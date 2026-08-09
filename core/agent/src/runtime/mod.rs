@@ -21,24 +21,26 @@ use ::session::{
     SessionStore,
 };
 use common::message::{Message, Role};
-use mcp::{call_tool_with_peer, is_mcp_tool_name, McpHub, MCP_TOOLSET};
+use mcp::{McpHub, MCP_TOOLSET};
 use memory::MemoryManager;
 use serde_json::Value;
-use tools::{dispatch_tool, register_all, DynToolHandler, ToolContext, ToolEntry, ToolRegistry};
+use tools::{register_all, ToolEntry, ToolRegistry};
 
 use crate::compression::{
     prune_tool_view,
     ContextMaintenanceResult, ToolCompressionManager,
 };
-use crate::prompt::context::{DynamicContext, StaticContext};
+use crate::prompt::context::StaticContext;
 use crate::prompt::hooks::CancelSignal;
-use crate::prompt::prompt_builder::PromptBuilder;
 use crate::runtime::session::{hydrate_session_messages, resolve_session_project_root};
 
 pub mod budget;
 pub(crate) mod compression_state;
 pub(crate) mod model_ctx;
+mod recording;
 mod session;
+mod system_prompt;
+mod tool_dispatch;
 pub(crate) mod turn_budget;
 pub(crate) mod usage;
 mod validate;
@@ -103,8 +105,8 @@ impl AgentConfig {
 /// 生命周期：通过 `run_turn` 处理用户输入，通过 `handle_tool_call_async` 执行工具，
 /// 由上层 streaming 层驱动 LLM 往返。
 pub struct AgentLoop {
-    config: AgentConfig,
-    session_id: String,
+    pub(crate) config: AgentConfig,
+    pub(crate) session_id: String,
     /// 内存中的会话消息镜像，与磁盘记忆同步追加。
     pub session_messages: Vec<Message>,
 
@@ -117,28 +119,28 @@ pub struct AgentLoop {
     pub(crate) turn: turn_budget::TurnState,
 
     // ── 不可拆（非 Send 或强耦合） ──────────────────────────
-    memory: MemoryManager,
-    sessions: Box<dyn ConversationStore>,
-    compression_policy: Box<dyn crate::compression::CompressionPolicy>,
-    tool_registry: ToolRegistry,
-    mcp_hub: Arc<TokioMutex<McpHub>>,
+    pub(crate) memory: MemoryManager,
+    pub(crate) sessions: Box<dyn ConversationStore>,
+    pub(crate) compression_policy: Box<dyn crate::compression::CompressionPolicy>,
+    pub(crate) tool_registry: ToolRegistry,
+    pub(crate) mcp_hub: Arc<TokioMutex<McpHub>>,
 
     // ── 注入的依赖 ─────────────────────────────────────────
     /// 进程内插件钩子总线（Block / Modify / Inject）。
-    hook_bus: Arc<::hooks::PluginHookBus>,
+    pub(crate) hook_bus: Arc<::hooks::PluginHookBus>,
     /// 子 Agent 执行调度器（统一 delegate/orchestration）。
-    execution: Arc<dyn tools::ExecutionDispatch>,
+    pub(crate) execution: Arc<dyn tools::ExecutionDispatch>,
 
     // ── 轻量状态 ───────────────────────────────────────────
-    cancel: CancelSignal,
+    pub(crate) cancel: CancelSignal,
     /// 代码/项目根（委派 worktree 或会话级 ASTRO_PROJECT_ROOT）。
-    project_root: Option<PathBuf>,
+    pub(crate) project_root: Option<PathBuf>,
     /// `pre_llm_call` 注入的本轮附加上下文（不回写用户原文）。
-    pending_inject_context: Option<String>,
+    pub(crate) pending_inject_context: Option<String>,
     /// 上一轮复杂任务后挂起的学习 nudge（本轮注入 dynamic，下一次 begin_user_turn 清掉/重算）。
-    pending_learning_nudge: Option<String>,
+    pub(crate) pending_learning_nudge: Option<String>,
     /// 当前聊天交互模式（Plan/Ask 只读门禁）；由 ChatRequest 下传。
-    interaction_mode: tools::InteractionMode,
+    pub(crate) interaction_mode: tools::InteractionMode,
 }
 
 impl AgentLoop {
@@ -718,34 +720,6 @@ impl AgentLoop {
         (messages, tools)
     }
 
-    /// 记录 assistant 回复并关联已解析的工具调用。
-    ///
-    /// 封装 `ParsedToolCall → ToolCall` 映射，消除 streaming / headless 的重复代码。
-    pub(crate) fn record_assistant_with_calls(
-        &mut self,
-        text: &str,
-        calls: &[tools::ParsedToolCall],
-        reasoning: Option<&str>,
-        reasoning_details: Option<serde_json::Value>,
-    ) -> anyhow::Result<()> {
-        let tc = if calls.is_empty() {
-            None
-        } else {
-            Some(
-                calls
-                    .iter()
-                    .map(|c| common::message::ToolCall {
-                        id: c.id.clone(),
-                        name: c.name.clone(),
-                        arguments: c.arguments.clone(),
-                        signature: c.signature.clone(),
-                    })
-                    .collect(),
-            )
-        };
-        self.record_assistant_message_with_tools(text, tc, reasoning, reasoning_details)
-    }
-
     /// 会话轮次预算是否已耗尽（`current_turn >= max_turns`）。
     pub fn is_budget_exhausted(&self) -> bool {
         self.turn.is_budget_exhausted(self.config.max_turns)
@@ -907,645 +881,9 @@ impl AgentLoop {
         Ok(report.pruned + report.compressed)
     }
 
-    /// 与 `build_system_prompt` 同源加载静态/动态上下文与技能列表（不含 env 副作用）。
-    fn system_prompt_parts(&self) -> (StaticContext, DynamicContext, Vec<(String, String)>) {
-        let (project_memory, user_profile, daily) = self.memory.prompt_snapshot_with_daily();
-        let skill_pairs = if self.tool_registry.is_toolset_enabled("skills") {
-            skills::list_enabled_for_prompt()
-        } else {
-            Vec::new()
-        };
-
-        let mut static_ctx = if let Some(ref over) = self.config.static_override {
-            over.clone()
-        } else {
-            StaticContext::from_workspace_files(
-                &self.config.soul,
-                &project_memory,
-                &user_profile,
-                &daily,
-            )
-        };
-        if static_ctx.agent_md.is_empty() {
-            let ws = self.resolve_workspace_dir();
-            if let Ok(content) = std::fs::read_to_string(ws.join("AGENTS.md")) {
-                static_ctx.agent_md = content;
-            }
-        }
-        let dynamic_ctx = {
-            let mut dyn_ctx = DynamicContext::from_recalled(
-                self.config.dynamic_max_items,
-                &self.compression.last_recalled_context,
-            );
-            let pinned = tools::render_pinned_for_prompt(&self.memory.workspace_dir);
-            if !pinned.trim().is_empty() {
-                // 固定上下文优先于本轮 FTS 召回
-                dyn_ctx.items.insert(0, pinned);
-            }
-            if let Some(ref nudge) = self.pending_learning_nudge {
-                dyn_ctx.items.insert(0, format!("# 学习提示\n{nudge}"));
-            }
-            dyn_ctx
-        };
-        (static_ctx, dynamic_ctx, skill_pairs)
-    }
-
-    /// 组装完整 system prompt：静态上下文 + 动态召回 + 技能索引 + 工具指引 + 时间戳。
-    ///
-    /// MEMORY / USER 仅注入 **snapshot**（同会话冻结）；日记读盘后截断注入。
-    /// 各层经 [`crate::prompt::ContextSource`] 共享字符预算（优先 static）。
-    ///
-    /// **不**把 `pending_inject_context` 编入 system：hooks / KeepGoing 注入仍走
-    /// [`Self::take_inject_context`] → 消息侧 `[astro:hook-context]`（见 `multi_turn`），
-    /// 避免与 system 层双重注入。
-    ///
-    /// 副作用：设置 workspace 目录覆盖供 skills 发现使用。
-    pub fn build_system_prompt(&self) -> String {
-        let (static_ctx, dynamic_ctx, skill_pairs) = self.system_prompt_parts();
-        skills::set_workspace_override(&self.memory.workspace_dir);
-        let skill_index: Vec<(&str, &str)> = skill_pairs
-            .iter()
-            .map(|(name, desc)| (name.as_str(), desc.as_str()))
-            .collect();
-
-        let (guidance, timestamp) = self.system_prompt_guidance_timestamp();
-        let mut budget = crate::prompt::ContextBudget::new(self.config.context_budget_chars.max(1));
-        crate::prompt::assemble_system_layers(
-            &mut budget,
-            &static_ctx,
-            None, // inject 走 take_inject_context / user 消息，不进 system
-            &skill_index,
-            &dynamic_ctx,
-            &guidance,
-            &timestamp,
-        )
-    }
-
-    /// 与 `build_system_prompt` 同源的分层字符数，供上下文占用估算。
-    /// 返回 (system, memory, skills, recall)。
-    pub fn system_prompt_layer_chars(&self) -> (usize, usize, usize, usize) {
-        let layers = self.system_prompt_layer_breakdown();
-        (
-            layers.system_chars,
-            layers.memory_chars,
-            layers.skills_chars,
-            layers.recall_chars,
-        )
-    }
-
-    /// 分层占用明细（含 system / memory / skills 子项），供 `context_usage` 快照。
-    pub fn system_prompt_layer_breakdown(&self) -> crate::prompt::context_usage::LayerBreakdown {
-        use crate::prompt::context_usage::{estimate_tokens, LayerBreakdown, NamedChars};
-
-        let (static_ctx, dynamic_ctx, skill_pairs) = self.system_prompt_parts();
-        let skill_index: Vec<(&str, &str)> = skill_pairs
-            .iter()
-            .map(|(name, desc)| (name.as_str(), desc.as_str()))
-            .collect();
-
-        let (guidance, timestamp) = self.system_prompt_guidance_timestamp();
-        let mode_guidance = self.interaction_mode.system_guidance();
-        let tool_guidance = crate::prompt::prompt_builder::TOOL_GUIDANCE;
-
-        let mut system_items: Vec<NamedChars> = Vec::new();
-        let mut push_sys = |id: &str, label: &str, content: &str| {
-            let n = content.trim().len();
-            if n > 0 {
-                system_items.push((id.to_string(), label.to_string(), n));
-            }
-        };
-        push_sys("soul", "SOUL.md", &static_ctx.soul);
-        push_sys("identity", "身份", &static_ctx.identity);
-        push_sys("agents", "AGENTS.md", &static_ctx.agent_md);
-        push_sys("mode", "交互模式引导", mode_guidance);
-        push_sys("tool_guidance", "工具指引", tool_guidance);
-        push_sys("timestamp", "当前时间", &timestamp);
-
-        let system_chars = static_ctx.soul.trim().len()
-            + static_ctx.identity.trim().len()
-            + static_ctx.agent_md.trim().len()
-            + guidance.len()
-            + timestamp.len();
-
-        let mut memory_items: Vec<NamedChars> = Vec::new();
-        let mut push_mem = |id: &str, label: &str, content: &str| {
-            let n = content.trim().len();
-            if n > 0 {
-                memory_items.push((id.to_string(), label.to_string(), n));
-            }
-        };
-        push_mem("memory", "MEMORY.md", &static_ctx.memory);
-        push_mem("user", "USER.md", &static_ctx.user_profile);
-        push_mem("daily", "今日记忆", &static_ctx.daily);
-        let memory_chars: usize = memory_items.iter().map(|(_, _, n)| *n).sum();
-
-        let skills_chars = PromptBuilder::new()
-            .with_skills_index(&skill_index)
-            .build()
-            .len();
-        let skill_items: Vec<NamedChars> = skill_pairs
-            .iter()
-            .map(|(name, desc)| {
-                let line = format!("- **{}**: {}", name, desc);
-                (name.clone(), name.clone(), line.len())
-            })
-            .filter(|(_, _, n)| estimate_tokens(*n) > 0)
-            .collect();
-
-        let recall_chars = dynamic_ctx.render().len();
-
-        LayerBreakdown {
-            system_chars,
-            memory_chars,
-            skills_chars,
-            recall_chars,
-            system_items,
-            memory_items,
-            skill_items,
-        }
-    }
-
-    /// guidance（mode 在前，便于预算截断时保留）+ timestamp，与 `assemble_system_layers` 顺序一致。
-    fn system_prompt_guidance_timestamp(&self) -> (String, String) {
-        // mode 置于 TOOL_GUIDANCE 之前：guidance 层被 take_chars 截断时优先保留模式说明。
-        let guidance = format!(
-            "{}\n\n{}",
-            self.interaction_mode.system_guidance(),
-            crate::prompt::prompt_builder::TOOL_GUIDANCE,
-        );
-        let now = chrono::Local::now().format("%Y-%m-%d %H:%M:%S %Z");
-        let timestamp = format!("# 当前时间\n{now}");
-        (guidance, timestamp)
-    }
-
     /// 解析当前 Agent 工作区目录，供工具上下文注入。
     fn resolve_workspace_dir(&self) -> PathBuf {
         self.memory.workspace_dir.clone()
-    }
-
-    /// 按名称分发工具调用：MCP 走 Hub，内置工具走 [`dispatch_tool`]。
-    ///
-    /// 调用前刷新 gate 与 MCP 注册；未启用或不存在的工具直接 bail。
-    /// MCP 工具通过克隆 `Arc<TokioMutex<McpHub>>` 构造动态 handler，
-    /// 避免 `&self.mcp_hub` 与 `&mut self.memory` 的借用冲突。
-    async fn dispatch_named_tool(
-        &mut self,
-        name: &str,
-        args: &serde_json::Value,
-    ) -> anyhow::Result<common::ToolOutput> {
-        let agent_id = self.memory.agent_id.clone();
-        self.tool_registry.reload_enabled_from_disk(Some(&agent_id));
-
-        // MCP 工具：同步 enablement + 刷新注册
-        if is_mcp_tool_name(name) {
-            let _ = self.mcp_hub.lock().await.sync_enablement_from_disk();
-            self.attach_mcp_tools().await;
-        }
-
-        let allowed = self.tool_registry.is_tool_allowed(name);
-
-        // 在构造 ToolContext 之前，从 Hub 解析 peer（lock → resolve → release）
-        // 构建 MCP 动态 handler，持有 Peer（Send + Sync），无需跨 await 持锁。
-        let mcp_handler: Option<DynToolHandler> = if is_mcp_tool_name(name) {
-            let (peer, native, timeout_secs) = self
-                .mcp_hub
-                .lock()
-                .await
-                .resolve_tool_peer(name)?;
-            let qname = name.to_string();
-            Some(Box::new(move |_name: &str, args: &serde_json::Value| {
-                let peer = peer.clone();
-                let qname = qname.clone();
-                let native = native.clone();
-                let a = args.clone();
-                Box::pin(async move {
-                    call_tool_with_peer(&peer, &qname, &native, &a, timeout_secs).await
-                }) as std::pin::Pin<Box<dyn std::future::Future<Output = anyhow::Result<common::ToolOutput>> + Send>>
-            }))
-        } else {
-            None
-        };
-
-        let workspace_dir = self.resolve_workspace_dir();
-        skills::set_workspace_override(&workspace_dir);
-        let session_id = self.session_id.clone();
-        let turn_id = self.turn.current_turn_id.clone();
-        let memory_dir = self.config.memory_dir.clone();
-        let sessions: &dyn ConversationStore = &*self.sessions;
-        let execution = Some(self.execution());
-        let hook_bus = Some(self.hook_bus());
-        let mut ctx = ToolContext {
-            memory: &mut self.memory,
-            sessions,
-            memory_dir,
-            workspace_dir,
-            project_root: self.project_root.clone(),
-            image_gen_targets: &self.model_ctx.image_gen_targets,
-            session_id,
-            turn_id,
-            credentials: &self.model_ctx.credentials,
-            chat_targets: &self.model_ctx.chat_targets,
-            execution,
-            hook_bus,
-        };
-        dispatch_tool(|_| allowed, &mut ctx, name, args, mcp_handler.as_ref()).await
-    }
-
-    /// 同步执行工具调用：在无 tokio runtime 时自建 current_thread runtime。
-    ///
-    /// 适用于 Tauri 等同步边界；异步上下文优先使用 [`handle_tool_call_async`]。
-    pub fn handle_tool_call(
-        &mut self,
-        name: &str,
-        args: &serde_json::Value,
-    ) -> anyhow::Result<common::ToolOutput> {
-        let fut = self.handle_tool_call_async(name, args);
-        match tokio::runtime::Handle::try_current() {
-            Ok(handle) => {
-                // 在 blocking 线程上安全执行异步任务（避免在 async 上下文中 block_on panic）
-                tokio::task::block_in_place(|| handle.block_on(fut))
-            }
-            Err(_) => {
-                let rt = tokio::runtime::Builder::new_current_thread()
-                    .enable_all()
-                    .build()?;
-                rt.block_on(fut)
-            }
-        }
-    }
-
-    /// 异步执行单次工具调用：检查取消 → 递增深度 → hooks → 分发 → hooks。
-    ///
-    /// 取消或深度耗尽时返回错误；成功时返回 `ToolOutput`。
-    pub async fn handle_tool_call_async(
-        &mut self,
-        name: &str,
-        args: &serde_json::Value,
-    ) -> anyhow::Result<common::ToolOutput> {
-        if self.cancel.is_cancelled() {
-            anyhow::bail!("prompt cancelled");
-        }
-        self.increment_tool_round()?;
-        // 可拦截：PluginHookBus 优先
-        let bus_out = self.fire_hook(
-            ::hooks::PRE_TOOL_CALL,
-            ::hooks::HookPayload {
-                session_id: self.session_id.clone(),
-                turn_id: self.turn.current_turn_id.clone(),
-                tool_name: Some(name.into()),
-                tool_args: Some(args.clone()),
-                detail: format!("{name} {args}"),
-                ..Default::default()
-            },
-        );
-        let mut args_owned = args.clone();
-        match bus_out {
-            ::hooks::HookOutcome::Block(reason) => {
-                return Ok(format!("[blocked by hook] {reason}").into());
-            }
-            ::hooks::HookOutcome::Modify(v) => {
-                args_owned = v;
-            }
-            _ => {}
-        }
-        if self.cancel.is_cancelled() {
-            anyhow::bail!("prompt cancelled");
-        }
-        // Soft-alias：模型把 Skill 名当工具名时，改写成 skills(skill_id=…)
-        let (exec_name, exec_args) = if !is_mcp_tool_name(name)
-            && !self.tool_registry.has_tool(name)
-            && self.tool_registry.is_tool_allowed("skills")
-            && skills::list_installed()
-                .into_iter()
-                .any(|s| s.name == name && s.enabled)
-        {
-            (
-                "skills",
-                serde_json::json!({
-                    "action": "load",
-                    "skill_id": name,
-                    "input": args_owned,
-                }),
-            )
-        } else {
-            (name, args_owned)
-        };
-        if let Err(msg) = tools::check_tool_call(self.interaction_mode, exec_name, &exec_args) {
-            return Ok(msg.into());
-        }
-        let raw_result = self.dispatch_named_tool(exec_name, &exec_args).await?;
-        if exec_name == "skills" {
-            self.activate_skill_toolsets_from_args(&exec_args);
-        }
-        // KeyChoice：`confirm` 是关键决策闸口，记一笔供学习闭环。
-        if exec_name == "confirm" {
-            memory::try_append_decision(
-                self.memory.base_dir.as_path(),
-                memory::DecisionEntry::new(
-                    memory::DecisionKind::KeyChoice,
-                    format!(
-                        "confirm: {}",
-                        exec_args
-                            .get("prompt")
-                            .or_else(|| exec_args.get("message"))
-                            .and_then(|v| v.as_str())
-                            .unwrap_or("")
-                            .chars()
-                            .take(160)
-                            .collect::<String>()
-                    ),
-                )
-                .with_tool("confirm")
-                .with_session(self.session_id.clone()),
-            );
-        }
-        if tool_writes_disk(exec_name, &exec_args) {
-            self.turn.mark_wrote_disk();
-        }
-        Ok(self
-            .finalize_tool_call_result(exec_name, &exec_args, raw_result)
-            .await)
-    }
-
-    /// `skills` 工具成功加载后：按 frontmatter `astro_tools` additive 放宽 toolset。
-    fn activate_skill_toolsets_from_args(&mut self, args: &serde_json::Value) {
-        let Some(skill_id) = args
-            .get("skill_id")
-            .and_then(|v| v.as_str())
-            .map(str::trim)
-            .filter(|s| !s.is_empty())
-        else {
-            return;
-        };
-        // 优先复用 skills 工具刚加载过的结果，避免二次扫描 + 读盘。
-        let astro_tools = match skills::recent_astro_tools(skill_id) {
-            Some(tools) => tools,
-            None => match skills::load_skill_by_name(skill_id) {
-                Ok(loaded) => loaded.metadata.astro_tools,
-                Err(_) => return,
-            },
-        };
-        if !astro_tools.is_empty() {
-            tracing::info!(
-                skill = %skill_id,
-                toolsets = ?astro_tools,
-                "skill activated toolsets (additive)"
-            );
-            self.tool_registry.activate_skill_toolsets(&astro_tools);
-        }
-    }
-
-    /// `pub(crate)`：供 `exec::delegate` 的 `subagent_start`/`subagent_stop` 顺序测试复用。
-    pub(crate) async fn finalize_tool_call_result(
-        &self,
-        name: &str,
-        args_owned: &serde_json::Value,
-        raw_result: common::ToolOutput,
-    ) -> common::ToolOutput {
-        let raw_text = raw_result.text().to_string();
-        let transformed = self.fire_hook(
-            ::hooks::TRANSFORM_TOOL_RESULT,
-            ::hooks::HookPayload {
-                session_id: self.session_id.clone(),
-                turn_id: self.turn.current_turn_id.clone(),
-                tool_name: Some(name.into()),
-                tool_args: Some(args_owned.clone()),
-                tool_result: Some(raw_text.clone()),
-                ..Default::default()
-            },
-        );
-        let result = match transformed {
-            ::hooks::HookOutcome::ReplaceText(s) => match raw_result {
-                common::ToolOutput::Media { assets, .. } => {
-                    common::ToolOutput::Media { text: s, assets }
-                }
-                _ => common::ToolOutput::from(s),
-            },
-            _ => raw_result,
-        };
-        let _ = self.fire_hook(
-            ::hooks::POST_TOOL_CALL,
-            ::hooks::HookPayload {
-                session_id: self.session_id.clone(),
-                turn_id: self.turn.current_turn_id.clone(),
-                tool_name: Some(name.into()),
-                tool_result: Some(result.text().to_string()),
-                detail: {
-                    let preview: String = result.text().chars().take(200).collect();
-                    format!("{name} → {preview}")
-                },
-                ..Default::default()
-            },
-        );
-        if name == "subagent" || name == "pipeline" {
-            self.fire_subagent_stop_from_delegate_result(&raw_text)
-                .await;
-        }
-        result
-    }
-
-    async fn fire_subagent_stop_from_delegate_result(&self, result: &str) {
-        let Ok(v) = serde_json::from_str::<serde_json::Value>(result) else {
-            return;
-        };
-        let tasks = v
-            .get("tasks")
-            .and_then(|t| t.as_array())
-            .cloned()
-            .unwrap_or_else(|| {
-                if v.get("session_id").is_some() {
-                    vec![v.clone()]
-                } else {
-                    Vec::new()
-                }
-            });
-        for t in tasks {
-            let child = t
-                .get("session_id")
-                .and_then(|s| s.as_str())
-                .unwrap_or("unknown");
-            let summary = t.get("summary").and_then(|s| s.as_str()).unwrap_or("");
-            let _ = self.fire_hook(
-                ::hooks::SUBAGENT_STOP,
-                ::hooks::HookPayload {
-                    session_id: child.into(),
-                    turn_id: self.turn.current_turn_id.clone(),
-                    detail: summary.chars().take(200).collect(),
-                    ..Default::default()
-                },
-            );
-        }
-    }
-
-    /// 确保会话行存在（不存在则按 `source` 创建）。
-    pub fn ensure_session(&self, source: &str) -> anyhow::Result<()> {
-        self.sessions.ensure_session(&self.session_id, source)
-    }
-
-    /// 将 assistant 纯文本回复写入记忆与会话镜像。
-    pub fn record_assistant_message(&mut self, content: &str) -> anyhow::Result<()> {
-        self.record_assistant_message_with_tools(content, None, None, None)
-    }
-
-    /// 将 assistant 回复（可含 tool_calls / reasoning / reasoning_details）写入记忆与会话镜像。
-    ///
-    /// 非空 `tool_calls` 时使用 `Message::assistant_with_tools` 保留结构化调用信息；
-    /// 落盘通过 `SessionStore::append_message` 写入富字段。
-    pub fn record_assistant_message_with_tools(
-        &mut self,
-        content: &str,
-        tool_calls: Option<Vec<common::message::ToolCall>>,
-        reasoning: Option<&str>,
-        reasoning_details: Option<serde_json::Value>,
-    ) -> anyhow::Result<()> {
-        let tool_calls_json = match &tool_calls {
-            Some(calls) if !calls.is_empty() => Some(serde_json::to_value(calls)?),
-            _ => None,
-        };
-        let reasoning = reasoning.filter(|r| !r.is_empty());
-        let thought_signature =
-            common::message::google_thought_signature_from_details(&reasoning_details);
-        self.sessions.ensure_session(&self.session_id, "tauri")?;
-        self.sessions.append_message(NewMessage {
-            content: Some(content),
-            tool_calls: tool_calls_json,
-            reasoning,
-            reasoning_details: reasoning_details.clone(),
-            ..NewMessage::empty(&self.session_id, "assistant")
-        })?;
-        let msg = match tool_calls {
-            Some(calls) if !calls.is_empty() => Message::assistant_with_tools(content, calls),
-            _ => Message::assistant(content),
-        };
-        let mut msg = msg;
-        msg.reasoning = reasoning.map(str::to_string);
-        msg.thought_signature = thought_signature;
-        self.session_messages.push(msg);
-        Ok(())
-    }
-
-    /// 工具执行后回写最近一条 assistant 的 timeline/surfaces（避免历史丢 A2UI 卡）。
-    pub fn patch_last_assistant_timeline(
-        &self,
-        reasoning_details: serde_json::Value,
-    ) -> anyhow::Result<()> {
-        self.sessions
-            .patch_last_assistant_reasoning_details(&self.session_id, &reasoning_details)
-    }
-
-    /// 将 user 角色消息写入记忆与会话镜像。
-    ///
-    /// 供 `pre_verify` 的 `KeepGoing(msg)` 等下游控制流场景使用：与 `pending_inject_context`
-    /// 的临时注入不同，本方法直接落盘并写入 `session_messages`，确保下一轮 API 历史与
-    /// `SessionStore` 保持一致（角色交替），避免连续 assistant 触发 Provider 400。
-    pub fn record_user_message(&mut self, content: &str) -> anyhow::Result<()> {
-        self.sessions.ensure_session(&self.session_id, "tauri")?;
-        self.sessions.append_message(NewMessage {
-            content: Some(content),
-            ..NewMessage::empty(&self.session_id, "user")
-        })?;
-        self.session_messages.push(Message::user(content));
-        Ok(())
-    }
-
-    /// 将 tool 角色结果写入记忆与会话镜像（无 tool_call_id / tool_name）。
-    pub fn record_tool_result(&mut self, content: &str) -> anyhow::Result<()> {
-        self.record_tool_result_with_id(None, None, content)
-    }
-
-    /// 将工具生成的媒体文件实时登记到 artifacts 索引，关联当前会话与消息。
-    ///
-    /// 否则这些文件仅在文件空间 `reconcile` 扫盘时以 `session_id=None` 补登记，
-    /// 导致「会话中生成的文件」被归入「未关联会话」。
-    fn register_media_artifacts(&self, media: &[common::MediaAsset], msg_id: i64) {
-        if media.is_empty() {
-            return;
-        }
-        let db = match artifacts::open_default(self.memory_dir()) {
-            Ok(db) => db,
-            Err(e) => {
-                tracing::debug!(error = %e, "open artifacts db failed; skip media register");
-                return;
-            }
-        };
-        let workspace = self.memory.workspace_dir.clone();
-        let session_id = self.session_id.clone();
-        let message_id = msg_id.to_string();
-        let agent_id = self.agent_id().to_string();
-        for asset in media {
-            let Some(rel) = asset.workspace_path() else {
-                continue; // data URL / 远程 URI 不落盘，跳过
-            };
-            let abs = workspace.join(rel);
-            let Some(path) = abs.to_str() else {
-                continue;
-            };
-            if let Err(e) = db.register(
-                path,
-                artifacts::ArtifactSource::AgentWrite,
-                Some(&session_id),
-                Some(&message_id),
-                Some(&agent_id),
-            ) {
-                tracing::debug!(error = %e, path, "register media artifact failed");
-            }
-        }
-    }
-
-    /// 将 tool 角色结果写入记忆与会话镜像，并关联 `tool_call_id` / `tool_name`。
-    pub fn record_tool_result_with_id(
-        &mut self,
-        tool_call_id: Option<&str>,
-        tool_name: Option<&str>,
-        content: &str,
-    ) -> anyhow::Result<()> {
-        let (_, media) = common::extract_tool_media(content);
-        let media_owned = if media.is_empty() {
-            None
-        } else {
-            Some(serde_json::to_string(&media)?)
-        };
-        self.sessions.ensure_session(&self.session_id, "tauri")?;
-        let msg_id = self.sessions.append_message(NewMessage {
-            content: Some(content),
-            tool_call_id,
-            tool_name,
-            media_json: media_owned.as_deref(),
-            ..NewMessage::empty(&self.session_id, "tool")
-        })?;
-
-        self.register_media_artifacts(&media, msg_id);
-
-        let mut spill_view: Option<String> = None;
-        if content.len() >= common::DEFAULT_SPILL_THRESHOLD_BYTES {
-            match common::write_tool_spill(self.memory_dir(), &self.session_id, msg_id, content) {
-                Ok(path) => {
-                    let rel = common::spill_path_for_prompt(self.memory_dir(), &path);
-                    let view = common::make_spill_view(tool_name, &rel, content.len(), content);
-                    if self
-                        .sessions
-                        .update_message_compressed_content(msg_id, Some(&view))
-                        .is_ok()
-                    {
-                        spill_view = Some(view);
-                    }
-                }
-                Err(e) => {
-                    tracing::warn!(error = %e, "tool spill write failed; keeping inline content");
-                }
-            }
-        }
-
-        let mut msg = match tool_call_id {
-            Some(id) if !id.is_empty() => Message::tool_with_id(id, content),
-            _ => Message::tool(content),
-        };
-        msg.media = media;
-        if let Some(view) = spill_view {
-            msg.compressed_content = Some(view);
-        }
-        self.session_messages.push(msg);
-        Ok(())
     }
 
     /// 处理一轮用户输入：记录消息、召回记忆、构建 system prompt。
