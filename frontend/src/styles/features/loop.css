@@ -1636,6 +1636,8 @@
 
 /* input */
 .loop-config-input {
+  width: 100%;
+  box-sizing: border-box;
   padding: 8px 12px;
   border-radius: 8px;
   border: 1px solid var(--border);
@@ -1743,12 +1745,15 @@
 
 /* textarea */
 .loop-config-textarea {
+  width: 100%;
+  box-sizing: border-box;
   padding: 10px 12px;
   border-radius: 8px;
   border: 1px solid var(--border);
   background: var(--bg0, #fff);
   color: var(--ink);
   font-size: 13px;
+  font-family: inherit;
   line-height: 1.6;
   outline: none;
   resize: vertical;
@@ -1768,6 +1773,8 @@
 
 /* select */
 .loop-config-select {
+  width: 100%;
+  box-sizing: border-box;
   padding: 8px 12px;
   border-radius: 8px;
   border: 1px solid var(--border);
