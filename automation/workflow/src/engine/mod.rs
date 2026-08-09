@@ -20,7 +20,7 @@ use crate::model::{NodeType, Workflow, WorkflowEdge, WorkflowNode};
 use crate::nodes;
 use crate::run_db::WorkflowRunDb;
 use crate::store::WorkflowStore;
-use dag::{resolve_dag, downstream_from_handle};
+use dag::resolve_dag;
 use executor::NodeResult;
 use variables::VariableContext;
 
@@ -88,6 +88,11 @@ pub async fn execute_workflow(
         Err(e) => {
             run_db.finish_run(&run_id, "failure", &finished_at, Some(&e.to_string()), None, 0)?;
         }
+    }
+
+    // 自动清理旧记录（保留最近 500 条）
+    if let Err(e) = run_db.prune_old_runs(500) {
+        tracing::warn!("清理旧运行记录失败: {e}");
     }
 
     result
@@ -376,9 +381,9 @@ async fn execute_loop_body(
     let break_cond = loop_node.config.get("break_condition").and_then(|v| v.as_str()).unwrap_or("");
     let loop_id = &loop_node.id;
 
-    // 找到 loop 节点的直接下游节点（loop body）
-    let body_nodes: Vec<String> = downstream_from_handle(loop_id, None, lc.edges);
-    if body_nodes.is_empty() {
+    // 收集 loop 节点的完整子 DAG（拓扑序），而非仅直接下游
+    let body_chain = collect_sub_dag(loop_id, lc.edges, lc.node_map);
+    if body_chain.is_empty() {
         return Ok(0);
     }
 
@@ -396,7 +401,7 @@ async fn execute_loop_body(
             }
         }
 
-        for body_id in &body_nodes {
+        for body_id in &body_chain {
             if lc.skipped.contains(body_id) { continue; }
             let body_node = match lc.node_map.get(body_id.as_str()) {
                 Some(n) => *n,
@@ -432,7 +437,7 @@ async fn execute_loop_body(
         }
     }
 
-    for body_id in &body_nodes {
+    for body_id in &body_chain {
         lc.skipped.insert(body_id.clone());
     }
 
@@ -477,6 +482,40 @@ fn mark_all_downstream(
             }
         }
     }
+}
+
+/// 从 start_node 出发，BFS 收集所有可达的下游节点（拓扑序）
+fn collect_sub_dag(
+    start_node: &str,
+    edges: &[WorkflowEdge],
+    node_map: &HashMap<&str, &WorkflowNode>,
+) -> Vec<String> {
+    let mut visited = HashSet::new();
+    let mut queue = std::collections::VecDeque::new();
+    let mut result = Vec::new();
+
+    for e in edges {
+        if e.source == start_node {
+            if !visited.contains(&e.target) {
+                visited.insert(e.target.clone());
+                queue.push_back(e.target.clone());
+            }
+        }
+    }
+
+    while let Some(id) = queue.pop_front() {
+        if node_map.contains_key(id.as_str()) {
+            result.push(id.clone());
+        }
+        for e in edges {
+            if e.source == id && !visited.contains(&e.target) {
+                visited.insert(e.target.clone());
+                queue.push_back(e.target.clone());
+            }
+        }
+    }
+
+    result
 }
 
 fn truncate_utf8_safe(s: &str, max_bytes: usize) -> String {

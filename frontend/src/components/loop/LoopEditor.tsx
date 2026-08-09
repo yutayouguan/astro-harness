@@ -77,13 +77,6 @@ function LoopNode({ data, selected }: { data: LoopNodeData; selected?: boolean }
       {selected && (
         <div className="loop-rf-node-toolbar">
           <button
-            className="loop-rf-toolbar-btn"
-            title={t("loop.run")}
-            onClick={(e) => { e.stopPropagation(); data.onRunNode?.(); }}
-          >
-            <LucideIcons.Play size={12} />
-          </button>
-          <button
             className={`loop-rf-toolbar-btn${data.disabled ? " is-active" : ""}`}
             title={data.disabled ? t("loop.enabledYes") : t("loop.enabledNo")}
             onClick={(e) => { e.stopPropagation(); data.onToggleDisable?.(); }}
@@ -140,10 +133,6 @@ function BranchNode({ data, selected }: { data: LoopNodeData; selected?: boolean
     >
       {selected && (
         <div className="loop-rf-node-toolbar">
-          <button className="loop-rf-toolbar-btn" title={t("loop.run")}
-            onClick={(e) => { e.stopPropagation(); data.onRunNode?.(); }}>
-            <LucideIcons.Play size={12} />
-          </button>
           <button className={`loop-rf-toolbar-btn${data.disabled ? " is-active" : ""}`}
             title={data.disabled ? t("loop.enabledYes") : t("loop.enabledNo")}
             onClick={(e) => { e.stopPropagation(); data.onToggleDisable?.(); }}>
@@ -499,7 +488,6 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
         ...n,
         data: {
           ...n.data,
-          onRunNode: () => showToast(t("loop.runNodeUnsupported"), { tone: "info" }),
           onToggleDisable: () => toggleNodeDisabled(n.id),
           onDeleteNode: async () => {
             const ok = await confirm({ title: t("loop.deleteNode"), message: t("loop.deleteNodeConfirm").replace("{name}", String((n.data as Record<string, unknown>).label)), confirmLabel: t("loop.delete"), variant: "danger" });

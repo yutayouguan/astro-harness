@@ -191,7 +191,19 @@ export default function LoopPanel({ active, providers, onCollapseSidebar, onExpa
       if (!file) return;
       const text = await file.text();
       try {
+        const parsed = JSON.parse(text);
+        const importId = parsed.id;
+        if (importId && loops.some((lp) => lp.id === importId)) {
+          const ok = await confirm({
+            title: t("loop.importConflictTitle"),
+            message: t("loop.importConflictMsg"),
+            confirmLabel: t("loop.importOverwrite"),
+            variant: "danger",
+          });
+          if (!ok) return;
+        }
         await invoke("import_loop", { json: text });
+        showToast(t("loop.imported"), { tone: "success" });
         void refresh();
       } catch (e) {
         showToast(String(e), { tone: "error" });
