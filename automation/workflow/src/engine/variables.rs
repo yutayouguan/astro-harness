@@ -182,25 +182,28 @@ impl VariableContext {
     }
 }
 
-/// 在字符串中查找操作符，跳过 `{{ }}` 内部
+/// 在字符串中查找操作符，跳过 `{{ }}`  和 `"..."` 内部
 fn find_operator_outside_braces(s: &str, op: &str) -> Option<usize> {
     let bytes = s.as_bytes();
     let op_bytes = op.as_bytes();
     let mut i = 0;
     while i < bytes.len() {
-        // 进入 {{ }} 块时跳过
+        // 跳过 {{ }} 模板
         if i + 1 < bytes.len() && bytes[i] == b'{' && bytes[i + 1] == b'{' {
             i += 2;
             while i + 1 < bytes.len() {
-                if bytes[i] == b'}' && bytes[i + 1] == b'}' {
-                    i += 2;
-                    break;
-                }
+                if bytes[i] == b'}' && bytes[i + 1] == b'}' { i += 2; break; }
                 i += 1;
             }
             continue;
         }
-        // 检查操作符匹配
+        // 跳过 "..." 引号字符串
+        if bytes[i] == b'"' {
+            i += 1;
+            while i < bytes.len() && bytes[i] != b'"' { i += 1; }
+            if i < bytes.len() { i += 1; }
+            continue;
+        }
         if i + op_bytes.len() <= bytes.len() && &bytes[i..i + op_bytes.len()] == op_bytes {
             return Some(i);
         }

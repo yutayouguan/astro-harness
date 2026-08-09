@@ -599,6 +599,7 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
               meta: NODE_REGISTRY.find((m) => m.type === n.node_type) ?? NODE_REGISTRY[0],
               config: n.config,
               nodeType: n.node_type,
+              disabled: n.disabled,
             },
           })),
         );

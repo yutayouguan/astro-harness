@@ -457,10 +457,20 @@ fn mark_inactive_downstream(
             let handle = edge.source_handle.as_deref();
             let is_active = match handle {
                 Some(h) => active_set.contains(h),
-                None => !active_handles.is_empty(), // 无 handle 的边：如果有任何激活则放行
+                None => !active_handles.is_empty(),
             };
-            if !is_active {
+            if !is_active && !skipped.contains(&edge.target) {
                 skipped.insert(edge.target.clone());
+                // 递归 skip 所有下游
+                let mut queue = vec![edge.target.clone()];
+                while let Some(cur) = queue.pop() {
+                    for e2 in edges {
+                        if e2.source == cur && !skipped.contains(&e2.target) {
+                            skipped.insert(e2.target.clone());
+                            queue.push(e2.target.clone());
+                        }
+                    }
+                }
             }
         }
     }
@@ -484,34 +494,66 @@ fn mark_all_downstream(
     }
 }
 
-/// 从 start_node 出发，BFS 收集所有可达的下游节点（拓扑序）
+/// 从 start_node 出发，收集所有可达下游节点并按拓扑序排列
 fn collect_sub_dag(
     start_node: &str,
     edges: &[WorkflowEdge],
     node_map: &HashMap<&str, &WorkflowNode>,
 ) -> Vec<String> {
-    let mut visited = HashSet::new();
-    let mut queue = std::collections::VecDeque::new();
-    let mut result = Vec::new();
-
+    // 1. BFS 收集可达节点
+    let mut reachable = HashSet::new();
+    let mut bfs_queue = std::collections::VecDeque::new();
     for e in edges {
-        if e.source == start_node {
-            if !visited.contains(&e.target) {
-                visited.insert(e.target.clone());
-                queue.push_back(e.target.clone());
+        if e.source == start_node && !reachable.contains(&e.target) {
+            reachable.insert(e.target.clone());
+            bfs_queue.push_back(e.target.clone());
+        }
+    }
+    while let Some(id) = bfs_queue.pop_front() {
+        for e in edges {
+            if e.source == id && !reachable.contains(&e.target) {
+                reachable.insert(e.target.clone());
+                bfs_queue.push_back(e.target.clone());
             }
         }
     }
 
-    while let Some(id) = queue.pop_front() {
+    // 2. Kahn 拓扑排序（仅在子图内）
+    let mut in_deg: HashMap<&str, usize> = reachable.iter().map(|id| (id.as_str(), 0usize)).collect();
+    for e in edges {
+        if reachable.contains(&e.source) && reachable.contains(&e.target) {
+            *in_deg.entry(e.target.as_str()).or_insert(0) += 1;
+        }
+    }
+    // start_node 的直接下游入度减去来自 start_node 的边
+    for e in edges {
+        if e.source == start_node && reachable.contains(&e.target) {
+            if let Some(d) = in_deg.get_mut(e.target.as_str()) { *d = d.saturating_sub(1); }
+        }
+    }
+
+    let mut topo_queue: std::collections::VecDeque<String> = in_deg.iter()
+        .filter(|(_, &d)| d == 0)
+        .map(|(&id, _)| id.to_string())
+        .collect();
+    let mut result = Vec::new();
+    while let Some(id) = topo_queue.pop_front() {
         if node_map.contains_key(id.as_str()) {
             result.push(id.clone());
         }
         for e in edges {
-            if e.source == id && !visited.contains(&e.target) {
-                visited.insert(e.target.clone());
-                queue.push_back(e.target.clone());
+            if e.source == id && reachable.contains(&e.target) {
+                if let Some(d) = in_deg.get_mut(e.target.as_str()) {
+                    *d = d.saturating_sub(1);
+                    if *d == 0 { topo_queue.push_back(e.target.clone()); }
+                }
             }
+        }
+    }
+    // 环中节点兜底（避免丢失）
+    for id in &reachable {
+        if !result.contains(id) && node_map.contains_key(id.as_str()) {
+            result.push(id.clone());
         }
     }
 
