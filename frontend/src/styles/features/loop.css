@@ -1892,11 +1892,13 @@
 }
 .loop-ai-model-status-value {
   display: flex;
-  align-items: center;
-  gap: 6px;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px;
   font-size: 14px;
   font-weight: 600;
   color: var(--ink);
+  word-break: break-all;
 }
 .loop-ai-model-provider {
   color: var(--tone, #6366f1);

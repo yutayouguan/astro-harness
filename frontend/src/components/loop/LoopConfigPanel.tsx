@@ -396,6 +396,7 @@ function AiModelPanel({
 }) {
   const { t } = useI18n();
   const [fallback, setFallback] = useState<ActiveProviderInfo | null>(null);
+  const [allProviders, setAllProviders] = useState<ActiveProviderInfo[]>([]);
 
   useEffect(() => {
     (async () => {
@@ -405,6 +406,7 @@ function AiModelPanel({
           active_provider_id: string | null;
         }>("get_providers_state");
         const available = (state.providers ?? []).filter((p) => p.enabled && p.has_api_key);
+        setAllProviders(available.map((p) => ({ id: p.id, display_name: p.display_name, model: p.model })));
         const active = available.find((p) => p.id === state.active_provider_id) ?? available[0];
         if (active) setFallback({ id: active.id, display_name: active.display_name, model: active.model });
       } catch { /* ignore */ }
@@ -412,7 +414,10 @@ function AiModelPanel({
   }, []);
 
   const isConfigured = !!(providerId && providerId.trim());
-  const effectiveName = isConfigured ? providerId : fallback?.display_name ?? "—";
+  const configuredProvider = allProviders.find((p) => p.id === providerId);
+  const effectiveName = isConfigured
+    ? (configuredProvider?.display_name ?? providerId)
+    : fallback?.display_name ?? "—";
   const effectiveModel = isConfigured ? (model || t("loop.aiModelDefault")) : fallback?.model ?? "—";
 
   return (
