@@ -15,7 +15,7 @@ export default function QuestionClassificationConfig({ config, onChange }: Confi
         columns={[
           { key: "id", label: "ID", placeholder: "billing", flex: 1 },
           { key: "label", label: "标签", placeholder: "计费问题", flex: 1.5 },
-          { key: "desc", label: "描述", placeholder: "可选", flex: 2 },
+          { key: "description", label: "描述", placeholder: "可选", flex: 2 },
         ]}
         value={jsonToRowList(config.classes)}
         onChange={(v) => onChange({ ...config, classes: v })}

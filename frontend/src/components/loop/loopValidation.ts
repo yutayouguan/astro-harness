@@ -22,7 +22,7 @@ const REQUIRED_FIELDS: Partial<Record<NodeType, ValidationRule[]>> = {
   sentiment_analysis: [{ field: "text_template", label: "输入文本" }],
   vision_understanding: [{ field: "input_path", label: "图片路径" }],
   http_request: [{ field: "url_template", label: "URL" }],
-  conditional: [{ field: "condition", label: "条件表达式" }],
+  conditional: [{ field: "conditions", label: "条件表达式" }],
   scheduled_trigger: [{ field: "schedule", label: "Cron 表达式" }],
   webhook_trigger: [{ field: "path", label: "路径" }],
   email_trigger: [{ field: "host", label: "服务器地址" }],
