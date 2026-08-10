@@ -40,6 +40,13 @@ export type ProviderOpt = {
 };
 
 /** 新建/编辑定时任务抽屉入参 */
+/** 模板预填值（仅预填表单，不进入编辑模式） */
+export type CronPrefill = {
+  title: string;
+  task: string;
+  schedule: string;
+};
+
 type Props = {
   open: boolean;
   onClose: () => void;
@@ -52,6 +59,8 @@ type Props = {
   defaultAgentId?: string;
   /** 传入则进入编辑模式 */
   editingJob?: CronJobDto | null;
+  /** 模板预填（仅填入表单，提交时走创建流程） */
+  prefill?: CronPrefill | null;
   toneStyle?: CSSProperties;
 };
 
@@ -83,6 +92,7 @@ export function CreateCronDialog({
   agents = [],
   defaultAgentId = "default",
   editingJob = null,
+  prefill = null,
   toneStyle,
 }: Props) {
   const { t } = useI18n();
@@ -136,11 +146,16 @@ export function CreateCronDialog({
       setSaving(false);
       return;
     }
+    if (prefill) {
+      setTitle(prefill.title);
+      setTask(prefill.task);
+      setDraft(decodeSchedule(prefill.schedule));
+    }
     setSelectedAgentId(normalizeAgentId(defaultAgentId));
     setSelectedProviderId(defaultProviderId(providers, activeProviderId));
     setShowInChat(false);
     setError("");
-  }, [open, providers, activeProviderId, defaultAgentId, editingJob]);
+  }, [open, providers, activeProviderId, defaultAgentId, editingJob, prefill]);
 
   useEffect(() => {
     if (!open) return;

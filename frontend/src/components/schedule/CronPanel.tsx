@@ -4,6 +4,7 @@ import { createPortal } from "react-dom";
 import { toneStyleFromElement } from "../../lib/ui/toneFromElement";
 import { invoke } from "@tauri-apps/api/core";
 import {
+  BookOpen,
   Bot,
   BrainCircuit,
   CalendarClock,
@@ -15,15 +16,23 @@ import {
   Copy,
   Eye,
   EyeOff,
+  Film,
+  GraduationCap,
   Hand,
+  Heart,
   History,
+  Languages,
   ListTodo,
   ListTree,
   LoaderCircle,
   MessageSquareText,
+  Newspaper,
+  Phone,
   Server,
+  Stethoscope,
   TerminalSquare,
   X,
+  type LucideIcon,
 } from "lucide-react";
 import { useAnchoredMenu } from "../../hooks/ui/useAnchoredMenu";
 import { useConfirm } from "../../hooks/ui/DialogContext";
@@ -39,11 +48,86 @@ import MsgActivity from "../chat/MsgActivity";
 import { ChatMarkdown } from "../chat/ChatMarkdown";
 import {
   CreateCronDialog,
+  type CronPrefill,
   type ProviderOpt,
 } from "./CreateCronDialog";
 import { GlassDatePicker } from "./GlassDatePicker";
 import { SelectMenu } from "../ui/SelectMenu";
 import { EmptyIllustration } from "../../illustrations";
+
+type CronTemplate = {
+  icon: LucideIcon;
+  title: string;
+  desc: string;
+  task: string;
+  schedule: string;
+};
+
+const CRON_TEMPLATES: CronTemplate[] = [
+  {
+    icon: Newspaper,
+    title: "每日 AI 新闻推送",
+    desc: "关注当天 AI 领域的重要动态",
+    task: "请搜索并汇总今天 AI 领域最重要的 3-5 条新闻，包括大模型发布、重要论文、行业动态等。用简洁的中文摘要呈现，每条附上关键要点。",
+    schedule: "every:1d",
+  },
+  {
+    icon: Languages,
+    title: "每日 5 个英语单词",
+    desc: "每天推荐 5 个高频实用英语单词",
+    task: "请推荐 5 个高频实用英语单词，包含音标、中文释义、例句和记忆技巧。难度适中，适合日常和职场使用。",
+    schedule: "every:1d",
+  },
+  {
+    icon: BookOpen,
+    title: "每日儿童睡前故事",
+    desc: "生成 3-5 分钟可读的温和睡前故事",
+    task: "请为 4-8 岁的孩子生成一个原创睡前故事，约 500 字，主题温馨正面，语言生动易懂，结尾安宁祥和。",
+    schedule: "0 20 * * *",
+  },
+  {
+    icon: ListTodo,
+    title: "每周工作周报",
+    desc: "每周五汇总仓库 PR 与 Issue 进展",
+    task: "请帮我生成本周工作周报模板：列出本周完成的主要工作、遇到的问题、下周计划。用 Markdown 格式输出。",
+    schedule: "0 17 * * 5",
+  },
+  {
+    icon: Film,
+    title: "经典电影推荐",
+    desc: "推荐一部高分经典电影",
+    task: "请推荐一部经典高分电影，包含：电影名称、年份、导演、豆瓣/IMDb 评分、剧情简介（不剧透）、推荐理由。每次推荐不同的电影。",
+    schedule: "every:1d",
+  },
+  {
+    icon: GraduationCap,
+    title: "历史上的今天",
+    desc: "从科技、文化等领域挑选历史事件",
+    task: "请介绍今天在历史上发生的 2-3 件有趣或重要的事件，涵盖科技、文化、体育等不同领域。每件事用 2-3 句话简述，附上年份。",
+    schedule: "every:1d",
+  },
+  {
+    icon: Heart,
+    title: "父母联系提醒",
+    desc: "每周日提醒你给家人打电话",
+    task: "提醒：今天是周日，记得给爸妈打个电话或发个消息，聊聊近况。可以问问他们身体状况、最近在忙什么、有没有什么需要帮忙的。",
+    schedule: "0 10 * * 0",
+  },
+  {
+    icon: Stethoscope,
+    title: "体检预约提醒",
+    desc: "定期提醒你关注健康检查",
+    task: "健康提醒：距离上次体检已经过了一段时间，建议你安排一次常规体检。请检查以下事项：预约体检时间、确认体检项目、注意体检前注意事项。",
+    schedule: "0 9 1 */3 *",
+  },
+  {
+    icon: Phone,
+    title: "会议前准备",
+    desc: "在会议开始前提醒你整理议题",
+    task: "会议准备提醒：你有一个即将开始的会议。请提前准备：1) 回顾会议议程 2) 整理需要汇报的进展 3) 准备需要讨论的问题 4) 确认所需材料已就绪。",
+    schedule: "0 9 * * 1-5",
+  },
+];
 
 /** 定时任务 DTO（与 Rust cron 序列化对齐） */
 export type CronJobDto = {
@@ -382,6 +466,7 @@ export default function CronPanel({
   const [error, setError] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
   const [editingJob, setEditingJob] = useState<CronJobDto | null>(null);
+  const [prefill, setPrefill] = useState<CronPrefill | null>(null);
   const [menuJobId, setMenuJobId] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
 
@@ -1317,12 +1402,42 @@ export default function CronPanel({
         {error && <p className="cron-error">{error}</p>}
 
         {activeTab === "jobs" && !loading && filteredJobs.length === 0 && !error && (
-          <EmptyIllustration
-            scene="cron"
-            className="cron-empty"
-            title={t("cron.empty")}
-            hint={t("cron.emptyHint")}
-          />
+          <div className="cron-empty-with-templates">
+            <EmptyIllustration
+              scene="cron"
+              className="cron-empty"
+              title={t("cron.empty")}
+              hint={t("cron.emptyHint")}
+            />
+            <section className="cron-templates">
+              <h3 className="cron-templates-title">自动化任务模版</h3>
+              <div className="cron-templates-grid">
+                {CRON_TEMPLATES.map((tpl) => {
+                  const Icon = tpl.icon;
+                  return (
+                    <button
+                      key={tpl.title}
+                      type="button"
+                      className="cron-template-card"
+                      onClick={() => {
+                        setPrefill({ title: tpl.title, task: tpl.task, schedule: tpl.schedule });
+                        setEditingJob(null);
+                        setShowCreate(true);
+                      }}
+                    >
+                      <span className="cron-template-icon" aria-hidden>
+                        <Icon size={20} strokeWidth={1.6} />
+                      </span>
+                      <span className="cron-template-text">
+                        <strong>{tpl.title}</strong>
+                        <span>{tpl.desc}</span>
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </section>
+          </div>
         )}
 
         {activeTab === "jobs" && filteredJobs.length > 0 && (
@@ -1340,9 +1455,11 @@ export default function CronPanel({
       <CreateCronDialog
         open={showCreate}
         editingJob={editingJob}
+        prefill={prefill}
         onClose={() => {
           setShowCreate(false);
           setEditingJob(null);
+          setPrefill(null);
         }}
         onCreated={() => void loadJobs()}
         providers={providers}
