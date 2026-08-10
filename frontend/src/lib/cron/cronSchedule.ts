@@ -167,13 +167,22 @@ export function decodeSchedule(schedule: string): ScheduleDraft {
     const mm = Number(parts[0]);
     const hh = Number(parts[1]);
     const wdRaw = parts[4];
-    const weekdays: Weekday[] =
-      wdRaw === "*"
-        ? []
-        : wdRaw
-            .split(",")
-            .map((n) => Number(n))
-            .filter((v): v is Weekday => v >= 0 && v <= 6);
+    const weekdays: Weekday[] = [];
+    if (wdRaw !== "*") {
+      for (const seg of wdRaw.split(",")) {
+        const range = seg.match(/^(\d)-(\d)$/);
+        if (range) {
+          const lo = Number(range[1]);
+          const hi = Number(range[2]);
+          for (let i = lo; i <= hi; i++) {
+            if (i >= 0 && i <= 6) weekdays.push(i as Weekday);
+          }
+        } else {
+          const v = Number(seg);
+          if (v >= 0 && v <= 6) weekdays.push(v as Weekday);
+        }
+      }
+    }
     const pad = (n: number) => String(n).padStart(2, "0");
     return {
       mode: "daily",
