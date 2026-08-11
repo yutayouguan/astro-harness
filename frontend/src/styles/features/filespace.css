@@ -126,12 +126,12 @@
     linear-gradient(
       165deg,
       color-mix(in srgb, #fff 70%, transparent) 0%,
-      color-mix(in srgb, var(--tone) 14%, rgba(255, 255, 255, 0.5)) 100%
+      color-mix(in srgb, var(--tone) 14%, rgba(255, 255, 255, 0.32)) 100%
     ),
     var(--tone-soft);
   box-shadow:
     inset 0 0 0 1px color-mix(in srgb, var(--tone) 28%, transparent),
-    inset 0 1px 0 rgba(255, 255, 255, 0.85);
+    inset 0 1px 0 rgba(255, 255, 255, 0.55);
 }
 
 .fs-cat.is-active .fs-cat-icon {
@@ -208,9 +208,9 @@ html[data-theme="dark"] .fs-cat-icon {
   padding: 3px;
   border-radius: 12px;
   background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.42) 0%, rgba(255, 255, 255, 0.14) 100%),
-    color-mix(in srgb, var(--tone-soft, transparent) 40%, rgba(255, 255, 255, 0.16));
-  border: 1px solid color-mix(in srgb, var(--tone) 16%, rgba(255, 255, 255, 0.5));
+    linear-gradient(155deg, rgba(255, 255, 255, 0.26) 0%, rgba(255, 255, 255, 0.14) 100%),
+    color-mix(in srgb, var(--tone-soft, transparent) 40%, rgba(255, 255, 255, 0.1));
+  border: 1px solid color-mix(in srgb, var(--tone) 16%, rgba(255, 255, 255, 0.32));
   box-shadow:
     0 6px 16px color-mix(in srgb, var(--tone, transparent) 8%, rgba(15, 23, 42, 0.05)),
     0 1px 3px rgba(15, 23, 42, 0.03),
@@ -253,20 +253,20 @@ html[data-theme="dark"] .fs-cat-icon {
 .fs-tab.is-active {
   color: var(--tone);
   background:
-    linear-gradient(165deg, rgba(255, 255, 255, 0.55), rgba(255, 255, 255, 0.22)),
+    linear-gradient(165deg, rgba(255, 255, 255, 0.35), rgba(255, 255, 255, 0.14)),
     var(--tone-soft);
   box-shadow:
     inset 0 0 0 1px color-mix(in srgb, var(--tone) 18%, transparent),
-    inset 0 1px 0 rgba(255, 255, 255, 0.75);
+    inset 0 1px 0 rgba(255, 255, 255, 0.48);
 }
 
 .fs-toolbar-end {
   --fs-ctrl: 36px;
   --fs-ctrl-radius: 12px;
-  --fs-ctrl-edge: color-mix(in srgb, var(--tone, #06b6d4) 16%, rgba(255, 255, 255, 0.5));
+  --fs-ctrl-edge: color-mix(in srgb, var(--tone, #06b6d4) 16%, rgba(255, 255, 255, 0.32));
   --fs-ctrl-fill:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.42) 0%, rgba(255, 255, 255, 0.14) 100%),
-    color-mix(in srgb, var(--tone-soft, transparent) 45%, rgba(255, 255, 255, 0.18));
+    linear-gradient(155deg, rgba(255, 255, 255, 0.26) 0%, rgba(255, 255, 255, 0.14) 100%),
+    color-mix(in srgb, var(--tone-soft, transparent) 45%, rgba(255, 255, 255, 0.12));
   --fs-ctrl-shadow:
     0 6px 16px color-mix(in srgb, var(--tone, transparent) 8%, rgba(15, 23, 42, 0.05)),
     0 1px 3px rgba(15, 23, 42, 0.03),
@@ -298,14 +298,14 @@ html[data-theme="dark"] .fs-cat-icon {
 }
 
 .fs-toolbar-end .expandable-search-btn:hover {
-  border-color: color-mix(in srgb, var(--tone) 32%, rgba(255, 255, 255, 0.75));
+  border-color: color-mix(in srgb, var(--tone) 32%, rgba(255, 255, 255, 0.48));
   background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.52) 0%, rgba(255, 255, 255, 0.2) 100%),
-    color-mix(in srgb, var(--tone-soft) 58%, rgba(255, 255, 255, 0.22));
+    linear-gradient(155deg, rgba(255, 255, 255, 0.33) 0%, rgba(255, 255, 255, 0.13) 100%),
+    color-mix(in srgb, var(--tone-soft) 58%, rgba(255, 255, 255, 0.14));
   box-shadow:
     0 10px 24px color-mix(in srgb, var(--tone) 14%, transparent),
-    inset 0 1px 0 rgba(255, 255, 255, 1),
-    inset 0 0 0 0.5px rgba(255, 255, 255, 0.7);
+    inset 0 1px 0 rgba(255, 255, 255, 0.65),
+    inset 0 0 0 0.5px rgba(255, 255, 255, 0.45);
   color: var(--tone);
 }
 
@@ -347,11 +347,11 @@ html[data-theme="dark"] .fs-cat-icon {
 .fs-layout-btn.is-active {
   color: var(--tone);
   background:
-    linear-gradient(165deg, rgba(255, 255, 255, 0.55), rgba(255, 255, 255, 0.22)),
+    linear-gradient(165deg, rgba(255, 255, 255, 0.35), rgba(255, 255, 255, 0.14)),
     color-mix(in srgb, var(--tone-soft) 80%, transparent);
   box-shadow:
     inset 0 0 0 1px color-mix(in srgb, var(--tone) 18%, transparent),
-    inset 0 1px 0 rgba(255, 255, 255, 0.7);
+    inset 0 1px 0 rgba(255, 255, 255, 0.45);
 }
 
 .fs-close-btn {
@@ -384,14 +384,14 @@ html[data-theme="dark"] .fs-cat-icon {
 
 .fs-close-btn:hover {
   color: var(--tone);
-  border-color: color-mix(in srgb, var(--tone) 32%, rgba(255, 255, 255, 0.75));
+  border-color: color-mix(in srgb, var(--tone) 32%, rgba(255, 255, 255, 0.48));
   background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.52) 0%, rgba(255, 255, 255, 0.2) 100%),
-    color-mix(in srgb, var(--tone-soft) 58%, rgba(255, 255, 255, 0.22));
+    linear-gradient(155deg, rgba(255, 255, 255, 0.33) 0%, rgba(255, 255, 255, 0.13) 100%),
+    color-mix(in srgb, var(--tone-soft) 58%, rgba(255, 255, 255, 0.14));
   box-shadow:
     0 10px 24px color-mix(in srgb, var(--tone) 14%, transparent),
-    inset 0 1px 0 rgba(255, 255, 255, 1),
-    inset 0 0 0 0.5px rgba(255, 255, 255, 0.7);
+    inset 0 1px 0 rgba(255, 255, 255, 0.65),
+    inset 0 0 0 0.5px rgba(255, 255, 255, 0.45);
 }
 
 html[data-theme="dark"] .fs-tabs {
@@ -601,13 +601,13 @@ html[data-theme="dark"] .fs-layout-btn:hover {
   font-size: 12px;
   font-weight: 650;
   background:
-    linear-gradient(165deg, rgba(255, 255, 255, 0.88), rgba(255, 255, 255, 0.48)),
-    color-mix(in srgb, var(--glass-panel, rgba(255, 255, 255, 0.5)) 70%, transparent);
+    linear-gradient(165deg, rgba(255, 255, 255, 0.56), rgba(255, 255, 255, 0.3)),
+    color-mix(in srgb, var(--glass-panel, rgba(255, 255, 255, 0.32)) 70%, transparent);
   color: var(--tone);
   cursor: pointer;
   box-shadow:
     0 1px 3px rgba(15, 23, 42, 0.05),
-    inset 0 1px 0 rgba(255, 255, 255, 0.9);
+    inset 0 1px 0 rgba(255, 255, 255, 0.58);
   backdrop-filter: blur(12px) saturate(1.25);
   -webkit-backdrop-filter: blur(12px) saturate(1.25);
   transition: background 0.12s ease, border-color 0.12s ease, box-shadow 0.12s ease, color 0.12s ease;
@@ -616,12 +616,12 @@ html[data-theme="dark"] .fs-layout-btn:hover {
 .fs-continue-btn:hover:not(:disabled),
 .fs-action-btn:hover:not(:disabled) {
   background:
-    linear-gradient(165deg, rgba(255, 255, 255, 0.95), rgba(255, 255, 255, 0.6)),
+    linear-gradient(165deg, rgba(255, 255, 255, 0.62), rgba(255, 255, 255, 0.38)),
     var(--tone-soft);
   border-color: color-mix(in srgb, var(--tone) 32%, transparent);
   box-shadow:
     0 4px 12px color-mix(in srgb, var(--tone) 12%, transparent),
-    inset 0 1px 0 rgba(255, 255, 255, 1);
+    inset 0 1px 0 rgba(255, 255, 255, 0.65);
 }
 
 .fs-continue-btn:disabled,
@@ -632,7 +632,7 @@ html[data-theme="dark"] .fs-layout-btn:hover {
 
 .fs-action-btn.is-primary {
   background:
-    linear-gradient(165deg, rgba(255, 255, 255, 0.75), rgba(255, 255, 255, 0.35)),
+    linear-gradient(165deg, rgba(255, 255, 255, 0.48), rgba(255, 255, 255, 0.22)),
     var(--tone-soft);
   border-color: color-mix(in srgb, var(--tone) 28%, transparent);
   color: color-mix(in srgb, var(--tone) 85%, var(--ink));
@@ -681,11 +681,11 @@ html[data-theme="dark"] .fs-layout-btn:hover {
   place-items: center;
   border-radius: 11px;
   background:
-    linear-gradient(160deg, rgba(255, 255, 255, 0.85), rgba(255, 255, 255, 0.35)),
+    linear-gradient(160deg, rgba(255, 255, 255, 0.55), rgba(255, 255, 255, 0.22)),
     color-mix(in srgb, var(--tone) 14%, transparent);
   color: var(--tone);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.9),
+    inset 0 1px 0 rgba(255, 255, 255, 0.58),
     inset 0 0 0 1px color-mix(in srgb, var(--tone) 18%, transparent),
     0 1px 3px rgba(15, 23, 42, 0.05);
 }
@@ -1069,15 +1069,15 @@ html[data-theme="dark"] .fs-preview-img {
   background:
     linear-gradient(
       165deg,
-      color-mix(in srgb, var(--tone-soft, transparent) 22%, rgba(255, 255, 255, 0.55)) 0%,
-      rgba(255, 255, 255, 0.28) 55%,
-      rgba(255, 255, 255, 0.16) 100%
+      color-mix(in srgb, var(--tone-soft, transparent) 22%, rgba(255, 255, 255, 0.35)) 0%,
+      rgba(255, 255, 255, 0.18) 55%,
+      rgba(255, 255, 255, 0.1) 100%
     ),
-    color-mix(in srgb, var(--menu-glass-bg, rgba(255, 255, 255, 0.42)) 48%, transparent);
+    color-mix(in srgb, var(--menu-glass-bg, rgba(255, 255, 255, 0.26)) 48%, transparent);
   box-shadow:
     0 18px 48px color-mix(in srgb, var(--tone, transparent) 10%, rgba(15, 23, 42, 0.14)),
     0 2px 8px rgba(15, 23, 42, 0.06),
-    inset 0 1px 0 rgba(255, 255, 255, 0.78),
+    inset 0 1px 0 rgba(255, 255, 255, 0.5),
     0 0 0 1px color-mix(in srgb, var(--tone, transparent) 6%, transparent);
   backdrop-filter: blur(28px) saturate(1.45);
   -webkit-backdrop-filter: blur(28px) saturate(1.45);
@@ -1133,7 +1133,7 @@ html[data-theme="dark"] .fs-preview-img {
   margin: 5px 8px;
   border: 0;
   background: color-mix(in srgb, var(--ink, #1e293b) 14%, rgba(148, 163, 184, 0.42));
-  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.55);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.35);
 }
 
 .fs-ctx-group {
@@ -1142,7 +1142,7 @@ html[data-theme="dark"] .fs-preview-img {
 
 /* Optional FileSpace glass accent class (compatible with workspace className) */
 .fs-glass-ctx.fs-ctx-menu {
-  border-color: color-mix(in srgb, var(--tone, #06b6d4) 22%, rgba(255, 255, 255, 0.7));
+  border-color: color-mix(in srgb, var(--tone, #06b6d4) 22%, rgba(255, 255, 255, 0.45));
 }
 
 html[data-theme="dark"] .fs-ctx-menu {
@@ -1197,10 +1197,10 @@ html[data-theme="dark"] .fs-glass-ctx.fs-ctx-menu {
   background:
     linear-gradient(
       155deg,
-      color-mix(in srgb, var(--tone, #06b6d4) 10%, rgba(255, 255, 255, 0.72)) 0%,
-      color-mix(in srgb, var(--tone, #06b6d4) 4%, rgba(255, 255, 255, 0.42)) 100%
+      color-mix(in srgb, var(--tone, #06b6d4) 10%, rgba(255, 255, 255, 0.45)) 0%,
+      color-mix(in srgb, var(--tone, #06b6d4) 4%, rgba(255, 255, 255, 0.26)) 100%
     ),
-    color-mix(in srgb, var(--glass-panel, rgba(255, 255, 255, 0.5)) 78%, transparent);
+    color-mix(in srgb, var(--glass-panel, rgba(255, 255, 255, 0.32)) 78%, transparent);
   box-shadow:
     0 8px 22px rgba(15, 23, 42, 0.08),
     0 1px 3px rgba(15, 23, 42, 0.04),
@@ -1225,8 +1225,8 @@ html[data-theme="dark"] .fs-glass-ctx.fs-ctx-menu {
   border-radius: 11px;
   border: 1px solid color-mix(in srgb, var(--glass-edge) 90%, transparent);
   background:
-    linear-gradient(165deg, rgba(255, 255, 255, 0.9), rgba(255, 255, 255, 0.55)),
-    color-mix(in srgb, var(--glass-fill, rgba(255, 255, 255, 0.55)) 70%, transparent);
+    linear-gradient(165deg, rgba(255, 255, 255, 0.58), rgba(255, 255, 255, 0.35)),
+    color-mix(in srgb, var(--glass-fill, rgba(255, 255, 255, 0.35)) 70%, transparent);
   color: var(--ink);
   padding: 5px 11px;
   font: inherit;
@@ -1235,7 +1235,7 @@ html[data-theme="dark"] .fs-glass-ctx.fs-ctx-menu {
   cursor: pointer;
   box-shadow:
     0 1px 3px rgba(15, 23, 42, 0.05),
-    inset 0 1px 0 rgba(255, 255, 255, 0.92);
+    inset 0 1px 0 rgba(255, 255, 255, 0.6);
   transition:
     background 0.12s ease,
     border-color 0.12s ease,
@@ -1252,11 +1252,11 @@ html[data-theme="dark"] .fs-glass-ctx.fs-ctx-menu {
 .fs-batch-bar button:hover:not(:disabled) {
   border-color: color-mix(in srgb, var(--tone, #06b6d4) 28%, var(--glass-edge));
   background:
-    linear-gradient(165deg, rgba(255, 255, 255, 0.96), rgba(255, 255, 255, 0.68)),
+    linear-gradient(165deg, rgba(255, 255, 255, 0.62), rgba(255, 255, 255, 0.44)),
     color-mix(in srgb, var(--tone, #06b6d4) 8%, transparent);
   box-shadow:
     0 4px 12px rgba(15, 23, 42, 0.08),
-    inset 0 1px 0 rgba(255, 255, 255, 1);
+    inset 0 1px 0 rgba(255, 255, 255, 0.65);
 }
 
 .fs-batch-bar button:active:not(:disabled) {
@@ -1275,7 +1275,7 @@ html[data-theme="dark"] .fs-glass-ctx.fs-ctx-menu {
 
 .fs-batch-bar button.is-danger:hover:not(:disabled) {
   background:
-    linear-gradient(165deg, rgba(255, 255, 255, 0.92), rgba(255, 255, 255, 0.55)),
+    linear-gradient(165deg, rgba(255, 255, 255, 0.6), rgba(255, 255, 255, 0.35)),
     var(--danger-bg, rgba(244, 63, 94, 0.1));
   border-color: color-mix(in srgb, var(--danger, #e11d48) 36%, transparent);
   color: color-mix(in srgb, var(--danger, #e11d48) 92%, #000);
@@ -1352,11 +1352,11 @@ html[data-theme="dark"] .fs-batch-bar button.is-danger:hover:not(:disabled) {
   border-radius: 16px;
   border: 1px solid color-mix(in srgb, var(--glass-edge) 90%, transparent);
   background:
-    linear-gradient(165deg, rgba(255, 255, 255, 0.88), rgba(255, 255, 255, 0.62)),
+    linear-gradient(165deg, rgba(255, 255, 255, 0.56), rgba(255, 255, 255, 0.4)),
     color-mix(in srgb, var(--glass-panel, #fff) 80%, transparent);
   box-shadow:
     0 16px 40px rgba(15, 23, 42, 0.16),
-    inset 0 1px 0 rgba(255, 255, 255, 0.95);
+    inset 0 1px 0 rgba(255, 255, 255, 0.62);
   backdrop-filter: blur(22px) saturate(1.35);
   -webkit-backdrop-filter: blur(22px) saturate(1.35);
   color: var(--ink);

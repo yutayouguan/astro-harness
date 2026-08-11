@@ -12,14 +12,14 @@
   gap: 12px;
   padding: 16px;
   border-radius: 20px;
-  border: 1px solid color-mix(in srgb, var(--card-tone) 28%, rgba(255, 255, 255, 0.55));
+  border: 1px solid color-mix(in srgb, var(--card-tone) 32%, rgba(255, 255, 255, 0.32));
   background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.42), rgba(255, 255, 255, 0.12)),
-    color-mix(in srgb, var(--card-tone-soft) 45%, rgba(255, 255, 255, 0.22));
+    linear-gradient(155deg, rgba(255, 255, 255, 0.28), rgba(255, 255, 255, 0.06)),
+    color-mix(in srgb, var(--card-tone-soft) 52%, rgba(255, 255, 255, 0.12));
   box-shadow:
     var(--shadow-card),
-    inset 0 1px 0 rgba(255, 255, 255, 0.55),
-    0 0 0 0.5px color-mix(in srgb, var(--card-tone) 12%, transparent);
+    inset 0 1px 0 rgba(255, 255, 255, 0.38),
+    0 0 0 0.5px color-mix(in srgb, var(--card-tone) 14%, transparent);
   backdrop-filter: blur(16px) saturate(1.2);
   -webkit-backdrop-filter: blur(16px) saturate(1.2);
   overflow: hidden;
@@ -50,10 +50,10 @@
 .tool-card:hover,
 .empty-mode-card:hover {
   transform: translateY(-1px);
-  border-color: color-mix(in srgb, var(--card-tone) 42%, rgba(255, 255, 255, 0.5));
+  border-color: color-mix(in srgb, var(--card-tone) 48%, rgba(255, 255, 255, 0.32));
   box-shadow:
-    0 3px 10px color-mix(in srgb, var(--card-tone) 8%, transparent),
-    inset 0 1px 0 rgba(255, 255, 255, 0.65);
+    0 3px 10px color-mix(in srgb, var(--card-tone) 12%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.45);
 }
 
 html[data-theme="dark"] .tool-card,

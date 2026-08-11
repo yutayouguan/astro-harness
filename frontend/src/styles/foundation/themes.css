@@ -153,14 +153,14 @@ html[data-theme="light"] {
     radial-gradient(ellipse 70% 55% at 88% 18%, rgba(196, 181, 253, 0.32), transparent 50%),
     radial-gradient(ellipse 60% 50% at 50% 100%, rgba(167, 243, 208, 0.22), transparent 55%),
     linear-gradient(165deg, #f4f6fa 0%, #e9eef6 48%, #e4eaf3 100%);
-  --glass: rgba(255, 255, 255, 0.38);
-  --glass-strong: rgba(255, 255, 255, 0.62);
-  --glass-edge: rgba(255, 255, 255, 0.72);
-  --glass-card: rgba(255, 255, 255, 0.48);
-  --glass-panel: rgba(255, 255, 255, 0.38);
-  --glass-inner: rgba(255, 255, 255, 0.62);
-  --sidebar-bg: rgba(255, 255, 255, 0.42);
-  --sidebar-pinned-bg: rgba(255, 255, 255, 0.42);
+  --glass: rgba(255, 255, 255, 0.22);
+  --glass-strong: rgba(255, 255, 255, 0.38);
+  --glass-edge: rgba(255, 255, 255, 0.48);
+  --glass-card: rgba(255, 255, 255, 0.3);
+  --glass-panel: rgba(255, 255, 255, 0.24);
+  --glass-inner: rgba(255, 255, 255, 0.38);
+  --sidebar-bg: rgba(255, 255, 255, 0.26);
+  --sidebar-pinned-bg: rgba(255, 255, 255, 0.28);
   --ink: #1e293b;
   --ink-soft: rgba(30, 41, 59, 0.78);
   --ink-mute: rgba(71, 85, 105, 0.72);
@@ -179,25 +179,25 @@ html[data-theme="light"] {
   --accent-2: #3b82f6;
   --pink: #ec4899;
   --gold: #f59e0b;
-  --user-fill: linear-gradient(145deg, rgba(219, 234, 254, 0.85), rgba(191, 219, 254, 0.55));
-  --assist-fill: rgba(255, 255, 255, 0.32);
+  --user-fill: linear-gradient(145deg, rgba(219, 234, 254, 0.72), rgba(191, 219, 254, 0.42));
+  --assist-fill: rgba(255, 255, 255, 0.18);
   --danger: #e11d48;
   --danger-bg: rgba(244, 63, 94, 0.1);
   --shadow: 0 4px 16px rgba(15, 23, 42, 0.05);
   --shadow-card: 0 1px 6px rgba(15, 23, 42, 0.04), 0 0 1px rgba(15, 23, 42, 0.03);
-  --rim: inset 0 1px 0 rgba(255, 255, 255, 0.95), inset 0 0 0 0.5px rgba(255, 255, 255, 0.6);
+  --rim: inset 0 1px 0 rgba(255, 255, 255, 0.72), inset 0 0 0 0.5px rgba(255, 255, 255, 0.4);
   --scroll-thumb: rgba(148, 163, 184, 0.16);
-  --chip-bg: rgba(255, 255, 255, 0.42);
+  --chip-bg: rgba(255, 255, 255, 0.26);
   --chip-border: rgba(148, 163, 184, 0.22);
-  --composer-bg: rgba(255, 255, 255, 0.28);
+  --composer-bg: rgba(255, 255, 255, 0.18);
   --send-fg: #1e293b;
   --glass-border: rgba(148, 163, 184, 0.28);
     --glass-fill:
-      linear-gradient(145deg, rgba(255, 255, 255, 0.55), rgba(255, 255, 255, 0.22)),
-      rgba(255, 255, 255, 0.48);
+      linear-gradient(145deg, rgba(255, 255, 255, 0.38), rgba(255, 255, 255, 0.14)),
+      rgba(255, 255, 255, 0.28);
     --glass-fill-soft:
-      linear-gradient(145deg, rgba(255, 255, 255, 0.45), rgba(255, 255, 255, 0.18)),
-      rgba(255, 255, 255, 0.4);
+      linear-gradient(145deg, rgba(255, 255, 255, 0.3), rgba(255, 255, 255, 0.1)),
+      rgba(255, 255, 255, 0.22);
   --tone-blue: #2563eb;
   --tone-blue-soft: rgba(37, 99, 235, 0.14);
   --tone-blue-glow: rgba(59, 130, 246, 0.45);
@@ -234,46 +234,46 @@ html[data-theme="light"] {
   --blur-glass: 22px;
   --glass-layer: var(--sidebar-bg);
     --glass-rim:
-      0 0 0 1px rgba(255, 255, 255, 0.45) inset,
-      0 1px 0 rgba(255, 255, 255, 0.85) inset;
-    --backdrop-glass: blur(var(--blur-glass, 20px)) saturate(1.25);
-    /* 浮层下拉：白色调半透明毛玻璃（靠 blur 保证可读，避免实底白块） */
+      0 0 0 1px rgba(255, 255, 255, 0.32) inset,
+      0 1px 0 rgba(255, 255, 255, 0.58) inset;
+    --backdrop-glass: blur(var(--blur-glass, 20px)) saturate(1.35);
+    /* 浮层下拉：色调毛玻璃（靠 blur + tone 叠色保证深度，避免纯白实底） */
     --menu-glass-bg:
-      linear-gradient(165deg, rgba(255, 255, 255, 0.72) 0%, rgba(255, 255, 255, 0.4) 100%),
-      rgba(255, 255, 255, 0.48);
-    --menu-glass-border: rgba(255, 255, 255, 0.7);
+      linear-gradient(165deg, rgba(255, 255, 255, 0.48) 0%, rgba(255, 255, 255, 0.2) 100%),
+      color-mix(in srgb, var(--tone-soft, transparent) 28%, rgba(255, 255, 255, 0.22));
+    --menu-glass-border: color-mix(in srgb, var(--tone, #94a3b8) 10%, rgba(255, 255, 255, 0.48));
     --menu-glass-shadow:
-      0 16px 40px rgba(15, 23, 42, 0.12),
-      0 2px 8px rgba(15, 23, 42, 0.05),
-      inset 0 1px 0 rgba(255, 255, 255, 0.85);
+      0 16px 40px rgba(15, 23, 42, 0.14),
+      0 2px 8px rgba(15, 23, 42, 0.06),
+      inset 0 1px 0 rgba(255, 255, 255, 0.62);
     --menu-glass-blur: blur(24px) saturate(1.35);
     --header-chip-bg:
-      linear-gradient(155deg, rgba(255, 255, 255, 0.52) 0%, rgba(255, 255, 255, 0.2) 100%),
-      color-mix(in srgb, var(--tone-soft, transparent) 42%, var(--chip-bg, rgba(255, 255, 255, 0.42)));
-    --header-chip-border: color-mix(in srgb, var(--tone, var(--accent)) 14%, var(--glass-edge));
+      linear-gradient(155deg, rgba(255, 255, 255, 0.36) 0%, rgba(255, 255, 255, 0.12) 100%),
+      color-mix(in srgb, var(--tone-soft, transparent) 48%, var(--chip-bg, rgba(255, 255, 255, 0.26)));
+    --header-chip-border: color-mix(in srgb, var(--tone, var(--accent)) 18%, var(--glass-edge));
     --header-chip-shadow:
-      0 4px 14px color-mix(in srgb, var(--tone, var(--accent)) 8%, rgba(15, 23, 42, 0.04)),
-      inset 0 1px 0 rgba(255, 255, 255, 0.82);
+      0 4px 14px color-mix(in srgb, var(--tone, var(--accent)) 10%, rgba(15, 23, 42, 0.06)),
+      inset 0 1px 0 rgba(255, 255, 255, 0.55);
     --lens-bg:
-      radial-gradient(circle at 32% 28%, rgba(255, 255, 255, 0.7) 0%, rgba(255, 255, 255, 0.28) 48%, transparent 78%),
-      linear-gradient(165deg, rgba(255, 255, 255, 0.58), rgba(255, 255, 255, 0.22)),
-      color-mix(in srgb, var(--tone, var(--accent)) 10%, transparent);
-    --lens-border: color-mix(in srgb, var(--tone, var(--accent)) 16%, rgba(255, 255, 255, 0.62));
+      radial-gradient(circle at 32% 28%, rgba(255, 255, 255, 0.52) 0%, rgba(255, 255, 255, 0.18) 48%, transparent 78%),
+      linear-gradient(165deg, rgba(255, 255, 255, 0.38), rgba(255, 255, 255, 0.12)),
+      color-mix(in srgb, var(--tone, var(--accent)) 14%, transparent);
+    --lens-border: color-mix(in srgb, var(--tone, var(--accent)) 22%, rgba(255, 255, 255, 0.42));
     --lens-shadow:
-      0 6px 16px color-mix(in srgb, var(--tone, var(--accent)) 14%, transparent),
-      0 2px 6px rgba(15, 23, 42, 0.04),
-      inset 0 1px 0 rgba(255, 255, 255, 0.88),
-      inset 0 -2px 5px rgba(15, 23, 42, 0.04);
+      0 6px 16px color-mix(in srgb, var(--tone, var(--accent)) 18%, transparent),
+      0 2px 6px rgba(15, 23, 42, 0.06),
+      inset 0 1px 0 rgba(255, 255, 255, 0.62),
+      inset 0 -2px 5px rgba(15, 23, 42, 0.05);
     --badge-bg:
-      radial-gradient(circle at 30% 24%, rgba(255, 255, 255, 0.72) 0%, rgba(255, 255, 255, 0.28) 42%, transparent 68%),
-      linear-gradient(165deg, rgba(255, 255, 255, 0.62) 0%, rgba(255, 255, 255, 0.28) 100%),
-      color-mix(in srgb, var(--tone, var(--accent)) 12%, transparent);
-    --badge-border: color-mix(in srgb, var(--tone, var(--accent)) 18%, rgba(255, 255, 255, 0.7));
+      radial-gradient(circle at 30% 24%, rgba(255, 255, 255, 0.52) 0%, rgba(255, 255, 255, 0.18) 42%, transparent 68%),
+      linear-gradient(165deg, rgba(255, 255, 255, 0.42) 0%, rgba(255, 255, 255, 0.16) 100%),
+      color-mix(in srgb, var(--tone, var(--accent)) 16%, transparent);
+    --badge-border: color-mix(in srgb, var(--tone, var(--accent)) 24%, rgba(255, 255, 255, 0.48));
     --badge-shadow:
-      0 4px 12px color-mix(in srgb, var(--tone, var(--accent)) 16%, transparent),
-      0 1px 3px rgba(15, 23, 42, 0.04),
-      inset 0 1px 0 rgba(255, 255, 255, 0.9),
-      inset 0 -2px 4px rgba(15, 23, 42, 0.04);
+      0 4px 12px color-mix(in srgb, var(--tone, var(--accent)) 20%, transparent),
+      0 1px 3px rgba(15, 23, 42, 0.05),
+      inset 0 1px 0 rgba(255, 255, 255, 0.62),
+      inset 0 -2px 4px rgba(15, 23, 42, 0.05);
 }
 
 /* 减少透明度偏好：提高玻璃不透明度，关闭 blur，确保可读性 */
@@ -292,14 +292,14 @@ html[data-theme="light"] {
   }
 
   html[data-theme="light"] {
-    --glass: rgba(255, 255, 255, 0.92);
-    --glass-strong: rgba(255, 255, 255, 0.95);
-    --glass-panel: rgba(255, 255, 255, 0.92);
-    --sidebar-bg: rgba(245, 245, 250, 0.95);
-    --sidebar-pinned-bg: rgba(240, 240, 248, 0.95);
-    --menu-glass-bg: rgba(255, 255, 255, 0.96);
-    --header-chip-bg: rgba(255, 255, 255, 0.92);
-    --composer-bg: rgba(255, 255, 255, 0.92);
+    --glass: rgba(245, 245, 252, 0.88);
+    --glass-strong: rgba(245, 245, 252, 0.92);
+    --glass-panel: rgba(245, 245, 252, 0.9);
+    --sidebar-bg: rgba(240, 240, 248, 0.92);
+    --sidebar-pinned-bg: rgba(238, 238, 246, 0.92);
+    --menu-glass-bg: rgba(245, 245, 252, 0.94);
+    --header-chip-bg: rgba(245, 245, 252, 0.9);
+    --composer-bg: rgba(245, 245, 252, 0.9);
     --backdrop-glass: none;
     --menu-glass-blur: none;
   }

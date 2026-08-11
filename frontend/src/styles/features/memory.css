@@ -43,12 +43,12 @@
   box-sizing: border-box;
   border-radius: 14px;
   background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.52) 0%, rgba(255, 255, 255, 0.18) 100%),
+    linear-gradient(155deg, rgba(255, 255, 255, 0.33) 0%, rgba(255, 255, 255, 0.12) 100%),
     color-mix(in srgb, var(--tone-soft, var(--tone-green-soft)) 32%, var(--glass-fill, transparent));
   border: 1px solid color-mix(in srgb, var(--tone, var(--tone-green)) 14%, var(--glass-edge));
   box-shadow:
     0 2px 8px color-mix(in srgb, var(--tone, transparent) 5%, rgba(15, 23, 42, 0.03)),
-    var(--glass-rim, inset 0 1px 0 rgba(255, 255, 255, 0.7));
+    var(--glass-rim, inset 0 1px 0 rgba(255, 255, 255, 0.45));
   backdrop-filter: var(--backdrop-glass, blur(18px) saturate(1.25));
   -webkit-backdrop-filter: var(--backdrop-glass, blur(18px) saturate(1.25));
   width: fit-content;
@@ -259,7 +259,7 @@
   padding: 0 12px;
   border-radius: 12px;
   border: 1px solid color-mix(in srgb, var(--tone) 22%, var(--glass-edge));
-  background: color-mix(in srgb, var(--tone-soft) 64%, rgba(255, 255, 255, 0.32));
+  background: color-mix(in srgb, var(--tone-soft) 64%, rgba(255, 255, 255, 0.2));
   color: var(--ink);
   font-size: 12px;
   font-weight: 650;
@@ -362,7 +362,7 @@ html[data-theme="dark"] .aux-error {
   border-radius: 18px;
   border: 1px solid color-mix(in srgb, var(--tone) 16%, var(--glass-edge));
   background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.55), rgba(255, 255, 255, 0.18)),
+    linear-gradient(155deg, rgba(255, 255, 255, 0.35), rgba(255, 255, 255, 0.12)),
     color-mix(in srgb, var(--tone-soft) 40%, var(--glass-panel, transparent));
   box-shadow: var(--shadow-card), var(--glass-rim);
   backdrop-filter: blur(16px) saturate(1.2);
@@ -398,7 +398,7 @@ html[data-theme="dark"] .evo-toolbar {
   border-radius: 13px;
   color: var(--tone);
   background:
-    linear-gradient(160deg, rgba(255, 255, 255, 0.7), transparent),
+    linear-gradient(160deg, rgba(255, 255, 255, 0.45), transparent),
     var(--tone-soft);
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--tone) 22%, transparent);
   flex-shrink: 0;
@@ -496,7 +496,7 @@ html[data-theme="dark"] .evo-toolbar {
   padding: 3px;
   border-radius: 12px;
   border: 1px solid color-mix(in srgb, var(--glass-edge) 88%, transparent);
-  background: color-mix(in srgb, var(--glass-panel, rgba(255, 255, 255, 0.55)) 88%, transparent);
+  background: color-mix(in srgb, var(--glass-panel, rgba(255, 255, 255, 0.35)) 88%, transparent);
   backdrop-filter: blur(12px) saturate(1.1);
   -webkit-backdrop-filter: blur(12px) saturate(1.1);
 }
@@ -799,8 +799,8 @@ html[data-theme="dark"] .evo-seg-item.is-active {
   border-radius: 14px;
   border: 1px solid color-mix(in srgb, var(--glass-edge) 90%, transparent);
   background:
-    linear-gradient(160deg, rgba(255, 255, 255, 0.65), rgba(255, 255, 255, 0.22)),
-    color-mix(in srgb, var(--glass-panel, rgba(255, 255, 255, 0.5)) 80%, transparent);
+    linear-gradient(160deg, rgba(255, 255, 255, 0.42), rgba(255, 255, 255, 0.14)),
+    color-mix(in srgb, var(--glass-panel, rgba(255, 255, 255, 0.32)) 80%, transparent);
   overflow: hidden;
 }
 
@@ -813,8 +813,8 @@ html[data-theme="dark"] .evo-stat {
 .evo-stat-primary {
   border-color: color-mix(in srgb, var(--tone) 28%, var(--glass-edge));
   background:
-    linear-gradient(160deg, rgba(255, 255, 255, 0.78), rgba(255, 255, 255, 0.3)),
-    color-mix(in srgb, var(--tone-soft) 50%, rgba(255, 255, 255, 0.45));
+    linear-gradient(160deg, rgba(255, 255, 255, 0.5), rgba(255, 255, 255, 0.2)),
+    color-mix(in srgb, var(--tone-soft) 50%, rgba(255, 255, 255, 0.28));
 }
 
 .evo-stat-primary::before {
@@ -1209,7 +1209,7 @@ html[data-theme="dark"] .evo-stat {
   border-radius: 18px;
   border: 1px solid color-mix(in srgb, var(--tone) 12%, var(--glass-edge));
   background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.38), rgba(255, 255, 255, 0.12)),
+    linear-gradient(155deg, rgba(255, 255, 255, 0.24), rgba(255, 255, 255, 0.12)),
     color-mix(in srgb, var(--tone-soft) 22%, transparent);
 }
 
@@ -1504,12 +1504,12 @@ html[data-theme="dark"] .mem-view-tab--dream.active {
 .mem-view-tab.active {
   color: var(--tone, var(--tone-green));
   background:
-    linear-gradient(165deg, rgba(255, 255, 255, 0.55) 0%, rgba(255, 255, 255, 0.2) 100%),
+    linear-gradient(165deg, rgba(255, 255, 255, 0.35) 0%, rgba(255, 255, 255, 0.14) 100%),
     color-mix(in srgb, var(--tone-soft, var(--tone-green-soft)) 58%, transparent);
   border-color: color-mix(in srgb, var(--tone, var(--tone-green)) 26%, var(--glass-edge));
   box-shadow:
     0 3px 12px color-mix(in srgb, var(--tone, var(--tone-green)) 12%, rgba(15, 23, 42, 0.05)),
-    inset 0 1px 0 rgba(255, 255, 255, 0.8);
+    inset 0 1px 0 rgba(255, 255, 255, 0.52);
   backdrop-filter: blur(14px) saturate(1.3);
   -webkit-backdrop-filter: blur(14px) saturate(1.3);
 }
@@ -1521,7 +1521,7 @@ html[data-theme="dark"] .mem-view-tab--dream.active {
 /* 选中做梦时仍盖住圆点走线 */
 .mem-view-tab--dream.active {
   background:
-    linear-gradient(165deg, rgba(255, 255, 255, 0.58) 0%, rgba(255, 255, 255, 0.22) 100%),
+    linear-gradient(165deg, rgba(255, 255, 255, 0.37) 0%, rgba(255, 255, 255, 0.14) 100%),
     color-mix(in srgb, var(--tone-soft, var(--tone-green-soft)) 62%, transparent);
 }
 
@@ -1596,11 +1596,11 @@ html[data-theme="dark"] .mem-view-tab--dream.active {
   border-radius: 14px;
   border: 1px solid color-mix(in srgb, var(--tone, var(--tone-green)) 12%, var(--glass-edge));
   background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.5) 0%, rgba(255, 255, 255, 0.18) 100%),
+    linear-gradient(155deg, rgba(255, 255, 255, 0.32) 0%, rgba(255, 255, 255, 0.12) 100%),
     color-mix(in srgb, var(--tone-soft, var(--tone-green-soft)) 28%, transparent);
   box-shadow:
     0 4px 14px color-mix(in srgb, var(--tone, transparent) 8%, rgba(15, 23, 42, 0.05)),
-    inset 0 1px 0 rgba(255, 255, 255, 0.75);
+    inset 0 1px 0 rgba(255, 255, 255, 0.48);
   backdrop-filter: blur(14px) saturate(1.3);
   -webkit-backdrop-filter: blur(14px) saturate(1.3);
   color: var(--ink-soft);
@@ -1615,9 +1615,9 @@ html[data-theme="dark"] .mem-view-tab--dream.active {
   border-radius: 9px;
   color: var(--tone, var(--tone-green));
   background:
-    linear-gradient(160deg, rgba(255, 255, 255, 0.55), rgba(255, 255, 255, 0.18)),
+    linear-gradient(160deg, rgba(255, 255, 255, 0.35), rgba(255, 255, 255, 0.12)),
     color-mix(in srgb, var(--tone, var(--tone-green)) 10%, transparent);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.45);
   border: 1px solid color-mix(in srgb, var(--tone, var(--tone-green)) 12%, var(--glass-edge));
 }
 
@@ -1740,27 +1740,27 @@ html[data-theme="dark"] .mem-stat-label {
 
 .memory-panel .mem-cal-header .ws-tool-btn {
   background:
-    linear-gradient(165deg, rgba(255, 255, 255, 0.72) 0%, rgba(255, 255, 255, 0.38) 100%),
+    linear-gradient(165deg, rgba(255, 255, 255, 0.45) 0%, rgba(255, 255, 255, 0.24) 100%),
     color-mix(in srgb, var(--tone-soft, var(--tone-green-soft)) 42%, transparent);
   border: 1px solid color-mix(in srgb, var(--tone, var(--tone-green)) 28%, var(--glass-edge));
   color: var(--tone, var(--tone-green));
   font-weight: 700;
   box-shadow:
     0 2px 8px color-mix(in srgb, var(--tone, var(--tone-green)) 12%, rgba(15, 23, 42, 0.06)),
-    inset 0 1px 0 rgba(255, 255, 255, 0.85);
+    inset 0 1px 0 rgba(255, 255, 255, 0.55);
   backdrop-filter: blur(14px) saturate(1.3);
   -webkit-backdrop-filter: blur(14px) saturate(1.3);
 }
 
 .memory-panel .mem-cal-header .ws-tool-btn:hover:not(:disabled) {
   background:
-    linear-gradient(165deg, rgba(255, 255, 255, 0.82) 0%, rgba(255, 255, 255, 0.48) 100%),
+    linear-gradient(165deg, rgba(255, 255, 255, 0.52) 0%, rgba(255, 255, 255, 0.3) 100%),
     color-mix(in srgb, var(--tone-soft, var(--tone-green-soft)) 55%, transparent);
   border-color: color-mix(in srgb, var(--tone, var(--tone-green)) 42%, var(--glass-edge));
   color: var(--tone, var(--tone-green));
   box-shadow:
     0 3px 12px color-mix(in srgb, var(--tone, var(--tone-green)) 16%, rgba(15, 23, 42, 0.07)),
-    inset 0 1px 0 rgba(255, 255, 255, 0.9);
+    inset 0 1px 0 rgba(255, 255, 255, 0.58);
 }
 
 html[data-theme="dark"] .memory-panel .mem-cal-header .ws-tool-btn {
@@ -1903,7 +1903,7 @@ html[data-theme="dark"] .memory-panel .mem-cal-header .ws-tool-btn:hover:not(:di
   flex-shrink: 0;
   color: var(--ink);
   background:
-    radial-gradient(circle at 32% 26%, rgba(255, 255, 255, 0.5) 0%, transparent 62%),
+    radial-gradient(circle at 32% 26%, rgba(255, 255, 255, 0.32) 0%, transparent 62%),
     color-mix(in srgb, var(--tone, var(--accent)) 16%, var(--chip-bg));
   border: 1px solid color-mix(in srgb, var(--tone, var(--accent)) 14%, var(--chip-border));
   overflow: hidden;
@@ -1991,15 +1991,15 @@ html[data-theme="dark"] .memory-panel .mem-cal-header .ws-tool-btn:hover:not(:di
   place-items: center;
   width: 64px;
   height: 64px;
-  border: 1px solid color-mix(in srgb, var(--tone-green) 22%, rgba(255, 255, 255, 0.7));
+  border: 1px solid color-mix(in srgb, var(--tone-green) 22%, rgba(255, 255, 255, 0.45));
   border-radius: 18px;
   color: var(--tone-green);
   background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.72) 0%, rgba(255, 255, 255, 0.28) 100%),
+    linear-gradient(155deg, rgba(255, 255, 255, 0.45) 0%, rgba(255, 255, 255, 0.18) 100%),
     color-mix(in srgb, var(--tone-green-soft) 70%, transparent);
   box-shadow:
     0 3px 10px color-mix(in srgb, var(--tone-green) 10%, transparent),
-    inset 0 1px 0 rgba(255, 255, 255, 0.9);
+    inset 0 1px 0 rgba(255, 255, 255, 0.58);
   backdrop-filter: blur(14px) saturate(1.2);
   -webkit-backdrop-filter: blur(14px) saturate(1.2);
   cursor: pointer;
@@ -2008,10 +2008,10 @@ html[data-theme="dark"] .memory-panel .mem-cal-header .ws-tool-btn:hover:not(:di
 
 .mem-empty-chat:hover {
   transform: translateY(-1px);
-  border-color: color-mix(in srgb, var(--tone-green) 40%, rgba(255, 255, 255, 0.75));
+  border-color: color-mix(in srgb, var(--tone-green) 40%, rgba(255, 255, 255, 0.48));
   box-shadow:
     0 4px 12px color-mix(in srgb, var(--tone-green) 14%, transparent),
-    inset 0 1px 0 rgba(255, 255, 255, 0.95);
+    inset 0 1px 0 rgba(255, 255, 255, 0.62);
 }
 
 html[data-theme="dark"] .mem-empty-chat {
@@ -2100,13 +2100,13 @@ html[data-theme="dark"] .mem-empty-chat {
   place-items: center;
   color: var(--tone, var(--tone-green));
   background:
-    radial-gradient(circle at 35% 30%, rgba(255, 255, 255, 0.28), transparent 58%),
-    linear-gradient(155deg, rgba(255, 255, 255, 0.32), rgba(255, 255, 255, 0.1)),
+    radial-gradient(circle at 35% 30%, rgba(255, 255, 255, 0.18), transparent 58%),
+    linear-gradient(155deg, rgba(255, 255, 255, 0.2), rgba(255, 255, 255, 0.1)),
     color-mix(in srgb, var(--tone-soft, var(--tone-green-soft)) 58%, transparent);
-  border: 1px solid color-mix(in srgb, var(--tone, var(--tone-green)) 20%, rgba(255, 255, 255, 0.35));
+  border: 1px solid color-mix(in srgb, var(--tone, var(--tone-green)) 20%, rgba(255, 255, 255, 0.22));
   box-shadow:
     0 12px 28px color-mix(in srgb, var(--tone, var(--tone-green)) 10%, transparent),
-    inset 0 1px 0 rgba(255, 255, 255, 0.5);
+    inset 0 1px 0 rgba(255, 255, 255, 0.32);
   backdrop-filter: blur(16px) saturate(1.2);
   -webkit-backdrop-filter: blur(16px) saturate(1.2);
 }
@@ -2464,11 +2464,11 @@ html[data-theme="dark"] .memory-dirty-badge {
 }
 
 .mem-pending-item {
-  border: 1px solid color-mix(in srgb, var(--tone, var(--tone-green)) 16%, rgba(255, 255, 255, 0.5));
+  border: 1px solid color-mix(in srgb, var(--tone, var(--tone-green)) 16%, rgba(255, 255, 255, 0.32));
   border-radius: 14px;
   padding: 12px 14px;
   background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.45) 0%, rgba(255, 255, 255, 0.16) 100%);
+    linear-gradient(155deg, rgba(255, 255, 255, 0.28) 0%, rgba(255, 255, 255, 0.11) 100%);
 }
 
 .mem-pending-meta {
@@ -2524,7 +2524,7 @@ html[data-theme="dark"] .memory-dirty-badge {
 
 .mem-view-tab--pending.active {
   background:
-    linear-gradient(165deg, rgba(255, 255, 255, 0.55) 0%, rgba(255, 255, 255, 0.2) 100%),
+    linear-gradient(165deg, rgba(255, 255, 255, 0.35) 0%, rgba(255, 255, 255, 0.14) 100%),
     color-mix(in srgb, var(--tone-soft, var(--tone-amber-soft, #f5e6c8)) 55%, transparent);
   border-color: color-mix(in srgb, var(--tone-amber, #d97706) 22%, var(--glass-edge));
 }

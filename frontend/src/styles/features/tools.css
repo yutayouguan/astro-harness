@@ -47,7 +47,7 @@
   padding: 14px;
   border: 1px solid color-mix(in srgb, var(--glass-edge) 90%, transparent);
   background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.62), rgba(255, 255, 255, 0.22)),
+    linear-gradient(155deg, rgba(255, 255, 255, 0.39), rgba(255, 255, 255, 0.12)),
     color-mix(in srgb, var(--glass-panel, rgba(255, 255, 255, 0.5)) 78%, transparent);
   box-shadow: var(--shadow-card), var(--glass-rim);
   backdrop-filter: blur(16px) saturate(1.2);
@@ -119,7 +119,7 @@ html[data-theme="dark"] .agent-tools-body {
   max-width: 100%;
   border: 1px solid color-mix(in srgb, var(--glass-edge) 90%, transparent);
   background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.72), rgba(255, 255, 255, 0.28)),
+    linear-gradient(155deg, rgba(255, 255, 255, 0.45), rgba(255, 255, 255, 0.15)),
     color-mix(in srgb, var(--glass-panel, rgba(255, 255, 255, 0.5)) 80%, transparent);
   box-shadow: var(--shadow-card), var(--glass-rim);
   backdrop-filter: blur(16px) saturate(1.2);
@@ -164,11 +164,11 @@ html[data-theme="dark"] .agent-tools-body {
 .tool-main-tab.active {
   color: var(--tone);
   background:
-    linear-gradient(165deg, rgba(255, 255, 255, 0.88), rgba(255, 255, 255, 0.45)),
+    linear-gradient(165deg, rgba(255, 255, 255, 0.55), rgba(255, 255, 255, 0.25)),
     var(--tone-soft);
   box-shadow:
     inset 0 0 0 1px color-mix(in srgb, var(--tone) 26%, transparent),
-    inset 0 1px 0 rgba(255, 255, 255, 0.9),
+    inset 0 1px 0 rgba(255, 255, 255, 0.58),
     0 2px 8px color-mix(in srgb, var(--tone) 12%, transparent);
 }
 
@@ -199,11 +199,11 @@ html[data-theme="dark"] .agent-tools-body {
   white-space: nowrap;
   color: var(--tone);
   background:
-    linear-gradient(165deg, rgba(255, 255, 255, 0.82), rgba(255, 255, 255, 0.4)),
+    linear-gradient(165deg, rgba(255, 255, 255, 0.52), rgba(255, 255, 255, 0.22)),
     var(--tone-soft);
   border: 1px solid color-mix(in srgb, var(--tone) 24%, transparent);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.85),
+    inset 0 1px 0 rgba(255, 255, 255, 0.55),
     0 1px 3px color-mix(in srgb, var(--tone) 10%, transparent);
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
@@ -225,11 +225,11 @@ html[data-theme="dark"] .tools-usage-chip {
   padding: 4px 10px;
   border-radius: 999px;
   background:
-    linear-gradient(165deg, rgba(255, 255, 255, 0.85), rgba(255, 255, 255, 0.45));
+    linear-gradient(165deg, rgba(255, 255, 255, 0.53), rgba(255, 255, 255, 0.25));
   border: 1px solid color-mix(in srgb, var(--glass-edge) 80%, transparent);
   color: var(--ink-mute);
   white-space: nowrap;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.85);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.55);
 }
 
 html[data-theme="dark"] .agent-tool-call-stat {
@@ -291,11 +291,11 @@ html[data-theme="dark"] .agent-tool-call-stat {
   line-height: 1;
   color: var(--tone);
   background:
-    linear-gradient(165deg, rgba(255, 255, 255, 0.52), rgba(255, 255, 255, 0.18)),
+    linear-gradient(165deg, rgba(255, 255, 255, 0.33), rgba(255, 255, 255, 0.10)),
     color-mix(in srgb, var(--tone-soft) 70%, transparent);
   box-shadow:
     0 6px 16px color-mix(in srgb, var(--tone) 10%, transparent),
-    inset 0 1px 0 rgba(255, 255, 255, 0.55);
+    inset 0 1px 0 rgba(255, 255, 255, 0.35);
   backdrop-filter: blur(14px) saturate(1.2);
   -webkit-backdrop-filter: blur(14px) saturate(1.2);
   transition: border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease, color 0.15s ease;
@@ -304,11 +304,11 @@ html[data-theme="dark"] .agent-tool-call-stat {
 .mcp-add-btn:hover {
   border-color: color-mix(in srgb, var(--tone) 36%, rgba(255, 255, 255, 0.6));
   background:
-    linear-gradient(165deg, rgba(255, 255, 255, 0.62), rgba(255, 255, 255, 0.24)),
+    linear-gradient(165deg, rgba(255, 255, 255, 0.39), rgba(255, 255, 255, 0.13)),
     color-mix(in srgb, var(--tone-soft) 85%, transparent);
   box-shadow:
     0 10px 22px color-mix(in srgb, var(--tone) 14%, transparent),
-    inset 0 1px 0 rgba(255, 255, 255, 0.65);
+    inset 0 1px 0 rgba(255, 255, 255, 0.42);
 }
 
 html[data-theme="dark"] .mcp-add-btn {
@@ -348,7 +348,7 @@ html[data-theme="dark"] .mcp-add-btn:hover {
   isolation: isolate;
   border: 1px solid color-mix(in srgb, var(--glass-edge) 90%, transparent);
   background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.72), rgba(255, 255, 255, 0.28)),
+    linear-gradient(155deg, rgba(255, 255, 255, 0.45), rgba(255, 255, 255, 0.15)),
     color-mix(in srgb, var(--glass-panel, rgba(255, 255, 255, 0.5)) 80%, transparent);
   box-shadow: var(--shadow-card), var(--glass-rim);
   backdrop-filter: blur(16px) saturate(1.2);
@@ -400,7 +400,7 @@ html[data-theme="dark"] .mcp-add-btn:hover {
     linear-gradient(145deg, color-mix(in srgb, var(--tone) 22%, #fff), var(--tone-soft));
   border: 1px solid color-mix(in srgb, var(--tone) 22%, transparent);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.85),
+    inset 0 1px 0 rgba(255, 255, 255, 0.55),
     0 2px 6px color-mix(in srgb, var(--tone) 14%, transparent);
 }
 
@@ -488,8 +488,8 @@ html[data-theme="dark"] .mcp-add-btn:hover {
   cursor: pointer;
   color: var(--ink-mute);
   background:
-    linear-gradient(165deg, rgba(255, 255, 255, 0.82), rgba(255, 255, 255, 0.42));
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9);
+    linear-gradient(165deg, rgba(255, 255, 255, 0.52), rgba(255, 255, 255, 0.23));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.58);
   transition: color 0.15s ease, background 0.15s ease, border-color 0.15s ease;
 }
 
@@ -654,7 +654,7 @@ html[data-theme="light"] .mcp-add-drawer-backdrop {
   overflow: hidden;
   border-left: 1px solid color-mix(in srgb, var(--tone) 22%, var(--glass-edge));
   background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.78), rgba(255, 255, 255, 0.32)),
+    linear-gradient(155deg, rgba(255, 255, 255, 0.49), rgba(255, 255, 255, 0.18)),
     color-mix(in srgb, var(--tone-soft) 55%, var(--glass-panel, rgba(255, 255, 255, 0.5)));
   box-shadow:
     -16px 0 48px color-mix(in srgb, var(--tone) 14%, rgba(15, 23, 42, 0.1)),
@@ -758,10 +758,10 @@ html[data-theme="dark"] .mcp-add-drawer-head {
   color: var(--tone);
   border: 1px solid color-mix(in srgb, var(--tone) 24%, rgba(255, 255, 255, 0.65));
   background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.88), rgba(255, 255, 255, 0.28)),
+    linear-gradient(155deg, rgba(255, 255, 255, 0.55), rgba(255, 255, 255, 0.15)),
     var(--tone-soft);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.95),
+    inset 0 1px 0 rgba(255, 255, 255, 0.61),
     0 6px 16px color-mix(in srgb, var(--tone) 16%, transparent);
 }
 
@@ -802,9 +802,9 @@ html[data-theme="dark"] .mcp-add-drawer-title-icon {
   border-radius: 10px;
   border: 1px solid color-mix(in srgb, var(--tone) 12%, var(--chip-border, transparent));
   background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.5), rgba(255, 255, 255, 0.16)),
+    linear-gradient(155deg, rgba(255, 255, 255, 0.32), rgba(255, 255, 255, 0.09)),
     color-mix(in srgb, var(--glass-fill, transparent) 60%, transparent);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.5);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.32);
 }
 
 html[data-theme="dark"] .mcp-add-drawer-tabs {
@@ -845,7 +845,7 @@ html[data-theme="dark"] .mcp-add-drawer-tabs {
 .mcp-add-drawer-tab.active {
   color: var(--tone);
   background:
-    linear-gradient(165deg, rgba(255, 255, 255, 0.55), rgba(255, 255, 255, 0.22)),
+    linear-gradient(165deg, rgba(255, 255, 255, 0.35), rgba(255, 255, 255, 0.12)),
     var(--tone-soft);
   box-shadow:
     inset 0 0 0 1px color-mix(in srgb, var(--tone) 22%, transparent),
@@ -902,14 +902,14 @@ html[data-theme="dark"] .mcp-add-drawer-tab.active {
   border-radius: 12px;
   border: 1px solid color-mix(in srgb, var(--tone) 14%, rgba(255, 255, 255, 0.55));
   background:
-    linear-gradient(165deg, rgba(255, 255, 255, 0.64), rgba(255, 255, 255, 0.3)),
+    linear-gradient(165deg, rgba(255, 255, 255, 0.40), rgba(255, 255, 255, 0.16)),
     rgba(255, 255, 255, 0.38);
   color: inherit;
   font-size: 12px;
   font-family: var(--font-mono, monospace);
   resize: vertical;
   line-height: 1.55;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.72);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.46);
   backdrop-filter: blur(16px) saturate(1.25);
   -webkit-backdrop-filter: blur(16px) saturate(1.25);
 }
@@ -930,7 +930,7 @@ html[data-theme="dark"] .mcp-add-drawer-textarea {
   outline: none;
   border-color: color-mix(in srgb, var(--tone) 42%, transparent);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.9),
+    inset 0 1px 0 rgba(255, 255, 255, 0.58),
     0 0 0 3px color-mix(in srgb, var(--tone) 14%, transparent);
 }
 
@@ -1037,12 +1037,12 @@ html[data-theme="dark"] .mcp-add-drawer-foot {
   border-radius: 12px;
   border: 1px solid color-mix(in srgb, var(--tone) 14%, rgba(255, 255, 255, 0.55));
   background:
-    linear-gradient(165deg, rgba(255, 255, 255, 0.64), rgba(255, 255, 255, 0.3)),
+    linear-gradient(165deg, rgba(255, 255, 255, 0.40), rgba(255, 255, 255, 0.16)),
     rgba(255, 255, 255, 0.38);
   color: inherit;
   font-size: 13px;
   font-family: inherit;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.72);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.46);
   backdrop-filter: blur(16px) saturate(1.25);
   -webkit-backdrop-filter: blur(16px) saturate(1.25);
   transition: border-color 0.14s ease, box-shadow 0.14s ease;
@@ -1075,7 +1075,7 @@ html[data-theme="dark"] .mcp-field-textarea {
   outline: none;
   border-color: color-mix(in srgb, var(--tone) 42%, transparent);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.9),
+    inset 0 1px 0 rgba(255, 255, 255, 0.58),
     0 0 0 3px color-mix(in srgb, var(--tone) 14%, transparent);
 }
 
@@ -1107,11 +1107,11 @@ html[data-theme="dark"] .mcp-field-textarea {
   cursor: pointer;
   color: var(--tone);
   background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.55) 0%, rgba(255, 255, 255, 0.22) 100%),
+    linear-gradient(155deg, rgba(255, 255, 255, 0.35) 0%, rgba(255, 255, 255, 0.12) 100%),
     color-mix(in srgb, var(--tone-soft) 70%, transparent);
   box-shadow:
     0 6px 16px color-mix(in srgb, var(--tone) 12%, transparent),
-    inset 0 1px 0 rgba(255, 255, 255, 0.75);
+    inset 0 1px 0 rgba(255, 255, 255, 0.48);
   backdrop-filter: blur(12px) saturate(1.2);
   -webkit-backdrop-filter: blur(12px) saturate(1.2);
   transition: opacity 0.15s ease, transform 0.12s ease, box-shadow 0.15s ease, border-color 0.15s ease;
@@ -1120,11 +1120,11 @@ html[data-theme="dark"] .mcp-field-textarea {
 .mcp-btn-primary:hover:not(:disabled) {
   border-color: color-mix(in srgb, var(--tone) 36%, rgba(255, 255, 255, 0.55));
   background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.68) 0%, rgba(255, 255, 255, 0.3) 100%),
+    linear-gradient(155deg, rgba(255, 255, 255, 0.43) 0%, rgba(255, 255, 255, 0.16) 100%),
     var(--tone-soft);
   box-shadow:
     0 10px 22px color-mix(in srgb, var(--tone) 16%, transparent),
-    inset 0 1px 0 rgba(255, 255, 255, 0.85);
+    inset 0 1px 0 rgba(255, 255, 255, 0.55);
 }
 
 html[data-theme="dark"] .mcp-btn-primary {
@@ -1181,10 +1181,10 @@ html[data-theme="dark"] .mcp-btn-primary:hover:not(:disabled) {
     padding: 3px;
     border-radius: 12px;
     background:
-      linear-gradient(155deg, rgba(255, 255, 255, 0.35), rgba(255, 255, 255, 0.12)),
+      linear-gradient(155deg, rgba(255, 255, 255, 0.22), rgba(255, 255, 255, 0.12)),
       color-mix(in srgb, var(--glass-fill) 55%, transparent);
     border: 1px solid color-mix(in srgb, var(--tone) 12%, var(--chip-border));
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.55);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35);
     backdrop-filter: blur(12px) saturate(1.15);
     -webkit-backdrop-filter: blur(12px) saturate(1.15);
   }
@@ -1210,11 +1210,11 @@ html[data-theme="dark"] .mcp-btn-primary:hover:not(:disabled) {
   .tools-view-btn.is-active {
     color: var(--tone);
     background:
-      linear-gradient(165deg, rgba(255, 255, 255, 0.55), rgba(255, 255, 255, 0.22)),
+      linear-gradient(165deg, rgba(255, 255, 255, 0.35), rgba(255, 255, 255, 0.12)),
       color-mix(in srgb, var(--tone-soft) 80%, transparent);
     box-shadow:
       inset 0 0 0 1px color-mix(in srgb, var(--tone) 18%, transparent),
-      inset 0 1px 0 rgba(255, 255, 255, 0.7);
+      inset 0 1px 0 rgba(255, 255, 255, 0.45);
   }
   
   html[data-theme="dark"] .tools-view-toggle {
@@ -1416,7 +1416,7 @@ html[data-theme="dark"] .mcp-btn-primary:hover:not(:disabled) {
   border: 1px solid var(--chip-border);
   border-radius: 14px;
   background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.4), rgba(255, 255, 255, 0.12)),
+    linear-gradient(155deg, rgba(255, 255, 255, 0.25), rgba(255, 255, 255, 0.12)),
     color-mix(in srgb, var(--glass-fill) 55%, transparent);
   cursor: pointer;
   text-align: left;
@@ -1427,14 +1427,14 @@ html[data-theme="dark"] .mcp-btn-primary:hover:not(:disabled) {
   .tools-detail-item:hover {
     border-color: color-mix(in srgb, var(--tone) 28%, transparent);
     background:
-      linear-gradient(155deg, rgba(255, 255, 255, 0.5), rgba(255, 255, 255, 0.18)),
+      linear-gradient(155deg, rgba(255, 255, 255, 0.32), rgba(255, 255, 255, 0.10)),
       color-mix(in srgb, var(--tone-soft) 35%, transparent);
   }
   
   .tools-detail-item.is-selected {
     border-color: color-mix(in srgb, var(--tone) 32%, transparent);
     background:
-      linear-gradient(155deg, rgba(255, 255, 255, 0.48), rgba(255, 255, 255, 0.16)),
+      linear-gradient(155deg, rgba(255, 255, 255, 0.30), rgba(255, 255, 255, 0.09)),
       color-mix(in srgb, var(--tone-soft) 65%, transparent);
     box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--tone) 14%, transparent);
   }
@@ -1558,7 +1558,7 @@ html[data-theme="dark"] .mcp-btn-primary:hover:not(:disabled) {
   line-height: 1.55;
   color: var(--ink-soft);
   background:
-    linear-gradient(165deg, rgba(255, 255, 255, 0.88), rgba(255, 255, 255, 0.55)),
+    linear-gradient(165deg, rgba(255, 255, 255, 0.55), rgba(255, 255, 255, 0.30)),
     var(--glass-inner, rgba(255, 255, 255, 0.78));
   border: 1px solid color-mix(in srgb, var(--glass-edge) 80%, transparent);
   box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
@@ -1659,7 +1659,7 @@ html[data-theme="dark"] .mcp-btn-primary:hover:not(:disabled) {
     padding: 14px;
     border: 1px solid color-mix(in srgb, var(--glass-edge) 90%, transparent);
     background:
-      linear-gradient(155deg, rgba(255, 255, 255, 0.72), rgba(255, 255, 255, 0.28)),
+      linear-gradient(155deg, rgba(255, 255, 255, 0.45), rgba(255, 255, 255, 0.15)),
       color-mix(in srgb, var(--glass-panel, rgba(255, 255, 255, 0.5)) 80%, transparent);
     box-shadow: var(--shadow-card), var(--glass-rim);
     backdrop-filter: blur(16px) saturate(1.2);
@@ -1727,11 +1727,11 @@ html[data-theme="dark"] .mcp-btn-primary:hover:not(:disabled) {
     padding: 12px 14px;
     border-radius: 14px;
     background:
-      linear-gradient(165deg, rgba(255, 255, 255, 0.88), rgba(255, 255, 255, 0.55)),
+      linear-gradient(165deg, rgba(255, 255, 255, 0.55), rgba(255, 255, 255, 0.30)),
       var(--glass-inner, rgba(255, 255, 255, 0.78));
     border: 1px solid rgba(255, 255, 255, 0.78);
     box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.95),
+      inset 0 1px 0 rgba(255, 255, 255, 0.61),
       0 1px 3px rgba(15, 23, 42, 0.04);
   }
   
@@ -1954,7 +1954,7 @@ html[data-theme="dark"] .mcp-btn-primary:hover:not(:disabled) {
   border-radius: 12px;
   border: 1px solid color-mix(in srgb, var(--tone, var(--accent)) 14%, rgba(255, 255, 255, 0.55));
   background:
-    linear-gradient(165deg, rgba(255, 255, 255, 0.64), rgba(255, 255, 255, 0.3)),
+    linear-gradient(165deg, rgba(255, 255, 255, 0.40), rgba(255, 255, 255, 0.16)),
     rgba(255, 255, 255, 0.6);
   color: var(--ink);
   font-size: 13px;
@@ -2003,8 +2003,8 @@ html[data-theme="dark"] .approvals-add-row input {
   background:
     linear-gradient(
       165deg,
-      color-mix(in srgb, var(--danger) 10%, rgba(255, 255, 255, 0.86)),
-      rgba(255, 255, 255, 0.5)
+      color-mix(in srgb, var(--danger) 10%, rgba(255, 255, 255, 0.54)),
+      rgba(255, 255, 255, 0.27)
     );
 }
 

@@ -48,13 +48,13 @@
   border-radius: 20px;
   border: 1px solid color-mix(in srgb, var(--tone-blue, #2563eb) 12%, var(--glass-edge));
   background:
-    linear-gradient(165deg, rgba(255, 255, 255, 0.72) 0%, rgba(255, 255, 255, 0.38) 100%),
-    color-mix(in srgb, var(--tone-blue-soft, rgba(37, 99, 235, 0.14)) 28%, var(--composer-bg));
+    linear-gradient(165deg, rgba(255, 255, 255, 0.42) 0%, rgba(255, 255, 255, 0.16) 100%),
+    color-mix(in srgb, var(--tone-blue-soft, rgba(37, 99, 235, 0.14)) 36%, var(--composer-bg));
   box-shadow:
-    0 18px 44px rgba(15, 23, 42, 0.14),
-    0 4px 14px rgba(15, 23, 42, 0.05),
-    inset 0 1px 0 rgba(255, 255, 255, 0.78),
-    inset 0 0 0 0.5px rgba(255, 255, 255, 0.35);
+    0 18px 44px rgba(15, 23, 42, 0.16),
+    0 4px 14px rgba(15, 23, 42, 0.06),
+    inset 0 1px 0 rgba(255, 255, 255, 0.52),
+    inset 0 0 0 0.5px rgba(255, 255, 255, 0.22);
   backdrop-filter: blur(22px) saturate(1.28);
   -webkit-backdrop-filter: blur(22px) saturate(1.28);
   min-height: 0;
@@ -107,8 +107,8 @@ html[data-theme="dark"] .chat-right-panel {
   border: 1px solid color-mix(in srgb, var(--tone-blue, #2563eb) 14%, var(--chip-border));
   border-radius: 10px;
   background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.45), rgba(255, 255, 255, 0.12)),
-    color-mix(in srgb, var(--tone-blue-soft, transparent) 35%, transparent);
+    linear-gradient(155deg, rgba(255, 255, 255, 0.28), rgba(255, 255, 255, 0.06)),
+    color-mix(in srgb, var(--tone-blue-soft, transparent) 42%, transparent);
   color: var(--ink-soft);
   display: grid;
   place-items: center;
@@ -119,8 +119,8 @@ html[data-theme="dark"] .chat-right-panel {
 .chat-right-close:hover {
   color: var(--tone-blue, #2563eb);
   background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.55), rgba(255, 255, 255, 0.18)),
-    color-mix(in srgb, var(--tone-blue-soft, transparent) 55%, transparent);
+    linear-gradient(155deg, rgba(255, 255, 255, 0.38), rgba(255, 255, 255, 0.1)),
+    color-mix(in srgb, var(--tone-blue-soft, transparent) 62%, transparent);
   border-color: color-mix(in srgb, var(--tone-blue, #2563eb) 28%, transparent);
 }
 
@@ -251,10 +251,10 @@ html[data-theme="dark"] .chat-session-list .side-error {
   padding: 3px;
   border-radius: 12px;
   background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.28), rgba(255, 255, 255, 0.08)),
+    linear-gradient(155deg, rgba(255, 255, 255, 0.18), rgba(255, 255, 255, 0.08)),
     color-mix(in srgb, var(--ink) 4%, transparent);
   border: 1px solid color-mix(in srgb, var(--chip-border) 75%, transparent);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.22);
 }
 
 .chat-session-tab {
@@ -278,11 +278,11 @@ html[data-theme="dark"] .chat-session-list .side-error {
 .chat-session-tab.is-active {
   color: var(--ink);
   background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.78), rgba(255, 255, 255, 0.42)),
+    linear-gradient(155deg, rgba(255, 255, 255, 0.5), rgba(255, 255, 255, 0.26)),
     color-mix(in srgb, var(--composer-bg, #fff) 70%, transparent);
   box-shadow:
     0 1px 3px rgba(15, 23, 42, 0.06),
-    inset 0 1px 0 rgba(255, 255, 255, 0.85);
+    inset 0 1px 0 rgba(255, 255, 255, 0.55);
 }
 
 html[data-theme="dark"] .chat-session-tabs {
@@ -304,23 +304,23 @@ html[data-theme="dark"] .chat-session-tab.is-active {
 /* [新建会话] [Agent▾] [🔍]；搜索展开时占满整行 */
 .chat-session-toolbar {
   --session-toolbar-glass-fill:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.42) 0%, rgba(255, 255, 255, 0.14) 100%),
-    color-mix(in srgb, var(--tone-soft, transparent) 45%, rgba(255, 255, 255, 0.18));
+    linear-gradient(155deg, rgba(255, 255, 255, 0.26) 0%, rgba(255, 255, 255, 0.14) 100%),
+    color-mix(in srgb, var(--tone-soft, transparent) 45%, rgba(255, 255, 255, 0.12));
   --session-toolbar-glass-fill-hover:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.52) 0%, rgba(255, 255, 255, 0.2) 100%),
-    color-mix(in srgb, var(--tone-soft, transparent) 58%, rgba(255, 255, 255, 0.22));
+    linear-gradient(155deg, rgba(255, 255, 255, 0.33) 0%, rgba(255, 255, 255, 0.13) 100%),
+    color-mix(in srgb, var(--tone-soft, transparent) 58%, rgba(255, 255, 255, 0.14));
   --session-toolbar-glass-edge:
-    color-mix(in srgb, var(--tone, #64748b) 16%, rgba(255, 255, 255, 0.5));
+    color-mix(in srgb, var(--tone, #64748b) 16%, rgba(255, 255, 255, 0.32));
   --session-toolbar-glass-shadow:
     0 6px 16px color-mix(in srgb, var(--tone, transparent) 8%, rgba(15, 23, 42, 0.05)),
     0 1px 3px rgba(15, 23, 42, 0.03),
-    inset 0 1px 0 rgba(255, 255, 255, 0.55),
-    inset 0 0 0 0.5px rgba(255, 255, 255, 0.28);
+    inset 0 1px 0 rgba(255, 255, 255, 0.35),
+    inset 0 0 0 0.5px rgba(255, 255, 255, 0.18);
   --session-toolbar-glass-shadow-hover:
     0 10px 24px color-mix(in srgb, var(--tone, #64748b) 14%, transparent),
     0 2px 6px rgba(15, 23, 42, 0.05),
-    inset 0 1px 0 rgba(255, 255, 255, 1),
-    inset 0 0 0 0.5px rgba(255, 255, 255, 0.7);
+    inset 0 1px 0 rgba(255, 255, 255, 0.65),
+    inset 0 0 0 0.5px rgba(255, 255, 255, 0.45);
 
   display: flex;
   align-items: center;
@@ -394,7 +394,7 @@ html[data-theme="dark"] .chat-session-tab.is-active {
 .chat-session-toolbar .agent-picker-chip.is-open {
   background: var(--session-toolbar-glass-fill-hover);
   border-color:
-    color-mix(in srgb, var(--tone, #64748b) 32%, rgba(255, 255, 255, 0.75));
+    color-mix(in srgb, var(--tone, #64748b) 32%, rgba(255, 255, 255, 0.48));
   box-shadow: var(--session-toolbar-glass-shadow-hover);
 }
 
@@ -484,9 +484,9 @@ html[data-theme="dark"] .chat-session-toolbar .agent-picker-chip.is-open {
   border: 1px solid color-mix(in srgb, var(--chip-border) 88%, transparent);
   border-radius: 13px;
   background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.42) 0%, rgba(255, 255, 255, 0.12) 100%),
+    linear-gradient(155deg, rgba(255, 255, 255, 0.26) 0%, rgba(255, 255, 255, 0.12) 100%),
     color-mix(in srgb, var(--ink) 2.5%, transparent);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.4);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.26);
   transition:
     border-color 0.14s ease,
     background 0.14s ease,
@@ -495,7 +495,7 @@ html[data-theme="dark"] .chat-session-toolbar .agent-picker-chip.is-open {
 
 .chat-session-row:hover {
   background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.55) 0%, rgba(255, 255, 255, 0.18) 100%),
+    linear-gradient(155deg, rgba(255, 255, 255, 0.35) 0%, rgba(255, 255, 255, 0.12) 100%),
     color-mix(in srgb, var(--ink) 4%, transparent);
   border-color: color-mix(in srgb, var(--tone-blue, #2563eb) 16%, var(--chip-border));
 }
@@ -503,11 +503,11 @@ html[data-theme="dark"] .chat-session-toolbar .agent-picker-chip.is-open {
 .chat-session-row.is-active {
   border-color: color-mix(in srgb, var(--tone-blue, #2563eb) 36%, transparent);
   background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.55) 0%, rgba(255, 255, 255, 0.16) 100%),
+    linear-gradient(155deg, rgba(255, 255, 255, 0.35) 0%, rgba(255, 255, 255, 0.1) 100%),
     color-mix(in srgb, var(--tone-blue-soft, rgba(37, 99, 235, 0.14)) 72%, transparent);
   box-shadow:
     0 4px 14px color-mix(in srgb, var(--tone-blue, #2563eb) 10%, rgba(15, 23, 42, 0.04)),
-    inset 0 1px 0 rgba(255, 255, 255, 0.65);
+    inset 0 1px 0 rgba(255, 255, 255, 0.42);
 }
 
 html[data-theme="dark"] .chat-session-row {
@@ -621,7 +621,7 @@ html[data-theme="dark"] .chat-session-row.is-active {
 .chat-session-quick-btn:hover:not(:disabled) {
   color: var(--tone-blue, #2563eb);
   background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.55), rgba(255, 255, 255, 0.18)),
+    linear-gradient(155deg, rgba(255, 255, 255, 0.35), rgba(255, 255, 255, 0.12)),
     color-mix(in srgb, var(--tone-blue-soft, rgba(37, 99, 235, 0.14)) 55%, transparent);
   border-color: color-mix(in srgb, var(--tone-blue, #2563eb) 18%, transparent);
 }
@@ -674,7 +674,7 @@ html[data-theme="dark"] .chat-session-row.is-active {
 .chat-session-menu-wrap.is-open .chat-session-more {
   color: var(--ink);
   background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.55), rgba(255, 255, 255, 0.18)),
+    linear-gradient(155deg, rgba(255, 255, 255, 0.35), rgba(255, 255, 255, 0.12)),
     color-mix(in srgb, var(--ink) 5%, transparent);
   border-color: color-mix(in srgb, var(--chip-border) 80%, transparent);
   backdrop-filter: blur(10px) saturate(1.15);
@@ -696,13 +696,13 @@ html[data-theme="dark"] .chat-session-row.is-active {
   border-radius: 12px;
   border: 1px solid color-mix(in srgb, var(--glass-edge, #fff) 82%, rgba(148, 163, 184, 0.28));
   background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.62) 0%, rgba(255, 255, 255, 0.28) 100%),
-    color-mix(in srgb, var(--composer-bg, #fff) 55%, rgba(255, 255, 255, 0.35));
+    linear-gradient(155deg, rgba(255, 255, 255, 0.4) 0%, rgba(255, 255, 255, 0.18) 100%),
+    color-mix(in srgb, var(--composer-bg, #fff) 55%, rgba(255, 255, 255, 0.22));
   box-shadow:
     0 14px 32px rgba(15, 23, 42, 0.14),
     0 2px 8px rgba(15, 23, 42, 0.05),
-    inset 0 1px 0 rgba(255, 255, 255, 0.75),
-    inset 0 0 0 0.5px rgba(255, 255, 255, 0.4);
+    inset 0 1px 0 rgba(255, 255, 255, 0.48),
+    inset 0 0 0 0.5px rgba(255, 255, 255, 0.26);
   backdrop-filter: blur(18px) saturate(1.25);
   -webkit-backdrop-filter: blur(18px) saturate(1.25);
   display: flex;
@@ -926,8 +926,8 @@ html[data-theme="dark"] .chat-session-menu {
   border-radius: 18px;
   background:
     radial-gradient(circle at 50% 0%, color-mix(in srgb, var(--tone-blue-soft, #dbeafe) 48%, transparent), transparent 68%),
-    linear-gradient(155deg, rgba(255, 255, 255, 0.42), rgba(255, 255, 255, 0.12));
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7);
+    linear-gradient(155deg, rgba(255, 255, 255, 0.26), rgba(255, 255, 255, 0.12));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.45);
   text-align: center;
 }
 
@@ -940,15 +940,15 @@ html[data-theme="dark"] .chat-session-menu {
   height: 38px;
   display: grid;
   place-items: center;
-  border: 1px solid color-mix(in srgb, var(--tone-blue, #2563eb) 18%, rgba(255, 255, 255, 0.72));
+  border: 1px solid color-mix(in srgb, var(--tone-blue, #2563eb) 18%, rgba(255, 255, 255, 0.46));
   border-radius: 13px;
   background:
-    linear-gradient(145deg, rgba(255, 255, 255, 0.82), rgba(255, 255, 255, 0.28)),
+    linear-gradient(145deg, rgba(255, 255, 255, 0.52), rgba(255, 255, 255, 0.18)),
     color-mix(in srgb, var(--tone-blue-soft, #dbeafe) 72%, transparent);
   color: var(--tone-blue, #2563eb);
   box-shadow:
     0 8px 20px color-mix(in srgb, var(--tone-blue, #2563eb) 12%, transparent),
-    inset 0 1px 0 rgba(255, 255, 255, 0.95);
+    inset 0 1px 0 rgba(255, 255, 255, 0.62);
 }
 
 .chat-agent-state-icon.is-loading svg {
@@ -965,10 +965,10 @@ html[data-theme="dark"] .chat-session-menu {
   border-radius: 18px;
   background:
     radial-gradient(circle at 4% 0%, color-mix(in srgb, var(--tone-blue-soft, #dbeafe) 62%, transparent), transparent 42%),
-    linear-gradient(150deg, rgba(255, 255, 255, 0.58), rgba(255, 255, 255, 0.17));
+    linear-gradient(150deg, rgba(255, 255, 255, 0.37), rgba(255, 255, 255, 0.11));
   box-shadow:
     0 12px 28px color-mix(in srgb, var(--tone-blue, #2563eb) 8%, transparent),
-    inset 0 1px 0 rgba(255, 255, 255, 0.85);
+    inset 0 1px 0 rgba(255, 255, 255, 0.55);
   backdrop-filter: blur(18px) saturate(1.18);
   -webkit-backdrop-filter: blur(18px) saturate(1.18);
 }
@@ -980,13 +980,13 @@ html[data-theme="dark"] .chat-session-menu {
   display: grid;
   place-items: center;
   background:
-    radial-gradient(circle at 32% 26%, rgba(255, 255, 255, 0.55) 0%, transparent 62%),
+    radial-gradient(circle at 32% 26%, rgba(255, 255, 255, 0.35) 0%, transparent 62%),
     color-mix(in srgb, var(--tone, #2563eb) 18%, transparent);
   font-weight: 700;
   overflow: hidden;
   color: var(--tone, #2563eb);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.7),
+    inset 0 1px 0 rgba(255, 255, 255, 0.45),
     0 0 0 5px color-mix(in srgb, var(--tone-blue-soft, #dbeafe) 38%, transparent),
     0 10px 24px color-mix(in srgb, var(--tone, #2563eb) 18%, transparent);
 }
@@ -1025,9 +1025,9 @@ html[data-theme="dark"] .chat-session-menu {
   margin: 6px 0 0;
   padding: 3px 8px;
   overflow: hidden;
-  border: 1px solid color-mix(in srgb, var(--tone-blue, #2563eb) 16%, rgba(255, 255, 255, 0.7));
+  border: 1px solid color-mix(in srgb, var(--tone-blue, #2563eb) 16%, rgba(255, 255, 255, 0.45));
   border-radius: 999px;
-  background: color-mix(in srgb, var(--tone-blue-soft, #dbeafe) 52%, rgba(255, 255, 255, 0.28));
+  background: color-mix(in srgb, var(--tone-blue-soft, #dbeafe) 52%, rgba(255, 255, 255, 0.18));
   color: color-mix(in srgb, var(--tone-blue, #2563eb) 72%, var(--ink));
   font-size: 10.5px;
   font-weight: 650;
@@ -1042,11 +1042,11 @@ html[data-theme="dark"] .chat-session-menu {
   border: 1px solid color-mix(in srgb, var(--glass-edge) 86%, transparent);
   border-radius: 16px;
   background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.48), rgba(255, 255, 255, 0.14)),
+    linear-gradient(155deg, rgba(255, 255, 255, 0.3), rgba(255, 255, 255, 0.14)),
     color-mix(in srgb, var(--composer-bg, transparent) 56%, transparent);
   box-shadow:
     0 8px 22px rgba(15, 23, 42, 0.035),
-    inset 0 1px 0 rgba(255, 255, 255, 0.76);
+    inset 0 1px 0 rgba(255, 255, 255, 0.49);
   backdrop-filter: blur(16px) saturate(1.14);
   -webkit-backdrop-filter: blur(16px) saturate(1.14);
 }
@@ -1079,13 +1079,13 @@ html[data-theme="dark"] .chat-session-menu {
   flex-shrink: 0;
   display: grid;
   place-items: center;
-  border: 1px solid color-mix(in srgb, var(--tone-blue, #2563eb) 17%, rgba(255, 255, 255, 0.72));
+  border: 1px solid color-mix(in srgb, var(--tone-blue, #2563eb) 17%, rgba(255, 255, 255, 0.46));
   border-radius: 9px;
   background:
-    linear-gradient(145deg, rgba(255, 255, 255, 0.78), rgba(255, 255, 255, 0.25)),
+    linear-gradient(145deg, rgba(255, 255, 255, 0.5), rgba(255, 255, 255, 0.16)),
     color-mix(in srgb, var(--tone-blue-soft, #dbeafe) 65%, transparent);
   color: var(--tone-blue, #2563eb);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.58);
 }
 
 .chat-agent-turn {
@@ -1104,7 +1104,7 @@ html[data-theme="dark"] .chat-session-menu {
   padding: 3px 7px;
   border: 1px solid color-mix(in srgb, var(--ink) 8%, transparent);
   border-radius: 7px;
-  background: color-mix(in srgb, var(--ink) 5%, rgba(255, 255, 255, 0.24));
+  background: color-mix(in srgb, var(--ink) 5%, rgba(255, 255, 255, 0.16));
 }
 
 .chat-agent-preview {
@@ -1119,7 +1119,7 @@ html[data-theme="dark"] .chat-session-menu {
   border: 1px solid color-mix(in srgb, var(--glass-edge) 72%, transparent);
   border-radius: 11px;
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.26), rgba(255, 255, 255, 0.08)),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.17), rgba(255, 255, 255, 0.08)),
     color-mix(in srgb, var(--ink) 2.5%, transparent);
   box-shadow:
     inset 0 10px 16px -16px color-mix(in srgb, var(--ink) 22%, transparent),
@@ -1147,9 +1147,9 @@ html[data-theme="dark"] .chat-session-menu {
   border: 1px solid color-mix(in srgb, var(--tone-blue, #2563eb) 14%, var(--glass-edge));
   border-radius: 12px;
   background:
-    linear-gradient(145deg, rgba(255, 255, 255, 0.42), rgba(255, 255, 255, 0.1)),
+    linear-gradient(145deg, rgba(255, 255, 255, 0.26), rgba(255, 255, 255, 0.1)),
     color-mix(in srgb, var(--tone-blue-soft, #dbeafe) 28%, transparent);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.45);
   color: inherit;
   text-align: left;
   cursor: pointer;
@@ -1159,7 +1159,7 @@ html[data-theme="dark"] .chat-session-menu {
 .chat-agent-usage:hover {
   border-color: color-mix(in srgb, var(--tone-blue, #2563eb) 28%, var(--glass-edge));
   background:
-    linear-gradient(145deg, rgba(255, 255, 255, 0.58), rgba(255, 255, 255, 0.16)),
+    linear-gradient(145deg, rgba(255, 255, 255, 0.37), rgba(255, 255, 255, 0.1)),
     color-mix(in srgb, var(--tone-blue-soft, #dbeafe) 46%, transparent);
   transform: translateY(-1px);
 }
@@ -1209,14 +1209,14 @@ html[data-theme="dark"] .chat-session-menu {
 
 .chat-agent-skill-tags span {
   padding: 4px 9px;
-  border: 1px solid color-mix(in srgb, var(--tone-blue, #2563eb) 12%, rgba(255, 255, 255, 0.62));
+  border: 1px solid color-mix(in srgb, var(--tone-blue, #2563eb) 12%, rgba(255, 255, 255, 0.4));
   border-radius: 999px;
   background:
-    linear-gradient(145deg, rgba(255, 255, 255, 0.56), rgba(255, 255, 255, 0.16)),
+    linear-gradient(145deg, rgba(255, 255, 255, 0.36), rgba(255, 255, 255, 0.1)),
     color-mix(in srgb, var(--tone-blue-soft, #dbeafe) 38%, transparent);
   color: var(--ink-soft);
   font-size: 11.5px;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.72);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.46);
 }
 
 .chat-agent-view-all,
@@ -1256,15 +1256,15 @@ html[data-theme="dark"] .chat-session-menu {
   border: 1px solid color-mix(in srgb, var(--tone-blue, #2563eb) 16%, var(--glass-edge));
   border-radius: 10px;
   background:
-    linear-gradient(145deg, rgba(255, 255, 255, 0.48), rgba(255, 255, 255, 0.12)),
+    linear-gradient(145deg, rgba(255, 255, 255, 0.3), rgba(255, 255, 255, 0.12)),
     color-mix(in srgb, var(--tone-blue-soft, #dbeafe) 34%, transparent);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.72);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.46);
 }
 
 .chat-agent-view-all:hover {
   border-color: color-mix(in srgb, var(--tone-blue, #2563eb) 30%, var(--glass-edge));
   background:
-    linear-gradient(145deg, rgba(255, 255, 255, 0.65), rgba(255, 255, 255, 0.2)),
+    linear-gradient(145deg, rgba(255, 255, 255, 0.42), rgba(255, 255, 255, 0.13)),
     color-mix(in srgb, var(--tone-blue-soft, #dbeafe) 54%, transparent);
   transform: translateY(-1px);
 }
@@ -1396,14 +1396,14 @@ html[data-theme="dark"] .chat-agent-preview {
   min-width: 0;
   padding: 8px 9px;
   border-radius: 12px;
-  border: 1px solid color-mix(in srgb, var(--tone-blue, #2563eb) 14%, rgba(255, 255, 255, 0.5));
+  border: 1px solid color-mix(in srgb, var(--tone-blue, #2563eb) 14%, rgba(255, 255, 255, 0.32));
   background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.42) 0%, rgba(255, 255, 255, 0.12) 100%),
-    color-mix(in srgb, var(--tone-blue-soft, rgba(37, 99, 235, 0.14)) 38%, rgba(255, 255, 255, 0.16));
+    linear-gradient(155deg, rgba(255, 255, 255, 0.26) 0%, rgba(255, 255, 255, 0.12) 100%),
+    color-mix(in srgb, var(--tone-blue-soft, rgba(37, 99, 235, 0.14)) 38%, rgba(255, 255, 255, 0.1));
   box-shadow:
     0 4px 12px color-mix(in srgb, var(--tone-blue, #2563eb) 6%, rgba(15, 23, 42, 0.04)),
-    inset 0 1px 0 rgba(255, 255, 255, 0.55),
-    inset 0 0 0 0.5px rgba(255, 255, 255, 0.28);
+    inset 0 1px 0 rgba(255, 255, 255, 0.35),
+    inset 0 0 0 0.5px rgba(255, 255, 255, 0.18);
   backdrop-filter: blur(12px) saturate(1.15);
   -webkit-backdrop-filter: blur(12px) saturate(1.15);
 }
@@ -1417,9 +1417,9 @@ html[data-theme="dark"] .chat-agent-preview {
   border-radius: 8px;
   color: var(--tone-blue, #2563eb);
   background:
-    radial-gradient(circle at 32% 26%, rgba(255, 255, 255, 0.65) 0%, transparent 62%),
+    radial-gradient(circle at 32% 26%, rgba(255, 255, 255, 0.42) 0%, transparent 62%),
     color-mix(in srgb, var(--tone-blue-soft, rgba(37, 99, 235, 0.14)) 85%, transparent);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.55);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35);
 }
 
 .ctx-explorer-metric-icon svg {
@@ -1471,12 +1471,12 @@ html[data-theme="dark"] .chat-agent-preview {
       color-mix(in srgb, var(--tone-blue-soft, rgba(37, 99, 235, 0.14)) 70%, transparent) 0%,
       transparent 58%
     ),
-    linear-gradient(155deg, rgba(255, 255, 255, 0.38) 0%, rgba(255, 255, 255, 0.1) 100%),
-    color-mix(in srgb, var(--composer-bg, rgba(255, 255, 255, 0.38)) 72%, transparent);
+    linear-gradient(155deg, rgba(255, 255, 255, 0.24) 0%, rgba(255, 255, 255, 0.1) 100%),
+    color-mix(in srgb, var(--composer-bg, rgba(255, 255, 255, 0.24)) 72%, transparent);
   box-shadow:
     0 8px 24px color-mix(in srgb, var(--tone-blue, #2563eb) 8%, rgba(15, 23, 42, 0.06)),
-    inset 0 1px 0 rgba(255, 255, 255, 0.5),
-    inset 0 0 0 0.5px rgba(255, 255, 255, 0.25);
+    inset 0 1px 0 rgba(255, 255, 255, 0.32),
+    inset 0 0 0 0.5px rgba(255, 255, 255, 0.16);
   backdrop-filter: blur(14px) saturate(1.2);
   -webkit-backdrop-filter: blur(14px) saturate(1.2);
 }
@@ -1546,9 +1546,9 @@ html[data-theme="dark"] .chat-agent-preview {
   border-radius: 7px;
   color: var(--tone-blue, #2563eb);
   background:
-    radial-gradient(circle at 32% 26%, rgba(255, 255, 255, 0.55) 0%, transparent 62%),
+    radial-gradient(circle at 32% 26%, rgba(255, 255, 255, 0.35) 0%, transparent 62%),
     color-mix(in srgb, var(--tone-blue-soft, rgba(37, 99, 235, 0.14)) 75%, transparent);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.45);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.29);
 }
 
 .ctx-explorer-expand-all {
@@ -1582,9 +1582,9 @@ html[data-theme="dark"] .chat-agent-preview {
   border-radius: 14px;
   border: 1px dashed color-mix(in srgb, var(--glass-edge) 82%, var(--ink-mute));
   background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.22) 0%, rgba(255, 255, 255, 0.06) 100%),
+    linear-gradient(155deg, rgba(255, 255, 255, 0.14) 0%, rgba(255, 255, 255, 0.06) 100%),
     color-mix(in srgb, var(--ink) 2%, transparent);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.22);
   font-size: 12px;
   line-height: 1.45;
   color: var(--ink-mute);
@@ -1602,9 +1602,9 @@ html[data-theme="dark"] .chat-agent-preview {
   border-radius: 10px;
   color: var(--tone-blue, #2563eb);
   background:
-    radial-gradient(circle at 32% 26%, rgba(255, 255, 255, 0.55) 0%, transparent 62%),
+    radial-gradient(circle at 32% 26%, rgba(255, 255, 255, 0.35) 0%, transparent 62%),
     color-mix(in srgb, var(--tone-blue-soft, rgba(37, 99, 235, 0.14)) 80%, transparent);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.45);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.29);
 }
 
 .ctx-explorer-list {
@@ -1679,7 +1679,7 @@ html[data-theme="dark"] .chat-agent-preview {
   border-radius: 6px;
   color: var(--ink-soft);
   background: color-mix(in srgb, var(--ink) 5%, transparent);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.25);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16);
 }
 
 .ctx-explorer-row-label {

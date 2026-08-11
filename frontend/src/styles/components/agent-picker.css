@@ -2,21 +2,21 @@
 
 .agent-picker {
   --agent-glass-fill:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.42) 0%, rgba(255, 255, 255, 0.14) 100%),
-      color-mix(in srgb, var(--tone-soft, transparent) 45%, rgba(255, 255, 255, 0.18));
+    linear-gradient(155deg, rgba(255, 255, 255, 0.26) 0%, rgba(255, 255, 255, 0.14) 100%),
+      color-mix(in srgb, var(--tone-soft, transparent) 45%, rgba(255, 255, 255, 0.12));
   --agent-glass-fill-hover:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.52) 0%, rgba(255, 255, 255, 0.2) 100%),
-      color-mix(in srgb, var(--tone-soft, transparent) 58%, rgba(255, 255, 255, 0.22));
-      --agent-glass-edge: color-mix(in srgb, var(--tone, #64748b) 16%, rgba(255, 255, 255, 0.5));
+    linear-gradient(155deg, rgba(255, 255, 255, 0.33) 0%, rgba(255, 255, 255, 0.13) 100%),
+      color-mix(in srgb, var(--tone-soft, transparent) 58%, rgba(255, 255, 255, 0.14));
+      --agent-glass-edge: color-mix(in srgb, var(--tone, #64748b) 16%, rgba(255, 255, 255, 0.32));
   --agent-glass-rim:
-    inset 0 1px 0 rgba(255, 255, 255, 0.55),
-      inset 0 0 0 0.5px rgba(255, 255, 255, 0.28);
+    inset 0 1px 0 rgba(255, 255, 255, 0.35),
+      inset 0 0 0 0.5px rgba(255, 255, 255, 0.18);
   --agent-glass-shadow:
     0 6px 16px color-mix(in srgb, var(--tone, transparent) 8%, rgba(15, 23, 42, 0.05)),
       0 1px 3px rgba(15, 23, 42, 0.03);
       --agent-glass-blur: blur(16px) saturate(1.2);
   --agent-avatar-fill:
-    radial-gradient(circle at 32% 26%, rgba(255, 255, 255, 0.45) 0%, rgba(255, 255, 255, 0.16) 45%, transparent 72%),
+    radial-gradient(circle at 32% 26%, rgba(255, 255, 255, 0.28) 0%, rgba(255, 255, 255, 0.1) 45%, transparent 72%),
       linear-gradient(160deg, color-mix(in srgb, var(--tone-soft, #dbeafe) 50%, transparent) 0%, color-mix(in srgb, var(--tone, #93c5fd) 16%, #e2e8f0) 100%);
       --agent-avatar-ink: var(--ink);
 
@@ -49,12 +49,12 @@
 .agent-picker-chip:hover:not(:disabled),
 .agent-picker-chip.is-open {
   background: var(--agent-glass-fill-hover);
-  border-color: color-mix(in srgb, var(--tone, #64748b) 32%, rgba(255, 255, 255, 0.75));
+  border-color: color-mix(in srgb, var(--tone, #64748b) 32%, rgba(255, 255, 255, 0.48));
   box-shadow:
     0 10px 24px color-mix(in srgb, var(--tone, #64748b) 14%, transparent),
     0 2px 6px rgba(15, 23, 42, 0.05),
-    inset 0 1px 0 rgba(255, 255, 255, 1),
-    inset 0 0 0 0.5px rgba(255, 255, 255, 0.7);
+    inset 0 1px 0 rgba(255, 255, 255, 0.65),
+    inset 0 0 0 0.5px rgba(255, 255, 255, 0.45);
 }
 
 .agent-picker-chip:disabled {
@@ -72,7 +72,7 @@
   place-items: center;
   background: var(--agent-avatar-fill);
   box-shadow:
-    inset 0 1.5px 0 rgba(255, 255, 255, 1),
+    inset 0 1.5px 0 rgba(255, 255, 255, 0.65),
     inset 0 -1px 3px rgba(15, 23, 42, 0.06),
     0 2px 6px rgba(59, 130, 246, 0.12);
   font-size: 11px;
@@ -96,7 +96,7 @@
   color: var(--tone, #2563eb);
   background: var(--agent-avatar-fill);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.65),
     0 1px 4px rgba(59, 130, 246, 0.1);
 }
 
@@ -104,7 +104,7 @@
   width: 26px;
   height: 26px;
   box-shadow:
-    inset 0 1.5px 0 rgba(255, 255, 255, 1),
+    inset 0 1.5px 0 rgba(255, 255, 255, 0.65),
     inset 0 -1px 3px rgba(15, 23, 42, 0.06),
     0 2px 6px rgba(59, 130, 246, 0.12);
 }
@@ -171,15 +171,15 @@
   background:
     linear-gradient(
       165deg,
-      color-mix(in srgb, var(--tone-soft, transparent) 28%, rgba(255, 255, 255, 0.35)) 0%,
-      rgba(255, 255, 255, 0.18) 55%,
+      color-mix(in srgb, var(--tone-soft, transparent) 28%, rgba(255, 255, 255, 0.22)) 0%,
+      rgba(255, 255, 255, 0.12) 55%,
       rgba(255, 255, 255, 0.12) 100%
     ),
-    color-mix(in srgb, var(--menu-glass-bg, rgba(255, 255, 255, 0.42)) 55%, transparent);
+    color-mix(in srgb, var(--menu-glass-bg, rgba(255, 255, 255, 0.26)) 55%, transparent);
   box-shadow:
     0 18px 48px color-mix(in srgb, var(--tone, transparent) 10%, rgba(15, 23, 42, 0.14)),
     0 2px 8px rgba(15, 23, 42, 0.06),
-    inset 0 1px 0 rgba(255, 255, 255, 0.75),
+    inset 0 1px 0 rgba(255, 255, 255, 0.48),
     0 0 0 1px color-mix(in srgb, var(--tone, transparent) 6%, transparent);
   backdrop-filter: blur(28px) saturate(1.45);
   -webkit-backdrop-filter: blur(28px) saturate(1.45);
@@ -208,18 +208,18 @@
 }
 
 .agent-picker-option:hover {
-  background: color-mix(in srgb, rgba(255, 255, 255, 0.55) 70%, transparent);
+  background: color-mix(in srgb, rgba(255, 255, 255, 0.35) 70%, transparent);
 }
 
 .agent-picker-option.is-highlighted {
-  background: color-mix(in srgb, rgba(255, 255, 255, 0.55) 70%, transparent);
+  background: color-mix(in srgb, rgba(255, 255, 255, 0.35) 70%, transparent);
 }
 
 .agent-picker-option.is-active {
   background:
-    linear-gradient(145deg, rgba(255, 255, 255, 0.45), rgba(255, 255, 255, 0.18)),
+    linear-gradient(145deg, rgba(255, 255, 255, 0.28), rgba(255, 255, 255, 0.12)),
       var(--tone-soft, rgba(147, 197, 253, 0.14));
-      box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--tone, #64748b) 18%, rgba(255, 255, 255, 0.45));
+      box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--tone, #64748b) 18%, rgba(255, 255, 255, 0.28));
 }
 
 .agent-picker-option .agent-avatar {
@@ -232,7 +232,7 @@
   place-items: center;
   background: var(--agent-avatar-fill);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.65),
     0 1px 4px rgba(59, 130, 246, 0.1);
   font-size: 10px;
   font-weight: 750;
@@ -402,16 +402,16 @@ html[data-theme="dark"] .agent-picker-option.is-active {
   width: 36px;
   height: 36px;
   padding: 0;
-  border: 1px solid color-mix(in srgb, var(--tone, #64748b) 14%, rgba(255, 255, 255, 0.55));
+  border: 1px solid color-mix(in srgb, var(--tone, #64748b) 14%, rgba(255, 255, 255, 0.35));
   border-radius: 12px;
   background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.48) 0%, rgba(255, 255, 255, 0.16) 100%),
-      color-mix(in srgb, var(--tone-soft, transparent) 35%, rgba(255, 255, 255, 0.2));
+    linear-gradient(155deg, rgba(255, 255, 255, 0.3) 0%, rgba(255, 255, 255, 0.1) 100%),
+      color-mix(in srgb, var(--tone-soft, transparent) 35%, rgba(255, 255, 255, 0.13));
       color: var(--tone, var(--ink-soft));
   cursor: pointer;
   box-shadow:
     0 6px 16px color-mix(in srgb, var(--tone, transparent) 8%, rgba(15, 23, 42, 0.05)),
-      inset 0 1px 0 rgba(255, 255, 255, 0.55);
+      inset 0 1px 0 rgba(255, 255, 255, 0.35);
       backdrop-filter: blur(16px) saturate(1.25);
       -webkit-backdrop-filter: blur(16px) saturate(1.25);
   transition: color 0.12s ease, border-color 0.12s ease, background 0.12s ease, box-shadow 0.12s ease;
@@ -419,13 +419,13 @@ html[data-theme="dark"] .agent-picker-option.is-active {
 
 .expandable-search-btn:hover {
   color: var(--tone, var(--ink));
-    border-color: color-mix(in srgb, var(--tone, #64748b) 28%, rgba(255, 255, 255, 0.55));
+    border-color: color-mix(in srgb, var(--tone, #64748b) 28%, rgba(255, 255, 255, 0.35));
   background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.58) 0%, rgba(255, 255, 255, 0.22) 100%),
+    linear-gradient(155deg, rgba(255, 255, 255, 0.37) 0%, rgba(255, 255, 255, 0.14) 100%),
       color-mix(in srgb, var(--tone-soft, transparent) 55%, transparent);
   box-shadow:
     0 10px 22px color-mix(in srgb, var(--tone, #64748b) 12%, transparent),
-      inset 0 1px 0 rgba(255, 255, 255, 0.65);
+      inset 0 1px 0 rgba(255, 255, 255, 0.42);
 }
 
 .expandable-search-field {
@@ -436,13 +436,13 @@ html[data-theme="dark"] .agent-picker-option.is-active {
   height: 36px;
   padding: 0 6px 0 10px;
   border-radius: 12px;
-  border: 1px solid color-mix(in srgb, var(--tone, #64748b) 28%, rgba(255, 255, 255, 0.72));
+  border: 1px solid color-mix(in srgb, var(--tone, #64748b) 28%, rgba(255, 255, 255, 0.46));
   background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.86) 0%, rgba(255, 255, 255, 0.48) 100%),
-      var(--tone-soft, rgba(255, 255, 255, 0.42));
+    linear-gradient(155deg, rgba(255, 255, 255, 0.55) 0%, rgba(255, 255, 255, 0.3) 100%),
+      var(--tone-soft, rgba(255, 255, 255, 0.26));
   box-shadow:
     0 6px 18px color-mix(in srgb, var(--tone, #64748b) 12%, transparent),
-    inset 0 1px 0 rgba(255, 255, 255, 0.95);
+    inset 0 1px 0 rgba(255, 255, 255, 0.62);
   backdrop-filter: blur(18px) saturate(1.35);
   -webkit-backdrop-filter: blur(18px) saturate(1.35);
 }

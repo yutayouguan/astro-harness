@@ -16,8 +16,8 @@
   background:
     linear-gradient(
       155deg,
-      color-mix(in srgb, var(--toast-tone) 8%, rgba(255, 255, 255, 0.55)),
-      rgba(255, 255, 255, 0.18)
+      color-mix(in srgb, var(--toast-tone) 8%, rgba(255, 255, 255, 0.35)),
+      rgba(255, 255, 255, 0.12)
     ),
     color-mix(in srgb, var(--glass-bg, var(--glass-panel)) 88%, transparent);
   border: none;

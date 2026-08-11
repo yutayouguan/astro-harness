@@ -187,8 +187,8 @@ html[data-theme="dark"] .a2ui-surface {
 }
 
 html[data-theme="light"] .a2ui-surface {
-  --a2ui-glass-bg: rgba(255, 255, 255, 0.55);
-  --a2ui-glass-border: rgba(255, 255, 255, 0.72);
+  --a2ui-glass-bg: rgba(255, 255, 255, 0.35);
+  --a2ui-glass-border: rgba(255, 255, 255, 0.46);
   --a2ui-glass-shadow: 0 10px 36px rgba(15, 23, 42, 0.1);
   --a2ui-glass-fill: rgba(15, 23, 42, 0.04);
 }
@@ -1000,7 +1000,7 @@ html[data-theme="light"] .a2ui-surface {
   border-radius: 12px;
   border: 1px solid color-mix(in srgb, var(--tl-tone, var(--tone, var(--accent))) 14%, var(--glass-edge));
   background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.35) 0%, rgba(255, 255, 255, 0.08) 100%),
+    linear-gradient(155deg, rgba(255, 255, 255, 0.22) 0%, rgba(255, 255, 255, 0.08) 100%),
     color-mix(in srgb, var(--tone-soft, transparent) 30%, transparent);
   box-shadow: var(--glass-rim);
   backdrop-filter: blur(12px) saturate(1.25);

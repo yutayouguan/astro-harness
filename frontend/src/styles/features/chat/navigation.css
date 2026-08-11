@@ -75,7 +75,7 @@
   --nav-label-border: color-mix(
     in srgb,
     var(--tone, var(--accent)) 20%,
-    rgba(255, 255, 255, 0.16)
+    rgba(255, 255, 255, 0.11)
   );
   --arrow-size: 7px;
   position: fixed;

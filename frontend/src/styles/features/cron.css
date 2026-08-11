@@ -21,7 +21,7 @@
   container-name: cron-pane;
   border: 1px solid color-mix(in srgb, var(--glass-edge) 90%, transparent);
   background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.62), rgba(255, 255, 255, 0.22)),
+    linear-gradient(155deg, rgba(255, 255, 255, 0.40), rgba(255, 255, 255, 0.12)),
     color-mix(in srgb, var(--glass-panel, rgba(255, 255, 255, 0.5)) 78%, transparent);
   box-shadow:
     var(--shadow-card),
@@ -186,10 +186,10 @@ html[data-theme="dark"] .cron-pane {
   border-radius: 16px;
   border: 1px solid color-mix(in srgb, var(--chip-border) 85%, transparent);
   background:
-    linear-gradient(160deg, rgba(255, 255, 255, 0.58), rgba(255, 255, 255, 0.16)),
+    linear-gradient(160deg, rgba(255, 255, 255, 0.36), rgba(255, 255, 255, 0.08)),
     color-mix(in srgb, var(--ink) 2%, transparent);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.5),
+    inset 0 1px 0 rgba(255, 255, 255, 0.32),
     0 1px 3px rgba(15, 23, 42, 0.03);
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
@@ -225,11 +225,11 @@ html[data-theme="dark"] .cron-pane {
 .cron-template-card:hover {
   border-color: color-mix(in srgb, var(--tone) 32%, var(--chip-border));
   background:
-    linear-gradient(160deg, rgba(255, 255, 255, 0.72), rgba(255, 255, 255, 0.28)),
+    linear-gradient(160deg, rgba(255, 255, 255, 0.45), rgba(255, 255, 255, 0.15)),
     color-mix(in srgb, var(--tone-soft, transparent) 28%, transparent);
   box-shadow:
     0 6px 20px color-mix(in srgb, var(--tone) 12%, rgba(15, 23, 42, 0.06)),
-    inset 0 1px 0 rgba(255, 255, 255, 0.65);
+    inset 0 1px 0 rgba(255, 255, 255, 0.42);
   transform: translateY(-2px);
 }
 
@@ -247,17 +247,17 @@ html[data-theme="dark"] .cron-pane {
   border-radius: 12px;
   color: var(--ink-soft);
   background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.5), rgba(255, 255, 255, 0.15)),
+    linear-gradient(155deg, rgba(255, 255, 255, 0.32), rgba(255, 255, 255, 0.08)),
     color-mix(in srgb, var(--ink) 5%, transparent);
   border: 1px solid color-mix(in srgb, var(--ink) 6%, transparent);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.4);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.26);
   transition: color 0.14s ease, background 0.14s ease, border-color 0.14s ease;
 }
 
 .cron-template-card:hover .cron-template-icon {
   color: var(--tone);
   background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.6), rgba(255, 255, 255, 0.2)),
+    linear-gradient(155deg, rgba(255, 255, 255, 0.38), rgba(255, 255, 255, 0.1)),
     color-mix(in srgb, var(--tone-soft, transparent) 65%, transparent);
   border-color: color-mix(in srgb, var(--tone) 22%, transparent);
 }
@@ -350,7 +350,7 @@ html[data-theme="dark"] .cron-template-card:hover .cron-template-icon {
   height: 160px;
   border-radius: 50%;
   background:
-    radial-gradient(circle at 40% 35%, rgba(255, 255, 255, 0.7), transparent 45%),
+    radial-gradient(circle at 40% 35%, rgba(255, 255, 255, 0.45), transparent 45%),
     radial-gradient(circle at 50% 50%, color-mix(in srgb, var(--tone) 32%, transparent), transparent 68%);
   filter: blur(12px);
   opacity: 0.75;
@@ -383,7 +383,7 @@ html[data-theme="dark"] .cron-template-card:hover .cron-template-icon {
   place-items: center;
   color: var(--tone);
   filter:
-    drop-shadow(0 1px 0 rgba(255, 255, 255, 0.55))
+    drop-shadow(0 1px 0 rgba(255, 255, 255, 0.35))
     drop-shadow(0 2px 3px color-mix(in srgb, var(--tone) 28%, transparent));
 }
 
@@ -418,7 +418,7 @@ html[data-theme="dark"] .cron-template-card:hover .cron-template-icon {
   border-radius: 20px;
   border: 1px solid color-mix(in srgb, var(--glass-edge) 90%, transparent);
   background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.72), rgba(255, 255, 255, 0.28)),
+    linear-gradient(155deg, rgba(255, 255, 255, 0.45), rgba(255, 255, 255, 0.15)),
     color-mix(in srgb, var(--glass-panel, rgba(255, 255, 255, 0.5)) 80%, transparent);
   box-shadow: var(--shadow-card), var(--glass-rim);
   backdrop-filter: blur(16px) saturate(1.2);
@@ -510,7 +510,7 @@ html[data-theme="dark"] .cron-card {
   place-items: center;
   color: var(--tone);
   filter:
-    drop-shadow(0 1px 0 rgba(255, 255, 255, 0.55))
+    drop-shadow(0 1px 0 rgba(255, 255, 255, 0.35))
     drop-shadow(0 2px 3px color-mix(in srgb, var(--tone) 28%, transparent));
 }
 
@@ -543,16 +543,16 @@ html[data-theme="dark"] .cron-card-glyph {
 .cron-more-btn {
   width: 32px;
   height: 32px;
-  border: 1px solid color-mix(in srgb, var(--tone, #64748b) 14%, rgba(255, 255, 255, 0.55));
+  border: 1px solid color-mix(in srgb, var(--tone, #64748b) 14%, rgba(255, 255, 255, 0.35));
   border-radius: 10px;
   display: grid;
   place-items: center;
   background:
-    linear-gradient(165deg, rgba(255, 255, 255, 0.48), rgba(255, 255, 255, 0.18)),
+    linear-gradient(165deg, rgba(255, 255, 255, 0.3), rgba(255, 255, 255, 0.1)),
     color-mix(in srgb, var(--tone-soft, transparent) 35%, transparent);
   color: var(--ink-soft);
   cursor: pointer;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.45);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.29);
   backdrop-filter: blur(12px) saturate(1.15);
   -webkit-backdrop-filter: blur(12px) saturate(1.15);
   transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease, box-shadow 0.12s ease;
@@ -562,9 +562,9 @@ html[data-theme="dark"] .cron-card-glyph {
 .cron-more.is-open .cron-more-btn {
   color: var(--tone);
   background:
-    linear-gradient(165deg, rgba(255, 255, 255, 0.58), rgba(255, 255, 255, 0.22)),
+    linear-gradient(165deg, rgba(255, 255, 255, 0.36), rgba(255, 255, 255, 0.12)),
     color-mix(in srgb, var(--tone-soft) 70%, transparent);
-  border-color: color-mix(in srgb, var(--tone) 28%, rgba(255, 255, 255, 0.45));
+  border-color: color-mix(in srgb, var(--tone) 28%, rgba(255, 255, 255, 0.29));
 }
 
 .cron-more-btn:disabled {
@@ -598,14 +598,14 @@ html[data-theme="dark"] .cron-more.is-open .cron-more-btn {
   min-width: 176px;
   padding: 6px;
   border-radius: 14px;
-  border: 1px solid color-mix(in srgb, var(--tone) 14%, rgba(255, 255, 255, 0.6));
+  border: 1px solid color-mix(in srgb, var(--tone) 14%, rgba(255, 255, 255, 0.38));
   background:
-    linear-gradient(165deg, rgba(255, 255, 255, 0.72), rgba(255, 255, 255, 0.4)),
-    rgba(255, 255, 255, 0.48);
+    linear-gradient(165deg, rgba(255, 255, 255, 0.45), rgba(255, 255, 255, 0.22)),
+    rgba(255, 255, 255, 0.3);
   box-shadow:
     0 16px 40px rgba(15, 23, 42, 0.12),
     0 2px 8px rgba(15, 23, 42, 0.05),
-    inset 0 1px 0 rgba(255, 255, 255, 0.85);
+    inset 0 1px 0 rgba(255, 255, 255, 0.55);
   backdrop-filter: blur(24px) saturate(1.35);
   -webkit-backdrop-filter: blur(24px) saturate(1.35);
   display: flex;
@@ -729,11 +729,11 @@ html[data-theme="dark"] .cron-more-menu {
   padding: 12px;
   border-radius: 16px;
   background:
-    linear-gradient(165deg, rgba(255, 255, 255, 0.78), rgba(255, 255, 255, 0.42)),
+    linear-gradient(165deg, rgba(255, 255, 255, 0.49), rgba(255, 255, 255, 0.22)),
     color-mix(in srgb, var(--glass-inner, rgba(255, 255, 255, 0.72)) 70%, transparent);
-  border: 1px solid rgba(255, 255, 255, 0.72);
+  border: 1px solid rgba(255, 255, 255, 0.45);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.92),
+    inset 0 1px 0 rgba(255, 255, 255, 0.6),
     0 1px 3px rgba(15, 23, 42, 0.04);
 }
 
@@ -756,7 +756,7 @@ html[data-theme="dark"] .cron-more-menu {
   min-width: 0;
   padding: 8px 10px;
   border-radius: 12px;
-  background: color-mix(in srgb, var(--tone) 6%, rgba(255, 255, 255, 0.55));
+  background: color-mix(in srgb, var(--tone) 6%, rgba(255, 255, 255, 0.35));
   border: 1px solid color-mix(in srgb, var(--tone) 12%, transparent);
 }
 
@@ -835,9 +835,9 @@ html[data-theme="dark"] .cron-more-menu {
 .cron-card-meta-tag.is-agent {
   color: var(--ink-soft);
   background:
-    linear-gradient(165deg, rgba(255, 255, 255, 0.88), rgba(255, 255, 255, 0.5));
+    linear-gradient(165deg, rgba(255, 255, 255, 0.55), rgba(255, 255, 255, 0.28));
   border: 1px solid color-mix(in srgb, var(--glass-edge) 85%, transparent);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.58);
 }
 
 .cron-card-tag.is-agent svg,
@@ -913,7 +913,7 @@ html[data-theme="dark"] .cron-card-meta-tag.is-model {
   color: var(--tone);
   background: var(--tone-soft);
   border: 1px solid color-mix(in srgb, var(--tone) 22%, transparent);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.45);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.29);
 }
 
 .cron-card-chip svg {
@@ -966,10 +966,10 @@ html[data-theme="dark"] .cron-card-meta-tag.is-model {
   border-radius: 14px;
   border: 1px solid color-mix(in srgb, var(--tone) 12%, var(--glass-border));
   background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.42), rgba(255, 255, 255, 0.14)),
+    linear-gradient(155deg, rgba(255, 255, 255, 0.26), rgba(255, 255, 255, 0.07)),
     color-mix(in srgb, var(--glass-fill) 60%, transparent);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.55),
+    inset 0 1px 0 rgba(255, 255, 255, 0.35),
     0 4px 14px color-mix(in srgb, var(--tone) 6%, transparent);
   backdrop-filter: blur(12px) saturate(1.15);
   -webkit-backdrop-filter: blur(12px) saturate(1.15);
@@ -1045,10 +1045,10 @@ html[data-theme="dark"] .cron-history-item {
   border-radius: 16px;
   border: 1px solid color-mix(in srgb, var(--tone) 14%, var(--chip-border));
   background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.5), rgba(255, 255, 255, 0.18)),
+    linear-gradient(155deg, rgba(255, 255, 255, 0.32), rgba(255, 255, 255, 0.1)),
     color-mix(in srgb, var(--tone-soft) 28%, transparent);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.75),
+    inset 0 1px 0 rgba(255, 255, 255, 0.49),
     0 6px 16px color-mix(in srgb, var(--tone) 6%, transparent);
 }
 
@@ -1080,10 +1080,10 @@ html[data-theme="dark"] .cron-sched {
   padding: 4px;
   border-radius: 10px;
   background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.55), rgba(255, 255, 255, 0.18)),
+    linear-gradient(155deg, rgba(255, 255, 255, 0.35), rgba(255, 255, 255, 0.1)),
     color-mix(in srgb, var(--glass-fill) 60%, transparent);
   border: 1px solid color-mix(in srgb, var(--tone) 10%, var(--chip-border));
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.5);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.32);
   backdrop-filter: blur(10px) saturate(1.1);
   -webkit-backdrop-filter: blur(10px) saturate(1.1);
 }
@@ -1126,7 +1126,7 @@ html[data-theme="dark"] .cron-sched-modes {
 .cron-sched-mode.active {
   color: var(--tone);
   background:
-    linear-gradient(165deg, rgba(255, 255, 255, 0.55), rgba(255, 255, 255, 0.22)),
+    linear-gradient(165deg, rgba(255, 255, 255, 0.35), rgba(255, 255, 255, 0.12)),
     var(--tone-soft);
   box-shadow:
     inset 0 0 0 1px color-mix(in srgb, var(--tone) 22%, transparent),
@@ -1179,12 +1179,12 @@ html[data-theme="dark"] .cron-sched-mode.active {
   box-sizing: border-box;
   padding: 0 10px;
   border-radius: 12px;
-  border: 1px solid color-mix(in srgb, var(--tone) 14%, rgba(255, 255, 255, 0.55));
+  border: 1px solid color-mix(in srgb, var(--tone) 14%, rgba(255, 255, 255, 0.35));
   background:
-    linear-gradient(165deg, rgba(255, 255, 255, 0.52), rgba(255, 255, 255, 0.2)),
-    rgba(255, 255, 255, 0.28);
+    linear-gradient(165deg, rgba(255, 255, 255, 0.33), rgba(255, 255, 255, 0.1)),
+    rgba(255, 255, 255, 0.17);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.72),
+    inset 0 1px 0 rgba(255, 255, 255, 0.47),
     0 4px 12px color-mix(in srgb, var(--tone) 8%, transparent);
   backdrop-filter: blur(16px) saturate(1.25);
   -webkit-backdrop-filter: blur(16px) saturate(1.25);
@@ -1226,7 +1226,7 @@ html[data-theme="dark"] .cron-sched-stepper {
 .cron-sched-stepper:focus-within {
   border-color: color-mix(in srgb, var(--tone) 42%, transparent);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.9),
+    inset 0 1px 0 rgba(255, 255, 255, 0.58),
     0 0 0 3px color-mix(in srgb, var(--tone) 14%, transparent);
 }
 
@@ -1258,7 +1258,7 @@ html[data-theme="dark"] .cron-sched-stepper {
   color: var(--ink);
   font-size: 13px;
   font-family: inherit;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.58);
   backdrop-filter: blur(10px) saturate(1.1);
   -webkit-backdrop-filter: blur(10px) saturate(1.1);
   transition: border-color 0.14s ease, box-shadow 0.14s ease;
@@ -1299,7 +1299,7 @@ html[data-theme="dark"] .cron-sched-input--bare::-webkit-calendar-picker-indicat
   outline: none;
   border-color: color-mix(in srgb, var(--tone) 42%, transparent);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.95),
+    inset 0 1px 0 rgba(255, 255, 255, 0.62),
     0 0 0 3px color-mix(in srgb, var(--tone) 14%, transparent);
 }
 
@@ -1376,7 +1376,7 @@ html[data-theme="dark"] .cron-sched-input {
   border-radius: 8px;
   border: 1px solid color-mix(in srgb, var(--tone) 12%, var(--chip-border));
   background:
-    linear-gradient(160deg, rgba(255, 255, 255, 0.55), rgba(255, 255, 255, 0.18)),
+    linear-gradient(160deg, rgba(255, 255, 255, 0.35), rgba(255, 255, 255, 0.1)),
     color-mix(in srgb, var(--glass-fill) 70%, transparent);
   color: var(--ink-mute);
   font-size: 12px;
@@ -1397,7 +1397,7 @@ html[data-theme="dark"] .cron-sched-wd {
 .cron-sched-wd.active {
   color: var(--tone);
   background:
-    linear-gradient(165deg, rgba(255, 255, 255, 0.55), rgba(255, 255, 255, 0.22)),
+    linear-gradient(165deg, rgba(255, 255, 255, 0.35), rgba(255, 255, 255, 0.12)),
     var(--tone-soft);
   border-color: color-mix(in srgb, var(--tone) 35%, transparent);
   box-shadow: 0 2px 8px color-mix(in srgb, var(--tone) 12%, transparent);
@@ -1419,9 +1419,9 @@ html[data-theme="dark"] .cron-sched-wd.active {
   gap: 8px;
   padding: 10px;
   border-radius: 14px;
-  border: 1px solid color-mix(in srgb, var(--tone) 18%, rgba(255, 255, 255, 0.55));
+  border: 1px solid color-mix(in srgb, var(--tone) 18%, rgba(255, 255, 255, 0.35));
   background:
-    linear-gradient(165deg, rgba(255, 255, 255, 0.58), rgba(255, 255, 255, 0.22)),
+    linear-gradient(165deg, rgba(255, 255, 255, 0.36), rgba(255, 255, 255, 0.12)),
     color-mix(in srgb, var(--tone-soft) 48%, transparent);
   box-shadow: 0 14px 36px color-mix(in srgb, var(--tone) 14%, rgba(15, 23, 42, 0.14));
   backdrop-filter: blur(20px) saturate(1.3);
@@ -1529,7 +1529,7 @@ html[data-theme="dark"] .cron-dt-pop {
 .cron-dt-day.is-selected {
   color: var(--tone);
   background:
-    linear-gradient(165deg, rgba(255, 255, 255, 0.55), rgba(255, 255, 255, 0.2)),
+    linear-gradient(165deg, rgba(255, 255, 255, 0.35), rgba(255, 255, 255, 0.1)),
     var(--tone-soft);
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--tone) 28%, transparent);
 }
@@ -1618,11 +1618,11 @@ html[data-theme="light"] .cron-create-drawer-backdrop {
   overflow: hidden;
   border-left: 1px solid color-mix(in srgb, var(--tone) 18%, var(--glass-edge, transparent));
   background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.78), rgba(255, 255, 255, 0.32)),
+    linear-gradient(155deg, rgba(255, 255, 255, 0.49), rgba(255, 255, 255, 0.17)),
     color-mix(in srgb, var(--tone-soft) 45%, var(--glass-panel, rgba(255, 255, 255, 0.5)));
   box-shadow:
     -16px 0 48px color-mix(in srgb, var(--tone) 12%, rgba(15, 23, 42, 0.1)),
-    var(--glass-rim, 0 0 0 1px rgba(255, 255, 255, 0.35) inset);
+    var(--glass-rim, 0 0 0 1px rgba(255, 255, 255, 0.22) inset);
   backdrop-filter: blur(24px) saturate(1.35);
   -webkit-backdrop-filter: blur(24px) saturate(1.35);
   box-sizing: border-box;
@@ -1697,10 +1697,10 @@ html[data-theme="dark"] .cron-create-drawer-head {
   border-radius: 10px;
   color: var(--tone);
   background:
-    linear-gradient(160deg, rgba(255, 255, 255, 0.55), rgba(255, 255, 255, 0.18)),
+    linear-gradient(160deg, rgba(255, 255, 255, 0.35), rgba(255, 255, 255, 0.1)),
     color-mix(in srgb, var(--tone-soft) 70%, transparent);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.6),
+    inset 0 1px 0 rgba(255, 255, 255, 0.39),
     0 2px 8px color-mix(in srgb, var(--tone) 14%, transparent);
 }
 
@@ -1752,7 +1752,7 @@ html[data-theme="dark"] .cron-create-drawer-title-icon {
   background:
     linear-gradient(
       0deg,
-      color-mix(in srgb, var(--tone-soft) 35%, rgba(255, 255, 255, 0.55)),
+      color-mix(in srgb, var(--tone-soft) 35%, rgba(255, 255, 255, 0.35)),
       color-mix(in srgb, var(--tone-soft) 6%, transparent)
     );
 }
@@ -1840,15 +1840,15 @@ html[data-theme="dark"] .cron-create-drawer-foot {
   padding: 10px 12px;
   min-height: 40px;
   border-radius: 12px;
-  border: 1px solid color-mix(in srgb, var(--tone) 14%, rgba(255, 255, 255, 0.55));
+  border: 1px solid color-mix(in srgb, var(--tone) 14%, rgba(255, 255, 255, 0.35));
   background:
-    linear-gradient(165deg, rgba(255, 255, 255, 0.52), rgba(255, 255, 255, 0.2)),
-    rgba(255, 255, 255, 0.28);
+    linear-gradient(165deg, rgba(255, 255, 255, 0.33), rgba(255, 255, 255, 0.1)),
+    rgba(255, 255, 255, 0.17);
   color: var(--ink);
   font-size: 13px;
   font-weight: 400;
   font-family: inherit;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.72);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.47);
   backdrop-filter: blur(16px) saturate(1.25);
   -webkit-backdrop-filter: blur(16px) saturate(1.25);
   transition: border-color 0.14s ease, box-shadow 0.14s ease;
@@ -1873,7 +1873,7 @@ html[data-theme="dark"] .cron-create-drawer-foot {
   outline: none;
   border-color: color-mix(in srgb, var(--tone) 42%, transparent);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.95),
+    inset 0 1px 0 rgba(255, 255, 255, 0.62),
     0 0 0 3px color-mix(in srgb, var(--tone) 14%, transparent);
 }
 
@@ -1896,11 +1896,11 @@ html[data-theme="dark"] .cron-dialog-textarea {
   border-radius: 14px;
   border: 1px solid color-mix(in srgb, var(--tone) 12%, var(--chip-border));
   background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.42), rgba(255, 255, 255, 0.14)),
+    linear-gradient(155deg, rgba(255, 255, 255, 0.26), rgba(255, 255, 255, 0.07)),
     color-mix(in srgb, var(--glass-fill) 65%, transparent);
   padding: 0 12px;
   overflow: visible;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.55);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35);
 }
 
 .cron-dialog-advanced > summary {
@@ -1975,31 +1975,31 @@ html[data-theme="dark"] .cron-dialog-textarea {
 
 .cron-btn-primary {
   padding: 9px 20px;
-  border: 1px solid color-mix(in srgb, var(--tone) 22%, rgba(255, 255, 255, 0.55));
+  border: 1px solid color-mix(in srgb, var(--tone) 22%, rgba(255, 255, 255, 0.35));
   border-radius: 12px;
   font-size: 13px;
   font-weight: 650;
   cursor: pointer;
   color: var(--tone);
   background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.55) 0%, rgba(255, 255, 255, 0.22) 100%),
+    linear-gradient(155deg, rgba(255, 255, 255, 0.35) 0%, rgba(255, 255, 255, 0.12) 100%),
     color-mix(in srgb, var(--tone-soft) 70%, transparent);
   box-shadow:
     0 6px 16px color-mix(in srgb, var(--tone) 12%, transparent),
-    inset 0 1px 0 rgba(255, 255, 255, 0.75);
+    inset 0 1px 0 rgba(255, 255, 255, 0.49);
   backdrop-filter: blur(12px) saturate(1.2);
   -webkit-backdrop-filter: blur(12px) saturate(1.2);
   transition: opacity 0.15s ease, transform 0.12s ease, box-shadow 0.15s ease, border-color 0.15s ease, background 0.15s ease;
 }
 
 .cron-btn-primary:hover:not(:disabled) {
-  border-color: color-mix(in srgb, var(--tone) 36%, rgba(255, 255, 255, 0.55));
+  border-color: color-mix(in srgb, var(--tone) 36%, rgba(255, 255, 255, 0.35));
   background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.68) 0%, rgba(255, 255, 255, 0.3) 100%),
+    linear-gradient(155deg, rgba(255, 255, 255, 0.43) 0%, rgba(255, 255, 255, 0.16) 100%),
     var(--tone-soft);
   box-shadow:
     0 10px 22px color-mix(in srgb, var(--tone) 16%, transparent),
-    inset 0 1px 0 rgba(255, 255, 255, 0.85);
+    inset 0 1px 0 rgba(255, 255, 255, 0.55);
 }
 
 .cron-btn-primary:active:not(:disabled) {
@@ -2057,9 +2057,9 @@ html[data-theme="dark"] .cron-btn-primary:hover:not(:disabled) {
   flex-shrink: 0;
   border: 1px solid color-mix(in srgb, var(--glass-edge) 90%, transparent);
   background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.55), rgba(255, 255, 255, 0.18)),
+    linear-gradient(155deg, rgba(255, 255, 255, 0.35), rgba(255, 255, 255, 0.1)),
     color-mix(in srgb, var(--glass-fill) 70%, transparent);
-  box-shadow: var(--glass-rim), inset 0 1px 0 rgba(255, 255, 255, 0.55);
+  box-shadow: var(--glass-rim), inset 0 1px 0 rgba(255, 255, 255, 0.35);
   backdrop-filter: blur(14px) saturate(1.2);
   -webkit-backdrop-filter: blur(14px) saturate(1.2);
 }
@@ -2097,11 +2097,11 @@ html[data-theme="dark"] .cron-btn-primary:hover:not(:disabled) {
 .cron-tab.is-active {
   color: var(--tone);
   background:
-    linear-gradient(165deg, rgba(255, 255, 255, 0.9), rgba(255, 255, 255, 0.55)),
+    linear-gradient(165deg, rgba(255, 255, 255, 0.58), rgba(255, 255, 255, 0.3)),
     var(--tone-soft);
   box-shadow:
     inset 0 0 0 1px color-mix(in srgb, var(--tone) 18%, transparent),
-    inset 0 1px 0 rgba(255, 255, 255, 0.7);
+    inset 0 1px 0 rgba(255, 255, 255, 0.45);
 }
 
 html[data-theme="dark"] .cron-tabs {
@@ -2129,10 +2129,10 @@ html[data-theme="dark"] .cron-tab.is-active {
   padding: 3px;
   border-radius: 12px;
   background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.35), rgba(255, 255, 255, 0.12)),
+    linear-gradient(155deg, rgba(255, 255, 255, 0.22), rgba(255, 255, 255, 0.12)),
     color-mix(in srgb, var(--glass-fill) 55%, transparent);
   border: 1px solid color-mix(in srgb, var(--tone) 12%, var(--chip-border));
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.55);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35);
   backdrop-filter: blur(12px) saturate(1.15);
   -webkit-backdrop-filter: blur(12px) saturate(1.15);
 }
@@ -2158,11 +2158,11 @@ html[data-theme="dark"] .cron-tab.is-active {
 .cron-view-btn.is-active {
   color: var(--tone);
   background:
-    linear-gradient(165deg, rgba(255, 255, 255, 0.55), rgba(255, 255, 255, 0.22)),
+    linear-gradient(165deg, rgba(255, 255, 255, 0.35), rgba(255, 255, 255, 0.12)),
     color-mix(in srgb, var(--tone-soft) 80%, transparent);
   box-shadow:
     inset 0 0 0 1px color-mix(in srgb, var(--tone) 18%, transparent),
-    inset 0 1px 0 rgba(255, 255, 255, 0.7);
+    inset 0 1px 0 rgba(255, 255, 255, 0.45);
 }
 
 html[data-theme="dark"] .cron-view-toggle {
@@ -2200,7 +2200,7 @@ html[data-theme="dark"] .cron-view-btn.is-active {
   border-radius: 16px;
   border: 1px solid color-mix(in srgb, var(--glass-edge) 90%, transparent);
   background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.65), rgba(255, 255, 255, 0.25)),
+    linear-gradient(155deg, rgba(255, 255, 255, 0.42), rgba(255, 255, 255, 0.13)),
     color-mix(in srgb, var(--glass-panel, rgba(255, 255, 255, 0.5)) 75%, transparent);
   box-shadow: var(--glass-rim);
   backdrop-filter: blur(14px) saturate(1.15);
@@ -2296,29 +2296,29 @@ html[data-theme="dark"] .cron-job-list-row {
   border: 1px solid var(--chip-border);
   border-radius: 14px;
   background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.4), rgba(255, 255, 255, 0.12)),
+    linear-gradient(155deg, rgba(255, 255, 255, 0.25), rgba(255, 255, 255, 0.12)),
     color-mix(in srgb, var(--glass-fill) 55%, transparent);
   cursor: pointer;
   text-align: left;
   transition: border-color 0.12s ease, background 0.12s ease, box-shadow 0.12s ease;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.45);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.29);
 }
 
 .cron-job-detail-item:hover {
   border-color: color-mix(in srgb, var(--tone) 28%, transparent);
   background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.5), rgba(255, 255, 255, 0.18)),
+    linear-gradient(155deg, rgba(255, 255, 255, 0.32), rgba(255, 255, 255, 0.1)),
     color-mix(in srgb, var(--tone-soft) 35%, transparent);
 }
 
 .cron-job-detail-item.is-selected {
   border-color: color-mix(in srgb, var(--tone) 32%, transparent);
   background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.48), rgba(255, 255, 255, 0.16)),
+    linear-gradient(155deg, rgba(255, 255, 255, 0.3), rgba(255, 255, 255, 0.08)),
     color-mix(in srgb, var(--tone-soft) 65%, transparent);
   box-shadow:
     inset 0 0 0 1px color-mix(in srgb, var(--tone) 14%, transparent),
-    inset 0 1px 0 rgba(255, 255, 255, 0.55);
+    inset 0 1px 0 rgba(255, 255, 255, 0.35);
 }
 
 html[data-theme="dark"] .cron-job-detail-item {
@@ -2421,11 +2421,11 @@ html[data-theme="dark"] .cron-job-detail-item.is-selected {
   margin: 0;
   padding: 12px 14px;
   border-radius: 14px;
-  border: 1px solid color-mix(in srgb, var(--tone) 18%, rgba(255, 255, 255, 0.5));
+  border: 1px solid color-mix(in srgb, var(--tone) 18%, rgba(255, 255, 255, 0.32));
   background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.4), rgba(255, 255, 255, 0.12)),
+    linear-gradient(155deg, rgba(255, 255, 255, 0.25), rgba(255, 255, 255, 0.12)),
     color-mix(in srgb, var(--tone-soft) 28%, transparent);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.45);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.29);
   backdrop-filter: blur(12px) saturate(1.15);
   -webkit-backdrop-filter: blur(12px) saturate(1.15);
   font-size: 13px;
@@ -2456,11 +2456,11 @@ html[data-theme="dark"] .cron-job-detail-task {
   border-radius: 12px;
   border: 1px solid var(--chip-border);
   background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.35), rgba(255, 255, 255, 0.1)),
+    linear-gradient(155deg, rgba(255, 255, 255, 0.22), rgba(255, 255, 255, 0.1)),
     color-mix(in srgb, var(--glass-fill) 50%, transparent);
   font-size: 13px;
   color: var(--ink);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.4);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.26);
 }
 
 html[data-theme="dark"] .cron-job-detail-meta-item,
@@ -2493,7 +2493,7 @@ html[data-theme="dark"] .cron-job-detail-task {
   z-index: 40;
   border: 1px solid color-mix(in srgb, var(--glass-edge) 90%, transparent);
   background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.55), rgba(255, 255, 255, 0.18)),
+    linear-gradient(155deg, rgba(255, 255, 255, 0.35), rgba(255, 255, 255, 0.1)),
     color-mix(in srgb, var(--glass-fill) 70%, transparent);
   box-shadow: none;
   backdrop-filter: blur(14px) saturate(1.2);
@@ -2600,9 +2600,9 @@ html[data-theme="dark"] .cron-history-filters .select-menu.is-open .select-menu-
   text-align: left;
   color: var(--ink);
   background:
-    linear-gradient(165deg, rgba(255, 255, 255, 0.64), rgba(255, 255, 255, 0.3)),
-    rgba(255, 255, 255, 0.38);
-  border-color: color-mix(in srgb, var(--tone) 14%, rgba(255, 255, 255, 0.55));
+    linear-gradient(165deg, rgba(255, 255, 255, 0.4), rgba(255, 255, 255, 0.16)),
+    rgba(255, 255, 255, 0.24);
+  border-color: color-mix(in srgb, var(--tone) 14%, rgba(255, 255, 255, 0.35));
   box-shadow: none;
 }
 
@@ -2719,7 +2719,7 @@ html[data-theme="dark"] .cron-dt-clear {
   border-radius: 20px;
   border: 1px solid color-mix(in srgb, var(--glass-edge) 90%, transparent);
   background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.72), rgba(255, 255, 255, 0.28)),
+    linear-gradient(155deg, rgba(255, 255, 255, 0.45), rgba(255, 255, 255, 0.15)),
     color-mix(in srgb, var(--glass-panel, rgba(255, 255, 255, 0.5)) 80%, transparent);
   box-shadow:
     var(--glass-rim),
@@ -2836,9 +2836,9 @@ html[data-theme="dark"] .cron-timeline-card {
   line-height: 1.2;
   color: var(--ink-soft);
   background:
-    linear-gradient(165deg, rgba(255, 255, 255, 0.88), rgba(255, 255, 255, 0.5));
+    linear-gradient(165deg, rgba(255, 255, 255, 0.55), rgba(255, 255, 255, 0.28));
   border: 1px solid color-mix(in srgb, var(--glass-edge) 85%, transparent);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.58);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -2868,7 +2868,7 @@ html[data-theme="dark"] .cron-timeline-meta-chip {
   border: 1px solid color-mix(in srgb, var(--tone) 22%, transparent);
   border-radius: 999px;
   background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.4), rgba(255, 255, 255, 0.12)),
+    linear-gradient(155deg, rgba(255, 255, 255, 0.25), rgba(255, 255, 255, 0.12)),
     var(--tone-soft);
   color: var(--tone);
   font-size: 11px;
@@ -2880,7 +2880,7 @@ html[data-theme="dark"] .cron-timeline-meta-chip {
 .cron-timeline-log-btn:hover {
   border-color: color-mix(in srgb, var(--tone) 36%, transparent);
   background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.5), rgba(255, 255, 255, 0.18)),
+    linear-gradient(155deg, rgba(255, 255, 255, 0.32), rgba(255, 255, 255, 0.1)),
     color-mix(in srgb, var(--tone-soft) 85%, transparent);
 }
 
@@ -2960,10 +2960,10 @@ html[data-theme="dark"] .cron-timeline-log-btn:hover {
   border-radius: 14px;
   border: 1px solid color-mix(in srgb, var(--tone) 14%, var(--chip-border));
   background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.55), rgba(255, 255, 255, 0.18)),
+    linear-gradient(155deg, rgba(255, 255, 255, 0.35), rgba(255, 255, 255, 0.1)),
     color-mix(in srgb, var(--tone-soft) 32%, var(--glass-fill, transparent));
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.7),
+    inset 0 1px 0 rgba(255, 255, 255, 0.45),
     0 4px 14px color-mix(in srgb, var(--tone) 8%, transparent);
   backdrop-filter: blur(14px) saturate(1.2);
   -webkit-backdrop-filter: blur(14px) saturate(1.2);
@@ -2989,7 +2989,7 @@ html[data-theme="dark"] .cron-dialog-check {
 .cron-dialog-check.is-checked {
   border-color: color-mix(in srgb, var(--tone) 36%, transparent);
   background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.6), rgba(255, 255, 255, 0.22)),
+    linear-gradient(155deg, rgba(255, 255, 255, 0.38), rgba(255, 255, 255, 0.12)),
     color-mix(in srgb, var(--tone-soft) 55%, transparent);
 }
 
@@ -3018,10 +3018,10 @@ html[data-theme="dark"] .cron-dialog-check.is-checked {
   border-radius: 7px;
   border: 1.5px solid color-mix(in srgb, var(--tone) 28%, var(--chip-border));
   background:
-    linear-gradient(160deg, rgba(255, 255, 255, 0.7), rgba(255, 255, 255, 0.28)),
+    linear-gradient(160deg, rgba(255, 255, 255, 0.45), rgba(255, 255, 255, 0.15)),
     color-mix(in srgb, var(--glass-fill) 80%, transparent);
   color: #fff;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.75);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.49);
   transition: background 0.14s ease, border-color 0.14s ease, box-shadow 0.14s ease;
 }
 
@@ -3089,7 +3089,7 @@ html[data-theme="dark"] .cron-dialog-check-box {
   flex-direction: column;
   border-left: 1px solid var(--glass-edge);
   background:
-    linear-gradient(165deg, rgba(255, 255, 255, 0.92), rgba(255, 255, 255, 0.78)),
+    linear-gradient(165deg, rgba(255, 255, 255, 0.58), rgba(255, 255, 255, 0.42)),
     var(--glass-panel, #fff);
   box-shadow: -12px 0 40px rgba(15, 23, 42, 0.12);
   animation: cron-drawer-in 0.22s cubic-bezier(0.22, 1, 0.36, 1) both;

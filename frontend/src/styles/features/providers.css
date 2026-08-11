@@ -21,7 +21,7 @@
   border-radius: 12px;
   width: fit-content;
   max-width: 100%;
-  background: color-mix(in srgb, var(--glass-panel, rgba(255, 255, 255, 0.55)) 88%, transparent);
+  background: color-mix(in srgb, var(--glass-panel, rgba(255, 255, 255, 0.35)) 88%, transparent);
   border: 1px solid color-mix(in srgb, var(--glass-edge) 88%, transparent);
   box-shadow: none;
   backdrop-filter: blur(12px) saturate(1.1);
@@ -661,13 +661,13 @@ html[data-theme="dark"] .providers-media-model-select.select-menu.is-open .selec
   padding: 10px 12px;
   min-height: 40px;
   border-radius: 12px;
-  border: 1px solid color-mix(in srgb, var(--tone) 14%, rgba(255, 255, 255, 0.55));
+  border: 1px solid color-mix(in srgb, var(--tone) 14%, rgba(255, 255, 255, 0.35));
   background:
-    linear-gradient(165deg, rgba(255, 255, 255, 0.64), rgba(255, 255, 255, 0.3)),
-    rgba(255, 255, 255, 0.38);
+    linear-gradient(165deg, rgba(255, 255, 255, 0.42), rgba(255, 255, 255, 0.2)),
+    rgba(255, 255, 255, 0.24);
   color: inherit;
   font-size: 13px;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.72);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.46);
   backdrop-filter: blur(16px) saturate(1.25);
   -webkit-backdrop-filter: blur(16px) saturate(1.25);
   transition: border-color 0.14s ease, box-shadow 0.14s ease;
@@ -677,7 +677,7 @@ html[data-theme="dark"] .providers-media-model-select.select-menu.is-open .selec
   outline: none;
   border-color: color-mix(in srgb, var(--tone) 42%, transparent);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.9),
+    inset 0 1px 0 rgba(255, 255, 255, 0.58),
     0 0 0 3px color-mix(in srgb, var(--tone) 14%, transparent);
 }
 
@@ -904,16 +904,16 @@ html[data-theme="dark"] .providers-media-model-select.select-menu.is-open .selec
   padding: 10px 40px 10px 12px;
   min-height: 40px;
   border-radius: 12px;
-  border: 1px solid color-mix(in srgb, var(--tone) 14%, rgba(255, 255, 255, 0.55));
+  border: 1px solid color-mix(in srgb, var(--tone) 14%, rgba(255, 255, 255, 0.35));
   background:
-    linear-gradient(165deg, rgba(255, 255, 255, 0.64), rgba(255, 255, 255, 0.3)),
-    rgba(255, 255, 255, 0.38);
+    linear-gradient(165deg, rgba(255, 255, 255, 0.42), rgba(255, 255, 255, 0.2)),
+    rgba(255, 255, 255, 0.24);
   color: inherit;
   font-size: 13px;
   margin: 0;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   letter-spacing: 0.02em;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.72);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.46);
   backdrop-filter: blur(16px) saturate(1.25);
   -webkit-backdrop-filter: blur(16px) saturate(1.25);
   transition: border-color 0.14s ease, box-shadow 0.14s ease;
@@ -923,7 +923,7 @@ html[data-theme="dark"] .providers-media-model-select.select-menu.is-open .selec
   outline: none;
   border-color: color-mix(in srgb, var(--tone) 42%, transparent);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.9),
+    inset 0 1px 0 rgba(255, 255, 255, 0.58),
     0 0 0 3px color-mix(in srgb, var(--tone) 14%, transparent);
 }
 
@@ -968,24 +968,24 @@ html[data-theme="dark"] .providers-media-model-select.select-menu.is-open .selec
 
 .providers-icon-btn.is-danger {
   color: var(--danger, #e11d48);
-  border-color: color-mix(in srgb, var(--danger, #e11d48) 22%, rgba(255, 255, 255, 0.55));
+  border-color: color-mix(in srgb, var(--danger, #e11d48) 22%, rgba(255, 255, 255, 0.35));
   background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.48) 0%, rgba(255, 255, 255, 0.16) 100%),
-    color-mix(in srgb, var(--danger-bg, rgba(244, 63, 94, 0.1)) 70%, rgba(255, 255, 255, 0.18));
+    linear-gradient(155deg, rgba(255, 255, 255, 0.3) 0%, rgba(255, 255, 255, 0.11) 100%),
+    color-mix(in srgb, var(--danger-bg, rgba(244, 63, 94, 0.1)) 70%, rgba(255, 255, 255, 0.12));
   box-shadow:
     0 6px 16px color-mix(in srgb, var(--danger, #e11d48) 10%, rgba(15, 23, 42, 0.05)),
-    inset 0 1px 0 rgba(255, 255, 255, 0.55);
+    inset 0 1px 0 rgba(255, 255, 255, 0.35);
 }
 
 .providers-icon-btn.is-danger:hover:not(:disabled) {
   color: var(--danger, #e11d48);
-  border-color: color-mix(in srgb, var(--danger, #e11d48) 36%, rgba(255, 255, 255, 0.55));
+  border-color: color-mix(in srgb, var(--danger, #e11d48) 36%, rgba(255, 255, 255, 0.35));
   background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.58) 0%, rgba(255, 255, 255, 0.22) 100%),
+    linear-gradient(155deg, rgba(255, 255, 255, 0.37) 0%, rgba(255, 255, 255, 0.14) 100%),
     color-mix(in srgb, var(--danger, #e11d48) 14%, transparent);
   box-shadow:
     0 10px 22px color-mix(in srgb, var(--danger, #e11d48) 14%, transparent),
-    inset 0 1px 0 rgba(255, 255, 255, 0.65);
+    inset 0 1px 0 rgba(255, 255, 255, 0.42);
 }
 
 .providers-action-btn {
@@ -1112,16 +1112,16 @@ html[data-theme="dark"] .providers-media-model-select.select-menu.is-open .selec
   height: 36px;
   padding: 0;
   border-radius: 12px;
-  border: 1px solid color-mix(in srgb, var(--tone, #64748b) 14%, rgba(255, 255, 255, 0.55));
+  border: 1px solid color-mix(in srgb, var(--tone, #64748b) 14%, rgba(255, 255, 255, 0.35));
   background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.48) 0%, rgba(255, 255, 255, 0.16) 100%),
-    color-mix(in srgb, var(--tone-soft, transparent) 35%, rgba(255, 255, 255, 0.2));
+    linear-gradient(155deg, rgba(255, 255, 255, 0.3) 0%, rgba(255, 255, 255, 0.11) 100%),
+    color-mix(in srgb, var(--tone-soft, transparent) 35%, rgba(255, 255, 255, 0.14));
   color: var(--tone, var(--ink-soft));
   cursor: pointer;
   line-height: 1;
   box-shadow:
     0 6px 16px color-mix(in srgb, var(--tone, transparent) 8%, rgba(15, 23, 42, 0.05)),
-    inset 0 1px 0 rgba(255, 255, 255, 0.55);
+    inset 0 1px 0 rgba(255, 255, 255, 0.35);
   backdrop-filter: blur(16px) saturate(1.25);
   -webkit-backdrop-filter: blur(16px) saturate(1.25);
   transition:
@@ -1135,13 +1135,13 @@ html[data-theme="dark"] .providers-media-model-select.select-menu.is-open .selec
 
 .providers-icon-btn:hover:not(:disabled) {
   color: var(--tone, var(--ink));
-  border-color: color-mix(in srgb, var(--tone, #64748b) 28%, rgba(255, 255, 255, 0.55));
+  border-color: color-mix(in srgb, var(--tone, #64748b) 28%, rgba(255, 255, 255, 0.35));
   background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.58) 0%, rgba(255, 255, 255, 0.22) 100%),
+    linear-gradient(155deg, rgba(255, 255, 255, 0.37) 0%, rgba(255, 255, 255, 0.14) 100%),
     color-mix(in srgb, var(--tone-soft, transparent) 55%, transparent);
   box-shadow:
     0 10px 22px color-mix(in srgb, var(--tone, #64748b) 12%, transparent),
-    inset 0 1px 0 rgba(255, 255, 255, 0.65);
+    inset 0 1px 0 rgba(255, 255, 255, 0.42);
 }
 
 .providers-icon-btn:active:not(:disabled) {
@@ -1166,34 +1166,34 @@ html[data-theme="dark"] .providers-media-model-select.select-menu.is-open .selec
 
 .providers-icon-btn.is-active {
   color: var(--tone, var(--ink));
-  border-color: color-mix(in srgb, var(--tone, #64748b) 28%, rgba(255, 255, 255, 0.55));
+  border-color: color-mix(in srgb, var(--tone, #64748b) 28%, rgba(255, 255, 255, 0.35));
   background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.58) 0%, rgba(255, 255, 255, 0.22) 100%),
+    linear-gradient(155deg, rgba(255, 255, 255, 0.37) 0%, rgba(255, 255, 255, 0.14) 100%),
     color-mix(in srgb, var(--tone-soft, transparent) 55%, transparent);
   box-shadow:
     0 10px 22px color-mix(in srgb, var(--tone, #64748b) 12%, transparent),
-    inset 0 1px 0 rgba(255, 255, 255, 0.65);
+    inset 0 1px 0 rgba(255, 255, 255, 0.42);
 }
 
 .providers-icon-btn.is-primary {
   color: var(--tone, var(--ink));
-  border-color: color-mix(in srgb, var(--tone, #64748b) 28%, rgba(255, 255, 255, 0.55));
+  border-color: color-mix(in srgb, var(--tone, #64748b) 28%, rgba(255, 255, 255, 0.35));
   background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.58) 0%, rgba(255, 255, 255, 0.22) 100%),
+    linear-gradient(155deg, rgba(255, 255, 255, 0.37) 0%, rgba(255, 255, 255, 0.14) 100%),
     color-mix(in srgb, var(--tone-soft, transparent) 55%, transparent);
   box-shadow:
     0 8px 18px color-mix(in srgb, var(--tone, #64748b) 12%, transparent),
-    inset 0 1px 0 rgba(255, 255, 255, 0.65);
+    inset 0 1px 0 rgba(255, 255, 255, 0.42);
 }
 
 .providers-icon-btn.is-primary:hover:not(:disabled) {
-  border-color: color-mix(in srgb, var(--tone, #64748b) 38%, rgba(255, 255, 255, 0.55));
+  border-color: color-mix(in srgb, var(--tone, #64748b) 38%, rgba(255, 255, 255, 0.35));
   background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.66) 0%, rgba(255, 255, 255, 0.28) 100%),
+    linear-gradient(155deg, rgba(255, 255, 255, 0.42) 0%, rgba(255, 255, 255, 0.18) 100%),
     color-mix(in srgb, var(--tone-soft, transparent) 70%, transparent);
   box-shadow:
     0 10px 22px color-mix(in srgb, var(--tone, #64748b) 16%, transparent),
-    inset 0 1px 0 rgba(255, 255, 255, 0.72);
+    inset 0 1px 0 rgba(255, 255, 255, 0.46);
 }
 
 .providers-icon-btn .is-spin {
@@ -1256,14 +1256,14 @@ html[data-theme="dark"] .providers-media-model-select.select-menu.is-open .selec
   padding: 8px 12px;
   min-height: 36px;
   border-radius: 12px;
-  border: 1px solid color-mix(in srgb, var(--tone) 14%, rgba(255, 255, 255, 0.55));
+  border: 1px solid color-mix(in srgb, var(--tone) 14%, rgba(255, 255, 255, 0.35));
   background:
-    linear-gradient(165deg, rgba(255, 255, 255, 0.64), rgba(255, 255, 255, 0.3)),
-    rgba(255, 255, 255, 0.38);
+    linear-gradient(165deg, rgba(255, 255, 255, 0.42), rgba(255, 255, 255, 0.2)),
+    rgba(255, 255, 255, 0.24);
   color: inherit;
   font-size: 12px;
   outline: none;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.72);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.46);
   backdrop-filter: blur(16px) saturate(1.25);
   -webkit-backdrop-filter: blur(16px) saturate(1.25);
   transition: border-color 0.14s ease, box-shadow 0.14s ease;
@@ -1272,7 +1272,7 @@ html[data-theme="dark"] .providers-media-model-select.select-menu.is-open .selec
 .providers-model-filter:focus {
   border-color: color-mix(in srgb, var(--tone) 42%, transparent);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.9),
+    inset 0 1px 0 rgba(255, 255, 255, 0.58),
     0 0 0 3px color-mix(in srgb, var(--tone) 14%, transparent);
 }
 

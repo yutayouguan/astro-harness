@@ -239,18 +239,18 @@
 
 html[data-theme="light"] .bubble.assistant {
   background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.55) 0%, rgba(255, 255, 255, 0.22) 100%),
-    color-mix(in srgb, var(--tone-soft, rgba(37, 99, 235, 0.14)) 40%, rgba(255, 255, 255, 0.28));
-  border-color: color-mix(in srgb, var(--tone, #2563eb) 14%, rgba(255, 255, 255, 0.7));
+    linear-gradient(155deg, rgba(255, 255, 255, 0.35) 0%, rgba(255, 255, 255, 0.14) 100%),
+    color-mix(in srgb, var(--tone-soft, rgba(37, 99, 235, 0.14)) 40%, rgba(255, 255, 255, 0.18));
+  border-color: color-mix(in srgb, var(--tone, #2563eb) 14%, rgba(255, 255, 255, 0.45));
   box-shadow:
     var(--shadow-card),
     var(--glass-rim),
-    0 1px 0 rgba(255, 255, 255, 0.88) inset;
+    0 1px 0 rgba(255, 255, 255, 0.56) inset;
 }
 
 html[data-theme="light"] .msg-reasoning {
   background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.48) 0%, rgba(255, 255, 255, 0.16) 100%),
+    linear-gradient(155deg, rgba(255, 255, 255, 0.3) 0%, rgba(255, 255, 255, 0.11) 100%),
     color-mix(in srgb, var(--tone-soft, rgba(37, 99, 235, 0.14)) 35%, transparent);
   border-color: color-mix(in srgb, var(--tone, #2563eb) 14%, rgba(148, 163, 184, 0.28));
   backdrop-filter: blur(12px) saturate(1.2);
@@ -269,10 +269,10 @@ html[data-theme="light"] .chat-msg-nav-label {
   --nav-label-border: color-mix(
     in srgb,
     var(--tone, var(--accent)) 18%,
-    rgba(255, 255, 255, 0.72)
+    rgba(255, 255, 255, 0.46)
   );
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.82),
+    inset 0 1px 0 rgba(255, 255, 255, 0.52),
     0 8px 22px rgba(15, 23, 42, 0.12);
 }
 
@@ -286,7 +286,7 @@ html[data-theme="light"] .chat-msg-nav-bottom {
     );
   border-color: color-mix(in srgb, var(--tone, var(--accent)) 26%, rgba(148, 163, 184, 0.32));
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.85),
+    inset 0 1px 0 rgba(255, 255, 255, 0.55),
     0 1px 4px color-mix(in srgb, var(--tone, var(--accent)) 10%, rgba(15, 23, 42, 0.05));
   color: color-mix(in srgb, var(--tone, var(--accent)) 78%, var(--ink-mute));
 }
@@ -301,7 +301,7 @@ html[data-theme="light"] .chat-msg-nav-dot.is-user {
   border-color: color-mix(in srgb, var(--tone, var(--accent)) 40%, rgba(148, 163, 184, 0.28));
   color: var(--tone, var(--accent));
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.9),
+    inset 0 1px 0 rgba(255, 255, 255, 0.58),
     0 2px 7px color-mix(in srgb, var(--tone, var(--accent)) 14%, transparent);
 }
 
@@ -311,7 +311,7 @@ html[data-theme="light"] .chat-msg-nav-bottom {
 
 html[data-theme="light"] .msg-md-codeblock {
   background:
-    linear-gradient(160deg, rgba(255, 255, 255, 0.65) 0%, rgba(241, 245, 249, 0.9) 100%);
+    linear-gradient(160deg, rgba(255, 255, 255, 0.42) 0%, rgba(241, 245, 249, 0.9) 100%);
   border-color: rgba(148, 163, 184, 0.32);
   box-shadow: var(--glass-rim), 0 6px 16px rgba(15, 23, 42, 0.06);
 }
@@ -391,8 +391,8 @@ html[data-theme="dark"] .msg-md-codeblock {
   background:
     linear-gradient(
       160deg,
-      rgba(255, 255, 255, 0.48) 0%,
-      rgba(255, 255, 255, 0.18) 55%,
+      rgba(255, 255, 255, 0.3) 0%,
+      rgba(255, 255, 255, 0.12) 55%,
       rgba(255, 255, 255, 0.1) 100%
     ),
     color-mix(in srgb, var(--tone-soft, transparent) 42%, var(--composer-bg));
@@ -400,9 +400,9 @@ html[data-theme="dark"] .msg-md-codeblock {
   box-shadow:
     0 10px 28px color-mix(in srgb, var(--tone, #2563eb) 8%, rgba(15, 23, 42, 0.05)),
     0 2px 8px rgba(15, 23, 42, 0.04),
-    inset 0 1px 0 rgba(255, 255, 255, 0.88),
-    inset 0 -1px 0 rgba(255, 255, 255, 0.22),
-    inset 0 0 0 0.5px rgba(255, 255, 255, 0.35);
+    inset 0 1px 0 rgba(255, 255, 255, 0.56),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.14),
+    inset 0 0 0 0.5px rgba(255, 255, 255, 0.23);
   backdrop-filter: blur(22px) saturate(1.4);
   -webkit-backdrop-filter: blur(22px) saturate(1.4);
   transition: border-color 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
@@ -421,7 +421,7 @@ html[data-theme="dark"] .msg-md-codeblock {
   box-shadow:
     0 0 0 2px color-mix(in srgb, var(--tone, var(--accent)) 28%, transparent),
     0 10px 28px color-mix(in srgb, var(--tone, #2563eb) 10%, rgba(15, 23, 42, 0.06)),
-    inset 0 1px 0 rgba(255, 255, 255, 0.88);
+    inset 0 1px 0 rgba(255, 255, 255, 0.56);
 }
 
 .composer-drop-hint {
@@ -436,11 +436,11 @@ html[data-theme="dark"] .msg-md-codeblock {
   font-weight: 600;
   letter-spacing: 0.01em;
   color: var(--tone, var(--accent));
-  background: color-mix(in srgb, var(--tone-soft, var(--accent)) 35%, rgba(255, 255, 255, 0.72));
+  background: color-mix(in srgb, var(--tone-soft, var(--accent)) 35%, rgba(255, 255, 255, 0.45));
 }
 
 .chat-pane.is-file-dragover .composer-drop-hint {
-  background: color-mix(in srgb, var(--tone-soft, var(--accent)) 42%, rgba(255, 255, 255, 0.78));
+  background: color-mix(in srgb, var(--tone-soft, var(--accent)) 42%, rgba(255, 255, 255, 0.5));
 }
 
 .composer-input-wrap {
@@ -642,9 +642,9 @@ html[data-theme="dark"] .composer-agent-validate-hint {
   border: 1px solid color-mix(in srgb, var(--tone, var(--accent)) 14%, var(--glass-edge));
   border-radius: 999px;
   background:
-    linear-gradient(165deg, rgba(255, 255, 255, 0.42), rgba(255, 255, 255, 0.12)),
+    linear-gradient(165deg, rgba(255, 255, 255, 0.26), rgba(255, 255, 255, 0.12)),
     color-mix(in srgb, var(--tone-soft, transparent) 55%, transparent);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.45);
   backdrop-filter: blur(10px) saturate(1.25);
   -webkit-backdrop-filter: blur(10px) saturate(1.25);
   color: var(--ink-soft);
@@ -658,11 +658,11 @@ html[data-theme="dark"] .composer-agent-validate-hint {
 .composer-mode-pill.is-open {
   color: var(--ink);
   background:
-    linear-gradient(165deg, rgba(255, 255, 255, 0.68), rgba(255, 255, 255, 0.28)),
+    linear-gradient(165deg, rgba(255, 255, 255, 0.44), rgba(255, 255, 255, 0.18)),
     color-mix(in srgb, var(--ink) 8%, transparent);
   border-color: color-mix(in srgb, var(--glass-edge) 92%, transparent);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.85),
+    inset 0 1px 0 rgba(255, 255, 255, 0.55),
     0 2px 8px rgba(15, 23, 42, 0.05);
 }
 
@@ -704,7 +704,7 @@ html[data-theme="dark"] .composer-agent-validate-hint {
 
 html[data-theme="light"] .composer-mode-menu {
   background:
-    linear-gradient(160deg, rgba(255, 255, 255, 0.92), rgba(255, 255, 255, 0.75)),
+    linear-gradient(160deg, rgba(255, 255, 255, 0.6), rgba(255, 255, 255, 0.48)),
     rgba(248, 250, 252, 0.95);
 }
 
@@ -1009,20 +1009,20 @@ html[data-theme="light"] .composer-mode-menu {
 .composer-icon-btn:hover:not(:disabled) {
   color: var(--ink);
   background:
-    linear-gradient(165deg, rgba(255, 255, 255, 0.42), rgba(255, 255, 255, 0.12)),
+    linear-gradient(165deg, rgba(255, 255, 255, 0.26), rgba(255, 255, 255, 0.12)),
     color-mix(in srgb, var(--ink) 6%, transparent);
   border-color: color-mix(in srgb, var(--glass-edge) 70%, transparent);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.55);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35);
 }
 
 .composer-icon-btn.is-on,
 .composer-icon-btn.is-open {
   color: var(--tone-green, #16a34a);
   background:
-    linear-gradient(165deg, rgba(255, 255, 255, 0.35), rgba(255, 255, 255, 0.08)),
+    linear-gradient(165deg, rgba(255, 255, 255, 0.22), rgba(255, 255, 255, 0.08)),
     color-mix(in srgb, var(--tone-green, #22c55e) 16%, transparent);
   border-color: color-mix(in srgb, var(--tone-green, #22c55e) 28%, transparent);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.45);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.29);
 }
 
 .composer-icon-btn.is-recording {
@@ -1073,9 +1073,9 @@ html[data-theme="dark"] .composer-icon-btn.is-open {
   border-radius: 14px;
   border: 1px solid color-mix(in srgb, var(--glass-edge) 80%, rgba(148, 163, 184, 0.25));
   background:
-    linear-gradient(160deg, rgba(255, 255, 255, 0.5), rgba(255, 255, 255, 0.22)),
+    linear-gradient(160deg, rgba(255, 255, 255, 0.32), rgba(255, 255, 255, 0.14)),
     color-mix(in srgb, var(--tone-soft, transparent) 28%, transparent);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.55);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35);
   overflow: hidden;
 }
 
@@ -1158,7 +1158,7 @@ html[data-theme="dark"] .composer-icon-btn.is-open {
   gap: 8px;
   padding: 6px 8px;
   border-radius: 10px;
-  background: color-mix(in srgb, rgba(255, 255, 255, 0.45) 70%, transparent);
+  background: color-mix(in srgb, rgba(255, 255, 255, 0.28) 70%, transparent);
 }
 
 .composer-queue-dot {
@@ -1188,7 +1188,7 @@ html[data-theme="dark"] .composer-icon-btn.is-open {
   border-radius: 8px;
   padding: 4px 8px;
   font-size: 12px;
-  background: rgba(255, 255, 255, 0.7);
+  background: rgba(255, 255, 255, 0.45);
   color: var(--ink);
 }
 
@@ -1353,12 +1353,12 @@ html[data-theme="dark"] .composer-queue-edit {
   overflow: hidden;
   border: 1px solid color-mix(in srgb, var(--glass-edge) 82%, rgba(148, 163, 184, 0.28));
   background:
-    linear-gradient(160deg, rgba(255, 255, 255, 0.58), rgba(255, 255, 255, 0.28)),
+    linear-gradient(160deg, rgba(255, 255, 255, 0.37), rgba(255, 255, 255, 0.18)),
     var(--composer-bg);
   box-shadow:
     0 10px 28px rgba(15, 23, 42, 0.08),
     0 2px 8px rgba(15, 23, 42, 0.04),
-    inset 0 1px 0 rgba(255, 255, 255, 0.88);
+    inset 0 1px 0 rgba(255, 255, 255, 0.56);
   backdrop-filter: blur(22px) saturate(1.35);
   -webkit-backdrop-filter: blur(22px) saturate(1.35);
   max-height: min(42vh, 320px);
@@ -1596,8 +1596,8 @@ html[data-theme="dark"] .composer-palette {
   box-shadow:
     0 12px 32px rgba(15, 23, 42, 0.09),
     0 2px 8px rgba(15, 23, 42, 0.05),
-    inset 0 1px 0 rgba(255, 255, 255, 0.95),
-    inset 0 -1px 0 rgba(255, 255, 255, 0.32),
+    inset 0 1px 0 rgba(255, 255, 255, 0.62),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.2),
     0 0 0 2px color-mix(in srgb, var(--tone-blue, #2563eb) 10%, transparent);
 }
 
@@ -1775,7 +1775,7 @@ html[data-theme="dark"] .composer-mode-pill--ghost {
   padding: 8px 28px 8px 8px;
   border-radius: 14px;
   background:
-    linear-gradient(145deg, rgba(255, 255, 255, 0.72), rgba(255, 255, 255, 0.35)),
+    linear-gradient(145deg, rgba(255, 255, 255, 0.45), rgba(255, 255, 255, 0.22)),
     var(--chip-bg);
   border: 1px solid var(--chip-border);
   box-shadow: 0 1px 4px rgba(15, 23, 42, 0.05);
@@ -2025,7 +2025,7 @@ html[data-theme="light"] .composer--stacked .send-btn:not(.send-btn--stop) {
   flex-shrink: 0;
   box-shadow:
     0 10px 24px rgba(251, 191, 36, 0.28),
-    inset 0 1px 0 rgba(255, 255, 255, 0.55);
+    inset 0 1px 0 rgba(255, 255, 255, 0.35);
   transition: transform 0.15s ease, box-shadow 0.15s ease, filter 0.15s ease;
 }
 
@@ -2034,7 +2034,7 @@ html[data-theme="light"] .composer--stacked .send-btn:not(.send-btn--stop) {
   filter: brightness(1.04);
   box-shadow:
     0 14px 28px rgba(251, 191, 36, 0.36),
-    inset 0 1px 0 rgba(255, 255, 255, 0.65);
+    inset 0 1px 0 rgba(255, 255, 255, 0.42);
 }
 
 .send-btn:active:not(:disabled) {
@@ -2084,7 +2084,7 @@ html[data-theme="light"] .composer--stacked .send-btn:not(.send-btn--stop) {
   translate: -50% -50%;
   border-radius: 50%;
   background:
-    radial-gradient(circle at 35% 30%, rgba(255, 255, 255, 0.42), transparent 42%),
+    radial-gradient(circle at 35% 30%, rgba(255, 255, 255, 0.26), transparent 42%),
     radial-gradient(circle at 50% 50%, color-mix(in srgb, var(--tone-blue) 34%, transparent), transparent 68%);
   background-size: 130% 130%, 120% 120%;
   background-position: 30% 28%, 50% 50%;
@@ -2469,8 +2469,8 @@ html[data-theme="dark"] .chat-welcome-title-brand {
   border-radius: 18px;
   border: 1px solid color-mix(in srgb, var(--glass-edge) 90%, transparent);
   background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.72), rgba(255, 255, 255, 0.28)),
-    color-mix(in srgb, var(--glass-panel, rgba(255, 255, 255, 0.5)) 80%, transparent);
+    linear-gradient(155deg, rgba(255, 255, 255, 0.45), rgba(255, 255, 255, 0.18)),
+    color-mix(in srgb, var(--glass-panel, rgba(255, 255, 255, 0.32)) 80%, transparent);
   box-shadow: var(--shadow-card), var(--glass-rim);
   backdrop-filter: blur(16px) saturate(1.2);
   -webkit-backdrop-filter: blur(16px) saturate(1.2);
@@ -2564,7 +2564,7 @@ html[data-theme="dark"] .chat-welcome-title-brand {
   place-items: center;
   color: var(--tone);
   filter:
-    drop-shadow(0 1px 0 rgba(255, 255, 255, 0.55))
+    drop-shadow(0 1px 0 rgba(255, 255, 255, 0.35))
     drop-shadow(0 2px 3px color-mix(in srgb, var(--tone) 28%, transparent));
 }
 
@@ -2645,7 +2645,7 @@ html[data-theme="dark"] .chat-welcome-card-glyph {
   translate: -50% -50%;
   border-radius: 50%;
   background:
-    radial-gradient(circle at 35% 30%, rgba(255, 255, 255, 0.36), transparent 44%),
+    radial-gradient(circle at 35% 30%, rgba(255, 255, 255, 0.23), transparent 44%),
     radial-gradient(circle at 50% 50%, color-mix(in srgb, var(--tone-blue) 28%, transparent), transparent 68%);
   filter: blur(12px);
   opacity: 0.5;
@@ -2692,8 +2692,8 @@ html[data-theme="dark"] .chat-agent-guide-orb--soft {
   border-radius: 26px;
   border: 1px solid color-mix(in srgb, var(--glass-edge) 92%, transparent);
   background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.78), rgba(255, 255, 255, 0.32)),
-    color-mix(in srgb, var(--glass-panel, rgba(255, 255, 255, 0.5)) 78%, transparent);
+    linear-gradient(155deg, rgba(255, 255, 255, 0.5), rgba(255, 255, 255, 0.2)),
+    color-mix(in srgb, var(--glass-panel, rgba(255, 255, 255, 0.32)) 78%, transparent);
   box-shadow:
     var(--shadow-card),
     var(--glass-rim),
@@ -2744,7 +2744,7 @@ html[data-theme="dark"] .chat-agent-guide-card::before {
   display: grid;
   place-items: center;
   background:
-    linear-gradient(165deg, rgba(255, 255, 255, 0.88), rgba(255, 255, 255, 0.5)),
+    linear-gradient(165deg, rgba(255, 255, 255, 0.56), rgba(255, 255, 255, 0.32)),
     color-mix(in srgb, var(--glass-inner, #fff) 55%, transparent);
   color: var(--tone, var(--ink-mute));
   cursor: pointer;
@@ -2760,7 +2760,7 @@ html[data-theme="dark"] .chat-agent-guide-card::before {
   color: var(--danger, #e11d48);
   border-color: color-mix(in srgb, var(--danger, #e11d48) 28%, var(--glass-border));
   background:
-    linear-gradient(165deg, rgba(255, 255, 255, 0.95), rgba(255, 255, 255, 0.7)),
+    linear-gradient(165deg, rgba(255, 255, 255, 0.62), rgba(255, 255, 255, 0.45)),
     color-mix(in srgb, var(--danger-bg, rgba(244, 63, 94, 0.1)) 80%, transparent);
   transform: scale(1.04);
 }
@@ -2818,7 +2818,7 @@ html[data-theme="dark"] .chat-agent-guide-close:hover {
   border-radius: inherit;
   pointer-events: none;
   background:
-    linear-gradient(145deg, rgba(255, 255, 255, 0.55), transparent 42%, transparent 58%, color-mix(in srgb, var(--tone-purple) 28%, transparent));
+    linear-gradient(145deg, rgba(255, 255, 255, 0.35), transparent 42%, transparent 58%, color-mix(in srgb, var(--tone-purple) 28%, transparent));
   opacity: 0.85;
   mix-blend-mode: soft-light;
 }
@@ -2874,7 +2874,7 @@ html[data-theme="dark"] .chat-agent-guide-monogram {
   color: color-mix(in srgb, var(--tone, var(--tone-blue)) 72%, var(--ink-soft));
   background: color-mix(in srgb, var(--tone-soft, var(--tone-blue-soft)) 70%, transparent);
   border: 1px solid color-mix(in srgb, var(--tone, var(--tone-blue)) 18%, var(--glass-edge));
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.4);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.26);
 }
 
 html[data-theme="dark"] .chat-agent-guide-eyebrow {
@@ -2935,9 +2935,9 @@ html[data-theme="dark"] .chat-agent-guide-title {
   border-radius: 18px;
   border: 1px solid color-mix(in srgb, var(--glass-edge) 88%, transparent);
   background:
-    linear-gradient(165deg, rgba(255, 255, 255, 0.42), rgba(255, 255, 255, 0.12)),
-    color-mix(in srgb, var(--glass-inner, rgba(255, 255, 255, 0.5)) 45%, transparent);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.55);
+    linear-gradient(165deg, rgba(255, 255, 255, 0.26), rgba(255, 255, 255, 0.12)),
+    color-mix(in srgb, var(--glass-inner, rgba(255, 255, 255, 0.32)) 45%, transparent);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35);
 }
 
 html[data-theme="dark"] .chat-agent-guide-steps {
@@ -2983,7 +2983,7 @@ html[data-theme="dark"] .chat-agent-guide-step {
   color: var(--tone-blue);
   background: var(--tone-blue-soft);
   border: 1px solid color-mix(in srgb, var(--tone-blue) 18%, transparent);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.45);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.29);
 }
 
 .chat-agent-guide-step:nth-child(2) .chat-agent-guide-step-index {
@@ -3027,9 +3027,9 @@ html[data-theme="dark"] .chat-agent-guide-step {
   border-radius: 20px;
   border: 1px solid color-mix(in srgb, var(--glass-edge) 90%, transparent);
   background:
-    linear-gradient(165deg, rgba(255, 255, 255, 0.5), rgba(255, 255, 255, 0.16)),
-    color-mix(in srgb, var(--glass-inner, rgba(255, 255, 255, 0.55)) 42%, transparent);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.5);
+    linear-gradient(165deg, rgba(255, 255, 255, 0.32), rgba(255, 255, 255, 0.11)),
+    color-mix(in srgb, var(--glass-inner, rgba(255, 255, 255, 0.35)) 42%, transparent);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.32);
   animation: rise 0.45s cubic-bezier(0.22, 1, 0.36, 1) 0.12s both;
 }
 
@@ -3106,7 +3106,7 @@ html[data-theme="dark"] .chat-agent-icons {
   border-radius: 18px;
   border: 1px solid color-mix(in srgb, var(--glass-border) 88%, transparent);
   background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.72), rgba(255, 255, 255, 0.28)),
+    linear-gradient(155deg, rgba(255, 255, 255, 0.45), rgba(255, 255, 255, 0.18)),
     color-mix(in srgb, var(--glass-panel, #fff) 58%, transparent);
   box-shadow: var(--glass-rim), 0 4px 14px rgba(15, 23, 42, 0.04);
   overflow: hidden;
@@ -3224,7 +3224,7 @@ html[data-theme="dark"] .chat-agent-icon-slot:hover {
   cursor: pointer;
   display: grid;
   place-items: center;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.55);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35);
   transition: border-color 0.18s ease, background 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
 }
 
@@ -3243,7 +3243,7 @@ html[data-theme="dark"] .chat-agent-icon-slot:hover {
   border-style: solid;
   transform: scale(1.015);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.7),
+    inset 0 1px 0 rgba(255, 255, 255, 0.45),
     0 8px 18px color-mix(in srgb, var(--tone) 14%, transparent);
 }
 
@@ -3267,7 +3267,7 @@ html[data-theme="dark"] .chat-agent-icon-slot:hover {
   font-weight: 720;
   color: var(--tone);
   letter-spacing: -0.02em;
-  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.45);
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.29);
 }
 
 .chat-agent-icon-plus {
@@ -3285,7 +3285,7 @@ html[data-theme="dark"] .chat-agent-icon-slot:hover {
   line-height: 1;
   color: var(--tone);
   background:
-    linear-gradient(165deg, rgba(255, 255, 255, 0.95), rgba(255, 255, 255, 0.7)),
+    linear-gradient(165deg, rgba(255, 255, 255, 0.62), rgba(255, 255, 255, 0.45)),
     var(--tone-soft);
   border: 1px solid color-mix(in srgb, var(--tone) 22%, transparent);
   box-shadow: 0 3px 10px color-mix(in srgb, var(--tone) 18%, transparent);
@@ -3316,7 +3316,7 @@ html[data-theme="dark"] .chat-agent-icon-plus {
   cursor: pointer;
   font-size: 0.74rem;
   font-weight: 650;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.45);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.29);
   transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease, transform 0.15s ease;
 }
 

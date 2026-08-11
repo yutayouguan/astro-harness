@@ -56,7 +56,7 @@
   padding: 3px;
   border-radius: 12px;
   border: 1px solid color-mix(in srgb, var(--glass-edge) 88%, transparent);
-  background: color-mix(in srgb, var(--glass-panel, rgba(255, 255, 255, 0.55)) 88%, transparent);
+  background: color-mix(in srgb, var(--glass-panel, rgba(255, 255, 255, 0.35)) 88%, transparent);
   box-shadow: none;
   backdrop-filter: blur(12px) saturate(1.1);
   -webkit-backdrop-filter: blur(12px) saturate(1.1);
@@ -151,19 +151,19 @@
   border-radius: 16px;
   border: 1px solid color-mix(in srgb, var(--glass-edge) 90%, transparent);
   background:
-    linear-gradient(160deg, rgba(255, 255, 255, 0.72), rgba(255, 255, 255, 0.28)),
-    color-mix(in srgb, var(--glass-panel, rgba(255, 255, 255, 0.55)) 85%, transparent);
+    linear-gradient(160deg, rgba(255, 255, 255, 0.45), rgba(255, 255, 255, 0.18)),
+    color-mix(in srgb, var(--glass-panel, rgba(255, 255, 255, 0.35)) 85%, transparent);
   box-shadow:
     0 2px 8px rgba(15, 23, 42, 0.06),
-    var(--glass-rim, inset 0 1px 0 rgba(255, 255, 255, 0.35));
+    var(--glass-rim, inset 0 1px 0 rgba(255, 255, 255, 0.22));
   overflow: hidden;
 }
 
 .insights-kpi--primary {
   border-color: color-mix(in srgb, var(--tone) 28%, var(--glass-edge));
   background:
-    linear-gradient(160deg, rgba(255, 255, 255, 0.82), rgba(255, 255, 255, 0.35)),
-    color-mix(in srgb, var(--tone-soft) 55%, rgba(255, 255, 255, 0.5));
+    linear-gradient(160deg, rgba(255, 255, 255, 0.52), rgba(255, 255, 255, 0.22)),
+    color-mix(in srgb, var(--tone-soft) 55%, rgba(255, 255, 255, 0.32));
   box-shadow:
     0 2px 8px color-mix(in srgb, var(--tone) 8%, rgba(15, 23, 42, 0.05)),
     inset 0 0 0 1px color-mix(in srgb, var(--tone) 8%, transparent);
@@ -327,10 +327,10 @@
       color-mix(in srgb, var(--tone) 6%, transparent),
       transparent 42%
     ),
-    color-mix(in srgb, var(--glass-panel, rgba(255, 255, 255, 0.5)) 80%, transparent);
+    color-mix(in srgb, var(--glass-panel, rgba(255, 255, 255, 0.32)) 80%, transparent);
   box-shadow:
     0 2px 8px rgba(15, 23, 42, 0.05),
-    var(--glass-rim, inset 0 1px 0 rgba(255, 255, 255, 0.28));
+    var(--glass-rim, inset 0 1px 0 rgba(255, 255, 255, 0.18));
   overflow-x: auto;
   overscroll-behavior-x: contain;
 }
@@ -461,11 +461,11 @@
   padding: 12px 14px 8px;
   border-radius: 16px;
   border: 1px solid color-mix(in srgb, var(--glass-edge) 90%, transparent);
-  background: color-mix(in srgb, var(--glass-panel, rgba(255, 255, 255, 0.4)) 80%, transparent);
+  background: color-mix(in srgb, var(--glass-panel, rgba(255, 255, 255, 0.25)) 80%, transparent);
   min-height: 140px;
   box-shadow:
     0 2px 8px rgba(15, 23, 42, 0.05),
-    var(--glass-rim, inset 0 1px 0 rgba(255, 255, 255, 0.28));
+    var(--glass-rim, inset 0 1px 0 rgba(255, 255, 255, 0.18));
 }
 
 .insights-rank-empty {
@@ -504,7 +504,7 @@
   padding: 12px 14px 14px;
   border-radius: 16px;
   border: 1px solid color-mix(in srgb, var(--glass-edge) 90%, transparent);
-  background: color-mix(in srgb, var(--glass-panel, rgba(255, 255, 255, 0.4)) 80%, transparent);
+  background: color-mix(in srgb, var(--glass-panel, rgba(255, 255, 255, 0.25)) 80%, transparent);
 }
 
 .insights-hbar-list {
@@ -790,10 +790,10 @@ html[data-theme="dark"] .insights-unpriced{
   padding: 12px 14px;
   border-radius: 16px;
   border: 1px solid color-mix(in srgb, var(--glass-edge) 90%, transparent);
-  background: color-mix(in srgb, var(--glass-panel, rgba(255, 255, 255, 0.4)) 80%, transparent);
+  background: color-mix(in srgb, var(--glass-panel, rgba(255, 255, 255, 0.25)) 80%, transparent);
   box-shadow:
     0 2px 8px rgba(15, 23, 42, 0.05),
-    var(--glass-rim, inset 0 1px 0 rgba(255, 255, 255, 0.28));
+    var(--glass-rim, inset 0 1px 0 rgba(255, 255, 255, 0.18));
 }
 
 .insights-collab-list-panel {
@@ -960,7 +960,7 @@ html[data-theme="dark"] .insights-unpriced{
 .insights-collab-step {
   border-radius: 10px;
   border: 1px solid color-mix(in srgb, var(--glass-edge) 80%, transparent);
-  background: color-mix(in srgb, var(--glass-panel, rgba(255, 255, 255, 0.5)) 70%, transparent);
+  background: color-mix(in srgb, var(--glass-panel, rgba(255, 255, 255, 0.32)) 70%, transparent);
   padding: 0;
   max-width: 200px;
 }
@@ -1088,7 +1088,7 @@ html[data-theme="dark"] .insights-collab-label{
   padding: 12px 14px;
   border-radius: 16px;
   border: 1px solid color-mix(in srgb, var(--glass-edge) 90%, transparent);
-  background: color-mix(in srgb, var(--glass-panel, rgba(255, 255, 255, 0.4)) 80%, transparent);
+  background: color-mix(in srgb, var(--glass-panel, rgba(255, 255, 255, 0.25)) 80%, transparent);
   min-height: 360px;
   min-width: 0;
   display: flex;
@@ -1096,7 +1096,7 @@ html[data-theme="dark"] .insights-collab-label{
   overflow: hidden;
   box-shadow:
     0 2px 8px rgba(15, 23, 42, 0.05),
-    var(--glass-rim, inset 0 1px 0 rgba(255, 255, 255, 0.28));
+    var(--glass-rim, inset 0 1px 0 rgba(255, 255, 255, 0.18));
 }
 
 .insights-trace-list-panel .insights-collab-list,
@@ -1152,7 +1152,7 @@ html[data-theme="dark"] .insights-collab-label{
   flex-shrink: 0;
   border-radius: 12px;
   border: 1px solid color-mix(in srgb, var(--glass-edge) 90%, transparent);
-  background: color-mix(in srgb, var(--glass-panel, rgba(255, 255, 255, 0.4)) 55%, transparent);
+  background: color-mix(in srgb, var(--glass-panel, rgba(255, 255, 255, 0.25)) 55%, transparent);
   overflow: hidden;
 }
 
@@ -1339,7 +1339,7 @@ html[data-theme="dark"] .insights-collab-label{
   border: 1px solid color-mix(in srgb, var(--glass-edge) 86%, transparent);
   background: color-mix(
     in srgb,
-    var(--glass-panel, rgba(255, 255, 255, 0.48)) 82%,
+    var(--glass-panel, rgba(255, 255, 255, 0.3)) 82%,
     transparent
   );
 }
