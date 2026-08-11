@@ -11,8 +11,10 @@ import {
 
 export type ThemeMode = "light" | "dark" | "auto";
 export type ResolvedTheme = "light" | "dark";
+export type GlassLevel = "rich" | "normal" | "minimal";
 
 const STORAGE_KEY = "astro-theme-mode";
+const GLASS_KEY = "astro-glass-level";
 
 function readStoredMode(): ThemeMode {
   try {
@@ -39,6 +41,23 @@ function systemPrefersDark(): boolean {
 export function resolveTheme(mode: ThemeMode): ResolvedTheme {
   if (mode === "auto") return systemPrefersDark() ? "dark" : "light";
   return mode;
+}
+
+function readGlassLevel(): GlassLevel {
+  try {
+    const v = localStorage.getItem(GLASS_KEY);
+    if (v === "rich" || v === "normal" || v === "minimal") return v;
+  } catch { /* ignore */ }
+  return "rich";
+}
+
+function applyGlass(level: GlassLevel) {
+  const root = document.documentElement;
+  if (level === "rich") {
+    root.removeAttribute("data-glass");
+  } else {
+    root.setAttribute("data-glass", level);
+  }
 }
 
 function applyResolved(next: ResolvedTheme) {
@@ -70,6 +89,8 @@ type ThemeContextValue = {
   mode: ThemeMode;
   setMode: (mode: ThemeMode) => void;
   resolved: ResolvedTheme;
+  glassLevel: GlassLevel;
+  setGlassLevel: (level: GlassLevel) => void;
   /** 在切 tab / tone 后重新断言当前主题，防止 data-theme 被冲掉 */
   reassert: () => void;
 };
@@ -83,6 +104,9 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   const [resolved, setResolved] = useState<ResolvedTheme>(() =>
     typeof window === "undefined" ? "dark" : resolveTheme(readStoredMode()),
   );
+  const [glassLevel, setGlassState] = useState<GlassLevel>(() =>
+    typeof window === "undefined" ? "rich" : readGlassLevel(),
+  );
 
   const apply = useCallback((nextMode: ThemeMode) => {
     const next = resolveTheme(nextMode);
@@ -94,7 +118,8 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     apply(mode);
-  }, [mode, apply]);
+    applyGlass(glassLevel);
+  }, [mode, apply, glassLevel]);
 
   useEffect(() => {
     if (mode !== "auto") return;
@@ -110,13 +135,20 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     setModeState(next);
   }, []);
 
+  const setGlassLevel = useCallback((level: GlassLevel) => {
+    setGlassState(level);
+    applyGlass(level);
+    try { localStorage.setItem(GLASS_KEY, level); } catch { /* ignore */ }
+  }, []);
+
   const reassert = useCallback(() => {
     applyResolved(resolveTheme(mode));
-  }, [mode]);
+    applyGlass(glassLevel);
+  }, [mode, glassLevel]);
 
   const value = useMemo(
-    () => ({ mode, setMode, resolved, reassert }),
-    [mode, setMode, resolved, reassert],
+    () => ({ mode, setMode, resolved, glassLevel, setGlassLevel, reassert }),
+    [mode, setMode, resolved, glassLevel, setGlassLevel, reassert],
   );
 
   return (

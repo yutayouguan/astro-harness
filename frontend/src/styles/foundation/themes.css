@@ -339,3 +339,30 @@ html[data-theme="light"] {
     --ink-mute: rgba(71, 85, 105, 0.88);
   }
 }
+
+/* ═══════════════════════════════════════════════════════════════
+   视觉风格：data-glass 控制玻璃拟态/阴影强度
+   精致(rich) — 默认  |  标准(normal) — 减弱  |  简约(minimal) — 最轻
+   ═══════════════════════════════════════════════════════════════ */
+
+html[data-glass="normal"] {
+  --blur-glass: 12px;
+  --header-chip-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
+  --lens-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  --badge-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  --menu-glass-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+  --glass-rim: 0 0 0 1px rgba(255, 255, 255, 0.18) inset;
+}
+
+html[data-glass="minimal"] {
+  --blur-glass: 0px;
+  --backdrop-glass: none;
+  --menu-glass-blur: none;
+  --header-chip-shadow: none;
+  --lens-shadow: none;
+  --badge-shadow: none;
+  --menu-glass-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+  --glass-rim: 0 0 0 1px var(--border) inset;
+  --header-chip-bg: var(--glass-panel);
+  --menu-glass-bg: var(--glass-panel);
+}

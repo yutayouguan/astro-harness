@@ -12,13 +12,14 @@ import {
   ScrollText,
   Sparkles,
   Webhook,
+  Layers,
   Wrench,
 } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
 import { useAppIcon } from "../../hooks/settings/useAppIcon";
 import type { AppIconId } from "../../types";
 import type { ShellColorStyle } from "../../hooks/app/useShellColorStyle";
-import type { ThemeMode } from "../../hooks/app/useTheme";
+import { useTheme, type ThemeMode, type GlassLevel } from "../../hooks/app/useTheme";
 import type { ChatDisplayPrefs, ChatVerbosity } from "../../hooks/chat/useChatDisplayPrefs";
 import { useI18n } from "../../i18n/LocaleContext";
 import type { Locale, MessageKey } from "../../i18n/messages";
@@ -155,6 +156,7 @@ export default function PreferencesPanel({
   activeSessionId,
 }: Props) {
   const { locale, setLocale, t } = useI18n();
+  const { glassLevel, setGlassLevel } = useTheme();
   const { settings: appIcon, setIcon: setAppIcon } = useAppIcon();
   const [gradientEditorOpen, setGradientEditorOpen] = useState(false);
   const [activeCategory, setActiveCategory] =
@@ -414,6 +416,41 @@ export default function PreferencesPanel({
               <span className="theme-option-icon" aria-hidden>
                 <Icon />
               </span>
+              <span className="theme-option-text">
+                <span className="theme-option-label">{label}</span>
+                <span className="theme-option-desc">{desc}</span>
+              </span>
+              <span className="theme-option-check" aria-hidden />
+            </button>
+          ))}
+        </div>
+      </section>
+
+      <section className="prefs-card">
+        <div className="prefs-card-head">
+          <div className="prefs-icon-badge" data-tone={tone} aria-hidden>
+            <Layers size={22} />
+          </div>
+          <div>
+            <h2 className="prefs-card-title">{t("prefs.glass.title")}</h2>
+            <p className="prefs-card-sub">{t("prefs.glass.sub")}</p>
+          </div>
+        </div>
+        <div className="theme-options" role="radiogroup" aria-label={t("prefs.glass.title")}>
+          {([
+            { id: "rich" as GlassLevel, label: t("prefs.glass.rich"), desc: t("prefs.glass.richDesc") },
+            { id: "normal" as GlassLevel, label: t("prefs.glass.normal"), desc: t("prefs.glass.normalDesc") },
+            { id: "minimal" as GlassLevel, label: t("prefs.glass.minimal"), desc: t("prefs.glass.minimalDesc") },
+          ]).map(({ id, label, desc }) => (
+            <button
+              key={id}
+              type="button"
+              role="radio"
+              aria-checked={glassLevel === id}
+              className={`theme-option ${glassLevel === id ? "active" : ""}`}
+              data-tone={tone}
+              onClick={() => setGlassLevel(id)}
+            >
               <span className="theme-option-text">
                 <span className="theme-option-label">{label}</span>
                 <span className="theme-option-desc">{desc}</span>
