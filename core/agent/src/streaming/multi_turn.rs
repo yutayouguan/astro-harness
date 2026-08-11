@@ -13,8 +13,8 @@ use std::sync::Arc;
 use common::ChatTarget;
 use futures::stream::{AbortHandle, Abortable};
 use futures::StreamExt;
-use providers::{PauseControl, Usage};
 use providers::ProviderConfig;
+use providers::{PauseControl, Usage};
 use tokio::sync::{mpsc, Mutex};
 
 use super::run_state::{RunPhase, RunState};
@@ -22,9 +22,7 @@ use crate::control::hitl::HitlGate;
 use crate::runtime::usage::{apply_llm_usage_dual_write, LlmUsageWrite};
 use crate::runtime::AgentLoop;
 
-use super::hitl_bridge::{
-    register_live_parent_hitl, unregister_live_parent_hitl, ParentHitlCtx,
-};
+use super::hitl_bridge::{register_live_parent_hitl, unregister_live_parent_hitl, ParentHitlCtx};
 use super::provider::ProviderStreamer;
 use super::summary::{run_max_iterations_summary, SummaryOutcome};
 use super::tools_exec::{execute_tools_concurrent, execute_tools_serial, terminal_needs_approval};
@@ -268,7 +266,10 @@ async fn post_tool_maintenance(
         agent.tool_registry().any_stop_after(&names)
     };
     if stop_after {
-        tracing::info!(?names, "stop_after_tool_call: ending run without next LLM round");
+        tracing::info!(
+            ?names,
+            "stop_after_tool_call: ending run without next LLM round"
+        );
     }
     stop_after
 }
@@ -665,23 +666,28 @@ async fn run_multi_turn_stream_inner(args: MultiTurnStreamInnerArgs) {
 
         emit_context_usage(&session, &tx, &history, &tools).await;
 
-        let raw_stream =
-            match stream_chat_with_hooks(&session, &streamer, &system_prompt, &history, tools)
-                .await
-            {
-                Ok(s) => s,
-                Err(err) => {
-                    finish_error(
-                        &session,
-                        &streamer,
-                        &tx,
-                        err,
-                        saw_usage.then_some(total_usage),
-                    )
-                    .await;
-                    return;
-                }
-            };
+        let raw_stream = match stream_chat_with_hooks(
+            &session,
+            &streamer,
+            &system_prompt,
+            &history,
+            tools,
+        )
+        .await
+        {
+            Ok(s) => s,
+            Err(err) => {
+                finish_error(
+                    &session,
+                    &streamer,
+                    &tx,
+                    err,
+                    saw_usage.then_some(total_usage),
+                )
+                .await;
+                return;
+            }
+        };
 
         let (abort_handle, abort_reg) = AbortHandle::new_pair();
         pause.attach_abort(abort_handle);
@@ -837,9 +843,7 @@ async fn run_multi_turn_stream_inner(args: MultiTurnStreamInnerArgs) {
         let calls = tools::resolve_tool_calls(native_calls, &full_response);
 
         if full_response.is_empty() && calls.is_empty() {
-            if !full_reasoning.is_empty()
-                && thinking_only_retries < MAX_THINKING_ONLY_RETRIES
-            {
+            if !full_reasoning.is_empty() && thinking_only_retries < MAX_THINKING_ONLY_RETRIES {
                 thinking_only_retries += 1;
                 tracing::warn!(
                     reasoning_len = full_reasoning.len(),
@@ -1073,7 +1077,13 @@ async fn run_multi_turn_stream_inner(args: MultiTurnStreamInnerArgs) {
         };
 
         if !record_tool_outcomes(
-            &session, &calls, outcomes, &pause, &tx, &mut timeline, now_ms,
+            &session,
+            &calls,
+            outcomes,
+            &pause,
+            &tx,
+            &mut timeline,
+            now_ms,
         )
         .await
         {
@@ -1173,14 +1183,7 @@ pub fn stream_multi_turn(
     system_prompt: String,
     pause: Arc<PauseControl>,
 ) -> MultiTurnStream {
-    stream_multi_turn_with_hitl(
-        session,
-        targets,
-        base_config,
-        system_prompt,
-        pause,
-        None,
-    )
+    stream_multi_turn_with_hitl(session, targets, base_config, system_prompt, pause, None)
 }
 
 /// 带 HITL 闸门的多轮流。

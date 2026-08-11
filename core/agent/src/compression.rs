@@ -460,8 +460,7 @@ impl CompressionPolicy for StagedCompressionPolicy {
         plan.stage_ratio = Some(stage.min_ratio);
         plan.occupancy_before = self.manager.occupancy_ratio(session_messages);
 
-        let protect_start =
-            protect_tail_start_index(stored_messages.len(), protect_last_n.max(1));
+        let protect_start = protect_tail_start_index(stored_messages.len(), protect_last_n.max(1));
 
         for (idx, stored_msg) in stored_messages.iter().enumerate() {
             if stored_msg.role != "tool" {
@@ -474,7 +473,8 @@ impl CompressionPolicy for StagedCompressionPolicy {
                 continue;
             }
 
-            let spill_path = common::tool_spill::spill_file_path(memory_dir, session_id, stored_msg.id);
+            let spill_path =
+                common::tool_spill::spill_file_path(memory_dir, session_id, stored_msg.id);
             let spill_rel = spill_path
                 .exists()
                 .then(|| common::spill_path_for_prompt(memory_dir, &spill_path));
@@ -487,10 +487,7 @@ impl CompressionPolicy for StagedCompressionPolicy {
                     self.manager.hard_ratio,
                 )
             {
-                let current = stored_msg
-                    .compressed_content
-                    .as_deref()
-                    .unwrap_or(content);
+                let current = stored_msg.compressed_content.as_deref().unwrap_or(content);
                 if common::is_externalized_view(current)
                     && current.chars().count() <= stage.max_compressed_chars
                 {

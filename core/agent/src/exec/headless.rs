@@ -10,8 +10,8 @@
 //! 省略 HITL、pause/cancel、streaming channel、A2UI 渲染、timeline 等 UI 专属逻辑。
 
 use common::ChatTarget;
-use providers::Usage;
 use providers::ProviderConfig;
+use providers::Usage;
 
 use crate::runtime::budget::{should_refund_tool_round, IterationBudget, DEFAULT_MAX_ITERATIONS};
 use crate::runtime::AgentLoop;
@@ -49,7 +49,11 @@ pub async fn run_headless_multi_turn(
 
     let max_rounds = {
         let n = agent.multi_turn();
-        if n == 0 { DEFAULT_MAX_ITERATIONS } else { n }
+        if n == 0 {
+            DEFAULT_MAX_ITERATIONS
+        } else {
+            n
+        }
     };
     let budget = IterationBudget::new(max_rounds);
 
@@ -74,9 +78,7 @@ pub async fn run_headless_multi_turn(
 
         // 空响应处理：thinking-only 重试
         if response.text.is_empty() && response.calls.is_empty() {
-            if !response.reasoning.is_empty()
-                && thinking_only_retries < MAX_THINKING_ONLY_RETRIES
-            {
+            if !response.reasoning.is_empty() && thinking_only_retries < MAX_THINKING_ONLY_RETRIES {
                 thinking_only_retries += 1;
                 tracing::warn!(
                     reasoning_len = response.reasoning.len(),

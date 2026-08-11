@@ -31,13 +31,13 @@ pub use catalog::{
     ToolParamInfo,
 };
 pub use context::{ImageGenCreds, ImageGenParts, ImageGenTargets, ModelCredentials, ToolContext};
+pub use core::execution::ExecutionDispatch;
 pub use dispatch::{builtin_handler_names, dispatch_tool};
-pub use registry::DynToolHandler;
 pub use parse::{
     extract_tool_calls, resolve_tool_calls, ParsedToolCall, ToolCallAccumulator, ToolCallDelta,
 };
 pub use path_safe::resolve_safe;
-pub use core::execution::ExecutionDispatch;
+pub use registry::DynToolHandler;
 pub use registry::{
     BuiltinToolHandler, BuiltinToolRegistrar, NestingPolicy, ToolEntry, ToolRegistry,
 };

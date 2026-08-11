@@ -3,9 +3,9 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use providers::{PauseControl, Usage};
-use providers::{CompletionStream, ProviderConfig};
 use providers::types::stream::StreamChunk;
+use providers::{CompletionStream, ProviderConfig};
+use providers::{PauseControl, Usage};
 use tokio::sync::Mutex;
 
 use agent::runtime::{AgentConfig, AgentLoop};
@@ -41,9 +41,7 @@ fn scripted_chat(rounds: Vec<Vec<StreamChunk>>) -> ChatOverride {
 
 /// Boom 型 chat override：每次调用均返回错误。
 fn boom_chat() -> ChatOverride {
-    Arc::new(move |_msgs, _tools, _cfg| {
-        Box::pin(async move { Err(anyhow::anyhow!("boom")) })
-    })
+    Arc::new(move |_msgs, _tools, _cfg| Box::pin(async move { Err(anyhow::anyhow!("boom")) }))
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -806,8 +804,9 @@ async fn hitl_waiting_parks_then_continues_same_run() {
             },
             StreamChunk::ToolCallDelta {
                 index: 0,
-                arguments: r#"{"mode":"confirm","title":"Delete?","body":"Really delete the file?"}"#
-                    .into(),
+                arguments:
+                    r#"{"mode":"confirm","title":"Delete?","body":"Really delete the file?"}"#
+                        .into(),
             },
             StreamChunk::Done {
                 finish_reason: "tool_calls".into(),

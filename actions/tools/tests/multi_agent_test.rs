@@ -11,7 +11,12 @@ async fn pipeline_queues_orchestration() {
     let sessions =
         session::SessionStore::open_sessions_dir(&memory.base_dir.join("sessions")).unwrap();
     let targets = tools::ImageGenTargets::default();
-    let creds = tools::ModelCredentials { provider: "openai".into(), model: "test".into(), api_key: "k".into(), base_url: String::new() };
+    let creds = tools::ModelCredentials {
+        provider: "openai".into(),
+        model: "test".into(),
+        api_key: "k".into(),
+        base_url: String::new(),
+    };
     let mut ctx = ToolContext {
         memory: &mut memory,
         sessions: &sessions,
@@ -63,7 +68,12 @@ async fn pipeline_rejects_empty_agents() {
     let sessions =
         session::SessionStore::open_sessions_dir(&memory.base_dir.join("sessions")).unwrap();
     let targets = tools::ImageGenTargets::default();
-    let creds = tools::ModelCredentials { provider: "openai".into(), model: "test".into(), api_key: "k".into(), base_url: String::new() };
+    let creds = tools::ModelCredentials {
+        provider: "openai".into(),
+        model: "test".into(),
+        api_key: "k".into(),
+        base_url: String::new(),
+    };
     let mut ctx = ToolContext {
         memory: &mut memory,
         sessions: &sessions,

@@ -120,8 +120,9 @@ impl AgentLoop {
             .guard
             .record_outcome(result.occupancy_before, result.occupancy_after);
         result.thrashing_disabled = self.compression.guard.disabled;
-        result.recommend_session_compact =
-            self.compression_policy.should_recommend_compact(result.occupancy_after);
+        result.recommend_session_compact = self
+            .compression_policy
+            .should_recommend_compact(result.occupancy_after);
         if result.recommend_session_compact {
             self.compression.pending_recommend_compact = true;
         }

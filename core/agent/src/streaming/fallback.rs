@@ -149,7 +149,8 @@ pub async fn try_stream_completion_with_fallback(
                 messages.clone(),
                 tools.clone(),
                 &config,
-            ).await?;
+            )
+            .await?;
             probe_or_wrap_pre_content(stream).await
         }
         .await;
@@ -175,7 +176,6 @@ pub async fn try_stream_completion_with_fallback(
 #[cfg(test)]
 mod tests {
     use super::*;
-
 
     #[test]
     fn failover_eligible_for_429_and_5xx() {

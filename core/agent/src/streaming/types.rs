@@ -6,8 +6,8 @@ use std::pin::Pin;
 
 use futures::Stream;
 use futures::StreamExt;
-use providers::Usage;
 use providers::types::stream::StreamChunk;
+use providers::Usage;
 use tools::ToolCallDelta;
 
 /// 单次模型流式片段，对齐 Rig `StreamedAssistantContent` 并扩展 Reasoning 通道。

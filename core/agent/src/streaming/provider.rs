@@ -6,9 +6,9 @@ use async_trait::async_trait;
 use common::message::Message;
 use common::ChatTarget;
 use futures::StreamExt;
-use providers::ProviderConfig;
 use providers::types::message::Message as ProviderMessage;
 use providers::types::stream::{CompletionStream, StreamChunk};
+use providers::ProviderConfig;
 
 use crate::prompt::messages::to_provider_messages;
 
@@ -18,9 +18,14 @@ use super::types::{map_new_provider_stream, AssistantContentStream};
 
 /// 测试用 chat 函数覆盖：跳过 dispatch，直接返回脚本化的 CompletionStream。
 pub type ChatOverride = Arc<
-    dyn Fn(Vec<ProviderMessage>, Vec<serde_json::Value>, ProviderConfig)
-        -> std::pin::Pin<Box<dyn std::future::Future<Output = anyhow::Result<CompletionStream>> + Send>>
-    + Send + Sync
+    dyn Fn(
+            Vec<ProviderMessage>,
+            Vec<serde_json::Value>,
+            ProviderConfig,
+        ) -> std::pin::Pin<
+            Box<dyn std::future::Future<Output = anyhow::Result<CompletionStream>> + Send>,
+        > + Send
+        + Sync,
 >;
 
 /// 包装 fallback 链，实现三层 Streaming trait。
@@ -38,10 +43,7 @@ pub struct ProviderStreamer {
 }
 
 impl ProviderStreamer {
-    pub fn new(
-        targets: Vec<ChatTarget>,
-        base_config: ProviderConfig,
-    ) -> Self {
+    pub fn new(targets: Vec<ChatTarget>, base_config: ProviderConfig) -> Self {
         Self {
             targets,
             base_config,
@@ -113,10 +115,26 @@ impl StreamingCompletion for ProviderStreamer {
             // 测试覆盖路径：直接调用自定义函数
             let stream = chat_fn(messages, tools, config.clone()).await?;
             let meta = ActiveTargetMeta {
-                provider_id: self.targets.first().map(|t| t.provider_id.clone()).unwrap_or_default(),
-                backend_id: self.targets.first().map(|t| t.backend_id.clone()).unwrap_or_default(),
-                model: self.targets.first().map(|t| t.model.clone()).unwrap_or_default(),
-                base_url: self.targets.first().map(|t| t.base_url.clone()).unwrap_or_default(),
+                provider_id: self
+                    .targets
+                    .first()
+                    .map(|t| t.provider_id.clone())
+                    .unwrap_or_default(),
+                backend_id: self
+                    .targets
+                    .first()
+                    .map(|t| t.backend_id.clone())
+                    .unwrap_or_default(),
+                model: self
+                    .targets
+                    .first()
+                    .map(|t| t.model.clone())
+                    .unwrap_or_default(),
+                base_url: self
+                    .targets
+                    .first()
+                    .map(|t| t.base_url.clone())
+                    .unwrap_or_default(),
             };
             (stream, meta)
         } else {

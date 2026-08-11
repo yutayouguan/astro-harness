@@ -82,7 +82,9 @@ Pass full context; children have no parent history."
         schema: schema_for_args::<SubagentArgs>(),
         check_fn: None,
         icon: "send",
-        ..ToolEntry::lifecycle_defaults().exclusive().orchestrator_and_above()
+        ..ToolEntry::lifecycle_defaults()
+            .exclusive()
+            .orchestrator_and_above()
     });
 }
 

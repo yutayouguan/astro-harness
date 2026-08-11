@@ -18,8 +18,8 @@ use home::{default_memory_dir, AgentRuntimeConfig};
 use orchestration::{
     OrchestrationDb, OrchestrationRow, OrchestrationSpawnRequest, OrchestrationStatus, StepRow,
 };
-use providers::Usage;
 use providers::ProviderConfig;
+use providers::Usage;
 use usage::{NewUsageEvent, UsageDb};
 use uuid::Uuid;
 

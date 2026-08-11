@@ -4,8 +4,8 @@ use reqwest::header::HeaderMap;
 use serde_json::Value;
 
 use crate::compat::OpenAICompatible;
-use crate::traits::{Capable, Capabilities, Nothing, ProviderExt};
 use crate::compat::OpenAICompletionModel;
+use crate::traits::{Capabilities, Capable, Nothing, ProviderExt};
 
 #[derive(Debug, Clone, Copy, Default)]
 pub struct DeepSeek;
@@ -29,10 +29,7 @@ impl OpenAICompatible for DeepSeek {
                 "type": if enabled { "enabled" } else { "disabled" }
             });
             if enabled {
-                let effort = tc
-                    .get("effort")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("high");
+                let effort = tc.get("effort").and_then(|v| v.as_str()).unwrap_or("high");
                 // DeepSeek API 有效值：high / max（低于 high 的级别会被服务端映射为 high）
                 let mapped = match effort {
                     "max" | "xhigh" => "max",

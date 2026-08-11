@@ -172,9 +172,9 @@ impl AgentLoop {
         // 新 session / 构造路径：显式固化 MEMORY/USER snapshot（open 已对齐 live，此处钉死契约）。
         memory.refresh_memory_snapshot()?;
         let agent_id = memory.agent_id.clone();
-        let sessions: Box<dyn ConversationStore> = Box::new(
-            SessionStore::open_sessions_dir(&config.memory_dir.join("sessions"))?,
-        );
+        let sessions: Box<dyn ConversationStore> = Box::new(SessionStore::open_sessions_dir(
+            &config.memory_dir.join("sessions"),
+        )?);
         let session_messages = hydrate_session_messages(&*sessions, &session_id)?;
         let mut tool_registry = ToolRegistry::new();
         register_all(&mut tool_registry);
@@ -386,7 +386,8 @@ impl AgentLoop {
         api_key: &str,
         base_url: &str,
     ) {
-        self.model_ctx.set_credentials(provider, model, api_key, base_url);
+        self.model_ctx
+            .set_credentials(provider, model, api_key, base_url);
     }
 
     /// Agno 风格主模型入口：`Agent(model=…)`。
@@ -407,8 +408,13 @@ impl AgentLoop {
             *primary = spec.apply_to(primary);
             self.model_ctx.credentials.api_key = primary.api_key.clone();
             self.model_ctx.credentials.base_url = primary.base_url.clone();
-        } else if !self.model_ctx.credentials.api_key.is_empty() || !self.model_ctx.credentials.base_url.is_empty() {
-            let target = spec.to_chat_target(&self.model_ctx.credentials.api_key, &self.model_ctx.credentials.base_url);
+        } else if !self.model_ctx.credentials.api_key.is_empty()
+            || !self.model_ctx.credentials.base_url.is_empty()
+        {
+            let target = spec.to_chat_target(
+                &self.model_ctx.credentials.api_key,
+                &self.model_ctx.credentials.base_url,
+            );
             self.model_ctx.chat_targets = vec![target];
         }
         self.model_ctx.model_spec = Some(spec);

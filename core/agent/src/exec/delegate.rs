@@ -12,8 +12,8 @@ use delegate::{
 };
 use futures::StreamExt;
 use home::default_memory_dir;
-use providers::Usage;
 use providers::ProviderConfig;
+use providers::Usage;
 use tokio::task::JoinSet;
 use uuid::Uuid;
 
@@ -152,9 +152,7 @@ fn effective_role(
 }
 
 /// 有效聊天目标：优先 `chat_targets`，否则由四字段合成。
-fn effective_chat_targets(
-    creds: &DelegateRunRequest,
-) -> Vec<common::ChatTarget> {
+fn effective_chat_targets(creds: &DelegateRunRequest) -> Vec<common::ChatTarget> {
     if !creds.chat_targets.is_empty() {
         return creds.chat_targets.clone();
     }
@@ -763,7 +761,11 @@ mod subagent_lifecycle_tests {
             AgentLoop::new(AgentConfig::with_defaults(mem_dir.path().to_path_buf())).unwrap();
         agent.set_hook_bus(Arc::clone(&bus));
         let _ = agent
-            .finalize_tool_call_result("subagent", &serde_json::json!({}), common::ToolOutput::from(raw_result))
+            .finalize_tool_call_result(
+                "subagent",
+                &serde_json::json!({}),
+                common::ToolOutput::from(raw_result),
+            )
             .await;
 
         let entries = log.lock().unwrap().clone();

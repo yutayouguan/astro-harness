@@ -70,12 +70,14 @@ pub use seed::{
     BUNDLED_SKILLS, DEFAULT_PUBLIC_SKILLS,
 };
 pub use skill::{LoadedSkill, SkillMetadata};
+pub use snapshots::{
+    list_snapshots, restore_latest as restore_skill_snapshot, save_snapshot, SkillSnapshot,
+};
 pub use store::{fetch_detail, search};
 pub use update::{
     backup_skill_dir, update_all_with_origin, update_installed_skill, update_installed_skill_ex,
     update_outdated_skills,
 };
-pub use snapshots::{list_snapshots, restore_latest as restore_skill_snapshot, save_snapshot, SkillSnapshot};
 pub use usage::{
     curate_report, curate_report_at, last_loaded_at, record_skill_load, skill_usage_path,
 };

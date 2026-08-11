@@ -273,10 +273,13 @@ async fn execute_tools_serial_inner(
                                     "unavailable",
                                 )
                                 .await;
-                                out.push(format!(
+                                out.push(
+                                    format!(
                                     "Command blocked: dangerous ({}) and no HITL gate available.",
                                     decision.description
-                                ).into());
+                                )
+                                    .into(),
+                                );
                                 continue;
                             }
                         }
@@ -292,7 +295,8 @@ async fn execute_tools_serial_inner(
                     .get("_parse_error")
                     .and_then(|v| v.as_str())
                     .unwrap_or("invalid json")
-            ).into()
+            )
+            .into()
         } else {
             let mut agent = session.lock().await;
             let memory_dir = agent.memory_dir().to_path_buf();
@@ -320,7 +324,9 @@ async fn execute_tools_serial_inner(
         // confirm/clarify：astro_hitl → 同回合 park
         if let Some(hitl) = parse_astro_hitl(result.text()) {
             if let Some(gate) = hitl_gate {
-                result = park_astro_hitl(gate, tx, run_id, &call.id, hitl).await?.into();
+                result = park_astro_hitl(gate, tx, run_id, &call.id, hitl)
+                    .await?
+                    .into();
             } else {
                 // 无 HitlGate（单测或未注入闸门）：无法 park，返回说明文案
                 result = "HITL gate unavailable; confirmation/clarification could not be shown to the user.".into();
@@ -378,7 +384,8 @@ pub(crate) async fn execute_tools_concurrent(
                         .get("_parse_error")
                         .and_then(|v| v.as_str())
                         .unwrap_or("invalid json")
-                ).into()
+                )
+                .into()
             } else {
                 run_tool_on_snapshot(&snap, &call.name, &call.arguments)
             };
@@ -426,7 +433,11 @@ struct ToolExecSnapshot {
     hook_bus: Option<Arc<hooks::PluginHookBus>>,
 }
 
-fn run_tool_on_snapshot(snap: &ToolExecSnapshot, name: &str, args: &serde_json::Value) -> common::ToolOutput {
+fn run_tool_on_snapshot(
+    snap: &ToolExecSnapshot,
+    name: &str,
+    args: &serde_json::Value,
+) -> common::ToolOutput {
     // 纵深防御：并发路径没有审批闸门，此处硬拦 hardline 命令，
     // 即便路由判定漏了（见 terminal_needs_approval），也不会执行不可恢复操作。
     if name == "terminal" {

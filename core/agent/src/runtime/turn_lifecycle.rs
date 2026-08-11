@@ -22,7 +22,10 @@ impl AgentLoop {
     }
 
     /// 根据上一轮工具次数与 DecisionLog 计算本轮是否注入学习提示。
-    pub(crate) fn compute_learning_nudge(base: &std::path::Path, prev_tool_rounds: usize) -> Option<String> {
+    pub(crate) fn compute_learning_nudge(
+        base: &std::path::Path,
+        prev_tool_rounds: usize,
+    ) -> Option<String> {
         let cfg = memory::load_learning_config(base);
         if !cfg.nudge_enabled {
             return None;
@@ -168,9 +171,7 @@ impl AgentLoop {
     ///
     /// 返回 `(messages, tool_schemas)`，供 `ProviderStreamer::stream_chat` 或
     /// `to_provider_messages` 使用。streaming 与 headless 路径共享。
-    pub(crate) async fn prepare_llm_context(
-        &mut self,
-    ) -> (Vec<Message>, Vec<serde_json::Value>) {
+    pub(crate) async fn prepare_llm_context(&mut self) -> (Vec<Message>, Vec<serde_json::Value>) {
         self.reload_tools_and_mcp().await;
         let mut messages = self.provider_history();
         if let Some(ctx) = self.take_inject_context() {

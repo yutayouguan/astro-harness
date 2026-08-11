@@ -74,11 +74,7 @@ impl AgentLoop {
         // 在构造 ToolContext 之前，从 Hub 解析 peer（lock → resolve → release）
         // 构建 MCP 动态 handler，持有 Peer（Send + Sync），无需跨 await 持锁。
         let mcp_handler: Option<DynToolHandler> = if is_mcp_tool_name(name) {
-            let (peer, native, timeout_secs) = self
-                .mcp_hub
-                .lock()
-                .await
-                .resolve_tool_peer(name)?;
+            let (peer, native, timeout_secs) = self.mcp_hub.lock().await.resolve_tool_peer(name)?;
             let qname = name.to_string();
             Some(Box::new(move |_name: &str, args: &serde_json::Value| {
                 let peer = peer.clone();
@@ -87,7 +83,13 @@ impl AgentLoop {
                 let a = args.clone();
                 Box::pin(async move {
                     call_tool_with_peer(&peer, &qname, &native, &a, timeout_secs).await
-                }) as std::pin::Pin<Box<dyn std::future::Future<Output = anyhow::Result<common::ToolOutput>> + Send>>
+                })
+                    as std::pin::Pin<
+                        Box<
+                            dyn std::future::Future<Output = anyhow::Result<common::ToolOutput>>
+                                + Send,
+                        >,
+                    >
             }))
         } else {
             None
@@ -128,9 +130,7 @@ impl AgentLoop {
     ) -> Result<common::ToolOutput, ToolCallError> {
         let fut = self.handle_tool_call_async(name, args);
         match tokio::runtime::Handle::try_current() {
-            Ok(handle) => {
-                tokio::task::block_in_place(|| handle.block_on(fut))
-            }
+            Ok(handle) => tokio::task::block_in_place(|| handle.block_on(fut)),
             Err(_) => {
                 let rt = tokio::runtime::Builder::new_current_thread()
                     .enable_all()

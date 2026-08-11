@@ -56,7 +56,12 @@ async fn delegate_requires_goal() {
     let sessions =
         session::SessionStore::open_sessions_dir(&memory.base_dir.join("sessions")).unwrap();
     let targets = tools::ImageGenTargets::default();
-    let creds = tools::ModelCredentials { provider: "openai".into(), model: "test".into(), api_key: "k".into(), base_url: String::new() };
+    let creds = tools::ModelCredentials {
+        provider: "openai".into(),
+        model: "test".into(),
+        api_key: "k".into(),
+        base_url: String::new(),
+    };
     let mut ctx = make_ctx(&mut memory, &sessions, dir.path(), &targets, &creds);
     let args = serde_json::json!({});
     let err = tools::dispatch_tool(|_| true, &mut ctx, "subagent", &args, None)
@@ -76,7 +81,12 @@ async fn delegate_goal_hits_runner_or_key() {
     let sessions =
         session::SessionStore::open_sessions_dir(&memory.base_dir.join("sessions")).unwrap();
     let targets = tools::ImageGenTargets::default();
-    let creds = tools::ModelCredentials { provider: "openai".into(), model: "test".into(), api_key: "k".into(), base_url: String::new() };
+    let creds = tools::ModelCredentials {
+        provider: "openai".into(),
+        model: "test".into(),
+        api_key: "k".into(),
+        base_url: String::new(),
+    };
     let mut ctx = make_ctx(&mut memory, &sessions, dir.path(), &targets, &creds);
     let args = serde_json::json!({"goal": "do thing"});
     let err = tools::dispatch_tool(|_| true, &mut ctx, "subagent", &args, None)
@@ -108,7 +118,12 @@ async fn delegate_async_status_collect_cancel_flow() {
     let sessions =
         session::SessionStore::open_sessions_dir(&memory.base_dir.join("sessions")).unwrap();
     let targets = tools::ImageGenTargets::default();
-    let creds = tools::ModelCredentials { provider: "openai".into(), model: "test".into(), api_key: "k".into(), base_url: String::new() };
+    let creds = tools::ModelCredentials {
+        provider: "openai".into(),
+        model: "test".into(),
+        api_key: "k".into(),
+        base_url: String::new(),
+    };
     let mut ctx = make_ctx(&mut memory, &sessions, dir.path(), &targets, &creds);
     ctx.execution = Some(exec);
 
@@ -172,7 +187,12 @@ async fn delegate_async_cancel_marks_cancelled() {
     let sessions =
         session::SessionStore::open_sessions_dir(&memory.base_dir.join("sessions")).unwrap();
     let targets = tools::ImageGenTargets::default();
-    let creds = tools::ModelCredentials { provider: "openai".into(), model: "test".into(), api_key: "k".into(), base_url: String::new() };
+    let creds = tools::ModelCredentials {
+        provider: "openai".into(),
+        model: "test".into(),
+        api_key: "k".into(),
+        base_url: String::new(),
+    };
     let mut ctx = make_ctx(&mut memory, &sessions, dir.path(), &targets, &creds);
     ctx.execution = Some(exec);
 
@@ -211,7 +231,12 @@ async fn delegate_blocked_at_max_spawn_depth() {
     let targets = tools::ImageGenTargets::default();
     let sessions =
         session::SessionStore::open_sessions_dir(&memory.base_dir.join("sessions")).unwrap();
-    let creds = tools::ModelCredentials { provider: "openai".into(), model: "test".into(), api_key: "k".into(), base_url: String::new() };
+    let creds = tools::ModelCredentials {
+        provider: "openai".into(),
+        model: "test".into(),
+        api_key: "k".into(),
+        base_url: String::new(),
+    };
     let mut ctx = make_ctx(&mut memory, &sessions, dir.path(), &targets, &creds);
 
     let ctx_depth = home::SpawnDepthCtx {

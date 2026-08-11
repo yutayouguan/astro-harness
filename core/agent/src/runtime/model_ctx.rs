@@ -51,13 +51,7 @@ impl ModelContext {
 
     // ── 凭证 ───────────────────────────────────────────────
 
-    pub fn set_credentials(
-        &mut self,
-        provider: &str,
-        model: &str,
-        api_key: &str,
-        base_url: &str,
-    ) {
+    pub fn set_credentials(&mut self, provider: &str, model: &str, api_key: &str, base_url: &str) {
         self.credentials.provider = provider.to_string();
         self.credentials.model = model.to_string();
         self.credentials.api_key = api_key.to_string();
@@ -122,10 +116,7 @@ impl ModelContext {
 
     // ── 辅助任务目标 ───────────────────────────────────────
 
-    pub fn set_auxiliary_targets(
-        &mut self,
-        targets: HashMap<AuxiliaryTask, Vec<ChatTarget>>,
-    ) {
+    pub fn set_auxiliary_targets(&mut self, targets: HashMap<AuxiliaryTask, Vec<ChatTarget>>) {
         self.auxiliary_targets = targets;
     }
 
