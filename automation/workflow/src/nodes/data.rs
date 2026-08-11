@@ -87,7 +87,7 @@ impl NodeExecutor for CodeExec {
             bail!("代码节点的 source 为空");
         }
 
-        let (cmd, args, ext) = match lang {
+        let (cmd, args, _ext) = match lang {
             "javascript" | "js" => ("node", vec!["-e".to_string()], "js"),
             "python" | "py" => ("python3", vec!["-c".to_string()], "py"),
             "bash" | "sh" => ("bash", vec!["-c".to_string()], "sh"),
