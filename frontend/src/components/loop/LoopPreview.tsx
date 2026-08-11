@@ -12,8 +12,7 @@ import {
   type NodeTypes,
   type ReactFlowInstance,
 } from "@xyflow/react";
-import * as LucideIcons from "lucide-react";
-import type { LucideIcon } from "lucide-react";
+import { LOOP_ICON_MAP } from "./loopIcons";
 import type { LoopDto } from "./loopTypes";
 import { NODE_REGISTRY, type NodeMeta } from "./loopTypes";
 import { layoutNodes } from "./loopLayout";
@@ -25,7 +24,7 @@ interface PreviewNodeData {
 }
 
 function PreviewNode({ data }: { data: PreviewNodeData }) {
-  const IconComp = (LucideIcons as unknown as Record<string, LucideIcon>)[data.meta.icon];
+  const IconComp = LOOP_ICON_MAP[data.meta.icon];
   return (
     <div
       className="loop-preview-node"

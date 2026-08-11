@@ -10,7 +10,7 @@ import {
   Power,
   Bot,
 } from "lucide-react";
-import * as LucideIcons from "lucide-react";
+import { LOOP_ICON_MAP } from "./loopIcons";
 import type { LoopDto } from "./loopTypes";
 import { parseLoopIcon } from "./loopTypes";
 import { LOOP_TEMPLATES, type LoopTemplate } from "./loopTemplates";
@@ -360,7 +360,7 @@ export default function LoopPanel({ active, providers, onCollapseSidebar, onExpa
         title={t("loop.duplicate")}
         onClick={() => void handleDuplicate(lp)}
       >
-        <LucideIcons.Copy size={14} />
+        <LOOP_ICON_MAP.Copy size={14} />
       </button>
       <button
         className="loop-icon-btn"
@@ -593,7 +593,7 @@ export default function LoopPanel({ active, providers, onCollapseSidebar, onExpa
               onClick={() => setShowTemplates((v) => !v)}
               title={t("loop.templateTitle")}
             >
-              <LucideIcons.LayoutTemplate size={14} />
+              <LOOP_ICON_MAP.LayoutTemplate size={14} />
             </button>
           </div>
         </div>
@@ -605,12 +605,12 @@ export default function LoopPanel({ active, providers, onCollapseSidebar, onExpa
           <div className="loop-template-picker-header">
             <span>{t("loop.templateTitle")}</span>
             <button className="loop-icon-btn" onClick={() => setShowTemplates(false)}>
-              <LucideIcons.X size={14} />
+              <LOOP_ICON_MAP.X size={14} />
             </button>
           </div>
           <div className="loop-template-grid">
             {LOOP_TEMPLATES.map((tpl) => {
-              const Icon = (LucideIcons as unknown as Record<string, LucideIcons.LucideIcon>)[tpl.icon];
+              const Icon = LOOP_ICON_MAP[tpl.icon];
               return (
                 <button
                   key={tpl.id}
@@ -645,7 +645,7 @@ export default function LoopPanel({ active, providers, onCollapseSidebar, onExpa
                 <div className="loop-empty-templates-title">{t("loop.templateQuickStart")}</div>
                 <div className="loop-template-grid">
                   {LOOP_TEMPLATES.slice(0, 3).map((tpl) => {
-                    const Icon = (LucideIcons as unknown as Record<string, LucideIcons.LucideIcon>)[tpl.icon];
+                    const Icon = LOOP_ICON_MAP[tpl.icon];
                     return (
                       <button
                         key={tpl.id}

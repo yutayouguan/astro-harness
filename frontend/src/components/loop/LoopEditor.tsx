@@ -30,9 +30,7 @@ import {
   ChevronDown,
   ChevronRight,
 } from "lucide-react";
-import * as LucideIcons from "lucide-react";
-
-type LucideIcon = React.ComponentType<{ size?: number; className?: string }>;
+import { LOOP_ICON_MAP } from "./loopIcons";
 import type { LoopDto, NodeType, NodeMeta, LoopIconData } from "./loopTypes";
 import { NODE_CATEGORIES, NODE_REGISTRY, getNodesByCategory, getNodeMeta, parseLoopIcon, serializeLoopIcon } from "./loopTypes";
 import { clampPopover, pointAnchor, measurePopoverSize } from "../../lib/ui/clampPopover";
@@ -71,7 +69,7 @@ interface LoopNodeData {
 
 function LoopNode({ data, selected }: { data: LoopNodeData; selected?: boolean }) {
   const { t } = useI18n();
-  const IconComp = (LucideIcons as unknown as Record<string, LucideIcon>)[data.meta.icon];
+  const IconComp = LOOP_ICON_MAP[data.meta.icon];
   const raw = data as unknown as Record<string, unknown>;
   const warnings = validateNodeConfig(
     (raw.nodeType as NodeType) ?? data.meta.type,
@@ -89,20 +87,20 @@ function LoopNode({ data, selected }: { data: LoopNodeData; selected?: boolean }
             title={data.disabled ? t("loop.enabledYes") : t("loop.enabledNo")}
             onClick={(e) => { e.stopPropagation(); data.onToggleDisable?.(); }}
           >
-            <LucideIcons.Power size={12} />
+            <LOOP_ICON_MAP.Power size={12} />
           </button>
           <button
             className="loop-rf-toolbar-btn loop-rf-toolbar-btn--danger"
             title={t("loop.delete")}
             onClick={(e) => { e.stopPropagation(); data.onDeleteNode?.(); }}
           >
-            <LucideIcons.Trash2 size={12} />
+            <LOOP_ICON_MAP.Trash2 size={12} />
           </button>
         </div>
       )}
       {warnings.length > 0 && (
         <span className="loop-rf-node-warn" title={warnings.join("、") + " " + t("loop.notConfigured")}>
-          <LucideIcons.AlertTriangle size={10} />
+          <LOOP_ICON_MAP.AlertTriangle size={10} />
         </span>
       )}
       <Handle type="target" position={Position.Left} className="loop-rf-handle" />
@@ -128,7 +126,7 @@ interface BranchCondition {
 
 function BranchNode({ data, selected }: { data: LoopNodeData; selected?: boolean }) {
   const { t } = useI18n();
-  const IconComp = (LucideIcons as unknown as Record<string, LucideIcon>)[data.meta.icon];
+  const IconComp = LOOP_ICON_MAP[data.meta.icon];
   const raw = data as unknown as Record<string, unknown>;
   const config = raw.config as Record<string, unknown> | undefined;
   const warnings = validateNodeConfig(
@@ -154,17 +152,17 @@ function BranchNode({ data, selected }: { data: LoopNodeData; selected?: boolean
           <button className={`loop-rf-toolbar-btn${data.disabled ? " is-active" : ""}`}
             title={data.disabled ? t("loop.enabledYes") : t("loop.enabledNo")}
             onClick={(e) => { e.stopPropagation(); data.onToggleDisable?.(); }}>
-            <LucideIcons.Power size={12} />
+            <LOOP_ICON_MAP.Power size={12} />
           </button>
           <button className="loop-rf-toolbar-btn loop-rf-toolbar-btn--danger" title={t("loop.delete")}
             onClick={(e) => { e.stopPropagation(); data.onDeleteNode?.(); }}>
-            <LucideIcons.Trash2 size={12} />
+            <LOOP_ICON_MAP.Trash2 size={12} />
           </button>
         </div>
       )}
       {warnings.length > 0 && (
         <span className="loop-rf-node-warn" title={warnings.join("、") + " " + t("loop.notConfigured")}>
-          <LucideIcons.AlertTriangle size={10} />
+          <LOOP_ICON_MAP.AlertTriangle size={10} />
         </span>
       )}
       <Handle type="target" position={Position.Left} className="loop-rf-handle" />
@@ -274,7 +272,7 @@ function LoopNodePicker({ x, y, savedLoops, onSelect, onClose }: NodePickerProps
       }}
     >
       <div className="loop-node-picker-search">
-        <LucideIcons.Search size={14} className="loop-node-picker-search-icon" />
+        <LOOP_ICON_MAP.Search size={14} className="loop-node-picker-search-icon" />
         <input
           ref={inputRef}
           type="text"
@@ -290,7 +288,7 @@ function LoopNodePicker({ x, y, savedLoops, onSelect, onClose }: NodePickerProps
             (m) => !q || m.label.toLowerCase().includes(q) || m.labelEn.toLowerCase().includes(q),
           );
           if (items.length === 0) return null;
-          const CatIcon = (LucideIcons as unknown as Record<string, LucideIcon>)[cat.icon];
+          const CatIcon = LOOP_ICON_MAP[cat.icon];
           return (
             <div key={cat.key} className="loop-node-picker-group">
               <div className="loop-node-picker-group-header">
@@ -298,7 +296,7 @@ function LoopNodePicker({ x, y, savedLoops, onSelect, onClose }: NodePickerProps
                 <span>{cat.label}</span>
               </div>
               {items.map((meta) => {
-                const IconComp = (LucideIcons as unknown as Record<string, LucideIcon>)[meta.icon];
+                const IconComp = LOOP_ICON_MAP[meta.icon];
                 return (
                   <button
                     key={meta.type}
@@ -318,7 +316,7 @@ function LoopNodePicker({ x, y, savedLoops, onSelect, onClose }: NodePickerProps
         {savedLoops.length > 0 && (
           <div className="loop-node-picker-group">
             <div className="loop-node-picker-group-header">
-              <LucideIcons.Workflow size={12} />
+              <LOOP_ICON_MAP.Workflow size={12} />
               <span>{t("loop.savedFlows")}</span>
             </div>
             {savedLoops
@@ -330,7 +328,7 @@ function LoopNodePicker({ x, y, savedLoops, onSelect, onClose }: NodePickerProps
                   onClick={() => onSelect("custom_loop" as NodeType, lp.name, { workflow_id: lp.id })}
                 >
                   <span className="loop-node-picker-item-icon" style={{ color: "#8b5cf6" }}>
-                    <LucideIcons.Workflow size={16} />
+                    <LOOP_ICON_MAP.Workflow size={16} />
                   </span>
                   <span>{lp.name}</span>
                 </button>
@@ -910,7 +908,7 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
               onClick={() => setEditingName(true)}
             >
               <span>{name}</span>
-              <LucideIcons.Pencil size={12} className="loop-editor-name-edit" />
+              <LOOP_ICON_MAP.Pencil size={12} className="loop-editor-name-edit" />
             </button>
           )}
         </div>
@@ -926,14 +924,14 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
             title={`${t("loop.undo")} (⌘Z)`}
             onClick={undo}
           >
-            <LucideIcons.Undo2 size={16} />
+            <LOOP_ICON_MAP.Undo2 size={16} />
           </button>
           <button
             className="loop-icon-btn"
             title={`${t("loop.redo")} (⌘⇧Z)`}
             onClick={redo}
           >
-            <LucideIcons.Redo2 size={16} />
+            <LOOP_ICON_MAP.Redo2 size={16} />
           </button>
           <span className="loop-editor-toolbar-sep" />
           <button
@@ -947,21 +945,21 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
               }
             }}
           >
-            <LucideIcons.Sparkles size={16} />
+            <LOOP_ICON_MAP.Sparkles size={16} />
           </button>
           <button
             className={`loop-icon-btn${showVarsPanel ? " is-active" : ""}`}
             title={t("loop.variables")}
             onClick={() => setShowVarsPanel((v) => !v)}
           >
-            <LucideIcons.Variable size={16} />
+            <LOOP_ICON_MAP.Variable size={16} />
           </button>
           <button
             className="loop-icon-btn"
             title={t("loop.autoLayout")}
             onClick={handleAutoLayout}
           >
-            <LucideIcons.LayoutGrid size={16} />
+            <LOOP_ICON_MAP.LayoutGrid size={16} />
           </button>
           <select
             className="loop-edge-type-select"
@@ -984,7 +982,7 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
             title={t("loop.fitView")}
             onClick={() => reactFlowInstance.fitView({ padding: 0.15, duration: 300 })}
           >
-            <LucideIcons.Maximize size={16} />
+            <LOOP_ICON_MAP.Maximize size={16} />
           </button>
           <button
             className="loop-icon-btn"
@@ -1010,21 +1008,21 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
               }
             }}
           >
-            <LucideIcons.Camera size={16} />
+            <LOOP_ICON_MAP.Camera size={16} />
           </button>
           <button
             className="loop-icon-btn"
             title={t("loop.shortcuts")}
             onClick={() => setShowShortcuts((v) => !v)}
           >
-            <LucideIcons.Keyboard size={16} />
+            <LOOP_ICON_MAP.Keyboard size={16} />
           </button>
           <button
             className={`loop-icon-btn${fullscreen ? " is-active" : ""}`}
             title={fullscreen ? t("loop.exitFullscreen") : t("loop.fullscreen")}
             onClick={() => setFullscreen((v) => !v)}
           >
-            {fullscreen ? <LucideIcons.Minimize2 size={16} /> : <LucideIcons.Maximize2 size={16} />}
+            {fullscreen ? <LOOP_ICON_MAP.Minimize2 size={16} /> : <LOOP_ICON_MAP.Maximize2 size={16} />}
           </button>
           <button
             className={`loop-icon-btn${showHistory ? " is-active" : ""}`}
@@ -1077,7 +1075,7 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
               }
             }}
           >
-            {running ? <LucideIcons.Loader2 size={14} className="loop-spin" /> : <Play size={14} />}
+            {running ? <LOOP_ICON_MAP.Loader2 size={14} className="loop-spin" /> : <Play size={14} />}
             <span className="loop-btn-label">{running ? t("loop.running") : t("loop.run")}</span>
           </button>
         </div>
@@ -1091,7 +1089,7 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
             onClick={() => setPaletteOpen(true)}
             title={t("loop.expandPalette")}
           >
-            <LucideIcons.ChevronRight size={14} />
+            <LOOP_ICON_MAP.ChevronRight size={14} />
           </button>
         )}
         {paletteOpen && (
@@ -1110,7 +1108,7 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
             );
             if (pq && items.length === 0) return null;
             const isCollapsed = !!collapsed[cat.key];
-            const CatIcon = (LucideIcons as unknown as Record<string, LucideIcon>)[cat.icon];
+            const CatIcon = LOOP_ICON_MAP[cat.icon];
             return (
               <div key={cat.key} className={`loop-palette-group${!isCollapsed ? " is-open" : ""}`}>
                 <button
@@ -1125,7 +1123,7 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
                   <div className="loop-palette-items">
                     {/* 静态节点列表 */}
                     {items.filter((m) => m.type !== "custom_loop").map((meta) => {
-                      const IconComp = (LucideIcons as unknown as Record<string, LucideIcon>)[meta.icon];
+                      const IconComp = LOOP_ICON_MAP[meta.icon];
                       return (
                         <div
                           key={meta.type}
@@ -1173,7 +1171,7 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
                           className="loop-palette-item-icon"
                           style={{ background: "color-mix(in srgb, #8b5cf6 15%, transparent)", color: "#8b5cf6" }}
                         >
-                          <LucideIcons.Workflow size={14} />
+                          <LOOP_ICON_MAP.Workflow size={14} />
                         </span>
                         <span>{lp.name}</span>
                         <button
@@ -1205,7 +1203,7 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
             onClick={() => setPaletteOpen(false)}
             title={t("loop.collapsePalette")}
           >
-            <LucideIcons.ChevronLeft size={14} />
+            <LOOP_ICON_MAP.ChevronLeft size={14} />
           </button>
         )}
 
@@ -1288,7 +1286,7 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
           )}
           {showCanvasSearch && (
             <div className="loop-canvas-search">
-              <LucideIcons.Search size={14} />
+              <LOOP_ICON_MAP.Search size={14} />
               <input
                 autoFocus
                 placeholder={t("loop.searchNodes")}
@@ -1315,7 +1313,7 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
                 }}
               />
               <button className="loop-icon-btn" onClick={() => { setShowCanvasSearch(false); setCanvasSearch(""); }}>
-                <LucideIcons.X size={12} />
+                <LOOP_ICON_MAP.X size={12} />
               </button>
             </div>
           )}
@@ -1328,7 +1326,7 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
               {contextMenu.nodeId ? (
                 <>
                   <button onClick={() => { setSelectedNodeId(contextMenu.nodeId!); setContextMenu(null); }}>
-                    <LucideIcons.Settings2 size={13} /> {t("loop.configTab")}
+                    <LOOP_ICON_MAP.Settings2 size={13} /> {t("loop.configTab")}
                   </button>
                   <button onClick={() => {
                     const n = reactFlowInstance.getNode(contextMenu.nodeId!);
@@ -1338,22 +1336,22 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
                     }
                     setContextMenu(null);
                   }}>
-                    <LucideIcons.Copy size={13} /> {t("loop.shortcutCopy")}
+                    <LOOP_ICON_MAP.Copy size={13} /> {t("loop.shortcutCopy")}
                   </button>
                   <button onClick={() => { pushSnapshot(); deleteNode(contextMenu.nodeId!); setContextMenu(null); }}>
-                    <LucideIcons.Trash2 size={13} /> {t("loop.delete")}
+                    <LOOP_ICON_MAP.Trash2 size={13} /> {t("loop.delete")}
                   </button>
                 </>
               ) : (
                 <>
                   <button onClick={() => { handleAutoLayout(); setContextMenu(null); }}>
-                    <LucideIcons.LayoutGrid size={13} /> {t("loop.autoLayout")}
+                    <LOOP_ICON_MAP.LayoutGrid size={13} /> {t("loop.autoLayout")}
                   </button>
                   <button onClick={() => { reactFlowInstance.fitView({ padding: 0.15, duration: 300 }); setContextMenu(null); }}>
-                    <LucideIcons.Maximize size={13} /> {t("loop.fitView")}
+                    <LOOP_ICON_MAP.Maximize size={13} /> {t("loop.fitView")}
                   </button>
                   <button onClick={() => { setNodes((nds) => nds.map((n) => ({ ...n, selected: true }))); setContextMenu(null); }}>
-                    <LucideIcons.CheckSquare size={13} /> {t("loop.shortcutSelectAll")}
+                    <LOOP_ICON_MAP.CheckSquare size={13} /> {t("loop.shortcutSelectAll")}
                   </button>
                 </>
               )}
@@ -1368,7 +1366,7 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
             onClick={() => setSelectedNodeId(null)}
             title={t("loop.collapseConfig")}
           >
-            <LucideIcons.ChevronRight size={14} />
+            <LOOP_ICON_MAP.ChevronRight size={14} />
           </button>
         )}
 
@@ -1451,7 +1449,7 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
             <div className="loop-vars-panel-header">
               <span className="loop-vars-panel-title">{t("loop.variables")}</span>
               <button className="loop-icon-btn" onClick={() => setShowVarsPanel(false)} title={t("loop.close")}>
-                <LucideIcons.X size={14} />
+                <LOOP_ICON_MAP.X size={14} />
               </button>
             </div>
             <div className="loop-vars-panel-body">
@@ -1489,7 +1487,7 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
                     }}
                     title={t("loop.delete")}
                   >
-                    <LucideIcons.Trash2 size={12} />
+                    <LOOP_ICON_MAP.Trash2 size={12} />
                   </button>
                 </div>
               ))}
@@ -1501,7 +1499,7 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
                   setDirty(true);
                 }}
               >
-                <LucideIcons.Plus size={12} />
+                <LOOP_ICON_MAP.Plus size={12} />
                 <span>{t("loop.addVariable")}</span>
               </button>
             </div>
@@ -1604,7 +1602,7 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
       {draggingType && dragGhostPos && (() => {
         const meta = NODE_REGISTRY.find((m) => m.type === draggingType);
         if (!meta) return null;
-        const IconComp = (LucideIcons as unknown as Record<string, LucideIcon>)[meta.icon];
+        const IconComp = LOOP_ICON_MAP[meta.icon];
         return (
           <div
             className="loop-drag-ghost"
