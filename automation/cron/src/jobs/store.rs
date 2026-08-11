@@ -256,16 +256,20 @@ impl CronStore {
         if !fired.is_empty() {
             self.save(&file)?;
         } else {
-            // 仍保存可能被修正的 next_run（首次）
+            // 只在有 next_run 需要初始化时才写文件
+            let mut needs_save = false;
             for job in &mut file.jobs {
                 if job.enabled && job.next_run_at.is_none() {
                     job.next_run_at = Some(
                         compute_next_run(&job.schedule, now)?
                             .to_rfc3339_opts(chrono::SecondsFormat::Secs, true),
                     );
+                    needs_save = true;
                 }
             }
-            self.save(&file)?;
+            if needs_save {
+                self.save(&file)?;
+            }
         }
 
         Ok(fired)

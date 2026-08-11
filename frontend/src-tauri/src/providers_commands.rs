@@ -1374,6 +1374,23 @@ fn require_api_key(p: &ProviderConfig) -> Result<String, String> {
 /// Tauri 命令：list_provider_models。
 #[tauri::command]
 pub async fn list_provider_models(id: String) -> Result<ProviderModelsResult, String> {
+    // TTL 缓存：10 分钟内用缓存，不请求 API
+    let cache = load_models_cache();
+    if let Some(entry) = cache.providers.get(&id) {
+        if let Ok(updated) = chrono::DateTime::parse_from_rfc3339(&entry.updated_at) {
+            let age = chrono::Utc::now().signed_duration_since(updated);
+            if age.num_minutes() < 10 {
+                let kind = if entry.kind.is_empty() { "custom" } else { entry.kind.as_str() };
+                return Ok(ProviderModelsResult {
+                    models: entry.models.iter().cloned().map(|e| e.into_info(kind)).collect(),
+                    latency_ms: entry.latency_ms,
+                    source: format!("{} (cached)", entry.source),
+                });
+            }
+        }
+    }
+    drop(cache);
+
     let provider = find_provider(&id)?;
     validate_http_endpoint(&provider.endpoint)?;
     let api_key = require_api_key(&provider)?;

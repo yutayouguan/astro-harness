@@ -77,7 +77,7 @@ impl WorkflowRunDb {
             std::fs::create_dir_all(parent)?;
         }
         let conn = Connection::open(&path).context("打开 workflow.db 失败")?;
-        conn.execute_batch("PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000; PRAGMA foreign_keys=ON;")?;
+        conn.execute_batch("PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000; PRAGMA foreign_keys=ON; PRAGMA wal_autocheckpoint=100;")?;
         conn.execute_batch(DDL).context("workflow.db DDL 失败")?;
         Ok(Self { conn })
     }

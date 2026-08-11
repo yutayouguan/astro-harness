@@ -18,7 +18,7 @@ export function useLiveElapsedSec(
     }
     const tick = () => setElapsed(elapsedSecSince(startedAtMs));
     tick();
-    const id = window.setInterval(tick, 100);
+    const id = window.setInterval(tick, 1000);
     return () => window.clearInterval(id);
   }, [active, startedAtMs]);
 
