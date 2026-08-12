@@ -10,7 +10,9 @@ const MAX_DELAY_SECONDS: u64 = 86_400; // 24 hours
 
 /// 校验 URL：必须是 http/https，禁止内网和云元数据地址
 fn validate_url(url: &str) -> Result<()> {
-    let parsed: url::Url = url.parse().map_err(|_| anyhow::anyhow!("无效的 URL: {}", url))?;
+    let parsed: url::Url = url
+        .parse()
+        .map_err(|_| anyhow::anyhow!("无效的 URL: {}", url))?;
     match parsed.scheme() {
         "http" | "https" => {}
         s => bail!("不允许的 URL scheme: {s}，仅支持 http/https"),
@@ -52,22 +54,31 @@ fn is_172_private(host: &str) -> bool {
 /// 校验文件路径：规范化后必须在用户目录或 ~/.astro 下，禁止 .. 遍历
 fn validate_file_path(path: &str) -> Result<std::path::PathBuf> {
     let p = std::path::Path::new(path);
-    let canonical = p.canonicalize().or_else(|_| {
-        // 文件不存在时（write/append 场景），检查父目录
-        if let Some(parent) = p.parent() {
-            let cp = parent.canonicalize()?;
-            Ok(cp.join(p.file_name().unwrap_or_default()))
-        } else {
-            Err(std::io::Error::new(std::io::ErrorKind::NotFound, "路径无效"))
-        }
-    }).map_err(|e| anyhow::anyhow!("路径解析失败 {}: {}", path, e))?;
+    let canonical = p
+        .canonicalize()
+        .or_else(|_| {
+            // 文件不存在时（write/append 场景），检查父目录
+            if let Some(parent) = p.parent() {
+                let cp = parent.canonicalize()?;
+                Ok(cp.join(p.file_name().unwrap_or_default()))
+            } else {
+                Err(std::io::Error::new(
+                    std::io::ErrorKind::NotFound,
+                    "路径无效",
+                ))
+            }
+        })
+        .map_err(|e| anyhow::anyhow!("路径解析失败 {}: {}", path, e))?;
 
     let home_dir = home::user_home_dir().unwrap_or_else(|| std::path::PathBuf::from("/"));
     let astro_dir = home::default_memory_dir();
     if canonical.starts_with(&home_dir) || canonical.starts_with(&astro_dir) {
         Ok(canonical)
     } else {
-        bail!("路径 {} 不在允许的目录范围内（用户目录或 ~/.astro）", canonical.display())
+        bail!(
+            "路径 {} 不在允许的目录范围内（用户目录或 ~/.astro）",
+            canonical.display()
+        )
     }
 }
 
@@ -78,14 +89,31 @@ pub struct HttpRequestExec;
 #[async_trait]
 impl NodeExecutor for HttpRequestExec {
     async fn execute(&self, node: &WorkflowNode, ctx: &VariableContext) -> Result<NodeResult> {
-        let method = node.config.get("method").and_then(|v| v.as_str()).unwrap_or("GET");
-        let url_tpl = node.config.get("url_template").and_then(|v| v.as_str()).unwrap_or("");
+        let method = node
+            .config
+            .get("method")
+            .and_then(|v| v.as_str())
+            .unwrap_or("GET");
+        let url_tpl = node
+            .config
+            .get("url_template")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
         let url = ctx.interpolate(url_tpl);
-        let timeout = node.config.get("timeout_seconds").and_then(|v| v.as_u64()).unwrap_or(30).min(300);
+        let timeout = node
+            .config
+            .get("timeout_seconds")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(30)
+            .min(300);
 
         validate_url(&url)?;
 
-        let body_tpl = node.config.get("body_template").and_then(|v| v.as_str()).unwrap_or("");
+        let body_tpl = node
+            .config
+            .get("body_template")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
         let body = if body_tpl.is_empty() {
             None
         } else {
@@ -133,16 +161,24 @@ impl NodeExecutor for HttpRequestExec {
         // 限制响应大小，防止 OOM
         let content_len = resp.content_length().unwrap_or(0) as usize;
         if content_len > MAX_RESPONSE_BYTES {
-            bail!("响应体过大 ({} bytes)，上限 {} bytes", content_len, MAX_RESPONSE_BYTES);
+            bail!(
+                "响应体过大 ({} bytes)，上限 {} bytes",
+                content_len,
+                MAX_RESPONSE_BYTES
+            );
         }
         let resp_bytes = resp.bytes().await?;
         if resp_bytes.len() > MAX_RESPONSE_BYTES {
-            bail!("响应体过大 ({} bytes)，上限 {} bytes", resp_bytes.len(), MAX_RESPONSE_BYTES);
+            bail!(
+                "响应体过大 ({} bytes)，上限 {} bytes",
+                resp_bytes.len(),
+                MAX_RESPONSE_BYTES
+            );
         }
         let resp_text = String::from_utf8_lossy(&resp_bytes).to_string();
 
-        let resp_body: serde_json::Value = serde_json::from_str(&resp_text)
-            .unwrap_or(serde_json::Value::String(resp_text));
+        let resp_body: serde_json::Value =
+            serde_json::from_str(&resp_text).unwrap_or(serde_json::Value::String(resp_text));
 
         Ok(NodeResult::Success(serde_json::json!({
             "status": status,
@@ -160,8 +196,14 @@ impl NodeExecutor for RunLoopExec {
     async fn execute(&self, node: &WorkflowNode, _ctx: &VariableContext) -> Result<NodeResult> {
         // 子工作流执行由引擎层 execute_sub_workflow 直接处理（绕过此 executor）
         // 此处仅作 fallback 标记
-        let workflow_id = node.config.get("workflow_id").and_then(|v| v.as_str()).unwrap_or("");
-        Ok(NodeResult::Success(serde_json::json!({ "sub_workflow": workflow_id })))
+        let workflow_id = node
+            .config
+            .get("workflow_id")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+        Ok(NodeResult::Success(
+            serde_json::json!({ "sub_workflow": workflow_id }),
+        ))
     }
 }
 
@@ -172,7 +214,12 @@ pub struct DelayWaitExec;
 #[async_trait]
 impl NodeExecutor for DelayWaitExec {
     async fn execute(&self, node: &WorkflowNode, _ctx: &VariableContext) -> Result<NodeResult> {
-        let seconds = node.config.get("seconds").and_then(|v| v.as_u64()).unwrap_or(1).min(MAX_DELAY_SECONDS);
+        let seconds = node
+            .config
+            .get("seconds")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(1)
+            .min(MAX_DELAY_SECONDS);
         tokio::time::sleep(std::time::Duration::from_secs(seconds)).await;
         Ok(NodeResult::Success(serde_json::json!({
             "waited_seconds": seconds,
@@ -187,7 +234,11 @@ pub struct OutputExec;
 #[async_trait]
 impl NodeExecutor for OutputExec {
     async fn execute(&self, node: &WorkflowNode, ctx: &VariableContext) -> Result<NodeResult> {
-        let fields = node.config.get("output_fields").or_else(|| node.config.get("fields")).and_then(|v| v.as_array());
+        let fields = node
+            .config
+            .get("output_fields")
+            .or_else(|| node.config.get("fields"))
+            .and_then(|v| v.as_array());
         let mut out = serde_json::Map::new();
         if let Some(fields) = fields {
             for f in fields {
@@ -207,8 +258,16 @@ impl NodeExecutor for OutputExec {
             }
         }
 
-        let export_mode = node.config.get("export_mode").and_then(|v| v.as_str()).unwrap_or("none");
-        let export_path = node.config.get("export_path").and_then(|v| v.as_str()).unwrap_or("");
+        let export_mode = node
+            .config
+            .get("export_mode")
+            .and_then(|v| v.as_str())
+            .unwrap_or("none");
+        let export_path = node
+            .config
+            .get("export_path")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
         let export_path = ctx.interpolate(export_path);
         let export_path = expand_tilde(&export_path);
 
@@ -291,8 +350,15 @@ pub struct AudioProcessingExec;
 #[async_trait]
 impl NodeExecutor for AudioProcessingExec {
     async fn execute(&self, node: &WorkflowNode, _ctx: &VariableContext) -> Result<NodeResult> {
-        let op = node.config.get("operation").and_then(|v| v.as_str()).unwrap_or("convert");
-        bail!("音频处理功能正在开发中 — 待接入 ffmpeg/rodio 引擎。操作: {}", op)
+        let op = node
+            .config
+            .get("operation")
+            .and_then(|v| v.as_str())
+            .unwrap_or("convert");
+        bail!(
+            "音频处理功能正在开发中 — 待接入 ffmpeg/rodio 引擎。操作: {}",
+            op
+        )
     }
 }
 
@@ -303,12 +369,28 @@ pub struct SendNotificationExec;
 #[async_trait]
 impl NodeExecutor for SendNotificationExec {
     async fn execute(&self, node: &WorkflowNode, ctx: &VariableContext) -> Result<NodeResult> {
-        let channel = node.config.get("channel").and_then(|v| v.as_str()).unwrap_or("system");
-        let title_tpl = node.config.get("title_template").and_then(|v| v.as_str()).unwrap_or("");
-        let body_tpl = node.config.get("body_template").and_then(|v| v.as_str()).unwrap_or("");
+        let channel = node
+            .config
+            .get("channel")
+            .and_then(|v| v.as_str())
+            .unwrap_or("system");
+        let title_tpl = node
+            .config
+            .get("title_template")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+        let body_tpl = node
+            .config
+            .get("body_template")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
         let title = ctx.interpolate(title_tpl);
         let body = ctx.interpolate(body_tpl);
-        let recipient = node.config.get("recipient").and_then(|v| v.as_str()).unwrap_or("");
+        let recipient = node
+            .config
+            .get("recipient")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
 
         match channel {
             "system" => {
@@ -341,19 +423,19 @@ impl NodeExecutor for SendNotificationExec {
                 let client = reqwest::Client::builder()
                     .timeout(std::time::Duration::from_secs(30))
                     .build()?;
-                let resp = client.post(&url)
+                let resp = client
+                    .post(&url)
                     .json(&serde_json::json!({ "title": title, "body": body }))
-                    .send().await?;
+                    .send()
+                    .await?;
                 Ok(NodeResult::Success(serde_json::json!({
                     "channel": "webhook", "url": url, "status": resp.status().as_u16(), "sent": true,
                 })))
             }
-            _ => {
-                Ok(NodeResult::Success(serde_json::json!({
-                    "channel": channel, "title": title, "body": body,
-                    "note": format!("通知渠道 {} 暂未实现", channel),
-                })))
-            }
+            _ => Ok(NodeResult::Success(serde_json::json!({
+                "channel": channel, "title": title, "body": body,
+                "note": format!("通知渠道 {} 暂未实现", channel),
+            }))),
         }
     }
 }
@@ -365,8 +447,16 @@ pub struct FileIoExec;
 #[async_trait]
 impl NodeExecutor for FileIoExec {
     async fn execute(&self, node: &WorkflowNode, ctx: &VariableContext) -> Result<NodeResult> {
-        let op = node.config.get("operation").and_then(|v| v.as_str()).unwrap_or("read");
-        let path = node.config.get("path").and_then(|v| v.as_str()).unwrap_or("");
+        let op = node
+            .config
+            .get("operation")
+            .and_then(|v| v.as_str())
+            .unwrap_or("read");
+        let path = node
+            .config
+            .get("path")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
         let path = ctx.interpolate(path);
 
         if path.trim().is_empty() {
@@ -385,11 +475,18 @@ impl NodeExecutor for FileIoExec {
                 })))
             }
             "write" | "append" => {
-                let content_tpl = node.config.get("content_template").and_then(|v| v.as_str()).unwrap_or("");
+                let content_tpl = node
+                    .config
+                    .get("content_template")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("");
                 let content = ctx.interpolate(content_tpl);
                 if op == "append" {
                     use std::io::Write;
-                    let mut f = std::fs::OpenOptions::new().create(true).append(true).open(&safe_path)
+                    let mut f = std::fs::OpenOptions::new()
+                        .create(true)
+                        .append(true)
+                        .open(&safe_path)
                         .map_err(|e| anyhow::anyhow!("打开文件失败 {}: {}", path, e))?;
                     f.write_all(content.as_bytes())?;
                 } else {
@@ -403,7 +500,11 @@ impl NodeExecutor for FileIoExec {
                 })))
             }
             "copy" => {
-                let dest = node.config.get("dest_path").and_then(|v| v.as_str()).unwrap_or("");
+                let dest = node
+                    .config
+                    .get("dest_path")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("");
                 let dest = ctx.interpolate(dest);
                 let safe_dest = validate_file_path(&dest)?;
                 std::fs::copy(&safe_path, &safe_dest)
@@ -413,7 +514,11 @@ impl NodeExecutor for FileIoExec {
                 })))
             }
             "move" => {
-                let dest = node.config.get("dest_path").and_then(|v| v.as_str()).unwrap_or("");
+                let dest = node
+                    .config
+                    .get("dest_path")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("");
                 let dest = ctx.interpolate(dest);
                 let safe_dest = validate_file_path(&dest)?;
                 std::fs::rename(&safe_path, &safe_dest)

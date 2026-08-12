@@ -50,9 +50,8 @@ pub use history::{
     skill_last_approved_at, summarize as summarize_history, HistoryEvent, HistorySummary,
     SearchRunMeta,
 };
-pub use opportunities::{detect_opportunities, OpportunityHint};
-pub use signal::{skill_failure_signals, top_failing_skill, SkillSignalSummary};
 pub use judge::{build_judge_user_prompt, parse_judge_output, JudgeVerdict, JUDGE_SYSTEM_PROMPT};
+pub use opportunities::{detect_opportunities, OpportunityHint};
 pub use proposal::{
     apply_patch_unique, approve_proposal, approve_proposal_checked, candidate_new_markdown,
     list_proposals, proposals_dir, reject_proposal, save_proposals,
@@ -65,3 +64,4 @@ pub use search::{
     pareto_front, parse_variants, select_front_capped, select_population, ScoredVariant,
     SearchBudget, CROSSOVER_SYSTEM_PROMPT, MUTATION_SYSTEM_PROMPT,
 };
+pub use signal::{skill_failure_signals, top_failing_skill, SkillSignalSummary};

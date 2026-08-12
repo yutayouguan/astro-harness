@@ -1,8 +1,8 @@
 use anyhow::Result;
 use async_trait::async_trait;
 
-use crate::model::WorkflowNode;
 use super::variables::VariableContext;
+use crate::model::WorkflowNode;
 
 /// 节点执行结果
 #[derive(Debug, Clone)]
@@ -22,9 +22,5 @@ pub enum NodeResult {
 /// 节点执行器 trait —— 每种 NodeType 实现一个
 #[async_trait]
 pub trait NodeExecutor: Send + Sync {
-    async fn execute(
-        &self,
-        node: &WorkflowNode,
-        ctx: &VariableContext,
-    ) -> Result<NodeResult>;
+    async fn execute(&self, node: &WorkflowNode, ctx: &VariableContext) -> Result<NodeResult>;
 }

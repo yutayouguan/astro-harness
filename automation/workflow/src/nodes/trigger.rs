@@ -23,7 +23,11 @@ pub struct ScheduledTriggerExec;
 #[async_trait]
 impl NodeExecutor for ScheduledTriggerExec {
     async fn execute(&self, node: &WorkflowNode, _ctx: &VariableContext) -> Result<NodeResult> {
-        let schedule = node.config.get("schedule").and_then(|v| v.as_str()).unwrap_or("");
+        let schedule = node
+            .config
+            .get("schedule")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
         Ok(NodeResult::Success(serde_json::json!({
             "trigger_type": "scheduled",
             "schedule": schedule,
@@ -37,8 +41,16 @@ pub struct WebhookTriggerExec;
 #[async_trait]
 impl NodeExecutor for WebhookTriggerExec {
     async fn execute(&self, node: &WorkflowNode, _ctx: &VariableContext) -> Result<NodeResult> {
-        let path = node.config.get("path").and_then(|v| v.as_str()).unwrap_or("");
-        let method = node.config.get("method").and_then(|v| v.as_str()).unwrap_or("POST");
+        let path = node
+            .config
+            .get("path")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+        let method = node
+            .config
+            .get("method")
+            .and_then(|v| v.as_str())
+            .unwrap_or("POST");
         Ok(NodeResult::Success(serde_json::json!({
             "trigger_type": "webhook",
             "path": path,
@@ -53,8 +65,16 @@ pub struct EmailTriggerExec;
 #[async_trait]
 impl NodeExecutor for EmailTriggerExec {
     async fn execute(&self, node: &WorkflowNode, _ctx: &VariableContext) -> Result<NodeResult> {
-        let host = node.config.get("host").and_then(|v| v.as_str()).unwrap_or("");
-        let filter = node.config.get("filter").and_then(|v| v.as_str()).unwrap_or("");
+        let host = node
+            .config
+            .get("host")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+        let filter = node
+            .config
+            .get("filter")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
         tracing::warn!(host = %host, filter = %filter, "邮件触发节点尚未接入 IMAP/POP3，以手动模式执行");
         Ok(NodeResult::Success(serde_json::json!({
             "trigger_type": "email",
@@ -71,8 +91,16 @@ pub struct FileWatchTriggerExec;
 #[async_trait]
 impl NodeExecutor for FileWatchTriggerExec {
     async fn execute(&self, node: &WorkflowNode, _ctx: &VariableContext) -> Result<NodeResult> {
-        let path = node.config.get("watch_path").and_then(|v| v.as_str()).unwrap_or("");
-        let event = node.config.get("event_type").and_then(|v| v.as_str()).unwrap_or("any");
+        let path = node
+            .config
+            .get("watch_path")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+        let event = node
+            .config
+            .get("event_type")
+            .and_then(|v| v.as_str())
+            .unwrap_or("any");
         tracing::warn!(path = %path, event = %event, "文件监控节点尚未接入 notify，以手动模式执行");
         Ok(NodeResult::Success(serde_json::json!({
             "trigger_type": "file_watch",

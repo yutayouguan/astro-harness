@@ -15,4 +15,4 @@ pub mod tts_http;
 pub mod video_http;
 pub mod voice_clone_http;
 
-pub use defaults::{DEFAULT_API_BASE, DEFAULT_ANTHROPIC_BASE};
+pub use defaults::{DEFAULT_ANTHROPIC_BASE, DEFAULT_API_BASE};

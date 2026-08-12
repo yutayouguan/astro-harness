@@ -371,9 +371,7 @@ impl ProvidersState {
                 }
                 ProviderKind::Minimax => {
                     let ep = p.endpoint.trim_end_matches('/');
-                    if ep == "https://api.minimax.chat/v1"
-                        || ep == "https://api.minimaxi.com/v1"
-                    {
+                    if ep == "https://api.minimax.chat/v1" || ep == "https://api.minimaxi.com/v1" {
                         p.endpoint = "https://api.minimaxi.com/v1".to_string();
                         changed = true;
                     }
@@ -719,11 +717,31 @@ fn to_dto(p: &ProviderConfig) -> ProviderConfigDto {
         backend_id: bid.to_string(),
         official_key_url: p.kind.official_key_url().map(str::to_string),
         fallback: p.fallback.clone(),
-        image_model: if p.image_model.is_empty() { profile.default_image_model.to_string() } else { p.image_model.clone() },
-        video_model: if p.video_model.is_empty() { profile.default_video_model.to_string() } else { p.video_model.clone() },
-        tts_model: if p.tts_model.is_empty() { profile.default_tts_model.to_string() } else { p.tts_model.clone() },
-        vision_model: if p.vision_model.is_empty() { profile.default_vision_model.to_string() } else { p.vision_model.clone() },
-        music_model: if p.music_model.is_empty() { profile.default_music_model.to_string() } else { p.music_model.clone() },
+        image_model: if p.image_model.is_empty() {
+            profile.default_image_model.to_string()
+        } else {
+            p.image_model.clone()
+        },
+        video_model: if p.video_model.is_empty() {
+            profile.default_video_model.to_string()
+        } else {
+            p.video_model.clone()
+        },
+        tts_model: if p.tts_model.is_empty() {
+            profile.default_tts_model.to_string()
+        } else {
+            p.tts_model.clone()
+        },
+        vision_model: if p.vision_model.is_empty() {
+            profile.default_vision_model.to_string()
+        } else {
+            p.vision_model.clone()
+        },
+        music_model: if p.music_model.is_empty() {
+            profile.default_music_model.to_string()
+        } else {
+            p.music_model.clone()
+        },
         asr_model: profile.default_asr_model.to_string(),
         embedding_model: profile.default_embedding_model.to_string(),
         supports_image: profile.supports_image_gen,
@@ -1182,9 +1200,7 @@ pub fn resolve_latest_chat_model(kind: &ProviderKind) -> String {
                 continue;
             }
             // 纯媒体模型跳过
-            if info.capabilities.image_gen
-                && !info.capabilities.tools
-                && !info.capabilities.vision
+            if info.capabilities.image_gen && !info.capabilities.tools && !info.capabilities.vision
             {
                 continue;
             }
@@ -1194,7 +1210,8 @@ pub fn resolve_latest_chat_model(kind: &ProviderKind) -> String {
             }
         }
     }
-    best.map(|(_, id)| id).unwrap_or_else(|| kind.default_model().to_string())
+    best.map(|(_, id)| id)
+        .unwrap_or_else(|| kind.default_model().to_string())
 }
 
 /// 从 providers 面板解析图片生成候选：Google 优先，OpenAI 备用。
@@ -1280,7 +1297,10 @@ fn trim_slash(endpoint: &str) -> String {
 fn extract_api_error(body: &serde_json::Value) -> &str {
     body.pointer("/error/message")
         .and_then(|m| m.as_str())
-        .or_else(|| body.pointer("/base_resp/status_msg").and_then(|m| m.as_str()))
+        .or_else(|| {
+            body.pointer("/base_resp/status_msg")
+                .and_then(|m| m.as_str())
+        })
         .or_else(|| body.get("error").and_then(|e| e.as_str()))
         .or_else(|| body.get("message").and_then(|m| m.as_str()))
         .filter(|s| !s.is_empty())
@@ -1298,8 +1318,7 @@ fn validate_http_endpoint(endpoint: &str) -> Result<(), String> {
     if !(lower.starts_with("http://") || lower.starts_with("https://")) {
         return Err("Endpoint 仅支持 http:// 或 https://".to_string());
     }
-    let parsed =
-        url::Url::parse(trimmed).map_err(|e| format!("Endpoint 格式无效: {e}"))?;
+    let parsed = url::Url::parse(trimmed).map_err(|e| format!("Endpoint 格式无效: {e}"))?;
     if parsed.host_str().is_none_or(|h| h.is_empty()) {
         return Err("Endpoint 缺少主机名".to_string());
     }
@@ -1338,9 +1357,7 @@ const AZURE_API_VERSION: &str = "2024-06-01";
 
 /// 规范化 Anthropic endpoint：剥离用户误加的 `/v1` 后缀，避免拼出 `/v1/v1/messages`。
 fn anthropic_base(endpoint: &str) -> String {
-    trim_slash(endpoint)
-        .trim_end_matches("/v1")
-        .to_string()
+    trim_slash(endpoint).trim_end_matches("/v1").to_string()
 }
 
 /// 规范化 Azure OpenAI endpoint 根路径。
@@ -1380,9 +1397,18 @@ pub async fn list_provider_models(id: String) -> Result<ProviderModelsResult, St
         if let Ok(updated) = chrono::DateTime::parse_from_rfc3339(&entry.updated_at) {
             let age = chrono::Utc::now().signed_duration_since(updated);
             if age.num_minutes() < 10 {
-                let kind = if entry.kind.is_empty() { "custom" } else { entry.kind.as_str() };
+                let kind = if entry.kind.is_empty() {
+                    "custom"
+                } else {
+                    entry.kind.as_str()
+                };
                 return Ok(ProviderModelsResult {
-                    models: entry.models.iter().cloned().map(|e| e.into_info(kind)).collect(),
+                    models: entry
+                        .models
+                        .iter()
+                        .cloned()
+                        .map(|e| e.into_info(kind))
+                        .collect(),
                     latency_ms: entry.latency_ms,
                     source: format!("{} (cached)", entry.source),
                 });
@@ -1444,7 +1470,10 @@ pub async fn list_provider_models(id: String) -> Result<ProviderModelsResult, St
             let status = resp.status();
             let body: serde_json::Value = resp.json().await.map_err(|e| e.to_string())?;
             if !status.is_success() {
-                return Err(format!("Anthropic 列表失败 ({status}): {}", extract_api_error(&body)));
+                return Err(format!(
+                    "Anthropic 列表失败 ({status}): {}",
+                    extract_api_error(&body)
+                ));
             }
             let models = body["data"]
                 .as_array()
@@ -1477,7 +1506,10 @@ pub async fn list_provider_models(id: String) -> Result<ProviderModelsResult, St
             let status = resp.status();
             let body: serde_json::Value = resp.json().await.map_err(|e| e.to_string())?;
             if !status.is_success() {
-                return Err(format!("Google 列表失败 ({status}): {}", extract_api_error(&body)));
+                return Err(format!(
+                    "Google 列表失败 ({status}): {}",
+                    extract_api_error(&body)
+                ));
             }
             let models = body["models"]
                 .as_array()
@@ -1526,7 +1558,10 @@ pub async fn list_provider_models(id: String) -> Result<ProviderModelsResult, St
             let status = resp.status();
             let body: serde_json::Value = resp.json().await.map_err(|e| e.to_string())?;
             if !status.is_success() {
-                return Err(format!("模型列表失败 ({status}): {}", extract_api_error(&body)));
+                return Err(format!(
+                    "模型列表失败 ({status}): {}",
+                    extract_api_error(&body)
+                ));
             }
             let models = body["data"]
                 .as_array()
@@ -1567,7 +1602,10 @@ pub async fn list_provider_models(id: String) -> Result<ProviderModelsResult, St
             let status = resp.status();
             let body: serde_json::Value = resp.json().await.map_err(|e| e.to_string())?;
             if !status.is_success() {
-                return Err(format!("Azure 模型列表失败 ({status}): {}", extract_api_error(&body)));
+                return Err(format!(
+                    "Azure 模型列表失败 ({status}): {}",
+                    extract_api_error(&body)
+                ));
             }
             let models = body["data"]
                 .as_array()
@@ -1694,8 +1732,7 @@ async fn probe_one_model(
         additional_params: serde_json::Value::Null,
         previous_interaction_id: None,
     };
-    let result = providers::dispatch::verify(probe_id, &model, &config)
-        .await;
+    let result = providers::dispatch::verify(probe_id, &model, &config).await;
     ProviderTestResult {
         ok: result.ok,
         latency_ms: result.latency_ms,

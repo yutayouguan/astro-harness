@@ -69,8 +69,8 @@ pub fn extract_openai_delta(data: &str) -> Vec<StreamChunk> {
         .filter(|s| !s.is_empty());
     let meaningful_text = content_str.map_or(false, |s| !s.trim().is_empty());
 
-    if meaningful_text {
-        chunks.push(StreamChunk::Text(content_str.unwrap().to_string()));
+    if let (true, Some(s)) = (meaningful_text, content_str) {
+        chunks.push(StreamChunk::Text(s.to_string()));
     }
 
     // tool_calls
@@ -135,10 +135,16 @@ fn parse_tool_deltas(choice: &Value, chunks: &mut Vec<StreamChunk>) {
         });
         // MiniMax：id 和 arguments 在同一对象，不能丢 arguments
         if let Some(args) = arguments {
-            chunks.push(StreamChunk::ToolCallDelta { index, arguments: args });
+            chunks.push(StreamChunk::ToolCallDelta {
+                index,
+                arguments: args,
+            });
         }
     } else if let Some(args) = arguments {
-        chunks.push(StreamChunk::ToolCallDelta { index, arguments: args });
+        chunks.push(StreamChunk::ToolCallDelta {
+            index,
+            arguments: args,
+        });
     }
 }
 
@@ -163,7 +169,9 @@ mod tests {
         let data = r#"{"choices":[],"usage":{"prompt_tokens":10,"completion_tokens":5}}"#;
         let chunks = extract_openai_delta(data);
         assert_eq!(chunks.len(), 1);
-        assert!(matches!(&chunks[0], StreamChunk::Usage(u) if u.input_tokens == 10 && u.output_tokens == 5));
+        assert!(
+            matches!(&chunks[0], StreamChunk::Usage(u) if u.input_tokens == 10 && u.output_tokens == 5)
+        );
     }
 
     #[test]
@@ -171,7 +179,9 @@ mod tests {
         let data = r#"{"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_1","function":{"name":"read","arguments":""}}]}}]}"#;
         let chunks = extract_openai_delta(data);
         assert_eq!(chunks.len(), 1);
-        assert!(matches!(&chunks[0], StreamChunk::ToolCallStart { id, name, .. } if id == "call_1" && name == "read"));
+        assert!(
+            matches!(&chunks[0], StreamChunk::ToolCallStart { id, name, .. } if id == "call_1" && name == "read")
+        );
     }
 
     #[test]
@@ -200,8 +210,11 @@ mod tests {
             })
             .collect();
         // Thinking + ToolCallStart + ToolCallDelta(arguments) + Done
-        assert_eq!(types, vec!["Thinking", "ToolCallStart", "ToolCallDelta", "Done"],
-            "should extract all fields, got {types:?}");
+        assert_eq!(
+            types,
+            vec!["Thinking", "ToolCallStart", "ToolCallDelta", "Done"],
+            "should extract all fields, got {types:?}"
+        );
 
         // 验证 arguments 正确
         if let StreamChunk::ToolCallDelta { arguments, .. } = &chunks[2] {
@@ -251,8 +264,11 @@ mod tests {
             })
             .collect();
         // content 含 <think> 标签 → Text（非空白）+ ToolCallStart + ToolCallDelta + Done
-        assert_eq!(types, vec!["Text", "ToolCallStart", "ToolCallDelta", "Done"],
-            "native format: got {types:?}");
+        assert_eq!(
+            types,
+            vec!["Text", "ToolCallStart", "ToolCallDelta", "Done"],
+            "native format: got {types:?}"
+        );
     }
 
     #[test]
@@ -260,13 +276,19 @@ mod tests {
         // DeepSeek 风格：reasoning_content 字符串 + tool_calls
         let data = r#"{"choices":[{"finish_reason":"tool_calls","delta":{"reasoning_content":"let me think","tool_calls":[{"index":0,"id":"c1","function":{"name":"f","arguments":"{}"}}]}}]}"#;
         let chunks = extract_openai_delta(data);
-        let types: Vec<&str> = chunks.iter().map(|c| match c {
-            StreamChunk::Thinking(_) => "Thinking",
-            StreamChunk::ToolCallStart { .. } => "ToolCallStart",
-            StreamChunk::ToolCallDelta { .. } => "ToolCallDelta",
-            StreamChunk::Done { .. } => "Done",
-            _ => "Other",
-        }).collect();
-        assert_eq!(types, vec!["Thinking", "ToolCallStart", "ToolCallDelta", "Done"]);
+        let types: Vec<&str> = chunks
+            .iter()
+            .map(|c| match c {
+                StreamChunk::Thinking(_) => "Thinking",
+                StreamChunk::ToolCallStart { .. } => "ToolCallStart",
+                StreamChunk::ToolCallDelta { .. } => "ToolCallDelta",
+                StreamChunk::Done { .. } => "Done",
+                _ => "Other",
+            })
+            .collect();
+        assert_eq!(
+            types,
+            vec!["Thinking", "ToolCallStart", "ToolCallDelta", "Done"]
+        );
     }
 }

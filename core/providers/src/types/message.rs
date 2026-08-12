@@ -34,11 +34,24 @@ impl std::fmt::Display for Role {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum UserContent {
-    Text { text: String },
-    Image { url: String },
-    Audio { url: String, mime_type: String },
-    Video { url: String, mime_type: String },
-    Document { url: String, mime_type: String },
+    Text {
+        text: String,
+    },
+    Image {
+        url: String,
+    },
+    Audio {
+        url: String,
+        mime_type: String,
+    },
+    Video {
+        url: String,
+        mime_type: String,
+    },
+    Document {
+        url: String,
+        mime_type: String,
+    },
     ToolResult {
         tool_call_id: String,
         content: String,

@@ -2,51 +2,75 @@ use anyhow::{bail, Result};
 use async_trait::async_trait;
 use futures::StreamExt;
 
-use providers::ProviderConfig;
 use providers::types::message::Message as ProviderMessage;
 use providers::types::stream::StreamChunk;
+use providers::ProviderConfig;
 
 use crate::engine::executor::{NodeExecutor, NodeResult};
 use crate::engine::variables::VariableContext;
 use crate::model::WorkflowNode;
 
 fn build_provider_config(node: &WorkflowNode) -> Result<(String, ProviderConfig)> {
-    let provider_id = node.config.get("provider_id").and_then(|v| v.as_str()).unwrap_or("openai");
-    let model = node.config.get("model").and_then(|v| v.as_str()).unwrap_or("gpt-4o-mini");
-    let temperature = node.config.get("temperature").and_then(|v| v.as_f64()).unwrap_or(0.7) as f32;
-    let max_tokens = node.config.get("max_tokens").and_then(|v| v.as_u64()).unwrap_or(4096) as u32;
+    let provider_id = node
+        .config
+        .get("provider_id")
+        .and_then(|v| v.as_str())
+        .unwrap_or("openai");
+    let model = node
+        .config
+        .get("model")
+        .and_then(|v| v.as_str())
+        .unwrap_or("gpt-4o-mini");
+    let temperature = node
+        .config
+        .get("temperature")
+        .and_then(|v| v.as_f64())
+        .unwrap_or(0.7) as f32;
+    let max_tokens = node
+        .config
+        .get("max_tokens")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(4096) as u32;
 
     let auth = providers::AuthKind::for_provider(provider_id);
     let api_key = if auth == providers::AuthKind::None {
         String::new()
     } else {
-        providers::profile::read_env_api_key(provider_id).ok_or_else(|| {
-            anyhow::anyhow!("未找到 {} 的 API Key 环境变量", provider_id)
-        })?
+        providers::profile::read_env_api_key(provider_id)
+            .ok_or_else(|| anyhow::anyhow!("未找到 {} 的 API Key 环境变量", provider_id))?
     };
     let base_url = Some(providers::profile::default_base_for(provider_id).to_string())
         .filter(|s| !s.is_empty());
 
-    Ok((provider_id.to_string(), ProviderConfig {
-        api_key,
-        base_url,
-        model: model.to_string(),
-        temperature,
-        max_tokens,
-        thinking_enabled: false,
-        reasoning_effort: String::new(),
-        additional_params: serde_json::json!({}),
-        previous_interaction_id: None,
-    }))
+    Ok((
+        provider_id.to_string(),
+        ProviderConfig {
+            api_key,
+            base_url,
+            model: model.to_string(),
+            temperature,
+            max_tokens,
+            thinking_enabled: false,
+            reasoning_effort: String::new(),
+            additional_params: serde_json::json!({}),
+            previous_interaction_id: None,
+        },
+    ))
 }
 
-pub async fn one_shot_llm(provider_id: &str, config: &ProviderConfig, system: &str, user: &str) -> Result<String> {
+pub async fn one_shot_llm(
+    provider_id: &str,
+    config: &ProviderConfig,
+    system: &str,
+    user: &str,
+) -> Result<String> {
     let messages = vec![
         ProviderMessage::system(system),
         ProviderMessage::user_text(user),
     ];
 
-    let mut stream = providers::dispatch::chat_stream(provider_id, messages, vec![], config).await?;
+    let mut stream =
+        providers::dispatch::chat_stream(provider_id, messages, vec![], config).await?;
     let mut out = String::new();
     while let Some(item) = stream.next().await {
         let chunk = item?;
@@ -64,11 +88,17 @@ pub struct AiAgentTaskExec;
 #[async_trait]
 impl NodeExecutor for AiAgentTaskExec {
     async fn execute(&self, node: &WorkflowNode, ctx: &VariableContext) -> Result<NodeResult> {
-        let prompt_tpl = node.config.get("prompt_template").and_then(|v| v.as_str()).unwrap_or("");
+        let prompt_tpl = node
+            .config
+            .get("prompt_template")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
         let prompt = ctx.interpolate(prompt_tpl);
-        let system_prompt = node.config.get("system_prompt").and_then(|v| v.as_str()).unwrap_or(
-            "你是一个智能助手，请根据用户的指令完成任务。"
-        );
+        let system_prompt = node
+            .config
+            .get("system_prompt")
+            .and_then(|v| v.as_str())
+            .unwrap_or("你是一个智能助手，请根据用户的指令完成任务。");
 
         if prompt.trim().is_empty() {
             bail!("AI 节点的指令(prompt_template)为空");
@@ -92,12 +122,17 @@ pub struct ParameterExtractionExec;
 #[async_trait]
 impl NodeExecutor for ParameterExtractionExec {
     async fn execute(&self, node: &WorkflowNode, ctx: &VariableContext) -> Result<NodeResult> {
-        let prompt_tpl = node.config.get("prompt_template").and_then(|v| v.as_str()).unwrap_or("");
+        let prompt_tpl = node
+            .config
+            .get("prompt_template")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
         let prompt = ctx.interpolate(prompt_tpl);
         let fields = node.config.get("fields").and_then(|v| v.as_array());
 
         let field_desc = match fields {
-            Some(arr) => arr.iter()
+            Some(arr) => arr
+                .iter()
                 .filter_map(|f| {
                     let name = f.get("name").and_then(|v| v.as_str())?;
                     let desc = f.get("description").and_then(|v| v.as_str()).unwrap_or("");
@@ -118,9 +153,12 @@ impl NodeExecutor for ParameterExtractionExec {
 
         let parsed: serde_json::Value = serde_json::from_str(response.trim())
             .or_else(|_| {
-                let cleaned = response.trim()
-                    .trim_start_matches("```json").trim_start_matches("```")
-                    .trim_end_matches("```").trim();
+                let cleaned = response
+                    .trim()
+                    .trim_start_matches("```json")
+                    .trim_start_matches("```")
+                    .trim_end_matches("```")
+                    .trim();
                 serde_json::from_str(cleaned)
             })
             .unwrap_or(serde_json::json!({ "raw_response": response }));
@@ -136,7 +174,11 @@ pub struct QuestionClassificationExec;
 #[async_trait]
 impl NodeExecutor for QuestionClassificationExec {
     async fn execute(&self, node: &WorkflowNode, ctx: &VariableContext) -> Result<NodeResult> {
-        let prompt_tpl = node.config.get("prompt_template").and_then(|v| v.as_str()).unwrap_or("");
+        let prompt_tpl = node
+            .config
+            .get("prompt_template")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
         let prompt = ctx.interpolate(prompt_tpl);
         let classes = node.config.get("classes").and_then(|v| v.as_array());
 
@@ -145,7 +187,8 @@ impl NodeExecutor for QuestionClassificationExec {
             _ => bail!("问题分类节点未配置分类列表(classes)"),
         };
 
-        let class_desc = classes.iter()
+        let class_desc = classes
+            .iter()
             .filter_map(|c| {
                 let id = c.get("id").and_then(|v| v.as_str())?;
                 let desc = c.get("description").and_then(|v| v.as_str()).unwrap_or(id);
@@ -154,7 +197,8 @@ impl NodeExecutor for QuestionClassificationExec {
             .collect::<Vec<_>>()
             .join("\n");
 
-        let class_ids: Vec<&str> = classes.iter()
+        let class_ids: Vec<&str> = classes
+            .iter()
             .filter_map(|c| c.get("id").and_then(|v| v.as_str()))
             .collect();
 
@@ -184,10 +228,22 @@ pub struct KnowledgeRetrievalExec;
 #[async_trait]
 impl NodeExecutor for KnowledgeRetrievalExec {
     async fn execute(&self, node: &WorkflowNode, ctx: &VariableContext) -> Result<NodeResult> {
-        let query_tpl = node.config.get("query_template").and_then(|v| v.as_str()).unwrap_or("");
+        let query_tpl = node
+            .config
+            .get("query_template")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
         let query = ctx.interpolate(query_tpl);
-        let knowledge_path = node.config.get("knowledge_path").and_then(|v| v.as_str()).unwrap_or("");
-        let top_k = node.config.get("top_k").and_then(|v| v.as_u64()).unwrap_or(5);
+        let knowledge_path = node
+            .config
+            .get("knowledge_path")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+        let top_k = node
+            .config
+            .get("top_k")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(5);
 
         if query.trim().is_empty() {
             bail!("知识检索节点的查询(query_template)为空");
@@ -215,10 +271,22 @@ pub struct SummarizationExec;
 #[async_trait]
 impl NodeExecutor for SummarizationExec {
     async fn execute(&self, node: &WorkflowNode, ctx: &VariableContext) -> Result<NodeResult> {
-        let text_tpl = node.config.get("text_template").and_then(|v| v.as_str()).unwrap_or("");
+        let text_tpl = node
+            .config
+            .get("text_template")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
         let text = ctx.interpolate(text_tpl);
-        let style = node.config.get("style").and_then(|v| v.as_str()).unwrap_or("concise");
-        let max_len = node.config.get("max_length").and_then(|v| v.as_u64()).unwrap_or(200);
+        let style = node
+            .config
+            .get("style")
+            .and_then(|v| v.as_str())
+            .unwrap_or("concise");
+        let max_len = node
+            .config
+            .get("max_length")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(200);
 
         if text.trim().is_empty() {
             bail!("文本摘要节点的输入文本为空");
@@ -245,9 +313,17 @@ pub struct SentimentAnalysisExec;
 #[async_trait]
 impl NodeExecutor for SentimentAnalysisExec {
     async fn execute(&self, node: &WorkflowNode, ctx: &VariableContext) -> Result<NodeResult> {
-        let text_tpl = node.config.get("text_template").and_then(|v| v.as_str()).unwrap_or("");
+        let text_tpl = node
+            .config
+            .get("text_template")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
         let text = ctx.interpolate(text_tpl);
-        let custom_labels = node.config.get("custom_labels").and_then(|v| v.as_str()).unwrap_or("");
+        let custom_labels = node
+            .config
+            .get("custom_labels")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
 
         if text.trim().is_empty() {
             bail!("情感分析节点的输入文本为空");
@@ -280,10 +356,22 @@ pub struct DocumentUnderstandingExec;
 #[async_trait]
 impl NodeExecutor for DocumentUnderstandingExec {
     async fn execute(&self, node: &WorkflowNode, ctx: &VariableContext) -> Result<NodeResult> {
-        let task = node.config.get("task").and_then(|v| v.as_str()).unwrap_or("ocr");
-        let input_path = node.config.get("input_path").and_then(|v| v.as_str()).unwrap_or("");
+        let task = node
+            .config
+            .get("task")
+            .and_then(|v| v.as_str())
+            .unwrap_or("ocr");
+        let input_path = node
+            .config
+            .get("input_path")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
         let input_path = ctx.interpolate(input_path);
-        let prompt_tpl = node.config.get("prompt_template").and_then(|v| v.as_str()).unwrap_or("");
+        let prompt_tpl = node
+            .config
+            .get("prompt_template")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
         let prompt = ctx.interpolate(prompt_tpl);
 
         let system = format!(
@@ -312,10 +400,22 @@ pub struct VisionUnderstandingExec;
 #[async_trait]
 impl NodeExecutor for VisionUnderstandingExec {
     async fn execute(&self, node: &WorkflowNode, ctx: &VariableContext) -> Result<NodeResult> {
-        let input_type = node.config.get("input_type").and_then(|v| v.as_str()).unwrap_or("file");
-        let input_path = node.config.get("input_path").and_then(|v| v.as_str()).unwrap_or("");
+        let input_type = node
+            .config
+            .get("input_type")
+            .and_then(|v| v.as_str())
+            .unwrap_or("file");
+        let input_path = node
+            .config
+            .get("input_path")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
         let input_path = ctx.interpolate(input_path);
-        let prompt_tpl = node.config.get("prompt_template").and_then(|v| v.as_str()).unwrap_or("描述这张图片");
+        let prompt_tpl = node
+            .config
+            .get("prompt_template")
+            .and_then(|v| v.as_str())
+            .unwrap_or("描述这张图片");
         let prompt = ctx.interpolate(prompt_tpl);
 
         if input_path.trim().is_empty() {
@@ -327,10 +427,15 @@ impl NodeExecutor for VisionUnderstandingExec {
         } else {
             let data = std::fs::read(&input_path)
                 .map_err(|e| anyhow::anyhow!("读取图片失败 {}: {}", input_path, e))?;
-            let mime = if input_path.ends_with(".png") { "image/png" }
-                else if input_path.ends_with(".webp") { "image/webp" }
-                else if input_path.ends_with(".gif") { "image/gif" }
-                else { "image/jpeg" };
+            let mime = if input_path.ends_with(".png") {
+                "image/png"
+            } else if input_path.ends_with(".webp") {
+                "image/webp"
+            } else if input_path.ends_with(".gif") {
+                "image/gif"
+            } else {
+                "image/jpeg"
+            };
             let b64 = base64::Engine::encode(&base64::engine::general_purpose::STANDARD, &data);
             format!("data:{};base64,{}", mime, b64)
         };
@@ -344,7 +449,8 @@ impl NodeExecutor for VisionUnderstandingExec {
             ]),
         ];
 
-        let mut stream = providers::dispatch::chat_stream(&provider_id, messages, vec![], &config).await?;
+        let mut stream =
+            providers::dispatch::chat_stream(&provider_id, messages, vec![], &config).await?;
         let mut out = String::new();
         while let Some(item) = stream.next().await {
             let chunk = item?;

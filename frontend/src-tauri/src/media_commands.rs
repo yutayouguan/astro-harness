@@ -23,7 +23,13 @@ pub async fn tts_synthesize(
             .build()
             .map_err(|e| e.to_string())?;
         rt.block_on(async {
-            tts_inner(&text, provider_id.as_deref(), model.as_deref(), voice.as_deref()).await
+            tts_inner(
+                &text,
+                provider_id.as_deref(),
+                model.as_deref(),
+                voice.as_deref(),
+            )
+            .await
         })
     })
     .await
@@ -60,8 +66,8 @@ async fn tts_inner(
         providers::profile::read_env_api_key(pid)
             .ok_or_else(|| format!("未找到 {} 的 API Key 环境变量", pid))?
     };
-    let base_url = Some(providers::profile::default_base_for(pid).to_string())
-        .filter(|s| !s.is_empty());
+    let base_url =
+        Some(providers::profile::default_base_for(pid).to_string()).filter(|s| !s.is_empty());
     let config = ProviderConfig {
         api_key,
         base_url,
@@ -74,13 +80,23 @@ async fn tts_inner(
         previous_interaction_id: None,
     };
 
-    let result = providers::dispatch::text_to_speech(pid, text, &config).await.map_err(|e| e.to_string())?;
+    let result = providers::dispatch::text_to_speech(pid, text, &config)
+        .await
+        .map_err(|e| e.to_string())?;
 
     // 保存到 artifacts
     let artifacts_dir = home::default_memory_dir().join("artifacts").join("tts");
     std::fs::create_dir_all(&artifacts_dir).map_err(|e| e.to_string())?;
-    let ext = if result.mime_type.contains("wav") { "wav" } else { "mp3" };
-    let filename = format!("tts_{}.{}", chrono::Local::now().format("%Y%m%d_%H%M%S_%3f"), ext);
+    let ext = if result.mime_type.contains("wav") {
+        "wav"
+    } else {
+        "mp3"
+    };
+    let filename = format!(
+        "tts_{}.{}",
+        chrono::Local::now().format("%Y%m%d_%H%M%S_%3f"),
+        ext
+    );
     let path = artifacts_dir.join(&filename);
     std::fs::write(&path, &result.data).map_err(|e| e.to_string())?;
 
@@ -105,7 +121,13 @@ pub async fn speech_to_text(
             .build()
             .map_err(|e| e.to_string())?;
         rt.block_on(async {
-            stt_inner(&audio_base64, filename.as_deref(), provider_id.as_deref(), model.as_deref()).await
+            stt_inner(
+                &audio_base64,
+                filename.as_deref(),
+                provider_id.as_deref(),
+                model.as_deref(),
+            )
+            .await
         })
     })
     .await
@@ -133,8 +155,8 @@ async fn stt_inner(
         providers::profile::read_env_api_key(pid)
             .ok_or_else(|| format!("未找到 {} 的 API Key 环境变量", pid))?
     };
-    let base_url = Some(providers::profile::default_base_for(pid).to_string())
-        .filter(|s| !s.is_empty());
+    let base_url =
+        Some(providers::profile::default_base_for(pid).to_string()).filter(|s| !s.is_empty());
     let config = ProviderConfig {
         api_key,
         base_url,
@@ -150,7 +172,10 @@ async fn stt_inner(
     let fname = filename.unwrap_or("recording.webm");
     let http = reqwest::Client::new();
     providers::openai::media_compat::openai_audio_transcriptions(
-        &http, &audio_bytes, fname, &config,
+        &http,
+        &audio_bytes,
+        fname,
+        &config,
     )
     .await
     .map_err(|e| e.to_string())

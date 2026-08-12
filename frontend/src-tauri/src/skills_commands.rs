@@ -12,9 +12,9 @@ use skills::{
     read_skill_file_ex, reveal_skill_backup as skills_reveal_skill_backup,
     reveal_skill_file as reveal_skill_file_fs, search, set_enabled_for_agent,
     update_all_with_origin, update_installed_skill_ex, update_outdated_skills, InstallOriginHint,
-    InstalledSkill, SkillBackupEntry, SkillBundle, SkillStoreFilter, SkillUpdateCheckResult,
-    SkillUpdateItemResult, SkillUpdatePreview, SkillSnapshot, StoreSkill, StoreSkillDetail,
-    UpdateSkillOpts,
+    InstalledSkill, SkillBackupEntry, SkillBundle, SkillSnapshot, SkillStoreFilter,
+    SkillUpdateCheckResult, SkillUpdateItemResult, SkillUpdatePreview, StoreSkill,
+    StoreSkillDetail, UpdateSkillOpts,
 };
 
 #[derive(Serialize)]
@@ -298,8 +298,7 @@ pub async fn get_skill_cooldown_remaining(skill_id: String) -> Result<Option<u64
     let Ok(dt) = chrono::DateTime::parse_from_rfc3339(&last_ts) else {
         return Ok(None);
     };
-    let elapsed =
-        chrono::Utc::now().signed_duration_since(dt.with_timezone(&chrono::Utc));
+    let elapsed = chrono::Utc::now().signed_duration_since(dt.with_timezone(&chrono::Utc));
     let remain = cooldown as i64 - elapsed.num_seconds();
     if remain > 0 {
         Ok(Some(remain as u64))
@@ -325,8 +324,7 @@ pub async fn list_skill_snapshots(skill_id: String) -> Result<Vec<SkillSnapshot>
 /// 恢复某 skill 的最新快照（覆盖当前 SKILL.md）。
 #[tauri::command]
 pub async fn restore_skill_snapshot(skill_id: String) -> Result<(), String> {
-    let loaded = load_skill_by_name(&skill_id)
-        .map_err(|e| format!("技能不存在：{e}"))?;
+    let loaded = load_skill_by_name(&skill_id).map_err(|e| format!("技能不存在：{e}"))?;
     let skill_dir = std::path::Path::new(&loaded.path)
         .parent()
         .ok_or("无法确定技能目录")?;
@@ -362,7 +360,10 @@ pub async fn get_skill_signal_summary() -> Result<Vec<SkillSignalDto>, String> {
     let mut result: Vec<SkillSignalDto> = counts
         .into_iter()
         .filter(|(_, n)| *n > 0)
-        .map(|(skill_id, failure_signals)| SkillSignalDto { skill_id, failure_signals })
+        .map(|(skill_id, failure_signals)| SkillSignalDto {
+            skill_id,
+            failure_signals,
+        })
         .collect();
     result.sort_by_key(|a| std::cmp::Reverse(a.failure_signals));
     Ok(result)

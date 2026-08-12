@@ -87,9 +87,8 @@ pub fn google_v1beta_root(config: &ProviderConfig) -> String {
     let native = trim_slash(&google_native_base(config));
     if native.ends_with("/v1beta") {
         native
-    } else if native.contains("/v1beta/") {
-        let idx = native.find("/v1beta").unwrap();
-        format!("{}{}", &native[..idx], "/v1beta")
+    } else if let Some(idx) = native.find("/v1beta") {
+        format!("{}/v1beta", &native[..idx])
     } else {
         format!("{native}/v1beta")
     }

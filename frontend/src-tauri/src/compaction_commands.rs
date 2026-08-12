@@ -4,9 +4,9 @@ use futures::StreamExt;
 use serde::Serialize;
 use uuid::Uuid;
 
-use providers::ProviderConfig;
 use providers::types::message::Message as ProviderMessage;
 use providers::types::stream::StreamChunk;
+use providers::ProviderConfig;
 use session::StoredMessage;
 
 use crate::auxiliary_resolver::{
@@ -99,9 +99,10 @@ Reply in the same language as the transcript. No preamble.";
         ProviderMessage::system(system),
         ProviderMessage::user_text(user),
     ];
-    let mut stream = providers::dispatch::chat_stream(&target.backend_id, messages, vec![], &config)
-        .await
-        .map_err(|e| format!("压实调用模型失败: {e}"))?;
+    let mut stream =
+        providers::dispatch::chat_stream(&target.backend_id, messages, vec![], &config)
+            .await
+            .map_err(|e| format!("压实调用模型失败: {e}"))?;
     let mut out = String::new();
     while let Some(item) = stream.next().await {
         let chunk = item.map_err(|e| format!("压实流式读取失败: {e}"))?;

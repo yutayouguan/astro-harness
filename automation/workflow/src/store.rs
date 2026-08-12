@@ -61,7 +61,9 @@ impl WorkflowStore {
     fn rotate_backups(&self, path: &std::path::Path) {
         const MAX_BACKUPS: usize = 5;
         let backup_dir = self.root.join("backups");
-        if fs::create_dir_all(&backup_dir).is_err() { return; }
+        if fs::create_dir_all(&backup_dir).is_err() {
+            return;
+        }
         let ts = Local::now().format("%Y%m%d_%H%M%S");
         let backup_name = format!("workflows_{}.json", ts);
         let _ = fs::copy(path, backup_dir.join(&backup_name));
@@ -113,7 +115,9 @@ impl WorkflowStore {
     }
 
     pub fn update(&self, updated: Workflow) -> Result<Option<Workflow>> {
-        let _guard = STORE_LOCK.lock().map_err(|e| anyhow::anyhow!("store lock: {e}"))?;
+        let _guard = STORE_LOCK
+            .lock()
+            .map_err(|e| anyhow::anyhow!("store lock: {e}"))?;
         let mut file = self.load()?;
         if let Some(pos) = file.workflows.iter().position(|w| w.id == updated.id) {
             let mut wf = updated;
@@ -127,7 +131,9 @@ impl WorkflowStore {
     }
 
     pub fn delete(&self, id: &str) -> Result<bool> {
-        let _guard = STORE_LOCK.lock().map_err(|e| anyhow::anyhow!("store lock: {e}"))?;
+        let _guard = STORE_LOCK
+            .lock()
+            .map_err(|e| anyhow::anyhow!("store lock: {e}"))?;
         let mut file = self.load()?;
         let before = file.workflows.len();
         file.workflows.retain(|w| w.id != id);
@@ -140,7 +146,9 @@ impl WorkflowStore {
     }
 
     pub fn set_enabled(&self, id: &str, enabled: bool) -> Result<bool> {
-        let _guard = STORE_LOCK.lock().map_err(|e| anyhow::anyhow!("store lock: {e}"))?;
+        let _guard = STORE_LOCK
+            .lock()
+            .map_err(|e| anyhow::anyhow!("store lock: {e}"))?;
         let mut file = self.load()?;
         if let Some(wf) = file.workflows.iter_mut().find(|w| w.id == id) {
             wf.enabled = enabled;
@@ -153,7 +161,9 @@ impl WorkflowStore {
     }
 
     pub fn set_ai_callable(&self, id: &str, callable: bool) -> Result<bool> {
-        let _guard = STORE_LOCK.lock().map_err(|e| anyhow::anyhow!("store lock: {e}"))?;
+        let _guard = STORE_LOCK
+            .lock()
+            .map_err(|e| anyhow::anyhow!("store lock: {e}"))?;
         let mut file = self.load()?;
         if let Some(wf) = file.workflows.iter_mut().find(|w| w.id == id) {
             wf.ai_callable = callable;
@@ -168,7 +178,9 @@ impl WorkflowStore {
     /// Upsert：id 已存在则更新，否则插入。加锁防并发写入丢数据。
     pub fn save_workflow(&self, wf: Workflow) -> Result<Workflow> {
         Self::validate_workflow(&wf)?;
-        let _guard = STORE_LOCK.lock().map_err(|e| anyhow::anyhow!("store lock: {e}"))?;
+        let _guard = STORE_LOCK
+            .lock()
+            .map_err(|e| anyhow::anyhow!("store lock: {e}"))?;
         let mut file = self.load()?;
         let mut wf = wf;
         wf.updated_at = Local::now().to_rfc3339();

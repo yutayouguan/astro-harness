@@ -251,15 +251,26 @@ pub async fn minimax_tts(
         body["pronunciation_dict"] = json!({"tone": dict});
     }
     if let Some(ref tw) = req.timbre_weights {
-        let arr: Vec<Value> = tw.iter().map(|t| json!({"voice_id": t.voice_id, "weight": t.weight})).collect();
+        let arr: Vec<Value> = tw
+            .iter()
+            .map(|t| json!({"voice_id": t.voice_id, "weight": t.weight}))
+            .collect();
         body["timbre_weights"] = Value::Array(arr);
     }
     if let Some(ref vm) = req.voice_modify {
         let mut obj = serde_json::Map::new();
-        if let Some(p) = vm.pitch { obj.insert("pitch".into(), json!(p)); }
-        if let Some(i) = vm.intensity { obj.insert("intensity".into(), json!(i)); }
-        if let Some(t) = vm.timbre { obj.insert("timbre".into(), json!(t)); }
-        if let Some(ref se) = vm.sound_effects { obj.insert("sound_effects".into(), json!(se)); }
+        if let Some(p) = vm.pitch {
+            obj.insert("pitch".into(), json!(p));
+        }
+        if let Some(i) = vm.intensity {
+            obj.insert("intensity".into(), json!(i));
+        }
+        if let Some(t) = vm.timbre {
+            obj.insert("timbre".into(), json!(t));
+        }
+        if let Some(ref se) = vm.sound_effects {
+            obj.insert("sound_effects".into(), json!(se));
+        }
         if !obj.is_empty() {
             body["voice_modify"] = Value::Object(obj);
         }

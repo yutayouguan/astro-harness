@@ -308,19 +308,40 @@ pub async fn minimax_generate_lyrics(
     let status = resp.status();
     let v: Value = resp.json().await.context("解析歌词生成响应失败")?;
     if !status.is_success() {
-        let msg = v.pointer("/base_resp/status_msg").and_then(|m| m.as_str()).unwrap_or("未知错误");
+        let msg = v
+            .pointer("/base_resp/status_msg")
+            .and_then(|m| m.as_str())
+            .unwrap_or("未知错误");
         anyhow::bail!("MiniMax 歌词生成 HTTP {status}: {msg}");
     }
-    let code = v.pointer("/base_resp/status_code").and_then(|c| c.as_i64()).unwrap_or(0);
+    let code = v
+        .pointer("/base_resp/status_code")
+        .and_then(|c| c.as_i64())
+        .unwrap_or(0);
     if code != 0 {
-        let msg = v.pointer("/base_resp/status_msg").and_then(|m| m.as_str()).unwrap_or("未知错误");
+        let msg = v
+            .pointer("/base_resp/status_msg")
+            .and_then(|m| m.as_str())
+            .unwrap_or("未知错误");
         anyhow::bail!("MiniMax 歌词生成业务错误 ({code}): {msg}");
     }
 
     Ok(MiniMaxLyricsResult {
-        song_title: v.get("song_title").and_then(|s| s.as_str()).unwrap_or("").to_string(),
-        style_tags: v.get("style_tags").and_then(|s| s.as_str()).unwrap_or("").to_string(),
-        lyrics: v.get("lyrics").and_then(|s| s.as_str()).unwrap_or("").to_string(),
+        song_title: v
+            .get("song_title")
+            .and_then(|s| s.as_str())
+            .unwrap_or("")
+            .to_string(),
+        style_tags: v
+            .get("style_tags")
+            .and_then(|s| s.as_str())
+            .unwrap_or("")
+            .to_string(),
+        lyrics: v
+            .get("lyrics")
+            .and_then(|s| s.as_str())
+            .unwrap_or("")
+            .to_string(),
     })
 }
 
@@ -363,20 +384,44 @@ pub async fn minimax_cover_preprocess(
     let status = resp.status();
     let v: Value = resp.json().await.context("解析翻唱前处理响应失败")?;
     if !status.is_success() {
-        let msg = v.pointer("/base_resp/status_msg").and_then(|m| m.as_str()).unwrap_or("未知错误");
+        let msg = v
+            .pointer("/base_resp/status_msg")
+            .and_then(|m| m.as_str())
+            .unwrap_or("未知错误");
         anyhow::bail!("MiniMax 翻唱前处理 HTTP {status}: {msg}");
     }
-    let code = v.pointer("/base_resp/status_code").and_then(|c| c.as_i64()).unwrap_or(0);
+    let code = v
+        .pointer("/base_resp/status_code")
+        .and_then(|c| c.as_i64())
+        .unwrap_or(0);
     if code != 0 {
-        let msg = v.pointer("/base_resp/status_msg").and_then(|m| m.as_str()).unwrap_or("未知错误");
+        let msg = v
+            .pointer("/base_resp/status_msg")
+            .and_then(|m| m.as_str())
+            .unwrap_or("未知错误");
         anyhow::bail!("MiniMax 翻唱前处理业务错误 ({code}): {msg}");
     }
 
     Ok(MiniMaxCoverPreprocessResult {
-        cover_feature_id: v.get("cover_feature_id").and_then(|s| s.as_str()).unwrap_or("").to_string(),
-        formatted_lyrics: v.get("formatted_lyrics").and_then(|s| s.as_str()).unwrap_or("").to_string(),
-        structure_result: v.get("structure_result").and_then(|s| s.as_str()).unwrap_or("").to_string(),
-        audio_duration: v.get("audio_duration").and_then(|n| n.as_f64()).unwrap_or(0.0),
+        cover_feature_id: v
+            .get("cover_feature_id")
+            .and_then(|s| s.as_str())
+            .unwrap_or("")
+            .to_string(),
+        formatted_lyrics: v
+            .get("formatted_lyrics")
+            .and_then(|s| s.as_str())
+            .unwrap_or("")
+            .to_string(),
+        structure_result: v
+            .get("structure_result")
+            .and_then(|s| s.as_str())
+            .unwrap_or("")
+            .to_string(),
+        audio_duration: v
+            .get("audio_duration")
+            .and_then(|n| n.as_f64())
+            .unwrap_or(0.0),
     })
 }
 

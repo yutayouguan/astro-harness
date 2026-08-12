@@ -5,7 +5,7 @@ use serde_json::Value;
 
 use crate::compat::{OpenAICompatible, OpenAICompletionModel};
 use crate::traits::{
-    Capable, Capabilities, EmbeddingModel, FromClient, ImageGenModel, ModelBase, MusicGenModel,
+    Capabilities, Capable, EmbeddingModel, FromClient, ImageGenModel, ModelBase, MusicGenModel,
     ProviderClient, ProviderExt, TTSModel, VideoGenModel,
 };
 use crate::types::media::{
@@ -32,7 +32,9 @@ impl OpenAICompatible for MiniMax {
         body["reasoning_split"] = Value::Bool(true);
 
         if let Some(tc) = body.get("thinking_config").cloned() {
-            body.as_object_mut().unwrap().remove("thinking_config");
+            if let Some(obj) = body.as_object_mut() {
+                obj.remove("thinking_config");
+            }
             let enabled = tc.get("enabled").and_then(|v| v.as_bool()).unwrap_or(true);
             body["thinking"] = serde_json::json!({
                 "type": if enabled { "adaptive" } else { "disabled" }
@@ -65,10 +67,17 @@ impl FromClient<MiniMax> for MiniMaxEmbeddingModel {
 impl EmbeddingModel for MiniMaxEmbeddingModel {
     async fn embed(&self, texts: &[String]) -> anyhow::Result<Vec<Embedding>> {
         let config = self.0.to_provider_config();
-        let vectors =
-            crate::openai::embeddings_http::openai_batch_embed(self.0.http(), texts, self.0.model(), &config)
-                .await?;
-        Ok(vectors.into_iter().map(|v| Embedding { values: v }).collect())
+        let vectors = crate::openai::embeddings_http::openai_batch_embed(
+            self.0.http(),
+            texts,
+            self.0.model(),
+            &config,
+        )
+        .await?;
+        Ok(vectors
+            .into_iter()
+            .map(|v| Embedding { values: v })
+            .collect())
     }
 }
 
@@ -94,13 +103,17 @@ impl ImageGenModel for MiniMaxImageModel {
         let req = crate::minimax::image_http::MiniMaxImageRequest {
             model: self.0.model().to_string(),
             prompt: prompt.to_string(),
-            aspect_ratio: config.aspect_ratio.clone().unwrap_or_else(|| "1:1".to_string()),
+            aspect_ratio: config
+                .aspect_ratio
+                .clone()
+                .unwrap_or_else(|| "1:1".to_string()),
             width: config.width,
             height: config.height,
             n: if config.n > 0 { config.n } else { 1 },
             ..Default::default()
         };
-        crate::minimax::image_http::minimax_generate_image(self.0.http(), &provider_config, &req).await
+        crate::minimax::image_http::minimax_generate_image(self.0.http(), &provider_config, &req)
+            .await
     }
 }
 
@@ -128,7 +141,11 @@ impl VideoGenModel for MiniMaxVideoModel {
             prompt: prompt.to_string(),
             first_frame_image: config.first_frame_image.clone(),
             last_frame_image: config.last_frame_image.clone(),
-            duration: if config.duration_seconds > 0 { config.duration_seconds } else { 6 },
+            duration: if config.duration_seconds > 0 {
+                config.duration_seconds
+            } else {
+                6
+            },
             resolution: if config.resolution.is_empty() {
                 "768P".to_string()
             } else {
@@ -138,7 +155,8 @@ impl VideoGenModel for MiniMaxVideoModel {
         };
         let model_name = self.0.model().to_string();
         let task_id =
-            crate::minimax::video_http::minimax_create_video(self.0.http(), &provider_config, &req).await?;
+            crate::minimax::video_http::minimax_create_video(self.0.http(), &provider_config, &req)
+                .await?;
 
         let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10 * 60);
         loop {
@@ -147,12 +165,18 @@ impl VideoGenModel for MiniMaxVideoModel {
             }
             tokio::time::sleep(std::time::Duration::from_secs(10)).await;
 
-            let status =
-                crate::minimax::video_http::minimax_query_video(self.0.http(), &provider_config, &task_id, &model_name)
-                    .await?;
+            let status = crate::minimax::video_http::minimax_query_video(
+                self.0.http(),
+                &provider_config,
+                &task_id,
+                &model_name,
+            )
+            .await?;
             if status.status == crate::minimax::video_http::VideoTaskStatus::Success {
                 if let Some(ref url) = status.download_url {
-                    let result = crate::minimax::video_http::minimax_download_video_url(self.0.http(), url).await?;
+                    let result =
+                        crate::minimax::video_http::minimax_download_video_url(self.0.http(), url)
+                            .await?;
                     return Ok(GeneratedVideo {
                         data: result.data,
                         mime_type: result.mime_type,
@@ -253,9 +277,12 @@ impl MusicGenModel for MiniMaxMusicModel {
             output_format: "url".to_string(),
             ..Default::default()
         };
-        let result =
-            crate::minimax::music_http::minimax_generate_music(self.0.http(), &provider_config, &req)
-                .await?;
+        let result = crate::minimax::music_http::minimax_generate_music(
+            self.0.http(),
+            &provider_config,
+            &req,
+        )
+        .await?;
         Ok(GeneratedAudio {
             data: result.audio_bytes,
             mime_type: result.mime_type,

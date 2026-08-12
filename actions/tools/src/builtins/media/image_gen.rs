@@ -10,8 +10,8 @@ use home::{generated_dir, GeneratedKind};
 use providers::interactions_http::{
     google_interactions_image, InteractionImagePart, InteractionImageRequest, InteractionVideoInput,
 };
-use providers::ProviderConfig;
 use providers::types::media::GeneratedImage;
+use providers::ProviderConfig;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
@@ -184,7 +184,10 @@ crate::submit_builtin_tool! {
 ///
 /// # 错误
 /// 无可用 Provider、全部尝试失败，或缺少 `prompt`。
-pub async fn dispatch(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow::Result<common::ToolOutput> {
+pub async fn dispatch(
+    ctx: &ToolContext<'_>,
+    args: &serde_json::Value,
+) -> anyhow::Result<common::ToolOutput> {
     let mut parsed: ImageGenArgs = serde_json::from_value(args.clone())
         .map_err(|e| anyhow::anyhow!("image_gen 参数无效: {e}"))?;
     normalize_image_gen_args(&mut parsed);

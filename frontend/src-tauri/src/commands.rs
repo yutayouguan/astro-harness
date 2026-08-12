@@ -1104,8 +1104,12 @@ async fn run_chat_stream(p: ChatStreamParams<'_>) -> Result<(), String> {
             image_gen_video_model: primary.map(|t| t.video_model.clone()).unwrap_or_default(),
             image_gen_music_model: primary.map(|t| t.music_model.clone()).unwrap_or_default(),
             image_gen_tts_model: primary.map(|t| t.tts_model.clone()).unwrap_or_default(),
-            image_gen_fallback_video_model: fallback.map(|t| t.video_model.clone()).unwrap_or_default(),
-            image_gen_fallback_music_model: fallback.map(|t| t.music_model.clone()).unwrap_or_default(),
+            image_gen_fallback_video_model: fallback
+                .map(|t| t.video_model.clone())
+                .unwrap_or_default(),
+            image_gen_fallback_music_model: fallback
+                .map(|t| t.music_model.clone())
+                .unwrap_or_default(),
             image_gen_fallback_tts_model: fallback.map(|t| t.tts_model.clone()).unwrap_or_default(),
             image_gen_vision_model: primary.map(|t| t.vision_model.clone()).unwrap_or_default(),
             image_gen_fallback_vision_model: fallback
@@ -1142,10 +1146,9 @@ async fn run_chat_stream(p: ChatStreamParams<'_>) -> Result<(), String> {
                 );
             }
             Some(proto::chat_event::Payload::CitationsJson(json)) => {
-                let _ = p.app.emit(
-                    p.event_name,
-                    ChatStreamEvent::Citations { citations: json },
-                );
+                let _ = p
+                    .app
+                    .emit(p.event_name, ChatStreamEvent::Citations { citations: json });
             }
             Some(proto::chat_event::Payload::ToolCall(tc)) => {
                 let _ = p.app.emit(
@@ -1661,9 +1664,9 @@ pub async fn regenerate_session_title(
     session_id: String,
 ) -> Result<String, String> {
     use futures::StreamExt;
-    use providers::ProviderConfig;
     use providers::types::message::Message as ProviderMessage;
     use providers::types::stream::StreamChunk;
+    use providers::ProviderConfig;
 
     use crate::auxiliary_resolver::{
         primary_chat_target_for_session, resolve_auxiliary_targets, ResolvedTarget,
@@ -1719,9 +1722,10 @@ pub async fn regenerate_session_title(
             previous_interaction_id: None,
         };
         let messages = vec![ProviderMessage::user_text(prompt)];
-        let mut stream = providers::dispatch::chat_stream(&target.backend_id, messages, vec![], &config)
-            .await
-            .map_err(|e| e.to_string())?;
+        let mut stream =
+            providers::dispatch::chat_stream(&target.backend_id, messages, vec![], &config)
+                .await
+                .map_err(|e| e.to_string())?;
         let mut out = String::new();
         while let Some(item) = stream.next().await {
             let chunk = item.map_err(|e| e.to_string())?;

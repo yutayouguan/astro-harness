@@ -80,7 +80,10 @@ impl rmcp::handler::client::ClientHandler for ToolChangeHandler {
         &self,
         context: rmcp::service::NotificationContext<rmcp::service::RoleClient>,
     ) {
-        let seq = self.next_seq.fetch_add(1, std::sync::atomic::Ordering::SeqCst) + 1;
+        let seq = self
+            .next_seq
+            .fetch_add(1, std::sync::atomic::Ordering::SeqCst)
+            + 1;
         info!(server = %self.server_id, seq, "MCP tools/list_changed, refreshing");
         match context.peer.list_all_tools().await {
             Ok(new_tools) => {
@@ -419,7 +422,11 @@ impl McpHub {
     }
 
     /// 调用已连接 MCP 工具（按服务器与工具名）。
-    pub async fn call_tool(&self, qualified_name: &str, args: &Value) -> anyhow::Result<common::ToolOutput> {
+    pub async fn call_tool(
+        &self,
+        qualified_name: &str,
+        args: &Value,
+    ) -> anyhow::Result<common::ToolOutput> {
         let (peer, native, timeout_secs) = self.resolve_tool_peer(qualified_name)?;
         call_tool_with_peer(&peer, qualified_name, &native, args, timeout_secs).await
     }

@@ -4,9 +4,9 @@
 //! 生成结构化交接摘要，注入 [`AgentLoop`] 供后续 Provider 历史折叠。
 
 use futures::StreamExt;
-use providers::ProviderConfig;
 use providers::types::message::Message as ProviderMessage;
 use providers::types::stream::StreamChunk;
+use providers::ProviderConfig;
 use tracing::{info, warn};
 
 use crate::compression::{estimate_messages_tokens, ToolCompressionManager};
@@ -118,12 +118,11 @@ async fn complete_summary_chat(
         ..ProviderConfig::default()
     };
     let messages = vec![
-        ProviderMessage::system(
-            "You write compact structured handoff notes for coding agents.",
-        ),
+        ProviderMessage::system("You write compact structured handoff notes for coding agents."),
         ProviderMessage::user_text(prompt),
     ];
-    let mut stream = providers::dispatch::chat_stream(&target.backend_id, messages, vec![], &config).await?;
+    let mut stream =
+        providers::dispatch::chat_stream(&target.backend_id, messages, vec![], &config).await?;
     let mut out = String::new();
     while let Some(item) = stream.next().await {
         let chunk = item?;

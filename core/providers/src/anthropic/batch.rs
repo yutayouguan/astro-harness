@@ -79,10 +79,7 @@ pub async fn anthropic_get_batch(
 }
 
 /// 列出批处理任务。
-pub async fn anthropic_list_batches(
-    client: &Client,
-    config: &ProviderConfig,
-) -> Result<Value> {
+pub async fn anthropic_list_batches(client: &Client, config: &ProviderConfig) -> Result<Value> {
     let url = batch_url(config);
     let resp = client
         .get(&url)

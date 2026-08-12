@@ -2,7 +2,10 @@
 
 use std::collections::HashMap;
 
-use crate::traits::client::{ChatClient, EmbedClient, ImageGenClient, TTSClient, VideoGenClient, MusicGenClient, ProviderClient};
+use crate::traits::client::{
+    ChatClient, EmbedClient, ImageGenClient, MusicGenClient, ProviderClient, TTSClient,
+    VideoGenClient,
+};
 use crate::traits::dyn_provider::DynProvider;
 
 pub fn shared_http_client() -> reqwest::Client {
@@ -57,14 +60,15 @@ impl Registry {
     ) where
         Ext: crate::compat::OpenAICompatible
             + crate::traits::ProviderExt
-            + crate::traits::Capabilities<Chat = crate::traits::Capable<crate::compat::OpenAICompletionModel<Ext>>>
-            + Default
+            + crate::traits::Capabilities<
+                Chat = crate::traits::Capable<crate::compat::OpenAICompletionModel<Ext>>,
+            > + Default
             + Copy
             + 'static,
     {
         let client = self.make_client(api_key, base_url, Ext::default());
-        let provider = DynProvider::new(Ext::NAME, Ext::NAME)
-            .with_completion(client.completion_model(model));
+        let provider =
+            DynProvider::new(Ext::NAME, Ext::NAME).with_completion(client.completion_model(model));
         self.providers.insert(Ext::NAME.to_string(), provider);
     }
 
@@ -84,8 +88,7 @@ impl Registry {
                 Embedding = crate::traits::Capable<crate::compat::media::CompatEmbeddingModel>,
                 ImageGen = crate::traits::Capable<crate::compat::media::CompatImageGenModel>,
                 TTS = crate::traits::Capable<crate::compat::media::CompatTTSModel>,
-            >
-            + Default
+            > + Default
             + Copy
             + 'static,
     {
@@ -116,7 +119,8 @@ impl Registry {
         let client = self.make_client(api_key, base_url, Anthropic);
         let provider = DynProvider::new("anthropic", "anthropic")
             .with_completion(client.completion_model(model));
-        self.providers.insert("claude".to_string(), provider.clone());
+        self.providers
+            .insert("claude".to_string(), provider.clone());
         self.providers.insert("anthropic".to_string(), provider);
     }
 
@@ -189,7 +193,10 @@ impl Registry {
         self.providers.keys().map(|s| s.as_str()).collect()
     }
 
-    pub fn completion_model(&self, id: &str) -> Option<&dyn crate::traits::dyn_provider::DynCompletionModel> {
+    pub fn completion_model(
+        &self,
+        id: &str,
+    ) -> Option<&dyn crate::traits::dyn_provider::DynCompletionModel> {
         self.get(id)?.completion_model()
     }
 }

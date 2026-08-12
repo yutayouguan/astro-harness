@@ -6,12 +6,12 @@
 use anyhow::Result;
 use async_trait::async_trait;
 
+use super::models::*;
 use crate::types::media::{
     Embedding, GeneratedAudio, GeneratedImage, GeneratedVideo, ImageGenConfig, MusicGenConfig,
     TTSConfig, VideoGenConfig,
 };
 use crate::types::{CompletionRequest, CompletionStream};
-use super::models::*;
 
 // ─── 宏：生成 Dyn trait + blanket impl + Box Clone ──────
 

@@ -153,7 +153,10 @@ fn maybe_html_sidecar(text: String, rel: &str) -> common::ToolOutput {
 ///
 /// 路径经 `resolve_safe` 解析；`write`/`append`/`mkdir`/`move`/`copy` 会自动创建父目录。
 /// `read` / `list` / `search` 有字节或条目上限。
-pub fn dispatch(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow::Result<common::ToolOutput> {
+pub fn dispatch(
+    ctx: &ToolContext<'_>,
+    args: &serde_json::Value,
+) -> anyhow::Result<common::ToolOutput> {
     let parsed: FileOpsArgs = serde_json::from_value(args.clone())
         .map_err(|e| anyhow::anyhow!("file_ops 参数无效: {e}"))?;
     let op = parsed.operation.trim().to_lowercase();
@@ -164,11 +167,9 @@ pub fn dispatch(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow::Resu
     match op.as_str() {
         "read" => {
             if parsed.start_line.is_some() || parsed.end_line.is_some() {
-                read_lines_range(&full, &rel, parsed.start_line, parsed.end_line)
-                    .map(Into::into)
+                read_lines_range(&full, &rel, parsed.start_line, parsed.end_line).map(Into::into)
             } else {
-                read_file_capped(&full, parsed.offset.unwrap_or(0), parsed.limit)
-                    .map(Into::into)
+                read_file_capped(&full, parsed.offset.unwrap_or(0), parsed.limit).map(Into::into)
             }
         }
         "write" => {
@@ -264,8 +265,9 @@ pub fn dispatch(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow::Resu
             let dest_full = crate::path_safe::resolve_safe(root, dest_rel)?;
             copy_path(&full, &dest_full, root).map(Into::into)
         }
-        "delete" => delete_path(&full, root, &rel, parsed.recursive.unwrap_or(false))
-            .map(Into::into),
+        "delete" => {
+            delete_path(&full, root, &rel, parsed.recursive.unwrap_or(false)).map(Into::into)
+        }
         "mkdir" => {
             std::fs::create_dir_all(&full)?;
             Ok(format!("已创建目录 {rel}").into())

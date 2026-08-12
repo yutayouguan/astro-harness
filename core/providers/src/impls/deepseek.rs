@@ -23,7 +23,9 @@ impl OpenAICompatible for DeepSeek {
 
     fn finalize_body(&self, body: &mut Value) {
         if let Some(tc) = body.get("thinking_config").cloned() {
-            body.as_object_mut().unwrap().remove("thinking_config");
+            if let Some(obj) = body.as_object_mut() {
+                obj.remove("thinking_config");
+            }
             let enabled = tc.get("enabled").and_then(|v| v.as_bool()).unwrap_or(false);
             body["thinking"] = serde_json::json!({
                 "type": if enabled { "enabled" } else { "disabled" }

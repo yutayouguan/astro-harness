@@ -23,39 +23,23 @@ pub trait EmbeddingModel: Send + Sync {
 /// 图片生成模型。
 #[async_trait]
 pub trait ImageGenModel: Send + Sync {
-    async fn generate(
-        &self,
-        prompt: &str,
-        config: &ImageGenConfig,
-    ) -> Result<Vec<GeneratedImage>>;
+    async fn generate(&self, prompt: &str, config: &ImageGenConfig) -> Result<Vec<GeneratedImage>>;
 }
 
 /// 视频生成模型。
 #[async_trait]
 pub trait VideoGenModel: Send + Sync {
-    async fn generate(
-        &self,
-        prompt: &str,
-        config: &VideoGenConfig,
-    ) -> Result<GeneratedVideo>;
+    async fn generate(&self, prompt: &str, config: &VideoGenConfig) -> Result<GeneratedVideo>;
 }
 
 /// 语音合成模型。
 #[async_trait]
 pub trait TTSModel: Send + Sync {
-    async fn synthesize(
-        &self,
-        text: &str,
-        config: &TTSConfig,
-    ) -> Result<GeneratedAudio>;
+    async fn synthesize(&self, text: &str, config: &TTSConfig) -> Result<GeneratedAudio>;
 }
 
 /// 音乐生成模型。
 #[async_trait]
 pub trait MusicGenModel: Send + Sync {
-    async fn generate(
-        &self,
-        prompt: &str,
-        config: &MusicGenConfig,
-    ) -> Result<GeneratedAudio>;
+    async fn generate(&self, prompt: &str, config: &MusicGenConfig) -> Result<GeneratedAudio>;
 }

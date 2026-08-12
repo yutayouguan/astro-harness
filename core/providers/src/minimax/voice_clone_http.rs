@@ -30,7 +30,6 @@ pub struct VoiceCloneRequest {
     pub language_boost: Option<String>,
 }
 
-
 /// 声音克隆结果。
 #[derive(Debug, Clone)]
 pub struct VoiceCloneResult {
@@ -99,10 +98,7 @@ pub async fn minimax_voice_clone(
         .with_context(|| format!("连接 MiniMax 声音克隆 API 失败: {url}"))?;
 
     let status = response.status();
-    let v: Value = response
-        .json()
-        .await
-        .context("解析声音克隆响应失败")?;
+    let v: Value = response.json().await.context("解析声音克隆响应失败")?;
 
     if !status.is_success() {
         let msg = v

@@ -21,8 +21,8 @@ use proto::{
     McpServerList, MemoryQuery, MemoryResult, SessionEvent, SessionSnippet as ProtoSessionSnippet,
     SkillEvent, SkillInfo, SkillList, SkillRequest, SubscribeSessionEventsRequest, UsageEvent,
 };
-use providers::ProviderConfig;
 use providers::PauseControl;
+use providers::ProviderConfig;
 use tokio::sync::{Mutex, RwLock};
 use tokio_stream::wrappers::ReceiverStream;
 use tonic::{Request, Response, Status};
@@ -1435,15 +1435,18 @@ impl AstroService for AstroServiceImpl {
         }
         let config = providers::ProviderConfig {
             api_key,
-            model: if req.model.is_empty() { "claude-opus-4-8".into() } else { req.model },
+            model: if req.model.is_empty() {
+                "claude-opus-4-8".into()
+            } else {
+                req.model
+            },
             ..providers::ProviderConfig::default()
         };
         let client = reqwest::Client::new();
-        let count = providers::anthropic::token_count::anthropic_count_tokens(
-            &client, &[], &[], &config,
-        )
-        .await
-        .map_err(|e| Status::internal(e.to_string()))?;
+        let count =
+            providers::anthropic::token_count::anthropic_count_tokens(&client, &[], &[], &config)
+                .await
+                .map_err(|e| Status::internal(e.to_string()))?;
         Ok(Response::new(proto::CountTokensResponse {
             input_tokens: count,
         }))
@@ -1465,11 +1468,10 @@ impl AstroService for AstroServiceImpl {
             ..providers::ProviderConfig::default()
         };
         let client = reqwest::Client::new();
-        let result = providers::anthropic::batch::anthropic_create_batch(
-            &client, &requests, &config,
-        )
-        .await
-        .map_err(|e| Status::internal(e.to_string()))?;
+        let result =
+            providers::anthropic::batch::anthropic_create_batch(&client, &requests, &config)
+                .await
+                .map_err(|e| Status::internal(e.to_string()))?;
         Ok(Response::new(proto::BatchResponse {
             response_json: result.to_string(),
         }))
@@ -1489,11 +1491,10 @@ impl AstroService for AstroServiceImpl {
             ..providers::ProviderConfig::default()
         };
         let client = reqwest::Client::new();
-        let result = providers::anthropic::batch::anthropic_get_batch(
-            &client, &req.batch_id, &config,
-        )
-        .await
-        .map_err(|e| Status::internal(e.to_string()))?;
+        let result =
+            providers::anthropic::batch::anthropic_get_batch(&client, &req.batch_id, &config)
+                .await
+                .map_err(|e| Status::internal(e.to_string()))?;
         Ok(Response::new(proto::BatchResponse {
             response_json: result.to_string(),
         }))
@@ -1535,11 +1536,10 @@ impl AstroService for AstroServiceImpl {
             ..providers::ProviderConfig::default()
         };
         let client = reqwest::Client::new();
-        let result = providers::anthropic::batch::anthropic_batch_results(
-            &client, &req.batch_id, &config,
-        )
-        .await
-        .map_err(|e| Status::internal(e.to_string()))?;
+        let result =
+            providers::anthropic::batch::anthropic_batch_results(&client, &req.batch_id, &config)
+                .await
+                .map_err(|e| Status::internal(e.to_string()))?;
         Ok(Response::new(proto::BatchResultsResponse {
             results_jsonl: result,
         }))
@@ -1547,6 +1547,7 @@ impl AstroService for AstroServiceImpl {
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
 

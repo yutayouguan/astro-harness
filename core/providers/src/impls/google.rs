@@ -1,19 +1,17 @@
 //! Google Gemini Interactions API — 原生 CompletionModel 实现。
 
-
-
 use anyhow::{Context, Result};
 use reqwest::header::{HeaderMap, HeaderValue};
 use reqwest::Client as HttpClient;
 use serde_json::{json, Value};
 
 use crate::traits::{
-    Capable, Capabilities, CompletionModel, EmbeddingModel, FromClient, ImageGenModel,
-    ModelBase, MusicGenModel, ProviderClient, ProviderExt, TTSModel, VideoGenModel,
+    Capabilities, Capable, CompletionModel, EmbeddingModel, FromClient, ImageGenModel, ModelBase,
+    MusicGenModel, ProviderClient, ProviderExt, TTSModel, VideoGenModel,
 };
 use crate::types::media::{
-    Embedding, GeneratedAudio, GeneratedImage, GeneratedVideo,
-    ImageGenConfig, MusicGenConfig, TTSConfig, VideoGenConfig,
+    Embedding, GeneratedAudio, GeneratedImage, GeneratedVideo, ImageGenConfig, MusicGenConfig,
+    TTSConfig, VideoGenConfig,
 };
 use crate::types::{CompletionRequest, CompletionStream};
 
@@ -90,7 +88,11 @@ impl CompletionModel for InteractionsCompletionModel {
             format!("{base}/v1beta/interactions")
         };
 
-        let model = if request.model.is_empty() { &self.model } else { &request.model };
+        let model = if request.model.is_empty() {
+            &self.model
+        } else {
+            &request.model
+        };
         let (system, input) = to_interactions_input(&request.messages);
 
         let mut body = json!({
@@ -122,7 +124,9 @@ impl CompletionModel for InteractionsCompletionModel {
             gen.insert("temperature".into(), json!(temp));
         }
         if let Some(max) = request.max_tokens {
-            if max > 0 { gen.insert("max_output_tokens".into(), json!(max)); }
+            if max > 0 {
+                gen.insert("max_output_tokens".into(), json!(max));
+            }
         }
         let thinking_level = match request.thinking.as_ref() {
             Some(tc) if !tc.enabled => "minimal",
@@ -162,13 +166,20 @@ impl CompletionModel for InteractionsCompletionModel {
         if let Some(extra) = request.additional_params.as_object() {
             const GEN_CFG_KEYS: &[&str] = &["top_p", "top_k", "temperature"];
             const SKIP_KEYS: &[&str] = &[
-                "frequency_penalty", "presence_penalty", "repetition_penalty",
-                "google_search", "response_format", "safety_settings",
+                "frequency_penalty",
+                "presence_penalty",
+                "repetition_penalty",
+                "google_search",
+                "response_format",
+                "safety_settings",
             ];
             // Phase 1: route generation_config params
             for (k, v) in extra {
                 if GEN_CFG_KEYS.contains(&k.as_str()) {
-                    if let Some(gc) = body.get_mut("generation_config").and_then(|g| g.as_object_mut()) {
+                    if let Some(gc) = body
+                        .get_mut("generation_config")
+                        .and_then(|g| g.as_object_mut())
+                    {
                         gc.entry(k.clone()).or_insert_with(|| v.clone());
                     }
                 }
@@ -187,7 +198,8 @@ impl CompletionModel for InteractionsCompletionModel {
         }
 
         let auth = Google.auth_headers(&self.api_key);
-        let response = self.http
+        let response = self
+            .http
             .post(&url)
             .headers(auth)
             .header("content-type", "application/json")
@@ -196,7 +208,11 @@ impl CompletionModel for InteractionsCompletionModel {
             .await
             .with_context(|| format!("连接 Google Interactions 失败: {url}"))?;
 
-        crate::shared::sse::sse_stream(response, crate::shared::sse::wrap_single_extract(extract_interactions_delta)).await
+        crate::shared::sse::sse_stream(
+            response,
+            crate::shared::sse::wrap_single_extract(extract_interactions_delta),
+        )
+        .await
     }
 }
 
@@ -213,17 +229,30 @@ fn to_interactions_input(messages: &[crate::types::Message]) -> (Option<String>,
                 system = Some(content.clone());
             }
             Message::User { content } => {
-                let parts: Vec<Value> = content.iter().map(|c| match c {
-                    UserContent::Text { text } => json!({"type": "text", "text": text}),
-                    UserContent::Image { url } => media_part("image", url, "image/jpeg"),
-                    UserContent::Audio { url, mime_type } => media_part("audio", url, mime_type),
-                    UserContent::Video { url, mime_type } => media_part("video", url, mime_type),
-                    UserContent::Document { .. } => json!({"type": "text", "text": "[document]"}),
-                    UserContent::ToolResult { .. } => json!({"type": "text", "text": ""}),
-                }).collect();
+                let parts: Vec<Value> = content
+                    .iter()
+                    .map(|c| match c {
+                        UserContent::Text { text } => json!({"type": "text", "text": text}),
+                        UserContent::Image { url } => media_part("image", url, "image/jpeg"),
+                        UserContent::Audio { url, mime_type } => {
+                            media_part("audio", url, mime_type)
+                        }
+                        UserContent::Video { url, mime_type } => {
+                            media_part("video", url, mime_type)
+                        }
+                        UserContent::Document { .. } => {
+                            json!({"type": "text", "text": "[document]"})
+                        }
+                        UserContent::ToolResult { .. } => json!({"type": "text", "text": ""}),
+                    })
+                    .collect();
                 steps.push(json!({"type": "user_input", "content": parts}));
             }
-            Message::Tool { tool_call_id, content, .. } => {
+            Message::Tool {
+                tool_call_id,
+                content,
+                ..
+            } => {
                 steps.push(json!({
                     "type": "function_result",
                     "id": tool_call_id,
@@ -235,7 +264,9 @@ fn to_interactions_input(messages: &[crate::types::Message]) -> (Option<String>,
                 for c in content {
                     if let AssistantContent::Thinking { text, signature } = c {
                         let mut step = json!({"type": "thought"});
-                        if let Some(sig) = signature { step["signature"] = json!(sig); }
+                        if let Some(sig) = signature {
+                            step["signature"] = json!(sig);
+                        }
                         if !text.is_empty() {
                             step["content"] = json!([{"type": "text", "text": text}]);
                         }
@@ -243,9 +274,16 @@ fn to_interactions_input(messages: &[crate::types::Message]) -> (Option<String>,
                     }
                 }
                 // text output
-                let text_parts: Vec<String> = content.iter().filter_map(|c| {
-                    if let AssistantContent::Text { text } = c { Some(text.clone()) } else { None }
-                }).collect();
+                let text_parts: Vec<String> = content
+                    .iter()
+                    .filter_map(|c| {
+                        if let AssistantContent::Text { text } = c {
+                            Some(text.clone())
+                        } else {
+                            None
+                        }
+                    })
+                    .collect();
                 if !text_parts.is_empty() {
                     steps.push(json!({
                         "type": "model_output",
@@ -296,20 +334,47 @@ fn extract_interactions_delta(data: &str) -> Option<crate::types::StreamChunk> {
 
     // interaction completed → extract usage + finish
     if event_type.contains("completed") || event_type.contains("failed") {
-        let status = v.pointer("/interaction/status").and_then(|s| s.as_str()).unwrap_or("unknown");
-        let interaction_id = v.pointer("/interaction/id").and_then(|s| s.as_str()).map(str::to_string);
+        let status = v
+            .pointer("/interaction/status")
+            .and_then(|s| s.as_str())
+            .unwrap_or("unknown");
+        let interaction_id = v
+            .pointer("/interaction/id")
+            .and_then(|s| s.as_str())
+            .map(str::to_string);
 
         let usage = v.pointer("/interaction/usage").and_then(|u| {
-            let input = u.get("total_input_tokens").or_else(|| u.get("prompt_tokens"))
-                .and_then(|x| x.as_u64()).unwrap_or(0) as u32;
-            let output = u.get("total_output_tokens").or_else(|| u.get("completion_tokens"))
-                .and_then(|x| x.as_u64()).unwrap_or(0) as u32;
-            let reasoning = u.get("total_thought_tokens").or_else(|| u.get("reasoning_tokens"))
-                .and_then(|x| x.as_u64()).unwrap_or(0) as u32;
-            let cache_read = u.get("total_cached_tokens").or_else(|| u.get("cached_tokens"))
-                .and_then(|x| x.as_u64()).unwrap_or(0) as u32;
-            if input == 0 && output == 0 { return None; }
-            Some(Usage { input_tokens: input, output_tokens: output, cache_read_tokens: cache_read, cache_write_tokens: 0, reasoning_tokens: reasoning, request_count: 1 })
+            let input = u
+                .get("total_input_tokens")
+                .or_else(|| u.get("prompt_tokens"))
+                .and_then(|x| x.as_u64())
+                .unwrap_or(0) as u32;
+            let output = u
+                .get("total_output_tokens")
+                .or_else(|| u.get("completion_tokens"))
+                .and_then(|x| x.as_u64())
+                .unwrap_or(0) as u32;
+            let reasoning = u
+                .get("total_thought_tokens")
+                .or_else(|| u.get("reasoning_tokens"))
+                .and_then(|x| x.as_u64())
+                .unwrap_or(0) as u32;
+            let cache_read = u
+                .get("total_cached_tokens")
+                .or_else(|| u.get("cached_tokens"))
+                .and_then(|x| x.as_u64())
+                .unwrap_or(0) as u32;
+            if input == 0 && output == 0 {
+                return None;
+            }
+            Some(Usage {
+                input_tokens: input,
+                output_tokens: output,
+                cache_read_tokens: cache_read,
+                cache_write_tokens: 0,
+                reasoning_tokens: reasoning,
+                request_count: 1,
+            })
         });
 
         if let Some(id) = interaction_id {
@@ -318,8 +383,14 @@ fn extract_interactions_delta(data: &str) -> Option<crate::types::StreamChunk> {
         if let Some(u) = usage {
             return Some(StreamChunk::Usage(u));
         }
-        let reason = if status == "requires_action" { "tool_calls" } else { status };
-        return Some(StreamChunk::Done { finish_reason: reason.to_string() });
+        let reason = if status == "requires_action" {
+            "tool_calls"
+        } else {
+            status
+        };
+        return Some(StreamChunk::Done {
+            finish_reason: reason.to_string(),
+        });
     }
 
     // step events — route on event_type, not step/type
@@ -327,35 +398,62 @@ fn extract_interactions_delta(data: &str) -> Option<crate::types::StreamChunk> {
 
     match event_type {
         "step.delta" => {
-            let dt = delta.and_then(|d| d.get("type")).and_then(|t| t.as_str()).unwrap_or("");
+            let dt = delta
+                .and_then(|d| d.get("type"))
+                .and_then(|t| t.as_str())
+                .unwrap_or("");
             match dt {
                 "text" | "text_delta" => {
-                    let text = delta.and_then(|d| d.get("text")).and_then(|t| t.as_str())
-                        .filter(|s| !s.is_empty()).map(str::to_string)?;
+                    let text = delta
+                        .and_then(|d| d.get("text"))
+                        .and_then(|t| t.as_str())
+                        .filter(|s| !s.is_empty())
+                        .map(str::to_string)?;
                     Some(StreamChunk::Text(text))
                 }
                 "thought" | "thought_summary" => {
-                    let text = delta.and_then(|d| d.get("text").or(d.get("summary")))
+                    let text = delta
+                        .and_then(|d| d.get("text").or(d.get("summary")))
                         .and_then(|t| t.as_str())
-                        .or_else(|| delta.and_then(|d| d.pointer("/content/text")).and_then(|t| t.as_str()))
+                        .or_else(|| {
+                            delta
+                                .and_then(|d| d.pointer("/content/text"))
+                                .and_then(|t| t.as_str())
+                        })
                         .filter(|s| !s.is_empty())
                         .map(str::to_string)?;
                     Some(StreamChunk::Thinking(text))
                 }
                 "thought_signature" => {
-                    let sig = delta.and_then(|d| d.get("signature")).and_then(|s| s.as_str())
-                        .filter(|s| !s.is_empty()).map(str::to_string)?;
+                    let sig = delta
+                        .and_then(|d| d.get("signature"))
+                        .and_then(|s| s.as_str())
+                        .filter(|s| !s.is_empty())
+                        .map(str::to_string)?;
                     Some(StreamChunk::ThoughtSignature(sig))
                 }
                 "arguments" | "arguments_delta" => {
-                    let args = delta.and_then(|d| d.get("arguments")).map(|a| a.to_string())?;
+                    let args = delta
+                        .and_then(|d| d.get("arguments"))
+                        .map(|a| a.to_string())?;
                     let index = v.get("index").and_then(|i| i.as_u64()).unwrap_or(0) as u32;
-                    Some(StreamChunk::ToolCallDelta { index, arguments: args })
+                    Some(StreamChunk::ToolCallDelta {
+                        index,
+                        arguments: args,
+                    })
                 }
                 "function_call" => {
                     let step = v.get("step").unwrap_or(&v);
-                    let id = step.get("id").and_then(|s| s.as_str()).unwrap_or("").to_string();
-                    let name = step.get("name").and_then(|s| s.as_str()).unwrap_or("").to_string();
+                    let id = step
+                        .get("id")
+                        .and_then(|s| s.as_str())
+                        .unwrap_or("")
+                        .to_string();
+                    let name = step
+                        .get("name")
+                        .and_then(|s| s.as_str())
+                        .unwrap_or("")
+                        .to_string();
                     let index = v.get("index").and_then(|i| i.as_u64()).unwrap_or(0) as u32;
                     Some(StreamChunk::ToolCallStart { index, id, name })
                 }
@@ -367,8 +465,16 @@ fn extract_interactions_delta(data: &str) -> Option<crate::types::StreamChunk> {
             let step_kind = step.get("type").and_then(|t| t.as_str()).unwrap_or("");
             match step_kind {
                 "function_call" => {
-                    let id = step.get("id").and_then(|s| s.as_str()).unwrap_or("").to_string();
-                    let name = step.get("name").and_then(|s| s.as_str()).unwrap_or("").to_string();
+                    let id = step
+                        .get("id")
+                        .and_then(|s| s.as_str())
+                        .unwrap_or("")
+                        .to_string();
+                    let name = step
+                        .get("name")
+                        .and_then(|s| s.as_str())
+                        .unwrap_or("")
+                        .to_string();
                     let index = v.get("index").and_then(|i| i.as_u64()).unwrap_or(0) as u32;
                     Some(StreamChunk::ToolCallStart { index, id, name })
                 }
@@ -376,7 +482,10 @@ fn extract_interactions_delta(data: &str) -> Option<crate::types::StreamChunk> {
             }
         }
         _ if event_type.contains("error") => {
-            let msg = v.pointer("/error/message").and_then(|m| m.as_str()).unwrap_or("Google API error");
+            let msg = v
+                .pointer("/error/message")
+                .and_then(|m| m.as_str())
+                .unwrap_or("Google API error");
             Some(StreamChunk::Error(msg.to_string()))
         }
         _ => None,
@@ -436,10 +545,17 @@ impl FromClient<Google> for GeminiEmbeddingModel {
 impl EmbeddingModel for GeminiEmbeddingModel {
     async fn embed(&self, texts: &[String]) -> anyhow::Result<Vec<Embedding>> {
         let cfg = self.0.to_provider_config();
-        let vectors =
-            crate::google::interactions_http::google_batch_embed(self.0.http(), texts, self.0.model(), &cfg)
-                .await?;
-        Ok(vectors.into_iter().map(|v| Embedding { values: v }).collect())
+        let vectors = crate::google::interactions_http::google_batch_embed(
+            self.0.http(),
+            texts,
+            self.0.model(),
+            &cfg,
+        )
+        .await?;
+        Ok(vectors
+            .into_iter()
+            .map(|v| Embedding { values: v })
+            .collect())
     }
 }
 
@@ -494,7 +610,11 @@ impl VideoGenModel for VeoVideoModel {
     ) -> anyhow::Result<GeneratedVideo> {
         let cfg = self.0.to_provider_config();
         let mut extras = crate::google::veo_http::VideoGenExtras::default();
-        if let Some(ar) = config.additional_params.get("aspect_ratio").and_then(|v| v.as_str()) {
+        if let Some(ar) = config
+            .additional_params
+            .get("aspect_ratio")
+            .and_then(|v| v.as_str())
+        {
             extras.aspect_ratio = Some(ar.to_string());
         }
         if config.duration_seconds > 0 {
@@ -627,7 +747,8 @@ mod tests {
 
     #[test]
     fn extract_text_delta() {
-        let data = r#"{"index":1,"delta":{"text":"Hello","type":"text"},"event_type":"step.delta"}"#;
+        let data =
+            r#"{"index":1,"delta":{"text":"Hello","type":"text"},"event_type":"step.delta"}"#;
         let chunk = extract_interactions_delta(data);
         assert!(matches!(chunk, Some(crate::types::StreamChunk::Text(ref t)) if t == "Hello"));
     }
@@ -636,13 +757,17 @@ mod tests {
     fn extract_thought_signature() {
         let data = r#"{"index":0,"delta":{"signature":"abc123","type":"thought_signature"},"event_type":"step.delta"}"#;
         let chunk = extract_interactions_delta(data);
-        assert!(matches!(chunk, Some(crate::types::StreamChunk::ThoughtSignature(ref s)) if s == "abc123"));
+        assert!(
+            matches!(chunk, Some(crate::types::StreamChunk::ThoughtSignature(ref s)) if s == "abc123")
+        );
     }
 
     #[test]
     fn extract_completed_usage() {
         let data = r#"{"interaction":{"id":"v1_test","status":"completed","usage":{"total_input_tokens":10,"total_output_tokens":5}},"event_type":"interaction.completed"}"#;
         let chunk = extract_interactions_delta(data);
-        assert!(matches!(chunk, Some(crate::types::StreamChunk::InteractionId(ref id)) if id == "v1_test"));
+        assert!(
+            matches!(chunk, Some(crate::types::StreamChunk::InteractionId(ref id)) if id == "v1_test")
+        );
     }
 }

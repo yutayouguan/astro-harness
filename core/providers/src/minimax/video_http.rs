@@ -17,8 +17,7 @@ use crate::types::request::ProviderConfig;
 /// 判断是否为 H3 系列模型（使用 v2 API）。
 pub fn is_h3_model(model: &str) -> bool {
     let m = model.trim();
-    m.eq_ignore_ascii_case("MiniMax-H3")
-        || m.to_ascii_lowercase().starts_with("minimax-h3-")
+    m.eq_ignore_ascii_case("MiniMax-H3") || m.to_ascii_lowercase().starts_with("minimax-h3-")
 }
 
 // ---------------------------------------------------------------------------
@@ -315,10 +314,7 @@ pub async fn minimax_create_video(
         .with_context(|| format!("连接 MiniMax 视频生成 API 失败: {url}"))?;
 
     let status = response.status();
-    let v: Value = response
-        .json()
-        .await
-        .context("解析视频生成响应失败")?;
+    let v: Value = response.json().await.context("解析视频生成响应失败")?;
 
     if !status.is_success() {
         let msg = v
@@ -333,7 +329,11 @@ pub async fn minimax_create_video(
     }
 
     v.get("task_id")
-        .and_then(|t| t.as_str().map(str::to_string).or_else(|| Some(t.to_string())))
+        .and_then(|t| {
+            t.as_str()
+                .map(str::to_string)
+                .or_else(|| Some(t.to_string()))
+        })
         .ok_or_else(|| anyhow!("视频生成响应缺少 task_id"))
 }
 
@@ -365,10 +365,7 @@ pub async fn minimax_query_video(
         .with_context(|| format!("连接 MiniMax 视频查询 API 失败: {url}"))?;
 
     let status = response.status();
-    let v: Value = response
-        .json()
-        .await
-        .context("解析视频查询响应失败")?;
+    let v: Value = response.json().await.context("解析视频查询响应失败")?;
 
     if !status.is_success() {
         let msg = v
@@ -417,10 +414,7 @@ pub async fn minimax_download_video(
         .with_context(|| format!("连接 MiniMax 文件查询 API 失败: {url}"))?;
 
     let status = response.status();
-    let v: Value = response
-        .json()
-        .await
-        .context("解析文件查询响应失败")?;
+    let v: Value = response.json().await.context("解析文件查询响应失败")?;
 
     if !status.is_success() {
         let msg = v
@@ -440,10 +434,7 @@ pub async fn minimax_download_video(
 }
 
 /// 通过直接 URL 下载视频（H3 v2 API）。
-pub async fn minimax_download_video_url(
-    client: &Client,
-    url: &str,
-) -> Result<MiniMaxVideoResult> {
+pub async fn minimax_download_video_url(client: &Client, url: &str) -> Result<MiniMaxVideoResult> {
     download_video_from_url(client, url).await
 }
 
@@ -614,7 +605,11 @@ pub async fn minimax_regenerate_video(
     }
 
     v.get("task_id")
-        .and_then(|t| t.as_str().map(str::to_string).or_else(|| Some(t.to_string())))
+        .and_then(|t| {
+            t.as_str()
+                .map(str::to_string)
+                .or_else(|| Some(t.to_string()))
+        })
         .ok_or_else(|| anyhow!("重生成响应缺少 task_id"))
 }
 
@@ -709,10 +704,7 @@ fn parse_h3_query_result(v: &Value, task_id: &str) -> Result<VideoTaskResult> {
 }
 
 fn parse_v1_query_result(v: &Value, task_id: &str) -> Result<VideoTaskResult> {
-    let task_status = v
-        .get("status")
-        .and_then(|s| s.as_str())
-        .unwrap_or("Fail");
+    let task_status = v.get("status").and_then(|s| s.as_str()).unwrap_or("Fail");
 
     Ok(VideoTaskResult {
         task_id: v
@@ -721,12 +713,20 @@ fn parse_v1_query_result(v: &Value, task_id: &str) -> Result<VideoTaskResult> {
             .unwrap_or(task_id)
             .to_string(),
         status: VideoTaskStatus::from_str(task_status),
-        file_id: v
-            .get("file_id")
-            .and_then(|f| f.as_str().map(str::to_string).or_else(|| Some(f.to_string()))),
+        file_id: v.get("file_id").and_then(|f| {
+            f.as_str()
+                .map(str::to_string)
+                .or_else(|| Some(f.to_string()))
+        }),
         download_url: None,
-        video_width: v.get("video_width").and_then(|w| w.as_u64()).map(|w| w as u32),
-        video_height: v.get("video_height").and_then(|h| h.as_u64()).map(|h| h as u32),
+        video_width: v
+            .get("video_width")
+            .and_then(|w| w.as_u64())
+            .map(|w| w as u32),
+        video_height: v
+            .get("video_height")
+            .and_then(|h| h.as_u64())
+            .map(|h| h as u32),
     })
 }
 
@@ -745,11 +745,7 @@ async fn download_video_from_url(client: &Client, url: &str) -> Result<MiniMaxVi
         anyhow::bail!("下载视频 HTTP {}: {url}", dl_resp.status());
     }
 
-    let data = dl_resp
-        .bytes()
-        .await
-        .context("读取视频字节失败")?
-        .to_vec();
+    let data = dl_resp.bytes().await.context("读取视频字节失败")?.to_vec();
 
     if data.is_empty() {
         return Err(anyhow!("MiniMax 视频下载返回空数据"));
@@ -785,14 +781,32 @@ mod tests {
 
     #[test]
     fn status_parsing() {
-        assert_eq!(VideoTaskStatus::from_str("Preparing"), VideoTaskStatus::Preparing);
-        assert_eq!(VideoTaskStatus::from_str("Queueing"), VideoTaskStatus::Queueing);
-        assert_eq!(VideoTaskStatus::from_str("Processing"), VideoTaskStatus::Processing);
-        assert_eq!(VideoTaskStatus::from_str("Success"), VideoTaskStatus::Success);
-        assert_eq!(VideoTaskStatus::from_str("succeeded"), VideoTaskStatus::Success);
+        assert_eq!(
+            VideoTaskStatus::from_str("Preparing"),
+            VideoTaskStatus::Preparing
+        );
+        assert_eq!(
+            VideoTaskStatus::from_str("Queueing"),
+            VideoTaskStatus::Queueing
+        );
+        assert_eq!(
+            VideoTaskStatus::from_str("Processing"),
+            VideoTaskStatus::Processing
+        );
+        assert_eq!(
+            VideoTaskStatus::from_str("Success"),
+            VideoTaskStatus::Success
+        );
+        assert_eq!(
+            VideoTaskStatus::from_str("succeeded"),
+            VideoTaskStatus::Success
+        );
         assert_eq!(VideoTaskStatus::from_str("Fail"), VideoTaskStatus::Fail);
         assert_eq!(VideoTaskStatus::from_str("failed"), VideoTaskStatus::Fail);
-        assert_eq!(VideoTaskStatus::from_str("cancelled"), VideoTaskStatus::Cancelled);
+        assert_eq!(
+            VideoTaskStatus::from_str("cancelled"),
+            VideoTaskStatus::Cancelled
+        );
         assert_eq!(VideoTaskStatus::from_str("unknown"), VideoTaskStatus::Fail);
     }
 
@@ -818,15 +832,27 @@ mod tests {
 
     #[test]
     fn video_api_base_routing() {
-        let v1_cfg = ProviderConfig { base_url: None, ..ProviderConfig::default() };
-        assert_eq!(video_api_base(&v1_cfg, "MiniMax-Hailuo-2.3"), DEFAULT_API_BASE);
-        assert_eq!(video_api_base(&v1_cfg, "MiniMax-H3"), "https://api.minimaxi.com/v2");
+        let v1_cfg = ProviderConfig {
+            base_url: None,
+            ..ProviderConfig::default()
+        };
+        assert_eq!(
+            video_api_base(&v1_cfg, "MiniMax-Hailuo-2.3"),
+            DEFAULT_API_BASE
+        );
+        assert_eq!(
+            video_api_base(&v1_cfg, "MiniMax-H3"),
+            "https://api.minimaxi.com/v2"
+        );
 
         let custom_v1 = ProviderConfig {
             base_url: Some("https://api.minimaxi.com/v1".to_string()),
             ..ProviderConfig::default()
         };
-        assert_eq!(video_api_base(&custom_v1, "MiniMax-H3"), "https://api.minimaxi.com/v2");
+        assert_eq!(
+            video_api_base(&custom_v1, "MiniMax-H3"),
+            "https://api.minimaxi.com/v2"
+        );
     }
 
     #[test]

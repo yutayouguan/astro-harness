@@ -9,9 +9,21 @@ use providers::{
 #[test]
 fn test_profile_has_all_providers() {
     let ids = [
-        "google", "openai", "claude", "deepseek", "minimax",
-        "zhipu", "mimo", "ollama", "openrouter", "bailian",
-        "nvidia", "moonshot", "volcengine", "azure", "hunyuan",
+        "google",
+        "openai",
+        "claude",
+        "deepseek",
+        "minimax",
+        "zhipu",
+        "mimo",
+        "ollama",
+        "openrouter",
+        "bailian",
+        "nvidia",
+        "moonshot",
+        "volcengine",
+        "azure",
+        "hunyuan",
     ];
     for id in ids {
         assert!(resolve(id).is_some(), "profile missing for {id}");

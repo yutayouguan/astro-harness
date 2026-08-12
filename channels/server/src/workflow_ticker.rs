@@ -13,7 +13,9 @@ static NEXT_RUN: std::sync::Mutex<Option<HashMap<String, chrono::DateTime<Local>
     std::sync::Mutex::new(None);
 
 fn state_file() -> PathBuf {
-    home::default_memory_dir().join("workflows").join("schedule_state.json")
+    home::default_memory_dir()
+        .join("workflows")
+        .join("schedule_state.json")
 }
 
 fn load_state() -> HashMap<String, String> {
@@ -50,9 +52,10 @@ async fn tick_inner() -> anyhow::Result<()> {
         }
 
         // 找到第一个启用的 ScheduledTrigger 节点
-        let trigger_node = wf.nodes.iter().find(|n| {
-            !n.disabled && n.node_type == NodeType::ScheduledTrigger
-        });
+        let trigger_node = wf
+            .nodes
+            .iter()
+            .find(|n| !n.disabled && n.node_type == NodeType::ScheduledTrigger);
         let trigger_node = match trigger_node {
             Some(n) => n,
             None => continue,
@@ -69,7 +72,7 @@ async fn tick_inner() -> anyhow::Result<()> {
 
         // 获取或计算下次运行时间
         let next_run = {
-            let mut guard = NEXT_RUN.lock().unwrap();
+            let mut guard = NEXT_RUN.lock().unwrap_or_else(|e| e.into_inner());
             let map = guard.get_or_insert_with(|| {
                 let mut m = HashMap::new();
                 for (id, time_str) in &persisted {
@@ -144,7 +147,7 @@ async fn tick_inner() -> anyhow::Result<()> {
         // 计算下一次运行时间
         let next = cron::compute_next_run(schedule, now)?;
         {
-            let mut guard = NEXT_RUN.lock().unwrap();
+            let mut guard = NEXT_RUN.lock().unwrap_or_else(|e| e.into_inner());
             if let Some(map) = guard.as_mut() {
                 map.insert(wf_id.clone(), next);
             }

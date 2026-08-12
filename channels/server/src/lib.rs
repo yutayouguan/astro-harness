@@ -1,3 +1,5 @@
+#![deny(clippy::unwrap_used)]
+
 //! Astro 独立 gRPC 后端入口。
 //!
 //! 引导工作区、启动 [`AstroServiceImpl`]，并在独立线程的 current_thread 运行时中

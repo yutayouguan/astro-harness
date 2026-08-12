@@ -7,7 +7,9 @@ use reqwest::header::{HeaderMap, HeaderValue};
 use reqwest::Client as HttpClient;
 use serde_json::{json, Value};
 
-use crate::traits::{Capable, Capabilities, CompletionModel, FromClient, Nothing, ProviderClient, ProviderExt};
+use crate::traits::{
+    Capabilities, Capable, CompletionModel, FromClient, Nothing, ProviderClient, ProviderExt,
+};
 use crate::types::{CompletionRequest, CompletionStream};
 
 const ANTHROPIC_VERSION: &str = "2024-10-22";
@@ -85,15 +87,16 @@ impl CompletionModel for AnthropicCompletionModel {
         if self.api_key.is_empty() {
             return Err(anyhow!("缺少 Anthropic API Key"));
         }
-        let base = self
-            .base_url
-            .trim_end_matches('/')
-            .trim_end_matches("/v1");
+        let base = self.base_url.trim_end_matches('/').trim_end_matches("/v1");
         let url = format!("{base}/v1/messages");
 
         let (system, api_messages) = to_anthropic_messages(&request.messages);
 
-        let model = if request.model.is_empty() { &self.model } else { &request.model };
+        let model = if request.model.is_empty() {
+            &self.model
+        } else {
+            &request.model
+        };
         let mut body = json!({
             "model": model,
             "max_tokens": request.max_tokens.unwrap_or(4096),
@@ -120,7 +123,9 @@ impl CompletionModel for AnthropicCompletionModel {
                 let max = request.max_tokens.unwrap_or(4096);
                 let budget = raw_budget.clamp(1024, max.saturating_sub(1).max(1024));
                 body["thinking"] = json!({"type": "enabled", "budget_tokens": budget});
-                body.as_object_mut().unwrap().remove("temperature");
+                if let Some(obj) = body.as_object_mut() {
+                    obj.remove("temperature");
+                }
             }
         }
 
@@ -146,7 +151,8 @@ impl CompletionModel for AnthropicCompletionModel {
         }
 
         let auth = Anthropic.auth_headers(&self.api_key);
-        let response = self.http
+        let response = self
+            .http
             .post(&url)
             .headers(auth)
             .header("content-type", "application/json")
@@ -155,7 +161,11 @@ impl CompletionModel for AnthropicCompletionModel {
             .await
             .with_context(|| format!("连接 Anthropic 失败: {url}"))?;
 
-        crate::shared::sse::sse_stream(response, crate::shared::sse::wrap_single_extract(extract_anthropic_delta)).await
+        crate::shared::sse::sse_stream(
+            response,
+            crate::shared::sse::wrap_single_extract(extract_anthropic_delta),
+        )
+        .await
     }
 }
 
@@ -173,19 +183,30 @@ fn to_anthropic_messages(messages: &[crate::types::Message]) -> (Value, Vec<Valu
     let mut pending_tool_results: Vec<Value> = Vec::new();
 
     let flush = |pending: &mut Vec<Value>, out: &mut Vec<Value>| {
-        if pending.is_empty() { return; }
+        if pending.is_empty() {
+            return;
+        }
         out.push(json!({"role": "user", "content": Value::Array(std::mem::take(pending))}));
     };
 
     for m in messages {
         match m {
             Message::System { content } => {
-                if !system.is_empty() { system.push('\n'); }
+                if !system.is_empty() {
+                    system.push('\n');
+                }
                 system.push_str(content);
             }
-            Message::Tool { tool_call_id, content, is_error } => {
-                let mut block = json!({"type": "tool_result", "tool_use_id": tool_call_id, "content": content});
-                if *is_error { block["is_error"] = json!(true); }
+            Message::Tool {
+                tool_call_id,
+                content,
+                is_error,
+            } => {
+                let mut block =
+                    json!({"type": "tool_result", "tool_use_id": tool_call_id, "content": content});
+                if *is_error {
+                    block["is_error"] = json!(true);
+                }
                 pending_tool_results.push(block);
             }
             Message::Assistant { content } => {
@@ -195,7 +216,9 @@ fn to_anthropic_messages(messages: &[crate::types::Message]) -> (Value, Vec<Valu
                     match c {
                         AssistantContent::Thinking { text, signature } => {
                             let mut b = json!({"type": "thinking", "thinking": text});
-                            if let Some(sig) = signature { b["signature"] = json!(sig); }
+                            if let Some(sig) = signature {
+                                b["signature"] = json!(sig);
+                            }
                             blocks.push(b);
                         }
                         AssistantContent::Text { text } => {
@@ -205,7 +228,8 @@ fn to_anthropic_messages(messages: &[crate::types::Message]) -> (Value, Vec<Valu
                         }
                         AssistantContent::ToolCall(tc) => {
                             let input = if tc.arguments.is_string() {
-                                serde_json::from_str(tc.arguments.as_str().unwrap_or("{}")).unwrap_or(json!({}))
+                                serde_json::from_str(tc.arguments.as_str().unwrap_or("{}"))
+                                    .unwrap_or(json!({}))
                             } else {
                                 tc.arguments.clone()
                             };
@@ -213,7 +237,9 @@ fn to_anthropic_messages(messages: &[crate::types::Message]) -> (Value, Vec<Valu
                         }
                     }
                 }
-                if blocks.is_empty() { blocks.push(json!({"type": "text", "text": ""})); }
+                if blocks.is_empty() {
+                    blocks.push(json!({"type": "text", "text": ""}));
+                }
                 api_msgs.push(json!({"role": "assistant", "content": blocks}));
             }
             Message::User { content } => {
@@ -297,11 +323,23 @@ fn extract_anthropic_delta(data: &str) -> Option<crate::types::StreamChunk> {
             match bt {
                 "tool_use" | "server_tool_use" => Some(StreamChunk::ToolCallStart {
                     index,
-                    id: block.get("id").and_then(|s| s.as_str()).unwrap_or("").to_string(),
-                    name: block.get("name").and_then(|s| s.as_str()).unwrap_or("").to_string(),
+                    id: block
+                        .get("id")
+                        .and_then(|s| s.as_str())
+                        .unwrap_or("")
+                        .to_string(),
+                    name: block
+                        .get("name")
+                        .and_then(|s| s.as_str())
+                        .unwrap_or("")
+                        .to_string(),
                 }),
                 "thinking" => {
-                    let sig = block.get("signature").and_then(|s| s.as_str()).filter(|s| !s.is_empty()).map(str::to_string);
+                    let sig = block
+                        .get("signature")
+                        .and_then(|s| s.as_str())
+                        .filter(|s| !s.is_empty())
+                        .map(str::to_string);
                     sig.map(StreamChunk::ThoughtSignature)
                 }
                 _ => None,
@@ -312,16 +350,30 @@ fn extract_anthropic_delta(data: &str) -> Option<crate::types::StreamChunk> {
             let dt = delta.get("type").and_then(|t| t.as_str()).unwrap_or("");
             match dt {
                 "input_json_delta" => {
-                    let partial = delta.get("partial_json").and_then(|s| s.as_str()).map(str::to_string)?;
+                    let partial = delta
+                        .get("partial_json")
+                        .and_then(|s| s.as_str())
+                        .map(str::to_string)?;
                     let index = v.get("index").and_then(|i| i.as_u64()).unwrap_or(0) as u32;
-                    Some(StreamChunk::ToolCallDelta { index, arguments: partial })
+                    Some(StreamChunk::ToolCallDelta {
+                        index,
+                        arguments: partial,
+                    })
                 }
                 "thinking_delta" => {
-                    let text = delta.get("thinking").and_then(|t| t.as_str()).filter(|s| !s.is_empty()).map(str::to_string)?;
+                    let text = delta
+                        .get("thinking")
+                        .and_then(|t| t.as_str())
+                        .filter(|s| !s.is_empty())
+                        .map(str::to_string)?;
                     Some(StreamChunk::Thinking(text))
                 }
                 "signature_delta" => {
-                    let sig = delta.get("signature").and_then(|s| s.as_str()).filter(|s| !s.is_empty()).map(str::to_string)?;
+                    let sig = delta
+                        .get("signature")
+                        .and_then(|s| s.as_str())
+                        .filter(|s| !s.is_empty())
+                        .map(str::to_string)?;
                     Some(StreamChunk::ThoughtSignature(sig))
                 }
                 "citations_delta" => {
@@ -329,13 +381,20 @@ fn extract_anthropic_delta(data: &str) -> Option<crate::types::StreamChunk> {
                     Some(StreamChunk::Citation(citation.clone()))
                 }
                 _ => {
-                    let text = delta.get("text").and_then(|t| t.as_str()).filter(|s| !s.is_empty()).map(str::to_string)?;
+                    let text = delta
+                        .get("text")
+                        .and_then(|t| t.as_str())
+                        .filter(|s| !s.is_empty())
+                        .map(str::to_string)?;
                     Some(StreamChunk::Text(text))
                 }
             }
         }
         "message_delta" => {
-            let finish = v.pointer("/delta/stop_reason").and_then(|s| s.as_str()).map(str::to_string);
+            let finish = v
+                .pointer("/delta/stop_reason")
+                .and_then(|s| s.as_str())
+                .map(str::to_string);
             let usage = v.get("usage").and_then(parse_anthropic_usage);
             if let Some(f) = finish {
                 return Some(StreamChunk::Done { finish_reason: f });
@@ -343,7 +402,10 @@ fn extract_anthropic_delta(data: &str) -> Option<crate::types::StreamChunk> {
             usage.map(StreamChunk::Usage)
         }
         "error" => {
-            let msg = v.pointer("/error/message").and_then(|m| m.as_str()).unwrap_or("Anthropic error");
+            let msg = v
+                .pointer("/error/message")
+                .and_then(|m| m.as_str())
+                .unwrap_or("Anthropic error");
             Some(StreamChunk::Error(msg.to_string()))
         }
         _ => None,
@@ -353,9 +415,17 @@ fn extract_anthropic_delta(data: &str) -> Option<crate::types::StreamChunk> {
 fn parse_anthropic_usage(u: &Value) -> Option<crate::types::stream::Usage> {
     let input = u.get("input_tokens").and_then(|x| x.as_u64()).unwrap_or(0) as u32;
     let output = u.get("output_tokens").and_then(|x| x.as_u64()).unwrap_or(0) as u32;
-    let cache_read = u.get("cache_read_input_tokens").and_then(|x| x.as_u64()).unwrap_or(0) as u32;
-    let cache_write = u.get("cache_creation_input_tokens").and_then(|x| x.as_u64()).unwrap_or(0) as u32;
-    if input == 0 && output == 0 && cache_read == 0 && cache_write == 0 { return None; }
+    let cache_read = u
+        .get("cache_read_input_tokens")
+        .and_then(|x| x.as_u64())
+        .unwrap_or(0) as u32;
+    let cache_write = u
+        .get("cache_creation_input_tokens")
+        .and_then(|x| x.as_u64())
+        .unwrap_or(0) as u32;
+    if input == 0 && output == 0 && cache_read == 0 && cache_write == 0 {
+        return None;
+    }
     Some(crate::types::stream::Usage {
         input_tokens: input,
         output_tokens: output,
@@ -422,7 +492,10 @@ mod tests {
     #[test]
     fn thinking_block_in_assistant() {
         let msgs = vec![crate::types::Message::assistant(vec![
-            crate::types::AssistantContent::Thinking { text: "hmm".into(), signature: Some("sig".into()) },
+            crate::types::AssistantContent::Thinking {
+                text: "hmm".into(),
+                signature: Some("sig".into()),
+            },
             crate::types::AssistantContent::Text { text: "42".into() },
         ])];
         let (_, api) = to_anthropic_messages(&msgs);

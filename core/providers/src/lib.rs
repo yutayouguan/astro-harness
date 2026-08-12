@@ -1,3 +1,5 @@
+#![warn(clippy::unwrap_used)]
+
 //! 多供应商 AI 能力统一封装。
 //!
 //! - [`types`]：统一消息模型（`Message` enum + `StreamChunk` + `Usage` + `ProviderConfig`）
@@ -24,19 +26,22 @@ pub mod types;
 
 // ── 顶层路径稳定性 ──
 pub use google::{files_http, interactions_http, robotics_http};
-pub use profile::{read_env_api_key, env_api_key_names};
 pub use openai::{embeddings_http, image_http, responses, tts_http};
-pub use shared::{extractor, media as media_http, verify, vision};
+pub use profile::{env_api_key_names, read_env_api_key};
 pub use shared::http as http_stream;
+pub use shared::{extractor, media as media_http, verify, vision};
 pub use types::image_gen;
 
 // ── Dispatch (唯一公开入口) ──
-pub use dispatch::{chat_stream, chat_stream_direct, generate_image, text_to_speech, generate_video, generate_music, embed, verify, default_model, supports_image_gen};
+pub use dispatch::{
+    chat_stream, chat_stream_direct, default_model, embed, generate_image, generate_music,
+    generate_video, supports_image_gen, text_to_speech, verify,
+};
 pub use profile::AuthKind;
 pub use shared::verify::VerifyResult;
 
 // ── Stream types ──
-pub use types::stream::{PauseControl, Usage, CompletionStream, StreamChunk};
+pub use types::stream::{CompletionStream, PauseControl, StreamChunk, Usage};
 
 // ── Media types ──
 pub use types::media::{GeneratedAudio, GeneratedImage, GeneratedVideo};
@@ -47,12 +52,15 @@ pub use types::message::Message;
 // ── Config ──
 pub use types::ProviderConfig;
 
+// ── Error types ──
+pub use types::error::{ProviderError, ProviderResult};
+
+pub use anthropic::tools::openai_tools_to_anthropic;
 pub use compat::openai_compatible_base;
 pub use extractor::{
     extractor as build_extractor, extractor_from_env, parse_submit_payload, ExtractionError,
     Extractor, ExtractorBuilder,
 };
+pub use google::tools::openai_tools_to_gemini_native;
 pub use http_stream::merge_additional_params;
 pub use profile::{ApiMode, ProviderProfile, PROFILES};
-pub use anthropic::tools::openai_tools_to_anthropic;
-pub use google::tools::openai_tools_to_gemini_native;

@@ -13,8 +13,8 @@ use serde::Serialize;
 use serde_json::{json, Value};
 use thiserror::Error;
 
-use crate::types::request::ProviderConfig;
 use crate::types::message::Message;
+use crate::types::request::ProviderConfig;
 use crate::types::stream::StreamChunk;
 
 /// 结构化抽取过程中的错误类型。
@@ -220,12 +220,11 @@ where
     let api_key = if auth == crate::profile::AuthKind::None {
         String::new()
     } else {
-        crate::profile::read_env_api_key(provider_id).ok_or_else(|| {
-            anyhow::anyhow!("未找到 {} 的 API Key 环境变量", provider_id)
-        })?
+        crate::profile::read_env_api_key(provider_id)
+            .ok_or_else(|| anyhow::anyhow!("未找到 {} 的 API Key 环境变量", provider_id))?
     };
-    let base_url = Some(crate::profile::default_base_for(provider_id).to_string())
-        .filter(|s| !s.is_empty());
+    let base_url =
+        Some(crate::profile::default_base_for(provider_id).to_string()).filter(|s| !s.is_empty());
     let config = ProviderConfig {
         api_key,
         base_url,
@@ -290,18 +289,16 @@ where
         }
 
         let user = format!("请从以下文本抽取结构化数据：\n\n{text}");
-        vec![
-            Message::system(system),
-            Message::user_text(user),
-        ]
+        vec![Message::system(system), Message::user_text(user)]
     }
 
     /// 调用模型并反序列化为 `T`。
     pub async fn extract(&self, text: &str) -> Result<T, ExtractionError> {
         let messages = self.build_messages(text);
-        let mut stream = crate::dispatch::chat_stream(&self.provider, messages, vec![], &self.config)
-            .await
-            .map_err(|e| ExtractionError::PromptError(e.to_string()))?;
+        let mut stream =
+            crate::dispatch::chat_stream(&self.provider, messages, vec![], &self.config)
+                .await
+                .map_err(|e| ExtractionError::PromptError(e.to_string()))?;
 
         let mut out = String::new();
         while let Some(item) = stream.next().await {

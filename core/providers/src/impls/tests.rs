@@ -39,8 +39,8 @@ fn zhipu_has_chat() {
 
 #[cfg(test)]
 mod finalize_body {
-    use serde_json::{json, Value};
     use crate::compat::OpenAICompatible;
+    use serde_json::{json, Value};
 
     #[test]
     fn deepseek_thinking_enabled_maps_effort() {

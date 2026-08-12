@@ -39,7 +39,13 @@ pub async fn sse_stream(
 
     let byte_stream = response.bytes_stream();
     let stream = futures::stream::unfold(
-        (byte_stream, String::new(), false, extract, VecDeque::<StreamChunk>::new()),
+        (
+            byte_stream,
+            String::new(),
+            false,
+            extract,
+            VecDeque::<StreamChunk>::new(),
+        ),
         |(mut byte_stream, mut buf, done, extract, mut pending)| async move {
             // 先排空 pending 队列（一个 SSE 事件可产出多个 chunk）
             if let Some(chunk) = pending.pop_front() {

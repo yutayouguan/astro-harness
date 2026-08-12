@@ -15,9 +15,9 @@ use memory::{
     apply_review_suggestions, build_review_digest, load_auxiliary_config, parse_review_llm_output,
     MemoryManager, REVIEW_SYSTEM_PROMPT,
 };
-use providers::ProviderConfig;
 use providers::types::message::Message as ProviderMessage;
 use providers::types::stream::StreamChunk;
+use providers::ProviderConfig;
 use tracing::{info, warn};
 
 use crate::runtime::AgentLoop;
@@ -244,7 +244,8 @@ async fn complete_review_chat(
         ProviderMessage::system(system),
         ProviderMessage::user_text(user),
     ];
-    let mut stream = providers::dispatch::chat_stream(backend_id, messages, vec![], &config).await?;
+    let mut stream =
+        providers::dispatch::chat_stream(backend_id, messages, vec![], &config).await?;
     let mut out = String::new();
     while let Some(item) = stream.next().await {
         let chunk = item?;

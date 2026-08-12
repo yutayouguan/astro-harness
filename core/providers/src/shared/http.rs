@@ -54,9 +54,7 @@ pub fn json_error_message<'a>(v: &'a Value, default: &'a str) -> &'a str {
 }
 
 /// 检查 HTTP 响应状态；非 2xx 时消耗响应体并返回结构化错误。
-pub async fn check_response_status(
-    response: reqwest::Response,
-) -> Result<reqwest::Response> {
+pub async fn check_response_status(response: reqwest::Response) -> Result<reqwest::Response> {
     let status = response.status();
     if status.is_success() {
         return Ok(response);
@@ -73,4 +71,3 @@ pub async fn check_response_status(
         .unwrap_or(body);
     Err(anyhow!("上游 HTTP {status}: {msg}"))
 }
-

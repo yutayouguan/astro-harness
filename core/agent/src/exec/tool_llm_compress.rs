@@ -4,9 +4,9 @@
 //! 辅模型：`AuxiliaryTask::Compaction`；失败或无目标时回退 head/tail。
 
 use futures::StreamExt;
-use providers::ProviderConfig;
 use providers::types::message::Message as ProviderMessage;
 use providers::types::stream::StreamChunk;
+use providers::ProviderConfig;
 use tracing::warn;
 
 use common::TOOL_LLM_COMPRESS_MARK;
@@ -81,7 +81,8 @@ async fn complete_compaction_chat(
         ),
         ProviderMessage::user_text(prompt),
     ];
-    let mut stream = providers::dispatch::chat_stream(&target.backend_id, messages, vec![], &config).await?;
+    let mut stream =
+        providers::dispatch::chat_stream(&target.backend_id, messages, vec![], &config).await?;
     let mut out = String::new();
     while let Some(item) = stream.next().await {
         let chunk = item?;

@@ -153,14 +153,14 @@ mod tests {
 
     #[test]
     fn tool_call_empty_content_null() {
-        let msgs = to_openai_messages(&[Message::assistant(vec![
-            AssistantContent::ToolCall(crate::types::ToolCall {
+        let msgs = to_openai_messages(&[Message::assistant(vec![AssistantContent::ToolCall(
+            crate::types::ToolCall {
                 id: "call_1".into(),
                 name: "read".into(),
                 arguments: json!({"path": "f.rs"}),
                 signature: None,
-            }),
-        ])]);
+            },
+        )])]);
         assert!(msgs[0]["content"].is_null());
         assert_eq!(msgs[0]["tool_calls"][0]["function"]["name"], "read");
     }

@@ -5,7 +5,7 @@ use reqwest::Client;
 use serde_json::{json, Value};
 
 use crate::compat::{OpenAICompatible, OpenAICompletionModel};
-use crate::traits::{Capable, Capabilities, Nothing, ProviderExt};
+use crate::traits::{Capabilities, Capable, Nothing, ProviderExt};
 
 const API_VERSION: &str = "2024-06-01";
 

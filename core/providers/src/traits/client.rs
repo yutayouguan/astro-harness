@@ -2,7 +2,7 @@
 
 use reqwest::{header::HeaderMap, Client as HttpClient};
 
-use super::capability::{Capable, Capabilities};
+use super::capability::{Capabilities, Capable};
 use super::models::*;
 
 /// 厂商扩展标记 — 每个厂商实现此 trait。

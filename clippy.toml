@@ -1,0 +1,5 @@
+# Workspace-level Clippy configuration
+# See: https://doc.rust-lang.org/clippy/configuration.html
+
+# Raise cognitive-complexity threshold for agent's streaming code
+cognitive-complexity-threshold = 40

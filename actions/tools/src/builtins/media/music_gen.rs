@@ -128,16 +128,20 @@ crate::submit_builtin_tool! {
     async_ctx: dispatch,
 }
 
-pub async fn dispatch(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow::Result<common::ToolOutput> {
+pub async fn dispatch(
+    ctx: &ToolContext<'_>,
+    args: &serde_json::Value,
+) -> anyhow::Result<common::ToolOutput> {
     let parsed: MusicGenArgs = serde_json::from_value(args.clone())
         .map_err(|e| anyhow::anyhow!("music_gen 参数无效: {e}"))?;
     if let Some(creds) = ctx.image_gen_targets.minimax() {
         return dispatch_minimax_music(ctx, &parsed, creds).await;
     }
 
-    let creds = ctx.image_gen_targets.google().ok_or_else(|| {
-        anyhow::anyhow!("music_gen 需要 Google 或 MiniMax API Key")
-    })?;
+    let creds = ctx
+        .image_gen_targets
+        .google()
+        .ok_or_else(|| anyhow::anyhow!("music_gen 需要 Google 或 MiniMax API Key"))?;
     let (model_id, format) = validate_music_gen_args(&parsed, &creds.music_model)?;
 
     let mut images = Vec::new();

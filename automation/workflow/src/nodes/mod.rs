@@ -1,9 +1,9 @@
-pub mod trigger;
-pub mod data;
-pub mod control;
 pub mod action;
 pub mod ai;
+pub mod control;
+pub mod data;
 pub mod media;
+pub mod trigger;
 
 use std::collections::HashMap;
 use std::sync::OnceLock;
@@ -22,28 +22,61 @@ pub fn build_executor_registry() -> HashMap<NodeType, Box<dyn NodeExecutor>> {
     let mut m: HashMap<NodeType, Box<dyn NodeExecutor>> = HashMap::new();
 
     // 触发器
-    m.insert(NodeType::ManualTrigger, Box::new(trigger::ManualTriggerExec));
-    m.insert(NodeType::ScheduledTrigger, Box::new(trigger::ScheduledTriggerExec));
-    m.insert(NodeType::WebhookTrigger, Box::new(trigger::WebhookTriggerExec));
+    m.insert(
+        NodeType::ManualTrigger,
+        Box::new(trigger::ManualTriggerExec),
+    );
+    m.insert(
+        NodeType::ScheduledTrigger,
+        Box::new(trigger::ScheduledTriggerExec),
+    );
+    m.insert(
+        NodeType::WebhookTrigger,
+        Box::new(trigger::WebhookTriggerExec),
+    );
     m.insert(NodeType::EmailTrigger, Box::new(trigger::EmailTriggerExec));
-    m.insert(NodeType::FileWatchTrigger, Box::new(trigger::FileWatchTriggerExec));
+    m.insert(
+        NodeType::FileWatchTrigger,
+        Box::new(trigger::FileWatchTriggerExec),
+    );
 
     // AI — 接入 providers crate 调用 LLM
     m.insert(NodeType::AiAgentTask, Box::new(ai::AiAgentTaskExec));
-    m.insert(NodeType::ParameterExtraction, Box::new(ai::ParameterExtractionExec));
-    m.insert(NodeType::QuestionClassification, Box::new(ai::QuestionClassificationExec));
-    m.insert(NodeType::KnowledgeRetrieval, Box::new(ai::KnowledgeRetrievalExec));
+    m.insert(
+        NodeType::ParameterExtraction,
+        Box::new(ai::ParameterExtractionExec),
+    );
+    m.insert(
+        NodeType::QuestionClassification,
+        Box::new(ai::QuestionClassificationExec),
+    );
+    m.insert(
+        NodeType::KnowledgeRetrieval,
+        Box::new(ai::KnowledgeRetrievalExec),
+    );
     m.insert(NodeType::Summarization, Box::new(ai::SummarizationExec));
-    m.insert(NodeType::SentimentAnalysis, Box::new(ai::SentimentAnalysisExec));
-    m.insert(NodeType::DocumentUnderstanding, Box::new(ai::DocumentUnderstandingExec));
-    m.insert(NodeType::VisionUnderstanding, Box::new(ai::VisionUnderstandingExec));
+    m.insert(
+        NodeType::SentimentAnalysis,
+        Box::new(ai::SentimentAnalysisExec),
+    );
+    m.insert(
+        NodeType::DocumentUnderstanding,
+        Box::new(ai::DocumentUnderstandingExec),
+    );
+    m.insert(
+        NodeType::VisionUnderstanding,
+        Box::new(ai::VisionUnderstandingExec),
+    );
 
     // 多媒体
     m.insert(NodeType::ImageGeneration, Box::new(media::ImageGenExec));
     m.insert(NodeType::VideoGeneration, Box::new(media::VideoGenExec));
     m.insert(NodeType::MusicGeneration, Box::new(media::MusicGenExec));
     m.insert(NodeType::TextToSpeech, Box::new(media::TtsExec));
-    m.insert(NodeType::SubtitleGeneration, Box::new(media::SubtitleGenExec));
+    m.insert(
+        NodeType::SubtitleGeneration,
+        Box::new(media::SubtitleGenExec),
+    );
     m.insert(NodeType::VoiceClone, Box::new(media::VoiceCloneExec));
     m.insert(NodeType::SpeechToText, Box::new(media::SpeechToTextExec));
     m.insert(NodeType::ImageEdit, Box::new(media::ImageEditExec));
@@ -55,7 +88,10 @@ pub fn build_executor_registry() -> HashMap<NodeType, Box<dyn NodeExecutor>> {
     m.insert(NodeType::Filter, Box::new(control::FilterExec));
     m.insert(NodeType::Merge, Box::new(control::MergeExec));
     m.insert(NodeType::Loop, Box::new(control::LoopExec));
-    m.insert(NodeType::HumanApproval, Box::new(control::HumanApprovalExec));
+    m.insert(
+        NodeType::HumanApproval,
+        Box::new(control::HumanApprovalExec),
+    );
 
     // 数据处理
     m.insert(NodeType::SetFields, Box::new(data::SetFieldsExec));
@@ -71,8 +107,14 @@ pub fn build_executor_registry() -> HashMap<NodeType, Box<dyn NodeExecutor>> {
     m.insert(NodeType::RunLoop, Box::new(action::RunLoopExec));
     m.insert(NodeType::DelayWait, Box::new(action::DelayWaitExec));
     m.insert(NodeType::Output, Box::new(action::OutputExec));
-    m.insert(NodeType::AudioProcessing, Box::new(action::AudioProcessingExec));
-    m.insert(NodeType::SendNotification, Box::new(action::SendNotificationExec));
+    m.insert(
+        NodeType::AudioProcessing,
+        Box::new(action::AudioProcessingExec),
+    );
+    m.insert(
+        NodeType::SendNotification,
+        Box::new(action::SendNotificationExec),
+    );
     m.insert(NodeType::FileIo, Box::new(action::FileIoExec));
     m.insert(NodeType::CustomLoop, Box::new(action::RunLoopExec));
 

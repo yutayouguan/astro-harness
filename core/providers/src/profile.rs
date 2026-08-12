@@ -44,7 +44,6 @@ pub struct ProviderProfile {
     pub supports_embedding: bool,
 
     // ── 媒体能力（表驱动，消除 provider-id 硬编码） ──
-
     /// 图片生成协议模式。`None` = 不支持。
     pub image_mode: Option<ImageGenMode>,
     /// 图片生成默认模型名（空 = 不支持或用 fallback）。
@@ -95,9 +94,7 @@ pub enum AuthKind {
 
 impl AuthKind {
     pub fn for_provider(provider_id: &str) -> Self {
-        resolve(provider_id)
-            .map(|p| p.auth)
-            .unwrap_or(Self::Bearer)
+        resolve(provider_id).map(|p| p.auth).unwrap_or(Self::Bearer)
     }
 }
 
@@ -514,8 +511,8 @@ static OPENAI_COMPAT_FALLBACK: ProviderProfile = ProviderProfile {
     default_tts_model: "",
     default_video_model: "",
     default_music_model: "",
-        default_asr_model: "",
-        default_embedding_model: "",
+    default_asr_model: "",
+    default_embedding_model: "",
 };
 
 /// 将常见别名规范化为表内 id。
@@ -562,8 +559,8 @@ pub fn read_env_api_key(provider_id: &str) -> Option<String> {
 mod model_defaults {
     use std::collections::HashMap;
     use std::fs;
-    use std::sync::OnceLock;
     use std::path::PathBuf;
+    use std::sync::OnceLock;
     use std::time::{Duration, SystemTime};
 
     use serde::{Deserialize, Serialize};
@@ -624,8 +621,15 @@ mod model_defaults {
     ];
 
     const SKIP_SUFFIXES: &[&str] = &[
-        "-preview", "-free", "-extended", ":free", ":extended", "-online",
-        "-nitro", "-floor", "-exp",
+        "-preview",
+        "-free",
+        "-extended",
+        ":free",
+        ":extended",
+        "-online",
+        "-nitro",
+        "-floor",
+        "-exp",
     ];
 
     pub fn refresh_from_openrouter(api_key: &str) -> Result<(), String> {
@@ -643,7 +647,9 @@ mod model_defaults {
             return Err(format!("OpenRouter HTTP {}", resp.status()));
         }
         let json: serde_json::Value = resp.json().map_err(|e| e.to_string())?;
-        let data = json.get("data").and_then(|d| d.as_array())
+        let data = json
+            .get("data")
+            .and_then(|d| d.as_array())
             .ok_or("OpenRouter 响应缺少 data 数组")?;
 
         let mut defaults = HashMap::new();

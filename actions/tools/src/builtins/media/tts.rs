@@ -6,12 +6,12 @@
 //! 音频写入工作区 `generated/audio/`。
 
 use home::{generated_dir, GeneratedKind};
-use providers::minimax::tts_http::{minimax_tts, MiniMaxTtsRequest, VoiceSetting};
 use providers::compat::openai_compatible_base;
 use providers::interactions_http::{
     build_tts_input, google_interactions_tts, InteractionSpeechConfig, InteractionTtsRequest,
 };
 use providers::media_http::default_tts_model;
+use providers::minimax::tts_http::{minimax_tts, MiniMaxTtsRequest, VoiceSetting};
 use providers::ProviderConfig;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -73,7 +73,10 @@ crate::submit_builtin_tool! {
 }
 
 /// 请求 TTS，将音频保存到工作区并返回路径。
-pub async fn dispatch(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow::Result<common::ToolOutput> {
+pub async fn dispatch(
+    ctx: &ToolContext<'_>,
+    args: &serde_json::Value,
+) -> anyhow::Result<common::ToolOutput> {
     let parsed: TtsArgs =
         serde_json::from_value(args.clone()).map_err(|e| anyhow::anyhow!("tts 参数无效: {e}"))?;
     let text = parsed.text.trim();
@@ -119,7 +122,9 @@ pub async fn dispatch(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow
         // Append note to the text portion of the ToolOutput
         let output = match output {
             common::ToolOutput::Media { text, assets } => common::ToolOutput::Media {
-                text: format!("{text}\nnote: speakers/style/stream 仅 Google Interactions TTS 生效"),
+                text: format!(
+                    "{text}\nnote: speakers/style/stream 仅 Google Interactions TTS 生效"
+                ),
                 assets,
             },
             other => other,

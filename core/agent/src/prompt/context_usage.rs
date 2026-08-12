@@ -521,9 +521,6 @@ mod tests {
             snap.segment("conversation").map(|s| s.tokens).unwrap_or(0),
             0
         );
-        assert_eq!(
-            snap.segment("subagent").unwrap().items[0].id,
-            "subagent"
-        );
+        assert_eq!(snap.segment("subagent").unwrap().items[0].id, "subagent");
     }
 }

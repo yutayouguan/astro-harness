@@ -391,9 +391,12 @@ mod tests {
         let targets = ImageGenTargets::default();
         let creds = crate::context::ModelCredentials::default();
         let ctx = test_ctx(&dir, &mut memory, &sessions, &targets, &creds);
-        let err = dispatch(&ctx, &serde_json::json!({"language": "shell", "code": "echo hi"}))
-            .await
-            .unwrap_err();
+        let err = dispatch(
+            &ctx,
+            &serde_json::json!({"language": "shell", "code": "echo hi"}),
+        )
+        .await
+        .unwrap_err();
         assert!(err.to_string().contains("terminal"), "{err}");
     }
 }

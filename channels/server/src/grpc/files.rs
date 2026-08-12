@@ -72,6 +72,7 @@ fn collect_entries(dir: &Path, max_depth: usize) -> anyhow::Result<Vec<FileEntry
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
     use tempfile::TempDir;

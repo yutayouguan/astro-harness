@@ -413,7 +413,10 @@ pub async fn loop_ai_polish(
 
     // 优先级：per-workflow 参数 > 辅助模型全局配置 > 活跃供应商
     let (resolved_pid, resolved_mdl) = {
-        let pid = provider_id.as_deref().map(str::trim).filter(|s| !s.is_empty());
+        let pid = provider_id
+            .as_deref()
+            .map(str::trim)
+            .filter(|s| !s.is_empty());
         let mdl = model.as_deref().map(str::trim).filter(|s| !s.is_empty());
         if pid.is_some() {
             (pid.map(str::to_string), mdl.map(str::to_string))
@@ -453,8 +456,7 @@ pub async fn loop_ai_polish(
         ));
     }
     let api_key = key.unwrap_or_default();
-    let model_name = resolved_mdl
-        .unwrap_or_else(|| provider_cfg.model.clone());
+    let model_name = resolved_mdl.unwrap_or_else(|| provider_cfg.model.clone());
 
     let base_url = if provider_cfg.endpoint.trim().is_empty() {
         None
@@ -495,12 +497,7 @@ pub async fn loop_ai_polish(
         text
     };
 
-    workflow::nodes::ai::one_shot_llm(
-        provider_cfg.kind.backend_id(),
-        &config,
-        &system,
-        &user_msg,
-    )
-    .await
-    .map_err(|e| format!("AI 润色失败: {e}"))
+    workflow::nodes::ai::one_shot_llm(provider_cfg.kind.backend_id(), &config, &system, &user_msg)
+        .await
+        .map_err(|e| format!("AI 润色失败: {e}"))
 }

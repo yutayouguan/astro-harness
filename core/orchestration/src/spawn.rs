@@ -18,4 +18,3 @@ pub struct OrchestrationSpawnRequest {
     /// 为 true 时允许认领崩溃留下的 `running`（进程重启续跑）。
     pub allow_reclaim: bool,
 }
-

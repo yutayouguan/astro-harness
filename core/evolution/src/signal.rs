@@ -24,7 +24,10 @@ pub fn skill_failure_signals(
 ) -> HashMap<String, usize> {
     let mut map: HashMap<String, usize> = HashMap::new();
     for d in decisions {
-        if !matches!(d.kind, DecisionKind::ToolFailure | DecisionKind::UserCorrection) {
+        if !matches!(
+            d.kind,
+            DecisionKind::ToolFailure | DecisionKind::UserCorrection
+        ) {
             continue;
         }
         // 工具类型过滤：只关注 skills 工具（或 tool_name 未知时全量匹配）
@@ -109,9 +112,21 @@ mod tests {
     fn counts_by_skill_id_in_backticks() {
         let skills = vec!["demo-skill".to_string(), "other-skill".to_string()];
         let decisions = vec![
-            entry(DecisionKind::ToolFailure, "技能 `demo-skill` 执行失败", Some("skills")),
-            entry(DecisionKind::ToolFailure, "`demo-skill` 又出错了", Some("skills")),
-            entry(DecisionKind::UserCorrection, "skill: demo-skill 结果不对", Some("skills")),
+            entry(
+                DecisionKind::ToolFailure,
+                "技能 `demo-skill` 执行失败",
+                Some("skills"),
+            ),
+            entry(
+                DecisionKind::ToolFailure,
+                "`demo-skill` 又出错了",
+                Some("skills"),
+            ),
+            entry(
+                DecisionKind::UserCorrection,
+                "skill: demo-skill 结果不对",
+                Some("skills"),
+            ),
             entry(DecisionKind::ToolFailure, "无关日志", Some("terminal")),
         ];
         let counts = skill_failure_signals(&decisions, &skills);
@@ -124,7 +139,11 @@ mod tests {
         let skills = vec!["a-skill".to_string(), "b-skill".to_string()];
         let decisions = vec![
             entry(DecisionKind::ToolFailure, "`a-skill` fail", Some("skills")),
-            entry(DecisionKind::ToolFailure, "`a-skill` fail again", Some("skills")),
+            entry(
+                DecisionKind::ToolFailure,
+                "`a-skill` fail again",
+                Some("skills"),
+            ),
             entry(DecisionKind::ToolFailure, "`b-skill` fail", Some("skills")),
         ];
         let top = top_failing_skill(&decisions, &skills, 2).unwrap();

@@ -9,8 +9,8 @@ use serde_json::{json, Value};
 use super::defaults;
 use super::tools::openai_tools_to_anthropic;
 use crate::http_stream::{resolve_base, trim_slash};
-use crate::types::ProviderConfig;
 use crate::types::message::Message;
+use crate::types::ProviderConfig;
 
 /// 统计消息和工具的 token 数。
 pub async fn anthropic_count_tokens(
@@ -22,8 +22,7 @@ pub async fn anthropic_count_tokens(
     let base = trim_slash(&resolve_base(config, "claude"));
     let url = format!("{base}/v1/messages/count_tokens");
 
-    let (system, api_messages) =
-        crate::impls::anthropic::to_anthropic_messages_public(messages);
+    let (system, api_messages) = crate::impls::anthropic::to_anthropic_messages_public(messages);
 
     let mut body = json!({
         "model": config.model,
@@ -48,10 +47,7 @@ pub async fn anthropic_count_tokens(
         .await
         .context("连接 Anthropic Count Tokens 失败")?;
     let status = resp.status();
-    let v: Value = resp
-        .json()
-        .await
-        .context("解析 Count Tokens 响应失败")?;
+    let v: Value = resp.json().await.context("解析 Count Tokens 响应失败")?;
     if !status.is_success() {
         let msg = v
             .pointer("/error/message")

@@ -73,13 +73,19 @@ async fn handle_connection(stream: tokio::net::TcpStream) -> anyhow::Result<()> 
     };
 
     // 验证 webhook secret
-    let trigger_node = wf.nodes.iter().find(|n| {
-        !n.disabled && n.node_type == NodeType::WebhookTrigger
-    });
+    let trigger_node = wf
+        .nodes
+        .iter()
+        .find(|n| !n.disabled && n.node_type == NodeType::WebhookTrigger);
     if let Some(node) = trigger_node {
-        let secret = node.config.get("secret").and_then(|v| v.as_str()).unwrap_or("");
+        let secret = node
+            .config
+            .get("secret")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
         if !secret.is_empty() {
-            let req_secret = headers.iter()
+            let req_secret = headers
+                .iter()
                 .find(|(k, _)| k.eq_ignore_ascii_case("x-webhook-secret"))
                 .map(|(_, v)| v.as_str())
                 .unwrap_or("");
@@ -91,8 +97,8 @@ async fn handle_connection(stream: tokio::net::TcpStream) -> anyhow::Result<()> 
         }
     }
 
-    let trigger_input: serde_json::Value = serde_json::from_str(&body)
-        .unwrap_or(serde_json::json!({ "raw_body": body }));
+    let trigger_input: serde_json::Value =
+        serde_json::from_str(&body).unwrap_or(serde_json::json!({ "raw_body": body }));
 
     let wf_name = wf.name.clone();
     let _wf_id = workflow_id.to_string();
@@ -114,7 +120,8 @@ async fn handle_connection(stream: tokio::net::TcpStream) -> anyhow::Result<()> 
             let json = serde_json::to_string(&run_result).unwrap_or_default();
             let resp = format!(
                 "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{}",
-                json.len(), json
+                json.len(),
+                json
             );
             stream.write_all(resp.as_bytes()).await?;
         }

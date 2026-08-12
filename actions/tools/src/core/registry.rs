@@ -132,7 +132,10 @@ inventory::collect!(BuiltinToolRegistrar);
 /// 与 `BuiltinToolHandler` 不同，这不需要 `ToolContext` — MCP 工具通过
 /// 捕获的 `Arc<McpHub>` 自行完成调用。
 pub type DynToolHandler = Box<
-    dyn Fn(&str, &serde_json::Value) -> Pin<Box<dyn Future<Output = anyhow::Result<common::ToolOutput>> + Send>>
+    dyn Fn(
+            &str,
+            &serde_json::Value,
+        ) -> Pin<Box<dyn Future<Output = anyhow::Result<common::ToolOutput>> + Send>>
         + Send
         + Sync,
 >;
@@ -233,7 +236,9 @@ impl ToolRegistry {
     ///
     /// 主要用于 MCP 热重载：先 `unregister_toolset("mcp")` 再重新注册最新工具列表。
     pub fn unregister_toolset(&mut self, toolset: &str) {
-        let removed: Vec<String> = self.tools.iter()
+        let removed: Vec<String> = self
+            .tools
+            .iter()
             .filter(|(_, e)| e.toolset == toolset)
             .map(|(k, _)| k.clone())
             .collect();

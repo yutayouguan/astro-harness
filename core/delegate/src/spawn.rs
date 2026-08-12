@@ -82,4 +82,3 @@ pub struct DelegateRunRequest {
     #[serde(skip)]
     pub hook_bus: Option<Arc<hooks::PluginHookBus>>,
 }
-

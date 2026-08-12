@@ -33,13 +33,12 @@ pub fn wrap_think_tag_extraction(stream: CompletionStream) -> CompletionStream {
             loop {
                 match stream.next().await {
                     Some(Ok(chunk)) => {
-                        let chunks = ext.process_chunk(chunk);
+                        let mut chunks = ext.process_chunk(chunk);
                         if chunks.is_empty() {
                             continue;
                         }
-                        let mut iter = chunks.into_iter();
-                        let first = iter.next().unwrap();
-                        for rest in iter {
+                        let first = chunks.remove(0);
+                        for rest in chunks {
                             pending.push_back(Ok(rest));
                         }
                         return Some((Ok(first), (stream, ext, pending, done)));
@@ -48,14 +47,13 @@ pub fn wrap_think_tag_extraction(stream: CompletionStream) -> CompletionStream {
                         return Some((Err(e), (stream, ext, pending, done)));
                     }
                     None => {
-                        let remaining = ext.flush();
+                        let mut remaining = ext.flush();
                         done = true;
                         if remaining.is_empty() {
                             return None;
                         }
-                        let mut iter = remaining.into_iter();
-                        let first = iter.next().unwrap();
-                        for rest in iter {
+                        let first = remaining.remove(0);
+                        for rest in remaining {
                             pending.push_back(Ok(rest));
                         }
                         return Some((Ok(first), (stream, ext, pending, done)));
@@ -268,10 +266,7 @@ mod tests {
         assert_eq!(split_at_partial_prefix("我", "<think>"), ("我", ""));
         assert_eq!(split_at_partial_prefix("你好", "<think>"), ("你好", ""));
         assert_eq!(split_at_partial_prefix("说<", "<think>"), ("说", "<"));
-        assert_eq!(
-            split_at_partial_prefix("我<thi", "<think>"),
-            ("我", "<thi")
-        );
+        assert_eq!(split_at_partial_prefix("我<thi", "<think>"), ("我", "<thi"));
         // emoji (4 字节)
         assert_eq!(split_at_partial_prefix("😊", "<think>"), ("😊", ""));
     }

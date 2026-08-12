@@ -1427,10 +1427,7 @@ pub async fn google_batch_embed(
         .await
         .context("解析 Google Embedding 响应失败")?;
     if !status.is_success() {
-        anyhow::bail!(
-            "Google Embedding HTTP {status}: {}",
-            error_message(&v)
-        );
+        anyhow::bail!("Google Embedding HTTP {status}: {}", error_message(&v));
     }
 
     let embeddings = v
@@ -1503,10 +1500,7 @@ pub async fn google_create_cached_content(
         .await
         .context("解析 Google CachedContents 响应失败")?;
     if !status.is_success() {
-        anyhow::bail!(
-            "Google CachedContents HTTP {status}: {}",
-            error_message(&v)
-        );
+        anyhow::bail!("Google CachedContents HTTP {status}: {}", error_message(&v));
     }
 
     v.get("name")

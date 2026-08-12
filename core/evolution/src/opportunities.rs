@@ -118,7 +118,10 @@ fn skill_file_bytes(base: &Path, skill_id: &str) -> Option<u64> {
     // 尝试全局技能目录
     let candidates = [
         base.join("skills").join(skill_id).join("SKILL.md"),
-        base.join("workspace").join("skills").join(skill_id).join("SKILL.md"),
+        base.join("workspace")
+            .join("skills")
+            .join(skill_id)
+            .join("SKILL.md"),
     ];
     for p in &candidates {
         if let Ok(meta) = std::fs::metadata(p) {
@@ -148,11 +151,8 @@ mod tests {
         let skills = vec!["target-skill".to_string()];
         let decisions: Vec<DecisionEntry> = (0..4)
             .map(|_| {
-                DecisionEntry::new(
-                    DecisionKind::ToolFailure,
-                    "`target-skill` failed",
-                )
-                .with_tool("skills")
+                DecisionEntry::new(DecisionKind::ToolFailure, "`target-skill` failed")
+                    .with_tool("skills")
             })
             .collect();
         let dir = tempfile::tempdir().unwrap();

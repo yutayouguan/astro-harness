@@ -6,7 +6,7 @@ use serde_json::{json, Value};
 
 use crate::compat::{OpenAICompatible, OpenAICompletionModel};
 use crate::traits::{
-    Capable, Capabilities, EmbeddingModel, FromClient, ImageGenModel, ModelBase, Nothing,
+    Capabilities, Capable, EmbeddingModel, FromClient, ImageGenModel, ModelBase, Nothing,
     ProviderClient, ProviderExt, TTSModel,
 };
 use crate::types::media::{Embedding, GeneratedAudio, GeneratedImage, ImageGenConfig, TTSConfig};
@@ -38,13 +38,12 @@ impl OpenAICompatible for OpenAI {
 
     fn finalize_body(&self, body: &mut Value) {
         if let Some(tc) = body.get("thinking_config").cloned() {
-            body.as_object_mut().unwrap().remove("thinking_config");
+            if let Some(obj) = body.as_object_mut() {
+                obj.remove("thinking_config");
+            }
             let enabled = tc.get("enabled").and_then(|v| v.as_bool()).unwrap_or(false);
             if enabled {
-                let effort = tc
-                    .get("effort")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("high");
+                let effort = tc.get("effort").and_then(|v| v.as_str()).unwrap_or("high");
                 let mapped = match effort {
                     "max" | "xhigh" => "high",
                     "" => "high",
@@ -86,10 +85,17 @@ impl FromClient<OpenAI> for OpenAIEmbeddingModel {
 impl EmbeddingModel for OpenAIEmbeddingModel {
     async fn embed(&self, texts: &[String]) -> anyhow::Result<Vec<Embedding>> {
         let cfg = self.0.to_provider_config();
-        let vectors =
-            crate::openai::embeddings_http::openai_batch_embed(self.0.http(), texts, self.0.model(), &cfg)
-                .await?;
-        Ok(vectors.into_iter().map(|v| Embedding { values: v }).collect())
+        let vectors = crate::openai::embeddings_http::openai_batch_embed(
+            self.0.http(),
+            texts,
+            self.0.model(),
+            &cfg,
+        )
+        .await?;
+        Ok(vectors
+            .into_iter()
+            .map(|v| Embedding { values: v })
+            .collect())
     }
 }
 
@@ -144,7 +150,11 @@ impl TTSModel for OpenAITTSModel {
             model: self.0.model().to_string(),
             input: text.to_string(),
             voice,
-            speed: if tts_config.speed > 0.0 { tts_config.speed } else { 1.0 },
+            speed: if tts_config.speed > 0.0 {
+                tts_config.speed
+            } else {
+                1.0
+            },
             ..Default::default()
         };
         let result = crate::openai::tts_http::openai_tts(self.0.http(), &cfg, &req).await?;

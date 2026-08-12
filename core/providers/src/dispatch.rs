@@ -3,11 +3,11 @@
 //! 所有 provider 操作（聊天、媒体、验证、元数据）通过本模块的公开函数访问。
 //! 内部使用 trait 系统（`Registry` + `DynProvider`）路由到具体实现。
 
-use anyhow::Result;
 use serde_json::Value;
 
-use crate::types::message::{Message, ToolDefinition};
+use crate::types::error::{ProviderError, ProviderResult};
 use crate::types::media::{GeneratedAudio, GeneratedImage, GeneratedVideo};
+use crate::types::message::{Message, ToolDefinition};
 use crate::types::request::{CompletionRequest, ProviderConfig, ThinkingConfig};
 use crate::types::stream::CompletionStream;
 
@@ -18,16 +18,19 @@ pub async fn chat_stream_direct(
     provider: &str,
     request: CompletionRequest,
     config: &ProviderConfig,
-) -> Result<CompletionStream> {
+) -> ProviderResult<CompletionStream> {
     let provider = normalize_provider_id(provider);
     let mut reg = crate::registry::Registry::new();
     register_provider(&mut reg, provider, config);
 
     let dyn_model = reg
         .completion_model(provider)
-        .ok_or_else(|| anyhow::anyhow!("未知 provider: {provider}"))?;
+        .ok_or_else(|| ProviderError::UnknownProvider(provider.to_string()))?;
 
-    dyn_model.stream(request).await
+    dyn_model
+        .stream(request)
+        .await
+        .map_err(ProviderError::Other)
 }
 
 /// 聊天补全 — 接受旧签名（messages + tools JSON + config）。
@@ -38,15 +41,22 @@ pub async fn chat_stream(
     messages: Vec<Message>,
     tools: Vec<Value>,
     config: &ProviderConfig,
-) -> Result<CompletionStream> {
+) -> ProviderResult<CompletionStream> {
     let tool_defs: Vec<ToolDefinition> = tools
         .iter()
         .filter_map(|t| {
             let f = t.get("function").unwrap_or(t);
             Some(ToolDefinition {
                 name: f.get("name")?.as_str()?.to_string(),
-                description: f.get("description").and_then(|d| d.as_str()).unwrap_or("").to_string(),
-                parameters: f.get("parameters").cloned().unwrap_or(serde_json::json!({"type": "object", "properties": {}})),
+                description: f
+                    .get("description")
+                    .and_then(|d| d.as_str())
+                    .unwrap_or("")
+                    .to_string(),
+                parameters: f
+                    .get("parameters")
+                    .cloned()
+                    .unwrap_or(serde_json::json!({"type": "object", "properties": {}})),
             })
         })
         .collect();
@@ -74,11 +84,15 @@ pub async fn generate_image(
     provider: &str,
     prompt: &str,
     config: &ProviderConfig,
-) -> Result<Vec<GeneratedImage>> {
+) -> ProviderResult<Vec<GeneratedImage>> {
     let provider = normalize_provider_id(provider);
     let profile = crate::profile::resolve_or_openai_compat(provider);
-    let mode = profile.image_mode
-        .ok_or_else(|| anyhow::anyhow!("{provider} 不支持图片生成"))?;
+    let mode = profile
+        .image_mode
+        .ok_or_else(|| ProviderError::UnsupportedCapability {
+            provider: provider.to_string(),
+            capability: "图片生成".to_string(),
+        })?;
     let mut cfg = config.clone();
     if cfg.model.trim().is_empty() && !profile.default_image_model.is_empty() {
         cfg.model = profile.default_image_model.to_string();
@@ -86,14 +100,16 @@ pub async fn generate_image(
     let client = shared_http_client();
     match mode {
         crate::profile::ImageGenMode::OpenAi => {
-            crate::openai::image_http::openai_generate_image(&client, prompt, &cfg).await
+            Ok(crate::openai::image_http::openai_generate_image(&client, prompt, &cfg).await?)
         }
         crate::profile::ImageGenMode::GoogleInteractions => {
             let req = crate::google::interactions_http::InteractionImageRequest {
                 prompt: prompt.to_string(),
                 ..Default::default()
             };
-            let result = crate::google::interactions_http::google_interactions_image(&client, &cfg, &req).await?;
+            let result =
+                crate::google::interactions_http::google_interactions_image(&client, &cfg, &req)
+                    .await?;
             Ok(vec![result.image])
         }
         crate::profile::ImageGenMode::MiniMax => {
@@ -101,7 +117,7 @@ pub async fn generate_image(
                 prompt: prompt.to_string(),
                 ..Default::default()
             };
-            crate::minimax::image_http::minimax_generate_image(&client, &cfg, &req).await
+            Ok(crate::minimax::image_http::minimax_generate_image(&client, &cfg, &req).await?)
         }
     }
 }
@@ -111,11 +127,14 @@ pub async fn text_to_speech(
     provider: &str,
     text: &str,
     config: &ProviderConfig,
-) -> Result<GeneratedAudio> {
+) -> ProviderResult<GeneratedAudio> {
     let provider = normalize_provider_id(provider);
     let profile = crate::profile::resolve_or_openai_compat(provider);
     if !profile.supports_tts() {
-        anyhow::bail!("{provider} 不支持语音合成 (TTS)");
+        return Err(ProviderError::UnsupportedCapability {
+            provider: provider.to_string(),
+            capability: "语音合成 (TTS)".to_string(),
+        });
     }
     let mut cfg = config.clone();
     if cfg.model.trim().is_empty() {
@@ -129,7 +148,11 @@ pub async fn text_to_speech(
                 ..Default::default()
             };
             let r = crate::minimax::tts_http::minimax_tts(&client, &cfg, &req).await?;
-            Ok(GeneratedAudio { data: r.audio_bytes, mime_type: r.mime_type, duration_ms: r.duration_ms })
+            Ok(GeneratedAudio {
+                data: r.audio_bytes,
+                mime_type: r.mime_type,
+                duration_ms: r.duration_ms,
+            })
         }
         _ => {
             let req = crate::openai::tts_http::OpenAiTtsRequest {
@@ -140,7 +163,11 @@ pub async fn text_to_speech(
                 speed: 1.0,
             };
             let r = crate::openai::tts_http::openai_tts(&client, &cfg, &req).await?;
-            Ok(GeneratedAudio { data: r.audio_bytes, mime_type: r.mime_type, duration_ms: 0 })
+            Ok(GeneratedAudio {
+                data: r.audio_bytes,
+                mime_type: r.mime_type,
+                duration_ms: 0,
+            })
         }
     }
 }
@@ -176,10 +203,13 @@ pub async fn generate_video(
     provider: &str,
     prompt: &str,
     config: &ProviderConfig,
-) -> Result<GeneratedVideo> {
+) -> ProviderResult<GeneratedVideo> {
     generate_video_with_options(
         provider,
-        &VideoGenOptions { prompt: prompt.to_string(), ..Default::default() },
+        &VideoGenOptions {
+            prompt: prompt.to_string(),
+            ..Default::default()
+        },
         config,
     )
     .await
@@ -190,11 +220,14 @@ pub async fn generate_video_with_options(
     provider: &str,
     options: &VideoGenOptions,
     config: &ProviderConfig,
-) -> Result<GeneratedVideo> {
+) -> ProviderResult<GeneratedVideo> {
     let provider = normalize_provider_id(provider);
     let profile = crate::profile::resolve_or_openai_compat(provider);
     if !profile.supports_video() {
-        anyhow::bail!("{provider} 不支持视频生成");
+        return Err(ProviderError::UnsupportedCapability {
+            provider: provider.to_string(),
+            capability: "视频生成".to_string(),
+        });
     }
     let mut cfg = config.clone();
     if cfg.model.trim().is_empty() {
@@ -228,9 +261,7 @@ pub async fn generate_video_with_options(
             };
 
             // H3 Context-IR 提示词增强
-            if options.enhance_prompt
-                && crate::minimax::video_http::is_h3_model(&model_name)
-            {
+            if options.enhance_prompt && crate::minimax::video_http::is_h3_model(&model_name) {
                 if let Ok(ir) =
                     crate::minimax::video_http::minimax_enhance_prompt(&client, &cfg, &req).await
                 {
@@ -242,23 +273,27 @@ pub async fn generate_video_with_options(
 
             let task_id =
                 crate::minimax::video_http::minimax_create_video(&client, &cfg, &req).await?;
-            let deadline =
-                std::time::Instant::now() + std::time::Duration::from_secs(10 * 60);
+            let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10 * 60);
             loop {
                 if std::time::Instant::now() > deadline {
-                    anyhow::bail!("MiniMax 视频生成超时（task_id={task_id}）");
+                    return Err(ProviderError::Timeout {
+                        operation: "MiniMax 视频生成".to_string(),
+                        detail: format!("task_id={task_id}"),
+                    });
                 }
                 tokio::time::sleep(std::time::Duration::from_secs(10)).await;
                 let status = crate::minimax::video_http::minimax_query_video(
-                    &client, &cfg, &task_id, &model_name,
+                    &client,
+                    &cfg,
+                    &task_id,
+                    &model_name,
                 )
                 .await?;
                 if status.status == crate::minimax::video_http::VideoTaskStatus::Success {
                     if let Some(ref url) = status.download_url {
-                        let result = crate::minimax::video_http::minimax_download_video_url(
-                            &client, url,
-                        )
-                        .await?;
+                        let result =
+                            crate::minimax::video_http::minimax_download_video_url(&client, url)
+                                .await?;
                         break Ok(GeneratedVideo {
                             data: result.data,
                             mime_type: result.mime_type,
@@ -278,14 +313,25 @@ pub async fn generate_video_with_options(
                             height: status.video_height.unwrap_or(0),
                         });
                     }
-                    anyhow::bail!("MiniMax 视频生成成功但无下载途径");
+                    return Err(ProviderError::ModelError {
+                        provider: "minimax".to_string(),
+                        detail: "视频生成成功但无下载途径".to_string(),
+                    });
                 }
                 if !status.status.is_pending() {
-                    anyhow::bail!("MiniMax 视频生成失败: {:?}", status.status);
+                    return Err(ProviderError::ModelError {
+                        provider: "minimax".to_string(),
+                        detail: format!("视频生成失败: {:?}", status.status),
+                    });
                 }
             }
         }
-        _ => anyhow::bail!("{provider} 的视频生成暂未对接"),
+        _ => {
+            return Err(ProviderError::UnsupportedCapability {
+                provider: provider.to_string(),
+                capability: "视频生成".to_string(),
+            })
+        }
     }
 }
 
@@ -294,11 +340,14 @@ pub async fn generate_music(
     provider: &str,
     prompt: &str,
     config: &ProviderConfig,
-) -> Result<GeneratedAudio> {
+) -> ProviderResult<GeneratedAudio> {
     let provider = normalize_provider_id(provider);
     let profile = crate::profile::resolve_or_openai_compat(provider);
     if !profile.supports_music() {
-        anyhow::bail!("{provider} 不支持音乐生成");
+        return Err(ProviderError::UnsupportedCapability {
+            provider: provider.to_string(),
+            capability: "音乐生成".to_string(),
+        });
     }
     let mut cfg = config.clone();
     if cfg.model.trim().is_empty() {
@@ -312,9 +361,18 @@ pub async fn generate_music(
                 ..Default::default()
             };
             let r = crate::minimax::music_http::minimax_generate_music(&client, &cfg, &req).await?;
-            Ok(GeneratedAudio { data: r.audio_bytes, mime_type: r.mime_type, duration_ms: r.duration_ms })
+            Ok(GeneratedAudio {
+                data: r.audio_bytes,
+                mime_type: r.mime_type,
+                duration_ms: r.duration_ms,
+            })
         }
-        _ => anyhow::bail!("{provider} 的音乐生成暂未对接"),
+        _ => {
+            return Err(ProviderError::UnsupportedCapability {
+                provider: provider.to_string(),
+                capability: "音乐生成".to_string(),
+            })
+        }
     }
 }
 
@@ -323,18 +381,24 @@ pub async fn embed(
     provider: &str,
     texts: &[String],
     config: &ProviderConfig,
-) -> Result<Vec<Vec<f32>>> {
+) -> ProviderResult<Vec<Vec<f32>>> {
     let provider = normalize_provider_id(provider);
     let profile = crate::profile::resolve_or_openai_compat(provider);
     if !profile.supports_embedding {
-        anyhow::bail!("{provider} 不支持文本嵌入");
+        return Err(ProviderError::UnsupportedCapability {
+            provider: provider.to_string(),
+            capability: "文本嵌入".to_string(),
+        });
     }
     let mut cfg = config.clone();
     if cfg.model.trim().is_empty() && !profile.default_embedding_model.is_empty() {
         cfg.model = profile.default_embedding_model.to_string();
     }
     let client = shared_http_client();
-    crate::openai::embeddings_http::openai_batch_embed(&client, texts, &cfg.model, &cfg).await
+    Ok(
+        crate::openai::embeddings_http::openai_batch_embed(&client, texts, &cfg.model, &cfg)
+            .await?,
+    )
 }
 
 /// 连通性验证。
@@ -366,11 +430,7 @@ fn normalize_provider_id(id: &str) -> &str {
 }
 
 /// 根据 provider id 注册到注册表。
-fn register_provider(
-    reg: &mut crate::registry::Registry,
-    provider: &str,
-    config: &ProviderConfig,
-) {
+fn register_provider(reg: &mut crate::registry::Registry, provider: &str, config: &ProviderConfig) {
     let key = &config.api_key;
     let base = config.base_url.as_deref().filter(|s| !s.trim().is_empty());
     let model = &config.model;
@@ -386,8 +446,12 @@ fn register_provider(
         "ollama" => register_compat::<crate::impls::ollama::Ollama>(reg, key, base, model),
         "nvidia" => register_compat::<crate::impls::nvidia::Nvidia>(reg, key, base, model),
         "bailian" => register_media::<crate::impls::bailian::Bailian>(reg, key, base, model),
-        "volcengine" => register_media::<crate::impls::volcengine::Volcengine>(reg, key, base, model),
-        "openrouter" => register_compat::<crate::impls::openrouter::OpenRouter>(reg, key, base, model),
+        "volcengine" => {
+            register_media::<crate::impls::volcengine::Volcengine>(reg, key, base, model)
+        }
+        "openrouter" => {
+            register_compat::<crate::impls::openrouter::OpenRouter>(reg, key, base, model)
+        }
         "minimax" | "minmax" => reg.register_minimax(key, base, model),
         "minimax-anthropic" => reg.register_anthropic(key, base, model),
         "hunyuan" => register_media::<crate::impls::hunyuan::Hunyuan>(reg, key, base, model),
@@ -404,12 +468,12 @@ fn register_compat<Ext>(
     api_key: &str,
     base_url: Option<&str>,
     model: &str,
-)
-where
+) where
     Ext: crate::compat::OpenAICompatible
         + crate::traits::ProviderExt
-        + crate::traits::Capabilities<Chat = crate::traits::Capable<crate::compat::OpenAICompletionModel<Ext>>>
-        + Default
+        + crate::traits::Capabilities<
+            Chat = crate::traits::Capable<crate::compat::OpenAICompletionModel<Ext>>,
+        > + Default
         + Copy
         + 'static,
 {
@@ -421,8 +485,7 @@ fn register_media<Ext>(
     api_key: &str,
     base_url: Option<&str>,
     model: &str,
-)
-where
+) where
     Ext: crate::compat::OpenAICompatible
         + crate::traits::ProviderExt
         + crate::traits::Capabilities<
@@ -430,8 +493,7 @@ where
             Embedding = crate::traits::Capable<crate::compat::media::CompatEmbeddingModel>,
             ImageGen = crate::traits::Capable<crate::compat::media::CompatImageGenModel>,
             TTS = crate::traits::Capable<crate::compat::media::CompatTTSModel>,
-        >
-        + Default
+        > + Default
         + Copy
         + 'static,
 {
@@ -446,10 +508,25 @@ mod tests {
     fn register_all_providers() {
         let config = ProviderConfig::default();
         let providers = [
-            "openai", "anthropic", "claude", "deepseek", "google",
-            "azure", "zhipu", "moonshot", "ollama", "nvidia",
-            "bailian", "volcengine", "openrouter", "minimax", "hunyuan",
-            "mimo", "gemini-native", "openai-responses", "minimax-responses",
+            "openai",
+            "anthropic",
+            "claude",
+            "deepseek",
+            "google",
+            "azure",
+            "zhipu",
+            "moonshot",
+            "ollama",
+            "nvidia",
+            "bailian",
+            "volcengine",
+            "openrouter",
+            "minimax",
+            "hunyuan",
+            "mimo",
+            "gemini-native",
+            "openai-responses",
+            "minimax-responses",
         ];
         for id in providers {
             let mut reg = crate::registry::Registry::new();

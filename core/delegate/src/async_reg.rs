@@ -230,7 +230,6 @@ pub fn list_persisted_running() -> Vec<(String, DelegateRunRequest)> {
     out
 }
 
-
 /// 创建 running 记录并触发后台执行；立即返回 `task_id`。
 pub fn start_delegate_async(
     req: DelegateRunRequest,

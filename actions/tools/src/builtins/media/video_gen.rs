@@ -100,7 +100,10 @@ crate::submit_builtin_tool! {
 }
 
 /// 调用 Google 视频接口并落盘。
-pub async fn dispatch(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow::Result<common::ToolOutput> {
+pub async fn dispatch(
+    ctx: &ToolContext<'_>,
+    args: &serde_json::Value,
+) -> anyhow::Result<common::ToolOutput> {
     let parsed: VideoGenArgs = serde_json::from_value(args.clone())
         .map_err(|e| anyhow::anyhow!("video_gen 参数无效: {e}"))?;
     let prompt = parsed.prompt.trim();
@@ -434,10 +437,7 @@ async fn dispatch_minimax_video(
         };
         let bytes = std::fs::read(&abs)
             .map_err(|e| anyhow::anyhow!("读取图片失败 {}: {e}", abs.display()))?;
-        let b64 = base64::Engine::encode(
-            &base64::engine::general_purpose::STANDARD,
-            &bytes,
-        );
+        let b64 = base64::Engine::encode(&base64::engine::general_purpose::STANDARD, &bytes);
         let mime = mime_from_name(p);
         Ok(format!("data:{mime};base64,{b64}"))
     };
@@ -485,7 +485,11 @@ async fn dispatch_minimax_video(
         .iter()
         .filter_map(|v| {
             let t = v.trim();
-            if t.is_empty() { None } else { Some(t.to_string()) }
+            if t.is_empty() {
+                None
+            } else {
+                Some(t.to_string())
+            }
         })
         .collect();
 
@@ -497,7 +501,11 @@ async fn dispatch_minimax_video(
         .iter()
         .filter_map(|a| {
             let t = a.trim();
-            if t.is_empty() { None } else { Some(t.to_string()) }
+            if t.is_empty() {
+                None
+            } else {
+                Some(t.to_string())
+            }
         })
         .collect();
 
@@ -611,7 +619,10 @@ async fn dispatch_minimax_video(
                 ));
             }
             VideoTaskStatus::Fail | VideoTaskStatus::Cancelled => {
-                anyhow::bail!("MiniMax 视频生成失败 (task_id={task_id}, status={:?})", result.status);
+                anyhow::bail!(
+                    "MiniMax 视频生成失败 (task_id={task_id}, status={:?})",
+                    result.status
+                );
             }
             _ => {
                 if poll_count >= max_polls {

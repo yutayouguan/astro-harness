@@ -7,7 +7,9 @@ use anyhow::{anyhow, Context, Result};
 use reqwest::Client as HttpClient;
 use serde_json::{json, Value};
 
-use crate::traits::{Capable, Capabilities, CompletionModel, FromClient, Nothing, ProviderClient, ProviderExt};
+use crate::traits::{
+    Capabilities, Capable, CompletionModel, FromClient, Nothing, ProviderClient, ProviderExt,
+};
 use crate::types::{CompletionRequest, CompletionStream};
 
 // ─── Provider Extension ─────────────────────────────────
@@ -63,7 +65,13 @@ impl ResponsesCompletionModel {
         model: String,
         provider_id: &'static str,
     ) -> Self {
-        Self { http, base_url, api_key, model, provider_id }
+        Self {
+            http,
+            base_url,
+            api_key,
+            model,
+            provider_id,
+        }
     }
 }
 
@@ -89,7 +97,11 @@ impl CompletionModel for ResponsesCompletionModel {
         let base = crate::compat::openai_compatible_base(&self.base_url);
         let url = format!("{base}/responses");
         let is_openai = self.provider_id.starts_with("openai");
-        let model = if request.model.is_empty() { &self.model } else { &request.model };
+        let model = if request.model.is_empty() {
+            &self.model
+        } else {
+            &request.model
+        };
 
         let input = crate::openai::responses::to_responses_input(&request.messages);
 
@@ -122,14 +134,18 @@ impl CompletionModel for ResponsesCompletionModel {
 
         // Tools — 直接从 ToolDefinition 构建 Responses 格式
         if !request.tools.is_empty() {
-            let tools: Vec<Value> = request.tools.iter().map(|t| {
-                json!({
-                    "type": "function",
-                    "name": t.name,
-                    "description": t.description,
-                    "parameters": t.parameters,
+            let tools: Vec<Value> = request
+                .tools
+                .iter()
+                .map(|t| {
+                    json!({
+                        "type": "function",
+                        "name": t.name,
+                        "description": t.description,
+                        "parameters": t.parameters,
+                    })
                 })
-            }).collect();
+                .collect();
             body["tools"] = Value::Array(tools);
             body["tool_choice"] = json!("auto");
             if is_openai {
@@ -161,7 +177,8 @@ impl CompletionModel for ResponsesCompletionModel {
             }
         }
 
-        let response = self.http
+        let response = self
+            .http
             .post(&url)
             .bearer_auth(self.api_key.trim())
             .header("content-type", "application/json")

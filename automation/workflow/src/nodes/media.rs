@@ -8,12 +8,10 @@ use crate::engine::variables::VariableContext;
 use crate::model::WorkflowNode;
 
 /// 从节点 config 中解析字符串数组字段（支持 JSON 数组或逗号分隔字符串）。
-fn parse_string_array(
-    config: &serde_json::Value,
-    key: &str,
-    ctx: &VariableContext,
-) -> Vec<String> {
-    let Some(val) = config.get(key) else { return vec![] };
+fn parse_string_array(config: &serde_json::Value, key: &str, ctx: &VariableContext) -> Vec<String> {
+    let Some(val) = config.get(key) else {
+        return vec![];
+    };
     if let Some(arr) = val.as_array() {
         arr.iter()
             .filter_map(|v| v.as_str().map(|s| ctx.interpolate(s)))
@@ -48,41 +46,59 @@ async fn asr_transcribe(node: &WorkflowNode, audio_path: &str) -> Result<String>
         .map(|p| p.default_asr_model)
         .unwrap_or("");
     let config = ProviderConfig {
-        model: if asr_model.is_empty() { config.model } else { asr_model.to_string() },
+        model: if asr_model.is_empty() {
+            config.model
+        } else {
+            asr_model.to_string()
+        },
         ..config
     };
 
     let client = reqwest::Client::new();
     let text = providers::openai::media_compat::openai_audio_transcriptions(
-        &client, &audio_bytes, &filename, &config,
-    ).await?;
+        &client,
+        &audio_bytes,
+        &filename,
+        &config,
+    )
+    .await?;
     Ok(text)
 }
 
 fn build_media_config(node: &WorkflowNode) -> Result<(String, ProviderConfig)> {
-    let provider_id = node.config.get("provider_id").and_then(|v| v.as_str()).unwrap_or("openai");
-    let model = node.config.get("model").and_then(|v| v.as_str()).unwrap_or("");
+    let provider_id = node
+        .config
+        .get("provider_id")
+        .and_then(|v| v.as_str())
+        .unwrap_or("openai");
+    let model = node
+        .config
+        .get("model")
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
     let auth = providers::AuthKind::for_provider(provider_id);
     let api_key = if auth == providers::AuthKind::None {
         String::new()
     } else {
-        providers::profile::read_env_api_key(provider_id).ok_or_else(|| {
-            anyhow::anyhow!("未找到 {} 的 API Key 环境变量", provider_id)
-        })?
+        providers::profile::read_env_api_key(provider_id)
+            .ok_or_else(|| anyhow::anyhow!("未找到 {} 的 API Key 环境变量", provider_id))?
     };
     let base_url = Some(providers::profile::default_base_for(provider_id).to_string())
         .filter(|s| !s.is_empty());
-    Ok((provider_id.to_string(), ProviderConfig {
-        api_key,
-        base_url,
-        model: model.to_string(),
-        temperature: 0.7,
-        max_tokens: 4096,
-        thinking_enabled: false,
-        reasoning_effort: String::new(),
-        additional_params: serde_json::json!({}),
-        previous_interaction_id: None,
-    }))
+    Ok((
+        provider_id.to_string(),
+        ProviderConfig {
+            api_key,
+            base_url,
+            model: model.to_string(),
+            temperature: 0.7,
+            max_tokens: 4096,
+            thinking_enabled: false,
+            reasoning_effort: String::new(),
+            additional_params: serde_json::json!({}),
+            previous_interaction_id: None,
+        },
+    ))
 }
 
 // ── Image Generation ────────────────────────────────────────────────
@@ -92,7 +108,11 @@ pub struct ImageGenExec;
 #[async_trait]
 impl NodeExecutor for ImageGenExec {
     async fn execute(&self, node: &WorkflowNode, ctx: &VariableContext) -> Result<NodeResult> {
-        let prompt_tpl = node.config.get("prompt_template").and_then(|v| v.as_str()).unwrap_or("");
+        let prompt_tpl = node
+            .config
+            .get("prompt_template")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
         let prompt = ctx.interpolate(prompt_tpl);
         if prompt.trim().is_empty() {
             bail!("图片生成节点的提示词(prompt_template)为空");
@@ -109,8 +129,17 @@ impl NodeExecutor for ImageGenExec {
 
         let mut paths = Vec::new();
         for (i, img) in images.iter().enumerate() {
-            let ext = if img.mime_type.contains("png") { "png" } else { "jpg" };
-            let filename = format!("img_{}_{}.{}", chrono::Local::now().format("%Y%m%d_%H%M%S"), i, ext);
+            let ext = if img.mime_type.contains("png") {
+                "png"
+            } else {
+                "jpg"
+            };
+            let filename = format!(
+                "img_{}_{}.{}",
+                chrono::Local::now().format("%Y%m%d_%H%M%S"),
+                i,
+                ext
+            );
             let path = artifacts_dir.join(&filename);
             std::fs::write(&path, &img.data)?;
             paths.push(path.to_string_lossy().to_string());
@@ -131,7 +160,11 @@ pub struct VideoGenExec;
 #[async_trait]
 impl NodeExecutor for VideoGenExec {
     async fn execute(&self, node: &WorkflowNode, ctx: &VariableContext) -> Result<NodeResult> {
-        let prompt_tpl = node.config.get("prompt_template").and_then(|v| v.as_str()).unwrap_or("");
+        let prompt_tpl = node
+            .config
+            .get("prompt_template")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
         let prompt = ctx.interpolate(prompt_tpl);
         if prompt.trim().is_empty() {
             bail!("视频生成节点的提示词为空");
@@ -140,11 +173,15 @@ impl NodeExecutor for VideoGenExec {
         let (provider_id, config) = build_media_config(node)?;
 
         // 从节点 config 读取所有视频生成参数
-        let first_frame = node.config.get("first_frame_image")
+        let first_frame = node
+            .config
+            .get("first_frame_image")
             .and_then(|v| v.as_str())
             .map(|s| ctx.interpolate(s))
             .filter(|s| !s.trim().is_empty());
-        let last_frame = node.config.get("last_frame_image")
+        let last_frame = node
+            .config
+            .get("last_frame_image")
             .and_then(|v| v.as_str())
             .map(|s| ctx.interpolate(s))
             .filter(|s| !s.trim().is_empty());
@@ -153,20 +190,30 @@ impl NodeExecutor for VideoGenExec {
         let ref_videos = parse_string_array(&node.config, "reference_videos", ctx);
         let ref_audios = parse_string_array(&node.config, "reference_audios", ctx);
 
-        let duration = node.config.get("duration_seconds")
+        let duration = node
+            .config
+            .get("duration_seconds")
             .and_then(|v| v.as_u64())
             .map(|d| d as u32);
-        let resolution = node.config.get("resolution")
+        let resolution = node
+            .config
+            .get("resolution")
             .and_then(|v| v.as_str())
             .map(|s| s.to_string())
             .filter(|s| !s.trim().is_empty());
-        let ratio = node.config.get("aspect_ratio")
+        let ratio = node
+            .config
+            .get("aspect_ratio")
             .and_then(|v| v.as_str())
             .map(|s| s.to_string())
             .filter(|s| !s.trim().is_empty());
-        let prompt_optimizer = node.config.get("prompt_optimizer")
+        let prompt_optimizer = node
+            .config
+            .get("prompt_optimizer")
             .and_then(|v| v.as_bool());
-        let enhance_prompt = node.config.get("enhance_prompt")
+        let enhance_prompt = node
+            .config
+            .get("enhance_prompt")
             .and_then(|v| v.as_bool())
             .unwrap_or(false);
 
@@ -184,9 +231,9 @@ impl NodeExecutor for VideoGenExec {
             enhance_prompt,
         };
 
-        let result = providers::dispatch::generate_video_with_options(
-            &provider_id, &options, &config,
-        ).await?;
+        let result =
+            providers::dispatch::generate_video_with_options(&provider_id, &options, &config)
+                .await?;
 
         let artifacts_dir = home::default_memory_dir().join("artifacts");
         std::fs::create_dir_all(&artifacts_dir)?;
@@ -212,7 +259,11 @@ pub struct MusicGenExec;
 #[async_trait]
 impl NodeExecutor for MusicGenExec {
     async fn execute(&self, node: &WorkflowNode, ctx: &VariableContext) -> Result<NodeResult> {
-        let prompt_tpl = node.config.get("prompt_template").and_then(|v| v.as_str()).unwrap_or("");
+        let prompt_tpl = node
+            .config
+            .get("prompt_template")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
         let prompt = ctx.interpolate(prompt_tpl);
         if prompt.trim().is_empty() {
             bail!("音乐生成节点的提示词为空");
@@ -223,8 +274,16 @@ impl NodeExecutor for MusicGenExec {
 
         let artifacts_dir = home::default_memory_dir().join("artifacts");
         std::fs::create_dir_all(&artifacts_dir)?;
-        let ext = if result.mime_type.contains("wav") { "wav" } else { "mp3" };
-        let filename = format!("music_{}.{}", chrono::Local::now().format("%Y%m%d_%H%M%S"), ext);
+        let ext = if result.mime_type.contains("wav") {
+            "wav"
+        } else {
+            "mp3"
+        };
+        let filename = format!(
+            "music_{}.{}",
+            chrono::Local::now().format("%Y%m%d_%H%M%S"),
+            ext
+        );
         let path = artifacts_dir.join(&filename);
         std::fs::write(&path, &result.data)?;
 
@@ -244,7 +303,11 @@ pub struct TtsExec;
 #[async_trait]
 impl NodeExecutor for TtsExec {
     async fn execute(&self, node: &WorkflowNode, ctx: &VariableContext) -> Result<NodeResult> {
-        let text_tpl = node.config.get("text_template").and_then(|v| v.as_str()).unwrap_or("");
+        let text_tpl = node
+            .config
+            .get("text_template")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
         let text = ctx.interpolate(text_tpl);
         if text.trim().is_empty() {
             bail!("TTS 节点的文本为空");
@@ -255,8 +318,16 @@ impl NodeExecutor for TtsExec {
 
         let artifacts_dir = home::default_memory_dir().join("artifacts");
         std::fs::create_dir_all(&artifacts_dir)?;
-        let ext = if result.mime_type.contains("wav") { "wav" } else { "mp3" };
-        let filename = format!("tts_{}.{}", chrono::Local::now().format("%Y%m%d_%H%M%S"), ext);
+        let ext = if result.mime_type.contains("wav") {
+            "wav"
+        } else {
+            "mp3"
+        };
+        let filename = format!(
+            "tts_{}.{}",
+            chrono::Local::now().format("%Y%m%d_%H%M%S"),
+            ext
+        );
         let path = artifacts_dir.join(&filename);
         std::fs::write(&path, &result.data)?;
 
@@ -276,7 +347,11 @@ pub struct SubtitleGenExec;
 #[async_trait]
 impl NodeExecutor for SubtitleGenExec {
     async fn execute(&self, node: &WorkflowNode, ctx: &VariableContext) -> Result<NodeResult> {
-        let src = node.config.get("audio_source").and_then(|v| v.as_str()).unwrap_or("");
+        let src = node
+            .config
+            .get("audio_source")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
         let resolved = ctx.interpolate(src);
         if resolved.trim().is_empty() {
             bail!("字幕生成节点的音频源为空");
@@ -296,11 +371,23 @@ pub struct VoiceCloneExec;
 #[async_trait]
 impl NodeExecutor for VoiceCloneExec {
     async fn execute(&self, node: &WorkflowNode, ctx: &VariableContext) -> Result<NodeResult> {
-        let ref_audio = node.config.get("reference_audio").and_then(|v| v.as_str()).unwrap_or("");
+        let ref_audio = node
+            .config
+            .get("reference_audio")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
         let ref_audio = ctx.interpolate(ref_audio);
-        let text_tpl = node.config.get("text_template").and_then(|v| v.as_str()).unwrap_or("");
+        let text_tpl = node
+            .config
+            .get("text_template")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
         let text = ctx.interpolate(text_tpl);
-        let speaker_id = node.config.get("speaker_id").and_then(|v| v.as_str()).unwrap_or("");
+        let speaker_id = node
+            .config
+            .get("speaker_id")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
         let speaker_id = ctx.interpolate(speaker_id);
 
         if ref_audio.trim().is_empty() && speaker_id.trim().is_empty() {
@@ -325,24 +412,31 @@ impl NodeExecutor for VoiceCloneExec {
                 .unwrap_or_else(|| "voice_ref.wav".to_string());
 
             let file_info = providers::minimax::files_http::minimax_upload_file(
-                &client, &config, audio_data, &filename,
+                &client,
+                &config,
+                audio_data,
+                &filename,
                 providers::minimax::files_http::FileUploadPurpose::VoiceClone,
-            ).await?;
+            )
+            .await?;
 
             // 2) 克隆音色
             let clone_voice_id = format!("clone_{}", file_info.file_id);
             let clone_req = providers::minimax::voice_clone_http::VoiceCloneRequest {
                 file_id: file_info.file_id,
                 voice_id: clone_voice_id.clone(),
-                text: if text.trim().is_empty() { None } else { Some(text.clone()) },
+                text: if text.trim().is_empty() {
+                    None
+                } else {
+                    Some(text.clone())
+                },
                 model: Some(config.model.clone()).filter(|s| !s.is_empty()),
                 need_noise_reduction: true,
                 need_volume_normalization: true,
                 ..Default::default()
             };
-            providers::minimax::voice_clone_http::minimax_voice_clone(
-                &client, &config, &clone_req,
-            ).await?;
+            providers::minimax::voice_clone_http::minimax_voice_clone(&client, &config, &clone_req)
+                .await?;
 
             clone_voice_id
         };
@@ -357,7 +451,11 @@ impl NodeExecutor for VoiceCloneExec {
         }
 
         let tts_req = providers::minimax::tts_http::MiniMaxTtsRequest {
-            model: if config.model.is_empty() { "speech-2.8-hd".to_string() } else { config.model.clone() },
+            model: if config.model.is_empty() {
+                "speech-2.8-hd".to_string()
+            } else {
+                config.model.clone()
+            },
             text: text.clone(),
             voice_setting: providers::minimax::tts_http::VoiceSetting {
                 voice_id: voice_id.clone(),
@@ -366,13 +464,15 @@ impl NodeExecutor for VoiceCloneExec {
             output_format: "hex".to_string(),
             ..Default::default()
         };
-        let tts_result = providers::minimax::tts_http::minimax_tts(
-            &client, &config, &tts_req,
-        ).await?;
+        let tts_result =
+            providers::minimax::tts_http::minimax_tts(&client, &config, &tts_req).await?;
 
         let artifacts_dir = home::default_memory_dir().join("artifacts");
         std::fs::create_dir_all(&artifacts_dir)?;
-        let filename = format!("voice_clone_{}.mp3", chrono::Local::now().format("%Y%m%d_%H%M%S"));
+        let filename = format!(
+            "voice_clone_{}.mp3",
+            chrono::Local::now().format("%Y%m%d_%H%M%S")
+        );
         let path = artifacts_dir.join(&filename);
         std::fs::write(&path, &tts_result.audio_bytes)?;
 
@@ -392,7 +492,11 @@ pub struct SpeechToTextExec;
 #[async_trait]
 impl NodeExecutor for SpeechToTextExec {
     async fn execute(&self, node: &WorkflowNode, ctx: &VariableContext) -> Result<NodeResult> {
-        let input = node.config.get("input_path").and_then(|v| v.as_str()).unwrap_or("");
+        let input = node
+            .config
+            .get("input_path")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
         let input = ctx.interpolate(input);
 
         if input.trim().is_empty() {
@@ -415,12 +519,28 @@ pub struct ImageEditExec;
 #[async_trait]
 impl NodeExecutor for ImageEditExec {
     async fn execute(&self, node: &WorkflowNode, ctx: &VariableContext) -> Result<NodeResult> {
-        let op = node.config.get("operation").and_then(|v| v.as_str()).unwrap_or("inpaint");
-        let input = node.config.get("input_image").and_then(|v| v.as_str()).unwrap_or("");
+        let op = node
+            .config
+            .get("operation")
+            .and_then(|v| v.as_str())
+            .unwrap_or("inpaint");
+        let input = node
+            .config
+            .get("input_image")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
         let input = ctx.interpolate(input);
-        let prompt_tpl = node.config.get("prompt_template").and_then(|v| v.as_str()).unwrap_or("");
+        let prompt_tpl = node
+            .config
+            .get("prompt_template")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
         let _prompt = ctx.interpolate(prompt_tpl);
-        let provider_id = node.config.get("provider_id").and_then(|v| v.as_str()).unwrap_or("");
+        let provider_id = node
+            .config
+            .get("provider_id")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
 
         if input.trim().is_empty() {
             bail!("图片编辑节点的输入图片为空");
@@ -428,7 +548,9 @@ impl NodeExecutor for ImageEditExec {
 
         bail!(
             "图片编辑功能待接入（Image Edit API 暂无统一路由）。操作: {}，图片: {}，供应商: {}",
-            op, &input[..input.len().min(80)], provider_id
+            op,
+            &input[..input.len().min(80)],
+            provider_id
         )
     }
 }
@@ -440,10 +562,22 @@ pub struct TranslationExec;
 #[async_trait]
 impl NodeExecutor for TranslationExec {
     async fn execute(&self, node: &WorkflowNode, ctx: &VariableContext) -> Result<NodeResult> {
-        let text_tpl = node.config.get("text_template").and_then(|v| v.as_str()).unwrap_or("");
+        let text_tpl = node
+            .config
+            .get("text_template")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
         let text = ctx.interpolate(text_tpl);
-        let source = node.config.get("source_lang").and_then(|v| v.as_str()).unwrap_or("auto");
-        let target = node.config.get("target_lang").and_then(|v| v.as_str()).unwrap_or("en");
+        let source = node
+            .config
+            .get("source_lang")
+            .and_then(|v| v.as_str())
+            .unwrap_or("auto");
+        let target = node
+            .config
+            .get("target_lang")
+            .and_then(|v| v.as_str())
+            .unwrap_or("en");
 
         if text.trim().is_empty() {
             bail!("翻译节点的输入文本为空");
@@ -452,7 +586,11 @@ impl NodeExecutor for TranslationExec {
         // 通过 LLM 实现翻译
         let system = format!(
             "你是一个专业翻译。将用户输入从{}翻译为{}。只输出译文，不要添加解释。",
-            if source == "auto" { "源语言（自动检测）" } else { source },
+            if source == "auto" {
+                "源语言（自动检测）"
+            } else {
+                source
+            },
             target,
         );
         let (pid, config) = build_media_config(node)?;

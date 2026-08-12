@@ -322,12 +322,7 @@ impl crate::ConversationStore for SessionStore {
         SessionStore::recent_messages(self, session_id, limit)
     }
 
-    fn recall_message_ids(
-        &self,
-        session_id: &str,
-        query: &str,
-        limit: usize,
-    ) -> Result<Vec<i64>> {
+    fn recall_message_ids(&self, session_id: &str, query: &str, limit: usize) -> Result<Vec<i64>> {
         SessionStore::recall_message_ids(self, session_id, query, limit)
     }
 

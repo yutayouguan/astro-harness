@@ -41,7 +41,8 @@ impl Usage {
     }
 
     pub fn total_tokens(&self) -> u32 {
-        self.prompt_tokens().saturating_add(self.completion_tokens())
+        self.prompt_tokens()
+            .saturating_add(self.completion_tokens())
     }
 
     pub fn is_empty(&self) -> bool {
@@ -59,14 +60,20 @@ impl Usage {
         }
         self.input_tokens = self.input_tokens.saturating_add(other.input_tokens);
         self.output_tokens = self.output_tokens.saturating_add(other.output_tokens);
-        self.cache_read_tokens = self.cache_read_tokens.saturating_add(other.cache_read_tokens);
-        self.cache_write_tokens = self.cache_write_tokens.saturating_add(other.cache_write_tokens);
+        self.cache_read_tokens = self
+            .cache_read_tokens
+            .saturating_add(other.cache_read_tokens);
+        self.cache_write_tokens = self
+            .cache_write_tokens
+            .saturating_add(other.cache_write_tokens);
         self.reasoning_tokens = self.reasoning_tokens.saturating_add(other.reasoning_tokens);
-        self.request_count = self.request_count.saturating_add(if other.request_count > 0 {
-            other.request_count
-        } else {
-            1
-        });
+        self.request_count = self
+            .request_count
+            .saturating_add(if other.request_count > 0 {
+                other.request_count
+            } else {
+                1
+            });
     }
 }
 
@@ -86,18 +93,13 @@ pub enum StreamChunk {
         name: String,
     },
     /// 工具调用参数增量。
-    ToolCallDelta {
-        index: u32,
-        arguments: String,
-    },
+    ToolCallDelta { index: u32, arguments: String },
     /// Token 用量。
     Usage(Usage),
     /// 引用信息。
     Citation(serde_json::Value),
     /// 流结束。
-    Done {
-        finish_reason: String,
-    },
+    Done { finish_reason: String },
     /// 错误。
     Error(String),
     /// Google Interactions：interaction id。

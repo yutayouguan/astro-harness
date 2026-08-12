@@ -18,8 +18,14 @@ impl NodeExecutor for ConditionalExec {
         if let Some(branches) = conditions {
             let mut matched = false;
             for branch in branches {
-                let id = branch.get("id").and_then(|v| v.as_str()).unwrap_or_default();
-                let expr = branch.get("expression").and_then(|v| v.as_str()).unwrap_or("");
+                let id = branch
+                    .get("id")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or_default();
+                let expr = branch
+                    .get("expression")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("");
                 if expr.is_empty() {
                     // else 分支：仅当前面没有匹配时激活
                     if !matched {
@@ -50,7 +56,10 @@ impl NodeExecutor for MultiBranchExec {
             // 两轮评估：先评估条件分支，再决定默认分支
             let mut default_ids = Vec::new();
             for branch in branches {
-                let id = branch.get("id").and_then(|v| v.as_str()).unwrap_or_default();
+                let id = branch
+                    .get("id")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or_default();
                 let cond = branch.get("condition").and_then(|v| v.as_str());
                 match cond {
                     Some(expr) if !expr.is_empty() => {
@@ -80,7 +89,11 @@ pub struct FilterExec;
 #[async_trait]
 impl NodeExecutor for FilterExec {
     async fn execute(&self, node: &WorkflowNode, ctx: &VariableContext) -> Result<NodeResult> {
-        let condition = node.config.get("condition").and_then(|v| v.as_str()).unwrap_or("");
+        let condition = node
+            .config
+            .get("condition")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
         if condition.is_empty() || ctx.evaluate_condition(condition)? {
             Ok(NodeResult::Success(serde_json::json!({ "passed": true })))
         } else {
@@ -108,8 +121,16 @@ pub struct LoopExec;
 #[async_trait]
 impl NodeExecutor for LoopExec {
     async fn execute(&self, node: &WorkflowNode, _ctx: &VariableContext) -> Result<NodeResult> {
-        let max_iter = node.config.get("max_iterations").and_then(|v| v.as_u64()).unwrap_or(10);
-        let break_cond = node.config.get("break_condition").and_then(|v| v.as_str()).unwrap_or("");
+        let max_iter = node
+            .config
+            .get("max_iterations")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(10);
+        let break_cond = node
+            .config
+            .get("break_condition")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
         // Loop 节点的真正循环由引擎层驱动；这里仅返回配置信息
         Ok(NodeResult::Success(serde_json::json!({
             "loop": true,
@@ -126,14 +147,24 @@ pub struct HumanApprovalExec;
 #[async_trait]
 impl NodeExecutor for HumanApprovalExec {
     async fn execute(&self, node: &WorkflowNode, ctx: &VariableContext) -> Result<NodeResult> {
-        let prompt = node.config.get("prompt_template").and_then(|v| v.as_str()).unwrap_or("");
+        let prompt = node
+            .config
+            .get("prompt_template")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
         let resolved_prompt = ctx.interpolate(prompt);
-        let auto_approve = node.config.get("auto_approve").and_then(|v| v.as_bool()).unwrap_or(false);
+        let auto_approve = node
+            .config
+            .get("auto_approve")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
         if auto_approve {
             tracing::info!(prompt = %resolved_prompt, "人工审批节点：自动放行");
             return Ok(NodeResult::Approved);
         }
         tracing::info!(prompt = %resolved_prompt, "人工审批节点：等待用户审批");
-        Ok(NodeResult::PendingApproval { prompt: resolved_prompt })
+        Ok(NodeResult::PendingApproval {
+            prompt: resolved_prompt,
+        })
     }
 }

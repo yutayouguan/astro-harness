@@ -9,7 +9,7 @@ use reqwest::Client as HttpClient;
 use serde_json::{json, Value};
 
 use crate::traits::{
-    Capable, Capabilities, CompletionModel, FromClient, Nothing, ProviderClient, ProviderExt,
+    Capabilities, Capable, CompletionModel, FromClient, Nothing, ProviderClient, ProviderExt,
 };
 use crate::types::{CompletionRequest, CompletionStream};
 
@@ -145,10 +145,7 @@ impl CompletionModel for GeminiNativeCompletionModel {
             } else {
                 0
             };
-            gen.insert(
-                "thinkingConfig".into(),
-                json!({"thinkingBudget": budget}),
-            );
+            gen.insert("thinkingConfig".into(), json!({"thinkingBudget": budget}));
         }
 
         if !gen.is_empty() {
@@ -177,19 +174,13 @@ impl CompletionModel for GeminiNativeCompletionModel {
             .await
             .with_context(|| format!("连接 Gemini Native 失败: {url}"))?;
 
-        crate::shared::sse::sse_stream(
-            response,
-            std::sync::Arc::new(extract_native_chunks),
-        )
-        .await
+        crate::shared::sse::sse_stream(response, std::sync::Arc::new(extract_native_chunks)).await
     }
 }
 
 // ─── Message Conversion ──────────────────────────────────
 
-fn to_native_contents(
-    messages: &[crate::types::Message],
-) -> (Option<String>, Vec<Value>) {
+fn to_native_contents(messages: &[crate::types::Message]) -> (Option<String>, Vec<Value>) {
     use crate::types::message::*;
     let mut system = None;
     let mut contents = Vec::new();
@@ -319,8 +310,16 @@ fn extract_native_chunks(data: &str) -> Vec<crate::types::StreamChunk> {
             let mut tool_index = 0u32;
             for part in parts {
                 // Thinking (thought: true)
-                if part.get("thought").and_then(|t| t.as_bool()).unwrap_or(false) {
-                    if let Some(text) = part.get("text").and_then(|t| t.as_str()).filter(|s| !s.is_empty()) {
+                if part
+                    .get("thought")
+                    .and_then(|t| t.as_bool())
+                    .unwrap_or(false)
+                {
+                    if let Some(text) = part
+                        .get("text")
+                        .and_then(|t| t.as_str())
+                        .filter(|s| !s.is_empty())
+                    {
                         chunks.push(StreamChunk::Thinking(text.to_string()));
                         continue;
                     }
@@ -351,7 +350,11 @@ fn extract_native_chunks(data: &str) -> Vec<crate::types::StreamChunk> {
                 }
 
                 // Text
-                if let Some(text) = part.get("text").and_then(|t| t.as_str()).filter(|s| !s.is_empty()) {
+                if let Some(text) = part
+                    .get("text")
+                    .and_then(|t| t.as_str())
+                    .filter(|s| !s.is_empty())
+                {
                     chunks.push(StreamChunk::Text(text.to_string()));
                 }
             }
@@ -453,20 +456,27 @@ mod tests {
         let data = r#"{"candidates":[{"content":{"parts":[{"functionCall":{"name":"get_weather","args":{"location":"SF"}}}],"role":"model"}}]}"#;
         let chunks = extract_native_chunks(data);
         assert_eq!(chunks.len(), 2);
-        assert!(matches!(&chunks[0], StreamChunk::ToolCallStart { ref name, .. } if name == "get_weather"));
-        assert!(matches!(&chunks[1], StreamChunk::ToolCallDelta { ref arguments, .. } if arguments.contains("SF")));
+        assert!(
+            matches!(&chunks[0], StreamChunk::ToolCallStart { ref name, .. } if name == "get_weather")
+        );
+        assert!(
+            matches!(&chunks[1], StreamChunk::ToolCallDelta { ref arguments, .. } if arguments.contains("SF"))
+        );
     }
 
     #[test]
     fn extract_usage_metadata() {
         let data = r#"{"candidates":[{"content":{"parts":[{"text":"done"}],"role":"model"},"finishReason":"STOP"}],"usageMetadata":{"promptTokenCount":10,"candidatesTokenCount":5}}"#;
         let chunks = extract_native_chunks(data);
-        let types: Vec<&str> = chunks.iter().map(|c| match c {
-            StreamChunk::Text(_) => "Text",
-            StreamChunk::Done { .. } => "Done",
-            StreamChunk::Usage(_) => "Usage",
-            _ => "Other",
-        }).collect();
+        let types: Vec<&str> = chunks
+            .iter()
+            .map(|c| match c {
+                StreamChunk::Text(_) => "Text",
+                StreamChunk::Done { .. } => "Done",
+                StreamChunk::Usage(_) => "Usage",
+                _ => "Other",
+            })
+            .collect();
         assert_eq!(types, vec!["Text", "Done", "Usage"]);
         if let StreamChunk::Usage(u) = &chunks[2] {
             assert_eq!(u.input_tokens, 10);
@@ -479,7 +489,9 @@ mod tests {
         let data = r#"{"candidates":[{"finishReason":"STOP"}]}"#;
         let chunks = extract_native_chunks(data);
         assert_eq!(chunks.len(), 1);
-        assert!(matches!(&chunks[0], StreamChunk::Done { ref finish_reason } if finish_reason == "stop"));
+        assert!(
+            matches!(&chunks[0], StreamChunk::Done { ref finish_reason } if finish_reason == "stop")
+        );
     }
 
     #[test]
@@ -494,14 +506,20 @@ mod tests {
     fn extract_thinking_then_function_call() {
         let data = r#"{"candidates":[{"content":{"parts":[{"thought":true,"text":"analyzing"},{"functionCall":{"name":"search","args":{"q":"rust"}}}],"role":"model"},"finishReason":"FUNCTION_CALL"}]}"#;
         let chunks = extract_native_chunks(data);
-        let types: Vec<&str> = chunks.iter().map(|c| match c {
-            StreamChunk::Thinking(_) => "Thinking",
-            StreamChunk::ToolCallStart { .. } => "ToolCallStart",
-            StreamChunk::ToolCallDelta { .. } => "ToolCallDelta",
-            StreamChunk::Done { .. } => "Done",
-            _ => "Other",
-        }).collect();
-        assert_eq!(types, vec!["Thinking", "ToolCallStart", "ToolCallDelta", "Done"]);
+        let types: Vec<&str> = chunks
+            .iter()
+            .map(|c| match c {
+                StreamChunk::Thinking(_) => "Thinking",
+                StreamChunk::ToolCallStart { .. } => "ToolCallStart",
+                StreamChunk::ToolCallDelta { .. } => "ToolCallDelta",
+                StreamChunk::Done { .. } => "Done",
+                _ => "Other",
+            })
+            .collect();
+        assert_eq!(
+            types,
+            vec!["Thinking", "ToolCallStart", "ToolCallDelta", "Done"]
+        );
     }
 
     #[test]

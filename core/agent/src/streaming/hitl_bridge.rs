@@ -12,7 +12,7 @@ use tokio::sync::mpsc;
 use crate::control::hitl::{HitlGate, HitlResolution, HITL_DEFAULT_TIMEOUT_SECS};
 use crate::control::interrupt::Interrupt;
 
-use super::multi_turn::emit;
+use super::lifecycle::emit;
 use super::types::MultiTurnStreamItem;
 
 tokio::task_local! {

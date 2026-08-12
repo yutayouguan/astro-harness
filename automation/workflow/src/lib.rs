@@ -1,5 +1,7 @@
-pub mod model;
-pub mod store;
-pub mod run_db;
+#![warn(clippy::unwrap_used)]
+
 pub mod engine;
+pub mod model;
 pub mod nodes;
+pub mod run_db;
+pub mod store;

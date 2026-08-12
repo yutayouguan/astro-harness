@@ -83,7 +83,9 @@ impl WorkflowRunDb {
     }
 
     pub fn open_default() -> Result<Self> {
-        let path = home::default_memory_dir().join("workflows").join("workflow.db");
+        let path = home::default_memory_dir()
+            .join("workflows")
+            .join("workflow.db");
         Self::new(path)
     }
 
@@ -154,7 +156,8 @@ impl WorkflowRunDb {
             )
         };
         let mut stmt = self.conn.prepare(sql)?;
-        let params_ref: Vec<&dyn rusqlite::types::ToSql> = params.iter().map(|p| p.as_ref()).collect();
+        let params_ref: Vec<&dyn rusqlite::types::ToSql> =
+            params.iter().map(|p| p.as_ref()).collect();
         let rows = stmt.query_map(params_ref.as_slice(), |row| {
             Ok(WorkflowRunRow {
                 id: row.get(0)?,
@@ -175,11 +178,14 @@ impl WorkflowRunDb {
 
     pub fn delete_run(&self, id: &str) -> Result<bool> {
         self.conn.execute_batch("BEGIN")?;
-        self.conn
-            .execute("DELETE FROM workflow_step_logs WHERE run_id=?1", rusqlite::params![id])?;
-        let n = self
-            .conn
-            .execute("DELETE FROM workflow_runs WHERE id=?1", rusqlite::params![id])?;
+        self.conn.execute(
+            "DELETE FROM workflow_step_logs WHERE run_id=?1",
+            rusqlite::params![id],
+        )?;
+        let n = self.conn.execute(
+            "DELETE FROM workflow_runs WHERE id=?1",
+            rusqlite::params![id],
+        )?;
         self.conn.execute_batch("COMMIT")?;
         Ok(n > 0)
     }
@@ -240,9 +246,9 @@ impl WorkflowRunDb {
 
     /// 清理旧运行记录，保留最近 max_keep 条
     pub fn prune_old_runs(&self, max_keep: i64) -> Result<usize> {
-        let count: i64 = self.conn.query_row(
-            "SELECT COUNT(*) FROM workflow_runs", [], |r| r.get(0),
-        )?;
+        let count: i64 = self
+            .conn
+            .query_row("SELECT COUNT(*) FROM workflow_runs", [], |r| r.get(0))?;
         if count <= max_keep {
             return Ok(0);
         }
@@ -270,13 +276,26 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let db = WorkflowRunDb::new(dir.path().join("workflow.db")).unwrap();
 
-        db.insert_run("r1", "wf1", "测试流程", "manual", "2026-01-01T00:00:00+08:00")
-            .unwrap();
+        db.insert_run(
+            "r1",
+            "wf1",
+            "测试流程",
+            "manual",
+            "2026-01-01T00:00:00+08:00",
+        )
+        .unwrap();
         let run = db.get_run("r1").unwrap().unwrap();
         assert_eq!(run.status, "running");
 
-        db.finish_run("r1", "success", "2026-01-01T00:01:00+08:00", None, Some("ok"), 3)
-            .unwrap();
+        db.finish_run(
+            "r1",
+            "success",
+            "2026-01-01T00:01:00+08:00",
+            None,
+            Some("ok"),
+            3,
+        )
+        .unwrap();
         let run = db.get_run("r1").unwrap().unwrap();
         assert_eq!(run.status, "success");
         assert_eq!(run.node_count, 3);

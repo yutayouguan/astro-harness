@@ -10,7 +10,7 @@ use tokio::sync::{mpsc, Mutex};
 
 use crate::runtime::AgentLoop;
 
-use super::multi_turn::{emit, finish_usage_and_done};
+use super::lifecycle::{emit, finish_usage_and_done};
 use super::provider::ProviderStreamer;
 use super::traits::StreamingChat;
 use super::types::{MultiTurnStreamItem, StreamedAssistantContent};

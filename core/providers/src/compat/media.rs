@@ -3,7 +3,9 @@
 //! 与 `impls/openai.rs` 中的 `OpenAIEmbeddingModel` 等功能相同，
 //! 但 `FromClient<Ext>` 是泛型的，不绑定特定厂商。
 
-use crate::traits::{EmbeddingModel, FromClient, ImageGenModel, ModelBase, ProviderClient, ProviderExt, TTSModel};
+use crate::traits::{
+    EmbeddingModel, FromClient, ImageGenModel, ModelBase, ProviderClient, ProviderExt, TTSModel,
+};
 use crate::types::media::{Embedding, GeneratedAudio, GeneratedImage, ImageGenConfig, TTSConfig};
 
 // ─── Embedding ──────────────────────────────────────────
@@ -21,10 +23,17 @@ impl<Ext: ProviderExt> FromClient<Ext> for CompatEmbeddingModel {
 impl EmbeddingModel for CompatEmbeddingModel {
     async fn embed(&self, texts: &[String]) -> anyhow::Result<Vec<Embedding>> {
         let cfg = self.0.to_provider_config();
-        let vectors =
-            crate::openai::embeddings_http::openai_batch_embed(self.0.http(), texts, self.0.model(), &cfg)
-                .await?;
-        Ok(vectors.into_iter().map(|v| Embedding { values: v }).collect())
+        let vectors = crate::openai::embeddings_http::openai_batch_embed(
+            self.0.http(),
+            texts,
+            self.0.model(),
+            &cfg,
+        )
+        .await?;
+        Ok(vectors
+            .into_iter()
+            .map(|v| Embedding { values: v })
+            .collect())
     }
 }
 
@@ -79,7 +88,11 @@ impl TTSModel for CompatTTSModel {
             model: self.0.model().to_string(),
             input: text.to_string(),
             voice,
-            speed: if tts_config.speed > 0.0 { tts_config.speed } else { 1.0 },
+            speed: if tts_config.speed > 0.0 {
+                tts_config.speed
+            } else {
+                1.0
+            },
             ..Default::default()
         };
         let result = crate::openai::tts_http::openai_tts(self.0.http(), &cfg, &req).await?;

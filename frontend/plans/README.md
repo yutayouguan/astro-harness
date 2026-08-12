@@ -6,18 +6,18 @@ Audit commit: `5b1b3166` | Audited: 2026-08-08
 
 | # | Title | Severity | Status | Deps |
 |---|-------|----------|--------|------|
-| 001 | Fix anim-switch exit ease-in | HIGH | TODO | — |
-| 002 | Eliminate transition: all in loop.css | HIGH | TODO | — |
-| 003 | Add dialog button :active feedback | HIGH | TODO | — |
-| 004 | Add loop button :active feedback | MEDIUM | TODO | 002 |
-| 005 | Add prefers-reduced-motion to 7 files | MEDIUM | TODO | — |
-| 006 | Unify entry animation easing | MEDIUM | TODO | — |
-| 007 | Fix mem-flow-pulse layout animation | MEDIUM | TODO | — |
-| 008 | Fix radio checkmark scale(0) | LOW | TODO | — |
-| 009 | Replace width/height bar animations | LOW | TODO | — |
-| 010 | Reduce focus-flash duration | LOW | TODO | — |
-| 011 | Tooltip skip delay on consecutive hover | LOW | TODO | — |
-| 012 | Add dialog exit animation | LOW | TODO | — |
+| 001 | Fix anim-switch exit ease-in | HIGH | DONE | — |
+| 002 | Eliminate transition: all in loop.css | HIGH | DONE | — |
+| 003 | Add dialog button :active feedback | HIGH | DONE | — |
+| 004 | Add loop button :active feedback | MEDIUM | DONE | 002 |
+| 005 | Add prefers-reduced-motion to 7 files | MEDIUM | DONE | — |
+| 006 | Unify entry animation easing | MEDIUM | DONE | — |
+| 007 | Fix mem-flow-pulse layout animation | MEDIUM | DONE (will-change) | — |
+| 008 | Fix radio checkmark scale(0) | LOW | DONE | — |
+| 009 | Replace width/height bar animations | LOW | DONE (2/3, insights skipped) | — |
+| 010 | Reduce focus-flash duration | LOW | DONE | — |
+| 011 | Tooltip skip delay on consecutive hover | LOW | DONE | — |
+| 012 | Add dialog exit animation | LOW | DONE | — |
 
 ## Recommended execution order
 

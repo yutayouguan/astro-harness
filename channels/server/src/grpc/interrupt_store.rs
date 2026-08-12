@@ -103,6 +103,7 @@ pub fn parse_resume_items_json(raw: &str) -> Result<Vec<ResumeItem>, String> {
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
     use agent::Interrupt;

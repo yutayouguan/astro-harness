@@ -238,21 +238,38 @@ pub async fn minimax_list_files(
     let status = resp.status();
     let v: Value = resp.json().await.context("解析文件列表响应失败")?;
     if !status.is_success() {
-        let msg = v.pointer("/base_resp/status_msg").and_then(|m| m.as_str()).unwrap_or("未知错误");
+        let msg = v
+            .pointer("/base_resp/status_msg")
+            .and_then(|m| m.as_str())
+            .unwrap_or("未知错误");
         anyhow::bail!("MiniMax 文件列表 HTTP {status}: {msg}");
     }
-    let code = v.pointer("/base_resp/status_code").and_then(|c| c.as_i64()).unwrap_or(0);
+    let code = v
+        .pointer("/base_resp/status_code")
+        .and_then(|c| c.as_i64())
+        .unwrap_or(0);
     if code != 0 {
-        let msg = v.pointer("/base_resp/status_msg").and_then(|m| m.as_str()).unwrap_or("未知错误");
+        let msg = v
+            .pointer("/base_resp/status_msg")
+            .and_then(|m| m.as_str())
+            .unwrap_or("未知错误");
         anyhow::bail!("MiniMax 文件列表业务错误 ({code}): {msg}");
     }
-    let files = v.get("files").and_then(|f| f.as_array()).cloned().unwrap_or_default();
+    let files = v
+        .get("files")
+        .and_then(|f| f.as_array())
+        .cloned()
+        .unwrap_or_default();
     Ok(files
         .iter()
         .filter_map(|f| {
             Some(MiniMaxFileInfo {
                 file_id: f.get("file_id")?.as_u64()?,
-                filename: f.get("filename").and_then(|n| n.as_str()).unwrap_or("").to_string(),
+                filename: f
+                    .get("filename")
+                    .and_then(|n| n.as_str())
+                    .unwrap_or("")
+                    .to_string(),
                 download_url: None,
             })
         })
@@ -310,12 +327,21 @@ pub async fn minimax_delete_file(
     let status = resp.status();
     let v: Value = resp.json().await.context("解析文件删除响应失败")?;
     if !status.is_success() {
-        let msg = v.pointer("/base_resp/status_msg").and_then(|m| m.as_str()).unwrap_or("未知错误");
+        let msg = v
+            .pointer("/base_resp/status_msg")
+            .and_then(|m| m.as_str())
+            .unwrap_or("未知错误");
         anyhow::bail!("MiniMax 文件删除 HTTP {status}: {msg}");
     }
-    let code = v.pointer("/base_resp/status_code").and_then(|c| c.as_i64()).unwrap_or(0);
+    let code = v
+        .pointer("/base_resp/status_code")
+        .and_then(|c| c.as_i64())
+        .unwrap_or(0);
     if code != 0 {
-        let msg = v.pointer("/base_resp/status_msg").and_then(|m| m.as_str()).unwrap_or("未知错误");
+        let msg = v
+            .pointer("/base_resp/status_msg")
+            .and_then(|m| m.as_str())
+            .unwrap_or("未知错误");
         anyhow::bail!("MiniMax 文件删除业务错误 ({code}): {msg}");
     }
     Ok(())

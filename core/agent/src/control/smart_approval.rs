@@ -6,9 +6,9 @@
 use std::time::Duration;
 
 use futures::StreamExt;
-use providers::ProviderConfig;
 use providers::types::message::Message as ProviderMessage;
 use providers::types::stream::StreamChunk;
+use providers::ProviderConfig;
 use tools::ApprovalAction;
 
 const SMART_TIMEOUT: Duration = Duration::from_secs(8);
@@ -138,10 +138,7 @@ pub async fn maybe_smart_downgrade_ask(
     }
 }
 
-async fn ask_model(
-    target: &ApprovalTarget,
-    prompt: &str,
-) -> Result<String, String> {
+async fn ask_model(target: &ApprovalTarget, prompt: &str) -> Result<String, String> {
     let config = ProviderConfig {
         model: if target.model.trim().is_empty() {
             providers::default_model(&target.backend_id)
@@ -157,14 +154,10 @@ async fn ask_model(
         ..ProviderConfig::default()
     };
     let messages = vec![ProviderMessage::user_text(prompt)];
-    let mut stream = providers::dispatch::chat_stream(
-        &target.backend_id,
-        messages,
-        vec![],
-        &config,
-    )
-    .await
-    .map_err(|e| e.to_string())?;
+    let mut stream =
+        providers::dispatch::chat_stream(&target.backend_id, messages, vec![], &config)
+            .await
+            .map_err(|e| e.to_string())?;
 
     let mut full = String::new();
     while let Some(chunk) = stream.next().await {

@@ -85,10 +85,7 @@ pub async fn openai_batch_embed(
     let mut result: Vec<(usize, Vec<f32>)> = data
         .iter()
         .map(|item| {
-            let index = item
-                .get("index")
-                .and_then(|i| i.as_u64())
-                .unwrap_or(0) as usize;
+            let index = item.get("index").and_then(|i| i.as_u64()).unwrap_or(0) as usize;
             let embedding = item
                 .get("embedding")
                 .and_then(|e| e.as_array())

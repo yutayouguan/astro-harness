@@ -31,9 +31,9 @@ use evolution::{
 };
 use home::default_memory_dir;
 use memory::DecisionKind;
-use providers::ProviderConfig;
 use providers::types::message::Message as ProviderMessage;
 use providers::types::stream::StreamChunk;
+use providers::ProviderConfig;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::OnceLock;
 
@@ -161,9 +161,10 @@ async fn complete_chat(
         ProviderMessage::system(system),
         ProviderMessage::user_text(user),
     ];
-    let mut stream = providers::dispatch::chat_stream(&target.backend_id, messages, vec![], &config)
-        .await
-        .map_err(|e| format!("进化调用模型失败: {e}"))?;
+    let mut stream =
+        providers::dispatch::chat_stream(&target.backend_id, messages, vec![], &config)
+            .await
+            .map_err(|e| format!("进化调用模型失败: {e}"))?;
     let mut out = String::new();
     while let Some(item) = stream.next().await {
         let chunk = item.map_err(|e| format!("进化流式读取失败: {e}"))?;
@@ -536,15 +537,19 @@ pub async fn maybe_run_evolution_auto(app: AppHandle) -> Result<EvolutionAutoRun
         .collect();
     let signal_focus = if cfg.auto.min_skill_failure_signals > 0 {
         // 取最近 signal_window_days 天的条目（决策日志最近 N 条近似）
-        top_failing_skill(&decisions, &known_skills, cfg.auto.min_skill_failure_signals)
-            .map(|s| {
-                tracing::info!(
-                    skill = %s.skill_id,
-                    signals = s.failure_signals,
-                    "[P2] auto-trigger: 定向进化高失败率技能"
-                );
-                s.skill_id
-            })
+        top_failing_skill(
+            &decisions,
+            &known_skills,
+            cfg.auto.min_skill_failure_signals,
+        )
+        .map(|s| {
+            tracing::info!(
+                skill = %s.skill_id,
+                signals = s.failure_signals,
+                "[P2] auto-trigger: 定向进化高失败率技能"
+            );
+            s.skill_id
+        })
     } else {
         None
     };
@@ -835,8 +840,7 @@ pub async fn run_evolution_search(
                     let elapsed =
                         chrono::Utc::now().signed_duration_since(dt.with_timezone(&chrono::Utc));
                     if elapsed.num_seconds() < cooldown as i64 {
-                        let remain_h =
-                            (cooldown as i64 - elapsed.num_seconds()).max(0) / 3600 + 1;
+                        let remain_h = (cooldown as i64 - elapsed.num_seconds()).max(0) / 3600 + 1;
                         tracing::info!(
                             skill = %focus,
                             remain_hours = remain_h,
@@ -998,8 +1002,7 @@ pub async fn run_evolution_search(
                 curator_report.as_ref().map(|r| r.rows.as_slice()),
                 &known_skill_ids,
             );
-            let muser =
-                build_mutation_prompt(parent, variants, &critiques, &strengths, &opp_hints);
+            let muser = build_mutation_prompt(parent, variants, &critiques, &strengths, &opp_hints);
             let raw = match reflect_over_targets(&refl_targets, mutation_prompt, &muser).await {
                 Ok(r) => r,
                 Err(e) => {

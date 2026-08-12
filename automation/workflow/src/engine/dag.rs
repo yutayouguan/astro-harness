@@ -37,7 +37,9 @@ pub fn resolve_dag(nodes: &[WorkflowNode], edges: &[WorkflowEdge]) -> Result<Dag
         in_deg.entry(id).or_insert(0);
     }
     for e in &live_edges {
-        adj.entry(e.source.as_str()).or_default().push(e.target.as_str());
+        adj.entry(e.source.as_str())
+            .or_default()
+            .push(e.target.as_str());
         *in_deg.entry(e.target.as_str()).or_insert(0) += 1;
     }
 
@@ -81,8 +83,11 @@ pub fn resolve_dag(nodes: &[WorkflowNode], edges: &[WorkflowEdge]) -> Result<Dag
             !n.disabled
                 && matches!(
                     n.node_type,
-                    NodeType::ManualTrigger | NodeType::ScheduledTrigger | NodeType::WebhookTrigger
-                    | NodeType::EmailTrigger | NodeType::FileWatchTrigger
+                    NodeType::ManualTrigger
+                        | NodeType::ScheduledTrigger
+                        | NodeType::WebhookTrigger
+                        | NodeType::EmailTrigger
+                        | NodeType::FileWatchTrigger
                 )
         })
         .map(|n| n.id.clone());
@@ -141,8 +146,12 @@ pub fn detect_cycle(nodes: &[WorkflowNode], edges: &[WorkflowEdge]) -> Option<Ve
             let adj: HashMap<&str, Vec<&str>> = {
                 let mut m: HashMap<&str, Vec<&str>> = HashMap::new();
                 for e in edges {
-                    if remaining.contains(e.source.as_str()) && remaining.contains(e.target.as_str()) {
-                        m.entry(e.source.as_str()).or_default().push(e.target.as_str());
+                    if remaining.contains(e.source.as_str())
+                        && remaining.contains(e.target.as_str())
+                    {
+                        m.entry(e.source.as_str())
+                            .or_default()
+                            .push(e.target.as_str());
                     }
                 }
                 m
@@ -164,7 +173,8 @@ pub fn detect_cycle(nodes: &[WorkflowNode], edges: &[WorkflowEdge]) -> Option<Ve
                     for &next in neighbors {
                         if on_stack.contains(next) {
                             let start = path.iter().position(|&n| n == next).unwrap();
-                            let mut cycle: Vec<String> = path[start..].iter().map(|s| s.to_string()).collect();
+                            let mut cycle: Vec<String> =
+                                path[start..].iter().map(|s| s.to_string()).collect();
                             cycle.push(next.to_string());
                             return Some(cycle);
                         }
@@ -260,7 +270,12 @@ mod tests {
             node("b", NodeType::FormatText),
             node("m", NodeType::Merge),
         ];
-        let edges = vec![edge("t", "a"), edge("t", "b"), edge("a", "m"), edge("b", "m")];
+        let edges = vec![
+            edge("t", "a"),
+            edge("t", "b"),
+            edge("a", "m"),
+            edge("b", "m"),
+        ];
         let plan = resolve_dag(&nodes, &edges).unwrap();
         // t → [a, b] → m
         assert_eq!(plan.layers.len(), 3);

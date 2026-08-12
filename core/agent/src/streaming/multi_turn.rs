@@ -17,440 +17,25 @@ use providers::ProviderConfig;
 use providers::{PauseControl, Usage};
 use tokio::sync::{mpsc, Mutex};
 
-use super::run_state::{RunPhase, RunState};
-use crate::control::hitl::HitlGate;
-use crate::runtime::usage::{apply_llm_usage_dual_write, LlmUsageWrite};
-use crate::runtime::AgentLoop;
-
 use super::hitl_bridge::{register_live_parent_hitl, unregister_live_parent_hitl, ParentHitlCtx};
+use super::lifecycle::{emit, finish_error, finish_usage_and_done};
+use super::maintenance::{
+    emit_context_usage, post_tool_maintenance, pre_llm_maintenance, record_tool_outcomes,
+    stream_chat_with_hooks,
+};
 use super::provider::ProviderStreamer;
+use super::run_state::{RunPhase, RunState};
 use super::summary::{run_max_iterations_summary, SummaryOutcome};
 use super::tools_exec::{execute_tools_concurrent, execute_tools_serial, terminal_needs_approval};
-use super::traits::StreamingChat;
 use super::types::{MultiTurnStream, MultiTurnStreamItem, StreamedAssistantContent};
+use crate::control::hitl::HitlGate;
+use crate::runtime::AgentLoop;
 
 /// `pre_verify` 单次 turn 内允许的最多验证轮次（含首次结束尝试）。
-///
-/// 对齐设计文档：仅本轮写盘且无工具终态时才计入；超过后不再 fire，直接收尾。
 const MAX_VERIFY_ATTEMPTS: usize = 2;
 
 /// 模型只返回思考/推理内容而没有文本回复时，允许的最大重试次数。
 const MAX_THINKING_ONLY_RETRIES: usize = 1;
-
-/// 向 mpsc 发送单个成功事件；接收方关闭时返回 `false`。
-pub(crate) async fn emit(
-    tx: &mpsc::Sender<anyhow::Result<MultiTurnStreamItem>>,
-    item: MultiTurnStreamItem,
-) -> bool {
-    tx.send(Ok(item)).await.is_ok()
-}
-
-/// 尽力双写 `kind=llm` 事件与会话账单；失败忽略。
-/// `meta` 优先使用本轮实际命中目标；缺省时回退到 AgentLoop 上的会话凭据（不应在 failover 时写入）。
-async fn record_llm_usage(
-    session: &Arc<Mutex<AgentLoop>>,
-    streamer: &ProviderStreamer,
-    usage: &Usage,
-) {
-    if usage.is_empty() {
-        return;
-    }
-    let agent = session.lock().await;
-    let agent_id = agent.agent_id().to_string();
-    let session_id = agent.session_id().to_string();
-    let turn_id = agent.current_turn_id().map(str::to_string);
-    let fallback_provider = agent.chat_provider().to_string();
-    let fallback_base_url = agent.chat_base_url().to_string();
-    let fallback_api_key = agent.chat_api_key().to_string();
-    let fallback_model = agent.chat_model().to_string();
-
-    let (model, provider, base_url, api_key) = if let Some(meta) = streamer.last_hit_meta() {
-        let api_key = streamer.api_key_for(&meta);
-        (meta.model, meta.backend_id, meta.base_url, api_key)
-    } else {
-        (
-            if fallback_model.is_empty() {
-                streamer.primary_model()
-            } else {
-                fallback_model
-            },
-            fallback_provider,
-            fallback_base_url,
-            fallback_api_key,
-        )
-    };
-
-    // 持锁写入，确保账单落在与消息相同的 SessionStore（非 default_memory_dir 另开库）。
-    apply_llm_usage_dual_write(
-        &LlmUsageWrite {
-            agent_id: &agent_id,
-            session_id: Some(&session_id),
-            turn_id: turn_id.as_deref(),
-            model: &model,
-            usage,
-            provider: &provider,
-            base_url: &base_url,
-            api_key: &api_key,
-        },
-        None,
-        Some(agent.sessions()),
-    );
-}
-
-/// 发送 Error 后立即发送 Done；若有已累计 usage 则先写入 `usage.db`。
-async fn finish_error(
-    session: &Arc<Mutex<AgentLoop>>,
-    streamer: &ProviderStreamer,
-    tx: &mpsc::Sender<anyhow::Result<MultiTurnStreamItem>>,
-    msg: impl Into<String>,
-    usage: Option<Usage>,
-) {
-    if let Some(u) = usage.as_ref() {
-        record_llm_usage(session, streamer, u).await;
-    }
-    let _ = emit(tx, MultiTurnStreamItem::Error(msg.into())).await;
-    let _ = emit(tx, MultiTurnStreamItem::Done).await;
-}
-
-/// 仅发送 Done，表示正常结束。
-async fn finish_done(tx: &mpsc::Sender<anyhow::Result<MultiTurnStreamItem>>) {
-    let _ = emit(tx, MultiTurnStreamItem::Done).await;
-}
-
-/// 发送 RunFinished(success) 后 Done。
-async fn finish_success(tx: &mpsc::Sender<anyhow::Result<MultiTurnStreamItem>>, run_id: &str) {
-    let mut state = RunState::new();
-    state.set_phase(RunPhase::Finished);
-    let _ = emit(
-        tx,
-        MultiTurnStreamItem::RunFinished {
-            run_id: run_id.to_string(),
-            outcome_type: state.outcome_type().into(),
-            interrupts_json: "[]".into(),
-        },
-    )
-    .await;
-    finish_done(tx).await;
-}
-
-/// 可选发送累计 usage 后发送 Done；若有 usage 则旁路写入 `usage.db`（kind=llm）。
-pub(crate) async fn finish_usage_and_done(
-    session: &Arc<Mutex<AgentLoop>>,
-    streamer: &ProviderStreamer,
-    tx: &mpsc::Sender<anyhow::Result<MultiTurnStreamItem>>,
-    usage: Option<Usage>,
-    run_id: &str,
-) {
-    if let Some(u) = usage {
-        record_llm_usage(session, streamer, &u).await;
-        let _ = emit(
-            tx,
-            MultiTurnStreamItem::Assistant(StreamedAssistantContent::FinalUsage(u)),
-        )
-        .await;
-    }
-    finish_success(tx, run_id).await;
-}
-
-/// Gateway 预压安全网 + mid-run 辅模型摘要，统一进 LLM 前的上下文维护。
-async fn pre_llm_maintenance(session: &Arc<Mutex<AgentLoop>>) {
-    {
-        let mut agent = session.lock().await;
-        let recommend_ratio = agent.compression_config().recommend_compact_ratio;
-        if agent.occupancy_ratio() >= recommend_ratio {
-            match agent.maintain_tool_context().await {
-                Ok(report) if report.pruned + report.compressed > 0 => {
-                    tracing::info!(
-                        pruned = report.pruned,
-                        compressed = report.compressed,
-                        llm_summarized = report.llm_summarized,
-                        occupancy_before = report.occupancy_before,
-                        occupancy_after = report.occupancy_after,
-                        recommend_ratio,
-                        "gateway pre-maintain applied"
-                    );
-                }
-                Ok(report) if report.recommend_session_compact => {
-                    tracing::warn!(
-                        occupancy = report.occupancy_after,
-                        "gateway pre-maintain: still critical; recommend /compact"
-                    );
-                }
-                Ok(_) => {}
-                Err(e) => tracing::warn!(error = %e, "gateway pre-maintain failed"),
-            }
-        }
-    }
-    {
-        let mut agent = session.lock().await;
-        match crate::exec::mid_run_summary::maybe_apply_mid_run_summary(&mut agent).await {
-            Ok(true) => tracing::info!("mid-run summary applied before LLM round"),
-            Ok(false) => {}
-            Err(e) => tracing::warn!(error = %e, "mid-run summary failed"),
-        }
-    }
-}
-
-/// 构建并推送上下文占用估算快照。
-async fn emit_context_usage(
-    session: &Arc<Mutex<AgentLoop>>,
-    tx: &mpsc::Sender<anyhow::Result<MultiTurnStreamItem>>,
-    history: &[common::message::Message],
-    tools: &[serde_json::Value],
-) {
-    let agent = session.lock().await;
-    let layers = agent.system_prompt_layer_breakdown();
-    let recommend_compact_ratio = agent.compression_config().recommend_compact_ratio;
-    let snap = crate::prompt::context_usage::build_snapshot(
-        crate::prompt::context_usage::ContextUsageInput {
-            system_chars: layers.system_chars,
-            memory_chars: layers.memory_chars,
-            skills_chars: layers.skills_chars,
-            recall_chars: layers.recall_chars,
-            system_items: &layers.system_items,
-            memory_items: &layers.memory_items,
-            skill_items: &layers.skill_items,
-            tools,
-            messages: history,
-            context_window: agent.context_window(),
-            updated_at_ms: chrono::Utc::now().timestamp_millis(),
-            recommend_compact: agent.should_recommend_compact(),
-            recommend_compact_ratio,
-        },
-    );
-    drop(agent);
-    let _ = emit(tx, MultiTurnStreamItem::ContextUsage(snap)).await;
-}
-
-/// 工具执行后的上下文维护（压缩 + mid-run 摘要）+ stop_after 检查。
-///
-/// 返回 `true` 表示 `stop_after_tool_call` 触发，主循环应跳出。
-/// 预算退还由主循环直接处理（`IterationBudget` 含 `Cell`，不可跨 await）。
-async fn post_tool_maintenance(
-    session: &Arc<Mutex<AgentLoop>>,
-    calls: &[tools::ParsedToolCall],
-) -> bool {
-    {
-        let mut agent = session.lock().await;
-        match agent.maintain_tool_context().await {
-            Ok(report) if report.pruned + report.compressed > 0 => {
-                tracing::info!(
-                    pruned = report.pruned,
-                    compressed = report.compressed,
-                    llm_summarized = report.llm_summarized,
-                    occupancy_before = report.occupancy_before,
-                    occupancy_after = report.occupancy_after,
-                    stage_ratio = ?report.stage_ratio,
-                    "tool context maintenance applied"
-                );
-            }
-            Ok(report) if report.recommend_session_compact => {
-                tracing::warn!(
-                    occupancy = report.occupancy_after,
-                    "context still critical after tool maintenance; recommend /compact"
-                );
-            }
-            Ok(_) => {}
-            Err(e) => tracing::warn!(error = %e, "tool context maintenance failed"),
-        }
-        match crate::exec::mid_run_summary::maybe_apply_mid_run_summary(&mut agent).await {
-            Ok(true) => tracing::info!("mid-run summary applied after tool maintenance"),
-            Ok(false) => {}
-            Err(e) => tracing::warn!(error = %e, "mid-run summary failed"),
-        }
-    }
-
-    let names: Vec<&str> = calls.iter().map(|c| c.name.as_str()).collect();
-    let stop_after = {
-        let agent = session.lock().await;
-        agent.tool_registry().any_stop_after(&names)
-    };
-    if stop_after {
-        tracing::info!(
-            ?names,
-            "stop_after_tool_call: ending run without next LLM round"
-        );
-    }
-    stop_after
-}
-
-/// 处理工具执行结果：推送事件、解析 A2UI、记录到会话历史。
-///
-/// 返回 `false` 表示取消或 channel 关闭，主循环应提前退出。
-async fn record_tool_outcomes(
-    session: &Arc<Mutex<AgentLoop>>,
-    calls: &[tools::ParsedToolCall],
-    outcomes: Vec<common::ToolOutput>,
-    pause: &Arc<providers::PauseControl>,
-    tx: &mpsc::Sender<anyhow::Result<MultiTurnStreamItem>>,
-    timeline: &mut crate::timeline::TimelineBuilder,
-    now_ms: impl Fn() -> i64,
-) -> bool {
-    for (call, result) in calls.iter().zip(outcomes) {
-        if pause.is_cancelled() {
-            return false;
-        }
-
-        let tool_media = result.media().to_vec();
-        let result_text = result.text().to_string();
-        if !emit(
-            tx,
-            MultiTurnStreamItem::ToolResult {
-                id: call.id.clone(),
-                name: call.name.clone(),
-                arguments_json: call.arguments.to_string(),
-                result: result_text.clone(),
-                media: tool_media.clone(),
-            },
-        )
-        .await
-        {
-            return false;
-        }
-
-        if matches!(call.name.as_str(), "memory")
-            && !result_text.starts_with("工具错误")
-            && !result_text.starts_with("工具已禁用")
-            && !result_text.starts_with("工具参数 JSON 解析失败")
-        {
-            let preview = {
-                let s = result_text.trim();
-                if s.chars().count() > 240 {
-                    format!("{}…", s.chars().take(240).collect::<String>())
-                } else {
-                    s.to_string()
-                }
-            };
-            if !emit(
-                tx,
-                MultiTurnStreamItem::MemoryUpdate {
-                    op: call.name.clone(),
-                    content: preview,
-                },
-            )
-            .await
-            {
-                return false;
-            }
-        }
-
-        let info_ui = parse_astro_ui(&result_text);
-        let result_for_history = if let Some(ref ui) = info_ui {
-            format!("Presented info card: {}", ui.summary)
-        } else {
-            result_text.clone()
-        };
-
-        if let Some(ref ui) = info_ui {
-            let message_id = format!("a2ui-surface-{}", call.id);
-            let content_json = serde_json::json!({ "operations": ui.operations }).to_string();
-            timeline.upsert_surface(
-                serde_json::json!({
-                    "messageId": message_id,
-                    "activityType": "a2ui-surface",
-                    "operations": ui.operations,
-                    "status": "active",
-                }),
-                now_ms(),
-            );
-            if !emit(
-                tx,
-                MultiTurnStreamItem::Activity {
-                    message_id,
-                    activity_type: "a2ui-surface".into(),
-                    content_json,
-                    replace: true,
-                },
-            )
-            .await
-            {
-                return false;
-            }
-        }
-
-        {
-            let mut agent = session.lock().await;
-            let _ = agent.record_tool_result_with_id(
-                Some(&call.id),
-                Some(&call.name),
-                &result_for_history,
-            );
-            if !tool_media.is_empty() {
-                if let Some(last) = agent.session_messages.last_mut() {
-                    if last.role == common::message::Role::Tool && last.media.is_empty() {
-                        last.media = tool_media;
-                    }
-                }
-            }
-        }
-    }
-
-    // 工具循环后回写 timeline/surfaces，避免历史恢复丢 A2UI 卡片。
-    {
-        let agent = session.lock().await;
-        if let Err(e) = agent.patch_last_assistant_timeline(timeline.reasoning_details_snapshot()) {
-            tracing::warn!(error = %e, "patch assistant timeline after tools failed");
-        }
-    }
-    true
-}
-
-/// 触发 PRE/POST_API_REQUEST hook 并发起 LLM 流式请求。
-///
-/// 成功返回 `Ok(stream)`；失败返回 `Err(error_string)` 并已在 hook 中记录。
-async fn stream_chat_with_hooks(
-    session: &Arc<Mutex<AgentLoop>>,
-    streamer: &ProviderStreamer,
-    system_prompt: &str,
-    history: &[common::message::Message],
-    tools: Vec<serde_json::Value>,
-) -> Result<super::types::AssistantContentStream, String> {
-    {
-        let agent = session.lock().await;
-        let sid = agent.session_id().to_string();
-        let turn_id = agent.current_turn_id().map(str::to_string);
-        let _ = agent.fire_hook(
-            ::hooks::PRE_API_REQUEST,
-            ::hooks::HookPayload {
-                session_id: sid,
-                turn_id,
-                ..Default::default()
-            },
-        );
-    }
-    match streamer.stream_chat(system_prompt, history, tools).await {
-        Ok(s) => {
-            let agent = session.lock().await;
-            let sid = agent.session_id().to_string();
-            let turn_id = agent.current_turn_id().map(str::to_string);
-            let _ = agent.fire_hook(
-                ::hooks::POST_API_REQUEST,
-                ::hooks::HookPayload {
-                    session_id: sid,
-                    turn_id,
-                    ..Default::default()
-                },
-            );
-            Ok(s)
-        }
-        Err(err) => {
-            let agent = session.lock().await;
-            let sid = agent.session_id().to_string();
-            let turn_id = agent.current_turn_id().map(str::to_string);
-            let _ = agent.fire_hook(
-                ::hooks::POST_API_REQUEST,
-                ::hooks::HookPayload {
-                    session_id: sid,
-                    turn_id,
-                    error: Some(err.to_string()),
-                    detail: format!("error={err}"),
-                    ..Default::default()
-                },
-            );
-            Err(err.to_string())
-        }
-    }
-}
 
 /// [`run_multi_turn_stream`] 入参打包。
 pub struct MultiTurnStreamArgs {
@@ -525,8 +110,6 @@ pub async fn run_multi_turn_stream(args: MultiTurnStreamArgs) {
 }
 
 /// 测试入口：以自定义 chat 函数替代 dispatch，驱动多轮工具循环。
-///
-/// 用于集成测试注入脚本化 Provider 回复，替代已移除的 `run_multi_turn_stream_from_provider`。
 pub async fn run_multi_turn_stream_with_chat_fn(
     session: Arc<Mutex<AgentLoop>>,
     chat_fn: super::provider::ChatOverride,
@@ -614,17 +197,11 @@ async fn run_multi_turn_stream_inner(args: MultiTurnStreamInnerArgs) {
     };
     let budget = crate::runtime::budget::IterationBudget::new(max_rounds);
     let mut run_state = RunState::new();
-    // 工具循环结束后是否需要无工具强制总结（预算耗尽且尚无自然语言终答）
     let need_summary;
-    // 原始迭代计数（不受 refund 影响），防止 code_exec-only 反复 refund 导致净预算永不耗尽。
-    // 硬上限 = max_rounds × 2，超过即视为预算耗尽。
     let mut raw_rounds: usize = 0;
-    // `pre_verify` 已消耗的验证尝试次数（每个 run 独立，跨 KeepGoing 轮次累加）。
     let mut verify_attempt: usize = 0;
-    // 模型只返回推理内容而没有文本回复时的已重试次数。
     let mut thinking_only_retries: usize = 0;
 
-    // 整次 run 累积时间线，供每轮 assistant 落盘写入 reasoning_details
     let mut timeline = crate::timeline::TimelineBuilder::new();
     let now_ms = || chrono::Utc::now().timestamp_millis();
 
@@ -697,11 +274,9 @@ async fn run_multi_turn_stream_inner(args: MultiTurnStreamInnerArgs) {
         let mut full_reasoning = String::new();
         let mut thought_signature: Option<String> = None;
         let mut tool_acc = tools::ToolCallAccumulator::new();
-        // Google 等会在每个 chunk 带累计 usage：本轮覆盖式取最后一次
         let mut round_usage: Option<Usage> = None;
 
         loop {
-            // Rig 语义：先确认未 pause，再 poll 上游
             if !pause.wait_if_paused().await {
                 pause.clear_abort();
                 finish_usage_and_done(
@@ -787,7 +362,7 @@ async fn run_multi_turn_stream_inner(args: MultiTurnStreamInnerArgs) {
                     }
                 }
                 Some(Ok(StreamedAssistantContent::FinalUsage(u))) => {
-                    round_usage = Some(u); // 覆盖：兼容累计式 usageMetadata
+                    round_usage = Some(u);
                 }
                 Some(Ok(StreamedAssistantContent::Citations(cites))) => {
                     let _ = emit(
@@ -900,9 +475,7 @@ async fn run_multi_turn_stream_inner(args: MultiTurnStreamInnerArgs) {
             return;
         }
 
-        // `pre_verify`：仅无工具终态（`calls.is_empty()`）且本轮写过盘时才 fire，
-        // 在 `transform_llm_output` / `post_llm_call` 之前判断，`KeepGoing` 则注入
-        // 提示并继续外层 API 循环（不进入本轮收尾）。
+        // `pre_verify` hook
         if calls.is_empty() {
             let verify_outcome = {
                 let agent = session.lock().await;
@@ -947,11 +520,6 @@ async fn run_multi_turn_stream_inner(args: MultiTurnStreamInnerArgs) {
                     .await;
                     return;
                 }
-                // 直接持久化桥接 user 消息到 session_messages / SessionStore（而非仅
-                // `queue_inject_context` 排队临时注入）：否则第二次 KeepGoing 时
-                // `session_messages` 会出现连续 assistant，导致下一轮历史触发
-                // Anthropic/Gemini 400。与 inject 保持同一文本形态，且不再排队注入，
-                // 避免下一轮 history 重复出现该 user 消息（连续 user）。
                 if let Err(err) =
                     agent.record_user_message(&format!("[astro:hook-context]\n{prompt}"))
                 {
@@ -1212,32 +780,4 @@ pub fn stream_multi_turn_with_hitl(
     Box::pin(futures::stream::unfold(rx, |mut rx| async move {
         rx.recv().await.map(|item| (item, rx))
     }))
-}
-
-struct AstroUiPayload {
-    summary: String,
-    operations: serde_json::Value,
-}
-
-fn parse_astro_ui(result: &str) -> Option<AstroUiPayload> {
-    let value: serde_json::Value = serde_json::from_str(result).ok()?;
-    if value.get("astro_ui")?.as_bool() != Some(true) {
-        return None;
-    }
-    // HITL 优先：同结果不应既 hitl 又 ui
-    if value.get("astro_hitl").and_then(|v| v.as_bool()) == Some(true) {
-        return None;
-    }
-    let operations = value.get("operations")?.clone();
-    if !operations.is_array() {
-        return None;
-    }
-    Some(AstroUiPayload {
-        summary: value
-            .get("summary")
-            .and_then(|v| v.as_str())
-            .unwrap_or("info")
-            .to_string(),
-        operations,
-    })
 }

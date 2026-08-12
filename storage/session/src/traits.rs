@@ -50,19 +50,10 @@ pub trait ConversationStore: Send {
     // ── 上下文召回 ──
 
     /// 获取最近 `limit` 条消息（按 id 升序返回）。
-    fn recent_messages(
-        &self,
-        session_id: &str,
-        limit: usize,
-    ) -> Result<Vec<ScrolledMessage>>;
+    fn recent_messages(&self, session_id: &str, limit: usize) -> Result<Vec<ScrolledMessage>>;
 
     /// FTS 召回：返回与 `query` 相关的消息 id（最多 `limit` 个）。
-    fn recall_message_ids(
-        &self,
-        session_id: &str,
-        query: &str,
-        limit: usize,
-    ) -> Result<Vec<i64>>;
+    fn recall_message_ids(&self, session_id: &str, query: &str, limit: usize) -> Result<Vec<i64>>;
 
     /// 获取指定消息周围的上下文窗口（±`window_size` 行）。
     fn scroll_context_window(
@@ -91,10 +82,18 @@ impl<S: ConversationStore + ?Sized> ConversationStore for Box<S> {
     fn get_messages(&self, session_id: &str) -> Result<Vec<StoredMessage>> {
         (**self).get_messages(session_id)
     }
-    fn update_message_compressed_content(&self, message_id: i64, compressed: Option<&str>) -> Result<()> {
+    fn update_message_compressed_content(
+        &self,
+        message_id: i64,
+        compressed: Option<&str>,
+    ) -> Result<()> {
         (**self).update_message_compressed_content(message_id, compressed)
     }
-    fn patch_last_assistant_reasoning_details(&self, session_id: &str, details: &Value) -> Result<()> {
+    fn patch_last_assistant_reasoning_details(
+        &self,
+        session_id: &str,
+        details: &Value,
+    ) -> Result<()> {
         (**self).patch_last_assistant_reasoning_details(session_id, details)
     }
     fn ensure_session(&self, id: &str, source: &str) -> Result<()> {
@@ -109,10 +108,21 @@ impl<S: ConversationStore + ?Sized> ConversationStore for Box<S> {
     fn recall_message_ids(&self, session_id: &str, query: &str, limit: usize) -> Result<Vec<i64>> {
         (**self).recall_message_ids(session_id, query, limit)
     }
-    fn scroll_context_window(&self, session_id: &str, around_message_id: i64, window_size: i64) -> Result<Vec<ScrolledMessage>> {
+    fn scroll_context_window(
+        &self,
+        session_id: &str,
+        around_message_id: i64,
+        window_size: i64,
+    ) -> Result<Vec<ScrolledMessage>> {
         (**self).scroll_context_window(session_id, around_message_id, window_size)
     }
-    fn search_messages(&self, query: &str, source_filter: Option<&str>, role_filter: Option<&str>, limit: i64) -> Result<Vec<SearchHit>> {
+    fn search_messages(
+        &self,
+        query: &str,
+        source_filter: Option<&str>,
+        role_filter: Option<&str>,
+        limit: i64,
+    ) -> Result<Vec<SearchHit>> {
         (**self).search_messages(query, source_filter, role_filter, limit)
     }
 }

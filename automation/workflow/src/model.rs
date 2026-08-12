@@ -116,20 +116,48 @@ pub enum NodeType {
 impl NodeType {
     pub fn category(&self) -> NodeCategory {
         match self {
-            Self::ManualTrigger | Self::ScheduledTrigger | Self::WebhookTrigger
-            | Self::EmailTrigger | Self::FileWatchTrigger => NodeCategory::Trigger,
-            Self::AiAgentTask | Self::ParameterExtraction | Self::QuestionClassification
-            | Self::KnowledgeRetrieval | Self::Summarization | Self::SentimentAnalysis
-            | Self::DocumentUnderstanding | Self::VisionUnderstanding => NodeCategory::Ai,
-            Self::ImageGeneration | Self::VideoGeneration | Self::MusicGeneration
-            | Self::TextToSpeech | Self::SubtitleGeneration | Self::VoiceClone
-            | Self::SpeechToText | Self::ImageEdit | Self::Translation => NodeCategory::Media,
-            Self::Conditional | Self::MultiBranch | Self::Filter | Self::Merge
-            | Self::Loop | Self::HumanApproval => NodeCategory::FlowControl,
-            Self::SetFields | Self::FormatText | Self::Json | Self::Code
-            | Self::Sort | Self::Slice | Self::Aggregate => NodeCategory::DataProcessing,
-            Self::HttpRequest | Self::RunLoop | Self::DelayWait | Self::Output
-            | Self::AudioProcessing | Self::SendNotification | Self::FileIo
+            Self::ManualTrigger
+            | Self::ScheduledTrigger
+            | Self::WebhookTrigger
+            | Self::EmailTrigger
+            | Self::FileWatchTrigger => NodeCategory::Trigger,
+            Self::AiAgentTask
+            | Self::ParameterExtraction
+            | Self::QuestionClassification
+            | Self::KnowledgeRetrieval
+            | Self::Summarization
+            | Self::SentimentAnalysis
+            | Self::DocumentUnderstanding
+            | Self::VisionUnderstanding => NodeCategory::Ai,
+            Self::ImageGeneration
+            | Self::VideoGeneration
+            | Self::MusicGeneration
+            | Self::TextToSpeech
+            | Self::SubtitleGeneration
+            | Self::VoiceClone
+            | Self::SpeechToText
+            | Self::ImageEdit
+            | Self::Translation => NodeCategory::Media,
+            Self::Conditional
+            | Self::MultiBranch
+            | Self::Filter
+            | Self::Merge
+            | Self::Loop
+            | Self::HumanApproval => NodeCategory::FlowControl,
+            Self::SetFields
+            | Self::FormatText
+            | Self::Json
+            | Self::Code
+            | Self::Sort
+            | Self::Slice
+            | Self::Aggregate => NodeCategory::DataProcessing,
+            Self::HttpRequest
+            | Self::RunLoop
+            | Self::DelayWait
+            | Self::Output
+            | Self::AudioProcessing
+            | Self::SendNotification
+            | Self::FileIo
             | Self::CustomLoop => NodeCategory::Action,
         }
     }

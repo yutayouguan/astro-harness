@@ -164,9 +164,7 @@ impl VariableContext {
     /// 对 JSON Value 执行插值（递归处理字符串字段）
     pub fn interpolate_value(&self, value: &serde_json::Value) -> serde_json::Value {
         match value {
-            serde_json::Value::String(s) => {
-                serde_json::Value::String(self.interpolate(s))
-            }
+            serde_json::Value::String(s) => serde_json::Value::String(self.interpolate(s)),
             serde_json::Value::Array(arr) => {
                 serde_json::Value::Array(arr.iter().map(|v| self.interpolate_value(v)).collect())
             }
@@ -192,7 +190,10 @@ fn find_operator_outside_braces(s: &str, op: &str) -> Option<usize> {
         if i + 1 < bytes.len() && bytes[i] == b'{' && bytes[i + 1] == b'{' {
             i += 2;
             while i + 1 < bytes.len() {
-                if bytes[i] == b'}' && bytes[i + 1] == b'}' { i += 2; break; }
+                if bytes[i] == b'}' && bytes[i + 1] == b'}' {
+                    i += 2;
+                    break;
+                }
                 i += 1;
             }
             continue;
@@ -200,8 +201,12 @@ fn find_operator_outside_braces(s: &str, op: &str) -> Option<usize> {
         // 跳过 "..." 引号字符串
         if bytes[i] == b'"' {
             i += 1;
-            while i < bytes.len() && bytes[i] != b'"' { i += 1; }
-            if i < bytes.len() { i += 1; }
+            while i < bytes.len() && bytes[i] != b'"' {
+                i += 1;
+            }
+            if i < bytes.len() {
+                i += 1;
+            }
             continue;
         }
         if i + op_bytes.len() <= bytes.len() && &bytes[i..i + op_bytes.len()] == op_bytes {
@@ -278,7 +283,8 @@ mod tests {
     #[test]
     fn condition_eval() {
         let mut ctx = VariableContext::default();
-        ctx.global.insert("status".into(), serde_json::json!("active"));
+        ctx.global
+            .insert("status".into(), serde_json::json!("active"));
         ctx.global.insert("count".into(), serde_json::json!("10"));
 
         assert!(ctx.evaluate_condition("{{status}} == active").unwrap());
@@ -291,10 +297,7 @@ mod tests {
     #[test]
     fn resolve_nested() {
         let mut ctx = VariableContext::default();
-        ctx.set_node_output(
-            "api",
-            serde_json::json!({"data": {"items": [1, 2, 3]}}),
-        );
+        ctx.set_node_output("api", serde_json::json!({"data": {"items": [1, 2, 3]}}));
         assert_eq!(ctx.resolve("api.data.items.1"), Some(serde_json::json!(2)));
     }
 }

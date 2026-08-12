@@ -238,8 +238,12 @@ mod tests {
         let user = &msgs[1];
         assert_eq!(user.role(), providers::types::message::Role::User);
         if let ProviderMessage::User { content } = user {
-            assert!(content.iter().any(|c| matches!(c, UserContent::Text { text } if text == "描述")));
-            assert!(content.iter().any(|c| matches!(c, UserContent::Image { url } if url.starts_with("data:image/png"))));
+            assert!(content
+                .iter()
+                .any(|c| matches!(c, UserContent::Text { text } if text == "描述")));
+            assert!(content.iter().any(
+                |c| matches!(c, UserContent::Image { url } if url.starts_with("data:image/png"))
+            ));
         } else {
             panic!("expected User message");
         }
@@ -266,8 +270,12 @@ mod tests {
             .find(|m| m.role() == providers::types::message::Role::User)
             .unwrap();
         if let ProviderMessage::User { content } = user {
-            assert!(content.iter().any(|c| matches!(c, UserContent::Audio { .. })));
-            assert!(content.iter().any(|c| matches!(c, UserContent::Video { .. })));
+            assert!(content
+                .iter()
+                .any(|c| matches!(c, UserContent::Audio { .. })));
+            assert!(content
+                .iter()
+                .any(|c| matches!(c, UserContent::Video { .. })));
             assert_eq!(
                 content
                     .iter()
