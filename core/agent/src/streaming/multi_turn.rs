@@ -273,7 +273,7 @@ async fn run_multi_turn_stream_inner(args: MultiTurnStreamInnerArgs) {
         let mut full_response = String::new();
         let mut full_reasoning = String::new();
         let mut thought_signature: Option<String> = None;
-        let mut tool_acc = tools::ToolCallAccumulator::new();
+        let mut tool_acc = common::ToolCallAccumulator::new();
         let mut round_usage: Option<Usage> = None;
 
         loop {
@@ -415,7 +415,7 @@ async fn run_multi_turn_stream_inner(args: MultiTurnStreamInnerArgs) {
         }
 
         let native_calls = tool_acc.finish();
-        let calls = tools::resolve_tool_calls(native_calls, &full_response);
+        let calls = common::resolve_tool_calls(native_calls, &full_response);
 
         if full_response.is_empty() && calls.is_empty() {
             if !full_reasoning.is_empty() && thinking_only_retries < MAX_THINKING_ONLY_RETRIES {

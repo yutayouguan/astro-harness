@@ -5,7 +5,7 @@
 
 use futures::StreamExt;
 use providers::Usage;
-use tools::{ParsedToolCall, ToolCallAccumulator};
+use common::{ParsedToolCall, ToolCallAccumulator};
 
 use super::types::{AssistantContentStream, StreamedAssistantContent};
 
@@ -44,7 +44,7 @@ pub(crate) async fn collect_response(
     }
 
     let native_calls = tool_acc.finish();
-    let calls = tools::resolve_tool_calls(native_calls, &text);
+    let calls = common::resolve_tool_calls(native_calls, &text);
     Ok(AccumulatedResponse {
         text,
         reasoning,

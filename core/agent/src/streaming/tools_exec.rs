@@ -76,7 +76,7 @@ pub(crate) fn terminal_needs_approval(name: &str, args: &serde_json::Value) -> b
 /// 串行执行；`None` 表示已处理 cancel/断开，调用方应直接 return。
 pub(crate) async fn execute_tools_serial(
     session: &Arc<Mutex<AgentLoop>>,
-    calls: &[tools::ParsedToolCall],
+    calls: &[common::ParsedToolCall],
     pause: &Arc<PauseControl>,
     tx: &mpsc::Sender<anyhow::Result<MultiTurnStreamItem>>,
     run_id: &str,
@@ -97,7 +97,7 @@ pub(crate) async fn execute_tools_serial(
 
 async fn execute_tools_serial_inner(
     session: &Arc<Mutex<AgentLoop>>,
-    calls: &[tools::ParsedToolCall],
+    calls: &[common::ParsedToolCall],
     pause: &Arc<PauseControl>,
     tx: &mpsc::Sender<anyhow::Result<MultiTurnStreamItem>>,
     run_id: &str,
@@ -344,7 +344,7 @@ async fn execute_tools_serial_inner(
 /// 并发执行非 interactive/exclusive 工具；按调用顺序返回结果。
 pub(crate) async fn execute_tools_concurrent(
     session: &Arc<Mutex<AgentLoop>>,
-    calls: &[tools::ParsedToolCall],
+    calls: &[common::ParsedToolCall],
     pause: &Arc<PauseControl>,
 ) -> Option<Vec<common::ToolOutput>> {
     if pause.is_cancelled() || !pause.wait_if_paused().await {

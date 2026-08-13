@@ -12,6 +12,7 @@ pub mod sqlite;
 pub mod text;
 pub mod title;
 pub mod tool;
+pub mod tool_call;
 pub mod tool_output;
 pub mod tool_spill;
 
@@ -38,4 +39,7 @@ pub use tool_spill::{
 };
 
 pub use text::{truncate_chars, truncate_tool_result, truncate_utf8, MAX_TOOL_RESULT_BYTES};
+pub use tool_call::{
+    extract_tool_calls, resolve_tool_calls, ParsedToolCall, ToolCallAccumulator, ToolCallDelta,
+};
 pub use tool_output::ToolOutput;

@@ -85,7 +85,7 @@ pub(super) async fn emit_context_usage(
 /// 返回 `true` 表示 `stop_after_tool_call` 触发，主循环应跳出。
 pub(super) async fn post_tool_maintenance(
     session: &Arc<Mutex<AgentLoop>>,
-    calls: &[tools::ParsedToolCall],
+    calls: &[common::ParsedToolCall],
 ) -> bool {
     {
         let mut agent = session.lock().await;
@@ -136,7 +136,7 @@ pub(super) async fn post_tool_maintenance(
 /// 返回 `false` 表示取消或 channel 关闭，主循环应提前退出。
 pub(super) async fn record_tool_outcomes(
     session: &Arc<Mutex<AgentLoop>>,
-    calls: &[tools::ParsedToolCall],
+    calls: &[common::ParsedToolCall],
     outcomes: Vec<common::ToolOutput>,
     pause: &Arc<providers::PauseControl>,
     tx: &mpsc::Sender<anyhow::Result<MultiTurnStreamItem>>,
