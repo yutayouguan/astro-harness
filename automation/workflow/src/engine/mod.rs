@@ -4,9 +4,18 @@ pub mod variables;
 
 use std::collections::{HashMap, HashSet};
 
-use anyhow::{bail, Result};
+use anyhow::Result;
 use chrono::Local;
 use futures::future::join_all;
+
+use crate::error::WorkflowError;
+use crate::model::{NodeType, Workflow, WorkflowEdge, WorkflowNode};
+use crate::nodes;
+use crate::run_db::WorkflowRunDb;
+use crate::store::WorkflowStore;
+use dag::resolve_dag;
+use executor::NodeResult;
+use variables::VariableContext;
 
 macro_rules! log_db_err {
     ($expr:expr) => {
@@ -15,14 +24,6 @@ macro_rules! log_db_err {
         }
     };
 }
-
-use crate::model::{NodeType, Workflow, WorkflowEdge, WorkflowNode};
-use crate::nodes;
-use crate::run_db::WorkflowRunDb;
-use crate::store::WorkflowStore;
-use dag::resolve_dag;
-use executor::NodeResult;
-use variables::VariableContext;
 
 /// 工作流执行结果
 #[derive(Debug, Clone, serde::Serialize)]
@@ -67,10 +68,7 @@ pub async fn execute_workflow(
     .await
     {
         Ok(r) => r,
-        Err(_) => Err(anyhow::anyhow!(
-            "工作流执行超时（{}秒），可在工作流变量中设置 timeout_seconds 调整",
-            timeout_secs,
-        )),
+        Err(_) => Err(WorkflowError::Timeout { timeout_secs }.into()),
     };
 
     let finished_at = Local::now().to_rfc3339();
@@ -349,7 +347,12 @@ async fn execute_inner_with_depth(
                                     None,
                                     Some(&err_msg)
                                 ));
-                                bail!("节点 {} ({}) 执行失败: {}", node.label, node_id, e);
+                                return Err(WorkflowError::NodeExecFailed {
+                                    node_id: node_id.to_string(),
+                                    label: node.label.clone(),
+                                    source: e,
+                                }
+                                .into());
                             }
                         }
                     }
@@ -364,11 +367,12 @@ async fn execute_inner_with_depth(
             } else {
                 match executors.get(&node.node_type) {
                     Some(exec) => exec.execute(node, &ctx).await,
-                    None => Err(anyhow::anyhow!(
-                        "节点 {} 无可用执行器: {:?}",
-                        node.label,
-                        node.node_type
-                    )),
+                    None => Err(WorkflowError::NoExecutor {
+                        node_id: node_id.to_string(),
+                        label: node.label.clone(),
+                        node_type: node.node_type.clone(),
+                    }
+                    .into()),
                 }
             };
 
@@ -448,7 +452,12 @@ async fn execute_inner_with_depth(
                                 None,
                                 Some(&err_msg)
                             ));
-                            bail!("节点 {} ({}) 执行失败: {}", node.label, node_id, e);
+                            return Err(WorkflowError::NodeExecFailed {
+                                node_id: node_id.to_string(),
+                                label: node.label.clone(),
+                                source: e,
+                            }
+                            .into());
                         }
                     }
                 }
@@ -484,7 +493,10 @@ fn execute_sub_workflow<'a>(
 ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<NodeResult>> + 'a>> {
     Box::pin(async move {
         if depth >= MAX_SUB_WORKFLOW_DEPTH {
-            bail!("子工作流递归深度超过限制 ({})", MAX_SUB_WORKFLOW_DEPTH);
+            return Err(WorkflowError::MaxDepthExceeded {
+                max_depth: MAX_SUB_WORKFLOW_DEPTH,
+            }
+            .into());
         }
         let workflow_id = node
             .config
@@ -492,12 +504,17 @@ fn execute_sub_workflow<'a>(
             .and_then(|v| v.as_str())
             .unwrap_or("");
         if workflow_id.is_empty() {
-            bail!("RunLoop 节点未配置 workflow_id");
+            return Err(WorkflowError::MissingConfig {
+                field: "workflow_id".into(),
+            }
+            .into());
         }
         let store = WorkflowStore::open_default()?;
-        let sub_wf = store
-            .get(workflow_id)?
-            .ok_or_else(|| anyhow::anyhow!("子工作流 {} 不存在", workflow_id))?;
+        let sub_wf = store.get(workflow_id)?.ok_or_else(|| {
+            WorkflowError::SubWorkflowNotFound {
+                workflow_id: workflow_id.to_string(),
+            }
+        })?;
 
         let input = ctx.snapshot_outputs();
         let sub_run_id = uuid::Uuid::new_v4().to_string();
@@ -532,15 +549,21 @@ fn execute_sub_workflow<'a>(
                 )))
             }
             Err(e) => {
+                let err_msg = e.to_string();
                 log_db_err!(run_db.finish_run(
                     &sub_run_id,
                     "failure",
                     &finished_at,
-                    Some(&e.to_string()),
+                    Some(&err_msg),
                     None,
                     0
                 ));
-                bail!("子工作流 {} 执行失败: {}", workflow_id, e)
+                return Err(WorkflowError::NodeExecFailed {
+                    node_id: workflow_id.to_string(),
+                    label: format!("子工作流 {}", workflow_id),
+                    source: anyhow::anyhow!("{}", err_msg),
+                }
+                .into())
             }
         }
     })
@@ -648,7 +671,12 @@ async fn execute_loop_body(loop_node: &WorkflowNode, lc: &mut LoopContext<'_>) -
                         None,
                         Some(&e.to_string())
                     ));
-                    bail!("循环体节点 {} 执行失败: {}", body_node.label, e);
+                    return Err(WorkflowError::NodeExecFailed {
+                        node_id: body_id.to_string(),
+                        label: body_node.label.clone(),
+                        source: e,
+                    }
+                    .into());
                 }
             }
         }

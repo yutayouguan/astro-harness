@@ -1,7 +1,6 @@
 use std::collections::{HashMap, HashSet, VecDeque};
 
-use anyhow::{bail, Result};
-
+use crate::error::WorkflowError;
 use crate::model::{NodeType, WorkflowEdge, WorkflowNode};
 
 /// DAG 执行计划：按拓扑序分层，同一层内节点可并行
@@ -16,7 +15,10 @@ pub struct DagPlan {
 /// 对工作流 DAG 做拓扑排序，返回分层执行计划。
 ///
 /// 禁用的节点及其下游自动跳过。含环则报错。
-pub fn resolve_dag(nodes: &[WorkflowNode], edges: &[WorkflowEdge]) -> Result<DagPlan> {
+pub fn resolve_dag(
+    nodes: &[WorkflowNode],
+    edges: &[WorkflowEdge],
+) -> Result<DagPlan, WorkflowError> {
     let enabled: HashSet<&str> = nodes
         .iter()
         .filter(|n| !n.disabled)
@@ -74,7 +76,7 @@ pub fn resolve_dag(nodes: &[WorkflowNode], edges: &[WorkflowEdge]) -> Result<Dag
     }
 
     if visited != enabled.len() {
-        bail!("工作流中存在环路，无法执行");
+        return Err(WorkflowError::CycleDetected);
     }
 
     // 找触发器节点
