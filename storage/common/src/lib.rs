@@ -1,8 +1,10 @@
 //! 跨 crate 共享类型：消息、工具描述、统一错误与 SQLite 打开协议。
 
+pub mod approval;
 pub mod auxiliary_target;
 pub mod chat_target;
 pub mod credentials;
+pub mod interaction_mode;
 pub mod error;
 pub mod grpc_addr;
 pub mod media;
@@ -40,7 +42,9 @@ pub use tool_spill::{
 };
 
 pub use text::{truncate_chars, truncate_tool_result, truncate_utf8, MAX_TOOL_RESULT_BYTES};
+pub use approval::{ApprovalAction, ApprovalDecision, ApprovalMode};
 pub use credentials::{ImageGenCreds, ImageGenParts, ImageGenTargets, ModelCredentials};
+pub use interaction_mode::InteractionMode;
 pub use tool_call::{
     extract_tool_calls, resolve_tool_calls, ParsedToolCall, ToolCallAccumulator, ToolCallDelta,
 };

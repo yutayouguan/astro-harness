@@ -9,7 +9,7 @@ use futures::StreamExt;
 use providers::types::message::Message as ProviderMessage;
 use providers::types::stream::StreamChunk;
 use providers::ProviderConfig;
-use tools::ApprovalAction;
+use common::ApprovalAction;
 
 const SMART_TIMEOUT: Duration = Duration::from_secs(8);
 

@@ -136,7 +136,7 @@ pub struct AgentLoop {
     /// 上一轮复杂任务后挂起的学习 nudge（本轮注入 dynamic，下一次 begin_user_turn 清掉/重算）。
     pub(crate) pending_learning_nudge: Option<String>,
     /// 当前聊天交互模式（Plan/Ask 只读门禁）；由 ChatRequest 下传。
-    pub(crate) interaction_mode: tools::InteractionMode,
+    pub(crate) interaction_mode: common::InteractionMode,
 }
 
 impl AgentLoop {
@@ -228,7 +228,7 @@ impl AgentLoop {
             project_root: resolve_session_project_root(),
             pending_inject_context: None,
             pending_learning_nudge: None,
-            interaction_mode: tools::InteractionMode::Agent,
+            interaction_mode: common::InteractionMode::Agent,
         })
     }
 
@@ -661,11 +661,11 @@ impl AgentLoop {
     }
 
     /// 设置本轮交互模式（Plan/Ask 启用只读工具门禁）。
-    pub fn set_interaction_mode(&mut self, mode: tools::InteractionMode) {
+    pub fn set_interaction_mode(&mut self, mode: common::InteractionMode) {
         self.interaction_mode = mode;
     }
 
-    pub fn interaction_mode(&self) -> tools::InteractionMode {
+    pub fn interaction_mode(&self) -> common::InteractionMode {
         self.interaction_mode
     }
 
