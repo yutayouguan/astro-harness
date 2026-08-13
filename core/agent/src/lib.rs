@@ -44,5 +44,7 @@ pub use streaming::{
     stream_multi_turn_with_hitl, ChatOverride, MultiTurnStreamItem, ProviderStreamer,
     StreamedAssistantContent, StreamingChat, StreamingCompletion, StreamingPrompt,
 };
-/// 工具注册表与条目定义（实现位于 `tools` crate）。
-pub use tools::{ToolEntry, ToolRegistry};
+/// 工具元数据（定义位于 `common`）。
+pub use common::ToolEntry;
+/// 工具注册表（实现位于 `tools` crate）。
+pub use tools::ToolRegistry;

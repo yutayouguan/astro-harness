@@ -16,6 +16,7 @@ pub mod text;
 pub mod title;
 pub mod tool;
 pub mod tool_call;
+pub mod tool_entry;
 pub mod tool_output;
 pub mod tool_spill;
 
@@ -48,4 +49,5 @@ pub use interaction_mode::InteractionMode;
 pub use tool_call::{
     extract_tool_calls, resolve_tool_calls, ParsedToolCall, ToolCallAccumulator, ToolCallDelta,
 };
+pub use tool_entry::{NestingPolicy, ToolEntry};
 pub use tool_output::ToolOutput;

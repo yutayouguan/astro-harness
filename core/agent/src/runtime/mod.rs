@@ -21,7 +21,8 @@ use common::message::Message;
 use mcp::{McpHub, MCP_TOOLSET};
 use memory::MemoryManager;
 use serde_json::Value;
-use tools::{register_all, ToolEntry, ToolRegistry};
+use common::ToolEntry;
+use tools::{register_all, ToolRegistry};
 
 use crate::prompt::context::StaticContext;
 use crate::prompt::hooks::CancelSignal;
