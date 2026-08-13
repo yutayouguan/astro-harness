@@ -1,7 +1,7 @@
 //! 工具执行上下文：由 AgentLoop 注入的运行时依赖与凭证。
 //!
-//! 各内置工具的 `dispatch` 函数通过 [`ToolContext`] 访问工作区路径、
-//! 记忆管理器、Provider 注册表及聊天/生图凭证，避免在工具层重复读取环境变量。
+//! 凭证数据类型已下沉到 `common::credentials`，本模块 re-export 并提供
+//! `ToolContext` 结构体与 Provider 相关的便捷构造。
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -9,148 +9,13 @@ use std::sync::Arc;
 use memory::MemoryManager;
 use session::ConversationStore;
 
-/// 当前聊天会话的 LLM 凭证（provider / model / api_key / base_url）。
-///
-/// 由 AgentLoop 构建并通过 [`ToolContext`] 以引用传给工具层，
-/// 避免每次工具调用克隆四个 `String`。
-#[derive(Debug, Clone, Default)]
-pub struct ModelCredentials {
-    /// Provider id，如 `"openai"`、`"google"`。
-    pub provider: String,
-    /// 当前聊天模型名称。
-    pub model: String,
-    /// API Key。
-    pub api_key: String,
-    /// 自定义 Base URL；为空时使用 Provider 默认值。
-    pub base_url: String,
-}
+pub use common::credentials::{ImageGenCreds, ImageGenParts, ImageGenTargets, ModelCredentials};
 
-/// 单个媒体生成 Provider 的调用凭证。
-///
-/// 由 Tauri 前端从「模型提供商」面板注入，经 [`ImageGenTargets`] 传给
-/// `image_gen` / `video_gen` / `tts` / `vision` 工具。
-#[derive(Debug, Clone, Default)]
-pub struct ImageGenCreds {
-    /// Provider id，如 `"google"`、`"openai"`。
-    pub provider: String,
-    /// 生图模型；为空时由 `providers::image_gen::default_image_model` 补全。
-    pub model: String,
-    /// API Key。
-    pub api_key: String,
-    /// 自定义 Base URL；为空时使用 Provider 默认值。
-    pub base_url: String,
-    /// 生视频模型（主要为 Google）；空则用 `default_video_model`。
-    pub video_model: String,
-    /// 音乐生成模型（Google Lyria）；空则使用 clip 默认。
-    pub music_model: String,
-    /// 生音频 / TTS 模型；空则用供应商默认。
-    pub tts_model: String,
-    /// 视觉（图片理解）模型；空则用 `default_vision_model`。
-    pub vision_model: String,
-}
-
-/// 主备媒体凭证对：主 Provider 失败时自动尝试备用（图 / 音）。
-#[derive(Debug, Clone, Default)]
-pub struct ImageGenTargets {
-    /// 优先使用的媒体生成凭证。
-    pub primary: Option<ImageGenCreds>,
-    /// 主 Provider 失败时的备用凭证。
-    pub fallback: Option<ImageGenCreds>,
-}
-
-/// `ImageGenTargets::from_parts` 的扁平字符串入参（Tauri / gRPC 注入字段）。
-#[derive(Debug, Clone, Copy)]
-pub struct ImageGenParts<'a> {
-    pub provider: &'a str,
-    pub model: &'a str,
-    pub api_key: &'a str,
-    pub base_url: &'a str,
-    pub fb_provider: &'a str,
-    pub fb_model: &'a str,
-    pub fb_api_key: &'a str,
-    pub fb_base_url: &'a str,
-    pub video_model: &'a str,
-    pub music_model: &'a str,
-    pub tts_model: &'a str,
-    pub fb_video_model: &'a str,
-    pub fb_music_model: &'a str,
-    pub fb_tts_model: &'a str,
-    pub vision_model: &'a str,
-    pub fb_vision_model: &'a str,
-}
-
-impl ImageGenTargets {
-    /// 从 Tauri / gRPC 注入的字符串字段构建主备凭证。
-    ///
-    /// Provider 或 API Key 为空时，对应槽位为 `None`；
-    /// 图片 model 为空则使用 Provider 默认图片模型。
-    pub fn from_parts(p: ImageGenParts<'_>) -> Self {
-        let primary = if !p.provider.is_empty() && !p.api_key.is_empty() {
-            Some(ImageGenCreds {
-                provider: p.provider.to_string(),
-                model: if p.model.is_empty() {
-                    providers::image_gen::default_image_model(p.provider).to_string()
-                } else {
-                    p.model.to_string()
-                },
-                api_key: p.api_key.to_string(),
-                base_url: p.base_url.to_string(),
-                video_model: p.video_model.trim().to_string(),
-                music_model: p.music_model.trim().to_string(),
-                tts_model: p.tts_model.trim().to_string(),
-                vision_model: p.vision_model.trim().to_string(),
-            })
-        } else {
-            None
-        };
-        let fallback = if !p.fb_provider.is_empty() && !p.fb_api_key.is_empty() {
-            Some(ImageGenCreds {
-                provider: p.fb_provider.to_string(),
-                model: if p.fb_model.is_empty() {
-                    providers::image_gen::default_image_model(p.fb_provider).to_string()
-                } else {
-                    p.fb_model.to_string()
-                },
-                api_key: p.fb_api_key.to_string(),
-                base_url: p.fb_base_url.to_string(),
-                video_model: p.fb_video_model.trim().to_string(),
-                music_model: p.fb_music_model.trim().to_string(),
-                tts_model: p.fb_tts_model.trim().to_string(),
-                vision_model: p.fb_vision_model.trim().to_string(),
-            })
-        } else {
-            None
-        };
-        Self { primary, fallback }
-    }
-
-    /// 主备凭证均未配置时返回 `true`；`image_gen` 工具会据此提前报错。
-    pub fn is_empty(&self) -> bool {
-        self.primary.is_none() && self.fallback.is_none()
-    }
-
-    /// 按 provider id 查找主或备凭证。
-    pub fn find_provider(&self, provider: &str) -> Option<&ImageGenCreds> {
-        self.primary
-            .as_ref()
-            .filter(|c| c.provider == provider)
-            .or_else(|| self.fallback.as_ref().filter(|c| c.provider == provider))
-    }
-
-    /// Google 媒体生成凭证（图 / 视频 / TTS 共用 key）。
-    pub fn google(&self) -> Option<&ImageGenCreds> {
-        self.find_provider("google")
-    }
-
-    /// OpenAI 备用凭证。
-    pub fn openai(&self) -> Option<&ImageGenCreds> {
-        self.find_provider("openai")
-    }
-
-    /// MiniMax 媒体凭证。
-    pub fn minimax(&self) -> Option<&ImageGenCreds> {
-        self.find_provider("minimax")
-    }
+/// 使用 Provider 默认模型名构建 ImageGenTargets。
+pub fn image_gen_targets_from_parts(p: ImageGenParts<'_>) -> ImageGenTargets {
+    ImageGenTargets::from_parts(p, |provider| {
+        providers::image_gen::default_image_model(provider).to_string()
+    })
 }
 
 /// 单次工具调用的共享运行时上下文，由 AgentLoop 在每次 `dispatch_tool` 前构造。
@@ -188,9 +53,11 @@ impl<'a> ToolContext<'a> {
         Ok(self.workspace_dir.clone())
     }
 
-    /// 终端 / 文件操作的沙箱根：优先 `project_root`，否则记忆 `workspace_dir`。
+    /// 优先 project_root，否则 workspace_dir。
     pub fn project_or_workspace(&self) -> &Path {
-        self.project_root.as_ref().unwrap_or(&self.workspace_dir)
+        self.project_root
+            .as_deref()
+            .unwrap_or(self.workspace_dir.as_path())
     }
 
     /// 确保 [`Self::project_or_workspace`] 目录存在。
@@ -207,7 +74,7 @@ mod tests {
 
     #[test]
     fn from_parts_writes_primary_music_model_and_leaves_fallback_music_model_empty() {
-        let targets = ImageGenTargets::from_parts(ImageGenParts {
+        let targets = image_gen_targets_from_parts(ImageGenParts {
             provider: "google",
             model: "image-model",
             api_key: "primary-key",

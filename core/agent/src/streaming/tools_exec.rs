@@ -360,7 +360,7 @@ pub(crate) async fn execute_tools_concurrent(
             project_root: agent.project_root().cloned(),
             session_id: agent.session_id().to_string(),
             turn_id: agent.current_turn_id().map(str::to_string),
-            credentials: tools::ModelCredentials {
+            credentials: common::ModelCredentials {
                 provider: agent.chat_provider().to_string(),
                 model: agent.chat_model().to_string(),
                 api_key: agent.chat_api_key().to_string(),
@@ -426,9 +426,9 @@ struct ToolExecSnapshot {
     project_root: Option<std::path::PathBuf>,
     session_id: String,
     turn_id: Option<String>,
-    credentials: tools::ModelCredentials,
+    credentials: common::ModelCredentials,
     chat_targets: Vec<common::ChatTarget>,
-    image_gen_targets: tools::ImageGenTargets,
+    image_gen_targets: common::ImageGenTargets,
     execution: Arc<dyn tools::ExecutionDispatch>,
     hook_bus: Option<Arc<hooks::PluginHookBus>>,
 }

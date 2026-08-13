@@ -374,7 +374,7 @@ impl AgentLoop {
     }
 
     /// 设置图像生成工具的输出目标路径。
-    pub fn set_image_gen_targets(&mut self, targets: tools::ImageGenTargets) {
+    pub fn set_image_gen_targets(&mut self, targets: common::ImageGenTargets) {
         self.model_ctx.set_image_gen_targets(targets);
     }
 
@@ -571,7 +571,7 @@ impl AgentLoop {
         self.model_ctx.chat_model()
     }
 
-    pub fn image_gen_targets(&self) -> &tools::ImageGenTargets {
+    pub fn image_gen_targets(&self) -> &common::ImageGenTargets {
         self.model_ctx.image_gen_targets()
     }
 

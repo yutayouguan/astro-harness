@@ -744,7 +744,7 @@ impl AstroService for AstroServiceImpl {
         } else {
             req.reasoning_effort
         };
-        let image_targets = tools::ImageGenTargets::from_parts(tools::ImageGenParts {
+        let image_targets = tools::image_gen_targets_from_parts(tools::ImageGenParts {
             provider: &req.image_gen_provider,
             model: &req.image_gen_model,
             api_key: &req.image_gen_api_key,

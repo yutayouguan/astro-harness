@@ -30,7 +30,10 @@ pub use catalog::{
     builtin_catalog, catalog_for_ui, params_from_schema, ToolCatalogItem, ToolFunctionInfo,
     ToolParamInfo,
 };
-pub use context::{ImageGenCreds, ImageGenParts, ImageGenTargets, ModelCredentials, ToolContext};
+pub use context::{
+    image_gen_targets_from_parts, ImageGenCreds, ImageGenParts, ImageGenTargets, ModelCredentials,
+    ToolContext,
+};
 pub use core::execution::ExecutionDispatch;
 pub use dispatch::{builtin_handler_names, dispatch_tool};
 pub use parse::{
