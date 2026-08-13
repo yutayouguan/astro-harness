@@ -27,9 +27,9 @@ impl TimelineBuilder {
                     .unwrap_or("")
                     .to_string()
                     + delta;
-                last.as_object_mut()
-                    .unwrap()
-                    .insert("text".into(), json!(text));
+                if let Some(obj) = last.as_object_mut() {
+                    obj.insert("text".into(), json!(text));
+                }
                 return;
             }
         }

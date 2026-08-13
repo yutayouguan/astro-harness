@@ -193,7 +193,9 @@ async fn execute_inner_with_depth(
         if !layer_tasks.is_empty() {
             let ctx_ref = &ctx;
             let futs = layer_tasks.iter().map(|(_, node, _)| {
-                let executor = executors.get(&node.node_type).unwrap();
+                let executor = executors
+                    .get(&node.node_type)
+                    .expect("pre-checked in layer loop");
                 let retry_count = node
                     .config
                     .get("retry_count")
@@ -360,12 +362,14 @@ async fn execute_inner_with_depth(
             let result = if matches!(node.node_type, NodeType::RunLoop | NodeType::CustomLoop) {
                 execute_sub_workflow(node, &ctx, run_db, depth).await
             } else {
-                // Loop 节点
-                executors
-                    .get(&node.node_type)
-                    .unwrap()
-                    .execute(node, &ctx)
-                    .await
+                match executors.get(&node.node_type) {
+                    Some(exec) => exec.execute(node, &ctx).await,
+                    None => Err(anyhow::anyhow!(
+                        "节点 {} 无可用执行器: {:?}",
+                        node.label,
+                        node.node_type
+                    )),
+                }
             };
 
             let step_finished = Local::now().to_rfc3339();

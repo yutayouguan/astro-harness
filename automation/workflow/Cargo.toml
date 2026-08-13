@@ -6,6 +6,7 @@ description = "可视化工作流引擎：DAG 定义、JSON 持久化与 SQLite 
 
 [dependencies]
 anyhow = { workspace = true }
+thiserror = { workspace = true }
 base64 = "0.22"
 async-trait = { workspace = true }
 common = { path = "../../storage/common" }
