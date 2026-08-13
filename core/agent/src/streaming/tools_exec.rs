@@ -23,16 +23,16 @@ enum ApprovalRoute {
     Manual,
 }
 
-fn approval_route(command: &str, mode: tools::ApprovalMode, allowlist: &[String]) -> ApprovalRoute {
+fn approval_route(command: &str, mode: common::ApprovalMode, allowlist: &[String]) -> ApprovalRoute {
     if tools::is_hardline_blocked(command).is_some() {
         ApprovalRoute::Deny
     } else if tools::matches_allowlist(command, allowlist) {
         ApprovalRoute::Allowlist
     } else {
         match mode {
-            tools::ApprovalMode::Off => ApprovalRoute::Off,
-            tools::ApprovalMode::Smart => ApprovalRoute::Smart,
-            tools::ApprovalMode::Manual => ApprovalRoute::Manual,
+            common::ApprovalMode::Off => ApprovalRoute::Off,
+            common::ApprovalMode::Smart => ApprovalRoute::Smart,
+            common::ApprovalMode::Manual => ApprovalRoute::Manual,
         }
     }
 }
@@ -69,14 +69,14 @@ pub(crate) fn terminal_needs_approval(name: &str, args: &serde_json::Value) -> b
     // 二者的守卫都只存在于 execute_tools_serial_inner；漏判会让危险命令经并发路径直接执行。
     matches!(
         tools::classify_dangerous_command(cmd).map(|d| d.action),
-        Some(tools::ApprovalAction::Ask | tools::ApprovalAction::Deny)
+        Some(common::ApprovalAction::Ask | common::ApprovalAction::Deny)
     )
 }
 
 /// 串行执行；`None` 表示已处理 cancel/断开，调用方应直接 return。
 pub(crate) async fn execute_tools_serial(
     session: &Arc<Mutex<AgentLoop>>,
-    calls: &[tools::ParsedToolCall],
+    calls: &[common::ParsedToolCall],
     pause: &Arc<PauseControl>,
     tx: &mpsc::Sender<anyhow::Result<MultiTurnStreamItem>>,
     run_id: &str,
@@ -97,7 +97,7 @@ pub(crate) async fn execute_tools_serial(
 
 async fn execute_tools_serial_inner(
     session: &Arc<Mutex<AgentLoop>>,
-    calls: &[tools::ParsedToolCall],
+    calls: &[common::ParsedToolCall],
     pause: &Arc<PauseControl>,
     tx: &mpsc::Sender<anyhow::Result<MultiTurnStreamItem>>,
     run_id: &str,
@@ -121,17 +121,17 @@ async fn execute_tools_serial_inner(
                 .and_then(tools::classify_dangerous_command)
             {
                 match decision.action {
-                    tools::ApprovalAction::Deny => {
+                    common::ApprovalAction::Deny => {
                         out.push(format!(
                             "Command denied by policy (dangerous: {}). Do not retry without changing the command.",
                             decision.description
                         ).into());
                         continue;
                     }
-                    tools::ApprovalAction::Auto => {
+                    common::ApprovalAction::Auto => {
                         // 放行，继续执行
                     }
-                    tools::ApprovalAction::Ask => {
+                    common::ApprovalAction::Ask => {
                         let cmd = call
                             .arguments
                             .get("command")
@@ -161,7 +161,7 @@ async fn execute_tools_serial_inner(
                             (
                                 approval_session_id,
                                 approval_turn_id,
-                                tools::ApprovalMode::parse_lenient(&approvals.mode),
+                                common::ApprovalMode::parse_lenient(&approvals.mode),
                                 approvals.command_allowlist,
                                 base,
                             )
@@ -210,9 +210,9 @@ async fn execute_tools_serial_inner(
                                 )
                                 .await
                             } else {
-                                tools::ApprovalAction::Ask
+                                common::ApprovalAction::Ask
                             };
-                            if smart_action == tools::ApprovalAction::Auto {
+                            if smart_action == common::ApprovalAction::Auto {
                                 tracing::info!(
                                     command = %cmd,
                                     reason = decision.description,
@@ -344,7 +344,7 @@ async fn execute_tools_serial_inner(
 /// 并发执行非 interactive/exclusive 工具；按调用顺序返回结果。
 pub(crate) async fn execute_tools_concurrent(
     session: &Arc<Mutex<AgentLoop>>,
-    calls: &[tools::ParsedToolCall],
+    calls: &[common::ParsedToolCall],
     pause: &Arc<PauseControl>,
 ) -> Option<Vec<common::ToolOutput>> {
     if pause.is_cancelled() || !pause.wait_if_paused().await {
@@ -360,7 +360,7 @@ pub(crate) async fn execute_tools_concurrent(
             project_root: agent.project_root().cloned(),
             session_id: agent.session_id().to_string(),
             turn_id: agent.current_turn_id().map(str::to_string),
-            credentials: tools::ModelCredentials {
+            credentials: common::ModelCredentials {
                 provider: agent.chat_provider().to_string(),
                 model: agent.chat_model().to_string(),
                 api_key: agent.chat_api_key().to_string(),
@@ -426,9 +426,9 @@ struct ToolExecSnapshot {
     project_root: Option<std::path::PathBuf>,
     session_id: String,
     turn_id: Option<String>,
-    credentials: tools::ModelCredentials,
+    credentials: common::ModelCredentials,
     chat_targets: Vec<common::ChatTarget>,
-    image_gen_targets: tools::ImageGenTargets,
+    image_gen_targets: common::ImageGenTargets,
     execution: Arc<dyn tools::ExecutionDispatch>,
     hook_bus: Option<Arc<hooks::PluginHookBus>>,
 }
@@ -540,21 +540,21 @@ mod tests {
         let ask = "rm -rf /tmp/project";
         let none: Vec<String> = Vec::new();
         assert_eq!(
-            approval_route(ask, tools::ApprovalMode::Smart, &none),
+            approval_route(ask, common::ApprovalMode::Smart, &none),
             ApprovalRoute::Smart
         );
         assert_eq!(
-            approval_route(ask, tools::ApprovalMode::Manual, &none),
+            approval_route(ask, common::ApprovalMode::Manual, &none),
             ApprovalRoute::Manual
         );
         assert_eq!(
-            approval_route(ask, tools::ApprovalMode::Off, &none),
+            approval_route(ask, common::ApprovalMode::Off, &none),
             ApprovalRoute::Off
         );
 
         let allowlist = vec![ask.to_string()];
         assert_eq!(
-            approval_route(ask, tools::ApprovalMode::Manual, &allowlist),
+            approval_route(ask, common::ApprovalMode::Manual, &allowlist),
             ApprovalRoute::Allowlist
         );
     }
@@ -564,7 +564,7 @@ mod tests {
         let command = "mkfs.ext4 /dev/sdb1";
         let allowlist = vec!["mkfs*".to_string()];
         assert_eq!(
-            approval_route(command, tools::ApprovalMode::Off, &allowlist),
+            approval_route(command, common::ApprovalMode::Off, &allowlist),
             ApprovalRoute::Deny
         );
     }

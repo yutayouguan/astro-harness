@@ -1,52 +1,11 @@
 //! 危险命令检测与分级审批（Hermes 风格）。
 //!
-//! 规则层：`Deny` / `Ask` / `Auto`。可选辅模型对 `Ask` 降级见 `agent::control::smart_approval`。
+//! 枚举类型已下沉到 `common::approval`，本模块 re-export 并保留 regex 规则逻辑。
 
 use regex::Regex;
 use std::sync::OnceLock;
 
-/// 审批动作。
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ApprovalAction {
-    /// 直接拒绝，不弹卡、不执行。
-    Deny,
-    /// 弹出 HITL 确认。
-    Ask,
-    /// 低危白名单，自动放行。
-    Auto,
-}
-
-/// 分级结果。
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ApprovalDecision {
-    pub action: ApprovalAction,
-    pub description: &'static str,
-}
-
-/// 审批模式（对齐 Hermes：`smart` | `manual` | `off`）。
-///
-/// 仅作用于 `Ask` 级命令；**hardline blocklist（`Deny`）任何模式都拒绝**。
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub enum ApprovalMode {
-    /// 辅模型评估风险，低危自动放行、拿不准才弹卡。
-    #[default]
-    Smart,
-    /// 一律弹卡人工确认（不走辅模型降级）。
-    Manual,
-    /// 不弹卡：非 hardline 一律放行（等价 yolo，但 hardline 仍拦）。
-    Off,
-}
-
-impl ApprovalMode {
-    /// 宽松解析；未知值回落 `Smart`。
-    pub fn parse_lenient(s: &str) -> Self {
-        match s.trim().to_ascii_lowercase().as_str() {
-            "manual" => Self::Manual,
-            "off" | "yolo" => Self::Off,
-            _ => Self::Smart,
-        }
-    }
-}
+pub use common::approval::{ApprovalAction, ApprovalDecision, ApprovalMode};
 
 /// 极危：直接 deny。
 fn deny_patterns() -> &'static [(Regex, &'static str)] {

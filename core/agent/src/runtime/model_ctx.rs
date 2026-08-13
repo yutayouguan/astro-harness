@@ -7,7 +7,7 @@
 use std::collections::HashMap;
 
 use common::{AuxiliaryTask, ChatTarget, ModelSpec, MAX_CHAT_FALLBACKS};
-use tools::{ImageGenTargets, ModelCredentials};
+use common::{ImageGenTargets, ModelCredentials};
 
 /// LLM 模型配置、凭证与 fallback 链。
 pub struct ModelContext {

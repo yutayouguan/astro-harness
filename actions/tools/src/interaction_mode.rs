@@ -1,77 +1,8 @@
 //! 聊天交互模式（Agent / Plan / Ask / MultiTask）的工具能力档。
 //!
-//! Plan / Ask：只读向；写文件、有副作用终端、委派等硬拦。
-//! Ask 比 Plan 更严（禁 todo）。
-//! Agent / MultiTask：不额外限制（仍受 tools_enabled 约束）。
+//! 枚举已下沉到 `common::interaction_mode`，本模块 re-export 并保留工具过滤逻辑。
 
-use serde::{Deserialize, Serialize};
-
-/// 与前端 `ChatInteractionMode` 对齐的交互模式。
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub enum InteractionMode {
-    #[default]
-    Agent,
-    Plan,
-    Ask,
-    Multitask,
-}
-
-impl InteractionMode {
-    /// 解析字符串；未知值回落 Agent。
-    pub fn parse(s: &str) -> Self {
-        match s.trim().to_ascii_lowercase().as_str() {
-            "plan" => Self::Plan,
-            "ask" => Self::Ask,
-            "multitask" => Self::Multitask,
-            _ => Self::Agent,
-        }
-    }
-
-    pub fn as_str(self) -> &'static str {
-        match self {
-            Self::Agent => "agent",
-            Self::Plan => "plan",
-            Self::Ask => "ask",
-            Self::Multitask => "multitask",
-        }
-    }
-
-    /// 写入 system prompt 的模式行为说明（非用户消息）。
-    ///
-    /// 工具可见性/硬拦仍由 `filter_schemas` / `check_tool_call` 强制；此处只告诉模型当前档位意图。
-    /// 中英并列，避免仅依赖 UI locale 时英文界面丢失指引。
-    pub fn system_guidance(self) -> &'static str {
-        match self {
-            Self::Agent => {
-                "# Interaction mode: Agent / 交互模式：Agent\n\
-Tools enabled. For complex multi-step work, call switch_mode(to=\"plan\", reason=…) first, then return to Agent after authorization.\n\
-可执行工具完成任务。复杂多步工作可先调用 switch_mode(to=\"plan\", reason=…) 进入规划，再在授权后回到 Agent 执行。"
-            }
-            Self::Plan => {
-                "# Interaction mode: Plan (read-only planning) / 交互模式：Plan（只读规划）\n\
-Read-only: file_ops(read/list/search), web_search, todo. No writes, terminal, code_exec, subagent, pipeline, or memory. When ready, call switch_mode(to=\"agent\", reason=…, summary=plan summary).\n\
-可用 file_ops(read/list/search)、web_search、todo 等只读工具。禁止写文件、terminal、code_exec、subagent、pipeline、memory。\n\
-计划就绪后调用 switch_mode(to=\"agent\", reason=…, summary=计划摘要) 请求执行授权。"
-            }
-            Self::Ask => {
-                "# Interaction mode: Ask (read-only Q&A) / 交互模式：Ask（只读问答）\n\
-Explain and retrieve; do not modify files or run side effects. To implement, call switch_mode(to=\"agent\", reason=…, summary=plan).\n\
-以解释与检索为主，不要修改文件或执行有副作用的操作。若需落地实现，可 switch_mode(to=\"agent\", reason=…, summary=计划摘要)。"
-            }
-            Self::Multitask => {
-                "# Interaction mode: MultiTask / 交互模式：MultiTask\n\
-Split the goal with subagent (parallel one-shot) or pipeline (serial roles); then summarize.\n\
-用 subagent 并行拆临时子任务，或用 pipeline 串行多角色，再汇总结果。"
-            }
-        }
-    }
-
-    /// Plan / Ask 启用只读工具门禁。
-    pub fn is_readonly_gate(self) -> bool {
-        matches!(self, Self::Plan | Self::Ask)
-    }
-}
+pub use common::InteractionMode;
 
 /// Plan / Ask 下明确允许的工具名（其余非 MCP 默认拒绝；MCP 默认拒绝）。
 /// `memory` 全写，不在此列；`skills` / `file_ops` / `todo` 另有 action 级限制。

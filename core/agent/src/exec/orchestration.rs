@@ -362,7 +362,7 @@ async fn run_provider_loop(
         }
 
         last_response = full_response.clone();
-        let calls = tools::extract_tool_calls(&full_response);
+        let calls = common::extract_tool_calls(&full_response);
         let tc = if calls.is_empty() {
             None
         } else {

@@ -8,7 +8,7 @@ use futures::Stream;
 use futures::StreamExt;
 use providers::types::stream::StreamChunk;
 use providers::Usage;
-use tools::ToolCallDelta;
+use common::ToolCallDelta;
 
 /// 单次模型流式片段，对齐 Rig `StreamedAssistantContent` 并扩展 Reasoning 通道。
 #[derive(Debug, Clone)]
@@ -19,7 +19,7 @@ pub enum StreamedAssistantContent {
     Reasoning(String),
     /// Google Interactions：`thought.signature`（无状态多轮回放必需）。
     ThoughtSignature(String),
-    /// 工具调用的增量片段，需经 [`tools::ToolCallAccumulator`] 合并。
+    /// 工具调用的增量片段，需经 [`common::ToolCallAccumulator`] 合并。
     ToolCallDelta(ToolCallDelta),
     /// 本轮或累计 token 用量，通常在流末尾出现。
     FinalUsage(Usage),

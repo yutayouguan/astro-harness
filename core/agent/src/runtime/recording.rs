@@ -59,7 +59,7 @@ impl AgentLoop {
     pub(crate) fn record_assistant_with_calls(
         &mut self,
         text: &str,
-        calls: &[tools::ParsedToolCall],
+        calls: &[common::ParsedToolCall],
         reasoning: Option<&str>,
         reasoning_details: Option<serde_json::Value>,
     ) -> anyhow::Result<()> {

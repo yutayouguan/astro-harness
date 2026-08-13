@@ -11,6 +11,8 @@ use std::pin::Pin;
 
 use crate::context::ToolContext;
 
+pub use common::tool_entry::{NestingPolicy, ToolEntry};
+
 /// 内置工具统一异步 handler：可包 sync/async、`&mut ToolContext`、按 name 路由。
 ///
 /// 不要求 `Send`：`ToolContext`（含 `SessionStore`/`RefCell`）本身非 `Send`，
@@ -21,93 +23,6 @@ pub type BuiltinToolHandler =
         &'a str,
         &'a serde_json::Value,
     ) -> Pin<Box<dyn Future<Output = anyhow::Result<common::ToolOutput>> + 'a>>;
-
-/// 单个可注册工具的完整元数据条目。
-///
-/// 工具在嵌套子 Agent 中的可用性策略。
-///
-/// 在工具注册时声明，取代硬编码的 `apply_nested_agent_tool_strips` 字符串列表。
-/// 新增工具只需在注册时选择正确的 policy，无需改动 `delegate.rs`。
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub enum NestingPolicy {
-    /// 所有嵌套层级均可用（terminal、file_ops、web_search 等）。
-    #[default]
-    Always,
-    /// 仅顶层 Agent 可用；所有子 Agent 均不可用。
-    /// 适用于：memory、context_search、persona_create、ask_user。
-    TopLevelOnly,
-    /// 顶层 + Orchestrator 角色可用；Leaf 子 Agent 不可用。
-    /// 适用于：subagent、pipeline。
-    OrchestratorAndAbove,
-}
-
-/// 注册后由 [`ToolRegistry`] 以 `name` 为键存储；`schema` 在导出 API 前会经
-/// [`crate::schema::sanitize_tool_schema`] 清理，以兼容各 LLM 厂商的 function calling 格式。
-pub struct ToolEntry {
-    /// 工具唯一名称，与 `dispatch` 路由及 LLM `function.name` 对齐。
-    pub name: String,
-    /// 所属 toolset id，与前端开关及 `tools-enabled.json` 键名一致。
-    pub toolset: String,
-    /// 面向模型的自然语言说明，描述工具用途与适用场景。
-    pub description: String,
-    /// 参数 JSON Schema（object 类型），通常由 `schema_for_args` 或 `tool_schema!` 生成。
-    pub schema: serde_json::Value,
-    /// 可选运行时可用性检查；返回 `false` 时该工具不出现在 `available_tools` 中。
-    pub check_fn: Option<Box<dyn Fn() -> bool + Send + Sync>>,
-    /// Lucide 图标 id（kebab-case，如 `"calendar-check"`），供 UI 目录展示。
-    pub icon: &'static str,
-    /// 对齐 Agno `requires_confirmation`：执行路径应串行并允许 HITL park。
-    pub needs_confirmation: bool,
-    /// 对齐 Agno `stop_after_tool_call`：本工具执行完后结束 run，不再发起下一轮 LLM。
-    pub stop_after_tool_call: bool,
-    /// 需独占 `&mut MemoryManager` / 会话可变状态：同批工具强制串行。
-    pub exclusive_access: bool,
-    /// 嵌套子 Agent 中的可用性策略；默认 [`NestingPolicy::Always`]。
-    pub nesting_policy: NestingPolicy,
-}
-
-impl ToolEntry {
-    /// 仅提供生命周期字段默认值，供 `ToolEntry { …, ..ToolEntry::lifecycle_defaults() }` 使用。
-    pub fn lifecycle_defaults() -> Self {
-        Self {
-            name: String::new(),
-            toolset: String::new(),
-            description: String::new(),
-            schema: serde_json::json!({ "type": "object", "properties": {} }),
-            check_fn: None,
-            icon: "wrench",
-            needs_confirmation: false,
-            stop_after_tool_call: false,
-            exclusive_access: false,
-            nesting_policy: NestingPolicy::Always,
-        }
-    }
-
-    pub fn with_confirmation(mut self) -> Self {
-        self.needs_confirmation = true;
-        self
-    }
-
-    pub fn stop_after(mut self) -> Self {
-        self.stop_after_tool_call = true;
-        self
-    }
-
-    pub fn exclusive(mut self) -> Self {
-        self.exclusive_access = true;
-        self
-    }
-
-    pub fn top_level_only(mut self) -> Self {
-        self.nesting_policy = NestingPolicy::TopLevelOnly;
-        self
-    }
-
-    pub fn orchestrator_and_above(mut self) -> Self {
-        self.nesting_policy = NestingPolicy::OrchestratorAndAbove;
-        self
-    }
-}
 
 /// 内置工具自注册钩子：各工具模块通过 `inventory::submit!` / [`crate::submit_builtin_tool!`] 报名。
 ///
