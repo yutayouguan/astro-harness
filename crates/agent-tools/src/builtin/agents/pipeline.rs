@@ -8,7 +8,7 @@
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-use crate::builtins::agents::team::{self, TeamMemberArgs};
+use crate::builtin::agents::team::{self, TeamMemberArgs};
 use crate::context::ToolContext;
 use crate::registry::{ToolEntry, ToolRegistry};
 use crate::schema::schema_for_args;

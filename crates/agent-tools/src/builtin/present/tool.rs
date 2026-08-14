@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use uuid::Uuid;
 
-use crate::builtins::present::present_shared::dispatch_present;
+use crate::builtin::present::present_shared::dispatch_present;
 use crate::context::ToolContext;
 use crate::registry::ToolRegistry;
 use crate::schema::schema_for_args;

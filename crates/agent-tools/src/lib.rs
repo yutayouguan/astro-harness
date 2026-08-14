@@ -5,12 +5,12 @@
 //! 入口函数 [`register_all`] 将所有内置工具注册到 [`ToolRegistry`]。
 //!
 //! 模块分层：
-//! - [`core`]：注册表、上下文、分发、解析、schema、目录与路径安全
-//! - [`builtins`]：各内置工具实现（按领域分子目录：media / system / memory / hitl / present / agents）
+//! - [`engine`]：注册表、上下文、分发、解析、schema、目录与路径安全
+//! - [`builtin`]：各内置工具实现（按领域分子目录：media / shell / memory / hitl / present / agents）
 
 pub mod approval;
-pub mod builtins;
-pub mod core;
+pub mod builtin;
+pub mod engine;
 pub mod interaction_mode;
 
 // 保持原有顶层路径，避免破坏下游 crate 引用。
@@ -18,14 +18,14 @@ pub use approval::{
     classify_dangerous_command, is_hardline_blocked, matches_allowlist, resolve_command_action,
     ApprovalAction, ApprovalMode,
 };
-pub use builtins::context_tools::render_pinned_for_prompt;
-pub(crate) use core::path_safe;
-pub use core::{catalog, context, dispatch, parse, registry, schema};
+pub use builtin::context_tools::render_pinned_for_prompt;
+pub(crate) use engine::path_safe;
+pub use engine::{catalog, context, dispatch, parse, registry, schema};
 pub use interaction_mode::{
     check_tool_call, filter_schemas, tool_visible_in_mode, InteractionMode,
 };
 
-pub use builtins::system::jobs::shutdown_all_jobs as shutdown_background_jobs;
+pub use builtin::shell::jobs::shutdown_all_jobs as shutdown_background_jobs;
 pub use catalog::{
     builtin_catalog, catalog_for_ui, params_from_schema, ToolCatalogItem, ToolFunctionInfo,
     ToolParamInfo,
@@ -34,7 +34,7 @@ pub use context::{
     image_gen_targets_from_parts, ImageGenCreds, ImageGenParts, ImageGenTargets, ModelCredentials,
     ToolContext,
 };
-pub use core::execution::ExecutionDispatch;
+pub use engine::execution::ExecutionDispatch;
 pub use dispatch::{builtin_handler_names, dispatch_tool};
 pub use parse::{
     extract_tool_calls, resolve_tool_calls, ParsedToolCall, ToolCallAccumulator, ToolCallDelta,
@@ -155,7 +155,7 @@ macro_rules! submit_builtin_tool {
 /// 通过 [`inventory`] 收集各工具模块的 [`BuiltinToolRegistrar`]；新工具在自身文件
 /// `submit_builtin_tool! { register, names, … }` 即可，无需改本函数。MCP 工具由 agent 层单独注册。
 ///
-/// 注意：工具模块须通过 `pub mod builtins` 编入 crate，否则 submit 不会进入最终二进制。
+/// 注意：工具模块须通过 `pub mod builtin` 编入 crate，否则 submit 不会进入最终二进制。
 /// 通常在应用启动或测试初始化时调用一次。
 pub fn register_all(registry: &mut ToolRegistry) {
     for hook in inventory::iter::<BuiltinToolRegistrar> {
