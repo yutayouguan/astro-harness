@@ -123,9 +123,10 @@ impl CompletionModel for ResponsesCompletionModel {
                 body["instructions"] = json!(inst);
             }
         }
-        let has_reasoning = request.thinking.as_ref().is_some_and(|tc| tc.enabled);
-        if !has_reasoning {
-            if let Some(temp) = request.temperature {
+        if let Some(temp) = request.temperature {
+            let has_reasoning = request.thinking.as_ref().is_some_and(|tc| tc.enabled);
+            let is_default = (temp - 0.7).abs() < f32::EPSILON || temp == 1.0;
+            if !has_reasoning && !is_default {
                 body["temperature"] = json!(temp);
             }
         }
