@@ -2,7 +2,7 @@
 
 /// 客户端连接地址（内嵌分配端口后走进程内实际地址）。
 pub fn default_grpc_address() -> String {
-    common::resolve_grpc_address()
+    types::resolve_grpc_address()
 }
 
 /// 将裸主机端口补全为 tonic 可用的 `http://…` URL。

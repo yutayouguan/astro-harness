@@ -17,11 +17,11 @@ use tokio::sync::Mutex as TokioMutex;
 use uuid::Uuid;
 
 use ::session::{ConversationStore, SessionStore};
-use common::message::Message;
+use types::message::Message;
 use mcp::{McpHub, MCP_TOOLSET};
 use memory::MemoryManager;
 use serde_json::Value;
-use common::ToolEntry;
+use types::ToolEntry;
 use tools::{register_all, ToolRegistry};
 
 use crate::prompt::context::StaticContext;
@@ -137,7 +137,7 @@ pub struct AgentLoop {
     /// 上一轮复杂任务后挂起的学习 nudge（本轮注入 dynamic，下一次 begin_user_turn 清掉/重算）。
     pub(crate) pending_learning_nudge: Option<String>,
     /// 当前聊天交互模式（Plan/Ask 只读门禁）；由 ChatRequest 下传。
-    pub(crate) interaction_mode: common::InteractionMode,
+    pub(crate) interaction_mode: types::InteractionMode,
 }
 
 impl AgentLoop {
@@ -229,7 +229,7 @@ impl AgentLoop {
             project_root: resolve_session_project_root(),
             pending_inject_context: None,
             pending_learning_nudge: None,
-            interaction_mode: common::InteractionMode::Agent,
+            interaction_mode: types::InteractionMode::Agent,
         })
     }
 
@@ -375,7 +375,7 @@ impl AgentLoop {
     }
 
     /// 设置图像生成工具的输出目标路径。
-    pub fn set_image_gen_targets(&mut self, targets: common::ImageGenTargets) {
+    pub fn set_image_gen_targets(&mut self, targets: types::ImageGenTargets) {
         self.model_ctx.set_image_gen_targets(targets);
     }
 
@@ -395,7 +395,7 @@ impl AgentLoop {
     ///
     /// 更新 `chat_provider` / `chat_model` 与可选温度；若已有 `chat_targets`，
     /// 用本规格覆盖 primary 的 provider/model（保留 api_key / base_url）。
-    pub fn set_model(&mut self, spec: common::ModelSpec) {
+    pub fn set_model(&mut self, spec: types::ModelSpec) {
         if !spec.provider_id.trim().is_empty() {
             self.model_ctx.credentials.provider = spec.provider_id.trim().to_string();
         }
@@ -422,10 +422,10 @@ impl AgentLoop {
     }
 
     /// 按角色设置模型（主聊或辅助任务）。
-    pub fn set_role_model(&mut self, role: common::ModelRole, spec: common::ModelSpec) {
+    pub fn set_role_model(&mut self, role: types::ModelRole, spec: types::ModelSpec) {
         match role {
-            common::ModelRole::Main => self.set_model(spec),
-            common::ModelRole::Auxiliary(task) => {
+            types::ModelRole::Main => self.set_model(spec),
+            types::ModelRole::Auxiliary(task) => {
                 let base = self.primary_chat_target();
                 let target = spec.apply_to(&base);
                 self.model_ctx.auxiliary_targets.insert(task, vec![target]);
@@ -435,11 +435,11 @@ impl AgentLoop {
 
     /// Agno 风格主聊 fallback 入口：只改 `chat_targets[1..]`，保留 primary。
     ///
-    /// - 条数上限：[`common::MAX_CHAT_FALLBACKS`]
+    /// - 条数上限：[`types::MAX_CHAT_FALLBACKS`]
     /// - 凭据：默认继承 primary 的 `api_key` / `base_url`（跨厂商且 key 不同时，
     ///   请改用已解析的 [`Self::set_chat_targets`]）
     /// - 同 `provider_id` 去重（对齐 `expand_chat_targets`）
-    pub fn set_fallback_models(&mut self, specs: &[common::ModelSpec]) {
+    pub fn set_fallback_models(&mut self, specs: &[types::ModelSpec]) {
         self.model_ctx.set_fallback_models(specs);
     }
 
@@ -448,12 +448,12 @@ impl AgentLoop {
     /// 辅助任务：保留 preferred（链首；若尚无则先用当前主目标），再接 fallback。
     pub fn set_role_fallback_models(
         &mut self,
-        role: common::ModelRole,
-        specs: &[common::ModelSpec],
+        role: types::ModelRole,
+        specs: &[types::ModelSpec],
     ) {
         match role {
-            common::ModelRole::Main => self.set_fallback_models(specs),
-            common::ModelRole::Auxiliary(task) => {
+            types::ModelRole::Main => self.set_fallback_models(specs),
+            types::ModelRole::Auxiliary(task) => {
                 let preferred = self
                     .model_ctx
                     .auxiliary_targets
@@ -464,8 +464,8 @@ impl AgentLoop {
                 let mut chain = vec![preferred.clone()];
                 let mut seen = std::collections::HashSet::new();
                 seen.insert(preferred.provider_id.clone());
-                for spec in specs.iter().take(common::MAX_CHAT_FALLBACKS * 2) {
-                    if chain.len() > common::MAX_CHAT_FALLBACKS {
+                for spec in specs.iter().take(types::MAX_CHAT_FALLBACKS * 2) {
+                    if chain.len() > types::MAX_CHAT_FALLBACKS {
                         break;
                     }
                     let t = spec.apply_to(&preferred);
@@ -480,11 +480,11 @@ impl AgentLoop {
     }
 
     /// 当前主模型声明（若有）。
-    pub fn model_spec(&self) -> Option<&common::ModelSpec> {
+    pub fn model_spec(&self) -> Option<&types::ModelSpec> {
         self.model_ctx.model_spec()
     }
 
-    fn primary_chat_target(&self) -> common::ChatTarget {
+    fn primary_chat_target(&self) -> types::ChatTarget {
         self.model_ctx.primary_chat_target()
     }
 
@@ -499,12 +499,12 @@ impl AgentLoop {
     }
 
     /// 设置含 primary 的聊天 fallback 链（主聊 / cron / delegate 共用）。
-    pub fn set_chat_targets(&mut self, targets: Vec<common::ChatTarget>) {
+    pub fn set_chat_targets(&mut self, targets: Vec<types::ChatTarget>) {
         self.model_ctx.set_chat_targets(targets);
     }
 
     /// 当前聊天 fallback 链。
-    pub fn chat_targets(&self) -> &[common::ChatTarget] {
+    pub fn chat_targets(&self) -> &[types::ChatTarget] {
         self.model_ctx.chat_targets()
     }
 
@@ -513,7 +513,7 @@ impl AgentLoop {
     /// 调用方保证不落盘：本方法只存内存，session 结束或进程重启即丢弃。
     pub fn set_auxiliary_targets(
         &mut self,
-        targets: std::collections::HashMap<common::AuxiliaryTask, Vec<common::ChatTarget>>,
+        targets: std::collections::HashMap<types::AuxiliaryTask, Vec<types::ChatTarget>>,
     ) {
         self.model_ctx.set_auxiliary_targets(targets);
     }
@@ -522,7 +522,7 @@ impl AgentLoop {
     ///
     /// 未传输该任务目标时回退当前主 `ChatTarget`（`chat_targets` 的首项，缺失时
     /// 由 `set_chat_credentials` 字段现造一条），保持旧客户端兼容。
-    pub fn auxiliary_targets(&self, task: common::AuxiliaryTask) -> Vec<common::ChatTarget> {
+    pub fn auxiliary_targets(&self, task: types::AuxiliaryTask) -> Vec<types::ChatTarget> {
         self.model_ctx.auxiliary_targets(task)
     }
 
@@ -572,7 +572,7 @@ impl AgentLoop {
         self.model_ctx.chat_model()
     }
 
-    pub fn image_gen_targets(&self) -> &common::ImageGenTargets {
+    pub fn image_gen_targets(&self) -> &types::ImageGenTargets {
         self.model_ctx.image_gen_targets()
     }
 
@@ -662,11 +662,11 @@ impl AgentLoop {
     }
 
     /// 设置本轮交互模式（Plan/Ask 启用只读工具门禁）。
-    pub fn set_interaction_mode(&mut self, mode: common::InteractionMode) {
+    pub fn set_interaction_mode(&mut self, mode: types::InteractionMode) {
         self.interaction_mode = mode;
     }
 
-    pub fn interaction_mode(&self) -> common::InteractionMode {
+    pub fn interaction_mode(&self) -> types::InteractionMode {
         self.interaction_mode
     }
 
@@ -754,7 +754,7 @@ mod tests {
             .finalize_tool_call_result(
                 "subagent",
                 &serde_json::json!({"ignored": true}),
-                common::ToolOutput::from(raw_result),
+                types::ToolOutput::from(raw_result),
             )
             .await;
 
@@ -769,8 +769,8 @@ mod tests {
         );
     }
 
-    fn t(id: &str, backend: &str, model: &str) -> common::ChatTarget {
-        common::ChatTarget {
+    fn t(id: &str, backend: &str, model: &str) -> types::ChatTarget {
+        types::ChatTarget {
             provider_id: id.into(),
             backend_id: backend.into(),
             model: model.into(),
@@ -785,7 +785,7 @@ mod tests {
         let mut agent = AgentLoop::new(test_config(&dir)).unwrap();
         agent.set_chat_credentials("openai", "gpt-5.6", "key-1", "https://api.openai.com/v1");
 
-        let targets = agent.auxiliary_targets(common::AuxiliaryTask::Dreaming);
+        let targets = agent.auxiliary_targets(types::AuxiliaryTask::Dreaming);
         assert_eq!(targets.len(), 1);
         assert_eq!(targets[0].backend_id, "openai");
         assert_eq!(targets[0].model, "gpt-5.6");
@@ -798,7 +798,7 @@ mod tests {
         let mut agent = AgentLoop::new(test_config(&dir)).unwrap();
         agent.set_chat_targets(vec![t("p0", "openai", "gpt-5.6")]);
 
-        let targets = agent.auxiliary_targets(common::AuxiliaryTask::Compaction);
+        let targets = agent.auxiliary_targets(types::AuxiliaryTask::Compaction);
         assert_eq!(targets, vec![t("p0", "openai", "gpt-5.6")]);
     }
 
@@ -810,19 +810,19 @@ mod tests {
 
         let mut map = std::collections::HashMap::new();
         map.insert(
-            common::AuxiliaryTask::SmartApproval,
+            types::AuxiliaryTask::SmartApproval,
             vec![t("p1", "claude", "opus"), t("p0", "openai", "gpt-5.6")],
         );
         agent.set_auxiliary_targets(map);
 
-        let smart = agent.auxiliary_targets(common::AuxiliaryTask::SmartApproval);
+        let smart = agent.auxiliary_targets(types::AuxiliaryTask::SmartApproval);
         assert_eq!(
             smart,
             vec![t("p1", "claude", "opus"), t("p0", "openai", "gpt-5.6")]
         );
 
         // 未配置的任务仍回退主 ChatTarget，不受其它任务配置影响。
-        let dreaming = agent.auxiliary_targets(common::AuxiliaryTask::Dreaming);
+        let dreaming = agent.auxiliary_targets(types::AuxiliaryTask::Dreaming);
         assert_eq!(dreaming, vec![t("p0", "openai", "gpt-5.6")]);
     }
 

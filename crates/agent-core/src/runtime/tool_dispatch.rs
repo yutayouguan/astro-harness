@@ -59,7 +59,7 @@ impl AgentLoop {
         &mut self,
         name: &str,
         args: &serde_json::Value,
-    ) -> anyhow::Result<common::ToolOutput> {
+    ) -> anyhow::Result<types::ToolOutput> {
         let agent_id = self.memory.agent_id.clone();
         self.tool_registry.reload_enabled_from_disk(Some(&agent_id));
 
@@ -86,7 +86,7 @@ impl AgentLoop {
                 })
                     as std::pin::Pin<
                         Box<
-                            dyn std::future::Future<Output = anyhow::Result<common::ToolOutput>>
+                            dyn std::future::Future<Output = anyhow::Result<types::ToolOutput>>
                                 + Send,
                         >,
                     >
@@ -127,7 +127,7 @@ impl AgentLoop {
         &mut self,
         name: &str,
         args: &serde_json::Value,
-    ) -> Result<common::ToolOutput, ToolCallError> {
+    ) -> Result<types::ToolOutput, ToolCallError> {
         let fut = self.handle_tool_call_async(name, args);
         match tokio::runtime::Handle::try_current() {
             Ok(handle) => tokio::task::block_in_place(|| handle.block_on(fut)),
@@ -149,7 +149,7 @@ impl AgentLoop {
         &mut self,
         name: &str,
         args: &serde_json::Value,
-    ) -> Result<common::ToolOutput, ToolCallError> {
+    ) -> Result<types::ToolOutput, ToolCallError> {
         if self.cancel.is_cancelled() {
             return Err(ToolCallError::Cancelled);
         }
@@ -268,8 +268,8 @@ impl AgentLoop {
         &self,
         name: &str,
         args_owned: &serde_json::Value,
-        raw_result: common::ToolOutput,
-    ) -> common::ToolOutput {
+        raw_result: types::ToolOutput,
+    ) -> types::ToolOutput {
         let raw_text = raw_result.text().to_string();
         let transformed = self.fire_hook(
             ::hooks::TRANSFORM_TOOL_RESULT,
@@ -284,10 +284,10 @@ impl AgentLoop {
         );
         let result = match transformed {
             ::hooks::HookOutcome::ReplaceText(s) => match raw_result {
-                common::ToolOutput::Media { assets, .. } => {
-                    common::ToolOutput::Media { text: s, assets }
+                types::ToolOutput::Media { assets, .. } => {
+                    types::ToolOutput::Media { text: s, assets }
                 }
-                _ => common::ToolOutput::from(s),
+                _ => types::ToolOutput::from(s),
             },
             _ => raw_result,
         };

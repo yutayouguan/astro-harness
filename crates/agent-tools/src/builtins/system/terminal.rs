@@ -183,9 +183,9 @@ async fn dispatch_run(
     } else {
         body
     };
-    Ok(common::truncate_tool_result(
+    Ok(types::truncate_tool_result(
         &body,
-        common::MAX_TOOL_RESULT_BYTES,
+        types::MAX_TOOL_RESULT_BYTES,
     ))
 }
 
@@ -219,7 +219,7 @@ mod tests {
             hook_bus: None,
         };
 
-        let n = common::MAX_TOOL_RESULT_BYTES + 8 * 1024;
+        let n = types::MAX_TOOL_RESULT_BYTES + 8 * 1024;
         let args = serde_json::json!({
             "command": format!("awk 'BEGIN{{for(i=0;i<{n};i++)printf \"a\"}}'"),
         });
@@ -257,7 +257,7 @@ mod tests {
             hook_bus: Some(bus),
         };
 
-        let n = common::MAX_TOOL_RESULT_BYTES + 8 * 1024;
+        let n = types::MAX_TOOL_RESULT_BYTES + 8 * 1024;
         let args = serde_json::json!({
             "command": format!("awk 'BEGIN{{for(i=0;i<{n};i++)printf \"a\"}}'"),
         });

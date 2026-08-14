@@ -103,7 +103,7 @@ crate::submit_builtin_tool! {
 pub async fn dispatch(
     ctx: &ToolContext<'_>,
     args: &serde_json::Value,
-) -> anyhow::Result<common::ToolOutput> {
+) -> anyhow::Result<types::ToolOutput> {
     let parsed: VideoGenArgs = serde_json::from_value(args.clone())
         .map_err(|e| anyhow::anyhow!("video_gen 参数无效: {e}"))?;
     let prompt = parsed.prompt.trim();
@@ -293,7 +293,7 @@ pub async fn dispatch(
     ));
     Ok(super::media_out::media_output(
         lines.join("\n"),
-        common::MediaKind::Video,
+        types::MediaKind::Video,
         &rel,
         if video.mime_type.trim().is_empty() {
             "video/mp4"
@@ -407,7 +407,7 @@ async fn dispatch_minimax_video(
     ctx: &ToolContext<'_>,
     parsed: &VideoGenArgs,
     creds: &crate::context::ImageGenCreds,
-) -> anyhow::Result<common::ToolOutput> {
+) -> anyhow::Result<types::ToolOutput> {
     use providers::minimax::video_http::{
         is_h3_model, minimax_create_video, minimax_download_video, minimax_download_video_url,
         minimax_enhance_prompt, minimax_query_video, MiniMaxVideoRequest, VideoSubjectRef,
@@ -612,7 +612,7 @@ async fn dispatch_minimax_video(
                     format!(
                         "视频已生成：{rel}\nprovider=minimax\nmodel={model}\ntask_id={task_id}"
                     ),
-                    common::MediaKind::Video,
+                    types::MediaKind::Video,
                     &rel,
                     "video/mp4",
                     "视频已生成",

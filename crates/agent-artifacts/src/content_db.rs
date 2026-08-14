@@ -2,7 +2,7 @@
 //!
 //! 库路径：`{sessions_dir}/knowledge.db`（与 artifacts.db 并列）。
 
-use common::SqliteStore;
+use types::SqliteStore;
 use rusqlite::{params, Connection, OptionalExtension};
 use std::path::{Path, PathBuf};
 use uuid::Uuid;
@@ -45,7 +45,7 @@ pub struct KnowledgeDb {
 impl KnowledgeDb {
     pub fn open(path: impl Into<PathBuf>) -> anyhow::Result<Self> {
         let path = path.into();
-        let conn = common::open_wal(&path)?;
+        let conn = types::open_wal(&path)?;
         conn.execute_batch("PRAGMA foreign_keys=ON;")?;
         let db = Self { conn, path };
         db.migrate()?;

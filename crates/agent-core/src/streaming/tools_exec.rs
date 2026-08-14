@@ -23,16 +23,16 @@ enum ApprovalRoute {
     Manual,
 }
 
-fn approval_route(command: &str, mode: common::ApprovalMode, allowlist: &[String]) -> ApprovalRoute {
+fn approval_route(command: &str, mode: types::ApprovalMode, allowlist: &[String]) -> ApprovalRoute {
     if tools::is_hardline_blocked(command).is_some() {
         ApprovalRoute::Deny
     } else if tools::matches_allowlist(command, allowlist) {
         ApprovalRoute::Allowlist
     } else {
         match mode {
-            common::ApprovalMode::Off => ApprovalRoute::Off,
-            common::ApprovalMode::Smart => ApprovalRoute::Smart,
-            common::ApprovalMode::Manual => ApprovalRoute::Manual,
+            types::ApprovalMode::Off => ApprovalRoute::Off,
+            types::ApprovalMode::Smart => ApprovalRoute::Smart,
+            types::ApprovalMode::Manual => ApprovalRoute::Manual,
         }
     }
 }
@@ -69,19 +69,19 @@ pub(crate) fn terminal_needs_approval(name: &str, args: &serde_json::Value) -> b
     // 二者的守卫都只存在于 execute_tools_serial_inner；漏判会让危险命令经并发路径直接执行。
     matches!(
         tools::classify_dangerous_command(cmd).map(|d| d.action),
-        Some(common::ApprovalAction::Ask | common::ApprovalAction::Deny)
+        Some(types::ApprovalAction::Ask | types::ApprovalAction::Deny)
     )
 }
 
 /// 串行执行；`None` 表示已处理 cancel/断开，调用方应直接 return。
 pub(crate) async fn execute_tools_serial(
     session: &Arc<Mutex<AgentLoop>>,
-    calls: &[common::ParsedToolCall],
+    calls: &[types::ParsedToolCall],
     pause: &Arc<PauseControl>,
     tx: &mpsc::Sender<anyhow::Result<MultiTurnStreamItem>>,
     run_id: &str,
     hitl_gate: Option<&Arc<HitlGate>>,
-) -> Option<Vec<common::ToolOutput>> {
+) -> Option<Vec<types::ToolOutput>> {
     let ctx = hitl_gate.map(|gate| ParentHitlCtx {
         gate: gate.clone(),
         tx: tx.clone(),
@@ -97,13 +97,13 @@ pub(crate) async fn execute_tools_serial(
 
 async fn execute_tools_serial_inner(
     session: &Arc<Mutex<AgentLoop>>,
-    calls: &[common::ParsedToolCall],
+    calls: &[types::ParsedToolCall],
     pause: &Arc<PauseControl>,
     tx: &mpsc::Sender<anyhow::Result<MultiTurnStreamItem>>,
     run_id: &str,
     hitl_gate: Option<&Arc<HitlGate>>,
-) -> Option<Vec<common::ToolOutput>> {
-    let mut out: Vec<common::ToolOutput> = Vec::with_capacity(calls.len());
+) -> Option<Vec<types::ToolOutput>> {
+    let mut out: Vec<types::ToolOutput> = Vec::with_capacity(calls.len());
     for call in calls {
         if pause.is_cancelled() {
             return None;
@@ -121,17 +121,17 @@ async fn execute_tools_serial_inner(
                 .and_then(tools::classify_dangerous_command)
             {
                 match decision.action {
-                    common::ApprovalAction::Deny => {
+                    types::ApprovalAction::Deny => {
                         out.push(format!(
                             "Command denied by policy (dangerous: {}). Do not retry without changing the command.",
                             decision.description
                         ).into());
                         continue;
                     }
-                    common::ApprovalAction::Auto => {
+                    types::ApprovalAction::Auto => {
                         // 放行，继续执行
                     }
-                    common::ApprovalAction::Ask => {
+                    types::ApprovalAction::Ask => {
                         let cmd = call
                             .arguments
                             .get("command")
@@ -161,7 +161,7 @@ async fn execute_tools_serial_inner(
                             (
                                 approval_session_id,
                                 approval_turn_id,
-                                common::ApprovalMode::parse_lenient(&approvals.mode),
+                                types::ApprovalMode::parse_lenient(&approvals.mode),
                                 approvals.command_allowlist,
                                 base,
                             )
@@ -198,7 +198,7 @@ async fn execute_tools_serial_inner(
                             let smart_action = if route == ApprovalRoute::Smart {
                                 let agent = session.lock().await;
                                 let targets: Vec<_> = agent
-                                    .auxiliary_targets(common::AuxiliaryTask::SmartApproval)
+                                    .auxiliary_targets(types::AuxiliaryTask::SmartApproval)
                                     .iter()
                                     .map(crate::control::smart_approval::ApprovalTarget::from)
                                     .collect();
@@ -210,9 +210,9 @@ async fn execute_tools_serial_inner(
                                 )
                                 .await
                             } else {
-                                common::ApprovalAction::Ask
+                                types::ApprovalAction::Ask
                             };
-                            if smart_action == common::ApprovalAction::Auto {
+                            if smart_action == types::ApprovalAction::Auto {
                                 tracing::info!(
                                     command = %cmd,
                                     reason = decision.description,
@@ -288,7 +288,7 @@ async fn execute_tools_serial_inner(
             }
         }
 
-        let mut result: common::ToolOutput = if call.args_parse_error {
+        let mut result: types::ToolOutput = if call.args_parse_error {
             format!(
                 "工具参数 JSON 解析失败: {}",
                 call.arguments
@@ -344,9 +344,9 @@ async fn execute_tools_serial_inner(
 /// 并发执行非 interactive/exclusive 工具；按调用顺序返回结果。
 pub(crate) async fn execute_tools_concurrent(
     session: &Arc<Mutex<AgentLoop>>,
-    calls: &[common::ParsedToolCall],
+    calls: &[types::ParsedToolCall],
     pause: &Arc<PauseControl>,
-) -> Option<Vec<common::ToolOutput>> {
+) -> Option<Vec<types::ToolOutput>> {
     if pause.is_cancelled() || !pause.wait_if_paused().await {
         return None;
     }
@@ -360,7 +360,7 @@ pub(crate) async fn execute_tools_concurrent(
             project_root: agent.project_root().cloned(),
             session_id: agent.session_id().to_string(),
             turn_id: agent.current_turn_id().map(str::to_string),
-            credentials: common::ModelCredentials {
+            credentials: types::ModelCredentials {
                 provider: agent.chat_provider().to_string(),
                 model: agent.chat_model().to_string(),
                 api_key: agent.chat_api_key().to_string(),
@@ -377,7 +377,7 @@ pub(crate) async fn execute_tools_concurrent(
     for (idx, call) in calls.iter().cloned().enumerate() {
         let snap = snap.clone();
         join_set.spawn_blocking(move || {
-            let result: common::ToolOutput = if call.args_parse_error {
+            let result: types::ToolOutput = if call.args_parse_error {
                 format!(
                     "工具参数 JSON 解析失败: {}",
                     call.arguments
@@ -393,7 +393,7 @@ pub(crate) async fn execute_tools_concurrent(
         });
     }
 
-    let mut slots: Vec<Option<common::ToolOutput>> = (0..calls.len()).map(|_| None).collect();
+    let mut slots: Vec<Option<types::ToolOutput>> = (0..calls.len()).map(|_| None).collect();
     while let Some(joined) = join_set.join_next().await {
         match joined {
             Ok((idx, result)) => {
@@ -403,7 +403,7 @@ pub(crate) async fn execute_tools_concurrent(
             }
             Err(e) => {
                 // 标记失败占位
-                let msg: common::ToolOutput = format!("工具错误: join failed: {e}").into();
+                let msg: types::ToolOutput = format!("工具错误: join failed: {e}").into();
                 if let Some(empty_idx) = slots.iter().position(|s| s.is_none()) {
                     slots[empty_idx] = Some(msg);
                 }
@@ -426,9 +426,9 @@ struct ToolExecSnapshot {
     project_root: Option<std::path::PathBuf>,
     session_id: String,
     turn_id: Option<String>,
-    credentials: common::ModelCredentials,
-    chat_targets: Vec<common::ChatTarget>,
-    image_gen_targets: common::ImageGenTargets,
+    credentials: types::ModelCredentials,
+    chat_targets: Vec<types::ChatTarget>,
+    image_gen_targets: types::ImageGenTargets,
     execution: Arc<dyn tools::ExecutionDispatch>,
     hook_bus: Option<Arc<hooks::PluginHookBus>>,
 }
@@ -437,7 +437,7 @@ fn run_tool_on_snapshot(
     snap: &ToolExecSnapshot,
     name: &str,
     args: &serde_json::Value,
-) -> common::ToolOutput {
+) -> types::ToolOutput {
     // 纵深防御：并发路径没有审批闸门，此处硬拦 hardline 命令，
     // 即便路由判定漏了（见 terminal_needs_approval），也不会执行不可恢复操作。
     if name == "terminal" {
@@ -540,21 +540,21 @@ mod tests {
         let ask = "rm -rf /tmp/project";
         let none: Vec<String> = Vec::new();
         assert_eq!(
-            approval_route(ask, common::ApprovalMode::Smart, &none),
+            approval_route(ask, types::ApprovalMode::Smart, &none),
             ApprovalRoute::Smart
         );
         assert_eq!(
-            approval_route(ask, common::ApprovalMode::Manual, &none),
+            approval_route(ask, types::ApprovalMode::Manual, &none),
             ApprovalRoute::Manual
         );
         assert_eq!(
-            approval_route(ask, common::ApprovalMode::Off, &none),
+            approval_route(ask, types::ApprovalMode::Off, &none),
             ApprovalRoute::Off
         );
 
         let allowlist = vec![ask.to_string()];
         assert_eq!(
-            approval_route(ask, common::ApprovalMode::Manual, &allowlist),
+            approval_route(ask, types::ApprovalMode::Manual, &allowlist),
             ApprovalRoute::Allowlist
         );
     }
@@ -564,7 +564,7 @@ mod tests {
         let command = "mkfs.ext4 /dev/sdb1";
         let allowlist = vec!["mkfs*".to_string()];
         assert_eq!(
-            approval_route(command, common::ApprovalMode::Off, &allowlist),
+            approval_route(command, types::ApprovalMode::Off, &allowlist),
             ApprovalRoute::Deny
         );
     }

@@ -37,7 +37,7 @@ pub struct DelegateTaskSpec {
     /// 子 Agent 最大工具跟随轮次；缺省读配置 `child_max_iterations`（默认 50）。
     #[serde(default)]
     pub max_iterations: Option<usize>,
-    /// 可选成员模型：`provider:model_id`（见 [`common::ModelSpec`]）；缺省继承父凭据。
+    /// 可选成员模型：`provider:model_id`（见 [`types::ModelSpec`]）；缺省继承父凭据。
     #[serde(default)]
     pub model: Option<String>,
 }
@@ -66,7 +66,7 @@ pub struct DelegateRunRequest {
     pub base_url: String,
     /// 含 primary 的聊天 fallback 链；空则子 Agent 由四字段合成单目标。
     #[serde(default)]
-    pub chat_targets: Vec<common::ChatTarget>,
+    pub chat_targets: Vec<types::ChatTarget>,
     pub tasks: Vec<DelegateTaskSpec>,
     /// 并行上限（至少 1）。
     pub max_concurrent: usize,

@@ -131,7 +131,7 @@ crate::submit_builtin_tool! {
 pub async fn dispatch(
     ctx: &ToolContext<'_>,
     args: &serde_json::Value,
-) -> anyhow::Result<common::ToolOutput> {
+) -> anyhow::Result<types::ToolOutput> {
     let parsed: MusicGenArgs = serde_json::from_value(args.clone())
         .map_err(|e| anyhow::anyhow!("music_gen 参数无效: {e}"))?;
     if let Some(creds) = ctx.image_gen_targets.minimax() {
@@ -199,7 +199,7 @@ pub async fn dispatch(
     }
     Ok(super::media_out::media_output(
         out,
-        common::MediaKind::Audio,
+        types::MediaKind::Audio,
         &rel,
         &mime,
         "音乐已生成",
@@ -261,7 +261,7 @@ async fn dispatch_minimax_music(
     ctx: &ToolContext<'_>,
     parsed: &MusicGenArgs,
     creds: &crate::context::ImageGenCreds,
-) -> anyhow::Result<common::ToolOutput> {
+) -> anyhow::Result<types::ToolOutput> {
     let model = if creds.music_model.trim().is_empty() {
         providers::minimax::defaults::DEFAULT_MUSIC_MODEL.to_string()
     } else {
@@ -319,7 +319,7 @@ async fn dispatch_minimax_music(
             "音乐已生成：{rel}\nprovider=minimax\nmodel={model}\nduration_ms={}",
             result.duration_ms
         ),
-        common::MediaKind::Audio,
+        types::MediaKind::Audio,
         &rel,
         &result.mime_type,
         "音乐已生成",

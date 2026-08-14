@@ -12,7 +12,7 @@ use std::path::Path;
 use std::time::Duration;
 
 use chrono::Utc;
-use common::{truncate_chars, ChatTarget};
+use types::{truncate_chars, ChatTarget};
 use futures::StreamExt;
 use home::{default_memory_dir, AgentRuntimeConfig};
 use orchestration::{
@@ -362,14 +362,14 @@ async fn run_provider_loop(
         }
 
         last_response = full_response.clone();
-        let calls = common::extract_tool_calls(&full_response);
+        let calls = types::extract_tool_calls(&full_response);
         let tc = if calls.is_empty() {
             None
         } else {
             Some(
                 calls
                     .iter()
-                    .map(|c| common::message::ToolCall {
+                    .map(|c| types::message::ToolCall {
                         id: c.id.clone(),
                         name: c.name.clone(),
                         arguments: c.arguments.clone(),

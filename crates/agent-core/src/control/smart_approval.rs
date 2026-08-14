@@ -9,7 +9,7 @@ use futures::StreamExt;
 use providers::types::message::Message as ProviderMessage;
 use providers::types::stream::StreamChunk;
 use providers::ProviderConfig;
-use common::ApprovalAction;
+use types::ApprovalAction;
 
 const SMART_TIMEOUT: Duration = Duration::from_secs(8);
 
@@ -22,8 +22,8 @@ pub struct ApprovalTarget {
     pub base_url: String,
 }
 
-impl From<&common::ChatTarget> for ApprovalTarget {
-    fn from(t: &common::ChatTarget) -> Self {
+impl From<&types::ChatTarget> for ApprovalTarget {
+    fn from(t: &types::ChatTarget) -> Self {
         Self {
             backend_id: t.backend_id.clone(),
             model: t.model.clone(),

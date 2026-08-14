@@ -1758,7 +1758,7 @@ pub async fn regenerate_session_title(
         }
     }
     let raw = raw.ok_or(last_err)?;
-    let title = common::sanitize_title(&raw, 40);
+    let title = types::sanitize_title(&raw, 40);
     if title.is_empty() {
         return Err("模型未返回可用标题".into());
     }
@@ -2779,8 +2779,8 @@ pub async fn run_cron_job_now(id: String) -> Result<CronRunDto, String> {
     let row = match agent::exec::cron::spawn_job(&job, creds, "manual").await {
         Ok(row) => row,
         Err(err) => {
-            common::notify_kind(
-                common::ImportantKind::CronFailure,
+            types::notify_kind(
+                types::ImportantKind::CronFailure,
                 format!("{label}\n{err}"),
             );
             return Err(err.to_string());
@@ -2814,28 +2814,28 @@ pub async fn run_cron_job_now(id: String) -> Result<CronRunDto, String> {
                 } else {
                     format!(
                         "{label_bg}\n{}",
-                        common::truncate_notify(&finished.summary, 120)
+                        types::truncate_notify(&finished.summary, 120)
                     )
                 };
-                common::notify_kind(common::ImportantKind::CronSuccess, body);
+                types::notify_kind(types::ImportantKind::CronSuccess, body);
             } else {
                 let detail = finished
                     .error
                     .as_deref()
                     .map(str::trim)
                     .filter(|s| !s.is_empty())
-                    .map(|s| common::truncate_notify(s, 120))
+                    .map(|s| types::truncate_notify(s, 120))
                     .or_else(|| {
                         let s = finished.summary.trim();
                         if s.is_empty() {
                             None
                         } else {
-                            Some(common::truncate_notify(s, 120))
+                            Some(types::truncate_notify(s, 120))
                         }
                     })
                     .unwrap_or_else(|| finished.status.clone());
-                common::notify_kind(
-                    common::ImportantKind::CronFailure,
+                types::notify_kind(
+                    types::ImportantKind::CronFailure,
                     format!("{label_bg}\n{detail}"),
                 );
             }

@@ -11,7 +11,7 @@
 //! - Agent 工作区内的核心模板 md 与 `SKILL.md` 不参与 reconcile 登记
 
 use anyhow::Context;
-use common::SqliteStore;
+use types::SqliteStore;
 use rusqlite::{params, Connection, OptionalExtension};
 use std::path::{Path, PathBuf};
 use uuid::Uuid;
@@ -198,9 +198,9 @@ impl ArtifactDb {
     /// 打开或创建数据库并执行 DDL；缺 `agent_id` 的旧库直接丢弃重建。
     pub fn new(path: PathBuf) -> anyhow::Result<Self> {
         if path.exists() && !db_has_agent_id_column(&path)? {
-            common::delete_sqlite_files(&path);
+            types::delete_sqlite_files(&path);
         }
-        let conn = common::open_wal(&path)?;
+        let conn = types::open_wal(&path)?;
         let db = Self { conn, path };
         db.migrate()?;
         Ok(db)

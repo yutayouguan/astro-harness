@@ -1,6 +1,6 @@
 //! 生成类工具结果：统一落盘文件名与结构化 `ToolOutput::Media` 构建。
 
-use common::{MediaAsset, MediaKind, ToolOutput};
+use types::{MediaAsset, MediaKind, ToolOutput};
 
 /// 构造 `ToolOutput::Media`，替代 sidecar 拼接。
 pub fn media_output(

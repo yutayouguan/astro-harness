@@ -1,7 +1,7 @@
 //! Agent 主循环（`AgentLoop`）回合与工具调用测试。
 
 use agent::runtime::*;
-use common::message::*;
+use types::message::*;
 use tempfile::TempDir;
 
 fn test_config(dir: &TempDir) -> AgentConfig {
@@ -132,7 +132,7 @@ async fn test_set_model_agno_style_entry() {
     let dir = TempDir::new().unwrap();
     let mut agent = AgentLoop::new(test_config(&dir)).unwrap();
     agent.set_chat_credentials("openai", "gpt-old", "sk-test", "https://api.openai.com/v1");
-    agent.set_chat_targets(vec![common::ChatTarget {
+    agent.set_chat_targets(vec![types::ChatTarget {
         provider_id: "openai".into(),
         backend_id: "openai".into(),
         model: "gpt-old".into(),
@@ -140,7 +140,7 @@ async fn test_set_model_agno_style_entry() {
         base_url: "https://api.openai.com/v1".into(),
     }]);
 
-    let spec = common::ModelSpec::parse("claude:claude-sonnet-4-5")
+    let spec = types::ModelSpec::parse("claude:claude-sonnet-4-5")
         .unwrap()
         .with_temperature(0.2);
     agent.set_model(spec);
@@ -158,10 +158,10 @@ async fn test_set_model_agno_style_entry() {
     );
 
     agent.set_role_model(
-        common::ModelRole::Auxiliary(common::AuxiliaryTask::Compaction),
-        common::ModelSpec::parse("openai:gpt-5.6").unwrap(),
+        types::ModelRole::Auxiliary(types::AuxiliaryTask::Compaction),
+        types::ModelSpec::parse("openai:gpt-5.6").unwrap(),
     );
-    let aux = agent.auxiliary_targets(common::AuxiliaryTask::Compaction);
+    let aux = agent.auxiliary_targets(types::AuxiliaryTask::Compaction);
     assert_eq!(aux[0].backend_id, "openai");
     assert_eq!(aux[0].model, "gpt-5.6");
 }
@@ -170,7 +170,7 @@ async fn test_set_model_agno_style_entry() {
 async fn test_set_fallback_models_keeps_primary() {
     let dir = TempDir::new().unwrap();
     let mut agent = AgentLoop::new(test_config(&dir)).unwrap();
-    agent.set_chat_targets(vec![common::ChatTarget {
+    agent.set_chat_targets(vec![types::ChatTarget {
         provider_id: "claude".into(),
         backend_id: "claude".into(),
         model: "opus".into(),
@@ -179,11 +179,11 @@ async fn test_set_fallback_models_keeps_primary() {
     }]);
 
     agent.set_fallback_models(&[
-        common::ModelSpec::parse("openai:gpt-5.6").unwrap(),
-        common::ModelSpec::parse("google:gemini-2.5-flash").unwrap(),
-        common::ModelSpec::parse("openai:gpt-4o").unwrap(), // same provider → skip
-        common::ModelSpec::parse("deepseek:chat").unwrap(), // would be 4th → capped
-        common::ModelSpec::parse("zhipu:glm").unwrap(),
+        types::ModelSpec::parse("openai:gpt-5.6").unwrap(),
+        types::ModelSpec::parse("google:gemini-2.5-flash").unwrap(),
+        types::ModelSpec::parse("openai:gpt-4o").unwrap(), // same provider → skip
+        types::ModelSpec::parse("deepseek:chat").unwrap(), // would be 4th → capped
+        types::ModelSpec::parse("zhipu:glm").unwrap(),
     ]);
 
     let chain = agent.chat_targets();
@@ -197,10 +197,10 @@ async fn test_set_fallback_models_keeps_primary() {
     assert_eq!(chain[3].backend_id, "deepseek");
 
     agent.set_role_fallback_models(
-        common::ModelRole::Auxiliary(common::AuxiliaryTask::TitleGeneration),
-        &[common::ModelSpec::parse("openai:gpt-5.6").unwrap()],
+        types::ModelRole::Auxiliary(types::AuxiliaryTask::TitleGeneration),
+        &[types::ModelSpec::parse("openai:gpt-5.6").unwrap()],
     );
-    let aux = agent.auxiliary_targets(common::AuxiliaryTask::TitleGeneration);
+    let aux = agent.auxiliary_targets(types::AuxiliaryTask::TitleGeneration);
     assert_eq!(aux.len(), 2);
     assert_eq!(aux[0].backend_id, "claude"); // preferred = primary
     assert_eq!(aux[1].backend_id, "openai");

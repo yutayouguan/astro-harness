@@ -243,13 +243,13 @@ pub async fn set_dreaming_enabled_cmd(enabled: bool) -> Result<DreamingStatusDto
 }
 
 /// 取 UI 当前激活（或列表首个）供应商，并展开为 ChatTarget。
-fn active_chat_target() -> Result<common::ChatTarget, String> {
+fn active_chat_target() -> Result<types::ChatTarget, String> {
     let ui = active_ui_provider()?;
     if ui.model.trim().is_empty() {
         return Err("激活提供商未配置模型".into());
     }
     let (_has, _src, _env, key) = resolve_api_key(&ui);
-    Ok(common::ChatTarget {
+    Ok(types::ChatTarget {
         provider_id: ui.id,
         backend_id: ui.kind.backend_id().to_string(),
         model: ui.model,
@@ -467,15 +467,15 @@ pub async fn run_dreaming(app: AppHandle) -> Result<DreamRunReport, String> {
 
     if last_error.is_none() {
         if diaries_processed > 0 || new_memories > 0 {
-            common::notify_kind(
-                common::ImportantKind::DreamSuccess,
-                common::dream_success_body(diaries_processed, new_memories),
+            types::notify_kind(
+                types::ImportantKind::DreamSuccess,
+                types::dream_success_body(diaries_processed, new_memories),
             );
         }
     } else if let Some(err) = &last_error {
-        common::notify_kind(
-            common::ImportantKind::DreamFailure,
-            common::truncate_notify(err, 120),
+        types::notify_kind(
+            types::ImportantKind::DreamFailure,
+            types::truncate_notify(err, 120),
         );
     }
 

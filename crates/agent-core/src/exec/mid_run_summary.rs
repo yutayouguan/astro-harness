@@ -11,7 +11,7 @@ use tracing::{info, warn};
 
 use crate::compression::{estimate_messages_tokens, ToolCompressionManager};
 use crate::runtime::AgentLoop;
-use common::message::{Message, Role};
+use types::message::{Message, Role};
 
 pub const MID_RUN_SUMMARY_MARK: &str = "[astro:mid-run-summary]";
 /// Hard 阶段占比默认；运行时优先读 `compression.mid_run_summary_ratio`。
@@ -99,7 +99,7 @@ fn summary_prompt(transcript: &str) -> String {
 }
 
 async fn complete_summary_chat(
-    target: &common::ChatTarget,
+    target: &types::ChatTarget,
     prompt: &str,
 ) -> anyhow::Result<String> {
     let config = ProviderConfig {
@@ -150,7 +150,7 @@ pub async fn maybe_apply_mid_run_summary(agent: &mut AgentLoop) -> anyhow::Resul
         return Ok(false);
     }
 
-    let targets = agent.auxiliary_targets(common::AuxiliaryTask::Compaction);
+    let targets = agent.auxiliary_targets(types::AuxiliaryTask::Compaction);
     if targets.is_empty() {
         warn!("mid-run summary skipped: no compaction targets");
         agent.mark_mid_run_summary_skipped();

@@ -306,7 +306,7 @@ fn skip_pending_steps_after_marks_later_pending() {
 
 #[test]
 fn orchestration_db_impls_sqlite_store() {
-    use common::SqliteStore;
+    use types::SqliteStore;
     let dir = TempDir::new().unwrap();
     let path = dir.path().join("orchestration.db");
     let db = OrchestrationDb::new(path.clone()).unwrap();

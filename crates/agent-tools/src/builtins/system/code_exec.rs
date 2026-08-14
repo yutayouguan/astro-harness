@@ -204,9 +204,9 @@ pub async fn dispatch(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow
     let stderr = String::from_utf8_lossy(&output.stderr);
     let code_status = output.status.code().unwrap_or(-1);
     let body = format!("exit={code_status}\n--- stdout ---\n{stdout}\n--- stderr ---\n{stderr}");
-    Ok(common::truncate_tool_result(
+    Ok(types::truncate_tool_result(
         &body,
-        common::MAX_TOOL_RESULT_BYTES,
+        types::MAX_TOOL_RESULT_BYTES,
     ))
 }
 
@@ -290,7 +290,7 @@ mod tests {
         let targets = ImageGenTargets::default();
         let creds = crate::context::ModelCredentials::default();
         let ctx = test_ctx(&dir, &mut memory, &sessions, &targets, &creds);
-        let n = common::MAX_TOOL_RESULT_BYTES + 4096;
+        let n = types::MAX_TOOL_RESULT_BYTES + 4096;
         let out = dispatch(
             &ctx,
             &serde_json::json!({

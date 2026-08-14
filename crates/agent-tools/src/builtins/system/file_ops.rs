@@ -133,14 +133,14 @@ fn register_workspace_artifact(ctx: &ToolContext<'_>, rel: &str) {
 /// 写入 HTML 文件时构造 `ToolOutput::Media`，使前端活动卡渲染可预览的 HTML 卡片。
 ///
 /// 前端 `commands.rs` 已把 `file` 类且扩展名为 html/htm 的 sidecar 映射为 html 预览。
-fn maybe_html_sidecar(text: String, rel: &str) -> common::ToolOutput {
+fn maybe_html_sidecar(text: String, rel: &str) -> types::ToolOutput {
     let is_html = rel
         .rsplit('.')
         .next()
         .is_some_and(|e| matches!(e.to_ascii_lowercase().as_str(), "html" | "htm"));
     if is_html {
-        let asset = common::MediaAsset::workspace(common::MediaKind::File, rel, "text/html");
-        common::ToolOutput::Media {
+        let asset = types::MediaAsset::workspace(types::MediaKind::File, rel, "text/html");
+        types::ToolOutput::Media {
             text,
             assets: vec![asset],
         }
@@ -156,7 +156,7 @@ fn maybe_html_sidecar(text: String, rel: &str) -> common::ToolOutput {
 pub fn dispatch(
     ctx: &ToolContext<'_>,
     args: &serde_json::Value,
-) -> anyhow::Result<common::ToolOutput> {
+) -> anyhow::Result<types::ToolOutput> {
     let parsed: FileOpsArgs = serde_json::from_value(args.clone())
         .map_err(|e| anyhow::anyhow!("file_ops 参数无效: {e}"))?;
     let op = parsed.operation.trim().to_lowercase();

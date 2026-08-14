@@ -41,7 +41,7 @@ pub async fn run() -> anyhow::Result<()> {
 /// 供 Tauri 同进程内嵌：不做 `init_logging`（壳侧已初始化）。
 ///
 /// 未设置 `ASTRO_GRPC_ADDR` 时 bind `127.0.0.1:0`，系统分配端口；bind 成功后把实际地址
-/// 写入 [`common::set_runtime_grpc_address`]，并经 `ready` 回传给壳。
+/// 写入 [`types::set_runtime_grpc_address`]，并经 `ready` 回传给壳。
 ///
 /// # 错误
 /// 同 [`serve`]。
@@ -60,7 +60,7 @@ pub async fn serve(
     ready: Option<oneshot::Sender<String>>,
     ephemeral_if_unset: bool,
 ) -> anyhow::Result<()> {
-    let bind_spec = common::grpc_bind_address(ephemeral_if_unset);
+    let bind_spec = types::grpc_bind_address(ephemeral_if_unset);
     let addr: std::net::SocketAddr = bind_spec
         .parse()
         .with_context(|| format!("parse gRPC bind address `{bind_spec}`"))?;
@@ -81,7 +81,7 @@ pub async fn serve(
         .local_addr()
         .context("read bound gRPC local_addr")?;
     let addr_str = local.to_string();
-    common::set_runtime_grpc_address(&addr_str);
+    types::set_runtime_grpc_address(&addr_str);
     if let Some(tx) = ready {
         let _ = tx.send(addr_str.clone());
     }

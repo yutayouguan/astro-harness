@@ -187,7 +187,7 @@ crate::submit_builtin_tool! {
 pub async fn dispatch(
     ctx: &ToolContext<'_>,
     args: &serde_json::Value,
-) -> anyhow::Result<common::ToolOutput> {
+) -> anyhow::Result<types::ToolOutput> {
     let mut parsed: ImageGenArgs = serde_json::from_value(args.clone())
         .map_err(|e| anyhow::anyhow!("image_gen 参数无效: {e}"))?;
     normalize_image_gen_args(&mut parsed);
@@ -223,7 +223,7 @@ async fn generate_one(
     ctx: &ToolContext<'_>,
     args: &ImageGenArgs,
     creds: &ImageGenCreds,
-) -> anyhow::Result<common::ToolOutput> {
+) -> anyhow::Result<types::ToolOutput> {
     if creds.provider == "google" {
         return generate_one_google(ctx, args, creds).await;
     }
@@ -234,7 +234,7 @@ async fn generate_one_google(
     ctx: &ToolContext<'_>,
     args: &ImageGenArgs,
     creds: &ImageGenCreds,
-) -> anyhow::Result<common::ToolOutput> {
+) -> anyhow::Result<types::ToolOutput> {
     let prompt = args.prompt.trim();
     let config = ProviderConfig {
         api_key: creds.api_key.clone(),
@@ -304,7 +304,7 @@ async fn generate_one_google(
     ));
     Ok(super::media_out::media_output(
         out,
-        common::MediaKind::Image,
+        types::MediaKind::Image,
         &rel,
         &result.image.mime_type,
         "图片已生成",
@@ -315,7 +315,7 @@ async fn generate_one_openai_compat(
     ctx: &ToolContext<'_>,
     args: &ImageGenArgs,
     creds: &ImageGenCreds,
-) -> anyhow::Result<common::ToolOutput> {
+) -> anyhow::Result<types::ToolOutput> {
     let prompt = args.prompt.trim();
     let config = ProviderConfig {
         api_key: creds.api_key.clone(),
@@ -346,7 +346,7 @@ async fn generate_one_openai_compat(
     }
     Ok(super::media_out::media_output(
         out,
-        common::MediaKind::Image,
+        types::MediaKind::Image,
         &rel,
         &img.mime_type,
         "图片已生成",

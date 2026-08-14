@@ -9,7 +9,7 @@
 //!
 //! 省略 HITL、pause/cancel、streaming channel、A2UI 渲染、timeline 等 UI 专属逻辑。
 
-use common::ChatTarget;
+use types::ChatTarget;
 use providers::ProviderConfig;
 use providers::Usage;
 

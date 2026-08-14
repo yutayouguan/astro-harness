@@ -9,7 +9,7 @@
 //! - 运行中记录以 `status = 'running'` 标识；同一 job 可并发查询是否在跑
 //! - 使用 WAL 模式；`id` 为主键 UUID
 
-use common::{truncate_utf8, SqliteStore};
+use types::{truncate_utf8, SqliteStore};
 use rusqlite::{params, Connection, OptionalExtension};
 use std::path::{Path, PathBuf};
 use uuid::Uuid;
@@ -137,7 +137,7 @@ const SELECT_COLS: &str = "id, job_id, title, agent_id, schedule, task, fired_at
 impl CronRunDb {
     /// 打开或创建数据库并执行 DDL（WAL 模式）
     pub fn new(path: PathBuf) -> anyhow::Result<Self> {
-        let conn = common::open_wal(&path)?;
+        let conn = types::open_wal(&path)?;
         let db = Self { conn, path };
         db.migrate()?;
         Ok(db)

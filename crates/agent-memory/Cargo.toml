@@ -5,7 +5,7 @@ edition = "2021"
 
 [dependencies]
 anyhow          = { workspace = true }
-common          = { path = "../agent-types" }
+types           = { path = "../agent-types" }
 skills          = { path = "../agent-skills" }
 home            = { path = "../agent-home" }
 session         = { path = "../agent-session" }

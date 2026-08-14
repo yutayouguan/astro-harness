@@ -1,6 +1,6 @@
 //! 编排 spawn 请求类型。
 
-use common::ChatTarget;
+use types::ChatTarget;
 
 pub struct OrchestrationSpawnRequest {
     pub orchestration_id: String,

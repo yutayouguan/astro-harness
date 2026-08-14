@@ -1,7 +1,7 @@
 //! 上下文占用分层估算（ceil(chars/4)），与账单 Usage 无关。
 //! 分段含可选 `items` 明细（单工具 / 单 skill 等）。
 
-use common::message::{Message, Role};
+use types::message::{Message, Role};
 use serde::{Deserialize, Serialize};
 
 pub const DEFAULT_CONTEXT_WINDOW: u32 = 128_000;
@@ -380,7 +380,7 @@ pub fn build_snapshot(input: ContextUsageInput<'_>) -> ContextUsageSnapshot {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use common::message::{Message, ToolCall};
+    use types::message::{Message, ToolCall};
 
     #[test]
     fn estimate_tokens_ceil_div_4() {

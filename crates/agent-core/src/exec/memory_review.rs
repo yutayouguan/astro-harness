@@ -30,7 +30,7 @@ pub struct BackgroundReviewJob {
     /// `(role, content)` 升序。
     pub messages: Vec<(String, String)>,
     /// preferred + 可选 fallback；每项是完整 ChatTarget。
-    pub targets: Vec<common::ChatTarget>,
+    pub targets: Vec<types::ChatTarget>,
 }
 
 /// review 写盘后的轻量通知（`op` + `content`）。
@@ -47,10 +47,10 @@ pub fn job_from_agent(agent: &AgentLoop) -> BackgroundReviewJob {
         .iter()
         .filter_map(|m| {
             let role = match m.role {
-                common::message::Role::User => "user",
-                common::message::Role::Assistant => "assistant",
-                common::message::Role::Tool => "tool",
-                common::message::Role::System => return None,
+                types::message::Role::User => "user",
+                types::message::Role::Assistant => "assistant",
+                types::message::Role::Tool => "tool",
+                types::message::Role::System => return None,
             };
             let content = m.content_str().trim();
             if content.is_empty() {
@@ -65,7 +65,7 @@ pub fn job_from_agent(agent: &AgentLoop) -> BackgroundReviewJob {
         memory_dir: agent.memory_dir().to_path_buf(),
         agent_id: agent.agent_id().to_string(),
         messages,
-        targets: agent.auxiliary_targets(common::AuxiliaryTask::BackgroundReview),
+        targets: agent.auxiliary_targets(types::AuxiliaryTask::BackgroundReview),
     }
 }
 
@@ -113,11 +113,11 @@ pub fn spawn_background_review_after_turn(
 
 /// 按 preferred→fallback 完成；返回首个非空响应。全部失败返回 Err。
 pub async fn complete_review_with_targets<F, Fut>(
-    targets: &[common::ChatTarget],
+    targets: &[types::ChatTarget],
     mut complete: F,
 ) -> Result<String, String>
 where
-    F: FnMut(&common::ChatTarget) -> Fut,
+    F: FnMut(&types::ChatTarget) -> Fut,
     Fut: std::future::Future<Output = Result<String, String>>,
 {
     let mut last_err = "no review targets".to_string();
@@ -263,8 +263,8 @@ async fn complete_review_chat(
 mod tests {
     use super::*;
 
-    fn target(id: &str, backend: &str, model: &str, key: &str) -> common::ChatTarget {
-        common::ChatTarget {
+    fn target(id: &str, backend: &str, model: &str, key: &str) -> types::ChatTarget {
+        types::ChatTarget {
             provider_id: id.into(),
             backend_id: backend.into(),
             model: model.into(),

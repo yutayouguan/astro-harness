@@ -6,7 +6,7 @@
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
-use common::message::Message;
+use types::message::Message;
 
 /// 协作式取消信号。
 #[derive(Clone, Default)]

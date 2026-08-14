@@ -246,7 +246,7 @@ pub fn dispatch_status(args: &serde_json::Value) -> anyhow::Result<String> {
         .map(|s| {
             let output = s.output.map(|o| {
                 if o.len() > 8 * 1024 {
-                    common::truncate_tool_result(&o, 8 * 1024)
+                    types::truncate_tool_result(&o, 8 * 1024)
                 } else {
                     o
                 }

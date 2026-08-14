@@ -10,7 +10,7 @@
 
 use std::sync::Arc;
 
-use common::ChatTarget;
+use types::ChatTarget;
 use futures::stream::{AbortHandle, Abortable};
 use futures::StreamExt;
 use providers::ProviderConfig;
@@ -273,7 +273,7 @@ async fn run_multi_turn_stream_inner(args: MultiTurnStreamInnerArgs) {
         let mut full_response = String::new();
         let mut full_reasoning = String::new();
         let mut thought_signature: Option<String> = None;
-        let mut tool_acc = common::ToolCallAccumulator::new();
+        let mut tool_acc = types::ToolCallAccumulator::new();
         let mut round_usage: Option<Usage> = None;
 
         loop {
@@ -415,7 +415,7 @@ async fn run_multi_turn_stream_inner(args: MultiTurnStreamInnerArgs) {
         }
 
         let native_calls = tool_acc.finish();
-        let calls = common::resolve_tool_calls(native_calls, &full_response);
+        let calls = types::resolve_tool_calls(native_calls, &full_response);
 
         if full_response.is_empty() && calls.is_empty() {
             if !full_reasoning.is_empty() && thinking_only_retries < MAX_THINKING_ONLY_RETRIES {
@@ -426,7 +426,7 @@ async fn run_multi_turn_stream_inner(args: MultiTurnStreamInnerArgs) {
                     "model returned reasoning only with no text; injecting retry prompt"
                 );
                 let mut agent = session.lock().await;
-                let details = common::message::merge_google_thought_signature(
+                let details = types::message::merge_google_thought_signature(
                     Some(timeline.reasoning_details_snapshot()),
                     thought_signature.as_deref(),
                 );
@@ -499,7 +499,7 @@ async fn run_multi_turn_stream_inner(args: MultiTurnStreamInnerArgs) {
             };
             if let Some(::hooks::HookOutcome::KeepGoing(prompt)) = verify_outcome {
                 let mut agent = session.lock().await;
-                let details = common::message::merge_google_thought_signature(
+                let details = types::message::merge_google_thought_signature(
                     Some(timeline.reasoning_details_snapshot()),
                     thought_signature.as_deref(),
                 );
@@ -587,7 +587,7 @@ async fn run_multi_turn_stream_inner(args: MultiTurnStreamInnerArgs) {
             for c in &calls {
                 timeline.upsert_activity(&c.id, now_ms());
             }
-            let details = common::message::merge_google_thought_signature(
+            let details = types::message::merge_google_thought_signature(
                 Some(timeline.reasoning_details_snapshot()),
                 thought_signature.as_deref(),
             );

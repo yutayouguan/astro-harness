@@ -76,7 +76,7 @@ crate::submit_builtin_tool! {
 pub async fn dispatch(
     ctx: &ToolContext<'_>,
     args: &serde_json::Value,
-) -> anyhow::Result<common::ToolOutput> {
+) -> anyhow::Result<types::ToolOutput> {
     let parsed: TtsArgs =
         serde_json::from_value(args.clone()).map_err(|e| anyhow::anyhow!("tts 参数无效: {e}"))?;
     let text = parsed.text.trim();
@@ -121,7 +121,7 @@ pub async fn dispatch(
     if advanced {
         // Append note to the text portion of the ToolOutput
         let output = match output {
-            common::ToolOutput::Media { text, assets } => common::ToolOutput::Media {
+            types::ToolOutput::Media { text, assets } => types::ToolOutput::Media {
                 text: format!(
                     "{text}\nnote: speakers/style/stream 仅 Google Interactions TTS 生效"
                 ),
@@ -142,7 +142,7 @@ async fn synthesize_google(
     style: Option<&str>,
     stream: bool,
     creds: &crate::context::ImageGenCreds,
-) -> anyhow::Result<common::ToolOutput> {
+) -> anyhow::Result<types::ToolOutput> {
     let model = if creds.tts_model.trim().is_empty() {
         default_tts_model().to_string()
     } else {
@@ -187,7 +187,7 @@ async fn synthesize_google(
             "语音已生成：{rel}\nprovider=google\nmodel={model}\ninteraction_id={}\nstream={}",
             result.interaction_id, stream
         ),
-        common::MediaKind::Audio,
+        types::MediaKind::Audio,
         &rel,
         "audio/wav",
         "语音已生成",
@@ -199,7 +199,7 @@ async fn synthesize_minimax(
     text: &str,
     parsed: &TtsArgs,
     creds: &crate::context::ImageGenCreds,
-) -> anyhow::Result<common::ToolOutput> {
+) -> anyhow::Result<types::ToolOutput> {
     let model = if creds.tts_model.trim().is_empty() {
         providers::minimax::defaults::DEFAULT_TTS_MODEL.to_string()
     } else {
@@ -254,7 +254,7 @@ async fn synthesize_minimax(
             "语音已生成：{rel}\nprovider=minimax\nmodel={model}\nduration_ms={}",
             result.duration_ms
         ),
-        common::MediaKind::Audio,
+        types::MediaKind::Audio,
         &rel,
         &result.mime_type,
         "语音已生成",
@@ -304,7 +304,7 @@ async fn synthesize_openai(
     text: &str,
     voice: &str,
     title: Option<&str>,
-) -> anyhow::Result<common::ToolOutput> {
+) -> anyhow::Result<types::ToolOutput> {
     let (api_key, base) = resolve_openai_tts(ctx)?;
     let url = format!("{base}/audio/speech");
     let body = serde_json::json!({
@@ -338,7 +338,7 @@ async fn synthesize_openai(
         .unwrap_or_else(|_| path.display().to_string());
     Ok(super::media_out::media_output(
         format!("语音已生成：{rel}\nprovider=openai\nmodel=gpt-4o-mini-tts"),
-        common::MediaKind::Audio,
+        types::MediaKind::Audio,
         &rel,
         "audio/mpeg",
         "语音已生成",

@@ -426,7 +426,7 @@ impl McpHub {
         &self,
         qualified_name: &str,
         args: &Value,
-    ) -> anyhow::Result<common::ToolOutput> {
+    ) -> anyhow::Result<types::ToolOutput> {
         let (peer, native, timeout_secs) = self.resolve_tool_peer(qualified_name)?;
         call_tool_with_peer(&peer, qualified_name, &native, args, timeout_secs).await
     }
@@ -477,7 +477,7 @@ impl McpHub {
 const MAX_MEDIA_ASSETS: usize = 20;
 
 /// 将 MCP content blocks 转为结构化 ToolOutput（保留 image/media 信息）。
-fn content_to_tool_output(blocks: &[ContentBlock]) -> common::ToolOutput {
+fn content_to_tool_output(blocks: &[ContentBlock]) -> types::ToolOutput {
     let mut text_parts = Vec::new();
     let mut media_assets = Vec::new();
 
@@ -489,10 +489,10 @@ fn content_to_tool_output(blocks: &[ContentBlock]) -> common::ToolOutput {
             ContentBlock::Image(img) if media_assets.len() < MAX_MEDIA_ASSETS => {
                 let mime = img.mime_type.clone();
                 let data_url = format!("data:{};base64,{}", mime, img.data);
-                media_assets.push(common::MediaAsset {
-                    kind: common::MediaKind::Image,
+                media_assets.push(types::MediaAsset {
+                    kind: types::MediaKind::Image,
                     mime_type: mime,
-                    reference: common::MediaRef::DataUrl(data_url),
+                    reference: types::MediaRef::DataUrl(data_url),
                     label: None,
                     id: None,
                 });
@@ -501,10 +501,10 @@ fn content_to_tool_output(blocks: &[ContentBlock]) -> common::ToolOutput {
             ContentBlock::Audio(audio) if media_assets.len() < MAX_MEDIA_ASSETS => {
                 let mime = audio.mime_type.clone();
                 let data_url = format!("data:{};base64,{}", mime, audio.data);
-                media_assets.push(common::MediaAsset {
-                    kind: common::MediaKind::Audio,
+                media_assets.push(types::MediaAsset {
+                    kind: types::MediaKind::Audio,
                     mime_type: mime,
-                    reference: common::MediaRef::DataUrl(data_url),
+                    reference: types::MediaRef::DataUrl(data_url),
                     label: None,
                     id: None,
                 });
@@ -528,12 +528,12 @@ fn content_to_tool_output(blocks: &[ContentBlock]) -> common::ToolOutput {
     } else {
         text_parts.join("\n")
     };
-    let text = common::truncate_tool_result(&text, common::MAX_TOOL_RESULT_BYTES);
+    let text = types::truncate_tool_result(&text, types::MAX_TOOL_RESULT_BYTES);
 
     if media_assets.is_empty() {
-        common::ToolOutput::Text(text)
+        types::ToolOutput::Text(text)
     } else {
-        common::ToolOutput::Media {
+        types::ToolOutput::Media {
             text,
             assets: media_assets,
         }
@@ -554,7 +554,7 @@ pub async fn call_tool_with_peer(
     native: &str,
     args: &Value,
     timeout_secs: u64,
-) -> anyhow::Result<common::ToolOutput> {
+) -> anyhow::Result<types::ToolOutput> {
     let arguments = mcp_tool_arguments(args)?;
 
     let mut params = CallToolRequestParams::new(native.to_string());
@@ -574,14 +574,14 @@ pub async fn call_tool_with_peer(
         let msg = format_content(&result.content);
         anyhow::bail!(
             "MCP tool error: {}",
-            common::truncate_tool_result(&msg, common::MAX_TOOL_RESULT_BYTES)
+            types::truncate_tool_result(&msg, types::MAX_TOOL_RESULT_BYTES)
         );
     }
 
     if let Some(structured) = result.structured_content {
-        return Ok(common::ToolOutput::Text(common::truncate_tool_result(
+        return Ok(types::ToolOutput::Text(types::truncate_tool_result(
             &structured.to_string(),
-            common::MAX_TOOL_RESULT_BYTES,
+            types::MAX_TOOL_RESULT_BYTES,
         )));
     }
     Ok(content_to_tool_output(&result.content))

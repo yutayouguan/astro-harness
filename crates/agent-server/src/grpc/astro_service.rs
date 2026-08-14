@@ -45,16 +45,16 @@ fn open_sessions(memory_dir: &std::path::Path) -> Result<session::SessionStore, 
 /// 未知 `task` 字符串静默跳过（旧客户端/脏数据不阻塞主聊）；API key 仅存内存。
 fn parse_auxiliary_targets(
     items: Vec<proto::AuxiliaryModelTarget>,
-) -> HashMap<common::AuxiliaryTask, Vec<common::ChatTarget>> {
-    let mut grouped: HashMap<common::AuxiliaryTask, Vec<(u32, common::ChatTarget)>> =
+) -> HashMap<types::AuxiliaryTask, Vec<types::ChatTarget>> {
+    let mut grouped: HashMap<types::AuxiliaryTask, Vec<(u32, types::ChatTarget)>> =
         HashMap::new();
     for item in items {
-        let Some(task) = common::AuxiliaryTask::parse(item.task.trim()) else {
+        let Some(task) = types::AuxiliaryTask::parse(item.task.trim()) else {
             continue;
         };
         grouped.entry(task).or_default().push((
             item.order,
-            common::ChatTarget {
+            types::ChatTarget {
                 provider_id: item.provider_id,
                 backend_id: item.backend_id,
                 model: item.model,
@@ -387,17 +387,17 @@ fn parse_interrupts_json(raw: &str) -> Vec<proto::Interrupt> {
 }
 
 /// 将 agent 多轮流事件映射为 proto [`ChatEvent`]；无对应项时返回 `None`（当前均有映射）。
-fn media_asset_to_proto(asset: common::MediaAsset) -> proto::MediaAsset {
+fn media_asset_to_proto(asset: types::MediaAsset) -> proto::MediaAsset {
     let (ref_kind, ref_value) = match asset.reference {
-        common::MediaRef::WorkspacePath(p) => ("workspace_path", p),
-        common::MediaRef::DataUrl(u) => ("data_url", u),
-        common::MediaRef::RemoteUri(u) => ("remote_uri", u),
+        types::MediaRef::WorkspacePath(p) => ("workspace_path", p),
+        types::MediaRef::DataUrl(u) => ("data_url", u),
+        types::MediaRef::RemoteUri(u) => ("remote_uri", u),
     };
     let kind = match asset.kind {
-        common::MediaKind::Image => "image",
-        common::MediaKind::Audio => "audio",
-        common::MediaKind::Video => "video",
-        common::MediaKind::File => "file",
+        types::MediaKind::Image => "image",
+        types::MediaKind::Audio => "audio",
+        types::MediaKind::Video => "video",
+        types::MediaKind::File => "file",
     };
     proto::MediaAsset {
         kind: kind.into(),
@@ -999,7 +999,7 @@ impl AstroService for AstroServiceImpl {
             hitl_registry.insert(hitl_gate.clone()).await;
 
             // primary（ChatRequest 字段）+ chat_fallbacks → Vec<ChatTarget>
-            let mut chat_targets = vec![common::ChatTarget {
+            let mut chat_targets = vec![types::ChatTarget {
                 provider_id: String::new(),
                 backend_id: provider_name.clone(),
                 model: config.model.clone(),
@@ -1007,7 +1007,7 @@ impl AstroService for AstroServiceImpl {
                 base_url: config.base_url.clone().unwrap_or_default(),
             }];
             for fb in chat_fallbacks {
-                chat_targets.push(common::ChatTarget {
+                chat_targets.push(types::ChatTarget {
                     provider_id: fb.provider_id,
                     backend_id: fb.provider,
                     model: fb.model,
@@ -1688,11 +1688,11 @@ mod tests {
         ]);
 
         let chain = map
-            .get(&common::AuxiliaryTask::Compaction)
+            .get(&types::AuxiliaryTask::Compaction)
             .expect("compaction");
         assert_eq!(chain.len(), 2);
         assert_eq!(chain[0].provider_id, "p-pref");
         assert_eq!(chain[1].provider_id, "p-fb");
-        assert!(!map.contains_key(&common::AuxiliaryTask::Dreaming));
+        assert!(!map.contains_key(&types::AuxiliaryTask::Dreaming));
     }
 }

@@ -6,7 +6,7 @@ description = "多 Agent 编排状态库与协作洞察（orchestration.db）"
 
 [dependencies]
 anyhow = { workspace = true }
-common = { path = "../agent-types" }
+types = { path = "../agent-types" }
 home = { path = "../agent-home" }
 usage = { path = "../agent-usage" }
 chrono = { version = "0.4", features = ["clock", "serde"] }

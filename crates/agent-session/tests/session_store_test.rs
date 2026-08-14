@@ -21,7 +21,7 @@ fn opens_fresh_db_at_current_schema() {
 
 #[test]
 fn session_store_impls_sqlite_store() {
-    use common::SqliteStore;
+    use types::SqliteStore;
     let dir = TempDir::new().unwrap();
     let path = dir.path().join("state.db");
     let store = SessionStore::open(&path).unwrap();

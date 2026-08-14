@@ -9,7 +9,7 @@ use providers::types::stream::StreamChunk;
 use providers::ProviderConfig;
 use tracing::warn;
 
-use common::TOOL_LLM_COMPRESS_MARK;
+use types::TOOL_LLM_COMPRESS_MARK;
 
 /// 单次维护中最多对多少条 tool 做 LLM 摘要（其余走 head/tail）。
 pub const MAX_LLM_TOOL_COMPRESS_PER_PASS: usize = 6;
@@ -56,7 +56,7 @@ pub fn make_llm_compress_view(
 }
 
 async fn complete_compaction_chat(
-    target: &common::ChatTarget,
+    target: &types::ChatTarget,
     prompt: &str,
     max_tokens: u32,
 ) -> anyhow::Result<String> {
@@ -99,7 +99,7 @@ async fn complete_compaction_chat(
 
 /// 对单条 tool 结果做 LLM 摘要；失败返回 Err（调用方回退 head/tail）。
 pub async fn summarize_tool_result(
-    targets: &[common::ChatTarget],
+    targets: &[types::ChatTarget],
     tool_name: Option<&str>,
     content: &str,
     max_chars: usize,
@@ -153,6 +153,6 @@ mod tests {
         assert!(v.starts_with(TOOL_LLM_COMPRESS_MARK));
         assert!(v.contains("terminal"));
         assert!(v.contains("ls ok"));
-        assert!(common::is_externalized_view(&v));
+        assert!(types::is_externalized_view(&v));
     }
 }

@@ -27,7 +27,7 @@ pub mod timeline;
 /// 链式构建可运行的 Agent 实例及其规格。
 pub use builder::{AgentBuilder, BuiltAgentSpec};
 /// Agno 风格模型声明（实现位于 `common`）。
-pub use common::{ModelRole, ModelSpec};
+pub use types::{ModelRole, ModelSpec};
 /// HITL 闸门 re-export。
 #[allow(deprecated)]
 pub use control::hitl::{
@@ -45,6 +45,6 @@ pub use streaming::{
     StreamedAssistantContent, StreamingChat, StreamingCompletion, StreamingPrompt,
 };
 /// 工具元数据（定义位于 `common`）。
-pub use common::ToolEntry;
+pub use types::ToolEntry;
 /// 工具注册表（实现位于 `tools` crate）。
 pub use tools::ToolRegistry;

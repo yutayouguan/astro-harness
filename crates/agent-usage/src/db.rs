@@ -310,13 +310,13 @@ fn all_buckets(start: &str, end: &str, fmt: &str) -> anyhow::Result<Vec<String>>
 }
 
 fn open_and_init(path: &Path) -> anyhow::Result<Connection> {
-    let conn = common::open_wal(path)?;
+    let conn = types::open_wal(path)?;
     conn.execute_batch(DDL)?;
     conn.execute_batch(&format!("PRAGMA user_version = {USAGE_SCHEMA_VERSION};"))?;
     Ok(conn)
 }
 
-impl common::SqliteStore for UsageDb {
+impl types::SqliteStore for UsageDb {
     fn path(&self) -> &Path {
         &self.path
     }
@@ -341,7 +341,7 @@ impl UsageDb {
         };
 
         if !exists || version == 0 {
-            common::delete_sqlite_files(&path);
+            types::delete_sqlite_files(&path);
             let conn = open_and_init(&path)?;
             return Ok(Self { conn, path });
         }
@@ -354,12 +354,12 @@ impl UsageDb {
 
         if version < 3 {
             tracing::warn!(version, "usage.db too old; rebuilding");
-            common::delete_sqlite_files(&path);
+            types::delete_sqlite_files(&path);
             let conn = open_and_init(&path)?;
             return Ok(Self { conn, path });
         }
 
-        let conn = common::open_wal(&path)?;
+        let conn = types::open_wal(&path)?;
         if version < 4 {
             let has_turn: bool = {
                 let mut stmt = conn.prepare("PRAGMA table_info(usage_events)")?;
@@ -791,7 +791,7 @@ mod tests {
 
     #[test]
     fn usage_db_impls_sqlite_store() {
-        use common::SqliteStore;
+        use types::SqliteStore;
         let dir = TempDir::new().unwrap();
         let path = dir.path().join("usage.db");
         let db = UsageDb::new(path.clone()).unwrap();

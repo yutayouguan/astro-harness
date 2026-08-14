@@ -11,7 +11,7 @@
 //! - 时间戳为 ISO UTC（RFC3339，秒精度，与 usage period_window 一致）
 
 use chrono::{SecondsFormat, Utc};
-use common::{truncate_utf8, SqliteStore};
+use types::{truncate_utf8, SqliteStore};
 use rusqlite::{params, Connection, OptionalExtension};
 use std::path::{Path, PathBuf};
 use uuid::Uuid;
@@ -236,9 +236,9 @@ impl OrchestrationDb {
     /// 打开或创建数据库并执行 DDL（WAL 模式）；缺凭据列的旧库直接丢弃重建。
     pub fn new(path: PathBuf) -> anyhow::Result<Self> {
         if path.exists() && !db_has_spawn_creds(&path)? {
-            common::delete_sqlite_files(&path);
+            types::delete_sqlite_files(&path);
         }
-        let conn = common::open_wal(&path)?;
+        let conn = types::open_wal(&path)?;
         let db = Self { conn, path };
         db.migrate()?;
         Ok(db)

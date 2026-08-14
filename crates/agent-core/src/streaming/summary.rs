@@ -2,7 +2,7 @@
 
 use std::sync::Arc;
 
-use common::message::Message;
+use types::message::Message;
 use futures::stream::{AbortHandle, Abortable};
 use futures::StreamExt;
 use providers::{PauseControl, Usage};

@@ -1,4 +1,4 @@
-//! 桌面系统通知：注册 [`common::notify`] 钩子，供 cron / 入梦等后台任务使用。
+//! 桌面系统通知：注册 [`types::notify`] 钩子，供 cron / 入梦等后台任务使用。
 
 use std::sync::Arc;
 
@@ -12,7 +12,7 @@ pub fn show<R: Runtime>(app: &AppHandle<R>, title: &str, body: &str) {
     }
 }
 
-/// 启动时请求权限，并把 `common::notify_important` 接到系统通知（主线程 show）。
+/// 启动时请求权限，并把 `types::notify_important` 接到系统通知（主线程 show）。
 pub fn install<R: Runtime>(app: &AppHandle<R>) {
     match app.notification().permission_state() {
         Ok(PermissionState::Granted) => {}
@@ -27,7 +27,7 @@ pub fn install<R: Runtime>(app: &AppHandle<R>) {
     }
 
     let app = app.clone();
-    common::set_important_notify_handler(Arc::new(move |notice| {
+    types::set_important_notify_handler(Arc::new(move |notice| {
         let app2 = app.clone();
         let title = notice.title;
         let body = notice.body;

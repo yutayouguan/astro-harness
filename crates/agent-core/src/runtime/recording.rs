@@ -1,6 +1,6 @@
 //! AgentLoop 消息记录方法：assistant / user / tool 角色消息的持久化与会话镜像维护。
 
-use common::message::Message;
+use types::message::Message;
 use session::NewMessage;
 
 use super::AgentLoop;
@@ -23,7 +23,7 @@ impl AgentLoop {
     pub fn record_assistant_message_with_tools(
         &mut self,
         content: &str,
-        tool_calls: Option<Vec<common::message::ToolCall>>,
+        tool_calls: Option<Vec<types::message::ToolCall>>,
         reasoning: Option<&str>,
         reasoning_details: Option<serde_json::Value>,
     ) -> anyhow::Result<()> {
@@ -33,7 +33,7 @@ impl AgentLoop {
         };
         let reasoning = reasoning.filter(|r| !r.is_empty());
         let thought_signature =
-            common::message::google_thought_signature_from_details(&reasoning_details);
+            types::message::google_thought_signature_from_details(&reasoning_details);
         self.sessions.ensure_session(&self.session_id, "tauri")?;
         self.sessions.append_message(NewMessage {
             content: Some(content),
@@ -59,7 +59,7 @@ impl AgentLoop {
     pub(crate) fn record_assistant_with_calls(
         &mut self,
         text: &str,
-        calls: &[common::ParsedToolCall],
+        calls: &[types::ParsedToolCall],
         reasoning: Option<&str>,
         reasoning_details: Option<serde_json::Value>,
     ) -> anyhow::Result<()> {
@@ -69,7 +69,7 @@ impl AgentLoop {
             Some(
                 calls
                     .iter()
-                    .map(|c| common::message::ToolCall {
+                    .map(|c| types::message::ToolCall {
                         id: c.id.clone(),
                         name: c.name.clone(),
                         arguments: c.arguments.clone(),
@@ -114,7 +114,7 @@ impl AgentLoop {
     ///
     /// 否则这些文件仅在文件空间 `reconcile` 扫盘时以 `session_id=None` 补登记，
     /// 导致「会话中生成的文件」被归入「未关联会话」。
-    fn register_media_artifacts(&self, media: &[common::MediaAsset], msg_id: i64) {
+    fn register_media_artifacts(&self, media: &[types::MediaAsset], msg_id: i64) {
         if media.is_empty() {
             return;
         }
@@ -156,7 +156,7 @@ impl AgentLoop {
         tool_name: Option<&str>,
         content: &str,
     ) -> anyhow::Result<()> {
-        let (_, media) = common::extract_tool_media(content);
+        let (_, media) = types::extract_tool_media(content);
         let media_owned = if media.is_empty() {
             None
         } else {
@@ -174,11 +174,11 @@ impl AgentLoop {
         self.register_media_artifacts(&media, msg_id);
 
         let mut spill_view: Option<String> = None;
-        if content.len() >= common::DEFAULT_SPILL_THRESHOLD_BYTES {
-            match common::write_tool_spill(self.memory_dir(), &self.session_id, msg_id, content) {
+        if content.len() >= types::DEFAULT_SPILL_THRESHOLD_BYTES {
+            match types::write_tool_spill(self.memory_dir(), &self.session_id, msg_id, content) {
                 Ok(path) => {
-                    let rel = common::spill_path_for_prompt(self.memory_dir(), &path);
-                    let view = common::make_spill_view(tool_name, &rel, content.len(), content);
+                    let rel = types::spill_path_for_prompt(self.memory_dir(), &path);
+                    let view = types::make_spill_view(tool_name, &rel, content.len(), content);
                     if self
                         .sessions
                         .update_message_compressed_content(msg_id, Some(&view))

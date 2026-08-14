@@ -1,11 +1,11 @@
 [package]
-name = "backend"
+name = "server"
 version = "0.1.0"
 edition = "2021"
 
 [dependencies]
 proto = { path = "../agent-proto" }
-common = { path = "../agent-types" }
+types = { path = "../agent-types" }
 agent = { path = "../agent-core" }
 providers = { path = "../agent-providers" }
 memory = { path = "../agent-memory" }

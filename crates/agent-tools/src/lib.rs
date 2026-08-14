@@ -69,22 +69,22 @@ macro_rules! submit_builtin_tool {
     // ── raw args 变体（dispatch 接收 &Value）──────────────
     (register: $r:ident, names: [$($n:literal),+ $(,)?], async_ctx: $d:ident $(,)?) => {
         $crate::submit_builtin_tool!(@impl $r, [$($n),+], ctx, _name, args, {
-            $d(ctx, args).await.map(::common::ToolOutput::from)
+            $d(ctx, args).await.map(::types::ToolOutput::from)
         });
     };
     (register: $r:ident, names: [$($n:literal),+ $(,)?], sync_ctx: $d:ident $(,)?) => {
         $crate::submit_builtin_tool!(@impl $r, [$($n),+], ctx, _name, args, {
-            $d(ctx, args).map(::common::ToolOutput::from)
+            $d(ctx, args).map(::types::ToolOutput::from)
         });
     };
     (register: $r:ident, names: [$($n:literal),+ $(,)?], async_named: $d:ident $(,)?) => {
         $crate::submit_builtin_tool!(@impl $r, [$($n),+], ctx, name, args, {
-            $d(ctx, name, args).await.map(::common::ToolOutput::from)
+            $d(ctx, name, args).await.map(::types::ToolOutput::from)
         });
     };
     (register: $r:ident, names: [$($n:literal),+ $(,)?], sync_named: $d:ident $(,)?) => {
         $crate::submit_builtin_tool!(@impl $r, [$($n),+], ctx, name, args, {
-            $d(ctx, name, args).map(::common::ToolOutput::from)
+            $d(ctx, name, args).map(::types::ToolOutput::from)
         });
     };
     // ── typed args 变体（宏自动反序列化）──────────────────
@@ -92,28 +92,28 @@ macro_rules! submit_builtin_tool {
         $crate::submit_builtin_tool!(@impl $r, [$($n),+], ctx, _name, args, {
             let typed: $t = ::serde_json::from_value(args.clone())
                 .map_err(|e| ::anyhow::anyhow!(concat!(stringify!($t), " 参数无效: {}"), e))?;
-            $d(ctx, &typed).await.map(::common::ToolOutput::from)
+            $d(ctx, &typed).await.map(::types::ToolOutput::from)
         });
     };
     (register: $r:ident, names: [$($n:literal),+ $(,)?], sync_ctx: $d:ident, args: $t:ty $(,)?) => {
         $crate::submit_builtin_tool!(@impl $r, [$($n),+], ctx, _name, args, {
             let typed: $t = ::serde_json::from_value(args.clone())
                 .map_err(|e| ::anyhow::anyhow!(concat!(stringify!($t), " 参数无效: {}"), e))?;
-            $d(ctx, &typed).map(::common::ToolOutput::from)
+            $d(ctx, &typed).map(::types::ToolOutput::from)
         });
     };
     (register: $r:ident, names: [$($n:literal),+ $(,)?], async_named: $d:ident, args: $t:ty $(,)?) => {
         $crate::submit_builtin_tool!(@impl $r, [$($n),+], ctx, name, args, {
             let typed: $t = ::serde_json::from_value(args.clone())
                 .map_err(|e| ::anyhow::anyhow!(concat!(stringify!($t), " 参数无效: {}"), e))?;
-            $d(ctx, name, &typed).await.map(::common::ToolOutput::from)
+            $d(ctx, name, &typed).await.map(::types::ToolOutput::from)
         });
     };
     (register: $r:ident, names: [$($n:literal),+ $(,)?], sync_named: $d:ident, args: $t:ty $(,)?) => {
         $crate::submit_builtin_tool!(@impl $r, [$($n),+], ctx, name, args, {
             let typed: $t = ::serde_json::from_value(args.clone())
                 .map_err(|e| ::anyhow::anyhow!(concat!(stringify!($t), " 参数无效: {}"), e))?;
-            $d(ctx, name, &typed).map(::common::ToolOutput::from)
+            $d(ctx, name, &typed).map(::types::ToolOutput::from)
         });
     };
     // ── custom：handler 已符合 BuiltinToolHandler 签名 ───
@@ -134,7 +134,7 @@ macro_rules! submit_builtin_tool {
             $args: &'a ::serde_json::Value,
         ) -> ::std::pin::Pin<
             ::std::boxed::Box<
-                dyn ::std::future::Future<Output = ::anyhow::Result<::common::ToolOutput>>
+                dyn ::std::future::Future<Output = ::anyhow::Result<::types::ToolOutput>>
                     + 'a,
             >,
         > {

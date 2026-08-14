@@ -178,7 +178,7 @@ fn install_app_menu<R: tauri::Runtime>(app: &AppHandle<R>, locale: AppLocale) ->
 #[tauri::command]
 fn set_app_menu_locale(app: AppHandle, locale: String) -> Result<(), String> {
     let next = AppLocale::parse(&locale);
-    common::set_notify_locale(match next {
+    types::set_notify_locale(match next {
         AppLocale::En => "en",
         AppLocale::Zh => "zh",
     });
@@ -473,7 +473,7 @@ pub fn run() {
             if grpc::embed_backend_enabled() {
                 let (ready_tx, ready_rx) = tokio::sync::oneshot::channel();
                 tauri::async_runtime::spawn(async move {
-                    if let Err(err) = backend::run_embedded(Some(ready_tx)).await {
+                    if let Err(err) = server::run_embedded(Some(ready_tx)).await {
                         tracing::error!(
                             error = %err,
                             "embedded backend exited (port in use? set ASTRO_GRPC_ADDR or ASTRO_EMBED_BACKEND=0)"

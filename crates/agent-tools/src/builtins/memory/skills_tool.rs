@@ -172,7 +172,7 @@ fn load_skill(skill_id: &str, input: Option<serde_json::Value>) -> anyhow::Resul
     let input = input.unwrap_or(serde_json::json!({}));
     let input_str = serde_json::to_string_pretty(&input).unwrap_or_default();
     let input_capped = if input_str.len() > 4 * 1024 {
-        common::truncate_tool_result(&input_str, 4 * 1024)
+        types::truncate_tool_result(&input_str, 4 * 1024)
     } else {
         input_str
     };
@@ -180,9 +180,9 @@ fn load_skill(skill_id: &str, input: Option<serde_json::Value>) -> anyhow::Resul
         "# Skill: {}\n\n{}\n\n{}\n\n## 调用输入\n{}",
         loaded.metadata.name, path_section, loaded.content, input_capped
     );
-    Ok(common::truncate_tool_result(
+    Ok(types::truncate_tool_result(
         &body,
-        common::MAX_TOOL_RESULT_BYTES,
+        types::MAX_TOOL_RESULT_BYTES,
     ))
 }
 

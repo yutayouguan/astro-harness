@@ -3,7 +3,7 @@
 //! - [`jobs`]：`~/.astro/cron/jobs.json`、到期 tick、工具分发
 //! - [`run_db`]：`~/.astro/cron/cron.db` 执行历史
 //!
-//! 实际触发执行在 `agent::exec::cron` / `backend::cron_runner`。
+//! 实际触发执行在 `agent::exec::cron` / `server::cron_runner`。
 
 pub mod jobs;
 pub mod run_db;

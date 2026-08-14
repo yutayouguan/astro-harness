@@ -25,7 +25,7 @@ pub struct TitleChangedNotify {
 pub struct TitleGenerationJob {
     pub memory_dir: std::path::PathBuf,
     pub session_id: String,
-    pub targets: Vec<common::ChatTarget>,
+    pub targets: Vec<types::ChatTarget>,
 }
 
 /// 从当前 [`AgentLoop`] 构造标题任务。
@@ -33,7 +33,7 @@ pub fn job_from_agent(agent: &AgentLoop) -> TitleGenerationJob {
     TitleGenerationJob {
         memory_dir: agent.memory_dir().to_path_buf(),
         session_id: agent.session_id().to_string(),
-        targets: agent.auxiliary_targets(common::AuxiliaryTask::TitleGeneration),
+        targets: agent.auxiliary_targets(types::AuxiliaryTask::TitleGeneration),
     }
 }
 
@@ -71,11 +71,11 @@ fn build_title_prompt(user: &str, assistant: &str) -> String {
 
 /// 按 preferred→fallback 完成标题文本。
 pub async fn complete_title_with_targets<F, Fut>(
-    targets: &[common::ChatTarget],
+    targets: &[types::ChatTarget],
     mut complete: F,
 ) -> Result<String, String>
 where
-    F: FnMut(&common::ChatTarget) -> Fut,
+    F: FnMut(&types::ChatTarget) -> Fut,
     Fut: std::future::Future<Output = Result<String, String>>,
 {
     let mut last_err = "no title targets".to_string();
@@ -140,7 +140,7 @@ pub async fn maybe_generate_session_title(
     .await
     .map_err(|e| anyhow::anyhow!(e))?;
 
-    let title = common::sanitize_title(&raw, TITLE_MAX_CHARS);
+    let title = types::sanitize_title(&raw, TITLE_MAX_CHARS);
     if title.is_empty() {
         warn!("title generation produced empty sanitized title");
         return Ok(None);
@@ -168,7 +168,7 @@ fn open_store(memory_dir: &std::path::Path) -> anyhow::Result<session::SessionSt
     session::SessionStore::open_sessions_dir(&memory_dir.join("sessions"))
 }
 
-async fn complete_title_chat(target: &common::ChatTarget, prompt: &str) -> anyhow::Result<String> {
+async fn complete_title_chat(target: &types::ChatTarget, prompt: &str) -> anyhow::Result<String> {
     let config = ProviderConfig {
         api_key: target.api_key.clone(),
         base_url: if target.base_url.trim().is_empty() {
@@ -207,14 +207,14 @@ mod tests {
     #[tokio::test]
     async fn preferred_failure_falls_back() {
         let targets = vec![
-            common::ChatTarget {
+            types::ChatTarget {
                 provider_id: "a".into(),
                 backend_id: "deepseek".into(),
                 model: "mini".into(),
                 api_key: "k1".into(),
                 base_url: "https://a".into(),
             },
-            common::ChatTarget {
+            types::ChatTarget {
                 provider_id: "b".into(),
                 backend_id: "openai".into(),
                 model: "gpt".into(),
@@ -236,7 +236,7 @@ mod tests {
         })
         .await
         .unwrap();
-        assert_eq!(common::sanitize_title(&text, 20), "Rust 会话管理");
+        assert_eq!(types::sanitize_title(&text, 20), "Rust 会话管理");
         assert_eq!(calls, 2);
     }
 }

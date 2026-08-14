@@ -1,8 +1,8 @@
 //! 会话消息 → Provider 消息转换。
 //!
-//! 将应用内 `common::message::Message` 序列转为统一的 `providers::types::message::Message`。
+//! 将应用内 `types::message::Message` 序列转为统一的 `providers::types::message::Message`。
 
-use common::message::{Message, MessageContent, Role};
+use types::message::{Message, MessageContent, Role};
 use providers::types::message::{
     AssistantContent, Message as ProviderMessage, ToolCall as ProviderToolCall, UserContent,
 };
@@ -129,7 +129,7 @@ fn build_user_parts(message: &Message) -> Vec<UserContent> {
     }
 }
 
-fn content_part_to_user(p: &common::message::ContentPart) -> Option<UserContent> {
+fn content_part_to_user(p: &types::message::ContentPart) -> Option<UserContent> {
     match p.kind.as_str() {
         "text" => Some(UserContent::Text {
             text: p.text.clone().unwrap_or_default(),
@@ -153,7 +153,7 @@ fn content_part_to_user(p: &common::message::ContentPart) -> Option<UserContent>
 /// 将 `Message.media` 中可入模的 data/remote URI 并入 parts（workspace 路径跳过）。
 fn merge_media_user_parts(
     mut parts: Vec<UserContent>,
-    media: &[common::MediaAsset],
+    media: &[types::MediaAsset],
 ) -> Vec<UserContent> {
     for asset in media {
         if let Some(p) = media_asset_to_user_content(asset) {
@@ -182,8 +182,8 @@ fn merge_media_user_parts(
     parts
 }
 
-fn media_asset_to_user_content(asset: &common::MediaAsset) -> Option<UserContent> {
-    use common::{MediaKind, MediaRef};
+fn media_asset_to_user_content(asset: &types::MediaAsset) -> Option<UserContent> {
+    use types::{MediaKind, MediaRef};
     let (url, mime_from_data) = match &asset.reference {
         MediaRef::DataUrl(u) => {
             let mime = u
@@ -223,8 +223,8 @@ fn media_asset_to_user_content(asset: &common::MediaAsset) -> Option<UserContent
 #[cfg(test)]
 mod tests {
     use super::*;
-    use common::message::{Message, MessageContent, ToolCall};
-    use common::{MediaAsset, MediaKind, MediaRef};
+    use types::message::{Message, MessageContent, ToolCall};
+    use types::{MediaAsset, MediaKind, MediaRef};
     use serde_json::json;
 
     #[test]
@@ -253,9 +253,9 @@ mod tests {
     fn audio_video_parts_and_media_field_map() {
         let mut msg = Message::user("听这段并看视频");
         msg.content = MessageContent::Parts(vec![
-            common::message::ContentPart::text("听这段并看视频"),
-            common::message::ContentPart::audio_url("data:audio/wav;base64,AQID", "audio/wav"),
-            common::message::ContentPart::video_url("data:video/mp4;base64,AQID", "video/mp4"),
+            types::message::ContentPart::text("听这段并看视频"),
+            types::message::ContentPart::audio_url("data:audio/wav;base64,AQID", "audio/wav"),
+            types::message::ContentPart::video_url("data:video/mp4;base64,AQID", "video/mp4"),
         ]);
         msg.media.push(MediaAsset {
             kind: MediaKind::Audio,

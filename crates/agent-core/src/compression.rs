@@ -8,7 +8,7 @@
 //! summary via `tool_llm_compress` → head/tail fallback. This module owns the staged
 //! thresholds, thrashing guard, and head/tail heuristic.
 
-use common::message::{Message, Role};
+use types::message::{Message, Role};
 use memory::CompressionConfig;
 
 use crate::prompt::context_usage::{estimate_tokens, DEFAULT_CONTEXT_WINDOW};
@@ -346,13 +346,13 @@ pub fn should_prune_tool_at_stage(
         return true;
     }
     if stage.min_ratio >= soft_ratio {
-        return content_chars >= common::PRUNE_MIN_CHARS;
+        return content_chars >= types::PRUNE_MIN_CHARS;
     }
     false
 }
 
 pub fn prune_tool_view(tool_name: Option<&str>, spill_rel: Option<&str>) -> String {
-    common::make_prune_view(tool_name, spill_rel)
+    types::make_prune_view(tool_name, spill_rel)
 }
 
 // ── CompressionPolicy trait ────────────────────────────────────────────
@@ -474,10 +474,10 @@ impl CompressionPolicy for StagedCompressionPolicy {
             }
 
             let spill_path =
-                common::tool_spill::spill_file_path(memory_dir, session_id, stored_msg.id);
+                types::tool_spill::spill_file_path(memory_dir, session_id, stored_msg.id);
             let spill_rel = spill_path
                 .exists()
-                .then(|| common::spill_path_for_prompt(memory_dir, &spill_path));
+                .then(|| types::spill_path_for_prompt(memory_dir, &spill_path));
 
             if idx < protect_start
                 && should_prune_tool_at_stage(
@@ -488,7 +488,7 @@ impl CompressionPolicy for StagedCompressionPolicy {
                 )
             {
                 let current = stored_msg.compressed_content.as_deref().unwrap_or(content);
-                if common::is_externalized_view(current)
+                if types::is_externalized_view(current)
                     && current.chars().count() <= stage.max_compressed_chars
                 {
                     continue;
@@ -504,7 +504,7 @@ impl CompressionPolicy for StagedCompressionPolicy {
             let needs_compress = match stored_msg.compressed_content.as_deref() {
                 None => true,
                 Some(c) => {
-                    !common::is_externalized_view(c)
+                    !types::is_externalized_view(c)
                         && c.chars().count() > stage.max_compressed_chars
                 }
             };

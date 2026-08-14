@@ -11,7 +11,7 @@ use std::pin::Pin;
 
 use crate::context::ToolContext;
 
-pub use common::tool_entry::{NestingPolicy, ToolEntry};
+pub use types::tool_entry::{NestingPolicy, ToolEntry};
 
 /// 内置工具统一异步 handler：可包 sync/async、`&mut ToolContext`、按 name 路由。
 ///
@@ -22,7 +22,7 @@ pub type BuiltinToolHandler =
         &'a mut ToolContext<'b>,
         &'a str,
         &'a serde_json::Value,
-    ) -> Pin<Box<dyn Future<Output = anyhow::Result<common::ToolOutput>> + 'a>>;
+    ) -> Pin<Box<dyn Future<Output = anyhow::Result<types::ToolOutput>> + 'a>>;
 
 /// 内置工具自注册钩子：各工具模块通过 `inventory::submit!` / [`crate::submit_builtin_tool!`] 报名。
 ///
@@ -50,7 +50,7 @@ pub type DynToolHandler = Box<
     dyn Fn(
             &str,
             &serde_json::Value,
-        ) -> Pin<Box<dyn Future<Output = anyhow::Result<common::ToolOutput>> + Send>>
+        ) -> Pin<Box<dyn Future<Output = anyhow::Result<types::ToolOutput>> + Send>>
         + Send
         + Sync,
 >;

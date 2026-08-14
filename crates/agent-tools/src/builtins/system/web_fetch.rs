@@ -171,7 +171,7 @@ async fn dispatch_raw(parsed: WebFetchArgs) -> anyhow::Result<String> {
         .to_string();
     let body = resp.text().await?;
     let truncated = if body.len() > RAW_MAX_BYTES {
-        let kept = common::truncate_utf8(&body, RAW_MAX_BYTES);
+        let kept = types::truncate_utf8(&body, RAW_MAX_BYTES);
         format!(
             "{kept}…\n\n[已截断，返回 {}/{} 字节（上限 {RAW_MAX_BYTES}）]",
             kept.len(),
@@ -445,7 +445,7 @@ mod tests {
     #[test]
     fn truncate_raw_respects_utf8() {
         let body = "你好".repeat(5000);
-        let kept = common::truncate_utf8(&body, RAW_MAX_BYTES);
+        let kept = types::truncate_utf8(&body, RAW_MAX_BYTES);
         assert!(kept.len() <= RAW_MAX_BYTES);
         assert!(std::str::from_utf8(kept.as_bytes()).is_ok());
     }

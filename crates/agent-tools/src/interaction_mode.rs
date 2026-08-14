@@ -1,8 +1,8 @@
 //! 聊天交互模式（Agent / Plan / Ask / MultiTask）的工具能力档。
 //!
-//! 枚举已下沉到 `common::interaction_mode`，本模块 re-export 并保留工具过滤逻辑。
+//! 枚举已下沉到 `types::interaction_mode`，本模块 re-export 并保留工具过滤逻辑。
 
-pub use common::InteractionMode;
+pub use types::InteractionMode;
 
 /// Plan / Ask 下明确允许的工具名（其余非 MCP 默认拒绝；MCP 默认拒绝）。
 /// `memory` 全写，不在此列；`skills` / `file_ops` / `todo` 另有 action 级限制。

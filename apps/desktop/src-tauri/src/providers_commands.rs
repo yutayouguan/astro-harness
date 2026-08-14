@@ -851,7 +851,7 @@ pub fn save_provider(provider: ProviderConfigInput) -> Result<ProvidersStateDto,
         let fallback = provider
             .fallback
             .into_iter()
-            .take(common::MAX_CHAT_FALLBACKS)
+            .take(types::MAX_CHAT_FALLBACKS)
             .filter(|e| !e.provider_id.trim().is_empty())
             .collect();
         s.providers[idx] = ProviderConfig {
@@ -1031,7 +1031,7 @@ pub fn resolve_chat_targets(
     primary_provider_id: Option<&str>,
     backend_hint: &str,
     model: &str,
-) -> Result<Vec<common::ChatTarget>, String> {
+) -> Result<Vec<types::ChatTarget>, String> {
     let cfg: ProviderConfig = if let Some(id) = primary_provider_id.filter(|s| !s.is_empty()) {
         find_provider(id)?
     } else {
@@ -1055,7 +1055,7 @@ pub fn resolve_chat_targets(
         }
     };
 
-    let primary = common::ChatTarget {
+    let primary = types::ChatTarget {
         provider_id: cfg.id.clone(),
         backend_id: effective_backend_id(cfg.kind, &cfg.api_mode).to_string(),
         model,
@@ -1063,16 +1063,16 @@ pub fn resolve_chat_targets(
         base_url: cfg.endpoint.clone(),
     };
 
-    let refs: Vec<common::FallbackRef> = cfg
+    let refs: Vec<types::FallbackRef> = cfg
         .fallback
         .iter()
-        .map(|e| common::FallbackRef {
+        .map(|e| types::FallbackRef {
             provider_id: e.provider_id.clone(),
             model: e.model.clone(),
         })
         .collect();
 
-    let chain = common::expand_chat_targets(&primary, &refs, |id| {
+    let chain = types::expand_chat_targets(&primary, &refs, |id| {
         let Ok(p) = find_provider(id) else {
             return None;
         };
@@ -1086,7 +1086,7 @@ pub fn resolve_chat_targets(
         if api_key.trim().is_empty() && !allow_empty_key {
             return None;
         }
-        Some(common::ChatTarget {
+        Some(types::ChatTarget {
             provider_id: p.id.clone(),
             backend_id: bid.to_string(),
             model: p.model.clone(),

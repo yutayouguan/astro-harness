@@ -32,7 +32,7 @@ uuid = { version = "1", features = ["v4"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 proto = { path = "../../../crates/agent-proto" }
-common = { path = "../../../crates/agent-types" }
+types = { path = "../../../crates/agent-types" }
 memory = { path = "../../../crates/agent-memory" }
 home = { path = "../../../crates/agent-home" }
 cron = { path = "../../../crates/agent-cron" }
@@ -42,7 +42,7 @@ orchestration = { path = "../../../crates/agent-orchestration" }
 session = { path = "../../../crates/agent-session" }
 agent = { path = "../../../crates/agent-core" }
 delegate = { path = "../../../crates/agent-delegate" }
-backend = { path = "../../../crates/agent-server" }
+server = { path = "../../../crates/agent-server" }
 tools = { path = "../../../crates/agent-tools" }
 mcp = { path = "../../../crates/agent-mcp" }
 providers = { path = "../../../crates/agent-providers" }

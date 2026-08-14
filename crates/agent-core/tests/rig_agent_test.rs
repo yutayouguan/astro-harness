@@ -6,7 +6,7 @@ use agent::builder::AgentBuilder;
 use agent::prompt::context::{DynamicContext, StaticContext};
 use agent::prompt::prompt_builder::PromptBuilder;
 use agent::runtime::{AgentConfig, AgentLoop, MaxDepthError};
-use common::message::Message;
+use types::message::Message;
 use home::AgentRuntimeConfig;
 use tempfile::TempDir;
 

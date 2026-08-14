@@ -5,7 +5,7 @@
 use std::collections::HashSet;
 use std::path::PathBuf;
 
-use common::truncate_chars;
+use types::truncate_chars;
 use delegate::{
     create_task_worktree, find_git_root, resolve_project_root, DelegateRole, DelegateRunRequest,
     DelegateTaskSpec, WorktreeHandle,
@@ -152,7 +152,7 @@ fn effective_role(
 }
 
 /// 有效聊天目标：优先 `chat_targets`，否则由四字段合成。
-fn effective_chat_targets(creds: &DelegateRunRequest) -> Vec<common::ChatTarget> {
+fn effective_chat_targets(creds: &DelegateRunRequest) -> Vec<types::ChatTarget> {
     if !creds.chat_targets.is_empty() {
         return creds.chat_targets.clone();
     }
@@ -166,7 +166,7 @@ fn effective_chat_targets(creds: &DelegateRunRequest) -> Vec<common::ChatTarget>
     } else {
         creds.model.clone()
     };
-    vec![common::ChatTarget {
+    vec![types::ChatTarget {
         provider_id: backend.clone(),
         backend_id: backend,
         model,
@@ -242,7 +242,7 @@ async fn run_one_child_inner(
         .map(str::trim)
         .filter(|s| !s.is_empty())
     {
-        match common::ModelSpec::parse(spec_str) {
+        match types::ModelSpec::parse(spec_str) {
             Ok(spec) => {
                 member_temp = spec.temperature;
                 if let Some(primary) = targets.first_mut() {
@@ -259,7 +259,7 @@ async fn run_one_child_inner(
     agent.set_chat_targets(targets);
     if let Some(t) = member_temp {
         agent.set_model(
-            common::ModelSpec::new(agent.chat_provider(), agent.chat_model()).with_temperature(t),
+            types::ModelSpec::new(agent.chat_provider(), agent.chat_model()).with_temperature(t),
         );
     }
 
@@ -470,14 +470,14 @@ async fn run_provider_loop(a: ProviderLoopArgs<'_>) -> anyhow::Result<(String, U
         }
 
         last_response = full_response.clone();
-        let calls = common::extract_tool_calls(&full_response);
+        let calls = types::extract_tool_calls(&full_response);
         let tc = if calls.is_empty() {
             None
         } else {
             Some(
                 calls
                     .iter()
-                    .map(|c| common::message::ToolCall {
+                    .map(|c| types::message::ToolCall {
                         id: c.id.clone(),
                         name: c.name.clone(),
                         arguments: c.arguments.clone(),
@@ -516,7 +516,7 @@ async fn run_provider_loop(a: ProviderLoopArgs<'_>) -> anyhow::Result<(String, U
                             .into()
                     }
                 };
-                result = common::ToolOutput::from(resolved);
+                result = types::ToolOutput::from(resolved);
             }
             let result_text = result.text().to_string();
             a.agent.record_tool_result_with_id(
@@ -764,7 +764,7 @@ mod subagent_lifecycle_tests {
             .finalize_tool_call_result(
                 "subagent",
                 &serde_json::json!({}),
-                common::ToolOutput::from(raw_result),
+                types::ToolOutput::from(raw_result),
             )
             .await;
 

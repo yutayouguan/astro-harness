@@ -53,7 +53,7 @@ async fn multi_turn_emits_text_tool_result_and_usage() {
     {
         let mut a = session.lock().await;
         a.session_messages
-            .push(common::message::Message::user("call a tool"));
+            .push(types::message::Message::user("call a tool"));
     }
 
     let chat_fn = scripted_chat(vec![
@@ -171,7 +171,7 @@ async fn multi_turn_persists_reasoning_and_tool_activities() {
         let mut a = session.lock().await;
         a.ensure_session("test").unwrap();
         a.session_messages
-            .push(common::message::Message::user("call a tool"));
+            .push(types::message::Message::user("call a tool"));
     }
 
     let chat_fn = scripted_chat(vec![
@@ -258,7 +258,7 @@ async fn multi_turn_fires_post_llm_call_after_model_stream() {
     ::hooks::install_recording(&agent.hook_bus(), Arc::clone(&log));
     agent
         .session_messages
-        .push(common::message::Message::user("say hi"));
+        .push(types::message::Message::user("say hi"));
     let session = Arc::new(Mutex::new(agent));
 
     let chat_fn = scripted_chat(vec![vec![
@@ -314,7 +314,7 @@ async fn transform_llm_output_replaces_before_post_llm_call() {
         });
     agent
         .session_messages
-        .push(common::message::Message::user("say hi"));
+        .push(types::message::Message::user("say hi"));
     let session = Arc::new(Mutex::new(agent));
     let session_for_check = Arc::clone(&session);
 
@@ -378,7 +378,7 @@ async fn pre_verify_never_fires_without_disk_write() {
     ::hooks::install_recording(&agent.hook_bus(), Arc::clone(&log));
     agent
         .session_messages
-        .push(common::message::Message::user("just say hi, no tools"));
+        .push(types::message::Message::user("just say hi, no tools"));
     let session = Arc::new(Mutex::new(agent));
 
     let chat_fn = scripted_chat(vec![vec![
@@ -437,7 +437,7 @@ async fn pre_verify_keep_going_retries_capped_at_two() {
     });
     agent
         .session_messages
-        .push(common::message::Message::user("write a file then confirm"));
+        .push(types::message::Message::user("write a file then confirm"));
     let session = Arc::new(Mutex::new(agent));
     let session_for_check = Arc::clone(&session);
 
@@ -549,11 +549,11 @@ async fn pre_verify_keep_going_retries_capped_at_two() {
             .collect::<Vec<_>>()
     );
 
-    let bridge_users: Vec<&common::message::Message> = agent
+    let bridge_users: Vec<&types::message::Message> = agent
         .session_messages
         .iter()
         .filter(|m| {
-            m.role == common::message::Role::User
+            m.role == types::message::Role::User
                 && m.content_str().starts_with("[astro:hook-context]")
         })
         .collect();
@@ -614,7 +614,7 @@ async fn cumulative_usage_chunks_use_last_per_round() {
     {
         let mut a = session.lock().await;
         a.session_messages
-            .push(common::message::Message::user("hi"));
+            .push(types::message::Message::user("hi"));
     }
     let chat_fn = scripted_chat(vec![vec![
         StreamChunk::Text("a".into()),
@@ -662,7 +662,7 @@ async fn error_is_followed_by_done() {
     let session = Arc::new(Mutex::new(agent));
     {
         let mut a = session.lock().await;
-        a.session_messages.push(common::message::Message::user("x"));
+        a.session_messages.push(types::message::Message::user("x"));
     }
     let chat_fn = boom_chat();
     let (tx, mut rx) = tokio::sync::mpsc::channel(64);
@@ -705,7 +705,7 @@ async fn tool_call_delta_and_memory_path() {
     {
         let mut a = session.lock().await;
         a.session_messages
-            .push(common::message::Message::user("remember this"));
+            .push(types::message::Message::user("remember this"));
     }
 
     let chat_fn = scripted_chat(vec![
@@ -792,7 +792,7 @@ async fn hitl_waiting_parks_then_continues_same_run() {
     {
         let mut a = session.lock().await;
         a.session_messages
-            .push(common::message::Message::user("please confirm"));
+            .push(types::message::Message::user("please confirm"));
     }
 
     let chat_fn = scripted_chat(vec![
@@ -927,7 +927,7 @@ async fn approval_hooks_fire_pre_then_post_on_allow() {
     {
         let mut a = session.lock().await;
         a.session_messages
-            .push(common::message::Message::user("clean up the temp dir"));
+            .push(types::message::Message::user("clean up the temp dir"));
     }
 
     let cmd = "rm -rf /tmp/astro-approval-test-allow";
@@ -1081,7 +1081,7 @@ async fn approval_hooks_fire_pre_then_post_on_deny() {
     {
         let mut a = session.lock().await;
         a.session_messages
-            .push(common::message::Message::user("clean up the temp dir"));
+            .push(types::message::Message::user("clean up the temp dir"));
     }
 
     let cmd = "rm -rf /tmp/astro-approval-test-deny";
@@ -1204,7 +1204,7 @@ async fn multi_turn_budget_exhausted_forces_toolless_summary() {
     {
         let mut a = session.lock().await;
         a.session_messages
-            .push(common::message::Message::user("keep using tools"));
+            .push(types::message::Message::user("keep using tools"));
     }
 
     let chat_fn = scripted_chat(vec![

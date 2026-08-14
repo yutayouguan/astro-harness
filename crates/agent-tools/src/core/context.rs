@@ -1,6 +1,6 @@
 //! 工具执行上下文：由 AgentLoop 注入的运行时依赖与凭证。
 //!
-//! 凭证数据类型已下沉到 `common::credentials`，本模块 re-export 并提供
+//! 凭证数据类型已下沉到 `types::credentials`，本模块 re-export 并提供
 //! `ToolContext` 结构体与 Provider 相关的便捷构造。
 
 use std::path::{Path, PathBuf};
@@ -9,7 +9,7 @@ use std::sync::Arc;
 use memory::MemoryManager;
 use session::ConversationStore;
 
-pub use common::credentials::{ImageGenCreds, ImageGenParts, ImageGenTargets, ModelCredentials};
+pub use types::credentials::{ImageGenCreds, ImageGenParts, ImageGenTargets, ModelCredentials};
 
 /// 使用 Provider 默认模型名构建 ImageGenTargets。
 pub fn image_gen_targets_from_parts(p: ImageGenParts<'_>) -> ImageGenTargets {
@@ -39,7 +39,7 @@ pub struct ToolContext<'a> {
     /// 当前聊天会话的 LLM 凭证（provider / model / api_key / base_url）。
     pub credentials: &'a ModelCredentials,
     /// 含 primary 的聊天 fallback 链，供 `delegate` 下传给子 Agent。
-    pub chat_targets: &'a [common::ChatTarget],
+    pub chat_targets: &'a [types::ChatTarget],
     /// 子 Agent 执行调度器（由 AgentLoop 注入；工具层测试可为 None）。
     pub execution: Option<Arc<dyn crate::ExecutionDispatch>>,
     /// 插件钩子总线（由 AgentLoop 注入；无 bus 时对应工具跳过 transform 钩子）。

@@ -1,11 +1,11 @@
 //! 危险命令检测与分级审批（Hermes 风格）。
 //!
-//! 枚举类型已下沉到 `common::approval`，本模块 re-export 并保留 regex 规则逻辑。
+//! 枚举类型已下沉到 `types::approval`，本模块 re-export 并保留 regex 规则逻辑。
 
 use regex::Regex;
 use std::sync::OnceLock;
 
-pub use common::approval::{ApprovalAction, ApprovalDecision, ApprovalMode};
+pub use types::approval::{ApprovalAction, ApprovalDecision, ApprovalMode};
 
 /// 极危：直接 deny。
 fn deny_patterns() -> &'static [(Regex, &'static str)] {

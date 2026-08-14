@@ -5,7 +5,7 @@
 //! - [`pricing`]：路由感知费用估算
 //! - [`trace_insights`]：按 session 聚合调用链（可读 `session` 库）
 //! - [`eval_export`]：session trace → eval JSONL
-//! - SQLite 打开协议见 [`common::sqlite`]
+//! - SQLite 打开协议见 [`types::sqlite`]
 
 pub mod db;
 pub mod eval_export;

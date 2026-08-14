@@ -7,7 +7,7 @@ use std::fs::{self, File};
 use std::io::{BufWriter, Write};
 use std::path::Path;
 
-use common::truncate_chars;
+use types::truncate_chars;
 use serde::{Deserialize, Serialize};
 use session::SessionStore;
 

@@ -1,6 +1,6 @@
 //! AgentLoop 轮次生命周期：用户输入处理、记忆召回、system prompt 组装与 hook 触发。
 
-use common::message::Message;
+use types::message::Message;
 use session::{build_conversation_context, format_recalled_context, NewMessage};
 
 use super::{looks_like_user_correction, AgentLoop, TurnResult};
@@ -81,7 +81,7 @@ impl AgentLoop {
             && self
                 .session_messages
                 .iter()
-                .any(|m| matches!(m.role, common::message::Role::Assistant))
+                .any(|m| matches!(m.role, types::message::Role::Assistant))
         {
             memory::try_append_decision(
                 self.memory.base_dir.as_path(),
@@ -95,7 +95,7 @@ impl AgentLoop {
         self.reload_tools_and_mcp().await;
 
         self.sessions.ensure_session(&self.session_id, "tauri")?;
-        let media_assets: Vec<common::MediaAsset> = image_data_urls
+        let media_assets: Vec<types::MediaAsset> = image_data_urls
             .iter()
             .map(|u| u.trim())
             .filter(|u| !u.is_empty())
@@ -105,7 +105,7 @@ impl AgentLoop {
                     .and_then(|rest| rest.split(';').next())
                     .unwrap_or("image/*")
                     .to_string();
-                common::MediaAsset::data_url(common::MediaKind::Image, u, mime)
+                types::MediaAsset::data_url(types::MediaKind::Image, u, mime)
             })
             .collect();
         let media_owned = if media_assets.is_empty() {

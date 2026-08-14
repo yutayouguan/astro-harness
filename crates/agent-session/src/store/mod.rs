@@ -6,7 +6,7 @@ mod search;
 mod sessions;
 
 use anyhow::{anyhow, Context, Result};
-use common::SqliteStore;
+use types::SqliteStore;
 use rusqlite::{Connection, OptionalExtension};
 use serde_json::Value;
 use std::path::{Path, PathBuf};
@@ -234,12 +234,12 @@ impl SessionStore {
                     target = SCHEMA_VERSION,
                     "session state.db outdated; discarding prior chat history"
                 );
-                common::delete_sqlite_files(path);
+                types::delete_sqlite_files(path);
             } else {
                 tracing::debug!(version, target = SCHEMA_VERSION, "session state.db opened");
             }
         }
-        let conn = common::open_wal(path)
+        let conn = types::open_wal(path)
             .with_context(|| format!("open session store at {}", path.display()))?;
         conn.execute_batch("PRAGMA foreign_keys=ON;")?;
         let store = Self {
@@ -378,7 +378,7 @@ fn peek_schema_version(path: &Path) -> Result<i32> {
 /// 删除旁路旧 `sessions.db`（不再导入）。
 fn discard_sidecar_sessions_db(sessions_dir: &Path) {
     let base = sessions_dir.join("sessions.db");
-    common::delete_sqlite_files(&base);
+    types::delete_sqlite_files(&base);
 }
 
 pub(crate) fn is_unique_constraint(err: &rusqlite::Error) -> bool {
@@ -396,7 +396,7 @@ pub(crate) fn escape_fts5_query(query: &str) -> String {
     format!("\"{escaped}\"")
 }
 
-pub(crate) use common::truncate_chars;
+pub(crate) use types::truncate_chars;
 
 pub(crate) fn activities_from_tool_calls(tool_calls: Option<&Value>) -> Vec<ChatActivityStored> {
     let Some(Value::Array(arr)) = tool_calls else {

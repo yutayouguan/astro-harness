@@ -7,7 +7,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
-use common::truncate_chars;
+use types::truncate_chars;
 
 use crate::context::ToolContext;
 use crate::registry::{ToolEntry, ToolRegistry};
@@ -204,9 +204,9 @@ fn dispatch_search(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow::R
         }
     }
 
-    Ok(common::truncate_tool_result(
+    Ok(types::truncate_tool_result(
         &format!("# search: {query}\n\n{}", sections.join("\n\n")),
-        common::MAX_TOOL_RESULT_BYTES,
+        types::MAX_TOOL_RESULT_BYTES,
     ))
 }
 

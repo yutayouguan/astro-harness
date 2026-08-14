@@ -5,7 +5,7 @@
 //! 凭据解析：读 `providers.json` + **仅环境变量** API Key（无 keyring；GUI 手动跑走 Tauri）。
 
 use agent::exec::cron::{self as cron_exec, CronExecCredentials};
-use common::{expand_chat_targets, ChatTarget, FallbackRef};
+use types::{expand_chat_targets, ChatTarget, FallbackRef};
 use cron::{CronJob, CronStore};
 use home::default_memory_dir;
 use serde::Deserialize;
@@ -206,27 +206,27 @@ pub async fn tick_and_execute() {
                     let body = if row.summary.trim().is_empty() {
                         label
                     } else {
-                        format!("{label}\n{}", common::truncate_notify(&row.summary, 120))
+                        format!("{label}\n{}", types::truncate_notify(&row.summary, 120))
                     };
-                    common::notify_kind(common::ImportantKind::CronSuccess, body);
+                    types::notify_kind(types::ImportantKind::CronSuccess, body);
                 } else {
                     let detail = row
                         .error
                         .as_deref()
                         .map(str::trim)
                         .filter(|s| !s.is_empty())
-                        .map(|s| common::truncate_notify(s, 120))
+                        .map(|s| types::truncate_notify(s, 120))
                         .or_else(|| {
                             let s = row.summary.trim();
                             if s.is_empty() {
                                 None
                             } else {
-                                Some(common::truncate_notify(s, 120))
+                                Some(types::truncate_notify(s, 120))
                             }
                         })
                         .unwrap_or_else(|| row.status.clone());
-                    common::notify_kind(
-                        common::ImportantKind::CronFailure,
+                    types::notify_kind(
+                        types::ImportantKind::CronFailure,
                         format!("{label}\n{detail}"),
                     );
                 }
@@ -239,11 +239,11 @@ pub async fn tick_and_execute() {
                     error = %err,
                     "cron job execution failed"
                 );
-                common::notify_kind(
-                    common::ImportantKind::CronFailure,
+                types::notify_kind(
+                    types::ImportantKind::CronFailure,
                     format!(
                         "{label}\n{}",
-                        common::truncate_notify(&err.to_string(), 120)
+                        types::truncate_notify(&err.to_string(), 120)
                     ),
                 );
             }
@@ -256,7 +256,7 @@ fn cron_notify_label(job: &CronJob) -> String {
     if !title.is_empty() {
         return title.to_string();
     }
-    common::truncate_notify(job.task.trim(), 48)
+    types::truncate_notify(job.task.trim(), 48)
 }
 
 #[cfg(test)]

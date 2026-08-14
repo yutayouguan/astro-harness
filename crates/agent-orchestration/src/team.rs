@@ -42,7 +42,7 @@ pub struct TeamMember {
     pub agent_id: Option<String>,
     #[serde(default)]
     pub toolsets: Option<Vec<String>>,
-    /// 可选成员模型简写：`provider:model_id`（见 [`common::ModelSpec`]）。
+    /// 可选成员模型简写：`provider:model_id`（见 [`types::ModelSpec`]）。
     #[serde(default)]
     pub model: Option<String>,
 }

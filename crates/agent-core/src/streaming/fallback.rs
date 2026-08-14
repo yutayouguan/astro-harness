@@ -1,6 +1,6 @@
 //! 聊天主模型故障切换：错误分类与首包前 fallback 流包装。
 
-use common::ChatTarget;
+use types::ChatTarget;
 use futures::{stream, StreamExt};
 use providers::types::message::Message as ProviderMessage;
 use providers::types::stream::{CompletionStream, StreamChunk};

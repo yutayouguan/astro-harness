@@ -53,7 +53,7 @@ pub(super) async fn pre_llm_maintenance(session: &Arc<Mutex<AgentLoop>>) {
 pub(super) async fn emit_context_usage(
     session: &Arc<Mutex<AgentLoop>>,
     tx: &mpsc::Sender<anyhow::Result<MultiTurnStreamItem>>,
-    history: &[common::message::Message],
+    history: &[types::message::Message],
     tools: &[serde_json::Value],
 ) {
     let agent = session.lock().await;
@@ -85,7 +85,7 @@ pub(super) async fn emit_context_usage(
 /// 返回 `true` 表示 `stop_after_tool_call` 触发，主循环应跳出。
 pub(super) async fn post_tool_maintenance(
     session: &Arc<Mutex<AgentLoop>>,
-    calls: &[common::ParsedToolCall],
+    calls: &[types::ParsedToolCall],
 ) -> bool {
     {
         let mut agent = session.lock().await;
@@ -136,8 +136,8 @@ pub(super) async fn post_tool_maintenance(
 /// 返回 `false` 表示取消或 channel 关闭，主循环应提前退出。
 pub(super) async fn record_tool_outcomes(
     session: &Arc<Mutex<AgentLoop>>,
-    calls: &[common::ParsedToolCall],
-    outcomes: Vec<common::ToolOutput>,
+    calls: &[types::ParsedToolCall],
+    outcomes: Vec<types::ToolOutput>,
     pause: &Arc<providers::PauseControl>,
     tx: &mpsc::Sender<anyhow::Result<MultiTurnStreamItem>>,
     timeline: &mut crate::timeline::TimelineBuilder,
@@ -234,7 +234,7 @@ pub(super) async fn record_tool_outcomes(
             );
             if !tool_media.is_empty() {
                 if let Some(last) = agent.session_messages.last_mut() {
-                    if last.role == common::message::Role::Tool && last.media.is_empty() {
+                    if last.role == types::message::Role::Tool && last.media.is_empty() {
                         last.media = tool_media;
                     }
                 }
@@ -259,7 +259,7 @@ pub(super) async fn stream_chat_with_hooks(
     session: &Arc<Mutex<AgentLoop>>,
     streamer: &ProviderStreamer,
     system_prompt: &str,
-    history: &[common::message::Message],
+    history: &[types::message::Message],
     tools: Vec<serde_json::Value>,
 ) -> Result<super::types::AssistantContentStream, String> {
     {

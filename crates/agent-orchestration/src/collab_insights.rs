@@ -5,7 +5,7 @@
 
 use std::collections::HashMap;
 
-use common::truncate_utf8;
+use types::truncate_utf8;
 use serde::{Deserialize, Serialize};
 
 use crate::db::OrchestrationDb;

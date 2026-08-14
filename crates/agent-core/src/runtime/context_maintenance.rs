@@ -1,6 +1,6 @@
 //! AgentLoop 上下文维护：tool 结果压缩、provider 历史折叠与上下文占用估算。
 
-use common::message::{Message, Role};
+use types::message::{Message, Role};
 
 use crate::compression::{prune_tool_view, ContextMaintenanceResult, ToolCompressionManager};
 
@@ -70,7 +70,7 @@ impl AgentLoop {
         }
 
         // ── Compress 阶段：先尝试 LLM 摘要，失败回退 head/tail ──
-        let targets = self.auxiliary_targets(common::AuxiliaryTask::Compaction);
+        let targets = self.auxiliary_targets(types::AuxiliaryTask::Compaction);
         let llm_budget = crate::exec::tool_llm_compress::MAX_LLM_TOOL_COMPRESS_PER_PASS;
 
         for (i, job) in plan.compress.iter().enumerate() {
