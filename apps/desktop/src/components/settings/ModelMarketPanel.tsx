@@ -1,8 +1,9 @@
-/** 模型市场：浏览 OpenRouter 全量模型目录，支持搜索、筛选和排序。 */
+/** 模型市场：浏览 OpenRouter 全量模型目录，支持搜索、筛选、排序和详情面板。 */
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import {
   Brain,
+  ChevronRight,
   Eye,
   Headphones,
   Image,
@@ -11,8 +12,10 @@ import {
   Wrench,
   Globe,
   Sparkles,
+  X,
 } from "lucide-react";
 import { useI18n } from "../../i18n/LocaleContext";
+import { ModelBrandIcon } from "../icons/ProviderIcons";
 
 interface ModelPricing {
   prompt_per_million: number | null;
@@ -71,6 +74,11 @@ function providerFromId(id: string): string {
   return slash > 0 ? id.slice(0, slash) : id;
 }
 
+function modelSlug(id: string): string {
+  const slash = id.indexOf("/");
+  return slash > 0 ? id.slice(slash + 1) : id;
+}
+
 function timeSince(ts: number | null): string {
   if (!ts) return "";
   const now = Date.now() / 1000;
@@ -80,6 +88,15 @@ function timeSince(ts: number | null): string {
   if (days < 30) return `${Math.floor(days / 7)}w ago`;
   if (days < 365) return `${Math.floor(days / 30)}mo ago`;
   return `${Math.floor(days / 365)}y ago`;
+}
+
+function formatDate(ts: number | null): string {
+  if (!ts) return "—";
+  return new Date(ts * 1000).toLocaleDateString(undefined, {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  });
 }
 
 const FILTERS: { key: FilterKey; Icon: typeof Brain }[] = [
@@ -92,6 +109,144 @@ const FILTERS: { key: FilterKey; Icon: typeof Brain }[] = [
   { key: "free", Icon: Globe },
 ];
 
+function CapabilityBadges({ m }: { m: ModelCatalogEntry }) {
+  return (
+    <div className="model-market-card-caps">
+      {m.supports_function_calling && (
+        <span className="model-market-cap" title="Tools"><Wrench size={11} /></span>
+      )}
+      {m.supports_reasoning && (
+        <span className="model-market-cap" title="Reasoning"><Brain size={11} /></span>
+      )}
+      {m.supports_vision && (
+        <span className="model-market-cap" title="Vision"><Eye size={11} /></span>
+      )}
+      {m.supports_audio_input && (
+        <span className="model-market-cap" title="Audio Input"><Headphones size={11} /></span>
+      )}
+      {m.supports_image_generation && (
+        <span className="model-market-cap" title="Image Gen"><Image size={11} /></span>
+      )}
+      {m.supports_web_search && (
+        <span className="model-market-cap" title="Web Search"><Globe size={11} /></span>
+      )}
+    </div>
+  );
+}
+
+function ModelDetail({ m, onClose }: { m: ModelCatalogEntry; onClose: () => void }) {
+  const { t } = useI18n();
+  return (
+    <div className="model-market-detail">
+      <div className="model-market-detail-header">
+        <div className="model-market-detail-brand">
+          <ModelBrandIcon modelId={m.id} width={28} height={28} />
+        </div>
+        <div className="model-market-detail-title">
+          <span className="model-market-detail-provider">{providerFromId(m.id)}</span>
+          <h3 className="model-market-detail-name">{m.name ?? modelSlug(m.id)}</h3>
+        </div>
+        <button type="button" className="model-market-detail-close" onClick={onClose}>
+          <X size={16} />
+        </button>
+      </div>
+
+      <div className="model-market-detail-body">
+        <div className="model-market-detail-section">
+          <h4>{t("modelMarket.context")}</h4>
+          <span className="model-market-detail-value">{formatCtx(m.context_length)} tokens</span>
+        </div>
+
+        <div className="model-market-detail-section">
+          <h4>{t("modelMarket.sort.price")} ($/1M tokens)</h4>
+          <div className="model-market-detail-prices">
+            <div className="model-market-detail-price-row">
+              <span>{t("modelMarket.inputPrice")}</span>
+              <span className="model-market-detail-value">
+                {formatPrice(m.pricing?.prompt_per_million)}
+              </span>
+            </div>
+            <div className="model-market-detail-price-row">
+              <span>{t("modelMarket.outputPrice")}</span>
+              <span className="model-market-detail-value">
+                {formatPrice(m.pricing?.completion_per_million)}
+              </span>
+            </div>
+            {m.pricing?.cache_read_per_million != null && (
+              <div className="model-market-detail-price-row">
+                <span>Cache Read</span>
+                <span className="model-market-detail-value">
+                  {formatPrice(m.pricing.cache_read_per_million)}
+                </span>
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="model-market-detail-section">
+          <h4>Capabilities</h4>
+          <CapabilityBadges m={m} />
+        </div>
+
+        {(m.input_modalities.length > 0 || m.output_modalities.length > 0) && (
+          <div className="model-market-detail-section">
+            <h4>Modalities</h4>
+            {m.input_modalities.length > 0 && (
+              <div className="model-market-detail-modalities">
+                <span className="model-market-detail-mod-label">Input:</span>
+                {m.input_modalities.map((mod) => (
+                  <span key={mod} className="model-market-chip">{mod}</span>
+                ))}
+              </div>
+            )}
+            {m.output_modalities.length > 0 && (
+              <div className="model-market-detail-modalities">
+                <span className="model-market-detail-mod-label">Output:</span>
+                {m.output_modalities.map((mod) => (
+                  <span key={mod} className="model-market-chip">{mod}</span>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {m.knowledge_cutoff && (
+          <div className="model-market-detail-section">
+            <h4>Knowledge Cutoff</h4>
+            <span className="model-market-detail-value">{m.knowledge_cutoff}</span>
+          </div>
+        )}
+
+        {m.created && (
+          <div className="model-market-detail-section">
+            <h4>Added to OpenRouter</h4>
+            <span className="model-market-detail-value">{formatDate(m.created)}</span>
+          </div>
+        )}
+
+        {m.expiration_date && (
+          <div className="model-market-detail-section">
+            <h4>Expiration</h4>
+            <span className="model-market-detail-value warn">{m.expiration_date}</span>
+          </div>
+        )}
+
+        {m.description && (
+          <div className="model-market-detail-section">
+            <h4>Description</h4>
+            <p className="model-market-detail-desc">{m.description}</p>
+          </div>
+        )}
+
+        <div className="model-market-detail-section">
+          <h4>Model ID</h4>
+          <code className="model-market-detail-id">{m.id}</code>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function ModelMarketPanel({ active }: { active: boolean }) {
   const { t } = useI18n();
   const [models, setModels] = useState<ModelCatalogEntry[]>([]);
@@ -99,6 +254,7 @@ export default function ModelMarketPanel({ active }: { active: boolean }) {
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState<SortKey>("newest");
   const [filter, setFilter] = useState<FilterKey>("all");
+  const [selectedId, setSelectedId] = useState<string | null>(null);
 
   const load = useCallback(async (force: boolean) => {
     setLoading(true);
@@ -169,6 +325,8 @@ export default function ModelMarketPanel({ active }: { active: boolean }) {
     return list;
   }, [models, filter, search, sort]);
 
+  const selected = selectedId ? models.find((m) => m.id === selectedId) ?? null : null;
+
   if (!active) return null;
 
   const SORTS: { key: SortKey; labelKey: string }[] = [
@@ -179,152 +337,130 @@ export default function ModelMarketPanel({ active }: { active: boolean }) {
   ];
 
   return (
-    <div className="model-market">
-      {/* Toolbar */}
-      <div className="model-market-toolbar">
-        <div className="model-market-search">
-          <Search size={14} />
-          <input
-            type="text"
-            placeholder={t("modelMarket.search")}
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
+    <div className={`model-market ${selected ? "has-detail" : ""}`}>
+      <div className="model-market-main">
+        {/* Toolbar */}
+        <div className="model-market-toolbar">
+          <div className="model-market-search">
+            <Search size={14} />
+            <input
+              type="text"
+              placeholder={t("modelMarket.search")}
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+          </div>
+
+          <div className="model-market-sort">
+            {SORTS.map(({ key, labelKey }) => (
+              <button
+                key={key}
+                type="button"
+                className={`model-market-sort-btn ${sort === key ? "active" : ""}`}
+                onClick={() => setSort(key)}
+              >
+                {t(labelKey as never)}
+              </button>
+            ))}
+          </div>
+
+          <button
+            type="button"
+            className="model-market-refresh"
+            onClick={() => void load(true)}
+            disabled={loading}
+            title={t("modelMarket.refresh")}
+          >
+            <RefreshCw size={14} className={loading ? "spin" : ""} />
+          </button>
         </div>
 
-        <div className="model-market-sort">
-          {SORTS.map(({ key, labelKey }) => (
+        {/* Filters */}
+        <div className="model-market-filters">
+          {FILTERS.map(({ key, Icon }) => (
             <button
               key={key}
               type="button"
-              className={`model-market-sort-btn ${sort === key ? "active" : ""}`}
-              onClick={() => setSort(key)}
+              className={`model-market-filter-btn ${filter === key ? "active" : ""}`}
+              onClick={() => setFilter(key)}
             >
-              {t(labelKey as never)}
+              <Icon size={13} />
+              {t(`modelMarket.filter.${key}` as never)}
+            </button>
+          ))}
+          <span className="model-market-count">
+            {t("modelMarket.total", { count: String(filtered.length) })}
+          </span>
+        </div>
+
+        {/* List */}
+        <div className="model-market-list">
+          {filtered.length === 0 && !loading && (
+            <p className="model-market-empty">
+              {models.length === 0
+                ? t("modelMarket.empty")
+                : t("modelMarket.noResults")}
+            </p>
+          )}
+          {filtered.map((m) => (
+            <button
+              key={m.id}
+              type="button"
+              className={`model-market-card ${selectedId === m.id ? "is-selected" : ""}`}
+              onClick={() => setSelectedId(m.id === selectedId ? null : m.id)}
+            >
+              <div className="model-market-card-head">
+                <span className="model-market-card-logo">
+                  <ModelBrandIcon modelId={m.id} width={20} height={20} />
+                </span>
+                <div className="model-market-card-titles">
+                  <span className="model-market-card-provider">
+                    {providerFromId(m.id)}
+                  </span>
+                  <span className="model-market-card-name">
+                    {m.name ?? modelSlug(m.id)}
+                  </span>
+                </div>
+                {m.created && (
+                  <span className="model-market-card-age">
+                    {timeSince(m.created)}
+                  </span>
+                )}
+                <ChevronRight size={14} className="model-market-card-arrow" />
+              </div>
+
+              <div className="model-market-card-meta">
+                <span className="model-market-chip" title={t("modelMarket.context")}>
+                  {formatCtx(m.context_length)}
+                </span>
+                {m.pricing && (
+                  <>
+                    <span
+                      className="model-market-chip price"
+                      title={`${t("modelMarket.inputPrice")}${t("modelMarket.perMillion")}`}
+                    >
+                      {formatPrice(m.pricing.prompt_per_million)}
+                    </span>
+                    <span className="model-market-chip-sep">/</span>
+                    <span
+                      className="model-market-chip price"
+                      title={`${t("modelMarket.outputPrice")}${t("modelMarket.perMillion")}`}
+                    >
+                      {formatPrice(m.pricing.completion_per_million)}
+                    </span>
+                  </>
+                )}
+                <CapabilityBadges m={m} />
+              </div>
             </button>
           ))}
         </div>
-
-        <button
-          type="button"
-          className="model-market-refresh"
-          onClick={() => void load(true)}
-          disabled={loading}
-          title={t("modelMarket.refresh")}
-        >
-          <RefreshCw size={14} className={loading ? "spin" : ""} />
-        </button>
       </div>
 
-      {/* Filters */}
-      <div className="model-market-filters">
-        {FILTERS.map(({ key, Icon }) => (
-          <button
-            key={key}
-            type="button"
-            className={`model-market-filter-btn ${filter === key ? "active" : ""}`}
-            onClick={() => setFilter(key)}
-          >
-            <Icon size={13} />
-            {t(`modelMarket.filter.${key}` as never)}
-          </button>
-        ))}
-        <span className="model-market-count">
-          {t("modelMarket.total", { count: String(filtered.length) })}
-        </span>
-      </div>
-
-      {/* List */}
-      <div className="model-market-list">
-        {filtered.length === 0 && !loading && (
-          <p className="model-market-empty">
-            {models.length === 0
-              ? t("modelMarket.empty")
-              : t("modelMarket.noResults")}
-          </p>
-        )}
-        {filtered.map((m) => (
-          <div key={m.id} className="model-market-card">
-            <div className="model-market-card-head">
-              <span className="model-market-card-provider">
-                {providerFromId(m.id)}
-              </span>
-              <span className="model-market-card-name">
-                {m.name ?? m.id}
-              </span>
-              {m.created && (
-                <span className="model-market-card-age">
-                  {timeSince(m.created)}
-                </span>
-              )}
-            </div>
-
-            <div className="model-market-card-meta">
-              <span className="model-market-chip" title={t("modelMarket.context")}>
-                {formatCtx(m.context_length)}
-              </span>
-              {m.pricing && (
-                <>
-                  <span
-                    className="model-market-chip price"
-                    title={`${t("modelMarket.inputPrice")}${t("modelMarket.perMillion")}`}
-                  >
-                    {formatPrice(m.pricing.prompt_per_million)}
-                  </span>
-                  <span className="model-market-chip-sep">/</span>
-                  <span
-                    className="model-market-chip price"
-                    title={`${t("modelMarket.outputPrice")}${t("modelMarket.perMillion")}`}
-                  >
-                    {formatPrice(m.pricing.completion_per_million)}
-                  </span>
-                </>
-              )}
-            </div>
-
-            <div className="model-market-card-caps">
-              {m.supports_function_calling && (
-                <span className="model-market-cap" title="Tools">
-                  <Wrench size={11} />
-                </span>
-              )}
-              {m.supports_reasoning && (
-                <span className="model-market-cap" title="Reasoning">
-                  <Brain size={11} />
-                </span>
-              )}
-              {m.supports_vision && (
-                <span className="model-market-cap" title="Vision">
-                  <Eye size={11} />
-                </span>
-              )}
-              {m.supports_audio_input && (
-                <span className="model-market-cap" title="Audio">
-                  <Headphones size={11} />
-                </span>
-              )}
-              {m.supports_image_generation && (
-                <span className="model-market-cap" title="Image Gen">
-                  <Image size={11} />
-                </span>
-              )}
-              {m.supports_web_search && (
-                <span className="model-market-cap" title="Web Search">
-                  <Globe size={11} />
-                </span>
-              )}
-            </div>
-
-            {m.description && (
-              <p className="model-market-card-desc">
-                {m.description.length > 120
-                  ? m.description.slice(0, 120) + "…"
-                  : m.description}
-              </p>
-            )}
-          </div>
-        ))}
-      </div>
+      {/* Detail panel */}
+      {selected && (
+        <ModelDetail m={selected} onClose={() => setSelectedId(null)} />
+      )}
     </div>
   );
 }
