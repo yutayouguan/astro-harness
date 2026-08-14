@@ -1883,7 +1883,7 @@ export default function ChatView({
                                   caret={false}
                                   mediaBaseDir={mediaBaseDir}
                                 />
-                                {isStreamingBubble ? <MsgStreamLoader /> : null}
+                                <MsgStreamLoader visible={isStreamingBubble} />
                               </>
                             ),
                           });

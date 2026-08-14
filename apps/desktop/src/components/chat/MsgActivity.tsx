@@ -130,41 +130,43 @@ export default function MsgActivity({
         ) : (
           <div className="msg-activity-summary">{summary}</div>
         )}
-        {open && (hasMedia || input || output) ? (
-          <>
-            {hasMedia ? (
-              <div className="msg-activity-media">
-                {previewMedia.map((m) => (
-                  <GeneratedMediaCard
-                    key={`${m.kind}:${m.path}`}
-                    kind={m.kind}
-                    path={m.path}
-                    compact
-                  />
-                ))}
-              </div>
-            ) : null}
-            {input || output ? (
-              <div className="msg-activity-io">
-                {input ? (
-                  <div className="msg-activity-io-block">
-                    <span className="msg-activity-io-label">
-                      {t("chat.activityInput")}
-                    </span>
-                    <pre className="msg-activity-detail">{input}</pre>
-                  </div>
-                ) : null}
-                {output ? (
-                  <div className="msg-activity-io-block">
-                    <span className="msg-activity-io-label">
-                      {t("chat.activityOutput")}
-                    </span>
-                    <pre className="msg-activity-detail">{output}</pre>
-                  </div>
-                ) : null}
-              </div>
-            ) : null}
-          </>
+        {(hasMedia || input || output) ? (
+          <div className="msg-activity-collapse">
+            <div className="msg-activity-collapse-inner">
+              {hasMedia ? (
+                <div className="msg-activity-media">
+                  {previewMedia.map((m) => (
+                    <GeneratedMediaCard
+                      key={`${m.kind}:${m.path}`}
+                      kind={m.kind}
+                      path={m.path}
+                      compact
+                    />
+                  ))}
+                </div>
+              ) : null}
+              {input || output ? (
+                <div className="msg-activity-io">
+                  {input ? (
+                    <div className="msg-activity-io-block">
+                      <span className="msg-activity-io-label">
+                        {t("chat.activityInput")}
+                      </span>
+                      <pre className="msg-activity-detail">{input}</pre>
+                    </div>
+                  ) : null}
+                  {output ? (
+                    <div className="msg-activity-io-block">
+                      <span className="msg-activity-io-label">
+                        {t("chat.activityOutput")}
+                      </span>
+                      <pre className="msg-activity-detail">{output}</pre>
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
+            </div>
+          </div>
         ) : null}
         {showTimestamp && activity.at ? (
           <span className="msg-activity-time">

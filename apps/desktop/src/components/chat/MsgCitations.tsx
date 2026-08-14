@@ -1,4 +1,4 @@
-/** Anthropic citations 引用折叠块。 */
+/** Anthropic citations 引用折叠块，带手风琴展开动画。 */
 import { useState } from "react";
 import { BookOpen } from "lucide-react";
 
@@ -26,7 +26,7 @@ export default function MsgCitations({ citations }: Props) {
           {citations.length} {citations.length === 1 ? "citation" : "citations"}
         </span>
       </button>
-      {open && (
+      <div className="msg-citations-collapse">
         <ul className="msg-citations-list">
           {citations.map((c, i) => (
             <li key={i} className="msg-citations-item">
@@ -44,7 +44,7 @@ export default function MsgCitations({ citations }: Props) {
             </li>
           ))}
         </ul>
-      )}
+      </div>
     </div>
   );
 }

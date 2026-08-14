@@ -266,6 +266,16 @@ html[data-theme="light"] .msg-token-stats {
   -webkit-backdrop-filter: blur(12px) saturate(1.25);
 }
 
+.msg-token-stats {
+  animation: rise 220ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .msg-token-stats {
+    animation: none;
+  }
+}
+
 /* AI 消息悬停操作条：玻璃液态小按钮，贴在气泡下方，不挡选中文字 */
 .msg-actions {
   display: inline-flex;
@@ -578,10 +588,19 @@ html[data-theme="dark"] .bubble.user {
   }
 }
 
+.msg-stream-loader.is-leaving {
+  opacity: 0;
+  transform: scale(0.92);
+  transition: opacity 140ms ease-out, transform 140ms ease-out;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .msg-stream-loader span {
     animation: none;
     opacity: 0.55;
+  }
+  .msg-stream-loader.is-leaving {
+    transition: none;
   }
 }
 
