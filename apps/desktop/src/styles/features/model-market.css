@@ -129,6 +129,12 @@
     inset 0 0 0 1px color-mix(in srgb, var(--tone) 22%, transparent);
 }
 
+.model-market-sort-arrow {
+  flex-shrink: 0;
+  color: var(--tone);
+  opacity: 0.8;
+}
+
 .model-market-refresh {
   display: inline-flex;
   align-items: center;

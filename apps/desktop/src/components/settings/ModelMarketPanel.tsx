@@ -2,6 +2,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import {
+  ArrowDownAZ,
+  ArrowUpAZ,
   Brain,
   ChevronRight,
   Eye,
@@ -253,6 +255,7 @@ export default function ModelMarketPanel({ active }: { active: boolean }) {
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState<SortKey>("newest");
+  const [sortAsc, setSortAsc] = useState(false);
   const [filter, setFilter] = useState<FilterKey>("all");
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
@@ -307,23 +310,29 @@ export default function ModelMarketPanel({ active }: { active: boolean }) {
     }
 
     list = [...list].sort((a, b) => {
+      let cmp: number;
       switch (sort) {
         case "price": {
           const pa = a.pricing?.prompt_per_million ?? Infinity;
           const pb = b.pricing?.prompt_per_million ?? Infinity;
-          return pa - pb;
+          cmp = pa - pb;
+          break;
         }
         case "context":
-          return (b.context_length ?? 0) - (a.context_length ?? 0);
+          cmp = (b.context_length ?? 0) - (a.context_length ?? 0);
+          break;
         case "newest":
-          return (b.created ?? 0) - (a.created ?? 0);
+          cmp = (b.created ?? 0) - (a.created ?? 0);
+          break;
         case "name":
-          return (a.name ?? a.id).localeCompare(b.name ?? b.id);
+          cmp = (a.name ?? a.id).localeCompare(b.name ?? b.id);
+          break;
       }
+      return sortAsc ? -cmp : cmp;
     });
 
     return list;
-  }, [models, filter, search, sort]);
+  }, [models, filter, search, sort, sortAsc]);
 
   const selected = selectedId ? models.find((m) => m.id === selectedId) ?? null : null;
 
@@ -366,9 +375,21 @@ export default function ModelMarketPanel({ active }: { active: boolean }) {
                 key={key}
                 type="button"
                 className={`model-market-sort-btn ${sort === key ? "active" : ""}`}
-                onClick={() => setSort(key)}
+                onClick={() => {
+                  if (sort === key) {
+                    setSortAsc((v) => !v);
+                  } else {
+                    setSort(key);
+                    setSortAsc(false);
+                  }
+                }}
               >
                 {t(labelKey as never)}
+                {sort === key && (
+                  sortAsc
+                    ? <ArrowUpAZ size={13} className="model-market-sort-arrow" />
+                    : <ArrowDownAZ size={13} className="model-market-sort-arrow" />
+                )}
               </button>
             ))}
           </div>
