@@ -223,9 +223,18 @@ html[data-theme="dark"] .model-market-view-btn.active {
   animation: mm-fade-in 0.3s ease both;
 }
 
+.mm-parallax {
+  will-change: transform;
+  transition: transform 0.08s linear;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .mm-fade-in {
     animation: none;
+  }
+  .mm-parallax {
+    transform: none !important;
+    transition: none;
   }
 }
 

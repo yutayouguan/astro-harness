@@ -367,6 +367,8 @@ export default function ModelMarketPanel({ active }: { active: boolean }) {
     setVisibleCount(PAGE_SIZE);
   }, [filter, search, sort, sortAsc]);
 
+  const [scrollY, setScrollY] = useState(0);
+
   useEffect(() => {
     const el = listRef.current;
     if (!el) return;
@@ -374,6 +376,7 @@ export default function ModelMarketPanel({ active }: { active: boolean }) {
       if (el.scrollTop + el.clientHeight >= el.scrollHeight - 200) {
         setVisibleCount((v) => Math.min(v + PAGE_SIZE, filtered.length));
       }
+      setScrollY(el.scrollTop);
     };
     el.addEventListener("scroll", onScroll, { passive: true });
     return () => el.removeEventListener("scroll", onScroll);
@@ -554,11 +557,17 @@ export default function ModelMarketPanel({ active }: { active: boolean }) {
                 {models.length === 0 ? t("modelMarket.empty") : t("modelMarket.noResults")}
               </p>
             )}
-            {visible.map((m, idx) => (
+            {visible.map((m, idx) => {
+              const speed = viewMode === "gallery" ? (idx % 2 === 0 ? 0.03 : -0.02) : (idx % 3 === 0 ? 0.02 : idx % 3 === 1 ? -0.015 : 0);
+              const parallaxY = speed * scrollY;
+              return (
               <div
                 key={m.id}
-                className="model-market-card mm-fade-in"
-                style={{ animationDelay: `${Math.min(idx % PAGE_SIZE, 15) * 25}ms` }}
+                className="model-market-card mm-fade-in mm-parallax"
+                style={{
+                  animationDelay: `${Math.min(idx % PAGE_SIZE, 15) * 25}ms`,
+                  transform: `translateY(${parallaxY}px)`,
+                }}
               >
                 <div className="model-market-card-head">
                   <span className="model-market-card-logo">
@@ -586,7 +595,8 @@ export default function ModelMarketPanel({ active }: { active: boolean }) {
                   <CapabilityBadges m={m} />
                 </div>
               </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
