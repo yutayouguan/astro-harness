@@ -7,11 +7,11 @@ import {
   Brain,
   ChevronRight,
   Eye,
-  Grid3x3,
+  Grid2x2,
   Headphones,
   Image,
-  LayoutList,
-  Rows3,
+  Columns2,
+  List,
   RefreshCw,
   Search,
   Wrench,
@@ -405,7 +405,7 @@ export default function ModelMarketPanel({ active }: { active: boolean }) {
               onClick={() => setViewMode("gallery")}
               title={t("modelMarket.view.gallery" as never)}
             >
-              <Grid3x3 size={14} />
+              <Grid2x2 size={14} />
             </button>
             <button
               type="button"
@@ -413,7 +413,7 @@ export default function ModelMarketPanel({ active }: { active: boolean }) {
               onClick={() => setViewMode("list")}
               title={t("modelMarket.view.list" as never)}
             >
-              <Rows3 size={14} />
+              <List size={14} />
             </button>
             <button
               type="button"
@@ -421,7 +421,7 @@ export default function ModelMarketPanel({ active }: { active: boolean }) {
               onClick={() => setViewMode("detail")}
               title={t("modelMarket.view.detail" as never)}
             >
-              <LayoutList size={14} />
+              <Columns2 size={14} />
             </button>
           </div>
 
