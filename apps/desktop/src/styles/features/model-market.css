@@ -21,6 +21,15 @@
   overflow: hidden;
 }
 
+/* 有详情面板时，工具栏和筛选行也要能收窄 */
+.model-market.has-detail .model-market-toolbar {
+  flex-wrap: wrap;
+}
+
+.model-market.has-detail .model-market-search {
+  min-width: 120px;
+}
+
 /* ── Toolbar: search + sort + refresh ────────────── */
 
 .model-market-toolbar {
@@ -282,13 +291,28 @@ html[data-theme="dark"] .model-market-view-btn.active {
   align-items: center;
   padding: 8px 12px;
   border-radius: 10px;
-  gap: 0;
+  gap: 8px;
 }
 
 .model-market-list.view-list .model-market-card-head {
   flex: 1;
   min-width: 0;
   gap: 8px;
+  overflow: hidden;
+}
+
+.model-market-list.view-list .model-market-card-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.model-market-list.view-list .model-market-card-age {
+  display: none;
+}
+
+.model-market-list.view-list .model-market-card-arrow {
+  display: none;
 }
 
 .model-market-list.view-list .model-market-card-logo {
@@ -353,6 +377,10 @@ html[data-theme="dark"] .model-market-view-btn.active {
   line-height: 1.6;
   color: var(--ink-mute);
   margin: 0;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
 .model-market-card-cutoff {
