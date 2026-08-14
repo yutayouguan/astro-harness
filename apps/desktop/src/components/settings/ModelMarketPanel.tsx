@@ -375,7 +375,7 @@ export default function ModelMarketPanel({ active }: { active: boolean }) {
           }
         }
       },
-      { rootMargin: "40px 0px", threshold: 0.05 },
+      { rootMargin: "80px 0px", threshold: 0.01 },
     );
     return () => observerRef.current?.disconnect();
   }, []);
