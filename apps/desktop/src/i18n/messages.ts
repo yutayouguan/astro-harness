@@ -1304,7 +1304,8 @@ export const zh = {
 
   "prefs.category.aria": "偏好设置分类",
   "prefs.category.appearance": "外观",
-  "prefs.category.conversation": "对话与上下文",
+  "prefs.category.conversation": "对话",
+  "prefs.category.context": "上下文与压缩",
   "prefs.category.general": "通用",
   "prefs.category.diagnostics": "诊断",
   "prefs.category.about": "关于",
@@ -3151,7 +3152,8 @@ export const en: Record<MessageKey, string> = {
 
   "prefs.category.aria": "Preference categories",
   "prefs.category.appearance": "Appearance",
-  "prefs.category.conversation": "Chat & context",
+  "prefs.category.conversation": "Chat",
+  "prefs.category.context": "Context & compression",
   "prefs.category.general": "General",
   "prefs.category.diagnostics": "Diagnostics",
   "prefs.category.about": "About",

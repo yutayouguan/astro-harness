@@ -49,6 +49,7 @@ type LogLevelFilter = "all" | "issues";
 type PreferenceCategory =
   | "appearance"
   | "conversation"
+  | "context"
   | "general"
   | "diagnostics"
   | "about";
@@ -297,6 +298,11 @@ export default function PreferencesPanel({
       id: "conversation" as const,
       label: t("prefs.category.conversation"),
       Icon: IconChat,
+    },
+    {
+      id: "context" as const,
+      label: t("prefs.category.context"),
+      Icon: Layers,
     },
     {
       id: "general" as const,
@@ -688,6 +694,12 @@ export default function PreferencesPanel({
         </div>
       </section>
 
+      </div>
+
+      <div
+        className="prefs-category-stack"
+        hidden={activeCategory !== "context"}
+      >
       <CompressionSettingsCard tone={tone} />
       </div>
 
