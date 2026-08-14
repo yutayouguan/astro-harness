@@ -104,9 +104,13 @@ function trimSlash(s: string): string {
   return s.replace(/\/+$/, "");
 }
 
-function resolveEndpointPreview(kind: string, endpoint: string): string {
+function resolveEndpointPreview(kind: string, endpoint: string, apiMode?: string): string {
   const base = trimSlash(endpoint.trim());
   if (!base) return "";
+  if (apiMode === "responses") {
+    const norm = /\/v1$/.test(base) ? base : `${base}/v1`;
+    return `${norm}/responses`;
+  }
   switch (kind) {
     case "anthropic":
       return `${base.replace(/\/v1$/, "")}/v1/messages`;
@@ -1790,7 +1794,7 @@ export default function ProvidersPanel({ active, onStateChange, tone }: Props) {
                 </label>
                 {draft.endpoint.trim() && (
                   <p className="providers-field-hint">
-                    → {resolveEndpointPreview(selected.kind, draft.endpoint)}
+                    → {resolveEndpointPreview(selected.kind, draft.endpoint, draft.api_mode)}
                   </p>
                 )}
 
