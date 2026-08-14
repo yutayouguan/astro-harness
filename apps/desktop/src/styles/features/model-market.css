@@ -364,14 +364,19 @@
 /* ── Detail panel (right slide) ──────────────────── */
 
 .model-market-detail {
-  width: 360px;
+  width: 370px;
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
-  border-left: 1px solid color-mix(in srgb, var(--glass-edge) 72%, transparent);
+  margin: 4px 4px 4px 12px;
+  border-radius: 18px;
+  border: 1px solid color-mix(in srgb, var(--glass-edge) 72%, transparent);
   background: color-mix(in srgb, var(--glass-panel, rgba(255, 255, 255, 0.55)) 95%, transparent);
-  backdrop-filter: blur(16px) saturate(1.15);
-  -webkit-backdrop-filter: blur(16px) saturate(1.15);
+  backdrop-filter: blur(20px) saturate(1.2);
+  -webkit-backdrop-filter: blur(20px) saturate(1.2);
+  box-shadow:
+    0 4px 24px rgba(0, 0, 0, 0.06),
+    0 1px 4px rgba(0, 0, 0, 0.04);
   overflow-y: auto;
   overflow-x: hidden;
 }
@@ -380,8 +385,8 @@
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 16px 16px 12px;
-  border-bottom: 1px solid color-mix(in srgb, var(--glass-edge) 55%, transparent);
+  padding: 18px 18px 14px;
+  border-bottom: 1px solid color-mix(in srgb, var(--glass-edge) 45%, transparent);
   flex-shrink: 0;
 }
 
@@ -389,10 +394,11 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 40px;
-  height: 40px;
-  border-radius: 10px;
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
   background: color-mix(in srgb, var(--tone) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--tone) 15%, transparent);
   flex-shrink: 0;
 }
 
@@ -439,10 +445,10 @@
 }
 
 .model-market-detail-body {
-  padding: 16px;
+  padding: 18px;
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 18px;
 }
 
 .model-market-detail-section {
@@ -481,8 +487,8 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 6px 10px;
-  border-radius: 8px;
+  padding: 8px 12px;
+  border-radius: 10px;
   background: color-mix(in srgb, var(--ink) 4%, transparent);
   font-size: 13px;
   color: var(--ink-mute);
@@ -517,8 +523,8 @@
 .model-market-detail-id {
   font-size: 12px;
   font-family: var(--font-mono, monospace);
-  padding: 6px 10px;
-  border-radius: 8px;
+  padding: 8px 12px;
+  border-radius: 10px;
   background: color-mix(in srgb, var(--ink) 5%, transparent);
   color: var(--ink);
   word-break: break-all;
@@ -542,4 +548,7 @@ html[data-theme="dark"] .model-market-filter-btn.active {
 
 html[data-theme="dark"] .model-market-detail {
   background: color-mix(in srgb, var(--glass-panel, rgba(20, 20, 30, 0.75)) 95%, transparent);
+  box-shadow:
+    0 4px 24px rgba(0, 0, 0, 0.25),
+    0 1px 4px rgba(0, 0, 0, 0.15);
 }
