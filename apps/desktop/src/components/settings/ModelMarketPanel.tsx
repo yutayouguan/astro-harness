@@ -5,7 +5,6 @@ import {
   ArrowDownAZ,
   ArrowUpAZ,
   Brain,
-  ChevronRight,
   Eye,
   Grid2x2,
   Headphones,
@@ -114,15 +113,6 @@ function timeSince(ts: number | null): string {
   return `${Math.floor(days / 365)}y ago`;
 }
 
-function formatDate(ts: number | null): string {
-  if (!ts) return "—";
-  return new Date(ts * 1000).toLocaleDateString(undefined, {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-  });
-}
-
 const FILTERS: { key: FilterKey; Icon: typeof Brain }[] = [
   { key: "all", Icon: Sparkles },
   { key: "tools", Icon: Wrench },
@@ -158,119 +148,6 @@ function CapabilityBadges({ m }: { m: ModelCatalogEntry }) {
   );
 }
 
-function ModelDetail({ m, onClose }: { m: ModelCatalogEntry; onClose: () => void }) {
-  const { t } = useI18n();
-  return (
-    <div className="model-market-detail">
-      <div className="model-market-detail-header">
-        <div className="model-market-detail-brand">
-          <ModelBrandIcon modelId={m.id} width={28} height={28} />
-        </div>
-        <div className="model-market-detail-title">
-          <span className="model-market-detail-provider">{providerFromId(m.id)}</span>
-          <h3 className="model-market-detail-name">{stripProviderPrefix(m.name ?? modelSlug(m.id), providerFromId(m.id))}</h3>
-        </div>
-        <button type="button" className="model-market-detail-close" onClick={onClose}>
-          <X size={16} />
-        </button>
-      </div>
-
-      <div className="model-market-detail-body">
-        <div className="model-market-detail-section">
-          <h4>{t("modelMarket.context")}</h4>
-          <span className="model-market-detail-value">{formatCtx(m.context_length)} tokens</span>
-        </div>
-
-        <div className="model-market-detail-section">
-          <h4>{t("modelMarket.sort.price")} ($/1M tokens)</h4>
-          <div className="model-market-detail-prices">
-            <div className="model-market-detail-price-row">
-              <span>{t("modelMarket.inputPrice")}</span>
-              <span className="model-market-detail-value">
-                {formatPrice(m.pricing?.prompt_per_million)}
-              </span>
-            </div>
-            <div className="model-market-detail-price-row">
-              <span>{t("modelMarket.outputPrice")}</span>
-              <span className="model-market-detail-value">
-                {formatPrice(m.pricing?.completion_per_million)}
-              </span>
-            </div>
-            {m.pricing?.cache_read_per_million != null && (
-              <div className="model-market-detail-price-row">
-                <span>Cache Read</span>
-                <span className="model-market-detail-value">
-                  {formatPrice(m.pricing.cache_read_per_million)}
-                </span>
-              </div>
-            )}
-          </div>
-        </div>
-
-        <div className="model-market-detail-section">
-          <h4>Capabilities</h4>
-          <CapabilityBadges m={m} />
-        </div>
-
-        {(m.input_modalities.length > 0 || m.output_modalities.length > 0) && (
-          <div className="model-market-detail-section">
-            <h4>Modalities</h4>
-            {m.input_modalities.length > 0 && (
-              <div className="model-market-detail-modalities">
-                <span className="model-market-detail-mod-label">Input:</span>
-                {m.input_modalities.map((mod) => (
-                  <span key={mod} className="model-market-chip">{mod}</span>
-                ))}
-              </div>
-            )}
-            {m.output_modalities.length > 0 && (
-              <div className="model-market-detail-modalities">
-                <span className="model-market-detail-mod-label">Output:</span>
-                {m.output_modalities.map((mod) => (
-                  <span key={mod} className="model-market-chip">{mod}</span>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-
-        {m.knowledge_cutoff && (
-          <div className="model-market-detail-section">
-            <h4>Knowledge Cutoff</h4>
-            <span className="model-market-detail-value">{m.knowledge_cutoff}</span>
-          </div>
-        )}
-
-        {m.created && (
-          <div className="model-market-detail-section">
-            <h4>Added to OpenRouter</h4>
-            <span className="model-market-detail-value">{formatDate(m.created)}</span>
-          </div>
-        )}
-
-        {m.expiration_date && (
-          <div className="model-market-detail-section">
-            <h4>Expiration</h4>
-            <span className="model-market-detail-value warn">{m.expiration_date}</span>
-          </div>
-        )}
-
-        {m.description && (
-          <div className="model-market-detail-section">
-            <h4>Description</h4>
-            <p className="model-market-detail-desc">{m.description}</p>
-          </div>
-        )}
-
-        <div className="model-market-detail-section">
-          <h4>Model ID</h4>
-          <code className="model-market-detail-id">{m.id}</code>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 export default function ModelMarketPanel({ active }: { active: boolean }) {
   const { t } = useI18n();
   const [models, setModels] = useState<ModelCatalogEntry[]>([]);
@@ -280,7 +157,6 @@ export default function ModelMarketPanel({ active }: { active: boolean }) {
   const [sortAsc, setSortAsc] = useState(false);
   const [filter, setFilter] = useState<FilterKey>("all");
   const [viewMode, setViewMode] = useState<"gallery" | "list" | "detail">("gallery");
-  const [selectedId, setSelectedId] = useState<string | null>(null);
 
   const load = useCallback(async (force: boolean) => {
     setLoading(true);
@@ -357,8 +233,6 @@ export default function ModelMarketPanel({ active }: { active: boolean }) {
     return list;
   }, [models, filter, search, sort, sortAsc]);
 
-  const selected = selectedId ? models.find((m) => m.id === selectedId) ?? null : null;
-
   if (!active) return null;
 
   const SORTS: { key: SortKey; labelKey: string }[] = [
@@ -369,7 +243,7 @@ export default function ModelMarketPanel({ active }: { active: boolean }) {
   ];
 
   return (
-    <div className={`model-market ${selected ? "has-detail" : ""}`}>
+    <div className="model-market">
       <div className="model-market-main">
         {/* Toolbar */}
         <div className="model-market-toolbar">
@@ -483,11 +357,9 @@ export default function ModelMarketPanel({ active }: { active: boolean }) {
             </p>
           )}
           {filtered.map((m) => (
-            <button
+            <div
               key={m.id}
-              type="button"
-              className={`model-market-card ${selectedId === m.id ? "is-selected" : ""}`}
-              onClick={() => setSelectedId(m.id === selectedId ? null : m.id)}
+              className="model-market-card"
             >
               {viewMode === "detail" ? (
                 <>
@@ -506,7 +378,6 @@ export default function ModelMarketPanel({ active }: { active: boolean }) {
                     {m.created && (
                       <span className="model-market-card-age">{timeSince(m.created)}</span>
                     )}
-                    <ChevronRight size={14} className="model-market-card-arrow" />
                   </div>
                   <div className="model-market-card-detail-body">
                     <div className="model-market-card-detail-stats">
@@ -551,7 +422,6 @@ export default function ModelMarketPanel({ active }: { active: boolean }) {
                     {m.created && (
                       <span className="model-market-card-age">{timeSince(m.created)}</span>
                     )}
-                    <ChevronRight size={14} className="model-market-card-arrow" />
                   </div>
                   <div className="model-market-card-meta">
                     <span className="model-market-chip" title={t("modelMarket.context")}>
@@ -572,15 +442,11 @@ export default function ModelMarketPanel({ active }: { active: boolean }) {
                   </div>
                 </>
               )}
-            </button>
+            </div>
           ))}
         </div>
       </div>
 
-      {/* Detail panel */}
-      {selected && (
-        <ModelDetail m={selected} onClose={() => setSelectedId(null)} />
-      )}
     </div>
   );
 }
