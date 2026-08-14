@@ -3,18 +3,31 @@ import type { CSSProperties, ComponentType, SVGProps } from "react";
 import Anthropic from "@lobehub/icons/es/Anthropic/components/Mono";
 import Azure from "@lobehub/icons/es/Azure/components/Mono";
 import Bailian from "@lobehub/icons/es/Bailian/components/Mono";
+import Cohere from "@lobehub/icons/es/Cohere/components/Mono";
 import DeepSeek from "@lobehub/icons/es/DeepSeek/components/Mono";
 import Doubao from "@lobehub/icons/es/Doubao/components/Mono";
+import Fireworks from "@lobehub/icons/es/Fireworks/components/Mono";
 import Gemini from "@lobehub/icons/es/Gemini/components/Mono";
+import Google from "@lobehub/icons/es/Google/components/Mono";
+import Groq from "@lobehub/icons/es/Groq/components/Mono";
+import HuggingFace from "@lobehub/icons/es/HuggingFace/components/Mono";
+import InternLM from "@lobehub/icons/es/InternLM/components/Mono";
 import Kimi from "@lobehub/icons/es/Kimi/components/Mono";
+import Meta from "@lobehub/icons/es/Meta/components/Mono";
 import Minimax from "@lobehub/icons/es/Minimax/components/Mono";
+import Mistral from "@lobehub/icons/es/Mistral/components/Mono";
 import Moonshot from "@lobehub/icons/es/Moonshot/components/Mono";
 import Nvidia from "@lobehub/icons/es/Nvidia/components/Mono";
 import Ollama from "@lobehub/icons/es/Ollama/components/Mono";
 import OpenAI from "@lobehub/icons/es/OpenAI/components/Mono";
 import OpenRouter from "@lobehub/icons/es/OpenRouter/components/Mono";
+import Perplexity from "@lobehub/icons/es/Perplexity/components/Mono";
 import Qwen from "@lobehub/icons/es/Qwen/components/Mono";
+import Stepfun from "@lobehub/icons/es/Stepfun/components/Mono";
+import Together from "@lobehub/icons/es/Together/components/Mono";
 import Volcengine from "@lobehub/icons/es/Volcengine/components/Mono";
+import XAI from "@lobehub/icons/es/XAI/components/Mono";
+import Yi from "@lobehub/icons/es/Yi/components/Mono";
 import Zhipu from "@lobehub/icons/es/Zhipu/components/Mono";
 
 type IconProps = SVGProps<SVGSVGElement> & {
@@ -43,12 +56,24 @@ type BrandKey =
   | "kimi"
   | "volcengine"
   | "doubao"
-  | "minimax";
+  | "minimax"
+  | "meta"
+  | "xai"
+  | "mistral"
+  | "cohere"
+  | "groq"
+  | "perplexity"
+  | "together"
+  | "fireworks"
+  | "huggingface"
+  | "stepfun"
+  | "internlm"
+  | "yi";
 
 const BRAND_ICONS: Record<BrandKey, LobeMonoIcon> = {
   anthropic: Anthropic,
   openai: OpenAI,
-  google: Gemini,
+  google: Google,
   deepseek: DeepSeek,
   ollama: Ollama,
   azure: Azure,
@@ -62,6 +87,18 @@ const BRAND_ICONS: Record<BrandKey, LobeMonoIcon> = {
   volcengine: Volcengine,
   doubao: Doubao,
   minimax: Minimax,
+  meta: Meta,
+  xai: XAI,
+  mistral: Mistral,
+  cohere: Cohere,
+  groq: Groq,
+  perplexity: Perplexity,
+  together: Together,
+  fireworks: Fireworks,
+  huggingface: HuggingFace,
+  stepfun: Stepfun,
+  internlm: InternLM,
+  yi: Yi,
 };
 
 function toIconProps(props: IconProps): {
@@ -167,13 +204,18 @@ function resolveModelBrand(modelId: string): BrandKey | null {
   if (id.includes("minimax") || id.includes("minmax") || id.includes("abab")) {
     return "minimax";
   }
-  if (
-    id.includes("llama") ||
-    id.includes("mistral") ||
-    id.includes("phi")
-  ) {
-    return "ollama";
-  }
+  if (id.includes("llama") || id.startsWith("meta/") || id.includes("meta-llama")) return "meta";
+  if (id.includes("mistral") || id.startsWith("mistralai/")) return "mistral";
+  if (id.includes("grok") || id.startsWith("x-ai/") || id.startsWith("xai/")) return "xai";
+  if (id.includes("cohere") || id.startsWith("cohere/")) return "cohere";
+  if (id.startsWith("groq/")) return "groq";
+  if (id.includes("perplexity") || id.startsWith("perplexity/")) return "perplexity";
+  if (id.startsWith("together/")) return "together";
+  if (id.startsWith("fireworks/")) return "fireworks";
+  if (id.includes("hugging") || id.startsWith("huggingface/")) return "huggingface";
+  if (id.includes("step-") || id.startsWith("stepfun/")) return "stepfun";
+  if (id.includes("internlm") || id.includes("intern")) return "internlm";
+  if (id.startsWith("01-ai/") || id.includes("/yi-")) return "yi";
   return null;
 }
 
