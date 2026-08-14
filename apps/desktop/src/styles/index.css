@@ -44,5 +44,6 @@
 @import "./features/cron.css";
 @import "./features/loop.css";
 @import "./features/insights.css";
+@import "./features/model-market.css";
 @import "./foundation/transitions.css";
 @import "./components/illustrations.css";
