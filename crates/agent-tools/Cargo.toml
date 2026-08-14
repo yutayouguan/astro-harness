@@ -1,0 +1,40 @@
+[package]
+name = "tools"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+common = { path = "../agent-common" }
+memory = { path = "../agent-memory" }
+session = { path = "../agent-session" }
+home = { path = "../agent-home" }
+orchestration = { path = "../agent-orchestration" }
+delegate = { path = "../agent-delegate" }
+cron = { path = "../agent-cron" }
+usage = { path = "../agent-usage" }
+providers = { path = "../agent-providers" }
+skills = { path = "../agent-skills" }
+artifacts = { path = "../agent-artifacts" }
+a2ui = { path = "../agent-a2ui" }
+hooks = { path = "../agent-hooks" }
+tokio = { workspace = true, features = ["process", "time", "rt", "macros"] }
+serde = { workspace = true }
+serde_json = { workspace = true }
+schemars = { workspace = true }
+anyhow = { workspace = true }
+async-trait = { workspace = true }
+inventory = "0.3"
+uuid = { version = "1", features = ["v4"] }
+chrono = { version = "0.4", features = ["clock"] }
+reqwest = { version = "0.12", features = ["json", "stream", "rustls-tls"], default-features = false }
+base64 = "0.22"
+urlencoding = "2"
+regex = "1"
+futures = "0.3"
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
+[dev-dependencies]
+tempfile = "3"
+tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }

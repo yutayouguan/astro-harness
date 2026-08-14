@@ -1,39 +1,26 @@
 [workspace]
 members = [
-    # core — 代理大脑
-    "core/agent",
-    "core/providers",
-    "core/memory",
-    "core/orchestration",
-    "core/evolution",
-    "core/delegate",
-    "core/home",
-    "core/skills",
-
-    # actions — 工具实现
-    "actions/tools",
-    "actions/a2ui",
-
-    # channels — 对外通道
-    "channels/server",
-
-    # storage — 持久化与共享类型
-    "storage/common",
-    "storage/proto",
-    "storage/session",
-    "storage/artifacts",
-    "storage/usage",
-
-    # automation — 自动化
-    "automation/cron",
-    "automation/workflow",
-
-    # extensions — 可插拔扩展
-    "extensions/mcp",
-    "extensions/hooks",
-
-    # frontend — 前端
-    "frontend/src-tauri",
+    "crates/agent-common",
+    "crates/agent-home",
+    "crates/agent-skills",
+    "crates/agent-hooks",
+    "crates/agent-providers",
+    "crates/agent-proto",
+    "crates/agent-session",
+    "crates/agent-artifacts",
+    "crates/agent-usage",
+    "crates/agent-mcp",
+    "crates/agent-memory",
+    "crates/agent-delegate",
+    "crates/agent-orchestration",
+    "crates/agent-evolution",
+    "crates/agent-cron",
+    "crates/agent-workflow",
+    "crates/agent-a2ui",
+    "crates/agent-tools",
+    "crates/agent-core",
+    "crates/agent-server",
+    "apps/desktop/src-tauri",
 ]
 resolver = "2"
 

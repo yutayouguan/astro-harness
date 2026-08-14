@@ -1,0 +1,61 @@
+[package]
+name = "astro-agent"
+version = "0.1.0"
+description = "Astro Agent Tauri frontend"
+authors = ["Astro Agent"]
+edition = "2021"
+
+[lib]
+name = "astro_agent_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[[bin]]
+name = "astro-agent"
+path = "src/main.rs"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["protocol-asset", "macos-private-api", "tray-icon", "image-png"] }
+tauri-plugin-shell = "2"
+tauri-plugin-dialog = "2"
+tauri-plugin-notification = "2"
+tauri-plugin-single-instance = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+schemars = "0.8"
+tokio = { version = "1", features = ["full"] }
+tonic = "0.11"
+anyhow = "1"
+uuid = { version = "1", features = ["v4"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+proto = { path = "../../../crates/agent-proto" }
+common = { path = "../../../crates/agent-common" }
+memory = { path = "../../../crates/agent-memory" }
+home = { path = "../../../crates/agent-home" }
+cron = { path = "../../../crates/agent-cron" }
+artifacts = { path = "../../../crates/agent-artifacts" }
+usage = { path = "../../../crates/agent-usage" }
+orchestration = { path = "../../../crates/agent-orchestration" }
+session = { path = "../../../crates/agent-session" }
+agent = { path = "../../../crates/agent-core" }
+delegate = { path = "../../../crates/agent-delegate" }
+backend = { path = "../../../crates/agent-server" }
+tools = { path = "../../../crates/agent-tools" }
+mcp = { path = "../../../crates/agent-mcp" }
+providers = { path = "../../../crates/agent-providers" }
+skills = { path = "../../../crates/agent-skills" }
+evolution = { path = "../../../crates/agent-evolution" }
+workflow = { path = "../../../crates/agent-workflow" }
+chrono = { version = "0.4", features = ["clock"] }
+url = "2"
+keyring = "3"
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+futures = "0.3"
+base64 = "0.22"
+trash = "5"
+
+[target.'cfg(target_os = "macos")'.dependencies]
+objc = "0.2"

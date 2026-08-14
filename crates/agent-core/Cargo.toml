@@ -1,0 +1,35 @@
+[package]
+name = "agent"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+common = { path = "../agent-common" }
+memory = { path = "../agent-memory" }
+home = { path = "../agent-home" }
+session = { path = "../agent-session" }
+usage = { path = "../agent-usage" }
+orchestration = { path = "../agent-orchestration" }
+delegate = { path = "../agent-delegate" }
+cron = { path = "../agent-cron" }
+skills = { path = "../agent-skills" }
+providers = { path = "../agent-providers" }
+tools = { path = "../agent-tools" }
+mcp = { path = "../agent-mcp" }
+a2ui = { path = "../agent-a2ui" }
+artifacts = { path = "../agent-artifacts" }
+hooks = { path = "../agent-hooks" }
+tracing = { workspace = true }
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+async-trait = { workspace = true }
+uuid = { version = "1", features = ["v4"] }
+chrono = { version = "0.4", features = ["clock"] }
+futures = "0.3"
+
+[dev-dependencies]
+tempfile = "3"
+rusqlite = { version = "0.31", features = ["bundled"] }

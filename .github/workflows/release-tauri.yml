@@ -60,7 +60,7 @@ jobs:
         with:
           node-version: lts/*
           cache: npm
-          cache-dependency-path: frontend/package-lock.json
+          cache-dependency-path: apps/desktop/package-lock.json
 
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
@@ -79,7 +79,7 @@ jobs:
           shared-key: tauri-${{ matrix.platform }}-${{ matrix.rust_targets || 'host' }}
 
       - name: Install frontend dependencies
-        working-directory: frontend
+        working-directory: apps/desktop
         run: npm ci
 
       - name: Build and upload Tauri bundles
@@ -87,7 +87,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          projectPath: frontend
+          projectPath: apps/desktop
           tagName: v__VERSION__
           releaseName: Astro Agent v__VERSION__
           releaseBody: |

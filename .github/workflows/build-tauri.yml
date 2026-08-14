@@ -6,16 +6,8 @@ on:
   workflow_dispatch:
   pull_request:
     paths:
-      - "frontend/**"
-      - "agent/**"
-      - "memory/**"
-      - "providers/**"
-      - "tools/**"
-      - "mcp/**"
-      - "skills/**"
-      - "permissions/**"
-      - "common/**"
-      - "proto/**"
+      - "crates/**"
+      - "apps/desktop/**"
       - "Cargo.toml"
       - "Cargo.lock"
       - ".github/workflows/build-tauri.yml"
@@ -72,7 +64,7 @@ jobs:
         with:
           node-version: lts/*
           cache: npm
-          cache-dependency-path: frontend/package-lock.json
+          cache-dependency-path: apps/desktop/package-lock.json
 
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
@@ -91,11 +83,11 @@ jobs:
           shared-key: build-${{ matrix.artifact }}
 
       - name: Install frontend dependencies
-        working-directory: frontend
+        working-directory: apps/desktop
         run: npm ci
 
       - name: Build Tauri app
-        working-directory: frontend
+        working-directory: apps/desktop
         run: npm run tauri build -- ${{ matrix.args }}
 
       - name: Upload bundles
