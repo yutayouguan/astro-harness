@@ -84,6 +84,25 @@ function modelSlug(id: string): string {
   return slash > 0 ? id.slice(slash + 1) : id;
 }
 
+function stripProviderPrefix(name: string, provider: string): string {
+  const prefixes = [
+    `${provider}: `,
+    `${provider.charAt(0).toUpperCase() + provider.slice(1)}: `,
+    `${provider.toUpperCase()}: `,
+  ];
+  for (const p of prefixes) {
+    if (name.startsWith(p)) return name.slice(p.length);
+  }
+  const colonIdx = name.indexOf(": ");
+  if (colonIdx > 0 && colonIdx < 20) {
+    const before = name.slice(0, colonIdx).toLowerCase();
+    if (provider.toLowerCase().includes(before) || before.includes(provider.toLowerCase())) {
+      return name.slice(colonIdx + 2);
+    }
+  }
+  return name;
+}
+
 function timeSince(ts: number | null): string {
   if (!ts) return "";
   const now = Date.now() / 1000;
@@ -149,7 +168,7 @@ function ModelDetail({ m, onClose }: { m: ModelCatalogEntry; onClose: () => void
         </div>
         <div className="model-market-detail-title">
           <span className="model-market-detail-provider">{providerFromId(m.id)}</span>
-          <h3 className="model-market-detail-name">{m.name ?? modelSlug(m.id)}</h3>
+          <h3 className="model-market-detail-name">{stripProviderPrefix(m.name ?? modelSlug(m.id), providerFromId(m.id))}</h3>
         </div>
         <button type="button" className="model-market-detail-close" onClick={onClose}>
           <X size={16} />
@@ -479,7 +498,7 @@ export default function ModelMarketPanel({ active }: { active: boolean }) {
                     {providerFromId(m.id)}
                   </span>
                   <span className="model-market-card-name">
-                    {m.name ?? modelSlug(m.id)}
+                    {stripProviderPrefix(m.name ?? modelSlug(m.id), providerFromId(m.id))}
                   </span>
                 </div>
                 {m.created && (
