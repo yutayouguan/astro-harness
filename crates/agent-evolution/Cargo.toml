@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-common = { path = "../agent-common" }
+common = { path = "../agent-types" }
 home = { path = "../agent-home" }
 memory = { path = "../agent-memory" }
 skills = { path = "../agent-skills" }

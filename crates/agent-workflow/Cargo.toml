@@ -9,7 +9,7 @@ anyhow = { workspace = true }
 thiserror = { workspace = true }
 base64 = "0.22"
 async-trait = { workspace = true }
-common = { path = "../agent-common" }
+common = { path = "../agent-types" }
 home = { path = "../agent-home" }
 providers = { path = "../agent-providers" }
 futures = "0.3"

@@ -6,7 +6,7 @@ description = "子 Agent 委派请求类型、异步登记与 git worktree"
 
 [dependencies]
 anyhow = { workspace = true }
-common = { path = "../agent-common" }
+common = { path = "../agent-types" }
 home = { path = "../agent-home" }
 hooks = { path = "../agent-hooks" }
 chrono = { version = "0.4", features = ["clock", "serde"] }

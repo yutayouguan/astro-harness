@@ -6,7 +6,7 @@ description = "文件空间索引（artifacts.db）"
 
 [dependencies]
 anyhow = { workspace = true }
-common = { path = "../agent-common" }
+common = { path = "../agent-types" }
 home = { path = "../agent-home" }
 rusqlite = { version = "0.31", features = ["bundled"] }
 uuid = { version = "1", features = ["v4"] }

@@ -1,6 +1,6 @@
 [workspace]
 members = [
-    "crates/agent-common",
+    "crates/agent-types",
     "crates/agent-home",
     "crates/agent-skills",
     "crates/agent-hooks",

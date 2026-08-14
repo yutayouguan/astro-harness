@@ -32,7 +32,7 @@ uuid = { version = "1", features = ["v4"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 proto = { path = "../../../crates/agent-proto" }
-common = { path = "../../../crates/agent-common" }
+common = { path = "../../../crates/agent-types" }
 memory = { path = "../../../crates/agent-memory" }
 home = { path = "../../../crates/agent-home" }
 cron = { path = "../../../crates/agent-cron" }

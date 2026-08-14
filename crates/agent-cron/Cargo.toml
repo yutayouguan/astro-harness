@@ -6,7 +6,7 @@ description = "定时任务定义、JSON 持久化与运行记录（cron.db）"
 
 [dependencies]
 anyhow = { workspace = true }
-common = { path = "../agent-common" }
+common = { path = "../agent-types" }
 home = { path = "../agent-home" }
 chrono = { version = "0.4", features = ["clock", "serde"] }
 rusqlite = { version = "0.31", features = ["bundled"] }

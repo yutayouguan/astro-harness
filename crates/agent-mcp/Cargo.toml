@@ -9,7 +9,7 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
-common        = { path = "../agent-common" }
+common        = { path = "../agent-types" }
 home          = { path = "../agent-home" }
 rmcp = { version = "2", default-features = false, features = [
     "client",
