@@ -349,6 +349,15 @@ export default function ModelMarketPanel({ active }: { active: boolean }) {
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
+            {search && (
+              <button
+                type="button"
+                className="model-market-search-clear"
+                onClick={() => setSearch("")}
+              >
+                <X size={13} />
+              </button>
+            )}
           </div>
 
           <div className="model-market-sort">

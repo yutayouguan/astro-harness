@@ -50,10 +50,30 @@
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--tone) 12%, transparent);
 }
 
-.model-market-search svg {
+.model-market-search > svg {
   flex-shrink: 0;
   color: var(--ink-mute);
   opacity: 0.6;
+}
+
+.model-market-search-clear {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border: none;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--ink) 10%, transparent);
+  color: var(--ink-mute);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+
+.model-market-search-clear:hover {
+  background: color-mix(in srgb, var(--ink) 18%, transparent);
+  color: var(--ink);
 }
 
 .model-market-search input {
