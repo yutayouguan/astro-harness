@@ -7,8 +7,11 @@ import {
   Brain,
   ChevronRight,
   Eye,
+  Grid3x3,
   Headphones,
   Image,
+  LayoutList,
+  Rows3,
   RefreshCw,
   Search,
   Wrench,
@@ -257,6 +260,7 @@ export default function ModelMarketPanel({ active }: { active: boolean }) {
   const [sort, setSort] = useState<SortKey>("newest");
   const [sortAsc, setSortAsc] = useState(false);
   const [filter, setFilter] = useState<FilterKey>("all");
+  const [viewMode, setViewMode] = useState<"gallery" | "list" | "detail">("gallery");
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
   const load = useCallback(async (force: boolean) => {
@@ -394,6 +398,33 @@ export default function ModelMarketPanel({ active }: { active: boolean }) {
             ))}
           </div>
 
+          <div className="model-market-view-toggle">
+            <button
+              type="button"
+              className={`model-market-view-btn ${viewMode === "gallery" ? "active" : ""}`}
+              onClick={() => setViewMode("gallery")}
+              title={t("modelMarket.view.gallery" as never)}
+            >
+              <Grid3x3 size={14} />
+            </button>
+            <button
+              type="button"
+              className={`model-market-view-btn ${viewMode === "list" ? "active" : ""}`}
+              onClick={() => setViewMode("list")}
+              title={t("modelMarket.view.list" as never)}
+            >
+              <Rows3 size={14} />
+            </button>
+            <button
+              type="button"
+              className={`model-market-view-btn ${viewMode === "detail" ? "active" : ""}`}
+              onClick={() => setViewMode("detail")}
+              title={t("modelMarket.view.detail" as never)}
+            >
+              <LayoutList size={14} />
+            </button>
+          </div>
+
           <button
             type="button"
             className="model-market-refresh"
@@ -424,7 +455,7 @@ export default function ModelMarketPanel({ active }: { active: boolean }) {
         </div>
 
         {/* List */}
-        <div className="model-market-list">
+        <div className={`model-market-list view-${viewMode}`}>
           {filtered.length === 0 && !loading && (
             <p className="model-market-empty">
               {models.length === 0
@@ -441,7 +472,7 @@ export default function ModelMarketPanel({ active }: { active: boolean }) {
             >
               <div className="model-market-card-head">
                 <span className="model-market-card-logo">
-                  <ModelBrandIcon modelId={m.id} width={20} height={20} />
+                  <ModelBrandIcon modelId={m.id} width={viewMode === "list" ? 16 : 20} height={viewMode === "list" ? 16 : 20} />
                 </span>
                 <div className="model-market-card-titles">
                   <span className="model-market-card-provider">
@@ -482,6 +513,14 @@ export default function ModelMarketPanel({ active }: { active: boolean }) {
                 )}
                 <CapabilityBadges m={m} />
               </div>
+
+              {viewMode === "detail" && m.description && (
+                <p className="model-market-card-desc">
+                  {m.description.length > 200
+                    ? m.description.slice(0, 200) + "…"
+                    : m.description}
+                </p>
+              )}
             </button>
           ))}
         </div>

@@ -135,6 +135,50 @@
   opacity: 0.8;
 }
 
+/* ── View toggle ──────────────────────────────────── */
+
+.model-market-view-toggle {
+  display: inline-flex;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 10px;
+  border: 1px solid color-mix(in srgb, var(--glass-edge) 88%, transparent);
+  background: color-mix(in srgb, var(--glass-panel, rgba(255, 255, 255, 0.35)) 88%, transparent);
+  backdrop-filter: blur(12px) saturate(1.1);
+  -webkit-backdrop-filter: blur(12px) saturate(1.1);
+  flex-shrink: 0;
+}
+
+.model-market-view-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 28px;
+  border: none;
+  border-radius: 7px;
+  cursor: pointer;
+  color: var(--ink-mute);
+  background: transparent;
+  transition: color 0.16s ease, background 0.16s ease;
+}
+
+.model-market-view-btn:hover {
+  color: var(--ink);
+  background: color-mix(in srgb, var(--ink) 5%, transparent);
+}
+
+.model-market-view-btn.active {
+  color: var(--tone);
+  background: color-mix(in srgb, #fff 82%, var(--tone-soft));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--tone) 22%, transparent);
+}
+
+html[data-theme="dark"] .model-market-view-btn.active {
+  color: color-mix(in srgb, #fff 14%, var(--tone));
+  background: color-mix(in srgb, var(--tone-soft) 55%, rgba(255, 255, 255, 0.06));
+}
+
 .model-market-refresh {
   display: inline-flex;
   align-items: center;
@@ -220,6 +264,78 @@
   gap: 10px;
   padding: 0 0 16px;
   align-content: start;
+}
+
+/* Gallery: default grid */
+.model-market-list.view-gallery {
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+}
+
+/* List: single column, compact */
+.model-market-list.view-list {
+  grid-template-columns: 1fr;
+  gap: 4px;
+}
+
+.model-market-list.view-list .model-market-card {
+  padding: 8px 12px;
+  border-radius: 10px;
+  gap: 0;
+}
+
+.model-market-list.view-list .model-market-card-head {
+  gap: 8px;
+}
+
+.model-market-list.view-list .model-market-card-logo {
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+}
+
+.model-market-list.view-list .model-market-card-meta {
+  padding-left: 0;
+  margin-left: auto;
+  flex-wrap: nowrap;
+  flex-shrink: 0;
+}
+
+.model-market-list.view-list .model-market-card-titles {
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+}
+
+.model-market-list.view-list .model-market-card-provider {
+  font-size: 10px;
+}
+
+.model-market-list.view-list .model-market-card-name {
+  font-size: 13px;
+}
+
+/* Detail: single column, expanded */
+.model-market-list.view-detail {
+  grid-template-columns: 1fr;
+  gap: 10px;
+}
+
+.model-market-list.view-detail .model-market-card {
+  padding: 16px 18px;
+  gap: 10px;
+}
+
+.model-market-list.view-detail .model-market-card-logo {
+  width: 36px;
+  height: 36px;
+}
+
+.model-market-card-desc {
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--ink-mute);
+  margin: 0;
+  padding-left: 42px;
 }
 
 .model-market-empty {

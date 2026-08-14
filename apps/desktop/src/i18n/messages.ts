@@ -286,6 +286,9 @@ export const zh = {
   "modelMarket.perMillion": "/1M",
   "modelMarket.noResults": "未找到匹配的模型",
   "modelMarket.empty": "模型数据尚未加载，请刷新",
+  "modelMarket.view.gallery": "画廊",
+  "modelMarket.view.list": "列表",
+  "modelMarket.view.detail": "详情",
 
   "common.close": "关闭",
 
@@ -2151,6 +2154,9 @@ export const en: Record<MessageKey, string> = {
   "modelMarket.perMillion": "/1M",
   "modelMarket.noResults": "No matching models found",
   "modelMarket.empty": "Model data not loaded yet, please refresh",
+  "modelMarket.view.gallery": "Gallery",
+  "modelMarket.view.list": "List",
+  "modelMarket.view.detail": "Detail",
 
   "common.close": "Close",
 
