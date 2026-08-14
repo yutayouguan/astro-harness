@@ -21,10 +21,10 @@
 
 | 项 | 落地 |
 |----|------|
-| Schema 校验 | [`agent/src/schema_validate.rs`](../../../agent/src/schema_validate.rs)；`HitlGate::resolve` 对 `resolved` 强制校验 |
+| Schema 校验 | [`crates/agent-core/src/schema_validate.rs`](../../../agent/src/schema_validate.rs)；`HitlGate::resolve` 对 `resolved` 强制校验 |
 | 同批多 HITL | `HitlGate` 多 oneshot；`begin_wait` 不取消 sibling；`interrupt_resume` 可一次 resolve 多 id；旁路 `interrupt.json` 仅写剩余 pending |
-| 编排 HITL | [`agent/src/orchestration.rs`](../../../agent/src/orchestration.rs) 遇 `astro_hitl` 改写为 cancelled 文案，不 park |
-| deny/ask/auto | [`tools/src/approval.rs`](../../../tools/src/approval.rs) + streaming terminal 路径 |
+| 编排 HITL | [`crates/agent-core/src/orchestration.rs`](../../../agent/src/orchestration.rs) 遇 `astro_hitl` 改写为 cancelled 文案，不 park |
+| deny/ask/auto | [`crates/agent-tools/src/approval.rs`](../../../tools/src/approval.rs) + streaming terminal 路径 |
 | 活路径 | 生产 resume → `HitlRegistry`；`interrupt.json` 仅为 UI/调试旁路，不再作假续跑真相源 |
 
 ## 验收

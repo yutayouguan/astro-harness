@@ -51,17 +51,17 @@ DecisionLog + Skills 索引 (+ transcript / evalset)
 | 路径 | 职责 |
 |------|------|
 | [`evolution/`](../evolution/) | Rust 内置极简引擎（cargo workspace 成员） |
-| `evolution/src/candidate.rs` | `SkillCandidate` / `CandidateKind` |
-| `evolution/src/reflect.rs` | reflection 提示词与候选解析 |
-| `evolution/src/gates.rs` | 体积与 patch 结构门禁 |
-| `evolution/src/judge.rs` | 泛化 judge 提示词与解析 |
-| `evolution/src/evalset.rs` | 标注评测集 + grounded 评分提示 |
-| `evolution/src/search.rs` | GEPA-lite：变异 / 交叉 / Pareto |
-| `evolution/src/curator.rs` | 技能策展：健康报告、Disable/Merge 入队、LLM 诊断提示 |
-| `evolution/src/proposal.rs` | 提案队列、批准写入、唯一 patch |
-| `evolution/src/history.rs` | run / outcome 可观测 JSONL |
+| `crates/agent-evolution/src/candidate.rs` | `SkillCandidate` / `CandidateKind` |
+| `crates/agent-evolution/src/reflect.rs` | reflection 提示词与候选解析 |
+| `crates/agent-evolution/src/gates.rs` | 体积与 patch 结构门禁 |
+| `crates/agent-evolution/src/judge.rs` | 泛化 judge 提示词与解析 |
+| `crates/agent-evolution/src/evalset.rs` | 标注评测集 + grounded 评分提示 |
+| `crates/agent-evolution/src/search.rs` | GEPA-lite：变异 / 交叉 / Pareto |
+| `crates/agent-evolution/src/curator.rs` | 技能策展：健康报告、Disable/Merge 入队、LLM 诊断提示 |
+| `crates/agent-evolution/src/proposal.rs` | 提案队列、批准写入、唯一 patch |
+| `crates/agent-evolution/src/history.rs` | run / outcome 可观测 JSONL |
 | [`evolution-dspy/`](../evolution-dspy/) | 外部 Python 包（**非** cargo）；DSPy+GEPA |
-| `frontend/src-tauri/src/evolution_run_commands.rs` | Tauri 命令：run / search / approve / dspy / evalset |
+| `apps/desktop/src-tauri/src/evolution_run_commands.rs` | Tauri 命令：run / search / approve / dspy / evalset |
 | `apps/desktop/src/components/settings/EvolutionModelsPanel.tsx` | UI |
 | `memory` crate `EvolutionConfig` | `config.yaml` 的 `evolution:` 段 |
 

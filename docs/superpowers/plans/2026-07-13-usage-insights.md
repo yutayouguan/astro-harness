@@ -18,17 +18,17 @@
 
 | 文件 | 职责 |
 |---|---|
-| `memory/src/usage_db.rs` | SQLite 建库、insert、period 聚合查询 |
-| `memory/src/usage_pricing.rs` | 从 LiteLLM 缓存 JSON 估算 `cost_usd` |
+| `crates/agent-memory/src/usage_db.rs` | SQLite 建库、insert、period 聚合查询 |
+| `crates/agent-memory/src/usage_pricing.rs` | 从 LiteLLM 缓存 JSON 估算 `cost_usd` |
 | `memory/tests/usage_db_test.rs` | DB + 聚合 + pricing 单测 |
-| `memory/src/usage_stats.rs` | 双写：JSON 累计 + `usage_events`（tool/skill） |
-| `memory/src/lib.rs` | 导出新模块 API |
-| `agent/src/loop_.rs` | MCP 调用额外写 `kind=mcp` |
-| `agent/src/streaming.rs` | FinalUsage 写 `kind=llm`（含估价） |
-| `backend/src/cron_runner.rs` | cron 执行完成写 `kind=cron` |
-| `frontend/src-tauri/src/config_commands.rs` | `get_usage_insights` 命令 |
-| `frontend/src-tauri/src/lib.rs` | 注册命令 |
-| `frontend/src-tauri/src/litellm_meta.rs` | 解析并保留 `input_cost_per_token` / `output_cost_per_token` |
+| `crates/agent-memory/src/usage_stats.rs` | 双写：JSON 累计 + `usage_events`（tool/skill） |
+| `crates/agent-memory/src/lib.rs` | 导出新模块 API |
+| `crates/agent-core/src/loop_.rs` | MCP 调用额外写 `kind=mcp` |
+| `crates/agent-core/src/streaming.rs` | FinalUsage 写 `kind=llm`（含估价） |
+| `crates/agent-server/src/cron_runner.rs` | cron 执行完成写 `kind=cron` |
+| `apps/desktop/src-tauri/src/config_commands.rs` | `get_usage_insights` 命令 |
+| `apps/desktop/src-tauri/src/lib.rs` | 注册命令 |
+| `apps/desktop/src-tauri/src/litellm_meta.rs` | 解析并保留 `input_cost_per_token` / `output_cost_per_token` |
 | `apps/desktop/src/components/InsightsPanel.tsx` | 洞察 UI |
 | `apps/desktop/src/styles/insights.css` | 样式 |
 | `apps/desktop/src/components/NavIcons.tsx` | `IconInsights` |
@@ -41,9 +41,9 @@
 ### Task 1: `UsageDb` 建库与 insert（TDD）
 
 **Files:**
-- Create: `memory/src/usage_db.rs`
+- Create: `crates/agent-memory/src/usage_db.rs`
 - Create: `memory/tests/usage_db_test.rs`
-- Modify: `memory/src/lib.rs`
+- Modify: `crates/agent-memory/src/lib.rs`
 
 - [ ] **Step 1: 写失败测试（路径与 insert）**
 
@@ -114,7 +114,7 @@ Expected: 编译失败（模块/类型不存在）
 
 - [ ] **Step 3: 实现 `usage_db.rs`（最小可编译）**
 
-在 `memory/src/usage_db.rs` 实现（对齐 `cron_run_db` / `artifact_db` 风格）：
+在 `crates/agent-memory/src/usage_db.rs` 实现（对齐 `cron_run_db` / `artifact_db` 风格）：
 
 ```rust
 //! 用量事件库：`~/.astro/usage.db` 记录 tool/skill/mcp/cron/llm 事件并按 period 聚合。
@@ -546,7 +546,7 @@ fn period_bounds(
 
 注意：SQLite `strftime` 对带时区的 ISO 字符串解析不稳定。实现时把写入的 `ts` **统一存 UTC**（`chrono::Utc::now().to_rfc3339()`），且 `period_bounds` 返回的边界也用 UTC RFC3339；若实测 `strftime` 桶为空，改为在查询前把 `ts` 存成 `YYYY-MM-DDTHH:MM:SSZ` 无偏移形式，或用 `datetime(ts)` 包装。
 
-在 `memory/src/lib.rs` 增加：
+在 `crates/agent-memory/src/lib.rs` 增加：
 
 ```rust
 pub mod usage_db;
@@ -695,10 +695,10 @@ EOF
 ### Task 3: LiteLLM 估价 + 保留单价字段
 
 **Files:**
-- Create: `memory/src/usage_pricing.rs`
-- Modify: `memory/src/lib.rs`
+- Create: `crates/agent-memory/src/usage_pricing.rs`
+- Modify: `crates/agent-memory/src/lib.rs`
 - Modify: `memory/tests/usage_db_test.rs`
-- Modify: `frontend/src-tauri/src/litellm_meta.rs`
+- Modify: `apps/desktop/src-tauri/src/litellm_meta.rs`
 
 - [ ] **Step 1: 写 pricing 失败测试**
 
@@ -803,7 +803,7 @@ Expected: PASS
 - [ ] **Step 5: Commit**
 
 ```bash
-git add memory/src/usage_pricing.rs memory/src/lib.rs memory/tests/usage_db_test.rs frontend/src-tauri/src/litellm_meta.rs
+git add memory/src/usage_pricing.rs memory/src/lib.rs memory/tests/usage_db_test.rs apps/desktop/src-tauri/src/litellm_meta.rs
 git commit -m "$(cat <<'EOF'
 feat: estimate LLM cost from LiteLLM price cache
 
@@ -816,7 +816,7 @@ EOF
 ### Task 4: 双写 tool / skill 事件
 
 **Files:**
-- Modify: `memory/src/usage_stats.rs`
+- Modify: `crates/agent-memory/src/usage_stats.rs`
 
 - [ ] **Step 1: 在 `record_tool_call` 成功写 JSON 后追加事件**
 
@@ -890,8 +890,8 @@ EOF
 ### Task 5: MCP + cron 写入钩子
 
 **Files:**
-- Modify: `agent/src/loop_.rs`（MCP 分支，约 353–362 行）
-- Modify: `backend/src/cron_runner.rs`
+- Modify: `crates/agent-core/src/loop_.rs`（MCP 分支，约 353–362 行）
+- Modify: `crates/agent-server/src/cron_runner.rs`
 
 - [ ] **Step 1: MCP — 在已有 `record_usage_tool_call` 旁追加**
 
@@ -975,12 +975,12 @@ EOF
 ### Task 6: LLM FinalUsage 写入
 
 **Files:**
-- Modify: `agent/src/streaming.rs`
-- Modify: `agent/src/loop_.rs`（新增 `agent_id()`）
+- Modify: `crates/agent-core/src/streaming.rs`
+- Modify: `crates/agent-core/src/loop_.rs`（新增 `agent_id()`）
 
 - [ ] **Step 1: 在 `AgentLoop` 增加只读访问器（`memory` / `session_id` 均为私有）**
 
-在 `agent/src/loop_.rs`：
+在 `crates/agent-core/src/loop_.rs`：
 
 ```rust
 pub fn agent_id(&self) -> &str {
@@ -1042,8 +1042,8 @@ EOF
 ### Task 7: Tauri `get_usage_insights`
 
 **Files:**
-- Modify: `frontend/src-tauri/src/config_commands.rs`
-- Modify: `frontend/src-tauri/src/lib.rs`
+- Modify: `apps/desktop/src-tauri/src/config_commands.rs`
+- Modify: `apps/desktop/src-tauri/src/lib.rs`
 
 - [ ] **Step 1: 添加命令**
 
@@ -1085,7 +1085,7 @@ Expected: 成功
 - [ ] **Step 3: Commit**
 
 ```bash
-git add frontend/src-tauri/src/config_commands.rs frontend/src-tauri/src/lib.rs
+git add apps/desktop/src-tauri/src/config_commands.rs apps/desktop/src-tauri/src/lib.rs
 git commit -m "$(cat <<'EOF'
 feat(tauri): expose get_usage_insights command
 

@@ -30,7 +30,7 @@
 | Modify: `skills/src/lib.rs` | mod + re-export |
 | Modify: `skills/src/install.rs` | 安装/更新成功后尽量写 `remote_version`/`remote_updated_at`（best-effort fetch） |
 | Modify: `skills/src/update.rs` | `update_all_with_origin` 增加 `only_outdated: bool` 或新函数只更 outdated |
-| Modify: `frontend/src-tauri/src/skills_commands.rs` + `lib.rs` | `check_skill_updates`；update_all 传 only_outdated |
+| Modify: `apps/desktop/src-tauri/src/skills_commands.rs` + `lib.rs` | `check_skill_updates`；update_all 传 only_outdated |
 | Modify: `apps/desktop/src/types.ts` | CheckResult；UpdateRow status 扩展 |
 | Modify: `apps/desktop/src/lib/skillUpdateRows.ts` (+ test) | outdated/current/unknown；filter `updatable` |
 | Modify: `apps/desktop/src/components/SkillsPanel.tsx` | 检查更新按钮、角标、默认筛选、全部更新范围 |

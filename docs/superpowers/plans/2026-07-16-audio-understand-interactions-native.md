@@ -26,12 +26,12 @@
 
 | File | Responsibility |
 |------|----------------|
-| `providers/src/protocol/interactions_http.rs` | `AudioUnderstandMode`、媒体 part、body/parse、`google_interactions_audio` |
-| `providers/src/protocol/media_http.rs` | `default_whisper_model`、OpenAI describe body/HTTP、Whisper multipart、JSON 尽力组装 |
-| `tools/src/builtins/media/audio_understand.rs` | 新工具契约与分流 |
-| `tools/src/builtins/media/mod.rs` | `pub mod audio_understand` |
-| `tools/src/builtins/mod.rs` / `tools/src/lib.rs` | re-export + `register_all` |
-| `tools/src/core/dispatch.rs` | `match` 分支 |
+| `crates/agent-providers/src/protocol/interactions_http.rs` | `AudioUnderstandMode`、媒体 part、body/parse、`google_interactions_audio` |
+| `crates/agent-providers/src/protocol/media_http.rs` | `default_whisper_model`、OpenAI describe body/HTTP、Whisper multipart、JSON 尽力组装 |
+| `crates/agent-tools/src/builtin/media/audio_understand.rs` | 新工具契约与分流 |
+| `crates/agent-tools/src/builtin/media/mod.rs` | `pub mod audio_understand` |
+| `crates/agent-tools/src/builtin/mod.rs` / `crates/agent-tools/src/lib.rs` | re-export + `register_all` |
+| `crates/agent-tools/src/engine/dispatch.rs` | `match` 分支 |
 | `home/src/config/tools_enabled.rs` | `KNOWN_TOOLSET_IDS` + `tool_name_to_toolset` |
 | `apps/desktop/src/hooks/useAgentTools.ts` | 工具卡片 |
 | `apps/desktop/src/components/ToolIcons.tsx` | `IconAudioUnderstand`（波形/耳机简图标） |
@@ -42,9 +42,9 @@
 ### Task 1: Interactions 音频理解 — body、schema、解析、HTTP
 
 **Files:**
-- Modify: `providers/src/protocol/interactions_http.rs`
-- Verify: `providers/src/protocol/mod.rs` 已有 `pub mod interactions_http`
-- Verify: `providers/src/lib.rs` 已 re-export `interactions_http`
+- Modify: `crates/agent-providers/src/protocol/interactions_http.rs`
+- Verify: `crates/agent-providers/src/protocol/mod.rs` 已有 `pub mod interactions_http`
+- Verify: `crates/agent-providers/src/lib.rs` 已 re-export `interactions_http`
 
 **Interfaces:**
 - Produces:
@@ -394,7 +394,7 @@ EOF
 ### Task 2: OpenAI Whisper + Chat audio describe（独立路径）
 
 **Files:**
-- Modify: `providers/src/protocol/media_http.rs`
+- Modify: `crates/agent-providers/src/protocol/media_http.rs`
 
 **Interfaces:**
 - Produces:
@@ -615,11 +615,11 @@ EOF
 ### Task 3: 工具 `audio_understand` + 注册 / 分发 / tools-enabled
 
 **Files:**
-- Create: `tools/src/builtins/media/audio_understand.rs`
-- Modify: `tools/src/builtins/media/mod.rs`
-- Modify: `tools/src/builtins/mod.rs`
-- Modify: `tools/src/lib.rs`
-- Modify: `tools/src/core/dispatch.rs`
+- Create: `crates/agent-tools/src/builtin/media/audio_understand.rs`
+- Modify: `crates/agent-tools/src/builtin/media/mod.rs`
+- Modify: `crates/agent-tools/src/builtin/mod.rs`
+- Modify: `crates/agent-tools/src/lib.rs`
+- Modify: `crates/agent-tools/src/engine/dispatch.rs`
 - Modify: `home/src/config/tools_enabled.rs`
 
 **Interfaces:**
@@ -636,7 +636,7 @@ pub mod image_gen;
 // …其余不变
 ```
 
-`builtins/mod.rs`：
+`builtin/mod.rs`：
 
 ```rust
 pub use media::{audio_understand, image_gen, music, tts, video_gen, vision};
@@ -1091,11 +1091,11 @@ Expected: PASS；`cargo check -p tools` PASS
 - [ ] **Step 4: Commit**
 
 ```bash
-git add tools/src/builtins/media/audio_understand.rs \
-  tools/src/builtins/media/mod.rs \
-  tools/src/builtins/mod.rs \
+git add tools/src/builtin/media/audio_understand.rs \
+  tools/src/builtin/media/mod.rs \
+  tools/src/builtin/mod.rs \
   tools/src/lib.rs \
-  tools/src/core/dispatch.rs \
+  tools/src/engine/dispatch.rs \
   home/src/config/tools_enabled.rs
 git commit -m "$(cat <<'EOF'
 feat(tools): add audio_understand with Google/OpenAI split

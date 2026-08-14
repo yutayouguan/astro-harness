@@ -2,7 +2,7 @@
 
 > 介绍 Astro 当前接入 Google Gemini 的 API 体系、功能覆盖与配置方式。
 >
-> 代码位置：`providers/src/google/`
+> 代码位置：`crates/agent-providers/src/google/`
 
 ---
 
@@ -59,7 +59,7 @@ providers:
 
 ### 1. 对话（Chat）
 
-**代码**：`providers/src/google/interactions_chat.rs`
+**代码**：`crates/agent-providers/src/google/interactions_chat.rs`
 
 | 功能 | 支持 |
 |------|------|
@@ -77,8 +77,8 @@ providers:
 
 ### 2. 语音合成（TTS）
 
-**代码**：`providers/src/google/interactions_http.rs` → `google_interactions_tts`  
-**Veo TTS 模型**：`providers/src/google/veo_http.rs` → `default_tts_model()`
+**代码**：`crates/agent-providers/src/google/interactions_http.rs` → `google_interactions_tts`  
+**Veo TTS 模型**：`crates/agent-providers/src/google/veo_http.rs` → `default_tts_model()`
 
 | 功能 | 支持 |
 |------|------|
@@ -94,7 +94,7 @@ providers:
 
 ### 3. 图片生成（Image Generation）
 
-**代码**：`providers/src/google/interactions_http.rs` → `google_interactions_image`
+**代码**：`crates/agent-providers/src/google/interactions_http.rs` → `google_interactions_image`
 
 | 功能 | 支持 |
 |------|------|
@@ -108,7 +108,7 @@ providers:
 
 ### 4. 视觉理解（Vision）
 
-**代码**：`providers/src/google/interactions_http.rs` → `google_interactions_vision`
+**代码**：`crates/agent-providers/src/google/interactions_http.rs` → `google_interactions_vision`
 
 | 功能 | 支持 |
 |------|------|
@@ -122,7 +122,7 @@ providers:
 
 ### 5. 视频理解（Video Understanding）
 
-**代码**：`providers/src/google/interactions_http.rs` → `google_interactions_video`
+**代码**：`crates/agent-providers/src/google/interactions_http.rs` → `google_interactions_video`
 
 | 功能 | 支持 |
 |------|------|
@@ -135,7 +135,7 @@ providers:
 
 ### 6. 音频理解（Audio Understanding）
 
-**代码**：`providers/src/google/interactions_http.rs` → `google_interactions_audio`
+**代码**：`crates/agent-providers/src/google/interactions_http.rs` → `google_interactions_audio`
 
 | 功能 | 支持 |
 |------|------|
@@ -149,7 +149,7 @@ providers:
 
 ### 7. 音乐生成（Music Generation）
 
-**代码**：`providers/src/google/interactions_http.rs` → `google_interactions_music`
+**代码**：`crates/agent-providers/src/google/interactions_http.rs` → `google_interactions_music`
 
 | 功能 | 支持 |
 |------|------|
@@ -165,7 +165,7 @@ providers:
 
 ### 8. 视频生成（Veo）
 
-**代码**：`providers/src/google/veo_http.rs` → `google_native_generate_video`
+**代码**：`crates/agent-providers/src/google/veo_http.rs` → `google_native_generate_video`
 
 | 功能 | 支持 |
 |------|------|
@@ -180,7 +180,7 @@ providers:
 
 ### 9. 文件上传（Files API）
 
-**代码**：`providers/src/google/files_http.rs` → `google_files_upload_and_wait`
+**代码**：`crates/agent-providers/src/google/files_http.rs` → `google_files_upload_and_wait`
 
 | 功能 | 支持 |
 |------|------|

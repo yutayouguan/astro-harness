@@ -8,9 +8,9 @@
 
 ## 落地文件
 
-- `memory/src/config.rs` — `CompressionConfig` + load/set/reset
-- `frontend/src-tauri/src/compression_settings_commands.rs` — DTO / 校验 / 命令
-- `agent/src/compression.rs` — `from_config` / thrashing 参数化
-- `agent/src/runtime/mod.rs` / `mid_run_summary.rs` / `multi_turn.rs` / `context_usage.rs`
+- `crates/agent-memory/src/config.rs` — `CompressionConfig` + load/set/reset
+- `apps/desktop/src-tauri/src/compression_settings_commands.rs` — DTO / 校验 / 命令
+- `crates/agent-core/src/compression.rs` — `from_config` / thrashing 参数化
+- `crates/agent-core/src/runtime/mod.rs` / `mid_run_summary.rs` / `multi_turn.rs` / `context_usage.rs`
 - `apps/desktop/src/components/settings/CompressionSettingsCard.tsx` + Preferences 接入
 - `docs/context-compression.md` — 配置表更新

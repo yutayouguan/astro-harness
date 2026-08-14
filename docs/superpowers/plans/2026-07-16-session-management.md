@@ -14,20 +14,20 @@
 - 删除为二次确认后的永久删除，不提供回收站或恢复。
 - 归档与 `ended_at/end_reason` 正交；归档会话仍可打开和继续对话。
 - 删除不修改或删除关联产物文件。
-- 只提交本计划相关文件，不包含现有 `tools/src/builtins/media/music_gen.rs` 改动。
+- 只提交本计划相关文件，不包含现有 `crates/agent-tools/src/builtin/media/music_gen.rs` 改动。
 
 ---
 
 ## File Map
 
-- Modify: `session/src/store/schema.rs` — v14 非破坏迁移。
-- Modify: `session/src/store/mod.rs` — 会话列表过滤枚举与归档字段。
-- Modify: `session/src/store/sessions.rs` — 标题、归档、删除 API。
-- Modify: `session/src/store/search.rs` — active/archived 列表查询。
+- Modify: `crates/agent-session/src/store/schema.rs` — v14 非破坏迁移。
+- Modify: `crates/agent-session/src/store/mod.rs` — 会话列表过滤枚举与归档字段。
+- Modify: `crates/agent-session/src/store/sessions.rs` — 标题、归档、删除 API。
+- Modify: `crates/agent-session/src/store/search.rs` — active/archived 列表查询。
 - Modify: `session/tests/session_store_test.rs` — Store 与迁移回归。
-- Modify: `backend/src/grpc/astro_service.rs` — 幂等释放会话运行时。
-- Modify: `frontend/src-tauri/src/commands.rs` — 会话 CRUD commands/DTO。
-- Modify: `frontend/src-tauri/src/lib.rs` — command 注册。
+- Modify: `crates/agent-server/src/grpc/astro_service.rs` — 幂等释放会话运行时。
+- Modify: `apps/desktop/src-tauri/src/commands.rs` — 会话 CRUD commands/DTO。
+- Modify: `apps/desktop/src-tauri/src/lib.rs` — command 注册。
 - Modify: `apps/desktop/src/types.ts` — DTO 类型。
 - Create: `apps/desktop/src/lib/chat/sessionManagement.ts` — invoke 封装与刷新事件。
 - Create: `apps/desktop/src/lib/chat/sessionManagement.test.ts` — 纯状态逻辑测试。
@@ -42,8 +42,8 @@
 ### Task 1: 非破坏 schema v14 迁移
 
 **Files:**
-- Modify: `session/src/store/schema.rs`
-- Modify: `session/src/store/mod.rs`
+- Modify: `crates/agent-session/src/store/schema.rs`
+- Modify: `crates/agent-session/src/store/mod.rs`
 - Test: `session/tests/session_store_test.rs`
 
 **Interfaces:**
@@ -127,9 +127,9 @@ git commit -m "feat(session): migrate archived state without data loss"
 ### Task 2: Store 层归档、列表、标题与永久删除
 
 **Files:**
-- Modify: `session/src/store/mod.rs`
-- Modify: `session/src/store/sessions.rs`
-- Modify: `session/src/store/search.rs`
+- Modify: `crates/agent-session/src/store/mod.rs`
+- Modify: `crates/agent-session/src/store/sessions.rs`
+- Modify: `crates/agent-session/src/store/search.rs`
 - Test: `session/tests/session_store_test.rs`
 
 **Interfaces:**
@@ -278,8 +278,8 @@ git commit -m "feat(session): add archive title and delete operations"
 ### Task 3: Backend 幂等释放会话运行时
 
 **Files:**
-- Modify: `backend/src/grpc/astro_service.rs`
-- Test: existing backend unit test module in `backend/src/grpc/astro_service.rs`
+- Modify: `crates/agent-server/src/grpc/astro_service.rs`
+- Test: existing backend unit test module in `crates/agent-server/src/grpc/astro_service.rs`
 
 **Interfaces:**
 - Produces: chat control action `"release_session"`
@@ -330,8 +330,8 @@ git commit -m "feat(backend): release session runtime idempotently"
 ### Task 4: Tauri 会话管理 commands 与 DTO
 
 **Files:**
-- Modify: `frontend/src-tauri/src/commands.rs`
-- Modify: `frontend/src-tauri/src/lib.rs`
+- Modify: `apps/desktop/src-tauri/src/commands.rs`
+- Modify: `apps/desktop/src-tauri/src/lib.rs`
 - Modify: `apps/desktop/src/types.ts`
 
 **Interfaces:**
@@ -405,7 +405,7 @@ Expected: PASS。
 - [ ] **Step 5: Commit**
 
 ```bash
-git add frontend/src-tauri/src/commands.rs frontend/src-tauri/src/lib.rs \
+git add apps/desktop/src-tauri/src/commands.rs apps/desktop/src-tauri/src/lib.rs \
   apps/desktop/src/types.ts
 git commit -m "feat(tauri): expose session management commands"
 ```

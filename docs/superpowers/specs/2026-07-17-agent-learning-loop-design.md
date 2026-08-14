@@ -68,7 +68,7 @@ config.yaml (learning.*)
 
 落地位置：
 - crate [`evolution`](../../../evolution)：`candidate`（候选类型）、`reflect`（提示词 + `parse_candidates`）、`gates`（体积/patch 结构门禁）、`proposal`（提案队列 + 审批应用到 agent skills）
-- Tauri [`evolution_run_commands.rs`](../../../frontend/src-tauri/src/evolution_run_commands.rs)：`run_evolution` / `list_evolution_proposals` / `approve_evolution_proposal` / `reject_evolution_proposal`；`reflection`/`judge` 目标经 [`auxiliary_resolver::resolve_evolution_targets`](../../../frontend/src-tauri/src/auxiliary_resolver.rs) 解析
+- Tauri [`evolution_run_commands.rs`](../../../apps/desktop/src-tauri/src/evolution_run_commands.rs)：`run_evolution` / `list_evolution_proposals` / `approve_evolution_proposal` / `reject_evolution_proposal`；`reflection`/`judge` 目标经 [`auxiliary_resolver::resolve_evolution_targets`](../../../apps/desktop/src-tauri/src/auxiliary_resolver.rs) 解析
 - UI：`EvolutionModelsPanel` 增「运行进化」+ 提案 diff 审批
 - 数据：读 `learning/decisions.jsonl` + 已启用技能索引；提案存 `learning/evolution/proposals/{id}.json`；批准写入 `agent skills` 目录
 
@@ -115,8 +115,8 @@ evolution:
 ```
 
 落地位置：
-- 配置读写：[`memory/src/config.rs`](../../../memory/src/config.rs)（`EvolutionConfig` / `EvolutionGates` / `EvolutionRouteKind`、`load_evolution_config`、`set_evolution_*`、`reset_all_evolution_routes`）
-- Tauri 命令：[`frontend/src-tauri/src/evolution_commands.rs`](../../../frontend/src-tauri/src/evolution_commands.rs)
+- 配置读写：[`crates/agent-memory/src/config.rs`](../../../memory/src/config.rs)（`EvolutionConfig` / `EvolutionGates` / `EvolutionRouteKind`、`load_evolution_config`、`set_evolution_*`、`reset_all_evolution_routes`）
+- Tauri 命令：[`apps/desktop/src-tauri/src/evolution_commands.rs`](../../../apps/desktop/src-tauri/src/evolution_commands.rs)
 - UI：模型服务页「离线进化」子 Tab（[`EvolutionModelsPanel.tsx`](../../../apps/desktop/src/components/settings/EvolutionModelsPanel.tsx)），复用辅助模型的路由选择交互
 - `provider=auto` 跟随会话主模型；显式值保存 UI Provider ID，与 `auxiliary` 一致但**配置段独立**
 

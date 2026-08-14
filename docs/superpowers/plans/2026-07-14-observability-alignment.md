@@ -18,17 +18,17 @@
 
 | Path | Responsibility |
 |------|----------------|
-| `memory/src/usage/db.rs` | `turn_id` 列、安全迁移、`NewUsageEvent`、insert |
+| `crates/agent-memory/src/usage/db.rs` | `turn_id` 列、安全迁移、`NewUsageEvent`、insert |
 | `memory/tests/usage_db_test.rs` | 迁移 / insert / 读回 `turn_id` |
-| `memory/src/infra/log_query.rs`（新建） | `AgentLogQuery` / `query_agent_logs` |
-| `memory/src/infra/logging.rs` | 双 sink：`agent.log` + `errors.log` |
-| `memory/src/infra/mod.rs` / `lib.rs` | re-export |
-| `agent/src/loop_.rs` | `current_turn_id` 字段；工具 usage 写入带 `turn_id` |
-| `agent/src/streaming.rs` | `run_id` → 设为 `turn_id`；关键路径 `tracing` 带字段；`record_llm_usage` 贯通 |
-| `agent/src/usage_record.rs` | `build_llm_usage_event` / dual_write 接受 `turn_id` |
-| `memory/src/usage/stats.rs` 等 | `NewUsageEvent` 构造补 `turn_id: None`（或透传） |
-| `frontend/src-tauri/src/config_commands.rs`（或 `diagnostics_commands.rs`） | `query_agent_logs` |
-| `frontend/src-tauri/src/lib.rs` | 注册 command；`init_logging("agent")` |
+| `crates/agent-memory/src/infra/log_query.rs`（新建） | `AgentLogQuery` / `query_agent_logs` |
+| `crates/agent-memory/src/infra/logging.rs` | 双 sink：`agent.log` + `errors.log` |
+| `crates/agent-memory/src/infra/mod.rs` / `lib.rs` | re-export |
+| `crates/agent-core/src/loop_.rs` | `current_turn_id` 字段；工具 usage 写入带 `turn_id` |
+| `crates/agent-core/src/streaming.rs` | `run_id` → 设为 `turn_id`；关键路径 `tracing` 带字段；`record_llm_usage` 贯通 |
+| `crates/agent-core/src/usage_record.rs` | `build_llm_usage_event` / dual_write 接受 `turn_id` |
+| `crates/agent-memory/src/usage/stats.rs` 等 | `NewUsageEvent` 构造补 `turn_id: None`（或透传） |
+| `apps/desktop/src-tauri/src/config_commands.rs`（或 `diagnostics_commands.rs`） | `query_agent_logs` |
+| `apps/desktop/src-tauri/src/lib.rs` | 注册 command；`init_logging("agent")` |
 | `apps/desktop/src/components/PreferencesPanel.tsx` | 「日志 / 诊断」分区 |
 | `apps/desktop/src/i18n/messages.ts` | 文案键 |
 | `apps/desktop/src/styles/`（若需） | 诊断列表最小样式（复用 `prefs-*` 优先） |
@@ -38,7 +38,7 @@
 ## Task 1: UsageDb `turn_id` 列 + 安全迁移（TDD）
 
 **Files:**
-- Modify: `memory/src/usage/db.rs`
+- Modify: `crates/agent-memory/src/usage/db.rs`
 - Modify: `memory/tests/usage_db_test.rs`
 - Modify: 所有 `NewUsageEvent { ... }` 构造处（见下方 Step 4 清单）
 
@@ -151,7 +151,7 @@ fn migrate_v3_to_v4_keeps_rows_and_adds_turn_id() {
 }
 ```
 
-（若 `USAGE_SCHEMA_VERSION` 未 export，在 `memory/src/lib.rs` 增加 `pub use usage::db::USAGE_SCHEMA_VERSION;`。）
+（若 `USAGE_SCHEMA_VERSION` 未 export，在 `crates/agent-memory/src/lib.rs` 增加 `pub use usage::db::USAGE_SCHEMA_VERSION;`。）
 
 - [x] **Step 2: Run test — expect FAIL**
 
@@ -163,7 +163,7 @@ Expected: compile error（无 `turn_id` 字段）或打开库时毁掉 old1。
 
 - [x] **Step 3: Implement schema + safe migrate**
 
-在 `memory/src/usage/db.rs`：
+在 `crates/agent-memory/src/usage/db.rs`：
 
 1. `USAGE_SCHEMA_VERSION: i32 = 4`
 2. DDL 的 `usage_events` 增加 `turn_id TEXT`
@@ -228,14 +228,14 @@ pub fn new(path: PathBuf) -> anyhow::Result<Self> {
 
 为每处结构体字面量补 `turn_id: None`（或有值则透传）：
 
-- `memory/src/usage/stats.rs`（两处）
-- `memory/src/usage/trace_insights.rs`（测试/helper）
-- `memory/src/usage/db.rs`（测试 helper）
+- `crates/agent-memory/src/usage/stats.rs`（两处）
+- `crates/agent-memory/src/usage/trace_insights.rs`（测试/helper）
+- `crates/agent-memory/src/usage/db.rs`（测试 helper）
 - `memory/tests/usage_db_test.rs`、`collab_insights_test.rs`
-- `agent/src/usage_record.rs`
-- `agent/src/loop_.rs`
-- `agent/src/orchestration.rs`
-- `agent/src/cron_exec.rs`
+- `crates/agent-core/src/usage_record.rs`
+- `crates/agent-core/src/loop_.rs`
+- `crates/agent-core/src/orchestration.rs`
+- `crates/agent-core/src/cron_exec.rs`
 
 - [x] **Step 5: Run tests — expect PASS**
 
@@ -266,9 +266,9 @@ EOF
 ## Task 2: `query_agent_logs`（TDD）
 
 **Files:**
-- Create: `memory/src/infra/log_query.rs`
-- Modify: `memory/src/infra/mod.rs`
-- Modify: `memory/src/lib.rs`
+- Create: `crates/agent-memory/src/infra/log_query.rs`
+- Modify: `crates/agent-memory/src/infra/mod.rs`
+- Modify: `crates/agent-memory/src/lib.rs`
 - Test: 单元测试放在 `log_query.rs` 的 `#[cfg(test)]`
 
 - [x] **Step 1: Write failing tests**
@@ -489,9 +489,9 @@ EOF
 ## Task 3: 双文件日志 sink（`agent.log` + `errors.log`）
 
 **Files:**
-- Modify: `memory/src/infra/logging.rs`
-- Modify: `frontend/src-tauri/src/lib.rs`（`init_logging("agent")`）
-- Modify: `backend/src/lib.rs`（`init_logging("agent")`，与桌面共用文件名语义；若 backend 独立部署可接受同名）
+- Modify: `crates/agent-memory/src/infra/logging.rs`
+- Modify: `apps/desktop/src-tauri/src/lib.rs`（`init_logging("agent")`）
+- Modify: `crates/agent-server/src/lib.rs`（`init_logging("agent")`，与桌面共用文件名语义；若 backend 独立部署可接受同名）
 
 - [x] **Step 1: Rewrite `init_logging`**
 
@@ -549,13 +549,13 @@ pub fn init_logging(_component: &str) -> anyhow::Result<()> {
 
 - [x] **Step 2: 统一调用方文件语义**
 
-- `frontend/src-tauri/src/lib.rs`：`memory::init_logging("agent")`
-- `backend/src/lib.rs`：`init_logging("agent")`
+- `apps/desktop/src-tauri/src/lib.rs`：`memory::init_logging("agent")`
+- `crates/agent-server/src/lib.rs`：`init_logging("agent")`
 
 - [x] **Step 3: Smoke**
 
 ```bash
-cargo check -p memory -p frontend/src-tauri 2>/dev/null || cargo check -p memory
+cargo check -p memory -p apps/desktop/src-tauri 2>/dev/null || cargo check -p memory
 # 从仓库根：
 cargo check -p memory
 ```
@@ -565,7 +565,7 @@ cargo check -p memory
 - [x] **Step 4: Commit**
 
 ```bash
-git add memory/src/infra/logging.rs frontend/src-tauri/src/lib.rs backend/src/lib.rs
+git add memory/src/infra/logging.rs apps/desktop/src-tauri/src/lib.rs backend/src/lib.rs
 git commit -m "$(cat <<'EOF'
 feat(logging): split agent.log and errors.log sinks
 
@@ -578,9 +578,9 @@ EOF
 ## Task 4: Agent 主路径贯通 `turn_id`
 
 **Files:**
-- Modify: `agent/src/loop_.rs`
-- Modify: `agent/src/streaming.rs`
-- Modify: `agent/src/usage_record.rs`
+- Modify: `crates/agent-core/src/loop_.rs`
+- Modify: `crates/agent-core/src/streaming.rs`
+- Modify: `crates/agent-core/src/usage_record.rs`
 - Modify: 工具 usage 的 `NewUsageEvent`（`loop_.rs` 内 tool 记录处）
 
 **约定：** `run_multi_turn_stream` 内已有 `run_id` —— **本轮 `turn_id` 与其相同**（同一 UUID）。`RunStarted.run_id` 值不变；Usage/logs 字段名用 `turn_id`。
@@ -704,8 +704,8 @@ EOF
 ## Task 5: Tauri `query_agent_logs`
 
 **Files:**
-- Modify: `frontend/src-tauri/src/config_commands.rs`（或新建 `diagnostics_commands.rs` 并在 `lib.rs` mod）
-- Modify: `frontend/src-tauri/src/lib.rs`（`generate_handler!`）
+- Modify: `apps/desktop/src-tauri/src/config_commands.rs`（或新建 `diagnostics_commands.rs` 并在 `lib.rs` mod）
+- Modify: `apps/desktop/src-tauri/src/lib.rs`（`generate_handler!`）
 
 - [x] **Step 1: Command**
 
@@ -745,13 +745,13 @@ pub async fn query_agent_logs(args: QueryAgentLogsArgs) -> Result<Vec<memory::Ag
 - [x] **Step 2: Check**
 
 ```bash
-cargo check -p astro-ui 2>/dev/null || cargo check --manifest-path frontend/src-tauri/Cargo.toml
+cargo check -p astro-ui 2>/dev/null || cargo check --manifest-path apps/desktop/src-tauri/Cargo.toml
 ```
 
 - [x] **Step 3: Commit**
 
 ```bash
-git add frontend/src-tauri/src/config_commands.rs frontend/src-tauri/src/lib.rs
+git add apps/desktop/src-tauri/src/config_commands.rs apps/desktop/src-tauri/src/lib.rs
 # 若新建 diagnostics_commands.rs 一并 add
 git commit -m "$(cat <<'EOF'
 feat(tauri): expose query_agent_logs for diagnostics UI

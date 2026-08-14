@@ -21,13 +21,13 @@
 | Create: `a2ui/tests/validate_test.rs` | 校验与模板单测 |
 | Modify: `Cargo.toml` | workspace member `a2ui` |
 | Modify: `proto/proto/astro.proto` | `ActivityEvent`、`RunStarted`/`RunFinished`、`InterruptResume`、控制动作分流 |
-| Modify: `agent/src/streaming.rs` | `MultiTurnStreamItem::{RunStarted, Activity, RunFinished}` |
-| Create: `agent/src/interrupt.rs` | 挂起/校验 resume/取消 状态机 |
-| Modify: `agent/src/lib.rs` | 导出 interrupt |
-| Modify: `backend/src/grpc/astro_service.rs` | 事件映射；pending interrupt 闸门；`InterruptResume` RPC |
-| Modify: `tools/src/builtins/confirm.rs` (new) + `clarify.rs` | 模板 A2UI JSON + interrupt 标记结果 |
-| Modify: `tools/src/builtins/mod.rs`, `dispatch.rs`, `lib.rs` | 注册 confirm |
-| Modify: `frontend/src-tauri/src/commands.rs` | `ChatStreamEvent` 新变体；`interrupt_resume`；`stream_resume` 别名 |
+| Modify: `crates/agent-core/src/streaming.rs` | `MultiTurnStreamItem::{RunStarted, Activity, RunFinished}` |
+| Create: `crates/agent-core/src/interrupt.rs` | 挂起/校验 resume/取消 状态机 |
+| Modify: `crates/agent-core/src/lib.rs` | 导出 interrupt |
+| Modify: `crates/agent-server/src/grpc/astro_service.rs` | 事件映射；pending interrupt 闸门；`InterruptResume` RPC |
+| Modify: `crates/agent-tools/src/builtin/confirm.rs` (new) + `clarify.rs` | 模板 A2UI JSON + interrupt 标记结果 |
+| Modify: `crates/agent-tools/src/builtin/mod.rs`, `dispatch.rs`, `lib.rs` | 注册 confirm |
+| Modify: `apps/desktop/src-tauri/src/commands.rs` | `ChatStreamEvent` 新变体；`interrupt_resume`；`stream_resume` 别名 |
 | Modify: `apps/desktop/src/types.ts` | `UiSurface`, `ChatMessage.uiSurfaces`, interrupt 类型 |
 | Create: `apps/desktop/src/a2ui/types.ts` | 前端 A2UI operation 类型 |
 | Create: `apps/desktop/src/a2ui/CatalogAdapter.tsx` | 组件 → React |
@@ -37,7 +37,7 @@
 | Modify: `apps/desktop/src/App.tsx` | 消费新事件；interrupt_resume；拒发普通消息 |
 | Modify: `apps/desktop/src/styles/chat.css` | A2UI 卡样式 |
 | Modify: `apps/desktop/src/i18n/messages.ts` | 文案 |
-| Create: `tools/src/builtins/present_ui.rs` | 信息卡：校验后返回 A2UI（不 interrupt） |
+| Create: `crates/agent-tools/src/builtin/present_ui.rs` | 信息卡：校验后返回 A2UI（不 interrupt） |
 | Modify: session/history 相关（见 Task 11） | 持久化 surfaces / pending interrupts |
 
 ---
@@ -347,9 +347,9 @@ EOF
 ### Task 4: Agent interrupt 状态机
 
 **Files:**
-- Create: `agent/src/interrupt.rs`
+- Create: `crates/agent-core/src/interrupt.rs`
 - Create: `agent/tests/interrupt_test.rs`
-- Modify: `agent/src/lib.rs`
+- Modify: `crates/agent-core/src/lib.rs`
 - Modify: `agent/Cargo.toml`（依赖 `a2ui` 若需要）
 
 - [ ] **Step 1: 写失败测试**
@@ -409,8 +409,8 @@ EOF
 ### Task 5: 扩展 `MultiTurnStreamItem` 与流结束
 
 **Files:**
-- Modify: `agent/src/streaming.rs`
-- Modify: `backend/src/grpc/astro_service.rs`（`multi_turn_to_chat_event`）
+- Modify: `crates/agent-core/src/streaming.rs`
+- Modify: `crates/agent-server/src/grpc/astro_service.rs`（`multi_turn_to_chat_event`）
 
 - [ ] **Step 1: 扩展枚举**
 
@@ -458,10 +458,10 @@ EOF
 ### Task 6: `confirm` 工具 + 流内触发 interrupt
 
 **Files:**
-- Create: `tools/src/builtins/confirm.rs`
-- Modify: `tools/src/builtins/clarify.rs`, `mod.rs`, `dispatch.rs`, `lib.rs`, registry
-- Modify: `agent/src/streaming.rs`（检测 HITL 工具结果 → Activity + RunFinished(interrupt) → 停止续轮）
-- Modify: `memory/src/tools_enabled.rs` / agent toolsets（若需默认启用）
+- Create: `crates/agent-tools/src/builtin/confirm.rs`
+- Modify: `crates/agent-tools/src/builtin/clarify.rs`, `mod.rs`, `dispatch.rs`, `lib.rs`, registry
+- Modify: `crates/agent-core/src/streaming.rs`（检测 HITL 工具结果 → Activity + RunFinished(interrupt) → 停止续轮）
+- Modify: `crates/agent-memory/src/tools_enabled.rs` / agent toolsets（若需默认启用）
 
 - [ ] **Step 1: `confirm` 工具**
 
@@ -509,8 +509,8 @@ EOF
 ### Task 7: Backend session pending + `ChatRequest.resume_json`
 
 **Files:**
-- Modify: `backend/src/grpc/astro_service.rs`
-- Create: `backend/src/interrupt_store.rs`（或放 agent）
+- Modify: `crates/agent-server/src/grpc/astro_service.rs`
+- Create: `crates/agent-server/src/interrupt_store.rs`（或放 agent）
 
 - [ ] **Step 1: 进程内 `Mutex<HashMap<session_id, InterruptPending>>`**
 
@@ -538,8 +538,8 @@ EOF
 ### Task 8: Tauri 桥接
 
 **Files:**
-- Modify: `frontend/src-tauri/src/commands.rs`
-- Modify: `frontend/src-tauri/src/lib.rs`（注册命令若需要）
+- Modify: `apps/desktop/src-tauri/src/commands.rs`
+- Modify: `apps/desktop/src-tauri/src/lib.rs`（注册命令若需要）
 
 - [ ] **Step 1: 扩展 `ChatStreamEvent`**
 
@@ -684,7 +684,7 @@ EOF
 ### Task 11: `present_ui` 信息卡（无 interrupt）
 
 **Files:**
-- Create: `tools/src/builtins/present_ui.rs`
+- Create: `crates/agent-tools/src/builtin/present_ui.rs`
 - Modify: registry / dispatch / agent 解析
 
 - [ ] **Step 1: 工具参数**

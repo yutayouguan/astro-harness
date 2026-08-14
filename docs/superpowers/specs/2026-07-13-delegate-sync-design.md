@@ -18,5 +18,5 @@
 |------|------|
 | `memory/delegate_spawn.rs` | sync runner（经 `ToolContext` 注入，非全局 OnceLock） |
 | `agent/delegate_exec.rs` | 真执行 |
-| `tools/builtins/delegate.rs` | 参数 + 调 runner |
+| `tools/builtin/delegate.rs` | 参数 + 调 runner |
 | `agent/multi_agent.rs` | Orchestrator 接真执行器 |

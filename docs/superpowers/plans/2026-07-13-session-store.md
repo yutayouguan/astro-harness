@@ -4,7 +4,7 @@
 
 **Goal:** 将会话持久化升级为单库富消息 `SessionStore`（schema v11），使 UI/Agent 可完整恢复正文、工具活动与 reasoning；命名保持 Astro 中性（禁止 `hermes` 字样）。
 
-**Architecture:** 新建 `memory/src/session_store.rs` 作为权威 SQLite（`~/.astro/sessions/state.db`）：`sessions` + `messages` + FTS + `schema_version`。`MemoryManager` 只持有 `SessionStore`；Agent 流式落盘带 `tool_calls`/`reasoning`；`get_chat_history` 组装成前端 `ChatMessage`（含 `activities`）。旧 `sessions.db` 一次性迁入后废弃写路径。
+**Architecture:** 新建 `crates/agent-memory/src/session_store.rs` 作为权威 SQLite（`~/.astro/sessions/state.db`）：`sessions` + `messages` + FTS + `schema_version`。`MemoryManager` 只持有 `SessionStore`；Agent 流式落盘带 `tool_calls`/`reasoning`；`get_chat_history` 组装成前端 `ChatMessage`（含 `activities`）。旧 `sessions.db` 一次性迁入后废弃写路径。
 
 **Tech Stack:** Rust、rusqlite、serde_json、现有 agent streaming、Tauri commands、React 前端
 
@@ -18,29 +18,29 @@
 
 | File | Responsibility |
 |------|----------------|
-| Create: `memory/src/session_store.rs` | Schema v11、迁移、`SessionStore` CRUD、FTS、history 组装 |
+| Create: `crates/agent-memory/src/session_store.rs` | Schema v11、迁移、`SessionStore` CRUD、FTS、history 组装 |
 | Create: `memory/tests/session_store_test.rs` | 建表/迁移/append/search/history 单测 |
-| Modify: `memory/src/lib.rs` | 导出 `SessionStore` 等；逐步停用旧 re-export 写路径 |
-| Modify: `memory/src/manager.rs` | `session_store` 字段；`record_message` → `append_message`；`handle_session_search` |
-| Modify: `memory/src/message_db.rs` | 薄兼容层委托 `SessionStore`，或删除并改全引用 |
-| Modify: `memory/src/session_db.rs` | 仅保留迁移只读导入；迁完后删除调用方 |
-| Modify: `memory/src/workspace.rs` | bootstrap 只建 `state.db`；触发旧库迁移 |
-| Modify: `agent/src/loop_.rs` | 富字段落盘 API；ensure session |
-| Modify: `agent/src/streaming.rs` | 累积 reasoning；assistant/tool append 带结构化字段 |
-| Modify: `frontend/src-tauri/src/commands.rs` | 富 `ChatHistoryDto`；`list_recent_sessions` 改查 SessionStore |
+| Modify: `crates/agent-memory/src/lib.rs` | 导出 `SessionStore` 等；逐步停用旧 re-export 写路径 |
+| Modify: `crates/agent-memory/src/manager.rs` | `session_store` 字段；`record_message` → `append_message`；`handle_session_search` |
+| Modify: `crates/agent-memory/src/message_db.rs` | 薄兼容层委托 `SessionStore`，或删除并改全引用 |
+| Modify: `crates/agent-memory/src/session_db.rs` | 仅保留迁移只读导入；迁完后删除调用方 |
+| Modify: `crates/agent-memory/src/workspace.rs` | bootstrap 只建 `state.db`；触发旧库迁移 |
+| Modify: `crates/agent-core/src/loop_.rs` | 富字段落盘 API；ensure session |
+| Modify: `crates/agent-core/src/streaming.rs` | 累积 reasoning；assistant/tool append 带结构化字段 |
+| Modify: `apps/desktop/src-tauri/src/commands.rs` | 富 `ChatHistoryDto`；`list_recent_sessions` 改查 SessionStore |
 | Modify: `apps/desktop/src/App.tsx` | restore 消费 `reasoning`/`activities` |
 | Modify: `apps/desktop/src/types.ts` | history DTO 类型（若前端单独声明） |
-| Modify: `tools/src/builtins/memory_tools.rs` | `session_search` 描述改为搜索历史消息 |
-| Modify: `agent/src/cron_exec.rs` | 去掉 `SessionDb::save_session`，改 `create_session`/`set_title` |
+| Modify: `crates/agent-tools/src/builtin/memory_tools.rs` | `session_search` 描述改为搜索历史消息 |
+| Modify: `crates/agent-core/src/cron_exec.rs` | 去掉 `SessionDb::save_session`，改 `create_session`/`set_title` |
 
 ---
 
 ### Task 1: `SessionStore` 空库 schema v11 + 打开路径
 
 **Files:**
-- Create: `memory/src/session_store.rs`
+- Create: `crates/agent-memory/src/session_store.rs`
 - Create: `memory/tests/session_store_test.rs`
-- Modify: `memory/src/lib.rs`
+- Modify: `crates/agent-memory/src/lib.rs`
 - Modify: `memory/Cargo.toml`（若需 `[[test]]`；默认 `tests/` 即可）
 
 - [x] **Step 1: Write the failing test**
@@ -110,7 +110,7 @@ EOF
 ### Task 2: `append_message` / `get_messages` / conversation 重建
 
 **Files:**
-- Modify: `memory/src/session_store.rs`
+- Modify: `crates/agent-memory/src/session_store.rs`
 - Modify: `memory/tests/session_store_test.rs`
 
 - [x] **Step 1: Write the failing test**
@@ -207,7 +207,7 @@ EOF
 ### Task 3: FTS 搜索 + UI history 组装
 
 **Files:**
-- Modify: `memory/src/session_store.rs`
+- Modify: `crates/agent-memory/src/session_store.rs`
 - Modify: `memory/tests/session_store_test.rs`
 
 - [x] **Step 1: Write the failing tests**
@@ -323,9 +323,9 @@ EOF
 ### Task 4: 旧库迁移（messages 列 + sessions.db 导入）
 
 **Files:**
-- Modify: `memory/src/session_store.rs`
+- Modify: `crates/agent-memory/src/session_store.rs`
 - Modify: `memory/tests/session_store_test.rs`
-- Modify: `memory/src/workspace.rs`（bootstrap 调用 migrate）
+- Modify: `crates/agent-memory/src/workspace.rs`（bootstrap 调用 migrate）
 
 - [x] **Step 1: Write the failing test**
 
@@ -409,9 +409,9 @@ EOF
 ### Task 5: `MemoryManager` 切到 `SessionStore`
 
 **Files:**
-- Modify: `memory/src/manager.rs`
-- Modify: `memory/src/lib.rs`
-- Modify: `memory/src/message_db.rs`（兼容：`MessageDb` 改为 type alias / 包装，或更新所有引用）
+- Modify: `crates/agent-memory/src/manager.rs`
+- Modify: `crates/agent-memory/src/lib.rs`
+- Modify: `crates/agent-memory/src/message_db.rs`（兼容：`MessageDb` 改为 type alias / 包装，或更新所有引用）
 
 - [x] **Step 1: Write/adjust failing compile or unit test**
 
@@ -472,8 +472,8 @@ EOF
 ### Task 6: Agent 流式落盘（reasoning + tool_calls）
 
 **Files:**
-- Modify: `agent/src/loop_.rs`
-- Modify: `agent/src/streaming.rs`
+- Modify: `crates/agent-core/src/loop_.rs`
+- Modify: `crates/agent-core/src/streaming.rs`
 - Modify: `agent/tests/streaming_test.rs`（或新建 persistence 断言）
 
 - [x] **Step 1: Write the failing test**
@@ -523,7 +523,7 @@ EOF
 ### Task 7: Tauri `get_chat_history` + 前端 restore
 
 **Files:**
-- Modify: `frontend/src-tauri/src/commands.rs`
+- Modify: `apps/desktop/src-tauri/src/commands.rs`
 - Modify: `apps/desktop/src/App.tsx`
 - Modify: `apps/desktop/src/types.ts`（如需要）
 
@@ -583,7 +583,7 @@ Run: `cd frontend && npx tsc --noEmit`（若项目惯用）
 - [x] **Step 4: Commit**
 
 ```bash
-git add frontend/src-tauri/src/commands.rs apps/desktop/src/App.tsx apps/desktop/src/types.ts
+git add apps/desktop/src-tauri/src/commands.rs apps/desktop/src/App.tsx apps/desktop/src/types.ts
 git commit -m "$(cat <<'EOF'
 feat(chat): restore rich history with activities and reasoning
 
@@ -596,11 +596,11 @@ EOF
 ### Task 8: `list_recent_sessions` + `session_search` + cron/artifacts 去旧 SessionDb
 
 **Files:**
-- Modify: `frontend/src-tauri/src/commands.rs`
-- Modify: `frontend/src-tauri/src/artifacts_commands.rs`
-- Modify: `agent/src/cron_exec.rs`
-- Modify: `tools/src/builtins/memory_tools.rs`
-- Modify: `memory/src/session_db.rs`（删除或标 deprecated；无调用后可删）
+- Modify: `apps/desktop/src-tauri/src/commands.rs`
+- Modify: `apps/desktop/src-tauri/src/artifacts_commands.rs`
+- Modify: `crates/agent-core/src/cron_exec.rs`
+- Modify: `crates/agent-tools/src/builtin/memory_tools.rs`
+- Modify: `crates/agent-memory/src/session_db.rs`（删除或标 deprecated；无调用后可删）
 
 - [x] **Step 1: Update `list_recent_sessions`**
 
@@ -632,7 +632,7 @@ Expected: PASS
 - [x] **Step 6: Commit**
 
 ```bash
-git add -u memory agent tools frontend/src-tauri
+git add -u memory agent tools apps/desktop/src-tauri
 git commit -m "$(cat <<'EOF'
 refactor: retire dual sessions.db; route search and sidebar via SessionStore
 

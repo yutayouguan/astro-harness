@@ -17,16 +17,16 @@
 | Path | Responsibility |
 |------|----------------|
 | `proto/proto/astro.proto` | `SubscribeSessionEvents` + `SessionEvent` messages |
-| `backend/src/session_events.rs`（新建） | `SessionEventHub`：subscribe / publish |
-| `backend/src/grpc/astro_service.rs` | 实现 RPC；review 改 publish；删除 `Done` 后 30s 挂起 |
-| `backend/src/lib.rs` / `main` | hub 注入 `AstroServiceImpl` |
-| `agent/src/memory_review_spawn.rs` | publish 用钩子（或通过传入 `Fn`/`Sender`）；可保留 `MemoryReviewNotify` 作内部摘要 |
-| `memory/src/config.rs` | `auto_refresh_on_update` + setter |
-| `memory/src/pending.rs` | approve/reject/enqueue 后回调或返回计数供 emitter |
-| `memory/src/dreaming/mod.rs` | live 写成功后 publish 钩子（参数注入，避免 crate 环） |
-| `frontend/src-tauri/src/session_events.rs`（新建）或并入 `commands.rs` | 启动订阅任务 |
-| `frontend/src-tauri/src/memory_commands.rs` | settings 扩展；`approve_all` / `reject_all` |
-| `frontend/src-tauri/src/lib.rs` | 注册命令；setup 里启动订阅 |
+| `crates/agent-server/src/session_events.rs`（新建） | `SessionEventHub`：subscribe / publish |
+| `crates/agent-server/src/grpc/astro_service.rs` | 实现 RPC；review 改 publish；删除 `Done` 后 30s 挂起 |
+| `crates/agent-server/src/lib.rs` / `main` | hub 注入 `AstroServiceImpl` |
+| `crates/agent-core/src/memory_review_spawn.rs` | publish 用钩子（或通过传入 `Fn`/`Sender`）；可保留 `MemoryReviewNotify` 作内部摘要 |
+| `crates/agent-memory/src/config.rs` | `auto_refresh_on_update` + setter |
+| `crates/agent-memory/src/pending.rs` | approve/reject/enqueue 后回调或返回计数供 emitter |
+| `crates/agent-memory/src/dreaming/mod.rs` | live 写成功后 publish 钩子（参数注入，避免 crate 环） |
+| `apps/desktop/src-tauri/src/session_events.rs`（新建）或并入 `commands.rs` | 启动订阅任务 |
+| `apps/desktop/src-tauri/src/memory_commands.rs` | settings 扩展；`approve_all` / `reject_all` |
+| `apps/desktop/src-tauri/src/lib.rs` | 注册命令；setup 里启动订阅 |
 | `apps/desktop/src/App.tsx` | listen、toast、角标、auto-refresh、slash |
 | `apps/desktop/src/lib/composerCommands.ts` | `/memory` 子命令解析 |
 | `apps/desktop/src/components/MemoryPanel.tsx` | 「刷新进对话」+ auto-refresh 开关 |
@@ -111,8 +111,8 @@ EOF
 ## Task 2: Backend `SessionEventHub`（TDD）
 
 **Files:**
-- Create: `backend/src/session_events.rs`
-- Modify: `backend/src/lib.rs`（`mod session_events; pub use …`）
+- Create: `crates/agent-server/src/session_events.rs`
+- Modify: `crates/agent-server/src/lib.rs`（`mod session_events; pub use …`）
 - Test: unit tests in `session_events.rs`
 
 - [ ] **Step 1: 写失败测试**
@@ -196,7 +196,7 @@ Expected: 找不到 `SessionEventHub` 或 module
 
 - [ ] **Step 3: 最小实现**
 
-`backend/src/session_events.rs` 要点：
+`crates/agent-server/src/session_events.rs` 要点：
 
 ```rust
 use tokio::sync::broadcast;
@@ -309,7 +309,7 @@ EOF
 ## Task 3: 实现 `SubscribeSessionEvents` RPC + 注入 hub
 
 **Files:**
-- Modify: `backend/src/grpc/astro_service.rs`
+- Modify: `crates/agent-server/src/grpc/astro_service.rs`
 - Modify: hub 构造处（`AstroServiceImpl::new` / `main`）
 
 - [ ] **Step 1: `AstroServiceImpl` 增加字段**
@@ -382,8 +382,8 @@ EOF
 ## Task 4: Review 发布走 hub，撤掉 Chat 挂起
 
 **Files:**
-- Modify: `backend/src/grpc/astro_service.rs`（删除/改写 `spawn_review_and_emit_update`）
-- Modify: `agent/src/memory_review_spawn.rs`（可选：notify 仍返回摘要，backend 映射为 hub 事件）
+- Modify: `crates/agent-server/src/grpc/astro_service.rs`（删除/改写 `spawn_review_and_emit_update`）
+- Modify: `crates/agent-core/src/memory_review_spawn.rs`（可选：notify 仍返回摘要，backend 映射为 hub 事件）
 
 - [ ] **Step 1: 改写 review 启动**
 
@@ -473,7 +473,7 @@ EOF
 ## Task 5: Pending / dreaming emitters
 
 **Files:**
-- Modify: `memory/src/pending.rs` — `enqueue`/`approve`/`reject` 返回后由调用方 publish；或增加可选 `on_change: Option<&dyn Fn(PendingChangedPayload)>`（避免 memory→backend 依赖）
+- Modify: `crates/agent-memory/src/pending.rs` — `enqueue`/`approve`/`reject` 返回后由调用方 publish；或增加可选 `on_change: Option<&dyn Fn(PendingChangedPayload)>`（避免 memory→backend 依赖）
 - Modify: Tauri `approve_pending_memory_write` / `reject_…` / enqueue 路径（manager）
 - Modify: dreaming finalize 成功路径（Tauri `dreaming_commands` 或 memory dreaming）
 
@@ -550,8 +550,8 @@ EOF
 ## Task 6: `auto_refresh_on_update` 配置
 
 **Files:**
-- Modify: `memory/src/config.rs`
-- Modify: `frontend/src-tauri/src/memory_commands.rs`（`MemorySettingsDto`）
+- Modify: `crates/agent-memory/src/config.rs`
+- Modify: `apps/desktop/src-tauri/src/memory_commands.rs`（`MemorySettingsDto`）
 - Test: `config.rs` 单测
 
 - [ ] **Step 1: 扩展 `MemoryConfig`**
@@ -617,8 +617,8 @@ EOF
 ## Task 7: Tauri 订阅 gRPC + 前端 toast / 角标 / auto-refresh
 
 **Files:**
-- Create or modify: `frontend/src-tauri/src/session_events_cmd.rs`
-- Modify: `frontend/src-tauri/src/lib.rs`（`setup` 启动后台订阅；`listen` 侧）
+- Create or modify: `apps/desktop/src-tauri/src/session_events_cmd.rs`
+- Modify: `apps/desktop/src-tauri/src/lib.rs`（`setup` 启动后台订阅；`listen` 侧）
 - Modify: `apps/desktop/src/App.tsx`
 - Modify: nav 渲染（记忆项角标）
 - Modify: `apps/desktop/src/i18n/messages.ts`
@@ -740,7 +740,7 @@ EOF
 **Files:**
 - Modify: `apps/desktop/src/lib/composerCommands.ts`
 - Modify: `apps/desktop/src/App.tsx`（`handleSlashAction`）
-- Modify: `frontend/src-tauri/src/memory_commands.rs`
+- Modify: `apps/desktop/src-tauri/src/memory_commands.rs`
 - Test: 可加 `composerCommands` 的 vitest/纯函数测；或 Rust 侧 all API 测
 
 - [ ] **Step 1: 解析扩展**

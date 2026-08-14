@@ -144,7 +144,7 @@ resolve_image_gen_targets (+ vision_model)
 | `providers/.../media_http.rs` | Whisper + OpenAI describe；`default_whisper_model` |
 | `tools/.../audio_understand.rs` + `media/mod.rs` | 新工具 |
 | 工具 dispatch / registry | 挂载 `audio_understand` |
-| `frontend/.../useAgentTools.ts` + i18n | 卡片与文案 |
+| `apps/desktop/.../useAgentTools.ts` + i18n | 卡片与文案 |
 | 测试 | mock：describe / transcribe schema / YouTube→video / Whisper / Google→OpenAI / 无密钥 |
 
 ## 错误与边界

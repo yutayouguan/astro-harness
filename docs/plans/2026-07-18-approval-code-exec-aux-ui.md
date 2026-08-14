@@ -13,7 +13,7 @@
 ### Task 1: 审批策略集成测试
 
 **Files:**
-- Modify: `agent/src/streaming/tools_exec.rs`
+- Modify: `crates/agent-core/src/streaming/tools_exec.rs`
 
 1. 抽取纯函数，输入 `command`、`ApprovalMode`、白名单，输出 hardline/allowlist/off/manual/smart 分支策略。
 2. 编写覆盖 hardline、off、manual、白名单的单元测试。
@@ -22,7 +22,7 @@
 ### Task 2: code_exec 子进程安全护栏
 
 **Files:**
-- Modify: `tools/src/builtins/system/code_exec.rs`
+- Modify: `crates/agent-tools/src/builtin/shell/code_exec.rs`
 - Modify: `docs/coding-tools.md`
 
 1. 先写敏感环境变量判定与环境过滤测试。

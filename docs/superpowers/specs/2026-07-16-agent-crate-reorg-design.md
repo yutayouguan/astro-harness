@@ -115,9 +115,9 @@ agent/src/
 
 ### 已知调用方迁移
 
-- `backend/src/grpc/astro_service.rs`：`loop_` → 根或 `runtime`；`spawn_background_review_*` → `exec::memory_review`；`ImageGenTargets` → `tools`
-- `backend/src/cron_runner.rs`：`agent::cron_exec` → `agent::exec::cron`
-- `backend/src/grpc/interrupt_store.rs`：根上 Interrupt/HITL 可保持
+- `crates/agent-server/src/grpc/astro_service.rs`：`loop_` → 根或 `runtime`；`spawn_background_review_*` → `exec::memory_review`；`ImageGenTargets` → `tools`
+- `crates/agent-server/src/cron_runner.rs`：`agent::cron_exec` → `agent::exec::cron`
+- `crates/agent-server/src/grpc/interrupt_store.rs`：根上 Interrupt/HITL 可保持
 - `agent/tests/*`：只改 `use` 路径
 
 ## 落地顺序

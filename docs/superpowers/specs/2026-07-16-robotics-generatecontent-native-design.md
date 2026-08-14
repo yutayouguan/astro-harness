@@ -129,10 +129,10 @@ image_gen_targets.google()
 
 | 区域 | 变更 |
 |------|------|
-| `providers/src/protocol/robotics_http.rs`（新） | URL、body、解析、`default_robotics_model` |
-| `providers/src/protocol/mod.rs`（及 lib 导出） | 挂载模块 |
-| `tools/src/builtins/media/robotics.rs`（新） | 注册 + dispatch |
-| `tools/src/builtins/media/mod.rs` + 工具 dispatch | 挂载 |
+| `crates/agent-providers/src/protocol/robotics_http.rs`（新） | URL、body、解析、`default_robotics_model` |
+| `crates/agent-providers/src/protocol/mod.rs`（及 lib 导出） | 挂载模块 |
+| `crates/agent-tools/src/builtin/media/robotics.rs`（新） | 注册 + dispatch |
+| `crates/agent-tools/src/builtin/media/mod.rs` + 工具 dispatch | 挂载 |
 | frontend i18n（`agentTools.robotics`） | 工具描述 |
 | 测试 | providers 单测 + tools mock HTTP |
 

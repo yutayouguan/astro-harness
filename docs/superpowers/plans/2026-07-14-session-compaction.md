@@ -21,14 +21,14 @@
 
 | File | Responsibility |
 |------|----------------|
-| Modify: `memory/src/session/store/sessions.rs` | `end_session`、`assert_session_writable` |
-| Modify: `memory/src/session/store/messages.rs` | `start_inclusive_for_tail_bubbles`、`compact_and_split`；`append_message` 写保护 |
-| Modify: `memory/src/session/store/search.rs` | `list_recent_sessions` 选出 `ended_at` / `end_reason` |
-| Modify: `memory/src/session/store/mod.rs` | `RecentSession` 增加结束字段 |
+| Modify: `crates/agent-memory/src/session/store/sessions.rs` | `end_session`、`assert_session_writable` |
+| Modify: `crates/agent-memory/src/session/store/messages.rs` | `start_inclusive_for_tail_bubbles`、`compact_and_split`；`append_message` 写保护 |
+| Modify: `crates/agent-memory/src/session/store/search.rs` | `list_recent_sessions` 选出 `ended_at` / `end_reason` |
+| Modify: `crates/agent-memory/src/session/store/mod.rs` | `RecentSession` 增加结束字段 |
 | Modify: `memory/tests/session_store_test.rs` | end / compact / writable 单测 |
-| Create: `frontend/src-tauri/src/compaction_commands.rs` | 摘要（LLM + 启发式）+ `compact_chat_session` |
-| Modify: `frontend/src-tauri/src/lib.rs` | `mod` + register command |
-| Modify: `frontend/src-tauri/src/commands.rs` | `RecentSessionDto` 加 `endReason`（若放在本文件） |
+| Create: `apps/desktop/src-tauri/src/compaction_commands.rs` | 摘要（LLM + 启发式）+ `compact_chat_session` |
+| Modify: `apps/desktop/src-tauri/src/lib.rs` | `mod` + register command |
+| Modify: `apps/desktop/src-tauri/src/commands.rs` | `RecentSessionDto` 加 `endReason`（若放在本文件） |
 | Modify: `apps/desktop/src/types.ts` | DTO 类型 |
 | Modify: `apps/desktop/src/lib/composerCommands.ts` | `/compact` slash |
 | Modify: `apps/desktop/src/App.tsx` | compact handler、自动阈值、切会话 |
@@ -52,8 +52,8 @@ const COMPACTION_FALLBACK_PREFIX: &str = "[CONTEXT COMPACTION — fallback summa
 ### Task 1: `end_session` + `assert_session_writable`
 
 **Files:**
-- Modify: `memory/src/session/store/sessions.rs`
-- Modify: `memory/src/session/store/messages.rs`（`append_message` 开头调用 guard）
+- Modify: `crates/agent-memory/src/session/store/sessions.rs`
+- Modify: `crates/agent-memory/src/session/store/messages.rs`（`append_message` 开头调用 guard）
 - Modify: `memory/tests/session_store_test.rs`
 
 - [ ] **Step 1: 写失败测试**
@@ -165,7 +165,7 @@ EOF
 ### Task 2: `compact_and_split` + 尾部气泡 helper
 
 **Files:**
-- Modify: `memory/src/session/store/messages.rs`
+- Modify: `crates/agent-memory/src/session/store/messages.rs`
 - Modify: `memory/tests/session_store_test.rs`
 
 - [ ] **Step 1: 写失败测试**
@@ -422,9 +422,9 @@ EOF
 ### Task 3: 侧栏 DTO 暴露 `endReason`
 
 **Files:**
-- Modify: `memory/src/session/store/mod.rs`（`RecentSession`）
-- Modify: `memory/src/session/store/search.rs`（`list_recent_sessions` SELECT）
-- Modify: `frontend/src-tauri/src/commands.rs`（`RecentSessionDto` + map）
+- Modify: `crates/agent-memory/src/session/store/mod.rs`（`RecentSession`）
+- Modify: `crates/agent-memory/src/session/store/search.rs`（`list_recent_sessions` SELECT）
+- Modify: `apps/desktop/src-tauri/src/commands.rs`（`RecentSessionDto` + map）
 - Modify: `apps/desktop/src/types.ts`
 
 - [ ] **Step 1: 扩展 `RecentSession`**
@@ -462,7 +462,7 @@ export type RecentSessionDto = {
 
 ```bash
 cargo check -p memory
-cargo check -p frontend-lib 2>/dev/null || cargo check --manifest-path frontend/src-tauri/Cargo.toml
+cargo check -p frontend-lib 2>/dev/null || cargo check --manifest-path apps/desktop/src-tauri/Cargo.toml
 ```
 
 Expected: 无错误（按仓库实际 package 名调整）
@@ -471,7 +471,7 @@ Expected: 无错误（按仓库实际 package 名调整）
 
 ```bash
 git add memory/src/session/store/mod.rs memory/src/session/store/search.rs \
-  frontend/src-tauri/src/commands.rs apps/desktop/src/types.ts
+  apps/desktop/src-tauri/src/commands.rs apps/desktop/src/types.ts
 git commit -m "$(cat <<'EOF'
 feat(session): expose end_reason on recent session list
 
@@ -484,8 +484,8 @@ EOF
 ### Task 4: Tauri `compact_chat_session`（摘要 + 拆分）
 
 **Files:**
-- Create: `frontend/src-tauri/src/compaction_commands.rs`
-- Modify: `frontend/src-tauri/src/lib.rs`
+- Create: `apps/desktop/src-tauri/src/compaction_commands.rs`
+- Modify: `apps/desktop/src-tauri/src/lib.rs`
 
 - [ ] **Step 1: 模块骨架与 DTO**
 
@@ -671,7 +671,7 @@ pub async fn compact_chat_session(
 - [ ] **Step 5: 编译**
 
 ```bash
-cargo check --manifest-path frontend/src-tauri/Cargo.toml
+cargo check --manifest-path apps/desktop/src-tauri/Cargo.toml
 ```
 
 Expected: ok
@@ -679,7 +679,7 @@ Expected: ok
 - [ ] **Step 6: Commit**
 
 ```bash
-git add frontend/src-tauri/src/compaction_commands.rs frontend/src-tauri/src/lib.rs
+git add apps/desktop/src-tauri/src/compaction_commands.rs apps/desktop/src-tauri/src/lib.rs
 git commit -m "$(cat <<'EOF'
 feat(tauri): add compact_chat_session with LLM/heuristic summary
 

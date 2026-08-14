@@ -21,14 +21,14 @@
 | Modify: `apps/desktop/src/types.ts` | `ChatTimelineSegment`；`ChatMessage.segments`；history DTO |
 | Modify: `apps/desktop/src/components/ChatView.tsx` | 有 segments 时逐段渲染；无则分组回退 |
 | Modify: `apps/desktop/src/App.tsx` | 流式事件走 `chatTimeline`；restore 映射 segments/surfaces |
-| Create: `agent/src/timeline.rs` | Rust 侧 `TimelineBuilder` + JSON 合并进 `reasoning_details` |
-| Modify: `agent/src/lib.rs` | `mod timeline` |
-| Modify: `agent/src/loop_.rs` | `record_assistant_message_with_tools` 接受 `reasoning_details` |
-| Modify: `agent/src/streaming.rs` | 维护 builder；落盘时写入 |
-| Modify: `memory/src/session/store/mod.rs` | `ChatHistoryMessage.segments` / `ui_surfaces` |
-| Modify: `memory/src/session/store/search.rs` | `build_chat_history` 解析 `astro_timeline_v1` / `astro_surfaces_v1` |
+| Create: `crates/agent-core/src/timeline.rs` | Rust 侧 `TimelineBuilder` + JSON 合并进 `reasoning_details` |
+| Modify: `crates/agent-core/src/lib.rs` | `mod timeline` |
+| Modify: `crates/agent-core/src/loop_.rs` | `record_assistant_message_with_tools` 接受 `reasoning_details` |
+| Modify: `crates/agent-core/src/streaming.rs` | 维护 builder；落盘时写入 |
+| Modify: `crates/agent-memory/src/session/store/mod.rs` | `ChatHistoryMessage.segments` / `ui_surfaces` |
+| Modify: `crates/agent-memory/src/session/store/search.rs` | `build_chat_history` 解析 `astro_timeline_v1` / `astro_surfaces_v1` |
 | Create: `memory/tests/timeline_history_test.rs`（或扩展 `session_store_test.rs`） | 读写 timeline |
-| Modify: `frontend/src-tauri/src/commands.rs` | history DTO 增加 `segments` / `uiSurfaces` |
+| Modify: `apps/desktop/src-tauri/src/commands.rs` | history DTO 增加 `segments` / `uiSurfaces` |
 | Modify: `docs/superpowers/specs/2026-07-13-chat-timeline-interleave-design.md` | Status → Implemented（收尾） |
 
 ---
@@ -472,11 +472,11 @@ EOF
 ### Task 4: Agent `TimelineBuilder` + 落盘
 
 **Files:**
-- Create: `agent/src/timeline.rs`
-- Modify: `agent/src/lib.rs`
-- Modify: `agent/src/loop_.rs`
-- Modify: `agent/src/streaming.rs`
-- Test: `agent/src/timeline.rs` 内 `#[cfg(test)]` 或 `agent/tests/timeline_test.rs`
+- Create: `crates/agent-core/src/timeline.rs`
+- Modify: `crates/agent-core/src/lib.rs`
+- Modify: `crates/agent-core/src/loop_.rs`
+- Modify: `crates/agent-core/src/streaming.rs`
+- Test: `crates/agent-core/src/timeline.rs` 内 `#[cfg(test)]` 或 `agent/tests/timeline_test.rs`
 
 - [ ] **Step 1: 实现 `timeline.rs`**
 
@@ -664,10 +664,10 @@ EOF
 ### Task 5: SessionStore history 还原 + Tauri DTO
 
 **Files:**
-- Modify: `memory/src/session/store/mod.rs`
-- Modify: `memory/src/session/store/search.rs`
+- Modify: `crates/agent-memory/src/session/store/mod.rs`
+- Modify: `crates/agent-memory/src/session/store/search.rs`
 - Modify: `memory/tests/session_store_test.rs`（或新建 `timeline_history_test.rs`）
-- Modify: `frontend/src-tauri/src/commands.rs`
+- Modify: `apps/desktop/src-tauri/src/commands.rs`
 - Modify: `apps/desktop/src/types.ts`（history DTO）
 - Modify: `apps/desktop/src/App.tsx`（`mapHistoryMessages`）
 
@@ -745,7 +745,7 @@ uiSurfaces: Array.isArray(m.uiSurfaces)
 - [ ] **Step 6: Commit**
 
 ```bash
-git add memory frontend/src-tauri/src/commands.rs apps/desktop/src/App.tsx apps/desktop/src/types.ts
+git add memory apps/desktop/src-tauri/src/commands.rs apps/desktop/src/App.tsx apps/desktop/src/types.ts
 git commit -m "$(cat <<'EOF'
 feat(session): restore chat timeline segments from reasoning_details
 

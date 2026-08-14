@@ -23,14 +23,14 @@
 ### Task 1: Add the independent `music_gen` model capability
 
 **Files:**
-- Modify: `frontend/src-tauri/src/litellm_meta.rs`
-- Modify: `frontend/src-tauri/src/model_meta.rs`
+- Modify: `apps/desktop/src-tauri/src/litellm_meta.rs`
+- Modify: `apps/desktop/src-tauri/src/model_meta.rs`
 - Modify: `apps/desktop/src/types.ts`
 - Modify: `apps/desktop/src/lib/model/modelCaps.ts`
 - Modify: `apps/desktop/src/lib/model/modelCaps.test.ts`
 - Modify: `apps/desktop/src/components/agents/ModelCapabilityIcons.tsx`
 - Modify: `apps/desktop/src/i18n/messages.ts`
-- Modify: TypeScript test fixtures containing complete `ModelCapabilities` literals, as reported by `rg "audio_gen:" frontend/src --glob '*.{ts,tsx}'`
+- Modify: TypeScript test fixtures containing complete `ModelCapabilities` literals, as reported by `rg "audio_gen:" apps/desktop/src --glob '*.{ts,tsx}'`
 
 **Interfaces:**
 - Produces: `ModelCapabilities.music_gen: bool` in Rust and `music_gen: boolean` in TypeScript.
@@ -39,7 +39,7 @@
 
 - [ ] **Step 1: Add failing Rust metadata tests**
 
-In `frontend/src-tauri/src/model_meta.rs`, add fixtures covering the documented mode, the current Lyria metadata shape, and the TTS negative case:
+In `apps/desktop/src-tauri/src/model_meta.rs`, add fixtures covering the documented mode, the current Lyria metadata shape, and the TTS negative case:
 
 ```rust
 #[test]
@@ -93,7 +93,7 @@ Expected: FAIL because `music_gen` and `supported_output_modalities` do not exis
 
 - [ ] **Step 3: Parse music metadata and map it without model-name guessing**
 
-In `frontend/src-tauri/src/litellm_meta.rs`, add the field to both structs:
+In `apps/desktop/src-tauri/src/litellm_meta.rs`, add the field to both structs:
 
 ```rust
 pub supported_output_modalities: Vec<String>,
@@ -110,7 +110,7 @@ supported_output_modalities: self.supported_output_modalities,
 
 Include `|| !e.supported_output_modalities.is_empty()` in the `parse_map` retention condition.
 
-In `frontend/src-tauri/src/model_meta.rs`, add the serde-defaulted field and update `enrich_model_info`:
+In `apps/desktop/src-tauri/src/model_meta.rs`, add the serde-defaulted field and update `enrich_model_info`:
 
 ```rust
 #[serde(default)]
@@ -204,8 +204,8 @@ Expected: all tests PASS and TypeScript exits 0.
 - [ ] **Step 8: Commit the capability slice**
 
 ```bash
-git add frontend/src-tauri/src/litellm_meta.rs frontend/src-tauri/src/model_meta.rs apps/desktop/src/types.ts apps/desktop/src/lib/model/modelCaps.ts apps/desktop/src/lib/model/modelCaps.test.ts apps/desktop/src/components/agents/ModelCapabilityIcons.tsx apps/desktop/src/i18n/messages.ts
-git add $(rg -l "music_gen: false" frontend/src --glob '*.{ts,tsx}')
+git add apps/desktop/src-tauri/src/litellm_meta.rs apps/desktop/src-tauri/src/model_meta.rs apps/desktop/src/types.ts apps/desktop/src/lib/model/modelCaps.ts apps/desktop/src/lib/model/modelCaps.test.ts apps/desktop/src/components/agents/ModelCapabilityIcons.tsx apps/desktop/src/i18n/messages.ts
+git add $(rg -l "music_gen: false" apps/desktop/src --glob '*.{ts,tsx}')
 git commit -m "feat(models): distinguish music generation capability"
 ```
 
@@ -386,11 +386,11 @@ git commit -m "feat(providers): add media model filtering helpers"
 ### Task 3: Carry `music_model` through provider persistence and runtime transport
 
 **Files:**
-- Modify: `frontend/src-tauri/src/providers_commands.rs`
+- Modify: `apps/desktop/src-tauri/src/providers_commands.rs`
 - Modify: `proto/proto/astro.proto`
-- Modify: `frontend/src-tauri/src/commands.rs`
-- Modify: `backend/src/grpc/astro_service.rs`
-- Modify: `tools/src/core/context.rs`
+- Modify: `apps/desktop/src-tauri/src/commands.rs`
+- Modify: `crates/agent-server/src/grpc/astro_service.rs`
+- Modify: `crates/agent-tools/src/engine/context.rs`
 - Modify: Rust tests and constructors reported by `rg "ImageGenCreds \\{|ImageGenTargets::from_parts" --glob '*.rs'`
 
 **Interfaces:**
@@ -399,7 +399,7 @@ git commit -m "feat(providers): add media model filtering helpers"
 
 - [ ] **Step 1: Add failing provider backward-compatibility and default-resolution tests**
 
-In `frontend/src-tauri/src/providers_commands.rs` tests, add:
+In `apps/desktop/src-tauri/src/providers_commands.rs` tests, add:
 
 ```rust
 #[test]
@@ -468,7 +468,7 @@ Append to `ChatRequest` in `proto/proto/astro.proto` without renumbering existin
 string image_gen_music_model = 27;
 ```
 
-In `tools/src/core/context.rs`, add:
+In `crates/agent-tools/src/engine/context.rs`, add:
 
 ```rust
 /// 音乐生成模型（Google Lyria）；空则使用 clip 默认。
@@ -485,7 +485,7 @@ Use:
 rg "ImageGenCreds \\{|ImageGenTargets::from_parts|ChatRequest \\{" --glob '*.rs'
 ```
 
-For Tauri `frontend/src-tauri/src/commands.rs`, populate:
+For Tauri `apps/desktop/src-tauri/src/commands.rs`, populate:
 
 ```rust
 image_gen_music_model: primary
@@ -493,7 +493,7 @@ image_gen_music_model: primary
     .unwrap_or_default(),
 ```
 
-For `backend/src/grpc/astro_service.rs`, pass:
+For `crates/agent-server/src/grpc/astro_service.rs`, pass:
 
 ```rust
 &req.image_gen_music_model,
@@ -520,7 +520,7 @@ Expected: formatting check, tests, and all four package checks PASS.
 - [ ] **Step 7: Commit the transport slice**
 
 ```bash
-git add frontend/src-tauri/src/providers_commands.rs proto/proto/astro.proto frontend/src-tauri/src/commands.rs backend/src/grpc/astro_service.rs tools/src/core/context.rs
+git add apps/desktop/src-tauri/src/providers_commands.rs proto/proto/astro.proto apps/desktop/src-tauri/src/commands.rs backend/src/grpc/astro_service.rs tools/src/engine/context.rs
 git add $(rg -l "music_model:" --glob '*.rs')
 git commit -m "feat(providers): carry configured music model to tools"
 ```
@@ -530,7 +530,7 @@ git commit -m "feat(providers): carry configured music model to tools"
 ### Task 4: Make the existing `music_gen` tool honor provider configuration
 
 **Files:**
-- Modify: `tools/src/builtins/media/music_gen.rs`
+- Modify: `crates/agent-tools/src/builtin/media/music_gen.rs`
 
 **Interfaces:**
 - Consumes: `ImageGenCreds.music_model` from Task 3.
@@ -664,7 +664,7 @@ Expected: all tests PASS.
 - [ ] **Step 5: Commit the tool behavior**
 
 ```bash
-git add tools/src/builtins/media/music_gen.rs
+git add tools/src/builtin/media/music_gen.rs
 git commit -m "feat(tools): honor configured music generation model"
 ```
 
@@ -940,7 +940,7 @@ In the Tauri application:
 ```bash
 git status --short
 git diff
-git add frontend/src-tauri/src/litellm_meta.rs frontend/src-tauri/src/model_meta.rs frontend/src-tauri/src/providers_commands.rs frontend/src-tauri/src/commands.rs proto/proto/astro.proto backend/src/grpc/astro_service.rs tools/src/core/context.rs tools/src/builtins/media/music_gen.rs apps/desktop/src/types.ts apps/desktop/src/lib/model/modelCaps.ts apps/desktop/src/lib/model/modelCaps.test.ts apps/desktop/src/lib/providers/mediaModelOptions.ts apps/desktop/src/lib/providers/mediaModelOptions.test.ts apps/desktop/src/components/agents/ModelCapabilityIcons.tsx apps/desktop/src/components/settings/ProvidersPanel.tsx apps/desktop/src/i18n/messages.ts apps/desktop/src/styles/features/providers.css
+git add apps/desktop/src-tauri/src/litellm_meta.rs apps/desktop/src-tauri/src/model_meta.rs apps/desktop/src-tauri/src/providers_commands.rs apps/desktop/src-tauri/src/commands.rs proto/proto/astro.proto backend/src/grpc/astro_service.rs tools/src/engine/context.rs tools/src/builtin/media/music_gen.rs apps/desktop/src/types.ts apps/desktop/src/lib/model/modelCaps.ts apps/desktop/src/lib/model/modelCaps.test.ts apps/desktop/src/lib/providers/mediaModelOptions.ts apps/desktop/src/lib/providers/mediaModelOptions.test.ts apps/desktop/src/components/agents/ModelCapabilityIcons.tsx apps/desktop/src/components/settings/ProvidersPanel.tsx apps/desktop/src/i18n/messages.ts apps/desktop/src/styles/features/providers.css
 git commit -m "fix(providers): address media selector verification"
 ```
 

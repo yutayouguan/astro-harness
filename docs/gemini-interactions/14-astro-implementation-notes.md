@@ -50,7 +50,7 @@ Gemini 3 默认思考时，常见顺序是：`thought`（index 0）→ `function
 
 ### 3.1 工具入参为空 `{}`（主 bug）
 
-**文件**：`providers/src/google/interactions_chat.rs`
+**文件**：`crates/agent-providers/src/google/interactions_chat.rs`
 
 - 同时识别 `arguments_delta` + `arguments` 与 `arguments` + `partial_arguments`
 - `step.start` 上的空 `{}` 不当作有效参数
@@ -95,7 +95,7 @@ Gemini 3 默认思考时，常见顺序是：`thought`（index 0）→ `function
   └─ 必须按序重放：user_input → thought? → model_output? → function_call(+signature) → function_result → …
 ```
 
-注入 `previous_interaction_id`：`agent/src/streaming/provider.rs`（流中捕获 `interaction.id`，下一轮写入 `ProviderConfig`）。
+注入 `previous_interaction_id`：`crates/agent-core/src/streaming/provider.rs`（流中捕获 `interaction.id`，下一轮写入 `ProviderConfig`）。
 
 ---
 
@@ -103,13 +103,13 @@ Gemini 3 默认思考时，常见顺序是：`thought`（index 0）→ `function
 
 | 职责 | 路径 |
 | --- | --- |
-| SSE 解析 / 请求体 | `providers/src/google/interactions_chat.rs` |
-| HTTP + Api-Revision | `providers/src/google/interactions_http.rs` |
-| Chunk / ChatMessage 字段 | `providers/src/api/trait_.rs` |
-| 工具 delta 累积 | `tools/src/core/parse.rs` |
-| 多轮流 + 落盘 | `agent/src/streaming/multi_turn.rs` |
-| 会话镜像 / hydrate | `common/src/message.rs`、`agent/src/runtime/{mod,session}.rs`、`agent/src/prompt/messages.rs` |
-| gRPC（忽略 ThoughtSignature） | `backend/src/grpc/astro_service.rs` |
+| SSE 解析 / 请求体 | `crates/agent-providers/src/google/interactions_chat.rs` |
+| HTTP + Api-Revision | `crates/agent-providers/src/google/interactions_http.rs` |
+| Chunk / ChatMessage 字段 | `crates/agent-providers/src/api/trait_.rs` |
+| 工具 delta 累积 | `crates/agent-tools/src/engine/parse.rs` |
+| 多轮流 + 落盘 | `crates/agent-core/src/streaming/multi_turn.rs` |
+| 会话镜像 / hydrate | `common/src/message.rs`、`crates/agent-core/src/runtime/{mod,session}.rs`、`crates/agent-core/src/prompt/messages.rs` |
+| gRPC（忽略 ThoughtSignature） | `crates/agent-server/src/grpc/astro_service.rs` |
 
 相关 helper：
 

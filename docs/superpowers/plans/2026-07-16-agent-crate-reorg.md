@@ -24,20 +24,20 @@
 
 | Path | Responsibility |
 |------|----------------|
-| `agent/src/lib.rs` | 域 `mod` + B 根导出 |
-| `agent/src/builder.rs` | 保持顶层 |
-| `agent/src/event_bus.rs` | 保持顶层 |
-| `agent/src/timeline.rs` | 保持顶层 |
-| `agent/src/prompt/` | context、context_usage、prompt_builder、messages、hooks |
-| `agent/src/control/` | hitl、interrupt、smart_approval、schema_validate |
-| `agent/src/exec/` | cron、delegate、orchestration、multi_agent、memory_review |
-| `agent/src/runtime/` | AgentLoop 主体 + session/validate/budget/usage |
-| `agent/src/streaming/` | types/traits/provider/multi_turn/hitl_bridge/summary/fallback |
-| `backend/src/grpc/astro_service.rs` | 更新 `use` / `ImageGenTargets` / memory_review 路径 |
-| `backend/src/cron_runner.rs` | `agent::exec::cron` |
-| `backend/src/grpc/interrupt_store.rs` | 根 HITL/Interrupt 可不变；注释路径更新 |
-| `frontend/src-tauri/src/commands.rs` | `agent::cron_exec` → `agent::exec::cron` |
-| `frontend/src-tauri/src/memory_commands.rs` | 文档链接 `loop_` → `runtime` |
+| `crates/agent-core/src/lib.rs` | 域 `mod` + B 根导出 |
+| `crates/agent-core/src/builder.rs` | 保持顶层 |
+| `crates/agent-core/src/event_bus.rs` | 保持顶层 |
+| `crates/agent-core/src/timeline.rs` | 保持顶层 |
+| `crates/agent-core/src/prompt/` | context、context_usage、prompt_builder、messages、hooks |
+| `crates/agent-core/src/control/` | hitl、interrupt、smart_approval、schema_validate |
+| `crates/agent-core/src/exec/` | cron、delegate、orchestration、multi_agent、memory_review |
+| `crates/agent-core/src/runtime/` | AgentLoop 主体 + session/validate/budget/usage |
+| `crates/agent-core/src/streaming/` | types/traits/provider/multi_turn/hitl_bridge/summary/fallback |
+| `crates/agent-server/src/grpc/astro_service.rs` | 更新 `use` / `ImageGenTargets` / memory_review 路径 |
+| `crates/agent-server/src/cron_runner.rs` | `agent::exec::cron` |
+| `crates/agent-server/src/grpc/interrupt_store.rs` | 根 HITL/Interrupt 可不变；注释路径更新 |
+| `apps/desktop/src-tauri/src/commands.rs` | `agent::cron_exec` → `agent::exec::cron` |
+| `apps/desktop/src-tauri/src/memory_commands.rs` | 文档链接 `loop_` → `runtime` |
 | `agent/tests/*.rs` | 全部 `use` 路径 |
 | 文档注释 | `docs/hooks.md`、crate 头注释中的旧路径 |
 
@@ -69,11 +69,11 @@
 ### Task 1: 搬 `prompt` + `control` 域
 
 **Files:**
-- Create: `agent/src/prompt/mod.rs`
-- Create: `agent/src/control/mod.rs`
+- Create: `crates/agent-core/src/prompt/mod.rs`
+- Create: `crates/agent-core/src/control/mod.rs`
 - Move: `context.rs` → `prompt/context.rs`；`context_usage.rs` → `prompt/context_usage.rs`；`prompt_builder.rs` → `prompt/prompt_builder.rs`；`messages.rs` → `prompt/messages.rs`；`hooks.rs` → `prompt/hooks.rs`
 - Move: `hitl.rs` → `control/hitl.rs`；`interrupt.rs` → `control/interrupt.rs`；`smart_approval.rs` → `control/smart_approval.rs`；`schema_validate.rs` → `control/schema_validate.rs`
-- Modify: `agent/src/lib.rs`（临时仍从新路径 re-export 旧根符号，保证本 Task 后外部 `use agent::StaticContext` 等仍编译）
+- Modify: `crates/agent-core/src/lib.rs`（临时仍从新路径 re-export 旧根符号，保证本 Task 后外部 `use agent::StaticContext` 等仍编译）
 - Modify: 所有 `crate::context` / `crate::hitl` 等内部引用（见上表）
 
 **Interfaces:**
@@ -98,7 +98,7 @@ git mv schema_validate.rs control/schema_validate.rs
 
 - [ ] **Step 2: 写 `prompt/mod.rs` 与 `control/mod.rs`**
 
-`agent/src/prompt/mod.rs`:
+`crates/agent-core/src/prompt/mod.rs`:
 
 ```rust
 pub mod context;
@@ -108,7 +108,7 @@ pub mod messages;
 pub mod prompt_builder;
 ```
 
-`agent/src/control/mod.rs`:
+`crates/agent-core/src/control/mod.rs`:
 
 ```rust
 pub mod hitl;
@@ -182,9 +182,9 @@ EOF
 ### Task 2: 搬 `exec` 域
 
 **Files:**
-- Create: `agent/src/exec/mod.rs`
+- Create: `crates/agent-core/src/exec/mod.rs`
 - Move: `cron_exec.rs` → `exec/cron.rs`；`delegate_exec.rs` → `exec/delegate.rs`；`orchestration.rs` → `exec/orchestration.rs`；`multi_agent.rs` → `exec/multi_agent.rs`；`memory_review_spawn.rs` → `exec/memory_review.rs`
-- Modify: `agent/src/lib.rs`（临时：`pub use exec::memory_review::...` 等保持根符号）
+- Modify: `crates/agent-core/src/lib.rs`（临时：`pub use exec::memory_review::...` 等保持根符号）
 - Modify: 内部 `crate::cron_exec` 等；**本 Task 暂不改** `backend` / Tauri（仍靠根 re-export 或下一步）
 
 **Interfaces:**
@@ -268,7 +268,7 @@ Expected: PASS / 无 error
 - [ ] **Step 6: Commit**
 
 ```bash
-git add agent backend frontend/src-tauri 2>/dev/null || git add agent
+git add agent backend apps/desktop/src-tauri 2>/dev/null || git add agent
 git commit -m "$(cat <<'EOF'
 refactor(agent): move exec domain (cron/delegate/orchestration)
 
@@ -281,11 +281,11 @@ EOF
 ### Task 3: 建 `runtime` 并拆 `loop_.rs`
 
 **Files:**
-- Create: `agent/src/runtime/mod.rs`（主 `AgentLoop` 体，来自原 `loop_.rs` 的 config/loop/TurnResult/MaxDepthError）
-- Create: `agent/src/runtime/session.rs`（`hydrate_session_messages`、`stored_message_to_runtime`、`resolve_session_project_root`）
-- Create: `agent/src/runtime/validate.rs`（`validate_message_order`）
+- Create: `crates/agent-core/src/runtime/mod.rs`（主 `AgentLoop` 体，来自原 `loop_.rs` 的 config/loop/TurnResult/MaxDepthError）
+- Create: `crates/agent-core/src/runtime/session.rs`（`hydrate_session_messages`、`stored_message_to_runtime`、`resolve_session_project_root`）
+- Create: `crates/agent-core/src/runtime/validate.rs`（`validate_message_order`）
 - Move: `iteration_budget.rs` → `runtime/budget.rs`；`usage_record.rs` → `runtime/usage.rs`
-- Delete: `agent/src/loop_.rs`
+- Delete: `crates/agent-core/src/loop_.rs`
 - Modify: `lib.rs` — `pub mod runtime;`；过渡 `pub use runtime as loop_;` **或** `pub mod loop_ { pub use crate::runtime::*; }` 仅本 Task；Task 5 删除
 - Modify: 所有 `crate::loop_` → `crate::runtime`；`crate::iteration_budget` → `crate::runtime::budget`；`crate::usage_record` → `crate::runtime::usage`
 
@@ -307,7 +307,7 @@ git mv agent/src/usage_record.rs agent/src/runtime/usage.rs
 
 - [ ] **Step 2: 从 `loop_.rs` 抽出 `validate.rs` 与 `session.rs`**
 
-`agent/src/runtime/validate.rs` — 整段搬迁原 `validate_message_order`（约 L994–1006），签名不变：
+`crates/agent-core/src/runtime/validate.rs` — 整段搬迁原 `validate_message_order`（约 L994–1006），签名不变：
 
 ```rust
 use common::message::Message;
@@ -327,7 +327,7 @@ pub fn validate_message_order(messages: &[Message]) -> bool {
 }
 ```
 
-`agent/src/runtime/session.rs` — 搬迁 `hydrate_session_messages` / `stored_message_to_runtime` / `resolve_session_project_root`（原 L1008 末尾），按当前 `loop_.rs` 实际依赖调整 `use`（`MemoryManager` / `SessionStore` 以 HEAD 为准）。
+`crates/agent-core/src/runtime/session.rs` — 搬迁 `hydrate_session_messages` / `stored_message_to_runtime` / `resolve_session_project_root`（原 L1008 末尾），按当前 `loop_.rs` 实际依赖调整 `use`（`MemoryManager` / `SessionStore` 以 HEAD 为准）。
 
 - [ ] **Step 3: `runtime/mod.rs` 承接 `AgentConfig` / `AgentLoop` / `TurnResult` / `MaxDepthError`**
 
@@ -490,7 +490,7 @@ cargo test -p agent
 cargo check -p backend
 ```
 
-Expected: PASS；`agent/src/streaming/` 下单文件目视 < 800 行（理想 < 600）
+Expected: PASS；`crates/agent-core/src/streaming/` 下单文件目视 < 800 行（理想 < 600）
 
 - [ ] **Step 6: Commit**
 
@@ -508,14 +508,14 @@ EOF
 ### Task 5: 收紧根导出（B）并更新所有调用方
 
 **Files:**
-- Modify: `agent/src/lib.rs`（最终根导出清单，见 spec §公开 API）
-- Modify: `backend/src/grpc/astro_service.rs`
-- Modify: `backend/src/cron_runner.rs`
-- Modify: `frontend/src-tauri/src/commands.rs`
-- Modify: `frontend/src-tauri/src/memory_commands.rs`（文档注释）
+- Modify: `crates/agent-core/src/lib.rs`（最终根导出清单，见 spec §公开 API）
+- Modify: `crates/agent-server/src/grpc/astro_service.rs`
+- Modify: `crates/agent-server/src/cron_runner.rs`
+- Modify: `apps/desktop/src-tauri/src/commands.rs`
+- Modify: `apps/desktop/src-tauri/src/memory_commands.rs`（文档注释）
 - Modify: `agent/tests/*.rs`
 - Modify: `docs/hooks.md`（`agent::hooks` → `agent::prompt::hooks`）
-- Modify: `delegate/src/lib.rs`、`cron/src/lib.rs`、`tools/src/approval.rs`、`tools/src/builtins/agents/orchestration.rs` 中的路径注释
+- Modify: `delegate/src/lib.rs`、`cron/src/lib.rs`、`crates/agent-tools/src/approval.rs`、`crates/agent-tools/src/builtin/agents/orchestration.rs` 中的路径注释
 
 **Interfaces（最终 `lib.rs` 根导出）：**
 
@@ -615,7 +615,7 @@ Expected: 全部成功
 - [ ] **Step 7: Commit**
 
 ```bash
-git add agent backend frontend/src-tauri docs/hooks.md delegate cron tools
+git add agent backend apps/desktop/src-tauri docs/hooks.md delegate cron tools
 git commit -m "$(cat <<'EOF'
 refactor(agent): tighten crate root exports and update callers
 

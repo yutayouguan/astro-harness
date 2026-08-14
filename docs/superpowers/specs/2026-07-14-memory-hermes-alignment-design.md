@@ -83,11 +83,11 @@ config.yaml (memory.* / auxiliary.*)
 
 | 组件 | 职责 | 建议路径 |
 |------|------|----------|
-| `MemoryStore` | 条目解析/序列化、容量、扫描、去重、live/snapshot | 演进 `memory/src/agent/files.rs` 或新建 `memory/src/agent/store.rs` |
-| `MemoryManager` | 聚合、工具分发、`refresh_snapshot`、日记 append API（非工具） | `memory/src/session/manager.rs` |
-| `AgentLoop` | 捕获/使用 snapshot；构造与换 session 时 reload | `agent/src/loop_.rs` |
-| Tool 注册 | `memory` + `session_search` | `tools/src/builtins/memory_tools.rs` |
-| Config | 扩展共享 `AstroConfig`（hooks 继续读 `hooks:`） | `hooks/src/config.rs` 或抽 `astro-config` 薄模块；**禁止**两套 yaml |
+| `MemoryStore` | 条目解析/序列化、容量、扫描、去重、live/snapshot | 演进 `crates/agent-memory/src/agent/files.rs` 或新建 `crates/agent-memory/src/agent/store.rs` |
+| `MemoryManager` | 聚合、工具分发、`refresh_snapshot`、日记 append API（非工具） | `crates/agent-memory/src/session/manager.rs` |
+| `AgentLoop` | 捕获/使用 snapshot；构造与换 session 时 reload | `crates/agent-core/src/loop_.rs` |
+| Tool 注册 | `memory` + `session_search` | `crates/agent-tools/src/builtin/memory_tools.rs` |
+| Config | 扩展共享 `AstroConfig`（hooks 继续读 `hooks:`） | `crates/agent-hooks/src/config.rs` 或抽 `astro-config` 薄模块；**禁止**两套 yaml |
 
 ---
 

@@ -25,7 +25,7 @@ flowchart LR
 
 ## 2. 回复标记约定
 
-系统提示在 `agent/src/prompt/prompt_builder.rs` 中要求：
+系统提示在 `crates/agent-core/src/prompt/prompt_builder.rs` 中要求：
 
 ```markdown
 ![code](generated/example.py)
@@ -151,7 +151,7 @@ type GeneratingPreview = {
 
 ## 6. 关键文件
 
-- `agent/src/prompt/prompt_builder.rs`：`![code](path)` 输出约定。
+- `crates/agent-core/src/prompt/prompt_builder.rs`：`![code](path)` 输出约定。
 - `apps/desktop/src/lib/media/parseGeneratedMedia.ts`：媒体类型与代码后缀识别。
 - `apps/desktop/src/components/chat/ChatMarkdown.tsx`：Markdown 标记解析。
 - `apps/desktop/src/components/media/GeneratedMediaCard.tsx`：生成结果卡片分发。

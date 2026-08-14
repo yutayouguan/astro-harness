@@ -18,8 +18,8 @@
 
 | 文件 | 职责 |
 |---|---|
-| `agent/src/streaming.rs` | 抽 `record_llm_usage`；`finish_error` 有 usage 时落库 |
-| `agent/src/cron_exec.rs` | 累加 chunk.usage；成功/失败写 llm 事件 |
+| `crates/agent-core/src/streaming.rs` | 抽 `record_llm_usage`；`finish_error` 有 usage 时落库 |
+| `crates/agent-core/src/cron_exec.rs` | 累加 chunk.usage；成功/失败写 llm 事件 |
 | `agent/tests/` 或 `cron_exec` 可测 helper | 用 `ASTRO_MEMORY_DIR` 断言落库 |
 | `apps/desktop/src/components/InsightsPanel.tsx` | metric 切换 + 柱图 |
 | `apps/desktop/src/styles/insights.css` | metric tabs 样式 |
@@ -30,7 +30,7 @@
 ### Task 1: 抽 `record_llm_usage` + 错误路径落库
 
 **Files:**
-- Modify: `agent/src/streaming.rs`
+- Modify: `crates/agent-core/src/streaming.rs`
 - Test: 在 `agent/tests/streaming_test.rs` 或新建小测：设 `ASTRO_MEMORY_DIR`，触发带 usage 的错误收尾，断言 `usage.db` 有 `kind=llm`
 
 - [ ] **Step 1: 抽出辅助函数**（从现有 `finish_usage_and_done` 体中）
@@ -114,7 +114,7 @@ EOF
 ### Task 2: Cron 累加 usage 并写 llm 事件
 
 **Files:**
-- Modify: `agent/src/cron_exec.rs`
+- Modify: `crates/agent-core/src/cron_exec.rs`
 - Test: `agent/tests/cron_exec_test.rs`（扩展）或 memory 侧不测；优先在 cron_exec 测 usage 累加纯函数
 
 - [ ] **Step 1: `run_provider_loop` 返回 `(String, Usage)`**

@@ -21,10 +21,10 @@
 
 | File | Responsibility |
 |------|----------------|
-| `providers/src/protocol/media_http.rs` | `default_vision_model` + `openai_vision_completions` |
+| `crates/agent-providers/src/protocol/media_http.rs` | `default_vision_model` + `openai_vision_completions` |
 | `providers/tests/provider_test.rs` | 默认模型断言 |
-| `tools/src/builtins/vision.rs` | 真正看图 dispatch |
-| `tools/src/core/context.rs` | `ImageGenCreds.vision_model` + `from_parts` |
+| `crates/agent-tools/src/builtin/vision.rs` | 真正看图 dispatch |
+| `crates/agent-tools/src/engine/context.rs` | `ImageGenCreds.vision_model` + `from_parts` |
 | `proto/proto/astro.proto` | `image_gen_vision_model` / fallback |
 | `backend/.../astro_service.rs` + `commands.rs` | 透传字段 |
 | `providers_commands.rs` + DTO/config | persist `vision_model` |
@@ -35,7 +35,7 @@
 ### Task 1: providers 视觉 HTTP helper + 默认模型
 
 **Files:**
-- Modify: `providers/src/protocol/media_http.rs`
+- Modify: `crates/agent-providers/src/protocol/media_http.rs`
 - Modify: `providers/tests/provider_test.rs`
 
 **Interfaces:**
@@ -96,11 +96,11 @@ git commit -m "feat(providers): add OpenAI-compat vision completions helper"
 ### Task 2: `vision_model` 配置透传
 
 **Files:**
-- Modify: `tools/src/core/context.rs` — `ImageGenCreds.vision_model`；`from_parts` 增加 `vision_model` / `fb_vision_model`
+- Modify: `crates/agent-tools/src/engine/context.rs` — `ImageGenCreds.vision_model`；`from_parts` 增加 `vision_model` / `fb_vision_model`
 - Modify: `proto/proto/astro.proto` — `image_gen_vision_model = 24`；`image_gen_fallback_vision_model = 25`
-- Modify: `backend/src/grpc/astro_service.rs` — `from_parts` 传新字段
-- Modify: `frontend/src-tauri/src/commands.rs` — ChatRequest 填字段
-- Modify: `frontend/src-tauri/src/providers_commands.rs` — ProviderConfig/DTO/Input/`resolve_image_gen_targets`/`to_dto`/`save`
+- Modify: `crates/agent-server/src/grpc/astro_service.rs` — `from_parts` 传新字段
+- Modify: `apps/desktop/src-tauri/src/commands.rs` — ChatRequest 填字段
+- Modify: `apps/desktop/src-tauri/src/providers_commands.rs` — ProviderConfig/DTO/Input/`resolve_image_gen_targets`/`to_dto`/`save`
 - Modify: `apps/desktop/src/types.ts` — `vision_model?: string`
 
 **Interfaces:**
@@ -137,7 +137,7 @@ git commit -m "feat(providers): persist and wire vision_model through chat targe
 ### Task 3: 实现 `vision` 工具
 
 **Files:**
-- Modify: `tools/src/builtins/vision.rs`
+- Modify: `crates/agent-tools/src/builtin/vision.rs`
 - Modify: `apps/desktop/src/hooks/useAgentTools.ts`（若描述硬编码）
 - Modify: `apps/desktop/src/i18n/messages.ts` — `agentTools.vision.desc`
 

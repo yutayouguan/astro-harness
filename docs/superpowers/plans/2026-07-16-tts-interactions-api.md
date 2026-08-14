@@ -26,11 +26,11 @@
 
 | File | Responsibility |
 |------|----------------|
-| `providers/src/protocol/interactions_http.rs` | TTS 类型、body、解析、流式、HTTP |
-| `providers/src/protocol/mod.rs` | `pub mod interactions_http` |
-| `providers/src/lib.rs` | re-export |
-| `providers/src/protocol/media_http.rs` | 弃用注释 `google_tts_generate` |
-| `tools/src/builtins/media/tts.rs` | Args 扩展、校验、接线 |
+| `crates/agent-providers/src/protocol/interactions_http.rs` | TTS 类型、body、解析、流式、HTTP |
+| `crates/agent-providers/src/protocol/mod.rs` | `pub mod interactions_http` |
+| `crates/agent-providers/src/lib.rs` | re-export |
+| `crates/agent-providers/src/protocol/media_http.rs` | 弃用注释 `google_tts_generate` |
+| `crates/agent-tools/src/builtin/media/tts.rs` | Args 扩展、校验、接线 |
 
 ## 架构（落地）
 

@@ -25,11 +25,11 @@
 
 | File | Responsibility |
 |------|----------------|
-| `providers/src/protocol/interactions_http.rs` | 新建或扩展：`VisionMode`、图片输入、body/parse、`google_interactions_vision` |
-| `providers/src/protocol/mod.rs` | `pub mod interactions_http`（若尚未注册） |
-| `providers/src/lib.rs` | re-export `interactions_http`（若尚未导出） |
-| `providers/src/protocol/media_http.rs` | 扩展 OpenAI 视觉 helper（多图 + mode）；Google 视觉调用方停止使用 openai 路径 |
-| `tools/src/builtins/media/vision.rs` | 新契约与分流 |
+| `crates/agent-providers/src/protocol/interactions_http.rs` | 新建或扩展：`VisionMode`、图片输入、body/parse、`google_interactions_vision` |
+| `crates/agent-providers/src/protocol/mod.rs` | `pub mod interactions_http`（若尚未注册） |
+| `crates/agent-providers/src/lib.rs` | re-export `interactions_http`（若尚未导出） |
+| `crates/agent-providers/src/protocol/media_http.rs` | 扩展 OpenAI 视觉 helper（多图 + mode）；Google 视觉调用方停止使用 openai 路径 |
+| `crates/agent-tools/src/builtin/media/vision.rs` | 新契约与分流 |
 | `apps/desktop/src/i18n/messages.ts` | 中英 `agentTools.vision.desc` |
 
 ---
@@ -37,9 +37,9 @@
 ### Task 1: Interactions 视觉 — body 构建、响应解析、HTTP
 
 **Files:**
-- Create or Modify: `providers/src/protocol/interactions_http.rs`
-- Modify: `providers/src/protocol/mod.rs`（若缺模块）
-- Modify: `providers/src/lib.rs`（若缺 re-export）
+- Create or Modify: `crates/agent-providers/src/protocol/interactions_http.rs`
+- Modify: `crates/agent-providers/src/protocol/mod.rs`（若缺模块）
+- Modify: `crates/agent-providers/src/lib.rs`（若缺 re-export）
 
 **Interfaces:**
 - Produces:
@@ -54,13 +54,13 @@
 
 - [ ] **Step 1: 注册模块（若文件不存在）**
 
-`providers/src/protocol/mod.rs` 确保有：
+`crates/agent-providers/src/protocol/mod.rs` 确保有：
 
 ```rust
 pub mod interactions_http;
 ```
 
-`providers/src/lib.rs` 的 `pub use protocol::{...}` 加入 `interactions_http`。
+`crates/agent-providers/src/lib.rs` 的 `pub use protocol::{...}` 加入 `interactions_http`。
 
 若文件已存在（image_gen），跳过创建，只追加视觉部分。
 
@@ -410,7 +410,7 @@ EOF
 ### Task 2: 扩展 OpenAI 视觉 helper（多图 + mode）
 
 **Files:**
-- Modify: `providers/src/protocol/media_http.rs`
+- Modify: `crates/agent-providers/src/protocol/media_http.rs`
 
 **Interfaces:**
 - Consumes: `VisionMode` from `crate::interactions_http`（或本文件内镜像 enum；优先 import interactions_http）
@@ -546,7 +546,7 @@ EOF
 ### Task 3: 重写 `vision` 工具分流
 
 **Files:**
-- Modify: `tools/src/builtins/media/vision.rs`
+- Modify: `crates/agent-tools/src/builtin/media/vision.rs`
 
 **Interfaces:**
 - Consumes:
@@ -738,7 +738,7 @@ fn merges_image_url_into_list() {
 - [ ] **Step 4: Commit**
 
 ```bash
-git add tools/src/builtins/media/vision.rs
+git add tools/src/builtin/media/vision.rs
 git commit -m "$(cat <<'EOF'
 feat(tools): route vision through Google Interactions API
 

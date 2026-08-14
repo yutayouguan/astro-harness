@@ -218,4 +218,4 @@ Plugin bus 事件（可拦截/变更）：`pre_llm_call`、`pre_tool_call`、`pr
 
 ## Test Organization
 
-集成测试在各 crate `tests/` 目录下，覆盖核心路径：`crates/agent-core`（9 个测试文件：agent_test、cron_exec_test、streaming_test 等）、`crates/agent-providers`（3）、`crates/agent-orchestration`（2）、`crates/agent-tools`（4）、`crates/agent-a2ui`（3）、`crates/agent-cron`（1）、`crates/agent-server`（1）、`crates/agent-session`（2）、`crates/agent-artifacts`（1）、`crates/agent-usage`（1）。单元测试（`#[cfg(test)]`）分布在约 120 个源文件中。测试环境工具：`core/home/src/test_env.rs`。前端测试在 `apps/desktop/src/a2ui/`。
+集成测试在各 crate `tests/` 目录下，覆盖核心路径：`crates/agent-core`（9 个测试文件：agent_test、cron_exec_test、streaming_test 等）、`crates/agent-providers`（3）、`crates/agent-orchestration`（2）、`crates/agent-tools`（4）、`crates/agent-a2ui`（3）、`crates/agent-cron`（1）、`crates/agent-server`（1）、`crates/agent-session`（2）、`crates/agent-artifacts`（1）、`crates/agent-usage`（1）。单元测试（`#[cfg(test)]`）分布在约 120 个源文件中。测试环境工具：`crates/agent-home/src/test_env.rs`。前端测试在 `apps/desktop/src/a2ui/`。

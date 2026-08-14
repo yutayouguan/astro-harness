@@ -80,7 +80,7 @@ RunStarted.run_id (= turn_id)
 
 | 组件 | 职责 | 路径 |
 |------|------|------|
-| Usage / TraceEvent 透传 | SELECT + 序列化带 `turn_id` | `memory/src/usage/db.rs`、`trace_insights.rs` |
+| Usage / TraceEvent 透传 | SELECT + 序列化带 `turn_id` | `crates/agent-memory/src/usage/db.rs`、`trace_insights.rs` |
 | FE Trace 类型 | 对齐字段 | `InsightsPanel.tsx` |
 | Turn 折叠 UI | 分组、默认折叠、组头小计 | `InsightsPanel` 时间线 / 相关 CSS |
 | 聊天状态 | `run_started` → `currentTurnId`；回合结束可保留「上一局」直至下一局开始 | `App.tsx` |

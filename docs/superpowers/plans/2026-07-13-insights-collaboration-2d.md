@@ -18,13 +18,13 @@
 
 | 文件 | 职责 |
 |------|------|
-| `memory/src/orchestration_db.rs` | `list_in_period`（created_at 窗 + agent + limit） |
-| `memory/src/collab_insights.rs` | `CollaborationInsights` 类型 + `query_collaboration_insights` |
-| `memory/src/usage_db.rs` | 导出 period 边界辅助（`period_window`）供 collab 复用 |
-| `memory/src/lib.rs` | 导出 |
+| `crates/agent-memory/src/orchestration_db.rs` | `list_in_period`（created_at 窗 + agent + limit） |
+| `crates/agent-memory/src/collab_insights.rs` | `CollaborationInsights` 类型 + `query_collaboration_insights` |
+| `crates/agent-memory/src/usage_db.rs` | 导出 period 边界辅助（`period_window`）供 collab 复用 |
+| `crates/agent-memory/src/lib.rs` | 导出 |
 | `memory/tests/collab_insights_test.rs` | TDD：列表过滤、图聚合、agent 过滤、calls 不膨胀 |
-| `frontend/src-tauri/src/config_commands.rs` | `get_collaboration_insights` |
-| `frontend/src-tauri/src/lib.rs` | 注册命令 |
+| `apps/desktop/src-tauri/src/config_commands.rs` | `get_collaboration_insights` |
+| `apps/desktop/src-tauri/src/lib.rs` | 注册命令 |
 | `apps/desktop/src/components/InsightsPanel.tsx` | Tab + 协作 UI + SVG |
 | `apps/desktop/src/styles/insights.css` | 协作布局样式 |
 | `apps/desktop/src/i18n/messages.ts` | 中英文案 |
@@ -36,10 +36,10 @@
 ### Task 1: 导出 period 时间窗 + OrchestrationDb 列表查询（TDD）
 
 **Files:**
-- Modify: `memory/src/usage_db.rs`
-- Modify: `memory/src/orchestration_db.rs`
+- Modify: `crates/agent-memory/src/usage_db.rs`
+- Modify: `crates/agent-memory/src/orchestration_db.rs`
 - Modify: `memory/tests/orchestration_db_test.rs`
-- Modify: `memory/src/lib.rs`（若需导出新类型）
+- Modify: `crates/agent-memory/src/lib.rs`（若需导出新类型）
 
 - [ ] **Step 1: 在 `usage_db` 增加可复用窗口 API**
 
@@ -157,9 +157,9 @@ EOF
 ### Task 2: `query_collaboration_insights`（TDD）
 
 **Files:**
-- Create: `memory/src/collab_insights.rs`
+- Create: `crates/agent-memory/src/collab_insights.rs`
 - Create: `memory/tests/collab_insights_test.rs`
-- Modify: `memory/src/lib.rs`
+- Modify: `crates/agent-memory/src/lib.rs`
 
 - [ ] **Step 1: 类型与查询签名（写进测试与实现）**
 
@@ -389,8 +389,8 @@ EOF
 ### Task 3: Tauri 命令 `get_collaboration_insights`
 
 **Files:**
-- Modify: `frontend/src-tauri/src/config_commands.rs`
-- Modify: `frontend/src-tauri/src/lib.rs`
+- Modify: `apps/desktop/src-tauri/src/config_commands.rs`
+- Modify: `apps/desktop/src-tauri/src/lib.rs`
 
 - [ ] **Step 1: 参数与命令（对齐 `get_usage_insights`）**
 
@@ -433,7 +433,7 @@ cargo check -p astro-agent
 - [ ] **Step 3: Commit**
 
 ```bash
-git add frontend/src-tauri/src/config_commands.rs frontend/src-tauri/src/lib.rs
+git add apps/desktop/src-tauri/src/config_commands.rs apps/desktop/src-tauri/src/lib.rs
 git commit -m "$(cat <<'EOF'
 feat(tauri): expose get_collaboration_insights command
 

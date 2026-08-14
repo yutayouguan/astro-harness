@@ -18,12 +18,12 @@
 
 | Path | Responsibility |
 |------|----------------|
-| `hooks/src/outcome.rs` | `HookPayload.turn_id` |
-| `hooks/src/shell.rs` | `ASTRO_HOOK_TURN`；单元测试 `env_from_payload` |
-| `hooks/src/{lib,plugin,ui}.rs` 等 | 字面量补 `turn_id: None` |
-| `agent/src/loop_.rs` | fire 时 `turn_id: self.current_turn_id.clone()` |
-| `agent/src/streaming.rs` | 同上（取 agent 锁后） |
-| `backend/src/grpc/astro_service.rs` | 无 turn 时 `None`；有 session context 尽量贯通 |
+| `crates/agent-hooks/src/outcome.rs` | `HookPayload.turn_id` |
+| `crates/agent-hooks/src/shell.rs` | `ASTRO_HOOK_TURN`；单元测试 `env_from_payload` |
+| `crates/agent-hooks/src/{lib,plugin,ui}.rs` 等 | 字面量补 `turn_id: None` |
+| `crates/agent-core/src/loop_.rs` | fire 时 `turn_id: self.current_turn_id.clone()` |
+| `crates/agent-core/src/streaming.rs` | 同上（取 agent 锁后） |
+| `crates/agent-server/src/grpc/astro_service.rs` | 无 turn 时 `None`；有 session context 尽量贯通 |
 | `docs/examples/hooks/telemetry-webhook.sh` | 新建示例脚本 |
 | `docs/examples/hooks/config.yaml.snippet` | 补充遥测样例 |
 | `docs/examples/hooks/README.md` | 用法 |
@@ -34,9 +34,9 @@
 ## Task 1: `HookPayload.turn_id` + Shell `ASTRO_HOOK_TURN`（TDD）
 
 **Files:**
-- Modify: `hooks/src/outcome.rs`
-- Modify: `hooks/src/shell.rs`
-- Modify: `hooks/src/lib.rs`、`plugin.rs`、`ui.rs`（测试/字面量）
+- Modify: `crates/agent-hooks/src/outcome.rs`
+- Modify: `crates/agent-hooks/src/shell.rs`
+- Modify: `crates/agent-hooks/src/lib.rs`、`plugin.rs`、`ui.rs`（测试/字面量）
 
 - [x] **Step 1: Write failing tests in `shell.rs` `#[cfg(test)]`**
 
@@ -137,9 +137,9 @@ EOF
 ## Task 2: Agent / streaming / backend fire 站点贯通
 
 **Files:**
-- Modify: `agent/src/loop_.rs`
-- Modify: `agent/src/streaming.rs`
-- Modify: `backend/src/grpc/astro_service.rs`
+- Modify: `crates/agent-core/src/loop_.rs`
+- Modify: `crates/agent-core/src/streaming.rs`
+- Modify: `crates/agent-server/src/grpc/astro_service.rs`
 - 其它 `HookPayload {` 编译失败处（`rg 'HookPayload \{'`）
 
 - [x] **Step 1: Compile after Task 1 — list breakages**

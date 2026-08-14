@@ -346,17 +346,17 @@ Absorb 列表中的技能在批准后被 `set_enabled(false)`，不删文件。
 
 | 文件 | 职责 |
 |------|------|
-| `evolution/src/search.rs` | `SearchBudget`、`effective_candidate_size`、`ScoredVariant`（三维）、`pareto_front`、`select_population`、`candidate_fingerprint`、mutation/crossover 提示词 |
-| `evolution/src/evalset.rs` | `EvalSplit`、`split_eval_examples`、`weighted_eval_score`、`EvalJudgement`、`aggregate_critiques`、grounded eval 提示词 |
-| `evolution/src/gates.rs` | `check_candidate`（含 dry-run）、`TestOutcome`、`run_skill_tests_in_dir`、`sandbox_test_candidate` |
-| `evolution/src/curator.rs` | `CurateReport`、`find_overlap_clusters`、`merge_suggestions_for_clusters`、LLM 诊断提示词/解析/回填、`enqueue_curator_suggestions` |
-| `evolution/src/history.rs` | `SearchRunMeta`、`record_run_meta` |
-| `evolution/src/candidate.rs` | `CandidateKind { NewSkill, Patch, Disable, Merge }` |
-| `evolution/src/reflect.rs` | reflection 提示词、`parse_candidates`（过滤 Disable/Merge 阻止泄入搜索） |
-| `evolution/src/judge.rs` | 泛化 judge 提示词 |
-| `evolution/src/proposal.rs` | 提案落盘/批准/回滚 |
-| `memory/src/config.rs` | `EvolutionSearch`（含 max_eval_examples / max_llm_calls / population_size）、`EvolutionCurator`（含 llm_diagnose / max_llm_calls） |
-| `frontend/src-tauri/src/evolution_run_commands.rs` | Tauri 命令：search 主循环（注入 LLM 调用）、fitness_score、holdout、sandbox、curator LLM 诊断 |
+| `crates/agent-evolution/src/search.rs` | `SearchBudget`、`effective_candidate_size`、`ScoredVariant`（三维）、`pareto_front`、`select_population`、`candidate_fingerprint`、mutation/crossover 提示词 |
+| `crates/agent-evolution/src/evalset.rs` | `EvalSplit`、`split_eval_examples`、`weighted_eval_score`、`EvalJudgement`、`aggregate_critiques`、grounded eval 提示词 |
+| `crates/agent-evolution/src/gates.rs` | `check_candidate`（含 dry-run）、`TestOutcome`、`run_skill_tests_in_dir`、`sandbox_test_candidate` |
+| `crates/agent-evolution/src/curator.rs` | `CurateReport`、`find_overlap_clusters`、`merge_suggestions_for_clusters`、LLM 诊断提示词/解析/回填、`enqueue_curator_suggestions` |
+| `crates/agent-evolution/src/history.rs` | `SearchRunMeta`、`record_run_meta` |
+| `crates/agent-evolution/src/candidate.rs` | `CandidateKind { NewSkill, Patch, Disable, Merge }` |
+| `crates/agent-evolution/src/reflect.rs` | reflection 提示词、`parse_candidates`（过滤 Disable/Merge 阻止泄入搜索） |
+| `crates/agent-evolution/src/judge.rs` | 泛化 judge 提示词 |
+| `crates/agent-evolution/src/proposal.rs` | 提案落盘/批准/回滚 |
+| `crates/agent-memory/src/config.rs` | `EvolutionSearch`（含 max_eval_examples / max_llm_calls / population_size）、`EvolutionCurator`（含 llm_diagnose / max_llm_calls） |
+| `apps/desktop/src-tauri/src/evolution_run_commands.rs` | Tauri 命令：search 主循环（注入 LLM 调用）、fitness_score、holdout、sandbox、curator LLM 诊断 |
 
 ---
 

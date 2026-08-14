@@ -22,19 +22,19 @@
 |------|----------------|
 | Create: `common/src/chat_target.rs` | `ChatTarget`、`FallbackRef`、`expand_chat_targets`、`MAX_CHAT_FALLBACKS=3` |
 | Modify: `common/src/lib.rs` | 导出 chat_target |
-| Create: `agent/src/chat_fallback.rs` | `is_failover_eligible`、`try_stream_completion_with_fallback`、`ActiveTargetMeta` |
-| Modify: `agent/src/lib.rs` | `mod chat_fallback` + 导出 |
-| Modify: `agent/src/streaming.rs` | `ProviderStreamer` / `run_multi_turn_stream*` 吃 `Vec<ChatTarget>`；usage 用实际 hit |
-| Modify: `agent/src/cron_exec.rs` | `CronExecCredentials.targets`；`chat_stream` → helper |
-| Modify: `agent/src/delegate_exec.rs` | 使用 `req.chat_targets` |
-| Modify: `agent/src/loop_.rs` | 可选缓存 `chat_targets` 注入 ToolContext |
-| Modify: `memory/src/delegate_spawn.rs` | `DelegateRunRequest.chat_targets: Vec<common::ChatTarget>` |
-| Modify: `tools/src/core/context.rs` | `ToolContext.chat_targets` |
-| Modify: `tools/src/builtins/delegate.rs` | `build_run_request` 下传链 |
+| Create: `crates/agent-core/src/chat_fallback.rs` | `is_failover_eligible`、`try_stream_completion_with_fallback`、`ActiveTargetMeta` |
+| Modify: `crates/agent-core/src/lib.rs` | `mod chat_fallback` + 导出 |
+| Modify: `crates/agent-core/src/streaming.rs` | `ProviderStreamer` / `run_multi_turn_stream*` 吃 `Vec<ChatTarget>`；usage 用实际 hit |
+| Modify: `crates/agent-core/src/cron_exec.rs` | `CronExecCredentials.targets`；`chat_stream` → helper |
+| Modify: `crates/agent-core/src/delegate_exec.rs` | 使用 `req.chat_targets` |
+| Modify: `crates/agent-core/src/loop_.rs` | 可选缓存 `chat_targets` 注入 ToolContext |
+| Modify: `crates/agent-memory/src/delegate_spawn.rs` | `DelegateRunRequest.chat_targets: Vec<common::ChatTarget>` |
+| Modify: `crates/agent-tools/src/engine/context.rs` | `ToolContext.chat_targets` |
+| Modify: `crates/agent-tools/src/builtin/delegate.rs` | `build_run_request` 下传链 |
 | Modify: `proto/proto/astro.proto` | `ChatFallbackTarget` + `repeated chat_fallbacks = 20` |
-| Modify: `backend/src/grpc/astro_service.rs` | 把 fallbacks 组成 `Vec<ChatTarget>` 传入 multi_turn |
-| Modify: `frontend/src-tauri/src/providers_commands.rs` | `ProviderConfig.fallback`、`resolve_chat_targets`、DTO |
-| Modify: `frontend/src-tauri/src/commands.rs` | `start_chat` / cron resolve 填链 |
+| Modify: `crates/agent-server/src/grpc/astro_service.rs` | 把 fallbacks 组成 `Vec<ChatTarget>` 传入 multi_turn |
+| Modify: `apps/desktop/src-tauri/src/providers_commands.rs` | `ProviderConfig.fallback`、`resolve_chat_targets`、DTO |
+| Modify: `apps/desktop/src-tauri/src/commands.rs` | `start_chat` / cron resolve 填链 |
 | Modify: `apps/desktop/src/components/ProvidersPanel.tsx` | MVP 后备编辑 UI |
 | Modify: `docs/superpowers/specs/2026-07-14-chat-fallback-chain-design.md` | 实现后状态 → 已实现 |
 
@@ -184,9 +184,9 @@ EOF
 ### Task 2: `is_failover_eligible` + stream helper
 
 **Files:**
-- Create: `agent/src/chat_fallback.rs`
-- Modify: `agent/src/lib.rs`
-- Test: `agent/src/chat_fallback.rs` `#[cfg(test)]`
+- Create: `crates/agent-core/src/chat_fallback.rs`
+- Modify: `crates/agent-core/src/lib.rs`
+- Test: `crates/agent-core/src/chat_fallback.rs` `#[cfg(test)]`
 
 - [x] **Step 1: 写失败测试（错误分类）**
 
@@ -298,7 +298,7 @@ EOF
 ### Task 3: 接线 `ProviderStreamer` / multi_turn
 
 **Files:**
-- Modify: `agent/src/streaming.rs`
+- Modify: `crates/agent-core/src/streaming.rs`
 - Modify: 所有 `run_multi_turn_stream` / `stream_multi_turn_with_hitl` 调用方签名
 
 - [x] **Step 1: 扩展签名**
@@ -353,7 +353,7 @@ EOF
 **Files:**
 - Modify: `proto/proto/astro.proto`
 - Rebuild proto（仓库既有脚本 / `cargo build -p proto`）
-- Modify: `backend/src/grpc/astro_service.rs`
+- Modify: `crates/agent-server/src/grpc/astro_service.rs`
 
 - [x] **Step 1: Proto 增量**
 
@@ -416,8 +416,8 @@ EOF
 ### Task 5: Tauri `providers.json` + `resolve_chat_targets`
 
 **Files:**
-- Modify: `frontend/src-tauri/src/providers_commands.rs`
-- Modify: `frontend/src-tauri/src/commands.rs`（`start_chat` / `run_chat_stream` / `resolve_creds_for_job`）
+- Modify: `apps/desktop/src-tauri/src/providers_commands.rs`
+- Modify: `apps/desktop/src-tauri/src/commands.rs`（`start_chat` / `run_chat_stream` / `resolve_creds_for_job`）
 
 - [x] **Step 1: 数据结构**
 
@@ -455,7 +455,7 @@ Cron：`CronExecCredentials` 增加 `targets: Vec<ChatTarget>`（或保留四字
 - [x] **Step 4:**
 
 ```bash
-cargo check -p astro-ui --manifest-path frontend/src-tauri/Cargo.toml
+cargo check -p astro-ui --manifest-path apps/desktop/src-tauri/Cargo.toml
 # 包名以实际 Cargo.toml name 为准
 ```
 
@@ -474,11 +474,11 @@ EOF
 ### Task 6: Cron + Delegate 下传
 
 **Files:**
-- Modify: `agent/src/cron_exec.rs`、`agent/tests/cron_exec_test.rs`
-- Modify: `memory/src/delegate_spawn.rs`
-- Modify: `tools/src/core/context.rs`、`tools/src/builtins/delegate.rs`
-- Modify: `agent/src/loop_.rs`（构造 ToolContext 时填 `chat_targets`）
-- Modify: `agent/src/delegate_exec.rs`
+- Modify: `crates/agent-core/src/cron_exec.rs`、`agent/tests/cron_exec_test.rs`
+- Modify: `crates/agent-memory/src/delegate_spawn.rs`
+- Modify: `crates/agent-tools/src/engine/context.rs`、`crates/agent-tools/src/builtin/delegate.rs`
+- Modify: `crates/agent-core/src/loop_.rs`（构造 ToolContext 时填 `chat_targets`）
+- Modify: `crates/agent-core/src/delegate_exec.rs`
 
 - [x] **Step 1: `CronExecCredentials`**
 

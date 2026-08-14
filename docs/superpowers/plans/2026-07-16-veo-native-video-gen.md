@@ -26,9 +26,9 @@
 
 | File | Responsibility |
 |------|----------------|
-| `providers/src/protocol/media_http.rs` | Veo 原生 URL/body/parse、`google_native_generate_video`；扩展 `VideoGenExtras`/`GeneratedVideo`；兼容路径多参考图 |
-| `tools/src/builtins/media/video_gen.rs` | 新参数契约、校验、native→compat、落盘与 hint |
-| `tools/src/builtins/media/image_gen.rs` | 成功 hint 中的 `reference_image` → `reference_images` |
+| `crates/agent-providers/src/protocol/media_http.rs` | Veo 原生 URL/body/parse、`google_native_generate_video`；扩展 `VideoGenExtras`/`GeneratedVideo`；兼容路径多参考图 |
+| `crates/agent-tools/src/builtin/media/video_gen.rs` | 新参数契约、校验、native→compat、落盘与 hint |
+| `crates/agent-tools/src/builtin/media/image_gen.rs` | 成功 hint 中的 `reference_image` → `reference_images` |
 | `apps/desktop/src/i18n/messages.ts` | 更新 `agentTools.videoGen.desc` 中英 |
 | `skills/bundled/storyboard-video/SKILL.md` | 续拍改推 `extend_video`；多参考图；`astro_bundled_rev` +1 |
 
@@ -37,7 +37,7 @@
 ### Task 1: Veo 原生 URL / 请求体 / 响应解析（纯函数 + 单测）
 
 **Files:**
-- Modify: `providers/src/protocol/media_http.rs`
+- Modify: `crates/agent-providers/src/protocol/media_http.rs`
 
 **Interfaces:**
 - Produces:
@@ -350,7 +350,7 @@ EOF
 ### Task 2: `google_native_generate_video` HTTP 循环 + 兼容多参考图
 
 **Files:**
-- Modify: `providers/src/protocol/media_http.rs`
+- Modify: `crates/agent-providers/src/protocol/media_http.rs`
 
 **Interfaces:**
 - Produces:
@@ -437,8 +437,8 @@ EOF
 ### Task 3: `video_gen` 工具 — 参数、校验、native→compat、落盘
 
 **Files:**
-- Modify: `tools/src/builtins/media/video_gen.rs`
-- Modify: `tools/src/builtins/media/image_gen.rs`（hint 文案一行）
+- Modify: `crates/agent-tools/src/builtin/media/video_gen.rs`
+- Modify: `crates/agent-tools/src/builtin/media/image_gen.rs`（hint 文案一行）
 
 **Interfaces:**
 - Consumes: `google_native_generate_video`、`google_openai_generate_video`、`VideoGenExtras`、`default_video_model`
@@ -590,7 +590,7 @@ Expected: PASS / 无错误
 - [ ] **Step 6: Commit**
 
 ```bash
-git add tools/src/builtins/media/video_gen.rs tools/src/builtins/media/image_gen.rs
+git add tools/src/builtin/media/video_gen.rs tools/src/builtin/media/image_gen.rs
 git commit -m "$(cat <<'EOF'
 feat(tools): route video_gen through native Veo with compat fallback
 

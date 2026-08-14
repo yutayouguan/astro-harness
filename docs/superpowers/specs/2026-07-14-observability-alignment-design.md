@@ -91,8 +91,8 @@ Astro 已具备参考架构同级的 **Agent 运行时** 可观测骨架：
 | 组件 | 职责 | 建议路径 |
 |------|------|----------|
 | `turn_id` 生成与持有 | 回合开始创建；线程/异步任务内传递 | `agent`：`loop_.rs` / `streaming.rs` |
-| Usage 双写 | LLM/工具用量写入 `turn_id` | `agent/src/usage_record.rs` + `memory/src/usage/db.rs` |
-| 日志初始化 | 双 sink（agent + errors）、字段友好格式 | `memory/src/infra/logging.rs` |
+| Usage 双写 | LLM/工具用量写入 `turn_id` | `crates/agent-core/src/usage_record.rs` + `crates/agent-memory/src/usage/db.rs` |
+| 日志初始化 | 双 sink（agent + errors）、字段友好格式 | `crates/agent-memory/src/infra/logging.rs` |
 | 日志查询 | 读滚动文件尾部、过滤、截断 | `memory` 新模块如 `infra/log_query.rs` + Tauri command |
 | 运维 UI | 过滤表单 + 只读行列表 | `PreferencesPanel` 或抽出 `DiagnosticsPanel` 嵌入偏好 |
 

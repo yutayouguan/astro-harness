@@ -114,7 +114,7 @@ Google 视觉路径**禁止**再调用 `google_openai_base` / openai compat comp
 | `providers/.../interactions_http.rs`（新建或复用） | `google_interactions_vision`：Interactions 看图 / 检测 / 分割 |
 | `providers/.../media_http.rs` | 扩展 `openai_vision_completions`（多图 + detect/segment JSON）；Google 视觉不再经此 openai 路径 |
 | `tools/.../vision.rs` | 新参数、mode 分流、多图解析 |
-| `frontend/.../messages.ts`（及对应 i18n） | 更新 `agentTools.vision.desc` |
+| `apps/desktop/.../messages.ts`（及对应 i18n） | 更新 `agentTools.vision.desc` |
 | 测试 | mock HTTP：describe / 多图 / detect schema / Google 失败→OpenAI / 无凭证 |
 
 ## 错误与边界

@@ -22,8 +22,8 @@
 ### Task 1: Tauri IP 城市推测命令
 
 **Files:**
-- Create: `frontend/src-tauri/src/ip_location.rs`
-- Modify: `frontend/src-tauri/src/lib.rs:3-20,240-350`
+- Create: `apps/desktop/src-tauri/src/ip_location.rs`
+- Modify: `apps/desktop/src-tauri/src/lib.rs:3-20,240-350`
 
 **Interfaces:**
 - Produces: `#[tauri::command] async fn infer_ip_location() -> Result<IpLocationDto, String>`
@@ -74,7 +74,7 @@ mod tests {
 Run:
 
 ```bash
-cd frontend/src-tauri && cargo test ip_location
+cd apps/desktop/src-tauri && cargo test ip_location
 ```
 
 Expected: FAIL，`ip_location` 模块或 `parse_ipwho_response` 尚未定义。
@@ -159,7 +159,7 @@ ip_location::infer_ip_location,
 Run:
 
 ```bash
-cd frontend/src-tauri && cargo test ip_location
+cd apps/desktop/src-tauri && cargo test ip_location
 ```
 
 Expected: 4 tests PASS。
@@ -167,7 +167,7 @@ Expected: 4 tests PASS。
 - [ ] **Step 5: 提交后端切片**
 
 ```bash
-git add frontend/src-tauri/src/ip_location.rs frontend/src-tauri/src/lib.rs
+git add apps/desktop/src-tauri/src/ip_location.rs apps/desktop/src-tauri/src/lib.rs
 git commit -m "feat(location): add IP city inference command"
 ```
 
@@ -518,7 +518,7 @@ git commit -m "feat(location): prefill city from IP"
 - [ ] **Step 1: 运行格式检查**
 
 ```bash
-cd frontend/src-tauri && cargo fmt --check
+cd apps/desktop/src-tauri && cargo fmt --check
 ```
 
 Expected: PASS。若失败，运行 `cargo fmt`，只提交本任务相关 Rust 文件的格式变化。
@@ -526,7 +526,7 @@ Expected: PASS。若失败，运行 `cargo fmt`，只提交本任务相关 Rust 
 - [ ] **Step 2: 运行 Rust 测试**
 
 ```bash
-cd frontend/src-tauri && cargo test
+cd apps/desktop/src-tauri && cargo test
 ```
 
 Expected: PASS。

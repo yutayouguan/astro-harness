@@ -6,7 +6,7 @@
 
 **Architecture:** `git mv` files into domain dirs (`chat/`, `filespace/`, `workspace/`, `agents/`, `schedule/`, `settings/`, `ui/`, `icons/`; keep `media/`). Update relative imports (`../X` → `../../X` for nested files) and all consumers (`App.tsx`, hooks, lib, a2ui, sibling components). Optional per-domain `index.ts` barrels. Verify with `npm run build` (runs `tsc -b && vite build`).
 
-**Tech Stack:** React + TypeScript + Vite (`frontend/`), existing relative imports (no new path-alias scheme).
+**Tech Stack:** React + TypeScript + Vite (`apps/desktop/`), existing relative imports (no new path-alias scheme).
 
 ## Global Constraints
 

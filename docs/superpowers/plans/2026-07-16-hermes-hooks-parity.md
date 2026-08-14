@@ -24,16 +24,16 @@
 
 | File | Responsibility |
 |------|----------------|
-| `hooks/src/names.rs` | 7 个常量 + `is_mutating_hook` |
-| `hooks/src/outcome.rs` | `ReplaceText` / `KeepGoing` |
-| `hooks/src/ui.rs` | `UI_HOOK_NAMES` 加入新名；outcome 字符串映射 |
-| `hooks/src/lib.rs` | re-export 新常量 |
+| `crates/agent-hooks/src/names.rs` | 7 个常量 + `is_mutating_hook` |
+| `crates/agent-hooks/src/outcome.rs` | `ReplaceText` / `KeepGoing` |
+| `crates/agent-hooks/src/ui.rs` | `UI_HOOK_NAMES` 加入新名；outcome 字符串映射 |
+| `crates/agent-hooks/src/lib.rs` | re-export 新常量 |
 | `docs/hooks.md` | 钩子表与顺序 |
-| `agent/src/runtime/mod.rs` | 写盘标记；`transform_tool_result`；`subagent_stop` 旁补 start 若适用 |
-| `agent/src/exec/delegate.rs` | `subagent_start` |
-| `agent/src/streaming/tools_exec.rs` | approval 对；terminal 结果后 `transform_terminal_output` |
-| `agent/src/streaming/multi_turn.rs` | `pre_verify` + `transform_llm_output` |
-| `tools/src/builtins/system/terminal.rs` | 可选：暴露 raw 或在内 fire（`tools` 已依赖 `hooks`）；优先 agent 包装 |
+| `crates/agent-core/src/runtime/mod.rs` | 写盘标记；`transform_tool_result`；`subagent_stop` 旁补 start 若适用 |
+| `crates/agent-core/src/exec/delegate.rs` | `subagent_start` |
+| `crates/agent-core/src/streaming/tools_exec.rs` | approval 对；terminal 结果后 `transform_terminal_output` |
+| `crates/agent-core/src/streaming/multi_turn.rs` | `pre_verify` + `transform_llm_output` |
+| `crates/agent-tools/src/builtin/shell/terminal.rs` | 可选：暴露 raw 或在内 fire（`tools` 已依赖 `hooks`）；优先 agent 包装 |
 | `agent/tests/*` / `hooks` 单测 | 覆盖各钩子 |
 
 ---
@@ -41,11 +41,11 @@
 ### Task 1: hooks 基础 — 名字 + Outcome + UI
 
 **Files:**
-- Modify: `hooks/src/names.rs`
-- Modify: `hooks/src/outcome.rs`
-- Modify: `hooks/src/ui.rs`
-- Modify: `hooks/src/lib.rs`（若需 pub use）
-- Modify: `hooks/src/plugin.rs` 测试（可选加 ReplaceText/KeepGoing 短路）
+- Modify: `crates/agent-hooks/src/names.rs`
+- Modify: `crates/agent-hooks/src/outcome.rs`
+- Modify: `crates/agent-hooks/src/ui.rs`
+- Modify: `crates/agent-hooks/src/lib.rs`（若需 pub use）
+- Modify: `crates/agent-hooks/src/plugin.rs` 测试（可选加 ReplaceText/KeepGoing 短路）
 
 **Interfaces:**
 - Produces:
@@ -55,7 +55,7 @@
 
 - [ ] **Step 1: 写失败测试（Outcome 短路）**
 
-在 `hooks/src/plugin.rs` 的 `#[cfg(test)]` 增加：
+在 `crates/agent-hooks/src/plugin.rs` 的 `#[cfg(test)]` 增加：
 
 ```rust
 #[test]
@@ -129,7 +129,7 @@ EOF
 ### Task 2: `transform_tool_result`
 
 **Files:**
-- Modify: `agent/src/runtime/mod.rs`（`handle_tool_call_async` 在 `POST_TOOL_CALL` 前）
+- Modify: `crates/agent-core/src/runtime/mod.rs`（`handle_tool_call_async` 在 `POST_TOOL_CALL` 前）
 - Test: `agent/tests/rig_agent_test.rs` 或新建小测
 
 **Interfaces:**
@@ -183,7 +183,7 @@ EOF
 ### Task 3: `transform_terminal_output`
 
 **Files:**
-- Modify: `agent/src/streaming/tools_exec.rs` 和/或 `tools/src/builtins/system/terminal.rs`
+- Modify: `crates/agent-core/src/streaming/tools_exec.rs` 和/或 `crates/agent-tools/src/builtin/shell/terminal.rs`
 - Prefer: 在 agent 拿到 terminal 结果后、若仍接近 raw，则 fire；若 truncation 在 tools 内，则在 `terminal.rs` 截断前 fire（`tools` 已依赖 `hooks`——可通过 `ToolContext` 增加可选 `hook_bus: Option<Arc<PluginHookBus>>`，无 bus 则跳过）
 
 **Interfaces:**
@@ -209,7 +209,7 @@ EOF
 ### Task 4: `transform_llm_output`
 
 **Files:**
-- Modify: `agent/src/streaming/multi_turn.rs`（在 `POST_LLM_CALL` 前、最终文本写入/下发前）
+- Modify: `crates/agent-core/src/streaming/multi_turn.rs`（在 `POST_LLM_CALL` 前、最终文本写入/下发前）
 
 **Interfaces:**
 - Consumes: `TRANSFORM_LLM_OUTPUT`、`ReplaceText`
@@ -242,7 +242,7 @@ EOF
 ### Task 5: `pre_approval_request` / `post_approval_response`
 
 **Files:**
-- Modify: `agent/src/streaming/tools_exec.rs`（Ask / smart / `park_confirm` 路径）
+- Modify: `crates/agent-core/src/streaming/tools_exec.rs`（Ask / smart / `park_confirm` 路径）
 
 **Interfaces:**
 - Consumes: `PRE_APPROVAL_REQUEST`、`POST_APPROVAL_RESPONSE`（观察，忽略返回值除 Continue）
@@ -269,7 +269,7 @@ EOF
 ### Task 6: `subagent_start`
 
 **Files:**
-- Modify: `agent/src/exec/delegate.rs`（sync/async 入口，每个 child run 前）
+- Modify: `crates/agent-core/src/exec/delegate.rs`（sync/async 入口，每个 child run 前）
 - 确认 `runtime` 里仅 `SUBAGENT_STOP` 的路径：start 应在 delegate 内，与 stop 配对
 
 **Interfaces:**
@@ -295,8 +295,8 @@ EOF
 ### Task 7: `pre_verify` 控制流
 
 **Files:**
-- Modify: `agent/src/streaming/multi_turn.rs`
-- Modify: `agent/src/runtime/mod.rs`（`turn_wrote_disk` / `begin_user_turn` 清零；getter）
+- Modify: `crates/agent-core/src/streaming/multi_turn.rs`
+- Modify: `crates/agent-core/src/runtime/mod.rs`（`turn_wrote_disk` / `begin_user_turn` 清零；getter）
 
 **Interfaces:**
 - Consumes: `PRE_VERIFY`、`KeepGoing`、`MAX_VERIFY_ATTEMPTS = 2`

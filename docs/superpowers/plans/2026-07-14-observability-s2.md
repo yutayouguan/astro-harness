@@ -18,8 +18,8 @@
 
 | Path | Responsibility |
 |------|----------------|
-| `memory/src/usage/db.rs` | `TraceEventRow.turn_id`；`list_trace_events` SELECT |
-| `memory/src/usage/trace_insights.rs` | `TraceEvent.turn_id`；usage→event 映射；chat-history 合成事件 `None` |
+| `crates/agent-memory/src/usage/db.rs` | `TraceEventRow.turn_id`；`list_trace_events` SELECT |
+| `crates/agent-memory/src/usage/trace_insights.rs` | `TraceEvent.turn_id`；usage→event 映射；chat-history 合成事件 `None` |
 | `memory/tests/…` 或 `trace_insights` 单测 | 透传断言 |
 | `apps/desktop/src/components/InsightsPanel.tsx` | 类型 + `groupEventsByTurn` + 折叠 UI |
 | `apps/desktop/src/styles/insights.css` | `.insights-turn-group*` |
@@ -34,9 +34,9 @@
 ## Task 1: Backend — `turn_id` 透出 `list_trace_events` / `TraceEvent`（TDD）
 
 **Files:**
-- Modify: `memory/src/usage/db.rs`
-- Modify: `memory/src/usage/trace_insights.rs`
-- Test: 在 `memory/src/usage/trace_insights.rs` 的 `#[cfg(test)]` 或 `memory/tests/` 追加（优先沿用现有 trace_insights 测试模块）
+- Modify: `crates/agent-memory/src/usage/db.rs`
+- Modify: `crates/agent-memory/src/usage/trace_insights.rs`
+- Test: 在 `crates/agent-memory/src/usage/trace_insights.rs` 的 `#[cfg(test)]` 或 `memory/tests/` 追加（优先沿用现有 trace_insights 测试模块）
 
 - [x] **Step 1: Write failing test**
 
@@ -376,7 +376,7 @@ EOF
 ```bash
 cargo test -p memory list_trace_events_includes_turn_id
 cargo test -p memory --lib usage::trace_insights
-cargo check --manifest-path frontend/src-tauri/Cargo.toml
+cargo check --manifest-path apps/desktop/src-tauri/Cargo.toml
 cd frontend && npx tsc --noEmit
 ```
 

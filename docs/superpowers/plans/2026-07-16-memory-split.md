@@ -27,12 +27,12 @@
 
 | 操作 | 路径 |
 |------|------|
-| Create | `session/Cargo.toml`、`session/src/lib.rs` |
-| Move | `memory/src/session/store/**` → `session/src/store/` |
-| Move | `memory/src/session/message_db.rs` → `session/src/message_db.rs` |
+| Create | `session/Cargo.toml`、`crates/agent-session/src/lib.rs` |
+| Move | `crates/agent-memory/src/session/store/**` → `crates/agent-session/src/store/` |
+| Move | `crates/agent-memory/src/session/message_db.rs` → `crates/agent-session/src/message_db.rs` |
 | Move（可选） | `memory/tests/session_store_test.rs` → `session/tests/` |
-| Keep | `memory/src/session/manager.rs` |
-| Modify | `memory/src/session/mod.rs`：re-export + manager |
+| Keep | `crates/agent-memory/src/session/manager.rs` |
+| Modify | `crates/agent-memory/src/session/mod.rs`：re-export + manager |
 | Modify | 根 `Cargo.toml`、`memory/Cargo.toml` |
 | Stub | `memory` 根级 `pub use session::…` 保持符号 |
 
@@ -44,7 +44,7 @@
 
 **Files:**
 - Create: `session/Cargo.toml`
-- Create: `session/src/lib.rs`
+- Create: `crates/agent-session/src/lib.rs`
 - Move: store + message_db
 - Modify: store 内 `crate::message_db` → `crate::message_db`（同 crate 即可）
 
@@ -58,8 +58,8 @@
 
 **Files:**
 - `memory/Cargo.toml`：`session = { path = "../session" }`
-- `memory/src/session/mod.rs`：`pub use session::store as store;` 等 + `mod manager`
-- `memory/src/lib.rs`：继续 `pub use session_store` / `message_db`（指向本包或 session）
+- `crates/agent-memory/src/session/mod.rs`：`pub use session::store as store;` 等 + `mod manager`
+- `crates/agent-memory/src/lib.rs`：继续 `pub use session_store` / `message_db`（指向本包或 session）
 - manager 的 `use crate::session_store` 保持有效
 
 **Verify：** `cargo test -p memory --tests`；`cargo check -p agent -p tools -p backend -p astro-agent`

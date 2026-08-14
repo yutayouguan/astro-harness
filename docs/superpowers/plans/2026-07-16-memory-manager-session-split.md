@@ -23,23 +23,23 @@
 
 | File | Responsibility |
 |------|----------------|
-| `session/src/format.rs`（新建） | `format_recalled_context`、`format_session_search_hits` |
-| `session/src/tools.rs`（新建） | `dispatch_session_tool`、可选 `record_message` helper |
-| `session/src/lib.rs` | 导出新模块 API |
+| `crates/agent-session/src/format.rs`（新建） | `format_recalled_context`、`format_session_search_hits` |
+| `crates/agent-session/src/tools.rs`（新建） | `dispatch_session_tool`、可选 `record_message` helper |
+| `crates/agent-session/src/lib.rs` | 导出新模块 API |
 | `session/Cargo.toml` | 若需要 `serde_json` 已有；无需新依赖 |
 | `session/tests/dispatch_session_tool_test.rs`（新建） | 搜索分发 + format 单测 |
-| `memory/src/session/manager.rs` | 删除会话字段/方法；收窄 `dispatch_memory_tool` |
-| `memory/src/lib.rs` | 不再导出 `format_recalled_context`（若曾导出） |
+| `crates/agent-memory/src/session/manager.rs` | 删除会话字段/方法；收窄 `dispatch_memory_tool` |
+| `crates/agent-memory/src/lib.rs` | 不再导出 `format_recalled_context`（若曾导出） |
 | `memory/tests/memory_manager_session_test.rs` | 删除或改为纯记忆测；会话测迁 `session` |
 | `tools/Cargo.toml` | 增加 `session` |
-| `tools/src/core/context.rs` | `sessions: &SessionStore` |
-| `tools/src/core/dispatch.rs` | `session_search` 分流 |
-| `tools/src/builtins/memory/memory_tools.rs` | 仅 `memory`；搜索另调 session |
-| `agent/src/loop_.rs` | `sessions` 字段 + 召回/落盘改路径 |
-| `agent/src/streaming.rs` | `ToolContext` 构造补 `sessions` |
-| `frontend/src-tauri/src/commands.rs` 等 | 纯会话改 `SessionStore` |
-| `frontend/src-tauri/src/compaction_commands.rs` | 同上 |
-| `backend/src/grpc/astro_service.rs` | 同上 |
+| `crates/agent-tools/src/engine/context.rs` | `sessions: &SessionStore` |
+| `crates/agent-tools/src/engine/dispatch.rs` | `session_search` 分流 |
+| `crates/agent-tools/src/builtin/memory/memory_tools.rs` | 仅 `memory`；搜索另调 session |
+| `crates/agent-core/src/loop_.rs` | `sessions` 字段 + 召回/落盘改路径 |
+| `crates/agent-core/src/streaming.rs` | `ToolContext` 构造补 `sessions` |
+| `apps/desktop/src-tauri/src/commands.rs` 等 | 纯会话改 `SessionStore` |
+| `apps/desktop/src-tauri/src/compaction_commands.rs` | 同上 |
+| `crates/agent-server/src/grpc/astro_service.rs` | 同上 |
 | 各 `tools`/`agent` 测试里的 `ToolContext { … }` | 补 `sessions` |
 
 ---
@@ -47,10 +47,10 @@
 ### Task 1: session — format + dispatch_session_tool
 
 **Files:**
-- Create: `session/src/format.rs`
-- Create: `session/src/tools.rs`
+- Create: `crates/agent-session/src/format.rs`
+- Create: `crates/agent-session/src/tools.rs`
 - Create: `session/tests/dispatch_session_tool_test.rs`
-- Modify: `session/src/lib.rs`
+- Modify: `crates/agent-session/src/lib.rs`
 
 **Interfaces:**
 - Consumes: `SessionStore::search_messages`, `SessionStore::ensure_session`, `SessionStore::append_message`, `ScrolledMessage`, `SearchHit`, `NewMessage`
@@ -117,7 +117,7 @@ fn dispatch_session_search_and_record_message() {
 }
 ```
 
-若 `ScrolledMessage` 字段名与现实现不一致，以 `session/src/message_db.rs` 为准调整测试结构体初始化。
+若 `ScrolledMessage` 字段名与现实现不一致，以 `crates/agent-session/src/message_db.rs` 为准调整测试结构体初始化。
 
 - [ ] **Step 2: Run tests — expect FAIL**
 
@@ -127,11 +127,11 @@ cargo test -p session --test dispatch_session_tool_test
 
 Expected: FAIL（`dispatch_session_tool` / `format_recalled_context` / `record_message` 未定义）
 
-- [ ] **Step 3: Implement `session/src/format.rs`**
+- [ ] **Step 3: Implement `crates/agent-session/src/format.rs`**
 
-从 `memory/src/session/manager.rs` 原样迁入 `format_session_search_hits`（`pub(crate)`）与 `format_recalled_context`（`pub`）。`use crate::{SearchHit, ScrolledMessage};`
+从 `crates/agent-memory/src/session/manager.rs` 原样迁入 `format_session_search_hits`（`pub(crate)`）与 `format_recalled_context`（`pub`）。`use crate::{SearchHit, ScrolledMessage};`
 
-- [ ] **Step 4: Implement `session/src/tools.rs`**
+- [ ] **Step 4: Implement `crates/agent-session/src/tools.rs`**
 
 ```rust
 use anyhow::anyhow;
@@ -172,7 +172,7 @@ pub fn dispatch_session_tool(
 }
 ```
 
-- [ ] **Step 5: Wire `session/src/lib.rs`**
+- [ ] **Step 5: Wire `crates/agent-session/src/lib.rs`**
 
 ```rust
 pub mod format;
@@ -213,10 +213,10 @@ EOF
 ### Task 2: memory — strip session from MemoryManager
 
 **Files:**
-- Modify: `memory/src/session/manager.rs`
-- Modify: `memory/src/lib.rs`（若仍 `pub use format_recalled_context` 则删除）
+- Modify: `crates/agent-memory/src/session/manager.rs`
+- Modify: `crates/agent-memory/src/lib.rs`（若仍 `pub use format_recalled_context` 则删除）
 - Modify: `memory/tests/memory_manager_session_test.rs`（删除文件，或改为只测记忆；会话断言已在 Task 1）
-- Modify: `memory/src/session/mod.rs` 文档注释
+- Modify: `crates/agent-memory/src/session/mod.rs` 文档注释
 
 **Interfaces:**
 - Consumes: Task 1 APIs（本 task 的 memory 不再调用）
@@ -303,9 +303,9 @@ EOF
 
 **Files:**
 - Modify: `tools/Cargo.toml`（加 `session = { path = "../session" }`）
-- Modify: `tools/src/core/context.rs`
-- Modify: `tools/src/core/dispatch.rs`
-- Modify: `tools/src/builtins/memory/memory_tools.rs`
+- Modify: `crates/agent-tools/src/engine/context.rs`
+- Modify: `crates/agent-tools/src/engine/dispatch.rs`
+- Modify: `crates/agent-tools/src/builtin/memory/memory_tools.rs`
 - Modify: 所有构造 `ToolContext {` 的测试/内测（见 File Structure 列表）
 
 **Interfaces:**
@@ -335,7 +335,7 @@ pub struct ToolContext<'a> {
 
 - [ ] **Step 3: Split dispatch**
 
-`tools/src/core/dispatch.rs`：
+`crates/agent-tools/src/engine/dispatch.rs`：
 
 ```rust
 match name {
@@ -380,9 +380,9 @@ let mut ctx = ToolContext {
 ```
 
 需改文件至少包括：
-- `agent/src/loop_.rs`（可与 Task 4 一起做；若本 task 先改 tools 测试）
-- `tools/tests/*.rs`、`tools/src/builtins/system/{terminal,code_exec}.rs`、`image_gen.rs` 内测
-- `agent/src/streaming.rs`
+- `crates/agent-core/src/loop_.rs`（可与 Task 4 一起做；若本 task 先改 tools 测试）
+- `tools/tests/*.rs`、`crates/agent-tools/src/builtin/shell/{terminal,code_exec}.rs`、`image_gen.rs` 内测
+- `crates/agent-core/src/streaming.rs`
 
 本 Task 至少让 `cargo test -p tools` 能编过；agent 可留到 Task 4，但若 tools 不依赖 agent，先修 tools 内所有构造点。
 
@@ -397,7 +397,7 @@ Expected: PASS
 - [ ] **Step 6: Commit**
 
 ```bash
-git add tools/Cargo.toml tools/src/core/context.rs tools/src/core/dispatch.rs tools/src/builtins/memory/memory_tools.rs tools/tests tools/src/builtins/system tools/src/builtins/media/image_gen.rs
+git add tools/Cargo.toml tools/src/engine/context.rs tools/src/engine/dispatch.rs tools/src/builtin/memory/memory_tools.rs tools/tests tools/src/builtin/system tools/src/builtin/media/image_gen.rs
 git commit -m "$(cat <<'EOF'
 refactor(tools): give ToolContext its own SessionStore
 
@@ -412,10 +412,10 @@ EOF
 ### Task 4: agent — dual fields on AgentLoop
 
 **Files:**
-- Modify: `agent/src/loop_.rs`
-- Modify: `agent/src/streaming.rs`
-- Modify: `agent/src/usage_record.rs`（若仍经 memory 取 SessionStore——改为 `session::SessionStore`）
-- 检查：`agent/src/cron_exec.rs`、`delegate_exec.rs`、`orchestration.rs` 是否经 MemoryManager 写会话
+- Modify: `crates/agent-core/src/loop_.rs`
+- Modify: `crates/agent-core/src/streaming.rs`
+- Modify: `crates/agent-core/src/usage_record.rs`（若仍经 memory 取 SessionStore——改为 `session::SessionStore`）
+- 检查：`crates/agent-core/src/cron_exec.rs`、`delegate_exec.rs`、`orchestration.rs` 是否经 MemoryManager 写会话
 
 **Interfaces:**
 - Consumes: `session::{SessionStore, build_conversation_context, format_recalled_context, record_message, NewMessage}`
@@ -487,10 +487,10 @@ EOF
 ### Task 5: tauri + backend — open SessionStore directly
 
 **Files:**
-- Modify: `frontend/src-tauri/src/commands.rs`（所有 `MemoryManager::new` 后只用 session 的块）
-- Modify: `frontend/src-tauri/src/compaction_commands.rs`
-- Modify: `backend/src/grpc/astro_service.rs`（约 Memory 查询旁的 session 路径）
-- 确认 `frontend/src-tauri/Cargo.toml` 已有 `session`（先前拆分已加）
+- Modify: `apps/desktop/src-tauri/src/commands.rs`（所有 `MemoryManager::new` 后只用 session 的块）
+- Modify: `apps/desktop/src-tauri/src/compaction_commands.rs`
+- Modify: `crates/agent-server/src/grpc/astro_service.rs`（约 Memory 查询旁的 session 路径）
+- 确认 `apps/desktop/src-tauri/Cargo.toml` 已有 `session`（先前拆分已加）
 
 **Helper pattern（可内联，不必新文件）：**
 
@@ -527,7 +527,7 @@ Expected: Finished
 - [ ] **Step 5: Commit**
 
 ```bash
-git add frontend/src-tauri/src/commands.rs frontend/src-tauri/src/compaction_commands.rs backend/src/grpc/astro_service.rs
+git add apps/desktop/src-tauri/src/commands.rs apps/desktop/src-tauri/src/compaction_commands.rs backend/src/grpc/astro_service.rs
 git commit -m "$(cat <<'EOF'
 refactor: open SessionStore directly in tauri/backend session paths
 

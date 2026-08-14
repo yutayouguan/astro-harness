@@ -92,7 +92,7 @@ resolve_image_gen_targets (+ vision_model)
 | 区域 | 变更 |
 |------|------|
 | `providers` | OpenAI 兼容看图 helper + 默认模型常量 |
-| `tools/builtins/vision.rs` | 真正调用；更新 description |
+| `tools/builtin/vision.rs` | 真正调用；更新 description |
 | `tools/core/context.rs` + proto / backend / tauri commands | `vision_model` 透传 |
 | `ProvidersPanel` + i18n | 媒体 Tab 视觉模型字段 |
 | 测试 | mock HTTP：本地图 / 远程 URL / 无凭证 |

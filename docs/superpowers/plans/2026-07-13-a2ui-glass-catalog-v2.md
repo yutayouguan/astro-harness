@@ -29,8 +29,8 @@
 | Create: `apps/desktop/src/a2ui/formState.test.ts` | node:test |
 | Create: `apps/desktop/src/a2ui/types.test.ts` | allowlist 含扩展组件 |
 | Modify: `apps/desktop/src/styles/chat.css` | 亮暗玻璃 token + 新组件样式 |
-| Modify: `tools/src/builtins/present_ui.rs` | 描述文案 + 可选 recipe 快捷字段（YAGNI：仅更新描述与校验依赖） |
-| Modify: `tools/src/builtins/confirm.rs` / `clarify.rs` | 仅依赖模板；若文案过旧则更新 description |
+| Modify: `crates/agent-tools/src/builtin/present_ui.rs` | 描述文案 + 可选 recipe 快捷字段（YAGNI：仅更新描述与校验依赖） |
+| Modify: `crates/agent-tools/src/builtin/confirm.rs` / `clarify.rs` | 仅依赖模板；若文案过旧则更新 description |
 | Modify: `docs/superpowers/specs/2026-07-13-declarative-genui-a2ui-design.md` | catalog 小节指向 v2 spec |
 
 ---
@@ -1211,9 +1211,9 @@ EOF
 ### Task 8: Tool descriptions for AI composition
 
 **Files:**
-- Modify: `tools/src/builtins/present_ui.rs`
-- Modify: `tools/src/builtins/confirm.rs` (description only if needed)
-- Modify: `tools/src/builtins/clarify.rs` (description only if needed)
+- Modify: `crates/agent-tools/src/builtin/present_ui.rs`
+- Modify: `crates/agent-tools/src/builtin/confirm.rs` (description only if needed)
+- Modify: `crates/agent-tools/src/builtin/clarify.rs` (description only if needed)
 
 - [ ] **Step 1: Expand `present_ui` description**
 
@@ -1232,7 +1232,7 @@ Templates already use v2 via `ASTRO_CATALOG_ID`; confirm/clarify need no logic c
 - [ ] **Step 3: Commit**
 
 ```bash
-git add tools/src/builtins/present_ui.rs tools/src/builtins/confirm.rs tools/src/builtins/clarify.rs
+git add tools/src/builtin/present_ui.rs tools/src/builtin/confirm.rs tools/src/builtin/clarify.rs
 git commit -m "$(cat <<'EOF'
 docs(tools): guide models toward A2UI catalog v2 composition
 

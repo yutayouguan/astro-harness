@@ -30,8 +30,8 @@
 | Modify: `skills/src/models.rs` | `SkillOriginRecord`、`SkillUpdateResult` DTO |
 | Modify: `skills/src/install.rs` | 安装成功后写 origin；可选传入 name/store/folder hint |
 | Modify: `skills/src/lib.rs` | mod + re-export |
-| Modify: `frontend/src-tauri/src/skills_commands.rs` | `list_skill_origins` / `update_installed_skill` / `update_all_skills`；扩展 `install_store_skill` 参数 |
-| Modify: `frontend/src-tauri/src/lib.rs` | 注册新 commands |
+| Modify: `apps/desktop/src-tauri/src/skills_commands.rs` | `list_skill_origins` / `update_installed_skill` / `update_all_skills`；扩展 `install_store_skill` 参数 |
+| Modify: `apps/desktop/src-tauri/src/lib.rs` | 注册新 commands |
 | Modify: `apps/desktop/src/types.ts` | Origin / UpdateResult 类型 |
 | Create: `apps/desktop/src/lib/skillUpdateRows.ts` | 扫盘 + origin → 更新行 + 筛选 |
 | Create: `apps/desktop/src/lib/skillUpdateRows.test.mjs` | 匹配与筛选单测 |
@@ -145,7 +145,7 @@ git commit -m "feat(skills): add skill-origins.json persistence"
 
 **Files:**
 - Modify: `skills/src/install.rs`
-- Modify: `frontend/src-tauri/src/skills_commands.rs`（可选参数透传）
+- Modify: `apps/desktop/src-tauri/src/skills_commands.rs`（可选参数透传）
 - Test: `skills/src/install.rs` 或 `origins` + 轻量纯函数测 `record_after_install`
 
 **Interfaces:**
@@ -272,8 +272,8 @@ git commit -m "feat(skills): update installed skill from origin"
 ### Task 4: Tauri 命令注册
 
 **Files:**
-- Modify: `frontend/src-tauri/src/skills_commands.rs`
-- Modify: `frontend/src-tauri/src/lib.rs`
+- Modify: `apps/desktop/src-tauri/src/skills_commands.rs`
+- Modify: `apps/desktop/src-tauri/src/lib.rs`
 
 **Interfaces:**
 - `list_skill_origins(agent_id?) -> Vec<SkillOriginRecord>`

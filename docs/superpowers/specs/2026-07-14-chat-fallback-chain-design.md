@@ -202,5 +202,5 @@ gRPC 若自带凭据：以请求 primary 为准，再按 primary 条目上的 `f
 
 ## 开放问题（实现期裁定）
 
-- 解析模块最终落在 `frontend/src-tauri` 抽出共享 crate，还是 `memory`/`providers` 旁新模块：以依赖方向（keyring 归属）为准，计划阶段选定。  
+- 解析模块最终落在 `apps/desktop/src-tauri` 抽出共享 crate，还是 `memory`/`providers` 旁新模块：以依赖方向（keyring 归属）为准，计划阶段选定。  
 - 聚合错误是否本地化文案：保持中文用户可见消息即可。

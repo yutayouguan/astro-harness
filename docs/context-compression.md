@@ -97,7 +97,7 @@
 | Provider 视图 | 头 `protect_first=4` + `[astro:mid-run-summary]` + 尾 `protect_last_n` |
 | DB / UI | 不变 |
 
-代码：`agent/src/exec/mid_run_summary.rs`。
+代码：`crates/agent-core/src/exec/mid_run_summary.rs`。
 
 ---
 
@@ -151,11 +151,11 @@ Provider 视图中的 Recovery 提示已写入 spill/prune 模板。
 
 | 模块 | 路径 |
 |------|------|
-| 分阶段 + thrashing + head/tail 回退 | `agent/src/compression.rs` |
-| 维护入口 | `AgentLoop::maintain_tool_context`（async）— `agent/src/runtime/mod.rs` |
-| 逐条 LLM 摘要 | `agent/src/exec/tool_llm_compress.rs` |
-| mid-run 摘要 | `agent/src/exec/mid_run_summary.rs` |
-| 多轮挂钩 | `agent/src/streaming/multi_turn.rs`（Gateway 前 + 工具后） |
+| 分阶段 + thrashing + head/tail 回退 | `crates/agent-core/src/compression.rs` |
+| 维护入口 | `AgentLoop::maintain_tool_context`（async）— `crates/agent-core/src/runtime/mod.rs` |
+| 逐条 LLM 摘要 | `crates/agent-core/src/exec/tool_llm_compress.rs` |
+| mid-run 摘要 | `crates/agent-core/src/exec/mid_run_summary.rs` |
+| 多轮挂钩 | `crates/agent-core/src/streaming/multi_turn.rs`（Gateway 前 + 工具后） |
 | Spill | `common/src/tool_spill.rs` |
 | Provider 视图 | `provider_history()` / `compressed_content` 优先 |
 | 会话压实 | `session/.../compact_and_split`，`apps/desktop/.../compaction_commands.rs` |

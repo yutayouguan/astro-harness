@@ -18,32 +18,32 @@
 - 网页抓取、技能搜索和 MCP 不增加模型配置。
 - 保留 `ASTRO_SMART_APPROVAL` 作为智能审批总开关。
 - 依赖 `2026-07-16-session-management.md` 提供的 `set_session_title_if_empty`、`first_turn_text` 与会话刷新事件。
-- 只提交本计划相关文件，不包含现有 `tools/src/builtins/media/music_gen.rs` 改动。
+- 只提交本计划相关文件，不包含现有 `crates/agent-tools/src/builtin/media/music_gen.rs` 改动。
 
 ---
 
 ## File Map
 
-- Modify: `memory/src/config.rs` — 五类 route、YAML 写回与重置。
-- Modify: `memory/src/lib.rs` — API re-export。
-- Create: `frontend/src-tauri/src/auxiliary_commands.rs` — 设置 DTO/commands。
-- Create: `frontend/src-tauri/src/auxiliary_resolver.rs` — UI Provider、凭据与 fallback 目标解析。
+- Modify: `crates/agent-memory/src/config.rs` — 五类 route、YAML 写回与重置。
+- Modify: `crates/agent-memory/src/lib.rs` — API re-export。
+- Create: `apps/desktop/src-tauri/src/auxiliary_commands.rs` — 设置 DTO/commands。
+- Create: `apps/desktop/src-tauri/src/auxiliary_resolver.rs` — UI Provider、凭据与 fallback 目标解析。
 - Create: `common/src/auxiliary_target.rs` — 跨 Tauri/backend 的任务目标类型。
 - Modify: `common/src/lib.rs` — 导出任务目标类型。
 - Modify: `proto/proto/astro.proto` — 在 ChatRequest 透传已解析的辅助目标。
-- Modify: `frontend/src-tauri/src/commands.rs` — `start_chat` 注入辅助目标。
-- Modify: `agent/src/runtime/mod.rs` — AgentLoop 保存当前辅助目标。
-- Modify: `frontend/src-tauri/src/lib.rs` — 模块与 command 注册。
-- Modify: `frontend/src-tauri/src/compaction_commands.rs` — compaction 辅助路由。
-- Modify: `frontend/src-tauri/src/dreaming_commands.rs` — dreaming 统一解析与重试。
-- Modify: `agent/src/control/smart_approval.rs` — 可注入辅助调用目标。
-- Modify: `agent/src/streaming/tools_exec.rs` — smart approval 路由。
-- Modify: `agent/src/exec/memory_review.rs` — background review 凭据与回退。
-- Create: `agent/src/exec/title_generation.rs` — 标题清理和后台生成。
-- Modify: `agent/src/exec/mod.rs` — 标题模块导出。
-- Modify: `backend/src/grpc/astro_service.rs` — Done 后触发标题。
-- Modify: `backend/src/session_events.rs` and `proto/proto/astro.proto` — 会话元数据事件。
-- Modify: `frontend/src-tauri/src/session_events.rs` — 事件 DTO 转换。
+- Modify: `apps/desktop/src-tauri/src/commands.rs` — `start_chat` 注入辅助目标。
+- Modify: `crates/agent-core/src/runtime/mod.rs` — AgentLoop 保存当前辅助目标。
+- Modify: `apps/desktop/src-tauri/src/lib.rs` — 模块与 command 注册。
+- Modify: `apps/desktop/src-tauri/src/compaction_commands.rs` — compaction 辅助路由。
+- Modify: `apps/desktop/src-tauri/src/dreaming_commands.rs` — dreaming 统一解析与重试。
+- Modify: `crates/agent-core/src/control/smart_approval.rs` — 可注入辅助调用目标。
+- Modify: `crates/agent-core/src/streaming/tools_exec.rs` — smart approval 路由。
+- Modify: `crates/agent-core/src/exec/memory_review.rs` — background review 凭据与回退。
+- Create: `crates/agent-core/src/exec/title_generation.rs` — 标题清理和后台生成。
+- Modify: `crates/agent-core/src/exec/mod.rs` — 标题模块导出。
+- Modify: `crates/agent-server/src/grpc/astro_service.rs` — Done 后触发标题。
+- Modify: `crates/agent-server/src/session_events.rs` and `proto/proto/astro.proto` — 会话元数据事件。
+- Modify: `apps/desktop/src-tauri/src/session_events.rs` — 事件 DTO 转换。
 - Create: `apps/desktop/src/hooks/settings/useAuxiliarySettings.ts` — 设置读写。
 - Create: `apps/desktop/src/components/settings/AuxiliaryModelsPanel.tsx` — 五任务设置页。
 - Modify: `apps/desktop/src/App.tsx` — 设置导航挂载。
@@ -56,8 +56,8 @@
 ### Task 1: 扩展五类辅助配置与 YAML 写回
 
 **Files:**
-- Modify: `memory/src/config.rs`
-- Modify: `memory/src/lib.rs`
+- Modify: `crates/agent-memory/src/config.rs`
+- Modify: `crates/agent-memory/src/lib.rs`
 
 **Interfaces:**
 - Produces: `AuxiliaryKind::{TitleGeneration, Compaction, SmartApproval, Dreaming, BackgroundReview}`
@@ -66,7 +66,7 @@
 
 - [ ] **Step 1: 写失败测试**
 
-在 `memory/src/config.rs` tests 增加：
+在 `crates/agent-memory/src/config.rs` tests 增加：
 
 ```rust
 #[test]
@@ -190,14 +190,14 @@ git commit -m "feat(memory): configure five auxiliary model routes"
 ### Task 2: Tauri 辅助模型设置 API 与目标解析
 
 **Files:**
-- Create: `frontend/src-tauri/src/auxiliary_commands.rs`
-- Create: `frontend/src-tauri/src/auxiliary_resolver.rs`
+- Create: `apps/desktop/src-tauri/src/auxiliary_commands.rs`
+- Create: `apps/desktop/src-tauri/src/auxiliary_resolver.rs`
 - Create: `common/src/auxiliary_target.rs`
 - Modify: `common/src/lib.rs`
 - Modify: `proto/proto/astro.proto`
-- Modify: `frontend/src-tauri/src/commands.rs`
-- Modify: `agent/src/runtime/mod.rs`
-- Modify: `frontend/src-tauri/src/lib.rs`
+- Modify: `apps/desktop/src-tauri/src/commands.rs`
+- Modify: `crates/agent-core/src/runtime/mod.rs`
+- Modify: `apps/desktop/src-tauri/src/lib.rs`
 - Modify: `apps/desktop/src/types.ts`
 
 **Interfaces:**
@@ -330,9 +330,9 @@ Expected: PASS。
 - [ ] **Step 6: Commit**
 
 ```bash
-git add frontend/src-tauri/src/auxiliary_commands.rs \
-  frontend/src-tauri/src/auxiliary_resolver.rs \
-  frontend/src-tauri/src/lib.rs frontend/src-tauri/src/commands.rs \
+git add apps/desktop/src-tauri/src/auxiliary_commands.rs \
+  apps/desktop/src-tauri/src/auxiliary_resolver.rs \
+  apps/desktop/src-tauri/src/lib.rs apps/desktop/src-tauri/src/commands.rs \
   apps/desktop/src/types.ts common/src/auxiliary_target.rs common/src/lib.rs \
   proto/proto/astro.proto agent/src/runtime/mod.rs
 git commit -m "feat(settings): expose auxiliary model routes"
@@ -417,7 +417,7 @@ git commit -m "feat(settings): add auxiliary models panel"
 ### Task 4: 上下文压缩使用辅助路由和主模型重试
 
 **Files:**
-- Modify: `frontend/src-tauri/src/compaction_commands.rs`
+- Modify: `apps/desktop/src-tauri/src/compaction_commands.rs`
 
 **Interfaces:**
 - Consumes: `resolve_auxiliary_targets(AuxiliaryKind::Compaction, primary)`.
@@ -456,7 +456,7 @@ Expected: PASS。
 - [ ] **Step 4: Commit**
 
 ```bash
-git add frontend/src-tauri/src/compaction_commands.rs
+git add apps/desktop/src-tauri/src/compaction_commands.rs
 git commit -m "feat(compaction): route summaries through auxiliary model"
 ```
 
@@ -465,8 +465,8 @@ git commit -m "feat(compaction): route summaries through auxiliary model"
 ### Task 5: 智能审批使用辅助路由
 
 **Files:**
-- Modify: `agent/src/control/smart_approval.rs`
-- Modify: `agent/src/streaming/tools_exec.rs`
+- Modify: `crates/agent-core/src/control/smart_approval.rs`
+- Modify: `crates/agent-core/src/streaming/tools_exec.rs`
 
 **Interfaces:**
 - Keeps: `ASTRO_SMART_APPROVAL` as master enable switch.
@@ -482,7 +482,7 @@ git commit -m "feat(compaction): route summaries through auxiliary model"
 
 - [ ] **Step 3: 在 tools_exec 解析 SmartApproval route**
 
-保持 `smart_approval_enabled()` 判断；开启后直接读取 Task 2 已注入 AgentLoop 的 `AuxiliaryTask::SmartApproval` 目标序列。agent 不读取 keyring，也不依赖 `frontend/src-tauri`。
+保持 `smart_approval_enabled()` 判断；开启后直接读取 Task 2 已注入 AgentLoop 的 `AuxiliaryTask::SmartApproval` 目标序列。agent 不读取 keyring，也不依赖 `apps/desktop/src-tauri`。
 
 - [ ] **Step 4: 运行 agent 测试**
 
@@ -504,9 +504,9 @@ git commit -m "feat(approval): use configured auxiliary model"
 ### Task 6: 统一入梦与记忆审查的凭据和降级
 
 **Files:**
-- Modify: `frontend/src-tauri/src/dreaming_commands.rs`
-- Modify: `agent/src/exec/memory_review.rs`
-- Modify: `agent/src/runtime/mod.rs`
+- Modify: `apps/desktop/src-tauri/src/dreaming_commands.rs`
+- Modify: `crates/agent-core/src/exec/memory_review.rs`
+- Modify: `crates/agent-core/src/runtime/mod.rs`
 
 **Interfaces:**
 - Dreaming uses `AuxiliaryKind::Dreaming`.
@@ -535,7 +535,7 @@ Expected: PASS。
 - [ ] **Step 5: Commit**
 
 ```bash
-git add frontend/src-tauri/src/dreaming_commands.rs \
+git add apps/desktop/src-tauri/src/dreaming_commands.rs \
   agent/src/exec/memory_review.rs agent/src/runtime/mod.rs
 git commit -m "fix(auxiliary): retry dreaming and review with main model"
 ```
@@ -545,12 +545,12 @@ git commit -m "fix(auxiliary): retry dreaming and review with main model"
 ### Task 7: 首轮异步标题生成与会话元数据事件
 
 **Files:**
-- Create: `agent/src/exec/title_generation.rs`
-- Modify: `agent/src/exec/mod.rs`
-- Modify: `backend/src/grpc/astro_service.rs`
-- Modify: `backend/src/session_events.rs`
+- Create: `crates/agent-core/src/exec/title_generation.rs`
+- Modify: `crates/agent-core/src/exec/mod.rs`
+- Modify: `crates/agent-server/src/grpc/astro_service.rs`
+- Modify: `crates/agent-server/src/session_events.rs`
 - Modify: `proto/proto/astro.proto`
-- Modify: `frontend/src-tauri/src/session_events.rs`
+- Modify: `apps/desktop/src-tauri/src/session_events.rs`
 - Modify: `apps/desktop/src/components/chat/ChatSessionList.tsx`
 - Modify: `apps/desktop/src/i18n/messages.ts`
 
@@ -622,8 +622,8 @@ Expected: 全部 PASS。
 ```bash
 git add agent/src/exec/title_generation.rs agent/src/exec/mod.rs \
   backend/src/grpc/astro_service.rs backend/src/session_events.rs \
-  proto/proto/astro.proto frontend/src-tauri/src/session_events.rs \
-  frontend/src-tauri/src/commands.rs frontend/src-tauri/src/lib.rs \
+  proto/proto/astro.proto apps/desktop/src-tauri/src/session_events.rs \
+  apps/desktop/src-tauri/src/commands.rs apps/desktop/src-tauri/src/lib.rs \
   apps/desktop/src/components/chat/ChatSessionList.tsx apps/desktop/src/i18n/messages.ts
 git commit -m "feat(chat): generate session titles after first turn"
 ```

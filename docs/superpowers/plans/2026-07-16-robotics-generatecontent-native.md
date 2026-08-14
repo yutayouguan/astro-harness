@@ -24,14 +24,14 @@
 
 | File | Responsibility |
 |------|----------------|
-| `providers/src/protocol/robotics_http.rs` | Mode、prompt、body、解析、`google_robotics_generate` |
-| `providers/src/protocol/mod.rs` | `pub mod robotics_http` |
-| `providers/src/lib.rs` | re-export `robotics_http` |
-| `tools/src/builtins/media/robotics.rs` | 工具参数、读图、dispatch |
-| `tools/src/builtins/media/mod.rs` | `pub mod robotics` |
-| `tools/src/builtins/mod.rs` | re-export `robotics` |
-| `tools/src/lib.rs` | `register_all` + `pub use` |
-| `tools/src/core/dispatch.rs` | `"robotics" => …` |
+| `crates/agent-providers/src/protocol/robotics_http.rs` | Mode、prompt、body、解析、`google_robotics_generate` |
+| `crates/agent-providers/src/protocol/mod.rs` | `pub mod robotics_http` |
+| `crates/agent-providers/src/lib.rs` | re-export `robotics_http` |
+| `crates/agent-tools/src/builtin/media/robotics.rs` | 工具参数、读图、dispatch |
+| `crates/agent-tools/src/builtin/media/mod.rs` | `pub mod robotics` |
+| `crates/agent-tools/src/builtin/mod.rs` | re-export `robotics` |
+| `crates/agent-tools/src/lib.rs` | `register_all` + `pub use` |
+| `crates/agent-tools/src/engine/dispatch.rs` | `"robotics" => …` |
 | `home/src/config/tools_enabled.rs` | toolset 映射 + `KNOWN_TOOLSET_IDS` |
 | `tools/tests/tools_test.rs` | 注册表含 `robotics` |
 | `apps/desktop/src/components/ToolIcons.tsx` | `IconRobotics` |
@@ -43,9 +43,9 @@
 ### Task 1: providers `robotics_http` — body / 解析 / HTTP
 
 **Files:**
-- Create: `providers/src/protocol/robotics_http.rs`
-- Modify: `providers/src/protocol/mod.rs`
-- Modify: `providers/src/lib.rs`
+- Create: `crates/agent-providers/src/protocol/robotics_http.rs`
+- Modify: `crates/agent-providers/src/protocol/mod.rs`
+- Modify: `crates/agent-providers/src/lib.rs`
 
 **Interfaces:**
 - Produces:
@@ -62,13 +62,13 @@
 
 - [ ] **Step 1: 注册模块**
 
-在 `providers/src/protocol/mod.rs` 增加：
+在 `crates/agent-providers/src/protocol/mod.rs` 增加：
 
 ```rust
 pub mod robotics_http;
 ```
 
-在 `providers/src/lib.rs` 的 `pub use protocol::{...}` 加入 `robotics_http`。
+在 `crates/agent-providers/src/lib.rs` 的 `pub use protocol::{...}` 加入 `robotics_http`。
 
 - [ ] **Step 2: 写失败测试（文件底部 `#[cfg(test)]`）**
 
@@ -175,7 +175,7 @@ Expected: FAIL（模块/符号不存在）
 
 - [ ] **Step 4: 最小实现**
 
-创建 `providers/src/protocol/robotics_http.rs`：
+创建 `crates/agent-providers/src/protocol/robotics_http.rs`：
 
 ```rust
 //! Gemini Robotics-ER：原生 `generateContent`（点 / 框 / 轨迹 / 规划）。
@@ -445,9 +445,9 @@ EOF
 ### Task 2: tools `robotics` — 注册与 dispatch
 
 **Files:**
-- Create: `tools/src/builtins/media/robotics.rs`
-- Modify: `tools/src/builtins/media/mod.rs`
-- Modify: `tools/src/builtins/mod.rs`
+- Create: `crates/agent-tools/src/builtin/media/robotics.rs`
+- Modify: `crates/agent-tools/src/builtin/media/mod.rs`
+- Modify: `crates/agent-tools/src/builtin/mod.rs`
 
 **Interfaces:**
 - Consumes: Task 1 全部公开符号；`ToolContext::image_gen_targets.google()`；`ProviderConfig`
@@ -458,13 +458,13 @@ EOF
 
 - [ ] **Step 1: 挂模块**
 
-`tools/src/builtins/media/mod.rs`：
+`crates/agent-tools/src/builtin/media/mod.rs`：
 
 ```rust
 pub mod robotics;
 ```
 
-`tools/src/builtins/mod.rs`：
+`crates/agent-tools/src/builtin/mod.rs`：
 
 ```rust
 pub use media::{image_gen, music, robotics, tts, video_gen, vision};
@@ -751,7 +751,7 @@ Expected: PASS
 - [ ] **Step 6: Commit**
 
 ```bash
-git add tools/src/builtins/media/robotics.rs tools/src/builtins/media/mod.rs tools/src/builtins/mod.rs
+git add tools/src/builtin/media/robotics.rs tools/src/builtin/media/mod.rs tools/src/builtin/mod.rs
 git commit -m "$(cat <<'EOF'
 feat(tools): add robotics tool dispatch for Robotics-ER
 
@@ -765,8 +765,8 @@ EOF
 ### Task 3: 路由、toolset、注册表测试
 
 **Files:**
-- Modify: `tools/src/lib.rs`
-- Modify: `tools/src/core/dispatch.rs`
+- Modify: `crates/agent-tools/src/lib.rs`
+- Modify: `crates/agent-tools/src/engine/dispatch.rs`
 - Modify: `home/src/config/tools_enabled.rs`
 - Modify: `tools/tests/tools_test.rs`
 
@@ -786,7 +786,7 @@ Expected: FAIL `missing robotics`
 
 - [ ] **Step 3: 接线**
 
-`tools/src/lib.rs`：
+`crates/agent-tools/src/lib.rs`：
 
 ```rust
 pub(crate) use builtins::{
@@ -804,7 +804,7 @@ vision::register(registry);
 robotics::register(registry);
 ```
 
-`tools/src/core/dispatch.rs` match 臂：
+`crates/agent-tools/src/engine/dispatch.rs` match 臂：
 
 ```rust
 "vision" => crate::vision::dispatch(ctx, args).await,
@@ -835,7 +835,7 @@ Expected: PASS（若 home 无对应测试名，至少 `cargo test -p home --lib`
 - [ ] **Step 5: Commit**
 
 ```bash
-git add tools/src/lib.rs tools/src/core/dispatch.rs home/src/config/tools_enabled.rs tools/tests/tools_test.rs
+git add tools/src/lib.rs tools/src/engine/dispatch.rs home/src/config/tools_enabled.rs tools/tests/tools_test.rs
 git commit -m "$(cat <<'EOF'
 feat: register robotics toolset and dispatch route
 

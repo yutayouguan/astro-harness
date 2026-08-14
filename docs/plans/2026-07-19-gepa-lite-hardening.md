@@ -14,13 +14,13 @@
 
 当前工作树已经包含一部分第一阶段能力，实施前必须先确认并保留：
 
-- `evolution/src/evalset.rs`
+- `crates/agent-evolution/src/evalset.rs`
   - `Verdict::{Pass, Fail}`
   - `weighted_eval_score`：Fail 权重 2、Pass 权重 1
-- `memory/src/config.rs`
+- `crates/agent-memory/src/config.rs`
   - `search.max_eval_examples`（默认 5）
   - `search.max_llm_calls`（默认 0 = 不限）
-- `frontend/src-tauri/src/evolution_run_commands.rs`
+- `apps/desktop/src-tauri/src/evolution_run_commands.rs`
   - `fitness_score` 返回 `(f32, String, u32)` — 第三个值为实际 LLM 调用数
   - `fitness_score` 对 Fail 例优先截断
   - 搜索出口应用 `gates.min_judge_score`
@@ -37,8 +37,8 @@
 ```bash
 git status --short
 git diff -- evolution/src/evalset.rs memory/src/config.rs \
-  frontend/src-tauri/src/evolution_run_commands.rs \
-  frontend/src-tauri/src/evolution_commands.rs
+  apps/desktop/src-tauri/src/evolution_run_commands.rs \
+  apps/desktop/src-tauri/src/evolution_commands.rs
 ```
 
 不得覆盖或回退用户现有改动。
@@ -61,13 +61,13 @@ git diff -- evolution/src/evalset.rs memory/src/config.rs \
 
 **Files:**
 
-- Modify: `evolution/src/search.rs`
-- Modify: `frontend/src-tauri/src/evolution_run_commands.rs`
-- Test: `evolution/src/search.rs`
+- Modify: `crates/agent-evolution/src/search.rs`
+- Modify: `apps/desktop/src-tauri/src/evolution_run_commands.rs`
+- Test: `crates/agent-evolution/src/search.rs`
 
 **Step 1: 写预算单元测试**
 
-在 `evolution/src/search.rs` 增加纯 Rust 预算类型测试：
+在 `crates/agent-evolution/src/search.rs` 增加纯 Rust 预算类型测试：
 
 ```rust
 #[test]
@@ -98,7 +98,7 @@ Expected: FAIL，`SearchBudget` 尚不存在。
 
 **Step 3: 实现预算对象**
 
-在 `evolution/src/search.rs` 增加：
+在 `crates/agent-evolution/src/search.rs` 增加：
 
 ```rust
 #[derive(Debug, Clone)]
@@ -166,7 +166,7 @@ Expected: PASS；搜索预算不会超出配置上限。
 
 ```bash
 git add evolution/src/search.rs \
-  frontend/src-tauri/src/evolution_run_commands.rs
+  apps/desktop/src-tauri/src/evolution_run_commands.rs
 git commit -m "fix(evolution): enforce strict GEPA-lite call budget"
 ```
 
@@ -180,12 +180,12 @@ git commit -m "fix(evolution): enforce strict GEPA-lite call budget"
 
 **Files:**
 
-- Modify: `evolution/src/search.rs`（`effective_candidate_size` + `ScoredVariant::new` 改签名）
-- Modify: `evolution/src/candidate.rs`（保留 `payload_len` 兼容，不破坏 gates 调用）
-- Modify: `evolution/src/gates.rs`（`check_candidate` 接收 `effective_size` 或在内部计算）
-- Modify: `frontend/src-tauri/src/evolution_run_commands.rs`
-- Test: `evolution/src/search.rs`
-- Test: `evolution/src/proposal.rs`
+- Modify: `crates/agent-evolution/src/search.rs`（`effective_candidate_size` + `ScoredVariant::new` 改签名）
+- Modify: `crates/agent-evolution/src/candidate.rs`（保留 `payload_len` 兼容，不破坏 gates 调用）
+- Modify: `crates/agent-evolution/src/gates.rs`（`check_candidate` 接收 `effective_size` 或在内部计算）
+- Modify: `apps/desktop/src-tauri/src/evolution_run_commands.rs`
+- Test: `crates/agent-evolution/src/search.rs`
+- Test: `crates/agent-evolution/src/proposal.rs`
 
 **依赖说明：** `effective_candidate_size` 对 Patch 需要调用 `apply_patch_unique`（位于 `proposal.rs`），因此 `search.rs` 需加 `use crate::proposal::apply_patch_unique`。
 
@@ -211,7 +211,7 @@ Expected: FAIL，尚无“应用后体积”计算函数。
 
 **Step 3: 增加有效载荷计算**
 
-在 `evolution/src/search.rs` 增加纯函数：
+在 `crates/agent-evolution/src/search.rs` 增加纯函数：
 
 ```rust
 pub fn effective_candidate_size(
@@ -252,7 +252,7 @@ Expected: PASS；无效 patch 不再进入模型评分。
 
 ```bash
 git add evolution/src/search.rs evolution/src/candidate.rs \
-  frontend/src-tauri/src/evolution_run_commands.rs
+  apps/desktop/src-tauri/src/evolution_run_commands.rs
 git commit -m "fix(evolution): compare candidates by effective skill size"
 ```
 
@@ -266,14 +266,14 @@ git commit -m "fix(evolution): compare candidates by effective skill size"
 
 **Files:**
 
-- Modify: `memory/src/config.rs`（新字段 `population_size` + setter `set_evolution_search` 持久化）
-- Modify: `evolution/src/search.rs`（`select_population` + `candidate_fingerprint`）
-- Modify: `frontend/src-tauri/src/evolution_commands.rs`（`EvolutionSearchDto` 加 `population_size`/`max_eval_examples`/`max_llm_calls`；`set_evolution_search` 新增参数）
-- Modify: `frontend/src-tauri/src/evolution_run_commands.rs`
+- Modify: `crates/agent-memory/src/config.rs`（新字段 `population_size` + setter `set_evolution_search` 持久化）
+- Modify: `crates/agent-evolution/src/search.rs`（`select_population` + `candidate_fingerprint`）
+- Modify: `apps/desktop/src-tauri/src/evolution_commands.rs`（`EvolutionSearchDto` 加 `population_size`/`max_eval_examples`/`max_llm_calls`；`set_evolution_search` 新增参数）
+- Modify: `apps/desktop/src-tauri/src/evolution_run_commands.rs`
 - Modify: `apps/desktop/src/hooks/settings/useEvolutionSettings.ts`（`setSearch` 新增参数）
 - ~~`compression_settings_commands.rs`~~（该文件与进化无关，不改）
-- Test: `memory/src/config.rs`
-- Test: `evolution/src/search.rs`
+- Test: `crates/agent-memory/src/config.rs`
+- Test: `crates/agent-evolution/src/search.rs`
 
 **⚠️ UI 传播链（同时修正 Phase 1 遗漏）：**
 
@@ -281,7 +281,7 @@ git commit -m "fix(evolution): compare candidates by effective skill size"
 
 | 层 | 文件 | 改动 |
 |---|---|---|
-| config 持久化 | `memory/src/config.rs` | `population_size` 新字段 + `set_evolution_search` 持久化 |
+| config 持久化 | `crates/agent-memory/src/config.rs` | `population_size` 新字段 + `set_evolution_search` 持久化 |
 | DTO 展示 | `evolution_commands.rs` `EvolutionSearchDto` | 加 `populationSize`/`maxEvalExamples`/`maxLlmCalls` 字段 |
 | Tauri cmd 设置 | `evolution_commands.rs` `set_evolution_search` | 加 3 个新参数（移除从 current 读取的 hack） |
 | 前端 hook | `useEvolutionSettings.ts` `setSearch` | 加 3 个新参数 |
@@ -304,7 +304,7 @@ assert_eq!(cfg.search.population_size, 3);
 
 **Step 2: 写种群选择测试**
 
-在 `evolution/src/search.rs` 新增测试：
+在 `crates/agent-evolution/src/search.rs` 新增测试：
 
 - 相同 `skill_id/kind/content` 的候选去重；
 - 从 Pareto front 保留最多 K 个；
@@ -360,8 +360,8 @@ Expected: PASS；`population_size=1` 时行为与旧实现兼容。
 
 ```bash
 git add evolution/src/search.rs memory/src/config.rs memory/src/lib.rs \
-  frontend/src-tauri/src/compression_settings_commands.rs \
-  frontend/src-tauri/src/evolution_run_commands.rs
+  apps/desktop/src-tauri/src/compression_settings_commands.rs \
+  apps/desktop/src-tauri/src/evolution_run_commands.rs
 git commit -m "feat(evolution): maintain diverse GEPA-lite population"
 ```
 
@@ -378,16 +378,16 @@ git commit -m "feat(evolution): maintain diverse GEPA-lite population"
 
 **Files:**
 
-- Modify: `evolution/src/evalset.rs`（新增 `EvalJudgement` + `parse_eval_judgement` + `aggregate_critiques`）
-- Keep: `evolution/src/judge.rs`（`JudgeVerdict` 保持不变）
-- Modify: `evolution/src/search.rs`（`build_mutation_prompt` 接受结构化 critique）
-- Modify: `frontend/src-tauri/src/evolution_run_commands.rs`
-- Test: `evolution/src/evalset.rs`
-- Test: `evolution/src/judge.rs`（确认未破坏）
+- Modify: `crates/agent-evolution/src/evalset.rs`（新增 `EvalJudgement` + `parse_eval_judgement` + `aggregate_critiques`）
+- Keep: `crates/agent-evolution/src/judge.rs`（`JudgeVerdict` 保持不变）
+- Modify: `crates/agent-evolution/src/search.rs`（`build_mutation_prompt` 接受结构化 critique）
+- Modify: `apps/desktop/src-tauri/src/evolution_run_commands.rs`
+- Test: `crates/agent-evolution/src/evalset.rs`
+- Test: `crates/agent-evolution/src/judge.rs`（确认未破坏）
 
 **Step 1: 定义结构化结果**
 
-在 `evolution/src/evalset.rs` 新增：
+在 `crates/agent-evolution/src/evalset.rs` 新增：
 
 ```rust
 pub struct EvalJudgement {
@@ -464,7 +464,7 @@ Expected: PASS；下一代 prompt 包含可验证的 unmet expectation。
 
 ```bash
 git add evolution/src/evalset.rs evolution/src/judge.rs \
-  evolution/src/search.rs frontend/src-tauri/src/evolution_run_commands.rs
+  evolution/src/search.rs apps/desktop/src-tauri/src/evolution_run_commands.rs
 git commit -m "feat(evolution): feed structured judge critique into mutations"
 ```
 
@@ -478,10 +478,10 @@ git commit -m "feat(evolution): feed structured judge critique into mutations"
 
 **Files:**
 
-- Modify: `evolution/src/evalset.rs`
-- Modify: `frontend/src-tauri/src/evolution_run_commands.rs`
-- Modify: `evolution/src/history.rs`
-- Test: `evolution/src/evalset.rs`
+- Modify: `crates/agent-evolution/src/evalset.rs`
+- Modify: `apps/desktop/src-tauri/src/evolution_run_commands.rs`
+- Modify: `crates/agent-evolution/src/history.rs`
+- Test: `crates/agent-evolution/src/evalset.rs`
 
 **Step 1: 写稳定划分测试**
 
@@ -536,7 +536,7 @@ Expected: PASS；重复运行划分结果稳定。
 
 ```bash
 git add evolution/src/evalset.rs evolution/src/history.rs \
-  frontend/src-tauri/src/evolution_run_commands.rs
+  apps/desktop/src-tauri/src/evolution_run_commands.rs
 git commit -m "feat(evolution): validate GEPA-lite candidates on holdout examples"
 ```
 
@@ -546,10 +546,10 @@ git commit -m "feat(evolution): validate GEPA-lite candidates on holdout example
 
 **Files:**
 
-- Modify: `evolution/src/history.rs`
-- Modify: `frontend/src-tauri/src/evolution_run_commands.rs`
+- Modify: `crates/agent-evolution/src/history.rs`
+- Modify: `apps/desktop/src-tauri/src/evolution_run_commands.rs`
 - Modify: `docs/evolution.md`
-- Test: `evolution/src/history.rs`
+- Test: `crates/agent-evolution/src/history.rs`
 
 **Step 1: 定义搜索摘要**
 
@@ -596,7 +596,7 @@ pub struct SearchRunMeta {
 
 同步修正：
 
-- `evolution/src/search.rs` 第 4 行过时注释「不做交叉（crossover）」— **在本 Task 修正**（不要等到 Task 6 才改，因为 Task 1 就会接触 search.rs）；
+- `crates/agent-evolution/src/search.rs` 第 4 行过时注释「不做交叉（crossover）」— **在本 Task 修正**（不要等到 Task 6 才改，因为 Task 1 就会接触 search.rs）；
 - `docs/evolution.md` 的成本公式，加入 grounded eval 倍数；
 - `docs/learning-loop.md` 中与交叉/evalset 冲突的描述。
 
@@ -616,7 +616,7 @@ Expected: PASS；旧 history 数据兼容。
 
 ```bash
 git add evolution/src/history.rs evolution/src/search.rs \
-  frontend/src-tauri/src/evolution_run_commands.rs \
+  apps/desktop/src-tauri/src/evolution_run_commands.rs \
   docs/evolution.md docs/learning-loop.md
 git commit -m "docs(evolution): record reproducible GEPA-lite search summaries"
 ```
@@ -631,16 +631,16 @@ git commit -m "docs(evolution): record reproducible GEPA-lite search summaries"
 
 **Files:**
 
-- Modify: `evolution/src/gates.rs`
-- Modify: `evolution/src/search.rs`
-- Modify: `frontend/src-tauri/src/evolution_run_commands.rs`
-- Reuse: `evolution/src/proposal.rs` 中现有技能测试执行逻辑
-- Test: `evolution/src/gates.rs`
-- Test: `evolution/src/proposal.rs`
+- Modify: `crates/agent-evolution/src/gates.rs`
+- Modify: `crates/agent-evolution/src/search.rs`
+- Modify: `apps/desktop/src-tauri/src/evolution_run_commands.rs`
+- Reuse: `crates/agent-evolution/src/proposal.rs` 中现有技能测试执行逻辑
+- Test: `crates/agent-evolution/src/gates.rs`
+- Test: `crates/agent-evolution/src/proposal.rs`
 
 **Step 1: 先抽取现有测试 runner**
 
-现有测试 runner 是 `run_skill_tests`（`evolution_run_commands.rs:696–743`），位于 Tauri 侧而非 `evolution` crate。需将其逻辑抽取到 `evolution/src/gates.rs` 或新建 `evolution/src/sandbox.rs`，使其成为纯 Rust 可测试函数，入参必须是临时技能目录路径，不能直接修改真实技能。
+现有测试 runner 是 `run_skill_tests`（`evolution_run_commands.rs:696–743`），位于 Tauri 侧而非 `evolution` crate。需将其逻辑抽取到 `crates/agent-evolution/src/gates.rs` 或新建 `crates/agent-evolution/src/sandbox.rs`，使其成为纯 Rust 可测试函数，入参必须是临时技能目录路径，不能直接修改真实技能。
 
 **Step 2: 设计安全边界**
 
@@ -678,7 +678,7 @@ Expected: PASS；测试只在临时目录执行，超时可控。
 
 ```bash
 git add evolution/src/gates.rs evolution/src/search.rs \
-  evolution/src/proposal.rs frontend/src-tauri/src/evolution_run_commands.rs
+  evolution/src/proposal.rs apps/desktop/src-tauri/src/evolution_run_commands.rs
 git commit -m "feat(evolution): score testable skills with sandbox feedback"
 ```
 
@@ -697,12 +697,12 @@ git commit -m "feat(evolution): score testable skills with sandbox feedback"
 
 - Modify: `skills/src/usage.rs`
 - Modify: `skills/src/lib.rs`
-- Modify: `memory/src/config.rs`（`learning.unused_skill_days` 旁增加 `evolution.curator` 或 `learning.curator`）
-- Modify: `tools/src/builtins/memory/skills_tool.rs`
-- Create: `evolution/src/curator.rs`（或先放 `skills`，若需写 proposal 再由 Tauri 调用）
-- Modify: `frontend/src-tauri/src/evolution_run_commands.rs`（或新建 `curator_commands.rs`）
+- Modify: `crates/agent-memory/src/config.rs`（`learning.unused_skill_days` 旁增加 `evolution.curator` 或 `learning.curator`）
+- Modify: `crates/agent-tools/src/builtin/memory/skills_tool.rs`
+- Create: `crates/agent-evolution/src/curator.rs`（或先放 `skills`，若需写 proposal 再由 Tauri 调用）
+- Modify: `apps/desktop/src-tauri/src/evolution_run_commands.rs`（或新建 `curator_commands.rs`）
 - Test: `skills/src/usage.rs`
-- Test: `memory/src/config.rs`
+- Test: `crates/agent-memory/src/config.rs`
 
 **Step 1: 定义结构化报告**
 
@@ -781,8 +781,8 @@ Expected: PASS；旧 `skills curate` 仍返回可读 Markdown。
 
 ```bash
 git add skills/src/usage.rs skills/src/lib.rs memory/src/config.rs \
-  tools/src/builtins/memory/skills_tool.rs \
-  frontend/src-tauri/src/evolution_run_commands.rs \
+  tools/src/builtin/memory/skills_tool.rs \
+  apps/desktop/src-tauri/src/evolution_run_commands.rs \
   apps/desktop/src/components/settings/
 git commit -m "feat(skills): structured curator report with health signals"
 ```
@@ -795,12 +795,12 @@ git commit -m "feat(skills): structured curator report with health signals"
 
 **Files:**
 
-- Modify: `skills/src/usage.rs` 或 Create: `evolution/src/curator.rs`
-- Modify: `evolution/src/proposal.rs`（若复用提案目录）
-- Modify: `evolution/src/history.rs`（`mode=curator`）
-- Modify: `frontend/src-tauri/src/evolution_run_commands.rs`
+- Modify: `skills/src/usage.rs` 或 Create: `crates/agent-evolution/src/curator.rs`
+- Modify: `crates/agent-evolution/src/proposal.rs`（若复用提案目录）
+- Modify: `crates/agent-evolution/src/history.rs`（`mode=curator`）
+- Modify: `apps/desktop/src-tauri/src/evolution_run_commands.rs`
 - Modify: `docs/evolution.md`
-- Test: `evolution/src/curator.rs`（或 `skills` 侧）
+- Test: `crates/agent-evolution/src/curator.rs`（或 `skills` 侧）
 
 **Step 1: 重叠检测（无模型优先）**
 
@@ -867,7 +867,7 @@ Expected: PASS；文档说明 Curator 与 search/reflect/dspy 并列。
 ```bash
 git add skills/src/usage.rs evolution/src/curator.rs evolution/src/lib.rs \
   evolution/src/history.rs evolution/src/proposal.rs \
-  frontend/src-tauri/src/evolution_run_commands.rs docs/evolution.md
+  apps/desktop/src-tauri/src/evolution_run_commands.rs docs/evolution.md
 git commit -m "feat(evolution): curator overlap merge proposals with human review"
 ```
 

@@ -21,13 +21,13 @@
 
 | File | Responsibility |
 |------|----------------|
-| Create: `agent/src/context_usage.rs` | 估算、8 类归类、`ContextUsageSnapshot` |
-| Modify: `agent/src/lib.rs` | `mod context_usage` + re-export |
-| Modify: `agent/src/loop_.rs` | 导出分层字符原料（与 `build_system_prompt` 同源） |
-| Modify: `agent/src/streaming.rs` | 组装前 emit `ContextUsage` |
+| Create: `crates/agent-core/src/context_usage.rs` | 估算、8 类归类、`ContextUsageSnapshot` |
+| Modify: `crates/agent-core/src/lib.rs` | `mod context_usage` + re-export |
+| Modify: `crates/agent-core/src/loop_.rs` | 导出分层字符原料（与 `build_system_prompt` 同源） |
+| Modify: `crates/agent-core/src/streaming.rs` | 组装前 emit `ContextUsage` |
 | Modify: `proto/proto/astro.proto` | `ContextUsageEvent` + `ChatEvent` oneof |
-| Modify: `backend/src/grpc/astro_service.rs` | `multi_turn_to_chat_event` 映射 |
-| Modify: `frontend/src-tauri/src/commands.rs` | `ChatStreamEvent::ContextUsage` + emit |
+| Modify: `crates/agent-server/src/grpc/astro_service.rs` | `multi_turn_to_chat_event` 映射 |
+| Modify: `apps/desktop/src-tauri/src/commands.rs` | `ChatStreamEvent::ContextUsage` + emit |
 | Create: `apps/desktop/src/lib/contextUsage.ts` | 类型、格式化、%、过滤 0 |
 | Create: `apps/desktop/src/lib/contextUsage.test.ts` | 纯函数测试 |
 | Create: `apps/desktop/src/components/ContextUsageBar.tsx` | 分段条 |
@@ -46,12 +46,12 @@
 ### Task 1: `context_usage` 纯模块（TDD）
 
 **Files:**
-- Create: `agent/src/context_usage.rs`
-- Modify: `agent/src/lib.rs`
+- Create: `crates/agent-core/src/context_usage.rs`
+- Modify: `crates/agent-core/src/lib.rs`
 
 - [ ] **Step 1: 写失败测试（模块内 `#[cfg(test)]`）**
 
-先在 `agent/src/context_usage.rs` 写最小类型与空 `build_snapshot`，再写测试；或先写测试文件后实现——按下面完整模块落盘。
+先在 `crates/agent-core/src/context_usage.rs` 写最小类型与空 `build_snapshot`，再写测试；或先写测试文件后实现——按下面完整模块落盘。
 
 目标测试（实现后放在同文件 `mod tests`）：
 
@@ -119,7 +119,7 @@ fn delegate_tool_result_counts_as_subagent() {
 Run: `cargo test -p agent estimate_tokens_ceil_div_4 -- --nocapture`  
 Expected: compile fail 或 test not found（尚未实现）
 
-- [ ] **Step 3: 实现 `agent/src/context_usage.rs`**
+- [ ] **Step 3: 实现 `crates/agent-core/src/context_usage.rs`**
 
 ```rust
 //! 上下文占用分层估算（ceil(chars/4)），与账单 Usage 无关。
@@ -305,7 +305,7 @@ pub fn build_snapshot(input: ContextUsageInput<'_>) -> ContextUsageSnapshot {
 }
 ```
 
-在 `agent/src/lib.rs` 加入：
+在 `crates/agent-core/src/lib.rs` 加入：
 
 ```rust
 pub mod context_usage;
@@ -335,7 +335,7 @@ EOF
 ### Task 2: 从 AgentLoop 导出分层字符
 
 **Files:**
-- Modify: `agent/src/loop_.rs`
+- Modify: `crates/agent-core/src/loop_.rs`
 
 - [ ] **Step 1: 新增 `system_prompt_layer_chars`（与 `build_system_prompt` 同源）**
 
@@ -440,7 +440,7 @@ EOF
 ### Task 3: 流式路径 emit ContextUsage
 
 **Files:**
-- Modify: `agent/src/streaming.rs`
+- Modify: `crates/agent-core/src/streaming.rs`
 
 - [ ] **Step 1: 扩展 `MultiTurnStreamItem`**
 
@@ -504,8 +504,8 @@ EOF
 
 **Files:**
 - Modify: `proto/proto/astro.proto`
-- Modify: `backend/src/grpc/astro_service.rs`
-- Modify: `frontend/src-tauri/src/commands.rs`
+- Modify: `crates/agent-server/src/grpc/astro_service.rs`
+- Modify: `apps/desktop/src-tauri/src/commands.rs`
 
 - [ ] **Step 1: Proto 追加**
 
@@ -585,13 +585,13 @@ Serialize 字段名：现有 Usage 用 `prompt_tokens` snake；前端 listen 若
 
 - [ ] **Step 5: 编译**
 
-Run: `cargo check -p backend` 与 `cargo check -p astro-frontend`（或 `frontend/src-tauri` package 名）  
+Run: `cargo check -p backend` 与 `cargo check -p astro-frontend`（或 `apps/desktop/src-tauri` package 名）  
 Expected: OK
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add proto/proto/astro.proto backend/src/grpc/astro_service.rs frontend/src-tauri/src/commands.rs
+git add proto/proto/astro.proto backend/src/grpc/astro_service.rs apps/desktop/src-tauri/src/commands.rs
 git commit -m "$(cat <<'EOF'
 feat: pipe context usage events to the desktop UI
 

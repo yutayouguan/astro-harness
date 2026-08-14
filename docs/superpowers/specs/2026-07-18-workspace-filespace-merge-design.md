@@ -58,7 +58,7 @@ nav = "files"
 | [apps/desktop/src/lib/filespace/fileMeta.ts](../../../apps/desktop/src/lib/filespace/fileMeta.ts) | 共享 `formatSize` / `isTauri` |
 | [apps/desktop/src/components/filespace/FileGlyph.tsx](../../../apps/desktop/src/components/filespace/FileGlyph.tsx) | 共享文件类型图标 |
 | [apps/desktop/src/components/filespace/FilePreviewContent.tsx](../../../apps/desktop/src/components/filespace/FilePreviewContent.tsx) | 按类型渲染预览/编辑内容区 |
-| [frontend/src-tauri/src/artifacts_commands.rs](../../../frontend/src-tauri/src/artifacts_commands.rs) | `find_artifact_by_path` |
+| [apps/desktop/src-tauri/src/artifacts_commands.rs](../../../apps/desktop/src-tauri/src/artifacts_commands.rs) | `find_artifact_by_path` |
 
 ## 行为说明
 

@@ -83,7 +83,7 @@
 
 ## 2. 路由定价
 
-模块：`memory/src/usage/pricing.rs`（可拆 `billing_route`）。
+模块：`crates/agent-memory/src/usage/pricing.rs`（可拆 `billing_route`）。
 
 ### 公式
 

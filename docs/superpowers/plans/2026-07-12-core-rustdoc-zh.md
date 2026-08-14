@@ -36,8 +36,8 @@
 
 - [x] `proto`（`astro.proto` + build/lib）
 - [x] `backend` `astro_service.rs` 各 RPC 方法
-- [x] `frontend/src-tauri` 模块与命令注释
-- [x] `frontend/src` 组件 Props + 大面板私有辅助函数中文 JSDoc
+- [x] `apps/desktop/src-tauri` 模块与命令注释
+- [x] `apps/desktop/src` 组件 Props + 大面板私有辅助函数中文 JSDoc
 
 ### 验证
 

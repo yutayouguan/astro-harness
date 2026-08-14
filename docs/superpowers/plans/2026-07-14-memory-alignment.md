@@ -16,21 +16,21 @@
 
 | Path | Responsibility |
 |------|----------------|
-| `memory/src/agent/store.rs`（新建） | `MemoryStore`：§ 解析、容量、扫描、去重、live/snapshot |
-| `memory/src/agent/scan.rs`（新建） | 写入前威胁 / 不可见 Unicode 扫描 |
-| `memory/src/agent/files.rs` | 删除或薄委托到 `store`（避免双实现） |
-| `memory/src/agent/mod.rs` / `lib.rs` | re-export |
-| `memory/src/session/manager.rs` | 持有 store、dispatch `memory`、refresh、日记 API |
-| `memory/src/config.rs`（新建）或扩展 `hooks/src/config.rs` | `memory:` / `auxiliary:` 解析（单一 yaml） |
-| `memory/src/dreaming/mod.rs` | finalize 经 MemoryStore；P2 aux 路由 |
-| `memory/src/pending.rs`（P2） | write_approval 队列 |
-| `memory/src/review.rs`（P2） | 回合后 review digest + 应用建议 |
-| `agent/src/loop_.rs` / `context.rs` | Frozen Snapshot 注入；日记截断 |
-| `tools/src/builtins/memory_tools.rs` | 注册单一 `memory` |
-| `tools/src/core/dispatch.rs` | 工具名分支 |
-| `memory/src/agent/tools_enabled.rs` | toolset 映射 |
-| `agent/src/delegate_exec.rs` | deny/allow 名单工具名 |
-| `frontend/src-tauri/src/*` | `refresh_memory`；P2 pending UI 命令 |
+| `crates/agent-memory/src/agent/store.rs`（新建） | `MemoryStore`：§ 解析、容量、扫描、去重、live/snapshot |
+| `crates/agent-memory/src/agent/scan.rs`（新建） | 写入前威胁 / 不可见 Unicode 扫描 |
+| `crates/agent-memory/src/agent/files.rs` | 删除或薄委托到 `store`（避免双实现） |
+| `crates/agent-memory/src/agent/mod.rs` / `lib.rs` | re-export |
+| `crates/agent-memory/src/session/manager.rs` | 持有 store、dispatch `memory`、refresh、日记 API |
+| `crates/agent-memory/src/config.rs`（新建）或扩展 `crates/agent-hooks/src/config.rs` | `memory:` / `auxiliary:` 解析（单一 yaml） |
+| `crates/agent-memory/src/dreaming/mod.rs` | finalize 经 MemoryStore；P2 aux 路由 |
+| `crates/agent-memory/src/pending.rs`（P2） | write_approval 队列 |
+| `crates/agent-memory/src/review.rs`（P2） | 回合后 review digest + 应用建议 |
+| `crates/agent-core/src/loop_.rs` / `context.rs` | Frozen Snapshot 注入；日记截断 |
+| `crates/agent-tools/src/builtin/memory_tools.rs` | 注册单一 `memory` |
+| `crates/agent-tools/src/engine/dispatch.rs` | 工具名分支 |
+| `crates/agent-memory/src/agent/tools_enabled.rs` | toolset 映射 |
+| `crates/agent-core/src/delegate_exec.rs` | deny/allow 名单工具名 |
+| `apps/desktop/src-tauri/src/*` | `refresh_memory`；P2 pending UI 命令 |
 | `docs/hooks.md` 旁或 `docs` 记忆小节 | 用户可见配置说明（可选短节） |
 
 **命名：** 代码与 UI **禁止**出现参考项目品牌字符串。
@@ -42,10 +42,10 @@
 ### Task 1: `MemoryStore` + scan（TDD）
 
 **Files:**
-- Create: `memory/src/agent/store.rs`
-- Create: `memory/src/agent/scan.rs`
-- Modify: `memory/src/agent/mod.rs`
-- Modify: `memory/src/agent/files.rs`（改为 `pub use store::*` 或删除后改 import）
+- Create: `crates/agent-memory/src/agent/store.rs`
+- Create: `crates/agent-memory/src/agent/scan.rs`
+- Modify: `crates/agent-memory/src/agent/mod.rs`
+- Modify: `crates/agent-memory/src/agent/files.rs`（改为 `pub use store::*` 或删除后改 import）
 - Test: unit tests in `store.rs` / `scan.rs`
 
 - [ ] **Step 1: Write failing tests for parse/serialize and overflow**
@@ -150,11 +150,11 @@ EOF
 ### Task 2: Config `memory.*` + wire `MemoryManager`
 
 **Files:**
-- Create: `memory/src/config.rs`（推荐：memory 自管 memory/auxiliary；hooks 继续只读 hooks，或两端共用同一 parse 函数）
-- Modify: `hooks/src/config.rs` — 扩展 `AstroConfig` 字段 **或** 抽共享解析；禁止两套互相覆盖的 yaml 路径
-- Modify: `memory/src/session/manager.rs`
-- Modify: `memory/src/lib.rs`
-- Test: `memory/src/config.rs` 或 manager 集成测
+- Create: `crates/agent-memory/src/config.rs`（推荐：memory 自管 memory/auxiliary；hooks 继续只读 hooks，或两端共用同一 parse 函数）
+- Modify: `crates/agent-hooks/src/config.rs` — 扩展 `AstroConfig` 字段 **或** 抽共享解析；禁止两套互相覆盖的 yaml 路径
+- Modify: `crates/agent-memory/src/session/manager.rs`
+- Modify: `crates/agent-memory/src/lib.rs`
+- Test: `crates/agent-memory/src/config.rs` 或 manager 集成测
 
 - [ ] **Step 1: Config types**
 
@@ -238,11 +238,11 @@ EOF
 ### Task 3: 单一 `memory` 工具 + dispatch
 
 **Files:**
-- Modify: `tools/src/builtins/memory_tools.rs`
-- Modify: `tools/src/core/dispatch.rs`
-- Modify: `memory/src/session/manager.rs` (`dispatch_memory_tool`)
-- Modify: `memory/src/agent/tools_enabled.rs`
-- Modify: `agent/src/delegate_exec.rs`（工具名列表）
+- Modify: `crates/agent-tools/src/builtin/memory_tools.rs`
+- Modify: `crates/agent-tools/src/engine/dispatch.rs`
+- Modify: `crates/agent-memory/src/session/manager.rs` (`dispatch_memory_tool`)
+- Modify: `crates/agent-memory/src/agent/tools_enabled.rs`
+- Modify: `crates/agent-core/src/delegate_exec.rs`（工具名列表）
 - Test: manager unit test or tools test
 
 - [ ] **Step 1: Schema**
@@ -299,8 +299,8 @@ EOF
 ### Task 4: AgentLoop Frozen Snapshot
 
 **Files:**
-- Modify: `agent/src/loop_.rs`
-- Modify: `agent/src/context.rs`（可选：render 标题带 usage，若 snapshot_render 已含 header 则避免双标题）
+- Modify: `crates/agent-core/src/loop_.rs`
+- Modify: `crates/agent-core/src/context.rs`（可选：render 标题带 usage，若 snapshot_render 已含 header 则避免双标题）
 - Test: `agent/tests/agent_test.rs` 或新建 `agent/tests/memory_snapshot_test.rs`
 
 - [ ] **Step 1: 构造时 snapshot 已由 `MemoryStore::open` 固化** — 确认 `open` = load disk → live + snapshot
@@ -348,9 +348,9 @@ EOF
 ### Task 5: Tauri `refresh_memory` + 入梦经 Store
 
 **Files:**
-- Modify: `frontend/src-tauri/src/lib.rs`（register command）
-- Create or Modify: `frontend/src-tauri/src/memory_commands.rs`（若已有则扩展）
-- Modify: `memory/src/dreaming/mod.rs` — `finalize_dream_job_with_memory`
+- Modify: `apps/desktop/src-tauri/src/lib.rs`（register command）
+- Create or Modify: `apps/desktop/src-tauri/src/memory_commands.rs`（若已有则扩展）
+- Modify: `crates/agent-memory/src/dreaming/mod.rs` — `finalize_dream_job_with_memory`
 - Modify: 前端记忆页（可选按钮「刷新进对话」）— 最小：命令可用即可
 
 - [ ] **Step 1: Tauri command**
@@ -418,8 +418,8 @@ EOF
 ### Task 7: `write_approval` pending 队列
 
 **Files:**
-- Create: `memory/src/pending.rs`
-- Modify: `memory/src/session/manager.rs` — 写路径分支
+- Create: `crates/agent-memory/src/pending.rs`
+- Modify: `crates/agent-memory/src/session/manager.rs` — 写路径分支
 - Modify: Tauri commands + 设置/记忆页最小 UI
 - Test: `memory/tests/pending_test.rs`
 
@@ -458,10 +458,10 @@ EOF
 ### Task 8: `auxiliary` + background review + dreaming 模型路由
 
 **Files:**
-- Modify: `memory/src/config.rs` — `AuxiliaryConfig`
-- Create: `memory/src/review.rs` 或 `agent/src/memory_review.rs`
+- Modify: `crates/agent-memory/src/config.rs` — `AuxiliaryConfig`
+- Create: `crates/agent-memory/src/review.rs` 或 `crates/agent-core/src/memory_review.rs`
 - Modify: `agent` turn 结束路径（streaming / loop 成功后 `tokio::spawn`）
-- Modify: `frontend/src-tauri/src/dreaming_commands.rs` — 用 aux 模型调 LLM
+- Modify: `apps/desktop/src-tauri/src/dreaming_commands.rs` — 用 aux 模型调 LLM
 - Test: review 用 mock/scripted provider
 
 - [ ] **Step 1: Config**

@@ -58,8 +58,8 @@ Astro 的会话真相源改为：
 
 - 路径：`{ASTRO_MEMORY_DIR|~/.astro}/sessions/state.db`（WAL）
 - 模块：
-  - `memory/src/message_db.rs` → 扩展或演进为 `session_store.rs` 中的 `SessionStore`（sessions + messages + FTS + migrations）
-  - `memory/src/session_db.rs`：迁移期保留只读导入；迁完后删除或变为 thin deprecated wrapper
+  - `crates/agent-memory/src/message_db.rs` → 扩展或演进为 `session_store.rs` 中的 `SessionStore`（sessions + messages + FTS + migrations）
+  - `crates/agent-memory/src/session_db.rs`：迁移期保留只读导入；迁完后删除或变为 thin deprecated wrapper
 - `MemoryManager` 只持有一个 `SessionStore`
 
 ## Schema（目标版本 11）

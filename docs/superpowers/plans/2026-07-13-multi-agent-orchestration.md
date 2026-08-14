@@ -18,15 +18,15 @@
 
 | 文件 | 职责 |
 |------|------|
-| `memory/src/orchestration_db.rs` | SQLite CRUD + 状态更新 |
-| `memory/src/orchestration_spawn.rs` | `OnceLock` spawner + `OrchestrationSpawnRequest` |
-| `memory/src/lib.rs` | 导出 |
+| `crates/agent-memory/src/orchestration_db.rs` | SQLite CRUD + 状态更新 |
+| `crates/agent-memory/src/orchestration_spawn.rs` | `OnceLock` spawner + `OrchestrationSpawnRequest` |
+| `crates/agent-memory/src/lib.rs` | 导出 |
 | `memory/tests/orchestration_db_test.rs` | DB 单测 |
-| `agent/src/orchestration.rs` | `run_orchestration` 串行执行 |
-| `agent/src/lib.rs` | 导出 + 注册 spawner 辅助 |
-| `tools/src/builtins/orchestration.rs` | `orchestration_run` / `orchestration_status` |
-| `tools/src/builtins/mod.rs` / `dispatch.rs` / `lib.rs` | 注册与路由 |
-| `memory/src/tools_enabled.rs` | `tool_name_to_toolset` 映射到 `multi_agent` |
+| `crates/agent-core/src/orchestration.rs` | `run_orchestration` 串行执行 |
+| `crates/agent-core/src/lib.rs` | 导出 + 注册 spawner 辅助 |
+| `crates/agent-tools/src/builtin/orchestration.rs` | `orchestration_run` / `orchestration_status` |
+| `crates/agent-tools/src/builtin/mod.rs` / `dispatch.rs` / `lib.rs` | 注册与路由 |
+| `crates/agent-memory/src/tools_enabled.rs` | `tool_name_to_toolset` 映射到 `multi_agent` |
 | `frontend` hooks（可选） | 若 `KNOWN_TOOLSET`/`AGENT_TOOLS` 需展示新工具名，补文案；toolset 仍用 `multi_agent` 则可能无需改开关 |
 
 **依赖方向：** `tools` → `memory`（insert + `request_spawn`）；`agent` → `memory` + `tools`（执行器 + 启动时 `set_spawner`）。禁止 `tools` → `agent`。
@@ -51,9 +51,9 @@ pub struct OrchestrationSpawnRequest {
 ### Task 1: `OrchestrationDb`（TDD）
 
 **Files:**
-- Create: `memory/src/orchestration_db.rs`
+- Create: `crates/agent-memory/src/orchestration_db.rs`
 - Create: `memory/tests/orchestration_db_test.rs`
-- Modify: `memory/src/lib.rs`
+- Modify: `crates/agent-memory/src/lib.rs`
 
 - [ ] **Step 1: 写失败测试**
 
@@ -157,8 +157,8 @@ EOF
 ### Task 2: Spawn 回调注册
 
 **Files:**
-- Create: `memory/src/orchestration_spawn.rs`
-- Modify: `memory/src/lib.rs`
+- Create: `crates/agent-memory/src/orchestration_spawn.rs`
+- Modify: `crates/agent-memory/src/lib.rs`
 
 - [ ] **Step 1: 实现**
 
@@ -214,9 +214,9 @@ EOF
 ### Task 3: 串行执行器 `agent::orchestration`
 
 **Files:**
-- Create: `agent/src/orchestration.rs`
-- Modify: `agent/src/lib.rs`
-- Modify: `agent/src/loop_.rs` 或 `builder` / backend 启动处：调用 `set_orchestration_spawner`
+- Create: `crates/agent-core/src/orchestration.rs`
+- Modify: `crates/agent-core/src/lib.rs`
+- Modify: `crates/agent-core/src/loop_.rs` 或 `builder` / backend 启动处：调用 `set_orchestration_spawner`
 - Test: `agent/tests/orchestration_test.rs`（可用短超时 + 假失败路径测状态机；真 LLM 可选 ignore）
 
 - [ ] **Step 1: 实现 `run_orchestration(req: OrchestrationSpawnRequest)`**
@@ -324,9 +324,9 @@ EOF
 ### Task 4: 工具 `orchestration_run` / `orchestration_status`
 
 **Files:**
-- Create: `tools/src/builtins/orchestration.rs`
-- Modify: `tools/src/builtins/mod.rs`、`tools/src/lib.rs`（`register_all`）、`tools/src/core/dispatch.rs`
-- Modify: `memory/src/tools_enabled.rs`：`orchestration_run` | `orchestration_status` → `multi_agent`
+- Create: `crates/agent-tools/src/builtin/orchestration.rs`
+- Modify: `crates/agent-tools/src/builtin/mod.rs`、`crates/agent-tools/src/lib.rs`（`register_all`）、`crates/agent-tools/src/engine/dispatch.rs`
+- Modify: `crates/agent-memory/src/tools_enabled.rs`：`orchestration_run` | `orchestration_status` → `multi_agent`
 - Modify: `apps/desktop/src/hooks/useAgentTools.ts`（若有工具名录需展示描述；toolset 仍为 multi_agent）
 
 - [ ] **Step 1: 实现工具**
@@ -379,8 +379,8 @@ cargo check -p agent -p tools
 - [ ] **Step 5: Commit**
 
 ```bash
-git add tools/src/builtins/orchestration.rs tools/src/builtins/mod.rs tools/src/lib.rs \
-  tools/src/core/dispatch.rs memory/src/tools_enabled.rs
+git add tools/src/builtin/orchestration.rs tools/src/builtin/mod.rs tools/src/lib.rs \
+  tools/src/engine/dispatch.rs memory/src/tools_enabled.rs
 git commit -m "$(cat <<'EOF'
 feat(tools): add orchestration_run and orchestration_status
 
@@ -393,7 +393,7 @@ EOF
 ### Task 5: 遥测边
 
 **Files:**
-- Modify: `agent/src/orchestration.rs`（step start/end）
+- Modify: `crates/agent-core/src/orchestration.rs`（step start/end）
 - Optionally extend Insights KPI later — **本 Task 不改前端**
 
 - [ ] **Step 1: 写入 `usage_events`**

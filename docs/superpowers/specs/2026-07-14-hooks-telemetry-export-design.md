@@ -79,9 +79,9 @@ AgentLoop / streaming
 
 | 组件 | 职责 | 路径 |
 |------|------|------|
-| `HookPayload` | 增加 `turn_id` | `hooks/src/outcome.rs` |
-| `env_from_payload` | 导出 `ASTRO_HOOK_TURN` | `hooks/src/shell.rs` |
-| Agent fire 站点 | 填 `turn_id: self.current_turn_id.clone()` | `agent/src/loop_.rs`、`streaming.rs`（及其他构造 `HookPayload` 处） |
+| `HookPayload` | 增加 `turn_id` | `crates/agent-hooks/src/outcome.rs` |
+| `env_from_payload` | 导出 `ASTRO_HOOK_TURN` | `crates/agent-hooks/src/shell.rs` |
+| Agent fire 站点 | 填 `turn_id: self.current_turn_id.clone()` | `crates/agent-core/src/loop_.rs`、`streaming.rs`（及其他构造 `HookPayload` 处） |
 | 示例脚本 | 读 env → JSON POST | `docs/examples/hooks/telemetry-webhook.sh` |
 | 文档 | 配置样例与安全注意 | `docs/examples/hooks/README.md`、`docs/hooks.md` 短节 |
 

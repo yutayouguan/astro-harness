@@ -53,7 +53,7 @@ image_gen (tools)
   └─ OpenAI → Provider::generate_image（仅 prompt；忽略高级参数并 note）
 ```
 
-新增类型（建议放 `providers/src/protocol/interactions_http.rs`）：
+新增类型（建议放 `crates/agent-providers/src/protocol/interactions_http.rs`）：
 
 - `InteractionImageRequest`：prompt、response_format 字段、参考图 bytes、video、tools、previous_id、thinking_level
 - `InteractionImageResult`：`GeneratedImage`（或等价）+ `interaction_id` + 可选 `output_text` / `search_suggestions`

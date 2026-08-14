@@ -129,9 +129,9 @@ stream=true|false
 
 | 路径 | 说明 |
 |------|------|
-| `providers/src/protocol/interactions_http.rs` | TTS body / 解析 / 流式聚合 / `google_interactions_tts` |
-| `tools/src/builtins/media/tts.rs` | Args、校验、Google / OpenAI 分路径 |
-| `providers/src/protocol/media_http.rs` | `google_tts_generate` 标弃用 |
+| `crates/agent-providers/src/protocol/interactions_http.rs` | TTS body / 解析 / 流式聚合 / `google_interactions_tts` |
+| `crates/agent-tools/src/builtin/media/tts.rs` | Args、校验、Google / OpenAI 分路径 |
+| `crates/agent-providers/src/protocol/media_http.rs` | `google_tts_generate` 标弃用 |
 
 ## 测试
 

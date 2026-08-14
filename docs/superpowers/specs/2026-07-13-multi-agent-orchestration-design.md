@@ -72,7 +72,7 @@
 
 ## 执行器
 
-模块：`agent/src/orchestration.rs`（执行）+ `memory/src/orchestration_db.rs`（持久化）。
+模块：`crates/agent-core/src/orchestration.rs`（执行）+ `crates/agent-memory/src/orchestration_db.rs`（持久化）。
 
 1. 将 orchestration 标为 `running`
 2. 按 `seq` 串行：
@@ -107,8 +107,8 @@
 
 | 位置 | 职责 |
 |---|---|
-| `memory/src/orchestration_db.rs` | 建库、CRUD、状态迁移 |
-| `agent/src/orchestration.rs` | 串行执行器、临时角色会话 |
+| `crates/agent-memory/src/orchestration_db.rs` | 建库、CRUD、状态迁移 |
+| `crates/agent-core/src/orchestration.rs` | 串行执行器、临时角色会话 |
 | `tools` builtins | 注册 `orchestration_run` / `orchestration_status` |
 | `usage_db` / 写入钩子 | 编排遥测边 |
 | Tauri | MVP 不强制；二期面板/API |

@@ -122,6 +122,6 @@ GeneratedKind = Images | Videos | Audio | Code | Project | Docs | Html | Other
 
 1. `memory`：扩展子目录列表（注意 `AGENT_SUBDIRS` 当前为 `memory` / `skills`——`generated/...` 可用新常量一并 ensure）。
 2. `tools`：抽出 `generated_dir`（crate 内公共即可）；改 `image_gen` / `video_gen` / `tts`。
-3. `frontend/src-tauri/commands.rs` 出图写入对齐。
+3. `apps/desktop/src-tauri/commands.rs` 出图写入对齐。
 4. 更新媒体 gen 设计文档中的输出路径表述；模板 TOOLS/AGENT 一句引导。
 5. **不**跑批量迁文件脚本。

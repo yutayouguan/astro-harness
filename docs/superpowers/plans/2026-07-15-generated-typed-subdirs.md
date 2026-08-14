@@ -26,12 +26,12 @@
 |------|----------------|
 | Create: `memory-paths/src/workspace/generated.rs` | `GeneratedKind`、`GENERATED_SUBDIRS`、`generated_dir` |
 | Modify: `memory-paths/src/workspace/mod.rs` | 导出 generated 模块 |
-| Modify: `memory/src/agent/workspace/lifecycle.rs` | ensure 时创建 GENERATED_SUBDIRS |
-| Modify: `memory/src/lib.rs` | 再导出 `GeneratedKind` / `generated_dir` / `GENERATED_SUBDIRS` |
-| Modify: `tools/src/builtins/image_gen.rs` | 写入 `images/` |
-| Modify: `tools/src/builtins/video_gen.rs` | 写入 `videos/` |
-| Modify: `tools/src/builtins/tts.rs` | 写入 `audio/` |
-| Modify: `frontend/src-tauri/src/commands.rs` | `generate_image` 对齐 |
+| Modify: `crates/agent-memory/src/agent/workspace/lifecycle.rs` | ensure 时创建 GENERATED_SUBDIRS |
+| Modify: `crates/agent-memory/src/lib.rs` | 再导出 `GeneratedKind` / `generated_dir` / `GENERATED_SUBDIRS` |
+| Modify: `crates/agent-tools/src/builtin/image_gen.rs` | 写入 `images/` |
+| Modify: `crates/agent-tools/src/builtin/video_gen.rs` | 写入 `videos/` |
+| Modify: `crates/agent-tools/src/builtin/tts.rs` | 写入 `audio/` |
+| Modify: `apps/desktop/src-tauri/src/commands.rs` | `generate_image` 对齐 |
 | Modify: `memory/.../templates.rs` | TOOLS.md 一句引导 |
 | Modify: 媒体 gen design 路径表述（可选同 commit） |
 | Modify: `apps/desktop/src/lib/resolveMediaSrc.test.ts` | 嵌套相对路径用例 |
@@ -189,8 +189,8 @@ EOF
 ### Task 2: ensure_agent_space 脚手架 + 再导出
 
 **Files:**
-- Modify: `memory/src/agent/workspace/lifecycle.rs`（`ensure_agent_space` 内循环）
-- Modify: `memory/src/lib.rs`（`pub use workspace::{…, GeneratedKind, generated_dir, GENERATED_SUBDIRS}`）
+- Modify: `crates/agent-memory/src/agent/workspace/lifecycle.rs`（`ensure_agent_space` 内循环）
+- Modify: `crates/agent-memory/src/lib.rs`（`pub use workspace::{…, GeneratedKind, generated_dir, GENERATED_SUBDIRS}`）
 - Test: 扩展 `lifecycle.rs` 现有 `ensure_workspace_creates_core_layout`
 
 **Interfaces:**
@@ -248,9 +248,9 @@ for rel in memory_paths::GENERATED_SUBDIRS {
 }
 ```
 
-`memory/src/lib.rs` 的 `pub use workspace::{...}` 增加：`generated_dir, GeneratedKind, GENERATED_SUBDIRS`（需在 `memory/src/agent/workspace/mod.rs` 已 `pub use` paths/generated — 因 `pub use paths::*` 且 paths 来自 memory-paths workspace 的 `pub use generated::*`，确认 `memory/src/agent/workspace/paths.rs` 的 `pub use memory_paths::workspace::paths::*` **不会**带上 generated。
+`crates/agent-memory/src/lib.rs` 的 `pub use workspace::{...}` 增加：`generated_dir, GeneratedKind, GENERATED_SUBDIRS`（需在 `crates/agent-memory/src/agent/workspace/mod.rs` 已 `pub use` paths/generated — 因 `pub use paths::*` 且 paths 来自 memory-paths workspace 的 `pub use generated::*`，确认 `crates/agent-memory/src/agent/workspace/paths.rs` 的 `pub use memory_paths::workspace::paths::*` **不会**带上 generated。
 
-**关键：** `memory/src/agent/workspace/paths.rs` 当前只 re-export `memory_paths::workspace::paths::*`。Task2 需改为：
+**关键：** `crates/agent-memory/src/agent/workspace/paths.rs` 当前只 re-export `memory_paths::workspace::paths::*`。Task2 需改为：
 
 ```rust
 pub use memory_paths::workspace::paths::*;
@@ -282,9 +282,9 @@ EOF
 ### Task 3: 媒体工具改写入路径
 
 **Files:**
-- Modify: `tools/src/builtins/image_gen.rs`（约 L107：`join("generated")` → `memory::generated_dir(..., Images)`）
-- Modify: `tools/src/builtins/video_gen.rs`（同类）
-- Modify: `tools/src/builtins/tts.rs`（Google / OpenAI 两处 `join("generated")`）
+- Modify: `crates/agent-tools/src/builtin/image_gen.rs`（约 L107：`join("generated")` → `memory::generated_dir(..., Images)`）
+- Modify: `crates/agent-tools/src/builtin/video_gen.rs`（同类）
+- Modify: `crates/agent-tools/src/builtin/tts.rs`（Google / OpenAI 两处 `join("generated")`）
 - Modify: 各文件顶部模块注释路径文案
 
 **Interfaces:**
@@ -293,9 +293,9 @@ EOF
 
 - [ ] **Step 1: Write a focused path unit test（tools）**
 
-若 tools 尚无对 generate_one 的单测，在 `tools/src/core/` 或新建 `tools/tests/generated_dir_wiring_test.rs` **不必**真调 API。最小方案：在 `memory-paths` 已测 helper 后，本任务用编译期接线 + 可选：
+若 tools 尚无对 generate_one 的单测，在 `crates/agent-tools/src/engine/` 或新建 `tools/tests/generated_dir_wiring_test.rs` **不必**真调 API。最小方案：在 `memory-paths` 已测 helper 后，本任务用编译期接线 + 可选：
 
-在 `tools/src/builtins/image_gen.rs` 同文件不测私有函数时，增加裸测：
+在 `crates/agent-tools/src/builtin/image_gen.rs` 同文件不测私有函数时，增加裸测：
 
 ```rust
 #[cfg(test)]
@@ -315,7 +315,7 @@ mod path_tests {
 
 - [ ] **Step 2: Run — path_tests 应已 PASS（helper 已存在）；再用 grep 确认旧路径仍在，作为改前基线**
 
-Run: `rg 'join\("generated"\)' tools/src/builtins/image_gen.rs tools/src/builtins/video_gen.rs tools/src/builtins/tts.rs`  
+Run: `rg 'join\("generated"\)' tools/src/builtin/image_gen.rs tools/src/builtin/video_gen.rs tools/src/builtin/tts.rs`  
 Expected: 仍有命中
 
 - [ ] **Step 3: Replace writes**
@@ -336,7 +336,7 @@ std::fs::create_dir_all(&dir)?;
 
 - [ ] **Step 4: Verify**
 
-Run: `rg 'join\("generated"\)' tools/src/builtins/{image_gen,video_gen,tts}.rs`  
+Run: `rg 'join\("generated"\)' tools/src/builtin/{image_gen,video_gen,tts}.rs`  
 Expected: 无命中（或仅注释）
 
 Run: `cargo test -p tools path_tests -- --nocapture`（若加入）及 `cargo check -p tools`  
@@ -345,7 +345,7 @@ Expected: OK
 - [ ] **Step 5: Commit**
 
 ```bash
-git add tools/src/builtins/image_gen.rs tools/src/builtins/video_gen.rs tools/src/builtins/tts.rs
+git add tools/src/builtin/image_gen.rs tools/src/builtin/video_gen.rs tools/src/builtin/tts.rs
 git commit -m "$(cat <<'EOF'
 feat(tools): write media gens into generated/{images,videos,audio}
 
@@ -358,7 +358,7 @@ EOF
 ### Task 4: Tauri generate_image 对齐
 
 **Files:**
-- Modify: `frontend/src-tauri/src/commands.rs`（`generate_image` 内 `join("generated")` ≈ L1022）
+- Modify: `apps/desktop/src-tauri/src/commands.rs`（`generate_image` 内 `join("generated")` ≈ L1022）
 
 **Interfaces:**
 - Consumes: `memory::generated_dir`, `memory::GeneratedKind::Images`
@@ -378,12 +378,12 @@ std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
 - [ ] **Step 2: Check compile**
 
 Run: `cargo check -p astro-agent`  
-Expected: OK（包名以 `frontend/src-tauri/Cargo.toml` 的 `name = "astro-agent"` 为准）
+Expected: OK（包名以 `apps/desktop/src-tauri/Cargo.toml` 的 `name = "astro-agent"` 为准）
 
 - [ ] **Step 3: Commit**
 
 ```bash
-git add frontend/src-tauri/src/commands.rs
+git add apps/desktop/src-tauri/src/commands.rs
 git commit -m "$(cat <<'EOF'
 feat(tauri): save generate_image under generated/images
 
@@ -396,7 +396,7 @@ EOF
 ### Task 5: 模板引导 + 前端相对路径用例 + spec 路径备注
 
 **Files:**
-- Modify: `memory/src/agent/workspace/templates.rs` — `TEMPLATE_TOOLS` 增加「生成物目录」小节
+- Modify: `crates/agent-memory/src/agent/workspace/templates.rs` — `TEMPLATE_TOOLS` 增加「生成物目录」小节
 - Modify: `apps/desktop/src/lib/resolveMediaSrc.test.ts` — 一条 `generated/images/...`
 - Modify: `docs/superpowers/specs/2026-07-15-generated-typed-subdirs-design.md` — 状态改为「已规划/实现中」或实现后改为「已实现」
 - Modify: `docs/superpowers/specs/2026-07-15-google-media-gen-tools-design.md` — 输出路径改为 `generated/images/` 等（短注）

@@ -20,16 +20,16 @@
 
 | File | Responsibility |
 |------|----------------|
-| Modify: `memory/src/session/store/mod.rs` | 定义 `BillingDelta`（或同文件旁路类型） |
-| Modify: `memory/src/session/store/sessions.rs` | 实现 `update_session_billing` |
+| Modify: `crates/agent-memory/src/session/store/mod.rs` | 定义 `BillingDelta`（或同文件旁路类型） |
+| Modify: `crates/agent-memory/src/session/store/sessions.rs` | 实现 `update_session_billing` |
 | Modify: `memory/tests/session_store_test.rs` | billing 累加单测 |
-| Modify: `memory/src/usage/db.rs` | 排除 llm 的 calls SQL；`usage_meta` + `ensure_p1a_cleared` |
-| Create: `memory/src/usage/insights.rs` | `query_usage_insights_merged` |
-| Modify: `memory/src/usage/mod.rs` | `pub mod insights` |
-| Modify: `memory/src/lib.rs` | 导出门面 |
+| Modify: `crates/agent-memory/src/usage/db.rs` | 排除 llm 的 calls SQL；`usage_meta` + `ensure_p1a_cleared` |
+| Create: `crates/agent-memory/src/usage/insights.rs` | `query_usage_insights_merged` |
+| Modify: `crates/agent-memory/src/usage/mod.rs` | `pub mod insights` |
+| Modify: `crates/agent-memory/src/lib.rs` | 导出门面 |
 | Create/Modify: `memory/tests/usage_insights_merge_test.rs`（或扩展 `usage_db_test.rs`） | 合并与清空测试 |
-| Modify: `agent/src/streaming.rs` | `record_llm_usage` → sessions 回填 |
-| Modify: `frontend/src-tauri/src/config_commands.rs` | `get_usage_insights` 走合并门面 |
+| Modify: `crates/agent-core/src/streaming.rs` | `record_llm_usage` → sessions 回填 |
+| Modify: `apps/desktop/src-tauri/src/config_commands.rs` | `get_usage_insights` 走合并门面 |
 | Modify: `apps/desktop/src/components/InsightsPanel.tsx` + i18n（可选） | 空态文案 |
 | Modify: `docs/superpowers/specs/2026-07-13-session-store-p1a-billing-design.md` | 状态 → 已实现 |
 
@@ -38,8 +38,8 @@
 ### Task 1: `BillingDelta` + `update_session_billing`
 
 **Files:**
-- Modify: `memory/src/session/store/mod.rs`
-- Modify: `memory/src/session/store/sessions.rs`
+- Modify: `crates/agent-memory/src/session/store/mod.rs`
+- Modify: `crates/agent-memory/src/session/store/sessions.rs`
 - Modify: `memory/tests/session_store_test.rs`
 
 - [ ] **Step 1: 写失败测试**
@@ -107,7 +107,7 @@ fn update_session_billing_accumulates_tokens_and_cost() {
 }
 ```
 
-若 `BillingDelta` / `get_session_billing` 路径与导出名不同，测试里改用 crate 实际公开路径（`memory::session_store` 或 `SessionStore` 同模块）。**优先把 `BillingDelta` 与 `SessionBillingRow` 放在 `memory/src/session/store/mod.rs` 并 `pub use`。**
+若 `BillingDelta` / `get_session_billing` 路径与导出名不同，测试里改用 crate 实际公开路径（`memory::session_store` 或 `SessionStore` 同模块）。**优先把 `BillingDelta` 与 `SessionBillingRow` 放在 `crates/agent-memory/src/session/store/mod.rs` 并 `pub use`。**
 
 - [ ] **Step 2: 跑测确认失败**
 
@@ -121,7 +121,7 @@ Expected: FAIL（方法不存在）
 
 - [ ] **Step 3: 实现类型与 API**
 
-在 `memory/src/session/store/mod.rs` 增加：
+在 `crates/agent-memory/src/session/store/mod.rs` 增加：
 
 ```rust
 #[derive(Debug, Clone, Default)]
@@ -240,7 +240,7 @@ pub fn get_session_billing(&self, id: &str) -> Result<Option<SessionBillingRow>>
 }
 ```
 
-从 `memory/src/lib.rs` / `session` 模块 re-export `BillingDelta`、`SessionBillingRow`（若测试用 `memory::…`）。
+从 `crates/agent-memory/src/lib.rs` / `session` 模块 re-export `BillingDelta`、`SessionBillingRow`（若测试用 `memory::…`）。
 
 - [ ] **Step 4: 跑测确认通过**
 
@@ -268,7 +268,7 @@ EOF
 ### Task 2: Agent 流式改写 sessions（停写 llm 事件）
 
 **Files:**
-- Modify: `agent/src/streaming.rs`（约 `record_llm_usage`）
+- Modify: `crates/agent-core/src/streaming.rs`（约 `record_llm_usage`）
 
 - [ ] **Step 1: 替换 `record_llm_usage` 实现**
 
@@ -343,7 +343,7 @@ EOF
 ### Task 3: 清空 `usage_events`（幂等）
 
 **Files:**
-- Modify: `memory/src/usage/db.rs`
+- Modify: `crates/agent-memory/src/usage/db.rs`
 - Modify: `memory/tests/usage_db_test.rs`（或新建测试）
 
 - [ ] **Step 1: 扩展 DDL + 清空 API**
@@ -455,10 +455,10 @@ EOF
 ### Task 4: Insights 合并门面
 
 **Files:**
-- Create: `memory/src/usage/insights.rs`
-- Modify: `memory/src/usage/mod.rs`
-- Modify: `memory/src/lib.rs`
-- Modify: `frontend/src-tauri/src/config_commands.rs`
+- Create: `crates/agent-memory/src/usage/insights.rs`
+- Modify: `crates/agent-memory/src/usage/mod.rs`
+- Modify: `crates/agent-memory/src/lib.rs`
+- Modify: `apps/desktop/src-tauri/src/config_commands.rs`
 - Test: `memory/tests/usage_insights_merge_test.rs`
 
 - [ ] **Step 1: 写失败/目标测试**
@@ -518,7 +518,7 @@ fn merged_insights_uses_sessions_for_llm_cost() {
 
 - [ ] **Step 2: 实现 `query_usage_insights_merged`**
 
-`memory/src/usage/insights.rs` 核心逻辑：
+`crates/agent-memory/src/usage/insights.rs` 核心逻辑：
 
 1. `UsageDb::open_default()?.query_insights(q)` 得到非 llm 为主的 usage 侧结果（Task 3 已改 CALLS_KIND；**额外**在 `query_rank_by_kind` / series / kpis 的 SQL 加 `AND kind != 'llm'`，双保险）。  
 2. 打开 `SessionStore`：`SessionStore::open(&default_memory_dir().join("sessions/state.db"))`。  
@@ -579,7 +579,7 @@ Expected: PASS / 无 error
 - [ ] **Step 5: Commit**
 
 ```bash
-git add memory/src/usage/insights.rs memory/src/usage/mod.rs memory/src/lib.rs memory/src/usage/db.rs memory/tests/usage_insights_merge_test.rs frontend/src-tauri/src/config_commands.rs
+git add memory/src/usage/insights.rs memory/src/usage/mod.rs memory/src/lib.rs memory/src/usage/db.rs memory/tests/usage_insights_merge_test.rs apps/desktop/src-tauri/src/config_commands.rs
 git commit -m "$(cat <<'EOF'
 feat(insights): merge session LLM billing into usage insights
 

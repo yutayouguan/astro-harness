@@ -102,7 +102,7 @@ get_usage_insights({
 
 ## 模块落点
 
-- `memory/src/usage_db.rs`：建库、insert、聚合查询。
+- `crates/agent-memory/src/usage_db.rs`：建库、insert、聚合查询。
 - 写入钩子：dispatch / agent loop / MCP / cron / streaming usage。
 - Tauri：`get_usage_insights` 注册与前端 invoke。
 

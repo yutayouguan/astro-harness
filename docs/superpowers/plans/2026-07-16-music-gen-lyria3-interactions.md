@@ -25,12 +25,12 @@
 
 | File | Responsibility |
 |------|----------------|
-| `providers/src/protocol/interactions_http.rs` | Lyria 类型、body、parse、`google_interactions_music` + 单测 |
-| `tools/src/builtins/media/music_gen.rs` | 新建：Args、校验、读图、dispatch、落盘 |
-| `tools/src/builtins/media/mod.rs` | `pub mod music_gen` |
-| `tools/src/builtins/mod.rs` | re-export `music_gen` |
-| `tools/src/lib.rs` | `register_all` + `pub use` |
-| `tools/src/core/dispatch.rs` | `"music_gen" => …` |
+| `crates/agent-providers/src/protocol/interactions_http.rs` | Lyria 类型、body、parse、`google_interactions_music` + 单测 |
+| `crates/agent-tools/src/builtin/media/music_gen.rs` | 新建：Args、校验、读图、dispatch、落盘 |
+| `crates/agent-tools/src/builtin/media/mod.rs` | `pub mod music_gen` |
+| `crates/agent-tools/src/builtin/mod.rs` | re-export `music_gen` |
+| `crates/agent-tools/src/lib.rs` | `register_all` + `pub use` |
+| `crates/agent-tools/src/engine/dispatch.rs` | `"music_gen" => …` |
 | `home/src/config/tools_enabled.rs` | `KNOWN_TOOLSET_IDS` + `tool_name_to_toolset` |
 | `apps/desktop/src/hooks/useAgentTools.ts` | AGENT_TOOLS 条目 |
 | `apps/desktop/src/i18n/messages.ts` | zh/en 文案 |
@@ -42,7 +42,7 @@
 ### Task 1: `interactions_http` Lyria helpers
 
 **Files:**
-- Modify: `providers/src/protocol/interactions_http.rs`
+- Modify: `crates/agent-providers/src/protocol/interactions_http.rs`
 - Test: 同文件 `mod tests`
 
 **Interfaces:**
@@ -431,11 +431,11 @@ EOF
 ### Task 2: `music_gen` 工具 + 注册
 
 **Files:**
-- Create: `tools/src/builtins/media/music_gen.rs`
-- Modify: `tools/src/builtins/media/mod.rs`
-- Modify: `tools/src/builtins/mod.rs`
-- Modify: `tools/src/lib.rs`
-- Modify: `tools/src/core/dispatch.rs`
+- Create: `crates/agent-tools/src/builtin/media/music_gen.rs`
+- Modify: `crates/agent-tools/src/builtin/media/mod.rs`
+- Modify: `crates/agent-tools/src/builtin/mod.rs`
+- Modify: `crates/agent-tools/src/lib.rs`
+- Modify: `crates/agent-tools/src/engine/dispatch.rs`
 - Modify: `home/src/config/tools_enabled.rs`
 
 **Interfaces:**
@@ -731,25 +731,25 @@ rg 'base64' tools/Cargo.toml
 
 - [ ] **Step 4: Wire modules / dispatch / toolset**
 
-`tools/src/builtins/media/mod.rs`：
+`crates/agent-tools/src/builtin/media/mod.rs`：
 
 ```rust
 pub mod music_gen;
 ```
 
-`tools/src/builtins/mod.rs`：
+`crates/agent-tools/src/builtin/mod.rs`：
 
 ```rust
 pub use media::{image_gen, music, music_gen, tts, video_gen, vision};
 ```
 
-`tools/src/lib.rs`：在 `pub(crate) use builtins::{…}` 与 `register_all` 中加入 `music_gen`（`music` 旁）：
+`crates/agent-tools/src/lib.rs`：在 `pub(crate) use builtins::{…}` 与 `register_all` 中加入 `music_gen`（`music` 旁）：
 
 ```rust
 music_gen::register(registry);
 ```
 
-`tools/src/core/dispatch.rs`：
+`crates/agent-tools/src/engine/dispatch.rs`：
 
 ```rust
 "music_gen" => crate::music_gen::dispatch(ctx, args).await,
@@ -775,7 +775,7 @@ Expected: PASS / 无错误
 - [ ] **Step 6: Commit**
 
 ```bash
-git add tools/src/builtins/media/music_gen.rs tools/src/builtins/media/mod.rs tools/src/builtins/mod.rs tools/src/lib.rs tools/src/core/dispatch.rs home/src/config/tools_enabled.rs tools/Cargo.toml
+git add tools/src/builtin/media/music_gen.rs tools/src/builtin/media/mod.rs tools/src/builtin/mod.rs tools/src/lib.rs tools/src/engine/dispatch.rs home/src/config/tools_enabled.rs tools/Cargo.toml
 git commit -m "$(cat <<'EOF'
 feat(tools): add music_gen Lyria 3 Google-native tool
 

@@ -63,7 +63,7 @@ Rust：
 
 ```bash
 cd frontend && npm run build
-cd frontend/src-tauri && cargo test
+cd apps/desktop/src-tauri && cargo test
 ```
 
 ## 非目标

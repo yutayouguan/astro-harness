@@ -27,11 +27,11 @@
 
 | File | Responsibility |
 |------|----------------|
-| `providers/src/protocol/files_http.rs` | Files API：upload + ACTIVE 轮询 + 可选 delete |
-| `providers/src/protocol/interactions_http.rs` | 追加：`VideoUnderstandMode`、video part/body/parse、`google_interactions_video` |
-| `providers/src/protocol/mod.rs` / `lib.rs` | 登记 `files_http` |
-| `tools/src/builtins/media/video_understand.rs` | 新工具 |
-| `tools/src/builtins/media/mod.rs`、`builtins/mod.rs`、`lib.rs`、`dispatch.rs` | 注册 / dispatch / re-export |
+| `crates/agent-providers/src/protocol/files_http.rs` | Files API：upload + ACTIVE 轮询 + 可选 delete |
+| `crates/agent-providers/src/protocol/interactions_http.rs` | 追加：`VideoUnderstandMode`、video part/body/parse、`google_interactions_video` |
+| `crates/agent-providers/src/protocol/mod.rs` / `lib.rs` | 登记 `files_http` |
+| `crates/agent-tools/src/builtin/media/video_understand.rs` | 新工具 |
+| `crates/agent-tools/src/builtin/media/mod.rs`、`builtin/mod.rs`、`lib.rs`、`dispatch.rs` | 注册 / dispatch / re-export |
 | `home/src/config/tools_enabled.rs` | `KNOWN_TOOLSET_IDS` + 名映射 |
 | `apps/desktop/src/hooks/useAgentTools.ts` | 工具开关 |
 | `apps/desktop/src/i18n/messages.ts` | 中英 title/desc |
@@ -42,9 +42,9 @@
 ### Task 1: Files API helper
 
 **Files:**
-- Create: `providers/src/protocol/files_http.rs`
-- Modify: `providers/src/protocol/mod.rs`
-- Modify: `providers/src/lib.rs`
+- Create: `crates/agent-providers/src/protocol/files_http.rs`
+- Modify: `crates/agent-providers/src/protocol/mod.rs`
+- Modify: `crates/agent-providers/src/lib.rs`
 
 **Interfaces:**
 - Produces:
@@ -61,13 +61,13 @@
 
 - [ ] **Step 1: 注册模块**
 
-`providers/src/protocol/mod.rs` 增加：
+`crates/agent-providers/src/protocol/mod.rs` 增加：
 
 ```rust
 pub mod files_http;
 ```
 
-`providers/src/lib.rs` 的 `pub use protocol::{...}` 加入 `files_http`。
+`crates/agent-providers/src/lib.rs` 的 `pub use protocol::{...}` 加入 `files_http`。
 
 - [ ] **Step 2: 写失败测试（`files_http.rs` 底部）**
 
@@ -433,7 +433,7 @@ EOF
 ### Task 2: Interactions 视频理解 — body / 解析 / HTTP
 
 **Files:**
-- Modify: `providers/src/protocol/interactions_http.rs`
+- Modify: `crates/agent-providers/src/protocol/interactions_http.rs`
 
 **Interfaces:**
 - Produces:
@@ -797,11 +797,11 @@ EOF
 ### Task 3: `video_understand` 工具
 
 **Files:**
-- Create: `tools/src/builtins/media/video_understand.rs`
-- Modify: `tools/src/builtins/media/mod.rs`
-- Modify: `tools/src/builtins/mod.rs`
-- Modify: `tools/src/lib.rs`（`pub use` + `register_all`）
-- Modify: `tools/src/core/dispatch.rs`
+- Create: `crates/agent-tools/src/builtin/media/video_understand.rs`
+- Modify: `crates/agent-tools/src/builtin/media/mod.rs`
+- Modify: `crates/agent-tools/src/builtin/mod.rs`
+- Modify: `crates/agent-tools/src/lib.rs`（`pub use` + `register_all`）
+- Modify: `crates/agent-tools/src/engine/dispatch.rs`
 - Modify: `tools/tests/tools_test.rs`
 
 **Interfaces:**
@@ -1140,7 +1140,7 @@ fn mime_from_url(url: &str) -> &'static str {
 pub mod video_understand;
 ```
 
-`builtins/mod.rs`:
+`builtin/mod.rs`:
 
 ```rust
 pub use media::{image_gen, music, tts, video_gen, video_understand, vision};
@@ -1168,7 +1168,7 @@ Expected: PASS。
 - [ ] **Step 5: Commit**
 
 ```bash
-git add tools/src/builtins/media/video_understand.rs tools/src/builtins/media/mod.rs tools/src/builtins/mod.rs tools/src/lib.rs tools/src/core/dispatch.rs tools/tests/tools_test.rs
+git add tools/src/builtin/media/video_understand.rs tools/src/builtin/media/mod.rs tools/src/builtin/mod.rs tools/src/lib.rs tools/src/engine/dispatch.rs tools/tests/tools_test.rs
 git commit -m "$(cat <<'EOF'
 feat(tools): add video_understand via Gemini Interactions
 

@@ -2,7 +2,7 @@
 
 面向「让 Agent 写代码」的一组内置系统工具：文件读写检索改（`file_ops`）、Shell 执行与后台任务（`terminal`）、临时代码片段（`code_exec`）。本文档描述它们的能力边界、参数、上限与安全模型。
 
-实现位于 `tools/src/builtins/system/`，参数 schema 由 `schemars` 自动生成后下发给模型。
+实现位于 `crates/agent-tools/src/builtin/shell/`，参数 schema 由 `schemars` 自动生成后下发给模型。
 
 ---
 

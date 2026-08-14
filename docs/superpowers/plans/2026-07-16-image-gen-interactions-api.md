@@ -25,19 +25,19 @@
 
 | File | Responsibility |
 |------|----------------|
-| `providers/src/protocol/interactions_http.rs` | 新建：请求/响应类型、body 构建、解析、HTTP 调用 |
-| `providers/src/protocol/mod.rs` | `pub mod interactions_http` |
-| `providers/src/lib.rs` | re-export `interactions_http` |
-| `tools/src/builtins/media/image_gen.rs` | Args 扩展、校验、Google/OpenAI 分支、落盘与返回文案 |
+| `crates/agent-providers/src/protocol/interactions_http.rs` | 新建：请求/响应类型、body 构建、解析、HTTP 调用 |
+| `crates/agent-providers/src/protocol/mod.rs` | `pub mod interactions_http` |
+| `crates/agent-providers/src/lib.rs` | re-export `interactions_http` |
+| `crates/agent-tools/src/builtin/media/image_gen.rs` | Args 扩展、校验、Google/OpenAI 分支、落盘与返回文案 |
 
 ---
 
 ### Task 1: Interactions 纯函数 — body 构建与响应解析
 
 **Files:**
-- Create: `providers/src/protocol/interactions_http.rs`
-- Modify: `providers/src/protocol/mod.rs`
-- Modify: `providers/src/lib.rs`
+- Create: `crates/agent-providers/src/protocol/interactions_http.rs`
+- Modify: `crates/agent-providers/src/protocol/mod.rs`
+- Modify: `crates/agent-providers/src/lib.rs`
 
 **Interfaces:**
 - Produces:
@@ -129,13 +129,13 @@ mod tests {
 
 - [ ] **Step 2: 注册模块**
 
-`providers/src/protocol/mod.rs` 增加：
+`crates/agent-providers/src/protocol/mod.rs` 增加：
 
 ```rust
 pub mod interactions_http;
 ```
 
-`providers/src/lib.rs` 的 `pub use protocol::{...}` 加入 `interactions_http`。
+`crates/agent-providers/src/lib.rs` 的 `pub use protocol::{...}` 加入 `interactions_http`。
 
 - [ ] **Step 3: 实现类型与函数**
 
@@ -348,7 +348,7 @@ git commit -m "feat(providers): add Gemini Interactions image body/parse helpers
 ### Task 2: HTTP 调用 `google_interactions_image`
 
 **Files:**
-- Modify: `providers/src/protocol/interactions_http.rs`
+- Modify: `crates/agent-providers/src/protocol/interactions_http.rs`
 
 **Interfaces:**
 - Consumes: `build_interaction_image_body`, `parse_interaction_image_response`, `media_http::google_native_base`
@@ -432,7 +432,7 @@ git commit -m "feat(providers): call Gemini /v1beta/interactions for image gen"
 ### Task 3: 扩展 `image_gen` 参数校验（可测纯函数）
 
 **Files:**
-- Modify: `tools/src/builtins/media/image_gen.rs`
+- Modify: `crates/agent-tools/src/builtin/media/image_gen.rs`
 
 **Interfaces:**
 - Produces:
@@ -591,7 +591,7 @@ Expected: PASS
 - [ ] **Step 4: Commit**
 
 ```bash
-git add tools/src/builtins/media/image_gen.rs
+git add tools/src/builtin/media/image_gen.rs
 git commit -m "feat(tools): expand image_gen args and validation for Interactions"
 ```
 
@@ -600,7 +600,7 @@ git commit -m "feat(tools): expand image_gen args and validation for Interaction
 ### Task 4: Google / OpenAI dispatch 接线
 
 **Files:**
-- Modify: `tools/src/builtins/media/image_gen.rs`
+- Modify: `crates/agent-tools/src/builtin/media/image_gen.rs`
 
 **Interfaces:**
 - Consumes: `providers::interactions_http::{google_interactions_image, InteractionImageRequest, InteractionImagePart, InteractionVideoInput}`
@@ -657,7 +657,7 @@ Expected: PASS / 成功
 - [ ] **Step 4: Commit**
 
 ```bash
-git add tools/src/builtins/media/image_gen.rs
+git add tools/src/builtin/media/image_gen.rs
 git commit -m "feat(tools): route Google image_gen through Interactions API"
 ```
 

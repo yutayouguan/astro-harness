@@ -198,8 +198,8 @@ x-goog-api-key: {api_key}
 
 ## 文件触点
 
-- `providers/src/protocol/media_http.rs`：新增 `google_native_generate_video`；扩展 `VideoGenExtras` / `GeneratedVideo`；保留兼容函数。
-- `tools/src/builtins/media/video_gen.rs`：参数升级、校验、native→compat、落盘与 hint。
+- `crates/agent-providers/src/protocol/media_http.rs`：新增 `google_native_generate_video`；扩展 `VideoGenExtras` / `GeneratedVideo`；保留兼容函数。
+- `crates/agent-tools/src/builtin/media/video_gen.rs`：参数升级、校验、native→compat、落盘与 hint。
 - 工具描述字符串：改为标明 Veo 原生 + 兼容回退。
 
 ## 验收

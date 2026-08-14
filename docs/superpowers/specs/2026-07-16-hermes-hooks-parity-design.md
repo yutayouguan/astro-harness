@@ -32,7 +32,7 @@ Astro 已实现与 Hermes 同名的核心 Plugin Hooks（`pre_llm_call`、`pre/p
 
 扩展现有 `HookOutcome` + 在现有执行路径插入 fire 点（方案 1）。
 
-### 新增名字（`hooks/src/names.rs`）
+### 新增名字（`crates/agent-hooks/src/names.rs`）
 
 ```text
 pre_verify

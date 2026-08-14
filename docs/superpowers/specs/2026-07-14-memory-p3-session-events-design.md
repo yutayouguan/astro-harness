@@ -47,7 +47,7 @@
 | Proto | `SubscribeSessionEvents` + `SessionEvent` | `proto/proto/astro.proto` |
 | Backend hub | 按 `session_id` / `agent_id` fan-out；无订阅者丢弃 | `backend`（新建轻量 hub） |
 | Emitters | review 落盘、pending 入队/批驳、入梦写 MEMORY | `agent` review spawn、`memory` pending、dreaming |
-| Tauri | 长订阅流 → `app.emit("session_event", …)` | `frontend/src-tauri` |
+| Tauri | 长订阅流 → `app.emit("session_event", …)` | `apps/desktop/src-tauri` |
 | 前端 | Toast、nav 角标、可选自动 refresh、slash 分发 | `App.tsx` / `MemoryPanel` / `composerCommands` |
 
 ### 数据流

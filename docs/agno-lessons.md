@@ -21,7 +21,7 @@
 
 ### Astro 现状
 - Provider 已按 `google/` `openai/` 模块拆分，Google 走 Interactions，OpenAI 走 Responses/compat。
-- 媒体处理分散在 `providers/src/*/media_*`、`tools/src/builtins/media/`。
+- 媒体处理分散在 `crates/agent-providers/src/*/media_*`、`crates/agent-tools/src/builtin/media/`。
 
 ### 可借鉴
 1. **`MediaAsset` 一等抽象**：统一 `Image/Audio/Video/File`，贯穿输入 → 消息 → 工具结果 → 输出。
@@ -98,9 +98,9 @@
 - 超长靠 `SessionStore::compact_and_split` 拆新会话。
 
 关键路径：
-- `agent/src/prompt/context.rs`
-- `agent/src/prompt/context_usage.rs`
-- `session/src/store/messages.rs`(`compact_and_split`)
+- `crates/agent-core/src/prompt/context.rs`
+- `crates/agent-core/src/prompt/context_usage.rs`
+- `crates/agent-session/src/store/messages.rs`(`compact_and_split`)
 
 ### 可借鉴
 1. **统一 `ContextSource` trait + 预算**：session / memory / FTS /（未来）KB / inject 各自 `contribute(budget)`，替代在拼 prompt 处堆叠逻辑。
@@ -163,7 +163,7 @@ messages 中 tool 结果超阈值
 - `write_approval` pending 队列；入梦（daily → MEMORY）；background review。
 - UI/文档完整（Memory 面板、slash `/memory`）。
 
-关键路径：`memory/src/lib.rs`、`memory/src/dreaming/mod.rs`、`memory/src/pending.rs`、`memory/src/review.rs`
+关键路径：`crates/agent-memory/src/lib.rs`、`crates/agent-memory/src/dreaming/mod.rs`、`crates/agent-memory/src/pending.rs`、`crates/agent-memory/src/review.rs`
 
 ### 可借鉴（轻量）
 - 把 MEMORY/USER/daily 抽象成 **MemoryStore 协议**（list / search / propose_write / apply）。
@@ -232,7 +232,7 @@ messages 中 tool 结果超阈值
 - 会话 FTS5、Skills、artifacts 索引；Provider 上 `supports_embedding` 仅**能力位预留**。
 - **基本缺失**：向量 DB、embedding 流水线、chunking、RAG 索引/检索。
 
-关键路径：`session/src/store/search.rs`(FTS)、`artifacts/src/db.rs`、`providers/src/api/trait_.rs`(`supports_embedding`)
+关键路径：`crates/agent-session/src/store/search.rs`(FTS)、`artifacts/src/db.rs`、`crates/agent-providers/src/api/trait_.rs`(`supports_embedding`)
 
 ### 可借鉴（若做 KB）
 1. **Content DB 先行**：文档登记 → 状态 → 删除连带清理；比一上来接向量更重要。
@@ -255,7 +255,7 @@ messages 中 tool 结果超阈值
 ### Astro
 - 本地多 SQLite：session（sessions/messages/FTS5）、usage、cron、orchestration、artifacts。
 
-关键路径：`session/src/store/schema.rs`、`session/src/store/mod.rs`、`usage/src/db.rs`
+关键路径：`crates/agent-session/src/store/schema.rs`、`crates/agent-session/src/store/mod.rs`、`usage/src/db.rs`
 
 ### 可借鉴
 - 统一 **打开/迁移协议**（`path` + `migrate`），实现仍 rusqlite；**不要**做成跨域大一统 CRUD / ORM。
@@ -311,8 +311,8 @@ Agno 的 Team 是一等运行时，而不是简单「Agent 调 Agent」。核心
 ### Astro 现状
 Astro 已有可复用积木，工具入口已压成无歧义的两维 + 持久人设：
 
-- **工具 `subagent`**（crate `delegate/` + `agent/src/exec/delegate.rs`）：回合内并行瞬时子 Agent，独立 session，摘要回父
-- **工具 `pipeline`**（crate `orchestration/` + `agent/src/exec/orchestration.rs`）：异步串行流水线；`action=team_*` 管理持久 Team
+- **工具 `subagent`**（crate `delegate/` + `crates/agent-core/src/exec/delegate.rs`）：回合内并行瞬时子 Agent，独立 session，摘要回父
+- **工具 `pipeline`**（crate `orchestration/` + `crates/agent-core/src/exec/orchestration.rs`）：异步串行流水线；`action=team_*` 管理持久 Team
 - **工具 `persona_create`**：新建长期助手 workspace（禁止用来拆当前任务）
 - Insights 协作图：已有 handoff 可观测基础
 

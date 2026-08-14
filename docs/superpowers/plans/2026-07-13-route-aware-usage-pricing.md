@@ -20,23 +20,23 @@
 
 | File | Responsibility |
 |------|----------------|
-| Modify: `providers/src/api/streaming.rs` | 四桶 `Usage`、`add_assign`、`prompt_tokens`/`completion_tokens` 访问器 |
-| Modify: `providers/src/protocol/http_stream.rs` | `parse_openai_usage`（cache 拆分）；必要时 Anthropic usage 解析 |
+| Modify: `crates/agent-providers/src/api/streaming.rs` | 四桶 `Usage`、`add_assign`、`prompt_tokens`/`completion_tokens` 访问器 |
+| Modify: `crates/agent-providers/src/protocol/http_stream.rs` | `parse_openai_usage`（cache 拆分）；必要时 Anthropic usage 解析 |
 | Create/Modify: `providers` 单测（同文件或 `providers/tests`） | normalize / parse |
-| Rewrite: `memory/src/usage/pricing.rs` | 路由、快照、models 缓存、`estimate_usage_cost`；删除 LiteLLM 费用读取 |
+| Rewrite: `crates/agent-memory/src/usage/pricing.rs` | 路由、快照、models 缓存、`estimate_usage_cost`；删除 LiteLLM 费用读取 |
 | Modify: `memory/Cargo.toml` | 增加 `reqwest`（blocking 或 default）供拉 `/models` |
-| Modify: `memory/src/usage/db.rs` | 新 DDL + `user_version` 摧毁重建；扩展 `NewUsageEvent`；insights 聚合过滤 unknown |
-| Modify: `memory/src/usage/stats.rs` | `NewUsageEvent` 字段适配（非 llm 默认空） |
-| Modify: `memory/src/session/store/mod.rs` | 导出 `BillingDelta` |
-| Modify: `memory/src/session/store/sessions.rs` | `update_session_billing` |
-| Modify: `memory/src/session/store/schema.rs` | `SCHEMA_VERSION=12` + billing 清零迁移 |
-| Modify: `memory/src/lib.rs` | 导出新 API；去掉/替换 `estimate_llm_cost` |
+| Modify: `crates/agent-memory/src/usage/db.rs` | 新 DDL + `user_version` 摧毁重建；扩展 `NewUsageEvent`；insights 聚合过滤 unknown |
+| Modify: `crates/agent-memory/src/usage/stats.rs` | `NewUsageEvent` 字段适配（非 llm 默认空） |
+| Modify: `crates/agent-memory/src/session/store/mod.rs` | 导出 `BillingDelta` |
+| Modify: `crates/agent-memory/src/session/store/sessions.rs` | `update_session_billing` |
+| Modify: `crates/agent-memory/src/session/store/schema.rs` | `SCHEMA_VERSION=12` + billing 清零迁移 |
+| Modify: `crates/agent-memory/src/lib.rs` | 导出新 API；去掉/替换 `estimate_llm_cost` |
 | Modify: `memory/tests/usage_db_test.rs` | 新 schema、pricing、insights unknown |
 | Modify: `memory/tests/session_store_test.rs` | billing 累加 / 迁移清零 |
 | Modify: `memory/tests/collab_insights_test.rs` | `NewUsageEvent` 字段 |
-| Modify: `agent/src/streaming.rs` | 双写 + 传入 provider/base_url |
-| Modify: `agent/src/cron_exec.rs` | 同上 |
-| Modify: `agent/src/orchestration.rs` | 若构造 `NewUsageEvent` 则适配默认字段 |
+| Modify: `crates/agent-core/src/streaming.rs` | 双写 + 传入 provider/base_url |
+| Modify: `crates/agent-core/src/cron_exec.rs` | 同上 |
+| Modify: `crates/agent-core/src/orchestration.rs` | 若构造 `NewUsageEvent` 则适配默认字段 |
 | Modify: `apps/desktop/src/components/InsightsPanel.tsx` | 未计价改看 `unpriced_llm_events`（若 DTO 增加） |
 | Modify: `docs/superpowers/specs/2026-07-13-route-aware-usage-pricing-design.md` | 实现后状态 → 已实现 |
 
@@ -45,9 +45,9 @@
 ### Task 1: 扩展 `providers::Usage` + OpenAI usage 解析
 
 **Files:**
-- Modify: `providers/src/api/streaming.rs`
-- Modify: `providers/src/protocol/http_stream.rs`
-- Test: `providers/src/protocol/http_stream.rs` 内既有 `#[cfg(test)]` 或追加
+- Modify: `crates/agent-providers/src/api/streaming.rs`
+- Modify: `crates/agent-providers/src/protocol/http_stream.rs`
+- Test: `crates/agent-providers/src/protocol/http_stream.rs` 内既有 `#[cfg(test)]` 或追加
 
 - [x] **Step 1: 写失败测试（cache 拆分）**
 
@@ -81,7 +81,7 @@ Expected: FAIL（字段不存在或断言失败）
 
 - [x] **Step 3: 实现 `Usage` 四桶**
 
-将 `providers/src/api/streaming.rs` 中 `Usage` 改为：
+将 `crates/agent-providers/src/api/streaming.rs` 中 `Usage` 改为：
 
 ```rust
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -199,8 +199,8 @@ EOF
 ### Task 2: 路由定价（官方快照，无网络）
 
 **Files:**
-- Rewrite: `memory/src/usage/pricing.rs`
-- Modify: `memory/src/lib.rs`
+- Rewrite: `crates/agent-memory/src/usage/pricing.rs`
+- Modify: `crates/agent-memory/src/lib.rs`
 - Modify: `memory/tests/usage_db_test.rs`（替换 `estimate_llm_cost` 测试）
 
 - [x] **Step 1: 写失败测试**
@@ -247,7 +247,7 @@ Run: `cargo test -p memory estimate_usage_cost_official_snapshot_and_unknown -- 
 
 - [x] **Step 3: 实现 pricing 模块**
 
-`memory/src/usage/pricing.rs` 核心类型与 API：
+`crates/agent-memory/src/usage/pricing.rs` 核心类型与 API：
 
 ```rust
 #[derive(Debug, Clone, Copy, Default)]
@@ -326,7 +326,7 @@ EOF
 
 **Files:**
 - Modify: `memory/Cargo.toml`（`reqwest` features `json,rustls-tls,blocking`）
-- Modify: `memory/src/usage/pricing.rs`
+- Modify: `crates/agent-memory/src/usage/pricing.rs`
 - Test: `memory/tests/usage_db_test.rs`（文件系统缓存，不打真网）
 
 - [x] **Step 1: 写失败测试（读缓存文件）**
@@ -389,8 +389,8 @@ EOF
 ### Task 4: 重建 `usage.db` schema + insights 过滤 unknown
 
 **Files:**
-- Modify: `memory/src/usage/db.rs`
-- Modify: `memory/src/usage/stats.rs`
+- Modify: `crates/agent-memory/src/usage/db.rs`
+- Modify: `crates/agent-memory/src/usage/stats.rs`
 - Modify: `memory/tests/usage_db_test.rs`
 - Modify: `memory/tests/collab_insights_test.rs`
 
@@ -524,9 +524,9 @@ EOF
 ### Task 5: `update_session_billing` + schema v12 账单清零
 
 **Files:**
-- Modify: `memory/src/session/store/mod.rs`
-- Modify: `memory/src/session/store/sessions.rs`
-- Modify: `memory/src/session/store/schema.rs`
+- Modify: `crates/agent-memory/src/session/store/mod.rs`
+- Modify: `crates/agent-memory/src/session/store/sessions.rs`
+- Modify: `crates/agent-memory/src/session/store/schema.rs`
 - Modify: `memory/tests/session_store_test.rs`
 
 - [x] **Step 1: 写失败测试**
@@ -622,14 +622,14 @@ EOF
 ### Task 6: Agent 流式 / cron 双写
 
 **Files:**
-- Modify: `agent/src/streaming.rs`
-- Modify: `agent/src/cron_exec.rs`
-- Modify: `agent/src/orchestration.rs`（若有 `NewUsageEvent`）
+- Modify: `crates/agent-core/src/streaming.rs`
+- Modify: `crates/agent-core/src/cron_exec.rs`
+- Modify: `crates/agent-core/src/orchestration.rs`（若有 `NewUsageEvent`）
 - Test: 优先单测 hook；若无现成 mock，加 `agent` 内对 `apply_llm_usage_record` 的纯函数测
 
 - [x] **Step 1: 提取可测函数并写测**
 
-在 `streaming.rs`（或 `agent/src/usage_record.rs`）：
+在 `streaming.rs`（或 `crates/agent-core/src/usage_record.rs`）：
 
 ```rust
 pub(crate) fn build_llm_usage_event(
@@ -692,7 +692,7 @@ EOF
 
 **Files:**
 - Modify: `apps/desktop/src/components/InsightsPanel.tsx`
-- Modify: `frontend/src-tauri` 若 DTO 透传需改（serde 字段 `unpriced_llm_events`）
+- Modify: `apps/desktop/src-tauri` 若 DTO 透传需改（serde 字段 `unpriced_llm_events`）
 
 - [x] **Step 1: 扩展 TS 类型**
 

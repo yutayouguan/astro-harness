@@ -17,11 +17,11 @@
 | Path | Responsibility |
 |------|----------------|
 | `hooks/` (new crate) | PluginHookBus、Gateway、Shell、PluginContext、names、UiTimeline |
-| `agent/src/hooks.rs` | 薄 re-export 或适配旧 API → 新 bus |
-| `agent/src/loop_.rs` / `streaming.rs` / `delegate_exec.rs` | 点火点 |
-| `backend/src/grpc/astro_service.rs` | pre_gateway_dispatch、挂 UI hooks、gateway 事件 |
+| `crates/agent-core/src/hooks.rs` | 薄 re-export 或适配旧 API → 新 bus |
+| `crates/agent-core/src/loop_.rs` / `streaming.rs` / `delegate_exec.rs` | 点火点 |
+| `crates/agent-server/src/grpc/astro_service.rs` | pre_gateway_dispatch、挂 UI hooks、gateway 事件 |
 | `proto/proto/astro.proto` | `HookEvent` oneof |
-| `frontend/...` | 消费 HookEvent；`showHooks` |
+| `apps/desktop/...` | 消费 HookEvent；`showHooks` |
 | `permissions/src/hooks.rs` | 转发或删除重复 |
 | `docs/hooks.md` | 用户/开发文档 |
 
@@ -30,9 +30,9 @@
 ### Task 1: Create `hooks` crate skeleton + PluginHookBus
 
 **Files:**
-- Create: `hooks/Cargo.toml`, `hooks/src/lib.rs`, `hooks/src/names.rs`, `hooks/src/plugin/mod.rs`, `hooks/src/context.rs`
+- Create: `hooks/Cargo.toml`, `crates/agent-hooks/src/lib.rs`, `crates/agent-hooks/src/names.rs`, `crates/agent-hooks/src/plugin/mod.rs`, `crates/agent-hooks/src/context.rs`
 - Modify: root `Cargo.toml` workspace members
-- Test: `hooks/src/plugin/mod.rs` (unit tests) or `hooks/tests/plugin_bus.rs`
+- Test: `crates/agent-hooks/src/plugin/mod.rs` (unit tests) or `hooks/tests/plugin_bus.rs`
 
 - [x] **Step 1:** Add workspace member `hooks` with deps: `tokio`, `serde`, `serde_json`, `anyhow`, `async-trait`, `tracing`, `serde_yaml`, `thiserror`
 - [x] **Step 2:** Define `names` constants (`PRE_LLM_CALL`, …) matching spec
@@ -45,7 +45,7 @@
 ### Task 2: Gateway + Shell + config
 
 **Files:**
-- Create: `hooks/src/gateway/mod.rs`, `hooks/src/shell/mod.rs`, `hooks/src/config.rs`
+- Create: `crates/agent-hooks/src/gateway/mod.rs`, `crates/agent-hooks/src/shell/mod.rs`, `crates/agent-hooks/src/config.rs`
 - Test: unit tests in same modules
 
 - [x] **Step 1:** Load `~/.astro/config.yaml` (`ASTRO_MEMORY_DIR` aware) → `hooks:` map
@@ -57,9 +57,9 @@
 ### Task 3: UiTimelineHooks + proto HookEvent
 
 **Files:**
-- Create: `hooks/src/ui.rs`
+- Create: `crates/agent-hooks/src/ui.rs`
 - Modify: `proto/proto/astro.proto`, regenerate / update proto rust
-- Modify: `backend` + `frontend/src-tauri` event mapping
+- Modify: `backend` + `apps/desktop/src-tauri` event mapping
 - Modify: `apps/desktop/src/App.tsx`（不再走 memory_update）
 
 - [x] **Step 1:** Add `message HookEvent { string name = 1; string detail = 2; string outcome = 3; }` to `ChatEvent` oneof
@@ -70,9 +70,9 @@
 ### Task 4: Wire Agent lifecycle (Plugin Hooks)
 
 **Files:**
-- Modify: `agent/src/loop_.rs`, `agent/src/streaming.rs`, `agent/src/builder.rs`, `agent/src/lib.rs`
-- Modify: `agent/src/hooks.rs` → adapt or re-export
-- Modify: `agent/src/delegate_exec.rs` for `subagent_stop`
+- Modify: `crates/agent-core/src/loop_.rs`, `crates/agent-core/src/streaming.rs`, `crates/agent-core/src/builder.rs`, `crates/agent-core/src/lib.rs`
+- Modify: `crates/agent-core/src/hooks.rs` → adapt or re-export
+- Modify: `crates/agent-core/src/delegate_exec.rs` for `subagent_stop`
 - Test: update `agent/tests/*` RecordingHooks expectations
 
 - [x] **Step 1:** Agent holds `Arc<PluginHookBus>` (or adapter implementing old trait calling new names)
@@ -84,7 +84,7 @@
 ### Task 5: Backend Gateway wiring
 
 **Files:**
-- Modify: `backend/src/grpc/astro_service.rs` (and startup)
+- Modify: `crates/agent-server/src/grpc/astro_service.rs` (and startup)
 - Modify: `backend/Cargo.toml` add `hooks`
 
 - [x] **Step 1:** On server start: load config, shell runner, gateway registry, `gateway:startup`

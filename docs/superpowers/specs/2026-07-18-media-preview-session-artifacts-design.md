@@ -138,7 +138,7 @@
 
 ### 4.1 实时路径（媒体 sidecar）
 
-注入点：`agent/src/runtime/mod.rs` → `record_tool_result_with_id`
+注入点：`crates/agent-core/src/runtime/mod.rs` → `record_tool_result_with_id`
 
 1. `common::extract_tool_media(content)` 解析 `astro_media_v1` sidecar。
 2. `append_message` 落库工具消息（含 `media_json`），得到 `msg_id`。
@@ -152,7 +152,7 @@
 
 ### 4.2 实时路径（普通写文件）
 
-注入点：`tools/src/builtins/system/file_ops.rs` → `register_workspace_artifact`
+注入点：`crates/agent-tools/src/builtin/shell/file_ops.rs` → `register_workspace_artifact`
 
 - 在 `write` / `append` 落盘成功后调用。
 - **跳过** `project_root`（委派 worktree / 代码仓）与空 `session_id`。
@@ -197,8 +197,8 @@ reconcile(扫盘) → backfill_artifact_sessions
 | 工具栏 / 全屏预览 | `apps/desktop/src/components/media/MediaToolbar.tsx`、`MediaPreviewModal.tsx` |
 | HTML 预览与改写 | `HtmlPreview.tsx`、`apps/desktop/src/lib/media/htmlAssetRewrite.ts` |
 | 卡片样式 | `apps/desktop/src/styles/components/media.css` |
-| 实时登记 | `agent/src/runtime/mod.rs`、`tools/.../file_ops.rs` |
-| 回填 / IPC | `frontend/src-tauri/src/artifacts_commands.rs`、`artifacts/src/db.rs`、`session/src/store/messages.rs` |
+| 实时登记 | `crates/agent-core/src/runtime/mod.rs`、`tools/.../file_ops.rs` |
+| 回填 / IPC | `apps/desktop/src-tauri/src/artifacts_commands.rs`、`artifacts/src/db.rs`、`crates/agent-session/src/store/messages.rs` |
 
 ## 6. 验证要点
 

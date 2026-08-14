@@ -25,7 +25,7 @@
 | `tools/.../video_gen.rs` | Args, path→base64, validation |
 | `skills/bundled/storyboard-video/SKILL.md` | Skill body |
 | `skills/src/bundled_seed.rs` (+ lib export) | Seed from embed |
-| `frontend/.../default_skills_seed.rs` | Call bundled seed |
+| `apps/desktop/.../default_skills_seed.rs` | Call bundled seed |
 | `useAgentTools.ts` / i18n | UI params |
 
 ---

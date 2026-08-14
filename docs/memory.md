@@ -275,11 +275,11 @@ auxiliary:
 
 | 组件 | 路径 |
 |------|------|
-| `MemoryStore` | `memory/src/agent/store.rs` |
-| 安全扫描 | `memory/src/agent/scan.rs` |
-| 配置 | `memory/src/config.rs` |
-| `MemoryManager` / dispatch | `memory/src/session/manager.rs` |
-| Frozen Snapshot | `agent/src/runtime/mod.rs` |
-| 工具注册 | `tools/src/builtins/memory/memory_tools.rs` |
-| Tauri refresh | `frontend/src-tauri/src/memory_commands.rs` |
-| 入梦写回 | `memory/src/dreaming/mod.rs` |
+| `MemoryStore` | `crates/agent-memory/src/agent/store.rs` |
+| 安全扫描 | `crates/agent-memory/src/agent/scan.rs` |
+| 配置 | `crates/agent-memory/src/config.rs` |
+| `MemoryManager` / dispatch | `crates/agent-memory/src/session/manager.rs` |
+| Frozen Snapshot | `crates/agent-core/src/runtime/mod.rs` |
+| 工具注册 | `crates/agent-tools/src/builtin/memory/memory_tools.rs` |
+| Tauri refresh | `apps/desktop/src-tauri/src/memory_commands.rs` |
+| 入梦写回 | `crates/agent-memory/src/dreaming/mod.rs` |
