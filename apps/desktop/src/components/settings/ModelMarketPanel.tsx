@@ -362,6 +362,26 @@ export default function ModelMarketPanel({ active }: { active: boolean }) {
   const PAGE_SIZE = 50;
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
   const listRef = useRef<HTMLDivElement>(null);
+  const observerRef = useRef<IntersectionObserver | null>(null);
+
+  useEffect(() => {
+    observerRef.current = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          if (entry.isIntersecting) {
+            entry.target.classList.add("mm-visible");
+            observerRef.current?.unobserve(entry.target);
+          }
+        }
+      },
+      { rootMargin: "60px 0px", threshold: 0.05 },
+    );
+    return () => observerRef.current?.disconnect();
+  }, []);
+
+  const cardRef = useCallback((el: HTMLDivElement | null) => {
+    if (el) observerRef.current?.observe(el);
+  }, []);
 
   useEffect(() => {
     setVisibleCount(PAGE_SIZE);
@@ -557,7 +577,8 @@ export default function ModelMarketPanel({ active }: { active: boolean }) {
             {visible.map((m) => (
               <div
                 key={m.id}
-                className="model-market-card mm-scroll-anim"
+                ref={cardRef}
+                className="model-market-card mm-scroll-reveal"
               >
                 <div className="model-market-card-head">
                   <span className="model-market-card-logo">
