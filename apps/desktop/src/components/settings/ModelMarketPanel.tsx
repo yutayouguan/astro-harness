@@ -370,11 +370,12 @@ export default function ModelMarketPanel({ active }: { active: boolean }) {
         for (const entry of entries) {
           if (entry.isIntersecting) {
             entry.target.classList.add("mm-visible");
-            observerRef.current?.unobserve(entry.target);
+          } else {
+            entry.target.classList.remove("mm-visible");
           }
         }
       },
-      { rootMargin: "60px 0px", threshold: 0.05 },
+      { rootMargin: "40px 0px", threshold: 0.05 },
     );
     return () => observerRef.current?.disconnect();
   }, []);
