@@ -10,10 +10,10 @@ Astro Agent（阿童木）— 本地 AI 桌面工作站。技术栈：**Rust wor
 
 ```bash
 # 安装前端依赖（首次）
-cd ui/frontend && npm install
+cd apps/desktop && npm install
 
 # 开发模式（Tauri + 内嵌 backend + 前端热更新）
-cd ui/frontend && npm run tauri dev
+cd apps/desktop && npm run tauri dev
 
 # 仅 Rust 编译检查（最快）
 cargo check
@@ -36,15 +36,15 @@ cargo fmt --all
 cargo clippy --all-targets
 
 # TypeScript 类型检查
-cd ui/frontend && npx tsc --noEmit
+cd apps/desktop && npx tsc --noEmit
 
 # 桌面应用打包（当前架构）
-cd ui/frontend && npm run tauri build
+cd apps/desktop && npm run tauri build
 
 # macOS 跨架构
-cd ui/frontend && npm run tauri:build:arm          # aarch64-apple-darwin
-cd ui/frontend && npm run tauri:build:x64          # x86_64-apple-darwin
-cd ui/frontend && npm run tauri:build:universal    # universal-apple-darwin
+cd apps/desktop && npm run tauri:build:arm          # aarch64-apple-darwin
+cd apps/desktop && npm run tauri:build:x64          # x86_64-apple-darwin
+cd apps/desktop && npm run tauri:build:universal    # universal-apple-darwin
 ```
 
 **自动提交**：完成一轮可落地的代码改动后主动创建 git commit，不必等用户说「提交」。仅探索/问答、未改仓库时不提交。不要 push，除非用户明确要求。
@@ -59,59 +59,59 @@ cd ui/frontend && npm run tauri:build:universal    # universal-apple-darwin
 
 | 路径 | package name | 职责 |
 |---|---|---|
-| `core/agent` | `agent` | Agent 运行时核心：`AgentLoop` 状态机、流式多轮循环、工具分发、压缩、HITL、hooks、prompt 组装。 |
-| `core/providers` | `providers` | 多厂商 LLM/图像 Provider 层：`ProviderRegistry`、流式 `ChatStream`、fallback 链。支持 Google、OpenAI、Codex、DeepSeek、MiniMax、Ollama、Azure 等。 |
-| `core/memory` | `memory` | `MemoryManager` — MEMORY.md/USER.md 快照、dreaming 管道、待审批记忆队列、decision log、workspace bootstrap。 |
-| `core/orchestration` | `orchestration` | 多 Agent 编排：`OrchestrationDb`（`orchestration.db`）、spawn request、协作洞察图谱、Team 定义（Coordinate/Route/Broadcast/Tasks 四模式）。 |
-| `core/evolution` | `evolution` | 自进化/学习循环：改进提议、评判、信号分析、评估集、DSPy 集成。配套 Python 包 `evolution-dspy/`。 |
-| `core/delegate` | `delegate` | Sub-agent 委派：同步 `DelegateRunner`、异步 `DelegateAsyncSpawner`、`AsyncDelegateRegistry`、git worktree 隔离。 |
-| `core/home` | `home` | `~/.astro` 路径约定、日志、agent config YAML、tool-enable gates、spawn-depth 限制。无 SQLite。 |
-| `core/skills` | `skills` | Skill 管理 — 安装、加载、注册表、摘要、备份。Skill frontmatter `astro_tools` 可 additive 开放 toolset。 |
+| `crates/agent-core` | `agent` | Agent 运行时核心：`AgentLoop` 状态机、流式多轮循环、工具分发、压缩、HITL、hooks、prompt 组装。 |
+| `crates/agent-providers` | `providers` | 多厂商 LLM/图像 Provider 层：`ProviderRegistry`、流式 `ChatStream`、fallback 链。支持 Google、OpenAI、Codex、DeepSeek、MiniMax、Ollama、Azure 等。 |
+| `crates/agent-memory` | `memory` | `MemoryManager` — MEMORY.md/USER.md 快照、dreaming 管道、待审批记忆队列、decision log、workspace bootstrap。 |
+| `crates/agent-orchestration` | `orchestration` | 多 Agent 编排：`OrchestrationDb`（`orchestration.db`）、spawn request、协作洞察图谱、Team 定义（Coordinate/Route/Broadcast/Tasks 四模式）。 |
+| `crates/agent-evolution` | `evolution` | 自进化/学习循环：改进提议、评判、信号分析、评估集、DSPy 集成。配套 Python 包 `evolution-dspy/`。 |
+| `crates/agent-delegate` | `delegate` | Sub-agent 委派：同步 `DelegateRunner`、异步 `DelegateAsyncSpawner`、`AsyncDelegateRegistry`、git worktree 隔离。 |
+| `crates/agent-home` | `home` | `~/.astro` 路径约定、日志、agent config YAML、tool-enable gates、spawn-depth 限制。无 SQLite。 |
+| `crates/agent-skills` | `skills` | Skill 管理 — 安装、加载、注册表、摘要、备份。Skill frontmatter `astro_tools` 可 additive 开放 toolset。 |
 
 ### actions/ — 工具实现
 
 | 路径 | package name | 职责 |
 |---|---|---|
-| `actions/tools` | `tools` | 全部内置工具实现（`register_all`）、注册表/分发、审批逻辑、HITL、schema sanitization。工具域：terminal、file_ops、browser、code_exec、memory、skills、delegate、orchestration、media（image_gen/tts/video/music）等。 |
-| `actions/a2ui` | `a2ui` | AG-UI 声明式生成式 UI 表面：22 种组件（Text、Card、Button、Image、Audio、Video、Metric、ClarifyWizard 等）、模板、校验。Catalog ID: `astro://a2ui/catalog/v2`。 |
+| `crates/agent-tools` | `tools` | 全部内置工具实现（`register_all`）、注册表/分发、审批逻辑、HITL、schema sanitization。工具域：terminal、file_ops、browser、code_exec、memory、skills、delegate、orchestration、media（image_gen/tts/video/music）等。 |
+| `crates/agent-a2ui` | `a2ui` | AG-UI 声明式生成式 UI 表面：22 种组件（Text、Card、Button、Image、Audio、Video、Metric、ClarifyWizard 等）、模板、校验。Catalog ID: `astro://a2ui/catalog/v2`。 |
 
 ### channels/ — 对外通道
 
 | 路径 | package name | 职责 |
 |---|---|---|
-| `channels/server` | `backend` | 独立 gRPC 服务端（tonic）。`run_embedded()` 供 Tauri in-process 使用；Cron ticker 跑在 side thread。 |
+| `crates/agent-server` | `server` | 独立 gRPC 服务端（tonic）。`run_embedded()` 供 Tauri in-process 使用；Cron ticker 跑在 side thread。 |
 
 ### storage/ — 持久化与共享类型
 
 | 路径 | package name | 职责 |
 |---|---|---|
-| `storage/common` | `common` | 跨 crate 共享类型：`Message`、`Role`、`ToolCall`、`MediaAsset`、`ChatTarget`、`ModelSpec`、SQLite helpers、tool-spill。无业务逻辑。 |
-| `storage/proto` | `proto` | Protobuf / tonic gRPC 服务契约（backend ↔ Tauri shell）。定义 `AstroService` 14 个 RPC（Chat、ChatControl、GenerateImage、ListSkills、ExecuteSkill、ListMcpServers、QueryMemory、SubscribeSessionEvents 等）。 |
-| `storage/session` | `session` | `SessionStore`（`state.db` WAL SQLite，schema v17，FTS5）— 消息、会话、billing、FTS 召回。 |
-| `storage/artifacts` | `artifacts` | 文件空间索引（`artifacts.db`）+ Knowledge Content DB（`knowledge.db`，FTS）。按来源（agent_write/user_upload/reconcile）注册文件，MIME 分类。 |
-| `storage/usage` | `usage` | 用量事件 DB（`usage.db`）、per-agent 统计、路由感知成本估算（官方定价快照 + OpenRouter API）、trace insights、eval JSONL 导出。 |
+| `crates/agent-types` | `types` | 跨 crate 共享类型：`Message`、`Role`、`ToolCall`、`MediaAsset`、`ChatTarget`、`ModelSpec`、SQLite helpers、tool-spill。无业务逻辑。 |
+| `crates/agent-proto` | `proto` | Protobuf / tonic gRPC 服务契约（backend ↔ Tauri shell）。定义 `AstroService` 14 个 RPC（Chat、ChatControl、GenerateImage、ListSkills、ExecuteSkill、ListMcpServers、QueryMemory、SubscribeSessionEvents 等）。 |
+| `crates/agent-session` | `session` | `SessionStore`（`state.db` WAL SQLite，schema v17，FTS5）— 消息、会话、billing、FTS 召回。 |
+| `crates/agent-artifacts` | `artifacts` | 文件空间索引（`artifacts.db`）+ Knowledge Content DB（`knowledge.db`，FTS）。按来源（agent_write/user_upload/reconcile）注册文件，MIME 分类。 |
+| `crates/agent-usage` | `usage` | 用量事件 DB（`usage.db`）、per-agent 统计、路由感知成本估算（官方定价快照 + OpenRouter API）、trace insights、eval JSONL 导出。 |
 
 ### automation/ — 自动化
 
 | 路径 | package name | 职责 |
 |---|---|---|
-| `automation/cron` | `cron` | Cron job JSON 持久化、运行记录 DB（`cron.db`）、ticker（每 30s，`current_thread` runtime）。 |
-| `automation/workflow` | `workflow` | 可视化工作流引擎：29 种节点跨 6 类（Trigger、AI、Media、FlowControl、DataProcessing、Action），DAG 执行引擎、变量解析、运行 DB。持久化 `~/.astro/workflows/workflows.json`。 |
+| `crates/agent-cron` | `cron` | Cron job JSON 持久化、运行记录 DB（`cron.db`）、ticker（每 30s，`current_thread` runtime）。 |
+| `crates/agent-workflow` | `workflow` | 可视化工作流引擎：29 种节点跨 6 类（Trigger、AI、Media、FlowControl、DataProcessing、Action），DAG 执行引擎、变量解析、运行 DB。持久化 `~/.astro/workflows/workflows.json`。 |
 
 ### extensions/ — 可插拔扩展
 
 | 路径 | package name | 职责 |
 |---|---|---|
-| `extensions/mcp` | `mcp` | MCP 客户端 — per-agent 进程级连接池（`McpHub`），工具发现与调用。工具名约定：`mcp__{server}__{tool}`。 |
-| `extensions/hooks` | `hooks` | 三总线 hook 系统：Plugin（进程内同步 `PluginHookBus`）、Gateway（文件扫描外部 manifest）、Shell（config-map 异步 shell 命令）。 |
+| `crates/agent-mcp` | `mcp` | MCP 客户端 — per-agent 进程级连接池（`McpHub`），工具发现与调用。工具名约定：`mcp__{server}__{tool}`。 |
+| `crates/agent-hooks` | `hooks` | 三总线 hook 系统：Plugin（进程内同步 `PluginHookBus`）、Gateway（文件扫描外部 manifest）、Shell（config-map 异步 shell 命令）。 |
 
 ### ui/ — 前端
 
 | 路径 | package name | 职责 |
 |---|---|---|
-| `ui/frontend/src-tauri` | `astro-agent` | Tauri 2 桌面 shell。默认内嵌 backend（随机端口 `127.0.0.1:0`），单实例，系统托盘。32 个 Tauri command 模块。 |
+| `apps/desktop/src-tauri` | `astro-agent` | Tauri 2 桌面 shell。默认内嵌 backend（随机端口 `127.0.0.1:0`），单实例，系统托盘。32 个 Tauri command 模块。 |
 
-前端 React 应用在 `ui/frontend/`，使用 CodeMirror（多语言）、`@xyflow/react`（流程图编辑器，用于 workflow）、`react-markdown`、`lucide-react`。
+前端 React 应用在 `apps/desktop/`，使用 CodeMirror（多语言）、`@xyflow/react`（流程图编辑器，用于 workflow）、`react-markdown`、`lucide-react`。
 
 ## Core Architecture
 
@@ -136,7 +136,7 @@ cd ui/frontend && npm run tauri:build:universal    # universal-apple-darwin
       └─ 无工具调用时 → 返回最终文本
 ```
 
-### core/agent 模块组织
+### agent-core 模块组织
 
 `agent` crate 是中央运行时，7 个子模块：
 
@@ -167,11 +167,11 @@ Plugin bus 事件（可拦截/变更）：`pre_llm_call`、`pre_tool_call`、`pr
 
 ### 多 Agent 编排
 
-`core/orchestration` 管理多 agent 协作：`OrchestrationDb` 记录编排/步骤状态，`OrchestrationSpawnRequest` 携带 parent agent、provider 凭证、fallback 链、深度限制。`TeamDefinition` 定义团队组成（四种模式：Coordinate/Route/Broadcast/Tasks），持久化于 `~/.astro/teams/`。`collab_insights` 提供协作图谱可视化。
+`crates/agent-orchestration` 管理多 agent 协作：`OrchestrationDb` 记录编排/步骤状态，`OrchestrationSpawnRequest` 携带 parent agent、provider 凭证、fallback 链、深度限制。`TeamDefinition` 定义团队组成（四种模式：Coordinate/Route/Broadcast/Tasks），持久化于 `~/.astro/teams/`。`collab_insights` 提供协作图谱可视化。
 
 ### 可视化工作流引擎
 
-`automation/workflow` 实现 DAG 工作流：29 种节点分 6 类（Trigger 3 / AI 3 / Media 5 / FlowControl 6 / DataProcessing 7 / Action 5）。引擎模块：`dag.rs`（拓扑排序）、`executor.rs`（步骤执行）、`variables.rs`（变量插值）。前端用 `@xyflow/react` 渲染流程图编辑器。
+`crates/agent-workflow` 实现 DAG 工作流：29 种节点分 6 类（Trigger 3 / AI 3 / Media 5 / FlowControl 6 / DataProcessing 7 / Action 5）。引擎模块：`dag.rs`（拓扑排序）、`executor.rs`（步骤执行）、`variables.rs`（变量插值）。前端用 `@xyflow/react` 渲染流程图编辑器。
 
 ### 目录约定
 
@@ -218,4 +218,4 @@ Plugin bus 事件（可拦截/变更）：`pre_llm_call`、`pre_tool_call`、`pr
 
 ## Test Organization
 
-集成测试在各 crate `tests/` 目录下，覆盖核心路径：`core/agent`（9 个测试文件：agent_test、cron_exec_test、streaming_test 等）、`core/providers`（3）、`core/orchestration`（2）、`actions/tools`（4）、`actions/a2ui`（3）、`automation/cron`（1）、`channels/server`（1）、`storage/session`（2）、`storage/artifacts`（1）、`storage/usage`（1）。单元测试（`#[cfg(test)]`）分布在约 120 个源文件中。测试环境工具：`core/home/src/test_env.rs`。前端测试在 `ui/frontend/src/a2ui/`。
+集成测试在各 crate `tests/` 目录下，覆盖核心路径：`crates/agent-core`（9 个测试文件：agent_test、cron_exec_test、streaming_test 等）、`crates/agent-providers`（3）、`crates/agent-orchestration`（2）、`crates/agent-tools`（4）、`crates/agent-a2ui`（3）、`crates/agent-cron`（1）、`crates/agent-server`（1）、`crates/agent-session`（2）、`crates/agent-artifacts`（1）、`crates/agent-usage`（1）。单元测试（`#[cfg(test)]`）分布在约 120 个源文件中。测试环境工具：`core/home/src/test_env.rs`。前端测试在 `apps/desktop/src/a2ui/`。

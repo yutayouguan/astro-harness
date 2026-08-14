@@ -6,7 +6,7 @@
 
 ## 方案
 
-在 `frontend/src/styles/features/chat/right-panel.css` 中为暗色主题下的 `.chat-session-toolbar` 覆盖现有五个局部玻璃变量：
+在 `apps/desktop/src/styles/features/chat/right-panel.css` 中为暗色主题下的 `.chat-session-toolbar` 覆盖现有五个局部玻璃变量：
 
 - 默认填充改为深紫黑半透明底，并保留低强度顶部高光。
 - 悬停填充仅小幅提亮，避免变成亮色按钮。

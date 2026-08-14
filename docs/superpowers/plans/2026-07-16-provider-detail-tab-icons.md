@@ -20,8 +20,8 @@
 ### Task 1: 为提供商详情 Tab 添加图标
 
 **Files:**
-- Modify: `frontend/src/components/settings/ProvidersPanel.tsx:12-33,1375-1395`
-- Modify: `frontend/src/styles/features/providers.css:377-400`
+- Modify: `apps/desktop/src/components/settings/ProvidersPanel.tsx:12-33,1375-1395`
+- Modify: `apps/desktop/src/styles/features/providers.css:377-400`
 
 **Interfaces:**
 - Consumes: `lucide-react` 导出的 `MessageCircle` 与 `Image` React 图标组件；现有 `detailTab: "chat" | "media"` 状态。
@@ -40,7 +40,7 @@ Expected: TypeScript 编译和 Vite 构建均成功，命令退出码为 0。
 
 - [ ] **Step 2: 添加 Lucide 图标引用和 Tab 图标**
 
-在 `frontend/src/components/settings/ProvidersPanel.tsx` 的 `lucide-react` 导入列表中加入：
+在 `apps/desktop/src/components/settings/ProvidersPanel.tsx` 的 `lucide-react` 导入列表中加入：
 
 ```tsx
 Image,
@@ -63,7 +63,7 @@ MessageCircle,
 
 - [ ] **Step 3: 对齐图标与文字**
 
-在 `frontend/src/styles/features/providers.css` 的 `.providers-detail-tab` 中加入：
+在 `apps/desktop/src/styles/features/providers.css` 的 `.providers-detail-tab` 中加入：
 
 ```css
 display: inline-flex;
@@ -90,8 +90,8 @@ Expected: TypeScript 编译无未使用导入或 JSX 类型错误；Vite 构建�
 检查以下文件的 IDE linter：
 
 ```text
-frontend/src/components/settings/ProvidersPanel.tsx
-frontend/src/styles/features/providers.css
+apps/desktop/src/components/settings/ProvidersPanel.tsx
+apps/desktop/src/styles/features/providers.css
 ```
 
 Expected: 两个文件均无新增诊断。
@@ -99,7 +99,7 @@ Expected: 两个文件均无新增诊断。
 - [ ] **Step 6: 提交实现**
 
 ```bash
-git add frontend/src/components/settings/ProvidersPanel.tsx frontend/src/styles/features/providers.css
+git add apps/desktop/src/components/settings/ProvidersPanel.tsx apps/desktop/src/styles/features/providers.css
 git commit -m "feat(providers): add icons to detail tabs"
 git status --short
 ```

@@ -10,7 +10,7 @@
 
 ## Global Constraints
 
-- 仅修改 `frontend/src/styles/features/chat/right-panel.css`。
+- 仅修改 `apps/desktop/src/styles/features/chat/right-panel.css`。
 - `.chat-right-panel` 使用 `top: 0`、`right: 0` 与 `bottom: 0`。
 - 保持宽度、圆角、阴影、遮罩和滑入动画不变。
 
@@ -19,7 +19,7 @@
 ### Task 1: 对齐右侧栏上下边缘
 
 **Files:**
-- Modify: `frontend/src/styles/features/chat/right-panel.css:40-60`
+- Modify: `apps/desktop/src/styles/features/chat/right-panel.css:40-60`
 
 **Interfaces:**
 - Consumes: `.chat-layout-with-right` 的相对定位边界。
@@ -48,13 +48,13 @@ Expected: TypeScript 与 Vite 构建成功，退出码为 0。
 
 - [ ] **Step 3: 检查样式差异**
 
-Run: `git diff --check && git diff -- frontend/src/styles/features/chat/right-panel.css`
+Run: `git diff --check && git diff -- apps/desktop/src/styles/features/chat/right-panel.css`
 
 Expected: `top`、`right` 与 `bottom` 均为 `0`，无空白错误。
 
 - [ ] **Step 4: 提交改动**
 
 ```bash
-git add frontend/src/styles/features/chat/right-panel.css
+git add apps/desktop/src/styles/features/chat/right-panel.css
 git commit -m "fix(chat): align right panel edges"
 ```

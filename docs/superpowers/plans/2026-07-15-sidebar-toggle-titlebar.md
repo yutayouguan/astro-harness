@@ -24,15 +24,15 @@
 
 | File | Responsibility |
 |------|----------------|
-| Modify: `frontend/src/styles/shell.css` | `.titlebar-sidebar-toggle` 定位与按钮外观；品牌区仅一按钮时布局保持可用 |
-| Modify: `frontend/src/App.tsx` | 标题栏挂 pin 按钮；从 `sidebar-brand-actions` 删除 pin 按钮 |
+| Modify: `apps/desktop/src/styles/shell.css` | `.titlebar-sidebar-toggle` 定位与按钮外观；品牌区仅一按钮时布局保持可用 |
+| Modify: `apps/desktop/src/App.tsx` | 标题栏挂 pin 按钮；从 `sidebar-brand-actions` 删除 pin 按钮 |
 
 ---
 
 ### Task 1: 标题栏侧栏开关样式
 
 **Files:**
-- Modify: `frontend/src/styles/shell.css`（紧接 `.native-drag-region` 之后）
+- Modify: `apps/desktop/src/styles/shell.css`（紧接 `.native-drag-region` 之后）
 
 **Interfaces:**
 - Consumes: `--titlebar-h`、`--titlebar-traffic-w`（`base.css` 已有）
@@ -73,7 +73,7 @@
 - [ ] **Step 3: Commit**
 
 ```bash
-git add frontend/src/styles/shell.css
+git add apps/desktop/src/styles/shell.css
 git commit -m "$(cat <<'EOF'
 style(shell): add titlebar sidebar toggle positioning
 
@@ -86,7 +86,7 @@ EOF
 ### Task 2: 挪按钮 markup + 验收
 
 **Files:**
-- Modify: `frontend/src/App.tsx`（`return` 开头 shell 区域与 `sidebar-brand-actions`）
+- Modify: `apps/desktop/src/App.tsx`（`return` 开头 shell 区域与 `sidebar-brand-actions`）
 
 **Interfaces:**
 - Consumes: `toggleSidebar`、`sidebarPinned`、`activeTone`、`t`、`IconPanelOpen` / `IconPanelClose`；类名 `.titlebar-sidebar-toggle`
@@ -172,7 +172,7 @@ Expected: 5 条全部通过。
 - [ ] **Step 4: Commit**
 
 ```bash
-git add frontend/src/App.tsx
+git add apps/desktop/src/App.tsx
 git commit -m "$(cat <<'EOF'
 feat(shell): move sidebar pin toggle next to traffic lights
 

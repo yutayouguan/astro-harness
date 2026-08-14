@@ -38,8 +38,8 @@
 
 ### 文件
 
-- 新建：`frontend/src/lib/clampPopover.ts`
-- 测试：`frontend/src/lib/clampPopover.test.ts`
+- 新建：`apps/desktop/src/lib/clampPopover.ts`
+- 测试：`apps/desktop/src/lib/clampPopover.test.ts`
 - 废弃/薄包装：`modelPickerFlyout.ts` 改为 re-export 或删并由 ModelPicker 改用新 API
 
 ### 类型与函数

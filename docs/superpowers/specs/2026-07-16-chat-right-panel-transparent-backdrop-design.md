@@ -6,7 +6,7 @@
 
 ## 实现
 
-仅调整 `frontend/src/styles/features/chat/right-panel.css`：
+仅调整 `apps/desktop/src/styles/features/chat/right-panel.css`：
 
 - 保留 `.chat-right-backdrop` 按钮及其层级，继续接收侧栏外部点击。
 - 将遮罩背景改为 `transparent`。

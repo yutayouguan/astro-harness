@@ -6,7 +6,7 @@
 
 ## 实现
 
-仅修改 `frontend/src/styles/features/chat/right-panel.css`：
+仅修改 `apps/desktop/src/styles/features/chat/right-panel.css`：
 
 - 将 `.chat-right-panel` 的 `top` 从 `10px` 改为 `0`。
 - 将 `.chat-right-panel` 的 `right` 从 `10px` 改为 `0`。

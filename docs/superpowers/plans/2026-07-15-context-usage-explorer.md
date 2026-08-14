@@ -28,17 +28,17 @@
 | Modify: `proto/proto/astro.proto` | `ContextUsageEvent` + `ChatEvent` oneof |
 | Modify: `backend/src/grpc/astro_service.rs` | `multi_turn_to_chat_event` 映射 |
 | Modify: `frontend/src-tauri/src/commands.rs` | `ChatStreamEvent::ContextUsage` + emit |
-| Create: `frontend/src/lib/contextUsage.ts` | 类型、格式化、%、过滤 0 |
-| Create: `frontend/src/lib/contextUsage.test.ts` | 纯函数测试 |
-| Create: `frontend/src/components/ContextUsageBar.tsx` | 分段条 |
-| Create: `frontend/src/components/ContextUsagePopover.tsx` | Composer 浮层 |
-| Create: `frontend/src/components/ContextExplorer.tsx` | 右栏用量区 |
-| Modify: `frontend/src/components/ChatRightPanel.tsx` | context tab：Explorer + Timeline |
-| Modify: `frontend/src/components/ChatView.tsx` | % 按钮 ↔ popover；查看详情回调 |
-| Modify: `frontend/src/components/ChatAgentInfo.tsx` | 弱化用量，链到上下文 tab |
-| Modify: `frontend/src/App.tsx` | 监听事件、state、传 props、模型窗口 |
-| Modify: `frontend/src/styles/chat.css` / `chat-right-panel.css` | 浮层 / Explorer / 环图样式 |
-| Modify: `frontend/src/i18n/messages.ts` | 文案 |
+| Create: `apps/desktop/src/lib/contextUsage.ts` | 类型、格式化、%、过滤 0 |
+| Create: `apps/desktop/src/lib/contextUsage.test.ts` | 纯函数测试 |
+| Create: `apps/desktop/src/components/ContextUsageBar.tsx` | 分段条 |
+| Create: `apps/desktop/src/components/ContextUsagePopover.tsx` | Composer 浮层 |
+| Create: `apps/desktop/src/components/ContextExplorer.tsx` | 右栏用量区 |
+| Modify: `apps/desktop/src/components/ChatRightPanel.tsx` | context tab：Explorer + Timeline |
+| Modify: `apps/desktop/src/components/ChatView.tsx` | % 按钮 ↔ popover；查看详情回调 |
+| Modify: `apps/desktop/src/components/ChatAgentInfo.tsx` | 弱化用量，链到上下文 tab |
+| Modify: `apps/desktop/src/App.tsx` | 监听事件、state、传 props、模型窗口 |
+| Modify: `apps/desktop/src/styles/chat.css` / `chat-right-panel.css` | 浮层 / Explorer / 环图样式 |
+| Modify: `apps/desktop/src/i18n/messages.ts` | 文案 |
 | Modify: spec | 状态 → 已实现（收尾） |
 
 ---
@@ -604,8 +604,8 @@ EOF
 ### Task 5: 前端纯函数库
 
 **Files:**
-- Create: `frontend/src/lib/contextUsage.ts`
-- Create: `frontend/src/lib/contextUsage.test.ts`
+- Create: `apps/desktop/src/lib/contextUsage.ts`
+- Create: `apps/desktop/src/lib/contextUsage.test.ts`
 
 - [ ] **Step 1: 写失败测试**
 
@@ -746,7 +746,7 @@ Expected: PASS
 - [ ] **Step 5: Commit**
 
 ```bash
-git add frontend/src/lib/contextUsage.ts frontend/src/lib/contextUsage.test.ts
+git add apps/desktop/src/lib/contextUsage.ts apps/desktop/src/lib/contextUsage.test.ts
 git commit -m "$(cat <<'EOF'
 feat(frontend): add context usage formatting helpers
 
@@ -759,11 +759,11 @@ EOF
 ### Task 6: `ContextUsageBar` + Popover + Composer 接线
 
 **Files:**
-- Create: `frontend/src/components/ContextUsageBar.tsx`
-- Create: `frontend/src/components/ContextUsagePopover.tsx`
-- Modify: `frontend/src/components/ChatView.tsx`
-- Modify: `frontend/src/styles/chat.css`
-- Modify: `frontend/src/i18n/messages.ts`
+- Create: `apps/desktop/src/components/ContextUsageBar.tsx`
+- Create: `apps/desktop/src/components/ContextUsagePopover.tsx`
+- Modify: `apps/desktop/src/components/ChatView.tsx`
+- Modify: `apps/desktop/src/styles/chat.css`
+- Modify: `apps/desktop/src/i18n/messages.ts`
 
 - [ ] **Step 1: `ContextUsageBar`**
 
@@ -841,11 +841,11 @@ Props：`snapshot | null`、`windowTokens`、`onClose`、`onViewDetails`、`open
 - [ ] **Step 6: Commit**
 
 ```bash
-git add frontend/src/components/ContextUsageBar.tsx \
-  frontend/src/components/ContextUsagePopover.tsx \
-  frontend/src/components/ChatView.tsx \
-  frontend/src/styles/chat.css \
-  frontend/src/i18n/messages.ts
+git add apps/desktop/src/components/ContextUsageBar.tsx \
+  apps/desktop/src/components/ContextUsagePopover.tsx \
+  apps/desktop/src/components/ChatView.tsx \
+  apps/desktop/src/styles/chat.css \
+  apps/desktop/src/i18n/messages.ts
 git commit -m "$(cat <<'EOF'
 feat(chat): add context usage popover on composer
 
@@ -858,10 +858,10 @@ EOF
 ### Task 7: ContextExplorer + 右栏
 
 **Files:**
-- Create: `frontend/src/components/ContextExplorer.tsx`
-- Modify: `frontend/src/components/ChatRightPanel.tsx`
-- Modify: `frontend/src/styles/chat-right-panel.css`
-- Modify: `frontend/src/i18n/messages.ts`
+- Create: `apps/desktop/src/components/ContextExplorer.tsx`
+- Modify: `apps/desktop/src/components/ChatRightPanel.tsx`
+- Modify: `apps/desktop/src/styles/chat-right-panel.css`
+- Modify: `apps/desktop/src/i18n/messages.ts`
 
 - [ ] **Step 1: `ContextExplorer` UI**
 
@@ -898,10 +898,10 @@ EOF
 - [ ] **Step 4: Commit**
 
 ```bash
-git add frontend/src/components/ContextExplorer.tsx \
-  frontend/src/components/ChatRightPanel.tsx \
-  frontend/src/styles/chat-right-panel.css \
-  frontend/src/i18n/messages.ts
+git add apps/desktop/src/components/ContextExplorer.tsx \
+  apps/desktop/src/components/ChatRightPanel.tsx \
+  apps/desktop/src/styles/chat-right-panel.css \
+  apps/desktop/src/i18n/messages.ts
 git commit -m "$(cat <<'EOF'
 feat(chat): add context explorer to the right panel
 
@@ -914,8 +914,8 @@ EOF
 ### Task 8: App 状态与模型窗口
 
 **Files:**
-- Modify: `frontend/src/App.tsx`
-- Modify: `frontend/src/components/ChatAgentInfo.tsx`
+- Modify: `apps/desktop/src/App.tsx`
+- Modify: `apps/desktop/src/components/ChatAgentInfo.tsx`
 
 - [ ] **Step 1: state**
 
@@ -977,7 +977,7 @@ contextUsagePercent={
 - [ ] **Step 6: Commit**
 
 ```bash
-git add frontend/src/App.tsx frontend/src/components/ChatAgentInfo.tsx
+git add apps/desktop/src/App.tsx apps/desktop/src/components/ChatAgentInfo.tsx
 git commit -m "$(cat <<'EOF'
 feat(chat): wire context usage snapshot through App
 

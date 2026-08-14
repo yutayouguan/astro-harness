@@ -20,7 +20,7 @@
 ### Task 1: 增加会话工具栏暗色玻璃变量
 
 **Files:**
-- Modify: `frontend/src/styles/features/chat/right-panel.css:169-308`
+- Modify: `apps/desktop/src/styles/features/chat/right-panel.css:169-308`
 
 **Interfaces:**
 - Consumes: `html[data-theme="dark"]`、`--tone`、`--tone-soft`、`.chat-session-toolbar` 已有局部变量接口。
@@ -32,7 +32,7 @@
 
 - [ ] **Step 2: 增加暗色变量覆盖**
 
-在 `frontend/src/styles/features/chat/right-panel.css` 的 `.chat-session-new svg` 规则之后加入：
+在 `apps/desktop/src/styles/features/chat/right-panel.css` 的 `.chat-session-new svg` 规则之后加入：
 
 ```css
 html[data-theme="dark"] .chat-session-toolbar {
@@ -79,11 +79,11 @@ Expected: TypeScript 与 Vite 构建成功，命令退出码为 `0`。
 
 - [ ] **Step 5: 检查并提交**
 
-Run: `git diff --check && git diff -- frontend/src/styles/features/chat/right-panel.css`
+Run: `git diff --check && git diff -- apps/desktop/src/styles/features/chat/right-panel.css`
 
 Expected: `git diff --check` 无输出；差异只包含暗色会话工具栏变量及 hover 边框覆盖。
 
 ```bash
-git add frontend/src/styles/features/chat/right-panel.css
+git add apps/desktop/src/styles/features/chat/right-panel.css
 git commit -m "style(chat): adapt session toolbar to dark theme"
 ```

@@ -32,12 +32,12 @@
 | Modify: `skills/src/lib.rs` | mod + re-export |
 | Modify: `frontend/src-tauri/src/skills_commands.rs` | `list_skill_origins` / `update_installed_skill` / `update_all_skills`；扩展 `install_store_skill` 参数 |
 | Modify: `frontend/src-tauri/src/lib.rs` | 注册新 commands |
-| Modify: `frontend/src/types.ts` | Origin / UpdateResult 类型 |
-| Create: `frontend/src/lib/skillUpdateRows.ts` | 扫盘 + origin → 更新行 + 筛选 |
-| Create: `frontend/src/lib/skillUpdateRows.test.mjs` | 匹配与筛选单测 |
-| Modify: `frontend/src/components/SkillsPanel.tsx` | 更新 Tab、全部更新、已安装/本机次要更新按钮 |
-| Modify: `frontend/src/i18n/messages.ts` | 中英文案 |
-| Modify: `frontend/src/styles/skills.css` | 筛选芯片 / 更新按钮态（必要时） |
+| Modify: `apps/desktop/src/types.ts` | Origin / UpdateResult 类型 |
+| Create: `apps/desktop/src/lib/skillUpdateRows.ts` | 扫盘 + origin → 更新行 + 筛选 |
+| Create: `apps/desktop/src/lib/skillUpdateRows.test.mjs` | 匹配与筛选单测 |
+| Modify: `apps/desktop/src/components/SkillsPanel.tsx` | 更新 Tab、全部更新、已安装/本机次要更新按钮 |
+| Modify: `apps/desktop/src/i18n/messages.ts` | 中英文案 |
+| Modify: `apps/desktop/src/styles/skills.css` | 筛选芯片 / 更新按钮态（必要时） |
 
 ---
 
@@ -294,9 +294,9 @@ git commit -m "feat(tauri): expose skill origin list and update commands"
 ### Task 5: 前端合并行与筛选纯函数
 
 **Files:**
-- Create: `frontend/src/lib/skillUpdateRows.ts`
-- Create: `frontend/src/lib/skillUpdateRows.test.mjs`
-- Modify: `frontend/src/types.ts`
+- Create: `apps/desktop/src/lib/skillUpdateRows.ts`
+- Create: `apps/desktop/src/lib/skillUpdateRows.test.mjs`
+- Modify: `apps/desktop/src/types.ts`
 
 **Interfaces:**
 ```ts
@@ -344,7 +344,7 @@ test("default filter with_origin hides no_origin", () => {
 
 - [ ] **Step 2: RED → 实现 → GREEN**
 
-Run: `node --experimental-strip-types --test frontend/src/lib/skillUpdateRows.test.mjs`
+Run: `node --experimental-strip-types --test apps/desktop/src/lib/skillUpdateRows.test.mjs`
 
 - [ ] **Step 3: Commit**
 
@@ -357,9 +357,9 @@ git commit -m "feat(frontend): merge installed skills with origins for update ta
 ### Task 6: SkillsPanel「更新」Tab UI（v1）
 
 **Files:**
-- Modify: `frontend/src/components/SkillsPanel.tsx`
-- Modify: `frontend/src/i18n/messages.ts`
-- Modify: `frontend/src/styles/skills.css`（筛选芯片，若无现成 class）
+- Modify: `apps/desktop/src/components/SkillsPanel.tsx`
+- Modify: `apps/desktop/src/i18n/messages.ts`
+- Modify: `apps/desktop/src/styles/skills.css`（筛选芯片，若无现成 class）
 
 **行为：**
 - `SkillsTab` 增加 `"updates"`；主 Tab 顺序：已安装 | 本机 | **更新** | 在线。
@@ -402,7 +402,7 @@ git commit -m "feat(skills-ui): add Updates tab with reinstall actions"
 ### Task 7: 已安装 / 本机次要「更新」入口
 
 **Files:**
-- Modify: `frontend/src/components/SkillsPanel.tsx`
+- Modify: `apps/desktop/src/components/SkillsPanel.tsx`
 
 - [ ] **Step 1: `renderInstalledCard` / `renderMachineCard`：若该 skill 能 match 到 origin，显示次要按钮「更新」，调用同一 `update_installed_skill`**
 - [ ] **Step 2: 无 origin 不显示按钮（避免噪音）**
@@ -420,7 +420,7 @@ git commit -m "feat(skills-ui): add update action on installed and machine cards
 
 ```bash
 cargo test -p skills origins:: update::
-node --experimental-strip-types --test frontend/src/lib/skillUpdateRows.test.mjs frontend/src/lib/skillInstalledMatch.test.mjs
+node --experimental-strip-types --test apps/desktop/src/lib/skillUpdateRows.test.mjs apps/desktop/src/lib/skillInstalledMatch.test.mjs
 ```
 
 Expected: all PASS

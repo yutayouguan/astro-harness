@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Move `frontend/src/components/` from a flat layout into domain folders without changing runtime behavior or UI.
+**Goal:** Move `apps/desktop/src/components/` from a flat layout into domain folders without changing runtime behavior or UI.
 
 **Architecture:** `git mv` files into domain dirs (`chat/`, `filespace/`, `workspace/`, `agents/`, `schedule/`, `settings/`, `ui/`, `icons/`; keep `media/`). Update relative imports (`../X` → `../../X` for nested files) and all consumers (`App.tsx`, hooks, lib, a2ui, sibling components). Optional per-domain `index.ts` barrels. Verify with `npm run build` (runs `tsc -b && vite build`).
 
@@ -44,11 +44,11 @@ After a file moves from `components/Foo.tsx` → `components/<domain>/Foo.tsx`:
 
 ### Known external consumers (update as domains move)
 
-- `frontend/src/App.tsx` — many panels, NavIcons, Toast, MsgDissolveOverlay, ModelPicker, SidebarContextMenu
-- `frontend/src/hooks/useTransientToast.ts` — Toast
-- `frontend/src/hooks/useAgentTools.ts` — ToolIcons
-- `frontend/src/lib/workspaceMenuItems.ts` — FileContextMenu
-- `frontend/src/a2ui/CatalogAdapter.tsx` — `media/MediaPreview` (no change for media path)
+- `apps/desktop/src/App.tsx` — many panels, NavIcons, Toast, MsgDissolveOverlay, ModelPicker, SidebarContextMenu
+- `apps/desktop/src/hooks/useTransientToast.ts` — Toast
+- `apps/desktop/src/hooks/useAgentTools.ts` — ToolIcons
+- `apps/desktop/src/lib/workspaceMenuItems.ts` — FileContextMenu
+- `apps/desktop/src/a2ui/CatalogAdapter.tsx` — `media/MediaPreview` (no change for media path)
 
 Plus dense cross-imports among components (especially `ChatView` ↔ Msg*/Composer*/Context*/media).
 
@@ -66,7 +66,7 @@ Expected: `tsc -b` and `vite build` succeed with exit code 0.
 
 **Files:**
 - Move: listed `icons/` files
-- Create: `frontend/src/components/icons/index.ts`
+- Create: `apps/desktop/src/components/icons/index.ts`
 - Modify: all importers of those icons (search `components/NavIcons`, `ProviderIcons`, `ToolIcons`, `GlassSolidIcons`, `McpIcon`, `LucideByName`)
 
 **Interfaces:**
@@ -81,7 +81,7 @@ git checkout -b chore/frontend-components-reorg
 - [ ] **Step 2: Move icon files**
 
 ```bash
-cd frontend/src/components
+cd apps/desktop/src/components
 mkdir -p icons
 git mv NavIcons.tsx ProviderIcons.tsx ToolIcons.tsx GlassSolidIcons.tsx McpIcon.tsx LucideByName.tsx icons/
 ```
@@ -93,7 +93,7 @@ git mv NavIcons.tsx ProviderIcons.tsx ToolIcons.tsx GlassSolidIcons.tsx McpIcon.
 - [ ] **Step 5: Add barrel**
 
 ```ts
-// frontend/src/components/icons/index.ts
+// apps/desktop/src/components/icons/index.ts
 export * from "./NavIcons";
 export { default as ProviderIcons } from "./ProviderIcons";
 // ... re-export each module’s public API to match prior usage
@@ -110,7 +110,7 @@ cd frontend && npm run build
 - [ ] **Step 7: Commit**
 
 ```bash
-git add frontend/src/components/icons frontend/src/App.tsx frontend/src/hooks frontend/src/components
+git add apps/desktop/src/components/icons apps/desktop/src/App.tsx apps/desktop/src/hooks apps/desktop/src/components
 git commit -m "$(cat <<'EOF'
 refactor(ui): move icon components into components/icons
 
@@ -124,7 +124,7 @@ EOF
 
 **Files:**
 - Move: `Toast.tsx`, `SelectMenu.tsx`, `AnimatedSwitch.tsx`, `ExpandableSearch.tsx`
-- Create: `frontend/src/components/ui/index.ts`
+- Create: `apps/desktop/src/components/ui/index.ts`
 - Modify: importers (`App.tsx`, `useTransientToast.ts`, components that import SelectMenu/ExpandableSearch/Toast)
 
 - [ ] **Step 1: git mv into `ui/`**
@@ -140,7 +140,7 @@ EOF
 
 **Files:**
 - Move: all `chat/` files from File map
-- Create: `frontend/src/components/chat/index.ts`
+- Create: `apps/desktop/src/components/chat/index.ts`
 - Modify: `App.tsx` + every cross-import among chat files and into `media/`, `agents/`, `ui/`, `icons/` as already moved
 
 **Interfaces:**
@@ -160,7 +160,7 @@ EOF
 
 **Files:**
 - Move: filespace cluster
-- Create: `frontend/src/components/filespace/index.ts`
+- Create: `apps/desktop/src/components/filespace/index.ts`
 - Modify: `App.tsx`, `lib/workspaceMenuItems.ts`, any chat/workspace importers
 
 - [ ] **Step 1: git mv → `filespace/`**
@@ -174,7 +174,7 @@ EOF
 
 **Files:**
 - Move: workspace cluster
-- Create: `frontend/src/components/workspace/index.ts`
+- Create: `apps/desktop/src/components/workspace/index.ts`
 - Modify: `App.tsx` and cross-importers
 
 - [ ] **Step 1–4:** same pattern as Task 4
@@ -186,7 +186,7 @@ EOF
 
 **Files:**
 - Move: agents cluster
-- Create: `frontend/src/components/agents/index.ts`
+- Create: `apps/desktop/src/components/agents/index.ts`
 - Modify: `App.tsx` (`ModelPicker`), chat/settings importers of Agent*/Model*
 
 - [ ] **Step 1–4:** same pattern
@@ -198,7 +198,7 @@ EOF
 
 **Files:**
 - Move: `CronPanel.tsx`, `CreateCronDialog.tsx`, `ScheduleEditor.tsx`
-- Create: `frontend/src/components/schedule/index.ts`
+- Create: `apps/desktop/src/components/schedule/index.ts`
 - Modify: `App.tsx` and any importers
 
 - [ ] **Step 1–4:** same pattern
@@ -210,7 +210,7 @@ EOF
 
 **Files:**
 - Move: settings cluster
-- Create: `frontend/src/components/settings/index.ts`
+- Create: `apps/desktop/src/components/settings/index.ts`
 - Modify: `App.tsx` and remaining importers
 - Verify: `components/` root contains only domain dirs (no leftover `.tsx` at root)
 
@@ -227,7 +227,7 @@ Expected: no matches to old flat paths (except comments if any).
 - [ ] **Step 4: Confirm root is dirs-only**
 
 ```bash
-ls frontend/src/components
+ls apps/desktop/src/components
 # expect: agents chat filespace icons media schedule settings ui workspace (+ maybe no loose tsx)
 ```
 

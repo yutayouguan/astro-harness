@@ -35,7 +35,7 @@
 | Modify: `backend/src/grpc/astro_service.rs` | 把 fallbacks 组成 `Vec<ChatTarget>` 传入 multi_turn |
 | Modify: `frontend/src-tauri/src/providers_commands.rs` | `ProviderConfig.fallback`、`resolve_chat_targets`、DTO |
 | Modify: `frontend/src-tauri/src/commands.rs` | `start_chat` / cron resolve 填链 |
-| Modify: `frontend/src/components/ProvidersPanel.tsx` | MVP 后备编辑 UI |
+| Modify: `apps/desktop/src/components/ProvidersPanel.tsx` | MVP 后备编辑 UI |
 | Modify: `docs/superpowers/specs/2026-07-14-chat-fallback-chain-design.md` | 实现后状态 → 已实现 |
 
 ---
@@ -524,7 +524,7 @@ EOF
 ### Task 7: Providers 面板 MVP UI
 
 **Files:**
-- Modify: `frontend/src/components/ProvidersPanel.tsx`
+- Modify: `apps/desktop/src/components/ProvidersPanel.tsx`
 - 类型定义处（若有独立 `types`）同步 `fallback?: { provider_id: string; model?: string }[]`
 
 - [x] **Step 1: draft 状态增加 `fallback`**

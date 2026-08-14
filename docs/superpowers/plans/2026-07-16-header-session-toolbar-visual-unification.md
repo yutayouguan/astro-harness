@@ -20,7 +20,7 @@
 ### Task 1: 统一顶部栏控件高度
 
 **Files:**
-- Modify: `frontend/src/styles/features/shell/header.css:14-26,86-109,791-804`
+- Modify: `apps/desktop/src/styles/features/shell/header.css:14-26,86-109,791-804`
 
 **Interfaces:**
 - Consumes: `App.tsx` 中现有 `.status-chip`、`.model-picker-trigger`、`.chat-header-tools` 结构。
@@ -64,14 +64,14 @@ Expected: TypeScript 与 Vite 构建完成，退出码为 0。
 - [ ] **Step 5: 提交顶部高度改动**
 
 ```bash
-git add frontend/src/styles/features/shell/header.css
+git add apps/desktop/src/styles/features/shell/header.css
 git commit -m "fix(chat): align header control heights"
 ```
 
 ### Task 2: 统一会话工具栏玻璃样式
 
 **Files:**
-- Modify: `frontend/src/styles/features/chat/right-panel.css:170-273`
+- Modify: `apps/desktop/src/styles/features/chat/right-panel.css:170-273`
 
 **Interfaces:**
 - Consumes: `.chat-session-toolbar` 内现有 `.expandable-search-btn`、`.expandable-search-field`、`.chat-session-new` 和 `.agent-picker-chip`。
@@ -154,15 +154,15 @@ Expected: TypeScript 与 Vite 构建完成，退出码为 0。
 - [ ] **Step 6: 提交会话工具栏改动**
 
 ```bash
-git add frontend/src/styles/features/chat/right-panel.css
+git add apps/desktop/src/styles/features/chat/right-panel.css
 git commit -m "fix(chat): unify session toolbar glass styling"
 ```
 
 ### Task 3: 最终回归验证
 
 **Files:**
-- Verify: `frontend/src/styles/features/shell/header.css`
-- Verify: `frontend/src/styles/features/chat/right-panel.css`
+- Verify: `apps/desktop/src/styles/features/shell/header.css`
+- Verify: `apps/desktop/src/styles/features/chat/right-panel.css`
 
 **Interfaces:**
 - Consumes: Task 1 与 Task 2 的 CSS 结果。
@@ -180,6 +180,6 @@ Expected: 退出码为 0，无 TypeScript 或 Vite 错误。
 
 - [ ] **Step 3: 检查改动范围**
 
-Run: `git diff HEAD~2 -- frontend/src/styles/features/shell/header.css frontend/src/styles/features/chat/right-panel.css`
+Run: `git diff HEAD~2 -- apps/desktop/src/styles/features/shell/header.css apps/desktop/src/styles/features/chat/right-panel.css`
 
 Expected: 仅包含约定的高度和玻璃样式调整，不包含 React 结构或交互逻辑改动。

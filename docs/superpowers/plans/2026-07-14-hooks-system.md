@@ -60,7 +60,7 @@
 - Create: `hooks/src/ui.rs`
 - Modify: `proto/proto/astro.proto`, regenerate / update proto rust
 - Modify: `backend` + `frontend/src-tauri` event mapping
-- Modify: `frontend/src/App.tsx`（不再走 memory_update）
+- Modify: `apps/desktop/src/App.tsx`（不再走 memory_update）
 
 - [x] **Step 1:** Add `message HookEvent { string name = 1; string detail = 2; string outcome = 3; }` to `ChatEvent` oneof
 - [x] **Step 2:** Rebuild proto; map in backend `multi_turn` / hook channel

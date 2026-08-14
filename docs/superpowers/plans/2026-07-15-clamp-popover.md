@@ -19,9 +19,9 @@
 ### Task 1: clampPopover 纯函数 + 测试
 
 **Files:**
-- Create: `frontend/src/lib/clampPopover.ts`
-- Create: `frontend/src/lib/clampPopover.test.ts`
-- Delete or thin: `frontend/src/lib/modelPickerFlyout.ts` / `.test.ts`（Task 2）
+- Create: `apps/desktop/src/lib/clampPopover.ts`
+- Create: `apps/desktop/src/lib/clampPopover.test.ts`
+- Delete or thin: `apps/desktop/src/lib/modelPickerFlyout.ts` / `.test.ts`（Task 2）
 
 **Produces:** `clampPopover`, `resolveClipBounds`, `measurePopoverSize` 及导出类型
 
@@ -33,8 +33,8 @@
 ### Task 2: ModelPicker 迁移
 
 **Files:**
-- Modify: `frontend/src/components/ModelPicker.tsx`
-- Delete: `frontend/src/lib/modelPickerFlyout.ts`, `modelPickerFlyout.test.ts`
+- Modify: `apps/desktop/src/components/ModelPicker.tsx`
+- Delete: `apps/desktop/src/lib/modelPickerFlyout.ts`, `modelPickerFlyout.test.ts`
 
 - [x] 改用 `clampPopover` + `resolveClipBounds` + `measurePopoverSize`
 - [x] 相对定位 style：`left: offsetLeft, right: "auto"`（top 可仍用 CSS）
@@ -44,7 +44,7 @@
 ### Task 3: AgentPicker 迁移
 
 **Files:**
-- Modify: `frontend/src/components/AgentPicker.tsx`
+- Modify: `apps/desktop/src/components/AgentPicker.tsx`
 
 - [x] 替换内联 VIEWPORT 钳制为共享 API（`preferAlign: "start"` 或按现有左/右逻辑）
 - [x] Commit
@@ -52,7 +52,7 @@
 ### Task 4: SelectMenu 迁移
 
 **Files:**
-- Modify: `frontend/src/components/SelectMenu.tsx`
+- Modify: `apps/desktop/src/components/SelectMenu.tsx`
 
 - [x] `computePos` 改为调用 `clampPopover`（fixed / portal，`preferAlign: "start"`）
 - [x] 保持 openUp / maxHeight 行为
@@ -61,7 +61,7 @@
 ### Task 5（可选本轮）: useClampPopover + Composer
 
 **Files:**
-- Create: `frontend/src/hooks/useClampPopover.ts`
+- Create: `apps/desktop/src/hooks/useClampPopover.ts`
 - Modify: Composer 相关（`ChatView.tsx` 模式/MCP/palette）
 
 - [x] hook 已建
@@ -92,7 +92,7 @@
 ### Task 8: 随访收口
 
 **Files:**
-- Create: `frontend/src/hooks/useAnchoredMenu.ts`
+- Create: `apps/desktop/src/hooks/useAnchoredMenu.ts`
 - Modify: `AgentPicker.tsx`, `SelectMenu.tsx`, `CronPanel.tsx`, `ModelPicker.tsx`, `ChatMessageNav.tsx`
 - Modify: `base.css`（`--z-drawer` / `--z-menu` / `--z-tip`）及菜单/抽屉/tip 样式
 
@@ -105,7 +105,7 @@
 ### Task 9: 随访收口（二）
 
 **Files:**
-- Create: `frontend/src/lib/anchoredMenuLayout.ts` + `.test.ts`
+- Create: `apps/desktop/src/lib/anchoredMenuLayout.ts` + `.test.ts`
 - Modify: `ScheduleEditor.tsx`, `SelectMenu.tsx`, `AgentPicker.tsx`, `CronPanel.tsx`
 
 - [x] ScheduleEditor 日期弹层改用 `useAnchoredMenu`

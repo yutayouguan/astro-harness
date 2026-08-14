@@ -22,11 +22,11 @@
 
 | File | Role |
 |------|------|
-| `frontend/src/components/AvatarPickerDrawer.tsx` | 新建：头像右侧抽屉 |
-| `frontend/src/components/LucideIconPicker.tsx` | 壳改为右侧抽屉；可加可选上传回调 |
-| `frontend/src/components/AgentCreateGuide.tsx` | 两行入口 + 开抽屉 + 互斥 |
-| `frontend/src/styles/chat.css` | `.agent-icon-drawer-*` + Lucide 壳样式改侧滑 |
-| `frontend/src/i18n/messages.ts` | zh/en 抽屉与入口文案 |
+| `apps/desktop/src/components/AvatarPickerDrawer.tsx` | 新建：头像右侧抽屉 |
+| `apps/desktop/src/components/LucideIconPicker.tsx` | 壳改为右侧抽屉；可加可选上传回调 |
+| `apps/desktop/src/components/AgentCreateGuide.tsx` | 两行入口 + 开抽屉 + 互斥 |
+| `apps/desktop/src/styles/chat.css` | `.agent-icon-drawer-*` + Lucide 壳样式改侧滑 |
+| `apps/desktop/src/i18n/messages.ts` | zh/en 抽屉与入口文案 |
 | Spec status | 标为已批准 |
 
 ---
@@ -34,7 +34,7 @@
 ### Task 1: i18n 文案
 
 **Files:**
-- Modify: `frontend/src/i18n/messages.ts`（zh + en）
+- Modify: `apps/desktop/src/i18n/messages.ts`（zh + en）
 
 **Produces:** 下列 MessageKey（写入 `zh` 后 `en` 必须齐全）
 
@@ -76,7 +76,7 @@
 - [ ] **Step 3: Commit**
 
 ```bash
-git add frontend/src/i18n/messages.ts
+git add apps/desktop/src/i18n/messages.ts
 git commit -m "$(cat <<'EOF'
 i18n(chat): 头像/Emoji 侧抽屉文案
 
@@ -89,8 +89,8 @@ EOF
 ### Task 2: 共用右侧抽屉 CSS + Lucide 改壳
 
 **Files:**
-- Modify: `frontend/src/styles/chat.css`（`lucide-picker-*` 段 + 新 `agent-icon-drawer-*`）
-- Modify: `frontend/src/components/LucideIconPicker.tsx`
+- Modify: `apps/desktop/src/styles/chat.css`（`lucide-picker-*` 段 + 新 `agent-icon-drawer-*`）
+- Modify: `apps/desktop/src/components/LucideIconPicker.tsx`
 
 **Consumes:** Task 1 文案（lucide 标题仍用原 key）  
 **Produces:** 侧滑抽屉壳；Lucide 打开时为右侧面板
@@ -235,7 +235,7 @@ type Props = {
 - [ ] **Step 5: Commit**
 
 ```bash
-git add frontend/src/styles/chat.css frontend/src/components/LucideIconPicker.tsx
+git add apps/desktop/src/styles/chat.css apps/desktop/src/components/LucideIconPicker.tsx
 git commit -m "$(cat <<'EOF'
 feat(chat): Lucide 选择器改为右侧抽屉壳
 
@@ -248,8 +248,8 @@ EOF
 ### Task 3: `AvatarPickerDrawer`
 
 **Files:**
-- Create: `frontend/src/components/AvatarPickerDrawer.tsx`
-- Modify: `frontend/src/styles/chat.css`（上传区小样式）
+- Create: `apps/desktop/src/components/AvatarPickerDrawer.tsx`
+- Modify: `apps/desktop/src/styles/chat.css`（上传区小样式）
 
 **Consumes:** Task 1 keys；Task 2 `.agent-icon-drawer-*`；`CoverPicker`  
 **Produces:**
@@ -375,7 +375,7 @@ export default function AvatarPickerDrawer({
 - [ ] **Step 2: Commit**
 
 ```bash
-git add frontend/src/components/AvatarPickerDrawer.tsx frontend/src/styles/chat.css
+git add apps/desktop/src/components/AvatarPickerDrawer.tsx apps/desktop/src/styles/chat.css
 git commit -m "$(cat <<'EOF'
 feat(chat): 新增头像选择右侧抽屉
 
@@ -388,7 +388,7 @@ EOF
 ### Task 4: 改写 `AgentCreateGuide` 入口 + 接线
 
 **Files:**
-- Modify: `frontend/src/components/AgentCreateGuide.tsx`
+- Modify: `apps/desktop/src/components/AgentCreateGuide.tsx`
 
 **Consumes:** AvatarPickerDrawer；LucideIconPicker；现有 `pick` / `pickCover` / `pickLucide` / `clear`
 
@@ -480,7 +480,7 @@ const openLucide = () => {
 - [ ] **Step 4: Commit**
 
 ```bash
-git add frontend/src/components/AgentCreateGuide.tsx frontend/src/components/LucideIconPicker.tsx
+git add apps/desktop/src/components/AgentCreateGuide.tsx apps/desktop/src/components/LucideIconPicker.tsx
 git commit -m "$(cat <<'EOF'
 feat(chat): 创建 Agent 头像/Emoji 改右侧抽屉选择
 

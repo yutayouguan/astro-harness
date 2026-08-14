@@ -29,7 +29,7 @@
 | Modify: `skills/src/origins.rs` / `install.rs` | 安装成功写 digest |
 | Modify: `skills/src/update.rs` | preview / backup / force / retry |
 | Modify: Tauri `skills_commands.rs` + `lib.rs` | `preview_skill_update`；扩展 update 参数 |
-| Modify: `frontend/src/types.ts` | Preview DTO |
+| Modify: `apps/desktop/src/types.ts` | Preview DTO |
 | Modify: `SkillsPanel.tsx` + i18n + 少量 css | 确认流；批量时逐条或汇总确认 |
 | Modify: spec 状态 → v3 已实现 |
 

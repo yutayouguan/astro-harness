@@ -34,9 +34,9 @@
 ### Task 3: 辅助模型实际生效路由提示
 
 **Files:**
-- Modify: `frontend/src/components/settings/AuxiliaryModelsPanel.tsx`
-- Modify: `frontend/src/i18n/messages.ts`
-- Modify: `frontend/src/styles/features/preferences.css`
+- Modify: `apps/desktop/src/components/settings/AuxiliaryModelsPanel.tsx`
+- Modify: `apps/desktop/src/i18n/messages.ts`
+- Modify: `apps/desktop/src/styles/features/preferences.css`
 
 1. 从 `providersState.active_provider_id` 与 provider 默认模型解析自动路由的实际 provider/model。
 2. 自动项显示“继承：provider / model”，不再只显示“跟随主模型”。

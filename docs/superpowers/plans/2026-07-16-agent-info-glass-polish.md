@@ -19,7 +19,7 @@
 ### Task 1: 图标化 Agent 信息展示结构
 
 **Files:**
-- Modify: `frontend/src/components/chat/ChatAgentInfo.tsx`
+- Modify: `apps/desktop/src/components/chat/ChatAgentInfo.tsx`
 
 **Interfaces:**
 - Consumes: 现有 Agent、记忆、日记、技能状态和操作回调
@@ -52,7 +52,7 @@ Expected: TypeScript 与 Vite 构建成功。
 ### Task 2: 实现统一玻璃卡片样式
 
 **Files:**
-- Modify: `frontend/src/styles/features/chat/right-panel.css:468-603`
+- Modify: `apps/desktop/src/styles/features/chat/right-panel.css:468-603`
 
 **Interfaces:**
 - Consumes: Task 1 新增的 Agent 信息 CSS 类名
@@ -85,6 +85,6 @@ Run: `cd frontend && npm run build`
 Expected: 构建成功，相关文件无 lint 错误。
 
 ```bash
-git add frontend/src/components/chat/ChatAgentInfo.tsx frontend/src/styles/features/chat/right-panel.css
+git add apps/desktop/src/components/chat/ChatAgentInfo.tsx apps/desktop/src/styles/features/chat/right-panel.css
 git commit -m "style(chat): polish agent info panel"
 ```

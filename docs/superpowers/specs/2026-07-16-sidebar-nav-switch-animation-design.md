@@ -33,8 +33,8 @@
 
 预计修改：
 
-- `frontend/src/App.tsx`：增加导航定位容器、高亮块和当前索引变量。
-- `frontend/src/styles/layout.css`：迁移选中态视觉并加入高亮块定位和动画。
+- `apps/desktop/src/App.tsx`：增加导航定位容器、高亮块和当前索引变量。
+- `apps/desktop/src/styles/layout.css`：迁移选中态视觉并加入高亮块定位和动画。
 
 不引入动画库，不修改页面内容的 `AnimatedSwitch`，不改变侧栏展开/收起逻辑，也不在本次改动中拆分 `App.tsx`。
 

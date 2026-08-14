@@ -84,9 +84,9 @@
 
 ## 前端落点
 
-- `frontend/src/components/InsightsPanel.tsx` — `ViewMode` 增加 `overview`（或等价默认值）；渲染总览区块；调整模型 Tab
-- `frontend/src/styles/insights.css` — 总览网格、KPI 三列、响应式；保持 overflow 防护
-- `frontend/src/i18n/messages.ts` — `insights.view.overview` 等中英键
+- `apps/desktop/src/components/InsightsPanel.tsx` — `ViewMode` 增加 `overview`（或等价默认值）；渲染总览区块；调整模型 Tab
+- `apps/desktop/src/styles/insights.css` — 总览网格、KPI 三列、响应式；保持 overflow 防护
+- `apps/desktop/src/i18n/messages.ts` — `insights.view.overview` 等中英键
 
 ## 验收
 

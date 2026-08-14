@@ -29,12 +29,12 @@
 | `frontend/src-tauri/src/config_commands.rs` | `get_usage_insights` 命令 |
 | `frontend/src-tauri/src/lib.rs` | 注册命令 |
 | `frontend/src-tauri/src/litellm_meta.rs` | 解析并保留 `input_cost_per_token` / `output_cost_per_token` |
-| `frontend/src/components/InsightsPanel.tsx` | 洞察 UI |
-| `frontend/src/styles/insights.css` | 样式 |
-| `frontend/src/components/NavIcons.tsx` | `IconInsights` |
-| `frontend/src/App.tsx` | NAV / PAGE_META / 挂载面板 |
-| `frontend/src/i18n/messages.ts` | 中英文案 |
-| `frontend/src/styles/index.css` | `@import` insights.css |
+| `apps/desktop/src/components/InsightsPanel.tsx` | 洞察 UI |
+| `apps/desktop/src/styles/insights.css` | 样式 |
+| `apps/desktop/src/components/NavIcons.tsx` | `IconInsights` |
+| `apps/desktop/src/App.tsx` | NAV / PAGE_META / 挂载面板 |
+| `apps/desktop/src/i18n/messages.ts` | 中英文案 |
+| `apps/desktop/src/styles/index.css` | `@import` insights.css |
 
 ---
 
@@ -1098,12 +1098,12 @@ EOF
 ### Task 8: 前端 InsightsPanel + 导航
 
 **Files:**
-- Create: `frontend/src/components/InsightsPanel.tsx`
-- Create: `frontend/src/styles/insights.css`
-- Modify: `frontend/src/styles/index.css`
-- Modify: `frontend/src/components/NavIcons.tsx`
-- Modify: `frontend/src/App.tsx`
-- Modify: `frontend/src/i18n/messages.ts`
+- Create: `apps/desktop/src/components/InsightsPanel.tsx`
+- Create: `apps/desktop/src/styles/insights.css`
+- Modify: `apps/desktop/src/styles/index.css`
+- Modify: `apps/desktop/src/components/NavIcons.tsx`
+- Modify: `apps/desktop/src/App.tsx`
+- Modify: `apps/desktop/src/i18n/messages.ts`
 
 - [ ] **Step 1: 图标**
 
@@ -1214,9 +1214,9 @@ Expected: 无错误
 - [ ] **Step 6: Commit**
 
 ```bash
-git add frontend/src/components/InsightsPanel.tsx frontend/src/styles/insights.css \
-  frontend/src/styles/index.css frontend/src/components/NavIcons.tsx \
-  frontend/src/App.tsx frontend/src/i18n/messages.ts
+git add apps/desktop/src/components/InsightsPanel.tsx apps/desktop/src/styles/insights.css \
+  apps/desktop/src/styles/index.css apps/desktop/src/components/NavIcons.tsx \
+  apps/desktop/src/App.tsx apps/desktop/src/i18n/messages.ts
 git commit -m "$(cat <<'EOF'
 feat(frontend): add Insights sidebar panel
 

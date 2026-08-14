@@ -37,7 +37,7 @@
 | Modify: `agent/src/streaming.rs` | 双写 + 传入 provider/base_url |
 | Modify: `agent/src/cron_exec.rs` | 同上 |
 | Modify: `agent/src/orchestration.rs` | 若构造 `NewUsageEvent` 则适配默认字段 |
-| Modify: `frontend/src/components/InsightsPanel.tsx` | 未计价改看 `unpriced_llm_events`（若 DTO 增加） |
+| Modify: `apps/desktop/src/components/InsightsPanel.tsx` | 未计价改看 `unpriced_llm_events`（若 DTO 增加） |
 | Modify: `docs/superpowers/specs/2026-07-13-route-aware-usage-pricing-design.md` | 实现后状态 → 已实现 |
 
 ---
@@ -691,7 +691,7 @@ EOF
 ### Task 7: Insights 前端未计价提示
 
 **Files:**
-- Modify: `frontend/src/components/InsightsPanel.tsx`
+- Modify: `apps/desktop/src/components/InsightsPanel.tsx`
 - Modify: `frontend/src-tauri` 若 DTO 透传需改（serde 字段 `unpriced_llm_events`）
 
 - [x] **Step 1: 扩展 TS 类型**

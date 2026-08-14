@@ -22,13 +22,13 @@
 | Modify: `a2ui/tests/validate_test.rs` | v2 组件接受；v1 catalogId / Modal 拒绝 |
 | Modify: `a2ui/tests/templates_test.rs` | 新模板校验通过 |
 | Create: `a2ui/tests/recipes_test.rs` | metrics/callout/result recipes |
-| Modify: `frontend/src/a2ui/types.ts` | catalogId v2；扩展组件与 props |
-| Modify: `frontend/src/a2ui/CatalogAdapter.tsx` | 扩展组件 + 表单控件真实渲染 |
-| Modify: `frontend/src/a2ui/A2UIRenderer.tsx` | 表单字段 state → action.context |
-| Create: `frontend/src/a2ui/formState.ts` | 纯函数：合并字段值到 context |
-| Create: `frontend/src/a2ui/formState.test.ts` | node:test |
-| Create: `frontend/src/a2ui/types.test.ts` | allowlist 含扩展组件 |
-| Modify: `frontend/src/styles/chat.css` | 亮暗玻璃 token + 新组件样式 |
+| Modify: `apps/desktop/src/a2ui/types.ts` | catalogId v2；扩展组件与 props |
+| Modify: `apps/desktop/src/a2ui/CatalogAdapter.tsx` | 扩展组件 + 表单控件真实渲染 |
+| Modify: `apps/desktop/src/a2ui/A2UIRenderer.tsx` | 表单字段 state → action.context |
+| Create: `apps/desktop/src/a2ui/formState.ts` | 纯函数：合并字段值到 context |
+| Create: `apps/desktop/src/a2ui/formState.test.ts` | node:test |
+| Create: `apps/desktop/src/a2ui/types.test.ts` | allowlist 含扩展组件 |
+| Modify: `apps/desktop/src/styles/chat.css` | 亮暗玻璃 token + 新组件样式 |
 | Modify: `tools/src/builtins/present_ui.rs` | 描述文案 + 可选 recipe 快捷字段（YAGNI：仅更新描述与校验依赖） |
 | Modify: `tools/src/builtins/confirm.rs` / `clarify.rs` | 仅依赖模板；若文案过旧则更新 description |
 | Modify: `docs/superpowers/specs/2026-07-13-declarative-genui-a2ui-design.md` | catalog 小节指向 v2 spec |
@@ -554,12 +554,12 @@ EOF
 ### Task 4: Frontend types + allowlist mirror
 
 **Files:**
-- Modify: `frontend/src/a2ui/types.ts`
-- Create: `frontend/src/a2ui/types.test.ts`
+- Modify: `apps/desktop/src/a2ui/types.ts`
+- Create: `apps/desktop/src/a2ui/types.test.ts`
 
 - [ ] **Step 1: Write failing test**
 
-`frontend/src/a2ui/types.test.ts`:
+`apps/desktop/src/a2ui/types.test.ts`:
 
 ```ts
 import { test } from "node:test";
@@ -641,7 +641,7 @@ Keep existing `A2uiOperation` type unchanged.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add frontend/src/a2ui/types.ts frontend/src/a2ui/types.test.ts
+git add apps/desktop/src/a2ui/types.ts apps/desktop/src/a2ui/types.test.ts
 git commit -m "$(cat <<'EOF'
 feat(frontend): mirror A2UI catalog v2 types and allowlist
 
@@ -654,7 +654,7 @@ EOF
 ### Task 5: Soft Dark / Frost glass CSS
 
 **Files:**
-- Modify: `frontend/src/styles/chat.css` (a2ui section ~412+)
+- Modify: `apps/desktop/src/styles/chat.css` (a2ui section ~412+)
 
 - [ ] **Step 1: Replace a2ui CSS block with themed tokens**
 
@@ -905,7 +905,7 @@ Run app (`npm run tauri dev` if already running), toggle light/dark, confirm exi
 - [ ] **Step 3: Commit**
 
 ```bash
-git add frontend/src/styles/chat.css
+git add apps/desktop/src/styles/chat.css
 git commit -m "$(cat <<'EOF'
 style(a2ui): add Soft Dark and Frost glass tokens
 
@@ -918,7 +918,7 @@ EOF
 ### Task 6: CatalogAdapter — extension components
 
 **Files:**
-- Modify: `frontend/src/a2ui/CatalogAdapter.tsx`
+- Modify: `apps/desktop/src/a2ui/CatalogAdapter.tsx`
 
 - [ ] **Step 1: Extend `RenderCtx` and add cases**
 
@@ -1021,7 +1021,7 @@ Expected: no errors related to CatalogAdapter
 - [ ] **Step 3: Commit**
 
 ```bash
-git add frontend/src/a2ui/CatalogAdapter.tsx
+git add apps/desktop/src/a2ui/CatalogAdapter.tsx
 git commit -m "$(cat <<'EOF'
 feat(frontend): render A2UI v2 extension components
 
@@ -1034,14 +1034,14 @@ EOF
 ### Task 7: Form controls + field context merge
 
 **Files:**
-- Create: `frontend/src/a2ui/formState.ts`
-- Create: `frontend/src/a2ui/formState.test.ts`
-- Modify: `frontend/src/a2ui/CatalogAdapter.tsx`
-- Modify: `frontend/src/a2ui/A2UIRenderer.tsx`
+- Create: `apps/desktop/src/a2ui/formState.ts`
+- Create: `apps/desktop/src/a2ui/formState.test.ts`
+- Modify: `apps/desktop/src/a2ui/CatalogAdapter.tsx`
+- Modify: `apps/desktop/src/a2ui/A2UIRenderer.tsx`
 
 - [ ] **Step 1: Failing tests for merge helper**
 
-`frontend/src/a2ui/formState.ts` (create empty stub first if preferred TDD):
+`apps/desktop/src/a2ui/formState.ts` (create empty stub first if preferred TDD):
 
 ```ts
 export function mergeActionContext(
@@ -1052,7 +1052,7 @@ export function mergeActionContext(
 }
 ```
 
-`frontend/src/a2ui/formState.test.ts`:
+`apps/desktop/src/a2ui/formState.test.ts`:
 
 ```ts
 import { test } from "node:test";
@@ -1197,8 +1197,8 @@ Expected: PASS
 - [ ] **Step 6: Commit**
 
 ```bash
-git add frontend/src/a2ui/formState.ts frontend/src/a2ui/formState.test.ts \
-  frontend/src/a2ui/CatalogAdapter.tsx frontend/src/a2ui/A2UIRenderer.tsx
+git add apps/desktop/src/a2ui/formState.ts apps/desktop/src/a2ui/formState.test.ts \
+  apps/desktop/src/a2ui/CatalogAdapter.tsx apps/desktop/src/a2ui/A2UIRenderer.tsx
 git commit -m "$(cat <<'EOF'
 feat(frontend): enable interactive A2UI form fields
 

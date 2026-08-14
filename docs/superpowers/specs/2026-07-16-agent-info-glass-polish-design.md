@@ -36,8 +36,8 @@
 
 ## 技术范围
 
-- 修改 `frontend/src/components/chat/ChatAgentInfo.tsx`，加入 Lucide 图标和展示钩子。
-- 修改 `frontend/src/styles/features/chat/right-panel.css` 中 Agent 信息相关样式。
+- 修改 `apps/desktop/src/components/chat/ChatAgentInfo.tsx`，加入 Lucide 图标和展示钩子。
+- 修改 `apps/desktop/src/styles/features/chat/right-panel.css` 中 Agent 信息相关样式。
 - 不修改数据加载、Tauri 调用、国际化文案、业务逻辑或其他侧栏 Tab。
 
 ## 验证

@@ -21,8 +21,8 @@
 ### Task 1: Update Sidebar Button Translations
 
 **Files:**
-- Modify: `frontend/src/i18n/messages.ts:559-566`
-- Modify: `frontend/src/i18n/messages.ts:1742-1749`
+- Modify: `apps/desktop/src/i18n/messages.ts:559-566`
+- Modify: `apps/desktop/src/i18n/messages.ts:1742-1749`
 
 **Interfaces:**
 - Consumes: Existing `sidebar.pin`, `sidebar.unpin`, `sidebar.showLabels`, `sidebar.hideLabels` keys and their ARIA variants.
@@ -72,6 +72,6 @@ Expected: TypeScript and Vite complete with exit code 0.
 - [ ] **Step 4: Commit the implementation**
 
 ```bash
-git add frontend/src/i18n/messages.ts
+git add apps/desktop/src/i18n/messages.ts
 git commit -m "fix(sidebar): clarify dynamic button tips"
 ```

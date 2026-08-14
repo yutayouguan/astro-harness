@@ -20,7 +20,7 @@
 ### Task 1: 将遮罩改为透明点击层
 
 **Files:**
-- Modify: `frontend/src/styles/features/chat/right-panel.css:22-33,612-626`
+- Modify: `apps/desktop/src/styles/features/chat/right-panel.css:22-33,612-626`
 
 **Interfaces:**
 - Consumes: `ChatRightPanel.tsx` 中 `.chat-right-backdrop` 的 `onClick={onClose}`。
@@ -71,13 +71,13 @@ Expected: TypeScript 与 Vite 构建成功，退出码为 0。
 
 - [ ] **Step 4: 检查差异**
 
-Run: `git diff --check && git diff -- frontend/src/styles/features/chat/right-panel.css`
+Run: `git diff --check && git diff -- apps/desktop/src/styles/features/chat/right-panel.css`
 
 Expected: 仅包含透明背景、遮罩动画移除和 reduced-motion 清理。
 
 - [ ] **Step 5: 提交改动**
 
 ```bash
-git add frontend/src/styles/features/chat/right-panel.css
+git add apps/desktop/src/styles/features/chat/right-panel.css
 git commit -m "style(chat): remove right panel backdrop"
 ```

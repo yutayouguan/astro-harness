@@ -5,7 +5,7 @@
 
 ## 目标
 
-将 `frontend/src/components/` 从「几乎全平铺 + 仅 `media/` 成组」整理为按功能域分目录，降低找文件成本，并约定新组件落点。
+将 `apps/desktop/src/components/` 从「几乎全平铺 + 仅 `media/` 成组」整理为按功能域分目录，降低找文件成本，并约定新组件落点。
 
 ## 决策
 
@@ -18,7 +18,7 @@
 ## 目标结构
 
 ```
-frontend/src/components/
+apps/desktop/src/components/
   chat/
   filespace/
   workspace/

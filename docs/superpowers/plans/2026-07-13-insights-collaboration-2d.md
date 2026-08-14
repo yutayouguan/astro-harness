@@ -25,9 +25,9 @@
 | `memory/tests/collab_insights_test.rs` | TDD：列表过滤、图聚合、agent 过滤、calls 不膨胀 |
 | `frontend/src-tauri/src/config_commands.rs` | `get_collaboration_insights` |
 | `frontend/src-tauri/src/lib.rs` | 注册命令 |
-| `frontend/src/components/InsightsPanel.tsx` | Tab + 协作 UI + SVG |
-| `frontend/src/styles/insights.css` | 协作布局样式 |
-| `frontend/src/i18n/messages.ts` | 中英文案 |
+| `apps/desktop/src/components/InsightsPanel.tsx` | Tab + 协作 UI + SVG |
+| `apps/desktop/src/styles/insights.css` | 协作布局样式 |
+| `apps/desktop/src/i18n/messages.ts` | 中英文案 |
 
 **对齐现有：** `get_usage_insights` 在 `config_commands.rs`；`InsightsPanel` 已 `invoke("get_usage_insights", { args: { period, as_of, agent_id } })`。
 
@@ -446,7 +446,7 @@ EOF
 ### Task 4: i18n 文案
 
 **Files:**
-- Modify: `frontend/src/i18n/messages.ts`
+- Modify: `apps/desktop/src/i18n/messages.ts`
 
 - [ ] **Step 1: 中英键（固定 key）**
 
@@ -464,7 +464,7 @@ EOF
 - [ ] **Step 2: Commit**
 
 ```bash
-git add frontend/src/i18n/messages.ts
+git add apps/desktop/src/i18n/messages.ts
 git commit -m "$(cat <<'EOF'
 feat(i18n): add Insights collaboration tab strings
 
@@ -477,8 +477,8 @@ EOF
 ### Task 5: InsightsPanel 协作 UI + SVG
 
 **Files:**
-- Modify: `frontend/src/components/InsightsPanel.tsx`
-- Modify: `frontend/src/styles/insights.css`
+- Modify: `apps/desktop/src/components/InsightsPanel.tsx`
+- Modify: `apps/desktop/src/styles/insights.css`
 
 - [ ] **Step 1: 状态与加载**
 
@@ -571,7 +571,7 @@ cd frontend && npx tsc --noEmit
 - [ ] **Step 6: Commit**
 
 ```bash
-git add frontend/src/components/InsightsPanel.tsx frontend/src/styles/insights.css
+git add apps/desktop/src/components/InsightsPanel.tsx apps/desktop/src/styles/insights.css
 git commit -m "$(cat <<'EOF'
 feat(frontend): Insights collaboration tab with SVG graph
 

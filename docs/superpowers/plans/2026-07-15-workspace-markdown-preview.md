@@ -24,19 +24,19 @@
 
 | File | Responsibility |
 |------|----------------|
-| Create: `frontend/src/lib/workspaceMdMode.ts` | `isMarkdownFilename`、`readWorkspaceMdMode`、`writeWorkspaceMdMode`、`MdMode` |
-| Create: `frontend/src/lib/workspaceMdMode.test.ts` | 纯函数单测 |
-| Modify: `frontend/src/components/WorkspacePanel.tsx` | state、控件、按模式渲染 |
-| Modify: `frontend/src/styles/workspace.css` | `.ws-md-modes` / `.ws-md-mode` / `.ws-md-preview` |
-| Modify: `frontend/src/i18n/messages.ts` | `workspace.previewMode` / `workspace.previewSource` |
+| Create: `apps/desktop/src/lib/workspaceMdMode.ts` | `isMarkdownFilename`、`readWorkspaceMdMode`、`writeWorkspaceMdMode`、`MdMode` |
+| Create: `apps/desktop/src/lib/workspaceMdMode.test.ts` | 纯函数单测 |
+| Modify: `apps/desktop/src/components/WorkspacePanel.tsx` | state、控件、按模式渲染 |
+| Modify: `apps/desktop/src/styles/workspace.css` | `.ws-md-modes` / `.ws-md-mode` / `.ws-md-preview` |
+| Modify: `apps/desktop/src/i18n/messages.ts` | `workspace.previewMode` / `workspace.previewSource` |
 
 ---
 
 ### Task 1: Markdown 模式纯函数 + 单测
 
 **Files:**
-- Create: `frontend/src/lib/workspaceMdMode.ts`
-- Create: `frontend/src/lib/workspaceMdMode.test.ts`
+- Create: `apps/desktop/src/lib/workspaceMdMode.ts`
+- Create: `apps/desktop/src/lib/workspaceMdMode.test.ts`
 
 **Interfaces:**
 - Produces:
@@ -143,7 +143,7 @@ Expected: PASS
 - [ ] **Step 5: Commit**
 
 ```bash
-git add frontend/src/lib/workspaceMdMode.ts frontend/src/lib/workspaceMdMode.test.ts
+git add apps/desktop/src/lib/workspaceMdMode.ts apps/desktop/src/lib/workspaceMdMode.test.ts
 git commit -m "$(cat <<'EOF'
 feat(workspace): add markdown preview mode helpers
 
@@ -156,7 +156,7 @@ EOF
 ### Task 2: i18n 文案
 
 **Files:**
-- Modify: `frontend/src/i18n/messages.ts`
+- Modify: `apps/desktop/src/i18n/messages.ts`
 
 **Interfaces:**
 - Produces keys: `workspace.previewMode` / `workspace.previewSource`
@@ -178,7 +178,7 @@ EOF
 - [ ] **Step 3: Commit**
 
 ```bash
-git add frontend/src/i18n/messages.ts
+git add apps/desktop/src/i18n/messages.ts
 git commit -m "$(cat <<'EOF'
 i18n(workspace): add markdown preview mode labels
 
@@ -191,8 +191,8 @@ EOF
 ### Task 3: WorkspacePanel 切换 UI + 渲染
 
 **Files:**
-- Modify: `frontend/src/components/WorkspacePanel.tsx`
-- Modify: `frontend/src/styles/workspace.css`
+- Modify: `apps/desktop/src/components/WorkspacePanel.tsx`
+- Modify: `apps/desktop/src/styles/workspace.css`
 
 **Interfaces:**
 - Consumes: `isMarkdownFilename`, `readWorkspaceMdMode`, `writeWorkspaceMdMode`, `MdMode` from `../lib/workspaceMdMode`
@@ -351,7 +351,7 @@ Expected: 无新增错误
 - [ ] **Step 7: Commit**
 
 ```bash
-git add frontend/src/components/WorkspacePanel.tsx frontend/src/styles/workspace.css
+git add apps/desktop/src/components/WorkspacePanel.tsx apps/desktop/src/styles/workspace.css
 git commit -m "$(cat <<'EOF'
 feat(workspace): toggle markdown preview and source
 

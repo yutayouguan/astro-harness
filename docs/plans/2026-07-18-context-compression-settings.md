@@ -12,5 +12,5 @@
 - `frontend/src-tauri/src/compression_settings_commands.rs` — DTO / 校验 / 命令
 - `agent/src/compression.rs` — `from_config` / thrashing 参数化
 - `agent/src/runtime/mod.rs` / `mid_run_summary.rs` / `multi_turn.rs` / `context_usage.rs`
-- `frontend/src/components/settings/CompressionSettingsCard.tsx` + Preferences 接入
+- `apps/desktop/src/components/settings/CompressionSettingsCard.tsx` + Preferences 接入
 - `docs/context-compression.md` — 配置表更新

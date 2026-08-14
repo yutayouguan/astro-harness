@@ -32,10 +32,10 @@
 | `tools/src/lib.rs` | `register_all` + `pub use` |
 | `tools/src/core/dispatch.rs` | `"music_gen" => …` |
 | `home/src/config/tools_enabled.rs` | `KNOWN_TOOLSET_IDS` + `tool_name_to_toolset` |
-| `frontend/src/hooks/useAgentTools.ts` | AGENT_TOOLS 条目 |
-| `frontend/src/i18n/messages.ts` | zh/en 文案 |
-| `frontend/src/lib/parseGeneratedMedia.ts` | 认「音乐已生成」 |
-| `frontend/src/lib/parseGeneratedMedia.test.ts` | 若已有测文件则追加；否则本 Task 创建最小测 |
+| `apps/desktop/src/hooks/useAgentTools.ts` | AGENT_TOOLS 条目 |
+| `apps/desktop/src/i18n/messages.ts` | zh/en 文案 |
+| `apps/desktop/src/lib/parseGeneratedMedia.ts` | 认「音乐已生成」 |
+| `apps/desktop/src/lib/parseGeneratedMedia.test.ts` | 若已有测文件则追加；否则本 Task 创建最小测 |
 
 ---
 
@@ -790,10 +790,10 @@ EOF
 ### Task 3: 前端开关 + 预览解析
 
 **Files:**
-- Modify: `frontend/src/hooks/useAgentTools.ts`
-- Modify: `frontend/src/i18n/messages.ts`
-- Modify: `frontend/src/lib/parseGeneratedMedia.ts`
-- Modify or Create: `frontend/src/lib/parseGeneratedMedia.test.ts`（若仓库用 vitest；无测文件则只改解析并跳过测，或加最小测）
+- Modify: `apps/desktop/src/hooks/useAgentTools.ts`
+- Modify: `apps/desktop/src/i18n/messages.ts`
+- Modify: `apps/desktop/src/lib/parseGeneratedMedia.ts`
+- Modify or Create: `apps/desktop/src/lib/parseGeneratedMedia.test.ts`（若仓库用 vitest；无测文件则只改解析并跳过测，或加最小测）
 
 **Interfaces:**
 - Consumes: 工具返回文案前缀 `音乐已生成：`
@@ -872,7 +872,7 @@ Expected: PASS（无该文件则跳过）
 - [ ] **Step 5: Commit**
 
 ```bash
-git add frontend/src/hooks/useAgentTools.ts frontend/src/i18n/messages.ts frontend/src/lib/parseGeneratedMedia.ts frontend/src/lib/parseGeneratedMedia.test.ts
+git add apps/desktop/src/hooks/useAgentTools.ts apps/desktop/src/i18n/messages.ts apps/desktop/src/lib/parseGeneratedMedia.ts apps/desktop/src/lib/parseGeneratedMedia.test.ts
 git commit -m "$(cat <<'EOF'
 feat(frontend): expose music_gen tool and parse audio preview
 

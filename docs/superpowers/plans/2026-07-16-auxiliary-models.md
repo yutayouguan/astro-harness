@@ -44,11 +44,11 @@
 - Modify: `backend/src/grpc/astro_service.rs` — Done 后触发标题。
 - Modify: `backend/src/session_events.rs` and `proto/proto/astro.proto` — 会话元数据事件。
 - Modify: `frontend/src-tauri/src/session_events.rs` — 事件 DTO 转换。
-- Create: `frontend/src/hooks/settings/useAuxiliarySettings.ts` — 设置读写。
-- Create: `frontend/src/components/settings/AuxiliaryModelsPanel.tsx` — 五任务设置页。
-- Modify: `frontend/src/App.tsx` — 设置导航挂载。
-- Modify: `frontend/src/types.ts` — DTO。
-- Modify: `frontend/src/i18n/messages.ts` — 中英文文案。
+- Create: `apps/desktop/src/hooks/settings/useAuxiliarySettings.ts` — 设置读写。
+- Create: `apps/desktop/src/components/settings/AuxiliaryModelsPanel.tsx` — 五任务设置页。
+- Modify: `apps/desktop/src/App.tsx` — 设置导航挂载。
+- Modify: `apps/desktop/src/types.ts` — DTO。
+- Modify: `apps/desktop/src/i18n/messages.ts` — 中英文文案。
 - Modify: `docs/memory.md` — 配置文档。
 
 ---
@@ -198,7 +198,7 @@ git commit -m "feat(memory): configure five auxiliary model routes"
 - Modify: `frontend/src-tauri/src/commands.rs`
 - Modify: `agent/src/runtime/mod.rs`
 - Modify: `frontend/src-tauri/src/lib.rs`
-- Modify: `frontend/src/types.ts`
+- Modify: `apps/desktop/src/types.ts`
 
 **Interfaces:**
 - Produces commands: `get_auxiliary_settings`, `set_auxiliary_route`, `reset_auxiliary_route`, `reset_all_auxiliary_routes`
@@ -333,7 +333,7 @@ Expected: PASS。
 git add frontend/src-tauri/src/auxiliary_commands.rs \
   frontend/src-tauri/src/auxiliary_resolver.rs \
   frontend/src-tauri/src/lib.rs frontend/src-tauri/src/commands.rs \
-  frontend/src/types.ts common/src/auxiliary_target.rs common/src/lib.rs \
+  apps/desktop/src/types.ts common/src/auxiliary_target.rs common/src/lib.rs \
   proto/proto/astro.proto agent/src/runtime/mod.rs
 git commit -m "feat(settings): expose auxiliary model routes"
 ```
@@ -343,11 +343,11 @@ git commit -m "feat(settings): expose auxiliary model routes"
 ### Task 3: 辅助模型设置面板
 
 **Files:**
-- Create: `frontend/src/hooks/settings/useAuxiliarySettings.ts`
-- Create: `frontend/src/components/settings/AuxiliaryModelsPanel.tsx`
-- Modify: `frontend/src/App.tsx`
-- Modify: `frontend/src/i18n/messages.ts`
-- Modify: `frontend/src/styles/features/memory.css`
+- Create: `apps/desktop/src/hooks/settings/useAuxiliarySettings.ts`
+- Create: `apps/desktop/src/components/settings/AuxiliaryModelsPanel.tsx`
+- Modify: `apps/desktop/src/App.tsx`
+- Modify: `apps/desktop/src/i18n/messages.ts`
+- Modify: `apps/desktop/src/styles/features/memory.css`
 
 **Interfaces:**
 - Consumes Task 2 commands/DTO.
@@ -405,10 +405,10 @@ Expected: PASS。
 - [ ] **Step 6: Commit**
 
 ```bash
-git add frontend/src/hooks/settings/useAuxiliarySettings.ts \
-  frontend/src/components/settings/AuxiliaryModelsPanel.tsx \
-  frontend/src/i18n/messages.ts frontend/src/styles/features/memory.css \
-  frontend/src/App.tsx
+git add apps/desktop/src/hooks/settings/useAuxiliarySettings.ts \
+  apps/desktop/src/components/settings/AuxiliaryModelsPanel.tsx \
+  apps/desktop/src/i18n/messages.ts apps/desktop/src/styles/features/memory.css \
+  apps/desktop/src/App.tsx
 git commit -m "feat(settings): add auxiliary models panel"
 ```
 
@@ -551,8 +551,8 @@ git commit -m "fix(auxiliary): retry dreaming and review with main model"
 - Modify: `backend/src/session_events.rs`
 - Modify: `proto/proto/astro.proto`
 - Modify: `frontend/src-tauri/src/session_events.rs`
-- Modify: `frontend/src/components/chat/ChatSessionList.tsx`
-- Modify: `frontend/src/i18n/messages.ts`
+- Modify: `apps/desktop/src/components/chat/ChatSessionList.tsx`
+- Modify: `apps/desktop/src/i18n/messages.ts`
 
 **Interfaces:**
 - Consumes session plan: `first_turn_text`, `set_session_title_if_empty`, `dispatchSessionsChanged`.
@@ -624,7 +624,7 @@ git add agent/src/exec/title_generation.rs agent/src/exec/mod.rs \
   backend/src/grpc/astro_service.rs backend/src/session_events.rs \
   proto/proto/astro.proto frontend/src-tauri/src/session_events.rs \
   frontend/src-tauri/src/commands.rs frontend/src-tauri/src/lib.rs \
-  frontend/src/components/chat/ChatSessionList.tsx frontend/src/i18n/messages.ts
+  apps/desktop/src/components/chat/ChatSessionList.tsx apps/desktop/src/i18n/messages.ts
 git commit -m "feat(chat): generate session titles after first turn"
 ```
 

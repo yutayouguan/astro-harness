@@ -19,7 +19,7 @@
 ### Task 1: 图标化上下文用量展示结构
 
 **Files:**
-- Modify: `frontend/src/components/chat/ContextExplorer.tsx`
+- Modify: `apps/desktop/src/components/chat/ContextExplorer.tsx`
 
 **Interfaces:**
 - Consumes: `ContextUsageSnapshot`、`SEGMENT_TONE`、现有国际化键
@@ -86,7 +86,7 @@ Expected: TypeScript 编译与 Vite 构建成功，退出码为 `0`。
 ### Task 2: 完成浅色玻璃仪表盘样式
 
 **Files:**
-- Modify: `frontend/src/styles/features/chat/right-panel.css:622-837`
+- Modify: `apps/desktop/src/styles/features/chat/right-panel.css:622-837`
 
 **Interfaces:**
 - Consumes: Task 1 新增的上下文界面类名
@@ -123,6 +123,6 @@ Expected: 5 项测试全部通过，TypeScript/Vite 构建成功。
 - [ ] **Step 6: 提交实现**
 
 ```bash
-git add frontend/src/components/chat/ContextExplorer.tsx frontend/src/styles/features/chat/right-panel.css
+git add apps/desktop/src/components/chat/ContextExplorer.tsx apps/desktop/src/styles/features/chat/right-panel.css
 git commit -m "style(chat): polish context explorer"
 ```

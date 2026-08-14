@@ -20,16 +20,16 @@
 
 ## File Structure
 
-- Modify: `frontend/src/App.tsx` — 计算当前导航索引，渲染共享高亮块并提供纵向偏移。
-- Modify: `frontend/src/styles/layout.css` — 统一导航行尺寸，将活动背景迁移到高亮块并定义切换动画。
+- Modify: `apps/desktop/src/App.tsx` — 计算当前导航索引，渲染共享高亮块并提供纵向偏移。
+- Modify: `apps/desktop/src/styles/layout.css` — 统一导航行尺寸，将活动背景迁移到高亮块并定义切换动画。
 
 不创建独立组件：该高亮块只服务当前侧栏，拆分会增加没有复用价值的接口。项目没有 DOM/CSS 单测环境，本次视觉行为通过 TypeScript 构建和手工交互矩阵验证，不为此引入测试框架。
 
 ### Task 1: 实现共享导航高亮块
 
 **Files:**
-- Modify: `frontend/src/App.tsx:1-9, 93-106, 577-604`
-- Modify: `frontend/src/styles/layout.css:1-158`
+- Modify: `apps/desktop/src/App.tsx:1-9, 93-106, 577-604`
+- Modify: `apps/desktop/src/styles/layout.css:1-158`
 
 **Interfaces:**
 - Consumes: `nav: NavId`、`NAV` 的固定顺序、现有 `data-tone` 与 `.active` 状态。
@@ -208,10 +208,10 @@ Run:
 
 ```bash
 git status --short
-git diff -- frontend/src/App.tsx frontend/src/styles/layout.css
+git diff -- apps/desktop/src/App.tsx apps/desktop/src/styles/layout.css
 git diff --cached
 git log -5 --oneline
-git add frontend/src/App.tsx frontend/src/styles/layout.css
+git add apps/desktop/src/App.tsx apps/desktop/src/styles/layout.css
 git commit -m "feat(ui): animate sidebar navigation selection"
 git status --short
 ```

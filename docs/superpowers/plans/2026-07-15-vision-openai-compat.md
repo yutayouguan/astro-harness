@@ -101,7 +101,7 @@ git commit -m "feat(providers): add OpenAI-compat vision completions helper"
 - Modify: `backend/src/grpc/astro_service.rs` — `from_parts` 传新字段
 - Modify: `frontend/src-tauri/src/commands.rs` — ChatRequest 填字段
 - Modify: `frontend/src-tauri/src/providers_commands.rs` — ProviderConfig/DTO/Input/`resolve_image_gen_targets`/`to_dto`/`save`
-- Modify: `frontend/src/types.ts` — `vision_model?: string`
+- Modify: `apps/desktop/src/types.ts` — `vision_model?: string`
 
 **Interfaces:**
 - Produces: `ImageGenCreds { ..., vision_model: String }`；resolve 后 Google/OpenAI target 带默认或配置值
@@ -138,8 +138,8 @@ git commit -m "feat(providers): persist and wire vision_model through chat targe
 
 **Files:**
 - Modify: `tools/src/builtins/vision.rs`
-- Modify: `frontend/src/hooks/useAgentTools.ts`（若描述硬编码）
-- Modify: `frontend/src/i18n/messages.ts` — `agentTools.vision.desc`
+- Modify: `apps/desktop/src/hooks/useAgentTools.ts`（若描述硬编码）
+- Modify: `apps/desktop/src/i18n/messages.ts` — `agentTools.vision.desc`
 
 **Interfaces:**
 - Consumes: `openai_vision_completions`；`ctx.image_gen_targets.google()/openai()`；`creds.vision_model`
@@ -178,9 +178,9 @@ git commit -m "feat(tools): implement vision via OpenAI-compat chat completions"
 ### Task 4: 媒体 Tab「视觉模型」UI + i18n
 
 **Files:**
-- Modify: `frontend/src/components/ProvidersPanel.tsx` — Draft/`MEDIA_MODEL_DEFAULTS`/媒体表单
-- Modify: `frontend/src/i18n/messages.ts` — `providers.visionModel`
-- Modify: `frontend/src/types.ts`（若 Task 2 未做完）
+- Modify: `apps/desktop/src/components/ProvidersPanel.tsx` — Draft/`MEDIA_MODEL_DEFAULTS`/媒体表单
+- Modify: `apps/desktop/src/i18n/messages.ts` — `providers.visionModel`
+- Modify: `apps/desktop/src/types.ts`（若 Task 2 未做完）
 
 - [ ] **Step 1: Draft + defaults**
 

@@ -16,17 +16,17 @@
 
 | File | Responsibility |
 |------|----------------|
-| Create: `frontend/src/lib/shouldShowThinkingControls.ts` | 推理按钮可见性判定 |
-| Create: `frontend/src/lib/shouldShowThinkingControls.test.ts` | 上述纯函数测试 |
-| Modify: `frontend/src/lib/modelPrefs.ts` | 加载 globals 时强制 `auto/maxMode=false` 并写回 |
-| Create: `frontend/src/lib/modelPrefsGlobals.test.ts` | globals 规范化测试 |
-| Modify: `frontend/src/components/ModelPicker.tsx` | 移除 Auto/MAX UI 与 Auto 触发器文案 |
-| Create: `frontend/src/components/ComposerMcpMenu.tsx` | MCP 搜索 + toggle + 打开设置 |
-| Modify: `frontend/src/components/ChatView.tsx` | Composer 接入 MCP 按钮/菜单 |
-| Modify: `frontend/src/components/ToolsPanel.tsx` | `initialTab` 一次性落到 mcp |
-| Modify: `frontend/src/App.tsx` | showThinking、跳转 tools、发送 thinking 门控 |
-| Modify: `frontend/src/i18n/messages.ts` | 中英 i18n |
-| Modify: `frontend/src/styles/chat.css` | MCP 弹出层样式 |
+| Create: `apps/desktop/src/lib/shouldShowThinkingControls.ts` | 推理按钮可见性判定 |
+| Create: `apps/desktop/src/lib/shouldShowThinkingControls.test.ts` | 上述纯函数测试 |
+| Modify: `apps/desktop/src/lib/modelPrefs.ts` | 加载 globals 时强制 `auto/maxMode=false` 并写回 |
+| Create: `apps/desktop/src/lib/modelPrefsGlobals.test.ts` | globals 规范化测试 |
+| Modify: `apps/desktop/src/components/ModelPicker.tsx` | 移除 Auto/MAX UI 与 Auto 触发器文案 |
+| Create: `apps/desktop/src/components/ComposerMcpMenu.tsx` | MCP 搜索 + toggle + 打开设置 |
+| Modify: `apps/desktop/src/components/ChatView.tsx` | Composer 接入 MCP 按钮/菜单 |
+| Modify: `apps/desktop/src/components/ToolsPanel.tsx` | `initialTab` 一次性落到 mcp |
+| Modify: `apps/desktop/src/App.tsx` | showThinking、跳转 tools、发送 thinking 门控 |
+| Modify: `apps/desktop/src/i18n/messages.ts` | 中英 i18n |
+| Modify: `apps/desktop/src/styles/chat.css` | MCP 弹出层样式 |
 | Modify: spec 状态 → 已批准 |
 
 ---
@@ -34,8 +34,8 @@
 ### Task 1: `shouldShowThinkingControls` 纯函数 + 测试
 
 **Files:**
-- Create: `frontend/src/lib/shouldShowThinkingControls.ts`
-- Create: `frontend/src/lib/shouldShowThinkingControls.test.ts`
+- Create: `apps/desktop/src/lib/shouldShowThinkingControls.ts`
+- Create: `apps/desktop/src/lib/shouldShowThinkingControls.test.ts`
 
 - [ ] **Step 1: Write the failing test**
 
@@ -102,7 +102,7 @@ Expected: PASS (2 tests)
 - [ ] **Step 5: Commit**
 
 ```bash
-git add frontend/src/lib/shouldShowThinkingControls.ts frontend/src/lib/shouldShowThinkingControls.test.ts
+git add apps/desktop/src/lib/shouldShowThinkingControls.ts apps/desktop/src/lib/shouldShowThinkingControls.test.ts
 git commit -m "$(cat <<'EOF'
 feat(chat): add shouldShowThinkingControls helper
 
@@ -115,8 +115,8 @@ EOF
 ### Task 2: 强制关闭 Auto / MAX globals
 
 **Files:**
-- Modify: `frontend/src/lib/modelPrefs.ts` (`loadPickerGlobals`, optionally no-op `syncMaxModeWithThinkingLevel` max writes)
-- Create: `frontend/src/lib/modelPrefsGlobals.test.ts`
+- Modify: `apps/desktop/src/lib/modelPrefs.ts` (`loadPickerGlobals`, optionally no-op `syncMaxModeWithThinkingLevel` max writes)
+- Create: `apps/desktop/src/lib/modelPrefsGlobals.test.ts`
 
 - [ ] **Step 1: Write the failing test**
 
@@ -165,7 +165,7 @@ Expected: FAIL (`auto` still true)
 
 - [ ] **Step 3: Update `loadPickerGlobals`**
 
-Replace body of `loadPickerGlobals` in `frontend/src/lib/modelPrefs.ts` with:
+Replace body of `loadPickerGlobals` in `apps/desktop/src/lib/modelPrefs.ts` with:
 
 ```ts
 export function loadPickerGlobals(): ModelPickerGlobals {
@@ -230,7 +230,7 @@ Expected: PASS
 - [ ] **Step 5: Commit**
 
 ```bash
-git add frontend/src/lib/modelPrefs.ts frontend/src/lib/modelPrefsGlobals.test.ts
+git add apps/desktop/src/lib/modelPrefs.ts apps/desktop/src/lib/modelPrefsGlobals.test.ts
 git commit -m "$(cat <<'EOF'
 fix(chat): force Auto/MAX picker globals off on load
 
@@ -243,7 +243,7 @@ EOF
 ### Task 3: ModelPicker 隐藏 Auto / MAX UI
 
 **Files:**
-- Modify: `frontend/src/components/ModelPicker.tsx`
+- Modify: `apps/desktop/src/components/ModelPicker.tsx`
 
 - [ ] **Step 1: Remove globals toggles and Auto trigger branch**
 
@@ -263,7 +263,7 @@ Expected: no errors in ModelPicker
 - [ ] **Step 3: Commit**
 
 ```bash
-git add frontend/src/components/ModelPicker.tsx
+git add apps/desktop/src/components/ModelPicker.tsx
 git commit -m "$(cat <<'EOF'
 refactor(chat): remove Auto and MAX Mode from ModelPicker UI
 
@@ -276,7 +276,7 @@ EOF
 ### Task 4: i18n 文案
 
 **Files:**
-- Modify: `frontend/src/i18n/messages.ts`
+- Modify: `apps/desktop/src/i18n/messages.ts`
 
 - [ ] **Step 1: Add zh + en keys**
 
@@ -305,7 +305,7 @@ Ensure `MessageKey` type (if derived from the zh object) still compiles.
 - [ ] **Step 2: Commit**
 
 ```bash
-git add frontend/src/i18n/messages.ts
+git add apps/desktop/src/i18n/messages.ts
 git commit -m "$(cat <<'EOF'
 feat(i18n): add chat MCP menu strings
 
@@ -318,8 +318,8 @@ EOF
 ### Task 5: `ComposerMcpMenu` 组件 + CSS
 
 **Files:**
-- Create: `frontend/src/components/ComposerMcpMenu.tsx`
-- Modify: `frontend/src/styles/chat.css`
+- Create: `apps/desktop/src/components/ComposerMcpMenu.tsx`
+- Modify: `apps/desktop/src/styles/chat.css`
 
 - [ ] **Step 1: Create component**
 
@@ -543,7 +543,7 @@ export default function ComposerMcpMenu({
 - [ ] **Step 3: Commit**
 
 ```bash
-git add frontend/src/components/ComposerMcpMenu.tsx frontend/src/styles/chat.css
+git add apps/desktop/src/components/ComposerMcpMenu.tsx apps/desktop/src/styles/chat.css
 git commit -m "$(cat <<'EOF'
 feat(chat): add ComposerMcpMenu popup
 
@@ -556,7 +556,7 @@ EOF
 ### Task 6: ChatView 接入 MCP 按钮
 
 **Files:**
-- Modify: `frontend/src/components/ChatView.tsx`
+- Modify: `apps/desktop/src/components/ChatView.tsx`
 
 - [ ] **Step 1: Extend props**
 
@@ -616,7 +616,7 @@ Expected: only missing App props until Task 8, or fix ChatView optional props so
 - [ ] **Step 4: Commit**
 
 ```bash
-git add frontend/src/components/ChatView.tsx
+git add apps/desktop/src/components/ChatView.tsx
 git commit -m "$(cat <<'EOF'
 feat(chat): wire MCP menu button in composer
 
@@ -629,8 +629,8 @@ EOF
 ### Task 7: ToolsPanel `initialTab`
 
 **Files:**
-- Modify: `frontend/src/components/ToolsPanel.tsx`
-- Modify: `frontend/src/App.tsx` (minimal: state + pass prop; full ChatView wiring in Task 8)
+- Modify: `apps/desktop/src/components/ToolsPanel.tsx`
+- Modify: `apps/desktop/src/App.tsx` (minimal: state + pass prop; full ChatView wiring in Task 8)
 
 - [ ] **Step 1: Extend ToolsPanel props**
 
@@ -681,7 +681,7 @@ const [toolsInitialTab, setToolsInitialTab] = useState<"builtin" | "mcp" | null>
 - [ ] **Step 3: Commit**
 
 ```bash
-git add frontend/src/components/ToolsPanel.tsx frontend/src/App.tsx
+git add apps/desktop/src/components/ToolsPanel.tsx apps/desktop/src/App.tsx
 git commit -m "$(cat <<'EOF'
 feat(tools): support initialTab for MCP deep-link
 
@@ -694,7 +694,7 @@ EOF
 ### Task 8: App 接线 — showThinking、MCP 跳转、发送门控
 
 **Files:**
-- Modify: `frontend/src/App.tsx`
+- Modify: `apps/desktop/src/App.tsx`
 
 - [ ] **Step 1: Resolve capabilities for active model**
 
@@ -795,7 +795,7 @@ Expected: all PASS / no tsc errors
 - [ ] **Step 5: Commit**
 
 ```bash
-git add frontend/src/App.tsx
+git add apps/desktop/src/App.tsx
 git commit -m "$(cat <<'EOF'
 feat(chat): gate thinking UI/send and deep-link MCP settings
 

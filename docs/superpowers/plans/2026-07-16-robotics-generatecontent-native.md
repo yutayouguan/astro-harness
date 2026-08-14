@@ -34,9 +34,9 @@
 | `tools/src/core/dispatch.rs` | `"robotics" => …` |
 | `home/src/config/tools_enabled.rs` | toolset 映射 + `KNOWN_TOOLSET_IDS` |
 | `tools/tests/tools_test.rs` | 注册表含 `robotics` |
-| `frontend/src/components/ToolIcons.tsx` | `IconRobotics` |
-| `frontend/src/hooks/useAgentTools.ts` | 目录项 |
-| `frontend/src/i18n/messages.ts` | 中英 title/desc |
+| `apps/desktop/src/components/ToolIcons.tsx` | `IconRobotics` |
+| `apps/desktop/src/hooks/useAgentTools.ts` | 目录项 |
+| `apps/desktop/src/i18n/messages.ts` | 中英 title/desc |
 
 ---
 
@@ -849,9 +849,9 @@ EOF
 ### Task 4: 前端目录与 i18n
 
 **Files:**
-- Modify: `frontend/src/components/ToolIcons.tsx`
-- Modify: `frontend/src/hooks/useAgentTools.ts`
-- Modify: `frontend/src/i18n/messages.ts`
+- Modify: `apps/desktop/src/components/ToolIcons.tsx`
+- Modify: `apps/desktop/src/hooks/useAgentTools.ts`
+- Modify: `apps/desktop/src/i18n/messages.ts`
 
 **Interfaces:**
 - Produces: UI 工具列表出现 `robotics`，中英文案说明与 `vision` / 多 Agent orchestration 的区别
@@ -916,12 +916,12 @@ export function IconRobotics(props: IconProps) {
 
 Run: `cd frontend && npm test -- --run autoModelSelect.test.ts 2>/dev/null || true`
 
-若 `KNOWN_TOOLSET` / 工具 id 列表测试需要更新，同步加入 `"robotics"`（检查 `frontend/src/lib/autoModelSelect.test.ts` 是否枚举全部 tool id；**不要**把 robotics 并入 TaskKind `vision` 自动选模）。
+若 `KNOWN_TOOLSET` / 工具 id 列表测试需要更新，同步加入 `"robotics"`（检查 `apps/desktop/src/lib/autoModelSelect.test.ts` 是否枚举全部 tool id；**不要**把 robotics 并入 TaskKind `vision` 自动选模）。
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add frontend/src/components/ToolIcons.tsx frontend/src/hooks/useAgentTools.ts frontend/src/i18n/messages.ts
+git add apps/desktop/src/components/ToolIcons.tsx apps/desktop/src/hooks/useAgentTools.ts apps/desktop/src/i18n/messages.ts
 git commit -m "$(cat <<'EOF'
 feat(ui): expose robotics tool in agent tools panel
 

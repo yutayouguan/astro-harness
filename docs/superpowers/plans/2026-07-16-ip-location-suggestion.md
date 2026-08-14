@@ -176,9 +176,9 @@ git commit -m "feat(location): add IP city inference command"
 ### Task 2: A2UI 安全异步预填
 
 **Files:**
-- Create: `frontend/src/a2ui/initialFieldValues.ts`
-- Create: `frontend/src/a2ui/initialFieldValues.test.ts`
-- Modify: `frontend/src/a2ui/A2UIRenderer.tsx:5-55`
+- Create: `apps/desktop/src/a2ui/initialFieldValues.ts`
+- Create: `apps/desktop/src/a2ui/initialFieldValues.test.ts`
+- Modify: `apps/desktop/src/a2ui/A2UIRenderer.tsx:5-55`
 
 **Interfaces:**
 - Produces: `mergeInitialFieldValues(current, initial): Record<string, unknown>`
@@ -276,7 +276,7 @@ Expected: 3 tests PASS；TypeScript/Vite build PASS。
 - [ ] **Step 6: 提交 A2UI 切片**
 
 ```bash
-git add frontend/src/a2ui/initialFieldValues.ts frontend/src/a2ui/initialFieldValues.test.ts frontend/src/a2ui/A2UIRenderer.tsx
+git add apps/desktop/src/a2ui/initialFieldValues.ts apps/desktop/src/a2ui/initialFieldValues.test.ts apps/desktop/src/a2ui/A2UIRenderer.tsx
 git commit -m "feat(a2ui): support safe async field defaults"
 ```
 
@@ -285,12 +285,12 @@ git commit -m "feat(a2ui): support safe async field defaults"
 ### Task 3: 位置 surface 自动推测并预填城市
 
 **Files:**
-- Create: `frontend/src/hooks/ui/useIpCitySuggestion.ts`
-- Create: `frontend/src/components/chat/LocationA2UISurface.tsx`
-- Create: `frontend/src/lib/chat/locationSurface.ts`
-- Create: `frontend/src/lib/chat/locationSurface.test.ts`
-- Modify: `frontend/src/components/chat/ChatView.tsx:99,1360-1380`
-- Modify: `frontend/src/i18n/messages.ts:253-260,1434-1442`
+- Create: `apps/desktop/src/hooks/ui/useIpCitySuggestion.ts`
+- Create: `apps/desktop/src/components/chat/LocationA2UISurface.tsx`
+- Create: `apps/desktop/src/lib/chat/locationSurface.ts`
+- Create: `apps/desktop/src/lib/chat/locationSurface.test.ts`
+- Modify: `apps/desktop/src/components/chat/ChatView.tsx:99,1360-1380`
+- Modify: `apps/desktop/src/i18n/messages.ts:253-260,1434-1442`
 
 **Interfaces:**
 - Consumes: Tauri command `infer_ip_location`
@@ -496,12 +496,12 @@ Expected: 5 tests PASS；build PASS。
 
 ```bash
 git add \
-  frontend/src/hooks/ui/useIpCitySuggestion.ts \
-  frontend/src/components/chat/LocationA2UISurface.tsx \
-  frontend/src/lib/chat/locationSurface.ts \
-  frontend/src/lib/chat/locationSurface.test.ts \
-  frontend/src/components/chat/ChatView.tsx \
-  frontend/src/i18n/messages.ts
+  apps/desktop/src/hooks/ui/useIpCitySuggestion.ts \
+  apps/desktop/src/components/chat/LocationA2UISurface.tsx \
+  apps/desktop/src/lib/chat/locationSurface.ts \
+  apps/desktop/src/lib/chat/locationSurface.test.ts \
+  apps/desktop/src/components/chat/ChatView.tsx \
+  apps/desktop/src/i18n/messages.ts
 git commit -m "feat(location): prefill city from IP"
 ```
 

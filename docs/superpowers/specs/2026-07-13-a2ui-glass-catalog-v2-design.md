@@ -146,7 +146,7 @@ flowchart LR
 | Area | Files (expected) |
 |------|------------------|
 | Catalog / validate / templates | `a2ui/src/catalog.rs`, `validate.rs`, `templates.rs`, tests |
-| Frontend types / adapter / CSS | `frontend/src/a2ui/*`, `frontend/src/styles/chat.css` |
+| Frontend types / adapter / CSS | `apps/desktop/src/a2ui/*`, `apps/desktop/src/styles/chat.css` |
 | Tools | `tools/src/builtins/{confirm,clarify,present_ui}.rs` |
 | Docs cross-link | 更新 declarative GenUI spec 中 catalog 小节指向本文 |
 

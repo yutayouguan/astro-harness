@@ -5,7 +5,7 @@
 
 ## 目标
 
-将约 3300 行的 `frontend/src/App.tsx` 从「壳 + 聊天运行时 + 面板编排」拆成可维护结构，**不改变 UI / 运行时行为**。
+将约 3300 行的 `apps/desktop/src/App.tsx` 从「壳 + 聊天运行时 + 面板编排」拆成可维护结构，**不改变 UI / 运行时行为**。
 
 ## 总体策略（三刀）
 
@@ -23,10 +23,10 @@
 
 | 从 `App.tsx` 迁出 | 目标路径 |
 |------------------|----------|
-| `MAX_ATTACHMENTS`, `MAX_INLINE_BYTES`, `kindFromMime` | `frontend/src/lib/chat/attachments.ts` |
-| `ACTIVITY_KINDS`, `countChatBubbles`, `mapHistoryMessages` | `frontend/src/lib/chat/historyMap.ts` |
-| `calcTokensPerSec` | `frontend/src/lib/chat/tokensPerSec.ts` |
-| `NavId`, `IconComp`, `Tone`, `StatusPhase`, `NAV`, `PAGE_META` | `frontend/src/lib/ui/navConfig.ts` |
+| `MAX_ATTACHMENTS`, `MAX_INLINE_BYTES`, `kindFromMime` | `apps/desktop/src/lib/chat/attachments.ts` |
+| `ACTIVITY_KINDS`, `countChatBubbles`, `mapHistoryMessages` | `apps/desktop/src/lib/chat/historyMap.ts` |
+| `calcTokensPerSec` | `apps/desktop/src/lib/chat/tokensPerSec.ts` |
+| `NavId`, `IconComp`, `Tone`, `StatusPhase`, `NAV`, `PAGE_META` | `apps/desktop/src/lib/ui/navConfig.ts` |
 
 说明：`navConfig` 放 `lib/ui/`（与现有 `windowZoom` / `windowUnderlay` 等同属壳层工具），不新建 `lib/shell/`。
 

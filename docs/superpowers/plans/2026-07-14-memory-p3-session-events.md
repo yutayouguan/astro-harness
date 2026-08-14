@@ -27,10 +27,10 @@
 | `frontend/src-tauri/src/session_events.rs`（新建）或并入 `commands.rs` | 启动订阅任务 |
 | `frontend/src-tauri/src/memory_commands.rs` | settings 扩展；`approve_all` / `reject_all` |
 | `frontend/src-tauri/src/lib.rs` | 注册命令；setup 里启动订阅 |
-| `frontend/src/App.tsx` | listen、toast、角标、auto-refresh、slash |
-| `frontend/src/lib/composerCommands.ts` | `/memory` 子命令解析 |
-| `frontend/src/components/MemoryPanel.tsx` | 「刷新进对话」+ auto-refresh 开关 |
-| `frontend/src/i18n/messages.ts` / `styles/memory.css` | 文案与角标样式 |
+| `apps/desktop/src/App.tsx` | listen、toast、角标、auto-refresh、slash |
+| `apps/desktop/src/lib/composerCommands.ts` | `/memory` 子命令解析 |
+| `apps/desktop/src/components/MemoryPanel.tsx` | 「刷新进对话」+ auto-refresh 开关 |
+| `apps/desktop/src/i18n/messages.ts` / `styles/memory.css` | 文案与角标样式 |
 | `docs/memory.md` | 用户文档 |
 
 **命名：** 禁止外部参考项目品牌字符串。
@@ -619,9 +619,9 @@ EOF
 **Files:**
 - Create or modify: `frontend/src-tauri/src/session_events_cmd.rs`
 - Modify: `frontend/src-tauri/src/lib.rs`（`setup` 启动后台订阅；`listen` 侧）
-- Modify: `frontend/src/App.tsx`
+- Modify: `apps/desktop/src/App.tsx`
 - Modify: nav 渲染（记忆项角标）
-- Modify: `frontend/src/i18n/messages.ts`
+- Modify: `apps/desktop/src/i18n/messages.ts`
 
 - [ ] **Step 1: Tauri 后台任务**
 
@@ -694,8 +694,8 @@ EOF
 ## Task 8: MemoryPanel —「刷新进对话」+ 开关
 
 **Files:**
-- Modify: `frontend/src/components/MemoryPanel.tsx`
-- Modify: `frontend/src/styles/memory.css`
+- Modify: `apps/desktop/src/components/MemoryPanel.tsx`
+- Modify: `apps/desktop/src/styles/memory.css`
 - Modify: i18n
 
 - [ ] **Step 1: 审批设置区增加开关**
@@ -738,8 +738,8 @@ EOF
 ## Task 9: Slash 子命令 + approve/reject all
 
 **Files:**
-- Modify: `frontend/src/lib/composerCommands.ts`
-- Modify: `frontend/src/App.tsx`（`handleSlashAction`）
+- Modify: `apps/desktop/src/lib/composerCommands.ts`
+- Modify: `apps/desktop/src/App.tsx`（`handleSlashAction`）
 - Modify: `frontend/src-tauri/src/memory_commands.rs`
 - Test: 可加 `composerCommands` 的 vitest/纯函数测；或 Rust 侧 all API 测
 

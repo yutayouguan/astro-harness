@@ -117,7 +117,7 @@ evolution:
 落地位置：
 - 配置读写：[`memory/src/config.rs`](../../../memory/src/config.rs)（`EvolutionConfig` / `EvolutionGates` / `EvolutionRouteKind`、`load_evolution_config`、`set_evolution_*`、`reset_all_evolution_routes`）
 - Tauri 命令：[`frontend/src-tauri/src/evolution_commands.rs`](../../../frontend/src-tauri/src/evolution_commands.rs)
-- UI：模型服务页「离线进化」子 Tab（[`EvolutionModelsPanel.tsx`](../../../frontend/src/components/settings/EvolutionModelsPanel.tsx)），复用辅助模型的路由选择交互
+- UI：模型服务页「离线进化」子 Tab（[`EvolutionModelsPanel.tsx`](../../../apps/desktop/src/components/settings/EvolutionModelsPanel.tsx)），复用辅助模型的路由选择交互
 - `provider=auto` 跟随会话主模型；显式值保存 UI Provider ID，与 `auxiliary` 一致但**配置段独立**
 
 ### 门禁（对齐上游）

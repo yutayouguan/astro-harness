@@ -30,7 +30,7 @@
 | `providers/src/lib.rs` | re-export `interactions_http`（若尚未导出） |
 | `providers/src/protocol/media_http.rs` | 扩展 OpenAI 视觉 helper（多图 + mode）；Google 视觉调用方停止使用 openai 路径 |
 | `tools/src/builtins/media/vision.rs` | 新契约与分流 |
-| `frontend/src/i18n/messages.ts` | 中英 `agentTools.vision.desc` |
+| `apps/desktop/src/i18n/messages.ts` | 中英 `agentTools.vision.desc` |
 
 ---
 
@@ -754,7 +754,7 @@ EOF
 ### Task 4: i18n 文案
 
 **Files:**
-- Modify: `frontend/src/i18n/messages.ts`
+- Modify: `apps/desktop/src/i18n/messages.ts`
 
 - [ ] **Step 1: 更新中英描述**
 
@@ -767,7 +767,7 @@ EOF
 - [ ] **Step 2: Commit**
 
 ```bash
-git add frontend/src/i18n/messages.ts
+git add apps/desktop/src/i18n/messages.ts
 git commit -m "docs(i18n): update vision tool description for Interactions API"
 ```
 

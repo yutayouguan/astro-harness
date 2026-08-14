@@ -30,7 +30,7 @@
 | Create/Modify: `memory/tests/usage_insights_merge_test.rs`（或扩展 `usage_db_test.rs`） | 合并与清空测试 |
 | Modify: `agent/src/streaming.rs` | `record_llm_usage` → sessions 回填 |
 | Modify: `frontend/src-tauri/src/config_commands.rs` | `get_usage_insights` 走合并门面 |
-| Modify: `frontend/src/components/InsightsPanel.tsx` + i18n（可选） | 空态文案 |
+| Modify: `apps/desktop/src/components/InsightsPanel.tsx` + i18n（可选） | 空态文案 |
 | Modify: `docs/superpowers/specs/2026-07-13-session-store-p1a-billing-design.md` | 状态 → 已实现 |
 
 ---
@@ -592,8 +592,8 @@ EOF
 ### Task 5: 前端空态（可选但推荐）+ 文档收尾
 
 **Files:**
-- Modify: `frontend/src/components/InsightsPanel.tsx`（空态旁提示）
-- Modify: 对应 i18n messages（`frontend/src/i18n/…`）
+- Modify: `apps/desktop/src/components/InsightsPanel.tsx`（空态旁提示）
+- Modify: 对应 i18n messages（`apps/desktop/src/i18n/…`）
 - Modify: `docs/superpowers/specs/2026-07-13-session-store-p1a-billing-design.md`
 
 - [ ] **Step 1: i18n**
@@ -620,7 +620,7 @@ Expected: 全绿
 - [ ] **Step 4: Commit**
 
 ```bash
-git add frontend/src/components/InsightsPanel.tsx frontend/src/i18n docs/superpowers/specs/2026-07-13-session-store-p1a-billing-design.md
+git add apps/desktop/src/components/InsightsPanel.tsx apps/desktop/src/i18n docs/superpowers/specs/2026-07-13-session-store-p1a-billing-design.md
 git commit -m "$(cat <<'EOF'
 docs: mark session store P1a billing implemented
 

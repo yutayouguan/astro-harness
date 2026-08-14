@@ -18,7 +18,7 @@
 ### Task 1: 调整会话工具栏控件顺序
 
 **Files:**
-- Modify: `frontend/src/components/chat/ChatSessionList.tsx:101-124`
+- Modify: `apps/desktop/src/components/chat/ChatSessionList.tsx:101-124`
 
 **Interfaces:**
 - Consumes: `query`、`setQuery`、`onNewSession`、`agents`、`activeAgentId`、`handleAgentChange`、`onNewAgent`
@@ -73,6 +73,6 @@ Expected: TypeScript 编译和 Vite 构建成功，命令退出码为 `0`。
 - [ ] **Step 4: 提交实现**
 
 ```bash
-git add frontend/src/components/chat/ChatSessionList.tsx
+git add apps/desktop/src/components/chat/ChatSessionList.tsx
 git commit -m "style(chat): move session search to toolbar end"
 ```

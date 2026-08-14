@@ -28,15 +28,15 @@
 | Modify: `tools/src/builtins/confirm.rs` (new) + `clarify.rs` | 模板 A2UI JSON + interrupt 标记结果 |
 | Modify: `tools/src/builtins/mod.rs`, `dispatch.rs`, `lib.rs` | 注册 confirm |
 | Modify: `frontend/src-tauri/src/commands.rs` | `ChatStreamEvent` 新变体；`interrupt_resume`；`stream_resume` 别名 |
-| Modify: `frontend/src/types.ts` | `UiSurface`, `ChatMessage.uiSurfaces`, interrupt 类型 |
-| Create: `frontend/src/a2ui/types.ts` | 前端 A2UI operation 类型 |
-| Create: `frontend/src/a2ui/CatalogAdapter.tsx` | 组件 → React |
-| Create: `frontend/src/a2ui/A2UIRenderer.tsx` | surface 渲染 + action 回调 |
-| Create: `frontend/src/a2ui/validate.ts` | 轻量前端校验（未知组件降级） |
-| Modify: `frontend/src/components/ChatView.tsx` | 插入 `uiSurfaces` |
-| Modify: `frontend/src/App.tsx` | 消费新事件；interrupt_resume；拒发普通消息 |
-| Modify: `frontend/src/styles/chat.css` | A2UI 卡样式 |
-| Modify: `frontend/src/i18n/messages.ts` | 文案 |
+| Modify: `apps/desktop/src/types.ts` | `UiSurface`, `ChatMessage.uiSurfaces`, interrupt 类型 |
+| Create: `apps/desktop/src/a2ui/types.ts` | 前端 A2UI operation 类型 |
+| Create: `apps/desktop/src/a2ui/CatalogAdapter.tsx` | 组件 → React |
+| Create: `apps/desktop/src/a2ui/A2UIRenderer.tsx` | surface 渲染 + action 回调 |
+| Create: `apps/desktop/src/a2ui/validate.ts` | 轻量前端校验（未知组件降级） |
+| Modify: `apps/desktop/src/components/ChatView.tsx` | 插入 `uiSurfaces` |
+| Modify: `apps/desktop/src/App.tsx` | 消费新事件；interrupt_resume；拒发普通消息 |
+| Modify: `apps/desktop/src/styles/chat.css` | A2UI 卡样式 |
+| Modify: `apps/desktop/src/i18n/messages.ts` | 文案 |
 | Create: `tools/src/builtins/present_ui.rs` | 信息卡：校验后返回 A2UI（不 interrupt） |
 | Modify: session/history 相关（见 Task 11） | 持久化 surfaces / pending interrupts |
 
@@ -582,8 +582,8 @@ EOF
 ### Task 9: 前端类型 + 事件消费
 
 **Files:**
-- Modify: `frontend/src/types.ts`
-- Modify: `frontend/src/App.tsx`
+- Modify: `apps/desktop/src/types.ts`
+- Modify: `apps/desktop/src/App.tsx`
 
 - [ ] **Step 1: 类型**
 
@@ -632,13 +632,13 @@ EOF
 ### Task 10: `A2UIRenderer` + `CatalogAdapter`
 
 **Files:**
-- Create: `frontend/src/a2ui/types.ts`
-- Create: `frontend/src/a2ui/validate.ts`
-- Create: `frontend/src/a2ui/CatalogAdapter.tsx`
-- Create: `frontend/src/a2ui/A2UIRenderer.tsx`
-- Modify: `frontend/src/components/ChatView.tsx`
-- Modify: `frontend/src/styles/chat.css`
-- Modify: `frontend/src/i18n/messages.ts`
+- Create: `apps/desktop/src/a2ui/types.ts`
+- Create: `apps/desktop/src/a2ui/validate.ts`
+- Create: `apps/desktop/src/a2ui/CatalogAdapter.tsx`
+- Create: `apps/desktop/src/a2ui/A2UIRenderer.tsx`
+- Modify: `apps/desktop/src/components/ChatView.tsx`
+- Modify: `apps/desktop/src/styles/chat.css`
+- Modify: `apps/desktop/src/i18n/messages.ts`
 
 - [ ] **Step 1: Adapter 支持子集组件**
 

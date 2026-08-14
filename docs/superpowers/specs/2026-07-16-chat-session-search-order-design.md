@@ -6,7 +6,7 @@
 
 ## 实现
 
-仅调整 `frontend/src/components/chat/ChatSessionList.tsx` 中三个工具栏控件的 JSX 顺序：
+仅调整 `apps/desktop/src/components/chat/ChatSessionList.tsx` 中三个工具栏控件的 JSX 顺序：
 
 - 新建会话按钮保持第一位。
 - Agent 选择器保持第二位。

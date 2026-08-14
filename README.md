@@ -14,7 +14,7 @@
 
 ```bash
 # 安装前端依赖
-cd frontend && npm install
+cd apps/desktop && npm install
 
 # 开发模式（热更新）
 npm run tauri dev
@@ -35,7 +35,7 @@ npm run tauri build -- --bundles app
 rustup target add aarch64-apple-darwin x86_64-apple-darwin
 ```
 
-然后在 `frontend/` 下按架构打包（npm scripts）：
+然后在 `apps/desktop/` 下按架构打包（npm scripts）：
 
 ```bash
 # Apple Silicon (ARM64)
@@ -77,7 +77,7 @@ target/release/bundle/appimage/*.AppImage
 target/release/bundle/deb/*.deb
 ```
 
-图标与 DMG 资源在 `frontend/src-tauri/icons/`（`icon.png` / `icon.icns` / `icon.ico` 等）；DMG 安装窗口背景为 `dmg-background.png`，在 `tauri.conf.json` → `bundle.macOS.dmg` 中配置。
+图标与 DMG 资源在 `apps/desktop/src-tauri/icons/`（`icon.png` / `icon.icns` / `icon.ico` 等）；DMG 安装窗口背景为 `dmg-background.png`，在 `tauri.conf.json` → `bundle.macOS.dmg` 中配置。
 
 Windows / Linux 的 ARM 包需在对应 ARM 机器或 CI runner 上构建（见下方 CI）；本机 Mac **不能**交叉打出 Windows/Linux 安装包。
 
@@ -117,7 +117,7 @@ cargo build -p astro-agent --release --target x86_64-apple-darwin
 
 `tauri dev` / 打包后的 `.app` **默认在同进程启动 gRPC backend**（含 cron），无需另开终端。双击 APP 即可聊天。
 
-**端口：** 未设置 `ASTRO_GRPC_ADDR` 时内嵌使用 `127.0.0.1:0`，由系统分配空闲端口，并在进程内告诉壳侧客户端（用户无感、不与其它进程抢 50051）。独立 `cargo run -p backend` 仍默认 `127.0.0.1:50051`。
+**端口：** 未设置 `ASTRO_GRPC_ADDR` 时内嵌使用 `127.0.0.1:0`，由系统分配空闲端口，并在进程内告诉壳侧客户端（用户无感、不与其它进程抢 50051）。独立 `cargo run -p server` 仍默认 `127.0.0.1:50051`。
 
 调试固定端口：
 
@@ -131,12 +131,12 @@ export ASTRO_GRPC_ADDR=127.0.0.1:50051
 
 ```bash
 # 终端 1：只跑 backend（默认 50051）
-cargo run -p backend
+cargo run -p server
 
 # 终端 2：关掉内嵌，连外部 backend
 export ASTRO_EMBED_BACKEND=0
 export ASTRO_GRPC_ADDR=127.0.0.1:50051
-cd frontend && npm run tauri dev
+cd apps/desktop && npm run tauri dev
 ```
 
 也可在 `~/.astro/.env` 写入 `ASTRO_EMBED_BACKEND=0` / `ASTRO_GRPC_ADDR=…`。
@@ -146,34 +146,35 @@ cd frontend && npm run tauri dev
 ```text
 astro/
 ├── Cargo.toml              # Workspace 根
-├── frontend/               # React + Vite UI
-│   └── src-tauri/          # Tauri 壳（crate: astro-agent）
-├── agent/                  # Agent 循环、流式输出、工具编排
-├── backend/                # gRPC 服务
-├── providers/              # 模型供应商
-├── memory/                 # 本地记忆 / 工作区
-├── session/                # 会话库（SQLite）
-├── usage/                  # 用量与洞察
-├── skills/                 # Skills
-├── tools/                  # 工具实现
-├── mcp/                    # MCP 客户端
-├── hooks/                  # 生命周期钩子
-├── proto/                  # Protobuf / tonic
-└── common/                 # 共享类型与错误
+├── crates/                 # 所有 Rust crate（扁平 agent-* 命名）
+│   ├── agent-core/         # Agent 循环、流式输出、工具编排
+│   ├── agent-types/        # 共享类型与错误
+│   ├── agent-providers/    # 模型供应商
+│   ├── agent-tools/        # 工具实现
+│   ├── agent-memory/       # 本地记忆 / 工作区
+│   ├── agent-server/       # gRPC 服务
+│   ├── agent-session/      # 会话库（SQLite）
+│   ├── agent-skills/       # Skills
+│   ├── agent-mcp/          # MCP 客户端
+│   ├── agent-hooks/        # 生命周期钩子
+│   ├── agent-proto/        # Protobuf / tonic
+│   └── ...                 # 另有 9 个 crate
+└── apps/
+    └── desktop/            # React + Vite UI + Tauri 壳
 ```
 
 | Crate | 说明 |
 |-------|------|
-| `astro-agent` | Tauri 桌面应用（`frontend/src-tauri`） |
+| `astro-agent` | Tauri 桌面应用（`apps/desktop/src-tauri`） |
 | `agent` | 对话与工具调用核心 |
-| `backend` | gRPC 服务（可独立运行；桌面壳默认同进程内嵌） |
+| `server` | gRPC 服务（可独立运行；桌面壳默认同进程内嵌） |
 | `providers` | LLM / 图像等供应商适配 |
 | `memory` | 记忆、工作区 |
 | `session` | 会话消息与账单 |
 | `usage` | 用量统计与 Tracing 洞察 |
 | `skills` / `tools` / `mcp` | 扩展能力 |
 | `hooks` | Plugin / Gateway / Shell 三套生命周期钩子 |
-| `proto` / `common` | 协议与公共库 |
+| `proto` / `types` | 协议与公共类型 |
 
 钩子说明见 [`docs/hooks.md`](./docs/hooks.md)。
 
@@ -184,10 +185,10 @@ astro/
 cargo check
 
 # 跑测试（示例）
-cargo test -p backend
+cargo test -p server
 
 # 仅构建前端静态资源
-cd frontend && npm run build
+cd apps/desktop && npm run build
 ```
 
 ## 许可证

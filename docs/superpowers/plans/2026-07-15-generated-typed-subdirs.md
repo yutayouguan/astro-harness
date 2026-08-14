@@ -34,7 +34,7 @@
 | Modify: `frontend/src-tauri/src/commands.rs` | `generate_image` 对齐 |
 | Modify: `memory/.../templates.rs` | TOOLS.md 一句引导 |
 | Modify: 媒体 gen design 路径表述（可选同 commit） |
-| Modify: `frontend/src/lib/resolveMediaSrc.test.ts` | 嵌套相对路径用例 |
+| Modify: `apps/desktop/src/lib/resolveMediaSrc.test.ts` | 嵌套相对路径用例 |
 
 ---
 
@@ -397,7 +397,7 @@ EOF
 
 **Files:**
 - Modify: `memory/src/agent/workspace/templates.rs` — `TEMPLATE_TOOLS` 增加「生成物目录」小节
-- Modify: `frontend/src/lib/resolveMediaSrc.test.ts` — 一条 `generated/images/...`
+- Modify: `apps/desktop/src/lib/resolveMediaSrc.test.ts` — 一条 `generated/images/...`
 - Modify: `docs/superpowers/specs/2026-07-15-generated-typed-subdirs-design.md` — 状态改为「已规划/实现中」或实现后改为「已实现」
 - Modify: `docs/superpowers/specs/2026-07-15-google-media-gen-tools-design.md` — 输出路径改为 `generated/images/` 等（短注）
 
@@ -449,7 +449,7 @@ Expected: PASS
 
 ```bash
 git add memory/src/agent/workspace/templates.rs \
-  frontend/src/lib/resolveMediaSrc.test.ts \
+  apps/desktop/src/lib/resolveMediaSrc.test.ts \
   docs/superpowers/specs/2026-07-15-generated-typed-subdirs-design.md \
   docs/superpowers/specs/2026-07-15-google-media-gen-tools-design.md
 git commit -m "$(cat <<'EOF'

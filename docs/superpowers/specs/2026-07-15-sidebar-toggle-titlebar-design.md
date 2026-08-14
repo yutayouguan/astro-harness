@@ -50,8 +50,8 @@
 
 ## 实现触及点
 
-- `frontend/src/App.tsx`：按钮 DOM 从品牌区挪到标题栏区域。
-- `frontend/src/styles/shell.css`（必要时 `header.css`）：标题栏按钮定位与品牌区只留标签开关时的布局。
+- `apps/desktop/src/App.tsx`：按钮 DOM 从品牌区挪到标题栏区域。
+- `apps/desktop/src/styles/shell.css`（必要时 `header.css`）：标题栏按钮定位与品牌区只留标签开关时的布局。
 - 复用现有图标组件与 i18n key；无需改文案语义。
 
 ## 验收

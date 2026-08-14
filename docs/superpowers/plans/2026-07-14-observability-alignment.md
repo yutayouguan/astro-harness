@@ -29,9 +29,9 @@
 | `memory/src/usage/stats.rs` 等 | `NewUsageEvent` 构造补 `turn_id: None`（或透传） |
 | `frontend/src-tauri/src/config_commands.rs`（或 `diagnostics_commands.rs`） | `query_agent_logs` |
 | `frontend/src-tauri/src/lib.rs` | 注册 command；`init_logging("agent")` |
-| `frontend/src/components/PreferencesPanel.tsx` | 「日志 / 诊断」分区 |
-| `frontend/src/i18n/messages.ts` | 文案键 |
-| `frontend/src/styles/`（若需） | 诊断列表最小样式（复用 `prefs-*` 优先） |
+| `apps/desktop/src/components/PreferencesPanel.tsx` | 「日志 / 诊断」分区 |
+| `apps/desktop/src/i18n/messages.ts` | 文案键 |
+| `apps/desktop/src/styles/`（若需） | 诊断列表最小样式（复用 `prefs-*` 优先） |
 
 ---
 
@@ -765,9 +765,9 @@ EOF
 ## Task 6: Preferences「日志 / 诊断」UI + i18n
 
 **Files:**
-- Modify: `frontend/src/components/PreferencesPanel.tsx`
-- Modify: `frontend/src/i18n/messages.ts`
-- Optional: `frontend/src/styles/` 下 prefs 相关 CSS（优先复用 `prefs-card`）
+- Modify: `apps/desktop/src/components/PreferencesPanel.tsx`
+- Modify: `apps/desktop/src/i18n/messages.ts`
+- Optional: `apps/desktop/src/styles/` 下 prefs 相关 CSS（优先复用 `prefs-card`）
 
 - [x] **Step 1: i18n keys**
 
@@ -833,7 +833,7 @@ type AgentLogLine = { raw: string; source: string };
 - [x] **Step 5: Commit**
 
 ```bash
-git add frontend/src/components/PreferencesPanel.tsx frontend/src/i18n/messages.ts frontend/src/styles/*.css
+git add apps/desktop/src/components/PreferencesPanel.tsx apps/desktop/src/i18n/messages.ts apps/desktop/src/styles/*.css
 git commit -m "$(cat <<'EOF'
 feat(ui): preferences log diagnostics filter by session/turn
 

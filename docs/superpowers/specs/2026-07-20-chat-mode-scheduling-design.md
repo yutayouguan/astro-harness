@@ -2,7 +2,7 @@
 
 > 日期：2026-07-20  
 > 状态：设计定稿；Step 1–4 + 增强 + High/Medium 修复已落地；**模式说明已迁入 system prompt（不再拼进用户消息）**  
-> 相关：[`chatMode.ts`](../../../frontend/src/lib/chat/chatMode.ts)、[`followUpQueue.ts`](../../../frontend/src/lib/chat/followUpQueue.ts)、[`interaction_mode.rs`](../../../tools/src/interaction_mode.rs)、[`parallelTasks.ts`](../../../frontend/src/lib/chat/parallelTasks.ts)、编排 / delegate / worktree
+> 相关：[`chatMode.ts`](../../../apps/desktop/src/lib/chat/chatMode.ts)、[`followUpQueue.ts`](../../../apps/desktop/src/lib/chat/followUpQueue.ts)、[`interaction_mode.rs`](../../../tools/src/interaction_mode.rs)、[`parallelTasks.ts`](../../../apps/desktop/src/lib/chat/parallelTasks.ts)、编排 / delegate / worktree
 
 ## 1. 问题（历史背景）
 

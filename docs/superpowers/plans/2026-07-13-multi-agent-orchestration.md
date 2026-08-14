@@ -327,7 +327,7 @@ EOF
 - Create: `tools/src/builtins/orchestration.rs`
 - Modify: `tools/src/builtins/mod.rs`、`tools/src/lib.rs`（`register_all`）、`tools/src/core/dispatch.rs`
 - Modify: `memory/src/tools_enabled.rs`：`orchestration_run` | `orchestration_status` → `multi_agent`
-- Modify: `frontend/src/hooks/useAgentTools.ts`（若有工具名录需展示描述；toolset 仍为 multi_agent）
+- Modify: `apps/desktop/src/hooks/useAgentTools.ts`（若有工具名录需展示描述；toolset 仍为 multi_agent）
 
 - [ ] **Step 1: 实现工具**
 

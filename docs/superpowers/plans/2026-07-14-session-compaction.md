@@ -29,11 +29,11 @@
 | Create: `frontend/src-tauri/src/compaction_commands.rs` | 摘要（LLM + 启发式）+ `compact_chat_session` |
 | Modify: `frontend/src-tauri/src/lib.rs` | `mod` + register command |
 | Modify: `frontend/src-tauri/src/commands.rs` | `RecentSessionDto` 加 `endReason`（若放在本文件） |
-| Modify: `frontend/src/types.ts` | DTO 类型 |
-| Modify: `frontend/src/lib/composerCommands.ts` | `/compact` slash |
-| Modify: `frontend/src/App.tsx` | compact handler、自动阈值、切会话 |
-| Modify: `frontend/src/components/ChatSessionList.tsx` | 「已压实」徽章 |
-| Modify: `frontend/src/i18n/messages.ts` | 文案 |
+| Modify: `apps/desktop/src/types.ts` | DTO 类型 |
+| Modify: `apps/desktop/src/lib/composerCommands.ts` | `/compact` slash |
+| Modify: `apps/desktop/src/App.tsx` | compact handler、自动阈值、切会话 |
+| Modify: `apps/desktop/src/components/ChatSessionList.tsx` | 「已压实」徽章 |
+| Modify: `apps/desktop/src/i18n/messages.ts` | 文案 |
 | Modify: `docs/superpowers/specs/2026-07-14-session-compaction-design.md` | 实现后状态 → 已实现 |
 
 **常量（Tauri / 前端共享语义，可各写一份）：**
@@ -425,7 +425,7 @@ EOF
 - Modify: `memory/src/session/store/mod.rs`（`RecentSession`）
 - Modify: `memory/src/session/store/search.rs`（`list_recent_sessions` SELECT）
 - Modify: `frontend/src-tauri/src/commands.rs`（`RecentSessionDto` + map）
-- Modify: `frontend/src/types.ts`
+- Modify: `apps/desktop/src/types.ts`
 
 - [ ] **Step 1: 扩展 `RecentSession`**
 
@@ -471,7 +471,7 @@ Expected: 无错误（按仓库实际 package 名调整）
 
 ```bash
 git add memory/src/session/store/mod.rs memory/src/session/store/search.rs \
-  frontend/src-tauri/src/commands.rs frontend/src/types.ts
+  frontend/src-tauri/src/commands.rs apps/desktop/src/types.ts
 git commit -m "$(cat <<'EOF'
 feat(session): expose end_reason on recent session list
 
@@ -692,10 +692,10 @@ EOF
 ### Task 5: 前端手动 `/compact` + 无感切换
 
 **Files:**
-- Modify: `frontend/src/lib/composerCommands.ts`
-- Modify: `frontend/src/i18n/messages.ts`
-- Modify: `frontend/src/App.tsx`
-- Modify: `frontend/src/components/ChatSessionList.tsx`（徽章可本任务一并做）
+- Modify: `apps/desktop/src/lib/composerCommands.ts`
+- Modify: `apps/desktop/src/i18n/messages.ts`
+- Modify: `apps/desktop/src/App.tsx`
+- Modify: `apps/desktop/src/components/ChatSessionList.tsx`（徽章可本任务一并做）
 
 - [ ] **Step 1: Slash + i18n**
 
@@ -797,8 +797,8 @@ const runCompactSession = useCallback(async () => {
 - [ ] **Step 5: Commit**
 
 ```bash
-git add frontend/src/lib/composerCommands.ts frontend/src/i18n/messages.ts \
-  frontend/src/App.tsx frontend/src/components/ChatSessionList.tsx frontend/src/styles/layout.css
+git add apps/desktop/src/lib/composerCommands.ts apps/desktop/src/i18n/messages.ts \
+  apps/desktop/src/App.tsx apps/desktop/src/components/ChatSessionList.tsx apps/desktop/src/styles/layout.css
 git commit -m "$(cat <<'EOF'
 feat(chat): /compact switches to split session after summary
 
@@ -811,7 +811,7 @@ EOF
 ### Task 6: 自动阈值 + 冷却
 
 **Files:**
-- Modify: `frontend/src/App.tsx`
+- Modify: `apps/desktop/src/App.tsx`
 
 - [ ] **Step 1: 在流结束 / 一轮完成处挂检查**
 
@@ -847,7 +847,7 @@ const maybeAutoCompact = useCallback(() => {
 - [ ] **Step 3: Commit**
 
 ```bash
-git add frontend/src/App.tsx
+git add apps/desktop/src/App.tsx
 git commit -m "$(cat <<'EOF'
 feat(chat): auto-compact when context usage passes threshold
 

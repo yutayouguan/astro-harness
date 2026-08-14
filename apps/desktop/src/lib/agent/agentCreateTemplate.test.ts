@@ -1,4 +1,4 @@
-// code/astro/frontend/src/lib/agentCreateTemplate.test.ts
+// apps/desktop/src/lib/agentCreateTemplate.test.ts
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {

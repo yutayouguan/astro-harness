@@ -16,15 +16,15 @@
 
 | File | Responsibility |
 |------|----------------|
-| Modify: `frontend/src/types.ts` | `ChatActivity` 增加 `input?` / `output?` |
-| Create: `frontend/src/lib/resolveActivityIO.ts` | 从 activity 解析 input/output（含旧 detail 兜底） |
-| Create: `frontend/src/lib/resolveActivityIO.test.ts` | 上述纯函数测试 |
-| Modify: `frontend/src/App.tsx` | 流式写入 `input`/`output` |
-| Modify: `frontend/src/i18n/messages.ts` | 父级摘要、Input/Output 文案 |
-| Create: `frontend/src/components/ActivityGroup.tsx` | 父折叠容器 |
-| Modify: `frontend/src/components/MsgActivity.tsx` | 图标 + Input/Output 分区；子项默认折 |
-| Modify: `frontend/src/components/ChatView.tsx` | `ActivityCards` 包 `ActivityGroup` |
-| Modify: `frontend/src/styles/chat.css` | 父级/分区样式 |
+| Modify: `apps/desktop/src/types.ts` | `ChatActivity` 增加 `input?` / `output?` |
+| Create: `apps/desktop/src/lib/resolveActivityIO.ts` | 从 activity 解析 input/output（含旧 detail 兜底） |
+| Create: `apps/desktop/src/lib/resolveActivityIO.test.ts` | 上述纯函数测试 |
+| Modify: `apps/desktop/src/App.tsx` | 流式写入 `input`/`output` |
+| Modify: `apps/desktop/src/i18n/messages.ts` | 父级摘要、Input/Output 文案 |
+| Create: `apps/desktop/src/components/ActivityGroup.tsx` | 父折叠容器 |
+| Modify: `apps/desktop/src/components/MsgActivity.tsx` | 图标 + Input/Output 分区；子项默认折 |
+| Modify: `apps/desktop/src/components/ChatView.tsx` | `ActivityCards` 包 `ActivityGroup` |
+| Modify: `apps/desktop/src/styles/chat.css` | 父级/分区样式 |
 | Modify: spec 状态 → 已实现 |
 
 **不改：** `MsgReasoning.tsx`、`ChatContextTimeline.tsx`、后端流事件 DTO。
@@ -34,9 +34,9 @@
 ### Task 1: `ChatActivity` 字段 + `resolveActivityIO`
 
 **Files:**
-- Modify: `frontend/src/types.ts`
-- Create: `frontend/src/lib/resolveActivityIO.ts`
-- Create: `frontend/src/lib/resolveActivityIO.test.ts`
+- Modify: `apps/desktop/src/types.ts`
+- Create: `apps/desktop/src/lib/resolveActivityIO.ts`
+- Create: `apps/desktop/src/lib/resolveActivityIO.test.ts`
 
 - [ ] **Step 1: Write the failing test**
 
@@ -101,7 +101,7 @@ Expected: FAIL (module not found)
 
 - [ ] **Step 3: Extend type + implement helper**
 
-In `frontend/src/types.ts`，把 `ChatActivity` 改为：
+In `apps/desktop/src/types.ts`，把 `ChatActivity` 改为：
 
 ```ts
 export type ChatActivity = {
@@ -118,7 +118,7 @@ export type ChatActivity = {
 };
 ```
 
-Create `frontend/src/lib/resolveActivityIO.ts`：
+Create `apps/desktop/src/lib/resolveActivityIO.ts`：
 
 ```ts
 import type { ChatActivity } from "../types";
@@ -166,7 +166,7 @@ Expected: 4 pass
 - [ ] **Step 5: Commit**
 
 ```bash
-git add frontend/src/types.ts frontend/src/lib/resolveActivityIO.ts frontend/src/lib/resolveActivityIO.test.ts
+git add apps/desktop/src/types.ts apps/desktop/src/lib/resolveActivityIO.ts apps/desktop/src/lib/resolveActivityIO.test.ts
 git commit -m "$(cat <<'EOF'
 feat(chat): add activity input/output fields and resolver
 
@@ -179,7 +179,7 @@ EOF
 ### Task 2: App.tsx 流式写入 `input` / `output`
 
 **Files:**
-- Modify: `frontend/src/App.tsx`
+- Modify: `apps/desktop/src/App.tsx`
 
 - [ ] **Step 1: Update `flushToolDeltas` activity create/update**
 
@@ -256,7 +256,7 @@ Expected: exit 0
 - [ ] **Step 5: Commit**
 
 ```bash
-git add frontend/src/App.tsx
+git add apps/desktop/src/App.tsx
 git commit -m "$(cat <<'EOF'
 feat(chat): write activity input and output from stream events
 
@@ -269,7 +269,7 @@ EOF
 ### Task 3: i18n 文案
 
 **Files:**
-- Modify: `frontend/src/i18n/messages.ts`
+- Modify: `apps/desktop/src/i18n/messages.ts`
 
 - [ ] **Step 1: Add Chinese keys**（紧挨 `chat.activityCollapse` 之后）
 
@@ -296,7 +296,7 @@ EOF
 - [ ] **Step 3: Commit**
 
 ```bash
-git add frontend/src/i18n/messages.ts
+git add apps/desktop/src/i18n/messages.ts
 git commit -m "$(cat <<'EOF'
 i18n: add activity group and input/output labels
 
@@ -309,10 +309,10 @@ EOF
 ### Task 4: `ActivityGroup` + 重写 `MsgActivity` + 样式 + 接线
 
 **Files:**
-- Create: `frontend/src/components/ActivityGroup.tsx`
-- Modify: `frontend/src/components/MsgActivity.tsx`
-- Modify: `frontend/src/components/ChatView.tsx`
-- Modify: `frontend/src/styles/chat.css`
+- Create: `apps/desktop/src/components/ActivityGroup.tsx`
+- Modify: `apps/desktop/src/components/MsgActivity.tsx`
+- Modify: `apps/desktop/src/components/ChatView.tsx`
+- Modify: `apps/desktop/src/styles/chat.css`
 
 - [ ] **Step 1: Create `ActivityGroup.tsx`**
 
@@ -669,7 +669,7 @@ Expected: tests pass；tsc exit 0。
 - [ ] **Step 6: Commit**
 
 ```bash
-git add frontend/src/components/ActivityGroup.tsx frontend/src/components/MsgActivity.tsx frontend/src/components/ChatView.tsx frontend/src/styles/chat.css
+git add apps/desktop/src/components/ActivityGroup.tsx apps/desktop/src/components/MsgActivity.tsx apps/desktop/src/components/ChatView.tsx apps/desktop/src/styles/chat.css
 git commit -m "$(cat <<'EOF'
 feat(chat): parent-fold activity group with input/output rows
 

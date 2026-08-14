@@ -75,11 +75,11 @@
 
 | 组件 | 路径 | 职责 |
 |------|------|------|
-| `GeneratedMediaCard` | `frontend/src/components/media/GeneratedMediaCard.tsx` | 外层卡片：文件名 + 工具栏 + 内嵌预览 |
-| `MediaToolbar` | `frontend/src/components/media/MediaToolbar.tsx` | 共享工具条 |
-| `MediaPreview` | `frontend/src/components/media/MediaPreview.tsx` | 按 kind 渲染内嵌预览 |
-| `HtmlPreview` | `frontend/src/components/media/HtmlPreview.tsx` | 沙箱 HTML（`srcDoc`） |
-| `MediaPreviewModal` | `frontend/src/components/media/MediaPreviewModal.tsx` | App 内全屏预览浮层 |
+| `GeneratedMediaCard` | `apps/desktop/src/components/media/GeneratedMediaCard.tsx` | 外层卡片：文件名 + 工具栏 + 内嵌预览 |
+| `MediaToolbar` | `apps/desktop/src/components/media/MediaToolbar.tsx` | 共享工具条 |
+| `MediaPreview` | `apps/desktop/src/components/media/MediaPreview.tsx` | 按 kind 渲染内嵌预览 |
+| `HtmlPreview` | `apps/desktop/src/components/media/HtmlPreview.tsx` | 沙箱 HTML（`srcDoc`） |
+| `MediaPreviewModal` | `apps/desktop/src/components/media/MediaPreviewModal.tsx` | App 内全屏预览浮层 |
 
 ### 工具栏能力矩阵
 
@@ -130,7 +130,7 @@
 1. `rewriteHtmlRelativeAssets(html, dir, convertFileSrc)`  
    - 改写 `src` / `poster` 与 CSS `url(...)` 中的相对引用。  
    - 按文件目录解析 `..` 后，对**绝对本地路径**逐个 `convertFileSrc`。  
-   - 纯函数，单测见 `frontend/src/lib/media/htmlAssetRewrite.test.ts`。
+   - 纯函数，单测见 `apps/desktop/src/lib/media/htmlAssetRewrite.test.ts`。
 2. `withBaseHref(...)` 仍注入 `<base>` 作兜底（文档已有 `<base>` 则不覆盖）。
 3. iframe `sandbox="allow-scripts"`（无 `same-origin` / top-nav）。
 
@@ -194,9 +194,9 @@ reconcile(扫盘) → backfill_artifact_sessions
 
 | 区域 | 文件 |
 |------|------|
-| 工具栏 / 全屏预览 | `frontend/src/components/media/MediaToolbar.tsx`、`MediaPreviewModal.tsx` |
-| HTML 预览与改写 | `HtmlPreview.tsx`、`frontend/src/lib/media/htmlAssetRewrite.ts` |
-| 卡片样式 | `frontend/src/styles/components/media.css` |
+| 工具栏 / 全屏预览 | `apps/desktop/src/components/media/MediaToolbar.tsx`、`MediaPreviewModal.tsx` |
+| HTML 预览与改写 | `HtmlPreview.tsx`、`apps/desktop/src/lib/media/htmlAssetRewrite.ts` |
+| 卡片样式 | `apps/desktop/src/styles/components/media.css` |
 | 实时登记 | `agent/src/runtime/mod.rs`、`tools/.../file_ops.rs` |
 | 回填 / IPC | `frontend/src-tauri/src/artifacts_commands.rs`、`artifacts/src/db.rs`、`session/src/store/messages.rs` |
 

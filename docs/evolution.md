@@ -62,7 +62,7 @@ DecisionLog + Skills 索引 (+ transcript / evalset)
 | `evolution/src/history.rs` | run / outcome 可观测 JSONL |
 | [`evolution-dspy/`](../evolution-dspy/) | 外部 Python 包（**非** cargo）；DSPy+GEPA |
 | `frontend/src-tauri/src/evolution_run_commands.rs` | Tauri 命令：run / search / approve / dspy / evalset |
-| `frontend/src/components/settings/EvolutionModelsPanel.tsx` | UI |
+| `apps/desktop/src/components/settings/EvolutionModelsPanel.tsx` | UI |
 | `memory` crate `EvolutionConfig` | `config.yaml` 的 `evolution:` 段 |
 
 ---

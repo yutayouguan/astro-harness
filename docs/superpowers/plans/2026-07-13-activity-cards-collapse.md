@@ -16,10 +16,10 @@
 
 | File | Responsibility |
 |------|----------------|
-| Create: `frontend/src/components/MsgActivity.tsx` | 单条活动卡：摘要行 + 可折叠 detail |
-| Modify: `frontend/src/components/ChatView.tsx` | `ActivityCards` 改用 `MsgActivity`；移除内联 detail 渲染 |
-| Modify: `frontend/src/styles/chat.css` | 活动卡 toggle / chevron / `is-open` 样式 |
-| Modify: `frontend/src/i18n/messages.ts` | 展开/折叠详情的 `aria-label` 中英文案 |
+| Create: `apps/desktop/src/components/MsgActivity.tsx` | 单条活动卡：摘要行 + 可折叠 detail |
+| Modify: `apps/desktop/src/components/ChatView.tsx` | `ActivityCards` 改用 `MsgActivity`；移除内联 detail 渲染 |
+| Modify: `apps/desktop/src/styles/chat.css` | 活动卡 toggle / chevron / `is-open` 样式 |
+| Modify: `apps/desktop/src/i18n/messages.ts` | 展开/折叠详情的 `aria-label` 中英文案 |
 | Modify: `docs/superpowers/specs/2026-07-13-activity-cards-collapse-design.md` | 状态改为已实现（收尾） |
 
 **不改：** `MsgReasoning.tsx`、`ChatContextTimeline.tsx`、后端流事件、`useChatDisplayPrefs` 可见性逻辑。
@@ -29,7 +29,7 @@
 ### Task 1: i18n 文案
 
 **Files:**
-- Modify: `frontend/src/i18n/messages.ts`
+- Modify: `apps/desktop/src/i18n/messages.ts`
 
 - [ ] **Step 1: 在中文与英文区块各加两条 key**
 
@@ -50,7 +50,7 @@
 - [ ] **Step 2: Commit**
 
 ```bash
-git add frontend/src/i18n/messages.ts
+git add apps/desktop/src/i18n/messages.ts
 git commit -m "$(cat <<'EOF'
 i18n: add activity card expand/collapse labels
 
@@ -63,7 +63,7 @@ EOF
 ### Task 2: 新建 `MsgActivity` 组件
 
 **Files:**
-- Create: `frontend/src/components/MsgActivity.tsx`
+- Create: `apps/desktop/src/components/MsgActivity.tsx`
 
 - [ ] **Step 1: 创建组件文件**
 
@@ -140,7 +140,7 @@ export default function MsgActivity({
 - [ ] **Step 2: Commit**
 
 ```bash
-git add frontend/src/components/MsgActivity.tsx
+git add apps/desktop/src/components/MsgActivity.tsx
 git commit -m "$(cat <<'EOF'
 feat(chat): add MsgActivity collapsible activity card
 
@@ -153,8 +153,8 @@ EOF
 ### Task 3: 接线 `ActivityCards` + 样式
 
 **Files:**
-- Modify: `frontend/src/components/ChatView.tsx`
-- Modify: `frontend/src/styles/chat.css`
+- Modify: `apps/desktop/src/components/ChatView.tsx`
+- Modify: `apps/desktop/src/styles/chat.css`
 
 - [ ] **Step 1: 在 `ChatView.tsx` 顶部增加 import**
 
@@ -260,7 +260,7 @@ Expected: 无错误退出（exit 0）。
 - [ ] **Step 5: Commit**
 
 ```bash
-git add frontend/src/components/ChatView.tsx frontend/src/styles/chat.css
+git add apps/desktop/src/components/ChatView.tsx apps/desktop/src/styles/chat.css
 git commit -m "$(cat <<'EOF'
 feat(chat): collapse activity details by default
 

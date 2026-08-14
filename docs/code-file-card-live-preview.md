@@ -42,9 +42,9 @@ flowchart LR
 
 ### 3.1 类型识别
 
-`frontend/src/lib/media/parseGeneratedMedia.ts` 定义 `GeneratedMediaKind`，其中包含 `code`，并通过 `CODE_EXT` 和 `isCodePath()` 判断代码/文本文件。
+`apps/desktop/src/lib/media/parseGeneratedMedia.ts` 定义 `GeneratedMediaKind`，其中包含 `code`，并通过 `CODE_EXT` 和 `isCodePath()` 判断代码/文本文件。
 
-`frontend/src/components/chat/ChatMarkdown.tsx` 的识别顺序是：
+`apps/desktop/src/components/chat/ChatMarkdown.tsx` 的识别顺序是：
 
 1. Markdown `alt` 明确为 `code` 时直接按代码处理。
 2. 未指定明确类型时，根据路径后缀判断音频、视频、HTML 或代码。
@@ -52,9 +52,9 @@ flowchart LR
 
 ### 3.2 渲染
 
-`frontend/src/components/media/GeneratedMediaCard.tsx` 在 `kind === "code"` 时渲染 `CodeFileCard`。
+`apps/desktop/src/components/media/GeneratedMediaCard.tsx` 在 `kind === "code"` 时渲染 `CodeFileCard`。
 
-`frontend/src/components/media/CodeFileCard.tsx` 支持两种内容来源：
+`apps/desktop/src/components/media/CodeFileCard.tsx` 支持两种内容来源：
 
 - `path`：通过 Tauri `read_file` 读取已经落盘的文件。
 - `source`：直接渲染内存中的文本，供生成中实时预览复用。
@@ -72,9 +72,9 @@ flowchart LR
 
 对应实现位于：
 
-- `frontend/src/components/media/MediaToolbar.tsx`
-- `frontend/src/components/media/MediaPreviewModal.tsx`
-- `frontend/src/lib/media/mediaActions.ts`
+- `apps/desktop/src/components/media/MediaToolbar.tsx`
+- `apps/desktop/src/components/media/MediaPreviewModal.tsx`
+- `apps/desktop/src/lib/media/mediaActions.ts`
 
 ## 4. 生成中实时预览
 
@@ -82,7 +82,7 @@ flowchart LR
 
 `file_ops.write` 最终仍然一次性写入磁盘。实时预览不依赖文件系统监听，而是使用模型生成工具参数时产生的 `tool_call_delta`。
 
-`frontend/src/hooks/chat/useSend.ts` 同时执行两项处理：
+`apps/desktop/src/hooks/chat/useSend.ts` 同时执行两项处理：
 
 - 继续把工具参数增量交给聊天活动卡。
 - 把同一增量交给 `generatingPreviewApi.onToolDelta()`。
@@ -91,7 +91,7 @@ flowchart LR
 
 ### 4.2 部分 JSON 解析
 
-`frontend/src/lib/chat/parsePartialFileWrite.ts` 专门处理不完整的工具参数 JSON。
+`apps/desktop/src/lib/chat/parsePartialFileWrite.ts` 专门处理不完整的工具参数 JSON。
 
 解析策略：
 
@@ -104,7 +104,7 @@ flowchart LR
 
 ### 4.3 状态与节流
 
-`frontend/src/hooks/chat/useGeneratingPreview.ts` 维护以下状态：
+`apps/desktop/src/hooks/chat/useGeneratingPreview.ts` 维护以下状态：
 
 ```ts
 type GeneratingPreview = {
@@ -128,9 +128,9 @@ type GeneratingPreview = {
 
 ### 4.4 侧栏渲染
 
-`frontend/src/components/chat/ChatRightPanel.tsx` 增加 `preview` 页签。
+`apps/desktop/src/components/chat/ChatRightPanel.tsx` 增加 `preview` 页签。
 
-`frontend/src/components/chat/GeneratingPreviewPanel.tsx` 根据内容类型选择：
+`apps/desktop/src/components/chat/GeneratingPreviewPanel.tsx` 根据内容类型选择：
 
 - HTML：`HtmlPreview source={content}`，使用沙箱 iframe 的 `srcDoc` 实时渲染。
 - 其他代码/文本：`CodeFileCard source={content}`，按文件名后缀高亮。
@@ -152,17 +152,17 @@ type GeneratingPreview = {
 ## 6. 关键文件
 
 - `agent/src/prompt/prompt_builder.rs`：`![code](path)` 输出约定。
-- `frontend/src/lib/media/parseGeneratedMedia.ts`：媒体类型与代码后缀识别。
-- `frontend/src/components/chat/ChatMarkdown.tsx`：Markdown 标记解析。
-- `frontend/src/components/media/GeneratedMediaCard.tsx`：生成结果卡片分发。
-- `frontend/src/components/media/CodeFileCard.tsx`：代码/文本只读预览。
-- `frontend/src/lib/chat/parsePartialFileWrite.ts`：不完整 JSON 容错解析。
-- `frontend/src/hooks/chat/useGeneratingPreview.ts`：实时预览状态与节流。
-- `frontend/src/hooks/chat/useSend.ts`：聊天流事件接入。
-- `frontend/src/hooks/chat/useChatSession.ts`：侧栏状态接线。
-- `frontend/src/components/chat/ChatRightPanel.tsx`：预览页签。
-- `frontend/src/components/chat/GeneratingPreviewPanel.tsx`：实时预览界面。
-- `frontend/src/components/media/HtmlPreview.tsx`：沙箱 HTML 预览。
+- `apps/desktop/src/lib/media/parseGeneratedMedia.ts`：媒体类型与代码后缀识别。
+- `apps/desktop/src/components/chat/ChatMarkdown.tsx`：Markdown 标记解析。
+- `apps/desktop/src/components/media/GeneratedMediaCard.tsx`：生成结果卡片分发。
+- `apps/desktop/src/components/media/CodeFileCard.tsx`：代码/文本只读预览。
+- `apps/desktop/src/lib/chat/parsePartialFileWrite.ts`：不完整 JSON 容错解析。
+- `apps/desktop/src/hooks/chat/useGeneratingPreview.ts`：实时预览状态与节流。
+- `apps/desktop/src/hooks/chat/useSend.ts`：聊天流事件接入。
+- `apps/desktop/src/hooks/chat/useChatSession.ts`：侧栏状态接线。
+- `apps/desktop/src/components/chat/ChatRightPanel.tsx`：预览页签。
+- `apps/desktop/src/components/chat/GeneratingPreviewPanel.tsx`：实时预览界面。
+- `apps/desktop/src/components/media/HtmlPreview.tsx`：沙箱 HTML 预览。
 
 ## 7. 已知边界
 

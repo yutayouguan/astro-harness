@@ -10,8 +10,8 @@
 
 仅调整以下样式文件，不修改组件结构、状态逻辑或交互行为：
 
-- `frontend/src/styles/features/shell/header.css`
-- `frontend/src/styles/features/chat/right-panel.css`
+- `apps/desktop/src/styles/features/shell/header.css`
+- `apps/desktop/src/styles/features/chat/right-panel.css`
 
 ## 样式设计
 

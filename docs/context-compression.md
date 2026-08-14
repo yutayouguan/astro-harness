@@ -158,7 +158,7 @@ Provider 视图中的 Recovery 提示已写入 spill/prune 模板。
 | 多轮挂钩 | `agent/src/streaming/multi_turn.rs`（Gateway 前 + 工具后） |
 | Spill | `common/src/tool_spill.rs` |
 | Provider 视图 | `provider_history()` / `compressed_content` 优先 |
-| 会话压实 | `session/.../compact_and_split`，`frontend/.../compaction_commands.rs` |
+| 会话压实 | `session/.../compact_and_split`，`apps/desktop/.../compaction_commands.rs` |
 | 辅模型压实 | `AuxiliaryTask::Compaction` → `compact_chat_session` / mid-run |
 | 前端提示 | `ContextUsage.recommendCompact` → toast（60s 冷却） |
 

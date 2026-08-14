@@ -51,7 +51,7 @@
 
 ## 组件与数据流
 
-### 新增 `frontend/src/components/MsgActivity.tsx`
+### 新增 `apps/desktop/src/components/MsgActivity.tsx`
 
 - Props：`activity: ChatActivity`、`defaultOpen: boolean`、`showTimestamp: boolean`
 - 本地 `open`；有 `detail` 时用 button 切换

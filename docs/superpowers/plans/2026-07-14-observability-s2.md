@@ -21,13 +21,13 @@
 | `memory/src/usage/db.rs` | `TraceEventRow.turn_id`；`list_trace_events` SELECT |
 | `memory/src/usage/trace_insights.rs` | `TraceEvent.turn_id`；usage→event 映射；chat-history 合成事件 `None` |
 | `memory/tests/…` 或 `trace_insights` 单测 | 透传断言 |
-| `frontend/src/components/InsightsPanel.tsx` | 类型 + `groupEventsByTurn` + 折叠 UI |
-| `frontend/src/styles/insights.css` | `.insights-turn-group*` |
-| `frontend/src/App.tsx` | `currentTurnId` state；run_started / session 切换 |
-| `frontend/src/components/ChatRightPanel.tsx` | 下传 props |
-| `frontend/src/components/ChatAgentInfo.tsx` | 展示 + 复制诊断 |
-| `frontend/src/i18n/messages.ts` | 文案键 |
-| `frontend/src/lib/diagnosticContext.ts`（可选新建） | `formatDiagnosticContext(sessionId, turnId)` 纯函数便于测 |
+| `apps/desktop/src/components/InsightsPanel.tsx` | 类型 + `groupEventsByTurn` + 折叠 UI |
+| `apps/desktop/src/styles/insights.css` | `.insights-turn-group*` |
+| `apps/desktop/src/App.tsx` | `currentTurnId` state；run_started / session 切换 |
+| `apps/desktop/src/components/ChatRightPanel.tsx` | 下传 props |
+| `apps/desktop/src/components/ChatAgentInfo.tsx` | 展示 + 复制诊断 |
+| `apps/desktop/src/i18n/messages.ts` | 文案键 |
+| `apps/desktop/src/lib/diagnosticContext.ts`（可选新建） | `formatDiagnosticContext(sessionId, turnId)` 纯函数便于测 |
 
 ---
 
@@ -142,13 +142,13 @@ EOF
 ## Task 2: Insights — `groupEventsByTurn` + 默认折叠 UI
 
 **Files:**
-- Modify: `frontend/src/components/InsightsPanel.tsx`
-- Modify: `frontend/src/styles/insights.css`
-- Modify: `frontend/src/i18n/messages.ts`
+- Modify: `apps/desktop/src/components/InsightsPanel.tsx`
+- Modify: `apps/desktop/src/styles/insights.css`
+- Modify: `apps/desktop/src/i18n/messages.ts`
 
 - [x] **Step 1: Add pure helper + unit-level assert via small extract (optional file)**
 
-在 `InsightsPanel.tsx` 顶部（或 `frontend/src/lib/traceTurnGroups.ts`）：
+在 `InsightsPanel.tsx` 顶部（或 `apps/desktop/src/lib/traceTurnGroups.ts`）：
 
 ```ts
 export type TraceEvent = { /* existing + */ turn_id?: string | null; total_tokens: number; cost_usd: number; /* ... */ };
@@ -274,7 +274,7 @@ cd frontend && npx tsc --noEmit
 - [x] **Step 5: Commit**
 
 ```bash
-git add frontend/src/components/InsightsPanel.tsx frontend/src/styles/insights.css frontend/src/i18n/messages.ts frontend/src/lib/traceTurnGroups.ts
+git add apps/desktop/src/components/InsightsPanel.tsx apps/desktop/src/styles/insights.css apps/desktop/src/i18n/messages.ts apps/desktop/src/lib/traceTurnGroups.ts
 git commit -m "$(cat <<'EOF'
 feat(insights): collapse trace timeline by turn_id
 
@@ -287,16 +287,16 @@ EOF
 ## Task 3: Chat — `currentTurnId` + 复制诊断
 
 **Files:**
-- Create (可选): `frontend/src/lib/diagnosticContext.ts`
-- Modify: `frontend/src/App.tsx`
-- Modify: `frontend/src/components/ChatRightPanel.tsx`
-- Modify: `frontend/src/components/ChatAgentInfo.tsx`
-- Modify: `frontend/src/i18n/messages.ts`
+- Create (可选): `apps/desktop/src/lib/diagnosticContext.ts`
+- Modify: `apps/desktop/src/App.tsx`
+- Modify: `apps/desktop/src/components/ChatRightPanel.tsx`
+- Modify: `apps/desktop/src/components/ChatAgentInfo.tsx`
+- Modify: `apps/desktop/src/i18n/messages.ts`
 
 - [x] **Step 1: Formatter**
 
 ```ts
-// frontend/src/lib/diagnosticContext.ts
+// apps/desktop/src/lib/diagnosticContext.ts
 export function formatDiagnosticContext(sessionId: string, turnId: string): string {
   return `session_id=${sessionId}\nturn_id=${turnId}\n`;
 }
@@ -357,9 +357,9 @@ cd frontend && npx tsc --noEmit
 - [x] **Step 5: Commit**
 
 ```bash
-git add frontend/src/App.tsx frontend/src/components/ChatRightPanel.tsx \
-  frontend/src/components/ChatAgentInfo.tsx frontend/src/lib/diagnosticContext.ts \
-  frontend/src/i18n/messages.ts
+git add apps/desktop/src/App.tsx apps/desktop/src/components/ChatRightPanel.tsx \
+  apps/desktop/src/components/ChatAgentInfo.tsx apps/desktop/src/lib/diagnosticContext.ts \
+  apps/desktop/src/i18n/messages.ts
 git commit -m "$(cat <<'EOF'
 feat(chat): show turn_id and copy diagnostic context
 

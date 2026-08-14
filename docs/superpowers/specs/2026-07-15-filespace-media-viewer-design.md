@@ -126,11 +126,11 @@ HTML iframe：`sandbox` 允许脚本以便本地产物可预览；禁止导航�
 
 | 文件 | 变更 |
 |------|------|
-| `frontend/src/components/FileSpaceViewer.tsx` | 新建（可同文件分 pane） |
-| `frontend/src/components/FileSpacePanel.tsx` | 接入 Viewer，移除旧 PreviewState / 扩展名集合 |
-| `frontend/src/lib/fileTypeIcon.ts` | `media-audio` / `media-pdf` |
-| `frontend/src/lib/fileTypeIcon.test.ts` | 覆盖新 mode |
-| `frontend/src/styles/filespace.css` | viewer / 媒体 / 分栏样式 |
+| `apps/desktop/src/components/FileSpaceViewer.tsx` | 新建（可同文件分 pane） |
+| `apps/desktop/src/components/FileSpacePanel.tsx` | 接入 Viewer，移除旧 PreviewState / 扩展名集合 |
+| `apps/desktop/src/lib/fileTypeIcon.ts` | `media-audio` / `media-pdf` |
+| `apps/desktop/src/lib/fileTypeIcon.test.ts` | 覆盖新 mode |
+| `apps/desktop/src/styles/filespace.css` | viewer / 媒体 / 分栏样式 |
 | i18n messages | 新增相关 key |
 
 ## 测试要点

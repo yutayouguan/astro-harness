@@ -21,10 +21,10 @@
 ### Task 1: Make Sidebar Icon Button Feedback Transient
 
 **Files:**
-- Modify: `frontend/src/styles/features/shell/shell.css:482-546`
+- Modify: `apps/desktop/src/styles/features/shell/shell.css:482-546`
 
 **Interfaces:**
-- Consumes: The existing `.sidebar-pin-btn` class used by both buttons in `frontend/src/App.tsx`.
+- Consumes: The existing `.sidebar-pin-btn` class used by both buttons in `apps/desktop/src/App.tsx`.
 - Produces: Shared default, `:hover`, and `:active` visual states for `.sidebar-pin-btn`.
 
 - [ ] **Step 1: Record the failing visual baseline**
@@ -40,7 +40,7 @@ Expected before the change: both sidebar icon buttons display a tinted backgroun
 
 - [ ] **Step 2: Implement the three button states**
 
-In `frontend/src/styles/features/shell/shell.css`, change the base rule and add the press rule:
+In `apps/desktop/src/styles/features/shell/shell.css`, change the base rule and add the press rule:
 
 ```css
 .sidebar-pin-btn {
@@ -94,6 +94,6 @@ Expected:
 - [ ] **Step 5: Commit the implementation**
 
 ```bash
-git add frontend/src/styles/features/shell/shell.css
+git add apps/desktop/src/styles/features/shell/shell.css
 git commit -m "style(sidebar): make icon button feedback transient"
 ```

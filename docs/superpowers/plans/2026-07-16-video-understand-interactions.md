@@ -33,8 +33,8 @@
 | `tools/src/builtins/media/video_understand.rs` | 新工具 |
 | `tools/src/builtins/media/mod.rs`、`builtins/mod.rs`、`lib.rs`、`dispatch.rs` | 注册 / dispatch / re-export |
 | `home/src/config/tools_enabled.rs` | `KNOWN_TOOLSET_IDS` + 名映射 |
-| `frontend/src/hooks/useAgentTools.ts` | 工具开关 |
-| `frontend/src/i18n/messages.ts` | 中英 title/desc |
+| `apps/desktop/src/hooks/useAgentTools.ts` | 工具开关 |
+| `apps/desktop/src/i18n/messages.ts` | 中英 title/desc |
 | `tools/tests/tools_test.rs` | 注册表含 `video_understand` |
 
 ---
@@ -1183,8 +1183,8 @@ EOF
 
 **Files:**
 - Modify: `home/src/config/tools_enabled.rs`
-- Modify: `frontend/src/hooks/useAgentTools.ts`
-- Modify: `frontend/src/i18n/messages.ts`
+- Modify: `apps/desktop/src/hooks/useAgentTools.ts`
+- Modify: `apps/desktop/src/i18n/messages.ts`
 
 - [ ] **Step 1: `KNOWN_TOOLSET_IDS` 与映射**
 
@@ -1250,7 +1250,7 @@ cd frontend && npx tsc --noEmit
 - [ ] **Step 5: Commit**
 
 ```bash
-git add home/src/config/tools_enabled.rs frontend/src/hooks/useAgentTools.ts frontend/src/i18n/messages.ts
+git add home/src/config/tools_enabled.rs apps/desktop/src/hooks/useAgentTools.ts apps/desktop/src/i18n/messages.ts
 git commit -m "$(cat <<'EOF'
 feat: enable video_understand toolset in UI and config
 

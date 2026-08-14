@@ -270,7 +270,7 @@ git commit -m "fix(evolution): compare candidates by effective skill size"
 - Modify: `evolution/src/search.rs`（`select_population` + `candidate_fingerprint`）
 - Modify: `frontend/src-tauri/src/evolution_commands.rs`（`EvolutionSearchDto` 加 `population_size`/`max_eval_examples`/`max_llm_calls`；`set_evolution_search` 新增参数）
 - Modify: `frontend/src-tauri/src/evolution_run_commands.rs`
-- Modify: `frontend/src/hooks/settings/useEvolutionSettings.ts`（`setSearch` 新增参数）
+- Modify: `apps/desktop/src/hooks/settings/useEvolutionSettings.ts`（`setSearch` 新增参数）
 - ~~`compression_settings_commands.rs`~~（该文件与进化无关，不改）
 - Test: `memory/src/config.rs`
 - Test: `evolution/src/search.rs`
@@ -783,7 +783,7 @@ Expected: PASS；旧 `skills curate` 仍返回可读 Markdown。
 git add skills/src/usage.rs skills/src/lib.rs memory/src/config.rs \
   tools/src/builtins/memory/skills_tool.rs \
   frontend/src-tauri/src/evolution_run_commands.rs \
-  frontend/src/components/settings/
+  apps/desktop/src/components/settings/
 git commit -m "feat(skills): structured curator report with health signals"
 ```
 

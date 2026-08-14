@@ -1,4 +1,4 @@
-// frontend/src/lib/insightsView.ts
+// apps/desktop/src/lib/insightsView.ts
 export type InsightsViewMode =
   | "overview"
   | "models"

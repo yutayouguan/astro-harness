@@ -29,7 +29,7 @@
 | `providers/src/protocol/media_http.rs` | Veo 原生 URL/body/parse、`google_native_generate_video`；扩展 `VideoGenExtras`/`GeneratedVideo`；兼容路径多参考图 |
 | `tools/src/builtins/media/video_gen.rs` | 新参数契约、校验、native→compat、落盘与 hint |
 | `tools/src/builtins/media/image_gen.rs` | 成功 hint 中的 `reference_image` → `reference_images` |
-| `frontend/src/i18n/messages.ts` | 更新 `agentTools.videoGen.desc` 中英 |
+| `apps/desktop/src/i18n/messages.ts` | 更新 `agentTools.videoGen.desc` 中英 |
 | `skills/bundled/storyboard-video/SKILL.md` | 续拍改推 `extend_video`；多参考图；`astro_bundled_rev` +1 |
 
 ---
@@ -605,7 +605,7 @@ EOF
 ### Task 4: 文案与 storyboard skill
 
 **Files:**
-- Modify: `frontend/src/i18n/messages.ts`（中英 `agentTools.videoGen.desc`）
+- Modify: `apps/desktop/src/i18n/messages.ts`（中英 `agentTools.videoGen.desc`）
 - Modify: `skills/bundled/storyboard-video/SKILL.md`（`astro_bundled_rev: 3`）
 
 - [ ] **Step 1: i18n**
@@ -623,7 +623,7 @@ EOF
 - [ ] **Step 3: Commit**
 
 ```bash
-git add frontend/src/i18n/messages.ts skills/bundled/storyboard-video/SKILL.md
+git add apps/desktop/src/i18n/messages.ts skills/bundled/storyboard-video/SKILL.md
 git commit -m "$(cat <<'EOF'
 docs: align video_gen copy and storyboard skill with Veo native
 

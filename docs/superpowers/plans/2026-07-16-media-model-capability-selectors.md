@@ -25,11 +25,11 @@
 **Files:**
 - Modify: `frontend/src-tauri/src/litellm_meta.rs`
 - Modify: `frontend/src-tauri/src/model_meta.rs`
-- Modify: `frontend/src/types.ts`
-- Modify: `frontend/src/lib/model/modelCaps.ts`
-- Modify: `frontend/src/lib/model/modelCaps.test.ts`
-- Modify: `frontend/src/components/agents/ModelCapabilityIcons.tsx`
-- Modify: `frontend/src/i18n/messages.ts`
+- Modify: `apps/desktop/src/types.ts`
+- Modify: `apps/desktop/src/lib/model/modelCaps.ts`
+- Modify: `apps/desktop/src/lib/model/modelCaps.test.ts`
+- Modify: `apps/desktop/src/components/agents/ModelCapabilityIcons.tsx`
+- Modify: `apps/desktop/src/i18n/messages.ts`
 - Modify: TypeScript test fixtures containing complete `ModelCapabilities` literals, as reported by `rg "audio_gen:" frontend/src --glob '*.{ts,tsx}'`
 
 **Interfaces:**
@@ -154,7 +154,7 @@ Expected: PASS.
 
 - [ ] **Step 5: Add failing frontend capability-order test**
 
-Update `frontend/src/lib/model/modelCaps.test.ts`:
+Update `apps/desktop/src/lib/model/modelCaps.test.ts`:
 
 ```typescript
 test("listActiveModelCaps keeps fixed order", () => {
@@ -204,7 +204,7 @@ Expected: all tests PASS and TypeScript exits 0.
 - [ ] **Step 8: Commit the capability slice**
 
 ```bash
-git add frontend/src-tauri/src/litellm_meta.rs frontend/src-tauri/src/model_meta.rs frontend/src/types.ts frontend/src/lib/model/modelCaps.ts frontend/src/lib/model/modelCaps.test.ts frontend/src/components/agents/ModelCapabilityIcons.tsx frontend/src/i18n/messages.ts
+git add frontend/src-tauri/src/litellm_meta.rs frontend/src-tauri/src/model_meta.rs apps/desktop/src/types.ts apps/desktop/src/lib/model/modelCaps.ts apps/desktop/src/lib/model/modelCaps.test.ts apps/desktop/src/components/agents/ModelCapabilityIcons.tsx apps/desktop/src/i18n/messages.ts
 git add $(rg -l "music_gen: false" frontend/src --glob '*.{ts,tsx}')
 git commit -m "feat(models): distinguish music generation capability"
 ```
@@ -214,8 +214,8 @@ git commit -m "feat(models): distinguish music generation capability"
 ### Task 2: Build and test pure media-model selector logic
 
 **Files:**
-- Create: `frontend/src/lib/providers/mediaModelOptions.ts`
-- Create: `frontend/src/lib/providers/mediaModelOptions.test.ts`
+- Create: `apps/desktop/src/lib/providers/mediaModelOptions.ts`
+- Create: `apps/desktop/src/lib/providers/mediaModelOptions.test.ts`
 
 **Interfaces:**
 - Consumes: `ModelInfo` and `ModelCapabilities.music_gen` from Task 1.
@@ -224,7 +224,7 @@ git commit -m "feat(models): distinguish music generation capability"
 
 - [ ] **Step 1: Write failing pure-function tests**
 
-Create `frontend/src/lib/providers/mediaModelOptions.test.ts`:
+Create `apps/desktop/src/lib/providers/mediaModelOptions.test.ts`:
 
 ```typescript
 import assert from "node:assert/strict";
@@ -298,7 +298,7 @@ Expected: FAIL with module-not-found for `mediaModelOptions.ts`.
 
 - [ ] **Step 3: Implement the pure module**
 
-Create `frontend/src/lib/providers/mediaModelOptions.ts`:
+Create `apps/desktop/src/lib/providers/mediaModelOptions.ts`:
 
 ```typescript
 import type { ModelInfo } from "../../types";
@@ -377,7 +377,7 @@ Expected: 3 tests PASS.
 - [ ] **Step 5: Commit the pure selector logic**
 
 ```bash
-git add frontend/src/lib/providers/mediaModelOptions.ts frontend/src/lib/providers/mediaModelOptions.test.ts
+git add apps/desktop/src/lib/providers/mediaModelOptions.ts apps/desktop/src/lib/providers/mediaModelOptions.test.ts
 git commit -m "feat(providers): add media model filtering helpers"
 ```
 
@@ -673,11 +673,11 @@ git commit -m "feat(tools): honor configured music generation model"
 ### Task 5: Replace media text fields with capability-filtered selectors
 
 **Files:**
-- Modify: `frontend/src/components/settings/ProvidersPanel.tsx`
-- Modify: `frontend/src/types.ts`
-- Modify: `frontend/src/i18n/messages.ts`
-- Modify: `frontend/src/styles/features/providers.css`
-- Test: `frontend/src/lib/providers/mediaModelOptions.test.ts`
+- Modify: `apps/desktop/src/components/settings/ProvidersPanel.tsx`
+- Modify: `apps/desktop/src/types.ts`
+- Modify: `apps/desktop/src/i18n/messages.ts`
+- Modify: `apps/desktop/src/styles/features/providers.css`
+- Test: `apps/desktop/src/lib/providers/mediaModelOptions.test.ts`
 
 **Interfaces:**
 - Consumes: Task 2 option helpers and Task 3 `ProviderDto.music_model`.
@@ -711,7 +711,7 @@ Expected: PASS, proving the helper contract before component integration.
 
 - [ ] **Step 2: Extend DTO and draft state**
 
-In `frontend/src/types.ts` add:
+In `apps/desktop/src/types.ts` add:
 
 ```typescript
 /** 音乐生成模型（空=内置默认；Google only） */
@@ -846,7 +846,7 @@ Add bilingual keys:
 "providers.mediaDefaultOption": "Built-in default ({model})",
 ```
 
-In `frontend/src/styles/features/providers.css`, make the SelectMenu fill the existing field:
+In `apps/desktop/src/styles/features/providers.css`, make the SelectMenu fill the existing field:
 
 ```css
 .providers-media-model-select {
@@ -875,7 +875,7 @@ Expected: all Node tests PASS and TypeScript exits 0. Then inspect IDE diagnosti
 - [ ] **Step 8: Commit the UI slice**
 
 ```bash
-git add frontend/src/components/settings/ProvidersPanel.tsx frontend/src/types.ts frontend/src/i18n/messages.ts frontend/src/styles/features/providers.css frontend/src/lib/providers/mediaModelOptions.test.ts
+git add apps/desktop/src/components/settings/ProvidersPanel.tsx apps/desktop/src/types.ts apps/desktop/src/i18n/messages.ts apps/desktop/src/styles/features/providers.css apps/desktop/src/lib/providers/mediaModelOptions.test.ts
 git commit -m "feat(providers): select media models by capability"
 ```
 
@@ -940,7 +940,7 @@ In the Tauri application:
 ```bash
 git status --short
 git diff
-git add frontend/src-tauri/src/litellm_meta.rs frontend/src-tauri/src/model_meta.rs frontend/src-tauri/src/providers_commands.rs frontend/src-tauri/src/commands.rs proto/proto/astro.proto backend/src/grpc/astro_service.rs tools/src/core/context.rs tools/src/builtins/media/music_gen.rs frontend/src/types.ts frontend/src/lib/model/modelCaps.ts frontend/src/lib/model/modelCaps.test.ts frontend/src/lib/providers/mediaModelOptions.ts frontend/src/lib/providers/mediaModelOptions.test.ts frontend/src/components/agents/ModelCapabilityIcons.tsx frontend/src/components/settings/ProvidersPanel.tsx frontend/src/i18n/messages.ts frontend/src/styles/features/providers.css
+git add frontend/src-tauri/src/litellm_meta.rs frontend/src-tauri/src/model_meta.rs frontend/src-tauri/src/providers_commands.rs frontend/src-tauri/src/commands.rs proto/proto/astro.proto backend/src/grpc/astro_service.rs tools/src/core/context.rs tools/src/builtins/media/music_gen.rs apps/desktop/src/types.ts apps/desktop/src/lib/model/modelCaps.ts apps/desktop/src/lib/model/modelCaps.test.ts apps/desktop/src/lib/providers/mediaModelOptions.ts apps/desktop/src/lib/providers/mediaModelOptions.test.ts apps/desktop/src/components/agents/ModelCapabilityIcons.tsx apps/desktop/src/components/settings/ProvidersPanel.tsx apps/desktop/src/i18n/messages.ts apps/desktop/src/styles/features/providers.css
 git commit -m "fix(providers): address media selector verification"
 ```
 

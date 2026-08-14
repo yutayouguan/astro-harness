@@ -12,7 +12,7 @@
 
 ## Global Constraints
 
-- 复用已有 `frontend/src/components/media/*`，不重复造图/音/视/HTML iframe。
+- 复用已有 `apps/desktop/src/components/media/*`，不重复造图/音/视/HTML iframe。
 - Office（docx/xlsx/pptx）仍 `external`；本期只把 **pdf** 改为 `media-pdf`。
 - HTML sandbox：`allow-scripts`（与现有 `HtmlPreview` 一致）。
 - 自动保存防抖约 600ms；切换文件前 flush。
@@ -24,13 +24,13 @@
 
 | File | Responsibility |
 |------|----------------|
-| Modify: `frontend/src/lib/fileTypeIcon.ts` | `media-pdf`；`mediaKindOf` 可返回 `pdf` 或单独 helper |
-| Modify: `frontend/src/lib/fileTypeIcon.test.ts` | pdf / 音频回归 |
-| Create: `frontend/src/lib/filespaceViewerKind.ts` (+test) | 纯函数：artifact → viewer kind |
-| Create: `frontend/src/components/FileSpaceViewer.tsx` | 右侧内容：各 pane + 保存 |
-| Modify: `frontend/src/components/FileSpacePanel.tsx` | 删 PreviewState / TEXT_EXTS；挂 Viewer |
-| Modify: `frontend/src/styles/filespace.css` | viewer 编辑/分栏样式 |
-| Modify: `frontend/src/i18n/messages.ts` | 未保存/保存中等（可复用 workspace keys） |
+| Modify: `apps/desktop/src/lib/fileTypeIcon.ts` | `media-pdf`；`mediaKindOf` 可返回 `pdf` 或单独 helper |
+| Modify: `apps/desktop/src/lib/fileTypeIcon.test.ts` | pdf / 音频回归 |
+| Create: `apps/desktop/src/lib/filespaceViewerKind.ts` (+test) | 纯函数：artifact → viewer kind |
+| Create: `apps/desktop/src/components/FileSpaceViewer.tsx` | 右侧内容：各 pane + 保存 |
+| Modify: `apps/desktop/src/components/FileSpacePanel.tsx` | 删 PreviewState / TEXT_EXTS；挂 Viewer |
+| Modify: `apps/desktop/src/styles/filespace.css` | viewer 编辑/分栏样式 |
+| Modify: `apps/desktop/src/i18n/messages.ts` | 未保存/保存中等（可复用 workspace keys） |
 
 ---
 

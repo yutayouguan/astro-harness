@@ -34,8 +34,8 @@
 
 ## 技术范围
 
-- 修改 `frontend/src/components/chat/ContextExplorer.tsx`，引入并渲染 Lucide 图标。
-- 修改 `frontend/src/styles/features/chat/right-panel.css`，完成卡片、环图、列表和空状态样式。
+- 修改 `apps/desktop/src/components/chat/ContextExplorer.tsx`，引入并渲染 Lucide 图标。
+- 修改 `apps/desktop/src/styles/features/chat/right-panel.css`，完成卡片、环图、列表和空状态样式。
 - 不修改上下文数据结构、计算函数、国际化文案或其他侧栏 Tab。
 
 ## 验证

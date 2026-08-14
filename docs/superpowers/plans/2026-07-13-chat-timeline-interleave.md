@@ -16,11 +16,11 @@
 
 | File | Responsibility |
 |------|----------------|
-| Create: `frontend/src/lib/chatTimeline.ts` | 纯函数：事件 → 更新 `segments` / `activities` / `uiSurfaces` / `reasoning` |
-| Create: `frontend/src/lib/chatTimeline.test.ts` | 交错拼装单测 |
-| Modify: `frontend/src/types.ts` | `ChatTimelineSegment`；`ChatMessage.segments`；history DTO |
-| Modify: `frontend/src/components/ChatView.tsx` | 有 segments 时逐段渲染；无则分组回退 |
-| Modify: `frontend/src/App.tsx` | 流式事件走 `chatTimeline`；restore 映射 segments/surfaces |
+| Create: `apps/desktop/src/lib/chatTimeline.ts` | 纯函数：事件 → 更新 `segments` / `activities` / `uiSurfaces` / `reasoning` |
+| Create: `apps/desktop/src/lib/chatTimeline.test.ts` | 交错拼装单测 |
+| Modify: `apps/desktop/src/types.ts` | `ChatTimelineSegment`；`ChatMessage.segments`；history DTO |
+| Modify: `apps/desktop/src/components/ChatView.tsx` | 有 segments 时逐段渲染；无则分组回退 |
+| Modify: `apps/desktop/src/App.tsx` | 流式事件走 `chatTimeline`；restore 映射 segments/surfaces |
 | Create: `agent/src/timeline.rs` | Rust 侧 `TimelineBuilder` + JSON 合并进 `reasoning_details` |
 | Modify: `agent/src/lib.rs` | `mod timeline` |
 | Modify: `agent/src/loop_.rs` | `record_assistant_message_with_tools` 接受 `reasoning_details` |
@@ -36,13 +36,13 @@
 ### Task 1: 前端纯函数 `chatTimeline`（TDD）
 
 **Files:**
-- Create: `frontend/src/lib/chatTimeline.ts`
-- Create: `frontend/src/lib/chatTimeline.test.ts`
-- Modify: `frontend/src/types.ts`
+- Create: `apps/desktop/src/lib/chatTimeline.ts`
+- Create: `apps/desktop/src/lib/chatTimeline.test.ts`
+- Modify: `apps/desktop/src/types.ts`
 
 - [ ] **Step 1: 扩展类型**
 
-在 `frontend/src/types.ts` 的 `ChatMessage` 附近加入：
+在 `apps/desktop/src/types.ts` 的 `ChatMessage` 附近加入：
 
 ```ts
 export type ChatTimelineSegment =
@@ -70,7 +70,7 @@ segments?: ChatTimelineSegment[];
 
 - [ ] **Step 2: 写失败测试**
 
-`frontend/src/lib/chatTimeline.test.ts`：
+`apps/desktop/src/lib/chatTimeline.test.ts`：
 
 ```ts
 import { test } from "node:test";
@@ -271,7 +271,7 @@ Expected: PASS
 - [ ] **Step 6: Commit**
 
 ```bash
-git add frontend/src/types.ts frontend/src/lib/chatTimeline.ts frontend/src/lib/chatTimeline.test.ts
+git add apps/desktop/src/types.ts apps/desktop/src/lib/chatTimeline.ts apps/desktop/src/lib/chatTimeline.test.ts
 git commit -m "$(cat <<'EOF'
 feat(chat): add timeline segment helpers for interleaved turns
 
@@ -284,7 +284,7 @@ EOF
 ### Task 2: ChatView 按 segments 渲染
 
 **Files:**
-- Modify: `frontend/src/components/ChatView.tsx`
+- Modify: `apps/desktop/src/components/ChatView.tsx`
 
 - [ ] **Step 1: 在助手气泡内分支渲染**
 
@@ -387,7 +387,7 @@ Expected: 无错误
 - [ ] **Step 3: Commit**
 
 ```bash
-git add frontend/src/components/ChatView.tsx
+git add apps/desktop/src/components/ChatView.tsx
 git commit -m "$(cat <<'EOF'
 feat(chat): render assistant bubble from timeline segments
 
@@ -400,7 +400,7 @@ EOF
 ### Task 3: App 流式接线
 
 **Files:**
-- Modify: `frontend/src/App.tsx`
+- Modify: `apps/desktop/src/App.tsx`
 
 - [ ] **Step 1: import helpers**
 
@@ -459,7 +459,7 @@ Expected: 干净
 - [ ] **Step 7: Commit**
 
 ```bash
-git add frontend/src/App.tsx
+git add apps/desktop/src/App.tsx
 git commit -m "$(cat <<'EOF'
 feat(chat): build timeline segments during stream events
 
@@ -668,8 +668,8 @@ EOF
 - Modify: `memory/src/session/store/search.rs`
 - Modify: `memory/tests/session_store_test.rs`（或新建 `timeline_history_test.rs`）
 - Modify: `frontend/src-tauri/src/commands.rs`
-- Modify: `frontend/src/types.ts`（history DTO）
-- Modify: `frontend/src/App.tsx`（`mapHistoryMessages`）
+- Modify: `apps/desktop/src/types.ts`（history DTO）
+- Modify: `apps/desktop/src/App.tsx`（`mapHistoryMessages`）
 
 - [ ] **Step 1: 扩展 `ChatHistoryMessage`**
 
@@ -745,7 +745,7 @@ uiSurfaces: Array.isArray(m.uiSurfaces)
 - [ ] **Step 6: Commit**
 
 ```bash
-git add memory frontend/src-tauri/src/commands.rs frontend/src/App.tsx frontend/src/types.ts
+git add memory frontend/src-tauri/src/commands.rs apps/desktop/src/App.tsx apps/desktop/src/types.ts
 git commit -m "$(cat <<'EOF'
 feat(session): restore chat timeline segments from reasoning_details
 

@@ -93,7 +93,7 @@ type ModelCapabilities = {
 
 | 位置 | 改动 |
 |------|------|
-| `frontend/src/types.ts` | `ModelCapabilities` 增加三字段 |
+| `apps/desktop/src/types.ts` | `ModelCapabilities` 增加三字段 |
 | `ModelPicker` | `ModelOption` 保留 `capabilities`；供应商行渲染图标 |
 | 新小组件（如 `ModelCapabilityIcons`） | 按固定顺序渲染，便于单测 |
 | `modelCaps.ts` `inferModelCapabilities` | 新字段默认 false（或仅作调用方补缺），**列表主路径以后端 enrich 为准** |

@@ -28,8 +28,8 @@
 | Modify: `agent/src/loop_.rs` | 富字段落盘 API；ensure session |
 | Modify: `agent/src/streaming.rs` | 累积 reasoning；assistant/tool append 带结构化字段 |
 | Modify: `frontend/src-tauri/src/commands.rs` | 富 `ChatHistoryDto`；`list_recent_sessions` 改查 SessionStore |
-| Modify: `frontend/src/App.tsx` | restore 消费 `reasoning`/`activities` |
-| Modify: `frontend/src/types.ts` | history DTO 类型（若前端单独声明） |
+| Modify: `apps/desktop/src/App.tsx` | restore 消费 `reasoning`/`activities` |
+| Modify: `apps/desktop/src/types.ts` | history DTO 类型（若前端单独声明） |
 | Modify: `tools/src/builtins/memory_tools.rs` | `session_search` 描述改为搜索历史消息 |
 | Modify: `agent/src/cron_exec.rs` | 去掉 `SessionDb::save_session`，改 `create_session`/`set_title` |
 
@@ -524,8 +524,8 @@ EOF
 
 **Files:**
 - Modify: `frontend/src-tauri/src/commands.rs`
-- Modify: `frontend/src/App.tsx`
-- Modify: `frontend/src/types.ts`（如需要）
+- Modify: `apps/desktop/src/App.tsx`
+- Modify: `apps/desktop/src/types.ts`（如需要）
 
 - [x] **Step 1: Expand DTOs**
 
@@ -583,7 +583,7 @@ Run: `cd frontend && npx tsc --noEmit`（若项目惯用）
 - [x] **Step 4: Commit**
 
 ```bash
-git add frontend/src-tauri/src/commands.rs frontend/src/App.tsx frontend/src/types.ts
+git add frontend/src-tauri/src/commands.rs apps/desktop/src/App.tsx apps/desktop/src/types.ts
 git commit -m "$(cat <<'EOF'
 feat(chat): restore rich history with activities and reasoning
 

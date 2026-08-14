@@ -28,14 +28,14 @@
 - Modify: `backend/src/grpc/astro_service.rs` — 幂等释放会话运行时。
 - Modify: `frontend/src-tauri/src/commands.rs` — 会话 CRUD commands/DTO。
 - Modify: `frontend/src-tauri/src/lib.rs` — command 注册。
-- Modify: `frontend/src/types.ts` — DTO 类型。
-- Create: `frontend/src/lib/chat/sessionManagement.ts` — invoke 封装与刷新事件。
-- Create: `frontend/src/lib/chat/sessionManagement.test.ts` — 纯状态逻辑测试。
-- Modify: `frontend/src/components/chat/ChatSessionList.tsx` — 页签、菜单与删除确认。
-- Modify: `frontend/src/components/chat/ChatRightPanel.tsx` — 当前会话删除回调。
-- Modify: `frontend/src/hooks/chat/useChatSession.ts` — 删除当前会话后的本地清理。
-- Modify: `frontend/src/App.tsx` — 回调接线。
-- Modify: `frontend/src/i18n/messages.ts` — 中英文文案。
+- Modify: `apps/desktop/src/types.ts` — DTO 类型。
+- Create: `apps/desktop/src/lib/chat/sessionManagement.ts` — invoke 封装与刷新事件。
+- Create: `apps/desktop/src/lib/chat/sessionManagement.test.ts` — 纯状态逻辑测试。
+- Modify: `apps/desktop/src/components/chat/ChatSessionList.tsx` — 页签、菜单与删除确认。
+- Modify: `apps/desktop/src/components/chat/ChatRightPanel.tsx` — 当前会话删除回调。
+- Modify: `apps/desktop/src/hooks/chat/useChatSession.ts` — 删除当前会话后的本地清理。
+- Modify: `apps/desktop/src/App.tsx` — 回调接线。
+- Modify: `apps/desktop/src/i18n/messages.ts` — 中英文文案。
 
 ---
 
@@ -332,7 +332,7 @@ git commit -m "feat(backend): release session runtime idempotently"
 **Files:**
 - Modify: `frontend/src-tauri/src/commands.rs`
 - Modify: `frontend/src-tauri/src/lib.rs`
-- Modify: `frontend/src/types.ts`
+- Modify: `apps/desktop/src/types.ts`
 
 **Interfaces:**
 - Produces commands: `list_sessions`, `rename_session`, `archive_session`, `unarchive_session`, `delete_session_permanently`
@@ -406,7 +406,7 @@ Expected: PASS。
 
 ```bash
 git add frontend/src-tauri/src/commands.rs frontend/src-tauri/src/lib.rs \
-  frontend/src/types.ts
+  apps/desktop/src/types.ts
 git commit -m "feat(tauri): expose session management commands"
 ```
 
@@ -415,11 +415,11 @@ git commit -m "feat(tauri): expose session management commands"
 ### Task 5: 前端会话管理状态与当前会话清理
 
 **Files:**
-- Create: `frontend/src/lib/chat/sessionManagement.ts`
-- Create: `frontend/src/lib/chat/sessionManagement.test.ts`
-- Modify: `frontend/src/hooks/chat/useChatSession.ts`
-- Modify: `frontend/src/components/chat/ChatRightPanel.tsx`
-- Modify: `frontend/src/App.tsx`
+- Create: `apps/desktop/src/lib/chat/sessionManagement.ts`
+- Create: `apps/desktop/src/lib/chat/sessionManagement.test.ts`
+- Modify: `apps/desktop/src/hooks/chat/useChatSession.ts`
+- Modify: `apps/desktop/src/components/chat/ChatRightPanel.tsx`
+- Modify: `apps/desktop/src/App.tsx`
 
 **Interfaces:**
 - Produces: `SessionListKind = "active" | "archived"`
@@ -453,7 +453,7 @@ test("failed delete does not clear active chat", async () => {
 
 - [ ] **Step 2: 运行并确认模块不存在**
 
-Run: `node --import tsx --test frontend/src/lib/chat/sessionManagement.test.ts`  
+Run: `node --import tsx --test apps/desktop/src/lib/chat/sessionManagement.test.ts`  
 Expected: FAIL，无法导入模块。
 
 - [ ] **Step 3: 实现 invoke 封装与 DOM 事件**
@@ -489,7 +489,7 @@ export async function deleteManagedSession(
 
 - [ ] **Step 5: 运行测试与前端构建**
 
-Run: `node --import tsx --test frontend/src/lib/chat/sessionManagement.test.ts`  
+Run: `node --import tsx --test apps/desktop/src/lib/chat/sessionManagement.test.ts`  
 Expected: PASS。
 
 Run: `cd frontend && npm run build`  
@@ -498,10 +498,10 @@ Expected: PASS。
 - [ ] **Step 6: Commit**
 
 ```bash
-git add frontend/src/lib/chat/sessionManagement.ts \
-  frontend/src/lib/chat/sessionManagement.test.ts \
-  frontend/src/hooks/chat/useChatSession.ts \
-  frontend/src/components/chat/ChatRightPanel.tsx frontend/src/App.tsx
+git add apps/desktop/src/lib/chat/sessionManagement.ts \
+  apps/desktop/src/lib/chat/sessionManagement.test.ts \
+  apps/desktop/src/hooks/chat/useChatSession.ts \
+  apps/desktop/src/components/chat/ChatRightPanel.tsx apps/desktop/src/App.tsx
 git commit -m "feat(chat): coordinate session deletion state"
 ```
 
@@ -510,9 +510,9 @@ git commit -m "feat(chat): coordinate session deletion state"
 ### Task 6: 会话侧栏页签、菜单、确认与文案
 
 **Files:**
-- Modify: `frontend/src/components/chat/ChatSessionList.tsx`
-- Modify: `frontend/src/i18n/messages.ts`
-- Modify: `frontend/src/styles/features/chat/right-panel.css`
+- Modify: `apps/desktop/src/components/chat/ChatSessionList.tsx`
+- Modify: `apps/desktop/src/i18n/messages.ts`
+- Modify: `apps/desktop/src/styles/features/chat/right-panel.css`
 
 **Interfaces:**
 - Consumes: Task 4 commands and Task 5 events.
@@ -567,8 +567,8 @@ Expected: PASS。
 - [ ] **Step 6: Commit**
 
 ```bash
-git add frontend/src/components/chat/ChatSessionList.tsx \
-  frontend/src/i18n/messages.ts frontend/src/styles/features/chat/right-panel.css
+git add apps/desktop/src/components/chat/ChatSessionList.tsx \
+  apps/desktop/src/i18n/messages.ts apps/desktop/src/styles/features/chat/right-panel.css
 git commit -m "feat(chat): add session archive and delete controls"
 ```
 
@@ -585,7 +585,7 @@ git commit -m "feat(chat): add session archive and delete controls"
 cargo test -p session -- --nocapture
 cargo test -p backend -- --nocapture
 cargo check -p astro-agent
-node --import tsx --test frontend/src/lib/chat/sessionManagement.test.ts
+node --import tsx --test apps/desktop/src/lib/chat/sessionManagement.test.ts
 cd frontend && npm run build
 ```
 

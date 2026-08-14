@@ -21,9 +21,9 @@
 | `agent/src/streaming.rs` | 抽 `record_llm_usage`；`finish_error` 有 usage 时落库 |
 | `agent/src/cron_exec.rs` | 累加 chunk.usage；成功/失败写 llm 事件 |
 | `agent/tests/` 或 `cron_exec` 可测 helper | 用 `ASTRO_MEMORY_DIR` 断言落库 |
-| `frontend/src/components/InsightsPanel.tsx` | metric 切换 + 柱图 |
-| `frontend/src/styles/insights.css` | metric tabs 样式 |
-| `frontend/src/i18n/messages.ts` | 中英键 |
+| `apps/desktop/src/components/InsightsPanel.tsx` | metric 切换 + 柱图 |
+| `apps/desktop/src/styles/insights.css` | metric tabs 样式 |
+| `apps/desktop/src/i18n/messages.ts` | 中英键 |
 
 ---
 
@@ -189,9 +189,9 @@ EOF
 ### Task 3: Insights 趋势图指标切换
 
 **Files:**
-- Modify: `frontend/src/components/InsightsPanel.tsx`
-- Modify: `frontend/src/styles/insights.css`
-- Modify: `frontend/src/i18n/messages.ts`
+- Modify: `apps/desktop/src/components/InsightsPanel.tsx`
+- Modify: `apps/desktop/src/styles/insights.css`
+- Modify: `apps/desktop/src/i18n/messages.ts`
 
 - [ ] **Step 1: i18n**
 
@@ -235,7 +235,7 @@ cd frontend && ./node_modules/.bin/tsc -b --pretty false
 - [ ] **Step 5: Commit**
 
 ```bash
-git add frontend/src/components/InsightsPanel.tsx frontend/src/styles/insights.css frontend/src/i18n/messages.ts
+git add apps/desktop/src/components/InsightsPanel.tsx apps/desktop/src/styles/insights.css apps/desktop/src/i18n/messages.ts
 git commit -m "$(cat <<'EOF'
 feat(frontend): toggle Insights chart by calls, tokens, or cost
 

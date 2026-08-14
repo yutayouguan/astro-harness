@@ -18,11 +18,11 @@
 
 | 文件 | 职责 |
 |------|------|
-| `frontend/src/lib/insightsView.ts` | `ViewMode`、默认 Tab、是否拉 usage、厂商花钱 Top N |
-| `frontend/src/lib/insightsView.test.ts` | 上述纯函数测试 |
-| `frontend/src/i18n/messages.ts` | `insights.view.overview`、`insights.rank.more`、`insights.rank.providerSpend` 中英 |
-| `frontend/src/components/InsightsPanel.tsx` | Tab / 默认 view / fetch / 总览 UI / 模型 Tab 收敛 |
-| `frontend/src/styles/insights.css` | `.insights-overview-*`、三列 KPI、响应式网格 |
+| `apps/desktop/src/lib/insightsView.ts` | `ViewMode`、默认 Tab、是否拉 usage、厂商花钱 Top N |
+| `apps/desktop/src/lib/insightsView.test.ts` | 上述纯函数测试 |
+| `apps/desktop/src/i18n/messages.ts` | `insights.view.overview`、`insights.rank.more`、`insights.rank.providerSpend` 中英 |
+| `apps/desktop/src/components/InsightsPanel.tsx` | Tab / 默认 view / fetch / 总览 UI / 模型 Tab 收敛 |
+| `apps/desktop/src/styles/insights.css` | `.insights-overview-*`、三列 KPI、响应式网格 |
 
 不做：后端 API、协作/Tracing 布局大改、图表库。
 
@@ -31,13 +31,13 @@
 ### Task 1: `insightsView` 纯模块 + 失败测试
 
 **Files:**
-- Create: `frontend/src/lib/insightsView.ts`
-- Create: `frontend/src/lib/insightsView.test.ts`
+- Create: `apps/desktop/src/lib/insightsView.ts`
+- Create: `apps/desktop/src/lib/insightsView.test.ts`
 
 - [ ] **Step 1: Write the failing test**
 
 ```ts
-// frontend/src/lib/insightsView.test.ts
+// apps/desktop/src/lib/insightsView.test.ts
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
@@ -92,7 +92,7 @@ Expected: FAIL（模块不存在或导出缺失）
 - [ ] **Step 3: Minimal implementation**
 
 ```ts
-// frontend/src/lib/insightsView.ts
+// apps/desktop/src/lib/insightsView.ts
 export type InsightsViewMode =
   | "overview"
   | "models"
@@ -147,7 +147,7 @@ cd frontend && node --experimental-strip-types --test src/lib/insightsView.test.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add frontend/src/lib/insightsView.ts frontend/src/lib/insightsView.test.ts
+git add apps/desktop/src/lib/insightsView.ts apps/desktop/src/lib/insightsView.test.ts
 git commit -m "$(cat <<'EOF'
 feat(frontend): add insights view helpers for overview-first tabs
 
@@ -160,7 +160,7 @@ EOF
 ### Task 2: i18n 键
 
 **Files:**
-- Modify: `frontend/src/i18n/messages.ts`（`zh` 与 `en` 对象，约 insights.view 区块）
+- Modify: `apps/desktop/src/i18n/messages.ts`（`zh` 与 `en` 对象，约 insights.view 区块）
 
 - [ ] **Step 1: 在中文 `zh` 增加键（紧挨现有 insights.view.*）**
 
@@ -189,7 +189,7 @@ EOF
 - [ ] **Step 4: Commit**
 
 ```bash
-git add frontend/src/i18n/messages.ts
+git add apps/desktop/src/i18n/messages.ts
 git commit -m "$(cat <<'EOF'
 feat(i18n): add Insights overview tab strings
 
@@ -202,7 +202,7 @@ EOF
 ### Task 3: InsightsPanel — Tab、默认 view、fetch
 
 **Files:**
-- Modify: `frontend/src/components/InsightsPanel.tsx`
+- Modify: `apps/desktop/src/components/InsightsPanel.tsx`
 
 - [ ] **Step 1: 替换本地 ViewMode / VIEW_TABS / 默认 state / usage effect**
 
@@ -275,7 +275,7 @@ Expected: 可能因尚未渲染 overview 分支而仍通过；若有错误只修
 - [ ] **Step 3: Commit**
 
 ```bash
-git add frontend/src/components/InsightsPanel.tsx
+git add apps/desktop/src/components/InsightsPanel.tsx
 git commit -m "$(cat <<'EOF'
 feat(frontend): default Insights to overview and fetch usage for it
 
@@ -288,8 +288,8 @@ EOF
 ### Task 4: 总览 UI 区块
 
 **Files:**
-- Modify: `frontend/src/components/InsightsPanel.tsx`（`return` 内，error 之后、现有 `view === "models"` 之前）
-- Modify: `frontend/src/styles/insights.css`
+- Modify: `apps/desktop/src/components/InsightsPanel.tsx`（`return` 内，error 之后、现有 `view === "models"` 之前）
+- Modify: `apps/desktop/src/styles/insights.css`
 
 - [ ] **Step 1: 计算 overview 用 provider Top（面板内）**
 
@@ -439,7 +439,7 @@ Expected: PASS
 - [ ] **Step 5: Commit**
 
 ```bash
-git add frontend/src/components/InsightsPanel.tsx frontend/src/styles/insights.css
+git add apps/desktop/src/components/InsightsPanel.tsx apps/desktop/src/styles/insights.css
 git commit -m "$(cat <<'EOF'
 feat(frontend): render Insights overview with KPIs, trend, and spend top
 
@@ -452,8 +452,8 @@ EOF
 ### Task 5: 模型用量 Tab 收敛
 
 **Files:**
-- Modify: `frontend/src/components/InsightsPanel.tsx`（`view === "models"` 分支）
-- Modify: `frontend/src/styles/insights.css`
+- Modify: `apps/desktop/src/components/InsightsPanel.tsx`（`view === "models"` 分支）
+- Modify: `apps/desktop/src/styles/insights.css`
 
 按 spec 明确取舍：
 
@@ -504,7 +504,7 @@ Expected: PASS
 - [ ] **Step 5: Commit**
 
 ```bash
-git add frontend/src/components/InsightsPanel.tsx frontend/src/styles/insights.css
+git add apps/desktop/src/components/InsightsPanel.tsx apps/desktop/src/styles/insights.css
 git commit -m "$(cat <<'EOF'
 refactor(frontend): slim Insights models tab after overview split
 

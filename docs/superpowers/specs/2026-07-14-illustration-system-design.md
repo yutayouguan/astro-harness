@@ -17,7 +17,7 @@
 
 ## 范围
 
-- `frontend/src/illustrations/`：registry + SVG 组件 + EmptyIllustration + CoverPicker
+- `apps/desktop/src/illustrations/`：registry + SVG 组件 + EmptyIllustration + CoverPicker
 - 接入：ChatWelcome、Workspace/Memory/Cron/FileSpace/Providers 空态、AgentCreateGuide
 - 样式：共享 `.astro-empty` / `.astro-cover-*`
 

@@ -33,9 +33,9 @@
 | `tools/src/builtins/mod.rs` / `tools/src/lib.rs` | re-export + `register_all` |
 | `tools/src/core/dispatch.rs` | `match` 分支 |
 | `home/src/config/tools_enabled.rs` | `KNOWN_TOOLSET_IDS` + `tool_name_to_toolset` |
-| `frontend/src/hooks/useAgentTools.ts` | 工具卡片 |
-| `frontend/src/components/ToolIcons.tsx` | `IconAudioUnderstand`（波形/耳机简图标） |
-| `frontend/src/i18n/messages.ts` | 中英 title/desc |
+| `apps/desktop/src/hooks/useAgentTools.ts` | 工具卡片 |
+| `apps/desktop/src/components/ToolIcons.tsx` | `IconAudioUnderstand`（波形/耳机简图标） |
+| `apps/desktop/src/i18n/messages.ts` | 中英 title/desc |
 
 ---
 
@@ -1112,9 +1112,9 @@ EOF
 ### Task 4: 前端工具卡片与文案
 
 **Files:**
-- Modify: `frontend/src/components/ToolIcons.tsx`
-- Modify: `frontend/src/hooks/useAgentTools.ts`
-- Modify: `frontend/src/i18n/messages.ts`
+- Modify: `apps/desktop/src/components/ToolIcons.tsx`
+- Modify: `apps/desktop/src/hooks/useAgentTools.ts`
+- Modify: `apps/desktop/src/i18n/messages.ts`
 
 **Interfaces:**
 - Produces: `AGENT_TOOLS` 条目 `id: "audio_understand"`；中英 i18n；图标组件
@@ -1184,9 +1184,9 @@ Expected: PASS
 - [ ] **Step 5: Commit**
 
 ```bash
-git add frontend/src/components/ToolIcons.tsx \
-  frontend/src/hooks/useAgentTools.ts \
-  frontend/src/i18n/messages.ts
+git add apps/desktop/src/components/ToolIcons.tsx \
+  apps/desktop/src/hooks/useAgentTools.ts \
+  apps/desktop/src/i18n/messages.ts
 git commit -m "$(cat <<'EOF'
 feat(frontend): expose audio_understand tool in agent tools UI
 

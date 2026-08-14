@@ -52,12 +52,12 @@ nav = "files"
 
 | 路径 | 职责 |
 |------|------|
-| [frontend/src/lib/ui/navConfig.ts](../../../frontend/src/lib/ui/navConfig.ts) | `NavId` 含 `files`；`PAGE_META.files` |
-| [frontend/src/components/files/FilesPage.tsx](../../../frontend/src/components/files/FilesPage.tsx) | 外壳：显隐切换、透传 `openPath` / `onOpenSession` |
-| [frontend/src/lib/filespace/filesMode.ts](../../../frontend/src/lib/filespace/filesMode.ts) | `FilesSubmode` + localStorage |
-| [frontend/src/lib/filespace/fileMeta.ts](../../../frontend/src/lib/filespace/fileMeta.ts) | 共享 `formatSize` / `isTauri` |
-| [frontend/src/components/filespace/FileGlyph.tsx](../../../frontend/src/components/filespace/FileGlyph.tsx) | 共享文件类型图标 |
-| [frontend/src/components/filespace/FilePreviewContent.tsx](../../../frontend/src/components/filespace/FilePreviewContent.tsx) | 按类型渲染预览/编辑内容区 |
+| [apps/desktop/src/lib/ui/navConfig.ts](../../../apps/desktop/src/lib/ui/navConfig.ts) | `NavId` 含 `files`；`PAGE_META.files` |
+| [apps/desktop/src/components/files/FilesPage.tsx](../../../apps/desktop/src/components/files/FilesPage.tsx) | 外壳：显隐切换、透传 `openPath` / `onOpenSession` |
+| [apps/desktop/src/lib/filespace/filesMode.ts](../../../apps/desktop/src/lib/filespace/filesMode.ts) | `FilesSubmode` + localStorage |
+| [apps/desktop/src/lib/filespace/fileMeta.ts](../../../apps/desktop/src/lib/filespace/fileMeta.ts) | 共享 `formatSize` / `isTauri` |
+| [apps/desktop/src/components/filespace/FileGlyph.tsx](../../../apps/desktop/src/components/filespace/FileGlyph.tsx) | 共享文件类型图标 |
+| [apps/desktop/src/components/filespace/FilePreviewContent.tsx](../../../apps/desktop/src/components/filespace/FilePreviewContent.tsx) | 按类型渲染预览/编辑内容区 |
 | [frontend/src-tauri/src/artifacts_commands.rs](../../../frontend/src-tauri/src/artifacts_commands.rs) | `find_artifact_by_path` |
 
 ## 行为说明

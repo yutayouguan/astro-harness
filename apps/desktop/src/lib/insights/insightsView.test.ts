@@ -1,4 +1,4 @@
-// frontend/src/lib/insightsView.test.ts
+// apps/desktop/src/lib/insightsView.test.ts
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
