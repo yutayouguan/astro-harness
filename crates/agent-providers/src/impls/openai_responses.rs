@@ -123,8 +123,11 @@ impl CompletionModel for ResponsesCompletionModel {
                 body["instructions"] = json!(inst);
             }
         }
-        if let Some(temp) = request.temperature {
-            body["temperature"] = json!(temp);
+        let has_reasoning = request.thinking.as_ref().is_some_and(|tc| tc.enabled);
+        if !has_reasoning {
+            if let Some(temp) = request.temperature {
+                body["temperature"] = json!(temp);
+            }
         }
         if let Some(max) = request.max_tokens {
             if max > 0 {
