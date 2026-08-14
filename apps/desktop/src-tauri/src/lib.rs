@@ -462,6 +462,7 @@ pub fn run() {
             evolution_run_commands::maybe_run_evolution_auto,
             icon_commands::get_app_icon,
             icon_commands::set_app_icon,
+            commands::list_model_catalog,
         ])
         .setup(|app| {
             if let Err(err) = memory::ensure_default_workspace() {

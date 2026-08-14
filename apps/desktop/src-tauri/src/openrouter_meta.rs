@@ -3,7 +3,7 @@
 //! 源：`GET https://openrouter.ai/api/v1/models?output_modalities=all`
 //! 刷新模型列表时按需拉取，落盘 `~/.astro/openrouter-model-meta.json`。
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -655,6 +655,89 @@ pub fn lookup(id: &str, kind: &str) -> Option<OpenRouterEntry> {
         }
     }
     best.cloned()
+}
+
+/// 前端可序列化的模型目录条目。
+#[derive(Debug, Clone, Serialize)]
+pub struct ModelCatalogEntry {
+    pub id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub context_length: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub created: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub pricing: Option<crate::model_meta::ModelPricingMeta>,
+    pub supports_vision: bool,
+    pub supports_function_calling: bool,
+    pub supports_reasoning: bool,
+    pub supports_web_search: bool,
+    pub supports_image_generation: bool,
+    pub supports_audio_input: bool,
+    pub supports_audio_output: bool,
+    pub input_modalities: Vec<String>,
+    pub output_modalities: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub knowledge_cutoff: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub expiration_date: Option<String>,
+}
+
+/// 返回缓存中所有 OpenRouter 模型条目（供前端目录展示）。
+pub fn all_entries() -> Vec<ModelCatalogEntry> {
+    let guard = match map_lock().read() {
+        Ok(g) => g,
+        Err(_) => return Vec::new(),
+    };
+    guard
+        .values()
+        .map(|e| {
+            let mut input_mods = vec!["text".to_string()];
+            if e.supports_vision {
+                input_mods.push("image".to_string());
+            }
+            if e.supports_audio_input {
+                input_mods.push("audio".to_string());
+            }
+            if e.supports_file_input {
+                input_mods.push("file".to_string());
+            }
+
+            let mut output_mods = vec!["text".to_string()];
+            if e.supports_image_generation {
+                output_mods.push("image".to_string());
+            }
+            if e.supports_video_generation {
+                output_mods.push("video".to_string());
+            }
+            if e.supports_audio_output || e.supports_music_generation {
+                output_mods.push("audio".to_string());
+            }
+
+            ModelCatalogEntry {
+                id: e.matched_key.clone(),
+                name: e.display_name.clone(),
+                description: e.description.clone(),
+                context_length: e.max_input_tokens,
+                created: e.created,
+                pricing: e.pricing.clone(),
+                supports_vision: e.supports_vision,
+                supports_function_calling: e.supports_function_calling,
+                supports_reasoning: e.supports_reasoning,
+                supports_web_search: e.supports_web_search,
+                supports_image_generation: e.supports_image_generation,
+                supports_audio_input: e.supports_audio_input,
+                supports_audio_output: e.supports_audio_output,
+                input_modalities: input_mods,
+                output_modalities: output_mods,
+                knowledge_cutoff: e.knowledge_cutoff.clone(),
+                expiration_date: e.expiration_date.clone(),
+            }
+        })
+        .collect()
 }
 
 #[cfg(test)]

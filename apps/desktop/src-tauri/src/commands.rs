@@ -3000,6 +3000,15 @@ pub async fn get_batch_results(batch_id: String) -> Result<String, String> {
     Ok(result.results_jsonl)
 }
 
+/// 返回 OpenRouter 全量模型目录（缓存刷新后读取）。
+#[tauri::command]
+pub async fn list_model_catalog(
+    force_refresh: bool,
+) -> Result<Vec<crate::openrouter_meta::ModelCatalogEntry>, String> {
+    crate::openrouter_meta::ensure_cache(force_refresh).await?;
+    Ok(crate::openrouter_meta::all_entries())
+}
+
 #[cfg(test)]
 mod tests {
     use super::{parse_session_filter, validate_session_title};

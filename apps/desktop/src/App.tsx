@@ -18,6 +18,7 @@ import CronPanel from "./components/schedule/CronPanel";
 import LoopPanel from "./components/loop/LoopPanel";
 import FilesPage from "./components/files/FilesPage";
 import InsightsPanel from "./components/settings/InsightsPanel";
+import ModelMarketPanel from "./components/settings/ModelMarketPanel";
 import MemoryPanel, {
   type MemoryHeaderAgentPicker,
 } from "./components/settings/MemoryPanel";
@@ -1008,6 +1009,9 @@ export default function App() {
               )}
               {nav === "insights" && (
                 <InsightsPanel active={nav === "insights"} />
+              )}
+              {nav === "models" && (
+                <ModelMarketPanel active={nav === "models"} />
               )}
               {nav === "loop" && (
                 <LoopPanel

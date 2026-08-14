@@ -251,6 +251,16 @@ export function IconEvolution(props: IconProps) {
   );
 }
 
+/** 模型市场 — 排行/比较图标 */
+export function IconModelMarket(props: IconProps) {
+  return (
+    <NavIconBase {...props}>
+      <path d="M3 3v16a2 2 0 0 0 2 2h16" />
+      <path d="M7 16l4-8 4 5 4-9" />
+    </NavIconBase>
+  );
+}
+
 /** 模型提供商 — 闪电剪影，选中整块填实 */
 export function IconProviders(props: IconProps) {
   return (

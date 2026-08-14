@@ -6,6 +6,7 @@ import {
   IconInsights,
   IconLoop,
   IconMemory,
+  IconModelMarket,
   IconProviders,
   IconSettings,
   IconSkills,
@@ -31,6 +32,7 @@ export type NavId =
   | "insights"
   | "cron"
   | "providers"
+  | "models"
   | "settings";
 
 export type Tone =
@@ -85,6 +87,12 @@ export const NAV: {
     tone: "aurora",
   },
   {
+    id: "models",
+    labelKey: "nav.models",
+    Icon: IconModelMarket,
+    tone: "indigo",
+  },
+  {
     id: "settings",
     labelKey: "nav.settings",
     Icon: IconSettings,
@@ -114,6 +122,10 @@ export const PAGE_META: Record<
   providers: {
     titleKey: "page.providers.title",
     subKey: "page.providers.sub",
+  },
+  models: {
+    titleKey: "page.models.title",
+    subKey: "page.models.sub",
   },
   settings: { titleKey: "page.settings.title", subKey: "page.settings.sub" },
 };
