@@ -667,7 +667,10 @@ pub(crate) fn resolve_api_key(
 
 /// 支持 Responses API 切换的厂商。
 fn supports_responses_toggle(kind: ProviderKind) -> bool {
-    matches!(kind, ProviderKind::Openai | ProviderKind::Minimax)
+    matches!(
+        kind,
+        ProviderKind::Openai | ProviderKind::Minimax | ProviderKind::Deepseek
+    )
 }
 
 /// 根据 api_mode 覆盖计算实际 backend_id。
@@ -676,6 +679,7 @@ fn effective_backend_id(kind: ProviderKind, api_mode: &str) -> &'static str {
         match kind {
             ProviderKind::Openai => "openai-responses",
             ProviderKind::Minimax => "minimax-responses",
+            ProviderKind::Deepseek => "openai-responses",
             _ => kind.backend_id(),
         }
     } else {
