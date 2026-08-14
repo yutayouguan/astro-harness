@@ -1452,7 +1452,18 @@ export default function ProvidersPanel({ active, onStateChange, tone }: Props) {
             {loading && !state && (
               <li className="providers-empty">{t("skills.refreshing")}</li>
             )}
-            {state?.providers.map((p, index) => {
+            {state?.providers
+            .slice()
+            .sort((a, b) => {
+              const rank = (p: typeof a) => {
+                if (!p.enabled) return 2;
+                const h = healthById[p.id];
+                if (h === "ok") return 0;
+                return 1;
+              };
+              return rank(a) - rank(b);
+            })
+            .map((p, index) => {
               const activeDefault = state.active_provider_id === p.id;
               const isDragging = drag?.id === p.id;
               const showInsertBefore =
