@@ -76,11 +76,8 @@ pub fn to_responses_input(messages: &[Message]) -> Vec<Value> {
                 }));
             }
 
-            Message::System { content } => {
-                input.push(json!({
-                    "role": "system",
-                    "content": json!(content),
-                }));
+            Message::System { .. } => {
+                // 跳过：由调用方通过顶层 `instructions` 字段发送
             }
         }
     }
@@ -108,8 +105,8 @@ fn build_content_from_user(parts: &[UserContent]) -> Value {
                 "data": url,
             }),
             UserContent::Video { url, .. } => json!({
-                "type": "input_video",
-                "video_url": url,
+                "type": "input_file",
+                "file_url": url,
             }),
             UserContent::Document { url, .. } => json!({
                 "type": "input_file",
@@ -256,7 +253,7 @@ pub fn extract_responses_chunks(data: &str) -> Vec<StreamChunk> {
 
         "response.incomplete" => {
             one!(StreamChunk::Done {
-                finish_reason: "stop".to_string()
+                finish_reason: "length".to_string()
             });
         }
 
@@ -366,14 +363,14 @@ mod tests {
     }
 
     #[test]
-    fn system_message_extracted() {
+    fn system_message_skipped() {
         let msgs = vec![
             Message::system("You are helpful"),
             Message::user_text("hello"),
         ];
         let input = to_responses_input(&msgs);
-        assert_eq!(input.len(), 2);
-        assert_eq!(input[0]["role"], "system");
+        assert_eq!(input.len(), 1);
+        assert_eq!(input[0]["role"], "user");
     }
 
     // ── SSE 解析 ──
