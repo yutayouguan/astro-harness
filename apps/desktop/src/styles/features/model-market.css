@@ -208,33 +208,52 @@ html[data-theme="dark"] .model-market-view-btn.active {
   to { transform: rotate(360deg); }
 }
 
-@keyframes mm-fade-in {
+/* ── Scroll animation (VSCode-Animations style) ──── */
+
+@keyframes mm-scroll-scale {
   from {
-    opacity: 0;
-    transform: translateY(8px);
+    opacity: 0.4;
+    transform: scale(0.92);
   }
   to {
     opacity: 1;
-    transform: translateY(0);
+    transform: scale(1);
   }
 }
 
-.mm-fade-in {
-  animation: mm-fade-in 0.3s ease both;
+@keyframes mm-scroll-slide {
+  from {
+    opacity: 0.4;
+    transform: translateX(-12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
 }
 
-.mm-parallax {
-  will-change: transform;
-  transition: transform 0.08s linear;
+@keyframes mm-scroll-fade {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+.mm-scroll-anim {
+  animation: mm-scroll-scale 0.28s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.view-list .mm-scroll-anim {
+  animation-name: mm-scroll-slide;
+  animation-duration: 0.24s;
+}
+
+.view-detail .mm-scroll-anim {
+  animation-name: mm-scroll-fade;
+  animation-duration: 0.32s;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .mm-fade-in {
-    animation: none;
-  }
-  .mm-parallax {
-    transform: none !important;
-    transition: none;
+  .mm-scroll-anim {
+    animation: none !important;
   }
 }
 
