@@ -28,6 +28,7 @@ import Stepfun from "@lobehub/icons/es/Stepfun/components/Mono";
 import Together from "@lobehub/icons/es/Together/components/Mono";
 import Volcengine from "@lobehub/icons/es/Volcengine/components/Mono";
 import XAI from "@lobehub/icons/es/XAI/components/Mono";
+import XiaomiMiMo from "@lobehub/icons/es/XiaomiMiMo/components/Mono";
 import Yi from "@lobehub/icons/es/Yi/components/Mono";
 import Zhipu from "@lobehub/icons/es/Zhipu/components/Mono";
 
@@ -70,7 +71,8 @@ type BrandKey =
   | "stepfun"
   | "internlm"
   | "yi"
-  | "bytedance";
+  | "bytedance"
+  | "xiaomi";
 
 const BRAND_ICONS: Record<BrandKey, LobeMonoIcon> = {
   anthropic: Anthropic,
@@ -102,6 +104,7 @@ const BRAND_ICONS: Record<BrandKey, LobeMonoIcon> = {
   internlm: InternLM,
   yi: Yi,
   bytedance: ByteDance,
+  xiaomi: XiaomiMiMo,
 };
 
 function toIconProps(props: IconProps): {
@@ -204,6 +207,7 @@ function resolveModelBrand(modelId: string): BrandKey | null {
   if (id.includes("moonshot")) return "moonshot";
   if (id.includes("doubao")) return "doubao";
   if (id.includes("bytedance") || id.includes("seedance") || id.includes("seedream")) return "bytedance";
+  if (id.includes("mimo") || id.includes("xiaomi")) return "xiaomi";
   if (id.includes("volc") || id.includes("ep-")) return "volcengine";
   if (id.includes("minimax") || id.includes("minmax") || id.includes("abab")) {
     return "minimax";
