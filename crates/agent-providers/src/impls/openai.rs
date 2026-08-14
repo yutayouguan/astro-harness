@@ -225,7 +225,7 @@ pub async fn probe_openai_responses(
     let body = json!({
         "model": model,
         "input": "ping",
-        "max_output_tokens": 1,
+        "max_output_tokens": 16,
     });
     let mut req = client.post(&url).json(&body);
     if !api_key.is_empty() {

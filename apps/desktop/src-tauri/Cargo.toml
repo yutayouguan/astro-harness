@@ -52,7 +52,7 @@ workflow = { path = "../../../crates/agent-workflow" }
 chrono = { version = "0.4", features = ["clock"] }
 url = "2"
 keyring = "3"
-reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "macos-system-configuration"] }
 futures = "0.3"
 base64 = "0.22"
 trash = "5"
