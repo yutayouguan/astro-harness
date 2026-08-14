@@ -489,56 +489,88 @@ export default function ModelMarketPanel({ active }: { active: boolean }) {
               className={`model-market-card ${selectedId === m.id ? "is-selected" : ""}`}
               onClick={() => setSelectedId(m.id === selectedId ? null : m.id)}
             >
-              <div className="model-market-card-head">
-                <span className="model-market-card-logo">
-                  <ModelBrandIcon modelId={m.id} width={viewMode === "list" ? 16 : 20} height={viewMode === "list" ? 16 : 20} />
-                </span>
-                <div className="model-market-card-titles">
-                  <span className="model-market-card-provider">
-                    {providerFromId(m.id)}
-                  </span>
-                  <span className="model-market-card-name">
-                    {stripProviderPrefix(m.name ?? modelSlug(m.id), providerFromId(m.id))}
-                  </span>
-                </div>
-                {m.created && (
-                  <span className="model-market-card-age">
-                    {timeSince(m.created)}
-                  </span>
-                )}
-                <ChevronRight size={14} className="model-market-card-arrow" />
-              </div>
-
-              <div className="model-market-card-meta">
-                <span className="model-market-chip" title={t("modelMarket.context")}>
-                  {formatCtx(m.context_length)}
-                </span>
-                {m.pricing && (
-                  <>
-                    <span
-                      className="model-market-chip price"
-                      title={`${t("modelMarket.inputPrice")}${t("modelMarket.perMillion")}`}
-                    >
-                      {formatPrice(m.pricing.prompt_per_million)}
+              {viewMode === "detail" ? (
+                <>
+                  <div className="model-market-card-head">
+                    <span className="model-market-card-logo">
+                      <ModelBrandIcon modelId={m.id} width={24} height={24} />
                     </span>
-                    <span className="model-market-chip-sep">/</span>
-                    <span
-                      className="model-market-chip price"
-                      title={`${t("modelMarket.outputPrice")}${t("modelMarket.perMillion")}`}
-                    >
-                      {formatPrice(m.pricing.completion_per_million)}
+                    <div className="model-market-card-titles">
+                      <span className="model-market-card-provider">
+                        {providerFromId(m.id)}
+                      </span>
+                      <span className="model-market-card-name">
+                        {stripProviderPrefix(m.name ?? modelSlug(m.id), providerFromId(m.id))}
+                      </span>
+                    </div>
+                    {m.created && (
+                      <span className="model-market-card-age">{timeSince(m.created)}</span>
+                    )}
+                    <ChevronRight size={14} className="model-market-card-arrow" />
+                  </div>
+                  <div className="model-market-card-detail-body">
+                    <div className="model-market-card-detail-stats">
+                      <span className="model-market-chip">{formatCtx(m.context_length)}</span>
+                      {m.pricing && (
+                        <>
+                          <span className="model-market-chip price">
+                            {formatPrice(m.pricing.prompt_per_million)}
+                          </span>
+                          <span className="model-market-chip-sep">/</span>
+                          <span className="model-market-chip price">
+                            {formatPrice(m.pricing.completion_per_million)}
+                          </span>
+                        </>
+                      )}
+                      <CapabilityBadges m={m} />
+                    </div>
+                    {m.description && (
+                      <p className="model-market-card-desc">{m.description}</p>
+                    )}
+                    {m.knowledge_cutoff && (
+                      <span className="model-market-card-cutoff">
+                        Knowledge: {m.knowledge_cutoff}
+                      </span>
+                    )}
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="model-market-card-head">
+                    <span className="model-market-card-logo">
+                      <ModelBrandIcon modelId={m.id} width={viewMode === "list" ? 16 : 20} height={viewMode === "list" ? 16 : 20} />
                     </span>
-                  </>
-                )}
-                <CapabilityBadges m={m} />
-              </div>
-
-              {viewMode === "detail" && m.description && (
-                <p className="model-market-card-desc">
-                  {m.description.length > 200
-                    ? m.description.slice(0, 200) + "…"
-                    : m.description}
-                </p>
+                    <div className="model-market-card-titles">
+                      <span className="model-market-card-provider">
+                        {providerFromId(m.id)}
+                      </span>
+                      <span className="model-market-card-name">
+                        {stripProviderPrefix(m.name ?? modelSlug(m.id), providerFromId(m.id))}
+                      </span>
+                    </div>
+                    {m.created && (
+                      <span className="model-market-card-age">{timeSince(m.created)}</span>
+                    )}
+                    <ChevronRight size={14} className="model-market-card-arrow" />
+                  </div>
+                  <div className="model-market-card-meta">
+                    <span className="model-market-chip" title={t("modelMarket.context")}>
+                      {formatCtx(m.context_length)}
+                    </span>
+                    {m.pricing && (
+                      <>
+                        <span className="model-market-chip price">
+                          {formatPrice(m.pricing.prompt_per_million)}
+                        </span>
+                        <span className="model-market-chip-sep">/</span>
+                        <span className="model-market-chip price">
+                          {formatPrice(m.pricing.completion_per_million)}
+                        </span>
+                      </>
+                    )}
+                    <CapabilityBadges m={m} />
+                  </div>
+                </>
               )}
             </button>
           ))}

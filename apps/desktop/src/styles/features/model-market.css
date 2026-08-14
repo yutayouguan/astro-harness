@@ -330,12 +330,31 @@ html[data-theme="dark"] .model-market-view-btn.active {
   height: 36px;
 }
 
+.model-market-card-detail-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-left: 46px;
+}
+
+.model-market-card-detail-stats {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
 .model-market-card-desc {
-  font-size: 12.5px;
+  font-size: 13px;
   line-height: 1.6;
   color: var(--ink-mute);
   margin: 0;
-  padding-left: 42px;
+}
+
+.model-market-card-cutoff {
+  font-size: 11.5px;
+  color: var(--ink-mute);
+  opacity: 0.7;
 }
 
 .model-market-empty {

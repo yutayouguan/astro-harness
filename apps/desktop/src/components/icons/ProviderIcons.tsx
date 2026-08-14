@@ -5,6 +5,7 @@ import Azure from "@lobehub/icons/es/Azure/components/Mono";
 import Bailian from "@lobehub/icons/es/Bailian/components/Mono";
 import Cohere from "@lobehub/icons/es/Cohere/components/Mono";
 import DeepSeek from "@lobehub/icons/es/DeepSeek/components/Mono";
+import ByteDance from "@lobehub/icons/es/ByteDance/components/Mono";
 import Doubao from "@lobehub/icons/es/Doubao/components/Mono";
 import Fireworks from "@lobehub/icons/es/Fireworks/components/Mono";
 import Gemini from "@lobehub/icons/es/Gemini/components/Mono";
@@ -68,7 +69,8 @@ type BrandKey =
   | "huggingface"
   | "stepfun"
   | "internlm"
-  | "yi";
+  | "yi"
+  | "bytedance";
 
 const BRAND_ICONS: Record<BrandKey, LobeMonoIcon> = {
   anthropic: Anthropic,
@@ -99,6 +101,7 @@ const BRAND_ICONS: Record<BrandKey, LobeMonoIcon> = {
   stepfun: Stepfun,
   internlm: InternLM,
   yi: Yi,
+  bytedance: ByteDance,
 };
 
 function toIconProps(props: IconProps): {
@@ -200,6 +203,7 @@ function resolveModelBrand(modelId: string): BrandKey | null {
   if (id.includes("kimi")) return "kimi";
   if (id.includes("moonshot")) return "moonshot";
   if (id.includes("doubao")) return "doubao";
+  if (id.includes("bytedance") || id.includes("seedance") || id.includes("seedream")) return "bytedance";
   if (id.includes("volc") || id.includes("ep-")) return "volcengine";
   if (id.includes("minimax") || id.includes("minmax") || id.includes("abab")) {
     return "minimax";
