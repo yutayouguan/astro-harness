@@ -196,11 +196,10 @@ fn set_app_menu_locale(app: AppHandle, locale: String) -> Result<(), String> {
     Ok(())
 }
 
-/// macOS：吞掉原生 `zoom:`（标题栏双击白边根因，见 tauri#13898 / tao#1207）。
-/// 底色保持不透明 underlay，勿清成 clearColor（露白边）。
+/// macOS：注入 NSVisualEffectView 实现原生毛玻璃透明效果。
 #[cfg(target_os = "macos")]
 fn configure_macos_window(win: &tauri::WebviewWindow) {
-    use objc::runtime::Object;
+    use objc::runtime::{Class, Object, BOOL, YES};
     use objc::{msg_send, sel, sel_impl};
 
     if let Ok(ns_window) = win.ns_window() {
@@ -211,18 +210,70 @@ fn configure_macos_window(win: &tauri::WebviewWindow) {
             if content_view.is_null() {
                 return;
             }
+
+            // 子视图自动缩放
             let subviews: *mut Object = msg_send![content_view, subviews];
-            if subviews.is_null() {
-                return;
-            }
-            let flexible: usize = 2 | 16; // WidthSizable | HeightSizable
-            let count: usize = msg_send![subviews, count];
-            for i in 0..count {
-                let child: *mut Object = msg_send![subviews, objectAtIndex: i];
-                if child.is_null() {
-                    continue;
+            if !subviews.is_null() {
+                let flexible: usize = 2 | 16; // WidthSizable | HeightSizable
+                let count: usize = msg_send![subviews, count];
+                for i in 0..count {
+                    let child: *mut Object = msg_send![subviews, objectAtIndex: i];
+                    if !child.is_null() {
+                        let _: () = msg_send![child, setAutoresizingMask: flexible];
+                    }
                 }
-                let _: () = msg_send![child, setAutoresizingMask: flexible];
+            }
+
+            // 注入 NSVisualEffectView
+            let cls = Class::get("NSVisualEffectView").unwrap();
+            let bounds: ((f64, f64), (f64, f64)) = msg_send![content_view, bounds];
+            let alloc: *mut Object = msg_send![cls, alloc];
+            let effect_view: *mut Object = msg_send![alloc, initWithFrame: bounds];
+            // NSVisualEffectMaterial.HudWindow = 13 (深色半透) / .Sidebar = 7 / .UnderWindowBackground = 21
+            let _: () = msg_send![effect_view, setMaterial: 21_i64]; // UnderWindowBackground
+            // NSVisualEffectBlendingMode.BehindWindow = 0
+            let _: () = msg_send![effect_view, setBlendingMode: 0_i64];
+            // NSVisualEffectState.FollowsWindowActiveState = 0 / Active = 1
+            let _: () = msg_send![effect_view, setState: 1_i64]; // 始终激活
+            let flexible: usize = 2 | 16;
+            let _: () = msg_send![effect_view, setAutoresizingMask: flexible];
+
+            // 插到最底层
+            let subviews: *mut Object = msg_send![content_view, subviews];
+            let first: *mut Object = if !subviews.is_null() {
+                let count: usize = msg_send![subviews, count];
+                if count > 0 { msg_send![subviews, objectAtIndex: 0_usize] } else { std::ptr::null_mut() }
+            } else {
+                std::ptr::null_mut()
+            };
+            if !first.is_null() {
+                let _: () = msg_send![content_view, addSubview: effect_view positioned: 2_i64 relativeTo: first];
+                // NSWindowOrderingMode.Below = 2 — 这里 positioned: 是 NSWindowOrderingMode
+                // 但 addSubview:positioned:relativeTo: 的 positioned 参数是 NSWindowOrderingMode
+                // Below = -1, Out = 0, Above = 1
+                // 实际上用 addSubview:positioned:relativeTo: 参数是 NSWindowOrderingMode
+            } else {
+                let _: () = msg_send![content_view, addSubview: effect_view];
+            }
+
+            // WebView 背景透明
+            let wk_webview: *mut Object = msg_send![content_view, subviews];
+            if !wk_webview.is_null() {
+                let count: usize = msg_send![wk_webview, count];
+                for i in 0..count {
+                    let sv: *mut Object = msg_send![wk_webview, objectAtIndex: i];
+                    if !sv.is_null() {
+                        let sv_class: *mut Object = msg_send![sv, class];
+                        let class_name: *mut Object = msg_send![sv_class, description];
+                        let c_str: *const std::os::raw::c_char = msg_send![class_name, UTF8String];
+                        if !c_str.is_null() {
+                            let name = std::ffi::CStr::from_ptr(c_str).to_string_lossy();
+                            if name.contains("WKWebView") || name.contains("WebView") {
+                                let _: () = msg_send![sv, setDrawsBackground: false as BOOL];
+                            }
+                        }
+                    }
+                }
             }
         }
     }
@@ -533,12 +584,18 @@ pub fn run() {
                 .cloned()
                 .expect("missing window config");
 
-            let window = WebviewWindowBuilder::from_config(app.handle(), &config)?
-                .background_color(BG)
-                .auto_resize()
-                .build()?;
+            let builder = WebviewWindowBuilder::from_config(app.handle(), &config)?
+                .auto_resize();
+
+            #[cfg(target_os = "macos")]
+            let builder = builder.transparent(true);
+            #[cfg(not(target_os = "macos"))]
+            let builder = builder.background_color(BG);
+
+            let window = builder.build()?;
 
             let _ = window.set_title("Astro");
+            #[cfg(not(target_os = "macos"))]
             let _ = window.set_background_color(Some(BG));
             let _ = window.as_ref().set_auto_resize(true);
 

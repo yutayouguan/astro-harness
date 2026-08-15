@@ -70,6 +70,15 @@ html.zooming #root {
   background: var(--window-underlay, var(--bg1)) !important;
 }
 
+/* macOS 原生透明：body 背景半透明，让 NSVisualEffectView 穿透 */
+html[data-platform="macos"] body {
+  background: color-mix(in srgb, var(--window-underlay, var(--bg1)) 72%, transparent) !important;
+}
+
+html[data-platform="macos"][data-theme="dark"] body {
+  background: color-mix(in srgb, var(--window-underlay, var(--bg1)) 55%, transparent) !important;
+}
+
 
 /* Overlay 标题栏：红绿灯约占 12–38px 高、左侧约 78px 宽 */
 :root {
