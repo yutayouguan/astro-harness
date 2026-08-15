@@ -332,6 +332,15 @@ fn extract_interactions_delta(data: &str) -> Option<crate::types::StreamChunk> {
     let v: Value = serde_json::from_str(data).ok()?;
     let event_type = v.get("event_type").and_then(|e| e.as_str()).unwrap_or("");
 
+    // interaction.created → extract interaction_id early
+    if event_type == "interaction.created" {
+        let id = v
+            .pointer("/interaction/id")
+            .and_then(|s| s.as_str())
+            .map(str::to_string)?;
+        return Some(StreamChunk::InteractionId(id));
+    }
+
     // interaction completed → extract usage + finish
     if event_type.contains("completed") || event_type.contains("failed") {
         let status = v

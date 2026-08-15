@@ -107,6 +107,8 @@ pub fn build_interaction_tts_body(req: &InteractionTtsRequest) -> Value {
 }
 
 /// 解析非流式 Interactions TTS 响应。
+///
+/// 优先读 `output_audio`（便利属性），回退到 `steps` 数组中的 audio 块。
 pub fn parse_interaction_tts_response(v: &Value) -> Result<InteractionTtsResult> {
     let interaction_id = v
         .get("id")
@@ -114,11 +116,49 @@ pub fn parse_interaction_tts_response(v: &Value) -> Result<InteractionTtsResult>
         .unwrap_or("")
         .to_string();
 
-    let b64 = v
+    let mut audio_b64: Option<&str> = v
         .pointer("/output_audio/data")
         .or_else(|| v.pointer("/outputAudio/data"))
-        .and_then(|d| d.as_str())
-        .ok_or_else(|| anyhow!("Google interactions TTS 响应无 output_audio.data"))?;
+        .and_then(|d| d.as_str());
+
+    let mut rate_hint: Option<&str> = v
+        .pointer("/output_audio/mime_type")
+        .or_else(|| v.pointer("/output_audio/mimeType"))
+        .or_else(|| v.pointer("/outputAudio/mime_type"))
+        .and_then(|m| m.as_str());
+
+    if audio_b64.is_none() {
+        if let Some(steps) = v.get("steps").and_then(|s| s.as_array()) {
+            for step in steps {
+                if step_type(step) != "model_output" {
+                    continue;
+                }
+                let Some(content) = step.get("content").and_then(|c| c.as_array()) else {
+                    continue;
+                };
+                for block in content {
+                    if block_type(block) == "audio" {
+                        if let Some(d) = block.get("data").and_then(|x| x.as_str()) {
+                            audio_b64 = Some(d);
+                        }
+                        if let Some(m) = block
+                            .get("mime_type")
+                            .or_else(|| block.get("mimeType"))
+                            .and_then(|x| x.as_str())
+                        {
+                            rate_hint = Some(m);
+                        }
+                        break;
+                    }
+                }
+                if audio_b64.is_some() {
+                    break;
+                }
+            }
+        }
+    }
+
+    let b64 = audio_b64.ok_or_else(|| anyhow!("Google interactions TTS 响应无音频数据"))?;
 
     let pcm = base64::engine::general_purpose::STANDARD
         .decode(b64)
@@ -127,14 +167,7 @@ pub fn parse_interaction_tts_response(v: &Value) -> Result<InteractionTtsResult>
         anyhow::bail!("Google interactions TTS 返回空音频");
     }
 
-    let rate = mime_sample_rate(
-        v.pointer("/output_audio/mime_type")
-            .or_else(|| v.pointer("/output_audio/mimeType"))
-            .or_else(|| v.pointer("/outputAudio/mime_type"))
-            .and_then(|m| m.as_str())
-            .unwrap_or(""),
-    )
-    .unwrap_or(DEFAULT_SAMPLE_RATE);
+    let rate = mime_sample_rate(rate_hint.unwrap_or("")).unwrap_or(DEFAULT_SAMPLE_RATE);
 
     Ok(InteractionTtsResult {
         wav_bytes: pcm_to_wav(&pcm, rate, 1, 16),
@@ -419,15 +452,18 @@ pub fn build_interaction_image_body(model: &str, req: &InteractionImageRequest) 
         }
     }
 
-    let mut response_format = json!({ "type": "image" });
+    let mime = req
+        .mime_type
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .unwrap_or("image/png");
+    let mut response_format = json!({ "type": "image", "mime_type": mime });
     if let Some(ar) = req.aspect_ratio.as_deref().filter(|s| !s.is_empty()) {
         response_format["aspect_ratio"] = json!(ar);
     }
     if let Some(sz) = req.image_size.as_deref().filter(|s| !s.is_empty()) {
         response_format["image_size"] = json!(sz);
-    }
-    if let Some(mt) = req.mime_type.as_deref().filter(|s| !s.is_empty()) {
-        response_format["mime_type"] = json!(mt);
     }
 
     let mut body = json!({
@@ -1613,7 +1649,7 @@ mod tests {
         let c1 = base64::engine::general_purpose::STANDARD.encode([1u8, 2]);
         let c2 = base64::engine::general_purpose::STANDARD.encode([3u8, 4]);
         let events = vec![
-            json!({ "event_type": "interaction.start", "id": "ix-s" }),
+            json!({ "event_type": "interaction.created", "interaction": { "id": "ix-s" }, "id": "ix-s" }),
             json!({
                 "event_type": "step.delta",
                 "delta": { "type": "audio", "data": c1 }
