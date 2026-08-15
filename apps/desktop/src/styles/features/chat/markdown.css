@@ -2755,30 +2755,39 @@ html[data-theme="dark"] .chat-welcome-card-glyph {
 }
 
 .chat-welcome-carousel .chat-welcome-grid {
-  animation: wc-enter 0.32s cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation: wc-enter-next 0.32s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.chat-welcome-carousel.is-entering-prev .chat-welcome-grid {
+  animation: wc-enter-prev 0.32s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
 .chat-welcome-carousel.is-leaving-next .chat-welcome-grid {
-  animation: wc-leave-next 0.22s cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation: wc-leave-next 0.24s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
 .chat-welcome-carousel.is-leaving-prev .chat-welcome-grid {
-  animation: wc-leave-prev 0.22s cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation: wc-leave-prev 0.24s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
-@keyframes wc-enter {
-  from { opacity: 0; transform: translateY(10px); }
-  to   { opacity: 1; transform: translateY(0); }
+@keyframes wc-enter-next {
+  from { opacity: 0; transform: translateX(60px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes wc-enter-prev {
+  from { opacity: 0; transform: translateX(-60px); }
+  to   { opacity: 1; transform: translateX(0); }
 }
 
 @keyframes wc-leave-next {
   from { opacity: 1; transform: translateX(0); }
-  to   { opacity: 0; transform: translateX(-24px); }
+  to   { opacity: 0; transform: translateX(-60px); }
 }
 
 @keyframes wc-leave-prev {
   from { opacity: 1; transform: translateX(0); }
-  to   { opacity: 0; transform: translateX(24px); }
+  to   { opacity: 0; transform: translateX(60px); }
 }
 
 /* ── 分页圆点 ─────────────────────────────────────── */
@@ -2815,6 +2824,7 @@ html[data-theme="dark"] .chat-welcome-card-glyph {
 
 @media (prefers-reduced-motion: reduce) {
   .chat-welcome-carousel .chat-welcome-grid,
+  .chat-welcome-carousel.is-entering-prev .chat-welcome-grid,
   .chat-welcome-carousel.is-leaving-next .chat-welcome-grid,
   .chat-welcome-carousel.is-leaving-prev .chat-welcome-grid {
     animation: none;

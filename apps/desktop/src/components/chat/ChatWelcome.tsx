@@ -81,7 +81,7 @@ export function ChatWelcome({ onPickCard }: Props) {
     setTimeout(() => {
       setActiveGroup(idx);
       setTimeout(() => setAnimating(false), 40);
-    }, 220);
+    }, 240);
   }, [animating]);
 
   const next = useCallback(() => {
@@ -131,7 +131,7 @@ export function ChatWelcome({ onPickCard }: Props) {
         <p className="chat-welcome-sub">{t("chat.welcomeSub")}</p>
       </div>
 
-      <div className={`chat-welcome-carousel ${animating ? `is-leaving-${direction}` : "is-entering"}`}>
+      <div className={`chat-welcome-carousel ${animating ? `is-leaving-${direction}` : `is-entering-${direction}`}`}>
         <div className="chat-welcome-grid" key={activeGroup}>
           {group.map((card, index) => {
             const { meta } = card;
