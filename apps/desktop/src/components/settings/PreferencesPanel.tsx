@@ -202,7 +202,7 @@ export default function PreferencesPanel({
   const { settings: appIcon, setIcon: setAppIcon } = useAppIcon();
   const [gradientEditorOpen, setGradientEditorOpen] = useState(false);
   const [activeCategory, setActiveCategory] =
-    useState<PreferenceCategory>("appearance");
+    useState<PreferenceCategory>("general");
 
   const appIconLabel = (id: AppIconId): string => {
     switch (id) {
@@ -331,6 +331,11 @@ export default function PreferencesPanel({
     colorStyleOptions.find((o) => o.id === colorStyle)?.Icon ?? Palette;
   const categoryOptions = [
     {
+      id: "general" as const,
+      label: t("prefs.category.general"),
+      Icon: IconGlobe,
+    },
+    {
       id: "appearance" as const,
       label: t("prefs.category.appearance"),
       Icon: Palette,
@@ -344,11 +349,6 @@ export default function PreferencesPanel({
       id: "context" as const,
       label: t("prefs.category.context"),
       Icon: Layers,
-    },
-    {
-      id: "general" as const,
-      label: t("prefs.category.general"),
-      Icon: IconGlobe,
     },
     {
       id: "diagnostics" as const,
