@@ -80,8 +80,8 @@ export function ChatWelcome({ onPickCard }: Props) {
     setAnimating(true);
     setTimeout(() => {
       setActiveGroup(idx);
-      setTimeout(() => setAnimating(false), 50);
-    }, 280);
+      setTimeout(() => setAnimating(false), 40);
+    }, 220);
   }, [animating]);
 
   const next = useCallback(() => {
