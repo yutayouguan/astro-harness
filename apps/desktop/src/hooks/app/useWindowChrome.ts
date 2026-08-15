@@ -3,6 +3,8 @@ import type { MouseEvent as ReactMouseEvent } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { zoomOrRestore, prefetchZoomState, installMacMaximizeRedirect } from "../../lib/ui/windowZoom";
 
+const isMac = navigator.userAgent.includes("Mac");
+
 export function useWindowChrome() {
   const [windowMaximized, setWindowMaximized] = useState(false);
   const zoomingRef = useRef(false);
@@ -68,9 +70,18 @@ export function useWindowChrome() {
       titleLastClickRef.current = { time: 0, x: 0, y: 0 };
       if (zoomingRef.current) return;
       zoomingRef.current = true;
-      void zoomOrRestore().finally(() => {
-        zoomingRef.current = false;
-      });
+      if (isMac) {
+        void zoomOrRestore().finally(() => {
+          zoomingRef.current = false;
+        });
+      } else {
+        const win = getCurrentWindow();
+        void win.isMaximized().then((max) =>
+          max ? win.unmaximize() : win.maximize()
+        ).finally(() => {
+          zoomingRef.current = false;
+        });
+      }
       return;
     }
 
