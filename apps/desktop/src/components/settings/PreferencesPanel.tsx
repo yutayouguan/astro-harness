@@ -8,6 +8,7 @@ import {
   Clock,
   Dices,
   Palette,
+  Play,
   Plug,
   ScrollText,
   Sparkles,
@@ -53,6 +54,46 @@ type PreferenceCategory =
   | "general"
   | "diagnostics"
   | "about";
+
+function AutostartSwitch({ tone }: { tone: string }) {
+  const [enabled, setEnabled] = useState(false);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    import("@tauri-apps/plugin-autostart").then((mod) => {
+      mod.isEnabled().then((v) => { setEnabled(v); setLoading(false); }).catch(() => setLoading(false));
+    }).catch(() => setLoading(false));
+  }, []);
+
+  const toggle = async () => {
+    try {
+      const mod = await import("@tauri-apps/plugin-autostart");
+      if (enabled) {
+        await mod.disable();
+      } else {
+        await mod.enable();
+      }
+      setEnabled(!enabled);
+    } catch (e) {
+      console.error("autostart toggle failed", e);
+    }
+  };
+
+  if (loading) return null;
+
+  return (
+    <button
+      type="button"
+      role="switch"
+      className="prefs-switch"
+      aria-checked={enabled}
+      data-tone={tone}
+      onClick={toggle}
+    >
+      <span className="prefs-switch-thumb" />
+    </button>
+  );
+}
 
 /** 行数预设 */
 const LINE_PRESETS = [50, 100, 200] as const;
@@ -919,6 +960,31 @@ export default function PreferencesPanel({
               <span className="theme-option-check" aria-hidden />
             </button>
           ))}
+        </div>
+      </section>
+
+      <section className="prefs-card">
+        <div className="prefs-card-head">
+          <div className="prefs-icon-badge" data-tone={tone} aria-hidden>
+            <Wrench width={22} height={22} />
+          </div>
+          <div>
+            <h2 className="prefs-card-title">{t("prefs.system.title" as never)}</h2>
+            <p className="prefs-card-sub">{t("prefs.system.sub" as never)}</p>
+          </div>
+        </div>
+
+        <div className="prefs-toggle-list" role="group" aria-label={t("prefs.system.title" as never)}>
+          <label className="prefs-toggle-row">
+            <span className="prefs-toggle-icon" aria-hidden>
+              <Play size={15} strokeWidth={2.25} />
+            </span>
+            <span className="prefs-toggle-text">
+              <span className="prefs-toggle-label">{t("prefs.system.autostart" as never)}</span>
+              <span className="prefs-toggle-desc">{t("prefs.system.autostartDesc" as never)}</span>
+            </span>
+            <AutostartSwitch tone={tone} />
+          </label>
         </div>
       </section>
       </div>

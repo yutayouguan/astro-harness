@@ -1414,6 +1414,11 @@ export const zh = {
   "prefs.app.about":
     "Astro（阿童木）是本地 AI 桌面工作站，名字取自经典动漫《铁臂阿童木》——希望它像阿童木一样，成为你身边可靠、聪明、敢闯敢干的助手。支持智能对话、记忆召回、工作区与文件空间，可接入多家模型，并调用工具与 Skills 完成复杂任务；还能在使用中沉淀经验、自我进化。偏好设置保存在本机。",
 
+  "prefs.system.title": "系统",
+  "prefs.system.sub": "开机自启动与系统集成",
+  "prefs.system.autostart": "开机自启动",
+  "prefs.system.autostartDesc": "登录时自动启动 Astro Agent",
+
   "prefs.lang.title": "界面语言",
   "prefs.lang.sub": "切换中文 / English，选择会保存在本机",
   "prefs.lang.zh": "中文",
@@ -3303,6 +3308,11 @@ export const en: Record<MessageKey, string> = {
   "prefs.app.aboutTitle": "About Astro",
   "prefs.app.about":
     "Astro (阿童木) is a local AI desktop workstation, named after the classic anime Astro Boy — meant to be a reliable, smart, and adventurous helper by your side. Chat, memory, workspace, and filespace in one; connect multiple model providers, and use tools & Skills for complex tasks. It can also learn from experience and evolve itself. Preferences are saved on this device.",
+
+  "prefs.system.title": "System",
+  "prefs.system.sub": "Startup and system integration",
+  "prefs.system.autostart": "Launch at login",
+  "prefs.system.autostartDesc": "Automatically start Astro Agent when you log in",
 
   "prefs.lang.title": "Language",
   "prefs.lang.sub": "Switch Chinese / English — saved locally",
