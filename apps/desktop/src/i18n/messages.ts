@@ -1081,6 +1081,7 @@ export const zh = {
   "chat.rightPanel.agentUnavailable": "无法加载 Agent 信息",
 
   "sidebar.pin": "显示导航栏",
+  "sidebar.newChat": "新建会话",
   "sidebar.unpin": "收起导航栏",
   "sidebar.pinAria": "显示导航栏",
   "sidebar.unpinAria": "收起导航栏",
@@ -1278,6 +1279,7 @@ export const zh = {
   "filespace.saving": "保存中…",
   "filespace.boardComingSoon": "画板即将推出：可在此浏览生成的图 / 视频 / 音频与 HTML 预览。",
   "media.loadError": "无法预览此媒体",
+  "media.fileNotFound": "文件尚未生成或已被删除",
   "media.htmlPreview": "HTML 预览",
   "media.htmlSource": "源码",
   "media.htmlShowPreview": "预览",
@@ -2975,6 +2977,7 @@ export const en: Record<MessageKey, string> = {
   "chat.rightPanel.agentUnavailable": "Unable to load Agent info",
 
   "sidebar.pin": "Show sidebar",
+  "sidebar.newChat": "New chat",
   "sidebar.unpin": "Collapse sidebar",
   "sidebar.pinAria": "Show sidebar",
   "sidebar.unpinAria": "Collapse sidebar",
@@ -3172,6 +3175,7 @@ export const en: Record<MessageKey, string> = {
   "filespace.saving": "Saving…",
   "filespace.boardComingSoon": "Boards coming soon — browse generated images, video, audio, and HTML previews here.",
   "media.loadError": "Unable to preview this media",
+  "media.fileNotFound": "File not yet generated or has been deleted",
   "media.htmlPreview": "HTML preview",
   "media.htmlSource": "Source",
   "media.htmlShowPreview": "Preview",
