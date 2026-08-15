@@ -127,11 +127,6 @@ export default function App() {
     cancelGradientEdit,
   } = useShellColorStyle();
   useBeautifyTips();
-  useEffect(() => {
-    if (navigator.userAgent.includes("Mac")) {
-      document.documentElement.setAttribute("data-platform", "macos");
-    }
-  }, []);
   const { t, locale } = useI18n();
   const { prefs: chatDisplayPrefs, setVerbosity, setToggle } = useChatDisplayPrefs();
   const chatDisplayPrefsRef = useRef(chatDisplayPrefs);
