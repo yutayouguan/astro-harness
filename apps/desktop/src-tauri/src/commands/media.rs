@@ -45,7 +45,7 @@ async fn tts_inner(
     use providers::ProviderConfig;
 
     let pid = provider_id.unwrap_or_else(|| {
-        let state = crate::providers_commands::get_providers_state();
+        let state = super::providers::get_providers_state();
         if let Ok(s) = &state {
             if let Some(ref id) = s.active_provider_id {
                 return match id.as_str() {

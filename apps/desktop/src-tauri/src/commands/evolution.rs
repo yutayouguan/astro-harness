@@ -6,7 +6,7 @@
 
 use serde::Serialize;
 
-use crate::providers_commands::{self, ProviderConfigDto};
+use super::providers::{self as providers_commands, ProviderConfigDto};
 
 /// 单个进化路由在设置面的展示态。
 #[derive(Debug, Clone, Serialize)]

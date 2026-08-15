@@ -9,7 +9,7 @@ use providers::types::stream::StreamChunk;
 use providers::ProviderConfig;
 use session::StoredMessage;
 
-use crate::auxiliary_resolver::{
+use crate::meta::auxiliary_resolver::{
     primary_chat_target_for_session, resolve_auxiliary_targets, AuxiliaryTargets, ResolvedTarget,
 };
 
@@ -227,7 +227,7 @@ pub async fn compact_chat_session(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::providers_commands::{ProviderConfig as UiProvider, ProviderKind};
+    use super::providers::{ProviderConfig as UiProvider, ProviderKind};
 
     fn ui_provider(id: &str) -> UiProvider {
         UiProvider {

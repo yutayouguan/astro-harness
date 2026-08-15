@@ -6,7 +6,7 @@ use tauri::{
     AppHandle, Manager, Runtime,
 };
 
-use crate::menu_locale::AppLocale;
+use super::menu_locale::AppLocale;
 
 const TRAY_ID: &str = "main-tray";
 const TRAY_SHOW_ID: &str = "tray-show";
@@ -34,7 +34,7 @@ pub fn install_tray<R: Runtime>(app: &AppHandle<R>, locale: AppLocale) -> tauri:
     let menu = build_tray_menu(app, locale)?;
 
     // 托盘图标按持久化的应用图标变体加载；失败回退到内置窗口图标。
-    let icon = match crate::app_icon::icon_image(&crate::app_icon::load_variant()) {
+    let icon = match super::app_icon::icon_image(&super::app_icon::load_variant()) {
         Ok(img) => img,
         Err(_) => app
             .default_window_icon()

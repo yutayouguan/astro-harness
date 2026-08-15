@@ -6,7 +6,7 @@ use std::fs;
 use std::path::PathBuf;
 use std::sync::Mutex;
 
-use crate::keystore::{
+use crate::infra::keystore::{
     delete_api_key, has_api_key, keyring_service_for_provider, load_api_key, save_api_key,
 };
 
@@ -500,7 +500,7 @@ pub struct ProviderConfigInput {
 
 #[derive(Debug, Clone, Serialize)]
 pub struct ProviderModelsResult {
-    pub models: Vec<crate::model_meta::ModelInfo>,
+    pub models: Vec<crate::meta::model_meta::ModelInfo>,
     pub latency_ms: u64,
     pub source: String,
 }
@@ -539,7 +539,7 @@ struct CachedProviderModels {
     #[serde(default)]
     kind: String,
     #[serde(default)]
-    models: Vec<crate::model_meta::ModelEntryCompat>,
+    models: Vec<crate::meta::model_meta::ModelEntryCompat>,
     #[serde(default)]
     source: String,
     #[serde(default)]
@@ -592,7 +592,7 @@ fn save_models_cache(cache: &ModelsCacheFile) -> Result<(), String> {
 /// 持久化某一 Provider 的模型列表。
 fn persist_provider_models(
     provider: &ProviderConfig,
-    models: &[crate::model_meta::ModelInfo],
+    models: &[crate::meta::model_meta::ModelInfo],
     source: &str,
     latency_ms: u64,
 ) -> Result<(), String> {
@@ -607,7 +607,7 @@ fn persist_provider_models(
             models: models
                 .iter()
                 .cloned()
-                .map(|info| crate::model_meta::ModelEntryCompat::Full(Box::new(info)))
+                .map(|info| crate::meta::model_meta::ModelEntryCompat::Full(Box::new(info)))
                 .collect(),
             source: source.to_string(),
             latency_ms,
@@ -1186,7 +1186,7 @@ pub fn resolve_latest_chat_model(kind: &ProviderKind) -> String {
         }
         for compat in &entry.models {
             let info = match compat {
-                crate::model_meta::ModelEntryCompat::Full(boxed) => boxed.as_ref(),
+                crate::meta::model_meta::ModelEntryCompat::Full(boxed) => boxed.as_ref(),
                 _ => continue,
             };
             // 过滤非聊天模型
@@ -1425,7 +1425,7 @@ pub async fn list_provider_models(id: String) -> Result<ProviderModelsResult, St
     validate_http_endpoint(&provider.endpoint)?;
     let api_key = require_api_key(&provider)?;
     // 刷新模型前确保 OpenRouter 上下文/能力表可用（失败不阻断，走回落）
-    if let Err(err) = crate::openrouter_meta::ensure_cache(false).await {
+    if let Err(err) = crate::meta::openrouter_meta::ensure_cache(false).await {
         tracing::warn!(error = %err, "OpenRouter 模型表不可用，将使用 API/回落");
     }
     let client = http_client()?;
@@ -1457,7 +1457,7 @@ pub async fn list_provider_models(id: String) -> Result<ProviderModelsResult, St
                         .as_str()
                         .or_else(|| m["model"].as_str())?
                         .to_string();
-                    Some(crate::model_meta::enrich_from_id(&id, kind, None))
+                    Some(crate::meta::model_meta::enrich_from_id(&id, kind, None))
                 })
                 .collect::<Vec<_>>();
             (models, "ollama:/api/tags".to_string())
@@ -1485,11 +1485,11 @@ pub async fn list_provider_models(id: String) -> Result<ProviderModelsResult, St
                 .flatten()
                 .filter_map(|m| {
                     let id = m["id"].as_str()?.to_string();
-                    let hints = crate::model_meta::ApiModelHints {
+                    let hints = crate::meta::model_meta::ApiModelHints {
                         display_name: m["display_name"].as_str().map(str::to_string),
                         ..Default::default()
                     };
-                    Some(crate::model_meta::enrich_from_id(&id, kind, Some(hints)))
+                    Some(crate::meta::model_meta::enrich_from_id(&id, kind, Some(hints)))
                 })
                 .collect::<Vec<_>>();
             (models, "anthropic:/v1/models".to_string())
@@ -1528,13 +1528,13 @@ pub async fn list_provider_models(id: String) -> Result<ProviderModelsResult, St
                         .flatten()
                         .filter_map(|v| v.as_str().map(str::to_string))
                         .collect::<Vec<_>>();
-                    let hints = crate::model_meta::ApiModelHints {
+                    let hints = crate::meta::model_meta::ApiModelHints {
                         display_name: m["displayName"].as_str().map(str::to_string),
                         context_window: m["inputTokenLimit"].as_u64(),
                         max_output_tokens: m["outputTokenLimit"].as_u64(),
                         supported_methods: methods,
                     };
-                    Some(crate::model_meta::enrich_from_id(&id, kind, Some(hints)))
+                    Some(crate::meta::model_meta::enrich_from_id(&id, kind, Some(hints)))
                 })
                 .collect::<Vec<_>>();
             (models, "google:/v1beta/models".to_string())
@@ -1579,13 +1579,13 @@ pub async fn list_provider_models(id: String) -> Result<ProviderModelsResult, St
                         .or_else(|| m["context_window"].as_u64())
                         .or_else(|| m["max_model_len"].as_u64())
                         .or_else(|| m["max_tokens"].as_u64());
-                    let hints = crate::model_meta::ApiModelHints {
+                    let hints = crate::meta::model_meta::ApiModelHints {
                         display_name: m["name"].as_str().map(str::to_string),
                         context_window: ctx,
                         max_output_tokens: m["max_output_tokens"].as_u64(),
                         supported_methods: Vec::new(),
                     };
-                    Some(crate::model_meta::enrich_from_id(
+                    Some(crate::meta::model_meta::enrich_from_id(
                         &id,
                         kind,
                         if ctx.is_some() { Some(hints) } else { None },
@@ -1620,7 +1620,7 @@ pub async fn list_provider_models(id: String) -> Result<ProviderModelsResult, St
                         .as_str()
                         .or_else(|| m["model"].as_str())?
                         .to_string();
-                    Some(crate::model_meta::enrich_from_id(&id, kind, None))
+                    Some(crate::meta::model_meta::enrich_from_id(&id, kind, None))
                 })
                 .collect::<Vec<_>>();
             (models, "azure:/openai/models".to_string())
@@ -1643,7 +1643,7 @@ pub async fn list_provider_models(id: String) -> Result<ProviderModelsResult, St
 pub fn cached_model_info(
     provider_id: &str,
     model_id: &str,
-) -> Option<crate::model_meta::ModelInfo> {
+) -> Option<crate::meta::model_meta::ModelInfo> {
     let cache = load_models_cache();
     let entry = cache.providers.get(provider_id)?;
     let kind = if entry.kind.is_empty() {
@@ -1653,19 +1653,19 @@ pub fn cached_model_info(
     };
     for m in &entry.models {
         match m {
-            crate::model_meta::ModelEntryCompat::Full(info) if info.id == model_id => {
+            crate::meta::model_meta::ModelEntryCompat::Full(info) if info.id == model_id => {
                 let mut info = info.as_ref().clone();
-                crate::model_meta::enrich_model_info(&mut info, kind, None);
+                crate::meta::model_meta::enrich_model_info(&mut info, kind, None);
                 return Some(info);
             }
-            crate::model_meta::ModelEntryCompat::Id(id) if id == model_id => {
-                return Some(crate::model_meta::enrich_from_id(id, kind, None));
+            crate::meta::model_meta::ModelEntryCompat::Id(id) if id == model_id => {
+                return Some(crate::meta::model_meta::enrich_from_id(id, kind, None));
             }
             _ => {}
         }
     }
     // 缓存未命中时仍尝试 OpenRouter 表
-    let info = crate::model_meta::enrich_from_id(model_id, kind, None);
+    let info = crate::meta::model_meta::enrich_from_id(model_id, kind, None);
     if info.meta_source.is_empty() {
         None
     } else {

@@ -13,8 +13,8 @@
 use serde::Serialize;
 use tauri::AppHandle;
 
-use crate::commands::chat_control;
-use crate::session_events::{
+use super::chat::chat_control;
+use crate::infra::session_events::{
     emit_session_event, now_ts_ms, MemoryUpdatedDto, PendingChangedDto, SessionEventDto,
 };
 

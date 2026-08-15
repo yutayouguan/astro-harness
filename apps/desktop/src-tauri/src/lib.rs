@@ -2,40 +2,15 @@
 
 #![allow(unexpected_cfgs)] // 旧版 objc 的 msg_send!/sel! 使用 cfg(feature = "cargo-clippy")
 
-mod app_icon;
-mod artifacts_commands;
-mod auxiliary_commands;
-mod auxiliary_resolver;
-mod clipboard_files;
 mod commands;
-mod compaction_commands;
-mod compression_settings_commands;
-mod config_commands;
-mod dreaming_commands;
-mod env_hydrate;
-mod evolution_commands;
-mod evolution_run_commands;
-mod fs_ops;
-mod grpc;
-mod icon_commands;
-mod ip_location;
-mod keystore;
-mod loop_commands;
-mod media_commands;
-mod memory_commands;
-mod menu_locale;
-mod model_meta;
-mod notify;
-mod openrouter_meta;
-mod providers_commands;
-mod session_events;
-mod skills_commands;
-mod tray;
+mod infra;
+mod meta;
+mod ui;
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 
-use menu_locale::AppLocale;
+use ui::menu_locale::AppLocale;
 use tauri::{
     menu::{Menu, MenuItem, PredefinedMenuItem, Submenu, HELP_SUBMENU_ID, WINDOW_SUBMENU_ID},
     window::Color,
@@ -192,7 +167,7 @@ fn set_app_menu_locale(app: AppHandle, locale: String) -> Result<(), String> {
         app.manage(Mutex::new(next));
     }
     install_app_menu(&app, next).map_err(|e| e.to_string())?;
-    tray::apply_tray_locale(&app, next).map_err(|e| e.to_string())?;
+    ui::tray::apply_tray_locale(&app, next).map_err(|e| e.to_string())?;
     Ok(())
 }
 
@@ -211,12 +186,12 @@ pub fn run() {
     }
 
     // Finder / Dock 启动的 .app 没有终端 shell 环境；补载 ~/.astro/.env 与登录 shell 中的 API Key。
-    env_hydrate::hydrate_process_env();
+    infra::env_hydrate::hydrate_process_env();
 
     tauri::Builder::default()
         // 单实例须最先注册：二次启动聚焦已有窗口（Windows/Linux；macOS 另见 Reopen）。
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
-            tray::show_main_window(app);
+            ui::tray::show_main_window(app);
         }))
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
@@ -230,10 +205,10 @@ pub fn run() {
         .on_menu_event(|app, event| {
             if event.id() == MENU_PREFERENCES_ID {
                 let _ = app.emit(EVENT_OPEN_PREFERENCES, ());
-                tray::show_main_window(app);
+                ui::tray::show_main_window(app);
             } else if event.id() == MENU_ABOUT_ID {
                 let _ = app.emit(EVENT_OPEN_ABOUT, ());
-                tray::show_main_window(app);
+                ui::tray::show_main_window(app);
             }
         })
         // 关窗 → 进托盘；真正退出见 [`request_app_exit`] / ExitRequested。
@@ -247,203 +222,224 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             set_app_menu_locale,
-            commands::start_chat,
-            commands::chat_control,
-            commands::interrupt_resume,
-            commands::prepare_multitask_worktree,
-            commands::cleanup_multitask_worktree,
-            commands::generate_image,
-            commands::query_memory,
-            commands::count_tokens,
-            commands::create_batch,
-            commands::get_batch,
-            commands::list_batches,
-            commands::get_batch_results,
-            memory_commands::refresh_memory,
-            memory_commands::list_pending_memory_writes,
-            memory_commands::approve_pending_memory_write,
-            memory_commands::reject_pending_memory_write,
-            memory_commands::approve_all_pending_memory_writes,
-            memory_commands::reject_all_pending_memory_writes,
-            memory_commands::get_memory_settings,
-            memory_commands::set_memory_write_approval,
-            memory_commands::set_memory_auto_refresh,
-            memory_commands::set_background_review_enabled,
-            memory_commands::get_approval_settings,
-            memory_commands::set_approval_mode,
-            memory_commands::add_command_allowlist,
-            memory_commands::remove_command_allowlist,
-            session_events::set_session_events_filter,
-            commands::get_chat_history,
-            commands::fork_chat_session,
-            commands::remove_chat_bubbles,
-            commands::list_recent_sessions,
-            commands::list_sessions,
-            commands::rename_session,
-            commands::regenerate_session_title,
-            commands::archive_session,
-            commands::unarchive_session,
-            commands::pin_session,
-            commands::unpin_session,
-            commands::delete_session_permanently,
-            commands::list_files,
-            commands::read_file,
-            commands::open_path_externally,
-            commands::reveal_in_folder,
-            commands::trash_paths,
-            commands::read_file_base64,
-            commands::read_user_file_base64,
-            commands::download_file_to_downloads,
-            commands::download_bytes_to_downloads,
-            commands::copy_paths_to_clipboard,
-            commands::list_clipboard_file_paths,
-            commands::paste_paths_from_clipboard,
-            commands::write_file,
-            commands::create_file,
-            commands::create_directory,
-            commands::rename_path,
-            commands::copy_paths,
-            commands::move_paths,
-            commands::delete_path,
-            commands::get_config,
-            commands::list_agents,
-            commands::create_agent,
-            commands::set_active_agent,
-            commands::set_pending_agent_icon,
-            commands::clear_pending_agent_icon,
-            commands::list_daily_memory,
-            commands::read_daily_memory,
-            commands::write_daily_memory,
-            commands::list_cron_jobs,
-            commands::extract_cron_job,
-            commands::add_cron_job,
-            commands::update_cron_job,
-            commands::remove_cron_job,
-            commands::set_cron_job_enabled,
-            commands::run_cron_job_now,
-            commands::get_cron_run,
-            commands::delete_cron_run,
-            commands::list_cron_runs,
-            commands::list_cron_job_runs,
-            loop_commands::list_loops,
-            loop_commands::get_loop,
-            loop_commands::create_loop,
-            loop_commands::save_loop,
-            loop_commands::delete_loop,
-            loop_commands::set_loop_enabled,
-            loop_commands::set_loop_ai_callable,
-            loop_commands::run_loop,
-            loop_commands::list_loop_runs,
-            loop_commands::get_loop_run,
-            loop_commands::delete_loop_run,
-            loop_commands::list_loop_step_logs,
-            loop_commands::export_loop,
-            loop_commands::export_loop_svg,
-            loop_commands::import_loop,
-            loop_commands::ai_generate_workflow,
-            loop_commands::loop_ai_polish,
-            media_commands::tts_synthesize,
-            media_commands::speech_to_text,
-            config_commands::get_tools_enabled,
-            config_commands::set_tools_enabled,
-            config_commands::get_tool_catalog,
-            config_commands::get_mcp_servers,
-            config_commands::set_mcp_servers,
-            config_commands::refresh_mcp_tools,
-            config_commands::get_agent_usage_stats,
-            config_commands::get_usage_insights,
-            config_commands::get_collaboration_insights,
-            config_commands::get_trace_insights,
-            config_commands::query_agent_logs,
-            providers_commands::get_providers_state,
-            providers_commands::list_providers,
-            providers_commands::add_provider,
-            providers_commands::save_provider,
-            providers_commands::reorder_providers,
-            providers_commands::delete_provider,
-            providers_commands::set_active_provider,
-            providers_commands::set_provider_api_key,
-            providers_commands::get_provider_api_key,
-            providers_commands::clear_provider_api_key,
-            providers_commands::list_provider_models,
-            providers_commands::get_cached_provider_models,
-            providers_commands::test_provider,
-            providers_commands::test_provider_models,
-            skills_commands::list_installed_skills,
-            skills_commands::search_store_skills,
-            skills_commands::get_store_skill_detail,
-            skills_commands::set_skill_enabled,
-            skills_commands::link_machine_skill,
-            skills_commands::install_store_skill,
-            skills_commands::get_skill_content,
-            skills_commands::list_skill_bundle,
-            skills_commands::get_skill_file,
-            skills_commands::open_skill_folder,
-            skills_commands::reveal_skill_file,
-            skills_commands::open_skill_file,
-            skills_commands::list_skill_origins,
-            skills_commands::preview_skill_update,
-            skills_commands::update_installed_skill,
-            skills_commands::check_skill_updates,
-            skills_commands::update_all_skills,
-            skills_commands::list_skill_backups,
-            skills_commands::reveal_skill_backup,
-            skills_commands::get_skill_cooldown_remaining,
-            skills_commands::list_skill_snapshots,
-            skills_commands::restore_skill_snapshot,
-            skills_commands::get_skill_signal_summary,
-            artifacts_commands::list_artifacts,
-            artifacts_commands::find_artifact_by_path,
-            artifacts_commands::reconcile_artifacts,
-            artifacts_commands::register_artifact,
-            artifacts_commands::save_chat_upload,
-            artifacts_commands::remove_artifacts_by_paths,
-            dreaming_commands::get_dreaming_status,
-            dreaming_commands::set_dreaming_enabled_cmd,
-            dreaming_commands::run_dreaming,
-            compaction_commands::compact_chat_session,
-            compression_settings_commands::get_compression_settings,
-            compression_settings_commands::set_compression_settings,
-            compression_settings_commands::reset_compression_settings,
-            ip_location::infer_ip_location,
-            auxiliary_commands::get_auxiliary_settings,
-            auxiliary_commands::set_auxiliary_route,
-            auxiliary_commands::reset_auxiliary_route,
-            auxiliary_commands::reset_all_auxiliary_routes,
-            evolution_commands::get_evolution_settings,
-            evolution_commands::set_evolution_enabled,
-            evolution_commands::set_evolution_route,
-            evolution_commands::reset_evolution_route,
-            evolution_commands::set_evolution_gates,
-            evolution_commands::set_evolution_search,
-            evolution_commands::set_evolution_auto,
-            evolution_commands::set_evolution_curator,
-            evolution_run_commands::run_evolution,
-            evolution_run_commands::run_evolution_search,
-            evolution_run_commands::cancel_evolution_search,
-            evolution_run_commands::list_evolution_proposals,
-            evolution_run_commands::approve_evolution_proposal,
-            evolution_run_commands::approve_evolution_proposal_to_branch,
-            evolution_run_commands::reject_evolution_proposal,
-            evolution_run_commands::list_eval_examples,
-            evolution_run_commands::list_eval_import_candidates,
-            evolution_run_commands::import_eval_from_session,
-            evolution_run_commands::add_eval_example,
-            evolution_run_commands::remove_eval_example,
-            evolution_run_commands::run_skill_curator,
-            evolution_run_commands::enqueue_curator_proposals,
-            evolution_run_commands::get_curator_last,
-            evolution_run_commands::curator_status,
-            evolution_run_commands::maybe_run_skill_curator,
-            evolution_run_commands::evolution_dspy_status,
-            evolution_run_commands::setup_evolution_dspy,
-            evolution_run_commands::run_evolution_dspy,
-            evolution_run_commands::evolution_history,
-            evolution_run_commands::evolution_auto_status,
-            evolution_run_commands::maybe_run_evolution_auto,
-            icon_commands::get_app_icon,
-            icon_commands::set_app_icon,
-            commands::list_model_catalog,
+            // — chat —
+            commands::chat::start_chat,
+            commands::chat::chat_control,
+            commands::chat::interrupt_resume,
+            commands::chat::generate_image,
+            commands::chat::query_memory,
+            commands::chat::count_tokens,
+            // — agent —
+            commands::agent::prepare_multitask_worktree,
+            commands::agent::cleanup_multitask_worktree,
+            commands::agent::get_config,
+            commands::agent::list_agents,
+            commands::agent::create_agent,
+            commands::agent::set_active_agent,
+            commands::agent::set_pending_agent_icon,
+            commands::agent::clear_pending_agent_icon,
+            commands::agent::list_daily_memory,
+            commands::agent::read_daily_memory,
+            commands::agent::write_daily_memory,
+            // — session —
+            commands::session::get_chat_history,
+            commands::session::fork_chat_session,
+            commands::session::remove_chat_bubbles,
+            commands::session::list_recent_sessions,
+            commands::session::list_sessions,
+            commands::session::rename_session,
+            commands::session::regenerate_session_title,
+            commands::session::archive_session,
+            commands::session::unarchive_session,
+            commands::session::pin_session,
+            commands::session::unpin_session,
+            commands::session::delete_session_permanently,
+            // — files —
+            commands::files::list_files,
+            commands::files::read_file,
+            commands::files::open_path_externally,
+            commands::files::reveal_in_folder,
+            commands::files::trash_paths,
+            commands::files::read_file_base64,
+            commands::files::read_user_file_base64,
+            commands::files::download_file_to_downloads,
+            commands::files::download_bytes_to_downloads,
+            commands::files::copy_paths_to_clipboard,
+            commands::files::list_clipboard_file_paths,
+            commands::files::paste_paths_from_clipboard,
+            commands::files::write_file,
+            commands::files::create_file,
+            commands::files::create_directory,
+            commands::files::rename_path,
+            commands::files::copy_paths,
+            commands::files::move_paths,
+            commands::files::delete_path,
+            // — cron —
+            commands::cron::list_cron_jobs,
+            commands::cron::extract_cron_job,
+            commands::cron::add_cron_job,
+            commands::cron::update_cron_job,
+            commands::cron::remove_cron_job,
+            commands::cron::set_cron_job_enabled,
+            commands::cron::run_cron_job_now,
+            commands::cron::get_cron_run,
+            commands::cron::delete_cron_run,
+            commands::cron::list_cron_runs,
+            commands::cron::list_cron_job_runs,
+            // — batch & model catalog —
+            commands::batch::create_batch,
+            commands::batch::get_batch,
+            commands::batch::list_batches,
+            commands::batch::get_batch_results,
+            commands::batch::list_model_catalog,
+            // — memory —
+            commands::memory::refresh_memory,
+            commands::memory::list_pending_memory_writes,
+            commands::memory::approve_pending_memory_write,
+            commands::memory::reject_pending_memory_write,
+            commands::memory::approve_all_pending_memory_writes,
+            commands::memory::reject_all_pending_memory_writes,
+            commands::memory::get_memory_settings,
+            commands::memory::set_memory_write_approval,
+            commands::memory::set_memory_auto_refresh,
+            commands::memory::set_background_review_enabled,
+            commands::memory::get_approval_settings,
+            commands::memory::set_approval_mode,
+            commands::memory::add_command_allowlist,
+            commands::memory::remove_command_allowlist,
+            // — loops —
+            commands::loops::list_loops,
+            commands::loops::get_loop,
+            commands::loops::create_loop,
+            commands::loops::save_loop,
+            commands::loops::delete_loop,
+            commands::loops::set_loop_enabled,
+            commands::loops::set_loop_ai_callable,
+            commands::loops::run_loop,
+            commands::loops::list_loop_runs,
+            commands::loops::get_loop_run,
+            commands::loops::delete_loop_run,
+            commands::loops::list_loop_step_logs,
+            commands::loops::export_loop,
+            commands::loops::export_loop_svg,
+            commands::loops::import_loop,
+            commands::loops::ai_generate_workflow,
+            commands::loops::loop_ai_polish,
+            // — media —
+            commands::media::tts_synthesize,
+            commands::media::speech_to_text,
+            // — config —
+            commands::config::get_tools_enabled,
+            commands::config::set_tools_enabled,
+            commands::config::get_tool_catalog,
+            commands::config::get_mcp_servers,
+            commands::config::set_mcp_servers,
+            commands::config::refresh_mcp_tools,
+            commands::config::get_agent_usage_stats,
+            commands::config::get_usage_insights,
+            commands::config::get_collaboration_insights,
+            commands::config::get_trace_insights,
+            commands::config::query_agent_logs,
+            // — providers —
+            commands::providers::get_providers_state,
+            commands::providers::list_providers,
+            commands::providers::add_provider,
+            commands::providers::save_provider,
+            commands::providers::reorder_providers,
+            commands::providers::delete_provider,
+            commands::providers::set_active_provider,
+            commands::providers::set_provider_api_key,
+            commands::providers::get_provider_api_key,
+            commands::providers::clear_provider_api_key,
+            commands::providers::list_provider_models,
+            commands::providers::get_cached_provider_models,
+            commands::providers::test_provider,
+            commands::providers::test_provider_models,
+            // — skills —
+            commands::skills::list_installed_skills,
+            commands::skills::search_store_skills,
+            commands::skills::get_store_skill_detail,
+            commands::skills::set_skill_enabled,
+            commands::skills::link_machine_skill,
+            commands::skills::install_store_skill,
+            commands::skills::get_skill_content,
+            commands::skills::list_skill_bundle,
+            commands::skills::get_skill_file,
+            commands::skills::open_skill_folder,
+            commands::skills::reveal_skill_file,
+            commands::skills::open_skill_file,
+            commands::skills::list_skill_origins,
+            commands::skills::preview_skill_update,
+            commands::skills::update_installed_skill,
+            commands::skills::check_skill_updates,
+            commands::skills::update_all_skills,
+            commands::skills::list_skill_backups,
+            commands::skills::reveal_skill_backup,
+            commands::skills::get_skill_cooldown_remaining,
+            commands::skills::list_skill_snapshots,
+            commands::skills::restore_skill_snapshot,
+            commands::skills::get_skill_signal_summary,
+            // — artifacts —
+            commands::artifacts::list_artifacts,
+            commands::artifacts::find_artifact_by_path,
+            commands::artifacts::reconcile_artifacts,
+            commands::artifacts::register_artifact,
+            commands::artifacts::save_chat_upload,
+            commands::artifacts::remove_artifacts_by_paths,
+            // — dreaming —
+            commands::dreaming::get_dreaming_status,
+            commands::dreaming::set_dreaming_enabled_cmd,
+            commands::dreaming::run_dreaming,
+            // — compaction —
+            commands::compaction::compact_chat_session,
+            // — compression settings —
+            commands::compression_settings::get_compression_settings,
+            commands::compression_settings::set_compression_settings,
+            commands::compression_settings::reset_compression_settings,
+            // — auxiliary —
+            commands::auxiliary::get_auxiliary_settings,
+            commands::auxiliary::set_auxiliary_route,
+            commands::auxiliary::reset_auxiliary_route,
+            commands::auxiliary::reset_all_auxiliary_routes,
+            // — evolution —
+            commands::evolution::get_evolution_settings,
+            commands::evolution::set_evolution_enabled,
+            commands::evolution::set_evolution_route,
+            commands::evolution::reset_evolution_route,
+            commands::evolution::set_evolution_gates,
+            commands::evolution::set_evolution_search,
+            commands::evolution::set_evolution_auto,
+            commands::evolution::set_evolution_curator,
+            // — evolution_run —
+            commands::evolution_run::run_evolution,
+            commands::evolution_run::run_evolution_search,
+            commands::evolution_run::cancel_evolution_search,
+            commands::evolution_run::list_evolution_proposals,
+            commands::evolution_run::approve_evolution_proposal,
+            commands::evolution_run::approve_evolution_proposal_to_branch,
+            commands::evolution_run::reject_evolution_proposal,
+            commands::evolution_run::list_eval_examples,
+            commands::evolution_run::list_eval_import_candidates,
+            commands::evolution_run::import_eval_from_session,
+            commands::evolution_run::add_eval_example,
+            commands::evolution_run::remove_eval_example,
+            commands::evolution_run::run_skill_curator,
+            commands::evolution_run::enqueue_curator_proposals,
+            commands::evolution_run::get_curator_last,
+            commands::evolution_run::curator_status,
+            commands::evolution_run::maybe_run_skill_curator,
+            commands::evolution_run::evolution_dspy_status,
+            commands::evolution_run::setup_evolution_dspy,
+            commands::evolution_run::run_evolution_dspy,
+            commands::evolution_run::evolution_history,
+            commands::evolution_run::evolution_auto_status,
+            commands::evolution_run::maybe_run_evolution_auto,
+            // — icon —
+            commands::icon::get_app_icon,
+            commands::icon::set_app_icon,
+            // — infra —
+            infra::session_events::set_session_events_filter,
+            infra::ip_location::infer_ip_location,
         ])
         .setup(|app| {
             if let Err(err) = memory::ensure_default_workspace() {
@@ -452,7 +448,7 @@ pub fn run() {
 
             // 默认同进程内嵌 gRPC；ASTRO_EMBED_BACKEND=0 时连外部 backend。
             // 未设 ASTRO_GRPC_ADDR 时 bind 127.0.0.1:0，实际端口经 oneshot + 进程内地址共享。
-            if grpc::embed_backend_enabled() {
+            if infra::grpc::embed_backend_enabled() {
                 let (ready_tx, ready_rx) = tokio::sync::oneshot::channel();
                 tauri::async_runtime::spawn(async move {
                     if let Err(err) = server::run_embedded(Some(ready_tx)).await {
@@ -482,11 +478,11 @@ pub fn run() {
             } else {
                 tracing::info!(
                     "ASTRO_EMBED_BACKEND disabled; expecting external backend at {}",
-                    grpc::default_grpc_address()
+                    infra::grpc::default_grpc_address()
                 );
             }
 
-            session_events::start_bridge(app.handle());
+            infra::session_events::start_bridge(app.handle());
 
             app.manage(Mutex::new(AppLocale::Zh));
 
@@ -494,17 +490,19 @@ pub fn run() {
                 tracing::warn!("app menu install failed: {err}");
             }
 
-            if let Err(err) = tray::install_tray(app.handle(), AppLocale::Zh) {
+            if let Err(err) = ui::tray::install_tray(app.handle(), AppLocale::Zh) {
                 tracing::warn!("system tray install failed: {err}");
             }
 
             // 重放持久化的应用图标（托盘/程序坞/窗口）
-            app_icon::apply_app_icon(app.handle(), &app_icon::load_variant());
+            ui::app_icon::apply_app_icon(app.handle(), &ui::app_icon::load_variant());
 
-            notify::install(app.handle());
+            infra::notify::install(app.handle());
+
+            meta::default_skills_seed::spawn_on_startup(app.handle());
 
             // 策展到期：仅刷新启发式报告，不入队、不调 LLM
-            crate::evolution_run_commands::spawn_maybe_curator(app.handle().clone());
+            crate::commands::evolution_run::spawn_maybe_curator(app.handle().clone());
 
             let config = app
                 .config()
@@ -547,7 +545,7 @@ pub fn run() {
                 has_visible_windows: false,
                 ..
             } => {
-                tray::show_main_window(app);
+                ui::tray::show_main_window(app);
             }
             _ => {}
         });

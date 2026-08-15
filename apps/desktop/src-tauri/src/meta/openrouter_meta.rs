@@ -38,9 +38,9 @@ pub struct OpenRouterEntry {
     pub created: Option<u64>,
     pub hugging_face_id: Option<String>,
     pub is_moderated: Option<bool>,
-    pub pricing: Option<crate::model_meta::ModelPricingMeta>,
-    pub default_parameters: Option<crate::model_meta::ModelDefaultParams>,
-    pub reasoning: crate::model_meta::ModelReasoningMeta,
+    pub pricing: Option<super::model_meta::ModelPricingMeta>,
+    pub default_parameters: Option<super::model_meta::ModelDefaultParams>,
+    pub reasoning: super::model_meta::ModelReasoningMeta,
     /// 命中的 OpenRouter 模型 id（调试 / 单测用）
     #[allow(dead_code)]
     pub matched_key: String,
@@ -225,7 +225,7 @@ impl RawModel {
             {
                 return None;
             }
-            Some(crate::model_meta::ModelPricingMeta {
+            Some(super::model_meta::ModelPricingMeta {
                 prompt_per_million: prompt,
                 completion_per_million: completion,
                 cache_read_per_million: cache_read,
@@ -234,7 +234,7 @@ impl RawModel {
         });
 
         let default_parameters = self.default_parameters.as_ref().and_then(|d| {
-            let meta = crate::model_meta::ModelDefaultParams {
+            let meta = super::model_meta::ModelDefaultParams {
                 temperature: d.temperature,
                 top_p: d.top_p,
                 top_k: d.top_k,
@@ -295,7 +295,7 @@ impl RawModel {
 /// 解析 OpenRouter 顶层 `reasoning` 对象。
 fn parse_reasoning_meta(
     raw: Option<&serde_json::Value>,
-) -> Option<crate::model_meta::ModelReasoningMeta> {
+) -> Option<super::model_meta::ModelReasoningMeta> {
     let v = raw?;
     if v.is_null() {
         return None;
@@ -307,7 +307,7 @@ fn parse_reasoning_meta(
         .map(|s| s.trim().to_lowercase())
         .filter(|s| !s.is_empty())
         .collect();
-    let meta = crate::model_meta::ModelReasoningMeta {
+    let meta = super::model_meta::ModelReasoningMeta {
         supported_efforts: efforts,
         default_effort: parsed
             .default_effort
@@ -319,7 +319,7 @@ fn parse_reasoning_meta(
     };
     if meta.is_empty() {
         // 空对象 `{}` 仍视为「支持推理」占位
-        return Some(crate::model_meta::ModelReasoningMeta::default());
+        return Some(super::model_meta::ModelReasoningMeta::default());
     }
     Some(meta)
 }
@@ -670,7 +670,7 @@ pub struct ModelCatalogEntry {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub created: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub pricing: Option<crate::model_meta::ModelPricingMeta>,
+    pub pricing: Option<super::model_meta::ModelPricingMeta>,
     pub supports_vision: bool,
     pub supports_function_calling: bool,
     pub supports_reasoning: bool,

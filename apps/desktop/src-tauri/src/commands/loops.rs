@@ -314,7 +314,7 @@ pub async fn ai_generate_workflow(
     provider_id: Option<String>,
     model: Option<String>,
 ) -> Result<AiGeneratedWorkflow, String> {
-    use crate::providers_commands::{find_provider, resolve_api_key};
+    use super::providers::{find_provider, resolve_api_key};
     if prompt.trim().is_empty() {
         return Err("请描述你想要创建的工作流".into());
     }
@@ -322,7 +322,7 @@ pub async fn ai_generate_workflow(
     let provider_cfg = if let Some(id) = provider_id.as_deref().filter(|s| !s.is_empty()) {
         find_provider(id)?
     } else {
-        let state = crate::providers_commands::get_providers_state()?;
+        let state = super::providers::get_providers_state()?;
         let id = state
             .active_provider_id
             .or_else(|| state.providers.first().map(|p| p.id.clone()))
@@ -409,7 +409,7 @@ pub async fn loop_ai_polish(
     provider_id: Option<String>,
     model: Option<String>,
 ) -> Result<String, String> {
-    use crate::providers_commands::{find_provider, resolve_api_key};
+    use super::providers::{find_provider, resolve_api_key};
 
     // 优先级：per-workflow 参数 > 辅助模型全局配置 > 活跃供应商
     let (resolved_pid, resolved_mdl) = {
@@ -440,7 +440,7 @@ pub async fn loop_ai_polish(
     let provider_cfg = if let Some(ref id) = resolved_pid {
         find_provider(id)?
     } else {
-        let state = crate::providers_commands::get_providers_state()?;
+        let state = super::providers::get_providers_state()?;
         let id = state
             .active_provider_id
             .or_else(|| state.providers.first().map(|p| p.id.clone()))

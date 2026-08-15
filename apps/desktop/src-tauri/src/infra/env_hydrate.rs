@@ -20,7 +20,7 @@ use std::path::PathBuf;
 use std::process::Command;
 use std::time::Duration;
 
-use crate::providers_commands::ProviderKind;
+use crate::commands::providers::ProviderKind;
 
 const KNOWN_KINDS: &[ProviderKind] = &[
     ProviderKind::Openai,

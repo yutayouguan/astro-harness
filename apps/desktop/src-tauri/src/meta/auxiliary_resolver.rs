@@ -9,7 +9,7 @@
 
 use memory::{AuxiliaryConfig, AuxiliaryKind, AuxiliaryRoute};
 
-use crate::providers_commands::{self, resolve_api_key, ProviderConfig as UiProvider};
+use crate::commands::providers::{self, resolve_api_key, ProviderConfig as UiProvider};
 
 /// 单个已解析目标：命中的 UI Provider 条目 + 实际调用用的后端凭据。
 #[derive(Debug, Clone)]
@@ -71,7 +71,7 @@ fn resolved_from_ui_provider(
 }
 
 /// 核心解析逻辑：Provider 查找与 API key 解析通过闭包注入，供单测脱离全局
-/// Provider 状态（`providers_commands::STATE`）独立验证。
+/// Provider 状态（`providers::STATE`）独立验证。
 fn resolve_with<F, K>(
     kind: AuxiliaryKind,
     aux: &AuxiliaryConfig,
@@ -152,7 +152,7 @@ fn resolve_for_config(
         kind,
         aux,
         primary,
-        |id| providers_commands::find_provider(id).ok(),
+        |id| providers::find_provider(id).ok(),
         |p| {
             let (has, _source, _env, key) = resolve_api_key(p);
             (has, key.unwrap_or_default())
@@ -181,7 +181,7 @@ fn resolve_route_for(
     route: &AuxiliaryRoute,
     primary: &types::ChatTarget,
 ) -> Result<AuxiliaryTargets, String> {
-    let primary_provider = providers_commands::find_provider(&primary.provider_id)
+    let primary_provider = providers::find_provider(&primary.provider_id)
         .ok()
         .ok_or_else(|| format!("primary provider not found: {}", primary.provider_id))?;
     let primary_resolved = resolved_from_ui_provider(
@@ -197,7 +197,7 @@ fn resolve_route_for(
         });
     }
 
-    let explicit = providers_commands::find_provider(route.provider.trim())
+    let explicit = providers::find_provider(route.provider.trim())
         .ok()
         .filter(|p| p.enabled);
     let Some(p) = explicit else {
@@ -287,9 +287,9 @@ pub fn primary_chat_target_for_session(session_id: &str) -> Result<types::ChatTa
         .map(|m| m.trim().trim_end_matches('/').to_string())
         .filter(|m| !m.is_empty());
 
-    let state = providers_commands::get_providers_state()?;
+    let state = providers::get_providers_state()?;
     let matched_id = billing_provider.as_ref().and_then(|bp| {
-        let candidates: Vec<&providers_commands::ProviderConfigDto> = state
+        let candidates: Vec<&providers::ProviderConfigDto> = state
             .providers
             .iter()
             .filter(|p| p.enabled && p.backend_id == *bp)
@@ -316,7 +316,7 @@ pub fn primary_chat_target_for_session(session_id: &str) -> Result<types::ChatTa
         })
         .ok_or_else(|| "请先在「模型提供商」中配置并启用至少一个提供商".to_string())?;
 
-    let ui = providers_commands::find_provider(&provider_id)?;
+    let ui = providers::find_provider(&provider_id)?;
     let model = session_model.unwrap_or_else(|| ui.model.clone());
     if model.trim().is_empty() {
         return Err("会话/提供商未配置模型".into());
@@ -366,7 +366,7 @@ mod tests {
 
     fn ui_provider(
         id: &str,
-        kind: providers_commands::ProviderKind,
+        kind: providers::ProviderKind,
         model: &str,
         enabled: bool,
     ) -> UiProvider {
@@ -411,7 +411,7 @@ mod tests {
         let aux = AuxiliaryConfig::default();
         let primary_ui = ui_provider(
             "prov-primary",
-            providers_commands::ProviderKind::Openai,
+            providers::ProviderKind::Openai,
             "gpt-5.6",
             true,
         );
@@ -441,13 +441,13 @@ mod tests {
         };
         let primary_ui = ui_provider(
             "prov-primary",
-            providers_commands::ProviderKind::Openai,
+            providers::ProviderKind::Openai,
             "gpt-5.6",
             true,
         );
         let cheap_ui = ui_provider(
             "prov-cheap",
-            providers_commands::ProviderKind::Deepseek,
+            providers::ProviderKind::Deepseek,
             "deepseek-chat",
             true,
         );
@@ -479,7 +479,7 @@ mod tests {
         };
         let primary_ui = ui_provider(
             "prov-primary",
-            providers_commands::ProviderKind::Openai,
+            providers::ProviderKind::Openai,
             "gpt-5.6",
             true,
         );
@@ -512,7 +512,7 @@ mod tests {
         };
         let primary_ui = ui_provider(
             "prov-primary",
-            providers_commands::ProviderKind::Openai,
+            providers::ProviderKind::Openai,
             "gpt-5.6",
             true,
         );
@@ -541,7 +541,7 @@ mod tests {
         };
         let primary_ui = ui_provider(
             "prov-primary",
-            providers_commands::ProviderKind::Openai,
+            providers::ProviderKind::Openai,
             "gpt-5.6",
             true,
         );
@@ -570,13 +570,13 @@ mod tests {
         };
         let primary_ui = ui_provider(
             "prov-primary",
-            providers_commands::ProviderKind::Openai,
+            providers::ProviderKind::Openai,
             "gpt-5.6",
             true,
         );
         let disabled_ui = ui_provider(
             "prov-disabled",
-            providers_commands::ProviderKind::Anthropic,
+            providers::ProviderKind::Anthropic,
             "claude",
             false,
         );
@@ -605,13 +605,13 @@ mod tests {
         };
         let primary_ui = ui_provider(
             "prov-primary",
-            providers_commands::ProviderKind::Openai,
+            providers::ProviderKind::Openai,
             "gpt-5.6",
             true,
         );
         let nokey_ui = ui_provider(
             "prov-nokey",
-            providers_commands::ProviderKind::Anthropic,
+            providers::ProviderKind::Anthropic,
             "claude",
             true,
         );
@@ -640,13 +640,13 @@ mod tests {
         };
         let primary_ui = ui_provider(
             "prov-primary",
-            providers_commands::ProviderKind::Openai,
+            providers::ProviderKind::Openai,
             "gpt-5.6",
             true,
         );
         let ollama_ui = ui_provider(
             "prov-ollama",
-            providers_commands::ProviderKind::Ollama,
+            providers::ProviderKind::Ollama,
             "llama",
             true,
         );
@@ -675,13 +675,13 @@ mod tests {
         };
         let primary_ui = ui_provider(
             "prov-primary",
-            providers_commands::ProviderKind::Openai,
+            providers::ProviderKind::Openai,
             "gpt-5.6",
             true,
         );
         let cheap_ui = ui_provider(
             "prov-cheap",
-            providers_commands::ProviderKind::Deepseek,
+            providers::ProviderKind::Deepseek,
             "deepseek-chat",
             true,
         );

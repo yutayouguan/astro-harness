@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 use tauri::image::Image;
 use tauri::{AppHandle, Runtime};
 
-/// 与 [`tray::install_tray`](crate::tray) 使用的 tray id 保持一致。
+/// 与 [`tray::install_tray`](crate::ui::tray) 使用的 tray id 保持一致。
 const TRAY_ID: &str = "main-tray";
 
 /// 默认变体（与构建期烘焙的 `icon.png` 来源一致）。
@@ -18,11 +18,11 @@ pub const DEFAULT_VARIANT: &str = "blue";
 
 /// 变体 id 与其嵌入 PNG 字节。
 const VARIANTS: &[(&str, &[u8])] = &[
-    ("blue", include_bytes!("../icons/blue.png")),
-    ("deep_blue", include_bytes!("../icons/deep_blue.png")),
-    ("black", include_bytes!("../icons/black.png")),
-    ("white", include_bytes!("../icons/white.png")),
-    ("white_logo", include_bytes!("../icons/white_logo.png")),
+    ("blue", include_bytes!("../../icons/blue.png")),
+    ("deep_blue", include_bytes!("../../icons/deep_blue.png")),
+    ("black", include_bytes!("../../icons/black.png")),
+    ("white", include_bytes!("../../icons/white.png")),
+    ("white_logo", include_bytes!("../../icons/white_logo.png")),
 ];
 
 /// 全部可选变体 id（保持声明顺序）。

@@ -8,7 +8,7 @@ use tauri::{AppHandle, Emitter, Manager};
 use tokio::sync::RwLock;
 use tracing::debug;
 
-use crate::grpc::{default_grpc_address, endpoint_url};
+use super::grpc::{default_grpc_address, endpoint_url};
 
 const EVENT_NAME: &str = "session_event";
 

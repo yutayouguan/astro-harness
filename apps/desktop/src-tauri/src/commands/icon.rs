@@ -4,7 +4,7 @@ use base64::Engine;
 use serde::Serialize;
 use tauri::{AppHandle, Runtime};
 
-use crate::app_icon;
+use crate::ui::app_icon;
 
 /// 单个图标变体的展示态（含 base64 缩略图供选择器预览）。
 #[derive(Debug, Clone, Serialize)]

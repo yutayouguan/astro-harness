@@ -354,22 +354,24 @@ export function IconPanelClose(props: IconProps) {
   );
 }
 
-/** 侧栏显示文字（宽） */
+/** 侧栏显示文字（宽）— macOS sidebar.left 风格 */
 export function IconSidebarLabels(props: IconProps) {
   return (
     <ChromeIconBase {...props}>
-      <rect width="18" height="18" x="3" y="3" rx="2" />
+      <rect width="18" height="18" x="3" y="3" rx="3" />
+      <path d="M6 3h3v18H6a3 3 0 0 1-3-3V6a3 3 0 0 1 3-3z" fill="currentColor" opacity="0.25" stroke="none" />
       <path d="M9 3v18" />
       <path d="M13 8h5M13 12h5M13 16h3" />
     </ChromeIconBase>
   );
 }
 
-/** 侧栏仅图标（窄） */
+/** 侧栏仅图标（窄）— macOS sidebar.left 风格 */
 export function IconSidebarIcons(props: IconProps) {
   return (
     <ChromeIconBase {...props}>
-      <rect width="18" height="18" x="3" y="3" rx="2" />
+      <rect width="18" height="18" x="3" y="3" rx="3" />
+      <path d="M6 3h3v18H6a3 3 0 0 1-3-3V6a3 3 0 0 1 3-3z" fill="currentColor" opacity="0.25" stroke="none" />
       <path d="M9 3v18" />
     </ChromeIconBase>
   );

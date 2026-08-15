@@ -262,7 +262,7 @@ pub fn enrich_model_info(info: &mut ModelInfo, kind: &str, hints: Option<ApiMode
         }
     }
 
-    if let Some(entry) = crate::openrouter_meta::lookup(&id_lower, &kind) {
+    if let Some(entry) = super::openrouter_meta::lookup(&id_lower, &kind) {
         if info.display_name.is_none() {
             info.display_name = entry.display_name.clone();
         }
@@ -441,7 +441,7 @@ mod tests {
 
     #[test]
     fn google_api_only_without_openrouter() {
-        crate::openrouter_meta::with_fixture(r#"{"data":[]}"#, || {
+        super::openrouter_meta::with_fixture(r#"{"data":[]}"#, || {
             let info = enrich_from_id(
                 "gemini-2.5-flash",
                 "google",
@@ -463,7 +463,7 @@ mod tests {
 
     #[test]
     fn openrouter_enriches_deepseek() {
-        crate::openrouter_meta::with_fixture(
+        super::openrouter_meta::with_fixture(
             r#"{
               "data": [{
                 "id": "deepseek/deepseek-chat",
@@ -510,7 +510,7 @@ mod tests {
 
     #[test]
     fn clears_stale_caps_when_openrouter_hits() {
-        crate::openrouter_meta::with_fixture(
+        super::openrouter_meta::with_fixture(
             r#"{
               "data": [{
                 "id": "deepseek/deepseek-v4-flash",
@@ -561,7 +561,7 @@ mod tests {
 
     #[test]
     fn deepseek_v4_known_reasoning_when_openrouter_misses() {
-        crate::openrouter_meta::with_fixture(r#"{"data":[]}"#, || {
+        super::openrouter_meta::with_fixture(r#"{"data":[]}"#, || {
             let info = enrich_from_id("deepseek-v4-pro", "deepseek", None);
             assert!(info.capabilities.reasoning);
             assert_eq!(info.meta_source, "known");
@@ -570,7 +570,7 @@ mod tests {
 
     #[test]
     fn no_hardcode_when_both_miss() {
-        crate::openrouter_meta::with_fixture(r#"{"data":[]}"#, || {
+        super::openrouter_meta::with_fixture(r#"{"data":[]}"#, || {
             let info = enrich_from_id("gpt-4o-2024-08-06", "openai", None);
             assert_eq!(info.context_window, None);
             assert!(!info.capabilities.vision);
@@ -581,7 +581,7 @@ mod tests {
 
     #[test]
     fn api_without_openrouter_keeps_api_only() {
-        crate::openrouter_meta::with_fixture(r#"{"data":[]}"#, || {
+        super::openrouter_meta::with_fixture(r#"{"data":[]}"#, || {
             let info = enrich_from_id(
                 "some-unknown-model",
                 "openai",
@@ -601,7 +601,7 @@ mod tests {
 
     #[test]
     fn openrouter_image_output_sets_image_gen() {
-        crate::openrouter_meta::with_fixture(
+        super::openrouter_meta::with_fixture(
             r#"{
               "data": [{
                 "id": "openai/dall-e-3",
@@ -627,7 +627,7 @@ mod tests {
 
     #[test]
     fn openrouter_audio_output_sets_audio_gen() {
-        crate::openrouter_meta::with_fixture(
+        super::openrouter_meta::with_fixture(
             r#"{
               "data": [{
                 "id": "openai/gpt-4o-mini-tts",
@@ -652,7 +652,7 @@ mod tests {
 
     #[test]
     fn openrouter_chat_multimodal_flags() {
-        crate::openrouter_meta::with_fixture(
+        super::openrouter_meta::with_fixture(
             r#"{
               "data": [{
                 "id": "google/gemini-2.0-flash",
@@ -679,7 +679,7 @@ mod tests {
 
     #[test]
     fn google_image_model_does_not_get_web() {
-        crate::openrouter_meta::with_fixture(r#"{"data":[]}"#, || {
+        super::openrouter_meta::with_fixture(r#"{"data":[]}"#, || {
             let info = enrich_from_id("gemini-2.5-flash-image", "google", None);
             assert!(!info.capabilities.web);
         });
@@ -687,7 +687,7 @@ mod tests {
 
     #[test]
     fn openrouter_web_search_options_sets_web() {
-        crate::openrouter_meta::with_fixture(
+        super::openrouter_meta::with_fixture(
             r#"{
               "data": [{
                 "id": "openai/gpt-4o",
@@ -711,7 +711,7 @@ mod tests {
 
     #[test]
     fn openrouter_video_output_sets_video_gen() {
-        crate::openrouter_meta::with_fixture(
+        super::openrouter_meta::with_fixture(
             r#"{
               "data": [{
                 "id": "openai/sora-2",
@@ -735,7 +735,7 @@ mod tests {
 
     #[test]
     fn openrouter_lyria_sets_music_gen_only() {
-        crate::openrouter_meta::with_fixture(
+        super::openrouter_meta::with_fixture(
             r#"{
               "data": [{
                 "id": "google/lyria-3-pro-preview",

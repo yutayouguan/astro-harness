@@ -37,8 +37,8 @@ use providers::ProviderConfig;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::OnceLock;
 
-use crate::auxiliary_resolver::{resolve_evolution_targets, AuxiliaryTargets, ResolvedTarget};
-use crate::providers_commands::{self, resolve_api_key, ProviderConfig as UiProvider};
+use crate::meta::auxiliary_resolver::{resolve_evolution_targets, AuxiliaryTargets, ResolvedTarget};
+use super::providers::{self as providers_commands, resolve_api_key, ProviderConfig as UiProvider};
 
 /// 单条提案的展示态。
 #[derive(Debug, Clone, Serialize)]
