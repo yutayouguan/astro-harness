@@ -142,7 +142,6 @@ export function ChatWelcome({ onPickCard }: Props) {
                 type="button"
                 className="chat-welcome-card"
                 data-tone={meta.tone}
-                style={{ animationDelay: `${index * 0.07}s` }}
                 onClick={() => onPickCard(t(meta.prompt))}
               >
                 <span className={`chat-welcome-card-icon ${meta.lucide ? "is-lucide" : ""}`} aria-hidden>
