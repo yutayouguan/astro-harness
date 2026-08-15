@@ -134,6 +134,14 @@ export async function zoomOrRestore(): Promise<void> {
     pseudoMaximized = false;
     cachedTarget = null;
     await animatePhysical(current, target);
+    try {
+      const win = getCurrentWindow();
+      if (await win.isMaximized()) {
+        await win.unmaximize();
+      }
+    } catch {
+      // ignore
+    }
   }
 }
 
