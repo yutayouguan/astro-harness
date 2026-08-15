@@ -196,36 +196,11 @@ fn set_app_menu_locale(app: AppHandle, locale: String) -> Result<(), String> {
     Ok(())
 }
 
-/// macOS：吞掉原生 `zoom:`（标题栏双击白边根因，见 tauri#13898 / tao#1207）。
-/// 底色保持不透明 underlay，勿清成 clearColor（露白边）。
+/// macOS：通过 window-vibrancy 插件启用原生毛玻璃效果。
 #[cfg(target_os = "macos")]
 fn configure_macos_window(win: &tauri::WebviewWindow) {
-    use objc::runtime::Object;
-    use objc::{msg_send, sel, sel_impl};
-
-    if let Ok(ns_window) = win.ns_window() {
-        unsafe {
-            let ns_window = ns_window as *mut Object;
-
-            let content_view: *mut Object = msg_send![ns_window, contentView];
-            if content_view.is_null() {
-                return;
-            }
-            let subviews: *mut Object = msg_send![content_view, subviews];
-            if subviews.is_null() {
-                return;
-            }
-            let flexible: usize = 2 | 16; // WidthSizable | HeightSizable
-            let count: usize = msg_send![subviews, count];
-            for i in 0..count {
-                let child: *mut Object = msg_send![subviews, objectAtIndex: i];
-                if child.is_null() {
-                    continue;
-                }
-                let _: () = msg_send![child, setAutoresizingMask: flexible];
-            }
-        }
-    }
+    use window_vibrancy::{apply_vibrancy, NSVisualEffectMaterial};
+    let _ = apply_vibrancy(win, NSVisualEffectMaterial::UnderWindowBackground, None, None);
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
