@@ -5,7 +5,7 @@ use proto::{
     ChatControlAction, ChatControlRequest, ChatRequest, FileListRequest, ImageRequest, MemoryQuery,
 };
 use serde::{Deserialize, Serialize};
-use tauri::{AppHandle, Emitter};
+use tauri::{AppHandle, Emitter, Manager};
 use uuid::Uuid;
 
 use crate::grpc::{default_grpc_address, endpoint_url};
@@ -2132,7 +2132,10 @@ pub async fn download_bytes_to_downloads(
 
 /// 复制选中路径到剪贴板。
 #[tauri::command]
-pub async fn copy_paths_to_clipboard(paths: Vec<String>) -> Result<(), String> {
+pub async fn copy_paths_to_clipboard(
+    app: tauri::AppHandle,
+    paths: Vec<String>,
+) -> Result<(), String> {
     if paths.is_empty() {
         return Err("没有可复制的文件".into());
     }
@@ -2144,13 +2147,15 @@ pub async fn copy_paths_to_clipboard(paths: Vec<String>) -> Result<(), String> {
         }
         resolved.push(p);
     }
-    crate::clipboard_files::write_paths(&resolved)
+    let clipboard = app.state::<tauri_plugin_clipboard::Clipboard>();
+    crate::clipboard_files::write_paths(&clipboard, &resolved)
 }
 
 /// 列出系统剪贴板中的文件路径（仅文件，不含目录）；供聊天输入粘贴附件。
 #[tauri::command]
-pub async fn list_clipboard_file_paths() -> Result<Vec<String>, String> {
-    let paths = crate::clipboard_files::read_paths()?;
+pub async fn list_clipboard_file_paths(app: tauri::AppHandle) -> Result<Vec<String>, String> {
+    let clipboard = app.state::<tauri_plugin_clipboard::Clipboard>();
+    let paths = crate::clipboard_files::read_paths(&clipboard)?;
     let files: Vec<String> = paths
         .into_iter()
         .filter(|p| p.is_file())
@@ -2165,6 +2170,7 @@ pub async fn list_clipboard_file_paths() -> Result<Vec<String>, String> {
 /// 从剪贴板粘贴路径列表。
 #[tauri::command]
 pub async fn paste_paths_from_clipboard(
+    app: tauri::AppHandle,
     dest_dir: String,
     mode: Option<String>,
 ) -> Result<Vec<FileEntryDto>, String> {
@@ -2172,7 +2178,8 @@ pub async fn paste_paths_from_clipboard(
     if !dest_dir.is_dir() {
         return Err("目标不是目录".into());
     }
-    let sources = crate::clipboard_files::read_paths()?;
+    let clipboard = app.state::<tauri_plugin_clipboard::Clipboard>();
+    let sources = crate::clipboard_files::read_paths(&clipboard)?;
     let cut = mode.as_deref() == Some("cut");
     let mut out = Vec::new();
     for src in sources {
