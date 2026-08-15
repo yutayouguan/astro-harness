@@ -1768,24 +1768,15 @@ export default function ChatView({
                                   onUiAction?.(m.id, name, context)
                                 }
                               />
-                            ) : surface.interrupts && surface.interrupts.length > 0 ? (
-                                <A2UIRenderer
-                                  operations={surface.operations}
-                                  disabled={surface.status !== "active"}
-                                  mediaBaseDir={mediaBaseDir}
-                                  onAction={(name, context) =>
-                                    onUiAction?.(m.id, name, context)
-                                  }
-                                />
-                              ) : (
-                                <A2UISurfaceCard
-                                  surface={surface}
-                                  mediaBaseDir={mediaBaseDir}
-                                  onAction={(name, context) =>
-                                    onUiAction?.(m.id, name, context)
-                                  }
-                                />
-                              ),
+                            ) : (
+                              <A2UISurfaceCard
+                                surface={surface}
+                                mediaBaseDir={mediaBaseDir}
+                                onAction={(name, context) =>
+                                  onUiAction?.(m.id, name, context)
+                                }
+                              />
+                            ),
                           });
                         };
 

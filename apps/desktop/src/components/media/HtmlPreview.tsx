@@ -57,7 +57,7 @@ export default function HtmlPreview({
 }: Props) {
   const { t } = useI18n();
   const [doc, setDoc] = useState<string | null>(source ?? null);
-  const [error, setError] = useState(false);
+  const [error, setError] = useState<false | "not-found" | "load-error">(false);
 
   useEffect(() => {
     if (source != null) {
@@ -67,7 +67,7 @@ export default function HtmlPreview({
     }
     if (!path) {
       setDoc(null);
-      setError(true);
+      setError("load-error");
       return;
     }
     let cancelled = false;
@@ -76,10 +76,15 @@ export default function HtmlPreview({
       .then((text) => {
         if (!cancelled) setDoc(text);
       })
-      .catch(() => {
+      .catch((err) => {
         if (!cancelled) {
           setDoc(null);
-          setError(true);
+          const msg = String(err ?? "");
+          setError(
+            msg.includes("not found") || msg.includes("No such file") || msg.includes("不存在")
+              ? "not-found"
+              : "load-error",
+          );
         }
       });
     return () => {
@@ -106,6 +111,7 @@ export default function HtmlPreview({
     return (
       <BrokenMedia
         path={path}
+        reason={error === "not-found" ? "not-found" : undefined}
         onOpenExternally={path ? openExternally : undefined}
         className={className}
       />

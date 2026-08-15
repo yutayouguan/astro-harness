@@ -18,6 +18,7 @@ type Props = {
 };
 
 type Phase = "idle" | "exit" | "enter";
+type Direction = "forward" | "backward";
 
 export default function ClarifyWizard({
   steps,
@@ -29,7 +30,9 @@ export default function ClarifyWizard({
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [customDrafts, setCustomDrafts] = useState<Record<string, string>>({});
   const [phase, setPhase] = useState<Phase>("idle");
+  const [direction, setDirection] = useState<Direction>("forward");
   const [pendingIndex, setPendingIndex] = useState<number | null>(null);
+  const [collapsed, setCollapsed] = useState(false);
 
   const safeIndex = Math.min(Math.max(index, 0), Math.max(steps.length - 1, 0));
   const step = steps[safeIndex];
@@ -42,6 +45,7 @@ export default function ClarifyWizard({
       if (disabled || steps.length === 0) return;
       const clamped = Math.min(Math.max(next, 0), steps.length - 1);
       if (clamped === safeIndex) return;
+      setDirection(clamped > safeIndex ? "forward" : "backward");
       setPendingIndex(clamped);
       setPhase("exit");
     },
@@ -53,7 +57,7 @@ export default function ClarifyWizard({
     const reduce =
       typeof window !== "undefined" &&
       window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    const ms = reduce ? 0 : 220;
+    const ms = reduce ? 0 : 180;
     const timer = window.setTimeout(() => {
       setIndex(pendingIndex);
       setPendingIndex(null);
@@ -67,7 +71,7 @@ export default function ClarifyWizard({
     const reduce =
       typeof window !== "undefined" &&
       window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    const ms = reduce ? 0 : 240;
+    const ms = reduce ? 0 : 200;
     const timer = window.setTimeout(() => setPhase("idle"), ms);
     return () => window.clearTimeout(timer);
   }, [phase]);
@@ -85,6 +89,7 @@ export default function ClarifyWizard({
         answers: finalAnswers,
         value: summary || Object.values(finalAnswers).join("；"),
       });
+      setCollapsed(true);
     },
     [onAction, steps],
   );
@@ -97,9 +102,14 @@ export default function ClarifyWizard({
       }
       if (!isLast) {
         goTo(safeIndex + 1);
+      } else {
+        const allAnswered = steps.every((s) => nextAnswers[s.id]?.trim());
+        if (allAnswered) {
+          submitAll(nextAnswers);
+        }
       }
     },
-    [goTo, isLast, isSingle, safeIndex, submitAll],
+    [goTo, isLast, isSingle, safeIndex, steps, submitAll],
   );
 
   const pickPreset = useCallback(
@@ -131,7 +141,75 @@ export default function ClarifyWizard({
     [advanceWithAnswer, answers, customDrafts, disabled, phase, step],
   );
 
+  /** 当前步骤是否有有效答案（含自定义草稿） */
+  const currentHasAnswer = useCallback(() => {
+    if (!step) return false;
+    if (answers[step.id]?.trim()) return true;
+    if (customDrafts[step.id]?.trim()) return true;
+    return false;
+  }, [answers, customDrafts, step]);
+
+  /** 点"下一题"时：先保存自定义草稿（如有），再前进 */
+  const handleNext = useCallback(() => {
+    if (!step) return;
+    const draft = customDrafts[step.id]?.trim();
+    if (draft && !answers[step.id]?.trim()) {
+      const nextAnswers = { ...answers, [step.id]: draft };
+      setAnswers(nextAnswers);
+      setCustomDrafts((prev) => ({ ...prev, [step.id]: draft }));
+      advanceWithAnswer(nextAnswers);
+    } else {
+      goTo(safeIndex + 1);
+    }
+  }, [advanceWithAnswer, answers, customDrafts, goTo, safeIndex, step]);
+
+  /** 点"提交"时：也要保存最后一题的自定义草稿 */
+  const handleSubmit = useCallback(() => {
+    let finalAnswers = { ...answers };
+    if (step) {
+      const draft = customDrafts[step.id]?.trim();
+      if (draft && !finalAnswers[step.id]?.trim()) {
+        finalAnswers = { ...finalAnswers, [step.id]: draft };
+        setAnswers(finalAnswers);
+      }
+    }
+    submitAll(finalAnswers);
+  }, [answers, customDrafts, step, submitAll]);
+
   if (!steps.length || !step) return null;
+
+  if (collapsed) {
+    const summaryParts = steps
+      .map((s) => {
+        const a = answers[s.id];
+        return a ? { question: s.question, answer: a } : null;
+      })
+      .filter(Boolean) as { question: string; answer: string }[];
+
+    return (
+      <div
+        className="a2ui-clarify-wizard is-collapsed"
+        data-a2ui-id="wizard"
+        onClick={() => setCollapsed(false)}
+        role="button"
+        tabIndex={0}
+        onKeyDown={(e) => e.key === "Enter" && setCollapsed(false)}
+      >
+        <div className="a2ui-clarify-collapsed">
+          <span className="a2ui-clarify-collapsed-icon" aria-hidden>✓</span>
+          <div className="a2ui-clarify-collapsed-body">
+            {summaryParts.map((p) => (
+              <span key={p.question} className="a2ui-clarify-collapsed-pair">
+                <span className="a2ui-clarify-collapsed-q">{p.question}</span>
+                <span className="a2ui-clarify-collapsed-a">{p.answer}</span>
+              </span>
+            ))}
+          </div>
+          <span className="a2ui-clarify-collapsed-expand" aria-hidden>▸</span>
+        </div>
+      </div>
+    );
+  }
 
   const hasPresets = step.options.length > 0;
   const saved = answers[step.id];
@@ -143,6 +221,8 @@ export default function ClarifyWizard({
   const backPeek = multi
     ? steps.slice(safeIndex + 1, safeIndex + 3).map((_, i) => i + 1)
     : [];
+
+  const dirClass = `is-${direction}`;
 
   const customInput = (
     <label
@@ -196,7 +276,7 @@ export default function ClarifyWizard({
       {multi ? (
         <div className="a2ui-clarify-tabs" role="tablist" aria-label={t("chat.a2ui.clarifyTabs")}>
           {steps.map((s, i) => {
-            const answered = Boolean(answers[s.id]?.trim());
+            const answered = Boolean(answers[s.id]?.trim() || customDrafts[s.id]?.trim());
             const active = i === safeIndex;
             return (
               <button
@@ -236,8 +316,8 @@ export default function ClarifyWizard({
         <div
           className={[
             "a2ui-clarify-layer is-front",
-            phase === "exit" ? "is-exit" : "",
-            phase === "enter" ? "is-enter" : "",
+            phase === "exit" ? `is-exit ${dirClass}` : "",
+            phase === "enter" ? `is-enter ${dirClass}` : "",
           ]
             .filter(Boolean)
             .join(" ")}
@@ -299,9 +379,9 @@ export default function ClarifyWizard({
                   type="button"
                   className="a2ui-button is-primary"
                   disabled={
-                    disabled || !answers[step.id]?.trim() || phase === "exit"
+                    disabled || !currentHasAnswer() || phase === "exit"
                   }
-                  onClick={() => goTo(safeIndex + 1)}
+                  onClick={handleNext}
                 >
                   {t("chat.a2ui.clarifyNext")}
                 </button>
@@ -311,10 +391,11 @@ export default function ClarifyWizard({
                   className="a2ui-button is-primary"
                   disabled={
                     disabled ||
-                    steps.some((s) => !answers[s.id]?.trim()) ||
+                    !currentHasAnswer() ||
+                    steps.slice(0, -1).some((s) => !answers[s.id]?.trim()) ||
                     phase === "exit"
                   }
-                  onClick={() => submitAll(answers)}
+                  onClick={handleSubmit}
                 >
                   {t("chat.a2ui.clarifySubmit")}
                 </button>

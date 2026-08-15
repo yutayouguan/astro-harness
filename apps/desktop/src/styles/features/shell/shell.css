@@ -48,34 +48,6 @@
   flex-shrink: 0;
 }
 
-.titlebar-sidebar-toggle .sidebar-new-chat-btn {
-  box-sizing: border-box;
-  width: 22px;
-  height: 22px;
-  border-radius: 6px;
-  padding: 0;
-  margin: 0 0 0 2px;
-  line-height: 0;
-  display: grid;
-  place-items: center;
-  border: none;
-  background: transparent;
-  color: var(--ink-mute);
-  cursor: pointer;
-  transition: color 0.15s ease, background 0.15s ease;
-}
-
-.titlebar-sidebar-toggle .sidebar-new-chat-btn:hover {
-  color: var(--tone, var(--ink));
-  background: color-mix(in srgb, var(--tone, var(--ink)) 12%, transparent);
-}
-
-.titlebar-sidebar-toggle .sidebar-new-chat-btn svg {
-  display: block;
-  width: 14px;
-  height: 14px;
-}
-
 .app-shell {
   position: fixed;
   inset: 0;

@@ -98,10 +98,11 @@ export function ComposerPalette({
                 type="button"
                 role="option"
                 data-idx={index}
+                data-kind={item.mentionKind ?? undefined}
                 aria-selected={active}
                 className={`composer-palette-item ${active ? "is-active" : ""} ${
                   selected ? "is-selected" : ""
-                }`}
+                } ${item.mentionKind ? `is-${item.mentionKind}` : ""}`}
                 onMouseEnter={() => onHover(index)}
                 onClick={() => onSelect(item)}
               >
@@ -109,6 +110,11 @@ export function ComposerPalette({
                   <span className="composer-palette-item-title">
                     {item.icon ? <span className="composer-palette-ico">{item.icon}</span> : null}
                     {item.title}
+                    {item.mentionKind === "skill" ? (
+                      <span className="composer-palette-badge composer-palette-badge--skill">skill</span>
+                    ) : item.mentionKind === "mcp" ? (
+                      <span className="composer-palette-badge composer-palette-badge--mcp">MCP</span>
+                    ) : null}
                   </span>
                   {item.description ? (
                     <span className="composer-palette-item-desc">{item.description}</span>
