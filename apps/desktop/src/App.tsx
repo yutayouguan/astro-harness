@@ -652,19 +652,6 @@ export default function App() {
             <IconPanelOpen width={13} height={13} />
           )}
         </button>
-        <button
-          type="button"
-          className="sidebar-new-chat-btn"
-          data-tone={shellTone}
-          onClick={() => { setNav("chat"); startNewChat(); }}
-          title={t("sidebar.newChat" as never)}
-          aria-label={t("sidebar.newChat" as never)}
-        >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z" />
-            <path d="M12 8v8" /><path d="M8 12h8" />
-          </svg>
-        </button>
       </div>
 
       {!sidebar.sidebarPinned && (
@@ -843,8 +830,20 @@ export default function App() {
                   disabled={chat.streaming}
                 />
               )}
-              {nav === "chat" && (
-                <div className="chat-header-tools">
+              <div className="chat-header-tools">
+                <button
+                  type="button"
+                  className="header-icon-btn"
+                  onClick={() => { setNav("chat"); startNewChat(); }}
+                  title={t("sidebar.newChat" as never)}
+                  aria-label={t("sidebar.newChat" as never)}
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z" />
+                    <path d="M12 8v8" /><path d="M8 12h8" />
+                  </svg>
+                </button>
+                {nav === "chat" && (
                   <button
                     type="button"
                     className={`header-icon-btn ${chat.chatRightOpen ? "is-active" : ""}`}
@@ -855,8 +854,8 @@ export default function App() {
                   >
                     <IconRightPanel width={16} height={16} />
                   </button>
-                </div>
-              )}
+                )}
+              </div>
             </div>
           </div>
           <div className="page-body">
