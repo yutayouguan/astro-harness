@@ -38,13 +38,12 @@ use std::sync::Mutex;
 use menu_locale::AppLocale;
 use tauri::{
     menu::{Menu, MenuItem, PredefinedMenuItem, Submenu, HELP_SUBMENU_ID, WINDOW_SUBMENU_ID},
-    window::Color,
     AppHandle, Emitter, Manager, RunEvent, WebviewWindowBuilder,
 };
 
-/// 原生窗全透明；内容由 CSS 铺满。macOS 用系统装饰 + Overlay 标题栏（红绿灯）。
-/// 与 light/blue underlay 一致；勿用全透明，否则 zoom 不同步时会露白边（tauri#13898）。
-const BG: Color = Color(0xdb, 0xea, 0xfe, 0xff);
+/// Windows/Linux 窗口底色。macOS 走透明 + NSVisualEffectView。
+#[cfg(not(target_os = "macos"))]
+const BG: tauri::window::Color = tauri::window::Color(0xdb, 0xea, 0xfe, 0xff);
 
 /// 原生菜单「偏好设置」项 id。
 const MENU_PREFERENCES_ID: &str = "preferences";
@@ -199,7 +198,7 @@ fn set_app_menu_locale(app: AppHandle, locale: String) -> Result<(), String> {
 /// macOS：注入 NSVisualEffectView 实现原生毛玻璃透明效果。
 #[cfg(target_os = "macos")]
 fn configure_macos_window(win: &tauri::WebviewWindow) {
-    use objc::runtime::{Class, Object, BOOL, YES};
+    use objc::runtime::{Class, Object, BOOL};
     use objc::{msg_send, sel, sel_impl};
 
     if let Ok(ns_window) = win.ns_window() {
