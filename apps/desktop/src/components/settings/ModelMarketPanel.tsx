@@ -4,19 +4,26 @@ import { invoke } from "@tauri-apps/api/core";
 import {
   ArrowDownAZ,
   ArrowUpAZ,
+  BookOpen,
   Brain,
+  Calendar,
+  Coins,
   Eye,
+  FileText,
   Grid2x2,
   Headphones,
   Image,
   Columns2,
+  Layers,
   List,
   RefreshCw,
   Search,
+  Shield,
   Wrench,
   Globe,
   Sparkles,
   X,
+  Zap,
 } from "lucide-react";
 import { useI18n } from "../../i18n/LocaleContext";
 import { ModelBrandIcon } from "../icons/ProviderIcons";
@@ -179,37 +186,37 @@ function ModelDetailPanel({ model }: { model: ModelCatalogEntry }) {
 
       {model.description && (
         <div className="mm-detail-section">
-          <span className="mm-detail-label">{t("modelMarket.detail.description" as never)}</span>
+          <span className="mm-detail-label"><FileText size={13} /> {t("modelMarket.detail.description" as never)}</span>
           <div className="mm-detail-body">{model.description}</div>
         </div>
       )}
 
       <div className="mm-detail-section">
-        <span className="mm-detail-label">{t("modelMarket.detail.specs" as never)}</span>
+        <span className="mm-detail-label"><Coins size={13} /> {t("modelMarket.detail.specs" as never)}</span>
         <div className="mm-detail-meta-grid">
           <div className="mm-detail-meta-item">
-            <span className="mm-detail-meta-key">{t("modelMarket.context")}</span>
+            <span className="mm-detail-meta-key"><BookOpen size={12} /> {t("modelMarket.context")}</span>
             <span className="mm-detail-meta-val">{formatCtx(model.context_length)}</span>
           </div>
           {model.pricing && (
             <>
               <div className="mm-detail-meta-item">
-                <span className="mm-detail-meta-key">{t("modelMarket.detail.promptPrice" as never)}</span>
+                <span className="mm-detail-meta-key"><Coins size={12} /> {t("modelMarket.detail.promptPrice" as never)}</span>
                 <span className="mm-detail-meta-val price">{formatPrice(model.pricing.prompt_per_million)}/M</span>
               </div>
               <div className="mm-detail-meta-item">
-                <span className="mm-detail-meta-key">{t("modelMarket.detail.completionPrice" as never)}</span>
+                <span className="mm-detail-meta-key"><Coins size={12} /> {t("modelMarket.detail.completionPrice" as never)}</span>
                 <span className="mm-detail-meta-val price">{formatPrice(model.pricing.completion_per_million)}/M</span>
               </div>
               {model.pricing.cache_read_per_million != null && model.pricing.cache_read_per_million > 0 && (
                 <div className="mm-detail-meta-item">
-                  <span className="mm-detail-meta-key">{t("modelMarket.detail.cacheRead" as never)}</span>
+                  <span className="mm-detail-meta-key"><Coins size={12} /> {t("modelMarket.detail.cacheRead" as never)}</span>
                   <span className="mm-detail-meta-val">{formatPrice(model.pricing.cache_read_per_million)}/M</span>
                 </div>
               )}
               {model.pricing.cache_write_per_million != null && model.pricing.cache_write_per_million > 0 && (
                 <div className="mm-detail-meta-item">
-                  <span className="mm-detail-meta-key">{t("modelMarket.detail.cacheWrite" as never)}</span>
+                  <span className="mm-detail-meta-key"><Coins size={12} /> {t("modelMarket.detail.cacheWrite" as never)}</span>
                   <span className="mm-detail-meta-val">{formatPrice(model.pricing.cache_write_per_million)}/M</span>
                 </div>
               )}
@@ -217,19 +224,19 @@ function ModelDetailPanel({ model }: { model: ModelCatalogEntry }) {
           )}
           {model.knowledge_cutoff && (
             <div className="mm-detail-meta-item">
-              <span className="mm-detail-meta-key">{t("modelMarket.detail.cutoff" as never)}</span>
+              <span className="mm-detail-meta-key"><Calendar size={12} /> {t("modelMarket.detail.cutoff" as never)}</span>
               <span className="mm-detail-meta-val">{model.knowledge_cutoff}</span>
             </div>
           )}
           {model.created && (
             <div className="mm-detail-meta-item">
-              <span className="mm-detail-meta-key">{t("modelMarket.detail.created" as never)}</span>
+              <span className="mm-detail-meta-key"><Calendar size={12} /> {t("modelMarket.detail.created" as never)}</span>
               <span className="mm-detail-meta-val">{new Date(model.created * 1000).toLocaleDateString()}</span>
             </div>
           )}
           {model.expiration_date && (
             <div className="mm-detail-meta-item">
-              <span className="mm-detail-meta-key">{t("modelMarket.detail.expiration" as never)}</span>
+              <span className="mm-detail-meta-key"><Shield size={12} /> {t("modelMarket.detail.expiration" as never)}</span>
               <span className="mm-detail-meta-val">{model.expiration_date}</span>
             </div>
           )}
@@ -238,7 +245,7 @@ function ModelDetailPanel({ model }: { model: ModelCatalogEntry }) {
 
       {activeCaps.length > 0 && (
         <div className="mm-detail-section">
-          <span className="mm-detail-label">{t("modelMarket.detail.capabilities" as never)}</span>
+          <span className="mm-detail-label"><Zap size={13} /> {t("modelMarket.detail.capabilities" as never)}</span>
           <div className="mm-detail-caps">
             {activeCaps.map((c) => (
               <span key={c.key} className="mm-detail-cap">
@@ -252,7 +259,7 @@ function ModelDetailPanel({ model }: { model: ModelCatalogEntry }) {
 
       {(model.input_modalities.length > 0 || model.output_modalities.length > 0) && (
         <div className="mm-detail-section">
-          <span className="mm-detail-label">{t("modelMarket.detail.modalities" as never)}</span>
+          <span className="mm-detail-label"><Layers size={13} /> {t("modelMarket.detail.modalities" as never)}</span>
           <div className="mm-detail-meta-grid">
             {model.input_modalities.length > 0 && (
               <div className="mm-detail-meta-item">
