@@ -2497,9 +2497,10 @@ html[data-theme="dark"] .chat-welcome-title-brand {
   z-index: 1;
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 248px));
+  justify-content: center;
   gap: 12px;
   margin-top: 6px;
-  width: min(100%, 520px);
+  width: 100%;
 }
 
 .chat-welcome-card {
@@ -2749,6 +2750,8 @@ html[data-theme="dark"] .chat-welcome-card-glyph {
 .chat-welcome-carousel {
   width: 100%;
   max-width: 720px;
+  margin-left: auto;
+  margin-right: auto;
   overflow: hidden;
 }
 
@@ -2795,12 +2798,12 @@ html[data-theme="dark"] .chat-welcome-card-glyph {
   border: none;
   padding: 0;
   cursor: pointer;
-  background: color-mix(in srgb, var(--ink) 18%, transparent);
+  background: color-mix(in srgb, var(--tone, var(--ink)) 22%, transparent);
   transition: all 0.3s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .chat-welcome-dot:hover {
-  background: color-mix(in srgb, var(--ink) 35%, transparent);
+  background: color-mix(in srgb, var(--tone, var(--ink)) 45%, transparent);
   transform: scale(1.3);
 }
 
