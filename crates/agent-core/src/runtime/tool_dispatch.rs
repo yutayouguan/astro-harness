@@ -116,6 +116,7 @@ impl AgentLoop {
             credentials: &self.model_ctx.credentials,
             chat_targets: &self.model_ctx.chat_targets,
             execution,
+            permission_profile: self.permission_profile.clone(),
             hook_bus,
             workspace_write_grant,
         };

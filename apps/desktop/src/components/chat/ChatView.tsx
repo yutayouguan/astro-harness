@@ -696,7 +696,6 @@ export default function ChatView({
   const [approvalMode, setApprovalMode] = useState<PermissionPreset>("ask_for_approval");
   const [sandboxHealth, setSandboxHealth] = useState<PermissionSettings["sandboxHealth"] | null>(null);
   const [approvalBusy, setApprovalBusy] = useState(false);
-  const [queueOpen, setQueueOpen] = useState(true);
   const [tasksOpen, setTasksOpen] = useState(true);
   const [editingQueueId, setEditingQueueId] = useState<string | null>(null);
   const [modeSwitchSecLeft, setModeSwitchSecLeft] = useState(MODE_SWITCH_COUNTDOWN_SEC);

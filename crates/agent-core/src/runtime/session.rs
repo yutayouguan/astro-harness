@@ -112,6 +112,6 @@ pub fn resolve_session_project_root() -> Option<PathBuf> {
     if flag != "1" && !flag.eq_ignore_ascii_case("true") {
         return None;
     }
-    delegate::resolve_project_root(None)
-        .filter(|p| delegate::find_git_root(p).is_some() || p.is_dir())
+    worktree::resolve_project_root(None)
+        .filter(|p| worktree::find_git_root(p).is_some() || p.is_dir())
 }

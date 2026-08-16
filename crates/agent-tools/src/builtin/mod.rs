@@ -10,7 +10,7 @@ pub mod memory;
 pub mod present;
 pub mod shell;
 
-pub use agents::{persona_create, pipeline, subagent, team};
+pub use agents::{persona_create, subagent};
 pub use hitl::{ask_user, switch_mode};
 pub use media::{
     audio_understand, image_gen, image_understand, music_gen, robotics, tts, video_gen,

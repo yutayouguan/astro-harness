@@ -1,10 +1,8 @@
 pub mod cron;
-pub mod delegate;
 pub mod dispatch;
 pub mod headless;
 pub mod memory_review;
 pub mod mid_run_summary;
-pub mod multi_agent;
-pub mod orchestration;
+pub mod subagents;
 pub mod title_generation;
 pub mod tool_llm_compress;

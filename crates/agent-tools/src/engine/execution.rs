@@ -1,22 +1,35 @@
-//! 子 Agent 执行调度统一接口。
-//!
-//! 替代原来分散的 `DelegateRunner` / `DelegateAsyncSpawner` / `OrchestrationSpawner`
-//! 三个 `Arc<dyn Fn>` 类型别名，使编排策略可测试、可替换。
+//! First-class subagent thread dispatch contract.
 
-use delegate::DelegateRunRequest;
-use orchestration::OrchestrationSpawnRequest;
+use async_trait::async_trait;
+use subagents::{
+    AgentThread, AgentThreadMessage, CloseAgentRequest, InterruptAgentRequest,
+    ListAgentThreadsRequest, SendAgentMessageRequest, SpawnAgentRequest, WaitAgentThreadsRequest,
+};
 
-/// 子 Agent 执行调度统一接口。
+/// Runtime boundary used by the model tools and desktop commands.
 ///
-/// 由 `AgentLoop` 在构造时注入实现（通常为 `DefaultExecutionDispatch`），
-/// 经 `ToolContext` 传递给 `subagent` / `pipeline` / `team` 工具。
-pub trait ExecutionDispatch: Send + Sync {
-    /// 同步执行委派（阻塞等待结果）。
-    fn run_sync(&self, request: DelegateRunRequest) -> anyhow::Result<String>;
+/// `agent-core` owns the actual model/tool loop; this trait keeps `agent-tools`
+/// independent from the runtime implementation and makes lifecycle behavior
+/// testable.
+#[async_trait]
+pub trait AgentThreadDispatch: Send + Sync {
+    async fn spawn_agent(&self, request: SpawnAgentRequest) -> anyhow::Result<AgentThread>;
 
-    /// 异步启动委派（立即返回，结果写入 `AsyncDelegateRegistry`）。
-    fn spawn_async(&self, task_id: String, request: DelegateRunRequest);
+    async fn list_agents(
+        &self,
+        request: ListAgentThreadsRequest,
+    ) -> anyhow::Result<Vec<AgentThread>>;
 
-    /// 启动编排流水线（立即返回，结果写入 `OrchestrationDb`）。
-    fn spawn_orchestration(&self, request: OrchestrationSpawnRequest);
+    async fn read_agent(&self, thread_id: &str) -> anyhow::Result<(AgentThread, Vec<AgentThreadMessage>)>;
+
+    async fn send_message(&self, request: SendAgentMessageRequest) -> anyhow::Result<AgentThread>;
+
+    async fn wait_agents(
+        &self,
+        request: WaitAgentThreadsRequest,
+    ) -> anyhow::Result<Vec<AgentThread>>;
+
+    async fn interrupt_agent(&self, request: InterruptAgentRequest) -> anyhow::Result<AgentThread>;
+
+    async fn close_agent(&self, request: CloseAgentRequest) -> anyhow::Result<AgentThread>;
 }

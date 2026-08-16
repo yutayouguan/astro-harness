@@ -165,12 +165,16 @@ pub fn dispatch(
     let rel = display_rel(root, &full);
     let active_profile = if is_mutating_operation(&op) {
         let settings = memory::load_permission_settings(&ctx.memory_dir);
+        let selected_profile = ctx
+            .permission_profile
+            .clone()
+            .unwrap_or(settings.selection.profile_id);
         let profile_id = if ctx.workspace_write_grant
-            && settings.selection.profile_id == types::READ_ONLY_PROFILE
+            && selected_profile == types::READ_ONLY_PROFILE
         {
             types::WORKSPACE_PROFILE.to_string()
         } else {
-            settings.selection.profile_id
+            selected_profile
         };
         if !matches!(op.as_str(), "copy" | "cp") {
             enforce_file_mutation_policy(&profile_id, root, &full)?;

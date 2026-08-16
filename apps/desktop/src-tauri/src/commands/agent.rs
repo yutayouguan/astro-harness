@@ -205,13 +205,13 @@ pub async fn write_daily_memory(
 /// MultiTask：若能解析到 git root 则创建隔离 worktree；否则返回 `None`（降级共工作区）。
 #[tauri::command]
 pub fn prepare_multitask_worktree(task_id: String) -> Result<Option<MultitaskWorktreeDto>, String> {
-    let Some(root) = delegate::resolve_project_root(None) else {
+    let Some(root) = worktree::resolve_project_root(None) else {
         return Ok(None);
     };
-    let Some(repo) = delegate::find_git_root(&root) else {
+    let Some(repo) = worktree::find_git_root(&root) else {
         return Ok(None);
     };
-    match delegate::create_task_worktree(&repo, &task_id) {
+    match worktree::create_task_worktree(&repo, &task_id) {
         Ok(handle) => Ok(Some(MultitaskWorktreeDto {
             path: handle.path().to_string_lossy().into_owned(),
             repo_root: handle.repo_root.to_string_lossy().into_owned(),
@@ -238,6 +238,6 @@ pub fn cleanup_multitask_worktree(
         return Ok(());
     }
     // 泄漏 handle 字段到 cleanup API（不 drop 原 handle）
-    delegate::cleanup_task_worktree(&repo, &path, &branch, true);
+    worktree::cleanup_task_worktree(&repo, &path, &branch, true);
     Ok(())
 }

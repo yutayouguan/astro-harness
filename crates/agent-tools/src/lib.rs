@@ -35,7 +35,7 @@ pub use context::{
     ToolContext,
 };
 pub use dispatch::{builtin_handler_names, dispatch_tool, tool_requires_in_process_write};
-pub use engine::execution::ExecutionDispatch;
+pub use engine::execution::AgentThreadDispatch;
 pub use parse::{
     extract_tool_calls, resolve_tool_calls, ParsedToolCall, ToolCallAccumulator, ToolCallDelta,
 };

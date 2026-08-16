@@ -607,6 +607,7 @@ pub(crate) async fn execute_tools_concurrent(
             chat_targets: agent.chat_targets().to_vec(),
             image_gen_targets: agent.image_gen_targets().clone(),
             execution: agent.execution(),
+            permission_profile: agent.permission_profile().map(str::to_string),
             hook_bus: Some(agent.hook_bus()),
         }
     };
@@ -667,7 +668,8 @@ struct ToolExecSnapshot {
     credentials: types::ModelCredentials,
     chat_targets: Vec<types::ChatTarget>,
     image_gen_targets: types::ImageGenTargets,
-    execution: Arc<dyn tools::ExecutionDispatch>,
+    execution: Arc<dyn tools::AgentThreadDispatch>,
+    permission_profile: Option<String>,
     hook_bus: Option<Arc<hooks::PluginHookBus>>,
 }
 
@@ -717,6 +719,7 @@ fn run_tool_on_snapshot(
             credentials: &snap.credentials,
             chat_targets: &snap.chat_targets,
             execution: Some(snap.execution.clone()),
+            permission_profile: snap.permission_profile.clone(),
             hook_bus: snap.hook_bus.clone(),
             workspace_write_grant: false,
         };

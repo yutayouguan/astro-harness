@@ -1181,62 +1181,35 @@ html[data-theme="dark"] .composer-icon-btn.is-open {
   opacity: 0.9;
 }
 
-.composer-queue-toggle {
+/* ── Codex-style queue cards ──────────────────────── */
+
+.composer-queue-card {
   display: flex;
   align-items: center;
-  gap: 6px;
-  width: 100%;
-  border: none;
-  background: transparent;
-  padding: 8px 12px;
-  font-size: 12px;
-  font-weight: 650;
-  color: var(--ink-soft);
-  cursor: pointer;
-  text-align: left;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  margin: 4px 0;
+  background: color-mix(in srgb, rgba(255, 255, 255, 0.35) 80%, transparent);
+  border: 1px solid color-mix(in srgb, var(--glass-edge) 60%, transparent);
+  transition: background 0.15s ease, border-color 0.15s ease;
 }
 
-.composer-queue-toggle svg {
-  transition: transform 0.15s ease;
-  transform: rotate(-90deg);
-  opacity: 0.75;
+.composer-queue-card:hover {
+  background: color-mix(in srgb, rgba(255, 255, 255, 0.5) 80%, transparent);
+  border-color: color-mix(in srgb, var(--tone, var(--ink)) 25%, var(--glass-edge));
 }
 
-.composer-queue-toggle svg.is-open {
-  transform: rotate(0deg);
-}
-
-.composer-queue-list {
-  list-style: none;
-  margin: 0;
-  padding: 0 8px 8px;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.composer-queue-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 8px;
-  border-radius: 10px;
-  background: color-mix(in srgb, rgba(255, 255, 255, 0.28) 70%, transparent);
-}
-
-.composer-queue-dot {
+.composer-queue-card-icon {
   flex-shrink: 0;
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  border: 1.5px solid color-mix(in srgb, var(--tone, #64748b) 55%, transparent);
-  background: transparent;
+  color: var(--ink-mute);
+  opacity: 0.5;
 }
 
-.composer-queue-text {
+.composer-queue-card-text {
   flex: 1;
   min-width: 0;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 550;
   color: var(--ink);
   white-space: nowrap;
@@ -1249,17 +1222,29 @@ html[data-theme="dark"] .composer-icon-btn.is-open {
   min-width: 0;
   border: 1px solid color-mix(in srgb, var(--tone, #64748b) 28%, var(--glass-edge));
   border-radius: 8px;
-  padding: 4px 8px;
-  font-size: 12px;
-  background: rgba(255, 255, 255, 0.45);
+  padding: 5px 10px;
+  font-size: 13px;
+  background: rgba(255, 255, 255, 0.5);
   color: var(--ink);
+  outline: none;
 }
 
-.composer-queue-actions {
+.composer-queue-edit:focus {
+  border-color: color-mix(in srgb, var(--tone) 55%, transparent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--tone) 12%, transparent);
+}
+
+.composer-queue-card-actions {
   display: inline-flex;
   align-items: center;
   gap: 2px;
   flex-shrink: 0;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.composer-queue-card:hover .composer-queue-card-actions {
+  opacity: 1;
 }
 
 .composer-queue-btn {
@@ -1268,10 +1253,11 @@ html[data-theme="dark"] .composer-icon-btn.is-open {
   width: 26px;
   height: 26px;
   border: none;
-  border-radius: 8px;
+  border-radius: 7px;
   background: transparent;
   color: var(--ink-mute);
   cursor: pointer;
+  transition: color 0.12s ease, background 0.12s ease;
 }
 
 .composer-queue-btn:hover:not(:disabled) {
@@ -1286,14 +1272,18 @@ html[data-theme="dark"] .composer-icon-btn.is-open {
 
 html[data-theme="dark"] .composer-queue {
   background:
-    linear-gradient(160deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.02)),
-    color-mix(in srgb, var(--tone-soft, transparent) 22%, rgba(8, 6, 18, 0.45));
-  border-color: rgba(255, 255, 255, 0.12);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+    linear-gradient(160deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.02)),
+    color-mix(in srgb, var(--tone-soft, transparent) 18%, rgba(8, 6, 18, 0.4));
+  border-color: rgba(255, 255, 255, 0.1);
 }
 
-html[data-theme="dark"] .composer-queue-item {
+html[data-theme="dark"] .composer-queue-card {
   background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+html[data-theme="dark"] .composer-queue-card:hover {
+  background: rgba(255, 255, 255, 0.08);
 }
 
 html[data-theme="dark"] .composer-queue-edit {

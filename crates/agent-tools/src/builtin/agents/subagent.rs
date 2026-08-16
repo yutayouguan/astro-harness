@@ -1,8 +1,4 @@
-//! 临时子 Agent：同步 / 异步真 spawn（单一 `subagent` + `action`）。
-//!
-//! 经 `delegate` crate 回调执行；未注册 runner/spawner 时返回错误。
-//! 用于回合内短暂并行子任务（不建持久 Agent）；串行多角色用 `pipeline`；
-//! 新建长期助手请用 `persona_create`（禁止用本工具「创建人设」）。
+//! Codex-style first-class subagent thread tools.
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -11,322 +7,334 @@ use crate::context::ToolContext;
 use crate::registry::{ToolEntry, ToolRegistry};
 use crate::schema::schema_for_args;
 
-/// One item in a batch delegate.
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
-pub struct DelegateTaskArgs {
-    pub goal: String,
-    /// Context the child needs (parent must pass explicitly).
+struct SpawnAgentArgs {
+    task: String,
     #[serde(default)]
-    pub context: Option<String>,
-    /// `leaf` (default) cannot re-delegate; `orchestrator` may spawn one more level if allowed.
+    agent: Option<String>,
     #[serde(default)]
-    pub role: Option<String>,
-    /// Toolset whitelist, e.g. `["terminal","file","web"]`; default = parent minus stripped sets.
+    model: Option<String>,
     #[serde(default)]
-    pub toolsets: Option<Vec<String>>,
-    /// Max child iterations; default from config child_max_iterations (often 50).
+    model_reasoning_effort: Option<String>,
+    /// none|all|N. Defaults to all parent user/assistant messages.
     #[serde(default)]
-    pub max_iterations: Option<usize>,
-    /// Optional model: `provider:model_id`.
-    #[serde(default)]
-    pub model: Option<String>,
+    fork_turns: Option<String>,
 }
 
-/// Arguments for the unified `subagent` tool.
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
-pub struct SubagentArgs {
-    /// `run` (default) | `async` | `status` | `collect` | `cancel`.
+struct ListAgentsArgs {
     #[serde(default)]
-    pub action: Option<String>,
-    /// Single-task goal (mutually exclusive with `tasks`); for run/async.
-    #[serde(default)]
-    pub goal: Option<String>,
-    #[serde(default)]
-    pub context: Option<String>,
-    /// Single-task role: `leaf` | `orchestrator`.
-    #[serde(default)]
-    pub role: Option<String>,
-    /// Single-task toolset whitelist.
-    #[serde(default)]
-    pub toolsets: Option<Vec<String>>,
-    #[serde(default)]
-    pub max_iterations: Option<usize>,
-    /// Single-task optional model: `provider:model_id`.
-    #[serde(default)]
-    pub model: Option<String>,
-    /// Parallel sub-tasks (1–3 recommended; max 8).
-    #[serde(default)]
-    pub tasks: Option<Vec<DelegateTaskArgs>>,
-    /// Concurrency cap; default from config (often 3).
-    #[serde(default)]
-    pub max_concurrent: Option<usize>,
-    /// Task id for status/collect/cancel.
-    #[serde(default)]
-    pub task_id: Option<String>,
-    /// Max wait seconds for collect; default 600.
-    #[serde(default)]
-    pub timeout_secs: Option<u64>,
+    include_closed: Option<bool>,
 }
 
-/// 向注册表登记 `subagent`。
+#[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
+struct ThreadIdArgs {
+    thread_id: String,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
+struct SendMessageArgs {
+    thread_id: String,
+    message: String,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
+struct WaitAgentsArgs {
+    #[serde(default)]
+    thread_ids: Vec<String>,
+    #[serde(default)]
+    timeout_ms: Option<u64>,
+}
+
 pub fn register(registry: &mut ToolRegistry) {
+    let lifecycle = || ToolEntry::lifecycle_defaults().orchestrator_and_above();
     registry.register(ToolEntry {
-        name: "subagent".to_string(),
-        toolset: "subagent".to_string(),
-        description:
-            "Spawn ephemeral in-turn sub-agent(s) for parallel one-shot work (isolated sessions). \
-action=run (default, sync) | async (returns task_id) | status | collect | cancel. \
-NOT for durable personas (use persona_create) and NOT for serial multi-role flows (use pipeline). \
-Pass full context; children have no parent history."
-                .to_string(),
-        schema: schema_for_args::<SubagentArgs>(),
+        name: "spawn_agent".into(),
+        toolset: "subagents".into(),
+        description: "Spawn a first-class subagent thread. The child has its own context and tool loop; manage it with list/read/wait/send/interrupt/close.".into(),
+        schema: schema_for_args::<SpawnAgentArgs>(),
+        check_fn: None,
+        icon: "bot",
+        ..lifecycle()
+    });
+    registry.register(ToolEntry {
+        name: "list_agents".into(),
+        toolset: "subagents".into(),
+        description: "List subagent threads owned by the current parent session.".into(),
+        schema: schema_for_args::<ListAgentsArgs>(),
+        check_fn: None,
+        icon: "list-tree",
+        ..lifecycle()
+    });
+    registry.register(ToolEntry {
+        name: "read_agent".into(),
+        toolset: "subagents".into(),
+        description: "Inspect one subagent thread and its conversation messages.".into(),
+        schema: schema_for_args::<ThreadIdArgs>(),
+        check_fn: None,
+        icon: "messages-square",
+        ..lifecycle()
+    });
+    registry.register(ToolEntry {
+        name: "send_message_to_agent".into(),
+        toolset: "subagents".into(),
+        description: "Steer a live subagent by queueing a follow-up message at the next model boundary.".into(),
+        schema: schema_for_args::<SendMessageArgs>(),
         check_fn: None,
         icon: "send",
-        ..ToolEntry::lifecycle_defaults()
-            .exclusive()
-            .orchestrator_and_above()
+        ..lifecycle()
+    });
+    registry.register(ToolEntry {
+        name: "wait_agents".into(),
+        toolset: "subagents".into(),
+        description: "Wait for requested subagent threads to finish their current turns and return their summaries.".into(),
+        schema: schema_for_args::<WaitAgentsArgs>(),
+        check_fn: None,
+        icon: "clock",
+        ..lifecycle()
+    });
+    registry.register(ToolEntry {
+        name: "interrupt_agent".into(),
+        toolset: "subagents".into(),
+        description: "Interrupt the currently running turn of a subagent thread.".into(),
+        schema: schema_for_args::<ThreadIdArgs>(),
+        check_fn: None,
+        icon: "circle-stop",
+        ..lifecycle()
+    });
+    registry.register(ToolEntry {
+        name: "close_agent".into(),
+        toolset: "subagents".into(),
+        description: "Close a subagent thread and release its live controls.".into(),
+        schema: schema_for_args::<ThreadIdArgs>(),
+        check_fn: None,
+        icon: "x",
+        ..lifecycle()
     });
 }
 
 crate::submit_builtin_tool! {
     register: register,
-    names: ["subagent"],
+    names: [
+        "spawn_agent",
+        "list_agents",
+        "read_agent",
+        "send_message_to_agent",
+        "wait_agents",
+        "interrupt_agent",
+        "close_agent"
+    ],
     async_named: handle,
 }
 
-/// 本模块统一入口：按 `action` 分发。
 async fn handle(
     ctx: &mut ToolContext<'_>,
-    _name: &str,
+    name: &str,
     args: &serde_json::Value,
 ) -> anyhow::Result<String> {
-    let action = args
-        .get("action")
-        .and_then(|v| v.as_str())
-        .map(str::trim)
-        .filter(|s| !s.is_empty())
-        .unwrap_or("run")
-        .to_ascii_lowercase();
-    match action.as_str() {
-        "run" => dispatch(ctx, args),
-        "async" => dispatch_async(ctx, args),
-        "status" => dispatch_status(args),
-        "collect" => dispatch_collect(args).await,
-        "cancel" => dispatch_cancel(args),
-        other => {
-            anyhow::bail!("未知 subagent action: {other}（应为 run|async|status|collect|cancel）")
-        }
-    }
-}
-
-/// 同步执行真委派并返回摘要 JSON。
-pub fn dispatch(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow::Result<String> {
-    let req = build_run_request(ctx, args)?;
-    let exec = ctx
+    let dispatch = ctx
         .execution
         .as_ref()
-        .ok_or_else(|| anyhow::anyhow!("no execution dispatch configured"))?;
-    exec.run_sync(req)
-}
-
-/// 异步启动委派；立即返回 `task_id`。
-pub fn dispatch_async(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow::Result<String> {
-    let req = build_run_request(ctx, args)?;
-    let exec = ctx
-        .execution
-        .as_ref()
-        .ok_or_else(|| anyhow::anyhow!("no execution dispatch configured"))?;
-    let exec = std::sync::Arc::clone(exec);
-    let task_id =
-        delegate::start_delegate_async(req, move |task_id, req| exec.spawn_async(task_id, req))?;
-    Ok(serde_json::json!({
-        "task_id": task_id,
-        "status": "running",
-    })
-    .to_string())
-}
-
-/// 查询异步委派状态。
-pub fn dispatch_status(args: &serde_json::Value) -> anyhow::Result<String> {
-    let parsed: SubagentArgs = serde_json::from_value(args.clone())
-        .map_err(|e| anyhow::anyhow!("subagent status 参数无效: {e}"))?;
-    let id = parsed.task_id.as_deref().unwrap_or("").trim();
-    if id.is_empty() {
-        anyhow::bail!("subagent status 需要非空 task_id");
-    }
-    let rec = delegate::async_delegate_status(id).map_err(|e| anyhow::anyhow!("{e}"))?;
-    Ok(record_to_json(&rec, true))
-}
-
-/// 等待异步委派完成。
-pub async fn dispatch_collect(args: &serde_json::Value) -> anyhow::Result<String> {
-    let parsed: SubagentArgs = serde_json::from_value(args.clone())
-        .map_err(|e| anyhow::anyhow!("subagent collect 参数无效: {e}"))?;
-    let id = parsed.task_id.as_deref().unwrap_or("").trim();
-    if id.is_empty() {
-        anyhow::bail!("subagent collect 需要非空 task_id");
-    }
-    let timeout = parsed.timeout_secs.unwrap_or(600).clamp(1, 3600);
-    let rec = delegate::async_delegate_collect(id, timeout)
-        .await
-        .map_err(|e| anyhow::anyhow!("{e}"))?;
-    Ok(record_to_json(&rec, false))
-}
-
-/// 取消异步委派。
-pub fn dispatch_cancel(args: &serde_json::Value) -> anyhow::Result<String> {
-    let parsed: SubagentArgs = serde_json::from_value(args.clone())
-        .map_err(|e| anyhow::anyhow!("subagent cancel 参数无效: {e}"))?;
-    let id = parsed.task_id.as_deref().unwrap_or("").trim();
-    if id.is_empty() {
-        anyhow::bail!("subagent cancel 需要非空 task_id");
-    }
-    let rec = delegate::async_delegate_cancel(id).map_err(|e| anyhow::anyhow!("{e}"))?;
-    Ok(record_to_json(&rec, true))
-}
-
-fn build_run_request(
-    ctx: &ToolContext<'_>,
-    args: &serde_json::Value,
-) -> anyhow::Result<delegate::DelegateRunRequest> {
-    if !home::can_spawn_nested() {
-        anyhow::bail!(
-            "spawn depth limit reached (depth {} >= max {})",
-            home::current_spawn_depth(),
-            home::effective_max_spawn_depth()
-        );
-    }
-    let parsed: SubagentArgs = serde_json::from_value(args.clone())
-        .map_err(|e| anyhow::anyhow!("subagent 参数无效: {e}"))?;
-    let task_specs = resolve_tasks(&parsed)?;
-    let cfg = hooks::config::load_config_or_default();
-    let max_concurrent = parsed
-        .max_concurrent
-        .unwrap_or(cfg.delegation.max_concurrent_children)
-        .clamp(1, 8);
-    let max_spawn_depth =
-        home::scoped_max_spawn_depth().unwrap_or(cfg.delegation.max_spawn_depth.max(1));
-    Ok(delegate::DelegateRunRequest {
-        parent_agent_id: ctx.memory.agent_id.clone(),
-        parent_session_id: ctx.session_id.clone(),
-        provider: ctx.credentials.provider.clone(),
-        model: ctx.credentials.model.clone(),
-        api_key: ctx.credentials.api_key.clone(),
-        base_url: ctx.credentials.base_url.clone(),
-        chat_targets: ctx.chat_targets.to_vec(),
-        tasks: task_specs,
-        max_concurrent,
-        caller_depth: home::current_spawn_depth(),
-        max_spawn_depth,
-        project_root: ctx.project_root.clone(),
-        hook_bus: ctx.hook_bus.clone(),
-    })
-}
-
-fn resolve_tasks(parsed: &SubagentArgs) -> anyhow::Result<Vec<delegate::DelegateTaskSpec>> {
-    if let Some(tasks) = &parsed.tasks {
-        if tasks.is_empty() {
-            anyhow::bail!("tasks 不能为空");
-        }
-        if tasks.len() > 8 {
-            anyhow::bail!("tasks 最多 8 项");
-        }
-        let mut out = Vec::with_capacity(tasks.len());
-        for t in tasks {
-            let goal = t.goal.trim();
-            if goal.is_empty() {
-                anyhow::bail!("tasks[].goal 不能为空");
+        .ok_or_else(|| anyhow::anyhow!("no agent thread dispatch configured"))?;
+    match name {
+        "spawn_agent" => {
+            let parsed: SpawnAgentArgs = parse(name, args)?;
+            let task = parsed.task.trim();
+            if task.is_empty() {
+                anyhow::bail!("spawn_agent requires a non-empty task");
             }
-            out.push(delegate::DelegateTaskSpec {
-                goal: goal.to_string(),
-                context: t.context.as_deref().unwrap_or("").trim().to_string(),
-                role: delegate::DelegateRole::parse(t.role.as_deref().unwrap_or("leaf")),
-                toolsets: t.toolsets.clone(),
-                max_iterations: t.max_iterations,
-                model: t
-                    .model
-                    .as_deref()
-                    .map(str::trim)
-                    .filter(|s| !s.is_empty())
-                    .map(str::to_string),
-            });
+            let project_root = ctx.project_root.as_deref();
+            let settings = subagents::load_agents_settings(&ctx.memory_dir, project_root);
+            if !settings.enabled {
+                anyhow::bail!("subagent threads are disabled by [agents].enabled");
+            }
+            let catalog = subagents::load_agent_catalog(&ctx.memory_dir, project_root);
+            let agent_name = parsed
+                .agent
+                .as_deref()
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .unwrap_or("default");
+            let parent_model = format!("{}:{}", ctx.credentials.provider, ctx.credentials.model);
+            let parent_sandbox = current_sandbox_mode(ctx);
+            let resolved = subagents::resolve_agent(
+                &catalog,
+                &settings,
+                agent_name,
+                parsed.model.as_deref(),
+                parsed.model_reasoning_effort.as_deref(),
+                Some(&parent_model),
+                Some(&parent_sandbox),
+            )?;
+            let active = subagents::AgentThreadStore::open_default()?
+                .count_active(&ctx.session_id)?;
+            if active >= settings.max_concurrent_threads_per_session {
+                anyhow::bail!(
+                    "subagent concurrency limit reached ({active}/{})",
+                    settings.max_concurrent_threads_per_session
+                );
+            }
+            let request = subagents::SpawnAgentRequest {
+                parent_session_id: ctx.session_id.clone(),
+                parent_agent_id: ctx.memory.agent_id.clone(),
+                task: task.to_string(),
+                agent_name: resolved.definition.name,
+                developer_instructions: resolved.definition.developer_instructions,
+                context_snapshot: fork_context(ctx, parsed.fork_turns.as_deref())?,
+                model: resolved.model,
+                model_reasoning_effort: resolved.model_reasoning_effort,
+                sandbox_mode: resolved.sandbox_mode,
+                chat_targets: ctx.chat_targets.to_vec(),
+                project_root: ctx.project_root.clone(),
+                hook_bus: ctx.hook_bus.clone(),
+                interrupt_message: settings.interrupt_message,
+            };
+            Ok(serde_json::to_string(&dispatch.spawn_agent(request).await?)?)
         }
-        return Ok(out);
+        "list_agents" => {
+            let parsed: ListAgentsArgs = parse(name, args)?;
+            Ok(serde_json::to_string(
+                &dispatch
+                    .list_agents(subagents::ListAgentThreadsRequest {
+                        parent_session_id: Some(ctx.session_id.clone()),
+                        include_closed: parsed.include_closed.unwrap_or(false),
+                    })
+                    .await?,
+            )?)
+        }
+        "read_agent" => {
+            let parsed: ThreadIdArgs = parse(name, args)?;
+            let (thread, messages) = dispatch.read_agent(non_empty_id(&parsed.thread_id)?).await?;
+            Ok(serde_json::json!({ "thread": thread, "messages": messages }).to_string())
+        }
+        "send_message_to_agent" => {
+            let parsed: SendMessageArgs = parse(name, args)?;
+            if parsed.message.trim().is_empty() {
+                anyhow::bail!("send_message_to_agent requires a non-empty message");
+            }
+            Ok(serde_json::to_string(
+                &dispatch
+                    .send_message(subagents::SendAgentMessageRequest {
+                        thread_id: non_empty_id(&parsed.thread_id)?.to_string(),
+                        message: parsed.message.trim().to_string(),
+                    })
+                    .await?,
+            )?)
+        }
+        "wait_agents" => {
+            let parsed: WaitAgentsArgs = parse(name, args)?;
+            let ids = if parsed.thread_ids.is_empty() {
+                dispatch
+                    .list_agents(subagents::ListAgentThreadsRequest {
+                        parent_session_id: Some(ctx.session_id.clone()),
+                        include_closed: false,
+                    })
+                    .await?
+                    .into_iter()
+                    .filter(|thread| {
+                        matches!(
+                            thread.status,
+                            subagents::AgentThreadStatus::Pending
+                                | subagents::AgentThreadStatus::Running
+                        )
+                    })
+                    .map(|thread| thread.id)
+                    .collect()
+            } else {
+                parsed.thread_ids
+            };
+            Ok(serde_json::to_string(
+                &dispatch
+                    .wait_agents(subagents::WaitAgentThreadsRequest {
+                        thread_ids: ids,
+                        timeout_ms: parsed.timeout_ms.unwrap_or(120_000).clamp(0, 600_000),
+                    })
+                    .await?,
+            )?)
+        }
+        "interrupt_agent" => {
+            let parsed: ThreadIdArgs = parse(name, args)?;
+            Ok(serde_json::to_string(
+                &dispatch
+                    .interrupt_agent(subagents::InterruptAgentRequest {
+                        thread_id: non_empty_id(&parsed.thread_id)?.to_string(),
+                    })
+                    .await?,
+            )?)
+        }
+        "close_agent" => {
+            let parsed: ThreadIdArgs = parse(name, args)?;
+            Ok(serde_json::to_string(
+                &dispatch
+                    .close_agent(subagents::CloseAgentRequest {
+                        thread_id: non_empty_id(&parsed.thread_id)?.to_string(),
+                    })
+                    .await?,
+            )?)
+        }
+        _ => anyhow::bail!("unknown agent thread tool: {name}"),
     }
-
-    let goal = parsed.goal.as_deref().unwrap_or("").trim();
-    if goal.is_empty() {
-        anyhow::bail!("subagent 需要 goal 或 tasks");
-    }
-    Ok(vec![delegate::DelegateTaskSpec {
-        goal: goal.to_string(),
-        context: parsed.context.as_deref().unwrap_or("").trim().to_string(),
-        role: delegate::DelegateRole::parse(parsed.role.as_deref().unwrap_or("leaf")),
-        toolsets: parsed.toolsets.clone(),
-        max_iterations: parsed.max_iterations,
-        model: parsed
-            .model
-            .as_deref()
-            .map(str::trim)
-            .filter(|s| !s.is_empty())
-            .map(str::to_string),
-    }])
 }
 
-fn record_to_json(rec: &delegate::AsyncDelegateRecord, truncate_result: bool) -> String {
-    let mut result = rec.result_json.clone();
-    if truncate_result && result.len() > 2_000 {
-        result.truncate(2_000);
-        result.push('…');
-    }
-    let mut error = rec.error.clone();
-    if truncate_result && error.len() > 500 {
-        error.truncate(500);
-        error.push('…');
-    }
-    serde_json::json!({
-        "task_id": rec.id,
-        "status": rec.status,
-        "parent_session_id": rec.parent_session_id,
-        "result": if result.is_empty() { serde_json::Value::Null } else {
-            serde_json::from_str(&result).unwrap_or(serde_json::Value::String(result))
-        },
-        "error": if error.is_empty() { serde_json::Value::Null } else { serde_json::Value::String(error) },
-        "created_at": rec.created_at,
-        "finished_at": if rec.finished_at.is_empty() { serde_json::Value::Null } else {
-            serde_json::Value::String(rec.finished_at.clone())
-        },
-    })
-    .to_string()
+fn parse<T: for<'de> Deserialize<'de>>(name: &str, args: &serde_json::Value) -> anyhow::Result<T> {
+    serde_json::from_value(args.clone()).map_err(|error| anyhow::anyhow!("{name} arguments: {error}"))
 }
 
-#[cfg(test)]
-mod resolve_tests {
-    use super::*;
-
-    #[test]
-    fn parses_role_toolsets_max_iterations() {
-        let parsed = SubagentArgs {
-            action: None,
-            goal: Some("do it".into()),
-            context: Some("ctx".into()),
-            role: Some("orchestrator".into()),
-            toolsets: Some(vec!["terminal".into(), "file".into()]),
-            max_iterations: Some(12),
-            model: Some("claude:opus".into()),
-            tasks: None,
-            max_concurrent: None,
-            task_id: None,
-            timeout_secs: None,
-        };
-        let specs = resolve_tasks(&parsed).unwrap();
-        assert_eq!(specs.len(), 1);
-        assert_eq!(specs[0].role, delegate::DelegateRole::Orchestrator);
-        assert_eq!(
-            specs[0].toolsets.as_ref().unwrap(),
-            &vec!["terminal".to_string(), "file".to_string()]
-        );
-        assert_eq!(specs[0].max_iterations, Some(12));
-        assert_eq!(specs[0].model.as_deref(), Some("claude:opus"));
+fn non_empty_id(value: &str) -> anyhow::Result<&str> {
+    let value = value.trim();
+    if value.is_empty() {
+        anyhow::bail!("thread_id cannot be empty");
     }
+    Ok(value)
+}
+
+fn current_sandbox_mode(ctx: &ToolContext<'_>) -> String {
+    let profile = ctx.permission_profile.clone().unwrap_or_else(|| {
+        memory::load_permission_settings(&ctx.memory_dir)
+            .selection
+            .profile_id
+    });
+    match profile.as_str() {
+        types::READ_ONLY_PROFILE => "read-only".into(),
+        types::WORKSPACE_PROFILE => "workspace-write".into(),
+        types::DANGER_FULL_ACCESS_PROFILE => "danger-full-access".into(),
+        other => other.to_string(),
+    }
+}
+
+fn fork_context(ctx: &ToolContext<'_>, fork_turns: Option<&str>) -> anyhow::Result<String> {
+    let mode = fork_turns.map(str::trim).filter(|value| !value.is_empty()).unwrap_or("all");
+    if mode.eq_ignore_ascii_case("none") {
+        return Ok(String::new());
+    }
+    let mut messages: Vec<_> = ctx
+        .sessions
+        .get_messages(&ctx.session_id)?
+        .into_iter()
+        .filter(|message| matches!(message.role.as_str(), "user" | "assistant"))
+        .collect();
+    if !mode.eq_ignore_ascii_case("all") {
+        let turns = mode
+            .parse::<usize>()
+            .map_err(|_| anyhow::anyhow!("fork_turns must be none, all, or a positive integer"))?;
+        if turns == 0 {
+            return Ok(String::new());
+        }
+        let keep = turns.saturating_mul(2);
+        if messages.len() > keep {
+            messages.drain(..messages.len() - keep);
+        }
+    }
+    let mut out = String::new();
+    for message in messages {
+        let content = message.content.unwrap_or_default();
+        if content.trim().is_empty() {
+            continue;
+        }
+        out.push_str(&format!("## {}\n{}\n\n", message.role, types::truncate_chars(&content, 6_000)));
+        if out.len() >= 32_000 {
+            break;
+        }
+    }
+    Ok(types::truncate_chars(&out, 32_000))
 }

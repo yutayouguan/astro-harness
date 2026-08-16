@@ -9,8 +9,7 @@ memory = { path = "../agent-memory" }
 sandbox = { path = "../agent-sandbox" }
 session = { path = "../agent-session" }
 home = { path = "../agent-home" }
-orchestration = { path = "../agent-orchestration" }
-delegate = { path = "../agent-delegate" }
+subagents = { path = "../agent-subagents" }
 cron = { path = "../agent-cron" }
 usage = { path = "../agent-usage" }
 providers = { path = "../agent-providers" }

@@ -125,13 +125,15 @@ pub struct AgentLoop {
     // ── 注入的依赖 ─────────────────────────────────────────
     /// 进程内插件钩子总线（Block / Modify / Inject）。
     pub(crate) hook_bus: Arc<::hooks::PluginHookBus>,
-    /// 子 Agent 执行调度器（统一 delegate/orchestration）。
-    pub(crate) execution: Arc<dyn tools::ExecutionDispatch>,
+    /// First-class subagent thread dispatcher.
+    pub(crate) execution: Arc<dyn tools::AgentThreadDispatch>,
 
     // ── 轻量状态 ───────────────────────────────────────────
     pub(crate) cancel: CancelSignal,
     /// 代码/项目根（委派 worktree 或会话级 ASTRO_PROJECT_ROOT）。
     pub(crate) project_root: Option<PathBuf>,
+    /// Per-session permission profile override. `None` inherits current workspace selection.
+    pub(crate) permission_profile: Option<String>,
     /// `pre_llm_call` 注入的本轮附加上下文（不回写用户原文）。
     pub(crate) pending_inject_context: Option<String>,
     /// 上一轮复杂任务后挂起的学习 nudge（本轮注入 dynamic，下一次 begin_user_turn 清掉/重算）。
@@ -184,25 +186,15 @@ impl AgentLoop {
         mcp_hub_inner.set_agent_id(Some(agent_id));
         let mcp_hub = Arc::new(TokioMutex::new(mcp_hub_inner));
 
-        let execution: Arc<dyn tools::ExecutionDispatch> =
-            Arc::new(crate::exec::dispatch::DefaultExecutionDispatch);
+        let execution: Arc<dyn tools::AgentThreadDispatch> =
+            Arc::new(crate::exec::dispatch::DefaultAgentThreadDispatch);
 
-        static RESUME_ONCE: std::sync::Once = std::sync::Once::new();
-        let exec_resume = Arc::clone(&execution);
-        RESUME_ONCE.call_once(move || {
-            let exec = Arc::clone(&exec_resume);
-            delegate::resume_incomplete_async_delegates(move |task_id, req| {
-                exec.spawn_async(task_id, req);
-            });
-            if let Ok(handle) = tokio::runtime::Handle::try_current() {
-                let exec = exec_resume;
-                handle.spawn(async move {
-                    if let Err(e) =
-                        crate::exec::orchestration::resume_incomplete_orchestrations(&*exec).await
-                    {
-                        tracing::warn!(error = %e, "orchestration resume failed");
-                    }
-                });
+        static RECOVER_THREADS_ONCE: std::sync::Once = std::sync::Once::new();
+        RECOVER_THREADS_ONCE.call_once(|| {
+            if let Ok(store) = subagents::AgentThreadStore::open_default() {
+                if let Err(error) = store.interrupt_stale_running() {
+                    tracing::warn!(%error, "failed to recover stale subagent threads");
+                }
             }
         });
 
@@ -227,6 +219,7 @@ impl AgentLoop {
             execution,
             cancel: CancelSignal::new(),
             project_root: resolve_session_project_root(),
+            permission_profile: None,
             pending_inject_context: None,
             pending_learning_nudge: None,
             interaction_mode: types::InteractionMode::Agent,
@@ -249,8 +242,16 @@ impl AgentLoop {
     }
 
     /// 子 Agent 执行调度器。
-    pub fn execution(&self) -> Arc<dyn tools::ExecutionDispatch> {
+    pub fn execution(&self) -> Arc<dyn tools::AgentThreadDispatch> {
         Arc::clone(&self.execution)
+    }
+
+    pub fn set_permission_profile(&mut self, profile: Option<String>) {
+        self.permission_profile = profile;
+    }
+
+    pub fn permission_profile(&self) -> Option<&str> {
+        self.permission_profile.as_deref()
     }
 
     /// 从磁盘重载 MEMORY / USER 并更新 prompt 快照（同会话写入默认不刷新）。

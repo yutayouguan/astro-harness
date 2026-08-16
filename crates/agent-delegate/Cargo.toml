@@ -1,19 +1,12 @@
 [package]
-name = "delegate"
+name = "worktree"
 version = "0.1.0"
 edition = "2021"
-description = "子 Agent 委派请求类型、异步登记与 git worktree"
+description = "Git worktree helpers for project and desktop task isolation"
 
 [dependencies]
 anyhow = { workspace = true }
-types = { path = "../agent-types" }
-home = { path = "../agent-home" }
-hooks = { path = "../agent-hooks" }
-chrono = { version = "0.4", features = ["clock", "serde"] }
-serde = { workspace = true }
-serde_json = { workspace = true }
 tracing = { workspace = true }
-tokio = { workspace = true }
 uuid = { version = "1", features = ["v4"] }
 
 [dev-dependencies]

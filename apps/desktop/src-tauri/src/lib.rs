@@ -344,9 +344,15 @@ pub fn run() {
             commands::config::refresh_mcp_tools,
             commands::config::get_agent_usage_stats,
             commands::config::get_usage_insights,
-            commands::config::get_collaboration_insights,
             commands::config::get_trace_insights,
             commands::config::query_agent_logs,
+            // — first-class subagent threads —
+            commands::subagents::list_subagent_threads,
+            commands::subagents::read_subagent_thread,
+            commands::subagents::send_subagent_message,
+            commands::subagents::interrupt_subagent_thread,
+            commands::subagents::close_subagent_thread,
+            commands::subagents::list_subagent_definitions,
             // — providers —
             commands::providers::get_providers_state,
             commands::providers::list_providers,

@@ -100,7 +100,11 @@ fn enforce_in_process_write_policy(
         return Ok(());
     }
     let settings = memory::load_permission_settings(&ctx.memory_dir);
-    match settings.selection.profile_id.as_str() {
+    let profile = ctx
+        .permission_profile
+        .as_deref()
+        .unwrap_or(&settings.selection.profile_id);
+    match profile {
         types::READ_ONLY_PROFILE if ctx.workspace_write_grant => Ok(()),
         types::READ_ONLY_PROFILE => anyhow::bail!(
             "permission denied: read-only profile does not allow {name} to modify local state"

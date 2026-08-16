@@ -11,6 +11,7 @@
 
 use providers::ProviderConfig;
 use providers::Usage;
+use std::sync::Arc;
 use types::ChatTarget;
 
 use crate::runtime::budget::{should_refund_tool_round, IterationBudget, DEFAULT_MAX_ITERATIONS};
@@ -36,6 +37,16 @@ pub async fn run_headless_multi_turn(
     targets: Vec<ChatTarget>,
     system_prompt: String,
 ) -> anyhow::Result<(String, Usage)> {
+    run_headless_multi_turn_controlled(agent, targets, system_prompt, None).await
+}
+
+/// Headless loop with a real interrupt signal for first-class subagent threads.
+pub async fn run_headless_multi_turn_controlled(
+    agent: &mut AgentLoop,
+    targets: Vec<ChatTarget>,
+    system_prompt: String,
+    control: Option<Arc<subagents::AgentThreadControl>>,
+) -> anyhow::Result<(String, Usage)> {
     let base_config = ProviderConfig {
         temperature: agent.temperature(),
         additional_params: agent.additional_params().clone(),
@@ -58,6 +69,10 @@ pub async fn run_headless_multi_turn(
     let budget = IterationBudget::new(max_rounds);
 
     loop {
+        if control.as_ref().is_some_and(|value| value.is_interrupted() || value.is_closed()) {
+            agent.cancel_signal().cancel();
+            anyhow::bail!("agent thread interrupted");
+        }
         if !budget.consume() || agent.is_tool_depth_exhausted() {
             break;
         }
@@ -70,7 +85,17 @@ pub async fn run_headless_multi_turn(
             .stream_chat(&system_prompt, &history, tools)
             .await?;
 
-        let response = collect_response(stream).await?;
+        let response = if let Some(control) = control.as_ref() {
+            tokio::select! {
+                _ = control.cancelled() => {
+                    agent.cancel_signal().cancel();
+                    anyhow::bail!("agent thread interrupted");
+                }
+                result = collect_response(stream) => result?,
+            }
+        } else {
+            collect_response(stream).await?
+        };
 
         if let Some(u) = response.usage {
             total_usage.add_assign(u);
@@ -111,10 +136,18 @@ pub async fn run_headless_multi_turn(
         let stop_after = agent.tool_registry().any_stop_after(&names);
 
         for call in &response.calls {
-            let result = match agent
-                .handle_tool_call_async(&call.name, &call.arguments)
-                .await
-            {
+            let call_result = if let Some(control) = control.as_ref() {
+                tokio::select! {
+                    _ = control.cancelled() => {
+                        agent.cancel_signal().cancel();
+                        anyhow::bail!("agent thread interrupted");
+                    }
+                    result = agent.handle_tool_call_async(&call.name, &call.arguments) => result,
+                }
+            } else {
+                agent.handle_tool_call_async(&call.name, &call.arguments).await
+            };
+            let result = match call_result {
                 Ok(output) => output,
                 Err(crate::runtime::ToolCallError::Cancelled) => break,
                 Err(e) => format!("工具错误: {e}").into(),

@@ -33,16 +33,18 @@ pub struct ToolContext<'a> {
     pub project_root: Option<PathBuf>,
     /// 媒体生成主备凭证，由前端 Provider 面板注入。
     pub image_gen_targets: &'a ImageGenTargets,
-    /// 当前会话 id；`delegate`、`todo`、编排落盘时写入关联字段。
+    /// 当前会话 id；subagent threads、todo 等持久记录用它关联父会话。
     pub session_id: String,
     /// 当前流式 run 的 turn_id（与 agent `run_id` 相同）；未在 run 内为 `None`。
     pub turn_id: Option<String>,
     /// 当前聊天会话的 LLM 凭证（provider / model / api_key / base_url）。
     pub credentials: &'a ModelCredentials,
-    /// 含 primary 的聊天 fallback 链，供 `delegate` 下传给子 Agent。
+    /// 含 primary 的聊天 fallback 链，供子 Agent thread 继承。
     pub chat_targets: &'a [types::ChatTarget],
     /// 子 Agent 执行调度器（由 AgentLoop 注入；工具层测试可为 None）。
-    pub execution: Option<Arc<dyn crate::ExecutionDispatch>>,
+    pub execution: Option<Arc<dyn crate::AgentThreadDispatch>>,
+    /// 当前会话的权限 profile；子 Agent 缺省继承，可由 custom agent 收紧。
+    pub permission_profile: Option<String>,
     /// 插件钩子总线（由 AgentLoop 注入；无 bus 时对应工具跳过 transform 钩子）。
     pub hook_bus: Option<Arc<hooks::PluginHookBus>>,
     /// 当前单次工具调用已获得 workspace-write 临时授权。
@@ -76,18 +78,20 @@ impl<'a> ToolContext<'a> {
     pub fn command_sandbox_policy(&self) -> anyhow::Result<sandbox::SandboxPolicy> {
         let root = self.ensure_project_or_workspace()?;
         let loaded = memory::load_permission_settings(&self.memory_dir);
+        let profile_id = self
+            .permission_profile
+            .as_deref()
+            .unwrap_or(&loaded.selection.profile_id);
         if !matches!(
-            loaded.selection.profile_id.as_str(),
+            profile_id,
             READ_ONLY_PROFILE | WORKSPACE_PROFILE | DANGER_FULL_ACCESS_PROFILE
         ) {
             anyhow::bail!(
                 "custom permission profile {:?} is not executable until its filesystem rules are fully resolved",
-                loaded.selection.profile_id
+                profile_id
             );
         }
-        let mut mode = loaded
-            .permissions
-            .sandbox_mode_for(&loaded.selection.profile_id)?;
+        let mut mode = loaded.permissions.sandbox_mode_for(profile_id)?;
         if self.workspace_write_grant && mode == types::SandboxMode::ReadOnly {
             mode = types::SandboxMode::WorkspaceWrite;
         }

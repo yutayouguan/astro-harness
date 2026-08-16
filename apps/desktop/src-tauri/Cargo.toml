@@ -43,10 +43,10 @@ home = { path = "../../../crates/agent-home" }
 cron = { path = "../../../crates/agent-cron" }
 artifacts = { path = "../../../crates/agent-artifacts" }
 usage = { path = "../../../crates/agent-usage" }
-orchestration = { path = "../../../crates/agent-orchestration" }
+subagents = { path = "../../../crates/agent-subagents" }
 session = { path = "../../../crates/agent-session" }
 agent = { path = "../../../crates/agent-core" }
-delegate = { path = "../../../crates/agent-delegate" }
+worktree = { path = "../../../crates/agent-delegate" }
 server = { path = "../../../crates/agent-server" }
 tools = { path = "../../../crates/agent-tools" }
 mcp = { path = "../../../crates/agent-mcp" }

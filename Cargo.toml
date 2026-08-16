@@ -13,7 +13,7 @@ members = [
     "crates/agent-memory",
     "crates/agent-sandbox",
     "crates/agent-delegate",
-    "crates/agent-orchestration",
+    "crates/agent-subagents",
     "crates/agent-evolution",
     "crates/agent-cron",
     "crates/agent-workflow",

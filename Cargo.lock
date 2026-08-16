@@ -27,19 +27,18 @@ dependencies = [
  "async-trait",
  "chrono",
  "cron",
- "delegate",
  "futures",
  "home",
  "hooks",
  "mcp",
  "memory",
- "orchestration",
  "providers",
  "rusqlite",
  "serde",
  "serde_json",
  "session",
  "skills",
+ "subagents",
  "tempfile",
  "thiserror 1.0.69",
  "tokio",
@@ -48,6 +47,7 @@ dependencies = [
  "types",
  "usage",
  "uuid",
+ "worktree",
 ]
 
 [[package]]
@@ -173,7 +173,6 @@ dependencies = [
  "base64 0.22.1",
  "chrono",
  "cron",
- "delegate",
  "evolution",
  "futures",
  "home",
@@ -181,7 +180,6 @@ dependencies = [
  "mcp",
  "memory",
  "objc",
- "orchestration",
  "proto",
  "providers",
  "reqwest 0.12.28",
@@ -192,6 +190,7 @@ dependencies = [
  "server",
  "session",
  "skills",
+ "subagents",
  "tauri",
  "tauri-build",
  "tauri-plugin-autostart",
@@ -213,6 +212,7 @@ dependencies = [
  "uuid",
  "window-vibrancy 0.8.0",
  "workflow",
+ "worktree",
 ]
 
 [[package]]
@@ -1119,23 +1119,6 @@ dependencies = [
  "libc",
  "libdbus-sys",
  "windows-sys 0.61.2",
-]
-
-[[package]]
-name = "delegate"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "chrono",
- "home",
- "hooks",
- "serde",
- "serde_json",
- "tempfile",
- "tokio",
- "tracing",
- "types",
- "uuid",
 ]
 
 [[package]]
@@ -3556,22 +3539,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "04744f49eae99ab78e0d5c0b603ab218f515ea8cfe5a456d7629ad883a3b6e7d"
 
 [[package]]
-name = "orchestration"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "chrono",
- "home",
- "rusqlite",
- "serde",
- "serde_json",
- "tempfile",
- "types",
- "usage",
- "uuid",
-]
-
-[[package]]
 name = "ordered-stream"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5323,6 +5290,25 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7da8b5736845d9f2fcb837ea5d9e2628564b3b043a70948a3f0b778838c5fb4f"
 
 [[package]]
+name = "subagents"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "home",
+ "hooks",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "tokio",
+ "toml 0.8.2",
+ "tracing",
+ "types",
+ "uuid",
+]
+
+[[package]]
 name = "subtle"
 version = "2.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6250,14 +6236,12 @@ dependencies = [
  "base64 0.22.1",
  "chrono",
  "cron",
- "delegate",
  "futures",
  "home",
  "hooks",
  "inventory",
  "libc",
  "memory",
- "orchestration",
  "providers",
  "regex",
  "reqwest 0.12.28",
@@ -6267,6 +6251,7 @@ dependencies = [
  "serde_json",
  "session",
  "skills",
+ "subagents",
  "tempfile",
  "tokio",
  "types",
@@ -7693,6 +7678,16 @@ dependencies = [
  "tracing",
  "types",
  "url",
+ "uuid",
+]
+
+[[package]]
+name = "worktree"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "tempfile",
+ "tracing",
  "uuid",
 ]
 

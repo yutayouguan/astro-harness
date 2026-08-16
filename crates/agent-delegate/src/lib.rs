@@ -1,18 +1,10 @@
-//! 委派运行时契约：同步请求、异步任务登记、git worktree 隔离。
+//! Git worktree helpers used by explicit desktop multi-task workflows.
 //!
-//! 实际执行在 `agent::exec::delegate`；tools 通过 `ExecutionDispatch` trait 调用。
+//! Codex-style subagent threads intentionally do not create implicit worktrees;
+//! they inherit the parent workspace and permission policy.
 
-pub mod async_reg;
 pub mod git_worktree;
-pub mod spawn;
-
-pub use async_reg::{
-    async_delegate_cancel, async_delegate_collect, async_delegate_status,
-    resume_incomplete_async_delegates, start_delegate_async, AsyncDelegateRecord,
-    AsyncDelegateRegistry, AsyncDelegateStatus,
-};
 pub use git_worktree::{
     cleanup_task_worktree, create_task_worktree, find_git_root, resolve_project_root,
     WorktreeHandle,
 };
-pub use spawn::{DelegateRole, DelegateRunRequest, DelegateTaskSpec};
