@@ -718,11 +718,11 @@ html[data-theme="dark"] .composer-agent-validate-hint {
   width: min(330px, calc(100vw - 24px));
 }
 
-.composer-approval-item[data-approval-mode="off"] {
+.composer-approval-item[data-approval-mode="full_access"] {
   color: var(--tone-orange);
 }
 
-.composer-approval-item[data-approval-mode="off"] .composer-mode-item-desc {
+.composer-approval-item[data-approval-mode="full_access"] .composer-mode-item-desc {
   color: color-mix(in srgb, var(--tone-orange) 68%, var(--ink-mute));
 }
 
@@ -736,6 +736,33 @@ html[data-theme="dark"] .composer-agent-validate-hint {
   font-size: 0.62rem;
   font-weight: 650;
   vertical-align: 0.08rem;
+}
+
+.composer-approval-health {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 5px 8px 2px;
+  padding: 9px 10px 4px;
+  border-top: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
+  color: var(--text-tertiary);
+  font-size: 11px;
+}
+
+.composer-approval-health-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent-2);
+}
+
+.composer-approval-health[data-status="unavailable"] {
+  color: var(--danger);
+}
+
+.composer-approval-health[data-status="unavailable"] .composer-approval-health-dot,
+.composer-approval-health[data-status="unknown"] .composer-approval-health-dot {
+  background: currentColor;
 }
 
 html[data-theme="light"] .composer-mode-menu {

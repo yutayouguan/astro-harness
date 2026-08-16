@@ -21,6 +21,7 @@ import {
   Check,
   ChevronDown,
   Copy,
+  Eye,
   File,
   FileVideo,
   GitBranch,
@@ -344,12 +345,22 @@ const MAX_ATTACHMENTS = 8;
 /** 图片内联 base64 上限（字节） */
 const MAX_INLINE_BYTES = 4 * 1024 * 1024;
 
-type ApprovalMode = "manual" | "smart" | "off";
-type ApprovalSettings = { mode: string; commandAllowlist: string[] };
-const APPROVAL_MODES: ApprovalMode[] = ["manual", "smart", "off"];
+type PermissionPreset = "ask_for_approval" | "approve_for_me" | "read_only" | "full_access";
+type PermissionSettings = {
+  preset: string | null;
+  sandboxHealth: { backend: string; status: "available" | "unavailable"; detail: string };
+};
+const PERMISSION_PRESETS: PermissionPreset[] = [
+  "ask_for_approval",
+  "approve_for_me",
+  "read_only",
+  "full_access",
+];
 
-function normalizeApprovalMode(mode: string | null | undefined): ApprovalMode {
-  return mode === "manual" || mode === "off" ? mode : "smart";
+function normalizePermissionPreset(value: string | null | undefined): PermissionPreset {
+  return PERMISSION_PRESETS.includes(value as PermissionPreset)
+    ? (value as PermissionPreset)
+    : "ask_for_approval";
 }
 
 /** 由 MIME / 扩展名推断附件种类 */
@@ -681,7 +692,8 @@ export default function ChatView({
   const contextWrapRef = useRef<HTMLDivElement>(null);
   const [modeMenuOpen, setModeMenuOpen] = useState(false);
   const [approvalMenuOpen, setApprovalMenuOpen] = useState(false);
-  const [approvalMode, setApprovalMode] = useState<ApprovalMode>("smart");
+  const [approvalMode, setApprovalMode] = useState<PermissionPreset>("ask_for_approval");
+  const [sandboxHealth, setSandboxHealth] = useState<PermissionSettings["sandboxHealth"] | null>(null);
   const [approvalBusy, setApprovalBusy] = useState(false);
   const [queueOpen, setQueueOpen] = useState(true);
   const [tasksOpen, setTasksOpen] = useState(true);
@@ -752,9 +764,10 @@ export default function ChatView({
   const refreshApprovalMode = useCallback(async () => {
     const requestId = ++approvalRequestIdRef.current;
     try {
-      const settings = await invoke<ApprovalSettings>("get_approval_settings");
+      const settings = await invoke<PermissionSettings>("get_permission_settings");
       if (requestId === approvalRequestIdRef.current) {
-        setApprovalMode(normalizeApprovalMode(settings.mode));
+        setApprovalMode(normalizePermissionPreset(settings.preset));
+        setSandboxHealth(settings.sandboxHealth);
       }
     } catch {
       // 浏览器预览或后端暂不可用时保留安全默认值。
@@ -881,30 +894,36 @@ export default function ChatView({
   }, [t]);
 
   const approvalMeta = useMemo(() => ({
-    manual: {
-      label: t("chat.approval.manual"),
-      desc: t("chat.approval.desc.manual"),
+    ask_for_approval: {
+      label: t("chat.approval.askForApproval"),
+      desc: t("chat.approval.desc.askForApproval"),
       Icon: Hand,
     },
-    smart: {
-      label: t("chat.approval.smart"),
-      desc: t("chat.approval.desc.smart"),
+    approve_for_me: {
+      label: t("chat.approval.approveForMe"),
+      desc: t("chat.approval.desc.approveForMe"),
       Icon: ShieldCheck,
     },
-    off: {
-      label: t("chat.approval.off"),
-      desc: t("chat.approval.desc.off"),
+    read_only: {
+      label: t("chat.approval.readOnly"),
+      desc: t("chat.approval.desc.readOnly"),
+      Icon: Eye,
+    },
+    full_access: {
+      label: t("chat.approval.fullAccess"),
+      desc: t("chat.approval.desc.fullAccess"),
       Icon: ShieldAlert,
     },
   }), [t]);
 
-  const changeApprovalMode = useCallback(async (next: ApprovalMode) => {
+  const changeApprovalMode = useCallback(async (next: PermissionPreset) => {
     if (approvalBusy || next === approvalMode) {
       setApprovalMenuOpen(false);
       return;
     }
     setApprovalMenuOpen(false);
-    if (next === "off") {
+    let confirmed = false;
+    if (next === "full_access") {
       const approved = await confirm({
         title: t("chat.approval.fullAccessConfirmTitle"),
         message: t("chat.approval.fullAccessConfirmMessage"),
@@ -912,15 +931,18 @@ export default function ChatView({
         variant: "danger",
       });
       if (!approved) return;
+      confirmed = true;
     }
     setApprovalBusy(true);
     const requestId = ++approvalRequestIdRef.current;
     try {
-      const settings = await invoke<ApprovalSettings>("set_approval_mode", {
-        mode: next,
+      const settings = await invoke<PermissionSettings>("set_permission_preset", {
+        preset: next,
+        confirmed,
       });
       if (requestId === approvalRequestIdRef.current) {
-        setApprovalMode(normalizeApprovalMode(settings.mode));
+        setApprovalMode(normalizePermissionPreset(settings.preset));
+        setSandboxHealth(settings.sandboxHealth);
       }
     } catch (error) {
       showToast(t("chat.approval.updateFailed", { error: String(error) }), {
@@ -2572,7 +2594,7 @@ export default function ChatView({
               <div className="composer-mode" ref={approvalMenuRef}>
                 <button
                   type="button"
-                  className={`composer-mode-pill composer-approval-pill ${approvalMenuOpen ? "is-open" : ""} ${approvalMode === "off" ? "is-full-access" : ""}`.trim()}
+                  className={`composer-mode-pill composer-approval-pill ${approvalMenuOpen ? "is-open" : ""} ${approvalMode === "full_access" ? "is-full-access" : ""}`.trim()}
                   disabled={approvalBusy}
                   aria-haspopup="listbox"
                   aria-expanded={approvalMenuOpen}
@@ -2607,7 +2629,7 @@ export default function ChatView({
                         aria-label={t("chat.approval.menu")}
                         style={approvalMenuStyle ?? { visibility: "hidden" }}
                       >
-                        {APPROVAL_MODES.map((mode) => {
+                        {PERMISSION_PRESETS.map((mode) => {
                           const Meta = approvalMeta[mode];
                           const Icon = Meta.Icon;
                           const selected = mode === approvalMode;
@@ -2625,7 +2647,7 @@ export default function ChatView({
                               <span className="composer-mode-item-text">
                                 <span className="composer-mode-item-label">
                                   {Meta.label}
-                                  {mode === "smart" ? (
+                                  {mode === "ask_for_approval" ? (
                                     <span className="composer-approval-recommended">
                                       {t("chat.approval.recommended")}
                                     </span>
@@ -2637,6 +2659,14 @@ export default function ChatView({
                             </button>
                           );
                         })}
+                        <div className="composer-approval-health" data-status={sandboxHealth?.status ?? "unknown"}>
+                          <span className="composer-approval-health-dot" aria-hidden />
+                          <span>
+                            {sandboxHealth?.status === "available"
+                              ? t("chat.approval.sandboxAvailable")
+                              : t("chat.approval.sandboxUnavailable")}
+                          </span>
+                        </div>
                       </div>,
                       document.body,
                     )
