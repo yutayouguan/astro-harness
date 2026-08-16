@@ -1,36 +1,29 @@
-/** 输入框模式 / 附件调色板。 */
+/** 输入框浮动命令面板（/ 斜杠 · @ 提及 · 推理档位）。 */
 import { useEffect, useMemo, useRef } from "react";
 import { useI18n } from "../../i18n/LocaleContext";
 import type { ThinkingLevel } from "../../lib/chat/thinkingPrefs";
 import type { SlashAction } from "../../lib/chat/composerCommands";
 
-/** 调色板种类：斜杠命令 / @提及 / 思考档位 */
 export type PaletteKind = "slash" | "mention" | "thinking";
 
-/** 调色板单项 */
 export type PaletteItem = {
   id: string;
   title: string;
   description?: string;
   icon?: string;
   insert?: string;
-  /** slash 命令动作 */
   action?: SlashAction | "insert" | "help" | "clear";
-  /** insert_skill 时的技能名 */
   skillName?: string;
-  /** @ 提及类别 */
   mentionKind?: "agent" | "skill" | "mcp";
-  /** thinking 等级 */
   level?: ThinkingLevel;
+  /** 分组标签（如"指令"/"技能"/"添加"/"插件"） */
+  group?: string;
 };
 
-/** Composer 浮动调色板入参 */
 type Props = {
   kind: PaletteKind;
   items: PaletteItem[];
-  /** 过滤查询串 */
   query: string;
-  /** 键盘高亮下标 */
   activeIndex: number;
   selectedId?: string | null;
   footerHint?: string;
@@ -45,11 +38,11 @@ export function ComposerPalette({
   query,
   activeIndex,
   selectedId,
-  footerHint,
   onHover,
   onSelect,
-  onClose,
+  onClose: _onClose,
 }: Props) {
+  void _onClose;
   const { t } = useI18n();
   const listRef = useRef<HTMLDivElement>(null);
 
@@ -71,73 +64,66 @@ export function ComposerPalette({
     el?.scrollIntoView({ block: "nearest" });
   }, [activeIndex]);
 
-  const title =
-    kind === "slash"
-      ? t("chat.slashTitle")
-      : kind === "mention"
-        ? t("chat.mentionTitle")
-        : t("chat.thinkingLength");
+  const groups = useMemo(() => {
+    const map = new Map<string, { label: string; items: { item: PaletteItem; globalIdx: number }[] }>();
+    filtered.forEach((item, idx) => {
+      const g = item.group || "";
+      if (!map.has(g)) map.set(g, { label: g, items: [] });
+      map.get(g)!.items.push({ item, globalIdx: idx });
+    });
+    return [...map.values()];
+  }, [filtered]);
 
   return (
     <div
       className={`composer-palette composer-palette--${kind}`}
       role="listbox"
-      aria-label={title}
+      onMouseDown={(e) => e.preventDefault()}
     >
-      <div className="composer-palette-head">{title}</div>
       <div className="composer-palette-list" ref={listRef}>
         {filtered.length === 0 ? (
           <div className="composer-palette-empty">{t("chat.paletteEmpty")}</div>
         ) : (
-          filtered.map((item, index) => {
-            const active = index === activeIndex;
-            const selected = selectedId === item.id || selectedId === item.level;
-            return (
-              <button
-                key={item.id}
-                type="button"
-                role="option"
-                data-idx={index}
-                data-kind={item.mentionKind ?? undefined}
-                aria-selected={active}
-                className={`composer-palette-item ${active ? "is-active" : ""} ${
-                  selected ? "is-selected" : ""
-                } ${item.mentionKind ? `is-${item.mentionKind}` : ""}`}
-                onMouseEnter={() => onHover(index)}
-                onClick={() => onSelect(item)}
-              >
-                <span className="composer-palette-item-main">
-                  <span className="composer-palette-item-title">
-                    {item.icon ? <span className="composer-palette-ico">{item.icon}</span> : null}
-                    {item.title}
-                    {item.mentionKind === "skill" ? (
-                      <span className="composer-palette-badge composer-palette-badge--skill">skill</span>
-                    ) : item.mentionKind === "mcp" ? (
-                      <span className="composer-palette-badge composer-palette-badge--mcp">MCP</span>
-                    ) : null}
-                  </span>
-                  {item.description ? (
-                    <span className="composer-palette-item-desc">{item.description}</span>
-                  ) : null}
-                </span>
-                {selected ? (
-                  <span className="composer-palette-check" aria-hidden>
-                    ✓
-                  </span>
-                ) : null}
-              </button>
-            );
-          })
+          groups.map((group) => (
+            <div key={group.label} className="composer-palette-group">
+              {group.label && (
+                <div className="composer-palette-group-label">{group.label}</div>
+              )}
+              {group.items.map(({ item, globalIdx }) => {
+                const active = globalIdx === activeIndex;
+                const selected = selectedId === item.id || selectedId === item.level;
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    role="option"
+                    data-idx={globalIdx}
+                    aria-selected={active}
+                    className={`composer-palette-item ${active ? "is-active" : ""} ${selected ? "is-selected" : ""}`}
+                    onMouseEnter={() => onHover(globalIdx)}
+                    onClick={() => onSelect(item)}
+                  >
+                    {item.icon && (
+                      <span className="composer-palette-ico" aria-hidden>{item.icon}</span>
+                    )}
+                    <span className="composer-palette-item-name">{item.title}</span>
+                    {item.description && (
+                      <span className="composer-palette-item-hint">{item.description}</span>
+                    )}
+                    {selected && (
+                      <span className="composer-palette-check" aria-hidden>✓</span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          ))
         )}
       </div>
       <div className="composer-palette-foot">
-        <span>{footerHint ?? title}</span>
-        <span className="composer-palette-keys">
-          ESC {t("chat.paletteEsc")} · ↑↓ {t("chat.paletteNav")} · ↵ {t("chat.paletteEnter")}
-        </span>
-        <button type="button" className="composer-palette-close" onClick={onClose}>
-          ESC
-        </button>
+        <kbd>↑↓</kbd> {t("chat.paletteNav")}
+        <kbd>↵</kbd> {t("chat.paletteEnter")}
+        <kbd>ESC</kbd> {t("chat.paletteEsc")}
       </div>
     </div>
   );

@@ -280,8 +280,14 @@ export function parseSlashInput(
   return { name: builtin.name, args, action: builtin.action };
 }
 
-/** 调色板用：内置命令 + 技能斜杠项 */
-export function buildSlashPaletteEntries(skills: { id: string; name: string; description?: string }[]) {
+/** 调色板用：内置命令 + 技能斜杠项（带分组） */
+export function buildSlashPaletteEntries(
+  skills: { id: string; name: string; description?: string }[],
+  t?: (key: string) => string,
+) {
+  const groupCommands = t?.("chat.paletteGroupCommands") ?? "指令";
+  const groupSkills = t?.("chat.paletteGroupSkills") ?? "技能";
+
   const builtins = BUILTIN_SLASH_COMMANDS.map((c) => ({
     id: `slash-${c.name}`,
     title: `/${c.name}`,
@@ -290,6 +296,7 @@ export function buildSlashPaletteEntries(skills: { id: string; name: string; des
     action: c.action,
     icon: c.icon,
     skillName: undefined as string | undefined,
+    group: groupCommands,
   }));
 
   const skillEntries = skills.map((s) => ({
@@ -300,33 +307,43 @@ export function buildSlashPaletteEntries(skills: { id: string; name: string; des
     action: "insert_skill" as SlashAction,
     icon: "✦",
     skillName: s.name,
+    group: groupSkills,
   }));
 
   return [...builtins, ...skillEntries];
 }
 
-/** @ 提及候选：Agent → Skill → MCP（分组排序） */
-export function buildMentionCandidates(opts: {
-  agents: { id: string; name: string }[];
-  skills: { id: string; name: string; description?: string }[];
-  mcpServers?: { id: string; name: string; description?: string }[];
-}): MentionCandidate[] {
-  const agents: MentionCandidate[] = opts.agents.map((a) => ({
-    kind: "agent",
+/** @ 提及候选：Agent → Skill → MCP（带分组） */
+export function buildMentionCandidates(
+  opts: {
+    agents: { id: string; name: string }[];
+    skills: { id: string; name: string; description?: string }[];
+    mcpServers?: { id: string; name: string; description?: string }[];
+  },
+  t?: (key: string) => string,
+): (MentionCandidate & { group?: string })[] {
+  const groupAdd = t?.("chat.paletteGroupAdd") ?? "添加";
+  const groupPlugins = t?.("chat.paletteGroupPlugins") ?? "插件";
+
+  const agents = opts.agents.map((a) => ({
+    kind: "agent" as MentionKind,
     id: a.id,
     name: a.name,
+    group: groupAdd,
   }));
-  const skills: MentionCandidate[] = opts.skills.map((s) => ({
-    kind: "skill",
+  const skills = opts.skills.map((s) => ({
+    kind: "skill" as MentionKind,
     id: s.id,
     name: s.name,
     description: s.description,
+    group: groupPlugins,
   }));
-  const mcps: MentionCandidate[] = (opts.mcpServers ?? []).map((m) => ({
-    kind: "mcp",
+  const mcps = (opts.mcpServers ?? []).map((m) => ({
+    kind: "mcp" as MentionKind,
     id: m.id,
     name: m.name,
     description: m.description,
+    group: groupPlugins,
   }));
   return [...agents, ...skills, ...mcps];
 }

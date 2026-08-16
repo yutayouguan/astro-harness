@@ -36,10 +36,10 @@ pub use notify::{
     set_notify_locale, truncate_notify, ImportantKind, ImportantNotice,
 };
 pub use permissions::{
-    ApprovalPolicy, ApprovalsReviewer, FilesystemAccess, FilesystemPolicy, NetworkAccess,
-    NetworkPolicy, PermissionPreset, PermissionProfile, PermissionProfileError, PermissionsConfig,
-    SandboxMode, SessionPermissions, DANGER_FULL_ACCESS_PROFILE, READ_ONLY_PROFILE,
-    WORKSPACE_PROFILE,
+    ApprovalPolicy, ApprovalsReviewer, FilesystemAccess, FilesystemPolicy, GrantScope,
+    NetworkAccess, NetworkPolicy, PermissionCapability, PermissionPreset, PermissionProfile,
+    PermissionProfileError, PermissionReason, PermissionRequest, PermissionsConfig, SandboxMode,
+    SessionPermissions, DANGER_FULL_ACCESS_PROFILE, READ_ONLY_PROFILE, WORKSPACE_PROFILE,
 };
 pub use sqlite::{delete_sqlite_files, open_wal, ExampleSqliteStore, SqliteStore};
 pub use title::sanitize_title;

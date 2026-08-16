@@ -23,16 +23,23 @@ enum ApprovalRoute {
     Manual,
 }
 
-fn approval_route(command: &str, mode: types::ApprovalMode, allowlist: &[String]) -> ApprovalRoute {
+fn approval_route(
+    command: &str,
+    selection: &types::SessionPermissions,
+    allowlist: &[String],
+) -> ApprovalRoute {
     if tools::is_hardline_blocked(command).is_some() {
         ApprovalRoute::Deny
     } else if tools::matches_allowlist(command, allowlist) {
         ApprovalRoute::Allowlist
     } else {
-        match mode {
-            types::ApprovalMode::Off => ApprovalRoute::Off,
-            types::ApprovalMode::Smart => ApprovalRoute::Smart,
-            types::ApprovalMode::Manual => ApprovalRoute::Manual,
+        match (
+            selection.approval_policy,
+            selection.approvals_reviewer,
+        ) {
+            (types::ApprovalPolicy::Never, _) => ApprovalRoute::Off,
+            (_, types::ApprovalsReviewer::AutoReview) => ApprovalRoute::Smart,
+            (_, types::ApprovalsReviewer::User) => ApprovalRoute::Manual,
         }
     }
 }
@@ -60,17 +67,16 @@ async fn fire_post_approval_response(
     );
 }
 
-pub(crate) fn terminal_needs_approval(name: &str, args: &serde_json::Value) -> bool {
-    if name != "terminal" {
-        return false;
+pub(crate) fn tool_may_require_permission(name: &str, args: &serde_json::Value) -> bool {
+    match name {
+        // 权限 profile 和命令规则都可能要求 park；统一走串行 preflight。
+        "terminal" | "code_exec" => true,
+        "file_ops" => matches!(
+            args.get("operation").and_then(|value| value.as_str()),
+            Some("write" | "append" | "delete" | "mkdir" | "patch" | "move" | "copy")
+        ),
+        _ => false,
     }
-    let cmd = args.get("command").and_then(|v| v.as_str()).unwrap_or("");
-    // Ask 与 Deny 都必须走串行路径：Ask 需 HITL 卡，Deny(hardline) 需被拦截。
-    // 二者的守卫都只存在于 execute_tools_serial_inner；漏判会让危险命令经并发路径直接执行。
-    matches!(
-        tools::classify_dangerous_command(cmd).map(|d| d.action),
-        Some(types::ApprovalAction::Ask | types::ApprovalAction::Deny)
-    )
 }
 
 /// 串行执行；`None` 表示已处理 cancel/断开，调用方应直接 return。
@@ -139,12 +145,12 @@ async fn execute_tools_serial_inner(
                             .unwrap_or("")
                             .to_string();
                         // 读取审批模式 + 白名单，并触发 PRE_APPROVAL_REQUEST 钩子
-                        let (approval_session_id, approval_turn_id, mode, allowlist, memory_dir) = {
+                        let (approval_session_id, approval_turn_id, permissions, allowlist, memory_dir) = {
                             let agent = session.lock().await;
                             let approval_session_id = agent.session_id().to_string();
                             let approval_turn_id = agent.current_turn_id().map(str::to_string);
                             let base = agent.memory_dir().to_path_buf();
-                            let approvals = memory::config::load_approvals_config(&base);
+                            let permissions = memory::config::load_permission_settings(&base);
                             agent.fire_hook(
                                 hooks::PRE_APPROVAL_REQUEST,
                                 hooks::HookPayload {
@@ -161,13 +167,13 @@ async fn execute_tools_serial_inner(
                             (
                                 approval_session_id,
                                 approval_turn_id,
-                                types::ApprovalMode::parse_lenient(&approvals.mode),
-                                approvals.command_allowlist,
+                                permissions.selection,
+                                permissions.legacy_command_allowlist,
                                 base,
                             )
                         };
 
-                        let route = approval_route(&cmd, mode, &allowlist);
+                        let route = approval_route(&cmd, &permissions, &allowlist);
                         // 防御性兜底：即使规则分级未来发生漂移，hardline 仍不可进入 HITL 放行。
                         if route == ApprovalRoute::Deny {
                             out.push(
@@ -226,6 +232,20 @@ async fn execute_tools_serial_inner(
                                     "auto",
                                 )
                                 .await;
+                            } else if route == ApprovalRoute::Smart {
+                                fire_post_approval_response(
+                                    session,
+                                    &approval_session_id,
+                                    approval_turn_id.as_deref(),
+                                    &cmd,
+                                    "deny",
+                                )
+                                .await;
+                                out.push(
+                                    "Command denied by automatic approval review. Do not retry the same action or attempt a workaround without explicit user authorization."
+                                        .into(),
+                                );
+                                continue;
                             } else if let Some(gate) = hitl_gate {
                                 let title = "批准危险命令";
                                 let body = format!(

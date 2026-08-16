@@ -26,7 +26,7 @@ use super::maintenance::{
 use super::provider::ProviderStreamer;
 use super::run_state::{RunPhase, RunState};
 use super::summary::{run_max_iterations_summary, SummaryOutcome};
-use super::tools_exec::{execute_tools_concurrent, execute_tools_serial, terminal_needs_approval};
+use super::tools_exec::{execute_tools_concurrent, execute_tools_serial, tool_may_require_permission};
 use super::types::{MultiTurnStream, MultiTurnStreamItem, StreamedAssistantContent};
 use crate::control::hitl::HitlGate;
 use crate::runtime::AgentLoop;
@@ -623,7 +623,7 @@ async fn run_multi_turn_stream_inner(args: MultiTurnStreamInnerArgs) {
                 || agent.tool_registry().any_exclusive_access(&names)
                 || calls
                     .iter()
-                    .any(|c| terminal_needs_approval(&c.name, &c.arguments))
+                    .any(|c| tool_may_require_permission(&c.name, &c.arguments))
         };
 
         let outcomes = if force_serial || hitl_gate.is_none() {
