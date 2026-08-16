@@ -163,6 +163,15 @@ pub fn dispatch(
     let root = ctx.project_or_workspace();
     let full = crate::path_safe::resolve_safe(root, &parsed.path)?;
     let rel = display_rel(root, &full);
+    let active_profile = if is_mutating_operation(&op) {
+        let settings = memory::load_permission_settings(&ctx.memory_dir);
+        if !matches!(op.as_str(), "copy" | "cp") {
+            enforce_file_mutation_policy(&settings.selection.profile_id, root, &full)?;
+        }
+        Some(settings.selection.profile_id)
+    } else {
+        None
+    };
 
     match op.as_str() {
         "read" => {
@@ -253,6 +262,13 @@ pub fn dispatch(
                 .filter(|s| !s.is_empty())
                 .ok_or_else(|| anyhow::anyhow!("move 需要 dest 参数"))?;
             let dest_full = crate::path_safe::resolve_safe(root, dest_rel)?;
+            enforce_file_mutation_policy(
+                active_profile
+                    .as_deref()
+                    .expect("move aliases are mutating operations"),
+                root,
+                &dest_full,
+            )?;
             move_path(&full, &dest_full, root).map(Into::into)
         }
         "copy" | "cp" => {
@@ -263,6 +279,13 @@ pub fn dispatch(
                 .filter(|s| !s.is_empty())
                 .ok_or_else(|| anyhow::anyhow!("copy 需要 dest 参数"))?;
             let dest_full = crate::path_safe::resolve_safe(root, dest_rel)?;
+            enforce_file_mutation_policy(
+                active_profile
+                    .as_deref()
+                    .expect("copy aliases are mutating operations"),
+                root,
+                &dest_full,
+            )?;
             copy_path(&full, &dest_full, root).map(Into::into)
         }
         "delete" => {
@@ -273,6 +296,51 @@ pub fn dispatch(
             Ok(format!("已创建目录 {rel}").into())
         }
         other => anyhow::bail!("未知 operation: {other}"),
+    }
+}
+
+fn is_mutating_operation(operation: &str) -> bool {
+    matches!(
+        operation,
+        "write"
+            | "append"
+            | "delete"
+            | "mkdir"
+            | "patch"
+            | "move"
+            | "rename"
+            | "mv"
+            | "copy"
+            | "cp"
+    )
+}
+
+fn enforce_file_mutation_policy(
+    profile_id: &str,
+    root: &Path,
+    target: &Path,
+) -> anyhow::Result<()> {
+    match profile_id {
+        types::READ_ONLY_PROFILE => {
+            anyhow::bail!("permission denied: read-only profile does not allow file mutations")
+        }
+        types::WORKSPACE_PROFILE => {
+            let canonical_root = root.canonicalize().unwrap_or_else(|_| root.to_path_buf());
+            for protected in [".git", ".agents", ".codex"] {
+                if target.starts_with(root.join(protected))
+                    || target.starts_with(canonical_root.join(protected))
+                {
+                    anyhow::bail!(
+                        "permission denied: workspace metadata path {protected} is read-only"
+                    );
+                }
+            }
+            Ok(())
+        }
+        types::DANGER_FULL_ACCESS_PROFILE => Ok(()),
+        custom => anyhow::bail!(
+            "custom permission profile {custom:?} is not executable until its filesystem rules are fully resolved"
+        ),
     }
 }
 
@@ -956,9 +1024,33 @@ fn reaffirm_within(path: &Path, workspace: &Path) -> anyhow::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::context::{ImageGenTargets, ToolContext};
     use std::fs;
     use std::path::PathBuf;
     use tempfile::TempDir;
+
+    fn test_ctx<'a>(
+        dir: &'a TempDir,
+        memory: &'a mut memory::MemoryManager,
+        sessions: &'a session::SessionStore,
+        targets: &'a ImageGenTargets,
+        creds: &'a crate::context::ModelCredentials,
+    ) -> ToolContext<'a> {
+        ToolContext {
+            memory,
+            sessions,
+            memory_dir: dir.path().to_path_buf(),
+            workspace_dir: dir.path().join("workspace"),
+            project_root: None,
+            image_gen_targets: targets,
+            session_id: "test".into(),
+            turn_id: None,
+            credentials: creds,
+            chat_targets: &[],
+            execution: None,
+            hook_bus: None,
+        }
+    }
 
     fn write_ws_file(dir: &TempDir, name: &str, bytes: &[u8]) -> PathBuf {
         let p = dir.path().join(name);
@@ -967,6 +1059,94 @@ mod tests {
         }
         fs::write(&p, bytes).unwrap();
         p
+    }
+
+    #[test]
+    fn read_only_and_workspace_metadata_block_mutations() {
+        let dir = TempDir::new().unwrap();
+        let normal = dir.path().join("src/lib.rs");
+        let git_config = dir.path().join(".git/config");
+        assert!(
+            enforce_file_mutation_policy(types::READ_ONLY_PROFILE, dir.path(), &normal)
+                .unwrap_err()
+                .to_string()
+                .contains("read-only")
+        );
+        assert!(
+            enforce_file_mutation_policy(types::WORKSPACE_PROFILE, dir.path(), &normal).is_ok()
+        );
+        assert!(
+            enforce_file_mutation_policy(types::WORKSPACE_PROFILE, dir.path(), &git_config)
+                .unwrap_err()
+                .to_string()
+                .contains("metadata")
+        );
+        assert!(enforce_file_mutation_policy(
+            types::DANGER_FULL_ACCESS_PROFILE,
+            dir.path(),
+            &git_config
+        )
+        .is_ok());
+    }
+
+    #[test]
+    fn dispatch_blocks_mutating_aliases_and_protected_destinations() {
+        let dir = TempDir::new().unwrap();
+        let workspace = dir.path().join("workspace");
+        fs::create_dir_all(workspace.join(".git")).unwrap();
+        fs::write(workspace.join("source.txt"), "source").unwrap();
+        let mut memory = memory::MemoryManager::new(dir.path().to_path_buf()).unwrap();
+        let sessions =
+            session::SessionStore::open_sessions_dir(&memory.base_dir.join("sessions")).unwrap();
+        let targets = ImageGenTargets::default();
+        let creds = crate::context::ModelCredentials::default();
+
+        memory::set_permission_preset(dir.path(), types::PermissionPreset::ReadOnly).unwrap();
+        {
+            let ctx = test_ctx(&dir, &mut memory, &sessions, &targets, &creds);
+            let error = dispatch(
+                &ctx,
+                &serde_json::json!({
+                    "operation": "cp",
+                    "path": "source.txt",
+                    "dest": "copy.txt"
+                }),
+            )
+            .unwrap_err()
+            .to_string();
+            assert!(error.contains("read-only"), "{error}");
+            assert!(!workspace.join("copy.txt").exists());
+        }
+
+        memory::set_permission_preset(dir.path(), types::PermissionPreset::AskForApproval).unwrap();
+        fs::write(workspace.join(".git/config"), "[core]").unwrap();
+        let ctx = test_ctx(&dir, &mut memory, &sessions, &targets, &creds);
+        dispatch(
+            &ctx,
+            &serde_json::json!({
+                "operation": "copy",
+                "path": ".git/config",
+                "dest": "saved-git-config"
+            }),
+        )
+        .unwrap();
+        assert_eq!(
+            fs::read_to_string(workspace.join("saved-git-config")).unwrap(),
+            "[core]"
+        );
+        let error = dispatch(
+            &ctx,
+            &serde_json::json!({
+                "operation": "rename",
+                "path": "source.txt",
+                "dest": ".git/source.txt"
+            }),
+        )
+        .unwrap_err()
+        .to_string();
+        assert!(error.contains("metadata"), "{error}");
+        assert!(workspace.join("source.txt").exists());
+        assert!(!workspace.join(".git/source.txt").exists());
     }
 
     #[test]
