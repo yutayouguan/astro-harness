@@ -64,7 +64,7 @@ pub struct McpServerDto {
     pub name: String,
     #[serde(default)]
     pub description: String,
-    /// stdio | sse | streamableHttp
+    /// stdio | streamableHttp
     #[serde(default = "default_mcp_type", alias = "transport")]
     pub r#type: String,
     #[serde(default)]
@@ -123,12 +123,12 @@ fn dto_from_config(c: mcp::McpServerConfig) -> McpServerDto {
 }
 
 /// 前端 DTO → `McpServerConfig`（会 sanitize server id）。
-fn config_from_dto(d: McpServerDto) -> mcp::McpServerConfig {
-    mcp::McpServerConfig {
+fn config_from_dto(d: McpServerDto) -> Result<mcp::McpServerConfig, String> {
+    Ok(mcp::McpServerConfig {
         id: mcp::sanitize_server_id(&d.id),
         name: d.name,
         description: d.description,
-        r#type: mcp::McpTransportType::parse(&d.r#type),
+        r#type: mcp::McpTransportType::parse(&d.r#type)?,
         command: d.command,
         args: d.args,
         env: d.env,
@@ -145,7 +145,7 @@ fn config_from_dto(d: McpServerDto) -> mcp::McpServerConfig {
                 description: x.description,
             })
             .collect(),
-    }
+    })
 }
 
 /// Tauri 命令：get_mcp_servers。
@@ -163,7 +163,10 @@ pub async fn set_mcp_servers(
     agent_id: Option<String>,
 ) -> Result<(), String> {
     let id = normalize_agent_id(agent_id);
-    let configs: Vec<_> = servers.into_iter().map(config_from_dto).collect();
+    let configs: Vec<_> = servers
+        .into_iter()
+        .map(config_from_dto)
+        .collect::<Result<_, _>>()?;
     mcp::save_mcp_servers(id.as_deref(), &configs).map_err(|e| e.to_string())
 }
 
@@ -288,4 +291,38 @@ pub async fn query_agent_logs(args: QueryAgentLogsArgs) -> Result<Vec<home::Agen
         source,
     };
     home::query_agent_logs(q).map_err(|e| e.to_string())
+}
+
+#[cfg(test)]
+mod mcp_config_tests {
+    use super::*;
+
+    fn server_dto(transport: &str) -> McpServerDto {
+        McpServerDto {
+            id: "demo".into(),
+            name: "Demo".into(),
+            description: String::new(),
+            r#type: transport.into(),
+            command: String::new(),
+            args: Vec::new(),
+            env: HashMap::new(),
+            url: "http://localhost:3000/mcp".into(),
+            headers: HashMap::new(),
+            enabled: true,
+            tools: HashMap::new(),
+            discovered: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn mcp_dto_rejects_legacy_sse_instead_of_falling_back() {
+        let error = config_from_dto(server_dto("sse")).unwrap_err();
+        assert!(error.contains("legacy SSE transport is not supported"));
+    }
+
+    #[test]
+    fn mcp_dto_accepts_streamable_http() {
+        let config = config_from_dto(server_dto("streamableHttp")).unwrap();
+        assert_eq!(config.r#type, mcp::McpTransportType::StreamableHttp);
+    }
 }

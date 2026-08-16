@@ -2,8 +2,18 @@
 import { useCallback, useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 
-/** MCP 传输类型：本地进程 / SSE / 可流式 HTTP */
-export type McpTransportType = "stdio" | "sse" | "streamableHttp";
+/** MCP 传输类型：本地进程 / Streamable HTTP。 */
+export type McpTransportType = "stdio" | "streamableHttp";
+
+/** 旧 SSE 不能安全地推断为 Streamable HTTP，必须由用户提供新的 /mcp endpoint。 */
+export class LegacySseTransportError extends Error {
+  constructor() {
+    super(
+      "Legacy SSE transport is not supported; configure the server's Streamable HTTP /mcp endpoint instead.",
+    );
+    this.name = "LegacySseTransportError";
+  }
+}
 
 export type McpDiscoveredTool = {
   name: string;
@@ -19,7 +29,7 @@ export type McpServer = {
   command: string;
   args: string[];
   env: Record<string, string>;
-  /** sse / streamableHttp */
+  /** streamableHttp */
   url: string;
   headers: Record<string, string>;
   enabled: boolean;
@@ -34,13 +44,7 @@ const isTauri = () =>
   !!(window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__;
 
 function normalizeServer(raw: Partial<McpServer> & { id?: string; name?: string }): McpServer {
-  const hasUrl = typeof raw.url === "string" && raw.url.trim().length > 0;
-  const hasCommand = typeof raw.command === "string" && raw.command.trim().length > 0;
-  let type: McpTransportType = raw.type ?? "stdio";
-  if (!raw.type) {
-    if (hasUrl && !hasCommand) type = "streamableHttp";
-    else type = "stdio";
-  }
+  const type = inferType(raw as unknown as Record<string, unknown>);
   const tools =
     raw.tools && typeof raw.tools === "object" ? { ...raw.tools } : ({} as Record<string, boolean>);
   const discovered = Array.isArray(raw.discovered)
@@ -81,9 +85,17 @@ function readLocalStored(): McpServer[] {
 
 function inferType(cfg: Record<string, unknown>): McpTransportType {
   const t = cfg.type ?? cfg.transport;
-  if (t === "stdio" || t === "sse" || t === "streamableHttp") return t;
+  if (t === "sse") throw new LegacySseTransportError();
+  if (t === "stdio" || t === "streamableHttp" || t === "streamable_http") {
+    return t === "streamable_http" ? "streamableHttp" : t;
+  }
+  if (t !== undefined && t !== null && t !== "") {
+    throw new Error(`Unsupported MCP transport: ${String(t)}`);
+  }
   if (typeof cfg.url === "string" && cfg.url.trim()) {
-    if (t === "sse" || String(cfg.url).includes("/sse")) return "sse";
+    if (/(?:^|\/)sse(?:[/?#]|$)/i.test(cfg.url)) {
+      throw new LegacySseTransportError();
+    }
     return "streamableHttp";
   }
   return "stdio";

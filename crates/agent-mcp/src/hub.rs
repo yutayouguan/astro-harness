@@ -669,7 +669,7 @@ async fn connect_server(
             let transport = TokioChildProcess::new(cmd)?;
             handler.serve(transport).await.context("stdio serve")?
         }
-        McpTransportType::Sse | McpTransportType::StreamableHttp => {
+        McpTransportType::StreamableHttp => {
             if !execution_context.sandbox_policy.network_access {
                 anyhow::bail!(
                     "network access denied by the active permission profile for MCP server {sid}"

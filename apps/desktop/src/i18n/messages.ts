@@ -547,7 +547,6 @@ export const zh = {
   "mcpTools.formDescPlaceholder": "服务器功能简介",
   "mcpTools.formType": "类型",
   "mcpTools.type.stdio": "标准输入 / 输出 (stdio)",
-  "mcpTools.type.sse": "服务器发送事件 (SSE)",
   "mcpTools.type.streamableHttp": "可流式传输的 HTTP (streamableHttp)",
   "mcpTools.formCommand": "命令",
   "mcpTools.formCommandPlaceholder": "uvx 或 npx",
@@ -571,7 +570,7 @@ export const zh = {
   "mcpTools.refresh": "刷新工具",
   "mcpTools.refreshing": "刷新中…",
   "mcpTools.noToolsYet": "尚未发现工具，点击刷新连接服务器",
-  "mcpTools.sseNote": "SSE 在 rmcp 2.x 中走 Streamable HTTP 客户端；纯 legacy /sse 端点可能连不上",
+  "mcpTools.legacySseError": "不再支持旧版 SSE 传输。请改用服务器提供的 Streamable HTTP /mcp 地址；/sse 地址不能自动转换。",
 
   "agentTools.empty": "没有匹配的工具",
   "agentTools.on": "已启用",
@@ -2482,7 +2481,6 @@ export const en: Record<MessageKey, string> = {
   "mcpTools.formDescPlaceholder": "What this server does",
   "mcpTools.formType": "Type",
   "mcpTools.type.stdio": "Standard Input / Output (stdio)",
-  "mcpTools.type.sse": "Server-Sent Events (SSE)",
   "mcpTools.type.streamableHttp": "Streamable HTTP (streamableHttp)",
   "mcpTools.formCommand": "Command",
   "mcpTools.formCommandPlaceholder": "uvx or npx",
@@ -2506,7 +2504,7 @@ export const en: Record<MessageKey, string> = {
   "mcpTools.refresh": "Refresh tools",
   "mcpTools.refreshing": "Refreshing…",
   "mcpTools.noToolsYet": "No tools discovered yet — click refresh to connect",
-  "mcpTools.sseNote": "SSE uses the Streamable HTTP client in rmcp 2.x; legacy /sse-only endpoints may fail",
+  "mcpTools.legacySseError": "Legacy SSE transport is no longer supported. Use the server's Streamable HTTP /mcp endpoint; an /sse URL cannot be converted automatically.",
 
   "agentTools.empty": "No matching tools",
   "agentTools.on": "On",

@@ -21,8 +21,6 @@ use crate::names::sanitize_server_id;
 pub enum McpTransportType {
     /// 本地子进程 stdio。
     Stdio,
-    /// Server-Sent Events。
-    Sse,
     /// Streamable HTTP。
     #[serde(rename = "streamableHttp", alias = "streamable_http")]
     StreamableHttp,
@@ -40,19 +38,25 @@ impl McpTransportType {
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Stdio => "stdio",
-            Self::Sse => "sse",
             Self::StreamableHttp => "streamableHttp",
         }
     }
 
-    /// 解析配置字符串；未知值回退为 [`Stdio`](Self::Stdio)。
-    pub fn parse(s: &str) -> Self {
+    /// 解析配置字符串；旧 SSE 与未知传输必须显式报错，禁止静默回退。
+    pub fn parse(s: &str) -> Result<Self, String> {
         match s {
-            "sse" => Self::Sse,
-            "streamableHttp" | "streamable_http" => Self::StreamableHttp,
-            _ => Self::Stdio,
+            "stdio" => Ok(Self::Stdio),
+            "streamableHttp" | "streamable_http" => Ok(Self::StreamableHttp),
+            "sse" => Err(legacy_sse_error()),
+            other => Err(format!(
+                "unsupported MCP transport {other:?}; expected stdio or streamableHttp"
+            )),
         }
     }
+}
+
+fn legacy_sse_error() -> String {
+    "legacy SSE transport is not supported; configure the server's Streamable HTTP /mcp endpoint instead (an /sse URL cannot be converted automatically)".into()
 }
 
 /// 连接时发现的工具摘要（写入配置缓存）。
@@ -78,7 +82,7 @@ pub struct McpServerConfig {
     #[serde(default)]
     pub description: String,
     /// 传输类型。
-    /// stdio | sse | streamableHttp
+    /// stdio | streamableHttp
     #[serde(default, alias = "transport", deserialize_with = "de_type")]
     pub r#type: McpTransportType,
     #[serde(default)]
@@ -115,15 +119,7 @@ where
     D: serde::Deserializer<'de>,
 {
     let s = String::deserialize(deserializer)?;
-    match s.as_str() {
-        "stdio" => Ok(McpTransportType::Stdio),
-        "sse" => Ok(McpTransportType::Sse),
-        "streamableHttp" | "streamable_http" => Ok(McpTransportType::StreamableHttp),
-        other => Err(serde::de::Error::unknown_variant(
-            other,
-            &["stdio", "sse", "streamableHttp"],
-        )),
-    }
+    McpTransportType::parse(&s).map_err(serde::de::Error::custom)
 }
 
 impl McpServerConfig {
@@ -369,6 +365,22 @@ mod tests {
             }"#,
         );
         assert!(err.is_err(), "unknown transport must fail deserialize");
+    }
+
+    #[test]
+    fn legacy_sse_is_rejected_with_migration_guidance() {
+        let err = serde_json::from_str::<McpServerConfig>(
+            r#"{
+                "id": "legacy",
+                "name": "legacy",
+                "type": "sse",
+                "url": "http://localhost:3000/sse"
+            }"#,
+        )
+        .unwrap_err()
+        .to_string();
+        assert!(err.contains("legacy SSE transport is not supported"));
+        assert!(err.contains("Streamable HTTP /mcp"));
     }
 
     #[test]

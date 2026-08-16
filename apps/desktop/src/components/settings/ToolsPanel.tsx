@@ -18,7 +18,6 @@ import {
   List,
   CirclePlus,
   Plus,
-  Radio,
   ShieldAlert,
   ShieldCheck,
   Tag,
@@ -32,6 +31,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { useAgentTools } from "../../hooks/providers/useAgentTools";
 import {
   parseMcpJson,
+  LegacySseTransportError,
   useMcpTools,
   type McpServer,
   type McpTransportType,
@@ -260,17 +260,15 @@ const VIEW_OPTIONS = [
   { id: "detail" as const, Icon: IconViewDetail, labelKey: "tools.view.detail" as MessageKey },
 ];
 
-const MCP_TYPES: McpTransportType[] = ["stdio", "sse", "streamableHttp"];
+const MCP_TYPES: McpTransportType[] = ["stdio", "streamableHttp"];
 
 const MCP_TYPE_LABEL: Record<McpTransportType, MessageKey> = {
   stdio: "mcpTools.type.stdio",
-  sse: "mcpTools.type.sse",
   streamableHttp: "mcpTools.type.streamableHttp",
 };
 
 const MCP_TYPE_ICON: Record<McpTransportType, typeof Terminal> = {
   stdio: Terminal,
-  sse: Radio,
   streamableHttp: Globe,
 };
 
@@ -347,8 +345,12 @@ function McpAddDialog({
       const servers = parseMcpJson(jsonText.trim());
       onAdd(servers);
       onClose();
-    } catch {
-      setJsonError(t("mcpTools.jsonError"));
+    } catch (error) {
+      setJsonError(
+        error instanceof LegacySseTransportError
+          ? t("mcpTools.legacySseError")
+          : t("mcpTools.jsonError"),
+      );
     }
   }
 
