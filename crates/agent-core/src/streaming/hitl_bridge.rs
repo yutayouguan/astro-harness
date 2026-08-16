@@ -1,10 +1,6 @@
-//! Astro HITL 桥：解析工具结果中的 `astro_hitl` 标记，并在父/子会话间转发 park/resume。
-//!
-//! - 同步 `delegate` 子路径：通过 [`PARENT_HITL_CTX`] task-local 上浮到父流。
-//! - 异步 `delegate(action=async)` 子路径：通过 [`LIVE_PARENT_HITL`] 会话表按 `session_id` 查找。
+//! Astro HITL 桥：解析工具结果中的 `astro_hitl` 标记，并 park/resume 当前会话。
 
-use std::collections::HashMap;
-use std::sync::{Arc, OnceLock};
+use std::sync::Arc;
 use std::time::Duration;
 
 use tokio::sync::mpsc;
@@ -16,73 +12,16 @@ use super::lifecycle::emit;
 use super::types::MultiTurnStreamItem;
 
 tokio::task_local! {
-    /// 同步 `delegate` 子路径上浮 HITL 时读取；由串行工具执行注入。
+    /// 串行工具执行时注入的当前会话 HITL 上下文。
     pub(crate) static PARENT_HITL_CTX: Option<ParentHitlCtx>;
 }
 
-/// 父会话 HITL 桥：子 Agent park 时复用同一 gate 与流。
+/// 当前会话 HITL 桥。
 #[derive(Clone)]
 pub(crate) struct ParentHitlCtx {
     pub gate: Arc<HitlGate>,
     pub tx: mpsc::Sender<anyhow::Result<MultiTurnStreamItem>>,
     pub run_id: String,
-}
-
-/// 进行中聊天流的父 HITL 表（供 `delegate(action=async)` 子任务上浮）。
-static LIVE_PARENT_HITL: OnceLock<tokio::sync::RwLock<HashMap<String, ParentHitlCtx>>> =
-    OnceLock::new();
-
-fn live_parent_hitl_map() -> &'static tokio::sync::RwLock<HashMap<String, ParentHitlCtx>> {
-    LIVE_PARENT_HITL.get_or_init(|| tokio::sync::RwLock::new(HashMap::new()))
-}
-
-pub(crate) async fn register_live_parent_hitl(session_id: &str, ctx: ParentHitlCtx) {
-    live_parent_hitl_map()
-        .write()
-        .await
-        .insert(session_id.to_string(), ctx);
-}
-
-pub(crate) async fn unregister_live_parent_hitl(session_id: &str) {
-    live_parent_hitl_map().write().await.remove(session_id);
-}
-
-fn decorate_delegate_hitl(mut hitl: AstroHitlPayload, async_child: bool) -> AstroHitlPayload {
-    let tag = if async_child {
-        "[delegate async]"
-    } else {
-        "[delegate]"
-    };
-    if !hitl.reason.starts_with("[delegate") {
-        hitl.reason = format!("{tag} {}", hitl.reason);
-    }
-    if hitl.message.is_empty() {
-        hitl.message = format!("{tag} Sub-agent needs your input");
-    } else if !hitl.message.starts_with("[delegate") {
-        hitl.message = format!("{tag} {}", hitl.message);
-    }
-    hitl
-}
-
-/// 子 Agent 若有父 HITL 上下文则 park 并返回 tool result；否则 `None`。
-///
-/// 查找顺序：task_local（同步 delegate）→ live 会话表（async，父流仍在）。
-pub(crate) async fn try_park_parent_hitl(
-    tool_call_id: &str,
-    hitl: AstroHitlPayload,
-    parent_session_id: Option<&str>,
-) -> Option<String> {
-    if let Some(ctx) = PARENT_HITL_CTX.try_with(|c| c.clone()).ok().flatten() {
-        let hitl = decorate_delegate_hitl(hitl, false);
-        return park_astro_hitl(&ctx.gate, &ctx.tx, &ctx.run_id, tool_call_id, hitl).await;
-    }
-    if let Some(sid) = parent_session_id {
-        if let Some(ctx) = live_parent_hitl_map().read().await.get(sid).cloned() {
-            let hitl = decorate_delegate_hitl(hitl, true);
-            return park_astro_hitl(&ctx.gate, &ctx.tx, &ctx.run_id, tool_call_id, hitl).await;
-        }
-    }
-    None
 }
 
 pub(crate) struct AstroHitlPayload {
@@ -261,156 +200,4 @@ async fn park_astro_hitl_resolution(
         )
         .await;
     Some(resolution)
-}
-
-#[cfg(test)]
-mod child_hitl_tests {
-    use super::*;
-    use crate::control::interrupt::ResumeItem;
-    use serde_json::json;
-
-    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-    async fn try_park_parent_hitl_resolves_via_gate() {
-        let gate = HitlGate::new("parent-sess");
-        let (tx, mut rx) = mpsc::channel::<anyhow::Result<MultiTurnStreamItem>>(8);
-        let ctx = ParentHitlCtx {
-            gate: gate.clone(),
-            tx,
-            run_id: "run-1".into(),
-        };
-
-        let gate_resolver = gate.clone();
-        let resolve_task = tokio::spawn(async move {
-            // 等到有 waiting
-            for _ in 0..50 {
-                if gate_resolver.is_waiting().await {
-                    break;
-                }
-                tokio::time::sleep(Duration::from_millis(20)).await;
-            }
-            let pending = gate_resolver.pending_interrupts().await;
-            assert!(!pending.is_empty());
-            assert!(pending[0].reason.contains("[delegate]"));
-            gate_resolver
-                .resolve(&[ResumeItem {
-                    interrupt_id: pending[0].id.clone(),
-                    status: "resolved".into(),
-                    payload_json: r#"{"approved":true}"#.into(),
-                }])
-                .await
-                .unwrap();
-        });
-
-        let hitl = AstroHitlPayload {
-            reason: "confirmation".into(),
-            message: "ok?".into(),
-            operations: json!([]),
-            response_schema: json!({
-                "type": "object",
-                "properties": { "approved": { "type": "boolean" } },
-                "required": ["approved"]
-            }),
-        };
-
-        let result = PARENT_HITL_CTX
-            .scope(Some(ctx), async {
-                try_park_parent_hitl("tc-child-1", hitl, None).await
-            })
-            .await
-            .expect("park should return");
-
-        assert!(
-            result.contains("approved") || result.contains("true"),
-            "got {result}"
-        );
-        resolve_task.await.unwrap();
-
-        // 至少收到 Activity 或 hitl_waiting
-        let mut saw_waiting = false;
-        while let Ok(item) = rx.try_recv() {
-            if let Ok(MultiTurnStreamItem::RunFinished { outcome_type, .. }) = item {
-                if outcome_type == "hitl_waiting" {
-                    saw_waiting = true;
-                }
-            }
-        }
-        assert!(saw_waiting, "expected hitl_waiting on parent stream");
-    }
-
-    #[tokio::test]
-    async fn try_park_without_ctx_returns_none() {
-        let hitl = AstroHitlPayload {
-            reason: "confirmation".into(),
-            message: "x".into(),
-            operations: json!([]),
-            response_schema: json!({}),
-        };
-        assert!(try_park_parent_hitl("tc", hitl, None).await.is_none());
-    }
-
-    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-    async fn try_park_via_live_session_map() {
-        let gate = HitlGate::new("async-parent");
-        let (tx, mut rx) = mpsc::channel::<anyhow::Result<MultiTurnStreamItem>>(8);
-        register_live_parent_hitl(
-            "async-parent",
-            ParentHitlCtx {
-                gate: gate.clone(),
-                tx,
-                run_id: "run-async".into(),
-            },
-        )
-        .await;
-
-        let gate_resolver = gate.clone();
-        let resolve_task = tokio::spawn(async move {
-            for _ in 0..50 {
-                if gate_resolver.is_waiting().await {
-                    break;
-                }
-                tokio::time::sleep(Duration::from_millis(20)).await;
-            }
-            let pending = gate_resolver.pending_interrupts().await;
-            assert!(!pending.is_empty());
-            assert!(pending[0].reason.contains("delegate async"));
-            gate_resolver
-                .resolve(&[ResumeItem {
-                    interrupt_id: pending[0].id.clone(),
-                    status: "resolved".into(),
-                    payload_json: r#"{"approved":true}"#.into(),
-                }])
-                .await
-                .unwrap();
-        });
-
-        let hitl = AstroHitlPayload {
-            reason: "confirmation".into(),
-            message: "async?".into(),
-            operations: json!([]),
-            response_schema: json!({
-                "type": "object",
-                "properties": { "approved": { "type": "boolean" } },
-                "required": ["approved"]
-            }),
-        };
-        let result = try_park_parent_hitl("tc-async", hitl, Some("async-parent"))
-            .await
-            .expect("live park");
-        assert!(
-            result.contains("approved") || result.contains("true"),
-            "got {result}"
-        );
-        resolve_task.await.unwrap();
-        unregister_live_parent_hitl("async-parent").await;
-
-        let mut saw_waiting = false;
-        while let Ok(item) = rx.try_recv() {
-            if let Ok(MultiTurnStreamItem::RunFinished { outcome_type, .. }) = item {
-                if outcome_type == "hitl_waiting" {
-                    saw_waiting = true;
-                }
-            }
-        }
-        assert!(saw_waiting);
-    }
 }

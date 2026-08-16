@@ -17,7 +17,6 @@ use providers::{PauseControl, Usage};
 use tokio::sync::{mpsc, Mutex};
 use types::ChatTarget;
 
-use super::hitl_bridge::{register_live_parent_hitl, unregister_live_parent_hitl, ParentHitlCtx};
 use super::lifecycle::{emit, finish_error, finish_usage_and_done};
 use super::maintenance::{
     emit_context_usage, post_tool_maintenance, pre_llm_maintenance, record_tool_outcomes,
@@ -79,17 +78,6 @@ pub async fn run_multi_turn_stream(args: MultiTurnStreamArgs) {
         agent.set_current_turn_id(turn_id.clone());
     }
     tracing::info!(session_id = %session_id, turn_id = %turn_id, "turn started");
-    if let Some(ref gate) = hitl_gate {
-        register_live_parent_hitl(
-            &session_id,
-            ParentHitlCtx {
-                gate: gate.clone(),
-                tx: tx.clone(),
-                run_id: run_id.clone(),
-            },
-        )
-        .await;
-    }
     run_multi_turn_stream_inner(MultiTurnStreamInnerArgs {
         session: session.clone(),
         targets,
@@ -108,7 +96,6 @@ pub async fn run_multi_turn_stream(args: MultiTurnStreamArgs) {
         agent.clear_current_turn_id();
     }
     tracing::info!(session_id = %session_id, turn_id = %run_id, "turn finished");
-    unregister_live_parent_hitl(&session_id).await;
 }
 
 /// 测试入口：以自定义 chat 函数替代 dispatch，驱动多轮工具循环。

@@ -337,43 +337,6 @@ impl AgentLoop {
                 ..Default::default()
             },
         );
-        if name == "subagent" || name == "pipeline" {
-            self.fire_subagent_stop_from_delegate_result(&raw_text)
-                .await;
-        }
         result
-    }
-
-    async fn fire_subagent_stop_from_delegate_result(&self, result: &str) {
-        let Ok(v) = serde_json::from_str::<serde_json::Value>(result) else {
-            return;
-        };
-        let tasks = v
-            .get("tasks")
-            .and_then(|t| t.as_array())
-            .cloned()
-            .unwrap_or_else(|| {
-                if v.get("session_id").is_some() {
-                    vec![v.clone()]
-                } else {
-                    Vec::new()
-                }
-            });
-        for t in tasks {
-            let child = t
-                .get("session_id")
-                .and_then(|s| s.as_str())
-                .unwrap_or("unknown");
-            let summary = t.get("summary").and_then(|s| s.as_str()).unwrap_or("");
-            let _ = self.fire_hook(
-                ::hooks::SUBAGENT_STOP,
-                ::hooks::HookPayload {
-                    session_id: child.into(),
-                    turn_id: self.turn.current_turn_id.clone(),
-                    detail: summary.chars().take(200).collect(),
-                    ..Default::default()
-                },
-            );
-        }
     }
 }
