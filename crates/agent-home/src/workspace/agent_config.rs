@@ -35,7 +35,7 @@ pub struct AgentRuntimeConfig {
     /// 为 null 时使用全局 `tools-enabled.json`
     #[serde(default)]
     pub tools_enabled: Option<serde_json::Value>,
-    /// 为 null 时使用全局 `mcp.json`
+    /// 旧版内嵌 MCP 快照；新配置使用全局/项目/Agent `config.toml` 分层。
     #[serde(default)]
     pub mcp: Option<serde_json::Value>,
     /// ISO 8601 创建时间（本地时区 RFC3339）

@@ -19,8 +19,8 @@ use std::sync::Arc;
 use tokio::sync::Mutex as TokioMutex;
 
 use crate::config::{
-    load_for_active_agent, load_mcp_servers, merge_discovered, persist_discovered,
-    save_mcp_servers, DiscoveredTool, McpServerConfig, McpTransportType,
+    load_for_active_agent, load_mcp_servers_layered, merge_discovered, persist_discovered_layered,
+    DiscoveredTool, McpServerConfig, McpTransportType,
 };
 use crate::names::{
     is_mcp_tool_name, parse_qualified_name, qualify_tool_name, sanitize_server_id, MCP_TOOLSET,
@@ -224,8 +224,12 @@ impl McpHub {
             .map(|s| s.trim().to_string())
             .filter(|s| !s.is_empty());
         self.agent_id = id.clone();
+        let project_root = self
+            .execution_context
+            .as_ref()
+            .map(|context| context.working_dir.as_path());
         let configs = if let Some(ref a) = id {
-            load_mcp_servers(Some(a))?
+            load_mcp_servers_layered(Some(a), project_root)?
         } else {
             load_for_active_agent()?
         };
@@ -302,11 +306,21 @@ impl McpHub {
             }
         }
 
-        // 只补丁写回 discovered，与磁盘最新 tools 合并，避免覆盖 UI 开关
+        // 只向当前可写层已显式定义的 Server 补丁 discovered，不摊平继承配置。
         if !discovered_updates.is_empty() {
-            if let Err(e) = persist_discovered(self.agent_id.as_deref(), &discovered_updates) {
+            let project_root = self
+                .execution_context
+                .as_ref()
+                .map(|context| context.working_dir.as_path());
+            if let Err(e) = persist_discovered_layered(
+                self.agent_id.as_deref(),
+                project_root,
+                &discovered_updates,
+            ) {
                 warn!(error = %e, "persist MCP discovered failed");
-            } else if let Ok(fresh) = load_mcp_servers(self.agent_id.as_deref()) {
+            } else if let Ok(fresh) =
+                load_mcp_servers_layered(self.agent_id.as_deref(), project_root)
+            {
                 for cfg in fresh {
                     let sid = sanitize_server_id(&cfg.id);
                     if let Some(slot) = self
@@ -315,12 +329,17 @@ impl McpHub {
                         .find(|c| sanitize_server_id(&c.id) == sid)
                     {
                         slot.tools = cfg.tools.clone();
-                        slot.discovered = cfg.discovered.clone();
                         slot.enabled = cfg.enabled;
                     }
                     if let Some(rs) = self.servers.get_mut(&sid) {
                         rs.config.tools = cfg.tools;
-                        rs.config.discovered = cfg.discovered;
+                        if let Some(slot) = self
+                            .configs
+                            .iter()
+                            .find(|c| sanitize_server_id(&c.id) == sid)
+                        {
+                            rs.config.discovered = slot.discovered.clone();
+                        }
                         rs.config.enabled = cfg.enabled;
                     }
                 }
@@ -334,7 +353,11 @@ impl McpHub {
 
     /// 仅从磁盘同步 enabled / tools 开关，不重连（供工具调用路径）
     pub fn sync_enablement_from_disk(&mut self) -> anyhow::Result<()> {
-        let fresh = load_mcp_servers(self.agent_id.as_deref())?;
+        let project_root = self
+            .execution_context
+            .as_ref()
+            .map(|context| context.working_dir.as_path());
+        let fresh = load_mcp_servers_layered(self.agent_id.as_deref(), project_root)?;
         let mut seen = std::collections::HashSet::new();
         for cfg in &fresh {
             let sid = sanitize_server_id(&cfg.id);
@@ -488,7 +511,8 @@ impl McpHub {
         server_id: Option<&str>,
         execution_context: &McpExecutionContext,
     ) -> anyhow::Result<Vec<McpServerConfig>> {
-        let mut configs = load_mcp_servers(agent_id)?;
+        let mut configs = load_mcp_servers_layered(agent_id, Some(&execution_context.working_dir))?;
+        let mut discovered_updates = Vec::new();
         for cfg in configs.iter_mut() {
             if let Some(want) = server_id {
                 if sanitize_server_id(&cfg.id) != sanitize_server_id(want) {
@@ -512,7 +536,8 @@ impl McpHub {
                                 .unwrap_or_default(),
                         })
                         .collect();
-                    merge_discovered(cfg, discovered);
+                    merge_discovered(cfg, discovered.clone());
+                    discovered_updates.push((sanitize_server_id(&cfg.id), discovered));
                     // drop running → 关闭短连
                 }
                 Err(e) => {
@@ -520,7 +545,11 @@ impl McpHub {
                 }
             }
         }
-        save_mcp_servers(agent_id, &configs)?;
+        persist_discovered_layered(
+            agent_id,
+            Some(&execution_context.working_dir),
+            &discovered_updates,
+        )?;
         Ok(configs)
     }
 }
@@ -798,7 +827,7 @@ fn build_stdio_command(
 
 /// stdio command 最小约束：不经 shell；禁止 `..` 与危险字符；允许绝对路径或简单命令名（如 npx）
 ///
-/// `mcp.json` 仍视为受信任的本地配置；此处只挡明显的路径穿越 / 注入形态。
+/// TOML 配置已通过全局/可信项目/Agent 分层校验；此处再挡明显的路径穿越 / 注入形态。
 pub fn validate_stdio_command(command: &str) -> anyhow::Result<()> {
     let cmd = command.trim();
     if cmd.is_empty() {

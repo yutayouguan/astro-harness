@@ -173,7 +173,14 @@ fn config_from_dto(d: McpServerDto) -> Result<mcp::McpServerConfig, String> {
 #[tauri::command]
 pub async fn get_mcp_servers(agent_id: Option<String>) -> Result<Vec<McpServerDto>, String> {
     let id = normalize_agent_id(agent_id);
-    let servers = mcp::load_mcp_servers(id.as_deref()).map_err(|e| e.to_string())?;
+    let servers = if id.is_some() {
+        let project_root = worktree::resolve_project_root(None);
+        mcp::load_mcp_servers_layered(id.as_deref(), project_root.as_deref())
+    } else {
+        // `None` 是全局配置编辑语义；不得将项目层有效配置读出后又摊平写回全局。
+        mcp::load_mcp_servers(None)
+    }
+    .map_err(|e| e.to_string())?;
     Ok(servers.into_iter().map(dto_from_config).collect())
 }
 
@@ -202,7 +209,8 @@ pub async fn refresh_mcp_tools(
     let effective_agent_id = id
         .clone()
         .unwrap_or_else(|| home::active_agent_id(&memory_root));
-    let execution_root = home::agent_workspace_dir(&memory_root, &effective_agent_id);
+    let execution_root = worktree::resolve_project_root(None)
+        .unwrap_or_else(|| home::agent_workspace_dir(&memory_root, &effective_agent_id));
     let policy =
         tools::context::build_command_sandbox_policy(&memory_root, &execution_root, None, false)
             .map_err(|e| e.to_string())?;

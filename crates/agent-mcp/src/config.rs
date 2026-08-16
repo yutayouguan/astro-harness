@@ -1,11 +1,12 @@
-//! 读写 `mcp.json`（全局或按 Agent）。
+//! 读写全局、可信项目与 Agent 私有的 `config.toml` MCP 配置。
 //!
-//! 负责传输类型、发现工具合并，以及启用状态持久化。
+//! 旧 `mcp.json` 仅用于一次性只读迁移；运行时不再写回 JSON。
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use anyhow::Context;
 use serde::{Deserialize, Serialize};
 
 use home::{
@@ -188,97 +189,345 @@ impl McpServerConfig {
     }
 }
 
-/// 磁盘上的 mcp.json 结构。
+/// 旧版磁盘 `mcp.json` 结构，仅供只读迁移。
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
-struct McpFile {
+struct LegacyMcpFile {
     #[serde(default)]
     servers: Vec<McpServerConfig>,
 }
 
-/// 全局 `~/.astro/mcp.json` 路径。
-pub fn mcp_path_global() -> PathBuf {
+/// TOML 中的单个 MCP Server；传输由 command/url 互斥推断。
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+struct TomlMcpServer {
+    #[serde(
+        default,
+        rename = "type",
+        alias = "transport",
+        skip_serializing_if = "Option::is_none"
+    )]
+    legacy_transport: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    name: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    description: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    command: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    args: Vec<String>,
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    env: HashMap<String, String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    url: Option<String>,
+    #[serde(
+        default,
+        rename = "http_headers",
+        alias = "headers",
+        skip_serializing_if = "HashMap::is_empty"
+    )]
+    headers: HashMap<String, String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    enabled: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    startup_timeout_sec: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    tool_timeout_sec: Option<u64>,
+    /// Astro 当前的逐工具开关，后续迁移到 enabled_tools/disabled_tools。
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    tools: HashMap<String, bool>,
+    /// UI 使用的发现缓存；后续可迁移到独立 runtime state。
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    discovered: Vec<DiscoveredTool>,
+}
+
+impl TomlMcpServer {
+    fn into_config(self, id: String) -> anyhow::Result<McpServerConfig> {
+        if let Some(transport) = self.legacy_transport.as_deref() {
+            if transport.eq_ignore_ascii_case("sse") {
+                anyhow::bail!(legacy_sse_error());
+            }
+            anyhow::bail!(
+                "MCP server {id:?} must omit type/transport; transport is inferred from command or url"
+            );
+        }
+        let command = self.command.unwrap_or_default().trim().to_string();
+        let url = self.url.unwrap_or_default().trim().to_string();
+        let r#type = match (command.is_empty(), url.is_empty()) {
+            (false, true) => McpTransportType::Stdio,
+            (true, false) => McpTransportType::StreamableHttp,
+            (false, false) => anyhow::bail!("MCP server {id:?} cannot define both command and url"),
+            (true, true) => {
+                anyhow::bail!("MCP server {id:?} must define exactly one of command or url")
+            }
+        };
+        match r#type {
+            McpTransportType::Stdio if !self.headers.is_empty() => {
+                anyhow::bail!("STDIO MCP server {id:?} cannot define http_headers")
+            }
+            McpTransportType::StreamableHttp if !self.args.is_empty() || !self.env.is_empty() => {
+                anyhow::bail!("HTTP MCP server {id:?} cannot define args or env")
+            }
+            _ => {}
+        }
+        let id = sanitize_server_id(&id);
+        Ok(McpServerConfig {
+            name: self
+                .name
+                .filter(|value| !value.trim().is_empty())
+                .unwrap_or_else(|| id.clone()),
+            id,
+            description: self.description.unwrap_or_default(),
+            r#type,
+            command,
+            args: self.args,
+            env: self.env,
+            url,
+            headers: self.headers,
+            enabled: self.enabled.unwrap_or(true),
+            startup_timeout_secs: self.startup_timeout_sec,
+            tool_timeout_secs: self.tool_timeout_sec,
+            tools: self.tools,
+            discovered: self.discovered,
+        })
+    }
+
+    fn from_config(config: &McpServerConfig) -> Self {
+        Self {
+            legacy_transport: None,
+            name: (config.name != config.id).then(|| config.name.clone()),
+            description: (!config.description.is_empty()).then(|| config.description.clone()),
+            command: (config.r#type == McpTransportType::Stdio).then(|| config.command.clone()),
+            args: (config.r#type == McpTransportType::Stdio)
+                .then(|| config.args.clone())
+                .unwrap_or_default(),
+            env: (config.r#type == McpTransportType::Stdio)
+                .then(|| config.env.clone())
+                .unwrap_or_default(),
+            url: (config.r#type == McpTransportType::StreamableHttp).then(|| config.url.clone()),
+            headers: (config.r#type == McpTransportType::StreamableHttp)
+                .then(|| config.headers.clone())
+                .unwrap_or_default(),
+            enabled: (!config.enabled).then_some(false),
+            startup_timeout_sec: config.startup_timeout_secs,
+            tool_timeout_sec: config.tool_timeout_secs,
+            tools: config.tools.clone(),
+            discovered: config.discovered.clone(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Deserialize, Default)]
+struct ProjectTrust {
+    #[serde(default)]
+    trust_level: String,
+}
+
+#[derive(Debug, Clone, Deserialize, Default)]
+struct McpTomlRoot {
+    #[serde(default)]
+    mcp_servers: BTreeMap<String, TomlMcpServer>,
+    #[serde(default)]
+    projects: BTreeMap<String, ProjectTrust>,
+}
+
+/// 全局 `~/.astro/config.toml` 路径。
+pub fn mcp_config_path_global() -> PathBuf {
+    default_memory_dir().join("config.toml")
+}
+
+/// Agent 私有 `~/.astro/agents/<id>/config.toml` 路径。
+pub fn mcp_config_path_for_agent(agent_id: &str) -> PathBuf {
+    let base = default_memory_dir();
+    agent_config_dir(&base, normalize_agent_id(agent_id)).join("config.toml")
+}
+
+/// 可信项目 `<project>/.astro/config.toml` 路径。
+pub fn mcp_config_path_for_project(project_root: &Path) -> PathBuf {
+    project_root.join(".astro").join("config.toml")
+}
+
+fn normalize_agent_id(agent_id: &str) -> &str {
+    let agent_id = agent_id.trim();
+    if agent_id == "default" {
+        DEFAULT_AGENT_ID
+    } else {
+        agent_id
+    }
+}
+
+fn legacy_mcp_path_global() -> PathBuf {
     default_memory_dir().join("mcp.json")
 }
 
-/// 指定 Agent 的 `mcp.json` 路径（落在 agent 配置目录）。
-pub fn mcp_path_for_agent(agent_id: Option<&str>) -> PathBuf {
+fn legacy_mcp_path_for_agent(agent_id: &str) -> PathBuf {
     let base = default_memory_dir();
-    match agent_id.map(str::trim).filter(|s| !s.is_empty()) {
-        Some(id) => {
-            let id = if id == "default" {
-                DEFAULT_AGENT_ID
-            } else {
-                id
-            };
-            agent_config_dir(&base, id).join("mcp.json")
-        }
-        None => mcp_path_global(),
-    }
+    agent_config_dir(&base, normalize_agent_id(agent_id)).join("mcp.json")
 }
 
-/// 读取 mcp.json；缺失或空文件返回默认。
-fn read_file(path: &Path) -> anyhow::Result<McpFile> {
+fn read_legacy_file(path: &Path) -> anyhow::Result<LegacyMcpFile> {
     if !path.exists() {
-        return Ok(McpFile::default());
+        return Ok(LegacyMcpFile::default());
     }
     let raw = fs::read_to_string(path)?;
     if raw.trim().is_empty() {
-        return Ok(McpFile::default());
+        return Ok(LegacyMcpFile::default());
     }
     Ok(serde_json::from_str(&raw)?)
 }
 
-/// 原子写入 mcp.json（先写临时文件再 rename）。
-fn write_file(path: &Path, file: &McpFile) -> anyhow::Result<()> {
+fn read_toml_value(path: &Path) -> anyhow::Result<toml::Value> {
+    if !path.exists() {
+        return Ok(toml::Value::Table(Default::default()));
+    }
+    let raw = fs::read_to_string(path)?;
+    if raw.trim().is_empty() {
+        return Ok(toml::Value::Table(Default::default()));
+    }
+    raw.parse::<toml::Value>()
+        .with_context(|| format!("parse MCP config {}", path.display()))
+}
+
+fn write_toml_value(path: &Path, value: &toml::Value) -> anyhow::Result<()> {
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)?;
     }
-    let tmp = path.with_extension("json.tmp");
-    fs::write(&tmp, serde_json::to_string_pretty(file)?)?;
+    let tmp = path.with_extension("toml.tmp");
+    let rendered = toml::to_string_pretty(value)?;
+    fs::write(&tmp, format!("{rendered}\n"))?;
     fs::rename(&tmp, path)?;
     Ok(())
 }
 
-/// 读取 Agent MCP 配置；专属文件不存在时回退全局
-pub fn load_mcp_servers(agent_id: Option<&str>) -> anyhow::Result<Vec<McpServerConfig>> {
-    let _ = ensure_default_workspace_dirs();
-    let path = mcp_path_for_agent(agent_id);
-    let file = if path.exists() {
-        read_file(&path)?
-    } else if agent_id.is_some() {
-        read_file(&mcp_path_global())?
-    } else {
-        read_file(&path)?
-    };
-    Ok(file
-        .servers
-        .into_iter()
-        .map(|mut s| {
-            s.id = sanitize_server_id(&s.id);
-            s
-        })
-        .collect())
+fn backup_path_for_legacy(path: &Path) -> PathBuf {
+    let name = path
+        .file_name()
+        .and_then(|value| value.to_str())
+        .unwrap_or("mcp.json");
+    path.with_file_name(format!("{name}.migrated.bak"))
 }
 
-/// 将服务器列表写回当前 Agent（或全局）的 `mcp.json`。
-pub fn save_mcp_servers(agent_id: Option<&str>, servers: &[McpServerConfig]) -> anyhow::Result<()> {
-    ensure_default_workspace_dirs()?;
-    let id = agent_id.map(str::trim).filter(|s| !s.is_empty()).map(|s| {
-        if s == "default" {
-            DEFAULT_AGENT_ID.to_string()
-        } else {
-            s.to_string()
-        }
-    });
-    let path = mcp_path_for_agent(id.as_deref());
-    let file = McpFile {
-        servers: servers.to_vec(),
-    };
-    write_file(&path, &file)?;
-    if id.as_deref() == Some(DEFAULT_AGENT_ID) {
-        write_file(&mcp_path_global(), &file)?;
+/// 只读导入旧 JSON；TOML 已有 mcp_servers 时不覆盖。
+fn migrate_legacy_json(legacy_path: &Path, toml_path: &Path) -> anyhow::Result<bool> {
+    if !legacy_path.is_file() {
+        return Ok(false);
+    }
+    let mut root = read_toml_value(toml_path)?;
+    let table = root
+        .as_table_mut()
+        .ok_or_else(|| anyhow::anyhow!("MCP config root must be a TOML table"))?;
+    if table.contains_key("mcp_servers") {
+        return Ok(false);
+    }
+    let legacy = read_legacy_file(legacy_path)?;
+    let servers: BTreeMap<String, TomlMcpServer> = legacy
+        .servers
+        .into_iter()
+        .map(|mut config| {
+            config.id = sanitize_server_id(&config.id);
+            (config.id.clone(), TomlMcpServer::from_config(&config))
+        })
+        .collect();
+    let backup = backup_path_for_legacy(legacy_path);
+    if !backup.exists() {
+        fs::copy(legacy_path, &backup)?;
+    }
+    table.insert("mcp_servers".into(), toml::Value::try_from(servers)?);
+    write_toml_value(toml_path, &root)?;
+    Ok(true)
+}
+
+fn read_toml_root(path: &Path) -> anyhow::Result<McpTomlRoot> {
+    read_toml_value(path)?
+        .try_into()
+        .with_context(|| format!("decode MCP config {}", path.display()))
+}
+
+fn merge_servers(
+    merged: &mut BTreeMap<String, McpServerConfig>,
+    servers: BTreeMap<String, TomlMcpServer>,
+) -> anyhow::Result<()> {
+    for (id, server) in servers {
+        let config = server.into_config(id)?;
+        merged.insert(config.id.clone(), config);
     }
     Ok(())
+}
+
+fn project_is_trusted(global: &McpTomlRoot, project_root: &Path) -> bool {
+    let Ok(project_root) = project_root.canonicalize() else {
+        return false;
+    };
+    global.projects.iter().any(|(configured_path, trust)| {
+        if !trust.trust_level.eq_ignore_ascii_case("trusted") {
+            return false;
+        }
+        let configured_path = Path::new(configured_path);
+        configured_path.is_absolute()
+            && configured_path
+                .canonicalize()
+                .is_ok_and(|configured| configured == project_root)
+    })
+}
+
+/// 按 `全局 → 可信项目 → Agent` 读取并以 Server 为单位整体覆盖。
+pub fn load_mcp_servers_layered(
+    agent_id: Option<&str>,
+    project_root: Option<&Path>,
+) -> anyhow::Result<Vec<McpServerConfig>> {
+    ensure_default_workspace_dirs()?;
+    let global_path = mcp_config_path_global();
+    migrate_legacy_json(&legacy_mcp_path_global(), &global_path)?;
+    if let Some(agent_id) = agent_id.map(str::trim).filter(|value| !value.is_empty()) {
+        migrate_legacy_json(
+            &legacy_mcp_path_for_agent(agent_id),
+            &mcp_config_path_for_agent(agent_id),
+        )?;
+    }
+
+    let global = read_toml_root(&global_path)?;
+    let mut merged = BTreeMap::new();
+    merge_servers(&mut merged, global.mcp_servers.clone())?;
+    if let Some(project_root) = project_root.filter(|root| project_is_trusted(&global, root)) {
+        let project = read_toml_root(&mcp_config_path_for_project(project_root))?;
+        merge_servers(&mut merged, project.mcp_servers)?;
+    }
+    if let Some(agent_id) = agent_id.map(str::trim).filter(|value| !value.is_empty()) {
+        let agent = read_toml_root(&mcp_config_path_for_agent(agent_id))?;
+        merge_servers(&mut merged, agent.mcp_servers)?;
+    }
+    Ok(merged.into_values().collect())
+}
+
+/// 无项目上下文时读取全局与 Agent 配置。
+pub fn load_mcp_servers(agent_id: Option<&str>) -> anyhow::Result<Vec<McpServerConfig>> {
+    load_mcp_servers_layered(agent_id, None)
+}
+
+/// 将服务器列表写入 Agent 私有层；未指定 Agent 时写入全局层。
+pub fn save_mcp_servers(agent_id: Option<&str>, servers: &[McpServerConfig]) -> anyhow::Result<()> {
+    ensure_default_workspace_dirs()?;
+    let agent_id = agent_id.map(str::trim).filter(|value| !value.is_empty());
+    let (path, legacy_path) = if let Some(agent_id) = agent_id {
+        (
+            mcp_config_path_for_agent(agent_id),
+            legacy_mcp_path_for_agent(agent_id),
+        )
+    } else {
+        (mcp_config_path_global(), legacy_mcp_path_global())
+    };
+    migrate_legacy_json(&legacy_path, &path)?;
+    let mut root = read_toml_value(&path)?;
+    let table = root
+        .as_table_mut()
+        .ok_or_else(|| anyhow::anyhow!("MCP config root must be a TOML table"))?;
+    let mapped: BTreeMap<String, TomlMcpServer> = servers
+        .iter()
+        .map(|config| {
+            let id = sanitize_server_id(&config.id);
+            (id, TomlMcpServer::from_config(config))
+        })
+        .collect();
+    table.insert("mcp_servers".into(), toml::Value::try_from(mapped)?);
+    write_toml_value(&path, &root)
 }
 
 /// 加载当前活跃 Agent 的 MCP 服务器配置。
@@ -301,20 +550,76 @@ pub fn persist_discovered(
     agent_id: Option<&str>,
     updates: &[(String, Vec<DiscoveredTool>)],
 ) -> anyhow::Result<()> {
+    persist_discovered_layered(agent_id, None, updates)
+}
+
+/// 只向当前可写层中已存在的 Server 回写发现缓存。
+///
+/// 继承自全局或项目层的 Server 不会被自动复制到 Agent 层，避免一次
+/// `tools/list` 将分层配置意外摊平。这个缓存后续应迁移到独立运行时状态。
+pub fn persist_discovered_layered(
+    agent_id: Option<&str>,
+    _project_root: Option<&Path>,
+    updates: &[(String, Vec<DiscoveredTool>)],
+) -> anyhow::Result<()> {
     if updates.is_empty() {
         return Ok(());
     }
-    let mut configs = load_mcp_servers(agent_id)?;
+    ensure_default_workspace_dirs()?;
+    let agent_id = agent_id.map(str::trim).filter(|value| !value.is_empty());
+    let (path, legacy_path) = if let Some(agent_id) = agent_id {
+        (
+            mcp_config_path_for_agent(agent_id),
+            legacy_mcp_path_for_agent(agent_id),
+        )
+    } else {
+        (mcp_config_path_global(), legacy_mcp_path_global())
+    };
+    migrate_legacy_json(&legacy_path, &path)?;
+
+    let mut root = read_toml_value(&path)?;
+    let root_table = root
+        .as_table_mut()
+        .ok_or_else(|| anyhow::anyhow!("MCP config root must be a TOML table"))?;
+    let Some(server_table) = root_table
+        .get_mut("mcp_servers")
+        .and_then(toml::Value::as_table_mut)
+    else {
+        return Ok(());
+    };
+
+    let mut changed = false;
     for (sid, discovered) in updates {
         let sid = sanitize_server_id(sid);
-        if let Some(slot) = configs
+        let Some((_, server)) = server_table
             .iter_mut()
-            .find(|c| sanitize_server_id(&c.id) == sid)
-        {
-            merge_discovered(slot, discovered.clone());
+            .find(|(configured_id, _)| sanitize_server_id(configured_id) == sid)
+        else {
+            continue;
+        };
+        let server = server
+            .as_table_mut()
+            .ok_or_else(|| anyhow::anyhow!("MCP server {sid:?} must be a TOML table"))?;
+        let tools = server
+            .entry("tools")
+            .or_insert_with(|| toml::Value::Table(Default::default()))
+            .as_table_mut()
+            .ok_or_else(|| anyhow::anyhow!("MCP server {sid:?} tools must be a TOML table"))?;
+        for tool in discovered {
+            tools
+                .entry(tool.name.clone())
+                .or_insert(toml::Value::Boolean(true));
         }
+        server.insert(
+            "discovered".into(),
+            toml::Value::try_from(discovered.clone())?,
+        );
+        changed = true;
     }
-    save_mcp_servers(agent_id, &configs)
+    if changed {
+        write_toml_value(&path, &root)?;
+    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -403,6 +708,44 @@ mod tests {
     }
 
     #[test]
+    fn persist_discovered_does_not_flatten_inherited_server_into_agent_layer() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        let dir = TempDir::new().unwrap();
+        std::env::set_var("ASTRO_MEMORY_DIR", dir.path());
+        ensure_default_workspace_dirs().unwrap();
+        fs::write(
+            mcp_config_path_global(),
+            r#"[mcp_servers.inherited]
+command = "global-command"
+"#,
+        )
+        .unwrap();
+        let agent_path = mcp_config_path_for_agent("worker");
+        fs::create_dir_all(agent_path.parent().unwrap()).unwrap();
+        fs::write(&agent_path, "[agent]\nenabled = true\n").unwrap();
+
+        persist_discovered_layered(
+            Some("worker"),
+            None,
+            &[(
+                "inherited".into(),
+                vec![DiscoveredTool {
+                    name: "read".into(),
+                    description: "Read".into(),
+                }],
+            )],
+        )
+        .unwrap();
+
+        let agent_config = fs::read_to_string(agent_path).unwrap();
+        assert!(agent_config.contains("[agent]"));
+        assert!(!agent_config.contains("mcp_servers"));
+        let loaded = load_mcp_servers_layered(Some("worker"), None).unwrap();
+        assert_eq!(loaded.len(), 1);
+        assert!(loaded[0].discovered.is_empty());
+    }
+
+    #[test]
     fn de_type_rejects_unknown_transport() {
         let err = serde_json::from_str::<McpServerConfig>(
             r#"{
@@ -480,5 +823,156 @@ mod tests {
         let serialized = serde_json::to_value(cfg).unwrap();
         assert_eq!(serialized["startupTimeoutSecs"], 17);
         assert_eq!(serialized["toolTimeoutSecs"], 91);
+    }
+
+    #[test]
+    fn layered_toml_uses_trusted_project_and_whole_server_overrides() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        let dir = TempDir::new().unwrap();
+        std::env::set_var("ASTRO_MEMORY_DIR", dir.path());
+        ensure_default_workspace_dirs().unwrap();
+        let project = dir.path().join("project");
+        fs::create_dir_all(project.join(".astro")).unwrap();
+        let agent_path = mcp_config_path_for_agent("worker");
+        fs::create_dir_all(agent_path.parent().unwrap()).unwrap();
+
+        fs::write(
+            mcp_config_path_global(),
+            format!(
+                r#"[projects."{}"]
+trust_level = "trusted"
+
+[mcp_servers.shared]
+command = "global-command"
+args = ["from-global"]
+
+[mcp_servers.global-only]
+command = "global-only"
+"#,
+                project.display()
+            ),
+        )
+        .unwrap();
+        fs::write(
+            mcp_config_path_for_project(&project),
+            r#"[mcp_servers.shared]
+command = "project-command"
+
+[mcp_servers.project-only]
+url = "https://example.com/mcp"
+"#,
+        )
+        .unwrap();
+        fs::write(
+            agent_path,
+            r#"[mcp_servers.shared]
+command = "agent-command"
+tool_timeout_sec = 91
+"#,
+        )
+        .unwrap();
+
+        let loaded = load_mcp_servers_layered(Some("worker"), Some(&project)).unwrap();
+        assert_eq!(loaded.len(), 3);
+        let shared = loaded.iter().find(|server| server.id == "shared").unwrap();
+        assert_eq!(shared.command, "agent-command");
+        assert!(
+            shared.args.is_empty(),
+            "override must replace the full server"
+        );
+        assert_eq!(shared.tool_timeout_secs, Some(91));
+        assert!(loaded.iter().any(|server| server.id == "global-only"));
+        assert!(loaded.iter().any(|server| server.id == "project-only"));
+    }
+
+    #[test]
+    fn untrusted_project_config_is_ignored() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        let dir = TempDir::new().unwrap();
+        std::env::set_var("ASTRO_MEMORY_DIR", dir.path());
+        ensure_default_workspace_dirs().unwrap();
+        let project = dir.path().join("project");
+        fs::create_dir_all(project.join(".astro")).unwrap();
+        fs::write(
+            mcp_config_path_global(),
+            r#"[mcp_servers.global]
+command = "global-command"
+"#,
+        )
+        .unwrap();
+        fs::write(
+            mcp_config_path_for_project(&project),
+            r#"[mcp_servers.project]
+command = "must-not-load"
+"#,
+        )
+        .unwrap();
+
+        let loaded = load_mcp_servers_layered(None, Some(&project)).unwrap();
+        assert_eq!(loaded.len(), 1);
+        assert_eq!(loaded[0].id, "global");
+    }
+
+    #[test]
+    fn toml_rejects_legacy_sse_transport_field() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        let dir = TempDir::new().unwrap();
+        std::env::set_var("ASTRO_MEMORY_DIR", dir.path());
+        ensure_default_workspace_dirs().unwrap();
+        fs::write(
+            mcp_config_path_global(),
+            r#"[mcp_servers.legacy]
+type = "sse"
+url = "http://localhost:3000/sse"
+"#,
+        )
+        .unwrap();
+
+        let error = load_mcp_servers(None).unwrap_err().to_string();
+        assert!(error.contains("legacy SSE transport is not supported"));
+    }
+
+    #[test]
+    fn legacy_json_migrates_once_and_preserves_other_toml_sections() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        let dir = TempDir::new().unwrap();
+        std::env::set_var("ASTRO_MEMORY_DIR", dir.path());
+        ensure_default_workspace_dirs().unwrap();
+        let legacy_path = legacy_mcp_path_global();
+        fs::write(
+            &legacy_path,
+            r#"{
+  "servers": [{
+    "id": "legacy",
+    "name": "Legacy",
+    "type": "stdio",
+    "command": "legacy-command"
+  }]
+}"#,
+        )
+        .unwrap();
+        fs::write(
+            mcp_config_path_global(),
+            r#"[agents]
+enabled = false
+"#,
+        )
+        .unwrap();
+
+        let loaded = load_mcp_servers(None).unwrap();
+        assert_eq!(loaded[0].command, "legacy-command");
+        assert!(backup_path_for_legacy(&legacy_path).is_file());
+        let migrated = fs::read_to_string(mcp_config_path_global()).unwrap();
+        assert!(migrated.contains("[agents]"));
+        assert!(migrated.contains("[mcp_servers.legacy]"));
+
+        fs::write(
+            &legacy_path,
+            r#"{"servers":[{"id":"changed","name":"Changed","type":"stdio","command":"changed"}]}"#,
+        )
+        .unwrap();
+        let loaded_again = load_mcp_servers(None).unwrap();
+        assert_eq!(loaded_again.len(), 1);
+        assert_eq!(loaded_again[0].id, "legacy");
     }
 }

@@ -205,11 +205,12 @@ pub(crate) const ENSURED_DIRS: &[&str] = &[
     "cache/audio",
 ];
 
-/// 数据根下需要确保存在的空 JSON 状态文件
-pub(crate) const STATE_JSON_FILES: &[(&str, &str)] = &[
+/// 数据根下需要确保存在的空状态文件。
+pub(crate) const STATE_FILES: &[(&str, &str)] = &[
+    // 不预建 [mcp_servers]，以便旧 mcp.json 首次加载时安全迁移。
+    ("config.toml", "# Astro configuration\n"),
     ("skills-enabled.json", "{\n}\n"),
     ("tools-enabled.json", "{\n}\n"),
-    ("mcp.json", "{\n  \"servers\": []\n}\n"),
     ("models.json", "{\n  \"providers\": {}\n}\n"),
     ("dreaming.json", "{\n  \"enabled\": false\n}\n"),
     ("cron/jobs.json", "{\n  \"jobs\": []\n}\n"),

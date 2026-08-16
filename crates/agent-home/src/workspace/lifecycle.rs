@@ -12,9 +12,7 @@ use super::paths::{
     daily_memory_path, default_memory_dir, generate_agent_id, normalize_agent_id, set_active_agent,
     DEFAULT_AGENT_ID,
 };
-use super::templates::{
-    render_template, AGENT_SUBDIRS, CORE_FILES, ENSURED_DIRS, STATE_JSON_FILES,
-};
+use super::templates::{render_template, AGENT_SUBDIRS, CORE_FILES, ENSURED_DIRS, STATE_FILES};
 
 /// 创建默认/继承自默认 Agent 的运行时配置
 pub fn write_agent_config(
@@ -42,16 +40,11 @@ pub fn write_agent_config(
         created_at: chrono::Local::now().to_rfc3339(),
     };
 
-    // 若继承：把全局 tools / mcp 快照写入，便于之后单独改
+    // 若继承：保留旧 tools 快照行为；MCP 改由 config.toml 分层继承。
     if inherit && id != DEFAULT_AGENT_ID {
         if let Ok(tools) = fs::read_to_string(base.join("tools-enabled.json")) {
             if let Ok(v) = serde_json::from_str::<serde_json::Value>(&tools) {
                 cfg.tools_enabled = Some(v);
-            }
-        }
-        if let Ok(mcp) = fs::read_to_string(base.join("mcp.json")) {
-            if let Ok(v) = serde_json::from_str::<serde_json::Value>(&mcp) {
-                cfg.mcp = Some(v);
             }
         }
     }
@@ -519,9 +512,11 @@ pub fn ensure_agent_space(
 /// 布局：
 /// ```text
 /// ~/.astro/
+/// ├── config.toml                ← 全局设置、项目信任与 MCP
 /// ├── workspace/                 ← 默认 Agent 工作区
 /// ├── workspace-{id}/            ← 其他 Agent 工作区（同构）
-/// ├── agents/{id}/config.json    ← 每 Agent 的模型/工具/MCP 配置
+/// ├── agents/{id}/config.json    ← 每 Agent 的运行时配置
+/// ├── agents/{id}/config.toml    ← 每 Agent 的 MCP 覆盖（按需创建）
 /// └── active-agent.json
 /// ```
 pub fn ensure_workspace(base: &Path) -> anyhow::Result<EnsureWorkspaceReport> {
@@ -546,7 +541,7 @@ pub fn ensure_workspace(base: &Path) -> anyhow::Result<EnsureWorkspaceReport> {
     }
     let _ = ensure_agent_space(base, DEFAULT_AGENT_ID, Some("Astro"))?;
 
-    for (rel, content) in STATE_JSON_FILES {
+    for (rel, content) in STATE_FILES {
         let path = base.join(rel);
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent)?;
@@ -596,7 +591,7 @@ mod tests {
         active_agent_id, agent_workspace_dir, is_generated_agent_id, list_daily_memory_dates,
         set_active_agent,
     };
-    use super::super::templates::{CORE_FILES, ENSURED_DIRS, STATE_JSON_FILES};
+    use super::super::templates::{CORE_FILES, ENSURED_DIRS, STATE_FILES};
     use super::*;
     use tempfile::TempDir;
 
@@ -637,7 +632,7 @@ mod tests {
         assert!(dir.path().join("active-agent.json").is_file());
         assert_eq!(
             report.created_files.len(),
-            CORE_FILES.len() + STATE_JSON_FILES.len()
+            CORE_FILES.len() + STATE_FILES.len()
         );
         assert!(report.created_files.iter().any(|f| f == "cron/jobs.json"));
         assert!(report.created_files.iter().any(|f| f == "models.json"));
@@ -649,7 +644,7 @@ mod tests {
             .created_files
             .iter()
             .any(|f| f == "tools-enabled.json"));
-        assert!(report.created_files.iter().any(|f| f == "mcp.json"));
+        assert!(report.created_files.iter().any(|f| f == "config.toml"));
         assert!(report
             .created_files
             .iter()
@@ -661,7 +656,7 @@ mod tests {
         assert!(dir.path().join("models.json").is_file());
         assert!(dir.path().join("skills-enabled.json").is_file());
         assert!(dir.path().join("tools-enabled.json").is_file());
-        assert!(dir.path().join("mcp.json").is_file());
+        assert!(dir.path().join("config.toml").is_file());
     }
 
     #[test]
