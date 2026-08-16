@@ -8,7 +8,9 @@ use std::path::Path;
 
 use serde::{Deserialize, Serialize};
 use tracing::warn;
-use types::{ApprovalPolicy, ApprovalsReviewer, PermissionsConfig, SessionPermissions};
+use types::{
+    ApprovalPolicy, ApprovalsReviewer, PermissionPreset, PermissionsConfig, SessionPermissions,
+};
 
 fn default_true() -> bool {
     true
@@ -856,6 +858,55 @@ pub fn load_permission_settings(base: &Path) -> LoadedPermissionSettings {
         });
     }
     loaded
+}
+
+/// 激活桌面端内置权限组合，同时保留自定义 profiles 和其它配置段。
+pub fn set_permission_preset(
+    base: &Path,
+    preset: PermissionPreset,
+) -> anyhow::Result<LoadedPermissionSettings> {
+    let selection = preset.selection();
+    let mut root = load_yaml_root(base)?;
+    ensure_mapping_path(&mut root, &["permissions"])?.insert(
+        serde_yaml::Value::String("default_profile".into()),
+        serde_yaml::Value::String(selection.profile_id.clone()),
+    );
+    {
+        let top = ensure_mapping_path(&mut root, &[])?;
+        top.insert(
+            serde_yaml::Value::String("approval_policy".into()),
+            serde_yaml::Value::String(
+                match selection.approval_policy {
+                    ApprovalPolicy::Untrusted => "untrusted",
+                    ApprovalPolicy::OnRequest => "on-request",
+                    ApprovalPolicy::Never => "never",
+                }
+                .into(),
+            ),
+        );
+        top.insert(
+            serde_yaml::Value::String("approvals_reviewer".into()),
+            serde_yaml::Value::String(
+                match selection.approvals_reviewer {
+                    ApprovalsReviewer::User => "user",
+                    ApprovalsReviewer::AutoReview => "auto_review",
+                }
+                .into(),
+            ),
+        );
+    }
+    // 迁移期兼容旧执行链；permission profile 仍是实际沙箱边界的唯一来源。
+    let legacy_mode = match preset {
+        PermissionPreset::ApproveForMe => "smart",
+        PermissionPreset::FullAccess => "off",
+        PermissionPreset::AskForApproval | PermissionPreset::ReadOnly => "manual",
+    };
+    ensure_mapping_path(&mut root, &["approvals"])?.insert(
+        serde_yaml::Value::String("mode".into()),
+        serde_yaml::Value::String(legacy_mode.into()),
+    );
+    save_yaml_root(base, &root)?;
+    Ok(load_permission_settings(base))
 }
 
 fn load_explicit_permissions(
@@ -1853,6 +1904,24 @@ auxiliary:
         assert_eq!(loaded.source, PermissionConfigSource::Default);
         assert_eq!(loaded.selection, SessionPermissions::ask_for_approval());
         assert!(loaded.diagnostics.is_empty());
+    }
+
+    #[test]
+    fn permission_preset_roundtrips_and_preserves_unrelated_config() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(
+            dir.path().join("config.yaml"),
+            "memory:\n  memory_char_limit: 41\npermissions:\n  profiles: {}\n",
+        )
+        .unwrap();
+        let loaded = set_permission_preset(dir.path(), PermissionPreset::ApproveForMe).unwrap();
+        assert_eq!(loaded.selection, SessionPermissions::approve_for_me());
+        assert_eq!(load_memory_config(dir.path()).memory_char_limit, 41);
+        assert_eq!(load_approvals_config(dir.path()).mode, "smart");
+
+        let loaded = set_permission_preset(dir.path(), PermissionPreset::FullAccess).unwrap();
+        assert_eq!(loaded.selection, SessionPermissions::full_access());
+        assert_eq!(load_approvals_config(dir.path()).mode, "off");
     }
 
     #[test]

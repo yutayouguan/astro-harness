@@ -216,6 +216,41 @@ pub struct SessionPermissions {
     pub approvals_reviewer: ApprovalsReviewer,
 }
 
+/// 桌面端权限选择器中的四个内置组合。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PermissionPreset {
+    AskForApproval,
+    ApproveForMe,
+    ReadOnly,
+    FullAccess,
+}
+
+impl PermissionPreset {
+    pub fn selection(self) -> SessionPermissions {
+        match self {
+            Self::AskForApproval => SessionPermissions::ask_for_approval(),
+            Self::ApproveForMe => SessionPermissions::approve_for_me(),
+            Self::ReadOnly => SessionPermissions::read_only(),
+            Self::FullAccess => SessionPermissions::full_access(),
+        }
+    }
+
+    pub fn from_selection(selection: &SessionPermissions) -> Option<Self> {
+        if selection == &SessionPermissions::ask_for_approval() {
+            Some(Self::AskForApproval)
+        } else if selection == &SessionPermissions::approve_for_me() {
+            Some(Self::ApproveForMe)
+        } else if selection == &SessionPermissions::read_only() {
+            Some(Self::ReadOnly)
+        } else if selection == &SessionPermissions::full_access() {
+            Some(Self::FullAccess)
+        } else {
+            None
+        }
+    }
+}
+
 impl Default for SessionPermissions {
     fn default() -> Self {
         Self::ask_for_approval()
@@ -321,5 +356,9 @@ mod tests {
         let full = SessionPermissions::full_access();
         assert_eq!(full.profile_id, DANGER_FULL_ACCESS_PROFILE);
         assert_eq!(full.approval_policy, ApprovalPolicy::Never);
+        assert_eq!(
+            PermissionPreset::from_selection(&auto),
+            Some(PermissionPreset::ApproveForMe)
+        );
     }
 }

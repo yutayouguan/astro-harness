@@ -310,6 +310,8 @@ pub fn run() {
             commands::memory::set_background_review_enabled,
             commands::memory::get_approval_settings,
             commands::memory::set_approval_mode,
+            commands::memory::get_permission_settings,
+            commands::memory::set_permission_preset,
             commands::memory::add_command_allowlist,
             commands::memory::remove_command_allowlist,
             // — loops —

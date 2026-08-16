@@ -37,8 +37,9 @@ pub use notify::{
 };
 pub use permissions::{
     ApprovalPolicy, ApprovalsReviewer, FilesystemAccess, FilesystemPolicy, NetworkAccess,
-    NetworkPolicy, PermissionProfile, PermissionProfileError, PermissionsConfig, SandboxMode,
-    SessionPermissions, DANGER_FULL_ACCESS_PROFILE, READ_ONLY_PROFILE, WORKSPACE_PROFILE,
+    NetworkPolicy, PermissionPreset, PermissionProfile, PermissionProfileError, PermissionsConfig,
+    SandboxMode, SessionPermissions, DANGER_FULL_ACCESS_PROFILE, READ_ONLY_PROFILE,
+    WORKSPACE_PROFILE,
 };
 pub use sqlite::{delete_sqlite_files, open_wal, ExampleSqliteStore, SqliteStore};
 pub use title::sanitize_title;

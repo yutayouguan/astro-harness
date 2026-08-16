@@ -185,6 +185,7 @@ dependencies = [
  "proto",
  "providers",
  "reqwest 0.12.28",
+ "sandbox",
  "schemars 0.8.22",
  "serde",
  "serde_json",

@@ -265,6 +265,57 @@ pub async fn set_approval_mode(mode: String) -> Result<ApprovalSettingsDto, Stri
         .into())
 }
 
+/// 新权限系统的当前组合与平台沙箱健康状态。
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PermissionSettingsDto {
+    pub preset: Option<String>,
+    pub settings: memory::LoadedPermissionSettings,
+    pub sandbox_health: sandbox::SandboxHealth,
+}
+
+fn permission_settings_dto() -> PermissionSettingsDto {
+    let root = home::default_memory_dir();
+    let settings = memory::load_permission_settings(&root);
+    let preset = types::PermissionPreset::from_selection(&settings.selection).map(|value| {
+        match value {
+            types::PermissionPreset::AskForApproval => "ask_for_approval",
+            types::PermissionPreset::ApproveForMe => "approve_for_me",
+            types::PermissionPreset::ReadOnly => "read_only",
+            types::PermissionPreset::FullAccess => "full_access",
+        }
+        .to_string()
+    });
+    PermissionSettingsDto {
+        preset,
+        settings,
+        sandbox_health: sandbox::SandboxRunner.probe(),
+    }
+}
+
+#[tauri::command]
+pub async fn get_permission_settings() -> Result<PermissionSettingsDto, String> {
+    Ok(permission_settings_dto())
+}
+
+#[tauri::command]
+pub async fn set_permission_preset(
+    preset: String,
+    confirmed: bool,
+) -> Result<PermissionSettingsDto, String> {
+    let preset = match preset.trim().to_ascii_lowercase().as_str() {
+        "ask_for_approval" => types::PermissionPreset::AskForApproval,
+        "approve_for_me" => types::PermissionPreset::ApproveForMe,
+        "read_only" => types::PermissionPreset::ReadOnly,
+        "full_access" if confirmed => types::PermissionPreset::FullAccess,
+        "full_access" => return Err("启用完全访问需要显式确认".to_string()),
+        other => return Err(format!("未知权限组合: {other}")),
+    };
+    let root = home::default_memory_dir();
+    memory::set_permission_preset(&root, preset).map_err(|error| error.to_string())?;
+    Ok(permission_settings_dto())
+}
+
 /// 向命令白名单追加一条（精确或 glob）。
 #[tauri::command]
 pub async fn add_command_allowlist(entry: String) -> Result<ApprovalSettingsDto, String> {
