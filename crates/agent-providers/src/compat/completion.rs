@@ -97,7 +97,7 @@ where
         // thinking 模式下 max_tokens 同时覆盖推理和正文。DeepSeek R1 等模型的
         // reasoning 轻松消耗 10k-30k tokens，16384 远远不够，导致正文为空。
         // 保底 65536 覆盖 DeepSeek R1 (max 64k) / MiniMax 等主流 thinking 模型。
-        if request.thinking.as_ref().map_or(false, |tc| tc.enabled) {
+        if request.thinking.as_ref().is_some_and(|tc| tc.enabled) {
             let current = body.get("max_tokens").and_then(|v| v.as_u64()).unwrap_or(0);
             if current < 65536 {
                 body["max_tokens"] = json!(65536);

@@ -5,6 +5,7 @@ use std::path::PathBuf;
 
 use anyhow::{Context, Result};
 
+use crate::agent_id::normalize as normalize_agent_id;
 use crate::models::{SkillOriginRecord, SkillOriginsFile, StoreSkill, StoreSkillDetail};
 use crate::store::fetch_detail;
 
@@ -20,14 +21,6 @@ fn memory_dir() -> PathBuf {
                 .map(|h| PathBuf::from(h).join(".astro"))
         })
         .unwrap_or_else(|_| PathBuf::from(".astro"))
-}
-
-/// 规范化 Agent id：空/`default` → `workspace`（与 `install` 一致）。
-fn normalize_agent_id(agent_id: Option<&str>) -> String {
-    match agent_id.map(str::trim).filter(|s| !s.is_empty()) {
-        Some("default") | None => "workspace".to_string(),
-        Some(id) => id.to_string(),
-    }
 }
 
 fn origin_key(agent_id: Option<&str>, folder: &str) -> (String, String) {
@@ -70,7 +63,8 @@ pub fn save_origins(file: &SkillOriginsFile) -> Result<()> {
 }
 
 /// 按 `(agent_id, folder)` 插入或更新；更新时写入新记录的 `last_updated_at`。
-pub fn upsert_origin(record: SkillOriginRecord) -> Result<()> {
+pub fn upsert_origin(mut record: SkillOriginRecord) -> Result<()> {
+    record.agent_id = Some(normalize_agent_id(record.agent_id.as_deref()));
     let key = origin_key(record.agent_id.as_deref(), &record.folder);
     let mut file = load_origins()?;
     if let Some(existing) = file
@@ -244,9 +238,8 @@ pub async fn fill_origin_remote_baseline(agent_id: Option<&str>, folder: &str) -
 mod tests {
     use super::*;
     use crate::models::SkillOriginRecord;
+    use crate::ENV_TEST_LOCK;
     use tempfile::tempdir;
-
-    static ENV_TEST_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 
     #[test]
     fn upsert_same_folder_updates_not_duplicates() {
@@ -313,7 +306,7 @@ mod tests {
     }
 
     #[test]
-    fn upsert_none_agent_id_matches_workspace() {
+    fn upsert_default_agent_matches_legacy_workspace_alias() {
         let _guard = ENV_TEST_LOCK.blocking_lock();
         let dir = tempdir().unwrap();
         std::env::set_var("ASTRO_MEMORY_DIR", dir.path());
@@ -351,6 +344,7 @@ mod tests {
 
         let file = load_origins().unwrap();
         assert_eq!(file.records.len(), 1);
+        assert_eq!(file.records[0].agent_id.as_deref(), Some("default"));
         assert_eq!(file.records[0].last_updated_at, Some(9));
     }
 
@@ -431,7 +425,7 @@ mod tests {
 
     #[tokio::test]
     async fn fill_origin_remote_baseline_fetch_failure_leaves_remote_none() {
-        let _guard = ENV_TEST_LOCK.blocking_lock();
+        let _guard = ENV_TEST_LOCK.lock().await;
         let dir = tempdir().unwrap();
         std::env::set_var("ASTRO_MEMORY_DIR", dir.path());
 
@@ -466,7 +460,7 @@ mod tests {
     async fn record_after_install_upserts() {
         use crate::install::{record_after_install, InstallOriginHint};
 
-        let _guard = ENV_TEST_LOCK.blocking_lock();
+        let _guard = ENV_TEST_LOCK.lock().await;
         let dir = tempdir().unwrap();
         std::env::set_var("ASTRO_MEMORY_DIR", dir.path());
 
@@ -495,7 +489,7 @@ mod tests {
         use crate::install::{agent_skills_dir, record_after_install, InstallOriginHint};
         use std::io::Write;
 
-        let _guard = ENV_TEST_LOCK.blocking_lock();
+        let _guard = ENV_TEST_LOCK.lock().await;
         let dir = tempdir().unwrap();
         std::env::set_var("ASTRO_MEMORY_DIR", dir.path());
 

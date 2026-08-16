@@ -3,8 +3,8 @@
 //! Provider（OpenAI / Anthropic / Gemini）要求每个 `tool_calls[].id`
 //! 都有对应 `role=tool` 且带 `tool_call_id` 的结果；悬挂调用会导致 400。
 
-use types::message::{Message, Role};
 use std::collections::HashSet;
+use types::message::{Message, Role};
 
 /// 清理悬挂的 tool_calls / 孤儿 tool 消息（就地修改）。
 ///
@@ -73,8 +73,8 @@ pub fn sanitized_tool_pairs(messages: &[Message]) -> Vec<Message> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use types::message::ToolCall;
     use serde_json::json;
+    use types::message::ToolCall;
 
     #[test]
     fn drops_dangling_tool_calls_without_results() {

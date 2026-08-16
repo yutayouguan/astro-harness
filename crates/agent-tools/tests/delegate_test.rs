@@ -75,7 +75,7 @@ async fn delegate_requires_goal() {
 }
 
 #[tokio::test]
-async fn delegate_goal_hits_runner_or_key() {
+async fn delegate_goal_requires_execution_dispatch() {
     let dir = tempfile::tempdir().unwrap();
     let mut memory = memory::MemoryManager::new(dir.path().to_path_buf()).unwrap();
     let sessions =
@@ -92,10 +92,7 @@ async fn delegate_goal_hits_runner_or_key() {
     let err = tools::dispatch_tool(|_| true, &mut ctx, "subagent", &args, None)
         .await
         .unwrap_err();
-    assert!(
-        err.to_string().contains("runner") || err.to_string().contains("API Key"),
-        "got: {err}"
-    );
+    assert!(err.to_string().contains("execution dispatch"), "got: {err}");
 }
 
 #[tokio::test]

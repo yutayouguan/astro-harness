@@ -6,6 +6,7 @@ use std::path::{Path, PathBuf};
 use anyhow::{bail, Context, Result};
 use serde::{Deserialize, Serialize};
 
+use crate::agent_id::normalize as normalize_agent_id;
 use crate::installed::reveal_path_in_file_manager;
 
 /// 单次技能目录备份条目（`~/.astro/skill-backups/{agent}/{folder}/{timestamp}/`）。
@@ -36,14 +37,6 @@ fn backups_root() -> PathBuf {
     memory_dir().join("skill-backups")
 }
 
-/// 规范化 Agent id：空/`default` → `workspace`（与 `update` / `origins` 一致）。
-fn normalize_agent_id(agent_id: Option<&str>) -> String {
-    match agent_id.map(str::trim).filter(|s| !s.is_empty()) {
-        Some("default") | None => "workspace".to_string(),
-        Some(id) => id.to_string(),
-    }
-}
-
 fn dir_mtime_secs(path: &Path) -> Option<i64> {
     fs::metadata(path)
         .ok()
@@ -72,7 +65,8 @@ pub fn list_skill_backups(agent_id: Option<&str>) -> Result<Vec<SkillBackupEntry
         if !agent_path.is_dir() {
             continue;
         }
-        let agent_id_str = agent_entry.file_name().to_string_lossy().to_string();
+        let stored_agent_id = agent_entry.file_name().to_string_lossy().to_string();
+        let agent_id_str = normalize_agent_id(Some(&stored_agent_id));
         if filter_agent
             .as_ref()
             .is_some_and(|target| *target != agent_id_str)
@@ -148,9 +142,8 @@ pub fn reveal_skill_backup(path: &str) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::ENV_TEST_LOCK;
     use tempfile::tempdir;
-
-    static ENV_TEST_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 
     fn mkdir_backup(base: &Path, agent: &str, folder: &str, timestamp: &str) {
         let p = base

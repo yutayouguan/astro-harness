@@ -6,9 +6,9 @@ use agent::builder::AgentBuilder;
 use agent::prompt::context::{DynamicContext, StaticContext};
 use agent::prompt::prompt_builder::PromptBuilder;
 use agent::runtime::{AgentConfig, AgentLoop, MaxDepthError};
-use types::message::Message;
 use home::AgentRuntimeConfig;
 use tempfile::TempDir;
+use types::message::Message;
 
 fn test_config(dir: &TempDir) -> AgentConfig {
     AgentConfig::with_defaults(dir.path().to_path_buf())

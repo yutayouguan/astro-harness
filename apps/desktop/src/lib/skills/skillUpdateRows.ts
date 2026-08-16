@@ -18,13 +18,13 @@ function norm(value: string | undefined | null): string | undefined {
   return v || undefined;
 }
 
-/** Agent id 规范化（空 / default → workspace，与 memory crate 一致） */
+/** Agent id 规范化（空 / 旧 workspace 别名 → default） */
 function normalizeAgentId(id: string | null | undefined): string {
   if (!id || id === "workspace") return "default";
   return id;
 }
 
-/** 来源记录的 agent_id 规范化（空 / default → workspace） */
+/** 来源记录的 agent_id 规范化 */
 function originAgentId(record: SkillOriginRecord): string {
   return normalizeAgentId(record.agent_id);
 }

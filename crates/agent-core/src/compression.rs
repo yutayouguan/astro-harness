@@ -8,8 +8,8 @@
 //! summary via `tool_llm_compress` → head/tail fallback. This module owns the staged
 //! thresholds, thrashing guard, and head/tail heuristic.
 
-use types::message::{Message, Role};
 use memory::CompressionConfig;
+use types::message::{Message, Role};
 
 use crate::prompt::context_usage::{estimate_tokens, DEFAULT_CONTEXT_WINDOW};
 

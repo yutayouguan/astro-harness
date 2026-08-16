@@ -6,11 +6,11 @@ mod search;
 mod sessions;
 
 use anyhow::{anyhow, Context, Result};
-use types::SqliteStore;
 use rusqlite::{Connection, OptionalExtension};
 use serde_json::Value;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
+use types::SqliteStore;
 
 pub use schema::SCHEMA_VERSION;
 

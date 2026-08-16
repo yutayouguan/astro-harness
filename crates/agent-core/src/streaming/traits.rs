@@ -1,8 +1,8 @@
 //! Rig 风格流式分层 trait：`StreamingCompletion` / `StreamingChat` / `StreamingPrompt`。
 
 use async_trait::async_trait;
-use types::message::Message;
 use providers::types::message::Message as ProviderMessage;
+use types::message::Message;
 
 use super::types::AssistantContentStream;
 

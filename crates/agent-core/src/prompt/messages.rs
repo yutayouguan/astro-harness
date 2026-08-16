@@ -2,10 +2,10 @@
 //!
 //! 将应用内 `types::message::Message` 序列转为统一的 `providers::types::message::Message`。
 
-use types::message::{Message, MessageContent, Role};
 use providers::types::message::{
     AssistantContent, Message as ProviderMessage, ToolCall as ProviderToolCall, UserContent,
 };
+use types::message::{Message, MessageContent, Role};
 
 /// 将会话历史与 system prompt 转为 Provider 可消费的聊天消息列表。
 ///
@@ -223,9 +223,9 @@ fn media_asset_to_user_content(asset: &types::MediaAsset) -> Option<UserContent>
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serde_json::json;
     use types::message::{Message, MessageContent, ToolCall};
     use types::{MediaAsset, MediaKind, MediaRef};
-    use serde_json::json;
 
     #[test]
     fn multimodal_parts_map_to_provider_parts() {

@@ -613,8 +613,7 @@ async fn cumulative_usage_chunks_use_last_per_round() {
     let session = Arc::new(Mutex::new(agent));
     {
         let mut a = session.lock().await;
-        a.session_messages
-            .push(types::message::Message::user("hi"));
+        a.session_messages.push(types::message::Message::user("hi"));
     }
     let chat_fn = scripted_chat(vec![vec![
         StreamChunk::Text("a".into()),

@@ -370,7 +370,7 @@ async fn execute_inner_with_depth(
                     None => Err(WorkflowError::NoExecutor {
                         node_id: node_id.to_string(),
                         label: node.label.clone(),
-                        node_type: node.node_type.clone(),
+                        node_type: node.node_type,
                     }
                     .into()),
                 }
@@ -510,11 +510,11 @@ fn execute_sub_workflow<'a>(
             .into());
         }
         let store = WorkflowStore::open_default()?;
-        let sub_wf = store.get(workflow_id)?.ok_or_else(|| {
-            WorkflowError::SubWorkflowNotFound {
+        let sub_wf = store
+            .get(workflow_id)?
+            .ok_or_else(|| WorkflowError::SubWorkflowNotFound {
                 workflow_id: workflow_id.to_string(),
-            }
-        })?;
+            })?;
 
         let input = ctx.snapshot_outputs();
         let sub_run_id = uuid::Uuid::new_v4().to_string();
@@ -558,7 +558,7 @@ fn execute_sub_workflow<'a>(
                     None,
                     0
                 ));
-                return Err(WorkflowError::NodeExecFailed {
+                Err(WorkflowError::NodeExecFailed {
                     node_id: workflow_id.to_string(),
                     label: format!("子工作流 {}", workflow_id),
                     source: anyhow::anyhow!("{}", err_msg),

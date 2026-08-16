@@ -1,10 +1,10 @@
 //! 聊天主模型故障切换：错误分类与首包前 fallback 流包装。
 
-use types::ChatTarget;
 use futures::{stream, StreamExt};
 use providers::types::message::Message as ProviderMessage;
 use providers::types::stream::{CompletionStream, StreamChunk};
 use providers::ProviderConfig;
+use types::ChatTarget;
 
 /// 实际命中目标的可观测元数据（写入 usage 等，不改会话默认模型）。
 #[derive(Debug, Clone, PartialEq, Eq)]

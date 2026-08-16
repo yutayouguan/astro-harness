@@ -1,8 +1,8 @@
 //! Agent 主循环（`AgentLoop`）回合与工具调用测试。
 
 use agent::runtime::*;
-use types::message::*;
 use tempfile::TempDir;
+use types::message::*;
 
 fn test_config(dir: &TempDir) -> AgentConfig {
     AgentConfig::with_defaults(dir.path().to_path_buf())

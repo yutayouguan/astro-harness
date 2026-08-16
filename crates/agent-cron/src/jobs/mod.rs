@@ -251,10 +251,10 @@ mod tests {
 
     #[test]
     fn normalize_cron_agent_id_maps_legacy_default() {
-        assert_eq!(normalize_cron_agent_id(""), "workspace");
-        assert_eq!(normalize_cron_agent_id("default"), "workspace");
-        assert_eq!(normalize_cron_agent_id("DEFAULT"), "workspace");
-        assert_eq!(normalize_cron_agent_id("workspace"), "workspace");
+        assert_eq!(normalize_cron_agent_id(""), home::DEFAULT_AGENT_ID);
+        assert_eq!(normalize_cron_agent_id("default"), home::DEFAULT_AGENT_ID);
+        assert_eq!(normalize_cron_agent_id("DEFAULT"), home::DEFAULT_AGENT_ID);
+        assert_eq!(normalize_cron_agent_id("workspace"), home::DEFAULT_AGENT_ID);
         assert_eq!(normalize_cron_agent_id("Coder"), "coder");
     }
 
@@ -278,14 +278,14 @@ mod tests {
         .unwrap();
         let store = CronStore::open(dir.path()).unwrap();
         let jobs = store.list().unwrap();
-        assert_eq!(jobs[0].agent_id, "workspace");
+        assert_eq!(jobs[0].agent_id, home::DEFAULT_AGENT_ID);
     }
 
     #[test]
-    fn add_defaults_to_workspace_agent() {
+    fn add_defaults_to_default_agent() {
         let dir = TempDir::new().unwrap();
         let store = CronStore::open(dir.path()).unwrap();
         let job = store.add("every:1h", "hi").unwrap();
-        assert_eq!(job.agent_id, "workspace");
+        assert_eq!(job.agent_id, home::DEFAULT_AGENT_ID);
     }
 }

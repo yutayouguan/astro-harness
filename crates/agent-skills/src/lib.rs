@@ -18,6 +18,12 @@ use std::sync::RwLock;
 /// `installed` 在发现 skill 根目录时通过 [`workspace_override`] 读取。
 static WORKSPACE_OVERRIDE: RwLock<Option<PathBuf>> = RwLock::new(None);
 
+/// 测试会改写进程级 ASTRO_MEMORY_DIR，必须跨模块串行。
+#[cfg(test)]
+pub(crate) static ENV_TEST_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+
+mod agent_id;
+
 /// 设置当前进程的 workspace 目录覆盖（线程安全）。
 pub fn set_workspace_override(path: &Path) {
     if let Ok(mut g) = WORKSPACE_OVERRIDE.write() {

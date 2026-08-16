@@ -254,11 +254,9 @@ fn memory_dir() -> PathBuf {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::ENV_TEST_LOCK;
     use std::fs;
-    use std::sync::Mutex;
     use tempfile::tempdir;
-
-    static ENV_LOCK: Mutex<()> = Mutex::new(());
 
     #[test]
     fn default_catalog_has_four_skills() {
@@ -353,7 +351,7 @@ mod tests {
 
     #[test]
     fn is_installed_when_skill_md_exists() {
-        let _g = ENV_LOCK.lock().unwrap();
+        let _g = ENV_TEST_LOCK.blocking_lock();
         let dir = tempdir().unwrap();
         let skill = dir.path().join("skills/find-skills");
         fs::create_dir_all(&skill).unwrap();
@@ -364,7 +362,7 @@ mod tests {
 
     #[test]
     fn relocate_moves_agents_skill_into_public_skills() {
-        let _g = ENV_LOCK.lock().unwrap();
+        let _g = ENV_TEST_LOCK.blocking_lock();
         let dir = tempdir().unwrap();
         let src = dir.path().join(".agents/skills/brainstorming");
         fs::create_dir_all(&src).unwrap();
@@ -395,7 +393,7 @@ mod tests {
 
     #[test]
     fn relocate_noop_if_already_in_public() {
-        let _g = ENV_LOCK.lock().unwrap();
+        let _g = ENV_TEST_LOCK.blocking_lock();
         let dir = tempdir().unwrap();
         let dest = dir.path().join("skills/find-skills");
         fs::create_dir_all(&dest).unwrap();
@@ -407,7 +405,7 @@ mod tests {
 
     #[test]
     fn seed_skips_installed_and_installs_missing() {
-        let _g = ENV_LOCK.lock().unwrap();
+        let _g = ENV_TEST_LOCK.blocking_lock();
         let dir = tempdir().unwrap();
         std::env::set_var("ASTRO_MEMORY_DIR", dir.path());
 
@@ -433,7 +431,7 @@ mod tests {
 
     #[test]
     fn seed_records_failure_and_continues() {
-        let _g = ENV_LOCK.lock().unwrap();
+        let _g = ENV_TEST_LOCK.blocking_lock();
         let dir = tempdir().unwrap();
         let catalog = &DEFAULT_PUBLIC_SKILLS[..2];
         let report = seed_with_installer(dir.path(), catalog, &|_s, name| {

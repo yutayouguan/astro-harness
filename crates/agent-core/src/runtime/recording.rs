@@ -1,7 +1,7 @@
 //! AgentLoop 消息记录方法：assistant / user / tool 角色消息的持久化与会话镜像维护。
 
-use types::message::Message;
 use session::NewMessage;
+use types::message::Message;
 
 use super::AgentLoop;
 

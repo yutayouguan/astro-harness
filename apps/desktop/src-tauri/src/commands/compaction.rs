@@ -160,7 +160,7 @@ pub async fn compact_chat_session(
         .unwrap_or_else(keep_tail_default);
 
     // SessionStore（rusqlite）非 Send：先读出元数据/消息并 drop，再 await LLM。
-    let (messages, transcript) = {
+    let (messages, expected_last_message_id, transcript) = {
         let store = open_sessions()?;
         let meta = store
             .get_session(sid)
@@ -197,7 +197,8 @@ pub async fn compact_chat_session(
             .collect::<Vec<_>>()
             .join("\n\n");
         let transcript: String = transcript.chars().take(60_000).collect();
-        (messages, transcript)
+        let expected_last_message_id = messages.last().map(|message| message.id);
+        (messages, expected_last_message_id, transcript)
     };
 
     let (summary, degraded) = match summarize_with_llm(sid, &transcript).await {
@@ -212,7 +213,7 @@ pub async fn compact_chat_session(
     {
         let store = open_sessions()?;
         store
-            .compact_and_split(sid, &new_id, &summary, keep)
+            .compact_and_split_if_unchanged(sid, &new_id, &summary, keep, expected_last_message_id)
             .map_err(|e| e.to_string())?;
     }
 
@@ -227,7 +228,7 @@ pub async fn compact_chat_session(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use super::providers::{ProviderConfig as UiProvider, ProviderKind};
+    use crate::commands::providers::{ProviderConfig as UiProvider, ProviderKind};
 
     fn ui_provider(id: &str) -> UiProvider {
         UiProvider {

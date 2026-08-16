@@ -17,12 +17,12 @@ use tokio::sync::Mutex as TokioMutex;
 use uuid::Uuid;
 
 use ::session::{ConversationStore, SessionStore};
-use types::message::Message;
 use mcp::{McpHub, MCP_TOOLSET};
 use memory::MemoryManager;
 use serde_json::Value;
-use types::ToolEntry;
 use tools::{register_all, ToolRegistry};
+use types::message::Message;
+use types::ToolEntry;
 
 use crate::prompt::context::StaticContext;
 use crate::prompt::hooks::CancelSignal;
@@ -446,11 +446,7 @@ impl AgentLoop {
     /// 按角色设置 fallback 链（主聊或辅助任务）。
     ///
     /// 辅助任务：保留 preferred（链首；若尚无则先用当前主目标），再接 fallback。
-    pub fn set_role_fallback_models(
-        &mut self,
-        role: types::ModelRole,
-        specs: &[types::ModelSpec],
-    ) {
+    pub fn set_role_fallback_models(&mut self, role: types::ModelRole, specs: &[types::ModelSpec]) {
         match role {
             types::ModelRole::Main => self.set_fallback_models(specs),
             types::ModelRole::Auxiliary(task) => {

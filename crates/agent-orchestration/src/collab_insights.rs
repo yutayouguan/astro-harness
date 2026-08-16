@@ -5,8 +5,8 @@
 
 use std::collections::HashMap;
 
-use types::truncate_utf8;
 use serde::{Deserialize, Serialize};
+use types::truncate_utf8;
 
 use crate::db::OrchestrationDb;
 use usage::{period_window, UsageDb, UsagePeriod};

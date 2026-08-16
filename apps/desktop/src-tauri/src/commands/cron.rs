@@ -151,9 +151,7 @@ fn run_to_dto(r: cron::run_db::CronRunRow) -> CronRunDto {
 fn resolve_creds_for_job(
     job: &cron::CronJob,
 ) -> Result<agent::exec::cron::CronExecCredentials, String> {
-    use super::providers::{
-        find_provider, find_provider_by_backend, resolve_chat_targets,
-    };
+    use super::providers::{find_provider, find_provider_by_backend, resolve_chat_targets};
 
     let provider_cfg = if let Some(id) = job.provider_id.as_deref().filter(|s| !s.is_empty()) {
         find_provider(id).or_else(|_| find_provider_by_backend(id))?
@@ -369,10 +367,7 @@ pub async fn run_cron_job_now(id: String) -> Result<CronRunDto, String> {
     let row = match agent::exec::cron::spawn_job(&job, creds, "manual").await {
         Ok(row) => row,
         Err(err) => {
-            types::notify_kind(
-                types::ImportantKind::CronFailure,
-                format!("{label}\n{err}"),
-            );
+            types::notify_kind(types::ImportantKind::CronFailure, format!("{label}\n{err}"));
             return Err(err.to_string());
         }
     };

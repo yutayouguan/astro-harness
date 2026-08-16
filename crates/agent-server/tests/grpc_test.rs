@@ -3,10 +3,10 @@
 //! 默认套件不依赖本机 Ollama。真 chat 联调见
 //! `test_grpc_chat_ollama_live`（需 `ASTRO_LIVE_OLLAMA=1` 或 `--ignored`）。
 
-use server::grpc::AstroServiceImpl;
 use proto::astro_service_client::AstroServiceClient;
 use proto::astro_service_server::AstroServiceServer;
 use proto::{ChatControlAction, ChatControlRequest, ChatRequest, MemoryQuery};
+use server::grpc::AstroServiceImpl;
 use tempfile::TempDir;
 use tokio_stream::wrappers::TcpListenerStream;
 use tonic::transport::Server;

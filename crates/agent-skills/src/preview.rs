@@ -46,10 +46,9 @@ mod tests {
     use crate::install::agent_skills_dir;
     use crate::models::SkillOriginRecord;
     use crate::origins::upsert_origin;
+    use crate::ENV_TEST_LOCK;
     use std::io::Write;
     use tempfile::tempdir;
-
-    static ENV_TEST_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 
     fn write_skill_md(dir: &std::path::Path, body: &str) {
         std::fs::create_dir_all(dir).unwrap();

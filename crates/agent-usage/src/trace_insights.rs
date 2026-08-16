@@ -4,8 +4,8 @@
 //! user → tool/skill/mcp → llm 调用链（含 input/output），再合并 `usage.db` 的 token/费用。
 
 use chrono::{SecondsFormat, TimeZone, Utc};
-use types::truncate_chars;
 use serde::{Deserialize, Serialize};
+use types::truncate_chars;
 
 use crate::db::{period_window, UsageDb, UsagePeriod};
 use home::default_memory_dir;

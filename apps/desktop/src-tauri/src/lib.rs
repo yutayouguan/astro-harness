@@ -10,12 +10,12 @@ mod ui;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 
-use ui::menu_locale::AppLocale;
 use tauri::{
     menu::{Menu, MenuItem, PredefinedMenuItem, Submenu, HELP_SUBMENU_ID, WINDOW_SUBMENU_ID},
     window::Color,
     AppHandle, Emitter, Manager, RunEvent, WebviewWindowBuilder,
 };
+use ui::menu_locale::AppLocale;
 
 /// 原生窗全透明；内容由 CSS 铺满。macOS 用系统装饰 + Overlay 标题栏（红绿灯）。
 /// 与 light/blue underlay 一致；勿用全透明，否则 zoom 不同步时会露白边（tauri#13898）。
@@ -175,7 +175,12 @@ fn set_app_menu_locale(app: AppHandle, locale: String) -> Result<(), String> {
 #[cfg(target_os = "macos")]
 fn configure_macos_window(win: &tauri::WebviewWindow) {
     use window_vibrancy::{apply_vibrancy, NSVisualEffectMaterial};
-    let _ = apply_vibrancy(win, NSVisualEffectMaterial::UnderWindowBackground, None, None);
+    let _ = apply_vibrancy(
+        win,
+        NSVisualEffectMaterial::UnderWindowBackground,
+        None,
+        None,
+    );
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]

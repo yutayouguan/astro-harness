@@ -2,8 +2,8 @@
 
 use proto::astro_service_client::AstroServiceClient;
 
-use crate::infra::grpc::{default_grpc_address, endpoint_url};
 use super::common::friendly_error;
+use crate::infra::grpc::{default_grpc_address, endpoint_url};
 
 // ---------------------------------------------------------------------------
 // Helpers

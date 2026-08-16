@@ -22,7 +22,6 @@ test("decode every interval", () => {
   const d = decodeSchedule("every:5m");
   assert.deepEqual(d, {
     mode: "interval",
-    time: "09:00",
     weekdays: [],
     intervalValue: 5,
     intervalUnit: "m",
@@ -63,7 +62,8 @@ test("decode daily with weekday range", () => {
   assert.deepEqual(d?.weekdays, [1, 2, 3, 4, 5]);
 });
 
-test("unknown schedule returns null", () => {
-  assert.equal(decodeSchedule("sometime"), null);
-  assert.equal(decodeSchedule(""), null);
+test("unknown schedule falls back to a safe daily draft", () => {
+  const fallback = { mode: "daily", time: "09:00", weekdays: [] };
+  assert.deepEqual(decodeSchedule("sometime"), fallback);
+  assert.deepEqual(decodeSchedule(""), fallback);
 });

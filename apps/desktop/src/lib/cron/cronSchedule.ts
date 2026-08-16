@@ -148,9 +148,18 @@ export function decodeSchedule(schedule: string): ScheduleDraft {
     const weekdays: Weekday[] = [];
     for (const part of rest) {
       if (part.startsWith("wd=")) {
-        for (const n of part.slice(3).split(",")) {
-          const v = Number(n);
-          if (v >= 0 && v <= 6) weekdays.push(v as Weekday);
+        for (const segment of part.slice(3).split(",")) {
+          const range = segment.match(/^(\d)-(\d)$/);
+          if (range) {
+            const lo = Number(range[1]);
+            const hi = Number(range[2]);
+            for (let value = lo; value <= hi; value += 1) {
+              if (value >= 0 && value <= 6) weekdays.push(value as Weekday);
+            }
+            continue;
+          }
+          const value = Number(segment);
+          if (value >= 0 && value <= 6) weekdays.push(value as Weekday);
         }
       }
     }

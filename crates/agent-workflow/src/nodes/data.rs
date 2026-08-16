@@ -139,8 +139,7 @@ impl NodeExecutor for CodeExec {
             for (k, v) in &env_vars {
                 child.env(k, v);
             }
-            let result = child.output();
-            result
+            child.output()
         })
         .await
         .map_err(|e| anyhow::anyhow!("代码执行任务失败: {}", e))?

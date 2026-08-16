@@ -2,9 +2,9 @@
 //!
 //! 库路径：`{sessions_dir}/knowledge.db`（与 artifacts.db 并列）。
 
-use types::SqliteStore;
 use rusqlite::{params, Connection, OptionalExtension};
 use std::path::{Path, PathBuf};
+use types::SqliteStore;
 use uuid::Uuid;
 
 const SCHEMA_VERSION: i32 = 1;

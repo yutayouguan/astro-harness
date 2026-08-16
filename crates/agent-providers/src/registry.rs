@@ -189,6 +189,15 @@ impl Registry {
         self.providers.get(normalized)
     }
 
+    /// 为已注册 provider 增加一个等价查找 id。
+    pub fn register_alias(&mut self, alias: &str, target: &str) -> bool {
+        let Some(provider) = self.providers.get(target).cloned() else {
+            return false;
+        };
+        self.providers.insert(alias.to_string(), provider);
+        true
+    }
+
     pub fn provider_ids(&self) -> Vec<&str> {
         self.providers.keys().map(|s| s.as_str()).collect()
     }

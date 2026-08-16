@@ -1,7 +1,7 @@
 //! AgentLoop 轮次生命周期：用户输入处理、记忆召回、system prompt 组装与 hook 触发。
 
-use types::message::Message;
 use session::{build_conversation_context, format_recalled_context, NewMessage};
+use types::message::Message;
 
 use super::{looks_like_user_correction, AgentLoop, TurnResult};
 

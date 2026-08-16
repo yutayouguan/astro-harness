@@ -120,20 +120,13 @@ impl SessionStore {
     /// 了 v14（如 `archived_at`）却未加 `compressed_content`。
     pub(crate) fn migrate_schema(&self) -> Result<()> {
         let current = self.read_schema_version_or_zero()?;
-        if current < SCHEMA_VERSION {
-            if !self.table_exists("messages")? {
-                self.conn.execute_batch(SCHEMA_V11_DDL)?;
-                self.conn.execute_batch(MESSAGES_FTS_V11_DDL)?;
-            }
-            // v16→v17：删除历史用户消息末尾的 `chatModeHint`（`---\n[Mode: …]`），
-            // 模式说明已迁入 system prompt，旧后缀会造成混杂信号。
-            if (1..17).contains(&current) && self.table_exists("messages")? {
-                self.strip_legacy_chat_mode_hints()
-                    .context("strip legacy chatModeHint from user messages")?;
-            }
-            self.stamp_schema_version()?;
+        let tx = self.conn.unchecked_transaction()?;
+        if current < SCHEMA_VERSION && !self.table_exists("messages")? {
+            self.conn.execute_batch(SCHEMA_V11_DDL)?;
+            self.conn.execute_batch(MESSAGES_FTS_V11_DDL)?;
         }
-        // 版本已到也要自愈缺列，避免「stamp=14 但列缺失」的半迁移库。
+
+        // 必须先补齐列，再执行引用这些列的数据清洗；版本已到也要自愈半迁移库。
         if self.table_exists("messages")? {
             self.ensure_messages_compressed_content_column()?;
             self.ensure_messages_media_json_column()?;
@@ -146,6 +139,18 @@ impl SessionStore {
             self.conn
                 .execute("ALTER TABLE sessions ADD COLUMN pinned_at REAL", [])?;
         }
+
+        if current < SCHEMA_VERSION {
+            // v16→v17：删除历史用户消息末尾的 `chatModeHint`（`---\n[Mode: …]`），
+            // 模式说明已迁入 system prompt，旧后缀会造成混杂信号。
+            if (1..17).contains(&current) && self.table_exists("messages")? {
+                self.strip_legacy_chat_mode_hints()
+                    .context("strip legacy chatModeHint from user messages")?;
+            }
+            // 所有 DDL 与数据清洗成功后才提交目标版本，避免留下错误 stamp。
+            self.stamp_schema_version()?;
+        }
+        tx.commit()?;
         Ok(())
     }
 

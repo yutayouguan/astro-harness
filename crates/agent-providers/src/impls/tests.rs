@@ -40,7 +40,7 @@ fn zhipu_has_chat() {
 #[cfg(test)]
 mod finalize_body {
     use crate::compat::OpenAICompatible;
-    use serde_json::{json, Value};
+    use serde_json::json;
 
     #[test]
     fn deepseek_thinking_enabled_maps_effort() {

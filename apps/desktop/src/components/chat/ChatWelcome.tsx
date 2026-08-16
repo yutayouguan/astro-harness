@@ -1,5 +1,5 @@
 /** 空会话欢迎卡片 — 双行跑马灯无限滚动。 */
-import { type ComponentType, type SVGProps } from "react";
+import { useState, type ComponentType, type SVGProps } from "react";
 import { useI18n } from "../../i18n/LocaleContext";
 import type { MessageKey } from "../../i18n/messages";
 import { AstroLogoMark } from "../icons/AstroLogoMark";
@@ -18,6 +18,8 @@ import {
   PenLine,
   Search,
   Languages,
+  Pause,
+  Play,
 } from "lucide-react";
 
 export type WelcomeCardId =
@@ -58,7 +60,11 @@ const ALL_CARDS: { id: WelcomeCardId; meta: CardMeta }[] = [
 const ROW1 = ALL_CARDS.slice(0, 6);
 const ROW2 = ALL_CARDS.slice(6, 12);
 
-function MarqueeCard({ card, onPick }: { card: typeof ALL_CARDS[0]; onPick: (p: string) => void }) {
+function MarqueeCard({ card, onPick, duplicate = false }: {
+  card: typeof ALL_CARDS[0];
+  onPick: (p: string) => void;
+  duplicate?: boolean;
+}) {
   const { t } = useI18n();
   const { meta } = card;
   const { Icon } = meta;
@@ -68,6 +74,7 @@ function MarqueeCard({ card, onPick }: { card: typeof ALL_CARDS[0]; onPick: (p: 
       className="chat-welcome-card"
       data-tone={meta.tone}
       onClick={() => onPick(t(meta.prompt))}
+      tabIndex={duplicate ? -1 : undefined}
     >
       <span className={`chat-welcome-card-icon ${meta.lucide ? "is-lucide" : ""}`} aria-hidden>
         <span className="chat-welcome-card-lens" />
@@ -89,13 +96,19 @@ function MarqueeRow({ cards, direction, onPick }: {
   direction: "left" | "right";
   onPick: (p: string) => void;
 }) {
-  const doubled = [...cards, ...cards];
   return (
     <div className={`chat-welcome-marquee chat-welcome-marquee--${direction}`}>
       <div className="chat-welcome-marquee-track">
-        {doubled.map((card, i) => (
-          <MarqueeCard key={`${card.id}-${i}`} card={card} onPick={onPick} />
-        ))}
+        <div className="chat-welcome-marquee-group">
+          {cards.map((card) => (
+            <MarqueeCard key={card.id} card={card} onPick={onPick} />
+          ))}
+        </div>
+        <div className="chat-welcome-marquee-group chat-welcome-marquee-copy" aria-hidden="true">
+          {cards.map((card) => (
+            <MarqueeCard key={card.id} card={card} onPick={onPick} duplicate />
+          ))}
+        </div>
       </div>
     </div>
   );
@@ -103,7 +116,9 @@ function MarqueeRow({ cards, direction, onPick }: {
 
 export function ChatWelcome({ onPickCard }: Props) {
   const { t } = useI18n();
+  const [marqueePaused, setMarqueePaused] = useState(false);
   const brandLabel = `${t("chat.welcomeGreeting")} Astro`;
+  const marqueeControlLabel = t(marqueePaused ? "media.play" : "media.pause");
 
   return (
     <div className="chat-empty chat-welcome" role="region" aria-label={brandLabel}>
@@ -134,7 +149,19 @@ export function ChatWelcome({ onPickCard }: Props) {
         <p className="chat-welcome-sub">{t("chat.welcomeSub")}</p>
       </div>
 
-      <div className="chat-welcome-marquee-wrap">
+      <button
+        type="button"
+        className="chat-welcome-marquee-control"
+        aria-pressed={marqueePaused}
+        aria-label={marqueeControlLabel}
+        title={marqueeControlLabel}
+        onClick={() => setMarqueePaused((paused) => !paused)}
+      >
+        {marqueePaused ? <Play size={14} aria-hidden /> : <Pause size={14} aria-hidden />}
+        <span>{marqueeControlLabel}</span>
+      </button>
+
+      <div className={`chat-welcome-marquee-wrap ${marqueePaused ? "is-paused" : ""}`}>
         <MarqueeRow cards={ROW1} direction="right" onPick={onPickCard} />
         <MarqueeRow cards={ROW2} direction="left" onPick={onPickCard} />
       </div>

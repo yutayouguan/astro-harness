@@ -121,7 +121,6 @@ import MsgStreamLoader from "./MsgStreamLoader";
 import { MsgTimeline, MsgTimelineStep, type MsgTimelineKind } from "./MsgTimeline";
 import { useMcpTools } from "../../hooks/providers/useMcpTools";
 import { useTypingPlaceholder } from "../../hooks/chat/useTypingPlaceholder";
-import A2UIRenderer from "../../a2ui/A2UIRenderer";
 import LocationA2UISurface from "./LocationA2UISurface";
 import A2UISurfaceCard from "./A2UISurfaceCard";
 import { formatElapsedSec } from "../../lib/chat/elapsedSec";

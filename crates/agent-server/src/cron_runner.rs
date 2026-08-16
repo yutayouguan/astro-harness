@@ -5,10 +5,10 @@
 //! 凭据解析：读 `providers.json` + **仅环境变量** API Key（无 keyring；GUI 手动跑走 Tauri）。
 
 use agent::exec::cron::{self as cron_exec, CronExecCredentials};
-use types::{expand_chat_targets, ChatTarget, FallbackRef};
 use cron::{CronJob, CronStore};
 use home::default_memory_dir;
 use serde::Deserialize;
+use types::{expand_chat_targets, ChatTarget, FallbackRef};
 
 #[derive(Debug, Deserialize)]
 struct ProvidersFile {
@@ -241,10 +241,7 @@ pub async fn tick_and_execute() {
                 );
                 types::notify_kind(
                     types::ImportantKind::CronFailure,
-                    format!(
-                        "{label}\n{}",
-                        types::truncate_notify(&err.to_string(), 120)
-                    ),
+                    format!("{label}\n{}", types::truncate_notify(&err.to_string(), 120)),
                 );
             }
         }

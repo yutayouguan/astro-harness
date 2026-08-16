@@ -9,9 +9,9 @@
 //! - 运行中记录以 `status = 'running'` 标识；同一 job 可并发查询是否在跑
 //! - 使用 WAL 模式；`id` 为主键 UUID
 
-use types::{truncate_utf8, SqliteStore};
 use rusqlite::{params, Connection, OptionalExtension};
 use std::path::{Path, PathBuf};
+use types::{truncate_utf8, SqliteStore};
 use uuid::Uuid;
 
 /// 建表 DDL（`cron_runs` 及 fired/job/agent 索引）

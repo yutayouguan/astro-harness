@@ -46,8 +46,7 @@ fn open_sessions(memory_dir: &std::path::Path) -> Result<session::SessionStore, 
 fn parse_auxiliary_targets(
     items: Vec<proto::AuxiliaryModelTarget>,
 ) -> HashMap<types::AuxiliaryTask, Vec<types::ChatTarget>> {
-    let mut grouped: HashMap<types::AuxiliaryTask, Vec<(u32, types::ChatTarget)>> =
-        HashMap::new();
+    let mut grouped: HashMap<types::AuxiliaryTask, Vec<(u32, types::ChatTarget)>> = HashMap::new();
     for item in items {
         let Some(task) = types::AuxiliaryTask::parse(item.task.trim()) else {
             continue;

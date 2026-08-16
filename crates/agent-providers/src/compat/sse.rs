@@ -67,7 +67,7 @@ pub fn extract_openai_delta(data: &str) -> Vec<StreamChunk> {
         .or_else(|| choice.pointer("/message/content"))
         .and_then(|c| c.as_str())
         .filter(|s| !s.is_empty());
-    let meaningful_text = content_str.map_or(false, |s| !s.trim().is_empty());
+    let meaningful_text = content_str.is_some_and(|s| !s.trim().is_empty());
 
     if let (true, Some(s)) = (meaningful_text, content_str) {
         chunks.push(StreamChunk::Text(s.to_string()));

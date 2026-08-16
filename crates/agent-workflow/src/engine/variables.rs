@@ -115,8 +115,8 @@ impl VariableContext {
         }
 
         // 取反 !
-        if expr.starts_with('!') {
-            return Ok(!self.evaluate_condition(&expr[1..])?);
+        if let Some(stripped) = expr.strip_prefix('!') {
+            return Ok(!self.evaluate_condition(stripped)?);
         }
 
         self.evaluate_single_condition(expr)

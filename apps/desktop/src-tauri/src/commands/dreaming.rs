@@ -15,10 +15,12 @@ use providers::types::message::Message as ProviderMessage;
 use providers::types::stream::StreamChunk;
 use providers::ProviderConfig;
 
-use crate::meta::auxiliary_resolver::{resolve_auxiliary_targets, AuxiliaryTargets, ResolvedTarget};
 use super::providers::{self as providers_commands, resolve_api_key, ProviderConfig as UiProvider};
 use crate::infra::session_events::{
     emit_session_event, now_ts_ms, MemoryUpdatedDto, PendingChangedDto, SessionEventDto,
+};
+use crate::meta::auxiliary_resolver::{
+    resolve_auxiliary_targets, AuxiliaryTargets, ResolvedTarget,
 };
 
 /// Dreaming 总状态（供偏好 / 状态页）。

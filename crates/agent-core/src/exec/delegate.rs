@@ -5,7 +5,6 @@
 use std::collections::HashSet;
 use std::path::PathBuf;
 
-use types::truncate_chars;
 use delegate::{
     create_task_worktree, find_git_root, resolve_project_root, DelegateRole, DelegateRunRequest,
     DelegateTaskSpec, WorktreeHandle,
@@ -15,6 +14,7 @@ use home::default_memory_dir;
 use providers::ProviderConfig;
 use providers::Usage;
 use tokio::task::JoinSet;
+use types::truncate_chars;
 use uuid::Uuid;
 
 use crate::prompt::messages::to_provider_messages;

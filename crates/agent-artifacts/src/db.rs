@@ -11,9 +11,9 @@
 //! - Agent 工作区内的核心模板 md 与 `SKILL.md` 不参与 reconcile 登记
 
 use anyhow::Context;
-use types::SqliteStore;
 use rusqlite::{params, Connection, OptionalExtension};
 use std::path::{Path, PathBuf};
+use types::SqliteStore;
 use uuid::Uuid;
 
 /// 建表 DDL（`artifacts` 及 session/category/name/agent 索引）

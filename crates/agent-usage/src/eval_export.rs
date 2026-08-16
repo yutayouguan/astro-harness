@@ -7,9 +7,9 @@ use std::fs::{self, File};
 use std::io::{BufWriter, Write};
 use std::path::Path;
 
-use types::truncate_chars;
 use serde::{Deserialize, Serialize};
 use session::SessionStore;
+use types::truncate_chars;
 
 use crate::db::UsageDb;
 use crate::trace_insights::TRACE_EVENTS_LIMIT;

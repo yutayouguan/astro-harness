@@ -1,8 +1,8 @@
 //! 上下文占用分层估算（ceil(chars/4)），与账单 Usage 无关。
 //! 分段含可选 `items` 明细（单工具 / 单 skill 等）。
 
-use types::message::{Message, Role};
 use serde::{Deserialize, Serialize};
+use types::message::{Message, Role};
 
 pub const DEFAULT_CONTEXT_WINDOW: u32 = 128_000;
 

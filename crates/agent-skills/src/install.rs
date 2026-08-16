@@ -8,6 +8,7 @@ use std::time::Duration;
 use anyhow::{anyhow, bail, Context, Result};
 use serde::Deserialize;
 
+use crate::agent_id::normalize as normalize_agent_id;
 use crate::digest::skill_content_digest;
 use crate::models::SkillOriginRecord;
 use crate::origins::{
@@ -29,22 +30,9 @@ fn memory_dir() -> PathBuf {
         .unwrap_or_else(|_| PathBuf::from(".astro"))
 }
 
-/// 规范化 Agent id：空/`default` → `workspace`。
-fn normalize_agent_id(agent_id: Option<&str>) -> String {
-    match agent_id.map(str::trim).filter(|s| !s.is_empty()) {
-        Some("default") | None => "workspace".to_string(),
-        Some(id) => id.to_string(),
-    }
-}
-
 /// Agent 工作区根目录。
 fn agent_workspace(agent_id: &str) -> PathBuf {
-    let base = memory_dir();
-    if agent_id == "workspace" {
-        base.join("workspace")
-    } else {
-        base.join(format!("workspace-{agent_id}"))
-    }
+    home::agent_workspace_dir(&memory_dir(), agent_id)
 }
 
 /// 当前 Agent 工作区 skills 目录（在线安装 / 更新目标）
@@ -573,6 +561,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[ignore = "requires public SkillHub network"]
     async fn skillhub_http_install_from_public_api() {
         let dir = tempfile::tempdir().unwrap();
         let msg = install_skillhub_http("web-tools-guide", dir.path())

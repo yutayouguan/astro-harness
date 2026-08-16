@@ -12,7 +12,6 @@ use std::path::Path;
 use std::time::Duration;
 
 use chrono::Utc;
-use types::{truncate_chars, ChatTarget};
 use futures::StreamExt;
 use home::{default_memory_dir, AgentRuntimeConfig};
 use orchestration::{
@@ -20,6 +19,7 @@ use orchestration::{
 };
 use providers::ProviderConfig;
 use providers::Usage;
+use types::{truncate_chars, ChatTarget};
 use usage::{NewUsageEvent, UsageDb};
 use uuid::Uuid;
 

@@ -3,12 +3,12 @@
 use std::sync::{Arc, Mutex as StdMutex};
 
 use async_trait::async_trait;
-use types::message::Message;
-use types::ChatTarget;
 use futures::StreamExt;
 use providers::types::message::Message as ProviderMessage;
 use providers::types::stream::{CompletionStream, StreamChunk};
 use providers::ProviderConfig;
+use types::message::Message;
+use types::ChatTarget;
 
 use crate::prompt::messages::to_provider_messages;
 

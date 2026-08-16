@@ -10,12 +10,12 @@
 
 use std::sync::Arc;
 
-use types::ChatTarget;
 use futures::stream::{AbortHandle, Abortable};
 use futures::StreamExt;
 use providers::ProviderConfig;
 use providers::{PauseControl, Usage};
 use tokio::sync::{mpsc, Mutex};
+use types::ChatTarget;
 
 use super::hitl_bridge::{register_live_parent_hitl, unregister_live_parent_hitl, ParentHitlCtx};
 use super::lifecycle::{emit, finish_error, finish_usage_and_done};

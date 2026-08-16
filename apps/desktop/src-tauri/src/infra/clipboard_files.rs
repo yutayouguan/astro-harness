@@ -65,7 +65,10 @@ fn parse_path_lines(text: &str) -> Vec<PathBuf> {
             let raw = l.strip_prefix("file://").unwrap_or(l);
             let path = if raw.len() >= 3
                 && raw.as_bytes().first() == Some(&b'/')
-                && raw.as_bytes().get(1).map_or(false, |b| b.is_ascii_alphabetic())
+                && raw
+                    .as_bytes()
+                    .get(1)
+                    .is_some_and(|b| b.is_ascii_alphabetic())
                 && raw.as_bytes().get(2) == Some(&b':')
             {
                 PathBuf::from(&raw[1..])

@@ -98,10 +98,7 @@ fn summary_prompt(transcript: &str) -> String {
     )
 }
 
-async fn complete_summary_chat(
-    target: &types::ChatTarget,
-    prompt: &str,
-) -> anyhow::Result<String> {
+async fn complete_summary_chat(target: &types::ChatTarget, prompt: &str) -> anyhow::Result<String> {
     let config = ProviderConfig {
         api_key: target.api_key.clone(),
         base_url: if target.base_url.trim().is_empty() {

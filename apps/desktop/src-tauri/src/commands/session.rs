@@ -304,11 +304,11 @@ pub async fn regenerate_session_title(
     app: AppHandle,
     session_id: String,
 ) -> Result<String, String> {
-    use crate::meta::auxiliary_resolver::{
-        primary_chat_target_for_session, resolve_auxiliary_targets, ResolvedTarget,
-    };
     use crate::infra::session_events::{
         emit_session_event, now_ts_ms, SessionEventDto, SessionMetadataChangedDto,
+    };
+    use crate::meta::auxiliary_resolver::{
+        primary_chat_target_for_session, resolve_auxiliary_targets, ResolvedTarget,
     };
 
     let sid = session_id.trim().to_string();

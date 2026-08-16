@@ -206,7 +206,7 @@ pub fn is_generated_agent_id(id: &str) -> bool {
 
 /// 规范化已有 agent id（查找路径 / 激活 / 兼容旧数据）。
 ///
-/// - 空 → `workspace`
+/// - 空、`workspace`（旧默认别名）→ `default`
 /// - 新式 `{slug}--{hex}` 与旧 slug（如 `ppt-expert`）均小写清洗后透传
 /// - 纯非 ASCII 遗留输入仍用 `agent-{hash}` 兜底（**新建**请用 [`generate_agent_id`]）
 pub fn normalize_agent_id(raw: &str) -> String {
@@ -216,6 +216,9 @@ pub fn normalize_agent_id(raw: &str) -> String {
         .filter(|c| c.is_ascii_alphanumeric() || *c == '-' || *c == '_')
         .collect();
     let cleaned = cleaned.trim_matches('-').trim_matches('_').to_string();
+    if cleaned == DEFAULT_AGENT_ID || cleaned == DEFAULT_AGENT_WORKSPACE_DIR {
+        return DEFAULT_AGENT_ID.to_string();
+    }
     if cleaned.is_empty() {
         if raw.trim().is_empty() {
             return DEFAULT_AGENT_ID.to_string();
@@ -381,6 +384,7 @@ mod tests {
         assert_eq!(normalize_agent_id("PPT Expert"), "ppt-expert");
         assert_eq!(normalize_agent_id(""), DEFAULT_AGENT_ID);
         assert_eq!(normalize_agent_id("default"), "default");
+        assert_eq!(normalize_agent_id("workspace"), "default");
         assert!(is_generated_agent_id(&normalize_agent_id(
             "PPT-Expert--AABBCCDDEEFF"
         )));

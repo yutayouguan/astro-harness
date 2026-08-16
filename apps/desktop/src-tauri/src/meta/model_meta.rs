@@ -438,10 +438,11 @@ fn looks_like_native_web_model(kind: &str, id_lower: &str, info: &ModelInfo) -> 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::meta::openrouter_meta;
 
     #[test]
     fn google_api_only_without_openrouter() {
-        super::openrouter_meta::with_fixture(r#"{"data":[]}"#, || {
+        openrouter_meta::with_fixture(r#"{"data":[]}"#, || {
             let info = enrich_from_id(
                 "gemini-2.5-flash",
                 "google",
@@ -463,7 +464,7 @@ mod tests {
 
     #[test]
     fn openrouter_enriches_deepseek() {
-        super::openrouter_meta::with_fixture(
+        openrouter_meta::with_fixture(
             r#"{
               "data": [{
                 "id": "deepseek/deepseek-chat",
@@ -510,7 +511,7 @@ mod tests {
 
     #[test]
     fn clears_stale_caps_when_openrouter_hits() {
-        super::openrouter_meta::with_fixture(
+        openrouter_meta::with_fixture(
             r#"{
               "data": [{
                 "id": "deepseek/deepseek-v4-flash",
@@ -561,7 +562,7 @@ mod tests {
 
     #[test]
     fn deepseek_v4_known_reasoning_when_openrouter_misses() {
-        super::openrouter_meta::with_fixture(r#"{"data":[]}"#, || {
+        openrouter_meta::with_fixture(r#"{"data":[]}"#, || {
             let info = enrich_from_id("deepseek-v4-pro", "deepseek", None);
             assert!(info.capabilities.reasoning);
             assert_eq!(info.meta_source, "known");
@@ -570,7 +571,7 @@ mod tests {
 
     #[test]
     fn no_hardcode_when_both_miss() {
-        super::openrouter_meta::with_fixture(r#"{"data":[]}"#, || {
+        openrouter_meta::with_fixture(r#"{"data":[]}"#, || {
             let info = enrich_from_id("gpt-4o-2024-08-06", "openai", None);
             assert_eq!(info.context_window, None);
             assert!(!info.capabilities.vision);
@@ -581,7 +582,7 @@ mod tests {
 
     #[test]
     fn api_without_openrouter_keeps_api_only() {
-        super::openrouter_meta::with_fixture(r#"{"data":[]}"#, || {
+        openrouter_meta::with_fixture(r#"{"data":[]}"#, || {
             let info = enrich_from_id(
                 "some-unknown-model",
                 "openai",
@@ -601,7 +602,7 @@ mod tests {
 
     #[test]
     fn openrouter_image_output_sets_image_gen() {
-        super::openrouter_meta::with_fixture(
+        openrouter_meta::with_fixture(
             r#"{
               "data": [{
                 "id": "openai/dall-e-3",
@@ -627,7 +628,7 @@ mod tests {
 
     #[test]
     fn openrouter_audio_output_sets_audio_gen() {
-        super::openrouter_meta::with_fixture(
+        openrouter_meta::with_fixture(
             r#"{
               "data": [{
                 "id": "openai/gpt-4o-mini-tts",
@@ -652,7 +653,7 @@ mod tests {
 
     #[test]
     fn openrouter_chat_multimodal_flags() {
-        super::openrouter_meta::with_fixture(
+        openrouter_meta::with_fixture(
             r#"{
               "data": [{
                 "id": "google/gemini-2.0-flash",
@@ -679,7 +680,7 @@ mod tests {
 
     #[test]
     fn google_image_model_does_not_get_web() {
-        super::openrouter_meta::with_fixture(r#"{"data":[]}"#, || {
+        openrouter_meta::with_fixture(r#"{"data":[]}"#, || {
             let info = enrich_from_id("gemini-2.5-flash-image", "google", None);
             assert!(!info.capabilities.web);
         });
@@ -687,7 +688,7 @@ mod tests {
 
     #[test]
     fn openrouter_web_search_options_sets_web() {
-        super::openrouter_meta::with_fixture(
+        openrouter_meta::with_fixture(
             r#"{
               "data": [{
                 "id": "openai/gpt-4o",
@@ -711,7 +712,7 @@ mod tests {
 
     #[test]
     fn openrouter_video_output_sets_video_gen() {
-        super::openrouter_meta::with_fixture(
+        openrouter_meta::with_fixture(
             r#"{
               "data": [{
                 "id": "openai/sora-2",
@@ -735,7 +736,7 @@ mod tests {
 
     #[test]
     fn openrouter_lyria_sets_music_gen_only() {
-        super::openrouter_meta::with_fixture(
+        openrouter_meta::with_fixture(
             r#"{
               "data": [{
                 "id": "google/lyria-3-pro-preview",

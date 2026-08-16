@@ -2,11 +2,11 @@
 
 use std::sync::Arc;
 
-use types::message::Message;
 use futures::stream::{AbortHandle, Abortable};
 use futures::StreamExt;
 use providers::{PauseControl, Usage};
 use tokio::sync::{mpsc, Mutex};
+use types::message::Message;
 
 use crate::runtime::AgentLoop;
 

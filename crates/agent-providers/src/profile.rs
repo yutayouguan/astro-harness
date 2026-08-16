@@ -603,7 +603,7 @@ mod model_defaults {
     }
 
     fn get_cache() -> &'static Option<HashMap<String, String>> {
-        CACHE.get_or_init(|| load_cache())
+        CACHE.get_or_init(load_cache)
     }
 
     pub fn resolve_default_model(provider_id: &str) -> Option<&'static str> {
@@ -664,7 +664,7 @@ mod model_defaults {
                     continue;
                 }
                 let created = item.get("created").and_then(|v| v.as_i64()).unwrap_or(0);
-                if best.map_or(true, |(_, c)| created > c) {
+                if best.is_none_or(|(_, c)| created > c) {
                     best = Some((id, created));
                 }
             }

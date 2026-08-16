@@ -162,8 +162,9 @@ fn build_chat_history_folds_tools_into_activities() {
         .unwrap();
 
     let ui = store.build_chat_history("s1", 200).unwrap();
-    assert_eq!(ui.len(), 3); // user + assistant(with activity) + assistant(text)
+    assert_eq!(ui.len(), 2); // user + coalesced assistant(activity + final text)
     assert_eq!(ui[1].reasoning.as_deref(), Some("plan"));
+    assert_eq!(ui[1].content, "done");
     assert_eq!(ui[1].activities.len(), 1);
     assert_eq!(ui[1].activities[0].title, "memory");
     assert_eq!(ui[1].activities[0].output.as_deref(), Some("ok"));
@@ -1356,6 +1357,46 @@ fn compact_and_split_keep_zero_is_summary_only() {
         .unwrap();
     let msgs = store.get_messages("new").unwrap();
     assert_eq!(msgs.len(), 1);
+}
+
+#[test]
+fn compact_and_split_rejects_changed_source_without_partial_state() {
+    let dir = TempDir::new().unwrap();
+    let store = SessionStore::open(&dir.path().join("state.db")).unwrap();
+    store
+        .create_session("old", "test", None, None, None)
+        .unwrap();
+    let snapshot_id = store
+        .append_message(NewMessage {
+            content: Some("before summary"),
+            ..NewMessage::empty("old", "user")
+        })
+        .unwrap();
+    store
+        .append_message(NewMessage {
+            content: Some("arrived while summarizing"),
+            ..NewMessage::empty("old", "assistant")
+        })
+        .unwrap();
+
+    let err = store
+        .compact_and_split_if_unchanged(
+            "old",
+            "new",
+            "[CONTEXT COMPACTION]\nstale",
+            0,
+            Some(snapshot_id),
+        )
+        .unwrap_err();
+
+    assert!(err.to_string().contains("changed while summarizing"));
+    assert!(store
+        .get_session("old")
+        .unwrap()
+        .unwrap()
+        .ended_at
+        .is_none());
+    assert!(store.get_session("new").unwrap().is_none());
 }
 
 #[test]

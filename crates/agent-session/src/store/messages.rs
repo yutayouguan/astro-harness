@@ -433,11 +433,23 @@ impl SessionStore {
         summary_text: &str,
         keep_tail_bubbles: usize,
     ) -> Result<()> {
+        self.compact_and_split_if_unchanged(old_id, new_id, summary_text, keep_tail_bubbles, None)
+    }
+
+    /// 与 [`Self::compact_and_split`] 相同，但在提交前校验源会话最后一条消息未变化。
+    ///
+    /// `expected_last_message_id` 来自生成摘要前的快照；不匹配时整个事务回滚，
+    /// 避免用过期摘要结束仍在写入的会话。
+    pub fn compact_and_split_if_unchanged(
+        &self,
+        old_id: &str,
+        new_id: &str,
+        summary_text: &str,
+        keep_tail_bubbles: usize,
+        expected_last_message_id: Option<i64>,
+    ) -> Result<()> {
         if old_id == new_id {
             anyhow::bail!("compact_and_split: session ids must differ");
-        }
-        if self.get_session(new_id)?.is_some() {
-            anyhow::bail!("compact_and_split: target session already exists");
         }
         let parent = self
             .get_session(old_id)?
@@ -446,35 +458,80 @@ impl SessionStore {
             anyhow::bail!("compact_and_split: source session already ended");
         }
 
-        self.end_session(old_id, "compacted")?;
+        let messages = self.get_messages(old_id)?;
+        let observed_last_message_id = messages.last().map(|message| message.id);
+        if expected_last_message_id.is_some()
+            && observed_last_message_id != expected_last_message_id
+        {
+            anyhow::bail!("compact_and_split: source session changed while summarizing");
+        }
 
-        let model = parent.model.clone();
-        let source = parent.source.clone();
-        self.create_session(new_id, &source, model.as_deref(), None, Some(old_id))?;
+        let now = now_epoch_secs()?;
+        let continued_title = parent
+            .title
+            .as_deref()
+            .filter(|title| !title.trim().is_empty())
+            .map(|title| format!("{title} · continued"));
+        let tx = self.conn.unchecked_transaction()?;
 
-        self.append_message(NewMessage {
-            content: Some(summary_text),
-            ..NewMessage::empty(new_id, "user")
-        })?;
+        let target_exists: bool = tx.query_row(
+            "SELECT EXISTS(SELECT 1 FROM sessions WHERE id = ?1)",
+            params![new_id],
+            |row| row.get(0),
+        )?;
+        if target_exists {
+            anyhow::bail!("compact_and_split: target session already exists");
+        }
 
+        let current_last_message_id: Option<i64> = tx.query_row(
+            "SELECT MAX(id) FROM messages WHERE session_id = ?1",
+            params![old_id],
+            |row| row.get(0),
+        )?;
+        if current_last_message_id != observed_last_message_id {
+            anyhow::bail!("compact_and_split: source session changed while preparing transaction");
+        }
+
+        let changed = tx.execute(
+            "UPDATE sessions
+             SET ended_at = ?1, end_reason = 'compacted'
+             WHERE id = ?2 AND ended_at IS NULL",
+            params![now, old_id],
+        )?;
+        if changed != 1 {
+            anyhow::bail!("compact_and_split: source session already ended");
+        }
+
+        tx.execute(
+            "INSERT INTO sessions (
+                id, source, title, model, parent_session_id, started_at
+             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            params![
+                new_id,
+                parent.source,
+                continued_title,
+                parent.model,
+                old_id,
+                now,
+            ],
+        )?;
+        tx.execute(
+            "INSERT INTO messages (session_id, role, content, timestamp)
+             VALUES (?1, 'user', ?2, ?3)",
+            params![new_id, summary_text, now],
+        )?;
+
+        let mut message_count = 1i64;
+        let mut tool_call_count = 0i64;
         if keep_tail_bubbles > 0 {
-            let messages = self.get_messages(old_id)?;
             if let Some(start) = start_inclusive_for_tail_bubbles(&messages, keep_tail_bubbles) {
-                // 摘要已按「当前时间」写入；尾部若保留旧 timestamp，ORDER BY 会把它排到摘要之前。
-                let summary_ts = self
-                    .get_messages(new_id)?
-                    .first()
-                    .map(|m| m.timestamp)
-                    .unwrap_or(0.0);
-                let tx = self.conn.unchecked_transaction()?;
-                let mut message_count = 1i64; // 已有摘要
-                let mut tool_call_count = 0i64;
                 for (i, m) in messages[start..].iter().enumerate() {
                     let tool_calls = json_to_db(&m.tool_calls)?;
                     let reasoning_details = json_to_db(&m.reasoning_details)?;
                     let codex_reasoning_items = json_to_db(&m.codex_reasoning_items)?;
                     let codex_message_items = json_to_db(&m.codex_message_items)?;
-                    let timestamp = summary_ts + (i + 1) as f64 * 0.001;
+                    // 摘要按当前时间写入；尾部需重排 timestamp，确保显示在摘要之后。
+                    let timestamp = now + (i + 1) as f64 * 0.001;
                     tx.execute(
                         "INSERT INTO messages (
                             session_id, role, content, compressed_content, tool_call_id, tool_calls, tool_name,
@@ -511,20 +568,16 @@ impl SessionStore {
                         tool_call_count += 1;
                     }
                 }
-                tx.execute(
-                    "UPDATE sessions
-                     SET message_count = ?1, tool_call_count = ?2
-                     WHERE id = ?3",
-                    params![message_count, tool_call_count, new_id],
-                )?;
-                tx.commit()?;
             }
         }
 
-        if let Some(title) = parent.title.filter(|t| !t.trim().is_empty()) {
-            let continued = format!("{title} · continued");
-            let _ = self.set_session_title(new_id, &continued);
-        }
+        tx.execute(
+            "UPDATE sessions
+             SET message_count = ?1, tool_call_count = ?2
+             WHERE id = ?3",
+            params![message_count, tool_call_count, new_id],
+        )?;
+        tx.commit()?;
 
         Ok(())
     }

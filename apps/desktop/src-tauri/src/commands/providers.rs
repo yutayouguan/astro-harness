@@ -1489,7 +1489,11 @@ pub async fn list_provider_models(id: String) -> Result<ProviderModelsResult, St
                         display_name: m["display_name"].as_str().map(str::to_string),
                         ..Default::default()
                     };
-                    Some(crate::meta::model_meta::enrich_from_id(&id, kind, Some(hints)))
+                    Some(crate::meta::model_meta::enrich_from_id(
+                        &id,
+                        kind,
+                        Some(hints),
+                    ))
                 })
                 .collect::<Vec<_>>();
             (models, "anthropic:/v1/models".to_string())
@@ -1534,7 +1538,11 @@ pub async fn list_provider_models(id: String) -> Result<ProviderModelsResult, St
                         max_output_tokens: m["outputTokenLimit"].as_u64(),
                         supported_methods: methods,
                     };
-                    Some(crate::meta::model_meta::enrich_from_id(&id, kind, Some(hints)))
+                    Some(crate::meta::model_meta::enrich_from_id(
+                        &id,
+                        kind,
+                        Some(hints),
+                    ))
                 })
                 .collect::<Vec<_>>();
             (models, "google:/v1beta/models".to_string())

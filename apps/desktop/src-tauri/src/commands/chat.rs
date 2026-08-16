@@ -6,12 +6,12 @@ use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter};
 use uuid::Uuid;
 
-use crate::infra::grpc::{default_grpc_address, endpoint_url};
 use super::common::{bootstrap_workspace, friendly_error, open_sessions};
 use super::providers::{
     cached_model_context_window, cached_model_info, cached_model_max_output_tokens,
     resolve_chat_targets, resolve_image_gen_targets, ImageGenTarget,
 };
+use crate::infra::grpc::{default_grpc_address, endpoint_url};
 
 // ---------------------------------------------------------------------------
 // DTOs
@@ -441,7 +441,8 @@ pub async fn start_chat(app: AppHandle, request: StartChatRequest) -> Result<Str
     let image_targets = resolve_image_gen_targets().unwrap_or_default();
     // 五类辅助任务（标题生成/压缩/智能审批/入梦/回合后 review）已解析目标；
     // 单个任务解析失败时静默跳过，不阻塞主聊天（见 auxiliary_resolver 内部注释）。
-    let auxiliary_targets = crate::meta::auxiliary_resolver::build_auxiliary_model_targets(&primary);
+    let auxiliary_targets =
+        crate::meta::auxiliary_resolver::build_auxiliary_model_targets(&primary);
     // 优先用 models.json 缓存（与前端展示同源）；否则 LiteLLM/enrich；未知为 0（agent 侧再兜底）。
     let context_window = cached_model_context_window(&primary.provider_id, &primary.model)
         .or_else(|| {

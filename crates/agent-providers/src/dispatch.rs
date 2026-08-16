@@ -326,12 +326,10 @@ pub async fn generate_video_with_options(
                 }
             }
         }
-        _ => {
-            return Err(ProviderError::UnsupportedCapability {
-                provider: provider.to_string(),
-                capability: "视频生成".to_string(),
-            })
-        }
+        _ => Err(ProviderError::UnsupportedCapability {
+            provider: provider.to_string(),
+            capability: "视频生成".to_string(),
+        }),
     }
 }
 
@@ -367,12 +365,10 @@ pub async fn generate_music(
                 duration_ms: r.duration_ms,
             })
         }
-        _ => {
-            return Err(ProviderError::UnsupportedCapability {
-                provider: provider.to_string(),
-                capability: "音乐生成".to_string(),
-            })
-        }
+        _ => Err(ProviderError::UnsupportedCapability {
+            provider: provider.to_string(),
+            capability: "音乐生成".to_string(),
+        }),
     }
 }
 
@@ -418,7 +414,7 @@ pub fn default_model(provider: &str) -> String {
 
 /// 查询 provider 是否支持图片生成。
 pub fn supports_image_gen(provider: &str) -> bool {
-    crate::profile::resolve(provider).map_or(false, |p| p.supports_image_gen)
+    crate::profile::resolve(provider).is_some_and(|p| p.supports_image_gen)
 }
 
 fn shared_http_client() -> reqwest::Client {
@@ -453,7 +449,10 @@ fn register_provider(reg: &mut crate::registry::Registry, provider: &str, config
             register_compat::<crate::impls::openrouter::OpenRouter>(reg, key, base, model)
         }
         "minimax" | "minmax" => reg.register_minimax(key, base, model),
-        "minimax-anthropic" => reg.register_anthropic(key, base, model),
+        "minimax-anthropic" => {
+            reg.register_anthropic(key, base, model);
+            reg.register_alias("minimax-anthropic", "anthropic");
+        }
         "hunyuan" => register_media::<crate::impls::hunyuan::Hunyuan>(reg, key, base, model),
         "mimo" => register_compat::<crate::impls::mimo::Mimo>(reg, key, base, model),
         "gemini-native" => reg.register_gemini_native(key, base, model),

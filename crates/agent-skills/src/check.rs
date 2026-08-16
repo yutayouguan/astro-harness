@@ -2,6 +2,7 @@
 
 use anyhow::Result;
 
+use crate::agent_id::normalize as normalize_agent_id;
 use crate::install::agent_skills_dir;
 use crate::models::{
     SkillOriginRecord, SkillUpdateCheckResult, SkillUpdateStatus, StoreSkillDetail,
@@ -62,13 +63,6 @@ pub fn check_origin_against_detail(
         remote_version: detail.version.clone(),
         remote_updated_at: detail.updated_at,
         message: String::new(),
-    }
-}
-
-fn normalize_agent_id(agent_id: Option<&str>) -> String {
-    match agent_id.map(str::trim).filter(|s| !s.is_empty()) {
-        Some("default") | None => "workspace".to_string(),
-        Some(id) => id.to_string(),
     }
 }
 
@@ -135,9 +129,8 @@ mod tests {
     use super::*;
     use crate::models::SkillUpdateStatus;
     use crate::origins::{load_origins, upsert_origin};
+    use crate::ENV_TEST_LOCK;
     use tempfile::tempdir;
-
-    static ENV_TEST_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 
     fn sample_origin(
         remote_version: Option<&str>,
@@ -343,7 +336,7 @@ mod tests {
 
     #[tokio::test]
     async fn check_updates_skips_orphan_without_origin_mutation() {
-        let _guard = ENV_TEST_LOCK.blocking_lock();
+        let _guard = ENV_TEST_LOCK.lock().await;
         let dir = tempdir().unwrap();
         std::env::set_var("ASTRO_MEMORY_DIR", dir.path());
 

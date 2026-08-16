@@ -148,7 +148,7 @@ test("origin for another agent is not matched", () => {
   assert.equal(rows[0].status, "no_origin");
 });
 
-test("default agent id normalizes to workspace", () => {
+test("legacy workspace agent id matches canonical default", () => {
   const rows = mergeUpdateRows(
     [pptInstalled],
     [],

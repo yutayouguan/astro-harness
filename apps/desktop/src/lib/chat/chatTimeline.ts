@@ -8,7 +8,7 @@ import type {
   ChatTimelineSegment,
   UiSurface,
 } from "../../types";
-import { elapsedSecSince } from "./elapsedSec";
+import { elapsedSecSince } from "./elapsedSec.ts";
 
 function ensureSegments(m: ChatMessage): ChatTimelineSegment[] {
   return [...(m.segments ?? [])];

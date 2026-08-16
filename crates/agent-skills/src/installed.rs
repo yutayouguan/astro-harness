@@ -10,6 +10,7 @@ use std::{
 
 use anyhow::{bail, Context, Result};
 
+use crate::agent_id::normalize_optional as normalize_agent_id;
 use crate::models::InstalledSkill;
 use crate::skill::{LoadedSkill, SkillMetadata};
 
@@ -28,25 +29,9 @@ fn memory_dir() -> PathBuf {
         .unwrap_or_else(|_| PathBuf::from(".astro"))
 }
 
-/// 规范化 Agent id：空→None，`default`→`workspace`。
-fn normalize_agent_id(agent_id: Option<&str>) -> Option<String> {
-    agent_id.map(str::trim).filter(|s| !s.is_empty()).map(|s| {
-        if s == "default" {
-            "workspace".to_string()
-        } else {
-            s.to_string()
-        }
-    })
-}
-
-/// Agent 工作区目录（`workspace` 或 `workspace-{id}`）。
+/// Agent 工作区目录（默认 Agent 为 `workspace`，其余为 `workspace-{id}`）。
 fn agent_workspace(agent_id: &str) -> PathBuf {
-    let base = memory_dir();
-    if agent_id == "workspace" {
-        base.join("workspace")
-    } else {
-        base.join(format!("workspace-{agent_id}"))
-    }
+    home::agent_workspace_dir(&memory_dir(), agent_id)
 }
 
 /// 读取 `active-agent.json` 中的当前 Agent id。
@@ -62,7 +47,7 @@ fn active_agent_id() -> Option<String> {
 fn state_path_for(agent_id: Option<&str>) -> PathBuf {
     let base = memory_dir();
     match normalize_agent_id(agent_id) {
-        Some(id) => base.join("agents").join(id).join(STATE_FILE),
+        Some(id) => home::agent_config_dir(&base, &id).join(STATE_FILE),
         None => base.join(STATE_FILE),
     }
 }
@@ -84,7 +69,7 @@ fn load_enabled_state(agent_id: Option<&str>) -> HashMap<String, bool> {
         .unwrap_or_default()
 }
 
-/// 持久化技能启用表；workspace Agent 同步写全局副本。
+/// 持久化技能启用表；默认 Agent 同步写全局副本。
 fn save_enabled_state(agent_id: Option<&str>, state: &HashMap<String, bool>) -> Result<()> {
     let path = state_path_for(agent_id);
     if let Some(parent) = path.parent() {
@@ -92,7 +77,7 @@ fn save_enabled_state(agent_id: Option<&str>, state: &HashMap<String, bool>) -> 
     }
     let json = serde_json::to_string_pretty(state)?;
     fs::write(&path, json).with_context(|| format!("write {}", path.display()))?;
-    if normalize_agent_id(agent_id).as_deref() == Some("workspace") {
+    if normalize_agent_id(agent_id).as_deref() == Some(home::DEFAULT_AGENT_ID) {
         let global = memory_dir().join(STATE_FILE);
         let _ = fs::write(&global, serde_json::to_string_pretty(state)?);
     }
@@ -926,10 +911,9 @@ pub fn open_skill_file_externally(name: &str, relative_path: &str, id: Option<&s
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::ENV_TEST_LOCK;
     use std::fs;
     use tempfile::tempdir;
-
-    static ENV_TEST_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 
     #[test]
     fn scan_and_load_skill_by_name() {

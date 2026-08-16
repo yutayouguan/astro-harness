@@ -4,9 +4,9 @@ pub mod approval;
 pub mod auxiliary_target;
 pub mod chat_target;
 pub mod credentials;
-pub mod interaction_mode;
 pub mod error;
 pub mod grpc_addr;
+pub mod interaction_mode;
 pub mod media;
 pub mod message;
 pub mod model_spec;
@@ -42,10 +42,10 @@ pub use tool_spill::{
     TOOL_PRUNE_MARK, TOOL_SPILL_MARK,
 };
 
-pub use text::{truncate_chars, truncate_tool_result, truncate_utf8, MAX_TOOL_RESULT_BYTES};
 pub use approval::{ApprovalAction, ApprovalDecision, ApprovalMode};
 pub use credentials::{ImageGenCreds, ImageGenParts, ImageGenTargets, ModelCredentials};
 pub use interaction_mode::InteractionMode;
+pub use text::{truncate_chars, truncate_tool_result, truncate_utf8, MAX_TOOL_RESULT_BYTES};
 pub use tool_call::{
     extract_tool_calls, resolve_tool_calls, ParsedToolCall, ToolCallAccumulator, ToolCallDelta,
 };

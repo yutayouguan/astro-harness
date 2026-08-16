@@ -2625,6 +2625,12 @@ html[data-theme="dark"] .chat-welcome-title-brand {
     var(--glass-rim);
 }
 
+.chat-welcome-card:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--tone) 72%, white);
+  outline-offset: 2px;
+  border-color: color-mix(in srgb, var(--tone) 52%, var(--glass-border));
+}
+
 .chat-welcome-card:hover .chat-welcome-card-arrow {
   opacity: 1;
   transform: translateX(0);
@@ -2759,6 +2765,7 @@ html[data-theme="dark"] .chat-welcome-card-glyph {
   flex-direction: column;
   gap: 12px;
   margin-top: 8px;
+  padding: 6px 0;
   -webkit-mask-image: linear-gradient(
     to right,
     transparent 0%,
@@ -2775,6 +2782,39 @@ html[data-theme="dark"] .chat-welcome-card-glyph {
   );
 }
 
+.chat-welcome-marquee-control {
+  position: relative;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  align-self: flex-end;
+  margin: -8px 8% -8px 0;
+  padding: 5px 9px;
+  border: 1px solid color-mix(in srgb, var(--glass-edge) 82%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--glass-panel) 72%, transparent);
+  color: var(--ink-mute);
+  font-size: 0.72rem;
+  line-height: 1;
+  cursor: pointer;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  transition: color 0.18s ease, border-color 0.18s ease, background 0.18s ease;
+}
+
+.chat-welcome-marquee-control:hover,
+.chat-welcome-marquee-control:focus-visible {
+  color: var(--ink);
+  border-color: color-mix(in srgb, var(--tone-blue) 36%, var(--glass-edge));
+  background: color-mix(in srgb, var(--glass-panel) 90%, transparent);
+}
+
+.chat-welcome-marquee-control:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--tone-blue) 68%, white);
+  outline-offset: 2px;
+}
+
 .chat-welcome-marquee {
   width: 100%;
   overflow: hidden;
@@ -2782,9 +2822,14 @@ html[data-theme="dark"] .chat-welcome-card-glyph {
 
 .chat-welcome-marquee-track {
   display: flex;
-  gap: 12px;
   width: max-content;
   will-change: transform;
+}
+
+.chat-welcome-marquee-group {
+  display: flex;
+  gap: 12px;
+  padding-right: 12px;
 }
 
 .chat-welcome-marquee--right .chat-welcome-marquee-track {
@@ -2795,7 +2840,9 @@ html[data-theme="dark"] .chat-welcome-card-glyph {
   animation: wc-scroll-left 40s linear infinite;
 }
 
-.chat-welcome-marquee:hover .chat-welcome-marquee-track {
+.chat-welcome-marquee-wrap:hover .chat-welcome-marquee-track,
+.chat-welcome-marquee-wrap:focus-within .chat-welcome-marquee-track,
+.chat-welcome-marquee-wrap.is-paused .chat-welcome-marquee-track {
   animation-play-state: paused;
 }
 
@@ -2810,8 +2857,28 @@ html[data-theme="dark"] .chat-welcome-card-glyph {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .chat-welcome-orb,
+  .chat-welcome-mark,
+  .chat-welcome-copy,
   .chat-welcome-marquee-track {
     animation: none !important;
+  }
+
+  .chat-welcome-card {
+    transition: none;
+  }
+
+  .chat-welcome-marquee {
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .chat-welcome-marquee::-webkit-scrollbar {
+    display: none;
+  }
+
+  .chat-welcome-marquee-copy {
+    display: none;
   }
 }
 
