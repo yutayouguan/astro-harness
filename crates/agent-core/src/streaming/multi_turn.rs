@@ -225,9 +225,23 @@ async fn run_multi_turn_stream_inner(args: MultiTurnStreamInnerArgs) {
 
         pre_llm_maintenance(&session).await;
 
-        let (history, tools) = {
+        let prepared = {
             let mut agent = session.lock().await;
             agent.prepare_llm_context().await
+        };
+        let (history, tools) = match prepared {
+            Ok(prepared) => prepared,
+            Err(error) => {
+                finish_error(
+                    &session,
+                    &streamer,
+                    &tx,
+                    error.to_string(),
+                    saw_usage.then_some(total_usage),
+                )
+                .await;
+                return;
+            }
         };
 
         emit_context_usage(&session, &tx, &history, &tools).await;

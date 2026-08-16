@@ -45,15 +45,29 @@ export type McpServer = {
   url: string;
   headers: Record<string, string>;
   enabled: boolean;
+  /** 启动失败时阻止 Agent 进入首次 LLM 调用 */
+  required: boolean;
+  /** STDIO 工作目录，必须位于当前项目执行根内 */
+  cwd?: string;
   /** 建连、初始化与首次工具发现的超时（秒） */
   startupTimeoutSecs: number;
   /** 单次工具调用超时（秒） */
   toolTimeoutSecs: number;
+  /** 显式 allow list；缺失表示默认允许 */
+  enabledTools?: string[];
+  /** deny list，在 allow list 之后应用 */
+  disabledTools: string[];
   /** 单工具开关；缺失视为启用 */
   tools: Record<string, boolean>;
   /** 最近一次 list_tools 缓存 */
   discovered: McpDiscoveredTool[];
 };
+
+export function isMcpToolEnabled(server: McpServer, toolName: string): boolean {
+  if (server.enabledTools && !server.enabledTools.includes(toolName)) return false;
+  if (server.disabledTools.includes(toolName)) return false;
+  return server.tools[toolName] ?? true;
+}
 
 const isTauri = () =>
   typeof window !== "undefined" &&
@@ -74,6 +88,21 @@ function readTimeout(
     }
   }
   return fallback;
+}
+
+function readStringArray(
+  raw: Record<string, unknown>,
+  keys: readonly string[],
+): string[] | undefined {
+  for (const key of keys) {
+    const value = raw[key];
+    if (!Array.isArray(value)) continue;
+    return value
+      .filter((item): item is string => typeof item === "string")
+      .map((item) => item.trim())
+      .filter(Boolean);
+  }
+  return undefined;
 }
 
 function normalizeServer(raw: Partial<McpServer> & { id?: string; name?: string }): McpServer {
@@ -101,12 +130,16 @@ function normalizeServer(raw: Partial<McpServer> & { id?: string; name?: string 
     url: raw.url ?? "",
     headers: raw.headers && typeof raw.headers === "object" ? raw.headers : {},
     enabled: raw.enabled ?? true,
+    required: config.required === true,
+    cwd: typeof config.cwd === "string" && config.cwd.trim() ? config.cwd.trim() : undefined,
     startupTimeoutSecs: readTimeout(
       config, STARTUP_TIMEOUT_KEYS, DEFAULT_MCP_STARTUP_TIMEOUT_SECS, MAX_MCP_STARTUP_TIMEOUT_SECS,
     ),
     toolTimeoutSecs: readTimeout(
       config, TOOL_TIMEOUT_KEYS, DEFAULT_MCP_TOOL_TIMEOUT_SECS, MAX_MCP_TOOL_TIMEOUT_SECS,
     ),
+    enabledTools: readStringArray(config, ["enabledTools", "enabled_tools"]),
+    disabledTools: readStringArray(config, ["disabledTools", "disabled_tools"]) ?? [],
     tools,
     discovered,
   };
@@ -169,6 +202,10 @@ export function parseMcpJson(raw: string): McpServer[] {
         toolTimeoutSecs: readTimeout(
           cfg, TOOL_TIMEOUT_KEYS, DEFAULT_MCP_TOOL_TIMEOUT_SECS, MAX_MCP_TOOL_TIMEOUT_SECS,
         ),
+        required: cfg.required === true,
+        cwd: typeof cfg.cwd === "string" ? cfg.cwd : undefined,
+        enabledTools: readStringArray(cfg, ["enabledTools", "enabled_tools"]),
+        disabledTools: readStringArray(cfg, ["disabledTools", "disabled_tools"]) ?? [],
         enabled: true,
       }),
     );
@@ -262,8 +299,19 @@ export function useMcpTools(agentId?: string | null) {
     setServers((prev) =>
       prev.map((s) => {
         if (s.id !== serverId) return s;
-        const cur = s.tools[toolName] ?? true;
-        return { ...s, tools: { ...s.tools, [toolName]: !cur } };
+        const cur = isMcpToolEnabled(s, toolName);
+        const enabledTools =
+          !cur && s.enabledTools && !s.enabledTools.includes(toolName)
+            ? [...s.enabledTools, toolName]
+            : s.enabledTools;
+        return {
+          ...s,
+          enabledTools,
+          disabledTools: !cur
+            ? s.disabledTools.filter((name) => name !== toolName)
+            : s.disabledTools,
+          tools: { ...s.tools, [toolName]: !cur },
+        };
       }),
     );
   }, []);

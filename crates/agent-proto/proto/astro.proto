@@ -311,7 +311,13 @@ message SkillList { repeated SkillInfo skills = 1; }
 message SkillInfo { string name = 1; string description = 2; string category = 3; }
 
 message McpServerList { repeated McpServerInfo servers = 1; }
-message McpServerInfo { string name = 1; string status = 2; repeated string tools = 3; }
+message McpServerInfo {
+  string name = 1;
+  string status = 2;
+  repeated string tools = 3;
+  bool required = 4;
+  string error = 5;
+}
 
 message MemoryQuery { string query = 1; int32 limit = 2; }
 message MemoryResult { string memory_content = 1; string user_content = 2; repeated SessionSnippet sessions = 3; }

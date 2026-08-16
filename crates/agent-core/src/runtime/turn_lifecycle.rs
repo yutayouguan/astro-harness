@@ -92,7 +92,7 @@ impl AgentLoop {
                 .with_session(self.session_id.clone()),
             );
         }
-        self.reload_tools_and_mcp().await;
+        self.reload_tools_and_mcp().await?;
 
         self.sessions.ensure_session(&self.session_id, "tauri")?;
         let media_assets: Vec<types::MediaAsset> = image_data_urls
@@ -171,13 +171,15 @@ impl AgentLoop {
     ///
     /// 返回 `(messages, tool_schemas)`，供 `ProviderStreamer::stream_chat` 或
     /// `to_provider_messages` 使用。streaming 与 headless 路径共享。
-    pub(crate) async fn prepare_llm_context(&mut self) -> (Vec<Message>, Vec<serde_json::Value>) {
-        self.reload_tools_and_mcp().await;
+    pub(crate) async fn prepare_llm_context(
+        &mut self,
+    ) -> anyhow::Result<(Vec<Message>, Vec<serde_json::Value>)> {
+        self.reload_tools_and_mcp().await?;
         let mut messages = self.provider_history();
         if let Some(ctx) = self.take_inject_context() {
             messages.push(Message::user(&format!("[astro:hook-context]\n{ctx}")));
         }
         let tools = self.schemas_for_api();
-        (messages, tools)
+        Ok((messages, tools))
     }
 }

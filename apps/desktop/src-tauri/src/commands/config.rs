@@ -79,6 +79,10 @@ pub struct McpServerDto {
     pub headers: HashMap<String, String>,
     #[serde(default = "default_true")]
     pub enabled: bool,
+    #[serde(default)]
+    pub required: bool,
+    #[serde(default)]
+    pub cwd: Option<String>,
     /// 启动超时（秒），覆盖建连、初始化与首次工具发现。
     #[serde(
         default,
@@ -97,6 +101,20 @@ pub struct McpServerDto {
         alias = "toolTimeoutSec"
     )]
     pub tool_timeout_secs: Option<u64>,
+    #[serde(
+        default,
+        rename = "enabledTools",
+        alias = "enabled_tools",
+        alias = "enabled-tools"
+    )]
+    pub enabled_tools: Option<Vec<String>>,
+    #[serde(
+        default,
+        rename = "disabledTools",
+        alias = "disabled_tools",
+        alias = "disabled-tools"
+    )]
+    pub disabled_tools: Vec<String>,
     /// 单工具开关；缺失视为启用
     #[serde(default)]
     pub tools: HashMap<String, bool>,
@@ -128,8 +146,12 @@ fn dto_from_config(c: mcp::McpServerConfig) -> McpServerDto {
         url: c.url,
         headers: c.headers,
         enabled: c.enabled,
+        required: c.required,
+        cwd: c.cwd,
         startup_timeout_secs: c.startup_timeout_secs,
         tool_timeout_secs: c.tool_timeout_secs,
+        enabled_tools: c.enabled_tools,
+        disabled_tools: c.disabled_tools,
         tools: c.tools,
         discovered: c
             .discovered
@@ -144,19 +166,29 @@ fn dto_from_config(c: mcp::McpServerConfig) -> McpServerDto {
 
 /// 前端 DTO → `McpServerConfig`（会 sanitize server id）。
 fn config_from_dto(d: McpServerDto) -> Result<mcp::McpServerConfig, String> {
+    let transport = mcp::McpTransportType::parse(&d.r#type)?;
+    if transport == mcp::McpTransportType::StreamableHttp
+        && d.cwd.as_deref().is_some_and(|cwd| !cwd.trim().is_empty())
+    {
+        return Err("HTTP MCP server cannot define cwd".into());
+    }
     Ok(mcp::McpServerConfig {
         id: mcp::sanitize_server_id(&d.id),
         name: d.name,
         description: d.description,
-        r#type: mcp::McpTransportType::parse(&d.r#type)?,
+        r#type: transport,
         command: d.command,
         args: d.args,
         env: d.env,
         url: d.url,
         headers: d.headers,
         enabled: d.enabled,
+        required: d.required,
+        cwd: d.cwd,
         startup_timeout_secs: d.startup_timeout_secs,
         tool_timeout_secs: d.tool_timeout_secs,
+        enabled_tools: d.enabled_tools,
+        disabled_tools: d.disabled_tools,
         tools: d.tools,
         discovered: d
             .discovered
@@ -358,8 +390,12 @@ mod mcp_config_tests {
             url: "http://localhost:3000/mcp".into(),
             headers: HashMap::new(),
             enabled: true,
+            required: false,
+            cwd: None,
             startup_timeout_secs: None,
             tool_timeout_secs: None,
+            enabled_tools: None,
+            disabled_tools: Vec::new(),
             tools: HashMap::new(),
             discovered: Vec::new(),
         }
@@ -390,5 +426,35 @@ mod mcp_config_tests {
         let roundtrip = dto_from_config(config);
         assert_eq!(roundtrip.startup_timeout_secs, Some(17));
         assert_eq!(roundtrip.tool_timeout_secs, Some(91));
+    }
+
+    #[test]
+    fn mcp_dto_preserves_lifecycle_and_tool_policy() {
+        let mut dto = server_dto("stdio");
+        dto.required = true;
+        dto.cwd = Some("packages/server".into());
+        dto.enabled_tools = Some(vec!["read".into(), "search".into()]);
+        dto.disabled_tools = vec!["search".into()];
+
+        let config = config_from_dto(dto).unwrap();
+        assert!(config.required);
+        assert_eq!(config.cwd.as_deref(), Some("packages/server"));
+        assert!(config.is_tool_enabled("read"));
+        assert!(!config.is_tool_enabled("search"));
+        assert!(!config.is_tool_enabled("write"));
+
+        let roundtrip = dto_from_config(config);
+        assert!(roundtrip.required);
+        assert_eq!(roundtrip.cwd.as_deref(), Some("packages/server"));
+        assert_eq!(roundtrip.enabled_tools.unwrap().len(), 2);
+        assert_eq!(roundtrip.disabled_tools, vec!["search"]);
+    }
+
+    #[test]
+    fn mcp_dto_rejects_http_cwd() {
+        let mut dto = server_dto("streamableHttp");
+        dto.cwd = Some("packages/server".into());
+        let error = config_from_dto(dto).unwrap_err();
+        assert!(error.contains("cannot define cwd"));
     }
 }

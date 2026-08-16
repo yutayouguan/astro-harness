@@ -107,6 +107,12 @@ pub struct McpServerConfig {
     pub headers: HashMap<String, String>,
     #[serde(default = "default_true")]
     pub enabled: bool,
+    /// 连接失败时是否阻止 Agent 进入首次 LLM 调用。
+    #[serde(default)]
+    pub required: bool,
+    /// STDIO Server 工作目录；必须位于当前执行根内。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cwd: Option<String>,
     /// 启动超时（秒）；覆盖建连、初始化与首次工具发现，缺失默认 10s。
     #[serde(
         default,
@@ -125,6 +131,17 @@ pub struct McpServerConfig {
         skip_serializing_if = "Option::is_none"
     )]
     pub tool_timeout_secs: Option<u64>,
+    /// 显式工具 allow list；`Some([])` 表示不暴露任何工具。
+    #[serde(
+        default,
+        alias = "enabled_tools",
+        alias = "enabledTools",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub enabled_tools: Option<Vec<String>>,
+    /// 工具 deny list，在 allow list 之后应用。
+    #[serde(default, alias = "disabled_tools", alias = "disabledTools")]
+    pub disabled_tools: Vec<String>,
     /// 单工具开关；缺失视为 true
     #[serde(default)]
     pub tools: HashMap<String, bool>,
@@ -150,6 +167,16 @@ where
 impl McpServerConfig {
     /// 工具是否启用（未登记视为启用）。
     pub fn is_tool_enabled(&self, tool_name: &str) -> bool {
+        if self
+            .enabled_tools
+            .as_ref()
+            .is_some_and(|allowed| !allowed.iter().any(|name| name == tool_name))
+        {
+            return false;
+        }
+        if self.disabled_tools.iter().any(|name| name == tool_name) {
+            return false;
+        }
         self.tools.get(tool_name).copied().unwrap_or(true)
     }
 
@@ -176,12 +203,13 @@ impl McpServerConfig {
     /// 连接身份指纹（不含 tools/discovered/tool timeout，避免非连接项变化触发重连）。
     pub fn connection_fingerprint(&self) -> String {
         format!(
-            "{}|{}|{}|{:?}|{:?}|{}|{:?}|{}",
+            "{}|{}|{}|{:?}|{:?}|{:?}|{}|{:?}|{}",
             sanitize_server_id(&self.id),
             self.r#type.as_str(),
             self.command,
             self.args,
             self.env,
+            self.cwd,
             self.url,
             self.headers,
             self.effective_startup_timeout_secs(),
@@ -217,6 +245,8 @@ struct TomlMcpServer {
     #[serde(default, skip_serializing_if = "HashMap::is_empty")]
     env: HashMap<String, String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    cwd: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     url: Option<String>,
     #[serde(
         default,
@@ -228,9 +258,15 @@ struct TomlMcpServer {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     enabled: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    required: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     startup_timeout_sec: Option<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     tool_timeout_sec: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    enabled_tools: Option<Vec<String>>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    disabled_tools: Vec<String>,
     /// Astro 当前的逐工具开关，后续迁移到 enabled_tools/disabled_tools。
     #[serde(default, skip_serializing_if = "HashMap::is_empty")]
     tools: HashMap<String, bool>,
@@ -263,8 +299,10 @@ impl TomlMcpServer {
             McpTransportType::Stdio if !self.headers.is_empty() => {
                 anyhow::bail!("STDIO MCP server {id:?} cannot define http_headers")
             }
-            McpTransportType::StreamableHttp if !self.args.is_empty() || !self.env.is_empty() => {
-                anyhow::bail!("HTTP MCP server {id:?} cannot define args or env")
+            McpTransportType::StreamableHttp
+                if !self.args.is_empty() || !self.env.is_empty() || self.cwd.is_some() =>
+            {
+                anyhow::bail!("HTTP MCP server {id:?} cannot define args, env, or cwd")
             }
             _ => {}
         }
@@ -283,8 +321,12 @@ impl TomlMcpServer {
             url,
             headers: self.headers,
             enabled: self.enabled.unwrap_or(true),
+            required: self.required.unwrap_or(false),
+            cwd: self.cwd.filter(|value| !value.trim().is_empty()),
             startup_timeout_secs: self.startup_timeout_sec,
             tool_timeout_secs: self.tool_timeout_sec,
+            enabled_tools: self.enabled_tools,
+            disabled_tools: self.disabled_tools,
             tools: self.tools,
             discovered: self.discovered,
         })
@@ -302,13 +344,19 @@ impl TomlMcpServer {
             env: (config.r#type == McpTransportType::Stdio)
                 .then(|| config.env.clone())
                 .unwrap_or_default(),
+            cwd: (config.r#type == McpTransportType::Stdio)
+                .then(|| config.cwd.clone())
+                .flatten(),
             url: (config.r#type == McpTransportType::StreamableHttp).then(|| config.url.clone()),
             headers: (config.r#type == McpTransportType::StreamableHttp)
                 .then(|| config.headers.clone())
                 .unwrap_or_default(),
             enabled: (!config.enabled).then_some(false),
+            required: config.required.then_some(true),
             startup_timeout_sec: config.startup_timeout_secs,
             tool_timeout_sec: config.tool_timeout_secs,
+            enabled_tools: config.enabled_tools.clone(),
+            disabled_tools: config.disabled_tools.clone(),
             tools: config.tools.clone(),
             discovered: config.discovered.clone(),
         }
@@ -647,6 +695,10 @@ mod tests {
             url: String::new(),
             headers: HashMap::new(),
             enabled: true,
+            required: false,
+            cwd: None,
+            enabled_tools: None,
+            disabled_tools: vec![],
             tools: HashMap::from([("a".into(), false)]),
             discovered: vec![],
             startup_timeout_secs: None,
@@ -676,6 +728,10 @@ mod tests {
             url: String::new(),
             headers: HashMap::new(),
             enabled: true,
+            required: false,
+            cwd: None,
+            enabled_tools: None,
+            disabled_tools: vec![],
             tools: HashMap::from([("a".into(), false)]),
             discovered: vec![],
             startup_timeout_secs: None,
@@ -867,7 +923,11 @@ url = "https://example.com/mcp"
             agent_path,
             r#"[mcp_servers.shared]
 command = "agent-command"
+cwd = "packages/server"
+required = true
 tool_timeout_sec = 91
+enabled_tools = ["read", "search"]
+disabled_tools = ["search"]
 "#,
         )
         .unwrap();
@@ -881,6 +941,11 @@ tool_timeout_sec = 91
             "override must replace the full server"
         );
         assert_eq!(shared.tool_timeout_secs, Some(91));
+        assert!(shared.required);
+        assert_eq!(shared.cwd.as_deref(), Some("packages/server"));
+        assert!(shared.is_tool_enabled("read"));
+        assert!(!shared.is_tool_enabled("search"));
+        assert!(!shared.is_tool_enabled("unknown"));
         assert!(loaded.iter().any(|server| server.id == "global-only"));
         assert!(loaded.iter().any(|server| server.id == "project-only"));
     }
@@ -930,6 +995,25 @@ url = "http://localhost:3000/sse"
 
         let error = load_mcp_servers(None).unwrap_err().to_string();
         assert!(error.contains("legacy SSE transport is not supported"));
+    }
+
+    #[test]
+    fn http_server_rejects_stdio_only_cwd() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        let dir = TempDir::new().unwrap();
+        std::env::set_var("ASTRO_MEMORY_DIR", dir.path());
+        ensure_default_workspace_dirs().unwrap();
+        fs::write(
+            mcp_config_path_global(),
+            r#"[mcp_servers.remote]
+url = "https://example.com/mcp"
+cwd = "packages/server"
+"#,
+        )
+        .unwrap();
+
+        let error = load_mcp_servers(None).unwrap_err().to_string();
+        assert!(error.contains("cannot define args, env, or cwd"), "{error}");
     }
 
     #[test]

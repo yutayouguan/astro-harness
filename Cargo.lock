@@ -2986,6 +2986,7 @@ name = "mcp"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "futures",
  "home",
  "http 1.4.2",
  "rmcp",

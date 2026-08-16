@@ -17,7 +17,8 @@ pub use config::{
 };
 pub use hub::{
     call_tool_with_peer, filter_enabled_tool_names, toolset_name, McpExecutionContext, McpHub,
-    ServerStatus, ToolEntrySpec,
+    McpLifecycleState, McpStartupFailure, RequiredMcpServersError, ServerStatus, ToolEntrySpec,
+    MAX_PARALLEL_MCP_STARTUPS,
 };
 pub use names::{
     is_mcp_tool_name, parse_qualified_name, qualify_tool_name, sanitize_server_id, MCP_PREFIX,

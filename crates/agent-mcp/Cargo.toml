@@ -10,6 +10,7 @@ serde_json = { workspace = true }
 toml = "0.8"
 tokio = { workspace = true }
 tracing = { workspace = true }
+futures = "0.3"
 types         = { path = "../agent-types" }
 home          = { path = "../agent-home" }
 sandbox       = { path = "../agent-sandbox" }

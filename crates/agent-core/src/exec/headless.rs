@@ -82,7 +82,7 @@ pub async fn run_headless_multi_turn_controlled(
 
         let _ = agent.maintain_tool_context().await;
 
-        let (history, tools) = agent.prepare_llm_context().await;
+        let (history, tools) = agent.prepare_llm_context().await?;
 
         let stream = streamer
             .stream_chat(&system_prompt, &history, tools)

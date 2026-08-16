@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  isMcpToolEnabled,
   LegacySseTransportError,
   parseMcpJson,
 } from "./useMcpTools.ts";
@@ -45,6 +46,26 @@ test("bounds imported timeout values", () => {
 
   assert.equal(server.startupTimeoutSecs, 1);
   assert.equal(server.toolTimeoutSecs, 3600);
+});
+
+test("preserves required, cwd and allow/deny policy", () => {
+  const [server] = parseMcpJson(
+    JSON.stringify({
+      command: "npx",
+      cwd: "packages/server",
+      required: true,
+      enabled_tools: ["read", "search"],
+      disabled_tools: ["search"],
+    }),
+  );
+
+  assert.equal(server.required, true);
+  assert.equal(server.cwd, "packages/server");
+  assert.deepEqual(server.enabledTools, ["read", "search"]);
+  assert.deepEqual(server.disabledTools, ["search"]);
+  assert.equal(isMcpToolEnabled(server, "read"), true);
+  assert.equal(isMcpToolEnabled(server, "search"), false);
+  assert.equal(isMcpToolEnabled(server, "unknown"), false);
 });
 
 test("rejects an explicit legacy SSE transport", () => {

@@ -7,6 +7,7 @@ use std::path::{Path, PathBuf};
 use std::process::Stdio;
 
 use anyhow::{anyhow, Context};
+use futures::{stream, StreamExt};
 use http::{HeaderName, HeaderValue};
 use rmcp::model::{CallToolRequestParams, ContentBlock, Tool as RmcpTool};
 use rmcp::transport::streamable_http_client::StreamableHttpClientTransportConfig;
@@ -25,6 +26,9 @@ use crate::config::{
 use crate::names::{
     is_mcp_tool_name, parse_qualified_name, qualify_tool_name, sanitize_server_id, MCP_TOOLSET,
 };
+
+/// 同时启动的 MCP Server 上限。
+pub const MAX_PARALLEL_MCP_STARTUPS: usize = 4;
 
 /// MCP 连接建立时使用的权限快照。
 ///
@@ -102,6 +106,8 @@ pub struct ServerStatus {
     pub id: String,
     /// 显示名。
     pub name: String,
+    /// 是否为必需 Server。
+    pub required: bool,
     /// 状态字符串（如 connected / error）。
     pub status: String,
     /// 已发现工具名列表。
@@ -109,6 +115,61 @@ pub struct ServerStatus {
     /// 最近错误。
     pub error: Option<String>,
 }
+
+/// MCP Server 连接生命周期状态。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum McpLifecycleState {
+    Disabled,
+    Connecting,
+    Connected,
+    Disconnected,
+    Error,
+}
+
+impl McpLifecycleState {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Disabled => "disabled",
+            Self::Connecting => "connecting",
+            Self::Connected => "connected",
+            Self::Disconnected => "disconnected",
+            Self::Error => "error",
+        }
+    }
+}
+
+/// 单个必需 MCP Server 的启动失败诊断。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct McpStartupFailure {
+    pub server_id: String,
+    pub server_name: String,
+    pub error: String,
+}
+
+/// 一个或多个必需 MCP Server 启动失败。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RequiredMcpServersError {
+    pub failures: Vec<McpStartupFailure>,
+}
+
+impl std::fmt::Display for RequiredMcpServersError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let details = self
+            .failures
+            .iter()
+            .map(|failure| {
+                format!(
+                    "{} ({}): {}",
+                    failure.server_name, failure.server_id, failure.error
+                )
+            })
+            .collect::<Vec<_>>()
+            .join("; ");
+        write!(formatter, "required MCP server startup failed: {details}")
+    }
+}
+
+impl std::error::Error for RequiredMcpServersError {}
 
 /// 通知处理器与 RunningServer 共享的工具状态。
 struct SharedToolState {
@@ -191,6 +252,8 @@ pub struct McpHub {
     configs: Vec<McpServerConfig>,
     /// 最近一次 reload 的连接错误（server_id → message）。
     last_connect_errors: HashMap<String, String>,
+    /// Server 生命周期状态。
+    states: HashMap<String, McpLifecycleState>,
     /// 当前 session/profile 对 MCP 连接施加的不可变权限快照。
     execution_context: Option<McpExecutionContext>,
 }
@@ -210,6 +273,7 @@ impl McpHub {
             servers: HashMap::new(),
             configs: Vec::new(),
             last_connect_errors: HashMap::new(),
+            states: HashMap::new(),
             execution_context: None,
         }
     }
@@ -256,6 +320,16 @@ impl McpHub {
     ) -> anyhow::Result<()> {
         self.configs = configs;
         let enabled: Vec<_> = self.configs.iter().filter(|c| c.enabled).cloned().collect();
+        let configured_ids: std::collections::HashSet<String> = self
+            .configs
+            .iter()
+            .map(|config| sanitize_server_id(&config.id))
+            .collect();
+        self.states.retain(|id, _| configured_ids.contains(id));
+        for config in self.configs.iter().filter(|config| !config.enabled) {
+            self.states
+                .insert(sanitize_server_id(&config.id), McpLifecycleState::Disabled);
+        }
 
         let keep_ids: std::collections::HashSet<String> =
             enabled.iter().map(|c| sanitize_server_id(&c.id)).collect();
@@ -273,21 +347,46 @@ impl McpHub {
 
         let mut discovered_updates: Vec<(String, Vec<DiscoveredTool>)> = Vec::new();
         let mut connect_errors: HashMap<String, String> = HashMap::new();
+        let mut pending = Vec::new();
 
         for cfg in enabled {
             let sid = sanitize_server_id(&cfg.id);
             let fp = effective_connection_fingerprint(&cfg, self.execution_context.as_ref());
             if let Some(existing) = self.servers.get(&sid) {
-                if existing.fingerprint == fp && existing.status == "connected" {
+                if existing.fingerprint == fp
+                    && existing.status == "connected"
+                    && !existing.peer.is_transport_closed()
+                {
                     if let Some(rs) = self.servers.get_mut(&sid) {
                         rs.config = cfg;
                         rs.error = None;
                     }
+                    self.states.insert(sid, McpLifecycleState::Connected);
                     continue;
                 }
             }
             self.servers.remove(&sid);
-            match connect_server(&cfg, self.execution_context.as_ref()).await {
+            self.states.insert(sid, McpLifecycleState::Connecting);
+            pending.push(cfg);
+        }
+
+        let execution_context = self.execution_context.clone();
+        let futures = pending
+            .into_iter()
+            .map(|cfg| {
+                let execution_context = execution_context.clone();
+                async move {
+                    let result = connect_server(&cfg, execution_context.as_ref()).await;
+                    (cfg, result)
+                }
+            })
+            .collect();
+        let connection_results = collect_bounded(futures, MAX_PARALLEL_MCP_STARTUPS).await;
+        let mut required_failures = Vec::new();
+
+        for (cfg, result) in connection_results {
+            let sid = sanitize_server_id(&cfg.id);
+            match result {
                 Ok(mut running) => {
                     running.config = cfg.clone();
                     let discovered: Vec<DiscoveredTool> = running
@@ -310,11 +409,22 @@ impl McpHub {
                         merge_discovered(slot, discovered.clone());
                     }
                     discovered_updates.push((sid.clone(), discovered));
+                    self.states
+                        .insert(sid.clone(), McpLifecycleState::Connected);
                     self.servers.insert(sid, running);
                 }
                 Err(e) => {
                     warn!(server = %sid, error = %e, "MCP server connect failed");
-                    connect_errors.insert(sid, e.to_string());
+                    let error = e.to_string();
+                    self.states.insert(sid.clone(), McpLifecycleState::Error);
+                    connect_errors.insert(sid.clone(), error.clone());
+                    if cfg.required {
+                        required_failures.push(McpStartupFailure {
+                            server_id: sid,
+                            server_name: cfg.name,
+                            error,
+                        });
+                    }
                 }
             }
         }
@@ -342,10 +452,14 @@ impl McpHub {
                         .find(|c| sanitize_server_id(&c.id) == sid)
                     {
                         slot.tools = cfg.tools.clone();
+                        slot.enabled_tools = cfg.enabled_tools.clone();
+                        slot.disabled_tools = cfg.disabled_tools.clone();
                         slot.enabled = cfg.enabled;
                     }
                     if let Some(rs) = self.servers.get_mut(&sid) {
                         rs.config.tools = cfg.tools;
+                        rs.config.enabled_tools = cfg.enabled_tools;
+                        rs.config.disabled_tools = cfg.disabled_tools;
                         if let Some(slot) = self
                             .configs
                             .iter()
@@ -361,7 +475,14 @@ impl McpHub {
 
         // 把连接错误挂到 configs 状态（无 RunningServer 时 server_status 可读）
         self.last_connect_errors = connect_errors;
-        Ok(())
+        if required_failures.is_empty() {
+            Ok(())
+        } else {
+            Err(RequiredMcpServersError {
+                failures: required_failures,
+            }
+            .into())
+        }
     }
 
     /// 仅从磁盘同步 enabled / tools 开关，不重连（供工具调用路径）
@@ -382,12 +503,19 @@ impl McpHub {
             {
                 slot.enabled = cfg.enabled;
                 slot.tools = cfg.tools.clone();
+                slot.enabled_tools = cfg.enabled_tools.clone();
+                slot.disabled_tools = cfg.disabled_tools.clone();
             } else {
                 self.configs.push(cfg.clone());
             }
             if let Some(rs) = self.servers.get_mut(&sid) {
                 rs.config.enabled = cfg.enabled;
                 rs.config.tools = cfg.tools.clone();
+                rs.config.enabled_tools = cfg.enabled_tools.clone();
+                rs.config.disabled_tools = cfg.disabled_tools.clone();
+            }
+            if !cfg.enabled {
+                self.states.insert(sid, McpLifecycleState::Disabled);
             }
         }
         // 磁盘上已删除的配置：从内存 configs 去掉（连接由完整 reload 清理）
@@ -446,10 +574,19 @@ impl McpHub {
         for cfg in &self.configs {
             let sid = sanitize_server_id(&cfg.id);
             if let Some(rs) = self.servers.get(&sid) {
+                let state = if rs.peer.is_transport_closed() {
+                    McpLifecycleState::Disconnected
+                } else {
+                    self.states
+                        .get(&sid)
+                        .copied()
+                        .unwrap_or(McpLifecycleState::Connected)
+                };
                 out.push(ServerStatus {
                     id: sid,
                     name: cfg.name.clone(),
-                    status: rs.status.clone(),
+                    required: cfg.required,
+                    status: state.as_str().into(),
                     tools: rs.tools.iter().map(|t| t.name.to_string()).collect(),
                     error: rs.error.clone(),
                 });
@@ -458,13 +595,20 @@ impl McpHub {
                 out.push(ServerStatus {
                     id: sid,
                     name: cfg.name.clone(),
-                    status: if !cfg.enabled {
-                        "disabled".into()
-                    } else if err.is_some() {
-                        "error".into()
-                    } else {
-                        "disconnected".into()
-                    },
+                    required: cfg.required,
+                    status: self
+                        .states
+                        .get(&sanitize_server_id(&cfg.id))
+                        .copied()
+                        .unwrap_or(if !cfg.enabled {
+                            McpLifecycleState::Disabled
+                        } else if err.is_some() {
+                            McpLifecycleState::Error
+                        } else {
+                            McpLifecycleState::Disconnected
+                        })
+                        .as_str()
+                        .into(),
                     tools: cfg.discovered.iter().map(|d| d.name.clone()).collect(),
                     error: err,
                 });
@@ -709,6 +853,16 @@ async fn with_startup_timeout<T>(
         .map_err(|_| anyhow!("MCP server 启动超时 ({timeout_secs}s): {server_id}"))?
 }
 
+async fn collect_bounded<F, T>(futures: Vec<F>, limit: usize) -> Vec<T>
+where
+    F: std::future::Future<Output = T>,
+{
+    stream::iter(futures)
+        .buffer_unordered(limit.max(1))
+        .collect()
+        .await
+}
+
 /// 实际建连流程；由 [`connect_server`] 对完整启动阶段施加统一超时。
 async fn connect_server_inner(
     cfg: &McpServerConfig,
@@ -861,6 +1015,17 @@ fn build_stdio_command(
             );
         }
     })?;
+    let working_dir = resolve_server_working_dir(cfg, execution_context).inspect_err(|_error| {
+        if let Some(audit) = &audit {
+            audit.record(
+                sandbox::SandboxAuditKind::Denied,
+                Some(&execution_context.sandbox_policy),
+                "stdio",
+                "working_directory_denied",
+                None,
+            );
+        }
+    })?;
     let prepare_started = std::time::Instant::now();
     let mut cmd = match sandbox::SandboxRunner
         .tokio_command(&execution_context.sandbox_policy, &cfg.command)
@@ -879,7 +1044,7 @@ fn build_stdio_command(
         }
     };
     cmd.args(&cfg.args)
-        .current_dir(&execution_context.working_dir)
+        .current_dir(working_dir)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::inherit())
@@ -888,6 +1053,40 @@ fn build_stdio_command(
         .envs(scrubbed_parent_env(std::env::vars()))
         .envs(&cfg.env);
     Ok(cmd)
+}
+
+fn resolve_server_working_dir(
+    cfg: &McpServerConfig,
+    execution_context: &McpExecutionContext,
+) -> anyhow::Result<PathBuf> {
+    let Some(configured) = cfg
+        .cwd
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    else {
+        return Ok(execution_context.working_dir.clone());
+    };
+    let requested = Path::new(configured);
+    let candidate = if requested.is_absolute() {
+        requested.to_path_buf()
+    } else {
+        execution_context.working_dir.join(requested)
+    };
+    let candidate = candidate
+        .canonicalize()
+        .with_context(|| format!("resolve MCP server cwd: {}", candidate.display()))?;
+    if !candidate.is_dir() {
+        anyhow::bail!("MCP server cwd is not a directory: {}", candidate.display());
+    }
+    if !candidate.starts_with(&execution_context.working_dir) {
+        anyhow::bail!(
+            "MCP server cwd escapes the execution root: {} (root: {})",
+            candidate.display(),
+            execution_context.working_dir.display()
+        );
+    }
+    Ok(candidate)
 }
 
 /// stdio command 最小约束：不经 shell；禁止 `..` 与危险字符；允许绝对路径或简单命令名（如 npx）
@@ -985,6 +1184,10 @@ mod tests {
             url: String::new(),
             headers: HashMap::new(),
             enabled: true,
+            required: false,
+            cwd: None,
+            enabled_tools: None,
+            disabled_tools: vec![],
             tools: HashMap::new(),
             discovered: vec![],
             startup_timeout_secs: None,
@@ -1005,6 +1208,10 @@ mod tests {
             url: String::new(),
             headers: HashMap::new(),
             enabled: true,
+            required: false,
+            cwd: None,
+            enabled_tools: None,
+            disabled_tools: vec![],
             tools: HashMap::from([("a".into(), true), ("b".into(), false)]),
             discovered: vec![],
             startup_timeout_secs: None,
@@ -1024,6 +1231,25 @@ mod tests {
     }
 
     #[test]
+    fn allow_list_then_deny_list_then_legacy_gate() {
+        let mut server = stdio_server("echo");
+        server.enabled_tools = Some(vec!["read".into(), "search".into(), "legacy".into()]);
+        server.disabled_tools = vec!["search".into()];
+        server.tools.insert("legacy".into(), false);
+        let names = vec![
+            "read".into(),
+            "search".into(),
+            "legacy".into(),
+            "unknown".into(),
+        ];
+
+        assert_eq!(
+            filter_enabled_tool_names(&server, &names),
+            vec!["mcp__s1__read"]
+        );
+    }
+
+    #[test]
     fn stdio_command_validation() {
         assert!(validate_stdio_command("npx").is_ok());
         assert!(validate_stdio_command("uvx").is_ok());
@@ -1032,6 +1258,62 @@ mod tests {
         assert!(validate_stdio_command("../evil").is_err());
         assert!(validate_stdio_command("npx;rm").is_err());
         assert!(validate_stdio_command("foo/bar").is_err());
+    }
+
+    #[test]
+    fn parent_environment_is_allowlisted() {
+        let env = scrubbed_parent_env([
+            ("PATH", "/usr/bin"),
+            ("HOME", "/tmp/home"),
+            ("OPENAI_API_KEY", "secret"),
+            ("GITHUB_TOKEN", "secret"),
+            ("CUSTOM", "value"),
+        ]);
+        assert_eq!(env.get("PATH").map(String::as_str), Some("/usr/bin"));
+        assert_eq!(env.get("HOME").map(String::as_str), Some("/tmp/home"));
+        assert!(!env.contains_key("OPENAI_API_KEY"));
+        assert!(!env.contains_key("GITHUB_TOKEN"));
+        assert!(!env.contains_key("CUSTOM"));
+    }
+
+    #[test]
+    fn full_access_stdio_command_uses_working_dir_and_explicit_env() {
+        let dir = tempfile::tempdir().unwrap();
+        let policy = sandbox::SandboxPolicy::new(
+            types::SandboxMode::DangerFullAccess,
+            dir.path(),
+            Vec::new(),
+            false,
+        )
+        .unwrap();
+        let context = McpExecutionContext::new(policy, dir.path()).unwrap();
+        let mut server = stdio_server("echo");
+        server.args = vec!["hello".into()];
+        server
+            .env
+            .insert("MCP_EXPLICIT_TOKEN".into(), "configured".into());
+
+        let command = build_stdio_command(&server, &context).unwrap();
+        let command = command.as_std();
+        assert_eq!(command.get_program(), "echo");
+        assert_eq!(command.get_args().collect::<Vec<_>>(), ["hello"]);
+        assert_eq!(
+            command.get_current_dir(),
+            Some(context.working_dir.as_path())
+        );
+        let env = command
+            .get_envs()
+            .map(|(key, value)| {
+                (
+                    key.to_string_lossy().into_owned(),
+                    value.map(|value| value.to_string_lossy().into_owned()),
+                )
+            })
+            .collect::<HashMap<_, _>>();
+        assert_eq!(
+            env.get("MCP_EXPLICIT_TOKEN").and_then(Option::as_deref),
+            Some("configured")
+        );
     }
 
     #[test]
@@ -1095,59 +1377,82 @@ mod tests {
     }
 
     #[test]
-    fn parent_environment_is_allowlisted() {
-        let env = scrubbed_parent_env([
-            ("PATH", "/usr/bin"),
-            ("HOME", "/tmp/home"),
-            ("OPENAI_API_KEY", "secret"),
-            ("GITHUB_TOKEN", "secret"),
-            ("CUSTOM", "value"),
-        ]);
-        assert_eq!(env.get("PATH").map(String::as_str), Some("/usr/bin"));
-        assert_eq!(env.get("HOME").map(String::as_str), Some("/tmp/home"));
-        assert!(!env.contains_key("OPENAI_API_KEY"));
-        assert!(!env.contains_key("GITHUB_TOKEN"));
-        assert!(!env.contains_key("CUSTOM"));
-    }
-
-    #[test]
-    fn full_access_stdio_command_uses_working_dir_and_explicit_env() {
-        let dir = tempfile::tempdir().unwrap();
+    fn stdio_cwd_must_resolve_inside_execution_root() {
+        let root = tempfile::tempdir().unwrap();
+        let nested = root.path().join("packages/server");
+        std::fs::create_dir_all(&nested).unwrap();
+        let outside = tempfile::tempdir().unwrap();
         let policy = sandbox::SandboxPolicy::new(
             types::SandboxMode::DangerFullAccess,
-            dir.path(),
+            root.path(),
             Vec::new(),
             false,
         )
         .unwrap();
-        let context = McpExecutionContext::new(policy, dir.path()).unwrap();
+        let context = McpExecutionContext::new(policy, root.path()).unwrap();
         let mut server = stdio_server("echo");
-        server.args = vec!["hello".into()];
-        server
-            .env
-            .insert("MCP_EXPLICIT_TOKEN".into(), "configured".into());
+        server.cwd = Some("packages/server".into());
+        assert_eq!(
+            resolve_server_working_dir(&server, &context).unwrap(),
+            nested.canonicalize().unwrap()
+        );
 
-        let command = build_stdio_command(&server, &context).unwrap();
-        let command = command.as_std();
-        assert_eq!(command.get_program(), "echo");
-        assert_eq!(command.get_args().collect::<Vec<_>>(), ["hello"]);
-        assert_eq!(
-            command.get_current_dir(),
-            Some(context.working_dir.as_path())
-        );
-        let env = command
-            .get_envs()
-            .map(|(key, value)| {
-                (
-                    key.to_string_lossy().into_owned(),
-                    value.map(|value| value.to_string_lossy().into_owned()),
-                )
+        server.cwd = Some(outside.path().to_string_lossy().into_owned());
+        let error = resolve_server_working_dir(&server, &context)
+            .unwrap_err()
+            .to_string();
+        assert!(error.contains("escapes the execution root"), "{error}");
+    }
+
+    #[tokio::test]
+    async fn startup_collection_obeys_global_parallel_limit() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+
+        let current = Arc::new(AtomicUsize::new(0));
+        let peak = Arc::new(AtomicUsize::new(0));
+        let futures = (0..12)
+            .map(|_| {
+                let current = Arc::clone(&current);
+                let peak = Arc::clone(&peak);
+                async move {
+                    let active = current.fetch_add(1, Ordering::SeqCst) + 1;
+                    peak.fetch_max(active, Ordering::SeqCst);
+                    tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+                    current.fetch_sub(1, Ordering::SeqCst);
+                }
             })
-            .collect::<HashMap<_, _>>();
-        assert_eq!(
-            env.get("MCP_EXPLICIT_TOKEN").and_then(Option::as_deref),
-            Some("configured")
-        );
+            .collect();
+
+        collect_bounded(futures, MAX_PARALLEL_MCP_STARTUPS).await;
+        assert_eq!(peak.load(Ordering::SeqCst), MAX_PARALLEL_MCP_STARTUPS);
+    }
+
+    #[tokio::test]
+    async fn required_failure_blocks_while_optional_failure_only_degrades() {
+        let mut optional_hub = McpHub::new();
+        optional_hub
+            .reload_with_configs(vec![stdio_server("echo")])
+            .await
+            .expect("optional startup failure must not block");
+        let optional = optional_hub.server_status();
+        assert_eq!(optional[0].status, "error");
+        assert!(!optional[0].required);
+
+        let mut required = stdio_server("echo");
+        required.required = true;
+        let mut required_hub = McpHub::new();
+        let error = required_hub
+            .reload_with_configs(vec![required])
+            .await
+            .unwrap_err();
+        let typed = error
+            .downcast_ref::<RequiredMcpServersError>()
+            .expect("required failure must retain structured diagnostics");
+        assert_eq!(typed.failures.len(), 1);
+        assert_eq!(typed.failures[0].server_id, "s1");
+        let status = required_hub.server_status();
+        assert_eq!(status[0].status, "error");
+        assert!(status[0].required);
     }
 
     #[cfg(target_os = "macos")]

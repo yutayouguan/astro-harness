@@ -38,6 +38,7 @@ import {
   DEFAULT_MCP_TOOL_TIMEOUT_SECS,
   MAX_MCP_STARTUP_TIMEOUT_SECS,
   MAX_MCP_TOOL_TIMEOUT_SECS,
+  isMcpToolEnabled,
   useMcpTools,
   type McpServer,
   type McpTransportType,
@@ -323,6 +324,7 @@ function McpAddDialog({
   const [formDesc, setFormDesc] = useState("");
   const [formType, setFormType] = useState<McpTransportType>("stdio");
   const [formCommand, setFormCommand] = useState("");
+  const [formCwd, setFormCwd] = useState("");
   const [formArgs, setFormArgs] = useState("");
   const [formEnv, setFormEnv] = useState("");
   const [formUrl, setFormUrl] = useState("");
@@ -333,6 +335,7 @@ function McpAddDialog({
   const [formToolTimeout, setFormToolTimeout] = useState(
     String(DEFAULT_MCP_TOOL_TIMEOUT_SECS),
   );
+  const [formRequired, setFormRequired] = useState(false);
   const [formError, setFormError] = useState("");
 
   const backdropRef = useRef<HTMLDivElement>(null);
@@ -412,8 +415,12 @@ function McpAddDialog({
         url: isStdio ? "" : formUrl.trim(),
         headers: isStdio ? {} : parseEnvOrHeaders(formHeaders),
         enabled: true,
+        required: formRequired,
+        cwd: isStdio && formCwd.trim() ? formCwd.trim() : undefined,
         startupTimeoutSecs,
         toolTimeoutSecs,
+        enabledTools: undefined,
+        disabledTools: [],
         tools: {},
         discovered: [],
       },
@@ -579,6 +586,20 @@ function McpAddDialog({
                       onChange={(e) => setFormToolTimeout(e.target.value)}
                     />
                   </label>
+                  <div className="mcp-field">
+                    <span className="mcp-field-label">
+                      {t("mcpTools.formRequired")}
+                    </span>
+                    <button
+                      type="button"
+                      role="switch"
+                      className="tool-toggle"
+                      aria-checked={formRequired}
+                      onClick={() => setFormRequired((required) => !required)}
+                    >
+                      <span className="tool-toggle-thumb" />
+                    </button>
+                  </div>
 
                   {isStdio ? (
                     <>
@@ -592,6 +613,17 @@ function McpAddDialog({
                           value={formCommand}
                           onChange={(e) => setFormCommand(e.target.value)}
                           placeholder={t("mcpTools.formCommandPlaceholder")}
+                        />
+                      </label>
+                      <label className="mcp-field mcp-field--full">
+                        <span className="mcp-field-label">
+                          {t("mcpTools.formCwd")}
+                        </span>
+                        <input
+                          type="text"
+                          value={formCwd}
+                          onChange={(e) => setFormCwd(e.target.value)}
+                          placeholder={t("mcpTools.formCwdPlaceholder")}
                         />
                       </label>
                       <label className="mcp-field mcp-field--full">
@@ -757,6 +789,14 @@ function McpServerCard({
         <span className="mcp-server-env-key">
           {t("mcpTools.toolTimeout")}: {server.toolTimeoutSecs}s
         </span>
+        {server.required ? (
+          <span className="mcp-server-env-key">{t("mcpTools.required")}</span>
+        ) : null}
+        {server.cwd ? (
+          <span className="mcp-server-env-key">
+            {t("mcpTools.cwd")}: {server.cwd}
+          </span>
+        ) : null}
         {envKeys.map((k) => (
           <span key={`env-${k}`} className="mcp-server-env-key">{k}</span>
         ))}
@@ -786,7 +826,7 @@ function McpServerCard({
         ) : (
           <ul className="mcp-tool-rows">
             {toolRows.map((tool) => {
-              const on = server.tools[tool.name] ?? true;
+              const on = isMcpToolEnabled(server, tool.name);
               return (
                 <li key={tool.name} className="mcp-tool-row">
                   <div className="mcp-tool-meta">
@@ -1417,6 +1457,22 @@ export default function ToolsPanel({
                         </span>
                         <span>{selectedServer.toolTimeoutSecs}s</span>
                       </div>
+                      <div className="tools-detail-meta-item">
+                        <span className="tools-detail-label">
+                          {t("mcpTools.required")}
+                        </span>
+                        <span>
+                          {selectedServer.required
+                            ? t("mcpTools.enabled")
+                            : t("mcpTools.disabled")}
+                        </span>
+                      </div>
+                      {selectedServer.cwd ? (
+                        <div className="tools-detail-meta-item">
+                          <span className="tools-detail-label">{t("mcpTools.cwd")}</span>
+                          <code>{selectedServer.cwd}</code>
+                        </div>
+                      ) : null}
                     </section>
                     <section className="tools-detail-section">
                       <div className="mcp-tool-list-head">
@@ -1442,7 +1498,7 @@ export default function ToolsPanel({
                             description: "",
                           }))
                       ).map((tool) => {
-                        const on = selectedServer.tools[tool.name] ?? true;
+                        const on = isMcpToolEnabled(selectedServer, tool.name);
                         return (
                           <div key={tool.name} className="mcp-tool-row">
                             <div className="mcp-tool-meta">

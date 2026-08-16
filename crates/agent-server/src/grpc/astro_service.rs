@@ -882,6 +882,20 @@ impl AstroService for AstroServiceImpl {
             let turn_result = match run_result {
                 Ok(result) => result,
                 Err(err) => {
+                    if err.downcast_ref::<mcp::RequiredMcpServersError>().is_some() {
+                        let _ = tx
+                            .send(Ok(ChatEvent {
+                                payload: Some(proto::chat_event::Payload::Error(err.to_string())),
+                            }))
+                            .await;
+                        let _ = tx
+                            .send(Ok(ChatEvent {
+                                payload: Some(proto::chat_event::Payload::Done(true)),
+                            }))
+                            .await;
+                        cleanup().await;
+                        return;
+                    }
                     let _ = tx.send(Err(Status::internal(err.to_string()))).await;
                     cleanup().await;
                     return;
@@ -1305,16 +1319,12 @@ impl AstroService for AstroServiceImpl {
             let servers = hub_guard
                 .server_status()
                 .into_iter()
-                .map(|s| {
-                    let status = match s.error {
-                        Some(err) if !err.is_empty() => format!("{}: {}", s.status, err),
-                        _ => s.status,
-                    };
-                    proto::McpServerInfo {
-                        name: s.name,
-                        status,
-                        tools: s.tools,
-                    }
+                .map(|s| proto::McpServerInfo {
+                    name: s.name,
+                    status: s.status,
+                    tools: s.tools,
+                    required: s.required,
+                    error: s.error.unwrap_or_default(),
                 })
                 .collect();
             return Ok(Response::new(McpServerList { servers }));
@@ -1332,6 +1342,8 @@ impl AstroService for AstroServiceImpl {
                     "disabled".into()
                 },
                 tools: c.discovered.iter().map(|d| d.name.clone()).collect(),
+                required: c.required,
+                error: String::new(),
             })
             .collect();
         Ok(Response::new(McpServerList { servers }))

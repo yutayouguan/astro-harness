@@ -596,8 +596,9 @@ impl AgentLoop {
 
     /// 从磁盘重载 MCP 配置，并将启用工具挂接到 [`ToolRegistry`]。
     ///
-    /// 失败时仅记录 warn 日志，不中断调用方；成功后 MCP 工具以 `MCP_TOOLSET` 注册。
-    pub async fn reload_mcp(&mut self) {
+    /// optional Server 失败仅降级；required Server 失败向调用方传播。
+    /// 无论是否存在 required 失败，已成功连接的工具都会同步到 `MCP_TOOLSET`。
+    pub async fn reload_mcp(&mut self) -> anyhow::Result<()> {
         let agent_id = self.memory.agent_id.clone();
         let execution_root = self
             .project_root
@@ -638,20 +639,22 @@ impl AgentLoop {
             tracing::warn!(%error, "resolve MCP execution policy failed; connections will be denied");
         })
         .ok();
-        {
+        let reload_result = {
             let mut hub = self.mcp_hub.lock().await;
             hub.set_execution_context(execution_context);
-            if let Err(e) = hub.reload_from_disk(Some(&agent_id)).await {
-                tracing::warn!(error = %e, "reload MCP failed");
-            }
-        }
+            hub.reload_from_disk(Some(&agent_id)).await
+        };
         self.attach_mcp_tools().await;
+        if let Err(error) = &reload_result {
+            tracing::warn!(%error, "reload MCP failed");
+        }
+        reload_result
     }
 
     /// 同时重载工具 gate 与 MCP 配置，通常在每轮用户输入开始时调用。
-    pub async fn reload_tools_and_mcp(&mut self) {
+    pub async fn reload_tools_and_mcp(&mut self) -> anyhow::Result<()> {
         self.reload_tool_gates();
-        self.reload_mcp().await;
+        self.reload_mcp().await
     }
 
     /// 将 MCP Hub 中已启用的工具条目同步到 [`ToolRegistry`]。
