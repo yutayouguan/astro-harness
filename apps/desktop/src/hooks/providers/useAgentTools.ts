@@ -6,7 +6,6 @@ import {
   IconAudioUnderstand,
   IconClarify,
   IconCodeExec,
-  IconDelegate,
   IconEye,
   IconFileOps,
   IconImageGen,
@@ -50,9 +49,8 @@ export type AgentToolId =
   | "ask_user"
   | "switch_mode"
   | "present"
-  | "subagent"
+  | "subagents"
   | "cron"
-  | "pipeline"
   | "persona"
   | "todo";
 
@@ -372,19 +370,15 @@ export const AGENT_TOOLS: AgentToolDef[] = [
     ],
   },
   {
-    id: "subagent",
-    titleKey: "agentTools.subagent.title",
-    descKey: "agentTools.subagent.desc",
-    Icon: IconDelegate,
+    id: "subagents",
+    titleKey: "agentTools.subagents.title",
+    descKey: "agentTools.subagents.desc",
+    Icon: IconMultiAgent,
     tone: "sky",
     params: [
-      { name: "action", type: "string", optional: true },
-      { name: "goal", type: "string", optional: true },
-      { name: "context", type: "string", optional: true },
-      { name: "tasks", type: "object", optional: true },
-      { name: "max_concurrent", type: "number", optional: true },
-      { name: "task_id", type: "string", optional: true },
-      { name: "timeout_secs", type: "number", optional: true },
+      { name: "task", type: "string" },
+      { name: "agent_name", type: "string", optional: true },
+      { name: "fork_turns", type: "string", optional: true },
     ],
   },
   {
@@ -399,25 +393,6 @@ export const AGENT_TOOLS: AgentToolDef[] = [
       { name: "cron", type: "string", optional: true },
       { name: "task", type: "string", optional: true },
       { name: "id", type: "string", optional: true },
-    ],
-  },
-  {
-    id: "pipeline",
-    titleKey: "agentTools.pipeline.title",
-    descKey: "agentTools.pipeline.desc",
-    Icon: IconMultiAgent,
-    tone: "fuchsia",
-    params: [
-      { name: "action", type: "string", optional: true },
-      { name: "goal", type: "string", optional: true },
-      { name: "steps", type: "array", optional: true },
-      { name: "agents", type: "array", optional: true },
-      { name: "orchestration_id", type: "string", optional: true },
-      { name: "team_id", type: "string", optional: true },
-      { name: "id", type: "string", optional: true },
-      { name: "name", type: "string", optional: true },
-      { name: "members", type: "array", optional: true },
-      { name: "mode", type: "string", optional: true },
     ],
   },
   {

@@ -426,20 +426,6 @@ impl UsageDb {
         Ok(id)
     }
 
-    /// 列出时间窗内 `kind=orchestration` 事件的 `meta_json`（供协作图聚合）
-    pub fn list_orchestration_meta(&self, start: &str, end: &str) -> anyhow::Result<Vec<String>> {
-        let mut stmt = self.conn.prepare(
-            "SELECT meta_json FROM usage_events
-             WHERE kind = 'orchestration'
-               AND ts >= ?1 AND ts < ?2
-               AND meta_json IS NOT NULL",
-        )?;
-        let rows = stmt
-            .query_map(params![start, end], |r| r.get::<_, String>(0))?
-            .collect::<Result<Vec<_>, _>>()?;
-        Ok(rows)
-    }
-
     /// 尽力写入：打开默认库并 insert；失败只记日志，不向上抛
     pub fn try_record(row: NewUsageEvent) {
         match Self::open_default().and_then(|db| db.insert(row).map(|_| ())) {

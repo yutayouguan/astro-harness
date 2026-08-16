@@ -295,7 +295,7 @@ impl AgentLoop {
         }
     }
 
-    /// `pub(crate)`：供 `exec::delegate` 的 `subagent_start`/`subagent_stop` 顺序测试复用。
+    /// 统一应用工具结果 hook 与媒体保留逻辑。
     pub(crate) async fn finalize_tool_call_result(
         &self,
         name: &str,

@@ -9,9 +9,7 @@ use tokio::task::JoinSet;
 use crate::control::hitl::HitlGate;
 use crate::runtime::AgentLoop;
 
-use super::hitl_bridge::{
-    park_astro_hitl, park_confirm, parse_astro_hitl, ParentHitlCtx, PARENT_HITL_CTX,
-};
+use super::hitl_bridge::{park_astro_hitl, park_confirm, parse_astro_hitl};
 use super::types::MultiTurnStreamItem;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -262,17 +260,7 @@ pub(crate) async fn execute_tools_serial(
     run_id: &str,
     hitl_gate: Option<&Arc<HitlGate>>,
 ) -> Option<Vec<types::ToolOutput>> {
-    let ctx = hitl_gate.map(|gate| ParentHitlCtx {
-        gate: gate.clone(),
-        tx: tx.clone(),
-        run_id: run_id.to_string(),
-    });
-    PARENT_HITL_CTX
-        .scope(
-            ctx,
-            execute_tools_serial_inner(session, calls, pause, tx, run_id, hitl_gate),
-        )
-        .await
+    execute_tools_serial_inner(session, calls, pause, tx, run_id, hitl_gate).await
 }
 
 async fn execute_tools_serial_inner(

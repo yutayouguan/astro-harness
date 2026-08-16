@@ -1,6 +1,6 @@
 //! UTF-8 安全截断，供工具结果回灌 LLM 时统一限长。
 
-/// 工具结果默认上限（64 KiB），与 file_ops read / orchestration step 对齐。
+/// 工具结果默认上限（64 KiB），与 file_ops read 对齐。
 pub const MAX_TOOL_RESULT_BYTES: usize = 64 * 1024;
 
 /// 按字节上限截断字符串，保证落在 UTF-8 字符边界上。

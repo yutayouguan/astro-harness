@@ -134,3 +134,30 @@ impl LiveAgentThreads {
         self.inner.lock().unwrap().contains_key(thread_id)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn follow_up_interrupt_and_close_are_independent_controls() {
+        let registry = LiveAgentThreads::default();
+        let (control, mut rx) = registry.register("thread");
+        registry.send_follow_up("thread", "next".into()).unwrap();
+        assert!(matches!(
+            rx.recv().await,
+            Some(AgentThreadCommand::FollowUp(message)) if message == "next"
+        ));
+
+        registry.interrupt("thread").unwrap();
+        control.cancelled().await;
+        assert!(control.is_interrupted());
+        assert!(!control.is_closed());
+
+        control.begin_turn();
+        assert!(!control.is_interrupted());
+        registry.close("thread").unwrap();
+        assert!(control.is_closed());
+        assert!(matches!(rx.recv().await, Some(AgentThreadCommand::Close)));
+    }
+}

@@ -41,9 +41,7 @@ pub use parse::{
 };
 pub use path_safe::resolve_safe;
 pub use registry::DynToolHandler;
-pub use registry::{
-    BuiltinToolHandler, BuiltinToolRegistrar, NestingPolicy, ToolEntry, ToolRegistry,
-};
+pub use registry::{BuiltinToolHandler, BuiltinToolRegistrar, ToolEntry, ToolRegistry};
 pub use schema::{sanitize_tool_schema, schema_for_args, schema_has_vendor_hazards};
 
 // 宏：`tool_schema!` / `register_tool_schemars!` / `define_tool_args!` / `submit_builtin_tool!`
@@ -183,7 +181,8 @@ mod inventory_register_tests {
             "video_gen",
             "speech_gen",
             "ask_user",
-            "subagent",
+            "spawn_agent",
+            "wait_agents",
             "present",
             "file_ops",
             "web_search",

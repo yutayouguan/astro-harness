@@ -495,7 +495,7 @@ impl AgentLoop {
         self.project_root.as_ref()
     }
 
-    /// 设置含 primary 的聊天 fallback 链（主聊 / cron / delegate 共用）。
+    /// 设置含 primary 的聊天 fallback 链（主聊 / cron / Agent Thread 共用）。
     pub fn set_chat_targets(&mut self, targets: Vec<types::ChatTarget>) {
         self.model_ctx.set_chat_targets(targets);
     }
@@ -578,7 +578,7 @@ impl AgentLoop {
         &self.tool_registry
     }
 
-    /// 工具注册表可变引用（编排子步剔除 `orchestration_*` 等）。
+    /// 工具注册表可变引用。
     pub fn tool_registry_mut(&mut self) -> &mut ToolRegistry {
         &mut self.tool_registry
     }
@@ -718,69 +718,10 @@ impl AgentLoop {
 mod tests {
     use super::*;
     use std::fs;
-    use std::sync::{Arc, Mutex};
-
     use tempfile::TempDir;
 
     fn test_config(dir: &TempDir) -> AgentConfig {
         AgentConfig::with_defaults(dir.path().to_path_buf())
-    }
-
-    #[tokio::test]
-    async fn finalize_tool_call_result_keeps_raw_delegate_json_for_internal_control_flow() {
-        let dir = TempDir::new().unwrap();
-        let mut agent = AgentLoop::new(test_config(&dir)).unwrap();
-        agent.set_current_turn_id("turn-1");
-
-        let bus = agent.hook_bus();
-        let post_result: Arc<Mutex<Option<String>>> = Arc::new(Mutex::new(None));
-        let post_result2 = Arc::clone(&post_result);
-        let subagent_stop: Arc<Mutex<Vec<(String, String)>>> = Arc::new(Mutex::new(Vec::new()));
-        let subagent_stop2 = Arc::clone(&subagent_stop);
-
-        bus.register(::hooks::TRANSFORM_TOOL_RESULT, |_| {
-            ::hooks::HookOutcome::ReplaceText("REDACTED".into())
-        });
-        bus.register(::hooks::POST_TOOL_CALL, move |payload| {
-            *post_result2.lock().unwrap() = payload.tool_result.clone();
-            ::hooks::HookOutcome::Continue
-        });
-        bus.register(::hooks::SUBAGENT_STOP, move |payload| {
-            subagent_stop2
-                .lock()
-                .unwrap()
-                .push((payload.session_id.clone(), payload.detail.clone()));
-            ::hooks::HookOutcome::Continue
-        });
-
-        let raw_result = serde_json::json!({
-            "subagent": true,
-            "status": "done",
-            "tasks": [
-                {
-                    "session_id": "child-session-1",
-                    "summary": "raw delegate summary"
-                }
-            ]
-        })
-        .to_string();
-        let final_result = agent
-            .finalize_tool_call_result(
-                "subagent",
-                &serde_json::json!({"ignored": true}),
-                types::ToolOutput::from(raw_result),
-            )
-            .await;
-
-        assert_eq!(final_result.text(), "REDACTED");
-        assert_eq!(post_result.lock().unwrap().as_deref(), Some("REDACTED"));
-        assert_eq!(
-            subagent_stop.lock().unwrap().as_slice(),
-            [(
-                "child-session-1".to_string(),
-                "raw delegate summary".to_string()
-            )]
-        );
     }
 
     fn t(id: &str, backend: &str, model: &str) -> types::ChatTarget {

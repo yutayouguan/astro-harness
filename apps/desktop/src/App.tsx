@@ -879,6 +879,7 @@ export default function App() {
                 <div className="chat-layout-with-right">
                   <div className="chat-main">
                     <ChatView
+                      sessionId={chat.sessionId}
                       messages={chat.messages}
                       input={chat.input}
                       attachments={chat.attachments}

@@ -69,7 +69,10 @@ pub async fn run_headless_multi_turn_controlled(
     let budget = IterationBudget::new(max_rounds);
 
     loop {
-        if control.as_ref().is_some_and(|value| value.is_interrupted() || value.is_closed()) {
+        if control
+            .as_ref()
+            .is_some_and(|value| value.is_interrupted() || value.is_closed())
+        {
             agent.cancel_signal().cancel();
             anyhow::bail!("agent thread interrupted");
         }
@@ -145,7 +148,9 @@ pub async fn run_headless_multi_turn_controlled(
                     result = agent.handle_tool_call_async(&call.name, &call.arguments) => result,
                 }
             } else {
-                agent.handle_tool_call_async(&call.name, &call.arguments).await
+                agent
+                    .handle_tool_call_async(&call.name, &call.arguments)
+                    .await
             };
             let result = match call_result {
                 Ok(output) => output,

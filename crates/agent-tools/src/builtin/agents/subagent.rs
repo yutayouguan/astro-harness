@@ -47,7 +47,7 @@ struct WaitAgentsArgs {
 }
 
 pub fn register(registry: &mut ToolRegistry) {
-    let lifecycle = || ToolEntry::lifecycle_defaults().orchestrator_and_above();
+    let lifecycle = ToolEntry::lifecycle_defaults;
     registry.register(ToolEntry {
         name: "spawn_agent".into(),
         toolset: "subagents".into(),
@@ -78,7 +78,9 @@ pub fn register(registry: &mut ToolRegistry) {
     registry.register(ToolEntry {
         name: "send_message_to_agent".into(),
         toolset: "subagents".into(),
-        description: "Steer a live subagent by queueing a follow-up message at the next model boundary.".into(),
+        description:
+            "Steer a live subagent by queueing a follow-up message at the next model boundary."
+                .into(),
         schema: schema_for_args::<SendMessageArgs>(),
         check_fn: None,
         icon: "send",
@@ -166,8 +168,8 @@ async fn handle(
                 Some(&parent_model),
                 Some(&parent_sandbox),
             )?;
-            let active = subagents::AgentThreadStore::open_default()?
-                .count_active(&ctx.session_id)?;
+            let active =
+                subagents::AgentThreadStore::open_default()?.count_active(&ctx.session_id)?;
             if active >= settings.max_concurrent_threads_per_session {
                 anyhow::bail!(
                     "subagent concurrency limit reached ({active}/{})",
@@ -189,7 +191,9 @@ async fn handle(
                 hook_bus: ctx.hook_bus.clone(),
                 interrupt_message: settings.interrupt_message,
             };
-            Ok(serde_json::to_string(&dispatch.spawn_agent(request).await?)?)
+            Ok(serde_json::to_string(
+                &dispatch.spawn_agent(request).await?,
+            )?)
         }
         "list_agents" => {
             let parsed: ListAgentsArgs = parse(name, args)?;
@@ -204,7 +208,9 @@ async fn handle(
         }
         "read_agent" => {
             let parsed: ThreadIdArgs = parse(name, args)?;
-            let (thread, messages) = dispatch.read_agent(non_empty_id(&parsed.thread_id)?).await?;
+            let (thread, messages) = dispatch
+                .read_agent(non_empty_id(&parsed.thread_id)?)
+                .await?;
             Ok(serde_json::json!({ "thread": thread, "messages": messages }).to_string())
         }
         "send_message_to_agent" => {
@@ -277,7 +283,8 @@ async fn handle(
 }
 
 fn parse<T: for<'de> Deserialize<'de>>(name: &str, args: &serde_json::Value) -> anyhow::Result<T> {
-    serde_json::from_value(args.clone()).map_err(|error| anyhow::anyhow!("{name} arguments: {error}"))
+    serde_json::from_value(args.clone())
+        .map_err(|error| anyhow::anyhow!("{name} arguments: {error}"))
 }
 
 fn non_empty_id(value: &str) -> anyhow::Result<&str> {
@@ -303,7 +310,10 @@ fn current_sandbox_mode(ctx: &ToolContext<'_>) -> String {
 }
 
 fn fork_context(ctx: &ToolContext<'_>, fork_turns: Option<&str>) -> anyhow::Result<String> {
-    let mode = fork_turns.map(str::trim).filter(|value| !value.is_empty()).unwrap_or("all");
+    let mode = fork_turns
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .unwrap_or("all");
     if mode.eq_ignore_ascii_case("none") {
         return Ok(String::new());
     }
@@ -331,7 +341,11 @@ fn fork_context(ctx: &ToolContext<'_>, fork_turns: Option<&str>) -> anyhow::Resu
         if content.trim().is_empty() {
             continue;
         }
-        out.push_str(&format!("## {}\n{}\n\n", message.role, types::truncate_chars(&content, 6_000)));
+        out.push_str(&format!(
+            "## {}\n{}\n\n",
+            message.role,
+            types::truncate_chars(&content, 6_000)
+        ));
         if out.len() >= 32_000 {
             break;
         }

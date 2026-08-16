@@ -1,22 +1,16 @@
 //! Astro 本机根（默认 `~/.astro` / `ASTRO_MEMORY_DIR`）——无 SQLite 依赖。
 //!
-//! 提供路径解析、日志、嵌套 spawn 深度，以及配置层（图标、工具开关、内容扫描）。
+//! 提供路径解析、日志以及配置层（图标、工具开关、内容扫描）。
 //! 供不需要持久化存储的 crate（如 `mcp`）直接依赖，避免引入 `rusqlite`。
 
 pub mod config;
 pub mod infra;
-pub mod spawn_depth;
 pub mod test_env;
 pub mod workspace;
 
 // ─── flat re-exports ─────────────────────────────────────────────────────────
 
 pub use workspace::*;
-
-pub use spawn_depth::{
-    can_spawn_nested, current_spawn_depth, effective_max_spawn_depth, scope_spawn_depth,
-    scoped_max_spawn_depth, SpawnDepthCtx, DEFAULT_MAX_SPAWN_DEPTH,
-};
 
 pub use infra::log_query::{
     default_agent_log_query, query_agent_logs, AgentLogLine, AgentLogQuery, LogSource,

@@ -11,7 +11,7 @@ use std::pin::Pin;
 
 use crate::context::ToolContext;
 
-pub use types::tool_entry::{NestingPolicy, ToolEntry};
+pub use types::tool_entry::ToolEntry;
 
 /// 内置工具统一异步 handler：可包 sync/async、`&mut ToolContext`、按 name 路由。
 ///
@@ -166,26 +166,6 @@ impl ToolRegistry {
     /// 按名称移除单个工具（不存在则 no-op）。
     pub fn unregister(&mut self, name: &str) {
         self.tools.remove(name);
-    }
-
-    /// 根据各工具声明的 [`NestingPolicy`] 移除不适合当前嵌套层级的工具。
-    ///
-    /// - `is_leaf_role`: 当前子 Agent 角色是否为 Leaf（不可再委派）。
-    /// - `is_leaf_depth`: 嵌套深度是否已达上限（`SpawnDepthCtx::is_leaf()`）。
-    pub fn strip_by_nesting_policy(&mut self, is_leaf_role: bool, is_leaf_depth: bool) {
-        let to_remove: Vec<String> = self
-            .tools
-            .values()
-            .filter(|t| match t.nesting_policy {
-                NestingPolicy::Always => false,
-                NestingPolicy::TopLevelOnly => true,
-                NestingPolicy::OrchestratorAndAbove => is_leaf_role || is_leaf_depth,
-            })
-            .map(|t| t.name.clone())
-            .collect();
-        for name in to_remove {
-            self.unregister(&name);
-        }
     }
 
     /// 检查是否已注册指定名称的工具。
@@ -418,7 +398,7 @@ mod tests {
     fn registered_builtins_mark_exclusive_tools() {
         let mut reg = ToolRegistry::new();
         crate::register_all(&mut reg);
-        assert!(reg.any_exclusive_access(&["memory", "subagent", "pin_context"]));
+        assert!(reg.any_exclusive_access(&["memory", "spawn_agent", "pin_context"]));
         assert!(!reg.any_exclusive_access(&["web_search"]));
         assert!(reg.get("persona_create").unwrap().exclusive_access);
         assert!(reg.get("context_search").is_some());

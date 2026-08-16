@@ -31,8 +31,13 @@ async fn register_all_includes_panel_tools() {
         "speech_gen",
         "skills",
         "ask_user",
-        "subagent",
-        "pipeline",
+        "spawn_agent",
+        "list_agents",
+        "read_agent",
+        "send_message_to_agent",
+        "wait_agents",
+        "interrupt_agent",
+        "close_agent",
         "persona_create",
         "todo",
     ] {
@@ -82,6 +87,7 @@ async fn file_ops_write_and_read() {
         credentials: &creds,
         chat_targets: &[],
         execution: None,
+        permission_profile: None,
         hook_bus: None,
         workspace_write_grant: false,
     };

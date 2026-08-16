@@ -253,7 +253,7 @@ messages 中 tool 结果超阈值
 - 可插拔多后端（sqlite / postgres / …），统一存 session / memory / trace / eval。
 
 ### Astro
-- 本地多 SQLite：session（sessions/messages/FTS5）、usage、cron、orchestration、artifacts。
+- 本地多 SQLite：session（sessions/messages/FTS5）、usage、cron、subagents、artifacts。
 
 关键路径：`crates/agent-session/src/store/schema.rs`、`crates/agent-session/src/store/mod.rs`、`usage/src/db.rs`
 
@@ -264,7 +264,7 @@ messages 中 tool 结果超阈值
 
 ### 已落地
 - `common::sqlite::{open_wal, delete_sqlite_files, SqliteStore, ExampleSqliteStore}`：共享 WAL 打开 + path/migrate 协议
-- 生产库均已 `impl SqliteStore`：`UsageDb` / `SessionStore` / `KnowledgeDb` / `ArtifactDb` / `CronRunDb` / `OrchestrationDb`
+- 生产库均已统一 SQLite 连接约定：`UsageDb` / `SessionStore` / `KnowledgeDb` / `ArtifactDb` / `CronRunDb` / `AgentThreadStore`
 - 不合并多库、不上 Postgres；旧 `usage::sqlite_store` 已删除，一律用 `common::sqlite`
 - Memory 仍为 Markdown + `MemoryOps`，不塞进 SQLite trait
 
@@ -309,38 +309,19 @@ Agno 的 Team 是一等运行时，而不是简单「Agent 调 Agent」。核心
 | `tasks` | Leader 维护共享任务列表，循环执行直到目标完成 |
 
 ### Astro 现状
-Astro 已有可复用积木，工具入口已压成无歧义的两维 + 持久人设：
+Astro 已改为 Codex 风格 Agent Threads：
 
-- **工具 `subagent`**（crate `delegate/` + `crates/agent-core/src/exec/delegate.rs`）：回合内并行瞬时子 Agent，独立 session，摘要回父
-- **工具 `pipeline`**（crate `orchestration/` + `crates/agent-core/src/exec/orchestration.rs`）：异步串行流水线；`action=team_*` 管理持久 Team
-- **工具 `persona_create`**：新建长期助手 workspace（禁止用来拆当前任务）
-- Insights 协作图：已有 handoff 可观测基础
+- `spawn_agent` 启动持久化独立线程，通过 `list/read/send/wait/interrupt/close` 完成全生命周期管理。
+- 自定义 agent 使用个人或项目 TOML；内置 `default` / `worker` / `explorer`。
+- 线程继承父任务权限，不隐式创建 worktree，凭证不持久化。
+- `persona_create` 仍只用于新建可切换的长期助手 workspace。
+- 旧 `subagent` 一次性委派、`pipeline` / Team 编排和 Insights 协作图已移除。
 
 | 决策 | 用哪个工具 |
 |------|------------|
-| 并行临时子任务 | `subagent` |
-| 串行多角色 / 持久 Team | `pipeline` |
+| 并行或长时间子任务 | `spawn_agent` + `wait_agents` |
+| 检查或追问子任务 | `read_agent` + `send_message_to_agent` |
 | 新建可切换长期助手 | `persona_create` |
-
-### 可借鉴
-1. **先做 Team 门面，不重写编排栈**：用现有 subagent / pipeline / persona_create 作为执行底座。
-2. **模式先落前三个**：
-   - `coordinate`：Leader 可委派 Team 成员，随后继续合成。
-   - `route`：委派一个成员后直接返回成员结果。
-   - `broadcast`：同一任务并行发给所有成员，再汇总。
-3. **TeamDefinition 持久化**：`~/.astro/teams/{id}.json`，成员可引用已有 `agent_id` 或临时角色。
-4. **共享状态先轻量**：先做 `team_run_state` JSON merge；`tasks` 共享任务图、嵌套 Team、完整 `TeamRunEvent` 后续再上。
-
-### 已落地（本轮）
-- `orchestration::team`：`TeamDefinition` / `TeamMode` / `~/.astro/teams/{id}.json`
-- 工具：`pipeline`（`action=run|status|team_list|team_create|team_run`）
-- `team_run` 模式映射：
-  - `coordinate`：对全部成员发起 subagent，Leader 继续合成
-  - `route`：单成员直出（多成员时需 `member_id`），`respond_directly=true`
-  - `broadcast`：对全部成员并行 subagent
-  - `tasks`：串行执行共享任务板；可选 `tasks: string[]`（按成员 round-robin），缺省则每成员一步；前序结果写入 Shared Task Board 传给后续
-- `ToolEntry.exclusive_access` + `ToolRegistry::any_exclusive_access` 替代硬编码 `is_exclusive_tool`（后者 deprecated）
-- 成员执行仍走现有 subagent runtime；成员 `agent_id` 会写入定义，但本轮执行层先按角色/说明作为临时子 Agent 跑
 
 ---
 
@@ -348,7 +329,7 @@ Astro 已有可复用积木，工具入口已压成无歧义的两维 + 持久�
 
 ```text
 P0  Mid-run tool 结果压缩（Agno CompressionManager）—— 与 compact_and_split 正交，改动面可控
-P0.5 TeamDefinition + coordinate/route/broadcast 门面（复用 subagent/pipeline）
+P0.5 Agent Thread 的持久化、steer / wait / interrupt 生命周期
 P1  ContextSource trait + budget（协议化现有 Static/Dynamic/FTS）
 P2  DecisionLog + Propose 写入（挂审批，扩展入梦/review）
 P3  Knowledge Content DB + FTS（可选再 embedding）

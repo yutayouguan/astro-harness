@@ -62,17 +62,17 @@ cd apps/desktop && npm run tauri:build:universal    # universal-apple-darwin
 | `crates/agent-core` | `agent` | Agent 运行时核心：`AgentLoop` 状态机、流式多轮循环、工具分发、压缩、HITL、hooks、prompt 组装。 |
 | `crates/agent-providers` | `providers` | 多厂商 LLM/图像 Provider 层：`ProviderRegistry`、流式 `ChatStream`、fallback 链。支持 Google、OpenAI、Codex、DeepSeek、MiniMax、Ollama、Azure 等。 |
 | `crates/agent-memory` | `memory` | `MemoryManager` — MEMORY.md/USER.md 快照、dreaming 管道、待审批记忆队列、decision log、workspace bootstrap。 |
-| `crates/agent-orchestration` | `orchestration` | 多 Agent 编排：`OrchestrationDb`（`orchestration.db`）、spawn request、协作洞察图谱、Team 定义（Coordinate/Route/Broadcast/Tasks 四模式）。 |
+| `crates/agent-subagents` | `subagents` | Codex 风格 Agent Threads：持久化、自定义 agent TOML、spawn/list/read/send/wait/interrupt/close 生命周期。 |
 | `crates/agent-evolution` | `evolution` | 自进化/学习循环：改进提议、评判、信号分析、评估集、DSPy 集成。配套 Python 包 `evolution-dspy/`。 |
-| `crates/agent-delegate` | `delegate` | Sub-agent 委派：同步 `DelegateRunner`、异步 `DelegateAsyncSpawner`、`AsyncDelegateRegistry`、git worktree 隔离。 |
-| `crates/agent-home` | `home` | `~/.astro` 路径约定、日志、agent config YAML、tool-enable gates、spawn-depth 限制。无 SQLite。 |
+| `crates/agent-delegate` | `worktree` | 显式桌面多任务用的 git worktree 工具；Subagent 不会隐式创建 worktree。 |
+| `crates/agent-home` | `home` | `~/.astro` 路径约定、日志、agent config YAML、tool-enable gates。无 SQLite。 |
 | `crates/agent-skills` | `skills` | Skill 管理 — 安装、加载、注册表、摘要、备份。Skill frontmatter `astro_tools` 可 additive 开放 toolset。 |
 
 ### actions/ — 工具实现
 
 | 路径 | package name | 职责 |
 |---|---|---|
-| `crates/agent-tools` | `tools` | 全部内置工具实现（`register_all`）、注册表/分发、审批逻辑、HITL、schema sanitization。工具域：terminal、file_ops、browser、code_exec、memory、skills、delegate、orchestration、media（image_gen/tts/video/music）等。 |
+| `crates/agent-tools` | `tools` | 全部内置工具实现（`register_all`）、注册表/分发、审批逻辑、HITL、schema sanitization。工具域：terminal、file_ops、browser、code_exec、memory、skills、subagents、media（image_gen/tts/video/music）等。 |
 | `crates/agent-a2ui` | `a2ui` | AG-UI 声明式生成式 UI 表面：22 种组件（Text、Card、Button、Image、Audio、Video、Metric、ClarifyWizard 等）、模板、校验。Catalog ID: `astro://a2ui/catalog/v2`。 |
 
 ### channels/ — 对外通道
@@ -165,9 +165,9 @@ Plugin bus 事件（可拦截/变更）：`pre_llm_call`、`pre_tool_call`、`pr
 
 `AgentLoop` / `SessionStore` 含 rusqlite `RefCell`，非 Send。Cron 必须在 `current_thread` runtime 运行，通过 `spawn_blocking` 封装后对外暴露 Send future。
 
-### 多 Agent 编排
+### Agent Threads
 
-`crates/agent-orchestration` 管理多 agent 协作：`OrchestrationDb` 记录编排/步骤状态，`OrchestrationSpawnRequest` 携带 parent agent、provider 凭证、fallback 链、深度限制。`TeamDefinition` 定义团队组成（四种模式：Coordinate/Route/Broadcast/Tasks），持久化于 `~/.astro/teams/`。`collab_insights` 提供协作图谱可视化。
+`crates/agent-subagents` 是唯一 Subagent 模型。父 Agent 用 `spawn_agent` 启动独立线程，并可通过 `list_agents` / `read_agent` / `send_message_to_agent` / `wait_agents` / `interrupt_agent` / `close_agent` 管理。线程持久化到 `~/.astro/subagents.db`，凭证只在内存中传递，权限完整继承父任务，不隐式创建 git worktree。自定义 agent 从 `~/.astro/agents/*.toml` 和 `<project>/.astro/agents/*.toml` 加载，project 定义优先。
 
 ### 可视化工作流引擎
 
@@ -189,9 +189,8 @@ Plugin bus 事件（可拦截/变更）：`pre_llm_call`、`pre_tool_call`、`pr
     knowledge.db       # 知识内容 FTS
   cron/                # cron.db + jobs.json
   workflows/workflows.json
-  orchestration.db
+  subagents.db          # Agent Thread 状态与消息
   usage/usage.db
-  teams/               # 团队定义
 ```
 
 ## Key Invariants
@@ -218,4 +217,4 @@ Plugin bus 事件（可拦截/变更）：`pre_llm_call`、`pre_tool_call`、`pr
 
 ## Test Organization
 
-集成测试在各 crate `tests/` 目录下，覆盖核心路径：`crates/agent-core`（9 个测试文件：agent_test、cron_exec_test、streaming_test 等）、`crates/agent-providers`（3）、`crates/agent-orchestration`（2）、`crates/agent-tools`（4）、`crates/agent-a2ui`（3）、`crates/agent-cron`（1）、`crates/agent-server`（1）、`crates/agent-session`（2）、`crates/agent-artifacts`（1）、`crates/agent-usage`（1）。单元测试（`#[cfg(test)]`）分布在约 120 个源文件中。测试环境工具：`crates/agent-home/src/test_env.rs`。前端测试在 `apps/desktop/src/a2ui/`。
+集成测试在各 crate `tests/` 目录下，覆盖核心路径：`crates/agent-core`、`crates/agent-subagents`、`crates/agent-providers`、`crates/agent-tools`、`crates/agent-a2ui`、`crates/agent-cron`、`crates/agent-server`、`crates/agent-session`、`crates/agent-artifacts`、`crates/agent-usage`。测试环境工具：`crates/agent-home/src/test_env.rs`。前端测试在 `apps/desktop/src/a2ui/`。

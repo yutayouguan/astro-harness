@@ -38,6 +38,7 @@ async fn confirm_emits_valid_a2ui_hitl() {
         credentials: &creds,
         chat_targets: &[],
         execution: None,
+        permission_profile: None,
         hook_bus: None,
         workspace_write_grant: false,
     };
@@ -80,6 +81,7 @@ async fn clarify_emits_valid_a2ui_hitl() {
         credentials: &creds,
         chat_targets: &[],
         execution: None,
+        permission_profile: None,
         hook_bus: None,
         workspace_write_grant: false,
     };
@@ -137,6 +139,7 @@ async fn clarify_free_text_step_allows_empty_options() {
         credentials: &creds,
         chat_targets: &[],
         execution: None,
+        permission_profile: None,
         hook_bus: None,
         workspace_write_grant: false,
     };
@@ -200,6 +203,7 @@ async fn clarify_multi_emits_wizard_hitl() {
         credentials: &creds,
         chat_targets: &[],
         execution: None,
+        permission_profile: None,
         hook_bus: None,
         workspace_write_grant: false,
     };
@@ -268,6 +272,7 @@ async fn ask_user_location_mode_emits_valid_a2ui_hitl() {
         credentials: &creds,
         chat_targets: &[],
         execution: None,
+        permission_profile: None,
         hook_bus: None,
         workspace_write_grant: false,
     };
@@ -309,6 +314,7 @@ async fn present_emits_valid_astro_ui() {
         credentials: &creds,
         chat_targets: &[],
         execution: None,
+        permission_profile: None,
         hook_bus: None,
         workspace_write_grant: false,
     };
@@ -352,6 +358,7 @@ async fn ask_user_rejects_mixed_questions_and_body() {
         credentials: &creds,
         chat_targets: &[],
         execution: None,
+        permission_profile: None,
         hook_bus: None,
         workspace_write_grant: false,
     };

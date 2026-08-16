@@ -2,7 +2,7 @@
 //!
 //! 对外暴露构建器、循环控制、消息转换与工具注册等能力，供 Tauri 前端与后端服务复用。
 //! 工具注册表实现位于 `tools` crate，本 crate re-export [`ToolRegistry`]。
-//! 领域细分能力（上下文、hook、cron/delegate/多智能体执行等）请通过 `prompt::` /
+//! 领域细分能力（上下文、hook、cron/Agent Thread 执行等）请通过 `prompt::` /
 //! `control::` / `exec::` 子模块路径访问，根导出仅保留最常用的顶层类型。
 
 /// 声明式 Agent 构建与规格导出。
@@ -13,7 +13,7 @@ pub mod compression;
 pub mod control;
 /// Agent 运行期事件广播，供 UI 订阅流式输出与工具调用。
 pub mod event_bus;
-/// 执行域聚合模块（cron / delegate / orchestration / multi_agent / memory_review）。
+/// 执行域聚合模块（cron / subagents / memory_review）。
 pub mod exec;
 /// 提示词域：上下文、消息转换、hook 与 prompt builder。
 pub mod prompt;

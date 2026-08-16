@@ -1,6 +1,6 @@
 ---
 name: create-agent
-description: 根据用户填写的助手模板，创建**持久** Agent 记忆空间（workspace-{id}）、写入 agents/{id}/config.json，并填充 AGENT/IDENTITY/SOUL/USER/MEMORY 等 md。用户说「帮我创建一个助手」或点击「新建 Agent」时使用。不要用于回合内拆任务——那是 subagent / pipeline。
+description: 根据用户填写的助手模板，创建**持久** Agent 记忆空间（workspace-{id}）、写入 agents/{id}/config.json，并填充 AGENT/IDENTITY/SOUL/USER/MEMORY 等 md。用户说「帮我创建一个助手」或点击「新建 Agent」时使用。不要用于回合内拆任务——那是 Agent Thread。
 astro_bundled_rev: 5
 ---
 
@@ -8,7 +8,7 @@ astro_bundled_rev: 5
 
 当用户用下面模板（或等价描述）要求**新建长期助手人格**时，执行本技能。
 
-**这与 `subagent` / `pipeline` 不同**：`persona_create` 新建可切换、带 MEMORY/IDENTITY 的持久助手；`subagent` 仅在当前回合并行 spawn 短暂子任务；`pipeline` 做串行多角色/Team。不要把「委派一个子任务」说成或做成「创建一个 Agent」。
+**这与 Agent Thread 不同**：`persona_create` 新建可切换、带 MEMORY/IDENTITY 的持久助手；`spawn_agent` 创建当前任务所属的独立线程。不要把「委派一个子任务」说成或做成「创建一个持久 Agent」。
 
 ## 用户模板
 
@@ -47,4 +47,4 @@ astro_bundled_rev: 5
 - 配置（模型/工具/MCP）写在 `agents/{id}/`，工作区文件写在 `workspace-{id}/`。
 - 专属技能放 `workspace-{id}/skills/`；公共技能继续用 `~/.astro/skills/`。
 - 不必为图标额外调用工具；`persona_create` 会自动完成。
-- 并行改代码仓、拆解当前任务 → 用 `subagent`（可选 git worktree）；串行多角色 → 用 `pipeline`。不要 `persona_create`。
+- 并行改代码仓、拆解当前任务 → 用 `spawn_agent` 启动 Agent Thread。不要 `persona_create`。

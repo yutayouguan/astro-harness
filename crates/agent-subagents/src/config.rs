@@ -5,6 +5,7 @@ use std::path::{Path, PathBuf};
 use serde::Deserialize;
 
 #[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct AgentDefinition {
     pub name: String,
     pub description: String,
@@ -13,8 +14,6 @@ pub struct AgentDefinition {
     pub model: Option<String>,
     #[serde(default)]
     pub model_reasoning_effort: Option<String>,
-    #[serde(default)]
-    pub sandbox_mode: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -168,7 +167,6 @@ fn builtin_agents() -> Vec<AgentDefinition> {
             developer_instructions: "Complete the delegated task. Keep the parent informed with a concise, evidence-based result.".into(),
             model: None,
             model_reasoning_effort: None,
-            sandbox_mode: None,
         },
         AgentDefinition {
             name: "worker".into(),
@@ -176,7 +174,6 @@ fn builtin_agents() -> Vec<AgentDefinition> {
             developer_instructions: "Own the implementation task end to end. Make focused changes, validate them, and report files changed plus verification results.".into(),
             model: None,
             model_reasoning_effort: None,
-            sandbox_mode: None,
         },
         AgentDefinition {
             name: "explorer".into(),
@@ -184,7 +181,6 @@ fn builtin_agents() -> Vec<AgentDefinition> {
             developer_instructions: "Stay read-only. Trace real code paths, gather evidence, and return concise findings with file and symbol references.".into(),
             model: None,
             model_reasoning_effort: None,
-            sandbox_mode: Some("read-only".into()),
         },
     ]
 }
@@ -223,10 +219,10 @@ pub fn resolve_agent(
         .clone()
         .or_else(|| non_empty(explicit_effort))
         .or_else(|| settings.default_subagent_reasoning_effort.clone());
-    let sandbox_mode = definition
-        .sandbox_mode
-        .clone()
-        .or_else(|| non_empty(parent_sandbox_mode));
+    // Codex subagents inherit the parent task's permission profile. Agent
+    // definitions may specialize behavior and model selection, but cannot
+    // elevate or replace sandbox permissions.
+    let sandbox_mode = non_empty(parent_sandbox_mode);
 
     Ok(ResolvedAgent {
         definition,
@@ -274,5 +270,25 @@ model = "provider:custom"
         .unwrap();
         assert_eq!(resolved.model.as_deref(), Some("provider:custom"));
         assert_eq!(resolved.definition.description, "custom");
+        assert_eq!(resolved.sandbox_mode.as_deref(), Some("workspace-write"));
+    }
+
+    #[test]
+    fn custom_agent_cannot_override_parent_permissions() {
+        let root = tempfile::tempdir().unwrap();
+        let agents = root.path().join("agents");
+        fs::create_dir_all(&agents).unwrap();
+        fs::write(
+            agents.join("unsafe.toml"),
+            r#"name = "unsafe"
+description = "invalid permission override"
+developer_instructions = "work"
+sandbox_mode = "danger-full-access"
+"#,
+        )
+        .unwrap();
+        let catalog = load_agent_catalog(root.path(), None);
+        assert!(!catalog.agents.contains_key("unsafe"));
+        assert_eq!(catalog.diagnostics.len(), 1);
     }
 }

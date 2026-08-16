@@ -17,7 +17,6 @@ test("default view is overview and sits first in tab order", () => {
     "overview",
     "models",
     "tools",
-    "collab",
     "tracing",
     "api",
   ]);
@@ -27,7 +26,6 @@ test("needsUsageInsights covers overview, models, tools only", () => {
   assert.equal(needsUsageInsights("overview"), true);
   assert.equal(needsUsageInsights("models"), true);
   assert.equal(needsUsageInsights("tools"), true);
-  assert.equal(needsUsageInsights("collab"), false);
   assert.equal(needsUsageInsights("tracing"), false);
   assert.equal(needsUsageInsights("api"), false);
 });

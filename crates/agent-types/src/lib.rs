@@ -56,5 +56,5 @@ pub use text::{truncate_chars, truncate_tool_result, truncate_utf8, MAX_TOOL_RES
 pub use tool_call::{
     extract_tool_calls, resolve_tool_calls, ParsedToolCall, ToolCallAccumulator, ToolCallDelta,
 };
-pub use tool_entry::{NestingPolicy, ToolEntry};
+pub use tool_entry::ToolEntry;
 pub use tool_output::ToolOutput;

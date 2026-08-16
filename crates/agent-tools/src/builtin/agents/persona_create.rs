@@ -3,7 +3,7 @@
 //! 调用 [`home::create_agent_with_profile`]；若 `activate`，会就地更新
 //! [`ToolContext`] 的工作区与 MemoryManager，便于后续 file_ops 写到新空间。
 //!
-//! **禁止**用本工具拆解当前回合任务——并行临时子任务用 `subagent`，串行多角色用 `pipeline`。
+//! **禁止**用本工具拆解当前回合任务——这类任务应启动 Agent Thread。
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -56,13 +56,13 @@ pub fn register(registry: &mut ToolRegistry) {
         toolset: "persona".to_string(),
         description:
             "Create a durable Agent persona with persistent workspace (MEMORY/IDENTITY/SOUL). \
-FORBIDDEN for in-turn task splitting—use subagent (parallel one-shot) or pipeline (serial roles). \
+FORBIDDEN for in-turn task splitting—use spawn_agent to create an Agent Thread. \
 Prefer after loading the create-agent skill."
                 .to_string(),
         schema: schema_for_args::<PersonaCreateArgs>(),
         check_fn: None,
         icon: "user-plus",
-        ..ToolEntry::lifecycle_defaults().exclusive().top_level_only()
+        ..ToolEntry::lifecycle_defaults().exclusive()
     });
 }
 

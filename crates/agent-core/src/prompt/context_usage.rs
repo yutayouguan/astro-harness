@@ -6,10 +6,27 @@ use types::message::{Message, Role};
 
 pub const DEFAULT_CONTEXT_WINDOW: u32 = 128_000;
 
-const SUBAGENT_TOOLS: &[&str] = &["subagent", "pipeline"];
+const SUBAGENT_TOOLS: &[&str] = &[
+    "spawn_agent",
+    "list_agents",
+    "read_agent",
+    "send_message_to_agent",
+    "wait_agents",
+    "interrupt_agent",
+    "close_agent",
+];
 
 /// 写入上下文的 Agent 编排工具定义（与「子 Agent 返回」区分）。
-const AGENT_DEF_TOOLS: &[&str] = &["subagent", "pipeline", "persona_create"];
+const AGENT_DEF_TOOLS: &[&str] = &[
+    "spawn_agent",
+    "list_agents",
+    "read_agent",
+    "send_message_to_agent",
+    "wait_agents",
+    "interrupt_agent",
+    "close_agent",
+    "persona_create",
+];
 
 fn is_agent_def_tool_name(name: &str) -> bool {
     AGENT_DEF_TOOLS.contains(&name)
@@ -428,8 +445,8 @@ mod tests {
     fn agent_def_tools_go_to_agents_segment() {
         let tools: Vec<serde_json::Value> = serde_json::json!([
             {"type":"function","function":{"name":"file_ops","parameters":{}}},
-            {"type":"function","function":{"name":"subagent","parameters":{"task":"x"}}},
-            {"type":"function","function":{"name":"pipeline","parameters":{}}}
+            {"type":"function","function":{"name":"spawn_agent","parameters":{"task":"x"}}},
+            {"type":"function","function":{"name":"wait_agents","parameters":{}}}
         ])
         .as_array()
         .unwrap()
@@ -452,8 +469,8 @@ mod tests {
         assert_eq!(snap.segment("tools").unwrap().items.len(), 1);
         let agents = snap.segment("agents").unwrap();
         assert_eq!(agents.items.len(), 2);
-        assert!(agents.items.iter().any(|i| i.id == "subagent"));
-        assert!(agents.items.iter().any(|i| i.id == "pipeline"));
+        assert!(agents.items.iter().any(|i| i.id == "spawn_agent"));
+        assert!(agents.items.iter().any(|i| i.id == "wait_agents"));
     }
 
     #[test]
@@ -490,12 +507,12 @@ mod tests {
     }
 
     #[test]
-    fn delegate_tool_result_counts_as_subagent() {
+    fn agent_thread_tool_result_counts_as_subagent() {
         let assistant = Message::assistant_with_tools(
             "",
             vec![ToolCall {
                 id: "c1".into(),
-                name: "subagent".into(),
+                name: "spawn_agent".into(),
                 arguments: serde_json::json!({}),
                 signature: None,
             }],
@@ -521,6 +538,6 @@ mod tests {
             snap.segment("conversation").map(|s| s.tokens).unwrap_or(0),
             0
         );
-        assert_eq!(snap.segment("subagent").unwrap().items[0].id, "subagent");
+        assert_eq!(snap.segment("subagent").unwrap().items[0].id, "spawn_agent");
     }
 }

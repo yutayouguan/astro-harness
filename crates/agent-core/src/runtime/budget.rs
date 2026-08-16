@@ -1,16 +1,13 @@
 //! 每 Agent 独立的迭代预算（对齐 Hermes `IterationBudget`）。
 //!
 //! - 父 Agent 默认上限为 [`DEFAULT_MAX_ITERATIONS`]（90）
-//! - 子 Agent 使用独立预算，默认来自配置 `delegation.child_max_iterations`（50）
+//! - 每个 Agent Thread 使用自己的独立预算
 //! - `code_exec` 等廉价轮次可通过 [`IterationBudget::refund`] 退还
 
 use std::cell::Cell;
 
 /// 父 Agent / 主会话默认工具迭代上限（对齐 Hermes `max_iterations`）。
 pub const DEFAULT_MAX_ITERATIONS: usize = 90;
-
-/// 子 Agent 默认独立迭代上限（对齐 Hermes `delegation.max_iterations`）。
-pub const DEFAULT_CHILD_MAX_ITERATIONS: usize = 50;
 
 /// 单任务迭代计数器：每轮 API/工具迭代 `consume` 一次，必要时 `refund`。
 ///
@@ -107,7 +104,6 @@ mod tests {
     #[test]
     fn defaults_match_hermes() {
         assert_eq!(DEFAULT_MAX_ITERATIONS, 90);
-        assert_eq!(DEFAULT_CHILD_MAX_ITERATIONS, 50);
     }
 
     #[test]

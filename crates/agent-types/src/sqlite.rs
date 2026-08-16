@@ -1,6 +1,6 @@
 //! 共享 SQLite 打开约定与 [`SqliteStore`] 协议。
 //!
-//! 桌面多库（session / usage / knowledge / artifacts / cron / orchestration）
+//! 桌面多库（session / usage / knowledge / artifacts / cron / subagents）
 //! 对齐 WAL 打开与 `path`/`migrate` 生命周期；不上 Postgres，不合并多库。
 
 use std::path::{Path, PathBuf};

@@ -36,7 +36,6 @@ pub struct AgentDefinitionDto {
     pub description: String,
     pub model: Option<String>,
     pub model_reasoning_effort: Option<String>,
-    pub sandbox_mode: Option<String>,
 }
 
 #[tauri::command]
@@ -91,9 +90,7 @@ pub async fn interrupt_subagent_thread(
 }
 
 #[tauri::command]
-pub async fn close_subagent_thread(
-    args: ThreadIdArgs,
-) -> Result<subagents::AgentThread, String> {
+pub async fn close_subagent_thread(args: ThreadIdArgs) -> Result<subagents::AgentThread, String> {
     let dispatch = agent::exec::dispatch::DefaultAgentThreadDispatch;
     dispatch
         .close_agent(subagents::CloseAgentRequest {
@@ -116,7 +113,6 @@ pub async fn list_subagent_definitions() -> Result<Vec<AgentDefinitionDto>, Stri
             description: definition.description,
             model: definition.model,
             model_reasoning_effort: definition.model_reasoning_effort,
-            sandbox_mode: definition.sandbox_mode,
         })
         .collect())
 }

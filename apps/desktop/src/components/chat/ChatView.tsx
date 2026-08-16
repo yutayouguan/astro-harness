@@ -15,6 +15,7 @@ import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { useClampPopover } from "../../hooks/ui/useClampPopover";
 import {
   AtSign,
+  Bot,
   ChartPie,
   Check,
   ChevronDown,
@@ -129,6 +130,7 @@ import { useTypingPlaceholder } from "../../hooks/chat/useTypingPlaceholder";
 import LocationA2UISurface from "./LocationA2UISurface";
 import A2UISurfaceCard from "./A2UISurfaceCard";
 import TodoProgress from "./TodoProgress";
+import SubagentsPanel from "./SubagentsPanel";
 import { formatElapsedSec } from "../../lib/chat/elapsedSec";
 import { coalesceReasoningSegments } from "../../lib/chat/chatTimeline";
 import { isLocationRequiredSurface } from "../../lib/chat/locationSurface";
@@ -206,6 +208,8 @@ function MessageTokenStats({
 
 /** ChatView 入参：消息列表、输入态与流式控制回调 */
 type Props = {
+  /** 当前父会话 id，用于展示其 Agent Threads。 */
+  sessionId?: string | null;
   /** 当前会话消息（含欢迎占位） */
   messages: ChatMessage[];
   /** 输入框文本 */
@@ -616,6 +620,7 @@ function MessageActions({
 }
 
 export default function ChatView({
+  sessionId = null,
   messages,
   input,
   attachments,
@@ -701,6 +706,7 @@ export default function ChatView({
   const [modeSwitchSecLeft, setModeSwitchSecLeft] = useState(MODE_SWITCH_COUNTDOWN_SEC);
   const [contextPopoverOpen, setContextPopoverOpen] = useState(false);
   const [mcpOpen, setMcpOpen] = useState(false);
+  const [subagentsOpen, setSubagentsOpen] = useState(false);
   const [recording, setRecording] = useState(false);
   const [transcribing, setTranscribing] = useState(false);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -2704,6 +2710,23 @@ export default function ChatView({
                 </button>
               ) : null}
 
+              <button
+                type="button"
+                className={`composer-icon-btn ${subagentsOpen ? "is-open" : ""}`}
+                title={t("subagents.open")}
+                aria-label={t("subagents.open")}
+                aria-expanded={subagentsOpen}
+                onClick={() => {
+                  setMcpOpen(false);
+                  setApprovalMenuOpen(false);
+                  setContextPopoverOpen(false);
+                  setPaletteKind(null);
+                  setSubagentsOpen(true);
+                }}
+              >
+                <Bot size={17} strokeWidth={2} />
+              </button>
+
               <div className="composer-mcp-wrap" ref={mcpWrapRef}>
                 <button
                   type="button"
@@ -2914,6 +2937,11 @@ export default function ChatView({
           </div>
         </div>
       </form>
+      <SubagentsPanel
+        open={subagentsOpen}
+        parentSessionId={sessionId}
+        onClose={() => setSubagentsOpen(false)}
+      />
     </section>
     </ChatMediaAttachProvider>
   );

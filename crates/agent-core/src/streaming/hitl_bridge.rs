@@ -11,19 +11,6 @@ use crate::control::interrupt::Interrupt;
 use super::lifecycle::emit;
 use super::types::MultiTurnStreamItem;
 
-tokio::task_local! {
-    /// 串行工具执行时注入的当前会话 HITL 上下文。
-    pub(crate) static PARENT_HITL_CTX: Option<ParentHitlCtx>;
-}
-
-/// 当前会话 HITL 桥。
-#[derive(Clone)]
-pub(crate) struct ParentHitlCtx {
-    pub gate: Arc<HitlGate>,
-    pub tx: mpsc::Sender<anyhow::Result<MultiTurnStreamItem>>,
-    pub run_id: String,
-}
-
 pub(crate) struct AstroHitlPayload {
     pub reason: String,
     pub message: String,

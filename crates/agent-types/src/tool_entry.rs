@@ -1,13 +1,4 @@
-//! 工具注册元数据：ToolEntry 与 NestingPolicy。
-
-/// 工具在嵌套子 Agent 中的可用性策略。
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub enum NestingPolicy {
-    #[default]
-    Always,
-    TopLevelOnly,
-    OrchestratorAndAbove,
-}
+//! 工具注册元数据。
 
 /// 单个可注册工具的完整元数据条目。
 pub struct ToolEntry {
@@ -20,7 +11,6 @@ pub struct ToolEntry {
     pub needs_confirmation: bool,
     pub stop_after_tool_call: bool,
     pub exclusive_access: bool,
-    pub nesting_policy: NestingPolicy,
 }
 
 impl ToolEntry {
@@ -35,7 +25,6 @@ impl ToolEntry {
             needs_confirmation: false,
             stop_after_tool_call: false,
             exclusive_access: false,
-            nesting_policy: NestingPolicy::Always,
         }
     }
 
@@ -51,16 +40,6 @@ impl ToolEntry {
 
     pub fn exclusive(mut self) -> Self {
         self.exclusive_access = true;
-        self
-    }
-
-    pub fn top_level_only(mut self) -> Self {
-        self.nesting_policy = NestingPolicy::TopLevelOnly;
-        self
-    }
-
-    pub fn orchestrator_and_above(mut self) -> Self {
-        self.nesting_policy = NestingPolicy::OrchestratorAndAbove;
         self
     }
 }

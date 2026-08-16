@@ -1,0 +1,208 @@
+.subagents-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-drawer);
+  display: flex;
+  justify-content: flex-end;
+  background: color-mix(in srgb, var(--ink) 7%, transparent);
+}
+
+.subagents-panel {
+  width: min(720px, 94vw);
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  color: var(--ink);
+  border-left: 1px solid color-mix(in srgb, var(--tone) 18%, var(--glass-edge));
+  background:
+    linear-gradient(160deg, color-mix(in srgb, var(--tone-soft) 28%, transparent), transparent 42%),
+    color-mix(in srgb, var(--composer-bg, rgba(248, 250, 255, 0.96)) 92%, #f8faff);
+  box-shadow: -18px 0 48px color-mix(in srgb, var(--ink) 14%, transparent);
+  backdrop-filter: blur(30px) saturate(1.35);
+  -webkit-backdrop-filter: blur(30px) saturate(1.35);
+  animation: subagents-panel-in 0.2s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@keyframes subagents-panel-in {
+  from { transform: translateX(24px); opacity: 0; }
+  to { transform: none; opacity: 1; }
+}
+
+.subagents-head {
+  min-height: 58px;
+  padding: 13px 15px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  border-bottom: 1px solid var(--glass-edge);
+}
+
+.subagents-head h2 {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 14px;
+}
+
+.subagents-head h2 svg { color: var(--tone); }
+.subagents-head p { margin: 4px 0 0; color: var(--ink-soft); font-size: 11.5px; }
+.subagents-head-actions { display: flex; gap: 6px; }
+.subagents-head-actions button,
+.subagents-thread-head button {
+  min-height: 28px;
+  padding: 0 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  border: 1px solid var(--glass-edge);
+  border-radius: 9px;
+  color: var(--ink-soft);
+  background: color-mix(in srgb, var(--glass-panel) 70%, transparent);
+  cursor: pointer;
+  font-size: 11px;
+}
+
+.subagents-head-actions button:hover,
+.subagents-thread-head button:hover { color: var(--tone); border-color: color-mix(in srgb, var(--tone) 32%, var(--glass-edge)); }
+.subagents-head-actions button:disabled,
+.subagents-thread-head button:disabled { opacity: 0.5; cursor: default; }
+
+html[data-theme="dark"] .subagents-panel {
+  background:
+    linear-gradient(160deg, color-mix(in srgb, var(--tone-soft) 22%, transparent), transparent 42%),
+    color-mix(in srgb, var(--composer-bg, rgba(15, 18, 30, 0.96)) 82%, #080a12);
+}
+
+.subagents-layout {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 220px minmax(0, 1fr);
+}
+
+.subagents-list {
+  min-height: 0;
+  padding: 8px;
+  overflow: auto;
+  border-right: 1px solid var(--glass-edge);
+}
+
+.subagents-list > button {
+  width: 100%;
+  padding: 9px;
+  display: grid;
+  grid-template-columns: 9px minmax(0, 1fr);
+  gap: 8px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  color: inherit;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.subagents-list > button:hover { background: color-mix(in srgb, var(--tone) 6%, transparent); }
+.subagents-list > button.is-active {
+  border-color: color-mix(in srgb, var(--tone) 20%, var(--glass-edge));
+  background: color-mix(in srgb, var(--tone-soft) 45%, transparent);
+}
+
+.subagents-status {
+  width: 7px;
+  height: 7px;
+  margin-top: 5px;
+  border-radius: 50%;
+  background: var(--ink-faint);
+}
+.subagents-status.is-running,
+.subagents-status.is-pending { background: var(--tone); box-shadow: 0 0 0 3px color-mix(in srgb, var(--tone) 12%, transparent); }
+.subagents-status.is-completed { background: #22a06b; }
+.subagents-status.is-failed { background: #dc4c4c; }
+.subagents-status.is-interrupted { background: #d58b21; }
+
+.subagents-list-copy { min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.subagents-list-copy strong { font-size: 12px; font-weight: 650; }
+.subagents-list-copy small {
+  overflow: hidden;
+  color: var(--ink-soft);
+  font-size: 10.5px;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.subagents-detail { min-width: 0; min-height: 0; display: flex; flex-direction: column; }
+.subagents-thread-head {
+  padding: 9px 12px;
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  border-bottom: 1px solid var(--glass-edge);
+}
+.subagents-thread-head > div { display: flex; align-items: center; gap: 7px; }
+.subagents-thread-head strong { font-size: 12.5px; }
+.subagents-thread-head span {
+  padding: 2px 6px;
+  border-radius: 999px;
+  color: var(--tone);
+  background: color-mix(in srgb, var(--tone-soft) 60%, transparent);
+  font-size: 10px;
+}
+
+.subagents-messages { flex: 1; min-height: 0; overflow: auto; padding: 14px; }
+.subagents-messages article { max-width: 86%; margin: 0 0 12px; }
+.subagents-messages article.is-user { margin-left: auto; }
+.subagents-messages article > span { display: block; margin-bottom: 4px; color: var(--ink-soft); font-size: 10px; }
+.subagents-messages article.is-user > span { text-align: right; }
+.subagents-messages article p {
+  margin: 0;
+  padding: 9px 11px;
+  border: 1px solid var(--glass-edge);
+  border-radius: 11px;
+  background: color-mix(in srgb, var(--glass-panel) 68%, transparent);
+  font-size: 12px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+}
+.subagents-messages article.is-user p { background: color-mix(in srgb, var(--tone-soft) 55%, transparent); }
+
+.subagents-composer { padding: 10px; display: flex; gap: 7px; border-top: 1px solid var(--glass-edge); }
+.subagents-composer textarea {
+  flex: 1;
+  min-width: 0;
+  resize: none;
+  border: 1px solid var(--glass-edge);
+  border-radius: 10px;
+  padding: 8px 10px;
+  color: var(--ink);
+  background: color-mix(in srgb, var(--composer-bg) 85%, transparent);
+  font: inherit;
+  font-size: 12px;
+  outline: none;
+}
+.subagents-composer textarea:focus { border-color: color-mix(in srgb, var(--tone) 42%, var(--glass-edge)); }
+.subagents-composer button {
+  width: 34px;
+  border: none;
+  border-radius: 10px;
+  color: white;
+  background: var(--tone);
+  cursor: pointer;
+}
+.subagents-composer button:disabled { opacity: 0.45; cursor: default; }
+
+.subagents-empty { margin: auto; max-width: 320px; padding: 24px; color: var(--ink-soft); text-align: center; font-size: 12px; line-height: 1.6; }
+.subagents-error { color: #cf4545; font-size: 11px; white-space: pre-wrap; }
+.subagents-error-global { padding: 8px 12px; border-top: 1px solid color-mix(in srgb, #cf4545 22%, transparent); }
+
+@media (max-width: 640px) {
+  .subagents-layout { grid-template-columns: 132px minmax(0, 1fr); }
+  .subagents-panel { width: 100%; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .subagents-panel { animation: none; }
+}

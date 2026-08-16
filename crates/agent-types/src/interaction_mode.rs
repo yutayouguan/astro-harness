@@ -41,8 +41,8 @@ Tools enabled. For complex multi-step work, call switch_mode(to=\"plan\", reason
             }
             Self::Plan => {
                 "# Interaction mode: Plan (read-only planning) / 交互模式：Plan（只读规划）\n\
-Read-only: file_ops(read/list/search), web_search, todo. No writes, terminal, code_exec, subagent, pipeline, or memory. When ready, call switch_mode(to=\"agent\", reason=…, summary=plan summary).\n\
-可用 file_ops(read/list/search)、web_search、todo 等只读工具。禁止写文件、terminal、code_exec、subagent、pipeline、memory。\n\
+Read-only: file_ops(read/list/search), web_search, todo. No writes, terminal, code_exec, agent-thread tools, or memory. When ready, call switch_mode(to=\"agent\", reason=…, summary=plan summary).\n\
+可用 file_ops(read/list/search)、web_search、todo 等只读工具。禁止写文件、terminal、code_exec、Agent Thread 工具、memory。\n\
 计划就绪后调用 switch_mode(to=\"agent\", reason=…, summary=计划摘要) 请求执行授权。"
             }
             Self::Ask => {
@@ -52,8 +52,8 @@ Explain and retrieve; do not modify files or run side effects. To implement, cal
             }
             Self::Multitask => {
                 "# Interaction mode: MultiTask / 交互模式：MultiTask\n\
-Split the goal with subagent (parallel one-shot) or pipeline (serial roles); then summarize.\n\
-用 subagent 并行拆临时子任务，或用 pipeline 串行多角色，再汇总结果。"
+Spawn first-class agent threads with spawn_agent, inspect or steer them as needed, wait with wait_agents, then summarize.\n\
+用 spawn_agent 并行启动独立 Agent Thread，按需检查或追问，用 wait_agents 等待后汇总。"
             }
         }
     }

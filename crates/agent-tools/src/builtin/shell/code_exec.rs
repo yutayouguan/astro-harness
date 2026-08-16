@@ -237,6 +237,7 @@ mod tests {
             credentials: creds,
             chat_targets: &[],
             execution: None,
+            permission_profile: None,
             hook_bus: None,
             workspace_write_grant: false,
         }

@@ -53,6 +53,7 @@ impl AgentThreadDispatch for DefaultAgentThreadDispatch {
             ));
             if let Err(error) = result {
                 tracing::warn!(thread_id, %error, "subagent thread runner failed");
+                LiveAgentThreads::global().remove(&thread_id);
                 if let Ok(store) = AgentThreadStore::open_default() {
                     let _ = store.set_status(
                         &thread_id,
@@ -70,10 +71,8 @@ impl AgentThreadDispatch for DefaultAgentThreadDispatch {
         &self,
         request: ListAgentThreadsRequest,
     ) -> anyhow::Result<Vec<AgentThread>> {
-        AgentThreadStore::open_default()?.list(
-            request.parent_session_id.as_deref(),
-            request.include_closed,
-        )
+        AgentThreadStore::open_default()?
+            .list(request.parent_session_id.as_deref(), request.include_closed)
     }
 
     async fn read_agent(
@@ -95,6 +94,9 @@ impl AgentThreadDispatch for DefaultAgentThreadDispatch {
             .ok_or_else(|| anyhow::anyhow!("unknown agent thread: {}", request.thread_id))?;
         if thread.status == AgentThreadStatus::Closed {
             anyhow::bail!("agent thread is closed: {}", request.thread_id);
+        }
+        if !LiveAgentThreads::global().is_live(&request.thread_id) {
+            anyhow::bail!("agent thread is not live: {}", request.thread_id);
         }
         store.append_message(&request.thread_id, "user", &request.message)?;
         store.set_status(&request.thread_id, AgentThreadStatus::Pending, None, None)?;
@@ -124,7 +126,10 @@ impl AgentThreadDispatch for DefaultAgentThreadDispatch {
         let thread = store
             .get(&request.thread_id)?
             .ok_or_else(|| anyhow::anyhow!("unknown agent thread: {}", request.thread_id))?;
-        if matches!(thread.status, AgentThreadStatus::Pending | AgentThreadStatus::Running) {
+        if matches!(
+            thread.status,
+            AgentThreadStatus::Pending | AgentThreadStatus::Running
+        ) {
             LiveAgentThreads::global().interrupt(&request.thread_id)?;
             store.set_status(
                 &request.thread_id,
@@ -146,12 +151,7 @@ impl AgentThreadDispatch for DefaultAgentThreadDispatch {
         if LiveAgentThreads::global().is_live(&request.thread_id) {
             LiveAgentThreads::global().close(&request.thread_id)?;
         }
-        store.set_status(
-            &request.thread_id,
-            AgentThreadStatus::Closed,
-            None,
-            None,
-        )?;
+        store.set_status(&request.thread_id, AgentThreadStatus::Closed, None, None)?;
         store
             .get(&request.thread_id)?
             .ok_or_else(|| anyhow::anyhow!("agent thread disappeared: {}", request.thread_id))

@@ -86,7 +86,7 @@ pub fn register(registry: &mut ToolRegistry) {
     registry.register(crate::registry::ToolEntry {
         name: "file_ops".to_string(),
         toolset: "file_ops".to_string(),
-        description: "File ops under project_root (delegated worktree) or agent workspace: read, write, append, list, mkdir, delete, search, patch, move, copy. Paths are workspace-relative; read/list/search outputs are size-capped."
+        description: "File ops under project_root or agent workspace: read, write, append, list, mkdir, delete, search, patch, move, copy. Paths are workspace-relative; read/list/search outputs are size-capped."
             .to_string(),
         schema: schema_for_args::<FileOpsArgs>(),
         check_fn: None,
@@ -169,13 +169,12 @@ pub fn dispatch(
             .permission_profile
             .clone()
             .unwrap_or(settings.selection.profile_id);
-        let profile_id = if ctx.workspace_write_grant
-            && selected_profile == types::READ_ONLY_PROFILE
-        {
-            types::WORKSPACE_PROFILE.to_string()
-        } else {
-            selected_profile
-        };
+        let profile_id =
+            if ctx.workspace_write_grant && selected_profile == types::READ_ONLY_PROFILE {
+                types::WORKSPACE_PROFILE.to_string()
+            } else {
+                selected_profile
+            };
         if !matches!(op.as_str(), "copy" | "cp") {
             enforce_file_mutation_policy(&profile_id, root, &full)?;
         }
@@ -1059,6 +1058,7 @@ mod tests {
             credentials: creds,
             chat_targets: &[],
             execution: None,
+            permission_profile: None,
             hook_bus: None,
             workspace_write_grant: false,
         }

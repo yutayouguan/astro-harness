@@ -58,7 +58,7 @@ pub fn register(registry: &mut ToolRegistry) {
         schema: schema_for_args::<MemoryArgs>(),
         check_fn: None,
         icon: "brain",
-        ..crate::registry::ToolEntry::lifecycle_defaults().exclusive().top_level_only()
+        ..crate::registry::ToolEntry::lifecycle_defaults().exclusive()
     });
 }
 

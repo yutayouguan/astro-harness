@@ -3,7 +3,6 @@ export type InsightsViewMode =
   | "overview"
   | "models"
   | "tools"
-  | "collab"
   | "tracing"
   | "api";
 
@@ -13,7 +12,6 @@ export const INSIGHTS_VIEW_ORDER: readonly InsightsViewMode[] = [
   "overview",
   "models",
   "tools",
-  "collab",
   "tracing",
   "api",
 ] as const;

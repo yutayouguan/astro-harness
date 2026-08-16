@@ -20,7 +20,10 @@ pub trait AgentThreadDispatch: Send + Sync {
         request: ListAgentThreadsRequest,
     ) -> anyhow::Result<Vec<AgentThread>>;
 
-    async fn read_agent(&self, thread_id: &str) -> anyhow::Result<(AgentThread, Vec<AgentThreadMessage>)>;
+    async fn read_agent(
+        &self,
+        thread_id: &str,
+    ) -> anyhow::Result<(AgentThread, Vec<AgentThreadMessage>)>;
 
     async fn send_message(&self, request: SendAgentMessageRequest) -> anyhow::Result<AgentThread>;
 
