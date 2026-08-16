@@ -710,7 +710,7 @@ mod path_tests {
             permission_profile: None,
             hook_bus: None,
             workspace_write_grant: false,
-            network_grant: false,
+            network_grant: crate::InProcessNetworkGrant::default(),
         };
 
         let err = resolve_workspace_file(&ctx, "../outside/secret.txt").unwrap_err();
@@ -744,7 +744,7 @@ mod path_tests {
             permission_profile: None,
             hook_bus: None,
             workspace_write_grant: false,
-            network_grant: false,
+            network_grant: crate::InProcessNetworkGrant::default(),
         };
 
         let path = resolve_workspace_file(&ctx, "ok.txt").unwrap();

@@ -487,7 +487,7 @@ mod path_tests {
             permission_profile: None,
             hook_bus: None,
             workspace_write_grant: false,
-            network_grant: false,
+            network_grant: crate::InProcessNetworkGrant::default(),
         };
 
         let err = resolve_workspace_file(&ctx, "../outside/secret.mp4").unwrap_err();

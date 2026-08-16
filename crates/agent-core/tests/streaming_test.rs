@@ -1053,6 +1053,21 @@ async fn approval_hooks_fire_pre_then_post_on_allow() {
         "post detail should include surface/choice=allow: {}",
         post.1
     );
+
+    let audits = memory::list_recent_permission_audits(dir.path(), 20).unwrap();
+    for expected in [
+        memory::PermissionAuditKind::Requested,
+        memory::PermissionAuditKind::Reviewed,
+        memory::PermissionAuditKind::Granted,
+        memory::PermissionAuditKind::Applied,
+    ] {
+        assert!(
+            audits.iter().any(|event| event.event == expected),
+            "missing {expected:?} in {audits:?}"
+        );
+    }
+    let raw_audit = std::fs::read_to_string(memory::permission_audit_path(dir.path())).unwrap();
+    assert!(!raw_audit.contains(cmd), "audit must omit command text");
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -1190,6 +1205,17 @@ async fn approval_hooks_fire_pre_then_post_on_deny() {
         )),
         "expected denial tool result; got: {:?}",
         items.iter().map(|i| format!("{i:?}")).collect::<Vec<_>>()
+    );
+
+    let audits = memory::list_recent_permission_audits(dir.path(), 20).unwrap();
+    assert!(audits
+        .iter()
+        .any(|event| event.event == memory::PermissionAuditKind::Denied));
+    assert!(
+        !audits
+            .iter()
+            .any(|event| event.event == memory::PermissionAuditKind::Applied),
+        "denied permission must not be recorded as applied"
     );
 }
 

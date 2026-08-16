@@ -8,6 +8,7 @@ pub mod config;
 pub mod decision_log;
 pub mod dreaming;
 pub mod pending;
+pub mod permission_audit;
 pub mod protocol;
 pub mod review;
 pub mod session;
@@ -39,6 +40,11 @@ pub use dreaming::{
 pub use pending::{
     approve as approve_pending_memory, enqueue as enqueue_pending_memory, list_pending,
     pending_dir, reject as reject_pending_memory, PendingMemoryWrite,
+};
+pub use permission_audit::{
+    append_permission_audit, list_recent_permission_audits, permission_audit_path,
+    permission_snapshot_hash, try_append_permission_audit, PermissionAuditCapability,
+    PermissionAuditEvent, PermissionAuditKind,
 };
 pub use review::{
     apply_review_suggestions, build_review_digest, parse_review_llm_output, ReviewOutput,

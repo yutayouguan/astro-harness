@@ -85,15 +85,90 @@ async fn fire_post_permission_response(
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum PermissionPreflight {
     NotRequired,
-    Granted,
+    Granted(Box<PermissionAuditReceipt>),
     Denied(String),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct PermissionAuditReceipt {
+    memory_dir: std::path::PathBuf,
+    profile_id: String,
+    snapshot_hash: String,
+    request: types::PermissionRequest,
+}
+
+impl PermissionAuditReceipt {
+    fn new(
+        memory_dir: std::path::PathBuf,
+        settings: &memory::LoadedPermissionSettings,
+        profile_id: String,
+        request: types::PermissionRequest,
+    ) -> Self {
+        let snapshot_hash = memory::permission_snapshot_hash(settings, &profile_id);
+        Self {
+            memory_dir,
+            profile_id,
+            snapshot_hash,
+            request,
+        }
+    }
+
+    fn record(
+        &self,
+        kind: memory::PermissionAuditKind,
+        reviewer: Option<types::ApprovalsReviewer>,
+        result: Option<&str>,
+        duration_ms: Option<u64>,
+    ) {
+        let mut event = memory::PermissionAuditEvent::new(
+            kind,
+            &self.request,
+            self.profile_id.clone(),
+            self.snapshot_hash.clone(),
+        );
+        if let Some(reviewer) = reviewer {
+            event = event.with_reviewer(reviewer);
+        }
+        if let Some(result) = result {
+            event = event.with_result(result);
+        }
+        if let Some(duration_ms) = duration_ms {
+            event = event.with_duration_ms(duration_ms);
+        }
+        memory::try_append_permission_audit(&self.memory_dir, event);
+    }
+
+    fn record_review(
+        &self,
+        reviewer: types::ApprovalsReviewer,
+        result: &str,
+        granted: bool,
+        duration_ms: u64,
+    ) {
+        self.record(
+            memory::PermissionAuditKind::Reviewed,
+            Some(reviewer),
+            Some(result),
+            Some(duration_ms),
+        );
+        self.record(
+            if granted {
+                memory::PermissionAuditKind::Granted
+            } else {
+                memory::PermissionAuditKind::Denied
+            },
+            Some(reviewer),
+            Some(result),
+            Some(duration_ms),
+        );
+    }
 }
 
 #[allow(clippy::too_many_arguments)]
 async fn review_once_permission(
     session: &Arc<Mutex<AgentLoop>>,
     selection: &types::SessionPermissions,
-    request: &types::PermissionRequest,
+    audit: PermissionAuditReceipt,
     tx: &mpsc::Sender<anyhow::Result<MultiTurnStreamItem>>,
     run_id: &str,
     hitl_gate: Option<&Arc<HitlGate>>,
@@ -101,6 +176,20 @@ async fn review_once_permission(
     title: &str,
     body: &str,
 ) -> Option<PermissionPreflight> {
+    let request = &audit.request;
+    let review_started = std::time::Instant::now();
+    audit.record(
+        memory::PermissionAuditKind::Evaluated,
+        None,
+        Some("approval_required"),
+        None,
+    );
+    audit.record(
+        memory::PermissionAuditKind::Requested,
+        Some(selection.approvals_reviewer),
+        None,
+        None,
+    );
     {
         let agent = session.lock().await;
         agent.fire_hook(
@@ -124,6 +213,12 @@ async fn review_once_permission(
             "deny",
         )
         .await;
+        audit.record_review(
+            selection.approvals_reviewer,
+            "approval_policy_never",
+            false,
+            review_started.elapsed().as_millis() as u64,
+        );
         return Some(PermissionPreflight::Denied(
             "Permission denied: approval policy is never".to_string(),
         ));
@@ -149,7 +244,13 @@ async fn review_once_permission(
                 "auto",
             )
             .await;
-            return Some(PermissionPreflight::Granted);
+            audit.record_review(
+                selection.approvals_reviewer,
+                "auto_approved",
+                true,
+                review_started.elapsed().as_millis() as u64,
+            );
+            return Some(PermissionPreflight::Granted(Box::new(audit)));
         }
         fire_post_permission_response(
             session,
@@ -159,6 +260,12 @@ async fn review_once_permission(
             "deny",
         )
         .await;
+        audit.record_review(
+            selection.approvals_reviewer,
+            "auto_denied",
+            false,
+            review_started.elapsed().as_millis() as u64,
+        );
         return Some(PermissionPreflight::Denied(
             "Permission denied by automatic approval review".to_string(),
         ));
@@ -173,11 +280,27 @@ async fn review_once_permission(
             "unavailable",
         )
         .await;
+        audit.record_review(
+            selection.approvals_reviewer,
+            "reviewer_unavailable",
+            false,
+            review_started.elapsed().as_millis() as u64,
+        );
         return Some(PermissionPreflight::Denied(
             "Permission blocked: user approval is unavailable".to_string(),
         ));
     };
-    let confirm = park_confirm(gate, tx, run_id, &request.tool_call_id, title, body, false).await?;
+    let Some(confirm) =
+        park_confirm(gate, tx, run_id, &request.tool_call_id, title, body, false).await
+    else {
+        audit.record_review(
+            selection.approvals_reviewer,
+            "cancelled",
+            false,
+            review_started.elapsed().as_millis() as u64,
+        );
+        return None;
+    };
     let choice = match confirm.status.as_str() {
         "timeout" => "timeout",
         _ if confirm.approved => "allow_once",
@@ -191,8 +314,14 @@ async fn review_once_permission(
         choice,
     )
     .await;
+    audit.record_review(
+        selection.approvals_reviewer,
+        choice,
+        confirm.approved,
+        review_started.elapsed().as_millis() as u64,
+    );
     if confirm.approved {
-        Some(PermissionPreflight::Granted)
+        Some(PermissionPreflight::Granted(Box::new(audit)))
     } else {
         Some(PermissionPreflight::Denied(
             "Permission denied by user".to_string(),
@@ -226,6 +355,58 @@ fn affected_write_paths(name: &str, args: &serde_json::Value) -> Vec<String> {
     vec![logical_path.to_string()]
 }
 
+async fn audit_hardline_terminal_denial(
+    session: &Arc<Mutex<AgentLoop>>,
+    call: &types::ParsedToolCall,
+    description: &str,
+) {
+    let (memory_dir, settings, profile_id, session_id, turn_id) = {
+        let agent = session.lock().await;
+        let settings = memory::load_permission_settings(agent.memory_dir());
+        let profile_id = agent
+            .permission_profile()
+            .unwrap_or(&settings.selection.profile_id)
+            .to_string();
+        (
+            agent.memory_dir().to_path_buf(),
+            settings,
+            profile_id,
+            agent.session_id().to_string(),
+            agent.current_turn_id().map(str::to_string),
+        )
+    };
+    let request = types::PermissionRequest {
+        request_id: uuid::Uuid::new_v4().to_string(),
+        session_id,
+        turn_id,
+        tool_call_id: call.id.clone(),
+        tool_name: call.name.clone(),
+        summary: format!("Command denied by hardline policy: {description}"),
+        capabilities: vec![types::PermissionCapability::ProcessSpawn {
+            program: "sh".to_string(),
+            cwd: None,
+        }],
+        reason: types::PermissionReason::UntrustedCommand,
+        requested_scope: types::GrantScope::Once,
+        command_preview: None,
+        affected_paths: Vec::new(),
+        network_hosts: Vec::new(),
+    };
+    let audit = PermissionAuditReceipt::new(memory_dir, &settings, profile_id, request);
+    audit.record(
+        memory::PermissionAuditKind::Evaluated,
+        None,
+        Some("hardline_denied"),
+        None,
+    );
+    audit.record(
+        memory::PermissionAuditKind::Denied,
+        None,
+        Some("hardline_denied"),
+        Some(0),
+    );
+}
+
 async fn preflight_read_only_write(
     session: &Arc<Mutex<AgentLoop>>,
     call: &types::ParsedToolCall,
@@ -237,7 +418,7 @@ async fn preflight_read_only_write(
         return Some(PermissionPreflight::NotRequired);
     }
 
-    let (session_id, turn_id, selection) = {
+    let (session_id, turn_id, profile_id, memory_dir, settings) = {
         let agent = session.lock().await;
         let session_id = agent.session_id().to_string();
         let turn_id = agent.current_turn_id().map(str::to_string);
@@ -249,8 +430,15 @@ async fn preflight_read_only_write(
         if profile_id != types::READ_ONLY_PROFILE {
             return Some(PermissionPreflight::NotRequired);
         }
-        (session_id, turn_id, settings.selection)
+        (
+            session_id,
+            turn_id,
+            profile_id,
+            agent.memory_dir().to_path_buf(),
+            settings,
+        )
     };
+    let selection = settings.selection.clone();
 
     let affected_paths = affected_write_paths(&call.name, &call.arguments);
     let request = types::PermissionRequest {
@@ -278,10 +466,11 @@ async fn preflight_read_only_write(
         "当前为只读模式。是否仅允许本次 `{}` 执行下列写入？\n\n影响路径：\n- {}\n\n不会修改全局权限，也不会提升为完全访问。",
         call.name, paths
     );
+    let audit = PermissionAuditReceipt::new(memory_dir, &settings, profile_id, request);
     review_once_permission(
         session,
         &selection,
-        &request,
+        audit,
         tx,
         run_id,
         hitl_gate,
@@ -303,7 +492,7 @@ async fn preflight_in_process_network(
         return Some(PermissionPreflight::NotRequired);
     }
 
-    let (session_id, turn_id, selection, profile_id) = {
+    let (session_id, turn_id, profile_id, memory_dir, settings) = {
         let agent = session.lock().await;
         let settings = memory::load_permission_settings(agent.memory_dir());
         let profile_id = agent
@@ -313,10 +502,12 @@ async fn preflight_in_process_network(
         (
             agent.session_id().to_string(),
             agent.current_turn_id().map(str::to_string),
-            settings.selection,
             profile_id,
+            agent.memory_dir().to_path_buf(),
+            settings,
         )
     };
+    let selection = settings.selection.clone();
 
     match profile_id.as_str() {
         types::DANGER_FULL_ACCESS_PROFILE => {
@@ -356,10 +547,11 @@ async fn preflight_in_process_network(
         "当前模式未直接授予进程内网络访问。是否仅允许本次 `{}` 访问以下主机？\n\n{}\n\n该授权不会开放 terminal/code_exec 网络，也不会持久化。",
         call.name, host_list
     );
+    let audit = PermissionAuditReceipt::new(memory_dir, &settings, profile_id, request);
     review_once_permission(
         session,
         &selection,
-        &request,
+        audit,
         tx,
         run_id,
         hitl_gate,
@@ -411,11 +603,15 @@ async fn execute_tools_serial_inner(
         }
 
         let mut workspace_write_grant = false;
-        let mut network_grant = false;
+        let mut network_grant = tools::InProcessNetworkGrant::default();
+        let mut permission_audits = Vec::new();
         if !call.args_parse_error {
             match preflight_read_only_write(session, call, tx, run_id, hitl_gate).await? {
                 PermissionPreflight::NotRequired => {}
-                PermissionPreflight::Granted => workspace_write_grant = true,
+                PermissionPreflight::Granted(audit) => {
+                    workspace_write_grant = true;
+                    permission_audits.push(*audit);
+                }
                 PermissionPreflight::Denied(message) => {
                     out.push(format!(
                         "{message}. Do not retry the same action or attempt a workaround without explicit authorization."
@@ -425,7 +621,12 @@ async fn execute_tools_serial_inner(
             }
             match preflight_in_process_network(session, call, tx, run_id, hitl_gate).await? {
                 PermissionPreflight::NotRequired => {}
-                PermissionPreflight::Granted => network_grant = true,
+                PermissionPreflight::Granted(audit) => {
+                    network_grant = tools::InProcessNetworkGrant::for_hosts(
+                        tools::in_process_network_hosts(&call.name, &call.arguments),
+                    );
+                    permission_audits.push(*audit);
+                }
                 PermissionPreflight::Denied(message) => {
                     out.push(format!(
                         "{message}. Do not retry the same action or attempt a workaround without explicit authorization."
@@ -445,6 +646,7 @@ async fn execute_tools_serial_inner(
             {
                 match decision.action {
                     types::ApprovalAction::Deny => {
+                        audit_hardline_terminal_denial(session, call, decision.description).await;
                         out.push(format!(
                             "Command denied by policy (dangerous: {}). Do not retry without changing the command.",
                             decision.description
@@ -468,12 +670,18 @@ async fn execute_tools_serial_inner(
                             permissions,
                             allowlist,
                             memory_dir,
+                            active_profile_id,
+                            permission_settings,
                         ) = {
                             let agent = session.lock().await;
                             let approval_session_id = agent.session_id().to_string();
                             let approval_turn_id = agent.current_turn_id().map(str::to_string);
                             let base = agent.memory_dir().to_path_buf();
                             let permissions = memory::config::load_permission_settings(&base);
+                            let active_profile_id = agent
+                                .permission_profile()
+                                .unwrap_or(&permissions.selection.profile_id)
+                                .to_string();
                             agent.fire_hook(
                                 hooks::PRE_APPROVAL_REQUEST,
                                 hooks::HookPayload {
@@ -490,9 +698,11 @@ async fn execute_tools_serial_inner(
                             (
                                 approval_session_id,
                                 approval_turn_id,
-                                permissions.selection,
-                                permissions.legacy_command_allowlist,
+                                permissions.selection.clone(),
+                                permissions.legacy_command_allowlist.clone(),
                                 base,
+                                active_profile_id,
+                                permissions,
                             )
                         };
 
@@ -517,8 +727,41 @@ async fn execute_tools_serial_inner(
                             affected_paths: Vec::new(),
                             network_hosts: Vec::new(),
                         };
+                        let approval_audit = PermissionAuditReceipt::new(
+                            memory_dir.clone(),
+                            &permission_settings,
+                            active_profile_id,
+                            permission_request.clone(),
+                        );
+                        let approval_started = std::time::Instant::now();
+                        approval_audit.record(
+                            memory::PermissionAuditKind::Evaluated,
+                            None,
+                            Some(match route {
+                                ApprovalRoute::Deny => "hardline_denied",
+                                ApprovalRoute::Allowlist => "allowlist",
+                                ApprovalRoute::Off => "approval_disabled",
+                                ApprovalRoute::Smart => "auto_review_required",
+                                ApprovalRoute::Manual => "user_review_required",
+                            }),
+                            None,
+                        );
+                        if matches!(route, ApprovalRoute::Smart | ApprovalRoute::Manual) {
+                            approval_audit.record(
+                                memory::PermissionAuditKind::Requested,
+                                Some(permissions.approvals_reviewer),
+                                None,
+                                None,
+                            );
+                        }
                         // 防御性兜底：即使规则分级未来发生漂移，hardline 仍不可进入 HITL 放行。
                         if route == ApprovalRoute::Deny {
+                            approval_audit.record(
+                                memory::PermissionAuditKind::Denied,
+                                None,
+                                Some("hardline_denied"),
+                                Some(approval_started.elapsed().as_millis() as u64),
+                            );
                             out.push(
                                 "Command denied by hardline policy. Do not retry without changing the command."
                                     .into(),
@@ -533,6 +776,13 @@ async fn execute_tools_serial_inner(
                                 "allowlist",
                             )
                             .await;
+                            approval_audit.record(
+                                memory::PermissionAuditKind::Granted,
+                                None,
+                                Some("allowlist"),
+                                Some(approval_started.elapsed().as_millis() as u64),
+                            );
+                            permission_audits.push(approval_audit);
                         } else if route == ApprovalRoute::Off {
                             fire_post_approval_response(
                                 session,
@@ -542,6 +792,13 @@ async fn execute_tools_serial_inner(
                                 "auto",
                             )
                             .await;
+                            approval_audit.record(
+                                memory::PermissionAuditKind::Granted,
+                                None,
+                                Some("approval_disabled"),
+                                Some(approval_started.elapsed().as_millis() as u64),
+                            );
+                            permission_audits.push(approval_audit);
                         } else {
                             // 仅 Smart 模式尝试辅模型降级；Manual 直接弹卡
                             let smart_action = if route == ApprovalRoute::Smart {
@@ -574,6 +831,13 @@ async fn execute_tools_serial_inner(
                                     "auto",
                                 )
                                 .await;
+                                approval_audit.record_review(
+                                    permissions.approvals_reviewer,
+                                    "auto_approved",
+                                    true,
+                                    approval_started.elapsed().as_millis() as u64,
+                                );
+                                permission_audits.push(approval_audit);
                             } else if route == ApprovalRoute::Smart {
                                 fire_post_approval_response(
                                     session,
@@ -583,6 +847,12 @@ async fn execute_tools_serial_inner(
                                     "deny",
                                 )
                                 .await;
+                                approval_audit.record_review(
+                                    permissions.approvals_reviewer,
+                                    "auto_denied",
+                                    false,
+                                    approval_started.elapsed().as_millis() as u64,
+                                );
                                 out.push(
                                     "Command denied by automatic approval review. Do not retry the same action or attempt a workaround without explicit user authorization."
                                         .into(),
@@ -610,6 +880,12 @@ async fn execute_tools_serial_inner(
                                     choice,
                                 )
                                 .await;
+                                approval_audit.record_review(
+                                    permissions.approvals_reviewer,
+                                    choice,
+                                    confirm.approved,
+                                    approval_started.elapsed().as_millis() as u64,
+                                );
                                 if !confirm.approved {
                                     out.push(
                                         "Command denied by user (dangerous-command approval). Do not retry the same command without explicit user request.".into(),
@@ -626,6 +902,7 @@ async fn execute_tools_serial_inner(
                                         tracing::info!(command = %cmd, "added command to approval allowlist");
                                     }
                                 }
+                                permission_audits.push(approval_audit);
                             } else {
                                 fire_post_approval_response(
                                     session,
@@ -635,6 +912,12 @@ async fn execute_tools_serial_inner(
                                     "unavailable",
                                 )
                                 .await;
+                                approval_audit.record_review(
+                                    permissions.approvals_reviewer,
+                                    "reviewer_unavailable",
+                                    false,
+                                    approval_started.elapsed().as_millis() as u64,
+                                );
                                 out.push(
                                     format!(
                                     "Command blocked: dangerous ({}) and no HITL gate available.",
@@ -663,8 +946,9 @@ async fn execute_tools_serial_inner(
             let mut agent = session.lock().await;
             let memory_dir = agent.memory_dir().to_path_buf();
             let session_id = agent.session_id().to_string();
+            let execution_started = std::time::Instant::now();
             let executed = tokio::task::block_in_place(|| {
-                if workspace_write_grant || network_grant {
+                if workspace_write_grant || !network_grant.is_empty() {
                     agent.handle_tool_call_with_once_grants(
                         &call.name,
                         &call.arguments,
@@ -675,6 +959,19 @@ async fn execute_tools_serial_inner(
                     agent.handle_tool_call(&call.name, &call.arguments)
                 }
             });
+            let execution_result = match &executed {
+                Ok(_) => "success",
+                Err(crate::runtime::ToolCallError::Cancelled) => "cancelled",
+                Err(_) => "error",
+            };
+            for audit in &permission_audits {
+                audit.record(
+                    memory::PermissionAuditKind::Applied,
+                    None,
+                    Some(execution_result),
+                    Some(execution_started.elapsed().as_millis() as u64),
+                );
+            }
             match executed {
                 Ok(output) => output,
                 Err(crate::runtime::ToolCallError::Cancelled) => return None,
@@ -856,7 +1153,7 @@ fn run_tool_on_snapshot(
             permission_profile: snap.permission_profile.clone(),
             hook_bus: snap.hook_bus.clone(),
             workspace_write_grant: false,
-            network_grant: false,
+            network_grant: tools::InProcessNetworkGrant::default(),
         };
         tools::dispatch_tool(|_| true, &mut ctx, name, args, None)
             .await
@@ -995,5 +1292,45 @@ mod tests {
             ),
             ApprovalRoute::Deny
         );
+    }
+
+    #[test]
+    fn permission_audit_receipt_records_applied_result() {
+        let dir = tempfile::tempdir().unwrap();
+        let settings = memory::LoadedPermissionSettings::default();
+        let request = types::PermissionRequest {
+            request_id: "request-1".into(),
+            session_id: "session-1".into(),
+            turn_id: Some("turn-1".into()),
+            tool_call_id: "call-1".into(),
+            tool_name: "web_fetch".into(),
+            summary: "fetch approved host".into(),
+            capabilities: vec![types::PermissionCapability::Network {
+                hosts: vec!["example.com".into()],
+            }],
+            reason: types::PermissionReason::NetworkDisabled,
+            requested_scope: types::GrantScope::Once,
+            command_preview: None,
+            affected_paths: Vec::new(),
+            network_hosts: vec!["example.com".into()],
+        };
+        let receipt = PermissionAuditReceipt::new(
+            dir.path().to_path_buf(),
+            &settings,
+            types::WORKSPACE_PROFILE.to_string(),
+            request,
+        );
+        receipt.record(
+            memory::PermissionAuditKind::Applied,
+            None,
+            Some("success"),
+            Some(12),
+        );
+
+        let events = memory::list_recent_permission_audits(dir.path(), 10).unwrap();
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].event, memory::PermissionAuditKind::Applied);
+        assert_eq!(events[0].result.as_deref(), Some("success"));
+        assert_eq!(events[0].duration_ms, Some(12));
     }
 }

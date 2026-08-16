@@ -60,7 +60,7 @@ impl AgentLoop {
         name: &str,
         args: &serde_json::Value,
         workspace_write_grant: bool,
-        network_grant: bool,
+        network_grant: tools::InProcessNetworkGrant,
     ) -> anyhow::Result<types::ToolOutput> {
         let agent_id = self.memory.agent_id.clone();
         self.tool_registry.reload_enabled_from_disk(Some(&agent_id));
@@ -133,7 +133,7 @@ impl AgentLoop {
         name: &str,
         args: &serde_json::Value,
     ) -> Result<types::ToolOutput, ToolCallError> {
-        self.handle_tool_call_scoped(name, args, false, false)
+        self.handle_tool_call_scoped(name, args, false, tools::InProcessNetworkGrant::default())
     }
 
     /// 执行已审批的单次调用。授权只进入本次 ToolContext，不保存到 Agent 状态。
@@ -142,7 +142,7 @@ impl AgentLoop {
         name: &str,
         args: &serde_json::Value,
         workspace_write_grant: bool,
-        network_grant: bool,
+        network_grant: tools::InProcessNetworkGrant,
     ) -> Result<types::ToolOutput, ToolCallError> {
         self.handle_tool_call_scoped(name, args, workspace_write_grant, network_grant)
     }
@@ -152,7 +152,7 @@ impl AgentLoop {
         name: &str,
         args: &serde_json::Value,
         workspace_write_grant: bool,
-        network_grant: bool,
+        network_grant: tools::InProcessNetworkGrant,
     ) -> Result<types::ToolOutput, ToolCallError> {
         let fut =
             self.handle_tool_call_async_scoped(name, args, workspace_write_grant, network_grant);
@@ -177,8 +177,13 @@ impl AgentLoop {
         name: &str,
         args: &serde_json::Value,
     ) -> Result<types::ToolOutput, ToolCallError> {
-        self.handle_tool_call_async_scoped(name, args, false, false)
-            .await
+        self.handle_tool_call_async_scoped(
+            name,
+            args,
+            false,
+            tools::InProcessNetworkGrant::default(),
+        )
+        .await
     }
 
     async fn handle_tool_call_async_scoped(
@@ -186,7 +191,7 @@ impl AgentLoop {
         name: &str,
         args: &serde_json::Value,
         workspace_write_grant: bool,
-        network_grant: bool,
+        network_grant: tools::InProcessNetworkGrant,
     ) -> Result<types::ToolOutput, ToolCallError> {
         if self.cancel.is_cancelled() {
             return Err(ToolCallError::Cancelled);

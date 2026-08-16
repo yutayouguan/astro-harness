@@ -1061,7 +1061,7 @@ mod tests {
             permission_profile: None,
             hook_bus: None,
             workspace_write_grant: false,
-            network_grant: false,
+            network_grant: crate::InProcessNetworkGrant::default(),
         }
     }
 

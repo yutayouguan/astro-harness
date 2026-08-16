@@ -41,7 +41,7 @@ async fn confirm_emits_valid_a2ui_hitl() {
         permission_profile: None,
         hook_bus: None,
         workspace_write_grant: false,
-        network_grant: false,
+        network_grant: tools::InProcessNetworkGrant::default(),
     };
 
     let raw = tools::dispatch_tool(
@@ -85,7 +85,7 @@ async fn clarify_emits_valid_a2ui_hitl() {
         permission_profile: None,
         hook_bus: None,
         workspace_write_grant: false,
-        network_grant: false,
+        network_grant: tools::InProcessNetworkGrant::default(),
     };
 
     let raw = tools::dispatch_tool(
@@ -144,7 +144,7 @@ async fn clarify_free_text_step_allows_empty_options() {
         permission_profile: None,
         hook_bus: None,
         workspace_write_grant: false,
-        network_grant: false,
+        network_grant: tools::InProcessNetworkGrant::default(),
     };
 
     let raw = tools::dispatch_tool(
@@ -209,7 +209,7 @@ async fn clarify_multi_emits_wizard_hitl() {
         permission_profile: None,
         hook_bus: None,
         workspace_write_grant: false,
-        network_grant: false,
+        network_grant: tools::InProcessNetworkGrant::default(),
     };
 
     let raw = tools::dispatch_tool(
@@ -279,7 +279,7 @@ async fn ask_user_location_mode_emits_valid_a2ui_hitl() {
         permission_profile: None,
         hook_bus: None,
         workspace_write_grant: false,
-        network_grant: false,
+        network_grant: tools::InProcessNetworkGrant::default(),
     };
 
     let raw = tools::dispatch_tool(
@@ -322,7 +322,7 @@ async fn present_emits_valid_astro_ui() {
         permission_profile: None,
         hook_bus: None,
         workspace_write_grant: false,
-        network_grant: false,
+        network_grant: tools::InProcessNetworkGrant::default(),
     };
 
     let raw = tools::dispatch_tool(
@@ -367,7 +367,7 @@ async fn ask_user_rejects_mixed_questions_and_body() {
         permission_profile: None,
         hook_bus: None,
         workspace_write_grant: false,
-        network_grant: false,
+        network_grant: tools::InProcessNetworkGrant::default(),
     };
 
     let err = tools::dispatch_tool(

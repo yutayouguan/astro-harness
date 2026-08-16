@@ -10,6 +10,8 @@ use memory::MemoryManager;
 use session::ConversationStore;
 use types::{DANGER_FULL_ACCESS_PROFILE, READ_ONLY_PROFILE, WORKSPACE_PROFILE};
 
+use super::network::InProcessNetworkGrant;
+
 pub use types::credentials::{ImageGenCreds, ImageGenParts, ImageGenTargets, ModelCredentials};
 
 /// 使用 Provider 默认模型名构建 ImageGenTargets。
@@ -51,10 +53,10 @@ pub struct ToolContext<'a> {
     ///
     /// 该值只存在于本次 `ToolContext` 生命周期，不会持久化或扩大到后续工具调用。
     pub workspace_write_grant: bool,
-    /// 当前单次工具调用已获得进程内网络访问授权。
+    /// 当前单次工具调用已获得的进程内网络主机授权。
     ///
     /// 与命令沙箱的 `network.enabled` 相互独立，不会持久化或跨工具调用复用。
-    pub network_grant: bool,
+    pub network_grant: InProcessNetworkGrant,
 }
 
 impl<'a> ToolContext<'a> {
@@ -87,6 +89,20 @@ impl<'a> ToolContext<'a> {
             self.permission_profile.as_deref(),
             self.workspace_write_grant,
         )
+    }
+
+    /// 返回当前调用实际生效的进程内网络授权。
+    pub fn effective_in_process_network_grant(&self) -> InProcessNetworkGrant {
+        let loaded = memory::load_permission_settings(&self.memory_dir);
+        let profile_id = self
+            .permission_profile
+            .as_deref()
+            .unwrap_or(&loaded.selection.profile_id);
+        if profile_id == DANGER_FULL_ACCESS_PROFILE {
+            InProcessNetworkGrant::unrestricted()
+        } else {
+            self.network_grant.clone()
+        }
     }
 }
 
@@ -150,7 +166,7 @@ mod tests {
             permission_profile: None,
             hook_bus: None,
             workspace_write_grant: true,
-            network_grant: false,
+            network_grant: InProcessNetworkGrant::default(),
         };
 
         let policy = ctx.command_sandbox_policy().unwrap();

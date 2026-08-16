@@ -3025,6 +3025,7 @@ dependencies = [
  "serde_json",
  "serde_yaml",
  "session",
+ "sha2",
  "skills",
  "tempfile",
  "tracing",

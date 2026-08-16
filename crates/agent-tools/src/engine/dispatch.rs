@@ -132,17 +132,26 @@ fn enforce_in_process_network_policy(
         .unwrap_or(&settings.selection.profile_id);
     match profile {
         types::DANGER_FULL_ACCESS_PROFILE => Ok(()),
-        types::READ_ONLY_PROFILE | types::WORKSPACE_PROFILE if ctx.network_grant => Ok(()),
         types::READ_ONLY_PROFILE | types::WORKSPACE_PROFILE => {
             let hosts = in_process_network_hosts(name, args);
-            let target = if hosts.is_empty() {
-                "the requested remote host".to_string()
+            if hosts.is_empty() {
+                anyhow::bail!(
+                    "permission denied: {name} has no valid remote host to authorize"
+                );
+            }
+            let missing: Vec<_> = hosts
+                .iter()
+                .filter(|host| !ctx.network_grant.allows_host(host))
+                .cloned()
+                .collect();
+            if missing.is_empty() {
+                Ok(())
             } else {
-                hosts.join(", ")
-            };
-            anyhow::bail!(
-                "permission denied: {name} requires one-call in-process network approval for {target}"
-            )
+                anyhow::bail!(
+                    "permission denied: {name} requires one-call in-process network approval for {}",
+                    missing.join(", ")
+                )
+            }
         }
         custom => anyhow::bail!(
             "custom permission profile {custom:?} cannot grant in-process network access until its tool-network rules are fully resolved"
@@ -232,7 +241,7 @@ mod permission_tests {
     fn with_ctx(
         dir: &tempfile::TempDir,
         write_grant: bool,
-        network_grant: bool,
+        network_hosts: &[&str],
         f: impl FnOnce(&ToolContext<'_>),
     ) {
         let mut manager = memory::MemoryManager::new(dir.path().to_path_buf()).unwrap();
@@ -255,7 +264,9 @@ mod permission_tests {
             permission_profile: None,
             hook_bus: None,
             workspace_write_grant: write_grant,
-            network_grant,
+            network_grant: crate::InProcessNetworkGrant::for_hosts(
+                network_hosts.iter().map(|host| (*host).to_string()),
+            ),
         };
         f(&ctx);
     }
@@ -304,7 +315,7 @@ mod permission_tests {
     fn read_only_denies_and_workspace_allows_in_process_writes() {
         let dir = tempfile::tempdir().unwrap();
         memory::set_permission_preset(dir.path(), types::PermissionPreset::ReadOnly).unwrap();
-        with_ctx(&dir, false, false, |ctx| {
+        with_ctx(&dir, false, &[], |ctx| {
             let error = enforce_in_process_write_policy(
                 ctx,
                 "todo",
@@ -318,7 +329,7 @@ mod permission_tests {
                     .is_ok()
             );
         });
-        with_ctx(&dir, true, false, |ctx| {
+        with_ctx(&dir, true, &[], |ctx| {
             assert!(enforce_in_process_write_policy(
                 ctx,
                 "todo",
@@ -328,7 +339,7 @@ mod permission_tests {
         });
 
         memory::set_permission_preset(dir.path(), types::PermissionPreset::AskForApproval).unwrap();
-        with_ctx(&dir, false, false, |ctx| {
+        with_ctx(&dir, false, &[], |ctx| {
             assert!(enforce_in_process_write_policy(
                 ctx,
                 "todo",
@@ -342,7 +353,7 @@ mod permission_tests {
     fn in_process_network_requires_separate_once_grant() {
         let dir = tempfile::tempdir().unwrap();
         memory::set_permission_preset(dir.path(), types::PermissionPreset::AskForApproval).unwrap();
-        with_ctx(&dir, false, false, |ctx| {
+        with_ctx(&dir, false, &[], |ctx| {
             let error = enforce_in_process_network_policy(
                 ctx,
                 "web_fetch",
@@ -352,7 +363,7 @@ mod permission_tests {
             .to_string();
             assert!(error.contains("one-call"), "{error}");
         });
-        with_ctx(&dir, false, true, |ctx| {
+        with_ctx(&dir, false, &["example.com"], |ctx| {
             enforce_in_process_network_policy(
                 ctx,
                 "web_fetch",
@@ -360,9 +371,19 @@ mod permission_tests {
             )
             .unwrap();
         });
+        with_ctx(&dir, false, &["other.example"], |ctx| {
+            let error = enforce_in_process_network_policy(
+                ctx,
+                "web_fetch",
+                &serde_json::json!({"url": "https://example.com/path"}),
+            )
+            .unwrap_err()
+            .to_string();
+            assert!(error.contains("example.com"), "{error}");
+        });
 
         memory::set_permission_preset(dir.path(), types::PermissionPreset::FullAccess).unwrap();
-        with_ctx(&dir, false, false, |ctx| {
+        with_ctx(&dir, false, &[], |ctx| {
             enforce_in_process_network_policy(
                 ctx,
                 "web_fetch",
