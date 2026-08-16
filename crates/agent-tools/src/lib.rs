@@ -34,7 +34,10 @@ pub use context::{
     image_gen_targets_from_parts, ImageGenCreds, ImageGenParts, ImageGenTargets, ModelCredentials,
     ToolContext,
 };
-pub use dispatch::{builtin_handler_names, dispatch_tool, tool_requires_in_process_write};
+pub use dispatch::{
+    builtin_handler_names, dispatch_tool, in_process_network_hosts,
+    tool_requires_in_process_network, tool_requires_in_process_write,
+};
 pub use engine::execution::AgentThreadDispatch;
 pub use parse::{
     extract_tool_calls, resolve_tool_calls, ParsedToolCall, ToolCallAccumulator, ToolCallDelta,

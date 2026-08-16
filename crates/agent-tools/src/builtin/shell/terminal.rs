@@ -228,6 +228,7 @@ mod tests {
             permission_profile: None,
             hook_bus: None,
             workspace_write_grant: false,
+            network_grant: false,
         };
 
         let n = types::MAX_TOOL_RESULT_BYTES + 8 * 1024;
@@ -268,6 +269,7 @@ mod tests {
             permission_profile: None,
             hook_bus: Some(bus),
             workspace_write_grant: false,
+            network_grant: false,
         };
 
         let n = types::MAX_TOOL_RESULT_BYTES + 8 * 1024;

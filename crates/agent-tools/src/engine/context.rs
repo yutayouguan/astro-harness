@@ -51,6 +51,10 @@ pub struct ToolContext<'a> {
     ///
     /// 该值只存在于本次 `ToolContext` 生命周期，不会持久化或扩大到后续工具调用。
     pub workspace_write_grant: bool,
+    /// 当前单次工具调用已获得进程内网络访问授权。
+    ///
+    /// 与命令沙箱的 `network.enabled` 相互独立，不会持久化或跨工具调用复用。
+    pub network_grant: bool,
 }
 
 impl<'a> ToolContext<'a> {
@@ -146,6 +150,7 @@ mod tests {
             permission_profile: None,
             hook_bus: None,
             workspace_write_grant: true,
+            network_grant: false,
         };
 
         let policy = ctx.command_sandbox_policy().unwrap();

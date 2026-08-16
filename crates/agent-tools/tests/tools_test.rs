@@ -90,6 +90,7 @@ async fn file_ops_write_and_read() {
         permission_profile: None,
         hook_bus: None,
         workspace_write_grant: false,
+        network_grant: false,
     };
 
     let w = tools::dispatch_tool(

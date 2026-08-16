@@ -121,7 +121,7 @@ async fn dispatch_text(parsed: WebFetchArgs) -> anyhow::Result<String> {
     let client = reqwest::Client::builder()
         .user_agent(USER_AGENT)
         .timeout(std::time::Duration::from_secs(25))
-        .redirect(reqwest::redirect::Policy::limited(5))
+        .redirect(public_redirect_policy(5))
         .build()?;
 
     let mut sections = Vec::with_capacity(targets.len());
@@ -363,12 +363,34 @@ fn assert_public_http_url(raw: &str) -> anyhow::Result<()> {
     let addrs = format!("{host}:{port}")
         .to_socket_addrs()
         .map_err(|e| anyhow::anyhow!("无法解析主机 {host}: {e}"))?;
+    let mut resolved = false;
     for addr in addrs {
+        resolved = true;
         if is_blocked_ip(addr.ip()) {
             anyhow::bail!("拒绝访问解析到私网/本机的地址: {}", addr.ip());
         }
     }
+    if !resolved {
+        anyhow::bail!("主机未解析到任何地址: {host}");
+    }
     Ok(())
+}
+
+fn public_redirect_policy(max_redirects: usize) -> reqwest::redirect::Policy {
+    reqwest::redirect::Policy::custom(move |attempt| {
+        if attempt.previous().len() >= max_redirects {
+            return attempt.error(std::io::Error::other(format!(
+                "redirect limit exceeded ({max_redirects})"
+            )));
+        }
+        match assert_public_http_url(attempt.url().as_str()) {
+            Ok(()) => attempt.follow(),
+            Err(error) => attempt.error(std::io::Error::new(
+                std::io::ErrorKind::PermissionDenied,
+                format!("redirect blocked by SSRF policy: {error}"),
+            )),
+        }
+    })
 }
 
 fn is_blocked_host(host: &str) -> bool {
@@ -395,9 +417,13 @@ fn is_blocked_v4(ip: Ipv4Addr) -> bool {
     ip.is_loopback()
         || ip.is_private()
         || ip.is_link_local()
+        || ip.is_multicast()
         || ip.is_broadcast()
+        || ip.is_documentation()
         || ip.is_unspecified()
+        || ip.octets()[0] == 0
         || (ip.octets()[0] == 100 && (ip.octets()[1] & 0b1100_0000) == 0b0100_0000)
+        || (ip.octets()[0] == 198 && matches!(ip.octets()[1], 18 | 19))
 }
 
 fn is_blocked_v6(ip: Ipv6Addr) -> bool {
@@ -409,6 +435,9 @@ fn is_blocked_v6(ip: Ipv6Addr) -> bool {
         return true;
     }
     if (segments[0] & 0xffc0) == 0xfe80 {
+        return true;
+    }
+    if ip.is_multicast() || segments[0] == 0x2001 && segments[1] == 0x0db8 {
         return true;
     }
     ip.to_ipv4_mapped().map(is_blocked_v4).unwrap_or(false)
@@ -434,6 +463,8 @@ mod tests {
         assert!(assert_public_http_url("http://localhost/a").is_err());
         assert!(assert_public_http_url("http://127.0.0.1/").is_err());
         assert!(assert_public_http_url("http://192.168.1.1/").is_err());
+        assert!(assert_public_http_url("http://198.18.0.1/").is_err());
+        assert!(assert_public_http_url("http://224.0.0.1/").is_err());
     }
 
     #[test]

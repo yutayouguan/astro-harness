@@ -60,6 +60,7 @@ impl AgentLoop {
         name: &str,
         args: &serde_json::Value,
         workspace_write_grant: bool,
+        network_grant: bool,
     ) -> anyhow::Result<types::ToolOutput> {
         let agent_id = self.memory.agent_id.clone();
         self.tool_registry.reload_enabled_from_disk(Some(&agent_id));
@@ -119,6 +120,7 @@ impl AgentLoop {
             permission_profile: self.permission_profile.clone(),
             hook_bus,
             workspace_write_grant,
+            network_grant,
         };
         dispatch_tool(|_| allowed, &mut ctx, name, args, mcp_handler.as_ref()).await
     }
@@ -131,16 +133,18 @@ impl AgentLoop {
         name: &str,
         args: &serde_json::Value,
     ) -> Result<types::ToolOutput, ToolCallError> {
-        self.handle_tool_call_scoped(name, args, false)
+        self.handle_tool_call_scoped(name, args, false, false)
     }
 
-    /// 执行已审批的单次 workspace-write 调用。授权不保存到 Agent 状态。
-    pub(crate) fn handle_tool_call_with_workspace_write_grant(
+    /// 执行已审批的单次调用。授权只进入本次 ToolContext，不保存到 Agent 状态。
+    pub(crate) fn handle_tool_call_with_once_grants(
         &mut self,
         name: &str,
         args: &serde_json::Value,
+        workspace_write_grant: bool,
+        network_grant: bool,
     ) -> Result<types::ToolOutput, ToolCallError> {
-        self.handle_tool_call_scoped(name, args, true)
+        self.handle_tool_call_scoped(name, args, workspace_write_grant, network_grant)
     }
 
     fn handle_tool_call_scoped(
@@ -148,8 +152,10 @@ impl AgentLoop {
         name: &str,
         args: &serde_json::Value,
         workspace_write_grant: bool,
+        network_grant: bool,
     ) -> Result<types::ToolOutput, ToolCallError> {
-        let fut = self.handle_tool_call_async_scoped(name, args, workspace_write_grant);
+        let fut =
+            self.handle_tool_call_async_scoped(name, args, workspace_write_grant, network_grant);
         match tokio::runtime::Handle::try_current() {
             Ok(handle) => tokio::task::block_in_place(|| handle.block_on(fut)),
             Err(_) => {
@@ -171,7 +177,8 @@ impl AgentLoop {
         name: &str,
         args: &serde_json::Value,
     ) -> Result<types::ToolOutput, ToolCallError> {
-        self.handle_tool_call_async_scoped(name, args, false).await
+        self.handle_tool_call_async_scoped(name, args, false, false)
+            .await
     }
 
     async fn handle_tool_call_async_scoped(
@@ -179,6 +186,7 @@ impl AgentLoop {
         name: &str,
         args: &serde_json::Value,
         workspace_write_grant: bool,
+        network_grant: bool,
     ) -> Result<types::ToolOutput, ToolCallError> {
         if self.cancel.is_cancelled() {
             return Err(ToolCallError::Cancelled);
@@ -232,7 +240,7 @@ impl AgentLoop {
             return Ok(msg.into());
         }
         let raw_result = self
-            .dispatch_named_tool(exec_name, &exec_args, workspace_write_grant)
+            .dispatch_named_tool(exec_name, &exec_args, workspace_write_grant, network_grant)
             .await?;
         if exec_name == "skills" {
             self.activate_skill_toolsets_from_args(&exec_args);

@@ -61,6 +61,7 @@ pub async fn dispatch_tool(
         ctx.turn_id.as_deref(),
     );
     enforce_in_process_write_policy(ctx, name, args)?;
+    enforce_in_process_network_policy(ctx, name, args)?;
 
     // 1. 内置 handler（静态 inventory 注册）
     if let Some(handler) = handler_table().get(name) {
@@ -116,6 +117,77 @@ fn enforce_in_process_write_policy(
     }
 }
 
+fn enforce_in_process_network_policy(
+    ctx: &ToolContext<'_>,
+    name: &str,
+    args: &serde_json::Value,
+) -> anyhow::Result<()> {
+    if !tool_requires_in_process_network(name) {
+        return Ok(());
+    }
+    let settings = memory::load_permission_settings(&ctx.memory_dir);
+    let profile = ctx
+        .permission_profile
+        .as_deref()
+        .unwrap_or(&settings.selection.profile_id);
+    match profile {
+        types::DANGER_FULL_ACCESS_PROFILE => Ok(()),
+        types::READ_ONLY_PROFILE | types::WORKSPACE_PROFILE if ctx.network_grant => Ok(()),
+        types::READ_ONLY_PROFILE | types::WORKSPACE_PROFILE => {
+            let hosts = in_process_network_hosts(name, args);
+            let target = if hosts.is_empty() {
+                "the requested remote host".to_string()
+            } else {
+                hosts.join(", ")
+            };
+            anyhow::bail!(
+                "permission denied: {name} requires one-call in-process network approval for {target}"
+            )
+        }
+        custom => anyhow::bail!(
+            "custom permission profile {custom:?} cannot grant in-process network access until its tool-network rules are fully resolved"
+        ),
+    }
+}
+
+/// 是否为直接在 Astro 进程内发起网络请求的工具。
+///
+/// 该分类独立于 terminal/code_exec 的命令沙箱网络开关。
+pub fn tool_requires_in_process_network(name: &str) -> bool {
+    matches!(name, "web_search" | "web_fetch")
+}
+
+/// 从工具参数提取本次审批卡应展示的目标主机。
+pub fn in_process_network_hosts(name: &str, args: &serde_json::Value) -> Vec<String> {
+    let mut hosts = match name {
+        "web_search" => vec![
+            "api.search.brave.com".to_string(),
+            "www.bing.com".to_string(),
+        ],
+        "web_fetch" => {
+            let urls: Vec<&str> = args
+                .get("urls")
+                .and_then(serde_json::Value::as_array)
+                .filter(|items| !items.is_empty())
+                .map(|items| items.iter().filter_map(serde_json::Value::as_str).collect())
+                .unwrap_or_else(|| {
+                    args.get("url")
+                        .and_then(serde_json::Value::as_str)
+                        .into_iter()
+                        .collect()
+                });
+            urls.into_iter()
+                .filter_map(|raw| reqwest::Url::parse(raw.trim()).ok())
+                .filter_map(|url| url.host_str().map(str::to_ascii_lowercase))
+                .collect()
+        }
+        _ => Vec::new(),
+    };
+    hosts.sort();
+    hosts.dedup();
+    hosts
+}
+
 pub fn tool_requires_in_process_write(name: &str, args: &serde_json::Value) -> bool {
     let action = || {
         args.get("action")
@@ -157,7 +229,12 @@ mod permission_tests {
     use super::*;
     use crate::context::ImageGenTargets;
 
-    fn with_ctx(dir: &tempfile::TempDir, grant: bool, f: impl FnOnce(&ToolContext<'_>)) {
+    fn with_ctx(
+        dir: &tempfile::TempDir,
+        write_grant: bool,
+        network_grant: bool,
+        f: impl FnOnce(&ToolContext<'_>),
+    ) {
         let mut manager = memory::MemoryManager::new(dir.path().to_path_buf()).unwrap();
         let sessions =
             session::SessionStore::open_sessions_dir(&manager.base_dir.join("sessions")).unwrap();
@@ -177,7 +254,8 @@ mod permission_tests {
             execution: None,
             permission_profile: None,
             hook_bus: None,
-            workspace_write_grant: grant,
+            workspace_write_grant: write_grant,
+            network_grant,
         };
         f(&ctx);
     }
@@ -226,7 +304,7 @@ mod permission_tests {
     fn read_only_denies_and_workspace_allows_in_process_writes() {
         let dir = tempfile::tempdir().unwrap();
         memory::set_permission_preset(dir.path(), types::PermissionPreset::ReadOnly).unwrap();
-        with_ctx(&dir, false, |ctx| {
+        with_ctx(&dir, false, false, |ctx| {
             let error = enforce_in_process_write_policy(
                 ctx,
                 "todo",
@@ -240,7 +318,7 @@ mod permission_tests {
                     .is_ok()
             );
         });
-        with_ctx(&dir, true, |ctx| {
+        with_ctx(&dir, true, false, |ctx| {
             assert!(enforce_in_process_write_policy(
                 ctx,
                 "todo",
@@ -250,7 +328,7 @@ mod permission_tests {
         });
 
         memory::set_permission_preset(dir.path(), types::PermissionPreset::AskForApproval).unwrap();
-        with_ctx(&dir, false, |ctx| {
+        with_ctx(&dir, false, false, |ctx| {
             assert!(enforce_in_process_write_policy(
                 ctx,
                 "todo",
@@ -258,5 +336,59 @@ mod permission_tests {
             )
             .is_ok());
         });
+    }
+
+    #[test]
+    fn in_process_network_requires_separate_once_grant() {
+        let dir = tempfile::tempdir().unwrap();
+        memory::set_permission_preset(dir.path(), types::PermissionPreset::AskForApproval).unwrap();
+        with_ctx(&dir, false, false, |ctx| {
+            let error = enforce_in_process_network_policy(
+                ctx,
+                "web_fetch",
+                &serde_json::json!({"url": "https://example.com/path"}),
+            )
+            .unwrap_err()
+            .to_string();
+            assert!(error.contains("one-call"), "{error}");
+        });
+        with_ctx(&dir, false, true, |ctx| {
+            enforce_in_process_network_policy(
+                ctx,
+                "web_fetch",
+                &serde_json::json!({"url": "https://example.com/path"}),
+            )
+            .unwrap();
+        });
+
+        memory::set_permission_preset(dir.path(), types::PermissionPreset::FullAccess).unwrap();
+        with_ctx(&dir, false, false, |ctx| {
+            enforce_in_process_network_policy(
+                ctx,
+                "web_fetch",
+                &serde_json::json!({"url": "https://example.com/path"}),
+            )
+            .unwrap();
+        });
+    }
+
+    #[test]
+    fn network_host_extraction_is_stable_and_deduplicated() {
+        assert_eq!(
+            in_process_network_hosts(
+                "web_fetch",
+                &serde_json::json!({
+                    "url": "https://ignored.example",
+                    "urls": [
+                        "https://EXAMPLE.com/a",
+                        "https://example.com/b",
+                        "https://www.rust-lang.org/"
+                    ]
+                })
+            ),
+            vec!["example.com", "www.rust-lang.org"]
+        );
+        assert!(tool_requires_in_process_network("web_search"));
+        assert!(!tool_requires_in_process_network("terminal"));
     }
 }
