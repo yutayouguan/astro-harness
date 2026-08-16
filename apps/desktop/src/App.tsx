@@ -73,8 +73,11 @@ import { shouldShowThinkingControls } from "./lib/chat/shouldShowThinkingControl
 import {
   CHAT_MODES,
   loadChatMode,
+  loadParallelTasksEnabled,
+  resolveInteractionMode,
   saveChatMode,
-  type ChatInteractionMode,
+  saveParallelTasksEnabled,
+  type ChatWorkMode,
 } from "./lib/chat/chatMode";
 import type { SlashAction } from "./lib/chat/composerCommands";
 import {
@@ -135,11 +138,23 @@ export default function App() {
   const { showToast: showTransientToast, toastHost } = useTransientToast();
 
   // ── App-level state ───────────────────────────────────────────────────────
-  const [chatMode, setChatMode] = useState<ChatInteractionMode>(() => loadChatMode());
-  const onChatModeChange = useCallback((mode: ChatInteractionMode) => {
+  const [chatMode, setChatMode] = useState<ChatWorkMode>(() => loadChatMode());
+  const [parallelTasksEnabled, setParallelTasksEnabled] = useState(() =>
+    loadParallelTasksEnabled(),
+  );
+  const onChatModeChange = useCallback((mode: ChatWorkMode) => {
     setChatMode(mode);
     saveChatMode(mode);
+    if (mode !== "agent") {
+      setParallelTasksEnabled(false);
+      saveParallelTasksEnabled(false);
+    }
   }, []);
+  const onParallelTasksEnabledChange = useCallback((enabled: boolean) => {
+    setParallelTasksEnabled(enabled);
+    saveParallelTasksEnabled(enabled);
+  }, []);
+  const interactionMode = resolveInteractionMode(chatMode, parallelTasksEnabled);
   const syncComposerFromModelPrefs = useCallback(
     (prefs: ModelRuntimePrefs, globals: ModelPickerGlobals) => {
       setThinkingLevel(modelPrefsToThinkingLevel(prefs, globals));
@@ -184,7 +199,7 @@ export default function App() {
   const chat = useChatSession({
     activeProvider,
     providers,
-    chatMode,
+    chatMode: interactionMode,
     onChatModeChange,
     chatDisplayPrefsRef,
     locale,
@@ -917,6 +932,8 @@ export default function App() {
                       }}
                       chatMode={chatMode}
                       onChatModeChange={onChatModeChange}
+                      parallelTasksEnabled={parallelTasksEnabled}
+                      onParallelTasksEnabledChange={onParallelTasksEnabledChange}
                       onOpenContext={() => {
                         setChatRightTab("context");
                         setChatRightOpen(true);

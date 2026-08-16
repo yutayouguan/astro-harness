@@ -1,32 +1,50 @@
-/**
- * 聊天交互模式（Agent / Plan / Ask / MultiTask）。
- *
- * 模式行为说明由后端写入 system prompt（`InteractionMode::system_guidance`），
- * 前端只负责 UI 选择与 `interactionMode` 传参。
- */
+/** 用户直接选择的工作模式。 */
+export type ChatWorkMode = "agent" | "plan" | "ask";
 
-export type ChatInteractionMode = "agent" | "plan" | "ask" | "multitask";
+/**
+ * 发给后端的交互模式。
+ *
+ * `multitask` 是 Agent + 并行任务开关组合出的运行态，不再作为顶层工作模式展示。
+ */
+export type ChatInteractionMode = ChatWorkMode | "multitask";
 
 const STORAGE_KEY = "astro.chat.mode";
+const PARALLEL_TASKS_STORAGE_KEY = "astro.chat.parallelTasks";
 
 /** 模式切换授权条默认倒计时（秒） */
 export const MODE_SWITCH_COUNTDOWN_SEC = 10;
 
 /** 可选模式列表（UI 顺序） */
-export const CHAT_MODES: ChatInteractionMode[] = [
-  "agent",
-  "plan",
-  "ask",
-  "multitask",
-];
+export const CHAT_MODES: ChatWorkMode[] = ["agent", "plan", "ask"];
+
+/** 把历史 MultiTask 顶层模式迁移为 Agent 工作模式。 */
+export function normalizeStoredChatMode(value: string | null): ChatWorkMode {
+  if (value === "plan" || value === "ask") return value;
+  return "agent";
+}
+
+/** 新开关未写入时，继承历史 `multitask` 配置。 */
+export function resolveStoredParallelTasks(
+  storedMode: string | null,
+  storedParallel: string | null,
+): boolean {
+  if (storedParallel === "true") return true;
+  if (storedParallel === "false") return false;
+  return storedMode === "multitask";
+}
+
+/** 工作模式与并行开关组合成后端已有的交互模式。 */
+export function resolveInteractionMode(
+  workMode: ChatWorkMode,
+  parallelTasksEnabled: boolean,
+): ChatInteractionMode {
+  return workMode === "agent" && parallelTasksEnabled ? "multitask" : workMode;
+}
 
 /** 从 localStorage 读取模式，缺省 `agent` */
-export function loadChatMode(): ChatInteractionMode {
+export function loadChatMode(): ChatWorkMode {
   try {
-    const v = localStorage.getItem(STORAGE_KEY);
-    if (v === "agent" || v === "plan" || v === "ask" || v === "multitask") {
-      return v;
-    }
+    return normalizeStoredChatMode(localStorage.getItem(STORAGE_KEY));
   } catch {
     /* ignore */
   }
@@ -34,9 +52,30 @@ export function loadChatMode(): ChatInteractionMode {
 }
 
 /** 持久化聊天模式 */
-export function saveChatMode(mode: ChatInteractionMode) {
+export function saveChatMode(mode: ChatWorkMode) {
   try {
     localStorage.setItem(STORAGE_KEY, mode);
+  } catch {
+    /* ignore */
+  }
+}
+
+/** 读取 Agent 并行任务开关，并兼容旧版 MultiTask 顶层模式。 */
+export function loadParallelTasksEnabled(): boolean {
+  try {
+    return resolveStoredParallelTasks(
+      localStorage.getItem(STORAGE_KEY),
+      localStorage.getItem(PARALLEL_TASKS_STORAGE_KEY),
+    );
+  } catch {
+    return false;
+  }
+}
+
+/** 持久化 Agent 并行任务开关。 */
+export function saveParallelTasksEnabled(enabled: boolean) {
+  try {
+    localStorage.setItem(PARALLEL_TASKS_STORAGE_KEY, String(enabled));
   } catch {
     /* ignore */
   }
@@ -77,4 +116,3 @@ export function parseModeSwitchResult(
     return null;
   }
 }
-

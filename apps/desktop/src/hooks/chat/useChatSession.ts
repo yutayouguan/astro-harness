@@ -15,6 +15,7 @@ import {
 import { elapsedSecSince } from "../../lib/chat/elapsedSec";
 import {
   type ChatInteractionMode,
+  type ChatWorkMode,
   type ModeSwitchRequest,
 } from "../../lib/chat/chatMode";
 import {
@@ -98,7 +99,7 @@ export interface UseChatSessionDeps {
   activeProvider: ProviderDto | undefined;
   providers: ProviderDto[];
   chatMode: ChatInteractionMode;
-  onChatModeChange: (mode: ChatInteractionMode) => void;
+  onChatModeChange: (mode: ChatWorkMode) => void;
   chatDisplayPrefsRef: RefObject<ChatDisplayPrefs>;
   locale: string;
   t: TFn;

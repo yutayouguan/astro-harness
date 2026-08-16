@@ -24,6 +24,7 @@ import {
   File,
   FileVideo,
   GitBranch,
+  Hand,
   Image,
   Infinity as InfinityIcon,
   Layers2,
@@ -37,6 +38,8 @@ import {
   Play,
   RefreshCw,
   SendHorizontal,
+  ShieldAlert,
+  ShieldCheck,
   Slash,
   Square,
   Trash2,
@@ -61,7 +64,7 @@ import {
 import {
   CHAT_MODES,
   MODE_SWITCH_COUNTDOWN_SEC,
-  type ChatInteractionMode,
+  type ChatWorkMode,
   type ModeSwitchRequest,
 } from "../../lib/chat/chatMode";
 import type { QueuedFollowUp } from "../../lib/chat/followUpQueue";
@@ -99,6 +102,7 @@ import {
   formatEstimateCostUsd,
 } from "../../lib/model/modelCaps";
 import { useTransientToast } from "../../hooks/ui/useTransientToast";
+import { useConfirm } from "../../hooks/ui/DialogContext";
 import { AgentCreateGuide } from "../agents/AgentCreateGuide";
 import AgentAvatar from "../agents/AgentAvatar";
 import ChatMessageNav from "./ChatMessageNav";
@@ -276,9 +280,12 @@ type Props = {
   modelPricing?: ModelPricingMeta | null;
   /** 打开 Tools 面板 MCP tab */
   onOpenMcpSettings?: () => void;
-  /** Agent / Plan / Ask / MultiTask */
-  chatMode: ChatInteractionMode;
-  onChatModeChange: (mode: ChatInteractionMode) => void;
+  /** Agent / Plan / Ask 工作模式 */
+  chatMode: ChatWorkMode;
+  onChatModeChange: (mode: ChatWorkMode) => void;
+  /** Agent 模式下，每条消息是否创建独立并行任务 */
+  parallelTasksEnabled: boolean;
+  onParallelTasksEnabledChange: (enabled: boolean) => void;
   /** 打开右侧上下文面板 */
   onOpenContext: () => void;
   /** 简易上下文占用 0–100，用于按钮提示 */
@@ -336,6 +343,14 @@ function detectTrigger(text: string, caret: number): TriggerState | null {
 const MAX_ATTACHMENTS = 8;
 /** 图片内联 base64 上限（字节） */
 const MAX_INLINE_BYTES = 4 * 1024 * 1024;
+
+type ApprovalMode = "manual" | "smart" | "off";
+type ApprovalSettings = { mode: string; commandAllowlist: string[] };
+const APPROVAL_MODES: ApprovalMode[] = ["manual", "smart", "off"];
+
+function normalizeApprovalMode(mode: string | null | undefined): ApprovalMode {
+  return mode === "manual" || mode === "off" ? mode : "smart";
+}
 
 /** 由 MIME / 扩展名推断附件种类 */
 function kindFromMime(mime: string, name: string): ChatAttachmentKind {
@@ -635,6 +650,8 @@ export default function ChatView({
   onOpenMcpSettings,
   chatMode,
   onChatModeChange,
+  parallelTasksEnabled,
+  onParallelTasksEnabledChange,
   onOpenContext,
   contextUsagePercent = null,
   contextUsage = null,
@@ -648,6 +665,7 @@ export default function ChatView({
 }: Props) {
   const { t } = useI18n();
   const { showToast, toastHost } = useTransientToast();
+  const confirm = useConfirm();
   const dissolvingSet = useMemo(() => new Set(dissolvingIds), [dissolvingIds]);
   const bottomRef = useRef<HTMLDivElement>(null);
   const messageListRef = useRef<HTMLDivElement>(null);
@@ -656,9 +674,15 @@ export default function ChatView({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const modeMenuRef = useRef<HTMLDivElement>(null);
   const modeMenuPanelRef = useRef<HTMLDivElement>(null);
+  const approvalMenuRef = useRef<HTMLDivElement>(null);
+  const approvalMenuPanelRef = useRef<HTMLDivElement>(null);
+  const approvalRequestIdRef = useRef(0);
   const mcpWrapRef = useRef<HTMLDivElement>(null);
   const contextWrapRef = useRef<HTMLDivElement>(null);
   const [modeMenuOpen, setModeMenuOpen] = useState(false);
+  const [approvalMenuOpen, setApprovalMenuOpen] = useState(false);
+  const [approvalMode, setApprovalMode] = useState<ApprovalMode>("smart");
+  const [approvalBusy, setApprovalBusy] = useState(false);
   const [queueOpen, setQueueOpen] = useState(true);
   const [tasksOpen, setTasksOpen] = useState(true);
   const [editingQueueId, setEditingQueueId] = useState<string | null>(null);
@@ -725,6 +749,22 @@ export default function ChatView({
     void loadMentionSources();
   }, [loadMentionSources]);
 
+  const refreshApprovalMode = useCallback(async () => {
+    const requestId = ++approvalRequestIdRef.current;
+    try {
+      const settings = await invoke<ApprovalSettings>("get_approval_settings");
+      if (requestId === approvalRequestIdRef.current) {
+        setApprovalMode(normalizeApprovalMode(settings.mode));
+      }
+    } catch {
+      // 浏览器预览或后端暂不可用时保留安全默认值。
+    }
+  }, []);
+
+  useEffect(() => {
+    void refreshApprovalMode();
+  }, [refreshApprovalMode]);
+
   useEffect(() => {
     if (!modeSwitchPrompt) {
       setModeSwitchSecLeft(MODE_SWITCH_COUNTDOWN_SEC);
@@ -777,6 +817,19 @@ export default function ChatView({
     return () => document.removeEventListener("mousedown", onDoc);
   }, [modeMenuOpen]);
 
+  useEffect(() => {
+    if (!approvalMenuOpen) return;
+    void refreshApprovalMode();
+    const onDoc = (ev: MouseEvent) => {
+      const target = ev.target as Node;
+      if (approvalMenuRef.current?.contains(target)) return;
+      if (approvalMenuPanelRef.current?.contains(target)) return;
+      setApprovalMenuOpen(false);
+    };
+    document.addEventListener("mousedown", onDoc);
+    return () => document.removeEventListener("mousedown", onDoc);
+  }, [approvalMenuOpen, refreshApprovalMode]);
+
   const modeMenuStyle = useClampPopover({
     open: modeMenuOpen,
     anchorRef: modeMenuRef,
@@ -790,9 +843,22 @@ export default function ChatView({
     sizeKey: chatMode,
   });
 
+  const approvalMenuStyle = useClampPopover({
+    open: approvalMenuOpen,
+    anchorRef: approvalMenuRef,
+    popoverRef: approvalMenuPanelRef,
+    mode: "fixed",
+    preferAlign: "start",
+    placement: "above",
+    gap: 8,
+    maxHeightCap: 320,
+    minMaxHeight: 96,
+    sizeKey: approvalMode,
+  });
+
   const modeMeta = useMemo(() => {
     const map: Record<
-      ChatInteractionMode,
+      ChatWorkMode,
       { label: string; desc: string; Icon: typeof InfinityIcon }
     > = {
       agent: {
@@ -810,14 +876,60 @@ export default function ChatView({
         desc: t("chat.mode.desc.ask"),
         Icon: MessageCircle,
       },
-      multitask: {
-        label: t("chat.modeMultitask"),
-        desc: t("chat.mode.desc.multitask"),
-        Icon: Layers2,
-      },
     };
     return map;
   }, [t]);
+
+  const approvalMeta = useMemo(() => ({
+    manual: {
+      label: t("chat.approval.manual"),
+      desc: t("chat.approval.desc.manual"),
+      Icon: Hand,
+    },
+    smart: {
+      label: t("chat.approval.smart"),
+      desc: t("chat.approval.desc.smart"),
+      Icon: ShieldCheck,
+    },
+    off: {
+      label: t("chat.approval.off"),
+      desc: t("chat.approval.desc.off"),
+      Icon: ShieldAlert,
+    },
+  }), [t]);
+
+  const changeApprovalMode = useCallback(async (next: ApprovalMode) => {
+    if (approvalBusy || next === approvalMode) {
+      setApprovalMenuOpen(false);
+      return;
+    }
+    setApprovalMenuOpen(false);
+    if (next === "off") {
+      const approved = await confirm({
+        title: t("chat.approval.fullAccessConfirmTitle"),
+        message: t("chat.approval.fullAccessConfirmMessage"),
+        confirmLabel: t("chat.approval.enableFullAccess"),
+        variant: "danger",
+      });
+      if (!approved) return;
+    }
+    setApprovalBusy(true);
+    const requestId = ++approvalRequestIdRef.current;
+    try {
+      const settings = await invoke<ApprovalSettings>("set_approval_mode", {
+        mode: next,
+      });
+      if (requestId === approvalRequestIdRef.current) {
+        setApprovalMode(normalizeApprovalMode(settings.mode));
+      }
+    } catch (error) {
+      showToast(t("chat.approval.updateFailed", { error: String(error) }), {
+        tone: "error",
+      });
+    } finally {
+      setApprovalBusy(false);
+    }
+  }, [approvalBusy, approvalMode, confirm, showToast, t]);
 
   const thinkingItems: PaletteItem[] = useMemo(() => {
     const levels = thinkingLevelsFromMeta(reasoningMeta);
@@ -949,6 +1061,7 @@ export default function ChatView({
   const openThinkingPalette = useCallback(() => {
     setMcpOpen(false);
     setModeMenuOpen(false);
+    setApprovalMenuOpen(false);
     setContextPopoverOpen(false);
     setPaletteKind((k) => (k === "thinking" ? null : "thinking"));
     setPaletteQuery("");
@@ -1478,13 +1591,14 @@ export default function ChatView({
   };
 
   const interruptBlocked = pendingInterrupts.length > 0;
-  const queueEnabled = chatMode !== "multitask";
+  const isParallelMode = chatMode === "agent" && parallelTasksEnabled;
+  const queueEnabled = !isParallelMode;
   const canQueueWhileBusy =
     queueEnabled && (streaming || turnInFlight || interruptBlocked);
   const canSend =
     !sendBlocked &&
     (input.trim().length > 0 || attachments.length > 0) &&
-    (!streaming || canQueueWhileBusy || chatMode === "multitask") &&
+    (!streaming || canQueueWhileBusy || isParallelMode) &&
     (queueEnabled || !interruptBlocked);
   const parallelRunningCount = useMemo(
     () => countRunningParallel(parallelTasks),
@@ -1528,10 +1642,10 @@ export default function ChatView({
 
   const showStopControl =
     streaming ||
-    (turnInFlight && chatMode !== "multitask") ||
-    (chatMode === "multitask" && parallelRunningCount > 0);
+    (turnInFlight && !isParallelMode) ||
+    (isParallelMode && parallelRunningCount > 0);
   const showPauseResume = streaming;
-  const showSendButton = chatMode === "multitask" || !streaming;
+  const showSendButton = isParallelMode || !streaming;
   const modeSwitchLocked =
     streaming || turnInFlight || interruptBlocked || parallelRunningCount > 0;
   const parallelRunningIds = useMemo(
@@ -1617,12 +1731,12 @@ export default function ChatView({
 
   const composerPlaceholder =
     streaming || (turnInFlight && queueEnabled)
-      ? chatMode === "multitask"
+      ? isParallelMode
         ? t("chat.placeholderMultitask")
         : queueEnabled
           ? t("chat.placeholderStreaming")
           : t("chat.placeholderStreamingBusy")
-      : chatMode === "multitask" && parallelRunningCount > 0
+      : isParallelMode && parallelRunningCount > 0
         ? t("chat.placeholderMultitask")
       : sendBlocked && sendBlockedReason
         ? sendBlockedReason
@@ -1666,7 +1780,7 @@ export default function ChatView({
                 m.role === "assistant" &&
                 !m.error &&
                 (parallelRunningIds.has(m.id) ||
-                  (chatMode !== "multitask" &&
+                  (!isParallelMode &&
                     streaming &&
                     index === messages.length - 1));
               const reasoningActive = Boolean(
@@ -2369,7 +2483,7 @@ export default function ChatView({
                     : composerPlaceholder || t("chat.placeholder")
               }
               disabled={
-                (streaming && chatMode !== "multitask") ||
+                (streaming && !isParallelMode) ||
                 (interruptBlocked && !queueEnabled)
               }
               autoFocus
@@ -2393,6 +2507,7 @@ export default function ChatView({
                   onClick={() => {
                     setMcpOpen(false);
                     setContextPopoverOpen(false);
+                    setApprovalMenuOpen(false);
                     setModeMenuOpen((o) => !o);
                   }}
                 >
@@ -2454,6 +2569,97 @@ export default function ChatView({
                   : null}
               </div>
 
+              <div className="composer-mode" ref={approvalMenuRef}>
+                <button
+                  type="button"
+                  className={`composer-mode-pill composer-approval-pill ${approvalMenuOpen ? "is-open" : ""} ${approvalMode === "off" ? "is-full-access" : ""}`.trim()}
+                  disabled={approvalBusy}
+                  aria-haspopup="listbox"
+                  aria-expanded={approvalMenuOpen}
+                  aria-label={t("chat.approval.menu")}
+                  title={`${approvalMeta[approvalMode].label} — ${approvalMeta[approvalMode].desc}`}
+                  onClick={() => {
+                    setModeMenuOpen(false);
+                    setMcpOpen(false);
+                    setContextPopoverOpen(false);
+                    setPaletteKind(null);
+                    setApprovalMenuOpen((open) => !open);
+                  }}
+                >
+                  {(() => {
+                    const Meta = approvalMeta[approvalMode];
+                    const Icon = Meta.Icon;
+                    return (
+                      <>
+                        <Icon size={14} strokeWidth={2.1} />
+                        <span>{Meta.label}</span>
+                        <ChevronDown size={14} strokeWidth={2} />
+                      </>
+                    );
+                  })()}
+                </button>
+                {approvalMenuOpen && typeof document !== "undefined"
+                  ? createPortal(
+                      <div
+                        ref={approvalMenuPanelRef}
+                        className="composer-mode-menu composer-approval-menu"
+                        role="listbox"
+                        aria-label={t("chat.approval.menu")}
+                        style={approvalMenuStyle ?? { visibility: "hidden" }}
+                      >
+                        {APPROVAL_MODES.map((mode) => {
+                          const Meta = approvalMeta[mode];
+                          const Icon = Meta.Icon;
+                          const selected = mode === approvalMode;
+                          return (
+                            <button
+                              key={mode}
+                              type="button"
+                              role="option"
+                              aria-selected={selected}
+                              data-approval-mode={mode}
+                              className={`composer-mode-item composer-approval-item ${selected ? "is-selected" : ""}`}
+                              onClick={() => void changeApprovalMode(mode)}
+                            >
+                              <Icon size={16} strokeWidth={2} />
+                              <span className="composer-mode-item-text">
+                                <span className="composer-mode-item-label">
+                                  {Meta.label}
+                                  {mode === "smart" ? (
+                                    <span className="composer-approval-recommended">
+                                      {t("chat.approval.recommended")}
+                                    </span>
+                                  ) : null}
+                                </span>
+                                <span className="composer-mode-item-desc">{Meta.desc}</span>
+                              </span>
+                              {selected ? <Check size={14} strokeWidth={2.4} /> : null}
+                            </button>
+                          );
+                        })}
+                      </div>,
+                      document.body,
+                    )
+                  : null}
+              </div>
+
+              <button
+                type="button"
+                className={`composer-mode-pill composer-mode-pill--ghost composer-parallel-toggle ${parallelTasksEnabled ? "is-on" : ""}`.trim()}
+                disabled={modeSwitchLocked || chatMode !== "agent"}
+                title={
+                  chatMode === "agent"
+                    ? t("chat.parallelTasks.desc")
+                    : t("chat.parallelTasks.agentOnly")
+                }
+                aria-label={t("chat.parallelTasks")}
+                aria-pressed={parallelTasksEnabled}
+                onClick={() => onParallelTasksEnabledChange(!parallelTasksEnabled)}
+              >
+                <Layers2 size={14} strokeWidth={2} />
+                <span>{t("chat.parallelTasks")}</span>
+              </button>
+
               {showThinkingControls ? (
                 <button
                   type="button"
@@ -2499,6 +2705,7 @@ export default function ChatView({
                   aria-expanded={mcpOpen}
                   onClick={() => {
                     setModeMenuOpen(false);
+                    setApprovalMenuOpen(false);
                     setPaletteKind(null);
                     setContextPopoverOpen(false);
                     setMcpOpen((v) => !v);
@@ -2524,6 +2731,7 @@ export default function ChatView({
                 aria-label={t("chat.mentionTitle")}
                 onClick={() => {
                   setMcpOpen(false);
+                  setApprovalMenuOpen(false);
                   setContextPopoverOpen(false);
                   const el = textareaRef.current;
                   const caret = el?.selectionStart ?? input.length;
@@ -2550,6 +2758,7 @@ export default function ChatView({
                 aria-label={t("chat.slashTitle")}
                 onClick={() => {
                   setMcpOpen(false);
+                  setApprovalMenuOpen(false);
                   setContextPopoverOpen(false);
                   const el = textareaRef.current;
                   const caret = el?.selectionStart ?? input.length;
@@ -2586,6 +2795,7 @@ export default function ChatView({
                   aria-expanded={contextPopoverOpen}
                   onClick={() => {
                     setModeMenuOpen(false);
+                    setApprovalMenuOpen(false);
                     setMcpOpen(false);
                     setPaletteKind(null);
                     setContextPopoverOpen((v) => !v);
