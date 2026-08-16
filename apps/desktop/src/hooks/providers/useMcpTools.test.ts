@@ -19,6 +19,32 @@ test("imports stdio and Streamable HTTP servers", () => {
     servers.map((server) => server.type),
     ["stdio", "streamableHttp"],
   );
+  assert.deepEqual(
+    servers.map((server) => [server.startupTimeoutSecs, server.toolTimeoutSecs]),
+    [[10, 60], [10, 60]],
+  );
+});
+
+test("preserves Codex timeout field names", () => {
+  const [server] = parseMcpJson(
+    JSON.stringify({
+      mcpServers: {
+        local: { command: "npx", startup_timeout_sec: 17, tool_timeout_sec: 91 },
+      },
+    }),
+  );
+
+  assert.equal(server.startupTimeoutSecs, 17);
+  assert.equal(server.toolTimeoutSecs, 91);
+});
+
+test("bounds imported timeout values", () => {
+  const [server] = parseMcpJson(
+    JSON.stringify({ command: "npx", startupTimeoutSecs: 0, toolTimeoutSecs: 9000 }),
+  );
+
+  assert.equal(server.startupTimeoutSecs, 1);
+  assert.equal(server.toolTimeoutSecs, 3600);
 });
 
 test("rejects an explicit legacy SSE transport", () => {

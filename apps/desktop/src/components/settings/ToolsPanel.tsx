@@ -4,6 +4,7 @@ import { createPortal } from "react-dom";
 import {
   AlignLeft,
   Braces,
+  Clock3,
   Columns2,
   FileJson2,
   FileText,
@@ -22,6 +23,7 @@ import {
   ShieldCheck,
   Tag,
   Terminal,
+  Timer,
   Trash2,
   Type,
   Wrench,
@@ -32,6 +34,10 @@ import { useAgentTools } from "../../hooks/providers/useAgentTools";
 import {
   parseMcpJson,
   LegacySseTransportError,
+  DEFAULT_MCP_STARTUP_TIMEOUT_SECS,
+  DEFAULT_MCP_TOOL_TIMEOUT_SECS,
+  MAX_MCP_STARTUP_TIMEOUT_SECS,
+  MAX_MCP_TOOL_TIMEOUT_SECS,
   useMcpTools,
   type McpServer,
   type McpTransportType,
@@ -321,6 +327,12 @@ function McpAddDialog({
   const [formEnv, setFormEnv] = useState("");
   const [formUrl, setFormUrl] = useState("");
   const [formHeaders, setFormHeaders] = useState("");
+  const [formStartupTimeout, setFormStartupTimeout] = useState(
+    String(DEFAULT_MCP_STARTUP_TIMEOUT_SECS),
+  );
+  const [formToolTimeout, setFormToolTimeout] = useState(
+    String(DEFAULT_MCP_TOOL_TIMEOUT_SECS),
+  );
   const [formError, setFormError] = useState("");
 
   const backdropRef = useRef<HTMLDivElement>(null);
@@ -360,6 +372,19 @@ function McpAddDialog({
       setFormError(t("mcpTools.formNameRequired"));
       return;
     }
+    const startupTimeoutSecs = Number(formStartupTimeout);
+    const toolTimeoutSecs = Number(formToolTimeout);
+    if (
+      !Number.isInteger(startupTimeoutSecs) ||
+      startupTimeoutSecs < 1 ||
+      startupTimeoutSecs > MAX_MCP_STARTUP_TIMEOUT_SECS ||
+      !Number.isInteger(toolTimeoutSecs) ||
+      toolTimeoutSecs < 1 ||
+      toolTimeoutSecs > MAX_MCP_TOOL_TIMEOUT_SECS
+    ) {
+      setFormError(t("mcpTools.formTimeoutRangeError"));
+      return;
+    }
     if (isStdio) {
       if (!formCommand.trim()) {
         setFormError(t("mcpTools.formCommandRequired"));
@@ -387,6 +412,8 @@ function McpAddDialog({
         url: isStdio ? "" : formUrl.trim(),
         headers: isStdio ? {} : parseEnvOrHeaders(formHeaders),
         enabled: true,
+        startupTimeoutSecs,
+        toolTimeoutSecs,
         tools: {},
         discovered: [],
       },
@@ -524,6 +551,34 @@ function McpAddDialog({
                       })}
                     />
                   </div>
+                  <label className="mcp-field">
+                    <span className="mcp-field-label">
+                      <Clock3 size={13} strokeWidth={2.2} aria-hidden />
+                      {t("mcpTools.formStartupTimeout")}
+                    </span>
+                    <input
+                      type="number"
+                      min={1}
+                      max={MAX_MCP_STARTUP_TIMEOUT_SECS}
+                      step={1}
+                      value={formStartupTimeout}
+                      onChange={(e) => setFormStartupTimeout(e.target.value)}
+                    />
+                  </label>
+                  <label className="mcp-field">
+                    <span className="mcp-field-label">
+                      <Timer size={13} strokeWidth={2.2} aria-hidden />
+                      {t("mcpTools.formToolTimeout")}
+                    </span>
+                    <input
+                      type="number"
+                      min={1}
+                      max={MAX_MCP_TOOL_TIMEOUT_SECS}
+                      step={1}
+                      value={formToolTimeout}
+                      onChange={(e) => setFormToolTimeout(e.target.value)}
+                    />
+                  </label>
 
                   {isStdio ? (
                     <>
@@ -695,16 +750,20 @@ function McpServerCard({
       {server.description && (
         <p className="mcp-server-desc">{server.description}</p>
       )}
-      {(envKeys.length > 0 || headerKeys.length > 0) && (
-        <div className="mcp-server-env">
-          {envKeys.map((k) => (
-            <span key={`env-${k}`} className="mcp-server-env-key">{k}</span>
-          ))}
-          {headerKeys.map((k) => (
-            <span key={`hdr-${k}`} className="mcp-server-env-key">{k}</span>
-          ))}
-        </div>
-      )}
+      <div className="mcp-server-env">
+        <span className="mcp-server-env-key">
+          {t("mcpTools.startupTimeout")}: {server.startupTimeoutSecs}s
+        </span>
+        <span className="mcp-server-env-key">
+          {t("mcpTools.toolTimeout")}: {server.toolTimeoutSecs}s
+        </span>
+        {envKeys.map((k) => (
+          <span key={`env-${k}`} className="mcp-server-env-key">{k}</span>
+        ))}
+        {headerKeys.map((k) => (
+          <span key={`hdr-${k}`} className="mcp-server-env-key">{k}</span>
+        ))}
+      </div>
       <div className={`mcp-tool-list ${server.enabled ? "" : "is-disabled"}`}>
         <div className="mcp-tool-list-head">
           <span className="mcp-tool-list-label">{t("mcpTools.tools")}</span>
@@ -1345,6 +1404,18 @@ export default function ToolsPanel({
                           {t("tools.detail.endpoint")}
                         </span>
                         <code>{serverEndpoint(selectedServer)}</code>
+                      </div>
+                      <div className="tools-detail-meta-item">
+                        <span className="tools-detail-label">
+                          {t("mcpTools.startupTimeout")}
+                        </span>
+                        <span>{selectedServer.startupTimeoutSecs}s</span>
+                      </div>
+                      <div className="tools-detail-meta-item">
+                        <span className="tools-detail-label">
+                          {t("mcpTools.toolTimeout")}
+                        </span>
+                        <span>{selectedServer.toolTimeoutSecs}s</span>
                       </div>
                     </section>
                     <section className="tools-detail-section">

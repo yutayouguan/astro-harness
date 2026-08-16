@@ -5,6 +5,18 @@ import { invoke } from "@tauri-apps/api/core";
 /** MCP 传输类型：本地进程 / Streamable HTTP。 */
 export type McpTransportType = "stdio" | "streamableHttp";
 
+export const DEFAULT_MCP_STARTUP_TIMEOUT_SECS = 10;
+export const DEFAULT_MCP_TOOL_TIMEOUT_SECS = 60;
+export const MAX_MCP_STARTUP_TIMEOUT_SECS = 120;
+export const MAX_MCP_TOOL_TIMEOUT_SECS = 3600;
+
+const STARTUP_TIMEOUT_KEYS = [
+  "startupTimeoutSecs", "startupTimeoutSec", "startup_timeout_secs", "startup_timeout_sec",
+] as const;
+const TOOL_TIMEOUT_KEYS = [
+  "toolTimeoutSecs", "toolTimeoutSec", "tool_timeout_secs", "tool_timeout_sec",
+] as const;
+
 /** 旧 SSE 不能安全地推断为 Streamable HTTP，必须由用户提供新的 /mcp endpoint。 */
 export class LegacySseTransportError extends Error {
   constructor() {
@@ -33,6 +45,10 @@ export type McpServer = {
   url: string;
   headers: Record<string, string>;
   enabled: boolean;
+  /** 建连、初始化与首次工具发现的超时（秒） */
+  startupTimeoutSecs: number;
+  /** 单次工具调用超时（秒） */
+  toolTimeoutSecs: number;
   /** 单工具开关；缺失视为启用 */
   tools: Record<string, boolean>;
   /** 最近一次 list_tools 缓存 */
@@ -43,8 +59,26 @@ const isTauri = () =>
   typeof window !== "undefined" &&
   !!(window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__;
 
+function readTimeout(
+  raw: Record<string, unknown>,
+  keys: readonly string[],
+  fallback: number,
+  max: number,
+): number {
+  for (const key of keys) {
+    const value = raw[key];
+    if (value === undefined || value === null || value === "") continue;
+    const parsed = typeof value === "number" ? value : Number(value);
+    if (Number.isFinite(parsed)) {
+      return Math.min(max, Math.max(1, Math.trunc(parsed)));
+    }
+  }
+  return fallback;
+}
+
 function normalizeServer(raw: Partial<McpServer> & { id?: string; name?: string }): McpServer {
-  const type = inferType(raw as unknown as Record<string, unknown>);
+  const config = raw as unknown as Record<string, unknown>;
+  const type = inferType(config);
   const tools =
     raw.tools && typeof raw.tools === "object" ? { ...raw.tools } : ({} as Record<string, boolean>);
   const discovered = Array.isArray(raw.discovered)
@@ -67,6 +101,12 @@ function normalizeServer(raw: Partial<McpServer> & { id?: string; name?: string 
     url: raw.url ?? "",
     headers: raw.headers && typeof raw.headers === "object" ? raw.headers : {},
     enabled: raw.enabled ?? true,
+    startupTimeoutSecs: readTimeout(
+      config, STARTUP_TIMEOUT_KEYS, DEFAULT_MCP_STARTUP_TIMEOUT_SECS, MAX_MCP_STARTUP_TIMEOUT_SECS,
+    ),
+    toolTimeoutSecs: readTimeout(
+      config, TOOL_TIMEOUT_KEYS, DEFAULT_MCP_TOOL_TIMEOUT_SECS, MAX_MCP_TOOL_TIMEOUT_SECS,
+    ),
     tools,
     discovered,
   };
@@ -123,6 +163,12 @@ export function parseMcpJson(raw: string): McpServer[] {
           cfg.headers && typeof cfg.headers === "object"
             ? (cfg.headers as Record<string, string>)
             : {},
+        startupTimeoutSecs: readTimeout(
+          cfg, STARTUP_TIMEOUT_KEYS, DEFAULT_MCP_STARTUP_TIMEOUT_SECS, MAX_MCP_STARTUP_TIMEOUT_SECS,
+        ),
+        toolTimeoutSecs: readTimeout(
+          cfg, TOOL_TIMEOUT_KEYS, DEFAULT_MCP_TOOL_TIMEOUT_SECS, MAX_MCP_TOOL_TIMEOUT_SECS,
+        ),
         enabled: true,
       }),
     );

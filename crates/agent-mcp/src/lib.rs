@@ -11,6 +11,8 @@ pub mod names;
 pub use config::{
     load_for_active_agent, load_mcp_servers, merge_discovered, persist_discovered,
     save_mcp_servers, DiscoveredTool, McpServerConfig, McpTransportType,
+    DEFAULT_STARTUP_TIMEOUT_SECS, DEFAULT_TOOL_TIMEOUT_SECS, STARTUP_TIMEOUT_SECS_RANGE,
+    TOOL_TIMEOUT_SECS_RANGE,
 };
 pub use hub::{
     call_tool_with_peer, filter_enabled_tool_names, toolset_name, McpExecutionContext, McpHub,

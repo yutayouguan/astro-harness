@@ -15,6 +15,15 @@ use home::{
 
 use crate::names::sanitize_server_id;
 
+/// MCP server 启动默认超时（秒），与 Codex 默认值一致。
+pub const DEFAULT_STARTUP_TIMEOUT_SECS: u64 = 10;
+/// MCP 工具调用默认超时（秒），与 Codex 默认值一致。
+pub const DEFAULT_TOOL_TIMEOUT_SECS: u64 = 60;
+/// MCP server 启动超时允许范围。
+pub const STARTUP_TIMEOUT_SECS_RANGE: std::ops::RangeInclusive<u64> = 1..=120;
+/// MCP 工具调用超时允许范围。
+pub const TOOL_TIMEOUT_SECS_RANGE: std::ops::RangeInclusive<u64> = 1..=3600;
+
 /// MCP 传输方式。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
@@ -97,8 +106,23 @@ pub struct McpServerConfig {
     pub headers: HashMap<String, String>,
     #[serde(default = "default_true")]
     pub enabled: bool,
-    /// 工具调用超时（秒）；缺失默认 300s。
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    /// 启动超时（秒）；覆盖建连、初始化与首次工具发现，缺失默认 10s。
+    #[serde(
+        default,
+        alias = "startup_timeout_sec",
+        alias = "startup_timeout_secs",
+        alias = "startupTimeoutSec",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub startup_timeout_secs: Option<u64>,
+    /// 工具调用超时（秒）；缺失默认 60s。
+    #[serde(
+        default,
+        alias = "tool_timeout_sec",
+        alias = "tool_timeout_secs",
+        alias = "toolTimeoutSec",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub tool_timeout_secs: Option<u64>,
     /// 单工具开关；缺失视为 true
     #[serde(default)]
@@ -128,17 +152,38 @@ impl McpServerConfig {
         self.tools.get(tool_name).copied().unwrap_or(true)
     }
 
-    /// 连接身份指纹（不含 tools/discovered，避免开关变化触发重连）
+    /// 应用默认值与安全边界后的启动超时。
+    pub fn effective_startup_timeout_secs(&self) -> u64 {
+        self.startup_timeout_secs
+            .unwrap_or(DEFAULT_STARTUP_TIMEOUT_SECS)
+            .clamp(
+                *STARTUP_TIMEOUT_SECS_RANGE.start(),
+                *STARTUP_TIMEOUT_SECS_RANGE.end(),
+            )
+    }
+
+    /// 应用默认值与安全边界后的工具调用超时。
+    pub fn effective_tool_timeout_secs(&self) -> u64 {
+        self.tool_timeout_secs
+            .unwrap_or(DEFAULT_TOOL_TIMEOUT_SECS)
+            .clamp(
+                *TOOL_TIMEOUT_SECS_RANGE.start(),
+                *TOOL_TIMEOUT_SECS_RANGE.end(),
+            )
+    }
+
+    /// 连接身份指纹（不含 tools/discovered/tool timeout，避免非连接项变化触发重连）。
     pub fn connection_fingerprint(&self) -> String {
         format!(
-            "{}|{}|{}|{:?}|{:?}|{}|{:?}",
+            "{}|{}|{}|{:?}|{:?}|{}|{:?}|{}",
             sanitize_server_id(&self.id),
             self.r#type.as_str(),
             self.command,
             self.args,
             self.env,
             self.url,
-            self.headers
+            self.headers,
+            self.effective_startup_timeout_secs(),
         )
     }
 }
@@ -299,6 +344,7 @@ mod tests {
             enabled: true,
             tools: HashMap::from([("a".into(), false)]),
             discovered: vec![],
+            startup_timeout_secs: None,
             tool_timeout_secs: None,
         }];
         save_mcp_servers(None, &servers).unwrap();
@@ -327,6 +373,7 @@ mod tests {
             enabled: true,
             tools: HashMap::from([("a".into(), false)]),
             discovered: vec![],
+            startup_timeout_secs: None,
             tool_timeout_secs: None,
         }];
         save_mcp_servers(None, &servers).unwrap();
@@ -394,5 +441,44 @@ mod tests {
         )
         .unwrap();
         assert_eq!(cfg.r#type.as_str(), "streamableHttp");
+    }
+
+    #[test]
+    fn timeout_defaults_and_bounds_match_runtime_contract() {
+        let mut cfg: McpServerConfig = serde_json::from_str(
+            r#"{
+                "id": "x",
+                "name": "x",
+                "type": "stdio"
+            }"#,
+        )
+        .unwrap();
+        assert_eq!(cfg.effective_startup_timeout_secs(), 10);
+        assert_eq!(cfg.effective_tool_timeout_secs(), 60);
+
+        cfg.startup_timeout_secs = Some(0);
+        cfg.tool_timeout_secs = Some(9_999);
+        assert_eq!(cfg.effective_startup_timeout_secs(), 1);
+        assert_eq!(cfg.effective_tool_timeout_secs(), 3_600);
+    }
+
+    #[test]
+    fn codex_timeout_aliases_are_preserved() {
+        let cfg: McpServerConfig = serde_json::from_str(
+            r#"{
+                "id": "x",
+                "name": "x",
+                "type": "stdio",
+                "startup_timeout_sec": 17,
+                "tool_timeout_sec": 91
+            }"#,
+        )
+        .unwrap();
+        assert_eq!(cfg.startup_timeout_secs, Some(17));
+        assert_eq!(cfg.tool_timeout_secs, Some(91));
+
+        let serialized = serde_json::to_value(cfg).unwrap();
+        assert_eq!(serialized["startupTimeoutSecs"], 17);
+        assert_eq!(serialized["toolTimeoutSecs"], 91);
     }
 }

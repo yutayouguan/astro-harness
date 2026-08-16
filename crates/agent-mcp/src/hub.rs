@@ -468,7 +468,7 @@ impl McpHub {
             anyhow::bail!("MCP 工具已禁用: {qualified_name}");
         }
 
-        let timeout_secs = rs.config.tool_timeout_secs.unwrap_or(300);
+        let timeout_secs = rs.config.effective_tool_timeout_secs();
         Ok((rs.peer.clone(), native.to_string(), timeout_secs))
     }
 
@@ -644,6 +644,31 @@ pub async fn call_tool_with_peer(
 /// 使用 [`ToolChangeHandler`] 作为客户端 handler，自动处理
 /// `tools/list_changed` 通知，实时同步工具列表。
 async fn connect_server(
+    cfg: &McpServerConfig,
+    execution_context: Option<&McpExecutionContext>,
+) -> anyhow::Result<RunningServer> {
+    let sid = sanitize_server_id(&cfg.id);
+    let timeout_secs = cfg.effective_startup_timeout_secs();
+    with_startup_timeout(
+        &sid,
+        timeout_secs,
+        connect_server_inner(cfg, execution_context),
+    )
+    .await
+}
+
+async fn with_startup_timeout<T>(
+    server_id: &str,
+    timeout_secs: u64,
+    future: impl std::future::Future<Output = anyhow::Result<T>>,
+) -> anyhow::Result<T> {
+    tokio::time::timeout(std::time::Duration::from_secs(timeout_secs), future)
+        .await
+        .map_err(|_| anyhow!("MCP server 启动超时 ({timeout_secs}s): {server_id}"))?
+}
+
+/// 实际建连流程；由 [`connect_server`] 对完整启动阶段施加统一超时。
+async fn connect_server_inner(
     cfg: &McpServerConfig,
     execution_context: Option<&McpExecutionContext>,
 ) -> anyhow::Result<RunningServer> {
@@ -868,6 +893,7 @@ mod tests {
             enabled: true,
             tools: HashMap::new(),
             discovered: vec![],
+            startup_timeout_secs: None,
             tool_timeout_secs: None,
         }
     }
@@ -887,6 +913,7 @@ mod tests {
             enabled: true,
             tools: HashMap::from([("a".into(), true), ("b".into(), false)]),
             discovered: vec![],
+            startup_timeout_secs: None,
             tool_timeout_secs: None,
         };
         let names = vec!["a".into(), "b".into(), "c".into()];
@@ -1025,6 +1052,15 @@ mod tests {
             .expect("restricted network must fail")
             .to_string();
         assert!(error.contains("network access denied"), "{error}");
+    }
+
+    #[tokio::test]
+    async fn startup_timeout_bounds_the_entire_connection_future() {
+        let error = with_startup_timeout("slow", 1, std::future::pending::<anyhow::Result<()>>())
+            .await
+            .unwrap_err()
+            .to_string();
+        assert!(error.contains("启动超时 (1s): slow"), "{error}");
     }
 
     #[test]

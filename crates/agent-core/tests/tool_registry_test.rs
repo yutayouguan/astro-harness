@@ -87,6 +87,7 @@ fn mcp_disabled_tools_not_in_schemas_for_api() {
         enabled: true,
         tools: HashMap::from([("keep".into(), true), ("drop".into(), false)]),
         discovered: vec![],
+        startup_timeout_secs: None,
         tool_timeout_secs: None,
     };
     let discovered = vec!["keep".into(), "drop".into(), "unset".into()];

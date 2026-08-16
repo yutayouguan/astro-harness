@@ -79,6 +79,24 @@ pub struct McpServerDto {
     pub headers: HashMap<String, String>,
     #[serde(default = "default_true")]
     pub enabled: bool,
+    /// 启动超时（秒），覆盖建连、初始化与首次工具发现。
+    #[serde(
+        default,
+        rename = "startupTimeoutSecs",
+        alias = "startup_timeout_sec",
+        alias = "startup_timeout_secs",
+        alias = "startupTimeoutSec"
+    )]
+    pub startup_timeout_secs: Option<u64>,
+    /// 单次工具调用超时（秒）。
+    #[serde(
+        default,
+        rename = "toolTimeoutSecs",
+        alias = "tool_timeout_sec",
+        alias = "tool_timeout_secs",
+        alias = "toolTimeoutSec"
+    )]
+    pub tool_timeout_secs: Option<u64>,
     /// 单工具开关；缺失视为启用
     #[serde(default)]
     pub tools: HashMap<String, bool>,
@@ -110,6 +128,8 @@ fn dto_from_config(c: mcp::McpServerConfig) -> McpServerDto {
         url: c.url,
         headers: c.headers,
         enabled: c.enabled,
+        startup_timeout_secs: c.startup_timeout_secs,
+        tool_timeout_secs: c.tool_timeout_secs,
         tools: c.tools,
         discovered: c
             .discovered
@@ -135,7 +155,8 @@ fn config_from_dto(d: McpServerDto) -> Result<mcp::McpServerConfig, String> {
         url: d.url,
         headers: d.headers,
         enabled: d.enabled,
-        tool_timeout_secs: None,
+        startup_timeout_secs: d.startup_timeout_secs,
+        tool_timeout_secs: d.tool_timeout_secs,
         tools: d.tools,
         discovered: d
             .discovered
@@ -309,6 +330,8 @@ mod mcp_config_tests {
             url: "http://localhost:3000/mcp".into(),
             headers: HashMap::new(),
             enabled: true,
+            startup_timeout_secs: None,
+            tool_timeout_secs: None,
             tools: HashMap::new(),
             discovered: Vec::new(),
         }
@@ -324,5 +347,20 @@ mod mcp_config_tests {
     fn mcp_dto_accepts_streamable_http() {
         let config = config_from_dto(server_dto("streamableHttp")).unwrap();
         assert_eq!(config.r#type, mcp::McpTransportType::StreamableHttp);
+    }
+
+    #[test]
+    fn mcp_dto_preserves_timeout_configuration() {
+        let mut dto = server_dto("stdio");
+        dto.startup_timeout_secs = Some(17);
+        dto.tool_timeout_secs = Some(91);
+
+        let config = config_from_dto(dto).unwrap();
+        assert_eq!(config.startup_timeout_secs, Some(17));
+        assert_eq!(config.tool_timeout_secs, Some(91));
+
+        let roundtrip = dto_from_config(config);
+        assert_eq!(roundtrip.startup_timeout_secs, Some(17));
+        assert_eq!(roundtrip.tool_timeout_secs, Some(91));
     }
 }
