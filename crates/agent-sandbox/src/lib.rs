@@ -6,6 +6,13 @@ use serde::Serialize;
 use std::path::{Path, PathBuf};
 use types::SandboxMode;
 
+mod audit;
+
+pub use audit::{
+    append_sandbox_audit, list_recent_sandbox_audits, sandbox_audit_path, try_append_sandbox_audit,
+    SandboxAuditEvent, SandboxAuditKind, SandboxAuditMetadata,
+};
+
 const MACOS_SANDBOX_EXEC: &str = "/usr/bin/sandbox-exec";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]

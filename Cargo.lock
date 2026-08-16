@@ -4686,11 +4686,17 @@ dependencies = [
 name = "sandbox"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
+ "chrono",
  "serde",
+ "serde_json",
+ "sha2",
  "tempfile",
  "thiserror 1.0.69",
  "tokio",
+ "tracing",
  "types",
+ "uuid",
 ]
 
 [[package]]

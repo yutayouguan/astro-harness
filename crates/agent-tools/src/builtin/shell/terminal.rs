@@ -129,6 +129,7 @@ async fn dispatch_run(
         root
     };
     std::fs::create_dir_all(&cwd)?;
+    let audit = ctx.sandbox_audit_metadata("terminal");
 
     if parsed.background.unwrap_or(false) {
         let cwd_display = parsed
@@ -137,28 +138,73 @@ async fn dispatch_run(
             .map(str::trim)
             .filter(|s| !s.is_empty())
             .unwrap_or(".");
-        let policy = ctx.command_sandbox_policy()?;
+        let policy = ctx.command_sandbox_policy().inspect_err(|_error| {
+            audit.record(
+                sandbox::SandboxAuditKind::Denied,
+                None,
+                "sh",
+                "policy_resolution_failed",
+                None,
+            );
+        })?;
         let id = super::jobs::spawn_background_sandboxed(
             &ctx.session_id,
             command,
             &cwd,
             cwd_display,
             &policy,
+            Some(&audit),
         )?;
         return Ok(format!(
             "已在后台启动任务 {id}。\n用 terminal action=status id={id} 轮询输出，action=wait 等待完成，action=kill 终止。"
         ));
     }
 
-    let policy = ctx.command_sandbox_policy()?;
-    let mut sandboxed_command = sandbox::SandboxRunner.tokio_command(&policy, "sh")?;
+    let policy = ctx.command_sandbox_policy().inspect_err(|_error| {
+        audit.record(
+            sandbox::SandboxAuditKind::Denied,
+            None,
+            "sh",
+            "policy_resolution_failed",
+            None,
+        );
+    })?;
+    let spawn_started = std::time::Instant::now();
+    let mut sandboxed_command = match sandbox::SandboxRunner.tokio_command(&policy, "sh") {
+        Ok(command) => command,
+        Err(error) => {
+            audit.record_prepare_error(
+                Some(&policy),
+                "sh",
+                &error,
+                Some(spawn_started.elapsed().as_millis() as u64),
+            );
+            return Err(error.into());
+        }
+    };
     let child = sandboxed_command
         .arg("-c")
         .arg(command)
         .current_dir(&cwd)
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
-        .spawn()?;
+        .spawn()
+        .inspect_err(|_error| {
+            audit.record(
+                sandbox::SandboxAuditKind::Denied,
+                Some(&policy),
+                "sh",
+                "spawn_failed",
+                Some(spawn_started.elapsed().as_millis() as u64),
+            );
+        })?;
+    audit.record(
+        sandbox::SandboxAuditKind::Spawned,
+        Some(&policy),
+        "sh",
+        "spawned",
+        Some(spawn_started.elapsed().as_millis() as u64),
+    );
 
     let timeout_secs = parsed
         .timeout_secs
@@ -238,6 +284,12 @@ mod tests {
         let out = dispatch(&ctx, &args).await.unwrap();
         assert!(out.contains("[truncated]"), "{out}");
         assert!(out.len() < n + 200);
+        let audits = sandbox::list_recent_sandbox_audits(dir.path(), 10).unwrap();
+        assert!(audits.iter().any(|event| {
+            event.event == sandbox::SandboxAuditKind::Spawned
+                && event.tool_name == "terminal"
+                && event.target == "sh"
+        }));
     }
 
     #[tokio::test]

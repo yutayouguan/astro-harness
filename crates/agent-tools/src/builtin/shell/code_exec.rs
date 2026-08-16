@@ -172,8 +172,29 @@ pub async fn dispatch(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow
 
     let env = scrubbed_env(std::env::vars());
 
-    let policy = ctx.command_sandbox_policy()?;
-    let mut cmd = sandbox::SandboxRunner.tokio_command(&policy, program)?;
+    let audit = ctx.sandbox_audit_metadata("code_exec");
+    let policy = ctx.command_sandbox_policy().inspect_err(|_error| {
+        audit.record(
+            sandbox::SandboxAuditKind::Denied,
+            None,
+            program,
+            "policy_resolution_failed",
+            None,
+        );
+    })?;
+    let spawn_started = std::time::Instant::now();
+    let mut cmd = match sandbox::SandboxRunner.tokio_command(&policy, program) {
+        Ok(command) => command,
+        Err(error) => {
+            audit.record_prepare_error(
+                Some(&policy),
+                program,
+                &error,
+                Some(spawn_started.elapsed().as_millis() as u64),
+            );
+            return Err(error.into());
+        }
+    };
     for a in script_args {
         cmd.arg(a);
     }
@@ -193,7 +214,22 @@ pub async fn dispatch(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow
         });
     }
 
-    let child = cmd.spawn()?;
+    let child = cmd.spawn().inspect_err(|_error| {
+        audit.record(
+            sandbox::SandboxAuditKind::Denied,
+            Some(&policy),
+            program,
+            "spawn_failed",
+            Some(spawn_started.elapsed().as_millis() as u64),
+        );
+    })?;
+    audit.record(
+        sandbox::SandboxAuditKind::Spawned,
+        Some(&policy),
+        program,
+        "spawned",
+        Some(spawn_started.elapsed().as_millis() as u64),
+    );
     let output = tokio::time::timeout(Duration::from_secs(30), child.wait_with_output())
         .await
         .map_err(|_| anyhow::anyhow!("code_exec 超时（30s）"))??;
@@ -305,6 +341,12 @@ mod tests {
         .await
         .unwrap();
         assert!(out.contains("[truncated]"), "{out}");
+        let audits = sandbox::list_recent_sandbox_audits(dir.path(), 10).unwrap();
+        assert!(audits.iter().any(|event| {
+            event.event == sandbox::SandboxAuditKind::Spawned
+                && event.tool_name == "code_exec"
+                && event.target == "python3"
+        }));
     }
 
     #[tokio::test]

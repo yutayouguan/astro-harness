@@ -104,6 +104,26 @@ impl<'a> ToolContext<'a> {
             self.network_grant.clone()
         }
     }
+
+    /// 当前调用的有效权限 profile id。
+    pub fn active_permission_profile_id(&self) -> String {
+        self.permission_profile.clone().unwrap_or_else(|| {
+            memory::load_permission_settings(&self.memory_dir)
+                .selection
+                .profile_id
+        })
+    }
+
+    /// 构造不包含命令正文或路径的沙箱审计上下文。
+    pub fn sandbox_audit_metadata(&self, tool_name: &str) -> sandbox::SandboxAuditMetadata {
+        sandbox::SandboxAuditMetadata::new(
+            self.memory_dir.clone(),
+            Some(self.session_id.clone()),
+            self.turn_id.clone(),
+            tool_name,
+            self.active_permission_profile_id(),
+        )
+    }
 }
 
 /// 从当前权限配置构造不可变的子进程沙箱策略。

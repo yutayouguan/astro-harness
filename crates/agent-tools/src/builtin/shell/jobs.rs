@@ -140,8 +140,23 @@ pub fn spawn_background_sandboxed(
     cwd: &Path,
     cwd_display: &str,
     policy: &sandbox::SandboxPolicy,
+    audit: Option<&sandbox::SandboxAuditMetadata>,
 ) -> anyhow::Result<String> {
-    let mut cmd = sandbox::SandboxRunner.std_command(policy, "sh")?;
+    let started = Instant::now();
+    let mut cmd = match sandbox::SandboxRunner.std_command(policy, "sh") {
+        Ok(command) => command,
+        Err(error) => {
+            if let Some(audit) = audit {
+                audit.record_prepare_error(
+                    Some(policy),
+                    "sh",
+                    &error,
+                    Some(started.elapsed().as_millis() as u64),
+                );
+            }
+            return Err(error.into());
+        }
+    };
     cmd.arg("-c")
         .arg(command)
         .current_dir(cwd)
@@ -155,7 +170,30 @@ pub fn spawn_background_sandboxed(
         use std::os::unix::process::CommandExt;
         cmd.process_group(0);
     }
-    let mut child = cmd.spawn()?;
+    let mut child = match cmd.spawn() {
+        Ok(child) => child,
+        Err(error) => {
+            if let Some(audit) = audit {
+                audit.record(
+                    sandbox::SandboxAuditKind::Denied,
+                    Some(policy),
+                    "sh",
+                    "spawn_failed",
+                    Some(started.elapsed().as_millis() as u64),
+                );
+            }
+            return Err(error.into());
+        }
+    };
+    if let Some(audit) = audit {
+        audit.record(
+            sandbox::SandboxAuditKind::Spawned,
+            Some(policy),
+            "sh",
+            "spawned_background",
+            Some(started.elapsed().as_millis() as u64),
+        );
+    }
     let pid = child.id();
 
     let output = Arc::new(Mutex::new(JobBuf::default()));
@@ -223,7 +261,7 @@ fn spawn_background(
 ) -> anyhow::Result<String> {
     let policy =
         sandbox::SandboxPolicy::new(types::SandboxMode::DangerFullAccess, cwd, Vec::new(), true)?;
-    spawn_background_sandboxed(session_id, command, cwd, cwd_display, &policy)
+    spawn_background_sandboxed(session_id, command, cwd, cwd_display, &policy, None)
 }
 
 /// 按 `action` 管理后台任务（由 `terminal` 分发）。
@@ -456,13 +494,40 @@ mod tests {
     #[test]
     fn background_job_captures_output_and_exits() {
         let dir = tempfile::tempdir().unwrap();
-        let id = spawn_background("s1", "printf 'hello-bg'", dir.path(), ".").unwrap();
+        let policy = sandbox::SandboxPolicy::new(
+            types::SandboxMode::DangerFullAccess,
+            dir.path(),
+            Vec::new(),
+            true,
+        )
+        .unwrap();
+        let audit = sandbox::SandboxAuditMetadata::new(
+            dir.path(),
+            Some("s1".into()),
+            None,
+            "terminal",
+            types::DANGER_FULL_ACCESS_PROFILE,
+        );
+        let id = spawn_background_sandboxed(
+            "s1",
+            "printf 'hello-bg'",
+            dir.path(),
+            ".",
+            &policy,
+            Some(&audit),
+        )
+        .unwrap();
         let st = wait_terminal(&id, 5);
         assert!(matches!(st, JobStatus::Exited(Some(0))), "status={st:?}");
         let job = registry().lock().unwrap().get(&id).unwrap();
         let rendered = render_status(&job, 0);
         assert!(rendered.contains("hello-bg"), "{rendered}");
         assert!(rendered.contains("exited(code=0)"));
+        let audits = sandbox::list_recent_sandbox_audits(dir.path(), 10).unwrap();
+        assert!(audits.iter().any(|event| {
+            event.event == sandbox::SandboxAuditKind::Spawned
+                && event.result == "spawned_background"
+        }));
     }
 
     #[test]
