@@ -174,9 +174,20 @@ pub async fn refresh_mcp_tools(
     server_id: Option<String>,
 ) -> Result<Vec<McpServerDto>, String> {
     let id = normalize_agent_id(agent_id);
-    let configs = mcp::McpHub::refresh_discovered(id.as_deref(), server_id.as_deref())
-        .await
-        .map_err(|e| e.to_string())?;
+    let memory_root = home::default_memory_dir();
+    let effective_agent_id = id
+        .clone()
+        .unwrap_or_else(|| home::active_agent_id(&memory_root));
+    let execution_root = home::agent_workspace_dir(&memory_root, &effective_agent_id);
+    let policy =
+        tools::context::build_command_sandbox_policy(&memory_root, &execution_root, None, false)
+            .map_err(|e| e.to_string())?;
+    let execution_context =
+        mcp::McpExecutionContext::new(policy, &execution_root).map_err(|e| e.to_string())?;
+    let configs =
+        mcp::McpHub::refresh_discovered(id.as_deref(), server_id.as_deref(), &execution_context)
+            .await
+            .map_err(|e| e.to_string())?;
     Ok(configs.into_iter().map(dto_from_config).collect())
 }
 

@@ -3,6 +3,7 @@
 //! 按 Agent 加载配置、维持 RunningService，并向 ToolRegistry 暴露限定名工具。
 
 use std::collections::HashMap;
+use std::path::{Path, PathBuf};
 use std::process::Stdio;
 
 use anyhow::{anyhow, Context};
@@ -12,7 +13,6 @@ use rmcp::transport::streamable_http_client::StreamableHttpClientTransportConfig
 use rmcp::transport::{StreamableHttpClientTransport, TokioChildProcess};
 use rmcp::{Peer, RoleClient, ServiceExt};
 use serde_json::{json, Value};
-use tokio::process::Command;
 use tracing::{info, warn};
 
 use std::sync::Arc;
@@ -25,6 +25,47 @@ use crate::config::{
 use crate::names::{
     is_mcp_tool_name, parse_qualified_name, qualify_tool_name, sanitize_server_id, MCP_TOOLSET,
 };
+
+/// MCP 连接建立时使用的权限快照。
+///
+/// 常驻连接只接受 session/profile 生成的稳定策略，不承接单次工具审批授权。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct McpExecutionContext {
+    sandbox_policy: sandbox::SandboxPolicy,
+    working_dir: PathBuf,
+}
+
+impl McpExecutionContext {
+    pub fn new(
+        sandbox_policy: sandbox::SandboxPolicy,
+        working_dir: impl AsRef<Path>,
+    ) -> anyhow::Result<Self> {
+        let working_dir = working_dir.as_ref().canonicalize().with_context(|| {
+            format!(
+                "resolve MCP working directory: {}",
+                working_dir.as_ref().display()
+            )
+        })?;
+        if !working_dir.is_dir() {
+            anyhow::bail!(
+                "MCP working directory is not a directory: {}",
+                working_dir.display()
+            );
+        }
+        Ok(Self {
+            sandbox_policy,
+            working_dir,
+        })
+    }
+
+    fn fingerprint(&self) -> String {
+        format!(
+            "{}|{}",
+            self.sandbox_policy.profile_hash_material(),
+            self.working_dir.to_string_lossy()
+        )
+    }
+}
 
 /// 供 ToolRegistry 注册的精简条目。
 #[derive(Debug, Clone)]
@@ -137,6 +178,8 @@ pub struct McpHub {
     configs: Vec<McpServerConfig>,
     /// 最近一次 reload 的连接错误（server_id → message）。
     last_connect_errors: HashMap<String, String>,
+    /// 当前 session/profile 对 MCP 连接施加的不可变权限快照。
+    execution_context: Option<McpExecutionContext>,
 }
 
 impl Default for McpHub {
@@ -154,6 +197,7 @@ impl McpHub {
             servers: HashMap::new(),
             configs: Vec::new(),
             last_connect_errors: HashMap::new(),
+            execution_context: None,
         }
     }
 
@@ -165,6 +209,13 @@ impl McpHub {
     /// 设置绑定的 Agent id（不立即重连）。
     pub fn set_agent_id(&mut self, agent_id: Option<String>) {
         self.agent_id = agent_id;
+    }
+
+    /// 设置后续连接/重连使用的权限快照。
+    ///
+    /// 传 `None` 表示策略解析失败或尚未配置；所有连接都会 fail closed。
+    pub fn set_execution_context(&mut self, context: Option<McpExecutionContext>) {
+        self.execution_context = context;
     }
 
     /// 从磁盘重载：保留未变连接，重连变更项，断开已删除/禁用项
@@ -208,7 +259,7 @@ impl McpHub {
 
         for cfg in enabled {
             let sid = sanitize_server_id(&cfg.id);
-            let fp = cfg.connection_fingerprint();
+            let fp = effective_connection_fingerprint(&cfg, self.execution_context.as_ref());
             if let Some(existing) = self.servers.get(&sid) {
                 if existing.fingerprint == fp && existing.status == "connected" {
                     if let Some(rs) = self.servers.get_mut(&sid) {
@@ -219,7 +270,7 @@ impl McpHub {
                 }
             }
             self.servers.remove(&sid);
-            match connect_server(&cfg).await {
+            match connect_server(&cfg, self.execution_context.as_ref()).await {
                 Ok(mut running) => {
                     running.config = cfg.clone();
                     let discovered: Vec<DiscoveredTool> = running
@@ -435,6 +486,7 @@ impl McpHub {
     pub async fn refresh_discovered(
         agent_id: Option<&str>,
         server_id: Option<&str>,
+        execution_context: &McpExecutionContext,
     ) -> anyhow::Result<Vec<McpServerConfig>> {
         let mut configs = load_mcp_servers(agent_id)?;
         for cfg in configs.iter_mut() {
@@ -446,7 +498,7 @@ impl McpHub {
             if !cfg.enabled && server_id.is_none() {
                 continue;
             }
-            match connect_server(cfg).await {
+            match connect_server(cfg, Some(execution_context)).await {
                 Ok(running) => {
                     let discovered: Vec<DiscoveredTool> = running
                         .tools
@@ -591,9 +643,15 @@ pub async fn call_tool_with_peer(
 ///
 /// 使用 [`ToolChangeHandler`] 作为客户端 handler，自动处理
 /// `tools/list_changed` 通知，实时同步工具列表。
-async fn connect_server(cfg: &McpServerConfig) -> anyhow::Result<RunningServer> {
+async fn connect_server(
+    cfg: &McpServerConfig,
+    execution_context: Option<&McpExecutionContext>,
+) -> anyhow::Result<RunningServer> {
     let sid = sanitize_server_id(&cfg.id);
-    let fingerprint = cfg.connection_fingerprint();
+    let execution_context = execution_context.ok_or_else(|| {
+        anyhow!("MCP execution policy is unavailable; refusing to connect server {sid}")
+    })?;
+    let fingerprint = effective_connection_fingerprint(cfg, Some(execution_context));
 
     let shared_state = Arc::new(TokioMutex::new(SharedToolState {
         tools: Vec::new(),
@@ -607,19 +665,16 @@ async fn connect_server(cfg: &McpServerConfig) -> anyhow::Result<RunningServer> 
 
     let service = match cfg.r#type {
         McpTransportType::Stdio => {
-            validate_stdio_command(&cfg.command)?;
-            let mut cmd = Command::new(&cfg.command);
-            cmd.args(&cfg.args)
-                .stdin(Stdio::piped())
-                .stdout(Stdio::piped())
-                .stderr(Stdio::inherit());
-            for (k, v) in &cfg.env {
-                cmd.env(k, v);
-            }
+            let cmd = build_stdio_command(cfg, execution_context)?;
             let transport = TokioChildProcess::new(cmd)?;
             handler.serve(transport).await.context("stdio serve")?
         }
         McpTransportType::Sse | McpTransportType::StreamableHttp => {
+            if !execution_context.sandbox_policy.network_access {
+                anyhow::bail!(
+                    "network access denied by the active permission profile for MCP server {sid}"
+                );
+            }
             if cfg.url.trim().is_empty() {
                 anyhow::bail!("HTTP MCP server 缺少 url");
             }
@@ -665,6 +720,55 @@ async fn connect_server(cfg: &McpServerConfig) -> anyhow::Result<RunningServer> 
         status: "connected".into(),
         error: None,
     })
+}
+
+const SAFE_PARENT_ENV_KEYS: &[&str] = &[
+    "PATH", "HOME", "USER", "LOGNAME", "LANG", "LC_ALL", "LC_CTYPE", "TERM", "TMPDIR", "TMP",
+    "TEMP", "SHELL",
+];
+
+fn scrubbed_parent_env(
+    parent: impl IntoIterator<Item = (impl AsRef<str>, impl AsRef<str>)>,
+) -> HashMap<String, String> {
+    parent
+        .into_iter()
+        .filter_map(|(key, value)| {
+            let key = key.as_ref();
+            SAFE_PARENT_ENV_KEYS
+                .contains(&key)
+                .then(|| (key.to_string(), value.as_ref().to_string()))
+        })
+        .collect()
+}
+
+fn effective_connection_fingerprint(
+    cfg: &McpServerConfig,
+    execution_context: Option<&McpExecutionContext>,
+) -> String {
+    let policy = execution_context
+        .map(McpExecutionContext::fingerprint)
+        .unwrap_or_else(|| "unconfigured".to_string());
+    format!("{}|{policy}", cfg.connection_fingerprint())
+}
+
+fn build_stdio_command(
+    cfg: &McpServerConfig,
+    execution_context: &McpExecutionContext,
+) -> anyhow::Result<tokio::process::Command> {
+    validate_stdio_command(&cfg.command)?;
+    let mut cmd = sandbox::SandboxRunner
+        .tokio_command(&execution_context.sandbox_policy, &cfg.command)
+        .context("prepare sandboxed MCP stdio command")?;
+    cmd.args(&cfg.args)
+        .current_dir(&execution_context.working_dir)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::inherit())
+        .kill_on_drop(true)
+        .env_clear()
+        .envs(scrubbed_parent_env(std::env::vars()))
+        .envs(&cfg.env);
+    Ok(cmd)
 }
 
 /// stdio command 最小约束：不经 shell；禁止 `..` 与危险字符；允许绝对路径或简单命令名（如 npx）
@@ -750,6 +854,24 @@ fn mcp_tool_arguments(args: &Value) -> anyhow::Result<Option<serde_json::Map<Str
 mod tests {
     use super::*;
 
+    fn stdio_server(command: &str) -> McpServerConfig {
+        McpServerConfig {
+            id: "s1".into(),
+            name: "demo".into(),
+            description: String::new(),
+            r#type: McpTransportType::Stdio,
+            command: command.into(),
+            args: vec![],
+            env: HashMap::new(),
+            url: String::new(),
+            headers: HashMap::new(),
+            enabled: true,
+            tools: HashMap::new(),
+            discovered: vec![],
+            tool_timeout_secs: None,
+        }
+    }
+
     #[test]
     fn filter_respects_server_and_tool_flags() {
         let mut server = McpServerConfig {
@@ -789,6 +911,120 @@ mod tests {
         assert!(validate_stdio_command("../evil").is_err());
         assert!(validate_stdio_command("npx;rm").is_err());
         assert!(validate_stdio_command("foo/bar").is_err());
+    }
+
+    #[test]
+    fn parent_environment_is_allowlisted() {
+        let env = scrubbed_parent_env([
+            ("PATH", "/usr/bin"),
+            ("HOME", "/tmp/home"),
+            ("OPENAI_API_KEY", "secret"),
+            ("GITHUB_TOKEN", "secret"),
+            ("CUSTOM", "value"),
+        ]);
+        assert_eq!(env.get("PATH").map(String::as_str), Some("/usr/bin"));
+        assert_eq!(env.get("HOME").map(String::as_str), Some("/tmp/home"));
+        assert!(!env.contains_key("OPENAI_API_KEY"));
+        assert!(!env.contains_key("GITHUB_TOKEN"));
+        assert!(!env.contains_key("CUSTOM"));
+    }
+
+    #[test]
+    fn full_access_stdio_command_uses_working_dir_and_explicit_env() {
+        let dir = tempfile::tempdir().unwrap();
+        let policy = sandbox::SandboxPolicy::new(
+            types::SandboxMode::DangerFullAccess,
+            dir.path(),
+            Vec::new(),
+            false,
+        )
+        .unwrap();
+        let context = McpExecutionContext::new(policy, dir.path()).unwrap();
+        let mut server = stdio_server("echo");
+        server.args = vec!["hello".into()];
+        server
+            .env
+            .insert("MCP_EXPLICIT_TOKEN".into(), "configured".into());
+
+        let command = build_stdio_command(&server, &context).unwrap();
+        let command = command.as_std();
+        assert_eq!(command.get_program(), "echo");
+        assert_eq!(command.get_args().collect::<Vec<_>>(), ["hello"]);
+        assert_eq!(
+            command.get_current_dir(),
+            Some(context.working_dir.as_path())
+        );
+        let env = command
+            .get_envs()
+            .map(|(key, value)| {
+                (
+                    key.to_string_lossy().into_owned(),
+                    value.map(|value| value.to_string_lossy().into_owned()),
+                )
+            })
+            .collect::<HashMap<_, _>>();
+        assert_eq!(
+            env.get("MCP_EXPLICIT_TOKEN").and_then(Option::as_deref),
+            Some("configured")
+        );
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn restricted_stdio_command_is_wrapped_by_seatbelt_without_network() {
+        let dir = tempfile::tempdir().unwrap();
+        let policy = sandbox::SandboxPolicy::new(
+            types::SandboxMode::ReadOnly,
+            dir.path(),
+            Vec::new(),
+            false,
+        )
+        .unwrap();
+        let context = McpExecutionContext::new(policy, dir.path()).unwrap();
+
+        let command = build_stdio_command(&stdio_server("echo"), &context).unwrap();
+        let command = command.as_std();
+        assert_eq!(command.get_program(), "/usr/bin/sandbox-exec");
+        let args = command
+            .get_args()
+            .map(|arg| arg.to_string_lossy().into_owned())
+            .collect::<Vec<_>>();
+        assert_eq!(args.first().map(String::as_str), Some("-p"));
+        assert_eq!(args.last().map(String::as_str), Some("echo"));
+        assert!(!args[1].contains("(allow network*)"));
+    }
+
+    #[tokio::test]
+    async fn missing_execution_context_fails_closed() {
+        let error = connect_server(&stdio_server("echo"), None)
+            .await
+            .err()
+            .expect("missing policy must fail")
+            .to_string();
+        assert!(error.contains("execution policy is unavailable"), "{error}");
+    }
+
+    #[tokio::test]
+    async fn restricted_profile_denies_remote_mcp_before_connecting() {
+        let dir = tempfile::tempdir().unwrap();
+        let policy = sandbox::SandboxPolicy::new(
+            types::SandboxMode::ReadOnly,
+            dir.path(),
+            Vec::new(),
+            false,
+        )
+        .unwrap();
+        let context = McpExecutionContext::new(policy, dir.path()).unwrap();
+        let mut server = stdio_server("");
+        server.r#type = McpTransportType::StreamableHttp;
+        server.url = "https://example.invalid/mcp".into();
+
+        let error = connect_server(&server, Some(&context))
+            .await
+            .err()
+            .expect("restricted network must fail")
+            .to_string();
+        assert!(error.contains("network access denied"), "{error}");
     }
 
     #[test]

@@ -17,7 +17,7 @@ use tokio::sync::Mutex as TokioMutex;
 use uuid::Uuid;
 
 use ::session::{ConversationStore, SessionStore};
-use mcp::{McpHub, MCP_TOOLSET};
+use mcp::{McpExecutionContext, McpHub, MCP_TOOLSET};
 use memory::MemoryManager;
 use serde_json::Value;
 use tools::{register_all, ToolRegistry};
@@ -599,8 +599,25 @@ impl AgentLoop {
     /// 失败时仅记录 warn 日志，不中断调用方；成功后 MCP 工具以 `MCP_TOOLSET` 注册。
     pub async fn reload_mcp(&mut self) {
         let agent_id = self.memory.agent_id.clone();
+        let execution_root = self
+            .project_root
+            .clone()
+            .unwrap_or_else(|| self.memory.workspace_dir.clone());
+        let execution_context = tools::context::build_command_sandbox_policy(
+            &self.config.memory_dir,
+            &execution_root,
+            self.permission_profile.as_deref(),
+            false,
+        )
+        .and_then(|policy| McpExecutionContext::new(policy, &execution_root))
+        .map_err(|error| {
+            tracing::warn!(%error, "resolve MCP execution policy failed; connections will be denied");
+            error
+        })
+        .ok();
         {
             let mut hub = self.mcp_hub.lock().await;
+            hub.set_execution_context(execution_context);
             if let Err(e) = hub.reload_from_disk(Some(&agent_id)).await {
                 tracing::warn!(error = %e, "reload MCP failed");
             }

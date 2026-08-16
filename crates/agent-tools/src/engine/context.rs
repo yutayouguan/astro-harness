@@ -77,26 +77,43 @@ impl<'a> ToolContext<'a> {
     /// 从当前磁盘配置构造本次工具调用的不可变命令沙箱策略。
     pub fn command_sandbox_policy(&self) -> anyhow::Result<sandbox::SandboxPolicy> {
         let root = self.ensure_project_or_workspace()?;
-        let loaded = memory::load_permission_settings(&self.memory_dir);
-        let profile_id = self
-            .permission_profile
-            .as_deref()
-            .unwrap_or(&loaded.selection.profile_id);
-        if !matches!(
-            profile_id,
-            READ_ONLY_PROFILE | WORKSPACE_PROFILE | DANGER_FULL_ACCESS_PROFILE
-        ) {
-            anyhow::bail!(
-                "custom permission profile {:?} is not executable until its filesystem rules are fully resolved",
-                profile_id
-            );
-        }
-        let mut mode = loaded.permissions.sandbox_mode_for(profile_id)?;
-        if self.workspace_write_grant && mode == types::SandboxMode::ReadOnly {
-            mode = types::SandboxMode::WorkspaceWrite;
-        }
-        sandbox::SandboxPolicy::new(mode, root, Vec::new(), false).map_err(Into::into)
+        build_command_sandbox_policy(
+            &self.memory_dir,
+            &root,
+            self.permission_profile.as_deref(),
+            self.workspace_write_grant,
+        )
     }
+}
+
+/// 从当前权限配置构造不可变的子进程沙箱策略。
+///
+/// terminal、code_exec 与 MCP stdio 共用此入口，避免不同进程启动路径对 profile
+/// 产生不同解释。`workspace_write_grant` 仅供单次已审批的工具调用使用；常驻 MCP
+/// 连接必须传 `false`，不得继承临时授权。
+pub fn build_command_sandbox_policy(
+    memory_dir: &Path,
+    execution_root: &Path,
+    permission_profile: Option<&str>,
+    workspace_write_grant: bool,
+) -> anyhow::Result<sandbox::SandboxPolicy> {
+    std::fs::create_dir_all(execution_root)?;
+    let loaded = memory::load_permission_settings(memory_dir);
+    let profile_id = permission_profile.unwrap_or(&loaded.selection.profile_id);
+    if !matches!(
+        profile_id,
+        READ_ONLY_PROFILE | WORKSPACE_PROFILE | DANGER_FULL_ACCESS_PROFILE
+    ) {
+        anyhow::bail!(
+            "custom permission profile {:?} is not executable until its filesystem rules are fully resolved",
+            profile_id
+        );
+    }
+    let mut mode = loaded.permissions.sandbox_mode_for(profile_id)?;
+    if workspace_write_grant && mode == types::SandboxMode::ReadOnly {
+        mode = types::SandboxMode::WorkspaceWrite;
+    }
+    sandbox::SandboxPolicy::new(mode, execution_root, Vec::new(), false).map_err(Into::into)
 }
 
 #[cfg(test)]
@@ -126,6 +143,7 @@ mod tests {
             credentials: &credentials,
             chat_targets: &[],
             execution: None,
+            permission_profile: None,
             hook_bus: None,
             workspace_write_grant: true,
         };

@@ -2989,6 +2989,7 @@ dependencies = [
  "home",
  "http 1.4.2",
  "rmcp",
+ "sandbox",
  "serde",
  "serde_json",
  "tempfile",
