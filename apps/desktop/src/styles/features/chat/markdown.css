@@ -2514,6 +2514,9 @@ html[data-theme="dark"] .chat-welcome-title-brand {
   gap: 12px;
   padding: 14px 14px 14px 12px;
   border-radius: 18px;
+  width: 240px;
+  min-width: 240px;
+  flex-shrink: 0;
   border: 1px solid color-mix(in srgb, var(--glass-edge) 90%, transparent);
   background:
     linear-gradient(155deg, rgba(255, 255, 255, 0.45), rgba(255, 255, 255, 0.18)),
@@ -2746,88 +2749,74 @@ html[data-theme="dark"] .chat-welcome-card-glyph {
 
 /* ── 轮播容器 ─────────────────────────────────────── */
 
-.chat-welcome-carousel {
+/* ── 跑马灯容器 ───────────────────────────────────── */
+
+.chat-welcome-marquee-wrap {
+  position: relative;
   width: 100%;
-  max-width: 720px;
-  margin-left: auto;
-  margin-right: auto;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 8px;
+}
+
+.chat-welcome-marquee-fade {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 80px;
+  z-index: 2;
+  pointer-events: none;
+}
+
+.chat-welcome-marquee-fade--left {
+  left: 0;
+  background: linear-gradient(to right, var(--window-underlay, var(--bg1)) 10%, transparent 100%);
+}
+
+.chat-welcome-marquee-fade--right {
+  right: 0;
+  background: linear-gradient(to left, var(--window-underlay, var(--bg1)) 10%, transparent 100%);
+}
+
+.chat-welcome-marquee {
+  width: 100%;
   overflow: hidden;
 }
 
-.chat-welcome-carousel .chat-welcome-grid {
-  animation: wc-enter-next 0.32s cubic-bezier(0.22, 1, 0.36, 1) both;
-}
-
-.chat-welcome-carousel.is-entering-prev .chat-welcome-grid {
-  animation: wc-enter-prev 0.32s cubic-bezier(0.22, 1, 0.36, 1) both;
-}
-
-.chat-welcome-carousel.is-leaving-next .chat-welcome-grid {
-  animation: wc-leave-next 0.24s cubic-bezier(0.22, 1, 0.36, 1) both;
-}
-
-.chat-welcome-carousel.is-leaving-prev .chat-welcome-grid {
-  animation: wc-leave-prev 0.24s cubic-bezier(0.22, 1, 0.36, 1) both;
-}
-
-@keyframes wc-enter-next {
-  from { opacity: 0; transform: translateX(60px); }
-  to   { opacity: 1; transform: translateX(0); }
-}
-
-@keyframes wc-enter-prev {
-  from { opacity: 0; transform: translateX(-60px); }
-  to   { opacity: 1; transform: translateX(0); }
-}
-
-@keyframes wc-leave-next {
-  from { opacity: 1; transform: translateX(0); }
-  to   { opacity: 0; transform: translateX(-60px); }
-}
-
-@keyframes wc-leave-prev {
-  from { opacity: 1; transform: translateX(0); }
-  to   { opacity: 0; transform: translateX(60px); }
-}
-
-/* ── 分页圆点 ─────────────────────────────────────── */
-
-.chat-welcome-dots {
+.chat-welcome-marquee-track {
   display: flex;
-  justify-content: center;
-  gap: 8px;
-  margin-top: 16px;
+  gap: 12px;
+  width: max-content;
+  will-change: transform;
 }
 
-.chat-welcome-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  border: none;
-  padding: 0;
-  cursor: pointer;
-  background: color-mix(in srgb, var(--tone, var(--ink)) 22%, transparent);
-  transition: all 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+.chat-welcome-marquee--right .chat-welcome-marquee-track {
+  animation: wc-scroll-right 40s linear infinite;
 }
 
-.chat-welcome-dot:hover {
-  background: color-mix(in srgb, var(--tone, var(--ink)) 45%, transparent);
-  transform: scale(1.3);
+.chat-welcome-marquee--left .chat-welcome-marquee-track {
+  animation: wc-scroll-left 40s linear infinite;
 }
 
-.chat-welcome-dot.is-active {
-  width: 24px;
-  border-radius: 4px;
-  background: var(--tone, #6366f1);
-  box-shadow: 0 0 8px color-mix(in srgb, var(--tone, #6366f1) 40%, transparent);
+.chat-welcome-marquee:hover .chat-welcome-marquee-track {
+  animation-play-state: paused;
+}
+
+@keyframes wc-scroll-right {
+  from { transform: translateX(0); }
+  to   { transform: translateX(-50%); }
+}
+
+@keyframes wc-scroll-left {
+  from { transform: translateX(-50%); }
+  to   { transform: translateX(0); }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .chat-welcome-carousel .chat-welcome-grid,
-  .chat-welcome-carousel.is-entering-prev .chat-welcome-grid,
-  .chat-welcome-carousel.is-leaving-next .chat-welcome-grid,
-  .chat-welcome-carousel.is-leaving-prev .chat-welcome-grid {
-    animation: none;
+  .chat-welcome-marquee-track {
+    animation: none !important;
   }
 }
 
