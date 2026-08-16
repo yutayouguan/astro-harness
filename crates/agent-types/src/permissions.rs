@@ -53,11 +53,23 @@ pub enum NetworkAccess {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case", tag = "kind")]
 pub enum PermissionCapability {
-    FileRead { paths: Vec<String> },
-    FileWrite { paths: Vec<String> },
-    ProcessSpawn { program: String, cwd: Option<String> },
-    Network { hosts: Vec<String> },
-    ExternalSideEffect { category: String, target: String },
+    FileRead {
+        paths: Vec<String>,
+    },
+    FileWrite {
+        paths: Vec<String>,
+    },
+    ProcessSpawn {
+        program: String,
+        cwd: Option<String>,
+    },
+    Network {
+        hosts: Vec<String>,
+    },
+    ExternalSideEffect {
+        category: String,
+        target: String,
+    },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

@@ -26,7 +26,9 @@ use super::maintenance::{
 use super::provider::ProviderStreamer;
 use super::run_state::{RunPhase, RunState};
 use super::summary::{run_max_iterations_summary, SummaryOutcome};
-use super::tools_exec::{execute_tools_concurrent, execute_tools_serial, tool_may_require_permission};
+use super::tools_exec::{
+    execute_tools_concurrent, execute_tools_serial, tool_may_require_permission,
+};
 use super::types::{MultiTurnStream, MultiTurnStreamItem, StreamedAssistantContent};
 use crate::control::hitl::HitlGate;
 use crate::runtime::AgentLoop;

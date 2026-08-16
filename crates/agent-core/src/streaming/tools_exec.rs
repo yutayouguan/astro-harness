@@ -33,10 +33,7 @@ fn approval_route(
     } else if tools::matches_allowlist(command, allowlist) {
         ApprovalRoute::Allowlist
     } else {
-        match (
-            selection.approval_policy,
-            selection.approvals_reviewer,
-        ) {
+        match (selection.approval_policy, selection.approvals_reviewer) {
             (types::ApprovalPolicy::Never, _) => ApprovalRoute::Off,
             (_, types::ApprovalsReviewer::AutoReview) => ApprovalRoute::Smart,
             (_, types::ApprovalsReviewer::User) => ApprovalRoute::Manual,
@@ -145,7 +142,13 @@ async fn execute_tools_serial_inner(
                             .unwrap_or("")
                             .to_string();
                         // 读取审批模式 + 白名单，并触发 PRE_APPROVAL_REQUEST 钩子
-                        let (approval_session_id, approval_turn_id, permissions, allowlist, memory_dir) = {
+                        let (
+                            approval_session_id,
+                            approval_turn_id,
+                            permissions,
+                            allowlist,
+                            memory_dir,
+                        ) = {
                             let agent = session.lock().await;
                             let approval_session_id = agent.session_id().to_string();
                             let approval_turn_id = agent.current_turn_id().map(str::to_string);
@@ -174,6 +177,26 @@ async fn execute_tools_serial_inner(
                         };
 
                         let route = approval_route(&cmd, &permissions, &allowlist);
+                        let permission_request = types::PermissionRequest {
+                            request_id: uuid::Uuid::new_v4().to_string(),
+                            session_id: approval_session_id.clone(),
+                            turn_id: approval_turn_id.clone(),
+                            tool_call_id: call.id.clone(),
+                            tool_name: call.name.clone(),
+                            summary: format!(
+                                "Run a command requiring approval: {}",
+                                decision.description
+                            ),
+                            capabilities: vec![types::PermissionCapability::ProcessSpawn {
+                                program: "sh".to_string(),
+                                cwd: None,
+                            }],
+                            reason: types::PermissionReason::UntrustedCommand,
+                            requested_scope: types::GrantScope::Once,
+                            command_preview: Some(cmd.clone()),
+                            affected_paths: Vec::new(),
+                            network_hosts: Vec::new(),
+                        };
                         // 防御性兜底：即使规则分级未来发生漂移，hardline 仍不可进入 HITL 放行。
                         if route == ApprovalRoute::Deny {
                             out.push(
@@ -210,8 +233,7 @@ async fn execute_tools_serial_inner(
                                     .collect();
                                 drop(agent);
                                 crate::control::smart_approval::maybe_smart_downgrade_ask(
-                                    &cmd,
-                                    decision.description,
+                                    &permission_request,
                                     &targets,
                                 )
                                 .await
@@ -459,7 +481,7 @@ fn run_tool_on_snapshot(
     args: &serde_json::Value,
 ) -> types::ToolOutput {
     // 纵深防御：并发路径没有审批闸门，此处硬拦 hardline 命令，
-    // 即便路由判定漏了（见 terminal_needs_approval），也不会执行不可恢复操作。
+    // 即便路由判定漏了（见 tool_may_require_permission），也不会执行不可恢复操作。
     if name == "terminal" {
         if let Some(cmd) = args.get("command").and_then(|v| v.as_str()) {
             if let Some(desc) = tools::is_hardline_blocked(cmd) {
@@ -527,32 +549,40 @@ mod tests {
     #[test]
     fn dangerous_commands_force_serial() {
         // hardline(Deny) 必须强制串行——否则会经并发路径绕过 Deny 拦截
-        assert!(terminal_needs_approval(
+        assert!(tool_may_require_permission(
             "terminal",
             &term("mkfs.ext4 /dev/sdb1")
         ));
-        assert!(terminal_needs_approval(
+        assert!(tool_may_require_permission(
             "terminal",
             &term("dd if=/dev/zero of=/dev/sda")
         ));
         // Ask 也强制串行（需 HITL 卡）
-        assert!(terminal_needs_approval(
+        assert!(tool_may_require_permission(
             "terminal",
             &term("rm -rf /tmp/project")
         ));
     }
 
     #[test]
-    fn safe_and_auto_commands_allow_concurrent() {
-        // Auto 白名单与安全命令无需串行
-        assert!(!terminal_needs_approval(
+    fn process_and_mutating_file_tools_force_serial_preflight() {
+        assert!(tool_may_require_permission(
             "terminal",
             &term("rm -rf node_modules")
         ));
-        assert!(!terminal_needs_approval("terminal", &term("ls -la")));
-        assert!(!terminal_needs_approval("terminal", &term("cargo test")));
-        // 非 terminal 工具永不触发
-        assert!(!terminal_needs_approval("file_ops", &term("mkfs")));
+        assert!(tool_may_require_permission("terminal", &term("ls -la")));
+        assert!(tool_may_require_permission(
+            "code_exec",
+            &serde_json::json!({})
+        ));
+        assert!(tool_may_require_permission(
+            "file_ops",
+            &serde_json::json!({"operation": "write"})
+        ));
+        assert!(!tool_may_require_permission(
+            "file_ops",
+            &serde_json::json!({"operation": "read"})
+        ));
     }
 
     #[test]
@@ -560,21 +590,25 @@ mod tests {
         let ask = "rm -rf /tmp/project";
         let none: Vec<String> = Vec::new();
         assert_eq!(
-            approval_route(ask, types::ApprovalMode::Smart, &none),
+            approval_route(ask, &types::SessionPermissions::approve_for_me(), &none),
             ApprovalRoute::Smart
         );
         assert_eq!(
-            approval_route(ask, types::ApprovalMode::Manual, &none),
+            approval_route(ask, &types::SessionPermissions::ask_for_approval(), &none),
             ApprovalRoute::Manual
         );
         assert_eq!(
-            approval_route(ask, types::ApprovalMode::Off, &none),
+            approval_route(ask, &types::SessionPermissions::full_access(), &none),
             ApprovalRoute::Off
         );
 
         let allowlist = vec![ask.to_string()];
         assert_eq!(
-            approval_route(ask, types::ApprovalMode::Manual, &allowlist),
+            approval_route(
+                ask,
+                &types::SessionPermissions::ask_for_approval(),
+                &allowlist
+            ),
             ApprovalRoute::Allowlist
         );
     }
@@ -584,7 +618,11 @@ mod tests {
         let command = "mkfs.ext4 /dev/sdb1";
         let allowlist = vec!["mkfs*".to_string()];
         assert_eq!(
-            approval_route(command, types::ApprovalMode::Off, &allowlist),
+            approval_route(
+                command,
+                &types::SessionPermissions::full_access(),
+                &allowlist
+            ),
             ApprovalRoute::Deny
         );
     }
