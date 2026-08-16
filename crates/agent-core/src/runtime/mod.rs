@@ -603,16 +603,39 @@ impl AgentLoop {
             .project_root
             .clone()
             .unwrap_or_else(|| self.memory.workspace_dir.clone());
+        let permission_settings = memory::load_permission_settings(&self.config.memory_dir);
+        let profile_id = self
+            .permission_profile
+            .clone()
+            .unwrap_or(permission_settings.selection.profile_id);
+        let sandbox_audit = tools::SandboxAuditMetadata::new(
+            self.config.memory_dir.clone(),
+            Some(self.session_id.clone()),
+            self.turn.current_turn_id.clone(),
+            "mcp",
+            profile_id,
+        );
         let execution_context = tools::context::build_command_sandbox_policy(
             &self.config.memory_dir,
             &execution_root,
             self.permission_profile.as_deref(),
             false,
         )
-        .and_then(|policy| McpExecutionContext::new(policy, &execution_root))
-        .map_err(|error| {
+        .inspect_err(|_error| {
+            sandbox_audit.record(
+                tools::SandboxAuditKind::Denied,
+                None,
+                "mcp",
+                "policy_resolution_failed",
+                None,
+            );
+        })
+        .and_then(|policy| {
+            McpExecutionContext::new(policy, &execution_root)
+                .map(|context| context.with_sandbox_audit(sandbox_audit))
+        })
+        .inspect_err(|error| {
             tracing::warn!(%error, "resolve MCP execution policy failed; connections will be denied");
-            error
         })
         .ok();
         {

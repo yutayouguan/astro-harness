@@ -33,6 +33,7 @@ use crate::names::{
 pub struct McpExecutionContext {
     sandbox_policy: sandbox::SandboxPolicy,
     working_dir: PathBuf,
+    sandbox_audit: Option<sandbox::SandboxAuditMetadata>,
 }
 
 impl McpExecutionContext {
@@ -55,7 +56,19 @@ impl McpExecutionContext {
         Ok(Self {
             sandbox_policy,
             working_dir,
+            sandbox_audit: None,
         })
+    }
+
+    pub fn with_sandbox_audit(mut self, audit: sandbox::SandboxAuditMetadata) -> Self {
+        self.sandbox_audit = Some(audit);
+        self
+    }
+
+    fn sandbox_audit_for(&self, server_id: &str) -> Option<sandbox::SandboxAuditMetadata> {
+        self.sandbox_audit
+            .as_ref()
+            .map(|audit| audit.with_tool_name(format!("mcp:{server_id}")))
     }
 
     fn fingerprint(&self) -> String {
@@ -720,7 +733,34 @@ async fn connect_server_inner(
     let service = match cfg.r#type {
         McpTransportType::Stdio => {
             let cmd = build_stdio_command(cfg, execution_context)?;
-            let transport = TokioChildProcess::new(cmd)?;
+            let audit = execution_context.sandbox_audit_for(&sid);
+            let spawn_started = std::time::Instant::now();
+            let transport = match TokioChildProcess::new(cmd) {
+                Ok(transport) => {
+                    if let Some(audit) = &audit {
+                        audit.record(
+                            sandbox::SandboxAuditKind::Spawned,
+                            Some(&execution_context.sandbox_policy),
+                            "stdio",
+                            "spawned",
+                            Some(spawn_started.elapsed().as_millis() as u64),
+                        );
+                    }
+                    transport
+                }
+                Err(error) => {
+                    if let Some(audit) = &audit {
+                        audit.record(
+                            sandbox::SandboxAuditKind::Denied,
+                            Some(&execution_context.sandbox_policy),
+                            "stdio",
+                            "spawn_failed",
+                            Some(spawn_started.elapsed().as_millis() as u64),
+                        );
+                    }
+                    return Err(error.into());
+                }
+            };
             handler.serve(transport).await.context("stdio serve")?
         }
         McpTransportType::StreamableHttp => {
@@ -809,10 +849,35 @@ fn build_stdio_command(
     cfg: &McpServerConfig,
     execution_context: &McpExecutionContext,
 ) -> anyhow::Result<tokio::process::Command> {
-    validate_stdio_command(&cfg.command)?;
-    let mut cmd = sandbox::SandboxRunner
+    let audit = execution_context.sandbox_audit_for(&sanitize_server_id(&cfg.id));
+    validate_stdio_command(&cfg.command).inspect_err(|_error| {
+        if let Some(audit) = &audit {
+            audit.record(
+                sandbox::SandboxAuditKind::Denied,
+                Some(&execution_context.sandbox_policy),
+                "stdio",
+                "command_validation_failed",
+                None,
+            );
+        }
+    })?;
+    let prepare_started = std::time::Instant::now();
+    let mut cmd = match sandbox::SandboxRunner
         .tokio_command(&execution_context.sandbox_policy, &cfg.command)
-        .context("prepare sandboxed MCP stdio command")?;
+    {
+        Ok(command) => command,
+        Err(error) => {
+            if let Some(audit) = &audit {
+                audit.record_prepare_error(
+                    Some(&execution_context.sandbox_policy),
+                    "stdio",
+                    &error,
+                    Some(prepare_started.elapsed().as_millis() as u64),
+                );
+            }
+            return Err(error).context("prepare sandboxed MCP stdio command");
+        }
+    };
     cmd.args(&cfg.args)
         .current_dir(&execution_context.working_dir)
         .stdin(Stdio::piped())
@@ -967,6 +1032,66 @@ mod tests {
         assert!(validate_stdio_command("../evil").is_err());
         assert!(validate_stdio_command("npx;rm").is_err());
         assert!(validate_stdio_command("foo/bar").is_err());
+    }
+
+    #[test]
+    fn rejected_stdio_command_is_audited_without_command_text() {
+        let dir = tempfile::tempdir().unwrap();
+        let policy = sandbox::SandboxPolicy::new(
+            types::SandboxMode::DangerFullAccess,
+            dir.path(),
+            Vec::new(),
+            false,
+        )
+        .unwrap();
+        let audit = sandbox::SandboxAuditMetadata::new(
+            dir.path(),
+            None,
+            None,
+            "mcp",
+            types::DANGER_FULL_ACCESS_PROFILE,
+        );
+        let context = McpExecutionContext::new(policy, dir.path())
+            .unwrap()
+            .with_sandbox_audit(audit);
+        let server = stdio_server("echo; secret-command");
+
+        assert!(build_stdio_command(&server, &context).is_err());
+        let events = sandbox::list_recent_sandbox_audits(dir.path(), 10).unwrap();
+        assert_eq!(events[0].event, sandbox::SandboxAuditKind::Denied);
+        let raw = std::fs::read_to_string(sandbox::sandbox_audit_path(dir.path())).unwrap();
+        assert!(!raw.contains("secret-command"));
+    }
+
+    #[tokio::test]
+    async fn stdio_process_spawn_is_audited_before_handshake_failure() {
+        let dir = tempfile::tempdir().unwrap();
+        let policy = sandbox::SandboxPolicy::new(
+            types::SandboxMode::DangerFullAccess,
+            dir.path(),
+            Vec::new(),
+            false,
+        )
+        .unwrap();
+        let audit = sandbox::SandboxAuditMetadata::new(
+            dir.path(),
+            Some("session-1".into()),
+            None,
+            "mcp",
+            types::DANGER_FULL_ACCESS_PROFILE,
+        );
+        let context = McpExecutionContext::new(policy, dir.path())
+            .unwrap()
+            .with_sandbox_audit(audit);
+        let server = stdio_server("echo");
+
+        assert!(connect_server_inner(&server, Some(&context)).await.is_err());
+        let events = sandbox::list_recent_sandbox_audits(dir.path(), 10).unwrap();
+        assert!(events.iter().any(|event| {
+            event.event == sandbox::SandboxAuditKind::Spawned
+                && event.tool_name == "mcp:s1"
+                && event.target == "stdio"
+        }));
     }
 
     #[test]

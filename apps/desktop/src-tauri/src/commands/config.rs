@@ -211,11 +211,31 @@ pub async fn refresh_mcp_tools(
         .unwrap_or_else(|| home::active_agent_id(&memory_root));
     let execution_root = worktree::resolve_project_root(None)
         .unwrap_or_else(|| home::agent_workspace_dir(&memory_root, &effective_agent_id));
+    let profile_id = memory::load_permission_settings(&memory_root)
+        .selection
+        .profile_id;
+    let sandbox_audit = tools::SandboxAuditMetadata::new(
+        memory_root.clone(),
+        None,
+        None,
+        "mcp_refresh",
+        profile_id,
+    );
     let policy =
         tools::context::build_command_sandbox_policy(&memory_root, &execution_root, None, false)
-            .map_err(|e| e.to_string())?;
-    let execution_context =
-        mcp::McpExecutionContext::new(policy, &execution_root).map_err(|e| e.to_string())?;
+            .map_err(|error| {
+                sandbox_audit.record(
+                    tools::SandboxAuditKind::Denied,
+                    None,
+                    "mcp",
+                    "policy_resolution_failed",
+                    None,
+                );
+                error.to_string()
+            })?;
+    let execution_context = mcp::McpExecutionContext::new(policy, &execution_root)
+        .map(|context| context.with_sandbox_audit(sandbox_audit))
+        .map_err(|e| e.to_string())?;
     let configs =
         mcp::McpHub::refresh_discovered(id.as_deref(), server_id.as_deref(), &execution_context)
             .await
