@@ -33,13 +33,13 @@ impl From<&types::ChatTarget> for ApprovalTarget {
     }
 }
 
-/// 解析审查器 JSON：仅明确的 approve_once / approve_session 才放行。
+/// 解析审查器 JSON：仅明确的 `approve_once` 才放行。
 pub fn parse_smart_verdict(text: &str) -> ApprovalAction {
     let Ok(value) = serde_json::from_str::<serde_json::Value>(text.trim()) else {
         return ApprovalAction::Ask;
     };
     match value.get("decision").and_then(|value| value.as_str()) {
-        Some("approve_once" | "approve_session") => ApprovalAction::Auto,
+        Some("approve_once") => ApprovalAction::Auto,
         _ => ApprovalAction::Ask,
     }
 }
@@ -174,6 +174,10 @@ mod tests {
         );
         assert_eq!(
             parse_smart_verdict(r#"{"decision":"deny","risk":"high"}"#),
+            ApprovalAction::Ask
+        );
+        assert_eq!(
+            parse_smart_verdict(r#"{"decision":"approve_session","risk":"low"}"#),
             ApprovalAction::Ask
         );
         assert_eq!(parse_smart_verdict("AUTO"), ApprovalAction::Ask);

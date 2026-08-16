@@ -45,6 +45,10 @@ pub struct ToolContext<'a> {
     pub execution: Option<Arc<dyn crate::ExecutionDispatch>>,
     /// 插件钩子总线（由 AgentLoop 注入；无 bus 时对应工具跳过 transform 钩子）。
     pub hook_bus: Option<Arc<hooks::PluginHookBus>>,
+    /// 当前单次工具调用已获得 workspace-write 临时授权。
+    ///
+    /// 该值只存在于本次 `ToolContext` 生命周期，不会持久化或扩大到后续工具调用。
+    pub workspace_write_grant: bool,
 }
 
 impl<'a> ToolContext<'a> {
@@ -81,9 +85,12 @@ impl<'a> ToolContext<'a> {
                 loaded.selection.profile_id
             );
         }
-        let mode = loaded
+        let mut mode = loaded
             .permissions
             .sandbox_mode_for(&loaded.selection.profile_id)?;
+        if self.workspace_write_grant && mode == types::SandboxMode::ReadOnly {
+            mode = types::SandboxMode::WorkspaceWrite;
+        }
         sandbox::SandboxPolicy::new(mode, root, Vec::new(), false).map_err(Into::into)
     }
 }
@@ -91,6 +98,42 @@ impl<'a> ToolContext<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn one_call_grant_upgrades_read_only_to_workspace_write_without_network() {
+        let dir = tempfile::tempdir().unwrap();
+        let workspace = dir.path().join("workspace");
+        std::fs::create_dir_all(&workspace).unwrap();
+        memory::set_permission_preset(dir.path(), types::PermissionPreset::ReadOnly).unwrap();
+        let mut manager = memory::MemoryManager::new(dir.path().to_path_buf()).unwrap();
+        let sessions =
+            session::SessionStore::open_sessions_dir(&manager.base_dir.join("sessions")).unwrap();
+        let targets = ImageGenTargets::default();
+        let credentials = ModelCredentials::default();
+        let ctx = ToolContext {
+            memory: &mut manager,
+            sessions: &sessions,
+            memory_dir: dir.path().to_path_buf(),
+            workspace_dir: workspace.clone(),
+            project_root: None,
+            image_gen_targets: &targets,
+            session_id: "test".into(),
+            turn_id: None,
+            credentials: &credentials,
+            chat_targets: &[],
+            execution: None,
+            hook_bus: None,
+            workspace_write_grant: true,
+        };
+
+        let policy = ctx.command_sandbox_policy().unwrap();
+        assert_eq!(policy.mode, types::SandboxMode::WorkspaceWrite);
+        assert_eq!(
+            policy.writable_roots,
+            vec![workspace.canonicalize().unwrap()]
+        );
+        assert!(!policy.network_access);
+    }
 
     #[test]
     fn from_parts_writes_primary_music_model_and_leaves_fallback_music_model_empty() {

@@ -5,7 +5,6 @@
 //! [`crate::registry::BuiltinToolRegistrar`] inventory 构建。
 
 use std::collections::HashMap;
-use std::path::Path;
 use std::sync::OnceLock;
 
 use crate::context::ToolContext;
@@ -61,7 +60,7 @@ pub async fn dispatch_tool(
         Some(ctx.session_id.as_str()),
         ctx.turn_id.as_deref(),
     );
-    enforce_in_process_write_policy(&ctx.memory_dir, name, args)?;
+    enforce_in_process_write_policy(ctx, name, args)?;
 
     // 1. 内置 handler（静态 inventory 注册）
     if let Some(handler) = handler_table().get(name) {
@@ -93,15 +92,16 @@ pub async fn dispatch_tool(
 }
 
 fn enforce_in_process_write_policy(
-    memory_dir: &Path,
+    ctx: &ToolContext<'_>,
     name: &str,
     args: &serde_json::Value,
 ) -> anyhow::Result<()> {
     if !tool_requires_in_process_write(name, args) {
         return Ok(());
     }
-    let settings = memory::load_permission_settings(memory_dir);
+    let settings = memory::load_permission_settings(&ctx.memory_dir);
     match settings.selection.profile_id.as_str() {
+        types::READ_ONLY_PROFILE if ctx.workspace_write_grant => Ok(()),
         types::READ_ONLY_PROFILE => anyhow::bail!(
             "permission denied: read-only profile does not allow {name} to modify local state"
         ),
@@ -112,7 +112,7 @@ fn enforce_in_process_write_policy(
     }
 }
 
-fn tool_requires_in_process_write(name: &str, args: &serde_json::Value) -> bool {
+pub fn tool_requires_in_process_write(name: &str, args: &serde_json::Value) -> bool {
     let action = || {
         args.get("action")
             .and_then(serde_json::Value::as_str)
@@ -151,6 +151,31 @@ fn tool_requires_in_process_write(name: &str, args: &serde_json::Value) -> bool 
 #[cfg(test)]
 mod permission_tests {
     use super::*;
+    use crate::context::ImageGenTargets;
+
+    fn with_ctx(dir: &tempfile::TempDir, grant: bool, f: impl FnOnce(&ToolContext<'_>)) {
+        let mut manager = memory::MemoryManager::new(dir.path().to_path_buf()).unwrap();
+        let sessions =
+            session::SessionStore::open_sessions_dir(&manager.base_dir.join("sessions")).unwrap();
+        let targets = ImageGenTargets::default();
+        let creds = crate::context::ModelCredentials::default();
+        let ctx = ToolContext {
+            memory: &mut manager,
+            sessions: &sessions,
+            memory_dir: dir.path().to_path_buf(),
+            workspace_dir: dir.path().join("workspace"),
+            project_root: None,
+            image_gen_targets: &targets,
+            session_id: "test".into(),
+            turn_id: None,
+            credentials: &creds,
+            chat_targets: &[],
+            execution: None,
+            hook_bus: None,
+            workspace_write_grant: grant,
+        };
+        f(&ctx);
+    }
 
     #[test]
     fn classifies_in_process_writes_without_blocking_read_actions() {
@@ -196,27 +221,37 @@ mod permission_tests {
     fn read_only_denies_and_workspace_allows_in_process_writes() {
         let dir = tempfile::tempdir().unwrap();
         memory::set_permission_preset(dir.path(), types::PermissionPreset::ReadOnly).unwrap();
-        let error = enforce_in_process_write_policy(
-            dir.path(),
-            "todo",
-            &serde_json::json!({"action": "create"}),
-        )
-        .unwrap_err()
-        .to_string();
-        assert!(error.contains("read-only"), "{error}");
-        assert!(enforce_in_process_write_policy(
-            dir.path(),
-            "context_search",
-            &serde_json::json!({})
-        )
-        .is_ok());
+        with_ctx(&dir, false, |ctx| {
+            let error = enforce_in_process_write_policy(
+                ctx,
+                "todo",
+                &serde_json::json!({"action": "create"}),
+            )
+            .unwrap_err()
+            .to_string();
+            assert!(error.contains("read-only"), "{error}");
+            assert!(
+                enforce_in_process_write_policy(ctx, "context_search", &serde_json::json!({}))
+                    .is_ok()
+            );
+        });
+        with_ctx(&dir, true, |ctx| {
+            assert!(enforce_in_process_write_policy(
+                ctx,
+                "todo",
+                &serde_json::json!({"action": "create"})
+            )
+            .is_ok());
+        });
 
         memory::set_permission_preset(dir.path(), types::PermissionPreset::AskForApproval).unwrap();
-        assert!(enforce_in_process_write_policy(
-            dir.path(),
-            "todo",
-            &serde_json::json!({"action": "create"})
-        )
-        .is_ok());
+        with_ctx(&dir, false, |ctx| {
+            assert!(enforce_in_process_write_policy(
+                ctx,
+                "todo",
+                &serde_json::json!({"action": "create"})
+            )
+            .is_ok());
+        });
     }
 }

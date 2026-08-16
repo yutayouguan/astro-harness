@@ -485,6 +485,7 @@ mod path_tests {
             chat_targets: &[],
             execution: None,
             hook_bus: None,
+            workspace_write_grant: false,
         };
 
         let err = resolve_workspace_file(&ctx, "../outside/secret.mp4").unwrap_err();

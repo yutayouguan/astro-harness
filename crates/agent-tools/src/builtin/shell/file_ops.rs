@@ -165,10 +165,17 @@ pub fn dispatch(
     let rel = display_rel(root, &full);
     let active_profile = if is_mutating_operation(&op) {
         let settings = memory::load_permission_settings(&ctx.memory_dir);
+        let profile_id = if ctx.workspace_write_grant
+            && settings.selection.profile_id == types::READ_ONLY_PROFILE
+        {
+            types::WORKSPACE_PROFILE.to_string()
+        } else {
+            settings.selection.profile_id
+        };
         if !matches!(op.as_str(), "copy" | "cp") {
-            enforce_file_mutation_policy(&settings.selection.profile_id, root, &full)?;
+            enforce_file_mutation_policy(&profile_id, root, &full)?;
         }
-        Some(settings.selection.profile_id)
+        Some(profile_id)
     } else {
         None
     };
@@ -1049,6 +1056,7 @@ mod tests {
             chat_targets: &[],
             execution: None,
             hook_bus: None,
+            workspace_write_grant: false,
         }
     }
 
@@ -1103,7 +1111,7 @@ mod tests {
 
         memory::set_permission_preset(dir.path(), types::PermissionPreset::ReadOnly).unwrap();
         {
-            let ctx = test_ctx(&dir, &mut memory, &sessions, &targets, &creds);
+            let mut ctx = test_ctx(&dir, &mut memory, &sessions, &targets, &creds);
             let error = dispatch(
                 &ctx,
                 &serde_json::json!({
@@ -1116,6 +1124,36 @@ mod tests {
             .to_string();
             assert!(error.contains("read-only"), "{error}");
             assert!(!workspace.join("copy.txt").exists());
+
+            ctx.workspace_write_grant = true;
+            dispatch(
+                &ctx,
+                &serde_json::json!({
+                    "operation": "cp",
+                    "path": "source.txt",
+                    "dest": "copy.txt"
+                }),
+            )
+            .unwrap();
+            assert_eq!(
+                fs::read_to_string(workspace.join("copy.txt")).unwrap(),
+                "source"
+            );
+        }
+        {
+            let ctx = test_ctx(&dir, &mut memory, &sessions, &targets, &creds);
+            let error = dispatch(
+                &ctx,
+                &serde_json::json!({
+                    "operation": "cp",
+                    "path": "source.txt",
+                    "dest": "second-copy.txt"
+                }),
+            )
+            .unwrap_err()
+            .to_string();
+            assert!(error.contains("read-only"), "{error}");
+            assert!(!workspace.join("second-copy.txt").exists());
         }
 
         memory::set_permission_preset(dir.path(), types::PermissionPreset::AskForApproval).unwrap();

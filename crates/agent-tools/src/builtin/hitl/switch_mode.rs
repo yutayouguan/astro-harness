@@ -117,6 +117,7 @@ mod tests {
             chat_targets: &[],
             execution: None,
             hook_bus: None,
+            workspace_write_grant: false,
         };
         f(&ctx);
     }

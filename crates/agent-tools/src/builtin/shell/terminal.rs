@@ -226,6 +226,7 @@ mod tests {
             chat_targets: &[],
             execution: None,
             hook_bus: None,
+            workspace_write_grant: false,
         };
 
         let n = types::MAX_TOOL_RESULT_BYTES + 8 * 1024;
@@ -264,6 +265,7 @@ mod tests {
             chat_targets: &[],
             execution: None,
             hook_bus: Some(bus),
+            workspace_write_grant: false,
         };
 
         let n = types::MAX_TOOL_RESULT_BYTES + 8 * 1024;

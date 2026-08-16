@@ -59,6 +59,7 @@ impl AgentLoop {
         &mut self,
         name: &str,
         args: &serde_json::Value,
+        workspace_write_grant: bool,
     ) -> anyhow::Result<types::ToolOutput> {
         let agent_id = self.memory.agent_id.clone();
         self.tool_registry.reload_enabled_from_disk(Some(&agent_id));
@@ -116,6 +117,7 @@ impl AgentLoop {
             chat_targets: &self.model_ctx.chat_targets,
             execution,
             hook_bus,
+            workspace_write_grant,
         };
         dispatch_tool(|_| allowed, &mut ctx, name, args, mcp_handler.as_ref()).await
     }
@@ -128,7 +130,25 @@ impl AgentLoop {
         name: &str,
         args: &serde_json::Value,
     ) -> Result<types::ToolOutput, ToolCallError> {
-        let fut = self.handle_tool_call_async(name, args);
+        self.handle_tool_call_scoped(name, args, false)
+    }
+
+    /// 执行已审批的单次 workspace-write 调用。授权不保存到 Agent 状态。
+    pub(crate) fn handle_tool_call_with_workspace_write_grant(
+        &mut self,
+        name: &str,
+        args: &serde_json::Value,
+    ) -> Result<types::ToolOutput, ToolCallError> {
+        self.handle_tool_call_scoped(name, args, true)
+    }
+
+    fn handle_tool_call_scoped(
+        &mut self,
+        name: &str,
+        args: &serde_json::Value,
+        workspace_write_grant: bool,
+    ) -> Result<types::ToolOutput, ToolCallError> {
+        let fut = self.handle_tool_call_async_scoped(name, args, workspace_write_grant);
         match tokio::runtime::Handle::try_current() {
             Ok(handle) => tokio::task::block_in_place(|| handle.block_on(fut)),
             Err(_) => {
@@ -149,6 +169,15 @@ impl AgentLoop {
         &mut self,
         name: &str,
         args: &serde_json::Value,
+    ) -> Result<types::ToolOutput, ToolCallError> {
+        self.handle_tool_call_async_scoped(name, args, false).await
+    }
+
+    async fn handle_tool_call_async_scoped(
+        &mut self,
+        name: &str,
+        args: &serde_json::Value,
+        workspace_write_grant: bool,
     ) -> Result<types::ToolOutput, ToolCallError> {
         if self.cancel.is_cancelled() {
             return Err(ToolCallError::Cancelled);
@@ -201,7 +230,9 @@ impl AgentLoop {
         if let Err(msg) = tools::check_tool_call(self.interaction_mode, exec_name, &exec_args) {
             return Ok(msg.into());
         }
-        let raw_result = self.dispatch_named_tool(exec_name, &exec_args).await?;
+        let raw_result = self
+            .dispatch_named_tool(exec_name, &exec_args, workspace_write_grant)
+            .await?;
         if exec_name == "skills" {
             self.activate_skill_toolsets_from_args(&exec_args);
         }

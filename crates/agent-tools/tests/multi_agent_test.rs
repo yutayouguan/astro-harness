@@ -30,6 +30,7 @@ async fn pipeline_queues_orchestration() {
         chat_targets: &[],
         execution: None,
         hook_bus: None,
+        workspace_write_grant: false,
     };
 
     let out = tools::dispatch_tool(
@@ -87,6 +88,7 @@ async fn pipeline_rejects_empty_agents() {
         chat_targets: &[],
         execution: None,
         hook_bus: None,
+        workspace_write_grant: false,
     };
     let err = tools::dispatch_tool(
         |_| true,

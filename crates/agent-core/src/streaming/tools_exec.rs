@@ -64,15 +64,192 @@ async fn fire_post_approval_response(
     );
 }
 
+async fn fire_post_permission_response(
+    session: &Arc<Mutex<AgentLoop>>,
+    session_id: &str,
+    turn_id: Option<&str>,
+    request: &types::PermissionRequest,
+    choice: &str,
+) {
+    let agent = session.lock().await;
+    agent.fire_hook(
+        hooks::POST_APPROVAL_RESPONSE,
+        hooks::HookPayload {
+            session_id: session_id.to_string(),
+            turn_id: turn_id.map(str::to_string),
+            message: Some(request.summary.clone()),
+            detail: format!("surface=permission choice={choice}"),
+            ..Default::default()
+        },
+    );
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum PermissionPreflight {
+    NotRequired,
+    Granted,
+    Denied(String),
+}
+
+fn affected_write_paths(name: &str, args: &serde_json::Value) -> Vec<String> {
+    if name == "file_ops" {
+        return ["path", "dest"]
+            .into_iter()
+            .filter_map(|key| args.get(key).and_then(|value| value.as_str()))
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(str::to_string)
+            .collect();
+    }
+    let logical_path = match name {
+        "todo" => "workspace/plans",
+        "memory" => "agent/MEMORY.md or USER.md",
+        "skills" => "skills directory",
+        "pin_context" => "workspace/pinned-context.json",
+        "cron" => "~/.astro/cron/jobs.json",
+        "persona_create" => "~/.astro/agents",
+        "image_gen" => "workspace/images",
+        "video_gen" => "workspace/videos",
+        "speech_gen" => "workspace/audio",
+        "music_gen" => "workspace/music",
+        _ => "local state",
+    };
+    vec![logical_path.to_string()]
+}
+
+async fn preflight_read_only_write(
+    session: &Arc<Mutex<AgentLoop>>,
+    call: &types::ParsedToolCall,
+    tx: &mpsc::Sender<anyhow::Result<MultiTurnStreamItem>>,
+    run_id: &str,
+    hitl_gate: Option<&Arc<HitlGate>>,
+) -> Option<PermissionPreflight> {
+    if !tools::tool_requires_in_process_write(&call.name, &call.arguments) {
+        return Some(PermissionPreflight::NotRequired);
+    }
+
+    let (session_id, turn_id, selection) = {
+        let agent = session.lock().await;
+        let session_id = agent.session_id().to_string();
+        let turn_id = agent.current_turn_id().map(str::to_string);
+        let settings = memory::load_permission_settings(agent.memory_dir());
+        if settings.selection.profile_id != types::READ_ONLY_PROFILE {
+            return Some(PermissionPreflight::NotRequired);
+        }
+        (session_id, turn_id, settings.selection)
+    };
+
+    let affected_paths = affected_write_paths(&call.name, &call.arguments);
+    let request = types::PermissionRequest {
+        request_id: uuid::Uuid::new_v4().to_string(),
+        session_id: session_id.clone(),
+        turn_id: turn_id.clone(),
+        tool_call_id: call.id.clone(),
+        tool_name: call.name.clone(),
+        summary: format!(
+            "Allow {} to modify the listed local state for this call",
+            call.name
+        ),
+        capabilities: vec![types::PermissionCapability::FileWrite {
+            paths: affected_paths.clone(),
+        }],
+        reason: types::PermissionReason::ReadOnlyMutation,
+        requested_scope: types::GrantScope::Once,
+        command_preview: None,
+        affected_paths,
+        network_hosts: Vec::new(),
+    };
+
+    {
+        let agent = session.lock().await;
+        agent.fire_hook(
+            hooks::PRE_APPROVAL_REQUEST,
+            hooks::HookPayload {
+                session_id: session_id.clone(),
+                turn_id: turn_id.clone(),
+                message: Some(request.summary.clone()),
+                detail: "surface=permission reason=read_only_mutation".to_string(),
+                ..Default::default()
+            },
+        );
+    }
+
+    if selection.approval_policy == types::ApprovalPolicy::Never {
+        fire_post_permission_response(session, &session_id, turn_id.as_deref(), &request, "deny")
+            .await;
+        return Some(PermissionPreflight::Denied(
+            "Permission denied: approval policy is never".to_string(),
+        ));
+    }
+
+    if selection.approvals_reviewer == types::ApprovalsReviewer::AutoReview {
+        let targets = {
+            let agent = session.lock().await;
+            agent
+                .auxiliary_targets(types::AuxiliaryTask::SmartApproval)
+                .iter()
+                .map(crate::control::smart_approval::ApprovalTarget::from)
+                .collect::<Vec<_>>()
+        };
+        let action =
+            crate::control::smart_approval::maybe_smart_downgrade_ask(&request, &targets).await;
+        if action == types::ApprovalAction::Auto {
+            fire_post_permission_response(
+                session,
+                &session_id,
+                turn_id.as_deref(),
+                &request,
+                "auto",
+            )
+            .await;
+            return Some(PermissionPreflight::Granted);
+        }
+        fire_post_permission_response(session, &session_id, turn_id.as_deref(), &request, "deny")
+            .await;
+        return Some(PermissionPreflight::Denied(
+            "Permission denied by automatic approval review".to_string(),
+        ));
+    }
+
+    let Some(gate) = hitl_gate else {
+        fire_post_permission_response(
+            session,
+            &session_id,
+            turn_id.as_deref(),
+            &request,
+            "unavailable",
+        )
+        .await;
+        return Some(PermissionPreflight::Denied(
+            "Permission blocked: user approval is unavailable".to_string(),
+        ));
+    };
+    let paths = request.affected_paths.join("\n- ");
+    let body = format!(
+        "当前为只读模式。是否仅允许本次 `{}` 执行下列写入？\n\n影响路径：\n- {}\n\n不会修改全局权限，也不会提升为完全访问。",
+        call.name, paths
+    );
+    let confirm = park_confirm(gate, tx, run_id, &call.id, "批准本次写入", &body, false).await?;
+    let choice = match confirm.status.as_str() {
+        "timeout" => "timeout",
+        _ if confirm.approved => "allow_once",
+        _ => "deny",
+    };
+    fire_post_permission_response(session, &session_id, turn_id.as_deref(), &request, choice).await;
+    if confirm.approved {
+        Some(PermissionPreflight::Granted)
+    } else {
+        Some(PermissionPreflight::Denied(
+            "Permission denied by user".to_string(),
+        ))
+    }
+}
+
 pub(crate) fn tool_may_require_permission(name: &str, args: &serde_json::Value) -> bool {
     match name {
         // 权限 profile 和命令规则都可能要求 park；统一走串行 preflight。
         "terminal" | "code_exec" => true,
-        "file_ops" => matches!(
-            args.get("operation").and_then(|value| value.as_str()),
-            Some("write" | "append" | "delete" | "mkdir" | "patch" | "move" | "copy")
-        ),
-        _ => false,
+        _ => tools::tool_requires_in_process_write(name, args),
     }
 }
 
@@ -113,6 +290,20 @@ async fn execute_tools_serial_inner(
         }
         if !pause.wait_if_paused().await {
             return None;
+        }
+
+        let mut workspace_write_grant = false;
+        if !call.args_parse_error {
+            match preflight_read_only_write(session, call, tx, run_id, hitl_gate).await? {
+                PermissionPreflight::NotRequired => {}
+                PermissionPreflight::Granted => workspace_write_grant = true,
+                PermissionPreflight::Denied(message) => {
+                    out.push(format!(
+                        "{message}. Do not retry the same action or attempt a workaround without explicit authorization."
+                    ).into());
+                    continue;
+                }
+            }
         }
 
         // 危险 terminal：deny / auto / ask
@@ -343,9 +534,14 @@ async fn execute_tools_serial_inner(
             let mut agent = session.lock().await;
             let memory_dir = agent.memory_dir().to_path_buf();
             let session_id = agent.session_id().to_string();
-            match tokio::task::block_in_place(|| {
-                agent.handle_tool_call(&call.name, &call.arguments)
-            }) {
+            let executed = tokio::task::block_in_place(|| {
+                if workspace_write_grant {
+                    agent.handle_tool_call_with_workspace_write_grant(&call.name, &call.arguments)
+                } else {
+                    agent.handle_tool_call(&call.name, &call.arguments)
+                }
+            });
+            match executed {
                 Ok(output) => output,
                 Err(crate::runtime::ToolCallError::Cancelled) => return None,
                 Err(e) => {
@@ -522,6 +718,7 @@ fn run_tool_on_snapshot(
             chat_targets: &snap.chat_targets,
             execution: Some(snap.execution.clone()),
             hook_bus: snap.hook_bus.clone(),
+            workspace_write_grant: false,
         };
         tools::dispatch_tool(|_| true, &mut ctx, name, args, None)
             .await
@@ -577,12 +774,39 @@ mod tests {
         ));
         assert!(tool_may_require_permission(
             "file_ops",
-            &serde_json::json!({"operation": "write"})
+            &serde_json::json!({"operation": "mv"})
         ));
         assert!(!tool_may_require_permission(
             "file_ops",
             &serde_json::json!({"operation": "read"})
         ));
+        assert!(tool_may_require_permission(
+            "todo",
+            &serde_json::json!({"action": "create"})
+        ));
+        assert!(tool_may_require_permission(
+            "skills",
+            &serde_json::json!({"action": "manage"})
+        ));
+        assert!(!tool_may_require_permission(
+            "skills",
+            &serde_json::json!({"action": "load"})
+        ));
+    }
+
+    #[test]
+    fn permission_request_paths_include_both_move_endpoints() {
+        assert_eq!(
+            affected_write_paths(
+                "file_ops",
+                &serde_json::json!({"path": "src/a.rs", "dest": "src/b.rs"})
+            ),
+            vec!["src/a.rs", "src/b.rs"]
+        );
+        assert_eq!(
+            affected_write_paths("todo", &serde_json::json!({})),
+            vec!["workspace/plans"]
+        );
     }
 
     #[test]

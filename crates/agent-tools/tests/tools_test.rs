@@ -83,6 +83,7 @@ async fn file_ops_write_and_read() {
         chat_targets: &[],
         execution: None,
         hook_bus: None,
+        workspace_write_grant: false,
     };
 
     let w = tools::dispatch_tool(
