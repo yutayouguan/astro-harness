@@ -5,6 +5,7 @@
 //! [`crate::registry::BuiltinToolRegistrar`] inventory 构建。
 
 use std::collections::HashMap;
+use std::path::Path;
 use std::sync::OnceLock;
 
 use crate::context::ToolContext;
@@ -60,6 +61,7 @@ pub async fn dispatch_tool(
         Some(ctx.session_id.as_str()),
         ctx.turn_id.as_deref(),
     );
+    enforce_in_process_write_policy(&ctx.memory_dir, name, args)?;
 
     // 1. 内置 handler（静态 inventory 注册）
     if let Some(handler) = handler_table().get(name) {
@@ -88,4 +90,133 @@ pub async fn dispatch_tool(
     }
 
     anyhow::bail!("未知工具: {name}")
+}
+
+fn enforce_in_process_write_policy(
+    memory_dir: &Path,
+    name: &str,
+    args: &serde_json::Value,
+) -> anyhow::Result<()> {
+    if !tool_requires_in_process_write(name, args) {
+        return Ok(());
+    }
+    let settings = memory::load_permission_settings(memory_dir);
+    match settings.selection.profile_id.as_str() {
+        types::READ_ONLY_PROFILE => anyhow::bail!(
+            "permission denied: read-only profile does not allow {name} to modify local state"
+        ),
+        types::WORKSPACE_PROFILE | types::DANGER_FULL_ACCESS_PROFILE => Ok(()),
+        custom => anyhow::bail!(
+            "custom permission profile {custom:?} is not executable until its filesystem rules are fully resolved"
+        ),
+    }
+}
+
+fn tool_requires_in_process_write(name: &str, args: &serde_json::Value) -> bool {
+    let action = || {
+        args.get("action")
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or("")
+            .trim()
+            .to_ascii_lowercase()
+    };
+    match name {
+        "file_ops" => matches!(
+            args.get("operation")
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or("")
+                .trim()
+                .to_ascii_lowercase()
+                .as_str(),
+            "write"
+                | "append"
+                | "delete"
+                | "mkdir"
+                | "patch"
+                | "move"
+                | "rename"
+                | "mv"
+                | "copy"
+                | "cp"
+        ),
+        "memory" | "todo" | "persona_create" => true,
+        "skills" => action() == "manage",
+        "pin_context" => matches!(action().as_str(), "pin" | "unpin" | "clear"),
+        "cron" => matches!(action().as_str(), "add" | "remove" | "enable" | "disable"),
+        "image_gen" | "video_gen" | "speech_gen" | "music_gen" => true,
+        _ => false,
+    }
+}
+
+#[cfg(test)]
+mod permission_tests {
+    use super::*;
+
+    #[test]
+    fn classifies_in_process_writes_without_blocking_read_actions() {
+        assert!(tool_requires_in_process_write(
+            "file_ops",
+            &serde_json::json!({"operation": "mv"})
+        ));
+        assert!(!tool_requires_in_process_write(
+            "file_ops",
+            &serde_json::json!({"operation": "read"})
+        ));
+        assert!(tool_requires_in_process_write(
+            "skills",
+            &serde_json::json!({"action": "manage"})
+        ));
+        assert!(!tool_requires_in_process_write(
+            "skills",
+            &serde_json::json!({"action": "load"})
+        ));
+        assert!(tool_requires_in_process_write(
+            "pin_context",
+            &serde_json::json!({"action": "clear"})
+        ));
+        assert!(!tool_requires_in_process_write(
+            "pin_context",
+            &serde_json::json!({"action": "list"})
+        ));
+        assert!(tool_requires_in_process_write(
+            "cron",
+            &serde_json::json!({"action": "disable"})
+        ));
+        assert!(!tool_requires_in_process_write(
+            "cron",
+            &serde_json::json!({"action": "list"})
+        ));
+        assert!(tool_requires_in_process_write(
+            "image_gen",
+            &serde_json::json!({})
+        ));
+    }
+
+    #[test]
+    fn read_only_denies_and_workspace_allows_in_process_writes() {
+        let dir = tempfile::tempdir().unwrap();
+        memory::set_permission_preset(dir.path(), types::PermissionPreset::ReadOnly).unwrap();
+        let error = enforce_in_process_write_policy(
+            dir.path(),
+            "todo",
+            &serde_json::json!({"action": "create"}),
+        )
+        .unwrap_err()
+        .to_string();
+        assert!(error.contains("read-only"), "{error}");
+        assert!(enforce_in_process_write_policy(
+            dir.path(),
+            "context_search",
+            &serde_json::json!({})
+        )
+        .is_ok());
+
+        memory::set_permission_preset(dir.path(), types::PermissionPreset::AskForApproval).unwrap();
+        assert!(enforce_in_process_write_policy(
+            dir.path(),
+            "todo",
+            &serde_json::json!({"action": "create"})
+        )
+        .is_ok());
+    }
 }
