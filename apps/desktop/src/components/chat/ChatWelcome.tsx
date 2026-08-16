@@ -135,8 +135,6 @@ export function ChatWelcome({ onPickCard }: Props) {
       </div>
 
       <div className="chat-welcome-marquee-wrap">
-        <div className="chat-welcome-marquee-fade chat-welcome-marquee-fade--left" />
-        <div className="chat-welcome-marquee-fade chat-welcome-marquee-fade--right" />
         <MarqueeRow cards={ROW1} direction="right" onPick={onPickCard} />
         <MarqueeRow cards={ROW2} direction="left" onPick={onPickCard} />
       </div>

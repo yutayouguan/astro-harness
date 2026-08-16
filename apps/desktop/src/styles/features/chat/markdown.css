@@ -2759,25 +2759,20 @@ html[data-theme="dark"] .chat-welcome-card-glyph {
   flex-direction: column;
   gap: 12px;
   margin-top: 8px;
-}
-
-.chat-welcome-marquee-fade {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  width: 80px;
-  z-index: 2;
-  pointer-events: none;
-}
-
-.chat-welcome-marquee-fade--left {
-  left: 0;
-  background: linear-gradient(to right, var(--window-underlay, var(--bg1)) 10%, transparent 100%);
-}
-
-.chat-welcome-marquee-fade--right {
-  right: 0;
-  background: linear-gradient(to left, var(--window-underlay, var(--bg1)) 10%, transparent 100%);
+  -webkit-mask-image: linear-gradient(
+    to right,
+    transparent 0%,
+    black 10%,
+    black 90%,
+    transparent 100%
+  );
+  mask-image: linear-gradient(
+    to right,
+    transparent 0%,
+    black 10%,
+    black 90%,
+    transparent 100%
+  );
 }
 
 .chat-welcome-marquee {
