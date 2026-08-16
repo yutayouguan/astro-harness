@@ -6,8 +6,9 @@
 use std::fs;
 use std::path::Path;
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use tracing::warn;
+use types::{ApprovalPolicy, ApprovalsReviewer, PermissionsConfig, SessionPermissions};
 
 fn default_true() -> bool {
     true
@@ -139,6 +140,62 @@ impl Default for ApprovalsConfig {
         Self {
             mode: default_approval_mode(),
             command_allowlist: Vec::new(),
+        }
+    }
+}
+
+/// 命令网络代理开关。它与 profile 的 `network.enabled` 是两个独立维度。
+#[derive(Debug, Clone, Default, Deserialize, PartialEq, Eq)]
+struct NetworkProxyConfig {
+    #[serde(default)]
+    enabled: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PermissionConfigSource {
+    Default,
+    ExplicitProfiles,
+    LegacyApprovals,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PermissionDiagnosticCode {
+    LegacySmartMigrated,
+    LegacyOffRestricted,
+    UnknownLegacyMode,
+    MixedLegacySandboxIgnored,
+    InvalidProfileConfig,
+    DomainRulesWithoutProxy,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct PermissionConfigDiagnostic {
+    pub code: PermissionDiagnosticCode,
+    pub message: String,
+}
+
+/// 启动时解析出的安全权限配置。发生歧义或无效配置时返回安全默认并附带诊断。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct LoadedPermissionSettings {
+    pub permissions: PermissionsConfig,
+    pub selection: SessionPermissions,
+    pub network_proxy_enabled: bool,
+    pub legacy_command_allowlist: Vec<String>,
+    pub source: PermissionConfigSource,
+    pub diagnostics: Vec<PermissionConfigDiagnostic>,
+}
+
+impl Default for LoadedPermissionSettings {
+    fn default() -> Self {
+        Self {
+            permissions: PermissionsConfig::default(),
+            selection: SessionPermissions::ask_for_approval(),
+            network_proxy_enabled: false,
+            legacy_command_allowlist: Vec::new(),
+            source: PermissionConfigSource::Default,
+            diagnostics: Vec::new(),
         }
     }
 }
@@ -706,6 +763,19 @@ struct FileConfig {
     #[serde(default)]
     approvals: Option<ApprovalsConfig>,
     #[serde(default)]
+    permissions: Option<PermissionsConfig>,
+    #[serde(default)]
+    approval_policy: Option<ApprovalPolicy>,
+    #[serde(default)]
+    approvals_reviewer: Option<ApprovalsReviewer>,
+    #[serde(default)]
+    network_proxy: Option<NetworkProxyConfig>,
+    // 仅用于检测新 permission profiles 与旧 sandbox 配置混用。
+    #[serde(default)]
+    sandbox_mode: Option<String>,
+    #[serde(default)]
+    sandbox_workspace_write: Option<serde_yaml::Value>,
+    #[serde(default)]
     compression: Option<CompressionConfig>,
 }
 
@@ -764,6 +834,129 @@ pub fn load_evolution_config(base: &Path) -> EvolutionConfig {
 /// 从 `{base}/config.yaml` 加载危险命令审批配置。
 pub fn load_approvals_config(base: &Path) -> ApprovalsConfig {
     read_file_config(base).approvals.unwrap_or_default()
+}
+
+/// 加载新权限配置；旧 `approvals.mode` 只做安全迁移，不会把 `off` 扩大成完全访问。
+pub fn load_permission_settings(base: &Path) -> LoadedPermissionSettings {
+    let file = read_file_config(base);
+    if let Some(permissions) = file.permissions.clone() {
+        return load_explicit_permissions(file, permissions);
+    }
+
+    if let Some(legacy) = file.approvals {
+        return migrate_legacy_approvals(legacy);
+    }
+
+    let mut loaded = LoadedPermissionSettings::default();
+    if file.sandbox_mode.is_some() || file.sandbox_workspace_write.is_some() {
+        loaded.diagnostics.push(PermissionConfigDiagnostic {
+            code: PermissionDiagnosticCode::MixedLegacySandboxIgnored,
+            message: "legacy sandbox settings are not activated until they are migrated to a permission profile"
+                .to_string(),
+        });
+    }
+    loaded
+}
+
+fn load_explicit_permissions(
+    file: FileConfig,
+    permissions: PermissionsConfig,
+) -> LoadedPermissionSettings {
+    let mut diagnostics = Vec::new();
+    if file.sandbox_mode.is_some() || file.sandbox_workspace_write.is_some() {
+        diagnostics.push(PermissionConfigDiagnostic {
+            code: PermissionDiagnosticCode::MixedLegacySandboxIgnored,
+            message: "permission profiles are active; legacy sandbox_mode settings were ignored"
+                .to_string(),
+        });
+    }
+
+    if let Err(error) = permissions.validate() {
+        diagnostics.push(PermissionConfigDiagnostic {
+            code: PermissionDiagnosticCode::InvalidProfileConfig,
+            message: error.to_string(),
+        });
+        return LoadedPermissionSettings {
+            diagnostics,
+            ..LoadedPermissionSettings::default()
+        };
+    }
+
+    let network_proxy_enabled = file.network_proxy.unwrap_or_default().enabled;
+    let has_domain_rules = permissions
+        .profiles
+        .values()
+        .any(|profile| !profile.network.domains.is_empty());
+    if has_domain_rules && !network_proxy_enabled {
+        diagnostics.push(PermissionConfigDiagnostic {
+            code: PermissionDiagnosticCode::DomainRulesWithoutProxy,
+            message: "permission profile domain rules require network_proxy.enabled=true"
+                .to_string(),
+        });
+        return LoadedPermissionSettings {
+            diagnostics,
+            ..LoadedPermissionSettings::default()
+        };
+    }
+
+    let selection = SessionPermissions {
+        profile_id: permissions.default_profile.clone(),
+        approval_policy: file.approval_policy.unwrap_or_default(),
+        approvals_reviewer: file.approvals_reviewer.unwrap_or_default(),
+    };
+    let legacy_command_allowlist = file
+        .approvals
+        .map(|legacy| legacy.command_allowlist)
+        .unwrap_or_default();
+    LoadedPermissionSettings {
+        permissions,
+        selection,
+        network_proxy_enabled,
+        legacy_command_allowlist,
+        source: PermissionConfigSource::ExplicitProfiles,
+        diagnostics,
+    }
+}
+
+fn migrate_legacy_approvals(legacy: ApprovalsConfig) -> LoadedPermissionSettings {
+    let normalized = legacy.mode.trim().to_ascii_lowercase();
+    let mut diagnostics = Vec::new();
+    let selection = match normalized.as_str() {
+        "manual" => SessionPermissions::ask_for_approval(),
+        "smart" => {
+            diagnostics.push(PermissionConfigDiagnostic {
+                code: PermissionDiagnosticCode::LegacySmartMigrated,
+                message: "legacy smart approval migrated to workspace profile with auto-review"
+                    .to_string(),
+            });
+            SessionPermissions::approve_for_me()
+        }
+        "off" | "yolo" => {
+            diagnostics.push(PermissionConfigDiagnostic {
+                code: PermissionDiagnosticCode::LegacyOffRestricted,
+                message: "legacy approval off was restricted to ask-for-approval; full access requires explicit selection"
+                    .to_string(),
+            });
+            SessionPermissions::ask_for_approval()
+        }
+        _ => {
+            diagnostics.push(PermissionConfigDiagnostic {
+                code: PermissionDiagnosticCode::UnknownLegacyMode,
+                message: format!(
+                    "unknown legacy approval mode {:?}; using ask-for-approval",
+                    legacy.mode
+                ),
+            });
+            SessionPermissions::ask_for_approval()
+        }
+    };
+    LoadedPermissionSettings {
+        selection,
+        legacy_command_allowlist: legacy.command_allowlist,
+        source: PermissionConfigSource::LegacyApprovals,
+        diagnostics,
+        ..LoadedPermissionSettings::default()
+    }
 }
 
 /// 从 `{base}/config.yaml` 加载上下文卫生配置。
@@ -1651,6 +1844,138 @@ auxiliary:
         let cfg = load_approvals_config(dir.path());
         assert_eq!(cfg.mode, "smart");
         assert!(cfg.command_allowlist.is_empty());
+    }
+
+    #[test]
+    fn permission_settings_default_to_workspace_user_approval() {
+        let dir = tempfile::tempdir().unwrap();
+        let loaded = load_permission_settings(dir.path());
+        assert_eq!(loaded.source, PermissionConfigSource::Default);
+        assert_eq!(loaded.selection, SessionPermissions::ask_for_approval());
+        assert!(loaded.diagnostics.is_empty());
+    }
+
+    #[test]
+    fn legacy_approval_modes_migrate_without_expanding_access() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(
+            dir.path().join("config.yaml"),
+            "approvals:\n  mode: smart\n  command_allowlist:\n    - git status\n",
+        )
+        .unwrap();
+        let smart = load_permission_settings(dir.path());
+        assert_eq!(smart.source, PermissionConfigSource::LegacyApprovals);
+        assert_eq!(smart.selection, SessionPermissions::approve_for_me());
+        assert_eq!(smart.legacy_command_allowlist, vec!["git status"]);
+
+        fs::write(dir.path().join("config.yaml"), "approvals:\n  mode: off\n").unwrap();
+        let off = load_permission_settings(dir.path());
+        assert_eq!(off.selection, SessionPermissions::ask_for_approval());
+        assert!(off
+            .diagnostics
+            .iter()
+            .any(|item| { item.code == PermissionDiagnosticCode::LegacyOffRestricted }));
+    }
+
+    #[test]
+    fn explicit_profiles_keep_approval_dimensions_separate() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(
+            dir.path().join("config.yaml"),
+            r#"
+permissions:
+  default_profile: project-edit
+  profiles:
+    project-edit:
+      extends: ":workspace"
+      filesystem:
+        workspace_roots:
+          "**/*.env": deny
+approval_policy: untrusted
+approvals_reviewer: auto_review
+network_proxy:
+  enabled: false
+"#,
+        )
+        .unwrap();
+        let loaded = load_permission_settings(dir.path());
+        assert_eq!(loaded.source, PermissionConfigSource::ExplicitProfiles);
+        assert_eq!(loaded.selection.profile_id, "project-edit");
+        assert_eq!(loaded.selection.approval_policy, ApprovalPolicy::Untrusted);
+        assert_eq!(
+            loaded.selection.approvals_reviewer,
+            ApprovalsReviewer::AutoReview
+        );
+        assert!(loaded.diagnostics.is_empty());
+    }
+
+    #[test]
+    fn invalid_profiles_and_unenforced_domain_rules_fail_closed() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(
+            dir.path().join("config.yaml"),
+            r#"
+permissions:
+  default_profile: a
+  profiles:
+    a:
+      extends: b
+    b:
+      extends: a
+"#,
+        )
+        .unwrap();
+        let invalid = load_permission_settings(dir.path());
+        assert_eq!(invalid.source, PermissionConfigSource::Default);
+        assert_eq!(invalid.selection, SessionPermissions::ask_for_approval());
+        assert!(invalid
+            .diagnostics
+            .iter()
+            .any(|item| { item.code == PermissionDiagnosticCode::InvalidProfileConfig }));
+
+        fs::write(
+            dir.path().join("config.yaml"),
+            r#"
+permissions:
+  default_profile: project-net
+  profiles:
+    project-net:
+      extends: ":workspace"
+      network:
+        enabled: true
+        domains:
+          api.openai.com: allow
+network_proxy:
+  enabled: false
+"#,
+        )
+        .unwrap();
+        let no_proxy = load_permission_settings(dir.path());
+        assert_eq!(no_proxy.source, PermissionConfigSource::Default);
+        assert!(no_proxy
+            .diagnostics
+            .iter()
+            .any(|item| { item.code == PermissionDiagnosticCode::DomainRulesWithoutProxy }));
+    }
+
+    #[test]
+    fn profiles_win_explicitly_over_mixed_legacy_sandbox_keys() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(
+            dir.path().join("config.yaml"),
+            r#"
+permissions:
+  default_profile: ":read-only"
+sandbox_mode: danger-full-access
+"#,
+        )
+        .unwrap();
+        let loaded = load_permission_settings(dir.path());
+        assert_eq!(loaded.selection, SessionPermissions::read_only());
+        assert!(loaded
+            .diagnostics
+            .iter()
+            .any(|item| { item.code == PermissionDiagnosticCode::MixedLegacySandboxIgnored }));
     }
 
     #[test]

@@ -11,6 +11,7 @@ pub mod media;
 pub mod message;
 pub mod model_spec;
 pub mod notify;
+pub mod permissions;
 pub mod sqlite;
 pub mod text;
 pub mod title;
@@ -33,6 +34,11 @@ pub use model_spec::{ModelRole, ModelSpec};
 pub use notify::{
     dream_success_body, notify_important, notify_kind, set_important_notify_handler,
     set_notify_locale, truncate_notify, ImportantKind, ImportantNotice,
+};
+pub use permissions::{
+    ApprovalPolicy, ApprovalsReviewer, FilesystemAccess, FilesystemPolicy, NetworkAccess,
+    NetworkPolicy, PermissionProfile, PermissionProfileError, PermissionsConfig, SandboxMode,
+    SessionPermissions, DANGER_FULL_ACCESS_PROFILE, READ_ONLY_PROFILE, WORKSPACE_PROFILE,
 };
 pub use sqlite::{delete_sqlite_files, open_wal, ExampleSqliteStore, SqliteStore};
 pub use title::sanitize_title;
