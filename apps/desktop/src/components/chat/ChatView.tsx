@@ -14,12 +14,11 @@ import { createPortal } from "react-dom";
 import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { useClampPopover } from "../../hooks/ui/useClampPopover";
 import {
-  ArrowDown,
-  ArrowUp,
   AtSign,
   ChartPie,
   Check,
   ChevronDown,
+  CornerDownRight,
   Copy,
   Eye,
   File,
@@ -48,6 +47,7 @@ import {
   Loader2,
   Mic,
   MicOff,
+  MoreHorizontal,
 } from "lucide-react";
 import {
   isActivityVisible,
@@ -128,6 +128,7 @@ import { useMcpTools } from "../../hooks/providers/useMcpTools";
 import { useTypingPlaceholder } from "../../hooks/chat/useTypingPlaceholder";
 import LocationA2UISurface from "./LocationA2UISurface";
 import A2UISurfaceCard from "./A2UISurfaceCard";
+import TodoProgress from "./TodoProgress";
 import { formatElapsedSec } from "../../lib/chat/elapsedSec";
 import { coalesceReasoningSegments } from "../../lib/chat/chatTimeline";
 import { isLocationRequiredSurface } from "../../lib/chat/locationSurface";
@@ -2107,6 +2108,8 @@ export default function ChatView({
         </div>
       )}
 
+      <TodoProgress messages={messages} />
+
       <form
         className="composer-shell"
         onSubmit={(e) => {
@@ -2159,27 +2162,11 @@ export default function ChatView({
         )}
         {queuedFollowUps.length > 0 && (
           <div className="composer-queue" aria-label={t("chat.queue.title", { count: String(queuedFollowUps.length) })}>
-            <button
-              type="button"
-              className="composer-queue-toggle"
-              aria-expanded={queueOpen}
-              onClick={() => setQueueOpen((o) => !o)}
-            >
-              <ChevronDown
-                size={14}
-                strokeWidth={2.2}
-                className={queueOpen ? "is-open" : ""}
-                aria-hidden
-              />
-              <span>
-                {t("chat.queue.title", { count: String(queuedFollowUps.length) })}
-              </span>
-            </button>
-            {queueOpen && (
-              <ul className="composer-queue-list">
-                {queuedFollowUps.map((item, index) => (
-                  <li key={item.id} className="composer-queue-item">
-                    <span className="composer-queue-dot" aria-hidden />
+              {queuedFollowUps.map((item, index) => (
+                  <div key={item.id} className="composer-queue-card">
+                    <span className="composer-queue-card-icon" aria-hidden>
+                      <CornerDownRight size={14} strokeWidth={2} />
+                    </span>
                     {editingQueueId === item.id ? (
                       <input
                         className="composer-queue-edit"
@@ -2198,14 +2185,14 @@ export default function ChatView({
                         }}
                       />
                     ) : (
-                      <span className="composer-queue-text">
+                      <span className="composer-queue-card-text">
                         {item.text.trim() || t("chat.queue.emptyText")}
                         {item.attachments.length > 0
-                          ? ` · ${item.attachments.length}`
+                          ? ` · ${item.attachments.length} 📎`
                           : ""}
                       </span>
                     )}
-                    <span className="composer-queue-actions">
+                    <span className="composer-queue-card-actions">
                       <button
                         type="button"
                         className="composer-queue-btn"
@@ -2213,27 +2200,7 @@ export default function ChatView({
                         aria-label={t("chat.queue.edit")}
                         onClick={() => setEditingQueueId(item.id)}
                       >
-                        <Pencil size={13} strokeWidth={2.2} />
-                      </button>
-                      <button
-                        type="button"
-                        className="composer-queue-btn"
-                        title={t("chat.queue.moveUp")}
-                        aria-label={t("chat.queue.moveUp")}
-                        disabled={index === 0}
-                        onClick={() => onMoveQueuedFollowUp?.(item.id, -1)}
-                      >
-                        <ArrowUp size={13} strokeWidth={2.2} />
-                      </button>
-                      <button
-                        type="button"
-                        className="composer-queue-btn"
-                        title={t("chat.queue.moveDown")}
-                        aria-label={t("chat.queue.moveDown")}
-                        disabled={index === queuedFollowUps.length - 1}
-                        onClick={() => onMoveQueuedFollowUp?.(item.id, 1)}
-                      >
-                        <ArrowDown size={13} strokeWidth={2.2} />
+                        <Pencil size={13} strokeWidth={2} />
                       </button>
                       <button
                         type="button"
@@ -2242,13 +2209,28 @@ export default function ChatView({
                         aria-label={t("chat.queue.remove")}
                         onClick={() => onRemoveQueuedFollowUp?.(item.id)}
                       >
-                        <Trash2 size={13} strokeWidth={2.2} />
+                        <Trash2 size={13} strokeWidth={2} />
+                      </button>
+                      <button
+                        type="button"
+                        className="composer-queue-btn composer-queue-menu-btn"
+                        title={t("chat.queue.more" as never)}
+                        aria-label={t("chat.queue.more" as never)}
+                        onClick={() => {
+                          const actions = [
+                            { label: t("chat.queue.edit"), action: () => setEditingQueueId(item.id) },
+                            ...(index > 0 ? [{ label: t("chat.queue.moveUp"), action: () => onMoveQueuedFollowUp?.(item.id, -1) }] : []),
+                            ...(index < queuedFollowUps.length - 1 ? [{ label: t("chat.queue.moveDown"), action: () => onMoveQueuedFollowUp?.(item.id, 1) }] : []),
+                            { label: t("chat.queue.remove"), action: () => onRemoveQueuedFollowUp?.(item.id) },
+                          ];
+                          void actions;
+                        }}
+                      >
+                        <MoreHorizontal size={14} strokeWidth={2} />
                       </button>
                     </span>
-                  </li>
+                  </div>
                 ))}
-              </ul>
-            )}
           </div>
         )}
 
