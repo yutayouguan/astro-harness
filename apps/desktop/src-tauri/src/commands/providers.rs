@@ -366,13 +366,17 @@ impl ProvidersState {
                     changed = true;
                 }
                 ProviderKind::Volcengine if p.model == "doubao-pro-32k" => {
-                    p.model = "ep-".to_string();
+                    p.model = ProviderKind::Volcengine.default_model().to_string();
                     changed = true;
                 }
                 ProviderKind::Minimax => {
                     let ep = p.endpoint.trim_end_matches('/');
-                    if ep == "https://api.minimax.chat/v1" || ep == "https://api.minimaxi.com/v1" {
+                    if ep == "https://api.minimax.chat/v1" {
                         p.endpoint = "https://api.minimaxi.com/v1".to_string();
+                        changed = true;
+                    }
+                    if p.model == "MiniMax-M2.5" {
+                        p.model = ProviderKind::Minimax.default_model().to_string();
                         changed = true;
                     }
                 }
@@ -1905,7 +1909,7 @@ mod tests {
             ProviderKind::Bailian.default_endpoint(),
             "https://dashscope.aliyuncs.com/compatible-mode/v1"
         );
-        assert_eq!(ProviderKind::Bailian.default_model(), "qwen3.6-plus");
+        assert_eq!(ProviderKind::Bailian.default_model(), "qwen3.8-max");
         assert_eq!(
             ProviderKind::Nvidia.default_endpoint(),
             "https://integrate.api.nvidia.com/v1"
@@ -1923,12 +1927,15 @@ mod tests {
             ProviderKind::Volcengine.default_endpoint(),
             "https://ark.cn-beijing.volces.com/api/v3"
         );
-        assert_eq!(ProviderKind::Volcengine.default_model(), "ep-");
+        assert_eq!(
+            ProviderKind::Volcengine.default_model(),
+            "doubao-seed-2.1-pro"
+        );
         assert_eq!(
             ProviderKind::Minimax.default_endpoint(),
             "https://api.minimaxi.com/v1"
         );
-        assert_eq!(ProviderKind::Minimax.default_model(), "MiniMax-M2.5");
+        assert_eq!(ProviderKind::Minimax.default_model(), "MiniMax-M3");
     }
 
     #[test]
@@ -1966,10 +1973,10 @@ mod tests {
     }
 
     #[test]
-    fn google_music_model_defaults_to_lyria_clip() {
+    fn google_music_model_defaults_to_lyria_pro() {
         assert_eq!(
             default_music_model_for_kind(&ProviderKind::Google),
-            "lyria-3-clip-preview"
+            "lyria-3-pro"
         );
         assert_eq!(default_music_model_for_kind(&ProviderKind::Openai), "");
     }
@@ -2075,13 +2082,14 @@ mod tests {
         };
         assert!(s.migrate_stale_defaults());
         assert_eq!(s.providers[0].model, "kimi-k2.5");
-        assert_eq!(s.providers[1].model, "ep-");
+        assert_eq!(s.providers[1].model, "doubao-seed-2.1-pro");
         assert_eq!(s.providers[2].endpoint, "https://api.minimaxi.com/v1");
+        assert_eq!(s.providers[2].model, "MiniMax-M3");
         assert_eq!(
             s.providers[3].endpoint,
             "https://generativelanguage.googleapis.com"
         );
-        assert_eq!(s.providers[3].model, "gemini-3.5-flash");
+        assert_eq!(s.providers[3].model, "gemini-3.1-ultra");
         assert!(!s.migrate_stale_defaults());
     }
 

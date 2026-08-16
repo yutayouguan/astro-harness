@@ -273,10 +273,11 @@ mod tests {
             .query_insights(crate::UsageInsightsQuery {
                 period: crate::UsagePeriod::Month,
                 as_of: None,
-                agent_id: Some("workspace".into()),
+                agent_id: Some(home::DEFAULT_AGENT_ID.into()),
             })
             .unwrap();
-        assert!(insights.kpis.calls >= 3);
+        // tool 事件进入 KPI calls，skill 维度不重复增加。
+        assert_eq!(insights.kpis.calls, 3);
         assert!(insights
             .rankings
             .by_kind
