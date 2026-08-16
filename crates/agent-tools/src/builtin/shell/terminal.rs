@@ -137,13 +137,22 @@ async fn dispatch_run(
             .map(str::trim)
             .filter(|s| !s.is_empty())
             .unwrap_or(".");
-        let id = super::jobs::spawn_background(&ctx.session_id, command, &cwd, cwd_display)?;
+        let policy = ctx.command_sandbox_policy()?;
+        let id = super::jobs::spawn_background_sandboxed(
+            &ctx.session_id,
+            command,
+            &cwd,
+            cwd_display,
+            &policy,
+        )?;
         return Ok(format!(
             "已在后台启动任务 {id}。\n用 terminal action=status id={id} 轮询输出，action=wait 等待完成，action=kill 终止。"
         ));
     }
 
-    let child = tokio::process::Command::new("sh")
+    let policy = ctx.command_sandbox_policy()?;
+    let mut sandboxed_command = sandbox::SandboxRunner.tokio_command(&policy, "sh")?;
+    let child = sandboxed_command
         .arg("-c")
         .arg(command)
         .current_dir(&cwd)

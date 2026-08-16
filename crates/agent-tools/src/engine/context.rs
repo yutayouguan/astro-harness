@@ -8,6 +8,7 @@ use std::sync::Arc;
 
 use memory::MemoryManager;
 use session::ConversationStore;
+use types::{DANGER_FULL_ACCESS_PROFILE, READ_ONLY_PROFILE, WORKSPACE_PROFILE};
 
 pub use types::credentials::{ImageGenCreds, ImageGenParts, ImageGenTargets, ModelCredentials};
 
@@ -65,6 +66,25 @@ impl<'a> ToolContext<'a> {
         let root = self.project_or_workspace().to_path_buf();
         std::fs::create_dir_all(&root)?;
         Ok(root)
+    }
+
+    /// 从当前磁盘配置构造本次工具调用的不可变命令沙箱策略。
+    pub fn command_sandbox_policy(&self) -> anyhow::Result<sandbox::SandboxPolicy> {
+        let root = self.ensure_project_or_workspace()?;
+        let loaded = memory::load_permission_settings(&self.memory_dir);
+        if !matches!(
+            loaded.selection.profile_id.as_str(),
+            READ_ONLY_PROFILE | WORKSPACE_PROFILE | DANGER_FULL_ACCESS_PROFILE
+        ) {
+            anyhow::bail!(
+                "custom permission profile {:?} is not executable until its filesystem rules are fully resolved",
+                loaded.selection.profile_id
+            );
+        }
+        let mode = loaded
+            .permissions
+            .sandbox_mode_for(&loaded.selection.profile_id)?;
+        sandbox::SandboxPolicy::new(mode, root, Vec::new(), false).map_err(Into::into)
     }
 }
 

@@ -6,6 +6,7 @@ edition = "2021"
 [dependencies]
 types = { path = "../agent-types" }
 memory = { path = "../agent-memory" }
+sandbox = { path = "../agent-sandbox" }
 session = { path = "../agent-session" }
 home = { path = "../agent-home" }
 orchestration = { path = "../agent-orchestration" }

@@ -11,6 +11,7 @@ members = [
     "crates/agent-usage",
     "crates/agent-mcp",
     "crates/agent-memory",
+    "crates/agent-sandbox",
     "crates/agent-delegate",
     "crates/agent-orchestration",
     "crates/agent-evolution",

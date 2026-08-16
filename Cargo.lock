@@ -4712,6 +4712,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "sandbox"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "tempfile",
+ "thiserror 1.0.69",
+ "tokio",
+ "types",
+]
+
+[[package]]
 name = "schannel"
 version = "0.1.29"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6249,6 +6260,7 @@ dependencies = [
  "providers",
  "regex",
  "reqwest 0.12.28",
+ "sandbox",
  "schemars 0.8.22",
  "serde",
  "serde_json",

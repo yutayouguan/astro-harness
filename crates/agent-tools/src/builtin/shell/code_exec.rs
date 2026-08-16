@@ -172,7 +172,8 @@ pub async fn dispatch(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow
 
     let env = scrubbed_env(std::env::vars());
 
-    let mut cmd = tokio::process::Command::new(program);
+    let policy = ctx.command_sandbox_policy()?;
+    let mut cmd = sandbox::SandboxRunner.tokio_command(&policy, program)?;
     for a in script_args {
         cmd.arg(a);
     }

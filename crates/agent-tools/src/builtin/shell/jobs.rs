@@ -9,7 +9,7 @@
 use std::collections::VecDeque;
 use std::io::Read;
 use std::path::Path;
-use std::process::{Command, Stdio};
+use std::process::Stdio;
 use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
@@ -134,13 +134,14 @@ fn drain<R: Read>(mut reader: R, buf: Arc<Mutex<JobBuf>>) {
 ///
 /// 使用 `std::process`（而非 tokio）+ 独立线程抽取输出，确保子进程不随
 /// 临时工具运行时被回收。命令通过 `sh -c` 执行，`cwd` 为已校验的沙箱路径。
-pub fn spawn_background(
+pub fn spawn_background_sandboxed(
     session_id: &str,
     command: &str,
     cwd: &Path,
     cwd_display: &str,
+    policy: &sandbox::SandboxPolicy,
 ) -> anyhow::Result<String> {
-    let mut cmd = Command::new("sh");
+    let mut cmd = sandbox::SandboxRunner.std_command(policy, "sh")?;
     cmd.arg("-c")
         .arg(command)
         .current_dir(cwd)
@@ -211,6 +212,18 @@ pub fn spawn_background(
     });
     registry().lock().unwrap().insert(job);
     Ok(id)
+}
+
+#[cfg(test)]
+fn spawn_background(
+    session_id: &str,
+    command: &str,
+    cwd: &Path,
+    cwd_display: &str,
+) -> anyhow::Result<String> {
+    let policy =
+        sandbox::SandboxPolicy::new(types::SandboxMode::DangerFullAccess, cwd, Vec::new(), true)?;
+    spawn_background_sandboxed(session_id, command, cwd, cwd_display, &policy)
 }
 
 /// 按 `action` 管理后台任务（由 `terminal` 分发）。
