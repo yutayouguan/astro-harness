@@ -118,6 +118,13 @@ pub struct McpServerInstructions {
     pub instructions: String,
 }
 
+/// 当前健康连接可显式按需访问的 MCP 内容能力。
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct McpBrokerCapabilities {
+    pub resource_servers: Vec<String>,
+    pub prompt_servers: Vec<String>,
+}
+
 fn normalize_server_instructions(raw: &str) -> Option<String> {
     let cleaned: String = raw
         .chars()
@@ -817,6 +824,31 @@ impl McpHub {
         bound_server_instructions(entries)
     }
 
+    /// 仅统计健康、启用且 initialize 明确宣告的内容能力。
+    pub fn broker_capabilities(&self) -> McpBrokerCapabilities {
+        let mut capabilities = McpBrokerCapabilities::default();
+        for (server_id, server) in self.servers.iter().filter(|(_, server)| {
+            server.status == "connected"
+                && server.config.enabled
+                && !server.peer.is_transport_closed()
+        }) {
+            let Some(info) = server.peer.peer_info() else {
+                continue;
+            };
+            if info.capabilities.resources.is_some() {
+                capabilities.resource_servers.push(server_id.clone());
+            }
+            if info.capabilities.prompts.is_some() {
+                capabilities.prompt_servers.push(server_id.clone());
+            }
+        }
+        capabilities.resource_servers.sort();
+        capabilities.resource_servers.dedup();
+        capabilities.prompt_servers.sort();
+        capabilities.prompt_servers.dedup();
+        capabilities
+    }
+
     /// 查询某服务器连接状态摘要。
     pub fn server_status(&self) -> Vec<ServerStatus> {
         let mut out = Vec::new();
@@ -910,6 +942,55 @@ impl McpHub {
 
         let timeout_secs = rs.config.effective_tool_timeout_secs();
         Ok((rs.peer.clone(), native.to_string(), timeout_secs))
+    }
+
+    fn resolve_broker_peer(
+        &self,
+        server_id: &str,
+        capability: &str,
+        supports: impl FnOnce(&rmcp::model::ServerCapabilities) -> bool,
+    ) -> anyhow::Result<(Peer<RoleClient>, String, u64)> {
+        let requested = server_id.trim();
+        if requested.is_empty() {
+            anyhow::bail!("server_id 不能为空");
+        }
+        let server_id = sanitize_server_id(requested);
+        let server = self
+            .servers
+            .get(&server_id)
+            .ok_or_else(|| anyhow!("MCP server 未连接: {server_id}"))?;
+        if server.status != "connected" || !server.config.enabled {
+            anyhow::bail!("MCP server 不可用: {server_id}");
+        }
+        if server.peer.is_transport_closed() {
+            anyhow::bail!("MCP server 连接已关闭: {server_id}");
+        }
+        let info = server
+            .peer
+            .peer_info()
+            .ok_or_else(|| anyhow!("MCP server 缺少 initialize 结果: {server_id}"))?;
+        if !supports(&info.capabilities) {
+            anyhow::bail!("MCP server {server_id} 未声明 {capability} capability");
+        }
+        Ok((
+            server.peer.clone(),
+            server_id,
+            server.config.effective_tool_timeout_secs(),
+        ))
+    }
+
+    pub(crate) fn resolve_resource_peer(
+        &self,
+        server_id: &str,
+    ) -> anyhow::Result<(Peer<RoleClient>, String, u64)> {
+        self.resolve_broker_peer(server_id, "resources", |caps| caps.resources.is_some())
+    }
+
+    pub(crate) fn resolve_prompt_peer(
+        &self,
+        server_id: &str,
+    ) -> anyhow::Result<(Peer<RoleClient>, String, u64)> {
+        self.resolve_broker_peer(server_id, "prompts", |caps| caps.prompts.is_some())
     }
 
     /// 调用已连接 MCP 工具（按服务器与工具名）。

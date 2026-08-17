@@ -185,6 +185,7 @@ pub fn tool_name_to_toolset(name: &str) -> &str {
         return "mcp";
     }
     match name {
+        "mcp_resources" | "mcp_prompts" => "mcp",
         "memory" => "memory",
         "context_search" => "context_search",
         "pin_context" => "pin_context",
@@ -265,6 +266,12 @@ mod tests {
         state.insert("web_search".into(), false);
         save_tools_enabled(&state).unwrap();
         assert!(!is_tool_call_allowed("web_fetch"));
+    }
+
+    #[test]
+    fn mcp_brokers_share_the_mcp_toolset_gate() {
+        assert_eq!(tool_name_to_toolset("mcp_resources"), "mcp");
+        assert_eq!(tool_name_to_toolset("mcp_prompts"), "mcp");
     }
 
     #[test]

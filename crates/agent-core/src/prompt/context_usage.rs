@@ -183,7 +183,7 @@ pub fn build_snapshot(input: ContextUsageInput<'_>) -> ContextUsageSnapshot {
             label: n.to_string(),
             tokens,
         };
-        if n.starts_with("mcp__") {
+        if n.starts_with("mcp__") || matches!(n, mcp::MCP_RESOURCES_TOOL | mcp::MCP_PROMPTS_TOOL) {
             mcp_chars += s.len();
             mcp_items.push(item);
         } else if is_agent_def_tool_name(n) {
@@ -474,6 +474,38 @@ mod tests {
         let mcp = snap.segment("mcp").unwrap();
         assert_eq!(mcp.tokens, 10);
         assert_eq!(mcp.items[0].id, "instructions:docs");
+    }
+
+    #[test]
+    fn mcp_broker_schemas_share_the_mcp_segment() {
+        let tools: Vec<serde_json::Value> = serde_json::json!([
+            {"type":"function","function":{"name":"mcp_resources","parameters":{}}},
+            {"type":"function","function":{"name":"mcp_prompts","parameters":{}}}
+        ])
+        .as_array()
+        .unwrap()
+        .clone();
+        let snap = build_snapshot(ContextUsageInput {
+            system_chars: 0,
+            memory_chars: 0,
+            skills_chars: 0,
+            recall_chars: 0,
+            mcp_instruction_chars: 0,
+            system_items: &[],
+            memory_items: &[],
+            skill_items: &[],
+            mcp_instruction_items: &[],
+            tools: &tools,
+            messages: &[],
+            context_window: 128_000,
+            updated_at_ms: 1,
+            recommend_compact: false,
+            recommend_compact_ratio: 0.85,
+        });
+        let mcp = snap.segment("mcp").unwrap();
+        assert_eq!(mcp.meta.as_ref().and_then(|meta| meta.count), Some(2));
+        assert!(mcp.items.iter().any(|item| item.id == "mcp_resources"));
+        assert!(mcp.items.iter().any(|item| item.id == "mcp_prompts"));
     }
 
     #[test]

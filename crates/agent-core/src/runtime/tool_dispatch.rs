@@ -65,8 +65,10 @@ impl AgentLoop {
         let agent_id = self.memory.agent_id.clone();
         self.tool_registry.reload_enabled_from_disk(Some(&agent_id));
 
+        let is_mcp_broker = matches!(name, mcp::MCP_RESOURCES_TOOL | mcp::MCP_PROMPTS_TOOL);
+
         // MCP 工具：同步 enablement + 刷新注册
-        if is_mcp_tool_name(name) {
+        if is_mcp_tool_name(name) || is_mcp_broker {
             let _ = self.mcp_hub.lock().await.sync_enablement_from_disk();
             self.attach_mcp_tools().await;
         }
@@ -122,7 +124,10 @@ impl AgentLoop {
             workspace_write_grant,
             network_grant,
         };
-        dispatch_tool(|_| allowed, &mut ctx, name, args, mcp_handler.as_ref()).await
+        let dynamic_handler = mcp_handler
+            .as_ref()
+            .or_else(|| self.tool_registry.dynamic_handler(name));
+        dispatch_tool(|_| allowed, &mut ctx, name, args, dynamic_handler).await
     }
 
     /// 同步执行工具调用：在无 tokio runtime 时自建 current_thread runtime。
