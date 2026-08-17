@@ -5,7 +5,9 @@
 
 use proto::astro_service_client::AstroServiceClient;
 use proto::astro_service_server::AstroServiceServer;
-use proto::{ChatControlAction, ChatControlRequest, ChatRequest, MemoryQuery};
+use proto::{
+    ChatControlAction, ChatControlRequest, ChatRequest, McpServerListRequest, MemoryQuery,
+};
 use server::grpc::AstroServiceImpl;
 use tempfile::TempDir;
 use tokio_stream::wrappers::TcpListenerStream;
@@ -46,6 +48,19 @@ async fn test_grpc_connect_and_query_memory() {
         .into_inner();
     // 空库也可：只要 RPC 成功
     let _ = memory.sessions;
+
+    let mcp_servers = client
+        .list_mcp_servers(McpServerListRequest {
+            agent_id: "grpc-status-test".into(),
+            project_root: dir.path().to_string_lossy().into_owned(),
+        })
+        .await
+        .expect("list agent-scoped MCP runtime statuses")
+        .into_inner();
+    assert!(mcp_servers
+        .servers
+        .iter()
+        .all(|server| !server.id.is_empty()));
 }
 
 /// release_session 对冷会话与重复调用都应返回成功。

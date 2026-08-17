@@ -40,6 +40,8 @@ import {
   MAX_MCP_TOOL_TIMEOUT_SECS,
   isMcpToolEnabled,
   useMcpTools,
+  type McpRuntimeState,
+  type McpRuntimeStatus,
   type McpServer,
   type McpTransportType,
 } from "../../hooks/providers/useMcpTools";
@@ -272,6 +274,16 @@ const MCP_TYPES: McpTransportType[] = ["stdio", "streamableHttp"];
 const MCP_TYPE_LABEL: Record<McpTransportType, MessageKey> = {
   stdio: "mcpTools.type.stdio",
   streamableHttp: "mcpTools.type.streamableHttp",
+};
+
+const MCP_STATUS_LABEL: Record<McpRuntimeState, MessageKey> = {
+  configured: "mcpTools.status.configured",
+  disabled: "mcpTools.status.disabled",
+  connecting: "mcpTools.status.connecting",
+  connected: "mcpTools.status.connected",
+  disconnected: "mcpTools.status.disconnected",
+  error: "mcpTools.status.error",
+  unknown: "mcpTools.status.unknown",
 };
 
 const MCP_TYPE_ICON: Record<McpTransportType, typeof Terminal> = {
@@ -731,6 +743,17 @@ function serverEndpoint(server: McpServer): string {
   return server.url || "—";
 }
 
+function McpStatusBadge({ status }: { status?: McpRuntimeStatus }) {
+  const { t } = useI18n();
+  if (!status) return null;
+  return (
+    <span className="mcp-runtime-status" data-status={status.status}>
+      <span className="mcp-runtime-status-dot" aria-hidden />
+      {t(MCP_STATUS_LABEL[status.status])}
+    </span>
+  );
+}
+
 /** 单个 MCP Server 卡片（开关、工具列表、刷新） */
 function McpServerCard({
   server,
@@ -739,6 +762,7 @@ function McpServerCard({
   onRefresh,
   onRemove,
   refreshing,
+  runtimeStatus,
 }: {
   server: McpServer;
   onToggle: (id: string) => void;
@@ -746,6 +770,7 @@ function McpServerCard({
   onRefresh: (serverId: string) => void;
   onRemove: (id: string) => void;
   refreshing?: boolean;
+  runtimeStatus?: McpRuntimeStatus;
 }) {
   const { t } = useI18n();
   const headerKeys = Object.keys(server.headers ?? {});
@@ -768,6 +793,7 @@ function McpServerCard({
             <span className="mcp-server-type">{t(MCP_TYPE_LABEL[server.type])}</span>
           </div>
           <code className="mcp-server-cmd">{serverEndpoint(server)}</code>
+          <McpStatusBadge status={runtimeStatus} />
         </div>
         <button
           type="button"
@@ -782,6 +808,12 @@ function McpServerCard({
       {server.description && (
         <p className="mcp-server-desc">{server.description}</p>
       )}
+      {runtimeStatus?.error ? (
+        <p className="mcp-runtime-error" role="alert">
+          <ShieldAlert size={13} strokeWidth={2.2} aria-hidden />
+          <span>{runtimeStatus.error}</span>
+        </p>
+      ) : null}
       <div className="mcp-server-env">
         <span className="mcp-server-env-key">
           {t("mcpTools.startupTimeout")}: {server.startupTimeoutSecs}s
@@ -880,8 +912,17 @@ export default function ToolsPanel({
   const [selectedFnName, setSelectedFnName] = useState<string | null>(null);
   const [usage, setUsage] = useState<AgentUsageSummary | null>(null);
   const { enabled, toggle: onToggle, tools: agentTools } = useAgentTools(agentId);
-  const { servers, addServers, toggleServer, toggleTool, removeServer, refreshTools, refreshing } =
-    useMcpTools(agentId);
+  const {
+    servers,
+    addServers,
+    toggleServer,
+    toggleTool,
+    removeServer,
+    refreshTools,
+    refreshing,
+    runtimeStatuses,
+    runtimeStatusError,
+  } = useMcpTools(agentId, active && tab === "mcp");
   const query = search.trim().toLowerCase();
 
   useEffect(() => {
@@ -962,6 +1003,9 @@ export default function ToolsPanel({
 
   const selectedTool = items.find((tool) => tool.id === selectedDetailId);
   const selectedServer = filteredServers.find((s) => s.id === selectedDetailId);
+  const selectedRuntimeStatus = selectedServer
+    ? runtimeStatuses[selectedServer.id]
+    : undefined;
 
   useEffect(() => {
     if (!selectedTool) {
@@ -1367,6 +1411,12 @@ export default function ToolsPanel({
 
       {tab === "mcp" && (
         <>
+          {runtimeStatusError ? (
+            <p className="mcp-runtime-error mcp-runtime-error--global" role="alert">
+              <ShieldAlert size={13} strokeWidth={2.2} aria-hidden />
+              <span>{t("mcpTools.statusUnavailable")}: {runtimeStatusError}</span>
+            </p>
+          ) : null}
           {servers.length === 0 ? (
             <div className="mcp-tools-empty">
               <div className="mcp-tools-empty-icon" aria-hidden>
@@ -1390,7 +1440,9 @@ export default function ToolsPanel({
                   >
                     <span className="tools-detail-item-title">{server.name}</span>
                     <span className="tools-detail-item-meta">
-                      {t(MCP_TYPE_LABEL[server.type])}
+                      {runtimeStatuses[server.id]
+                        ? t(MCP_STATUS_LABEL[runtimeStatuses[server.id]!.status])
+                        : t(MCP_TYPE_LABEL[server.type])}
                     </span>
                   </button>
                 ))}
@@ -1432,7 +1484,23 @@ export default function ToolsPanel({
                         </p>
                       </section>
                     )}
+                    {selectedRuntimeStatus?.error ? (
+                      <p className="mcp-runtime-error" role="alert">
+                        <ShieldAlert size={13} strokeWidth={2.2} aria-hidden />
+                        <span>{selectedRuntimeStatus.error}</span>
+                      </p>
+                    ) : null}
                     <section className="tools-detail-meta-grid">
+                      <div className="tools-detail-meta-item">
+                        <span className="tools-detail-label">
+                          {t("mcpTools.runtimeStatus")}
+                        </span>
+                        {selectedRuntimeStatus ? (
+                          <McpStatusBadge status={selectedRuntimeStatus} />
+                        ) : (
+                          <span>{t("mcpTools.status.loading")}</span>
+                        )}
+                      </div>
                       <div className="tools-detail-meta-item">
                         <span className="tools-detail-label">
                           {t("tools.detail.type")}
@@ -1538,6 +1606,7 @@ export default function ToolsPanel({
                   onRefresh={(id) => void refreshTools(id)}
                   onRemove={removeServer}
                   refreshing={refreshing}
+                  runtimeStatus={runtimeStatuses[s.id]}
                 />
               ))}
             </div>

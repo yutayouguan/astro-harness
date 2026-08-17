@@ -18,8 +18,9 @@ use proto::astro_service_server::AstroService;
 use proto::{
     ChatControlAction, ChatControlRequest, ChatEvent, ChatRequest, ContextUsageEvent,
     ContextUsageSegment, Empty, FileListRequest, FileListResponse, ImageEvent, ImageRequest,
-    McpServerList, MemoryQuery, MemoryResult, SessionEvent, SessionSnippet as ProtoSessionSnippet,
-    SkillEvent, SkillInfo, SkillList, SkillRequest, SubscribeSessionEventsRequest, UsageEvent,
+    McpServerList, McpServerListRequest, MemoryQuery, MemoryResult, SessionEvent,
+    SessionSnippet as ProtoSessionSnippet, SkillEvent, SkillInfo, SkillList, SkillRequest,
+    SubscribeSessionEventsRequest, UsageEvent,
 };
 use providers::PauseControl;
 use providers::ProviderConfig;
@@ -1304,22 +1305,32 @@ impl AstroService for AstroServiceImpl {
     /// 优先从当前 active agent 的会话 Hub 取实时连接；否则回退磁盘配置。
     async fn list_mcp_servers(
         &self,
-        _request: Request<Empty>,
+        request: Request<McpServerListRequest>,
     ) -> Result<Response<McpServerList>, Status> {
-        // 优先：active agent 的 hub（实时连接状态）；勿用任意会话以免串 agent
-        let active = home::active_agent_id(&self.memory_dir);
+        let request = request.into_inner();
+        let requested_agent_id = request.agent_id.trim();
+        let agent_id = if requested_agent_id.is_empty() {
+            home::active_agent_id(&self.memory_dir)
+        } else {
+            requested_agent_id.to_string()
+        };
+        let project_root = (!request.project_root.trim().is_empty())
+            .then(|| PathBuf::from(request.project_root.trim()));
+
+        // 优先：指定 agent 的 hub（实时连接状态）；勿用任意会话以免串 agent。
         let sessions = self.sessions.read().await;
         for handle in sessions.values() {
             let agent = handle.lock().await;
             let hub = agent.mcp_hub();
             let hub_guard = hub.lock().await;
-            if hub_guard.agent_id() != Some(active.as_str()) {
+            if hub_guard.agent_id() != Some(agent_id.as_str()) {
                 continue;
             }
             let servers = hub_guard
                 .server_status()
                 .into_iter()
                 .map(|s| proto::McpServerInfo {
+                    id: s.id,
                     name: s.name,
                     status: s.status,
                     tools: s.tools,
@@ -1331,10 +1342,12 @@ impl AstroService for AstroServiceImpl {
         }
         drop(sessions);
 
-        let configs = mcp::load_mcp_servers(Some(&active)).unwrap_or_default();
+        let configs = mcp::load_mcp_servers_layered(Some(&agent_id), project_root.as_deref())
+            .unwrap_or_default();
         let servers = configs
             .into_iter()
             .map(|c| proto::McpServerInfo {
+                id: c.id,
                 name: c.name,
                 status: if c.enabled {
                     "configured".into()

@@ -4,6 +4,14 @@ import { invoke } from "@tauri-apps/api/core";
 
 /** MCP 传输类型：本地进程 / Streamable HTTP。 */
 export type McpTransportType = "stdio" | "streamableHttp";
+export type McpRuntimeState =
+  | "configured"
+  | "disabled"
+  | "connecting"
+  | "connected"
+  | "disconnected"
+  | "error"
+  | "unknown";
 
 export const DEFAULT_MCP_STARTUP_TIMEOUT_SECS = 10;
 export const DEFAULT_MCP_TOOL_TIMEOUT_SECS = 60;
@@ -31,6 +39,43 @@ export type McpDiscoveredTool = {
   name: string;
   description: string;
 };
+
+export type McpRuntimeStatus = {
+  id: string;
+  name: string;
+  status: McpRuntimeState;
+  tools: string[];
+  required: boolean;
+  error?: string;
+};
+
+const MCP_RUNTIME_STATES = new Set<McpRuntimeState>([
+  "configured",
+  "disabled",
+  "connecting",
+  "connected",
+  "disconnected",
+  "error",
+  "unknown",
+]);
+
+export function normalizeMcpRuntimeStatus(
+  raw: Partial<McpRuntimeStatus>,
+): McpRuntimeStatus {
+  const candidate = typeof raw.status === "string" ? raw.status : "unknown";
+  return {
+    id: typeof raw.id === "string" ? raw.id : "",
+    name: typeof raw.name === "string" ? raw.name : "",
+    status: MCP_RUNTIME_STATES.has(candidate as McpRuntimeState)
+      ? (candidate as McpRuntimeState)
+      : "unknown",
+    tools: Array.isArray(raw.tools)
+      ? raw.tools.filter((tool): tool is string => typeof tool === "string")
+      : [],
+    required: raw.required === true,
+    error: typeof raw.error === "string" && raw.error.trim() ? raw.error.trim() : undefined,
+  };
+}
 
 export type McpServer = {
   id: string;
@@ -223,11 +268,13 @@ export function parseMcpJson(raw: string): McpServer[] {
   throw new Error("Unrecognized MCP JSON format");
 }
 
-export function useMcpTools(agentId?: string | null) {
+export function useMcpTools(agentId?: string | null, watchRuntime = false) {
   const [servers, setServers] = useState<McpServer[]>([]);
   const [ready, setReady] = useState(false);
   const [skipNextSave, setSkipNextSave] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [runtimeStatuses, setRuntimeStatuses] = useState<Record<string, McpRuntimeStatus>>({});
+  const [runtimeStatusError, setRuntimeStatusError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -266,6 +313,37 @@ export function useMcpTools(agentId?: string | null) {
       cancelled = true;
     };
   }, [agentId]);
+
+  const refreshRuntimeStatuses = useCallback(async () => {
+    if (!isTauri()) return;
+    try {
+      const list = await invoke<Partial<McpRuntimeStatus>[]>("get_mcp_server_statuses", {
+        agentId: agentId || null,
+      });
+      const normalized = list.map(normalizeMcpRuntimeStatus);
+      setRuntimeStatuses(
+        Object.fromEntries(
+          normalized
+            .filter((status) => status.id)
+            .map((status) => [status.id, status]),
+        ),
+      );
+      setRuntimeStatusError(null);
+    } catch (error) {
+      setRuntimeStatusError(error instanceof Error ? error.message : String(error));
+    }
+  }, [agentId]);
+
+  useEffect(() => {
+    if (!watchRuntime || !isTauri()) {
+      setRuntimeStatuses({});
+      setRuntimeStatusError(null);
+      return;
+    }
+    void refreshRuntimeStatuses();
+    const interval = window.setInterval(() => void refreshRuntimeStatuses(), 5_000);
+    return () => window.clearInterval(interval);
+  }, [refreshRuntimeStatuses, watchRuntime]);
 
   useEffect(() => {
     if (!ready) return;
@@ -346,5 +424,8 @@ export function useMcpTools(agentId?: string | null) {
     removeServer,
     refreshTools,
     refreshing,
+    runtimeStatuses,
+    runtimeStatusError,
+    refreshRuntimeStatuses,
   };
 }

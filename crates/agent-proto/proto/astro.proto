@@ -18,7 +18,7 @@ service AstroService {
   // 执行指定技能，流式返回输出。
   rpc ExecuteSkill(SkillRequest) returns (stream SkillEvent);
   // 列出 MCP 服务器连接状态与工具名。
-  rpc ListMcpServers(Empty) returns (McpServerList);
+  rpc ListMcpServers(McpServerListRequest) returns (McpServerList);
   // 按查询召回 MEMORY / USER 与近期会话摘要。
   rpc QueryMemory(MemoryQuery) returns (MemoryResult);
   // 在记忆沙箱内列举文件（受根目录约束）。
@@ -310,6 +310,10 @@ message SkillEvent { oneof payload { string output = 1; string error = 2; bool d
 message SkillList { repeated SkillInfo skills = 1; }
 message SkillInfo { string name = 1; string description = 2; string category = 3; }
 
+message McpServerListRequest {
+  string agent_id = 1;
+  string project_root = 2;
+}
 message McpServerList { repeated McpServerInfo servers = 1; }
 message McpServerInfo {
   string name = 1;
@@ -317,6 +321,7 @@ message McpServerInfo {
   repeated string tools = 3;
   bool required = 4;
   string error = 5;
+  string id = 6;
 }
 
 message MemoryQuery { string query = 1; int32 limit = 2; }

@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   isMcpToolEnabled,
   LegacySseTransportError,
+  normalizeMcpRuntimeStatus,
   parseMcpJson,
 } from "./useMcpTools.ts";
 
@@ -66,6 +67,31 @@ test("preserves required, cwd and allow/deny policy", () => {
   assert.equal(isMcpToolEnabled(server, "read"), true);
   assert.equal(isMcpToolEnabled(server, "search"), false);
   assert.equal(isMcpToolEnabled(server, "unknown"), false);
+});
+
+test("normalizes MCP runtime status and rejects unknown state strings", () => {
+  assert.deepEqual(
+    normalizeMcpRuntimeStatus({
+      id: "docs",
+      name: "Docs",
+      status: "connected",
+      tools: ["search", "read"],
+      required: true,
+      error: "",
+    }),
+    {
+      id: "docs",
+      name: "Docs",
+      status: "connected",
+      tools: ["search", "read"],
+      required: true,
+      error: undefined,
+    },
+  );
+  assert.equal(
+    normalizeMcpRuntimeStatus({ id: "future", status: "future_state" as never }).status,
+    "unknown",
+  );
 });
 
 test("rejects an explicit legacy SSE transport", () => {

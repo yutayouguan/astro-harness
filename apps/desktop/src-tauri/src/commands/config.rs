@@ -1,7 +1,10 @@
 //! 工具启用状态 + MCP 配置，持久化到 ~/.astro（可按 Agent 隔离）。
 
+use proto::astro_service_client::AstroServiceClient;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+
+use crate::infra::grpc::{default_grpc_address, endpoint_url};
 
 /// 规范化 Agent id：`default` → 默认 id，空 → `None`。
 fn normalize_agent_id(agent_id: Option<String>) -> Option<String> {
@@ -55,6 +58,18 @@ pub struct McpDiscoveredToolDto {
     /// 描述。
     #[serde(default)]
     pub description: String,
+}
+
+/// MCP Server 的真实运行状态；来自 backend 内存中的 Agent Hub。
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct McpRuntimeStatusDto {
+    pub id: String,
+    pub name: String,
+    pub status: String,
+    pub tools: Vec<String>,
+    pub required: bool,
+    pub error: Option<String>,
 }
 
 /// MCP 服务器配置的前端 DTO。
@@ -214,6 +229,43 @@ pub async fn get_mcp_servers(agent_id: Option<String>) -> Result<Vec<McpServerDt
     }
     .map_err(|e| e.to_string())?;
     Ok(servers.into_iter().map(dto_from_config).collect())
+}
+
+/// 读取指定 Agent 的 MCP Hub 真实连接状态；无活跃 Hub 时返回分层配置状态。
+#[tauri::command]
+pub async fn get_mcp_server_statuses(
+    agent_id: Option<String>,
+) -> Result<Vec<McpRuntimeStatusDto>, String> {
+    let memory_root = home::default_memory_dir();
+    let id = normalize_agent_id(agent_id).unwrap_or_else(|| home::active_agent_id(&memory_root));
+    let project_root = worktree::resolve_project_root(None)
+        .map(|root| root.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    let endpoint = endpoint_url(&default_grpc_address());
+    let mut client = AstroServiceClient::connect(endpoint)
+        .await
+        .map_err(|error| error.to_string())?;
+    let response = client
+        .list_mcp_servers(proto::McpServerListRequest {
+            agent_id: id,
+            project_root,
+        })
+        .await
+        .map_err(|error| error.to_string())?
+        .into_inner();
+
+    Ok(response
+        .servers
+        .into_iter()
+        .map(|server| McpRuntimeStatusDto {
+            id: server.id,
+            name: server.name,
+            status: server.status,
+            tools: server.tools,
+            required: server.required,
+            error: (!server.error.is_empty()).then_some(server.error),
+        })
+        .collect())
 }
 
 /// Tauri 命令：set_mcp_servers。
