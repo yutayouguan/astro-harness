@@ -18,9 +18,9 @@ use proto::astro_service_server::AstroService;
 use proto::{
     ChatControlAction, ChatControlRequest, ChatEvent, ChatRequest, ContextUsageEvent,
     ContextUsageSegment, Empty, FileListRequest, FileListResponse, ImageEvent, ImageRequest,
-    McpServerList, McpServerListRequest, MemoryQuery, MemoryResult, SessionEvent,
-    SessionSnippet as ProtoSessionSnippet, SkillEvent, SkillInfo, SkillList, SkillRequest,
-    SubscribeSessionEventsRequest, UsageEvent,
+    McpReconnectRequest, McpServerList, McpServerListRequest, MemoryQuery, MemoryResult,
+    SessionEvent, SessionSnippet as ProtoSessionSnippet, SkillEvent, SkillInfo, SkillList,
+    SkillRequest, SubscribeSessionEventsRequest, UsageEvent,
 };
 use providers::PauseControl;
 use providers::ProviderConfig;
@@ -39,6 +39,20 @@ fn open_sessions(memory_dir: &std::path::Path) -> Result<session::SessionStore, 
     memory::ensure_workspace(memory_dir).map_err(|e| e.to_string())?;
     session::SessionStore::open_sessions_dir(&memory_dir.join("sessions"))
         .map_err(|e| e.to_string())
+}
+
+fn mcp_server_info(status: mcp::ServerStatus) -> proto::McpServerInfo {
+    proto::McpServerInfo {
+        id: status.id,
+        name: status.name,
+        status: status.status,
+        tools: status.tools,
+        required: status.required,
+        error: status.error.unwrap_or_default(),
+        retryable: status.retryable,
+        retry_attempt: status.retry_attempt,
+        next_retry_at_unix_ms: status.next_retry_at_unix_ms.unwrap_or_default(),
+    }
 }
 
 /// 将 ChatRequest 下传的辅助目标按 `task` 分组、按 `order` 排序后写入 AgentLoop。
@@ -1329,14 +1343,7 @@ impl AstroService for AstroServiceImpl {
             let servers = hub_guard
                 .server_status()
                 .into_iter()
-                .map(|s| proto::McpServerInfo {
-                    id: s.id,
-                    name: s.name,
-                    status: s.status,
-                    tools: s.tools,
-                    required: s.required,
-                    error: s.error.unwrap_or_default(),
-                })
+                .map(mcp_server_info)
                 .collect();
             return Ok(Response::new(McpServerList { servers }));
         }
@@ -1357,9 +1364,57 @@ impl AstroService for AstroServiceImpl {
                 tools: c.discovered.iter().map(|d| d.name.clone()).collect(),
                 required: c.required,
                 error: String::new(),
+                retryable: false,
+                retry_attempt: 0,
+                next_retry_at_unix_ms: 0,
             })
             .collect();
         Ok(Response::new(McpServerList { servers }))
+    }
+
+    /// 清除退避并立即重连指定 Agent Hub 中的 MCP Server。
+    async fn reconnect_mcp_server(
+        &self,
+        request: Request<McpReconnectRequest>,
+    ) -> Result<Response<McpServerList>, Status> {
+        let request = request.into_inner();
+        let agent_id = request.agent_id.trim();
+        let server_id = request.server_id.trim();
+        if agent_id.is_empty() || server_id.is_empty() {
+            return Err(Status::invalid_argument(
+                "agent_id and server_id are required",
+            ));
+        }
+
+        let handles: Vec<_> = self.sessions.read().await.values().cloned().collect();
+        for handle in handles {
+            let mut agent = handle.lock().await;
+            if agent.agent_id() != agent_id {
+                continue;
+            }
+            if let Err(error) = agent.reconnect_mcp_server(server_id).await {
+                if error
+                    .downcast_ref::<mcp::RequiredMcpServersError>()
+                    .is_none()
+                {
+                    return Err(Status::failed_precondition(error.to_string()));
+                }
+            }
+            let hub = agent.mcp_hub();
+            drop(agent);
+            let servers = hub
+                .lock()
+                .await
+                .server_status()
+                .into_iter()
+                .map(mcp_server_info)
+                .collect();
+            return Ok(Response::new(McpServerList { servers }));
+        }
+
+        Err(Status::failed_precondition(
+            "no active Agent runtime is available for MCP reconnect",
+        ))
     }
 
     /// 召回 MEMORY.md / USER.md 文本，并按 `query` 搜索历史消息（`limit` 至少 1）。

@@ -651,6 +651,15 @@ impl AgentLoop {
         reload_result
     }
 
+    /// 清除指定 MCP Server 的退避状态并立即执行一次真实 Hub 重连。
+    pub async fn reconnect_mcp_server(&mut self, server_id: &str) -> anyhow::Result<()> {
+        {
+            let mut hub = self.mcp_hub.lock().await;
+            hub.force_reconnect(server_id)?;
+        }
+        self.reload_mcp().await
+    }
+
     /// 同时重载工具 gate 与 MCP 配置，通常在每轮用户输入开始时调用。
     pub async fn reload_tools_and_mcp(&mut self) -> anyhow::Result<()> {
         self.reload_tool_gates();

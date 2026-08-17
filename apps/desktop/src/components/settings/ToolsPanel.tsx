@@ -282,6 +282,7 @@ const MCP_STATUS_LABEL: Record<McpRuntimeState, MessageKey> = {
   connecting: "mcpTools.status.connecting",
   connected: "mcpTools.status.connected",
   disconnected: "mcpTools.status.disconnected",
+  backoff: "mcpTools.status.backoff",
   error: "mcpTools.status.error",
   unknown: "mcpTools.status.unknown",
 };
@@ -754,6 +755,26 @@ function McpStatusBadge({ status }: { status?: McpRuntimeStatus }) {
   );
 }
 
+function McpRetryNote({ status }: { status?: McpRuntimeStatus }) {
+  const { t } = useI18n();
+  if (!status?.retryable || status.retryAttempt === 0) return null;
+  const time = status.nextRetryAtUnixMs
+    ? new Date(status.nextRetryAtUnixMs).toLocaleTimeString([], {
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+      })
+    : "—";
+  return (
+    <p className="mcp-retry-note">
+      {t("mcpTools.retryScheduled", {
+        attempt: String(status.retryAttempt),
+        time,
+      })}
+    </p>
+  );
+}
+
 /** 单个 MCP Server 卡片（开关、工具列表、刷新） */
 function McpServerCard({
   server,
@@ -761,7 +782,9 @@ function McpServerCard({
   onToggleTool,
   onRefresh,
   onRemove,
+  onReconnect,
   refreshing,
+  reconnecting,
   runtimeStatus,
 }: {
   server: McpServer;
@@ -769,7 +792,9 @@ function McpServerCard({
   onToggleTool: (serverId: string, toolName: string) => void;
   onRefresh: (serverId: string) => void;
   onRemove: (id: string) => void;
+  onReconnect: (id: string) => void;
   refreshing?: boolean;
+  reconnecting?: boolean;
   runtimeStatus?: McpRuntimeStatus;
 }) {
   const { t } = useI18n();
@@ -814,6 +839,7 @@ function McpServerCard({
           <span>{runtimeStatus.error}</span>
         </p>
       ) : null}
+      <McpRetryNote status={runtimeStatus} />
       <div className="mcp-server-env">
         <span className="mcp-server-env-key">
           {t("mcpTools.startupTimeout")}: {server.startupTimeoutSecs}s
@@ -883,15 +909,30 @@ function McpServerCard({
           </ul>
         )}
       </div>
-      <button
-        type="button"
-        className="mcp-server-remove"
-        onClick={() => onRemove(server.id)}
-        aria-label={t("mcpTools.remove")}
-      >
-        <Trash2 size={13} strokeWidth={2.25} aria-hidden />
-        {t("mcpTools.remove")}
-      </button>
+      <div className="mcp-server-actions">
+        <button
+          type="button"
+          className="mcp-btn-ghost mcp-reconnect-btn"
+          disabled={reconnecting}
+          onClick={() => onReconnect(server.id)}
+        >
+          <IconRefresh
+            width={13}
+            height={13}
+            className={reconnecting ? "is-spin" : undefined}
+          />
+          {reconnecting ? t("mcpTools.reconnecting") : t("mcpTools.reconnect")}
+        </button>
+        <button
+          type="button"
+          className="mcp-server-remove"
+          onClick={() => onRemove(server.id)}
+          aria-label={t("mcpTools.remove")}
+        >
+          <Trash2 size={13} strokeWidth={2.25} aria-hidden />
+          {t("mcpTools.remove")}
+        </button>
+      </div>
     </article>
   );
 }
@@ -922,6 +963,8 @@ export default function ToolsPanel({
     refreshing,
     runtimeStatuses,
     runtimeStatusError,
+    reconnectServer,
+    reconnectingServerIds,
   } = useMcpTools(agentId, active && tab === "mcp");
   const query = search.trim().toLowerCase();
 
@@ -1463,15 +1506,36 @@ export default function ToolsPanel({
                           <span className="tool-toggle-thumb" />
                         </button>
                       </div>
-                      <button
-                        type="button"
-                        className="mcp-server-remove"
-                        onClick={() => removeServer(selectedServer.id)}
-                        aria-label={t("mcpTools.remove")}
-                      >
-                        <Trash2 size={13} strokeWidth={2.25} aria-hidden />
-                        {t("mcpTools.remove")}
-                      </button>
+                      <div className="mcp-server-actions">
+                        <button
+                          type="button"
+                          className="mcp-btn-ghost mcp-reconnect-btn"
+                          disabled={reconnectingServerIds.has(selectedServer.id)}
+                          onClick={() => void reconnectServer(selectedServer.id)}
+                        >
+                          <IconRefresh
+                            width={13}
+                            height={13}
+                            className={
+                              reconnectingServerIds.has(selectedServer.id)
+                                ? "is-spin"
+                                : undefined
+                            }
+                          />
+                          {reconnectingServerIds.has(selectedServer.id)
+                            ? t("mcpTools.reconnecting")
+                            : t("mcpTools.reconnect")}
+                        </button>
+                        <button
+                          type="button"
+                          className="mcp-server-remove"
+                          onClick={() => removeServer(selectedServer.id)}
+                          aria-label={t("mcpTools.remove")}
+                        >
+                          <Trash2 size={13} strokeWidth={2.25} aria-hidden />
+                          {t("mcpTools.remove")}
+                        </button>
+                      </div>
                     </header>
                     {selectedServer.description && (
                       <section className="tools-detail-section">
@@ -1490,6 +1554,7 @@ export default function ToolsPanel({
                         <span>{selectedRuntimeStatus.error}</span>
                       </p>
                     ) : null}
+                    <McpRetryNote status={selectedRuntimeStatus} />
                     <section className="tools-detail-meta-grid">
                       <div className="tools-detail-meta-item">
                         <span className="tools-detail-label">
@@ -1605,7 +1670,9 @@ export default function ToolsPanel({
                   onToggleTool={toggleTool}
                   onRefresh={(id) => void refreshTools(id)}
                   onRemove={removeServer}
+                  onReconnect={(id) => void reconnectServer(id)}
                   refreshing={refreshing}
+                  reconnecting={reconnectingServerIds.has(s.id)}
                   runtimeStatus={runtimeStatuses[s.id]}
                 />
               ))}

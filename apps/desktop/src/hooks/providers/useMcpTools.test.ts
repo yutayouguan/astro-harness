@@ -78,6 +78,8 @@ test("normalizes MCP runtime status and rejects unknown state strings", () => {
       tools: ["search", "read"],
       required: true,
       error: "",
+      retryable: false,
+      retryAttempt: 0,
     }),
     {
       id: "docs",
@@ -86,12 +88,29 @@ test("normalizes MCP runtime status and rejects unknown state strings", () => {
       tools: ["search", "read"],
       required: true,
       error: undefined,
+      retryable: false,
+      retryAttempt: 0,
+      nextRetryAtUnixMs: undefined,
     },
   );
   assert.equal(
     normalizeMcpRuntimeStatus({ id: "future", status: "future_state" as never }).status,
     "unknown",
   );
+});
+
+test("normalizes snake_case retry metadata", () => {
+  const status = normalizeMcpRuntimeStatus({
+    id: "docs",
+    status: "backoff",
+    retryable: true,
+    retry_attempt: 3,
+    next_retry_at_unix_ms: 1_700_000_000_000,
+  } as never);
+
+  assert.equal(status.status, "backoff");
+  assert.equal(status.retryAttempt, 3);
+  assert.equal(status.nextRetryAtUnixMs, 1_700_000_000_000);
 });
 
 test("rejects an explicit legacy SSE transport", () => {

@@ -10,6 +10,7 @@ export type McpRuntimeState =
   | "connecting"
   | "connected"
   | "disconnected"
+  | "backoff"
   | "error"
   | "unknown";
 
@@ -47,6 +48,9 @@ export type McpRuntimeStatus = {
   tools: string[];
   required: boolean;
   error?: string;
+  retryable: boolean;
+  retryAttempt: number;
+  nextRetryAtUnixMs?: number;
 };
 
 const MCP_RUNTIME_STATES = new Set<McpRuntimeState>([
@@ -55,6 +59,7 @@ const MCP_RUNTIME_STATES = new Set<McpRuntimeState>([
   "connecting",
   "connected",
   "disconnected",
+  "backoff",
   "error",
   "unknown",
 ]);
@@ -62,7 +67,12 @@ const MCP_RUNTIME_STATES = new Set<McpRuntimeState>([
 export function normalizeMcpRuntimeStatus(
   raw: Partial<McpRuntimeStatus>,
 ): McpRuntimeStatus {
+  const values = raw as Record<string, unknown>;
   const candidate = typeof raw.status === "string" ? raw.status : "unknown";
+  const retryAttempt = Number(values.retryAttempt ?? values.retry_attempt ?? 0);
+  const nextRetryAt = Number(
+    values.nextRetryAtUnixMs ?? values.next_retry_at_unix_ms ?? 0,
+  );
   return {
     id: typeof raw.id === "string" ? raw.id : "",
     name: typeof raw.name === "string" ? raw.name : "",
@@ -74,7 +84,22 @@ export function normalizeMcpRuntimeStatus(
       : [],
     required: raw.required === true,
     error: typeof raw.error === "string" && raw.error.trim() ? raw.error.trim() : undefined,
+    retryable: raw.retryable === true,
+    retryAttempt: Number.isFinite(retryAttempt) ? Math.max(0, Math.trunc(retryAttempt)) : 0,
+    nextRetryAtUnixMs:
+      Number.isFinite(nextRetryAt) && nextRetryAt > 0 ? Math.trunc(nextRetryAt) : undefined,
   };
+}
+
+function runtimeStatusRecord(
+  list: Partial<McpRuntimeStatus>[],
+): Record<string, McpRuntimeStatus> {
+  const normalized = list.map(normalizeMcpRuntimeStatus);
+  return Object.fromEntries(
+    normalized
+      .filter((status) => status.id)
+      .map((status) => [status.id, status]),
+  );
 }
 
 export type McpServer = {
@@ -275,6 +300,7 @@ export function useMcpTools(agentId?: string | null, watchRuntime = false) {
   const [refreshing, setRefreshing] = useState(false);
   const [runtimeStatuses, setRuntimeStatuses] = useState<Record<string, McpRuntimeStatus>>({});
   const [runtimeStatusError, setRuntimeStatusError] = useState<string | null>(null);
+  const [reconnectingServerIds, setReconnectingServerIds] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     let cancelled = false;
@@ -320,14 +346,7 @@ export function useMcpTools(agentId?: string | null, watchRuntime = false) {
       const list = await invoke<Partial<McpRuntimeStatus>[]>("get_mcp_server_statuses", {
         agentId: agentId || null,
       });
-      const normalized = list.map(normalizeMcpRuntimeStatus);
-      setRuntimeStatuses(
-        Object.fromEntries(
-          normalized
-            .filter((status) => status.id)
-            .map((status) => [status.id, status]),
-        ),
-      );
+      setRuntimeStatuses(runtimeStatusRecord(list));
       setRuntimeStatusError(null);
     } catch (error) {
       setRuntimeStatusError(error instanceof Error ? error.message : String(error));
@@ -344,6 +363,30 @@ export function useMcpTools(agentId?: string | null, watchRuntime = false) {
     const interval = window.setInterval(() => void refreshRuntimeStatuses(), 5_000);
     return () => window.clearInterval(interval);
   }, [refreshRuntimeStatuses, watchRuntime]);
+
+  const reconnectServer = useCallback(
+    async (serverId: string) => {
+      if (!isTauri()) return;
+      setReconnectingServerIds((current) => new Set(current).add(serverId));
+      try {
+        const list = await invoke<Partial<McpRuntimeStatus>[]>("reconnect_mcp_server", {
+          agentId: agentId || null,
+          serverId,
+        });
+        setRuntimeStatuses(runtimeStatusRecord(list));
+        setRuntimeStatusError(null);
+      } catch (error) {
+        setRuntimeStatusError(error instanceof Error ? error.message : String(error));
+      } finally {
+        setReconnectingServerIds((current) => {
+          const next = new Set(current);
+          next.delete(serverId);
+          return next;
+        });
+      }
+    },
+    [agentId],
+  );
 
   useEffect(() => {
     if (!ready) return;
@@ -427,5 +470,7 @@ export function useMcpTools(agentId?: string | null, watchRuntime = false) {
     runtimeStatuses,
     runtimeStatusError,
     refreshRuntimeStatuses,
+    reconnectServer,
+    reconnectingServerIds,
   };
 }

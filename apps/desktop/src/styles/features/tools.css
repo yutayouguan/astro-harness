@@ -475,6 +475,10 @@ html[data-theme="dark"] .mcp-add-btn:hover {
   color: var(--tone);
 }
 
+.mcp-runtime-status[data-status="backoff"] {
+  color: #d97706;
+}
+
 .mcp-runtime-status[data-status="disconnected"],
 .mcp-runtime-status[data-status="error"] {
   color: var(--danger);
@@ -501,6 +505,13 @@ html[data-theme="dark"] .mcp-add-btn:hover {
 
 .mcp-runtime-error--global {
   margin-bottom: 12px;
+}
+
+.mcp-retry-note {
+  margin: -3px 0 0;
+  color: var(--ink-mute);
+  font-size: 11px;
+  line-height: 1.4;
 }
 
 .mcp-server-cmd {
@@ -559,6 +570,25 @@ html[data-theme="dark"] .mcp-add-btn:hover {
   background: color-mix(in srgb, #ef4444 10%, transparent);
 }
 
+.mcp-server-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: auto;
+}
+
+.mcp-server-actions .mcp-server-remove {
+  margin-top: 0;
+}
+
+.mcp-reconnect-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  font-size: 12px;
+}
+
 html[data-theme="dark"] .mcp-server-remove {
   color: var(--ink-mute);
   border-color: rgba(255, 255, 255, 0.1);
@@ -604,7 +634,8 @@ html[data-theme="dark"] .mcp-server-remove:hover {
   padding: 4px 8px;
 }
 
-.mcp-refresh-btn .is-spin {
+.mcp-refresh-btn .is-spin,
+.mcp-reconnect-btn .is-spin {
   animation: tools-icon-spin 0.8s linear infinite;
 }
 

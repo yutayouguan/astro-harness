@@ -19,6 +19,8 @@ service AstroService {
   rpc ExecuteSkill(SkillRequest) returns (stream SkillEvent);
   // 列出 MCP 服务器连接状态与工具名。
   rpc ListMcpServers(McpServerListRequest) returns (McpServerList);
+  // 清除指定 Server 的退避并立即重连。
+  rpc ReconnectMcpServer(McpReconnectRequest) returns (McpServerList);
   // 按查询召回 MEMORY / USER 与近期会话摘要。
   rpc QueryMemory(MemoryQuery) returns (MemoryResult);
   // 在记忆沙箱内列举文件（受根目录约束）。
@@ -314,6 +316,10 @@ message McpServerListRequest {
   string agent_id = 1;
   string project_root = 2;
 }
+message McpReconnectRequest {
+  string agent_id = 1;
+  string server_id = 2;
+}
 message McpServerList { repeated McpServerInfo servers = 1; }
 message McpServerInfo {
   string name = 1;
@@ -322,6 +328,9 @@ message McpServerInfo {
   bool required = 4;
   string error = 5;
   string id = 6;
+  bool retryable = 7;
+  uint32 retry_attempt = 8;
+  uint64 next_retry_at_unix_ms = 9;
 }
 
 message MemoryQuery { string query = 1; int32 limit = 2; }

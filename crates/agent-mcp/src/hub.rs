@@ -3,6 +3,7 @@
 //! 按 Agent 加载配置、维持 RunningService，并向 ToolRegistry 暴露限定名工具。
 
 use std::collections::HashMap;
+use std::hash::{Hash, Hasher};
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
 
@@ -29,6 +30,8 @@ use crate::names::{
 
 /// 同时启动的 MCP Server 上限。
 pub const MAX_PARALLEL_MCP_STARTUPS: usize = 4;
+/// 自动重连退避上限。
+pub const MAX_MCP_RETRY_DELAY_SECS: u64 = 30;
 
 /// MCP 连接建立时使用的权限快照。
 ///
@@ -114,6 +117,12 @@ pub struct ServerStatus {
     pub tools: Vec<String>,
     /// 最近错误。
     pub error: Option<String>,
+    /// 最近失败是否允许自动重试。
+    pub retryable: bool,
+    /// 当前连续失败次数。
+    pub retry_attempt: u32,
+    /// 下一次允许重试的 Unix 毫秒时间；永久错误为 None。
+    pub next_retry_at_unix_ms: Option<u64>,
 }
 
 /// MCP Server 连接生命周期状态。
@@ -123,6 +132,7 @@ pub enum McpLifecycleState {
     Connecting,
     Connected,
     Disconnected,
+    Backoff,
     Error,
 }
 
@@ -133,6 +143,7 @@ impl McpLifecycleState {
             Self::Connecting => "connecting",
             Self::Connected => "connected",
             Self::Disconnected => "disconnected",
+            Self::Backoff => "backoff",
             Self::Error => "error",
         }
     }
@@ -242,6 +253,16 @@ struct RunningServer {
     error: Option<String>,
 }
 
+/// 单个 Server 的连续失败与退避状态。
+#[derive(Debug)]
+struct RetryState {
+    fingerprint: String,
+    attempt: u32,
+    retryable: bool,
+    next_retry_at: Option<std::time::Instant>,
+    next_retry_at_unix_ms: Option<u64>,
+}
+
 /// MCP Hub：按 Agent 管理多服务器连接与工具调用。
 pub struct McpHub {
     /// 绑定的 Agent id（`None` 表示全局/当前约定）。
@@ -254,6 +275,8 @@ pub struct McpHub {
     last_connect_errors: HashMap<String, String>,
     /// Server 生命周期状态。
     states: HashMap<String, McpLifecycleState>,
+    /// Server 自动重连退避状态。
+    retries: HashMap<String, RetryState>,
     /// 当前 session/profile 对 MCP 连接施加的不可变权限快照。
     execution_context: Option<McpExecutionContext>,
 }
@@ -274,6 +297,7 @@ impl McpHub {
             configs: Vec::new(),
             last_connect_errors: HashMap::new(),
             states: HashMap::new(),
+            retries: HashMap::new(),
             execution_context: None,
         }
     }
@@ -326,9 +350,14 @@ impl McpHub {
             .map(|config| sanitize_server_id(&config.id))
             .collect();
         self.states.retain(|id, _| configured_ids.contains(id));
+        self.retries.retain(|id, _| configured_ids.contains(id));
+        self.last_connect_errors
+            .retain(|id, _| configured_ids.contains(id));
         for config in self.configs.iter().filter(|config| !config.enabled) {
-            self.states
-                .insert(sanitize_server_id(&config.id), McpLifecycleState::Disabled);
+            let sid = sanitize_server_id(&config.id);
+            self.states.insert(sid.clone(), McpLifecycleState::Disabled);
+            self.retries.remove(&sid);
+            self.last_connect_errors.remove(&sid);
         }
 
         let keep_ids: std::collections::HashSet<String> =
@@ -346,8 +375,10 @@ impl McpHub {
         }
 
         let mut discovered_updates: Vec<(String, Vec<DiscoveredTool>)> = Vec::new();
-        let mut connect_errors: HashMap<String, String> = HashMap::new();
+        let mut connect_errors = self.last_connect_errors.clone();
         let mut pending = Vec::new();
+        let mut required_failures = Vec::new();
+        let now = std::time::Instant::now();
 
         for cfg in enabled {
             let sid = sanitize_server_id(&cfg.id);
@@ -361,12 +392,51 @@ impl McpHub {
                         rs.config = cfg;
                         rs.error = None;
                     }
-                    self.states.insert(sid, McpLifecycleState::Connected);
+                    self.states
+                        .insert(sid.clone(), McpLifecycleState::Connected);
+                    self.retries.remove(&sid);
+                    connect_errors.remove(&sid);
+                    continue;
+                }
+            }
+
+            if self
+                .retries
+                .get(&sid)
+                .is_some_and(|retry| retry.fingerprint != fp)
+            {
+                self.retries.remove(&sid);
+                connect_errors.remove(&sid);
+            }
+            if let Some(retry) = self.retries.get(&sid) {
+                let waiting = retry
+                    .next_retry_at
+                    .is_some_and(|next_retry_at| next_retry_at > now);
+                if !retry.retryable || waiting {
+                    self.states.insert(
+                        sid.clone(),
+                        if retry.retryable {
+                            McpLifecycleState::Backoff
+                        } else {
+                            McpLifecycleState::Error
+                        },
+                    );
+                    if cfg.required {
+                        required_failures.push(McpStartupFailure {
+                            server_id: sid.clone(),
+                            server_name: cfg.name,
+                            error: connect_errors
+                                .get(&sid)
+                                .cloned()
+                                .unwrap_or_else(|| "MCP server is waiting for reconnect".into()),
+                        });
+                    }
                     continue;
                 }
             }
             self.servers.remove(&sid);
             self.states.insert(sid, McpLifecycleState::Connecting);
+            connect_errors.remove(&sanitize_server_id(&cfg.id));
             pending.push(cfg);
         }
 
@@ -382,8 +452,6 @@ impl McpHub {
             })
             .collect();
         let connection_results = collect_bounded(futures, MAX_PARALLEL_MCP_STARTUPS).await;
-        let mut required_failures = Vec::new();
-
         for (cfg, result) in connection_results {
             let sid = sanitize_server_id(&cfg.id);
             match result {
@@ -411,12 +479,55 @@ impl McpHub {
                     discovered_updates.push((sid.clone(), discovered));
                     self.states
                         .insert(sid.clone(), McpLifecycleState::Connected);
+                    self.retries.remove(&sid);
+                    connect_errors.remove(&sid);
                     self.servers.insert(sid, running);
                 }
                 Err(e) => {
                     warn!(server = %sid, error = %e, "MCP server connect failed");
                     let error = e.to_string();
-                    self.states.insert(sid.clone(), McpLifecycleState::Error);
+                    let retryable = is_retryable_connect_error(&e);
+                    let attempt = self
+                        .retries
+                        .get(&sid)
+                        .filter(|retry| {
+                            retry.fingerprint
+                                == effective_connection_fingerprint(
+                                    &cfg,
+                                    self.execution_context.as_ref(),
+                                )
+                        })
+                        .map_or(1, |retry| retry.attempt.saturating_add(1));
+                    let (next_retry_at, next_retry_at_unix_ms) = if retryable {
+                        let delay = retry_delay(&sid, attempt);
+                        (
+                            Some(std::time::Instant::now() + delay),
+                            Some(unix_time_ms().saturating_add(delay.as_millis() as u64)),
+                        )
+                    } else {
+                        (None, None)
+                    };
+                    self.retries.insert(
+                        sid.clone(),
+                        RetryState {
+                            fingerprint: effective_connection_fingerprint(
+                                &cfg,
+                                self.execution_context.as_ref(),
+                            ),
+                            attempt,
+                            retryable,
+                            next_retry_at,
+                            next_retry_at_unix_ms,
+                        },
+                    );
+                    self.states.insert(
+                        sid.clone(),
+                        if retryable {
+                            McpLifecycleState::Backoff
+                        } else {
+                            McpLifecycleState::Error
+                        },
+                    );
                     connect_errors.insert(sid.clone(), error.clone());
                     if cfg.required {
                         required_failures.push(McpStartupFailure {
@@ -483,6 +594,23 @@ impl McpHub {
             }
             .into())
         }
+    }
+
+    /// 清除指定 Server 的退避并丢弃现有连接，使下一次 reload 立即重连。
+    pub fn force_reconnect(&mut self, server_id: &str) -> anyhow::Result<()> {
+        let sid = sanitize_server_id(server_id);
+        if !self
+            .configs
+            .iter()
+            .any(|config| sanitize_server_id(&config.id) == sid)
+        {
+            anyhow::bail!("unknown MCP server: {sid}");
+        }
+        self.retries.remove(&sid);
+        self.last_connect_errors.remove(&sid);
+        self.servers.remove(&sid);
+        self.states.insert(sid, McpLifecycleState::Disconnected);
+        Ok(())
     }
 
     /// 仅从磁盘同步 enabled / tools 开关，不重连（供工具调用路径）
@@ -589,9 +717,13 @@ impl McpHub {
                     status: state.as_str().into(),
                     tools: rs.tools.iter().map(|t| t.name.to_string()).collect(),
                     error: rs.error.clone(),
+                    retryable: false,
+                    retry_attempt: 0,
+                    next_retry_at_unix_ms: None,
                 });
             } else {
                 let err = self.last_connect_errors.get(&sid).cloned();
+                let retry = self.retries.get(&sid);
                 out.push(ServerStatus {
                     id: sid,
                     name: cfg.name.clone(),
@@ -611,6 +743,9 @@ impl McpHub {
                         .into(),
                     tools: cfg.discovered.iter().map(|d| d.name.clone()).collect(),
                     error: err,
+                    retryable: retry.is_some_and(|retry| retry.retryable),
+                    retry_attempt: retry.map_or(0, |retry| retry.attempt),
+                    next_retry_at_unix_ms: retry.and_then(|retry| retry.next_retry_at_unix_ms),
                 });
             }
         }
@@ -853,6 +988,52 @@ async fn with_startup_timeout<T>(
         .map_err(|_| anyhow!("MCP server 启动超时 ({timeout_secs}s): {server_id}"))?
 }
 
+fn is_retryable_connect_error(error: &anyhow::Error) -> bool {
+    let message = format!("{error:#}").to_ascii_lowercase();
+    let permanent_markers = [
+        "execution policy is unavailable",
+        "network access denied",
+        "permission denied",
+        "working directory",
+        "escapes the execution root",
+        "stdio command",
+        "缺少 url",
+        "invalid http header",
+        "unauthorized",
+        "forbidden",
+        "status: 400",
+        "status 400",
+        "status: 401",
+        "status 401",
+        "status: 403",
+        "status 403",
+        "status: 404",
+        "status 404",
+    ];
+    !permanent_markers
+        .iter()
+        .any(|marker| message.contains(marker))
+}
+
+fn retry_delay(server_id: &str, attempt: u32) -> std::time::Duration {
+    let exponent = attempt.saturating_sub(1).min(5);
+    let base_ms = (1_u64 << exponent) * 1_000;
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    server_id.hash(&mut hasher);
+    attempt.hash(&mut hasher);
+    let jitter_per_mille = 800 + (hasher.finish() % 401);
+    let delay_ms =
+        (base_ms * jitter_per_mille / 1_000).min(MAX_MCP_RETRY_DELAY_SECS.saturating_mul(1_000));
+    std::time::Duration::from_millis(delay_ms)
+}
+
+fn unix_time_ms() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis() as u64
+}
+
 async fn collect_bounded<F, T>(futures: Vec<F>, limit: usize) -> Vec<T>
 where
     F: std::future::Future<Output = T>,
@@ -928,12 +1109,11 @@ async fn connect_server_inner(
             }
             let mut map = HashMap::new();
             for (k, v) in &cfg.headers {
-                if let (Ok(name), Ok(val)) = (
-                    HeaderName::try_from(k.as_str()),
-                    HeaderValue::try_from(v.as_str()),
-                ) {
-                    map.insert(name, val);
-                }
+                let name = HeaderName::try_from(k.as_str())
+                    .with_context(|| format!("invalid HTTP header name: {k}"))?;
+                let val = HeaderValue::try_from(v.as_str())
+                    .with_context(|| format!("invalid HTTP header value for {k}"))?;
+                map.insert(name, val);
             }
             let mut config = StreamableHttpClientTransportConfig::with_uri(cfg.url.as_str());
             if !map.is_empty() {
@@ -1453,6 +1633,62 @@ mod tests {
         let status = required_hub.server_status();
         assert_eq!(status[0].status, "error");
         assert!(status[0].required);
+    }
+
+    #[test]
+    fn retry_classification_and_delay_follow_policy() {
+        assert!(!is_retryable_connect_error(&anyhow!(
+            "network access denied by active profile"
+        )));
+        assert!(!is_retryable_connect_error(&anyhow!(
+            "HTTP status: 401 Unauthorized"
+        )));
+        assert!(is_retryable_connect_error(&anyhow!(
+            "connection reset by peer"
+        )));
+
+        let first = retry_delay("server-a", 1);
+        assert!(first >= std::time::Duration::from_millis(800));
+        assert!(first <= std::time::Duration::from_millis(1_200));
+        assert!(retry_delay("server-a", 20) <= std::time::Duration::from_secs(30));
+    }
+
+    #[tokio::test]
+    async fn retryable_failure_backs_off_until_manual_reconnect() {
+        let dir = tempfile::tempdir().unwrap();
+        let policy = sandbox::SandboxPolicy::new(
+            types::SandboxMode::DangerFullAccess,
+            dir.path(),
+            Vec::new(),
+            false,
+        )
+        .unwrap();
+        let context = McpExecutionContext::new(policy, dir.path()).unwrap();
+        let config = stdio_server("echo");
+        let mut hub = McpHub::new();
+        hub.set_execution_context(Some(context));
+
+        hub.reload_with_configs(vec![config.clone()]).await.unwrap();
+        let first = hub.server_status().remove(0);
+        assert_eq!(first.status, "backoff");
+        assert!(first.retryable);
+        assert_eq!(first.retry_attempt, 1);
+        assert!(first.next_retry_at_unix_ms.is_some());
+
+        hub.reload_with_configs(vec![config.clone()]).await.unwrap();
+        let skipped = hub.server_status().remove(0);
+        assert_eq!(
+            skipped.retry_attempt, 1,
+            "reload during backoff must not retry"
+        );
+
+        hub.force_reconnect("s1").unwrap();
+        let reset = hub.server_status().remove(0);
+        assert_eq!(reset.status, "disconnected");
+        assert_eq!(reset.retry_attempt, 0);
+
+        hub.reload_with_configs(vec![config]).await.unwrap();
+        assert_eq!(hub.server_status()[0].retry_attempt, 1);
     }
 
     #[cfg(target_os = "macos")]

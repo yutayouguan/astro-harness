@@ -6,7 +6,8 @@
 use proto::astro_service_client::AstroServiceClient;
 use proto::astro_service_server::AstroServiceServer;
 use proto::{
-    ChatControlAction, ChatControlRequest, ChatRequest, McpServerListRequest, MemoryQuery,
+    ChatControlAction, ChatControlRequest, ChatRequest, McpReconnectRequest, McpServerListRequest,
+    MemoryQuery,
 };
 use server::grpc::AstroServiceImpl;
 use tempfile::TempDir;
@@ -61,6 +62,15 @@ async fn test_grpc_connect_and_query_memory() {
         .servers
         .iter()
         .all(|server| !server.id.is_empty()));
+
+    let reconnect_error = client
+        .reconnect_mcp_server(McpReconnectRequest {
+            agent_id: "grpc-status-test".into(),
+            server_id: "missing".into(),
+        })
+        .await
+        .expect_err("reconnect requires an active Agent runtime");
+    assert_eq!(reconnect_error.code(), tonic::Code::FailedPrecondition);
 }
 
 /// release_session 对冷会话与重复调用都应返回成功。

@@ -341,6 +341,7 @@ pub fn run() {
             commands::config::get_tool_catalog,
             commands::config::get_mcp_servers,
             commands::config::get_mcp_server_statuses,
+            commands::config::reconnect_mcp_server,
             commands::config::set_mcp_servers,
             commands::config::refresh_mcp_tools,
             commands::config::get_agent_usage_stats,

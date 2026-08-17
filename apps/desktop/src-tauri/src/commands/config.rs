@@ -70,6 +70,24 @@ pub struct McpRuntimeStatusDto {
     pub tools: Vec<String>,
     pub required: bool,
     pub error: Option<String>,
+    pub retryable: bool,
+    pub retry_attempt: u32,
+    pub next_retry_at_unix_ms: Option<u64>,
+}
+
+fn runtime_status_dto(server: proto::McpServerInfo) -> McpRuntimeStatusDto {
+    McpRuntimeStatusDto {
+        id: server.id,
+        name: server.name,
+        status: server.status,
+        tools: server.tools,
+        required: server.required,
+        error: (!server.error.is_empty()).then_some(server.error),
+        retryable: server.retryable,
+        retry_attempt: server.retry_attempt,
+        next_retry_at_unix_ms: (server.next_retry_at_unix_ms > 0)
+            .then_some(server.next_retry_at_unix_ms),
+    }
 }
 
 /// MCP 服务器配置的前端 DTO。
@@ -257,14 +275,34 @@ pub async fn get_mcp_server_statuses(
     Ok(response
         .servers
         .into_iter()
-        .map(|server| McpRuntimeStatusDto {
-            id: server.id,
-            name: server.name,
-            status: server.status,
-            tools: server.tools,
-            required: server.required,
-            error: (!server.error.is_empty()).then_some(server.error),
+        .map(runtime_status_dto)
+        .collect())
+}
+
+/// 清除指定 Server 的退避并让对应 Agent Hub 立即重连。
+#[tauri::command]
+pub async fn reconnect_mcp_server(
+    agent_id: Option<String>,
+    server_id: String,
+) -> Result<Vec<McpRuntimeStatusDto>, String> {
+    let memory_root = home::default_memory_dir();
+    let id = normalize_agent_id(agent_id).unwrap_or_else(|| home::active_agent_id(&memory_root));
+    let endpoint = endpoint_url(&default_grpc_address());
+    let mut client = AstroServiceClient::connect(endpoint)
+        .await
+        .map_err(|error| error.to_string())?;
+    let response = client
+        .reconnect_mcp_server(proto::McpReconnectRequest {
+            agent_id: id,
+            server_id,
         })
+        .await
+        .map_err(|error| error.to_string())?
+        .into_inner();
+    Ok(response
+        .servers
+        .into_iter()
+        .map(runtime_status_dto)
         .collect())
 }
 
@@ -508,5 +546,24 @@ mod mcp_config_tests {
         dto.cwd = Some("packages/server".into());
         let error = config_from_dto(dto).unwrap_err();
         assert!(error.contains("cannot define cwd"));
+    }
+
+    #[test]
+    fn runtime_status_dto_preserves_retry_metadata() {
+        let dto = runtime_status_dto(proto::McpServerInfo {
+            id: "docs".into(),
+            name: "Docs".into(),
+            status: "backoff".into(),
+            tools: vec!["search".into()],
+            required: true,
+            error: "connection reset".into(),
+            retryable: true,
+            retry_attempt: 3,
+            next_retry_at_unix_ms: 1_700_000_000_000,
+        });
+        assert_eq!(dto.id, "docs");
+        assert!(dto.retryable);
+        assert_eq!(dto.retry_attempt, 3);
+        assert_eq!(dto.next_retry_at_unix_ms, Some(1_700_000_000_000));
     }
 }
