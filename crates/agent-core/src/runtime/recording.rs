@@ -55,7 +55,7 @@ impl AgentLoop {
 
     /// 记录 assistant 回复并关联已解析的工具调用。
     ///
-    /// 封装 `ParsedToolCall → ToolCall` 映射，消除 streaming / headless 的重复代码。
+    /// 封装 `ParsedToolCall → ToolCall` 映射，消除 foreground / background 的重复代码。
     pub(crate) fn record_assistant_with_calls(
         &mut self,
         text: &str,

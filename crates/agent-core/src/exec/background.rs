@@ -1,4 +1,4 @@
-//! 无头（非流式）多轮工具循环，供定时任务等不需要 UI 推流的场景使用。
+//! 后台（非 UI 流式）多轮运行适配器，供 Cron 和 Agent Thread 使用。
 //!
 //! 与 `run_multi_turn_stream_inner` 共享核心基础设施：
 //! - [`ProviderStreamer`] 统一 fallback 链与流式消费
@@ -7,7 +7,8 @@
 //! - [`AgentLoop::record_assistant_with_calls`] 统一 assistant 消息记录
 //! - [`IterationBudget`] 迭代预算（对齐 Hermes）
 //!
-//! 省略 HITL、pause/cancel、streaming channel、A2UI 渲染、timeline 等 UI 专属逻辑。
+//! 权限与执行表面解耦：后台运行仍完整应用 sandbox / approval
+//! 策略，仅省略 token UI 流、A2UI 渲染和 timeline 等前台展示逻辑。
 
 use providers::ProviderConfig;
 use providers::Usage;
@@ -21,7 +22,7 @@ use crate::streaming::{ChatOverride, ProviderStreamer, StreamingChat};
 
 const MAX_THINKING_ONLY_RETRIES: usize = 1;
 
-/// 无头多轮工具循环：驱动 LLM → 工具 → LLM 直至无工具调用或预算耗尽。
+/// 后台多轮工具循环：驱动 LLM → 工具 → LLM 直至无工具调用或预算耗尽。
 ///
 /// # 参数
 ///
@@ -32,25 +33,26 @@ const MAX_THINKING_ONLY_RETRIES: usize = 1;
 /// # 返回
 ///
 /// `(最终 assistant 文本, 累计 token 用量)`。
-pub async fn run_headless_multi_turn(
+pub async fn run_background_multi_turn(
     agent: &mut AgentLoop,
     targets: Vec<ChatTarget>,
     system_prompt: String,
 ) -> anyhow::Result<(String, Usage)> {
-    run_headless_multi_turn_controlled(agent, targets, system_prompt, None).await
+    run_background_multi_turn_controlled(agent, targets, system_prompt, None).await
 }
 
-/// Headless loop with a real interrupt signal for first-class subagent threads.
-pub async fn run_headless_multi_turn_controlled(
+/// Background loop with a real interrupt signal for first-class agent threads.
+pub async fn run_background_multi_turn_controlled(
     agent: &mut AgentLoop,
     targets: Vec<ChatTarget>,
     system_prompt: String,
     control: Option<Arc<subagents::AgentThreadControl>>,
 ) -> anyhow::Result<(String, Usage)> {
-    run_headless_multi_turn_controlled_with_chat(agent, targets, system_prompt, control, None).await
+    run_background_multi_turn_controlled_with_chat(agent, targets, system_prompt, control, None)
+        .await
 }
 
-pub(crate) async fn run_headless_multi_turn_controlled_with_chat(
+pub(crate) async fn run_background_multi_turn_controlled_with_chat(
     agent: &mut AgentLoop,
     targets: Vec<ChatTarget>,
     system_prompt: String,
@@ -125,7 +127,7 @@ pub(crate) async fn run_headless_multi_turn_controlled_with_chat(
                 tracing::warn!(
                     reasoning_len = response.reasoning.len(),
                     attempt = thinking_only_retries,
-                    "headless: model returned reasoning only; injecting retry prompt"
+                    "background: model returned reasoning only; injecting retry prompt"
                 );
                 agent.record_assistant_with_calls(
                     &response.text,

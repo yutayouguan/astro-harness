@@ -1,6 +1,6 @@
 //! 流式响应累积器：将 `AssistantContentStream` 收集为结构化结果。
 //!
-//! headless（无头/cron）路径直接使用本模块；streaming 路径因需实时推送 UI 事件
+//! background（Cron / Agent Thread）路径直接使用本模块；foreground 路径因需实时推送 UI 事件
 //! 而自行累积，但数据结构对齐。
 
 use futures::StreamExt;
@@ -21,7 +21,7 @@ pub(crate) struct AccumulatedResponse {
 
 /// 消费整个 `AssistantContentStream`，收集文本、推理、工具调用与用量。
 ///
-/// 适用于 headless 等不需要逐 token 推送的场景。
+/// 适用于 background 等不需要逐 token 推送的场景。
 pub(crate) async fn collect_response(
     mut stream: AssistantContentStream,
 ) -> anyhow::Result<AccumulatedResponse> {

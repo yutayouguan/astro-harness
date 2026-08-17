@@ -2,7 +2,7 @@
 //!
 //! 负责并发互斥（同一 job 不重叠执行）、可选会话创建、600 秒超时兜底，以及成功/失败
 //! 状态写入 `CronRunDb`。任务文案经 [`AgentLoop::run_turn`] 完成初始化后，由
-//! [`super::headless::run_headless_multi_turn`] 驱动完整的 LLM → 工具 → LLM 多轮循环。
+//! [`super::background::run_background_multi_turn`] 驱动完整的 LLM → 工具 → LLM 多轮循环。
 //!
 //! 进程退出后残留的 `running` 行由 [`reconcile_orphaned_runs`] 回收：本进程未登记为活跃的
 //! 记录会按关联会话终态收尾；若之后在聊天中重新生成出结果，失败的「应用退出中断」亦可升级为成功。
@@ -23,7 +23,7 @@ use uuid::Uuid;
 use crate::runtime::usage::{apply_llm_usage_dual_write, LlmUsageWrite};
 use crate::runtime::{AgentConfig, AgentLoop, TurnResult};
 
-use super::headless::run_headless_multi_turn;
+use super::background::run_background_multi_turn;
 
 /// 进程退出后孤儿 run 的失败文案；会话事后补全时可据此升级为 success。
 const CRON_INTERRUPTED_BY_EXIT: &str = "应用退出，执行中断";
@@ -669,7 +669,7 @@ async fn complete_job_local(
     Ok(row)
 }
 
-/// 以 Agent 主循环执行 `job.task`，通过 [`run_headless_multi_turn`] 驱动完整工具循环。
+/// 以 Agent 主循环执行 `job.task`，通过 [`run_background_multi_turn`] 驱动完整工具循环。
 ///
 /// 按 `job.agent_id` 绑定已有 Agent 工作区（SOUL / MEMORY / 工具门控 / MCP），
 /// 不依赖全局活跃 Agent。`session_id` 为 `None` 时为本次执行生成临时 UUID，
@@ -712,7 +712,7 @@ async fn run_agent_job(
         }
     };
 
-    run_headless_multi_turn(&mut agent, targets, system_prompt).await
+    run_background_multi_turn(&mut agent, targets, system_prompt).await
 }
 
 /// 返回当前 UTC 时间的 RFC3339 字符串（秒精度，含时区偏移）。

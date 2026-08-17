@@ -170,7 +170,7 @@ impl AgentLoop {
     /// 准备下一轮 LLM 调用所需的上下文：重载工具/MCP、构建历史、注入 hook 上下文。
     ///
     /// 返回 `(messages, tool_schemas)`，供 `ProviderStreamer::stream_chat` 或
-    /// `to_provider_messages` 使用。streaming 与 headless 路径共享。
+    /// `to_provider_messages` 使用。foreground 与 background 路径共享。
     pub(crate) async fn prepare_llm_context(
         &mut self,
     ) -> anyhow::Result<(Vec<Message>, Vec<serde_json::Value>)> {

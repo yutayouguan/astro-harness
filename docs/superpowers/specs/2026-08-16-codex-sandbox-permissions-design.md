@@ -293,7 +293,7 @@ flowchart TD
 1. 同一个 tool_call 最多进行一次自动重试，避免审批循环。
 2. `SandboxDenied` 必须包含结构化拒绝原因，不靠 stderr 文本猜测。
 3. 批量并发工具中只要存在审批请求，该调用串行 park；其他无依赖调用可继续并发。
-4. 无 HITL 的 cron/headless 场景按 reviewer 决定：可自动审查则审查，否则失败，不得直跑。
+4. 无 HITL 的 cron/Agent Thread 后台场景按 reviewer 决定：可自动审查则审查，否则失败，不得直跑。
 5. 自动审查的 prompt 构建、审查会话与结果解析失败全部 fail closed；超时单独上报但不执行。
 6. 相同 turn 连续拒绝 3 次，或最近 50 次审查中累计拒绝 10 次时中断本轮，防止模型绕过拒绝。
 7. 用户显式覆盖拒绝只能授权完全相同的动作重试一次，重试仍需经过审查器，不能升级成规则。
@@ -606,7 +606,7 @@ SessionEvent.permission_changed
 - on-request 越界产生一次 HITL，批准后只重试一次；
 - never 越界直接失败；
 - auto_review 结构化批准、拒绝、超时、fail-closed 与拒绝熔断；
-- headless 无用户审批时不误执行；
+- 后台执行无用户审批时不误执行；
 - hard deny 永不被自动审查或 session grant 覆盖。
 
 ### 21.5 前端测试
@@ -644,7 +644,7 @@ SessionEvent.permission_changed
 - generic PermissionRequest + HITL；
 - once/session/persistent grants；
 - structured auto review；
-- cron/delegate/headless 失败语义。
+- cron/delegate/Agent Thread 后台执行失败语义。
 
 ### Phase 4：桌面 UI
 

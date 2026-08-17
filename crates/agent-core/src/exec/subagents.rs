@@ -231,14 +231,15 @@ async fn run_turn(
     match turn {
         TurnResult::Finished(message) => Ok(message),
         TurnResult::Continue { system_prompt, .. } => {
-            let (output, _) = crate::exec::headless::run_headless_multi_turn_controlled_with_chat(
-                agent,
-                targets.to_vec(),
-                system_prompt,
-                Some(control),
-                chat_override,
-            )
-            .await?;
+            let (output, _) =
+                crate::exec::background::run_background_multi_turn_controlled_with_chat(
+                    agent,
+                    targets.to_vec(),
+                    system_prompt,
+                    Some(control),
+                    chat_override,
+                )
+                .await?;
             Ok(output)
         }
         TurnResult::BudgetExhausted => anyhow::bail!("subagent turn budget exhausted"),
