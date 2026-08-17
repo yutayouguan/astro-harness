@@ -4,7 +4,7 @@ use tools::AgentThreadDispatch;
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ListThreadsArgs {
-    pub parent_session_id: Option<String>,
+    pub parent_session_id: String,
     #[serde(default)]
     pub include_closed: bool,
 }
@@ -12,12 +12,14 @@ pub struct ListThreadsArgs {
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ThreadIdArgs {
+    pub parent_session_id: String,
     pub thread_id: String,
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SendMessageArgs {
+    pub parent_session_id: String,
     pub thread_id: String,
     pub message: String,
 }
@@ -56,7 +58,10 @@ pub async fn list_subagent_threads(
 pub async fn read_subagent_thread(args: ThreadIdArgs) -> Result<ThreadDetail, String> {
     let dispatch = agent::exec::dispatch::DefaultAgentThreadDispatch;
     let (thread, messages) = dispatch
-        .read_agent(args.thread_id.trim())
+        .read_agent(subagents::ReadAgentThreadRequest {
+            parent_session_id: args.parent_session_id,
+            thread_id: args.thread_id.trim().to_string(),
+        })
         .await
         .map_err(|error| error.to_string())?;
     Ok(ThreadDetail { thread, messages })
@@ -69,6 +74,7 @@ pub async fn send_subagent_message(
     let dispatch = agent::exec::dispatch::DefaultAgentThreadDispatch;
     dispatch
         .send_message(subagents::SendAgentMessageRequest {
+            parent_session_id: args.parent_session_id,
             thread_id: args.thread_id,
             message: args.message,
         })
@@ -83,6 +89,7 @@ pub async fn interrupt_subagent_thread(
     let dispatch = agent::exec::dispatch::DefaultAgentThreadDispatch;
     dispatch
         .interrupt_agent(subagents::InterruptAgentRequest {
+            parent_session_id: args.parent_session_id,
             thread_id: args.thread_id,
         })
         .await
@@ -94,6 +101,7 @@ pub async fn close_subagent_thread(args: ThreadIdArgs) -> Result<subagents::Agen
     let dispatch = agent::exec::dispatch::DefaultAgentThreadDispatch;
     dispatch
         .close_agent(subagents::CloseAgentRequest {
+            parent_session_id: args.parent_session_id,
             thread_id: args.thread_id,
         })
         .await

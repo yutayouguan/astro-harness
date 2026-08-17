@@ -200,7 +200,7 @@ async fn handle(
             Ok(serde_json::to_string(
                 &dispatch
                     .list_agents(subagents::ListAgentThreadsRequest {
-                        parent_session_id: Some(ctx.session_id.clone()),
+                        parent_session_id: ctx.session_id.clone(),
                         include_closed: parsed.include_closed.unwrap_or(false),
                     })
                     .await?,
@@ -209,7 +209,10 @@ async fn handle(
         "read_agent" => {
             let parsed: ThreadIdArgs = parse(name, args)?;
             let (thread, messages) = dispatch
-                .read_agent(non_empty_id(&parsed.thread_id)?)
+                .read_agent(subagents::ReadAgentThreadRequest {
+                    parent_session_id: ctx.session_id.clone(),
+                    thread_id: non_empty_id(&parsed.thread_id)?.to_string(),
+                })
                 .await?;
             Ok(serde_json::json!({ "thread": thread, "messages": messages }).to_string())
         }
@@ -221,6 +224,7 @@ async fn handle(
             Ok(serde_json::to_string(
                 &dispatch
                     .send_message(subagents::SendAgentMessageRequest {
+                        parent_session_id: ctx.session_id.clone(),
                         thread_id: non_empty_id(&parsed.thread_id)?.to_string(),
                         message: parsed.message.trim().to_string(),
                     })
@@ -232,7 +236,7 @@ async fn handle(
             let ids = if parsed.thread_ids.is_empty() {
                 dispatch
                     .list_agents(subagents::ListAgentThreadsRequest {
-                        parent_session_id: Some(ctx.session_id.clone()),
+                        parent_session_id: ctx.session_id.clone(),
                         include_closed: false,
                     })
                     .await?
@@ -252,6 +256,7 @@ async fn handle(
             Ok(serde_json::to_string(
                 &dispatch
                     .wait_agents(subagents::WaitAgentThreadsRequest {
+                        parent_session_id: ctx.session_id.clone(),
                         thread_ids: ids,
                         timeout_ms: parsed.timeout_ms.unwrap_or(120_000).clamp(0, 600_000),
                     })
@@ -263,6 +268,7 @@ async fn handle(
             Ok(serde_json::to_string(
                 &dispatch
                     .interrupt_agent(subagents::InterruptAgentRequest {
+                        parent_session_id: ctx.session_id.clone(),
                         thread_id: non_empty_id(&parsed.thread_id)?.to_string(),
                     })
                     .await?,
@@ -273,6 +279,7 @@ async fn handle(
             Ok(serde_json::to_string(
                 &dispatch
                     .close_agent(subagents::CloseAgentRequest {
+                        parent_session_id: ctx.session_id.clone(),
                         thread_id: non_empty_id(&parsed.thread_id)?.to_string(),
                     })
                     .await?,

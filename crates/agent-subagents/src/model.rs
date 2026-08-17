@@ -91,30 +91,40 @@ pub struct SpawnAgentRequest {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ReadAgentThreadRequest {
+    pub parent_session_id: String,
+    pub thread_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SendAgentMessageRequest {
+    pub parent_session_id: String,
     pub thread_id: String,
     pub message: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct InterruptAgentRequest {
+    pub parent_session_id: String,
     pub thread_id: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CloseAgentRequest {
+    pub parent_session_id: String,
     pub thread_id: String,
 }
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ListAgentThreadsRequest {
-    pub parent_session_id: Option<String>,
+    pub parent_session_id: String,
     #[serde(default)]
     pub include_closed: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WaitAgentThreadsRequest {
+    pub parent_session_id: String,
     pub thread_ids: Vec<String>,
     pub timeout_ms: u64,
 }

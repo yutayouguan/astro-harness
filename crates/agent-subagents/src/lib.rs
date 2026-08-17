@@ -16,6 +16,7 @@ pub use config::{
 pub use control::{AgentThreadCommand, AgentThreadControl, LiveAgentThreads};
 pub use model::{
     AgentThread, AgentThreadMessage, AgentThreadStatus, CloseAgentRequest, InterruptAgentRequest,
-    ListAgentThreadsRequest, SendAgentMessageRequest, SpawnAgentRequest, WaitAgentThreadsRequest,
+    ListAgentThreadsRequest, ReadAgentThreadRequest, SendAgentMessageRequest, SpawnAgentRequest,
+    WaitAgentThreadsRequest,
 };
 pub use store::AgentThreadStore;

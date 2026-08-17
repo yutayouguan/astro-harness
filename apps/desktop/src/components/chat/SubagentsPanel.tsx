@@ -77,16 +77,17 @@ export default function SubagentsPanel({ open, parentSessionId, onClose }: Props
   }, [open, parentSessionId]);
 
   const loadDetail = useCallback(async (threadId: string) => {
+    if (!parentSessionId) return;
     try {
       const next = await invoke<ThreadDetail>("read_subagent_thread", {
-        args: { threadId },
+        args: { parentSessionId, threadId },
       });
       setDetail(next);
       setError(null);
     } catch (reason) {
       setError(String(reason));
     }
-  }, []);
+  }, [parentSessionId]);
 
   useEffect(() => {
     if (!open) return;
@@ -119,9 +120,10 @@ export default function SubagentsPanel({ open, parentSessionId, onClose }: Props
   };
 
   const runAction = async (command: string, args: Record<string, unknown>) => {
+    if (!parentSessionId) return;
     setBusy(true);
     try {
-      await invoke(command, { args });
+      await invoke(command, { args: { parentSessionId, ...args } });
       await loadThreads();
       if (selectedId) await loadDetail(selectedId);
       setError(null);

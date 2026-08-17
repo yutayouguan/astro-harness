@@ -3,7 +3,8 @@
 use async_trait::async_trait;
 use subagents::{
     AgentThread, AgentThreadMessage, CloseAgentRequest, InterruptAgentRequest,
-    ListAgentThreadsRequest, SendAgentMessageRequest, SpawnAgentRequest, WaitAgentThreadsRequest,
+    ListAgentThreadsRequest, ReadAgentThreadRequest, SendAgentMessageRequest, SpawnAgentRequest,
+    WaitAgentThreadsRequest,
 };
 
 /// Runtime boundary used by the model tools and desktop commands.
@@ -22,7 +23,7 @@ pub trait AgentThreadDispatch: Send + Sync {
 
     async fn read_agent(
         &self,
-        thread_id: &str,
+        request: ReadAgentThreadRequest,
     ) -> anyhow::Result<(AgentThread, Vec<AgentThreadMessage>)>;
 
     async fn send_message(&self, request: SendAgentMessageRequest) -> anyhow::Result<AgentThread>;

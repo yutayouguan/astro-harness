@@ -5,8 +5,8 @@ use std::time::Duration;
 use async_trait::async_trait;
 use subagents::{
     AgentThread, AgentThreadMessage, AgentThreadStatus, AgentThreadStore, CloseAgentRequest,
-    InterruptAgentRequest, ListAgentThreadsRequest, LiveAgentThreads, SendAgentMessageRequest,
-    SpawnAgentRequest, WaitAgentThreadsRequest,
+    InterruptAgentRequest, ListAgentThreadsRequest, LiveAgentThreads, ReadAgentThreadRequest,
+    SendAgentMessageRequest, SpawnAgentRequest, WaitAgentThreadsRequest,
 };
 use tools::AgentThreadDispatch;
 
@@ -91,19 +91,15 @@ impl AgentThreadDispatch for DefaultAgentThreadDispatch {
         request: ListAgentThreadsRequest,
     ) -> anyhow::Result<Vec<AgentThread>> {
         AgentThreadStore::open_default()?
-            .list(request.parent_session_id.as_deref(), request.include_closed)
+            .list(Some(&request.parent_session_id), request.include_closed)
     }
 
     async fn read_agent(
         &self,
-        thread_id: &str,
+        request: ReadAgentThreadRequest,
     ) -> anyhow::Result<(AgentThread, Vec<AgentThreadMessage>)> {
         let store = AgentThreadStore::open_default()?;
-        let thread = store
-            .get(thread_id)?
-            .ok_or_else(|| anyhow::anyhow!("unknown agent thread: {thread_id}"))?;
-        let messages = store.messages(thread_id)?;
-        Ok((thread, messages))
+        read_owned_agent(&store, &request)
     }
 
     async fn send_message(&self, request: SendAgentMessageRequest) -> anyhow::Result<AgentThread> {
@@ -118,49 +114,54 @@ impl AgentThreadDispatch for DefaultAgentThreadDispatch {
         if request.thread_ids.is_empty() {
             return Ok(Vec::new());
         }
-        AgentThreadStore::open_default()?
-            .wait(
-                &request.thread_ids,
-                Duration::from_millis(request.timeout_ms),
-            )
-            .await
+        let store = AgentThreadStore::open_default()?;
+        wait_owned_agents(&store, &request).await
     }
 
     async fn interrupt_agent(&self, request: InterruptAgentRequest) -> anyhow::Result<AgentThread> {
         let store = AgentThreadStore::open_default()?;
-        let thread = store
-            .get(&request.thread_id)?
-            .ok_or_else(|| anyhow::anyhow!("unknown agent thread: {}", request.thread_id))?;
-        if matches!(
-            thread.status,
-            AgentThreadStatus::Pending | AgentThreadStatus::Running
-        ) {
-            LiveAgentThreads::global().interrupt(&request.thread_id)?;
-            store.set_status(
-                &request.thread_id,
-                AgentThreadStatus::Interrupted,
-                None,
-                Some("interrupted by parent"),
-            )?;
-        }
-        store
-            .get(&request.thread_id)?
-            .ok_or_else(|| anyhow::anyhow!("agent thread disappeared: {}", request.thread_id))
+        interrupt_owned_agent(&store, LiveAgentThreads::global(), &request)
     }
 
     async fn close_agent(&self, request: CloseAgentRequest) -> anyhow::Result<AgentThread> {
         let store = AgentThreadStore::open_default()?;
-        store
-            .get(&request.thread_id)?
-            .ok_or_else(|| anyhow::anyhow!("unknown agent thread: {}", request.thread_id))?;
-        if LiveAgentThreads::global().is_live(&request.thread_id) {
-            LiveAgentThreads::global().close(&request.thread_id)?;
-        }
-        store.set_status(&request.thread_id, AgentThreadStatus::Closed, None, None)?;
-        store
-            .get(&request.thread_id)?
-            .ok_or_else(|| anyhow::anyhow!("agent thread disappeared: {}", request.thread_id))
+        close_owned_agent(&store, LiveAgentThreads::global(), &request)
     }
+}
+
+fn require_owned_thread(
+    store: &AgentThreadStore,
+    parent_session_id: &str,
+    thread_id: &str,
+) -> anyhow::Result<AgentThread> {
+    store
+        .get(thread_id)?
+        .filter(|thread| thread.parent_session_id == parent_session_id)
+        .ok_or_else(|| anyhow::anyhow!("unknown agent thread: {thread_id}"))
+}
+
+fn read_owned_agent(
+    store: &AgentThreadStore,
+    request: &ReadAgentThreadRequest,
+) -> anyhow::Result<(AgentThread, Vec<AgentThreadMessage>)> {
+    let thread = require_owned_thread(store, &request.parent_session_id, &request.thread_id)?;
+    let messages = store.messages(&request.thread_id)?;
+    Ok((thread, messages))
+}
+
+async fn wait_owned_agents(
+    store: &AgentThreadStore,
+    request: &WaitAgentThreadsRequest,
+) -> anyhow::Result<Vec<AgentThread>> {
+    for thread_id in &request.thread_ids {
+        require_owned_thread(store, &request.parent_session_id, thread_id)?;
+    }
+    store
+        .wait(
+            &request.thread_ids,
+            Duration::from_millis(request.timeout_ms),
+        )
+        .await
 }
 
 fn enqueue_follow_up(
@@ -173,9 +174,7 @@ fn enqueue_follow_up(
         anyhow::bail!("subagent follow-up message cannot be empty");
     }
 
-    let thread = store
-        .get(&request.thread_id)?
-        .ok_or_else(|| anyhow::anyhow!("unknown agent thread: {}", request.thread_id))?;
+    let thread = require_owned_thread(store, &request.parent_session_id, &request.thread_id)?;
     if thread.status == AgentThreadStatus::Closed {
         anyhow::bail!("agent thread is closed: {}", request.thread_id);
     }
@@ -183,6 +182,44 @@ fn enqueue_follow_up(
     // The runner persists this message only after the current assistant turn
     // has finished, keeping the durable transcript in conversational order.
     live_threads.send_follow_up(&request.thread_id, message.to_string())?;
+    store
+        .get(&request.thread_id)?
+        .ok_or_else(|| anyhow::anyhow!("agent thread disappeared: {}", request.thread_id))
+}
+
+fn interrupt_owned_agent(
+    store: &AgentThreadStore,
+    live_threads: &LiveAgentThreads,
+    request: &InterruptAgentRequest,
+) -> anyhow::Result<AgentThread> {
+    let thread = require_owned_thread(store, &request.parent_session_id, &request.thread_id)?;
+    if matches!(
+        thread.status,
+        AgentThreadStatus::Pending | AgentThreadStatus::Running
+    ) {
+        live_threads.interrupt(&request.thread_id)?;
+        store.set_status(
+            &request.thread_id,
+            AgentThreadStatus::Interrupted,
+            None,
+            Some("interrupted by parent"),
+        )?;
+    }
+    store
+        .get(&request.thread_id)?
+        .ok_or_else(|| anyhow::anyhow!("agent thread disappeared: {}", request.thread_id))
+}
+
+fn close_owned_agent(
+    store: &AgentThreadStore,
+    live_threads: &LiveAgentThreads,
+    request: &CloseAgentRequest,
+) -> anyhow::Result<AgentThread> {
+    require_owned_thread(store, &request.parent_session_id, &request.thread_id)?;
+    if live_threads.is_live(&request.thread_id) {
+        live_threads.close(&request.thread_id)?;
+    }
+    store.set_status(&request.thread_id, AgentThreadStatus::Closed, None, None)?;
     store
         .get(&request.thread_id)?
         .ok_or_else(|| anyhow::anyhow!("agent thread disappeared: {}", request.thread_id))
@@ -228,6 +265,7 @@ mod tests {
             &store,
             &live_threads,
             SendAgentMessageRequest {
+                parent_session_id: thread.parent_session_id.clone(),
                 thread_id: thread.id.clone(),
                 message: "  check the tests too  ".into(),
             },
@@ -273,6 +311,7 @@ mod tests {
             &store,
             &live_threads,
             SendAgentMessageRequest {
+                parent_session_id: thread.parent_session_id.clone(),
                 thread_id: thread.id.clone(),
                 message: "  \n  ".into(),
             },
@@ -281,5 +320,142 @@ mod tests {
 
         assert!(error.to_string().contains("cannot be empty"));
         assert_eq!(store.messages(&thread.id).unwrap().len(), 1);
+    }
+
+    #[tokio::test]
+    async fn thread_management_is_scoped_to_parent_session() {
+        let temp = tempfile::tempdir().unwrap();
+        let store = AgentThreadStore::new(temp.path().join("subagents.db")).unwrap();
+        let thread = store.create(&spawn_request()).unwrap();
+        store
+            .set_status(&thread.id, AgentThreadStatus::Running, None, None)
+            .unwrap();
+        let live_threads = LiveAgentThreads::default();
+        let (control, mut commands) = live_threads
+            .register_bounded(&thread.id, &thread.parent_session_id, 1)
+            .unwrap();
+        let foreign_session = "different-parent".to_string();
+
+        assert_eq!(
+            store
+                .list(Some(&thread.parent_session_id), true)
+                .unwrap()
+                .len(),
+            1
+        );
+        assert!(store.list(Some(&foreign_session), true).unwrap().is_empty());
+
+        let read_error = read_owned_agent(
+            &store,
+            &ReadAgentThreadRequest {
+                parent_session_id: foreign_session.clone(),
+                thread_id: thread.id.clone(),
+            },
+        )
+        .unwrap_err();
+        assert!(read_error.to_string().contains("unknown agent thread"));
+
+        let send_error = enqueue_follow_up(
+            &store,
+            &live_threads,
+            SendAgentMessageRequest {
+                parent_session_id: foreign_session.clone(),
+                thread_id: thread.id.clone(),
+                message: "foreign follow-up".into(),
+            },
+        )
+        .unwrap_err();
+        assert!(send_error.to_string().contains("unknown agent thread"));
+        assert!(commands.try_recv().is_err());
+
+        let wait_error = wait_owned_agents(
+            &store,
+            &WaitAgentThreadsRequest {
+                parent_session_id: foreign_session.clone(),
+                thread_ids: vec![thread.id.clone()],
+                timeout_ms: 0,
+            },
+        )
+        .await
+        .unwrap_err();
+        assert!(wait_error.to_string().contains("unknown agent thread"));
+
+        let interrupt_error = interrupt_owned_agent(
+            &store,
+            &live_threads,
+            &InterruptAgentRequest {
+                parent_session_id: foreign_session.clone(),
+                thread_id: thread.id.clone(),
+            },
+        )
+        .unwrap_err();
+        assert!(interrupt_error.to_string().contains("unknown agent thread"));
+        assert!(!control.is_interrupted());
+
+        let close_error = close_owned_agent(
+            &store,
+            &live_threads,
+            &CloseAgentRequest {
+                parent_session_id: foreign_session,
+                thread_id: thread.id.clone(),
+            },
+        )
+        .unwrap_err();
+        assert!(close_error.to_string().contains("unknown agent thread"));
+        assert!(!control.is_closed());
+
+        let owner = thread.parent_session_id.clone();
+        assert!(read_owned_agent(
+            &store,
+            &ReadAgentThreadRequest {
+                parent_session_id: owner.clone(),
+                thread_id: thread.id.clone(),
+            }
+        )
+        .is_ok());
+        assert!(wait_owned_agents(
+            &store,
+            &WaitAgentThreadsRequest {
+                parent_session_id: owner.clone(),
+                thread_ids: vec![thread.id.clone()],
+                timeout_ms: 0,
+            }
+        )
+        .await
+        .is_ok());
+        assert!(enqueue_follow_up(
+            &store,
+            &live_threads,
+            SendAgentMessageRequest {
+                parent_session_id: owner.clone(),
+                thread_id: thread.id.clone(),
+                message: "owner follow-up".into(),
+            }
+        )
+        .is_ok());
+        assert!(matches!(
+            commands.try_recv(),
+            Ok(AgentThreadCommand::FollowUp(message)) if message == "owner follow-up"
+        ));
+        assert!(interrupt_owned_agent(
+            &store,
+            &live_threads,
+            &InterruptAgentRequest {
+                parent_session_id: owner.clone(),
+                thread_id: thread.id.clone(),
+            }
+        )
+        .is_ok());
+        assert!(control.is_interrupted());
+        assert!(close_owned_agent(
+            &store,
+            &live_threads,
+            &CloseAgentRequest {
+                parent_session_id: owner,
+                thread_id: thread.id,
+            }
+        )
+        .is_ok());
+        assert!(control.is_closed());
     }
 }
