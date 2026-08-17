@@ -10,7 +10,7 @@
 //! - 若传入 `session_id`，还会经 gRPC `ChatControl.REFRESH_MEMORY` 刷新 **backend 活会话**
 //!   的 [`AgentLoop::refresh_memory`]，使后续轮次 system prompt 立刻用到新 snapshot。
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use tauri::AppHandle;
 
 use super::chat::chat_control;
@@ -276,6 +276,20 @@ pub struct SecurityAuditCapabilityDto {
     pub target_count: usize,
 }
 
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SecurityAuditPageDto {
+    pub items: Vec<SecurityAuditEventDto>,
+    pub next_cursor: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct SecurityAuditCursor {
+    created_at: String,
+    id: String,
+}
+
 fn permission_audit_dto(event: memory::PermissionAuditEvent) -> SecurityAuditEventDto {
     SecurityAuditEventDto {
         source: "permission".into(),
@@ -356,6 +370,56 @@ fn list_security_audits_from(
     Ok(events)
 }
 
+fn list_security_audit_page_from(
+    root: &std::path::Path,
+    limit: usize,
+    cursor: Option<&str>,
+) -> anyhow::Result<SecurityAuditPageDto> {
+    let limit = limit.clamp(1, 100);
+    let cursor = cursor
+        .map(serde_json::from_str::<SecurityAuditCursor>)
+        .transpose()
+        .map_err(|error| anyhow::anyhow!("invalid security audit cursor: {error}"))?;
+    let before = cursor
+        .as_ref()
+        .map(|cursor| (cursor.created_at.as_str(), cursor.id.as_str()));
+    let source_limit = limit.saturating_add(1);
+    let mut events = memory::list_permission_audits_before(root, before, source_limit)?
+        .into_iter()
+        .map(permission_audit_dto)
+        .chain(
+            sandbox::list_sandbox_audits_before(root, before, source_limit)?
+                .into_iter()
+                .map(sandbox_audit_dto),
+        )
+        .collect::<Vec<_>>();
+    events.sort_by(|left, right| {
+        right
+            .created_at
+            .cmp(&left.created_at)
+            .then_with(|| right.id.cmp(&left.id))
+    });
+    let has_more = events.len() > limit;
+    events.truncate(limit);
+    let next_cursor = if has_more {
+        events
+            .last()
+            .map(|event| {
+                serde_json::to_string(&SecurityAuditCursor {
+                    created_at: event.created_at.clone(),
+                    id: event.id.clone(),
+                })
+            })
+            .transpose()?
+    } else {
+        None
+    };
+    Ok(SecurityAuditPageDto {
+        items: events,
+        next_cursor,
+    })
+}
+
 /// 读取最近安全审计；默认 100 条，最多 500 条。
 #[tauri::command]
 pub async fn list_security_audits(
@@ -363,6 +427,20 @@ pub async fn list_security_audits(
 ) -> Result<Vec<SecurityAuditEventDto>, String> {
     list_security_audits_from(&home::default_memory_dir(), limit.unwrap_or(100))
         .map_err(|error| error.to_string())
+}
+
+/// 分页读取安全审计；游标稳定指向上一页最后一条记录。
+#[tauri::command]
+pub async fn list_security_audit_page(
+    limit: Option<usize>,
+    cursor: Option<String>,
+) -> Result<SecurityAuditPageDto, String> {
+    list_security_audit_page_from(
+        &home::default_memory_dir(),
+        limit.unwrap_or(50),
+        cursor.as_deref(),
+    )
+    .map_err(|error| error.to_string())
 }
 
 /// 读取危险命令审批设置。
@@ -591,5 +669,15 @@ mod security_audit_tests {
         let serialized = serde_json::to_string(&events).unwrap();
         assert!(!serialized.contains("secret/project"));
         assert!(!serialized.contains("targets"));
+
+        let first_page = list_security_audit_page_from(dir.path(), 1, None).unwrap();
+        assert_eq!(first_page.items.len(), 1);
+        assert_eq!(first_page.items[0].id, "sandbox-1");
+        let second_page =
+            list_security_audit_page_from(dir.path(), 1, first_page.next_cursor.as_deref())
+                .unwrap();
+        assert_eq!(second_page.items.len(), 1);
+        assert_eq!(second_page.items[0].id, "permission-1");
+        assert!(second_page.next_cursor.is_none());
     }
 }

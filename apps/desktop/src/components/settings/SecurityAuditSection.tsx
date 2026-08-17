@@ -41,6 +41,13 @@ export type SecurityAuditEvent = {
   target: string | null;
 };
 
+type SecurityAuditPage = {
+  items: SecurityAuditEvent[];
+  nextCursor: string | null;
+};
+
+const AUDIT_PAGE_SIZE = 50;
+
 const FILTERS: { id: AuditFilter; key: MessageKey }[] = [
   { id: "all", key: "approvals.audit.filter.all" },
   { id: "permission", key: "approvals.audit.filter.permission" },
@@ -102,20 +109,50 @@ export default function SecurityAuditSection({ active }: { active: boolean }) {
   const [events, setEvents] = useState<SecurityAuditEvent[]>([]);
   const [filter, setFilter] = useState<AuditFilter>("all");
   const [loading, setLoading] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [loadMoreError, setLoadMoreError] = useState<string | null>(null);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     if (!active || !isTauri()) return;
     setLoading(true);
     setError(null);
+    setLoadMoreError(null);
     try {
-      setEvents(await invoke<SecurityAuditEvent[]>("list_security_audits", { limit: 100 }));
+      const page = await invoke<SecurityAuditPage>("list_security_audit_page", {
+        limit: AUDIT_PAGE_SIZE,
+        cursor: null,
+      });
+      setEvents(page.items);
+      setNextCursor(page.nextCursor);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : String(reason));
     } finally {
       setLoading(false);
     }
   }, [active]);
+
+  const loadMore = useCallback(async () => {
+    if (!active || !isTauri() || !nextCursor || loading || loadingMore) return;
+    setLoadingMore(true);
+    setLoadMoreError(null);
+    try {
+      const page = await invoke<SecurityAuditPage>("list_security_audit_page", {
+        limit: AUDIT_PAGE_SIZE,
+        cursor: nextCursor,
+      });
+      setEvents((current) => {
+        const seen = new Set(current.map((event) => event.id));
+        return [...current, ...page.items.filter((event) => !seen.has(event.id))];
+      });
+      setNextCursor(page.nextCursor);
+    } catch (reason) {
+      setLoadMoreError(reason instanceof Error ? reason.message : String(reason));
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [active, loading, loadingMore, nextCursor]);
 
   useEffect(() => {
     void refresh();
@@ -140,7 +177,7 @@ export default function SecurityAuditSection({ active }: { active: boolean }) {
           type="button"
           className="mcp-btn-ghost security-audit-refresh"
           onClick={() => void refresh()}
-          disabled={loading}
+          disabled={loading || loadingMore}
           aria-label={t("approvals.audit.refresh")}
           title={t("approvals.audit.refresh")}
         >
@@ -235,6 +272,28 @@ export default function SecurityAuditSection({ active }: { active: boolean }) {
             );
           })}
         </ol>
+      )}
+
+      {!error && loadMoreError && events.length > 0 && (
+        <p className="security-audit-load-error" role="alert">
+          <CircleAlert size={14} aria-hidden />
+          {t("approvals.audit.error")}: {loadMoreError}
+        </p>
+      )}
+
+      {!error && events.length > 0 && nextCursor && (
+        <div className="security-audit-footer">
+          <button
+            type="button"
+            className="mcp-btn-ghost"
+            onClick={() => void loadMore()}
+            disabled={loading || loadingMore}
+          >
+            {loadingMore
+              ? t("approvals.audit.loadingMore")
+              : t("approvals.audit.loadMore")}
+          </button>
+        </div>
       )}
     </section>
   );

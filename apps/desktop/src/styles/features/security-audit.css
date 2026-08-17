@@ -181,6 +181,27 @@
   color: var(--danger, #d95d5d);
 }
 
+.security-audit-footer {
+  display: flex;
+  justify-content: center;
+  padding-top: 10px;
+}
+
+.security-audit-footer .mcp-btn-ghost {
+  min-width: 104px;
+  justify-content: center;
+}
+
+.security-audit-load-error {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin: 10px 0 0;
+  color: var(--danger, #d95d5d);
+  font-size: 11px;
+}
+
 @keyframes security-audit-spin {
   to {
     transform: rotate(360deg);

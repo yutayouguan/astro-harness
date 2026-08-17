@@ -254,6 +254,15 @@ pub fn list_recent_sandbox_audits(
     base: &Path,
     limit: usize,
 ) -> anyhow::Result<Vec<SandboxAuditEvent>> {
+    list_sandbox_audits_before(base, None, limit)
+}
+
+/// 读取游标之前最近的沙箱审计，结果保持从旧到新的文件顺序。
+pub fn list_sandbox_audits_before(
+    base: &Path,
+    before: Option<(&str, &str)>,
+    limit: usize,
+) -> anyhow::Result<Vec<SandboxAuditEvent>> {
     if limit == 0 {
         return Ok(Vec::new());
     }
@@ -271,8 +280,13 @@ pub fn list_recent_sandbox_audits(
             if line.trim().is_empty() {
                 continue;
             }
-            match serde_json::from_str(&line) {
+            match serde_json::from_str::<SandboxAuditEvent>(&line) {
                 Ok(event) => {
+                    if before.is_some_and(|cursor| {
+                        (event.created_at.as_str(), event.id.as_str()) >= cursor
+                    }) {
+                        continue;
+                    }
                     events.push_back(event);
                     if events.len() > limit {
                         events.pop_front();
@@ -389,6 +403,16 @@ mod tests {
                 .map(|event| event.id.as_str())
                 .collect::<Vec<_>>(),
             vec!["event-3", "event-4"]
+        );
+        let before =
+            list_sandbox_audits_before(dir.path(), Some(("2026-08-17T00:00:04Z", "event-4")), 2)
+                .unwrap();
+        assert_eq!(
+            before
+                .iter()
+                .map(|event| event.id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["event-2", "event-3"]
         );
     }
 }
