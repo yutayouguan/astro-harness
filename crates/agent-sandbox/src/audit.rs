@@ -174,6 +174,30 @@ pub fn sandbox_audit_archive_path(base: &Path, index: usize) -> PathBuf {
     audit_dir(base).join(format!("sandbox.{index}.jsonl"))
 }
 
+/// 删除当前沙箱审计及其轮转归档，返回已删除文件数与字节数。
+pub fn clear_sandbox_audits(base: &Path) -> anyhow::Result<(usize, u64)> {
+    let _guard = AUDIT_WRITE_LOCK
+        .get_or_init(|| Mutex::new(()))
+        .lock()
+        .map_err(|_| anyhow::anyhow!("sandbox audit write lock poisoned"))?;
+    let paths = std::iter::once(sandbox_audit_path(base)).chain(
+        (1..=SANDBOX_AUDIT_ARCHIVE_COUNT).map(|index| sandbox_audit_archive_path(base, index)),
+    );
+    let mut files_removed = 0usize;
+    let mut bytes_removed = 0u64;
+    for path in paths {
+        let metadata = match fs::symlink_metadata(&path) {
+            Ok(metadata) => metadata,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => continue,
+            Err(error) => return Err(error.into()),
+        };
+        fs::remove_file(&path)?;
+        files_removed += 1;
+        bytes_removed = bytes_removed.saturating_add(metadata.len());
+    }
+    Ok((files_removed, bytes_removed))
+}
+
 pub fn append_sandbox_audit(base: &Path, event: &SandboxAuditEvent) -> anyhow::Result<()> {
     append_sandbox_audit_with_policy(
         base,
@@ -414,5 +438,33 @@ mod tests {
                 .collect::<Vec<_>>(),
             vec!["event-2", "event-3"]
         );
+    }
+
+    #[test]
+    fn clear_removes_active_and_rotated_sandbox_audits() {
+        let dir = tempfile::tempdir().unwrap();
+        let sample = test_event(0);
+        let max_file_bytes = serde_json::to_vec(&sample).unwrap().len() as u64 + 2;
+        for id in 0..4 {
+            append_sandbox_audit_with_policy(dir.path(), &test_event(id), max_file_bytes, 2)
+                .unwrap();
+        }
+        let expected_bytes = [
+            sandbox_audit_path(dir.path()),
+            sandbox_audit_archive_path(dir.path(), 1),
+            sandbox_audit_archive_path(dir.path(), 2),
+        ]
+        .iter()
+        .map(|path| path.metadata().unwrap().len())
+        .sum::<u64>();
+
+        let (files_removed, bytes_removed) = clear_sandbox_audits(dir.path()).unwrap();
+
+        assert_eq!(files_removed, 3);
+        assert_eq!(bytes_removed, expected_bytes);
+        assert!(list_recent_sandbox_audits(dir.path(), 10)
+            .unwrap()
+            .is_empty());
+        assert_eq!(clear_sandbox_audits(dir.path()).unwrap(), (0, 0));
     }
 }

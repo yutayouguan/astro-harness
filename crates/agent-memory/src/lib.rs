@@ -42,10 +42,11 @@ pub use pending::{
     pending_dir, reject as reject_pending_memory, PendingMemoryWrite,
 };
 pub use permission_audit::{
-    append_permission_audit, list_permission_audits_before, list_recent_permission_audits,
-    permission_audit_archive_path, permission_audit_path, permission_snapshot_hash,
-    try_append_permission_audit, PermissionAuditCapability, PermissionAuditEvent,
-    PermissionAuditKind, MAX_PERMISSION_AUDIT_FILE_BYTES, PERMISSION_AUDIT_ARCHIVE_COUNT,
+    append_permission_audit, clear_permission_audits, list_permission_audits_before,
+    list_recent_permission_audits, permission_audit_archive_path, permission_audit_path,
+    permission_snapshot_hash, try_append_permission_audit, PermissionAuditCapability,
+    PermissionAuditEvent, PermissionAuditKind, MAX_PERMISSION_AUDIT_FILE_BYTES,
+    PERMISSION_AUDIT_ARCHIVE_COUNT,
 };
 pub use review::{
     apply_review_suggestions, build_review_digest, parse_review_llm_output, ReviewOutput,

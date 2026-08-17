@@ -180,6 +180,31 @@ pub fn permission_audit_archive_path(base: &Path, index: usize) -> PathBuf {
     audit_dir(base).join(format!("permissions.{index}.jsonl"))
 }
 
+/// 删除当前权限审计及其轮转归档，返回已删除文件数与字节数。
+pub fn clear_permission_audits(base: &Path) -> anyhow::Result<(usize, u64)> {
+    let _guard = AUDIT_WRITE_LOCK
+        .get_or_init(|| Mutex::new(()))
+        .lock()
+        .map_err(|_| anyhow::anyhow!("permission audit write lock poisoned"))?;
+    let paths = std::iter::once(permission_audit_path(base)).chain(
+        (1..=PERMISSION_AUDIT_ARCHIVE_COUNT)
+            .map(|index| permission_audit_archive_path(base, index)),
+    );
+    let mut files_removed = 0usize;
+    let mut bytes_removed = 0u64;
+    for path in paths {
+        let metadata = match fs::symlink_metadata(&path) {
+            Ok(metadata) => metadata,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => continue,
+            Err(error) => return Err(error.into()),
+        };
+        fs::remove_file(&path)?;
+        files_removed += 1;
+        bytes_removed = bytes_removed.saturating_add(metadata.len());
+    }
+    Ok((files_removed, bytes_removed))
+}
+
 pub fn append_permission_audit(base: &Path, event: &PermissionAuditEvent) -> anyhow::Result<()> {
     append_permission_audit_with_policy(
         base,
@@ -416,5 +441,33 @@ mod tests {
                 .collect::<Vec<_>>(),
             vec!["event-2", "event-3"]
         );
+    }
+
+    #[test]
+    fn clear_removes_active_and_rotated_permission_audits() {
+        let dir = tempfile::tempdir().unwrap();
+        let sample = test_event(0);
+        let max_file_bytes = serde_json::to_vec(&sample).unwrap().len() as u64 + 2;
+        for id in 0..4 {
+            append_permission_audit_with_policy(dir.path(), &test_event(id), max_file_bytes, 2)
+                .unwrap();
+        }
+        let expected_bytes = [
+            permission_audit_path(dir.path()),
+            permission_audit_archive_path(dir.path(), 1),
+            permission_audit_archive_path(dir.path(), 2),
+        ]
+        .iter()
+        .map(|path| path.metadata().unwrap().len())
+        .sum::<u64>();
+
+        let (files_removed, bytes_removed) = clear_permission_audits(dir.path()).unwrap();
+
+        assert_eq!(files_removed, 3);
+        assert_eq!(bytes_removed, expected_bytes);
+        assert!(list_recent_permission_audits(dir.path(), 10)
+            .unwrap()
+            .is_empty());
+        assert_eq!(clear_permission_audits(dir.path()).unwrap(), (0, 0));
     }
 }

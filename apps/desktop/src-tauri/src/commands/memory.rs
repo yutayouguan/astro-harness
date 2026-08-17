@@ -290,6 +290,30 @@ pub struct SecurityAuditExportResultDto {
     pub event_count: usize,
 }
 
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SecurityAuditRetentionSourceDto {
+    pub source: &'static str,
+    pub max_file_bytes: u64,
+    pub archive_count: usize,
+    pub retained_file_count: usize,
+    pub max_total_bytes: u64,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SecurityAuditRetentionDto {
+    pub sources: [SecurityAuditRetentionSourceDto; 2],
+    pub max_total_bytes: u64,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SecurityAuditClearResultDto {
+    pub files_removed: usize,
+    pub bytes_removed: u64,
+}
+
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct SecurityAuditExportFile {
@@ -427,6 +451,45 @@ fn collect_security_audits_for_export(
     Ok(events)
 }
 
+fn security_audit_retention() -> SecurityAuditRetentionDto {
+    let permission_file_count = memory::PERMISSION_AUDIT_ARCHIVE_COUNT.saturating_add(1);
+    let permission_max_total = memory::MAX_PERMISSION_AUDIT_FILE_BYTES
+        .saturating_mul(u64::try_from(permission_file_count).unwrap_or(u64::MAX));
+    let sandbox_file_count = sandbox::SANDBOX_AUDIT_ARCHIVE_COUNT.saturating_add(1);
+    let sandbox_max_total = sandbox::MAX_SANDBOX_AUDIT_FILE_BYTES
+        .saturating_mul(u64::try_from(sandbox_file_count).unwrap_or(u64::MAX));
+    SecurityAuditRetentionDto {
+        sources: [
+            SecurityAuditRetentionSourceDto {
+                source: "permission",
+                max_file_bytes: memory::MAX_PERMISSION_AUDIT_FILE_BYTES,
+                archive_count: memory::PERMISSION_AUDIT_ARCHIVE_COUNT,
+                retained_file_count: permission_file_count,
+                max_total_bytes: permission_max_total,
+            },
+            SecurityAuditRetentionSourceDto {
+                source: "sandbox",
+                max_file_bytes: sandbox::MAX_SANDBOX_AUDIT_FILE_BYTES,
+                archive_count: sandbox::SANDBOX_AUDIT_ARCHIVE_COUNT,
+                retained_file_count: sandbox_file_count,
+                max_total_bytes: sandbox_max_total,
+            },
+        ],
+        max_total_bytes: permission_max_total.saturating_add(sandbox_max_total),
+    }
+}
+
+fn clear_security_audits_from(
+    root: &std::path::Path,
+) -> anyhow::Result<SecurityAuditClearResultDto> {
+    let (permission_files, permission_bytes) = memory::clear_permission_audits(root)?;
+    let (sandbox_files, sandbox_bytes) = sandbox::clear_sandbox_audits(root)?;
+    Ok(SecurityAuditClearResultDto {
+        files_removed: permission_files.saturating_add(sandbox_files),
+        bytes_removed: permission_bytes.saturating_add(sandbox_bytes),
+    })
+}
+
 fn export_security_audits_to(
     root: &std::path::Path,
     path: &std::path::Path,
@@ -553,6 +616,18 @@ pub async fn export_security_audits(
     export_security_audits_to(&home::default_memory_dir(), &path, &source, limit)
         .map(Some)
         .map_err(|error| error.to_string())
+}
+
+/// 返回权限与沙箱审计的轮转保留上限。
+#[tauri::command]
+pub async fn get_security_audit_retention() -> Result<SecurityAuditRetentionDto, String> {
+    Ok(security_audit_retention())
+}
+
+/// 清除权限与沙箱审计的当前文件及轮转归档。
+#[tauri::command]
+pub async fn clear_security_audits() -> Result<SecurityAuditClearResultDto, String> {
+    clear_security_audits_from(&home::default_memory_dir()).map_err(|error| error.to_string())
 }
 
 /// 读取危险命令审批设置。
@@ -816,5 +891,22 @@ mod security_audit_tests {
             10,
         )
         .is_err());
+
+        let retention = security_audit_retention();
+        assert_eq!(retention.sources[0].source, "permission");
+        assert_eq!(retention.sources[1].source, "sandbox");
+        assert_eq!(
+            retention.max_total_bytes,
+            retention.sources[0]
+                .max_total_bytes
+                .saturating_add(retention.sources[1].max_total_bytes)
+        );
+
+        let cleared = clear_security_audits_from(dir.path()).unwrap();
+        assert_eq!(cleared.files_removed, 2);
+        assert!(cleared.bytes_removed > 0);
+        assert!(list_security_audits_from(dir.path(), 10)
+            .unwrap()
+            .is_empty());
     }
 }

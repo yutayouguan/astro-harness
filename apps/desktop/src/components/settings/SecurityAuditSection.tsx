@@ -7,8 +7,10 @@ import {
   ScrollText,
   ShieldCheck,
   TerminalSquare,
+  Trash2,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useConfirm } from "../../hooks/ui/DialogContext";
 import { useI18n } from "../../i18n/LocaleContext";
 import type { MessageKey } from "../../i18n/messages";
 import "../../styles/features/security-audit.css";
@@ -49,6 +51,22 @@ type SecurityAuditPage = {
 
 type SecurityAuditExportResult = {
   eventCount: number;
+};
+
+type SecurityAuditRetention = {
+  sources: {
+    source: AuditSource;
+    maxFileBytes: number;
+    archiveCount: number;
+    retainedFileCount: number;
+    maxTotalBytes: number;
+  }[];
+  maxTotalBytes: number;
+};
+
+type SecurityAuditClearResult = {
+  filesRemoved: number;
+  bytesRemoved: number;
 };
 
 const AUDIT_PAGE_SIZE = 50;
@@ -106,13 +124,27 @@ function formatTimestamp(value: string): string {
   }).format(date);
 }
 
+function formatFileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  const units = ["KB", "MB", "GB"];
+  let value = bytes / 1024;
+  let unit = units[0];
+  for (let index = 1; index < units.length && value >= 1024; index += 1) {
+    value /= 1024;
+    unit = units[index];
+  }
+  return `${new Intl.NumberFormat(undefined, { maximumFractionDigits: 1 }).format(value)} ${unit}`;
+}
+
 function totalCapabilityTargets(event: SecurityAuditEvent): number {
   return event.capabilities.reduce((sum, item) => sum + item.targetCount, 0);
 }
 
 export default function SecurityAuditSection({ active }: { active: boolean }) {
   const { t } = useI18n();
+  const confirm = useConfirm();
   const [events, setEvents] = useState<SecurityAuditEvent[]>([]);
+  const [retention, setRetention] = useState<SecurityAuditRetention | null>(null);
   const [filter, setFilter] = useState<AuditFilter>("all");
   const [loading, setLoading] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -122,6 +154,9 @@ export default function SecurityAuditSection({ active }: { active: boolean }) {
   const [exporting, setExporting] = useState(false);
   const [exportResult, setExportResult] = useState<SecurityAuditExportResult | null>(null);
   const [exportError, setExportError] = useState<string | null>(null);
+  const [clearing, setClearing] = useState(false);
+  const [clearResult, setClearResult] = useState<SecurityAuditClearResult | null>(null);
+  const [clearError, setClearError] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     if (!active || !isTauri()) return;
@@ -130,13 +165,19 @@ export default function SecurityAuditSection({ active }: { active: boolean }) {
     setLoadMoreError(null);
     setExportResult(null);
     setExportError(null);
+    setClearResult(null);
+    setClearError(null);
     try {
-      const page = await invoke<SecurityAuditPage>("list_security_audit_page", {
-        limit: AUDIT_PAGE_SIZE,
-        cursor: null,
-      });
+      const [page, nextRetention] = await Promise.all([
+        invoke<SecurityAuditPage>("list_security_audit_page", {
+          limit: AUDIT_PAGE_SIZE,
+          cursor: null,
+        }),
+        invoke<SecurityAuditRetention>("get_security_audit_retention"),
+      ]);
       setEvents(page.items);
       setNextCursor(page.nextCursor);
+      setRetention(nextRetention);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : String(reason));
     } finally {
@@ -145,7 +186,7 @@ export default function SecurityAuditSection({ active }: { active: boolean }) {
   }, [active]);
 
   const loadMore = useCallback(async () => {
-    if (!active || !isTauri() || !nextCursor || loading || loadingMore) return;
+    if (!active || !isTauri() || !nextCursor || loading || loadingMore || clearing) return;
     setLoadingMore(true);
     setLoadMoreError(null);
     try {
@@ -163,7 +204,7 @@ export default function SecurityAuditSection({ active }: { active: boolean }) {
     } finally {
       setLoadingMore(false);
     }
-  }, [active, loading, loadingMore, nextCursor]);
+  }, [active, clearing, loading, loadingMore, nextCursor]);
 
   useEffect(() => {
     void refresh();
@@ -180,7 +221,7 @@ export default function SecurityAuditSection({ active }: { active: boolean }) {
   }, [filter]);
 
   const exportVisible = useCallback(async () => {
-    if (!isTauri() || visible.length === 0 || exporting) return;
+    if (!isTauri() || visible.length === 0 || exporting || clearing) return;
     setExporting(true);
     setExportResult(null);
     setExportError(null);
@@ -195,7 +236,58 @@ export default function SecurityAuditSection({ active }: { active: boolean }) {
     } finally {
       setExporting(false);
     }
-  }, [exporting, filter, visible.length]);
+  }, [clearing, exporting, filter, visible.length]);
+
+  const retentionSources = useMemo(() => {
+    if (!retention) return null;
+    return retention.sources
+      .map((source) =>
+        t("approvals.audit.retentionSource", {
+          source: t(
+            source.source === "permission"
+              ? "approvals.audit.filter.permission"
+              : "approvals.audit.filter.sandbox",
+          ),
+          files: String(source.retainedFileCount),
+          size: formatFileSize(source.maxFileBytes),
+        }),
+      )
+      .join(" · ");
+  }, [retention, t]);
+
+  const clearAll = useCallback(async () => {
+    if (
+      !isTauri() ||
+      clearing ||
+      loading ||
+      loadingMore ||
+      exporting ||
+      events.length === 0
+    )
+      return;
+    const approved = await confirm({
+      title: t("approvals.audit.clearConfirmTitle"),
+      message: t("approvals.audit.clearConfirmMessage"),
+      confirmLabel: t("approvals.audit.clearConfirmAction"),
+      variant: "danger",
+    });
+    if (!approved) return;
+    setClearing(true);
+    setClearResult(null);
+    setClearError(null);
+    setExportResult(null);
+    setExportError(null);
+    try {
+      const result = await invoke<SecurityAuditClearResult>("clear_security_audits");
+      setEvents([]);
+      setNextCursor(null);
+      setClearResult(result);
+    } catch (reason) {
+      setClearError(reason instanceof Error ? reason.message : String(reason));
+    } finally {
+      setClearing(false);
+    }
+  }, [clearing, confirm, events.length, exporting, loading, loadingMore, t]);
 
   return (
     <section className="tools-detail-section security-audit-section">
@@ -212,7 +304,7 @@ export default function SecurityAuditSection({ active }: { active: boolean }) {
             type="button"
             className="mcp-btn-ghost"
             onClick={() => void exportVisible()}
-            disabled={loading || loadingMore || exporting || visible.length === 0}
+            disabled={loading || loadingMore || exporting || clearing || visible.length === 0}
             aria-label={t("approvals.audit.export")}
             title={t("approvals.audit.exportHint")}
           >
@@ -223,7 +315,7 @@ export default function SecurityAuditSection({ active }: { active: boolean }) {
             type="button"
             className="mcp-btn-ghost security-audit-refresh"
             onClick={() => void refresh()}
-            disabled={loading || loadingMore || exporting}
+            disabled={loading || loadingMore || exporting || clearing}
             aria-label={t("approvals.audit.refresh")}
             title={t("approvals.audit.refresh")}
           >
@@ -232,6 +324,27 @@ export default function SecurityAuditSection({ active }: { active: boolean }) {
           </button>
         </div>
       </header>
+
+      {retention && retentionSources && (
+        <div className="security-audit-retention">
+          <p>
+            <span>{t("approvals.audit.retentionLabel")}</span>
+            {t("approvals.audit.retention", {
+              sources: retentionSources,
+              total: formatFileSize(retention.maxTotalBytes),
+            })}
+          </p>
+          <button
+            type="button"
+            className="mcp-btn-ghost security-audit-clear"
+            onClick={() => void clearAll()}
+            disabled={loading || loadingMore || exporting || clearing || events.length === 0}
+          >
+            <Trash2 size={14} aria-hidden />
+            {clearing ? t("approvals.audit.clearing") : t("approvals.audit.clear")}
+          </button>
+        </div>
+      )}
 
       <div className="security-audit-toolbar">
         <div
@@ -280,6 +393,29 @@ export default function SecurityAuditSection({ active }: { active: boolean }) {
               <CheckCircle2 size={14} aria-hidden />
               {t("approvals.audit.exported", {
                 n: String(exportResult?.eventCount ?? 0),
+              })}
+            </>
+          )}
+        </p>
+      )}
+
+      {(clearResult || clearError) && (
+        <p
+          className={`security-audit-export-status ${clearError ? "is-error" : ""}`}
+          role={clearError ? "alert" : "status"}
+          aria-live="polite"
+        >
+          {clearError ? (
+            <>
+              <CircleAlert size={14} aria-hidden />
+              {t("approvals.audit.clearError")}: {clearError}
+            </>
+          ) : (
+            <>
+              <CheckCircle2 size={14} aria-hidden />
+              {t("approvals.audit.cleared", {
+                files: String(clearResult?.filesRemoved ?? 0),
+                size: formatFileSize(clearResult?.bytesRemoved ?? 0),
               })}
             </>
           )}
@@ -356,7 +492,7 @@ export default function SecurityAuditSection({ active }: { active: boolean }) {
             type="button"
             className="mcp-btn-ghost"
             onClick={() => void loadMore()}
-            disabled={loading || loadingMore}
+            disabled={loading || loadingMore || clearing}
           >
             {loadingMore
               ? t("approvals.audit.loadingMore")
