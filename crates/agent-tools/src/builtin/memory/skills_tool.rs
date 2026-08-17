@@ -145,8 +145,8 @@ fn validate_skill_id(id: &str) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn list_skills() -> String {
-    let items = skills::list_enabled_for_prompt();
+fn list_skills(config: &[(PathBuf, bool)]) -> String {
+    let items = skills::list_enabled_for_prompt_with_config(config);
     if items.is_empty() {
         return "（无已启用技能）".to_string();
     }
@@ -162,9 +162,13 @@ fn list_skills() -> String {
     lines.join("\n")
 }
 
-fn load_skill(skill_id: &str, input: Option<serde_json::Value>) -> anyhow::Result<String> {
+fn load_skill(
+    skill_id: &str,
+    input: Option<serde_json::Value>,
+    config: &[(PathBuf, bool)],
+) -> anyhow::Result<String> {
     validate_skill_id(skill_id)?;
-    let loaded = skills::load_skill_by_name(skill_id)?;
+    let loaded = skills::load_skill_by_name_with_config(skill_id, config)?;
     let root = skill_root(&loaded.path);
     let scripts = list_script_rel_paths(&root);
     let path_section = format_path_section(&root, &scripts);
@@ -346,7 +350,7 @@ fn manage_skill(
 }
 
 /// 按 `action` 分发 skills 操作。
-pub fn dispatch(_ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow::Result<String> {
+pub fn dispatch(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow::Result<String> {
     let parsed: SkillsArgs = serde_json::from_value(args.clone())
         .map_err(|e| anyhow::anyhow!("skills 参数无效: {e}"))?;
 
@@ -358,7 +362,7 @@ pub fn dispatch(_ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow::Res
         .to_lowercase();
 
     match action.as_str() {
-        "list" => Ok(list_skills()),
+        "list" => Ok(list_skills(ctx.skill_config_overrides)),
         "curate" => {
             let days = memory::load_learning_config(&home::default_memory_dir()).unused_skill_days;
             Ok(skills::curate_report(days))
@@ -370,7 +374,7 @@ pub fn dispatch(_ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow::Res
                 .map(str::trim)
                 .filter(|s| !s.is_empty())
                 .ok_or_else(|| anyhow::anyhow!("skills load/view 需要 skill_id"))?;
-            load_skill(skill_id, parsed.input)
+            load_skill(skill_id, parsed.input, ctx.skill_config_overrides)
         }
         "manage" => {
             let skill_id = parsed

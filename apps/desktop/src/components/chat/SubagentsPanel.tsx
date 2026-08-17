@@ -2,29 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { Bot, RefreshCw, SendHorizontal, Square, X } from "lucide-react";
 import { useI18n } from "../../i18n/LocaleContext";
-
-type ThreadStatus =
-  | "pending"
-  | "running"
-  | "completed"
-  | "failed"
-  | "interrupted"
-  | "closed";
-
-type AgentThread = {
-  id: string;
-  parent_session_id: string;
-  agent_name: string;
-  task: string;
-  status: ThreadStatus;
-  summary?: string | null;
-  error?: string | null;
-  model?: string | null;
-  model_reasoning_effort?: string | null;
-  sandbox_mode?: string | null;
-  created_at: string;
-  updated_at: string;
-};
+import type { SubagentThread, SubagentThreadStatus } from "../../hooks/chat/useSubagentThreads";
 
 type ThreadMessage = {
   id: number;
@@ -34,47 +12,35 @@ type ThreadMessage = {
 };
 
 type ThreadDetail = {
-  thread: AgentThread;
+  thread: SubagentThread;
   messages: ThreadMessage[];
 };
 
 type Props = {
   open: boolean;
   parentSessionId?: string | null;
+  threads: SubagentThread[];
+  initialThreadId?: string | null;
+  refreshThreads: () => Promise<void>;
   onClose: () => void;
 };
 
-const ACTIVE_STATUSES = new Set<ThreadStatus>(["pending", "running"]);
+const ACTIVE_STATUSES = new Set<SubagentThreadStatus>(["pending", "running"]);
 
-export default function SubagentsPanel({ open, parentSessionId, onClose }: Props) {
+export default function SubagentsPanel({
+  open,
+  parentSessionId,
+  threads,
+  initialThreadId,
+  refreshThreads,
+  onClose,
+}: Props) {
   const { t } = useI18n();
-  const [threads, setThreads] = useState<AgentThread[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [detail, setDetail] = useState<ThreadDetail | null>(null);
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  const loadThreads = useCallback(async () => {
-    if (!open || !parentSessionId) {
-      setThreads([]);
-      return;
-    }
-    try {
-      const next = await invoke<AgentThread[]>("list_subagent_threads", {
-        args: { parentSessionId, includeClosed: true },
-      });
-      setThreads(next);
-      setSelectedId((current) =>
-        current && next.some((thread) => thread.id === current)
-          ? current
-          : next[0]?.id ?? null,
-      );
-      setError(null);
-    } catch (reason) {
-      setError(String(reason));
-    }
-  }, [open, parentSessionId]);
 
   const loadDetail = useCallback(async (threadId: string) => {
     if (!parentSessionId) return;
@@ -91,10 +57,17 @@ export default function SubagentsPanel({ open, parentSessionId, onClose }: Props
 
   useEffect(() => {
     if (!open) return;
-    void loadThreads();
-    const timer = window.setInterval(() => void loadThreads(), 1500);
-    return () => window.clearInterval(timer);
-  }, [open, loadThreads]);
+    if (initialThreadId) setSelectedId(initialThreadId);
+  }, [open, initialThreadId]);
+
+  useEffect(() => {
+    if (!open) return;
+    setSelectedId((current) => {
+      return current && threads.some((thread) => thread.id === current)
+        ? current
+        : threads[0]?.id ?? null;
+    });
+  }, [open, threads]);
 
   useEffect(() => {
     if (!open || !selectedId) {
@@ -110,7 +83,7 @@ export default function SubagentsPanel({ open, parentSessionId, onClose }: Props
     () => threads.find((thread) => thread.id === selectedId) ?? detail?.thread ?? null,
     [threads, selectedId, detail],
   );
-  const statusLabels: Record<ThreadStatus, string> = {
+  const statusLabels: Record<SubagentThreadStatus, string> = {
     pending: t("subagents.status.pending"),
     running: t("subagents.status.running"),
     completed: t("subagents.status.completed"),
@@ -124,7 +97,7 @@ export default function SubagentsPanel({ open, parentSessionId, onClose }: Props
     setBusy(true);
     try {
       await invoke(command, { args: { parentSessionId, ...args } });
-      await loadThreads();
+      await refreshThreads();
       if (selectedId) await loadDetail(selectedId);
       setError(null);
     } catch (reason) {
@@ -156,7 +129,7 @@ export default function SubagentsPanel({ open, parentSessionId, onClose }: Props
             <p>{t("subagents.subtitle")}</p>
           </div>
           <div className="subagents-head-actions">
-            <button type="button" onClick={() => void loadThreads()} aria-label={t("subagents.refresh")}>
+            <button type="button" onClick={() => void refreshThreads()} aria-label={t("subagents.refresh")}>
               <RefreshCw size={15} />
             </button>
             <button type="button" onClick={onClose} aria-label={t("subagents.closePanel")}>

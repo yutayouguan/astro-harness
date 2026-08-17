@@ -59,8 +59,9 @@ pub use check::{
 };
 pub use install::{install_from_ref, InstallOriginHint};
 pub use installed::{
-    link_skill_to_agent, list_enabled_for_prompt, list_installed, list_installed_for_agent,
-    list_skill_files, list_skill_files_ex, load_skill_by_name, open_skill_file_externally,
+    link_skill_to_agent, list_enabled_for_prompt, list_enabled_for_prompt_with_config,
+    list_installed, list_installed_for_agent, list_skill_files, list_skill_files_ex,
+    load_skill_by_name, load_skill_by_name_with_config, open_skill_file_externally,
     open_skill_folder, parse_skill_frontmatter_full, read_skill_file, read_skill_file_ex,
     recent_astro_tools, reveal_skill_file, set_enabled, set_enabled_for_agent,
 };

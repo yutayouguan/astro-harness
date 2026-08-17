@@ -1,5 +1,6 @@
 //! 单轮工具调用执行：串行（HITL/危险命令走 park）与并发（普通工具）两条路径。
 
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use providers::PauseControl;
@@ -1135,6 +1136,7 @@ pub(crate) async fn execute_tools_concurrent(
             image_gen_targets: agent.image_gen_targets().clone(),
             execution: agent.execution(),
             permission_profile: agent.permission_profile().map(str::to_string),
+            skill_config_overrides: agent.skill_config_overrides.clone(),
             hook_bus: Some(agent.hook_bus()),
         }
     };
@@ -1197,6 +1199,7 @@ struct ToolExecSnapshot {
     image_gen_targets: types::ImageGenTargets,
     execution: Arc<dyn tools::AgentThreadDispatch>,
     permission_profile: Option<String>,
+    skill_config_overrides: Vec<(PathBuf, bool)>,
     hook_bus: Option<Arc<hooks::PluginHookBus>>,
 }
 
@@ -1247,6 +1250,7 @@ fn run_tool_on_snapshot(
             chat_targets: &snap.chat_targets,
             execution: Some(snap.execution.clone()),
             permission_profile: snap.permission_profile.clone(),
+            skill_config_overrides: &snap.skill_config_overrides,
             hook_bus: snap.hook_bus.clone(),
             workspace_write_grant: false,
             network_grant: tools::InProcessNetworkGrant::default(),

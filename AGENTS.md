@@ -167,7 +167,7 @@ Plugin bus 事件（可拦截/变更）：`pre_llm_call`、`pre_tool_call`、`pr
 
 ### Agent Threads
 
-`crates/agent-subagents` 是唯一 Subagent 模型。父 Agent 用 `spawn_agent` 启动独立线程，并可通过 `list_agents` / `read_agent` / `send_message_to_agent` / `wait_agents` / `interrupt_agent` / `close_agent` 管理。线程持久化到 `~/.astro/subagents.db`，凭证只在内存中传递，权限完整继承父任务，不隐式创建 git worktree。自定义 agent 从 `~/.astro/agents/*.toml` 和 `<project>/.astro/agents/*.toml` 加载，project 定义优先。
+`crates/agent-subagents` 是唯一 Subagent 模型。父 Agent 用 `spawn_agent` 启动独立线程，并可通过 `list_agents` / `read_agent` / `followup_task` / `wait_agent` / `interrupt_agent` / `close_agent` 管理（旧名 `send_message_to_agent` / `wait_agents` 兼容）。线程持久化到 `~/.astro/subagents.db`，凭证只在内存中传递，权限继承父任务且自定义 agent 仅可收窄，不隐式创建 git worktree。自定义 agent 规范路径为 `~/.codex/agents/*.toml` 和 `<project>/.codex/agents/*.toml`，`.astro/agents` 作为兼容层，project `.codex` 定义优先。
 
 ### 可视化工作流引擎
 

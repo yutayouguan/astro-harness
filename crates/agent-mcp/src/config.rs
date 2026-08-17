@@ -685,6 +685,24 @@ fn merge_servers(
     Ok(())
 }
 
+/// Decode an inline Codex `mcp_servers` table from a custom agent file.
+/// The resulting configs are an overlay; callers decide which inherited layer
+/// they replace.
+pub fn decode_inline_mcp_servers(
+    servers: &BTreeMap<String, toml::Value>,
+) -> anyhow::Result<Vec<McpServerConfig>> {
+    let mut decoded = BTreeMap::new();
+    for (id, value) in servers {
+        let server: TomlMcpServer = value
+            .clone()
+            .try_into()
+            .with_context(|| format!("decode inline MCP server {id}"))?;
+        let config = server.into_config(id.clone())?;
+        decoded.insert(config.id.clone(), config);
+    }
+    Ok(decoded.into_values().collect())
+}
+
 fn project_is_trusted(global: &McpTomlRoot, project_root: &Path) -> bool {
     let Ok(project_root) = project_root.canonicalize() else {
         return false;
@@ -865,6 +883,34 @@ mod tests {
     use tempfile::TempDir;
 
     static ENV_LOCK: Mutex<()> = Mutex::new(());
+
+    #[test]
+    fn decodes_inline_codex_agent_mcp_servers() {
+        let value: toml::Value = r#"
+[mcp_servers.docs]
+url = "https://example.invalid/mcp"
+startup_timeout_sec = 20
+enabled_tools = ["search"]
+"#
+        .parse()
+        .unwrap();
+        let servers = value
+            .get("mcp_servers")
+            .and_then(toml::Value::as_table)
+            .unwrap()
+            .iter()
+            .map(|(id, value)| (id.clone(), value.clone()))
+            .collect();
+        let decoded = decode_inline_mcp_servers(&servers).unwrap();
+        assert_eq!(decoded.len(), 1);
+        assert_eq!(decoded[0].id, "docs");
+        assert_eq!(decoded[0].url, "https://example.invalid/mcp");
+        assert_eq!(decoded[0].startup_timeout_secs, Some(20));
+        assert_eq!(
+            decoded[0].enabled_tools.as_ref().unwrap(),
+            &vec!["search".to_string()]
+        );
+    }
 
     #[test]
     fn roundtrip_and_defaults() {

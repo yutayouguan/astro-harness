@@ -274,6 +274,7 @@ mod tests {
             chat_targets: &[],
             execution: None,
             permission_profile: None,
+            skill_config_overrides: &[],
             hook_bus: None,
             workspace_write_grant: false,
             network_grant: crate::InProcessNetworkGrant::default(),

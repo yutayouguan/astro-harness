@@ -52,8 +52,8 @@ Explain and retrieve; do not modify files or run side effects. To implement, cal
             }
             Self::Multitask => {
                 "# Interaction mode: MultiTask / 交互模式：MultiTask\n\
-Spawn first-class agent threads with spawn_agent, inspect or steer them as needed, wait with wait_agents, then summarize.\n\
-用 spawn_agent 并行启动独立 Agent Thread，按需检查或追问，用 wait_agents 等待后汇总。"
+Spawn first-class agent threads with spawn_agent, inspect or steer them as needed, wait with wait_agent, then summarize.\n\
+用 spawn_agent 并行启动独立 Agent Thread，按需检查或追问，用 wait_agent 等待后汇总。"
             }
         }
     }

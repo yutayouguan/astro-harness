@@ -120,6 +120,7 @@ impl AgentLoop {
             chat_targets: &self.model_ctx.chat_targets,
             execution,
             permission_profile: self.permission_profile.clone(),
+            skill_config_overrides: &self.skill_config_overrides,
             hook_bus,
             workspace_write_grant,
             network_grant,

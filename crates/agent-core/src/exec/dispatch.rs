@@ -241,6 +241,8 @@ mod tests {
             model: None,
             model_reasoning_effort: None,
             sandbox_mode: None,
+            mcp_servers: Default::default(),
+            skills_config: Vec::new(),
             chat_targets: Vec::new(),
             project_root: None,
             hook_bus: None,

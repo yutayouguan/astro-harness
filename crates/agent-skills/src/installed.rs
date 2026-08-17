@@ -385,6 +385,90 @@ pub fn list_enabled_for_prompt() -> Vec<(String, String)> {
         .collect()
 }
 
+fn configured_skill_md(path: &Path) -> PathBuf {
+    if path.is_dir() || path.extension().is_none() {
+        path.join("SKILL.md")
+    } else {
+        path.to_path_buf()
+    }
+}
+
+fn same_skill_path(left: &Path, right: &Path) -> bool {
+    let left = left.canonicalize().unwrap_or_else(|_| left.to_path_buf());
+    let right = right.canonicalize().unwrap_or_else(|_| right.to_path_buf());
+    left == right
+}
+
+fn configured_skill(path: &Path, enabled: bool) -> Result<(LoadedSkill, bool)> {
+    let skill_md = configured_skill_md(path);
+    let content =
+        fs::read_to_string(&skill_md).with_context(|| format!("读取 {}", skill_md.display()))?;
+    let mut metadata = parse_skill_frontmatter_full(&content);
+    if metadata.name.trim().is_empty() {
+        metadata.name = skill_md
+            .parent()
+            .and_then(Path::file_name)
+            .and_then(|name| name.to_str())
+            .unwrap_or("configured-skill")
+            .to_string();
+    }
+    Ok((
+        LoadedSkill {
+            metadata,
+            path: skill_md,
+            content,
+        },
+        enabled,
+    ))
+}
+
+/// Apply a child-session `[[skills.config]]` layer without mutating the
+/// parent's persisted enable state. Later entries win for the same path.
+pub fn list_enabled_for_prompt_with_config(config: &[(PathBuf, bool)]) -> Vec<(String, String)> {
+    if config.is_empty() {
+        return list_enabled_for_prompt();
+    }
+    let mut out = Vec::new();
+    let installed = list_installed();
+    for skill in installed {
+        let skill_path = Path::new(&skill.path);
+        let enabled = config
+            .iter()
+            .rev()
+            .find(|(path, _)| same_skill_path(&configured_skill_md(path), skill_path))
+            .map_or(skill.enabled, |(_, enabled)| *enabled);
+        if enabled {
+            out.push((skill.name, skill.description));
+        }
+    }
+    for (path, enabled) in config {
+        if !enabled {
+            continue;
+        }
+        let skill_md = configured_skill_md(path);
+        if out.iter().any(|(name, _)| {
+            installed_skill_path_by_name(name)
+                .is_some_and(|existing| same_skill_path(&existing, &skill_md))
+        }) {
+            continue;
+        }
+        if let Ok((loaded, true)) = configured_skill(path, true) {
+            if !out.iter().any(|(name, _)| name == &loaded.metadata.name) {
+                out.push((loaded.metadata.name, loaded.metadata.description));
+            }
+        }
+    }
+    out.sort_by(|left, right| left.0.to_lowercase().cmp(&right.0.to_lowercase()));
+    out
+}
+
+fn installed_skill_path_by_name(name: &str) -> Option<PathBuf> {
+    list_installed()
+        .into_iter()
+        .find(|skill| skill.name == name)
+        .map(|skill| PathBuf::from(skill.path))
+}
+
 /// 设置某技能的启用状态（仅 Astro 范围）
 pub fn set_enabled(id: &str, enabled: bool) -> Result<()> {
     set_enabled_for_agent(active_agent_id().as_deref(), id, enabled)
@@ -535,6 +619,41 @@ pub fn load_skill_by_name(name: &str) -> Result<LoadedSkill> {
     }
     crate::usage::record_skill_load(name);
 
+    Ok(loaded)
+}
+
+/// Load a skill under an ephemeral child-session config layer.
+pub fn load_skill_by_name_with_config(
+    name: &str,
+    config: &[(PathBuf, bool)],
+) -> Result<LoadedSkill> {
+    for (path, enabled) in config.iter().rev() {
+        let Ok((loaded, configured_enabled)) = configured_skill(path, *enabled) else {
+            continue;
+        };
+        if loaded.metadata.name != name {
+            continue;
+        }
+        if !configured_enabled {
+            anyhow::bail!("技能已被当前 Agent 配置禁用: {name}");
+        }
+        if let Ok(mut guard) = RECENT_LOAD.lock() {
+            *guard = Some(RecentLoad {
+                name: name.to_string(),
+                astro_tools: loaded.metadata.astro_tools.clone(),
+                at: Instant::now(),
+            });
+        }
+        crate::usage::record_skill_load(name);
+        return Ok(loaded);
+    }
+
+    let loaded = load_skill_by_name(name)?;
+    if config.iter().rev().any(|(path, enabled)| {
+        !enabled && same_skill_path(&configured_skill_md(path), &loaded.path)
+    }) {
+        anyhow::bail!("技能已被当前 Agent 配置禁用: {name}");
+    }
     Ok(loaded)
 }
 
@@ -914,6 +1033,34 @@ mod tests {
     use crate::ENV_TEST_LOCK;
     use std::fs;
     use tempfile::tempdir;
+
+    #[test]
+    fn configured_skill_layer_is_ephemeral_and_enforced() {
+        let _guard = ENV_TEST_LOCK.blocking_lock();
+        let dir = tempdir().unwrap();
+        std::env::set_var("ASTRO_MEMORY_DIR", dir.path().join("astro"));
+        std::env::remove_var("ASTRO_WORKSPACE");
+        let skill_dir = dir.path().join("external/reviewer");
+        fs::create_dir_all(&skill_dir).unwrap();
+        let skill_md = skill_dir.join("SKILL.md");
+        fs::write(
+            &skill_md,
+            "---\nname: configured-reviewer\ndescription: child only\n---\n# Review\n",
+        )
+        .unwrap();
+
+        let enabled = vec![(skill_md.clone(), true)];
+        assert!(list_enabled_for_prompt_with_config(&enabled)
+            .iter()
+            .any(|(name, _)| name == "configured-reviewer"));
+        assert!(load_skill_by_name_with_config("configured-reviewer", &enabled).is_ok());
+
+        let disabled = vec![(skill_md, false)];
+        let error = load_skill_by_name_with_config("configured-reviewer", &disabled)
+            .unwrap_err()
+            .to_string();
+        assert!(error.contains("禁用"));
+    }
 
     #[test]
     fn scan_and_load_skill_by_name() {

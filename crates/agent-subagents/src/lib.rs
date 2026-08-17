@@ -11,7 +11,7 @@ mod store;
 
 pub use config::{
     load_agent_catalog, load_agents_settings, resolve_agent, AgentCatalog, AgentConfigDiagnostic,
-    AgentDefinition, AgentsSettings, ResolvedAgent,
+    AgentDefinition, AgentsSettings, ResolvedAgent, SkillConfigEntry, SkillsLayer,
 };
 pub use control::{AgentThreadCommand, AgentThreadControl, LiveAgentThreads};
 pub use model::{

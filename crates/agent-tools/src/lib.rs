@@ -188,6 +188,7 @@ mod inventory_register_tests {
             "ask_user",
             "spawn_agent",
             "wait_agents",
+            "wait_agent",
             "present",
             "file_ops",
             "web_search",

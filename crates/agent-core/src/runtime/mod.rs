@@ -121,6 +121,8 @@ pub struct AgentLoop {
     pub(crate) compression_policy: Box<dyn crate::compression::CompressionPolicy>,
     pub(crate) tool_registry: ToolRegistry,
     pub(crate) mcp_hub: Arc<TokioMutex<McpHub>>,
+    /// Per-thread MCP overlay from a Codex custom agent file.
+    pub(crate) mcp_config_override: Vec<mcp::McpServerConfig>,
     /// 最近一次成功 reload 后的已连接 Server instructions 快照。
     pub(crate) mcp_instructions: Vec<mcp::McpServerInstructions>,
 
@@ -136,6 +138,8 @@ pub struct AgentLoop {
     pub(crate) project_root: Option<PathBuf>,
     /// Per-session permission profile override. `None` inherits current workspace selection.
     pub(crate) permission_profile: Option<String>,
+    /// Ephemeral `[[skills.config]]` layer; never mutates parent enable state.
+    pub(crate) skill_config_overrides: Vec<(PathBuf, bool)>,
     /// `pre_llm_call` 注入的本轮附加上下文（不回写用户原文）。
     pub(crate) pending_inject_context: Option<String>,
     /// 上一轮复杂任务后挂起的学习 nudge（本轮注入 dynamic，下一次 begin_user_turn 清掉/重算）。
@@ -217,12 +221,14 @@ impl AgentLoop {
             compression_policy,
             tool_registry,
             mcp_hub,
+            mcp_config_override: Vec::new(),
             mcp_instructions: Vec::new(),
             hook_bus: Arc::new(::hooks::PluginHookBus::new()),
             execution,
             cancel: CancelSignal::new(),
             project_root: resolve_session_project_root(),
             permission_profile: None,
+            skill_config_overrides: Vec::new(),
             pending_inject_context: None,
             pending_learning_nudge: None,
             interaction_mode: types::InteractionMode::Agent,
@@ -591,6 +597,14 @@ impl AgentLoop {
         Arc::clone(&self.mcp_hub)
     }
 
+    pub fn set_mcp_config_override(&mut self, configs: Vec<mcp::McpServerConfig>) {
+        self.mcp_config_override = configs;
+    }
+
+    pub fn set_skill_config_overrides(&mut self, config: Vec<(PathBuf, bool)>) {
+        self.skill_config_overrides = config;
+    }
+
     /// 从磁盘重载当前 Agent 的工具启用开关（gate 配置）。
     pub fn reload_tool_gates(&mut self) {
         let agent_id = self.memory.agent_id.clone();
@@ -645,7 +659,19 @@ impl AgentLoop {
         let (reload_result, mcp_instructions) = {
             let mut hub = self.mcp_hub.lock().await;
             hub.set_execution_context(execution_context);
-            let reload_result = hub.reload_from_disk(Some(&agent_id)).await;
+            let reload_result = if self.mcp_config_override.is_empty() {
+                hub.reload_from_disk(Some(&agent_id)).await
+            } else {
+                let mut configs =
+                    mcp::load_mcp_servers_layered(Some(&agent_id), Some(&execution_root))?;
+                for overlay in &self.mcp_config_override {
+                    let id = mcp::sanitize_server_id(&overlay.id);
+                    configs.retain(|config| mcp::sanitize_server_id(&config.id) != id);
+                    configs.push(overlay.clone());
+                }
+                hub.set_agent_id(Some(agent_id.clone()));
+                hub.reload_with_configs(configs).await
+            };
             let instructions = hub.server_instructions();
             (reload_result, instructions)
         };

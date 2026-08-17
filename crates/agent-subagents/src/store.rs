@@ -295,6 +295,8 @@ mod tests {
             model: None,
             model_reasoning_effort: None,
             sandbox_mode: Some("read-only".into()),
+            mcp_servers: Default::default(),
+            skills_config: Vec::new(),
             chat_targets: vec![],
             project_root: None,
             hook_bus: None,

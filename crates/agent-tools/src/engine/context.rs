@@ -47,6 +47,8 @@ pub struct ToolContext<'a> {
     pub execution: Option<Arc<dyn crate::AgentThreadDispatch>>,
     /// 当前会话的权限 profile；子 Agent 缺省继承，可由 custom agent 收紧。
     pub permission_profile: Option<String>,
+    /// Ephemeral custom-agent skill enable/disable layer.
+    pub skill_config_overrides: &'a [(PathBuf, bool)],
     /// 插件钩子总线（由 AgentLoop 注入；无 bus 时对应工具跳过 transform 钩子）。
     pub hook_bus: Option<Arc<hooks::PluginHookBus>>,
     /// 当前单次工具调用已获得 workspace-write 临时授权。
@@ -184,6 +186,7 @@ mod tests {
             chat_targets: &[],
             execution: None,
             permission_profile: None,
+            skill_config_overrides: &[],
             hook_bus: None,
             workspace_write_grant: true,
             network_grant: InProcessNetworkGrant::default(),

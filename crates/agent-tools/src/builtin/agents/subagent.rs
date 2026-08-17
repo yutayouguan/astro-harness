@@ -9,7 +9,8 @@ use crate::schema::schema_for_args;
 
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 struct SpawnAgentArgs {
-    task: String,
+    #[serde(default, alias = "message")]
+    task: Option<String>,
     #[serde(default)]
     agent: Option<String>,
     #[serde(default)]
@@ -29,12 +30,14 @@ struct ListAgentsArgs {
 
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 struct ThreadIdArgs {
-    thread_id: String,
+    #[serde(default, alias = "target")]
+    thread_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 struct SendMessageArgs {
-    thread_id: String,
+    #[serde(default, alias = "target")]
+    thread_id: Option<String>,
     message: String,
 }
 
@@ -42,6 +45,8 @@ struct SendMessageArgs {
 struct WaitAgentsArgs {
     #[serde(default)]
     thread_ids: Vec<String>,
+    #[serde(default, alias = "thread_id")]
+    target: Option<String>,
     #[serde(default)]
     timeout_ms: Option<u64>,
 }
@@ -87,9 +92,38 @@ pub fn register(registry: &mut ToolRegistry) {
         ..lifecycle()
     });
     registry.register(ToolEntry {
+        name: "followup_task".into(),
+        toolset: "subagents".into(),
+        description: "Codex-compatible alias: steer a subagent thread with a follow-up task."
+            .into(),
+        schema: schema_for_args::<SendMessageArgs>(),
+        check_fn: None,
+        icon: "send",
+        ..lifecycle()
+    });
+    registry.register(ToolEntry {
+        name: "send_message".into(),
+        toolset: "subagents".into(),
+        description: "Codex-compatible alias: send a message to an existing subagent thread."
+            .into(),
+        schema: schema_for_args::<SendMessageArgs>(),
+        check_fn: None,
+        icon: "send",
+        ..lifecycle()
+    });
+    registry.register(ToolEntry {
         name: "wait_agents".into(),
         toolset: "subagents".into(),
         description: "Wait for requested subagent threads to finish their current turns and return their summaries.".into(),
+        schema: schema_for_args::<WaitAgentsArgs>(),
+        check_fn: None,
+        icon: "clock",
+        ..lifecycle()
+    });
+    registry.register(ToolEntry {
+        name: "wait_agent".into(),
+        toolset: "subagents".into(),
+        description: "Codex-compatible alias: wait for one target thread, or all active threads when target is omitted.".into(),
         schema: schema_for_args::<WaitAgentsArgs>(),
         check_fn: None,
         icon: "clock",
@@ -122,7 +156,10 @@ crate::submit_builtin_tool! {
         "list_agents",
         "read_agent",
         "send_message_to_agent",
+        "followup_task",
+        "send_message",
         "wait_agents",
+        "wait_agent",
         "interrupt_agent",
         "close_agent"
     ],
@@ -141,7 +178,7 @@ async fn handle(
     match name {
         "spawn_agent" => {
             let parsed: SpawnAgentArgs = parse(name, args)?;
-            let task = parsed.task.trim();
+            let task = parsed.task.as_deref().unwrap_or_default().trim();
             if task.is_empty() {
                 anyhow::bail!("spawn_agent requires a non-empty task");
             }
@@ -176,16 +213,19 @@ async fn handle(
                     settings.max_concurrent_threads_per_session
                 );
             }
+            let definition = resolved.definition;
             let request = subagents::SpawnAgentRequest {
                 parent_session_id: ctx.session_id.clone(),
                 parent_agent_id: ctx.memory.agent_id.clone(),
                 task: task.to_string(),
-                agent_name: resolved.definition.name,
-                developer_instructions: resolved.definition.developer_instructions,
+                agent_name: definition.name,
+                developer_instructions: definition.developer_instructions,
                 context_snapshot: fork_context(ctx, parsed.fork_turns.as_deref())?,
                 model: resolved.model,
                 model_reasoning_effort: resolved.model_reasoning_effort,
                 sandbox_mode: resolved.sandbox_mode,
+                mcp_servers: definition.mcp_servers,
+                skills_config: definition.skills.config,
                 chat_targets: ctx.chat_targets.to_vec(),
                 project_root: ctx.project_root.clone(),
                 hook_bus: ctx.hook_bus.clone(),
@@ -211,12 +251,12 @@ async fn handle(
             let (thread, messages) = dispatch
                 .read_agent(subagents::ReadAgentThreadRequest {
                     parent_session_id: ctx.session_id.clone(),
-                    thread_id: non_empty_id(&parsed.thread_id)?.to_string(),
+                    thread_id: parsed.thread_id()?,
                 })
                 .await?;
             Ok(serde_json::json!({ "thread": thread, "messages": messages }).to_string())
         }
-        "send_message_to_agent" => {
+        "send_message_to_agent" | "followup_task" | "send_message" => {
             let parsed: SendMessageArgs = parse(name, args)?;
             if parsed.message.trim().is_empty() {
                 anyhow::bail!("send_message_to_agent requires a non-empty message");
@@ -225,15 +265,16 @@ async fn handle(
                 &dispatch
                     .send_message(subagents::SendAgentMessageRequest {
                         parent_session_id: ctx.session_id.clone(),
-                        thread_id: non_empty_id(&parsed.thread_id)?.to_string(),
+                        thread_id: parsed.thread_id()?,
                         message: parsed.message.trim().to_string(),
                     })
                     .await?,
             )?)
         }
-        "wait_agents" => {
+        "wait_agents" | "wait_agent" => {
             let parsed: WaitAgentsArgs = parse(name, args)?;
-            let ids = if parsed.thread_ids.is_empty() {
+            let requested_ids = parsed.requested_ids();
+            let ids = if requested_ids.is_empty() {
                 dispatch
                     .list_agents(subagents::ListAgentThreadsRequest {
                         parent_session_id: ctx.session_id.clone(),
@@ -251,7 +292,7 @@ async fn handle(
                     .map(|thread| thread.id)
                     .collect()
             } else {
-                parsed.thread_ids
+                requested_ids
             };
             Ok(serde_json::to_string(
                 &dispatch
@@ -269,7 +310,7 @@ async fn handle(
                 &dispatch
                     .interrupt_agent(subagents::InterruptAgentRequest {
                         parent_session_id: ctx.session_id.clone(),
-                        thread_id: non_empty_id(&parsed.thread_id)?.to_string(),
+                        thread_id: parsed.thread_id()?,
                     })
                     .await?,
             )?)
@@ -280,7 +321,7 @@ async fn handle(
                 &dispatch
                     .close_agent(subagents::CloseAgentRequest {
                         parent_session_id: ctx.session_id.clone(),
-                        thread_id: non_empty_id(&parsed.thread_id)?.to_string(),
+                        thread_id: parsed.thread_id()?,
                     })
                     .await?,
             )?)
@@ -300,6 +341,32 @@ fn non_empty_id(value: &str) -> anyhow::Result<&str> {
         anyhow::bail!("thread_id cannot be empty");
     }
     Ok(value)
+}
+
+impl ThreadIdArgs {
+    fn thread_id(&self) -> anyhow::Result<String> {
+        Ok(non_empty_id(self.thread_id.as_deref().unwrap_or_default())?.to_string())
+    }
+}
+
+impl SendMessageArgs {
+    fn thread_id(&self) -> anyhow::Result<String> {
+        Ok(non_empty_id(self.thread_id.as_deref().unwrap_or_default())?.to_string())
+    }
+}
+
+impl WaitAgentsArgs {
+    fn requested_ids(&self) -> Vec<String> {
+        if !self.thread_ids.is_empty() {
+            return self.thread_ids.clone();
+        }
+        self.target
+            .as_deref()
+            .map(str::trim)
+            .filter(|target| !target.is_empty())
+            .map(|target| vec![target.to_string()])
+            .unwrap_or_default()
+    }
 }
 
 fn current_sandbox_mode(ctx: &ToolContext<'_>) -> String {

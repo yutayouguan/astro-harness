@@ -168,6 +168,14 @@ fn build_agent(
     )?;
     agent.set_project_root(request.project_root.clone());
     agent.set_permission_profile(sandbox_profile(request.sandbox_mode.as_deref()));
+    agent.set_mcp_config_override(mcp::decode_inline_mcp_servers(&request.mcp_servers)?);
+    agent.set_skill_config_overrides(
+        request
+            .skills_config
+            .iter()
+            .map(|entry| (entry.path.clone(), entry.enabled))
+            .collect(),
+    );
     if let Some(bus) = request.hook_bus.as_ref() {
         agent.set_hook_bus(Arc::clone(bus));
     }
@@ -264,6 +272,8 @@ mod tests {
             model: None,
             model_reasoning_effort: None,
             sandbox_mode: Some("read-only".into()),
+            mcp_servers: Default::default(),
+            skills_config: Vec::new(),
             chat_targets: vec![types::ChatTarget {
                 provider_id: "test".into(),
                 backend_id: "openai".into(),

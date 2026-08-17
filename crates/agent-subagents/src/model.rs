@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -84,6 +85,8 @@ pub struct SpawnAgentRequest {
     pub model: Option<String>,
     pub model_reasoning_effort: Option<String>,
     pub sandbox_mode: Option<String>,
+    pub mcp_servers: BTreeMap<String, toml::Value>,
+    pub skills_config: Vec<crate::SkillConfigEntry>,
     pub chat_targets: Vec<types::ChatTarget>,
     pub project_root: Option<PathBuf>,
     pub hook_bus: Option<Arc<hooks::PluginHookBus>>,

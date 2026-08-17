@@ -130,7 +130,9 @@ import { useTypingPlaceholder } from "../../hooks/chat/useTypingPlaceholder";
 import LocationA2UISurface from "./LocationA2UISurface";
 import A2UISurfaceCard from "./A2UISurfaceCard";
 import TodoProgress from "./TodoProgress";
+import SubagentActivityBar from "./SubagentActivityBar";
 import SubagentsPanel from "./SubagentsPanel";
+import { useSubagentThreads } from "../../hooks/chat/useSubagentThreads";
 import { formatElapsedSec } from "../../lib/chat/elapsedSec";
 import { coalesceReasoningSegments } from "../../lib/chat/chatTimeline";
 import { isLocationRequiredSurface } from "../../lib/chat/locationSurface";
@@ -707,6 +709,11 @@ export default function ChatView({
   const [contextPopoverOpen, setContextPopoverOpen] = useState(false);
   const [mcpOpen, setMcpOpen] = useState(false);
   const [subagentsOpen, setSubagentsOpen] = useState(false);
+  const [selectedSubagentId, setSelectedSubagentId] = useState<string | null>(null);
+  const {
+    threads: subagentThreads,
+    refresh: refreshSubagentThreads,
+  } = useSubagentThreads(sessionId);
   const [recording, setRecording] = useState(false);
   const [transcribing, setTranscribing] = useState(false);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -2123,6 +2130,19 @@ export default function ChatView({
           trySubmitComposer();
         }}
       >
+        <SubagentActivityBar
+          parentSessionId={sessionId}
+          threads={subagentThreads}
+          onRefresh={refreshSubagentThreads}
+          onOpenPanel={() => {
+            setSelectedSubagentId(null);
+            setSubagentsOpen(true);
+          }}
+          onOpenThread={(threadId) => {
+            setSelectedSubagentId(threadId);
+            setSubagentsOpen(true);
+          }}
+        />
         {modeSwitchPrompt && (
           <div
             className="composer-queue composer-mode-switch"
@@ -2721,6 +2741,7 @@ export default function ChatView({
                   setApprovalMenuOpen(false);
                   setContextPopoverOpen(false);
                   setPaletteKind(null);
+                  setSelectedSubagentId(null);
                   setSubagentsOpen(true);
                 }}
               >
@@ -2940,6 +2961,9 @@ export default function ChatView({
       <SubagentsPanel
         open={subagentsOpen}
         parentSessionId={sessionId}
+        threads={subagentThreads}
+        initialThreadId={selectedSubagentId}
+        refreshThreads={refreshSubagentThreads}
         onClose={() => setSubagentsOpen(false)}
       />
     </section>
