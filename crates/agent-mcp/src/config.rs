@@ -385,28 +385,38 @@ impl TomlMcpServer {
             name: (config.name != config.id).then(|| config.name.clone()),
             description: (!config.description.is_empty()).then(|| config.description.clone()),
             command: (config.r#type == McpTransportType::Stdio).then(|| config.command.clone()),
-            args: (config.r#type == McpTransportType::Stdio)
-                .then(|| config.args.clone())
-                .unwrap_or_default(),
-            env: (config.r#type == McpTransportType::Stdio)
-                .then(|| config.env.clone())
-                .unwrap_or_default(),
-            env_vars: (config.r#type == McpTransportType::Stdio)
-                .then(|| config.env_vars.clone())
-                .unwrap_or_default(),
+            args: if config.r#type == McpTransportType::Stdio {
+                config.args.clone()
+            } else {
+                Vec::new()
+            },
+            env: if config.r#type == McpTransportType::Stdio {
+                config.env.clone()
+            } else {
+                HashMap::new()
+            },
+            env_vars: if config.r#type == McpTransportType::Stdio {
+                config.env_vars.clone()
+            } else {
+                Vec::new()
+            },
             cwd: (config.r#type == McpTransportType::Stdio)
                 .then(|| config.cwd.clone())
                 .flatten(),
             url: (config.r#type == McpTransportType::StreamableHttp).then(|| config.url.clone()),
-            headers: (config.r#type == McpTransportType::StreamableHttp)
-                .then(|| config.headers.clone())
-                .unwrap_or_default(),
+            headers: if config.r#type == McpTransportType::StreamableHttp {
+                config.headers.clone()
+            } else {
+                HashMap::new()
+            },
             bearer_token_env_var: (config.r#type == McpTransportType::StreamableHttp)
                 .then(|| config.bearer_token_env_var.clone())
                 .flatten(),
-            env_http_headers: (config.r#type == McpTransportType::StreamableHttp)
-                .then(|| config.env_http_headers.clone())
-                .unwrap_or_default(),
+            env_http_headers: if config.r#type == McpTransportType::StreamableHttp {
+                config.env_http_headers.clone()
+            } else {
+                HashMap::new()
+            },
             enabled: (!config.enabled).then_some(false),
             required: config.required.then_some(true),
             startup_timeout_sec: config.startup_timeout_secs,
@@ -982,6 +992,42 @@ env_http_headers = { X-API-Key = "MCP_API_KEY" }
         assert!(persisted.contains("http_headers"));
         assert!(persisted.contains("env_http_headers"));
         assert!(!persisted.contains("secret-token"));
+    }
+
+    #[test]
+    fn toml_projection_keeps_only_transport_specific_collection_fields() {
+        let stdio: McpServerConfig = serde_json::from_value(serde_json::json!({
+            "id": "local",
+            "name": "local",
+            "type": "stdio",
+            "command": "npx",
+            "args": ["-y", "server"],
+            "env": { "LOG_LEVEL": "info" },
+            "envVars": ["LOCAL_TOKEN"]
+        }))
+        .unwrap();
+        let stdio_toml = TomlMcpServer::from_config(&stdio);
+        assert_eq!(stdio_toml.args, vec!["-y", "server"]);
+        assert_eq!(stdio_toml.env["LOG_LEVEL"], "info");
+        assert_eq!(stdio_toml.env_vars, vec!["LOCAL_TOKEN"]);
+        assert!(stdio_toml.headers.is_empty());
+        assert!(stdio_toml.env_http_headers.is_empty());
+
+        let http: McpServerConfig = serde_json::from_value(serde_json::json!({
+            "id": "remote",
+            "name": "remote",
+            "type": "streamableHttp",
+            "url": "https://example.com/mcp",
+            "headers": { "X-Region": "us-east-1" },
+            "envHttpHeaders": { "X-API-Key": "MCP_API_KEY" }
+        }))
+        .unwrap();
+        let http_toml = TomlMcpServer::from_config(&http);
+        assert!(http_toml.args.is_empty());
+        assert!(http_toml.env.is_empty());
+        assert!(http_toml.env_vars.is_empty());
+        assert_eq!(http_toml.headers["X-Region"], "us-east-1");
+        assert_eq!(http_toml.env_http_headers["X-API-Key"], "MCP_API_KEY");
     }
 
     #[test]
