@@ -400,6 +400,7 @@ export function useParallelTasks(deps: Deps) {
 
     try {
       const eventName = `chat-stream-${sessionId}`;
+      let terminalError: string | undefined;
       const unlisten = await listen<{
         type: string;
         content?: string;
@@ -407,7 +408,9 @@ export function useParallelTasks(deps: Deps) {
         id?: string;
         name?: string;
         arguments?: string;
+        arguments_json?: string;
         result?: string;
+        phase?: string;
         index?: number;
         outcome_type?: string;
         interrupts_json?: string;
@@ -523,15 +526,18 @@ export function useParallelTasks(deps: Deps) {
               t.id === taskId ? { ...t, pendingInterrupts: undefined } : t,
             ),
           );
+        } else if (payload.type === "run_finished" && payload.outcome_type === "error") {
+          terminalError ??= t("status.unknownError");
         } else if (payload.type === "tool_call") {
           const name = payload.name ?? "tool";
           const activity: ChatActivity = {
             id: payload.id || `act-${Date.now()}`,
             kind: "tool",
             title: name,
-            input: payload.arguments,
+            input: payload.arguments_json ?? payload.arguments,
             output: payload.result,
-            status: payload.result ? "done" : "running",
+            status:
+              payload.phase === "completed" || payload.result ? "done" : "running",
             at: Date.now(),
           };
           setMessages((prev) =>
@@ -578,9 +584,10 @@ export function useParallelTasks(deps: Deps) {
               return sealed;
             }),
           );
-          finish("done");
+          finish(terminalError ? "error" : "done", terminalError);
         } else if (payload.type === "error") {
           const errMsg = payload.message || t("status.unknownError");
+          terminalError = errMsg;
           flushToken(assistantId);
           setMessages((prev) =>
             prev.map((m) => {
@@ -597,7 +604,6 @@ export function useParallelTasks(deps: Deps) {
               );
             }),
           );
-          finish("error", errMsg);
         }
       });
       unlistenMapRef.current.set(taskId, { unlisten, sessionId });

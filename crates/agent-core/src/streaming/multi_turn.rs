@@ -627,6 +627,21 @@ async fn run_multi_turn_stream_inner(args: MultiTurnStreamInnerArgs) {
             break;
         }
 
+        for call in &calls {
+            if !emit(
+                &tx,
+                MultiTurnStreamItem::ToolStarted {
+                    id: call.id.clone(),
+                    name: call.name.clone(),
+                    arguments_json: call.arguments.to_string(),
+                },
+            )
+            .await
+            {
+                return;
+            }
+        }
+
         run_state.set_phase(RunPhase::ExecutingTools);
         let force_serial = {
             let agent = session.lock().await;

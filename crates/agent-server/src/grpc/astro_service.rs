@@ -468,6 +468,20 @@ fn multi_turn_to_chat_event(item: MultiTurnStreamItem) -> Option<ChatEvent> {
             })
         }
         MultiTurnStreamItem::Assistant(StreamedAssistantContent::InteractionId(_)) => None,
+        MultiTurnStreamItem::ToolStarted {
+            id,
+            name,
+            arguments_json,
+        } => Some(ChatEvent {
+            payload: Some(proto::chat_event::Payload::ToolCall(proto::ToolCallEvent {
+                id,
+                name,
+                arguments_json,
+                result: String::new(),
+                media: Vec::new(),
+                phase: "started".into(),
+            })),
+        }),
         MultiTurnStreamItem::ToolResult {
             id,
             name,
@@ -481,6 +495,7 @@ fn multi_turn_to_chat_event(item: MultiTurnStreamItem) -> Option<ChatEvent> {
                 arguments_json,
                 result,
                 media: media.into_iter().map(media_asset_to_proto).collect(),
+                phase: "completed".into(),
             })),
         }),
         MultiTurnStreamItem::MemoryUpdate { op, content } => Some(ChatEvent {
@@ -1656,6 +1671,35 @@ mod tests {
         for outcome in ["error", "interrupt", "hitl_waiting", ""] {
             assert!(!allows_post_turn_side_effects(outcome), "outcome={outcome}");
         }
+    }
+
+    #[test]
+    fn tool_lifecycle_maps_to_started_and_completed_phases() {
+        let started = multi_turn_to_chat_event(MultiTurnStreamItem::ToolStarted {
+            id: "call-1".into(),
+            name: "echo".into(),
+            arguments_json: r#"{"text":"hello"}"#.into(),
+        })
+        .expect("started event");
+        let Some(proto::chat_event::Payload::ToolCall(started)) = started.payload else {
+            panic!("tool call payload");
+        };
+        assert_eq!(started.phase, "started");
+        assert!(started.result.is_empty());
+
+        let completed = multi_turn_to_chat_event(MultiTurnStreamItem::ToolResult {
+            id: "call-1".into(),
+            name: "echo".into(),
+            arguments_json: r#"{"text":"hello"}"#.into(),
+            result: "hello".into(),
+            media: Vec::new(),
+        })
+        .expect("completed event");
+        let Some(proto::chat_event::Payload::ToolCall(completed)) = completed.payload else {
+            panic!("tool call payload");
+        };
+        assert_eq!(completed.phase, "completed");
+        assert_eq!(completed.result, "hello");
     }
 
     #[tokio::test]

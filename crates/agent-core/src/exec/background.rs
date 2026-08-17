@@ -114,6 +114,7 @@ async fn collect_background_events(
             MultiTurnStreamItem::Error(message) => stream_error = Some(message),
             MultiTurnStreamItem::Done => break,
             MultiTurnStreamItem::Assistant(_)
+            | MultiTurnStreamItem::ToolStarted { .. }
             | MultiTurnStreamItem::ToolResult { .. }
             | MultiTurnStreamItem::MemoryUpdate { .. }
             | MultiTurnStreamItem::ContextUsage(_)

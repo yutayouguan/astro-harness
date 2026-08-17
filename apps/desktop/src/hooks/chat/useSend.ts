@@ -186,7 +186,6 @@ export function useSend(deps: UseSendDeps) {
         enqueueToolDelta,
         flushStreamTokens,
         flushToolDeltas,
-        settleMessageUsage,
         generatingPreviewApi,
         streamGenRef,
         currentRunIdRef,
@@ -419,6 +418,8 @@ export function useSend(deps: UseSendDeps) {
 
         const eventName = `chat-stream-${sid}`;
         const gen = ++streamGenRef.current;
+        let terminalOutcome: string | null = null;
+        let terminalError: string | null = null;
         toolDeltaIdsRef.current.clear();
         unlistenRef.current = await listen<{
           type: string;
@@ -429,6 +430,7 @@ export function useSend(deps: UseSendDeps) {
           arguments_json?: string;
           arguments?: string;
           result?: string;
+          phase?: string;
           media?: Array<{
             kind?: string;
             mime_type?: string;
@@ -531,6 +533,7 @@ export function useSend(deps: UseSendDeps) {
             );
             setStatusPhase("generating");
           } else if (payload.type === "run_finished") {
+            terminalOutcome = payload.outcome_type ?? null;
             if (
               payload.outcome_type === "hitl_waiting" ||
               payload.outcome_type === "interrupt"
@@ -595,6 +598,10 @@ export function useSend(deps: UseSendDeps) {
               }
             } else if (payload.outcome_type === "success") {
               setSessionPendingInterrupts([]);
+            } else if (payload.outcome_type === "error") {
+              terminalError ??= t("status.unknownError");
+              setStatus("error");
+              setStatusPhase("error");
             }
           } else if (payload.type === "tool_call_delta") {
             touchActivity();
@@ -673,7 +680,8 @@ export function useSend(deps: UseSendDeps) {
               input: payload.arguments_json || undefined,
               output: payload.result || undefined,
               detail: payload.result || payload.arguments_json || undefined,
-              status: payload.result ? "done" : "running",
+              status:
+                payload.phase === "completed" || payload.result ? "done" : "running",
               at: Date.now(),
               media: structuredMedia,
             };
@@ -743,6 +751,7 @@ export function useSend(deps: UseSendDeps) {
               ),
             );
           } else if (payload.type === "done") {
+            const runFailed = terminalOutcome === "error" || terminalError != null;
             if (streamRafRef.current != null) {
               cancelAnimationFrame(streamRafRef.current);
               flushStreamTokens();
@@ -809,9 +818,9 @@ export function useSend(deps: UseSendDeps) {
             setStreaming(false);
             setStreamPaused(false);
             markTurnEnded();
-            setStatus("ready");
-            setStatusPhase("ready");
-            setStatusDetail(null);
+            setStatus(runFailed ? "error" : "ready");
+            setStatusPhase(runFailed ? "error" : "ready");
+            setStatusDetail(runFailed ? terminalError : null);
             if (pendingModeSwitch) {
               onModeSwitchPrompt?.(pendingModeSwitch);
             }
@@ -825,8 +834,7 @@ export function useSend(deps: UseSendDeps) {
               flushToolDeltas();
             }
             const errMsg = payload.message || t("status.unknownError");
-            settleMessageUsage(assistantId);
-            activeAssistantIdRef.current = null;
+            terminalError = errMsg;
             setMessages((prev) =>
               prev.map((m) => {
                 if (m.id !== assistantId) return m;
@@ -847,10 +855,6 @@ export function useSend(deps: UseSendDeps) {
                 );
               }),
             );
-            generatingPreviewApi.onStreamEnd();
-            setStreaming(false);
-            setStreamPaused(false);
-            markTurnEnded();
             setStatus("error");
             setStatusPhase("error");
             setStatusDetail(errMsg);

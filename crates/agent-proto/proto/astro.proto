@@ -235,7 +235,7 @@ message Interrupt {
 
 message RunFinishedEvent {
   string run_id = 1;
-  // "success" | "interrupt"
+  // "success" | "error" | "interrupt" | "hitl_waiting"
   string outcome_type = 2;
   repeated Interrupt interrupts = 3;
 }
@@ -260,6 +260,8 @@ message ToolCallEvent {
   string result = 4;
   // 结构化媒体（生成图/音/视频）；旧客户端可忽略。
   repeated MediaAsset media = 5;
+  // started | completed；空值按旧协议由 result 是否为空推断。
+  string phase = 6;
 }
 
 // 统一媒体资产（对齐 common::MediaAsset）。

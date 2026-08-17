@@ -74,6 +74,12 @@ impl StreamedAssistantContent {
 pub enum MultiTurnStreamItem {
     /// 模型输出片段（文本、推理、工具 delta、usage）。
     Assistant(StreamedAssistantContent),
+    /// 单次工具调用开始执行，对齐 Codex `ItemStarted` 生命周期。
+    ToolStarted {
+        id: String,
+        name: String,
+        arguments_json: String,
+    },
     /// 单次工具调用完成后的结果，供 UI 展示。
     ToolResult {
         /// 与 assistant tool_call 对应的 id。

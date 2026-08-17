@@ -121,9 +121,15 @@ async fn multi_turn_emits_text_tool_result_and_usage() {
         i,
         MultiTurnStreamItem::Assistant(StreamedAssistantContent::Text(t)) if t == "thinking…"
     )));
-    assert!(items
+    let tool_started_index = items
         .iter()
-        .any(|i| matches!(i, MultiTurnStreamItem::ToolResult { name, .. } if name == "echo")));
+        .position(|i| matches!(i, MultiTurnStreamItem::ToolStarted { name, .. } if name == "echo"))
+        .expect("tool started event");
+    let tool_completed_index = items
+        .iter()
+        .position(|i| matches!(i, MultiTurnStreamItem::ToolResult { name, .. } if name == "echo"))
+        .expect("tool completed event");
+    assert!(tool_started_index < tool_completed_index);
     assert!(items.iter().any(|i| matches!(
         i,
         MultiTurnStreamItem::Assistant(StreamedAssistantContent::FinalUsage(u))

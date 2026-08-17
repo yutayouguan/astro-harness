@@ -74,6 +74,7 @@ pub enum ChatStreamEvent {
         name: String,
         arguments_json: String,
         result: String,
+        phase: String,
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         media: Vec<MediaAssetDto>,
     },
@@ -549,6 +550,15 @@ pub async fn start_chat(app: AppHandle, request: StartChatRequest) -> Result<Str
                     message: friendly_error(&err),
                 },
             );
+            let _ = app2.emit(
+                &event_name2,
+                ChatStreamEvent::RunFinished {
+                    run_id: String::new(),
+                    outcome_type: "error".into(),
+                    interrupts_json: "[]".into(),
+                },
+            );
+            let _ = app2.emit(&event_name2, ChatStreamEvent::Done);
         }
     });
 
@@ -726,6 +736,9 @@ async fn run_chat_stream(p: ChatStreamParams<'_>) -> Result<(), String> {
         .map_err(|e| e.to_string())?
         .into_inner();
 
+    let mut saw_error = false;
+    let mut saw_terminal = false;
+    let mut saw_done = false;
     while let Some(event) = stream.message().await.map_err(|e| e.to_string())? {
         match event.payload {
             Some(proto::chat_event::Payload::Token(token)) => {
@@ -752,6 +765,7 @@ async fn run_chat_stream(p: ChatStreamParams<'_>) -> Result<(), String> {
                         name: tc.name,
                         arguments_json: tc.arguments_json,
                         result: tc.result,
+                        phase: tc.phase,
                         media: tc.media.into_iter().map(media_asset_dto).collect(),
                     },
                 );
@@ -846,6 +860,7 @@ async fn run_chat_stream(p: ChatStreamParams<'_>) -> Result<(), String> {
                 );
             }
             Some(proto::chat_event::Payload::RunFinished(rf)) => {
+                saw_terminal = true;
                 let interrupts_json = serialize_interrupts(&rf.interrupts);
                 let _ = p.app.emit(
                     p.event_name,
@@ -857,6 +872,7 @@ async fn run_chat_stream(p: ChatStreamParams<'_>) -> Result<(), String> {
                 );
             }
             Some(proto::chat_event::Payload::Done(true)) => {
+                saw_done = true;
                 // 不立即结束：Done 之后仍可能有 background review 的 MemoryUpdate
                 let _ = p.app.emit(p.event_name, ChatStreamEvent::Done);
                 // 自动进化：默认关；命令内自守冷却/日限额/最低新决策，仅生成待审提案
@@ -865,16 +881,31 @@ async fn run_chat_stream(p: ChatStreamParams<'_>) -> Result<(), String> {
                 super::evolution_run::spawn_maybe_curator(p.app.clone());
             }
             Some(proto::chat_event::Payload::Error(err)) => {
+                saw_error = true;
                 let _ = p.app.emit(
                     p.event_name,
                     ChatStreamEvent::Error {
                         message: friendly_error(&err),
                     },
                 );
-                break;
             }
             _ => {}
         }
+    }
+
+    // 兼容尚未发出统一终态的旧 backend / 早期失败路径。
+    if saw_error && !saw_terminal {
+        let _ = p.app.emit(
+            p.event_name,
+            ChatStreamEvent::RunFinished {
+                run_id: String::new(),
+                outcome_type: "error".into(),
+                interrupts_json: "[]".into(),
+            },
+        );
+    }
+    if saw_error && !saw_done {
+        let _ = p.app.emit(p.event_name, ChatStreamEvent::Done);
     }
 
     Ok(())
