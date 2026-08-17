@@ -1,194 +1,230 @@
-//! 后台（非 UI 流式）多轮运行适配器，供 Cron 和 Agent Thread 使用。
+//! 后台（非 UI）运行适配器，供 Cron 和 Agent Thread 使用。
 //!
-//! 与 `run_multi_turn_stream_inner` 共享核心基础设施：
-//! - [`ProviderStreamer`] 统一 fallback 链与流式消费
-//! - [`collect_response`] 一次性累积流式响应
-//! - [`AgentLoop::prepare_llm_context`] 统一上下文准备
-//! - [`AgentLoop::record_assistant_with_calls`] 统一 assistant 消息记录
-//! - [`IterationBudget`] 迭代预算（对齐 Hermes）
+//! 本模块不实现第二套 Agent 循环。foreground 与 background 都由
+//! [`crate::streaming::run_multi_turn_stream`] 驱动；这里只负责：
+//! - 丢弃 UI 专属事件并收集最终 assistant 文本与 usage；
+//! - 将 Agent Thread 的 interrupt / close 信号桥接到 [`providers::PauseControl`]；
+//! - 把统一引擎的流式错误转换为后台调用方可处理的 `Result`。
 //!
-//! 权限与执行表面解耦：后台运行仍完整应用 sandbox / approval
-//! 策略，仅省略 token UI 流、A2UI 渲染和 timeline 等前台展示逻辑。
+//! 权限与执行表面解耦：后台运行经过与前台完全相同的 sandbox、approval、hooks、
+//! tool execution、iteration budget 和 max-iteration summary，仅不向 UI 转发事件。
 
-use providers::ProviderConfig;
-use providers::Usage;
 use std::sync::Arc;
+
+use providers::{PauseControl, ProviderConfig, Usage};
+use tokio::sync::{mpsc, Mutex};
+use types::message::{MessageContent, Role};
 use types::ChatTarget;
 
-use crate::runtime::budget::{should_refund_tool_round, IterationBudget, DEFAULT_MAX_ITERATIONS};
 use crate::runtime::AgentLoop;
-use crate::streaming::accumulate::collect_response;
-use crate::streaming::{ChatOverride, ProviderStreamer, StreamingChat};
+use crate::streaming::{
+    run_multi_turn_stream, ChatOverride, MultiTurnStreamArgs, MultiTurnStreamItem,
+    StreamedAssistantContent,
+};
 
-const MAX_THINKING_ONLY_RETRIES: usize = 1;
-
-/// 后台多轮工具循环：驱动 LLM → 工具 → LLM 直至无工具调用或预算耗尽。
-///
-/// # 参数
-///
-/// - `agent`：已经过 [`AgentLoop::run_turn`] 初始化的实例（`session_messages` 含用户消息）。
-/// - `targets`：聊天 fallback 链（`CronExecCredentials::effective_targets` 返回值）。
-/// - `system_prompt`：来自 `TurnResult::Continue { system_prompt }` 的系统提示；整轮不变。
-///
-/// # 返回
-///
-/// `(最终 assistant 文本, 累计 token 用量)`。
+/// 使用统一多轮引擎执行后台任务。
 pub async fn run_background_multi_turn(
-    agent: &mut AgentLoop,
+    session: Arc<Mutex<AgentLoop>>,
     targets: Vec<ChatTarget>,
     system_prompt: String,
 ) -> anyhow::Result<(String, Usage)> {
-    run_background_multi_turn_controlled(agent, targets, system_prompt, None).await
+    run_background_multi_turn_controlled(session, targets, system_prompt, None).await
 }
 
-/// Background loop with a real interrupt signal for first-class agent threads.
+/// 带 Agent Thread interrupt / close 控制的后台执行入口。
 pub async fn run_background_multi_turn_controlled(
-    agent: &mut AgentLoop,
+    session: Arc<Mutex<AgentLoop>>,
     targets: Vec<ChatTarget>,
     system_prompt: String,
     control: Option<Arc<subagents::AgentThreadControl>>,
 ) -> anyhow::Result<(String, Usage)> {
-    run_background_multi_turn_controlled_with_chat(agent, targets, system_prompt, control, None)
+    run_background_multi_turn_controlled_with_chat(session, targets, system_prompt, control, None)
         .await
 }
 
 pub(crate) async fn run_background_multi_turn_controlled_with_chat(
-    agent: &mut AgentLoop,
+    session: Arc<Mutex<AgentLoop>>,
     targets: Vec<ChatTarget>,
     system_prompt: String,
     control: Option<Arc<subagents::AgentThreadControl>>,
     chat_override: Option<ChatOverride>,
 ) -> anyhow::Result<(String, Usage)> {
-    let base_config = ProviderConfig {
-        temperature: agent.temperature(),
-        additional_params: agent.additional_params().clone(),
-        ..ProviderConfig::default()
+    let (base_config, message_start) = {
+        let agent = session.lock().await;
+        (
+            ProviderConfig {
+                temperature: agent.temperature(),
+                additional_params: agent.additional_params().clone(),
+                ..ProviderConfig::default()
+            },
+            agent.session_messages.len(),
+        )
     };
-    let streamer = if let Some(chat_override) = chat_override {
-        ProviderStreamer::with_chat_override(targets, base_config, chat_override)
-    } else {
-        ProviderStreamer::new(targets, base_config)
-    };
+    let pause = PauseControl::new();
+    let cancellation_bridge = control.as_ref().map(|control| {
+        let control = Arc::clone(control);
+        let pause = Arc::clone(&pause);
+        tokio::spawn(async move {
+            control.cancelled().await;
+            pause.cancel();
+        })
+    });
+    let (tx, rx) = mpsc::channel(32);
 
-    let mut total_usage = Usage::default();
-    let mut last_text = String::new();
-    let mut thinking_only_retries: usize = 0;
+    let engine = run_multi_turn_stream(MultiTurnStreamArgs {
+        session: Arc::clone(&session),
+        targets,
+        base_config,
+        system_prompt,
+        pause,
+        hitl_gate: None,
+        tx,
+        chat_override,
+    });
+    let collector = collect_background_events(rx);
+    let ((), collected) = tokio::join!(engine, collector);
 
-    let max_rounds = {
-        let n = agent.multi_turn();
-        if n == 0 {
-            DEFAULT_MAX_ITERATIONS
-        } else {
-            n
-        }
-    };
-    let budget = IterationBudget::new(max_rounds);
+    if let Some(bridge) = cancellation_bridge {
+        bridge.abort();
+    }
+    if control
+        .as_ref()
+        .is_some_and(|value| value.is_interrupted() || value.is_closed())
+    {
+        anyhow::bail!("agent thread interrupted");
+    }
+    let usage = collected?;
+    let output = latest_assistant_text(&session, message_start)
+        .await
+        .filter(|text| !text.is_empty())
+        .ok_or_else(|| anyhow::anyhow!("模型未返回有效回复"))?;
+    Ok((output, usage))
+}
 
-    loop {
-        if control
-            .as_ref()
-            .is_some_and(|value| value.is_interrupted() || value.is_closed())
-        {
-            agent.cancel_signal().cancel();
-            anyhow::bail!("agent thread interrupted");
-        }
-        if !budget.consume() || agent.is_tool_depth_exhausted() {
-            break;
-        }
-
-        let _ = agent.maintain_tool_context().await;
-
-        let (history, tools) = agent.prepare_llm_context().await?;
-
-        let stream = streamer
-            .stream_chat(&system_prompt, &history, tools)
-            .await?;
-
-        let response = if let Some(control) = control.as_ref() {
-            tokio::select! {
-                _ = control.cancelled() => {
-                    agent.cancel_signal().cancel();
-                    anyhow::bail!("agent thread interrupted");
-                }
-                result = collect_response(stream) => result?,
+async fn collect_background_events(
+    mut rx: mpsc::Receiver<anyhow::Result<MultiTurnStreamItem>>,
+) -> anyhow::Result<Usage> {
+    let mut usage = Usage::default();
+    let mut stream_error = None;
+    while let Some(item) = rx.recv().await {
+        match item? {
+            MultiTurnStreamItem::Assistant(StreamedAssistantContent::FinalUsage(value)) => {
+                usage = value;
             }
-        } else {
-            collect_response(stream).await?
+            MultiTurnStreamItem::Error(message) => stream_error = Some(message),
+            MultiTurnStreamItem::Done => break,
+            MultiTurnStreamItem::Assistant(_)
+            | MultiTurnStreamItem::ToolResult { .. }
+            | MultiTurnStreamItem::MemoryUpdate { .. }
+            | MultiTurnStreamItem::ContextUsage(_)
+            | MultiTurnStreamItem::RunStarted { .. }
+            | MultiTurnStreamItem::Activity { .. }
+            | MultiTurnStreamItem::RunFinished { .. } => {}
+        }
+    }
+    if let Some(error) = stream_error {
+        anyhow::bail!(error);
+    }
+    Ok(usage)
+}
+
+async fn latest_assistant_text(
+    session: &Arc<Mutex<AgentLoop>>,
+    message_start: usize,
+) -> Option<String> {
+    let agent = session.lock().await;
+    agent.session_messages[message_start..]
+        .iter()
+        .rev()
+        .find(|message| message.role == Role::Assistant)
+        .map(|message| match &message.content {
+            MessageContent::Text(text) => text.clone(),
+            MessageContent::Parts(parts) => parts
+                .iter()
+                .filter_map(|part| part.text.as_deref())
+                .collect::<Vec<_>>()
+                .join("\n"),
+        })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn pending_chat() -> ChatOverride {
+        Arc::new(move |_messages, _tools, _config| {
+            Box::pin(async move {
+                Ok(Box::pin(futures::stream::pending()) as providers::CompletionStream)
+            })
+        })
+    }
+
+    #[tokio::test]
+    async fn collector_returns_error_even_when_done_follows() {
+        let (tx, rx) = mpsc::channel(4);
+        tx.send(Ok(MultiTurnStreamItem::Error("blocked".into())))
+            .await
+            .unwrap();
+        tx.send(Ok(MultiTurnStreamItem::Done)).await.unwrap();
+        drop(tx);
+
+        assert_eq!(
+            collect_background_events(rx).await.unwrap_err().to_string(),
+            "blocked"
+        );
+    }
+
+    #[tokio::test]
+    async fn collector_uses_final_aggregate_usage() {
+        let (tx, rx) = mpsc::channel(4);
+        tx.send(Ok(MultiTurnStreamItem::Assistant(
+            StreamedAssistantContent::FinalUsage(Usage {
+                input_tokens: 12,
+                output_tokens: 3,
+                ..Usage::default()
+            }),
+        )))
+        .await
+        .unwrap();
+        tx.send(Ok(MultiTurnStreamItem::Done)).await.unwrap();
+        drop(tx);
+
+        let usage = collect_background_events(rx).await.unwrap();
+        assert_eq!(usage.input_tokens, 12);
+        assert_eq!(usage.output_tokens, 3);
+    }
+
+    #[tokio::test]
+    async fn agent_thread_interrupt_cancels_unified_engine() {
+        let temp = tempfile::tempdir().unwrap();
+        let config = crate::runtime::AgentConfig::with_defaults(temp.path().to_path_buf());
+        let mut agent = AgentLoop::with_session_id(config, "background-cancel".into()).unwrap();
+        agent
+            .session_messages
+            .push(types::message::Message::user("wait"));
+        let session = Arc::new(Mutex::new(agent));
+        let control = Arc::new(subagents::AgentThreadControl::default());
+        let target = ChatTarget {
+            provider_id: "test".into(),
+            backend_id: "openai".into(),
+            model: "test".into(),
+            api_key: "test".into(),
+            base_url: "http://127.0.0.1.invalid".into(),
         };
 
-        if let Some(u) = response.usage {
-            total_usage.add_assign(u);
-        }
+        let run = run_background_multi_turn_controlled_with_chat(
+            session,
+            vec![target],
+            "test".into(),
+            Some(Arc::clone(&control)),
+            Some(pending_chat()),
+        );
+        let interrupt = async {
+            tokio::task::yield_now().await;
+            control.interrupt();
+        };
+        let (result, ()) = tokio::join!(run, interrupt);
 
-        // 空响应处理：thinking-only 重试
-        if response.text.is_empty() && response.calls.is_empty() {
-            if !response.reasoning.is_empty() && thinking_only_retries < MAX_THINKING_ONLY_RETRIES {
-                thinking_only_retries += 1;
-                tracing::warn!(
-                    reasoning_len = response.reasoning.len(),
-                    attempt = thinking_only_retries,
-                    "background: model returned reasoning only; injecting retry prompt"
-                );
-                agent.record_assistant_with_calls(
-                    &response.text,
-                    &[],
-                    Some(response.reasoning.as_str()),
-                    None,
-                )?;
-                agent.record_user_message(
-                    "[astro:system]\n你的思考过程已记录，但没有生成回复内容。请直接给出你的回答。",
-                )?;
-                continue;
-            }
-            break;
-        }
-
-        last_text = response.text.clone();
-        agent.record_assistant_with_calls(&response.text, &response.calls, None, None)?;
-
-        if response.calls.is_empty() {
-            return Ok((last_text, total_usage));
-        }
-
-        // 工具执行
-        let names: Vec<&str> = response.calls.iter().map(|c| c.name.as_str()).collect();
-        let stop_after = agent.tool_registry().any_stop_after(&names);
-
-        for call in &response.calls {
-            let call_result = if let Some(control) = control.as_ref() {
-                tokio::select! {
-                    _ = control.cancelled() => {
-                        agent.cancel_signal().cancel();
-                        anyhow::bail!("agent thread interrupted");
-                    }
-                    result = agent.handle_tool_call_async(&call.name, &call.arguments) => result,
-                }
-            } else {
-                agent
-                    .handle_tool_call_async(&call.name, &call.arguments)
-                    .await
-            };
-            let result = match call_result {
-                Ok(output) => output,
-                Err(crate::runtime::ToolCallError::Cancelled) => break,
-                Err(e) => format!("工具错误: {e}").into(),
-            };
-            agent.record_tool_result_with_id(Some(&call.id), Some(&call.name), result.text())?;
-        }
-
-        let _ = agent.maintain_tool_context().await;
-
-        if should_refund_tool_round(&names) {
-            budget.refund();
-        }
-
-        if stop_after {
-            break;
-        }
+        assert_eq!(result.unwrap_err().to_string(), "agent thread interrupted");
     }
-
-    if last_text.is_empty() {
-        anyhow::bail!("模型未返回有效回复");
-    }
-    Ok((last_text, total_usage))
 }

@@ -15,6 +15,13 @@ Astro 的 Subagent 只有一套运行时语义：持久化的 Agent Thread。旧
 
 线程状态与对话写入 `~/.astro/subagents.db`。Provider 凭证仅在 spawn 时以内存值传递，不写入该数据库。子线程完整继承父任务权限，自定义 agent 不能扩大 sandbox 权限。
 
+## 统一运行内核
+
+普通聊天、Cron 与 Agent Thread 都由 `streaming::run_multi_turn_stream` 驱动同一套多轮循环。
+`exec::background` 只是非 UI 事件适配器，不拥有独立工具循环，也不代表更高权限。
+因此 Provider fallback、上下文维护、hooks、权限预检、工具执行、迭代预算、usage、取消和
+max-iteration summary 在前台与后台保持一致。
+
 ## 自定义 Agent
 
 Codex 路径是规范配置层；`.astro` 同名路径作为旧版兼容层保留。后加载的项目

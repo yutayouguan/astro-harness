@@ -9,7 +9,7 @@
 
 use std::collections::HashSet;
 use std::path::Path;
-use std::sync::{LazyLock, Mutex};
+use std::sync::{Arc, LazyLock, Mutex};
 use std::time::Duration;
 
 use chrono::Utc;
@@ -17,6 +17,7 @@ use cron::{cron_db_path, cron_dir, CronJob, CronRunDb, NewCronRun};
 use home::default_memory_dir;
 use providers::Usage;
 use session::{SessionStore, StoredMessage};
+use tokio::sync::Mutex as AsyncMutex;
 use types::ChatTarget;
 use uuid::Uuid;
 
@@ -271,7 +272,7 @@ pub async fn execute_job(
 /// # Send
 ///
 /// `AgentLoop`/`SessionStore` 含 rusqlite `RefCell`，内部 future 非 Send。
-/// 本函数经 `spawn_blocking` + `current_thread` runtime 隔离，对外返回 Send future，
+/// 本函数经 `spawn_blocking` + 单 worker multi-thread runtime 隔离，对外返回 Send future，
 /// 可供 Tauri command / 多线程 runtime 直接 `.await`。
 pub async fn execute_job_with_roots(
     cron_root: impl AsRef<Path>,
@@ -283,7 +284,8 @@ pub async fn execute_job_with_roots(
     let job = job.clone();
     let trigger = trigger.to_string();
     tokio::task::spawn_blocking(move || {
-        let rt = tokio::runtime::Builder::new_current_thread()
+        let rt = tokio::runtime::Builder::new_multi_thread()
+            .worker_threads(1)
             .enable_all()
             .build()
             .map_err(|e| anyhow::anyhow!("cron runtime: {e}"))?;
@@ -295,7 +297,7 @@ pub async fn execute_job_with_roots(
     .map_err(|e| anyhow::anyhow!("cron join: {e}"))?
 }
 
-/// 非 Send 的实际执行体；仅在 `current_thread` runtime / LocalSet 内调用。
+/// 非 Send 的实际执行体；由独立 runtime 的 `block_on` 调用。
 async fn execute_job_with_roots_local(
     cron_root: &Path,
     job: &CronJob,
@@ -478,7 +480,8 @@ pub async fn spawn_job(
     let session_id = row.session_id.clone();
     tokio::task::spawn(async move {
         let result = tokio::task::spawn_blocking(move || {
-            let rt = tokio::runtime::Builder::new_current_thread()
+            let rt = tokio::runtime::Builder::new_multi_thread()
+                .worker_threads(1)
                 .enable_all()
                 .build()
                 .map_err(|e| anyhow::anyhow!("cron runtime: {e}"))?;
@@ -702,7 +705,12 @@ async fn run_agent_job(
     let targets = creds.effective_targets();
     agent.set_chat_targets(targets.clone());
 
-    let system_prompt = match agent.run_turn(&job.task, "cron").await? {
+    let session = Arc::new(AsyncMutex::new(agent));
+    let turn = {
+        let mut agent = session.lock().await;
+        agent.run_turn(&job.task, "cron").await?
+    };
+    let system_prompt = match turn {
         TurnResult::Finished(message) => return Ok((message, Usage::default())),
         TurnResult::Continue { system_prompt, .. } => system_prompt,
         TurnResult::BudgetExhausted => anyhow::bail!("对话轮次预算已用尽"),
@@ -712,7 +720,7 @@ async fn run_agent_job(
         }
     };
 
-    run_background_multi_turn(&mut agent, targets, system_prompt).await
+    run_background_multi_turn(session, targets, system_prompt).await
 }
 
 /// 返回当前 UTC 时间的 RFC3339 字符串（秒精度，含时区偏移）。

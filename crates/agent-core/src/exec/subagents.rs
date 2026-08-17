@@ -7,7 +7,7 @@ use subagents::{
     AgentThreadCommand, AgentThreadControl, AgentThreadStatus, AgentThreadStore, LiveAgentThreads,
     SpawnAgentRequest,
 };
-use tokio::sync::mpsc;
+use tokio::sync::{mpsc, Mutex};
 
 use crate::runtime::{AgentConfig, AgentLoop, TurnResult};
 use crate::streaming::ChatOverride;
@@ -40,8 +40,8 @@ async fn run_agent_thread_inner(
     memory_dir: PathBuf,
     chat_override: Option<ChatOverride>,
 ) -> anyhow::Result<()> {
-    let mut agent = build_agent(&thread_id, &request, &memory_dir)?;
-    let targets = agent.chat_targets().to_vec();
+    let agent = Arc::new(Mutex::new(build_agent(&thread_id, &request, &memory_dir)?));
+    let targets = agent.lock().await.chat_targets().to_vec();
     if targets.is_empty() {
         anyhow::bail!("subagent thread has no chat target");
     }
@@ -71,7 +71,7 @@ async fn run_agent_thread_inner(
             control.begin_turn();
             store.set_status(&thread_id, AgentThreadStatus::Running, None, None)?;
             let result = run_turn(
-                &mut agent,
+                &agent,
                 &targets,
                 message,
                 Arc::clone(&control),
@@ -83,7 +83,7 @@ async fn run_agent_thread_inner(
             }
             if control.is_interrupted() {
                 if request.interrupt_message {
-                    let _ = agent.record_user_message(
+                    let _ = agent.lock().await.record_user_message(
                         "[astro:system]\nThe previous agent turn was interrupted by the parent.",
                     );
                 }
@@ -221,19 +221,22 @@ fn initial_message(request: &SpawnAgentRequest) -> String {
 }
 
 async fn run_turn(
-    agent: &mut AgentLoop,
+    agent: &Arc<Mutex<AgentLoop>>,
     targets: &[types::ChatTarget],
     message: String,
     control: Arc<AgentThreadControl>,
     chat_override: Option<ChatOverride>,
 ) -> anyhow::Result<String> {
-    let turn = agent.run_turn(&message, "subagent-thread").await?;
+    let turn = {
+        let mut agent = agent.lock().await;
+        agent.run_turn(&message, "subagent-thread").await?
+    };
     match turn {
         TurnResult::Finished(message) => Ok(message),
         TurnResult::Continue { system_prompt, .. } => {
             let (output, _) =
                 crate::exec::background::run_background_multi_turn_controlled_with_chat(
-                    agent,
+                    Arc::clone(agent),
                     targets.to_vec(),
                     system_prompt,
                     Some(control),

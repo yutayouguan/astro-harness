@@ -1044,18 +1044,16 @@ async fn execute_tools_serial_inner(
             let memory_dir = agent.memory_dir().to_path_buf();
             let session_id = agent.session_id().to_string();
             let execution_started = std::time::Instant::now();
-            let executed = tokio::task::block_in_place(|| {
-                if workspace_write_grant || !network_grant.is_empty() {
-                    agent.handle_tool_call_with_once_grants(
-                        &call.name,
-                        &call.arguments,
-                        workspace_write_grant,
-                        network_grant,
-                    )
-                } else {
-                    agent.handle_tool_call(&call.name, &call.arguments)
-                }
-            });
+            let executed = if workspace_write_grant || !network_grant.is_empty() {
+                agent.handle_tool_call_with_once_grants(
+                    &call.name,
+                    &call.arguments,
+                    workspace_write_grant,
+                    network_grant,
+                )
+            } else {
+                agent.handle_tool_call(&call.name, &call.arguments)
+            };
             let execution_result = match &executed {
                 Ok(_) => "success",
                 Err(crate::runtime::ToolCallError::Cancelled) => "cancelled",

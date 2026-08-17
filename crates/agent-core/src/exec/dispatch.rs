@@ -54,7 +54,8 @@ impl AgentThreadDispatch for DefaultAgentThreadDispatch {
         };
         let thread_id = thread.id.clone();
         tokio::task::spawn_blocking(move || {
-            let runtime = match tokio::runtime::Builder::new_current_thread()
+            let runtime = match tokio::runtime::Builder::new_multi_thread()
+                .worker_threads(1)
                 .enable_all()
                 .build()
             {

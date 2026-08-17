@@ -133,6 +133,71 @@ async fn multi_turn_emits_text_tool_result_and_usage() {
     assert!(matches!(items.last(), Some(MultiTurnStreamItem::Done)));
 }
 
+#[tokio::test]
+async fn multi_turn_tool_exec_works_on_current_thread_runtime() {
+    let dir = tempfile::tempdir().unwrap();
+    let config = AgentConfig::with_defaults(dir.path().to_path_buf());
+    let agent = AgentLoop::with_session_id(config, "current-thread-session".into()).unwrap();
+    let session = Arc::new(Mutex::new(agent));
+    session
+        .lock()
+        .await
+        .session_messages
+        .push(types::message::Message::user("call a tool"));
+
+    let chat_fn = scripted_chat(vec![
+        vec![
+            StreamChunk::ToolCallStart {
+                index: 0,
+                id: "call_current_thread".into(),
+                name: "echo".into(),
+            },
+            StreamChunk::ToolCallDelta {
+                index: 0,
+                arguments: r#"{"text":"safe"}"#.into(),
+            },
+            StreamChunk::Done {
+                finish_reason: "tool_calls".into(),
+            },
+        ],
+        vec![
+            StreamChunk::Text("current-thread ok".into()),
+            StreamChunk::Done {
+                finish_reason: "stop".into(),
+            },
+        ],
+    ]);
+    let (tx, mut rx) = tokio::sync::mpsc::channel(64);
+
+    run_multi_turn_stream_with_chat_fn(
+        session,
+        chat_fn,
+        ProviderConfig {
+            model: "test".into(),
+            ..Default::default()
+        },
+        "You are a test agent".into(),
+        PauseControl::new(),
+        None,
+        tx,
+    )
+    .await;
+
+    let mut items = Vec::new();
+    while let Some(item) = rx.recv().await {
+        items.push(item.unwrap());
+    }
+    assert!(items.iter().any(
+        |item| matches!(item, MultiTurnStreamItem::ToolResult { name, .. } if name == "echo")
+    ));
+    assert!(items.iter().any(|item| matches!(
+        item,
+        MultiTurnStreamItem::Assistant(StreamedAssistantContent::Text(text))
+            if text == "current-thread ok"
+    )));
+    assert!(matches!(items.last(), Some(MultiTurnStreamItem::Done)));
+}
+
 #[test]
 fn cold_start_hydrates_session_messages_from_db() {
     let dir = tempfile::tempdir().unwrap();

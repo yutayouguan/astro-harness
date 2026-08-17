@@ -131,7 +131,8 @@ impl AgentLoop {
         dispatch_tool(|_| allowed, &mut ctx, name, args, dynamic_handler).await
     }
 
-    /// 同步执行工具调用：在无 tokio runtime 时自建 current_thread runtime。
+    /// 同步执行工具调用：multi-thread runtime 使用 `block_in_place`；current-thread
+    /// runtime 在 scoped worker 中自建 runtime，避免 Tokio 的嵌套阻塞限制。
     ///
     /// 适用于 Tauri 等同步边界；异步上下文优先使用 [`handle_tool_call_async`]。
     pub fn handle_tool_call(
@@ -160,16 +161,53 @@ impl AgentLoop {
         workspace_write_grant: bool,
         network_grant: tools::InProcessNetworkGrant,
     ) -> Result<types::ToolOutput, ToolCallError> {
-        let fut =
-            self.handle_tool_call_async_scoped(name, args, workspace_write_grant, network_grant);
         match tokio::runtime::Handle::try_current() {
-            Ok(handle) => tokio::task::block_in_place(|| handle.block_on(fut)),
+            Ok(handle)
+                if matches!(
+                    handle.runtime_flavor(),
+                    tokio::runtime::RuntimeFlavor::MultiThread
+                ) =>
+            {
+                let fut = self.handle_tool_call_async_scoped(
+                    name,
+                    args,
+                    workspace_write_grant,
+                    network_grant,
+                );
+                tokio::task::block_in_place(|| handle.block_on(fut))
+            }
+            Ok(_) => std::thread::scope(|scope| {
+                scope
+                    .spawn(move || {
+                        let rt = tokio::runtime::Builder::new_current_thread()
+                            .enable_all()
+                            .build()
+                            .map_err(|e| ToolCallError::Execution(e.into()))?;
+                        rt.block_on(self.handle_tool_call_async_scoped(
+                            name,
+                            args,
+                            workspace_write_grant,
+                            network_grant,
+                        ))
+                    })
+                    .join()
+                    .unwrap_or_else(|_| {
+                        Err(ToolCallError::Execution(anyhow::anyhow!(
+                            "tool worker thread panicked"
+                        )))
+                    })
+            }),
             Err(_) => {
                 let rt = tokio::runtime::Builder::new_current_thread()
                     .enable_all()
                     .build()
                     .map_err(|e| ToolCallError::Execution(e.into()))?;
-                rt.block_on(fut)
+                rt.block_on(self.handle_tool_call_async_scoped(
+                    name,
+                    args,
+                    workspace_write_grant,
+                    network_grant,
+                ))
             }
         }
     }
