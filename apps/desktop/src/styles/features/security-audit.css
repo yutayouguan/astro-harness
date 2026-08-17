@@ -1,0 +1,215 @@
+.security-audit-section {
+  min-width: 0;
+}
+
+.security-audit-head,
+.security-audit-toolbar,
+.security-audit-title-row,
+.security-audit-item {
+  display: flex;
+  align-items: center;
+}
+
+.security-audit-head {
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.security-audit-head > div {
+  min-width: 0;
+}
+
+.security-audit-refresh {
+  flex: none;
+}
+
+.security-audit-refresh .is-spinning {
+  animation: security-audit-spin 0.8s linear infinite;
+}
+
+.security-audit-toolbar {
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.security-audit-filters {
+  display: inline-flex;
+  gap: 3px;
+  padding: 3px;
+  border: 1px solid color-mix(in srgb, var(--line) 78%, transparent);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--panel) 72%, transparent);
+}
+
+.security-audit-filters button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 28px;
+  padding: 0 9px;
+  border: 0;
+  border-radius: 7px;
+  color: var(--muted);
+  background: transparent;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.security-audit-filters button:hover {
+  color: var(--text);
+  background: color-mix(in srgb, var(--panel-strong) 58%, transparent);
+}
+
+.security-audit-filters button.is-active {
+  color: var(--text);
+  background: var(--panel-strong);
+  box-shadow: 0 1px 2px color-mix(in srgb, #000 10%, transparent);
+}
+
+.security-audit-filters button span,
+.security-audit-count {
+  color: var(--muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.security-audit-list {
+  display: grid;
+  gap: 1px;
+  max-height: 420px;
+  margin: 12px 0 0;
+  padding: 0;
+  overflow: auto;
+  list-style: none;
+  border: 1px solid color-mix(in srgb, var(--line) 76%, transparent);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--panel) 70%, transparent);
+}
+
+.security-audit-item {
+  align-items: flex-start;
+  gap: 10px;
+  padding: 11px 12px;
+  border-bottom: 1px solid color-mix(in srgb, var(--line) 60%, transparent);
+}
+
+.security-audit-item:last-child {
+  border-bottom: 0;
+}
+
+.security-audit-icon {
+  display: grid;
+  flex: none;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  border-radius: 9px;
+  color: var(--muted);
+  background: color-mix(in srgb, var(--panel-strong) 72%, transparent);
+}
+
+.security-audit-item[data-tone="success"] .security-audit-icon {
+  color: var(--success, #2f9e67);
+  background: color-mix(in srgb, var(--success, #2f9e67) 11%, transparent);
+}
+
+.security-audit-item[data-tone="danger"] .security-audit-icon {
+  color: var(--danger, #d95d5d);
+  background: color-mix(in srgb, var(--danger, #d95d5d) 11%, transparent);
+}
+
+.security-audit-content {
+  min-width: 0;
+  flex: 1;
+}
+
+.security-audit-title-row {
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.security-audit-title-row strong {
+  color: var(--text);
+  font-size: 12.5px;
+  font-weight: 650;
+}
+
+.security-audit-title-row time {
+  flex: none;
+  color: var(--muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.security-audit-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 6px;
+}
+
+.security-audit-meta code,
+.security-audit-meta span {
+  max-width: 100%;
+  padding: 2px 6px;
+  overflow: hidden;
+  border-radius: 6px;
+  color: var(--muted);
+  background: color-mix(in srgb, var(--panel-strong) 62%, transparent);
+  font-size: 10.5px;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.security-audit-state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 92px;
+  margin: 12px 0 0;
+  border: 1px dashed color-mix(in srgb, var(--line) 74%, transparent);
+  border-radius: 12px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.security-audit-state.is-error {
+  color: var(--danger, #d95d5d);
+}
+
+@keyframes security-audit-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (max-width: 720px) {
+  .security-audit-head,
+  .security-audit-toolbar {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .security-audit-filters {
+    width: 100%;
+  }
+
+  .security-audit-filters button {
+    flex: 1;
+    justify-content: center;
+  }
+
+  .security-audit-count {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .security-audit-refresh .is-spinning {
+    animation: none;
+  }
+}

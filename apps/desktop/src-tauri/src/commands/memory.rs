@@ -245,6 +245,126 @@ impl From<memory::ApprovalsConfig> for ApprovalSettingsDto {
     }
 }
 
+/// 权限与沙箱审计的安全展示 DTO；不暴露命令正文、路径或 capability target。
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SecurityAuditEventDto {
+    pub source: String,
+    pub id: String,
+    pub event: String,
+    pub session_id: Option<String>,
+    pub turn_id: Option<String>,
+    pub tool_name: String,
+    pub profile_id: String,
+    pub result: Option<String>,
+    pub duration_ms: Option<u64>,
+    pub created_at: String,
+    pub reviewer: Option<String>,
+    pub scope: Option<String>,
+    pub capabilities: Vec<SecurityAuditCapabilityDto>,
+    pub backend: Option<String>,
+    pub sandboxed: Option<bool>,
+    pub mode: Option<String>,
+    pub network_access: Option<bool>,
+    pub target: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SecurityAuditCapabilityDto {
+    pub kind: String,
+    pub target_count: usize,
+}
+
+fn permission_audit_dto(event: memory::PermissionAuditEvent) -> SecurityAuditEventDto {
+    SecurityAuditEventDto {
+        source: "permission".into(),
+        id: event.id,
+        event: serde_json::to_value(event.event)
+            .ok()
+            .and_then(|value| value.as_str().map(str::to_owned))
+            .unwrap_or_else(|| "permission.unknown".into()),
+        session_id: Some(event.session_id),
+        turn_id: event.turn_id,
+        tool_name: event.tool_name,
+        profile_id: event.profile_id,
+        result: event.result,
+        duration_ms: event.duration_ms,
+        created_at: event.created_at,
+        reviewer: event
+            .reviewer
+            .map(|value| format!("{value:?}").to_ascii_lowercase()),
+        scope: Some(format!("{:?}", event.scope).to_ascii_lowercase()),
+        capabilities: event
+            .capabilities
+            .into_iter()
+            .map(|capability| SecurityAuditCapabilityDto {
+                kind: capability.kind,
+                target_count: capability.targets.len(),
+            })
+            .collect(),
+        backend: None,
+        sandboxed: None,
+        mode: None,
+        network_access: None,
+        target: None,
+    }
+}
+
+fn sandbox_audit_dto(event: sandbox::SandboxAuditEvent) -> SecurityAuditEventDto {
+    SecurityAuditEventDto {
+        source: "sandbox".into(),
+        id: event.id,
+        event: serde_json::to_value(event.event)
+            .ok()
+            .and_then(|value| value.as_str().map(str::to_owned))
+            .unwrap_or_else(|| "sandbox.unknown".into()),
+        session_id: event.session_id,
+        turn_id: event.turn_id,
+        tool_name: event.tool_name,
+        profile_id: event.profile_id,
+        result: Some(event.result),
+        duration_ms: event.duration_ms,
+        created_at: event.created_at,
+        reviewer: None,
+        scope: None,
+        capabilities: Vec::new(),
+        backend: Some(event.backend),
+        sandboxed: Some(event.sandboxed),
+        mode: event.mode,
+        network_access: Some(event.network_access),
+        target: Some(event.target),
+    }
+}
+
+fn list_security_audits_from(
+    root: &std::path::Path,
+    limit: usize,
+) -> anyhow::Result<Vec<SecurityAuditEventDto>> {
+    let limit = limit.clamp(1, 500);
+    let mut events = memory::list_recent_permission_audits(root, limit)?
+        .into_iter()
+        .map(permission_audit_dto)
+        .chain(
+            sandbox::list_recent_sandbox_audits(root, limit)?
+                .into_iter()
+                .map(sandbox_audit_dto),
+        )
+        .collect::<Vec<_>>();
+    events.sort_by(|left, right| right.created_at.cmp(&left.created_at));
+    events.truncate(limit);
+    Ok(events)
+}
+
+/// 读取最近安全审计；默认 100 条，最多 500 条。
+#[tauri::command]
+pub async fn list_security_audits(
+    limit: Option<usize>,
+) -> Result<Vec<SecurityAuditEventDto>, String> {
+    list_security_audits_from(&home::default_memory_dir(), limit.unwrap_or(100))
+        .map_err(|error| error.to_string())
+}
+
 /// 读取危险命令审批设置。
 #[tauri::command]
 pub async fn get_approval_settings() -> Result<ApprovalSettingsDto, String> {
@@ -414,4 +534,62 @@ pub async fn reject_all_pending_memory_writes(app: AppHandle) -> Result<String, 
         }
     }
     Ok(format!("rejected={ok} failed={err}"))
+}
+
+#[cfg(test)]
+mod security_audit_tests {
+    use super::*;
+
+    #[test]
+    fn merged_audits_are_newest_first_and_hide_capability_targets() {
+        let dir = tempfile::tempdir().unwrap();
+        let permission = memory::PermissionAuditEvent {
+            id: "permission-1".into(),
+            event: memory::PermissionAuditKind::Denied,
+            request_id: "request-1".into(),
+            session_id: "session-1".into(),
+            turn_id: Some("turn-1".into()),
+            tool_call_id: "call-1".into(),
+            tool_name: "terminal".into(),
+            profile_id: ":workspace".into(),
+            snapshot_hash: "hash".into(),
+            scope: types::GrantScope::Once,
+            reviewer: Some(types::ApprovalsReviewer::User),
+            result: Some("denied".into()),
+            duration_ms: Some(4),
+            capabilities: vec![memory::PermissionAuditCapability {
+                kind: "file_write".into(),
+                targets: vec!["/secret/project/file.txt".into()],
+            }],
+            created_at: "2026-08-17T00:00:01+00:00".into(),
+        };
+        memory::append_permission_audit(dir.path(), &permission).unwrap();
+        let sandbox = sandbox::SandboxAuditEvent {
+            id: "sandbox-1".into(),
+            event: sandbox::SandboxAuditKind::Spawned,
+            session_id: Some("session-1".into()),
+            turn_id: Some("turn-1".into()),
+            tool_name: "code_exec".into(),
+            profile_id: ":workspace".into(),
+            policy_hash: Some("0".repeat(64)),
+            backend: "seatbelt".into(),
+            sandboxed: true,
+            mode: Some("workspacewrite".into()),
+            network_access: false,
+            writable_root_count: 1,
+            target: "python3".into(),
+            result: "spawned".into(),
+            duration_ms: Some(2),
+            created_at: "2026-08-17T00:00:02+00:00".into(),
+        };
+        sandbox::append_sandbox_audit(dir.path(), &sandbox).unwrap();
+
+        let events = list_security_audits_from(dir.path(), 10).unwrap();
+        assert_eq!(events.len(), 2);
+        assert_eq!(events[0].id, "sandbox-1");
+        assert_eq!(events[1].capabilities[0].target_count, 1);
+        let serialized = serde_json::to_string(&events).unwrap();
+        assert!(!serialized.contains("secret/project"));
+        assert!(!serialized.contains("targets"));
+    }
 }

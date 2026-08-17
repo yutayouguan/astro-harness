@@ -309,6 +309,7 @@ pub fn run() {
             commands::memory::set_memory_auto_refresh,
             commands::memory::set_background_review_enabled,
             commands::memory::get_approval_settings,
+            commands::memory::list_security_audits,
             commands::memory::set_approval_mode,
             commands::memory::get_permission_settings,
             commands::memory::set_permission_preset,

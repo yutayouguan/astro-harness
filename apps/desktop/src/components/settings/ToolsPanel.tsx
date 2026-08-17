@@ -55,6 +55,7 @@ import LucideByName from "../icons/LucideByName";
 import { IconRefresh } from "../icons/NavIcons";
 import { SelectMenu } from "../ui/SelectMenu";
 import { toneStyleFromElement } from "../../lib/ui/toneFromElement";
+import SecurityAuditSection from "./SecurityAuditSection";
 
 /** 工具面板 Tab：内置 / MCP / 审批 */
 type ToolTab = "builtin" | "mcp" | "approvals";
@@ -201,6 +202,8 @@ function ApprovalsSection({ active }: { active: boolean }) {
         </h4>
         <p className="tools-detail-body">{t("approvals.hardline.desc")}</p>
       </section>
+
+      <SecurityAuditSection active={active} />
     </div>
   );
 }
