@@ -121,6 +121,8 @@ pub struct AgentLoop {
     pub(crate) compression_policy: Box<dyn crate::compression::CompressionPolicy>,
     pub(crate) tool_registry: ToolRegistry,
     pub(crate) mcp_hub: Arc<TokioMutex<McpHub>>,
+    /// 最近一次成功 reload 后的已连接 Server instructions 快照。
+    pub(crate) mcp_instructions: Vec<mcp::McpServerInstructions>,
 
     // ── 注入的依赖 ─────────────────────────────────────────
     /// 进程内插件钩子总线（Block / Modify / Inject）。
@@ -215,6 +217,7 @@ impl AgentLoop {
             compression_policy,
             tool_registry,
             mcp_hub,
+            mcp_instructions: Vec::new(),
             hook_bus: Arc::new(::hooks::PluginHookBus::new()),
             execution,
             cancel: CancelSignal::new(),
@@ -639,11 +642,14 @@ impl AgentLoop {
             tracing::warn!(%error, "resolve MCP execution policy failed; connections will be denied");
         })
         .ok();
-        let reload_result = {
+        let (reload_result, mcp_instructions) = {
             let mut hub = self.mcp_hub.lock().await;
             hub.set_execution_context(execution_context);
-            hub.reload_from_disk(Some(&agent_id)).await
+            let reload_result = hub.reload_from_disk(Some(&agent_id)).await;
+            let instructions = hub.server_instructions();
+            (reload_result, instructions)
         };
+        self.mcp_instructions = mcp_instructions;
         self.attach_mcp_tools().await;
         if let Err(error) = &reload_result {
             tracing::warn!(%error, "reload MCP failed");

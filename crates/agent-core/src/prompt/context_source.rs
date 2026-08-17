@@ -1,7 +1,7 @@
 //! 可插拔上下文源 + 字符预算（对齐 Agno ContextProvider 思路）。
 //!
 //! 各层通过 [`ContextSource::contribute`] 在共享 [`ContextBudget`] 下取字符；
-//! 优先级由调用方排列：static → inject → skills → guidance/timestamp → dynamic。
+//! 优先级由调用方排列：static → inject → skills → guidance/timestamp → MCP → dynamic。
 
 use crate::prompt::context::{DynamicContext, StaticContext};
 
@@ -132,15 +132,21 @@ pub fn assemble_from_sources(budget: &mut ContextBudget, sources: &[&dyn Context
 /// 默认最大 system prompt 字符（桌面场景宽裕上限）。
 pub const DEFAULT_CONTEXT_BUDGET_CHARS: usize = 200_000;
 
-/// 标准 Astro 层序组装：static → inject → skills → guidance → timestamp → dynamic。
+/// 由运行时生成、按固定优先级组装的 system prompt 层。
+pub struct RuntimeSystemLayers<'a> {
+    pub guidance: &'a str,
+    pub timestamp: &'a str,
+    pub mcp_instructions: &'a str,
+}
+
+/// 标准 Astro 层序组装：static → inject → skills → guidance → timestamp → MCP → dynamic。
 pub fn assemble_system_layers(
     budget: &mut ContextBudget,
     static_ctx: &StaticContext,
     inject: Option<&str>,
     skill_index: &[(&str, &str)],
     dynamic_ctx: &DynamicContext,
-    guidance: &str,
-    timestamp: &str,
+    runtime_layers: RuntimeSystemLayers<'_>,
 ) -> String {
     let inject_body = inject
         .map(str::trim)
@@ -164,8 +170,9 @@ pub fn assemble_system_layers(
         )
     };
     let skills_src = RenderedSource::new("skills", skills_body);
-    let guidance_src = RenderedSource::new("guidance", guidance);
-    let ts_src = RenderedSource::new("timestamp", timestamp);
+    let guidance_src = RenderedSource::new("guidance", runtime_layers.guidance);
+    let ts_src = RenderedSource::new("timestamp", runtime_layers.timestamp);
+    let mcp_src = RenderedSource::new("mcp_instructions", runtime_layers.mcp_instructions);
 
     assemble_from_sources(
         budget,
@@ -175,6 +182,7 @@ pub fn assemble_system_layers(
             &skills_src,
             &guidance_src,
             &ts_src,
+            &mcp_src,
             dynamic_ctx,
         ],
     )
@@ -198,8 +206,11 @@ mod tests {
             None,
             &[],
             &dynamic,
-            "# 工具使用\nguidance",
-            "# 当前时间\nnow",
+            RuntimeSystemLayers {
+                guidance: "# 工具使用\nguidance",
+                timestamp: "# 当前时间\nnow",
+                mcp_instructions: "",
+            },
         );
         assert!(out.contains("SOUL_CONTENT_ABCDEF"));
         assert!(
@@ -245,5 +256,33 @@ mod tests {
         let out = assemble_from_sources(&mut budget, &[&a, &empty, &b]);
         assert_eq!(out, format!("AAAA{LAYER_SEP}BBBB"));
         assert_eq!(budget.remaining(), 0);
+    }
+
+    #[test]
+    fn mcp_instructions_follow_safety_guidance_and_precede_dynamic_context() {
+        let static_ctx = StaticContext {
+            soul: "STATIC".into(),
+            ..Default::default()
+        };
+        let dynamic = DynamicContext::from_recalled(1, "DYNAMIC_RECALL");
+        let mut budget = ContextBudget::new(10_000);
+        let out = assemble_system_layers(
+            &mut budget,
+            &static_ctx,
+            None,
+            &[],
+            &dynamic,
+            RuntimeSystemLayers {
+                guidance: "SAFETY_GUIDANCE",
+                timestamp: "TIMESTAMP",
+                mcp_instructions: "MCP_UNTRUSTED_INSTRUCTIONS",
+            },
+        );
+
+        let guidance = out.find("SAFETY_GUIDANCE").unwrap();
+        let mcp = out.find("MCP_UNTRUSTED_INSTRUCTIONS").unwrap();
+        let dynamic = out.find("DYNAMIC_RECALL").unwrap();
+        assert!(guidance < mcp);
+        assert!(mcp < dynamic);
     }
 }

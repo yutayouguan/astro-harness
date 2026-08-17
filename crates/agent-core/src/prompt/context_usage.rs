@@ -80,12 +80,14 @@ pub struct ContextUsageInput<'a> {
     pub memory_chars: usize,
     pub skills_chars: usize,
     pub recall_chars: usize,
+    pub mcp_instruction_chars: usize,
     /// SOUL / guidance 等系统提示子项
     pub system_items: &'a [NamedChars],
     /// MEMORY / USER / daily 等子项
     pub memory_items: &'a [NamedChars],
     /// 技能索引条目：(skill_id, 展示名, 该行字符数)
     pub skill_items: &'a [NamedChars],
+    pub mcp_instruction_items: &'a [NamedChars],
     pub tools: &'a [serde_json::Value],
     pub messages: &'a [Message],
     pub context_window: u32,
@@ -106,9 +108,11 @@ pub struct LayerBreakdown {
     pub memory_chars: usize,
     pub skills_chars: usize,
     pub recall_chars: usize,
+    pub mcp_instruction_chars: usize,
     pub system_items: Vec<NamedChars>,
     pub memory_items: Vec<NamedChars>,
     pub skill_items: Vec<NamedChars>,
+    pub mcp_instruction_items: Vec<NamedChars>,
 }
 
 pub fn is_subagent_tool_name(name: &str) -> bool {
@@ -162,10 +166,10 @@ fn tool_schema_name(tool: &serde_json::Value) -> Option<&str> {
 
 pub fn build_snapshot(input: ContextUsageInput<'_>) -> ContextUsageSnapshot {
     let mut tools_chars = 0usize;
-    let mut mcp_chars = 0usize;
+    let mut mcp_chars = input.mcp_instruction_chars;
     let mut agent_def_chars = 0usize;
     let mut tool_items: Vec<ContextUsageItem> = Vec::new();
-    let mut mcp_items: Vec<ContextUsageItem> = Vec::new();
+    let mut mcp_items: Vec<ContextUsageItem> = items_from_named(input.mcp_instruction_items);
     let mut agent_def_items: Vec<ContextUsageItem> = Vec::new();
     for t in input.tools {
         let s = t.to_string();
@@ -421,9 +425,11 @@ mod tests {
             memory_chars: 0,
             skills_chars: 0,
             recall_chars: 0,
+            mcp_instruction_chars: 0,
             system_items: &[],
             memory_items: &[],
             skill_items: &[],
+            mcp_instruction_items: &[],
             tools: &tools,
             messages: &[],
             context_window: 128_000,
@@ -442,6 +448,35 @@ mod tests {
     }
 
     #[test]
+    fn mcp_instructions_share_the_mcp_segment() {
+        let instructions = vec![(
+            "instructions:docs".into(),
+            "Docs instructions".into(),
+            40usize,
+        )];
+        let snap = build_snapshot(ContextUsageInput {
+            system_chars: 0,
+            memory_chars: 0,
+            skills_chars: 0,
+            recall_chars: 0,
+            mcp_instruction_chars: 40,
+            system_items: &[],
+            memory_items: &[],
+            skill_items: &[],
+            mcp_instruction_items: &instructions,
+            tools: &[],
+            messages: &[],
+            context_window: 128_000,
+            updated_at_ms: 1,
+            recommend_compact: false,
+            recommend_compact_ratio: 0.85,
+        });
+        let mcp = snap.segment("mcp").unwrap();
+        assert_eq!(mcp.tokens, 10);
+        assert_eq!(mcp.items[0].id, "instructions:docs");
+    }
+
+    #[test]
     fn agent_def_tools_go_to_agents_segment() {
         let tools: Vec<serde_json::Value> = serde_json::json!([
             {"type":"function","function":{"name":"file_ops","parameters":{}}},
@@ -456,9 +491,11 @@ mod tests {
             memory_chars: 0,
             skills_chars: 0,
             recall_chars: 0,
+            mcp_instruction_chars: 0,
             system_items: &[],
             memory_items: &[],
             skill_items: &[],
+            mcp_instruction_items: &[],
             tools: &tools,
             messages: &[],
             context_window: 128_000,
@@ -488,9 +525,11 @@ mod tests {
             memory_chars: 48,
             skills_chars: 100,
             recall_chars: 0,
+            mcp_instruction_chars: 0,
             system_items: &[],
             memory_items: &memory,
             skill_items: &skills,
+            mcp_instruction_items: &[],
             tools: &[],
             messages: &[],
             context_window: 128_000,
@@ -523,9 +562,11 @@ mod tests {
             memory_chars: 0,
             skills_chars: 0,
             recall_chars: 0,
+            mcp_instruction_chars: 0,
             system_items: &[],
             memory_items: &[],
             skill_items: &[],
+            mcp_instruction_items: &[],
             tools: &[],
             messages: &[assistant, tool],
             context_window: 128_000,

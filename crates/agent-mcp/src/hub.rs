@@ -32,6 +32,10 @@ use crate::names::{
 pub const MAX_PARALLEL_MCP_STARTUPS: usize = 4;
 /// 自动重连退避上限。
 pub const MAX_MCP_RETRY_DELAY_SECS: u64 = 30;
+/// 单个 Server instructions 的内存上限；保留开头以符合 Codex 的 512 字符自包含建议。
+pub const MAX_MCP_SERVER_INSTRUCTIONS_CHARS: usize = 16_384;
+/// 单个 Agent 所有已连接 Server instructions 的总上限。
+pub const MAX_TOTAL_MCP_INSTRUCTIONS_CHARS: usize = 65_536;
 
 /// MCP 连接建立时使用的权限快照。
 ///
@@ -104,6 +108,60 @@ pub struct ToolEntrySpec {
     pub approval_mode: types::McpToolApprovalMode,
     /// Server 声明的非授权性风险提示。
     pub annotations: types::McpToolAnnotations,
+}
+
+/// 已连接 Server 在 initialize 阶段返回的 guidance 快照。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct McpServerInstructions {
+    pub server_id: String,
+    pub server_name: String,
+    pub instructions: String,
+}
+
+fn normalize_server_instructions(raw: &str) -> Option<String> {
+    let cleaned: String = raw
+        .chars()
+        .filter(|ch| !ch.is_control() || matches!(ch, '\n' | '\t'))
+        .collect();
+    let trimmed = cleaned.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    Some(
+        trimmed
+            .chars()
+            .take(MAX_MCP_SERVER_INSTRUCTIONS_CHARS)
+            .collect(),
+    )
+}
+
+fn server_instructions_from_info(info: Option<&rmcp::model::ServerInfo>) -> Option<String> {
+    info.and_then(|info| {
+        info.instructions
+            .as_deref()
+            .and_then(normalize_server_instructions)
+    })
+}
+
+fn bound_server_instructions(
+    mut entries: Vec<McpServerInstructions>,
+) -> Vec<McpServerInstructions> {
+    entries.sort_by(|left, right| left.server_id.cmp(&right.server_id));
+
+    let mut remaining = MAX_TOTAL_MCP_INSTRUCTIONS_CHARS;
+    let mut bounded = Vec::new();
+    for mut entry in entries {
+        if remaining == 0 {
+            break;
+        }
+        let count = entry.instructions.chars().count();
+        if count > remaining {
+            entry.instructions = entry.instructions.chars().take(remaining).collect();
+        }
+        remaining = remaining.saturating_sub(entry.instructions.chars().count());
+        bounded.push(entry);
+    }
+    bounded
 }
 
 fn tool_annotations(tool: &RmcpTool) -> types::McpToolAnnotations {
@@ -276,6 +334,8 @@ struct RunningServer {
     error: Option<String>,
     /// 是否由持久化 OAuth 凭证建立连接。
     authenticated: bool,
+    /// initialize 返回的 Server guidance（非配置持久化数据）。
+    instructions: Option<String>,
 }
 
 /// 单个 Server 的连续失败与退避状态。
@@ -731,6 +791,30 @@ impl McpHub {
             }
         }
         out
+    }
+
+    /// 当前健康连接提供的 Server instructions，按稳定 Server id 排序并施加总上限。
+    pub fn server_instructions(&self) -> Vec<McpServerInstructions> {
+        let entries: Vec<_> = self
+            .servers
+            .iter()
+            .filter(|(_, server)| {
+                server.status == "connected"
+                    && server.config.enabled
+                    && !server.peer.is_transport_closed()
+            })
+            .filter_map(|(server_id, server)| {
+                server
+                    .instructions
+                    .as_ref()
+                    .map(|instructions| McpServerInstructions {
+                        server_id: server_id.clone(),
+                        server_name: server.config.name.clone(),
+                        instructions: instructions.clone(),
+                    })
+            })
+            .collect();
+        bound_server_instructions(entries)
     }
 
     /// 查询某服务器连接状态摘要。
@@ -1200,6 +1284,8 @@ async fn connect_server_inner(
     };
 
     let peer = service.peer().clone();
+    let peer_info = peer.peer_info();
+    let instructions = server_instructions_from_info(peer_info.as_deref());
     let tools = peer.list_all_tools().await.context("list_all_tools")?;
     {
         let mut state = shared_state.lock().await;
@@ -1223,6 +1309,7 @@ async fn connect_server_inner(
         status: "connected".into(),
         error: None,
         authenticated,
+        instructions,
     })
 }
 
@@ -1551,6 +1638,64 @@ mod tests {
             startup_timeout_secs: None,
             tool_timeout_secs: None,
         }
+    }
+
+    #[test]
+    fn server_instructions_are_trimmed_sanitized_and_head_bounded() {
+        let raw = format!("  important\0 guidance\n{}  ", "x".repeat(20_000));
+        let normalized = normalize_server_instructions(&raw).unwrap();
+        assert!(normalized.starts_with("important guidance\n"));
+        assert!(!normalized.contains('\0'));
+        assert_eq!(
+            normalized.chars().count(),
+            MAX_MCP_SERVER_INSTRUCTIONS_CHARS
+        );
+    }
+
+    #[test]
+    fn blank_server_instructions_are_ignored() {
+        assert_eq!(normalize_server_instructions(" \n\t\0 "), None);
+    }
+
+    #[test]
+    fn initialize_server_info_exposes_normalized_instructions() {
+        let info = rmcp::model::InitializeResult::new(Default::default())
+            .with_instructions("  use search before fetch\0  ");
+        assert_eq!(
+            server_instructions_from_info(Some(&info)).as_deref(),
+            Some("use search before fetch")
+        );
+        assert_eq!(server_instructions_from_info(None), None);
+    }
+
+    #[test]
+    fn server_instructions_have_stable_order_and_total_bound() {
+        let entries = vec![
+            McpServerInstructions {
+                server_id: "z".into(),
+                server_name: "Z".into(),
+                instructions: "z".repeat(MAX_TOTAL_MCP_INSTRUCTIONS_CHARS),
+            },
+            McpServerInstructions {
+                server_id: "a".into(),
+                server_name: "A".into(),
+                instructions: "a".repeat(10),
+            },
+        ];
+        let bounded = bound_server_instructions(entries);
+        assert_eq!(bounded[0].server_id, "a");
+        assert_eq!(bounded[0].instructions.chars().count(), 10);
+        assert_eq!(
+            bounded[1].instructions.chars().count(),
+            MAX_TOTAL_MCP_INSTRUCTIONS_CHARS - 10
+        );
+        assert_eq!(
+            bounded
+                .iter()
+                .map(|entry| entry.instructions.chars().count())
+                .sum::<usize>(),
+            MAX_TOTAL_MCP_INSTRUCTIONS_CHARS
+        );
     }
 
     #[test]
