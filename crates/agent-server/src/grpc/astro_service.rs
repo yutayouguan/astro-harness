@@ -1522,11 +1522,14 @@ impl AstroService for AstroServiceImpl {
             },
         };
         let hub = self.session_events.clone();
+        let resume_stream_id = req.stream_id;
+        let after_event_id = req.after_event_id;
         let (tx, rx) = tokio::sync::mpsc::channel(16);
         tokio::spawn(async move {
-            let mut filtered = hub.subscribe(filter);
+            let mut filtered = hub.subscribe(filter, &resume_stream_id, after_event_id);
+            let stream_id = hub.stream_id().to_string();
             while let Some(ev) = filtered.recv().await {
-                if tx.send(Ok(to_proto(&ev))).await.is_err() {
+                if tx.send(Ok(to_proto(&ev, &stream_id))).await.is_err() {
                     break;
                 }
             }

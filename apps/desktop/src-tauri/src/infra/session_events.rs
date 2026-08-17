@@ -5,7 +5,7 @@ use std::time::Duration;
 
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager};
-use tokio::sync::RwLock;
+use tokio::sync::{Notify, RwLock};
 use tracing::debug;
 
 use super::grpc::{default_grpc_address, endpoint_url};
@@ -19,6 +19,9 @@ pub struct SessionEventDto {
     pub session_id: Option<String>,
     pub agent_id: String,
     pub ts_ms: i64,
+    /// Backend replay cursor. Local-only events use zero / empty stream id.
+    pub event_id: u64,
+    pub stream_id: String,
     pub memory_updated: Option<MemoryUpdatedDto>,
     pub pending_changed: Option<PendingChangedDto>,
     pub session_metadata_changed: Option<SessionMetadataChangedDto>,
@@ -61,6 +64,7 @@ struct SessionEventsBridge {
     filter: RwLock<FilterState>,
     /// 递增后当前订阅循环应退出并按新 filter 重连。
     generation: RwLock<u64>,
+    filter_changed: Notify,
 }
 
 impl SessionEventsBridge {
@@ -68,6 +72,7 @@ impl SessionEventsBridge {
         Self {
             filter: RwLock::new(FilterState::default()),
             generation: RwLock::new(0),
+            filter_changed: Notify::new(),
         }
     }
 }
@@ -121,6 +126,8 @@ fn proto_to_dto(ev: proto::SessionEvent) -> SessionEventDto {
         session_id,
         agent_id: ev.agent_id,
         ts_ms: if ev.ts_ms != 0 { ev.ts_ms } else { now_ts_ms() },
+        event_id: ev.event_id,
+        stream_id: ev.stream_id,
         memory_updated,
         pending_changed,
         session_metadata_changed,
@@ -160,11 +167,14 @@ pub async fn set_session_events_filter(
         let mut g = bridge.generation.write().await;
         *g += 1;
     }
+    bridge.filter_changed.notify_one();
     Ok(())
 }
 
 async fn run_subscribe_loop(app: AppHandle, bridge: Arc<SessionEventsBridge>) {
     let mut backoff_ms: u64 = 500;
+    let mut stream_id = String::new();
+    let mut after_event_id = 0;
     loop {
         let gen_at_start = *bridge.generation.read().await;
         let (session_id, agent_id) = {
@@ -175,7 +185,17 @@ async fn run_subscribe_loop(app: AppHandle, bridge: Arc<SessionEventsBridge>) {
             )
         };
 
-        match subscribe_once(&app, &bridge, gen_at_start, session_id, agent_id).await {
+        match subscribe_once(
+            &app,
+            &bridge,
+            gen_at_start,
+            session_id,
+            agent_id,
+            &mut stream_id,
+            &mut after_event_id,
+        )
+        .await
+        {
             Ok(()) => {
                 backoff_ms = 500;
             }
@@ -185,10 +205,15 @@ async fn run_subscribe_loop(app: AppHandle, bridge: Arc<SessionEventsBridge>) {
         }
 
         // 若 generation 已变（热切换 filter），立刻重连；否则退避
+        let filter_changed = bridge.filter_changed.notified();
         let gen_now = *bridge.generation.read().await;
         if gen_now == gen_at_start {
-            tokio::time::sleep(Duration::from_millis(backoff_ms)).await;
-            backoff_ms = (backoff_ms.saturating_mul(2)).min(15_000);
+            tokio::select! {
+                () = tokio::time::sleep(Duration::from_millis(backoff_ms)) => {
+                    backoff_ms = (backoff_ms.saturating_mul(2)).min(15_000);
+                }
+                () = filter_changed => {}
+            }
         }
     }
 }
@@ -199,6 +224,8 @@ async fn subscribe_once(
     gen_at_start: u64,
     session_id: String,
     agent_id: String,
+    stream_id: &mut String,
+    after_event_id: &mut u64,
 ) -> Result<(), String> {
     let url = endpoint_url(&default_grpc_address());
     let mut client = proto::astro_service_client::AstroServiceClient::connect(url)
@@ -208,16 +235,32 @@ async fn subscribe_once(
         .subscribe_session_events(proto::SubscribeSessionEventsRequest {
             session_id,
             agent_id,
+            after_event_id: *after_event_id,
+            stream_id: stream_id.clone(),
         })
         .await
         .map_err(|e| e.to_string())?
         .into_inner();
 
-    while let Some(ev) = stream.message().await.map_err(|e| e.to_string())? {
+    loop {
+        let filter_changed = bridge.filter_changed.notified();
         if *bridge.generation.read().await != gen_at_start {
             return Ok(());
         }
+        let ev = tokio::select! {
+            result = stream.message() => result.map_err(|e| e.to_string())?,
+            () = filter_changed => return Ok(()),
+        };
+        let Some(ev) = ev else {
+            return Err("session events stream closed".into());
+        };
+        if !ev.stream_id.is_empty() && ev.stream_id != *stream_id {
+            *stream_id = ev.stream_id.clone();
+            *after_event_id = 0;
+        }
+        if ev.event_id != 0 {
+            *after_event_id = ev.event_id;
+        }
         emit_session_event(app, proto_to_dto(ev));
     }
-    Err("session events stream closed".into())
 }

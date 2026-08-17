@@ -1,8 +1,12 @@
 //! Session-scoped memory event fan-out for gRPC subscribers.
 
+use std::collections::VecDeque;
+use std::sync::{Arc, Mutex};
+
 use proto::session_event::Payload;
 use proto::{MemoryUpdatedEvent, PendingChangedEvent, SessionEvent, SessionMetadataChangedEvent};
 use tokio::sync::broadcast;
+use uuid::Uuid;
 
 /// Subscriber filter matching [`SubscribeSessionEventsRequest`] semantics.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -45,55 +49,158 @@ pub struct SessionEventMsg {
     pub session_metadata_changed: Option<SessionMetadataChangedPayload>,
 }
 
+/// Hub-assigned event envelope used for ordered delivery and reconnect replay.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SequencedSessionEvent {
+    pub event_id: u64,
+    pub ts_ms: i64,
+    pub event: SessionEventMsg,
+}
+
 /// Filtered receiver skipping non-matching broadcast events.
 pub struct FilteredReceiver {
-    rx: broadcast::Receiver<SessionEventMsg>,
+    rx: broadcast::Receiver<SequencedSessionEvent>,
     filter: SubscribeFilter,
+    replay: VecDeque<SequencedSessionEvent>,
+    last_seen_event_id: u64,
+    inner: Arc<SessionEventHubInner>,
 }
 
 impl FilteredReceiver {
     /// Returns the next event matching the subscription filter, or `None` if closed.
-    pub async fn recv(&mut self) -> Option<SessionEventMsg> {
+    pub async fn recv(&mut self) -> Option<SequencedSessionEvent> {
         loop {
+            if let Some(ev) = self.replay.pop_front() {
+                self.last_seen_event_id = self.last_seen_event_id.max(ev.event_id);
+                return Some(ev);
+            }
             match self.rx.recv().await {
-                Ok(ev) if event_matches(&self.filter, &ev) => return Some(ev),
-                Ok(_) => continue,
-                Err(broadcast::error::RecvError::Lagged(_)) => continue,
+                Ok(ev) => {
+                    if ev.event_id <= self.last_seen_event_id {
+                        continue;
+                    }
+                    self.last_seen_event_id = ev.event_id;
+                    if event_matches(&self.filter, &ev.event) {
+                        return Some(ev);
+                    }
+                }
+                Err(broadcast::error::RecvError::Lagged(_)) => {
+                    self.replay = replay_after(&self.inner, &self.filter, self.last_seen_event_id);
+                }
                 Err(broadcast::error::RecvError::Closed) => return None,
             }
         }
     }
 }
 
-/// Tokio broadcast fan-out for session memory events.
+#[derive(Debug)]
+struct SessionEventHubInner {
+    tx: broadcast::Sender<SequencedSessionEvent>,
+    stream_id: String,
+    history_capacity: usize,
+    state: Mutex<SessionEventHubState>,
+}
+
+#[derive(Debug)]
+struct SessionEventHubState {
+    next_event_id: u64,
+    history: VecDeque<SequencedSessionEvent>,
+}
+
+/// Tokio broadcast fan-out with bounded replay for reconnecting subscribers.
 #[derive(Debug, Clone)]
 pub struct SessionEventHub {
-    tx: broadcast::Sender<SessionEventMsg>,
+    inner: Arc<SessionEventHubInner>,
 }
 
 impl SessionEventHub {
     pub fn new(capacity: usize) -> Self {
-        let (tx, _) = broadcast::channel(capacity.max(1));
-        Self { tx }
+        let capacity = capacity.max(1);
+        let (tx, _) = broadcast::channel(capacity);
+        Self {
+            inner: Arc::new(SessionEventHubInner {
+                tx,
+                stream_id: Uuid::new_v4().to_string(),
+                history_capacity: capacity,
+                state: Mutex::new(SessionEventHubState {
+                    next_event_id: 1,
+                    history: VecDeque::with_capacity(capacity),
+                }),
+            }),
+        }
     }
 
-    /// Publishes an event; no-op when there are no subscribers.
+    /// Publishes an event and retains it for bounded reconnect replay.
     pub fn publish(&self, ev: SessionEventMsg) {
-        let _ = self.tx.send(ev);
+        // Sequence allocation, history insertion, and broadcast are serialized
+        // so concurrent publishers cannot expose ids out of order.
+        let mut state = lock_state(&self.inner);
+        let sequenced = SequencedSessionEvent {
+            event_id: state.next_event_id,
+            ts_ms: chrono::Utc::now().timestamp_millis(),
+            event: ev,
+        };
+        state.next_event_id = state.next_event_id.saturating_add(1);
+        if state.history.len() == self.inner.history_capacity {
+            state.history.pop_front();
+        }
+        state.history.push_back(sequenced.clone());
+        let _ = self.inner.tx.send(sequenced);
     }
 
     /// Raw broadcast receiver (no filtering).
-    pub fn subscribe_raw(&self) -> broadcast::Receiver<SessionEventMsg> {
-        self.tx.subscribe()
+    pub fn subscribe_raw(&self) -> broadcast::Receiver<SequencedSessionEvent> {
+        self.inner.tx.subscribe()
     }
 
-    /// Returns a receiver that only yields events matching `filter`.
-    pub fn subscribe(&self, filter: SubscribeFilter) -> FilteredReceiver {
+    /// Stable identifier for this in-process event stream generation.
+    pub fn stream_id(&self) -> &str {
+        &self.inner.stream_id
+    }
+
+    /// Returns a filtered receiver, replaying events after a valid cursor.
+    pub fn subscribe(
+        &self,
+        filter: SubscribeFilter,
+        resume_stream_id: &str,
+        after_event_id: u64,
+    ) -> FilteredReceiver {
+        // Subscribe before snapshotting history. Events racing with the snapshot
+        // can appear twice, and `last_seen_event_id` removes that duplicate.
+        let rx = self.inner.tx.subscribe();
+        let after_event_id = if resume_stream_id == self.stream_id() {
+            after_event_id
+        } else {
+            0
+        };
         FilteredReceiver {
-            rx: self.tx.subscribe(),
+            rx,
+            replay: replay_after(&self.inner, &filter, after_event_id),
+            last_seen_event_id: after_event_id,
             filter,
+            inner: self.inner.clone(),
         }
     }
+}
+
+fn lock_state(inner: &SessionEventHubInner) -> std::sync::MutexGuard<'_, SessionEventHubState> {
+    match inner.state.lock() {
+        Ok(state) => state,
+        Err(poisoned) => poisoned.into_inner(),
+    }
+}
+
+fn replay_after(
+    inner: &SessionEventHubInner,
+    filter: &SubscribeFilter,
+    after_event_id: u64,
+) -> VecDeque<SequencedSessionEvent> {
+    lock_state(inner)
+        .history
+        .iter()
+        .filter(|ev| ev.event_id > after_event_id && event_matches(filter, &ev.event))
+        .cloned()
+        .collect()
 }
 
 /// Whether `ev` should be delivered to a subscriber with `filter`.
@@ -119,21 +226,22 @@ pub fn event_matches(filter: &SubscribeFilter, ev: &SessionEventMsg) -> bool {
 }
 
 /// Converts a hub message to the gRPC [`SessionEvent`] type.
-pub fn to_proto(msg: &SessionEventMsg) -> SessionEvent {
-    let payload = if let Some(ref mem) = msg.memory_updated {
+pub fn to_proto(msg: &SequencedSessionEvent, stream_id: &str) -> SessionEvent {
+    let event = &msg.event;
+    let payload = if let Some(ref mem) = event.memory_updated {
         Some(Payload::MemoryUpdated(MemoryUpdatedEvent {
             source: mem.source.clone(),
             target: mem.target.clone(),
             summary: mem.summary.clone(),
             live_written: mem.live_written,
         }))
-    } else if let Some(ref pend) = msg.pending_changed {
+    } else if let Some(ref pend) = event.pending_changed {
         Some(Payload::PendingChanged(PendingChangedEvent {
             pending_count: pend.pending_count,
             reason: pend.reason.clone(),
         }))
     } else {
-        msg.session_metadata_changed.as_ref().map(|meta| {
+        event.session_metadata_changed.as_ref().map(|meta| {
             Payload::SessionMetadataChanged(SessionMetadataChangedEvent {
                 title: meta.title.clone(),
             })
@@ -141,9 +249,11 @@ pub fn to_proto(msg: &SessionEventMsg) -> SessionEvent {
     };
 
     SessionEvent {
-        session_id: msg.session_id.clone().unwrap_or_default(),
-        agent_id: msg.agent_id.clone(),
-        ts_ms: chrono::Utc::now().timestamp_millis(),
+        session_id: event.session_id.clone().unwrap_or_default(),
+        agent_id: event.agent_id.clone(),
+        ts_ms: msg.ts_ms,
+        event_id: msg.event_id,
+        stream_id: stream_id.to_string(),
         payload,
     }
 }
@@ -156,10 +266,14 @@ mod tests {
     #[tokio::test]
     async fn publish_reaches_matching_subscriber() {
         let hub = SessionEventHub::new(16);
-        let mut rx = hub.subscribe(SubscribeFilter {
-            session_id: Some("s1".into()),
-            agent_id: None,
-        });
+        let mut rx = hub.subscribe(
+            SubscribeFilter {
+                session_id: Some("s1".into()),
+                agent_id: None,
+            },
+            "",
+            0,
+        );
         hub.publish(SessionEventMsg {
             session_id: Some("s1".into()),
             agent_id: "workspace".into(),
@@ -176,17 +290,22 @@ mod tests {
             .await
             .unwrap()
             .unwrap();
-        assert_eq!(ev.session_id.as_deref(), Some("s1"));
-        assert!(ev.memory_updated.unwrap().live_written);
+        assert_eq!(ev.event_id, 1);
+        assert_eq!(ev.event.session_id.as_deref(), Some("s1"));
+        assert!(ev.event.memory_updated.unwrap().live_written);
     }
 
     #[tokio::test]
     async fn empty_session_filter_receives_global_pending() {
         let hub = SessionEventHub::new(16);
-        let mut rx = hub.subscribe(SubscribeFilter {
-            session_id: None,
-            agent_id: None,
-        });
+        let mut rx = hub.subscribe(
+            SubscribeFilter {
+                session_id: None,
+                agent_id: None,
+            },
+            "",
+            0,
+        );
         hub.publish(SessionEventMsg {
             session_id: None,
             agent_id: "workspace".into(),
@@ -198,7 +317,96 @@ mod tests {
             session_metadata_changed: None,
         });
         let ev = rx.recv().await.unwrap();
-        assert_eq!(ev.pending_changed.unwrap().pending_count, 2);
+        assert_eq!(ev.event.pending_changed.unwrap().pending_count, 2);
+    }
+
+    #[tokio::test]
+    async fn reconnect_replays_only_events_after_cursor() {
+        let hub = SessionEventHub::new(16);
+        for summary in ["first", "second"] {
+            hub.publish(SessionEventMsg {
+                session_id: Some("s1".into()),
+                agent_id: "workspace".into(),
+                memory_updated: Some(MemoryUpdatedPayload {
+                    source: "review".into(),
+                    target: "memory".into(),
+                    summary: summary.into(),
+                    live_written: true,
+                }),
+                pending_changed: None,
+                session_metadata_changed: None,
+            });
+        }
+
+        let mut rx = hub.subscribe(
+            SubscribeFilter {
+                session_id: Some("s1".into()),
+                agent_id: None,
+            },
+            hub.stream_id(),
+            1,
+        );
+        let ev = rx.recv().await.unwrap();
+        assert_eq!(ev.event_id, 2);
+        assert_eq!(ev.event.memory_updated.unwrap().summary, "second");
+    }
+
+    #[tokio::test]
+    async fn stale_stream_id_restarts_replay_from_available_history() {
+        let hub = SessionEventHub::new(16);
+        hub.publish(SessionEventMsg {
+            session_id: Some("s1".into()),
+            agent_id: "workspace".into(),
+            memory_updated: Some(MemoryUpdatedPayload {
+                source: "review".into(),
+                target: "memory".into(),
+                summary: "restored".into(),
+                live_written: true,
+            }),
+            pending_changed: None,
+            session_metadata_changed: None,
+        });
+
+        let mut rx = hub.subscribe(
+            SubscribeFilter {
+                session_id: Some("s1".into()),
+                agent_id: None,
+            },
+            "old-server-generation",
+            99,
+        );
+        let ev = rx.recv().await.unwrap();
+        assert_eq!(ev.event_id, 1);
+    }
+
+    #[tokio::test]
+    async fn concurrent_publishers_are_observed_in_event_id_order() {
+        let hub = SessionEventHub::new(16);
+        let mut rx = hub.subscribe_raw();
+        let publishers: Vec<_> = (0..8)
+            .map(|index| {
+                let hub = hub.clone();
+                std::thread::spawn(move || {
+                    hub.publish(SessionEventMsg {
+                        session_id: Some("s1".into()),
+                        agent_id: format!("agent-{index}"),
+                        memory_updated: None,
+                        pending_changed: Some(PendingChangedPayload {
+                            pending_count: index,
+                            reason: "test".into(),
+                        }),
+                        session_metadata_changed: None,
+                    });
+                })
+            })
+            .collect();
+        for publisher in publishers {
+            publisher.join().unwrap();
+        }
+
+        for expected_id in 1..=8 {
+            assert_eq!(rx.recv().await.unwrap().event_id, expected_id);
+        }
     }
 
     #[test]

@@ -350,12 +350,17 @@ message SubscribeSessionEventsRequest {
   string session_id = 1;
   // 可选 agent 过滤；空 = 不过滤
   string agent_id = 2;
+  // 断线重连游标；仅在 stream_id 匹配当前服务进程时生效。
+  uint64 after_event_id = 3;
+  string stream_id = 4;
 }
 
 message SessionEvent {
   string session_id = 1;
   string agent_id = 2;
   int64 ts_ms = 3;
+  uint64 event_id = 4;
+  string stream_id = 5;
   oneof payload {
     MemoryUpdatedEvent memory_updated = 10;
     PendingChangedEvent pending_changed = 11;
