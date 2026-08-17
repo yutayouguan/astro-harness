@@ -2,10 +2,12 @@
 //!
 //! 记录仅包含截断后的 capability 摘要，不保存命令正文、凭证或环境变量。
 
+use std::collections::VecDeque;
 use std::fmt::Write as _;
 use std::fs::{self, OpenOptions};
 use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
+use std::sync::{Mutex, OnceLock};
 
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
@@ -17,6 +19,10 @@ use crate::config::LoadedPermissionSettings;
 
 const MAX_TARGETS: usize = 10;
 const MAX_TARGET_CHARS: usize = 160;
+pub const MAX_PERMISSION_AUDIT_FILE_BYTES: u64 = 8 * 1024 * 1024;
+pub const PERMISSION_AUDIT_ARCHIVE_COUNT: usize = 3;
+
+static AUDIT_WRITE_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum PermissionAuditKind {
@@ -170,16 +176,77 @@ pub fn permission_audit_path(base: &Path) -> PathBuf {
     audit_dir(base).join("permissions.jsonl")
 }
 
+pub fn permission_audit_archive_path(base: &Path, index: usize) -> PathBuf {
+    audit_dir(base).join(format!("permissions.{index}.jsonl"))
+}
+
 pub fn append_permission_audit(base: &Path, event: &PermissionAuditEvent) -> anyhow::Result<()> {
+    append_permission_audit_with_policy(
+        base,
+        event,
+        MAX_PERMISSION_AUDIT_FILE_BYTES,
+        PERMISSION_AUDIT_ARCHIVE_COUNT,
+    )
+}
+
+fn append_permission_audit_with_policy(
+    base: &Path,
+    event: &PermissionAuditEvent,
+    max_file_bytes: u64,
+    archive_count: usize,
+) -> anyhow::Result<()> {
+    let _guard = AUDIT_WRITE_LOCK
+        .get_or_init(|| Mutex::new(()))
+        .lock()
+        .map_err(|_| anyhow::anyhow!("permission audit write lock poisoned"))?;
     let dir = audit_dir(base);
     fs::create_dir_all(&dir)?;
+    let mut line = serde_json::to_vec(event)?;
+    line.push(b'\n');
+    rotate_permission_audit_if_needed(
+        base,
+        u64::try_from(line.len()).unwrap_or(u64::MAX),
+        max_file_bytes,
+        archive_count,
+    )?;
     let mut file = OpenOptions::new()
         .create(true)
         .append(true)
         .open(permission_audit_path(base))?;
-    let mut line = serde_json::to_vec(event)?;
-    line.push(b'\n');
     file.write_all(&line)?;
+    Ok(())
+}
+
+fn rotate_permission_audit_if_needed(
+    base: &Path,
+    incoming_bytes: u64,
+    max_file_bytes: u64,
+    archive_count: usize,
+) -> anyhow::Result<()> {
+    let active = permission_audit_path(base);
+    let current_bytes = active.metadata().map(|meta| meta.len()).unwrap_or(0);
+    if current_bytes == 0 || current_bytes.saturating_add(incoming_bytes) <= max_file_bytes {
+        return Ok(());
+    }
+    if archive_count == 0 {
+        fs::remove_file(active)?;
+        return Ok(());
+    }
+    for index in (1..=archive_count).rev() {
+        let source = if index == 1 {
+            active.clone()
+        } else {
+            permission_audit_archive_path(base, index - 1)
+        };
+        if !source.is_file() {
+            continue;
+        }
+        let destination = permission_audit_archive_path(base, index);
+        if destination.exists() {
+            fs::remove_file(&destination)?;
+        }
+        fs::rename(source, destination)?;
+    }
     Ok(())
 }
 
@@ -193,26 +260,35 @@ pub fn list_recent_permission_audits(
     base: &Path,
     limit: usize,
 ) -> anyhow::Result<Vec<PermissionAuditEvent>> {
-    let path = permission_audit_path(base);
-    if !path.is_file() {
+    if limit == 0 {
         return Ok(Vec::new());
     }
-    let mut events = Vec::new();
-    for line in BufReader::new(fs::File::open(path)?).lines() {
-        let line = line?;
-        if line.trim().is_empty() {
+    let mut events = VecDeque::with_capacity(limit.min(1024));
+    let paths = (1..=PERMISSION_AUDIT_ARCHIVE_COUNT)
+        .rev()
+        .map(|index| permission_audit_archive_path(base, index))
+        .chain(std::iter::once(permission_audit_path(base)));
+    for path in paths {
+        if !path.is_file() {
             continue;
         }
-        match serde_json::from_str(&line) {
-            Ok(event) => events.push(event),
-            Err(error) => tracing::warn!(%error, "skip malformed permission audit line"),
+        for line in BufReader::new(fs::File::open(path)?).lines() {
+            let line = line?;
+            if line.trim().is_empty() {
+                continue;
+            }
+            match serde_json::from_str(&line) {
+                Ok(event) => {
+                    events.push_back(event);
+                    if events.len() > limit {
+                        events.pop_front();
+                    }
+                }
+                Err(error) => tracing::warn!(%error, "skip malformed permission audit line"),
+            }
         }
     }
-    if events.len() > limit {
-        Ok(events.split_off(events.len() - limit))
-    } else {
-        Ok(events)
-    }
+    Ok(events.into_iter().collect())
 }
 
 #[cfg(test)]
@@ -238,6 +314,18 @@ mod tests {
             affected_paths: Vec::new(),
             network_hosts: Vec::new(),
         }
+    }
+
+    fn test_event(id: usize) -> PermissionAuditEvent {
+        let mut event = PermissionAuditEvent::new(
+            PermissionAuditKind::Requested,
+            &request(),
+            ":workspace",
+            "hash",
+        );
+        event.id = format!("event-{id}");
+        event.created_at = format!("2026-08-17T00:00:0{id}Z");
+        event
     }
 
     #[test]
@@ -268,5 +356,41 @@ mod tests {
         let second_hash = permission_snapshot_hash(&first, ":read-only");
         assert_ne!(first_hash, second_hash);
         assert_eq!(first_hash.len(), 64);
+    }
+
+    #[test]
+    fn rotation_retains_only_newest_archives_and_query_crosses_files() {
+        let dir = tempfile::tempdir().unwrap();
+        let sample = test_event(0);
+        let max_file_bytes = serde_json::to_vec(&sample).unwrap().len() as u64 + 2;
+
+        for id in 0..5 {
+            append_permission_audit_with_policy(dir.path(), &test_event(id), max_file_bytes, 2)
+                .unwrap();
+        }
+
+        assert!(permission_audit_path(dir.path()).is_file());
+        assert!(permission_audit_archive_path(dir.path(), 1).is_file());
+        assert!(permission_audit_archive_path(dir.path(), 2).is_file());
+        assert!(!permission_audit_archive_path(dir.path(), 3).is_file());
+        let events = list_recent_permission_audits(dir.path(), 10).unwrap();
+        assert_eq!(
+            events
+                .iter()
+                .map(|event| event.id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["event-2", "event-3", "event-4"]
+        );
+        assert_eq!(
+            list_recent_permission_audits(dir.path(), 2)
+                .unwrap()
+                .iter()
+                .map(|event| event.id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["event-3", "event-4"]
+        );
+        assert!(list_recent_permission_audits(dir.path(), 0)
+            .unwrap()
+            .is_empty());
     }
 }
