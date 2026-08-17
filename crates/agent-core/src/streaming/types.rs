@@ -105,7 +105,7 @@ pub enum MultiTurnStreamItem {
         content_json: String,
         replace: bool,
     },
-    /// AG-UI `RUN_FINISHED`：`outcome_type` 为 `success`、`interrupt` 或 `hitl_waiting`。
+    /// AG-UI `RUN_FINISHED`：`outcome_type` 为 `success`、`error`、`interrupt` 或 `hitl_waiting`。
     /// `hitl_waiting`：同回合阻塞 HITL，流不随后发 Done。
     RunFinished {
         run_id: String,

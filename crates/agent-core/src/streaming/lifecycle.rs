@@ -70,19 +70,17 @@ pub(super) async fn record_llm_usage(
     );
 }
 
-/// 发送 Error 后立即发送 Done；若有已累计 usage 则先写入 `usage.db`。
+/// 发送 Error、RunFinished(error)、Done；若有已累计 usage 则先写入 `usage.db`。
 pub(super) async fn finish_error(
     session: &Arc<Mutex<AgentLoop>>,
     streamer: &ProviderStreamer,
     tx: &mpsc::Sender<anyhow::Result<MultiTurnStreamItem>>,
     msg: impl Into<String>,
     usage: Option<Usage>,
+    run_id: &str,
 ) {
-    if let Some(u) = usage.as_ref() {
-        record_llm_usage(session, streamer, u).await;
-    }
     let _ = emit(tx, MultiTurnStreamItem::Error(msg.into())).await;
-    let _ = emit(tx, MultiTurnStreamItem::Done).await;
+    finish_run(session, streamer, tx, usage, run_id, RunPhase::Error).await;
 }
 
 /// 仅发送 Done，表示正常结束。
@@ -90,10 +88,29 @@ async fn finish_done(tx: &mpsc::Sender<anyhow::Result<MultiTurnStreamItem>>) {
     let _ = emit(tx, MultiTurnStreamItem::Done).await;
 }
 
-/// 发送 RunFinished(success) 后 Done。
-async fn finish_success(tx: &mpsc::Sender<anyhow::Result<MultiTurnStreamItem>>, run_id: &str) {
+/// 发送唯一 RunFinished 终态后 Done。
+async fn finish_run(
+    session: &Arc<Mutex<AgentLoop>>,
+    streamer: &ProviderStreamer,
+    tx: &mpsc::Sender<anyhow::Result<MultiTurnStreamItem>>,
+    usage: Option<Usage>,
+    run_id: &str,
+    phase: RunPhase,
+) {
+    debug_assert!(matches!(
+        phase,
+        RunPhase::Finished | RunPhase::Cancelled | RunPhase::Error
+    ));
+    if let Some(u) = usage {
+        record_llm_usage(session, streamer, &u).await;
+        let _ = emit(
+            tx,
+            MultiTurnStreamItem::Assistant(StreamedAssistantContent::FinalUsage(u)),
+        )
+        .await;
+    }
     let mut state = RunState::new();
-    state.set_phase(RunPhase::Finished);
+    state.set_phase(phase);
     let _ = emit(
         tx,
         MultiTurnStreamItem::RunFinished {
@@ -106,21 +123,24 @@ async fn finish_success(tx: &mpsc::Sender<anyhow::Result<MultiTurnStreamItem>>, 
     finish_done(tx).await;
 }
 
-/// 可选发送累计 usage 后发送 Done；若有 usage 则旁路写入 `usage.db`（kind=llm）。
-pub(crate) async fn finish_usage_and_done(
+/// 正常完成：可选发送累计 usage，再发送 RunFinished(success) 与 Done。
+pub(crate) async fn finish_success(
     session: &Arc<Mutex<AgentLoop>>,
     streamer: &ProviderStreamer,
     tx: &mpsc::Sender<anyhow::Result<MultiTurnStreamItem>>,
     usage: Option<Usage>,
     run_id: &str,
 ) {
-    if let Some(u) = usage {
-        record_llm_usage(session, streamer, &u).await;
-        let _ = emit(
-            tx,
-            MultiTurnStreamItem::Assistant(StreamedAssistantContent::FinalUsage(u)),
-        )
-        .await;
-    }
-    finish_success(tx, run_id).await;
+    finish_run(session, streamer, tx, usage, run_id, RunPhase::Finished).await;
+}
+
+/// 用户取消或流控制中断：发送 RunFinished(interrupt) 与 Done。
+pub(crate) async fn finish_interrupted(
+    session: &Arc<Mutex<AgentLoop>>,
+    streamer: &ProviderStreamer,
+    tx: &mpsc::Sender<anyhow::Result<MultiTurnStreamItem>>,
+    usage: Option<Usage>,
+    run_id: &str,
+) {
+    finish_run(session, streamer, tx, usage, run_id, RunPhase::Cancelled).await;
 }

@@ -104,6 +104,11 @@ fn indicates_pending_enqueue(content: &str) -> bool {
     content.contains("待审批") || content.contains("pending") || content.contains("入队")
 }
 
+/// 仅正常成功的 Run 才允许触发记忆 review、标题生成等回合后副作用。
+fn allows_post_turn_side_effects(outcome_type: &str) -> bool {
+    outcome_type == "success"
+}
+
 /// 工具入 pending 时 publish 全局 `pending_changed`（+ live_written=false 的 memory_updated）。
 ///
 /// 回合内 **live** 工具写仍只走 Chat `MemoryUpdate`，不调用本函数。
@@ -1063,6 +1068,7 @@ impl AstroService for AstroServiceImpl {
                 pause,
                 Some(hitl_gate),
             );
+            let mut run_succeeded = false;
             while let Some(item) = stream.next().await {
                 match item {
                     Ok(mt) => {
@@ -1073,6 +1079,7 @@ impl AstroService for AstroServiceImpl {
                             ..
                         } = mt
                         {
+                            run_succeeded = allows_post_turn_side_effects(outcome_type);
                             if outcome_type == "hitl_waiting" || outcome_type == "interrupt" {
                                 let interrupts: Vec<agent::Interrupt> =
                                     serde_json::from_str(interrupts_json).unwrap_or_default();
@@ -1106,14 +1113,16 @@ impl AstroService for AstroServiceImpl {
                             }
                         }
                         if is_done {
-                            // 回合成功后 fire-and-forget review / 标题 → SessionEventHub（不阻塞 Chat 流）
-                            spawn_review_to_hub(
-                                &session_for_review,
-                                &sid_cleanup,
-                                &session_events_hub,
-                            )
-                            .await;
-                            spawn_title_to_hub(&session_for_review, &session_events_hub).await;
+                            if run_succeeded {
+                                // 仅成功回合 fire-and-forget review / 标题 → SessionEventHub。
+                                spawn_review_to_hub(
+                                    &session_for_review,
+                                    &sid_cleanup,
+                                    &session_events_hub,
+                                )
+                                .await;
+                                spawn_title_to_hub(&session_for_review, &session_events_hub).await;
+                            }
                             break;
                         }
                     }
@@ -1640,6 +1649,14 @@ mod tests {
     use std::sync::atomic::{AtomicUsize, Ordering};
 
     use tempfile::TempDir;
+
+    #[test]
+    fn only_successful_run_allows_post_turn_side_effects() {
+        assert!(allows_post_turn_side_effects("success"));
+        for outcome in ["error", "interrupt", "hitl_waiting", ""] {
+            assert!(!allows_post_turn_side_effects(outcome), "outcome={outcome}");
+        }
+    }
 
     #[tokio::test]
     async fn release_session_runtime_is_idempotent() {

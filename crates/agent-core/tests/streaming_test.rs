@@ -44,6 +44,12 @@ fn boom_chat() -> ChatOverride {
     Arc::new(move |_msgs, _tools, _cfg| Box::pin(async move { Err(anyhow::anyhow!("boom")) }))
 }
 
+fn pending_chat() -> ChatOverride {
+    Arc::new(move |_msgs, _tools, _cfg| {
+        Box::pin(async move { Ok(Box::pin(futures::stream::pending()) as CompletionStream) })
+    })
+}
+
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn multi_turn_emits_text_tool_result_and_usage() {
     let dir = tempfile::tempdir().unwrap();
@@ -719,7 +725,7 @@ async fn cumulative_usage_chunks_use_last_per_round() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn error_is_followed_by_done() {
+async fn error_has_single_error_terminal_before_done() {
     let dir = tempfile::tempdir().unwrap();
     let config = AgentConfig::with_defaults(dir.path().to_path_buf());
     let agent = AgentLoop::with_session_id(config, "err-session".into()).unwrap();
@@ -757,6 +763,68 @@ async fn error_is_followed_by_done() {
     assert!(items
         .iter()
         .any(|i| matches!(i, MultiTurnStreamItem::Error(_))));
+    let terminal_outcomes: Vec<&str> = items
+        .iter()
+        .filter_map(|item| match item {
+            MultiTurnStreamItem::RunFinished { outcome_type, .. } => Some(outcome_type.as_str()),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(terminal_outcomes, ["error"]);
+    assert!(matches!(items.last(), Some(MultiTurnStreamItem::Done)));
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn cancellation_has_single_interrupt_terminal_before_done() {
+    let dir = tempfile::tempdir().unwrap();
+    let config = AgentConfig::with_defaults(dir.path().to_path_buf());
+    let agent = AgentLoop::with_session_id(config, "cancel-session".into()).unwrap();
+    let session = Arc::new(Mutex::new(agent));
+    {
+        let mut agent = session.lock().await;
+        agent
+            .session_messages
+            .push(types::message::Message::user("wait"));
+    }
+
+    let (tx, mut rx) = tokio::sync::mpsc::channel(64);
+    let pause = PauseControl::new();
+    let run_pause = pause.clone();
+    tokio::spawn(async move {
+        run_multi_turn_stream_with_chat_fn(
+            session,
+            pending_chat(),
+            ProviderConfig {
+                model: "test".into(),
+                ..Default::default()
+            },
+            "sys".into(),
+            run_pause,
+            None,
+            tx,
+        )
+        .await;
+    });
+
+    let started = rx.recv().await.unwrap().unwrap();
+    assert!(matches!(started, MultiTurnStreamItem::RunStarted { .. }));
+    pause.cancel();
+
+    let mut items = vec![started];
+    while let Some(item) = rx.recv().await {
+        items.push(item.unwrap());
+    }
+    assert!(!items
+        .iter()
+        .any(|item| matches!(item, MultiTurnStreamItem::Error(_))));
+    let terminal_outcomes: Vec<&str> = items
+        .iter()
+        .filter_map(|item| match item {
+            MultiTurnStreamItem::RunFinished { outcome_type, .. } => Some(outcome_type.as_str()),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(terminal_outcomes, ["interrupt"]);
     assert!(matches!(items.last(), Some(MultiTurnStreamItem::Done)));
 }
 

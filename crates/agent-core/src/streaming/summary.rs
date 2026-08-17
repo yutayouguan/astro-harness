@@ -10,7 +10,7 @@ use types::message::Message;
 
 use crate::runtime::AgentLoop;
 
-use super::lifecycle::{emit, finish_usage_and_done};
+use super::lifecycle::{emit, finish_interrupted};
 use super::provider::ProviderStreamer;
 use super::traits::StreamingChat;
 use super::types::{MultiTurnStreamItem, StreamedAssistantContent};
@@ -103,7 +103,7 @@ pub(crate) async fn run_max_iterations_summary(a: MaxIterationsSummaryArgs<'_>) 
                 total_usage.add_assign(u);
                 *saw_usage = true;
             }
-            finish_usage_and_done(
+            finish_interrupted(
                 session,
                 streamer,
                 tx,
@@ -122,7 +122,7 @@ pub(crate) async fn run_max_iterations_summary(a: MaxIterationsSummaryArgs<'_>) 
                     total_usage.add_assign(u);
                     *saw_usage = true;
                 }
-                finish_usage_and_done(
+                finish_interrupted(
                     session,
                     streamer,
                     tx,

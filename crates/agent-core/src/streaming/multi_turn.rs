@@ -17,7 +17,7 @@ use providers::{PauseControl, Usage};
 use tokio::sync::{mpsc, Mutex};
 use types::ChatTarget;
 
-use super::lifecycle::{emit, finish_error, finish_usage_and_done};
+use super::lifecycle::{emit, finish_error, finish_interrupted, finish_success};
 use super::maintenance::{
     emit_context_usage, post_tool_maintenance, pre_llm_maintenance, record_tool_outcomes,
     stream_chat_with_hooks,
@@ -201,7 +201,7 @@ async fn run_multi_turn_stream_inner(args: MultiTurnStreamInnerArgs) {
             break;
         }
         if pause.is_cancelled() {
-            finish_usage_and_done(
+            finish_interrupted(
                 &session,
                 &streamer,
                 &tx,
@@ -212,7 +212,7 @@ async fn run_multi_turn_stream_inner(args: MultiTurnStreamInnerArgs) {
             return;
         }
         if !pause.wait_if_paused().await {
-            finish_usage_and_done(
+            finish_interrupted(
                 &session,
                 &streamer,
                 &tx,
@@ -238,6 +238,7 @@ async fn run_multi_turn_stream_inner(args: MultiTurnStreamInnerArgs) {
                     &tx,
                     error.to_string(),
                     saw_usage.then_some(total_usage),
+                    &run_id,
                 )
                 .await;
                 return;
@@ -263,6 +264,7 @@ async fn run_multi_turn_stream_inner(args: MultiTurnStreamInnerArgs) {
                     &tx,
                     err,
                     saw_usage.then_some(total_usage),
+                    &run_id,
                 )
                 .await;
                 return;
@@ -282,7 +284,7 @@ async fn run_multi_turn_stream_inner(args: MultiTurnStreamInnerArgs) {
         loop {
             if !pause.wait_if_paused().await {
                 pause.clear_abort();
-                finish_usage_and_done(
+                finish_interrupted(
                     &session,
                     &streamer,
                     &tx,
@@ -303,7 +305,7 @@ async fn run_multi_turn_stream_inner(args: MultiTurnStreamInnerArgs) {
                 biased;
                 _ = pause.wait_cancelled() => {
                     pause.clear_abort();
-                    finish_usage_and_done(
+                    finish_interrupted(
                     &session,
                     &streamer,
                         &tx,
@@ -387,6 +389,7 @@ async fn run_multi_turn_stream_inner(args: MultiTurnStreamInnerArgs) {
                         &tx,
                         err.to_string(),
                         saw_usage.then_some(total_usage),
+                        &run_id,
                     )
                     .await;
                     return;
@@ -401,7 +404,7 @@ async fn run_multi_turn_stream_inner(args: MultiTurnStreamInnerArgs) {
                 total_usage.add_assign(u);
                 saw_usage = true;
             }
-            finish_usage_and_done(
+            finish_interrupted(
                 &session,
                 &streamer,
                 &tx,
@@ -446,6 +449,7 @@ async fn run_multi_turn_stream_inner(args: MultiTurnStreamInnerArgs) {
                         &tx,
                         err.to_string(),
                         saw_usage.then_some(total_usage),
+                        &run_id,
                     )
                     .await;
                     return;
@@ -460,6 +464,7 @@ async fn run_multi_turn_stream_inner(args: MultiTurnStreamInnerArgs) {
                         &tx,
                         err.to_string(),
                         saw_usage.then_some(total_usage),
+                        &run_id,
                     )
                     .await;
                     return;
@@ -473,6 +478,7 @@ async fn run_multi_turn_stream_inner(args: MultiTurnStreamInnerArgs) {
                 &tx,
                 "模型返回了空回复。请重试，或换一个模型。",
                 saw_usage.then_some(total_usage),
+                &run_id,
             )
             .await;
             return;
@@ -519,6 +525,7 @@ async fn run_multi_turn_stream_inner(args: MultiTurnStreamInnerArgs) {
                         &tx,
                         err.to_string(),
                         saw_usage.then_some(total_usage),
+                        &run_id,
                     )
                     .await;
                     return;
@@ -533,6 +540,7 @@ async fn run_multi_turn_stream_inner(args: MultiTurnStreamInnerArgs) {
                         &tx,
                         err.to_string(),
                         saw_usage.then_some(total_usage),
+                        &run_id,
                     )
                     .await;
                     return;
@@ -573,7 +581,7 @@ async fn run_multi_turn_stream_inner(args: MultiTurnStreamInnerArgs) {
             let cancelled = agent.cancel_signal().is_cancelled();
             drop(agent);
             if cancelled {
-                finish_usage_and_done(
+                finish_interrupted(
                     &session,
                     &streamer,
                     &tx,
@@ -607,6 +615,7 @@ async fn run_multi_turn_stream_inner(args: MultiTurnStreamInnerArgs) {
                     &tx,
                     err.to_string(),
                     saw_usage.then_some(total_usage),
+                    &run_id,
                 )
                 .await;
                 return;
@@ -636,7 +645,7 @@ async fn run_multi_turn_stream_inner(args: MultiTurnStreamInnerArgs) {
         };
 
         let Some(outcomes) = outcomes else {
-            finish_usage_and_done(
+            finish_interrupted(
                 &session,
                 &streamer,
                 &tx,
@@ -658,7 +667,7 @@ async fn run_multi_turn_stream_inner(args: MultiTurnStreamInnerArgs) {
         )
         .await
         {
-            finish_usage_and_done(
+            finish_interrupted(
                 &session,
                 &streamer,
                 &tx,
@@ -710,6 +719,7 @@ async fn run_multi_turn_stream_inner(args: MultiTurnStreamInnerArgs) {
                     &tx,
                     err,
                     saw_usage.then_some(total_usage),
+                    &run_id,
                 )
                 .await;
                 return;
@@ -734,7 +744,7 @@ async fn run_multi_turn_stream_inner(args: MultiTurnStreamInnerArgs) {
         );
     }
 
-    finish_usage_and_done(
+    finish_success(
         &session,
         &streamer,
         &tx,
