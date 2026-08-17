@@ -192,11 +192,9 @@ impl AgentLoop {
                 self.project_root.clone(),
             ))
         });
-        Ok(Arc::new(StepContext::new(
-            turn_context,
-            history,
-            tool_specs,
-        )))
+        let step_context = Arc::new(StepContext::new(turn_context, history, tool_specs));
+        self.current_step_context = Some(Arc::clone(&step_context));
+        Ok(step_context)
     }
 }
 
@@ -227,5 +225,7 @@ mod tests {
             serde_json::to_value(&second.history).unwrap()
         );
         assert_eq!(first.tool_specs, second.tool_specs);
+        assert!(first.advertises_tool("file_ops"));
+        assert!(!first.advertises_tool("terminal"));
     }
 }

@@ -61,6 +61,7 @@ impl AgentLoop {
         args: &serde_json::Value,
         workspace_write_grant: bool,
         network_grant: tools::InProcessNetworkGrant,
+        step_context: Option<&super::StepContext>,
     ) -> anyhow::Result<types::ToolOutput> {
         let agent_id = self.memory.agent_id.clone();
         self.tool_registry.reload_enabled_from_disk(Some(&agent_id));
@@ -73,7 +74,8 @@ impl AgentLoop {
             self.attach_mcp_tools().await;
         }
 
-        let allowed = self.tool_registry.is_tool_allowed(name);
+        let allowed = self.tool_registry.is_tool_allowed(name)
+            && step_context.is_none_or(|step_context| step_context.advertises_tool(name));
 
         // 在构造 ToolContext 之前，从 Hub 解析 peer（lock → resolve → release）
         // 构建 MCP 动态 handler，持有 Peer（Send + Sync），无需跨 await 持锁。
@@ -102,7 +104,9 @@ impl AgentLoop {
         let workspace_dir = self.resolve_workspace_dir();
         skills::set_workspace_override(&workspace_dir);
         let session_id = self.session_id.clone();
-        let turn_id = self.turn.current_turn_id.clone();
+        let turn_id = step_context
+            .map(|step_context| step_context.turn.sub_id().to_string())
+            .or_else(|| self.turn.current_turn_id.clone());
         let memory_dir = self.config.memory_dir.clone();
         let sessions: &dyn ConversationStore = &*self.sessions;
         let execution = Some(self.execution());
@@ -112,14 +116,18 @@ impl AgentLoop {
             sessions,
             memory_dir,
             workspace_dir,
-            project_root: self.project_root.clone(),
+            project_root: step_context
+                .and_then(|step_context| step_context.turn.project_root().map(ToOwned::to_owned))
+                .or_else(|| self.project_root.clone()),
             image_gen_targets: &self.model_ctx.image_gen_targets,
             session_id,
             turn_id,
             credentials: &self.model_ctx.credentials,
             chat_targets: &self.model_ctx.chat_targets,
             execution,
-            permission_profile: self.permission_profile.clone(),
+            permission_profile: step_context
+                .and_then(|step_context| step_context.turn.permission_profile().map(str::to_string))
+                .or_else(|| self.permission_profile.clone()),
             skill_config_overrides: &self.skill_config_overrides,
             hook_bus,
             workspace_write_grant,
@@ -285,11 +293,31 @@ impl AgentLoop {
         } else {
             (name, args_owned)
         };
-        if let Err(msg) = tools::check_tool_call(self.interaction_mode, exec_name, &exec_args) {
+        let step_context = self.current_step_context.clone();
+        let interaction_mode = step_context
+            .as_ref()
+            .map(|step_context| step_context.turn.mode())
+            .unwrap_or(self.interaction_mode);
+        if let Err(msg) = tools::check_tool_call(interaction_mode, exec_name, &exec_args) {
             return Ok(msg.into());
         }
+        if step_context
+            .as_ref()
+            .is_some_and(|step_context| !step_context.advertises_tool(exec_name))
+        {
+            return Ok(format!(
+                "工具 `{exec_name}` 不在生成本次调用的 StepContext 中，已拒绝执行。"
+            )
+            .into());
+        }
         let raw_result = self
-            .dispatch_named_tool(exec_name, &exec_args, workspace_write_grant, network_grant)
+            .dispatch_named_tool(
+                exec_name,
+                &exec_args,
+                workspace_write_grant,
+                network_grant,
+                step_context.as_deref(),
+            )
             .await?;
         if exec_name == "skills" {
             self.activate_skill_toolsets_from_args(&exec_args);

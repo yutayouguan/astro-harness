@@ -152,6 +152,8 @@ pub struct AgentLoop {
     pub(crate) interaction_mode: types::InteractionMode,
     /// 当前用户 Turn 的不可变上下文；每个 sampling step 共享同一 `Arc`。
     pub(crate) current_turn_context: Option<Arc<TurnContext>>,
+    /// 最近一次模型 sampling 实际使用的 Step 快照；工具调用必须绑定此快照。
+    pub(crate) current_step_context: Option<Arc<StepContext>>,
 }
 
 impl AgentLoop {
@@ -239,6 +241,7 @@ impl AgentLoop {
             pending_learning_nudge: None,
             interaction_mode: types::InteractionMode::Agent,
             current_turn_context: None,
+            current_step_context: None,
         })
     }
 
@@ -259,6 +262,7 @@ impl AgentLoop {
     pub fn clear_current_turn_id(&mut self) {
         self.turn.clear_current_turn_id();
         self.current_turn_context = None;
+        self.current_step_context = None;
     }
 
     /// 当前绑定的 turn_id（若有）。

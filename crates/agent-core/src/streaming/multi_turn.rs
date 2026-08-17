@@ -657,9 +657,18 @@ async fn run_turn(args: RunTurnArgs) {
         };
 
         let outcomes = if force_serial || hitl_gate.is_none() {
-            execute_tools_serial(&session, &calls, &pause, &tx, &run_id, hitl_gate.as_ref()).await
+            execute_tools_serial(
+                &session,
+                Arc::clone(&step_context),
+                &calls,
+                &pause,
+                &tx,
+                &run_id,
+                hitl_gate.as_ref(),
+            )
+            .await
         } else {
-            execute_tools_concurrent(&session, &calls, &pause).await
+            execute_tools_concurrent(&session, Arc::clone(&step_context), &calls, &pause).await
         };
 
         let Some(outcomes) = outcomes else {

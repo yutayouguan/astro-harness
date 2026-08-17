@@ -8,7 +8,7 @@ use tokio::sync::{mpsc, Mutex};
 use tokio::task::JoinSet;
 
 use crate::control::hitl::HitlGate;
-use crate::runtime::AgentLoop;
+use crate::runtime::{AgentLoop, StepContext};
 
 use super::hitl_bridge::{park_astro_hitl, park_confirm, parse_astro_hitl};
 use super::types::MultiTurnStreamItem;
@@ -663,17 +663,19 @@ pub(crate) fn tool_may_require_permission(name: &str, args: &serde_json::Value) 
 /// 串行执行；`None` 表示已处理 cancel/断开，调用方应直接 return。
 pub(crate) async fn execute_tools_serial(
     session: &Arc<Mutex<AgentLoop>>,
+    step_context: Arc<StepContext>,
     calls: &[types::ParsedToolCall],
     pause: &Arc<PauseControl>,
     tx: &mpsc::Sender<anyhow::Result<MultiTurnStreamItem>>,
     run_id: &str,
     hitl_gate: Option<&Arc<HitlGate>>,
 ) -> Option<Vec<types::ToolOutput>> {
-    execute_tools_serial_inner(session, calls, pause, tx, run_id, hitl_gate).await
+    execute_tools_serial_inner(session, step_context, calls, pause, tx, run_id, hitl_gate).await
 }
 
 async fn execute_tools_serial_inner(
     session: &Arc<Mutex<AgentLoop>>,
+    step_context: Arc<StepContext>,
     calls: &[types::ParsedToolCall],
     pause: &Arc<PauseControl>,
     tx: &mpsc::Sender<anyhow::Result<MultiTurnStreamItem>>,
@@ -687,6 +689,16 @@ async fn execute_tools_serial_inner(
         }
         if !pause.wait_if_paused().await {
             return None;
+        }
+        if !step_context.advertises_tool(&call.name) {
+            out.push(
+                format!(
+                    "工具 `{}` 不在生成本次调用的 StepContext 中，已拒绝执行。",
+                    call.name
+                )
+                .into(),
+            );
+            continue;
         }
 
         let mut workspace_write_grant = false;
@@ -1108,6 +1120,7 @@ async fn execute_tools_serial_inner(
 /// 并发执行非 interactive/exclusive 工具；按调用顺序返回结果。
 pub(crate) async fn execute_tools_concurrent(
     session: &Arc<Mutex<AgentLoop>>,
+    step_context: Arc<StepContext>,
     calls: &[types::ParsedToolCall],
     pause: &Arc<PauseControl>,
 ) -> Option<Vec<types::ToolOutput>> {
@@ -1115,15 +1128,14 @@ pub(crate) async fn execute_tools_concurrent(
         return None;
     }
 
-    let snap = {
+    let runtime = {
         let agent = session.lock().await;
-        ToolExecSnapshot {
+        ToolCallRuntime {
+            step_context,
             memory_dir: agent.memory_dir().to_path_buf(),
             agent_id: agent.agent_id().to_string(),
             workspace_dir: agent.workspace_dir(),
-            project_root: agent.project_root().cloned(),
             session_id: agent.session_id().to_string(),
-            turn_id: agent.current_turn_id().map(str::to_string),
             credentials: types::ModelCredentials {
                 provider: agent.chat_provider().to_string(),
                 model: agent.chat_model().to_string(),
@@ -1133,7 +1145,6 @@ pub(crate) async fn execute_tools_concurrent(
             chat_targets: agent.chat_targets().to_vec(),
             image_gen_targets: agent.image_gen_targets().clone(),
             execution: agent.execution(),
-            permission_profile: agent.permission_profile().map(str::to_string),
             skill_config_overrides: agent.skill_config_overrides.clone(),
             hook_bus: Some(agent.hook_bus()),
         }
@@ -1141,7 +1152,7 @@ pub(crate) async fn execute_tools_concurrent(
 
     let mut join_set = JoinSet::new();
     for (idx, call) in calls.iter().cloned().enumerate() {
-        let snap = snap.clone();
+        let runtime = runtime.clone();
         join_set.spawn_blocking(move || {
             let result: types::ToolOutput = if call.args_parse_error {
                 format!(
@@ -1153,7 +1164,7 @@ pub(crate) async fn execute_tools_concurrent(
                 )
                 .into()
             } else {
-                run_tool_on_snapshot(&snap, &call.name, &call.arguments)
+                runtime.run(&call.name, &call.arguments)
             };
             (idx, result)
         });
@@ -1185,86 +1196,92 @@ pub(crate) async fn execute_tools_concurrent(
 }
 
 #[derive(Clone)]
-struct ToolExecSnapshot {
+struct ToolCallRuntime {
+    step_context: Arc<StepContext>,
     memory_dir: std::path::PathBuf,
     agent_id: String,
     workspace_dir: std::path::PathBuf,
-    project_root: Option<std::path::PathBuf>,
     session_id: String,
-    turn_id: Option<String>,
     credentials: types::ModelCredentials,
     chat_targets: Vec<types::ChatTarget>,
     image_gen_targets: types::ImageGenTargets,
     execution: Arc<dyn tools::AgentThreadDispatch>,
-    permission_profile: Option<String>,
     skill_config_overrides: Vec<(PathBuf, bool)>,
     hook_bus: Option<Arc<hooks::PluginHookBus>>,
 }
 
-fn run_tool_on_snapshot(
-    snap: &ToolExecSnapshot,
-    name: &str,
-    args: &serde_json::Value,
-) -> types::ToolOutput {
-    // 纵深防御：并发路径没有审批闸门，此处硬拦 hardline 命令，
-    // 即便路由判定漏了（见 tool_may_require_permission），也不会执行不可恢复操作。
-    if name == "terminal" {
-        if let Some(cmd) = args.get("command").and_then(|v| v.as_str()) {
-            if let Some(desc) = tools::is_hardline_blocked(cmd) {
-                return format!(
+impl ToolCallRuntime {
+    fn run(&self, name: &str, args: &serde_json::Value) -> types::ToolOutput {
+        if !self.step_context.advertises_tool(name) {
+            return format!("工具 `{name}` 不在生成本次调用的 StepContext 中，已拒绝执行。").into();
+        }
+        // 纵深防御：并发路径没有审批闸门，此处硬拦 hardline 命令，
+        // 即便路由判定漏了（见 tool_may_require_permission），也不会执行不可恢复操作。
+        if name == "terminal" {
+            if let Some(cmd) = args.get("command").and_then(|v| v.as_str()) {
+                if let Some(desc) = tools::is_hardline_blocked(cmd) {
+                    return format!(
                     "Command denied by policy (dangerous: {desc}). Do not retry without changing the command."
                 ).into();
+                }
             }
         }
-    }
-    let rt = match tokio::runtime::Builder::new_current_thread()
-        .enable_all()
-        .build()
-    {
-        Ok(rt) => rt,
-        Err(e) => return format!("工具错误: runtime: {e}").into(),
-    };
-    rt.block_on(async {
-        let mut memory =
-            match memory::MemoryManager::for_agent(snap.memory_dir.clone(), &snap.agent_id) {
-                Ok(m) => m,
-                Err(e) => return format!("工具错误: memory: {e}").into(),
-            };
-        let sessions =
-            match session::SessionStore::open_sessions_dir(&snap.memory_dir.join("sessions")) {
-                Ok(s) => s,
-                Err(e) => return format!("工具错误: sessions: {e}").into(),
-            };
-        let mut ctx = tools::ToolContext {
-            memory: &mut memory,
-            sessions: &sessions,
-            memory_dir: snap.memory_dir.clone(),
-            workspace_dir: snap.workspace_dir.clone(),
-            project_root: snap.project_root.clone(),
-            image_gen_targets: &snap.image_gen_targets,
-            session_id: snap.session_id.clone(),
-            turn_id: snap.turn_id.clone(),
-            credentials: &snap.credentials,
-            chat_targets: &snap.chat_targets,
-            execution: Some(snap.execution.clone()),
-            permission_profile: snap.permission_profile.clone(),
-            skill_config_overrides: &snap.skill_config_overrides,
-            hook_bus: snap.hook_bus.clone(),
-            workspace_write_grant: false,
-            network_grant: tools::InProcessNetworkGrant::default(),
+        let rt = match tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+        {
+            Ok(rt) => rt,
+            Err(e) => return format!("工具错误: runtime: {e}").into(),
         };
-        tools::dispatch_tool(|_| true, &mut ctx, name, args, None)
-            .await
-            .unwrap_or_else(|e| {
-                memory::try_append_decision(
-                    &snap.memory_dir,
-                    memory::DecisionEntry::new(memory::DecisionKind::ToolFailure, format!("{e}"))
+        rt.block_on(async {
+            let mut memory =
+                match memory::MemoryManager::for_agent(self.memory_dir.clone(), &self.agent_id) {
+                    Ok(m) => m,
+                    Err(e) => return format!("工具错误: memory: {e}").into(),
+                };
+            let sessions =
+                match session::SessionStore::open_sessions_dir(&self.memory_dir.join("sessions")) {
+                    Ok(s) => s,
+                    Err(e) => return format!("工具错误: sessions: {e}").into(),
+                };
+            let mut ctx = tools::ToolContext {
+                memory: &mut memory,
+                sessions: &sessions,
+                memory_dir: self.memory_dir.clone(),
+                workspace_dir: self.workspace_dir.clone(),
+                project_root: self.step_context.turn.project_root().map(ToOwned::to_owned),
+                image_gen_targets: &self.image_gen_targets,
+                session_id: self.session_id.clone(),
+                turn_id: Some(self.step_context.turn.sub_id().to_string()),
+                credentials: &self.credentials,
+                chat_targets: &self.chat_targets,
+                execution: Some(self.execution.clone()),
+                permission_profile: self
+                    .step_context
+                    .turn
+                    .permission_profile()
+                    .map(str::to_string),
+                skill_config_overrides: &self.skill_config_overrides,
+                hook_bus: self.hook_bus.clone(),
+                workspace_write_grant: false,
+                network_grant: tools::InProcessNetworkGrant::default(),
+            };
+            tools::dispatch_tool(|_| true, &mut ctx, name, args, None)
+                .await
+                .unwrap_or_else(|e| {
+                    memory::try_append_decision(
+                        &self.memory_dir,
+                        memory::DecisionEntry::new(
+                            memory::DecisionKind::ToolFailure,
+                            format!("{e}"),
+                        )
                         .with_tool(name.to_string())
-                        .with_session(snap.session_id.clone()),
-                );
-                format!("工具错误: {e}").into()
-            })
-    })
+                        .with_session(self.session_id.clone()),
+                    );
+                    format!("工具错误: {e}").into()
+                })
+        })
+    }
 }
 
 #[cfg(test)]
