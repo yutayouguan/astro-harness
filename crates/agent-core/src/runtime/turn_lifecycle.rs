@@ -5,6 +5,8 @@ use types::message::Message;
 
 use std::sync::Arc;
 
+use crate::tasks::{TaskKind, TurnInput};
+
 use super::{looks_like_user_correction, Session, StepContext, TurnContext, TurnResult};
 
 impl Session {
@@ -74,6 +76,9 @@ impl Session {
         image_data_urls: &[String],
         _submission_id: &str,
     ) -> anyhow::Result<TurnResult> {
+        if let Some(turn_id) = self.steer_input(user_message, image_data_urls) {
+            return Ok(TurnResult::Steered { turn_id });
+        }
         self.cancel.reset();
         if self.is_budget_exhausted() {
             return Ok(TurnResult::BudgetExhausted);
@@ -97,29 +102,9 @@ impl Session {
         }
         self.reload_tools_and_mcp().await?;
 
-        self.sessions.ensure_session(&self.session_id, "tauri")?;
-        let media_assets: Vec<types::MediaAsset> = image_data_urls
-            .iter()
-            .map(|u| u.trim())
-            .filter(|u| !u.is_empty())
-            .map(|u| {
-                let mime = u
-                    .strip_prefix("data:")
-                    .and_then(|rest| rest.split(';').next())
-                    .unwrap_or("image/*")
-                    .to_string();
-                types::MediaAsset::data_url(types::MediaKind::Image, u, mime)
-            })
-            .collect();
-        let media_owned = if media_assets.is_empty() {
-            None
-        } else {
-            Some(serde_json::to_string(&media_assets)?)
-        };
-        self.sessions.append_message(NewMessage {
-            content: Some(user_message),
-            media_json: media_owned.as_deref(),
-            ..NewMessage::empty(&self.session_id, "user")
+        self.record_turn_input(TurnInput::UserInput {
+            content: user_message.to_string(),
+            image_data_urls: image_data_urls.to_vec(),
         })?;
 
         let fts_keywords = if self.turn.current_turn >= self.config.recent_turns {
@@ -135,8 +120,6 @@ impl Session {
         )?;
         self.compression.last_recalled_context = format_recalled_context(&recalled);
 
-        self.session_messages
-            .push(Message::user_with_images(user_message, image_data_urls));
         self.increment_turn();
         let system_prompt = self.build_system_prompt();
         let _ = self.fire_hook(
@@ -168,6 +151,56 @@ impl Session {
             turn: self.turn.current_turn,
             system_prompt,
         })
+    }
+
+    /// Queue user input for the active regular task.
+    pub fn steer_input(&self, user_message: &str, image_data_urls: &[String]) -> Option<String> {
+        if user_message.trim().is_empty() && image_data_urls.is_empty() {
+            return None;
+        }
+        let running = self.active_turn.task.as_ref()?;
+        if running.kind != TaskKind::Regular {
+            return None;
+        }
+        let accepted = running.turn_context.push_input(TurnInput::UserInput {
+            content: user_message.to_string(),
+            image_data_urls: image_data_urls.to_vec(),
+        });
+        accepted.then(|| running.turn_context.sub_id().to_string())
+    }
+
+    pub(crate) fn record_turn_input(&mut self, input: TurnInput) -> anyhow::Result<()> {
+        let TurnInput::UserInput {
+            content,
+            image_data_urls,
+        } = input;
+        self.sessions.ensure_session(&self.session_id, "tauri")?;
+        let media_assets: Vec<types::MediaAsset> = image_data_urls
+            .iter()
+            .map(|url| url.trim())
+            .filter(|url| !url.is_empty())
+            .map(|url| {
+                let mime = url
+                    .strip_prefix("data:")
+                    .and_then(|rest| rest.split(';').next())
+                    .unwrap_or("image/*")
+                    .to_string();
+                types::MediaAsset::data_url(types::MediaKind::Image, url, mime)
+            })
+            .collect();
+        let media_json = if media_assets.is_empty() {
+            None
+        } else {
+            Some(serde_json::to_string(&media_assets)?)
+        };
+        self.sessions.append_message(NewMessage {
+            content: Some(&content),
+            media_json: media_json.as_deref(),
+            ..NewMessage::empty(&self.session_id, "user")
+        })?;
+        self.session_messages
+            .push(Message::user_with_images(&content, &image_data_urls));
+        Ok(())
     }
 
     /// Compatibility adapter for callers not yet migrated to Codex naming.

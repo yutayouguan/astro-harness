@@ -257,14 +257,30 @@ impl Session {
     /// 绑定当前流式 run 的 turn_id（约定与 `run_id` 相同）。
     pub fn set_current_turn_id(&mut self, turn_id: impl Into<String>) {
         let sub_id = turn_id.into();
-        self.turn.set_current_turn_id(sub_id.clone());
-        self.current_turn_context = Some(Arc::new(TurnContext::new(
+        let turn_context = Arc::new(TurnContext::new(
             sub_id,
             self.turn.current_turn(),
             self.interaction_mode,
             self.permission_profile.clone(),
             self.project_root.clone(),
-        )));
+        ));
+        self.bind_turn_context(turn_context);
+    }
+
+    pub(crate) fn create_turn_context(&self, sub_id: String) -> Arc<TurnContext> {
+        Arc::new(TurnContext::new(
+            sub_id,
+            self.turn.current_turn(),
+            self.interaction_mode,
+            self.permission_profile.clone(),
+            self.project_root.clone(),
+        ))
+    }
+
+    pub(crate) fn bind_turn_context(&mut self, turn_context: Arc<TurnContext>) {
+        self.turn
+            .set_current_turn_id(turn_context.sub_id().to_string());
+        self.current_turn_context = Some(turn_context);
     }
 
     /// 清除当前 turn_id（run 结束或中断时调用）。
@@ -277,10 +293,6 @@ impl Session {
     /// 当前绑定的 turn_id（若有）。
     pub fn current_turn_id(&self) -> Option<&str> {
         self.turn.current_turn_id()
-    }
-
-    pub(crate) fn current_turn_context(&self) -> Option<Arc<TurnContext>> {
-        self.current_turn_context.clone()
     }
 
     /// 子 Agent 执行调度器。
@@ -1056,6 +1068,8 @@ fn tool_writes_disk(name: &str, args: &Value) -> bool {
 pub enum TurnResult {
     /// 准备就绪，携带轮次编号与 system prompt，等待 LLM 响应。
     Continue { turn: usize, system_prompt: String },
+    /// Input was queued into the currently active regular task.
+    Steered { turn_id: String },
     /// 模型请求的工具名称列表（由 streaming 层填充）。
     ToolCalls(Vec<String>),
     /// 对话自然结束，携带最终 assistant 文本。

@@ -1,6 +1,6 @@
 # Agent 生命周期详细设计
 
-> 版本：v2.1
+> 版本：v2.2
 > 日期：2026-08-17  
 > 状态：实施基线  
 > 上游参考：[OpenAI Codex](https://github.com/openai/codex) `632e35ce8d5dec43b75dbf99f9e6fa52bed47c3d`  
@@ -130,6 +130,15 @@ foreground/background/subagent 三套入口最终都必须创建 `RegularTask`�
 
 Astro 迁移期内部使用 `Arc<Mutex<Session>>`，因为旧 `AgentLoop` 尚含需要串行访问的
 SQLite/memory 状态；当状态完成内部锁化后，签名收敛为 Codex 的 `Arc<Session>`。
+
+`Session::spawn_task` 是唯一任务启动入口，负责替换旧任务、绑定 `TurnContext`、
+登记 `RunningTask` 和统一收尾。`Session::abort_all_tasks` 使用与 Codex 一致的
+`TurnAbortReason::{Interrupted, Replaced, ReviewEnded, BudgetLimited}`，先触发
+`CancellationToken`，再等待 task 生命周期退出。
+
+steer 输入不创建第二条流：`TurnInput::UserInput` 进入当前 `TurnContext` 的 pending
+queue，`run_turn` 在下一次 sampling 前持久化并消费。最终输出前以同一把锁原子地
+执行“取出 pending 或关闭 steer”，避免输入在 task 收尾窗口丢失。
 
 ### 3.3 run_turn
 
@@ -494,8 +503,11 @@ schema 和 RPC 字段改名都必须提供 migration 或 serde alias。
 - [x] 把 `run_multi_turn_stream_inner` 提升为唯一 `run_turn`。
 - [x] 将核心主类更名为 `Session` / `Config`，旧名保留 type alias。
 - [x] 前台与 background adapter 真实经过 `RegularTask`。
-- [ ] 将 Cron/SubAgent 的输入准备也收口到 `Session::spawn_task`。
-- [ ] 实现 mailbox steer 与 Codex 同签名的 `abort_all_tasks`。
+- [x] foreground/background/Cron/SubAgent 的执行均经过 `Session::spawn_task`。
+- [x] 实现 pending-input mailbox steer 和 `Session::abort_all_tasks`。
+- [x] Chat 重入时优先 steer，不替换 `PauseControl`、不创建第二条流。
+- [ ] 将首次用户输入的持久化从 adapter 移入 `RegularTask::run`。
+- [ ] 将 `Arc<Mutex<Session>>` 内锁化为 Codex 的 `Arc<Session>`。
 
 ### Phase C：工具运行时
 

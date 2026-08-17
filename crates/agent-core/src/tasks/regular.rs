@@ -35,7 +35,9 @@ impl SessionTask for RegularTask {
         input: Vec<TurnInput>,
         cancellation_token: CancellationToken,
     ) -> SessionTaskResult {
-        let _ = input;
+        for item in input {
+            ctx.push_input(item);
+        }
         run_turn(
             self.args.with_session_and_turn(sess, ctx),
             cancellation_token,

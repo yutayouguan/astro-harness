@@ -32,7 +32,7 @@ use super::tools_exec::{
 use super::types::{MultiTurnStream, MultiTurnStreamItem, StreamedAssistantContent};
 use crate::control::hitl::HitlGate;
 use crate::runtime::{Session, TurnContext};
-use crate::tasks::{AnySessionTask, RegularTask};
+use crate::tasks::{RegularTask, TurnInput};
 
 /// `pre_verify` 单次 turn 内允许的最多验证轮次（含首次结束尝试）。
 const MAX_VERIFY_ATTEMPTS: usize = 2;
@@ -73,10 +73,14 @@ pub async fn run_multi_turn_stream(args: MultiTurnStreamArgs) {
         let agent = session.lock().await;
         agent.session_id().to_string()
     };
-    let run_id = uuid::Uuid::new_v4().to_string();
-    let turn_id = run_id.clone();
-    let task: Arc<dyn AnySessionTask> = Arc::new(RegularTask::new(RunTurnArgs {
+    let sub_id = uuid::Uuid::new_v4().to_string();
+    let turn_context = {
+        let sess = session.lock().await;
+        sess.create_turn_context(sub_id.clone())
+    };
+    let task = RegularTask::new(RunTurnArgs {
         session: session.clone(),
+        turn_context: Arc::clone(&turn_context),
         targets,
         base_config,
         system_prompt,
@@ -84,60 +88,17 @@ pub async fn run_multi_turn_stream(args: MultiTurnStreamArgs) {
         hitl_gate,
         tx: tx.clone(),
         thread_id: session_id.clone(),
-        run_id: run_id.clone(),
+        run_id: sub_id.clone(),
         chat_override,
-    }));
-    let cancellation_token = CancellationToken::new();
-    let start_result = {
-        let mut agent = session.lock().await;
-        if agent.active_turn.task.is_some() {
-            Err(anyhow::anyhow!("session already has an active task"))
-        } else {
-            agent.set_current_turn_id(turn_id.clone());
-            let turn_context = agent
-                .current_turn_context()
-                .expect("setting a turn id must create a TurnContext");
-            match agent.active_turn.start(
-                Arc::clone(&task),
-                cancellation_token.clone(),
-                Arc::clone(&turn_context),
-            ) {
-                Ok(()) => Ok(turn_context),
-                Err(error) => Err(error),
-            }
-        }
-    };
-    let turn_context = match start_result {
-        Ok(turn_context) => turn_context,
-        Err(error) => {
-            let _ = tx
-                .send(Ok(MultiTurnStreamItem::Error(error.to_string())))
-                .await;
-            let _ = tx.send(Ok(MultiTurnStreamItem::Done)).await;
-            return;
-        }
-    };
-    tracing::info!(session_id = %session_id, turn_id = %turn_id, "turn started");
-    if let Err(error) = task
-        .run(
-            Arc::clone(&session),
-            Arc::clone(&turn_context),
-            Vec::new(),
-            cancellation_token,
-        )
-        .await
-    {
+    });
+    tracing::info!(session_id = %session_id, turn_id = %sub_id, "turn started");
+    if let Err(error) = Session::spawn_task(&session, turn_context, Vec::new(), task).await {
         let _ = tx
             .send(Ok(MultiTurnStreamItem::Error(error.to_string())))
             .await;
         let _ = tx.send(Ok(MultiTurnStreamItem::Done)).await;
     }
-    {
-        let mut agent = session.lock().await;
-        agent.active_turn.finish(turn_context.sub_id());
-        agent.clear_current_turn_id();
-    }
-    tracing::info!(session_id = %session_id, turn_id = %run_id, "turn finished");
+    tracing::info!(session_id = %session_id, turn_id = %sub_id, "turn finished");
 }
 
 /// 测试入口：以自定义 chat 函数替代 dispatch，驱动多轮工具循环。
@@ -174,6 +135,7 @@ pub async fn run_multi_turn_stream_with_chat_fn(
 #[derive(Clone)]
 pub(crate) struct RunTurnArgs {
     session: Arc<Mutex<Session>>,
+    turn_context: Arc<TurnContext>,
     targets: Vec<ChatTarget>,
     base_config: ProviderConfig,
     system_prompt: String,
@@ -193,17 +155,32 @@ impl RunTurnArgs {
     ) -> Self {
         Self {
             session,
+            turn_context,
             thread_id: self.thread_id.clone(),
-            run_id: turn_context.sub_id().to_string(),
             ..self.clone()
         }
     }
+}
+
+async fn record_pending_input(
+    session: &Arc<Mutex<Session>>,
+    pending_input: Vec<TurnInput>,
+) -> anyhow::Result<()> {
+    if pending_input.is_empty() {
+        return Ok(());
+    }
+    let mut sess = session.lock().await;
+    for input in pending_input {
+        sess.record_turn_input(input)?;
+    }
+    Ok(())
 }
 
 /// Codex-aligned regular turn loop shared by foreground and background adapters.
 pub(crate) async fn run_turn(args: RunTurnArgs, cancellation_token: CancellationToken) {
     let RunTurnArgs {
         session,
+        turn_context,
         targets,
         base_config,
         system_prompt,
@@ -275,6 +252,20 @@ pub(crate) async fn run_turn(args: RunTurnArgs, cancellation_token: Cancellation
                 &session,
                 &streamer,
                 &tx,
+                saw_usage.then_some(total_usage),
+                &run_id,
+            )
+            .await;
+            return;
+        }
+
+        if let Err(error) = record_pending_input(&session, turn_context.take_pending_input()).await
+        {
+            finish_error(
+                &session,
+                &streamer,
+                &tx,
+                error.to_string(),
                 saw_usage.then_some(total_usage),
                 &run_id,
             )
@@ -696,6 +687,23 @@ pub(crate) async fn run_turn(args: RunTurnArgs, cancellation_token: Cancellation
         }
 
         if calls.is_empty() {
+            let pending_input = turn_context.take_pending_input_or_close();
+            if !pending_input.is_empty() {
+                if let Err(error) = record_pending_input(&session, pending_input).await {
+                    finish_error(
+                        &session,
+                        &streamer,
+                        &tx,
+                        error.to_string(),
+                        saw_usage.then_some(total_usage),
+                        &run_id,
+                    )
+                    .await;
+                    return;
+                }
+                run_state.set_phase(RunPhase::StreamingLlm);
+                continue;
+            }
             need_summary = false;
             break;
         }

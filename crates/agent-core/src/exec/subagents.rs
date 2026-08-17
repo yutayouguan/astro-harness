@@ -248,7 +248,7 @@ async fn run_turn(
         }
         TurnResult::BudgetExhausted => anyhow::bail!("subagent turn budget exhausted"),
         TurnResult::MaxDepth => anyhow::bail!("subagent tool depth exhausted"),
-        TurnResult::ToolCalls(_) | TurnResult::Interrupted => {
+        TurnResult::Steered { .. } | TurnResult::ToolCalls(_) | TurnResult::Interrupted => {
             anyhow::bail!("unsupported subagent turn result")
         }
     }

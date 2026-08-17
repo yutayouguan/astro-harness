@@ -715,7 +715,7 @@ async fn run_agent_job(
         TurnResult::Continue { system_prompt, .. } => system_prompt,
         TurnResult::BudgetExhausted => anyhow::bail!("对话轮次预算已用尽"),
         TurnResult::MaxDepth => anyhow::bail!("工具调用轮次已达上限"),
-        TurnResult::ToolCalls(_) | TurnResult::Interrupted => {
+        TurnResult::Steered { .. } | TurnResult::ToolCalls(_) | TurnResult::Interrupted => {
             anyhow::bail!("定时任务不支持该轮次结果")
         }
     };

@@ -10,7 +10,7 @@ use agent::runtime::{Session, TurnResult};
 use agent::streaming::{
     stream_multi_turn_with_hitl, MultiTurnStreamItem, StreamedAssistantContent,
 };
-use agent::{HitlGate, HitlRegistry};
+use agent::{HitlGate, HitlRegistry, TurnAbortReason};
 use futures::StreamExt;
 use home::AgentRuntimeConfig;
 use memory::MemoryManager;
@@ -322,7 +322,10 @@ impl AstroServiceImpl {
             sessions.remove(session_id)
         };
         if let Some(handle) = removed.as_ref() {
-            handle.lock().await.cancel_signal().cancel();
+            if let Err(error) = Session::abort_all_tasks(handle, TurnAbortReason::Interrupted).await
+            {
+                tracing::warn!(%error, session_id, "failed to abort session task");
+            }
         }
         removed
     }
@@ -658,7 +661,9 @@ impl AstroService for AstroServiceImpl {
                 self.hitl_registry.cancel_and_remove(&req.session_id).await;
                 clear_interrupt_file(&self.memory_dir, &req.session_id);
                 if let Ok(session) = self.get_session(&req.session_id).await {
-                    session.lock().await.cancel_signal().cancel();
+                    Session::abort_all_tasks(&session, TurnAbortReason::Interrupted)
+                        .await
+                        .map_err(|error| Status::internal(error.to_string()))?;
                 }
             }
             ChatControlAction::ChatControlNewChat
@@ -774,7 +779,18 @@ impl AstroService for AstroServiceImpl {
         let thinking_enabled = req.thinking_enabled;
         // 当前模型最大输出 token（前端由模型元数据下传）；0 = 用默认。
         let chat_max_output_tokens = req.max_output_tokens;
-        let images = req.images;
+        let image_data_urls: Vec<String> = req
+            .images
+            .iter()
+            .filter_map(|image| {
+                let mime = image.mime.trim();
+                let data = image.data_base64.trim();
+                if mime.is_empty() || data.is_empty() {
+                    return None;
+                }
+                Some(format!("data:{mime};base64,{data}"))
+            })
+            .collect();
         let reasoning_effort = if req.reasoning_effort.trim().is_empty() {
             "high".to_string()
         } else {
@@ -800,6 +816,19 @@ impl AstroService for AstroServiceImpl {
         });
 
         let session = self.get_session(&session_id).await?;
+        let steered_turn_id = {
+            let sess = session.lock().await;
+            sess.steer_input(&content, &image_data_urls)
+        };
+        if steered_turn_id.is_some() {
+            let (tx, rx) = tokio::sync::mpsc::channel::<Result<ChatEvent, Status>>(1);
+            let _ = tx
+                .send(Ok(ChatEvent {
+                    payload: Some(proto::chat_event::Payload::Done(true)),
+                }))
+                .await;
+            return Ok(Response::new(Box::pin(ReceiverStream::new(rx))));
+        }
         if is_new_session {
             self.hook_runtime.fire_gateway(
                 ::hooks::SESSION_START,
@@ -897,18 +926,6 @@ impl AstroService for AstroServiceImpl {
             };
 
             let turn_content = content;
-            let image_data_urls: Vec<String> = images
-                .iter()
-                .filter_map(|img| {
-                    let mime = img.mime.trim();
-                    let data = img.data_base64.trim();
-                    if mime.is_empty() || data.is_empty() {
-                        return None;
-                    }
-                    Some(format!("data:{mime};base64,{data}"))
-                })
-                .collect();
-
             let run_result = {
                 let mut agent = session.lock().await;
                 agent
@@ -941,6 +958,15 @@ impl AstroService for AstroServiceImpl {
 
             let system_prompt = match turn_result {
                 TurnResult::Continue { system_prompt, .. } => system_prompt,
+                TurnResult::Steered { .. } => {
+                    let _ = tx
+                        .send(Ok(ChatEvent {
+                            payload: Some(proto::chat_event::Payload::Done(true)),
+                        }))
+                        .await;
+                    cleanup().await;
+                    return;
+                }
                 TurnResult::BudgetExhausted => {
                     let _ = tx
                         .send(Ok(ChatEvent {

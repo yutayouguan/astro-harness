@@ -1,12 +1,13 @@
 //! 多轮流式与 `PauseControl` 集成测试。
 
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
 use providers::types::stream::StreamChunk;
 use providers::{CompletionStream, ProviderConfig};
 use providers::{PauseControl, Usage};
-use tokio::sync::Mutex;
+use tokio::sync::{Mutex, Notify};
 
 use agent::runtime::{AgentConfig, AgentLoop};
 use agent::streaming::{
@@ -48,6 +49,97 @@ fn pending_chat() -> ChatOverride {
     Arc::new(move |_msgs, _tools, _cfg| {
         Box::pin(async move { Ok(Box::pin(futures::stream::pending()) as CompletionStream) })
     })
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn steered_input_is_consumed_by_the_active_regular_task() {
+    let dir = tempfile::tempdir().unwrap();
+    let config = AgentConfig::with_defaults(dir.path().to_path_buf());
+    let agent = AgentLoop::with_session_id(config, "steer-session".into()).unwrap();
+    let session = Arc::new(Mutex::new(agent));
+    session
+        .lock()
+        .await
+        .session_messages
+        .push(types::message::Message::user("initial"));
+
+    let calls = Arc::new(AtomicUsize::new(0));
+    let saw_follow_up = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let first_started = Arc::new(Notify::new());
+    let release_first = Arc::new(Notify::new());
+    let chat_fn: ChatOverride = {
+        let calls = Arc::clone(&calls);
+        let saw_follow_up = Arc::clone(&saw_follow_up);
+        let first_started = Arc::clone(&first_started);
+        let release_first = Arc::clone(&release_first);
+        Arc::new(move |messages, _tools, _config| {
+            let calls = Arc::clone(&calls);
+            let saw_follow_up = Arc::clone(&saw_follow_up);
+            let first_started = Arc::clone(&first_started);
+            let release_first = Arc::clone(&release_first);
+            Box::pin(async move {
+                let call = calls.fetch_add(1, Ordering::SeqCst);
+                if call > 0
+                    && messages
+                        .iter()
+                        .any(|message| message.text_content() == "follow up")
+                {
+                    saw_follow_up.store(true, Ordering::SeqCst);
+                }
+                if call == 0 {
+                    first_started.notify_one();
+                    release_first.notified().await;
+                }
+                let text = if call == 0 { "first" } else { "second" };
+                Ok(Box::pin(futures::stream::iter(vec![
+                    Ok(StreamChunk::Text(text.into())),
+                    Ok(StreamChunk::Done {
+                        finish_reason: "stop".into(),
+                    }),
+                ])) as CompletionStream)
+            })
+        })
+    };
+    let (tx, mut rx) = tokio::sync::mpsc::channel(64);
+    let run = tokio::spawn({
+        let session = Arc::clone(&session);
+        async move {
+            run_multi_turn_stream_with_chat_fn(
+                session,
+                chat_fn,
+                ProviderConfig {
+                    model: "test".into(),
+                    ..Default::default()
+                },
+                "system".into(),
+                PauseControl::new(),
+                None,
+                tx,
+            )
+            .await;
+        }
+    });
+
+    first_started.notified().await;
+    let turn_id = session
+        .lock()
+        .await
+        .steer_input("follow up", &[])
+        .expect("active regular task accepts steer");
+    assert!(!turn_id.is_empty());
+    release_first.notify_one();
+    while rx.recv().await.is_some() {}
+    run.await.unwrap();
+
+    assert_eq!(calls.load(Ordering::SeqCst), 2);
+    assert!(saw_follow_up.load(Ordering::SeqCst));
+    let messages = &session.lock().await.session_messages;
+    assert!(messages.iter().any(|message| {
+        matches!(
+            &message.content,
+            types::message::MessageContent::Text(text) if text == "follow up"
+        )
+    }));
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
