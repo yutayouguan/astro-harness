@@ -12,6 +12,7 @@
 
 use serde::{Deserialize, Serialize};
 use tauri::AppHandle;
+use tauri_plugin_dialog::DialogExt;
 
 use super::chat::chat_control;
 use crate::infra::session_events::{
@@ -283,6 +284,24 @@ pub struct SecurityAuditPageDto {
     pub next_cursor: Option<String>,
 }
 
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SecurityAuditExportResultDto {
+    pub event_count: usize,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct SecurityAuditExportFile {
+    schema_version: u8,
+    exported_at: String,
+    scope: &'static str,
+    source: String,
+    event_count: usize,
+    omitted_fields: [&'static str; 4],
+    events: Vec<SecurityAuditEventDto>,
+}
+
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct SecurityAuditCursor {
@@ -370,6 +389,73 @@ fn list_security_audits_from(
     Ok(events)
 }
 
+fn collect_security_audits_for_export(
+    root: &std::path::Path,
+    source: &str,
+    limit: usize,
+) -> anyhow::Result<Vec<SecurityAuditEventDto>> {
+    if !(1..=5_000).contains(&limit) {
+        anyhow::bail!("security audit export limit must be between 1 and 5000");
+    }
+    let mut events = match source {
+        "all" => memory::list_recent_permission_audits(root, limit)?
+            .into_iter()
+            .map(permission_audit_dto)
+            .chain(
+                sandbox::list_recent_sandbox_audits(root, limit)?
+                    .into_iter()
+                    .map(sandbox_audit_dto),
+            )
+            .collect::<Vec<_>>(),
+        "permission" => memory::list_recent_permission_audits(root, limit)?
+            .into_iter()
+            .map(permission_audit_dto)
+            .collect(),
+        "sandbox" => sandbox::list_recent_sandbox_audits(root, limit)?
+            .into_iter()
+            .map(sandbox_audit_dto)
+            .collect(),
+        _ => anyhow::bail!("unsupported security audit source: {source}"),
+    };
+    events.sort_by(|left, right| {
+        right
+            .created_at
+            .cmp(&left.created_at)
+            .then_with(|| right.id.cmp(&left.id))
+    });
+    events.truncate(limit);
+    Ok(events)
+}
+
+fn export_security_audits_to(
+    root: &std::path::Path,
+    path: &std::path::Path,
+    source: &str,
+    limit: usize,
+) -> anyhow::Result<SecurityAuditExportResultDto> {
+    if !path.is_absolute() {
+        anyhow::bail!("security audit export path must be absolute");
+    }
+    if !path.parent().is_some_and(|parent| parent.is_dir()) {
+        anyhow::bail!("security audit export directory does not exist");
+    }
+    let events = collect_security_audits_for_export(root, source, limit)?;
+    let event_count = events.len();
+    let export = SecurityAuditExportFile {
+        schema_version: 1,
+        exported_at: chrono::Utc::now().to_rfc3339(),
+        scope: "loaded_filtered_events",
+        source: source.to_string(),
+        event_count,
+        omitted_fields: ["command_text", "arguments", "paths", "capability_targets"],
+        events,
+    };
+    let mut bytes = serde_json::to_vec_pretty(&export)?;
+    bytes.push(b'\n');
+    std::fs::write(path, bytes)?;
+    Ok(SecurityAuditExportResultDto { event_count })
+}
+
 fn list_security_audit_page_from(
     root: &std::path::Path,
     limit: usize,
@@ -441,6 +527,32 @@ pub async fn list_security_audit_page(
         cursor.as_deref(),
     )
     .map_err(|error| error.to_string())
+}
+
+/// 将当前筛选下已加载的安全审计导出为隐私裁剪后的 JSON。
+#[tauri::command]
+pub async fn export_security_audits(
+    app: AppHandle,
+    source: String,
+    limit: usize,
+) -> Result<Option<SecurityAuditExportResultDto>, String> {
+    let file_name = format!(
+        "astro-security-audit-{}.json",
+        chrono::Utc::now().format("%Y%m%d-%H%M%S")
+    );
+    let Some(file_path) = app
+        .dialog()
+        .file()
+        .add_filter("JSON", &["json"])
+        .set_file_name(file_name)
+        .blocking_save_file()
+    else {
+        return Ok(None);
+    };
+    let path = file_path.into_path().map_err(|error| error.to_string())?;
+    export_security_audits_to(&home::default_memory_dir(), &path, &source, limit)
+        .map(Some)
+        .map_err(|error| error.to_string())
 }
 
 /// 读取危险命令审批设置。
@@ -679,5 +791,30 @@ mod security_audit_tests {
         assert_eq!(second_page.items.len(), 1);
         assert_eq!(second_page.items[0].id, "permission-1");
         assert!(second_page.next_cursor.is_none());
+
+        let export_path = dir.path().join("security-audit.json");
+        let exported = export_security_audits_to(dir.path(), &export_path, "all", 10).unwrap();
+        assert_eq!(exported.event_count, 2);
+        let raw = std::fs::read_to_string(export_path).unwrap();
+        assert!(!raw.contains("secret/project"));
+        assert!(!raw.contains("\"targets\":"));
+        let value: serde_json::Value = serde_json::from_str(&raw).unwrap();
+        assert_eq!(value["schemaVersion"], 1);
+        assert_eq!(value["scope"], "loaded_filtered_events");
+        assert_eq!(value["eventCount"], 2);
+        assert_eq!(value["events"][0]["id"], "sandbox-1");
+        assert_eq!(value["omittedFields"][3], "capability_targets");
+        let permission_only =
+            collect_security_audits_for_export(dir.path(), "permission", 10).unwrap();
+        assert_eq!(permission_only.len(), 1);
+        assert_eq!(permission_only[0].source, "permission");
+        assert!(collect_security_audits_for_export(dir.path(), "unknown", 10).is_err());
+        assert!(export_security_audits_to(
+            dir.path(),
+            std::path::Path::new("relative.json"),
+            "all",
+            10,
+        )
+        .is_err());
     }
 }

@@ -2,6 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import {
   CheckCircle2,
   CircleAlert,
+  Download,
   RefreshCw,
   ScrollText,
   ShieldCheck,
@@ -46,7 +47,12 @@ type SecurityAuditPage = {
   nextCursor: string | null;
 };
 
+type SecurityAuditExportResult = {
+  eventCount: number;
+};
+
 const AUDIT_PAGE_SIZE = 50;
+const MAX_AUDIT_EXPORT_EVENTS = 5_000;
 
 const FILTERS: { id: AuditFilter; key: MessageKey }[] = [
   { id: "all", key: "approvals.audit.filter.all" },
@@ -113,12 +119,17 @@ export default function SecurityAuditSection({ active }: { active: boolean }) {
   const [error, setError] = useState<string | null>(null);
   const [loadMoreError, setLoadMoreError] = useState<string | null>(null);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const [exporting, setExporting] = useState(false);
+  const [exportResult, setExportResult] = useState<SecurityAuditExportResult | null>(null);
+  const [exportError, setExportError] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     if (!active || !isTauri()) return;
     setLoading(true);
     setError(null);
     setLoadMoreError(null);
+    setExportResult(null);
+    setExportError(null);
     try {
       const page = await invoke<SecurityAuditPage>("list_security_audit_page", {
         limit: AUDIT_PAGE_SIZE,
@@ -163,6 +174,29 @@ export default function SecurityAuditSection({ active }: { active: boolean }) {
     [events, filter],
   );
 
+  useEffect(() => {
+    setExportResult(null);
+    setExportError(null);
+  }, [filter]);
+
+  const exportVisible = useCallback(async () => {
+    if (!isTauri() || visible.length === 0 || exporting) return;
+    setExporting(true);
+    setExportResult(null);
+    setExportError(null);
+    try {
+      const result = await invoke<SecurityAuditExportResult | null>("export_security_audits", {
+        source: filter,
+        limit: Math.min(visible.length, MAX_AUDIT_EXPORT_EVENTS),
+      });
+      if (result) setExportResult(result);
+    } catch (reason) {
+      setExportError(reason instanceof Error ? reason.message : String(reason));
+    } finally {
+      setExporting(false);
+    }
+  }, [exporting, filter, visible.length]);
+
   return (
     <section className="tools-detail-section security-audit-section">
       <header className="security-audit-head">
@@ -173,17 +207,30 @@ export default function SecurityAuditSection({ active }: { active: boolean }) {
           </h4>
           <p className="tools-detail-body">{t("approvals.audit.sub")}</p>
         </div>
-        <button
-          type="button"
-          className="mcp-btn-ghost security-audit-refresh"
-          onClick={() => void refresh()}
-          disabled={loading || loadingMore}
-          aria-label={t("approvals.audit.refresh")}
-          title={t("approvals.audit.refresh")}
-        >
-          <RefreshCw size={14} className={loading ? "is-spinning" : ""} aria-hidden />
-          {t("approvals.audit.refresh")}
-        </button>
+        <div className="security-audit-actions">
+          <button
+            type="button"
+            className="mcp-btn-ghost"
+            onClick={() => void exportVisible()}
+            disabled={loading || loadingMore || exporting || visible.length === 0}
+            aria-label={t("approvals.audit.export")}
+            title={t("approvals.audit.exportHint")}
+          >
+            <Download size={14} aria-hidden />
+            {exporting ? t("approvals.audit.exporting") : t("approvals.audit.export")}
+          </button>
+          <button
+            type="button"
+            className="mcp-btn-ghost security-audit-refresh"
+            onClick={() => void refresh()}
+            disabled={loading || loadingMore || exporting}
+            aria-label={t("approvals.audit.refresh")}
+            title={t("approvals.audit.refresh")}
+          >
+            <RefreshCw size={14} className={loading ? "is-spinning" : ""} aria-hidden />
+            {t("approvals.audit.refresh")}
+          </button>
+        </div>
       </header>
 
       <div className="security-audit-toolbar">
@@ -216,6 +263,28 @@ export default function SecurityAuditSection({ active }: { active: boolean }) {
           {t("approvals.audit.count", { n: String(visible.length) })}
         </span>
       </div>
+
+      {(exportResult || exportError) && (
+        <p
+          className={`security-audit-export-status ${exportError ? "is-error" : ""}`}
+          role={exportError ? "alert" : "status"}
+          aria-live="polite"
+        >
+          {exportError ? (
+            <>
+              <CircleAlert size={14} aria-hidden />
+              {t("approvals.audit.exportError")}: {exportError}
+            </>
+          ) : (
+            <>
+              <CheckCircle2 size={14} aria-hidden />
+              {t("approvals.audit.exported", {
+                n: String(exportResult?.eventCount ?? 0),
+              })}
+            </>
+          )}
+        </p>
+      )}
 
       {error ? (
         <p className="security-audit-state is-error" role="alert">
