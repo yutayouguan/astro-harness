@@ -226,7 +226,7 @@ fn cold_start_hydrates_session_messages_from_db() {
             .build()
             .unwrap();
         rt.block_on(async {
-            agent.run_turn("hello", "hydrate").await.unwrap();
+            agent.start_or_steer_turn("hello", "hydrate").await.unwrap();
         });
         agent.record_assistant_message("world").unwrap();
     }

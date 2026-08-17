@@ -134,7 +134,7 @@ async fn test_prompt_hooks_on_run_turn() {
     let log: Arc<std::sync::Mutex<Vec<String>>> = Arc::new(std::sync::Mutex::new(vec![]));
     ::hooks::install_recording(&agent.hook_bus(), Arc::clone(&log));
 
-    let _ = agent.run_turn("你好", "t1").await.unwrap();
+    let _ = agent.start_or_steer_turn("你好", "t1").await.unwrap();
     let events = log.lock().unwrap().clone();
     assert!(
         events.iter().any(|e| e.starts_with("pre_llm_call:")),
@@ -174,7 +174,10 @@ async fn pre_llm_call_inject_context_via_hook_bus() {
     bus.register(hooks::PRE_LLM_CALL, |_| {
         hooks::HookOutcome::InjectContext("tz=Asia/Shanghai".into())
     });
-    let _ = agent.run_turn("你好", "inject-test").await.unwrap();
+    let _ = agent
+        .start_or_steer_turn("你好", "inject-test")
+        .await
+        .unwrap();
     let ctx = agent.take_inject_context();
     assert_eq!(ctx.as_deref(), Some("tz=Asia/Shanghai"));
 }
@@ -267,7 +270,7 @@ async fn test_agent_loop_memory_injection() {
     assert!(wrote.text().contains("已写盘（live）") || wrote.text().contains("已存在"));
 
     let mut agent = AgentLoop::new(test_config(&dir)).unwrap();
-    let result = agent.run_turn("你好", "task-1").await.unwrap();
+    let result = agent.start_or_steer_turn("你好", "task-1").await.unwrap();
     match result {
         agent::TurnResult::Continue { system_prompt, .. } => {
             assert!(system_prompt.contains("用户偏好 Rust"));

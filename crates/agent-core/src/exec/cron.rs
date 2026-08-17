@@ -1,7 +1,7 @@
 //! 定时任务（Cron）执行器：将 [`CronJob`] 派发给 Agent 或 Provider 并完成运行记录落库。
 //!
 //! 负责并发互斥（同一 job 不重叠执行）、可选会话创建、600 秒超时兜底，以及成功/失败
-//! 状态写入 `CronRunDb`。任务文案经 [`AgentLoop::run_turn`] 完成初始化后，由
+//! 状态写入 `CronRunDb`。任务文案经 [`Session::start_or_steer_turn`] 完成初始化后，由
 //! [`super::background::run_background_multi_turn`] 驱动完整的 LLM → 工具 → LLM 多轮循环。
 //!
 //! 进程退出后残留的 `running` 行由 [`reconcile_orphaned_runs`] 回收：本进程未登记为活跃的
@@ -22,7 +22,7 @@ use types::ChatTarget;
 use uuid::Uuid;
 
 use crate::runtime::usage::{apply_llm_usage_dual_write, LlmUsageWrite};
-use crate::runtime::{AgentConfig, AgentLoop, TurnResult};
+use crate::runtime::{Config, Session, TurnResult};
 
 use super::background::run_background_multi_turn;
 
@@ -271,7 +271,7 @@ pub async fn execute_job(
 ///
 /// # Send
 ///
-/// `AgentLoop`/`SessionStore` 含 rusqlite `RefCell`，内部 future 非 Send。
+/// `Session`/`SessionStore` 含 rusqlite `RefCell`，内部 future 非 Send。
 /// 本函数经 `spawn_blocking` + 单 worker multi-thread runtime 隔离，对外返回 Send future，
 /// 可供 Tauri command / 多线程 runtime 直接 `.await`。
 pub async fn execute_job_with_roots(
@@ -312,7 +312,7 @@ async fn execute_job_with_roots_local(
 
     let session_id = Some(Uuid::new_v4().to_string());
 
-    // 与 run_agent_job / AgentLoop 共用同一 memory_dir 下的 SessionStore。
+    // 与 run_agent_job / Session 共用同一 memory_dir 下的 SessionStore。
     // show_in_chat 仅影响侧栏展示；执行记录 / Tracing 始终需要 session。
     let memory_dir = default_memory_dir();
     let sessions = SessionStore::open_sessions_dir(&memory_dir.join("sessions")).ok();
@@ -688,27 +688,27 @@ async fn run_agent_job(
         .unwrap_or_else(|| Uuid::new_v4().to_string());
     let agent_id = cron::normalize_cron_agent_id(&job.agent_id);
 
-    let mut config = AgentConfig::with_defaults(memory_dir.clone());
+    let mut config = Config::with_defaults(memory_dir.clone());
     // with_defaults 读的是活跃 agent 的 SOUL；覆盖为任务指定 agent。
     let ws = home::agent_workspace_dir(&memory_dir, &agent_id);
     if let Ok(soul) = std::fs::read_to_string(ws.join("SOUL.md")) {
         config.soul = soul;
     }
 
-    let mut agent = AgentLoop::with_session_id_for_agent(config, sid, &agent_id)?;
-    agent.set_chat_credentials(
+    let mut session = Session::with_session_id_for_agent(config, sid, &agent_id)?;
+    session.set_chat_credentials(
         &creds.provider,
         &creds.model,
         &creds.api_key,
         &creds.base_url,
     );
     let targets = creds.effective_targets();
-    agent.set_chat_targets(targets.clone());
+    session.set_chat_targets(targets.clone());
 
-    let session = Arc::new(AsyncMutex::new(agent));
+    let session = Arc::new(AsyncMutex::new(session));
     let turn = {
-        let mut agent = session.lock().await;
-        agent.run_turn(&job.task, "cron").await?
+        let mut sess = session.lock().await;
+        sess.start_or_steer_turn(&job.task, "cron").await?
     };
     let system_prompt = match turn {
         TurnResult::Finished(message) => return Ok((message, Usage::default())),

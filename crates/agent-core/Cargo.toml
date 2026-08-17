@@ -21,6 +21,7 @@ artifacts = { path = "../agent-artifacts" }
 hooks = { path = "../agent-hooks" }
 tracing = { workspace = true }
 tokio = { workspace = true }
+tokio-util = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 anyhow = { workspace = true }

@@ -21,6 +21,8 @@ pub mod prompt;
 pub mod runtime;
 /// 流式补全与多轮流式迭代抽象。
 pub mod streaming;
+/// Codex-style session task lifecycle.
+pub(crate) mod tasks;
 /// 助手回合时间线（astro_timeline_v1）。
 pub mod timeline;
 
@@ -35,7 +37,9 @@ pub use control::hitl::{
 /// Interrupt 状态机 re-export。
 pub use control::interrupt::{Interrupt, InterruptError, InterruptPending, ResumeItem};
 /// 对话循环核心类型 re-export。
-pub use runtime::{AgentConfig, AgentLoop, MaxDepthError, ToolCallError, TurnResult};
+pub use runtime::{
+    AgentConfig, AgentLoop, Config, MaxDepthError, Session, ToolCallError, TurnResult,
+};
 /// 流式 API re-export。
 pub use streaming::{
     run_multi_turn_stream, run_multi_turn_stream_with_chat_fn, stream_multi_turn,

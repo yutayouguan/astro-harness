@@ -27,6 +27,7 @@ use types::ToolEntry;
 use crate::prompt::context::StaticContext;
 use crate::prompt::hooks::CancelSignal;
 use crate::runtime::session::{hydrate_session_messages, resolve_session_project_root};
+use crate::tasks::ActiveTurn;
 
 pub mod budget;
 pub(crate) mod compression_state;
@@ -50,7 +51,7 @@ pub use turn_context::TurnContext;
 pub use validate::validate_message_order;
 
 /// Agent 运行时配置，控制轮次预算、记忆召回与提示组装策略。
-pub struct AgentConfig {
+pub struct Config {
     /// 整个会话允许的最大对话轮次（用户消息计数）。
     pub max_turns: usize,
     /// 单次用户消息内允许的工具迭代次数（对齐 Hermes `max_iterations`，默认 90）。
@@ -75,7 +76,7 @@ pub struct AgentConfig {
     pub static_override: Option<StaticContext>,
 }
 
-impl AgentConfig {
+impl Config {
     /// 以工作区默认值构造配置：读取 `SOUL.md` 并确保记忆目录存在。
     ///
     /// 不变量：`memory_dir` 必须可写；`ensure_workspace` 失败时仍继续，使用内置默认 soul。
@@ -101,12 +102,11 @@ impl AgentConfig {
     }
 }
 
-/// Agent 主循环状态机：持有会话、记忆、工具注册表与 Provider 凭据。
+/// Session runtime: owns conversation state, memory, tools, and provider credentials.
 ///
-/// 生命周期：通过 `run_turn` 处理用户输入，通过 `handle_tool_call_async` 执行工具，
-/// 由上层 streaming 层驱动 LLM 往返。
-pub struct AgentLoop {
-    pub(crate) config: AgentConfig,
+/// Input enters through `start_or_steer_turn`; a `SessionTask` owns the model/tool loop.
+pub struct Session {
+    pub(crate) config: Config,
     pub(crate) session_id: String,
     /// 内存中的会话消息镜像，与磁盘记忆同步追加。
     pub session_messages: Vec<Message>,
@@ -154,11 +154,19 @@ pub struct AgentLoop {
     pub(crate) current_turn_context: Option<Arc<TurnContext>>,
     /// 最近一次模型 sampling 实际使用的 Step 快照；工具调用必须绑定此快照。
     pub(crate) current_step_context: Option<Arc<StepContext>>,
+    /// Codex-style single-active-task registry for this session.
+    pub(crate) active_turn: ActiveTurn,
 }
 
-impl AgentLoop {
+/// Compatibility name retained while downstream crates migrate to [`Config`].
+pub type AgentConfig = Config;
+
+/// Compatibility name retained while downstream crates migrate to [`Session`].
+pub type AgentLoop = Session;
+
+impl Session {
     /// 以随机 UUID 作为 session_id 创建 Agent 实例。
-    pub fn new(config: AgentConfig) -> anyhow::Result<Self> {
+    pub fn new(config: Config) -> anyhow::Result<Self> {
         Self::with_session_id(config, Uuid::new_v4().to_string())
     }
 
@@ -166,14 +174,14 @@ impl AgentLoop {
     ///
     /// 初始化时 `tool_rounds` 与 `current_turn` 均为 0。
     /// 记忆侧使用当前活跃 Agent（[`MemoryManager::new`]）。
-    pub fn with_session_id(config: AgentConfig, session_id: String) -> anyhow::Result<Self> {
+    pub fn with_session_id(config: Config, session_id: String) -> anyhow::Result<Self> {
         let memory = MemoryManager::new(config.memory_dir.clone())?;
         Self::from_memory(config, session_id, memory)
     }
 
     /// 以指定 `agent_id` 与 session_id 创建 Agent 实例（不依赖全局活跃 Agent）。
     pub fn with_session_id_for_agent(
-        config: AgentConfig,
+        config: Config,
         session_id: String,
         agent_id: &str,
     ) -> anyhow::Result<Self> {
@@ -182,7 +190,7 @@ impl AgentLoop {
     }
 
     fn from_memory(
-        config: AgentConfig,
+        config: Config,
         session_id: String,
         mut memory: MemoryManager,
     ) -> anyhow::Result<Self> {
@@ -217,7 +225,7 @@ impl AgentLoop {
             crate::compression::StagedCompressionPolicy::from_config(&compression_cfg),
         );
 
-        Ok(AgentLoop {
+        Ok(Session {
             config,
             session_id,
             session_messages,
@@ -242,6 +250,7 @@ impl AgentLoop {
             interaction_mode: types::InteractionMode::Agent,
             current_turn_context: None,
             current_step_context: None,
+            active_turn: ActiveTurn::default(),
         })
     }
 
@@ -268,6 +277,10 @@ impl AgentLoop {
     /// 当前绑定的 turn_id（若有）。
     pub fn current_turn_id(&self) -> Option<&str> {
         self.turn.current_turn_id()
+    }
+
+    pub(crate) fn current_turn_context(&self) -> Option<Arc<TurnContext>> {
+        self.current_turn_context.clone()
     }
 
     /// 子 Agent 执行调度器。

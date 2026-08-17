@@ -1,13 +1,13 @@
-//! AgentLoop 轮次生命周期：用户输入处理、记忆召回、system prompt 组装与 hook 触发。
+//! Session turn lifecycle: input persistence, memory recall, prompt assembly, and hooks.
 
 use session::{build_conversation_context, format_recalled_context, NewMessage};
 use types::message::Message;
 
 use std::sync::Arc;
 
-use super::{looks_like_user_correction, AgentLoop, StepContext, TurnContext, TurnResult};
+use super::{looks_like_user_correction, Session, StepContext, TurnContext, TurnResult};
 
-impl AgentLoop {
+impl Session {
     /// 开始新的用户消息处理：重置 `tool_rounds` 与 `turn_wrote_disk`。
     ///
     /// 若上一轮工具次数达到 `learning.complex_task_tool_threshold`，为本轮挂起学习 nudge。
@@ -56,22 +56,23 @@ impl AgentLoop {
     ///
     /// 返回 [`TurnResult::Continue`] 供上层发起 LLM 请求；预算耗尽或已取消时提前返回。
     /// 注意：本方法不直接调用 LLM，仅完成 Agent 侧准备工作。
-    pub async fn run_turn(
+    pub async fn start_or_steer_turn(
         &mut self,
         user_message: &str,
-        _task_id: &str,
+        submission_id: &str,
     ) -> anyhow::Result<TurnResult> {
-        self.run_turn_with_images(user_message, &[], _task_id).await
+        self.start_or_steer_turn_with_images(user_message, &[], submission_id)
+            .await
     }
 
-    /// 同 [`Self::run_turn`]，附带本轮图片 data URL（`data:image/...;base64,...`）。
+    /// 同 [`Self::start_or_steer_turn`]，附带本轮图片 data URL（`data:image/...;base64,...`）。
     ///
     /// FTS 仍只索引文本；附图写入 `messages.media_json` 并进入内存 `session_messages`。
-    pub async fn run_turn_with_images(
+    pub async fn start_or_steer_turn_with_images(
         &mut self,
         user_message: &str,
         image_data_urls: &[String],
-        _task_id: &str,
+        _submission_id: &str,
     ) -> anyhow::Result<TurnResult> {
         self.cancel.reset();
         if self.is_budget_exhausted() {
@@ -169,6 +170,28 @@ impl AgentLoop {
         })
     }
 
+    /// Compatibility adapter for callers not yet migrated to Codex naming.
+    #[deprecated(note = "use start_or_steer_turn")]
+    pub async fn run_turn(
+        &mut self,
+        user_message: &str,
+        submission_id: &str,
+    ) -> anyhow::Result<TurnResult> {
+        self.start_or_steer_turn(user_message, submission_id).await
+    }
+
+    /// Compatibility adapter for callers not yet migrated to Codex naming.
+    #[deprecated(note = "use start_or_steer_turn_with_images")]
+    pub async fn run_turn_with_images(
+        &mut self,
+        user_message: &str,
+        image_data_urls: &[String],
+        submission_id: &str,
+    ) -> anyhow::Result<TurnResult> {
+        self.start_or_steer_turn_with_images(user_message, image_data_urls, submission_id)
+            .await
+    }
+
     /// 准备下一轮 LLM 调用所需的上下文：重载工具/MCP、构建历史、注入 hook 上下文。
     ///
     /// 返回当前 sampling request 的不可变 [`StepContext`]。foreground、background
@@ -209,8 +232,8 @@ mod tests {
     #[tokio::test]
     async fn capture_step_context_reuses_the_turn_snapshot() {
         let dir = TempDir::new().unwrap();
-        let config = crate::runtime::AgentConfig::with_defaults(dir.path().to_path_buf());
-        let mut session = AgentLoop::with_session_id(config, "step-context-test".into()).unwrap();
+        let config = crate::runtime::Config::with_defaults(dir.path().to_path_buf());
+        let mut session = Session::with_session_id(config, "step-context-test".into()).unwrap();
         session.set_interaction_mode(types::InteractionMode::Plan);
         session.set_current_turn_id("turn-1");
 

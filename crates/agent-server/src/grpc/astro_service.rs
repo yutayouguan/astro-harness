@@ -6,7 +6,7 @@ use std::pin::Pin;
 use std::sync::Arc;
 
 use agent::builder::AgentBuilder;
-use agent::runtime::{AgentLoop, TurnResult};
+use agent::runtime::{Session, TurnResult};
 use agent::streaming::{
     stream_multi_turn_with_hitl, MultiTurnStreamItem, StreamedAssistantContent,
 };
@@ -57,7 +57,7 @@ fn mcp_server_info(status: mcp::ServerStatus) -> proto::McpServerInfo {
     }
 }
 
-/// 将 ChatRequest 下传的辅助目标按 `task` 分组、按 `order` 排序后写入 AgentLoop。
+/// 将 ChatRequest 下传的辅助目标按 `task` 分组、按 `order` 排序后写入 Session。
 ///
 /// 未知 `task` 字符串静默跳过（旧客户端/脏数据不阻塞主聊）；API key 仅存内存。
 fn parse_auxiliary_targets(
@@ -89,7 +89,7 @@ fn parse_auxiliary_targets(
 }
 
 /// 会话 Agent 循环的共享句柄。
-type SessionHandle = Arc<Mutex<AgentLoop>>;
+type SessionHandle = Arc<Mutex<Session>>;
 /// Chat RPC 返回的事件流类型别名。
 type ChatStream = Pin<Box<dyn futures::Stream<Item = Result<ChatEvent, Status>> + Send>>;
 /// SubscribeSessionEvents RPC 返回的事件流类型别名。
@@ -269,7 +269,7 @@ impl AstroServiceImpl {
         &self.session_events
     }
 
-    /// 获取或惰性创建会话对应的 [`AgentLoop`]。
+    /// 获取或惰性创建会话对应的 [`Session`]。
     ///
     /// 新建时读取当前 active agent 的 [`AgentRuntimeConfig`]，并用请求的 `session_id` 构建。
     ///
@@ -304,7 +304,7 @@ impl AstroServiceImpl {
         pause
     }
 
-    /// 释放会话运行时：取消暂停/HITL/中断文件，并从内存移除 AgentLoop。
+    /// 释放会话运行时：取消暂停/HITL/中断文件，并从内存移除 Session。
     ///
     /// 返回被移除的会话句柄，供 `new_chat` 在卸载后继续派发 session hooks。
     async fn release_session_runtime(&self, session_id: &str) -> Option<SessionHandle> {
@@ -628,7 +628,7 @@ impl AstroService for AstroServiceImpl {
             let sessions = self.sessions.read().await;
             let Some(session) = sessions.get(&req.session_id).cloned() else {
                 return Err(Status::not_found(format!(
-                    "会话 {} 不在内存中（无活 AgentLoop 可刷新）",
+                    "会话 {} 不在内存中（无活 Session 可刷新）",
                     req.session_id
                 )));
             };
@@ -815,7 +815,7 @@ impl AstroService for AstroServiceImpl {
             let mut agent = session.lock().await;
             agent.set_image_gen_targets(image_targets);
             agent.set_chat_credentials(&provider_name, &model, &api_key, &base_url);
-            // 五类辅助目标随本轮 ChatRequest 刷新；未下传的任务在 AgentLoop 内回退主模型。
+            // 五类辅助目标随本轮 ChatRequest 刷新；未下传的任务在 Session 内回退主模型。
             agent.set_auxiliary_targets(auxiliary_targets);
             if req.context_window > 0 {
                 agent.set_context_window(req.context_window);
@@ -912,7 +912,7 @@ impl AstroService for AstroServiceImpl {
             let run_result = {
                 let mut agent = session.lock().await;
                 agent
-                    .run_turn_with_images(&turn_content, &image_data_urls, "grpc-chat")
+                    .start_or_steer_turn_with_images(&turn_content, &image_data_urls, "grpc-chat")
                     .await
             };
 

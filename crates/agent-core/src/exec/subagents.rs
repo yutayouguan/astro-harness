@@ -9,7 +9,7 @@ use subagents::{
 };
 use tokio::sync::{mpsc, Mutex};
 
-use crate::runtime::{AgentConfig, AgentLoop, TurnResult};
+use crate::runtime::{Config, Session, TurnResult};
 use crate::streaming::ChatOverride;
 
 pub async fn run_agent_thread(
@@ -152,8 +152,8 @@ fn build_agent(
     thread_id: &str,
     request: &SpawnAgentRequest,
     memory_dir: &Path,
-) -> anyhow::Result<AgentLoop> {
-    let mut config = AgentConfig::with_defaults(memory_dir.to_path_buf());
+) -> anyhow::Result<Session> {
+    let mut config = Config::with_defaults(memory_dir.to_path_buf());
     config.soul = format!(
         "{}\n\n## Subagent developer instructions\n{}",
         config.soul, request.developer_instructions
@@ -161,15 +161,15 @@ fn build_agent(
     if let Some(effort) = request.model_reasoning_effort.as_deref() {
         config.additional_params = serde_json::json!({ "reasoning_effort": effort });
     }
-    let mut agent = AgentLoop::with_session_id_for_agent(
+    let mut session = Session::with_session_id_for_agent(
         config,
         thread_id.to_string(),
         &request.parent_agent_id,
     )?;
-    agent.set_project_root(request.project_root.clone());
-    agent.set_permission_profile(sandbox_profile(request.sandbox_mode.as_deref()));
-    agent.set_mcp_config_override(mcp::decode_inline_mcp_servers(&request.mcp_servers)?);
-    agent.set_skill_config_overrides(
+    session.set_project_root(request.project_root.clone());
+    session.set_permission_profile(sandbox_profile(request.sandbox_mode.as_deref()));
+    session.set_mcp_config_override(mcp::decode_inline_mcp_servers(&request.mcp_servers)?);
+    session.set_skill_config_overrides(
         request
             .skills_config
             .iter()
@@ -177,7 +177,7 @@ fn build_agent(
             .collect(),
     );
     if let Some(bus) = request.hook_bus.as_ref() {
-        agent.set_hook_bus(Arc::clone(bus));
+        session.set_hook_bus(Arc::clone(bus));
     }
 
     let mut targets = request.chat_targets.clone();
@@ -191,8 +191,8 @@ fn build_agent(
             Err(error) => tracing::warn!(%error, model, "invalid subagent model override"),
         }
     }
-    agent.set_chat_targets(targets);
-    Ok(agent)
+    session.set_chat_targets(targets);
+    Ok(session)
 }
 
 fn sandbox_profile(mode: Option<&str>) -> Option<String> {
@@ -221,22 +221,23 @@ fn initial_message(request: &SpawnAgentRequest) -> String {
 }
 
 async fn run_turn(
-    agent: &Arc<Mutex<AgentLoop>>,
+    session: &Arc<Mutex<Session>>,
     targets: &[types::ChatTarget],
     message: String,
     control: Arc<AgentThreadControl>,
     chat_override: Option<ChatOverride>,
 ) -> anyhow::Result<String> {
     let turn = {
-        let mut agent = agent.lock().await;
-        agent.run_turn(&message, "subagent-thread").await?
+        let mut sess = session.lock().await;
+        sess.start_or_steer_turn(&message, "subagent-thread")
+            .await?
     };
     match turn {
         TurnResult::Finished(message) => Ok(message),
         TurnResult::Continue { system_prompt, .. } => {
             let (output, _) =
                 crate::exec::background::run_background_multi_turn_controlled_with_chat(
-                    Arc::clone(agent),
+                    Arc::clone(session),
                     targets.to_vec(),
                     system_prompt,
                     Some(control),

@@ -1,6 +1,6 @@
 # Agent 生命周期详细设计
 
-> 版本：v2.0  
+> 版本：v2.1
 > 日期：2026-08-17  
 > 状态：实施基线  
 > 上游参考：[OpenAI Codex](https://github.com/openai/codex) `632e35ce8d5dec43b75dbf99f9e6fa52bed47c3d`  
@@ -106,21 +106,30 @@ mailbox，不重建本轮配置。
 ### 3.2 SessionTask
 
 ```rust
-#[async_trait]
-pub trait SessionTask: Send + Sync {
-    fn kind(&self) -> SessionTaskKind;
-    async fn run(
+pub trait SessionTask: Send + Sync + 'static {
+    fn kind(&self) -> TaskKind;
+    fn span_name(&self) -> &'static str;
+    fn run(
         self: Arc<Self>,
         session: Arc<Session>,
-        turn_context: Arc<TurnContext>,
+        ctx: Arc<TurnContext>,
+        input: Vec<TurnInput>,
         cancellation_token: CancellationToken,
-    ) -> Option<String>;
-    async fn abort(&self, session: Arc<Session>, reason: TurnAbortReason);
+    ) -> impl Future<Output = SessionTaskResult> + Send;
+    fn abort(
+        &self,
+        session: Arc<Session>,
+        ctx: Arc<TurnContext>,
+    ) -> impl Future<Output = ()> + Send;
 }
 ```
 
-首批任务种类为 `Regular`、`Compact`、`Review` 和 `UserShell`。现有
+与当前 Codex 源码一致，`TaskKind` 只有 `Regular`、`Review`、`Compact`。`UserShellCommandTask`
+不新增第四个 kind，而是作为独立 task 实现处理。现有
 foreground/background/subagent 三套入口最终都必须创建 `RegularTask`，而不是分别持有多轮循环。
+
+Astro 迁移期内部使用 `Arc<Mutex<Session>>`，因为旧 `AgentLoop` 尚含需要串行访问的
+SQLite/memory 状态；当状态完成内部锁化后，签名收敛为 Codex 的 `Arc<Session>`。
 
 ### 3.3 run_turn
 
@@ -129,11 +138,16 @@ foreground/background/subagent 三套入口最终都必须创建 `RegularTask`�
 
 ```rust
 pub async fn run_turn(
-    session: Arc<Session>,
+    sess: Arc<Session>,
     turn_context: Arc<TurnContext>,
+    input: Vec<TurnInput>,
+    prewarmed_client_session: Option<ModelClientSession>,
     cancellation_token: CancellationToken,
-) -> Option<String>;
+) -> SessionTaskResult;
 ```
+
+Astro 当前的 `RunTurnArgs` 仅是迁移 adapter；当 provider client session 下沉到 `Session`
+后删除该结构，使 `run_turn` 收敛为上述 Codex 签名。
 
 执行顺序：
 
@@ -420,16 +434,18 @@ schema 和 RPC 字段改名都必须提供 migration 或 serde alias。
 
 | 当前 Astro | 目标名称 | 处理方式 |
 | --- | --- | --- |
-| `AgentLoop` | `Session` | 分阶段迁移，过渡期 deprecated facade |
-| `AgentConfig` | `Config` | 迁移到 session config |
+| `AgentLoop` | `Session` | 已更名为真实主类；`AgentLoop` 仅保留兼容 type alias |
+| `AgentConfig` | `Config` | 已更名为真实主类；`AgentConfig` 仅保留兼容 type alias |
 | `AgentThreadDispatch` | `AgentControl` | 根树共享控制面 |
 | `DefaultAgentThreadDispatch` | `AgentControl` | 删除无状态 dispatcher |
 | `AgentThreadStore` | `ThreadStore` / `LocalThreadStore` | 接口与本地实现分离 |
 | `AgentThreadStatus` | `AgentStatus` | 保留旧序列化值兼容 |
 | `ToolContext` | `ToolInvocation` | 可变 memory facade 移出调用参数 |
-| 无 | `TurnContext` | 新增，Turn 级不可变状态 |
-| 无 | `StepContext` | 新增，sampling 级不可变快照 |
-| 无 | `ToolCallRuntime` | 新增，绑定 `Arc<StepContext>` |
+| 无 | `TurnContext` | 已落地，Turn 级不可变状态 |
+| 无 | `StepContext` | 已落地，sampling 级不可变快照 |
+| 无 | `SessionTask` / `AnySessionTask` | 已落地，对齐 Codex 的静态 trait 与 object-safe adapter |
+| 无 | `ActiveTurn` / `RunningTask` | 已落地，强制单 active task |
+| 无 | `ToolCallRuntime` | 已落地，绑定 `Arc<StepContext>` |
 | 无 | `ToolRouter` | 新增，绑定模型可见 spec 与 runtime |
 | hooks 三总线 | `ExtensionRegistry` | 三总线作为 adapter |
 
@@ -437,10 +453,10 @@ schema 和 RPC 字段改名都必须提供 migration 或 serde alias。
 
 | 当前 Astro | 目标名称 |
 | --- | --- |
-| `AgentLoop::run_turn`（仅准备输入） | `Session::start_or_steer_turn` |
-| `run_multi_turn_stream_inner` | `run_turn` |
-| `prepare_llm_context` | `capture_step_context` |
-| `stream_chat_with_hooks` | `run_sampling_request` |
+| `AgentLoop::run_turn`（仅准备输入） | `Session::start_or_steer_turn`（已落地，旧名仅兼容） |
+| `run_multi_turn_stream_inner` | `run_turn`（已落地） |
+| `prepare_llm_context` | `capture_step_context`（已落地） |
+| `stream_chat_with_hooks` | `run_sampling_request`（已落地） |
 | `handle_tool_call_async_scoped` | `ToolCallRuntime::run` |
 | `dispatch_named_tool` | `ToolRouter::dispatch_tool_call` |
 | `run_agent_thread` | `ThreadManager::spawn_thread` + `RegularTask` |
@@ -450,8 +466,8 @@ schema 和 RPC 字段改名都必须提供 migration 或 serde alias。
 
 | 禁止/旧名称 | 统一名称 |
 | --- | --- |
-| `agent`（实际为 Session） | `session` |
-| `ctx` | `turn_context`、`step_context` 或 `tool_context` |
+| `agent`（实际为 Session） | Turn/task 内使用 Codex 的 `sess`；边界/字段使用 `session` |
+| 无语义的 `ctx` | 仅 `SessionTask` 签名保留 Codex 的 `ctx`；其余使用 `turn_context`、`step_context` |
 | `calls` | `tool_calls` |
 | `call` | `tool_call` |
 | `tools`（模型 schema） | `tool_specs` |
@@ -467,16 +483,19 @@ schema 和 RPC 字段改名都必须提供 migration 或 serde alias。
 
 ### Phase A：上下文命名与快照
 
-- 新增 `TurnContext`、`StepContext`。
-- 将 `prepare_llm_context` 改为 `capture_step_context`。
-- sampling 和 tool execution 开始传递同一个 `Arc<StepContext>`。
-- 不改变 RPC、数据库和 UI 行为。
+- [x] 新增 `TurnContext`、`StepContext`。
+- [x] 将 `prepare_llm_context` 改为 `capture_step_context`。
+- [x] sampling 和 tool execution 传递同一个 `Arc<StepContext>`。
+- [x] 不改变 RPC、数据库和 UI 行为。
 
 ### Phase B：统一 SessionTask
 
-- 引入 `SessionTask`、`RegularTask` 和 active task。
-- 把 `run_multi_turn_stream_inner` 提升为唯一 `run_turn`。
-- foreground、background、Cron、SubAgent 只保留 adapter。
+- [x] 引入 `SessionTask`、`AnySessionTask`、`RegularTask`、`ActiveTurn` 和 `RunningTask`。
+- [x] 把 `run_multi_turn_stream_inner` 提升为唯一 `run_turn`。
+- [x] 将核心主类更名为 `Session` / `Config`，旧名保留 type alias。
+- [x] 前台与 background adapter 真实经过 `RegularTask`。
+- [ ] 将 Cron/SubAgent 的输入准备也收口到 `Session::spawn_task`。
+- [ ] 实现 mailbox steer 与 Codex 同签名的 `abort_all_tasks`。
 
 ### Phase C：工具运行时
 

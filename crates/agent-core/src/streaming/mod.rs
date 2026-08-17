@@ -23,7 +23,7 @@ mod lifecycle;
 /// 上下文维护：LLM 前后的压缩/摘要、工具结果记录、hook 集成。
 mod maintenance;
 /// 多轮工具循环编排。
-mod multi_turn;
+pub(crate) mod multi_turn;
 /// `ProviderStreamer`：Streaming trait 实现 + fallback 接入。
 mod provider;
 /// 显式 Run 阶段 / requirements。

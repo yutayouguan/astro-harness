@@ -16,7 +16,7 @@ use tokio::sync::{mpsc, Mutex};
 use types::message::{MessageContent, Role};
 use types::ChatTarget;
 
-use crate::runtime::AgentLoop;
+use crate::runtime::Session;
 use crate::streaming::{
     run_multi_turn_stream, ChatOverride, MultiTurnStreamArgs, MultiTurnStreamItem,
     StreamedAssistantContent,
@@ -24,7 +24,7 @@ use crate::streaming::{
 
 /// 使用统一多轮引擎执行后台任务。
 pub async fn run_background_multi_turn(
-    session: Arc<Mutex<AgentLoop>>,
+    session: Arc<Mutex<Session>>,
     targets: Vec<ChatTarget>,
     system_prompt: String,
 ) -> anyhow::Result<(String, Usage)> {
@@ -33,7 +33,7 @@ pub async fn run_background_multi_turn(
 
 /// 带 Agent Thread interrupt / close 控制的后台执行入口。
 pub async fn run_background_multi_turn_controlled(
-    session: Arc<Mutex<AgentLoop>>,
+    session: Arc<Mutex<Session>>,
     targets: Vec<ChatTarget>,
     system_prompt: String,
     control: Option<Arc<subagents::AgentThreadControl>>,
@@ -43,7 +43,7 @@ pub async fn run_background_multi_turn_controlled(
 }
 
 pub(crate) async fn run_background_multi_turn_controlled_with_chat(
-    session: Arc<Mutex<AgentLoop>>,
+    session: Arc<Mutex<Session>>,
     targets: Vec<ChatTarget>,
     system_prompt: String,
     control: Option<Arc<subagents::AgentThreadControl>>,
@@ -130,7 +130,7 @@ async fn collect_background_events(
 }
 
 async fn latest_assistant_text(
-    session: &Arc<Mutex<AgentLoop>>,
+    session: &Arc<Mutex<Session>>,
     message_start: usize,
 ) -> Option<String> {
     let agent = session.lock().await;
@@ -198,8 +198,8 @@ mod tests {
     #[tokio::test]
     async fn agent_thread_interrupt_cancels_unified_engine() {
         let temp = tempfile::tempdir().unwrap();
-        let config = crate::runtime::AgentConfig::with_defaults(temp.path().to_path_buf());
-        let mut agent = AgentLoop::with_session_id(config, "background-cancel".into()).unwrap();
+        let config = crate::runtime::Config::with_defaults(temp.path().to_path_buf());
+        let mut agent = Session::with_session_id(config, "background-cancel".into()).unwrap();
         agent
             .session_messages
             .push(types::message::Message::user("wait"));

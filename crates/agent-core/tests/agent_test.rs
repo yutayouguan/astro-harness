@@ -73,7 +73,7 @@ async fn test_agent_loop_memory_injection() {
 
     // 工具写入只改 live；新 AgentLoop（新 session）open/reload 会把盘上内容固化进 snapshot
     let mut agent = AgentLoop::new(test_config(&dir)).unwrap();
-    let result = agent.run_turn("你好", "task-1").await.unwrap();
+    let result = agent.start_or_steer_turn("你好", "task-1").await.unwrap();
     match result {
         TurnResult::Continue { system_prompt, .. } => {
             assert!(system_prompt.contains("用户偏好 Rust"));
@@ -90,13 +90,13 @@ async fn test_agent_loop_fts_recall_after_long_session() {
     config.recent_turns = 2;
     let mut agent = AgentLoop::new(config).unwrap();
 
-    agent.run_turn("消息一", "task-1").await.unwrap();
+    agent.start_or_steer_turn("消息一", "task-1").await.unwrap();
     agent.record_assistant_message("回复一").unwrap();
-    agent.run_turn("消息二", "task-2").await.unwrap();
+    agent.start_or_steer_turn("消息二", "task-2").await.unwrap();
     agent.record_assistant_message("回复二").unwrap();
 
     let result = agent
-        .run_turn("三个月前我们定了地图点叫 Aurora", "task-3")
+        .start_or_steer_turn("三个月前我们定了地图点叫 Aurora", "task-3")
         .await
         .unwrap();
 
@@ -211,7 +211,10 @@ async fn run_turn_clears_prior_cancel_signal() {
     let dir = TempDir::new().unwrap();
     let mut agent = AgentLoop::new(test_config(&dir)).unwrap();
     agent.cancel_signal().cancel();
-    let result = agent.run_turn("重试", "task-retry").await.unwrap();
+    let result = agent
+        .start_or_steer_turn("重试", "task-retry")
+        .await
+        .unwrap();
     assert!(matches!(result, TurnResult::Continue { .. }));
     assert!(!agent.cancel_signal().is_cancelled());
 }

@@ -15,6 +15,7 @@ use futures::StreamExt;
 use providers::ProviderConfig;
 use providers::{PauseControl, Usage};
 use tokio::sync::{mpsc, Mutex};
+use tokio_util::sync::CancellationToken;
 use types::ChatTarget;
 
 use super::lifecycle::{emit, finish_error, finish_interrupted, finish_success};
@@ -30,7 +31,8 @@ use super::tools_exec::{
 };
 use super::types::{MultiTurnStream, MultiTurnStreamItem, StreamedAssistantContent};
 use crate::control::hitl::HitlGate;
-use crate::runtime::AgentLoop;
+use crate::runtime::{Session, TurnContext};
+use crate::tasks::{AnySessionTask, RegularTask};
 
 /// `pre_verify` 单次 turn 内允许的最多验证轮次（含首次结束尝试）。
 const MAX_VERIFY_ATTEMPTS: usize = 2;
@@ -40,7 +42,7 @@ const MAX_THINKING_ONLY_RETRIES: usize = 1;
 
 /// [`run_multi_turn_stream`] 入参打包。
 pub struct MultiTurnStreamArgs {
-    pub session: Arc<Mutex<AgentLoop>>,
+    pub session: Arc<Mutex<Session>>,
     pub targets: Vec<ChatTarget>,
     pub base_config: ProviderConfig,
     pub system_prompt: String,
@@ -73,26 +75,66 @@ pub async fn run_multi_turn_stream(args: MultiTurnStreamArgs) {
     };
     let run_id = uuid::Uuid::new_v4().to_string();
     let turn_id = run_id.clone();
-    {
-        let mut agent = session.lock().await;
-        agent.set_current_turn_id(turn_id.clone());
-    }
-    tracing::info!(session_id = %session_id, turn_id = %turn_id, "turn started");
-    run_turn(RunTurnArgs {
+    let task: Arc<dyn AnySessionTask> = Arc::new(RegularTask::new(RunTurnArgs {
         session: session.clone(),
         targets,
         base_config,
         system_prompt,
         pause,
         hitl_gate,
-        tx,
+        tx: tx.clone(),
         thread_id: session_id.clone(),
         run_id: run_id.clone(),
         chat_override,
-    })
-    .await;
+    }));
+    let cancellation_token = CancellationToken::new();
+    let start_result = {
+        let mut agent = session.lock().await;
+        if agent.active_turn.task.is_some() {
+            Err(anyhow::anyhow!("session already has an active task"))
+        } else {
+            agent.set_current_turn_id(turn_id.clone());
+            let turn_context = agent
+                .current_turn_context()
+                .expect("setting a turn id must create a TurnContext");
+            match agent.active_turn.start(
+                Arc::clone(&task),
+                cancellation_token.clone(),
+                Arc::clone(&turn_context),
+            ) {
+                Ok(()) => Ok(turn_context),
+                Err(error) => Err(error),
+            }
+        }
+    };
+    let turn_context = match start_result {
+        Ok(turn_context) => turn_context,
+        Err(error) => {
+            let _ = tx
+                .send(Ok(MultiTurnStreamItem::Error(error.to_string())))
+                .await;
+            let _ = tx.send(Ok(MultiTurnStreamItem::Done)).await;
+            return;
+        }
+    };
+    tracing::info!(session_id = %session_id, turn_id = %turn_id, "turn started");
+    if let Err(error) = task
+        .run(
+            Arc::clone(&session),
+            Arc::clone(&turn_context),
+            Vec::new(),
+            cancellation_token,
+        )
+        .await
+    {
+        let _ = tx
+            .send(Ok(MultiTurnStreamItem::Error(error.to_string())))
+            .await;
+        let _ = tx.send(Ok(MultiTurnStreamItem::Done)).await;
+    }
     {
         let mut agent = session.lock().await;
+        agent.active_turn.finish(turn_context.sub_id());
         agent.clear_current_turn_id();
     }
     tracing::info!(session_id = %session_id, turn_id = %run_id, "turn finished");
@@ -100,7 +142,7 @@ pub async fn run_multi_turn_stream(args: MultiTurnStreamArgs) {
 
 /// 测试入口：以自定义 chat 函数替代 dispatch，驱动多轮工具循环。
 pub async fn run_multi_turn_stream_with_chat_fn(
-    session: Arc<Mutex<AgentLoop>>,
+    session: Arc<Mutex<Session>>,
     chat_fn: super::provider::ChatOverride,
     config: ProviderConfig,
     system_prompt: String,
@@ -129,8 +171,9 @@ pub async fn run_multi_turn_stream_with_chat_fn(
     .await;
 }
 
-struct RunTurnArgs {
-    session: Arc<Mutex<AgentLoop>>,
+#[derive(Clone)]
+pub(crate) struct RunTurnArgs {
+    session: Arc<Mutex<Session>>,
     targets: Vec<ChatTarget>,
     base_config: ProviderConfig,
     system_prompt: String,
@@ -142,8 +185,23 @@ struct RunTurnArgs {
     chat_override: Option<super::provider::ChatOverride>,
 }
 
+impl RunTurnArgs {
+    pub(crate) fn with_session_and_turn(
+        &self,
+        session: Arc<Mutex<Session>>,
+        turn_context: Arc<TurnContext>,
+    ) -> Self {
+        Self {
+            session,
+            thread_id: self.thread_id.clone(),
+            run_id: turn_context.sub_id().to_string(),
+            ..self.clone()
+        }
+    }
+}
+
 /// Codex-aligned regular turn loop shared by foreground and background adapters.
-async fn run_turn(args: RunTurnArgs) {
+pub(crate) async fn run_turn(args: RunTurnArgs, cancellation_token: CancellationToken) {
     let RunTurnArgs {
         session,
         targets,
@@ -201,7 +259,7 @@ async fn run_turn(args: RunTurnArgs) {
             need_summary = true;
             break;
         }
-        if pause.is_cancelled() {
+        if cancellation_token.is_cancelled() || pause.is_cancelled() {
             finish_interrupted(
                 &session,
                 &streamer,
@@ -306,6 +364,18 @@ async fn run_turn(args: RunTurnArgs) {
 
             let next = tokio::select! {
                 biased;
+                _ = cancellation_token.cancelled() => {
+                    pause.clear_abort();
+                    finish_interrupted(
+                        &session,
+                        &streamer,
+                        &tx,
+                        saw_usage.then_some(total_usage),
+                        &run_id,
+                    )
+                    .await;
+                    return;
+                }
                 _ = pause.wait_cancelled() => {
                     pause.clear_abort();
                     finish_interrupted(
@@ -785,7 +855,7 @@ async fn run_turn(args: RunTurnArgs) {
 ///
 /// channel 容量为 32；消费者 drop 后发送方通过 [`emit`] 返回 `false` 自然退出。
 pub fn stream_multi_turn(
-    session: Arc<Mutex<AgentLoop>>,
+    session: Arc<Mutex<Session>>,
     targets: Vec<ChatTarget>,
     base_config: ProviderConfig,
     system_prompt: String,
@@ -796,7 +866,7 @@ pub fn stream_multi_turn(
 
 /// 带 HITL 闸门的多轮流。
 pub fn stream_multi_turn_with_hitl(
-    session: Arc<Mutex<AgentLoop>>,
+    session: Arc<Mutex<Session>>,
     targets: Vec<ChatTarget>,
     base_config: ProviderConfig,
     system_prompt: String,
