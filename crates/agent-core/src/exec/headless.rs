@@ -17,7 +17,7 @@ use types::ChatTarget;
 use crate::runtime::budget::{should_refund_tool_round, IterationBudget, DEFAULT_MAX_ITERATIONS};
 use crate::runtime::AgentLoop;
 use crate::streaming::accumulate::collect_response;
-use crate::streaming::{ProviderStreamer, StreamingChat};
+use crate::streaming::{ChatOverride, ProviderStreamer, StreamingChat};
 
 const MAX_THINKING_ONLY_RETRIES: usize = 1;
 
@@ -47,12 +47,26 @@ pub async fn run_headless_multi_turn_controlled(
     system_prompt: String,
     control: Option<Arc<subagents::AgentThreadControl>>,
 ) -> anyhow::Result<(String, Usage)> {
+    run_headless_multi_turn_controlled_with_chat(agent, targets, system_prompt, control, None).await
+}
+
+pub(crate) async fn run_headless_multi_turn_controlled_with_chat(
+    agent: &mut AgentLoop,
+    targets: Vec<ChatTarget>,
+    system_prompt: String,
+    control: Option<Arc<subagents::AgentThreadControl>>,
+    chat_override: Option<ChatOverride>,
+) -> anyhow::Result<(String, Usage)> {
     let base_config = ProviderConfig {
         temperature: agent.temperature(),
         additional_params: agent.additional_params().clone(),
         ..ProviderConfig::default()
     };
-    let streamer = ProviderStreamer::new(targets, base_config);
+    let streamer = if let Some(chat_override) = chat_override {
+        ProviderStreamer::with_chat_override(targets, base_config, chat_override)
+    } else {
+        ProviderStreamer::new(targets, base_config)
+    };
 
     let mut total_usage = Usage::default();
     let mut last_text = String::new();
