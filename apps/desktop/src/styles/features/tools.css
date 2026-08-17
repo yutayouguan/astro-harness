@@ -479,6 +479,10 @@ html[data-theme="dark"] .mcp-add-btn:hover {
   color: #d97706;
 }
 
+.mcp-runtime-status[data-status="auth-required"] {
+  color: #d97706;
+}
+
 .mcp-runtime-status[data-status="disconnected"],
 .mcp-runtime-status[data-status="error"] {
   color: var(--danger);

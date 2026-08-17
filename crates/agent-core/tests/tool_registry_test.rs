@@ -87,6 +87,7 @@ fn mcp_disabled_tools_not_in_schemas_for_api() {
         headers: HashMap::new(),
         bearer_token_env_var: None,
         env_http_headers: HashMap::new(),
+        auth: None,
         enabled: true,
         required: false,
         cwd: None,

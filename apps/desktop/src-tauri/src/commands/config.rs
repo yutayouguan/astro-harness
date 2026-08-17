@@ -73,6 +73,8 @@ pub struct McpRuntimeStatusDto {
     pub retryable: bool,
     pub retry_attempt: u32,
     pub next_retry_at_unix_ms: Option<u64>,
+    pub oauth_available: bool,
+    pub authenticated: bool,
 }
 
 fn runtime_status_dto(server: proto::McpServerInfo) -> McpRuntimeStatusDto {
@@ -87,6 +89,8 @@ fn runtime_status_dto(server: proto::McpServerInfo) -> McpRuntimeStatusDto {
         retry_attempt: server.retry_attempt,
         next_retry_at_unix_ms: (server.next_retry_at_unix_ms > 0)
             .then_some(server.next_retry_at_unix_ms),
+        oauth_available: server.oauth_available,
+        authenticated: server.authenticated,
     }
 }
 
@@ -117,6 +121,9 @@ pub struct McpServerDto {
     pub bearer_token_env_var: Option<String>,
     #[serde(default, rename = "envHttpHeaders", alias = "env_http_headers")]
     pub env_http_headers: HashMap<String, String>,
+    /// oauth | chatgpt；缺省表示标准 OAuth 可用但先尝试匿名连接。
+    #[serde(default)]
+    pub auth: Option<String>,
     #[serde(default = "default_true")]
     pub enabled: bool,
     #[serde(default)]
@@ -188,6 +195,7 @@ fn dto_from_config(c: mcp::McpServerConfig) -> McpServerDto {
         headers: c.headers,
         bearer_token_env_var: c.bearer_token_env_var,
         env_http_headers: c.env_http_headers,
+        auth: c.auth.map(|auth| auth.as_str().to_string()),
         enabled: c.enabled,
         required: c.required,
         cwd: c.cwd,
@@ -214,7 +222,8 @@ fn config_from_dto(d: McpServerDto) -> Result<mcp::McpServerConfig, String> {
         mcp::McpTransportType::Stdio
             if !d.headers.is_empty()
                 || d.bearer_token_env_var.is_some()
-                || !d.env_http_headers.is_empty() =>
+                || !d.env_http_headers.is_empty()
+                || d.auth.is_some() =>
         {
             return Err("STDIO MCP server cannot define HTTP authentication or headers".into());
         }
@@ -246,6 +255,7 @@ fn config_from_dto(d: McpServerDto) -> Result<mcp::McpServerConfig, String> {
             .map(|value| value.trim().to_string())
             .filter(|value| !value.is_empty()),
         env_http_headers: d.env_http_headers,
+        auth: d.auth.as_deref().map(mcp::McpHttpAuth::parse).transpose()?,
         enabled: d.enabled,
         required: d.required,
         cwd: d.cwd,
@@ -513,6 +523,7 @@ mod mcp_config_tests {
             headers: HashMap::new(),
             bearer_token_env_var: None,
             env_http_headers: HashMap::new(),
+            auth: None,
             enabled: true,
             required: false,
             cwd: None,
@@ -615,6 +626,8 @@ mod mcp_config_tests {
             retryable: true,
             retry_attempt: 3,
             next_retry_at_unix_ms: 1_700_000_000_000,
+            oauth_available: true,
+            authenticated: false,
         });
         assert_eq!(dto.id, "docs");
         assert!(dto.retryable);

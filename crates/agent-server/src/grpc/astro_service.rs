@@ -52,6 +52,8 @@ fn mcp_server_info(status: mcp::ServerStatus) -> proto::McpServerInfo {
         retryable: status.retryable,
         retry_attempt: status.retry_attempt,
         next_retry_at_unix_ms: status.next_retry_at_unix_ms.unwrap_or_default(),
+        oauth_available: status.oauth_available,
+        authenticated: status.authenticated,
     }
 }
 
@@ -1353,20 +1355,25 @@ impl AstroService for AstroServiceImpl {
             .unwrap_or_default();
         let servers = configs
             .into_iter()
-            .map(|c| proto::McpServerInfo {
-                id: c.id,
-                name: c.name,
-                status: if c.enabled {
-                    "configured".into()
-                } else {
-                    "disabled".into()
-                },
-                tools: c.discovered.iter().map(|d| d.name.clone()).collect(),
-                required: c.required,
-                error: String::new(),
-                retryable: false,
-                retry_attempt: 0,
-                next_retry_at_unix_ms: 0,
+            .map(|c| {
+                let oauth_available = mcp::auth::is_oauth_available(&c);
+                proto::McpServerInfo {
+                    id: c.id,
+                    name: c.name,
+                    status: if c.enabled {
+                        "configured".into()
+                    } else {
+                        "disabled".into()
+                    },
+                    tools: c.discovered.iter().map(|d| d.name.clone()).collect(),
+                    required: c.required,
+                    error: String::new(),
+                    retryable: false,
+                    retry_attempt: 0,
+                    next_retry_at_unix_ms: 0,
+                    oauth_available,
+                    authenticated: false,
+                }
             })
             .collect();
         Ok(Response::new(McpServerList { servers }))

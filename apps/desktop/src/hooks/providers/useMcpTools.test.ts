@@ -112,12 +112,29 @@ test("normalizes MCP runtime status and rejects unknown state strings", () => {
       retryable: false,
       retryAttempt: 0,
       nextRetryAtUnixMs: undefined,
+      oauthAvailable: false,
+      authenticated: false,
     },
   );
   assert.equal(
     normalizeMcpRuntimeStatus({ id: "future", status: "future_state" as never }).status,
     "unknown",
   );
+});
+
+test("preserves OAuth auth mode and auth-required runtime state", () => {
+  const [server] = parseMcpJson(
+    JSON.stringify({ url: "https://example.com/mcp", auth: "oauth" }),
+  );
+  assert.equal(server.auth, "oauth");
+  const status = normalizeMcpRuntimeStatus({
+    id: "remote",
+    status: "auth-required",
+    oauth_available: true,
+  } as never);
+  assert.equal(status.status, "auth-required");
+  assert.equal(status.oauthAvailable, true);
+  assert.equal(status.authenticated, false);
 });
 
 test("normalizes snake_case retry metadata", () => {

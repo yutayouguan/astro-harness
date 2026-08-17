@@ -4,6 +4,7 @@
 //! - [`hub`]：进程连接、工具列表与调用
 //! - [`names`]：`mcp__{server}__{tool}` 限定名约定
 
+pub mod auth;
 pub mod config;
 pub mod hub;
 pub mod names;
@@ -11,7 +12,7 @@ pub mod names;
 pub use config::{
     load_for_active_agent, load_mcp_servers, load_mcp_servers_layered, mcp_config_path_for_agent,
     mcp_config_path_for_project, mcp_config_path_global, merge_discovered, persist_discovered,
-    persist_discovered_layered, save_mcp_servers, DiscoveredTool, McpServerConfig,
+    persist_discovered_layered, save_mcp_servers, DiscoveredTool, McpHttpAuth, McpServerConfig,
     McpTransportType, DEFAULT_STARTUP_TIMEOUT_SECS, DEFAULT_TOOL_TIMEOUT_SECS,
     STARTUP_TIMEOUT_SECS_RANGE, TOOL_TIMEOUT_SECS_RANGE,
 };

@@ -37,6 +37,35 @@ pub enum McpTransportType {
     StreamableHttp,
 }
 
+/// Streamable HTTP 认证方式。
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[serde(rename_all = "lowercase")]
+pub enum McpHttpAuth {
+    /// 标准 MCP OAuth 2.1 Authorization Code + PKCE。
+    OAuth,
+    /// Codex 第一方 ChatGPT 会话认证；Astro 当前不具备该信任通道。
+    Chatgpt,
+}
+
+impl McpHttpAuth {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::OAuth => "oauth",
+            Self::Chatgpt => "chatgpt",
+        }
+    }
+
+    pub fn parse(value: &str) -> Result<Self, String> {
+        match value.trim().to_ascii_lowercase().as_str() {
+            "oauth" => Ok(Self::OAuth),
+            "chatgpt" => Ok(Self::Chatgpt),
+            other => Err(format!(
+                "unsupported MCP HTTP auth {other:?}; expected oauth or chatgpt"
+            )),
+        }
+    }
+}
+
 impl Default for McpTransportType {
     /// 默认使用 stdio 本地进程。
     fn default() -> Self {
@@ -120,6 +149,9 @@ pub struct McpServerConfig {
     /// HTTP Header 名到本地环境变量名的映射。
     #[serde(default, alias = "env_http_headers", alias = "envHttpHeaders")]
     pub env_http_headers: HashMap<String, String>,
+    /// HTTP 认证方式；缺省时与 Codex 一致，优先匿名连接，401 后提示 OAuth 登录。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub auth: Option<McpHttpAuth>,
     #[serde(default = "default_true")]
     pub enabled: bool,
     /// 连接失败时是否阻止 Agent 进入首次 LLM 调用。
@@ -231,6 +263,7 @@ impl McpServerConfig {
         hash_string_map(&self.headers, &mut hasher);
         self.bearer_token_env_var.hash(&mut hasher);
         hash_string_map(&self.env_http_headers, &mut hasher);
+        self.auth.hash(&mut hasher);
         self.effective_startup_timeout_secs().hash(&mut hasher);
         format!("{:016x}", hasher.finish())
     }
@@ -288,6 +321,8 @@ struct TomlMcpServer {
     #[serde(default, skip_serializing_if = "HashMap::is_empty")]
     env_http_headers: HashMap<String, String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    auth: Option<McpHttpAuth>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     enabled: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     required: Option<bool>,
@@ -331,7 +366,8 @@ impl TomlMcpServer {
             McpTransportType::Stdio
                 if !self.headers.is_empty()
                     || self.bearer_token_env_var.is_some()
-                    || !self.env_http_headers.is_empty() =>
+                    || !self.env_http_headers.is_empty()
+                    || self.auth.is_some() =>
             {
                 anyhow::bail!(
                     "STDIO MCP server {id:?} cannot define HTTP authentication or headers"
@@ -367,6 +403,7 @@ impl TomlMcpServer {
                 .map(|value| value.trim().to_string())
                 .filter(|value| !value.is_empty()),
             env_http_headers: self.env_http_headers,
+            auth: self.auth,
             enabled: self.enabled.unwrap_or(true),
             required: self.required.unwrap_or(false),
             cwd: self.cwd.filter(|value| !value.trim().is_empty()),
@@ -417,6 +454,9 @@ impl TomlMcpServer {
             } else {
                 HashMap::new()
             },
+            auth: (config.r#type == McpTransportType::StreamableHttp)
+                .then_some(config.auth)
+                .flatten(),
             enabled: (!config.enabled).then_some(false),
             required: config.required.then_some(true),
             startup_timeout_sec: config.startup_timeout_secs,
@@ -763,6 +803,7 @@ mod tests {
             headers: HashMap::new(),
             bearer_token_env_var: None,
             env_http_headers: HashMap::new(),
+            auth: None,
             enabled: true,
             required: false,
             cwd: None,
@@ -799,6 +840,7 @@ mod tests {
             headers: HashMap::new(),
             bearer_token_env_var: None,
             env_http_headers: HashMap::new(),
+            auth: None,
             enabled: true,
             required: false,
             cwd: None,
@@ -967,6 +1009,7 @@ env_vars = ["LOCAL_TOKEN"]
 
 [mcp_servers.remote]
 url = "https://example.com/mcp"
+auth = "oauth"
 bearer_token_env_var = "MCP_ACCESS_TOKEN"
 http_headers = { X-Region = "us-east-1" }
 env_http_headers = { X-API-Key = "MCP_API_KEY" }
@@ -984,6 +1027,7 @@ env_http_headers = { X-API-Key = "MCP_API_KEY" }
         );
         assert_eq!(remote.headers["X-Region"], "us-east-1");
         assert_eq!(remote.env_http_headers["X-API-Key"], "MCP_API_KEY");
+        assert_eq!(remote.auth, Some(McpHttpAuth::OAuth));
 
         save_mcp_servers(None, &loaded).unwrap();
         let persisted = fs::read_to_string(mcp_config_path_global()).unwrap();
@@ -991,6 +1035,7 @@ env_http_headers = { X-API-Key = "MCP_API_KEY" }
         assert!(persisted.contains("bearer_token_env_var"));
         assert!(persisted.contains("http_headers"));
         assert!(persisted.contains("env_http_headers"));
+        assert!(persisted.contains("auth = \"oauth\""));
         assert!(!persisted.contains("secret-token"));
     }
 

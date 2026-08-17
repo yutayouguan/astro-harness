@@ -1,6 +1,7 @@
 /** MCP 服务器列表与工具启用状态。 */
 import { useCallback, useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { open } from "@tauri-apps/plugin-shell";
 
 /** MCP 传输类型：本地进程 / Streamable HTTP。 */
 export type McpTransportType = "stdio" | "streamableHttp";
@@ -11,6 +12,7 @@ export type McpRuntimeState =
   | "connected"
   | "disconnected"
   | "backoff"
+  | "auth-required"
   | "error"
   | "unknown";
 
@@ -51,6 +53,8 @@ export type McpRuntimeStatus = {
   retryable: boolean;
   retryAttempt: number;
   nextRetryAtUnixMs?: number;
+  oauthAvailable: boolean;
+  authenticated: boolean;
 };
 
 const MCP_RUNTIME_STATES = new Set<McpRuntimeState>([
@@ -60,6 +64,7 @@ const MCP_RUNTIME_STATES = new Set<McpRuntimeState>([
   "connected",
   "disconnected",
   "backoff",
+  "auth-required",
   "error",
   "unknown",
 ]);
@@ -88,6 +93,8 @@ export function normalizeMcpRuntimeStatus(
     retryAttempt: Number.isFinite(retryAttempt) ? Math.max(0, Math.trunc(retryAttempt)) : 0,
     nextRetryAtUnixMs:
       Number.isFinite(nextRetryAt) && nextRetryAt > 0 ? Math.trunc(nextRetryAt) : undefined,
+    oauthAvailable: values.oauthAvailable === true || values.oauth_available === true,
+    authenticated: values.authenticated === true,
   };
 }
 
@@ -120,6 +127,7 @@ export type McpServer = {
   bearerTokenEnvVar?: string;
   /** HTTP Header 名到环境变量名的映射 */
   envHttpHeaders: Record<string, string>;
+  auth?: "oauth" | "chatgpt";
   enabled: boolean;
   /** 启动失败时阻止 Agent 进入首次 LLM 调用 */
   required: boolean;
@@ -234,6 +242,12 @@ function normalizeServer(raw: Partial<McpServer> & { id?: string; name?: string 
       "bearerTokenEnvVar", "bearer_token_env_var",
     ]),
     envHttpHeaders: readStringRecord(config, ["envHttpHeaders", "env_http_headers"]),
+    auth:
+      readOptionalString(config, ["auth"]) === "chatgpt"
+        ? "chatgpt"
+        : readOptionalString(config, ["auth"]) === "oauth"
+          ? "oauth"
+          : undefined,
     enabled: raw.enabled ?? true,
     required: config.required === true,
     cwd: typeof config.cwd === "string" && config.cwd.trim() ? config.cwd.trim() : undefined,
@@ -303,6 +317,12 @@ export function parseMcpJson(raw: string): McpServer[] {
           "bearerTokenEnvVar", "bearer_token_env_var",
         ]),
         envHttpHeaders: readStringRecord(cfg, ["envHttpHeaders", "env_http_headers"]),
+        auth:
+          readOptionalString(cfg, ["auth"]) === "chatgpt"
+            ? "chatgpt"
+            : readOptionalString(cfg, ["auth"]) === "oauth"
+              ? "oauth"
+              : undefined,
         startupTimeoutSecs: readTimeout(
           cfg, STARTUP_TIMEOUT_KEYS, DEFAULT_MCP_STARTUP_TIMEOUT_SECS, MAX_MCP_STARTUP_TIMEOUT_SECS,
         ),
@@ -338,6 +358,7 @@ export function useMcpTools(agentId?: string | null, watchRuntime = false) {
   const [runtimeStatuses, setRuntimeStatuses] = useState<Record<string, McpRuntimeStatus>>({});
   const [runtimeStatusError, setRuntimeStatusError] = useState<string | null>(null);
   const [reconnectingServerIds, setReconnectingServerIds] = useState<Set<string>>(new Set());
+  const [authenticatingServerIds, setAuthenticatingServerIds] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     let cancelled = false;
@@ -425,6 +446,56 @@ export function useMcpTools(agentId?: string | null, watchRuntime = false) {
     [agentId],
   );
 
+  const authenticateServer = useCallback(
+    async (serverId: string) => {
+      if (!isTauri()) return;
+      setAuthenticatingServerIds((current) => new Set(current).add(serverId));
+      let flowId: string | undefined;
+      try {
+        const flow = await invoke<{ flowId: string; authorizationUrl: string }>(
+          "begin_mcp_oauth",
+          { agentId: agentId || null, serverId },
+        );
+        flowId = flow.flowId;
+        await open(flow.authorizationUrl);
+        await invoke("complete_mcp_oauth", { flowId });
+        await reconnectServer(serverId);
+      } catch (error) {
+        if (flowId) {
+          await invoke("cancel_mcp_oauth", { flowId }).catch(() => undefined);
+        }
+        setRuntimeStatusError(error instanceof Error ? error.message : String(error));
+      } finally {
+        setAuthenticatingServerIds((current) => {
+          const next = new Set(current);
+          next.delete(serverId);
+          return next;
+        });
+      }
+    },
+    [agentId, reconnectServer],
+  );
+
+  const logoutServer = useCallback(
+    async (serverId: string) => {
+      if (!isTauri()) return;
+      setAuthenticatingServerIds((current) => new Set(current).add(serverId));
+      try {
+        await invoke("logout_mcp_oauth", { agentId: agentId || null, serverId });
+        await reconnectServer(serverId);
+      } catch (error) {
+        setRuntimeStatusError(error instanceof Error ? error.message : String(error));
+      } finally {
+        setAuthenticatingServerIds((current) => {
+          const next = new Set(current);
+          next.delete(serverId);
+          return next;
+        });
+      }
+    },
+    [agentId, reconnectServer],
+  );
+
   useEffect(() => {
     if (!ready) return;
     if (skipNextSave) {
@@ -509,5 +580,8 @@ export function useMcpTools(agentId?: string | null, watchRuntime = false) {
     refreshRuntimeStatuses,
     reconnectServer,
     reconnectingServerIds,
+    authenticateServer,
+    logoutServer,
+    authenticatingServerIds,
   };
 }

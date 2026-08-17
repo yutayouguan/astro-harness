@@ -22,7 +22,7 @@ use tokio::sync::Mutex as TokioMutex;
 
 use crate::config::{
     load_for_active_agent, load_mcp_servers_layered, merge_discovered, persist_discovered_layered,
-    DiscoveredTool, McpServerConfig, McpTransportType,
+    DiscoveredTool, McpHttpAuth, McpServerConfig, McpTransportType,
 };
 use crate::names::{
     is_mcp_tool_name, parse_qualified_name, qualify_tool_name, sanitize_server_id, MCP_TOOLSET,
@@ -123,6 +123,10 @@ pub struct ServerStatus {
     pub retry_attempt: u32,
     /// 下一次允许重试的 Unix 毫秒时间；永久错误为 None。
     pub next_retry_at_unix_ms: Option<u64>,
+    /// 此 Server 是否可通过标准 MCP OAuth 登录。
+    pub oauth_available: bool,
+    /// 当前连接是否使用 Keychain 中的 OAuth 凭证。
+    pub authenticated: bool,
 }
 
 /// MCP Server 连接生命周期状态。
@@ -133,6 +137,7 @@ pub enum McpLifecycleState {
     Connected,
     Disconnected,
     Backoff,
+    AuthRequired,
     Error,
 }
 
@@ -144,6 +149,7 @@ impl McpLifecycleState {
             Self::Connected => "connected",
             Self::Disconnected => "disconnected",
             Self::Backoff => "backoff",
+            Self::AuthRequired => "auth-required",
             Self::Error => "error",
         }
     }
@@ -251,6 +257,8 @@ struct RunningServer {
     status: String,
     /// 错误信息。
     error: Option<String>,
+    /// 是否由持久化 OAuth 凭证建立连接。
+    authenticated: bool,
 }
 
 /// 单个 Server 的连续失败与退避状态。
@@ -417,6 +425,8 @@ impl McpHub {
                         sid.clone(),
                         if retry.retryable {
                             McpLifecycleState::Backoff
+                        } else if self.states.get(&sid) == Some(&McpLifecycleState::AuthRequired) {
+                            McpLifecycleState::AuthRequired
                         } else {
                             McpLifecycleState::Error
                         },
@@ -520,9 +530,12 @@ impl McpHub {
                             next_retry_at_unix_ms,
                         },
                     );
+                    let auth_required = is_auth_required_error(&cfg, &e);
                     self.states.insert(
                         sid.clone(),
-                        if retryable {
+                        if auth_required {
+                            McpLifecycleState::AuthRequired
+                        } else if retryable {
                             McpLifecycleState::Backoff
                         } else {
                             McpLifecycleState::Error
@@ -720,6 +733,8 @@ impl McpHub {
                     retryable: false,
                     retry_attempt: 0,
                     next_retry_at_unix_ms: None,
+                    oauth_available: crate::auth::is_oauth_available(cfg),
+                    authenticated: rs.authenticated,
                 });
             } else {
                 let err = self.last_connect_errors.get(&sid).cloned();
@@ -746,6 +761,8 @@ impl McpHub {
                     retryable: retry.is_some_and(|retry| retry.retryable),
                     retry_attempt: retry.map_or(0, |retry| retry.attempt),
                     next_retry_at_unix_ms: retry.and_then(|retry| retry.next_retry_at_unix_ms),
+                    oauth_available: crate::auth::is_oauth_available(cfg),
+                    authenticated: false,
                 });
             }
         }
@@ -1016,6 +1033,26 @@ fn is_retryable_connect_error(error: &anyhow::Error) -> bool {
         .any(|marker| message.contains(marker))
 }
 
+fn is_auth_required_error(config: &McpServerConfig, error: &anyhow::Error) -> bool {
+    if !crate::auth::is_oauth_available(config) || has_configured_authorization(config) {
+        return false;
+    }
+    let message = format!("{error:#}").to_ascii_lowercase();
+    message.contains("unauthorized")
+        || message.contains("oauth authorization required")
+        || message.contains("status: 401")
+        || message.contains("status 401")
+}
+
+fn has_configured_authorization(config: &McpServerConfig) -> bool {
+    config.bearer_token_env_var.is_some()
+        || config
+            .headers
+            .keys()
+            .chain(config.env_http_headers.keys())
+            .any(|name| name.eq_ignore_ascii_case("authorization"))
+}
+
 fn retry_delay(server_id: &str, attempt: u32) -> std::time::Duration {
     let exponent = attempt.saturating_sub(1).min(5);
     let base_ms = (1_u64 << exponent) * 1_000;
@@ -1066,6 +1103,7 @@ async fn connect_server_inner(
         next_seq: Arc::new(std::sync::atomic::AtomicU64::new(0)),
     };
 
+    let mut authenticated = false;
     let service = match cfg.r#type {
         McpTransportType::Stdio => {
             let cmd = build_stdio_command(cfg, execution_context)?;
@@ -1108,13 +1146,31 @@ async fn connect_server_inner(
             if cfg.url.trim().is_empty() {
                 anyhow::bail!("HTTP MCP server 缺少 url");
             }
+            if cfg.auth == Some(McpHttpAuth::Chatgpt) {
+                anyhow::bail!(
+                    "ChatGPT session authentication is only available to trusted Codex first-party integrations"
+                );
+            }
             let map = resolve_http_headers(cfg)?;
             let mut config = StreamableHttpClientTransportConfig::with_uri(cfg.url.as_str());
             if !map.is_empty() {
+                let has_static_authorization = map.contains_key(&AUTHORIZATION);
                 config = config.custom_headers(map);
+                let (client, used_oauth) =
+                    crate::auth::http_client_for(cfg, !has_static_authorization)
+                        .await
+                        .context("load MCP OAuth credentials")?;
+                authenticated = used_oauth;
+                let transport = StreamableHttpClientTransport::with_client(client, config);
+                handler.serve(transport).await.context("http serve")?
+            } else {
+                let (client, used_oauth) = crate::auth::http_client_for(cfg, true)
+                    .await
+                    .context("load MCP OAuth credentials")?;
+                authenticated = used_oauth;
+                let transport = StreamableHttpClientTransport::with_client(client, config);
+                handler.serve(transport).await.context("http serve")?
             }
-            let transport = StreamableHttpClientTransport::from_config(config);
-            handler.serve(transport).await.context("http serve")?
         }
     };
 
@@ -1141,6 +1197,7 @@ async fn connect_server_inner(
         config: cfg.clone(),
         status: "connected".into(),
         error: None,
+        authenticated,
     })
 }
 
@@ -1457,6 +1514,7 @@ mod tests {
             headers: HashMap::new(),
             bearer_token_env_var: None,
             env_http_headers: HashMap::new(),
+            auth: None,
             enabled: true,
             required: false,
             cwd: None,
@@ -1484,6 +1542,7 @@ mod tests {
             headers: HashMap::new(),
             bearer_token_env_var: None,
             env_http_headers: HashMap::new(),
+            auth: None,
             enabled: true,
             required: false,
             cwd: None,
@@ -1830,6 +1889,22 @@ mod tests {
         assert!(first >= std::time::Duration::from_millis(800));
         assert!(first <= std::time::Duration::from_millis(1_200));
         assert!(retry_delay("server-a", 20) <= std::time::Duration::from_secs(30));
+    }
+
+    #[test]
+    fn oauth_eligible_401_requires_auth_but_static_auth_does_not() {
+        let mut server = stdio_server("");
+        server.r#type = McpTransportType::StreamableHttp;
+        server.url = "https://example.invalid/mcp".into();
+        let unauthorized = anyhow!("HTTP status client error (401 Unauthorized)");
+        assert!(is_auth_required_error(&server, &unauthorized));
+
+        server.bearer_token_env_var = Some("MCP_TOKEN".into());
+        assert!(!is_auth_required_error(&server, &unauthorized));
+
+        server.bearer_token_env_var = None;
+        server.auth = Some(McpHttpAuth::Chatgpt);
+        assert!(!is_auth_required_error(&server, &unauthorized));
     }
 
     #[tokio::test]

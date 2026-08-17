@@ -331,6 +331,8 @@ message McpServerInfo {
   bool retryable = 7;
   uint32 retry_attempt = 8;
   uint64 next_retry_at_unix_ms = 9;
+  bool oauth_available = 10;
+  bool authenticated = 11;
 }
 
 message MemoryQuery { string query = 1; int32 limit = 2; }

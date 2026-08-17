@@ -14,6 +14,7 @@ pub(crate) mod evolution_run;
 pub(crate) mod files;
 pub(crate) mod icon;
 pub(crate) mod loops;
+pub(crate) mod mcp_oauth;
 pub(crate) mod media;
 pub(crate) mod memory;
 pub(crate) mod providers;

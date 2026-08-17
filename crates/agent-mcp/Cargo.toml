@@ -7,10 +7,14 @@ edition = "2021"
 anyhow = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
+async-trait = { workspace = true }
 toml = "0.8"
 tokio = { workspace = true }
 tracing = { workspace = true }
 futures = "0.3"
+keyring = "3"
+reqwest = { version = "0.13.2", default-features = false, features = ["rustls"] }
+sse-stream = "0.2"
 types         = { path = "../agent-types" }
 home          = { path = "../agent-home" }
 sandbox       = { path = "../agent-sandbox" }
@@ -19,6 +23,7 @@ rmcp = { version = "2", default-features = false, features = [
     "transport-child-process",
     "transport-streamable-http-client-reqwest",
     "reqwest",
+    "auth",
 ] }
 http = "1"
 

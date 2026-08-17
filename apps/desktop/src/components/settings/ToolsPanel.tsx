@@ -286,6 +286,7 @@ const MCP_STATUS_LABEL: Record<McpRuntimeState, MessageKey> = {
   connected: "mcpTools.status.connected",
   disconnected: "mcpTools.status.disconnected",
   backoff: "mcpTools.status.backoff",
+  "auth-required": "mcpTools.status.authRequired",
   error: "mcpTools.status.error",
   unknown: "mcpTools.status.unknown",
 };
@@ -849,8 +850,11 @@ function McpServerCard({
   onRefresh,
   onRemove,
   onReconnect,
+  onAuthenticate,
+  onLogout,
   refreshing,
   reconnecting,
+  authenticating,
   runtimeStatus,
 }: {
   server: McpServer;
@@ -859,8 +863,11 @@ function McpServerCard({
   onRefresh: (serverId: string) => void;
   onRemove: (id: string) => void;
   onReconnect: (id: string) => void;
+  onAuthenticate: (id: string) => void;
+  onLogout: (id: string) => void;
   refreshing?: boolean;
   reconnecting?: boolean;
+  authenticating?: boolean;
   runtimeStatus?: McpRuntimeStatus;
 }) {
   const { t } = useI18n();
@@ -991,6 +998,28 @@ function McpServerCard({
         )}
       </div>
       <div className="mcp-server-actions">
+        {runtimeStatus?.status === "auth-required" ? (
+          <button
+            type="button"
+            className="mcp-btn-ghost"
+            disabled={authenticating}
+            onClick={() => onAuthenticate(server.id)}
+          >
+            <KeyRound size={13} strokeWidth={2.2} aria-hidden />
+            {authenticating ? t("mcpTools.authenticating") : t("mcpTools.authenticate")}
+          </button>
+        ) : null}
+        {runtimeStatus?.authenticated ? (
+          <button
+            type="button"
+            className="mcp-btn-ghost"
+            disabled={authenticating}
+            onClick={() => onLogout(server.id)}
+          >
+            <KeyRound size={13} strokeWidth={2.2} aria-hidden />
+            {authenticating ? t("mcpTools.loggingOut") : t("mcpTools.logout")}
+          </button>
+        ) : null}
         <button
           type="button"
           className="mcp-btn-ghost mcp-reconnect-btn"
@@ -1046,6 +1075,9 @@ export default function ToolsPanel({
     runtimeStatusError,
     reconnectServer,
     reconnectingServerIds,
+    authenticateServer,
+    logoutServer,
+    authenticatingServerIds,
   } = useMcpTools(agentId, active && tab === "mcp");
   const query = search.trim().toLowerCase();
 
@@ -1588,6 +1620,32 @@ export default function ToolsPanel({
                         </button>
                       </div>
                       <div className="mcp-server-actions">
+                        {selectedRuntimeStatus?.status === "auth-required" ? (
+                          <button
+                            type="button"
+                            className="mcp-btn-ghost"
+                            disabled={authenticatingServerIds.has(selectedServer.id)}
+                            onClick={() => void authenticateServer(selectedServer.id)}
+                          >
+                            <KeyRound size={13} strokeWidth={2.2} aria-hidden />
+                            {authenticatingServerIds.has(selectedServer.id)
+                              ? t("mcpTools.authenticating")
+                              : t("mcpTools.authenticate")}
+                          </button>
+                        ) : null}
+                        {selectedRuntimeStatus?.authenticated ? (
+                          <button
+                            type="button"
+                            className="mcp-btn-ghost"
+                            disabled={authenticatingServerIds.has(selectedServer.id)}
+                            onClick={() => void logoutServer(selectedServer.id)}
+                          >
+                            <KeyRound size={13} strokeWidth={2.2} aria-hidden />
+                            {authenticatingServerIds.has(selectedServer.id)
+                              ? t("mcpTools.loggingOut")
+                              : t("mcpTools.logout")}
+                          </button>
+                        ) : null}
                         <button
                           type="button"
                           className="mcp-btn-ghost mcp-reconnect-btn"
@@ -1752,8 +1810,11 @@ export default function ToolsPanel({
                   onRefresh={(id) => void refreshTools(id)}
                   onRemove={removeServer}
                   onReconnect={(id) => void reconnectServer(id)}
+                  onAuthenticate={(id) => void authenticateServer(id)}
+                  onLogout={(id) => void logoutServer(id)}
                   refreshing={refreshing}
                   reconnecting={reconnectingServerIds.has(s.id)}
+                  authenticating={authenticatingServerIds.has(s.id)}
                   runtimeStatus={runtimeStatuses[s.id]}
                 />
               ))}
