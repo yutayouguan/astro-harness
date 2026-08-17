@@ -30,9 +30,28 @@ impl AgentThreadDispatch for DefaultAgentThreadDispatch {
                 settings.max_concurrent_threads_per_session
             );
         }
+        LiveAgentThreads::global().ensure_capacity(
+            &request.parent_session_id,
+            settings.max_concurrent_threads_per_session,
+        )?;
 
         let thread = store.create(&request)?;
-        let (control, receiver) = LiveAgentThreads::global().register(&thread.id);
+        let (control, receiver) = match LiveAgentThreads::global().register_bounded(
+            &thread.id,
+            &request.parent_session_id,
+            settings.max_concurrent_threads_per_session,
+        ) {
+            Ok(registered) => registered,
+            Err(error) => {
+                store.set_status(
+                    &thread.id,
+                    AgentThreadStatus::Failed,
+                    None,
+                    Some(&error.to_string()),
+                )?;
+                return Err(error);
+            }
+        };
         let thread_id = thread.id.clone();
         tokio::task::spawn_blocking(move || {
             let runtime = match tokio::runtime::Builder::new_current_thread()

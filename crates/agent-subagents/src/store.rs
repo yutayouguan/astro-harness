@@ -317,7 +317,7 @@ mod tests {
             .set_status(&thread.id, AgentThreadStatus::Completed, Some("done"), None)
             .unwrap();
         let waited = store
-            .wait(&[thread.id.clone()], Duration::from_secs(1))
+            .wait(std::slice::from_ref(&thread.id), Duration::from_secs(1))
             .await
             .unwrap();
         assert_eq!(waited[0].status, AgentThreadStatus::Completed);

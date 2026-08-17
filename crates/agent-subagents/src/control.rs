@@ -4,6 +4,9 @@ use std::sync::{Arc, Mutex, OnceLock};
 
 use tokio::sync::{mpsc, Notify};
 
+/// 防止不同会话通过保留已完成线程无限占用 blocking worker。
+pub const MAX_LIVE_AGENT_THREADS: usize = 32;
+
 #[derive(Debug)]
 pub enum AgentThreadCommand {
     FollowUp(String),
@@ -56,6 +59,7 @@ impl AgentThreadControl {
 struct LiveThread {
     tx: mpsc::UnboundedSender<AgentThreadCommand>,
     control: Arc<AgentThreadControl>,
+    parent_session_id: String,
 }
 
 #[derive(Default)]
@@ -69,23 +73,42 @@ impl LiveAgentThreads {
         REGISTRY.get_or_init(Self::default)
     }
 
-    pub fn register(
+    pub fn ensure_capacity(
+        &self,
+        parent_session_id: &str,
+        max_per_session: usize,
+    ) -> anyhow::Result<()> {
+        let live = self.inner.lock().unwrap();
+        check_capacity(&live, parent_session_id, max_per_session)
+    }
+
+    /// 原子检查并登记存活线程。已完成但仍可追问的线程也保留在此表中，
+    /// 因此会继续占用会话级与全局资源预算，直到显式关闭或进程退出。
+    pub fn register_bounded(
         &self,
         thread_id: &str,
-    ) -> (
+        parent_session_id: &str,
+        max_per_session: usize,
+    ) -> anyhow::Result<(
         Arc<AgentThreadControl>,
         mpsc::UnboundedReceiver<AgentThreadCommand>,
-    ) {
+    )> {
         let (tx, rx) = mpsc::unbounded_channel();
         let control = Arc::new(AgentThreadControl::default());
-        self.inner.lock().unwrap().insert(
+        let mut live = self.inner.lock().unwrap();
+        if live.contains_key(thread_id) {
+            anyhow::bail!("agent thread is already live: {thread_id}");
+        }
+        check_capacity(&live, parent_session_id, max_per_session)?;
+        live.insert(
             thread_id.to_string(),
             LiveThread {
                 tx,
                 control: Arc::clone(&control),
+                parent_session_id: parent_session_id.to_string(),
             },
         );
-        (control, rx)
+        Ok((control, rx))
     }
 
     pub fn send_follow_up(&self, thread_id: &str, message: String) -> anyhow::Result<()> {
@@ -135,6 +158,29 @@ impl LiveAgentThreads {
     }
 }
 
+fn check_capacity(
+    live: &HashMap<String, LiveThread>,
+    parent_session_id: &str,
+    max_per_session: usize,
+) -> anyhow::Result<()> {
+    let session_count = live
+        .values()
+        .filter(|thread| thread.parent_session_id == parent_session_id)
+        .count();
+    if session_count >= max_per_session {
+        anyhow::bail!(
+            "subagent live-thread limit reached for session ({session_count}/{max_per_session})"
+        );
+    }
+    if live.len() >= MAX_LIVE_AGENT_THREADS {
+        anyhow::bail!(
+            "global subagent live-thread limit reached ({}/{MAX_LIVE_AGENT_THREADS})",
+            live.len()
+        );
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -142,7 +188,7 @@ mod tests {
     #[tokio::test]
     async fn follow_up_interrupt_and_close_are_independent_controls() {
         let registry = LiveAgentThreads::default();
-        let (control, mut rx) = registry.register("thread");
+        let (control, mut rx) = registry.register_bounded("thread", "parent", 1).unwrap();
         registry.send_follow_up("thread", "next".into()).unwrap();
         assert!(matches!(
             rx.recv().await,
@@ -159,5 +205,41 @@ mod tests {
         registry.close("thread").unwrap();
         assert!(control.is_closed());
         assert!(matches!(rx.recv().await, Some(AgentThreadCommand::Close)));
+    }
+
+    #[test]
+    fn completed_live_threads_still_consume_session_budget() {
+        let registry = LiveAgentThreads::default();
+        let (_first, _first_rx) = registry.register_bounded("first", "parent", 1).unwrap();
+        let error = registry
+            .register_bounded("second", "parent", 1)
+            .unwrap_err();
+        assert!(error.to_string().contains("live-thread limit"));
+
+        registry.remove("first");
+        assert!(registry.register_bounded("second", "parent", 1).is_ok());
+    }
+
+    #[test]
+    fn live_thread_limit_is_scoped_per_parent_session() {
+        let registry = LiveAgentThreads::default();
+        let (_first, _first_rx) = registry.register_bounded("first", "parent-a", 1).unwrap();
+        assert!(registry.register_bounded("second", "parent-b", 1).is_ok());
+    }
+
+    #[test]
+    fn global_live_thread_limit_bounds_all_sessions() {
+        let registry = LiveAgentThreads::default();
+        for index in 0..MAX_LIVE_AGENT_THREADS {
+            registry
+                .register_bounded(&format!("thread-{index}"), &format!("parent-{index}"), 1)
+                .unwrap();
+        }
+        let error = registry
+            .register_bounded("overflow", "overflow-parent", 1)
+            .unwrap_err();
+        assert!(error
+            .to_string()
+            .contains("global subagent live-thread limit"));
     }
 }
