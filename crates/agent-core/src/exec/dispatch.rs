@@ -108,21 +108,7 @@ impl AgentThreadDispatch for DefaultAgentThreadDispatch {
 
     async fn send_message(&self, request: SendAgentMessageRequest) -> anyhow::Result<AgentThread> {
         let store = AgentThreadStore::open_default()?;
-        let thread = store
-            .get(&request.thread_id)?
-            .ok_or_else(|| anyhow::anyhow!("unknown agent thread: {}", request.thread_id))?;
-        if thread.status == AgentThreadStatus::Closed {
-            anyhow::bail!("agent thread is closed: {}", request.thread_id);
-        }
-        if !LiveAgentThreads::global().is_live(&request.thread_id) {
-            anyhow::bail!("agent thread is not live: {}", request.thread_id);
-        }
-        store.append_message(&request.thread_id, "user", &request.message)?;
-        store.set_status(&request.thread_id, AgentThreadStatus::Pending, None, None)?;
-        LiveAgentThreads::global().send_follow_up(&request.thread_id, request.message)?;
-        store
-            .get(&request.thread_id)?
-            .ok_or_else(|| anyhow::anyhow!("agent thread disappeared: {}", request.thread_id))
+        enqueue_follow_up(&store, LiveAgentThreads::global(), request)
     }
 
     async fn wait_agents(
@@ -174,5 +160,126 @@ impl AgentThreadDispatch for DefaultAgentThreadDispatch {
         store
             .get(&request.thread_id)?
             .ok_or_else(|| anyhow::anyhow!("agent thread disappeared: {}", request.thread_id))
+    }
+}
+
+fn enqueue_follow_up(
+    store: &AgentThreadStore,
+    live_threads: &LiveAgentThreads,
+    request: SendAgentMessageRequest,
+) -> anyhow::Result<AgentThread> {
+    let message = request.message.trim();
+    if message.is_empty() {
+        anyhow::bail!("subagent follow-up message cannot be empty");
+    }
+
+    let thread = store
+        .get(&request.thread_id)?
+        .ok_or_else(|| anyhow::anyhow!("unknown agent thread: {}", request.thread_id))?;
+    if thread.status == AgentThreadStatus::Closed {
+        anyhow::bail!("agent thread is closed: {}", request.thread_id);
+    }
+
+    // The runner persists this message only after the current assistant turn
+    // has finished, keeping the durable transcript in conversational order.
+    live_threads.send_follow_up(&request.thread_id, message.to_string())?;
+    store
+        .get(&request.thread_id)?
+        .ok_or_else(|| anyhow::anyhow!("agent thread disappeared: {}", request.thread_id))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use subagents::AgentThreadCommand;
+
+    fn spawn_request() -> SpawnAgentRequest {
+        SpawnAgentRequest {
+            parent_session_id: "parent-session".into(),
+            parent_agent_id: "parent-agent".into(),
+            task: "inspect the project".into(),
+            agent_name: "reviewer".into(),
+            developer_instructions: String::new(),
+            context_snapshot: String::new(),
+            model: None,
+            model_reasoning_effort: None,
+            sandbox_mode: None,
+            chat_targets: Vec::new(),
+            project_root: None,
+            hook_bus: None,
+            interrupt_message: false,
+        }
+    }
+
+    #[tokio::test]
+    async fn follow_up_is_persisted_after_current_assistant_message() {
+        let temp = tempfile::tempdir().unwrap();
+        let store = AgentThreadStore::new(temp.path().join("subagents.db")).unwrap();
+        let thread = store.create(&spawn_request()).unwrap();
+        store
+            .set_status(&thread.id, AgentThreadStatus::Running, None, None)
+            .unwrap();
+        let live_threads = LiveAgentThreads::default();
+        let (_control, mut commands) = live_threads
+            .register_bounded(&thread.id, &thread.parent_session_id, 1)
+            .unwrap();
+
+        let returned = enqueue_follow_up(
+            &store,
+            &live_threads,
+            SendAgentMessageRequest {
+                thread_id: thread.id.clone(),
+                message: "  check the tests too  ".into(),
+            },
+        )
+        .unwrap();
+        assert_eq!(returned.status, AgentThreadStatus::Running);
+        assert_eq!(store.messages(&thread.id).unwrap().len(), 1);
+
+        store
+            .append_message(&thread.id, "assistant", "first answer")
+            .unwrap();
+        let Some(AgentThreadCommand::FollowUp(message)) = commands.recv().await else {
+            panic!("expected queued follow-up");
+        };
+        crate::exec::subagents::record_follow_up(&store, &thread.id, &message).unwrap();
+
+        let messages = store.messages(&thread.id).unwrap();
+        let transcript = messages
+            .iter()
+            .map(|message| (message.role.as_str(), message.content.as_str()))
+            .collect::<Vec<_>>();
+        assert_eq!(
+            transcript,
+            vec![
+                ("user", "inspect the project"),
+                ("assistant", "first answer"),
+                ("user", "check the tests too"),
+            ]
+        );
+    }
+
+    #[test]
+    fn empty_follow_up_is_rejected_without_changing_transcript() {
+        let temp = tempfile::tempdir().unwrap();
+        let store = AgentThreadStore::new(temp.path().join("subagents.db")).unwrap();
+        let thread = store.create(&spawn_request()).unwrap();
+        let live_threads = LiveAgentThreads::default();
+        let (_control, _commands) = live_threads
+            .register_bounded(&thread.id, &thread.parent_session_id, 1)
+            .unwrap();
+
+        let error = enqueue_follow_up(
+            &store,
+            &live_threads,
+            SendAgentMessageRequest {
+                thread_id: thread.id.clone(),
+                message: "  \n  ".into(),
+            },
+        )
+        .unwrap_err();
+
+        assert!(error.to_string().contains("cannot be empty"));
+        assert_eq!(store.messages(&thread.id).unwrap().len(), 1);
     }
 }

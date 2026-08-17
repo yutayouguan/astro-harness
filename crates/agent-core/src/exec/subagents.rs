@@ -87,7 +87,10 @@ pub async fn run_agent_thread(
         }
 
         match commands.recv().await {
-            Some(AgentThreadCommand::FollowUp(message)) => next_message = Some(message),
+            Some(AgentThreadCommand::FollowUp(message)) => {
+                record_follow_up(&store, &thread_id, &message)?;
+                next_message = Some(message);
+            }
             Some(AgentThreadCommand::Close) | None => break,
         }
     }
@@ -105,6 +108,14 @@ pub async fn run_agent_thread(
         );
     }
     Ok(())
+}
+
+pub(super) fn record_follow_up(
+    store: &AgentThreadStore,
+    thread_id: &str,
+    message: &str,
+) -> anyhow::Result<()> {
+    store.append_message(thread_id, "user", message)
 }
 
 fn build_agent(thread_id: &str, request: &SpawnAgentRequest) -> anyhow::Result<AgentLoop> {
