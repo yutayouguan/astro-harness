@@ -3,7 +3,9 @@
 use session::{build_conversation_context, format_recalled_context, NewMessage};
 use types::message::Message;
 
-use super::{looks_like_user_correction, AgentLoop, TurnResult};
+use std::sync::Arc;
+
+use super::{looks_like_user_correction, AgentLoop, StepContext, TurnContext, TurnResult};
 
 impl AgentLoop {
     /// 开始新的用户消息处理：重置 `tool_rounds` 与 `turn_wrote_disk`。
@@ -169,17 +171,61 @@ impl AgentLoop {
 
     /// 准备下一轮 LLM 调用所需的上下文：重载工具/MCP、构建历史、注入 hook 上下文。
     ///
-    /// 返回 `(messages, tool_schemas)`，供 `ProviderStreamer::stream_chat` 或
-    /// `to_provider_messages` 使用。foreground 与 background 路径共享。
-    pub(crate) async fn prepare_llm_context(
-        &mut self,
-    ) -> anyhow::Result<(Vec<Message>, Vec<serde_json::Value>)> {
+    /// 返回当前 sampling request 的不可变 [`StepContext`]。foreground、background
+    /// 与 Agent Thread 路径共享同一捕获入口。
+    pub(crate) async fn capture_step_context(&mut self) -> anyhow::Result<Arc<StepContext>> {
         self.reload_tools_and_mcp().await?;
-        let mut messages = self.provider_history();
+        let mut history = self.provider_history();
         if let Some(ctx) = self.take_inject_context() {
-            messages.push(Message::user(&format!("[astro:hook-context]\n{ctx}")));
+            history.push(Message::user(&format!("[astro:hook-context]\n{ctx}")));
         }
-        let tools = self.schemas_for_api();
-        Ok((messages, tools))
+        let tool_specs = self.schemas_for_api();
+        let turn_context = self.current_turn_context.clone().unwrap_or_else(|| {
+            Arc::new(TurnContext::new(
+                self.turn
+                    .current_turn_id()
+                    .map(str::to_owned)
+                    .unwrap_or_else(|| uuid::Uuid::new_v4().to_string()),
+                self.turn.current_turn(),
+                self.interaction_mode,
+                self.permission_profile.clone(),
+                self.project_root.clone(),
+            ))
+        });
+        Ok(Arc::new(StepContext::new(
+            turn_context,
+            history,
+            tool_specs,
+        )))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Arc;
+
+    use tempfile::TempDir;
+
+    use super::*;
+
+    #[tokio::test]
+    async fn capture_step_context_reuses_the_turn_snapshot() {
+        let dir = TempDir::new().unwrap();
+        let config = crate::runtime::AgentConfig::with_defaults(dir.path().to_path_buf());
+        let mut session = AgentLoop::with_session_id(config, "step-context-test".into()).unwrap();
+        session.set_interaction_mode(types::InteractionMode::Plan);
+        session.set_current_turn_id("turn-1");
+
+        let first = session.capture_step_context().await.unwrap();
+        let second = session.capture_step_context().await.unwrap();
+
+        assert!(Arc::ptr_eq(&first.turn, &second.turn));
+        assert_eq!(first.turn.sub_id(), "turn-1");
+        assert_eq!(first.turn.mode(), types::InteractionMode::Plan);
+        assert_eq!(
+            serde_json::to_value(&first.history).unwrap(),
+            serde_json::to_value(&second.history).unwrap()
+        );
+        assert_eq!(first.tool_specs, second.tool_specs);
     }
 }

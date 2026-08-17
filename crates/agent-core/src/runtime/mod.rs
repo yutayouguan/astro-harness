@@ -34,15 +34,19 @@ mod context_maintenance;
 pub(crate) mod model_ctx;
 mod recording;
 mod session;
+pub(crate) mod step_context;
 mod system_prompt;
 mod tool_dispatch;
 pub(crate) mod turn_budget;
+pub(crate) mod turn_context;
 mod turn_lifecycle;
 pub(crate) mod usage;
 mod validate;
 
+pub(crate) use step_context::StepContext;
 pub use tool_dispatch::ToolCallError;
 pub use turn_budget::MaxDepthError;
+pub use turn_context::TurnContext;
 pub use validate::validate_message_order;
 
 /// Agent 运行时配置，控制轮次预算、记忆召回与提示组装策略。
@@ -146,6 +150,8 @@ pub struct AgentLoop {
     pub(crate) pending_learning_nudge: Option<String>,
     /// 当前聊天交互模式（Plan/Ask 只读门禁）；由 ChatRequest 下传。
     pub(crate) interaction_mode: types::InteractionMode,
+    /// 当前用户 Turn 的不可变上下文；每个 sampling step 共享同一 `Arc`。
+    pub(crate) current_turn_context: Option<Arc<TurnContext>>,
 }
 
 impl AgentLoop {
@@ -232,17 +238,27 @@ impl AgentLoop {
             pending_inject_context: None,
             pending_learning_nudge: None,
             interaction_mode: types::InteractionMode::Agent,
+            current_turn_context: None,
         })
     }
 
     /// 绑定当前流式 run 的 turn_id（约定与 `run_id` 相同）。
     pub fn set_current_turn_id(&mut self, turn_id: impl Into<String>) {
-        self.turn.set_current_turn_id(turn_id);
+        let sub_id = turn_id.into();
+        self.turn.set_current_turn_id(sub_id.clone());
+        self.current_turn_context = Some(Arc::new(TurnContext::new(
+            sub_id,
+            self.turn.current_turn(),
+            self.interaction_mode,
+            self.permission_profile.clone(),
+            self.project_root.clone(),
+        )));
     }
 
     /// 清除当前 turn_id（run 结束或中断时调用）。
     pub fn clear_current_turn_id(&mut self) {
         self.turn.clear_current_turn_id();
+        self.current_turn_context = None;
     }
 
     /// 当前绑定的 turn_id（若有）。
@@ -848,7 +864,7 @@ impl AgentLoop {
 
 // ── 其余 impl AgentLoop 方法见子模块 ──────────────────────
 // context_maintenance.rs — maintain_tool_context / provider_history / occupancy_ratio
-// turn_lifecycle.rs — begin_user_turn / run_turn / run_turn_with_images / prepare_llm_context
+// turn_lifecycle.rs — begin_user_turn / run_turn / run_turn_with_images / capture_step_context
 // recording.rs — record_assistant_* / record_tool_* / register_media_artifacts
 // tool_dispatch.rs — dispatch_named_tool / handle_tool_call_async / finalize_tool_call_result
 // system_prompt.rs — build_system_prompt / system_prompt_layer_*

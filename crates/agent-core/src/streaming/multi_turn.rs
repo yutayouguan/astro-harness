@@ -225,12 +225,12 @@ async fn run_multi_turn_stream_inner(args: MultiTurnStreamInnerArgs) {
 
         pre_llm_maintenance(&session).await;
 
-        let prepared = {
+        let step_context = {
             let mut agent = session.lock().await;
-            agent.prepare_llm_context().await
+            agent.capture_step_context().await
         };
-        let (history, tools) = match prepared {
-            Ok(prepared) => prepared,
+        let step_context = match step_context {
+            Ok(step_context) => step_context,
             Err(error) => {
                 finish_error(
                     &session,
@@ -244,32 +244,34 @@ async fn run_multi_turn_stream_inner(args: MultiTurnStreamInnerArgs) {
                 return;
             }
         };
+        tracing::debug!(
+            sub_id = %step_context.turn.sub_id(),
+            turn = step_context.turn.turn(),
+            "step context captured"
+        );
+        let history = step_context.history.clone();
+        let tool_specs = step_context.tool_specs.clone();
 
-        emit_context_usage(&session, &tx, &history, &tools).await;
+        emit_context_usage(&session, &tx, &history, &tool_specs).await;
 
-        let raw_stream = match stream_chat_with_hooks(
-            &session,
-            &streamer,
-            &system_prompt,
-            &history,
-            tools,
-        )
-        .await
-        {
-            Ok(s) => s,
-            Err(err) => {
-                finish_error(
-                    &session,
-                    &streamer,
-                    &tx,
-                    err,
-                    saw_usage.then_some(total_usage),
-                    &run_id,
-                )
-                .await;
-                return;
-            }
-        };
+        let raw_stream =
+            match stream_chat_with_hooks(&session, &streamer, &system_prompt, &history, tool_specs)
+                .await
+            {
+                Ok(s) => s,
+                Err(err) => {
+                    finish_error(
+                        &session,
+                        &streamer,
+                        &tx,
+                        err,
+                        saw_usage.then_some(total_usage),
+                        &run_id,
+                    )
+                    .await;
+                    return;
+                }
+            };
 
         let (abort_handle, abort_reg) = AbortHandle::new_pair();
         pause.attach_abort(abort_handle);

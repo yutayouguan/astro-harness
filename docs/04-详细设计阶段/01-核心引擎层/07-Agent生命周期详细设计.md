@@ -1,0 +1,551 @@
+# Agent 生命周期详细设计
+
+> 版本：v2.0  
+> 日期：2026-08-17  
+> 状态：实施基线  
+> 上游参考：[OpenAI Codex](https://github.com/openai/codex) `632e35ce8d5dec43b75dbf99f9e6fa52bed47c3d`  
+> 适用范围：`agent-core`、`agent-tools`、`agent-subagents`、`agent-memory`、`agent-session`、`agent-hooks`、`agent-mcp`
+
+---
+
+## 1. 文档地位
+
+本文档是 Astro Agent 生命周期、内部类型和内部命名的权威设计。其他文档中仍出现的
+`AgentInstance`、`AgentSessionManager`、`AgentExecutor::round_loop`、`Supervisor`、
+`delegate_task`、短生命周期且不持久化的 Child Agent 等旧设计，均以本文档为准逐步迁移。
+
+本次对齐的目标不是复制 Codex 产品名称，而是复用其已经验证的运行时语义、生命周期边界和
+源码命名，使阅读两套代码时无需重复建立概念映射。
+
+对齐遵循以下规则：
+
+1. 相同语义必须使用 Codex 的类型、函数和变量名称。
+2. 不同语义不得仅为了表面一致而强行同名。
+3. 带产品专名的类型只替换专名：Codex 的 `CodexThread` 在 Astro 中命名为 `AgentThread`。
+4. 对外 RPC、数据库和前端字段通过兼容层迁移，禁止一次性破坏已有数据。
+5. 新代码不得继续引入本文列入淘汰表的旧名称。
+
+---
+
+## 2. 核心结论
+
+Astro 不再把 Agent 生命周期建模为一个巨大的 `AgentLoop`。目标架构与 Codex 一致，分为五层：
+
+```text
+ThreadManager
+  └─ AgentThread
+      └─ Session
+          └─ SessionTask
+              └─ TurnContext
+                  └─ StepContext
+                      ├─ Model sampling
+                      └─ ToolCallRuntime
+```
+
+各层只拥有与自身生命周期一致的状态：
+
+| 层级 | Codex 对齐名称 | 生命周期 | 主要职责 |
+| --- | --- | --- | --- |
+| 线程注册表 | `ThreadManager` | 进程级 | 创建、恢复、fork、关闭和查找线程 |
+| Agent 线程 | `AgentThread` | 跨多个 Turn | 独立身份、历史、父子关系和持久化 |
+| 会话运行时 | `Session` | 线程驻留期间 | 配置、服务、active task、事件和运行态 |
+| 会话任务 | `SessionTask` | 一次后台任务 | regular、compact、review 等可取消任务 |
+| 用户轮次 | `TurnContext` | 一次用户 Turn | 本轮固定配置、权限、模式、父子元数据 |
+| 采样步骤 | `StepContext` | 一次模型请求 | 模型、工具、MCP、权限和环境的不可变快照 |
+| 工具调用 | `ToolCallRuntime` | 单个 tool call | 并发门禁、取消、审批、沙箱和执行 |
+
+### 2.1 关键不变量
+
+- 一个 `Session` 同时最多存在一个 active `SessionTask`。
+- 一个用户 Turn 只创建一个 `TurnContext`；模型 fallback 不得修改它。
+- 每次模型 sampling 前必须创建新的 `StepContext`。
+- 模型看到的工具集合与该 Step 随后可执行的工具集合必须来自同一个 `ToolRouter`。
+- assistant tool call 必须先持久化，再开始执行工具。
+- tool result 必须持久化后才能发起下一次 sampling。
+- 前台、Cron 和 SubAgent 使用同一个 `run_turn`，后台代码只能做事件收集适配。
+- SubAgent 是完整 `AgentThread`，拥有独立 thread id、状态、消息和 rollout。
+
+---
+
+## 3. 生命周期主链路
+
+### 3.1 输入接纳
+
+所有用户输入统一进入：
+
+```rust
+Session::start_or_steer_turn(TurnInputRequest)
+    -> TurnInputSubmission
+```
+
+目标类型：
+
+```rust
+pub struct TurnInputRequest {
+    pub items: Vec<UserInput>,
+    pub mode: TurnInputMode,
+    pub options: TurnStartOptions,
+}
+
+pub enum TurnInputMode {
+    StartOrSteer,
+    StartIfIdle,
+    Steer,
+}
+
+pub enum TurnInputSubmission {
+    Started { turn_id: String },
+    Steered { turn_id: String },
+    NotSubmitted { reason: TurnInputRejection },
+}
+```
+
+`Start` 创建新的 `TurnContext` 和 `RegularTask`；`Steer` 只把输入投递到当前 active turn 的
+mailbox，不重建本轮配置。
+
+### 3.2 SessionTask
+
+```rust
+#[async_trait]
+pub trait SessionTask: Send + Sync {
+    fn kind(&self) -> SessionTaskKind;
+    async fn run(
+        self: Arc<Self>,
+        session: Arc<Session>,
+        turn_context: Arc<TurnContext>,
+        cancellation_token: CancellationToken,
+    ) -> Option<String>;
+    async fn abort(&self, session: Arc<Session>, reason: TurnAbortReason);
+}
+```
+
+首批任务种类为 `Regular`、`Compact`、`Review` 和 `UserShell`。现有
+foreground/background/subagent 三套入口最终都必须创建 `RegularTask`，而不是分别持有多轮循环。
+
+### 3.3 run_turn
+
+`run_turn` 是唯一的 LLM 与工具多轮循环。旧的 `AgentLoop::run_turn` 只负责准备用户输入，必须
+拆分并最终移除，避免与 Codex 的 `run_turn` 同名异义。
+
+```rust
+pub async fn run_turn(
+    session: Arc<Session>,
+    turn_context: Arc<TurnContext>,
+    cancellation_token: CancellationToken,
+) -> Option<String>;
+```
+
+执行顺序：
+
+```text
+1. drain 上一轮异步 hook 结果
+2. Turn 开始前检查 compaction
+3. 解析用户输入、提及的 Skill/Plugin/MCP
+4. 持久化输入和 TurnContext
+5. 进入 sampling loop
+   5.1 接收 mailbox/steer 输入
+   5.2 capture_step_context
+   5.3 构造 provider history
+   5.4 run_sampling_request
+   5.5 持久化 assistant item/tool calls
+   5.6 执行工具并持久化 tool results
+   5.7 根据 needs_follow_up 决定是否继续
+6. 执行 turn-stop lifecycle
+7. flush 持久化并进入 idle
+```
+
+### 3.4 Sampling Step
+
+```rust
+Session::capture_step_context(
+    turn_context: Arc<TurnContext>,
+    cancellation_token: &CancellationToken,
+) -> Result<Arc<StepContext>>
+```
+
+```rust
+pub struct StepContext {
+    pub turn: Arc<TurnContext>,
+    pub model_info: Arc<ModelInfo>,
+    pub reasoning_effort: Option<ReasoningEffort>,
+    pub approval_policy: AskForApproval,
+    pub environments: TurnEnvironmentSnapshot,
+    pub mcp: Arc<McpBinding>,
+    pub tool_router: Arc<ToolRouter>,
+}
+```
+
+Astro 可以分阶段补齐字段，但名称和所有权关系必须保持一致：`StepContext` 持有
+`Arc<TurnContext>`，工具执行持有创建 tool call 时的同一个 `Arc<StepContext>`。
+
+---
+
+## 4. TurnContext 与 StepContext
+
+### 4.1 TurnContext
+
+`TurnContext` 只放本轮不应随 sampling 改变的状态：
+
+```rust
+pub struct TurnContext {
+    pub sub_id: String,
+    pub config: Arc<Config>,
+    pub session_source: SessionSource,
+    pub parent_thread_id: Option<ThreadId>,
+    pub mode: InteractionMode,
+    pub permission_profile: PermissionProfile,
+    pub environments: TurnEnvironmentSnapshot,
+    pub developer_instructions: Option<String>,
+    pub extension_data: Arc<ExtensionData>,
+}
+```
+
+命名要求：
+
+- `turn_id` 在内部统一命名为 `sub_id`；协议边界仍可序列化为 `turn_id`。
+- 局部变量必须写作 `turn_context`，禁止在生命周期代码中使用含义模糊的 `ctx`。
+- `run_id` 若实际表示 Turn 标识，迁移为 `sub_id`；若表示 UI stream，保留 `stream_id`。
+
+### 4.2 StepContext
+
+以下值必须是 Step 级快照，禁止工具执行时重新从磁盘或全局状态解析：
+
+- model 与 reasoning 配置
+- approval policy/reviewer
+- cwd、workspace roots 和 permission profile
+- MCP 连接与工具目录
+- 模型实际看到的 tool specs
+- Skill/Plugin 对本 Step 的工具贡献
+
+现有 `prepare_llm_context() -> (messages, tools)` 迁移为：
+
+```rust
+Session::capture_step_context(...) -> Arc<StepContext>
+```
+
+Provider history 属于 sampling request 输入，不属于工具注册表；目标接口为：
+
+```rust
+run_sampling_request(
+    session: Arc<Session>,
+    step_context: Arc<StepContext>,
+    history: Vec<Message>,
+    cancellation_token: CancellationToken,
+) -> SamplingResult
+```
+
+---
+
+## 5. 工具生命周期
+
+### 5.1 类型边界
+
+目标工具栈：
+
+```text
+ToolSpec                  模型可见 schema
+ToolRouter                本 Step 最终工具计划
+ToolRegistry              进程/Session 可用 runtime 注册表
+ToolInvocation            单次调用参数
+ToolCallRuntime           并发、取消和生命周期执行器
+ToolOrchestrator          审批、沙箱、重试
+ToolOutput                返回给模型的结构化结果
+```
+
+目标类型：
+
+```rust
+pub struct ToolInvocation {
+    pub session: Arc<Session>,
+    pub turn: Arc<TurnContext>,
+    pub step_context: Arc<StepContext>,
+    pub call_id: String,
+    pub tool_name: ToolName,
+    pub payload: ToolPayload,
+    pub cancellation_token: CancellationToken,
+}
+```
+
+### 5.2 审批、沙箱与并发
+
+所有可产生副作用的工具统一经过 `ToolOrchestrator::run`：
+
+```text
+approval requirement
+  -> permission-request hooks
+  -> Guardian 或 User reviewer
+  -> sandbox selection
+  -> first attempt
+  -> sandbox denial analysis
+  -> retry approval（如需要）
+  -> escalated attempt
+```
+
+禁止 terminal、code_exec、MCP、file_ops 各自解释“完全访问权限”。它们只能消费
+`StepContext` 中已经解析完成的权限和 `ToolOrchestrator` 产生的本次 attempt。
+
+`ToolCallRuntime` 使用读写门禁：普通工具获取共享读许可；`exclusive_access` 工具获取写许可；
+取消后仍需清理的工具必须声明 cancellation semantics。
+
+---
+
+## 6. SubAgent / Agent Thread
+
+SubAgent 是完整 `AgentThread`，不是临时 Child Agent。每个线程拥有独立 `ThreadId`、`Session`、
+rollout/history、状态与消息邮箱，以及 `parent_thread_id`、`forked_from_thread_id` 和 agent path。
+
+所有线程共享根树级 `AgentControl`：
+
+```rust
+pub struct AgentControl {
+    session_id: SessionId,
+    registry: Arc<AgentRegistry>,
+    rollout_budget: Arc<RolloutBudget>,
+    execution_limiter: Arc<AgentExecutionLimiter>,
+}
+```
+
+内部 handler 和公开工具统一使用：
+
+- `spawn_agent`
+- `list_agents`
+- `read_agent`
+- `send_message`
+- `followup_task`
+- `wait_agent`
+- `interrupt_agent`
+- `close_agent`
+
+旧名称 `delegate_task`、`delegate_async`、`Supervisor::spawn_child` 不再进入新代码。
+
+子线程从父 `TurnContext`/`StepContext` 继承 cwd、workspace roots、permission profile、审批与
+sandbox 策略、provider/model、Skill/MCP/Plugin 快照和 root/parent turn id。禁止隐式创建 git
+worktree；worktree 是用户显式选择的任务隔离能力。
+
+---
+
+## 7. 记忆生命周期
+
+记忆分为活跃上下文和长期记忆两个系统。
+
+`ContextManager` 管理当前模型历史，包括 tool call/output 配对、media 能力过滤、token 估算、
+prune、compaction、rollback 和 provider-visible history。
+
+长期记忆采用两阶段后台流水线：
+
+```text
+Phase 1: Rollout Extraction
+  rollout -> raw_memory + rollout_summary -> State DB
+
+Phase 2: Global Consolidation
+  DB selection -> memory workspace diff -> restricted consolidation Agent
+  -> MEMORY.md + memory_summary.md + skills/
+```
+
+约束：
+
+- 仅 root interactive thread 触发，SubAgent 不触发写流水线。
+- Phase 1 使用 DB claim/lease/retry，支持并行但不重复消费。
+- Phase 2 使用全局 lease，consolidation Agent 禁止网络和协作派生。
+- memory read 与 memory write 分离。
+- 模型引用长期记忆时必须保留来源并更新 usage。
+
+现有 `MemoryManager` 保留为过渡 facade；目标名称为 `MemoryStore`、`MemoriesExtension`、
+`start_memories_startup_task`、`phase1::run` 和 `phase2::run`。
+
+---
+
+## 8. Plugin 与 Extension 生命周期
+
+`Plugin` 是分发单元，`Extension` 是运行时贡献接口，两者不得混称。
+
+```rust
+pub struct PluginManifest<Resource> {
+    pub name: String,
+    pub version: Option<String>,
+    pub description: Option<String>,
+    pub paths: PluginManifestPaths<Resource>,
+    pub interface: Option<PluginManifestInterface<Resource>>,
+}
+
+pub struct PluginManifestPaths<Resource> {
+    pub skills: Vec<Resource>,
+    pub mcp_servers: Option<PluginManifestMcpServers<Resource>>,
+    pub apps: Option<Resource>,
+    pub hooks: Option<PluginManifestHooks<Resource>>,
+}
+```
+
+目标 Extension contributors：
+
+- `ThreadLifecycleContributor`
+- `TurnLifecycleContributor`
+- `ContextContributor`
+- `ToolContributor`
+- `ToolLifecycleContributor`
+- `TurnInputContributor`
+- `TurnItemContributor`
+- `McpServerContributor`
+- `ApprovalReviewContributor`
+- `TokenUsageContributor`
+
+扩展数据按 `session_store`、`thread_store`、`turn_store` 三个 `ExtensionData` 生命周期分层。
+当前 Plugin/Gateway/Shell hook 总线保留为兼容 adapter，逐步迁移到 typed contributors。
+
+---
+
+## 9. 持久化
+
+持久化采用双层模型：
+
+```text
+Rollout JSONL / append-only items
+  └─ 耐久历史、审计、resume、fork、replay
+
+State DB / SQLite projections
+  └─ thread metadata、查询、队列、Agent graph、memory jobs、分页索引
+```
+
+目标接口统一为 `ThreadStore`，覆盖 create、resume、append、persist、flush、shutdown、
+load history、prepare fork、revert、read 和 list。
+
+现有 `SessionStore` 不立即删除；先成为 `LocalThreadStore` 的 SQLite projection adapter。任何
+schema 和 RPC 字段改名都必须提供 migration 或 serde alias。
+
+---
+
+## 10. 命名对齐表
+
+### 10.1 类型
+
+| 当前 Astro | 目标名称 | 处理方式 |
+| --- | --- | --- |
+| `AgentLoop` | `Session` | 分阶段迁移，过渡期 deprecated facade |
+| `AgentConfig` | `Config` | 迁移到 session config |
+| `AgentThreadDispatch` | `AgentControl` | 根树共享控制面 |
+| `DefaultAgentThreadDispatch` | `AgentControl` | 删除无状态 dispatcher |
+| `AgentThreadStore` | `ThreadStore` / `LocalThreadStore` | 接口与本地实现分离 |
+| `AgentThreadStatus` | `AgentStatus` | 保留旧序列化值兼容 |
+| `ToolContext` | `ToolInvocation` | 可变 memory facade 移出调用参数 |
+| 无 | `TurnContext` | 新增，Turn 级不可变状态 |
+| 无 | `StepContext` | 新增，sampling 级不可变快照 |
+| 无 | `ToolCallRuntime` | 新增，绑定 `Arc<StepContext>` |
+| 无 | `ToolRouter` | 新增，绑定模型可见 spec 与 runtime |
+| hooks 三总线 | `ExtensionRegistry` | 三总线作为 adapter |
+
+### 10.2 函数
+
+| 当前 Astro | 目标名称 |
+| --- | --- |
+| `AgentLoop::run_turn`（仅准备输入） | `Session::start_or_steer_turn` |
+| `run_multi_turn_stream_inner` | `run_turn` |
+| `prepare_llm_context` | `capture_step_context` |
+| `stream_chat_with_hooks` | `run_sampling_request` |
+| `handle_tool_call_async_scoped` | `ToolCallRuntime::run` |
+| `dispatch_named_tool` | `ToolRouter::dispatch_tool_call` |
+| `run_agent_thread` | `ThreadManager::spawn_thread` + `RegularTask` |
+| `run_background_multi_turn` | 删除；保留 event collector adapter |
+
+### 10.3 局部变量
+
+| 禁止/旧名称 | 统一名称 |
+| --- | --- |
+| `agent`（实际为 Session） | `session` |
+| `ctx` | `turn_context`、`step_context` 或 `tool_context` |
+| `calls` | `tool_calls` |
+| `call` | `tool_call` |
+| `tools`（模型 schema） | `tool_specs` |
+| `tools`（执行器） | `tool_registry` 或 `tool_router` |
+| `run_id`（实际为 turn id） | `sub_id` |
+| `child` | `subagent` 或 `agent_thread` |
+| `parent_session_id` | `parent_thread_id` |
+| `conversation_id` | `thread_id`，协议迁移期除外 |
+
+---
+
+## 11. 分阶段迁移
+
+### Phase A：上下文命名与快照
+
+- 新增 `TurnContext`、`StepContext`。
+- 将 `prepare_llm_context` 改为 `capture_step_context`。
+- sampling 和 tool execution 开始传递同一个 `Arc<StepContext>`。
+- 不改变 RPC、数据库和 UI 行为。
+
+### Phase B：统一 SessionTask
+
+- 引入 `SessionTask`、`RegularTask` 和 active task。
+- 把 `run_multi_turn_stream_inner` 提升为唯一 `run_turn`。
+- foreground、background、Cron、SubAgent 只保留 adapter。
+
+### Phase C：工具运行时
+
+- 引入 `ToolRouter`、`ToolInvocation`、`ToolCallRuntime`、`ToolOrchestrator`。
+- 审批、沙箱、network approval 和 retry 收口。
+- 删除工具执行时重新加载权限/工具的路径。
+
+### Phase D：ThreadManager 与 AgentControl
+
+- root/subagent 都由 `ThreadManager` 创建。
+- `AgentControl` 在一棵 Agent 树内共享。
+- 迁移 `subagents.db` 到 `ThreadStore`/Agent graph projection。
+
+### Phase E：Rollout 与记忆
+
+- append-only rollout 先双写，再成为 replay contract。
+- SQLite 转为 projection/query store。
+- 上线两阶段 memory pipeline 和引用追踪。
+
+### Phase F：Plugin/Extension
+
+- 增加 `PluginManifest` bundle。
+- 增加 typed `ExtensionRegistry`。
+- 将现有三类 hook 总线迁移为兼容 adapter。
+
+---
+
+## 12. 兼容与验收
+
+兼容要求：
+
+- Rust 内部改名允许使用短期 `#[deprecated]` alias，但新代码只能使用目标名称。
+- Tauri/gRPC/JSON 字段先增加新字段或 serde alias，再迁移前端，最后删除旧字段。
+- SQLite 表和列不得通过直接 rename 破坏旧库，必须提供 schema migration。
+- tool name 改名必须至少保留一个版本的 soft alias。
+- rollout item 一经发布不得原地改变语义，只能增加新版本 item。
+
+每阶段至少运行：
+
+```bash
+cargo fmt --all -- --check
+cargo check --workspace --all-targets
+cargo test -p agent
+cargo test -p subagents
+cargo test -p tools
+cd apps/desktop && npx tsc --noEmit
+cd apps/desktop && npm run build
+```
+
+只有同时满足以下条件才能称为“与 Codex 生命周期对齐”：
+
+1. 前台、Cron、SubAgent 共用 `SessionTask -> run_turn`。
+2. tool call 使用生成该调用时的同一个 `StepContext`。
+3. SubAgent 是可恢复的完整 `AgentThread`。
+4. rollout 可重放，SQLite 可由 rollout 修复或重建关键 projection。
+5. memory write 为两阶段后台流水线，read path 为 Extension。
+6. Plugin bundle 与 typed Extension API 已区分。
+7. 旧名称仅存在于兼容层和迁移代码。
+
+---
+
+## 13. 相关设计
+
+- [agent-core 详细设计](01-agent-core详细设计.md)
+- [agent-runtime 详细设计](02-agent-runtime详细设计.md)
+- [子 Agent 派生详细设计](06-子Agent派生详细设计.md)
+- [Hooks 系统详细设计](08-Hooks系统详细设计.md)
+- [Checkpoint 与状态快照详细设计](09-Checkpoint与状态快照详细设计.md)
+- [记忆系统详细设计](../03-记忆与上下文/01-记忆系统详细设计.md)
+- [工具系统详细设计](../04-工具与扩展生态/02-工具系统详细设计.md)
+- [Plugin SDK 开发者文档](../04-工具与扩展生态/04-PluginSDK开发者文档.md)
+- [存储层详细设计](../06-安全与基础设施/09-存储层详细设计.md)
