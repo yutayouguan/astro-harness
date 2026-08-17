@@ -5,6 +5,7 @@ import { open } from "@tauri-apps/plugin-shell";
 
 /** MCP 传输类型：本地进程 / Streamable HTTP。 */
 export type McpTransportType = "stdio" | "streamableHttp";
+export type McpToolApprovalMode = "auto" | "prompt" | "writes" | "approve";
 export type McpRuntimeState =
   | "configured"
   | "disabled"
@@ -41,6 +42,11 @@ export class LegacySseTransportError extends Error {
 export type McpDiscoveredTool = {
   name: string;
   description: string;
+  title?: string;
+  readOnlyHint?: boolean;
+  destructiveHint?: boolean;
+  idempotentHint?: boolean;
+  openWorldHint?: boolean;
 };
 
 export type McpRuntimeStatus = {
@@ -141,8 +147,12 @@ export type McpServer = {
   enabledTools?: string[];
   /** deny list，在 allow list 之后应用 */
   disabledTools: string[];
+  /** Server 默认工具审批模式 */
+  defaultToolsApprovalMode: McpToolApprovalMode;
   /** 单工具开关；缺失视为启用 */
   tools: Record<string, boolean>;
+  /** 单工具审批模式覆盖；缺失时继承 Server 默认值 */
+  toolApprovalModes: Record<string, McpToolApprovalMode>;
   /** 最近一次 list_tools 缓存 */
   discovered: McpDiscoveredTool[];
 };
@@ -213,15 +223,55 @@ function readOptionalString(raw: Record<string, unknown>, keys: readonly string[
   return undefined;
 }
 
+function readApprovalMode(value: unknown): McpToolApprovalMode | undefined {
+  return value === "auto" || value === "prompt" || value === "writes" || value === "approve"
+    ? value
+    : undefined;
+}
+
+function readToolSettings(raw: Record<string, unknown>): {
+  enabled: Record<string, boolean>;
+  approvalModes: Record<string, McpToolApprovalMode>;
+} {
+  const enabled: Record<string, boolean> = {};
+  const approvalModes: Record<string, McpToolApprovalMode> = {};
+  const source = raw.tools;
+  if (source && typeof source === "object" && !Array.isArray(source)) {
+    for (const [name, value] of Object.entries(source as Record<string, unknown>)) {
+      if (typeof value === "boolean") {
+        enabled[name] = value;
+      } else if (value && typeof value === "object" && !Array.isArray(value)) {
+        const settings = value as Record<string, unknown>;
+        enabled[name] = settings.enabled !== false;
+        const mode = readApprovalMode(settings.approvalMode ?? settings.approval_mode);
+        if (mode) approvalModes[name] = mode;
+      }
+    }
+  }
+  const explicitModes = raw.toolApprovalModes ?? raw.tool_approval_modes;
+  if (explicitModes && typeof explicitModes === "object" && !Array.isArray(explicitModes)) {
+    for (const [name, value] of Object.entries(explicitModes as Record<string, unknown>)) {
+      const mode = readApprovalMode(value);
+      if (mode) approvalModes[name] = mode;
+    }
+  }
+  return { enabled, approvalModes };
+}
+
 function normalizeServer(raw: Partial<McpServer> & { id?: string; name?: string }): McpServer {
   const config = raw as unknown as Record<string, unknown>;
   const type = inferType(config);
-  const tools =
-    raw.tools && typeof raw.tools === "object" ? { ...raw.tools } : ({} as Record<string, boolean>);
+  const toolSettings = readToolSettings(config);
+  const tools = toolSettings.enabled;
   const discovered = Array.isArray(raw.discovered)
     ? raw.discovered.map((d) => ({
         name: d.name ?? "",
         description: d.description ?? "",
+        title: typeof d.title === "string" ? d.title : undefined,
+        readOnlyHint: typeof d.readOnlyHint === "boolean" ? d.readOnlyHint : undefined,
+        destructiveHint: typeof d.destructiveHint === "boolean" ? d.destructiveHint : undefined,
+        idempotentHint: typeof d.idempotentHint === "boolean" ? d.idempotentHint : undefined,
+        openWorldHint: typeof d.openWorldHint === "boolean" ? d.openWorldHint : undefined,
       }))
     : [];
   for (const d of discovered) {
@@ -259,7 +309,10 @@ function normalizeServer(raw: Partial<McpServer> & { id?: string; name?: string 
     ),
     enabledTools: readStringArray(config, ["enabledTools", "enabled_tools"]),
     disabledTools: readStringArray(config, ["disabledTools", "disabled_tools"]) ?? [],
+    defaultToolsApprovalMode:
+      readApprovalMode(config.defaultToolsApprovalMode ?? config.default_tools_approval_mode) ?? "auto",
     tools,
+    toolApprovalModes: toolSettings.approvalModes,
     discovered,
   };
 }
@@ -333,6 +386,14 @@ export function parseMcpJson(raw: string): McpServer[] {
         cwd: typeof cfg.cwd === "string" ? cfg.cwd : undefined,
         enabledTools: readStringArray(cfg, ["enabledTools", "enabled_tools"]),
         disabledTools: readStringArray(cfg, ["disabledTools", "disabled_tools"]) ?? [],
+        defaultToolsApprovalMode:
+          readApprovalMode(cfg.defaultToolsApprovalMode ?? cfg.default_tools_approval_mode) ??
+          "auto",
+        tools: (cfg.tools ?? {}) as Record<string, boolean>,
+        toolApprovalModes: (cfg.toolApprovalModes ?? cfg.tool_approval_modes ?? {}) as Record<
+          string,
+          McpToolApprovalMode
+        >,
         enabled: true,
       }),
     );
@@ -545,6 +606,32 @@ export function useMcpTools(agentId?: string | null, watchRuntime = false) {
     );
   }, []);
 
+  const setServerApprovalMode = useCallback(
+    (serverId: string, mode: McpToolApprovalMode) => {
+      setServers((prev) =>
+        prev.map((server) =>
+          server.id === serverId ? { ...server, defaultToolsApprovalMode: mode } : server,
+        ),
+      );
+    },
+    [],
+  );
+
+  const setToolApprovalMode = useCallback(
+    (serverId: string, toolName: string, mode?: McpToolApprovalMode) => {
+      setServers((prev) =>
+        prev.map((server) => {
+          if (server.id !== serverId) return server;
+          const toolApprovalModes = { ...server.toolApprovalModes };
+          if (mode) toolApprovalModes[toolName] = mode;
+          else delete toolApprovalModes[toolName];
+          return { ...server, toolApprovalModes };
+        }),
+      );
+    },
+    [],
+  );
+
   const removeServer = useCallback((id: string) => {
     setServers((prev) => prev.filter((s) => s.id !== id));
   }, []);
@@ -572,6 +659,8 @@ export function useMcpTools(agentId?: string | null, watchRuntime = false) {
     addServers,
     toggleServer,
     toggleTool,
+    setServerApprovalMode,
+    setToolApprovalMode,
     removeServer,
     refreshTools,
     refreshing,

@@ -287,6 +287,7 @@ mod tests {
             tool_timeout_secs: None,
             enabled_tools: None,
             disabled_tools: Vec::new(),
+            default_tools_approval_mode: types::McpToolApprovalMode::Auto,
             tools: HashMap::new(),
             discovered: Vec::new(),
         }

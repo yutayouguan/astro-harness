@@ -100,6 +100,23 @@ pub struct ToolEntrySpec {
     pub description: String,
     /// 参数 schema。
     pub schema: Value,
+    /// 解析 Server 默认与单工具覆盖后的审批模式。
+    pub approval_mode: types::McpToolApprovalMode,
+    /// Server 声明的非授权性风险提示。
+    pub annotations: types::McpToolAnnotations,
+}
+
+fn tool_annotations(tool: &RmcpTool) -> types::McpToolAnnotations {
+    let Some(annotations) = tool.annotations.as_ref() else {
+        return types::McpToolAnnotations::default();
+    };
+    types::McpToolAnnotations {
+        title: annotations.title.clone(),
+        read_only_hint: annotations.read_only_hint,
+        destructive_hint: annotations.destructive_hint,
+        idempotent_hint: annotations.idempotent_hint,
+        open_world_hint: annotations.open_world_hint,
+    }
 }
 
 /// 单个 MCP 服务器的运行状态快照（供 UI）。
@@ -477,6 +494,7 @@ impl McpHub {
                                 .as_ref()
                                 .map(|d| d.to_string())
                                 .unwrap_or_default(),
+                            annotations: tool_annotations(t),
                         })
                         .collect();
                     if let Some(slot) = self
@@ -578,12 +596,14 @@ impl McpHub {
                         slot.tools = cfg.tools.clone();
                         slot.enabled_tools = cfg.enabled_tools.clone();
                         slot.disabled_tools = cfg.disabled_tools.clone();
+                        slot.default_tools_approval_mode = cfg.default_tools_approval_mode;
                         slot.enabled = cfg.enabled;
                     }
                     if let Some(rs) = self.servers.get_mut(&sid) {
                         rs.config.tools = cfg.tools;
                         rs.config.enabled_tools = cfg.enabled_tools;
                         rs.config.disabled_tools = cfg.disabled_tools;
+                        rs.config.default_tools_approval_mode = cfg.default_tools_approval_mode;
                         if let Some(slot) = self
                             .configs
                             .iter()
@@ -646,6 +666,7 @@ impl McpHub {
                 slot.tools = cfg.tools.clone();
                 slot.enabled_tools = cfg.enabled_tools.clone();
                 slot.disabled_tools = cfg.disabled_tools.clone();
+                slot.default_tools_approval_mode = cfg.default_tools_approval_mode;
             } else {
                 self.configs.push(cfg.clone());
             }
@@ -654,6 +675,7 @@ impl McpHub {
                 rs.config.tools = cfg.tools.clone();
                 rs.config.enabled_tools = cfg.enabled_tools.clone();
                 rs.config.disabled_tools = cfg.disabled_tools.clone();
+                rs.config.default_tools_approval_mode = cfg.default_tools_approval_mode;
             }
             if !cfg.enabled {
                 self.states.insert(sid, McpLifecycleState::Disabled);
@@ -703,6 +725,8 @@ impl McpHub {
                         .map(|d| d.to_string())
                         .unwrap_or_else(|| format!("MCP tool {native} via {}", rs.config.name)),
                     schema,
+                    approval_mode: rs.config.tool_approval_mode(native),
+                    annotations: tool_annotations(tool),
                 });
             }
         }
@@ -843,6 +867,7 @@ impl McpHub {
                                 .as_ref()
                                 .map(|d| d.to_string())
                                 .unwrap_or_default(),
+                            annotations: tool_annotations(t),
                         })
                         .collect();
                     merge_discovered(cfg, discovered.clone());
@@ -1520,6 +1545,7 @@ mod tests {
             cwd: None,
             enabled_tools: None,
             disabled_tools: vec![],
+            default_tools_approval_mode: types::McpToolApprovalMode::Auto,
             tools: HashMap::new(),
             discovered: vec![],
             startup_timeout_secs: None,
@@ -1548,7 +1574,11 @@ mod tests {
             cwd: None,
             enabled_tools: None,
             disabled_tools: vec![],
-            tools: HashMap::from([("a".into(), true), ("b".into(), false)]),
+            default_tools_approval_mode: types::McpToolApprovalMode::Auto,
+            tools: HashMap::from([
+                ("a".into(), crate::config::McpToolConfig::Enabled(true)),
+                ("b".into(), crate::config::McpToolConfig::Enabled(false)),
+            ]),
             discovered: vec![],
             startup_timeout_secs: None,
             tool_timeout_secs: None,
@@ -1571,7 +1601,10 @@ mod tests {
         let mut server = stdio_server("echo");
         server.enabled_tools = Some(vec!["read".into(), "search".into(), "legacy".into()]);
         server.disabled_tools = vec!["search".into()];
-        server.tools.insert("legacy".into(), false);
+        server.tools.insert(
+            "legacy".into(),
+            crate::config::McpToolConfig::Enabled(false),
+        );
         let names = vec![
             "read".into(),
             "search".into(),

@@ -43,6 +43,7 @@ import {
   type McpRuntimeState,
   type McpRuntimeStatus,
   type McpServer,
+  type McpToolApprovalMode,
   type McpTransportType,
 } from "../../hooks/providers/useMcpTools";
 import { useActiveAgent } from "../../hooks/app/useActiveAgent";
@@ -64,6 +65,7 @@ type ToolTab = "builtin" | "mcp" | "approvals";
 type ApprovalSettings = { mode: string; commandAllowlist: string[] };
 
 const APPROVAL_MODES = ["smart", "manual", "off"] as const;
+const MCP_APPROVAL_MODES: McpToolApprovalMode[] = ["auto", "prompt", "writes", "approve"];
 
 /** 危险命令审批设置区（全局，非按 Agent） */
 function ApprovalsSection({ active }: { active: boolean }) {
@@ -460,7 +462,9 @@ function McpAddDialog({
         toolTimeoutSecs,
         enabledTools: undefined,
         disabledTools: [],
+        defaultToolsApprovalMode: "auto",
         tools: {},
+        toolApprovalModes: {},
         discovered: [],
       },
     ]);
@@ -847,6 +851,8 @@ function McpServerCard({
   server,
   onToggle,
   onToggleTool,
+  onSetServerApprovalMode,
+  onSetToolApprovalMode,
   onRefresh,
   onRemove,
   onReconnect,
@@ -860,6 +866,12 @@ function McpServerCard({
   server: McpServer;
   onToggle: (id: string) => void;
   onToggleTool: (serverId: string, toolName: string) => void;
+  onSetServerApprovalMode: (serverId: string, mode: McpToolApprovalMode) => void;
+  onSetToolApprovalMode: (
+    serverId: string,
+    toolName: string,
+    mode?: McpToolApprovalMode,
+  ) => void;
   onRefresh: (serverId: string) => void;
   onRemove: (id: string) => void;
   onReconnect: (id: string) => void;
@@ -875,10 +887,24 @@ function McpServerCard({
   const envKeys = Object.keys(server.env ?? {});
   const forwardedEnvKeys = server.envVars ?? [];
   const envHeaderEntries = Object.entries(server.envHttpHeaders ?? {});
+  const approvalOptions = MCP_APPROVAL_MODES.map((mode) => ({
+    value: mode,
+    label: t(`mcpTools.approval.${mode}` as MessageKey),
+  }));
+  const toolApprovalOptions = [
+    { value: "inherit", label: t("mcpTools.approval.inherit") },
+    ...approvalOptions,
+  ];
   const toolRows =
     server.discovered.length > 0
       ? server.discovered
-      : Object.keys(server.tools).map((name) => ({ name, description: "" }));
+      : Object.keys(server.tools).map((name) => ({
+          name,
+          description: "",
+          readOnlyHint: undefined,
+          destructiveHint: undefined,
+          openWorldHint: undefined,
+        }));
   return (
     <article
       className={`mcp-server-card ${server.enabled ? "is-on" : "is-off"}`}
@@ -950,6 +976,23 @@ function McpServerCard({
           </span>
         ))}
       </div>
+      <div className="mcp-approval-setting">
+        <div>
+          <span className="mcp-tool-list-label">{t("mcpTools.approval.default")}</span>
+          <span className="mcp-approval-hint">
+            {t(`mcpTools.approval.hint.${server.defaultToolsApprovalMode}` as MessageKey)}
+          </span>
+        </div>
+        <SelectMenu
+          size="sm"
+          value={server.defaultToolsApprovalMode}
+          options={approvalOptions}
+          onChange={(value) =>
+            onSetServerApprovalMode(server.id, value as McpToolApprovalMode)
+          }
+          aria-label={t("mcpTools.approval.default")}
+        />
+      </div>
       <div className={`mcp-tool-list ${server.enabled ? "" : "is-disabled"}`}>
         <div className="mcp-tool-list-head">
           <span className="mcp-tool-list-label">{t("mcpTools.tools")}</span>
@@ -980,17 +1023,44 @@ function McpServerCard({
                     {tool.description ? (
                       <span className="mcp-tool-desc">{tool.description}</span>
                     ) : null}
+                    <span className="mcp-tool-hints">
+                      {tool.readOnlyHint === true ? (
+                        <span>{t("mcpTools.annotation.readOnly")}</span>
+                      ) : null}
+                      {tool.destructiveHint === true ? (
+                        <span>{t("mcpTools.annotation.destructive")}</span>
+                      ) : null}
+                      {tool.openWorldHint === true ? (
+                        <span>{t("mcpTools.annotation.openWorld")}</span>
+                      ) : null}
+                    </span>
                   </div>
-                  <button
-                    type="button"
-                    role="switch"
-                    className="tool-toggle"
-                    aria-checked={on}
-                    disabled={!server.enabled}
-                    onClick={() => onToggleTool(server.id, tool.name)}
-                  >
-                    <span className="tool-toggle-thumb" />
-                  </button>
+                  <div className="mcp-tool-controls">
+                    <SelectMenu
+                      size="sm"
+                      value={server.toolApprovalModes[tool.name] ?? "inherit"}
+                      options={toolApprovalOptions}
+                      disabled={!server.enabled}
+                      onChange={(value) =>
+                        onSetToolApprovalMode(
+                          server.id,
+                          tool.name,
+                          value === "inherit" ? undefined : (value as McpToolApprovalMode),
+                        )
+                      }
+                      aria-label={t("mcpTools.approval.tool", { name: tool.name })}
+                    />
+                    <button
+                      type="button"
+                      role="switch"
+                      className="tool-toggle"
+                      aria-checked={on}
+                      disabled={!server.enabled}
+                      onClick={() => onToggleTool(server.id, tool.name)}
+                    >
+                      <span className="tool-toggle-thumb" />
+                    </button>
+                  </div>
                 </li>
               );
             })}
@@ -1068,6 +1138,8 @@ export default function ToolsPanel({
     addServers,
     toggleServer,
     toggleTool,
+    setServerApprovalMode,
+    setToolApprovalMode,
     removeServer,
     refreshTools,
     refreshing,
@@ -1747,6 +1819,32 @@ export default function ToolsPanel({
                       ) : null}
                     </section>
                     <section className="tools-detail-section">
+                      <h4 className="tools-detail-label">
+                        <ShieldCheck size={15} strokeWidth={2.25} aria-hidden />
+                        {t("mcpTools.approval.default")}
+                      </h4>
+                      <SelectMenu
+                        size="sm"
+                        value={selectedServer.defaultToolsApprovalMode}
+                        options={MCP_APPROVAL_MODES.map((mode) => ({
+                          value: mode,
+                          label: t(`mcpTools.approval.${mode}` as MessageKey),
+                        }))}
+                        onChange={(value) =>
+                          setServerApprovalMode(
+                            selectedServer.id,
+                            value as McpToolApprovalMode,
+                          )
+                        }
+                        aria-label={t("mcpTools.approval.default")}
+                      />
+                      <p className="tools-detail-body">
+                        {t(
+                          `mcpTools.approval.hint.${selectedServer.defaultToolsApprovalMode}` as MessageKey,
+                        )}
+                      </p>
+                    </section>
+                    <section className="tools-detail-section">
                       <div className="mcp-tool-list-head">
                         <h4 className="tools-detail-label">{t("mcpTools.tools")}</h4>
                         <button
@@ -1768,6 +1866,9 @@ export default function ToolsPanel({
                         : Object.keys(selectedServer.tools).map((name) => ({
                             name,
                             description: "",
+                            readOnlyHint: undefined,
+                            destructiveHint: undefined,
+                            openWorldHint: undefined,
                           }))
                       ).map((tool) => {
                         const on = isMcpToolEnabled(selectedServer, tool.name);
@@ -1778,17 +1879,52 @@ export default function ToolsPanel({
                               {tool.description ? (
                                 <span className="mcp-tool-desc">{tool.description}</span>
                               ) : null}
+                              <span className="mcp-tool-hints">
+                                {tool.readOnlyHint === true ? (
+                                  <span>{t("mcpTools.annotation.readOnly")}</span>
+                                ) : null}
+                                {tool.destructiveHint === true ? (
+                                  <span>{t("mcpTools.annotation.destructive")}</span>
+                                ) : null}
+                                {tool.openWorldHint === true ? (
+                                  <span>{t("mcpTools.annotation.openWorld")}</span>
+                                ) : null}
+                              </span>
                             </div>
-                            <button
-                              type="button"
-                              role="switch"
-                              className="tool-toggle"
-                              aria-checked={on}
-                              disabled={!selectedServer.enabled}
-                              onClick={() => toggleTool(selectedServer.id, tool.name)}
-                            >
-                              <span className="tool-toggle-thumb" />
-                            </button>
+                            <div className="mcp-tool-controls">
+                              <SelectMenu
+                                size="sm"
+                                value={selectedServer.toolApprovalModes[tool.name] ?? "inherit"}
+                                options={[
+                                  { value: "inherit", label: t("mcpTools.approval.inherit") },
+                                  ...MCP_APPROVAL_MODES.map((mode) => ({
+                                    value: mode,
+                                    label: t(`mcpTools.approval.${mode}` as MessageKey),
+                                  })),
+                                ]}
+                                disabled={!selectedServer.enabled}
+                                onChange={(value) =>
+                                  setToolApprovalMode(
+                                    selectedServer.id,
+                                    tool.name,
+                                    value === "inherit"
+                                      ? undefined
+                                      : (value as McpToolApprovalMode),
+                                  )
+                                }
+                                aria-label={t("mcpTools.approval.tool", { name: tool.name })}
+                              />
+                              <button
+                                type="button"
+                                role="switch"
+                                className="tool-toggle"
+                                aria-checked={on}
+                                disabled={!selectedServer.enabled}
+                                onClick={() => toggleTool(selectedServer.id, tool.name)}
+                              >
+                                <span className="tool-toggle-thumb" />
+                              </button>
+                            </div>
                           </div>
                         );
                       })}
@@ -1807,6 +1943,8 @@ export default function ToolsPanel({
                   server={s}
                   onToggle={toggleServer}
                   onToggleTool={toggleTool}
+                  onSetServerApprovalMode={setServerApprovalMode}
+                  onSetToolApprovalMode={setToolApprovalMode}
                   onRefresh={(id) => void refreshTools(id)}
                   onRemove={removeServer}
                   onReconnect={(id) => void reconnectServer(id)}

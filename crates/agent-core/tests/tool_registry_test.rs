@@ -93,7 +93,11 @@ fn mcp_disabled_tools_not_in_schemas_for_api() {
         cwd: None,
         enabled_tools: None,
         disabled_tools: vec![],
-        tools: HashMap::from([("keep".into(), true), ("drop".into(), false)]),
+        default_tools_approval_mode: types::McpToolApprovalMode::Auto,
+        tools: HashMap::from([
+            ("keep".into(), mcp::McpToolConfig::Enabled(true)),
+            ("drop".into(), mcp::McpToolConfig::Enabled(false)),
+        ]),
         discovered: vec![],
         startup_timeout_secs: None,
         tool_timeout_secs: None,

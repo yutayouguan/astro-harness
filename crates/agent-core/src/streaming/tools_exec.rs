@@ -481,6 +481,92 @@ async fn preflight_read_only_write(
     .await
 }
 
+async fn preflight_mcp_tool_approval(
+    session: &Arc<Mutex<AgentLoop>>,
+    call: &types::ParsedToolCall,
+    tx: &mpsc::Sender<anyhow::Result<MultiTurnStreamItem>>,
+    run_id: &str,
+    hitl_gate: Option<&Arc<HitlGate>>,
+) -> Option<PermissionPreflight> {
+    let approval = {
+        let agent = session.lock().await;
+        agent
+            .tool_registry()
+            .get(&call.name)
+            .and_then(|entry| entry.mcp_approval.clone())
+    };
+    let Some(approval) = approval else {
+        return Some(PermissionPreflight::NotRequired);
+    };
+    let route = approval.route();
+    if route == types::McpToolApprovalRoute::Allow {
+        return Some(PermissionPreflight::NotRequired);
+    }
+
+    let (session_id, turn_id, profile_id, memory_dir, settings) = {
+        let agent = session.lock().await;
+        let settings = memory::load_permission_settings(agent.memory_dir());
+        let profile_id = agent
+            .permission_profile()
+            .unwrap_or(&settings.selection.profile_id)
+            .to_string();
+        (
+            agent.session_id().to_string(),
+            agent.current_turn_id().map(str::to_string),
+            profile_id,
+            agent.memory_dir().to_path_buf(),
+            settings,
+        )
+    };
+    let mut selection = settings.selection.clone();
+    if route == types::McpToolApprovalRoute::UserReview {
+        selection.approvals_reviewer = types::ApprovalsReviewer::User;
+    }
+
+    let target = format!("{}/{}", approval.server_id, approval.native_name);
+    let request = types::PermissionRequest {
+        request_id: uuid::Uuid::new_v4().to_string(),
+        session_id,
+        turn_id,
+        tool_call_id: call.id.clone(),
+        tool_name: call.name.clone(),
+        summary: format!("Allow MCP tool {target} for this call"),
+        capabilities: vec![types::PermissionCapability::ExternalSideEffect {
+            category: "mcp_tool".to_string(),
+            target: target.clone(),
+        }],
+        reason: types::PermissionReason::RulePrompt,
+        requested_scope: types::GrantScope::Once,
+        command_preview: None,
+        affected_paths: Vec::new(),
+        network_hosts: Vec::new(),
+    };
+    let annotations = &approval.annotations;
+    let body = format!(
+        "MCP Server 请求调用 `{target}`。是否仅批准本次调用？\n\n审批模式：`{}`\n风险提示：只读={}，破坏性={}，开放世界={}\n\nServer 提供的 annotations 仅作提示；批准不会绕过沙箱或其他权限检查。",
+        approval.mode.as_str(),
+        annotations.read_only_hint.unwrap_or(false),
+        annotations.destructive_hint.unwrap_or(true),
+        annotations.open_world_hint.unwrap_or(true),
+    );
+    let audit = PermissionAuditReceipt::new(memory_dir, &settings, profile_id, request);
+    review_once_permission(
+        session,
+        &selection,
+        audit,
+        tx,
+        run_id,
+        hitl_gate,
+        &format!(
+            "surface=mcp reason=tool_policy mode={}",
+            approval.mode.as_str()
+        ),
+        "批准 MCP 工具调用",
+        &body,
+    )
+    .await
+}
+
 async fn preflight_in_process_network(
     session: &Arc<Mutex<AgentLoop>>,
     call: &types::ParsedToolCall,
@@ -606,6 +692,16 @@ async fn execute_tools_serial_inner(
         let mut network_grant = tools::InProcessNetworkGrant::default();
         let mut permission_audits = Vec::new();
         if !call.args_parse_error {
+            match preflight_mcp_tool_approval(session, call, tx, run_id, hitl_gate).await? {
+                PermissionPreflight::NotRequired => {}
+                PermissionPreflight::Granted(audit) => permission_audits.push(*audit),
+                PermissionPreflight::Denied(message) => {
+                    out.push(format!(
+                        "{message}. Do not retry the same action or attempt a workaround without explicit authorization."
+                    ).into());
+                    continue;
+                }
+            }
             match preflight_read_only_write(session, call, tx, run_id, hitl_gate).await? {
                 PermissionPreflight::NotRequired => {}
                 PermissionPreflight::Granted(audit) => {

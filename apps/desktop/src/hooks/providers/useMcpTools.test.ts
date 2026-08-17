@@ -90,6 +90,30 @@ test("preserves required, cwd and allow/deny policy", () => {
   assert.equal(isMcpToolEnabled(server, "unknown"), false);
 });
 
+test("preserves Codex server and per-tool approval modes", () => {
+  const [server] = parseMcpJson(
+    JSON.stringify({
+      mcpServers: {
+        docs: {
+          command: "npx",
+          default_tools_approval_mode: "writes",
+          tools: {
+            read: { approval_mode: "approve" },
+            publish: { enabled: false, approval_mode: "prompt" },
+            legacy: true,
+          },
+        },
+      },
+    }),
+  );
+
+  assert.equal(server.defaultToolsApprovalMode, "writes");
+  assert.equal(server.toolApprovalModes.read, "approve");
+  assert.equal(server.toolApprovalModes.publish, "prompt");
+  assert.equal(isMcpToolEnabled(server, "publish"), false);
+  assert.equal(isMcpToolEnabled(server, "legacy"), true);
+});
+
 test("normalizes MCP runtime status and rejects unknown state strings", () => {
   assert.deepEqual(
     normalizeMcpRuntimeStatus({

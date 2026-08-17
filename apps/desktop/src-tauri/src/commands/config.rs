@@ -52,12 +52,23 @@ pub async fn get_tool_catalog() -> Result<Vec<tools::ToolCatalogItem>, String> {
 
 /// MCP 发现工具的前端 DTO。
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct McpDiscoveredToolDto {
     /// 原生工具名。
     pub name: String,
     /// 描述。
     #[serde(default)]
     pub description: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub read_only_hint: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub destructive_hint: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub idempotent_hint: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub open_world_hint: Option<bool>,
 }
 
 /// MCP Server 的真实运行状态；来自 backend 内存中的 Agent Hub。
@@ -162,9 +173,18 @@ pub struct McpServerDto {
         alias = "disabled-tools"
     )]
     pub disabled_tools: Vec<String>,
+    /// Server 默认审批模式：auto | prompt | writes | approve。
+    #[serde(
+        default = "default_mcp_approval_mode",
+        rename = "defaultToolsApprovalMode"
+    )]
+    pub default_tools_approval_mode: String,
     /// 单工具开关；缺失视为启用
     #[serde(default)]
     pub tools: HashMap<String, bool>,
+    /// 单工具审批模式覆盖。
+    #[serde(default, rename = "toolApprovalModes")]
+    pub tool_approval_modes: HashMap<String, String>,
     /// 最近一次 list_tools 缓存
     #[serde(default)]
     pub discovered: Vec<McpDiscoveredToolDto>,
@@ -180,8 +200,26 @@ fn default_true() -> bool {
     true
 }
 
+fn default_mcp_approval_mode() -> String {
+    "auto".into()
+}
+
 /// `McpServerConfig` → 前端 DTO。
 fn dto_from_config(c: mcp::McpServerConfig) -> McpServerDto {
+    let tools = c
+        .tools
+        .iter()
+        .map(|(name, config)| (name.clone(), config.is_enabled()))
+        .collect();
+    let tool_approval_modes = c
+        .tools
+        .iter()
+        .filter_map(|(name, config)| {
+            config
+                .approval_mode()
+                .map(|mode| (name.clone(), mode.as_str().to_string()))
+        })
+        .collect();
     McpServerDto {
         id: c.id,
         name: c.name,
@@ -203,13 +241,20 @@ fn dto_from_config(c: mcp::McpServerConfig) -> McpServerDto {
         tool_timeout_secs: c.tool_timeout_secs,
         enabled_tools: c.enabled_tools,
         disabled_tools: c.disabled_tools,
-        tools: c.tools,
+        default_tools_approval_mode: c.default_tools_approval_mode.as_str().to_string(),
+        tools,
+        tool_approval_modes,
         discovered: c
             .discovered
             .into_iter()
             .map(|d| McpDiscoveredToolDto {
                 name: d.name,
                 description: d.description,
+                title: d.annotations.title,
+                read_only_hint: d.annotations.read_only_hint,
+                destructive_hint: d.annotations.destructive_hint,
+                idempotent_hint: d.annotations.idempotent_hint,
+                open_world_hint: d.annotations.open_world_hint,
             })
             .collect(),
     }
@@ -218,6 +263,8 @@ fn dto_from_config(c: mcp::McpServerConfig) -> McpServerDto {
 /// 前端 DTO → `McpServerConfig`（会 sanitize server id）。
 fn config_from_dto(d: McpServerDto) -> Result<mcp::McpServerConfig, String> {
     let transport = mcp::McpTransportType::parse(&d.r#type)?;
+    let default_tools_approval_mode =
+        types::McpToolApprovalMode::parse(&d.default_tools_approval_mode)?;
     match transport {
         mcp::McpTransportType::Stdio
             if !d.headers.is_empty()
@@ -238,6 +285,27 @@ fn config_from_dto(d: McpServerDto) -> Result<mcp::McpServerConfig, String> {
             return Err("HTTP MCP server cannot define args, env, or env_vars".into());
         }
         _ => {}
+    }
+    let mut tools = d
+        .tools
+        .into_iter()
+        .map(|(name, enabled)| {
+            let approval_mode = d
+                .tool_approval_modes
+                .get(&name)
+                .map(|mode| types::McpToolApprovalMode::parse(mode))
+                .transpose()?;
+            Ok((name, mcp::McpToolConfig::from_parts(enabled, approval_mode)))
+        })
+        .collect::<Result<HashMap<_, _>, String>>()?;
+    for (name, mode) in d.tool_approval_modes {
+        if tools.contains_key(&name) {
+            continue;
+        }
+        tools.insert(
+            name,
+            mcp::McpToolConfig::from_parts(true, Some(types::McpToolApprovalMode::parse(&mode)?)),
+        );
     }
     Ok(mcp::McpServerConfig {
         id: mcp::sanitize_server_id(&d.id),
@@ -263,13 +331,21 @@ fn config_from_dto(d: McpServerDto) -> Result<mcp::McpServerConfig, String> {
         tool_timeout_secs: d.tool_timeout_secs,
         enabled_tools: d.enabled_tools,
         disabled_tools: d.disabled_tools,
-        tools: d.tools,
+        default_tools_approval_mode,
+        tools,
         discovered: d
             .discovered
             .into_iter()
             .map(|x| mcp::DiscoveredTool {
                 name: x.name,
                 description: x.description,
+                annotations: types::McpToolAnnotations {
+                    title: x.title,
+                    read_only_hint: x.read_only_hint,
+                    destructive_hint: x.destructive_hint,
+                    idempotent_hint: x.idempotent_hint,
+                    open_world_hint: x.open_world_hint,
+                },
             })
             .collect(),
     })
@@ -531,7 +607,9 @@ mod mcp_config_tests {
             tool_timeout_secs: None,
             enabled_tools: None,
             disabled_tools: Vec::new(),
+            default_tools_approval_mode: "auto".into(),
             tools: HashMap::new(),
+            tool_approval_modes: HashMap::new(),
             discovered: Vec::new(),
         }
     }
@@ -604,6 +682,43 @@ mod mcp_config_tests {
         assert_eq!(roundtrip.cwd.as_deref(), Some("packages/server"));
         assert_eq!(roundtrip.enabled_tools.unwrap().len(), 2);
         assert_eq!(roundtrip.disabled_tools, vec!["search"]);
+    }
+
+    #[test]
+    fn mcp_dto_roundtrips_approval_modes_and_annotations() {
+        let mut dto = server_dto("streamableHttp");
+        dto.default_tools_approval_mode = "writes".into();
+        dto.tools.insert("publish".into(), false);
+        dto.tool_approval_modes
+            .insert("publish".into(), "prompt".into());
+        dto.discovered.push(McpDiscoveredToolDto {
+            name: "publish".into(),
+            description: "Publish a document".into(),
+            title: Some("Publish".into()),
+            read_only_hint: Some(false),
+            destructive_hint: Some(true),
+            idempotent_hint: Some(false),
+            open_world_hint: Some(true),
+        });
+
+        let config = config_from_dto(dto).unwrap();
+        assert_eq!(
+            config.default_tools_approval_mode,
+            types::McpToolApprovalMode::Writes
+        );
+        assert_eq!(
+            config.tool_approval_mode("publish"),
+            types::McpToolApprovalMode::Prompt
+        );
+        assert!(!config.is_tool_enabled("publish"));
+
+        let dto = dto_from_config(config);
+        assert_eq!(dto.default_tools_approval_mode, "writes");
+        assert_eq!(
+            dto.tool_approval_modes.get("publish").map(String::as_str),
+            Some("prompt")
+        );
+        assert_eq!(dto.discovered[0].destructive_hint, Some(true));
     }
 
     #[test]

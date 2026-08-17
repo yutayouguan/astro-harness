@@ -673,6 +673,13 @@ impl AgentLoop {
         let entries = self.mcp_hub.lock().await.enabled_tool_entries();
         self.tool_registry.unregister_toolset(MCP_TOOLSET);
         for spec in entries {
+            let mcp_approval = types::McpToolApproval {
+                server_id: spec.server_id,
+                native_name: spec.native_name,
+                mode: spec.approval_mode,
+                annotations: spec.annotations,
+            };
+            let needs_confirmation = mcp_approval.needs_review();
             self.tool_registry.register(ToolEntry {
                 name: spec.qualified_name,
                 toolset: MCP_TOOLSET.to_string(),
@@ -680,6 +687,8 @@ impl AgentLoop {
                 schema: spec.schema,
                 check_fn: None,
                 icon: "plug",
+                needs_confirmation,
+                mcp_approval: Some(mcp_approval),
                 ..ToolEntry::lifecycle_defaults()
             });
         }

@@ -16,6 +16,7 @@ use home::{
 };
 
 use crate::names::sanitize_server_id;
+use types::{McpToolAnnotations, McpToolApprovalMode};
 
 /// MCP server 启动默认超时（秒），与 Codex 默认值一致。
 pub const DEFAULT_STARTUP_TIMEOUT_SECS: u64 = 10;
@@ -108,6 +109,62 @@ pub struct DiscoveredTool {
     /// 描述。
     #[serde(default)]
     pub description: String,
+    /// Server 提供的非授权性风险提示。
+    #[serde(default, flatten)]
+    pub annotations: McpToolAnnotations,
+}
+
+/// 单工具配置。布尔值兼容 Astro 旧开关，table 支持 Codex `approval_mode`。
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(untagged)]
+pub enum McpToolConfig {
+    Enabled(bool),
+    Settings(McpToolSettings),
+}
+
+/// MCP 单工具覆盖项。
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+pub struct McpToolSettings {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub enabled: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub approval_mode: Option<McpToolApprovalMode>,
+}
+
+impl McpToolConfig {
+    pub fn is_enabled(&self) -> bool {
+        match self {
+            Self::Enabled(enabled) => *enabled,
+            Self::Settings(settings) => settings.enabled.unwrap_or(true),
+        }
+    }
+
+    pub fn approval_mode(&self) -> Option<McpToolApprovalMode> {
+        match self {
+            Self::Enabled(_) => None,
+            Self::Settings(settings) => settings.approval_mode,
+        }
+    }
+
+    pub fn with_enabled(self, enabled: bool) -> Self {
+        match self {
+            Self::Enabled(_) => Self::Enabled(enabled),
+            Self::Settings(mut settings) => {
+                settings.enabled = Some(enabled);
+                Self::Settings(settings)
+            }
+        }
+    }
+
+    pub fn from_parts(enabled: bool, approval_mode: Option<McpToolApprovalMode>) -> Self {
+        match approval_mode {
+            Some(approval_mode) => Self::Settings(McpToolSettings {
+                enabled: (!enabled).then_some(false),
+                approval_mode: Some(approval_mode),
+            }),
+            None => Self::Enabled(enabled),
+        }
+    }
 }
 
 /// 单个 MCP 服务器配置条目。
@@ -189,9 +246,12 @@ pub struct McpServerConfig {
     /// 工具 deny list，在 allow list 之后应用。
     #[serde(default, alias = "disabled_tools", alias = "disabledTools")]
     pub disabled_tools: Vec<String>,
-    /// 单工具开关；缺失视为 true
+    /// Server 默认工具审批模式。
     #[serde(default)]
-    pub tools: HashMap<String, bool>,
+    pub default_tools_approval_mode: McpToolApprovalMode,
+    /// 单工具开关及审批覆盖；布尔值旧格式仍可读取。
+    #[serde(default)]
+    pub tools: HashMap<String, McpToolConfig>,
     /// 最近一次 list_tools 缓存（供 UI）
     #[serde(default)]
     pub discovered: Vec<DiscoveredTool>,
@@ -200,6 +260,10 @@ pub struct McpServerConfig {
 /// serde 默认：字段缺省为 `true`。
 fn default_true() -> bool {
     true
+}
+
+fn is_auto_approval_mode(mode: &McpToolApprovalMode) -> bool {
+    *mode == McpToolApprovalMode::Auto
 }
 
 /// 反序列化传输类型（兼容 `streamable_http` 别名）。
@@ -224,7 +288,18 @@ impl McpServerConfig {
         if self.disabled_tools.iter().any(|name| name == tool_name) {
             return false;
         }
-        self.tools.get(tool_name).copied().unwrap_or(true)
+        self.tools
+            .get(tool_name)
+            .map(McpToolConfig::is_enabled)
+            .unwrap_or(true)
+    }
+
+    /// 单工具覆盖优先，否则使用 Server 默认审批模式。
+    pub fn tool_approval_mode(&self, tool_name: &str) -> McpToolApprovalMode {
+        self.tools
+            .get(tool_name)
+            .and_then(McpToolConfig::approval_mode)
+            .unwrap_or(self.default_tools_approval_mode)
     }
 
     /// 应用默认值与安全边界后的启动超时。
@@ -334,9 +409,11 @@ struct TomlMcpServer {
     enabled_tools: Option<Vec<String>>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     disabled_tools: Vec<String>,
-    /// Astro 当前的逐工具开关，后续迁移到 enabled_tools/disabled_tools。
+    #[serde(default, skip_serializing_if = "is_auto_approval_mode")]
+    default_tools_approval_mode: McpToolApprovalMode,
+    /// Astro 逐工具开关兼容旧 bool；table 同时承载 Codex approval_mode。
     #[serde(default, skip_serializing_if = "HashMap::is_empty")]
-    tools: HashMap<String, bool>,
+    tools: HashMap<String, McpToolConfig>,
     /// UI 使用的发现缓存；后续可迁移到独立 runtime state。
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     discovered: Vec<DiscoveredTool>,
@@ -411,6 +488,7 @@ impl TomlMcpServer {
             tool_timeout_secs: self.tool_timeout_sec,
             enabled_tools: self.enabled_tools,
             disabled_tools: self.disabled_tools,
+            default_tools_approval_mode: self.default_tools_approval_mode,
             tools: self.tools,
             discovered: self.discovered,
         })
@@ -463,6 +541,7 @@ impl TomlMcpServer {
             tool_timeout_sec: config.tool_timeout_secs,
             enabled_tools: config.enabled_tools.clone(),
             disabled_tools: config.disabled_tools.clone(),
+            default_tools_approval_mode: config.default_tools_approval_mode,
             tools: config.tools.clone(),
             discovered: config.discovered.clone(),
         }
@@ -694,7 +773,10 @@ pub fn load_for_active_agent() -> anyhow::Result<Vec<McpServerConfig>> {
 /// 合并 discovered：保留已有 tools 开关；新工具默认 true
 pub fn merge_discovered(server: &mut McpServerConfig, discovered: Vec<DiscoveredTool>) {
     for d in &discovered {
-        server.tools.entry(d.name.clone()).or_insert(true);
+        server
+            .tools
+            .entry(d.name.clone())
+            .or_insert(McpToolConfig::Enabled(true));
     }
     server.discovered = discovered;
 }
@@ -809,7 +891,8 @@ mod tests {
             cwd: None,
             enabled_tools: None,
             disabled_tools: vec![],
-            tools: HashMap::from([("a".into(), false)]),
+            default_tools_approval_mode: McpToolApprovalMode::Auto,
+            tools: HashMap::from([("a".into(), McpToolConfig::Enabled(false))]),
             discovered: vec![],
             startup_timeout_secs: None,
             tool_timeout_secs: None,
@@ -819,6 +902,61 @@ mod tests {
         assert_eq!(loaded.len(), 1);
         assert!(!loaded[0].is_tool_enabled("a"));
         assert!(loaded[0].is_tool_enabled("missing"));
+    }
+
+    #[test]
+    fn codex_approval_modes_and_legacy_boolean_tools_coexist() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        let dir = TempDir::new().unwrap();
+        std::env::set_var("ASTRO_MEMORY_DIR", dir.path());
+        ensure_default_workspace_dirs().unwrap();
+        fs::write(
+            mcp_config_path_global(),
+            r#"[mcp_servers.docs]
+command = "docs-server"
+default_tools_approval_mode = "writes"
+
+[mcp_servers.docs.tools.read]
+approval_mode = "approve"
+
+[mcp_servers.docs.tools.publish]
+enabled = false
+approval_mode = "prompt"
+
+[mcp_servers.legacy]
+command = "legacy-server"
+tools = { read = true, write = false }
+"#,
+        )
+        .unwrap();
+
+        let loaded = load_mcp_servers(None).unwrap();
+        let docs = loaded.iter().find(|server| server.id == "docs").unwrap();
+        assert_eq!(
+            docs.default_tools_approval_mode,
+            McpToolApprovalMode::Writes
+        );
+        assert_eq!(
+            docs.tool_approval_mode("read"),
+            McpToolApprovalMode::Approve
+        );
+        assert_eq!(
+            docs.tool_approval_mode("publish"),
+            McpToolApprovalMode::Prompt
+        );
+        assert!(!docs.is_tool_enabled("publish"));
+
+        let legacy = loaded.iter().find(|server| server.id == "legacy").unwrap();
+        assert!(legacy.is_tool_enabled("read"));
+        assert!(!legacy.is_tool_enabled("write"));
+
+        save_mcp_servers(None, &loaded).unwrap();
+        let reloaded = load_mcp_servers(None).unwrap();
+        let docs = reloaded.iter().find(|server| server.id == "docs").unwrap();
+        assert_eq!(
+            docs.tool_approval_mode("read"),
+            McpToolApprovalMode::Approve
+        );
     }
 
     #[test]
@@ -846,7 +984,8 @@ mod tests {
             cwd: None,
             enabled_tools: None,
             disabled_tools: vec![],
-            tools: HashMap::from([("a".into(), false)]),
+            default_tools_approval_mode: McpToolApprovalMode::Auto,
+            tools: HashMap::from([("a".into(), McpToolConfig::Enabled(false))]),
             discovered: vec![],
             startup_timeout_secs: None,
             tool_timeout_secs: None,
@@ -861,10 +1000,12 @@ mod tests {
                     DiscoveredTool {
                         name: "a".into(),
                         description: "A".into(),
+                        annotations: Default::default(),
                     },
                     DiscoveredTool {
                         name: "b".into(),
                         description: "B".into(),
+                        annotations: Default::default(),
                     },
                 ],
             )],
@@ -902,6 +1043,7 @@ command = "global-command"
                 vec![DiscoveredTool {
                     name: "read".into(),
                     description: "Read".into(),
+                    annotations: Default::default(),
                 }],
             )],
         )
