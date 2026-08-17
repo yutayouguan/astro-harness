@@ -111,9 +111,15 @@ export type McpServer = {
   command: string;
   args: string[];
   env: Record<string, string>;
+  /** 从本地进程环境按名称转发，不持久化值 */
+  envVars: string[];
   /** streamableHttp */
   url: string;
   headers: Record<string, string>;
+  /** Bearer Token 所在的环境变量名 */
+  bearerTokenEnvVar?: string;
+  /** HTTP Header 名到环境变量名的映射 */
+  envHttpHeaders: Record<string, string>;
   enabled: boolean;
   /** 启动失败时阻止 Agent 进入首次 LLM 调用 */
   required: boolean;
@@ -175,6 +181,30 @@ function readStringArray(
   return undefined;
 }
 
+function readStringRecord(
+  raw: Record<string, unknown>,
+  keys: readonly string[],
+): Record<string, string> {
+  for (const key of keys) {
+    const value = raw[key];
+    if (!value || typeof value !== "object" || Array.isArray(value)) continue;
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>).filter(
+        (entry): entry is [string, string] => typeof entry[1] === "string",
+      ),
+    );
+  }
+  return {};
+}
+
+function readOptionalString(raw: Record<string, unknown>, keys: readonly string[]): string | undefined {
+  for (const key of keys) {
+    const value = raw[key];
+    if (typeof value === "string" && value.trim()) return value.trim();
+  }
+  return undefined;
+}
+
 function normalizeServer(raw: Partial<McpServer> & { id?: string; name?: string }): McpServer {
   const config = raw as unknown as Record<string, unknown>;
   const type = inferType(config);
@@ -197,8 +227,13 @@ function normalizeServer(raw: Partial<McpServer> & { id?: string; name?: string 
     command: raw.command ?? "",
     args: Array.isArray(raw.args) ? raw.args : [],
     env: raw.env && typeof raw.env === "object" ? raw.env : {},
+    envVars: readStringArray(config, ["envVars", "env_vars"]) ?? [],
     url: raw.url ?? "",
-    headers: raw.headers && typeof raw.headers === "object" ? raw.headers : {},
+    headers: readStringRecord(config, ["headers", "httpHeaders", "http_headers"]),
+    bearerTokenEnvVar: readOptionalString(config, [
+      "bearerTokenEnvVar", "bearer_token_env_var",
+    ]),
+    envHttpHeaders: readStringRecord(config, ["envHttpHeaders", "env_http_headers"]),
     enabled: raw.enabled ?? true,
     required: config.required === true,
     cwd: typeof config.cwd === "string" && config.cwd.trim() ? config.cwd.trim() : undefined,
@@ -261,11 +296,13 @@ export function parseMcpJson(raw: string): McpServer[] {
           cfg.env && typeof cfg.env === "object"
             ? (cfg.env as Record<string, string>)
             : {},
+        envVars: readStringArray(cfg, ["envVars", "env_vars"]) ?? [],
         url: typeof cfg.url === "string" ? cfg.url : "",
-        headers:
-          cfg.headers && typeof cfg.headers === "object"
-            ? (cfg.headers as Record<string, string>)
-            : {},
+        headers: readStringRecord(cfg, ["headers", "httpHeaders", "http_headers"]),
+        bearerTokenEnvVar: readOptionalString(cfg, [
+          "bearerTokenEnvVar", "bearer_token_env_var",
+        ]),
+        envHttpHeaders: readStringRecord(cfg, ["envHttpHeaders", "env_http_headers"]),
         startupTimeoutSecs: readTimeout(
           cfg, STARTUP_TIMEOUT_KEYS, DEFAULT_MCP_STARTUP_TIMEOUT_SECS, MAX_MCP_STARTUP_TIMEOUT_SECS,
         ),

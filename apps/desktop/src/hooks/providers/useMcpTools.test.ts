@@ -40,6 +40,27 @@ test("preserves Codex timeout field names", () => {
   assert.equal(server.toolTimeoutSecs, 91);
 });
 
+test("preserves Codex environment credential references", () => {
+  const servers = parseMcpJson(
+    JSON.stringify({
+      mcpServers: {
+        local: { command: "npx", env_vars: ["LOCAL_TOKEN"] },
+        remote: {
+          url: "https://example.com/mcp",
+          bearer_token_env_var: "MCP_ACCESS_TOKEN",
+          http_headers: { "X-Region": "us-east-1" },
+          env_http_headers: { "X-API-Key": "MCP_API_KEY" },
+        },
+      },
+    }),
+  );
+
+  assert.deepEqual(servers[0]?.envVars, ["LOCAL_TOKEN"]);
+  assert.equal(servers[1]?.bearerTokenEnvVar, "MCP_ACCESS_TOKEN");
+  assert.deepEqual(servers[1]?.headers, { "X-Region": "us-east-1" });
+  assert.deepEqual(servers[1]?.envHttpHeaders, { "X-API-Key": "MCP_API_KEY" });
+});
+
 test("bounds imported timeout values", () => {
   const [server] = parseMcpJson(
     JSON.stringify({ command: "npx", startupTimeoutSecs: 0, toolTimeoutSecs: 9000 }),

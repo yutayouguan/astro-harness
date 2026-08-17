@@ -9,7 +9,7 @@ use std::process::Stdio;
 
 use anyhow::{anyhow, Context};
 use futures::{stream, StreamExt};
-use http::{HeaderName, HeaderValue};
+use http::{header::AUTHORIZATION, HeaderName, HeaderValue};
 use rmcp::model::{CallToolRequestParams, ContentBlock, Tool as RmcpTool};
 use rmcp::transport::streamable_http_client::StreamableHttpClientTransportConfig;
 use rmcp::transport::{StreamableHttpClientTransport, TokioChildProcess};
@@ -999,6 +999,7 @@ fn is_retryable_connect_error(error: &anyhow::Error) -> bool {
         "stdio command",
         "缺少 url",
         "invalid http header",
+        "invalid environment variable name",
         "unauthorized",
         "forbidden",
         "status: 400",
@@ -1107,14 +1108,7 @@ async fn connect_server_inner(
             if cfg.url.trim().is_empty() {
                 anyhow::bail!("HTTP MCP server 缺少 url");
             }
-            let mut map = HashMap::new();
-            for (k, v) in &cfg.headers {
-                let name = HeaderName::try_from(k.as_str())
-                    .with_context(|| format!("invalid HTTP header name: {k}"))?;
-                let val = HeaderValue::try_from(v.as_str())
-                    .with_context(|| format!("invalid HTTP header value for {k}"))?;
-                map.insert(name, val);
-            }
+            let map = resolve_http_headers(cfg)?;
             let mut config = StreamableHttpClientTransportConfig::with_uri(cfg.url.as_str());
             if !map.is_empty() {
                 config = config.custom_headers(map);
@@ -1176,7 +1170,102 @@ fn effective_connection_fingerprint(
     let policy = execution_context
         .map(McpExecutionContext::fingerprint)
         .unwrap_or_else(|| "unconfigured".to_string());
-    format!("{}|{policy}", cfg.connection_fingerprint())
+    let credential_hash = credential_fingerprint_with(cfg, |name| std::env::var(name).ok());
+    format!(
+        "{}|{policy}|{credential_hash:016x}",
+        cfg.connection_fingerprint()
+    )
+}
+
+fn is_valid_env_var_name(name: &str) -> bool {
+    let mut chars = name.chars();
+    matches!(chars.next(), Some('_' | 'a'..='z' | 'A'..='Z'))
+        && chars.all(|ch| matches!(ch, '_' | 'a'..='z' | 'A'..='Z' | '0'..='9'))
+}
+
+fn validate_env_var_name(name: &str) -> anyhow::Result<&str> {
+    let name = name.trim();
+    if !is_valid_env_var_name(name) {
+        anyhow::bail!("invalid environment variable name: {name:?}");
+    }
+    Ok(name)
+}
+
+fn resolve_forwarded_env_with(
+    cfg: &McpServerConfig,
+    mut lookup: impl FnMut(&str) -> Option<String>,
+) -> anyhow::Result<HashMap<String, String>> {
+    let mut resolved = HashMap::new();
+    for configured_name in &cfg.env_vars {
+        let name = validate_env_var_name(configured_name)?;
+        if let Some(value) = lookup(name) {
+            resolved.insert(name.to_string(), value);
+        }
+    }
+    Ok(resolved)
+}
+
+fn resolve_http_headers_with(
+    cfg: &McpServerConfig,
+    mut lookup: impl FnMut(&str) -> Option<String>,
+) -> anyhow::Result<HashMap<HeaderName, HeaderValue>> {
+    let mut resolved = HashMap::new();
+    for (configured_name, configured_value) in &cfg.headers {
+        let name = HeaderName::try_from(configured_name.as_str())
+            .with_context(|| format!("invalid HTTP header name: {configured_name}"))?;
+        let value = HeaderValue::try_from(configured_value.as_str())
+            .with_context(|| format!("invalid HTTP header value for {configured_name}"))?;
+        resolved.insert(name, value);
+    }
+    for (configured_header, configured_env_var) in &cfg.env_http_headers {
+        let name = HeaderName::try_from(configured_header.as_str())
+            .with_context(|| format!("invalid HTTP header name: {configured_header}"))?;
+        let env_var = validate_env_var_name(configured_env_var)?;
+        let Some(raw_value) = lookup(env_var) else {
+            continue;
+        };
+        let value = HeaderValue::try_from(raw_value.as_str()).with_context(|| {
+            format!("invalid HTTP header value from environment variable {env_var}")
+        })?;
+        resolved.insert(name, value);
+    }
+    if let Some(configured_env_var) = cfg.bearer_token_env_var.as_deref() {
+        let env_var = validate_env_var_name(configured_env_var)?;
+        if let Some(token) = lookup(env_var).filter(|value| !value.is_empty()) {
+            let value = HeaderValue::try_from(format!("Bearer {token}")).with_context(|| {
+                format!("invalid bearer token from environment variable {env_var}")
+            })?;
+            resolved.entry(AUTHORIZATION).or_insert(value);
+        }
+    }
+    Ok(resolved)
+}
+
+fn resolve_http_headers(cfg: &McpServerConfig) -> anyhow::Result<HashMap<HeaderName, HeaderValue>> {
+    resolve_http_headers_with(cfg, |name| std::env::var(name).ok())
+}
+
+fn credential_fingerprint_with(
+    cfg: &McpServerConfig,
+    mut lookup: impl FnMut(&str) -> Option<String>,
+) -> u64 {
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    for name in &cfg.env_vars {
+        name.hash(&mut hasher);
+        lookup(name.trim()).hash(&mut hasher);
+    }
+    if let Some(name) = cfg.bearer_token_env_var.as_deref() {
+        name.hash(&mut hasher);
+        lookup(name.trim()).hash(&mut hasher);
+    }
+    let mut env_headers = cfg.env_http_headers.iter().collect::<Vec<_>>();
+    env_headers.sort_unstable_by(|left, right| left.0.cmp(right.0));
+    for (header, name) in env_headers {
+        header.hash(&mut hasher);
+        name.hash(&mut hasher);
+        lookup(name.trim()).hash(&mut hasher);
+    }
+    hasher.finish()
 }
 
 fn build_stdio_command(
@@ -1206,6 +1295,7 @@ fn build_stdio_command(
             );
         }
     })?;
+    let forwarded_env = resolve_forwarded_env_with(cfg, |name| std::env::var(name).ok())?;
     let prepare_started = std::time::Instant::now();
     let mut cmd = match sandbox::SandboxRunner
         .tokio_command(&execution_context.sandbox_policy, &cfg.command)
@@ -1231,6 +1321,7 @@ fn build_stdio_command(
         .kill_on_drop(true)
         .env_clear()
         .envs(scrubbed_parent_env(std::env::vars()))
+        .envs(forwarded_env)
         .envs(&cfg.env);
     Ok(cmd)
 }
@@ -1361,8 +1452,11 @@ mod tests {
             command: command.into(),
             args: vec![],
             env: HashMap::new(),
+            env_vars: vec![],
             url: String::new(),
             headers: HashMap::new(),
+            bearer_token_env_var: None,
+            env_http_headers: HashMap::new(),
             enabled: true,
             required: false,
             cwd: None,
@@ -1385,8 +1479,11 @@ mod tests {
             command: "x".into(),
             args: vec![],
             env: HashMap::new(),
+            env_vars: vec![],
             url: String::new(),
             headers: HashMap::new(),
+            bearer_token_env_var: None,
+            env_http_headers: HashMap::new(),
             enabled: true,
             required: false,
             cwd: None,
@@ -1454,6 +1551,88 @@ mod tests {
         assert!(!env.contains_key("OPENAI_API_KEY"));
         assert!(!env.contains_key("GITHUB_TOKEN"));
         assert!(!env.contains_key("CUSTOM"));
+    }
+
+    #[test]
+    fn configured_environment_references_only_forward_available_values() {
+        let mut server = stdio_server("echo");
+        server.env_vars = vec!["MCP_TOKEN".into(), "MISSING_TOKEN".into()];
+
+        let resolved = resolve_forwarded_env_with(&server, |name| {
+            (name == "MCP_TOKEN").then(|| "secret-value".to_string())
+        })
+        .unwrap();
+
+        assert_eq!(
+            resolved.get("MCP_TOKEN").map(String::as_str),
+            Some("secret-value")
+        );
+        assert!(!resolved.contains_key("MISSING_TOKEN"));
+        server.env_vars = vec!["NOT-VALID".into()];
+        assert!(resolve_forwarded_env_with(&server, |_| None).is_err());
+    }
+
+    #[test]
+    fn http_environment_headers_and_bearer_token_follow_precedence() {
+        let mut server = stdio_server("echo");
+        server.r#type = McpTransportType::StreamableHttp;
+        server.command.clear();
+        server.url = "https://example.com/mcp".into();
+        server
+            .headers
+            .insert("X-Region".into(), "static-region".into());
+        server
+            .env_http_headers
+            .insert("X-Region".into(), "MCP_REGION".into());
+        server.bearer_token_env_var = Some("MCP_TOKEN".into());
+
+        let resolved = resolve_http_headers_with(&server, |name| match name {
+            "MCP_REGION" => Some("environment-region".into()),
+            "MCP_TOKEN" => Some("secret-token".into()),
+            _ => None,
+        })
+        .unwrap();
+
+        assert_eq!(
+            resolved[&HeaderName::from_static("x-region")],
+            "environment-region"
+        );
+        assert_eq!(resolved[&AUTHORIZATION], "Bearer secret-token");
+
+        server
+            .headers
+            .insert("Authorization".into(), "Static credential".into());
+        let explicit = resolve_http_headers_with(&server, |name| {
+            (name == "MCP_TOKEN").then(|| "secret-token".into())
+        })
+        .unwrap();
+        assert_eq!(explicit[&AUTHORIZATION], "Static credential");
+    }
+
+    #[test]
+    fn unresolved_http_environment_credentials_are_omitted() {
+        let mut server = stdio_server("echo");
+        server.r#type = McpTransportType::StreamableHttp;
+        server.command.clear();
+        server.bearer_token_env_var = Some("MCP_TOKEN".into());
+        server
+            .env_http_headers
+            .insert("X-API-Key".into(), "MCP_API_KEY".into());
+
+        let resolved = resolve_http_headers_with(&server, |_| None).unwrap();
+        assert!(resolved.is_empty());
+    }
+
+    #[test]
+    fn credential_fingerprint_changes_without_exposing_secret_values() {
+        let mut server = stdio_server("echo");
+        server.env_vars = vec!["MCP_TOKEN".into()];
+        let first = credential_fingerprint_with(&server, |_| Some("first-secret".into()));
+        let second = credential_fingerprint_with(&server, |_| Some("second-secret".into()));
+        assert_ne!(first, second);
+        assert!(
+            !format!("{}|{first:016x}", server.connection_fingerprint()).contains("first-secret")
+        );
     }
 
     #[test]

@@ -106,10 +106,17 @@ pub struct McpServerDto {
     pub args: Vec<String>,
     #[serde(default)]
     pub env: HashMap<String, String>,
+    /// 仅保存环境变量名，运行时从本地环境转发值。
+    #[serde(default, rename = "envVars", alias = "env_vars")]
+    pub env_vars: Vec<String>,
     #[serde(default)]
     pub url: String,
-    #[serde(default)]
+    #[serde(default, alias = "http_headers", alias = "httpHeaders")]
     pub headers: HashMap<String, String>,
+    #[serde(default, rename = "bearerTokenEnvVar", alias = "bearer_token_env_var")]
+    pub bearer_token_env_var: Option<String>,
+    #[serde(default, rename = "envHttpHeaders", alias = "env_http_headers")]
+    pub env_http_headers: HashMap<String, String>,
     #[serde(default = "default_true")]
     pub enabled: bool,
     #[serde(default)]
@@ -176,8 +183,11 @@ fn dto_from_config(c: mcp::McpServerConfig) -> McpServerDto {
         command: c.command,
         args: c.args,
         env: c.env,
+        env_vars: c.env_vars,
         url: c.url,
         headers: c.headers,
+        bearer_token_env_var: c.bearer_token_env_var,
+        env_http_headers: c.env_http_headers,
         enabled: c.enabled,
         required: c.required,
         cwd: c.cwd,
@@ -200,10 +210,25 @@ fn dto_from_config(c: mcp::McpServerConfig) -> McpServerDto {
 /// 前端 DTO → `McpServerConfig`（会 sanitize server id）。
 fn config_from_dto(d: McpServerDto) -> Result<mcp::McpServerConfig, String> {
     let transport = mcp::McpTransportType::parse(&d.r#type)?;
-    if transport == mcp::McpTransportType::StreamableHttp
-        && d.cwd.as_deref().is_some_and(|cwd| !cwd.trim().is_empty())
-    {
-        return Err("HTTP MCP server cannot define cwd".into());
+    match transport {
+        mcp::McpTransportType::Stdio
+            if !d.headers.is_empty()
+                || d.bearer_token_env_var.is_some()
+                || !d.env_http_headers.is_empty() =>
+        {
+            return Err("STDIO MCP server cannot define HTTP authentication or headers".into());
+        }
+        mcp::McpTransportType::StreamableHttp
+            if d.cwd.as_deref().is_some_and(|cwd| !cwd.trim().is_empty()) =>
+        {
+            return Err("HTTP MCP server cannot define cwd".into());
+        }
+        mcp::McpTransportType::StreamableHttp
+            if !d.args.is_empty() || !d.env.is_empty() || !d.env_vars.is_empty() =>
+        {
+            return Err("HTTP MCP server cannot define args, env, or env_vars".into());
+        }
+        _ => {}
     }
     Ok(mcp::McpServerConfig {
         id: mcp::sanitize_server_id(&d.id),
@@ -213,8 +238,14 @@ fn config_from_dto(d: McpServerDto) -> Result<mcp::McpServerConfig, String> {
         command: d.command,
         args: d.args,
         env: d.env,
+        env_vars: d.env_vars,
         url: d.url,
         headers: d.headers,
+        bearer_token_env_var: d
+            .bearer_token_env_var
+            .map(|value| value.trim().to_string())
+            .filter(|value| !value.is_empty()),
+        env_http_headers: d.env_http_headers,
         enabled: d.enabled,
         required: d.required,
         cwd: d.cwd,
@@ -477,8 +508,11 @@ mod mcp_config_tests {
             command: String::new(),
             args: Vec::new(),
             env: HashMap::new(),
+            env_vars: Vec::new(),
             url: "http://localhost:3000/mcp".into(),
             headers: HashMap::new(),
+            bearer_token_env_var: None,
+            env_http_headers: HashMap::new(),
             enabled: true,
             required: false,
             cwd: None,
@@ -516,6 +550,27 @@ mod mcp_config_tests {
         let roundtrip = dto_from_config(config);
         assert_eq!(roundtrip.startup_timeout_secs, Some(17));
         assert_eq!(roundtrip.tool_timeout_secs, Some(91));
+    }
+
+    #[test]
+    fn mcp_dto_preserves_environment_credential_references() {
+        let mut stdio = server_dto("stdio");
+        stdio.url.clear();
+        stdio.command = "npx".into();
+        stdio.env_vars = vec!["MCP_TOKEN".into()];
+        let stdio_roundtrip = dto_from_config(config_from_dto(stdio).unwrap());
+        assert_eq!(stdio_roundtrip.env_vars, vec!["MCP_TOKEN"]);
+
+        let mut http = server_dto("streamableHttp");
+        http.bearer_token_env_var = Some("MCP_ACCESS_TOKEN".into());
+        http.env_http_headers
+            .insert("X-API-Key".into(), "MCP_API_KEY".into());
+        let http_roundtrip = dto_from_config(config_from_dto(http).unwrap());
+        assert_eq!(
+            http_roundtrip.bearer_token_env_var.as_deref(),
+            Some("MCP_ACCESS_TOKEN")
+        );
+        assert_eq!(http_roundtrip.env_http_headers["X-API-Key"], "MCP_API_KEY");
     }
 
     #[test]

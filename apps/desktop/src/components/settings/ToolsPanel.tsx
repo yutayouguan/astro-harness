@@ -343,8 +343,11 @@ function McpAddDialog({
   const [formCwd, setFormCwd] = useState("");
   const [formArgs, setFormArgs] = useState("");
   const [formEnv, setFormEnv] = useState("");
+  const [formEnvVars, setFormEnvVars] = useState("");
   const [formUrl, setFormUrl] = useState("");
   const [formHeaders, setFormHeaders] = useState("");
+  const [formBearerTokenEnvVar, setFormBearerTokenEnvVar] = useState("");
+  const [formEnvHeaders, setFormEnvHeaders] = useState("");
   const [formStartupTimeout, setFormStartupTimeout] = useState(
     String(DEFAULT_MCP_STARTUP_TIMEOUT_SECS),
   );
@@ -418,6 +421,22 @@ function McpAddDialog({
       .split("\n")
       .map((s) => s.trim())
       .filter(Boolean);
+    const envVars = formEnvVars
+      .split("\n")
+      .map((s) => s.trim())
+      .filter(Boolean);
+    const envHttpHeaders = parseEnvOrHeaders(formEnvHeaders);
+    const bearerTokenEnvVar = formBearerTokenEnvVar.trim();
+    const referencedEnvVars = isStdio
+      ? envVars
+      : [
+          ...Object.values(envHttpHeaders),
+          ...(bearerTokenEnvVar ? [bearerTokenEnvVar] : []),
+        ];
+    if (referencedEnvVars.some((name) => !/^[A-Za-z_][A-Za-z0-9_]*$/.test(name))) {
+      setFormError(t("mcpTools.formEnvVarError"));
+      return;
+    }
 
     onAdd([
       {
@@ -428,8 +447,11 @@ function McpAddDialog({
         command: isStdio ? formCommand.trim() : "",
         args: isStdio ? args : [],
         env: isStdio ? parseEnvOrHeaders(formEnv) : {},
+        envVars: isStdio ? envVars : [],
         url: isStdio ? "" : formUrl.trim(),
         headers: isStdio ? {} : parseEnvOrHeaders(formHeaders),
+        bearerTokenEnvVar: !isStdio && bearerTokenEnvVar ? bearerTokenEnvVar : undefined,
+        envHttpHeaders: isStdio ? {} : envHttpHeaders,
         enabled: true,
         required: formRequired,
         cwd: isStdio && formCwd.trim() ? formCwd.trim() : undefined,
@@ -658,6 +680,19 @@ function McpAddDialog({
                       <label className="mcp-field mcp-field--full">
                         <span className="mcp-field-label">
                           <KeyRound size={13} strokeWidth={2.2} aria-hidden />
+                          {t("mcpTools.formEnvVars")}
+                        </span>
+                        <textarea
+                          className="mcp-field-textarea"
+                          value={formEnvVars}
+                          onChange={(e) => setFormEnvVars(e.target.value)}
+                          placeholder={t("mcpTools.formEnvVarsPlaceholder")}
+                          rows={3}
+                        />
+                      </label>
+                      <label className="mcp-field mcp-field--full">
+                        <span className="mcp-field-label">
+                          <KeyRound size={13} strokeWidth={2.2} aria-hidden />
                           {t("mcpTools.formEnv")}
                         </span>
                         <textarea
@@ -693,6 +728,34 @@ function McpAddDialog({
                           value={formHeaders}
                           onChange={(e) => setFormHeaders(e.target.value)}
                           placeholder={t("mcpTools.formHeadersPlaceholder")}
+                          rows={3}
+                        />
+                      </label>
+                      <label className="mcp-field mcp-field--full">
+                        <span className="mcp-field-label">
+                          <KeyRound size={13} strokeWidth={2.2} aria-hidden />
+                          {t("mcpTools.formBearerTokenEnvVar")}
+                        </span>
+                        <input
+                          type="text"
+                          value={formBearerTokenEnvVar}
+                          onChange={(e) => setFormBearerTokenEnvVar(e.target.value)}
+                          placeholder={t("mcpTools.formBearerTokenEnvVarPlaceholder")}
+                          autoCapitalize="off"
+                          autoCorrect="off"
+                          spellCheck={false}
+                        />
+                      </label>
+                      <label className="mcp-field mcp-field--full">
+                        <span className="mcp-field-label">
+                          <KeyRound size={13} strokeWidth={2.2} aria-hidden />
+                          {t("mcpTools.formEnvHeaders")}
+                        </span>
+                        <textarea
+                          className="mcp-field-textarea"
+                          value={formEnvHeaders}
+                          onChange={(e) => setFormEnvHeaders(e.target.value)}
+                          placeholder={t("mcpTools.formEnvHeadersPlaceholder")}
                           rows={3}
                         />
                       </label>
@@ -803,6 +866,8 @@ function McpServerCard({
   const { t } = useI18n();
   const headerKeys = Object.keys(server.headers ?? {});
   const envKeys = Object.keys(server.env ?? {});
+  const forwardedEnvKeys = server.envVars ?? [];
+  const envHeaderEntries = Object.entries(server.envHttpHeaders ?? {});
   const toolRows =
     server.discovered.length > 0
       ? server.discovered
@@ -861,8 +926,21 @@ function McpServerCard({
         {envKeys.map((k) => (
           <span key={`env-${k}`} className="mcp-server-env-key">{k}</span>
         ))}
+        {forwardedEnvKeys.map((k) => (
+          <span key={`env-ref-${k}`} className="mcp-server-env-key">{k} ← env</span>
+        ))}
         {headerKeys.map((k) => (
           <span key={`hdr-${k}`} className="mcp-server-env-key">{k}</span>
+        ))}
+        {server.bearerTokenEnvVar ? (
+          <span className="mcp-server-env-key">
+            Authorization ← {server.bearerTokenEnvVar}
+          </span>
+        ) : null}
+        {envHeaderEntries.map(([header, envVar]) => (
+          <span key={`env-hdr-${header}`} className="mcp-server-env-key">
+            {header} ← {envVar}
+          </span>
         ))}
       </div>
       <div className={`mcp-tool-list ${server.enabled ? "" : "is-disabled"}`}>

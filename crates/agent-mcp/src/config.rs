@@ -4,6 +4,7 @@
 
 use std::collections::{BTreeMap, HashMap};
 use std::fs;
+use std::hash::{Hash, Hasher};
 use std::path::{Path, PathBuf};
 
 use anyhow::Context;
@@ -101,10 +102,24 @@ pub struct McpServerConfig {
     pub args: Vec<String>,
     #[serde(default)]
     pub env: HashMap<String, String>,
+    /// 从 Astro 本地进程环境按名称转发给 STDIO Server，不在配置中持久化值。
+    #[serde(default, alias = "env_vars", alias = "envVars")]
+    pub env_vars: Vec<String>,
     #[serde(default)]
     pub url: String,
-    #[serde(default)]
+    #[serde(default, alias = "http_headers", alias = "httpHeaders")]
     pub headers: HashMap<String, String>,
+    /// HTTP Bearer Token 所在的环境变量名。
+    #[serde(
+        default,
+        alias = "bearer_token_env_var",
+        alias = "bearerTokenEnvVar",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub bearer_token_env_var: Option<String>,
+    /// HTTP Header 名到本地环境变量名的映射。
+    #[serde(default, alias = "env_http_headers", alias = "envHttpHeaders")]
+    pub env_http_headers: HashMap<String, String>,
     #[serde(default = "default_true")]
     pub enabled: bool,
     /// 连接失败时是否阻止 Agent 进入首次 LLM 调用。
@@ -200,20 +215,31 @@ impl McpServerConfig {
             )
     }
 
-    /// 连接身份指纹（不含 tools/discovered/tool timeout，避免非连接项变化触发重连）。
+    /// 连接身份指纹（仅返回哈希，避免将静态凭证写入运行状态或日志）。
+    ///
+    /// 不含 tools/discovered/tool timeout，避免非连接项变化触发重连。
     pub fn connection_fingerprint(&self) -> String {
-        format!(
-            "{}|{}|{}|{:?}|{:?}|{:?}|{}|{:?}|{}",
-            sanitize_server_id(&self.id),
-            self.r#type.as_str(),
-            self.command,
-            self.args,
-            self.env,
-            self.cwd,
-            self.url,
-            self.headers,
-            self.effective_startup_timeout_secs(),
-        )
+        let mut hasher = std::collections::hash_map::DefaultHasher::new();
+        sanitize_server_id(&self.id).hash(&mut hasher);
+        self.r#type.as_str().hash(&mut hasher);
+        self.command.hash(&mut hasher);
+        self.args.hash(&mut hasher);
+        hash_string_map(&self.env, &mut hasher);
+        self.env_vars.hash(&mut hasher);
+        self.cwd.hash(&mut hasher);
+        self.url.hash(&mut hasher);
+        hash_string_map(&self.headers, &mut hasher);
+        self.bearer_token_env_var.hash(&mut hasher);
+        hash_string_map(&self.env_http_headers, &mut hasher);
+        self.effective_startup_timeout_secs().hash(&mut hasher);
+        format!("{:016x}", hasher.finish())
+    }
+}
+
+fn hash_string_map(map: &HashMap<String, String>, hasher: &mut impl Hasher) {
+    for (key, value) in map.iter().collect::<BTreeMap<_, _>>() {
+        key.hash(hasher);
+        value.hash(hasher);
     }
 }
 
@@ -244,6 +270,8 @@ struct TomlMcpServer {
     args: Vec<String>,
     #[serde(default, skip_serializing_if = "HashMap::is_empty")]
     env: HashMap<String, String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    env_vars: Vec<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     cwd: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -255,6 +283,10 @@ struct TomlMcpServer {
         skip_serializing_if = "HashMap::is_empty"
     )]
     headers: HashMap<String, String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    bearer_token_env_var: Option<String>,
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    env_http_headers: HashMap<String, String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     enabled: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -296,13 +328,22 @@ impl TomlMcpServer {
             }
         };
         match r#type {
-            McpTransportType::Stdio if !self.headers.is_empty() => {
-                anyhow::bail!("STDIO MCP server {id:?} cannot define http_headers")
+            McpTransportType::Stdio
+                if !self.headers.is_empty()
+                    || self.bearer_token_env_var.is_some()
+                    || !self.env_http_headers.is_empty() =>
+            {
+                anyhow::bail!(
+                    "STDIO MCP server {id:?} cannot define HTTP authentication or headers"
+                )
+            }
+            McpTransportType::StreamableHttp if self.cwd.is_some() => {
+                anyhow::bail!("HTTP MCP server {id:?} cannot define cwd")
             }
             McpTransportType::StreamableHttp
-                if !self.args.is_empty() || !self.env.is_empty() || self.cwd.is_some() =>
+                if !self.args.is_empty() || !self.env.is_empty() || !self.env_vars.is_empty() =>
             {
-                anyhow::bail!("HTTP MCP server {id:?} cannot define args, env, or cwd")
+                anyhow::bail!("HTTP MCP server {id:?} cannot define args, env, or env_vars")
             }
             _ => {}
         }
@@ -318,8 +359,14 @@ impl TomlMcpServer {
             command,
             args: self.args,
             env: self.env,
+            env_vars: self.env_vars,
             url,
             headers: self.headers,
+            bearer_token_env_var: self
+                .bearer_token_env_var
+                .map(|value| value.trim().to_string())
+                .filter(|value| !value.is_empty()),
+            env_http_headers: self.env_http_headers,
             enabled: self.enabled.unwrap_or(true),
             required: self.required.unwrap_or(false),
             cwd: self.cwd.filter(|value| !value.trim().is_empty()),
@@ -344,12 +391,21 @@ impl TomlMcpServer {
             env: (config.r#type == McpTransportType::Stdio)
                 .then(|| config.env.clone())
                 .unwrap_or_default(),
+            env_vars: (config.r#type == McpTransportType::Stdio)
+                .then(|| config.env_vars.clone())
+                .unwrap_or_default(),
             cwd: (config.r#type == McpTransportType::Stdio)
                 .then(|| config.cwd.clone())
                 .flatten(),
             url: (config.r#type == McpTransportType::StreamableHttp).then(|| config.url.clone()),
             headers: (config.r#type == McpTransportType::StreamableHttp)
                 .then(|| config.headers.clone())
+                .unwrap_or_default(),
+            bearer_token_env_var: (config.r#type == McpTransportType::StreamableHttp)
+                .then(|| config.bearer_token_env_var.clone())
+                .flatten(),
+            env_http_headers: (config.r#type == McpTransportType::StreamableHttp)
+                .then(|| config.env_http_headers.clone())
                 .unwrap_or_default(),
             enabled: (!config.enabled).then_some(false),
             required: config.required.then_some(true),
@@ -692,8 +748,11 @@ mod tests {
             command: "echo".into(),
             args: vec![],
             env: HashMap::new(),
+            env_vars: vec![],
             url: String::new(),
             headers: HashMap::new(),
+            bearer_token_env_var: None,
+            env_http_headers: HashMap::new(),
             enabled: true,
             required: false,
             cwd: None,
@@ -725,8 +784,11 @@ mod tests {
             command: "echo".into(),
             args: vec![],
             env: HashMap::new(),
+            env_vars: vec![],
             url: String::new(),
             headers: HashMap::new(),
+            bearer_token_env_var: None,
+            env_http_headers: HashMap::new(),
             enabled: true,
             required: false,
             cwd: None,
@@ -882,6 +944,47 @@ command = "global-command"
     }
 
     #[test]
+    fn codex_environment_reference_fields_roundtrip_in_toml() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        let dir = TempDir::new().unwrap();
+        std::env::set_var("ASTRO_MEMORY_DIR", dir.path());
+        ensure_default_workspace_dirs().unwrap();
+        fs::write(
+            mcp_config_path_global(),
+            r#"[mcp_servers.local]
+command = "npx"
+env_vars = ["LOCAL_TOKEN"]
+
+[mcp_servers.remote]
+url = "https://example.com/mcp"
+bearer_token_env_var = "MCP_ACCESS_TOKEN"
+http_headers = { X-Region = "us-east-1" }
+env_http_headers = { X-API-Key = "MCP_API_KEY" }
+"#,
+        )
+        .unwrap();
+
+        let loaded = load_mcp_servers(None).unwrap();
+        let local = loaded.iter().find(|server| server.id == "local").unwrap();
+        assert_eq!(local.env_vars, vec!["LOCAL_TOKEN"]);
+        let remote = loaded.iter().find(|server| server.id == "remote").unwrap();
+        assert_eq!(
+            remote.bearer_token_env_var.as_deref(),
+            Some("MCP_ACCESS_TOKEN")
+        );
+        assert_eq!(remote.headers["X-Region"], "us-east-1");
+        assert_eq!(remote.env_http_headers["X-API-Key"], "MCP_API_KEY");
+
+        save_mcp_servers(None, &loaded).unwrap();
+        let persisted = fs::read_to_string(mcp_config_path_global()).unwrap();
+        assert!(persisted.contains("env_vars"));
+        assert!(persisted.contains("bearer_token_env_var"));
+        assert!(persisted.contains("http_headers"));
+        assert!(persisted.contains("env_http_headers"));
+        assert!(!persisted.contains("secret-token"));
+    }
+
+    #[test]
     fn layered_toml_uses_trusted_project_and_whole_server_overrides() {
         let _guard = ENV_LOCK.lock().unwrap();
         let dir = TempDir::new().unwrap();
@@ -1013,7 +1116,7 @@ cwd = "packages/server"
         .unwrap();
 
         let error = load_mcp_servers(None).unwrap_err().to_string();
-        assert!(error.contains("cannot define args, env, or cwd"), "{error}");
+        assert!(error.contains("cannot define cwd"), "{error}");
     }
 
     #[test]
