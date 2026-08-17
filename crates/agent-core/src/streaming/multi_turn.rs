@@ -20,7 +20,7 @@ use types::ChatTarget;
 use super::lifecycle::{emit, finish_error, finish_interrupted, finish_success};
 use super::maintenance::{
     emit_context_usage, post_tool_maintenance, pre_llm_maintenance, record_tool_outcomes,
-    stream_chat_with_hooks,
+    run_sampling_request,
 };
 use super::provider::ProviderStreamer;
 use super::run_state::{RunPhase, RunState};
@@ -78,7 +78,7 @@ pub async fn run_multi_turn_stream(args: MultiTurnStreamArgs) {
         agent.set_current_turn_id(turn_id.clone());
     }
     tracing::info!(session_id = %session_id, turn_id = %turn_id, "turn started");
-    run_multi_turn_stream_inner(MultiTurnStreamInnerArgs {
+    run_turn(RunTurnArgs {
         session: session.clone(),
         targets,
         base_config,
@@ -129,7 +129,7 @@ pub async fn run_multi_turn_stream_with_chat_fn(
     .await;
 }
 
-struct MultiTurnStreamInnerArgs {
+struct RunTurnArgs {
     session: Arc<Mutex<AgentLoop>>,
     targets: Vec<ChatTarget>,
     base_config: ProviderConfig,
@@ -142,8 +142,9 @@ struct MultiTurnStreamInnerArgs {
     chat_override: Option<super::provider::ChatOverride>,
 }
 
-async fn run_multi_turn_stream_inner(args: MultiTurnStreamInnerArgs) {
-    let MultiTurnStreamInnerArgs {
+/// Codex-aligned regular turn loop shared by foreground and background adapters.
+async fn run_turn(args: RunTurnArgs) {
+    let RunTurnArgs {
         session,
         targets,
         base_config,
@@ -255,7 +256,7 @@ async fn run_multi_turn_stream_inner(args: MultiTurnStreamInnerArgs) {
         emit_context_usage(&session, &tx, &history, &tool_specs).await;
 
         let raw_stream =
-            match stream_chat_with_hooks(&session, &streamer, &system_prompt, &history, tool_specs)
+            match run_sampling_request(&session, &streamer, &system_prompt, &history, tool_specs)
                 .await
             {
                 Ok(s) => s,

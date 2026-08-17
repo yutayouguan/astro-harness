@@ -257,12 +257,12 @@ pub(super) async fn record_tool_outcomes(
 /// 触发 PRE/POST_API_REQUEST hook 并发起 LLM 流式请求。
 ///
 /// 成功返回 `Ok(stream)`；失败返回 `Err(error_string)` 并已在 hook 中记录。
-pub(super) async fn stream_chat_with_hooks(
+pub(super) async fn run_sampling_request(
     session: &Arc<Mutex<AgentLoop>>,
     streamer: &ProviderStreamer,
     system_prompt: &str,
     history: &[types::message::Message],
-    tools: Vec<serde_json::Value>,
+    tool_specs: Vec<serde_json::Value>,
 ) -> Result<super::types::AssistantContentStream, String> {
     {
         let agent = session.lock().await;
@@ -277,7 +277,10 @@ pub(super) async fn stream_chat_with_hooks(
             },
         );
     }
-    match streamer.stream_chat(system_prompt, history, tools).await {
+    match streamer
+        .stream_chat(system_prompt, history, tool_specs)
+        .await
+    {
         Ok(s) => {
             let agent = session.lock().await;
             let sid = agent.session_id().to_string();
