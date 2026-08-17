@@ -1,9 +1,11 @@
 //! 沙箱进程启动的 append-only 安全审计。
 
+use std::collections::VecDeque;
 use std::fmt::Write as _;
 use std::fs::{self, OpenOptions};
 use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
+use std::sync::{Mutex, OnceLock};
 
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
@@ -13,6 +15,10 @@ use uuid::Uuid;
 use crate::{SandboxError, SandboxPolicy, SandboxRunner};
 
 const MAX_FIELD_CHARS: usize = 160;
+pub const MAX_SANDBOX_AUDIT_FILE_BYTES: u64 = 8 * 1024 * 1024;
+pub const SANDBOX_AUDIT_ARCHIVE_COUNT: usize = 3;
+
+static AUDIT_WRITE_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum SandboxAuditKind {
@@ -164,16 +170,77 @@ pub fn sandbox_audit_path(base: &Path) -> PathBuf {
     audit_dir(base).join("sandbox.jsonl")
 }
 
+pub fn sandbox_audit_archive_path(base: &Path, index: usize) -> PathBuf {
+    audit_dir(base).join(format!("sandbox.{index}.jsonl"))
+}
+
 pub fn append_sandbox_audit(base: &Path, event: &SandboxAuditEvent) -> anyhow::Result<()> {
+    append_sandbox_audit_with_policy(
+        base,
+        event,
+        MAX_SANDBOX_AUDIT_FILE_BYTES,
+        SANDBOX_AUDIT_ARCHIVE_COUNT,
+    )
+}
+
+fn append_sandbox_audit_with_policy(
+    base: &Path,
+    event: &SandboxAuditEvent,
+    max_file_bytes: u64,
+    archive_count: usize,
+) -> anyhow::Result<()> {
+    let _guard = AUDIT_WRITE_LOCK
+        .get_or_init(|| Mutex::new(()))
+        .lock()
+        .map_err(|_| anyhow::anyhow!("sandbox audit write lock poisoned"))?;
     let dir = audit_dir(base);
     fs::create_dir_all(&dir)?;
+    let mut line = serde_json::to_vec(event)?;
+    line.push(b'\n');
+    rotate_sandbox_audit_if_needed(
+        base,
+        u64::try_from(line.len()).unwrap_or(u64::MAX),
+        max_file_bytes,
+        archive_count,
+    )?;
     let mut file = OpenOptions::new()
         .create(true)
         .append(true)
         .open(sandbox_audit_path(base))?;
-    let mut line = serde_json::to_vec(event)?;
-    line.push(b'\n');
     file.write_all(&line)?;
+    Ok(())
+}
+
+fn rotate_sandbox_audit_if_needed(
+    base: &Path,
+    incoming_bytes: u64,
+    max_file_bytes: u64,
+    archive_count: usize,
+) -> anyhow::Result<()> {
+    let active = sandbox_audit_path(base);
+    let current_bytes = active.metadata().map(|meta| meta.len()).unwrap_or(0);
+    if current_bytes == 0 || current_bytes.saturating_add(incoming_bytes) <= max_file_bytes {
+        return Ok(());
+    }
+    if archive_count == 0 {
+        fs::remove_file(active)?;
+        return Ok(());
+    }
+    for index in (1..=archive_count).rev() {
+        let source = if index == 1 {
+            active.clone()
+        } else {
+            sandbox_audit_archive_path(base, index - 1)
+        };
+        if !source.is_file() {
+            continue;
+        }
+        let destination = sandbox_audit_archive_path(base, index);
+        if destination.exists() {
+            fs::remove_file(&destination)?;
+        }
+        fs::rename(source, destination)?;
+    }
     Ok(())
 }
 
@@ -187,32 +254,62 @@ pub fn list_recent_sandbox_audits(
     base: &Path,
     limit: usize,
 ) -> anyhow::Result<Vec<SandboxAuditEvent>> {
-    let path = sandbox_audit_path(base);
-    if !path.is_file() {
+    if limit == 0 {
         return Ok(Vec::new());
     }
-    let mut events = Vec::new();
-    for line in BufReader::new(fs::File::open(path)?).lines() {
-        let line = line?;
-        if line.trim().is_empty() {
+    let mut events = VecDeque::with_capacity(limit.min(1024));
+    let paths = (1..=SANDBOX_AUDIT_ARCHIVE_COUNT)
+        .rev()
+        .map(|index| sandbox_audit_archive_path(base, index))
+        .chain(std::iter::once(sandbox_audit_path(base)));
+    for path in paths {
+        if !path.is_file() {
             continue;
         }
-        match serde_json::from_str(&line) {
-            Ok(event) => events.push(event),
-            Err(error) => tracing::warn!(%error, "skip malformed sandbox audit line"),
+        for line in BufReader::new(fs::File::open(path)?).lines() {
+            let line = line?;
+            if line.trim().is_empty() {
+                continue;
+            }
+            match serde_json::from_str(&line) {
+                Ok(event) => {
+                    events.push_back(event);
+                    if events.len() > limit {
+                        events.pop_front();
+                    }
+                }
+                Err(error) => tracing::warn!(%error, "skip malformed sandbox audit line"),
+            }
         }
     }
-    if events.len() > limit {
-        Ok(events.split_off(events.len() - limit))
-    } else {
-        Ok(events)
-    }
+    Ok(events.into_iter().collect())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use types::SandboxMode;
+
+    fn test_event(id: usize) -> SandboxAuditEvent {
+        SandboxAuditEvent {
+            id: format!("event-{id}"),
+            event: SandboxAuditKind::Spawned,
+            session_id: Some("session-1".into()),
+            turn_id: Some("turn-1".into()),
+            tool_name: "terminal".into(),
+            profile_id: ":workspace".into(),
+            policy_hash: Some("0".repeat(64)),
+            backend: "seatbelt".into(),
+            sandboxed: true,
+            mode: Some("workspacewrite".into()),
+            network_access: false,
+            writable_root_count: 1,
+            target: "sh".into(),
+            result: "spawned".into(),
+            duration_ms: Some(1),
+            created_at: format!("2026-08-17T00:00:0{id}Z"),
+        }
+    }
 
     #[test]
     fn audit_roundtrip_uses_policy_hash_without_paths() {
@@ -260,5 +357,38 @@ mod tests {
         assert_eq!(events[0].event, SandboxAuditKind::BackendUnavailable);
         assert_eq!(events[0].result, "prepare_failed");
         assert_eq!(events[0].backend, "unknown");
+    }
+
+    #[test]
+    fn rotation_retains_only_newest_archives_and_query_crosses_files() {
+        let dir = tempfile::tempdir().unwrap();
+        let sample = test_event(0);
+        let max_file_bytes = serde_json::to_vec(&sample).unwrap().len() as u64 + 2;
+
+        for id in 0..5 {
+            append_sandbox_audit_with_policy(dir.path(), &test_event(id), max_file_bytes, 2)
+                .unwrap();
+        }
+
+        assert!(sandbox_audit_path(dir.path()).is_file());
+        assert!(sandbox_audit_archive_path(dir.path(), 1).is_file());
+        assert!(sandbox_audit_archive_path(dir.path(), 2).is_file());
+        assert!(!sandbox_audit_archive_path(dir.path(), 3).is_file());
+        let events = list_recent_sandbox_audits(dir.path(), 10).unwrap();
+        assert_eq!(
+            events
+                .iter()
+                .map(|event| event.id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["event-2", "event-3", "event-4"]
+        );
+        assert_eq!(
+            list_recent_sandbox_audits(dir.path(), 2)
+                .unwrap()
+                .iter()
+                .map(|event| event.id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["event-3", "event-4"]
+        );
     }
 }

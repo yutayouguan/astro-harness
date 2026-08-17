@@ -9,8 +9,9 @@ use types::SandboxMode;
 mod audit;
 
 pub use audit::{
-    append_sandbox_audit, list_recent_sandbox_audits, sandbox_audit_path, try_append_sandbox_audit,
-    SandboxAuditEvent, SandboxAuditKind, SandboxAuditMetadata,
+    append_sandbox_audit, list_recent_sandbox_audits, sandbox_audit_archive_path,
+    sandbox_audit_path, try_append_sandbox_audit, SandboxAuditEvent, SandboxAuditKind,
+    SandboxAuditMetadata, MAX_SANDBOX_AUDIT_FILE_BYTES, SANDBOX_AUDIT_ARCHIVE_COUNT,
 };
 
 const MACOS_SANDBOX_EXEC: &str = "/usr/bin/sandbox-exec";
