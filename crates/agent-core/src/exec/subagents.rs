@@ -23,10 +23,10 @@ struct DurableSteerInput {
     image_data_urls: Vec<String>,
 }
 
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub(crate) struct MailboxDrainOutcome {
     pub(crate) delivered: usize,
-    pub(crate) delivered_steers: usize,
+    pub(crate) delivered_steer_ids: Vec<String>,
     pub(crate) deferred: bool,
 }
 
@@ -117,14 +117,14 @@ pub(crate) async fn drain_mailbox_at_safe_boundary(
     }
     let mut contents = Vec::with_capacity(delivered);
     let mut image_data_urls = Vec::new();
-    let mut delivered_steers = 0usize;
+    let mut delivered_steer_ids = Vec::new();
     for message in messages.into_iter().take(delivered) {
         if message.sender_thread_id == message.recipient_thread_id {
             if let Some(encoded) = message.payload.strip_prefix(MAIN_STEER_PREFIX) {
                 let input: DurableSteerInput = serde_json::from_str(encoded)?;
                 contents.push(input.content);
                 image_data_urls.extend(input.image_data_urls);
-                delivered_steers += 1;
+                delivered_steer_ids.push(message.message_id);
                 continue;
             }
         }
@@ -152,7 +152,7 @@ pub(crate) async fn drain_mailbox_at_safe_boundary(
     control.ack_mailbox(&path, through_sequence)?;
     Ok(MailboxDrainOutcome {
         delivered,
-        delivered_steers,
+        delivered_steer_ids,
         deferred: false,
     })
 }
@@ -1179,7 +1179,7 @@ mod tests {
             .await;
         let delivered = drain_mailbox_at_safe_boundary(&mut session).await.unwrap();
         assert_eq!(delivered.delivered, 1);
-        assert_eq!(delivered.delivered_steers, 1);
+        assert_eq!(delivered.delivered_steer_ids.len(), 1);
         assert!(!delivered.deferred);
         assert!(graph.pending_for("root-v2", 0).unwrap().is_empty());
         assert!(crate::runtime::validate_message_order(

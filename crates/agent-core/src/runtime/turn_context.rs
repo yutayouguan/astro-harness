@@ -7,11 +7,14 @@
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
-use crate::tasks::TurnInput;
+#[derive(Debug)]
+struct PendingInputSignal {
+    mailbox_message_id: String,
+}
 
 #[derive(Debug, Default)]
 struct TurnInputState {
-    pending: Vec<TurnInput>,
+    pending: Vec<PendingInputSignal>,
     accepting: bool,
 }
 
@@ -73,36 +76,47 @@ impl TurnContext {
         self.project_root.as_deref()
     }
 
-    pub(crate) fn push_input(&self, input: TurnInput) -> bool {
+    /// Reserve the stable mailbox identity before its durable write. Using the
+    /// same identity in both places makes delivery acknowledgement race-free.
+    pub(crate) fn reserve_mailbox_input(&self) -> Option<String> {
         let mut state = self
             .input_state
             .lock()
             .expect("turn input state mutex poisoned");
         if !state.accepting {
-            return false;
+            return None;
         }
-        state.pending.push(input);
-        true
+        let mailbox_message_id = uuid::Uuid::new_v4().to_string();
+        state.pending.push(PendingInputSignal {
+            mailbox_message_id: mailbox_message_id.clone(),
+        });
+        Some(mailbox_message_id)
     }
 
-    pub(crate) fn acknowledge_pending_input(&self, delivered: usize) -> usize {
+    /// Remove only signals whose durable mailbox identities were delivered.
+    /// Unrelated generations are intentionally kept.
+    pub(crate) fn acknowledge_mailbox_inputs(&self, delivered_message_ids: &[String]) -> usize {
         let mut state = self
             .input_state
             .lock()
             .expect("turn input state mutex poisoned");
-        let acknowledged = delivered.min(state.pending.len());
-        state.pending.drain(..acknowledged);
-        acknowledged
+        let before = state.pending.len();
+        state.pending.retain(|pending| {
+            !delivered_message_ids
+                .iter()
+                .any(|delivered| delivered == &pending.mailbox_message_id)
+        });
+        before - state.pending.len()
     }
 
-    pub(crate) fn retract_input(&self, input: &TurnInput) {
+    pub(crate) fn retract_input(&self, mailbox_message_id: &str) {
         let mut state = self
             .input_state
             .lock()
             .expect("turn input state mutex poisoned");
-        if let Some(index) = state.pending.iter().rposition(|pending| pending == input) {
-            state.pending.remove(index);
-        }
+        state
+            .pending
+            .retain(|pending| pending.mailbox_message_id != mailbox_message_id);
     }
 
     /// Atomically close steering only when no durable-delivery signal remains.
@@ -124,13 +138,6 @@ impl TurnContext {
 mod tests {
     use super::*;
 
-    fn input(text: &str) -> TurnInput {
-        TurnInput::UserInput {
-            content: text.to_string(),
-            image_data_urls: Vec::new(),
-        }
-    }
-
     #[test]
     fn closing_an_empty_input_queue_rejects_late_steer() {
         let turn_context = TurnContext::new(
@@ -140,15 +147,15 @@ mod tests {
             None,
             None,
         );
-        assert!(turn_context.push_input(input("first")));
+        let first = turn_context.reserve_mailbox_input().unwrap();
         assert!(!turn_context.close_if_no_pending_input());
-        assert_eq!(turn_context.acknowledge_pending_input(1), 1);
+        assert_eq!(turn_context.acknowledge_mailbox_inputs(&[first]), 1);
         assert!(turn_context.close_if_no_pending_input());
-        assert!(!turn_context.push_input(input("late")));
+        assert!(turn_context.reserve_mailbox_input().is_none());
     }
 
     #[test]
-    fn acknowledgement_removes_only_the_delivered_pending_prefix() {
+    fn acknowledgement_removes_only_matching_mailbox_identities() {
         let turn_context = TurnContext::new(
             "turn-1".into(),
             1,
@@ -156,12 +163,20 @@ mod tests {
             None,
             None,
         );
-        assert!(turn_context.push_input(input("first")));
-        assert!(turn_context.push_input(input("second")));
+        let first = turn_context.reserve_mailbox_input().unwrap();
+        let second = turn_context.reserve_mailbox_input().unwrap();
+        let unrelated = turn_context.reserve_mailbox_input().unwrap();
 
-        assert_eq!(turn_context.acknowledge_pending_input(1), 1);
+        assert_eq!(
+            turn_context.acknowledge_mailbox_inputs(&["old-generation-message".into()]),
+            0
+        );
+        assert_eq!(turn_context.acknowledge_mailbox_inputs(&[first.clone()]), 1);
+        assert_eq!(turn_context.acknowledge_mailbox_inputs(&[first]), 0);
         assert!(!turn_context.close_if_no_pending_input());
-        assert_eq!(turn_context.acknowledge_pending_input(1), 1);
+        assert_eq!(turn_context.acknowledge_mailbox_inputs(&[second]), 1);
+        assert!(!turn_context.close_if_no_pending_input());
+        turn_context.retract_input(&unrelated);
         assert!(turn_context.close_if_no_pending_input());
     }
 }

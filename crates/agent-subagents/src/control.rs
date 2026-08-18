@@ -232,11 +232,21 @@ impl AgentControl {
         path: &AgentPath,
         payload: String,
     ) -> anyhow::Result<MailboxMessage> {
+        self.persist_main_steer_with_id(path, Uuid::new_v4().to_string(), payload)
+    }
+
+    /// Persist a main/root steer using the caller-reserved mailbox identity.
+    /// The running turn uses this same id for exact delivery acknowledgement.
+    pub fn persist_main_steer_with_id(
+        &self,
+        path: &AgentPath,
+        message_id: String,
+        payload: String,
+    ) -> anyhow::Result<MailboxMessage> {
         let thread = self.require_path(path, "main steer recipient")?;
         if payload.trim().is_empty() {
             anyhow::bail!("main steer payload must not be empty");
         }
-        let message_id = Uuid::new_v4().to_string();
         self.store.enqueue(&NewMailboxMessage {
             idempotency_key: format!("main-steer:{message_id}"),
             message_id,
@@ -1146,6 +1156,24 @@ mod tests {
         );
         assert!(control.resolve_target(&root, "/root").is_err());
         assert!(control.resolve_target(&root, "missing").is_err());
+    }
+
+    #[test]
+    fn identified_main_steer_keeps_caller_identity_and_is_idempotent() {
+        let dir = TempDir::new().unwrap();
+        let (control, store) = open_control(&dir, "root-thread");
+        let root = crate::AgentPath::root();
+
+        let first = control
+            .persist_main_steer_with_id(&root, "steer-message-1".into(), "payload".into())
+            .unwrap();
+        let retry = control
+            .persist_main_steer_with_id(&root, "steer-message-1".into(), "payload".into())
+            .unwrap();
+
+        assert_eq!(first.message_id, "steer-message-1");
+        assert_eq!(retry, first);
+        assert_eq!(store.pending_for("root-thread", 0).unwrap(), vec![first]);
     }
 
     #[tokio::test]

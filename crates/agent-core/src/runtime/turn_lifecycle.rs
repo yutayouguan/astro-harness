@@ -205,25 +205,35 @@ impl Session {
                 content: user_message.to_string(),
                 image_data_urls: image_data_urls.to_vec(),
             };
-            let accepted = running.turn_context.push_input(input.clone());
-            if accepted {
+            let reserved_message_id = running.turn_context.reserve_mailbox_input();
+            if let Some(message_id) = reserved_message_id {
                 let durable_payload = match crate::exec::subagents::encode_main_steer_input(&input)
                 {
                     Ok(payload) => payload,
                     Err(error) => {
-                        running.turn_context.retract_input(&input);
+                        running.turn_context.retract_input(&message_id);
                         tracing::warn!(%error, "failed to encode steered input");
                         return None;
                     }
                 };
-                if let Err(error) = self
-                    .services
-                    .agent_control
-                    .persist_main_steer(&self.services.agent_path, durable_payload)
-                {
-                    running.turn_context.retract_input(&input);
-                    tracing::warn!(%error, "failed to durably accept steered input");
-                    return None;
+                let stored = match self.services.agent_control.persist_main_steer_with_id(
+                    &self.services.agent_path,
+                    message_id.clone(),
+                    durable_payload,
+                ) {
+                    Ok(stored) => stored,
+                    Err(error) => {
+                        running.turn_context.retract_input(&message_id);
+                        tracing::warn!(%error, "failed to durably accept steered input");
+                        return None;
+                    }
+                };
+                if stored.message_id != message_id {
+                    tracing::error!(
+                        reserved_message_id = message_id,
+                        stored_message_id = stored.message_id,
+                        "durable steered input returned an unexpected mailbox identity"
+                    );
                 }
                 self.services.agent_control.notify_main_steer();
                 Some(running.turn_context.sub_id().to_string())
