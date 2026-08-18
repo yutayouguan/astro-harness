@@ -53,13 +53,6 @@ pub struct HookInput {
     pub turn: Option<usize>,
     #[serde(skip)]
     pub error: Option<String>,
-
-    #[serde(skip)]
-    pub tool_args: Option<Value>,
-    #[serde(skip)]
-    pub tool_result: Option<String>,
-    #[serde(skip)]
-    pub message: Option<String>,
 }
 
 impl HookInput {
@@ -67,15 +60,6 @@ impl HookInput {
         let mut normalized = self.clone();
         normalized.hook_event_name =
             crate::event::canonical_hook_event_name(event_name).into_owned();
-        if normalized.tool_input.is_none() {
-            normalized.tool_input = normalized.tool_args.clone();
-        }
-        if normalized.tool_response.is_none() {
-            normalized.tool_response = normalized.tool_result.clone().map(Value::String);
-        }
-        if normalized.prompt.is_none() {
-            normalized.prompt = normalized.message.clone();
-        }
         normalized
     }
 }
@@ -146,16 +130,13 @@ mod wire_tests {
     }
 
     #[test]
-    fn astro_ui_and_compatibility_fields_are_not_serialized() {
+    fn astro_ui_fields_are_not_serialized() {
         let input = HookInput {
             detail: "visible only in Astro UI".into(),
             system_prompt_chars: Some(12),
             assistant_chars: Some(34),
             turn: Some(5),
             error: Some("failed".into()),
-            tool_args: Some(json!({"legacy": true})),
-            tool_result: Some("legacy result".into()),
-            message: Some("legacy prompt".into()),
             ..Default::default()
         };
 
@@ -180,20 +161,12 @@ mod wire_tests {
     }
 
     #[test]
-    fn normalized_for_event_canonicalizes_name_and_backfills_legacy_fields() {
-        let input = HookInput {
-            tool_args: Some(json!({"path": "README.md"})),
-            tool_result: Some("ok".into()),
-            message: Some("summarize this".into()),
-            ..Default::default()
-        };
+    fn normalized_for_event_only_canonicalizes_name() {
+        let input = HookInput::default();
 
         let normalized = input.normalized_for_event("pre_tool_call");
 
         assert_eq!(normalized.hook_event_name, "PreToolUse");
-        assert_eq!(normalized.tool_input, input.tool_args);
-        assert_eq!(normalized.tool_response, Some(json!("ok")));
-        assert_eq!(normalized.prompt, input.message);
         assert!(input.hook_event_name.is_empty());
         assert!(input.tool_input.is_none());
         assert!(input.tool_response.is_none());
@@ -206,9 +179,6 @@ mod wire_tests {
             tool_input: Some(json!({"canonical": true})),
             tool_response: Some(json!({"status": "canonical"})),
             prompt: Some("canonical prompt".into()),
-            tool_args: Some(json!({"legacy": true})),
-            tool_result: Some("legacy result".into()),
-            message: Some("legacy prompt".into()),
             ..Default::default()
         };
 

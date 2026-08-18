@@ -137,12 +137,12 @@ async fn test_prompt_hooks_on_run_turn() {
     let _ = agent.start_or_steer_turn("你好", "t1").await.unwrap();
     let events = log.lock().unwrap().clone();
     assert!(
-        events.iter().any(|e| e.starts_with("pre_llm_call:")),
+        events.iter().any(|e| e.starts_with(hooks::PRE_LLM_CALL)),
         "events={events:?}"
     );
-    // on_session_end 在 streaming 收尾触发；run_turn 仅准备阶段
+    // AgentEnd 在 streaming 收尾触发；run_turn 仅准备阶段
     assert!(
-        events.iter().any(|e| *e == "on_session_start"),
+        events.iter().any(|e| e == hooks::SESSION_START),
         "events={events:?}"
     );
 }
@@ -152,17 +152,26 @@ async fn pre_tool_call_block_via_hook_bus() {
     let dir = TempDir::new().unwrap();
     let mut agent = AgentLoop::new(test_config(&dir)).unwrap();
     let bus = agent.hook_bus();
-    bus.register(hooks::PRE_TOOL_CALL, |_| {
+    let captured: Arc<std::sync::Mutex<Option<(String, serde_json::Value)>>> =
+        Arc::new(std::sync::Mutex::new(None));
+    let captured2 = Arc::clone(&captured);
+    bus.register(hooks::PRE_TOOL_USE, move |payload| {
+        *captured2.lock().unwrap() = Some((
+            payload.hook_event_name.clone(),
+            payload.tool_input.clone().expect("canonical tool_input"),
+        ));
         hooks::HookOutcome::Block("denied-by-test".into())
     });
-    let out = agent
-        .handle_tool_call_async("echo", &serde_json::json!({"text": "hi"}))
-        .await
-        .unwrap();
+    let args = serde_json::json!({"text": "hi"});
+    let out = agent.handle_tool_call_async("echo", &args).await.unwrap();
     assert!(
         out.text().contains("blocked by hook") && out.text().contains("denied-by-test"),
         "out={:?}",
         out
+    );
+    assert_eq!(
+        captured.lock().unwrap().as_ref(),
+        Some(&(hooks::PRE_TOOL_USE.to_string(), args))
     );
 }
 
@@ -190,26 +199,32 @@ async fn transform_tool_result_replaces_before_post_tool_call() {
     bus.register(hooks::TRANSFORM_TOOL_RESULT, |_| {
         hooks::HookOutcome::ReplaceText("REDACTED".into())
     });
-    let captured: Arc<std::sync::Mutex<Option<String>>> = Arc::new(std::sync::Mutex::new(None));
+    let captured: Arc<std::sync::Mutex<Option<(serde_json::Value, String)>>> =
+        Arc::new(std::sync::Mutex::new(None));
     let captured2 = Arc::clone(&captured);
-    bus.register(hooks::POST_TOOL_CALL, move |payload| {
-        *captured2.lock().unwrap() = payload.tool_result.clone();
+    bus.register(hooks::POST_TOOL_USE, move |payload| {
+        let tool_input = payload.tool_input.clone().expect("canonical tool_input");
+        let tool_response = payload
+            .tool_response
+            .as_ref()
+            .and_then(serde_json::Value::as_str)
+            .expect("string tool_response")
+            .to_string();
+        *captured2.lock().unwrap() = Some((tool_input, tool_response));
         hooks::HookOutcome::Continue
     });
 
+    let args = serde_json::json!({"path": "x.txt", "operation": "write", "content": "hello"});
     let out = agent
-        .handle_tool_call_async(
-            "file_ops",
-            &serde_json::json!({"path": "x.txt", "operation": "write", "content": "hello"}),
-        )
+        .handle_tool_call_async("file_ops", &args)
         .await
         .unwrap();
 
     assert_eq!(out.text(), "REDACTED");
     assert_eq!(
-        captured.lock().unwrap().as_deref(),
-        Some("REDACTED"),
-        "post_tool_call must observe the transformed result"
+        captured.lock().unwrap().as_ref(),
+        Some(&(args, "REDACTED".to_string())),
+        "PostToolUse must observe canonical input and transformed response"
     );
 }
 

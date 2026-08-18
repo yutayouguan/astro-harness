@@ -226,8 +226,8 @@ async fn dispatch_run(
                 session_id: ctx.session_id.clone(),
                 turn_id: ctx.turn_id.clone(),
                 tool_name: Some("terminal".to_string()),
-                tool_args: Some(args.clone()),
-                tool_result: Some(body.clone()),
+                tool_input: Some(args.clone()),
+                tool_response: Some(serde_json::Value::String(body.clone())),
                 ..Default::default()
             },
         );

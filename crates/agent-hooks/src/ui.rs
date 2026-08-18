@@ -173,35 +173,20 @@ mod tests {
         let tool = HookPayload {
             tool_name: Some("terminal".into()),
             tool_input: Some(json!({"command": "pwd"})),
-            tool_args: Some(json!({"legacy": true})),
             ..Default::default()
         };
         let prompt = HookPayload {
             prompt: Some("canonical prompt".into()),
-            message: Some("legacy prompt".into()),
             ..Default::default()
         };
         let assistant = HookPayload {
             last_assistant_message: Some("canonical response".into()),
-            tool_result: Some("legacy result".into()),
             ..Default::default()
         };
 
         assert_eq!(detail_from_payload(&tool), "terminal {\"command\":\"pwd\"}");
         assert_eq!(detail_from_payload(&prompt), "canonical prompt");
         assert_eq!(detail_from_payload(&assistant), "canonical response");
-    }
-
-    #[test]
-    fn detail_ignores_legacy_only_fields() {
-        let payload = HookPayload {
-            tool_args: Some(json!({"legacy": true})),
-            message: Some("legacy prompt".into()),
-            tool_result: Some("legacy result".into()),
-            ..Default::default()
-        };
-
-        assert!(detail_from_payload(&payload).is_empty());
     }
 
     #[test]

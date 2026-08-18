@@ -100,8 +100,12 @@ pub(crate) fn env_from_payload(event: &str, payload: &HookPayload) -> Vec<(Strin
     if let Some(t) = &payload.tool_name {
         env.push(("ASTRO_HOOK_TOOL".into(), t.clone()));
     }
-    if let Some(m) = &payload.message {
-        env.push(("ASTRO_HOOK_MESSAGE".into(), m.clone()));
+    let message = payload
+        .prompt
+        .as_ref()
+        .or(payload.last_assistant_message.as_ref());
+    if let Some(message) = message {
+        env.push(("ASTRO_HOOK_MESSAGE".into(), message.clone()));
     }
     env
 }

@@ -564,7 +564,7 @@ pub(crate) async fn run_turn(args: RunTurnArgs, cancellation_token: Cancellation
             return;
         }
 
-        // `pre_verify` hook
+        // `Stop` hook
         if calls.is_empty() {
             let verify_outcome = {
                 let agent = session.lock().await;
@@ -573,11 +573,11 @@ pub(crate) async fn run_turn(args: RunTurnArgs, cancellation_token: Cancellation
                     let sid = agent.session_id().to_string();
                     let turn_id = agent.current_turn_id().await;
                     Some(agent.fire_hook(
-                        ::hooks::PRE_VERIFY,
+                        ::hooks::STOP,
                         ::hooks::HookPayload {
                             session_id: sid,
                             turn_id,
-                            message: Some(full_response.clone()),
+                            last_assistant_message: Some(full_response.clone()),
                             detail: format!("attempt={verify_attempt}"),
                             ..Default::default()
                         },
@@ -639,7 +639,7 @@ pub(crate) async fn run_turn(args: RunTurnArgs, cancellation_token: Cancellation
                 ::hooks::HookPayload {
                     session_id: sid.clone(),
                     turn_id: turn_id.clone(),
-                    message: Some(full_response.clone()),
+                    last_assistant_message: Some(full_response.clone()),
                     assistant_chars: Some(full_response.len()),
                     detail: format!("assistant_chars={}", full_response.len()),
                     ..Default::default()
@@ -854,7 +854,7 @@ pub(crate) async fn run_turn(args: RunTurnArgs, cancellation_token: Cancellation
         let turn = agent.session_turn().await;
         let turn_id = agent.current_turn_id().await;
         let _ = agent.fire_hook(
-            ::hooks::ON_SESSION_END,
+            ::hooks::AGENT_END,
             ::hooks::HookPayload {
                 session_id: sid,
                 turn_id,

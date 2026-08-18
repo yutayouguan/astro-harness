@@ -530,9 +530,10 @@ async fn multi_turn_fires_post_llm_call_after_model_stream() {
     }
 
     let events = log.lock().unwrap().clone();
+    let expected = format!("{}:5", ::hooks::POST_LLM_CALL);
     assert!(
-        events.iter().any(|e| e == "post_llm_call:5"),
-        "expected post_llm_call for \"hello\" (5 chars), events={events:?}"
+        events.iter().any(|e| e == &expected),
+        "expected PostLlmCall for \"hello\" (5 chars), events={events:?}"
     );
 }
 
@@ -587,11 +588,13 @@ async fn transform_llm_output_replaces_before_post_llm_call() {
     }
 
     let events = log.lock().unwrap().clone();
-    let transform_idx = events.iter().position(|e| e == "transform_llm_output:11");
-    let post_idx = events.iter().position(|e| e == "post_llm_call:8");
+    let transform_event = format!("{}:11", ::hooks::TRANSFORM_LLM_OUTPUT);
+    let post_event = format!("{}:8", ::hooks::POST_LLM_CALL);
+    let transform_idx = events.iter().position(|e| e == &transform_event);
+    let post_idx = events.iter().position(|e| e == &post_event);
     assert!(
         transform_idx.is_some() && post_idx.is_some() && transform_idx < post_idx,
-        "expected transform_llm_output before post_llm_call with replaced length, events={events:?}"
+        "expected TransformLlmOutput before PostLlmCall with replaced length, events={events:?}"
     );
 
     let agent = session_for_check.lock().await;
@@ -601,12 +604,12 @@ async fn transform_llm_output_replaces_before_post_llm_call() {
             .last()
             .map(|m| m.content_str().to_string()),
         Some("REPLACED".to_string()),
-        "final assistant message should reflect transform_llm_output replacement"
+        "final assistant message should reflect TransformLlmOutput replacement"
     );
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn pre_verify_never_fires_without_disk_write() {
+async fn stop_never_fires_without_disk_write() {
     let dir = tempfile::tempdir().unwrap();
     let config = AgentConfig::with_defaults(dir.path().to_path_buf());
     let mut agent = AgentLoop::with_session_id(config, "pre-verify-no-write".into()).unwrap();
@@ -651,8 +654,8 @@ async fn pre_verify_never_fires_without_disk_write() {
 
     let events = log.lock().unwrap().clone();
     assert!(
-        !events.iter().any(|e| e == "pre_verify"),
-        "pre_verify must not fire when no disk write happened this turn, events={events:?}"
+        !events.iter().any(|e| e == ::hooks::STOP),
+        "Stop must not fire when no disk write happened this turn, events={events:?}"
     );
     assert!(items.iter().any(|i| matches!(
         i,
@@ -662,13 +665,13 @@ async fn pre_verify_never_fires_without_disk_write() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn pre_verify_keep_going_retries_capped_at_two() {
+async fn stop_keep_going_retries_capped_at_two() {
     let dir = tempfile::tempdir().unwrap();
     let config = AgentConfig::with_defaults(dir.path().to_path_buf());
     let mut agent = AgentLoop::with_session_id(config, "pre-verify-keep-going".into()).unwrap();
     let log: Arc<std::sync::Mutex<Vec<String>>> = Arc::new(std::sync::Mutex::new(vec![]));
     ::hooks::install_recording(&agent.hook_bus(), Arc::clone(&log));
-    agent.hook_bus().register(::hooks::PRE_VERIFY, |_| {
+    agent.hook_bus().register(::hooks::STOP, |_| {
         ::hooks::HookOutcome::KeepGoing("请再检查一下你的改动".into())
     });
     agent
@@ -693,14 +696,14 @@ async fn pre_verify_keep_going_retries_capped_at_two() {
                 finish_reason: "tool_calls".into(),
             },
         ],
-        // round 2: 无工具终态草稿一 -> pre_verify attempt 1 -> KeepGoing
+        // round 2: 无工具终态草稿一 -> Stop attempt 1 -> KeepGoing
         vec![
             StreamChunk::Text("draft one".into()),
             StreamChunk::Done {
                 finish_reason: "stop".into(),
             },
         ],
-        // round 3: 无工具终态草稿二 -> pre_verify attempt 2 -> KeepGoing
+        // round 3: 无工具终态草稿二 -> Stop attempt 2 -> KeepGoing
         vec![
             StreamChunk::Text("draft two".into()),
             StreamChunk::Done {
@@ -742,26 +745,29 @@ async fn pre_verify_keep_going_retries_capped_at_two() {
     }
 
     let events = log.lock().unwrap().clone();
-    let verify_count = events.iter().filter(|e| e.as_str() == "pre_verify").count();
+    let stop_count = events
+        .iter()
+        .filter(|e| e.as_str() == ::hooks::STOP)
+        .count();
     assert_eq!(
-        verify_count, 2,
-        "pre_verify attempts must be capped at MAX_VERIFY_ATTEMPTS=2, events={events:?}"
+        stop_count, 2,
+        "Stop attempts must be capped at MAX_VERIFY_ATTEMPTS=2, events={events:?}"
     );
     let api_request_count = events
         .iter()
-        .filter(|e| e.as_str() == "pre_api_request")
+        .filter(|e| e.as_str() == ::hooks::PRE_API_REQUEST)
         .count();
     assert_eq!(
         api_request_count, 4,
-        "expect one pre_api_request round per LLM call (1 tool round + 2 keep-going + 1 final), events={events:?}"
+        "expect one PreApiRequest round per LLM call (1 tool round + 2 keep-going + 1 final), events={events:?}"
     );
     let post_llm_count = events
         .iter()
-        .filter(|e| e.starts_with("post_llm_call"))
+        .filter(|e| e.starts_with(::hooks::POST_LLM_CALL))
         .count();
     assert_eq!(
         post_llm_count, 2,
-        "post_llm_call must be skipped while pre_verify keeps going; only the tool round and the final round should fire it, events={events:?}"
+        "PostLlmCall must be skipped while Stop keeps going; only the tool round and the final round should fire it, events={events:?}"
     );
 
     assert!(items.iter().any(|i| matches!(
@@ -1191,7 +1197,7 @@ async fn hitl_waiting_parks_then_continues_same_run() {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn approval_hooks_fire_pre_then_post_on_allow() {
-    type CapturedApproval = Arc<std::sync::Mutex<Option<(Option<String>, String)>>>;
+    type CapturedApproval = Arc<std::sync::Mutex<Option<(Option<serde_json::Value>, String)>>>;
     use agent::{HitlGate, ResumeItem};
 
     let dir = tempfile::tempdir().unwrap();
@@ -1205,9 +1211,9 @@ async fn approval_hooks_fire_pre_then_post_on_allow() {
     let captured_pre2 = Arc::clone(&captured_pre);
     agent
         .hook_bus()
-        .register(hooks::PRE_APPROVAL_REQUEST, move |payload| {
+        .register(hooks::PERMISSION_REQUEST, move |payload| {
             *captured_pre2.lock().unwrap() =
-                Some((payload.message.clone(), payload.detail.clone()));
+                Some((payload.tool_input.clone(), payload.detail.clone()));
             hooks::HookOutcome::Continue
         });
     let captured_post: CapturedApproval = Arc::new(std::sync::Mutex::new(None));
@@ -1216,7 +1222,7 @@ async fn approval_hooks_fire_pre_then_post_on_allow() {
         .hook_bus()
         .register(hooks::POST_APPROVAL_RESPONSE, move |payload| {
             *captured_post2.lock().unwrap() =
-                Some((payload.message.clone(), payload.detail.clone()));
+                Some((payload.tool_input.clone(), payload.detail.clone()));
             hooks::HookOutcome::Continue
         });
 
@@ -1308,27 +1314,47 @@ async fn approval_hooks_fire_pre_then_post_on_allow() {
     }
 
     let events = log.lock().unwrap().clone();
-    let pre_idx = events.iter().position(|e| e == "pre_approval_request");
-    let post_idx = events.iter().position(|e| e == "post_approval_response");
+    let pre_idx = events.iter().position(|e| e == "PermissionRequest:Bash");
+    let post_idx = events.iter().position(|e| e == "PostApprovalResponse:Bash");
     assert!(
         pre_idx.is_some() && post_idx.is_some() && pre_idx < post_idx,
-        "expected pre_approval_request before post_approval_response, events={events:?}"
+        "expected PermissionRequest before PostApprovalResponse, events={events:?}"
     );
-    let post_tool_idx = events.iter().position(|e| e == "post_tool_call:terminal");
+    let post_tool_idx = events.iter().position(|e| e == "PostToolUse:terminal");
     assert!(
         post_idx < post_tool_idx,
-        "expected post_approval_response before post_tool_call, events={events:?}"
+        "expected PostApprovalResponse before PostToolUse, events={events:?}"
+    );
+    assert!(
+        events.iter().any(|e| e == "PreToolUse:terminal"),
+        "events={events:?}"
+    );
+    assert!(
+        !events.iter().any(|e| e.contains("pre_tool_call")),
+        "events={events:?}"
     );
 
     let pre = captured_pre
         .lock()
         .unwrap()
         .clone()
-        .expect("pre_approval_request payload captured");
+        .expect("PermissionRequest payload captured");
     assert_eq!(
-        pre.0.as_deref(),
+        pre.0
+            .as_ref()
+            .and_then(|v| v.get("command"))
+            .and_then(|v| v.as_str()),
         Some(cmd),
-        "pre payload.message should be the command"
+        "pre tool_input.command should be the command"
+    );
+    assert!(
+        pre.0
+            .as_ref()
+            .and_then(|v| v.get("description"))
+            .and_then(|v| v.as_str())
+            .is_some_and(|description| !description.is_empty()),
+        "pre tool_input.description should contain the request summary: {:?}",
+        pre.0
     );
     assert!(
         pre.1.contains("surface=terminal") && pre.1.contains("ask="),
@@ -1340,11 +1366,10 @@ async fn approval_hooks_fire_pre_then_post_on_allow() {
         .lock()
         .unwrap()
         .clone()
-        .expect("post_approval_response payload captured");
+        .expect("PostApprovalResponse payload captured");
     assert_eq!(
-        post.0.as_deref(),
-        Some(cmd),
-        "post payload.message should be the command"
+        post.0, pre.0,
+        "post tool_input should preserve command and request summary"
     );
     assert!(
         post.1.contains("surface=terminal") && post.1.contains("choice=allow"),
@@ -1478,18 +1503,18 @@ async fn approval_hooks_fire_pre_then_post_on_deny() {
     }
 
     let events = log.lock().unwrap().clone();
-    let pre_idx = events.iter().position(|e| e == "pre_approval_request");
-    let post_idx = events.iter().position(|e| e == "post_approval_response");
+    let pre_idx = events.iter().position(|e| e == "PermissionRequest:Bash");
+    let post_idx = events.iter().position(|e| e == "PostApprovalResponse:Bash");
     assert!(
         pre_idx.is_some() && post_idx.is_some() && pre_idx < post_idx,
-        "expected pre_approval_request before post_approval_response, events={events:?}"
+        "expected PermissionRequest before PostApprovalResponse, events={events:?}"
     );
 
     let post_detail = captured_post
         .lock()
         .unwrap()
         .clone()
-        .expect("post_approval_response payload captured");
+        .expect("PostApprovalResponse payload captured");
     assert!(
         post_detail.contains("choice=deny"),
         "post detail should include choice=deny: {post_detail}"

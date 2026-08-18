@@ -48,6 +48,7 @@ async fn fire_post_approval_response(
     session_id: &str,
     turn_id: Option<&str>,
     command: &str,
+    request_summary: &str,
     choice: &str,
 ) {
     let agent = session.lock().await;
@@ -56,7 +57,11 @@ async fn fire_post_approval_response(
         hooks::HookPayload {
             session_id: session_id.to_string(),
             turn_id: turn_id.map(str::to_string),
-            message: Some(command.to_string()),
+            tool_name: Some("Bash".to_string()),
+            tool_input: Some(serde_json::json!({
+                "command": command,
+                "description": request_summary,
+            })),
             detail: format!("surface=terminal choice={choice}"),
             ..Default::default()
         },
@@ -76,7 +81,8 @@ async fn fire_post_permission_response(
         hooks::HookPayload {
             session_id: session_id.to_string(),
             turn_id: turn_id.map(str::to_string),
-            message: Some(request.summary.clone()),
+            tool_name: Some(request.tool_name.clone()),
+            tool_input: Some(serde_json::json!({"summary": request.summary.clone()})),
             detail: format!("surface=permission choice={choice}"),
             ..Default::default()
         },
@@ -194,11 +200,12 @@ async fn review_once_permission(
     {
         let agent = session.lock().await;
         agent.fire_hook(
-            hooks::PRE_APPROVAL_REQUEST,
+            hooks::PERMISSION_REQUEST,
             hooks::HookPayload {
                 session_id: request.session_id.clone(),
                 turn_id: request.turn_id.clone(),
-                message: Some(request.summary.clone()),
+                tool_name: Some(request.tool_name.clone()),
+                tool_input: Some(serde_json::json!({"summary": request.summary.clone()})),
                 detail: hook_detail.to_string(),
                 ..Default::default()
             },
@@ -772,7 +779,9 @@ async fn execute_tools_serial_inner(
                             .and_then(|v| v.as_str())
                             .unwrap_or("")
                             .to_string();
-                        // 读取审批模式 + 白名单，并触发 PRE_APPROVAL_REQUEST 钩子
+                        let request_summary =
+                            format!("Run a command requiring approval: {}", decision.description);
+                        // 读取审批模式 + 白名单，并触发 PermissionRequest 钩子
                         let (
                             approval_session_id,
                             approval_turn_id,
@@ -792,11 +801,15 @@ async fn execute_tools_serial_inner(
                                 .unwrap_or(&permissions.selection.profile_id)
                                 .to_string();
                             agent.fire_hook(
-                                hooks::PRE_APPROVAL_REQUEST,
+                                hooks::PERMISSION_REQUEST,
                                 hooks::HookPayload {
                                     session_id: approval_session_id.clone(),
                                     turn_id: approval_turn_id.clone(),
-                                    message: Some(cmd.clone()),
+                                    tool_name: Some("Bash".to_string()),
+                                    tool_input: Some(serde_json::json!({
+                                        "command": cmd.clone(),
+                                        "description": request_summary.clone(),
+                                    })),
                                     detail: format!(
                                         "surface=terminal ask={}",
                                         decision.description
@@ -822,10 +835,7 @@ async fn execute_tools_serial_inner(
                             turn_id: approval_turn_id.clone(),
                             tool_call_id: call.id.clone(),
                             tool_name: call.name.clone(),
-                            summary: format!(
-                                "Run a command requiring approval: {}",
-                                decision.description
-                            ),
+                            summary: request_summary,
                             capabilities: vec![types::PermissionCapability::ProcessSpawn {
                                 program: "sh".to_string(),
                                 cwd: None,
@@ -882,6 +892,7 @@ async fn execute_tools_serial_inner(
                                 &approval_session_id,
                                 approval_turn_id.as_deref(),
                                 &cmd,
+                                &permission_request.summary,
                                 "allowlist",
                             )
                             .await;
@@ -898,6 +909,7 @@ async fn execute_tools_serial_inner(
                                 &approval_session_id,
                                 approval_turn_id.as_deref(),
                                 &cmd,
+                                &permission_request.summary,
                                 "auto",
                             )
                             .await;
@@ -937,6 +949,7 @@ async fn execute_tools_serial_inner(
                                     &approval_session_id,
                                     approval_turn_id.as_deref(),
                                     &cmd,
+                                    &permission_request.summary,
                                     "auto",
                                 )
                                 .await;
@@ -953,6 +966,7 @@ async fn execute_tools_serial_inner(
                                     &approval_session_id,
                                     approval_turn_id.as_deref(),
                                     &cmd,
+                                    &permission_request.summary,
                                     "deny",
                                 )
                                 .await;
@@ -986,6 +1000,7 @@ async fn execute_tools_serial_inner(
                                     &approval_session_id,
                                     approval_turn_id.as_deref(),
                                     &cmd,
+                                    &permission_request.summary,
                                     choice,
                                 )
                                 .await;
@@ -1018,6 +1033,7 @@ async fn execute_tools_serial_inner(
                                     &approval_session_id,
                                     approval_turn_id.as_deref(),
                                     &cmd,
+                                    &permission_request.summary,
                                     "unavailable",
                                 )
                                 .await;

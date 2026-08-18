@@ -154,7 +154,7 @@ impl Session {
         let system_prompt = self.build_system_prompt().await;
         let turn_id = self.current_turn_id().await;
         let _ = self.fire_hook(
-            ::hooks::ON_SESSION_START,
+            ::hooks::SESSION_START,
             ::hooks::HookPayload {
                 session_id: self.session_id.clone(),
                 turn_id: turn_id.clone(),

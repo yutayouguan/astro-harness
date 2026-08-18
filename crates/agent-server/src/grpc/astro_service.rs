@@ -343,10 +343,10 @@ impl AstroServiceImpl {
             .fire_gateway(::hooks::COMMAND_NEW_CHAT, &payload);
         let _ = self
             .hook_runtime
-            .fire_plugin(::hooks::ON_SESSION_RESET, &payload);
+            .fire_plugin(::hooks::SESSION_RESET, &payload);
         let _ = self
             .hook_runtime
-            .fire_plugin(::hooks::ON_SESSION_FINALIZE, &payload);
+            .fire_plugin(::hooks::SESSION_FINALIZE, &payload);
 
         if let Some(handle) = self.release_session_runtime(session_id).await {
             let agent = handle.lock().await;
@@ -358,8 +358,8 @@ impl AstroServiceImpl {
                 detail: format!("session={session_id}"),
                 ..Default::default()
             };
-            let _ = bus.fire(::hooks::ON_SESSION_RESET, &payload);
-            let _ = bus.fire(::hooks::ON_SESSION_FINALIZE, &payload);
+            let _ = bus.fire(::hooks::SESSION_RESET, &payload);
+            let _ = bus.fire(::hooks::SESSION_FINALIZE, &payload);
         }
     }
 }
@@ -732,7 +732,7 @@ impl AstroService for AstroServiceImpl {
             &::hooks::HookPayload {
                 session_id: session_id.clone(),
                 turn_id: None,
-                message: Some(content.clone()),
+                prompt: Some(content.clone()),
                 detail: content.chars().take(200).collect(),
                 ..Default::default()
             },
@@ -1696,7 +1696,7 @@ mod tests {
         service
             .hook_runtime
             .plugin
-            .register(::hooks::ON_SESSION_RESET, move |_| {
+            .register(::hooks::SESSION_RESET, move |_| {
                 reset_counter.fetch_add(1, Ordering::SeqCst);
                 ::hooks::HookOutcome::Continue
             });
@@ -1705,7 +1705,7 @@ mod tests {
         service
             .hook_runtime
             .plugin
-            .register(::hooks::ON_SESSION_FINALIZE, move |_| {
+            .register(::hooks::SESSION_FINALIZE, move |_| {
                 finalize_counter.fetch_add(1, Ordering::SeqCst);
                 ::hooks::HookOutcome::Continue
             });

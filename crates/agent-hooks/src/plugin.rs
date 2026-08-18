@@ -79,9 +79,7 @@ impl PluginHookBus {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::names::{
-        PRE_LLM_CALL, PRE_TOOL_CALL, PRE_TOOL_USE, PRE_VERIFY, TRANSFORM_TOOL_RESULT,
-    };
+    use crate::names::{PRE_LLM_CALL, PRE_TOOL_USE, STOP, TRANSFORM_TOOL_RESULT};
     use serde_json::json;
     use std::sync::atomic::{AtomicUsize, Ordering};
 
@@ -140,22 +138,22 @@ mod tests {
         let bus = PluginHookBus::new();
         let log = Arc::new(std::sync::Mutex::new(Vec::new()));
         let log1 = Arc::clone(&log);
-        bus.register(PRE_TOOL_CALL, move |_| {
+        bus.register(PRE_TOOL_USE, move |_| {
             log1.lock().unwrap().push("a");
             HookOutcome::Continue
         });
         let log2 = Arc::clone(&log);
-        bus.register(PRE_TOOL_CALL, move |_| {
+        bus.register(PRE_TOOL_USE, move |_| {
             log2.lock().unwrap().push("b");
             HookOutcome::Block("nope".into())
         });
         let log3 = Arc::clone(&log);
-        bus.register(PRE_TOOL_CALL, move |_| {
+        bus.register(PRE_TOOL_USE, move |_| {
             log3.lock().unwrap().push("c");
             HookOutcome::Continue
         });
         let out = bus.fire(
-            PRE_TOOL_CALL,
+            PRE_TOOL_USE,
             &HookPayload {
                 tool_name: Some("echo".into()),
                 ..Default::default()
@@ -179,8 +177,8 @@ mod tests {
     #[test]
     fn modify_args() {
         let bus = PluginHookBus::new();
-        bus.register(PRE_TOOL_CALL, |_| HookOutcome::Modify(json!({"x": 1})));
-        let out = bus.fire(PRE_TOOL_CALL, &HookPayload::default());
+        bus.register(PRE_TOOL_USE, |_| HookOutcome::Modify(json!({"x": 1})));
+        let out = bus.fire(PRE_TOOL_USE, &HookPayload::default());
         assert!(matches!(out, HookOutcome::Modify(ref v) if v["x"] == 1));
     }
 
@@ -200,8 +198,8 @@ mod tests {
     #[test]
     fn keep_going_short_circuits() {
         let bus = PluginHookBus::new();
-        bus.register(PRE_VERIFY, |_| HookOutcome::KeepGoing("retry".into()));
-        let out = bus.fire(PRE_VERIFY, &HookPayload::default());
+        bus.register(STOP, |_| HookOutcome::KeepGoing("retry".into()));
+        let out = bus.fire(STOP, &HookPayload::default());
         assert!(matches!(out, HookOutcome::KeepGoing(ref s) if s == "retry"));
     }
 }

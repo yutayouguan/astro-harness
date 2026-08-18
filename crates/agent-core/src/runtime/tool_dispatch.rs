@@ -253,12 +253,12 @@ impl AgentLoop {
         let turn_id = self.current_turn_id().await;
         // 可拦截：PluginHookBus 优先
         let bus_out = self.fire_hook(
-            ::hooks::PRE_TOOL_CALL,
+            ::hooks::PRE_TOOL_USE,
             ::hooks::HookPayload {
                 session_id: self.session_id.clone(),
                 turn_id,
                 tool_name: Some(name.into()),
-                tool_args: Some(args.clone()),
+                tool_input: Some(args.clone()),
                 detail: format!("{name} {args}"),
                 ..Default::default()
             },
@@ -401,8 +401,8 @@ impl AgentLoop {
                 session_id: self.session_id.clone(),
                 turn_id: turn_id.clone(),
                 tool_name: Some(name.into()),
-                tool_args: Some(args_owned.clone()),
-                tool_result: Some(raw_text.clone()),
+                tool_input: Some(args_owned.clone()),
+                tool_response: Some(serde_json::Value::String(raw_text.clone())),
                 ..Default::default()
             },
         );
@@ -416,12 +416,13 @@ impl AgentLoop {
             _ => raw_result,
         };
         let _ = self.fire_hook(
-            ::hooks::POST_TOOL_CALL,
+            ::hooks::POST_TOOL_USE,
             ::hooks::HookPayload {
                 session_id: self.session_id.clone(),
                 turn_id,
                 tool_name: Some(name.into()),
-                tool_result: Some(result.text().to_string()),
+                tool_input: Some(args_owned.clone()),
+                tool_response: Some(serde_json::Value::String(result.text().to_string())),
                 detail: {
                     let preview: String = result.text().chars().take(200).collect();
                     format!("{name} → {preview}")

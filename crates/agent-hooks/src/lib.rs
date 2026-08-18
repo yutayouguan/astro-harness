@@ -164,7 +164,7 @@ mod tests {
             },
         );
         assert_eq!(hits.load(Ordering::SeqCst), 0);
-        let _ = rt.fire_plugin(ON_SESSION_RESET, &HookPayload::default());
+        let _ = rt.fire_plugin(SESSION_RESET, &HookPayload::default());
     }
 
     #[test]
@@ -176,7 +176,7 @@ mod tests {
         let out = rt.fire_plugin(
             PRE_GATEWAY_DISPATCH,
             &HookPayload {
-                message: Some("hello".into()),
+                prompt: Some("hello".into()),
                 ..Default::default()
             },
         );
