@@ -105,7 +105,7 @@ pub(crate) fn migrate(conn: &mut Connection) -> anyhow::Result<()> {
         None => {}
     }
 
-    archive_legacy_tables(&tx)?;
+    archive_legacy_v1_tables(&tx)?;
     tx.execute_batch(
         "CREATE TABLE IF NOT EXISTS schema_meta (
             key TEXT PRIMARY KEY,
@@ -123,6 +123,10 @@ pub(crate) fn migrate(conn: &mut Connection) -> anyhow::Result<()> {
 
 pub(crate) fn schema_version(conn: &Connection) -> anyhow::Result<i32> {
     read_schema_version(conn)?.context("subagent graph schema_version is missing")
+}
+
+pub(crate) fn detected_schema_version(conn: &Connection) -> anyhow::Result<Option<i32>> {
+    read_schema_version(conn)
 }
 
 pub(crate) fn list_historical_threads(
@@ -189,27 +193,46 @@ pub(crate) fn list_historical_messages(
     Ok(messages)
 }
 
-fn archive_legacy_tables(tx: &Transaction<'_>) -> anyhow::Result<()> {
-    if !table_exists(tx, "agent_threads")? {
-        return Ok(());
-    }
-    if !column_exists(tx, "agent_threads", "id")?
-        || column_exists(tx, "agent_threads", "thread_id")?
-    {
-        bail!("agent_threads exists without a V1 marker; refusing destructive migration");
-    }
-    if table_exists(tx, "historical_agent_threads_v1")? {
-        bail!("historical_agent_threads_v1 already exists; refusing to overwrite archive");
+fn archive_legacy_v1_tables(tx: &Transaction<'_>) -> anyhow::Result<()> {
+    let had_legacy_threads = table_exists(tx, "agent_threads")?;
+    if had_legacy_threads {
+        if !column_exists(tx, "agent_threads", "id")?
+            || column_exists(tx, "agent_threads", "thread_id")?
+        {
+            bail!("agent_threads exists without a V1 marker; refusing destructive migration");
+        }
+        if table_exists(tx, "historical_agent_threads_v1")? {
+            bail!("historical_agent_threads_v1 already exists; refusing to overwrite archive");
+        }
+        tx.execute_batch("ALTER TABLE agent_threads RENAME TO historical_agent_threads_v1;")?;
     }
 
-    tx.execute_batch("ALTER TABLE agent_threads RENAME TO historical_agent_threads_v1;")?;
     if table_exists(tx, "agent_thread_messages")? {
         if table_exists(tx, "historical_agent_messages_v1")? {
             bail!("historical_agent_messages_v1 already exists; refusing to overwrite archive");
         }
-        tx.execute_batch(
-            "ALTER TABLE agent_thread_messages RENAME TO historical_agent_messages_v1;",
-        )?;
+        if had_legacy_threads {
+            tx.execute_batch(
+                "ALTER TABLE agent_thread_messages RENAME TO historical_agent_messages_v1;",
+            )?;
+        } else {
+            // With no legacy parent table, renaming would leave the archived
+            // foreign key pointing at the new V2 `agent_threads`. Rebuild the
+            // read-only archive without that unsafe cross-schema constraint.
+            tx.execute_batch(
+                "CREATE TABLE historical_agent_messages_v1 (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    thread_id TEXT NOT NULL,
+                    role TEXT NOT NULL,
+                    content TEXT NOT NULL,
+                    created_at TEXT NOT NULL
+                );
+                INSERT INTO historical_agent_messages_v1(id, thread_id, role, content, created_at)
+                    SELECT id, thread_id, role, content, created_at
+                    FROM agent_thread_messages;
+                DROP TABLE agent_thread_messages;",
+            )?;
+        }
     }
     Ok(())
 }
@@ -390,5 +413,47 @@ mod tests {
             .list_historical_messages("legacy-thread")
             .unwrap()
             .is_empty());
+    }
+
+    #[test]
+    fn migration_archives_orphaned_legacy_messages_table() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("subagents.db");
+        let conn = Connection::open(&path).unwrap();
+        conn.execute_batch(
+            "PRAGMA foreign_keys=OFF;
+            CREATE TABLE agent_thread_messages (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                thread_id TEXT NOT NULL,
+                role TEXT NOT NULL,
+                content TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                FOREIGN KEY(thread_id) REFERENCES agent_threads(id) ON DELETE CASCADE
+            );
+            INSERT INTO agent_thread_messages(thread_id, role, content, created_at)
+            VALUES ('orphan-thread', 'assistant', 'preserve me', '2026-08-18T00:00:00Z');",
+        )
+        .unwrap();
+        drop(conn);
+
+        let store = AgentGraphStore::open(path.clone()).unwrap();
+        assert_eq!(store.schema_version().unwrap(), 2);
+        let archived = store.list_historical_messages("orphan-thread").unwrap();
+        assert_eq!(archived.len(), 1);
+        assert_eq!(archived[0].content, "preserve me");
+
+        let conn = Connection::open(path).unwrap();
+        assert!(!super::table_exists(&conn, "agent_thread_messages").unwrap());
+        assert!(super::table_exists(&conn, "historical_agent_messages_v1").unwrap());
+        let foreign_key_targets = conn
+            .prepare("PRAGMA foreign_key_list(historical_agent_messages_v1)")
+            .unwrap()
+            .query_map([], |row| row.get::<_, String>(2))
+            .unwrap()
+            .collect::<rusqlite::Result<Vec<_>>>()
+            .unwrap();
+        assert!(!foreign_key_targets
+            .iter()
+            .any(|table| table == "agent_threads"));
     }
 }

@@ -53,6 +53,14 @@ const V2_THREAD_SELECT: &str =
     "thread_id, root_thread_id, parent_thread_id, canonical_path, task_name,
      agent_type, session_id, status_kind, status_payload, created_at, updated_at";
 
+fn legacy_default_db_path() -> PathBuf {
+    home::default_memory_dir().join("subagents.db")
+}
+
+fn v2_default_db_path() -> PathBuf {
+    home::default_memory_dir().join("subagents-v2.db")
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct StoredStatusEvent {
     pub sequence: i64,
@@ -78,7 +86,7 @@ impl AgentGraphStore {
     }
 
     pub fn open_default_v2() -> anyhow::Result<Self> {
-        Self::open(home::default_memory_dir().join("subagents.db"))
+        Self::open(v2_default_db_path())
     }
 
     pub fn path(&self) -> &Path {
@@ -267,29 +275,47 @@ impl AgentGraphStore {
     }
 
     pub fn snapshot(&self, root_thread_id: &str) -> anyhow::Result<AgentTreeSnapshotV2> {
+        self.snapshot_with_after_threads(root_thread_id, || {})
+    }
+
+    fn snapshot_with_after_threads<F>(
+        &self,
+        root_thread_id: &str,
+        after_threads: F,
+    ) -> anyhow::Result<AgentTreeSnapshotV2>
+    where
+        F: FnOnce(),
+    {
         require_non_empty("root_thread_id", root_thread_id)?;
-        let conn = self.connect()?;
-        let mut stmt = conn.prepare(&format!(
-            "SELECT {V2_THREAD_SELECT} FROM agent_threads
-             WHERE root_thread_id = ?1
-             ORDER BY canonical_path"
-        ))?;
-        let threads = stmt
-            .query_map([root_thread_id], v2_thread_from_row)?
-            .collect::<rusqlite::Result<Vec<_>>>()?;
-        let activity_sequence: i64 = conn.query_row(
+        let mut conn = self.connect()?;
+        let tx = conn.transaction()?;
+        let threads = {
+            let mut stmt = tx.prepare(&format!(
+                "SELECT {V2_THREAD_SELECT} FROM agent_threads
+                 WHERE root_thread_id = ?1
+                 ORDER BY canonical_path"
+            ))?;
+            let rows = stmt
+                .query_map([root_thread_id], v2_thread_from_row)?
+                .collect::<rusqlite::Result<Vec<_>>>()?;
+            rows
+        };
+        after_threads();
+        let activity_sequence: i64 = tx.query_row(
             "SELECT COALESCE(MAX(last_status_sequence), 0)
              FROM agent_threads WHERE root_thread_id = ?1",
             [root_thread_id],
             |row| row.get(0),
         )?;
-        Ok(AgentTreeSnapshotV2 {
+        let snapshot = AgentTreeSnapshotV2 {
             root_thread_id: root_thread_id.to_string(),
             threads,
             activity_sequence: activity_sequence.try_into().with_context(|| {
                 format!("invalid negative status activity sequence {activity_sequence}")
             })?,
-        })
+        };
+        tx.commit()?;
+        Ok(snapshot)
     }
 
     pub fn close_edge(&self, child_thread_id: &str) -> anyhow::Result<()> {
@@ -479,7 +505,7 @@ pub struct AgentThreadStore {
 
 impl AgentThreadStore {
     pub fn open_default() -> anyhow::Result<Self> {
-        Self::new(home::default_memory_dir().join("subagents.db"))
+        Self::new(legacy_default_db_path())
     }
 
     pub fn new(path: PathBuf) -> anyhow::Result<Self> {
@@ -494,6 +520,12 @@ impl AgentThreadStore {
 
     fn connect(&self) -> anyhow::Result<Connection> {
         let conn = types::open_wal(&self.path)?;
+        if migration::detected_schema_version(&conn)? == Some(migration::SCHEMA_VERSION) {
+            bail!(
+                "legacy AgentThreadStore refuses to open V2 schema at {}",
+                self.path.display()
+            );
+        }
         conn.execute_batch("PRAGMA foreign_keys=ON;")?;
         conn.execute_batch(DDL)?;
         Ok(conn)
@@ -715,6 +747,22 @@ mod tests {
     use super::*;
     use crate::{AgentPath, AgentStatusV2, RunnerEvent, ThreadReservation};
 
+    fn schema_objects(path: &Path) -> Vec<(String, String, Option<String>)> {
+        let conn = Connection::open(path).unwrap();
+        let mut stmt = conn
+            .prepare(
+                "SELECT type, name, sql
+                 FROM sqlite_master
+                 WHERE name NOT LIKE 'sqlite_%'
+                 ORDER BY type, name",
+            )
+            .unwrap();
+        stmt.query_map([], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))
+            .unwrap()
+            .collect::<rusqlite::Result<Vec<_>>>()
+            .unwrap()
+    }
+
     fn reservation(id: &str, path: &str) -> ThreadReservation {
         ThreadReservation {
             thread_id: id.into(),
@@ -767,6 +815,32 @@ mod tests {
             .unwrap();
         assert_eq!(waited[0].status, AgentThreadStatus::Completed);
         assert_eq!(store.messages(&thread.id).unwrap().len(), 2);
+    }
+
+    #[test]
+    fn v2_and_legacy_default_database_paths_are_isolated() {
+        assert_ne!(legacy_default_db_path(), v2_default_db_path());
+        assert_eq!(
+            legacy_default_db_path().file_name().unwrap(),
+            "subagents.db"
+        );
+        assert_eq!(v2_default_db_path().file_name().unwrap(), "subagents-v2.db");
+    }
+
+    #[test]
+    fn legacy_store_rejects_v2_schema_without_mutating_it() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("subagents-v2.db");
+        drop(AgentGraphStore::open(path.clone()).unwrap());
+        let before = schema_objects(&path);
+
+        let error = AgentThreadStore::new(path.clone()).unwrap_err();
+
+        assert!(error.to_string().contains("V2"));
+        assert_eq!(schema_objects(&path), before);
+        assert!(!before
+            .iter()
+            .any(|(_, name, _)| name == "agent_thread_messages"));
     }
 
     #[test]
@@ -912,6 +986,34 @@ mod tests {
             reopened.snapshot("root-thread").unwrap().activity_sequence,
             snapshot.activity_sequence
         );
+    }
+
+    #[test]
+    fn snapshot_projection_and_cursor_share_one_read_transaction() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = AgentGraphStore::open(dir.path().join("subagents-v2.db")).unwrap();
+        store
+            .reserve_thread(&reservation("child", "/root/child"))
+            .unwrap();
+
+        let snapshot = store
+            .snapshot_with_after_threads("root-thread", || {
+                store
+                    .apply_status_event(
+                        "child",
+                        RunnerEvent::TurnStarted {
+                            turn_id: "concurrent-turn".into(),
+                        },
+                    )
+                    .unwrap();
+            })
+            .unwrap();
+
+        assert_eq!(snapshot.threads[0].status, AgentStatusV2::PendingInit);
+        assert_eq!(snapshot.activity_sequence, 0);
+        let current = store.snapshot("root-thread").unwrap();
+        assert_eq!(current.threads[0].status, AgentStatusV2::Running);
+        assert_eq!(current.activity_sequence, 1);
     }
 
     #[test]
