@@ -259,6 +259,27 @@ impl<'a> SpawnReservation<'a> {
     }
 
     pub fn commit(mut self) -> anyhow::Result<()> {
+        let precheck_result = (|| {
+            let state = self.registry.lock_state()?;
+            if state.thread_paths.contains_key(&self.thread_id) {
+                bail!("agent thread id {:?} already exists", self.thread_id);
+            }
+            if state.reserved_paths.get(&self.path).map(String::as_str)
+                != Some(self.thread_id.as_str())
+            {
+                bail!("agent path {:?} is no longer reserved", self.path);
+            }
+            Ok(())
+        })();
+        if let Err(commit_error) = precheck_result {
+            return self.rollback_after_commit_error(commit_error);
+        }
+        if let Some(store) = self.persisted_store {
+            if let Err(error) = store.validate_pending_reservation(&self.thread) {
+                self.release_memory();
+                return Err(error.context("durable pending reservation validation failed"));
+            }
+        }
         let commit_result = (|| {
             let mut state = self.registry.lock_state()?;
             if state.thread_paths.contains_key(&self.thread_id) {
@@ -279,15 +300,7 @@ impl<'a> SpawnReservation<'a> {
             Ok(())
         })();
         if let Err(commit_error) = commit_result {
-            return match self.rollback_durable() {
-                Ok(()) => {
-                    self.release_memory();
-                    Err(commit_error)
-                }
-                Err(rollback_error) => Err(anyhow::anyhow!(
-                    "agent identity commit failed: {commit_error:#}; durable rollback failed: {rollback_error:#}"
-                )),
-            };
+            return self.rollback_after_commit_error(commit_error);
         }
         self.active = false;
         if let Some(activity) = self.activity {
@@ -299,6 +312,18 @@ impl<'a> SpawnReservation<'a> {
             );
         }
         Ok(())
+    }
+
+    fn rollback_after_commit_error(&mut self, commit_error: anyhow::Error) -> anyhow::Result<()> {
+        match self.rollback_durable() {
+            Ok(()) => {
+                self.release_memory();
+                Err(commit_error)
+            }
+            Err(rollback_error) => Err(anyhow::anyhow!(
+                "agent identity commit failed: {commit_error:#}; durable rollback failed: {rollback_error:#}"
+            )),
+        }
     }
 
     fn rollback_durable(&mut self) -> anyhow::Result<()> {

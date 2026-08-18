@@ -82,8 +82,15 @@ impl AgentControl {
         limits: Limits,
     ) -> anyhow::Result<Arc<Self>> {
         store.ensure_root_thread(&root_thread_id)?;
-        store.cleanup_pending_reservations(&root_thread_id)?;
         let snapshot = store.snapshot(&root_thread_id)?;
+        if snapshot.threads.iter().any(|thread| {
+            thread.canonical_path != AgentPath::root()
+                && thread.status == crate::AgentStatusV2::PendingInit
+        }) {
+            anyhow::bail!(
+                "pending reservations require exclusive recovery before opening root {root_thread_id:?}"
+            );
+        }
         let registry = AgentRegistry::from_threads(limits, &snapshot.threads)?;
         Ok(Arc::new(Self {
             root_thread_id,
@@ -627,28 +634,40 @@ mod tests {
     }
 
     #[test]
-    fn open_recovers_crashed_pending_reservations_before_restoring_registry() {
+    fn second_open_rejects_live_pending_reservation_without_deleting_it() {
         let dir = TempDir::new().unwrap();
-        let store = crate::AgentGraphStore::open(dir.path().join("subagents-v2.db")).unwrap();
-        store.ensure_root_thread("root-thread").unwrap();
-        store
-            .reserve_thread(&crate::ThreadReservation {
-                thread_id: "crashed-pending".into(),
-                root_thread_id: "root-thread".into(),
-                parent_thread_id: "root-thread".into(),
-                canonical_path: crate::AgentPath::parse("/root/worker").unwrap(),
-                task_name: "worker".into(),
-                agent_type: "default".into(),
-                session_id: "crashed-pending".into(),
-            })
-            .unwrap();
-
-        let control = AgentControl::open("root-thread".into(), store.clone(), limits()).unwrap();
-        assert!(store.get_thread("crashed-pending").unwrap().is_none());
-        let replacement = control
+        let (first, store) = open_control(&dir, "root-thread");
+        let reservation = first
             .reserve_spawn(&crate::AgentPath::root(), "worker")
             .unwrap();
-        assert_ne!(replacement.thread().thread_id, "crashed-pending");
+        let thread_id = reservation.thread().thread_id.clone();
+
+        let error = AgentControl::open("root-thread".into(), store.clone(), limits())
+            .err()
+            .expect("a second owner must not load a pending reservation");
+
+        assert!(error.to_string().contains("exclusive recovery"));
+        assert_eq!(
+            store.get_thread(&thread_id).unwrap().unwrap().status,
+            crate::AgentStatusV2::PendingInit
+        );
+        assert_eq!(
+            store.edge_state(&thread_id).unwrap().as_deref(),
+            Some("open")
+        );
+        reservation.commit().unwrap();
+        assert!(store.get_thread(&thread_id).unwrap().is_some());
+        assert_eq!(
+            store.edge_state(&thread_id).unwrap().as_deref(),
+            Some("open")
+        );
+        assert_eq!(
+            first
+                .resolve_target(&crate::AgentPath::root(), "worker")
+                .unwrap()
+                .thread_id,
+            thread_id
+        );
     }
 
     #[test]
@@ -684,6 +703,31 @@ mod tests {
         reservation.abort().unwrap();
 
         assert!(store.get_thread(&thread_id).unwrap().is_none());
+        let replacement = control.reserve_spawn(&root, "worker").unwrap();
+        assert_ne!(replacement.thread().thread_id, thread_id);
+    }
+
+    #[test]
+    fn commit_rejects_a_cleaned_durable_reservation_without_ghost_identity() {
+        let dir = TempDir::new().unwrap();
+        let (control, store) = open_control(&dir, "root-thread");
+        let root = crate::AgentPath::root();
+        let reservation = control.reserve_spawn(&root, "worker").unwrap();
+        let thread_id = reservation.thread().thread_id.clone();
+        let cursor = control.activity_cursor();
+        assert_eq!(
+            store.cleanup_pending_reservations("root-thread").unwrap(),
+            1
+        );
+
+        let error = reservation.commit().unwrap_err();
+
+        assert!(error.to_string().contains("durable pending reservation"));
+        assert_eq!(control.activity_cursor(), cursor);
+        assert_eq!(control.identity_count().unwrap(), 0);
+        assert!(store.get_thread(&thread_id).unwrap().is_none());
+        assert!(store.edge_state(&thread_id).unwrap().is_none());
+        assert!(control.resolve_target(&root, "worker").is_err());
         let replacement = control.reserve_spawn(&root, "worker").unwrap();
         assert_ne!(replacement.thread().thread_id, thread_id);
     }

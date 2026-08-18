@@ -238,6 +238,50 @@ impl AgentGraphStore {
         Ok(removed)
     }
 
+    pub fn validate_pending_reservation(&self, expected: &AgentThreadV2) -> anyhow::Result<()> {
+        require_non_empty("thread_id", &expected.thread_id)?;
+        let mut conn = self.connect()?;
+        let tx = conn.transaction()?;
+        let durable = query_v2_thread_by_id(&tx, &expected.thread_id)?.with_context(|| {
+            format!(
+                "durable pending reservation {:?} is missing",
+                expected.thread_id
+            )
+        })?;
+        if durable.root_thread_id != expected.root_thread_id
+            || durable.parent_thread_id != expected.parent_thread_id
+            || durable.canonical_path != expected.canonical_path
+            || durable.task_name != expected.task_name
+            || durable.agent_type != expected.agent_type
+            || durable.session_id != expected.session_id
+            || durable.status != AgentStatusV2::PendingInit
+        {
+            bail!(
+                "durable pending reservation {:?} does not match the reserved identity",
+                expected.thread_id
+            );
+        }
+        let edge = tx
+            .query_row(
+                "SELECT parent_thread_id, edge_state
+                 FROM agent_spawn_edges WHERE child_thread_id = ?1",
+                [&expected.thread_id],
+                |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)),
+            )
+            .optional()?;
+        if edge.as_ref().is_none_or(|(parent_thread_id, state)| {
+            Some(parent_thread_id.as_str()) != expected.parent_thread_id.as_deref()
+                || state != "open"
+        }) {
+            bail!(
+                "durable pending reservation {:?} requires its matching open spawn edge",
+                expected.thread_id
+            );
+        }
+        tx.commit()?;
+        Ok(())
+    }
+
     pub fn get_thread(&self, thread_id: &str) -> anyhow::Result<Option<AgentThreadV2>> {
         require_non_empty("thread_id", thread_id)?;
         query_v2_thread_by_id(&self.connect()?, thread_id)
@@ -1184,6 +1228,39 @@ mod tests {
             )
             .unwrap();
         assert_eq!(pending_edge_count, 0);
+    }
+
+    #[test]
+    fn pending_reservation_validation_requires_matching_row_and_open_edge() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = AgentGraphStore::open(dir.path().join("subagents-v2.db")).unwrap();
+        let expected = store
+            .reserve_thread(&reservation("child", "/root/child"))
+            .unwrap();
+
+        store.validate_pending_reservation(&expected).unwrap();
+
+        let mut wrong_root = expected.clone();
+        wrong_root.root_thread_id = "wrong-root".into();
+        assert!(store
+            .validate_pending_reservation(&wrong_root)
+            .unwrap_err()
+            .to_string()
+            .contains("does not match"));
+
+        store
+            .connect()
+            .unwrap()
+            .execute(
+                "DELETE FROM agent_spawn_edges WHERE child_thread_id = 'child'",
+                [],
+            )
+            .unwrap();
+        assert!(store
+            .validate_pending_reservation(&expected)
+            .unwrap_err()
+            .to_string()
+            .contains("open spawn edge"));
     }
 
     #[test]
