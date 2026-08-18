@@ -37,7 +37,7 @@ const TASK_ABORT_HOOK_TIMEOUT: Duration = Duration::from_millis(50);
 
 #[derive(Debug, thiserror::Error)]
 #[error("turn cancelled")]
-struct TurnCancelled;
+pub(crate) struct TurnCancelled;
 
 /// The workflow currently owned by a session task.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

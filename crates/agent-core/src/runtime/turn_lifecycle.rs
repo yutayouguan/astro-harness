@@ -174,22 +174,10 @@ impl Session {
             Arc::clone(&context),
             chat_override,
         );
-        let event_session = Arc::clone(self);
-        let event_turn_id = turn_id.clone();
         let event_drain = tokio::spawn(async move {
             while let Some(item) = legacy_rx.recv().await {
                 match item {
-                    Ok(crate::streaming::MultiTurnStreamItem::Error(message)) => {
-                        event_session
-                            .send_event(
-                                &event_turn_id,
-                                agent_protocol::EventMsg::Error(agent_protocol::ErrorEvent {
-                                    message,
-                                    error_type: "turn_execution".into(),
-                                }),
-                            )
-                            .await;
-                    }
+                    Ok(crate::streaming::MultiTurnStreamItem::Error(_)) => {}
                     Ok(crate::streaming::MultiTurnStreamItem::Done) | Err(_) => break,
                     Ok(_) => {}
                 }

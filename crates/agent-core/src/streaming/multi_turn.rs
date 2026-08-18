@@ -33,7 +33,7 @@ use super::tools_exec::{
 use super::types::{MultiTurnStream, MultiTurnStreamItem, StreamedAssistantContent};
 use crate::control::hitl::HitlGate;
 use crate::runtime::{Session, TurnContext};
-use crate::tasks::RegularTask;
+use crate::tasks::{RegularTask, SessionTaskResult, TurnCancelled};
 
 /// `pre_verify` 单次 turn 内允许的最多验证轮次（含首次结束尝试）。
 const MAX_VERIFY_ATTEMPTS: usize = 2;
@@ -250,8 +250,35 @@ async fn record_pending_input(
     Ok(())
 }
 
+async fn finish_task_error(
+    session: &Arc<Session>,
+    streamer: &ProviderStreamer,
+    tx: &mpsc::Sender<anyhow::Result<MultiTurnStreamItem>>,
+    message: impl Into<String>,
+    usage: Option<Usage>,
+    run_id: &str,
+) -> SessionTaskResult {
+    let message = message.into();
+    finish_error(session, streamer, tx, message.clone(), usage, run_id).await;
+    Err(anyhow::anyhow!(message))
+}
+
+async fn finish_task_cancelled(
+    session: &Arc<Session>,
+    streamer: &ProviderStreamer,
+    tx: &mpsc::Sender<anyhow::Result<MultiTurnStreamItem>>,
+    usage: Option<Usage>,
+    run_id: &str,
+) -> SessionTaskResult {
+    finish_interrupted(session, streamer, tx, usage, run_id).await;
+    Err(TurnCancelled.into())
+}
+
 /// Codex-aligned regular turn loop shared by foreground and background adapters.
-pub(crate) async fn run_turn(args: RunTurnArgs, cancellation_token: CancellationToken) {
+pub(crate) async fn run_turn(
+    args: RunTurnArgs,
+    cancellation_token: CancellationToken,
+) -> SessionTaskResult {
     let RunTurnArgs {
         session,
         turn_context,
@@ -312,7 +339,7 @@ pub(crate) async fn run_turn(args: RunTurnArgs, cancellation_token: Cancellation
             break;
         }
         if cancellation_token.is_cancelled() || pause.is_cancelled() {
-            finish_interrupted(
+            return finish_task_cancelled(
                 &session,
                 &streamer,
                 &tx,
@@ -320,10 +347,9 @@ pub(crate) async fn run_turn(args: RunTurnArgs, cancellation_token: Cancellation
                 &run_id,
             )
             .await;
-            return;
         }
         if !pause.wait_if_paused().await {
-            finish_interrupted(
+            return finish_task_cancelled(
                 &session,
                 &streamer,
                 &tx,
@@ -331,12 +357,11 @@ pub(crate) async fn run_turn(args: RunTurnArgs, cancellation_token: Cancellation
                 &run_id,
             )
             .await;
-            return;
         }
 
         if let Err(error) = record_pending_input(&session, turn_context.take_pending_input()).await
         {
-            finish_error(
+            return finish_task_error(
                 &session,
                 &streamer,
                 &tx,
@@ -345,7 +370,6 @@ pub(crate) async fn run_turn(args: RunTurnArgs, cancellation_token: Cancellation
                 &run_id,
             )
             .await;
-            return;
         }
 
         pre_llm_maintenance(&session).await;
@@ -354,7 +378,7 @@ pub(crate) async fn run_turn(args: RunTurnArgs, cancellation_token: Cancellation
         let step_context = match step_context {
             Ok(step_context) => step_context,
             Err(error) => {
-                finish_error(
+                return finish_task_error(
                     &session,
                     &streamer,
                     &tx,
@@ -363,7 +387,6 @@ pub(crate) async fn run_turn(args: RunTurnArgs, cancellation_token: Cancellation
                     &run_id,
                 )
                 .await;
-                return;
             }
         };
         tracing::debug!(
@@ -382,7 +405,7 @@ pub(crate) async fn run_turn(args: RunTurnArgs, cancellation_token: Cancellation
             {
                 Ok(s) => s,
                 Err(err) => {
-                    finish_error(
+                    return finish_task_error(
                         &session,
                         &streamer,
                         &tx,
@@ -391,7 +414,6 @@ pub(crate) async fn run_turn(args: RunTurnArgs, cancellation_token: Cancellation
                         &run_id,
                     )
                     .await;
-                    return;
                 }
             };
 
@@ -408,7 +430,7 @@ pub(crate) async fn run_turn(args: RunTurnArgs, cancellation_token: Cancellation
         loop {
             if !pause.wait_if_paused().await {
                 pause.clear_abort();
-                finish_interrupted(
+                return finish_task_cancelled(
                     &session,
                     &streamer,
                     &tx,
@@ -422,14 +444,13 @@ pub(crate) async fn run_turn(args: RunTurnArgs, cancellation_token: Cancellation
                     &run_id,
                 )
                 .await;
-                return;
             }
 
             let next = tokio::select! {
                 biased;
                 _ = cancellation_token.cancelled() => {
                     pause.clear_abort();
-                    finish_interrupted(
+                    return finish_task_cancelled(
                         &session,
                         &streamer,
                         &tx,
@@ -437,11 +458,10 @@ pub(crate) async fn run_turn(args: RunTurnArgs, cancellation_token: Cancellation
                         &run_id,
                     )
                     .await;
-                    return;
                 }
                 _ = pause.wait_cancelled() => {
                     pause.clear_abort();
-                    finish_interrupted(
+                    return finish_task_cancelled(
                     &session,
                     &streamer,
                         &tx,
@@ -455,7 +475,6 @@ pub(crate) async fn run_turn(args: RunTurnArgs, cancellation_token: Cancellation
                         &run_id,
                     )
                     .await;
-                    return;
                 }
                 item = stream.next() => item,
             };
@@ -471,7 +490,7 @@ pub(crate) async fn run_turn(args: RunTurnArgs, cancellation_token: Cancellation
                     .await
                     {
                         pause.clear_abort();
-                        return;
+                        return Err(TurnCancelled.into());
                     }
                 }
                 Some(Ok(StreamedAssistantContent::Reasoning(r))) => {
@@ -484,7 +503,7 @@ pub(crate) async fn run_turn(args: RunTurnArgs, cancellation_token: Cancellation
                     .await
                     {
                         pause.clear_abort();
-                        return;
+                        return Err(TurnCancelled.into());
                     }
                 }
                 Some(Ok(StreamedAssistantContent::ThoughtSignature(sig))) => {
@@ -499,7 +518,7 @@ pub(crate) async fn run_turn(args: RunTurnArgs, cancellation_token: Cancellation
                     .await
                     {
                         pause.clear_abort();
-                        return;
+                        return Err(TurnCancelled.into());
                     }
                 }
                 Some(Ok(StreamedAssistantContent::FinalUsage(u))) => {
@@ -519,7 +538,7 @@ pub(crate) async fn run_turn(args: RunTurnArgs, cancellation_token: Cancellation
                         total_usage.add_assign(u);
                         saw_usage = true;
                     }
-                    finish_error(
+                    return finish_task_error(
                         &session,
                         &streamer,
                         &tx,
@@ -528,7 +547,6 @@ pub(crate) async fn run_turn(args: RunTurnArgs, cancellation_token: Cancellation
                         &run_id,
                     )
                     .await;
-                    return;
                 }
             }
         }
@@ -540,7 +558,7 @@ pub(crate) async fn run_turn(args: RunTurnArgs, cancellation_token: Cancellation
                 total_usage.add_assign(u);
                 saw_usage = true;
             }
-            finish_interrupted(
+            return finish_task_cancelled(
                 &session,
                 &streamer,
                 &tx,
@@ -548,7 +566,6 @@ pub(crate) async fn run_turn(args: RunTurnArgs, cancellation_token: Cancellation
                 &run_id,
             )
             .await;
-            return;
         }
 
         if let Some(u) = round_usage {
@@ -581,7 +598,7 @@ pub(crate) async fn run_turn(args: RunTurnArgs, cancellation_token: Cancellation
                     )
                     .await
                 {
-                    finish_error(
+                    return finish_task_error(
                         &session,
                         &streamer,
                         &tx,
@@ -590,14 +607,13 @@ pub(crate) async fn run_turn(args: RunTurnArgs, cancellation_token: Cancellation
                         &run_id,
                     )
                     .await;
-                    return;
                 }
                 if let Err(err) = agent.record_user_message(
                     "[astro:system]\n你的思考过程已记录，但没有生成回复内容。请直接给出你的回答。",
                 )
                 .await
                 {
-                    finish_error(
+                    return finish_task_error(
                         &session,
                         &streamer,
                         &tx,
@@ -606,11 +622,10 @@ pub(crate) async fn run_turn(args: RunTurnArgs, cancellation_token: Cancellation
                         &run_id,
                     )
                     .await;
-                    return;
                 }
                 continue;
             }
-            finish_error(
+            return finish_task_error(
                 &session,
                 &streamer,
                 &tx,
@@ -619,7 +634,6 @@ pub(crate) async fn run_turn(args: RunTurnArgs, cancellation_token: Cancellation
                 &run_id,
             )
             .await;
-            return;
         }
 
         // `pre_verify` hook
@@ -659,7 +673,7 @@ pub(crate) async fn run_turn(args: RunTurnArgs, cancellation_token: Cancellation
                     )
                     .await
                 {
-                    finish_error(
+                    return finish_task_error(
                         &session,
                         &streamer,
                         &tx,
@@ -668,13 +682,12 @@ pub(crate) async fn run_turn(args: RunTurnArgs, cancellation_token: Cancellation
                         &run_id,
                     )
                     .await;
-                    return;
                 }
                 if let Err(err) = agent
                     .record_user_message(&format!("[astro:hook-context]\n{prompt}"))
                     .await
                 {
-                    finish_error(
+                    return finish_task_error(
                         &session,
                         &streamer,
                         &tx,
@@ -683,7 +696,6 @@ pub(crate) async fn run_turn(args: RunTurnArgs, cancellation_token: Cancellation
                         &run_id,
                     )
                     .await;
-                    return;
                 }
                 continue;
             }
@@ -719,7 +731,7 @@ pub(crate) async fn run_turn(args: RunTurnArgs, cancellation_token: Cancellation
             );
             let cancelled = agent.cancel_signal().is_cancelled();
             if cancelled {
-                finish_interrupted(
+                return finish_task_cancelled(
                     &session,
                     &streamer,
                     &tx,
@@ -727,7 +739,6 @@ pub(crate) async fn run_turn(args: RunTurnArgs, cancellation_token: Cancellation
                     &run_id,
                 )
                 .await;
-                return;
             }
         }
 
@@ -749,7 +760,7 @@ pub(crate) async fn run_turn(args: RunTurnArgs, cancellation_token: Cancellation
                 )
                 .await
             {
-                finish_error(
+                return finish_task_error(
                     &session,
                     &streamer,
                     &tx,
@@ -758,7 +769,6 @@ pub(crate) async fn run_turn(args: RunTurnArgs, cancellation_token: Cancellation
                     &run_id,
                 )
                 .await;
-                return;
             }
         }
 
@@ -766,7 +776,7 @@ pub(crate) async fn run_turn(args: RunTurnArgs, cancellation_token: Cancellation
             let pending_input = turn_context.take_pending_input_or_close();
             if !pending_input.is_empty() {
                 if let Err(error) = record_pending_input(&session, pending_input).await {
-                    finish_error(
+                    return finish_task_error(
                         &session,
                         &streamer,
                         &tx,
@@ -775,7 +785,6 @@ pub(crate) async fn run_turn(args: RunTurnArgs, cancellation_token: Cancellation
                         &run_id,
                     )
                     .await;
-                    return;
                 }
                 run_state.set_phase(RunPhase::StreamingLlm);
                 continue;
@@ -795,7 +804,7 @@ pub(crate) async fn run_turn(args: RunTurnArgs, cancellation_token: Cancellation
             )
             .await
             {
-                return;
+                return Err(TurnCancelled.into());
             }
         }
 
@@ -827,7 +836,7 @@ pub(crate) async fn run_turn(args: RunTurnArgs, cancellation_token: Cancellation
         };
 
         let Some(outcomes) = outcomes else {
-            finish_interrupted(
+            return finish_task_cancelled(
                 &session,
                 &streamer,
                 &tx,
@@ -835,7 +844,6 @@ pub(crate) async fn run_turn(args: RunTurnArgs, cancellation_token: Cancellation
                 &run_id,
             )
             .await;
-            return;
         };
 
         if !record_tool_outcomes(
@@ -849,7 +857,7 @@ pub(crate) async fn run_turn(args: RunTurnArgs, cancellation_token: Cancellation
         )
         .await
         {
-            finish_interrupted(
+            return finish_task_cancelled(
                 &session,
                 &streamer,
                 &tx,
@@ -857,7 +865,6 @@ pub(crate) async fn run_turn(args: RunTurnArgs, cancellation_token: Cancellation
                 &run_id,
             )
             .await;
-            return;
         }
 
         if post_tool_maintenance(&session, &calls).await {
@@ -893,9 +900,9 @@ pub(crate) async fn run_turn(args: RunTurnArgs, cancellation_token: Cancellation
         .await
         {
             SummaryOutcome::Finished => {}
-            SummaryOutcome::Aborted => return,
+            SummaryOutcome::Aborted => return Err(TurnCancelled.into()),
             SummaryOutcome::Failed(err) => {
-                finish_error(
+                return finish_task_error(
                     &session,
                     &streamer,
                     &tx,
@@ -904,7 +911,6 @@ pub(crate) async fn run_turn(args: RunTurnArgs, cancellation_token: Cancellation
                     &run_id,
                 )
                 .await;
-                return;
             }
         }
     }
@@ -926,6 +932,17 @@ pub(crate) async fn run_turn(args: RunTurnArgs, cancellation_token: Cancellation
         );
     }
 
+    if cancellation_token.is_cancelled() || pause.is_cancelled() {
+        return finish_task_cancelled(
+            &session,
+            &streamer,
+            &tx,
+            saw_usage.then_some(total_usage),
+            &run_id,
+        )
+        .await;
+    }
+
     finish_success(
         &session,
         &streamer,
@@ -934,6 +951,7 @@ pub(crate) async fn run_turn(args: RunTurnArgs, cancellation_token: Cancellation
         &run_id,
     )
     .await;
+    Ok(None)
 }
 
 /// 先完成 Session task 安装，再返回可消费的 [`MultiTurnStream`]。

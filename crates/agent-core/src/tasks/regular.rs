@@ -76,8 +76,7 @@ impl RegularTask {
                 return Err(error);
             }
         };
-        run_turn(args.with_system_prompt(system_prompt), cancellation_token).await;
-        Ok(None)
+        run_turn(args.with_system_prompt(system_prompt), cancellation_token).await
     }
 }
 

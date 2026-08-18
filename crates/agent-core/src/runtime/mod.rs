@@ -150,6 +150,8 @@ pub struct Session {
     pub(crate) task_completions: TokioMutex<HashMap<String, tokio_util::sync::CancellationToken>>,
     /// Bound atomically once by [`AstroThread`] for session runtime I/O.
     runtime_io: OnceLock<RuntimeIoBindings>,
+    /// Serializes rollout persistence, status reduction, and live delivery.
+    event_dispatch: TokioMutex<()>,
     /// Guards one-time release of task, hook, MCP, and terminal resources.
     runtime_shutdown: AtomicBool,
     /// Shared completion observed by every concurrent shutdown caller.
@@ -267,6 +269,7 @@ impl Session {
             task_admission: TokioMutex::new(()),
             task_completions: TokioMutex::new(HashMap::new()),
             runtime_io: OnceLock::new(),
+            event_dispatch: TokioMutex::new(()),
             runtime_shutdown: AtomicBool::new(false),
             runtime_shutdown_complete: tokio_util::sync::CancellationToken::new(),
         })
@@ -303,6 +306,19 @@ impl Session {
     }
 
     pub(crate) async fn send_event_raw_with_persistence(&self, event: Event, persist: bool) {
+        self.send_event_raw_with_persistence_and_hook(event, persist, async {})
+            .await;
+    }
+
+    async fn send_event_raw_with_persistence_and_hook<F>(
+        &self,
+        event: Event,
+        persist: bool,
+        after_persist: F,
+    ) where
+        F: std::future::Future<Output = ()>,
+    {
+        let _dispatch = self.event_dispatch.lock().await;
         if persist {
             if let Some(bindings) = self.runtime_io.get() {
                 if let Err(error) = bindings
@@ -314,10 +330,33 @@ impl Session {
                 }
             }
         }
-        self.deliver_event_raw(event).await;
+        after_persist.await;
+        self.deliver_event_raw_inner(event).await;
+    }
+
+    #[cfg(test)]
+    async fn send_event_with_after_persist_hook<F>(
+        &self,
+        turn_id: &str,
+        msg: EventMsg,
+        after_persist: F,
+    ) where
+        F: std::future::Future<Output = ()>,
+    {
+        let event = Event {
+            id: turn_id.to_string(),
+            msg,
+        };
+        self.send_event_raw_with_persistence_and_hook(event, true, after_persist)
+            .await;
     }
 
     pub(crate) async fn deliver_event_raw(&self, event: Event) {
+        let _dispatch = self.event_dispatch.lock().await;
+        self.deliver_event_raw_inner(event).await;
+    }
+
+    async fn deliver_event_raw_inner(&self, event: Event) {
         let Some(bindings) = self.runtime_io.get() else {
             return;
         };
@@ -1120,6 +1159,86 @@ mod tests {
             api_key: format!("k-{id}"),
             base_url: format!("https://{id}.example"),
         }
+    }
+
+    #[tokio::test]
+    async fn concurrent_events_keep_rollout_live_and_status_in_one_order() {
+        let dir = TempDir::new().unwrap();
+        let rollout_path = dir.path().join("ordered-events.jsonl");
+        let rollout = RolloutRecorder::open(
+            rollout_path.clone(),
+            agent_rollout::ThreadHistoryMode::Paginated,
+        )
+        .await
+        .unwrap();
+        let session = Arc::new(Session::new(test_config(&dir)).unwrap());
+        let thread = AstroThread::spawn(Arc::clone(&session), rollout).unwrap();
+        let first_persisted = Arc::new(tokio::sync::Barrier::new(2));
+        let release_first = Arc::new(tokio::sync::Barrier::new(2));
+        let first = {
+            let session = Arc::clone(&session);
+            let first_persisted = Arc::clone(&first_persisted);
+            let release_first = Arc::clone(&release_first);
+            tokio::spawn(async move {
+                session
+                    .send_event_with_after_persist_hook(
+                        "turn-a",
+                        EventMsg::TurnStarted(agent_protocol::TurnStartedEvent {
+                            turn_id: "turn-a".into(),
+                        }),
+                        async move {
+                            first_persisted.wait().await;
+                            release_first.wait().await;
+                        },
+                    )
+                    .await;
+            })
+        };
+        first_persisted.wait().await;
+        let mut second = {
+            let session = Arc::clone(&session);
+            tokio::spawn(async move {
+                session
+                    .send_event(
+                        "turn-b",
+                        EventMsg::TurnStarted(agent_protocol::TurnStartedEvent {
+                            turn_id: "turn-b".into(),
+                        }),
+                    )
+                    .await;
+            })
+        };
+        assert!(
+            tokio::time::timeout(std::time::Duration::from_millis(50), &mut second)
+                .await
+                .is_err(),
+            "second event must not overtake the first after its rollout write"
+        );
+        release_first.wait().await;
+        first.await.unwrap();
+        second.await.unwrap();
+
+        let first_live = thread.next_event().await.unwrap();
+        let second_live = thread.next_event().await.unwrap();
+        assert_eq!(
+            [first_live.id.as_str(), second_live.id.as_str()],
+            ["turn-a", "turn-b"]
+        );
+        assert_eq!(
+            thread.status(),
+            AgentStatus::Running {
+                turn_id: "turn-b".into()
+            }
+        );
+        let rollout = agent_rollout::read_rollout(&rollout_path).await.unwrap();
+        let turns: Vec<_> = rollout
+            .iter()
+            .filter_map(|item| match item {
+                RolloutItem::EventMsg(EventMsg::TurnStarted(event)) => Some(event.turn_id.as_str()),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(turns, ["turn-a", "turn-b"]);
     }
 
     #[test]
