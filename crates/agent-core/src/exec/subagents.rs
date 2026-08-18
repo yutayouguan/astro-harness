@@ -86,7 +86,8 @@ async fn run_agent_thread_inner(
                 if request.interrupt_message {
                     let _ = agent.lock().await.record_user_message(
                         "[astro:system]\nThe previous agent turn was interrupted by the parent.",
-                    );
+                    )
+                    .await;
                 }
                 store.set_status(
                     &thread_id,

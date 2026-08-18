@@ -68,11 +68,11 @@ pub(crate) async fn run_max_iterations_summary(a: MaxIterationsSummaryArgs<'_>) 
     }
 
     let history = {
-        let mut agent = session.lock().await;
+        let agent = session.lock().await;
         agent
-            .session_messages
-            .push(Message::user(MAX_ITERATIONS_SUMMARY_PROMPT));
-        agent.session_messages.clone()
+            .record_items(vec![Message::user(MAX_ITERATIONS_SUMMARY_PROMPT)])
+            .await;
+        agent.clone_history().await
     };
 
     let raw_stream = match streamer
@@ -178,14 +178,16 @@ pub(crate) async fn run_max_iterations_summary(a: MaxIterationsSummaryArgs<'_>) 
                 }
                 // 持久化已积累的部分回复，保证历史连贯
                 if !full_response.is_empty() {
-                    let mut agent = session.lock().await;
+                    let agent = session.lock().await;
                     let details = Some(timeline.reasoning_details_snapshot());
-                    let _ = agent.record_assistant_message_with_tools(
-                        &full_response,
-                        None,
-                        (!full_reasoning.is_empty()).then_some(full_reasoning.as_str()),
-                        details,
-                    );
+                    let _ = agent
+                        .record_assistant_message_with_tools(
+                            &full_response,
+                            None,
+                            (!full_reasoning.is_empty()).then_some(full_reasoning.as_str()),
+                            details,
+                        )
+                        .await;
                 }
                 return SummaryOutcome::Failed(format!(
                     "迭代预算已用尽（{used}/{max_total}），总结流式失败: {err}"
@@ -216,14 +218,17 @@ pub(crate) async fn run_max_iterations_summary(a: MaxIterationsSummaryArgs<'_>) 
     }
 
     {
-        let mut agent = session.lock().await;
+        let agent = session.lock().await;
         let details = Some(timeline.reasoning_details_snapshot());
-        if let Err(err) = agent.record_assistant_message_with_tools(
-            &full_response,
-            None,
-            (!full_reasoning.is_empty()).then_some(full_reasoning.as_str()),
-            details,
-        ) {
+        if let Err(err) = agent
+            .record_assistant_message_with_tools(
+                &full_response,
+                None,
+                (!full_reasoning.is_empty()).then_some(full_reasoning.as_str()),
+                details,
+            )
+            .await
+        {
             return SummaryOutcome::Failed(err.to_string());
         }
     }

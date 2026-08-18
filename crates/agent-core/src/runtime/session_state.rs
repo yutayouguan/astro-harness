@@ -6,11 +6,13 @@
 //! a Tokio mutex so callers never expose references tied to a state guard.
 
 use std::sync::Arc;
+use types::message::Message;
 
 use super::{compression_state, turn_budget, StepContext, TurnContext};
 
 /// Persistent mutable state previously stored directly on [`super::Session`].
 pub(crate) struct SessionState {
+    pub(crate) history: Vec<Message>,
     pub(crate) compression: compression_state::CompressionState,
     pub(crate) turn: turn_budget::TurnState,
     pub(crate) pending_inject_context: Option<String>,
@@ -20,9 +22,10 @@ pub(crate) struct SessionState {
     pub(crate) current_step_context: Option<Arc<StepContext>>,
 }
 
-impl Default for SessionState {
-    fn default() -> Self {
+impl SessionState {
+    pub(crate) fn new(history: Vec<Message>) -> Self {
         Self {
+            history,
             compression: compression_state::CompressionState::default(),
             turn: turn_budget::TurnState::default(),
             pending_inject_context: None,
@@ -31,5 +34,27 @@ impl Default for SessionState {
             current_turn_context: None,
             current_step_context: None,
         }
+    }
+
+    pub(crate) fn record_items<I>(&mut self, items: I)
+    where
+        I: IntoIterator<Item = Message>,
+    {
+        self.history.extend(items);
+    }
+
+    pub(crate) fn clone_history(&self) -> Vec<Message> {
+        self.history.clone()
+    }
+
+    #[cfg(test)]
+    pub(crate) fn replace_history(&mut self, history: Vec<Message>) {
+        self.history = history;
+    }
+}
+
+impl Default for SessionState {
+    fn default() -> Self {
+        Self::new(Vec::new())
     }
 }

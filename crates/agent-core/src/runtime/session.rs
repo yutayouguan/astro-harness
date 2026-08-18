@@ -3,8 +3,8 @@ use std::path::PathBuf;
 use ::session::ConversationStore;
 use types::message::Message;
 
-/// 从会话存储冷启动重建 `session_messages`（权威以 DB 为准）。
-pub fn hydrate_session_messages(
+/// 从会话存储冷启动重建 `SessionState.history`（权威以 DB 为准）。
+pub fn hydrate_history(
     sessions: &dyn ConversationStore,
     session_id: &str,
 ) -> anyhow::Result<Vec<Message>> {

@@ -1,6 +1,6 @@
 # Agent 生命周期详细设计
 
-> 版本：v2.9
+> 版本：v2.11
 > 日期：2026-08-18
 > 状态：实施基线  
 > 上游参考：[OpenAI Codex](https://github.com/openai/codex) `632e35ce8d5dec43b75dbf99f9e6fa52bed47c3d`  
@@ -516,7 +516,9 @@ schema 和 RPC 字段改名都必须提供 migration 或 serde alias。
   - [x] 将已由 `Session.state` 保护的轮次、压缩、注入上下文与交互模式 API
     收窄为 `&self`，并用 `Arc<Session>` 编译期契约锁定。
   - [x] 引入 Codex 同名异步 `Session::clone_history()` 快照边界，先迁移只读消费者。
-  - [ ] 将 `session_messages` 真实迁入 `SessionState.history`，并收口记录、压缩回写与测试夹具。
+  - [x] 将 `session_messages` 真实迁入 `SessionState.history`，并收口记录、压缩回写与测试夹具。
+  - [x] 将消息记录、provider history、tool context maintenance 与 pending input 记录
+    收窄为 `&Session`，并用 `Arc<Session>` 编译期契约锁定。
   - [ ] 将 `SessionTask`、streaming、background 和 server 签名迁移为 `Arc<Session>`。
 
 v2.3 落地说明：foreground、background、Cron 与 SubAgent 不再先调用
@@ -569,6 +571,26 @@ mid-run summary、background 输出提取与 memory review 等 5 个只读消费
 `clone_history_returns_an_owned_snapshot_through_arc` 同时锁定 `Arc<Session>` 可调用性与
 快照隔离性。本批刻意不移动 `session_messages` 字段：混合追加、压缩回写和集成测试
 夹具将在下一批统一收口到 `SessionState.history`，而只读调用方无需再次改签名。
+
+v2.10 history 内锁化批次 2：删除 `Session.session_messages`，由
+`SessionState.history: Vec<Message>` 唯一持有运行时会话历史，并对齐 Codex 的
+`SessionState::record_items / clone_history / replace_history` 与 `Session` 异步代理。
+消息记录方法在 SQLite 成功追加后，仅短暂获取 state 锁写入内存镜像；provider history、
+压缩计划和占用率计算先获取拥有所有权的快照，任何 Provider、工具、MCP 或辅助模型 I/O
+都不持有 state guard。压缩回写只在更新单条 `compressed_content` 时持锁，测试夹具统一
+通过 `record_items`、`clone_history` 与 `replace_history`，阻止重新暴露可变 history 字段。
+
+v2.11 shared receiver 批次：将 `record_assistant_message*`、`record_user_message`、
+`record_tool_result*`、`record_turn_input`、`provider_history`、`maintain_tool_context` 与
+`compress_tool_results_if_needed` 从 `&mut Session` 收窄为 `&Session`。这些方法只写
+`SessionServices` 的同步持久层或 `SessionState` 内锁状态，不再要求外层 session mutex 的
+可变借用。`session_state_api_is_callable_through_arc` 直接从 `Arc<Session>` 构造上述 future，
+作为编译期回归门；streaming 中因此移除 9 个无意义的 mutable guard。新增
+`conversation_write_lock` 将 SQLite 持久化与 `SessionState.history` 镜像追加串成同一写序，
+防止移除外锁后并发记录产生 DB/history 次序分叉；
+`conversation_write_lock_serializes_persistence_and_history` 固定该契约。本批不提前双包装
+background handle：background、streaming 与 `SessionTask` 必须在下一批共享同一个
+`Arc<Session>`，避免 `Arc<Mutex<Session>>` 与 `Arc<Session>` 并存造成身份分裂。
 
 ### Phase C：工具运行时
 

@@ -14,21 +14,23 @@ impl AgentLoop {
     }
 
     /// 将 assistant 纯文本回复写入记忆与会话镜像。
-    pub fn record_assistant_message(&mut self, content: &str) -> anyhow::Result<()> {
+    pub async fn record_assistant_message(&self, content: &str) -> anyhow::Result<()> {
         self.record_assistant_message_with_tools(content, None, None, None)
+            .await
     }
 
     /// 将 assistant 回复（可含 tool_calls / reasoning / reasoning_details）写入记忆与会话镜像。
     ///
     /// 非空 `tool_calls` 时使用 `Message::assistant_with_tools` 保留结构化调用信息；
     /// 落盘通过 `SessionStore::append_message` 写入富字段。
-    pub fn record_assistant_message_with_tools(
-        &mut self,
+    pub async fn record_assistant_message_with_tools(
+        &self,
         content: &str,
         tool_calls: Option<Vec<types::message::ToolCall>>,
         reasoning: Option<&str>,
         reasoning_details: Option<serde_json::Value>,
     ) -> anyhow::Result<()> {
+        let _write_guard = self.conversation_write_lock.lock().await;
         let tool_calls_json = match &tool_calls {
             Some(calls) if !calls.is_empty() => Some(serde_json::to_value(calls)?),
             _ => None,
@@ -53,15 +55,15 @@ impl AgentLoop {
         let mut msg = msg;
         msg.reasoning = reasoning.map(str::to_string);
         msg.thought_signature = thought_signature;
-        self.session_messages.push(msg);
+        self.record_items_unlocked(vec![msg]).await;
         Ok(())
     }
 
     /// 记录 assistant 回复并关联已解析的工具调用。
     ///
     /// 封装 `ParsedToolCall → ToolCall` 映射，消除 foreground / background 的重复代码。
-    pub(crate) fn record_assistant_with_calls(
-        &mut self,
+    pub(crate) async fn record_assistant_with_calls(
+        &self,
         text: &str,
         calls: &[types::ParsedToolCall],
         reasoning: Option<&str>,
@@ -83,6 +85,7 @@ impl AgentLoop {
             )
         };
         self.record_assistant_message_with_tools(text, tc, reasoning, reasoning_details)
+            .await
     }
 
     /// 工具执行后回写最近一条 assistant 的 timeline/surfaces（避免历史丢 A2UI 卡）。
@@ -98,9 +101,10 @@ impl AgentLoop {
     /// 将 user 角色消息写入记忆与会话镜像。
     ///
     /// 供 `pre_verify` 的 `KeepGoing(msg)` 等下游控制流场景使用：与 `pending_inject_context`
-    /// 的临时注入不同，本方法直接落盘并写入 `session_messages`，确保下一轮 API 历史与
+    /// 的临时注入不同，本方法直接落盘并写入 `SessionState.history`，确保下一轮 API 历史与
     /// `SessionStore` 保持一致（角色交替），避免连续 assistant 触发 Provider 400。
-    pub fn record_user_message(&mut self, content: &str) -> anyhow::Result<()> {
+    pub async fn record_user_message(&self, content: &str) -> anyhow::Result<()> {
+        let _write_guard = self.conversation_write_lock.lock().await;
         self.services
             .sessions
             .ensure_session(&self.session_id, "tauri")?;
@@ -108,13 +112,14 @@ impl AgentLoop {
             content: Some(content),
             ..NewMessage::empty(&self.session_id, "user")
         })?;
-        self.session_messages.push(Message::user(content));
+        self.record_items_unlocked(vec![Message::user(content)])
+            .await;
         Ok(())
     }
 
     /// 将 tool 角色结果写入记忆与会话镜像（无 tool_call_id / tool_name）。
-    pub fn record_tool_result(&mut self, content: &str) -> anyhow::Result<()> {
-        self.record_tool_result_with_id(None, None, content)
+    pub async fn record_tool_result(&self, content: &str) -> anyhow::Result<()> {
+        self.record_tool_result_with_id(None, None, content).await
     }
 
     /// 将工具生成的媒体文件实时登记到 artifacts 索引，关联当前会话与消息。
@@ -157,12 +162,13 @@ impl AgentLoop {
     }
 
     /// 将 tool 角色结果写入记忆与会话镜像，并关联 `tool_call_id` / `tool_name`。
-    pub fn record_tool_result_with_id(
-        &mut self,
+    pub async fn record_tool_result_with_id(
+        &self,
         tool_call_id: Option<&str>,
         tool_name: Option<&str>,
         content: &str,
     ) -> anyhow::Result<()> {
+        let _write_guard = self.conversation_write_lock.lock().await;
         let (_, media) = types::extract_tool_media(content);
         let media_owned = if media.is_empty() {
             None
@@ -211,7 +217,7 @@ impl AgentLoop {
         if let Some(view) = spill_view {
             msg.compressed_content = Some(view);
         }
-        self.session_messages.push(msg);
+        self.record_items_unlocked(vec![msg]).await;
         Ok(())
     }
 }
