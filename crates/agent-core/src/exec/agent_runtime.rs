@@ -9,7 +9,7 @@ use subagents::{
 use tokio::sync::watch;
 use uuid::Uuid;
 
-use crate::runtime::{Config, Session};
+use crate::runtime::{Config, Session, TurnResult};
 use crate::streaming::ChatOverride;
 use crate::tasks::TurnInput;
 
@@ -19,6 +19,10 @@ pub struct RunAgentTurnRequest {
     pub runtime: SpawnRuntimeV2Request,
     pub memory_dir: PathBuf,
     pub chat_override: Option<ChatOverride>,
+    /// Follow-up turns obtain their user input from the durable mailbox at the
+    /// first sampling boundary instead of duplicating it as an initial input.
+    pub consume_mailbox: bool,
+    pub(super) followup_start_tx: Option<watch::Sender<Option<Result<(), String>>>>,
 }
 
 #[derive(Debug, Clone)]
@@ -36,6 +40,22 @@ struct ActiveAgentTurn {
     turn_id: String,
     interrupt: Arc<AgentThreadControl>,
     terminated: watch::Receiver<Option<RunnerAck>>,
+    pending_followup: Option<PendingFollowup>,
+}
+
+struct PendingFollowup {
+    request: RunAgentTurnRequest,
+    result_rx: watch::Receiver<Option<Result<(), String>>>,
+}
+
+pub(super) enum FollowupAdmission {
+    StartNow {
+        request: Box<RunAgentTurnRequest>,
+        result_rx: watch::Receiver<Option<Result<(), String>>>,
+    },
+    AwaitStart {
+        result_rx: watch::Receiver<Option<Result<(), String>>>,
+    },
 }
 
 #[cfg(test)]
@@ -246,6 +266,7 @@ impl AgentRuntimeManager {
                     turn_id: turn_id.clone(),
                     interrupt: Arc::clone(&interrupt),
                     terminated: terminated_rx,
+                    pending_followup: None,
                 },
             );
         }
@@ -301,7 +322,6 @@ impl AgentRuntimeManager {
             )?;
             return Err(error);
         }
-
         let mut owner_guard = StartTurnOwnerGuard {
             manager: self,
             control: control.as_ref(),
@@ -385,11 +405,11 @@ impl AgentRuntimeManager {
                 }
             });
         self.run_before_cleanup_hook();
-        let active_result = self
-            .remove_active_if_turn(&thread_id, &turn_id)
-            .and_then(|removed| {
+        let mut active_result = self
+            .remove_active_and_take_followup(&thread_id, &turn_id)
+            .and_then(|(removed, pending)| {
                 self.run_cleanup_failure_hook("active")?;
-                Ok(removed)
+                Ok((removed, pending))
             });
         let runtime_result = control
             .remove_runtime_if_same(&thread_id, &owner_guard.runtime_handle)
@@ -399,6 +419,10 @@ impl AgentRuntimeManager {
             });
         owner_guard.release_permit();
         owner_guard.disarm();
+        let pending_followup = active_result
+            .as_mut()
+            .ok()
+            .and_then(|(_, pending)| pending.take());
         let completion_result = combine_completion_results([
             durable_result,
             active_result.map(|_| ()),
@@ -409,6 +433,32 @@ impl AgentRuntimeManager {
             Err(error) => owner_guard.publish_failure(error),
         }
         completion_result?;
+
+        if let Some(pending) = pending_followup {
+            let start_tx = pending.request.followup_start_tx.clone();
+            let next_result = if terminal_status == AgentStatusV2::Shutdown {
+                Err(anyhow::anyhow!(
+                    "cannot start a follow-up after agent runtime shutdown"
+                ))
+            } else if control
+                .drain_mailbox(&pending.request.thread.canonical_path)?
+                .is_empty()
+            {
+                Ok(())
+            } else {
+                Box::pin(self.start_turn(pending.request)).await
+            };
+            if let Some(start_tx) = start_tx {
+                if start_tx.borrow().is_none() {
+                    let shared = next_result
+                        .as_ref()
+                        .map(|_| ())
+                        .map_err(|error| format!("{error:#}"));
+                    let _ = start_tx.send(Some(shared));
+                }
+            }
+            next_result?;
+        }
 
         match result {
             Err(error) if !interrupt.is_interrupted() && !interrupt.is_closed() => Err(error),
@@ -438,6 +488,38 @@ impl AgentRuntimeManager {
             .lock()
             .map(|active| active.contains_key(thread_id))
             .unwrap_or(false)
+    }
+
+    /// Atomically decide whether a durable follow-up must start immediately or
+    /// be handed off from the current active generation.  The first caller for
+    /// an active turn owns the handoff; concurrent callers join its shared
+    /// result, so one next turn can consume every ordered mailbox message.
+    pub(super) fn request_or_start_followup(
+        &self,
+        thread_id: &str,
+        mut request: RunAgentTurnRequest,
+    ) -> anyhow::Result<FollowupAdmission> {
+        let mut active = self.lock_active()?;
+        let Some(turn) = active.get_mut(thread_id) else {
+            let (result_tx, result_rx) = watch::channel(None);
+            request.followup_start_tx = Some(result_tx);
+            return Ok(FollowupAdmission::StartNow {
+                request: Box::new(request),
+                result_rx,
+            });
+        };
+        if let Some(handoff) = &turn.pending_followup {
+            return Ok(FollowupAdmission::AwaitStart {
+                result_rx: handoff.result_rx.clone(),
+            });
+        }
+        let (result_tx, result_rx) = watch::channel(None);
+        request.followup_start_tx = Some(result_tx);
+        turn.pending_followup = Some(PendingFollowup {
+            request,
+            result_rx: result_rx.clone(),
+        });
+        Ok(FollowupAdmission::AwaitStart { result_rx })
     }
 
     fn termination_subscription(
@@ -500,7 +582,7 @@ impl AgentRuntimeManager {
     async fn pause_before_terminal_persist(&self) {}
 
     #[cfg(test)]
-    fn set_before_cleanup_hook(&self, hook: Option<BeforeCleanupHook>) {
+    pub(super) fn set_before_cleanup_hook(&self, hook: Option<BeforeCleanupHook>) {
         *self.before_cleanup_hook.lock().unwrap() = hook;
     }
 
@@ -605,14 +687,31 @@ impl AgentRuntimeManager {
     }
 
     fn remove_active_if_turn(&self, thread_id: &str, turn_id: &str) -> anyhow::Result<bool> {
+        let (removed, pending) = self.remove_active_and_take_followup(thread_id, turn_id)?;
+        if let Some(pending) = pending {
+            if let Some(start_tx) = pending.request.followup_start_tx {
+                let _ = start_tx.send(Some(Err(
+                    "active runtime ended before follow-up handoff".into()
+                )));
+            }
+        }
+        Ok(removed)
+    }
+
+    fn remove_active_and_take_followup(
+        &self,
+        thread_id: &str,
+        turn_id: &str,
+    ) -> anyhow::Result<(bool, Option<PendingFollowup>)> {
         let mut active = self.lock_active()?;
         let matches = active
             .get(thread_id)
             .is_some_and(|turn| turn.turn_id == turn_id);
-        if matches {
-            active.remove(thread_id);
-        }
-        Ok(matches)
+        let pending = matches
+            .then(|| active.remove(thread_id))
+            .flatten()
+            .and_then(|turn| turn.pending_followup);
+        Ok((matches, pending))
     }
 
     fn active_turn_matches(&self, thread_id: &str, turn_id: &str) -> anyhow::Result<bool> {
@@ -751,18 +850,65 @@ async fn run_request(
     }
     anyhow::ensure!(!targets.is_empty(), "agent turn has no chat target");
     session.set_chat_targets(targets.clone());
-    let session = Arc::new(tokio::sync::Mutex::new(session));
-    let result = crate::exec::background::run_background_multi_turn_controlled_with_chat(
-        Arc::clone(&session),
-        targets,
-        vec![TurnInput::UserInput {
-            content: request.runtime.model_request.message.clone(),
+    let prepared_system_prompt = if request.consume_mailbox {
+        let messages = request
+            .control
+            .drain_mailbox(&request.thread.canonical_path)?;
+        anyhow::ensure!(
+            !messages.is_empty(),
+            "follow-up turn has no durable mailbox input"
+        );
+        let through_sequence = messages.last().expect("non-empty mailbox").sequence;
+        let input = TurnInput::UserInput {
+            content: messages
+                .iter()
+                .map(|message| message.payload.as_str())
+                .collect::<Vec<_>>()
+                .join("\n\n"),
             image_data_urls: Vec::new(),
-        }],
-        Some(Arc::clone(&interrupt)),
-        request.chat_override.clone(),
-    )
-    .await;
+        };
+        let turn = session.prepare_turn(std::slice::from_ref(&input)).await?;
+        let system_prompt = match turn {
+            TurnResult::Continue { system_prompt, .. } => system_prompt,
+            TurnResult::BudgetExhausted => anyhow::bail!("conversation turn budget exhausted"),
+            TurnResult::Interrupted => anyhow::bail!("follow-up turn interrupted while preparing"),
+            other => anyhow::bail!("unexpected follow-up preparation result: {other:?}"),
+        };
+        // Acknowledge only after the combined mailbox input is durable and in
+        // memory. A failed start before this point therefore remains retryable.
+        request
+            .control
+            .ack_mailbox(&request.thread.canonical_path, through_sequence)?;
+        Some(system_prompt)
+    } else {
+        None
+    };
+    let session = Arc::new(tokio::sync::Mutex::new(session));
+    if let Some(started) = request.followup_start_tx.as_ref() {
+        let _ = started.send(Some(Ok(())));
+    }
+    let result = if let Some(system_prompt) = prepared_system_prompt {
+        crate::exec::background::run_background_prepared_turn_controlled_with_chat(
+            Arc::clone(&session),
+            targets,
+            system_prompt,
+            Some(Arc::clone(&interrupt)),
+            request.chat_override.clone(),
+        )
+        .await
+    } else {
+        crate::exec::background::run_background_multi_turn_controlled_with_chat(
+            Arc::clone(&session),
+            targets,
+            vec![TurnInput::UserInput {
+                content: request.runtime.model_request.message.clone(),
+                image_data_urls: Vec::new(),
+            }],
+            Some(Arc::clone(&interrupt)),
+            request.chat_override.clone(),
+        )
+        .await
+    };
     if result.is_err() && !interrupt.is_interrupted() && !interrupt.is_closed() {
         session
             .lock()
@@ -798,14 +944,24 @@ mod tests {
         AgentControl, AgentGraphStore, AgentPath, AgentRuntimeHandle, AgentStatusV2,
         AgentThreadControl, Limits, RunnerEvent, SpawnAgentV2Request, SpawnRuntimeV2Request,
     };
+
     use tokio::sync::watch;
 
     use crate::streaming::ChatOverride;
 
     use super::{
-        wait_for_termination, AckSubscribeHook, ActiveAgentTurn, AgentRuntimeManager,
-        RunAgentTurnRequest, StartTurnOwnerGuard,
+        sandbox_profile, wait_for_termination, AckSubscribeHook, ActiveAgentTurn,
+        AgentRuntimeManager, RunAgentTurnRequest, StartTurnOwnerGuard,
     };
+
+    #[test]
+    fn custom_parent_sandbox_profile_is_preserved_for_child_session() {
+        assert_eq!(sandbox_profile(Some("locked")).as_deref(), Some("locked"));
+        assert_eq!(
+            sandbox_profile(Some("workspace_write")).as_deref(),
+            Some(types::WORKSPACE_PROFILE)
+        );
+    }
 
     fn scripted_chat(reply: &str) -> ChatOverride {
         let reply = reply.to_string();
@@ -977,6 +1133,8 @@ mod tests {
             },
             memory_dir,
             chat_override: Some(chat_override),
+            consume_mailbox: false,
+            followup_start_tx: None,
         }
     }
 
@@ -2146,6 +2304,7 @@ mod tests {
                 turn_id: "replacement-turn".into(),
                 interrupt: Arc::clone(&replacement_control),
                 terminated: replacement_rx,
+                pending_followup: None,
             },
         );
         let (stale_tx, stale_rx) = watch::channel(None);

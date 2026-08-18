@@ -15,7 +15,7 @@ use subagents::{
 };
 use tools::{AgentThreadDispatch, SpawnAgentDispatchRequest};
 
-use super::agent_runtime::{AgentRuntimeManager, RunAgentTurnRequest};
+use super::agent_runtime::{AgentRuntimeManager, FollowupAdmission, RunAgentTurnRequest};
 use crate::runtime::{Config, Session};
 
 #[derive(Clone)]
@@ -132,6 +132,7 @@ impl DefaultAgentThreadDispatch {
         &self,
         thread: subagents::AgentThreadV2,
         stored: StoredRuntimeRequest,
+        consume_mailbox: bool,
     ) -> RunAgentTurnRequest {
         RunAgentTurnRequest {
             control: Arc::clone(&self.control),
@@ -142,6 +143,21 @@ impl DefaultAgentThreadDispatch {
             chat_override: self.chat_override.clone(),
             #[cfg(not(test))]
             chat_override: None,
+            consume_mailbox,
+            followup_start_tx: None,
+        }
+    }
+
+    async fn wait_for_shared_followup_start(
+        mut result_rx: tokio::sync::watch::Receiver<Option<Result<(), String>>>,
+    ) -> anyhow::Result<()> {
+        loop {
+            if let Some(result) = result_rx.borrow().clone() {
+                return result.map_err(anyhow::Error::msg);
+            }
+            result_rx.changed().await.map_err(|_| {
+                anyhow::anyhow!("follow-up handoff owner ended before starting the next turn")
+            })?;
         }
     }
 }
@@ -211,7 +227,7 @@ impl AgentThreadDispatch for DefaultAgentThreadDispatch {
             return Err(error);
         }
         if let Err(start_error) = self
-            .launch_turn(self.run_request(thread.clone(), stored))
+            .launch_turn(self.run_request(thread.clone(), stored, false))
             .await
         {
             self.runtime_requests.remove(&thread.thread_id);
@@ -264,18 +280,42 @@ impl AgentThreadDispatch for DefaultAgentThreadDispatch {
         let message = self
             .control
             .enqueue_message(&self.current_path, request, true)?;
-        if !self.runtime_manager.is_running(&target.thread_id) {
-            let mut stored = self
-                .runtime_requests
-                .get(&target.thread_id)?
-                .ok_or_else(|| {
-                    anyhow::anyhow!(
-                        "agent runtime configuration is unavailable for {}",
-                        target.canonical_path
-                    )
-                })?;
-            stored.runtime.model_request.message = followup_text;
-            self.launch_turn(self.run_request(target, stored)).await?;
+        let mut stored = self
+            .runtime_requests
+            .get(&target.thread_id)?
+            .ok_or_else(|| {
+                anyhow::anyhow!(
+                    "agent runtime configuration is unavailable for {}",
+                    target.canonical_path
+                )
+            })?;
+        stored.runtime.model_request.message = followup_text;
+        let run = self.run_request(target.clone(), stored, true);
+        match self
+            .runtime_manager
+            .request_or_start_followup(&target.thread_id, run)?
+        {
+            FollowupAdmission::StartNow { request, result_rx } => {
+                let start_tx = request
+                    .followup_start_tx
+                    .clone()
+                    .expect("follow-up start admission owns its result channel");
+                let manager = Arc::clone(&self.runtime_manager);
+                tokio::spawn(async move {
+                    let start_result = manager.start_turn(*request).await;
+                    if start_tx.borrow().is_none() {
+                        let shared = start_result
+                            .as_ref()
+                            .map(|_| ())
+                            .map_err(|error| format!("{error:#}"));
+                        let _ = start_tx.send(Some(shared));
+                    }
+                });
+                Self::wait_for_shared_followup_start(result_rx).await?
+            }
+            FollowupAdmission::AwaitStart { result_rx } => {
+                Self::wait_for_shared_followup_start(result_rx).await?
+            }
         }
         Ok(MessageAgentV2Result {
             message_id: message.message_id,
@@ -513,6 +553,7 @@ mod tests {
     use futures::stream;
     use providers::types::stream::StreamChunk;
     use providers::CompletionStream;
+    use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
     use subagents::{AgentGraphStore, Limits};
 
     fn dispatch(dir: &tempfile::TempDir) -> DefaultAgentThreadDispatch {
@@ -567,6 +608,30 @@ mod tests {
         Arc::new(move |_messages, _tools, _config| {
             Box::pin(async move {
                 Ok(Box::pin(stream::pending::<anyhow::Result<StreamChunk>>()) as CompletionStream)
+            })
+        })
+    }
+
+    fn gated_first_turn_chat(
+        entered: Arc<tokio::sync::Notify>,
+        release: Arc<tokio::sync::Notify>,
+    ) -> crate::streaming::ChatOverride {
+        let calls = Arc::new(AtomicUsize::new(0));
+        Arc::new(move |_messages, _tools, _config| {
+            let call = calls.fetch_add(1, Ordering::SeqCst);
+            let entered = Arc::clone(&entered);
+            let release = Arc::clone(&release);
+            Box::pin(async move {
+                if call == 0 {
+                    entered.notify_one();
+                    release.notified().await;
+                }
+                Ok(Box::pin(stream::iter(vec![
+                    Ok(StreamChunk::Text(format!("turn-{call}"))),
+                    Ok(StreamChunk::Done {
+                        finish_reason: "stop".into(),
+                    }),
+                ])) as CompletionStream)
             })
         })
     }
@@ -787,6 +852,179 @@ mod tests {
         assert!(mailbox[1].trigger_turn);
     }
 
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn followup_at_terminal_cleanup_is_handed_off_to_a_new_turn() {
+        let dir = tempfile::tempdir().unwrap();
+        let memory_dir = dir.path().join("memory");
+        let sessions =
+            session::SessionStore::open_sessions_dir(&memory_dir.join("sessions")).unwrap();
+        sessions.ensure_session("root-session", "test").unwrap();
+        let mut dispatch = dispatch(&dir);
+        let entered_sampling = Arc::new(tokio::sync::Notify::new());
+        let release_sampling = Arc::new(tokio::sync::Notify::new());
+        dispatch.chat_override = Some(gated_first_turn_chat(
+            Arc::clone(&entered_sampling),
+            Arc::clone(&release_sampling),
+        ));
+        let dispatch = Arc::new(dispatch);
+
+        let spawned = AgentThreadDispatch::spawn_agent(&*dispatch, spawn_request(&memory_dir))
+            .await
+            .unwrap();
+        entered_sampling.notified().await;
+
+        let cleanup_entered = Arc::new(AtomicBool::new(false));
+        let cleanup_entered_for_hook = Arc::clone(&cleanup_entered);
+        let (at_cleanup_tx, at_cleanup_rx) = std::sync::mpsc::sync_channel(1);
+        let (release_cleanup_tx, release_cleanup_rx) = std::sync::mpsc::sync_channel(1);
+        let release_cleanup_rx = Arc::new(Mutex::new(release_cleanup_rx));
+        dispatch
+            .runtime_manager
+            .set_before_cleanup_hook(Some(Arc::new(move || {
+                if !cleanup_entered_for_hook.swap(true, Ordering::SeqCst) {
+                    at_cleanup_tx.send(()).unwrap();
+                    release_cleanup_rx.lock().unwrap().recv().unwrap();
+                }
+            })));
+        release_sampling.notify_one();
+        tokio::task::spawn_blocking(move || at_cleanup_rx.recv().unwrap())
+            .await
+            .unwrap();
+
+        let followup_dispatch = Arc::clone(&dispatch);
+        let target = spawned.thread.canonical_path.to_string();
+        let followup = tokio::spawn(async move {
+            AgentThreadDispatch::followup_task(
+                &*followup_dispatch,
+                MessageAgentV2Request {
+                    target,
+                    message: "continue after cleanup".into(),
+                },
+            )
+            .await
+        });
+        let joined_dispatch = Arc::clone(&dispatch);
+        let joined_target = spawned.thread.canonical_path.to_string();
+        let joined_followup = tokio::spawn(async move {
+            AgentThreadDispatch::followup_task(
+                &*joined_dispatch,
+                MessageAgentV2Request {
+                    target: joined_target,
+                    message: "also continue after cleanup".into(),
+                },
+            )
+            .await
+        });
+        let queued = tokio::time::timeout(Duration::from_secs(1), async {
+            loop {
+                let queued = dispatch
+                    .control
+                    .drain_mailbox(&spawned.thread.canonical_path)
+                    .unwrap();
+                if queued.len() == 2 {
+                    break queued;
+                }
+                tokio::task::yield_now().await;
+            }
+        })
+        .await
+        .unwrap();
+        let expected_combined_input = queued
+            .iter()
+            .map(|message| message.payload.as_str())
+            .collect::<Vec<_>>()
+            .join("\n\n");
+        release_cleanup_tx.send(()).unwrap();
+        followup.await.unwrap().unwrap();
+        joined_followup.await.unwrap().unwrap();
+
+        tokio::time::timeout(Duration::from_secs(2), async {
+            loop {
+                let starts = dispatch
+                    .control
+                    .status_events(&spawned.thread.thread_id)
+                    .unwrap()
+                    .into_iter()
+                    .filter(|event| {
+                        matches!(event.event, subagents::RunnerEvent::TurnStarted { .. })
+                    })
+                    .count();
+                if starts == 2 {
+                    break;
+                }
+                tokio::task::yield_now().await;
+            }
+        })
+        .await
+        .expect("durable followup must start a second turn after cleanup handoff");
+        assert!(dispatch
+            .control
+            .drain_mailbox(&spawned.thread.canonical_path)
+            .unwrap()
+            .is_empty());
+        assert!(sessions
+            .get_messages(&spawned.thread.session_id)
+            .unwrap()
+            .iter()
+            .any(|message| message.content.as_deref() == Some(expected_combined_input.as_str())));
+        dispatch.runtime_manager.set_before_cleanup_hook(None);
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn idle_followup_reports_runtime_start_failure_instead_of_triggered_success() {
+        let dir = tempfile::tempdir().unwrap();
+        let memory_dir = dir.path().join("memory");
+        let sessions =
+            session::SessionStore::open_sessions_dir(&memory_dir.join("sessions")).unwrap();
+        sessions.ensure_session("root-session", "test").unwrap();
+        drop(sessions);
+        let mut dispatch = dispatch(&dir);
+        dispatch.chat_override = Some(scripted_chat("done"));
+        let spawned = AgentThreadDispatch::spawn_agent(&dispatch, spawn_request(&memory_dir))
+            .await
+            .unwrap();
+        tokio::time::timeout(Duration::from_secs(2), async {
+            while dispatch
+                .runtime_manager
+                .is_running(&spawned.thread.thread_id)
+            {
+                tokio::task::yield_now().await;
+            }
+        })
+        .await
+        .unwrap();
+
+        std::fs::remove_dir_all(&memory_dir).unwrap();
+        std::fs::write(&memory_dir, "not a runtime directory").unwrap();
+        let error = AgentThreadDispatch::followup_task(
+            &dispatch,
+            MessageAgentV2Request {
+                target: spawned.thread.canonical_path.to_string(),
+                message: "cannot start".into(),
+            },
+        )
+        .await
+        .unwrap_err();
+        assert!(
+            format!("{error:#}").contains("Not a directory")
+                || format!("{error:#}").contains("not a directory")
+                || format!("{error:#}").contains("File exists"),
+            "{error:#}"
+        );
+        assert!(!dispatch
+            .runtime_manager
+            .is_running(&spawned.thread.thread_id));
+        assert_eq!(
+            dispatch
+                .control
+                .drain_mailbox(&spawned.thread.canonical_path)
+                .unwrap()
+                .len(),
+            1,
+            "failed start must leave durable follow-up retryable"
+        );
+    }
+
     #[tokio::test]
     async fn list_defaults_to_entire_root_and_resolves_relative_prefix() {
         let dir = tempfile::tempdir().unwrap();
@@ -861,7 +1099,7 @@ mod tests {
     }
 
     #[test]
-    fn custom_layers_preserve_parent_sandbox_and_merge_skills() {
+    fn custom_layers_preserve_unknown_parent_sandbox_and_merge_skills() {
         let dir = tempfile::tempdir().unwrap();
         let project = dir.path().join("project");
         std::fs::create_dir_all(project.join(".codex/agents")).unwrap();
@@ -889,7 +1127,7 @@ enabled = true
             None,
             Some("high"),
             Some("openai:gpt-5.6"),
-            Some("workspace-write"),
+            Some("locked"),
         )
         .unwrap();
         let runtime = build_runtime_request(
@@ -905,7 +1143,7 @@ enabled = true
                 memory_dir: dir.path().to_path_buf(),
                 parent_agent_id: "parent-agent".into(),
                 parent_model: Some("openai:gpt-5.6".into()),
-                parent_sandbox_mode: "workspace-write".into(),
+                parent_sandbox_mode: "locked".into(),
                 inherited_skill_config: vec![(PathBuf::from("parent/SKILL.md"), true)],
                 chat_targets: Vec::new(),
                 project_root: Some(project),
@@ -917,7 +1155,7 @@ enabled = true
             "root",
             true,
         );
-        assert_eq!(runtime.sandbox_mode.as_deref(), Some("workspace-write"));
+        assert_eq!(runtime.sandbox_mode.as_deref(), Some("locked"));
         assert_eq!(runtime.developer_instructions, "review carefully");
         assert!(runtime.mcp_servers.contains_key("docs"));
         assert_eq!(runtime.skills_config.len(), 2);

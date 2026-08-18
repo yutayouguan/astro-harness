@@ -49,6 +49,43 @@ pub(crate) async fn run_background_multi_turn_controlled_with_chat(
     control: Option<Arc<subagents::AgentThreadControl>>,
     chat_override: Option<ChatOverride>,
 ) -> anyhow::Result<(String, Usage)> {
+    run_background_multi_turn_controlled_with_chat_and_system(
+        session,
+        targets,
+        input,
+        None,
+        control,
+        chat_override,
+    )
+    .await
+}
+
+pub(crate) async fn run_background_prepared_turn_controlled_with_chat(
+    session: Arc<Mutex<Session>>,
+    targets: Vec<ChatTarget>,
+    system_prompt: String,
+    control: Option<Arc<subagents::AgentThreadControl>>,
+    chat_override: Option<ChatOverride>,
+) -> anyhow::Result<(String, Usage)> {
+    run_background_multi_turn_controlled_with_chat_and_system(
+        session,
+        targets,
+        Vec::new(),
+        Some(system_prompt),
+        control,
+        chat_override,
+    )
+    .await
+}
+
+async fn run_background_multi_turn_controlled_with_chat_and_system(
+    session: Arc<Mutex<Session>>,
+    targets: Vec<ChatTarget>,
+    input: Vec<TurnInput>,
+    system_prompt: Option<String>,
+    control: Option<Arc<subagents::AgentThreadControl>>,
+    chat_override: Option<ChatOverride>,
+) -> anyhow::Result<(String, Usage)> {
     let (base_config, message_start) = {
         let agent = session.lock().await;
         let history = agent.clone_history().await;
@@ -77,7 +114,7 @@ pub(crate) async fn run_background_multi_turn_controlled_with_chat(
         targets,
         base_config,
         input,
-        system_prompt: None,
+        system_prompt,
         pause,
         hitl_gate: None,
         tx,

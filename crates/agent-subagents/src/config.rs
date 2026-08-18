@@ -288,15 +288,19 @@ fn resolve_sandbox_mode(parent: Option<&str>, requested: Option<&str>) -> Option
         return Some(parent);
     };
     let rank = |mode: &str| match mode.trim().to_ascii_lowercase().as_str() {
-        "read-only" | "read_only" => 0,
-        "workspace-write" | "workspace_write" => 1,
-        "danger-full-access" | "danger_full_access" => 2,
-        _ => 3,
+        "read-only" | "read_only" => Some(0),
+        "workspace-write" | "workspace_write" => Some(1),
+        "danger-full-access" | "danger_full_access" => Some(2),
+        _ => None,
     };
-    if rank(&requested) <= rank(&parent) {
-        Some(requested)
-    } else {
-        Some(parent)
+    match (rank(&parent), rank(&requested)) {
+        (Some(parent_rank), Some(requested_rank)) if requested_rank <= parent_rank => {
+            Some(requested)
+        }
+        // Unknown/custom profiles have no comparable privilege ordering.  A
+        // child may never replace one, and an unknown child request may never
+        // replace a known parent, so both cases conservatively inherit.
+        _ => Some(parent),
     }
 }
 
@@ -458,6 +462,51 @@ sandbox_mode = "danger-full-access"
         )
         .unwrap();
         assert_eq!(resolved.sandbox_mode.as_deref(), Some("read-only"));
+    }
+
+    #[test]
+    fn sandbox_resolution_is_conservative_for_unknown_profiles() {
+        assert_eq!(
+            resolve_sandbox_mode(Some("locked"), Some("danger-full-access")).as_deref(),
+            Some("locked")
+        );
+        assert_eq!(
+            resolve_sandbox_mode(Some("workspace-write"), Some("custom-unconfined")).as_deref(),
+            Some("workspace-write")
+        );
+        assert_eq!(
+            resolve_sandbox_mode(Some("locked"), Some("locked")).as_deref(),
+            Some("locked")
+        );
+    }
+
+    #[test]
+    fn sandbox_resolution_known_matrix_and_aliases_only_narrows() {
+        let cases = [
+            ("read-only", "read-only", "read-only"),
+            ("read-only", "workspace-write", "read-only"),
+            ("read-only", "danger-full-access", "read-only"),
+            ("workspace-write", "read-only", "read-only"),
+            ("workspace-write", "workspace-write", "workspace-write"),
+            ("workspace-write", "danger-full-access", "workspace-write"),
+            ("danger-full-access", "read-only", "read-only"),
+            ("danger-full-access", "workspace-write", "workspace-write"),
+            (
+                "danger-full-access",
+                "danger-full-access",
+                "danger-full-access",
+            ),
+            ("workspace_write", "read_only", "read_only"),
+            ("workspace_write", "danger_full_access", "workspace_write"),
+        ];
+
+        for (parent, requested, expected) in cases {
+            assert_eq!(
+                resolve_sandbox_mode(Some(parent), Some(requested)).as_deref(),
+                Some(expected),
+                "parent={parent}, requested={requested}"
+            );
+        }
     }
 
     #[test]
