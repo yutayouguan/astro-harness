@@ -360,7 +360,7 @@ impl Session {
     ///
     /// 返回当前 sampling request 的不可变 [`StepContext`]。foreground、background
     /// 与 Agent Thread 路径共享同一捕获入口。
-    pub(crate) async fn capture_step_context(&mut self) -> anyhow::Result<Arc<StepContext>> {
+    pub(crate) async fn capture_step_context(&self) -> anyhow::Result<Arc<StepContext>> {
         self.reload_tools_and_mcp().await?;
         let mut history = self.provider_history().await;
         if let Some(ctx) = self.take_inject_context().await {
@@ -401,7 +401,7 @@ mod tests {
     async fn capture_step_context_reuses_the_turn_snapshot() {
         let dir = TempDir::new().unwrap();
         let config = crate::runtime::Config::with_defaults(dir.path().to_path_buf());
-        let mut session = Session::with_session_id(config, "step-context-test".into()).unwrap();
+        let session = Session::with_session_id(config, "step-context-test".into()).unwrap();
         session
             .set_interaction_mode(types::InteractionMode::Plan)
             .await;

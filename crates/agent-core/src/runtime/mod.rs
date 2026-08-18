@@ -230,12 +230,16 @@ impl Session {
         let workspace_dir = memory.workspace_dir.clone();
         let project_root = resolve_session_project_root();
 
+        let mut state = session_state::SessionState::new(history, project_root);
+        state.temperature = config.temperature;
+        state.additional_params = config.additional_params.clone();
+
         Ok(Session {
             config,
             session_id,
             agent_id,
             workspace_dir,
-            state: StdMutex::new(session_state::SessionState::new(history, project_root)),
+            state: StdMutex::new(state),
             conversation_write_lock: TokioMutex::new(()),
             services: SessionServices::new(sessions, compression_policy, memory, tool_registry),
             mcp_hub,
@@ -362,8 +366,8 @@ impl Session {
         Arc::clone(&self.execution)
     }
 
-    pub fn set_permission_profile(&mut self, profile: Option<String>) {
-        self.state_mut().permission_profile = profile;
+    pub fn set_permission_profile(&self, profile: Option<String>) {
+        self.lock_state().permission_profile = profile;
     }
 
     pub fn permission_profile(&self) -> Option<String> {
@@ -375,8 +379,8 @@ impl Session {
     }
 
     /// 从磁盘重载 MEMORY / USER 并更新 prompt 快照（同会话写入默认不刷新）。
-    pub fn refresh_memory(&mut self) -> anyhow::Result<()> {
-        self.services.memory.get_mut().refresh_memory_snapshot()
+    pub async fn refresh_memory(&self) -> anyhow::Result<()> {
+        self.services.memory.lock().await.refresh_memory_snapshot()
     }
 
     /// 设置插件钩子总线。
@@ -425,22 +429,22 @@ impl Session {
 
     /// 当前 LLM 采样温度。
     pub fn temperature(&self) -> f32 {
-        self.config.temperature
+        self.lock_state().temperature
     }
 
     /// 覆盖采样温度（OpenRouter default_parameters 等）。
-    pub fn set_temperature(&mut self, temperature: f32) {
-        self.config.temperature = temperature;
+    pub fn set_temperature(&self, temperature: f32) {
+        self.lock_state().temperature = temperature;
     }
 
     /// 透传给 Provider 的额外 JSON 参数引用。
-    pub fn additional_params(&self) -> &Value {
-        &self.config.additional_params
+    pub fn additional_params(&self) -> Value {
+        self.lock_state().additional_params.clone()
     }
 
     /// 覆盖 Provider 扩展参数（与已有 map 合并由调用方决定）。
-    pub fn set_additional_params(&mut self, params: Value) {
-        self.config.additional_params = params;
+    pub fn set_additional_params(&self, params: Value) {
+        self.lock_state().additional_params = params;
     }
 
     /// 当前用户消息的工具深度是否已达 `multi_turn` 上限。
@@ -503,19 +507,13 @@ impl Session {
     }
 
     /// 设置图像生成工具的输出目标路径。
-    pub fn set_image_gen_targets(&mut self, targets: types::ImageGenTargets) {
-        self.state_mut().model_ctx.set_image_gen_targets(targets);
+    pub fn set_image_gen_targets(&self, targets: types::ImageGenTargets) {
+        self.lock_state().model_ctx.set_image_gen_targets(targets);
     }
 
     /// 配置 LLM 对话凭据，供需要调用 Provider 的内置工具使用。
-    pub fn set_chat_credentials(
-        &mut self,
-        provider: &str,
-        model: &str,
-        api_key: &str,
-        base_url: &str,
-    ) {
-        self.state_mut()
+    pub fn set_chat_credentials(&self, provider: &str, model: &str, api_key: &str, base_url: &str) {
+        self.lock_state()
             .model_ctx
             .set_credentials(provider, model, api_key, base_url);
     }
@@ -526,7 +524,7 @@ impl Session {
     /// 用本规格覆盖 primary 的 provider/model（保留 api_key / base_url）。
     pub fn set_model(&mut self, spec: types::ModelSpec) {
         if let Some(t) = spec.temperature {
-            self.config.temperature = t;
+            self.lock_state().temperature = t;
         }
         let model_ctx = &mut self.state_mut().model_ctx;
         if !spec.provider_id.trim().is_empty() {
@@ -612,8 +610,8 @@ impl Session {
     }
 
     /// 设置代码/项目根（委派 worktree）；`None` 时文件/终端回退到记忆工作区。
-    pub fn set_project_root(&mut self, root: Option<PathBuf>) {
-        self.state_mut().project_root = root;
+    pub fn set_project_root(&self, root: Option<PathBuf>) {
+        self.lock_state().project_root = root;
     }
 
     /// 当前代码/项目根（若有）。
@@ -626,8 +624,8 @@ impl Session {
     }
 
     /// 设置含 primary 的聊天 fallback 链（主聊 / cron / Agent Thread 共用）。
-    pub fn set_chat_targets(&mut self, targets: Vec<types::ChatTarget>) {
-        self.state_mut().model_ctx.set_chat_targets(targets);
+    pub fn set_chat_targets(&self, targets: Vec<types::ChatTarget>) {
+        self.lock_state().model_ctx.set_chat_targets(targets);
     }
 
     /// 当前聊天 fallback 链。
@@ -639,10 +637,10 @@ impl Session {
     ///
     /// 调用方保证不落盘：本方法只存内存，session 结束或进程重启即丢弃。
     pub fn set_auxiliary_targets(
-        &mut self,
+        &self,
         targets: std::collections::HashMap<types::AuxiliaryTask, Vec<types::ChatTarget>>,
     ) {
-        self.state_mut().model_ctx.set_auxiliary_targets(targets);
+        self.lock_state().model_ctx.set_auxiliary_targets(targets);
     }
 
     /// 返回指定辅助任务的目标链（preferred + 可选 fallback）。
@@ -722,12 +720,12 @@ impl Session {
         Arc::clone(&self.mcp_hub)
     }
 
-    pub fn set_mcp_config_override(&mut self, configs: Vec<mcp::McpServerConfig>) {
-        self.state_mut().mcp_config_override = configs;
+    pub fn set_mcp_config_override(&self, configs: Vec<mcp::McpServerConfig>) {
+        self.lock_state().mcp_config_override = configs;
     }
 
-    pub fn set_skill_config_overrides(&mut self, config: Vec<(PathBuf, bool)>) {
-        self.state_mut().skill_config_overrides = config;
+    pub fn set_skill_config_overrides(&self, config: Vec<(PathBuf, bool)>) {
+        self.lock_state().skill_config_overrides = config;
     }
 
     pub(crate) fn skill_config_overrides(&self) -> Vec<(PathBuf, bool)> {
@@ -957,8 +955,8 @@ impl Session {
     }
 
     /// 设置主模型上下文窗口（token），供分阶段 tool 压缩使用。
-    pub fn set_context_window(&mut self, window: u32) {
-        self.state_mut().model_ctx.set_context_window(window);
+    pub fn set_context_window(&self, window: u32) {
+        self.lock_state().model_ctx.set_context_window(window);
     }
 
     /// 设置本轮交互模式（Plan/Ask 启用只读工具门禁）。
@@ -1042,7 +1040,7 @@ mod tests {
     #[test]
     fn auxiliary_targets_falls_back_to_chat_credentials_when_nothing_set() {
         let dir = TempDir::new().unwrap();
-        let mut agent = AgentLoop::new(test_config(&dir)).unwrap();
+        let agent = AgentLoop::new(test_config(&dir)).unwrap();
         agent.set_chat_credentials("openai", "gpt-5.6", "key-1", "https://api.openai.com/v1");
 
         let targets = agent.auxiliary_targets(types::AuxiliaryTask::Dreaming);
@@ -1055,7 +1053,7 @@ mod tests {
     #[test]
     fn auxiliary_targets_falls_back_to_primary_chat_target_when_nothing_set() {
         let dir = TempDir::new().unwrap();
-        let mut agent = AgentLoop::new(test_config(&dir)).unwrap();
+        let agent = AgentLoop::new(test_config(&dir)).unwrap();
         agent.set_chat_targets(vec![t("p0", "openai", "gpt-5.6")]);
 
         let targets = agent.auxiliary_targets(types::AuxiliaryTask::Compaction);
@@ -1065,7 +1063,7 @@ mod tests {
     #[test]
     fn auxiliary_targets_returns_configured_chain_for_matching_task() {
         let dir = TempDir::new().unwrap();
-        let mut agent = AgentLoop::new(test_config(&dir)).unwrap();
+        let agent = AgentLoop::new(test_config(&dir)).unwrap();
         agent.set_chat_targets(vec![t("p0", "openai", "gpt-5.6")]);
 
         let mut map = std::collections::HashMap::new();
@@ -1189,7 +1187,7 @@ mod tests {
     #[tokio::test]
     async fn session_returns_owned_runtime_snapshots() {
         let dir = TempDir::new().unwrap();
-        let mut session = Session::new(test_config(&dir)).unwrap();
+        let session = Session::new(test_config(&dir)).unwrap();
         let project_root = dir.path().join("project");
         session.set_chat_credentials("openai", "gpt-5.6", "key", "https://example.test");
         session.set_project_root(Some(project_root.clone()));

@@ -57,7 +57,7 @@ impl AgentLoop {
     /// 调用前刷新 gate 与 MCP 注册；未启用或不存在的工具直接 bail。
     /// MCP 工具通过克隆 `Arc<TokioMutex<McpHub>>` 构造动态 handler。
     async fn dispatch_named_tool(
-        &mut self,
+        &self,
         name: &str,
         args: &serde_json::Value,
         workspace_write_grant: bool,
@@ -178,7 +178,7 @@ impl AgentLoop {
     ///
     /// 适用于 Tauri 等同步边界；异步上下文优先使用 [`handle_tool_call_async`]。
     pub fn handle_tool_call(
-        &mut self,
+        &self,
         name: &str,
         args: &serde_json::Value,
     ) -> Result<types::ToolOutput, ToolCallError> {
@@ -187,7 +187,7 @@ impl AgentLoop {
 
     /// 执行已审批的单次调用。授权只进入本次 ToolContext，不保存到 Agent 状态。
     pub(crate) fn handle_tool_call_with_once_grants(
-        &mut self,
+        &self,
         name: &str,
         args: &serde_json::Value,
         workspace_write_grant: bool,
@@ -197,7 +197,7 @@ impl AgentLoop {
     }
 
     fn handle_tool_call_scoped(
-        &mut self,
+        &self,
         name: &str,
         args: &serde_json::Value,
         workspace_write_grant: bool,
@@ -259,7 +259,7 @@ impl AgentLoop {
     /// 返回 [`ToolCallError`] 区分取消（`Cancelled`）、深度耗尽（`DepthExhausted`）
     /// 和执行异常（`Execution`），避免将取消误记为工具失败。
     pub async fn handle_tool_call_async(
-        &mut self,
+        &self,
         name: &str,
         args: &serde_json::Value,
     ) -> Result<types::ToolOutput, ToolCallError> {
@@ -273,7 +273,7 @@ impl AgentLoop {
     }
 
     async fn handle_tool_call_async_scoped(
-        &mut self,
+        &self,
         name: &str,
         args: &serde_json::Value,
         workspace_write_grant: bool,
@@ -429,7 +429,7 @@ impl AgentLoop {
 
     /// 统一应用工具结果 hook 与媒体保留逻辑。
     pub(crate) async fn finalize_tool_call_result(
-        &mut self,
+        &self,
         name: &str,
         args_owned: &serde_json::Value,
         raw_result: types::ToolOutput,

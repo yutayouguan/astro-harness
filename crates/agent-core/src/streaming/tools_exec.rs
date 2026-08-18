@@ -4,7 +4,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use providers::PauseControl;
-use tokio::sync::{mpsc, Mutex};
+use tokio::sync::mpsc;
 use tokio::task::JoinSet;
 
 use crate::control::hitl::HitlGate;
@@ -44,13 +44,13 @@ fn approval_route(
 /// `auto`（辅模型降级）/ `allow`（用户批准）/ `deny`（用户拒绝或 cancelled）/
 /// `timeout`（park 超时）/ `unavailable`（无 HITL gate）。
 async fn fire_post_approval_response(
-    session: &Arc<Mutex<AgentLoop>>,
+    session: &Arc<AgentLoop>,
     session_id: &str,
     turn_id: Option<&str>,
     command: &str,
     choice: &str,
 ) {
-    let agent = session.lock().await;
+    let agent = session.as_ref();
     agent.fire_hook(
         hooks::POST_APPROVAL_RESPONSE,
         hooks::HookPayload {
@@ -64,13 +64,13 @@ async fn fire_post_approval_response(
 }
 
 async fn fire_post_permission_response(
-    session: &Arc<Mutex<AgentLoop>>,
+    session: &Arc<AgentLoop>,
     session_id: &str,
     turn_id: Option<&str>,
     request: &types::PermissionRequest,
     choice: &str,
 ) {
-    let agent = session.lock().await;
+    let agent = session.as_ref();
     agent.fire_hook(
         hooks::POST_APPROVAL_RESPONSE,
         hooks::HookPayload {
@@ -167,7 +167,7 @@ impl PermissionAuditReceipt {
 
 #[allow(clippy::too_many_arguments)]
 async fn review_once_permission(
-    session: &Arc<Mutex<AgentLoop>>,
+    session: &Arc<AgentLoop>,
     selection: &types::SessionPermissions,
     audit: PermissionAuditReceipt,
     tx: &mpsc::Sender<anyhow::Result<MultiTurnStreamItem>>,
@@ -192,7 +192,7 @@ async fn review_once_permission(
         None,
     );
     {
-        let agent = session.lock().await;
+        let agent = session.as_ref();
         agent.fire_hook(
             hooks::PRE_APPROVAL_REQUEST,
             hooks::HookPayload {
@@ -227,7 +227,7 @@ async fn review_once_permission(
 
     if selection.approvals_reviewer == types::ApprovalsReviewer::AutoReview {
         let targets = {
-            let agent = session.lock().await;
+            let agent = session.as_ref();
             agent
                 .auxiliary_targets(types::AuxiliaryTask::SmartApproval)
                 .iter()
@@ -357,12 +357,12 @@ fn affected_write_paths(name: &str, args: &serde_json::Value) -> Vec<String> {
 }
 
 async fn audit_hardline_terminal_denial(
-    session: &Arc<Mutex<AgentLoop>>,
+    session: &Arc<AgentLoop>,
     call: &types::ParsedToolCall,
     description: &str,
 ) {
     let (memory_dir, settings, profile_id, session_id, turn_id) = {
-        let agent = session.lock().await;
+        let agent = session.as_ref();
         let settings = memory::load_permission_settings(agent.memory_dir());
         let profile_id = agent
             .permission_profile()
@@ -408,7 +408,7 @@ async fn audit_hardline_terminal_denial(
 }
 
 async fn preflight_read_only_write(
-    session: &Arc<Mutex<AgentLoop>>,
+    session: &Arc<AgentLoop>,
     call: &types::ParsedToolCall,
     tx: &mpsc::Sender<anyhow::Result<MultiTurnStreamItem>>,
     run_id: &str,
@@ -419,7 +419,7 @@ async fn preflight_read_only_write(
     }
 
     let (session_id, turn_id, profile_id, memory_dir, settings) = {
-        let agent = session.lock().await;
+        let agent = session.as_ref();
         let session_id = agent.session_id().to_string();
         let turn_id = agent.current_turn_id().await;
         let settings = memory::load_permission_settings(agent.memory_dir());
@@ -481,14 +481,14 @@ async fn preflight_read_only_write(
 }
 
 async fn preflight_mcp_tool_approval(
-    session: &Arc<Mutex<AgentLoop>>,
+    session: &Arc<AgentLoop>,
     call: &types::ParsedToolCall,
     tx: &mpsc::Sender<anyhow::Result<MultiTurnStreamItem>>,
     run_id: &str,
     hitl_gate: Option<&Arc<HitlGate>>,
 ) -> Option<PermissionPreflight> {
     let approval = {
-        let agent = session.lock().await;
+        let agent = session.as_ref();
         let registry = agent.tool_registry().await;
         let approval = registry
             .get(&call.name)
@@ -504,7 +504,7 @@ async fn preflight_mcp_tool_approval(
     }
 
     let (session_id, turn_id, profile_id, memory_dir, settings) = {
-        let agent = session.lock().await;
+        let agent = session.as_ref();
         let settings = memory::load_permission_settings(agent.memory_dir());
         let profile_id = agent
             .permission_profile()
@@ -567,7 +567,7 @@ async fn preflight_mcp_tool_approval(
 }
 
 async fn preflight_in_process_network(
-    session: &Arc<Mutex<AgentLoop>>,
+    session: &Arc<AgentLoop>,
     call: &types::ParsedToolCall,
     tx: &mpsc::Sender<anyhow::Result<MultiTurnStreamItem>>,
     run_id: &str,
@@ -578,7 +578,7 @@ async fn preflight_in_process_network(
     }
 
     let (session_id, turn_id, profile_id, memory_dir, settings) = {
-        let agent = session.lock().await;
+        let agent = session.as_ref();
         let settings = memory::load_permission_settings(agent.memory_dir());
         let profile_id = agent
             .permission_profile()
@@ -659,7 +659,7 @@ pub(crate) fn tool_may_require_permission(name: &str, args: &serde_json::Value) 
 
 /// 串行执行；`None` 表示已处理 cancel/断开，调用方应直接 return。
 pub(crate) async fn execute_tools_serial(
-    session: &Arc<Mutex<AgentLoop>>,
+    session: &Arc<AgentLoop>,
     step_context: Arc<StepContext>,
     calls: &[types::ParsedToolCall],
     pause: &Arc<PauseControl>,
@@ -671,7 +671,7 @@ pub(crate) async fn execute_tools_serial(
 }
 
 async fn execute_tools_serial_inner(
-    session: &Arc<Mutex<AgentLoop>>,
+    session: &Arc<AgentLoop>,
     step_context: Arc<StepContext>,
     calls: &[types::ParsedToolCall],
     pause: &Arc<PauseControl>,
@@ -779,7 +779,7 @@ async fn execute_tools_serial_inner(
                             active_profile_id,
                             permission_settings,
                         ) = {
-                            let agent = session.lock().await;
+                            let agent = session.as_ref();
                             let approval_session_id = agent.session_id().to_string();
                             let approval_turn_id = agent.current_turn_id().await;
                             let base = agent.memory_dir().to_path_buf();
@@ -907,13 +907,12 @@ async fn execute_tools_serial_inner(
                         } else {
                             // 仅 Smart 模式尝试辅模型降级；Manual 直接弹卡
                             let smart_action = if route == ApprovalRoute::Smart {
-                                let agent = session.lock().await;
+                                let agent = session.as_ref();
                                 let targets: Vec<_> = agent
                                     .auxiliary_targets(types::AuxiliaryTask::SmartApproval)
                                     .iter()
                                     .map(crate::control::smart_approval::ApprovalTarget::from)
                                     .collect();
-                                drop(agent);
                                 crate::control::smart_approval::maybe_smart_downgrade_ask(
                                     &permission_request,
                                     &targets,
@@ -1048,7 +1047,7 @@ async fn execute_tools_serial_inner(
             )
             .into()
         } else {
-            let mut agent = session.lock().await;
+            let agent = session.as_ref();
             let memory_dir = agent.memory_dir().to_path_buf();
             let session_id = agent.session_id().to_string();
             let execution_started = std::time::Instant::now();
@@ -1115,7 +1114,7 @@ async fn execute_tools_serial_inner(
 
 /// 并发执行非 interactive/exclusive 工具；按调用顺序返回结果。
 pub(crate) async fn execute_tools_concurrent(
-    session: &Arc<Mutex<AgentLoop>>,
+    session: &Arc<AgentLoop>,
     step_context: Arc<StepContext>,
     calls: &[types::ParsedToolCall],
     pause: &Arc<PauseControl>,
@@ -1125,7 +1124,7 @@ pub(crate) async fn execute_tools_concurrent(
     }
 
     let runtime = {
-        let agent = session.lock().await;
+        let agent = session.as_ref();
         ToolCallRuntime {
             step_context,
             memory_dir: agent.memory_dir().to_path_buf(),

@@ -23,6 +23,7 @@ pub(crate) use regular::RegularTask;
 pub(crate) type SessionTaskResult = anyhow::Result<Option<String>>;
 type BoxFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
 const TASK_ABORT_TIMEOUT: Duration = Duration::from_secs(5);
+const TASK_ABORT_HOOK_TIMEOUT: Duration = Duration::from_secs(5);
 
 /// The workflow currently owned by a session task.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -154,19 +155,13 @@ impl ActiveTurn {
         Ok(())
     }
 
+    #[cfg(test)]
     pub(crate) fn finish(&mut self, sub_id: &str) {
-        if let Some(task) = self
+        if self
             .task
             .as_ref()
-            .filter(|task| task.turn_context.sub_id() == sub_id)
+            .is_some_and(|task| task.turn_context.sub_id() == sub_id)
         {
-            tracing::debug!(
-                kind = ?task.kind,
-                span_name = task.task.span_name(),
-                cancelled = task.cancellation_token.is_cancelled(),
-                sub_id,
-                "session task finished"
-            );
             self.task = None;
         }
     }
@@ -204,7 +199,7 @@ impl Session {
             if !cancellation_for_run.is_cancelled() {
                 session.on_task_finished(ctx, result).await;
             }
-            done_for_run.notify_waiters();
+            done_for_run.notify_one();
         });
 
         let installed_result = self
@@ -231,15 +226,25 @@ impl Session {
         active_turn.start(task, cancellation_token, turn_context, done, handle)
     }
 
+    pub(crate) async fn wait_for_task(&self, turn_id: &str) {
+        let done = {
+            let active_turn = self.active_turn.lock().await;
+            active_turn
+                .as_ref()
+                .and_then(|turn| turn.task.as_ref())
+                .filter(|running| running.turn_context.sub_id() == turn_id)
+                .map(|running| Arc::clone(&running.done))
+        };
+        if let Some(done) = done {
+            done.notified().await;
+        }
+    }
+
     /// Cooperatively abort the active task and wait for its lifecycle to finish.
     pub async fn abort_all_tasks(self: &Arc<Self>, reason: TurnAbortReason) -> anyhow::Result<()> {
         let running = {
             let mut active_turn = self.active_turn.lock().await;
-            let running = active_turn.as_mut().and_then(|turn| turn.task.take());
-            if active_turn.as_ref().is_some_and(|turn| turn.task.is_none()) {
-                *active_turn = None;
-            }
-            running
+            active_turn.as_mut().and_then(|turn| turn.task.take())
         };
         let Some(mut running) = running else {
             return Ok(());
@@ -248,10 +253,6 @@ impl Session {
         let turn_id = running.turn_context.sub_id().to_string();
         running.cancellation_token.cancel();
         self.cancel_signal().cancel();
-        running
-            .task
-            .abort(Arc::clone(self), Arc::clone(&running.turn_context))
-            .await;
 
         if tokio::time::timeout(TASK_ABORT_TIMEOUT, &mut running.handle)
             .await
@@ -261,18 +262,33 @@ impl Session {
             running.handle.abort();
             let _ = running.handle.await;
         }
-        running.done.notify_waiters();
-        if self.current_turn_id().await.as_deref() == Some(&turn_id) {
-            self.clear_current_turn_id().await;
+        if tokio::time::timeout(
+            TASK_ABORT_HOOK_TIMEOUT,
+            running
+                .task
+                .abort(Arc::clone(self), Arc::clone(&running.turn_context)),
+        )
+        .await
+        .is_err()
+        {
+            tracing::warn!(?reason, %turn_id, "session task abort hook timed out");
         }
+        running.done.notify_one();
         self.emit_runtime_event(
             turn_id.clone(),
             agent_protocol::EventMsg::TurnAborted(TurnAbortedEvent {
-                turn_id: Some(turn_id),
+                turn_id: Some(turn_id.clone()),
                 reason,
             }),
         )
         .await;
+        if self.current_turn_id().await.as_deref() == Some(&turn_id) {
+            self.clear_current_turn_id().await;
+        }
+        let mut active_turn = self.active_turn.lock().await;
+        if active_turn.as_ref().is_some_and(|turn| turn.task.is_none()) {
+            *active_turn = None;
+        }
         Ok(())
     }
 
@@ -302,7 +318,12 @@ impl Session {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::atomic::{AtomicBool, Ordering};
+
+    use agent_rollout::{RolloutRecorder, ThreadHistoryMode};
+
     use super::*;
+    use crate::runtime::{AstroThread, Config};
 
     struct NoopTask;
 
@@ -432,5 +453,211 @@ mod tests {
             .await
             .unwrap();
         assert!(session.active_turn.lock().await.is_none());
+    }
+
+    struct OrderedAbortTask {
+        run_finished: Arc<AtomicBool>,
+        hook_started: Arc<Notify>,
+        hook_release: Arc<Notify>,
+        hook_saw_run_finished: Arc<AtomicBool>,
+    }
+
+    impl SessionTask for OrderedAbortTask {
+        fn kind(&self) -> TaskKind {
+            TaskKind::Regular
+        }
+
+        fn span_name(&self) -> &'static str {
+            "session_task.ordered_abort_test"
+        }
+
+        async fn run(
+            self: Arc<Self>,
+            _session: Arc<Session>,
+            _ctx: Arc<TurnContext>,
+            _input: Vec<TurnInput>,
+            cancellation_token: CancellationToken,
+        ) -> SessionTaskResult {
+            cancellation_token.cancelled().await;
+            self.run_finished.store(true, Ordering::SeqCst);
+            Ok(None)
+        }
+
+        async fn abort(&self, _session: Arc<Session>, _ctx: Arc<TurnContext>) {
+            self.hook_saw_run_finished
+                .store(self.run_finished.load(Ordering::SeqCst), Ordering::SeqCst);
+            self.hook_started.notify_one();
+            self.hook_release.notified().await;
+        }
+    }
+
+    async fn task_test_thread(name: &str) -> (tempfile::TempDir, Arc<Session>, Arc<AstroThread>) {
+        let dir = tempfile::tempdir().unwrap();
+        let rollout = RolloutRecorder::open(
+            dir.path().join("rollout.jsonl"),
+            ThreadHistoryMode::Paginated,
+        )
+        .await
+        .unwrap();
+        let session = Arc::new(
+            Session::with_session_id(Config::with_defaults(dir.path().to_path_buf()), name.into())
+                .unwrap(),
+        );
+        let thread = AstroThread::spawn(Arc::clone(&session), rollout).unwrap();
+        (dir, session, thread)
+    }
+
+    #[tokio::test]
+    async fn abort_waits_for_run_handle_before_abort_hook_and_clears_after_event() {
+        let (_dir, session, thread) = task_test_thread("ordered-abort-test").await;
+        let run_finished = Arc::new(AtomicBool::new(false));
+        let hook_started = Arc::new(Notify::new());
+        let hook_release = Arc::new(Notify::new());
+        let hook_saw_run_finished = Arc::new(AtomicBool::new(false));
+        let context = session
+            .create_turn_context("turn-ordered-abort".into())
+            .await;
+        session
+            .spawn_task(
+                context,
+                Vec::new(),
+                OrderedAbortTask {
+                    run_finished: Arc::clone(&run_finished),
+                    hook_started: Arc::clone(&hook_started),
+                    hook_release: Arc::clone(&hook_release),
+                    hook_saw_run_finished: Arc::clone(&hook_saw_run_finished),
+                },
+            )
+            .await
+            .unwrap();
+
+        let abort = tokio::spawn({
+            let session = Arc::clone(&session);
+            async move {
+                session
+                    .abort_all_tasks(TurnAbortReason::Interrupted)
+                    .await
+                    .unwrap();
+            }
+        });
+        hook_started.notified().await;
+        assert!(session.active_turn.lock().await.is_some());
+        assert_eq!(
+            session.current_turn_id().await.as_deref(),
+            Some("turn-ordered-abort")
+        );
+        hook_release.notify_one();
+        abort.await.unwrap();
+
+        assert!(run_finished.load(Ordering::SeqCst));
+        assert!(hook_saw_run_finished.load(Ordering::SeqCst));
+        let event = thread.next_event().await.unwrap();
+        assert!(matches!(
+            event.msg,
+            agent_protocol::EventMsg::TurnAborted(_)
+        ));
+        assert!(session.active_turn.lock().await.is_none());
+        assert!(session.current_turn_id().await.is_none());
+    }
+
+    struct DropFlag(Arc<AtomicBool>);
+
+    impl Drop for DropFlag {
+        fn drop(&mut self) {
+            self.0.store(true, Ordering::SeqCst);
+        }
+    }
+
+    struct UncooperativeAbortTask {
+        run_dropped: Arc<AtomicBool>,
+        hook_called: Arc<AtomicBool>,
+        hook_saw_run_dropped: Arc<AtomicBool>,
+    }
+
+    impl SessionTask for UncooperativeAbortTask {
+        fn kind(&self) -> TaskKind {
+            TaskKind::Regular
+        }
+
+        fn span_name(&self) -> &'static str {
+            "session_task.uncooperative_abort_test"
+        }
+
+        async fn run(
+            self: Arc<Self>,
+            _session: Arc<Session>,
+            _ctx: Arc<TurnContext>,
+            _input: Vec<TurnInput>,
+            _cancellation_token: CancellationToken,
+        ) -> SessionTaskResult {
+            let _drop_flag = DropFlag(Arc::clone(&self.run_dropped));
+            std::future::pending().await
+        }
+
+        async fn abort(&self, _session: Arc<Session>, _ctx: Arc<TurnContext>) {
+            self.hook_saw_run_dropped
+                .store(self.run_dropped.load(Ordering::SeqCst), Ordering::SeqCst);
+            self.hook_called.store(true, Ordering::SeqCst);
+            std::future::pending().await
+        }
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn abort_forces_run_then_bounds_hook_and_emits_one_terminal() {
+        let (_dir, session, thread) = task_test_thread("bounded-abort-test").await;
+        let run_dropped = Arc::new(AtomicBool::new(false));
+        let hook_called = Arc::new(AtomicBool::new(false));
+        let hook_saw_run_dropped = Arc::new(AtomicBool::new(false));
+        let context = session
+            .create_turn_context("turn-bounded-abort".into())
+            .await;
+        session
+            .spawn_task(
+                context,
+                Vec::new(),
+                UncooperativeAbortTask {
+                    run_dropped: Arc::clone(&run_dropped),
+                    hook_called: Arc::clone(&hook_called),
+                    hook_saw_run_dropped: Arc::clone(&hook_saw_run_dropped),
+                },
+            )
+            .await
+            .unwrap();
+
+        let abort = tokio::spawn({
+            let session = Arc::clone(&session);
+            async move {
+                session
+                    .abort_all_tasks(TurnAbortReason::Interrupted)
+                    .await
+                    .unwrap();
+            }
+        });
+        tokio::task::yield_now().await;
+        assert!(!hook_called.load(Ordering::SeqCst));
+        tokio::time::advance(Duration::from_secs(6)).await;
+        tokio::task::yield_now().await;
+        assert!(run_dropped.load(Ordering::SeqCst));
+        assert!(hook_called.load(Ordering::SeqCst));
+        assert!(hook_saw_run_dropped.load(Ordering::SeqCst));
+        tokio::time::advance(Duration::from_secs(6)).await;
+        abort.await.unwrap();
+
+        let event = thread.next_event().await.unwrap();
+        assert!(matches!(
+            event.msg,
+            agent_protocol::EventMsg::TurnAborted(_)
+        ));
+        session
+            .abort_all_tasks(TurnAbortReason::Interrupted)
+            .await
+            .unwrap();
+        assert!(
+            tokio::time::timeout(Duration::from_millis(1), thread.next_event())
+                .await
+                .is_err()
+        );
+        assert!(session.active_turn.lock().await.is_none());
+        assert!(session.current_turn_id().await.is_none());
     }
 }

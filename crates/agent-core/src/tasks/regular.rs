@@ -21,15 +21,6 @@ impl RegularTask {
         Self { args: None }
     }
 
-    pub(crate) async fn run_legacy(
-        self: Arc<Self>,
-        ctx: Arc<TurnContext>,
-        input: Vec<TurnInput>,
-        cancellation_token: CancellationToken,
-    ) -> SessionTaskResult {
-        self.run_with_args(ctx, input, cancellation_token).await
-    }
-
     async fn run_with_args(
         &self,
         ctx: Arc<TurnContext>,
@@ -50,7 +41,7 @@ impl RegularTask {
                 system_prompt
             }
             None => {
-                let turn = args.session().lock().await.prepare_turn(&input).await?;
+                let turn = args.session().prepare_turn(&input).await?;
                 match turn {
                     TurnResult::Continue { system_prompt, .. } => system_prompt,
                     TurnResult::BudgetExhausted => {

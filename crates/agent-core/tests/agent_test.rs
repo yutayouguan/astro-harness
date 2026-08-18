@@ -56,7 +56,7 @@ async fn test_prompt_builder_layers() {
 #[tokio::test]
 async fn test_agent_loop_memory_injection() {
     let dir = TempDir::new().unwrap();
-    let mut agent = AgentLoop::new(test_config(&dir)).unwrap();
+    let agent = AgentLoop::new(test_config(&dir)).unwrap();
 
     let wrote = agent
         .handle_tool_call_async(

@@ -150,7 +150,7 @@ async fn test_prompt_hooks_on_run_turn() {
 #[tokio::test]
 async fn pre_tool_call_block_via_hook_bus() {
     let dir = TempDir::new().unwrap();
-    let mut agent = AgentLoop::new(test_config(&dir)).unwrap();
+    let agent = AgentLoop::new(test_config(&dir)).unwrap();
     let bus = agent.hook_bus();
     bus.register(hooks::PRE_TOOL_CALL, |_| {
         hooks::HookOutcome::Block("denied-by-test".into())
@@ -185,7 +185,7 @@ async fn pre_llm_call_inject_context_via_hook_bus() {
 #[tokio::test]
 async fn transform_tool_result_replaces_before_post_tool_call() {
     let dir = TempDir::new().unwrap();
-    let mut agent = AgentLoop::new(test_config(&dir)).unwrap();
+    let agent = AgentLoop::new(test_config(&dir)).unwrap();
     let bus = agent.hook_bus();
     bus.register(hooks::TRANSFORM_TOOL_RESULT, |_| {
         hooks::HookOutcome::ReplaceText("REDACTED".into())
@@ -216,7 +216,7 @@ async fn transform_tool_result_replaces_before_post_tool_call() {
 #[tokio::test]
 async fn turn_wrote_disk_tracks_writes_and_resets_on_new_turn() {
     let dir = TempDir::new().unwrap();
-    let mut agent = AgentLoop::new(test_config(&dir)).unwrap();
+    let agent = AgentLoop::new(test_config(&dir)).unwrap();
     assert!(!agent.turn_wrote_disk().await);
 
     // 只读操作不应置位
@@ -254,7 +254,7 @@ async fn turn_wrote_disk_tracks_writes_and_resets_on_new_turn() {
 #[tokio::test]
 async fn test_agent_loop_memory_injection() {
     let dir = TempDir::new().unwrap();
-    let mut agent = AgentLoop::new(test_config(&dir)).unwrap();
+    let agent = AgentLoop::new(test_config(&dir)).unwrap();
 
     let wrote = agent
         .handle_tool_call_async(

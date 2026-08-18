@@ -146,7 +146,7 @@ impl Session {
         .await;
     }
 
-    async fn shutdown_runtime(self: &Arc<Self>) {
+    pub async fn shutdown_runtime(self: &Arc<Self>) {
         if !self.begin_runtime_shutdown() {
             return;
         }

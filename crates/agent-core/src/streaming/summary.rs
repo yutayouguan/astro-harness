@@ -5,7 +5,7 @@ use std::sync::Arc;
 use futures::stream::{AbortHandle, Abortable};
 use futures::StreamExt;
 use providers::{PauseControl, Usage};
-use tokio::sync::{mpsc, Mutex};
+use tokio::sync::mpsc;
 use types::message::Message;
 
 use crate::runtime::AgentLoop;
@@ -28,7 +28,7 @@ pub(crate) enum SummaryOutcome {
 
 /// [`run_max_iterations_summary`] 入参打包。
 pub(crate) struct MaxIterationsSummaryArgs<'a> {
-    pub session: &'a Arc<Mutex<AgentLoop>>,
+    pub session: &'a Arc<AgentLoop>,
     pub streamer: &'a ProviderStreamer,
     pub system_prompt: &'a str,
     pub pause: &'a Arc<PauseControl>,
@@ -68,7 +68,7 @@ pub(crate) async fn run_max_iterations_summary(a: MaxIterationsSummaryArgs<'_>) 
     }
 
     let history = {
-        let agent = session.lock().await;
+        let agent = session.as_ref();
         agent
             .record_items(vec![Message::user(MAX_ITERATIONS_SUMMARY_PROMPT)])
             .await;
@@ -178,7 +178,7 @@ pub(crate) async fn run_max_iterations_summary(a: MaxIterationsSummaryArgs<'_>) 
                 }
                 // 持久化已积累的部分回复，保证历史连贯
                 if !full_response.is_empty() {
-                    let agent = session.lock().await;
+                    let agent = session.as_ref();
                     let details = Some(timeline.reasoning_details_snapshot());
                     let _ = agent
                         .record_assistant_message_with_tools(
@@ -218,7 +218,7 @@ pub(crate) async fn run_max_iterations_summary(a: MaxIterationsSummaryArgs<'_>) 
     }
 
     {
-        let agent = session.lock().await;
+        let agent = session.as_ref();
         let details = Some(timeline.reasoning_details_snapshot());
         if let Err(err) = agent
             .record_assistant_message_with_tools(

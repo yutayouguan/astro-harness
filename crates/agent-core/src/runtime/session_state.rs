@@ -5,6 +5,7 @@
 //! directly on [`super::Session`]. [`super::Session`] owns this container behind
 //! a short-lived mutex so callers never expose references tied to a state guard.
 
+use serde_json::Value;
 use std::path::PathBuf;
 use std::sync::Arc;
 use types::message::Message;
@@ -27,6 +28,8 @@ pub(crate) struct SessionState {
     pub(crate) project_root: Option<PathBuf>,
     pub(crate) permission_profile: Option<String>,
     pub(crate) skill_config_overrides: Vec<(PathBuf, bool)>,
+    pub(crate) temperature: f32,
+    pub(crate) additional_params: Value,
 }
 
 impl SessionState {
@@ -46,6 +49,8 @@ impl SessionState {
             project_root,
             permission_profile: None,
             skill_config_overrides: Vec::new(),
+            temperature: 0.7,
+            additional_params: Value::Null,
         }
     }
 

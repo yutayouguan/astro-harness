@@ -2,7 +2,7 @@
 
 use std::sync::Arc;
 
-use tokio::sync::{mpsc, Mutex};
+use tokio::sync::mpsc;
 
 use super::lifecycle::emit;
 use super::provider::ProviderStreamer;
@@ -11,9 +11,9 @@ use super::types::MultiTurnStreamItem;
 use crate::runtime::AgentLoop;
 
 /// Gateway 预压安全网 + mid-run 辅模型摘要，统一进 LLM 前的上下文维护。
-pub(super) async fn pre_llm_maintenance(session: &Arc<Mutex<AgentLoop>>) {
+pub(super) async fn pre_llm_maintenance(session: &Arc<AgentLoop>) {
     {
-        let agent = session.lock().await;
+        let agent = session.as_ref();
         let recommend_ratio = agent.compression_config().recommend_compact_ratio;
         if agent.occupancy_ratio().await >= recommend_ratio {
             match agent.maintain_tool_context().await {
@@ -40,8 +40,8 @@ pub(super) async fn pre_llm_maintenance(session: &Arc<Mutex<AgentLoop>>) {
         }
     }
     {
-        let agent = session.lock().await;
-        match crate::exec::mid_run_summary::maybe_apply_mid_run_summary(&agent).await {
+        let agent = session.as_ref();
+        match crate::exec::mid_run_summary::maybe_apply_mid_run_summary(agent).await {
             Ok(true) => tracing::info!("mid-run summary applied before LLM round"),
             Ok(false) => {}
             Err(e) => tracing::warn!(error = %e, "mid-run summary failed"),
@@ -51,12 +51,12 @@ pub(super) async fn pre_llm_maintenance(session: &Arc<Mutex<AgentLoop>>) {
 
 /// 构建并推送上下文占用估算快照。
 pub(super) async fn emit_context_usage(
-    session: &Arc<Mutex<AgentLoop>>,
+    session: &Arc<AgentLoop>,
     tx: &mpsc::Sender<anyhow::Result<MultiTurnStreamItem>>,
     history: &[types::message::Message],
     tools: &[serde_json::Value],
 ) {
-    let agent = session.lock().await;
+    let agent = session.as_ref();
     let layers = agent.system_prompt_layer_breakdown().await;
     let recommend_compact_ratio = agent.compression_config().recommend_compact_ratio;
     let snap = crate::prompt::context_usage::build_snapshot(
@@ -78,7 +78,6 @@ pub(super) async fn emit_context_usage(
             recommend_compact_ratio,
         },
     );
-    drop(agent);
     let _ = emit(tx, MultiTurnStreamItem::ContextUsage(snap)).await;
 }
 
@@ -86,11 +85,11 @@ pub(super) async fn emit_context_usage(
 ///
 /// 返回 `true` 表示 `stop_after_tool_call` 触发，主循环应跳出。
 pub(super) async fn post_tool_maintenance(
-    session: &Arc<Mutex<AgentLoop>>,
+    session: &Arc<AgentLoop>,
     calls: &[types::ParsedToolCall],
 ) -> bool {
     {
-        let agent = session.lock().await;
+        let agent = session.as_ref();
         match agent.maintain_tool_context().await {
             Ok(report) if report.pruned + report.compressed > 0 => {
                 tracing::info!(
@@ -112,7 +111,7 @@ pub(super) async fn post_tool_maintenance(
             Ok(_) => {}
             Err(e) => tracing::warn!(error = %e, "tool context maintenance failed"),
         }
-        match crate::exec::mid_run_summary::maybe_apply_mid_run_summary(&agent).await {
+        match crate::exec::mid_run_summary::maybe_apply_mid_run_summary(agent).await {
             Ok(true) => tracing::info!("mid-run summary applied after tool maintenance"),
             Ok(false) => {}
             Err(e) => tracing::warn!(error = %e, "mid-run summary failed"),
@@ -121,7 +120,7 @@ pub(super) async fn post_tool_maintenance(
 
     let names: Vec<&str> = calls.iter().map(|c| c.name.as_str()).collect();
     let stop_after = {
-        let agent = session.lock().await;
+        let agent = session.as_ref();
         let registry = agent.tool_registry().await;
         let stop_after = registry.any_stop_after(&names);
         drop(registry);
@@ -140,7 +139,7 @@ pub(super) async fn post_tool_maintenance(
 ///
 /// 返回 `false` 表示取消或 channel 关闭，主循环应提前退出。
 pub(super) async fn record_tool_outcomes(
-    session: &Arc<Mutex<AgentLoop>>,
+    session: &Arc<AgentLoop>,
     calls: &[types::ParsedToolCall],
     outcomes: Vec<types::ToolOutput>,
     pause: &Arc<providers::PauseControl>,
@@ -231,7 +230,7 @@ pub(super) async fn record_tool_outcomes(
         }
 
         {
-            let agent = session.lock().await;
+            let agent = session.as_ref();
             let _ = agent
                 .record_tool_result_with_id(Some(&call.id), Some(&call.name), &result_for_history)
                 .await;
@@ -248,7 +247,7 @@ pub(super) async fn record_tool_outcomes(
 
     // 工具循环后回写 timeline/surfaces，避免历史恢复丢 A2UI 卡片。
     {
-        let agent = session.lock().await;
+        let agent = session.as_ref();
         if let Err(e) = agent.patch_last_assistant_timeline(timeline.reasoning_details_snapshot()) {
             tracing::warn!(error = %e, "patch assistant timeline after tools failed");
         }
@@ -260,14 +259,14 @@ pub(super) async fn record_tool_outcomes(
 ///
 /// 成功返回 `Ok(stream)`；失败返回 `Err(error_string)` 并已在 hook 中记录。
 pub(super) async fn run_sampling_request(
-    session: &Arc<Mutex<AgentLoop>>,
+    session: &Arc<AgentLoop>,
     streamer: &ProviderStreamer,
     system_prompt: &str,
     history: &[types::message::Message],
     tool_specs: Vec<serde_json::Value>,
 ) -> Result<super::types::AssistantContentStream, String> {
     {
-        let agent = session.lock().await;
+        let agent = session.as_ref();
         let sid = agent.session_id().to_string();
         let turn_id = agent.current_turn_id().await;
         let _ = agent.fire_hook(
@@ -284,7 +283,7 @@ pub(super) async fn run_sampling_request(
         .await
     {
         Ok(s) => {
-            let agent = session.lock().await;
+            let agent = session.as_ref();
             let sid = agent.session_id().to_string();
             let turn_id = agent.current_turn_id().await;
             let _ = agent.fire_hook(
@@ -298,7 +297,7 @@ pub(super) async fn run_sampling_request(
             Ok(s)
         }
         Err(err) => {
-            let agent = session.lock().await;
+            let agent = session.as_ref();
             let sid = agent.session_id().to_string();
             let turn_id = agent.current_turn_id().await;
             let _ = agent.fire_hook(

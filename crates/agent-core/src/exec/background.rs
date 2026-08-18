@@ -12,7 +12,7 @@
 use std::sync::Arc;
 
 use providers::{PauseControl, ProviderConfig, Usage};
-use tokio::sync::{mpsc, Mutex};
+use tokio::sync::mpsc;
 use types::message::{MessageContent, Role};
 use types::ChatTarget;
 
@@ -25,7 +25,7 @@ use agent_protocol::TurnInput;
 
 /// 使用统一多轮引擎执行后台任务。
 pub async fn run_background_multi_turn(
-    session: Arc<Mutex<Session>>,
+    session: Arc<Session>,
     targets: Vec<ChatTarget>,
     input: Vec<TurnInput>,
 ) -> anyhow::Result<(String, Usage)> {
@@ -34,7 +34,7 @@ pub async fn run_background_multi_turn(
 
 /// 带 Agent Thread interrupt / close 控制的后台执行入口。
 pub async fn run_background_multi_turn_controlled(
-    session: Arc<Mutex<Session>>,
+    session: Arc<Session>,
     targets: Vec<ChatTarget>,
     input: Vec<TurnInput>,
     control: Option<Arc<subagents::AgentThreadControl>>,
@@ -43,19 +43,19 @@ pub async fn run_background_multi_turn_controlled(
 }
 
 pub(crate) async fn run_background_multi_turn_controlled_with_chat(
-    session: Arc<Mutex<Session>>,
+    session: Arc<Session>,
     targets: Vec<ChatTarget>,
     input: Vec<TurnInput>,
     control: Option<Arc<subagents::AgentThreadControl>>,
     chat_override: Option<ChatOverride>,
 ) -> anyhow::Result<(String, Usage)> {
     let (base_config, message_start) = {
-        let agent = session.lock().await;
+        let agent = session.as_ref();
         let history = agent.clone_history().await;
         (
             ProviderConfig {
                 temperature: agent.temperature(),
-                additional_params: agent.additional_params().clone(),
+                additional_params: agent.additional_params(),
                 ..ProviderConfig::default()
             },
             history.len(),
@@ -131,12 +131,8 @@ async fn collect_background_events(
     Ok(usage)
 }
 
-async fn latest_assistant_text(
-    session: &Arc<Mutex<Session>>,
-    message_start: usize,
-) -> Option<String> {
-    let agent = session.lock().await;
-    let history = agent.clone_history().await;
+async fn latest_assistant_text(session: &Arc<Session>, message_start: usize) -> Option<String> {
+    let history = session.clone_history().await;
     history[message_start..]
         .iter()
         .rev()
@@ -203,7 +199,7 @@ mod tests {
         let temp = tempfile::tempdir().unwrap();
         let config = crate::runtime::Config::with_defaults(temp.path().to_path_buf());
         let agent = Session::with_session_id(config, "background-cancel".into()).unwrap();
-        let session = Arc::new(Mutex::new(agent));
+        let session = Arc::new(agent);
         let control = Arc::new(subagents::AgentThreadControl::default());
         let target = ChatTarget {
             provider_id: "test".into(),

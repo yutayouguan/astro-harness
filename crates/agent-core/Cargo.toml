@@ -37,3 +37,4 @@ async-channel = "2"
 [dev-dependencies]
 tempfile = "3"
 rusqlite = { version = "0.31", features = ["bundled"] }
+tokio = { workspace = true, features = ["test-util"] }
