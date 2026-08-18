@@ -1,9 +1,9 @@
 use std::fmt;
 
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 
 /// Canonical persisted path for a Codex V2 agent thread.
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize)]
 #[serde(transparent)]
 pub struct AgentPath(String);
 
@@ -64,6 +64,16 @@ impl AgentPath {
 impl AsRef<str> for AgentPath {
     fn as_ref(&self) -> &str {
         self.as_str()
+    }
+}
+
+impl<'de> Deserialize<'de> for AgentPath {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let value = String::deserialize(deserializer)?;
+        Self::parse(&value).map_err(serde::de::Error::custom)
     }
 }
 
@@ -154,5 +164,15 @@ mod tests {
             serde_json::from_str::<AgentPath>(&serialized).unwrap(),
             path
         );
+    }
+
+    #[test]
+    fn serde_rejects_invalid_paths() {
+        for value in ["/other", "/root/a/", "/root/UPPER"] {
+            assert!(
+                serde_json::from_str::<AgentPath>(&format!("\"{value}\"")).is_err(),
+                "accepted {value}"
+            );
+        }
     }
 }
