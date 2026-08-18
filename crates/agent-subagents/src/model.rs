@@ -64,7 +64,7 @@ pub struct AgentThreadV2 {
 pub struct ThreadReservation {
     pub thread_id: String,
     pub root_thread_id: String,
-    pub parent_thread_id: Option<String>,
+    pub parent_thread_id: String,
     pub canonical_path: AgentPath,
     pub task_name: String,
     pub agent_type: String,
@@ -73,7 +73,7 @@ pub struct ThreadReservation {
 
 /// Events emitted by one V2 runner for state projection and waiting callers.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(tag = "kind", content = "payload", rename_all = "snake_case")]
+#[serde(tag = "kind", rename_all = "snake_case")]
 pub enum RunnerEvent {
     TurnStarted {
         turn_id: String,
@@ -97,7 +97,7 @@ pub enum RunnerEvent {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AgentTreeSnapshotV2 {
     pub root_thread_id: String,
-    pub agents: Vec<AgentThreadV2>,
+    pub threads: Vec<AgentThreadV2>,
     pub activity_sequence: u64,
 }
 
@@ -358,24 +358,25 @@ mod tests {
         let reservation = ThreadReservation {
             thread_id: thread.thread_id.clone(),
             root_thread_id: thread.root_thread_id.clone(),
-            parent_thread_id: thread.parent_thread_id.clone(),
+            parent_thread_id: "parent-1".into(),
             canonical_path: thread.canonical_path.clone(),
             task_name: thread.task_name.clone(),
             agent_type: thread.agent_type.clone(),
             session_id: thread.session_id.clone(),
         };
         assert_eq!(reservation.task_name, "research");
+        let turn_started = serde_json::to_value(RunnerEvent::TurnStarted {
+            turn_id: "t1".into(),
+        })
+        .unwrap();
         assert_eq!(
-            serde_json::to_value(RunnerEvent::TurnCompleted {
-                turn_id: "turn-1".into(),
-                last_message: "done".into(),
-            })
-            .unwrap()["payload"]["turn_id"],
-            "turn-1"
+            turn_started,
+            serde_json::json!({ "kind": "turn_started", "turn_id": "t1" })
         );
+        assert!(turn_started.get("payload").is_none());
         let snapshot = AgentTreeSnapshotV2 {
             root_thread_id: thread.root_thread_id.clone(),
-            agents: vec![thread.clone()],
+            threads: vec![thread.clone()],
             activity_sequence: 7,
         };
         assert_eq!(snapshot.activity_sequence, 7);
