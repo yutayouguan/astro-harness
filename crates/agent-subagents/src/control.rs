@@ -1,4 +1,5 @@
 use std::collections::{BTreeSet, HashMap};
+use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, OnceLock};
 use std::time::Duration;
@@ -233,6 +234,10 @@ impl AgentControl {
 
     pub fn root_thread_id(&self) -> &str {
         &self.root_thread_id
+    }
+
+    pub fn graph_db_path(&self) -> &Path {
+        self.store.path()
     }
 
     pub fn reserve_spawn<'a>(

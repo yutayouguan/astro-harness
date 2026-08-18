@@ -719,60 +719,54 @@ async fn finish_close_operation(
     runtime_manager: Arc<AgentRuntimeManager>,
     control: Arc<AgentControl>,
     threads: Vec<AgentThreadV2>,
-    mut index: usize,
-    mut terminated: tokio::sync::watch::Receiver<Option<super::agent_runtime::RunnerAck>>,
 ) -> anyhow::Result<AgentTreeSnapshotV2> {
+    let mut index = 0;
     loop {
-        // A successful non-Shutdown acknowledgement can belong to a generation
-        // that crossed the close-admission boundary.  Re-read durable/runtime
-        // state below instead of treating that acknowledgement as completion.
-        let acknowledgement = runtime_manager.wait_for_close_ack(terminated).await;
-        if acknowledgement.is_err() {
-            // A closed acknowledgement channel can otherwise be re-subscribed
-            // in a tight loop while terminal cleanup is still converging.
-            tokio::select! {
-                () = runtime_manager.wait_for_runtime_change() => {}
-                () = tokio::time::sleep(Duration::from_millis(50)) => {}
-            }
-        }
-
-        loop {
-            let Some(thread) = threads.get(index) else {
-                return control.snapshot();
-            };
-            match runtime_manager
-                .begin_close_thread(control.as_ref(), thread)
-                .await
-            {
-                Ok(CloseThreadStart::Complete) => index += 1,
-                // request_close_slot removes and rejects Starting atomically,
-                // so re-read immediately; waiting here could miss the removal
-                // notification that was emitted before this result returned.
-                Ok(CloseThreadStart::Starting) => continue,
-                Ok(CloseThreadStart::TerminationRequested(receiver)) => {
-                    terminated = receiver;
-                    break;
-                }
-                Err(error) => {
-                    let runtime_may_still_be_live = runtime_manager.is_running(&thread.thread_id)
-                        || control
-                            .runtime_handle(&thread.thread_id)
-                            .map(|handle| handle.is_some())
-                            .unwrap_or(true);
-                    if runtime_may_still_be_live {
-                        tokio::select! {
-                            () = runtime_manager.wait_for_runtime_change() => {}
-                            () = tokio::time::sleep(Duration::from_millis(50)) => {}
-                        }
-                        continue;
+        let Some(thread) = threads.get(index) else {
+            return control.snapshot();
+        };
+        match runtime_manager
+            .begin_close_thread(control.as_ref(), thread)
+            .await
+        {
+            Ok(CloseThreadStart::Complete) => index += 1,
+            // request_close_slot removes and rejects Starting atomically,
+            // so re-read immediately; waiting here could miss the removal
+            // notification that was emitted before this result returned.
+            Ok(CloseThreadStart::Starting) => continue,
+            Ok(CloseThreadStart::TerminationRequested(terminated)) => {
+                // A successful non-Shutdown acknowledgement can belong to a
+                // generation that crossed the close-admission boundary. Re-read
+                // durable/runtime state instead of treating it as completion.
+                let acknowledgement = runtime_manager.wait_for_close_ack(terminated).await;
+                if acknowledgement.is_err() {
+                    // A closed acknowledgement channel can otherwise be
+                    // re-subscribed in a tight loop while cleanup converges.
+                    tokio::select! {
+                        () = runtime_manager.wait_for_runtime_change() => {}
+                        () = tokio::time::sleep(Duration::from_millis(50)) => {}
                     }
-                    runtime_manager.clear_close_intent(&thread.thread_id);
-                    return Err(close_subtree_error(
-                        control.as_ref(),
-                        &thread.canonical_path,
-                        error,
-                    ));
                 }
+            }
+            Err(error) => {
+                let runtime_may_still_be_live = runtime_manager.is_running(&thread.thread_id)
+                    || control
+                        .runtime_handle(&thread.thread_id)
+                        .map(|handle| handle.is_some())
+                        .unwrap_or(true);
+                if runtime_may_still_be_live {
+                    tokio::select! {
+                        () = runtime_manager.wait_for_runtime_change() => {}
+                        () = tokio::time::sleep(Duration::from_millis(50)) => {}
+                    }
+                    continue;
+                }
+                runtime_manager.clear_close_intent(&thread.thread_id);
+                return Err(close_subtree_error(
+                    control.as_ref(),
+                    &thread.canonical_path,
+                    error,
+                ));
             }
         }
     }
@@ -944,11 +938,41 @@ impl DesktopAgentThreadControl for DefaultDesktopAgentThreadControl {
         root_session_id: &str,
         target: &str,
     ) -> anyhow::Result<AgentTreeSnapshotV2> {
+        let response_timeout = self.runtime_manager.close_timeout();
+        let response_deadline = tokio::time::Instant::now() + response_timeout;
         let control = self.control(root_session_id)?;
         let target_thread = control.resolve_desktop_target(target)?;
-        let _close = self.runtime_manager.lock_subtree_close().await;
+        let _close = match tokio::time::timeout_at(
+            response_deadline,
+            self.runtime_manager.lock_subtree_close(control.as_ref()),
+        )
+        .await
+        {
+            Ok(result) => result?,
+            Err(_) => {
+                return Err(close_subtree_error(
+                    control.as_ref(),
+                    &target_thread.canonical_path,
+                    "timed out waiting for subtree close coordination; an earlier close remains active",
+                ));
+            }
+        };
         let close_admission = control.begin_close(target_thread.canonical_path.clone())?;
-        close_admission.wait_for_inflight_spawns().await?;
+        match tokio::time::timeout_at(
+            response_deadline,
+            close_admission.wait_for_inflight_spawns(),
+        )
+        .await
+        {
+            Ok(result) => result?,
+            Err(_) => {
+                return Err(close_subtree_error(
+                    control.as_ref(),
+                    &target_thread.canonical_path,
+                    "timed out waiting for in-flight agent spawn reservations",
+                ));
+            }
+        }
         #[cfg(test)]
         if let Some(hook) = self.close_barrier_hook.as_ref() {
             hook.entered.notify_one();
@@ -973,75 +997,31 @@ impl DesktopAgentThreadControl for DefaultDesktopAgentThreadControl {
                 .then_with(|| right.canonical_path.cmp(&left.canonical_path))
         });
 
-        let response_timeout = self.runtime_manager.close_timeout();
-        let response_deadline = tokio::time::Instant::now() + response_timeout;
-        let mut index = 0;
-        loop {
-            let Some(thread) = threads.get(index) else {
-                return control.snapshot();
-            };
-            match self
-                .runtime_manager
-                .begin_close_thread(control.as_ref(), thread)
-                .await
-            {
-                Ok(CloseThreadStart::Complete) => index += 1,
-                Ok(CloseThreadStart::Starting) => {
-                    if tokio::time::Instant::now() >= response_deadline {
-                        return Err(close_subtree_error(
-                            control.as_ref(),
-                            &thread.canonical_path,
-                            "timed out before a runtime termination request was sent",
-                        ));
-                    }
-                    // Starting was atomically removed and its shared result was
-                    // completed by begin_close_thread.  The next read observes
-                    // Missing and records the idle RuntimeTerminated event.
-                    continue;
-                }
-                Ok(CloseThreadStart::TerminationRequested(terminated)) => {
-                    let failed_path = thread.canonical_path.clone();
-                    let timeout =
-                        response_deadline.saturating_duration_since(tokio::time::Instant::now());
-                    let runtime_manager = Arc::clone(&self.runtime_manager);
-                    let background_control = Arc::clone(&control);
-                    let mut completion = tokio::spawn(async move {
-                        // Once termination has been sent, these two guards belong
-                        // to the manager-owned completion task rather than to the
-                        // desktop command future.
-                        let _subtree_close = _close;
-                        let _close_admission = close_admission;
-                        finish_close_operation(
-                            runtime_manager,
-                            background_control,
-                            threads,
-                            index,
-                            terminated,
-                        )
-                        .await
-                    });
-                    return match tokio::time::timeout(timeout, &mut completion).await {
-                        Ok(Ok(result)) => result,
-                        Ok(Err(join_error)) => Err(close_subtree_error(
-                            control.as_ref(),
-                            &failed_path,
-                            format!("background close task failed: {join_error}"),
-                        )),
-                        Err(_) => Err(close_subtree_error(
-                            control.as_ref(),
-                            &failed_path,
-                            "timed out waiting for shutdown acknowledgement; subtree remains closing in background",
-                        )),
-                    };
-                }
-                Err(error) => {
-                    return Err(close_subtree_error(
-                        control.as_ref(),
-                        &thread.canonical_path,
-                        error,
-                    ));
-                }
-            }
+        let Some(first_thread) = threads.first() else {
+            return control.snapshot();
+        };
+        let failed_path = first_thread.canonical_path.clone();
+        let runtime_manager = Arc::clone(&self.runtime_manager);
+        let background_control = Arc::clone(&control);
+        let mut completion = tokio::spawn(async move {
+            // Coordination and lifecycle admission belong to the manager-owned
+            // convergence task before the first runtime close intent is created.
+            let _subtree_close = _close;
+            let _close_admission = close_admission;
+            finish_close_operation(runtime_manager, background_control, threads).await
+        });
+        match tokio::time::timeout_at(response_deadline, &mut completion).await {
+            Ok(Ok(result)) => result,
+            Ok(Err(join_error)) => Err(close_subtree_error(
+                control.as_ref(),
+                &failed_path,
+                format!("background close task failed: {join_error}"),
+            )),
+            Err(_) => Err(close_subtree_error(
+                control.as_ref(),
+                &failed_path,
+                "timed out waiting for shutdown acknowledgement; subtree remains closing in background",
+            )),
         }
     }
 }
@@ -1056,9 +1036,21 @@ mod tests {
     use subagents::{AgentGraphStore, AgentStatusV2, Limits, RunnerEvent};
 
     fn dispatch(dir: &tempfile::TempDir) -> DefaultAgentThreadDispatch {
+        dispatch_for_root(
+            dir,
+            "root-session",
+            Arc::new(AgentRuntimeManager::default()),
+        )
+    }
+
+    fn dispatch_for_root(
+        dir: &tempfile::TempDir,
+        root_thread_id: &str,
+        runtime_manager: Arc<AgentRuntimeManager>,
+    ) -> DefaultAgentThreadDispatch {
         let store = AgentGraphStore::open(dir.path().join("subagents-v2.db")).unwrap();
         let control = AgentControl::open(
-            "root-session".into(),
+            root_thread_id.into(),
             store,
             Limits {
                 max_threads: 8,
@@ -1070,8 +1062,8 @@ mod tests {
         DefaultAgentThreadDispatch::for_test(
             control,
             AgentPath::root(),
-            "root-session".into(),
-            Arc::new(AgentRuntimeManager::default()),
+            root_thread_id.into(),
+            runtime_manager,
         )
     }
 
@@ -1574,6 +1566,186 @@ mod tests {
             .control
             .reserve_spawn(&spawned.thread.canonical_path, "too_late")
             .is_err());
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn stuck_background_close_in_one_root_does_not_block_another_root() {
+        let dir_a = tempfile::tempdir().unwrap();
+        let dir_b = tempfile::tempdir().unwrap();
+        let memory_a = dir_a.path().join("memory");
+        let memory_b = dir_b.path().join("memory");
+        let manager = Arc::new(AgentRuntimeManager::default());
+        let mut dispatch_a = dispatch_for_root(&dir_a, "root-a", Arc::clone(&manager));
+        let dispatch_b = dispatch_for_root(&dir_b, "root-b", Arc::clone(&manager));
+        session::SessionStore::open_sessions_dir(&memory_a.join("sessions"))
+            .unwrap()
+            .ensure_session("root-a", "test")
+            .unwrap();
+        session::SessionStore::open_sessions_dir(&memory_b.join("sessions"))
+            .unwrap()
+            .ensure_session("root-b", "test")
+            .unwrap();
+        dispatch_a.chat_override = Some(pending_chat());
+        let worker_a = AgentThreadDispatch::spawn_agent(&dispatch_a, spawn_request(&memory_a))
+            .await
+            .unwrap()
+            .thread;
+        let worker_b = committed_child(&dispatch_b, "worker");
+        let terminal_hook = super::super::agent_runtime::AckSubscribeHook {
+            entered: Arc::new(tokio::sync::Notify::new()),
+            release: Arc::new(tokio::sync::Notify::new()),
+        };
+        manager.set_before_terminal_persist_hook(Some(terminal_hook.clone()));
+        manager.set_close_timeout(Duration::from_millis(20));
+        let close_a = tokio::spawn({
+            let desktop = desktop_control(&dispatch_a, &memory_a);
+            async move { desktop.close_subtree("root-a", "/root/worker").await }
+        });
+        terminal_hook.entered.notified().await;
+        assert!(close_a
+            .await
+            .unwrap()
+            .unwrap_err()
+            .to_string()
+            .contains("remains closing in background"));
+
+        let close_b = tokio::time::timeout(
+            Duration::from_millis(100),
+            desktop_control(&dispatch_b, &memory_b).close_subtree("root-b", "/root/worker"),
+        )
+        .await;
+        terminal_hook.release.notify_one();
+        wait_for_shutdown_and_barrier_release(&dispatch_a, &worker_a).await;
+        let snapshot_b = close_b
+            .expect("root B must not wait for root A's close lock")
+            .unwrap();
+        assert_eq!(
+            snapshot_b
+                .threads
+                .iter()
+                .find(|thread| thread.thread_id == worker_b.thread_id)
+                .unwrap()
+                .status,
+            AgentStatusV2::Shutdown
+        );
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn same_root_close_lock_wait_is_bounded_by_the_caller_deadline() {
+        let dir = tempfile::tempdir().unwrap();
+        let memory_dir = dir.path().join("memory");
+        let sessions =
+            session::SessionStore::open_sessions_dir(&memory_dir.join("sessions")).unwrap();
+        sessions.ensure_session("root-session", "test").unwrap();
+        let mut dispatch = dispatch(&dir);
+        dispatch.chat_override = Some(pending_chat());
+        let worker = AgentThreadDispatch::spawn_agent(&dispatch, spawn_request(&memory_dir))
+            .await
+            .unwrap()
+            .thread;
+        let terminal_hook = super::super::agent_runtime::AckSubscribeHook {
+            entered: Arc::new(tokio::sync::Notify::new()),
+            release: Arc::new(tokio::sync::Notify::new()),
+        };
+        dispatch
+            .runtime_manager
+            .set_before_terminal_persist_hook(Some(terminal_hook.clone()));
+        dispatch
+            .runtime_manager
+            .set_close_timeout(Duration::from_millis(20));
+        let desktop = Arc::new(desktop_control(&dispatch, &memory_dir));
+        let first = tokio::spawn({
+            let desktop = Arc::clone(&desktop);
+            async move { desktop.close_subtree("root-session", "/root/worker").await }
+        });
+        terminal_hook.entered.notified().await;
+        assert!(first.await.unwrap().is_err());
+
+        let second = tokio::time::timeout(
+            Duration::from_millis(100),
+            desktop.close_subtree("root-session", "/root/worker"),
+        )
+        .await;
+        terminal_hook.release.notify_one();
+        wait_for_shutdown_and_barrier_release(&dispatch, &worker).await;
+        let error = second
+            .expect("same-root coordination wait must obey the caller deadline")
+            .unwrap_err();
+        assert!(error
+            .to_string()
+            .contains("timed out waiting for subtree close coordination"));
+        assert_eq!(
+            error
+                .downcast_ref::<CloseSubtreeError>()
+                .unwrap()
+                .failed_path(),
+            "/root/worker"
+        );
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn caller_cancellation_after_starting_close_keeps_background_convergence_owner() {
+        let dir = tempfile::tempdir().unwrap();
+        let memory_dir = dir.path().join("memory");
+        let sessions =
+            session::SessionStore::open_sessions_dir(&memory_dir.join("sessions")).unwrap();
+        sessions.ensure_session("root-session", "test").unwrap();
+        let mut dispatch = dispatch(&dir);
+        dispatch.chat_override = Some(scripted_chat("done"));
+        let dispatch = Arc::new(dispatch);
+        let spawned = AgentThreadDispatch::spawn_agent(&*dispatch, spawn_request(&memory_dir))
+            .await
+            .unwrap();
+        while dispatch
+            .runtime_manager
+            .is_running(&spawned.thread.thread_id)
+        {
+            tokio::task::yield_now().await;
+        }
+        let start_entered = Arc::new(tokio::sync::Notify::new());
+        let start_release = Arc::new(tokio::sync::Notify::new());
+        dispatch
+            .runtime_manager
+            .set_before_followup_start_hook(Some(crate::exec::agent_runtime::AckSubscribeHook {
+                entered: Arc::clone(&start_entered),
+                release: Arc::clone(&start_release),
+            }));
+        let followup = tokio::spawn({
+            let dispatch = Arc::clone(&dispatch);
+            let target = spawned.thread.canonical_path.to_string();
+            async move {
+                AgentThreadDispatch::followup_task(
+                    &*dispatch,
+                    MessageAgentV2Request {
+                        target,
+                        message: "close must own this Starting slot".into(),
+                    },
+                )
+                .await
+            }
+        });
+        start_entered.notified().await;
+        let close_hook = crate::exec::agent_runtime::AckSubscribeHook {
+            entered: Arc::new(tokio::sync::Notify::new()),
+            release: Arc::new(tokio::sync::Notify::new()),
+        };
+        dispatch
+            .runtime_manager
+            .set_after_starting_close_hook(Some(close_hook.clone()));
+        let close = tokio::spawn({
+            let desktop = desktop_control(&dispatch, &memory_dir);
+            async move { desktop.close_subtree("root-session", "/root/worker").await }
+        });
+        close_hook.entered.notified().await;
+        close.abort();
+        assert!(dispatch
+            .control
+            .is_path_closing(&spawned.thread.canonical_path)
+            .unwrap());
+        close_hook.release.notify_one();
+        start_release.notify_one();
+        wait_for_shutdown_and_barrier_release(&dispatch, &spawned.thread).await;
+        assert!(followup.await.unwrap().is_err());
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]

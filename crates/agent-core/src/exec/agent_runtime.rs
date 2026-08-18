@@ -2,7 +2,7 @@ use std::collections::{HashMap, HashSet};
 use std::ops::{Deref, DerefMut};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex, OnceLock};
+use std::sync::{Arc, Mutex, OnceLock, Weak};
 
 use subagents::{
     AgentRuntimeHandle, AgentStatusV2, AgentThreadControl, AgentThreadV2, RunnerEvent,
@@ -103,6 +103,12 @@ struct StartingAgentTurn {
 enum RuntimeSlot {
     Starting(StartingAgentTurn),
     Running(Box<ActiveAgentTurn>),
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+struct SubtreeCloseKey {
+    graph_db_path: PathBuf,
+    root_thread_id: String,
 }
 
 #[derive(Default)]
@@ -331,7 +337,7 @@ pub(super) struct CloseAdmissionHook {
 pub struct AgentRuntimeManager {
     active: Mutex<RuntimeState>,
     active_changed: tokio::sync::Notify,
-    subtree_close: Arc<tokio::sync::Mutex<()>>,
+    subtree_close: Mutex<HashMap<SubtreeCloseKey, Weak<tokio::sync::Mutex<()>>>>,
     #[cfg(test)]
     ack_subscribe_hook: Mutex<Option<AckSubscribeHook>>,
     #[cfg(test)]
@@ -358,6 +364,8 @@ pub struct AgentRuntimeManager {
     close_timeout: Mutex<Option<std::time::Duration>>,
     #[cfg(test)]
     close_admission_hook: Mutex<Option<CloseAdmissionHook>>,
+    #[cfg(test)]
+    after_starting_close_hook: Mutex<Option<AckSubscribeHook>>,
 }
 
 impl AgentRuntimeManager {
@@ -769,7 +777,10 @@ impl AgentRuntimeManager {
             CloseSlotAdmission::TerminationRequested(terminated) => {
                 Ok(CloseThreadStart::TerminationRequested(terminated))
             }
-            CloseSlotAdmission::Starting => Ok(CloseThreadStart::Starting),
+            CloseSlotAdmission::Starting => {
+                self.pause_after_starting_close().await;
+                Ok(CloseThreadStart::Starting)
+            }
             CloseSlotAdmission::Missing => {
                 if current.status == AgentStatusV2::Shutdown
                     && control.runtime_handle(thread_id)?.is_none()
@@ -806,8 +817,30 @@ impl AgentRuntimeManager {
         self.active_changed.notified().await;
     }
 
-    pub(super) async fn lock_subtree_close(&self) -> tokio::sync::OwnedMutexGuard<()> {
-        Arc::clone(&self.subtree_close).lock_owned().await
+    pub(super) async fn lock_subtree_close(
+        &self,
+        control: &subagents::AgentControl,
+    ) -> anyhow::Result<tokio::sync::OwnedMutexGuard<()>> {
+        let key = SubtreeCloseKey {
+            graph_db_path: control.graph_db_path().to_path_buf(),
+            root_thread_id: control.root_thread_id().to_string(),
+        };
+        let coordinator = {
+            let mut coordinators = self
+                .subtree_close
+                .lock()
+                .map_err(|_| anyhow::anyhow!("subtree close coordinator mutex is poisoned"))?;
+            coordinators.retain(|_, coordinator| coordinator.strong_count() > 0);
+            match coordinators.get(&key).and_then(Weak::upgrade) {
+                Some(coordinator) => coordinator,
+                None => {
+                    let coordinator = Arc::new(tokio::sync::Mutex::new(()));
+                    coordinators.insert(key, Arc::downgrade(&coordinator));
+                    coordinator
+                }
+            }
+        };
+        Ok(coordinator.lock_owned().await)
     }
 
     pub fn is_running(&self, thread_id: &str) -> bool {
@@ -1072,6 +1105,23 @@ impl AgentRuntimeManager {
     pub(super) fn set_close_admission_hook(&self, hook: Option<CloseAdmissionHook>) {
         *self.close_admission_hook.lock().unwrap() = hook;
     }
+
+    #[cfg(test)]
+    pub(super) fn set_after_starting_close_hook(&self, hook: Option<AckSubscribeHook>) {
+        *self.after_starting_close_hook.lock().unwrap() = hook;
+    }
+
+    #[cfg(test)]
+    async fn pause_after_starting_close(&self) {
+        let hook = self.after_starting_close_hook.lock().unwrap().take();
+        if let Some(hook) = hook {
+            hook.entered.notify_one();
+            hook.release.notified().await;
+        }
+    }
+
+    #[cfg(not(test))]
+    async fn pause_after_starting_close(&self) {}
 
     #[cfg(test)]
     fn pause_before_close_signal(&self) {
@@ -1620,6 +1670,29 @@ mod tests {
             result_observer.borrow().as_ref(),
             Some(Err(message)) if message.contains("cancelled starting follow-up")
         ));
+    }
+
+    #[tokio::test]
+    async fn subtree_close_coordinator_prunes_dropped_root_locks() {
+        let dir_a = tempfile::tempdir().unwrap();
+        let dir_b = tempfile::tempdir().unwrap();
+        let (control_a, _) = setup(&dir_a, "worker_a");
+        let (control_b, _) = setup(&dir_b, "worker_b");
+        let manager = AgentRuntimeManager::default();
+
+        let guard_a = manager
+            .lock_subtree_close(control_a.as_ref())
+            .await
+            .unwrap();
+        assert_eq!(manager.subtree_close.lock().unwrap().len(), 1);
+        drop(guard_a);
+
+        let guard_b = manager
+            .lock_subtree_close(control_b.as_ref())
+            .await
+            .unwrap();
+        assert_eq!(manager.subtree_close.lock().unwrap().len(), 1);
+        drop(guard_b);
     }
 
     fn scripted_chat(reply: &str) -> ChatOverride {
