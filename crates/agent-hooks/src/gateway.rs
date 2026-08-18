@@ -87,6 +87,8 @@ impl GatewayHookRegistry {
 
     /// 触发某 gateway 事件：对订阅了该事件且已绑定 handler 的清单调用。
     pub fn fire(&self, event: &str, payload: &HookPayload) {
+        let event = crate::event::normalize_hook_event_name(event);
+        let payload = payload.normalized_for_event(event.as_ref());
         let discovered = self
             .discovered
             .lock()
@@ -94,19 +96,23 @@ impl GatewayHookRegistry {
             .unwrap_or_default();
         let handlers = self.handlers.lock().map(|g| g.clone()).unwrap_or_default();
         for d in discovered {
-            if !d.manifest.events.iter().any(|e| e == event || e == "*") {
+            if !d.manifest.events.iter().any(|manifest_event| {
+                manifest_event == "*"
+                    || crate::event::canonical_hook_event_name(manifest_event).as_ref()
+                        == event.as_ref()
+            }) {
                 continue;
             }
             match handlers.get(&d.manifest.name) {
                 Some(h) => {
                     let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                        h(event, payload)
+                        h(event.as_ref(), &payload)
                     }));
                 }
                 None => {
                     warn!(
                         hook = %d.manifest.name,
-                        event,
+                        event = %event,
                         "gateway hook has no registered handler; skipped"
                     );
                 }
@@ -154,6 +160,55 @@ mod tests {
     use std::sync::atomic::{AtomicUsize, Ordering};
 
     #[test]
+    fn legacy_manifest_event_matches_canonical_dispatch() {
+        let dir = tempfile::tempdir().unwrap();
+        let hook_dir = dir.path().join("hooks").join("audit");
+        fs::create_dir_all(&hook_dir).unwrap();
+        fs::write(
+            hook_dir.join("HOOK.yaml"),
+            "name: audit\nevents:\n  - gateway:startup\n",
+        )
+        .unwrap();
+        let registry = GatewayHookRegistry::new();
+        registry.discover(dir.path()).unwrap();
+        let hits = Arc::new(AtomicUsize::new(0));
+        let capture = Arc::clone(&hits);
+        registry.register_handler("audit", move |event, input| {
+            assert_eq!(event, crate::names::GATEWAY_STARTUP);
+            assert_eq!(input.hook_event_name, crate::names::GATEWAY_STARTUP);
+            capture.fetch_add(1, Ordering::SeqCst);
+        });
+
+        registry.fire(crate::names::GATEWAY_STARTUP, &crate::HookInput::default());
+
+        assert_eq!(hits.load(Ordering::SeqCst), 1);
+    }
+
+    #[test]
+    fn unknown_custom_manifest_event_is_preserved() {
+        let dir = tempfile::tempdir().unwrap();
+        let hook_dir = dir.path().join("hooks").join("custom");
+        fs::create_dir_all(&hook_dir).unwrap();
+        fs::write(
+            hook_dir.join("HOOK.yaml"),
+            "name: custom\nevents:\n  - acme:custom_event\n",
+        )
+        .unwrap();
+        let registry = GatewayHookRegistry::new();
+        registry.discover(dir.path()).unwrap();
+        let seen = Arc::new(std::sync::Mutex::new(None));
+        let capture = Arc::clone(&seen);
+        registry.register_handler("custom", move |event, input| {
+            assert_eq!(input.hook_event_name, "acme:custom_event");
+            *capture.lock().unwrap() = Some(event.to_owned());
+        });
+
+        registry.fire("acme:custom_event", &crate::HookInput::default());
+
+        assert_eq!(seen.lock().unwrap().as_deref(), Some("acme:custom_event"));
+    }
+
+    #[test]
     fn discover_and_fire() {
         let dir = tempfile::tempdir().unwrap();
         let hook_dir = dir.path().join("hooks").join("audit");
@@ -168,7 +223,7 @@ mod tests {
         let hits = Arc::new(AtomicUsize::new(0));
         let h = Arc::clone(&hits);
         reg.register_handler("audit", move |ev, _| {
-            if ev == "gateway:startup" {
+            if ev == crate::names::GATEWAY_STARTUP {
                 h.fetch_add(1, Ordering::SeqCst);
             }
         });

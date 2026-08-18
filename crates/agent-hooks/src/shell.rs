@@ -21,6 +21,24 @@ pub struct ShellHookRunner {
 
 impl ShellHookRunner {
     pub fn new(commands: HashMap<String, String>) -> Self {
+        let mut entries = commands
+            .into_iter()
+            .map(|(event, command)| {
+                let canonical = crate::event::normalize_hook_event_name(&event).into_owned();
+                let is_canonical = event == canonical;
+                (canonical, is_canonical, event, command)
+            })
+            .collect::<Vec<_>>();
+        entries.sort_by(|left, right| {
+            left.0
+                .cmp(&right.0)
+                .then_with(|| left.1.cmp(&right.1))
+                .then_with(|| left.2.cmp(&right.2))
+        });
+        let commands = entries
+            .into_iter()
+            .map(|(canonical, _, _, command)| (canonical, command))
+            .collect();
         Self {
             commands,
             timeout: DEFAULT_TIMEOUT,
@@ -35,13 +53,20 @@ impl ShellHookRunner {
         self.commands.is_empty()
     }
 
+    #[cfg(test)]
+    pub(crate) fn has_event(&self, event: &str) -> bool {
+        self.commands
+            .contains_key(crate::event::canonical_hook_event_name(event).as_ref())
+    }
+
     /// Fire-and-forget：在后台跑命令，不阻塞调用方。
     pub fn fire_async(&self, event: &str, payload: &HookPayload) {
-        let Some(cmd) = self.commands.get(event).cloned() else {
+        let event = crate::event::canonical_hook_event_name(event);
+        let Some(cmd) = self.commands.get(event.as_ref()).cloned() else {
             return;
         };
-        let event = event.to_string();
-        let env = env_from_payload(&event, payload);
+        let env = env_from_payload(event.as_ref(), payload);
+        let event = event.into_owned();
         let timeout = self.timeout;
         tokio::spawn(async move {
             if let Err(err) = run_shell(&cmd, &env, timeout).await {
@@ -54,10 +79,11 @@ impl ShellHookRunner {
 
     /// 同步等待（测试用）。
     pub async fn fire_await(&self, event: &str, payload: &HookPayload) -> anyhow::Result<()> {
-        let Some(cmd) = self.commands.get(event) else {
+        let event = crate::event::canonical_hook_event_name(event);
+        let Some(cmd) = self.commands.get(event.as_ref()) else {
             return Ok(());
         };
-        let env = env_from_payload(event, payload);
+        let env = env_from_payload(event.as_ref(), payload);
         run_shell(cmd, &env, self.timeout).await
     }
 }
@@ -112,6 +138,43 @@ pub fn load_shell_runner(_root: &Path, hooks: HashMap<String, String>) -> ShellH
 mod tests {
     use super::*;
     use crate::outcome::HookPayload;
+
+    #[test]
+    fn legacy_yaml_key_is_stored_under_canonical_name() {
+        let runner = ShellHookRunner::new(HashMap::from([(
+            "post_tool_call".to_string(),
+            "true".to_string(),
+        )]));
+
+        assert!(runner.has_event(crate::names::POST_TOOL_USE));
+        assert_eq!(runner.commands.len(), 1);
+        assert_eq!(
+            runner
+                .commands
+                .get(crate::names::POST_TOOL_USE)
+                .map(String::as_str),
+            Some("true")
+        );
+    }
+
+    #[test]
+    fn legacy_and_canonical_keys_collapse_to_one_slot() {
+        let runner = ShellHookRunner::new(HashMap::from([
+            ("post_tool_call".to_string(), "false".to_string()),
+            (crate::names::POST_TOOL_USE.to_string(), "true".to_string()),
+        ]));
+
+        assert!(runner.has_event(crate::names::POST_TOOL_USE));
+        assert_eq!(runner.commands.len(), 1);
+        assert_eq!(
+            runner
+                .commands
+                .get(crate::names::POST_TOOL_USE)
+                .map(String::as_str),
+            Some("true"),
+            "the canonical spelling wins deterministically"
+        );
+    }
 
     #[test]
     fn env_includes_turn_when_set() {

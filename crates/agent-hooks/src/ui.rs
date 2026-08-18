@@ -3,9 +3,9 @@
 use std::sync::{Arc, Mutex};
 
 use crate::names::{
-    ON_SESSION_END, ON_SESSION_FINALIZE, ON_SESSION_RESET, ON_SESSION_START, POST_API_REQUEST,
-    POST_APPROVAL_RESPONSE, POST_LLM_CALL, POST_TOOL_CALL, PRE_API_REQUEST, PRE_APPROVAL_REQUEST,
-    PRE_GATEWAY_DISPATCH, PRE_LLM_CALL, PRE_TOOL_CALL, PRE_VERIFY, SUBAGENT_START, SUBAGENT_STOP,
+    AGENT_END, PERMISSION_REQUEST, POST_API_REQUEST, POST_APPROVAL_RESPONSE, POST_LLM_CALL,
+    POST_TOOL_USE, PRE_API_REQUEST, PRE_GATEWAY_DISPATCH, PRE_LLM_CALL, PRE_TOOL_USE,
+    SESSION_FINALIZE, SESSION_RESET, SESSION_START, STOP, SUBAGENT_START, SUBAGENT_STOP,
     TRANSFORM_LLM_OUTPUT, TRANSFORM_TERMINAL_OUTPUT, TRANSFORM_TOOL_RESULT,
 };
 use crate::outcome::{HookOutcome, HookPayload};
@@ -20,21 +20,21 @@ pub struct UiHookEvent {
 }
 
 const UI_HOOK_NAMES: &[&str] = &[
-    ON_SESSION_START,
+    SESSION_START,
     PRE_LLM_CALL,
     PRE_API_REQUEST,
     POST_API_REQUEST,
-    PRE_TOOL_CALL,
-    POST_TOOL_CALL,
+    PRE_TOOL_USE,
+    POST_TOOL_USE,
     POST_LLM_CALL,
-    ON_SESSION_END,
-    ON_SESSION_FINALIZE,
-    ON_SESSION_RESET,
+    AGENT_END,
+    SESSION_FINALIZE,
+    SESSION_RESET,
     SUBAGENT_STOP,
     PRE_GATEWAY_DISPATCH,
-    PRE_VERIFY,
+    STOP,
     SUBAGENT_START,
-    PRE_APPROVAL_REQUEST,
+    PERMISSION_REQUEST,
     POST_APPROVAL_RESPONSE,
     TRANSFORM_TOOL_RESULT,
     TRANSFORM_TERMINAL_OUTPUT,
@@ -48,11 +48,15 @@ fn detail_from_payload(payload: &HookPayload) -> String {
         format!(
             "{t} {}",
             payload
-                .tool_args
+                .tool_input
                 .as_ref()
                 .map(|v| v.to_string())
                 .unwrap_or_default()
         )
+    } else if let Some(prompt) = &payload.prompt {
+        prompt.clone()
+    } else if let Some(message) = &payload.last_assistant_message {
+        message.clone()
     } else if let Some(n) = payload.system_prompt_chars {
         format!("system_prompt_chars={n}")
     } else if let Some(n) = payload.assistant_chars {
@@ -151,6 +155,54 @@ pub fn install_recording(bus: &PluginHookBus, log: std::sync::Arc<std::sync::Mut
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn timeline_emits_canonical_name_for_legacy_fire() {
+        let bus = PluginHookBus::new();
+        let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
+        install_ui_timeline(&bus, tx);
+
+        bus.fire("pre_tool_call", &crate::HookInput::default());
+
+        assert_eq!(rx.try_recv().unwrap().name, crate::names::PRE_TOOL_USE);
+    }
+
+    #[test]
+    fn detail_uses_canonical_input_fields() {
+        let tool = HookPayload {
+            tool_name: Some("terminal".into()),
+            tool_input: Some(json!({"command": "pwd"})),
+            tool_args: Some(json!({"legacy": true})),
+            ..Default::default()
+        };
+        let prompt = HookPayload {
+            prompt: Some("canonical prompt".into()),
+            message: Some("legacy prompt".into()),
+            ..Default::default()
+        };
+        let assistant = HookPayload {
+            last_assistant_message: Some("canonical response".into()),
+            tool_result: Some("legacy result".into()),
+            ..Default::default()
+        };
+
+        assert_eq!(detail_from_payload(&tool), "terminal {\"command\":\"pwd\"}");
+        assert_eq!(detail_from_payload(&prompt), "canonical prompt");
+        assert_eq!(detail_from_payload(&assistant), "canonical response");
+    }
+
+    #[test]
+    fn detail_ignores_legacy_only_fields() {
+        let payload = HookPayload {
+            tool_args: Some(json!({"legacy": true})),
+            message: Some("legacy prompt".into()),
+            tool_result: Some("legacy result".into()),
+            ..Default::default()
+        };
+
+        assert!(detail_from_payload(&payload).is_empty());
+    }
 
     #[test]
     fn slot_replaces_sender_without_restacking() {

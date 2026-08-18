@@ -71,17 +71,21 @@ impl HookRuntime {
 
     /// Plugin fire + 旁路 Shell（同名事件）。
     pub fn fire_plugin(&self, name: &str, payload: &HookPayload) -> HookOutcome {
-        let out = self.plugin.fire(name, payload);
+        let name = normalize_hook_event_name(name);
+        let payload = payload.normalized_for_event(name.as_ref());
+        let out = self.plugin.fire(name.as_ref(), &payload);
         if let Ok(sh) = self.shell.lock() {
-            sh.fire_async(name, payload);
+            sh.fire_async(name.as_ref(), &payload);
         }
         out
     }
 
     pub fn fire_gateway(&self, event: &str, payload: &HookPayload) {
-        self.gateway.fire(event, payload);
+        let event = normalize_hook_event_name(event);
+        let payload = payload.normalized_for_event(event.as_ref());
+        self.gateway.fire(event.as_ref(), &payload);
         if let Ok(sh) = self.shell.lock() {
-            sh.fire_async(event, payload);
+            sh.fire_async(event.as_ref(), &payload);
         }
     }
 }
@@ -90,6 +94,55 @@ impl HookRuntime {
 mod tests {
     use super::*;
     use std::sync::atomic::{AtomicUsize, Ordering};
+
+    #[tokio::test]
+    async fn runtime_normalizes_plugin_and_shell_to_the_same_event() {
+        let rt = HookRuntime::new();
+        let seen = Arc::new(std::sync::Mutex::new(None));
+        let capture = Arc::clone(&seen);
+        rt.plugin.register(PRE_TOOL_USE, move |input| {
+            *capture.lock().unwrap() = Some(input.hook_event_name.clone());
+            HookOutcome::Continue
+        });
+        *rt.shell.lock().unwrap() = ShellHookRunner::new(std::collections::HashMap::from([(
+            "pre_tool_call".to_string(),
+            "true".to_string(),
+        )]));
+
+        let _ = rt.fire_plugin("pre_tool_call", &HookInput::default());
+
+        assert_eq!(seen.lock().unwrap().as_deref(), Some(PRE_TOOL_USE));
+        assert!(rt.shell.lock().unwrap().has_event(PRE_TOOL_USE));
+    }
+
+    #[tokio::test]
+    async fn runtime_normalizes_gateway_and_shell_to_the_same_event() {
+        let dir = tempfile::tempdir().unwrap();
+        let hook_dir = dir.path().join("hooks").join("audit");
+        std::fs::create_dir_all(&hook_dir).unwrap();
+        std::fs::write(
+            hook_dir.join("HOOK.yaml"),
+            "name: audit\nevents:\n  - gateway:startup\n",
+        )
+        .unwrap();
+        let rt = HookRuntime::new();
+        rt.gateway.discover(dir.path()).unwrap();
+        let seen = Arc::new(std::sync::Mutex::new(None));
+        let capture = Arc::clone(&seen);
+        rt.gateway.register_handler("audit", move |event, input| {
+            assert_eq!(input.hook_event_name, GATEWAY_STARTUP);
+            *capture.lock().unwrap() = Some(event.to_owned());
+        });
+        *rt.shell.lock().unwrap() = ShellHookRunner::new(std::collections::HashMap::from([(
+            "gateway:startup".to_string(),
+            "true".to_string(),
+        )]));
+
+        rt.fire_gateway("gateway:startup", &HookInput::default());
+
+        assert_eq!(seen.lock().unwrap().as_deref(), Some(GATEWAY_STARTUP));
+        assert!(rt.shell.lock().unwrap().has_event(GATEWAY_STARTUP));
+    }
 
     #[test]
     fn fire_gateway_invokes_handler_and_shell_map() {
