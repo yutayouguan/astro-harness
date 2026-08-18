@@ -143,6 +143,9 @@ pub struct Session {
 
     // ── 轻量状态 ───────────────────────────────────────────
     pub(crate) cancel: CancelSignal,
+    /// Long-lived controls reused by actor-submitted turns and exposed to adapters.
+    thread_controls: StdMutex<Option<ThreadControls>>,
+    thread_provider_options: StdMutex<ThreadProviderOptions>,
     /// Codex-style single-active-task registry for this session.
     pub(crate) active_turn: TokioMutex<Option<ActiveTurn>>,
     /// Serializes abort-old -> install -> bind -> start admission for session tasks.
@@ -171,6 +174,29 @@ struct RuntimeIoBindings {
     event_tx: async_channel::Sender<Event>,
     status_tx: watch::Sender<AgentStatus>,
     rollout: RolloutRecorder,
+}
+
+#[derive(Clone)]
+struct ThreadControls {
+    pause: Arc<providers::PauseControl>,
+    hitl_gate: Arc<crate::HitlGate>,
+}
+
+#[derive(Clone)]
+pub struct ThreadProviderOptions {
+    pub thinking_enabled: bool,
+    pub reasoning_effort: String,
+    pub max_tokens: u32,
+}
+
+impl Default for ThreadProviderOptions {
+    fn default() -> Self {
+        Self {
+            thinking_enabled: false,
+            reasoning_effort: "high".into(),
+            max_tokens: 8192,
+        }
+    }
 }
 
 #[derive(Clone)]
@@ -268,6 +294,8 @@ impl Session {
             hook_bus: Arc::new(::hooks::PluginHookBus::new()),
             execution,
             cancel: CancelSignal::new(),
+            thread_controls: StdMutex::new(None),
+            thread_provider_options: StdMutex::new(ThreadProviderOptions::default()),
             active_turn: TokioMutex::new(None),
             task_admission: TokioMutex::new(()),
             task_completions: TokioMutex::new(HashMap::new()),
@@ -292,6 +320,33 @@ impl Session {
                 rollout,
             })
             .map_err(|_| RuntimeIoBindError::AlreadyBound)
+    }
+
+    /// Returns the stable pause and HITL controls used by actor-submitted turns.
+    pub fn ensure_thread_controls(&self) -> (Arc<providers::PauseControl>, Arc<crate::HitlGate>) {
+        let mut controls = self
+            .thread_controls
+            .lock()
+            .expect("thread controls mutex poisoned");
+        let controls = controls.get_or_insert_with(|| ThreadControls {
+            pause: providers::PauseControl::new(),
+            hitl_gate: crate::HitlGate::new(self.session_id.clone()),
+        });
+        (Arc::clone(&controls.pause), Arc::clone(&controls.hitl_gate))
+    }
+
+    pub fn set_thread_provider_options(&self, options: ThreadProviderOptions) {
+        *self
+            .thread_provider_options
+            .lock()
+            .expect("thread provider options mutex poisoned") = options;
+    }
+
+    pub fn thread_provider_options(&self) -> ThreadProviderOptions {
+        self.thread_provider_options
+            .lock()
+            .expect("thread provider options mutex poisoned")
+            .clone()
     }
 
     pub(crate) fn close_event_stream(&self) {

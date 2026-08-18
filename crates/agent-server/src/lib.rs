@@ -9,6 +9,8 @@
 pub mod cron_runner;
 pub mod grpc;
 pub mod session_events;
+pub mod thread_listener;
+pub mod thread_manager;
 pub mod thread_state;
 pub mod transport;
 pub mod webhook_server;
@@ -18,6 +20,13 @@ pub use session_events::{
     event_matches, to_proto, MemoryUpdatedPayload, PendingChangedPayload, SessionEventHub,
     SessionEventMsg, SessionMetadataChangedPayload, SubscribeFilter,
 };
+pub use thread_listener::{run_listener_commands, run_thread_listener};
+pub use thread_manager::{ManagedThread, ThreadManager};
+pub use thread_state::{
+    ItemSnapshot, ListenerCommand, ThreadActivity, ThreadHistoryBuilder, ThreadSnapshot,
+    ThreadState, ThreadStateManager, TurnSnapshot,
+};
+pub use transport::{ConnectionGeneration, ConnectionRegistry};
 
 use std::time::Duration;
 

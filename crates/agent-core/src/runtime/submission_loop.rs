@@ -120,8 +120,8 @@ impl Session {
 
     async fn dispatch_control_op(&self, submission_id: String, op: Op) {
         match op {
-            Op::ThreadSettings { .. } => {
-                self.emit_unsupported_op(submission_id, "thread_settings")
+            Op::ThreadSettings { settings } => {
+                self.send_event(&submission_id, EventMsg::ThreadSettingsApplied(settings))
                     .await;
             }
             Op::RefreshMcpServers => {

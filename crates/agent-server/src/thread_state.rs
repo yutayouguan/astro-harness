@@ -222,6 +222,22 @@ impl ThreadStateManager {
         let has_subscribers = !state.lock().await.subscribers.is_empty();
         has_subscribers
     }
+
+    pub async fn unsubscribe_all(&self, connection_id: &str) {
+        let states = self
+            .states
+            .read()
+            .await
+            .values()
+            .cloned()
+            .collect::<Vec<_>>();
+        for state in states {
+            let command_tx = state.lock().await.listener_command_tx.clone();
+            let _ = command_tx.send(ListenerCommand::Unsubscribe {
+                connection_id: connection_id.into(),
+            });
+        }
+    }
 }
 
 #[cfg(test)]

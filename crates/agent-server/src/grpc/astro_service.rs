@@ -9,11 +9,9 @@ use std::sync::{Arc, Mutex as StdMutex, RwLock as StdRwLock, Weak};
 
 use agent::builder::AgentBuilder;
 use agent::runtime::Session;
-use agent::streaming::{
-    stream_multi_turn_with_hitl, MultiTurnStreamItem, StreamedAssistantContent,
-};
-use agent::{HitlGate, HitlRegistry, TurnAbortReason, TurnInput};
-use futures::{FutureExt, StreamExt};
+use agent::streaming::{MultiTurnStreamItem, StreamedAssistantContent};
+use agent::{HitlGate, HitlRegistry, TurnAbortReason};
+use futures::FutureExt;
 use home::AgentRuntimeConfig;
 use memory::MemoryManager;
 use proto::astro_service_server::AstroService;
@@ -29,18 +27,62 @@ use providers::ProviderConfig;
 use tokio::sync::{Mutex, OnceCell, OwnedMutexGuard, RwLock};
 use tokio_stream::wrappers::ReceiverStream;
 use tonic::{Request, Response, Status};
-use uuid::Uuid;
 
 use super::interrupt_store::{clear_interrupt_file, resume_items_from_proto, save_interrupt_file};
 use crate::{
-    to_proto, MemoryUpdatedPayload, PendingChangedPayload, SessionEventHub, SessionEventMsg,
-    SubscribeFilter,
+    run_thread_listener, to_proto, ConnectionRegistry, ManagedThread, MemoryUpdatedPayload,
+    PendingChangedPayload, SessionEventHub, SessionEventMsg, SubscribeFilter, ThreadActivity,
+    ThreadHistoryBuilder, ThreadManager, ThreadState, ThreadStateManager,
 };
 
 fn open_sessions(memory_dir: &std::path::Path) -> Result<session::SessionStore, String> {
     memory::ensure_workspace(memory_dir).map_err(|e| e.to_string())?;
     session::SessionStore::open_sessions_dir(&memory_dir.join("sessions"))
         .map_err(|e| e.to_string())
+}
+
+fn event_turn_id(msg: &agent_protocol::EventMsg) -> Option<String> {
+    use agent_protocol::EventMsg;
+    match msg {
+        EventMsg::TurnStarted(event) => Some(event.turn_id.clone()),
+        EventMsg::ItemStarted(event)
+        | EventMsg::ItemCompleted(event)
+        | EventMsg::McpToolCallBegin(event)
+        | EventMsg::McpToolCallEnd(event)
+        | EventMsg::HookStarted(event)
+        | EventMsg::HookCompleted(event)
+        | EventMsg::SubAgentActivity(event)
+        | EventMsg::ContextCompacted(event)
+        | EventMsg::LegacyMcpToolCallEnd(event)
+        | EventMsg::LegacyPatchApplyEnd(event)
+        | EventMsg::LegacyContextCompacted(event)
+        | EventMsg::LegacySubAgentActivity(event) => Some(event.turn_id.clone()),
+        EventMsg::AgentMessageContentDelta(event)
+        | EventMsg::PlanDelta(event)
+        | EventMsg::ReasoningContentDelta(event)
+        | EventMsg::ExecCommandOutputDelta(event)
+        | EventMsg::PatchApplyUpdated(event) => Some(event.turn_id.clone()),
+        EventMsg::ExecApprovalRequest(event)
+        | EventMsg::ApplyPatchApprovalRequest(event)
+        | EventMsg::RequestPermissions(event)
+        | EventMsg::RequestUserInput(event)
+        | EventMsg::ElicitationRequest(event)
+        | EventMsg::DynamicToolCallRequest(event)
+        | EventMsg::DynamicToolCallResponse(event) => Some(event.turn_id.clone()),
+        EventMsg::ContextUsage(event) => Some(event.turn_id.clone()),
+        EventMsg::TokenCount(event) => event.turn_id.clone(),
+        EventMsg::TurnComplete(event) => Some(event.turn_id.clone()),
+        EventMsg::TurnAborted(event) => event.turn_id.clone(),
+        EventMsg::LegacyUserMessage(_)
+        | EventMsg::LegacyAgentMessage(_)
+        | EventMsg::LegacyReasoning(_)
+        | EventMsg::ThreadSettingsApplied(_)
+        | EventMsg::ThreadRolledBack(_)
+        | EventMsg::Error(_)
+        | EventMsg::Warning(_)
+        | EventMsg::StreamError(_)
+        | EventMsg::ShutdownComplete => None,
+    }
 }
 
 fn mcp_server_info(status: mcp::ServerStatus) -> proto::McpServerInfo {
@@ -371,7 +413,7 @@ async fn cancel_pause_generation(
     }
 }
 /// Chat RPC 返回的事件流类型别名。
-type ChatStream = Pin<Box<dyn futures::Stream<Item = Result<ChatEvent, Status>> + Send>>;
+pub(crate) type ChatStream = Pin<Box<dyn futures::Stream<Item = Result<ChatEvent, Status>> + Send>>;
 /// SubscribeSessionEvents RPC 返回的事件流类型别名。
 type SessionEventsStream =
     Pin<Box<dyn futures::Stream<Item = Result<SessionEvent, Status>> + Send>>;
@@ -504,6 +546,9 @@ async fn spawn_title_to_hub(session: &SessionHandle, hub: &SessionEventHub) {
 pub struct AstroServiceImpl {
     /// session_id → Agent 循环句柄。
     sessions: Arc<RwLock<HashMap<String, SessionHandle>>>,
+    pub(crate) threads: ThreadManager,
+    pub(crate) thread_states: ThreadStateManager,
+    pub(crate) connections: ConnectionRegistry,
     /// session_id → 暂停控制器。
     pause_controls: Arc<StdRwLock<HashMap<String, PauseRegistration>>>,
     /// session_id → generation 操作锁（Weak 以免 release 后无限增长）。
@@ -511,7 +556,7 @@ pub struct AstroServiceImpl {
     /// In-flight release ownership, weakly retained so completed unique ids are reclaimed.
     release_ownerships: ReleaseOwnerships,
     /// session_id → 活 HITL 闸门。
-    hitl_registry: HitlRegistry,
+    pub(crate) hitl_registry: HitlRegistry,
     /// 记忆根目录。
     memory_dir: PathBuf,
     /// Plugin / Gateway / Shell 钩子运行时。
@@ -542,6 +587,9 @@ impl AstroServiceImpl {
         };
         Self {
             sessions: Arc::new(RwLock::new(HashMap::new())),
+            threads: ThreadManager::default(),
+            thread_states: ThreadStateManager::default(),
+            connections: ConnectionRegistry::default(),
             pause_controls: Arc::new(StdRwLock::new(HashMap::new())),
             generation_operations: Arc::new(StdMutex::new(HashMap::new())),
             release_ownerships: Arc::new(StdMutex::new(HashMap::new())),
@@ -550,6 +598,263 @@ impl AstroServiceImpl {
             hook_runtime,
             session_events: SessionEventHub::new(64),
         }
+    }
+
+    pub(crate) async fn get_or_create_thread(
+        &self,
+        thread_id: &str,
+    ) -> Result<Arc<ManagedThread>, Status> {
+        if let Some(managed) = self.threads.get(thread_id).await {
+            return Ok(managed);
+        }
+        let creation_lock = self.threads.creation_lock(thread_id).await;
+        let _creation = creation_lock.lock().await;
+        if let Some(managed) = self.threads.get(thread_id).await {
+            return Ok(managed);
+        }
+
+        let session = self.get_session(thread_id).await?;
+        let rollout_root = self.memory_dir.join("sessions").join("rollouts");
+        let rollout_path = agent_rollout::find_rollout(&rollout_root, thread_id)
+            .map_err(|error| Status::internal(error.to_string()))?
+            .unwrap_or_else(|| {
+                agent_rollout::new_rollout_path(&rollout_root, thread_id, chrono::Utc::now())
+            });
+        let existing_items = if rollout_path.exists() {
+            agent_rollout::read_rollout(&rollout_path)
+                .await
+                .map_err(|error| Status::internal(error.to_string()))?
+        } else {
+            Vec::new()
+        };
+        let rollout = agent_rollout::RolloutRecorder::open(
+            rollout_path,
+            agent_rollout::ThreadHistoryMode::Paginated,
+        )
+        .await
+        .map_err(|error| Status::internal(error.to_string()))?;
+        let runtime = agent::AstroThread::spawn(Arc::clone(&session), rollout)
+            .map_err(|error| Status::failed_precondition(error.to_string()))?;
+
+        let mut history = ThreadHistoryBuilder::default();
+        for item in existing_items {
+            if let agent_rollout::RolloutItem::EventMsg(msg) = item {
+                let id = event_turn_id(&msg).unwrap_or_else(|| thread_id.to_string());
+                history.track(&agent_protocol::Event { id, msg });
+            }
+        }
+        let (commands, command_rx) = tokio::sync::mpsc::unbounded_channel();
+        let (activity_tx, activity_rx) = tokio::sync::watch::channel(ThreadActivity {
+            status: match runtime.status() {
+                agent::AgentStatus::Idle => "idle",
+                agent::AgentStatus::Running { .. } => "running",
+                agent::AgentStatus::Errored(_) => "errored",
+                agent::AgentStatus::Shutdown => "shutdown",
+            }
+            .into(),
+            has_subscribers: false,
+        });
+        let state = Arc::new(Mutex::new(ThreadState {
+            status: activity_rx.borrow().status.clone(),
+            history,
+            subscribers: Default::default(),
+            listener_command_tx: commands.clone(),
+            activity_tx,
+        }));
+        self.thread_states
+            .insert(thread_id.to_string(), Arc::clone(&state))
+            .await;
+        let listener = tokio::spawn(run_thread_listener(
+            thread_id.to_string(),
+            Arc::clone(&runtime),
+            state,
+            commands.clone(),
+            command_rx,
+            self.connections.clone(),
+        ));
+        let candidate = Arc::new(ManagedThread {
+            runtime,
+            commands,
+            activity_rx,
+            listener,
+        });
+        if let Err(existing) = self
+            .threads
+            .insert_if_absent(thread_id.to_string(), Arc::clone(&candidate))
+            .await
+        {
+            candidate.listener.abort();
+            let _ = candidate.runtime.submit(agent_protocol::Op::Shutdown).await;
+            candidate.runtime.wait_terminated().await;
+            return Ok(existing);
+        }
+        self.spawn_idle_unload(thread_id.to_string(), Arc::clone(&candidate));
+        Ok(candidate)
+    }
+
+    pub(crate) async fn configure_thread_from_chat(
+        &self,
+        thread: &agent::AstroThread,
+        req: &proto::ChatRequest,
+    ) -> Result<(), Status> {
+        let provider = if req.provider.trim().is_empty() {
+            "ollama"
+        } else {
+            req.provider.trim()
+        };
+        let model = if req.model.trim().is_empty() {
+            providers::dispatch::default_model(provider).to_string()
+        } else {
+            req.model.trim().to_string()
+        };
+        let api_key = if req.api_key.trim().is_empty() {
+            providers::read_env_api_key(provider).unwrap_or_default()
+        } else {
+            req.api_key.trim().to_string()
+        };
+        let base_url = req.base_url.trim().to_string();
+        let mut targets = vec![types::ChatTarget {
+            provider_id: String::new(),
+            backend_id: provider.into(),
+            model: model.clone(),
+            api_key: api_key.clone(),
+            base_url: base_url.clone(),
+        }];
+        targets.extend(req.chat_fallbacks.iter().map(|fallback| types::ChatTarget {
+            provider_id: fallback.provider_id.clone(),
+            backend_id: fallback.provider.clone(),
+            model: fallback.model.clone(),
+            api_key: fallback.api_key.clone(),
+            base_url: fallback.base_url.clone(),
+        }));
+        let session = thread.session();
+        let (_, hitl_gate) = session.ensure_thread_controls();
+        if !self
+            .hitl_registry
+            .get(session.session_id())
+            .await
+            .is_some_and(|current| Arc::ptr_eq(&current, &hitl_gate))
+        {
+            if let Some(replaced) = self.hitl_registry.replace_for_admission(hitl_gate) {
+                replaced.cancel_all().await;
+            }
+        }
+        session.set_chat_credentials(provider, &model, &api_key, &base_url);
+        session.set_thread_provider_options(agent::runtime::ThreadProviderOptions {
+            thinking_enabled: req.thinking_enabled,
+            reasoning_effort: if req.reasoning_effort.trim().is_empty() {
+                "high".into()
+            } else {
+                req.reasoning_effort.trim().into()
+            },
+            max_tokens: if req.max_output_tokens > 0 {
+                req.max_output_tokens
+            } else {
+                8192
+            },
+        });
+        session.set_chat_targets(targets);
+        session.set_auxiliary_targets(parse_auxiliary_targets(req.auxiliary_targets.clone()));
+        session.set_image_gen_targets(tools::image_gen_targets_from_parts(tools::ImageGenParts {
+            provider: &req.image_gen_provider,
+            model: &req.image_gen_model,
+            api_key: &req.image_gen_api_key,
+            base_url: &req.image_gen_base_url,
+            fb_provider: &req.image_gen_fallback_provider,
+            fb_model: &req.image_gen_fallback_model,
+            fb_api_key: &req.image_gen_fallback_api_key,
+            fb_base_url: &req.image_gen_fallback_base_url,
+            video_model: &req.image_gen_video_model,
+            music_model: &req.image_gen_music_model,
+            tts_model: &req.image_gen_tts_model,
+            fb_video_model: &req.image_gen_fallback_video_model,
+            fb_music_model: &req.image_gen_fallback_music_model,
+            fb_tts_model: &req.image_gen_fallback_tts_model,
+            vision_model: &req.image_gen_vision_model,
+            fb_vision_model: &req.image_gen_fallback_vision_model,
+        }));
+        if req.context_window > 0 {
+            session.set_context_window(req.context_window);
+        }
+        session
+            .set_interaction_mode(types::InteractionMode::parse(&req.interaction_mode))
+            .await;
+        session.set_project_root(
+            (!req.project_root.trim().is_empty()).then(|| PathBuf::from(req.project_root.trim())),
+        );
+        if let Some(temperature) = req.temperature {
+            if !temperature.is_finite() || !(0.0..=2.0).contains(&temperature) {
+                return Err(Status::invalid_argument(
+                    "temperature must be between 0 and 2",
+                ));
+            }
+            session.set_temperature(temperature);
+        }
+        if !req.additional_params_json.trim().is_empty() {
+            let params: serde_json::Value = serde_json::from_str(&req.additional_params_json)
+                .map_err(|error| {
+                    Status::invalid_argument(format!("invalid additional_params_json: {error}"))
+                })?;
+            if !params.is_object() {
+                return Err(Status::invalid_argument(
+                    "additional_params_json must be an object",
+                ));
+            }
+            session.set_additional_params(params);
+        }
+        Ok(())
+    }
+
+    fn spawn_idle_unload(&self, thread_id: String, managed: Arc<ManagedThread>) {
+        let service = self.clone();
+        let mut activity_rx = managed.activity_rx.clone();
+        tokio::spawn(async move {
+            loop {
+                let idle = {
+                    let activity = activity_rx.borrow().clone();
+                    activity.status == "idle" && !activity.has_subscribers
+                };
+                if !idle {
+                    if activity_rx.changed().await.is_err() {
+                        break;
+                    }
+                    continue;
+                }
+                tokio::select! {
+                    changed = activity_rx.changed() => {
+                        if changed.is_err() { break; }
+                    }
+                    () = tokio::time::sleep(std::time::Duration::from_secs(30 * 60)) => {
+                        let activity = activity_rx.borrow().clone();
+                        if activity.status == "idle" && !activity.has_subscribers {
+                            let creation_lock = service.threads.creation_lock(&thread_id).await;
+                            let _creation = creation_lock.lock().await;
+                            let activity = activity_rx.borrow().clone();
+                            if activity.status != "idle" || activity.has_subscribers {
+                                continue;
+                            }
+                            let removed = service.threads.remove_if_current(&thread_id, &managed).await;
+                            if removed.is_none() {
+                                break;
+                            }
+                            service.thread_states.remove(&thread_id).await;
+                            {
+                                let mut sessions = service.sessions.write().await;
+                                if sessions.get(&thread_id).is_some_and(|session| {
+                                    Arc::ptr_eq(session, managed.runtime.session())
+                                }) {
+                                    sessions.remove(&thread_id);
+                                }
+                            }
+                            let _ = managed.runtime.submit(agent_protocol::Op::Shutdown).await;
+                            managed.runtime.wait_terminated().await;
+                            let _ = managed.runtime.flush_rollout().await;
+                            break;
+                        }
+                    }
+                }
+            }
+        });
     }
 
     /// 会话记忆事件 hub（供 Chat / 其它 RPC 发布副作用）。
@@ -599,9 +904,8 @@ impl AstroServiceImpl {
     /// # 错误
     /// Agent 构建失败时返回 `Status::internal`。
     async fn get_session(&self, session_id: &str) -> Result<SessionHandle, Status> {
-        let mut sessions = self.sessions.write().await;
-        if let Some(handle) = sessions.get(session_id) {
-            return Ok(handle.clone());
+        if let Some(handle) = self.sessions.read().await.get(session_id).cloned() {
+            return Ok(handle);
         }
 
         let agent_id = home::active_agent_id(&self.memory_dir);
@@ -614,6 +918,10 @@ impl AstroServiceImpl {
             .map_err(|e| Status::internal(e.to_string()))?;
         agent.set_hook_bus(Arc::clone(&self.hook_runtime.plugin));
         let handle = Arc::new(agent);
+        let mut sessions = self.sessions.write().await;
+        if let Some(existing) = sessions.get(session_id) {
+            return Ok(existing.clone());
+        }
         self.release_ownerships
             .lock()
             .expect("release ownership registry mutex poisoned")
@@ -1019,8 +1327,17 @@ impl AstroServiceImpl {
     }
 
     async fn release_session_runtime_inner(&self, session_id: &str) -> ReleaseSessionRuntimeResult {
+        let creation_lock = self.threads.creation_lock(session_id).await;
+        let _thread_creation = creation_lock.lock().await;
         let operation = self.generation_operation(session_id);
-        let (registration, detached_gate, orphan_gate, removed, should_finalize_without_runtime) = {
+        let (
+            registration,
+            detached_gate,
+            orphan_gate,
+            removed,
+            removed_thread,
+            should_finalize_without_runtime,
+        ) = {
             let _admission = operation.lock().await;
             let registration = self
                 .pause_controls
@@ -1048,6 +1365,10 @@ impl AstroServiceImpl {
             };
             let orphan_gate = self.hitl_registry.remove(session_id).await;
             clear_interrupt_file(&self.memory_dir, session_id);
+            let removed_thread = self.threads.remove(session_id).await;
+            if removed_thread.is_some() {
+                self.thread_states.remove(session_id).await;
+            }
             let mut sessions = self.sessions.write().await;
             let removed = match expected_session {
                 Some(expected)
@@ -1066,6 +1387,7 @@ impl AstroServiceImpl {
                 detached_gate,
                 orphan_gate,
                 removed,
+                removed_thread,
                 should_finalize_without_runtime,
             )
         };
@@ -1082,7 +1404,11 @@ impl AstroServiceImpl {
                 gate.cancel_all().await;
             }
         }
-        if let Some(handle) = removed.as_ref() {
+        if let Some(managed) = removed_thread.as_ref() {
+            let _ = managed.runtime.submit(agent_protocol::Op::Shutdown).await;
+            managed.runtime.wait_terminated().await;
+            let _ = managed.runtime.flush_rollout().await;
+        } else if let Some(handle) = removed.as_ref() {
             handle.shutdown_runtime().await;
         }
         prune_generation_operation(
@@ -1355,32 +1681,30 @@ impl AstroService for AstroServiceImpl {
 
     async fn subscribe_thread_events(
         &self,
-        _request: Request<proto::SubscribeThreadEventsRequest>,
+        request: Request<proto::SubscribeThreadEventsRequest>,
     ) -> Result<Response<Self::SubscribeThreadEventsStream>, Status> {
-        Err(Status::unimplemented(
-            "thread event transport lands in Task 12",
-        ))
+        super::thread_service::subscribe_thread_events(self, request).await
     }
 
     async fn submit_turn(
         &self,
-        _request: Request<proto::SubmitTurnRequest>,
+        request: Request<proto::SubmitTurnRequest>,
     ) -> Result<Response<proto::SubmitTurnResponse>, Status> {
-        Err(Status::unimplemented("thread submission lands in Task 12"))
+        super::thread_service::submit_turn(self, request).await
     }
 
     async fn resume_thread(
         &self,
-        _request: Request<proto::ResumeThreadRequest>,
+        request: Request<proto::ResumeThreadRequest>,
     ) -> Result<Response<proto::ResumeThreadResponse>, Status> {
-        Err(Status::unimplemented("thread resume lands in Task 12"))
+        super::thread_service::resume_thread(self, request).await
     }
 
     async fn unsubscribe_thread(
         &self,
-        _request: Request<proto::UnsubscribeThreadRequest>,
+        request: Request<proto::UnsubscribeThreadRequest>,
     ) -> Result<Response<proto::Empty>, Status> {
-        Err(Status::unimplemented("thread unsubscribe lands in Task 12"))
+        super::thread_service::unsubscribe_thread(self, request).await
     }
 
     /// Chat 流控制：暂停 / 继续 / 取消指定 `session_id` 的进行中对话。
@@ -1434,6 +1758,16 @@ impl AstroService for AstroServiceImpl {
         }
 
         if matches!(action, ChatControlAction::ChatControlCancel) {
+            if let Some(managed) = self.threads.get(&req.session_id).await {
+                let (_, gate) = managed.runtime.session().ensure_thread_controls();
+                gate.cancel_all().await;
+                managed
+                    .runtime
+                    .submit(agent_protocol::Op::Interrupt)
+                    .await
+                    .map_err(|error| Status::internal(error.to_string()))?;
+                return Ok(Response::new(Empty {}));
+            }
             let Some(_registration) = self
                 .cancel_current_pause_generation(&req.session_id)
                 .await
@@ -1444,6 +1778,17 @@ impl AstroService for AstroServiceImpl {
                     req.session_id
                 )));
             };
+            return Ok(Response::new(Empty {}));
+        }
+
+        if let Some(managed) = self.threads.get(&req.session_id).await {
+            let (pause, _) = managed.runtime.session().ensure_thread_controls();
+            match action {
+                ChatControlAction::ChatControlPause => pause.pause(),
+                ChatControlAction::ChatControlResume
+                | ChatControlAction::ChatControlStreamResume => pause.resume(),
+                _ => {}
+            }
             return Ok(Response::new(Empty {}));
         }
 
@@ -1533,399 +1878,8 @@ impl AstroService for AstroServiceImpl {
         &self,
         request: Request<ChatRequest>,
     ) -> Result<Response<Self::ChatStream>, Status> {
-        let req = request.into_inner();
-        let session_id = if req.session_id.is_empty() {
-            Uuid::new_v4().to_string()
-        } else {
-            req.session_id
-        };
-
-        // pre_gateway_dispatch：可 Skip / Rewrite
-        let mut content = req.content;
-        let dispatch = self.hook_runtime.fire_plugin(
-            ::hooks::PRE_GATEWAY_DISPATCH,
-            &::hooks::HookPayload {
-                session_id: session_id.clone(),
-                turn_id: None,
-                message: Some(content.clone()),
-                detail: content.chars().take(200).collect(),
-                ..Default::default()
-            },
-        );
-        match dispatch {
-            ::hooks::HookOutcome::Skip(reason) => {
-                let (tx, rx) = tokio::sync::mpsc::channel::<Result<ChatEvent, Status>>(4);
-                let _ = tx
-                    .send(Ok(ChatEvent {
-                        payload: Some(proto::chat_event::Payload::Error(format!(
-                            "请求被钩子跳过: {reason}"
-                        ))),
-                    }))
-                    .await;
-                let _ = tx
-                    .send(Ok(ChatEvent {
-                        payload: Some(proto::chat_event::Payload::Done(true)),
-                    }))
-                    .await;
-                return Ok(Response::new(Box::pin(ReceiverStream::new(rx))));
-            }
-            ::hooks::HookOutcome::Rewrite(msg) => {
-                content = msg;
-            }
-            _ => {}
-        }
-
-        let is_new_session = {
-            let sessions = self.sessions.read().await;
-            !sessions.contains_key(&session_id)
-        };
-
-        let provider_name = if req.provider.is_empty() {
-            "ollama".to_string()
-        } else {
-            req.provider
-        };
-        let model = req.model;
-        let _resume_json = req.resume_json;
-        let _use_memory = req.use_memory;
-        let api_key = req.api_key;
-        let base_url = req.base_url;
-        let chat_fallbacks = req.chat_fallbacks;
-        let auxiliary_targets = parse_auxiliary_targets(req.auxiliary_targets);
-        let thinking_enabled = req.thinking_enabled;
-        // 当前模型最大输出 token（前端由模型元数据下传）；0 = 用默认。
-        let chat_max_output_tokens = req.max_output_tokens;
-        let image_data_urls: Vec<String> = req
-            .images
-            .iter()
-            .filter_map(|image| {
-                let mime = image.mime.trim();
-                let data = image.data_base64.trim();
-                if mime.is_empty() || data.is_empty() {
-                    return None;
-                }
-                Some(format!("data:{mime};base64,{data}"))
-            })
-            .collect();
-        let reasoning_effort = if req.reasoning_effort.trim().is_empty() {
-            "high".to_string()
-        } else {
-            req.reasoning_effort
-        };
-        let image_targets = tools::image_gen_targets_from_parts(tools::ImageGenParts {
-            provider: &req.image_gen_provider,
-            model: &req.image_gen_model,
-            api_key: &req.image_gen_api_key,
-            base_url: &req.image_gen_base_url,
-            fb_provider: &req.image_gen_fallback_provider,
-            fb_model: &req.image_gen_fallback_model,
-            fb_api_key: &req.image_gen_fallback_api_key,
-            fb_base_url: &req.image_gen_fallback_base_url,
-            video_model: &req.image_gen_video_model,
-            music_model: &req.image_gen_music_model,
-            tts_model: &req.image_gen_tts_model,
-            fb_video_model: &req.image_gen_fallback_video_model,
-            fb_music_model: &req.image_gen_fallback_music_model,
-            fb_tts_model: &req.image_gen_fallback_tts_model,
-            vision_model: &req.image_gen_vision_model,
-            fb_vision_model: &req.image_gen_fallback_vision_model,
-        });
-
-        let session = self.get_session(&session_id).await?;
-        let steered_turn_id = { session.steer_input(&content, &image_data_urls).await };
-        if steered_turn_id.is_some() {
-            let (tx, rx) = tokio::sync::mpsc::channel::<Result<ChatEvent, Status>>(1);
-            let _ = tx
-                .send(Ok(ChatEvent {
-                    payload: Some(proto::chat_event::Payload::Done(true)),
-                }))
-                .await;
-            return Ok(Response::new(Box::pin(ReceiverStream::new(rx))));
-        }
-        if is_new_session {
-            self.hook_runtime.fire_gateway(
-                ::hooks::SESSION_START,
-                &::hooks::HookPayload {
-                    session_id: session_id.clone(),
-                    turn_id: None,
-                    ..Default::default()
-                },
-            );
-        }
-        let (hook_tx, mut hook_rx) = tokio::sync::mpsc::unbounded_channel::<::hooks::UiHookEvent>();
-        let interaction_mode = tools::InteractionMode::parse(&req.interaction_mode);
-        let project_root = (!req.project_root.trim().is_empty())
-            .then(|| std::path::PathBuf::from(req.project_root.trim()));
-        let temperature_override = req
-            .temperature
-            .filter(|temperature| temperature.is_finite() && (0.0..=2.0).contains(temperature));
-        let additional_params_override =
-            serde_json::from_str::<serde_json::Value>(req.additional_params_json.trim())
-                .ok()
-                .filter(serde_json::Value::is_object);
-        let context_window = (req.context_window > 0).then_some(req.context_window);
-        let hitl_gate = HitlGate::new(session_id.clone());
-        let Some(registration) = self
-            .admit_pause_generation(&session_id, &session, Arc::clone(&hitl_gate), hook_tx)
-            .await
-        else {
-            let (tx, rx) = tokio::sync::mpsc::channel::<Result<ChatEvent, Status>>(4);
-            let _ = tx
-                .send(Ok(ChatEvent {
-                    payload: Some(proto::chat_event::Payload::Error(
-                        "请先完成上方确认或澄清卡片（HITL waiting）".into(),
-                    )),
-                }))
-                .await;
-            let _ = tx
-                .send(Ok(ChatEvent {
-                    payload: Some(proto::chat_event::Payload::Done(true)),
-                }))
-                .await;
-            return Ok(Response::new(Box::pin(ReceiverStream::new(rx))));
-        };
-        let pause = Arc::clone(&registration.control);
-        let resolved_model = if model.is_empty() {
-            providers::dispatch::default_model(&provider_name)
-        } else {
-            model.clone()
-        };
-        let resolved_api_key = if api_key.trim().is_empty() {
-            providers::read_env_api_key(&provider_name).unwrap_or_default()
-        } else {
-            api_key.trim().to_string()
-        };
-        let resolved_base_url = (!base_url.trim().is_empty()).then(|| base_url.trim().to_string());
-        let mut chat_targets = vec![types::ChatTarget {
-            provider_id: String::new(),
-            backend_id: provider_name.clone(),
-            model: resolved_model.clone(),
-            api_key: resolved_api_key.clone(),
-            base_url: resolved_base_url.clone().unwrap_or_default(),
-        }];
-        for fb in chat_fallbacks {
-            chat_targets.push(types::ChatTarget {
-                provider_id: fb.provider_id,
-                backend_id: fb.provider,
-                model: fb.model,
-                api_key: fb.api_key,
-                base_url: fb.base_url,
-            });
-        }
-        let setup_targets = chat_targets.clone();
-        let setup_provider_name = provider_name.clone();
-        let setup_model = model.clone();
-        let setup_api_key = api_key.clone();
-        let setup_base_url = base_url.clone();
-        let launch_session = Arc::clone(&session);
-        let setup_session = Arc::clone(&session);
-        let launch_gate = Arc::clone(&hitl_gate);
-        let Some(mut stream) = self
-            .launch_current_pause_generation_with_setup(
-                &session_id,
-                &registration,
-                &setup_session,
-                move |session| async move {
-                    session.set_image_gen_targets(image_targets);
-                    session.set_chat_credentials(
-                        &setup_provider_name,
-                        &setup_model,
-                        &setup_api_key,
-                        &setup_base_url,
-                    );
-                    session.set_auxiliary_targets(auxiliary_targets);
-                    if let Some(context_window) = context_window {
-                        session.set_context_window(context_window);
-                    }
-                    session.set_interaction_mode(interaction_mode).await;
-                    session.set_project_root(project_root);
-                    if let Some(temperature) = temperature_override {
-                        session.set_temperature(temperature);
-                    }
-                    if let Some(additional_params) = additional_params_override {
-                        session.set_additional_params(additional_params);
-                    }
-                    session.set_chat_targets(setup_targets);
-                },
-                move || async move {
-                    let config = ProviderConfig {
-                        model: resolved_model,
-                        api_key: resolved_api_key,
-                        base_url: resolved_base_url,
-                        temperature: launch_session.temperature(),
-                        thinking_enabled,
-                        reasoning_effort,
-                        additional_params: launch_session.additional_params(),
-                        max_tokens: if chat_max_output_tokens > 0 {
-                            chat_max_output_tokens
-                        } else {
-                            8192
-                        },
-                        ..ProviderConfig::default()
-                    };
-                    stream_multi_turn_with_hitl(
-                        launch_session,
-                        chat_targets,
-                        config,
-                        vec![TurnInput {
-                            content,
-                            image_data_urls,
-                        }],
-                        pause,
-                        Some(launch_gate),
-                    )
-                    .await
-                },
-            )
-            .await
-        else {
-            self.cleanup_pause_generation(&session_id, &registration)
-                .await;
-            let (tx, rx) = tokio::sync::mpsc::channel::<Result<ChatEvent, Status>>(1);
-            let _ = tx
-                .send(Ok(ChatEvent {
-                    payload: Some(proto::chat_event::Payload::Done(true)),
-                }))
-                .await;
-            return Ok(Response::new(Box::pin(ReceiverStream::new(rx))));
-        };
-        let registration_for_cleanup = registration.clone();
-        let pause_controls = self.pause_controls.clone();
-        let generation_operations = self.generation_operations.clone();
-        let hitl_registry = self.hitl_registry.clone();
-        let memory_dir = self.memory_dir.clone();
-        let sid_cleanup = session_id.clone();
-        let hook_runtime = Arc::clone(&self.hook_runtime);
-        let ui_slot = self.hook_runtime.ui_slot.clone();
-        let session_events_hub = self.session_event_hub().clone();
-
-        let (tx, rx) = tokio::sync::mpsc::channel::<Result<ChatEvent, Status>>(8);
-        let hook_out = tx.clone();
-        tokio::spawn(async move {
-            while let Some(ev) = hook_rx.recv().await {
-                let _ = hook_out
-                    .send(Ok(ChatEvent {
-                        payload: Some(proto::chat_event::Payload::Hook(proto::HookEvent {
-                            name: ev.name,
-                            detail: ev.detail,
-                            outcome: ev.outcome,
-                        })),
-                    }))
-                    .await;
-            }
-        });
-
-        tokio::spawn(async move {
-            let session_for_review = session.clone();
-            let agent_id_for_events = { session.agent_id().to_string() };
-            let mut run_succeeded = false;
-            while let Some(item) = stream.next().await {
-                match item {
-                    Ok(mt) => {
-                        let is_done = matches!(mt, MultiTurnStreamItem::Done);
-                        if let MultiTurnStreamItem::RunFinished {
-                            ref outcome_type,
-                            ref interrupts_json,
-                            ..
-                        } = mt
-                        {
-                            run_succeeded = allows_post_turn_side_effects(outcome_type);
-                            if outcome_type == "hitl_waiting" || outcome_type == "interrupt" {
-                                let interrupts: Vec<agent::Interrupt> =
-                                    serde_json::from_str(interrupts_json).unwrap_or_default();
-                                if !interrupts.is_empty() {
-                                    let _admission =
-                                        registration_for_cleanup.operation.lock().await;
-                                    let is_current = pause_controls
-                                        .read()
-                                        .expect("pause registry lock poisoned")
-                                        .get(&sid_cleanup)
-                                        .is_some_and(|current| {
-                                            Arc::ptr_eq(
-                                                &current.control,
-                                                &registration_for_cleanup.control,
-                                            )
-                                        });
-                                    if is_current {
-                                        let _ = save_interrupt_file(
-                                            &memory_dir,
-                                            &sid_cleanup,
-                                            &interrupts,
-                                        );
-                                    }
-                                }
-                            }
-                        }
-                        // 工具入 pending → 只走 Hub（不刷 Chat 时间线）；live 仍走 Chat MemoryUpdate
-                        let skip_chat_memory_update = matches!(
-                            &mt,
-                            MultiTurnStreamItem::MemoryUpdate { content, .. }
-                                if indicates_pending_enqueue(content)
-                        );
-                        if let MultiTurnStreamItem::MemoryUpdate { ref content, .. } = mt {
-                            if indicates_pending_enqueue(content) {
-                                publish_tool_pending_to_hub(
-                                    &session_events_hub,
-                                    &memory_dir,
-                                    &agent_id_for_events,
-                                    content,
-                                );
-                            }
-                        }
-                        if !skip_chat_memory_update {
-                            if let Some(event) = multi_turn_to_chat_event(mt) {
-                                if tx.send(Ok(event)).await.is_err() {
-                                    break;
-                                }
-                            }
-                        }
-                        if is_done {
-                            if run_succeeded {
-                                // 仅成功回合 fire-and-forget review / 标题 → SessionEventHub。
-                                spawn_review_to_hub(
-                                    &session_for_review,
-                                    &sid_cleanup,
-                                    &session_events_hub,
-                                )
-                                .await;
-                                spawn_title_to_hub(&session_for_review, &session_events_hub).await;
-                            }
-                            break;
-                        }
-                    }
-                    Err(err) => {
-                        let _ = tx
-                            .send(Ok(ChatEvent {
-                                payload: Some(proto::chat_event::Payload::Error(err.to_string())),
-                            }))
-                            .await;
-                        break;
-                    }
-                }
-            }
-            hook_runtime.fire_gateway(
-                ::hooks::AGENT_END,
-                &::hooks::HookPayload {
-                    session_id: sid_cleanup.clone(),
-                    turn_id: None,
-                    ..Default::default()
-                },
-            );
-            cleanup_pause_generation_parts(
-                &generation_operations,
-                &pause_controls,
-                &hitl_registry,
-                &ui_slot,
-                &memory_dir,
-                &sid_cleanup,
-                &registration_for_cleanup,
-            )
-            .await;
-        });
-
-        Ok(Response::new(Box::pin(ReceiverStream::new(rx))))
+        super::thread_service::chat(self, request).await
     }
-
     /// 文生图流：先推送 progress，再推送 `image_data` 或 error。
     ///
     /// 默认 provider 为 `google`；模型空则用供应商默认图片模型；api_key 空则读环境变量。
@@ -4024,5 +3978,62 @@ mod tests {
         assert_eq!(chain[0].provider_id, "p-pref");
         assert_eq!(chain[1].provider_id, "p-fb");
         assert!(!map.contains_key(&types::AuxiliaryTask::Dreaming));
+    }
+
+    #[tokio::test]
+    async fn concurrent_thread_creation_installs_exactly_one_listener() {
+        let dir = TempDir::new().unwrap();
+        memory::ensure_workspace(dir.path()).unwrap();
+        let service = AstroServiceImpl::new(dir.path().to_path_buf());
+        let first_service = service.clone();
+        let second_service = service.clone();
+        let (first, second) = tokio::join!(
+            first_service.get_or_create_thread("race-thread"),
+            second_service.get_or_create_thread("race-thread")
+        );
+        let first = first.expect("first create");
+        let second = second.expect("second create");
+        assert!(Arc::ptr_eq(&first, &second));
+        assert!(service.threads.contains("race-thread").await);
+        first
+            .runtime
+            .submit(agent_protocol::Op::Shutdown)
+            .await
+            .unwrap();
+        first.runtime.wait_terminated().await;
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn idle_thread_unloads_only_after_thirty_minutes() {
+        let dir = TempDir::new().unwrap();
+        memory::ensure_workspace(dir.path()).unwrap();
+        let service = AstroServiceImpl::new(dir.path().to_path_buf());
+        let managed = service
+            .get_or_create_thread("idle-thread")
+            .await
+            .expect("create idle thread");
+        tokio::task::yield_now().await;
+
+        tokio::time::advance(std::time::Duration::from_secs(29 * 60)).await;
+        tokio::task::yield_now().await;
+        assert!(service.threads.contains("idle-thread").await);
+
+        tokio::time::advance(std::time::Duration::from_secs(60)).await;
+        for _ in 0..8 {
+            tokio::task::yield_now().await;
+        }
+        assert!(!service.threads.contains("idle-thread").await);
+        assert!(service.thread_states.get("idle-thread").await.is_none());
+        let replacement = service
+            .get_or_create_thread("idle-thread")
+            .await
+            .expect("idle thread should be reloadable");
+        assert!(!Arc::ptr_eq(&managed, &replacement));
+        replacement
+            .runtime
+            .submit(agent_protocol::Op::Shutdown)
+            .await
+            .unwrap();
+        replacement.runtime.wait_terminated().await;
     }
 }

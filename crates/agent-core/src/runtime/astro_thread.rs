@@ -237,4 +237,123 @@ mod tests {
             .await
             .unwrap();
     }
+
+    #[tokio::test]
+    async fn actor_submit_turn_keeps_hitl_control_event_and_resume_reachable() {
+        let dir = TempDir::new().unwrap();
+        let session = Arc::new(
+            Session::with_session_id(
+                Config::with_defaults(dir.path().to_path_buf()),
+                "actor-hitl-loop".into(),
+            )
+            .unwrap(),
+        );
+        session.set_chat_targets(vec![types::ChatTarget {
+            provider_id: "scripted".into(),
+            backend_id: "scripted".into(),
+            model: "test".into(),
+            api_key: String::new(),
+            base_url: String::new(),
+        }]);
+        let calls = Arc::new(AtomicUsize::new(0));
+        let chat_override: crate::streaming::ChatOverride = {
+            let calls = Arc::clone(&calls);
+            Arc::new(move |_messages, _tools, _config| {
+                let call = calls.fetch_add(1, Ordering::SeqCst);
+                Box::pin(async move {
+                    let chunks = if call == 0 {
+                        vec![
+                            StreamChunk::ToolCallStart {
+                                index: 0,
+                                id: "ask-1".into(),
+                                name: "ask_user".into(),
+                            },
+                            StreamChunk::ToolCallDelta {
+                                index: 0,
+                                arguments:
+                                    r#"{"mode":"confirm","title":"Continue?","body":"Proceed?"}"#
+                                        .into(),
+                            },
+                            StreamChunk::Done {
+                                finish_reason: "tool_calls".into(),
+                            },
+                        ]
+                    } else {
+                        vec![
+                            StreamChunk::Text("resumed".into()),
+                            StreamChunk::Done {
+                                finish_reason: "stop".into(),
+                            },
+                        ]
+                    };
+                    Ok(Box::pin(futures::stream::iter(chunks.into_iter().map(Ok)))
+                        as CompletionStream)
+                })
+            })
+        };
+        let thread = AstroThread::spawn_with_chat_override(
+            Arc::clone(&session),
+            recorder(&dir, "actor-hitl.jsonl").await,
+            chat_override,
+        )
+        .unwrap();
+        let (_, submitted) = thread
+            .submit_turn(
+                TurnInputRequest {
+                    input: vec![agent_protocol::TurnInput {
+                        content: "ask before acting".into(),
+                        image_data_urls: Vec::new(),
+                    }],
+                },
+                TurnInputMode::StartIfIdle,
+            )
+            .await
+            .unwrap();
+        let turn_id = submitted.turn_id().unwrap().to_string();
+
+        let request_id = timeout(Duration::from_secs(2), async {
+            loop {
+                let event = thread.next_event().await.unwrap();
+                if let agent_protocol::EventMsg::RequestUserInput(request) = event.msg {
+                    break request.request_id;
+                }
+            }
+        })
+        .await
+        .expect("actor thread should emit a HITL control event");
+        assert!(!request_id.is_empty());
+
+        let (_, gate) = session.ensure_thread_controls();
+        let pending = gate.pending_interrupts().await;
+        assert_eq!(pending.len(), 1);
+        assert_eq!(pending[0].id, request_id);
+        gate.resolve(&[crate::ResumeItem {
+            interrupt_id: pending[0].id.clone(),
+            status: "resolved".into(),
+            payload_json: r#"{"approved":true}"#.into(),
+        }])
+        .await
+        .unwrap();
+
+        timeout(Duration::from_secs(2), async {
+            loop {
+                let event = thread.next_event().await.unwrap();
+                if matches!(
+                    event.msg,
+                    agent_protocol::EventMsg::TurnComplete(ref complete)
+                        if complete.turn_id == turn_id && complete.error.is_none()
+                ) {
+                    break;
+                }
+            }
+        })
+        .await
+        .expect("resumed HITL turn should complete");
+        assert_eq!(calls.load(Ordering::SeqCst), 2);
+
+        thread.submit(Op::Shutdown).await.unwrap();
+        timeout(Duration::from_secs(1), thread.wait_terminated())
+            .await
+            .unwrap();
+    }
 }

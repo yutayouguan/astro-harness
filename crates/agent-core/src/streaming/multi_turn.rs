@@ -544,22 +544,27 @@ impl RunTurnArgs {
                 base_url: base_url.clone(),
             });
         }
+        let provider_options = session.thread_provider_options();
         let base_config = ProviderConfig {
             model,
             api_key,
             base_url: (!base_url.is_empty()).then_some(base_url),
             temperature: session.temperature(),
+            thinking_enabled: provider_options.thinking_enabled,
+            reasoning_effort: provider_options.reasoning_effort,
             additional_params: session.additional_params(),
+            max_tokens: provider_options.max_tokens,
             ..ProviderConfig::default()
         };
+        let (pause, hitl_gate) = session.ensure_thread_controls();
         Self {
             session,
             turn_context,
             targets,
             base_config,
             system_prompt: None,
-            pause: PauseControl::new(),
-            hitl_gate: None,
+            pause,
+            hitl_gate: Some(hitl_gate),
             chat_override,
         }
     }

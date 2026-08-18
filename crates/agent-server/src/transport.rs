@@ -103,13 +103,18 @@ impl ConnectionRegistry {
         }
     }
 
+    /// Returns whether a live registration currently owns `connection_id`.
+    pub async fn contains(&self, connection_id: &str) -> bool {
+        self.entries.read().await.contains_key(connection_id)
+    }
+
     /// Cleans up exactly the registration represented by `generation`.
     ///
     /// This is the normal stream-cleanup API. It cancels the observed
     /// generation and removes it only while it remains current.
-    pub async fn remove_generation(&self, generation: &ConnectionGeneration) {
+    pub async fn remove_generation(&self, generation: &ConnectionGeneration) -> bool {
         self.remove_if_current(&generation.connection_id, &generation.entry, true)
-            .await;
+            .await
     }
 
     /// Administratively removes whichever generation is current for an id.
@@ -127,7 +132,7 @@ impl ConnectionRegistry {
         connection_id: &str,
         observed: &Arc<ConnectionEntry>,
         cancel: bool,
-    ) {
+    ) -> bool {
         let removed = {
             let mut entries = self.entries.write().await;
             let is_current = entries
@@ -139,11 +144,14 @@ impl ConnectionRegistry {
                 None
             }
         };
+        let was_removed = removed.is_some();
         if cancel {
             if let Some(entry) = removed {
                 entry.cancel.cancel();
+                return true;
             }
         }
+        was_removed
     }
 }
 
