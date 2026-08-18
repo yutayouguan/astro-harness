@@ -118,12 +118,8 @@ impl AgentsSettings {
 
 pub fn load_agents_settings(memory_dir: &Path, project_root: Option<&Path>) -> AgentsSettings {
     let mut settings = AgentsSettings::default();
-    // Keep Astro paths as a compatibility layer, then apply Codex-native paths
-    // so a checked-in `.codex/config.toml` is the source of truth.
-    apply_settings_file(&mut settings, &memory_dir.join("config.toml"));
     apply_settings_file(&mut settings, &codex_home(memory_dir).join("config.toml"));
     if let Some(root) = project_root {
-        apply_settings_file(&mut settings, &root.join(".astro/config.toml"));
         apply_settings_file(&mut settings, &root.join(".codex/config.toml"));
     }
     settings
@@ -148,10 +144,8 @@ pub fn load_agent_catalog(memory_dir: &Path, project_root: Option<&Path>) -> Age
     for definition in builtin_agents() {
         catalog.agents.insert(definition.name.clone(), definition);
     }
-    load_agent_dir(&memory_dir.join("agents"), &mut catalog);
     load_agent_dir(&codex_home(memory_dir).join("agents"), &mut catalog);
     if let Some(root) = project_root {
-        load_agent_dir(&root.join(".astro/agents"), &mut catalog);
         load_agent_dir(&root.join(".codex/agents"), &mut catalog);
     }
     catalog
@@ -318,9 +312,52 @@ mod tests {
     use super::*;
 
     #[test]
+    fn astro_agent_directories_are_not_configuration_inputs() {
+        let memory = tempfile::tempdir().unwrap();
+        let project = tempfile::tempdir().unwrap();
+        fs::create_dir_all(memory.path().join("agents")).unwrap();
+        fs::create_dir_all(project.path().join(".astro/agents")).unwrap();
+        fs::write(
+            memory.path().join("agents/legacy.toml"),
+            "name = \"legacy\"\ndescription = \"legacy\"\ndeveloper_instructions = \"legacy\"\n",
+        )
+        .unwrap();
+        fs::write(
+            project.path().join(".astro/agents/project_legacy.toml"),
+            "name = \"project_legacy\"\ndescription = \"legacy\"\ndeveloper_instructions = \"legacy\"\n",
+        )
+        .unwrap();
+
+        let catalog = load_agent_catalog(memory.path(), Some(project.path()));
+
+        assert!(!catalog.agents.contains_key("legacy"));
+        assert!(!catalog.agents.contains_key("project_legacy"));
+    }
+
+    #[test]
+    fn astro_config_toml_does_not_override_codex_agents_settings() {
+        let memory = tempfile::tempdir().unwrap();
+        let project = tempfile::tempdir().unwrap();
+        fs::create_dir_all(project.path().join(".astro")).unwrap();
+        fs::create_dir_all(project.path().join(".codex")).unwrap();
+        fs::write(
+            project.path().join(".astro/config.toml"),
+            "[agents]\nenabled = false\n",
+        )
+        .unwrap();
+        fs::write(
+            project.path().join(".codex/config.toml"),
+            "[agents]\nenabled = true\n",
+        )
+        .unwrap();
+
+        assert!(load_agents_settings(memory.path(), Some(project.path())).enabled);
+    }
+
+    #[test]
     fn custom_agent_overrides_builtin_and_model_precedence() {
         let root = tempfile::tempdir().unwrap();
-        let agents = root.path().join("agents");
+        let agents = root.path().join(".codex/agents");
         fs::create_dir_all(&agents).unwrap();
         fs::write(
             agents.join("explorer.toml"),
@@ -350,7 +387,7 @@ model = "provider:custom"
     #[test]
     fn custom_agent_can_narrow_but_not_expand_parent_permissions() {
         let root = tempfile::tempdir().unwrap();
-        let agents = root.path().join("agents");
+        let agents = root.path().join(".codex/agents");
         fs::create_dir_all(&agents).unwrap();
         fs::write(
             agents.join("unsafe.toml"),
@@ -390,20 +427,11 @@ sandbox_mode = "danger-full-access"
     }
 
     #[test]
-    fn codex_paths_override_legacy_astro_paths_and_decode_layers() {
+    fn codex_paths_preserve_precedence_and_decode_layers() {
         let memory = tempfile::tempdir().unwrap();
         let project = tempfile::tempdir().unwrap();
-        fs::create_dir_all(memory.path().join("agents")).unwrap();
         fs::create_dir_all(memory.path().join(".codex/agents")).unwrap();
         fs::create_dir_all(project.path().join(".codex/agents")).unwrap();
-        fs::write(
-            memory.path().join("agents/reviewer.toml"),
-            r#"name = "reviewer"
-description = "legacy"
-developer_instructions = "legacy"
-"#,
-        )
-        .unwrap();
         fs::write(
             memory.path().join(".codex/agents/reviewer.toml"),
             r#"name = "reviewer"
