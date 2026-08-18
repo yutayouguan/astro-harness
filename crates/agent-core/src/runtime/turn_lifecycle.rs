@@ -181,8 +181,8 @@ impl Session {
                 match item {
                     Ok(crate::streaming::MultiTurnStreamItem::Error(message)) => {
                         event_session
-                            .emit_runtime_event(
-                                event_turn_id.clone(),
+                            .send_event(
+                                &event_turn_id,
                                 agent_protocol::EventMsg::Error(agent_protocol::ErrorEvent {
                                     message,
                                     error_type: "turn_execution".into(),

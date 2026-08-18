@@ -16,8 +16,8 @@ use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex as StdMutex, MutexGuard, OnceLock};
 
-use agent_protocol::Event;
-use agent_rollout::RolloutRecorder;
+use agent_protocol::{Event, EventMsg};
+use agent_rollout::{RolloutItem, RolloutRecorder};
 use tokio::sync::{watch, Mutex as TokioMutex};
 use uuid::Uuid;
 
@@ -293,18 +293,49 @@ impl Session {
         }
     }
 
-    pub(crate) async fn emit_runtime_event(
-        &self,
-        id: impl Into<String>,
-        msg: agent_protocol::EventMsg,
-    ) {
+    /// Persist one unified event according to rollout policy before making it live.
+    pub async fn send_event(&self, turn_id: &str, msg: EventMsg) {
+        let event = Event {
+            id: turn_id.to_string(),
+            msg,
+        };
+        self.send_event_raw_with_persistence(event, true).await;
+    }
+
+    pub(crate) async fn send_event_raw_with_persistence(&self, event: Event, persist: bool) {
+        if persist {
+            if let Some(bindings) = self.runtime_io.get() {
+                if let Err(error) = bindings
+                    .rollout
+                    .record(vec![RolloutItem::EventMsg(event.msg.clone())])
+                    .await
+                {
+                    tracing::warn!(%error, event_id = %event.id, "failed to persist event");
+                }
+            }
+        }
+        self.deliver_event_raw(event).await;
+    }
+
+    pub(crate) async fn deliver_event_raw(&self, event: Event) {
         let Some(bindings) = self.runtime_io.get() else {
             return;
         };
-        let _ = bindings
-            .event_tx
-            .send(agent_protocol::Event { id: id.into(), msg })
-            .await;
+        match &event.msg {
+            EventMsg::TurnStarted(started) => {
+                let _ = bindings.status_tx.send(AgentStatus::Running {
+                    turn_id: started.turn_id.clone(),
+                });
+            }
+            EventMsg::TurnComplete(_) | EventMsg::TurnAborted(_) => {
+                let _ = bindings.status_tx.send(AgentStatus::Idle);
+            }
+            EventMsg::ShutdownComplete => {
+                let _ = bindings.status_tx.send(AgentStatus::Shutdown);
+            }
+            _ => {}
+        }
+        let _ = bindings.event_tx.send(event).await;
     }
 
     pub(crate) fn begin_runtime_shutdown(&self) -> bool {

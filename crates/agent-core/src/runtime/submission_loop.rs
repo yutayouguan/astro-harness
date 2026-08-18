@@ -32,8 +32,8 @@ pub(crate) async fn submission_loop(
                     .await
                 {
                     session
-                        .emit_runtime_event(
-                            submission.id,
+                        .send_event(
+                            &submission.id,
                             EventMsg::Error(ErrorEvent {
                                 message: error.to_string(),
                                 error_type: "task_abort".into(),
@@ -48,7 +48,7 @@ pub(crate) async fn submission_loop(
                 false
             }
             Op::Shutdown => {
-                session.shutdown_runtime().await;
+                session.shutdown(submission.id).await;
                 true
             }
             op => {
@@ -62,11 +62,43 @@ pub(crate) async fn submission_loop(
         }
     }
     if !shutdown_received {
-        session.shutdown_runtime().await;
+        session
+            .shutdown(format!("{}:shutdown", session.session_id()))
+            .await;
     }
 }
 
 impl Session {
+    pub(crate) async fn shutdown(self: &Arc<Self>, submission_id: String) {
+        if let Err(error) = self
+            .abort_all_tasks(agent_protocol::TurnAbortReason::Interrupted)
+            .await
+        {
+            tracing::warn!(%error, session_id = %self.session_id(), "failed to abort session task before shutdown");
+        }
+        self.shutdown_runtime().await;
+        if let Some(bindings) = self.runtime_io.get() {
+            if let Err(error) = bindings.rollout.shutdown().await {
+                self.send_event_raw_with_persistence(
+                    agent_protocol::Event {
+                        id: submission_id.clone(),
+                        msg: EventMsg::Error(ErrorEvent {
+                            message: error.to_string(),
+                            error_type: "rollout_shutdown".into(),
+                        }),
+                    },
+                    false,
+                )
+                .await;
+            }
+        }
+        self.deliver_event_raw(agent_protocol::Event {
+            id: submission_id,
+            msg: EventMsg::ShutdownComplete,
+        })
+        .await;
+    }
+
     async fn record_extension(&self, submission_id: String, item: agent_protocol::ExtensionItem) {
         let turn_id = self
             .active_turn
@@ -76,8 +108,8 @@ impl Session {
             .and_then(|turn| turn.task.as_ref())
             .map(|running| running.turn_context.sub_id().to_string())
             .unwrap_or_else(|| submission_id.clone());
-        self.emit_runtime_event(
-            submission_id,
+        self.send_event(
+            &submission_id,
             EventMsg::ItemCompleted(ItemEvent {
                 turn_id,
                 item: TurnItem::Extension(item),
@@ -94,8 +126,8 @@ impl Session {
             }
             Op::RefreshMcpServers => {
                 if let Err(error) = self.reload_mcp().await {
-                    self.emit_runtime_event(
-                        submission_id,
+                    self.send_event(
+                        &submission_id,
                         EventMsg::Error(ErrorEvent {
                             message: error.to_string(),
                             error_type: "mcp_refresh".into(),
@@ -106,8 +138,8 @@ impl Session {
             }
             Op::ReloadUserConfig => {
                 if let Err(error) = self.reload_tools_and_mcp().await {
-                    self.emit_runtime_event(
-                        submission_id,
+                    self.send_event(
+                        &submission_id,
                         EventMsg::Error(ErrorEvent {
                             message: error.to_string(),
                             error_type: "user_config_reload".into(),
@@ -153,8 +185,8 @@ impl Session {
     }
 
     async fn emit_unsupported_op(&self, submission_id: String, operation: &str) {
-        self.emit_runtime_event(
-            submission_id,
+        self.send_event(
+            &submission_id,
             EventMsg::Error(ErrorEvent {
                 message: format!("operation {operation} is not supported by this runtime"),
                 error_type: "unsupported_op".into(),

@@ -26,7 +26,7 @@ pub(crate) mod tasks;
 /// 助手回合时间线（astro_timeline_v1）。
 pub mod timeline;
 
-pub use agent_protocol::{TurnAbortReason, TurnInput};
+pub use agent_protocol::{Event, EventMsg, Op, TurnAbortReason, TurnInput};
 /// 链式构建可运行的 Agent 实例及其规格。
 pub use builder::{AgentBuilder, BuiltAgentSpec};
 /// HITL 闸门 re-export。

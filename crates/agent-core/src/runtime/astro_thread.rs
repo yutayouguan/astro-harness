@@ -139,10 +139,15 @@ mod tests {
         assert_eq!(thread.status(), AgentStatus::Shutdown);
         statuses.changed().await.unwrap();
         assert_eq!(*statuses.borrow(), AgentStatus::Shutdown);
-        assert!(timeout(Duration::from_secs(1), thread.next_event())
-            .await
-            .expect("event stream should close after shutdown")
-            .is_err());
+        assert!(matches!(
+            timeout(Duration::from_secs(1), thread.next_event())
+                .await
+                .expect("shutdown event should be delivered before stream close")
+                .unwrap()
+                .msg,
+            agent_protocol::EventMsg::ShutdownComplete
+        ));
+        assert!(thread.next_event().await.is_err());
     }
 
     #[tokio::test]

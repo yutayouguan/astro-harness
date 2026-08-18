@@ -12,7 +12,9 @@ use std::pin::Pin;
 use std::sync::Arc;
 use std::time::Duration;
 
-use agent_protocol::{TurnAbortReason, TurnAbortedEvent, TurnInput};
+use agent_protocol::{
+    ErrorEvent, EventMsg, TurnAbortReason, TurnAbortedEvent, TurnCompleteEvent, TurnInput,
+};
 use futures::FutureExt;
 use tokio::sync::{oneshot, Notify};
 use tokio::task::JoinHandle;
@@ -32,6 +34,10 @@ const TASK_ABORT_TIMEOUT: Duration = Duration::from_millis(50);
 const TASK_ABORT_HOOK_TIMEOUT: Duration = Duration::from_secs(5);
 #[cfg(test)]
 const TASK_ABORT_HOOK_TIMEOUT: Duration = Duration::from_millis(50);
+
+#[derive(Debug, thiserror::Error)]
+#[error("turn cancelled")]
+struct TurnCancelled;
 
 /// The workflow currently owned by a session task.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -244,9 +250,9 @@ impl Session {
         let ctx = Arc::clone(&turn_context);
         let task_for_run = Arc::clone(&task);
         let child = cancellation_token.child_token();
-        let completion_for_run = completion.clone();
         let turn_id = turn_context.sub_id().to_string();
         let turn_id_for_run = turn_id.clone();
+        let turn_context_for_finish = Arc::clone(&turn_context);
         self.task_completions
             .lock()
             .await
@@ -262,11 +268,10 @@ impl Session {
                 .catch_unwind()
                 .await
                 .unwrap_or_else(|_| Err(anyhow::anyhow!("session task panicked")));
-            if let Some(running) = session.claim_natural_finish(&turn_id_for_run).await {
-                session
-                    .finish_natural_task(running, result, &completion_for_run)
-                    .await;
-            }
+            debug_assert_eq!(turn_context_for_finish.sub_id(), turn_id_for_run);
+            session
+                .on_task_finished(turn_context_for_finish, result)
+                .await;
         });
 
         let installed_result = self
@@ -351,16 +356,15 @@ impl Session {
         running
     }
 
-    async fn finish_natural_task(
-        &self,
-        mut running: RunningTask,
+    pub(crate) async fn on_task_finished(
+        self: &Arc<Self>,
+        turn_context: Arc<TurnContext>,
         result: SessionTaskResult,
-        completion: &CancellationToken,
     ) {
-        let turn_id = running.turn_context.sub_id().to_string();
-        if let Err(error) = result {
-            tracing::warn!(%error, %turn_id, "session task failed");
-        }
+        let turn_id = turn_context.sub_id().to_string();
+        let Some(mut running) = self.claim_natural_finish(&turn_id).await else {
+            return;
+        };
         running.turn_context.wait_for_children().await;
         drop(running.task);
         drop(running.handle);
@@ -368,7 +372,52 @@ impl Session {
         if self.current_turn_id().await.as_deref() == Some(&turn_id) {
             self.clear_current_turn_id().await;
         }
-        self.complete_task_lifecycle(&turn_id, completion).await;
+        match result {
+            Ok(last_agent_message) => {
+                self.send_event(
+                    &turn_id,
+                    EventMsg::TurnComplete(TurnCompleteEvent {
+                        turn_id: turn_id.clone(),
+                        last_agent_message,
+                        error: None,
+                    }),
+                )
+                .await;
+            }
+            Err(error) if error.downcast_ref::<TurnCancelled>().is_some() => {
+                self.send_event(
+                    &turn_id,
+                    EventMsg::TurnAborted(TurnAbortedEvent {
+                        turn_id: Some(turn_id.clone()),
+                        reason: TurnAbortReason::Interrupted,
+                    }),
+                )
+                .await;
+            }
+            Err(error) => {
+                tracing::warn!(%error, %turn_id, "session task failed");
+                let terminal_error = ErrorEvent {
+                    message: error.to_string(),
+                    error_type: "internal".into(),
+                };
+                self.send_event(&turn_id, EventMsg::Error(terminal_error.clone()))
+                    .await;
+                self.send_event(
+                    &turn_id,
+                    EventMsg::TurnComplete(TurnCompleteEvent {
+                        turn_id: turn_id.clone(),
+                        last_agent_message: None,
+                        error: Some(terminal_error),
+                    }),
+                )
+                .await;
+            }
+        }
+        if let Err(error) = self.flush_rollout().await {
+            tracing::warn!(%error, %turn_id, "failed to flush rollout after task completion");
+        }
+        self.complete_task_lifecycle(&turn_id, &running.completion)
+            .await;
     }
 
     async fn await_auxiliary_handles(handles: &mut Vec<JoinHandle<()>>) {
@@ -519,14 +568,17 @@ impl Session {
 
         drop(running.task);
         Self::await_auxiliary_handles(&mut running.auxiliary_handles).await;
-        self.emit_runtime_event(
-            turn_id.clone(),
-            agent_protocol::EventMsg::TurnAborted(TurnAbortedEvent {
+        self.send_event(
+            &turn_id,
+            EventMsg::TurnAborted(TurnAbortedEvent {
                 turn_id: Some(turn_id.clone()),
                 reason,
             }),
         )
         .await;
+        if let Err(error) = self.flush_rollout().await {
+            tracing::warn!(%error, %turn_id, "failed to flush rollout after task abort");
+        }
         if self.current_turn_id().await.as_deref() == Some(&turn_id) {
             self.clear_current_turn_id().await;
         }
@@ -556,6 +608,7 @@ impl Session {
 mod tests {
     use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
+    use agent_protocol::{Event, EventMsg, Op};
     use agent_rollout::{RolloutRecorder, ThreadHistoryMode};
 
     use super::*;
@@ -639,6 +692,28 @@ mod tests {
 
     struct PendingTask {
         started: Arc<Notify>,
+    }
+
+    struct FailingTask;
+
+    impl SessionTask for FailingTask {
+        fn kind(&self) -> TaskKind {
+            TaskKind::Regular
+        }
+
+        fn span_name(&self) -> &'static str {
+            "session_task.failing_test"
+        }
+
+        async fn run(
+            self: Arc<Self>,
+            _session: Arc<Session>,
+            _ctx: Arc<TurnContext>,
+            _input: Vec<TurnInput>,
+            _cancellation_token: CancellationToken,
+        ) -> SessionTaskResult {
+            Err(anyhow::anyhow!("provider failed"))
+        }
     }
 
     impl SessionTask for PendingTask {
@@ -827,6 +902,79 @@ mod tests {
         );
         let thread = AstroThread::spawn(Arc::clone(&session), rollout).unwrap();
         (dir, session, thread)
+    }
+
+    async fn collect_terminal(thread: &AstroThread, turn_id: &str) -> Vec<Event> {
+        let mut events = Vec::new();
+        loop {
+            let event = thread.next_event().await.unwrap();
+            if event.id != turn_id {
+                continue;
+            }
+            let terminal = event.msg.is_terminal();
+            events.push(event);
+            if terminal {
+                return events;
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn unexpected_error_emits_error_then_complete_with_error() {
+        let (_dir, session, thread) = task_test_thread("task-failure-test").await;
+        let turn_id = "turn-failure";
+        let context = session.create_turn_context(turn_id.into()).await;
+        session
+            .spawn_task(context, Vec::new(), FailingTask)
+            .await
+            .unwrap();
+        let events = collect_terminal(&thread, turn_id).await;
+        assert!(matches!(events[events.len() - 2].msg, EventMsg::Error(_)));
+        assert!(matches!(
+            events.last().unwrap().msg,
+            EventMsg::TurnComplete(ref event) if event.error.is_some()
+        ));
+        assert_eq!(
+            events
+                .iter()
+                .filter(|event| event.msg.is_terminal())
+                .count(),
+            1
+        );
+        assert_eq!(thread.status(), AgentStatus::Idle);
+    }
+
+    #[tokio::test]
+    async fn interrupt_emits_only_turn_aborted() {
+        let (_dir, session, thread) = task_test_thread("task-interrupt-test").await;
+        let turn_id = "turn-interrupt";
+        let started = Arc::new(Notify::new());
+        let context = session.create_turn_context(turn_id.into()).await;
+        session
+            .spawn_task(
+                context,
+                Vec::new(),
+                PendingTask {
+                    started: Arc::clone(&started),
+                },
+            )
+            .await
+            .unwrap();
+        started.notified().await;
+        thread.submit(Op::Interrupt).await.unwrap();
+        let events = collect_terminal(&thread, turn_id).await;
+        assert!(matches!(
+            events.last().unwrap().msg,
+            EventMsg::TurnAborted(_)
+        ));
+        assert_eq!(
+            events
+                .iter()
+                .filter(|event| event.msg.is_terminal())
+                .count(),
+            1
+        );
+        assert_eq!(thread.status(), AgentStatus::Idle);
     }
 
     #[tokio::test]
