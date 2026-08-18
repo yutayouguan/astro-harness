@@ -115,8 +115,8 @@ async fn test_agent_loop_fts_recall_after_long_session() {
 async fn test_memory_tools_registered() {
     let dir = TempDir::new().unwrap();
     let agent = AgentLoop::new(test_config(&dir)).unwrap();
-    let names: Vec<_> = agent
-        .tool_registry()
+    let registry = agent.tool_registry().await;
+    let names: Vec<_> = registry
         .available_tools()
         .iter()
         .map(|t| t.name.as_str())
@@ -223,7 +223,7 @@ async fn run_turn_clears_prior_cancel_signal() {
 #[tokio::test]
 async fn system_prompt_includes_interaction_mode_guidance() {
     let dir = TempDir::new().unwrap();
-    let mut agent = AgentLoop::new(test_config(&dir)).unwrap();
+    let agent = AgentLoop::new(test_config(&dir)).unwrap();
 
     agent
         .set_interaction_mode(tools::InteractionMode::Plan)

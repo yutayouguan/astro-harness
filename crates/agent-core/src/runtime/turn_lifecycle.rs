@@ -14,13 +14,13 @@ impl Session {
     ///
     /// 若上一轮工具次数达到 `learning.complex_task_tool_threshold`，为本轮挂起学习 nudge。
     pub async fn begin_user_turn(&mut self) {
-        let compression = memory::load_compression_config(&self.memory.base_dir);
+        let compression = memory::load_compression_config(self.memory_dir());
         {
-            let mut state = self.state.lock().await;
+            let mut state = self.lock_state();
             let prev_rounds = state.turn.begin_new_turn();
             state.compression.reset_for_new_turn(&compression);
             state.pending_learning_nudge =
-                Self::compute_learning_nudge(&self.memory.base_dir, prev_rounds);
+                Self::compute_learning_nudge(self.memory_dir(), prev_rounds);
         }
         let context_window = self.context_window();
         *self
@@ -122,7 +122,7 @@ impl Session {
                 .any(|m| matches!(m.role, types::message::Role::Assistant))
         {
             memory::try_append_decision(
-                self.memory.base_dir.as_path(),
+                self.memory_dir(),
                 memory::DecisionEntry::new(
                     memory::DecisionKind::UserCorrection,
                     user_message.chars().take(200).collect::<String>(),
@@ -136,7 +136,7 @@ impl Session {
             self.record_turn_input(item).await?;
         }
 
-        let current_turn = self.state.lock().await.turn.current_turn;
+        let current_turn = self.lock_state().turn.current_turn;
         let fts_keywords = if current_turn >= self.config.recent_turns {
             Some(user_message.as_str())
         } else {
@@ -148,8 +148,7 @@ impl Session {
             self.config.recent_turns,
             fts_keywords,
         )?;
-        self.state.lock().await.compression.last_recalled_context =
-            format_recalled_context(&recalled);
+        self.lock_state().compression.last_recalled_context = format_recalled_context(&recalled);
 
         self.increment_turn().await;
         let system_prompt = self.build_system_prompt().await;
@@ -174,7 +173,7 @@ impl Session {
             },
         );
         if let ::hooks::HookOutcome::InjectContext(ctx) = inject {
-            self.state.lock().await.pending_inject_context = Some(ctx);
+            self.lock_state().pending_inject_context = Some(ctx);
         }
         if self.cancel.is_cancelled() {
             return Ok(TurnResult::Interrupted);
@@ -241,8 +240,7 @@ impl Session {
             media_json: media_json.as_deref(),
             ..NewMessage::empty(&self.session_id, "user")
         })?;
-        self.record_items_unlocked(vec![Message::user_with_images(&content, &image_data_urls)])
-            .await;
+        self.record_items_unlocked(vec![Message::user_with_images(&content, &image_data_urls)]);
         Ok(())
     }
 
@@ -280,7 +278,7 @@ impl Session {
         }
         let tool_specs = self.schemas_for_api().await;
         let turn_context = {
-            let state = self.state.lock().await;
+            let state = self.lock_state();
             state.current_turn_context.clone().unwrap_or_else(|| {
                 Arc::new(TurnContext::new(
                     state
@@ -290,13 +288,13 @@ impl Session {
                         .unwrap_or_else(|| uuid::Uuid::new_v4().to_string()),
                     state.turn.current_turn(),
                     state.interaction_mode,
-                    self.permission_profile.clone(),
-                    self.project_root.clone(),
+                    state.permission_profile.clone(),
+                    state.project_root.clone(),
                 ))
             })
         };
         let step_context = Arc::new(StepContext::new(turn_context, history, tool_specs));
-        self.state.lock().await.current_step_context = Some(Arc::clone(&step_context));
+        self.lock_state().current_step_context = Some(Arc::clone(&step_context));
         Ok(step_context)
     }
 }

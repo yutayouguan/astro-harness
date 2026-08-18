@@ -55,7 +55,7 @@ impl AgentLoop {
         let mut msg = msg;
         msg.reasoning = reasoning.map(str::to_string);
         msg.thought_signature = thought_signature;
-        self.record_items_unlocked(vec![msg]).await;
+        self.record_items_unlocked(vec![msg]);
         Ok(())
     }
 
@@ -112,8 +112,7 @@ impl AgentLoop {
             content: Some(content),
             ..NewMessage::empty(&self.session_id, "user")
         })?;
-        self.record_items_unlocked(vec![Message::user(content)])
-            .await;
+        self.record_items_unlocked(vec![Message::user(content)]);
         Ok(())
     }
 
@@ -137,7 +136,7 @@ impl AgentLoop {
                 return;
             }
         };
-        let workspace = self.memory.workspace_dir.clone();
+        let workspace = self.workspace_dir.clone();
         let session_id = self.session_id.clone();
         let message_id = msg_id.to_string();
         let agent_id = self.agent_id().to_string();
@@ -217,7 +216,7 @@ impl AgentLoop {
         if let Some(view) = spill_view {
             msg.compressed_content = Some(view);
         }
-        self.record_items_unlocked(vec![msg]).await;
+        self.record_items_unlocked(vec![msg]);
         Ok(())
     }
 }

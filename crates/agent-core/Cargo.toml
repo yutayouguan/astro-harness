@@ -19,6 +19,8 @@ mcp = { path = "../agent-mcp" }
 a2ui = { path = "../agent-a2ui" }
 artifacts = { path = "../agent-artifacts" }
 hooks = { path = "../agent-hooks" }
+agent-protocol = { path = "../agent-protocol" }
+agent-rollout = { path = "../agent-rollout" }
 tracing = { workspace = true }
 tokio = { workspace = true }
 tokio-util = { workspace = true }
@@ -30,6 +32,7 @@ async-trait = { workspace = true }
 uuid = { version = "1", features = ["v4"] }
 chrono = { version = "0.4", features = ["clock"] }
 futures = "0.3"
+async-channel = "2"
 
 [dev-dependencies]
 tempfile = "3"

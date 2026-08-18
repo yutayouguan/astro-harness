@@ -22,8 +22,11 @@ name = "agent"
 version = "0.1.0"
 dependencies = [
  "a2ui",
+ "agent-protocol",
+ "agent-rollout",
  "anyhow",
  "artifacts",
+ "async-channel",
  "async-trait",
  "chrono",
  "cron",

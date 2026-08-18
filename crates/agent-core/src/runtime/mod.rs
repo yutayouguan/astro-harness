@@ -11,7 +11,7 @@
 //! - 取消信号（`CancelSignal`）在工具调用前后均会检查，已取消则立即中断
 
 use std::path::PathBuf;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex as StdMutex, MutexGuard};
 
 use tokio::sync::Mutex as TokioMutex;
 use uuid::Uuid;
@@ -111,24 +111,18 @@ impl Config {
 pub struct Session {
     pub(crate) config: Config,
     pub(crate) session_id: String,
+    pub(crate) agent_id: String,
+    pub(crate) workspace_dir: PathBuf,
 
     // ── 提取的子结构体 ──────────────────────────────────────
-    /// LLM 模型配置、凭证与 fallback 链。
-    pub(crate) model_ctx: model_ctx::ModelContext,
     /// Codex-style session-wide mutable runtime state.
-    pub(crate) state: TokioMutex<session_state::SessionState>,
+    pub(crate) state: StdMutex<session_state::SessionState>,
     /// Serializes persisted conversation writes with their in-memory history mirror.
     pub(crate) conversation_write_lock: TokioMutex<()>,
 
     // ── 会话级服务与注册表 ──────────────────────────
-    pub(crate) memory: MemoryManager,
     pub(crate) services: SessionServices,
-    pub(crate) tool_registry: ToolRegistry,
     pub(crate) mcp_hub: Arc<TokioMutex<McpHub>>,
-    /// Per-thread MCP overlay from a Codex custom agent file.
-    pub(crate) mcp_config_override: Vec<mcp::McpServerConfig>,
-    /// 最近一次成功 reload 后的已连接 Server instructions 快照。
-    pub(crate) mcp_instructions: Vec<mcp::McpServerInstructions>,
 
     // ── 注入的依赖 ─────────────────────────────────────────
     /// 进程内插件钩子总线（Block / Modify / Inject）。
@@ -138,12 +132,6 @@ pub struct Session {
 
     // ── 轻量状态 ───────────────────────────────────────────
     pub(crate) cancel: CancelSignal,
-    /// 代码/项目根（委派 worktree 或会话级 ASTRO_PROJECT_ROOT）。
-    pub(crate) project_root: Option<PathBuf>,
-    /// Per-session permission profile override. `None` inherits current workspace selection.
-    pub(crate) permission_profile: Option<String>,
-    /// Ephemeral `[[skills.config]]` layer; never mutates parent enable state.
-    pub(crate) skill_config_overrides: Vec<(PathBuf, bool)>,
     /// Codex-style single-active-task registry for this session.
     pub(crate) active_turn: TokioMutex<Option<ActiveTurn>>,
 }
@@ -195,7 +183,7 @@ impl Session {
         register_all(&mut tool_registry);
         tool_registry.reload_enabled_from_disk(Some(&agent_id));
         let mut mcp_hub_inner = McpHub::new();
-        mcp_hub_inner.set_agent_id(Some(agent_id));
+        mcp_hub_inner.set_agent_id(Some(agent_id.clone()));
         let mcp_hub = Arc::new(TokioMutex::new(mcp_hub_inner));
 
         let execution: Arc<dyn tools::AgentThreadDispatch> =
@@ -214,39 +202,43 @@ impl Session {
         let compression_policy: Box<dyn crate::compression::CompressionPolicy> = Box::new(
             crate::compression::StagedCompressionPolicy::from_config(&compression_cfg),
         );
+        let workspace_dir = memory.workspace_dir.clone();
+        let project_root = resolve_session_project_root();
 
         Ok(Session {
             config,
             session_id,
-            model_ctx: model_ctx::ModelContext::default(),
-            state: TokioMutex::new(session_state::SessionState::new(history)),
+            agent_id,
+            workspace_dir,
+            state: StdMutex::new(session_state::SessionState::new(history, project_root)),
             conversation_write_lock: TokioMutex::new(()),
-            memory,
-            services: SessionServices::new(sessions, compression_policy),
-            tool_registry,
+            services: SessionServices::new(sessions, compression_policy, memory, tool_registry),
             mcp_hub,
-            mcp_config_override: Vec::new(),
-            mcp_instructions: Vec::new(),
             hook_bus: Arc::new(::hooks::PluginHookBus::new()),
             execution,
             cancel: CancelSignal::new(),
-            project_root: resolve_session_project_root(),
-            permission_profile: None,
-            skill_config_overrides: Vec::new(),
             active_turn: TokioMutex::new(None),
         })
+    }
+
+    fn lock_state(&self) -> MutexGuard<'_, session_state::SessionState> {
+        self.state.lock().expect("session state mutex poisoned")
+    }
+
+    fn state_mut(&mut self) -> &mut session_state::SessionState {
+        self.state.get_mut().expect("session state mutex poisoned")
     }
 
     /// 绑定当前流式 run 的 turn_id（约定与 `run_id` 相同）。
     pub async fn set_current_turn_id(&self, turn_id: impl Into<String>) {
         let sub_id = turn_id.into();
-        let mut state = self.state.lock().await;
+        let mut state = self.lock_state();
         let turn_context = Arc::new(TurnContext::new(
             sub_id,
             state.turn.current_turn(),
             state.interaction_mode,
-            self.permission_profile.clone(),
-            self.project_root.clone(),
+            state.permission_profile.clone(),
+            state.project_root.clone(),
         ));
         state
             .turn
@@ -255,18 +247,18 @@ impl Session {
     }
 
     pub(crate) async fn create_turn_context(&self, sub_id: String) -> Arc<TurnContext> {
-        let state = self.state.lock().await;
+        let state = self.lock_state();
         Arc::new(TurnContext::new(
             sub_id,
             state.turn.current_turn().saturating_add(1),
             state.interaction_mode,
-            self.permission_profile.clone(),
-            self.project_root.clone(),
+            state.permission_profile.clone(),
+            state.project_root.clone(),
         ))
     }
 
     pub(crate) async fn bind_turn_context(&mut self, turn_context: Arc<TurnContext>) {
-        let mut state = self.state.lock().await;
+        let mut state = self.lock_state();
         state
             .turn
             .set_current_turn_id(turn_context.sub_id().to_string());
@@ -275,7 +267,7 @@ impl Session {
 
     /// 清除当前 turn_id（run 结束或中断时调用）。
     pub async fn clear_current_turn_id(&self) {
-        let mut state = self.state.lock().await;
+        let mut state = self.lock_state();
         state.turn.clear_current_turn_id();
         state.current_turn_context = None;
         state.current_step_context = None;
@@ -283,12 +275,7 @@ impl Session {
 
     /// 当前绑定的 turn_id（若有）。
     pub async fn current_turn_id(&self) -> Option<String> {
-        self.state
-            .lock()
-            .await
-            .turn
-            .current_turn_id()
-            .map(str::to_owned)
+        self.lock_state().turn.current_turn_id().map(str::to_owned)
     }
 
     /// 子 Agent 执行调度器。
@@ -297,16 +284,20 @@ impl Session {
     }
 
     pub fn set_permission_profile(&mut self, profile: Option<String>) {
-        self.permission_profile = profile;
+        self.state_mut().permission_profile = profile;
     }
 
-    pub fn permission_profile(&self) -> Option<&str> {
-        self.permission_profile.as_deref()
+    pub fn permission_profile(&self) -> Option<String> {
+        self.lock_state().permission_profile.clone()
+    }
+
+    pub async fn permission_profile_snapshot(&self) -> Option<String> {
+        self.lock_state().permission_profile.clone()
     }
 
     /// 从磁盘重载 MEMORY / USER 并更新 prompt 快照（同会话写入默认不刷新）。
     pub fn refresh_memory(&mut self) -> anyhow::Result<()> {
-        self.memory.refresh_memory_snapshot()
+        self.services.memory.get_mut().refresh_memory_snapshot()
     }
 
     /// 设置插件钩子总线。
@@ -326,7 +317,7 @@ impl Session {
 
     /// 取出并清空本轮 `pre_llm_call` 注入上下文。
     pub async fn take_inject_context(&self) -> Option<String> {
-        self.state.lock().await.pending_inject_context.take()
+        self.lock_state().pending_inject_context.take()
     }
 
     /// 排队下一轮注入上下文（复用 `pre_llm_call` 的注入机制）。
@@ -335,12 +326,12 @@ impl Session {
     /// `SessionState.history`，仅在下一轮构建 API history 时以 `[astro:hook-context]`
     /// 形式追加一条 user 消息。
     pub async fn queue_inject_context(&self, ctx: impl Into<String>) {
-        self.state.lock().await.pending_inject_context = Some(ctx.into());
+        self.lock_state().pending_inject_context = Some(ctx.into());
     }
 
     /// 当前会话轮次序号（从 1 起，未开始为 0）。
     pub async fn session_turn(&self) -> usize {
-        self.state.lock().await.turn.current_turn()
+        self.lock_state().turn.current_turn()
     }
 
     /// 返回可克隆的取消信号，供上层 streaming 或 UI 触发中断。
@@ -375,9 +366,7 @@ impl Session {
 
     /// 当前用户消息的工具深度是否已达 `multi_turn` 上限。
     pub async fn is_tool_depth_exhausted(&self) -> bool {
-        self.state
-            .lock()
-            .await
+        self.lock_state()
             .turn
             .is_tool_depth_exhausted(self.config.multi_turn)
     }
@@ -396,63 +385,47 @@ impl Session {
     }
 
     pub async fn mid_run_summary_done(&self) -> bool {
-        self.state.lock().await.compression.mid_run_summary_done()
+        self.lock_state().compression.mid_run_summary_done()
     }
 
     pub async fn mid_run_handoff(&self) -> Option<String> {
-        self.state
-            .lock()
-            .await
+        self.lock_state()
             .compression
             .mid_run_handoff()
             .map(str::to_owned)
     }
 
     pub async fn set_mid_run_handoff(&self, text: String) {
-        self.state
-            .lock()
-            .await
-            .compression
-            .set_mid_run_handoff(text);
+        self.lock_state().compression.set_mid_run_handoff(text);
     }
 
     pub async fn mark_mid_run_summary_skipped(&self) {
-        self.state
-            .lock()
-            .await
-            .compression
-            .mark_mid_run_summary_skipped();
+        self.lock_state().compression.mark_mid_run_summary_skipped();
     }
 
     pub async fn should_recommend_compact(&self) -> bool {
-        self.state
-            .lock()
-            .await
-            .compression
-            .should_recommend_compact()
+        self.lock_state().compression.should_recommend_compact()
     }
 
     pub async fn take_recommend_compact(&self) -> bool {
-        self.state.lock().await.compression.take_recommend_compact()
+        self.lock_state().compression.take_recommend_compact()
     }
 
     /// 本轮用户消息内是否已发生磁盘写入（`terminal` / `file_ops` 写类操作）。
     pub async fn turn_wrote_disk(&self) -> bool {
-        self.state.lock().await.turn.turn_wrote_disk()
+        self.lock_state().turn.turn_wrote_disk()
     }
 
     /// 递增工具轮次计数；超出 `multi_turn` 时返回 [`MaxDepthError`]。
     pub async fn increment_tool_round(&self) -> Result<(), MaxDepthError> {
-        self.state
-            .lock()
-            .await
+        self.lock_state()
             .turn
             .increment_tool_round(self.config.multi_turn)
     }
 
     /// 设置图像生成工具的输出目标路径。
     pub fn set_image_gen_targets(&mut self, targets: types::ImageGenTargets) {
-        self.model_ctx.set_image_gen_targets(targets);
+        self.state_mut().model_ctx.set_image_gen_targets(targets);
     }
 
     /// 配置 LLM 对话凭据，供需要调用 Provider 的内置工具使用。
@@ -463,7 +436,8 @@ impl Session {
         api_key: &str,
         base_url: &str,
     ) {
-        self.model_ctx
+        self.state_mut()
+            .model_ctx
             .set_credentials(provider, model, api_key, base_url);
     }
 
@@ -472,29 +446,30 @@ impl Session {
     /// 更新 `chat_provider` / `chat_model` 与可选温度；若已有 `chat_targets`，
     /// 用本规格覆盖 primary 的 provider/model（保留 api_key / base_url）。
     pub fn set_model(&mut self, spec: types::ModelSpec) {
-        if !spec.provider_id.trim().is_empty() {
-            self.model_ctx.credentials.provider = spec.provider_id.trim().to_string();
-        }
-        if !spec.model_id.trim().is_empty() {
-            self.model_ctx.credentials.model = spec.model_id.trim().to_string();
-        }
         if let Some(t) = spec.temperature {
             self.config.temperature = t;
         }
-        if let Some(primary) = self.model_ctx.chat_targets.first_mut() {
+        let model_ctx = &mut self.state_mut().model_ctx;
+        if !spec.provider_id.trim().is_empty() {
+            model_ctx.credentials.provider = spec.provider_id.trim().to_string();
+        }
+        if !spec.model_id.trim().is_empty() {
+            model_ctx.credentials.model = spec.model_id.trim().to_string();
+        }
+        if let Some(primary) = model_ctx.chat_targets.first_mut() {
             *primary = spec.apply_to(primary);
-            self.model_ctx.credentials.api_key = primary.api_key.clone();
-            self.model_ctx.credentials.base_url = primary.base_url.clone();
-        } else if !self.model_ctx.credentials.api_key.is_empty()
-            || !self.model_ctx.credentials.base_url.is_empty()
+            model_ctx.credentials.api_key = primary.api_key.clone();
+            model_ctx.credentials.base_url = primary.base_url.clone();
+        } else if !model_ctx.credentials.api_key.is_empty()
+            || !model_ctx.credentials.base_url.is_empty()
         {
             let target = spec.to_chat_target(
-                &self.model_ctx.credentials.api_key,
-                &self.model_ctx.credentials.base_url,
+                &model_ctx.credentials.api_key,
+                &model_ctx.credentials.base_url,
             );
-            self.model_ctx.chat_targets = vec![target];
+            model_ctx.chat_targets = vec![target];
         }
-        self.model_ctx.model_spec = Some(spec);
+        model_ctx.model_spec = Some(spec);
     }
 
     /// 按角色设置模型（主聊或辅助任务）。
@@ -502,9 +477,10 @@ impl Session {
         match role {
             types::ModelRole::Main => self.set_model(spec),
             types::ModelRole::Auxiliary(task) => {
-                let base = self.primary_chat_target();
+                let model_ctx = &mut self.state_mut().model_ctx;
+                let base = model_ctx.primary_chat_target();
                 let target = spec.apply_to(&base);
-                self.model_ctx.auxiliary_targets.insert(task, vec![target]);
+                model_ctx.auxiliary_targets.insert(task, vec![target]);
             }
         }
     }
@@ -516,7 +492,7 @@ impl Session {
     ///   请改用已解析的 [`Self::set_chat_targets`]）
     /// - 同 `provider_id` 去重（对齐 `expand_chat_targets`）
     pub fn set_fallback_models(&mut self, specs: &[types::ModelSpec]) {
-        self.model_ctx.set_fallback_models(specs);
+        self.state_mut().model_ctx.set_fallback_models(specs);
     }
 
     /// 按角色设置 fallback 链（主聊或辅助任务）。
@@ -526,13 +502,13 @@ impl Session {
         match role {
             types::ModelRole::Main => self.set_fallback_models(specs),
             types::ModelRole::Auxiliary(task) => {
-                let preferred = self
-                    .model_ctx
+                let model_ctx = &mut self.state_mut().model_ctx;
+                let preferred = model_ctx
                     .auxiliary_targets
                     .get(&task)
                     .and_then(|v| v.first())
                     .cloned()
-                    .unwrap_or_else(|| self.primary_chat_target());
+                    .unwrap_or_else(|| model_ctx.primary_chat_target());
                 let mut chain = vec![preferred.clone()];
                 let mut seen = std::collections::HashSet::new();
                 seen.insert(preferred.provider_id.clone());
@@ -546,38 +522,38 @@ impl Session {
                     }
                     chain.push(t);
                 }
-                self.model_ctx.auxiliary_targets.insert(task, chain);
+                model_ctx.auxiliary_targets.insert(task, chain);
             }
         }
     }
 
     /// 当前主模型声明（若有）。
-    pub fn model_spec(&self) -> Option<&types::ModelSpec> {
-        self.model_ctx.model_spec()
-    }
-
-    fn primary_chat_target(&self) -> types::ChatTarget {
-        self.model_ctx.primary_chat_target()
+    pub fn model_spec(&self) -> Option<types::ModelSpec> {
+        self.lock_state().model_ctx.model_spec().cloned()
     }
 
     /// 设置代码/项目根（委派 worktree）；`None` 时文件/终端回退到记忆工作区。
     pub fn set_project_root(&mut self, root: Option<PathBuf>) {
-        self.project_root = root;
+        self.state_mut().project_root = root;
     }
 
     /// 当前代码/项目根（若有）。
-    pub fn project_root(&self) -> Option<&PathBuf> {
-        self.project_root.as_ref()
+    pub fn project_root(&self) -> Option<PathBuf> {
+        self.lock_state().project_root.clone()
+    }
+
+    pub async fn project_root_snapshot(&self) -> Option<PathBuf> {
+        self.lock_state().project_root.clone()
     }
 
     /// 设置含 primary 的聊天 fallback 链（主聊 / cron / Agent Thread 共用）。
     pub fn set_chat_targets(&mut self, targets: Vec<types::ChatTarget>) {
-        self.model_ctx.set_chat_targets(targets);
+        self.state_mut().model_ctx.set_chat_targets(targets);
     }
 
     /// 当前聊天 fallback 链。
-    pub fn chat_targets(&self) -> &[types::ChatTarget] {
-        self.model_ctx.chat_targets()
+    pub fn chat_targets(&self) -> Vec<types::ChatTarget> {
+        self.lock_state().model_ctx.chat_targets().to_vec()
     }
 
     /// 设置五类辅助任务的已解析目标链（每次 `Chat` 请求由 backend 下传后调用）。
@@ -587,7 +563,7 @@ impl Session {
         &mut self,
         targets: std::collections::HashMap<types::AuxiliaryTask, Vec<types::ChatTarget>>,
     ) {
-        self.model_ctx.set_auxiliary_targets(targets);
+        self.state_mut().model_ctx.set_auxiliary_targets(targets);
     }
 
     /// 返回指定辅助任务的目标链（preferred + 可选 fallback）。
@@ -595,12 +571,16 @@ impl Session {
     /// 未传输该任务目标时回退当前主 `ChatTarget`（`chat_targets` 的首项，缺失时
     /// 由 `set_chat_credentials` 字段现造一条），保持旧客户端兼容。
     pub fn auxiliary_targets(&self, task: types::AuxiliaryTask) -> Vec<types::ChatTarget> {
-        self.model_ctx.auxiliary_targets(task)
+        self.lock_state().model_ctx.auxiliary_targets(task)
+    }
+
+    pub async fn model_context_snapshot(&self) -> model_ctx::ModelContext {
+        self.lock_state().model_ctx.clone()
     }
 
     /// 返回 `(project_memory, user_profile)` 原始 prompt 片段。
-    pub fn prompt_content(&self) -> (String, String) {
-        self.memory.prompt_content()
+    pub async fn prompt_content(&self) -> (String, String) {
+        self.services.memory.lock().await.prompt_content()
     }
 
     /// 当前会话唯一标识符。
@@ -610,7 +590,7 @@ impl Session {
 
     /// 当前 Agent 标识（来自 MemoryManager）。
     pub fn agent_id(&self) -> &str {
-        &self.memory.agent_id
+        &self.agent_id
     }
 
     /// 记忆根目录。
@@ -625,37 +605,37 @@ impl Session {
 
     /// 当前 Agent 工作区路径。
     pub fn workspace_dir(&self) -> std::path::PathBuf {
-        self.memory.workspace_dir.clone()
+        self.workspace_dir.clone()
     }
 
-    pub fn chat_api_key(&self) -> &str {
-        self.model_ctx.chat_api_key()
+    pub fn chat_api_key(&self) -> String {
+        self.lock_state().model_ctx.chat_api_key().to_string()
     }
 
-    pub fn chat_base_url(&self) -> &str {
-        self.model_ctx.chat_base_url()
+    pub fn chat_base_url(&self) -> String {
+        self.lock_state().model_ctx.chat_base_url().to_string()
     }
 
-    pub fn chat_provider(&self) -> &str {
-        self.model_ctx.chat_provider()
+    pub fn chat_provider(&self) -> String {
+        self.lock_state().model_ctx.chat_provider().to_string()
     }
 
-    pub fn chat_model(&self) -> &str {
-        self.model_ctx.chat_model()
+    pub fn chat_model(&self) -> String {
+        self.lock_state().model_ctx.chat_model().to_string()
     }
 
-    pub fn image_gen_targets(&self) -> &types::ImageGenTargets {
-        self.model_ctx.image_gen_targets()
+    pub fn image_gen_targets(&self) -> types::ImageGenTargets {
+        self.lock_state().model_ctx.image_gen_targets().clone()
     }
 
     /// 内置与 MCP 工具的注册表只读引用。
-    pub fn tool_registry(&self) -> &ToolRegistry {
-        &self.tool_registry
+    pub async fn tool_registry(&self) -> tokio::sync::RwLockReadGuard<'_, ToolRegistry> {
+        self.services.tool_registry.read().await
     }
 
     /// 工具注册表可变引用。
     pub fn tool_registry_mut(&mut self) -> &mut ToolRegistry {
-        &mut self.tool_registry
+        self.services.tool_registry.get_mut()
     }
 
     /// MCP Hub 共享句柄，用于外部查询或调试。
@@ -664,32 +644,43 @@ impl Session {
     }
 
     pub fn set_mcp_config_override(&mut self, configs: Vec<mcp::McpServerConfig>) {
-        self.mcp_config_override = configs;
+        self.state_mut().mcp_config_override = configs;
     }
 
     pub fn set_skill_config_overrides(&mut self, config: Vec<(PathBuf, bool)>) {
-        self.skill_config_overrides = config;
+        self.state_mut().skill_config_overrides = config;
+    }
+
+    pub(crate) fn skill_config_overrides(&self) -> Vec<(PathBuf, bool)> {
+        self.lock_state().skill_config_overrides.clone()
     }
 
     /// 从磁盘重载当前 Agent 的工具启用开关（gate 配置）。
-    pub fn reload_tool_gates(&mut self) {
-        let agent_id = self.memory.agent_id.clone();
-        self.tool_registry.reload_enabled_from_disk(Some(&agent_id));
+    pub async fn reload_tool_gates(&self) {
+        self.services
+            .tool_registry
+            .write()
+            .await
+            .reload_enabled_from_disk(Some(&self.agent_id));
     }
 
     /// 从磁盘重载 MCP 配置，并将启用工具挂接到 [`ToolRegistry`]。
     ///
     /// optional Server 失败仅降级；required Server 失败向调用方传播。
     /// 无论是否存在 required 失败，已成功连接的工具都会同步到 `MCP_TOOLSET`。
-    pub async fn reload_mcp(&mut self) -> anyhow::Result<()> {
-        let agent_id = self.memory.agent_id.clone();
-        let execution_root = self
-            .project_root
-            .clone()
-            .unwrap_or_else(|| self.memory.workspace_dir.clone());
+    pub async fn reload_mcp(&self) -> anyhow::Result<()> {
+        let agent_id = self.agent_id.clone();
+        let (project_root, permission_profile, mcp_config_override) = {
+            let state = self.lock_state();
+            (
+                state.project_root.clone(),
+                state.permission_profile.clone(),
+                state.mcp_config_override.clone(),
+            )
+        };
+        let execution_root = project_root.unwrap_or_else(|| self.workspace_dir.clone());
         let permission_settings = memory::load_permission_settings(&self.config.memory_dir);
-        let profile_id = self
-            .permission_profile
+        let profile_id = permission_profile
             .clone()
             .unwrap_or(permission_settings.selection.profile_id);
         let sandbox_audit = tools::SandboxAuditMetadata::new(
@@ -702,7 +693,7 @@ impl Session {
         let execution_context = tools::context::build_command_sandbox_policy(
             &self.config.memory_dir,
             &execution_root,
-            self.permission_profile.as_deref(),
+            permission_profile.as_deref(),
             false,
         )
         .inspect_err(|_error| {
@@ -725,12 +716,12 @@ impl Session {
         let (reload_result, mcp_instructions) = {
             let mut hub = self.mcp_hub.lock().await;
             hub.set_execution_context(execution_context);
-            let reload_result = if self.mcp_config_override.is_empty() {
+            let reload_result = if mcp_config_override.is_empty() {
                 hub.reload_from_disk(Some(&agent_id)).await
             } else {
                 let mut configs =
                     mcp::load_mcp_servers_layered(Some(&agent_id), Some(&execution_root))?;
-                for overlay in &self.mcp_config_override {
+                for overlay in &mcp_config_override {
                     let id = mcp::sanitize_server_id(&overlay.id);
                     configs.retain(|config| mcp::sanitize_server_id(&config.id) != id);
                     configs.push(overlay.clone());
@@ -741,7 +732,7 @@ impl Session {
             let instructions = hub.server_instructions();
             (reload_result, instructions)
         };
-        self.mcp_instructions = mcp_instructions;
+        self.lock_state().mcp_instructions = mcp_instructions;
         self.attach_mcp_tools().await;
         if let Err(error) = &reload_result {
             tracing::warn!(%error, "reload MCP failed");
@@ -750,7 +741,7 @@ impl Session {
     }
 
     /// 清除指定 MCP Server 的退避状态并立即执行一次真实 Hub 重连。
-    pub async fn reconnect_mcp_server(&mut self, server_id: &str) -> anyhow::Result<()> {
+    pub async fn reconnect_mcp_server(&self, server_id: &str) -> anyhow::Result<()> {
         {
             let mut hub = self.mcp_hub.lock().await;
             hub.force_reconnect(server_id)?;
@@ -759,20 +750,21 @@ impl Session {
     }
 
     /// 同时重载工具 gate 与 MCP 配置，通常在每轮用户输入开始时调用。
-    pub async fn reload_tools_and_mcp(&mut self) -> anyhow::Result<()> {
-        self.reload_tool_gates();
+    pub async fn reload_tools_and_mcp(&self) -> anyhow::Result<()> {
+        self.reload_tool_gates().await;
         self.reload_mcp().await
     }
 
     /// 将 MCP Hub 中已启用的工具条目同步到 [`ToolRegistry`]。
     ///
     /// 先卸载旧 `MCP_TOOLSET` 再逐条注册，保证与磁盘 enablement 一致。
-    async fn attach_mcp_tools(&mut self) {
+    async fn attach_mcp_tools(&self) {
         let (entries, broker_capabilities) = {
             let mut hub = self.mcp_hub.lock().await;
             (hub.enabled_tool_entries(), hub.broker_capabilities())
         };
-        self.tool_registry.unregister_toolset(MCP_TOOLSET);
+        let mut tool_registry = self.services.tool_registry.write().await;
+        tool_registry.unregister_toolset(MCP_TOOLSET);
         for spec in entries {
             let mcp_approval = types::McpToolApproval {
                 server_id: spec.server_id,
@@ -781,7 +773,7 @@ impl Session {
                 annotations: spec.annotations,
             };
             let needs_confirmation = mcp_approval.needs_review();
-            self.tool_registry.register(ToolEntry {
+            tool_registry.register(ToolEntry {
                 name: spec.qualified_name,
                 toolset: MCP_TOOLSET.to_string(),
                 description: spec.description,
@@ -797,7 +789,7 @@ impl Session {
             let server_ids = broker_capabilities.resource_servers.clone();
             let server_summary = server_ids.join(", ");
             let hub = Arc::clone(&self.mcp_hub);
-            self.tool_registry.register_dynamic(
+            tool_registry.register_dynamic(
                 ToolEntry {
                     name: mcp::MCP_RESOURCES_TOOL.to_string(),
                     toolset: MCP_TOOLSET.to_string(),
@@ -831,7 +823,7 @@ impl Session {
             let server_ids = broker_capabilities.prompt_servers.clone();
             let server_summary = server_ids.join(", ");
             let hub = Arc::clone(&self.mcp_hub);
-            self.tool_registry.register_dynamic(
+            tool_registry.register_dynamic(
                 ToolEntry {
                     name: mcp::MCP_PROMPTS_TOOL.to_string(),
                     toolset: MCP_TOOLSET.to_string(),
@@ -865,12 +857,7 @@ impl Session {
 
     /// 最近一次记忆召回的格式化文本，已注入动态上下文。
     pub async fn recalled_context(&self) -> String {
-        self.state
-            .lock()
-            .await
-            .compression
-            .recalled_context()
-            .to_string()
+        self.lock_state().compression.recalled_context().to_string()
     }
 
     /// 生成新的任务 UUID，供上层追踪单次 LLM 请求。
@@ -880,69 +867,67 @@ impl Session {
 
     /// 会话轮次预算是否已耗尽（`current_turn >= max_turns`）。
     pub async fn is_budget_exhausted(&self) -> bool {
-        self.state
-            .lock()
-            .await
+        self.lock_state()
             .turn
             .is_budget_exhausted(self.config.max_turns)
     }
 
     /// 递增会话轮次计数（每处理一条用户消息调用一次）。
     pub async fn increment_turn(&self) {
-        self.state.lock().await.turn.increment_turn();
+        self.lock_state().turn.increment_turn();
     }
 
     /// 设置主模型上下文窗口（token），供分阶段 tool 压缩使用。
     pub fn set_context_window(&mut self, window: u32) {
-        self.model_ctx.set_context_window(window);
+        self.state_mut().model_ctx.set_context_window(window);
     }
 
     /// 设置本轮交互模式（Plan/Ask 启用只读工具门禁）。
     pub async fn set_interaction_mode(&self, mode: types::InteractionMode) {
-        self.state.lock().await.interaction_mode = mode;
+        self.lock_state().interaction_mode = mode;
     }
 
     pub async fn interaction_mode(&self) -> types::InteractionMode {
-        self.state.lock().await.interaction_mode
+        self.lock_state().interaction_mode
     }
 
     /// 按当前交互模式过滤后的工具 schema（OpenAI tools 数组）。
     pub async fn schemas_for_api(&self) -> Vec<serde_json::Value> {
+        let tool_registry = self.services.tool_registry.read().await;
         tools::filter_schemas(
-            self.state.lock().await.interaction_mode,
-            self.tool_registry.schemas_for_api(),
+            self.lock_state().interaction_mode,
+            tool_registry.schemas_for_api(),
         )
     }
 
     /// Append conversation items to the session-owned history.
     pub async fn record_items(&self, items: Vec<Message>) {
         let _write_guard = self.conversation_write_lock.lock().await;
-        self.record_items_unlocked(items).await;
+        self.record_items_unlocked(items);
     }
 
-    async fn record_items_unlocked(&self, items: Vec<Message>) {
-        self.state.lock().await.record_items(items);
+    fn record_items_unlocked(&self, items: Vec<Message>) {
+        self.lock_state().record_items(items);
     }
 
     /// Return an owned snapshot of the current conversation history.
     pub async fn clone_history(&self) -> Vec<Message> {
-        self.state.lock().await.clone_history()
+        self.lock_state().clone_history()
     }
 
     /// Replace the current conversation history with an owned snapshot.
-    #[cfg(test)]
     pub async fn replace_history(&self, history: Vec<Message>) {
         let _write_guard = self.conversation_write_lock.lock().await;
-        self.state.lock().await.replace_history(history);
+        self.lock_state().replace_history(history);
     }
 
     pub fn context_window(&self) -> u32 {
-        self.model_ctx.context_window()
+        self.lock_state().model_ctx.context_window()
     }
 
     /// 解析当前 Agent 工作区目录，供工具上下文注入。
     fn resolve_workspace_dir(&self) -> PathBuf {
-        self.memory.workspace_dir.clone()
+        self.workspace_dir.clone()
     }
 }
 
@@ -1048,10 +1033,10 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn session_groups_turn_scoped_mutable_state_behind_async_mutex() {
+    async fn session_groups_mutable_runtime_state_behind_its_internal_lock() {
         let dir = TempDir::new().unwrap();
         let session = Session::new(test_config(&dir)).unwrap();
-        let state = session.state.lock().await;
+        let state = session.lock_state();
 
         assert_eq!(state.turn.current_turn(), 0);
         assert_eq!(state.interaction_mode, types::InteractionMode::Agent);
@@ -1060,13 +1045,51 @@ mod tests {
         assert!(state.current_turn_context.is_none());
         assert!(state.current_step_context.is_none());
         assert!(state.compression.recalled_context().is_empty());
+        assert!(state.model_ctx.chat_targets.is_empty());
+        assert!(state.mcp_config_override.is_empty());
+        assert!(state.mcp_instructions.is_empty());
+        assert!(state.permission_profile.is_none());
+        assert!(state.skill_config_overrides.is_empty());
     }
 
     #[test]
-    fn session_is_send_and_sync() {
+    fn session_is_send_and_sync_without_an_outer_mutex() {
         fn assert_send_sync<T: Send + Sync>() {}
 
         assert_send_sync::<Session>();
+    }
+
+    #[tokio::test]
+    async fn arc_session_owns_concurrent_history_snapshots() {
+        let dir = TempDir::new().unwrap();
+        let session = Arc::new(Session::new(test_config(&dir)).unwrap());
+        let writer = Arc::clone(&session);
+
+        tokio::spawn(async move {
+            writer.record_items(vec![Message::user("first")]).await;
+        })
+        .await
+        .unwrap();
+
+        assert_eq!(session.clone_history().await[0].content_str(), "first");
+    }
+
+    #[tokio::test]
+    async fn session_returns_owned_runtime_snapshots() {
+        let dir = TempDir::new().unwrap();
+        let mut session = Session::new(test_config(&dir)).unwrap();
+        let project_root = dir.path().join("project");
+        session.set_chat_credentials("openai", "gpt-5.6", "key", "https://example.test");
+        session.set_project_root(Some(project_root.clone()));
+        session.set_permission_profile(Some("workspace-write".to_string()));
+
+        let model = session.model_context_snapshot().await;
+        assert_eq!(model.chat_model(), "gpt-5.6");
+        assert_eq!(session.project_root_snapshot().await, Some(project_root));
+        assert_eq!(
+            session.permission_profile_snapshot().await.as_deref(),
+            Some("workspace-write")
+        );
     }
 
     #[test]
@@ -1094,6 +1117,10 @@ mod tests {
             drop(session.set_interaction_mode(types::InteractionMode::Agent));
             drop(session.interaction_mode());
             drop(session.schemas_for_api());
+            drop(session.model_context_snapshot());
+            drop(session.project_root_snapshot());
+            drop(session.permission_profile_snapshot());
+            drop(session.clone_history());
             drop(session.record_assistant_message("assistant"));
             drop(session.record_user_message("user"));
             drop(session.record_tool_result("tool"));

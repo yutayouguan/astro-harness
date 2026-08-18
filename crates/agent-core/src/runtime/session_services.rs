@@ -11,21 +11,28 @@ use serde_json::Value;
 use session::{
     BillingDelta, ConversationStore, NewMessage, ScrolledMessage, SearchHit, StoredMessage,
 };
+use tokio::sync::{Mutex as TokioMutex, RwLock};
 
 /// Shared dependencies that remain stable for the lifetime of a session.
 pub(crate) struct SessionServices {
     pub(crate) sessions: SharedConversationStore,
     pub(crate) compression_policy: Mutex<Box<dyn crate::compression::CompressionPolicy>>,
+    pub(crate) memory: TokioMutex<memory::MemoryManager>,
+    pub(crate) tool_registry: RwLock<tools::ToolRegistry>,
 }
 
 impl SessionServices {
     pub(crate) fn new(
         sessions: Box<dyn ConversationStore>,
         compression_policy: Box<dyn crate::compression::CompressionPolicy>,
+        memory: memory::MemoryManager,
+        tool_registry: tools::ToolRegistry,
     ) -> Self {
         Self {
             sessions: SharedConversationStore::new(sessions),
             compression_policy: Mutex::new(compression_policy),
+            memory: TokioMutex::new(memory),
+            tool_registry: RwLock::new(tool_registry),
         }
     }
 }

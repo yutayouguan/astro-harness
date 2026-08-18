@@ -33,19 +33,29 @@ fn render_mcp_instructions(entries: &[mcp::McpServerInstructions]) -> String {
 
 impl AgentLoop {
     /// 与 `build_system_prompt` 同源加载静态/动态上下文与技能列表（不含 env 副作用）。
-    async fn system_prompt_parts(
-        &mut self,
-    ) -> (StaticContext, DynamicContext, Vec<(String, String)>) {
-        let (recalled_context, learning_nudge) = {
-            let state = self.state.lock().await;
+    async fn system_prompt_parts(&self) -> (StaticContext, DynamicContext, Vec<(String, String)>) {
+        let (recalled_context, learning_nudge, skill_config_overrides) = {
+            let state = self.lock_state();
             (
                 state.compression.last_recalled_context.clone(),
                 state.pending_learning_nudge.clone(),
+                state.skill_config_overrides.clone(),
             )
         };
-        let (project_memory, user_profile, daily) = self.memory.prompt_snapshot_with_daily();
-        let skill_pairs = if self.tool_registry.is_toolset_enabled("skills") {
-            skills::list_enabled_for_prompt_with_config(&self.skill_config_overrides)
+        let (project_memory, user_profile, daily) = self
+            .services
+            .memory
+            .lock()
+            .await
+            .prompt_snapshot_with_daily();
+        let skills_enabled = self
+            .services
+            .tool_registry
+            .read()
+            .await
+            .is_toolset_enabled("skills");
+        let skill_pairs = if skills_enabled {
+            skills::list_enabled_for_prompt_with_config(&skill_config_overrides)
         } else {
             Vec::new()
         };
@@ -69,7 +79,7 @@ impl AgentLoop {
         let dynamic_ctx = {
             let mut dyn_ctx =
                 DynamicContext::from_recalled(self.config.dynamic_max_items, &recalled_context);
-            let pinned = tools::render_pinned_for_prompt(&self.memory.workspace_dir);
+            let pinned = tools::render_pinned_for_prompt(&self.workspace_dir);
             if !pinned.trim().is_empty() {
                 // 固定上下文优先于本轮 FTS 召回
                 dyn_ctx.items.insert(0, pinned);
@@ -92,16 +102,19 @@ impl AgentLoop {
     /// 避免与 system 层双重注入。
     ///
     /// 副作用：设置 workspace 目录覆盖供 skills 发现使用。
-    pub async fn build_system_prompt(&mut self) -> String {
+    pub async fn build_system_prompt(&self) -> String {
         let (static_ctx, dynamic_ctx, skill_pairs) = self.system_prompt_parts().await;
-        skills::set_workspace_override(&self.memory.workspace_dir);
+        skills::set_workspace_override(&self.workspace_dir);
         let skill_index: Vec<(&str, &str)> = skill_pairs
             .iter()
             .map(|(name, desc)| (name.as_str(), desc.as_str()))
             .collect();
 
         let (guidance, timestamp) = self.system_prompt_guidance_timestamp().await;
-        let mcp_instructions = render_mcp_instructions(&self.mcp_instructions);
+        let mcp_instructions = {
+            let state = self.lock_state();
+            render_mcp_instructions(&state.mcp_instructions)
+        };
         let mut budget = crate::prompt::ContextBudget::new(self.config.context_budget_chars.max(1));
         crate::prompt::assemble_system_layers(
             &mut budget,
@@ -119,7 +132,7 @@ impl AgentLoop {
 
     /// 与 `build_system_prompt` 同源的分层字符数，供上下文占用估算。
     /// 返回 (system, memory, skills, recall)。
-    pub async fn system_prompt_layer_chars(&mut self) -> (usize, usize, usize, usize) {
+    pub async fn system_prompt_layer_chars(&self) -> (usize, usize, usize, usize) {
         let layers = self.system_prompt_layer_breakdown().await;
         (
             layers.system_chars,
@@ -131,7 +144,7 @@ impl AgentLoop {
 
     /// 分层占用明细（含 system / memory / skills 子项），供 `context_usage` 快照。
     pub async fn system_prompt_layer_breakdown(
-        &mut self,
+        &self,
     ) -> crate::prompt::context_usage::LayerBreakdown {
         use crate::prompt::context_usage::{estimate_tokens, LayerBreakdown, NamedChars};
 
@@ -142,7 +155,8 @@ impl AgentLoop {
             .collect();
 
         let (guidance, timestamp) = self.system_prompt_guidance_timestamp().await;
-        let mcp_instructions = render_mcp_instructions(&self.mcp_instructions);
+        let mcp_instruction_entries = self.lock_state().mcp_instructions.clone();
+        let mcp_instructions = render_mcp_instructions(&mcp_instruction_entries);
         let interaction_mode = self.interaction_mode().await;
         let mode_guidance = interaction_mode.system_guidance();
         let tool_guidance = crate::prompt::prompt_builder::TOOL_GUIDANCE;
@@ -194,8 +208,7 @@ impl AgentLoop {
 
         let recall_chars = dynamic_ctx.render().len();
         let mcp_instruction_chars = mcp_instructions.len();
-        let mcp_instruction_items: Vec<NamedChars> = self
-            .mcp_instructions
+        let mcp_instruction_items: Vec<NamedChars> = mcp_instruction_entries
             .iter()
             .map(|entry| {
                 (
@@ -220,7 +233,7 @@ impl AgentLoop {
     }
 
     /// guidance（mode 在前，便于预算截断时保留）+ timestamp，与 `assemble_system_layers` 顺序一致。
-    async fn system_prompt_guidance_timestamp(&mut self) -> (String, String) {
+    async fn system_prompt_guidance_timestamp(&self) -> (String, String) {
         // mode 置于 TOOL_GUIDANCE 之前：guidance 层被 take_chars 截断时优先保留模式说明。
         let guidance = format!(
             "{}\n\n{}",

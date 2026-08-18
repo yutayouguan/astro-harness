@@ -1,5 +1,7 @@
 //! AgentLoop 工具调度：MCP/内置工具路由、HITL 审批、hook 触发与结果变换。
 
+use std::sync::Arc;
+
 use mcp::{call_tool_with_peer, is_mcp_tool_name};
 use session::ConversationStore;
 use tools::{dispatch_tool, DynToolHandler, ToolContext};
@@ -53,8 +55,7 @@ impl AgentLoop {
     /// 按名称分发工具调用：MCP 走 Hub，内置工具走 [`dispatch_tool`]。
     ///
     /// 调用前刷新 gate 与 MCP 注册；未启用或不存在的工具直接 bail。
-    /// MCP 工具通过克隆 `Arc<TokioMutex<McpHub>>` 构造动态 handler，
-    /// 避免 `&self.mcp_hub` 与 `&mut self.memory` 的借用冲突。
+    /// MCP 工具通过克隆 `Arc<TokioMutex<McpHub>>` 构造动态 handler。
     async fn dispatch_named_tool(
         &mut self,
         name: &str,
@@ -63,8 +64,12 @@ impl AgentLoop {
         network_grant: tools::InProcessNetworkGrant,
         step_context: Option<&super::StepContext>,
     ) -> anyhow::Result<types::ToolOutput> {
-        let agent_id = self.memory.agent_id.clone();
-        self.tool_registry.reload_enabled_from_disk(Some(&agent_id));
+        let agent_id = self.agent_id.clone();
+        self.services
+            .tool_registry
+            .write()
+            .await
+            .reload_enabled_from_disk(Some(&agent_id));
 
         let is_mcp_broker = matches!(name, mcp::MCP_RESOURCES_TOOL | mcp::MCP_PROMPTS_TOOL);
 
@@ -74,7 +79,12 @@ impl AgentLoop {
             self.attach_mcp_tools().await;
         }
 
-        let allowed = self.tool_registry.is_tool_allowed(name)
+        let allowed = self
+            .services
+            .tool_registry
+            .read()
+            .await
+            .is_tool_allowed(name)
             && step_context.is_none_or(|step_context| step_context.advertises_tool(name));
 
         // 在构造 ToolContext 之前，从 Hub 解析 peer（lock → resolve → release）
@@ -97,6 +107,20 @@ impl AgentLoop {
                         >,
                     >
             }))
+        } else if name == mcp::MCP_RESOURCES_TOOL {
+            let hub = Arc::clone(&self.mcp_hub);
+            Some(Box::new(move |_name: &str, args: &serde_json::Value| {
+                let hub = Arc::clone(&hub);
+                let args = args.clone();
+                Box::pin(async move { mcp::call_resource_broker(&hub, &args).await })
+            }))
+        } else if name == mcp::MCP_PROMPTS_TOOL {
+            let hub = Arc::clone(&self.mcp_hub);
+            Some(Box::new(move |_name: &str, args: &serde_json::Value| {
+                let hub = Arc::clone(&hub);
+                let args = args.clone();
+                Box::pin(async move { mcp::call_prompt_broker(&hub, &args).await })
+            }))
         } else {
             None
         };
@@ -112,32 +136,39 @@ impl AgentLoop {
         let sessions: &dyn ConversationStore = &self.services.sessions;
         let execution = Some(self.execution());
         let hook_bus = Some(self.hook_bus());
+        let model_ctx = self.model_context_snapshot().await;
+        let (project_root, permission_profile, skill_config_overrides) = {
+            let state = self.lock_state();
+            (
+                state.project_root.clone(),
+                state.permission_profile.clone(),
+                state.skill_config_overrides.clone(),
+            )
+        };
+        let mut memory = self.services.memory.lock().await;
         let mut ctx = ToolContext {
-            memory: &mut self.memory,
+            memory: &mut memory,
             sessions,
             memory_dir,
             workspace_dir,
             project_root: step_context
                 .and_then(|step_context| step_context.turn.project_root().map(ToOwned::to_owned))
-                .or_else(|| self.project_root.clone()),
-            image_gen_targets: &self.model_ctx.image_gen_targets,
+                .or(project_root),
+            image_gen_targets: &model_ctx.image_gen_targets,
             session_id,
             turn_id,
-            credentials: &self.model_ctx.credentials,
-            chat_targets: &self.model_ctx.chat_targets,
+            credentials: &model_ctx.credentials,
+            chat_targets: &model_ctx.chat_targets,
             execution,
             permission_profile: step_context
                 .and_then(|step_context| step_context.turn.permission_profile().map(str::to_string))
-                .or_else(|| self.permission_profile.clone()),
-            skill_config_overrides: &self.skill_config_overrides,
+                .or(permission_profile),
+            skill_config_overrides: &skill_config_overrides,
             hook_bus,
             workspace_write_grant,
             network_grant,
         };
-        let dynamic_handler = mcp_handler
-            .as_ref()
-            .or_else(|| self.tool_registry.dynamic_handler(name));
-        dispatch_tool(|_| allowed, &mut ctx, name, args, dynamic_handler).await
+        dispatch_tool(|_| allowed, &mut ctx, name, args, mcp_handler.as_ref()).await
     }
 
     /// 同步执行工具调用：multi-thread runtime 使用 `block_in_place`；current-thread
@@ -277,9 +308,13 @@ impl AgentLoop {
             return Err(ToolCallError::Cancelled);
         }
         // Soft-alias：模型把 Skill 名当工具名时，改写成 skills(skill_id=…)
-        let (exec_name, exec_args) = if !is_mcp_tool_name(name)
-            && !self.tool_registry.has_tool(name)
-            && self.tool_registry.is_tool_allowed("skills")
+        let is_skill_soft_alias = {
+            let tool_registry = self.services.tool_registry.read().await;
+            !is_mcp_tool_name(name)
+                && !tool_registry.has_tool(name)
+                && tool_registry.is_tool_allowed("skills")
+        };
+        let (exec_name, exec_args) = if is_skill_soft_alias
             && skills::list_installed()
                 .into_iter()
                 .any(|s| s.name == name && s.enabled)
@@ -296,7 +331,7 @@ impl AgentLoop {
             (name, args_owned)
         };
         let (step_context, interaction_mode) = {
-            let state = self.state.lock().await;
+            let state = self.lock_state();
             let step_context = state.current_step_context.clone();
             let interaction_mode = step_context
                 .as_ref()
@@ -326,12 +361,12 @@ impl AgentLoop {
             )
             .await?;
         if exec_name == "skills" {
-            self.activate_skill_toolsets_from_args(&exec_args);
+            self.activate_skill_toolsets_from_args(&exec_args).await;
         }
         // KeyChoice：`confirm` 是关键决策闸口，记一笔供学习闭环。
         if exec_name == "confirm" {
             memory::try_append_decision(
-                self.memory.base_dir.as_path(),
+                self.memory_dir(),
                 memory::DecisionEntry::new(
                     memory::DecisionKind::KeyChoice,
                     format!(
@@ -351,7 +386,7 @@ impl AgentLoop {
             );
         }
         if super::tool_writes_disk(exec_name, &exec_args) {
-            self.state.lock().await.turn.mark_wrote_disk();
+            self.lock_state().turn.mark_wrote_disk();
         }
         Ok(self
             .finalize_tool_call_result(exec_name, &exec_args, raw_result)
@@ -359,7 +394,7 @@ impl AgentLoop {
     }
 
     /// `skills` 工具成功加载后：按 frontmatter `astro_tools` additive 放宽 toolset。
-    fn activate_skill_toolsets_from_args(&mut self, args: &serde_json::Value) {
+    async fn activate_skill_toolsets_from_args(&self, args: &serde_json::Value) {
         let Some(skill_id) = args
             .get("skill_id")
             .and_then(|v| v.as_str())
@@ -382,7 +417,11 @@ impl AgentLoop {
                 toolsets = ?astro_tools,
                 "skill activated toolsets (additive)"
             );
-            self.tool_registry.activate_skill_toolsets(&astro_tools);
+            self.services
+                .tool_registry
+                .write()
+                .await
+                .activate_skill_toolsets(&astro_tools);
         }
     }
 
