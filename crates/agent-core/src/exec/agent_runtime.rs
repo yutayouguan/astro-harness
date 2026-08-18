@@ -211,7 +211,7 @@ impl AgentRuntimeManager {
         let interrupt = Arc::new(AgentThreadControl::default());
         interrupt.begin_turn();
         let (terminated_tx, terminated_rx) = watch::channel(None);
-        let recover_interrupted_boundary = control
+        let prior_turn_was_interrupted = control
             .status_events(&thread_id)?
             .last()
             .is_some_and(|event| matches!(event.event, RunnerEvent::TurnInterrupted { .. }));
@@ -297,12 +297,8 @@ impl AgentRuntimeManager {
             permit: Some(permit),
         };
 
-        let result = run_request(
-            &request,
-            Arc::clone(&interrupt),
-            recover_interrupted_boundary,
-        )
-        .await;
+        let result =
+            run_request(&request, Arc::clone(&interrupt), prior_turn_was_interrupted).await;
         let terminal_boundary_result = if (interrupt.is_closed() || interrupt.is_interrupted())
             && request.runtime.interrupt_message
         {
@@ -642,7 +638,7 @@ fn ensure_interrupted_history_boundary(
 async fn run_request(
     request: &RunAgentTurnRequest,
     interrupt: Arc<AgentThreadControl>,
-    recover_interrupted_boundary: bool,
+    prior_turn_was_interrupted: bool,
 ) -> anyhow::Result<String> {
     let mut config = Config::with_defaults(request.memory_dir.clone());
     config.soul = format!(
@@ -659,8 +655,13 @@ async fn run_request(
         Arc::clone(&request.control),
         request.thread.canonical_path.clone(),
     )?;
-    if recover_interrupted_boundary {
+    // Runner events choose the semantic boundary kind only. Whether a boundary
+    // is needed is derived idempotently from the hydrated and durable history,
+    // so a failed repair remains retryable after it records TurnErrored.
+    if prior_turn_was_interrupted {
         session.ensure_assistant_interrupted_boundary().await?;
+    } else {
+        session.ensure_assistant_error_boundary().await?;
     }
     session.set_project_root(request.runtime.project_root.clone());
     session.set_permission_profile(sandbox_profile(request.runtime.sandbox_mode.as_deref()));
@@ -1139,6 +1140,127 @@ mod tests {
             .map(|message| message.role)
             .collect::<Vec<_>>();
         assert_eq!(roles, ["user", "assistant", "user", "assistant"]);
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn failed_recovered_boundary_is_retried_after_turn_errored() {
+        let dir = tempfile::tempdir().unwrap();
+        let graph_path = dir.path().join("agents.db");
+        let store = AgentGraphStore::open(graph_path.clone()).unwrap();
+        let initial_control = AgentControl::open(
+            "root".into(),
+            store,
+            Limits {
+                max_threads: 8,
+                max_depth: 4,
+                max_running: 1,
+            },
+        )
+        .unwrap();
+        let reservation = initial_control
+            .reserve_spawn(&AgentPath::root(), "worker")
+            .unwrap();
+        let thread = reservation.thread().clone();
+        reservation.commit().unwrap();
+        initial_control
+            .record_runner_event(
+                &thread.thread_id,
+                RunnerEvent::TurnStarted {
+                    turn_id: "crashed-turn".into(),
+                },
+            )
+            .unwrap();
+        drop(initial_control);
+
+        let memory_dir = dir.path().join("memory");
+        let state_path = memory_dir.join("sessions/state.db");
+        let sessions =
+            session::SessionStore::open_sessions_dir(&memory_dir.join("sessions")).unwrap();
+        sessions
+            .ensure_session(&thread.session_id, "tauri")
+            .unwrap();
+        sessions
+            .append_message(session::NewMessage {
+                content: Some("unfinished request"),
+                ..session::NewMessage::empty(&thread.session_id, "user")
+            })
+            .unwrap();
+        let raw = rusqlite::Connection::open(&state_path).unwrap();
+        raw.execute_batch(&format!(
+            "CREATE TRIGGER fail_interrupted_boundary
+             BEFORE INSERT ON messages
+             WHEN NEW.session_id = '{}' AND NEW.role = 'assistant'
+                  AND NEW.finish_reason = 'interrupted'
+             BEGIN
+               SELECT RAISE(ABORT, 'injected interrupted boundary failure');
+             END;",
+            thread.session_id.replace('\'', "''")
+        ))
+        .unwrap();
+
+        let recovered = crate::exec::agent_control_directory::AgentControlDirectory::global()
+            .open_root_at("root", &graph_path)
+            .unwrap();
+        let manager = AgentRuntimeManager::default();
+        let recovered_thread = recovered
+            .resolve_target(&AgentPath::root(), "worker")
+            .unwrap();
+        let first_error = manager
+            .start_turn(request(
+                Arc::clone(&recovered),
+                recovered_thread,
+                memory_dir.clone(),
+                scripted_chat("unreachable"),
+            ))
+            .await
+            .unwrap_err();
+        assert!(first_error
+            .to_string()
+            .contains("injected interrupted boundary failure"));
+        assert!(matches!(
+            recovered
+                .status_events(&thread.thread_id)
+                .unwrap()
+                .last()
+                .map(|event| &event.event),
+            Some(RunnerEvent::TurnErrored { .. })
+        ));
+        assert!(!manager.is_running(&thread.thread_id));
+        assert!(recovered
+            .runtime_handle(&thread.thread_id)
+            .unwrap()
+            .is_none());
+        let permit = recovered.acquire_execution(&thread.thread_id).unwrap();
+        drop(permit);
+
+        raw.execute_batch("DROP TRIGGER fail_interrupted_boundary;")
+            .unwrap();
+        let captured_roles = Arc::new(std::sync::Mutex::new(Vec::new()));
+        let retry_thread = recovered
+            .resolve_target(&AgentPath::root(), "worker")
+            .unwrap();
+        manager
+            .start_turn(request(
+                Arc::clone(&recovered),
+                retry_thread,
+                memory_dir,
+                role_capturing_chat(Arc::clone(&captured_roles)),
+            ))
+            .await
+            .unwrap();
+
+        assert_eq!(
+            captured_roles.lock().unwrap().as_slice(),
+            &["user", "assistant", "user"]
+        );
+        let roles = sessions
+            .get_messages(&thread.session_id)
+            .unwrap()
+            .into_iter()
+            .map(|message| message.role)
+            .collect::<Vec<_>>();
+        assert_eq!(roles, ["user", "assistant", "user", "assistant"]);
+        assert!(roles.windows(2).all(|pair| pair[0] != pair[1]));
     }
 
     #[tokio::test(flavor = "current_thread")]
