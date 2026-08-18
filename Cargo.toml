@@ -2,6 +2,7 @@
 members = [
     "crates/agent-types",
     "crates/agent-protocol",
+    "crates/agent-rollout",
     "crates/agent-home",
     "crates/agent-skills",
     "crates/agent-hooks",
