@@ -1,23 +1,86 @@
 //! 钩子载荷与返回动作。
 
+use serde::Serialize;
 use serde_json::Value;
 
 /// 传入钩子回调的上下文快照。
-#[derive(Debug, Clone, Default)]
-pub struct HookPayload {
+#[derive(Debug, Clone, Default, Serialize)]
+pub struct HookInput {
     pub session_id: String,
+    pub transcript_path: Option<String>,
+    pub cwd: String,
+    pub hook_event_name: String,
+    pub model: String,
     /// 当前流式回合 id（= agent `current_turn_id` / run_id）；与 `turn`（轮次计数）不同。
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub turn_id: Option<String>,
-    pub detail: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub permission_mode: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub prompt: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub tool_name: Option<String>,
-    pub tool_args: Option<Value>,
-    pub tool_result: Option<String>,
-    pub message: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tool_use_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tool_input: Option<Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tool_response: Option<Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub trigger: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub agent_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub agent_type: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub agent_transcript_path: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub stop_hook_active: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub last_assistant_message: Option<String>,
+
+    #[serde(skip)]
+    pub detail: String,
+    #[serde(skip)]
     pub system_prompt_chars: Option<usize>,
+    #[serde(skip)]
     pub assistant_chars: Option<usize>,
+    #[serde(skip)]
     pub turn: Option<usize>,
+    #[serde(skip)]
     pub error: Option<String>,
+
+    #[serde(skip)]
+    pub tool_args: Option<Value>,
+    #[serde(skip)]
+    pub tool_result: Option<String>,
+    #[serde(skip)]
+    pub message: Option<String>,
 }
+
+impl HookInput {
+    pub fn normalized_for_event(&self, event_name: &str) -> Self {
+        let mut normalized = self.clone();
+        normalized.hook_event_name =
+            crate::event::canonical_hook_event_name(event_name).into_owned();
+        if normalized.tool_input.is_none() {
+            normalized.tool_input = normalized.tool_args.clone();
+        }
+        if normalized.tool_response.is_none() {
+            normalized.tool_response = normalized.tool_result.clone().map(Value::String);
+        }
+        if normalized.prompt.is_none() {
+            normalized.prompt = normalized.message.clone();
+        }
+        normalized
+    }
+}
+
+pub type HookPayload = HookInput;
 
 /// 钩子返回值；观察型应返回 [`Continue`](Self::Continue)。
 #[derive(Debug, Clone, Default)]
@@ -45,5 +108,115 @@ pub enum HookOutcome {
 impl HookOutcome {
     pub fn is_continue(&self) -> bool {
         matches!(self, Self::Continue | Self::Allow)
+    }
+}
+
+#[cfg(test)]
+mod wire_tests {
+    use serde_json::{json, to_value};
+
+    use super::{HookInput, HookPayload};
+
+    #[test]
+    fn pre_tool_use_has_exact_codex_wire_shape() {
+        let input = HookInput {
+            session_id: "session-1".into(),
+            cwd: "/workspace".into(),
+            hook_event_name: "PreToolUse".into(),
+            model: "gpt-5.6-sol".into(),
+            tool_name: Some("terminal".into()),
+            tool_use_id: Some("call-1".into()),
+            tool_input: Some(json!({"command": "pwd"})),
+            ..Default::default()
+        };
+
+        assert_eq!(
+            to_value(input).unwrap(),
+            json!({
+                "session_id": "session-1",
+                "transcript_path": null,
+                "cwd": "/workspace",
+                "hook_event_name": "PreToolUse",
+                "model": "gpt-5.6-sol",
+                "tool_name": "terminal",
+                "tool_use_id": "call-1",
+                "tool_input": {"command": "pwd"}
+            })
+        );
+    }
+
+    #[test]
+    fn astro_ui_and_compatibility_fields_are_not_serialized() {
+        let input = HookInput {
+            detail: "visible only in Astro UI".into(),
+            system_prompt_chars: Some(12),
+            assistant_chars: Some(34),
+            turn: Some(5),
+            error: Some("failed".into()),
+            tool_args: Some(json!({"legacy": true})),
+            tool_result: Some("legacy result".into()),
+            message: Some("legacy prompt".into()),
+            ..Default::default()
+        };
+
+        assert_eq!(
+            to_value(input).unwrap(),
+            json!({
+                "session_id": "",
+                "transcript_path": null,
+                "cwd": "",
+                "hook_event_name": "",
+                "model": ""
+            })
+        );
+    }
+
+    #[test]
+    fn hook_payload_is_a_hook_input_alias() {
+        let input = HookInput::default();
+        let payload: HookPayload = input.clone();
+        let exported_input: crate::HookInput = payload;
+        let _: crate::HookPayload = exported_input;
+    }
+
+    #[test]
+    fn normalized_for_event_canonicalizes_name_and_backfills_legacy_fields() {
+        let input = HookInput {
+            tool_args: Some(json!({"path": "README.md"})),
+            tool_result: Some("ok".into()),
+            message: Some("summarize this".into()),
+            ..Default::default()
+        };
+
+        let normalized = input.normalized_for_event("pre_tool_call");
+
+        assert_eq!(normalized.hook_event_name, "PreToolUse");
+        assert_eq!(normalized.tool_input, input.tool_args);
+        assert_eq!(normalized.tool_response, Some(json!("ok")));
+        assert_eq!(normalized.prompt, input.message);
+        assert!(input.hook_event_name.is_empty());
+        assert!(input.tool_input.is_none());
+        assert!(input.tool_response.is_none());
+        assert!(input.prompt.is_none());
+    }
+
+    #[test]
+    fn normalized_for_event_preserves_explicit_canonical_values() {
+        let input = HookInput {
+            tool_input: Some(json!({"canonical": true})),
+            tool_response: Some(json!({"status": "canonical"})),
+            prompt: Some("canonical prompt".into()),
+            tool_args: Some(json!({"legacy": true})),
+            tool_result: Some("legacy result".into()),
+            message: Some("legacy prompt".into()),
+            ..Default::default()
+        };
+
+        let normalized = input.normalized_for_event("post_tool_call");
+
+        assert_eq!(normalized.hook_event_name, "PostToolUse");
+        assert_eq!(normalized.tool_input, input.tool_input);
+        assert_eq!(normalized.tool_response, input.tool_response);
+        assert_eq!(normalized.prompt, input.prompt);
     }
 }

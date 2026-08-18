@@ -17,7 +17,7 @@ pub use context::PluginContext;
 pub use event::{canonical_hook_event_name, normalize_hook_event_name, HookEvent};
 pub use gateway::{DiscoveredHook, GatewayHookRegistry, HookManifest};
 pub use names::*;
-pub use outcome::{HookOutcome, HookPayload};
+pub use outcome::{HookInput, HookOutcome, HookPayload};
 pub use plugin::PluginHookBus;
 pub use shell::{load_shell_runner, ShellHookRunner};
 pub use ui::{install_recording, install_ui_timeline, UiHookEvent, UiTimelineSlot};
