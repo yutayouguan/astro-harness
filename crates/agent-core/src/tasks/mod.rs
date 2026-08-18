@@ -209,7 +209,9 @@ impl Session {
             let mut sess = session.lock().await;
             sess.cancel_signal().reset();
             sess.bind_turn_context(Arc::clone(&turn_context));
-            sess.active_turn.start(
+            let mut active_turn = sess.active_turn.lock().await;
+            let active_turn = active_turn.get_or_insert_with(ActiveTurn::default);
+            active_turn.start(
                 Arc::clone(&task),
                 cancellation_token.clone(),
                 Arc::clone(&turn_context),
@@ -228,7 +230,15 @@ impl Session {
 
         done.notify_one();
         let mut sess = session.lock().await;
-        sess.active_turn.finish(turn_context.sub_id());
+        {
+            let mut active_turn = sess.active_turn.lock().await;
+            if let Some(turn) = active_turn.as_mut() {
+                turn.finish(turn_context.sub_id());
+                if turn.task.is_none() {
+                    *active_turn = None;
+                }
+            }
+        }
         if sess.current_turn_id() == Some(turn_context.sub_id()) {
             sess.clear_current_turn_id();
         }
@@ -242,14 +252,18 @@ impl Session {
     ) -> anyhow::Result<()> {
         let active = {
             let sess = session.lock().await;
-            sess.active_turn.task.as_ref().map(|running| {
-                (
-                    Arc::clone(&running.task),
-                    running.cancellation_token.clone(),
-                    Arc::clone(&running.turn_context),
-                    Arc::clone(&running.done),
-                )
-            })
+            let active_turn = sess.active_turn.lock().await;
+            active_turn
+                .as_ref()
+                .and_then(|turn| turn.task.as_ref())
+                .map(|running| {
+                    (
+                        Arc::clone(&running.task),
+                        running.cancellation_token.clone(),
+                        Arc::clone(&running.turn_context),
+                        Arc::clone(&running.done),
+                    )
+                })
         };
         let Some((task, cancellation_token, turn_context, done)) = active else {
             return Ok(());
@@ -275,7 +289,15 @@ impl Session {
             })?;
 
         let mut sess = session.lock().await;
-        sess.active_turn.finish(turn_context.sub_id());
+        {
+            let mut active_turn = sess.active_turn.lock().await;
+            if let Some(turn) = active_turn.as_mut() {
+                turn.finish(turn_context.sub_id());
+                if turn.task.is_none() {
+                    *active_turn = None;
+                }
+            }
+        }
         if sess.current_turn_id() == Some(turn_context.sub_id()) {
             sess.clear_current_turn_id();
         }
@@ -348,6 +370,19 @@ mod tests {
         assert!(active_turn.task.is_none());
     }
 
+    #[tokio::test]
+    async fn session_owns_a_locked_optional_active_turn() {
+        let dir = tempfile::tempdir().unwrap();
+        let session = Session::with_session_id(
+            crate::runtime::Config::with_defaults(dir.path().to_path_buf()),
+            "locked-active-turn".into(),
+        )
+        .unwrap();
+
+        let active_turn = session.active_turn.lock().await;
+        assert!(active_turn.is_none());
+    }
+
     struct PendingTask {
         started: Arc<Notify>,
     }
@@ -406,6 +441,7 @@ mod tests {
             .await
             .unwrap();
         run.await.unwrap();
-        assert!(session.lock().await.active_turn.task.is_none());
+        let sess = session.lock().await;
+        assert!(sess.active_turn.lock().await.is_none());
     }
 }

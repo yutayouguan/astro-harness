@@ -155,7 +155,7 @@ pub struct Session {
     /// 最近一次模型 sampling 实际使用的 Step 快照；工具调用必须绑定此快照。
     pub(crate) current_step_context: Option<Arc<StepContext>>,
     /// Codex-style single-active-task registry for this session.
-    pub(crate) active_turn: ActiveTurn,
+    pub(crate) active_turn: TokioMutex<Option<ActiveTurn>>,
 }
 
 /// Compatibility name retained while downstream crates migrate to [`Config`].
@@ -250,7 +250,7 @@ impl Session {
             interaction_mode: types::InteractionMode::Agent,
             current_turn_context: None,
             current_step_context: None,
-            active_turn: ActiveTurn::default(),
+            active_turn: TokioMutex::new(None),
         })
     }
 

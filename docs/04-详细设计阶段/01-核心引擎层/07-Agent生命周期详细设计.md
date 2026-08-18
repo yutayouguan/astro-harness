@@ -1,6 +1,6 @@
 # Agent 生命周期详细设计
 
-> 版本：v2.3
+> 版本：v2.4
 > 日期：2026-08-18
 > 状态：实施基线  
 > 上游参考：[OpenAI Codex](https://github.com/openai/codex) `632e35ce8d5dec43b75dbf99f9e6fa52bed47c3d`  
@@ -508,12 +508,21 @@ schema 和 RPC 字段改名都必须提供 migration 或 serde alias。
 - [x] Chat 重入时优先 steer，不替换 `PauseControl`、不创建第二条流。
 - [x] 将首次用户输入的持久化从 adapter 移入 `RegularTask::run`。
 - [ ] 将 `Arc<Mutex<Session>>` 内锁化为 Codex 的 `Arc<Session>`。
+  - [x] `active_turn` 收敛为 Codex 同构的 `Mutex<Option<ActiveTurn>>`。
+  - [ ] 把其余可变会话字段归入内部 `Mutex<SessionState>`。
+  - [ ] 将 `SessionTask`、streaming、background 和 server 签名迁移为 `Arc<Session>`。
 
 v2.3 落地说明：foreground、background、Cron 与 SubAgent 不再先调用
 `start_or_steer_turn*` 获取预构建 system prompt，而是把 `Vec<TurnInput>` 直接交给
 `Session::spawn_task`。`RegularTask::run` 在 active `TurnContext` 绑定后统一完成输入持久化、
 FTS 召回、工具/MCP 热加载、system prompt 组装和首个 sampling；旧入口仅作为兼容 adapter
 保留。测试专用 chat override 仍可注入预构建 prompt，生产入口不得使用该兼容路径。
+
+v2.4 内锁化批次 1：先迁移 task registry。`steer_input`、`spawn_task`、
+`abort_all_tasks` 和 task finish 只能通过 `Session.active_turn` 的内部异步锁访问运行任务；
+Session 新建时该字段为 `None`，任务启动时创建 `ActiveTurn`，收尾时恢复 `None`。本批不移动
+SQLite、消息历史、工具注册表和 provider 配置，避免把 non-Send 状态迁移与任务竞争控制混为
+一次高风险改动。
 
 ### Phase C：工具运行时
 

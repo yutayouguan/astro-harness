@@ -191,6 +191,7 @@ async fn steered_input_is_consumed_by_the_active_regular_task() {
         .lock()
         .await
         .steer_input("follow up", &[])
+        .await
         .expect("active regular task accepts steer");
     assert!(!turn_id.is_empty());
     release_first.notify_one();

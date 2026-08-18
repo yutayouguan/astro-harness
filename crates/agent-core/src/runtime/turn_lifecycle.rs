@@ -76,7 +76,7 @@ impl Session {
         image_data_urls: &[String],
         _submission_id: &str,
     ) -> anyhow::Result<TurnResult> {
-        if let Some(turn_id) = self.steer_input(user_message, image_data_urls) {
+        if let Some(turn_id) = self.steer_input(user_message, image_data_urls).await {
             return Ok(TurnResult::Steered { turn_id });
         }
         self.prepare_turn(&[TurnInput::UserInput {
@@ -174,19 +174,27 @@ impl Session {
     }
 
     /// Queue user input for the active regular task.
-    pub fn steer_input(&self, user_message: &str, image_data_urls: &[String]) -> Option<String> {
-        if user_message.trim().is_empty() && image_data_urls.is_empty() {
-            return None;
+    pub fn steer_input<'a>(
+        &'a self,
+        user_message: &'a str,
+        image_data_urls: &'a [String],
+    ) -> impl std::future::Future<Output = Option<String>> + Send + 'a {
+        let active_turn = &self.active_turn;
+        async move {
+            if user_message.trim().is_empty() && image_data_urls.is_empty() {
+                return None;
+            }
+            let active_turn = active_turn.lock().await;
+            let running = active_turn.as_ref()?.task.as_ref()?;
+            if running.kind != TaskKind::Regular {
+                return None;
+            }
+            let accepted = running.turn_context.push_input(TurnInput::UserInput {
+                content: user_message.to_string(),
+                image_data_urls: image_data_urls.to_vec(),
+            });
+            accepted.then(|| running.turn_context.sub_id().to_string())
         }
-        let running = self.active_turn.task.as_ref()?;
-        if running.kind != TaskKind::Regular {
-            return None;
-        }
-        let accepted = running.turn_context.push_input(TurnInput::UserInput {
-            content: user_message.to_string(),
-            image_data_urls: image_data_urls.to_vec(),
-        });
-        accepted.then(|| running.turn_context.sub_id().to_string())
     }
 
     pub(crate) fn record_turn_input(&mut self, input: TurnInput) -> anyhow::Result<()> {
