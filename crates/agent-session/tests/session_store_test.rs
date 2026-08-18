@@ -42,6 +42,7 @@ fn append_and_reload_tool_calls_and_reasoning() {
             session_id: "s1",
             role: "assistant",
             content: Some("done"),
+            compressed_content: None,
             tool_calls: Some(serde_json::json!([{
                 "id": "c1",
                 "name": "memory",
@@ -64,6 +65,7 @@ fn append_and_reload_tool_calls_and_reasoning() {
             session_id: "s1",
             role: "tool",
             content: Some("ok"),
+            compressed_content: None,
             tool_calls: None,
             tool_call_id: Some("c1"),
             tool_name: Some("memory"),
@@ -89,6 +91,30 @@ fn append_and_reload_tool_calls_and_reasoning() {
     assert!(conv[0].get("tool_calls").is_some());
     assert_eq!(conv[0]["reasoning"], "think");
     assert_eq!(conv[1]["role"], "tool");
+}
+
+#[test]
+fn append_message_persists_compressed_content_in_the_initial_insert() {
+    let (_dir, store) = test_store();
+    store
+        .create_session("mailbox", "tauri", None, None, None)
+        .unwrap();
+    let marker = "agent-mailbox-through:7";
+
+    store
+        .append_message(NewMessage {
+            content: Some("atomic mailbox input"),
+            finish_reason: Some(marker),
+            compressed_content: Some(marker),
+            ..NewMessage::empty("mailbox", "user")
+        })
+        .unwrap();
+
+    let messages = store.get_messages("mailbox").unwrap();
+    assert_eq!(messages.len(), 1);
+    assert_eq!(messages[0].content.as_deref(), Some("atomic mailbox input"));
+    assert_eq!(messages[0].finish_reason.as_deref(), Some(marker));
+    assert_eq!(messages[0].compressed_content.as_deref(), Some(marker));
 }
 
 #[test]

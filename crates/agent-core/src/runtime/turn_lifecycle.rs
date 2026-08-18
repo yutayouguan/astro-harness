@@ -278,17 +278,13 @@ impl Session {
         } else {
             Some(serde_json::to_string(&media_assets)?)
         };
-        let message_id = self.services.sessions.append_message(NewMessage {
+        self.services.sessions.append_message(NewMessage {
             content: Some(content),
+            compressed_content: memory_marker,
             media_json: media_json.as_deref(),
             finish_reason,
             ..NewMessage::empty(&self.session_id, "user")
         })?;
-        if let Some(marker) = memory_marker {
-            self.services
-                .sessions
-                .update_message_compressed_content(message_id, Some(marker))?;
-        }
         #[cfg(test)]
         if let Some(hook) = self
             .services
@@ -326,16 +322,21 @@ impl Session {
         }
     }
 
-    pub(crate) fn has_durable_turn_input_marker(&self, marker: &str) -> anyhow::Result<bool> {
-        Ok(self
-            .services
-            .sessions
-            .get_messages(&self.session_id)?
-            .iter()
-            .any(|message| {
-                message.finish_reason.as_deref() == Some(marker)
-                    || message.compressed_content.as_deref() == Some(marker)
-            }))
+    pub(crate) fn ensure_durable_turn_input_marker(&self, marker: &str) -> anyhow::Result<bool> {
+        let messages = self.services.sessions.get_messages(&self.session_id)?;
+        let Some(message) = messages.iter().find(|message| {
+            message.role == "user"
+                && (message.finish_reason.as_deref() == Some(marker)
+                    || message.compressed_content.as_deref() == Some(marker))
+        }) else {
+            return Ok(false);
+        };
+        if message.compressed_content.as_deref() != Some(marker) {
+            self.services
+                .sessions
+                .update_message_compressed_content(message.id, Some(marker))?;
+        }
+        Ok(true)
     }
 
     #[cfg(test)]

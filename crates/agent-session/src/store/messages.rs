@@ -19,20 +19,23 @@ impl SessionStore {
         let tx = self.conn.unchecked_transaction()?;
         tx.execute(
             "INSERT INTO messages (
-                session_id, role, content, tool_call_id, tool_calls, tool_name,
+                session_id, role, content, compressed_content,
+                tool_call_id, tool_calls, tool_name,
                 timestamp, token_count, finish_reason,
                 reasoning, reasoning_content, reasoning_details,
                 codex_reasoning_items, codex_message_items, media_json
              ) VALUES (
-                ?1, ?2, ?3, ?4, ?5, ?6,
-                ?7, ?8, ?9,
-                ?10, ?11, ?12,
-                ?13, ?14, ?15
+                ?1, ?2, ?3, ?4,
+                ?5, ?6, ?7,
+                ?8, ?9, ?10,
+                ?11, ?12, ?13,
+                ?14, ?15, ?16
              )",
             params![
                 msg.session_id,
                 msg.role,
                 msg.content,
+                msg.compressed_content,
                 msg.tool_call_id,
                 tool_calls,
                 msg.tool_name,
@@ -169,7 +172,7 @@ impl SessionStore {
         Ok(out)
     }
 
-    /// 为指定消息写入工具结果压缩视图；原始 `content` 不变，FTS 也继续索引原文。
+    /// 为指定消息写入 provider 视图或内部交付标记；原始 `content` 不变。
     pub fn update_message_compressed_content(
         &self,
         message_id: i64,

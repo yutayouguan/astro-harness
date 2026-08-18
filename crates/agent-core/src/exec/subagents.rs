@@ -14,7 +14,7 @@ use crate::runtime::{Config, Session};
 use crate::streaming::ChatOverride;
 use crate::tasks::TurnInput;
 
-const MAILBOX_FINISH_PREFIX: &str = "agent-mailbox-through:";
+pub(crate) const MAILBOX_FINISH_PREFIX: &str = "agent-mailbox-through:";
 const MAIN_STEER_PREFIX: &str = "astro-main-steer-v1:";
 
 #[derive(serde::Deserialize, serde::Serialize)]
@@ -92,7 +92,7 @@ pub(crate) async fn drain_mailbox_at_safe_boundary(session: &mut Session) -> any
         .take_while(|message| message.sequence <= through_sequence)
         .count();
     let marker = format!("{MAILBOX_FINISH_PREFIX}{through_sequence}");
-    let durable = session.has_durable_turn_input_marker(&marker)?;
+    let durable = session.ensure_durable_turn_input_marker(&marker)?;
     let in_memory = runtime_history
         .iter()
         .any(|message| message.compressed_content.as_deref() == Some(marker.as_str()));
@@ -587,7 +587,7 @@ mod tests {
     }
 
     #[tokio::test(flavor = "current_thread")]
-    async fn mailbox_retry_after_history_write_does_not_duplicate_input() {
+    async fn mailbox_atomic_history_write_survives_cancel_and_restart() {
         let temp = tempfile::tempdir().unwrap();
         let graph = subagents::AgentGraphStore::open(temp.path().join("agents-v2.db")).unwrap();
         let root = subagents::AgentControl::open(
@@ -614,6 +614,8 @@ mod tests {
             true,
         )
         .unwrap();
+        let sequence = graph.pending_for(&thread.thread_id, 0).unwrap()[0].sequence;
+        let marker = format!("{MAILBOX_FINISH_PREFIX}{sequence}");
         let memory_dir = temp.path().join("memory");
         let sessions =
             session::SessionStore::open_sessions_dir(&memory_dir.join("sessions")).unwrap();
@@ -621,11 +623,11 @@ mod tests {
             .create_session(&thread.session_id, "tauri", None, None, None)
             .unwrap();
         let mut retry = Session::with_session_id_for_agent_thread(
-            Config::with_defaults(memory_dir),
+            Config::with_defaults(memory_dir.clone()),
             thread.session_id.clone(),
             home::DEFAULT_AGENT_ID,
             Arc::clone(&root),
-            thread.canonical_path,
+            thread.canonical_path.clone(),
         )
         .unwrap();
         let cancel = retry.cancel_signal();
@@ -635,16 +637,205 @@ mod tests {
         })));
 
         assert!(drain_mailbox_at_safe_boundary(&mut retry).await.is_err());
-        assert_eq!(sessions.get_messages(&thread.session_id).unwrap().len(), 1);
+        let stored = sessions.get_messages(&thread.session_id).unwrap();
+        assert_eq!(stored.len(), 1);
+        assert_eq!(stored[0].finish_reason.as_deref(), Some(marker.as_str()));
+        assert_eq!(
+            stored[0].compressed_content.as_deref(),
+            Some(marker.as_str())
+        );
         assert!(retry.clone_history().await.is_empty());
         assert_eq!(graph.pending_for(&thread.thread_id, 0).unwrap().len(), 1);
-        retry.set_turn_input_after_db_write_hook(None);
-        retry.cancel_signal().reset();
+        drop(retry);
+
+        let mut retry = Session::with_session_id_for_agent_thread(
+            Config::with_defaults(memory_dir),
+            thread.session_id.clone(),
+            home::DEFAULT_AGENT_ID,
+            Arc::clone(&root),
+            thread.canonical_path,
+        )
+        .unwrap();
+        assert_eq!(retry.clone_history().await.len(), 1);
 
         assert_eq!(drain_mailbox_at_safe_boundary(&mut retry).await.unwrap(), 1);
         assert!(graph.pending_for(&thread.thread_id, 0).unwrap().is_empty());
         assert_eq!(sessions.get_messages(&thread.session_id).unwrap().len(), 1);
         assert_eq!(retry.clone_history().await.len(), 1);
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn mailbox_recovers_a_crash_after_user_insert_before_marker_update() {
+        let temp = tempfile::tempdir().unwrap();
+        let graph = subagents::AgentGraphStore::open(temp.path().join("agents-v2.db")).unwrap();
+        let root = subagents::AgentControl::open(
+            "root-v2".into(),
+            graph.clone(),
+            subagents::Limits {
+                max_threads: 8,
+                max_depth: 4,
+                max_running: 2,
+            },
+        )
+        .unwrap();
+        let reservation = root
+            .reserve_spawn(&subagents::AgentPath::root(), "worker")
+            .unwrap();
+        let thread = reservation.thread().clone();
+        reservation.commit().unwrap();
+        root.enqueue_message(
+            &subagents::AgentPath::root(),
+            subagents::MessageAgentV2Request {
+                target: "worker".into(),
+                message: "committed before marker update".into(),
+            },
+            true,
+        )
+        .unwrap();
+        let sequence = graph.pending_for(&thread.thread_id, 0).unwrap()[0].sequence;
+        let marker = format!("{MAILBOX_FINISH_PREFIX}{sequence}");
+        let memory_dir = temp.path().join("memory");
+        {
+            let sessions =
+                session::SessionStore::open_sessions_dir(&memory_dir.join("sessions")).unwrap();
+            sessions
+                .create_session(&thread.session_id, "tauri", None, None, None)
+                .unwrap();
+            sessions
+                .append_message(session::NewMessage {
+                    content: Some("committed before marker update"),
+                    finish_reason: Some(&marker),
+                    ..session::NewMessage::empty(&thread.session_id, "user")
+                })
+                .unwrap();
+            let stored = sessions.get_messages(&thread.session_id).unwrap();
+            assert_eq!(stored.len(), 1);
+            assert!(stored[0].compressed_content.is_none());
+        }
+
+        let mut retry = Session::with_session_id_for_agent_thread(
+            Config::with_defaults(memory_dir.clone()),
+            thread.session_id.clone(),
+            home::DEFAULT_AGENT_ID,
+            Arc::clone(&root),
+            thread.canonical_path,
+        )
+        .unwrap();
+        assert_eq!(retry.clone_history().await.len(), 1);
+
+        assert_eq!(drain_mailbox_at_safe_boundary(&mut retry).await.unwrap(), 1);
+        assert!(graph.pending_for(&thread.thread_id, 0).unwrap().is_empty());
+        assert_eq!(drain_mailbox_at_safe_boundary(&mut retry).await.unwrap(), 0);
+        let stored = session::SessionStore::open_sessions_dir(&memory_dir.join("sessions"))
+            .unwrap()
+            .get_messages(&thread.session_id)
+            .unwrap();
+        assert_eq!(stored.len(), 1);
+        assert_eq!(
+            stored[0].compressed_content.as_deref(),
+            Some(marker.as_str())
+        );
+        let history = retry.clone_history().await;
+        assert_eq!(history.len(), 1);
+        assert_eq!(
+            history[0].compressed_content.as_deref(),
+            Some(marker.as_str())
+        );
+        let provider = crate::prompt::messages::to_provider_messages("", &history);
+        assert_eq!(
+            serde_json::to_string(&provider)
+                .unwrap()
+                .matches("committed before marker update")
+                .count(),
+            1
+        );
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn main_steer_recovers_a_finish_only_row_with_media() {
+        let temp = tempfile::tempdir().unwrap();
+        let graph = subagents::AgentGraphStore::open(temp.path().join("agents-v2.db")).unwrap();
+        let root = subagents::AgentControl::open(
+            "root-v2".into(),
+            graph.clone(),
+            subagents::Limits {
+                max_threads: 8,
+                max_depth: 4,
+                max_running: 2,
+            },
+        )
+        .unwrap();
+        let image = "data:image/png;base64,bGVnYWN5LXN0ZWVy";
+        root.persist_main_steer(
+            &subagents::AgentPath::root(),
+            encode_main_steer_input(&TurnInput::UserInput {
+                content: "legacy steer".into(),
+                image_data_urls: vec![image.into()],
+            })
+            .unwrap(),
+        )
+        .unwrap();
+        let sequence = graph.pending_for("root-v2", 0).unwrap()[0].sequence;
+        let marker = format!("{MAILBOX_FINISH_PREFIX}{sequence}");
+        let media_json = serde_json::to_string(&vec![types::MediaAsset::data_url(
+            types::MediaKind::Image,
+            image,
+            "image/png",
+        )])
+        .unwrap();
+        let memory_dir = temp.path().join("memory");
+        {
+            let sessions =
+                session::SessionStore::open_sessions_dir(&memory_dir.join("sessions")).unwrap();
+            sessions
+                .create_session("root-v2", "tauri", None, None, None)
+                .unwrap();
+            sessions
+                .append_message(session::NewMessage {
+                    content: Some("legacy steer"),
+                    finish_reason: Some(&marker),
+                    media_json: Some(&media_json),
+                    ..session::NewMessage::empty("root-v2", "user")
+                })
+                .unwrap();
+        }
+        let mut retry = Session::with_session_id_for_agent_thread(
+            Config::with_defaults(memory_dir.clone()),
+            "root-v2".into(),
+            home::DEFAULT_AGENT_ID,
+            Arc::clone(&root),
+            subagents::AgentPath::root(),
+        )
+        .unwrap();
+
+        assert_eq!(drain_mailbox_at_safe_boundary(&mut retry).await.unwrap(), 1);
+        assert!(graph.pending_for("root-v2", 0).unwrap().is_empty());
+        assert_eq!(drain_mailbox_at_safe_boundary(&mut retry).await.unwrap(), 0);
+        let stored = session::SessionStore::open_sessions_dir(&memory_dir.join("sessions"))
+            .unwrap()
+            .get_messages("root-v2")
+            .unwrap();
+        assert_eq!(stored.len(), 1);
+        assert_eq!(
+            stored[0].compressed_content.as_deref(),
+            Some(marker.as_str())
+        );
+        let history = retry.clone_history().await;
+        assert_eq!(history.len(), 1);
+        assert_eq!(history[0].content_str(), "legacy steer");
+        assert_eq!(history[0].media.len(), 1);
+        assert_eq!(
+            history[0].compressed_content.as_deref(),
+            Some(marker.as_str())
+        );
+        let provider = crate::prompt::messages::to_provider_messages("", &history);
+        assert_eq!(
+            serde_json::to_string(&provider)
+                .unwrap()
+                .matches("legacy steer")
+                .count(),
+            1
+        );
     }
 
     #[tokio::test(flavor = "current_thread")]

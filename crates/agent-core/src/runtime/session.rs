@@ -85,7 +85,11 @@ fn stored_message_to_runtime(m: ::session::StoredMessage) -> anyhow::Result<Opti
             return Ok(None);
         }
     };
-    msg.compressed_content = m.compressed_content;
+    msg.compressed_content = m.compressed_content.or_else(|| {
+        m.finish_reason.filter(|reason| {
+            m.role == "user" && reason.starts_with(crate::exec::subagents::MAILBOX_FINISH_PREFIX)
+        })
+    });
     // assistant 等角色若带 media_json 也还原
     if msg.media.is_empty() {
         let media = parse_media_json(m.media_json.as_deref());
