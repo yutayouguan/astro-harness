@@ -24,7 +24,7 @@ use proto::{
 };
 use providers::PauseControl;
 use providers::ProviderConfig;
-use tokio::sync::RwLock;
+use tokio::sync::{Mutex, RwLock};
 use tokio_stream::wrappers::ReceiverStream;
 use tonic::{Request, Response, Status};
 use uuid::Uuid;
@@ -100,6 +100,7 @@ struct PauseRegistration {
 }
 
 async fn cleanup_pause_generation_parts(
+    generation_admission: &Arc<Mutex<()>>,
     pause_controls: &Arc<RwLock<HashMap<String, PauseRegistration>>>,
     hitl_registry: &HitlRegistry,
     ui_slot: &::hooks::UiTimelineSlot,
@@ -107,27 +108,75 @@ async fn cleanup_pause_generation_parts(
     session_id: &str,
     registration: &PauseRegistration,
 ) -> bool {
-    registration.control.cancel();
-    let removed_current = {
-        let mut registrations = pause_controls.write().await;
-        if registrations
-            .get(session_id)
-            .is_some_and(|current| Arc::ptr_eq(&current.control, &registration.control))
-        {
-            registrations.remove(session_id);
-            true
-        } else {
-            false
-        }
+    let (removed_current, detached_gate) = {
+        let _admission = generation_admission.lock().await;
+        detach_pause_generation_parts(
+            pause_controls,
+            hitl_registry,
+            ui_slot,
+            memory_dir,
+            session_id,
+            registration,
+        )
+        .await
     };
-    hitl_registry
-        .cancel_and_remove_if(session_id, &registration.hitl_gate)
-        .await;
-    ui_slot.clear_if(registration.ui_generation);
+
+    cancel_pause_generation(registration, detached_gate).await;
+    removed_current
+}
+
+async fn detach_pause_generation_parts(
+    pause_controls: &Arc<RwLock<HashMap<String, PauseRegistration>>>,
+    hitl_registry: &HitlRegistry,
+    ui_slot: &::hooks::UiTimelineSlot,
+    memory_dir: &std::path::Path,
+    session_id: &str,
+    registration: &PauseRegistration,
+) -> (bool, Option<Arc<HitlGate>>) {
+    let mut registrations = pause_controls.write().await;
+    let removed_current = if registrations
+        .get(session_id)
+        .is_some_and(|current| Arc::ptr_eq(&current.control, &registration.control))
+    {
+        registrations.remove(session_id);
+        true
+    } else {
+        false
+    };
+    drop(registrations);
+
+    let detached_gate = if removed_current
+        && hitl_registry
+            .get(session_id)
+            .await
+            .is_some_and(|current| Arc::ptr_eq(&current, &registration.hitl_gate))
+    {
+        hitl_registry.remove(session_id).await
+    } else {
+        None
+    };
     if removed_current {
+        ui_slot.clear_if(registration.ui_generation);
         clear_interrupt_file(memory_dir, session_id);
     }
-    removed_current
+    (removed_current, detached_gate)
+}
+
+async fn cancel_pause_generation(
+    registration: &PauseRegistration,
+    detached_gate: Option<Arc<HitlGate>>,
+) {
+    registration.control.cancel();
+    registration.hitl_gate.cancel_all().await;
+    if detached_gate
+        .as_ref()
+        .is_some_and(|gate| !Arc::ptr_eq(gate, &registration.hitl_gate))
+    {
+        detached_gate
+            .expect("checked detached gate")
+            .cancel_all()
+            .await;
+    }
 }
 /// Chat RPC 返回的事件流类型别名。
 type ChatStream = Pin<Box<dyn futures::Stream<Item = Result<ChatEvent, Status>> + Send>>;
@@ -264,6 +313,8 @@ pub struct AstroServiceImpl {
     sessions: Arc<RwLock<HashMap<String, SessionHandle>>>,
     /// session_id → 暂停控制器。
     pause_controls: Arc<RwLock<HashMap<String, PauseRegistration>>>,
+    /// 串行化 pause / HITL / UI / interrupt file 的 generation 切换。
+    generation_admission: Arc<Mutex<()>>,
     /// session_id → 活 HITL 闸门。
     hitl_registry: HitlRegistry,
     /// 记忆根目录。
@@ -297,6 +348,7 @@ impl AstroServiceImpl {
         Self {
             sessions: Arc::new(RwLock::new(HashMap::new())),
             pause_controls: Arc::new(RwLock::new(HashMap::new())),
+            generation_admission: Arc::new(Mutex::new(())),
             hitl_registry: HitlRegistry::new(),
             memory_dir,
             hook_runtime,
@@ -335,36 +387,63 @@ impl AstroServiceImpl {
         Ok(handle)
     }
 
-    /// 同一 session 重入时取消旧 PauseControl，避免幽灵 pause
-    async fn register_pause(
+    /// 原子切换同一 chat generation 的 pause / HITL / UI 状态。
+    async fn admit_pause_generation(
         &self,
         session_id: &str,
         session: &SessionHandle,
         hitl_gate: Arc<HitlGate>,
-        ui_generation: ::hooks::UiTimelineGeneration,
-    ) -> PauseRegistration {
-        let pause = PauseControl::new();
-        let mut map = self.pause_controls.write().await;
-        let registration = PauseRegistration {
-            control: Arc::clone(&pause),
-            session: Arc::downgrade(session),
-            hitl_gate,
-            ui_generation,
+        hook_tx: tokio::sync::mpsc::UnboundedSender<::hooks::UiHookEvent>,
+    ) -> Option<PauseRegistration> {
+        let (registration, old_registration, old_registry_gate) = {
+            let _admission = self.generation_admission.lock().await;
+            if let Some(current_gate) = self.hitl_registry.get(session_id).await {
+                if current_gate.is_waiting().await {
+                    return None;
+                }
+            }
+
+            let old_registry_gate = self.hitl_registry.remove(session_id).await;
+            let ui_generation = self.hook_runtime.ui_slot.install_tx(hook_tx);
+            let registration = PauseRegistration {
+                control: PauseControl::new(),
+                session: Arc::downgrade(session),
+                hitl_gate: Arc::clone(&hitl_gate),
+                ui_generation,
+            };
+            let old_registration = self
+                .pause_controls
+                .write()
+                .await
+                .insert(session_id.to_string(), registration.clone());
+            self.hitl_registry.insert(hitl_gate).await;
+            clear_interrupt_file(&self.memory_dir, session_id);
+            (registration, old_registration, old_registry_gate)
         };
-        let old = map.insert(session_id.to_string(), registration.clone());
-        drop(map);
-        if let Some(old) = old {
-            self.cleanup_pause_generation(session_id, &old).await;
+
+        if let Some(old) = old_registration.as_ref() {
+            old.control.cancel();
+            old.hitl_gate.cancel_all().await;
         }
-        registration
+        if let Some(old_gate) = old_registry_gate {
+            let already_cancelled = old_registration
+                .as_ref()
+                .is_some_and(|old| Arc::ptr_eq(&old.hitl_gate, &old_gate));
+            if !already_cancelled {
+                old_gate.cancel_all().await;
+            }
+        }
+        Some(registration)
     }
 
+    #[cfg(test)]
     async fn cleanup_pause_generation(
         &self,
         session_id: &str,
         registration: &PauseRegistration,
     ) -> bool {
         cleanup_pause_generation_parts(
+            &self.generation_admission,
             &self.pause_controls,
             &self.hitl_registry,
             &self.hook_runtime.ui_slot,
@@ -375,23 +454,55 @@ impl AstroServiceImpl {
         .await
     }
 
+    async fn cancel_current_pause_generation(&self, session_id: &str) -> Option<PauseRegistration> {
+        let (registration, detached_gate) = {
+            let _admission = self.generation_admission.lock().await;
+            let registration = self.pause_controls.read().await.get(session_id).cloned()?;
+            let detached_gate = detach_pause_generation_parts(
+                &self.pause_controls,
+                &self.hitl_registry,
+                &self.hook_runtime.ui_slot,
+                &self.memory_dir,
+                session_id,
+                &registration,
+            )
+            .await
+            .1;
+            (registration, detached_gate)
+        };
+        cancel_pause_generation(&registration, detached_gate).await;
+        Some(registration)
+    }
+
     /// 释放会话运行时：取消暂停/HITL/中断文件，并从内存移除 Session。
     ///
     /// 返回被移除的会话句柄；Session 自身清理由幂等 `shutdown_runtime` 统一承接。
     async fn release_session_runtime(&self, session_id: &str) -> Option<SessionHandle> {
-        let registration = self.pause_controls.read().await.get(session_id).cloned();
-        let expected_session = match registration.as_ref() {
-            Some(registration) => registration.session.upgrade(),
-            None => self.sessions.read().await.get(session_id).cloned(),
-        };
-        if let Some(registration) = registration.as_ref() {
-            self.cleanup_pause_generation(session_id, registration)
-                .await;
-        }
-
-        let removed = {
+        let (registration, detached_gate, orphan_gate, removed) = {
+            let _admission = self.generation_admission.lock().await;
+            let registration = self.pause_controls.read().await.get(session_id).cloned();
+            let expected_session = match registration.as_ref() {
+                Some(registration) => registration.session.upgrade(),
+                None => self.sessions.read().await.get(session_id).cloned(),
+            };
+            let detached_gate = if let Some(registration) = registration.as_ref() {
+                detach_pause_generation_parts(
+                    &self.pause_controls,
+                    &self.hitl_registry,
+                    &self.hook_runtime.ui_slot,
+                    &self.memory_dir,
+                    session_id,
+                    registration,
+                )
+                .await
+                .1
+            } else {
+                None
+            };
+            let orphan_gate = self.hitl_registry.remove(session_id).await;
+            clear_interrupt_file(&self.memory_dir, session_id);
             let mut sessions = self.sessions.write().await;
-            match expected_session {
+            let removed = match expected_session {
                 Some(expected)
                     if sessions
                         .get(session_id)
@@ -400,8 +511,22 @@ impl AstroServiceImpl {
                     sessions.remove(session_id)
                 }
                 Some(_) | None => None,
-            }
+            };
+            (registration, detached_gate, orphan_gate, removed)
         };
+        if let Some(registration) = registration.as_ref() {
+            cancel_pause_generation(registration, detached_gate).await;
+        } else if let Some(gate) = detached_gate {
+            gate.cancel_all().await;
+        }
+        if let Some(gate) = orphan_gate {
+            let already_cancelled = registration
+                .as_ref()
+                .is_some_and(|registration| Arc::ptr_eq(&registration.hitl_gate, &gate));
+            if !already_cancelled {
+                gate.cancel_all().await;
+            }
+        }
         if let Some(handle) = removed.as_ref() {
             handle.shutdown_runtime().await;
         }
@@ -709,12 +834,31 @@ impl AstroService for AstroServiceImpl {
             return Ok(Response::new(Empty {}));
         }
 
-        let registration = self
-            .pause_controls
-            .read()
-            .await
-            .get(&req.session_id)
-            .cloned();
+        if matches!(action, ChatControlAction::ChatControlCancel) {
+            let Some(registration) = self.cancel_current_pause_generation(&req.session_id).await
+            else {
+                return Err(Status::not_found(format!(
+                    "会话 {} 当前没有进行中的流式对话",
+                    req.session_id
+                )));
+            };
+            if let Some(session) = registration.session.upgrade() {
+                session
+                    .abort_all_tasks(TurnAbortReason::Interrupted)
+                    .await
+                    .map_err(|error| Status::internal(error.to_string()))?;
+            }
+            return Ok(Response::new(Empty {}));
+        }
+
+        let registration = {
+            let _admission = self.generation_admission.lock().await;
+            self.pause_controls
+                .read()
+                .await
+                .get(&req.session_id)
+                .cloned()
+        };
         let Some(registration) = registration else {
             return Err(Status::not_found(format!(
                 "会话 {} 当前没有进行中的流式对话",
@@ -727,17 +871,7 @@ impl AstroService for AstroServiceImpl {
             ChatControlAction::ChatControlResume | ChatControlAction::ChatControlStreamResume => {
                 pause.resume()
             }
-            ChatControlAction::ChatControlCancel => {
-                let session = registration.session.upgrade();
-                self.cleanup_pause_generation(&req.session_id, &registration)
-                    .await;
-                if let Some(session) = session {
-                    session
-                        .abort_all_tasks(TurnAbortReason::Interrupted)
-                        .await
-                        .map_err(|error| Status::internal(error.to_string()))?;
-                }
-            }
+            ChatControlAction::ChatControlCancel => unreachable!("cancel handled above"),
             ChatControlAction::ChatControlNewChat
             | ChatControlAction::ChatControlRefreshMemory
             | ChatControlAction::ReleaseSession
@@ -755,7 +889,11 @@ impl AstroService for AstroServiceImpl {
         if req.session_id.is_empty() {
             return Err(Status::invalid_argument("session_id 不能为空"));
         }
-        let Some(gate) = self.hitl_registry.get(&req.session_id).await else {
+        let gate = {
+            let _admission = self.generation_admission.lock().await;
+            self.hitl_registry.get(&req.session_id).await
+        };
+        let Some(gate) = gate else {
             return Err(Status::failed_precondition(
                 "当前会话没有等待中的 HITL（可能已超时或过期）",
             ));
@@ -766,10 +904,18 @@ impl AstroService for AstroServiceImpl {
             .map_err(|e| Status::invalid_argument(format!("interrupt resume 无效: {e}")))?;
         // 同批多 HITL：只清已解决项，保留 sibling waiting 的旁路文件
         let remaining = gate.pending_interrupts().await;
-        if remaining.is_empty() {
-            clear_interrupt_file(&self.memory_dir, &req.session_id);
-        } else {
-            let _ = save_interrupt_file(&self.memory_dir, &req.session_id, &remaining);
+        let _admission = self.generation_admission.lock().await;
+        let is_current = self
+            .hitl_registry
+            .get(&req.session_id)
+            .await
+            .is_some_and(|current| Arc::ptr_eq(&current, &gate));
+        if is_current {
+            if remaining.is_empty() {
+                clear_interrupt_file(&self.memory_dir, &req.session_id);
+            } else {
+                let _ = save_interrupt_file(&self.memory_dir, &req.session_id, &remaining);
+            }
         }
         Ok(Response::new(Empty {}))
     }
@@ -941,35 +1087,30 @@ impl AstroService for AstroServiceImpl {
                 }
             }
         }
-        // 有活 HITL 时拒绝新 chat（须在 register_pause 之前，避免取消进行中的流）
-        if let Some(gate) = self.hitl_registry.get(&session_id).await {
-            if gate.is_waiting().await {
-                let (tx, rx) = tokio::sync::mpsc::channel::<Result<ChatEvent, Status>>(4);
-                let _ = tx
-                    .send(Ok(ChatEvent {
-                        payload: Some(proto::chat_event::Payload::Error(
-                            "请先完成上方确认或澄清卡片（HITL waiting）".into(),
-                        )),
-                    }))
-                    .await;
-                let _ = tx
-                    .send(Ok(ChatEvent {
-                        payload: Some(proto::chat_event::Payload::Done(true)),
-                    }))
-                    .await;
-                return Ok(Response::new(Box::pin(ReceiverStream::new(rx))));
-            }
-        }
-
         let hitl_gate = HitlGate::new(session_id.clone());
-        self.hitl_registry.insert(Arc::clone(&hitl_gate)).await;
-        let ui_generation = self.hook_runtime.ui_slot.install_tx(hook_tx);
-        let registration = self
-            .register_pause(&session_id, &session, Arc::clone(&hitl_gate), ui_generation)
-            .await;
+        let Some(registration) = self
+            .admit_pause_generation(&session_id, &session, Arc::clone(&hitl_gate), hook_tx)
+            .await
+        else {
+            let (tx, rx) = tokio::sync::mpsc::channel::<Result<ChatEvent, Status>>(4);
+            let _ = tx
+                .send(Ok(ChatEvent {
+                    payload: Some(proto::chat_event::Payload::Error(
+                        "请先完成上方确认或澄清卡片（HITL waiting）".into(),
+                    )),
+                }))
+                .await;
+            let _ = tx
+                .send(Ok(ChatEvent {
+                    payload: Some(proto::chat_event::Payload::Done(true)),
+                }))
+                .await;
+            return Ok(Response::new(Box::pin(ReceiverStream::new(rx))));
+        };
         let pause = Arc::clone(&registration.control);
         let registration_for_cleanup = registration.clone();
         let pause_controls = self.pause_controls.clone();
+        let generation_admission = self.generation_admission.clone();
         let hitl_registry = self.hitl_registry.clone();
         let memory_dir = self.memory_dir.clone();
         let sid_cleanup = session_id.clone();
@@ -1086,8 +1227,23 @@ impl AstroService for AstroServiceImpl {
                                 let interrupts: Vec<agent::Interrupt> =
                                     serde_json::from_str(interrupts_json).unwrap_or_default();
                                 if !interrupts.is_empty() {
-                                    let _ =
-                                        save_interrupt_file(&memory_dir, &sid_cleanup, &interrupts);
+                                    let _admission = generation_admission.lock().await;
+                                    let is_current =
+                                        pause_controls.read().await.get(&sid_cleanup).is_some_and(
+                                            |current| {
+                                                Arc::ptr_eq(
+                                                    &current.control,
+                                                    &registration_for_cleanup.control,
+                                                )
+                                            },
+                                        );
+                                    if is_current {
+                                        let _ = save_interrupt_file(
+                                            &memory_dir,
+                                            &sid_cleanup,
+                                            &interrupts,
+                                        );
+                                    }
                                 }
                             }
                         }
@@ -1138,7 +1294,6 @@ impl AstroService for AstroServiceImpl {
                     }
                 }
             }
-            clear_interrupt_file(&memory_dir, &sid_cleanup);
             hook_runtime.fire_gateway(
                 ::hooks::AGENT_END,
                 &::hooks::HookPayload {
@@ -1148,6 +1303,7 @@ impl AstroService for AstroServiceImpl {
                 },
             );
             cleanup_pause_generation_parts(
+                &generation_admission,
                 &pause_controls,
                 &hitl_registry,
                 &ui_slot,
@@ -1707,12 +1863,11 @@ mod tests {
 
         let session = service.get_session(session_id).await.unwrap();
         let gate = HitlGate::new(session_id.to_string());
-        service.hitl_registry.insert(gate.clone()).await;
         let (ui_tx, _ui_rx) = tokio::sync::mpsc::unbounded_channel();
-        let ui_generation = service.hook_runtime.ui_slot.install_tx(ui_tx);
         let pause = service
-            .register_pause(session_id, &session, Arc::clone(&gate), ui_generation)
-            .await;
+            .admit_pause_generation(session_id, &session, Arc::clone(&gate), ui_tx)
+            .await
+            .unwrap();
 
         let request = Request::new(ChatControlRequest {
             session_id: session_id.to_string(),
@@ -1806,12 +1961,11 @@ mod tests {
         let old_session = service.get_session(session_id).await.unwrap();
         let (old_turn, _old_rx) = spawn_pending_turn(Arc::clone(&old_session)).await;
         let old_gate = HitlGate::new(session_id);
-        service.hitl_registry.insert(Arc::clone(&old_gate)).await;
         let (old_ui_tx, _old_ui_rx) = tokio::sync::mpsc::unbounded_channel();
-        let old_ui_generation = service.hook_runtime.ui_slot.install_tx(old_ui_tx);
         let _old_pause = service
-            .register_pause(session_id, &old_session, old_gate, old_ui_generation)
-            .await;
+            .admit_pause_generation(session_id, &old_session, old_gate, old_ui_tx)
+            .await
+            .unwrap();
 
         service.sessions.write().await.remove(session_id);
         let replacement = service.get_session(session_id).await.unwrap();
@@ -1931,6 +2085,114 @@ mod tests {
             replacement_ui_rx.try_recv().unwrap().name,
             ::hooks::PRE_LLM_CALL
         );
+    }
+
+    #[tokio::test]
+    async fn concurrent_chat_admission_and_stale_cleanup_preserve_one_generation() {
+        let dir = TempDir::new().unwrap();
+        let service = Arc::new(AstroServiceImpl::new(dir.path().to_path_buf()));
+        let session_id = "concurrent-chat-generation";
+        let session = service.get_session(session_id).await.unwrap();
+        let gate_a = HitlGate::new(session_id);
+        let gate_b = HitlGate::new(session_id);
+        let (ui_tx_a, mut ui_rx_a) = tokio::sync::mpsc::unbounded_channel();
+        let (ui_tx_b, mut ui_rx_b) = tokio::sync::mpsc::unbounded_channel();
+        let barrier = Arc::new(tokio::sync::Barrier::new(3));
+
+        let admission_a = {
+            let service = Arc::clone(&service);
+            let session = Arc::clone(&session);
+            let gate = Arc::clone(&gate_a);
+            let barrier = Arc::clone(&barrier);
+            tokio::spawn(async move {
+                barrier.wait().await;
+                service
+                    .admit_pause_generation(session_id, &session, gate, ui_tx_a)
+                    .await
+                    .unwrap()
+            })
+        };
+        let admission_b = {
+            let service = Arc::clone(&service);
+            let session = Arc::clone(&session);
+            let gate = Arc::clone(&gate_b);
+            let barrier = Arc::clone(&barrier);
+            tokio::spawn(async move {
+                barrier.wait().await;
+                service
+                    .admit_pause_generation(session_id, &session, gate, ui_tx_b)
+                    .await
+                    .unwrap()
+            })
+        };
+        barrier.wait().await;
+        let registration_a = admission_a.await.unwrap();
+        let registration_b = admission_b.await.unwrap();
+
+        let current = service
+            .pause_controls
+            .read()
+            .await
+            .get(session_id)
+            .cloned()
+            .expect("one generation remains registered");
+        let (winner, loser, winner_gate, winner_ui_rx, loser_ui_rx) =
+            if Arc::ptr_eq(&current.control, &registration_a.control) {
+                (
+                    registration_a,
+                    registration_b,
+                    gate_a,
+                    &mut ui_rx_a,
+                    &mut ui_rx_b,
+                )
+            } else {
+                (
+                    registration_b,
+                    registration_a,
+                    gate_b,
+                    &mut ui_rx_b,
+                    &mut ui_rx_a,
+                )
+            };
+        assert!(service
+            .hitl_registry
+            .get(session_id)
+            .await
+            .is_some_and(|gate| Arc::ptr_eq(&gate, &winner_gate)));
+
+        save_interrupt_file(
+            &service.memory_dir,
+            session_id,
+            &[agent::Interrupt {
+                id: "winner-interrupt".into(),
+                ..Default::default()
+            }],
+        )
+        .unwrap();
+        service.cleanup_pause_generation(session_id, &loser).await;
+
+        assert!(service
+            .pause_controls
+            .read()
+            .await
+            .get(session_id)
+            .is_some_and(|registration| Arc::ptr_eq(&registration.control, &winner.control)));
+        assert!(service
+            .hitl_registry
+            .get(session_id)
+            .await
+            .is_some_and(|gate| Arc::ptr_eq(&gate, &winner_gate)));
+        let _ = service
+            .hook_runtime
+            .plugin
+            .fire(::hooks::PRE_LLM_CALL, &::hooks::HookPayload::default());
+        assert_eq!(winner_ui_rx.try_recv().unwrap().name, ::hooks::PRE_LLM_CALL);
+        assert!(loser_ui_rx.try_recv().is_err());
+        let interrupt_path =
+            crate::grpc::interrupt_store::interrupt_file_path(&service.memory_dir, session_id);
+        let interrupts: Vec<agent::Interrupt> =
+            serde_json::from_slice(&std::fs::read(interrupt_path).unwrap()).unwrap();
+        assert_eq!(interrupts[0].id, "winner-interrupt");
     }
 
     #[tokio::test]
