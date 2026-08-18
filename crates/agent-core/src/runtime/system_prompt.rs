@@ -60,14 +60,14 @@ impl AgentLoop {
         let dynamic_ctx = {
             let mut dyn_ctx = DynamicContext::from_recalled(
                 self.config.dynamic_max_items,
-                &self.compression.last_recalled_context,
+                &self.state.compression.last_recalled_context,
             );
             let pinned = tools::render_pinned_for_prompt(&self.memory.workspace_dir);
             if !pinned.trim().is_empty() {
                 // 固定上下文优先于本轮 FTS 召回
                 dyn_ctx.items.insert(0, pinned);
             }
-            if let Some(ref nudge) = self.pending_learning_nudge {
+            if let Some(ref nudge) = self.state.pending_learning_nudge {
                 dyn_ctx.items.insert(0, format!("# 学习提示\n{nudge}"));
             }
             dyn_ctx
@@ -134,7 +134,7 @@ impl AgentLoop {
 
         let (guidance, timestamp) = self.system_prompt_guidance_timestamp();
         let mcp_instructions = render_mcp_instructions(&self.mcp_instructions);
-        let mode_guidance = self.interaction_mode.system_guidance();
+        let mode_guidance = self.state.interaction_mode.system_guidance();
         let tool_guidance = crate::prompt::prompt_builder::TOOL_GUIDANCE;
 
         let mut system_items: Vec<NamedChars> = Vec::new();
@@ -214,7 +214,7 @@ impl AgentLoop {
         // mode 置于 TOOL_GUIDANCE 之前：guidance 层被 take_chars 截断时优先保留模式说明。
         let guidance = format!(
             "{}\n\n{}",
-            self.interaction_mode.system_guidance(),
+            self.state.interaction_mode.system_guidance(),
             crate::prompt::prompt_builder::TOOL_GUIDANCE,
         );
         let now = chrono::Local::now().format("%Y-%m-%d %H:%M:%S %Z");

@@ -9,7 +9,7 @@ use super::AgentLoop;
 impl AgentLoop {
     /// Provider 发送用历史：若有 mid-run handoff 则折叠中间轮次。
     pub fn provider_history(&self) -> Vec<Message> {
-        match self.compression.mid_run_handoff.as_deref() {
+        match self.state.compression.mid_run_handoff.as_deref() {
             Some(handoff) => crate::exec::mid_run_summary::collapse_history_with_handoff(
                 &self.session_messages,
                 handoff,
@@ -35,7 +35,7 @@ impl AgentLoop {
         if !self.compression_config().enabled {
             return Ok(result);
         }
-        if !self.compression.guard.allow_run() {
+        if !self.state.compression.guard.allow_run() {
             result.thrashing_disabled = true;
             return Ok(result);
         }
@@ -116,15 +116,16 @@ impl AgentLoop {
         let mgr = ToolCompressionManager::from_config(&self.compression_config())
             .with_context_window(self.context_window());
         result.occupancy_after = mgr.occupancy_ratio(&self.session_messages);
-        self.compression
+        self.state
+            .compression
             .guard
             .record_outcome(result.occupancy_before, result.occupancy_after);
-        result.thrashing_disabled = self.compression.guard.disabled;
+        result.thrashing_disabled = self.state.compression.guard.disabled;
         result.recommend_session_compact = self
             .compression_policy
             .should_recommend_compact(result.occupancy_after);
         if result.recommend_session_compact {
-            self.compression.pending_recommend_compact = true;
+            self.state.compression.pending_recommend_compact = true;
         }
         Ok(result)
     }

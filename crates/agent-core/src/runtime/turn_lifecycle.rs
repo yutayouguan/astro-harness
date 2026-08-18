@@ -14,14 +14,14 @@ impl Session {
     ///
     /// 若上一轮工具次数达到 `learning.complex_task_tool_threshold`，为本轮挂起学习 nudge。
     pub fn begin_user_turn(&mut self) {
-        let prev_rounds = self.turn.begin_new_turn();
+        let prev_rounds = self.state.turn.begin_new_turn();
         let compression = memory::load_compression_config(&self.memory.base_dir);
-        self.compression.reset_for_new_turn(&compression);
+        self.state.compression.reset_for_new_turn(&compression);
         self.compression_policy = Box::new(
             crate::compression::StagedCompressionPolicy::from_config(&compression)
                 .with_context_window(self.context_window()),
         );
-        self.pending_learning_nudge =
+        self.state.pending_learning_nudge =
             Self::compute_learning_nudge(&self.memory.base_dir, prev_rounds);
     }
 
@@ -127,7 +127,7 @@ impl Session {
             self.record_turn_input(item)?;
         }
 
-        let fts_keywords = if self.turn.current_turn >= self.config.recent_turns {
+        let fts_keywords = if self.state.turn.current_turn >= self.config.recent_turns {
             Some(user_message.as_str())
         } else {
             None
@@ -138,7 +138,7 @@ impl Session {
             self.config.recent_turns,
             fts_keywords,
         )?;
-        self.compression.last_recalled_context = format_recalled_context(&recalled);
+        self.state.compression.last_recalled_context = format_recalled_context(&recalled);
 
         self.increment_turn();
         let system_prompt = self.build_system_prompt();
@@ -146,7 +146,7 @@ impl Session {
             ::hooks::ON_SESSION_START,
             ::hooks::HookPayload {
                 session_id: self.session_id.clone(),
-                turn_id: self.turn.current_turn_id.clone(),
+                turn_id: self.state.turn.current_turn_id.clone(),
                 detail: format!("session={}", self.session_id),
                 ..Default::default()
             },
@@ -155,20 +155,20 @@ impl Session {
             ::hooks::PRE_LLM_CALL,
             ::hooks::HookPayload {
                 session_id: self.session_id.clone(),
-                turn_id: self.turn.current_turn_id.clone(),
+                turn_id: self.state.turn.current_turn_id.clone(),
                 system_prompt_chars: Some(system_prompt.len()),
                 detail: format!("system_prompt_chars={}", system_prompt.len()),
                 ..Default::default()
             },
         );
         if let ::hooks::HookOutcome::InjectContext(ctx) = inject {
-            self.pending_inject_context = Some(ctx);
+            self.state.pending_inject_context = Some(ctx);
         }
         if self.cancel.is_cancelled() {
             return Ok(TurnResult::Interrupted);
         }
         Ok(TurnResult::Continue {
-            turn: self.turn.current_turn,
+            turn: self.state.turn.current_turn,
             system_prompt,
         })
     }
@@ -264,20 +264,21 @@ impl Session {
             history.push(Message::user(&format!("[astro:hook-context]\n{ctx}")));
         }
         let tool_specs = self.schemas_for_api();
-        let turn_context = self.current_turn_context.clone().unwrap_or_else(|| {
+        let turn_context = self.state.current_turn_context.clone().unwrap_or_else(|| {
             Arc::new(TurnContext::new(
-                self.turn
+                self.state
+                    .turn
                     .current_turn_id()
                     .map(str::to_owned)
                     .unwrap_or_else(|| uuid::Uuid::new_v4().to_string()),
-                self.turn.current_turn(),
-                self.interaction_mode,
+                self.state.turn.current_turn(),
+                self.state.interaction_mode,
                 self.permission_profile.clone(),
                 self.project_root.clone(),
             ))
         });
         let step_context = Arc::new(StepContext::new(turn_context, history, tool_specs));
-        self.current_step_context = Some(Arc::clone(&step_context));
+        self.state.current_step_context = Some(Arc::clone(&step_context));
         Ok(step_context)
     }
 }

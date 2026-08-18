@@ -106,7 +106,7 @@ impl AgentLoop {
         let session_id = self.session_id.clone();
         let turn_id = step_context
             .map(|step_context| step_context.turn.sub_id().to_string())
-            .or_else(|| self.turn.current_turn_id.clone());
+            .or_else(|| self.state.turn.current_turn_id.clone());
         let memory_dir = self.config.memory_dir.clone();
         let sessions: &dyn ConversationStore = &*self.sessions;
         let execution = Some(self.execution());
@@ -254,7 +254,7 @@ impl AgentLoop {
             ::hooks::PRE_TOOL_CALL,
             ::hooks::HookPayload {
                 session_id: self.session_id.clone(),
-                turn_id: self.turn.current_turn_id.clone(),
+                turn_id: self.state.turn.current_turn_id.clone(),
                 tool_name: Some(name.into()),
                 tool_args: Some(args.clone()),
                 detail: format!("{name} {args}"),
@@ -293,11 +293,11 @@ impl AgentLoop {
         } else {
             (name, args_owned)
         };
-        let step_context = self.current_step_context.clone();
+        let step_context = self.state.current_step_context.clone();
         let interaction_mode = step_context
             .as_ref()
             .map(|step_context| step_context.turn.mode())
-            .unwrap_or(self.interaction_mode);
+            .unwrap_or(self.state.interaction_mode);
         if let Err(msg) = tools::check_tool_call(interaction_mode, exec_name, &exec_args) {
             return Ok(msg.into());
         }
@@ -345,7 +345,7 @@ impl AgentLoop {
             );
         }
         if super::tool_writes_disk(exec_name, &exec_args) {
-            self.turn.mark_wrote_disk();
+            self.state.turn.mark_wrote_disk();
         }
         Ok(self
             .finalize_tool_call_result(exec_name, &exec_args, raw_result)
@@ -392,7 +392,7 @@ impl AgentLoop {
             ::hooks::TRANSFORM_TOOL_RESULT,
             ::hooks::HookPayload {
                 session_id: self.session_id.clone(),
-                turn_id: self.turn.current_turn_id.clone(),
+                turn_id: self.state.turn.current_turn_id.clone(),
                 tool_name: Some(name.into()),
                 tool_args: Some(args_owned.clone()),
                 tool_result: Some(raw_text.clone()),
@@ -412,7 +412,7 @@ impl AgentLoop {
             ::hooks::POST_TOOL_CALL,
             ::hooks::HookPayload {
                 session_id: self.session_id.clone(),
-                turn_id: self.turn.current_turn_id.clone(),
+                turn_id: self.state.turn.current_turn_id.clone(),
                 tool_name: Some(name.into()),
                 tool_result: Some(result.text().to_string()),
                 detail: {

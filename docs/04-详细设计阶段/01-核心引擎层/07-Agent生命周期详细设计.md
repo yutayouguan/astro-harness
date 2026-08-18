@@ -1,6 +1,6 @@
 # Agent 生命周期详细设计
 
-> 版本：v2.4
+> 版本：v2.5
 > 日期：2026-08-18
 > 状态：实施基线  
 > 上游参考：[OpenAI Codex](https://github.com/openai/codex) `632e35ce8d5dec43b75dbf99f9e6fa52bed47c3d`  
@@ -509,7 +509,8 @@ schema 和 RPC 字段改名都必须提供 migration 或 serde alias。
 - [x] 将首次用户输入的持久化从 adapter 移入 `RegularTask::run`。
 - [ ] 将 `Arc<Mutex<Session>>` 内锁化为 Codex 的 `Arc<Session>`。
   - [x] `active_turn` 收敛为 Codex 同构的 `Mutex<Option<ActiveTurn>>`。
-  - [ ] 把其余可变会话字段归入内部 `Mutex<SessionState>`。
+  - [x] 提取 Codex 同名 `SessionState`，集中轮次、压缩、注入上下文、交互模式与 Turn/Step 快照。
+  - [ ] 将 `Session.state` 升级为内部 `Mutex<SessionState>`。
   - [ ] 将 `SessionTask`、streaming、background 和 server 签名迁移为 `Arc<Session>`。
 
 v2.3 落地说明：foreground、background、Cron 与 SubAgent 不再先调用
@@ -523,6 +524,14 @@ v2.4 内锁化批次 1：先迁移 task registry。`steer_input`、`spawn_task`�
 Session 新建时该字段为 `None`，任务启动时创建 `ActiveTurn`，收尾时恢复 `None`。本批不移动
 SQLite、消息历史、工具注册表和 provider 配置，避免把 non-Send 状态迁移与任务竞争控制混为
 一次高风险改动。
+
+v2.5 内锁化批次 2：先建立状态所有权边界，不同时改变同步语义。新增
+`runtime::session_state::SessionState`，将 `CompressionState`、`TurnState`、
+`pending_inject_context`、`pending_learning_nudge`、`interaction_mode`、
+`current_turn_context` 和 `current_step_context` 从 `Session` 直属字段迁入 `Session.state`；
+`active_turn` 继续作为独立内部锁，与 Codex 的字段布局一致。本批仍由现有 `&mut Session`
+路径提供互斥，后续批次再把 `state` 包装为 `Mutex<SessionState>` 并逐层收敛到
+`Arc<Session>`，因此不引入新的锁跨 `await` 行为。
 
 ### Phase C：工具运行时
 

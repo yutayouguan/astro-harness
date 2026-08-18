@@ -35,6 +35,7 @@ mod context_maintenance;
 pub(crate) mod model_ctx;
 mod recording;
 mod session;
+pub(crate) mod session_state;
 pub(crate) mod step_context;
 mod system_prompt;
 mod tool_dispatch;
@@ -114,10 +115,8 @@ pub struct Session {
     // ── 提取的子结构体 ──────────────────────────────────────
     /// LLM 模型配置、凭证与 fallback 链。
     pub(crate) model_ctx: model_ctx::ModelContext,
-    /// 压缩与上下文维护状态。
-    pub(crate) compression: compression_state::CompressionState,
-    /// 轮次与工具深度追踪。
-    pub(crate) turn: turn_budget::TurnState,
+    /// Codex-style session-wide mutable runtime state.
+    pub(crate) state: session_state::SessionState,
 
     // ── 不可拆（非 Send 或强耦合） ──────────────────────────
     pub(crate) memory: MemoryManager,
@@ -144,16 +143,6 @@ pub struct Session {
     pub(crate) permission_profile: Option<String>,
     /// Ephemeral `[[skills.config]]` layer; never mutates parent enable state.
     pub(crate) skill_config_overrides: Vec<(PathBuf, bool)>,
-    /// `pre_llm_call` 注入的本轮附加上下文（不回写用户原文）。
-    pub(crate) pending_inject_context: Option<String>,
-    /// 上一轮复杂任务后挂起的学习 nudge（本轮注入 dynamic，下一次 begin_user_turn 清掉/重算）。
-    pub(crate) pending_learning_nudge: Option<String>,
-    /// 当前聊天交互模式（Plan/Ask 只读门禁）；由 ChatRequest 下传。
-    pub(crate) interaction_mode: types::InteractionMode,
-    /// 当前用户 Turn 的不可变上下文；每个 sampling step 共享同一 `Arc`。
-    pub(crate) current_turn_context: Option<Arc<TurnContext>>,
-    /// 最近一次模型 sampling 实际使用的 Step 快照；工具调用必须绑定此快照。
-    pub(crate) current_step_context: Option<Arc<StepContext>>,
     /// Codex-style single-active-task registry for this session.
     pub(crate) active_turn: TokioMutex<Option<ActiveTurn>>,
 }
@@ -230,8 +219,7 @@ impl Session {
             session_id,
             session_messages,
             model_ctx: model_ctx::ModelContext::default(),
-            compression: compression_state::CompressionState::default(),
-            turn: turn_budget::TurnState::default(),
+            state: session_state::SessionState::default(),
             memory,
             sessions,
             compression_policy,
@@ -245,11 +233,6 @@ impl Session {
             project_root: resolve_session_project_root(),
             permission_profile: None,
             skill_config_overrides: Vec::new(),
-            pending_inject_context: None,
-            pending_learning_nudge: None,
-            interaction_mode: types::InteractionMode::Agent,
-            current_turn_context: None,
-            current_step_context: None,
             active_turn: TokioMutex::new(None),
         })
     }
@@ -259,8 +242,8 @@ impl Session {
         let sub_id = turn_id.into();
         let turn_context = Arc::new(TurnContext::new(
             sub_id,
-            self.turn.current_turn(),
-            self.interaction_mode,
+            self.state.turn.current_turn(),
+            self.state.interaction_mode,
             self.permission_profile.clone(),
             self.project_root.clone(),
         ));
@@ -270,29 +253,30 @@ impl Session {
     pub(crate) fn create_turn_context(&self, sub_id: String) -> Arc<TurnContext> {
         Arc::new(TurnContext::new(
             sub_id,
-            self.turn.current_turn().saturating_add(1),
-            self.interaction_mode,
+            self.state.turn.current_turn().saturating_add(1),
+            self.state.interaction_mode,
             self.permission_profile.clone(),
             self.project_root.clone(),
         ))
     }
 
     pub(crate) fn bind_turn_context(&mut self, turn_context: Arc<TurnContext>) {
-        self.turn
+        self.state
+            .turn
             .set_current_turn_id(turn_context.sub_id().to_string());
-        self.current_turn_context = Some(turn_context);
+        self.state.current_turn_context = Some(turn_context);
     }
 
     /// 清除当前 turn_id（run 结束或中断时调用）。
     pub fn clear_current_turn_id(&mut self) {
-        self.turn.clear_current_turn_id();
-        self.current_turn_context = None;
-        self.current_step_context = None;
+        self.state.turn.clear_current_turn_id();
+        self.state.current_turn_context = None;
+        self.state.current_step_context = None;
     }
 
     /// 当前绑定的 turn_id（若有）。
     pub fn current_turn_id(&self) -> Option<&str> {
-        self.turn.current_turn_id()
+        self.state.turn.current_turn_id()
     }
 
     /// 子 Agent 执行调度器。
@@ -330,7 +314,7 @@ impl Session {
 
     /// 取出并清空本轮 `pre_llm_call` 注入上下文。
     pub fn take_inject_context(&mut self) -> Option<String> {
-        self.pending_inject_context.take()
+        self.state.pending_inject_context.take()
     }
 
     /// 排队下一轮注入上下文（复用 `pre_llm_call` 的注入机制）。
@@ -339,12 +323,12 @@ impl Session {
     /// `session_messages`，仅在下一轮构建 API history 时以 `[astro:hook-context]`
     /// 形式追加一条 user 消息。
     pub fn queue_inject_context(&mut self, ctx: impl Into<String>) {
-        self.pending_inject_context = Some(ctx.into());
+        self.state.pending_inject_context = Some(ctx.into());
     }
 
     /// 当前会话轮次序号（从 1 起，未开始为 0）。
     pub fn session_turn(&self) -> usize {
-        self.turn.current_turn()
+        self.state.turn.current_turn()
     }
 
     /// 返回可克隆的取消信号，供上层 streaming 或 UI 触发中断。
@@ -379,7 +363,9 @@ impl Session {
 
     /// 当前用户消息的工具深度是否已达 `multi_turn` 上限。
     pub fn is_tool_depth_exhausted(&self) -> bool {
-        self.turn.is_tool_depth_exhausted(self.config.multi_turn)
+        self.state
+            .turn
+            .is_tool_depth_exhausted(self.config.multi_turn)
     }
 
     /// 热读 `compression:` 段（与 learning 同类）。
@@ -396,37 +382,37 @@ impl Session {
     }
 
     pub fn mid_run_summary_done(&self) -> bool {
-        self.compression.mid_run_summary_done()
+        self.state.compression.mid_run_summary_done()
     }
 
     pub fn mid_run_handoff(&self) -> Option<&str> {
-        self.compression.mid_run_handoff()
+        self.state.compression.mid_run_handoff()
     }
 
     pub fn set_mid_run_handoff(&mut self, text: String) {
-        self.compression.set_mid_run_handoff(text);
+        self.state.compression.set_mid_run_handoff(text);
     }
 
     pub fn mark_mid_run_summary_skipped(&mut self) {
-        self.compression.mark_mid_run_summary_skipped();
+        self.state.compression.mark_mid_run_summary_skipped();
     }
 
     pub fn should_recommend_compact(&self) -> bool {
-        self.compression.should_recommend_compact()
+        self.state.compression.should_recommend_compact()
     }
 
     pub fn take_recommend_compact(&mut self) -> bool {
-        self.compression.take_recommend_compact()
+        self.state.compression.take_recommend_compact()
     }
 
     /// 本轮用户消息内是否已发生磁盘写入（`terminal` / `file_ops` 写类操作）。
     pub fn turn_wrote_disk(&self) -> bool {
-        self.turn.turn_wrote_disk()
+        self.state.turn.turn_wrote_disk()
     }
 
     /// 递增工具轮次计数；超出 `multi_turn` 时返回 [`MaxDepthError`]。
     pub fn increment_tool_round(&mut self) -> Result<(), MaxDepthError> {
-        self.turn.increment_tool_round(self.config.multi_turn)
+        self.state.turn.increment_tool_round(self.config.multi_turn)
     }
 
     /// 设置图像生成工具的输出目标路径。
@@ -674,7 +660,7 @@ impl Session {
         let sandbox_audit = tools::SandboxAuditMetadata::new(
             self.config.memory_dir.clone(),
             Some(self.session_id.clone()),
-            self.turn.current_turn_id.clone(),
+            self.state.turn.current_turn_id.clone(),
             "mcp",
             profile_id,
         );
@@ -844,7 +830,7 @@ impl Session {
 
     /// 最近一次记忆召回的格式化文本，已注入动态上下文。
     pub fn recalled_context(&self) -> &str {
-        self.compression.recalled_context()
+        self.state.compression.recalled_context()
     }
 
     /// 生成新的任务 UUID，供上层追踪单次 LLM 请求。
@@ -854,12 +840,12 @@ impl Session {
 
     /// 会话轮次预算是否已耗尽（`current_turn >= max_turns`）。
     pub fn is_budget_exhausted(&self) -> bool {
-        self.turn.is_budget_exhausted(self.config.max_turns)
+        self.state.turn.is_budget_exhausted(self.config.max_turns)
     }
 
     /// 递增会话轮次计数（每处理一条用户消息调用一次）。
     pub fn increment_turn(&mut self) {
-        self.turn.increment_turn();
+        self.state.turn.increment_turn();
     }
 
     /// 设置主模型上下文窗口（token），供分阶段 tool 压缩使用。
@@ -869,16 +855,19 @@ impl Session {
 
     /// 设置本轮交互模式（Plan/Ask 启用只读工具门禁）。
     pub fn set_interaction_mode(&mut self, mode: types::InteractionMode) {
-        self.interaction_mode = mode;
+        self.state.interaction_mode = mode;
     }
 
     pub fn interaction_mode(&self) -> types::InteractionMode {
-        self.interaction_mode
+        self.state.interaction_mode
     }
 
     /// 按当前交互模式过滤后的工具 schema（OpenAI tools 数组）。
     pub fn schemas_for_api(&self) -> Vec<serde_json::Value> {
-        tools::filter_schemas(self.interaction_mode, self.tool_registry.schemas_for_api())
+        tools::filter_schemas(
+            self.state.interaction_mode,
+            self.tool_registry.schemas_for_api(),
+        )
     }
 
     pub fn context_window(&self) -> u32 {
@@ -990,6 +979,23 @@ mod tests {
         session.increment_turn();
         let second = session.create_turn_context("turn-2".into());
         assert_eq!(second.turn(), 2);
+    }
+
+    #[test]
+    fn session_groups_turn_scoped_mutable_state() {
+        let dir = TempDir::new().unwrap();
+        let session = Session::new(test_config(&dir)).unwrap();
+
+        assert_eq!(session.state.turn.current_turn(), 0);
+        assert_eq!(
+            session.state.interaction_mode,
+            types::InteractionMode::Agent
+        );
+        assert!(session.state.pending_inject_context.is_none());
+        assert!(session.state.pending_learning_nudge.is_none());
+        assert!(session.state.current_turn_context.is_none());
+        assert!(session.state.current_step_context.is_none());
+        assert!(session.state.compression.recalled_context().is_empty());
     }
 
     #[test]
