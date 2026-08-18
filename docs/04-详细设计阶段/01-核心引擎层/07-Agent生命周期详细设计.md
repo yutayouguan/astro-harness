@@ -1,6 +1,6 @@
 # Agent 生命周期详细设计
 
-> 版本：v2.6
+> 版本：v2.7
 > 日期：2026-08-18
 > 状态：实施基线  
 > 上游参考：[OpenAI Codex](https://github.com/openai/codex) `632e35ce8d5dec43b75dbf99f9e6fa52bed47c3d`  
@@ -511,6 +511,8 @@ schema 和 RPC 字段改名都必须提供 migration 或 serde alias。
   - [x] `active_turn` 收敛为 Codex 同构的 `Mutex<Option<ActiveTurn>>`。
   - [x] 提取 Codex 同名 `SessionState`，集中轮次、压缩、注入上下文、交互模式与 Turn/Step 快照。
   - [x] 将 `Session.state` 升级为内部 `Mutex<SessionState>`。
+  - [x] 将同步 `ConversationStore` 与 `CompressionPolicy` 收口到 Codex 同名
+    `SessionServices`，并用编译期断言锁定 `Session: Send + Sync`。
   - [ ] 将 `SessionTask`、streaming、background 和 server 签名迁移为 `Arc<Session>`。
 
 v2.3 落地说明：foreground、background、Cron 与 SubAgent 不再先调用
@@ -540,6 +542,13 @@ v2.6 内锁化批次 3：`Session.state` 已升级为 Codex 同构的
 摘要 `await` 前均释放 state guard，避免锁跨外部 I/O。由于 `ConversationStore` 与
 `CompressionPolicy` 尚未完成内部锁化，相关 async 访问器本批继续接收 `&mut Session`，以维持
 `SessionTask` future 的 `Send` 约束；下一批再迁移剩余状态与 `Arc<Session>` 签名。
+
+v2.7 内锁化批次 4：新增 Codex 同名 `SessionServices`，将会话级同步依赖从
+`Session` 顶层字段收口。`SharedConversationStore` 仅在单次同步 SQLite 调用期间持有
+`std::sync::Mutex`；`CompressionPolicy` 的互斥区仅包含 plan、fallback、recommend 与策略替换，
+均不跨 provider、工具或其他 `await`。`session_is_send_and_sync` 以编译期断言固定
+`Session: Send + Sync`。本批不移除迁移期的外层 `Arc<Mutex<Session>>`；下一批再逐层改为
+`Arc<Session>` 并收窄可变接口。
 
 ### Phase C：工具运行时
 

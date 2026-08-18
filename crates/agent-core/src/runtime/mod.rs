@@ -28,6 +28,7 @@ use crate::prompt::context::StaticContext;
 use crate::prompt::hooks::CancelSignal;
 use crate::runtime::session::{hydrate_session_messages, resolve_session_project_root};
 use crate::tasks::ActiveTurn;
+use session_services::SessionServices;
 
 pub mod budget;
 pub(crate) mod compression_state;
@@ -35,6 +36,7 @@ mod context_maintenance;
 pub(crate) mod model_ctx;
 mod recording;
 mod session;
+pub(crate) mod session_services;
 pub(crate) mod session_state;
 pub(crate) mod step_context;
 mod system_prompt;
@@ -118,10 +120,9 @@ pub struct Session {
     /// Codex-style session-wide mutable runtime state.
     pub(crate) state: TokioMutex<session_state::SessionState>,
 
-    // ── 不可拆（非 Send 或强耦合） ──────────────────────────
+    // ── 会话级服务与注册表 ──────────────────────────
     pub(crate) memory: MemoryManager,
-    pub(crate) sessions: Box<dyn ConversationStore>,
-    pub(crate) compression_policy: Box<dyn crate::compression::CompressionPolicy>,
+    pub(crate) services: SessionServices,
     pub(crate) tool_registry: ToolRegistry,
     pub(crate) mcp_hub: Arc<TokioMutex<McpHub>>,
     /// Per-thread MCP overlay from a Codex custom agent file.
@@ -221,8 +222,7 @@ impl Session {
             model_ctx: model_ctx::ModelContext::default(),
             state: TokioMutex::new(session_state::SessionState::default()),
             memory,
-            sessions,
-            compression_policy,
+            services: SessionServices::new(sessions, compression_policy),
             tool_registry,
             mcp_hub,
             mcp_config_override: Vec::new(),
@@ -620,7 +620,7 @@ impl Session {
 
     /// 与本 Agent 消息落盘共用的会话库。
     pub fn sessions(&self) -> &dyn ConversationStore {
-        &*self.sessions
+        &self.services.sessions
     }
 
     /// 当前 Agent 工作区路径。
@@ -1038,6 +1038,13 @@ mod tests {
         assert!(state.current_turn_context.is_none());
         assert!(state.current_step_context.is_none());
         assert!(state.compression.recalled_context().is_empty());
+    }
+
+    #[test]
+    fn session_is_send_and_sync() {
+        fn assert_send_sync<T: Send + Sync>() {}
+
+        assert_send_sync::<Session>();
     }
 
     #[test]

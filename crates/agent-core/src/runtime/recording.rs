@@ -1,6 +1,6 @@
 //! AgentLoop 消息记录方法：assistant / user / tool 角色消息的持久化与会话镜像维护。
 
-use session::NewMessage;
+use session::{ConversationStore, NewMessage};
 use types::message::Message;
 
 use super::AgentLoop;
@@ -8,7 +8,9 @@ use super::AgentLoop;
 impl AgentLoop {
     /// 确保会话行存在（不存在则按 `source` 创建）。
     pub fn ensure_session(&self, source: &str) -> anyhow::Result<()> {
-        self.sessions.ensure_session(&self.session_id, source)
+        self.services
+            .sessions
+            .ensure_session(&self.session_id, source)
     }
 
     /// 将 assistant 纯文本回复写入记忆与会话镜像。
@@ -34,8 +36,10 @@ impl AgentLoop {
         let reasoning = reasoning.filter(|r| !r.is_empty());
         let thought_signature =
             types::message::google_thought_signature_from_details(&reasoning_details);
-        self.sessions.ensure_session(&self.session_id, "tauri")?;
-        self.sessions.append_message(NewMessage {
+        self.services
+            .sessions
+            .ensure_session(&self.session_id, "tauri")?;
+        self.services.sessions.append_message(NewMessage {
             content: Some(content),
             tool_calls: tool_calls_json,
             reasoning,
@@ -86,7 +90,8 @@ impl AgentLoop {
         &self,
         reasoning_details: serde_json::Value,
     ) -> anyhow::Result<()> {
-        self.sessions
+        self.services
+            .sessions
             .patch_last_assistant_reasoning_details(&self.session_id, &reasoning_details)
     }
 
@@ -96,8 +101,10 @@ impl AgentLoop {
     /// 的临时注入不同，本方法直接落盘并写入 `session_messages`，确保下一轮 API 历史与
     /// `SessionStore` 保持一致（角色交替），避免连续 assistant 触发 Provider 400。
     pub fn record_user_message(&mut self, content: &str) -> anyhow::Result<()> {
-        self.sessions.ensure_session(&self.session_id, "tauri")?;
-        self.sessions.append_message(NewMessage {
+        self.services
+            .sessions
+            .ensure_session(&self.session_id, "tauri")?;
+        self.services.sessions.append_message(NewMessage {
             content: Some(content),
             ..NewMessage::empty(&self.session_id, "user")
         })?;
@@ -162,8 +169,10 @@ impl AgentLoop {
         } else {
             Some(serde_json::to_string(&media)?)
         };
-        self.sessions.ensure_session(&self.session_id, "tauri")?;
-        let msg_id = self.sessions.append_message(NewMessage {
+        self.services
+            .sessions
+            .ensure_session(&self.session_id, "tauri")?;
+        let msg_id = self.services.sessions.append_message(NewMessage {
             content: Some(content),
             tool_call_id,
             tool_name,
@@ -180,6 +189,7 @@ impl AgentLoop {
                     let rel = types::spill_path_for_prompt(self.memory_dir(), &path);
                     let view = types::make_spill_view(tool_name, &rel, content.len(), content);
                     if self
+                        .services
                         .sessions
                         .update_message_compressed_content(msg_id, Some(&view))
                         .is_ok()

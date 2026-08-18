@@ -1,5 +1,6 @@
 //! AgentLoop 上下文维护：tool 结果压缩、provider 历史折叠与上下文占用估算。
 
+use session::ConversationStore;
 use types::message::{Message, Role};
 
 use crate::compression::{prune_tool_view, ContextMaintenanceResult, ToolCompressionManager};
@@ -41,16 +42,21 @@ impl AgentLoop {
             return Ok(result);
         }
 
-        let stored = self.sessions.get_messages(&self.session_id)?;
+        let stored = self.services.sessions.get_messages(&self.session_id)?;
         let protect_last_n = self.compression_config().protect_last_n.max(1);
 
-        let plan = self.compression_policy.plan(
-            &stored,
-            &self.session_messages,
-            self.memory_dir(),
-            &self.session_id,
-            protect_last_n,
-        );
+        let plan = self
+            .services
+            .compression_policy
+            .lock()
+            .expect("compression policy mutex poisoned")
+            .plan(
+                &stored,
+                &self.session_messages,
+                self.memory_dir(),
+                &self.session_id,
+                protect_last_n,
+            );
 
         if plan.prune.is_empty() && plan.compress.is_empty() {
             return Ok(result);
@@ -94,18 +100,24 @@ impl AgentLoop {
                             tool = ?job.tool_name,
                             "tool LLM compress failed; falling back to head/tail"
                         );
-                        self.compression_policy
+                        self.services
+                            .compression_policy
+                            .lock()
+                            .expect("compression policy mutex poisoned")
                             .compress_fallback(job.tool_name.as_deref(), &job.content, job)
                             .unwrap_or_else(|| job.content.clone())
                     }
                 }
             } else {
-                self.compression_policy
+                self.services
+                    .compression_policy
+                    .lock()
+                    .expect("compression policy mutex poisoned")
                     .compress_fallback(job.tool_name.as_deref(), &job.content, job)
                     .unwrap_or_else(|| job.content.clone())
             };
 
-            let stored_again = self.sessions.get_messages(&self.session_id)?;
+            let stored_again = self.services.sessions.get_messages(&self.session_id)?;
             let Some(stored_msg) = stored_again.iter().find(|m| m.id == job.message_id) else {
                 continue;
             };
@@ -117,15 +129,19 @@ impl AgentLoop {
         let mgr = ToolCompressionManager::from_config(&self.compression_config())
             .with_context_window(self.context_window());
         result.occupancy_after = mgr.occupancy_ratio(&self.session_messages);
+        let recommend_session_compact = self
+            .services
+            .compression_policy
+            .lock()
+            .expect("compression policy mutex poisoned")
+            .should_recommend_compact(result.occupancy_after);
         let mut state = self.state.lock().await;
         state
             .compression
             .guard
             .record_outcome(result.occupancy_before, result.occupancy_after);
         result.thrashing_disabled = state.compression.guard.disabled;
-        result.recommend_session_compact = self
-            .compression_policy
-            .should_recommend_compact(result.occupancy_after);
+        result.recommend_session_compact = recommend_session_compact;
         if result.recommend_session_compact {
             state.compression.pending_recommend_compact = true;
         }
@@ -138,7 +154,8 @@ impl AgentLoop {
         content: &str,
         view: &str,
     ) -> anyhow::Result<()> {
-        self.sessions
+        self.services
+            .sessions
             .update_message_compressed_content(stored_msg.id, Some(view))?;
         if let Some(runtime_msg) = self.session_messages.iter_mut().find(|m| {
             m.role == Role::Tool

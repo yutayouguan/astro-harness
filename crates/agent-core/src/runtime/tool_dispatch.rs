@@ -109,7 +109,7 @@ impl AgentLoop {
             .map(|step_context| step_context.turn.sub_id().to_string())
             .or(fallback_turn_id);
         let memory_dir = self.config.memory_dir.clone();
-        let sessions: &dyn ConversationStore = &*self.sessions;
+        let sessions: &dyn ConversationStore = &self.services.sessions;
         let execution = Some(self.execution());
         let hook_bus = Some(self.hook_bus());
         let mut ctx = ToolContext {

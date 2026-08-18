@@ -1,6 +1,6 @@
 //! Session turn lifecycle: input persistence, memory recall, prompt assembly, and hooks.
 
-use session::{build_conversation_context, format_recalled_context, NewMessage};
+use session::{build_conversation_context, format_recalled_context, ConversationStore, NewMessage};
 use types::message::Message;
 
 use std::sync::Arc;
@@ -22,9 +22,14 @@ impl Session {
             state.pending_learning_nudge =
                 Self::compute_learning_nudge(&self.memory.base_dir, prev_rounds);
         }
-        self.compression_policy = Box::new(
+        let context_window = self.context_window();
+        *self
+            .services
+            .compression_policy
+            .lock()
+            .expect("compression policy mutex poisoned") = Box::new(
             crate::compression::StagedCompressionPolicy::from_config(&compression)
-                .with_context_window(self.context_window()),
+                .with_context_window(context_window),
         );
     }
 
@@ -137,7 +142,7 @@ impl Session {
             None
         };
         let recalled = build_conversation_context(
-            &*self.sessions,
+            &self.services.sessions,
             &self.session_id,
             self.config.recent_turns,
             fts_keywords,
@@ -208,7 +213,9 @@ impl Session {
             content,
             image_data_urls,
         } = input;
-        self.sessions.ensure_session(&self.session_id, "tauri")?;
+        self.services
+            .sessions
+            .ensure_session(&self.session_id, "tauri")?;
         let media_assets: Vec<types::MediaAsset> = image_data_urls
             .iter()
             .map(|url| url.trim())
@@ -227,7 +234,7 @@ impl Session {
         } else {
             Some(serde_json::to_string(&media_assets)?)
         };
-        self.sessions.append_message(NewMessage {
+        self.services.sessions.append_message(NewMessage {
             content: Some(&content),
             media_json: media_json.as_deref(),
             ..NewMessage::empty(&self.session_id, "user")
