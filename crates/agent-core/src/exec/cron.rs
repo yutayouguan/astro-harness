@@ -24,7 +24,7 @@ use uuid::Uuid;
 
 use crate::runtime::usage::{apply_llm_usage_dual_write, LlmUsageWrite};
 use crate::runtime::{Config, Session};
-use crate::tasks::TurnInput;
+use agent_protocol::TurnInput;
 
 use super::background::run_background_multi_turn;
 
@@ -711,7 +711,7 @@ async fn run_agent_job(
     run_background_multi_turn(
         session,
         targets,
-        vec![TurnInput::UserInput {
+        vec![TurnInput {
             content: job.task.clone(),
             image_data_urls: Vec::new(),
         }],

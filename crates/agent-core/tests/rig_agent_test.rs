@@ -40,7 +40,7 @@ async fn test_multi_turn_max_depth() {
     let dir = TempDir::new().unwrap();
     let mut config = test_config(&dir);
     config.multi_turn = 2;
-    let mut agent = AgentLoop::new(config).unwrap();
+    let agent = AgentLoop::new(config).unwrap();
     agent.begin_user_turn().await;
     agent.increment_tool_round().await.unwrap();
     agent.increment_tool_round().await.unwrap();

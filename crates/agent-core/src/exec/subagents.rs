@@ -11,7 +11,7 @@ use tokio::sync::{mpsc, Mutex};
 
 use crate::runtime::{Config, Session};
 use crate::streaming::ChatOverride;
-use crate::tasks::TurnInput;
+use agent_protocol::TurnInput;
 
 pub async fn run_agent_thread(
     thread_id: String,
@@ -232,7 +232,7 @@ async fn run_turn(
     let (output, _) = crate::exec::background::run_background_multi_turn_controlled_with_chat(
         Arc::clone(session),
         targets.to_vec(),
-        vec![TurnInput::UserInput {
+        vec![TurnInput {
             content: message,
             image_data_urls: Vec::new(),
         }],

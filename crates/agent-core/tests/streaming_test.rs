@@ -96,7 +96,7 @@ async fn regular_task_owns_initial_input_persistence() {
             model: "test".into(),
             ..Default::default()
         },
-        input: vec![TurnInput::UserInput {
+        input: vec![TurnInput {
             content: "owned by regular task".into(),
             image_data_urls: Vec::new(),
         }],

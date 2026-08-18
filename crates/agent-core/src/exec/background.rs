@@ -21,7 +21,7 @@ use crate::streaming::{
     run_multi_turn_stream, ChatOverride, MultiTurnStreamArgs, MultiTurnStreamItem,
     StreamedAssistantContent,
 };
-use crate::tasks::TurnInput;
+use agent_protocol::TurnInput;
 
 /// 使用统一多轮引擎执行后台任务。
 pub async fn run_background_multi_turn(
@@ -216,7 +216,7 @@ mod tests {
         let run = run_background_multi_turn_controlled_with_chat(
             session,
             vec![target],
-            vec![TurnInput::UserInput {
+            vec![TurnInput {
                 content: "wait".into(),
                 image_data_urls: Vec::new(),
             }],

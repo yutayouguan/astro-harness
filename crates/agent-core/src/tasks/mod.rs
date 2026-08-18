@@ -11,7 +11,9 @@ use std::pin::Pin;
 use std::sync::Arc;
 use std::time::Duration;
 
-use tokio::sync::{Mutex, Notify};
+use agent_protocol::{TurnAbortReason, TurnAbortedEvent, TurnInput};
+use tokio::sync::Notify;
+use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 
 use crate::runtime::{Session, TurnContext};
@@ -21,24 +23,6 @@ pub(crate) use regular::RegularTask;
 pub(crate) type SessionTaskResult = anyhow::Result<Option<String>>;
 type BoxFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
 const TASK_ABORT_TIMEOUT: Duration = Duration::from_secs(5);
-
-/// Why an active session task was aborted.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum TurnAbortReason {
-    Interrupted,
-    Replaced,
-    ReviewEnded,
-    BudgetLimited,
-}
-
-/// Input submitted to a session task.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum TurnInput {
-    UserInput {
-        content: String,
-        image_data_urls: Vec<String>,
-    },
-}
 
 /// The workflow currently owned by a session task.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -57,7 +41,7 @@ pub(crate) trait SessionTask: Send + Sync + 'static {
 
     fn run(
         self: Arc<Self>,
-        session: Arc<Mutex<Session>>,
+        session: Arc<Session>,
         ctx: Arc<TurnContext>,
         input: Vec<TurnInput>,
         cancellation_token: CancellationToken,
@@ -65,7 +49,7 @@ pub(crate) trait SessionTask: Send + Sync + 'static {
 
     fn abort(
         &self,
-        session: Arc<Mutex<Session>>,
+        session: Arc<Session>,
         ctx: Arc<TurnContext>,
     ) -> impl Future<Output = ()> + Send {
         async move {
@@ -82,17 +66,13 @@ pub(crate) trait AnySessionTask: Send + Sync + 'static {
 
     fn run(
         self: Arc<Self>,
-        session: Arc<Mutex<Session>>,
+        session: Arc<Session>,
         ctx: Arc<TurnContext>,
         input: Vec<TurnInput>,
         cancellation_token: CancellationToken,
     ) -> BoxFuture<'static, SessionTaskResult>;
 
-    fn abort<'a>(
-        &'a self,
-        session: Arc<Mutex<Session>>,
-        ctx: Arc<TurnContext>,
-    ) -> BoxFuture<'a, ()>;
+    fn abort<'a>(&'a self, session: Arc<Session>, ctx: Arc<TurnContext>) -> BoxFuture<'a, ()>;
 }
 
 impl<T> AnySessionTask for T
@@ -109,7 +89,7 @@ where
 
     fn run(
         self: Arc<Self>,
-        session: Arc<Mutex<Session>>,
+        session: Arc<Session>,
         ctx: Arc<TurnContext>,
         input: Vec<TurnInput>,
         cancellation_token: CancellationToken,
@@ -123,11 +103,7 @@ where
         ))
     }
 
-    fn abort<'a>(
-        &'a self,
-        session: Arc<Mutex<Session>>,
-        ctx: Arc<TurnContext>,
-    ) -> BoxFuture<'a, ()> {
+    fn abort<'a>(&'a self, session: Arc<Session>, ctx: Arc<TurnContext>) -> BoxFuture<'a, ()> {
         Box::pin(SessionTask::abort(self, session, ctx))
     }
 }
@@ -139,6 +115,7 @@ pub(crate) struct RunningTask {
     pub(crate) cancellation_token: CancellationToken,
     pub(crate) turn_context: Arc<TurnContext>,
     pub(crate) done: Arc<Notify>,
+    pub(crate) handle: JoinHandle<()>,
 }
 
 /// Turn-scoped task registry. A session owns at most one running task.
@@ -154,8 +131,10 @@ impl ActiveTurn {
         cancellation_token: CancellationToken,
         turn_context: Arc<TurnContext>,
         done: Arc<Notify>,
+        handle: JoinHandle<()>,
     ) -> anyhow::Result<()> {
         if self.task.is_some() {
+            handle.abort();
             anyhow::bail!("session already has an active task");
         }
         tracing::debug!(
@@ -170,6 +149,7 @@ impl ActiveTurn {
             cancellation_token,
             turn_context,
             done,
+            handle,
         });
         Ok(())
     }
@@ -195,113 +175,128 @@ impl ActiveTurn {
 impl Session {
     /// Start one session-owned task after replacing any previous task.
     pub(crate) async fn spawn_task<T: SessionTask>(
-        session: &Arc<Mutex<Self>>,
+        self: &Arc<Self>,
         turn_context: Arc<TurnContext>,
         input: Vec<TurnInput>,
         task: T,
-    ) -> SessionTaskResult {
-        Self::abort_all_tasks(session, TurnAbortReason::Replaced).await?;
+    ) -> anyhow::Result<()> {
+        self.abort_all_tasks(TurnAbortReason::Replaced).await?;
 
         let task: Arc<dyn AnySessionTask> = Arc::new(task);
         let cancellation_token = CancellationToken::new();
         let done = Arc::new(Notify::new());
-        {
-            let mut sess = session.lock().await;
-            sess.cancel_signal().reset();
-            sess.bind_turn_context(Arc::clone(&turn_context)).await;
-            let mut active_turn = sess.active_turn.lock().await;
-            let active_turn = active_turn.get_or_insert_with(ActiveTurn::default);
-            active_turn.start(
-                Arc::clone(&task),
-                cancellation_token.clone(),
-                Arc::clone(&turn_context),
-                Arc::clone(&done),
-            )?;
-        }
+        let installed = Arc::new(Notify::new());
+        self.cancel_signal().reset();
+        self.bind_turn_context(Arc::clone(&turn_context)).await;
 
-        let task_result = Arc::clone(&task)
-            .run(
-                Arc::clone(session),
-                Arc::clone(&turn_context),
-                input,
-                cancellation_token.child_token(),
-            )
-            .await;
-
-        done.notify_one();
-        let sess = session.lock().await;
-        {
-            let mut active_turn = sess.active_turn.lock().await;
-            if let Some(turn) = active_turn.as_mut() {
-                turn.finish(turn_context.sub_id());
-                if turn.task.is_none() {
-                    *active_turn = None;
-                }
+        let session = Arc::clone(self);
+        let ctx = Arc::clone(&turn_context);
+        let task_for_run = Arc::clone(&task);
+        let child = cancellation_token.child_token();
+        let cancellation_for_run = cancellation_token.clone();
+        let done_for_run = Arc::clone(&done);
+        let installed_for_run = Arc::clone(&installed);
+        let handle = tokio::spawn(async move {
+            installed_for_run.notified().await;
+            let result = task_for_run
+                .run(Arc::clone(&session), Arc::clone(&ctx), input, child)
+                .await;
+            if !cancellation_for_run.is_cancelled() {
+                session.on_task_finished(ctx, result).await;
             }
+            done_for_run.notify_waiters();
+        });
+
+        let installed_result = self
+            .install_running_task(task, cancellation_token.clone(), turn_context, done, handle)
+            .await;
+        if installed_result.is_ok() {
+            installed.notify_one();
+        } else {
+            cancellation_token.cancel();
         }
-        if sess.current_turn_id().await.as_deref() == Some(turn_context.sub_id()) {
-            sess.clear_current_turn_id().await;
-        }
-        task_result
+        installed_result
+    }
+
+    async fn install_running_task(
+        &self,
+        task: Arc<dyn AnySessionTask>,
+        cancellation_token: CancellationToken,
+        turn_context: Arc<TurnContext>,
+        done: Arc<Notify>,
+        handle: JoinHandle<()>,
+    ) -> anyhow::Result<()> {
+        let mut active_turn = self.active_turn.lock().await;
+        let active_turn = active_turn.get_or_insert_with(ActiveTurn::default);
+        active_turn.start(task, cancellation_token, turn_context, done, handle)
     }
 
     /// Cooperatively abort the active task and wait for its lifecycle to finish.
-    pub async fn abort_all_tasks(
-        session: &Arc<Mutex<Self>>,
-        reason: TurnAbortReason,
-    ) -> anyhow::Result<()> {
-        let active = {
-            let sess = session.lock().await;
-            let active_turn = sess.active_turn.lock().await;
-            active_turn
-                .as_ref()
-                .and_then(|turn| turn.task.as_ref())
-                .map(|running| {
-                    (
-                        Arc::clone(&running.task),
-                        running.cancellation_token.clone(),
-                        Arc::clone(&running.turn_context),
-                        Arc::clone(&running.done),
-                    )
-                })
+    pub async fn abort_all_tasks(self: &Arc<Self>, reason: TurnAbortReason) -> anyhow::Result<()> {
+        let running = {
+            let mut active_turn = self.active_turn.lock().await;
+            let running = active_turn.as_mut().and_then(|turn| turn.task.take());
+            if active_turn.as_ref().is_some_and(|turn| turn.task.is_none()) {
+                *active_turn = None;
+            }
+            running
         };
-        let Some((task, cancellation_token, turn_context, done)) = active else {
+        let Some(mut running) = running else {
             return Ok(());
         };
 
-        let notified = done.notified();
-        cancellation_token.cancel();
-        {
-            let sess = session.lock().await;
-            sess.cancel_signal().cancel();
-        }
-        task.abort(Arc::clone(session), Arc::clone(&turn_context))
+        let turn_id = running.turn_context.sub_id().to_string();
+        running.cancellation_token.cancel();
+        self.cancel_signal().cancel();
+        running
+            .task
+            .abort(Arc::clone(self), Arc::clone(&running.turn_context))
             .await;
 
-        tokio::time::timeout(TASK_ABORT_TIMEOUT, notified)
+        if tokio::time::timeout(TASK_ABORT_TIMEOUT, &mut running.handle)
             .await
-            .map_err(|_| {
-                anyhow::anyhow!(
-                    "timed out aborting {:?} task {}",
-                    reason,
-                    turn_context.sub_id()
-                )
-            })?;
-
-        let sess = session.lock().await;
+            .is_err()
         {
-            let mut active_turn = sess.active_turn.lock().await;
-            if let Some(turn) = active_turn.as_mut() {
-                turn.finish(turn_context.sub_id());
-                if turn.task.is_none() {
-                    *active_turn = None;
-                }
-            }
+            tracing::warn!(?reason, %turn_id, "forcing session task abort after timeout");
+            running.handle.abort();
+            let _ = running.handle.await;
         }
-        if sess.current_turn_id().await.as_deref() == Some(turn_context.sub_id()) {
-            sess.clear_current_turn_id().await;
+        running.done.notify_waiters();
+        if self.current_turn_id().await.as_deref() == Some(&turn_id) {
+            self.clear_current_turn_id().await;
         }
+        self.emit_runtime_event(
+            turn_id.clone(),
+            agent_protocol::EventMsg::TurnAborted(TurnAbortedEvent {
+                turn_id: Some(turn_id),
+                reason,
+            }),
+        )
+        .await;
         Ok(())
+    }
+
+    pub(crate) async fn on_task_finished(
+        self: &Arc<Self>,
+        turn_context: Arc<TurnContext>,
+        result: SessionTaskResult,
+    ) {
+        if let Err(error) = result {
+            tracing::warn!(%error, turn_id = turn_context.sub_id(), "session task failed");
+        }
+        let turn_id = turn_context.sub_id();
+        let mut active_turn = self.active_turn.lock().await;
+        if active_turn
+            .as_ref()
+            .and_then(|turn| turn.task.as_ref())
+            .is_some_and(|running| running.turn_context.sub_id() == turn_id)
+        {
+            *active_turn = None;
+        }
+        drop(active_turn);
+        if self.current_turn_id().await.as_deref() == Some(turn_id) {
+            self.clear_current_turn_id().await;
+        }
     }
 }
 
@@ -322,7 +317,7 @@ mod tests {
 
         async fn run(
             self: Arc<Self>,
-            _session: Arc<Mutex<Session>>,
+            _session: Arc<Session>,
             _turn_context: Arc<TurnContext>,
             _input: Vec<TurnInput>,
             _cancellation_token: CancellationToken,
@@ -341,8 +336,8 @@ mod tests {
         ))
     }
 
-    #[test]
-    fn active_turn_allows_only_one_running_task() {
+    #[tokio::test]
+    async fn active_turn_allows_only_one_running_task() {
         let mut active_turn = ActiveTurn::default();
         let first: Arc<dyn AnySessionTask> = Arc::new(NoopTask);
         let second: Arc<dyn AnySessionTask> = Arc::new(NoopTask);
@@ -353,6 +348,7 @@ mod tests {
                 CancellationToken::new(),
                 turn_context("turn-1"),
                 Arc::new(Notify::new()),
+                tokio::spawn(async {}),
             )
             .unwrap();
         assert!(active_turn
@@ -361,6 +357,7 @@ mod tests {
                 CancellationToken::new(),
                 turn_context("turn-2"),
                 Arc::new(Notify::new()),
+                tokio::spawn(async {}),
             )
             .is_err());
 
@@ -398,7 +395,7 @@ mod tests {
 
         async fn run(
             self: Arc<Self>,
-            _session: Arc<Mutex<Session>>,
+            _session: Arc<Session>,
             _ctx: Arc<TurnContext>,
             _input: Vec<TurnInput>,
             cancellation_token: CancellationToken,
@@ -412,36 +409,28 @@ mod tests {
     #[tokio::test]
     async fn abort_all_tasks_cancels_and_clears_active_task() {
         let dir = tempfile::tempdir().unwrap();
-        let session = Arc::new(Mutex::new(
+        let session = Arc::new(
             Session::with_session_id(
                 crate::runtime::Config::with_defaults(dir.path().to_path_buf()),
                 "abort-task-test".into(),
             )
             .unwrap(),
-        ));
-        let turn_context = {
-            let sess = session.lock().await;
-            sess.create_turn_context("turn-abort".into()).await
-        };
+        );
+        let turn_context = session.create_turn_context("turn-abort".into()).await;
         let started = Arc::new(Notify::new());
         let task = PendingTask {
             started: Arc::clone(&started),
         };
-        let run = tokio::spawn({
-            let session = Arc::clone(&session);
-            async move {
-                Session::spawn_task(&session, turn_context, Vec::new(), task)
-                    .await
-                    .unwrap();
-            }
-        });
-
-        started.notified().await;
-        Session::abort_all_tasks(&session, TurnAbortReason::Interrupted)
+        session
+            .spawn_task(turn_context, Vec::new(), task)
             .await
             .unwrap();
-        run.await.unwrap();
-        let sess = session.lock().await;
-        assert!(sess.active_turn.lock().await.is_none());
+
+        started.notified().await;
+        session
+            .abort_all_tasks(TurnAbortReason::Interrupted)
+            .await
+            .unwrap();
+        assert!(session.active_turn.lock().await.is_none());
     }
 }

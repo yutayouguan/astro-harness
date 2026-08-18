@@ -7,7 +7,7 @@
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
-use crate::tasks::TurnInput;
+use agent_protocol::TurnInput;
 
 #[derive(Debug, Default)]
 struct TurnInputState {
@@ -113,7 +113,7 @@ mod tests {
     use super::*;
 
     fn input(text: &str) -> TurnInput {
-        TurnInput::UserInput {
+        TurnInput {
             content: text.to_string(),
             image_data_urls: Vec::new(),
         }

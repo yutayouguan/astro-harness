@@ -26,6 +26,7 @@ pub(crate) mod tasks;
 /// 助手回合时间线（astro_timeline_v1）。
 pub mod timeline;
 
+pub use agent_protocol::{TurnAbortReason, TurnInput};
 /// 链式构建可运行的 Agent 实例及其规格。
 pub use builder::{AgentBuilder, BuiltAgentSpec};
 /// HITL 闸门 re-export。
@@ -47,7 +48,6 @@ pub use streaming::{
     stream_multi_turn_with_hitl, ChatOverride, MultiTurnStreamItem, ProviderStreamer,
     StreamedAssistantContent, StreamingChat, StreamingCompletion, StreamingPrompt,
 };
-pub use tasks::{TurnAbortReason, TurnInput};
 /// 工具注册表（实现位于 `tools` crate）。
 pub use tools::ToolRegistry;
 /// 工具元数据（定义位于 `common`）。

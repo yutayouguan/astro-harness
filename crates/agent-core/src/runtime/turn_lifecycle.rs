@@ -5,7 +5,11 @@ use types::message::Message;
 
 use std::sync::Arc;
 
-use crate::tasks::{TaskKind, TurnInput};
+use agent_protocol::{
+    TurnInput, TurnInputError, TurnInputMode, TurnInputRequest, TurnInputSubmission,
+};
+
+use crate::tasks::{RegularTask, TaskKind};
 
 use super::{looks_like_user_correction, Session, StepContext, TurnContext, TurnResult};
 
@@ -13,7 +17,7 @@ impl Session {
     /// 开始新的用户消息处理：重置 `tool_rounds` 与 `turn_wrote_disk`。
     ///
     /// 若上一轮工具次数达到 `learning.complex_task_tool_threshold`，为本轮挂起学习 nudge。
-    pub async fn begin_user_turn(&mut self) {
+    pub async fn begin_user_turn(&self) {
         let compression = memory::load_compression_config(self.memory_dir());
         let prev_rounds = {
             let mut state = self.lock_state();
@@ -88,11 +92,98 @@ impl Session {
         if let Some(turn_id) = self.steer_input(user_message, image_data_urls).await {
             return Ok(TurnResult::Steered { turn_id });
         }
-        self.prepare_turn(&[TurnInput::UserInput {
+        self.prepare_turn(&[TurnInput {
             content: user_message.to_string(),
             image_data_urls: image_data_urls.to_vec(),
         }])
         .await
+    }
+
+    pub(crate) async fn submit_turn_input(
+        self: &Arc<Self>,
+        submission_id: String,
+        request: TurnInputRequest,
+        mode: TurnInputMode,
+    ) -> Result<TurnInputSubmission, TurnInputError> {
+        if request.input.is_empty()
+            || request
+                .input
+                .iter()
+                .all(|item| item.content.trim().is_empty() && item.image_data_urls.is_empty())
+        {
+            return Err(TurnInputError::Invalid(
+                "turn input must contain text or an image".into(),
+            ));
+        }
+        match mode {
+            TurnInputMode::StartOrSteer => match self.active_turn_id().await {
+                Some(turn_id) => self.steer_turn(Some(&turn_id), request.input).await,
+                None => self.start_turn(submission_id, request.input).await,
+            },
+            TurnInputMode::StartIfIdle => match self.active_turn_id().await {
+                Some(_) => Ok(TurnInputSubmission::NotSubmitted {
+                    reason: "not_idle".into(),
+                }),
+                None => self.start_turn(submission_id, request.input).await,
+            },
+            TurnInputMode::Steer { expected_turn_id } => {
+                self.steer_turn(Some(&expected_turn_id), request.input)
+                    .await
+            }
+        }
+    }
+
+    async fn active_turn_id(&self) -> Option<String> {
+        let active_turn = self.active_turn.lock().await;
+        active_turn
+            .as_ref()?
+            .task
+            .as_ref()
+            .map(|running| running.turn_context.sub_id().to_string())
+    }
+
+    async fn start_turn(
+        self: &Arc<Self>,
+        turn_id: String,
+        input: Vec<TurnInput>,
+    ) -> Result<TurnInputSubmission, TurnInputError> {
+        let context = self.create_turn_context(turn_id.clone()).await;
+        self.spawn_task(context, input, RegularTask::submitted())
+            .await
+            .map_err(|error| TurnInputError::Invalid(error.to_string()))?;
+        Ok(TurnInputSubmission::Started { turn_id })
+    }
+
+    async fn steer_turn(
+        &self,
+        expected_turn_id: Option<&str>,
+        input: Vec<TurnInput>,
+    ) -> Result<TurnInputSubmission, TurnInputError> {
+        let active_turn = self.active_turn.lock().await;
+        let Some(running) = active_turn.as_ref().and_then(|turn| turn.task.as_ref()) else {
+            return Ok(TurnInputSubmission::NotSubmitted {
+                reason: "no_active_turn".into(),
+            });
+        };
+        let turn_id = running.turn_context.sub_id().to_string();
+        if expected_turn_id.is_some_and(|expected| expected != turn_id) {
+            return Ok(TurnInputSubmission::NotSubmitted {
+                reason: "turn_id_mismatch".into(),
+            });
+        }
+        if running.kind != TaskKind::Regular {
+            return Ok(TurnInputSubmission::NotSubmitted {
+                reason: "not_steerable".into(),
+            });
+        }
+        for item in input {
+            if !running.turn_context.push_input(item) {
+                return Ok(TurnInputSubmission::NotSubmitted {
+                    reason: "turn_not_accepting_input".into(),
+                });
+            }
+        }
+        Ok(TurnInputSubmission::Steered { turn_id })
     }
 
     /// Prepare initial task input for the first sampling request.
@@ -100,13 +191,11 @@ impl Session {
     /// Production paths call this from [`crate::tasks::RegularTask`]. The
     /// public `start_or_steer_turn*` methods remain compatibility adapters for
     /// callers that have not yet moved input ownership into `SessionTask`.
-    pub(crate) async fn prepare_turn(&mut self, input: &[TurnInput]) -> anyhow::Result<TurnResult> {
+    pub(crate) async fn prepare_turn(&self, input: &[TurnInput]) -> anyhow::Result<TurnResult> {
         anyhow::ensure!(!input.is_empty(), "regular turn requires initial input");
         let user_message = input
             .iter()
-            .map(|item| match item {
-                TurnInput::UserInput { content, .. } => content.as_str(),
-            })
+            .map(|item| item.content.as_str())
             .collect::<Vec<_>>()
             .join("\n");
         self.cancel.reset();
@@ -201,7 +290,7 @@ impl Session {
             if running.kind != TaskKind::Regular {
                 return None;
             }
-            let accepted = running.turn_context.push_input(TurnInput::UserInput {
+            let accepted = running.turn_context.push_input(TurnInput {
                 content: user_message.to_string(),
                 image_data_urls: image_data_urls.to_vec(),
             });
@@ -211,7 +300,7 @@ impl Session {
 
     pub(crate) async fn record_turn_input(&self, input: TurnInput) -> anyhow::Result<()> {
         let _write_guard = self.conversation_write_lock.lock().await;
-        let TurnInput::UserInput {
+        let TurnInput {
             content,
             image_data_urls,
         } = input;

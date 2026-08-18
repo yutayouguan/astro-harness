@@ -12,6 +12,7 @@
 
 use std::io;
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex as StdMutex, MutexGuard, OnceLock};
 
 use agent_protocol::Event;
@@ -144,6 +145,8 @@ pub struct Session {
     pub(crate) active_turn: TokioMutex<Option<ActiveTurn>>,
     /// Bound atomically once by [`AstroThread`] for session runtime I/O.
     runtime_io: OnceLock<RuntimeIoBindings>,
+    /// Guards one-time release of task, hook, MCP, and terminal resources.
+    runtime_shutdown: AtomicBool,
 }
 
 /// Compatibility name retained while downstream crates migrate to [`Config`].
@@ -241,6 +244,7 @@ impl Session {
             cancel: CancelSignal::new(),
             active_turn: TokioMutex::new(None),
             runtime_io: OnceLock::new(),
+            runtime_shutdown: AtomicBool::new(false),
         })
     }
 
@@ -263,6 +267,24 @@ impl Session {
         if let Some(bindings) = self.runtime_io.get() {
             bindings.event_tx.close();
         }
+    }
+
+    pub(crate) async fn emit_runtime_event(
+        &self,
+        id: impl Into<String>,
+        msg: agent_protocol::EventMsg,
+    ) {
+        let Some(bindings) = self.runtime_io.get() else {
+            return;
+        };
+        let _ = bindings
+            .event_tx
+            .send(agent_protocol::Event { id: id.into(), msg })
+            .await;
+    }
+
+    pub(crate) fn begin_runtime_shutdown(&self) -> bool {
+        !self.runtime_shutdown.swap(true, Ordering::AcqRel)
     }
 
     pub(crate) fn set_status(&self, status: AgentStatus) {
@@ -314,7 +336,7 @@ impl Session {
         ))
     }
 
-    pub(crate) async fn bind_turn_context(&mut self, turn_context: Arc<TurnContext>) {
+    pub(crate) async fn bind_turn_context(&self, turn_context: Arc<TurnContext>) {
         let mut state = self.lock_state();
         state
             .turn
@@ -1253,12 +1275,10 @@ mod tests {
             drop(session.provider_history());
             drop(session.maintain_tool_context());
             drop(session.compress_tool_results_if_needed());
-            drop(
-                session.record_turn_input(crate::tasks::TurnInput::UserInput {
-                    content: "input".to_string(),
-                    image_data_urls: Vec::new(),
-                }),
-            );
+            drop(session.record_turn_input(agent_protocol::TurnInput {
+                content: "input".to_string(),
+                image_data_urls: Vec::new(),
+            }));
         }
 
         let _ = assert_arc_api;

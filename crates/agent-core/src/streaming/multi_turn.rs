@@ -10,11 +10,12 @@
 
 use std::sync::Arc;
 
+use agent_protocol::TurnInput;
 use futures::stream::{AbortHandle, Abortable};
 use futures::StreamExt;
 use providers::ProviderConfig;
 use providers::{PauseControl, Usage};
-use tokio::sync::{mpsc, Mutex};
+use tokio::sync::{mpsc, oneshot, Mutex, Notify};
 use tokio_util::sync::CancellationToken;
 use types::ChatTarget;
 
@@ -32,7 +33,7 @@ use super::tools_exec::{
 use super::types::{MultiTurnStream, MultiTurnStreamItem, StreamedAssistantContent};
 use crate::control::hitl::HitlGate;
 use crate::runtime::{Session, TurnContext};
-use crate::tasks::{RegularTask, TurnInput};
+use crate::tasks::{ActiveTurn, AnySessionTask, RegularTask, SessionTaskResult};
 
 /// `pre_verify` 单次 turn 内允许的最多验证轮次（含首次结束尝试）。
 const MAX_VERIFY_ATTEMPTS: usize = 2;
@@ -95,13 +96,85 @@ pub async fn run_multi_turn_stream(args: MultiTurnStreamArgs) {
         chat_override,
     });
     tracing::info!(session_id = %session_id, turn_id = %sub_id, "turn started");
-    if let Err(error) = Session::spawn_task(&session, turn_context, input, task).await {
+    if let Err(error) = run_legacy_regular_task(&session, turn_context, input, task).await {
         let _ = tx
             .send(Ok(MultiTurnStreamItem::Error(error.to_string())))
             .await;
         let _ = tx.send(Ok(MultiTurnStreamItem::Done)).await;
     }
     tracing::info!(session_id = %session_id, turn_id = %sub_id, "turn finished");
+}
+
+async fn run_legacy_regular_task(
+    session: &Arc<Mutex<Session>>,
+    turn_context: Arc<TurnContext>,
+    input: Vec<TurnInput>,
+    task: RegularTask,
+) -> SessionTaskResult {
+    let task = Arc::new(task);
+    let task_for_registry: Arc<dyn AnySessionTask> = task.clone();
+    let cancellation_token = CancellationToken::new();
+    let done = Arc::new(Notify::new());
+    let installed = Arc::new(Notify::new());
+    let (result_tx, result_rx) = oneshot::channel();
+    {
+        let sess = session.lock().await;
+        sess.cancel_signal().reset();
+        sess.bind_turn_context(Arc::clone(&turn_context)).await;
+    }
+
+    let session_for_run = Arc::clone(session);
+    let context_for_run = Arc::clone(&turn_context);
+    let cancellation_for_run = cancellation_token.clone();
+    let done_for_run = Arc::clone(&done);
+    let installed_for_run = Arc::clone(&installed);
+    let handle = tokio::spawn(async move {
+        installed_for_run.notified().await;
+        let result = task
+            .run_legacy(
+                Arc::clone(&context_for_run),
+                input,
+                cancellation_for_run.child_token(),
+            )
+            .await;
+        if !cancellation_for_run.is_cancelled() {
+            let sess = session_for_run.lock().await;
+            let mut active_turn = sess.active_turn.lock().await;
+            if let Some(turn) = active_turn.as_mut() {
+                turn.finish(context_for_run.sub_id());
+                if turn.task.is_none() {
+                    *active_turn = None;
+                }
+            }
+            drop(active_turn);
+            if sess.current_turn_id().await.as_deref() == Some(context_for_run.sub_id()) {
+                sess.clear_current_turn_id().await;
+            }
+        }
+        done_for_run.notify_waiters();
+        let _ = result_tx.send(result);
+    });
+
+    let install_result = {
+        let sess = session.lock().await;
+        let mut active_turn = sess.active_turn.lock().await;
+        let active_turn = active_turn.get_or_insert_with(ActiveTurn::default);
+        active_turn.start(
+            task_for_registry,
+            cancellation_token,
+            turn_context,
+            done,
+            handle,
+        )
+    };
+    if let Err(error) = install_result {
+        session.lock().await.clear_current_turn_id().await;
+        return Err(error);
+    }
+    installed.notify_one();
+    result_rx
+        .await
+        .map_err(|_| anyhow::anyhow!("legacy regular task result channel closed"))?
 }
 
 /// 测试入口：以自定义 chat 函数替代 dispatch，驱动多轮工具循环。
@@ -152,17 +225,16 @@ pub(crate) struct RunTurnArgs {
 }
 
 impl RunTurnArgs {
-    pub(crate) fn with_session_and_turn(
-        &self,
-        session: Arc<Mutex<Session>>,
-        turn_context: Arc<TurnContext>,
-    ) -> Self {
+    pub(crate) fn with_turn_context(&self, turn_context: Arc<TurnContext>) -> Self {
         Self {
-            session,
             turn_context,
             thread_id: self.thread_id.clone(),
             ..self.clone()
         }
+    }
+
+    pub(crate) fn session(&self) -> &Arc<Mutex<Session>> {
+        &self.session
     }
 
     pub(crate) fn with_system_prompt(&self, system_prompt: String) -> Self {
