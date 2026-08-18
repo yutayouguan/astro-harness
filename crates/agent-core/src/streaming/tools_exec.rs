@@ -96,6 +96,19 @@ enum PermissionPreflight {
     Denied(String),
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum PermissionStage {
+    Mcp,
+    WorkspaceWrite,
+    InProcessNetwork,
+}
+
+const PERMISSION_STAGES: [PermissionStage; 3] = [
+    PermissionStage::Mcp,
+    PermissionStage::WorkspaceWrite,
+    PermissionStage::InProcessNetwork,
+];
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct PermissionAuditReceipt {
     memory_dir: std::path::PathBuf,
@@ -168,6 +181,118 @@ impl PermissionAuditReceipt {
             Some(result),
             Some(duration_ms),
         );
+    }
+}
+
+#[derive(Default)]
+struct ToolRunContext {
+    workspace_write_grant: bool,
+    network_grant: tools::InProcessNetworkGrant,
+    permission_audits: Vec<PermissionAuditReceipt>,
+}
+
+/// Codex-compatible tool policy boundary.
+///
+/// This first slice centralizes the approval preflight and one-shot grants.
+/// Terminal approval, sandbox selection, attempts, and escalation remain in
+/// the caller until their existing behavior is migrated in later slices.
+struct ToolOrchestrator<'a> {
+    session: &'a Arc<AgentLoop>,
+    step_context: &'a StepContext,
+    tx: &'a mpsc::Sender<anyhow::Result<MultiTurnStreamItem>>,
+    run_id: &'a str,
+    hitl_gate: Option<&'a Arc<HitlGate>>,
+}
+
+impl<'a> ToolOrchestrator<'a> {
+    fn new(
+        session: &'a Arc<AgentLoop>,
+        step_context: &'a StepContext,
+        tx: &'a mpsc::Sender<anyhow::Result<MultiTurnStreamItem>>,
+        run_id: &'a str,
+        hitl_gate: Option<&'a Arc<HitlGate>>,
+    ) -> Self {
+        Self {
+            session,
+            step_context,
+            tx,
+            run_id,
+            hitl_gate,
+        }
+    }
+
+    fn permission_stages() -> &'static [PermissionStage] {
+        &PERMISSION_STAGES
+    }
+
+    fn apply_preflight(
+        context: &mut ToolRunContext,
+        stage: PermissionStage,
+        call: &types::ParsedToolCall,
+        preflight: PermissionPreflight,
+    ) -> Result<(), String> {
+        match preflight {
+            PermissionPreflight::NotRequired => Ok(()),
+            PermissionPreflight::Granted(audit) => {
+                if stage == PermissionStage::WorkspaceWrite {
+                    context.workspace_write_grant = true;
+                } else if stage == PermissionStage::InProcessNetwork {
+                    context.network_grant = tools::InProcessNetworkGrant::for_hosts(
+                        tools::in_process_network_hosts(&call.name, &call.arguments),
+                    );
+                }
+                context.permission_audits.push(*audit);
+                Ok(())
+            }
+            PermissionPreflight::Denied(message) => Err(message),
+        }
+    }
+
+    async fn prepare(
+        &self,
+        call: &types::ParsedToolCall,
+    ) -> Option<Result<ToolRunContext, String>> {
+        let mut context = ToolRunContext::default();
+        for stage in Self::permission_stages() {
+            let preflight = match stage {
+                PermissionStage::Mcp => {
+                    preflight_mcp_tool_approval(
+                        self.session,
+                        self.step_context,
+                        call,
+                        self.tx,
+                        self.run_id,
+                        self.hitl_gate,
+                    )
+                    .await?
+                }
+                PermissionStage::WorkspaceWrite => {
+                    preflight_read_only_write(
+                        self.session,
+                        call,
+                        self.tx,
+                        self.run_id,
+                        self.hitl_gate,
+                    )
+                    .await?
+                }
+                PermissionStage::InProcessNetwork => {
+                    preflight_in_process_network(
+                        self.session,
+                        call,
+                        self.tx,
+                        self.run_id,
+                        self.hitl_gate,
+                    )
+                    .await?
+                }
+            };
+
+            if let Err(message) = Self::apply_preflight(&mut context, *stage, call, preflight) {
+                return Some(Err(message));
+            }
+        }
+        Some(Ok(context))
     }
 }
 
@@ -681,6 +806,7 @@ async fn execute_tools_serial_inner(
     hitl_gate: Option<&Arc<HitlGate>>,
 ) -> Option<Vec<types::ToolOutput>> {
     let mut out: Vec<types::ToolOutput> = Vec::with_capacity(calls.len());
+    let orchestrator = ToolOrchestrator::new(session, &step_context, tx, run_id, hitl_gate);
     for call in calls {
         if pause.is_cancelled() {
             return None;
@@ -699,51 +825,23 @@ async fn execute_tools_serial_inner(
             continue;
         }
 
-        let mut workspace_write_grant = false;
-        let mut network_grant = tools::InProcessNetworkGrant::default();
-        let mut permission_audits = Vec::new();
-        if !call.args_parse_error {
-            match preflight_mcp_tool_approval(session, &step_context, call, tx, run_id, hitl_gate)
-                .await?
-            {
-                PermissionPreflight::NotRequired => {}
-                PermissionPreflight::Granted(audit) => permission_audits.push(*audit),
-                PermissionPreflight::Denied(message) => {
+        let ToolRunContext {
+            workspace_write_grant,
+            network_grant,
+            mut permission_audits,
+        } = if call.args_parse_error {
+            ToolRunContext::default()
+        } else {
+            match orchestrator.prepare(call).await? {
+                Ok(context) => context,
+                Err(message) => {
                     out.push(format!(
                         "{message}. Do not retry the same action or attempt a workaround without explicit authorization."
                     ).into());
                     continue;
                 }
             }
-            match preflight_read_only_write(session, call, tx, run_id, hitl_gate).await? {
-                PermissionPreflight::NotRequired => {}
-                PermissionPreflight::Granted(audit) => {
-                    workspace_write_grant = true;
-                    permission_audits.push(*audit);
-                }
-                PermissionPreflight::Denied(message) => {
-                    out.push(format!(
-                        "{message}. Do not retry the same action or attempt a workaround without explicit authorization."
-                    ).into());
-                    continue;
-                }
-            }
-            match preflight_in_process_network(session, call, tx, run_id, hitl_gate).await? {
-                PermissionPreflight::NotRequired => {}
-                PermissionPreflight::Granted(audit) => {
-                    network_grant = tools::InProcessNetworkGrant::for_hosts(
-                        tools::in_process_network_hosts(&call.name, &call.arguments),
-                    );
-                    permission_audits.push(*audit);
-                }
-                PermissionPreflight::Denied(message) => {
-                    out.push(format!(
-                        "{message}. Do not retry the same action or attempt a workaround without explicit authorization."
-                    ).into());
-                    continue;
-                }
-            }
-        }
+        };
 
         // 危险 terminal：deny / auto / ask
         if call.name == "terminal" && !call.args_parse_error {
@@ -1214,6 +1312,67 @@ mod tests {
 
     fn term(cmd: &str) -> serde_json::Value {
         json!({ "command": cmd })
+    }
+
+    #[test]
+    fn tool_orchestrator_keeps_permission_preflight_order() {
+        assert_eq!(
+            ToolOrchestrator::permission_stages(),
+            &[
+                PermissionStage::Mcp,
+                PermissionStage::WorkspaceWrite,
+                PermissionStage::InProcessNetwork,
+            ]
+        );
+    }
+
+    #[test]
+    fn tool_orchestrator_aggregates_one_shot_grants() {
+        let dir = tempfile::tempdir().unwrap();
+        let settings = memory::LoadedPermissionSettings::default();
+        let request = types::PermissionRequest {
+            request_id: "request-1".into(),
+            session_id: "session-1".into(),
+            turn_id: Some("turn-1".into()),
+            tool_call_id: "call-1".into(),
+            tool_name: "web_fetch".into(),
+            summary: "grant one call".into(),
+            capabilities: Vec::new(),
+            reason: types::PermissionReason::NetworkDisabled,
+            requested_scope: types::GrantScope::Once,
+            command_preview: None,
+            affected_paths: Vec::new(),
+            network_hosts: vec!["example.com".into()],
+        };
+        let call = types::ParsedToolCall::with_id(
+            "call-1",
+            "web_fetch",
+            json!({"url": "https://example.com"}),
+        );
+        let mut context = ToolRunContext::default();
+
+        for stage in [
+            PermissionStage::WorkspaceWrite,
+            PermissionStage::InProcessNetwork,
+        ] {
+            let receipt = PermissionAuditReceipt::new(
+                dir.path().to_path_buf(),
+                &settings,
+                types::WORKSPACE_PROFILE.to_string(),
+                request.clone(),
+            );
+            ToolOrchestrator::apply_preflight(
+                &mut context,
+                stage,
+                &call,
+                PermissionPreflight::Granted(Box::new(receipt)),
+            )
+            .unwrap();
+        }
+
+        assert!(context.workspace_write_grant);
+        assert!(!context.network_grant.is_empty());
+        assert_eq!(context.permission_audits.len(), 2);
     }
 
     #[test]
