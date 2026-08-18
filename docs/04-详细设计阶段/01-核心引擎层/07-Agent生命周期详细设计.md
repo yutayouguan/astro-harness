@@ -1,6 +1,6 @@
 # Agent 生命周期详细设计
 
-> 版本：v2.15
+> 版本：v2.16
 > 日期：2026-08-18
 > 状态：实施基线  
 > 上游参考：[OpenAI Codex](https://github.com/openai/codex) `632e35ce8d5dec43b75dbf99f9e6fa52bed47c3d`  
@@ -641,9 +641,22 @@ built-in tool 的 current-thread `!Send` 契约保持不变。
 
 ### Phase C：工具运行时
 
-- 引入 `ToolRouter`、`ToolInvocation`、`ToolCallRuntime`、`ToolOrchestrator`。
-- 审批、沙箱、network approval 和 retry 收口。
-- 删除工具执行时重新加载权限/工具的路径。
+- [ ] 引入 `ToolRouter`、`ToolInvocation`、`ToolCallRuntime`、`ToolOrchestrator`。
+  - [x] 以 Codex 同名字段引入 `ToolInvocation` 和 `ToolCallRuntime`，把并发调用绑定到
+    产生该调用的 `StepContext` 与 turn cancellation token。
+  - [x] 并发工具改用 Session 统一 dispatch，不再重开 `MemoryManager` / `SessionStore`
+    或手工构造 `ToolContext`；动态工具、MCP、soft alias 与 tool hooks 因此共用同一语义。
+  - [ ] 将注册表与模型可见 specs 收口为 `ToolRouter`。
+  - [ ] 引入 `ToolOrchestrator` 并迁移审批、沙箱、network approval 与 retry。
+- [ ] 删除工具执行时重新加载权限/工具的路径。
+
+v2.16 ToolInvocation / ToolCallRuntime 首批：新运行时保留 Codex 的 `session`、
+`step_context`、`cancellation_token`、`call_id`、`tool_name` 与 `payload` 调用边界。
+`execute_tools_concurrent` 不再维护第二套快照执行器，而是通过 Session 现有的动态/MCP/
+built-in 路由和 pre/transform/post tool hooks 执行。显式 `StepContext` 防止并发调用读取后续
+sampling step 的工具可见性；cancellation token 与 Session cancel 任一取消都会终止入场。
+`tool_call_runtime_preserves_hardline_defense` 保留路由误判时的高危命令纵深防御，
+`concurrent_tools_use_session_router_and_hooks` 锁定动态工具与 hook 的统一路径。
 
 ### Phase D：ThreadManager 与 AgentControl
 

@@ -41,6 +41,7 @@ pub(crate) mod session_state;
 pub(crate) mod step_context;
 mod system_prompt;
 mod tool_dispatch;
+pub(crate) mod tool_runtime;
 pub(crate) mod turn_budget;
 pub(crate) mod turn_context;
 mod turn_lifecycle;
@@ -49,6 +50,7 @@ mod validate;
 
 pub(crate) use step_context::StepContext;
 pub use tool_dispatch::ToolCallError;
+pub(crate) use tool_runtime::{ToolCallRuntime, ToolInvocation};
 pub use turn_budget::MaxDepthError;
 pub use turn_context::TurnContext;
 pub use validate::validate_message_order;

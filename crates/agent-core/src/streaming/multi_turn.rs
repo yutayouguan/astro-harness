@@ -767,7 +767,14 @@ pub(crate) async fn run_turn(args: RunTurnArgs, cancellation_token: Cancellation
             )
             .await
         } else {
-            execute_tools_concurrent(&session, Arc::clone(&step_context), &calls, &pause).await
+            execute_tools_concurrent(
+                &session,
+                Arc::clone(&step_context),
+                &calls,
+                &pause,
+                cancellation_token.child_token(),
+            )
+            .await
         };
 
         let Some(outcomes) = outcomes else {

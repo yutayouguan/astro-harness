@@ -1,10 +1,13 @@
 //! AgentLoop 工具调度：MCP/内置工具路由、HITL 审批、hook 触发与结果变换。
 
+use std::sync::Arc;
+
 use mcp::{call_tool_with_peer, is_mcp_tool_name};
 use session::ConversationStore;
+use tokio_util::sync::CancellationToken;
 use tools::{dispatch_tool, DynToolHandler, ToolContext};
 
-use super::AgentLoop;
+use super::{AgentLoop, StepContext, ToolInvocation};
 
 /// 工具调用错误：区分取消、深度耗尽与执行异常，避免将取消误记为 ToolFailure。
 #[derive(Debug)]
@@ -152,7 +155,14 @@ impl AgentLoop {
         name: &str,
         args: &serde_json::Value,
     ) -> Result<types::ToolOutput, ToolCallError> {
-        self.handle_tool_call_scoped(name, args, false, tools::InProcessNetworkGrant::default())
+        self.handle_tool_call_scoped(
+            name,
+            args,
+            false,
+            tools::InProcessNetworkGrant::default(),
+            None,
+            CancellationToken::new(),
+        )
     }
 
     /// 执行已审批的单次调用。授权只进入本次 ToolContext，不保存到 Agent 状态。
@@ -163,7 +173,35 @@ impl AgentLoop {
         workspace_write_grant: bool,
         network_grant: tools::InProcessNetworkGrant,
     ) -> Result<types::ToolOutput, ToolCallError> {
-        self.handle_tool_call_scoped(name, args, workspace_write_grant, network_grant)
+        self.handle_tool_call_scoped(
+            name,
+            args,
+            workspace_write_grant,
+            network_grant,
+            None,
+            CancellationToken::new(),
+        )
+    }
+
+    /// Execute one call against the exact sampling step that advertised it.
+    pub(crate) fn handle_tool_invocation(
+        self: &Arc<Self>,
+        invocation: ToolInvocation,
+    ) -> Result<types::ToolOutput, ToolCallError> {
+        debug_assert!(Arc::ptr_eq(self, &invocation.session));
+        tracing::trace!(
+            call_id = %invocation.call_id,
+            tool_name = %invocation.tool_name,
+            "dispatch tool invocation"
+        );
+        self.handle_tool_call_scoped(
+            &invocation.tool_name,
+            &invocation.payload,
+            false,
+            tools::InProcessNetworkGrant::default(),
+            Some(invocation.step_context),
+            invocation.cancellation_token,
+        )
     }
 
     fn handle_tool_call_scoped(
@@ -172,6 +210,8 @@ impl AgentLoop {
         args: &serde_json::Value,
         workspace_write_grant: bool,
         network_grant: tools::InProcessNetworkGrant,
+        step_context: Option<Arc<StepContext>>,
+        cancellation_token: CancellationToken,
     ) -> Result<types::ToolOutput, ToolCallError> {
         match tokio::runtime::Handle::try_current() {
             Ok(handle)
@@ -185,6 +225,8 @@ impl AgentLoop {
                     args,
                     workspace_write_grant,
                     network_grant,
+                    step_context,
+                    cancellation_token,
                 );
                 tokio::task::block_in_place(|| handle.block_on(fut))
             }
@@ -200,6 +242,8 @@ impl AgentLoop {
                             args,
                             workspace_write_grant,
                             network_grant,
+                            step_context,
+                            cancellation_token,
                         ))
                     })
                     .join()
@@ -219,6 +263,8 @@ impl AgentLoop {
                     args,
                     workspace_write_grant,
                     network_grant,
+                    step_context,
+                    cancellation_token,
                 ))
             }
         }
@@ -238,6 +284,8 @@ impl AgentLoop {
             args,
             false,
             tools::InProcessNetworkGrant::default(),
+            None,
+            CancellationToken::new(),
         )
         .await
     }
@@ -248,8 +296,10 @@ impl AgentLoop {
         args: &serde_json::Value,
         workspace_write_grant: bool,
         network_grant: tools::InProcessNetworkGrant,
+        explicit_step_context: Option<Arc<StepContext>>,
+        cancellation_token: CancellationToken,
     ) -> Result<types::ToolOutput, ToolCallError> {
-        if self.cancel.is_cancelled() {
+        if self.cancel.is_cancelled() || cancellation_token.is_cancelled() {
             return Err(ToolCallError::Cancelled);
         }
         self.increment_tool_round().await?;
@@ -276,7 +326,7 @@ impl AgentLoop {
             }
             _ => {}
         }
-        if self.cancel.is_cancelled() {
+        if self.cancel.is_cancelled() || cancellation_token.is_cancelled() {
             return Err(ToolCallError::Cancelled);
         }
         // Soft-alias：模型把 Skill 名当工具名时，改写成 skills(skill_id=…)
@@ -304,7 +354,7 @@ impl AgentLoop {
         };
         let (step_context, interaction_mode) = {
             let state = self.state.lock().await;
-            let step_context = state.current_step_context.clone();
+            let step_context = explicit_step_context.or_else(|| state.current_step_context.clone());
             let interaction_mode = step_context
                 .as_ref()
                 .map(|step_context| step_context.turn.mode())

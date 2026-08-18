@@ -1,14 +1,14 @@
 //! 单轮工具调用执行：串行（HITL/危险命令走 park）与并发（普通工具）两条路径。
 
-use std::path::PathBuf;
 use std::sync::Arc;
 
 use providers::PauseControl;
 use tokio::sync::mpsc;
 use tokio::task::JoinSet;
+use tokio_util::sync::CancellationToken;
 
 use crate::control::hitl::HitlGate;
-use crate::runtime::{AgentLoop, StepContext};
+use crate::runtime::{AgentLoop, StepContext, ToolCallRuntime};
 
 use super::hitl_bridge::{park_astro_hitl, park_confirm, parse_astro_hitl};
 use super::types::MultiTurnStreamItem;
@@ -1133,57 +1133,59 @@ pub(crate) async fn execute_tools_concurrent(
     step_context: Arc<StepContext>,
     calls: &[types::ParsedToolCall],
     pause: &Arc<PauseControl>,
+    cancellation_token: CancellationToken,
 ) -> Option<Vec<types::ToolOutput>> {
     if pause.is_cancelled() || !pause.wait_if_paused().await {
         return None;
     }
 
-    let runtime = {
-        let agent = session.as_ref();
-        ToolCallRuntime {
-            step_context,
-            memory_dir: agent.memory_dir().to_path_buf(),
-            agent_id: agent.agent_id(),
-            workspace_dir: agent.workspace_dir(),
-            session_id: agent.session_id().to_string(),
-            credentials: types::ModelCredentials {
-                provider: agent.chat_provider().to_string(),
-                model: agent.chat_model().to_string(),
-                api_key: agent.chat_api_key().to_string(),
-                base_url: agent.chat_base_url().to_string(),
-            },
-            chat_targets: agent.chat_targets().to_vec(),
-            image_gen_targets: agent.image_gen_targets().clone(),
-            execution: agent.execution(),
-            skill_config_overrides: agent.skill_config_overrides(),
-            hook_bus: Some(agent.hook_bus()),
-        }
-    };
+    let runtime = ToolCallRuntime::new(Arc::clone(session), step_context);
 
     let mut join_set = JoinSet::new();
     for (idx, call) in calls.iter().cloned().enumerate() {
         let runtime = runtime.clone();
+        let cancellation_token = cancellation_token.child_token();
         join_set.spawn_blocking(move || {
-            let result: types::ToolOutput = if call.args_parse_error {
-                format!(
+            let tool_name = call.name.clone();
+            let result = if call.args_parse_error {
+                Ok(types::ToolOutput::from(format!(
                     "工具参数 JSON 解析失败: {}",
                     call.arguments
                         .get("_parse_error")
                         .and_then(|v| v.as_str())
                         .unwrap_or("invalid json")
-                )
-                .into()
+                )))
             } else {
-                runtime.run(&call.name, &call.arguments)
+                runtime.handle_tool_call(call, cancellation_token)
             };
-            (idx, result)
+            (idx, tool_name, result)
         });
     }
 
     let mut slots: Vec<Option<types::ToolOutput>> = (0..calls.len()).map(|_| None).collect();
+    let mut cancelled = false;
     while let Some(joined) = join_set.join_next().await {
         match joined {
-            Ok((idx, result)) => {
+            Ok((idx, tool_name, result)) => {
+                let result = match result {
+                    Ok(output) => output,
+                    Err(crate::runtime::ToolCallError::Cancelled) => {
+                        cancelled = true;
+                        continue;
+                    }
+                    Err(error) => {
+                        memory::try_append_decision(
+                            session.memory_dir(),
+                            memory::DecisionEntry::new(
+                                memory::DecisionKind::ToolFailure,
+                                error.to_string(),
+                            )
+                            .with_tool(tool_name)
+                            .with_session(session.session_id().to_string()),
+                        );
+                        format!("工具错误: {error}").into()
+                    }
+                };
                 if let Some(slot) = slots.get_mut(idx) {
                     *slot = Some(result);
                 }
@@ -1197,102 +1199,15 @@ pub(crate) async fn execute_tools_concurrent(
             }
         }
     }
+    if cancelled {
+        return None;
+    }
     Some(
         slots
             .into_iter()
             .map(|s| s.unwrap_or_else(|| "工具错误: missing result".into()))
             .collect(),
     )
-}
-
-#[derive(Clone)]
-struct ToolCallRuntime {
-    step_context: Arc<StepContext>,
-    memory_dir: std::path::PathBuf,
-    agent_id: String,
-    workspace_dir: std::path::PathBuf,
-    session_id: String,
-    credentials: types::ModelCredentials,
-    chat_targets: Vec<types::ChatTarget>,
-    image_gen_targets: types::ImageGenTargets,
-    execution: Arc<dyn tools::AgentThreadDispatch>,
-    skill_config_overrides: Vec<(PathBuf, bool)>,
-    hook_bus: Option<Arc<hooks::PluginHookBus>>,
-}
-
-impl ToolCallRuntime {
-    fn run(&self, name: &str, args: &serde_json::Value) -> types::ToolOutput {
-        if !self.step_context.advertises_tool(name) {
-            return format!("工具 `{name}` 不在生成本次调用的 StepContext 中，已拒绝执行。").into();
-        }
-        // 纵深防御：并发路径没有审批闸门，此处硬拦 hardline 命令，
-        // 即便路由判定漏了（见 tool_may_require_permission），也不会执行不可恢复操作。
-        if name == "terminal" {
-            if let Some(cmd) = args.get("command").and_then(|v| v.as_str()) {
-                if let Some(desc) = tools::is_hardline_blocked(cmd) {
-                    return format!(
-                    "Command denied by policy (dangerous: {desc}). Do not retry without changing the command."
-                ).into();
-                }
-            }
-        }
-        let rt = match tokio::runtime::Builder::new_current_thread()
-            .enable_all()
-            .build()
-        {
-            Ok(rt) => rt,
-            Err(e) => return format!("工具错误: runtime: {e}").into(),
-        };
-        rt.block_on(async {
-            let memory =
-                match memory::MemoryManager::for_agent(self.memory_dir.clone(), &self.agent_id) {
-                    Ok(m) => m,
-                    Err(e) => return format!("工具错误: memory: {e}").into(),
-                };
-            let sessions =
-                match session::SessionStore::open_sessions_dir(&self.memory_dir.join("sessions")) {
-                    Ok(s) => s,
-                    Err(e) => return format!("工具错误: sessions: {e}").into(),
-                };
-            let memory = std::sync::RwLock::new(memory);
-            let mut ctx = tools::ToolContext {
-                memory: &memory,
-                sessions: &sessions,
-                memory_dir: self.memory_dir.clone(),
-                workspace_dir: self.workspace_dir.clone(),
-                project_root: self.step_context.turn.project_root().map(ToOwned::to_owned),
-                image_gen_targets: &self.image_gen_targets,
-                session_id: self.session_id.clone(),
-                turn_id: Some(self.step_context.turn.sub_id().to_string()),
-                credentials: &self.credentials,
-                chat_targets: &self.chat_targets,
-                execution: Some(self.execution.clone()),
-                permission_profile: self
-                    .step_context
-                    .turn
-                    .permission_profile()
-                    .map(str::to_string),
-                skill_config_overrides: &self.skill_config_overrides,
-                hook_bus: self.hook_bus.clone(),
-                workspace_write_grant: false,
-                network_grant: tools::InProcessNetworkGrant::default(),
-            };
-            tools::dispatch_tool(|_| true, &mut ctx, name, args, None)
-                .await
-                .unwrap_or_else(|e| {
-                    memory::try_append_decision(
-                        &self.memory_dir,
-                        memory::DecisionEntry::new(
-                            memory::DecisionKind::ToolFailure,
-                            format!("{e}"),
-                        )
-                        .with_tool(name.to_string())
-                        .with_session(self.session_id.clone()),
-                    );
-                    format!("工具错误: {e}").into()
-                })
-        })
-    }
 }
 
 #[cfg(test)]
@@ -1320,6 +1235,14 @@ mod tests {
             "terminal",
             &term("rm -rf /tmp/project")
         ));
+    }
+
+    #[test]
+    fn tool_call_runtime_preserves_hardline_defense() {
+        let denial =
+            ToolCallRuntime::hardline_denial("terminal", &term("dd if=/dev/zero of=/dev/sda"))
+                .expect("hardline commands must remain denied after routing");
+        assert!(denial.text().contains("dangerous"));
     }
 
     #[test]
@@ -1458,5 +1381,61 @@ mod tests {
         assert_eq!(events[0].event, memory::PermissionAuditKind::Applied);
         assert_eq!(events[0].result.as_deref(), Some("success"));
         assert_eq!(events[0].duration_ms, Some(12));
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn concurrent_tools_use_session_router_and_hooks() {
+        let dir = tempfile::tempdir().unwrap();
+        let session = Arc::new(
+            AgentLoop::with_session_id(
+                crate::runtime::Config::with_defaults(dir.path().to_path_buf()),
+                "parallel-router-test".into(),
+            )
+            .unwrap(),
+        );
+        session.tool_registry_mut().register_dynamic(
+            types::ToolEntry {
+                name: "parallel_probe".into(),
+                toolset: "core".into(),
+                description: "prove concurrent calls use the session router".into(),
+                schema: json!({"type": "object", "properties": {}}),
+                check_fn: None,
+                icon: "test-tube",
+                ..types::ToolEntry::lifecycle_defaults()
+            },
+            Arc::new(|_name, _args| Box::pin(async { Ok(types::ToolOutput::from("routed")) })),
+        );
+        let saw_post_tool = Arc::new(std::sync::atomic::AtomicBool::new(false));
+        {
+            let saw_post_tool = Arc::clone(&saw_post_tool);
+            session
+                .hook_bus()
+                .register(hooks::POST_TOOL_USE, move |payload| {
+                    if payload.tool_name.as_deref() == Some("parallel_probe") {
+                        saw_post_tool.store(true, std::sync::atomic::Ordering::SeqCst);
+                    }
+                    hooks::HookOutcome::Continue
+                });
+        }
+        session.set_current_turn_id("turn-parallel").await;
+        let step_context = session.capture_step_context().await.unwrap();
+        assert!(step_context.advertises_tool("parallel_probe"));
+
+        let outcomes = execute_tools_concurrent(
+            &session,
+            step_context,
+            &[types::ParsedToolCall::with_id(
+                "call-parallel",
+                "parallel_probe",
+                json!({}),
+            )],
+            &PauseControl::new(),
+            CancellationToken::new(),
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(outcomes[0].text(), "routed");
+        assert!(saw_post_tool.load(std::sync::atomic::Ordering::SeqCst));
     }
 }
