@@ -335,19 +335,25 @@ mod tests {
     }
 
     #[test]
-    fn astro_config_toml_does_not_override_codex_agents_settings() {
+    fn memory_config_toml_is_not_a_configuration_input() {
         let memory = tempfile::tempdir().unwrap();
-        let project = tempfile::tempdir().unwrap();
-        fs::create_dir_all(project.path().join(".astro")).unwrap();
-        fs::create_dir_all(project.path().join(".codex")).unwrap();
         fs::write(
-            project.path().join(".astro/config.toml"),
+            memory.path().join("config.toml"),
             "[agents]\nenabled = false\n",
         )
         .unwrap();
+
+        assert!(load_agents_settings(memory.path(), None).enabled);
+    }
+
+    #[test]
+    fn project_astro_config_toml_is_not_a_configuration_input() {
+        let memory = tempfile::tempdir().unwrap();
+        let project = tempfile::tempdir().unwrap();
+        fs::create_dir_all(project.path().join(".astro")).unwrap();
         fs::write(
-            project.path().join(".codex/config.toml"),
-            "[agents]\nenabled = true\n",
+            project.path().join(".astro/config.toml"),
+            "[agents]\nenabled = false\n",
         )
         .unwrap();
 
