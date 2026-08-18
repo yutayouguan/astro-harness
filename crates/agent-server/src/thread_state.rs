@@ -40,6 +40,19 @@ impl ThreadHistoryBuilder {
     pub fn track(&mut self, event: &Event) {
         match &event.msg {
             EventMsg::TurnStarted(started) => {
+                if self
+                    .active
+                    .as_ref()
+                    .is_some_and(|turn| turn.id == started.turn_id)
+                    || self.completed.iter().any(|turn| turn.id == started.turn_id)
+                {
+                    return;
+                }
+                // Codex finishes the previous pending turn before opening the next one,
+                // preserving its last observed status and items when no terminal arrived.
+                if let Some(turn) = self.active.take() {
+                    self.completed.push(turn);
+                }
                 self.active = Some(TurnSnapshot {
                     id: started.turn_id.clone(),
                     status: "in_progress".into(),
@@ -55,21 +68,21 @@ impl ThreadHistoryBuilder {
                 self.upsert_item(&item.turn_id, &item.item, "completed");
             }
             EventMsg::TurnComplete(completed) => {
-                if self
+                let completes_active = self
                     .active
                     .as_ref()
-                    .is_some_and(|turn| turn.id == completed.turn_id)
-                {
+                    .is_some_and(|turn| turn.id == completed.turn_id);
+                if completes_active {
                     if let Some(mut turn) = self.active.take() {
-                        turn.status = if completed.error.is_some() {
-                            "failed".into()
-                        } else {
-                            "completed".into()
-                        };
-                        turn.last_agent_message = completed.last_agent_message.clone();
-                        turn.error = completed.error.clone();
+                        Self::complete_turn(&mut turn, completed);
                         self.completed.push(turn);
                     }
+                } else if let Some(turn) = self
+                    .completed
+                    .iter_mut()
+                    .find(|turn| turn.id == completed.turn_id)
+                {
+                    Self::complete_turn(turn, completed);
                 }
             }
             EventMsg::TurnAborted(aborted) => {
@@ -83,19 +96,35 @@ impl ThreadHistoryBuilder {
                         turn.status = "aborted".into();
                         self.completed.push(turn);
                     }
+                } else if let Some(turn_id) = &aborted.turn_id {
+                    if let Some(turn) = self.completed.iter_mut().find(|turn| turn.id == *turn_id) {
+                        turn.status = "aborted".into();
+                    }
                 }
             }
             _ => {}
         }
     }
 
+    fn complete_turn(turn: &mut TurnSnapshot, completed: &agent_protocol::TurnCompleteEvent) {
+        turn.status = if completed.error.is_some() {
+            "failed".into()
+        } else {
+            "completed".into()
+        };
+        turn.last_agent_message = completed.last_agent_message.clone();
+        turn.error = completed.error.clone();
+    }
+
     fn upsert_item(&mut self, turn_id: &str, item: &TurnItem, status: &str) {
-        let Some(turn) = self.active.as_mut() else {
+        let turn = self
+            .active
+            .as_mut()
+            .filter(|turn| turn.id == turn_id)
+            .or_else(|| self.completed.iter_mut().find(|turn| turn.id == turn_id));
+        let Some(turn) = turn else {
             return;
         };
-        if turn.id != turn_id {
-            return;
-        }
         if let Some(existing) = turn.items.iter_mut().find(|entry| entry.id == item.id()) {
             existing.status = status.into();
             existing.item = item.clone();
@@ -178,13 +207,7 @@ impl ThreadStateManager {
         let Some(state) = self.get(thread_id).await else {
             return false;
         };
-        let command_tx = {
-            let state = state.lock().await;
-            if !state.subscribers.contains(connection_id) {
-                return false;
-            }
-            state.listener_command_tx.clone()
-        };
+        let command_tx = state.lock().await.listener_command_tx.clone();
         command_tx
             .send(ListenerCommand::Unsubscribe {
                 connection_id: connection_id.into(),
@@ -291,6 +314,69 @@ mod tests {
         assert_eq!(builder.completed_turns()[0].status, "aborted");
     }
 
+    #[test]
+    fn repeated_start_is_idempotent_and_new_start_preserves_previous_turn() {
+        let mut builder = ThreadHistoryBuilder::default();
+        builder.track(&started("turn-1"));
+        builder.track(&item("turn-1", "item-1", "running", false));
+
+        builder.track(&started("turn-1"));
+        assert_eq!(
+            builder
+                .active_turn_snapshot()
+                .expect("repeated start should keep the active turn")
+                .items
+                .len(),
+            1
+        );
+        assert!(builder.completed_turns().is_empty());
+
+        builder.track(&started("turn-2"));
+        assert_eq!(builder.completed_turns().len(), 1);
+        assert_eq!(builder.completed_turns()[0].id, "turn-1");
+        assert_eq!(builder.completed_turns()[0].status, "in_progress");
+        assert_eq!(builder.completed_turns()[0].items.len(), 1);
+        assert_eq!(
+            builder
+                .active_turn_snapshot()
+                .expect("new turn should become active")
+                .id,
+            "turn-2"
+        );
+    }
+
+    #[test]
+    fn late_item_completion_updates_its_finished_turn() {
+        let mut builder = ThreadHistoryBuilder::default();
+        builder.track(&started("turn-1"));
+        builder.track(&item("turn-1", "item-1", "running", false));
+        builder.track(&Event {
+            id: "turn-1".into(),
+            msg: EventMsg::TurnComplete(TurnCompleteEvent {
+                turn_id: "turn-1".into(),
+                last_agent_message: None,
+                error: None,
+            }),
+        });
+        builder.track(&started("turn-2"));
+
+        builder.track(&item("turn-1", "item-1", "late done", true));
+
+        let old_turn = &builder.completed_turns()[0];
+        assert_eq!(old_turn.id, "turn-1");
+        assert_eq!(old_turn.items.len(), 1);
+        assert_eq!(old_turn.items[0].status, "completed");
+        assert!(matches!(
+            &old_turn.items[0].item,
+            TurnItem::AgentMessage(message) if message.content == "late done"
+        ));
+        assert!(builder
+            .active_turn_snapshot()
+            .expect("new turn should remain active")
+            .items
+            .is_empty());
+    }
+
     fn state(
         subscribers: &[&str],
     ) -> (
@@ -360,7 +446,44 @@ mod tests {
             ListenerCommand::Unsubscribe { connection_id } if connection_id == "first"
         ));
         assert!(thread_state.lock().await.subscribers.contains("first"));
-        assert!(!manager.unsubscribe("thread-1", "missing").await);
+        assert!(manager.unsubscribe("thread-1", "missing").await);
+        assert!(matches!(
+            commands
+                .recv()
+                .await
+                .expect("unknown subscriber removal should still be serialized"),
+            ListenerCommand::Unsubscribe { connection_id } if connection_id == "missing"
+        ));
         assert!(!manager.unsubscribe("missing", "first").await);
+    }
+
+    #[tokio::test]
+    async fn manager_queues_unsubscribe_behind_pending_resume() {
+        let manager = ThreadStateManager::default();
+        let (thread_state, mut commands) = state(&[]);
+        let command_tx = thread_state.lock().await.listener_command_tx.clone();
+        manager.insert("thread-1".into(), thread_state).await;
+
+        let (reply, _reply_rx) = tokio::sync::oneshot::channel();
+        command_tx
+            .send(ListenerCommand::Resume {
+                connection_id: "first".into(),
+                include_turns: false,
+                reply,
+            })
+            .expect("resume should be queued");
+        assert!(manager.unsubscribe("thread-1", "first").await);
+
+        assert!(matches!(
+            commands.recv().await.expect("resume command should exist"),
+            ListenerCommand::Resume { connection_id, .. } if connection_id == "first"
+        ));
+        assert!(matches!(
+            commands
+                .recv()
+                .await
+                .expect("unsubscribe command should follow resume"),
+            ListenerCommand::Unsubscribe { connection_id } if connection_id == "first"
+        ));
     }
 }
