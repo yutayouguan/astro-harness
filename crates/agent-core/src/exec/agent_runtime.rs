@@ -6,7 +6,7 @@ use subagents::{
     AgentRuntimeHandle, AgentStatusV2, AgentThreadControl, AgentThreadV2, RunnerEvent,
     SpawnRuntimeV2Request,
 };
-use tokio::sync::oneshot;
+use tokio::sync::watch;
 use uuid::Uuid;
 
 use crate::runtime::{Config, Session};
@@ -28,12 +28,21 @@ pub struct RunnerTermination {
 
 struct ActiveAgentTurn {
     interrupt: Arc<AgentThreadControl>,
-    terminated: Option<oneshot::Receiver<RunnerTermination>>,
+    terminated: watch::Receiver<Option<RunnerTermination>>,
+}
+
+#[cfg(test)]
+#[derive(Clone)]
+struct AckSubscribeHook {
+    entered: Arc<tokio::sync::Notify>,
+    release: Arc<tokio::sync::Notify>,
 }
 
 #[derive(Default)]
 pub struct AgentRuntimeManager {
     active: Mutex<HashMap<String, ActiveAgentTurn>>,
+    #[cfg(test)]
+    ack_subscribe_hook: Mutex<Option<AckSubscribeHook>>,
 }
 
 impl AgentRuntimeManager {
@@ -44,7 +53,7 @@ impl AgentRuntimeManager {
         let turn_id = Uuid::new_v4().to_string();
         let interrupt = Arc::new(AgentThreadControl::default());
         interrupt.begin_turn();
-        let (terminated_tx, terminated_rx) = oneshot::channel();
+        let (terminated_tx, terminated_rx) = watch::channel(None);
 
         {
             let mut active = self.lock_active()?;
@@ -55,7 +64,7 @@ impl AgentRuntimeManager {
                 thread_id.clone(),
                 ActiveAgentTurn {
                     interrupt: Arc::clone(&interrupt),
-                    terminated: Some(terminated_rx),
+                    terminated: terminated_rx,
                 },
             );
         }
@@ -146,9 +155,9 @@ impl AgentRuntimeManager {
         self.remove_active(&thread_id);
         finish_result?;
         shutdown_result?;
-        let _ = terminated_tx.send(RunnerTermination {
+        let _ = terminated_tx.send(Some(RunnerTermination {
             terminal_status: terminal_status.clone(),
-        });
+        }));
 
         match result {
             Err(error) if !interrupt.is_interrupted() && !interrupt.is_closed() => Err(error),
@@ -157,20 +166,18 @@ impl AgentRuntimeManager {
     }
 
     pub async fn interrupt(&self, thread_id: &str) -> anyhow::Result<AgentStatusV2> {
-        let (interrupt, terminated) = self.take_termination_receiver(thread_id)?;
+        let (interrupt, terminated) = self.termination_subscription(thread_id)?;
+        self.pause_after_ack_subscribe().await;
         interrupt.interrupt();
-        let termination = terminated
-            .await
-            .map_err(|_| anyhow::anyhow!("agent runtime ended without interruption ack"))?;
+        let termination = wait_for_termination(terminated, "interruption").await?;
         Ok(termination.terminal_status)
     }
 
     pub async fn terminate(&self, thread_id: &str) -> anyhow::Result<()> {
-        let (interrupt, terminated) = self.take_termination_receiver(thread_id)?;
+        let (interrupt, terminated) = self.termination_subscription(thread_id)?;
+        self.pause_after_ack_subscribe().await;
         interrupt.close();
-        terminated
-            .await
-            .map_err(|_| anyhow::anyhow!("agent runtime ended without termination ack"))?;
+        wait_for_termination(terminated, "termination").await?;
         Ok(())
     }
 
@@ -181,22 +188,35 @@ impl AgentRuntimeManager {
             .unwrap_or(false)
     }
 
-    fn take_termination_receiver(
+    fn termination_subscription(
         &self,
         thread_id: &str,
     ) -> anyhow::Result<(
         Arc<AgentThreadControl>,
-        oneshot::Receiver<RunnerTermination>,
+        watch::Receiver<Option<RunnerTermination>>,
     )> {
-        let mut active = self.lock_active()?;
-        let turn = active.get_mut(thread_id).ok_or_else(|| {
+        let active = self.lock_active()?;
+        let turn = active.get(thread_id).ok_or_else(|| {
             anyhow::anyhow!("agent thread {thread_id:?} has no active runtime turn")
         })?;
-        let terminated = turn
-            .terminated
-            .take()
-            .ok_or_else(|| anyhow::anyhow!("agent runtime acknowledgement is already awaited"))?;
-        Ok((Arc::clone(&turn.interrupt), terminated))
+        Ok((Arc::clone(&turn.interrupt), turn.terminated.clone()))
+    }
+
+    #[cfg(test)]
+    async fn pause_after_ack_subscribe(&self) {
+        let hook = self.ack_subscribe_hook.lock().unwrap().clone();
+        if let Some(hook) = hook {
+            hook.entered.notify_one();
+            hook.release.notified().await;
+        }
+    }
+
+    #[cfg(not(test))]
+    async fn pause_after_ack_subscribe(&self) {}
+
+    #[cfg(test)]
+    fn set_ack_subscribe_hook(&self, hook: Option<AckSubscribeHook>) {
+        *self.ack_subscribe_hook.lock().unwrap() = hook;
     }
 
     fn finish_failed_start(
@@ -205,7 +225,7 @@ impl AgentRuntimeManager {
         thread_id: &str,
         turn_id: &str,
         message: String,
-        terminated_tx: oneshot::Sender<RunnerTermination>,
+        terminated_tx: watch::Sender<Option<RunnerTermination>>,
     ) -> anyhow::Result<()> {
         let status = AgentStatusV2::Errored {
             message: message.clone(),
@@ -220,9 +240,9 @@ impl AgentRuntimeManager {
         let _ = control.remove_runtime(thread_id);
         self.remove_active(thread_id);
         event_result?;
-        let _ = terminated_tx.send(RunnerTermination {
+        let _ = terminated_tx.send(Some(RunnerTermination {
             terminal_status: status,
-        });
+        }));
         Ok(())
     }
 
@@ -238,6 +258,20 @@ impl AgentRuntimeManager {
         self.active
             .lock()
             .map_err(|_| anyhow::anyhow!("agent runtime manager mutex is poisoned"))
+    }
+}
+
+async fn wait_for_termination(
+    mut terminated: watch::Receiver<Option<RunnerTermination>>,
+    operation: &str,
+) -> anyhow::Result<RunnerTermination> {
+    loop {
+        if let Some(termination) = terminated.borrow().clone() {
+            return Ok(termination);
+        }
+        terminated.changed().await.map_err(|_| {
+            anyhow::anyhow!("agent runtime ended without {operation} acknowledgement")
+        })?;
     }
 }
 
@@ -306,17 +340,25 @@ async fn run_request(
     anyhow::ensure!(!targets.is_empty(), "agent turn has no chat target");
     session.set_chat_targets(targets.clone());
     let session = Arc::new(tokio::sync::Mutex::new(session));
-    let (output, _) = crate::exec::background::run_background_multi_turn_controlled_with_chat(
-        session,
+    let result = crate::exec::background::run_background_multi_turn_controlled_with_chat(
+        Arc::clone(&session),
         targets,
         vec![TurnInput::UserInput {
             content: request.runtime.model_request.message.clone(),
             image_data_urls: Vec::new(),
         }],
-        Some(interrupt),
+        Some(Arc::clone(&interrupt)),
         request.chat_override.clone(),
     )
-    .await?;
+    .await;
+    if result.is_err() && !interrupt.is_interrupted() && !interrupt.is_closed() {
+        session
+            .lock()
+            .await
+            .ensure_assistant_error_boundary()
+            .await?;
+    }
+    let (output, _) = result?;
     Ok(output)
 }
 
@@ -347,7 +389,7 @@ mod tests {
 
     use crate::streaming::ChatOverride;
 
-    use super::{AgentRuntimeManager, RunAgentTurnRequest};
+    use super::{AckSubscribeHook, AgentRuntimeManager, RunAgentTurnRequest};
 
     fn scripted_chat(reply: &str) -> ChatOverride {
         let reply = reply.to_string();
@@ -368,6 +410,30 @@ mod tests {
         Arc::new(move |_messages, _tools, _config| {
             Box::pin(async move {
                 Ok(Box::pin(stream::pending::<anyhow::Result<StreamChunk>>()) as CompletionStream)
+            })
+        })
+    }
+
+    fn failing_chat() -> ChatOverride {
+        Arc::new(move |_messages, _tools, _config| {
+            Box::pin(async move { Err(anyhow::anyhow!("provider failed before assistant output")) })
+        })
+    }
+
+    fn role_capturing_chat(captured_roles: Arc<std::sync::Mutex<Vec<String>>>) -> ChatOverride {
+        Arc::new(move |messages, _tools, _config| {
+            *captured_roles.lock().unwrap() = messages
+                .iter()
+                .filter(|message| message.role() != providers::types::message::Role::System)
+                .map(|message| message.role().as_str().to_string())
+                .collect();
+            Box::pin(async move {
+                Ok(Box::pin(stream::iter(vec![
+                    Ok(StreamChunk::Text("recovered answer".into())),
+                    Ok(StreamChunk::Done {
+                        finish_reason: "stop".into(),
+                    }),
+                ])) as CompletionStream)
             })
         })
     }
@@ -533,6 +599,51 @@ mod tests {
     }
 
     #[tokio::test(flavor = "current_thread")]
+    async fn provider_failure_records_assistant_boundary_before_follow_up() {
+        let dir = tempfile::tempdir().unwrap();
+        let (control, thread) = setup(&dir, "worker");
+        let memory_dir = dir.path().join("memory");
+        let manager = AgentRuntimeManager::default();
+
+        manager
+            .start_turn(request(
+                Arc::clone(&control),
+                thread.clone(),
+                memory_dir.clone(),
+                failing_chat(),
+            ))
+            .await
+            .unwrap_err();
+
+        let captured_roles = Arc::new(std::sync::Mutex::new(Vec::new()));
+        manager
+            .start_turn(request(
+                Arc::clone(&control),
+                thread.clone(),
+                memory_dir.clone(),
+                role_capturing_chat(Arc::clone(&captured_roles)),
+            ))
+            .await
+            .unwrap();
+
+        assert_eq!(
+            *captured_roles.lock().unwrap(),
+            vec!["user", "assistant", "user"]
+        );
+        let stored =
+            session::SessionStore::open_sessions_dir(&memory_dir.join("sessions")).unwrap();
+        assert_eq!(
+            stored
+                .get_messages(&thread.session_id)
+                .unwrap()
+                .into_iter()
+                .map(|message| message.role)
+                .collect::<Vec<_>>(),
+            vec!["user", "assistant", "user", "assistant"]
+        );
+    }
+
+    #[tokio::test(flavor = "current_thread")]
     async fn interrupt_waits_for_durable_turn_interrupted_ack() {
         let dir = tempfile::tempdir().unwrap();
         let (control, thread) = setup(&dir, "worker");
@@ -570,6 +681,58 @@ mod tests {
                 .collect::<Vec<_>>(),
             vec!["user", "assistant"]
         );
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn canceled_interrupt_waiter_does_not_consume_runtime_ack() {
+        let dir = tempfile::tempdir().unwrap();
+        let (control, thread) = setup(&dir, "worker");
+        let manager = Arc::new(AgentRuntimeManager::default());
+        let run_manager = Arc::clone(&manager);
+        let run = request(
+            Arc::clone(&control),
+            thread.clone(),
+            dir.path().join("memory"),
+            pending_chat(),
+        );
+        let entered = Arc::new(tokio::sync::Notify::new());
+        let release = Arc::new(tokio::sync::Notify::new());
+
+        let (run_result, takeover) = tokio::join!(run_manager.start_turn(run), async {
+            while !manager.is_running(&thread.thread_id) {
+                tokio::task::yield_now().await;
+            }
+            manager.set_ack_subscribe_hook(Some(AckSubscribeHook {
+                entered: Arc::clone(&entered),
+                release,
+            }));
+            let waiter = tokio::spawn({
+                let manager = Arc::clone(&manager);
+                let thread_id = thread.thread_id.clone();
+                async move { manager.interrupt(&thread_id).await }
+            });
+            entered.notified().await;
+            waiter.abort();
+            assert!(waiter.await.unwrap_err().is_cancelled());
+            manager.set_ack_subscribe_hook(None);
+
+            let takeover = manager.terminate(&thread.thread_id).await;
+            if takeover.is_err() {
+                let runtime = control
+                    .runtime_handle(&thread.thread_id)
+                    .unwrap()
+                    .expect("runtime handle for RED cleanup");
+                (runtime.terminate)();
+            }
+            takeover
+        });
+
+        run_result.unwrap();
+        takeover.unwrap();
+        assert!(!manager.is_running(&thread.thread_id));
+        assert!(control.runtime_handle(&thread.thread_id).unwrap().is_none());
+        let permit = control.acquire_execution(&thread.thread_id).unwrap();
+        drop(permit);
     }
 
     #[tokio::test(flavor = "current_thread")]

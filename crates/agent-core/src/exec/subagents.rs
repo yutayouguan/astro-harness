@@ -69,28 +69,43 @@ pub(crate) async fn drain_mailbox_at_safe_boundary(session: &mut Session) -> any
                 .ok()
         })
         .max();
-    if let Some(through_sequence) = persisted_through.filter(|value| *value >= first_sequence) {
-        let through_sequence = through_sequence.min(last_sequence);
-        let delivered = messages
-            .iter()
-            .take_while(|message| message.sequence <= through_sequence)
-            .count();
-        control.ack_mailbox(&path, through_sequence)?;
-        return Ok(delivered);
-    }
-    if session
-        .clone_history()
-        .await
-        .last()
-        .is_some_and(|message| message.role == types::message::Role::User)
+    let runtime_history = session.clone_history().await;
+    let in_memory_through = runtime_history
+        .iter()
+        .filter_map(|message| {
+            message
+                .compressed_content
+                .as_deref()?
+                .strip_prefix(MAILBOX_FINISH_PREFIX)?
+                .parse::<i64>()
+                .ok()
+        })
+        .max();
+    let through_sequence = persisted_through
+        .into_iter()
+        .chain(in_memory_through)
+        .filter(|value| *value >= first_sequence && *value <= last_sequence)
+        .max()
+        .unwrap_or(last_sequence);
+    let delivered = messages
+        .iter()
+        .take_while(|message| message.sequence <= through_sequence)
+        .count();
+    let marker = format!("{MAILBOX_FINISH_PREFIX}{through_sequence}");
+    let durable = session.has_durable_turn_input_marker(&marker)?;
+    let in_memory = runtime_history
+        .iter()
+        .any(|message| message.compressed_content.as_deref() == Some(marker.as_str()));
+    if !in_memory
+        && runtime_history
+            .last()
+            .is_some_and(|message| message.role == types::message::Role::User)
     {
         return Ok(0);
     }
-    let delivered = messages.len();
-    let through_sequence = last_sequence;
-    let mut contents = Vec::with_capacity(messages.len());
+    let mut contents = Vec::with_capacity(delivered);
     let mut image_data_urls = Vec::new();
-    for message in messages {
+    for message in messages.into_iter().take(delivered) {
         if message.sender_thread_id == message.recipient_thread_id {
             if let Some(encoded) = message.payload.strip_prefix(MAIN_STEER_PREFIX) {
                 let input: DurableSteerInput = serde_json::from_str(encoded)?;
@@ -102,17 +117,23 @@ pub(crate) async fn drain_mailbox_at_safe_boundary(session: &mut Session) -> any
         contents.push(message.payload);
     }
     let content = contents.join("\n\n");
-    session
-        .record_turn_input_with_finish_reason(
-            TurnInput::UserInput {
-                content,
-                image_data_urls,
-            },
-            Some(&format!("{MAILBOX_FINISH_PREFIX}{through_sequence}")),
-        )
-        .await?;
+    let input = TurnInput::UserInput {
+        content,
+        image_data_urls,
+    };
+    if !durable {
+        session.persist_turn_input(&input, Some(&marker), Some(&marker))?;
+    }
     if session.cancel_signal().is_cancelled() {
-        anyhow::bail!("agent turn interrupted after mailbox history write");
+        anyhow::bail!("agent turn interrupted after durable mailbox history write");
+    }
+    if !in_memory {
+        session
+            .record_turn_input_in_memory(&input, Some(&marker))
+            .await;
+    }
+    if session.cancel_signal().is_cancelled() {
+        anyhow::bail!("agent turn interrupted after in-memory mailbox history write");
     }
     control.ack_mailbox(&path, through_sequence)?;
     Ok(delivered)
@@ -593,20 +614,11 @@ mod tests {
             true,
         )
         .unwrap();
-        let sequence = graph.pending_for(&thread.thread_id, 0).unwrap()[0].sequence;
-
         let memory_dir = temp.path().join("memory");
         let sessions =
             session::SessionStore::open_sessions_dir(&memory_dir.join("sessions")).unwrap();
         sessions
             .create_session(&thread.session_id, "tauri", None, None, None)
-            .unwrap();
-        sessions
-            .append_message(session::NewMessage {
-                content: Some("persisted before ack"),
-                finish_reason: Some(&format!("agent-mailbox-through:{sequence}")),
-                ..session::NewMessage::empty(&thread.session_id, "user")
-            })
             .unwrap();
         let mut retry = Session::with_session_id_for_agent_thread(
             Config::with_defaults(memory_dir),
@@ -616,11 +628,223 @@ mod tests {
             thread.canonical_path,
         )
         .unwrap();
+        let cancel = retry.cancel_signal();
+        retry.set_turn_input_after_db_write_hook(Some(Arc::new(move || {
+            cancel.cancel();
+            anyhow::bail!("failpoint after durable mailbox write")
+        })));
+
+        assert!(drain_mailbox_at_safe_boundary(&mut retry).await.is_err());
+        assert_eq!(sessions.get_messages(&thread.session_id).unwrap().len(), 1);
+        assert!(retry.clone_history().await.is_empty());
+        assert_eq!(graph.pending_for(&thread.thread_id, 0).unwrap().len(), 1);
+        retry.set_turn_input_after_db_write_hook(None);
+        retry.cancel_signal().reset();
 
         assert_eq!(drain_mailbox_at_safe_boundary(&mut retry).await.unwrap(), 1);
         assert!(graph.pending_for(&thread.thread_id, 0).unwrap().is_empty());
         assert_eq!(sessions.get_messages(&thread.session_id).unwrap().len(), 1);
         assert_eq!(retry.clone_history().await.len(), 1);
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn mailbox_retry_repairs_a_memory_only_delivery_before_ack() {
+        let temp = tempfile::tempdir().unwrap();
+        let graph = subagents::AgentGraphStore::open(temp.path().join("agents-v2.db")).unwrap();
+        let root = subagents::AgentControl::open(
+            "root-v2".into(),
+            graph.clone(),
+            subagents::Limits {
+                max_threads: 8,
+                max_depth: 4,
+                max_running: 2,
+            },
+        )
+        .unwrap();
+        let reservation = root
+            .reserve_spawn(&subagents::AgentPath::root(), "worker")
+            .unwrap();
+        let thread = reservation.thread().clone();
+        reservation.commit().unwrap();
+        root.enqueue_message(
+            &subagents::AgentPath::root(),
+            subagents::MessageAgentV2Request {
+                target: "worker".into(),
+                message: "memory only follow up".into(),
+            },
+            true,
+        )
+        .unwrap();
+        let sequence = graph.pending_for(&thread.thread_id, 0).unwrap()[0].sequence;
+        let marker = format!("agent-mailbox-through:{sequence}");
+        let memory_dir = temp.path().join("memory");
+        let sessions =
+            session::SessionStore::open_sessions_dir(&memory_dir.join("sessions")).unwrap();
+        sessions
+            .create_session(&thread.session_id, "tauri", None, None, None)
+            .unwrap();
+        let mut retry = Session::with_session_id_for_agent_thread(
+            Config::with_defaults(memory_dir),
+            thread.session_id.clone(),
+            home::DEFAULT_AGENT_ID,
+            Arc::clone(&root),
+            thread.canonical_path,
+        )
+        .unwrap();
+        let mut memory_only = types::message::Message::user("memory only follow up");
+        memory_only.compressed_content = Some(marker);
+        retry.record_items(vec![memory_only]).await;
+        root.enqueue_message(
+            &subagents::AgentPath::root(),
+            subagents::MessageAgentV2Request {
+                target: "worker".into(),
+                message: "arrived after the partial delivery".into(),
+            },
+            true,
+        )
+        .unwrap();
+
+        assert_eq!(drain_mailbox_at_safe_boundary(&mut retry).await.unwrap(), 1);
+        assert_eq!(graph.pending_for(&thread.thread_id, 0).unwrap().len(), 1);
+        assert_eq!(sessions.get_messages(&thread.session_id).unwrap().len(), 1);
+        let history = retry.clone_history().await;
+        assert_eq!(history.len(), 1);
+        let provider = crate::prompt::messages::to_provider_messages("", &history);
+        assert_eq!(
+            serde_json::to_string(&provider)
+                .unwrap()
+                .matches("memory only follow up")
+                .count(),
+            1
+        );
+        assert_eq!(drain_mailbox_at_safe_boundary(&mut retry).await.unwrap(), 0);
+        assert_eq!(graph.pending_for(&thread.thread_id, 0).unwrap().len(), 1);
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn mailbox_retry_with_both_sides_present_only_acks_once() {
+        let temp = tempfile::tempdir().unwrap();
+        let graph = subagents::AgentGraphStore::open(temp.path().join("agents-v2.db")).unwrap();
+        let root = subagents::AgentControl::open(
+            "root-v2".into(),
+            graph.clone(),
+            subagents::Limits {
+                max_threads: 8,
+                max_depth: 4,
+                max_running: 2,
+            },
+        )
+        .unwrap();
+        let reservation = root
+            .reserve_spawn(&subagents::AgentPath::root(), "worker")
+            .unwrap();
+        let thread = reservation.thread().clone();
+        reservation.commit().unwrap();
+        root.enqueue_message(
+            &subagents::AgentPath::root(),
+            subagents::MessageAgentV2Request {
+                target: "worker".into(),
+                message: "already on both sides".into(),
+            },
+            true,
+        )
+        .unwrap();
+        let memory_dir = temp.path().join("memory");
+        let sessions =
+            session::SessionStore::open_sessions_dir(&memory_dir.join("sessions")).unwrap();
+        sessions
+            .create_session(&thread.session_id, "tauri", None, None, None)
+            .unwrap();
+        let mut retry = Session::with_session_id_for_agent_thread(
+            Config::with_defaults(memory_dir),
+            thread.session_id.clone(),
+            home::DEFAULT_AGENT_ID,
+            Arc::clone(&root),
+            thread.canonical_path,
+        )
+        .unwrap();
+        let cancel = retry.cancel_signal();
+        retry.set_turn_input_after_memory_write_hook(Some(Arc::new(move || cancel.cancel())));
+
+        assert!(drain_mailbox_at_safe_boundary(&mut retry).await.is_err());
+        assert_eq!(sessions.get_messages(&thread.session_id).unwrap().len(), 1);
+        assert_eq!(retry.clone_history().await.len(), 1);
+        assert_eq!(graph.pending_for(&thread.thread_id, 0).unwrap().len(), 1);
+        retry.set_turn_input_after_memory_write_hook(None);
+        retry.cancel_signal().reset();
+
+        assert_eq!(drain_mailbox_at_safe_boundary(&mut retry).await.unwrap(), 1);
+        assert!(graph.pending_for(&thread.thread_id, 0).unwrap().is_empty());
+        assert_eq!(sessions.get_messages(&thread.session_id).unwrap().len(), 1);
+        let history = retry.clone_history().await;
+        assert_eq!(history.len(), 1);
+        assert_eq!(
+            serde_json::to_string(&crate::prompt::messages::to_provider_messages("", &history))
+                .unwrap()
+                .matches("already on both sides")
+                .count(),
+            1
+        );
+        assert_eq!(drain_mailbox_at_safe_boundary(&mut retry).await.unwrap(), 0);
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn main_steer_retry_repairs_db_only_delivery_with_media() {
+        let temp = tempfile::tempdir().unwrap();
+        let graph = subagents::AgentGraphStore::open(temp.path().join("agents-v2.db")).unwrap();
+        let root = subagents::AgentControl::open(
+            "root-v2".into(),
+            graph.clone(),
+            subagents::Limits {
+                max_threads: 8,
+                max_depth: 4,
+                max_running: 2,
+            },
+        )
+        .unwrap();
+        root.persist_main_steer(
+            &subagents::AgentPath::root(),
+            encode_main_steer_input(&TurnInput::UserInput {
+                content: "steer through failure".into(),
+                image_data_urls: vec!["data:image/png;base64,c3RlZXI=".into()],
+            })
+            .unwrap(),
+        )
+        .unwrap();
+        let memory_dir = temp.path().join("memory");
+        let sessions =
+            session::SessionStore::open_sessions_dir(&memory_dir.join("sessions")).unwrap();
+        sessions
+            .create_session("root-v2", "tauri", None, None, None)
+            .unwrap();
+        let mut retry = Session::with_session_id_for_agent_thread(
+            Config::with_defaults(memory_dir),
+            "root-v2".into(),
+            home::DEFAULT_AGENT_ID,
+            Arc::clone(&root),
+            subagents::AgentPath::root(),
+        )
+        .unwrap();
+        let cancel = retry.cancel_signal();
+        retry.set_turn_input_after_db_write_hook(Some(Arc::new(move || {
+            cancel.cancel();
+            anyhow::bail!("steer failpoint after DB write")
+        })));
+
+        assert!(drain_mailbox_at_safe_boundary(&mut retry).await.is_err());
+        assert_eq!(sessions.get_messages("root-v2").unwrap().len(), 1);
+        assert!(retry.clone_history().await.is_empty());
+        assert_eq!(graph.pending_for("root-v2", 0).unwrap().len(), 1);
+        retry.set_turn_input_after_db_write_hook(None);
+        retry.cancel_signal().reset();
+
+        assert_eq!(drain_mailbox_at_safe_boundary(&mut retry).await.unwrap(), 1);
+        assert!(graph.pending_for("root-v2", 0).unwrap().is_empty());
+        let history = retry.clone_history().await;
+        assert_eq!(history.len(), 1);
+        assert_eq!(history[0].content_str(), "steer through failure");
+        assert_eq!(history[0].media.len(), 1);
+        assert_eq!(drain_mailbox_at_safe_boundary(&mut retry).await.unwrap(), 0);
     }
 
     #[tokio::test(flavor = "current_thread")]

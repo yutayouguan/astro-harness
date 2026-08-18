@@ -6,6 +6,36 @@ use types::message::Message;
 use super::AgentLoop;
 
 impl AgentLoop {
+    pub(crate) async fn ensure_assistant_error_boundary(&mut self) -> anyhow::Result<()> {
+        const CONTENT: &str =
+            "[astro:system]\nThe agent turn failed before producing an assistant response.";
+        self.services
+            .sessions
+            .ensure_session(&self.session_id, "tauri")?;
+        if self
+            .services
+            .sessions
+            .get_messages(&self.session_id)?
+            .last()
+            .is_some_and(|message| message.role == "user")
+        {
+            self.services.sessions.append_message(NewMessage {
+                content: Some(CONTENT),
+                finish_reason: Some("error"),
+                ..NewMessage::empty(&self.session_id, "assistant")
+            })?;
+        }
+        if self
+            .clone_history()
+            .await
+            .last()
+            .is_some_and(|message| message.role == types::message::Role::User)
+        {
+            self.record_items(vec![Message::assistant(CONTENT)]).await;
+        }
+        Ok(())
+    }
+
     /// 确保会话行存在（不存在则按 `source` 创建）。
     pub fn ensure_session(&self, source: &str) -> anyhow::Result<()> {
         self.services

@@ -402,11 +402,20 @@ pub enum AgentThreadCommand {
     Close,
 }
 
+#[cfg(test)]
+#[derive(Debug, Clone)]
+struct CancelWaitHook {
+    entered: Arc<Notify>,
+    release: Arc<Notify>,
+}
+
 #[derive(Debug, Default)]
 pub struct AgentThreadControl {
     interrupted: AtomicBool,
     closed: AtomicBool,
     notify: Notify,
+    #[cfg(test)]
+    cancel_wait_hook: Mutex<Option<CancelWaitHook>>,
 }
 
 impl AgentThreadControl {
@@ -436,11 +445,26 @@ impl AgentThreadControl {
 
     pub async fn cancelled(&self) {
         loop {
+            let notified = self.notify.notified();
+            tokio::pin!(notified);
+            notified.as_mut().enable();
             if self.is_interrupted() || self.is_closed() {
                 return;
             }
-            self.notify.notified().await;
+            #[cfg(test)]
+            let hook = { self.cancel_wait_hook.lock().unwrap().clone() };
+            #[cfg(test)]
+            if let Some(hook) = hook {
+                hook.entered.notify_one();
+                hook.release.notified().await;
+            }
+            notified.await;
         }
+    }
+
+    #[cfg(test)]
+    fn set_cancel_wait_hook(&self, hook: Option<CancelWaitHook>) {
+        *self.cancel_wait_hook.lock().unwrap() = hook;
     }
 }
 
@@ -641,6 +665,30 @@ mod tests {
         registry.close("thread").unwrap();
         assert!(control.is_closed());
         assert!(matches!(rx.recv().await, Some(AgentThreadCommand::Close)));
+    }
+
+    #[tokio::test]
+    async fn cancelled_waiter_cannot_miss_interrupt_between_check_and_registration() {
+        let control = Arc::new(AgentThreadControl::default());
+        let entered = Arc::new(Notify::new());
+        let release = Arc::new(Notify::new());
+        control.set_cancel_wait_hook(Some(CancelWaitHook {
+            entered: Arc::clone(&entered),
+            release: Arc::clone(&release),
+        }));
+        let waiter = tokio::spawn({
+            let control = Arc::clone(&control);
+            async move { control.cancelled().await }
+        });
+
+        entered.notified().await;
+        control.interrupt();
+        release.notify_one();
+
+        tokio::time::timeout(Duration::from_millis(100), waiter)
+            .await
+            .expect("cancelled waiter lost the deterministic interrupt wakeup")
+            .unwrap();
     }
 
     #[test]

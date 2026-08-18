@@ -242,6 +242,17 @@ impl Session {
         input: TurnInput,
         finish_reason: Option<&str>,
     ) -> anyhow::Result<()> {
+        self.persist_turn_input(&input, finish_reason, None)?;
+        self.record_turn_input_in_memory(&input, None).await;
+        Ok(())
+    }
+
+    pub(crate) fn persist_turn_input(
+        &self,
+        input: &TurnInput,
+        finish_reason: Option<&str>,
+        memory_marker: Option<&str>,
+    ) -> anyhow::Result<()> {
         let TurnInput::UserInput {
             content,
             image_data_urls,
@@ -267,15 +278,88 @@ impl Session {
         } else {
             Some(serde_json::to_string(&media_assets)?)
         };
-        self.services.sessions.append_message(NewMessage {
-            content: Some(&content),
+        let message_id = self.services.sessions.append_message(NewMessage {
+            content: Some(content),
             media_json: media_json.as_deref(),
             finish_reason,
             ..NewMessage::empty(&self.session_id, "user")
         })?;
-        self.record_items(vec![Message::user_with_images(&content, &image_data_urls)])
-            .await;
+        if let Some(marker) = memory_marker {
+            self.services
+                .sessions
+                .update_message_compressed_content(message_id, Some(marker))?;
+        }
+        #[cfg(test)]
+        if let Some(hook) = self
+            .services
+            .turn_input_after_db_write
+            .lock()
+            .map_err(|_| anyhow::anyhow!("turn input DB-write hook mutex poisoned"))?
+            .clone()
+        {
+            hook()?;
+        }
         Ok(())
+    }
+
+    pub(crate) async fn record_turn_input_in_memory(
+        &self,
+        input: &TurnInput,
+        marker: Option<&str>,
+    ) {
+        let TurnInput::UserInput {
+            content,
+            image_data_urls,
+        } = input;
+        let mut message = Message::user_with_images(content, image_data_urls);
+        message.compressed_content = marker.map(str::to_string);
+        self.record_items(vec![message]).await;
+        #[cfg(test)]
+        if let Some(hook) = self
+            .services
+            .turn_input_after_memory_write
+            .lock()
+            .expect("turn input memory-write hook mutex poisoned")
+            .clone()
+        {
+            hook();
+        }
+    }
+
+    pub(crate) fn has_durable_turn_input_marker(&self, marker: &str) -> anyhow::Result<bool> {
+        Ok(self
+            .services
+            .sessions
+            .get_messages(&self.session_id)?
+            .iter()
+            .any(|message| {
+                message.finish_reason.as_deref() == Some(marker)
+                    || message.compressed_content.as_deref() == Some(marker)
+            }))
+    }
+
+    #[cfg(test)]
+    pub(crate) fn set_turn_input_after_db_write_hook(
+        &self,
+        hook: Option<super::session_services::TurnInputDbWriteHook>,
+    ) {
+        *self
+            .services
+            .turn_input_after_db_write
+            .lock()
+            .expect("turn input DB-write hook mutex poisoned") = hook;
+    }
+
+    #[cfg(test)]
+    pub(crate) fn set_turn_input_after_memory_write_hook(
+        &self,
+        hook: Option<super::session_services::TurnInputMemoryWriteHook>,
+    ) {
+        *self
+            .services
+            .turn_input_after_memory_write
+            .lock()
+            .expect("turn input memory-write hook mutex poisoned") = hook;
     }
 
     /// Compatibility adapter for callers not yet migrated to Codex naming.
