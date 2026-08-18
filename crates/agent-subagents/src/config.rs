@@ -361,6 +361,34 @@ mod tests {
     }
 
     #[test]
+    fn codex_settings_load_from_home_and_project_overrides_personal() {
+        let home = tempfile::tempdir().unwrap();
+        let memory = home.path().join(".astro");
+        let project = tempfile::tempdir().unwrap();
+        fs::create_dir_all(&memory).unwrap();
+        fs::create_dir_all(home.path().join(".codex")).unwrap();
+        fs::create_dir_all(project.path().join(".codex")).unwrap();
+        fs::write(
+            home.path().join(".codex/config.toml"),
+            "[agents]\nenabled = false\nmax_threads = 7\n",
+        )
+        .unwrap();
+
+        let personal = load_agents_settings(&memory, None);
+        assert!(!personal.enabled);
+        assert_eq!(personal.max_concurrent_threads_per_session, 7);
+
+        fs::write(
+            project.path().join(".codex/config.toml"),
+            "[agents]\nenabled = true\nmax_threads = 9\n",
+        )
+        .unwrap();
+        let combined = load_agents_settings(&memory, Some(project.path()));
+        assert!(combined.enabled);
+        assert_eq!(combined.max_concurrent_threads_per_session, 9);
+    }
+
+    #[test]
     fn custom_agent_overrides_builtin_and_model_precedence() {
         let root = tempfile::tempdir().unwrap();
         let agents = root.path().join(".codex/agents");
