@@ -1,6 +1,6 @@
 # Agent 生命周期详细设计
 
-> 版本：v2.8
+> 版本：v2.9
 > 日期：2026-08-18
 > 状态：实施基线  
 > 上游参考：[OpenAI Codex](https://github.com/openai/codex) `632e35ce8d5dec43b75dbf99f9e6fa52bed47c3d`  
@@ -515,6 +515,8 @@ schema 和 RPC 字段改名都必须提供 migration 或 serde alias。
     `SessionServices`，并用编译期断言锁定 `Session: Send + Sync`。
   - [x] 将已由 `Session.state` 保护的轮次、压缩、注入上下文与交互模式 API
     收窄为 `&self`，并用 `Arc<Session>` 编译期契约锁定。
+  - [x] 引入 Codex 同名异步 `Session::clone_history()` 快照边界，先迁移只读消费者。
+  - [ ] 将 `session_messages` 真实迁入 `SessionState.history`，并收口记录、压缩回写与测试夹具。
   - [ ] 将 `SessionTask`、streaming、background 和 server 签名迁移为 `Arc<Session>`。
 
 v2.3 落地说明：foreground、background、Cron 与 SubAgent 不再先调用
@@ -560,6 +562,13 @@ v2.8 内锁化批次 5：将 `set_current_turn_id`、`create_turn_context`、
 17 处生产路径可变 guard 同步移除。本批仍保留外层 `Arc<Mutex<Session>>`：剩余阻塞集中在
 conversation history、`MemoryManager`、`ToolRegistry` 和 MCP 热加载等真实可变状态，
 后续批次须先继续收口这些所有权边界，再替换 `SessionTask` 与 server 的 handle 类型。
+
+v2.9 history 内锁化批次 1：先固定 Codex 同名的异步 `Session::clone_history()`
+契约，返回拥有所有权的 `Vec<Message>` 快照，不向调用方泄漏会话内部引用。
+mid-run summary、background 输出提取与 memory review 等 5 个只读消费点已迁移，
+`clone_history_returns_an_owned_snapshot_through_arc` 同时锁定 `Arc<Session>` 可调用性与
+快照隔离性。本批刻意不移动 `session_messages` 字段：混合追加、压缩回写和集成测试
+夹具将在下一批统一收口到 `SessionState.history`，而只读调用方无需再次改签名。
 
 ### Phase C：工具运行时
 

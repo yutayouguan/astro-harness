@@ -20,7 +20,7 @@ pub const MID_RUN_SUMMARY_RATIO: f32 = 0.80;
 pub const PROTECT_FIRST_MESSAGES: usize = 4;
 
 /// 是否应尝试 mid-run 摘要。
-pub async fn should_attempt(agent: &mut AgentLoop) -> bool {
+pub async fn should_attempt(agent: &AgentLoop) -> bool {
     if agent.mid_run_summary_done().await {
         return false;
     }
@@ -28,12 +28,13 @@ pub async fn should_attempt(agent: &mut AgentLoop) -> bool {
     if !cfg.enabled {
         return false;
     }
+    let history = agent.clone_history().await;
     let protect_first = cfg.protect_first_messages.max(1);
-    if agent.session_messages.len() < protect_first + agent.config_protect_last_n() {
+    if history.len() < protect_first + agent.config_protect_last_n() {
         return false;
     }
     let mgr = ToolCompressionManager::from_config(&cfg).with_context_window(agent.context_window());
-    mgr.occupancy_ratio(&agent.session_messages) >= cfg.mid_run_summary_ratio
+    mgr.occupancy_ratio(&history) >= cfg.mid_run_summary_ratio
 }
 
 /// 折叠 Provider 历史：头 + 摘要 + 尾（不改 DB 原文）。
@@ -135,13 +136,14 @@ async fn complete_summary_chat(target: &types::ChatTarget, prompt: &str) -> anyh
 }
 
 /// 尝试 mid-run 摘要；成功则写入 AgentLoop handoff，返回 true。
-pub async fn maybe_apply_mid_run_summary(agent: &mut AgentLoop) -> anyhow::Result<bool> {
+pub async fn maybe_apply_mid_run_summary(agent: &AgentLoop) -> anyhow::Result<bool> {
     if !should_attempt(agent).await {
         return Ok(false);
     }
     let protect_first = agent.config_protect_first_n();
     let protect_last = agent.config_protect_last_n();
-    let transcript = build_transcript(&agent.session_messages, protect_first, protect_last);
+    let history = agent.clone_history().await;
+    let transcript = build_transcript(&history, protect_first, protect_last);
     if transcript.chars().count() < 400 {
         agent.mark_mid_run_summary_skipped().await;
         return Ok(false);
@@ -182,10 +184,9 @@ pub async fn maybe_apply_mid_run_summary(agent: &mut AgentLoop) -> anyhow::Resul
         return Ok(false);
     };
 
-    let before = estimate_messages_tokens(&agent.session_messages);
+    let before = estimate_messages_tokens(&history);
     agent.set_mid_run_handoff(text.clone()).await;
-    let collapsed =
-        collapse_history_with_handoff(&agent.session_messages, &text, protect_first, protect_last);
+    let collapsed = collapse_history_with_handoff(&history, &text, protect_first, protect_last);
     let after = estimate_messages_tokens(&collapsed);
     info!(
         session = %agent.session_id(),

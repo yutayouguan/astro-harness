@@ -914,6 +914,15 @@ impl Session {
         )
     }
 
+    /// Return an owned snapshot of the current conversation history.
+    ///
+    /// The async shape matches Codex's `Session::clone_history` contract and
+    /// allows the backing storage to move into [`session_state::SessionState`]
+    /// without changing callers.
+    pub async fn clone_history(&self) -> Vec<Message> {
+        self.session_messages.clone()
+    }
+
     pub fn context_window(&self) -> u32 {
         self.model_ctx.context_window()
     }
@@ -1075,6 +1084,21 @@ mod tests {
         }
 
         let _ = assert_arc_api;
+    }
+
+    #[tokio::test]
+    async fn clone_history_returns_an_owned_snapshot_through_arc() {
+        let dir = TempDir::new().unwrap();
+        let mut session = Session::new(test_config(&dir)).unwrap();
+        session.session_messages.push(Message::user("original"));
+        let session = Arc::new(session);
+
+        let mut snapshot = session.clone_history().await;
+        snapshot.push(Message::assistant("snapshot-only"));
+
+        let current = session.clone_history().await;
+        assert_eq!(current.len(), 1);
+        assert_eq!(current[0].content_str(), "original");
     }
 
     #[test]

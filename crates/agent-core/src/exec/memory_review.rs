@@ -41,9 +41,9 @@ pub struct MemoryReviewNotify {
 }
 
 /// 从当前 [`AgentLoop`] 快照构造 review job（不含 system 消息）。
-pub fn job_from_agent(agent: &AgentLoop) -> BackgroundReviewJob {
-    let messages = agent
-        .session_messages
+pub async fn job_from_agent(agent: &AgentLoop) -> BackgroundReviewJob {
+    let history = agent.clone_history().await;
+    let messages = history
         .iter()
         .filter_map(|m| {
             let role = match m.role {
@@ -94,11 +94,11 @@ pub fn review_notify_from_applied(applied: &[String]) -> Option<MemoryReviewNoti
 }
 
 /// 若配置开启则异步跑 review；完成后可选向 `notify` 推一条摘要。
-pub fn spawn_background_review_after_turn(
+pub async fn spawn_background_review_after_turn(
     agent: &AgentLoop,
     notify: Option<tokio::sync::mpsc::UnboundedSender<MemoryReviewNotify>>,
 ) {
-    let job = job_from_agent(agent);
+    let job = job_from_agent(agent).await;
     tokio::spawn(async move {
         match maybe_run_background_review(job).await {
             Ok(applied) => {

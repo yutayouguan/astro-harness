@@ -156,7 +156,8 @@ async fn spawn_review_to_hub(session: &SessionHandle, session_id: &str, hub: &Se
         let agent = session.lock().await;
         let id = agent.agent_id().to_string();
         let dir = agent.memory_dir().to_path_buf();
-        agent::exec::memory_review::spawn_background_review_after_turn(&agent, Some(notify_tx));
+        agent::exec::memory_review::spawn_background_review_after_turn(&agent, Some(notify_tx))
+            .await;
         (id, dir)
     };
     tokio::spawn(async move {

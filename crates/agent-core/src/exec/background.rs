@@ -51,13 +51,14 @@ pub(crate) async fn run_background_multi_turn_controlled_with_chat(
 ) -> anyhow::Result<(String, Usage)> {
     let (base_config, message_start) = {
         let agent = session.lock().await;
+        let history = agent.clone_history().await;
         (
             ProviderConfig {
                 temperature: agent.temperature(),
                 additional_params: agent.additional_params().clone(),
                 ..ProviderConfig::default()
             },
-            agent.session_messages.len(),
+            history.len(),
         )
     };
     let pause = PauseControl::new();
@@ -135,7 +136,8 @@ async fn latest_assistant_text(
     message_start: usize,
 ) -> Option<String> {
     let agent = session.lock().await;
-    agent.session_messages[message_start..]
+    let history = agent.clone_history().await;
+    history[message_start..]
         .iter()
         .rev()
         .find(|message| message.role == Role::Assistant)

@@ -40,8 +40,8 @@ pub(super) async fn pre_llm_maintenance(session: &Arc<Mutex<AgentLoop>>) {
         }
     }
     {
-        let mut agent = session.lock().await;
-        match crate::exec::mid_run_summary::maybe_apply_mid_run_summary(&mut agent).await {
+        let agent = session.lock().await;
+        match crate::exec::mid_run_summary::maybe_apply_mid_run_summary(&agent).await {
             Ok(true) => tracing::info!("mid-run summary applied before LLM round"),
             Ok(false) => {}
             Err(e) => tracing::warn!(error = %e, "mid-run summary failed"),
@@ -112,7 +112,7 @@ pub(super) async fn post_tool_maintenance(
             Ok(_) => {}
             Err(e) => tracing::warn!(error = %e, "tool context maintenance failed"),
         }
-        match crate::exec::mid_run_summary::maybe_apply_mid_run_summary(&mut agent).await {
+        match crate::exec::mid_run_summary::maybe_apply_mid_run_summary(&agent).await {
             Ok(true) => tracing::info!("mid-run summary applied after tool maintenance"),
             Ok(false) => {}
             Err(e) => tracing::warn!(error = %e, "mid-run summary failed"),
