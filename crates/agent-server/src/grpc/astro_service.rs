@@ -465,43 +465,58 @@ impl AstroServiceImpl {
         let session = Arc::clone(session);
         let (reply_tx, reply_rx) = tokio::sync::oneshot::channel();
         tokio::spawn(async move {
-            let registration = service
-                .admit_pause_generation_inner(&session_id, &session, hitl_gate, hook_tx)
-                .await;
-            let Some(registration) = registration else {
-                let _ = reply_tx.send(None);
-                return;
-            };
-            let cleanup_registration = registration.clone();
-            let (accepted_tx, accepted_rx) = tokio::sync::oneshot::channel();
-            let guarded_reply = GenerationLaunchReply {
-                value: Some(registration),
-                accepted: Some(accepted_tx),
-            };
-            let accepted = match reply_tx.send(Some(guarded_reply)) {
-                Ok(()) => matches!(accepted_rx.await, Ok(true)),
-                Err(returned) => {
-                    drop(returned);
-                    false
-                }
-            };
-            if !accepted {
-                cleanup_pause_generation_parts(
-                    &service.generation_operations,
-                    &service.pause_controls,
-                    &service.hitl_registry,
-                    &service.hook_runtime.ui_slot,
-                    &service.memory_dir,
-                    &session_id,
-                    &cleanup_registration,
+            service
+                .run_admit_pause_generation_worker(
+                    session_id, session, hitl_gate, hook_tx, reply_tx,
                 )
                 .await;
-            }
         });
         reply_rx
             .await
             .unwrap_or(None)
             .map(GenerationLaunchReply::into_value)
+    }
+
+    async fn run_admit_pause_generation_worker(
+        &self,
+        session_id: String,
+        session: SessionHandle,
+        hitl_gate: Arc<HitlGate>,
+        hook_tx: tokio::sync::mpsc::UnboundedSender<::hooks::UiHookEvent>,
+        reply: tokio::sync::oneshot::Sender<Option<GenerationLaunchReply<PauseRegistration>>>,
+    ) {
+        let registration = self
+            .admit_pause_generation_inner(&session_id, &session, hitl_gate, hook_tx)
+            .await;
+        let Some(registration) = registration else {
+            let _ = reply.send(None);
+            return;
+        };
+        let cleanup_registration = registration.clone();
+        let (accepted_tx, accepted_rx) = tokio::sync::oneshot::channel();
+        let guarded_reply = GenerationLaunchReply {
+            value: Some(registration),
+            accepted: Some(accepted_tx),
+        };
+        let accepted = match reply.send(Some(guarded_reply)) {
+            Ok(()) => matches!(accepted_rx.await, Ok(true)),
+            Err(returned) => {
+                drop(returned);
+                false
+            }
+        };
+        if !accepted {
+            cleanup_pause_generation_parts(
+                &self.generation_operations,
+                &self.pause_controls,
+                &self.hitl_registry,
+                &self.hook_runtime.ui_slot,
+                &self.memory_dir,
+                &session_id,
+                &cleanup_registration,
+            )
+            .await;
+        }
     }
 
     async fn admit_pause_generation_inner(
@@ -2591,6 +2606,220 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(inherited, initial_temperature);
+    }
+
+    #[tokio::test]
+    async fn abandoned_launch_reply_after_send_rolls_back_exact_generation() {
+        let dir = TempDir::new().unwrap();
+        let service = Arc::new(AstroServiceImpl::new(dir.path().to_path_buf()));
+        let session_id = "abandoned-launch-reply-after-send";
+        let session = service.get_session(session_id).await.unwrap();
+        let initial_temperature = session.temperature();
+        let initial_mode = session.interaction_mode().await;
+        let gate = HitlGate::new(session_id);
+        let mut gate_wait = gate
+            .begin_wait(agent::Interrupt {
+                id: "abandoned-launch-reply-gate".into(),
+                ..Default::default()
+            })
+            .await;
+        let (ui_tx, mut ui_rx) = tokio::sync::mpsc::unbounded_channel();
+        let registration = service
+            .admit_pause_generation(session_id, &session, Arc::clone(&gate), ui_tx)
+            .await
+            .unwrap();
+        let (reply_tx, reply_rx) = tokio::sync::oneshot::channel();
+        let worker = tokio::spawn({
+            let service = Arc::clone(&service);
+            let worker_session = Arc::clone(&session);
+            let launch_session = Arc::clone(&session);
+            async move {
+                service
+                    .run_generation_launch_worker(
+                        session_id.to_string(),
+                        registration,
+                        worker_session,
+                        move |session| async move {
+                            session.set_temperature(0.2);
+                            session
+                                .set_interaction_mode(tools::InteractionMode::Ask)
+                                .await;
+                        },
+                        move || async move { spawn_pending_turn(launch_session).await },
+                        reply_tx,
+                    )
+                    .await;
+            }
+        });
+
+        let guarded_reply = reply_rx
+            .await
+            .expect("worker must send its launch reply")
+            .expect("current generation must launch");
+        tokio::task::yield_now().await;
+        assert!(
+            !worker.is_finished(),
+            "a successful reply send must leave the worker waiting for caller acceptance"
+        );
+        assert_eq!(session.temperature(), 0.2);
+        assert_eq!(
+            session.interaction_mode().await,
+            tools::InteractionMode::Ask
+        );
+        assert!(!session.cancel_signal().is_cancelled());
+
+        drop(guarded_reply);
+        tokio::time::timeout(std::time::Duration::from_secs(1), worker)
+            .await
+            .expect("false acknowledgement must release the launch worker")
+            .unwrap();
+
+        assert!(session.cancel_signal().is_cancelled());
+        assert_eq!(session.temperature(), initial_temperature);
+        assert_eq!(session.interaction_mode().await, initial_mode);
+        assert_eq!(
+            tokio::time::timeout(std::time::Duration::from_secs(1), &mut gate_wait)
+                .await
+                .expect("false acknowledgement must resolve the exact gate")
+                .expect("gate resolution")
+                .status,
+            "cancelled"
+        );
+        assert!(service
+            .pause_controls
+            .read()
+            .await
+            .get(session_id)
+            .is_none());
+        assert!(service.hitl_registry.get(session_id).await.is_none());
+        loop {
+            match ui_rx.try_recv() {
+                Ok(_) => {}
+                Err(tokio::sync::mpsc::error::TryRecvError::Disconnected) => break,
+                Err(tokio::sync::mpsc::error::TryRecvError::Empty) => {
+                    panic!("false acknowledgement must detach the exact UI generation")
+                }
+            }
+        }
+        assert!(!service
+            .generation_operations
+            .lock()
+            .unwrap()
+            .contains_key(session_id));
+    }
+
+    #[tokio::test]
+    async fn abandoned_admission_reply_after_send_cleans_before_replacement() {
+        let dir = TempDir::new().unwrap();
+        let service = Arc::new(AstroServiceImpl::new(dir.path().to_path_buf()));
+        let session_id = "abandoned-admission-reply-after-send";
+        let session = service.get_session(session_id).await.unwrap();
+        let abandoned_gate = HitlGate::new(session_id);
+        let mut abandoned_gate_wait = abandoned_gate
+            .begin_wait(agent::Interrupt {
+                id: "abandoned-admission-reply-gate".into(),
+                ..Default::default()
+            })
+            .await;
+        let (abandoned_ui_tx, mut abandoned_ui_rx) = tokio::sync::mpsc::unbounded_channel();
+        let (reply_tx, reply_rx) = tokio::sync::oneshot::channel();
+        let worker = tokio::spawn({
+            let service = Arc::clone(&service);
+            let session = Arc::clone(&session);
+            let abandoned_gate = Arc::clone(&abandoned_gate);
+            async move {
+                service
+                    .run_admit_pause_generation_worker(
+                        session_id.to_string(),
+                        session,
+                        abandoned_gate,
+                        abandoned_ui_tx,
+                        reply_tx,
+                    )
+                    .await;
+            }
+        });
+
+        let guarded_reply = reply_rx
+            .await
+            .expect("worker must send its admission reply")
+            .expect("current session must be admitted");
+        tokio::task::yield_now().await;
+        assert!(
+            !worker.is_finished(),
+            "a successful reply send must leave the worker waiting for caller acceptance"
+        );
+        assert!(service
+            .pause_controls
+            .read()
+            .await
+            .get(session_id)
+            .is_some());
+
+        drop(guarded_reply);
+        tokio::time::timeout(std::time::Duration::from_secs(1), worker)
+            .await
+            .expect("false acknowledgement must release the admission worker")
+            .unwrap();
+
+        assert_eq!(
+            tokio::time::timeout(std::time::Duration::from_secs(1), &mut abandoned_gate_wait,)
+                .await
+                .expect("false acknowledgement must resolve the abandoned gate")
+                .expect("gate resolution")
+                .status,
+            "cancelled"
+        );
+        assert!(service
+            .pause_controls
+            .read()
+            .await
+            .get(session_id)
+            .is_none());
+        assert!(service.hitl_registry.get(session_id).await.is_none());
+        loop {
+            match abandoned_ui_rx.try_recv() {
+                Ok(_) => {}
+                Err(tokio::sync::mpsc::error::TryRecvError::Disconnected) => break,
+                Err(tokio::sync::mpsc::error::TryRecvError::Empty) => {
+                    panic!("false acknowledgement must detach the abandoned UI generation")
+                }
+            }
+        }
+        assert!(!service
+            .generation_operations
+            .lock()
+            .unwrap()
+            .contains_key(session_id));
+
+        let replacement_gate = HitlGate::new(session_id);
+        let (replacement_ui_tx, mut replacement_ui_rx) = tokio::sync::mpsc::unbounded_channel();
+        let replacement = service
+            .admit_pause_generation(
+                session_id,
+                &session,
+                Arc::clone(&replacement_gate),
+                replacement_ui_tx,
+            )
+            .await
+            .expect("a replacement must admit after abandoned handoff cleanup");
+        assert!(!replacement.control.is_cancelled());
+        assert!(service
+            .hitl_registry
+            .get(session_id)
+            .await
+            .is_some_and(|gate| Arc::ptr_eq(&gate, &replacement_gate)));
+        let _ = service.hook_runtime.plugin.fire(
+            ::hooks::PRE_LLM_CALL,
+            &::hooks::HookPayload {
+                session_id: session_id.into(),
+                ..Default::default()
+            },
+        );
+        assert_eq!(
+            replacement_ui_rx.try_recv().unwrap().name,
+            ::hooks::PRE_LLM_CALL
+        );
     }
 
     #[tokio::test]
