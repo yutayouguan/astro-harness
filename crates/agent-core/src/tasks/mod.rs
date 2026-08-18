@@ -276,7 +276,8 @@ impl Session {
         active_turn.start(task, cancellation_token, turn_context, completion, handle)
     }
 
-    pub(crate) async fn wait_for_task(&self, turn_id: &str) {
+    /// Wait until the exact turn's full task lifecycle has completed.
+    pub async fn wait_for_task(&self, turn_id: &str) {
         let completion = self.task_completions.lock().await.get(turn_id).cloned();
         if let Some(completion) = completion {
             completion.cancelled().await;

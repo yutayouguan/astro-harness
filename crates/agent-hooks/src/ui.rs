@@ -1,5 +1,6 @@
 //! 将 Plugin 钩子推送到 UI 时间线（mpsc）。
 
+use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
 use crate::names::{
@@ -73,10 +74,13 @@ pub struct UiTimelineSlot {
 #[derive(Default)]
 struct UiTimelineState {
     next_generation: u64,
-    active: Option<(
-        UiTimelineGeneration,
-        tokio::sync::mpsc::UnboundedSender<UiHookEvent>,
-    )>,
+    active: HashMap<
+        String,
+        (
+            UiTimelineGeneration,
+            tokio::sync::mpsc::UnboundedSender<UiHookEvent>,
+        ),
+    >,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -85,11 +89,12 @@ pub struct UiTimelineGeneration(u64);
 impl UiTimelineState {
     fn install(
         &mut self,
+        session_id: &str,
         tx: tokio::sync::mpsc::UnboundedSender<UiHookEvent>,
     ) -> UiTimelineGeneration {
         self.next_generation = self.next_generation.wrapping_add(1);
         let generation = UiTimelineGeneration(self.next_generation);
-        self.active = Some((generation, tx));
+        self.active.insert(session_id.to_string(), (generation, tx));
         generation
     }
 }
@@ -104,33 +109,36 @@ impl UiTimelineSlot {
         if let Ok(mut state) = self.state.lock() {
             match tx {
                 Some(tx) => {
-                    state.install(tx);
+                    state.install("", tx);
                 }
-                None => state.active = None,
+                None => {
+                    state.active.remove("");
+                }
             }
         }
     }
 
     pub fn install_tx(
         &self,
+        session_id: &str,
         tx: tokio::sync::mpsc::UnboundedSender<UiHookEvent>,
     ) -> UiTimelineGeneration {
         self.state
             .lock()
             .expect("UI timeline slot mutex poisoned")
-            .install(tx)
+            .install(session_id, tx)
     }
 
-    pub fn clear_if(&self, generation: UiTimelineGeneration) -> bool {
+    pub fn clear_if(&self, session_id: &str, generation: UiTimelineGeneration) -> bool {
         let Ok(mut state) = self.state.lock() else {
             return false;
         };
         if state
             .active
-            .as_ref()
+            .get(session_id)
             .is_some_and(|(active, _)| *active == generation)
         {
-            state.active = None;
+            state.active.remove(session_id);
             true
         } else {
             false
@@ -144,7 +152,7 @@ impl UiTimelineSlot {
             let hook_name = name.to_string();
             bus.register(name, move |payload: &HookPayload| {
                 if let Ok(g) = slot.lock() {
-                    if let Some((_, tx)) = g.active.as_ref() {
+                    if let Some((_, tx)) = g.active.get(&payload.session_id) {
                         let _ = tx.send(UiHookEvent {
                             name: hook_name.clone(),
                             detail: detail_from_payload(payload),
@@ -246,11 +254,11 @@ mod tests {
         slot.install(&bus);
 
         let (tx1, mut rx1) = tokio::sync::mpsc::unbounded_channel();
-        let first = slot.install_tx(tx1);
+        let first = slot.install_tx("", tx1);
         let (tx2, mut rx2) = tokio::sync::mpsc::unbounded_channel();
-        let second = slot.install_tx(tx2);
+        let second = slot.install_tx("", tx2);
 
-        assert!(!slot.clear_if(first));
+        assert!(!slot.clear_if("", first));
         let _ = bus.fire(
             PRE_LLM_CALL,
             &HookPayload {
@@ -260,6 +268,50 @@ mod tests {
         );
         assert!(rx1.try_recv().is_err());
         assert_eq!(rx2.try_recv().unwrap().name, PRE_LLM_CALL);
-        assert!(slot.clear_if(second));
+        assert!(slot.clear_if("", second));
+    }
+
+    #[test]
+    fn concurrent_sessions_route_hooks_to_independent_generations() {
+        let bus = PluginHookBus::new();
+        let slot = UiTimelineSlot::new();
+        slot.install(&bus);
+        let (tx_a, mut rx_a) = tokio::sync::mpsc::unbounded_channel();
+        let (tx_b, mut rx_b) = tokio::sync::mpsc::unbounded_channel();
+        let generation_a = slot.install_tx("session-a", tx_a);
+        let generation_b = slot.install_tx("session-b", tx_b);
+
+        let _ = bus.fire(
+            PRE_LLM_CALL,
+            &HookPayload {
+                session_id: "session-a".into(),
+                system_prompt_chars: Some(7),
+                ..Default::default()
+            },
+        );
+        assert_eq!(rx_a.try_recv().unwrap().name, PRE_LLM_CALL);
+        assert!(rx_b.try_recv().is_err());
+
+        let _ = bus.fire(
+            PRE_LLM_CALL,
+            &HookPayload {
+                session_id: "session-b".into(),
+                system_prompt_chars: Some(11),
+                ..Default::default()
+            },
+        );
+        assert_eq!(rx_b.try_recv().unwrap().name, PRE_LLM_CALL);
+        assert!(rx_a.try_recv().is_err());
+
+        assert!(slot.clear_if("session-a", generation_a));
+        let _ = bus.fire(
+            PRE_LLM_CALL,
+            &HookPayload {
+                session_id: "session-b".into(),
+                ..Default::default()
+            },
+        );
+        assert_eq!(rx_b.try_recv().unwrap().name, PRE_LLM_CALL);
+        assert!(slot.clear_if("session-b", generation_b));
     }
 }
