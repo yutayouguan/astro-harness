@@ -247,6 +247,8 @@ pub struct AgentRuntimeManager {
     followup_admission_barrier: Mutex<Option<Arc<tokio::sync::Barrier>>>,
     #[cfg(test)]
     before_followup_start_hook: Mutex<Option<AckSubscribeHook>>,
+    #[cfg(test)]
+    start_status_failure: Mutex<Option<String>>,
 }
 
 impl AgentRuntimeManager {
@@ -272,8 +274,25 @@ impl AgentRuntimeManager {
         let interrupt = Arc::new(AgentThreadControl::default());
         interrupt.begin_turn();
         let (terminated_tx, terminated_rx) = watch::channel(None);
-        let prior_turn_was_interrupted = control
-            .status_events(&thread_id)?
+        let status_events = match self.status_events_for_start(&control, &thread_id) {
+            Ok(events) => events,
+            Err(error) => {
+                self.run_before_cleanup_hook();
+                let cleanup = self
+                    .remove_active_if_turn(&thread_id, &turn_id)
+                    .and_then(|removed| {
+                        self.run_cleanup_failure_hook("active")?;
+                        Ok(removed)
+                    })
+                    .map(|_| ());
+                drop(permit);
+                let combined = combine_completion_results([Err(error), cleanup, Ok(())])
+                    .expect_err("setup status failure must remain an error");
+                self.fail_starting_request(&request, &combined);
+                return Err(combined);
+            }
+        };
+        let prior_turn_was_interrupted = status_events
             .last()
             .is_some_and(|event| matches!(event.event, RunnerEvent::TurnInterrupted { .. }));
 
@@ -702,6 +721,32 @@ impl AgentRuntimeManager {
     #[cfg(test)]
     pub(super) fn set_before_followup_start_hook(&self, hook: Option<AckSubscribeHook>) {
         *self.before_followup_start_hook.lock().unwrap() = hook;
+    }
+
+    #[cfg(test)]
+    pub(super) fn set_start_status_failure(&self, message: Option<&str>) {
+        *self.start_status_failure.lock().unwrap() = message.map(str::to_string);
+    }
+
+    #[cfg(test)]
+    fn status_events_for_start(
+        &self,
+        control: &subagents::AgentControl,
+        thread_id: &str,
+    ) -> anyhow::Result<Vec<subagents::StoredStatusEvent>> {
+        if let Some(message) = self.start_status_failure.lock().unwrap().clone() {
+            anyhow::bail!(message);
+        }
+        control.status_events(thread_id)
+    }
+
+    #[cfg(not(test))]
+    fn status_events_for_start(
+        &self,
+        control: &subagents::AgentControl,
+        thread_id: &str,
+    ) -> anyhow::Result<Vec<subagents::StoredStatusEvent>> {
+        control.status_events(thread_id)
     }
 
     #[cfg(test)]

@@ -235,6 +235,28 @@ impl AgentControl {
         Ok(stored)
     }
 
+    /// Linearize a follow-up's Shutdown check, durable enqueue, and runtime
+    /// admission under the lifecycle lock. The admission closure may take only
+    /// the runtime-manager active mutex; the global lock order is lifecycle → active.
+    pub fn enqueue_followup_with_admission<T>(
+        &self,
+        sender: &AgentPath,
+        request: MessageAgentV2Request,
+        admission: impl FnOnce(&AgentThreadV2) -> anyhow::Result<T>,
+    ) -> anyhow::Result<(MailboxMessage, T)> {
+        let _lifecycle = self.lock_runtime_lifecycle()?;
+        let target = self.resolve_target(sender, &request.target)?;
+        if target.status == crate::AgentStatusV2::Shutdown {
+            anyhow::bail!(
+                "cannot follow up a Shutdown agent: {}",
+                target.canonical_path
+            );
+        }
+        let message = self.enqueue_message(sender, request, true)?;
+        let admitted = admission(&target)?;
+        Ok((message, admitted))
+    }
+
     /// Persist input steered into the currently running main/root turn. This
     /// intentionally does not publish activity: the caller publishes
     /// `MainSteer` only after the durable write succeeds.
@@ -290,17 +312,16 @@ impl AgentControl {
         event: RunnerEvent,
     ) -> anyhow::Result<AgentThreadV2> {
         let terminated = matches!(&event, RunnerEvent::RuntimeTerminated);
-        let _lifecycle = if terminated {
-            Some(self.lock_runtime_lifecycle()?)
-        } else {
-            None
-        };
+        let _lifecycle = self.lock_runtime_lifecycle()?;
         let existing = self
             .store
             .get_thread(thread_id)?
             .ok_or_else(|| anyhow::anyhow!("unknown agent thread {thread_id:?}"))?;
         if existing.root_thread_id != self.root_thread_id {
             anyhow::bail!("agent thread {thread_id:?} belongs to a different root");
+        }
+        if existing.status == crate::AgentStatusV2::Shutdown && !terminated {
+            anyhow::bail!("cannot record a runner event for Shutdown agent {thread_id:?}");
         }
         let committed_path = self
             .registry

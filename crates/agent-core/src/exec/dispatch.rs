@@ -7,11 +7,11 @@ use std::time::Duration;
 
 use async_trait::async_trait;
 use subagents::{
-    AgentControl, AgentPath, AgentStatusV2, AgentThread, AgentThreadMessage, AgentThreadStatus,
-    AgentThreadStore, CloseAgentRequest, InterruptAgentRequest, InterruptAgentV2Request,
-    InterruptAgentV2Result, ListAgentThreadsRequest, ListAgentsV2Request, MessageAgentV2Request,
-    MessageAgentV2Result, ReadAgentThreadRequest, SendAgentMessageRequest, SpawnAgentV2Result,
-    SpawnRuntimeV2Request, WaitAgentV2Request, WaitAgentV2Result, WaitOutcome,
+    AgentControl, AgentPath, AgentThread, AgentThreadMessage, AgentThreadStatus, AgentThreadStore,
+    CloseAgentRequest, InterruptAgentRequest, InterruptAgentV2Request, InterruptAgentV2Result,
+    ListAgentThreadsRequest, ListAgentsV2Request, MessageAgentV2Request, MessageAgentV2Result,
+    ReadAgentThreadRequest, SendAgentMessageRequest, SpawnAgentV2Result, SpawnRuntimeV2Request,
+    WaitAgentV2Request, WaitAgentV2Result, WaitOutcome,
 };
 use tools::{AgentThreadDispatch, SpawnAgentDispatchRequest};
 
@@ -72,6 +72,8 @@ pub struct DefaultAgentThreadDispatch {
     runtime_requests: Arc<RuntimeRequestRegistry>,
     #[cfg(test)]
     chat_override: Option<crate::streaming::ChatOverride>,
+    #[cfg(test)]
+    before_followup_atomic_hook: Option<super::agent_runtime::AckSubscribeHook>,
 }
 
 impl DefaultAgentThreadDispatch {
@@ -88,6 +90,8 @@ impl DefaultAgentThreadDispatch {
             runtime_requests: RuntimeRequestRegistry::global(),
             #[cfg(test)]
             chat_override: None,
+            #[cfg(test)]
+            before_followup_atomic_hook: None,
         }
     }
 
@@ -105,6 +109,7 @@ impl DefaultAgentThreadDispatch {
             runtime_manager,
             runtime_requests: Arc::new(RuntimeRequestRegistry::default()),
             chat_override: None,
+            before_followup_atomic_hook: None,
         }
     }
 
@@ -268,33 +273,36 @@ impl AgentThreadDispatch for DefaultAgentThreadDispatch {
         &self,
         request: MessageAgentV2Request,
     ) -> anyhow::Result<MessageAgentV2Result> {
-        let target = self
-            .control
-            .resolve_target(&self.current_path, &request.target)?;
-        if target.status == AgentStatusV2::Shutdown {
-            anyhow::bail!(
-                "cannot follow up a Shutdown agent: {}",
-                target.canonical_path
-            );
-        }
         let followup_text = request.message.trim().to_string();
-        let message = self
-            .control
-            .enqueue_message(&self.current_path, request, true)?;
-        let mut stored = self
-            .runtime_requests
-            .get(&target.thread_id)?
-            .ok_or_else(|| {
-                anyhow::anyhow!(
-                    "agent runtime configuration is unavailable for {}",
-                    target.canonical_path
-                )
-            })?;
-        stored.runtime.model_request.message = followup_text;
-        let run = self.run_request(target.clone(), stored, true);
-        let admission = self
-            .runtime_manager
-            .request_or_start_followup(&target.thread_id, run)?;
+        #[cfg(test)]
+        if let Some(hook) = self.before_followup_atomic_hook.as_ref() {
+            // Deliberately model a stale pre-check; the control-layer atomic
+            // admission below must re-check after this race window.
+            let _ = self
+                .control
+                .resolve_target(&self.current_path, &request.target)?;
+            hook.entered.notify_one();
+            hook.release.notified().await;
+        }
+        let (message, admission) = self.control.enqueue_followup_with_admission(
+            &self.current_path,
+            request,
+            |target| {
+                let mut stored =
+                    self.runtime_requests
+                        .get(&target.thread_id)?
+                        .ok_or_else(|| {
+                            anyhow::anyhow!(
+                                "agent runtime configuration is unavailable for {}",
+                                target.canonical_path
+                            )
+                        })?;
+                stored.runtime.model_request.message = followup_text;
+                let run = self.run_request(target.clone(), stored, true);
+                self.runtime_manager
+                    .request_or_start_followup(&target.thread_id, run)
+            },
+        )?;
         match admission {
             FollowupAdmission::StartNow { request, result_rx } => {
                 let start_tx = request
@@ -557,7 +565,7 @@ mod tests {
     use providers::types::stream::StreamChunk;
     use providers::CompletionStream;
     use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
-    use subagents::{AgentGraphStore, Limits};
+    use subagents::{AgentGraphStore, AgentStatusV2, Limits};
 
     fn dispatch(dir: &tempfile::TempDir) -> DefaultAgentThreadDispatch {
         let store = AgentGraphStore::open(dir.path().join("subagents-v2.db")).unwrap();
@@ -1166,6 +1174,96 @@ mod tests {
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn post_claim_setup_failure_is_shared_cleaned_and_retryable() {
+        let dir = tempfile::tempdir().unwrap();
+        let memory_dir = dir.path().join("memory");
+        let sessions =
+            session::SessionStore::open_sessions_dir(&memory_dir.join("sessions")).unwrap();
+        sessions.ensure_session("root-session", "test").unwrap();
+        let mut dispatch = dispatch(&dir);
+        dispatch.chat_override = Some(scripted_chat("done"));
+        let dispatch = Arc::new(dispatch);
+        let spawned = AgentThreadDispatch::spawn_agent(&*dispatch, spawn_request(&memory_dir))
+            .await
+            .unwrap();
+        while dispatch
+            .runtime_manager
+            .is_running(&spawned.thread.thread_id)
+        {
+            tokio::task::yield_now().await;
+        }
+        dispatch
+            .runtime_manager
+            .set_start_status_failure(Some("injected status_events failure"));
+        let barrier = Arc::new(tokio::sync::Barrier::new(3));
+        dispatch
+            .runtime_manager
+            .set_followup_admission_barrier(Some(Arc::clone(&barrier)));
+        let make = |message: &'static str| {
+            let dispatch = Arc::clone(&dispatch);
+            let target = spawned.thread.canonical_path.to_string();
+            tokio::spawn(async move {
+                AgentThreadDispatch::followup_task(
+                    &*dispatch,
+                    MessageAgentV2Request {
+                        target,
+                        message: message.into(),
+                    },
+                )
+                .await
+            })
+        };
+        let first = make("first retained");
+        let second = make("second retained");
+        barrier.wait().await;
+        dispatch
+            .runtime_manager
+            .set_followup_admission_barrier(None);
+        let (first, second) = tokio::join!(first, second);
+        let first = first.unwrap().unwrap_err();
+        let second = second.unwrap().unwrap_err();
+        assert_eq!(format!("{first:#}"), format!("{second:#}"));
+        assert!(format!("{first:#}").contains("injected status_events failure"));
+        assert!(!dispatch
+            .runtime_manager
+            .is_running(&spawned.thread.thread_id));
+        assert!(dispatch
+            .control
+            .runtime_handle(&spawned.thread.thread_id)
+            .unwrap()
+            .is_none());
+        assert_eq!(
+            dispatch
+                .control
+                .drain_mailbox(&spawned.thread.canonical_path)
+                .unwrap()
+                .len(),
+            2
+        );
+        dispatch.runtime_manager.set_start_status_failure(None);
+        AgentThreadDispatch::followup_task(
+            &*dispatch,
+            MessageAgentV2Request {
+                target: spawned.thread.canonical_path.to_string(),
+                message: "retry".into(),
+            },
+        )
+        .await
+        .unwrap();
+        while dispatch
+            .runtime_manager
+            .is_running(&spawned.thread.thread_id)
+        {
+            tokio::task::yield_now().await;
+        }
+        assert!(dispatch
+            .control
+            .drain_mailbox(&spawned.thread.canonical_path)
+            .unwrap()
+            .is_empty());
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn canceling_idle_followup_caller_does_not_cancel_manager_owned_start() {
         let dir = tempfile::tempdir().unwrap();
         let memory_dir = dir.path().join("memory");
@@ -1435,6 +1533,80 @@ mod tests {
                 .len(),
             1
         );
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn followup_rechecks_shutdown_atomically_before_enqueue_and_admission() {
+        let dir = tempfile::tempdir().unwrap();
+        let memory_dir = dir.path().join("memory");
+        let sessions =
+            session::SessionStore::open_sessions_dir(&memory_dir.join("sessions")).unwrap();
+        sessions.ensure_session("root-session", "test").unwrap();
+        let mut dispatch = dispatch(&dir);
+        dispatch.chat_override = Some(pending_chat());
+        let checked = Arc::new(tokio::sync::Notify::new());
+        let resume = Arc::new(tokio::sync::Notify::new());
+        dispatch.before_followup_atomic_hook = Some(crate::exec::agent_runtime::AckSubscribeHook {
+            entered: Arc::clone(&checked),
+            release: Arc::clone(&resume),
+        });
+        let dispatch = Arc::new(dispatch);
+        let spawned = AgentThreadDispatch::spawn_agent(&*dispatch, spawn_request(&memory_dir))
+            .await
+            .unwrap();
+        let followup_dispatch = Arc::clone(&dispatch);
+        let target = spawned.thread.canonical_path.to_string();
+        let followup = tokio::spawn(async move {
+            AgentThreadDispatch::followup_task(
+                &*followup_dispatch,
+                MessageAgentV2Request {
+                    target,
+                    message: "racing followup".into(),
+                },
+            )
+            .await
+        });
+        checked.notified().await;
+        dispatch
+            .runtime_manager
+            .terminate(&spawned.thread.thread_id)
+            .await
+            .unwrap();
+        resume.notify_one();
+        let error = followup.await.unwrap().unwrap_err();
+        assert!(format!("{error:#}").contains("Shutdown"));
+        assert!(dispatch
+            .control
+            .drain_mailbox(&spawned.thread.canonical_path)
+            .unwrap()
+            .is_empty());
+        let events = dispatch
+            .control
+            .status_events(&spawned.thread.thread_id)
+            .unwrap();
+        assert_eq!(
+            events
+                .iter()
+                .filter(|event| matches!(event.event, subagents::RunnerEvent::TurnStarted { .. }))
+                .count(),
+            1
+        );
+        assert!(!events
+            .iter()
+            .any(|event| matches!(event.event, subagents::RunnerEvent::TurnErrored { .. })));
+        assert_eq!(
+            dispatch
+                .control
+                .resolve_target(&AgentPath::root(), spawned.thread.canonical_path.as_ref())
+                .unwrap()
+                .status,
+            AgentStatusV2::Shutdown
+        );
+        assert!(dispatch
+            .control
+            .runtime_handle(&spawned.thread.thread_id)
+            .unwrap()
+            .is_none());
     }
 
     #[tokio::test]
