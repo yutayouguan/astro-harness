@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, OnceLock};
 use std::time::Duration;
@@ -34,6 +34,104 @@ pub struct AgentRuntimeHandle {
 #[derive(Default)]
 pub struct RuntimeHandleRegistry {
     handles: Mutex<HashMap<String, AgentRuntimeHandle>>,
+}
+
+#[derive(Default)]
+struct RuntimeLifecycleState {
+    closing_prefixes: BTreeSet<AgentPath>,
+    inflight_spawns: HashMap<String, AgentPath>,
+}
+
+/// A spawn reservation that remains visible to a concurrent desktop subtree
+/// close until it is committed, aborted, or dropped.
+pub struct AgentSpawnReservation<'a> {
+    inner: Option<SpawnReservation<'a>>,
+    control: &'a AgentControl,
+    lease_id: String,
+}
+
+impl<'a> AgentSpawnReservation<'a> {
+    pub fn canonical_path(&self) -> &AgentPath {
+        self.inner
+            .as_ref()
+            .expect("active spawn reservation")
+            .canonical_path()
+    }
+
+    pub fn thread_id(&self) -> &str {
+        self.inner
+            .as_ref()
+            .expect("active spawn reservation")
+            .thread_id()
+    }
+
+    pub fn thread(&self) -> &AgentThreadV2 {
+        self.inner
+            .as_ref()
+            .expect("active spawn reservation")
+            .thread()
+    }
+
+    pub fn abort(mut self) -> anyhow::Result<()> {
+        let result = self.inner.take().expect("active spawn reservation").abort();
+        self.release_lease();
+        result
+    }
+
+    pub fn commit(mut self) -> anyhow::Result<()> {
+        let result = self
+            .inner
+            .take()
+            .expect("active spawn reservation")
+            .commit();
+        self.release_lease();
+        result
+    }
+
+    fn release_lease(&mut self) {
+        if !self.lease_id.is_empty() {
+            self.control.release_spawn_lease(&self.lease_id);
+            self.lease_id.clear();
+        }
+    }
+}
+
+impl Drop for AgentSpawnReservation<'_> {
+    fn drop(&mut self) {
+        // Roll back the underlying reservation before waking a close waiter.
+        drop(self.inner.take());
+        self.release_lease();
+    }
+}
+
+/// Cancel-safe admission barrier for one canonical subtree prefix.
+pub struct CloseAdmissionGuard {
+    control: Arc<AgentControl>,
+    prefix: AgentPath,
+    active: bool,
+}
+
+impl CloseAdmissionGuard {
+    pub async fn wait_for_inflight_spawns(&self) -> anyhow::Result<()> {
+        loop {
+            let notified = self.control.lifecycle_notify.notified();
+            tokio::pin!(notified);
+            notified.as_mut().enable();
+            if !self.control.has_inflight_spawn_under(&self.prefix)? {
+                return Ok(());
+            }
+            notified.await;
+        }
+    }
+}
+
+impl Drop for CloseAdmissionGuard {
+    fn drop(&mut self) {
+        if self.active {
+            self.control.release_close_prefix(&self.prefix);
+            self.active = false;
+        }
+    }
 }
 
 impl RuntimeHandleRegistry {
@@ -97,7 +195,8 @@ pub struct AgentControl {
     registry: Arc<AgentRegistry>,
     activity: Arc<ActivityBus>,
     runtimes: Arc<RuntimeHandleRegistry>,
-    runtime_lifecycle: Arc<Mutex<()>>,
+    runtime_lifecycle: Arc<Mutex<RuntimeLifecycleState>>,
+    lifecycle_notify: Arc<Notify>,
     #[cfg(test)]
     before_runtime_insert_hook: Arc<Mutex<Option<BeforeRuntimeInsertHook>>>,
 }
@@ -125,7 +224,8 @@ impl AgentControl {
             registry: Arc::new(registry),
             activity: Arc::new(ActivityBus::default()),
             runtimes: Arc::new(RuntimeHandleRegistry::default()),
-            runtime_lifecycle: Arc::new(Mutex::new(())),
+            runtime_lifecycle: Arc::new(Mutex::new(RuntimeLifecycleState::default())),
+            lifecycle_notify: Arc::new(Notify::new()),
             #[cfg(test)]
             before_runtime_insert_hook: Arc::new(Mutex::new(None)),
         }))
@@ -139,7 +239,7 @@ impl AgentControl {
         &'a self,
         parent: &AgentPath,
         task_name: &str,
-    ) -> anyhow::Result<SpawnReservation<'a>> {
+    ) -> anyhow::Result<AgentSpawnReservation<'a>> {
         self.reserve_spawn_typed(parent, task_name, "default")
     }
 
@@ -148,14 +248,29 @@ impl AgentControl {
         parent: &AgentPath,
         task_name: &str,
         agent_type: &str,
-    ) -> anyhow::Result<SpawnReservation<'a>> {
+    ) -> anyhow::Result<AgentSpawnReservation<'a>> {
+        let mut lifecycle = self.lock_runtime_lifecycle()?;
         let parent_thread = self.require_path(parent, "parent agent")?;
+        if parent_thread.status == AgentStatusV2::Shutdown {
+            anyhow::bail!("cannot spawn under a Shutdown agent: {parent}");
+        }
+        let child_path = parent.child(task_name).map_err(anyhow::Error::msg)?;
+        if lifecycle
+            .closing_prefixes
+            .iter()
+            .any(|prefix| child_path.starts_with(prefix))
+        {
+            anyhow::bail!("cannot spawn inside a closing agent subtree: {child_path}");
+        }
         let thread_id = Uuid::new_v4().to_string();
         let mut reservation = self
             .registry
             .reserve_spawn_typed(parent, task_name, agent_type, &thread_id)?;
+        lifecycle
+            .inflight_spawns
+            .insert(thread_id.clone(), child_path);
         let identity = reservation.thread();
-        let persisted = self.store.reserve_thread(&ThreadReservation {
+        let persisted = match self.store.reserve_thread(&ThreadReservation {
             thread_id: identity.thread_id.clone(),
             root_thread_id: self.root_thread_id.clone(),
             parent_thread_id: parent_thread.thread_id,
@@ -163,9 +278,22 @@ impl AgentControl {
             task_name: identity.task_name.clone(),
             agent_type: identity.agent_type.clone(),
             session_id: identity.session_id.clone(),
-        })?;
+        }) {
+            Ok(persisted) => persisted,
+            Err(error) => {
+                lifecycle.inflight_spawns.remove(&thread_id);
+                drop(lifecycle);
+                self.lifecycle_notify.notify_waiters();
+                return Err(error);
+            }
+        };
         reservation.attach_persisted(&self.store, &self.activity, persisted);
-        Ok(reservation)
+        drop(lifecycle);
+        Ok(AgentSpawnReservation {
+            inner: Some(reservation),
+            control: self,
+            lease_id: thread_id,
+        })
     }
 
     pub fn resolve_target(
@@ -207,8 +335,32 @@ impl AgentControl {
         request: MessageAgentV2Request,
         trigger_turn: bool,
     ) -> anyhow::Result<MailboxMessage> {
+        let lifecycle = self.lock_runtime_lifecycle()?;
+        self.enqueue_message_locked(&lifecycle, sender, request, trigger_turn)
+    }
+
+    fn enqueue_message_locked(
+        &self,
+        lifecycle: &RuntimeLifecycleState,
+        sender: &AgentPath,
+        request: MessageAgentV2Request,
+        trigger_turn: bool,
+    ) -> anyhow::Result<MailboxMessage> {
         let sender_thread = self.require_path(sender, "message sender")?;
         let target = self.resolve_target(sender, &request.target)?;
+        if target.status == AgentStatusV2::Shutdown {
+            anyhow::bail!("cannot message a Shutdown agent: {}", target.canonical_path);
+        }
+        if lifecycle
+            .closing_prefixes
+            .iter()
+            .any(|prefix| target.canonical_path.starts_with(prefix))
+        {
+            anyhow::bail!(
+                "cannot message an agent in a closing subtree: {}",
+                target.canonical_path
+            );
+        }
         let message = request.message.trim();
         if message.is_empty() {
             anyhow::bail!("agent message must not be empty");
@@ -245,7 +397,7 @@ impl AgentControl {
         request: MessageAgentV2Request,
         admission: impl FnOnce(&AgentThreadV2) -> anyhow::Result<T>,
     ) -> anyhow::Result<(MailboxMessage, T)> {
-        let _lifecycle = self.lock_runtime_lifecycle()?;
+        let lifecycle = self.lock_runtime_lifecycle()?;
         let target = self.resolve_target(sender, &request.target)?;
         if target.status == crate::AgentStatusV2::Shutdown {
             anyhow::bail!(
@@ -253,7 +405,7 @@ impl AgentControl {
                 target.canonical_path
             );
         }
-        let message = self.enqueue_message(sender, request, true)?;
+        let message = self.enqueue_message_locked(&lifecycle, sender, request, true)?;
         let admitted = admission(&target)?;
         Ok((message, admitted))
     }
@@ -397,6 +549,32 @@ impl AgentControl {
         self.require_path(&path, "desktop agent target")
     }
 
+    pub fn begin_close(self: &Arc<Self>, prefix: AgentPath) -> anyhow::Result<CloseAdmissionGuard> {
+        let mut lifecycle = self.lock_runtime_lifecycle()?;
+        if lifecycle
+            .closing_prefixes
+            .iter()
+            .any(|existing| existing.starts_with(&prefix) || prefix.starts_with(existing))
+        {
+            anyhow::bail!("agent subtree close already overlaps {prefix}");
+        }
+        lifecycle.closing_prefixes.insert(prefix.clone());
+        drop(lifecycle);
+        Ok(CloseAdmissionGuard {
+            control: Arc::clone(self),
+            prefix,
+            active: true,
+        })
+    }
+
+    pub fn is_path_closing(&self, path: &AgentPath) -> anyhow::Result<bool> {
+        Ok(self
+            .lock_runtime_lifecycle()?
+            .closing_prefixes
+            .iter()
+            .any(|prefix| path.starts_with(prefix)))
+    }
+
     /// Roll back a spawn that was committed only long enough for the runtime
     /// manager to attempt admission. This is intentionally limited to a
     /// durable `PendingInit` row with no registered runtime.
@@ -511,10 +689,44 @@ impl AgentControl {
         self.runtimes.remove_if_same(thread_id, expected)
     }
 
-    fn lock_runtime_lifecycle(&self) -> anyhow::Result<MutexGuard<'_, ()>> {
+    fn lock_runtime_lifecycle(&self) -> anyhow::Result<MutexGuard<'_, RuntimeLifecycleState>> {
         self.runtime_lifecycle
             .lock()
             .map_err(|_| anyhow::anyhow!("agent runtime lifecycle mutex is poisoned"))
+    }
+
+    fn has_inflight_spawn_under(&self, prefix: &AgentPath) -> anyhow::Result<bool> {
+        Ok(self
+            .lock_runtime_lifecycle()?
+            .inflight_spawns
+            .values()
+            .any(|path| path.starts_with(prefix)))
+    }
+
+    fn release_spawn_lease(&self, lease_id: &str) {
+        match self.runtime_lifecycle.lock() {
+            Ok(mut lifecycle) => {
+                lifecycle.inflight_spawns.remove(lease_id);
+            }
+            Err(poisoned) => {
+                tracing::warn!("recovering poisoned lifecycle state during spawn lease release");
+                poisoned.into_inner().inflight_spawns.remove(lease_id);
+            }
+        }
+        self.lifecycle_notify.notify_waiters();
+    }
+
+    fn release_close_prefix(&self, prefix: &AgentPath) {
+        match self.runtime_lifecycle.lock() {
+            Ok(mut lifecycle) => {
+                lifecycle.closing_prefixes.remove(prefix);
+            }
+            Err(poisoned) => {
+                tracing::warn!("recovering poisoned lifecycle state during close release");
+                poisoned.into_inner().closing_prefixes.remove(prefix);
+            }
+        }
+        self.lifecycle_notify.notify_waiters();
     }
 
     fn require_path(&self, path: &AgentPath, label: &str) -> anyhow::Result<AgentThreadV2> {

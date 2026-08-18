@@ -703,6 +703,8 @@ pub struct DefaultDesktopAgentThreadControl {
     control_override: Option<Arc<AgentControl>>,
     #[cfg(test)]
     chat_override: Option<crate::streaming::ChatOverride>,
+    #[cfg(test)]
+    close_barrier_hook: Option<super::agent_runtime::AckSubscribeHook>,
 }
 
 impl DefaultDesktopAgentThreadControl {
@@ -714,6 +716,8 @@ impl DefaultDesktopAgentThreadControl {
             control_override: None,
             #[cfg(test)]
             chat_override: None,
+            #[cfg(test)]
+            close_barrier_hook: None,
         }
     }
 
@@ -731,7 +735,13 @@ impl DefaultDesktopAgentThreadControl {
             runtime_requests,
             control_override: Some(control),
             chat_override,
+            close_barrier_hook: None,
         }
+    }
+
+    #[cfg(test)]
+    fn set_close_barrier_hook(&mut self, hook: Option<super::agent_runtime::AckSubscribeHook>) {
+        self.close_barrier_hook = hook;
     }
 
     fn control(&self, root_session_id: &str) -> anyhow::Result<Arc<AgentControl>> {
@@ -855,6 +865,13 @@ impl DesktopAgentThreadControl for DefaultDesktopAgentThreadControl {
         let control = self.control(root_session_id)?;
         let target_thread = control.resolve_desktop_target(target)?;
         let _close = self.runtime_manager.lock_subtree_close().await;
+        let close_admission = control.begin_close(target_thread.canonical_path.clone())?;
+        close_admission.wait_for_inflight_spawns().await?;
+        #[cfg(test)]
+        if let Some(hook) = self.close_barrier_hook.as_ref() {
+            hook.entered.notify_one();
+            hook.release.notified().await;
+        }
         let mut threads = control
             .snapshot()?
             .threads
@@ -1410,6 +1427,198 @@ mod tests {
                 .filter(|event| matches!(event.event, RunnerEvent::RuntimeTerminated))
                 .count(),
             1
+        );
+    }
+
+    #[tokio::test]
+    async fn close_barrier_rejects_spawn_send_and_followup_under_prefix() {
+        let dir = tempfile::tempdir().unwrap();
+        let memory_dir = dir.path().join("memory");
+        let dispatch = dispatch(&dir);
+        let parent = committed_child(&dispatch, "parent");
+        let child_reservation = dispatch
+            .control
+            .reserve_spawn(&parent.canonical_path, "child")
+            .unwrap();
+        let child = child_reservation.thread().clone();
+        child_reservation.commit().unwrap();
+        let hook = super::super::agent_runtime::AckSubscribeHook {
+            entered: Arc::new(tokio::sync::Notify::new()),
+            release: Arc::new(tokio::sync::Notify::new()),
+        };
+        let mut desktop = desktop_control(&dispatch, &memory_dir);
+        desktop.set_close_barrier_hook(Some(hook.clone()));
+        let desktop = Arc::new(desktop);
+        let close = tokio::spawn({
+            let desktop = Arc::clone(&desktop);
+            async move { desktop.close_subtree("root-session", "/root/parent").await }
+        });
+        hook.entered.notified().await;
+
+        assert!(dispatch
+            .control
+            .reserve_spawn(&parent.canonical_path, "late_child")
+            .is_err());
+        assert!(dispatch
+            .control
+            .reserve_spawn(&child.canonical_path, "late_grandchild")
+            .is_err());
+        assert!(dispatch
+            .control
+            .enqueue_message(
+                &AgentPath::root(),
+                MessageAgentV2Request {
+                    target: parent.canonical_path.to_string(),
+                    message: "queue only".into(),
+                },
+                false,
+            )
+            .is_err());
+        assert!(dispatch
+            .control
+            .enqueue_followup_with_admission(
+                &AgentPath::root(),
+                MessageAgentV2Request {
+                    target: parent.canonical_path.to_string(),
+                    message: "trigger turn".into(),
+                },
+                |_| Ok(()),
+            )
+            .is_err());
+        assert!(dispatch
+            .control
+            .drain_mailbox(&parent.canonical_path)
+            .unwrap()
+            .is_empty());
+        assert!(!dispatch
+            .control
+            .snapshot()
+            .unwrap()
+            .threads
+            .iter()
+            .any(|thread| {
+                matches!(
+                    thread.canonical_path.as_str(),
+                    "/root/parent/late_child" | "/root/parent/child/late_grandchild"
+                )
+            }));
+
+        hook.release.notify_one();
+        close.await.unwrap().unwrap();
+    }
+
+    #[tokio::test]
+    async fn close_waits_for_preexisting_spawn_reservation_then_closes_committed_child() {
+        let dir = tempfile::tempdir().unwrap();
+        let memory_dir = dir.path().join("memory");
+        let dispatch = dispatch(&dir);
+        let parent = committed_child(&dispatch, "parent");
+        let reservation = dispatch
+            .control
+            .reserve_spawn(&parent.canonical_path, "late_child")
+            .unwrap();
+        let late_child = reservation.thread().clone();
+        let desktop = Arc::new(desktop_control(&dispatch, &memory_dir));
+        let close = tokio::spawn({
+            let desktop = Arc::clone(&desktop);
+            async move { desktop.close_subtree("root-session", "/root/parent").await }
+        });
+
+        tokio::time::timeout(Duration::from_secs(1), async {
+            while !dispatch
+                .control
+                .is_path_closing(&parent.canonical_path)
+                .unwrap()
+            {
+                tokio::task::yield_now().await;
+            }
+        })
+        .await
+        .unwrap();
+        assert!(!close.is_finished());
+
+        reservation.commit().unwrap();
+        let snapshot = close.await.unwrap().unwrap();
+        assert_eq!(
+            snapshot
+                .threads
+                .iter()
+                .find(|thread| thread.thread_id == late_child.thread_id)
+                .unwrap()
+                .status,
+            AgentStatusV2::Shutdown
+        );
+    }
+
+    #[tokio::test]
+    async fn shutdown_parent_rejects_new_spawn_without_pending_artifacts() {
+        let dir = tempfile::tempdir().unwrap();
+        let memory_dir = dir.path().join("memory");
+        let dispatch = dispatch(&dir);
+        let parent = committed_child(&dispatch, "parent");
+        desktop_control(&dispatch, &memory_dir)
+            .close_subtree("root-session", "/root/parent")
+            .await
+            .unwrap();
+        let before = dispatch.control.snapshot().unwrap();
+
+        assert!(dispatch
+            .control
+            .reserve_spawn(&parent.canonical_path, "after_shutdown")
+            .is_err());
+
+        assert_eq!(dispatch.control.snapshot().unwrap(), before);
+        let graph = rusqlite::Connection::open(dir.path().join("subagents-v2.db")).unwrap();
+        assert_eq!(
+            graph
+                .query_row(
+                    "SELECT COUNT(*) FROM agent_threads WHERE status_kind = 'pending_init'",
+                    [],
+                    |row| row.get::<_, i64>(0),
+                )
+                .unwrap(),
+            0
+        );
+    }
+
+    #[tokio::test]
+    async fn cancelled_close_releases_prefix_admission_barrier() {
+        let dir = tempfile::tempdir().unwrap();
+        let memory_dir = dir.path().join("memory");
+        let dispatch = dispatch(&dir);
+        let parent = committed_child(&dispatch, "parent");
+        let hook = super::super::agent_runtime::AckSubscribeHook {
+            entered: Arc::new(tokio::sync::Notify::new()),
+            release: Arc::new(tokio::sync::Notify::new()),
+        };
+        let mut desktop = desktop_control(&dispatch, &memory_dir);
+        desktop.set_close_barrier_hook(Some(hook.clone()));
+        let desktop = Arc::new(desktop);
+        let close = tokio::spawn({
+            let desktop = Arc::clone(&desktop);
+            async move { desktop.close_subtree("root-session", "/root/parent").await }
+        });
+        hook.entered.notified().await;
+
+        close.abort();
+        assert!(close.await.unwrap_err().is_cancelled());
+        assert!(!dispatch
+            .control
+            .is_path_closing(&parent.canonical_path)
+            .unwrap());
+        dispatch
+            .control
+            .reserve_spawn(&parent.canonical_path, "allowed_after_cancel")
+            .unwrap()
+            .abort()
+            .unwrap();
+        assert_ne!(
+            dispatch
+                .control
+                .resolve_desktop_target(parent.canonical_path.as_str())
+                .unwrap()
+                .status,
+            AgentStatusV2::Shutdown
         );
     }
 

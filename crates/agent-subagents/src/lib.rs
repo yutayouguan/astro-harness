@@ -20,8 +20,9 @@ pub use config::{
     AgentDefinition, AgentsSettings, ResolvedAgent, SkillConfigEntry, SkillsLayer,
 };
 pub use control::{
-    AgentControl, AgentRuntimeHandle, AgentThreadCommand, AgentThreadControl, LiveAgentThreads,
-    RuntimeHandleRegistry, WaitAgentResult, WaitOutcome,
+    AgentControl, AgentRuntimeHandle, AgentSpawnReservation, AgentThreadCommand,
+    AgentThreadControl, CloseAdmissionGuard, LiveAgentThreads, RuntimeHandleRegistry,
+    WaitAgentResult, WaitOutcome,
 };
 pub use mailbox::{MailboxKind, MailboxMessage, NewMailboxMessage};
 pub use migration::{HistoricalAgentMessage, HistoricalAgentThread};
