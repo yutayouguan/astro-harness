@@ -261,6 +261,23 @@ impl HitlRegistry {
             gate.cancel_all().await;
         }
     }
+
+    pub async fn cancel_and_remove_if(&self, session_id: &str, expected: &Arc<HitlGate>) -> bool {
+        let removed = {
+            let mut gates = self.inner.write().await;
+            if gates
+                .get(session_id)
+                .is_some_and(|current| Arc::ptr_eq(current, expected))
+            {
+                gates.remove(session_id);
+                true
+            } else {
+                false
+            }
+        };
+        expected.cancel_all().await;
+        removed
+    }
 }
 
 /// 工具名是否为 interactive（整批强制串行）。
@@ -323,6 +340,39 @@ mod tests {
         let (_interrupt, res) = handle.await.unwrap();
         assert_eq!(res.status, "resolved");
         assert!(res.to_tool_result().contains("approved"));
+    }
+
+    #[tokio::test]
+    async fn stale_gate_cleanup_cancels_only_its_exact_generation() {
+        let registry = HitlRegistry::new();
+        let old = HitlGate::new("same-session");
+        let old_rx = old
+            .begin_wait(Interrupt {
+                id: "old".into(),
+                ..Default::default()
+            })
+            .await;
+        registry.insert(Arc::clone(&old)).await;
+
+        let replacement = HitlGate::new("same-session");
+        let mut replacement_rx = replacement
+            .begin_wait(Interrupt {
+                id: "replacement".into(),
+                ..Default::default()
+            })
+            .await;
+        registry.insert(Arc::clone(&replacement)).await;
+
+        assert!(
+            !registry.cancel_and_remove_if("same-session", &old).await,
+            "stale cleanup must not remove the replacement registry entry"
+        );
+        assert_eq!(old_rx.await.unwrap().status, "cancelled");
+        assert!(replacement_rx.try_recv().is_err());
+        assert!(registry
+            .get("same-session")
+            .await
+            .is_some_and(|gate| Arc::ptr_eq(&gate, &replacement)));
     }
 
     #[tokio::test]

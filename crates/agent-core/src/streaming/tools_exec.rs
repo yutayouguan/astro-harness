@@ -1148,7 +1148,9 @@ pub(crate) async fn execute_tools_concurrent(
     let mut join_set = JoinSet::new();
     for (idx, call) in calls.iter().cloned().enumerate() {
         let runtime = runtime.clone();
+        let child_permit = runtime.step_context.turn.track_child();
         join_set.spawn_blocking(move || {
+            let _child_permit = child_permit;
             let result: types::ToolOutput = if call.args_parse_error {
                 format!(
                     "工具参数 JSON 解析失败: {}",

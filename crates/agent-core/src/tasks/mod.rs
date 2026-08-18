@@ -196,6 +196,7 @@ impl Session {
         input: Vec<TurnInput>,
         task: T,
     ) -> anyhow::Result<()> {
+        let _admission = self.task_admission.lock().await;
         if let Err(error) = self.abort_all_tasks(TurnAbortReason::Replaced).await {
             let Some(previous_turn_id) = self.current_turn_id().await else {
                 return Err(error);
@@ -212,8 +213,6 @@ impl Session {
         let cancellation_token = CancellationToken::new();
         let completion = CancellationToken::new();
         let installed = Arc::new(Notify::new());
-        self.cancel_signal().reset();
-        self.bind_turn_context(Arc::clone(&turn_context)).await;
 
         let session = Arc::clone(self);
         let ctx = Arc::clone(&turn_context);
@@ -229,15 +228,14 @@ impl Session {
         let installed_for_run = Arc::clone(&installed);
         let handle = tokio::spawn(async move {
             installed_for_run.notified().await;
-            let result = AssertUnwindSafe(task_for_run.run(
-                Arc::clone(&session),
-                Arc::clone(&ctx),
-                input,
-                child,
-            ))
-            .catch_unwind()
-            .await
-            .unwrap_or_else(|_| Err(anyhow::anyhow!("session task panicked")));
+            let run_session = Arc::clone(&session);
+            let result =
+                AssertUnwindSafe(
+                    async move { task_for_run.run(run_session, ctx, input, child).await },
+                )
+                .catch_unwind()
+                .await
+                .unwrap_or_else(|_| Err(anyhow::anyhow!("session task panicked")));
             if let Some(running) = session.claim_natural_finish(&turn_id_for_run).await {
                 session
                     .finish_natural_task(running, result, &completion_for_run)
@@ -249,12 +247,14 @@ impl Session {
             .install_running_task(
                 task,
                 cancellation_token.clone(),
-                turn_context,
+                Arc::clone(&turn_context),
                 completion.clone(),
                 handle,
             )
             .await;
         if installed_result.is_ok() {
+            self.cancel_signal().reset();
+            self.bind_turn_context(turn_context).await;
             installed.notify_one();
         } else {
             cancellation_token.cancel();
@@ -312,6 +312,7 @@ impl Session {
         if let Err(error) = result {
             tracing::warn!(%error, %turn_id, "session task failed");
         }
+        running.turn_context.wait_for_children().await;
         drop(running.task);
         drop(running.handle);
         Self::await_auxiliary_handles(&mut running.auxiliary_handles).await;
@@ -387,6 +388,18 @@ impl Session {
                 );
                 let _ = (&mut running.handle).await;
             }
+        }
+
+        if tokio::time::timeout(TASK_ABORT_TIMEOUT, running.turn_context.wait_for_children())
+            .await
+            .is_err()
+        {
+            tracing::warn!(?reason, %turn_id, "session task children are still running; supervisor retained ownership");
+            Self::report_deferred_abort(
+                &mut reply_tx,
+                anyhow::anyhow!("task {turn_id} children did not terminate"),
+            );
+            running.turn_context.wait_for_children().await;
         }
 
         let task = Arc::clone(&running.task);
@@ -1236,5 +1249,189 @@ mod tests {
             .unwrap()
             .unwrap();
         assert!(hook_called.load(Ordering::SeqCst));
+    }
+
+    struct SpawnBlockingToolChildTask {
+        child_started: Arc<Notify>,
+        child_release: Arc<std::sync::Mutex<std::sync::mpsc::Receiver<()>>>,
+    }
+
+    impl SessionTask for SpawnBlockingToolChildTask {
+        fn kind(&self) -> TaskKind {
+            TaskKind::Regular
+        }
+
+        fn span_name(&self) -> &'static str {
+            "session_task.spawn_blocking_tool_child_test"
+        }
+
+        async fn run(
+            self: Arc<Self>,
+            _session: Arc<Session>,
+            ctx: Arc<TurnContext>,
+            _input: Vec<TurnInput>,
+            _cancellation_token: CancellationToken,
+        ) -> SessionTaskResult {
+            let child_permit = ctx.track_child();
+            let child_started = Arc::clone(&self.child_started);
+            let child_release = Arc::clone(&self.child_release);
+            tokio::task::spawn_blocking(move || {
+                let _child_permit = child_permit;
+                child_started.notify_one();
+                let _ = child_release
+                    .lock()
+                    .expect("child release mutex poisoned")
+                    .recv();
+            })
+            .await?;
+            Ok(None)
+        }
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn spawn_blocking_tool_child_keeps_abort_lifecycle_until_real_exit() {
+        let (_dir, session, thread) = task_test_thread("spawn-blocking-child-test").await;
+        let child_started = Arc::new(Notify::new());
+        let (release_tx, release_rx) = std::sync::mpsc::channel();
+        let context = session
+            .create_turn_context("turn-spawn-blocking-child".into())
+            .await;
+        session
+            .spawn_task(
+                context,
+                Vec::new(),
+                SpawnBlockingToolChildTask {
+                    child_started: Arc::clone(&child_started),
+                    child_release: Arc::new(std::sync::Mutex::new(release_rx)),
+                },
+            )
+            .await
+            .unwrap();
+        child_started.notified().await;
+
+        thread.submit(agent_protocol::Op::Interrupt).await.unwrap();
+        let error = tokio::time::timeout(Duration::from_millis(250), thread.next_event())
+            .await
+            .expect("blocking child should produce a bounded abort error")
+            .unwrap();
+        assert!(matches!(error.msg, agent_protocol::EventMsg::Error(_)));
+
+        let wait_for_task = tokio::spawn({
+            let session = Arc::clone(&session);
+            async move { session.wait_for_task("turn-spawn-blocking-child").await }
+        });
+        let next_task = tokio::spawn({
+            let session = Arc::clone(&session);
+            async move {
+                let context = session
+                    .create_turn_context("turn-after-blocking-child".into())
+                    .await;
+                session.spawn_task(context, Vec::new(), NoopTask).await
+            }
+        });
+        tokio::task::yield_now().await;
+        assert!(!wait_for_task.is_finished());
+        assert!(!next_task.is_finished());
+        assert!(
+            tokio::time::timeout(Duration::from_millis(10), thread.next_event())
+                .await
+                .is_err()
+        );
+
+        release_tx.send(()).unwrap();
+        let event = tokio::time::timeout(Duration::from_secs(1), thread.next_event())
+            .await
+            .expect("terminal should follow the real blocking child exit")
+            .unwrap();
+        assert!(matches!(
+            event.msg,
+            agent_protocol::EventMsg::TurnAborted(_)
+        ));
+        tokio::time::timeout(Duration::from_secs(1), wait_for_task)
+            .await
+            .expect("completion should follow the real blocking child exit")
+            .unwrap();
+        tokio::time::timeout(Duration::from_secs(1), next_task)
+            .await
+            .expect("next turn should start after the blocking child exits")
+            .unwrap()
+            .unwrap();
+    }
+
+    #[tokio::test]
+    async fn concurrent_spawn_admission_serializes_replace_install_and_bind() {
+        let dir = tempfile::tempdir().unwrap();
+        let session = Arc::new(
+            Session::with_session_id(
+                Config::with_defaults(dir.path().to_path_buf()),
+                "concurrent-spawn-admission".into(),
+            )
+            .unwrap(),
+        );
+        let active_turn_guard = session.active_turn.lock().await;
+
+        let first = tokio::spawn({
+            let session = Arc::clone(&session);
+            async move {
+                let context = session.create_turn_context("turn-admission-1".into()).await;
+                session
+                    .spawn_task(
+                        context,
+                        Vec::new(),
+                        PendingTask {
+                            started: Arc::new(Notify::new()),
+                        },
+                    )
+                    .await
+            }
+        });
+        tokio::task::yield_now().await;
+        let second = tokio::spawn({
+            let session = Arc::clone(&session);
+            async move {
+                let context = session.create_turn_context("turn-admission-2".into()).await;
+                session
+                    .spawn_task(
+                        context,
+                        Vec::new(),
+                        PendingTask {
+                            started: Arc::new(Notify::new()),
+                        },
+                    )
+                    .await
+            }
+        });
+        tokio::task::yield_now().await;
+        drop(active_turn_guard);
+
+        tokio::time::timeout(Duration::from_secs(1), first)
+            .await
+            .expect("first admission should finish")
+            .unwrap()
+            .expect("first admission should install before replacement");
+        tokio::time::timeout(Duration::from_secs(1), second)
+            .await
+            .expect("second admission should finish")
+            .unwrap()
+            .expect("second admission should atomically replace the first");
+
+        let active_turn_id = session
+            .active_turn
+            .lock()
+            .await
+            .as_ref()
+            .and_then(|turn| turn.task.as_ref())
+            .map(|running| running.turn_context.sub_id().to_string());
+        assert_eq!(active_turn_id.as_deref(), Some("turn-admission-2"));
+        assert_eq!(
+            session.current_turn_id().await.as_deref(),
+            active_turn_id.as_deref(),
+            "the losing admission must never overwrite the installed turn context"
+        );
+
+        session
+            .abort_all_tasks(TurnAbortReason::Interrupted)
+            .await
+            .unwrap();
     }
 }

@@ -5,7 +5,8 @@
 //! belong to [`super::StepContext`].
 
 use std::path::{Path, PathBuf};
-use std::sync::Mutex;
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::{Arc, Mutex};
 
 use agent_protocol::TurnInput;
 
@@ -13,6 +14,25 @@ use agent_protocol::TurnInput;
 struct TurnInputState {
     pending: Vec<TurnInput>,
     accepting: bool,
+}
+
+#[derive(Debug, Default)]
+struct ChildTracker {
+    active: AtomicUsize,
+    changed: tokio::sync::Notify,
+}
+
+#[derive(Debug)]
+pub(crate) struct ChildPermit {
+    tracker: Arc<ChildTracker>,
+}
+
+impl Drop for ChildPermit {
+    fn drop(&mut self) {
+        if self.tracker.active.fetch_sub(1, Ordering::AcqRel) == 1 {
+            self.tracker.changed.notify_one();
+        }
+    }
 }
 
 /// Immutable state shared by every sampling step in one user turn.
@@ -30,6 +50,7 @@ pub struct TurnContext {
     pub(crate) project_root: Option<PathBuf>,
     /// User input steered into the active task, consumed before the next sampling request.
     input_state: Mutex<TurnInputState>,
+    child_tracker: Arc<ChildTracker>,
 }
 
 impl TurnContext {
@@ -50,6 +71,7 @@ impl TurnContext {
                 pending: Vec::new(),
                 accepting: true,
             }),
+            child_tracker: Arc::new(ChildTracker::default()),
         }
     }
 
@@ -71,6 +93,23 @@ impl TurnContext {
 
     pub fn project_root(&self) -> Option<&Path> {
         self.project_root.as_deref()
+    }
+
+    pub(crate) fn track_child(&self) -> ChildPermit {
+        self.child_tracker.active.fetch_add(1, Ordering::AcqRel);
+        ChildPermit {
+            tracker: Arc::clone(&self.child_tracker),
+        }
+    }
+
+    pub(crate) async fn wait_for_children(&self) {
+        loop {
+            let changed = self.child_tracker.changed.notified();
+            if self.child_tracker.active.load(Ordering::Acquire) == 0 {
+                return;
+            }
+            changed.await;
+        }
     }
 
     pub(crate) fn push_input(&self, input: TurnInput) -> bool {

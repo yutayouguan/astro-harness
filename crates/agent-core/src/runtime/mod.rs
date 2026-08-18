@@ -144,6 +144,8 @@ pub struct Session {
     pub(crate) cancel: CancelSignal,
     /// Codex-style single-active-task registry for this session.
     pub(crate) active_turn: TokioMutex<Option<ActiveTurn>>,
+    /// Serializes abort-old -> install -> bind -> start admission for session tasks.
+    pub(crate) task_admission: TokioMutex<()>,
     /// Persistent completion signals survive `RunningTask` being taken for abort.
     pub(crate) task_completions: TokioMutex<HashMap<String, tokio_util::sync::CancellationToken>>,
     /// Bound atomically once by [`AstroThread`] for session runtime I/O.
@@ -250,6 +252,7 @@ impl Session {
             execution,
             cancel: CancelSignal::new(),
             active_turn: TokioMutex::new(None),
+            task_admission: TokioMutex::new(()),
             task_completions: TokioMutex::new(HashMap::new()),
             runtime_io: OnceLock::new(),
             runtime_shutdown: AtomicBool::new(false),
