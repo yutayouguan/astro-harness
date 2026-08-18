@@ -2896,6 +2896,49 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn abandoned_prepared_admission_without_live_generation_prunes_operation() {
+        let dir = TempDir::new().unwrap();
+        let service = Arc::new(AstroServiceImpl::new(dir.path().to_path_buf()));
+        let session_id = "abandoned-prepared-admission-prunes-operation";
+        let session = service.get_session(session_id).await.unwrap();
+        let (ui_tx, _ui_rx) = tokio::sync::mpsc::unbounded_channel();
+        let (reply_tx, reply_rx) = tokio::sync::oneshot::channel();
+        let worker = tokio::spawn({
+            let service = Arc::clone(&service);
+            let session = Arc::clone(&session);
+            async move {
+                service
+                    .run_admit_pause_generation_worker(
+                        session_id.to_string(),
+                        session,
+                        HitlGate::new(session_id),
+                        ui_tx,
+                        reply_tx,
+                    )
+                    .await;
+            }
+        });
+
+        let prepared = reply_rx
+            .await
+            .expect("worker must send its prepared admission")
+            .expect("current session must prepare admission");
+        worker.await.unwrap();
+        assert!(service
+            .generation_operations
+            .lock()
+            .unwrap()
+            .contains_key(session_id));
+
+        drop(prepared);
+        assert!(!service
+            .generation_operations
+            .lock()
+            .unwrap()
+            .contains_key(session_id));
+    }
+
+    #[tokio::test]
     async fn closed_admission_reply_does_not_replace_live_generation() {
         let dir = TempDir::new().unwrap();
         let service = AstroServiceImpl::new(dir.path().to_path_buf());
@@ -3425,6 +3468,52 @@ mod tests {
             "the None fallback must not finalize a session already shutting down"
         );
         assert_eq!(finalize_hits.load(Ordering::SeqCst), 1);
+    }
+
+    #[tokio::test]
+    async fn recreated_session_resets_finalize_ownership_generation() {
+        let dir = TempDir::new().unwrap();
+        let service = AstroServiceImpl::new(dir.path().to_path_buf());
+        let session_id = "recreated-session-finalize-ownership";
+        let finalize_hits = Arc::new(AtomicUsize::new(0));
+        let finalize_counter = Arc::clone(&finalize_hits);
+        service
+            .hook_runtime
+            .plugin
+            .register(::hooks::ON_SESSION_FINALIZE, move |_| {
+                finalize_counter.fetch_add(1, Ordering::SeqCst);
+                ::hooks::HookOutcome::Continue
+            });
+
+        let first = service.get_session(session_id).await.unwrap();
+        let first_release = service.release_session_runtime(session_id).await;
+        assert!(!first_release.should_finalize_without_runtime);
+        assert_eq!(finalize_hits.load(Ordering::SeqCst), 1);
+        assert!(service
+            .released_session_ids
+            .lock()
+            .unwrap()
+            .contains(session_id));
+
+        let second = service.get_session(session_id).await.unwrap();
+        assert!(!Arc::ptr_eq(&first, &second));
+        assert!(!service
+            .released_session_ids
+            .lock()
+            .unwrap()
+            .contains(session_id));
+
+        let second_release = service.release_session_runtime(session_id).await;
+        assert!(!second_release.should_finalize_without_runtime);
+        assert_eq!(finalize_hits.load(Ordering::SeqCst), 2);
+        assert!(service
+            .released_session_ids
+            .lock()
+            .unwrap()
+            .contains(session_id));
+        let duplicate_release = service.release_session_runtime(session_id).await;
+        assert!(!duplicate_release.should_finalize_without_runtime);
+        assert_eq!(finalize_hits.load(Ordering::SeqCst), 2);
     }
 
     #[tokio::test]
