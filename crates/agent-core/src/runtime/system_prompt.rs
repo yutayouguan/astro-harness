@@ -41,7 +41,7 @@ impl AgentLoop {
                 state.pending_learning_nudge.clone(),
             )
         };
-        let (project_memory, user_profile, daily) = self.memory.prompt_snapshot_with_daily();
+        let (project_memory, user_profile, daily) = self.memory().prompt_snapshot_with_daily();
         let skill_pairs = if self.tool_registry().is_toolset_enabled("skills") {
             skills::list_enabled_for_prompt_with_config(&self.skill_config_overrides)
         } else {
@@ -67,7 +67,7 @@ impl AgentLoop {
         let dynamic_ctx = {
             let mut dyn_ctx =
                 DynamicContext::from_recalled(self.config.dynamic_max_items, &recalled_context);
-            let pinned = tools::render_pinned_for_prompt(&self.memory.workspace_dir);
+            let pinned = tools::render_pinned_for_prompt(&self.workspace_dir());
             if !pinned.trim().is_empty() {
                 // 固定上下文优先于本轮 FTS 召回
                 dyn_ctx.items.insert(0, pinned);
@@ -92,7 +92,7 @@ impl AgentLoop {
     /// 副作用：设置 workspace 目录覆盖供 skills 发现使用。
     pub async fn build_system_prompt(&self) -> String {
         let (static_ctx, dynamic_ctx, skill_pairs) = self.system_prompt_parts().await;
-        skills::set_workspace_override(&self.memory.workspace_dir);
+        skills::set_workspace_override(&self.workspace_dir());
         let skill_index: Vec<(&str, &str)> = skill_pairs
             .iter()
             .map(|(name, desc)| (name.as_str(), desc.as_str()))

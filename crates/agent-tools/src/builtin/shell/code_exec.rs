@@ -254,7 +254,7 @@ mod tests {
 
     fn test_ctx<'a>(
         dir: &'a tempfile::TempDir,
-        memory: &'a mut memory::MemoryManager,
+        memory: &'a std::sync::RwLock<memory::MemoryManager>,
         sessions: &'a session::SessionStore,
         targets: &'a ImageGenTargets,
         creds: &'a crate::context::ModelCredentials,
@@ -309,12 +309,13 @@ mod tests {
     #[tokio::test]
     async fn rejects_unknown_language() {
         let dir = tempfile::tempdir().unwrap();
-        let mut memory = memory::MemoryManager::new(dir.path().to_path_buf()).unwrap();
+        let memory = memory::MemoryManager::new(dir.path().to_path_buf()).unwrap();
         let sessions =
             session::SessionStore::open_sessions_dir(&memory.base_dir.join("sessions")).unwrap();
         let targets = ImageGenTargets::default();
         let creds = crate::context::ModelCredentials::default();
-        let ctx = test_ctx(&dir, &mut memory, &sessions, &targets, &creds);
+        let memory = std::sync::RwLock::new(memory);
+        let ctx = test_ctx(&dir, &memory, &sessions, &targets, &creds);
         let err = dispatch(&ctx, &serde_json::json!({"code": "1", "language": "ruby"}))
             .await
             .unwrap_err()
@@ -325,12 +326,13 @@ mod tests {
     #[tokio::test]
     async fn large_stdout_is_truncated() {
         let dir = tempfile::tempdir().unwrap();
-        let mut memory = memory::MemoryManager::new(dir.path().to_path_buf()).unwrap();
+        let memory = memory::MemoryManager::new(dir.path().to_path_buf()).unwrap();
         let sessions =
             session::SessionStore::open_sessions_dir(&memory.base_dir.join("sessions")).unwrap();
         let targets = ImageGenTargets::default();
         let creds = crate::context::ModelCredentials::default();
-        let ctx = test_ctx(&dir, &mut memory, &sessions, &targets, &creds);
+        let memory = std::sync::RwLock::new(memory);
+        let ctx = test_ctx(&dir, &memory, &sessions, &targets, &creds);
         let n = types::MAX_TOOL_RESULT_BYTES + 4096;
         let out = dispatch(
             &ctx,
@@ -353,12 +355,13 @@ mod tests {
     #[tokio::test]
     async fn concurrent_same_language_no_clobber() {
         let dir = tempfile::tempdir().unwrap();
-        let mut memory = memory::MemoryManager::new(dir.path().to_path_buf()).unwrap();
+        let memory = memory::MemoryManager::new(dir.path().to_path_buf()).unwrap();
         let sessions =
             session::SessionStore::open_sessions_dir(&memory.base_dir.join("sessions")).unwrap();
         let targets = ImageGenTargets::default();
         let creds = crate::context::ModelCredentials::default();
-        let ctx = test_ctx(&dir, &mut memory, &sessions, &targets, &creds);
+        let memory = std::sync::RwLock::new(memory);
+        let ctx = test_ctx(&dir, &memory, &sessions, &targets, &creds);
         // 两个并发的同语言调用共享同一个 .code_exec 目录；
         // sleep 制造重叠窗口——若临时文件名固定会相互覆盖。
         let a = serde_json::json!({"language": "python", "code": "import time; time.sleep(0.3); print('MARKER_AAA')"});
@@ -374,12 +377,13 @@ mod tests {
     async fn does_not_leak_secret_env_to_python() {
         std::env::set_var("ASTRO_CODE_EXEC_TEST_SECRET_TOKEN", "should-not-leak");
         let dir = tempfile::tempdir().unwrap();
-        let mut memory = memory::MemoryManager::new(dir.path().to_path_buf()).unwrap();
+        let memory = memory::MemoryManager::new(dir.path().to_path_buf()).unwrap();
         let sessions =
             session::SessionStore::open_sessions_dir(&memory.base_dir.join("sessions")).unwrap();
         let targets = ImageGenTargets::default();
         let creds = crate::context::ModelCredentials::default();
-        let ctx = test_ctx(&dir, &mut memory, &sessions, &targets, &creds);
+        let memory = std::sync::RwLock::new(memory);
+        let ctx = test_ctx(&dir, &memory, &sessions, &targets, &creds);
         let out = dispatch(
             &ctx,
             &serde_json::json!({
@@ -399,12 +403,13 @@ mod tests {
     #[tokio::test]
     async fn timeout_cleans_temp_script() {
         let dir = tempfile::tempdir().unwrap();
-        let mut memory = memory::MemoryManager::new(dir.path().to_path_buf()).unwrap();
+        let memory = memory::MemoryManager::new(dir.path().to_path_buf()).unwrap();
         let sessions =
             session::SessionStore::open_sessions_dir(&memory.base_dir.join("sessions")).unwrap();
         let targets = ImageGenTargets::default();
         let creds = crate::context::ModelCredentials::default();
-        let ctx = test_ctx(&dir, &mut memory, &sessions, &targets, &creds);
+        let memory = std::sync::RwLock::new(memory);
+        let ctx = test_ctx(&dir, &memory, &sessions, &targets, &creds);
         // 正常成功路径后确认目录可清理；超时清理由 TempScript Drop 保证。
         let _ = dispatch(
             &ctx,
@@ -432,12 +437,13 @@ mod tests {
     #[tokio::test]
     async fn shell_language_rejected() {
         let dir = tempfile::tempdir().unwrap();
-        let mut memory = memory::MemoryManager::new(dir.path().to_path_buf()).unwrap();
+        let memory = memory::MemoryManager::new(dir.path().to_path_buf()).unwrap();
         let sessions =
             session::SessionStore::open_sessions_dir(&memory.base_dir.join("sessions")).unwrap();
         let targets = ImageGenTargets::default();
         let creds = crate::context::ModelCredentials::default();
-        let ctx = test_ctx(&dir, &mut memory, &sessions, &targets, &creds);
+        let memory = std::sync::RwLock::new(memory);
+        let ctx = test_ctx(&dir, &memory, &sessions, &targets, &creds);
         let err = dispatch(
             &ctx,
             &serde_json::json!({"language": "shell", "code": "echo hi"}),

@@ -14,13 +14,13 @@ impl Session {
     ///
     /// 若上一轮工具次数达到 `learning.complex_task_tool_threshold`，为本轮挂起学习 nudge。
     pub async fn begin_user_turn(&self) {
-        let compression = memory::load_compression_config(&self.memory.base_dir);
+        let memory_dir = self.memory_dir().to_path_buf();
+        let compression = memory::load_compression_config(&memory_dir);
         {
             let mut state = self.state.lock().await;
             let prev_rounds = state.turn.begin_new_turn();
             state.compression.reset_for_new_turn(&compression);
-            state.pending_learning_nudge =
-                Self::compute_learning_nudge(&self.memory.base_dir, prev_rounds);
+            state.pending_learning_nudge = Self::compute_learning_nudge(&memory_dir, prev_rounds);
         }
         let context_window = self.context_window();
         *self
@@ -122,7 +122,7 @@ impl Session {
                 .any(|m| matches!(m.role, types::message::Role::Assistant))
         {
             memory::try_append_decision(
-                self.memory.base_dir.as_path(),
+                self.memory_dir(),
                 memory::DecisionEntry::new(
                     memory::DecisionKind::UserCorrection,
                     user_message.chars().take(200).collect::<String>(),

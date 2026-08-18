@@ -1,6 +1,6 @@
 # Agent 生命周期详细设计
 
-> 版本：v2.12
+> 版本：v2.13
 > 日期：2026-08-18
 > 状态：实施基线  
 > 上游参考：[OpenAI Codex](https://github.com/openai/codex) `632e35ce8d5dec43b75dbf99f9e6fa52bed47c3d`  
@@ -521,6 +521,8 @@ schema 和 RPC 字段改名都必须提供 migration 或 serde alias。
     收窄为 `&Session`，并用 `Arc<Session>` 编译期契约锁定。
   - [x] 将 `ToolRegistry` 与 MCP instructions 内锁化，并把回合准备、Step 快照与 system prompt
     API 收窄为 `&Session`。
+  - [x] 将 `MemoryManager` 内锁化，并把完整工具调用链收窄为 `&Session`；memory guard 不跨
+    任意工具、MCP、SubAgent 或 provider `await`。
   - [ ] 将 `SessionTask`、streaming、background 和 server 签名迁移为 `Arc<Session>`。
 
 v2.3 落地说明：foreground、background、Cron 与 SubAgent 不再先调用
@@ -603,6 +605,17 @@ v2.12 ToolRegistry/MCP 内锁化批次：`Session.tool_registry` 与 MCP instruc
 替换外层 `Arc<Mutex<Session>>`：工具执行会把 `&mut MemoryManager` 借入 `ToolContext`，这是
 下一批必须先内锁化的最后一类核心可变借用；完成后才能一次性迁移 SessionTask、streaming、
 background 与 server handle，避免双重 session 身份。
+
+v2.13 MemoryManager 内锁化批次：`Session.memory` 改由 `RwLock<MemoryManager>` 持有，
+`ToolContext` 只保留该锁的共享引用。agent id、workspace 与 prompt snapshot 均先复制为拥有
+所有权的值；`memory` 写入、`context_search` 读取和 `persona_create` 激活仅在同步临界区内
+获取 guard，动态工具、MCP、终端、媒体与 SubAgent 的异步执行均不持有 memory guard。
+`handle_tool_call*`、`dispatch_named_tool` 与 `finalize_tool_call_result` 因此统一收窄为
+`&Session`。`session_state_api_is_callable_through_arc` 锁定 `Arc<Session>` 工具入口，
+`awaiting_dynamic_tool_does_not_block_memory_reads` 用挂起的真实动态 handler 验证异步工具不会
+阻塞记忆读取。外层 `Arc<Mutex<Session>>` 的真实可变状态阻塞已消除；下一批迁移 handle 前仍须
+明确 `ToolContext.sessions` 与 built-in tool future 的 non-Send 执行契约，避免把 current-thread
+运行时约束误改成跨线程 `tokio::spawn`。
 
 ### Phase C：工具运行时
 

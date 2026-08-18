@@ -137,10 +137,12 @@ impl AgentLoop {
                 return;
             }
         };
-        let workspace = self.memory.workspace_dir.clone();
+        let (workspace, agent_id) = {
+            let memory = self.memory();
+            (memory.workspace_dir.clone(), memory.agent_id.clone())
+        };
         let session_id = self.session_id.clone();
         let message_id = msg_id.to_string();
-        let agent_id = self.agent_id().to_string();
         for asset in media {
             let Some(rel) = asset.workspace_path() else {
                 continue; // data URL / 远程 URI 不落盘，跳过

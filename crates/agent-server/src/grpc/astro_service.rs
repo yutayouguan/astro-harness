@@ -154,7 +154,7 @@ async fn spawn_review_to_hub(session: &SessionHandle, session_id: &str, hub: &Se
     let (notify_tx, mut notify_rx) = tokio::sync::mpsc::unbounded_channel();
     let (agent_id, memory_dir) = {
         let agent = session.lock().await;
-        let id = agent.agent_id().to_string();
+        let id = agent.agent_id();
         let dir = agent.memory_dir().to_path_buf();
         agent::exec::memory_review::spawn_background_review_after_turn(&agent, Some(notify_tx))
             .await;
@@ -200,7 +200,7 @@ async fn spawn_title_to_hub(session: &SessionHandle, hub: &SessionEventHub) {
     let (notify_tx, mut notify_rx) = tokio::sync::mpsc::unbounded_channel();
     let agent_id = {
         let agent = session.lock().await;
-        let id = agent.agent_id().to_string();
+        let id = agent.agent_id();
         agent::exec::title_generation::spawn_title_generation_after_turn(&agent, Some(notify_tx));
         id
     };
@@ -637,7 +637,7 @@ impl AstroService for AstroServiceImpl {
                 )));
             };
             drop(sessions);
-            let mut agent = session.lock().await;
+            let agent = session.lock().await;
             agent
                 .refresh_memory()
                 .map_err(|e| Status::internal(e.to_string()))?;
@@ -998,7 +998,7 @@ impl AstroService for AstroServiceImpl {
             let session_for_review = session.clone();
             let agent_id_for_events = {
                 let agent = session.lock().await;
-                agent.agent_id().to_string()
+                agent.agent_id()
             };
             let mut stream = stream_multi_turn_with_hitl(
                 session,
@@ -1347,7 +1347,7 @@ impl AstroService for AstroServiceImpl {
 
         let handles: Vec<_> = self.sessions.read().await.values().cloned().collect();
         for handle in handles {
-            let mut agent = handle.lock().await;
+            let agent = handle.lock().await;
             if agent.agent_id() != agent_id {
                 continue;
             }

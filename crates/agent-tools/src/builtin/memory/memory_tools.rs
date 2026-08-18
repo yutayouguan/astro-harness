@@ -68,7 +68,8 @@ pub fn dispatch(
     name: &str,
     args: &serde_json::Value,
 ) -> anyhow::Result<String> {
-    memory::dispatch_memory_tool(ctx.memory, name, args)
+    let mut memory = ctx.memory_mut();
+    memory::dispatch_memory_tool(&mut memory, name, args)
 }
 
 fn handle(

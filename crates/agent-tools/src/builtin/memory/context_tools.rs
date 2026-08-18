@@ -169,8 +169,9 @@ fn dispatch_search(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow::R
     }
 
     if want_memory {
-        let mem_hits = search_entries(ctx.memory.memory.live_entries(), query, limit);
-        let user_hits = search_entries(ctx.memory.user.live_entries(), query, limit);
+        let memory = ctx.memory();
+        let mem_hits = search_entries(memory.memory.live_entries(), query, limit);
+        let user_hits = search_entries(memory.user.live_entries(), query, limit);
         let mut lines = Vec::new();
         for e in &mem_hits {
             lines.push(format!("- [MEMORY] {}", truncate_chars(e, 400)));

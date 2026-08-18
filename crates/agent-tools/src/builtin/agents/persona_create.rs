@@ -122,7 +122,7 @@ pub fn dispatch(ctx: &mut ToolContext<'_>, args: &serde_json::Value) -> anyhow::
         ctx.workspace_dir = std::path::PathBuf::from(&info.path);
         skills::set_workspace_override(std::path::Path::new(&info.path));
         if let Ok(mgr) = memory::MemoryManager::for_agent(base.clone(), &info.id) {
-            *ctx.memory = mgr;
+            *ctx.memory_mut() = mgr;
         }
     }
 

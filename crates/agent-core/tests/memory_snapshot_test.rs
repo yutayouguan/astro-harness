@@ -6,7 +6,7 @@ use tempfile::TempDir;
 #[tokio::test]
 async fn snapshot_frozen_within_session() {
     let dir = TempDir::new().unwrap();
-    let mut agent = AgentLoop::with_session_id(
+    let agent = AgentLoop::with_session_id(
         AgentConfig::with_defaults(dir.path().to_path_buf()),
         "freeze-session".into(),
     )

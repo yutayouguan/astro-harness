@@ -254,13 +254,14 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let ws = dir.path().join("ws");
         std::fs::create_dir_all(&ws).unwrap();
-        let mut memory = memory::MemoryManager::new(dir.path().to_path_buf()).unwrap();
+        let memory = memory::MemoryManager::new(dir.path().to_path_buf()).unwrap();
         let sessions =
             session::SessionStore::open_sessions_dir(&memory.base_dir.join("sessions")).unwrap();
+        let memory = std::sync::RwLock::new(memory);
         let targets = ImageGenTargets::default();
         let creds = crate::context::ModelCredentials::default();
         let ctx = ToolContext {
-            memory: &mut memory,
+            memory: &memory,
             sessions: &sessions,
             memory_dir: dir.path().to_path_buf(),
             workspace_dir: ws,
@@ -298,9 +299,10 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let ws = dir.path().join("ws");
         std::fs::create_dir_all(&ws).unwrap();
-        let mut memory = memory::MemoryManager::new(dir.path().to_path_buf()).unwrap();
+        let memory = memory::MemoryManager::new(dir.path().to_path_buf()).unwrap();
         let sessions =
             session::SessionStore::open_sessions_dir(&memory.base_dir.join("sessions")).unwrap();
+        let memory = std::sync::RwLock::new(memory);
         let targets = ImageGenTargets::default();
         let bus = std::sync::Arc::new(hooks::PluginHookBus::new());
         bus.register(hooks::TRANSFORM_TERMINAL_OUTPUT, |_payload| {
@@ -308,7 +310,7 @@ mod tests {
         });
         let creds = crate::context::ModelCredentials::default();
         let ctx = ToolContext {
-            memory: &mut memory,
+            memory: &memory,
             sessions: &sessions,
             memory_dir: dir.path().to_path_buf(),
             workspace_dir: ws,

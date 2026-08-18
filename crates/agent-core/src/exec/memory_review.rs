@@ -63,7 +63,7 @@ pub async fn job_from_agent(agent: &AgentLoop) -> BackgroundReviewJob {
         .collect();
     BackgroundReviewJob {
         memory_dir: agent.memory_dir().to_path_buf(),
-        agent_id: agent.agent_id().to_string(),
+        agent_id: agent.agent_id(),
         messages,
         targets: agent.auxiliary_targets(types::AuxiliaryTask::BackgroundReview),
     }

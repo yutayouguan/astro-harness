@@ -216,7 +216,7 @@ async fn handle(
             let definition = resolved.definition;
             let request = subagents::SpawnAgentRequest {
                 parent_session_id: ctx.session_id.clone(),
-                parent_agent_id: ctx.memory.agent_id.clone(),
+                parent_agent_id: ctx.agent_id(),
                 task: task.to_string(),
                 agent_name: definition.name,
                 developer_instructions: definition.developer_instructions,

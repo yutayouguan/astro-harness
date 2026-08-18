@@ -467,13 +467,14 @@ mod path_tests {
         std::fs::create_dir_all(&outside).unwrap();
         std::fs::write(outside.join("secret.mp4"), b"x").unwrap();
 
-        let mut memory = MemoryManager::new(dir.path().to_path_buf()).unwrap();
+        let memory = MemoryManager::new(dir.path().to_path_buf()).unwrap();
         let sessions =
             session::SessionStore::open_sessions_dir(&dir.path().join("sessions")).unwrap();
+        let memory = std::sync::RwLock::new(memory);
         let targets = ImageGenTargets::default();
         let creds = crate::context::ModelCredentials::default();
         let ctx = ToolContext {
-            memory: &mut memory,
+            memory: &memory,
             sessions: &sessions,
             memory_dir: dir.path().to_path_buf(),
             workspace_dir: ws,

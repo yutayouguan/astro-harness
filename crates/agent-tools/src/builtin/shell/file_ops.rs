@@ -119,13 +119,14 @@ fn register_workspace_artifact(ctx: &ToolContext<'_>, rel: &str) {
         return;
     };
     if let Ok(db) = artifacts::open_default(&ctx.memory_dir) {
+        let agent_id = ctx.agent_id();
         // 垃圾/系统文件名会被 register 自行拒绝；失败不影响写入主流程。
         let _ = db.register(
             path,
             artifacts::ArtifactSource::AgentWrite,
             Some(&ctx.session_id),
             None,
-            Some(&ctx.memory.agent_id),
+            Some(&agent_id),
         );
     }
 }
@@ -1041,7 +1042,7 @@ mod tests {
 
     fn test_ctx<'a>(
         dir: &'a TempDir,
-        memory: &'a mut memory::MemoryManager,
+        memory: &'a std::sync::RwLock<memory::MemoryManager>,
         sessions: &'a session::SessionStore,
         targets: &'a ImageGenTargets,
         creds: &'a crate::context::ModelCredentials,
@@ -1109,15 +1110,16 @@ mod tests {
         let workspace = dir.path().join("workspace");
         fs::create_dir_all(workspace.join(".git")).unwrap();
         fs::write(workspace.join("source.txt"), "source").unwrap();
-        let mut memory = memory::MemoryManager::new(dir.path().to_path_buf()).unwrap();
+        let memory = memory::MemoryManager::new(dir.path().to_path_buf()).unwrap();
         let sessions =
             session::SessionStore::open_sessions_dir(&memory.base_dir.join("sessions")).unwrap();
+        let memory = std::sync::RwLock::new(memory);
         let targets = ImageGenTargets::default();
         let creds = crate::context::ModelCredentials::default();
 
         memory::set_permission_preset(dir.path(), types::PermissionPreset::ReadOnly).unwrap();
         {
-            let mut ctx = test_ctx(&dir, &mut memory, &sessions, &targets, &creds);
+            let mut ctx = test_ctx(&dir, &memory, &sessions, &targets, &creds);
             let error = dispatch(
                 &ctx,
                 &serde_json::json!({
@@ -1147,7 +1149,7 @@ mod tests {
             );
         }
         {
-            let ctx = test_ctx(&dir, &mut memory, &sessions, &targets, &creds);
+            let ctx = test_ctx(&dir, &memory, &sessions, &targets, &creds);
             let error = dispatch(
                 &ctx,
                 &serde_json::json!({
@@ -1164,7 +1166,7 @@ mod tests {
 
         memory::set_permission_preset(dir.path(), types::PermissionPreset::AskForApproval).unwrap();
         fs::write(workspace.join(".git/config"), "[core]").unwrap();
-        let ctx = test_ctx(&dir, &mut memory, &sessions, &targets, &creds);
+        let ctx = test_ctx(&dir, &memory, &sessions, &targets, &creds);
         dispatch(
             &ctx,
             &serde_json::json!({

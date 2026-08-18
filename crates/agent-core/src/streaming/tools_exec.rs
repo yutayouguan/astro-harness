@@ -1068,7 +1068,7 @@ async fn execute_tools_serial_inner(
             )
             .into()
         } else {
-            let mut agent = session.lock().await;
+            let agent = session.lock().await;
             let memory_dir = agent.memory_dir().to_path_buf();
             let session_id = agent.session_id().to_string();
             let execution_started = std::time::Instant::now();
@@ -1149,7 +1149,7 @@ pub(crate) async fn execute_tools_concurrent(
         ToolCallRuntime {
             step_context,
             memory_dir: agent.memory_dir().to_path_buf(),
-            agent_id: agent.agent_id().to_string(),
+            agent_id: agent.agent_id(),
             workspace_dir: agent.workspace_dir(),
             session_id: agent.session_id().to_string(),
             credentials: types::ModelCredentials {
@@ -1250,7 +1250,7 @@ impl ToolCallRuntime {
             Err(e) => return format!("工具错误: runtime: {e}").into(),
         };
         rt.block_on(async {
-            let mut memory =
+            let memory =
                 match memory::MemoryManager::for_agent(self.memory_dir.clone(), &self.agent_id) {
                     Ok(m) => m,
                     Err(e) => return format!("工具错误: memory: {e}").into(),
@@ -1260,8 +1260,9 @@ impl ToolCallRuntime {
                     Ok(s) => s,
                     Err(e) => return format!("工具错误: sessions: {e}").into(),
                 };
+            let memory = std::sync::RwLock::new(memory);
             let mut ctx = tools::ToolContext {
-                memory: &mut memory,
+                memory: &memory,
                 sessions: &sessions,
                 memory_dir: self.memory_dir.clone(),
                 workspace_dir: self.workspace_dir.clone(),

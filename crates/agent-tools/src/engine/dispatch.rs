@@ -51,7 +51,7 @@ pub async fn dispatch_tool(
         anyhow::bail!("工具已禁用（tools-enabled.json → {toolset}=false）: {name}");
     }
 
-    let agent_id = ctx.memory.agent_id.clone();
+    let agent_id = ctx.agent_id();
     let _ = home::record_tool_call(&agent_id, name, args);
     let _ = usage::record_tool_call(
         &agent_id,
@@ -244,13 +244,14 @@ mod permission_tests {
         network_hosts: &[&str],
         f: impl FnOnce(&ToolContext<'_>),
     ) {
-        let mut manager = memory::MemoryManager::new(dir.path().to_path_buf()).unwrap();
+        let manager = memory::MemoryManager::new(dir.path().to_path_buf()).unwrap();
         let sessions =
             session::SessionStore::open_sessions_dir(&manager.base_dir.join("sessions")).unwrap();
+        let manager = std::sync::RwLock::new(manager);
         let targets = ImageGenTargets::default();
         let creds = crate::context::ModelCredentials::default();
         let ctx = ToolContext {
-            memory: &mut manager,
+            memory: &manager,
             sessions: &sessions,
             memory_dir: dir.path().to_path_buf(),
             workspace_dir: dir.path().join("workspace"),

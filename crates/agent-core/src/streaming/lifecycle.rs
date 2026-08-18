@@ -30,7 +30,7 @@ pub(super) async fn record_llm_usage(
         return;
     }
     let agent = session.lock().await;
-    let agent_id = agent.agent_id().to_string();
+    let agent_id = agent.agent_id();
     let session_id = agent.session_id().to_string();
     let turn_id = agent.current_turn_id().await;
     let fallback_provider = agent.chat_provider().to_string();

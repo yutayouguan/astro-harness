@@ -4,7 +4,7 @@
 //! `ToolContext` 结构体与 Provider 相关的便捷构造。
 
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
+use std::sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 use memory::MemoryManager;
 use session::ConversationStore;
@@ -23,8 +23,8 @@ pub fn image_gen_targets_from_parts(p: ImageGenParts<'_>) -> ImageGenTargets {
 
 /// 单次工具调用的共享运行时上下文，由 AgentLoop 在每次 `dispatch_tool` 前构造。
 pub struct ToolContext<'a> {
-    /// 当前 Agent 的记忆管理器；`memory_*` 与 `persona_create`（激活时）会修改此字段。
-    pub memory: &'a mut MemoryManager,
+    /// 当前 Agent 的记忆管理器；只在同步 memory/context/persona 操作期间短暂加锁。
+    pub memory: &'a RwLock<MemoryManager>,
     /// 共享会话库（`{memory_dir}/sessions`），供 `search` 使用。
     pub sessions: &'a dyn ConversationStore,
     /// Agent 根目录（`~/.astro`），用于定位 `agents/{id}/` 等全局路径。
@@ -62,6 +62,21 @@ pub struct ToolContext<'a> {
 }
 
 impl<'a> ToolContext<'a> {
+    /// 获取当前 Agent 记忆的只读 guard；不得跨 `.await` 持有。
+    pub fn memory(&self) -> RwLockReadGuard<'_, MemoryManager> {
+        self.memory.read().expect("memory manager lock poisoned")
+    }
+
+    /// 获取当前 Agent 记忆的写 guard；不得跨 `.await` 持有。
+    pub fn memory_mut(&self) -> RwLockWriteGuard<'_, MemoryManager> {
+        self.memory.write().expect("memory manager lock poisoned")
+    }
+
+    /// 返回当前 Agent 标识的拥有所有权快照。
+    pub fn agent_id(&self) -> String {
+        self.memory().agent_id.clone()
+    }
+
     /// 确保记忆工作区存在。
     pub fn ensure_workspace(&self) -> anyhow::Result<PathBuf> {
         std::fs::create_dir_all(&self.workspace_dir)?;
@@ -168,13 +183,14 @@ mod tests {
         let workspace = dir.path().join("workspace");
         std::fs::create_dir_all(&workspace).unwrap();
         memory::set_permission_preset(dir.path(), types::PermissionPreset::ReadOnly).unwrap();
-        let mut manager = memory::MemoryManager::new(dir.path().to_path_buf()).unwrap();
+        let manager = memory::MemoryManager::new(dir.path().to_path_buf()).unwrap();
         let sessions =
             session::SessionStore::open_sessions_dir(&manager.base_dir.join("sessions")).unwrap();
+        let manager = std::sync::RwLock::new(manager);
         let targets = ImageGenTargets::default();
         let credentials = ModelCredentials::default();
         let ctx = ToolContext {
-            memory: &mut manager,
+            memory: &manager,
             sessions: &sessions,
             memory_dir: dir.path().to_path_buf(),
             workspace_dir: workspace.clone(),

@@ -53,17 +53,19 @@ impl AgentLoop {
     /// 按名称分发工具调用：MCP 走 Hub，内置工具走 [`dispatch_tool`]。
     ///
     /// 调用前刷新 gate 与 MCP 注册；未启用或不存在的工具直接 bail。
-    /// MCP 工具通过克隆 `Arc<TokioMutex<McpHub>>` 构造动态 handler，
-    /// 避免 `&self.mcp_hub` 与 `&mut self.memory` 的借用冲突。
+    /// MCP 工具通过克隆 `Arc<TokioMutex<McpHub>>` 构造动态 handler。
     async fn dispatch_named_tool(
-        &mut self,
+        &self,
         name: &str,
         args: &serde_json::Value,
         workspace_write_grant: bool,
         network_grant: tools::InProcessNetworkGrant,
         step_context: Option<&super::StepContext>,
     ) -> anyhow::Result<types::ToolOutput> {
-        let agent_id = self.memory.agent_id.clone();
+        let (agent_id, workspace_dir) = {
+            let memory = self.memory();
+            (memory.agent_id.clone(), memory.workspace_dir.clone())
+        };
         self.tool_registry_mut()
             .reload_enabled_from_disk(Some(&agent_id));
 
@@ -105,7 +107,6 @@ impl AgentLoop {
         };
         let dynamic_handler = mcp_handler.or_else(|| self.tool_registry().dynamic_handler(name));
 
-        let workspace_dir = self.resolve_workspace_dir();
         skills::set_workspace_override(&workspace_dir);
         let session_id = self.session_id.clone();
         let fallback_turn_id = self.current_turn_id().await;
@@ -117,7 +118,7 @@ impl AgentLoop {
         let execution = Some(self.execution());
         let hook_bus = Some(self.hook_bus());
         let mut ctx = ToolContext {
-            memory: &mut self.memory,
+            memory: &self.memory,
             sessions,
             memory_dir,
             workspace_dir,
@@ -146,7 +147,7 @@ impl AgentLoop {
     ///
     /// 适用于 Tauri 等同步边界；异步上下文优先使用 [`handle_tool_call_async`]。
     pub fn handle_tool_call(
-        &mut self,
+        &self,
         name: &str,
         args: &serde_json::Value,
     ) -> Result<types::ToolOutput, ToolCallError> {
@@ -155,7 +156,7 @@ impl AgentLoop {
 
     /// 执行已审批的单次调用。授权只进入本次 ToolContext，不保存到 Agent 状态。
     pub(crate) fn handle_tool_call_with_once_grants(
-        &mut self,
+        &self,
         name: &str,
         args: &serde_json::Value,
         workspace_write_grant: bool,
@@ -165,7 +166,7 @@ impl AgentLoop {
     }
 
     fn handle_tool_call_scoped(
-        &mut self,
+        &self,
         name: &str,
         args: &serde_json::Value,
         workspace_write_grant: bool,
@@ -227,7 +228,7 @@ impl AgentLoop {
     /// 返回 [`ToolCallError`] 区分取消（`Cancelled`）、深度耗尽（`DepthExhausted`）
     /// 和执行异常（`Execution`），避免将取消误记为工具失败。
     pub async fn handle_tool_call_async(
-        &mut self,
+        &self,
         name: &str,
         args: &serde_json::Value,
     ) -> Result<types::ToolOutput, ToolCallError> {
@@ -241,7 +242,7 @@ impl AgentLoop {
     }
 
     async fn handle_tool_call_async_scoped(
-        &mut self,
+        &self,
         name: &str,
         args: &serde_json::Value,
         workspace_write_grant: bool,
@@ -336,7 +337,7 @@ impl AgentLoop {
         // KeyChoice：`confirm` 是关键决策闸口，记一笔供学习闭环。
         if exec_name == "confirm" {
             memory::try_append_decision(
-                self.memory.base_dir.as_path(),
+                self.memory_dir(),
                 memory::DecisionEntry::new(
                     memory::DecisionKind::KeyChoice,
                     format!(
@@ -394,7 +395,7 @@ impl AgentLoop {
 
     /// 统一应用工具结果 hook 与媒体保留逻辑。
     pub(crate) async fn finalize_tool_call_result(
-        &mut self,
+        &self,
         name: &str,
         args_owned: &serde_json::Value,
         raw_result: types::ToolOutput,

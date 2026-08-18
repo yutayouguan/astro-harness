@@ -6,7 +6,7 @@ use tools::{register_all, ToolContext, ToolRegistry};
 fn make_ctx(
     dir: &TempDir,
 ) -> (
-    memory::MemoryManager,
+    std::sync::RwLock<memory::MemoryManager>,
     session::SessionStore,
     tools::ImageGenTargets,
     std::path::PathBuf,
@@ -19,15 +19,21 @@ fn make_ctx(
         session::SessionStore::open_sessions_dir(&memory.base_dir.join("sessions")).unwrap();
     let targets = tools::ImageGenTargets::default();
     let creds = tools::ModelCredentials::default();
-    (memory, sessions, targets, workspace, creds)
+    (
+        std::sync::RwLock::new(memory),
+        sessions,
+        targets,
+        workspace,
+        creds,
+    )
 }
 
 #[tokio::test]
 async fn confirm_emits_valid_a2ui_hitl() {
     let dir = TempDir::new().unwrap();
-    let (mut memory, sessions, targets, workspace, creds) = make_ctx(&dir);
+    let (memory, sessions, targets, workspace, creds) = make_ctx(&dir);
     let mut ctx = ToolContext {
-        memory: &mut memory,
+        memory: &memory,
         sessions: &sessions,
         memory_dir: dir.path().to_path_buf(),
         workspace_dir: workspace,
@@ -69,9 +75,9 @@ async fn confirm_emits_valid_a2ui_hitl() {
 #[tokio::test]
 async fn clarify_emits_valid_a2ui_hitl() {
     let dir = TempDir::new().unwrap();
-    let (mut memory, sessions, targets, workspace, creds) = make_ctx(&dir);
+    let (memory, sessions, targets, workspace, creds) = make_ctx(&dir);
     let mut ctx = ToolContext {
-        memory: &mut memory,
+        memory: &memory,
         sessions: &sessions,
         memory_dir: dir.path().to_path_buf(),
         workspace_dir: workspace,
@@ -129,9 +135,9 @@ async fn clarify_emits_valid_a2ui_hitl() {
 #[tokio::test]
 async fn clarify_free_text_step_allows_empty_options() {
     let dir = TempDir::new().unwrap();
-    let (mut memory, sessions, targets, workspace, creds) = make_ctx(&dir);
+    let (memory, sessions, targets, workspace, creds) = make_ctx(&dir);
     let mut ctx = ToolContext {
-        memory: &mut memory,
+        memory: &memory,
         sessions: &sessions,
         memory_dir: dir.path().to_path_buf(),
         workspace_dir: workspace,
@@ -195,9 +201,9 @@ async fn clarify_free_text_step_allows_empty_options() {
 #[tokio::test]
 async fn clarify_multi_emits_wizard_hitl() {
     let dir = TempDir::new().unwrap();
-    let (mut memory, sessions, targets, workspace, creds) = make_ctx(&dir);
+    let (memory, sessions, targets, workspace, creds) = make_ctx(&dir);
     let mut ctx = ToolContext {
-        memory: &mut memory,
+        memory: &memory,
         sessions: &sessions,
         memory_dir: dir.path().to_path_buf(),
         workspace_dir: workspace,
@@ -266,9 +272,9 @@ async fn clarify_multi_emits_wizard_hitl() {
 #[tokio::test]
 async fn ask_user_location_mode_emits_valid_a2ui_hitl() {
     let dir = TempDir::new().unwrap();
-    let (mut memory, sessions, targets, workspace, creds) = make_ctx(&dir);
+    let (memory, sessions, targets, workspace, creds) = make_ctx(&dir);
     let mut ctx = ToolContext {
-        memory: &mut memory,
+        memory: &memory,
         sessions: &sessions,
         memory_dir: dir.path().to_path_buf(),
         workspace_dir: workspace,
@@ -310,9 +316,9 @@ async fn ask_user_location_mode_emits_valid_a2ui_hitl() {
 #[tokio::test]
 async fn present_emits_valid_astro_ui() {
     let dir = TempDir::new().unwrap();
-    let (mut memory, sessions, targets, workspace, creds) = make_ctx(&dir);
+    let (memory, sessions, targets, workspace, creds) = make_ctx(&dir);
     let mut ctx = ToolContext {
-        memory: &mut memory,
+        memory: &memory,
         sessions: &sessions,
         memory_dir: dir.path().to_path_buf(),
         workspace_dir: workspace,
@@ -356,9 +362,9 @@ async fn present_emits_valid_astro_ui() {
 #[tokio::test]
 async fn ask_user_rejects_mixed_questions_and_body() {
     let dir = TempDir::new().unwrap();
-    let (mut memory, sessions, targets, workspace, creds) = make_ctx(&dir);
+    let (memory, sessions, targets, workspace, creds) = make_ctx(&dir);
     let mut ctx = ToolContext {
-        memory: &mut memory,
+        memory: &memory,
         sessions: &sessions,
         memory_dir: dir.path().to_path_buf(),
         workspace_dir: workspace,

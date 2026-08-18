@@ -73,13 +73,14 @@ async fn file_ops_write_and_read() {
     let dir = TempDir::new().unwrap();
     let workspace = dir.path().join("workspace");
     std::fs::create_dir_all(&workspace).unwrap();
-    let mut memory = memory::MemoryManager::new(dir.path().to_path_buf()).unwrap();
+    let memory = memory::MemoryManager::new(dir.path().to_path_buf()).unwrap();
     let sessions =
         session::SessionStore::open_sessions_dir(&memory.base_dir.join("sessions")).unwrap();
+    let memory = std::sync::RwLock::new(memory);
     let targets = tools::ImageGenTargets::default();
     let creds = tools::ModelCredentials::default();
     let mut ctx = ToolContext {
-        memory: &mut memory,
+        memory: &memory,
         sessions: &sessions,
         memory_dir: dir.path().to_path_buf(),
         workspace_dir: workspace.clone(),

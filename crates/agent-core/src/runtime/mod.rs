@@ -121,7 +121,7 @@ pub struct Session {
     pub(crate) conversation_write_lock: TokioMutex<()>,
 
     // ── 会话级服务与注册表 ──────────────────────────
-    pub(crate) memory: MemoryManager,
+    pub(crate) memory: RwLock<MemoryManager>,
     pub(crate) services: SessionServices,
     pub(crate) tool_registry: RwLock<ToolRegistry>,
     pub(crate) mcp_hub: Arc<TokioMutex<McpHub>>,
@@ -221,7 +221,7 @@ impl Session {
             model_ctx: model_ctx::ModelContext::default(),
             state: TokioMutex::new(session_state::SessionState::new(history)),
             conversation_write_lock: TokioMutex::new(()),
-            memory,
+            memory: RwLock::new(memory),
             services: SessionServices::new(sessions, compression_policy),
             tool_registry: RwLock::new(tool_registry),
             mcp_hub,
@@ -305,8 +305,8 @@ impl Session {
     }
 
     /// 从磁盘重载 MEMORY / USER 并更新 prompt 快照（同会话写入默认不刷新）。
-    pub fn refresh_memory(&mut self) -> anyhow::Result<()> {
-        self.memory.refresh_memory_snapshot()
+    pub fn refresh_memory(&self) -> anyhow::Result<()> {
+        self.memory_mut().refresh_memory_snapshot()
     }
 
     /// 设置插件钩子总线。
@@ -600,7 +600,7 @@ impl Session {
 
     /// 返回 `(project_memory, user_profile)` 原始 prompt 片段。
     pub fn prompt_content(&self) -> (String, String) {
-        self.memory.prompt_content()
+        self.memory().prompt_content()
     }
 
     /// 当前会话唯一标识符。
@@ -609,8 +609,8 @@ impl Session {
     }
 
     /// 当前 Agent 标识（来自 MemoryManager）。
-    pub fn agent_id(&self) -> &str {
-        &self.memory.agent_id
+    pub fn agent_id(&self) -> String {
+        self.memory().agent_id.clone()
     }
 
     /// 记忆根目录。
@@ -625,7 +625,17 @@ impl Session {
 
     /// 当前 Agent 工作区路径。
     pub fn workspace_dir(&self) -> std::path::PathBuf {
-        self.memory.workspace_dir.clone()
+        self.memory().workspace_dir.clone()
+    }
+
+    /// 当前 Agent 的记忆管理器只读 guard。
+    pub(crate) fn memory(&self) -> RwLockReadGuard<'_, MemoryManager> {
+        self.memory.read().expect("memory manager lock poisoned")
+    }
+
+    /// 当前 Agent 的记忆管理器写 guard。
+    pub(crate) fn memory_mut(&self) -> RwLockWriteGuard<'_, MemoryManager> {
+        self.memory.write().expect("memory manager lock poisoned")
     }
 
     pub fn chat_api_key(&self) -> &str {
@@ -677,7 +687,7 @@ impl Session {
 
     /// 从磁盘重载当前 Agent 的工具启用开关（gate 配置）。
     pub fn reload_tool_gates(&self) {
-        let agent_id = self.memory.agent_id.clone();
+        let agent_id = self.agent_id();
         self.tool_registry_mut()
             .reload_enabled_from_disk(Some(&agent_id));
     }
@@ -687,11 +697,11 @@ impl Session {
     /// optional Server 失败仅降级；required Server 失败向调用方传播。
     /// 无论是否存在 required 失败，已成功连接的工具都会同步到 `MCP_TOOLSET`。
     pub async fn reload_mcp(&self) -> anyhow::Result<()> {
-        let agent_id = self.memory.agent_id.clone();
-        let execution_root = self
-            .project_root
-            .clone()
-            .unwrap_or_else(|| self.memory.workspace_dir.clone());
+        let (agent_id, workspace_dir) = {
+            let memory = self.memory();
+            (memory.agent_id.clone(), memory.workspace_dir.clone())
+        };
+        let execution_root = self.project_root.clone().unwrap_or(workspace_dir);
         let permission_settings = memory::load_permission_settings(&self.config.memory_dir);
         let profile_id = self
             .permission_profile
@@ -949,7 +959,7 @@ impl Session {
 
     /// 解析当前 Agent 工作区目录，供工具上下文注入。
     fn resolve_workspace_dir(&self) -> PathBuf {
-        self.memory.workspace_dir.clone()
+        self.workspace_dir()
     }
 }
 
@@ -1125,9 +1135,63 @@ mod tests {
             drop(session.prepare_turn(&input));
             drop(session.capture_step_context());
             drop(session.start_or_steer_turn("turn", "submission"));
+            drop(session.handle_tool_call_async("echo", &serde_json::json!({})));
         }
 
         let _ = assert_arc_api;
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn awaiting_dynamic_tool_does_not_block_memory_reads() {
+        let dir = TempDir::new().unwrap();
+        let session = Arc::new(Session::new(test_config(&dir)).unwrap());
+        let entered = Arc::new(tokio::sync::Notify::new());
+        let release = Arc::new(tokio::sync::Notify::new());
+        {
+            let entered = Arc::clone(&entered);
+            let release = Arc::clone(&release);
+            session.tool_registry_mut().register_dynamic(
+                ToolEntry {
+                    name: "await_memory_probe".into(),
+                    toolset: "core".into(),
+                    description: "wait while memory remains readable".into(),
+                    schema: serde_json::json!({"type": "object", "properties": {}}),
+                    check_fn: None,
+                    icon: "clock",
+                    ..ToolEntry::lifecycle_defaults()
+                },
+                Arc::new(move |_name, _args| {
+                    let entered = Arc::clone(&entered);
+                    let release = Arc::clone(&release);
+                    Box::pin(async move {
+                        entered.notify_one();
+                        release.notified().await;
+                        Ok(types::ToolOutput::from("released"))
+                    })
+                }),
+            );
+        }
+
+        let args = serde_json::json!({});
+        let tool_call = session.handle_tool_call_async("await_memory_probe", &args);
+        let memory_read = async {
+            entered.notified().await;
+            let reader = {
+                let session = Arc::clone(&session);
+                tokio::task::spawn_blocking(move || session.prompt_content())
+            };
+            let result = tokio::time::timeout(std::time::Duration::from_secs(1), reader).await;
+            release.notify_waiters();
+            result
+        };
+
+        let (output, read_result) = tokio::join!(tool_call, memory_read);
+        let output = output.unwrap();
+        assert_eq!(output.text(), "released");
+        assert!(
+            read_result.is_ok(),
+            "memory reads must not wait for unrelated async tools"
+        );
     }
 
     #[tokio::test]
