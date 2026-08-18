@@ -5064,6 +5064,8 @@ name = "server"
 version = "0.1.0"
 dependencies = [
  "agent",
+ "agent-protocol",
+ "agent-rollout",
  "anyhow",
  "chrono",
  "cron",
@@ -5082,6 +5084,7 @@ dependencies = [
  "tempfile",
  "tokio",
  "tokio-stream",
+ "tokio-util",
  "tonic",
  "tools",
  "tracing",
