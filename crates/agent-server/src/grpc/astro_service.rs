@@ -242,6 +242,25 @@ impl Drop for ReleaseGenerationOwnershipLease {
     }
 }
 
+struct ReleaseSessionRuntimeReply {
+    shared: ReleaseSessionRuntimeResult,
+    ownership: ReleaseGenerationOwnershipLease,
+}
+
+impl ReleaseSessionRuntimeReply {
+    fn into_result(self) -> ReleaseSessionRuntimeResult {
+        ReleaseSessionRuntimeResult {
+            should_finalize_without_runtime: self.shared.should_finalize_without_runtime
+                && self
+                    .ownership
+                    .entry
+                    .fallback_claimed
+                    .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
+                    .is_ok(),
+        }
+    }
+}
+
 fn prune_generation_operation(
     operations: &GenerationOperations,
     session_id: &str,
@@ -952,22 +971,28 @@ impl AstroServiceImpl {
         let session_id = session_id.to_string();
         let (reply_tx, reply_rx) = tokio::sync::oneshot::channel();
         tokio::spawn(async move {
-            let shared = *ownership
-                .entry
-                .completion
-                .get_or_init(|| service.release_session_runtime_inner(&session_id))
+            service
+                .run_release_session_runtime_worker(session_id, ownership, reply_tx)
                 .await;
-            let result = ReleaseSessionRuntimeResult {
-                should_finalize_without_runtime: shared.should_finalize_without_runtime
-                    && ownership
-                        .entry
-                        .fallback_claimed
-                        .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
-                        .is_ok(),
-            };
-            let _ = reply_tx.send(result);
         });
-        reply_rx.await.unwrap_or_default()
+        reply_rx
+            .await
+            .map(ReleaseSessionRuntimeReply::into_result)
+            .unwrap_or_default()
+    }
+
+    async fn run_release_session_runtime_worker(
+        &self,
+        session_id: String,
+        ownership: ReleaseGenerationOwnershipLease,
+        reply: tokio::sync::oneshot::Sender<ReleaseSessionRuntimeReply>,
+    ) {
+        let shared = *ownership
+            .entry
+            .completion
+            .get_or_init(|| self.release_session_runtime_inner(&session_id))
+            .await;
+        let _ = reply.send(ReleaseSessionRuntimeReply { shared, ownership });
     }
 
     async fn release_session_runtime_inner(&self, session_id: &str) -> ReleaseSessionRuntimeResult {
@@ -3584,6 +3609,64 @@ mod tests {
             let result = caller.await.unwrap();
             assert!(!result.should_finalize_without_runtime);
         }
+        assert_eq!(finalize_hits.load(Ordering::SeqCst), 1);
+        assert!(service.release_ownerships.lock().unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn cancelled_cold_release_reply_does_not_consume_fallback_claim() {
+        let dir = TempDir::new().unwrap();
+        let service = AstroServiceImpl::new(dir.path().to_path_buf());
+        let session_id = "cancelled-cold-release-fallback-claim";
+        let cancelled_ownership = service.release_generation_ownership(session_id);
+        let surviving_ownership = service.release_generation_ownership(session_id);
+        assert_eq!(
+            cancelled_ownership.entry_ptr(),
+            surviving_ownership.entry_ptr()
+        );
+        let finalize_hits = Arc::new(AtomicUsize::new(0));
+        let finalize_counter = Arc::clone(&finalize_hits);
+        service
+            .hook_runtime
+            .plugin
+            .register(::hooks::ON_SESSION_FINALIZE, move |_| {
+                finalize_counter.fetch_add(1, Ordering::SeqCst);
+                ::hooks::HookOutcome::Continue
+            });
+
+        let (cancelled_tx, cancelled_rx) = tokio::sync::oneshot::channel();
+        drop(cancelled_rx);
+        service
+            .run_release_session_runtime_worker(
+                session_id.to_string(),
+                cancelled_ownership,
+                cancelled_tx,
+            )
+            .await;
+
+        let (surviving_tx, surviving_rx) = tokio::sync::oneshot::channel();
+        service
+            .run_release_session_runtime_worker(
+                session_id.to_string(),
+                surviving_ownership,
+                surviving_tx,
+            )
+            .await;
+        let result = surviving_rx
+            .await
+            .expect("surviving caller must receive the shared completion")
+            .into_result();
+        if result.should_finalize_without_runtime {
+            let _ = service.hook_runtime.fire_plugin(
+                ::hooks::ON_SESSION_FINALIZE,
+                &::hooks::HookPayload {
+                    session_id: session_id.into(),
+                    ..Default::default()
+                },
+            );
+        }
+
+        assert!(result.should_finalize_without_runtime);
         assert_eq!(finalize_hits.load(Ordering::SeqCst), 1);
         assert!(service.release_ownerships.lock().unwrap().is_empty());
     }
