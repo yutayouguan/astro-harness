@@ -26,11 +26,21 @@ pub struct RunnerTermination {
     pub terminal_status: AgentStatusV2,
 }
 
+#[derive(Debug, Clone)]
+pub enum RunnerAck {
+    Terminated(RunnerTermination),
+    Failed(String),
+}
+
 struct ActiveAgentTurn {
     turn_id: String,
     interrupt: Arc<AgentThreadControl>,
-    terminated: watch::Receiver<Option<RunnerTermination>>,
+    terminated: watch::Receiver<Option<RunnerAck>>,
 }
+
+#[cfg(test)]
+type TerminalPersistenceHook =
+    Arc<dyn Fn(&RunnerEvent) -> anyhow::Result<()> + Send + Sync + 'static>;
 
 struct StartTurnOwnerGuard<'a> {
     manager: &'a AgentRuntimeManager,
@@ -38,7 +48,7 @@ struct StartTurnOwnerGuard<'a> {
     thread_id: String,
     turn_id: String,
     runtime_handle: AgentRuntimeHandle,
-    terminated_tx: watch::Sender<Option<RunnerTermination>>,
+    terminated_tx: watch::Sender<Option<RunnerAck>>,
     memory_dir: PathBuf,
     session_id: String,
     interrupt_message: bool,
@@ -50,7 +60,15 @@ impl StartTurnOwnerGuard<'_> {
     fn publish_termination(&self, terminal_status: AgentStatusV2) {
         let _ = self
             .terminated_tx
-            .send(Some(RunnerTermination { terminal_status }));
+            .send(Some(RunnerAck::Terminated(RunnerTermination {
+                terminal_status,
+            })));
+    }
+
+    fn publish_failure(&self, error: &anyhow::Error) {
+        let _ = self
+            .terminated_tx
+            .send(Some(RunnerAck::Failed(format!("{error:#}"))));
     }
 
     fn disarm(&mut self) {
@@ -78,54 +96,52 @@ impl Drop for StartTurnOwnerGuard<'_> {
                 false
             }
         };
-        if owns_turn {
-            let durable_running = match self.control.status_events(&self.thread_id) {
-                Ok(events) => events.last().is_some_and(|event| {
-                    matches!(
-                        &event.event,
-                        RunnerEvent::TurnStarted { turn_id } if turn_id == &self.turn_id
-                    )
-                }),
-                Err(error) => {
-                    tracing::warn!(
-                        thread_id = %self.thread_id,
-                        turn_id = %self.turn_id,
-                        %error,
-                        "failed to inspect durable state for cancelled agent turn"
-                    );
-                    false
-                }
-            };
-            if durable_running {
-                if self.interrupt_message {
-                    if let Err(error) = ensure_interrupted_history_boundary(
-                        &self.memory_dir,
-                        &self.session_id,
-                        "[astro:system]\nThe previous agent turn was interrupted because its runtime owner was dropped.",
-                    ) {
-                        tracing::warn!(
-                            thread_id = %self.thread_id,
-                            turn_id = %self.turn_id,
-                            %error,
-                            "failed to record cancelled agent history boundary"
-                        );
+        let durable_result = if owns_turn {
+            self.control
+                .status_events(&self.thread_id)
+                .and_then(|events| {
+                    let durable_running = events.last().is_some_and(|event| {
+                        matches!(
+                            &event.event,
+                            RunnerEvent::TurnStarted { turn_id } if turn_id == &self.turn_id
+                        )
+                    });
+                    if durable_running {
+                        Ok(())
+                    } else {
+                        anyhow::bail!(
+                            "cancelled agent turn no longer has its durable Running projection"
+                        )
                     }
-                }
-                if let Err(error) = self.control.record_runner_event(
-                    &self.thread_id,
-                    RunnerEvent::TurnInterrupted {
-                        turn_id: self.turn_id.clone(),
-                        reason: "start_turn future cancelled or owner dropped".into(),
-                    },
-                ) {
-                    tracing::warn!(
-                        thread_id = %self.thread_id,
-                        turn_id = %self.turn_id,
-                        %error,
-                        "failed to record cancelled agent turn"
-                    );
-                }
-            }
+                })
+                .and_then(|()| {
+                    if self.interrupt_message {
+                        ensure_interrupted_history_boundary(
+                            &self.memory_dir,
+                            &self.session_id,
+                            "[astro:system]\nThe previous agent turn was interrupted because its runtime owner was dropped.",
+                        )
+                    } else {
+                        Ok(())
+                    }
+                })
+                .and_then(|()| {
+                    self.manager.record_terminal_event(
+                        self.control,
+                        &self.thread_id,
+                        RunnerEvent::TurnInterrupted {
+                            turn_id: self.turn_id.clone(),
+                            reason: "start_turn future cancelled or owner dropped".into(),
+                        },
+                    )?;
+                    Ok(())
+                })
+        } else {
+            Err(anyhow::anyhow!(
+                "cancelled agent turn no longer owns its active runtime generation"
+            ))
+        };
+        if owns_turn {
             if let Err(error) = self
                 .control
                 .remove_runtime_if_same(&self.thread_id, &self.runtime_handle)
@@ -138,7 +154,18 @@ impl Drop for StartTurnOwnerGuard<'_> {
                 );
             }
         }
-        self.publish_termination(AgentStatusV2::Interrupted);
+        match durable_result {
+            Ok(()) => self.publish_termination(AgentStatusV2::Interrupted),
+            Err(error) => {
+                tracing::warn!(
+                    thread_id = %self.thread_id,
+                    turn_id = %self.turn_id,
+                    %error,
+                    "failed to durably interrupt cancelled agent turn"
+                );
+                self.publish_failure(&error);
+            }
+        }
     }
 }
 
@@ -154,6 +181,8 @@ pub struct AgentRuntimeManager {
     active: Mutex<HashMap<String, ActiveAgentTurn>>,
     #[cfg(test)]
     ack_subscribe_hook: Mutex<Option<AckSubscribeHook>>,
+    #[cfg(test)]
+    terminal_persistence_hook: Mutex<Option<TerminalPersistenceHook>>,
 }
 
 impl AgentRuntimeManager {
@@ -224,16 +253,23 @@ impl AgentRuntimeManager {
         };
 
         let result = run_request(&request, Arc::clone(&interrupt)).await;
+        let terminal_boundary_result = if (interrupt.is_closed() || interrupt.is_interrupted())
+            && request.runtime.interrupt_message
+        {
+            ensure_interrupted_history_boundary(
+                &request.memory_dir,
+                &request.thread.session_id,
+                "[astro:system]\nThe previous agent turn was interrupted by the parent.",
+            )
+        } else {
+            Ok(())
+        };
         let (event, terminal_status) = if interrupt.is_closed() || interrupt.is_interrupted() {
-            if request.runtime.interrupt_message {
-                if let Err(error) = ensure_interrupted_history_boundary(
-                    &request.memory_dir,
-                    &request.thread.session_id,
-                    "[astro:system]\nThe previous agent turn was interrupted by the parent.",
-                ) {
-                    tracing::warn!(%error, "failed to record interrupted agent history boundary");
-                }
-            }
+            let terminal_status = if interrupt.is_closed() {
+                AgentStatusV2::Shutdown
+            } else {
+                AgentStatusV2::Interrupted
+            };
             (
                 RunnerEvent::TurnInterrupted {
                     turn_id: turn_id.clone(),
@@ -243,7 +279,7 @@ impl AgentRuntimeManager {
                         "interrupted by parent".into()
                     },
                 },
-                AgentStatusV2::Interrupted,
+                terminal_status,
             )
         } else {
             match &result {
@@ -268,21 +304,28 @@ impl AgentRuntimeManager {
             }
         };
 
-        let finish_result = control.record_runner_event(&thread_id, event);
-        let shutdown_result = if finish_result.is_ok() && interrupt.is_closed() {
-            control
-                .record_runner_event(&thread_id, RunnerEvent::RuntimeTerminated)
-                .map(|_| ())
-        } else {
-            Ok(())
-        };
+        let durable_result = terminal_boundary_result
+            .and_then(|()| {
+                self.record_terminal_event(&control, &thread_id, event)
+                    .map(|_| ())
+            })
+            .and_then(|()| {
+                if interrupt.is_closed() {
+                    self.record_terminal_event(&control, &thread_id, RunnerEvent::RuntimeTerminated)
+                        .map(|_| ())
+                } else {
+                    Ok(())
+                }
+            });
+        match &durable_result {
+            Ok(()) => owner_guard.publish_termination(terminal_status.clone()),
+            Err(error) => owner_guard.publish_failure(error),
+        }
         let active_result = self.remove_active_if_turn(&thread_id, &turn_id);
         let runtime_result =
             control.remove_runtime_if_same(&thread_id, &owner_guard.runtime_handle);
-        owner_guard.publish_termination(terminal_status.clone());
         owner_guard.disarm();
-        finish_result?;
-        shutdown_result?;
+        durable_result?;
         active_result?;
         runtime_result?;
 
@@ -318,10 +361,7 @@ impl AgentRuntimeManager {
     fn termination_subscription(
         &self,
         thread_id: &str,
-    ) -> anyhow::Result<(
-        Arc<AgentThreadControl>,
-        watch::Receiver<Option<RunnerTermination>>,
-    )> {
+    ) -> anyhow::Result<(Arc<AgentThreadControl>, watch::Receiver<Option<RunnerAck>>)> {
         let active = self.lock_active()?;
         let turn = active.get(thread_id).ok_or_else(|| {
             anyhow::anyhow!("agent thread {thread_id:?} has no active runtime turn")
@@ -346,18 +386,42 @@ impl AgentRuntimeManager {
         *self.ack_subscribe_hook.lock().unwrap() = hook;
     }
 
+    #[cfg(test)]
+    fn set_terminal_persistence_hook(&self, hook: Option<TerminalPersistenceHook>) {
+        *self.terminal_persistence_hook.lock().unwrap() = hook;
+    }
+
+    fn record_terminal_event(
+        &self,
+        control: &subagents::AgentControl,
+        thread_id: &str,
+        event: RunnerEvent,
+    ) -> anyhow::Result<AgentThreadV2> {
+        #[cfg(test)]
+        if let Some(hook) = self
+            .terminal_persistence_hook
+            .lock()
+            .map_err(|_| anyhow::anyhow!("terminal persistence hook mutex is poisoned"))?
+            .clone()
+        {
+            hook(&event)?;
+        }
+        control.record_runner_event(thread_id, event)
+    }
+
     fn finish_failed_start(
         &self,
         control: &subagents::AgentControl,
         thread_id: &str,
         turn_id: &str,
         message: String,
-        terminated_tx: watch::Sender<Option<RunnerTermination>>,
+        terminated_tx: watch::Sender<Option<RunnerAck>>,
     ) -> anyhow::Result<()> {
         let status = AgentStatusV2::Errored {
             message: message.clone(),
         };
-        let event_result = control.record_runner_event(
+        let event_result = self.record_terminal_event(
+            control,
             thread_id,
             RunnerEvent::TurnErrored {
                 turn_id: turn_id.to_string(),
@@ -366,10 +430,17 @@ impl AgentRuntimeManager {
         );
         let _ = control.remove_runtime(thread_id);
         let _ = self.remove_active_if_turn(thread_id, turn_id);
+        match &event_result {
+            Ok(_) => {
+                let _ = terminated_tx.send(Some(RunnerAck::Terminated(RunnerTermination {
+                    terminal_status: status,
+                })));
+            }
+            Err(error) => {
+                let _ = terminated_tx.send(Some(RunnerAck::Failed(format!("{error:#}"))));
+            }
+        }
         event_result?;
-        let _ = terminated_tx.send(Some(RunnerTermination {
-            terminal_status: status,
-        }));
         Ok(())
     }
 
@@ -394,12 +465,17 @@ impl AgentRuntimeManager {
 }
 
 async fn wait_for_termination(
-    mut terminated: watch::Receiver<Option<RunnerTermination>>,
+    mut terminated: watch::Receiver<Option<RunnerAck>>,
     operation: &str,
 ) -> anyhow::Result<RunnerTermination> {
     loop {
-        if let Some(termination) = terminated.borrow().clone() {
-            return Ok(termination);
+        if let Some(ack) = terminated.borrow().clone() {
+            return match ack {
+                RunnerAck::Terminated(termination) => Ok(termination),
+                RunnerAck::Failed(message) => Err(anyhow::anyhow!(
+                    "{operation} acknowledgement failed: {message}"
+                )),
+            };
         }
         terminated.changed().await.map_err(|_| {
             anyhow::anyhow!("agent runtime ended without {operation} acknowledgement")
@@ -557,9 +633,41 @@ mod tests {
         })
     }
 
-    fn failing_chat() -> ChatOverride {
+    fn gated_scripted_chat(
+        entered: Arc<tokio::sync::Notify>,
+        release: Arc<tokio::sync::Notify>,
+        reply: &str,
+    ) -> ChatOverride {
+        let reply = reply.to_string();
         Arc::new(move |_messages, _tools, _config| {
-            Box::pin(async move { Err(anyhow::anyhow!("provider failed before assistant output")) })
+            let entered = Arc::clone(&entered);
+            let release = Arc::clone(&release);
+            let reply = reply.clone();
+            Box::pin(async move {
+                entered.notify_one();
+                release.notified().await;
+                Ok(Box::pin(stream::iter(vec![
+                    Ok(StreamChunk::Text(reply)),
+                    Ok(StreamChunk::Done {
+                        finish_reason: "stop".into(),
+                    }),
+                ])) as CompletionStream)
+            })
+        })
+    }
+
+    fn gated_failing_chat(
+        entered: Arc<tokio::sync::Notify>,
+        release: Arc<tokio::sync::Notify>,
+    ) -> ChatOverride {
+        Arc::new(move |_messages, _tools, _config| {
+            let entered = Arc::clone(&entered);
+            let release = Arc::clone(&release);
+            Box::pin(async move {
+                entered.notify_one();
+                release.notified().await;
+                Err(anyhow::anyhow!("provider failed before assistant output"))
+            })
         })
     }
 
@@ -669,17 +777,30 @@ mod tests {
     async fn completed_turn_releases_runtime_and_execution_but_keeps_identity() {
         let dir = tempfile::tempdir().unwrap();
         let (control, thread) = setup(&dir, "worker");
-        let manager = AgentRuntimeManager::default();
+        let manager = Arc::new(AgentRuntimeManager::default());
+        let entered = Arc::new(tokio::sync::Notify::new());
+        let release = Arc::new(tokio::sync::Notify::new());
+        let run = request(
+            Arc::clone(&control),
+            thread.clone(),
+            dir.path().join("memory"),
+            gated_scripted_chat(Arc::clone(&entered), Arc::clone(&release), "finished"),
+        );
 
-        manager
-            .start_turn(request(
-                Arc::clone(&control),
-                thread.clone(),
-                dir.path().join("memory"),
-                scripted_chat("finished"),
-            ))
-            .await
-            .unwrap();
+        let (run_result, observed_ack) = tokio::join!(manager.start_turn(run), async {
+            entered.notified().await;
+            let (_, observer) = manager.termination_subscription(&thread.thread_id).unwrap();
+            release.notify_one();
+            wait_for_termination(observer, "completion observer").await
+        });
+
+        run_result.unwrap();
+        assert_eq!(
+            observed_ack.unwrap().terminal_status,
+            AgentStatusV2::Completed {
+                last_message: "finished".into()
+            }
+        );
 
         assert!(!manager.is_running(&thread.thread_id));
         assert!(control.runtime_handle(&thread.thread_id).unwrap().is_none());
@@ -746,17 +867,36 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let (control, thread) = setup(&dir, "worker");
         let memory_dir = dir.path().join("memory");
-        let manager = AgentRuntimeManager::default();
+        let manager = Arc::new(AgentRuntimeManager::default());
+        let entered = Arc::new(tokio::sync::Notify::new());
+        let release = Arc::new(tokio::sync::Notify::new());
+        let run = request(
+            Arc::clone(&control),
+            thread.clone(),
+            memory_dir.clone(),
+            gated_failing_chat(Arc::clone(&entered), Arc::clone(&release)),
+        );
 
-        manager
-            .start_turn(request(
-                Arc::clone(&control),
-                thread.clone(),
-                memory_dir.clone(),
-                failing_chat(),
-            ))
-            .await
-            .unwrap_err();
+        let (run_result, observed_ack) = tokio::join!(manager.start_turn(run), async {
+            entered.notified().await;
+            let (_, observer) = manager.termination_subscription(&thread.thread_id).unwrap();
+            release.notify_one();
+            wait_for_termination(observer, "error observer").await
+        });
+        run_result.unwrap_err();
+        assert!(matches!(
+            observed_ack.unwrap().terminal_status,
+            AgentStatusV2::Errored { message }
+                if message.contains("provider failed before assistant output")
+        ));
+        assert!(matches!(
+            control
+                .resolve_target(&AgentPath::root(), "worker")
+                .unwrap()
+                .status,
+            AgentStatusV2::Errored { message }
+                if message.contains("provider failed before assistant output")
+        ));
 
         let captured_roles = Arc::new(std::sync::Mutex::new(Vec::new()));
         manager
@@ -824,6 +964,81 @@ mod tests {
                 .collect::<Vec<_>>(),
             vec!["user", "assistant"]
         );
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn interrupt_ack_reports_terminal_persistence_failure() {
+        let dir = tempfile::tempdir().unwrap();
+        let (control, thread) = setup(&dir, "worker");
+        let manager = Arc::new(AgentRuntimeManager::default());
+        let barrier = Arc::new(tokio::sync::Barrier::new(2));
+        let run = request(
+            Arc::clone(&control),
+            thread.clone(),
+            dir.path().join("memory"),
+            barrier_pending_chat(Arc::clone(&barrier)),
+        );
+
+        let (run_result, (interrupt_result, observer_one, observer_two)) =
+            tokio::join!(manager.start_turn(run), async {
+                barrier.wait().await;
+                assert_eq!(
+                    control
+                        .resolve_target(&AgentPath::root(), "worker")
+                        .unwrap()
+                        .status,
+                    AgentStatusV2::Running
+                );
+                manager.set_terminal_persistence_hook(Some(Arc::new(|event| {
+                    if matches!(event, RunnerEvent::TurnInterrupted { .. }) {
+                        anyhow::bail!("injected durable terminal persistence failure");
+                    }
+                    Ok(())
+                })));
+                let (_, observer_one) =
+                    manager.termination_subscription(&thread.thread_id).unwrap();
+                let observer_two = observer_one.clone();
+                (
+                    manager.interrupt(&thread.thread_id).await,
+                    observer_one,
+                    observer_two,
+                )
+            });
+
+        assert!(run_result
+            .unwrap_err()
+            .to_string()
+            .contains("durable terminal persistence failure"));
+        assert!(interrupt_result
+            .unwrap_err()
+            .to_string()
+            .contains("durable terminal persistence failure"));
+        for observer in [observer_one, observer_two] {
+            assert!(wait_for_termination(observer, "terminal persistence")
+                .await
+                .unwrap_err()
+                .to_string()
+                .contains("durable terminal persistence failure"));
+        }
+        assert!(!manager.is_running(&thread.thread_id));
+        assert!(control.runtime_handle(&thread.thread_id).unwrap().is_none());
+        let permit = control.acquire_execution(&thread.thread_id).unwrap();
+        drop(permit);
+        assert_eq!(
+            control
+                .resolve_target(&AgentPath::root(), "worker")
+                .unwrap()
+                .status,
+            AgentStatusV2::Running
+        );
+        assert!(matches!(
+            control
+                .status_events(&thread.thread_id)
+                .unwrap()
+                .last()
+                .map(|event| &event.event),
+            Some(RunnerEvent::TurnStarted { .. })
+        ));
     }
 
     #[tokio::test(flavor = "current_thread")]
@@ -974,6 +1189,52 @@ mod tests {
     }
 
     #[tokio::test(flavor = "current_thread")]
+    async fn aborted_owner_ack_reports_terminal_persistence_failure() {
+        let dir = tempfile::tempdir().unwrap();
+        let (control, thread) = setup(&dir, "worker");
+        let manager = Arc::new(AgentRuntimeManager::default());
+        let barrier = Arc::new(tokio::sync::Barrier::new(2));
+        let owner = tokio::spawn({
+            let manager = Arc::clone(&manager);
+            let request = request(
+                Arc::clone(&control),
+                thread.clone(),
+                dir.path().join("memory"),
+                barrier_pending_chat(Arc::clone(&barrier)),
+            );
+            async move { manager.start_turn(request).await }
+        });
+
+        barrier.wait().await;
+        manager.set_terminal_persistence_hook(Some(Arc::new(|event| {
+            if matches!(event, RunnerEvent::TurnInterrupted { .. }) {
+                anyhow::bail!("injected owner-drop persistence failure");
+            }
+            Ok(())
+        })));
+        let (_, termination) = manager.termination_subscription(&thread.thread_id).unwrap();
+        owner.abort();
+        assert!(owner.await.unwrap_err().is_cancelled());
+
+        assert!(wait_for_termination(termination, "owner cancellation")
+            .await
+            .unwrap_err()
+            .to_string()
+            .contains("owner-drop persistence failure"));
+        assert!(!manager.is_running(&thread.thread_id));
+        assert!(control.runtime_handle(&thread.thread_id).unwrap().is_none());
+        let permit = control.acquire_execution(&thread.thread_id).unwrap();
+        drop(permit);
+        assert_eq!(
+            control
+                .resolve_target(&AgentPath::root(), "worker")
+                .unwrap()
+                .status,
+            AgentStatusV2::Running
+        );
+    }
+
+    #[tokio::test(flavor = "current_thread")]
     async fn terminate_records_one_turn_terminal_then_runtime_terminated() {
         let dir = tempfile::tempdir().unwrap();
         let (control, thread) = setup(&dir, "worker");
@@ -986,15 +1247,23 @@ mod tests {
             pending_chat(),
         );
 
-        let (run_result, terminate_result) = tokio::join!(run_manager.start_turn(run), async {
-            while !manager.is_running(&thread.thread_id) {
-                tokio::task::yield_now().await;
-            }
-            manager.terminate(&thread.thread_id).await
-        });
+        let (run_result, (terminate_result, observed_ack)) =
+            tokio::join!(run_manager.start_turn(run), async {
+                while !manager.is_running(&thread.thread_id) {
+                    tokio::task::yield_now().await;
+                }
+                let (_, observer) = manager.termination_subscription(&thread.thread_id).unwrap();
+                let terminate_result = manager.terminate(&thread.thread_id).await;
+                let observed_ack = wait_for_termination(observer, "termination observer").await;
+                (terminate_result, observed_ack)
+            });
 
         run_result.unwrap();
         terminate_result.unwrap();
+        assert_eq!(
+            observed_ack.unwrap().terminal_status,
+            AgentStatusV2::Shutdown
+        );
         assert_eq!(
             control
                 .resolve_target(&AgentPath::root(), "worker")
@@ -1020,6 +1289,59 @@ mod tests {
                 .collect::<Vec<_>>(),
             vec!["started", "interrupted", "terminated"]
         );
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn terminate_ack_reports_runtime_terminated_persistence_failure() {
+        let dir = tempfile::tempdir().unwrap();
+        let (control, thread) = setup(&dir, "worker");
+        let manager = Arc::new(AgentRuntimeManager::default());
+        let barrier = Arc::new(tokio::sync::Barrier::new(2));
+        let run = request(
+            Arc::clone(&control),
+            thread.clone(),
+            dir.path().join("memory"),
+            barrier_pending_chat(Arc::clone(&barrier)),
+        );
+
+        let (run_result, terminate_result) = tokio::join!(manager.start_turn(run), async {
+            barrier.wait().await;
+            manager.set_terminal_persistence_hook(Some(Arc::new(|event| {
+                if matches!(event, RunnerEvent::RuntimeTerminated) {
+                    anyhow::bail!("injected RuntimeTerminated persistence failure");
+                }
+                Ok(())
+            })));
+            manager.terminate(&thread.thread_id).await
+        });
+
+        assert!(run_result
+            .unwrap_err()
+            .to_string()
+            .contains("RuntimeTerminated persistence failure"));
+        assert!(terminate_result
+            .unwrap_err()
+            .to_string()
+            .contains("RuntimeTerminated persistence failure"));
+        assert!(!manager.is_running(&thread.thread_id));
+        assert!(control.runtime_handle(&thread.thread_id).unwrap().is_none());
+        let permit = control.acquire_execution(&thread.thread_id).unwrap();
+        drop(permit);
+        assert_eq!(
+            control
+                .resolve_target(&AgentPath::root(), "worker")
+                .unwrap()
+                .status,
+            AgentStatusV2::Interrupted
+        );
+        assert!(matches!(
+            control
+                .status_events(&thread.thread_id)
+                .unwrap()
+                .last()
+                .map(|event| &event.event),
+            Some(RunnerEvent::TurnInterrupted { .. })
+        ));
     }
 
     #[tokio::test(flavor = "current_thread")]
