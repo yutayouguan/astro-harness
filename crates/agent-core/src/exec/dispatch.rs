@@ -145,6 +145,7 @@ impl DefaultAgentThreadDispatch {
             chat_override: None,
             consume_mailbox,
             followup_start_tx: None,
+            start_token: None,
         }
     }
 
@@ -291,10 +292,10 @@ impl AgentThreadDispatch for DefaultAgentThreadDispatch {
             })?;
         stored.runtime.model_request.message = followup_text;
         let run = self.run_request(target.clone(), stored, true);
-        match self
+        let admission = self
             .runtime_manager
-            .request_or_start_followup(&target.thread_id, run)?
-        {
+            .request_or_start_followup(&target.thread_id, run)?;
+        match admission {
             FollowupAdmission::StartNow { request, result_rx } => {
                 let start_tx = request
                     .followup_start_tx
@@ -302,6 +303,7 @@ impl AgentThreadDispatch for DefaultAgentThreadDispatch {
                     .expect("follow-up start admission owns its result channel");
                 let manager = Arc::clone(&self.runtime_manager);
                 tokio::spawn(async move {
+                    manager.pause_after_followup_admission().await;
                     let start_result = manager.start_turn(*request).await;
                     if start_tx.borrow().is_none() {
                         let shared = start_result
@@ -314,6 +316,7 @@ impl AgentThreadDispatch for DefaultAgentThreadDispatch {
                 Self::wait_for_shared_followup_start(result_rx).await?
             }
             FollowupAdmission::AwaitStart { result_rx } => {
+                self.runtime_manager.pause_after_followup_admission().await;
                 Self::wait_for_shared_followup_start(result_rx).await?
             }
         }
@@ -632,6 +635,31 @@ mod tests {
                         finish_reason: "stop".into(),
                     }),
                 ])) as CompletionStream)
+            })
+        })
+    }
+
+    fn gated_first_then_pending_chat(
+        entered: Arc<tokio::sync::Notify>,
+        release: Arc<tokio::sync::Notify>,
+    ) -> crate::streaming::ChatOverride {
+        let calls = Arc::new(AtomicUsize::new(0));
+        Arc::new(move |_messages, _tools, _config| {
+            let call = calls.fetch_add(1, Ordering::SeqCst);
+            let entered = Arc::clone(&entered);
+            let release = Arc::clone(&release);
+            Box::pin(async move {
+                if call == 0 {
+                    entered.notify_one();
+                    release.notified().await;
+                    return Ok(Box::pin(stream::iter(vec![
+                        Ok(StreamChunk::Text("initial done".into())),
+                        Ok(StreamChunk::Done {
+                            finish_reason: "stop".into(),
+                        }),
+                    ])) as CompletionStream);
+                }
+                Ok(Box::pin(stream::pending::<anyhow::Result<StreamChunk>>()) as CompletionStream)
             })
         })
     }
@@ -996,15 +1024,43 @@ mod tests {
 
         std::fs::remove_dir_all(&memory_dir).unwrap();
         std::fs::write(&memory_dir, "not a runtime directory").unwrap();
-        let error = AgentThreadDispatch::followup_task(
-            &dispatch,
-            MessageAgentV2Request {
-                target: spawned.thread.canonical_path.to_string(),
-                message: "cannot start".into(),
-            },
-        )
-        .await
-        .unwrap_err();
+        let dispatch = Arc::new(dispatch);
+        let admission = Arc::new(tokio::sync::Barrier::new(3));
+        dispatch
+            .runtime_manager
+            .set_followup_admission_barrier(Some(Arc::clone(&admission)));
+        let first_dispatch = Arc::clone(&dispatch);
+        let first_target = spawned.thread.canonical_path.to_string();
+        let first = tokio::spawn(async move {
+            AgentThreadDispatch::followup_task(
+                &*first_dispatch,
+                MessageAgentV2Request {
+                    target: first_target,
+                    message: "cannot start one".into(),
+                },
+            )
+            .await
+        });
+        let second_dispatch = Arc::clone(&dispatch);
+        let second_target = spawned.thread.canonical_path.to_string();
+        let second = tokio::spawn(async move {
+            AgentThreadDispatch::followup_task(
+                &*second_dispatch,
+                MessageAgentV2Request {
+                    target: second_target,
+                    message: "cannot start two".into(),
+                },
+            )
+            .await
+        });
+        admission.wait().await;
+        dispatch
+            .runtime_manager
+            .set_followup_admission_barrier(None);
+        let (first, second) = tokio::join!(first, second);
+        let error = first.unwrap().unwrap_err();
+        let joined_error = second.unwrap().unwrap_err();
+        assert_eq!(format!("{error:#}"), format!("{joined_error:#}"));
         assert!(
             format!("{error:#}").contains("Not a directory")
                 || format!("{error:#}").contains("not a directory")
@@ -1020,8 +1076,364 @@ mod tests {
                 .drain_mailbox(&spawned.thread.canonical_path)
                 .unwrap()
                 .len(),
-            1,
+            2,
             "failed start must leave durable follow-up retryable"
+        );
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn concurrent_idle_followups_share_one_starting_generation() {
+        let dir = tempfile::tempdir().unwrap();
+        let memory_dir = dir.path().join("memory");
+        let sessions =
+            session::SessionStore::open_sessions_dir(&memory_dir.join("sessions")).unwrap();
+        sessions.ensure_session("root-session", "test").unwrap();
+        let mut dispatch = dispatch(&dir);
+        dispatch.chat_override = Some(scripted_chat("done"));
+        let dispatch = Arc::new(dispatch);
+        let spawned = AgentThreadDispatch::spawn_agent(&*dispatch, spawn_request(&memory_dir))
+            .await
+            .unwrap();
+        tokio::time::timeout(Duration::from_secs(2), async {
+            while dispatch
+                .runtime_manager
+                .is_running(&spawned.thread.thread_id)
+            {
+                tokio::task::yield_now().await;
+            }
+        })
+        .await
+        .unwrap();
+
+        let admission = Arc::new(tokio::sync::Barrier::new(3));
+        dispatch
+            .runtime_manager
+            .set_followup_admission_barrier(Some(Arc::clone(&admission)));
+        let first_dispatch = Arc::clone(&dispatch);
+        let first_target = spawned.thread.canonical_path.to_string();
+        let first = tokio::spawn(async move {
+            AgentThreadDispatch::followup_task(
+                &*first_dispatch,
+                MessageAgentV2Request {
+                    target: first_target,
+                    message: "idle one".into(),
+                },
+            )
+            .await
+        });
+        let second_dispatch = Arc::clone(&dispatch);
+        let second_target = spawned.thread.canonical_path.to_string();
+        let second = tokio::spawn(async move {
+            AgentThreadDispatch::followup_task(
+                &*second_dispatch,
+                MessageAgentV2Request {
+                    target: second_target,
+                    message: "idle two".into(),
+                },
+            )
+            .await
+        });
+        admission.wait().await;
+        dispatch
+            .runtime_manager
+            .set_followup_admission_barrier(None);
+        let (first, second) = tokio::join!(first, second);
+        first.unwrap().unwrap();
+        second.unwrap().unwrap();
+        tokio::time::timeout(Duration::from_secs(2), async {
+            while dispatch
+                .runtime_manager
+                .is_running(&spawned.thread.thread_id)
+            {
+                tokio::task::yield_now().await;
+            }
+        })
+        .await
+        .unwrap();
+        let starts = dispatch
+            .control
+            .status_events(&spawned.thread.thread_id)
+            .unwrap()
+            .into_iter()
+            .filter(|event| matches!(event.event, subagents::RunnerEvent::TurnStarted { .. }))
+            .count();
+        assert_eq!(starts, 2);
+        assert!(dispatch
+            .control
+            .drain_mailbox(&spawned.thread.canonical_path)
+            .unwrap()
+            .is_empty());
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn canceling_idle_followup_caller_does_not_cancel_manager_owned_start() {
+        let dir = tempfile::tempdir().unwrap();
+        let memory_dir = dir.path().join("memory");
+        let sessions =
+            session::SessionStore::open_sessions_dir(&memory_dir.join("sessions")).unwrap();
+        sessions.ensure_session("root-session", "test").unwrap();
+        let mut dispatch = dispatch(&dir);
+        dispatch.chat_override = Some(scripted_chat("done"));
+        let dispatch = Arc::new(dispatch);
+        let spawned = AgentThreadDispatch::spawn_agent(&*dispatch, spawn_request(&memory_dir))
+            .await
+            .unwrap();
+        while dispatch
+            .runtime_manager
+            .is_running(&spawned.thread.thread_id)
+        {
+            tokio::task::yield_now().await;
+        }
+
+        let start_entered = Arc::new(tokio::sync::Notify::new());
+        let start_release = Arc::new(tokio::sync::Notify::new());
+        dispatch
+            .runtime_manager
+            .set_before_followup_start_hook(Some(crate::exec::agent_runtime::AckSubscribeHook {
+                entered: Arc::clone(&start_entered),
+                release: Arc::clone(&start_release),
+            }));
+        let caller_dispatch = Arc::clone(&dispatch);
+        let target = spawned.thread.canonical_path.to_string();
+        let caller = tokio::spawn(async move {
+            AgentThreadDispatch::followup_task(
+                &*caller_dispatch,
+                MessageAgentV2Request {
+                    target,
+                    message: "survive caller cancellation".into(),
+                },
+            )
+            .await
+        });
+        start_entered.notified().await;
+        caller.abort();
+        start_release.notify_one();
+        tokio::time::timeout(Duration::from_secs(2), async {
+            loop {
+                let starts = dispatch
+                    .control
+                    .status_events(&spawned.thread.thread_id)
+                    .unwrap()
+                    .into_iter()
+                    .filter(|event| {
+                        matches!(event.event, subagents::RunnerEvent::TurnStarted { .. })
+                    })
+                    .count();
+                if starts == 2
+                    && !dispatch
+                        .runtime_manager
+                        .is_running(&spawned.thread.thread_id)
+                {
+                    break;
+                }
+                tokio::task::yield_now().await;
+            }
+        })
+        .await
+        .unwrap();
+        assert!(dispatch
+            .control
+            .drain_mailbox(&spawned.thread.canonical_path)
+            .unwrap()
+            .is_empty());
+        dispatch
+            .runtime_manager
+            .set_before_followup_start_hook(None);
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn terminal_handoff_keeps_starting_slot_visible_to_third_followup() {
+        let dir = tempfile::tempdir().unwrap();
+        let memory_dir = dir.path().join("memory");
+        let sessions =
+            session::SessionStore::open_sessions_dir(&memory_dir.join("sessions")).unwrap();
+        sessions.ensure_session("root-session", "test").unwrap();
+        let mut dispatch = dispatch(&dir);
+        let entered_sampling = Arc::new(tokio::sync::Notify::new());
+        let release_sampling = Arc::new(tokio::sync::Notify::new());
+        dispatch.chat_override = Some(gated_first_then_pending_chat(
+            Arc::clone(&entered_sampling),
+            Arc::clone(&release_sampling),
+        ));
+        let dispatch = Arc::new(dispatch);
+        let spawned = AgentThreadDispatch::spawn_agent(&*dispatch, spawn_request(&memory_dir))
+            .await
+            .unwrap();
+        entered_sampling.notified().await;
+
+        let cleanup_once = Arc::new(AtomicBool::new(false));
+        let cleanup_once_for_hook = Arc::clone(&cleanup_once);
+        let (at_cleanup_tx, at_cleanup_rx) = std::sync::mpsc::sync_channel(1);
+        let (release_cleanup_tx, release_cleanup_rx) = std::sync::mpsc::sync_channel(1);
+        let release_cleanup_rx = Arc::new(Mutex::new(release_cleanup_rx));
+        dispatch
+            .runtime_manager
+            .set_before_cleanup_hook(Some(Arc::new(move || {
+                if !cleanup_once_for_hook.swap(true, Ordering::SeqCst) {
+                    at_cleanup_tx.send(()).unwrap();
+                    release_cleanup_rx.lock().unwrap().recv().unwrap();
+                }
+            })));
+        release_sampling.notify_one();
+        tokio::task::spawn_blocking(move || at_cleanup_rx.recv().unwrap())
+            .await
+            .unwrap();
+
+        let second_dispatch = Arc::clone(&dispatch);
+        let second_target = spawned.thread.canonical_path.to_string();
+        let second = tokio::spawn(async move {
+            AgentThreadDispatch::followup_task(
+                &*second_dispatch,
+                MessageAgentV2Request {
+                    target: second_target,
+                    message: "handoff owner".into(),
+                },
+            )
+            .await
+        });
+        tokio::time::timeout(Duration::from_secs(1), async {
+            while dispatch
+                .control
+                .drain_mailbox(&spawned.thread.canonical_path)
+                .unwrap()
+                .len()
+                != 1
+            {
+                tokio::task::yield_now().await;
+            }
+        })
+        .await
+        .unwrap();
+
+        let start_entered = Arc::new(tokio::sync::Notify::new());
+        let start_release = Arc::new(tokio::sync::Notify::new());
+        dispatch
+            .runtime_manager
+            .set_before_followup_start_hook(Some(crate::exec::agent_runtime::AckSubscribeHook {
+                entered: Arc::clone(&start_entered),
+                release: Arc::clone(&start_release),
+            }));
+        release_cleanup_tx.send(()).unwrap();
+        start_entered.notified().await;
+
+        let third_dispatch = Arc::clone(&dispatch);
+        let third_target = spawned.thread.canonical_path.to_string();
+        let third = tokio::spawn(async move {
+            AgentThreadDispatch::followup_task(
+                &*third_dispatch,
+                MessageAgentV2Request {
+                    target: third_target,
+                    message: "handoff joiner".into(),
+                },
+            )
+            .await
+        });
+        tokio::time::timeout(Duration::from_secs(1), async {
+            while dispatch
+                .control
+                .drain_mailbox(&spawned.thread.canonical_path)
+                .unwrap()
+                .len()
+                != 2
+            {
+                tokio::task::yield_now().await;
+            }
+        })
+        .await
+        .unwrap();
+        start_release.notify_one();
+        let (second, third) = tokio::time::timeout(Duration::from_secs(2), async {
+            tokio::join!(second, third)
+        })
+        .await
+        .unwrap();
+        second.unwrap().unwrap();
+        third.unwrap().unwrap();
+        let starts = dispatch
+            .control
+            .status_events(&spawned.thread.thread_id)
+            .unwrap()
+            .into_iter()
+            .filter(|event| matches!(event.event, subagents::RunnerEvent::TurnStarted { .. }))
+            .count();
+        assert_eq!(starts, 2);
+        AgentThreadDispatch::interrupt_agent(
+            &*dispatch,
+            InterruptAgentV2Request {
+                target: spawned.thread.canonical_path.to_string(),
+            },
+        )
+        .await
+        .unwrap();
+        dispatch.runtime_manager.set_before_cleanup_hook(None);
+        dispatch
+            .runtime_manager
+            .set_before_followup_start_hook(None);
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn shutdown_rejects_pending_followup_without_starting_a_new_generation() {
+        let dir = tempfile::tempdir().unwrap();
+        let memory_dir = dir.path().join("memory");
+        let sessions =
+            session::SessionStore::open_sessions_dir(&memory_dir.join("sessions")).unwrap();
+        sessions.ensure_session("root-session", "test").unwrap();
+        let mut dispatch = dispatch(&dir);
+        dispatch.chat_override = Some(pending_chat());
+        let dispatch = Arc::new(dispatch);
+        let spawned = AgentThreadDispatch::spawn_agent(&*dispatch, spawn_request(&memory_dir))
+            .await
+            .unwrap();
+
+        let followup_dispatch = Arc::clone(&dispatch);
+        let target = spawned.thread.canonical_path.to_string();
+        let followup = tokio::spawn(async move {
+            AgentThreadDispatch::followup_task(
+                &*followup_dispatch,
+                MessageAgentV2Request {
+                    target,
+                    message: "must not run after shutdown".into(),
+                },
+            )
+            .await
+        });
+        tokio::time::timeout(Duration::from_secs(1), async {
+            while dispatch
+                .control
+                .drain_mailbox(&spawned.thread.canonical_path)
+                .unwrap()
+                .is_empty()
+            {
+                tokio::task::yield_now().await;
+            }
+        })
+        .await
+        .unwrap();
+        dispatch
+            .runtime_manager
+            .terminate(&spawned.thread.thread_id)
+            .await
+            .unwrap();
+        let error = followup.await.unwrap().unwrap_err();
+        assert!(format!("{error:#}").contains("shutdown"));
+        let starts = dispatch
+            .control
+            .status_events(&spawned.thread.thread_id)
+            .unwrap()
+            .into_iter()
+            .filter(|event| matches!(event.event, subagents::RunnerEvent::TurnStarted { .. }))
+            .count();
+        assert_eq!(starts, 1);
+        assert!(!dispatch
+            .runtime_manager
+            .is_running(&spawned.thread.thread_id));
+        assert_eq!(
+            dispatch
+                .control
+                .drain_mailbox(&spawned.thread.canonical_path)
+                .unwrap()
+                .len(),
+            1
         );
     }
 

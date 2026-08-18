@@ -23,6 +23,7 @@ pub struct RunAgentTurnRequest {
     /// first sampling boundary instead of duplicating it as an initial input.
     pub consume_mailbox: bool,
     pub(super) followup_start_tx: Option<watch::Sender<Option<Result<(), String>>>>,
+    pub(super) start_token: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -41,6 +42,16 @@ struct ActiveAgentTurn {
     interrupt: Arc<AgentThreadControl>,
     terminated: watch::Receiver<Option<RunnerAck>>,
     pending_followup: Option<PendingFollowup>,
+}
+
+struct StartingAgentTurn {
+    token: String,
+    result_rx: watch::Receiver<Option<Result<(), String>>>,
+}
+
+enum RuntimeSlot {
+    Starting(StartingAgentTurn),
+    Running(Box<ActiveAgentTurn>),
 }
 
 struct PendingFollowup {
@@ -212,14 +223,14 @@ impl Drop for StartTurnOwnerGuard<'_> {
 
 #[cfg(test)]
 #[derive(Clone)]
-struct AckSubscribeHook {
-    entered: Arc<tokio::sync::Notify>,
-    release: Arc<tokio::sync::Notify>,
+pub(super) struct AckSubscribeHook {
+    pub(super) entered: Arc<tokio::sync::Notify>,
+    pub(super) release: Arc<tokio::sync::Notify>,
 }
 
 #[derive(Default)]
 pub struct AgentRuntimeManager {
-    active: Mutex<HashMap<String, ActiveAgentTurn>>,
+    active: Mutex<HashMap<String, RuntimeSlot>>,
     #[cfg(test)]
     ack_subscribe_hook: Mutex<Option<AckSubscribeHook>>,
     #[cfg(test)]
@@ -232,6 +243,10 @@ pub struct AgentRuntimeManager {
     before_cleanup_hook: Mutex<Option<BeforeCleanupHook>>,
     #[cfg(test)]
     cleanup_failure_hook: Mutex<Option<CleanupFailureHook>>,
+    #[cfg(test)]
+    followup_admission_barrier: Mutex<Option<Arc<tokio::sync::Barrier>>>,
+    #[cfg(test)]
+    before_followup_start_hook: Mutex<Option<AckSubscribeHook>>,
 }
 
 impl AgentRuntimeManager {
@@ -243,9 +258,16 @@ impl AgentRuntimeManager {
     }
 
     pub async fn start_turn(&self, request: RunAgentTurnRequest) -> anyhow::Result<()> {
+        self.pause_before_followup_start(&request).await;
         let thread_id = request.thread.thread_id.clone();
         let control = Arc::clone(&request.control);
-        let permit = control.acquire_execution(&thread_id)?;
+        let permit = match control.acquire_execution(&thread_id) {
+            Ok(permit) => permit,
+            Err(error) => {
+                self.fail_starting_request(&request, &error);
+                return Err(error);
+            }
+        };
         let turn_id = Uuid::new_v4().to_string();
         let interrupt = Arc::new(AgentThreadControl::default());
         interrupt.begin_turn();
@@ -255,20 +277,39 @@ impl AgentRuntimeManager {
             .last()
             .is_some_and(|event| matches!(event.event, RunnerEvent::TurnInterrupted { .. }));
 
-        {
+        let claim_result = {
             let mut active = self.lock_active()?;
-            if active.contains_key(&thread_id) {
-                anyhow::bail!("agent thread {thread_id:?} already has an active runtime turn");
-            }
-            active.insert(
-                thread_id.clone(),
-                ActiveAgentTurn {
+            let running = || {
+                RuntimeSlot::Running(Box::new(ActiveAgentTurn {
                     turn_id: turn_id.clone(),
                     interrupt: Arc::clone(&interrupt),
                     terminated: terminated_rx,
                     pending_followup: None,
-                },
-            );
+                }))
+            };
+            match (active.entry(thread_id.clone()), request.start_token.as_deref()) {
+                (std::collections::hash_map::Entry::Vacant(entry), None) => {
+                    entry.insert(running());
+                    Ok(())
+                }
+                (std::collections::hash_map::Entry::Occupied(mut entry), Some(token))
+                    if matches!(entry.get(), RuntimeSlot::Starting(slot) if slot.token == token) =>
+                {
+                    entry.insert(running());
+                    Ok(())
+                }
+                (_, Some(token)) => Err(anyhow::anyhow!(
+                    "follow-up starting reservation {token:?} no longer owns agent thread {thread_id:?}"
+                )),
+                (_, None) => Err(anyhow::anyhow!(
+                    "agent thread {thread_id:?} already has an active runtime turn"
+                )),
+            }
+        };
+        if let Err(error) = claim_result {
+            drop(permit);
+            self.fail_starting_request(&request, &error);
+            return Err(error);
         }
 
         if let Err(error) = self.record_terminal_event(
@@ -406,7 +447,11 @@ impl AgentRuntimeManager {
             });
         self.run_before_cleanup_hook();
         let mut active_result = self
-            .remove_active_and_take_followup(&thread_id, &turn_id)
+            .remove_active_and_take_followup(
+                &thread_id,
+                &turn_id,
+                terminal_status != AgentStatusV2::Shutdown,
+            )
             .and_then(|(removed, pending)| {
                 self.run_cleanup_failure_hook("active")?;
                 Ok((removed, pending))
@@ -432,7 +477,12 @@ impl AgentRuntimeManager {
             Ok(()) => owner_guard.publish_termination(terminal_status.clone()),
             Err(error) => owner_guard.publish_failure(error),
         }
-        completion_result?;
+        if let Err(error) = completion_result {
+            if let Some(pending) = pending_followup.as_ref() {
+                self.fail_starting_request(&pending.request, &error);
+            }
+            return Err(error);
+        }
 
         if let Some(pending) = pending_followup {
             let start_tx = pending.request.followup_start_tx.clone();
@@ -440,13 +490,18 @@ impl AgentRuntimeManager {
                 Err(anyhow::anyhow!(
                     "cannot start a follow-up after agent runtime shutdown"
                 ))
-            } else if control
-                .drain_mailbox(&pending.request.thread.canonical_path)?
-                .is_empty()
-            {
-                Ok(())
             } else {
-                Box::pin(self.start_turn(pending.request)).await
+                match control.drain_mailbox(&pending.request.thread.canonical_path) {
+                    Ok(messages) if messages.is_empty() => {
+                        self.complete_starting_request(&pending.request, Ok(()));
+                        Ok(())
+                    }
+                    Ok(_) => Box::pin(self.start_turn(pending.request)).await,
+                    Err(error) => {
+                        self.fail_starting_request(&pending.request, &error);
+                        Err(error)
+                    }
+                }
             };
             if let Some(start_tx) = start_tx {
                 if start_tx.borrow().is_none() {
@@ -500,37 +555,87 @@ impl AgentRuntimeManager {
         mut request: RunAgentTurnRequest,
     ) -> anyhow::Result<FollowupAdmission> {
         let mut active = self.lock_active()?;
-        let Some(turn) = active.get_mut(thread_id) else {
+        let Some(slot) = active.get_mut(thread_id) else {
             let (result_tx, result_rx) = watch::channel(None);
+            let token = Uuid::new_v4().to_string();
             request.followup_start_tx = Some(result_tx);
+            request.start_token = Some(token.clone());
+            active.insert(
+                thread_id.to_string(),
+                RuntimeSlot::Starting(StartingAgentTurn {
+                    token,
+                    result_rx: result_rx.clone(),
+                }),
+            );
             return Ok(FollowupAdmission::StartNow {
                 request: Box::new(request),
                 result_rx,
             });
         };
-        if let Some(handoff) = &turn.pending_followup {
-            return Ok(FollowupAdmission::AwaitStart {
-                result_rx: handoff.result_rx.clone(),
-            });
+        match slot {
+            RuntimeSlot::Starting(starting) => Ok(FollowupAdmission::AwaitStart {
+                result_rx: starting.result_rx.clone(),
+            }),
+            RuntimeSlot::Running(turn) => {
+                if let Some(handoff) = &turn.pending_followup {
+                    return Ok(FollowupAdmission::AwaitStart {
+                        result_rx: handoff.result_rx.clone(),
+                    });
+                }
+                let (result_tx, result_rx) = watch::channel(None);
+                request.followup_start_tx = Some(result_tx);
+                request.start_token = Some(Uuid::new_v4().to_string());
+                turn.pending_followup = Some(PendingFollowup {
+                    request,
+                    result_rx: result_rx.clone(),
+                });
+                Ok(FollowupAdmission::AwaitStart { result_rx })
+            }
         }
-        let (result_tx, result_rx) = watch::channel(None);
-        request.followup_start_tx = Some(result_tx);
-        turn.pending_followup = Some(PendingFollowup {
-            request,
-            result_rx: result_rx.clone(),
-        });
-        Ok(FollowupAdmission::AwaitStart { result_rx })
     }
+
+    #[cfg(test)]
+    pub(super) async fn pause_after_followup_admission(&self) {
+        let barrier = self.followup_admission_barrier.lock().unwrap().clone();
+        if let Some(barrier) = barrier {
+            barrier.wait().await;
+        }
+    }
+
+    #[cfg(not(test))]
+    pub(super) async fn pause_after_followup_admission(&self) {}
+
+    #[cfg(test)]
+    async fn pause_before_followup_start(&self, request: &RunAgentTurnRequest) {
+        if request.followup_start_tx.is_none() {
+            return;
+        }
+        let hook = self.before_followup_start_hook.lock().unwrap().take();
+        if let Some(hook) = hook {
+            hook.entered.notify_one();
+            hook.release.notified().await;
+        }
+    }
+
+    #[cfg(not(test))]
+    async fn pause_before_followup_start(&self, _request: &RunAgentTurnRequest) {}
 
     fn termination_subscription(
         &self,
         thread_id: &str,
     ) -> anyhow::Result<(Arc<AgentThreadControl>, watch::Receiver<Option<RunnerAck>>)> {
         let active = self.lock_active()?;
-        let turn = active.get(thread_id).ok_or_else(|| {
+        let slot = active.get(thread_id).ok_or_else(|| {
             anyhow::anyhow!("agent thread {thread_id:?} has no active runtime turn")
         })?;
-        Ok((Arc::clone(&turn.interrupt), turn.terminated.clone()))
+        match slot {
+            RuntimeSlot::Running(turn) => {
+                Ok((Arc::clone(&turn.interrupt), turn.terminated.clone()))
+            }
+            RuntimeSlot::Starting(_) => {
+                anyhow::bail!("agent thread {thread_id:?} is starting a runtime turn")
+            }
+        }
     }
 
     #[cfg(test)]
@@ -584,6 +689,19 @@ impl AgentRuntimeManager {
     #[cfg(test)]
     pub(super) fn set_before_cleanup_hook(&self, hook: Option<BeforeCleanupHook>) {
         *self.before_cleanup_hook.lock().unwrap() = hook;
+    }
+
+    #[cfg(test)]
+    pub(super) fn set_followup_admission_barrier(
+        &self,
+        barrier: Option<Arc<tokio::sync::Barrier>>,
+    ) {
+        *self.followup_admission_barrier.lock().unwrap() = barrier;
+    }
+
+    #[cfg(test)]
+    pub(super) fn set_before_followup_start_hook(&self, hook: Option<AckSubscribeHook>) {
+        *self.before_followup_start_hook.lock().unwrap() = hook;
     }
 
     #[cfg(test)]
@@ -687,7 +805,7 @@ impl AgentRuntimeManager {
     }
 
     fn remove_active_if_turn(&self, thread_id: &str, turn_id: &str) -> anyhow::Result<bool> {
-        let (removed, pending) = self.remove_active_and_take_followup(thread_id, turn_id)?;
+        let (removed, pending) = self.remove_active_and_take_followup(thread_id, turn_id, false)?;
         if let Some(pending) = pending {
             if let Some(start_tx) = pending.request.followup_start_tx {
                 let _ = start_tx.send(Some(Err(
@@ -702,28 +820,70 @@ impl AgentRuntimeManager {
         &self,
         thread_id: &str,
         turn_id: &str,
+        reserve_followup: bool,
     ) -> anyhow::Result<(bool, Option<PendingFollowup>)> {
         let mut active = self.lock_active()?;
-        let matches = active
-            .get(thread_id)
-            .is_some_and(|turn| turn.turn_id == turn_id);
+        let matches = active.get(thread_id).is_some_and(
+            |slot| matches!(slot, RuntimeSlot::Running(turn) if turn.turn_id == turn_id),
+        );
         let pending = matches
             .then(|| active.remove(thread_id))
             .flatten()
-            .and_then(|turn| turn.pending_followup);
+            .and_then(|slot| match slot {
+                RuntimeSlot::Running(turn) => turn.pending_followup,
+                RuntimeSlot::Starting(_) => None,
+            });
+        if reserve_followup {
+            if let Some(pending) = pending.as_ref() {
+                let token = pending
+                    .request
+                    .start_token
+                    .clone()
+                    .expect("pending follow-up owns a starting token");
+                active.insert(
+                    thread_id.to_string(),
+                    RuntimeSlot::Starting(StartingAgentTurn {
+                        token,
+                        result_rx: pending.result_rx.clone(),
+                    }),
+                );
+            }
+        }
         Ok((matches, pending))
     }
 
+    fn complete_starting_request(&self, request: &RunAgentTurnRequest, result: Result<(), String>) {
+        let Some(token) = request.start_token.as_deref() else {
+            return;
+        };
+        if let Ok(mut active) = self.lock_active() {
+            let matches = active.get(&request.thread.thread_id).is_some_and(
+                |slot| matches!(slot, RuntimeSlot::Starting(starting) if starting.token == token),
+            );
+            if matches {
+                active.remove(&request.thread.thread_id);
+            }
+        }
+        if let Some(start_tx) = request.followup_start_tx.as_ref() {
+            if start_tx.borrow().is_none() {
+                let _ = start_tx.send(Some(result));
+            }
+        }
+    }
+
+    fn fail_starting_request(&self, request: &RunAgentTurnRequest, error: &anyhow::Error) {
+        self.complete_starting_request(request, Err(format!("{error:#}")));
+    }
+
     fn active_turn_matches(&self, thread_id: &str, turn_id: &str) -> anyhow::Result<bool> {
-        Ok(self
-            .lock_active()?
-            .get(thread_id)
-            .is_some_and(|turn| turn.turn_id == turn_id))
+        Ok(self.lock_active()?.get(thread_id).is_some_and(
+            |slot| matches!(slot, RuntimeSlot::Running(turn) if turn.turn_id == turn_id),
+        ))
     }
 
     fn lock_active(
         &self,
-    ) -> anyhow::Result<std::sync::MutexGuard<'_, HashMap<String, ActiveAgentTurn>>> {
+    ) -> anyhow::Result<std::sync::MutexGuard<'_, HashMap<String, RuntimeSlot>>> {
         self.active
             .lock()
             .map_err(|_| anyhow::anyhow!("agent runtime manager mutex is poisoned"))
@@ -951,7 +1111,7 @@ mod tests {
 
     use super::{
         sandbox_profile, wait_for_termination, AckSubscribeHook, ActiveAgentTurn,
-        AgentRuntimeManager, RunAgentTurnRequest, StartTurnOwnerGuard,
+        AgentRuntimeManager, RunAgentTurnRequest, RuntimeSlot, StartTurnOwnerGuard,
     };
 
     #[test]
@@ -1135,6 +1295,7 @@ mod tests {
             chat_override: Some(chat_override),
             consume_mailbox: false,
             followup_start_tx: None,
+            start_token: None,
         }
     }
 
@@ -2300,12 +2461,12 @@ mod tests {
         let (_replacement_tx, replacement_rx) = watch::channel(None);
         manager.lock_active().unwrap().insert(
             thread.thread_id.clone(),
-            ActiveAgentTurn {
+            RuntimeSlot::Running(Box::new(ActiveAgentTurn {
                 turn_id: "replacement-turn".into(),
                 interrupt: Arc::clone(&replacement_control),
                 terminated: replacement_rx,
                 pending_followup: None,
-            },
+            })),
         );
         let (stale_tx, stale_rx) = watch::channel(None);
 
@@ -2329,15 +2490,13 @@ mod tests {
             .unwrap_err()
             .to_string()
             .contains("no longer owns its active runtime generation"));
-        assert_eq!(
+        assert!(matches!(
             manager
                 .lock_active()
                 .unwrap()
-                .get(&thread.thread_id)
-                .unwrap()
-                .turn_id,
-            "replacement-turn"
-        );
+                .get(&thread.thread_id),
+            Some(RuntimeSlot::Running(turn)) if turn.turn_id == "replacement-turn"
+        ));
         let current = control.runtime_handle(&thread.thread_id).unwrap().unwrap();
         assert!(Arc::ptr_eq(
             &current.terminate,
@@ -2347,6 +2506,89 @@ mod tests {
             &current.interrupt,
             &replacement_handle.interrupt
         ));
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn stale_starting_token_cannot_claim_or_remove_replacement_reservation() {
+        let dir = tempfile::tempdir().unwrap();
+        let (control, thread) = setup(&dir, "worker");
+        let memory_dir = dir.path().join("memory");
+        let sessions =
+            session::SessionStore::open_sessions_dir(&memory_dir.join("sessions")).unwrap();
+        sessions.ensure_session(&thread.session_id, "test").unwrap();
+        let manager = AgentRuntimeManager::default();
+        let admission = manager
+            .request_or_start_followup(
+                &thread.thread_id,
+                request(
+                    Arc::clone(&control),
+                    thread.clone(),
+                    memory_dir.clone(),
+                    scripted_chat("replacement completed"),
+                ),
+            )
+            .unwrap();
+        let (owner, result_rx) = match admission {
+            super::FollowupAdmission::StartNow { request, result_rx } => (request, result_rx),
+            super::FollowupAdmission::AwaitStart { .. } => panic!("first admission must own start"),
+        };
+        let owner_token = owner.start_token.clone().unwrap();
+        assert!(!manager
+            .remove_active_if_turn(&thread.thread_id, "stale-running-turn")
+            .unwrap());
+
+        let mut stale = request(
+            Arc::clone(&control),
+            thread.clone(),
+            memory_dir,
+            scripted_chat("must not run"),
+        );
+        let (stale_tx, _stale_rx) = watch::channel(None);
+        stale.followup_start_tx = Some(stale_tx);
+        stale.start_token = Some("stale-token".into());
+        let error = manager.start_turn(stale).await.unwrap_err();
+        assert!(format!("{error:#}").contains("no longer owns"));
+        assert!(matches!(
+            manager.lock_active().unwrap().get(&thread.thread_id),
+            Some(RuntimeSlot::Starting(starting)) if starting.token == owner_token
+        ));
+
+        manager.start_turn(*owner).await.unwrap();
+        assert_eq!(result_rx.borrow().clone(), Some(Ok(())));
+        assert!(!manager.is_running(&thread.thread_id));
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn starting_admission_failure_removes_matching_slot_and_shares_error() {
+        let dir = tempfile::tempdir().unwrap();
+        let (control, thread) = setup(&dir, "worker");
+        let manager = AgentRuntimeManager::default();
+        let permit = control.acquire_execution(&thread.thread_id).unwrap();
+        let admission = manager
+            .request_or_start_followup(
+                &thread.thread_id,
+                request(
+                    Arc::clone(&control),
+                    thread.clone(),
+                    dir.path().join("memory"),
+                    scripted_chat("must not run"),
+                ),
+            )
+            .unwrap();
+        let (owner, mut result_rx) = match admission {
+            super::FollowupAdmission::StartNow { request, result_rx } => (request, result_rx),
+            super::FollowupAdmission::AwaitStart { .. } => panic!("first admission must own start"),
+        };
+        let error = manager.start_turn(*owner).await.unwrap_err();
+        assert!(format!("{error:#}").contains("active execution"));
+        if result_rx.borrow().is_none() {
+            result_rx.changed().await.unwrap();
+        }
+        assert!(
+            matches!(result_rx.borrow().as_ref(), Some(Err(message)) if message.contains("active execution"))
+        );
+        assert!(!manager.is_running(&thread.thread_id));
+        drop(permit);
     }
 
     #[tokio::test(flavor = "current_thread")]
