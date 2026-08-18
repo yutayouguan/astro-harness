@@ -1,9 +1,10 @@
 //! Astro gRPC [`AstroService`] 实现：聊天流、会话、记忆、MCP、技能与文件列表。
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::future::Future;
 use std::path::PathBuf;
 use std::pin::Pin;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex as StdMutex, RwLock as StdRwLock, Weak};
 
 use agent::builder::AgentBuilder;
@@ -25,7 +26,7 @@ use proto::{
 };
 use providers::PauseControl;
 use providers::ProviderConfig;
-use tokio::sync::{Mutex, OwnedMutexGuard, RwLock};
+use tokio::sync::{Mutex, OnceCell, OwnedMutexGuard, RwLock};
 use tokio_stream::wrappers::ReceiverStream;
 use tonic::{Request, Response, Status};
 use uuid::Uuid;
@@ -201,10 +202,44 @@ impl<T> Drop for GenerationLaunchReply<T> {
 }
 
 type GenerationOperations = Arc<StdMutex<HashMap<String, Weak<Mutex<()>>>>>;
+type ReleaseOwnerships = Arc<StdMutex<HashMap<String, Weak<ReleaseGenerationOwnership>>>>;
 
-#[derive(Default)]
+#[derive(Clone, Copy, Default)]
 struct ReleaseSessionRuntimeResult {
     should_finalize_without_runtime: bool,
+}
+
+#[derive(Default)]
+struct ReleaseGenerationOwnership {
+    completion: OnceCell<ReleaseSessionRuntimeResult>,
+    fallback_claimed: AtomicBool,
+}
+
+struct ReleaseGenerationOwnershipLease {
+    session_id: String,
+    entry: Arc<ReleaseGenerationOwnership>,
+    registry: ReleaseOwnerships,
+}
+
+impl ReleaseGenerationOwnershipLease {
+    #[cfg(test)]
+    fn entry_ptr(&self) -> usize {
+        Arc::as_ptr(&self.entry) as usize
+    }
+}
+
+impl Drop for ReleaseGenerationOwnershipLease {
+    fn drop(&mut self) {
+        let Ok(mut registry) = self.registry.lock() else {
+            return;
+        };
+        let is_current = registry
+            .get(&self.session_id)
+            .is_some_and(|current| Weak::ptr_eq(current, &Arc::downgrade(&self.entry)));
+        if is_current && Arc::strong_count(&self.entry) == 1 {
+            registry.remove(&self.session_id);
+        }
+    }
 }
 
 fn prune_generation_operation(
@@ -450,8 +485,8 @@ pub struct AstroServiceImpl {
     pause_controls: Arc<StdRwLock<HashMap<String, PauseRegistration>>>,
     /// session_id → generation 操作锁（Weak 以免 release 后无限增长）。
     generation_operations: GenerationOperations,
-    /// Session ids whose latest in-memory generation already owns finalization.
-    released_session_ids: Arc<StdMutex<HashSet<String>>>,
+    /// In-flight release ownership, weakly retained so completed unique ids are reclaimed.
+    release_ownerships: ReleaseOwnerships,
     /// session_id → 活 HITL 闸门。
     hitl_registry: HitlRegistry,
     /// 记忆根目录。
@@ -486,7 +521,7 @@ impl AstroServiceImpl {
             sessions: Arc::new(RwLock::new(HashMap::new())),
             pause_controls: Arc::new(StdRwLock::new(HashMap::new())),
             generation_operations: Arc::new(StdMutex::new(HashMap::new())),
-            released_session_ids: Arc::new(StdMutex::new(HashSet::new())),
+            release_ownerships: Arc::new(StdMutex::new(HashMap::new())),
             hitl_registry: HitlRegistry::new(),
             memory_dir,
             hook_runtime,
@@ -513,6 +548,27 @@ impl AstroServiceImpl {
         operation
     }
 
+    fn release_generation_ownership(&self, session_id: &str) -> ReleaseGenerationOwnershipLease {
+        let mut registry = self
+            .release_ownerships
+            .lock()
+            .expect("release ownership registry mutex poisoned");
+        registry.retain(|_, ownership| ownership.strong_count() > 0);
+        let entry = registry
+            .get(session_id)
+            .and_then(Weak::upgrade)
+            .unwrap_or_else(|| {
+                let entry = Arc::new(ReleaseGenerationOwnership::default());
+                registry.insert(session_id.to_string(), Arc::downgrade(&entry));
+                entry
+            });
+        ReleaseGenerationOwnershipLease {
+            session_id: session_id.to_string(),
+            entry,
+            registry: Arc::clone(&self.release_ownerships),
+        }
+    }
+
     /// 获取或惰性创建会话对应的 [`Session`]。
     ///
     /// 新建时读取当前 active agent 的 [`AgentRuntimeConfig`]，并用请求的 `session_id` 构建。
@@ -535,9 +591,9 @@ impl AstroServiceImpl {
             .map_err(|e| Status::internal(e.to_string()))?;
         agent.set_hook_bus(Arc::clone(&self.hook_runtime.plugin));
         let handle = Arc::new(agent);
-        self.released_session_ids
+        self.release_ownerships
             .lock()
-            .expect("released session registry mutex poisoned")
+            .expect("release ownership registry mutex poisoned")
             .remove(session_id);
         sessions.insert(session_id.to_string(), handle.clone());
         Ok(handle)
@@ -882,12 +938,34 @@ impl AstroServiceImpl {
     /// 返回是否仍需无 runtime 的 finalize fallback；真实 Session 清理由幂等
     /// `shutdown_runtime` 统一承接并登记 finalization ownership。
     async fn release_session_runtime(&self, session_id: &str) -> ReleaseSessionRuntimeResult {
+        let ownership = self.release_generation_ownership(session_id);
+        self.release_session_runtime_with_ownership(session_id, ownership)
+            .await
+    }
+
+    async fn release_session_runtime_with_ownership(
+        &self,
+        session_id: &str,
+        ownership: ReleaseGenerationOwnershipLease,
+    ) -> ReleaseSessionRuntimeResult {
         let service = self.clone();
         let session_id = session_id.to_string();
         let (reply_tx, reply_rx) = tokio::sync::oneshot::channel();
         tokio::spawn(async move {
-            let removed = service.release_session_runtime_inner(&session_id).await;
-            let _ = reply_tx.send(removed);
+            let shared = *ownership
+                .entry
+                .completion
+                .get_or_init(|| service.release_session_runtime_inner(&session_id))
+                .await;
+            let result = ReleaseSessionRuntimeResult {
+                should_finalize_without_runtime: shared.should_finalize_without_runtime
+                    && ownership
+                        .entry
+                        .fallback_claimed
+                        .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
+                        .is_ok(),
+            };
+            let _ = reply_tx.send(result);
         });
         reply_rx.await.unwrap_or_default()
     }
@@ -934,18 +1012,7 @@ impl AstroServiceImpl {
                 Some(_) | None => None,
             };
             let has_live_session = sessions.contains_key(session_id);
-            let should_finalize_without_runtime = {
-                let mut released = self
-                    .released_session_ids
-                    .lock()
-                    .expect("released session registry mutex poisoned");
-                if removed.is_some() {
-                    released.insert(session_id.to_string());
-                    false
-                } else {
-                    !has_live_session && !released.contains(session_id)
-                }
-            };
+            let should_finalize_without_runtime = removed.is_none() && !has_live_session;
             (
                 registration,
                 detached_gate,
@@ -3455,19 +3522,95 @@ mod tests {
             let service = Arc::clone(&service);
             async move { service.release_session_for_new_chat(session_id).await }
         });
-        tokio::time::timeout(std::time::Duration::from_secs(1), second)
-            .await
-            .expect("the concurrent new-chat release must finish")
-            .unwrap();
-        let hits_while_first_finalize_is_blocked = finalize_hits.load(Ordering::SeqCst);
+        tokio::task::yield_now().await;
+        assert!(
+            !second.is_finished(),
+            "the concurrent release must share the in-flight completion"
+        );
+        assert_eq!(finalize_hits.load(Ordering::SeqCst), 1);
 
         release_finalize_tx.send(()).unwrap();
         first.await.unwrap();
-        assert_eq!(
-            hits_while_first_finalize_is_blocked, 1,
-            "the None fallback must not finalize a session already shutting down"
-        );
+        second.await.unwrap();
         assert_eq!(finalize_hits.load(Ordering::SeqCst), 1);
+        assert!(service.release_ownerships.lock().unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn concurrent_release_callers_share_ownership_then_reclaim_entry() {
+        let dir = TempDir::new().unwrap();
+        let service = Arc::new(AstroServiceImpl::new(dir.path().to_path_buf()));
+        let session_id = "concurrent-release-shared-ownership";
+        let finalize_hits = Arc::new(AtomicUsize::new(0));
+        let finalize_counter = Arc::clone(&finalize_hits);
+        service
+            .hook_runtime
+            .plugin
+            .register(::hooks::ON_SESSION_FINALIZE, move |_| {
+                finalize_counter.fetch_add(1, Ordering::SeqCst);
+                ::hooks::HookOutcome::Continue
+            });
+        service.get_session(session_id).await.unwrap();
+
+        let acquired = Arc::new(tokio::sync::Barrier::new(3));
+        let release = Arc::new(tokio::sync::Barrier::new(3));
+        let ownership_ptrs = Arc::new(std::sync::Mutex::new(Vec::new()));
+        let mut callers = Vec::new();
+        for _ in 0..2 {
+            callers.push(tokio::spawn({
+                let service = Arc::clone(&service);
+                let acquired = Arc::clone(&acquired);
+                let release = Arc::clone(&release);
+                let ownership_ptrs = Arc::clone(&ownership_ptrs);
+                async move {
+                    let ownership = service.release_generation_ownership(session_id);
+                    ownership_ptrs.lock().unwrap().push(ownership.entry_ptr());
+                    acquired.wait().await;
+                    release.wait().await;
+                    service
+                        .release_session_runtime_with_ownership(session_id, ownership)
+                        .await
+                }
+            }));
+        }
+
+        acquired.wait().await;
+        let ownership_ptrs = ownership_ptrs.lock().unwrap().clone();
+        assert_eq!(ownership_ptrs.len(), 2);
+        assert_eq!(ownership_ptrs[0], ownership_ptrs[1]);
+        assert_eq!(service.release_ownerships.lock().unwrap().len(), 1);
+        release.wait().await;
+        for caller in callers {
+            let result = caller.await.unwrap();
+            assert!(!result.should_finalize_without_runtime);
+        }
+        assert_eq!(finalize_hits.load(Ordering::SeqCst), 1);
+        assert!(service.release_ownerships.lock().unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn unique_release_ownership_entries_are_reclaimed() {
+        let dir = TempDir::new().unwrap();
+        let service = AstroServiceImpl::new(dir.path().to_path_buf());
+        let finalize_hits = Arc::new(AtomicUsize::new(0));
+        let finalize_counter = Arc::clone(&finalize_hits);
+        service
+            .hook_runtime
+            .plugin
+            .register(::hooks::ON_SESSION_FINALIZE, move |_| {
+                finalize_counter.fetch_add(1, Ordering::SeqCst);
+                ::hooks::HookOutcome::Continue
+            });
+
+        for index in 0..32 {
+            let session_id = format!("unique-release-ownership-{index}");
+            service.get_session(&session_id).await.unwrap();
+            let result = service.release_session_runtime(&session_id).await;
+            assert!(!result.should_finalize_without_runtime);
+        }
+
+        assert_eq!(finalize_hits.load(Ordering::SeqCst), 32);
+        assert!(service.release_ownerships.lock().unwrap().is_empty());
     }
 
     #[tokio::test]
@@ -3489,31 +3632,16 @@ mod tests {
         let first_release = service.release_session_runtime(session_id).await;
         assert!(!first_release.should_finalize_without_runtime);
         assert_eq!(finalize_hits.load(Ordering::SeqCst), 1);
-        assert!(service
-            .released_session_ids
-            .lock()
-            .unwrap()
-            .contains(session_id));
+        assert!(service.release_ownerships.lock().unwrap().is_empty());
 
         let second = service.get_session(session_id).await.unwrap();
         assert!(!Arc::ptr_eq(&first, &second));
-        assert!(!service
-            .released_session_ids
-            .lock()
-            .unwrap()
-            .contains(session_id));
+        assert!(service.release_ownerships.lock().unwrap().is_empty());
 
         let second_release = service.release_session_runtime(session_id).await;
         assert!(!second_release.should_finalize_without_runtime);
         assert_eq!(finalize_hits.load(Ordering::SeqCst), 2);
-        assert!(service
-            .released_session_ids
-            .lock()
-            .unwrap()
-            .contains(session_id));
-        let duplicate_release = service.release_session_runtime(session_id).await;
-        assert!(!duplicate_release.should_finalize_without_runtime);
-        assert_eq!(finalize_hits.load(Ordering::SeqCst), 2);
+        assert!(service.release_ownerships.lock().unwrap().is_empty());
     }
 
     #[tokio::test]
