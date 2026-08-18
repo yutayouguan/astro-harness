@@ -86,6 +86,7 @@ pub(super) async fn emit_context_usage(
 /// 返回 `true` 表示 `stop_after_tool_call` 触发，主循环应跳出。
 pub(super) async fn post_tool_maintenance(
     session: &Arc<AgentLoop>,
+    step_context: &crate::runtime::StepContext,
     calls: &[types::ParsedToolCall],
 ) -> bool {
     {
@@ -119,11 +120,7 @@ pub(super) async fn post_tool_maintenance(
     }
 
     let names: Vec<&str> = calls.iter().map(|c| c.name.as_str()).collect();
-    let stop_after = {
-        let agent = session.as_ref();
-        let registry = agent.tool_registry();
-        registry.any_stop_after(&names)
-    };
+    let stop_after = step_context.tool_router.any_stop_after(&names);
     if stop_after {
         tracing::info!(
             ?names,

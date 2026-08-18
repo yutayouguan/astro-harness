@@ -278,7 +278,7 @@ impl Session {
         if let Some(ctx) = self.take_inject_context().await {
             history.push(Message::user(&format!("[astro:hook-context]\n{ctx}")));
         }
-        let tool_specs = self.schemas_for_api().await;
+        let tool_router = self.build_tool_router().await;
         let session_configuration = self.session_configuration().clone();
         let turn_context = {
             let state = self.state.lock().await;
@@ -296,7 +296,7 @@ impl Session {
                 ))
             })
         };
-        let step_context = Arc::new(StepContext::new(turn_context, history, tool_specs));
+        let step_context = Arc::new(StepContext::new(turn_context, history, tool_router));
         self.state.lock().await.current_step_context = Some(Arc::clone(&step_context));
         Ok(step_context)
     }
@@ -330,8 +330,51 @@ mod tests {
             serde_json::to_value(&first.history).unwrap(),
             serde_json::to_value(&second.history).unwrap()
         );
-        assert_eq!(first.tool_specs, second.tool_specs);
+        assert_eq!(
+            first.tool_router.model_visible_specs().as_ref(),
+            second.tool_router.model_visible_specs().as_ref()
+        );
         assert!(first.advertises_tool("file_ops"));
         assert!(!first.advertises_tool("terminal"));
+    }
+
+    #[tokio::test]
+    async fn tool_router_freezes_dynamic_handler_for_step() {
+        let dir = TempDir::new().unwrap();
+        let config = crate::runtime::Config::with_defaults(dir.path().to_path_buf());
+        let session =
+            Arc::new(Session::with_session_id(config, "tool-router-snapshot".into()).unwrap());
+        let entry = || types::ToolEntry {
+            name: "router_snapshot_probe".into(),
+            toolset: "core".into(),
+            description: "capture the handler advertised to one sampling step".into(),
+            schema: serde_json::json!({"type": "object", "properties": {}}),
+            check_fn: None,
+            icon: "test-tube",
+            ..types::ToolEntry::lifecycle_defaults()
+        };
+        session.tool_registry_mut().register_dynamic(
+            entry(),
+            Arc::new(|_name, _args| Box::pin(async { Ok(types::ToolOutput::from("first")) })),
+        );
+        let step = session.capture_step_context().await.unwrap();
+
+        session.tool_registry_mut().register_dynamic(
+            entry(),
+            Arc::new(|_name, _args| Box::pin(async { Ok(types::ToolOutput::from("second")) })),
+        );
+
+        let runtime = crate::runtime::ToolCallRuntime::new(Arc::clone(&session), step);
+        let output = runtime
+            .handle_tool_call(
+                types::ParsedToolCall::with_id(
+                    "router-snapshot-call",
+                    "router_snapshot_probe",
+                    serde_json::json!({}),
+                ),
+                tokio_util::sync::CancellationToken::new(),
+            )
+            .unwrap();
+        assert_eq!(output.text(), "first");
     }
 }

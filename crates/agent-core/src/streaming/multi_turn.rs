@@ -316,7 +316,7 @@ pub(crate) async fn run_turn(args: RunTurnArgs, cancellation_token: Cancellation
             "step context captured"
         );
         let history = step_context.history.clone();
-        let tool_specs = step_context.tool_specs.clone();
+        let tool_specs = step_context.tool_router.model_visible_specs().to_vec();
 
         emit_context_usage(&session, &tx, &history, &tool_specs).await;
 
@@ -744,16 +744,12 @@ pub(crate) async fn run_turn(args: RunTurnArgs, cancellation_token: Cancellation
         }
 
         run_state.set_phase(RunPhase::ExecutingTools);
-        let force_serial = {
-            let agent = session.as_ref();
-            let names: Vec<&str> = calls.iter().map(|c| c.name.as_str()).collect();
-            let registry = agent.tool_registry();
-            registry.any_needs_confirmation(&names)
-                || registry.any_exclusive_access(&names)
-                || calls
-                    .iter()
-                    .any(|c| tool_may_require_permission(&c.name, &c.arguments))
-        };
+        let names: Vec<&str> = calls.iter().map(|c| c.name.as_str()).collect();
+        let force_serial = step_context.tool_router.any_needs_confirmation(&names)
+            || step_context.tool_router.any_exclusive_access(&names)
+            || calls
+                .iter()
+                .any(|c| tool_may_require_permission(&c.name, &c.arguments));
 
         let outcomes = if force_serial || hitl_gate.is_none() {
             execute_tools_serial(
@@ -811,7 +807,7 @@ pub(crate) async fn run_turn(args: RunTurnArgs, cancellation_token: Cancellation
             return;
         }
 
-        if post_tool_maintenance(&session, &calls).await {
+        if post_tool_maintenance(&session, &step_context, &calls).await {
             need_summary = false;
             break;
         }

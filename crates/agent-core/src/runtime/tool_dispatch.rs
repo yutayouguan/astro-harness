@@ -69,19 +69,23 @@ impl AgentLoop {
             let memory = self.memory();
             (memory.agent_id.clone(), memory.workspace_dir.clone())
         };
-        self.tool_registry_mut()
-            .reload_enabled_from_disk(Some(&agent_id));
+        if step_context.is_none() {
+            self.tool_registry_mut()
+                .reload_enabled_from_disk(Some(&agent_id));
+        }
 
         let is_mcp_broker = matches!(name, mcp::MCP_RESOURCES_TOOL | mcp::MCP_PROMPTS_TOOL);
 
         // MCP 工具：同步 enablement + 刷新注册
-        if is_mcp_tool_name(name) || is_mcp_broker {
+        if step_context.is_none() && (is_mcp_tool_name(name) || is_mcp_broker) {
             let _ = self.mcp_hub.lock().await.sync_enablement_from_disk();
             self.attach_mcp_tools().await;
         }
 
-        let allowed = self.tool_registry().is_tool_allowed(name)
-            && step_context.is_none_or(|step_context| step_context.advertises_tool(name));
+        let allowed = step_context.map_or_else(
+            || self.tool_registry().is_tool_allowed(name),
+            |step_context| step_context.tool_router.has_tool(name),
+        );
 
         // 在构造 ToolContext 之前，从 Hub 解析 peer（lock → resolve → release）
         // 构建 MCP 动态 handler，持有 Peer（Send + Sync），无需跨 await 持锁。
@@ -108,7 +112,12 @@ impl AgentLoop {
         } else {
             None
         };
-        let dynamic_handler = mcp_handler.or_else(|| self.tool_registry().dynamic_handler(name));
+        let dynamic_handler = mcp_handler.or_else(|| {
+            step_context.map_or_else(
+                || self.tool_registry().dynamic_handler(name),
+                |step_context| step_context.tool_router.dynamic_handler(name),
+            )
+        });
 
         skills::set_workspace_override(&workspace_dir);
         let session_id = self.session_id.clone();
@@ -329,11 +338,28 @@ impl AgentLoop {
         if self.cancel.is_cancelled() || cancellation_token.is_cancelled() {
             return Err(ToolCallError::Cancelled);
         }
-        // Soft-alias：模型把 Skill 名当工具名时，改写成 skills(skill_id=…)
-        let (has_tool, skills_allowed) = {
-            let registry = self.tool_registry();
-            (registry.has_tool(name), registry.is_tool_allowed("skills"))
+        let (step_context, interaction_mode) = {
+            let state = self.state.lock().await;
+            let step_context = explicit_step_context.or_else(|| state.current_step_context.clone());
+            let interaction_mode = step_context
+                .as_ref()
+                .map(|step_context| step_context.turn.mode())
+                .unwrap_or(state.interaction_mode);
+            (step_context, interaction_mode)
         };
+        // Soft-alias：模型把 Skill 名当工具名时，改写成 skills(skill_id=…)
+        let (has_tool, skills_allowed) = step_context.as_ref().map_or_else(
+            || {
+                let registry = self.tool_registry();
+                (registry.has_tool(name), registry.is_tool_allowed("skills"))
+            },
+            |step_context| {
+                (
+                    step_context.tool_router.has_tool(name),
+                    step_context.tool_router.has_tool("skills"),
+                )
+            },
+        );
         let (exec_name, exec_args) = if !is_mcp_tool_name(name)
             && !has_tool
             && skills_allowed
@@ -351,15 +377,6 @@ impl AgentLoop {
             )
         } else {
             (name, args_owned)
-        };
-        let (step_context, interaction_mode) = {
-            let state = self.state.lock().await;
-            let step_context = explicit_step_context.or_else(|| state.current_step_context.clone());
-            let interaction_mode = step_context
-                .as_ref()
-                .map(|step_context| step_context.turn.mode())
-                .unwrap_or(state.interaction_mode);
-            (step_context, interaction_mode)
         };
         if let Err(msg) = tools::check_tool_call(interaction_mode, exec_name, &exec_args) {
             return Ok(msg.into());

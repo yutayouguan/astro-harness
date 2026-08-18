@@ -489,18 +489,13 @@ async fn preflight_read_only_write(
 
 async fn preflight_mcp_tool_approval(
     session: &Arc<AgentLoop>,
+    step_context: &StepContext,
     call: &types::ParsedToolCall,
     tx: &mpsc::Sender<anyhow::Result<MultiTurnStreamItem>>,
     run_id: &str,
     hitl_gate: Option<&Arc<HitlGate>>,
 ) -> Option<PermissionPreflight> {
-    let approval = {
-        let agent = session.as_ref();
-        let registry = agent.tool_registry();
-        registry
-            .get(&call.name)
-            .and_then(|entry| entry.mcp_approval.clone())
-    };
+    let approval = step_context.tool_router.mcp_approval(&call.name);
     let Some(approval) = approval else {
         return Some(PermissionPreflight::NotRequired);
     };
@@ -708,7 +703,9 @@ async fn execute_tools_serial_inner(
         let mut network_grant = tools::InProcessNetworkGrant::default();
         let mut permission_audits = Vec::new();
         if !call.args_parse_error {
-            match preflight_mcp_tool_approval(session, call, tx, run_id, hitl_gate).await? {
+            match preflight_mcp_tool_approval(session, &step_context, call, tx, run_id, hitl_gate)
+                .await?
+            {
                 PermissionPreflight::NotRequired => {}
                 PermissionPreflight::Granted(audit) => permission_audits.push(*audit),
                 PermissionPreflight::Denied(message) => {

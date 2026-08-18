@@ -41,6 +41,7 @@ pub(crate) mod session_state;
 pub(crate) mod step_context;
 mod system_prompt;
 mod tool_dispatch;
+pub(crate) mod tool_router;
 pub(crate) mod tool_runtime;
 pub(crate) mod turn_budget;
 pub(crate) mod turn_context;
@@ -50,6 +51,7 @@ mod validate;
 
 pub(crate) use step_context::StepContext;
 pub use tool_dispatch::ToolCallError;
+pub(crate) use tool_router::ToolRouter;
 pub(crate) use tool_runtime::{ToolCallRuntime, ToolInvocation};
 pub use turn_budget::MaxDepthError;
 pub use turn_context::TurnContext;
@@ -1018,6 +1020,14 @@ impl Session {
     pub async fn schemas_for_api(&self) -> Vec<serde_json::Value> {
         let interaction_mode = self.state.lock().await.interaction_mode;
         tools::filter_schemas(interaction_mode, self.tool_registry().schemas_for_api())
+    }
+
+    async fn build_tool_router(&self) -> Arc<ToolRouter> {
+        let interaction_mode = self.state.lock().await.interaction_mode;
+        let registry = self.tool_registry();
+        let model_visible_specs =
+            tools::filter_schemas(interaction_mode, registry.schemas_for_api());
+        Arc::new(ToolRouter::from_registry(&registry, model_visible_specs))
     }
 
     /// Append conversation items to the session-owned history.

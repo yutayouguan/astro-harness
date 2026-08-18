@@ -1,6 +1,6 @@
 # Agent 生命周期详细设计
 
-> 版本：v2.16
+> 版本：v2.17
 > 日期：2026-08-18
 > 状态：实施基线  
 > 上游参考：[OpenAI Codex](https://github.com/openai/codex) `632e35ce8d5dec43b75dbf99f9e6fa52bed47c3d`  
@@ -646,7 +646,7 @@ built-in tool 的 current-thread `!Send` 契约保持不变。
     产生该调用的 `StepContext` 与 turn cancellation token。
   - [x] 并发工具改用 Session 统一 dispatch，不再重开 `MemoryManager` / `SessionStore`
     或手工构造 `ToolContext`；动态工具、MCP、soft alias 与 tool hooks 因此共用同一语义。
-  - [ ] 将注册表与模型可见 specs 收口为 `ToolRouter`。
+  - [x] 将注册表运行时投影与模型可见 specs 收口为 `ToolRouter`。
   - [ ] 引入 `ToolOrchestrator` 并迁移审批、沙箱、network approval 与 retry。
 - [ ] 删除工具执行时重新加载权限/工具的路径。
 
@@ -657,6 +657,14 @@ built-in 路由和 pre/transform/post tool hooks 执行。显式 `StepContext` �
 sampling step 的工具可见性；cancellation token 与 Session cancel 任一取消都会终止入场。
 `tool_call_runtime_preserves_hardline_defense` 保留路由误判时的高危命令纵深防御，
 `concurrent_tools_use_session_router_and_hooks` 锁定动态工具与 hook 的统一路径。
+
+v2.17 ToolRouter 批次：`capture_step_context` 在同一次注册表读锁下将交互模式过滤后的
+model-visible specs、动态 handler、MCP approval 与 confirmation/exclusive/stop-after 元数据
+固定到 `Arc<ToolRouter>`，再交给 `StepContext`。sampling 之后的工具 gate 热更新、MCP
+重连或同名 handler 覆盖只影响下一个 step，不改写已生成 tool call 的准入与路由语义。
+streaming 的串/并发选择、MCP 预审批和 stop-after 判定也统一从该 router 读取。
+`tool_router_freezes_dynamic_handler_for_step` 通过采样后覆盖 Session 注册表并执行旧 step，
+锁定不可变快照契约。无 `StepContext` 的兼容工具入口仍保留当前注册表路径，待后续删除。
 
 ### Phase D：ThreadManager 与 AgentControl
 
