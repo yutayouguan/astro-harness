@@ -79,13 +79,34 @@ impl Session {
         if let Some(turn_id) = self.steer_input(user_message, image_data_urls) {
             return Ok(TurnResult::Steered { turn_id });
         }
+        self.prepare_turn(&[TurnInput::UserInput {
+            content: user_message.to_string(),
+            image_data_urls: image_data_urls.to_vec(),
+        }])
+        .await
+    }
+
+    /// Prepare initial task input for the first sampling request.
+    ///
+    /// Production paths call this from [`crate::tasks::RegularTask`]. The
+    /// public `start_or_steer_turn*` methods remain compatibility adapters for
+    /// callers that have not yet moved input ownership into `SessionTask`.
+    pub(crate) async fn prepare_turn(&mut self, input: &[TurnInput]) -> anyhow::Result<TurnResult> {
+        anyhow::ensure!(!input.is_empty(), "regular turn requires initial input");
+        let user_message = input
+            .iter()
+            .map(|item| match item {
+                TurnInput::UserInput { content, .. } => content.as_str(),
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
         self.cancel.reset();
         if self.is_budget_exhausted() {
             return Ok(TurnResult::BudgetExhausted);
         }
 
         self.begin_user_turn();
-        if looks_like_user_correction(user_message)
+        if looks_like_user_correction(&user_message)
             && self
                 .session_messages
                 .iter()
@@ -102,13 +123,12 @@ impl Session {
         }
         self.reload_tools_and_mcp().await?;
 
-        self.record_turn_input(TurnInput::UserInput {
-            content: user_message.to_string(),
-            image_data_urls: image_data_urls.to_vec(),
-        })?;
+        for item in input.iter().cloned() {
+            self.record_turn_input(item)?;
+        }
 
         let fts_keywords = if self.turn.current_turn >= self.config.recent_turns {
-            Some(user_message)
+            Some(user_message.as_str())
         } else {
             None
         };

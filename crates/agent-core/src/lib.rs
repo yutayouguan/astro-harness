@@ -46,7 +46,7 @@ pub use streaming::{
     stream_multi_turn_with_hitl, ChatOverride, MultiTurnStreamItem, ProviderStreamer,
     StreamedAssistantContent, StreamingChat, StreamingCompletion, StreamingPrompt,
 };
-pub use tasks::TurnAbortReason;
+pub use tasks::{TurnAbortReason, TurnInput};
 /// 工具注册表（实现位于 `tools` crate）。
 pub use tools::ToolRegistry;
 /// 工具元数据（定义位于 `common`）。

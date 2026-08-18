@@ -6,11 +6,11 @@ use std::pin::Pin;
 use std::sync::Arc;
 
 use agent::builder::AgentBuilder;
-use agent::runtime::{Session, TurnResult};
+use agent::runtime::Session;
 use agent::streaming::{
     stream_multi_turn_with_hitl, MultiTurnStreamItem, StreamedAssistantContent,
 };
-use agent::{HitlGate, HitlRegistry, TurnAbortReason};
+use agent::{HitlGate, HitlRegistry, TurnAbortReason, TurnInput};
 use futures::StreamExt;
 use home::AgentRuntimeConfig;
 use memory::MemoryManager;
@@ -925,110 +925,6 @@ impl AstroService for AstroServiceImpl {
                 hitl_registry.cancel_and_remove(&sid_cleanup).await;
             };
 
-            let turn_content = content;
-            let run_result = {
-                let mut agent = session.lock().await;
-                agent
-                    .start_or_steer_turn_with_images(&turn_content, &image_data_urls, "grpc-chat")
-                    .await
-            };
-
-            let turn_result = match run_result {
-                Ok(result) => result,
-                Err(err) => {
-                    if err.downcast_ref::<mcp::RequiredMcpServersError>().is_some() {
-                        let _ = tx
-                            .send(Ok(ChatEvent {
-                                payload: Some(proto::chat_event::Payload::Error(err.to_string())),
-                            }))
-                            .await;
-                        let _ = tx
-                            .send(Ok(ChatEvent {
-                                payload: Some(proto::chat_event::Payload::Done(true)),
-                            }))
-                            .await;
-                        cleanup().await;
-                        return;
-                    }
-                    let _ = tx.send(Err(Status::internal(err.to_string()))).await;
-                    cleanup().await;
-                    return;
-                }
-            };
-
-            let system_prompt = match turn_result {
-                TurnResult::Continue { system_prompt, .. } => system_prompt,
-                TurnResult::Steered { .. } => {
-                    let _ = tx
-                        .send(Ok(ChatEvent {
-                            payload: Some(proto::chat_event::Payload::Done(true)),
-                        }))
-                        .await;
-                    cleanup().await;
-                    return;
-                }
-                TurnResult::BudgetExhausted => {
-                    let _ = tx
-                        .send(Ok(ChatEvent {
-                            payload: Some(proto::chat_event::Payload::Error(
-                                "对话轮次预算已用尽".to_string(),
-                            )),
-                        }))
-                        .await;
-                    cleanup().await;
-                    return;
-                }
-                TurnResult::Finished(message) => {
-                    let _ = tx
-                        .send(Ok(ChatEvent {
-                            payload: Some(proto::chat_event::Payload::Token(message)),
-                        }))
-                        .await;
-                    let _ = tx
-                        .send(Ok(ChatEvent {
-                            payload: Some(proto::chat_event::Payload::Done(true)),
-                        }))
-                        .await;
-                    spawn_review_to_hub(&session, &sid_cleanup, &session_events_hub).await;
-                    spawn_title_to_hub(&session, &session_events_hub).await;
-                    cleanup().await;
-                    return;
-                }
-                TurnResult::MaxDepth => {
-                    let _ = tx
-                        .send(Ok(ChatEvent {
-                            payload: Some(proto::chat_event::Payload::Error(
-                                "工具调用轮次已达上限".to_string(),
-                            )),
-                        }))
-                        .await;
-                    cleanup().await;
-                    return;
-                }
-                TurnResult::ToolCalls(_) => {
-                    let _ = tx
-                        .send(Ok(ChatEvent {
-                            payload: Some(proto::chat_event::Payload::Error(
-                                "当前 gRPC Chat 尚未支持该轮次结果".to_string(),
-                            )),
-                        }))
-                        .await;
-                    cleanup().await;
-                    return;
-                }
-                TurnResult::Interrupted => {
-                    let _ = tx
-                        .send(Ok(ChatEvent {
-                            payload: Some(proto::chat_event::Payload::Error(
-                                "上一轮对话已中断，请重新发送消息".to_string(),
-                            )),
-                        }))
-                        .await;
-                    cleanup().await;
-                    return;
-                }
-            };
-
             let (temperature, additional_params) = {
                 let agent = session.lock().await;
                 (agent.temperature(), agent.additional_params().clone())
@@ -1105,7 +1001,10 @@ impl AstroService for AstroServiceImpl {
                 session,
                 chat_targets,
                 config,
-                system_prompt,
+                vec![TurnInput::UserInput {
+                    content,
+                    image_data_urls,
+                }],
                 pause,
                 Some(hitl_gate),
             );

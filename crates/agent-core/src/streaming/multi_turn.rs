@@ -45,7 +45,9 @@ pub struct MultiTurnStreamArgs {
     pub session: Arc<Mutex<Session>>,
     pub targets: Vec<ChatTarget>,
     pub base_config: ProviderConfig,
-    pub system_prompt: String,
+    pub input: Vec<TurnInput>,
+    /// Compatibility path for tests and callers that already prepared a turn.
+    pub system_prompt: Option<String>,
     pub pause: Arc<PauseControl>,
     pub hitl_gate: Option<Arc<HitlGate>>,
     pub tx: mpsc::Sender<anyhow::Result<MultiTurnStreamItem>>,
@@ -63,6 +65,7 @@ pub async fn run_multi_turn_stream(args: MultiTurnStreamArgs) {
         session,
         targets,
         base_config,
+        input,
         system_prompt,
         pause,
         hitl_gate,
@@ -92,7 +95,7 @@ pub async fn run_multi_turn_stream(args: MultiTurnStreamArgs) {
         chat_override,
     });
     tracing::info!(session_id = %session_id, turn_id = %sub_id, "turn started");
-    if let Err(error) = Session::spawn_task(&session, turn_context, Vec::new(), task).await {
+    if let Err(error) = Session::spawn_task(&session, turn_context, input, task).await {
         let _ = tx
             .send(Ok(MultiTurnStreamItem::Error(error.to_string())))
             .await;
@@ -123,7 +126,8 @@ pub async fn run_multi_turn_stream_with_chat_fn(
         session,
         targets,
         base_config: config,
-        system_prompt,
+        input: Vec::new(),
+        system_prompt: Some(system_prompt),
         pause,
         hitl_gate,
         tx,
@@ -138,7 +142,7 @@ pub(crate) struct RunTurnArgs {
     turn_context: Arc<TurnContext>,
     targets: Vec<ChatTarget>,
     base_config: ProviderConfig,
-    system_prompt: String,
+    system_prompt: Option<String>,
     pause: Arc<PauseControl>,
     hitl_gate: Option<Arc<HitlGate>>,
     tx: mpsc::Sender<anyhow::Result<MultiTurnStreamItem>>,
@@ -159,6 +163,17 @@ impl RunTurnArgs {
             thread_id: self.thread_id.clone(),
             ..self.clone()
         }
+    }
+
+    pub(crate) fn with_system_prompt(&self, system_prompt: String) -> Self {
+        Self {
+            system_prompt: Some(system_prompt),
+            ..self.clone()
+        }
+    }
+
+    pub(crate) fn prepared_system_prompt(&self) -> Option<&str> {
+        self.system_prompt.as_deref()
     }
 }
 
@@ -191,6 +206,7 @@ pub(crate) async fn run_turn(args: RunTurnArgs, cancellation_token: Cancellation
         run_id,
         chat_override,
     } = args;
+    let system_prompt = system_prompt.expect("RegularTask prepares the system prompt");
     let streamer = match chat_override {
         Some(f) => ProviderStreamer::with_chat_override(targets, base_config, f),
         None => ProviderStreamer::new(targets, base_config),
@@ -866,10 +882,10 @@ pub fn stream_multi_turn(
     session: Arc<Mutex<Session>>,
     targets: Vec<ChatTarget>,
     base_config: ProviderConfig,
-    system_prompt: String,
+    input: Vec<TurnInput>,
     pause: Arc<PauseControl>,
 ) -> MultiTurnStream {
-    stream_multi_turn_with_hitl(session, targets, base_config, system_prompt, pause, None)
+    stream_multi_turn_with_hitl(session, targets, base_config, input, pause, None)
 }
 
 /// 带 HITL 闸门的多轮流。
@@ -877,7 +893,7 @@ pub fn stream_multi_turn_with_hitl(
     session: Arc<Mutex<Session>>,
     targets: Vec<ChatTarget>,
     base_config: ProviderConfig,
-    system_prompt: String,
+    input: Vec<TurnInput>,
     pause: Arc<PauseControl>,
     hitl_gate: Option<Arc<HitlGate>>,
 ) -> MultiTurnStream {
@@ -887,7 +903,8 @@ pub fn stream_multi_turn_with_hitl(
             session,
             targets,
             base_config,
-            system_prompt,
+            input,
+            system_prompt: None,
             pause,
             hitl_gate,
             tx,

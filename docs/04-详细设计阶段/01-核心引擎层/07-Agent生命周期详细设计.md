@@ -1,7 +1,7 @@
 # Agent 生命周期详细设计
 
-> 版本：v2.2
-> 日期：2026-08-17  
+> 版本：v2.3
+> 日期：2026-08-18
 > 状态：实施基线  
 > 上游参考：[OpenAI Codex](https://github.com/openai/codex) `632e35ce8d5dec43b75dbf99f9e6fa52bed47c3d`  
 > 适用范围：`agent-core`、`agent-tools`、`agent-subagents`、`agent-memory`、`agent-session`、`agent-hooks`、`agent-mcp`
@@ -506,8 +506,14 @@ schema 和 RPC 字段改名都必须提供 migration 或 serde alias。
 - [x] foreground/background/Cron/SubAgent 的执行均经过 `Session::spawn_task`。
 - [x] 实现 pending-input mailbox steer 和 `Session::abort_all_tasks`。
 - [x] Chat 重入时优先 steer，不替换 `PauseControl`、不创建第二条流。
-- [ ] 将首次用户输入的持久化从 adapter 移入 `RegularTask::run`。
+- [x] 将首次用户输入的持久化从 adapter 移入 `RegularTask::run`。
 - [ ] 将 `Arc<Mutex<Session>>` 内锁化为 Codex 的 `Arc<Session>`。
+
+v2.3 落地说明：foreground、background、Cron 与 SubAgent 不再先调用
+`start_or_steer_turn*` 获取预构建 system prompt，而是把 `Vec<TurnInput>` 直接交给
+`Session::spawn_task`。`RegularTask::run` 在 active `TurnContext` 绑定后统一完成输入持久化、
+FTS 召回、工具/MCP 热加载、system prompt 组装和首个 sampling；旧入口仅作为兼容 adapter
+保留。测试专用 chat override 仍可注入预构建 prompt，生产入口不得使用该兼容路径。
 
 ### Phase C：工具运行时
 

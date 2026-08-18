@@ -11,8 +11,10 @@ use tokio::sync::{Mutex, Notify};
 
 use agent::runtime::{AgentConfig, AgentLoop};
 use agent::streaming::{
-    run_multi_turn_stream_with_chat_fn, ChatOverride, MultiTurnStreamItem, StreamedAssistantContent,
+    run_multi_turn_stream, run_multi_turn_stream_with_chat_fn, ChatOverride, MultiTurnStreamArgs,
+    MultiTurnStreamItem, StreamedAssistantContent,
 };
+use agent::TurnInput;
 
 /// 从脚本化轮次列表构造 [`ChatOverride`]。
 ///
@@ -49,6 +51,70 @@ fn pending_chat() -> ChatOverride {
     Arc::new(move |_msgs, _tools, _cfg| {
         Box::pin(async move { Ok(Box::pin(futures::stream::pending()) as CompletionStream) })
     })
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn regular_task_owns_initial_input_persistence() {
+    let dir = tempfile::tempdir().unwrap();
+    let config = AgentConfig::with_defaults(dir.path().to_path_buf());
+    let session = Arc::new(Mutex::new(
+        AgentLoop::with_session_id(config, "regular-task-input".into()).unwrap(),
+    ));
+    let saw_initial_input = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let chat_fn: ChatOverride = {
+        let saw_initial_input = Arc::clone(&saw_initial_input);
+        Arc::new(move |messages, _tools, _config| {
+            let saw_initial_input = Arc::clone(&saw_initial_input);
+            Box::pin(async move {
+                saw_initial_input.store(
+                    messages
+                        .iter()
+                        .any(|message| message.text_content() == "owned by regular task"),
+                    Ordering::SeqCst,
+                );
+                Ok(Box::pin(futures::stream::iter(vec![
+                    Ok(StreamChunk::Text("done".into())),
+                    Ok(StreamChunk::Done {
+                        finish_reason: "stop".into(),
+                    }),
+                ])) as CompletionStream)
+            })
+        })
+    };
+    let (tx, mut rx) = tokio::sync::mpsc::channel(32);
+
+    run_multi_turn_stream(MultiTurnStreamArgs {
+        session: Arc::clone(&session),
+        targets: vec![types::ChatTarget {
+            provider_id: "scripted".into(),
+            backend_id: "scripted".into(),
+            model: "test".into(),
+            api_key: String::new(),
+            base_url: String::new(),
+        }],
+        base_config: ProviderConfig {
+            model: "test".into(),
+            ..Default::default()
+        },
+        input: vec![TurnInput::UserInput {
+            content: "owned by regular task".into(),
+            image_data_urls: Vec::new(),
+        }],
+        system_prompt: None,
+        pause: PauseControl::new(),
+        hitl_gate: None,
+        tx,
+        chat_override: Some(chat_fn),
+    })
+    .await;
+    while rx.recv().await.is_some() {}
+
+    assert!(saw_initial_input.load(Ordering::SeqCst));
+    let sess = session.lock().await;
+    assert_eq!(
+        sess.session_messages[0].content_str(),
+        "owned by regular task"
+    );
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]

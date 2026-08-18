@@ -21,31 +21,31 @@ use crate::streaming::{
     run_multi_turn_stream, ChatOverride, MultiTurnStreamArgs, MultiTurnStreamItem,
     StreamedAssistantContent,
 };
+use crate::tasks::TurnInput;
 
 /// 使用统一多轮引擎执行后台任务。
 pub async fn run_background_multi_turn(
     session: Arc<Mutex<Session>>,
     targets: Vec<ChatTarget>,
-    system_prompt: String,
+    input: Vec<TurnInput>,
 ) -> anyhow::Result<(String, Usage)> {
-    run_background_multi_turn_controlled(session, targets, system_prompt, None).await
+    run_background_multi_turn_controlled(session, targets, input, None).await
 }
 
 /// 带 Agent Thread interrupt / close 控制的后台执行入口。
 pub async fn run_background_multi_turn_controlled(
     session: Arc<Mutex<Session>>,
     targets: Vec<ChatTarget>,
-    system_prompt: String,
+    input: Vec<TurnInput>,
     control: Option<Arc<subagents::AgentThreadControl>>,
 ) -> anyhow::Result<(String, Usage)> {
-    run_background_multi_turn_controlled_with_chat(session, targets, system_prompt, control, None)
-        .await
+    run_background_multi_turn_controlled_with_chat(session, targets, input, control, None).await
 }
 
 pub(crate) async fn run_background_multi_turn_controlled_with_chat(
     session: Arc<Mutex<Session>>,
     targets: Vec<ChatTarget>,
-    system_prompt: String,
+    input: Vec<TurnInput>,
     control: Option<Arc<subagents::AgentThreadControl>>,
     chat_override: Option<ChatOverride>,
 ) -> anyhow::Result<(String, Usage)> {
@@ -75,7 +75,8 @@ pub(crate) async fn run_background_multi_turn_controlled_with_chat(
         session: Arc::clone(&session),
         targets,
         base_config,
-        system_prompt,
+        input,
+        system_prompt: None,
         pause,
         hitl_gate: None,
         tx,
@@ -199,10 +200,7 @@ mod tests {
     async fn agent_thread_interrupt_cancels_unified_engine() {
         let temp = tempfile::tempdir().unwrap();
         let config = crate::runtime::Config::with_defaults(temp.path().to_path_buf());
-        let mut agent = Session::with_session_id(config, "background-cancel".into()).unwrap();
-        agent
-            .session_messages
-            .push(types::message::Message::user("wait"));
+        let agent = Session::with_session_id(config, "background-cancel".into()).unwrap();
         let session = Arc::new(Mutex::new(agent));
         let control = Arc::new(subagents::AgentThreadControl::default());
         let target = ChatTarget {
@@ -216,7 +214,10 @@ mod tests {
         let run = run_background_multi_turn_controlled_with_chat(
             session,
             vec![target],
-            "test".into(),
+            vec![TurnInput::UserInput {
+                content: "wait".into(),
+                image_data_urls: Vec::new(),
+            }],
             Some(Arc::clone(&control)),
             Some(pending_chat()),
         );

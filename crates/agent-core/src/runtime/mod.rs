@@ -270,7 +270,7 @@ impl Session {
     pub(crate) fn create_turn_context(&self, sub_id: String) -> Arc<TurnContext> {
         Arc::new(TurnContext::new(
             sub_id,
-            self.turn.current_turn(),
+            self.turn.current_turn().saturating_add(1),
             self.interaction_mode,
             self.permission_profile.clone(),
             self.project_root.clone(),
@@ -977,6 +977,19 @@ mod tests {
         assert!(!looks_like_user_correction("帮我加一个按钮"));
         assert!(!looks_like_user_correction("继续"));
         assert!(!looks_like_user_correction(""));
+    }
+
+    #[test]
+    fn new_task_context_snapshots_the_next_turn_ordinal() {
+        let dir = TempDir::new().unwrap();
+        let mut session = Session::new(test_config(&dir)).unwrap();
+
+        let first = session.create_turn_context("turn-1".into());
+        assert_eq!(first.turn(), 1);
+
+        session.increment_turn();
+        let second = session.create_turn_context("turn-2".into());
+        assert_eq!(second.turn(), 2);
     }
 
     #[test]

@@ -33,7 +33,7 @@ pub enum TurnAbortReason {
 
 /// Input submitted to a session task.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) enum TurnInput {
+pub enum TurnInput {
     UserInput {
         content: String,
         image_data_urls: Vec<String>,

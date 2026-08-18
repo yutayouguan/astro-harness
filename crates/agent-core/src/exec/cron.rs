@@ -1,8 +1,9 @@
 //! 定时任务（Cron）执行器：将 [`CronJob`] 派发给 Agent 或 Provider 并完成运行记录落库。
 //!
 //! 负责并发互斥（同一 job 不重叠执行）、可选会话创建、600 秒超时兜底，以及成功/失败
-//! 状态写入 `CronRunDb`。任务文案经 [`Session::start_or_steer_turn`] 完成初始化后，由
-//! [`super::background::run_background_multi_turn`] 驱动完整的 LLM → 工具 → LLM 多轮循环。
+//! 状态写入 `CronRunDb`。任务文案作为 [`TurnInput`](crate::tasks::TurnInput) 交给
+//! [`super::background::run_background_multi_turn`]，由统一 `RegularTask` 完成初始化并驱动
+//! LLM → 工具 → LLM 多轮循环。
 //!
 //! 进程退出后残留的 `running` 行由 [`reconcile_orphaned_runs`] 回收：本进程未登记为活跃的
 //! 记录会按关联会话终态收尾；若之后在聊天中重新生成出结果，失败的「应用退出中断」亦可升级为成功。
@@ -22,7 +23,8 @@ use types::ChatTarget;
 use uuid::Uuid;
 
 use crate::runtime::usage::{apply_llm_usage_dual_write, LlmUsageWrite};
-use crate::runtime::{Config, Session, TurnResult};
+use crate::runtime::{Config, Session};
+use crate::tasks::TurnInput;
 
 use super::background::run_background_multi_turn;
 
@@ -706,21 +708,15 @@ async fn run_agent_job(
     session.set_chat_targets(targets.clone());
 
     let session = Arc::new(AsyncMutex::new(session));
-    let turn = {
-        let mut sess = session.lock().await;
-        sess.start_or_steer_turn(&job.task, "cron").await?
-    };
-    let system_prompt = match turn {
-        TurnResult::Finished(message) => return Ok((message, Usage::default())),
-        TurnResult::Continue { system_prompt, .. } => system_prompt,
-        TurnResult::BudgetExhausted => anyhow::bail!("对话轮次预算已用尽"),
-        TurnResult::MaxDepth => anyhow::bail!("工具调用轮次已达上限"),
-        TurnResult::Steered { .. } | TurnResult::ToolCalls(_) | TurnResult::Interrupted => {
-            anyhow::bail!("定时任务不支持该轮次结果")
-        }
-    };
-
-    run_background_multi_turn(session, targets, system_prompt).await
+    run_background_multi_turn(
+        session,
+        targets,
+        vec![TurnInput::UserInput {
+            content: job.task.clone(),
+            image_data_urls: Vec::new(),
+        }],
+    )
+    .await
 }
 
 /// 返回当前 UTC 时间的 RFC3339 字符串（秒精度，含时区偏移）。

@@ -9,8 +9,9 @@ use subagents::{
 };
 use tokio::sync::{mpsc, Mutex};
 
-use crate::runtime::{Config, Session, TurnResult};
+use crate::runtime::{Config, Session};
 use crate::streaming::ChatOverride;
+use crate::tasks::TurnInput;
 
 pub async fn run_agent_thread(
     thread_id: String,
@@ -227,31 +228,18 @@ async fn run_turn(
     control: Arc<AgentThreadControl>,
     chat_override: Option<ChatOverride>,
 ) -> anyhow::Result<String> {
-    let turn = {
-        let mut sess = session.lock().await;
-        sess.start_or_steer_turn(&message, "subagent-thread")
-            .await?
-    };
-    match turn {
-        TurnResult::Finished(message) => Ok(message),
-        TurnResult::Continue { system_prompt, .. } => {
-            let (output, _) =
-                crate::exec::background::run_background_multi_turn_controlled_with_chat(
-                    Arc::clone(session),
-                    targets.to_vec(),
-                    system_prompt,
-                    Some(control),
-                    chat_override,
-                )
-                .await?;
-            Ok(output)
-        }
-        TurnResult::BudgetExhausted => anyhow::bail!("subagent turn budget exhausted"),
-        TurnResult::MaxDepth => anyhow::bail!("subagent tool depth exhausted"),
-        TurnResult::Steered { .. } | TurnResult::ToolCalls(_) | TurnResult::Interrupted => {
-            anyhow::bail!("unsupported subagent turn result")
-        }
-    }
+    let (output, _) = crate::exec::background::run_background_multi_turn_controlled_with_chat(
+        Arc::clone(session),
+        targets.to_vec(),
+        vec![TurnInput::UserInput {
+            content: message,
+            image_data_urls: Vec::new(),
+        }],
+        Some(control),
+        chat_override,
+    )
+    .await?;
+    Ok(output)
 }
 
 #[cfg(test)]
