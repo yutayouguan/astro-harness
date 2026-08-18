@@ -1342,6 +1342,8 @@ fn multi_turn_to_chat_event(item: MultiTurnStreamItem) -> Option<ChatEvent> {
 impl AstroService for AstroServiceImpl {
     /// [`chat`](Self::chat) 流类型。
     type ChatStream = ChatStream;
+    type SubscribeThreadEventsStream =
+        Pin<Box<dyn futures::Stream<Item = Result<proto::ThreadEvent, Status>> + Send>>;
     /// [`generate_image`](Self::generate_image) 流类型。
     type GenerateImageStream =
         Pin<Box<dyn futures::Stream<Item = Result<ImageEvent, Status>> + Send>>;
@@ -1350,6 +1352,36 @@ impl AstroService for AstroServiceImpl {
         Pin<Box<dyn futures::Stream<Item = Result<SkillEvent, Status>> + Send>>;
     /// [`subscribe_session_events`](Self::subscribe_session_events) 流类型。
     type SubscribeSessionEventsStream = SessionEventsStream;
+
+    async fn subscribe_thread_events(
+        &self,
+        _request: Request<proto::SubscribeThreadEventsRequest>,
+    ) -> Result<Response<Self::SubscribeThreadEventsStream>, Status> {
+        Err(Status::unimplemented(
+            "thread event transport lands in Task 12",
+        ))
+    }
+
+    async fn submit_turn(
+        &self,
+        _request: Request<proto::SubmitTurnRequest>,
+    ) -> Result<Response<proto::SubmitTurnResponse>, Status> {
+        Err(Status::unimplemented("thread submission lands in Task 12"))
+    }
+
+    async fn resume_thread(
+        &self,
+        _request: Request<proto::ResumeThreadRequest>,
+    ) -> Result<Response<proto::ResumeThreadResponse>, Status> {
+        Err(Status::unimplemented("thread resume lands in Task 12"))
+    }
+
+    async fn unsubscribe_thread(
+        &self,
+        _request: Request<proto::UnsubscribeThreadRequest>,
+    ) -> Result<Response<proto::Empty>, Status> {
+        Err(Status::unimplemented("thread unsubscribe lands in Task 12"))
+    }
 
     /// Chat 流控制：暂停 / 继续 / 取消指定 `session_id` 的进行中对话。
     ///

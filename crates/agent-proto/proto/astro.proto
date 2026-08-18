@@ -9,6 +9,15 @@ service AstroService {
   rpc Chat(ChatRequest) returns (stream ChatEvent);
   // 对进行中的 Chat 流执行暂停 / 继续 / 取消。
   rpc ChatControl(ChatControlRequest) returns (Empty);
+  // One long-lived outbound stream per client connection.
+  rpc SubscribeThreadEvents(SubscribeThreadEventsRequest)
+      returns (stream ThreadEvent);
+  // Submit one user input operation to a loaded or newly created Thread.
+  rpc SubmitTurn(SubmitTurnRequest) returns (SubmitTurnResponse);
+  // Rebuild durable history, merge an active snapshot, and subscribe the connection.
+  rpc ResumeThread(ResumeThreadRequest) returns (ResumeThreadResponse);
+  // Stop routing one Thread to a connection without stopping the Thread.
+  rpc UnsubscribeThread(UnsubscribeThreadRequest) returns (Empty);
   // 校验并登记 interrupt 的 resume 项（随后 Chat 携带 resume_json 续跑）。
   rpc InterruptResume(InterruptResumeRequest) returns (Empty);
   // 文生图流：进度、图片字节或错误。
@@ -143,6 +152,133 @@ enum ChatControlAction {
 message ChatControlRequest {
   string session_id = 1;
   ChatControlAction action = 2;
+}
+
+message SubscribeThreadEventsRequest {
+  string connection_id = 1;
+}
+
+message SubmitTurnRequest {
+  string connection_id = 1;
+  ChatRequest chat = 2;
+  string mode = 3;             // start_or_steer | start_if_idle | steer
+  string expected_turn_id = 4; // required only for steer
+}
+
+message SubmitTurnResponse {
+  string submission_id = 1;
+  string turn_id = 2;
+  string disposition = 3; // started | steered | not_submitted
+  string reason = 4;
+}
+
+message ResumeThreadRequest {
+  string connection_id = 1;
+  string thread_id = 2;
+  bool include_turns = 3;
+}
+
+message ResumeThreadResponse {
+  ThreadSnapshot thread = 1;
+}
+
+message UnsubscribeThreadRequest {
+  string connection_id = 1;
+  string thread_id = 2;
+}
+
+message ThreadSnapshot {
+  string thread_id = 1;
+  string status = 2; // idle | running | errored | shutdown
+  repeated ThreadTurn turns = 3;
+  ThreadTurn active_turn = 4;
+  bool has_active_turn = 5;
+}
+
+message ThreadTurn {
+  string id = 1;
+  string status = 2; // in_progress | completed | failed | aborted
+  repeated ThreadItem items = 3;
+  string last_agent_message = 4;
+  ThreadError error = 5;
+  bool has_error = 6;
+}
+
+message ThreadItem {
+  string id = 1;
+  string item_type = 2;
+  string status = 3; // in_progress | completed | failed
+  string payload_json = 4;
+}
+
+message ThreadError {
+  string message = 1;
+  string error_type = 2;
+}
+
+message ThreadEvent {
+  string thread_id = 1;
+  string turn_id = 2;
+  oneof payload {
+    ThreadTurnStarted turn_started = 10;
+    ThreadItemEvent item_started = 11;
+    ThreadItemEvent item_completed = 12;
+    ThreadDelta agent_message_delta = 13;
+    ThreadDelta plan_delta = 14;
+    ThreadDelta reasoning_delta = 15;
+    ThreadDelta exec_output_delta = 16;
+    ThreadDelta patch_delta = 17;
+    ThreadControlRequest control_request = 18;
+    ThreadTokenCount token_count = 19;
+    ThreadError error = 20;
+    ThreadError warning = 21;
+    ThreadTurnComplete turn_complete = 22;
+    ThreadTurnAborted turn_aborted = 23;
+    ThreadExtension extension = 24;
+    bool shutdown_complete = 25;
+  }
+}
+
+message ThreadTurnStarted {
+  string turn_id = 1;
+}
+
+message ThreadItemEvent {
+  ThreadItem item = 1;
+}
+
+message ThreadDelta {
+  string item_id = 1;
+  string delta = 2;
+}
+
+message ThreadControlRequest {
+  string kind = 1;
+  string item_id = 2;
+  string request_id = 3;
+  string payload_json = 4;
+}
+
+message ThreadTokenCount {
+  uint64 input_tokens = 1;
+  uint64 output_tokens = 2;
+  uint64 total_tokens = 3;
+}
+
+message ThreadTurnComplete {
+  string last_agent_message = 1;
+  ThreadError error = 2;
+  bool has_error = 3;
+}
+
+message ThreadTurnAborted {
+  string reason = 1;
+}
+
+message ThreadExtension {
+  string item_id = 1;
+  string namespace = 2;
+  string payload_json = 3;
 }
 
 // Token 用量（OpenAI 风格字段）。
