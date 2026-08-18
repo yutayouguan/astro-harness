@@ -7,6 +7,7 @@
 mod config;
 mod control;
 mod model;
+pub mod path;
 mod store;
 
 pub use config::{
@@ -15,8 +16,13 @@ pub use config::{
 };
 pub use control::{AgentThreadCommand, AgentThreadControl, LiveAgentThreads};
 pub use model::{
-    AgentThread, AgentThreadMessage, AgentThreadStatus, CloseAgentRequest, InterruptAgentRequest,
-    ListAgentThreadsRequest, ReadAgentThreadRequest, SendAgentMessageRequest, SpawnAgentRequest,
-    WaitAgentThreadsRequest,
+    AgentStatusKind, AgentStatusV2, AgentThread, AgentThreadMessage, AgentThreadStatus,
+    AgentThreadV2, AgentTreeSnapshotV2, CloseAgentRequest, InterruptAgentRequest,
+    InterruptAgentV2Request, InterruptAgentV2Result, ListAgentThreadsRequest, ListAgentsV2Request,
+    MessageAgentV2Request, MessageAgentV2Result, ReadAgentThreadRequest, RunnerEvent,
+    SendAgentMessageRequest, SpawnAgentRequest, SpawnAgentV2Request, SpawnAgentV2Result,
+    SpawnRuntimeV2Request, ThreadReservation, WaitAgentThreadsRequest, WaitAgentV2Request,
+    WaitAgentV2Result,
 };
+pub use path::AgentPath;
 pub use store::AgentThreadStore;
