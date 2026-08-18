@@ -1,8 +1,14 @@
 use serde::{Deserialize, Serialize};
 
+mod path;
 mod policy;
+mod reconstruction;
+mod recorder;
 
+pub use path::*;
 pub use policy::*;
+pub use reconstruction::*;
+pub use recorder::*;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
