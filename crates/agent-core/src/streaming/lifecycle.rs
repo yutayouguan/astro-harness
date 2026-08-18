@@ -3,7 +3,7 @@
 use std::sync::Arc;
 
 use agent_protocol::{
-    DeltaEvent, EventMsg, ExtensionItem, ItemEvent, TextItem, TokenCountEvent, ToolItem,
+    DeltaEvent, Event, EventMsg, ExtensionItem, ItemEvent, TextItem, TokenCountEvent, ToolItem,
     ToolStatus, TurnItem,
 };
 use providers::Usage;
@@ -11,6 +11,11 @@ use providers::Usage;
 use super::provider::ProviderStreamer;
 use crate::runtime::usage::{apply_llm_usage_dual_write, LlmUsageWrite};
 use crate::runtime::{Session, TurnContext};
+
+/// Match Codex's completed MCP event result cap: keep the model/history copy
+/// untouched while preventing a single durable/live event from carrying
+/// multi-megabyte inline payloads.
+pub(crate) const TOOL_COMPLETED_EVENT_MAX_BYTES: usize = 1024 * 1024;
 
 /// Persist an event before delivering it to live consumers.
 pub(crate) async fn emit(session: &Session, turn_context: &TurnContext, msg: EventMsg) {
@@ -80,6 +85,198 @@ pub(crate) fn tool_turn_item(
     } else {
         TurnItem::DynamicToolCall(item)
     }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn tool_completed_event(
+    turn_id: &str,
+    id: &str,
+    name: &str,
+    arguments: &serde_json::Value,
+    output: Option<serde_json::Value>,
+    media: &[types::MediaAsset],
+    status: ToolStatus,
+) -> EventMsg {
+    EventMsg::ItemCompleted(ItemEvent {
+        turn_id: turn_id.to_string(),
+        item: tool_turn_item(id, name, arguments.clone(), output, media.to_vec(), status),
+    })
+}
+
+fn serialized_event_len(turn_id: &str, event: &EventMsg) -> usize {
+    let live = Event {
+        id: turn_id.to_string(),
+        msg: event.clone(),
+    };
+    let durable = agent_rollout::RolloutItem::EventMsg(event.clone());
+    let live_len = serde_json::to_vec(&live).map_or(usize::MAX, |serialized| serialized.len());
+    let durable_len = serde_json::to_vec(&durable)
+        .map_or(usize::MAX, |serialized| serialized.len().saturating_add(1));
+    live_len.max(durable_len)
+}
+
+#[allow(clippy::too_many_arguments)]
+fn truncated_tool_completed_event(
+    turn_id: &str,
+    id: &str,
+    name: &str,
+    arguments: &serde_json::Value,
+    stable_media: &[types::MediaAsset],
+    status: ToolStatus,
+    original_serialized_bytes: usize,
+    inline_media_omitted: usize,
+    stable_media_omitted: usize,
+    preview: &str,
+) -> EventMsg {
+    tool_completed_event(
+        turn_id,
+        id,
+        name,
+        arguments,
+        Some(serde_json::json!({
+            "event_payload_truncated": true,
+            "original_serialized_bytes": original_serialized_bytes,
+            "inline_media_omitted": inline_media_omitted,
+            "stable_media_omitted": stable_media_omitted,
+            "preview": preview,
+        })),
+        stable_media,
+        status,
+    )
+}
+
+/// Build the completed tool event copy under the 1 MiB durable/live cap.
+///
+/// The original tool output has already been recorded before this helper is
+/// called. Inline data URLs are never copied into an oversized event; stable
+/// workspace/remote references are retained when they fit. The preview budget
+/// is chosen against the fully serialized live and JSONL rollout envelopes,
+/// so JSON escaping, wrapper overhead, and the record newline count toward the
+/// cap.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn bounded_tool_completed_event(
+    turn_id: &str,
+    id: &str,
+    name: &str,
+    arguments: serde_json::Value,
+    output: Option<serde_json::Value>,
+    media: Vec<types::MediaAsset>,
+    status: ToolStatus,
+) -> EventMsg {
+    let original = tool_completed_event(
+        turn_id,
+        id,
+        name,
+        &arguments,
+        output.clone(),
+        &media,
+        status,
+    );
+    let original_serialized_bytes = serialized_event_len(turn_id, &original);
+    if original_serialized_bytes <= TOOL_COMPLETED_EVENT_MAX_BYTES {
+        return original;
+    }
+    drop(original);
+
+    let preview_source = match output {
+        Some(serde_json::Value::String(text)) => text,
+        Some(value) => serde_json::to_string(&value).unwrap_or_default(),
+        None => String::new(),
+    };
+    let inline_media_omitted = media
+        .iter()
+        .filter(|asset| matches!(asset.reference, types::MediaRef::DataUrl(_)))
+        .count();
+    let mut stable_media = media
+        .into_iter()
+        .filter(|asset| !matches!(asset.reference, types::MediaRef::DataUrl(_)))
+        .collect::<Vec<_>>();
+    let mut stable_media_omitted = 0;
+    let mut event_arguments = arguments;
+
+    let mut bounded = truncated_tool_completed_event(
+        turn_id,
+        id,
+        name,
+        &event_arguments,
+        &stable_media,
+        status,
+        original_serialized_bytes,
+        inline_media_omitted,
+        stable_media_omitted,
+        "",
+    );
+    if serialized_event_len(turn_id, &bounded) > TOOL_COMPLETED_EVENT_MAX_BYTES {
+        stable_media_omitted = stable_media.len();
+        stable_media.clear();
+        bounded = truncated_tool_completed_event(
+            turn_id,
+            id,
+            name,
+            &event_arguments,
+            &stable_media,
+            status,
+            original_serialized_bytes,
+            inline_media_omitted,
+            stable_media_omitted,
+            "",
+        );
+    }
+    if serialized_event_len(turn_id, &bounded) > TOOL_COMPLETED_EVENT_MAX_BYTES {
+        event_arguments = serde_json::json!({
+            "event_arguments_omitted": true,
+        });
+        bounded = truncated_tool_completed_event(
+            turn_id,
+            id,
+            name,
+            &event_arguments,
+            &stable_media,
+            status,
+            original_serialized_bytes,
+            inline_media_omitted,
+            stable_media_omitted,
+            "",
+        );
+    }
+
+    // The marker-only event should fit for normal provider IDs/tool names. If
+    // it does not, returning it is still safer than reintroducing the original
+    // multi-megabyte result; IDs remain untouched for lifecycle correlation.
+    if serialized_event_len(turn_id, &bounded) > TOOL_COMPLETED_EVENT_MAX_BYTES
+        || preview_source.is_empty()
+    {
+        return bounded;
+    }
+
+    let mut best = bounded;
+    let mut low = 0usize;
+    let mut high = preview_source.len().min(TOOL_COMPLETED_EVENT_MAX_BYTES);
+    while low <= high {
+        let mid = low + (high - low) / 2;
+        let preview = types::truncate_utf8(&preview_source, mid);
+        let candidate = truncated_tool_completed_event(
+            turn_id,
+            id,
+            name,
+            &event_arguments,
+            &stable_media,
+            status,
+            original_serialized_bytes,
+            inline_media_omitted,
+            stable_media_omitted,
+            &preview,
+        );
+        if serialized_event_len(turn_id, &candidate) <= TOOL_COMPLETED_EVENT_MAX_BYTES {
+            best = candidate;
+            low = mid.saturating_add(1);
+        } else if mid == 0 {
+            break;
+        } else {
+            high = mid - 1;
+        }
+    }
+    best
 }
 
 pub(crate) async fn emit_assistant_completed(
@@ -373,6 +570,41 @@ mod tests {
         );
         let context = session.create_turn_context("turn-1".into()).await;
         (dir, session, context)
+    }
+
+    #[test]
+    fn oversized_mcp_inline_media_is_removed_from_completed_event_copy() {
+        let data_url = format!(
+            "data:image/png;base64,{}",
+            "mcp-inline-sentinel".repeat(TOOL_COMPLETED_EVENT_MAX_BYTES / 8)
+        );
+        let event = bounded_tool_completed_event(
+            "turn-1",
+            "mcp-call-1",
+            "mcp__server__image",
+            serde_json::json!({}),
+            Some(serde_json::Value::String("generated".into())),
+            vec![types::MediaAsset::data_url(
+                types::MediaKind::Image,
+                data_url.clone(),
+                "image/png",
+            )],
+            ToolStatus::Completed,
+        );
+
+        assert!(serialized_event_len("turn-1", &event) <= TOOL_COMPLETED_EVENT_MAX_BYTES);
+        let EventMsg::ItemCompleted(ItemEvent {
+            item: TurnItem::McpToolCall(tool),
+            ..
+        }) = &event
+        else {
+            panic!("expected MCP completed item");
+        };
+        assert_eq!(tool.id, "mcp-call-1");
+        assert!(tool.media.is_empty());
+        let serialized = serde_json::to_string(&event).unwrap();
+        assert!(serialized.contains("event_payload_truncated"));
+        assert!(!serialized.contains(&data_url));
     }
 
     #[tokio::test]

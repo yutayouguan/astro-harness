@@ -386,8 +386,8 @@ async fn media_tool_result_survives_rollout_and_legacy_adapter() {
                     assets: vec![types::MediaAsset {
                         kind: types::MediaKind::Image,
                         mime_type: "image/png".into(),
-                        reference: types::MediaRef::RemoteUri(
-                            "https://example.test/generated.png".into(),
+                        reference: types::MediaRef::DataUrl(
+                            "data:image/png;base64,c21hbGw=".into(),
                         ),
                         label: Some("generated image".into()),
                         id: Some("asset-1".into()),
@@ -468,10 +468,21 @@ async fn media_tool_result_survives_rollout_and_legacy_adapter() {
         serde_json::to_value(unified_tool).unwrap()["media"][0]["id"],
         "asset-1"
     );
+    assert!(matches!(
+        &unified_tool.media[0].reference,
+        types::MediaRef::DataUrl(value) if value == "data:image/png;base64,c21hbGw="
+    ));
     assert!(legacy.iter().any(|item| matches!(
         item,
         MultiTurnStreamItem::ToolResult { id, media, .. }
-            if id == "media-call" && media.first().and_then(|asset| asset.id.as_deref()) == Some("asset-1")
+            if id == "media-call" && media.first().is_some_and(|asset| {
+                asset.id.as_deref() == Some("asset-1")
+                    && matches!(
+                        &asset.reference,
+                        types::MediaRef::DataUrl(value)
+                            if value == "data:image/png;base64,c21hbGw="
+                    )
+            })
     )));
 
     let rollout = agent_rollout::read_rollout(&path).await.unwrap();
@@ -479,15 +490,184 @@ async fn media_tool_result_survives_rollout_and_legacy_adapter() {
         agent_rollout::RolloutItem::EventMsg(EventMsg::ItemCompleted(item))
             if item.item.id() == "media-call" =>
         {
-            serde_json::to_value(&item.item)
-                .ok()
-                .and_then(|value| value.get("data").cloned())
-                .and_then(|value| value.get("media").cloned())
-                .and_then(|value| value.as_array().cloned())
-                .is_some_and(|media| !media.is_empty())
+            match &item.item {
+                agent_protocol::TurnItem::DynamicToolCall(tool) => {
+                    tool.media.first().is_some_and(|asset| {
+                        matches!(
+                            &asset.reference,
+                            types::MediaRef::DataUrl(value)
+                                if value == "data:image/png;base64,c21hbGw="
+                        )
+                    })
+                }
+                _ => false,
+            }
         }
         _ => false,
     }));
+}
+
+#[tokio::test]
+async fn oversized_inline_media_is_bounded_only_in_completed_event_copy() {
+    const COMPLETED_EVENT_MAX_BYTES: usize = 1024 * 1024;
+
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("large-media-rollout.jsonl");
+    let large_data_url = format!(
+        "data:image/png;base64,{}",
+        "large-inline-media-sentinel-".repeat(COMPLETED_EVENT_MAX_BYTES / 16)
+    );
+    let tool_data_url = large_data_url.clone();
+    let escape_heavy_text = "\"\\\n".repeat(COMPLETED_EVENT_MAX_BYTES / 8);
+    let tool_text = escape_heavy_text.clone();
+    let mut agent = AgentLoop::with_session_id(
+        AgentConfig::with_defaults(dir.path().to_path_buf()),
+        "large-media-tool-session".into(),
+    )
+    .unwrap();
+    agent.tool_registry_mut().register_dynamic(
+        types::ToolEntry {
+            name: "test_large_media".into(),
+            toolset: "test_large_media".into(),
+            description: "returns oversized inline media".into(),
+            schema: serde_json::json!({"type": "object", "properties": {}}),
+            ..types::ToolEntry::lifecycle_defaults()
+        },
+        Arc::new(move |_name, _args| {
+            let data_url = tool_data_url.clone();
+            let text = tool_text.clone();
+            Box::pin(async move {
+                Ok(types::ToolOutput::Media {
+                    text,
+                    assets: vec![
+                        types::MediaAsset {
+                            kind: types::MediaKind::Image,
+                            mime_type: "image/png".into(),
+                            reference: types::MediaRef::DataUrl(data_url),
+                            label: Some("inline image".into()),
+                            id: Some("inline-asset".into()),
+                        },
+                        types::MediaAsset {
+                            kind: types::MediaKind::Image,
+                            mime_type: "image/png".into(),
+                            reference: types::MediaRef::RemoteUri(
+                                "https://example.test/stable.png".into(),
+                            ),
+                            label: Some("stable image".into()),
+                            id: Some("stable-asset".into()),
+                        },
+                    ],
+                })
+            })
+        }),
+    );
+    let session = Arc::new(agent);
+    let recorder = agent_rollout::RolloutRecorder::open(
+        path.clone(),
+        agent_rollout::ThreadHistoryMode::Paginated,
+    )
+    .await
+    .unwrap();
+    let thread = agent::AstroThread::spawn(Arc::clone(&session), recorder).unwrap();
+    let chat = scripted_chat(vec![
+        vec![
+            StreamChunk::ToolCallStart {
+                index: 0,
+                id: "large-media-call".into(),
+                name: "test_large_media".into(),
+            },
+            StreamChunk::ToolCallDelta {
+                index: 0,
+                arguments: "{}".into(),
+            },
+            StreamChunk::Done {
+                finish_reason: "tool_calls".into(),
+            },
+        ],
+        vec![
+            StreamChunk::Text("done".into()),
+            StreamChunk::Done {
+                finish_reason: "stop".into(),
+            },
+        ],
+    ]);
+    let (tx, mut rx) = tokio::sync::mpsc::channel(64);
+    let run = tokio::spawn(run_multi_turn_stream_with_chat_fn_legacy(
+        Arc::clone(&session),
+        chat,
+        ProviderConfig::default(),
+        "system".into(),
+        PauseControl::new(),
+        None,
+        tx,
+    ));
+    while rx.recv().await.is_some() {}
+    run.await.unwrap();
+
+    let mut events = Vec::new();
+    loop {
+        let event = thread.next_event().await.unwrap();
+        let terminal = event.msg.is_terminal();
+        events.push(event);
+        if terminal {
+            break;
+        }
+    }
+    let completed = events
+        .iter()
+        .find(|event| {
+            matches!(
+                &event.msg,
+                EventMsg::ItemCompleted(item) if item.item.id() == "large-media-call"
+            )
+        })
+        .expect("live completed large-media event");
+    assert_bounded_large_media_payload(
+        serde_json::to_vec(completed).unwrap(),
+        &large_data_url,
+        COMPLETED_EVENT_MAX_BYTES,
+    );
+
+    let history = session.clone_history().await;
+    let recorded_tool = history
+        .iter()
+        .find(|message| message.role == types::message::Role::Tool)
+        .expect("original tool history");
+    assert_eq!(recorded_tool.content_str(), escape_heavy_text);
+    assert!(recorded_tool.media.iter().any(|asset| matches!(
+        &asset.reference,
+        types::MediaRef::DataUrl(value) if value == &large_data_url
+    )));
+
+    let rollout = agent_rollout::read_rollout(&path).await.unwrap();
+    let persisted = rollout
+        .iter()
+        .find(|item| {
+            matches!(
+                item,
+                agent_rollout::RolloutItem::EventMsg(EventMsg::ItemCompleted(completed))
+                    if completed.item.id() == "large-media-call"
+            )
+        })
+        .expect("persisted completed large-media event");
+    assert_bounded_large_media_payload(
+        serde_json::to_vec(persisted).unwrap(),
+        &large_data_url,
+        COMPLETED_EVENT_MAX_BYTES,
+    );
+}
+
+fn assert_bounded_large_media_payload(serialized: Vec<u8>, sentinel: &str, max_bytes: usize) {
+    assert!(
+        serialized.len() <= max_bytes,
+        "completed event was {} bytes",
+        serialized.len()
+    );
+    let serialized = String::from_utf8(serialized).unwrap();
+    assert!(serialized.contains("event_payload_truncated"));
+    assert!(!serialized.contains(sentinel));
+    assert!(serialized.contains("https://example.test/stable.png"));
+    assert!(!serialized.contains("data:image/png;base64"));
 }
 
 /// 从脚本化轮次列表构造 [`ChatOverride`]。

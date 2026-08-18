@@ -3,13 +3,12 @@
 use std::sync::Arc;
 
 use agent_protocol::{
-    ContextUsageEvent, ContextUsageItem, ContextUsageSegment, DeltaEvent, EventMsg, ItemEvent,
-    ToolStatus,
+    ContextUsageEvent, ContextUsageItem, ContextUsageSegment, DeltaEvent, EventMsg, ToolStatus,
 };
 
 use super::lifecycle::{
-    emit, emit_context_compacted, emit_extension_completed, emit_hook_completed, emit_hook_started,
-    emit_subagent_activity, is_subagent_tool, tool_turn_item,
+    bounded_tool_completed_event, emit, emit_context_compacted, emit_extension_completed,
+    emit_hook_completed, emit_hook_started, emit_subagent_activity, is_subagent_tool,
 };
 use super::provider::ProviderStreamer;
 use super::traits::StreamingChat;
@@ -267,21 +266,19 @@ pub(super) async fn record_tool_outcomes(
         emit(
             session,
             turn_context,
-            EventMsg::ItemCompleted(ItemEvent {
-                turn_id: turn_context.sub_id().to_string(),
-                item: tool_turn_item(
-                    call.id.clone(),
-                    call.name.clone(),
-                    call.arguments.clone(),
-                    Some(serde_json::Value::String(result_text.clone())),
-                    tool_media,
-                    if is_success {
-                        ToolStatus::Completed
-                    } else {
-                        ToolStatus::Failed
-                    },
-                ),
-            }),
+            bounded_tool_completed_event(
+                turn_context.sub_id(),
+                &call.id,
+                &call.name,
+                call.arguments.clone(),
+                Some(serde_json::Value::String(result_text.clone())),
+                tool_media,
+                if is_success {
+                    ToolStatus::Completed
+                } else {
+                    ToolStatus::Failed
+                },
+            ),
         )
         .await;
 
