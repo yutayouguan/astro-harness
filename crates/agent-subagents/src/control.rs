@@ -393,6 +393,25 @@ impl AgentControl {
             .rollback_committed_spawn(&thread.canonical_path, &thread.thread_id)
     }
 
+    /// Complete manager-owned cleanup when the spawn caller disappears after
+    /// TurnStarted was made durable but before it accepted the startup ack.
+    pub fn abort_unaccepted_started_spawn(
+        &self,
+        thread: &AgentThreadV2,
+        turn_id: &str,
+    ) -> anyhow::Result<()> {
+        if thread.root_thread_id != self.root_thread_id {
+            anyhow::bail!("agent thread belongs to a different root");
+        }
+        if self.runtimes.get(&thread.thread_id)?.is_some() {
+            anyhow::bail!("cannot abort an unaccepted spawn with a registered runtime");
+        }
+        self.store
+            .rollback_unaccepted_started_thread(&thread.thread_id, turn_id)?;
+        self.registry
+            .rollback_committed_spawn(&thread.canonical_path, &thread.thread_id)
+    }
+
     pub fn register_runtime(
         &self,
         thread_id: &str,

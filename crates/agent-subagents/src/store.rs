@@ -217,6 +217,63 @@ impl AgentGraphStore {
         Ok(())
     }
 
+    /// Roll back the single durable TurnStarted written before a spawn caller
+    /// accepted ownership. No terminal or later-generation event may exist.
+    pub(crate) fn rollback_unaccepted_started_thread(
+        &self,
+        thread_id: &str,
+        turn_id: &str,
+    ) -> anyhow::Result<()> {
+        require_non_empty("thread_id", thread_id)?;
+        require_non_empty("turn_id", turn_id)?;
+        let mut conn = self.connect()?;
+        let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
+        let status_kind = tx
+            .query_row(
+                "SELECT status_kind FROM agent_threads WHERE thread_id = ?1",
+                [thread_id],
+                |row| row.get::<_, String>(0),
+            )
+            .optional()?
+            .with_context(|| format!("unknown agent thread {thread_id:?}"))?;
+        anyhow::ensure!(
+            status_kind == "running",
+            "cannot roll back unaccepted agent thread {thread_id:?}: expected running, found {status_kind}"
+        );
+        let events = {
+            let mut stmt = tx.prepare(
+                "SELECT event_kind, source_turn_id
+                 FROM agent_status_events
+                 WHERE thread_id = ?1
+                 ORDER BY sequence",
+            )?;
+            let rows = stmt
+                .query_map([thread_id], |row| {
+                    Ok((row.get::<_, String>(0)?, row.get::<_, Option<String>>(1)?))
+                })?
+                .collect::<rusqlite::Result<Vec<_>>>()?;
+            rows
+        };
+        anyhow::ensure!(
+            events.as_slice() == [("turn_started".to_string(), Some(turn_id.to_string()))],
+            "cannot roll back unaccepted agent thread {thread_id:?}: durable event history advanced"
+        );
+        tx.execute(
+            "DELETE FROM agent_status_events WHERE thread_id = ?1",
+            [thread_id],
+        )?;
+        tx.execute(
+            "DELETE FROM agent_spawn_edges WHERE child_thread_id = ?1",
+            [thread_id],
+        )?;
+        tx.execute(
+            "DELETE FROM agent_threads WHERE thread_id = ?1",
+            [thread_id],
+        )?;
+        tx.commit()?;
+        Ok(())
+    }
+
     pub fn cleanup_pending_reservations(&self, root_thread_id: &str) -> anyhow::Result<usize> {
         require_non_empty("root_thread_id", root_thread_id)?;
         let mut conn = self.connect()?;
@@ -1224,6 +1281,58 @@ mod tests {
             store.get_thread("running").unwrap().unwrap().status,
             AgentStatusV2::Running
         );
+    }
+
+    #[test]
+    fn rollback_unaccepted_start_requires_exact_matching_started_generation() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = AgentGraphStore::open(dir.path().join("subagents-v2.db")).unwrap();
+        store
+            .reserve_thread(&reservation("accepted", "/root/accepted"))
+            .unwrap();
+        store
+            .apply_status_event(
+                "accepted",
+                RunnerEvent::TurnStarted {
+                    turn_id: "turn-1".into(),
+                },
+            )
+            .unwrap();
+        store
+            .rollback_unaccepted_started_thread("accepted", "turn-1")
+            .unwrap();
+        assert!(store.get_thread("accepted").unwrap().is_none());
+        assert!(store.status_events("accepted").unwrap().is_empty());
+
+        store
+            .reserve_thread(&reservation("advanced", "/root/advanced"))
+            .unwrap();
+        store
+            .apply_status_event(
+                "advanced",
+                RunnerEvent::TurnStarted {
+                    turn_id: "turn-2".into(),
+                },
+            )
+            .unwrap();
+        store
+            .apply_status_event(
+                "advanced",
+                RunnerEvent::TurnCompleted {
+                    turn_id: "turn-2".into(),
+                    last_message: "done".into(),
+                },
+            )
+            .unwrap();
+        let error = store
+            .rollback_unaccepted_started_thread("advanced", "turn-2")
+            .unwrap_err();
+        assert!(
+            error.to_string().contains("expected running")
+                || error.to_string().contains("advanced")
+        );
+        assert!(store.get_thread("advanced").unwrap().is_some());
+        assert_eq!(store.status_events("advanced").unwrap().len(), 2);
     }
 
     #[test]

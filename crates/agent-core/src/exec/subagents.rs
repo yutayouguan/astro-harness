@@ -50,6 +50,34 @@ pub(crate) fn encode_main_steer_input(input: &TurnInput) -> anyhow::Result<Strin
 pub(crate) async fn drain_mailbox_at_safe_boundary(
     session: &mut Session,
 ) -> anyhow::Result<MailboxDrainOutcome> {
+    let mut total = MailboxDrainOutcome::default();
+    loop {
+        let batch = drain_mailbox_batch_at_safe_boundary(session).await?;
+        total.delivered += batch.delivered;
+        total.delivered_steer_ids.extend(batch.delivered_steer_ids);
+        if batch.deferred {
+            total.deferred = true;
+            return Ok(total);
+        }
+        if batch.delivered == 0 {
+            return Ok(total);
+        }
+        let pending = session
+            .services
+            .agent_control
+            .drain_mailbox(&session.services.agent_path)?;
+        if pending.is_empty() {
+            return Ok(total);
+        }
+        // A recovered older marker may cover only the prefix of the snapshot
+        // that admitted this generation. Continue at the same safe boundary
+        // so later sequence numbers are neither stranded nor duplicated.
+    }
+}
+
+async fn drain_mailbox_batch_at_safe_boundary(
+    session: &mut Session,
+) -> anyhow::Result<MailboxDrainOutcome> {
     if session.cancel_signal().is_cancelled() {
         anyhow::bail!("agent turn interrupted before mailbox drain");
     }

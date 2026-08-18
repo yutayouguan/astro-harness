@@ -116,6 +116,57 @@ impl RuntimeRequestRegistry {
     }
 }
 
+struct SpawnStartupGuard {
+    control: Arc<AgentControl>,
+    runtime_requests: Arc<RuntimeRequestRegistry>,
+    thread: subagents::AgentThreadV2,
+    forked_session: Option<ForkedSessionGuard>,
+    armed: bool,
+}
+
+impl SpawnStartupGuard {
+    fn cleanup(&mut self) -> anyhow::Result<()> {
+        if !self.armed {
+            return Ok(());
+        }
+        self.runtime_requests.remove(&self.thread.thread_id);
+        let graph_result = self.control.abort_committed_pending_spawn(&self.thread);
+        let session_result = self
+            .forked_session
+            .as_mut()
+            .map(ForkedSessionGuard::rollback)
+            .unwrap_or(Ok(()));
+        self.armed = false;
+        match (graph_result, session_result) {
+            (Ok(()), Ok(())) => Ok(()),
+            (Err(graph), Ok(())) => Err(graph.context("spawn graph rollback")),
+            (Ok(()), Err(session)) => Err(session.context("child session rollback")),
+            (Err(graph), Err(session)) => Err(anyhow::anyhow!(
+                "spawn graph rollback failed: {graph:#}; child session rollback failed: {session:#}"
+            )),
+        }
+    }
+
+    fn disarm(&mut self) {
+        if let Some(forked_session) = self.forked_session.as_mut() {
+            forked_session.disarm();
+        }
+        self.armed = false;
+    }
+}
+
+impl Drop for SpawnStartupGuard {
+    fn drop(&mut self) {
+        if self.armed {
+            if let Err(error) = self.cleanup() {
+                // A running status here means the manager owns the second half
+                // of the unaccepted-start rollback after observing accept drop.
+                tracing::warn!(%error, thread_id = %self.thread.thread_id, "spawn caller cleanup deferred to runtime manager");
+            }
+        }
+    }
+}
+
 /// Dispatcher bound to exactly one current Agent Thread session.
 pub struct DefaultAgentThreadDispatch {
     control: Arc<AgentControl>,
@@ -168,12 +219,18 @@ impl DefaultAgentThreadDispatch {
 
     async fn launch_turn(&self, mut request: RunAgentTurnRequest) -> anyhow::Result<()> {
         let (startup_tx, mut startup_rx) = tokio::sync::watch::channel(None);
+        let (startup_accept_tx, startup_accept_rx) = tokio::sync::oneshot::channel();
         request.startup_tx = Some(startup_tx);
+        request.startup_accept_rx = Some(startup_accept_rx);
         let run_manager = Arc::clone(&self.runtime_manager);
         let handle = tokio::spawn(async move { run_manager.start_turn(request).await });
         loop {
             if let Some(result) = startup_rx.borrow().clone() {
-                return result.map_err(anyhow::Error::msg);
+                result.map_err(anyhow::Error::msg)?;
+                startup_accept_tx.send(()).map_err(|_| {
+                    anyhow::anyhow!("agent runtime ended before startup acceptance")
+                })?;
+                return Ok(());
             }
             tokio::select! {
                 changed = startup_rx.changed() => {
@@ -203,6 +260,7 @@ impl DefaultAgentThreadDispatch {
             chat_override: None,
             consume_mailbox,
             startup_tx: None,
+            startup_accept_rx: None,
             followup_start_tx: None,
             start_token: None,
         }
@@ -304,21 +362,25 @@ impl AgentThreadDispatch for DefaultAgentThreadDispatch {
                 error,
             ));
         }
+        let mut startup_guard = SpawnStartupGuard {
+            control: Arc::clone(&self.control),
+            runtime_requests: Arc::clone(&self.runtime_requests),
+            thread: thread.clone(),
+            forked_session: Some(forked_session),
+            armed: true,
+        };
         if let Err(start_error) = self
             .launch_turn(self.run_request(thread.clone(), stored, false))
             .await
         {
-            self.runtime_requests.remove(&thread.thread_id);
-            let graph_error = self.control.abort_committed_pending_spawn(&thread).err();
-            let mut error =
-                rollback_fork_error(&mut forked_session, "start agent runtime", start_error);
-            if let Some(graph_error) = graph_error {
-                error =
-                    anyhow::anyhow!("{error:#}; pending spawn rollback failed: {graph_error:#}");
-            }
-            return Err(error);
+            return match startup_guard.cleanup() {
+                Ok(()) => Err(start_error.context("start agent runtime")),
+                Err(cleanup_error) => Err(anyhow::anyhow!(
+                    "start agent runtime failed: {start_error:#}; spawn cleanup failed: {cleanup_error:#}"
+                )),
+            };
         }
-        forked_session.disarm();
+        startup_guard.disarm();
         Ok(SpawnAgentV2Result { thread })
     }
 
@@ -715,6 +777,44 @@ mod tests {
         })
     }
 
+    fn capturing_chat(
+        captured: Arc<Mutex<Vec<Vec<String>>>>,
+        fail_call: Option<usize>,
+    ) -> crate::streaming::ChatOverride {
+        let calls = Arc::new(AtomicUsize::new(0));
+        Arc::new(move |messages, _tools, _config| {
+            let call = calls.fetch_add(1, Ordering::SeqCst);
+            captured.lock().unwrap().push(
+                messages
+                    .iter()
+                    .flat_map(|message| match message {
+                        providers::Message::User { content } => content
+                            .iter()
+                            .filter_map(|part| match part {
+                                providers::types::message::UserContent::Text { text } => {
+                                    Some(text.clone())
+                                }
+                                _ => None,
+                            })
+                            .collect::<Vec<_>>(),
+                        _ => Vec::new(),
+                    })
+                    .collect(),
+            );
+            Box::pin(async move {
+                if fail_call == Some(call) {
+                    anyhow::bail!("injected provider failure after mailbox preparation");
+                }
+                Ok(Box::pin(stream::iter(vec![
+                    Ok(StreamChunk::Text("done".into())),
+                    Ok(StreamChunk::Done {
+                        finish_reason: "stop".into(),
+                    }),
+                ])) as CompletionStream)
+            })
+        })
+    }
+
     fn gated_first_turn_chat(
         entered: Arc<tokio::sync::Notify>,
         release: Arc<tokio::sync::Notify>,
@@ -901,6 +1001,12 @@ mod tests {
             .get_session(&spawned.thread.session_id)
             .unwrap()
             .is_some());
+        while dispatch
+            .runtime_manager
+            .is_running(&spawned.thread.thread_id)
+        {
+            tokio::task::yield_now().await;
+        }
         assert!(matches!(
             dispatch
                 .control
@@ -1005,6 +1111,104 @@ mod tests {
     }
 
     #[tokio::test(flavor = "current_thread")]
+    async fn cancelling_spawn_before_startup_acceptance_rolls_back_every_artifact() {
+        let dir = tempfile::tempdir().unwrap();
+        let memory_dir = dir.path().join("memory");
+        let sessions =
+            session::SessionStore::open_sessions_dir(&memory_dir.join("sessions")).unwrap();
+        sessions.ensure_session("root-session", "test").unwrap();
+        sessions
+            .append_message(session::NewMessage {
+                content: Some("parent history"),
+                ..session::NewMessage::empty("root-session", "user")
+            })
+            .unwrap();
+        let mut dispatch = dispatch(&dir);
+        dispatch.chat_override = Some(scripted_chat("must not survive cancellation"));
+        let hook = super::super::agent_runtime::AckSubscribeHook {
+            entered: Arc::new(tokio::sync::Notify::new()),
+            release: Arc::new(tokio::sync::Notify::new()),
+        };
+        dispatch
+            .runtime_manager
+            .set_before_startup_ack_hook(Some(hook.clone()));
+        let dispatch = Arc::new(dispatch);
+        let spawn = tokio::spawn({
+            let dispatch = Arc::clone(&dispatch);
+            let memory_dir = memory_dir.clone();
+            async move { AgentThreadDispatch::spawn_agent(&*dispatch, spawn_request(&memory_dir)).await }
+        });
+        hook.entered.notified().await;
+        let child = dispatch
+            .control
+            .list_agents(&AgentPath::root(), Some("worker"))
+            .unwrap()
+            .into_iter()
+            .find(|thread| thread.canonical_path.as_str() == "/root/worker")
+            .unwrap();
+
+        spawn.abort();
+        assert!(spawn.await.unwrap_err().is_cancelled());
+        hook.release.notify_one();
+        tokio::time::timeout(Duration::from_secs(2), async {
+            while dispatch.runtime_manager.is_running(&child.thread_id) {
+                tokio::task::yield_now().await;
+            }
+        })
+        .await
+        .unwrap();
+
+        assert_eq!(dispatch.control.identity_count().unwrap(), 0);
+        assert_eq!(
+            dispatch
+                .control
+                .list_agents(&AgentPath::root(), None)
+                .unwrap()
+                .len(),
+            1
+        );
+        let graph = rusqlite::Connection::open(dir.path().join("subagents-v2.db")).unwrap();
+        let child_rows: i64 = graph
+            .query_row(
+                "SELECT COUNT(*) FROM agent_threads WHERE canonical_path <> '/root'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        let edge_rows: i64 = graph
+            .query_row("SELECT COUNT(*) FROM agent_spawn_edges", [], |row| {
+                row.get(0)
+            })
+            .unwrap();
+        assert_eq!(child_rows, 0);
+        assert_eq!(edge_rows, 0);
+        assert!(dispatch
+            .runtime_requests
+            .requests
+            .lock()
+            .unwrap()
+            .is_empty());
+        assert!(dispatch
+            .control
+            .runtime_handle(&child.thread_id)
+            .unwrap()
+            .is_none());
+        assert!(sessions.get_session(&child.session_id).unwrap().is_none());
+        assert_eq!(sessions.get_messages("root-session").unwrap().len(), 1);
+
+        let retried = AgentThreadDispatch::spawn_agent(&*dispatch, spawn_request(&memory_dir))
+            .await
+            .unwrap();
+        assert_eq!(retried.thread.canonical_path.as_str(), "/root/worker");
+        while dispatch
+            .runtime_manager
+            .is_running(&retried.thread.thread_id)
+        {
+            tokio::task::yield_now().await;
+        }
+    }
+
+    #[tokio::test(flavor = "current_thread")]
     async fn interrupt_waits_for_runner_ack_and_returns_previous_status() {
         let dir = tempfile::tempdir().unwrap();
         let memory_dir = dir.path().join("memory");
@@ -1074,6 +1278,135 @@ mod tests {
         assert_eq!(mailbox.len(), 2);
         assert!(!mailbox[0].trigger_turn);
         assert!(mailbox[1].trigger_turn);
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn followup_retry_delivers_old_marker_and_new_message_in_order() {
+        let dir = tempfile::tempdir().unwrap();
+        let memory_dir = dir.path().join("memory");
+        let sessions =
+            session::SessionStore::open_sessions_dir(&memory_dir.join("sessions")).unwrap();
+        sessions.ensure_session("root-session", "test").unwrap();
+        let captured = Arc::new(Mutex::new(Vec::new()));
+        let mut dispatch = dispatch(&dir);
+        dispatch.chat_override = Some(capturing_chat(Arc::clone(&captured), Some(1)));
+        let spawned = AgentThreadDispatch::spawn_agent(&dispatch, spawn_request(&memory_dir))
+            .await
+            .unwrap();
+        while dispatch
+            .runtime_manager
+            .is_running(&spawned.thread.thread_id)
+        {
+            tokio::task::yield_now().await;
+        }
+
+        let graph = rusqlite::Connection::open(dir.path().join("subagents-v2.db")).unwrap();
+        graph
+            .execute_batch(
+                "CREATE TRIGGER fail_first_followup_ack
+                 BEFORE UPDATE OF delivery_state ON agent_mailbox
+                 WHEN NEW.delivery_state = 'delivered'
+                 BEGIN
+                   SELECT RAISE(ABORT, 'injected first followup ack failure');
+                 END;",
+            )
+            .unwrap();
+        let first = AgentThreadDispatch::followup_task(
+            &dispatch,
+            MessageAgentV2Request {
+                target: spawned.thread.canonical_path.to_string(),
+                message: "S1".into(),
+            },
+        )
+        .await
+        .unwrap_err();
+        assert!(format!("{first:#}").contains("injected first followup ack failure"));
+        graph
+            .execute_batch("DROP TRIGGER fail_first_followup_ack;")
+            .unwrap();
+
+        AgentThreadDispatch::followup_task(
+            &dispatch,
+            MessageAgentV2Request {
+                target: spawned.thread.canonical_path.to_string(),
+                message: "S2".into(),
+            },
+        )
+        .await
+        .unwrap();
+        while dispatch
+            .runtime_manager
+            .is_running(&spawned.thread.thread_id)
+        {
+            tokio::task::yield_now().await;
+        }
+        assert!(matches!(
+            dispatch
+                .control
+                .resolve_target(&AgentPath::root(), "worker")
+                .unwrap()
+                .status,
+            AgentStatusV2::Errored { ref message }
+                if message.contains("injected provider failure")
+        ));
+
+        assert!(dispatch
+            .control
+            .drain_mailbox(&spawned.thread.canonical_path)
+            .unwrap()
+            .is_empty());
+        let child_users = sessions
+            .get_messages(&spawned.thread.session_id)
+            .unwrap()
+            .into_iter()
+            .filter(|message| message.role == "user")
+            .filter_map(|message| message.content)
+            .collect::<Vec<_>>();
+        assert_eq!(
+            child_users
+                .iter()
+                .filter(|content| content.as_str() == "S1")
+                .count(),
+            1
+        );
+        assert_eq!(
+            child_users
+                .iter()
+                .filter(|content| content.as_str() == "S2")
+                .count(),
+            1
+        );
+        AgentThreadDispatch::followup_task(
+            &dispatch,
+            MessageAgentV2Request {
+                target: spawned.thread.canonical_path.to_string(),
+                message: "S3".into(),
+            },
+        )
+        .await
+        .unwrap();
+        while dispatch
+            .runtime_manager
+            .is_running(&spawned.thread.thread_id)
+        {
+            tokio::task::yield_now().await;
+        }
+        let captured = captured.lock().unwrap();
+        let sampled = captured.last().unwrap();
+        assert_eq!(
+            sampled
+                .iter()
+                .filter(|content| content.as_str() == "S1")
+                .count(),
+            1
+        );
+        assert_eq!(
+            sampled
+                .iter()
+                .filter(|content| content.as_str() == "S2")
+                .count(),
+            1
+        );
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]

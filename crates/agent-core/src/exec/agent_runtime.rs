@@ -26,6 +26,7 @@ pub struct RunAgentTurnRequest {
     /// once TurnStarted is durable and the active runtime handle is registered;
     /// terminal turn completion is deliberately not part of this protocol.
     pub(super) startup_tx: Option<watch::Sender<Option<Result<(), String>>>>,
+    pub(super) startup_accept_rx: Option<tokio::sync::oneshot::Receiver<()>>,
     pub(super) followup_start_tx: Option<watch::Sender<Option<Result<(), String>>>>,
     pub(super) start_token: Option<String>,
 }
@@ -252,6 +253,8 @@ pub struct AgentRuntimeManager {
     #[cfg(test)]
     before_followup_start_hook: Mutex<Option<AckSubscribeHook>>,
     #[cfg(test)]
+    before_startup_ack_hook: Mutex<Option<AckSubscribeHook>>,
+    #[cfg(test)]
     start_status_failure: Mutex<Option<String>>,
 }
 
@@ -278,7 +281,7 @@ impl AgentRuntimeManager {
         result
     }
 
-    async fn start_turn_inner(&self, request: RunAgentTurnRequest) -> anyhow::Result<()> {
+    async fn start_turn_inner(&self, mut request: RunAgentTurnRequest) -> anyhow::Result<()> {
         self.pause_before_followup_start(&request).await;
         let thread_id = request.thread.thread_id.clone();
         let control = Arc::clone(&request.control);
@@ -415,8 +418,45 @@ impl AgentRuntimeManager {
             armed: true,
             permit: Some(permit),
         };
+        self.pause_before_startup_ack(&request).await;
         if let Some(startup_tx) = request.startup_tx.as_ref() {
             let _ = startup_tx.send(Some(Ok(())));
+        }
+        if let Some(startup_accept_rx) = request.startup_accept_rx.take() {
+            if startup_accept_rx.await.is_err() {
+                let cancelled = anyhow::anyhow!(
+                    "spawn caller ended before accepting the durable runtime startup"
+                );
+                self.run_before_cleanup_hook();
+                let active_result = self
+                    .remove_active_if_turn(&thread_id, &turn_id)
+                    .and_then(|removed| {
+                        self.run_cleanup_failure_hook("active")?;
+                        Ok(removed)
+                    })
+                    .map(|_| ());
+                let runtime_result = control
+                    .remove_runtime_if_same(&thread_id, &owner_guard.runtime_handle)
+                    .and_then(|removed| {
+                        self.run_cleanup_failure_hook("runtime handle")?;
+                        Ok(removed)
+                    })
+                    .map(|_| ());
+                owner_guard.release_permit();
+                owner_guard.disarm();
+                let graph_result =
+                    control.abort_unaccepted_started_spawn(&request.thread, &turn_id);
+                let cleanup_result =
+                    combine_completion_results([active_result, runtime_result, graph_result]);
+                let error = match cleanup_result {
+                    Ok(()) => cancelled,
+                    Err(cleanup_error) => anyhow::anyhow!(
+                        "{cancelled:#}; unaccepted startup cleanup failed: {cleanup_error:#}"
+                    ),
+                };
+                owner_guard.publish_failure(&error);
+                return Err(error);
+            }
         }
 
         let result =
@@ -661,6 +701,21 @@ impl AgentRuntimeManager {
     #[cfg(not(test))]
     async fn pause_before_followup_start(&self, _request: &RunAgentTurnRequest) {}
 
+    #[cfg(test)]
+    async fn pause_before_startup_ack(&self, request: &RunAgentTurnRequest) {
+        if request.startup_tx.is_none() {
+            return;
+        }
+        let hook = self.before_startup_ack_hook.lock().unwrap().take();
+        if let Some(hook) = hook {
+            hook.entered.notify_one();
+            hook.release.notified().await;
+        }
+    }
+
+    #[cfg(not(test))]
+    async fn pause_before_startup_ack(&self, _request: &RunAgentTurnRequest) {}
+
     fn termination_subscription(
         &self,
         thread_id: &str,
@@ -743,6 +798,11 @@ impl AgentRuntimeManager {
     #[cfg(test)]
     pub(super) fn set_before_followup_start_hook(&self, hook: Option<AckSubscribeHook>) {
         *self.before_followup_start_hook.lock().unwrap() = hook;
+    }
+
+    #[cfg(test)]
+    pub(super) fn set_before_startup_ack_hook(&self, hook: Option<AckSubscribeHook>) {
+        *self.before_startup_ack_hook.lock().unwrap() = hook;
     }
 
     #[cfg(test)]
@@ -1341,6 +1401,7 @@ mod tests {
             chat_override: Some(chat_override),
             consume_mailbox: false,
             startup_tx: None,
+            startup_accept_rx: None,
             followup_start_tx: None,
             start_token: None,
         }
