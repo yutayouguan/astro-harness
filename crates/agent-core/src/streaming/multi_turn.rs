@@ -178,16 +178,13 @@ impl RunTurnArgs {
 }
 
 async fn record_pending_input(
-    session: &Arc<Mutex<Session>>,
+    _session: &Arc<Mutex<Session>>,
     pending_input: Vec<TurnInput>,
 ) -> anyhow::Result<()> {
-    if pending_input.is_empty() {
-        return Ok(());
-    }
-    let mut sess = session.lock().await;
-    for input in pending_input {
-        sess.record_turn_input(input).await?;
-    }
+    // Steered input is persisted and appended to Session history before its
+    // acceptance is acknowledged. Draining here only advances the safe
+    // sampling boundary; recording it again would duplicate the user row.
+    let _ = pending_input;
     Ok(())
 }
 
@@ -289,7 +286,18 @@ pub(crate) async fn run_turn(args: RunTurnArgs, cancellation_token: Cancellation
             return;
         }
 
-        pre_llm_maintenance(&session).await;
+        if let Err(error) = pre_llm_maintenance(&session).await {
+            finish_error(
+                &session,
+                &streamer,
+                &tx,
+                error.to_string(),
+                saw_usage.then_some(total_usage),
+                &run_id,
+            )
+            .await;
+            return;
+        }
 
         let step_context = {
             let mut agent = session.lock().await;

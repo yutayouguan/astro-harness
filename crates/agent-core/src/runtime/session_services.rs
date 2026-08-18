@@ -4,7 +4,7 @@
 //! remains synchronous, so its adapter holds a standard mutex for exactly one
 //! [`ConversationStore`] call and never across an async suspension.
 
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
 use anyhow::{anyhow, Result};
 use serde_json::Value;
@@ -16,16 +16,22 @@ use session::{
 pub(crate) struct SessionServices {
     pub(crate) sessions: SharedConversationStore,
     pub(crate) compression_policy: Mutex<Box<dyn crate::compression::CompressionPolicy>>,
+    pub(crate) agent_control: Arc<subagents::AgentControl>,
+    pub(crate) agent_path: subagents::AgentPath,
 }
 
 impl SessionServices {
     pub(crate) fn new(
         sessions: Box<dyn ConversationStore>,
         compression_policy: Box<dyn crate::compression::CompressionPolicy>,
+        agent_control: Arc<subagents::AgentControl>,
+        agent_path: subagents::AgentPath,
     ) -> Self {
         Self {
             sessions: SharedConversationStore::new(sessions),
             compression_policy: Mutex::new(compression_policy),
+            agent_control,
+            agent_path,
         }
     }
 }

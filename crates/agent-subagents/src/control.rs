@@ -204,6 +204,45 @@ impl AgentControl {
         Ok(stored)
     }
 
+    /// Persist input steered into the currently running main/root turn. This
+    /// intentionally does not publish activity: the caller publishes
+    /// `MainSteer` only after the durable write succeeds.
+    pub fn persist_main_steer(
+        &self,
+        path: &AgentPath,
+        payload: String,
+    ) -> anyhow::Result<MailboxMessage> {
+        let thread = self.require_path(path, "main steer recipient")?;
+        if payload.trim().is_empty() {
+            anyhow::bail!("main steer payload must not be empty");
+        }
+        let message_id = Uuid::new_v4().to_string();
+        self.store.enqueue(&NewMailboxMessage {
+            idempotency_key: format!("main-steer:{message_id}"),
+            message_id,
+            sender_thread_id: thread.thread_id.clone(),
+            recipient_thread_id: thread.thread_id,
+            kind: MailboxKind::Followup,
+            payload,
+            trigger_turn: true,
+        })
+    }
+
+    pub fn drain_mailbox(&self, path: &AgentPath) -> anyhow::Result<Vec<MailboxMessage>> {
+        let thread = self.require_path(path, "mailbox recipient")?;
+        self.store.pending_for(&thread.thread_id, 0)
+    }
+
+    pub fn ack_mailbox(&self, path: &AgentPath, through_sequence: i64) -> anyhow::Result<()> {
+        let thread = self.require_path(path, "mailbox recipient")?;
+        self.store
+            .mark_delivered(&thread.thread_id, through_sequence)
+    }
+
+    pub fn status_events(&self, thread_id: &str) -> anyhow::Result<Vec<crate::StoredStatusEvent>> {
+        self.store.status_events(thread_id)
+    }
+
     pub fn record_runner_event(
         &self,
         thread_id: &str,

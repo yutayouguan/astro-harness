@@ -201,15 +201,47 @@ impl Session {
             if running.kind != TaskKind::Regular {
                 return None;
             }
-            let accepted = running.turn_context.push_input(TurnInput::UserInput {
+            let input = TurnInput::UserInput {
                 content: user_message.to_string(),
                 image_data_urls: image_data_urls.to_vec(),
-            });
-            accepted.then(|| running.turn_context.sub_id().to_string())
+            };
+            let accepted = running.turn_context.push_input(input.clone());
+            if accepted {
+                let durable_payload = match crate::exec::subagents::encode_main_steer_input(&input)
+                {
+                    Ok(payload) => payload,
+                    Err(error) => {
+                        running.turn_context.retract_input(&input);
+                        tracing::warn!(%error, "failed to encode steered input");
+                        return None;
+                    }
+                };
+                if let Err(error) = self
+                    .services
+                    .agent_control
+                    .persist_main_steer(&self.services.agent_path, durable_payload)
+                {
+                    running.turn_context.retract_input(&input);
+                    tracing::warn!(%error, "failed to durably accept steered input");
+                    return None;
+                }
+                self.services.agent_control.notify_main_steer();
+                Some(running.turn_context.sub_id().to_string())
+            } else {
+                None
+            }
         }
     }
 
-    pub(crate) async fn record_turn_input(&mut self, input: TurnInput) -> anyhow::Result<()> {
+    pub(crate) async fn record_turn_input(&self, input: TurnInput) -> anyhow::Result<()> {
+        self.record_turn_input_with_finish_reason(input, None).await
+    }
+
+    pub(crate) async fn record_turn_input_with_finish_reason(
+        &self,
+        input: TurnInput,
+        finish_reason: Option<&str>,
+    ) -> anyhow::Result<()> {
         let TurnInput::UserInput {
             content,
             image_data_urls,
@@ -238,6 +270,7 @@ impl Session {
         self.services.sessions.append_message(NewMessage {
             content: Some(&content),
             media_json: media_json.as_deref(),
+            finish_reason,
             ..NewMessage::empty(&self.session_id, "user")
         })?;
         self.record_items(vec![Message::user_with_images(&content, &image_data_urls)])

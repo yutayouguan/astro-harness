@@ -317,6 +317,98 @@ impl SessionStore {
         Ok(())
     }
 
+    /// Fork a session from complete stored rows, optionally retaining only the
+    /// most recent complete user turns.
+    ///
+    /// `None` copies the full history. `Some(0)` creates an empty child
+    /// session. A positive value starts at the Nth user row counted from the
+    /// end, so assistant/tool rows belonging to that user turn remain intact.
+    pub fn fork_session_recent_turns(
+        &self,
+        source_id: &str,
+        new_id: &str,
+        recent_turns: Option<usize>,
+    ) -> Result<()> {
+        if source_id == new_id {
+            anyhow::bail!("fork_session_recent_turns: source and target session ids must differ");
+        }
+        if self.get_session(new_id)?.is_some() {
+            anyhow::bail!("fork_session_recent_turns: target session already exists");
+        }
+
+        let parent = self.get_session(source_id)?;
+        let model = parent.as_ref().and_then(|session| session.model.clone());
+        self.create_session(new_id, "tauri", model.as_deref(), None, Some(source_id))?;
+
+        let messages = self.get_messages(source_id)?;
+        let start = match recent_turns {
+            None => 0,
+            Some(0) => messages.len(),
+            Some(turns) => messages
+                .iter()
+                .enumerate()
+                .rev()
+                .filter(|(_, message)| message.role == "user")
+                .nth(turns - 1)
+                .map(|(index, _)| index)
+                .unwrap_or(0),
+        };
+
+        let tx = self.conn.unchecked_transaction()?;
+        let mut message_count = 0i64;
+        let mut tool_call_count = 0i64;
+        for message in &messages[start..] {
+            let tool_calls = json_to_db(&message.tool_calls)?;
+            let reasoning_details = json_to_db(&message.reasoning_details)?;
+            let codex_reasoning_items = json_to_db(&message.codex_reasoning_items)?;
+            let codex_message_items = json_to_db(&message.codex_message_items)?;
+            tx.execute(
+                "INSERT INTO messages (
+                    session_id, role, content, compressed_content, tool_call_id, tool_calls, tool_name,
+                    timestamp, token_count, finish_reason,
+                    reasoning, reasoning_content, reasoning_details,
+                    codex_reasoning_items, codex_message_items, media_json
+                 ) VALUES (
+                    ?1, ?2, ?3, ?4, ?5, ?6, ?7,
+                    ?8, ?9, ?10,
+                    ?11, ?12, ?13,
+                    ?14, ?15, ?16
+                 )",
+                params![
+                    new_id,
+                    message.role,
+                    message.content,
+                    message.compressed_content,
+                    message.tool_call_id,
+                    tool_calls,
+                    message.tool_name,
+                    message.timestamp,
+                    message.token_count,
+                    message.finish_reason,
+                    message.reasoning,
+                    message.reasoning_content,
+                    reasoning_details,
+                    codex_reasoning_items,
+                    codex_message_items,
+                    message.media_json,
+                ],
+            )?;
+            message_count += 1;
+            if message.role == "tool" {
+                tool_call_count += 1;
+            }
+        }
+        tx.execute(
+            "UPDATE sessions
+             SET message_count = ?1, tool_call_count = ?2
+             WHERE id = ?3",
+            params![message_count, tool_call_count, new_id],
+        )?;
+        tx.commit()?;
+
+        Ok(())
+    }
+
     /// 将本会话截断到第 `keep_chat_bubbles` 个 user/assistant 气泡（含其后紧跟的 tool 行）。
     ///
     /// `keep_chat_bubbles == 0` 时删除全部消息。会话不存在时返回错误。用于编辑重发 / 再生前对齐 DB。

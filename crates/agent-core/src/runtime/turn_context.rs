@@ -93,6 +93,16 @@ impl TurnContext {
         std::mem::take(&mut state.pending)
     }
 
+    pub(crate) fn retract_input(&self, input: &TurnInput) {
+        let mut state = self
+            .input_state
+            .lock()
+            .expect("turn input state mutex poisoned");
+        if let Some(index) = state.pending.iter().rposition(|pending| pending == input) {
+            state.pending.remove(index);
+        }
+    }
+
     /// Atomically take queued input, or close steering if the queue is empty.
     pub(crate) fn take_pending_input_or_close(&self) -> Vec<TurnInput> {
         let mut state = self

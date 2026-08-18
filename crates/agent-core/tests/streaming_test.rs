@@ -119,13 +119,18 @@ async fn regular_task_owns_initial_input_persistence() {
 async fn steered_input_is_consumed_by_the_active_regular_task() {
     let dir = tempfile::tempdir().unwrap();
     let config = AgentConfig::with_defaults(dir.path().to_path_buf());
+    let sessions = session::SessionStore::open_sessions_dir(&dir.path().join("sessions")).unwrap();
+    sessions
+        .create_session("steer-session", "tauri", None, None, None)
+        .unwrap();
+    sessions
+        .append_message(session::NewMessage {
+            content: Some("initial"),
+            ..session::NewMessage::empty("steer-session", "user")
+        })
+        .unwrap();
     let agent = AgentLoop::with_session_id(config, "steer-session".into()).unwrap();
     let session = Arc::new(Mutex::new(agent));
-    session
-        .lock()
-        .await
-        .record_items(vec![types::message::Message::user("initial")])
-        .await;
 
     let calls = Arc::new(AtomicUsize::new(0));
     let saw_follow_up = Arc::new(std::sync::atomic::AtomicBool::new(false));
@@ -185,6 +190,10 @@ async fn steered_input_is_consumed_by_the_active_regular_task() {
     });
 
     first_started.notified().await;
+    let root_control = agent::exec::agent_control_directory::AgentControlDirectory::global()
+        .get("steer-session")
+        .expect("session root control");
+    let steer_cursor = root_control.activity_cursor();
     let turn_id = session
         .lock()
         .await
@@ -192,6 +201,19 @@ async fn steered_input_is_consumed_by_the_active_regular_task() {
         .await
         .expect("active regular task accepts steer");
     assert!(!turn_id.is_empty());
+    let durable = sessions.get_messages("steer-session").unwrap();
+    assert_eq!(durable.len(), 1);
+    let pending_steer = root_control
+        .drain_mailbox(&subagents::AgentPath::root())
+        .unwrap();
+    assert_eq!(pending_steer.len(), 1);
+    assert!(pending_steer[0].payload.contains("follow up"));
+    assert_eq!(
+        root_control
+            .wait_activity(steer_cursor, std::time::Duration::from_millis(20))
+            .await,
+        subagents::WaitOutcome::Steered
+    );
     release_first.notify_one();
     while rx.recv().await.is_some() {}
     run.await.unwrap();
@@ -199,6 +221,20 @@ async fn steered_input_is_consumed_by_the_active_regular_task() {
     assert_eq!(calls.load(Ordering::SeqCst), 2);
     assert!(saw_follow_up.load(Ordering::SeqCst));
     let messages = session.lock().await.clone_history().await;
+    assert!(agent::runtime::validate_message_order(&messages));
+    assert_eq!(
+        messages
+            .iter()
+            .filter(|message| message.role != types::message::Role::Tool)
+            .map(|message| message.role.clone())
+            .collect::<Vec<_>>(),
+        vec![
+            types::message::Role::User,
+            types::message::Role::Assistant,
+            types::message::Role::User,
+            types::message::Role::Assistant,
+        ]
+    );
     assert!(messages.iter().any(|message| {
         matches!(
             &message.content,

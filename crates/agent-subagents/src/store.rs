@@ -238,6 +238,47 @@ impl AgentGraphStore {
         Ok(removed)
     }
 
+    /// Recover child turns that were durably Running when their process died.
+    /// Recovery records a terminal interruption for the last started turn and
+    /// never attempts to replay provider or tool side effects.
+    pub fn recover_running_as_interrupted(&self, root_thread_id: &str) -> anyhow::Result<usize> {
+        require_non_empty("root_thread_id", root_thread_id)?;
+        let running = {
+            let conn = self.connect()?;
+            let mut stmt = conn.prepare(
+                "SELECT thread_id FROM agent_threads
+                 WHERE root_thread_id = ?1
+                   AND parent_thread_id IS NOT NULL
+                   AND status_kind = 'running'
+                 ORDER BY canonical_path",
+            )?;
+            let rows = stmt
+                .query_map([root_thread_id], |row| row.get::<_, String>(0))?
+                .collect::<rusqlite::Result<Vec<_>>>()?;
+            rows
+        };
+
+        for thread_id in &running {
+            let turn_id = self
+                .status_events(thread_id)?
+                .into_iter()
+                .rev()
+                .find_map(|event| match event.event {
+                    RunnerEvent::TurnStarted { turn_id } => Some(turn_id),
+                    _ => None,
+                })
+                .unwrap_or_else(|| format!("recovered:{thread_id}"));
+            self.apply_status_event(
+                thread_id,
+                RunnerEvent::TurnInterrupted {
+                    turn_id,
+                    reason: "runtime recovered after process interruption".into(),
+                },
+            )?;
+        }
+        Ok(running.len())
+    }
+
     pub fn validate_pending_reservation(&self, expected: &AgentThreadV2) -> anyhow::Result<()> {
         require_non_empty("thread_id", &expected.thread_id)?;
         let mut conn = self.connect()?;

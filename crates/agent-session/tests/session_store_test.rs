@@ -1115,6 +1115,143 @@ fn fork_session_copies_bubbles_and_trailing_tools() {
 }
 
 #[test]
+fn fork_session_recent_turns_preserves_complete_rows_and_turn_boundaries() {
+    let (_dir, store) = test_store();
+    store
+        .create_session("source", "tauri", Some("model-a"), None, None)
+        .unwrap();
+
+    store
+        .append_message(NewMessage {
+            session_id: "source",
+            role: "user",
+            content: Some("first question"),
+            media_json: Some(
+                r#"[{"kind":"image","mime_type":"image/png","reference":{"remote_url":"https://example.invalid/one.png"}}]"#,
+            ),
+            ..NewMessage::empty("source", "user")
+        })
+        .unwrap();
+    let assistant_id = store
+        .append_message(NewMessage {
+            session_id: "source",
+            role: "assistant",
+            content: Some("calling tool"),
+            tool_calls: Some(serde_json::json!([{
+                "id": "call-1",
+                "name": "inspect",
+                "arguments": {"path": "a.rs"}
+            }])),
+            token_count: Some(17),
+            finish_reason: Some("tool_calls"),
+            reasoning: Some("visible reasoning"),
+            reasoning_content: Some("provider reasoning"),
+            reasoning_details: Some(serde_json::json!({"detail": true})),
+            codex_reasoning_items: Some(serde_json::json!([{"type": "reasoning"}])),
+            codex_message_items: Some(serde_json::json!([{"type": "message"}])),
+            ..NewMessage::empty("source", "assistant")
+        })
+        .unwrap();
+    store
+        .update_message_compressed_content(assistant_id, Some("compressed assistant"))
+        .unwrap();
+    let tool_id = store
+        .append_message(NewMessage {
+            session_id: "source",
+            role: "tool",
+            content: Some("tool result"),
+            tool_call_id: Some("call-1"),
+            tool_name: Some("inspect"),
+            media_json: Some(
+                r#"[{"kind":"image","mime_type":"image/png","reference":{"workspace_path":"out.png"}}]"#,
+            ),
+            ..NewMessage::empty("source", "tool")
+        })
+        .unwrap();
+    store
+        .update_message_compressed_content(tool_id, Some("compressed tool"))
+        .unwrap();
+    store
+        .append_message(NewMessage {
+            session_id: "source",
+            role: "assistant",
+            content: Some("first answer"),
+            ..NewMessage::empty("source", "assistant")
+        })
+        .unwrap();
+    store
+        .append_message(NewMessage {
+            session_id: "source",
+            role: "user",
+            content: Some("second question"),
+            ..NewMessage::empty("source", "user")
+        })
+        .unwrap();
+    store
+        .append_message(NewMessage {
+            session_id: "source",
+            role: "assistant",
+            content: Some("second answer"),
+            ..NewMessage::empty("source", "assistant")
+        })
+        .unwrap();
+
+    store
+        .fork_session_recent_turns("source", "all", None)
+        .unwrap();
+    store
+        .fork_session_recent_turns("source", "none", Some(0))
+        .unwrap();
+    store
+        .fork_session_recent_turns("source", "last", Some(1))
+        .unwrap();
+    store
+        .fork_session_recent_turns("source", "last-two", Some(2))
+        .unwrap();
+
+    let source = store.get_messages("source").unwrap();
+    let all = store.get_messages("all").unwrap();
+    assert_eq!(all.len(), source.len());
+    for (expected, actual) in source.iter().zip(&all) {
+        assert_eq!(actual.role, expected.role);
+        assert_eq!(actual.content, expected.content);
+        assert_eq!(actual.compressed_content, expected.compressed_content);
+        assert_eq!(actual.tool_call_id, expected.tool_call_id);
+        assert_eq!(actual.tool_calls, expected.tool_calls);
+        assert_eq!(actual.tool_name, expected.tool_name);
+        assert_eq!(actual.timestamp, expected.timestamp);
+        assert_eq!(actual.token_count, expected.token_count);
+        assert_eq!(actual.finish_reason, expected.finish_reason);
+        assert_eq!(actual.reasoning, expected.reasoning);
+        assert_eq!(actual.reasoning_content, expected.reasoning_content);
+        assert_eq!(actual.reasoning_details, expected.reasoning_details);
+        assert_eq!(actual.codex_reasoning_items, expected.codex_reasoning_items);
+        assert_eq!(actual.codex_message_items, expected.codex_message_items);
+        assert_eq!(actual.media_json, expected.media_json);
+    }
+    assert!(store.get_messages("none").unwrap().is_empty());
+    assert_eq!(
+        store
+            .get_messages("last")
+            .unwrap()
+            .iter()
+            .map(|message| (message.role.as_str(), message.content.as_deref()))
+            .collect::<Vec<_>>(),
+        vec![
+            ("user", Some("second question")),
+            ("assistant", Some("second answer")),
+        ]
+    );
+    assert_eq!(store.get_messages("last-two").unwrap().len(), source.len());
+
+    for fork_id in ["all", "none", "last", "last-two"] {
+        let fork = store.get_session(fork_id).unwrap().unwrap();
+        assert_eq!(fork.parent_session_id.as_deref(), Some("source"));
+        assert_eq!(fork.model.as_deref(), Some("model-a"));
+    }
+}
+
+#[test]
 fn truncate_session_to_bubbles_drops_tail_and_trailing_tools() {
     let dir = TempDir::new().unwrap();
     let store = SessionStore::open(&dir.path().join("state.db")).unwrap();

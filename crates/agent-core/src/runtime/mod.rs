@@ -177,10 +177,41 @@ impl Session {
         Self::from_memory(config, session_id, memory)
     }
 
+    /// Construct a short-lived child runtime that shares its root control
+    /// plane while retaining an independent session id and canonical path.
+    pub fn with_session_id_for_agent_thread(
+        config: Config,
+        session_id: String,
+        agent_id: &str,
+        agent_control: Arc<subagents::AgentControl>,
+        agent_path: subagents::AgentPath,
+    ) -> anyhow::Result<Self> {
+        let memory = MemoryManager::for_agent(config.memory_dir.clone(), agent_id)?;
+        Self::from_memory_with_agent_control(config, session_id, memory, agent_control, agent_path)
+    }
+
     fn from_memory(
         config: Config,
         session_id: String,
+        memory: MemoryManager,
+    ) -> anyhow::Result<Self> {
+        let agent_control = crate::exec::agent_control_directory::AgentControlDirectory::global()
+            .open_root(&session_id)?;
+        Self::from_memory_with_agent_control(
+            config,
+            session_id,
+            memory,
+            agent_control,
+            subagents::AgentPath::root(),
+        )
+    }
+
+    fn from_memory_with_agent_control(
+        config: Config,
+        session_id: String,
         mut memory: MemoryManager,
+        agent_control: Arc<subagents::AgentControl>,
+        agent_path: subagents::AgentPath,
     ) -> anyhow::Result<Self> {
         // 新 session / 构造路径：显式固化 MEMORY/USER snapshot（open 已对齐 live，此处钉死契约）。
         memory.refresh_memory_snapshot()?;
@@ -219,7 +250,7 @@ impl Session {
             model_ctx: model_ctx::ModelContext::default(),
             state: TokioMutex::new(session_state::SessionState::new(history)),
             memory,
-            services: SessionServices::new(sessions, compression_policy),
+            services: SessionServices::new(sessions, compression_policy, agent_control, agent_path),
             tool_registry,
             mcp_hub,
             mcp_config_override: Vec::new(),
@@ -1117,6 +1148,39 @@ mod tests {
         let history = session.clone_history().await;
         assert_eq!(history.len(), 1);
         assert_eq!(history[0].content_str(), "replacement");
+    }
+
+    #[test]
+    fn agent_thread_session_keeps_shared_root_control_and_child_path() {
+        let dir = TempDir::new().unwrap();
+        let graph = subagents::AgentGraphStore::open(dir.path().join("agents.db")).unwrap();
+        let control = subagents::AgentControl::open(
+            "root-session".into(),
+            graph,
+            subagents::Limits {
+                max_threads: 8,
+                max_depth: 4,
+                max_running: 2,
+            },
+        )
+        .unwrap();
+        let reservation = control
+            .reserve_spawn(&subagents::AgentPath::root(), "worker")
+            .unwrap();
+        let child = reservation.thread().clone();
+        reservation.commit().unwrap();
+
+        let session = Session::with_session_id_for_agent_thread(
+            test_config(&dir),
+            child.session_id,
+            home::DEFAULT_AGENT_ID,
+            Arc::clone(&control),
+            child.canonical_path.clone(),
+        )
+        .unwrap();
+
+        assert!(Arc::ptr_eq(&session.services.agent_control, &control));
+        assert_eq!(session.services.agent_path, child.canonical_path);
     }
 
     #[test]
