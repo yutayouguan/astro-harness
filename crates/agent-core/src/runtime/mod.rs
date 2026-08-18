@@ -10,10 +10,13 @@
 //! - `SessionState.history` 中相邻消息不得连续出现相同角色（见 `validate_message_order`）
 //! - 取消信号（`CancelSignal`）在工具调用前后均会检查，已取消则立即中断
 
+use std::io;
 use std::path::PathBuf;
-use std::sync::{Arc, Mutex as StdMutex, MutexGuard};
+use std::sync::{Arc, Mutex as StdMutex, MutexGuard, OnceLock};
 
-use tokio::sync::Mutex as TokioMutex;
+use agent_protocol::Event;
+use agent_rollout::RolloutRecorder;
+use tokio::sync::{watch, Mutex as TokioMutex};
 use uuid::Uuid;
 
 use ::session::{ConversationStore, SessionStore};
@@ -30,15 +33,18 @@ use crate::runtime::session::{hydrate_history, resolve_session_project_root};
 use crate::tasks::ActiveTurn;
 use session_services::SessionServices;
 
+mod astro_thread;
 pub mod budget;
 pub(crate) mod compression_state;
 mod context_maintenance;
 pub(crate) mod model_ctx;
 mod recording;
 mod session;
+pub(crate) mod session_io;
 pub(crate) mod session_services;
 pub(crate) mod session_state;
 pub(crate) mod step_context;
+pub(crate) mod submission_loop;
 mod system_prompt;
 mod tool_dispatch;
 pub(crate) mod turn_budget;
@@ -47,6 +53,7 @@ mod turn_lifecycle;
 pub(crate) mod usage;
 mod validate;
 
+pub use astro_thread::AstroThread;
 pub(crate) use step_context::StepContext;
 pub use tool_dispatch::ToolCallError;
 pub use turn_budget::MaxDepthError;
@@ -134,6 +141,12 @@ pub struct Session {
     pub(crate) cancel: CancelSignal,
     /// Codex-style single-active-task registry for this session.
     pub(crate) active_turn: TokioMutex<Option<ActiveTurn>>,
+    /// Bound once by [`AstroThread`] to emit protocol events for this session.
+    pub(crate) event_tx: OnceLock<async_channel::Sender<Event>>,
+    /// Bound once by [`AstroThread`] to expose the long-lived task's status.
+    pub(crate) status_tx: OnceLock<watch::Sender<session_io::AgentStatus>>,
+    /// Bound once by [`AstroThread`] to persist the session rollout.
+    pub(crate) rollout: OnceLock<RolloutRecorder>,
 }
 
 /// Compatibility name retained while downstream crates migrate to [`Config`].
@@ -218,7 +231,37 @@ impl Session {
             execution,
             cancel: CancelSignal::new(),
             active_turn: TokioMutex::new(None),
+            event_tx: OnceLock::new(),
+            status_tx: OnceLock::new(),
+            rollout: OnceLock::new(),
         })
+    }
+
+    pub(crate) fn bind_runtime_io(
+        &self,
+        event_tx: async_channel::Sender<Event>,
+        status_tx: watch::Sender<session_io::AgentStatus>,
+        rollout: RolloutRecorder,
+    ) {
+        assert!(
+            self.event_tx.set(event_tx).is_ok(),
+            "session runtime event I/O already bound"
+        );
+        assert!(
+            self.status_tx.set(status_tx).is_ok(),
+            "session runtime status I/O already bound"
+        );
+        assert!(
+            self.rollout.set(rollout).is_ok(),
+            "session runtime rollout recorder already bound"
+        );
+    }
+
+    pub async fn flush_rollout(&self) -> io::Result<()> {
+        match self.rollout.get() {
+            Some(rollout) => rollout.flush().await,
+            None => Ok(()),
+        }
     }
 
     fn lock_state(&self) -> MutexGuard<'_, session_state::SessionState> {

@@ -38,7 +38,7 @@ pub use control::hitl::{
 pub use control::interrupt::{Interrupt, InterruptError, InterruptPending, ResumeItem};
 /// 对话循环核心类型 re-export。
 pub use runtime::{
-    AgentConfig, AgentLoop, Config, MaxDepthError, Session, ToolCallError, TurnResult,
+    AgentConfig, AgentLoop, AstroThread, Config, MaxDepthError, Session, ToolCallError, TurnResult,
 };
 /// 流式 API re-export。
 pub use streaming::{
