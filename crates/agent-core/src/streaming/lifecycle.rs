@@ -46,6 +46,7 @@ pub(crate) fn tool_turn_item(
     name: impl Into<String>,
     arguments: serde_json::Value,
     output: Option<serde_json::Value>,
+    media: Vec<types::MediaAsset>,
     status: ToolStatus,
 ) -> TurnItem {
     let id = id.into();
@@ -55,6 +56,7 @@ pub(crate) fn tool_turn_item(
         name: name.clone(),
         arguments,
         output,
+        media,
         status,
     };
     if name == "terminal" || name == "code_exec" {
@@ -342,7 +344,10 @@ pub(crate) async fn emit_usage(
             turn_id: Some(turn_context.sub_id().to_string()),
             input_tokens: u64::from(usage.input_tokens),
             output_tokens: u64::from(usage.output_tokens),
-            total_tokens: u64::from(usage.input_tokens) + u64::from(usage.output_tokens),
+            total_tokens: u64::from(usage.input_tokens)
+                .saturating_add(u64::from(usage.output_tokens))
+                .saturating_add(u64::from(usage.cache_read_tokens))
+                .saturating_add(u64::from(usage.cache_write_tokens)),
             cache_read_tokens: u64::from(usage.cache_read_tokens),
             cache_write_tokens: u64::from(usage.cache_write_tokens),
             reasoning_tokens: u64::from(usage.reasoning_tokens),

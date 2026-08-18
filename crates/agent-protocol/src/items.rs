@@ -13,6 +13,8 @@ pub struct ToolItem {
     pub name: String,
     pub arguments: Value,
     pub output: Option<Value>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub media: Vec<types::MediaAsset>,
     pub status: ToolStatus,
 }
 

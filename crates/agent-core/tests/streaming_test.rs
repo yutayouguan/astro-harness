@@ -284,6 +284,212 @@ async fn tool_argument_events_keep_stable_ids_across_late_start_and_rounds() {
     );
 }
 
+#[tokio::test]
+async fn argument_only_malformed_tool_delta_emits_no_orphan_request() {
+    let (_dir, session, thread, _recorder, _path) = common::new_thread().await;
+    let turn_id = "malformed-tool-delta";
+    let turn_context = session.create_turn_context(turn_id.into()).await;
+    let chat = scripted_chat(vec![vec![
+        StreamChunk::ToolCallDelta {
+            index: 0,
+            arguments: r#"{"command":"pwd"}"#.into(),
+        },
+        StreamChunk::Done {
+            finish_reason: "tool_calls".into(),
+        },
+    ]]);
+    let run = tokio::spawn(run_multi_turn_stream_with_chat_fn(
+        Arc::clone(&session),
+        turn_context,
+        vec![TurnInput {
+            content: "malformed tool".into(),
+            image_data_urls: Vec::new(),
+        }],
+        chat,
+    ));
+    let events = common::collect_through_terminal(&thread, turn_id).await;
+    run.await.unwrap().unwrap();
+
+    assert_eq!(
+        events
+            .iter()
+            .filter(|event| matches!(event.msg, EventMsg::DynamicToolCallRequest(_)))
+            .count(),
+        0,
+        "argument-only malformed tool calls must not emit orphan requests"
+    );
+}
+
+#[tokio::test]
+async fn billing_token_count_total_includes_cached_tokens() {
+    let (_dir, session, thread, _recorder, _path) = common::new_thread().await;
+    let turn_id = "billing-token-total";
+    let turn_context = session.create_turn_context(turn_id.into()).await;
+    let usage = Usage {
+        input_tokens: 10,
+        output_tokens: 5,
+        cache_read_tokens: 4,
+        cache_write_tokens: 2,
+        reasoning_tokens: 0,
+        request_count: 1,
+    };
+    let chat = scripted_chat(vec![vec![
+        StreamChunk::Text("done".into()),
+        StreamChunk::Usage(usage),
+        StreamChunk::Done {
+            finish_reason: "stop".into(),
+        },
+    ]]);
+    let run = tokio::spawn(run_multi_turn_stream_with_chat_fn(
+        Arc::clone(&session),
+        turn_context,
+        vec![TurnInput {
+            content: "count tokens".into(),
+            image_data_urls: Vec::new(),
+        }],
+        chat,
+    ));
+    let events = common::collect_through_terminal(&thread, turn_id).await;
+    run.await.unwrap().unwrap();
+
+    let billing = events
+        .iter()
+        .find_map(|event| match &event.msg {
+            EventMsg::TokenCount(tokens) if tokens.request_count > 0 => Some(tokens),
+            _ => None,
+        })
+        .expect("billing TokenCount event");
+    assert_eq!(billing.total_tokens, 21);
+}
+
+#[tokio::test]
+async fn media_tool_result_survives_rollout_and_legacy_adapter() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("media-rollout.jsonl");
+    let mut agent = AgentLoop::with_session_id(
+        AgentConfig::with_defaults(dir.path().to_path_buf()),
+        "media-tool-session".into(),
+    )
+    .unwrap();
+    agent.tool_registry_mut().register_dynamic(
+        types::ToolEntry {
+            name: "test_media".into(),
+            toolset: "test_media".into(),
+            description: "returns structured media".into(),
+            schema: serde_json::json!({"type": "object", "properties": {}}),
+            ..types::ToolEntry::lifecycle_defaults()
+        },
+        Arc::new(|_name, _args| {
+            Box::pin(async {
+                Ok(types::ToolOutput::Media {
+                    text: "generated".into(),
+                    assets: vec![types::MediaAsset {
+                        kind: types::MediaKind::Image,
+                        mime_type: "image/png".into(),
+                        reference: types::MediaRef::RemoteUri(
+                            "https://example.test/generated.png".into(),
+                        ),
+                        label: Some("generated image".into()),
+                        id: Some("asset-1".into()),
+                    }],
+                })
+            })
+        }),
+    );
+    let session = Arc::new(agent);
+    let recorder = agent_rollout::RolloutRecorder::open(
+        path.clone(),
+        agent_rollout::ThreadHistoryMode::Paginated,
+    )
+    .await
+    .unwrap();
+    let thread = agent::AstroThread::spawn(Arc::clone(&session), recorder).unwrap();
+    session
+        .record_items(vec![types::message::Message::user("generate media")])
+        .await;
+    let chat = scripted_chat(vec![
+        vec![
+            StreamChunk::ToolCallStart {
+                index: 0,
+                id: "media-call".into(),
+                name: "test_media".into(),
+            },
+            StreamChunk::ToolCallDelta {
+                index: 0,
+                arguments: "{}".into(),
+            },
+            StreamChunk::Done {
+                finish_reason: "tool_calls".into(),
+            },
+        ],
+        vec![
+            StreamChunk::Text("done".into()),
+            StreamChunk::Done {
+                finish_reason: "stop".into(),
+            },
+        ],
+    ]);
+    let (tx, mut rx) = tokio::sync::mpsc::channel(64);
+    let run = tokio::spawn(run_multi_turn_stream_with_chat_fn_legacy(
+        Arc::clone(&session),
+        chat,
+        ProviderConfig::default(),
+        "system".into(),
+        PauseControl::new(),
+        None,
+        tx,
+    ));
+    let mut legacy = Vec::new();
+    while let Some(item) = rx.recv().await {
+        legacy.push(item.unwrap());
+    }
+    run.await.unwrap();
+    let mut unified = Vec::new();
+    loop {
+        let event = thread.next_event().await.unwrap();
+        let terminal = event.msg.is_terminal();
+        unified.push(event);
+        if terminal {
+            break;
+        }
+    }
+
+    let unified_tool = unified
+        .iter()
+        .find_map(|event| match &event.msg {
+            EventMsg::ItemCompleted(item) if item.item.id() == "media-call" => match &item.item {
+                agent_protocol::TurnItem::DynamicToolCall(tool) => Some(tool),
+                _ => None,
+            },
+            _ => None,
+        })
+        .expect("unified completed media tool item");
+    assert_eq!(
+        serde_json::to_value(unified_tool).unwrap()["media"][0]["id"],
+        "asset-1"
+    );
+    assert!(legacy.iter().any(|item| matches!(
+        item,
+        MultiTurnStreamItem::ToolResult { id, media, .. }
+            if id == "media-call" && media.first().and_then(|asset| asset.id.as_deref()) == Some("asset-1")
+    )));
+
+    let rollout = agent_rollout::read_rollout(&path).await.unwrap();
+    assert!(rollout.iter().any(|item| match item {
+        agent_rollout::RolloutItem::EventMsg(EventMsg::ItemCompleted(item))
+            if item.item.id() == "media-call" =>
+        {
+            serde_json::to_value(&item.item)
+                .ok()
+                .and_then(|value| value.get("data").cloned())
+                .and_then(|value| value.get("media").cloned())
+                .and_then(|value| value.as_array().cloned())
+                .is_some_and(|media| !media.is_empty())
+        }
+        _ => false,
+    }));
+}
+
 /// 从脚本化轮次列表构造 [`ChatOverride`]。
 ///
 /// 每次调用消费一轮 chunks；轮次用尽后返回默认 "done" 回复。
@@ -650,6 +856,32 @@ async fn multi_turn_emits_text_tool_result_and_usage() {
         MultiTurnStreamItem::Assistant(StreamedAssistantContent::FinalUsage(u))
         if u.prompt_tokens() == 22 && u.completion_tokens() == 8
     )));
+    assert_eq!(
+        items
+            .iter()
+            .filter(|item| matches!(
+                item,
+                MultiTurnStreamItem::Assistant(StreamedAssistantContent::FinalUsage(_))
+            ))
+            .count(),
+        1,
+        "context snapshots must not be exposed as billing usage"
+    );
+    let context_snapshots = items
+        .iter()
+        .filter_map(|item| match item {
+            MultiTurnStreamItem::ContextUsage(snapshot) => Some(snapshot),
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+    assert!(!context_snapshots.is_empty());
+    assert!(context_snapshots
+        .iter()
+        .all(|snapshot| !snapshot.segments.is_empty()));
+    assert!(context_snapshots.iter().any(|snapshot| snapshot
+        .segments
+        .iter()
+        .any(|segment| !segment.items.is_empty())));
     assert!(items.iter().any(|i| matches!(
         i,
         MultiTurnStreamItem::RunFinished {

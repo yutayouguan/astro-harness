@@ -321,7 +321,7 @@ fn legacy_items_from_event(event: Event) -> Vec<MultiTurnStreamItem> {
                             other => other.to_string(),
                         })
                         .unwrap_or_default(),
-                    media: Vec::new(),
+                    media: tool.media,
                 }]
             }
             agent_protocol::TurnItem::Extension(extension)
@@ -365,6 +365,40 @@ fn legacy_items_from_event(event: Event) -> Vec<MultiTurnStreamItem> {
             }
             _ => Vec::new(),
         },
+        EventMsg::ContextUsage(context) => {
+            vec![MultiTurnStreamItem::ContextUsage(
+                crate::prompt::context_usage::ContextUsageSnapshot {
+                    context_window: context.context_window,
+                    total_tokens: context.total_tokens,
+                    segments: context
+                        .segments
+                        .into_iter()
+                        .map(
+                            |segment| crate::prompt::context_usage::ContextUsageSegment {
+                                id: segment.id,
+                                tokens: segment.tokens,
+                                meta: segment.count.map(|count| {
+                                    crate::prompt::context_usage::ContextUsageSegmentMeta {
+                                        count: Some(count),
+                                    }
+                                }),
+                                items: segment
+                                    .items
+                                    .into_iter()
+                                    .map(|item| crate::prompt::context_usage::ContextUsageItem {
+                                        id: item.id,
+                                        label: item.label,
+                                        tokens: item.tokens,
+                                    })
+                                    .collect(),
+                            },
+                        )
+                        .collect(),
+                    updated_at: context.updated_at,
+                    recommend_compact: context.recommend_compact,
+                },
+            )]
+        }
         EventMsg::TokenCount(tokens) => vec![MultiTurnStreamItem::Assistant(
             StreamedAssistantContent::FinalUsage(Usage {
                 input_tokens: u32::try_from(tokens.input_tokens).unwrap_or(u32::MAX),
@@ -811,17 +845,22 @@ pub(crate) async fn run_turn(
                     if d.name.as_deref().is_some_and(|name| !name.is_empty()) {
                         tool_call_indices.insert(d.index);
                     }
+                    let has_named_call = tool_call_indices.contains(&d.index);
                     let (item_id, buffered) = {
                         let pending = tool_argument_events.entry(d.index).or_default();
                         pending.deltas.push(d.clone());
                         if pending.item_id.is_none() {
                             pending.item_id = d.id.as_ref().filter(|id| !id.is_empty()).cloned();
                         }
-                        pending
-                            .item_id
-                            .clone()
-                            .map(|item_id| (item_id, std::mem::take(&mut pending.deltas)))
-                            .unzip()
+                        if has_named_call {
+                            pending
+                                .item_id
+                                .clone()
+                                .map(|item_id| (item_id, std::mem::take(&mut pending.deltas)))
+                                .unzip()
+                        } else {
+                            (None, None)
+                        }
                     };
                     let mut accumulated_delta = d;
                     if let Some(item_id) = item_id.as_ref() {
@@ -879,11 +918,9 @@ pub(crate) async fn run_turn(
             saw_usage = true;
         }
 
-        let mut indices = tool_argument_events.keys().copied().collect::<Vec<_>>();
-        indices.sort_unstable();
-        for index in indices {
+        for index in &tool_call_indices {
             let pending = tool_argument_events
-                .get_mut(&index)
+                .get_mut(index)
                 .expect("tool argument index collected above");
             let item_id = pending
                 .item_id
@@ -1168,6 +1205,7 @@ pub(crate) async fn run_turn(
                         call.name.clone(),
                         call.arguments.clone(),
                         None,
+                        Vec::new(),
                         ToolStatus::InProgress,
                     ),
                 }),

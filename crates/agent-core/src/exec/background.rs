@@ -151,19 +151,14 @@ async fn collect_background_events(
             EventMsg::ItemStarted(_) => event_kinds.push("item_started"),
             EventMsg::ItemCompleted(_) => event_kinds.push("item_completed"),
             EventMsg::TokenCount(tokens) => {
-                // Context-occupancy snapshots also use TokenCount but carry no requests.
-                // Only provider aggregate usage contributes to background billing totals.
-                if tokens.request_count > 0 {
-                    usage.input_tokens = u32::try_from(tokens.input_tokens).unwrap_or(u32::MAX);
-                    usage.output_tokens = u32::try_from(tokens.output_tokens).unwrap_or(u32::MAX);
-                    usage.cache_read_tokens =
-                        u32::try_from(tokens.cache_read_tokens).unwrap_or(u32::MAX);
-                    usage.cache_write_tokens =
-                        u32::try_from(tokens.cache_write_tokens).unwrap_or(u32::MAX);
-                    usage.reasoning_tokens =
-                        u32::try_from(tokens.reasoning_tokens).unwrap_or(u32::MAX);
-                    usage.request_count = u32::try_from(tokens.request_count).unwrap_or(u32::MAX);
-                }
+                usage.input_tokens = u32::try_from(tokens.input_tokens).unwrap_or(u32::MAX);
+                usage.output_tokens = u32::try_from(tokens.output_tokens).unwrap_or(u32::MAX);
+                usage.cache_read_tokens =
+                    u32::try_from(tokens.cache_read_tokens).unwrap_or(u32::MAX);
+                usage.cache_write_tokens =
+                    u32::try_from(tokens.cache_write_tokens).unwrap_or(u32::MAX);
+                usage.reasoning_tokens = u32::try_from(tokens.reasoning_tokens).unwrap_or(u32::MAX);
+                usage.request_count = u32::try_from(tokens.request_count).unwrap_or(u32::MAX);
             }
             EventMsg::Error(error) | EventMsg::StreamError(error) => {
                 stream_error = Some(error.message)
@@ -204,6 +199,7 @@ async fn collect_background_events(
             | EventMsg::HookCompleted(_)
             | EventMsg::SubAgentActivity(_)
             | EventMsg::ContextCompacted(_)
+            | EventMsg::ContextUsage(_)
             | EventMsg::LegacyUserMessage(_)
             | EventMsg::LegacyAgentMessage(_)
             | EventMsg::LegacyReasoning(_)
@@ -283,6 +279,7 @@ mod tests {
             name: "terminal".into(),
             arguments: serde_json::json!({"command": "pwd"}),
             output: None,
+            media: Vec::new(),
             status: ToolStatus::InProgress,
         });
         for msg in [

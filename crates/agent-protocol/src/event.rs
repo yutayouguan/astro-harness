@@ -79,6 +79,34 @@ pub struct TokenCountEvent {
     pub request_count: u64,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ContextUsageItem {
+    pub id: String,
+    pub label: String,
+    pub tokens: u32,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ContextUsageSegment {
+    pub id: String,
+    pub tokens: u32,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub count: Option<u32>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub items: Vec<ContextUsageItem>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ContextUsageEvent {
+    pub turn_id: String,
+    pub context_window: u32,
+    pub total_tokens: u32,
+    pub segments: Vec<ContextUsageSegment>,
+    pub updated_at: i64,
+    #[serde(default)]
+    pub recommend_compact: bool,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", content = "data", rename_all = "snake_case")]
 pub enum EventMsg {
@@ -103,6 +131,7 @@ pub enum EventMsg {
     HookCompleted(ItemEvent),
     SubAgentActivity(ItemEvent),
     ContextCompacted(ItemEvent),
+    ContextUsage(ContextUsageEvent),
     LegacyUserMessage(TextItem),
     LegacyAgentMessage(TextItem),
     LegacyReasoning(TextItem),
@@ -144,6 +173,34 @@ mod tests {
                 }),
             }),
         };
+        let json = serde_json::to_string(&event).unwrap();
+        let restored: Event = serde_json::from_str(&json).unwrap();
+        assert_eq!(restored, event);
+    }
+
+    #[test]
+    fn context_usage_roundtrips_with_segment_items() {
+        let event = Event {
+            id: "turn-1".into(),
+            msg: EventMsg::ContextUsage(ContextUsageEvent {
+                turn_id: "turn-1".into(),
+                context_window: 128_000,
+                total_tokens: 42,
+                segments: vec![ContextUsageSegment {
+                    id: "tools".into(),
+                    tokens: 42,
+                    count: Some(1),
+                    items: vec![ContextUsageItem {
+                        id: "terminal".into(),
+                        label: "Terminal".into(),
+                        tokens: 42,
+                    }],
+                }],
+                updated_at: 123,
+                recommend_compact: false,
+            }),
+        };
+
         let json = serde_json::to_string(&event).unwrap();
         let restored: Event = serde_json::from_str(&json).unwrap();
         assert_eq!(restored, event);

@@ -17,6 +17,7 @@ pub fn should_persist_event_msg(event: &EventMsg, mode: ThreadHistoryMode) -> bo
         | EventMsg::TurnComplete(_)
         | EventMsg::TurnAborted(_)
         | EventMsg::TokenCount(_)
+        | EventMsg::ContextUsage(_)
         | EventMsg::ThreadSettingsApplied(_)
         | EventMsg::ThreadRolledBack(_) => true,
         EventMsg::ItemStarted(_)
@@ -63,7 +64,9 @@ mod tests {
     use super::super::{
         is_persisted_rollout_item, should_persist_event_msg, RolloutItem, ThreadHistoryMode,
     };
-    use agent_protocol::event::{DeltaEvent, ErrorEvent, EventMsg, ItemEvent, TurnCompleteEvent};
+    use agent_protocol::event::{
+        ContextUsageEvent, DeltaEvent, ErrorEvent, EventMsg, ItemEvent, TurnCompleteEvent,
+    };
     use agent_protocol::items::{TextItem, TurnItem};
 
     #[test]
@@ -109,6 +112,23 @@ mod tests {
         ));
         assert!(!should_persist_event_msg(
             &error,
+            ThreadHistoryMode::Paginated
+        ));
+    }
+
+    #[test]
+    fn context_usage_snapshot_is_durable() {
+        let context = EventMsg::ContextUsage(ContextUsageEvent {
+            turn_id: "turn-1".into(),
+            context_window: 128_000,
+            total_tokens: 42,
+            segments: Vec::new(),
+            updated_at: 123,
+            recommend_compact: false,
+        });
+
+        assert!(should_persist_event_msg(
+            &context,
             ThreadHistoryMode::Paginated
         ));
     }

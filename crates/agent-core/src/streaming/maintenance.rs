@@ -2,7 +2,10 @@
 
 use std::sync::Arc;
 
-use agent_protocol::{DeltaEvent, EventMsg, ItemEvent, TokenCountEvent, ToolStatus};
+use agent_protocol::{
+    ContextUsageEvent, ContextUsageItem, ContextUsageSegment, DeltaEvent, EventMsg, ItemEvent,
+    ToolStatus,
+};
 
 use super::lifecycle::{
     emit, emit_context_compacted, emit_extension_completed, emit_hook_completed, emit_hook_started,
@@ -92,15 +95,30 @@ pub(super) async fn emit_context_usage(
     emit(
         session,
         turn_context,
-        EventMsg::TokenCount(TokenCountEvent {
-            turn_id: Some(turn_context.sub_id().to_string()),
-            input_tokens: u64::from(snap.total_tokens),
-            output_tokens: 0,
-            total_tokens: u64::from(snap.total_tokens),
-            cache_read_tokens: 0,
-            cache_write_tokens: 0,
-            reasoning_tokens: 0,
-            request_count: 0,
+        EventMsg::ContextUsage(ContextUsageEvent {
+            turn_id: turn_context.sub_id().to_string(),
+            context_window: snap.context_window,
+            total_tokens: snap.total_tokens,
+            segments: snap
+                .segments
+                .into_iter()
+                .map(|segment| ContextUsageSegment {
+                    id: segment.id,
+                    tokens: segment.tokens,
+                    count: segment.meta.and_then(|meta| meta.count),
+                    items: segment
+                        .items
+                        .into_iter()
+                        .map(|item| ContextUsageItem {
+                            id: item.id,
+                            label: item.label,
+                            tokens: item.tokens,
+                        })
+                        .collect(),
+                })
+                .collect(),
+            updated_at: snap.updated_at,
+            recommend_compact: snap.recommend_compact,
         }),
     )
     .await;
@@ -222,7 +240,7 @@ pub(super) async fn record_tool_outcomes(
                 let mut state = agent.state.lock().expect("session state mutex poisoned");
                 if let Some(last) = state.history.last_mut() {
                     if last.role == types::message::Role::Tool && last.media.is_empty() {
-                        last.media = tool_media;
+                        last.media = tool_media.clone();
                     }
                 }
             }
@@ -256,6 +274,7 @@ pub(super) async fn record_tool_outcomes(
                     call.name.clone(),
                     call.arguments.clone(),
                     Some(serde_json::Value::String(result_text.clone())),
+                    tool_media,
                     if is_success {
                         ToolStatus::Completed
                     } else {
