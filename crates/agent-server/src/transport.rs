@@ -128,16 +128,20 @@ impl ConnectionRegistry {
         observed: &Arc<ConnectionEntry>,
         cancel: bool,
     ) {
-        if cancel {
-            observed.cancel.cancel();
-        }
-        {
+        let removed = {
             let mut entries = self.entries.write().await;
             let is_current = entries
                 .get(connection_id)
                 .is_some_and(|current| Arc::ptr_eq(current, observed));
             if is_current {
-                entries.remove(connection_id);
+                entries.remove(connection_id)
+            } else {
+                None
+            }
+        };
+        if cancel {
+            if let Some(entry) = removed {
+                entry.cancel.cancel();
             }
         }
     }
@@ -227,6 +231,39 @@ mod tests {
 
         assert!(cancel.is_cancelled());
         assert!(!registry.entries.read().await.contains_key("connection"));
+    }
+
+    #[tokio::test]
+    async fn foreign_registry_cannot_cancel_a_connection_generation() {
+        let registry_a = ConnectionRegistry::default();
+        let registry_b = ConnectionRegistry::default();
+        let (mut receiver_a, cancel_a, generation_a) =
+            registry_a.register("connection".into()).await;
+        let (mut receiver_b, cancel_b, _generation_b) =
+            registry_b.register("connection".into()).await;
+
+        registry_b.remove_generation(&generation_a).await;
+
+        assert!(!cancel_a.is_cancelled());
+        assert!(!cancel_b.is_cancelled());
+        assert!(
+            registry_a
+                .send_to("connection", event("thread-a", "turn-a"))
+                .await
+        );
+        assert!(
+            registry_b
+                .send_to("connection", event("thread-b", "turn-b"))
+                .await
+        );
+        assert_eq!(
+            receiver_a.recv().await.map(|event| event.turn_id),
+            Some("turn-a".into())
+        );
+        assert_eq!(
+            receiver_b.recv().await.map(|event| event.turn_id),
+            Some("turn-b".into())
+        );
     }
 
     #[tokio::test]
