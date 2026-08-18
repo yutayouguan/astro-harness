@@ -41,6 +41,10 @@ struct ActiveAgentTurn {
 #[cfg(test)]
 type TerminalPersistenceHook =
     Arc<dyn Fn(&RunnerEvent) -> anyhow::Result<()> + Send + Sync + 'static>;
+#[cfg(test)]
+type BeforeCleanupHook = Arc<dyn Fn() + Send + Sync + 'static>;
+#[cfg(test)]
+type CleanupFailureHook = Arc<dyn Fn(&str) -> anyhow::Result<()> + Send + Sync + 'static>;
 
 struct StartTurnOwnerGuard<'a> {
     manager: &'a AgentRuntimeManager,
@@ -53,7 +57,13 @@ struct StartTurnOwnerGuard<'a> {
     session_id: String,
     interrupt_message: bool,
     armed: bool,
-    _permit: subagents::ExecutionPermit<'a>,
+    permit: Option<subagents::ExecutionPermit<'a>>,
+}
+
+struct FailedStartResources<'a> {
+    runtime_handle: AgentRuntimeHandle,
+    permit: subagents::ExecutionPermit<'a>,
+    terminated_tx: watch::Sender<Option<RunnerAck>>,
 }
 
 impl StartTurnOwnerGuard<'_> {
@@ -74,6 +84,10 @@ impl StartTurnOwnerGuard<'_> {
     fn disarm(&mut self) {
         self.armed = false;
     }
+
+    fn release_permit(&mut self) {
+        drop(self.permit.take());
+    }
 }
 
 impl Drop for StartTurnOwnerGuard<'_> {
@@ -81,80 +95,79 @@ impl Drop for StartTurnOwnerGuard<'_> {
         if !self.armed {
             return;
         }
-        let owns_turn = match self
+        let durable_result = self
+            .manager
+            .active_turn_matches(&self.thread_id, &self.turn_id)
+            .and_then(|owns_turn| {
+                if owns_turn {
+                    Ok(())
+                } else {
+                    anyhow::bail!(
+                        "cancelled agent turn no longer owns its active runtime generation"
+                    )
+                }
+            })
+            .and_then(|()| self.control.status_events(&self.thread_id))
+            .and_then(|events| {
+                let durable_running = events.last().is_some_and(|event| {
+                    matches!(
+                        &event.event,
+                        RunnerEvent::TurnStarted { turn_id } if turn_id == &self.turn_id
+                    )
+                });
+                if durable_running {
+                    Ok(())
+                } else {
+                    anyhow::bail!(
+                        "cancelled agent turn no longer has its durable Running projection"
+                    )
+                }
+            })
+            .and_then(|()| {
+                if self.interrupt_message {
+                    ensure_interrupted_history_boundary(
+                        &self.memory_dir,
+                        &self.session_id,
+                        "[astro:system]\nThe previous agent turn was interrupted because its runtime owner was dropped.",
+                    )
+                } else {
+                    Ok(())
+                }
+            })
+            .and_then(|()| {
+                self.manager.record_terminal_event(
+                    self.control,
+                    &self.thread_id,
+                    RunnerEvent::TurnInterrupted {
+                        turn_id: self.turn_id.clone(),
+                        reason: "start_turn future cancelled or owner dropped".into(),
+                    },
+                )?;
+                Ok(())
+            });
+
+        self.manager.run_before_cleanup_hook();
+        let active_result = self
             .manager
             .remove_active_if_turn(&self.thread_id, &self.turn_id)
-        {
-            Ok(owns_turn) => owns_turn,
-            Err(error) => {
-                tracing::warn!(
-                    thread_id = %self.thread_id,
-                    turn_id = %self.turn_id,
-                    %error,
-                    "failed to remove cancelled agent turn from active runtime map"
-                );
-                false
-            }
-        };
-        let durable_result = if owns_turn {
-            self.control
-                .status_events(&self.thread_id)
-                .and_then(|events| {
-                    let durable_running = events.last().is_some_and(|event| {
-                        matches!(
-                            &event.event,
-                            RunnerEvent::TurnStarted { turn_id } if turn_id == &self.turn_id
-                        )
-                    });
-                    if durable_running {
-                        Ok(())
-                    } else {
-                        anyhow::bail!(
-                            "cancelled agent turn no longer has its durable Running projection"
-                        )
-                    }
-                })
-                .and_then(|()| {
-                    if self.interrupt_message {
-                        ensure_interrupted_history_boundary(
-                            &self.memory_dir,
-                            &self.session_id,
-                            "[astro:system]\nThe previous agent turn was interrupted because its runtime owner was dropped.",
-                        )
-                    } else {
-                        Ok(())
-                    }
-                })
-                .and_then(|()| {
-                    self.manager.record_terminal_event(
-                        self.control,
-                        &self.thread_id,
-                        RunnerEvent::TurnInterrupted {
-                            turn_id: self.turn_id.clone(),
-                            reason: "start_turn future cancelled or owner dropped".into(),
-                        },
-                    )?;
-                    Ok(())
-                })
-        } else {
-            Err(anyhow::anyhow!(
-                "cancelled agent turn no longer owns its active runtime generation"
-            ))
-        };
-        if owns_turn {
-            if let Err(error) = self
-                .control
-                .remove_runtime_if_same(&self.thread_id, &self.runtime_handle)
-            {
-                tracing::warn!(
-                    thread_id = %self.thread_id,
-                    turn_id = %self.turn_id,
-                    %error,
-                    "failed to remove cancelled agent runtime handle"
-                );
-            }
-        }
-        match durable_result {
+            .and_then(|removed| {
+                self.manager.run_cleanup_failure_hook("active")?;
+                Ok(removed)
+            })
+            .map(|_| ());
+        let runtime_result = self
+            .control
+            .remove_runtime_if_same(&self.thread_id, &self.runtime_handle)
+            .and_then(|removed| {
+                self.manager.run_cleanup_failure_hook("runtime handle")?;
+                Ok(removed)
+            })
+            .map(|_| ());
+        self.release_permit();
+        self.disarm();
+        let completion_result =
+            combine_completion_results([durable_result, active_result, runtime_result]);
+        match completion_result {
             Ok(()) => self.publish_termination(AgentStatusV2::Interrupted),
             Err(error) => {
                 tracing::warn!(
@@ -183,6 +196,10 @@ pub struct AgentRuntimeManager {
     ack_subscribe_hook: Mutex<Option<AckSubscribeHook>>,
     #[cfg(test)]
     terminal_persistence_hook: Mutex<Option<TerminalPersistenceHook>>,
+    #[cfg(test)]
+    before_cleanup_hook: Mutex<Option<BeforeCleanupHook>>,
+    #[cfg(test)]
+    cleanup_failure_hook: Mutex<Option<CleanupFailureHook>>,
 }
 
 impl AgentRuntimeManager {
@@ -233,7 +250,11 @@ impl AgentRuntimeManager {
                 &thread_id,
                 &turn_id,
                 error.to_string(),
-                terminated_tx,
+                FailedStartResources {
+                    runtime_handle,
+                    permit,
+                    terminated_tx,
+                },
             )?;
             return Err(error);
         }
@@ -249,7 +270,7 @@ impl AgentRuntimeManager {
             session_id: request.thread.session_id.clone(),
             interrupt_message: request.runtime.interrupt_message,
             armed: true,
-            _permit: permit,
+            permit: Some(permit),
         };
 
         let result = run_request(&request, Arc::clone(&interrupt)).await;
@@ -317,17 +338,31 @@ impl AgentRuntimeManager {
                     Ok(())
                 }
             });
-        match &durable_result {
+        self.run_before_cleanup_hook();
+        let active_result = self
+            .remove_active_if_turn(&thread_id, &turn_id)
+            .and_then(|removed| {
+                self.run_cleanup_failure_hook("active")?;
+                Ok(removed)
+            });
+        let runtime_result = control
+            .remove_runtime_if_same(&thread_id, &owner_guard.runtime_handle)
+            .and_then(|removed| {
+                self.run_cleanup_failure_hook("runtime handle")?;
+                Ok(removed)
+            });
+        owner_guard.release_permit();
+        owner_guard.disarm();
+        let completion_result = combine_completion_results([
+            durable_result,
+            active_result.map(|_| ()),
+            runtime_result.map(|_| ()),
+        ]);
+        match &completion_result {
             Ok(()) => owner_guard.publish_termination(terminal_status.clone()),
             Err(error) => owner_guard.publish_failure(error),
         }
-        let active_result = self.remove_active_if_turn(&thread_id, &turn_id);
-        let runtime_result =
-            control.remove_runtime_if_same(&thread_id, &owner_guard.runtime_handle);
-        owner_guard.disarm();
-        durable_result?;
-        active_result?;
-        runtime_result?;
+        completion_result?;
 
         match result {
             Err(error) if !interrupt.is_interrupted() && !interrupt.is_closed() => Err(error),
@@ -391,6 +426,39 @@ impl AgentRuntimeManager {
         *self.terminal_persistence_hook.lock().unwrap() = hook;
     }
 
+    #[cfg(test)]
+    fn set_before_cleanup_hook(&self, hook: Option<BeforeCleanupHook>) {
+        *self.before_cleanup_hook.lock().unwrap() = hook;
+    }
+
+    #[cfg(test)]
+    fn run_before_cleanup_hook(&self) {
+        if let Some(hook) = self.before_cleanup_hook.lock().unwrap().clone() {
+            hook();
+        }
+    }
+
+    #[cfg(not(test))]
+    fn run_before_cleanup_hook(&self) {}
+
+    #[cfg(test)]
+    fn set_cleanup_failure_hook(&self, hook: Option<CleanupFailureHook>) {
+        *self.cleanup_failure_hook.lock().unwrap() = hook;
+    }
+
+    #[cfg(test)]
+    fn run_cleanup_failure_hook(&self, stage: &str) -> anyhow::Result<()> {
+        if let Some(hook) = self.cleanup_failure_hook.lock().unwrap().clone() {
+            hook(stage)?;
+        }
+        Ok(())
+    }
+
+    #[cfg(not(test))]
+    fn run_cleanup_failure_hook(&self, _stage: &str) -> anyhow::Result<()> {
+        Ok(())
+    }
+
     fn record_terminal_event(
         &self,
         control: &subagents::AgentControl,
@@ -415,7 +483,7 @@ impl AgentRuntimeManager {
         thread_id: &str,
         turn_id: &str,
         message: String,
-        terminated_tx: watch::Sender<Option<RunnerAck>>,
+        resources: FailedStartResources<'_>,
     ) -> anyhow::Result<()> {
         let status = AgentStatusV2::Errored {
             message: message.clone(),
@@ -428,20 +496,39 @@ impl AgentRuntimeManager {
                 message,
             },
         );
-        let _ = control.remove_runtime(thread_id);
-        let _ = self.remove_active_if_turn(thread_id, turn_id);
-        match &event_result {
-            Ok(_) => {
-                let _ = terminated_tx.send(Some(RunnerAck::Terminated(RunnerTermination {
-                    terminal_status: status,
-                })));
+        let active_result = self
+            .remove_active_if_turn(thread_id, turn_id)
+            .and_then(|removed| {
+                self.run_cleanup_failure_hook("active")?;
+                Ok(removed)
+            })
+            .map(|_| ());
+        let runtime_result = control
+            .remove_runtime_if_same(thread_id, &resources.runtime_handle)
+            .and_then(|removed| {
+                self.run_cleanup_failure_hook("runtime handle")?;
+                Ok(removed)
+            })
+            .map(|_| ());
+        drop(resources.permit);
+        let completion_result =
+            combine_completion_results([event_result.map(|_| ()), active_result, runtime_result]);
+        match &completion_result {
+            Ok(()) => {
+                let _ =
+                    resources
+                        .terminated_tx
+                        .send(Some(RunnerAck::Terminated(RunnerTermination {
+                            terminal_status: status,
+                        })));
             }
             Err(error) => {
-                let _ = terminated_tx.send(Some(RunnerAck::Failed(format!("{error:#}"))));
+                let _ = resources
+                    .terminated_tx
+                    .send(Some(RunnerAck::Failed(format!("{error:#}"))));
             }
         }
-        event_result?;
-        Ok(())
+        completion_result
     }
 
     fn remove_active_if_turn(&self, thread_id: &str, turn_id: &str) -> anyhow::Result<bool> {
@@ -455,12 +542,32 @@ impl AgentRuntimeManager {
         Ok(matches)
     }
 
+    fn active_turn_matches(&self, thread_id: &str, turn_id: &str) -> anyhow::Result<bool> {
+        Ok(self
+            .lock_active()?
+            .get(thread_id)
+            .is_some_and(|turn| turn.turn_id == turn_id))
+    }
+
     fn lock_active(
         &self,
     ) -> anyhow::Result<std::sync::MutexGuard<'_, HashMap<String, ActiveAgentTurn>>> {
         self.active
             .lock()
             .map_err(|_| anyhow::anyhow!("agent runtime manager mutex is poisoned"))
+    }
+}
+
+fn combine_completion_results(results: [anyhow::Result<()>; 3]) -> anyhow::Result<()> {
+    let errors = results
+        .into_iter()
+        .filter_map(Result::err)
+        .map(|error| format!("{error:#}"))
+        .collect::<Vec<_>>();
+    if errors.is_empty() {
+        Ok(())
+    } else {
+        anyhow::bail!(errors.join("; "))
     }
 }
 
@@ -828,6 +935,147 @@ mod tests {
                 RunnerEvent::TurnCompleted { .. }
             ]
         ));
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn success_ack_is_published_only_after_runtime_cleanup() {
+        let dir = tempfile::tempdir().unwrap();
+        let (control, thread) = setup(&dir, "worker");
+        let manager = Arc::new(AgentRuntimeManager::default());
+        let entered = Arc::new(tokio::sync::Notify::new());
+        let release = Arc::new(tokio::sync::Notify::new());
+        let ack_before_cleanup = Arc::new(AtomicBool::new(false));
+        let active_before_cleanup = Arc::new(AtomicBool::new(false));
+        let handle_before_cleanup = Arc::new(AtomicBool::new(false));
+        let permit_before_cleanup = Arc::new(AtomicBool::new(false));
+        let run = request(
+            Arc::clone(&control),
+            thread.clone(),
+            dir.path().join("memory"),
+            gated_scripted_chat(Arc::clone(&entered), Arc::clone(&release), "finished"),
+        );
+
+        let (run_result, observed_ack) = tokio::join!(manager.start_turn(run), async {
+            entered.notified().await;
+            let (_, observer) = manager.termination_subscription(&thread.thread_id).unwrap();
+            let observer_for_hook = observer.clone();
+            let manager_for_hook = Arc::clone(&manager);
+            let control_for_hook = Arc::clone(&control);
+            let thread_id = thread.thread_id.clone();
+            let ack_before_cleanup_for_hook = Arc::clone(&ack_before_cleanup);
+            let active_before_cleanup_for_hook = Arc::clone(&active_before_cleanup);
+            let handle_before_cleanup_for_hook = Arc::clone(&handle_before_cleanup);
+            let permit_before_cleanup_for_hook = Arc::clone(&permit_before_cleanup);
+            manager.set_before_cleanup_hook(Some(Arc::new(move || {
+                ack_before_cleanup_for_hook
+                    .store(observer_for_hook.borrow().is_some(), Ordering::SeqCst);
+                active_before_cleanup_for_hook
+                    .store(manager_for_hook.is_running(&thread_id), Ordering::SeqCst);
+                handle_before_cleanup_for_hook.store(
+                    control_for_hook
+                        .runtime_handle(&thread_id)
+                        .unwrap()
+                        .is_some(),
+                    Ordering::SeqCst,
+                );
+                permit_before_cleanup_for_hook.store(
+                    control_for_hook.acquire_execution(&thread_id).is_ok(),
+                    Ordering::SeqCst,
+                );
+            })));
+            release.notify_one();
+            wait_for_termination(observer, "cleanup ordering observer").await
+        });
+
+        run_result.unwrap();
+        assert_eq!(
+            observed_ack.unwrap().terminal_status,
+            AgentStatusV2::Completed {
+                last_message: "finished".into()
+            }
+        );
+        assert!(!ack_before_cleanup.load(Ordering::SeqCst));
+        assert!(active_before_cleanup.load(Ordering::SeqCst));
+        assert!(handle_before_cleanup.load(Ordering::SeqCst));
+        assert!(!permit_before_cleanup.load(Ordering::SeqCst));
+        assert!(!manager.is_running(&thread.thread_id));
+        assert!(control.runtime_handle(&thread.thread_id).unwrap().is_none());
+        let permit = control.acquire_execution(&thread.thread_id).unwrap();
+        drop(permit);
+        manager.set_before_cleanup_hook(None);
+        manager
+            .start_turn(request(
+                Arc::clone(&control),
+                thread,
+                dir.path().join("memory"),
+                scripted_chat("follow-up completed"),
+            ))
+            .await
+            .unwrap();
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn cleanup_failures_publish_one_shared_failed_ack_after_best_effort_cleanup() {
+        let dir = tempfile::tempdir().unwrap();
+        let (control, thread) = setup(&dir, "worker");
+        let manager = Arc::new(AgentRuntimeManager::default());
+        let entered = Arc::new(tokio::sync::Notify::new());
+        let release = Arc::new(tokio::sync::Notify::new());
+        let run = request(
+            Arc::clone(&control),
+            thread.clone(),
+            dir.path().join("memory"),
+            gated_scripted_chat(Arc::clone(&entered), Arc::clone(&release), "finished"),
+        );
+
+        let (run_result, (observed_ack, second_observer)) =
+            tokio::join!(manager.start_turn(run), async {
+                entered.notified().await;
+                let (_, observer) = manager.termination_subscription(&thread.thread_id).unwrap();
+                let second_observer = observer.clone();
+                manager.set_cleanup_failure_hook(Some(Arc::new(|stage| {
+                    anyhow::bail!("injected {stage} cleanup failure")
+                })));
+                release.notify_one();
+                (
+                    wait_for_termination(observer, "cleanup failure observer").await,
+                    second_observer,
+                )
+            });
+
+        let run_error = run_result.unwrap_err().to_string();
+        let ack_error = observed_ack.unwrap_err().to_string();
+        let second_error = wait_for_termination(second_observer, "second cleanup failure observer")
+            .await
+            .unwrap_err()
+            .to_string();
+        for error in [&run_error, &ack_error, &second_error] {
+            assert!(error.contains("injected active cleanup failure"));
+            assert!(error.contains("injected runtime handle cleanup failure"));
+        }
+        assert!(!manager.is_running(&thread.thread_id));
+        assert!(control.runtime_handle(&thread.thread_id).unwrap().is_none());
+        let permit = control.acquire_execution(&thread.thread_id).unwrap();
+        drop(permit);
+        assert_eq!(
+            control
+                .resolve_target(&AgentPath::root(), "worker")
+                .unwrap()
+                .status,
+            AgentStatusV2::Completed {
+                last_message: "finished".into()
+            }
+        );
+        manager.set_cleanup_failure_hook(None);
+        manager
+            .start_turn(request(
+                Arc::clone(&control),
+                thread,
+                dir.path().join("memory"),
+                scripted_chat("follow-up completed"),
+            ))
+            .await
+            .unwrap();
     }
 
     #[tokio::test(flavor = "current_thread")]
@@ -1231,6 +1479,56 @@ mod tests {
                 .unwrap()
                 .status,
             AgentStatusV2::Running
+        );
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn aborted_owner_cleanup_failures_publish_one_shared_failed_ack() {
+        let dir = tempfile::tempdir().unwrap();
+        let (control, thread) = setup(&dir, "worker");
+        let manager = Arc::new(AgentRuntimeManager::default());
+        let barrier = Arc::new(tokio::sync::Barrier::new(2));
+        let owner = tokio::spawn({
+            let manager = Arc::clone(&manager);
+            let request = request(
+                Arc::clone(&control),
+                thread.clone(),
+                dir.path().join("memory"),
+                barrier_pending_chat(Arc::clone(&barrier)),
+            );
+            async move { manager.start_turn(request).await }
+        });
+
+        barrier.wait().await;
+        manager.set_cleanup_failure_hook(Some(Arc::new(|stage| {
+            anyhow::bail!("injected owner-drop {stage} cleanup failure")
+        })));
+        let (_, termination) = manager.termination_subscription(&thread.thread_id).unwrap();
+        let second_observer = termination.clone();
+        owner.abort();
+        assert!(owner.await.unwrap_err().is_cancelled());
+
+        for (observer, operation) in [
+            (termination, "owner cleanup failure"),
+            (second_observer, "second owner cleanup failure"),
+        ] {
+            let error = wait_for_termination(observer, operation)
+                .await
+                .unwrap_err()
+                .to_string();
+            assert!(error.contains("injected owner-drop active cleanup failure"));
+            assert!(error.contains("injected owner-drop runtime handle cleanup failure"));
+        }
+        assert!(!manager.is_running(&thread.thread_id));
+        assert!(control.runtime_handle(&thread.thread_id).unwrap().is_none());
+        let permit = control.acquire_execution(&thread.thread_id).unwrap();
+        drop(permit);
+        assert_eq!(
+            control
+                .resolve_target(&AgentPath::root(), "worker")
+                .unwrap()
+                .status,
+            AgentStatusV2::Interrupted
         );
     }
 
