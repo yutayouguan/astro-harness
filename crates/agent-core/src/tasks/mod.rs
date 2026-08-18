@@ -229,7 +229,7 @@ impl Session {
             .await;
 
         done.notify_one();
-        let mut sess = session.lock().await;
+        let sess = session.lock().await;
         {
             let mut active_turn = sess.active_turn.lock().await;
             if let Some(turn) = active_turn.as_mut() {
@@ -288,7 +288,7 @@ impl Session {
                 )
             })?;
 
-        let mut sess = session.lock().await;
+        let sess = session.lock().await;
         {
             let mut active_turn = sess.active_turn.lock().await;
             if let Some(turn) = active_turn.as_mut() {
@@ -420,7 +420,7 @@ mod tests {
             .unwrap(),
         ));
         let turn_context = {
-            let mut sess = session.lock().await;
+            let sess = session.lock().await;
             sess.create_turn_context("turn-abort".into()).await
         };
         let started = Arc::new(Notify::new());

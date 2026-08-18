@@ -348,7 +348,7 @@ impl AstroServiceImpl {
             .fire_plugin(::hooks::ON_SESSION_FINALIZE, &payload);
 
         if let Some(handle) = self.release_session_runtime(session_id).await {
-            let mut agent = handle.lock().await;
+            let agent = handle.lock().await;
             let bus = agent.hook_bus();
             let turn_id = agent.current_turn_id().await;
             let payload = ::hooks::HookPayload {

@@ -28,7 +28,7 @@ async fn test_turn_budget_enforcement() {
     let dir = TempDir::new().unwrap();
     let mut config = test_config(&dir);
     config.max_turns = 2;
-    let mut agent = AgentLoop::new(config).unwrap();
+    let agent = AgentLoop::new(config).unwrap();
     assert!(!agent.is_budget_exhausted().await);
     agent.increment_turn().await;
     agent.increment_turn().await;

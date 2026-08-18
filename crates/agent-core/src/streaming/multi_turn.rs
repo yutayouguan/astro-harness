@@ -78,7 +78,7 @@ pub async fn run_multi_turn_stream(args: MultiTurnStreamArgs) {
     };
     let sub_id = uuid::Uuid::new_v4().to_string();
     let turn_context = {
-        let mut sess = session.lock().await;
+        let sess = session.lock().await;
         sess.create_turn_context(sub_id.clone()).await
     };
     let task = RegularTask::new(RunTurnArgs {
@@ -567,7 +567,7 @@ pub(crate) async fn run_turn(args: RunTurnArgs, cancellation_token: Cancellation
         // `pre_verify` hook
         if calls.is_empty() {
             let verify_outcome = {
-                let mut agent = session.lock().await;
+                let agent = session.lock().await;
                 if agent.turn_wrote_disk().await && verify_attempt < MAX_VERIFY_ATTEMPTS {
                     verify_attempt += 1;
                     let sid = agent.session_id().to_string();
@@ -631,7 +631,7 @@ pub(crate) async fn run_turn(args: RunTurnArgs, cancellation_token: Cancellation
         }
 
         {
-            let mut agent = session.lock().await;
+            let agent = session.lock().await;
             let sid = agent.session_id().to_string();
             let turn_id = agent.current_turn_id().await;
             let transformed = agent.fire_hook(
@@ -849,7 +849,7 @@ pub(crate) async fn run_turn(args: RunTurnArgs, cancellation_token: Cancellation
     }
 
     {
-        let mut agent = session.lock().await;
+        let agent = session.lock().await;
         let sid = agent.session_id().to_string();
         let turn = agent.session_turn().await;
         let turn_id = agent.current_turn_id().await;

@@ -238,7 +238,7 @@ impl Session {
     }
 
     /// 绑定当前流式 run 的 turn_id（约定与 `run_id` 相同）。
-    pub async fn set_current_turn_id(&mut self, turn_id: impl Into<String>) {
+    pub async fn set_current_turn_id(&self, turn_id: impl Into<String>) {
         let sub_id = turn_id.into();
         let mut state = self.state.lock().await;
         let turn_context = Arc::new(TurnContext::new(
@@ -254,7 +254,7 @@ impl Session {
         state.current_turn_context = Some(turn_context);
     }
 
-    pub(crate) async fn create_turn_context(&mut self, sub_id: String) -> Arc<TurnContext> {
+    pub(crate) async fn create_turn_context(&self, sub_id: String) -> Arc<TurnContext> {
         let state = self.state.lock().await;
         Arc::new(TurnContext::new(
             sub_id,
@@ -274,7 +274,7 @@ impl Session {
     }
 
     /// 清除当前 turn_id（run 结束或中断时调用）。
-    pub async fn clear_current_turn_id(&mut self) {
+    pub async fn clear_current_turn_id(&self) {
         let mut state = self.state.lock().await;
         state.turn.clear_current_turn_id();
         state.current_turn_context = None;
@@ -282,7 +282,7 @@ impl Session {
     }
 
     /// 当前绑定的 turn_id（若有）。
-    pub async fn current_turn_id(&mut self) -> Option<String> {
+    pub async fn current_turn_id(&self) -> Option<String> {
         self.state
             .lock()
             .await
@@ -325,7 +325,7 @@ impl Session {
     }
 
     /// 取出并清空本轮 `pre_llm_call` 注入上下文。
-    pub async fn take_inject_context(&mut self) -> Option<String> {
+    pub async fn take_inject_context(&self) -> Option<String> {
         self.state.lock().await.pending_inject_context.take()
     }
 
@@ -334,12 +334,12 @@ impl Session {
     /// 供 `pre_verify` 的 `KeepGoing(msg)` 等下游控制流场景使用：不回写
     /// `session_messages`，仅在下一轮构建 API history 时以 `[astro:hook-context]`
     /// 形式追加一条 user 消息。
-    pub async fn queue_inject_context(&mut self, ctx: impl Into<String>) {
+    pub async fn queue_inject_context(&self, ctx: impl Into<String>) {
         self.state.lock().await.pending_inject_context = Some(ctx.into());
     }
 
     /// 当前会话轮次序号（从 1 起，未开始为 0）。
-    pub async fn session_turn(&mut self) -> usize {
+    pub async fn session_turn(&self) -> usize {
         self.state.lock().await.turn.current_turn()
     }
 
@@ -374,7 +374,7 @@ impl Session {
     }
 
     /// 当前用户消息的工具深度是否已达 `multi_turn` 上限。
-    pub async fn is_tool_depth_exhausted(&mut self) -> bool {
+    pub async fn is_tool_depth_exhausted(&self) -> bool {
         self.state
             .lock()
             .await
@@ -395,11 +395,11 @@ impl Session {
         self.compression_config().protect_first_messages.max(1)
     }
 
-    pub async fn mid_run_summary_done(&mut self) -> bool {
+    pub async fn mid_run_summary_done(&self) -> bool {
         self.state.lock().await.compression.mid_run_summary_done()
     }
 
-    pub async fn mid_run_handoff(&mut self) -> Option<String> {
+    pub async fn mid_run_handoff(&self) -> Option<String> {
         self.state
             .lock()
             .await
@@ -408,7 +408,7 @@ impl Session {
             .map(str::to_owned)
     }
 
-    pub async fn set_mid_run_handoff(&mut self, text: String) {
+    pub async fn set_mid_run_handoff(&self, text: String) {
         self.state
             .lock()
             .await
@@ -416,7 +416,7 @@ impl Session {
             .set_mid_run_handoff(text);
     }
 
-    pub async fn mark_mid_run_summary_skipped(&mut self) {
+    pub async fn mark_mid_run_summary_skipped(&self) {
         self.state
             .lock()
             .await
@@ -424,7 +424,7 @@ impl Session {
             .mark_mid_run_summary_skipped();
     }
 
-    pub async fn should_recommend_compact(&mut self) -> bool {
+    pub async fn should_recommend_compact(&self) -> bool {
         self.state
             .lock()
             .await
@@ -432,17 +432,17 @@ impl Session {
             .should_recommend_compact()
     }
 
-    pub async fn take_recommend_compact(&mut self) -> bool {
+    pub async fn take_recommend_compact(&self) -> bool {
         self.state.lock().await.compression.take_recommend_compact()
     }
 
     /// 本轮用户消息内是否已发生磁盘写入（`terminal` / `file_ops` 写类操作）。
-    pub async fn turn_wrote_disk(&mut self) -> bool {
+    pub async fn turn_wrote_disk(&self) -> bool {
         self.state.lock().await.turn.turn_wrote_disk()
     }
 
     /// 递增工具轮次计数；超出 `multi_turn` 时返回 [`MaxDepthError`]。
-    pub async fn increment_tool_round(&mut self) -> Result<(), MaxDepthError> {
+    pub async fn increment_tool_round(&self) -> Result<(), MaxDepthError> {
         self.state
             .lock()
             .await
@@ -864,7 +864,7 @@ impl Session {
     }
 
     /// 最近一次记忆召回的格式化文本，已注入动态上下文。
-    pub async fn recalled_context(&mut self) -> String {
+    pub async fn recalled_context(&self) -> String {
         self.state
             .lock()
             .await
@@ -879,7 +879,7 @@ impl Session {
     }
 
     /// 会话轮次预算是否已耗尽（`current_turn >= max_turns`）。
-    pub async fn is_budget_exhausted(&mut self) -> bool {
+    pub async fn is_budget_exhausted(&self) -> bool {
         self.state
             .lock()
             .await
@@ -888,7 +888,7 @@ impl Session {
     }
 
     /// 递增会话轮次计数（每处理一条用户消息调用一次）。
-    pub async fn increment_turn(&mut self) {
+    pub async fn increment_turn(&self) {
         self.state.lock().await.turn.increment_turn();
     }
 
@@ -898,16 +898,16 @@ impl Session {
     }
 
     /// 设置本轮交互模式（Plan/Ask 启用只读工具门禁）。
-    pub async fn set_interaction_mode(&mut self, mode: types::InteractionMode) {
+    pub async fn set_interaction_mode(&self, mode: types::InteractionMode) {
         self.state.lock().await.interaction_mode = mode;
     }
 
-    pub async fn interaction_mode(&mut self) -> types::InteractionMode {
+    pub async fn interaction_mode(&self) -> types::InteractionMode {
         self.state.lock().await.interaction_mode
     }
 
     /// 按当前交互模式过滤后的工具 schema（OpenAI tools 数组）。
-    pub async fn schemas_for_api(&mut self) -> Vec<serde_json::Value> {
+    pub async fn schemas_for_api(&self) -> Vec<serde_json::Value> {
         tools::filter_schemas(
             self.state.lock().await.interaction_mode,
             self.tool_registry.schemas_for_api(),
@@ -1015,7 +1015,7 @@ mod tests {
     #[tokio::test]
     async fn new_task_context_snapshots_the_next_turn_ordinal() {
         let dir = TempDir::new().unwrap();
-        let mut session = Session::new(test_config(&dir)).unwrap();
+        let session = Session::new(test_config(&dir)).unwrap();
 
         let first = session.create_turn_context("turn-1".into()).await;
         assert_eq!(first.turn(), 1);
@@ -1045,6 +1045,36 @@ mod tests {
         fn assert_send_sync<T: Send + Sync>() {}
 
         assert_send_sync::<Session>();
+    }
+
+    #[test]
+    fn session_state_api_is_callable_through_arc() {
+        fn assert_arc_api(session: Arc<Session>) {
+            let _ = session.set_current_turn_id("turn");
+            let _ = session.create_turn_context("turn".to_string());
+            let _ = session.clear_current_turn_id();
+            let _ = session.current_turn_id();
+            let _ = session.take_inject_context();
+            let _ = session.queue_inject_context("context");
+            let _ = session.session_turn();
+            let _ = session.is_tool_depth_exhausted();
+            let _ = session.mid_run_summary_done();
+            let _ = session.mid_run_handoff();
+            let _ = session.set_mid_run_handoff("handoff".to_string());
+            let _ = session.mark_mid_run_summary_skipped();
+            let _ = session.should_recommend_compact();
+            let _ = session.take_recommend_compact();
+            let _ = session.turn_wrote_disk();
+            let _ = session.increment_tool_round();
+            let _ = session.recalled_context();
+            let _ = session.is_budget_exhausted();
+            let _ = session.increment_turn();
+            let _ = session.set_interaction_mode(types::InteractionMode::Agent);
+            let _ = session.interaction_mode();
+            let _ = session.schemas_for_api();
+        }
+
+        let _ = assert_arc_api;
     }
 
     #[test]

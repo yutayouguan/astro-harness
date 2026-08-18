@@ -29,7 +29,7 @@ pub(super) async fn record_llm_usage(
     if usage.is_empty() {
         return;
     }
-    let mut agent = session.lock().await;
+    let agent = session.lock().await;
     let agent_id = agent.agent_id().to_string();
     let session_id = agent.session_id().to_string();
     let turn_id = agent.current_turn_id().await;

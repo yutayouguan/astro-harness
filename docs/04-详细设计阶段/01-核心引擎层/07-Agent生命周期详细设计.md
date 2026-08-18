@@ -1,6 +1,6 @@
 # Agent 生命周期详细设计
 
-> 版本：v2.7
+> 版本：v2.8
 > 日期：2026-08-18
 > 状态：实施基线  
 > 上游参考：[OpenAI Codex](https://github.com/openai/codex) `632e35ce8d5dec43b75dbf99f9e6fa52bed47c3d`  
@@ -513,6 +513,8 @@ schema 和 RPC 字段改名都必须提供 migration 或 serde alias。
   - [x] 将 `Session.state` 升级为内部 `Mutex<SessionState>`。
   - [x] 将同步 `ConversationStore` 与 `CompressionPolicy` 收口到 Codex 同名
     `SessionServices`，并用编译期断言锁定 `Session: Send + Sync`。
+  - [x] 将已由 `Session.state` 保护的轮次、压缩、注入上下文与交互模式 API
+    收窄为 `&self`，并用 `Arc<Session>` 编译期契约锁定。
   - [ ] 将 `SessionTask`、streaming、background 和 server 签名迁移为 `Arc<Session>`。
 
 v2.3 落地说明：foreground、background、Cron 与 SubAgent 不再先调用
@@ -549,6 +551,15 @@ v2.7 内锁化批次 4：新增 Codex 同名 `SessionServices`，将会话级同
 均不跨 provider、工具或其他 `await`。`session_is_send_and_sync` 以编译期断言固定
 `Session: Send + Sync`。本批不移除迁移期的外层 `Arc<Mutex<Session>>`；下一批再逐层改为
 `Arc<Session>` 并收窄可变接口。
+
+v2.8 内锁化批次 5：将 `set_current_turn_id`、`create_turn_context`、
+`increment_tool_round`、`take_inject_context`、`schemas_for_api` 等 22 个仅访问内部
+`Session.state` 或只读会话配置的 API 从 `&mut self` 收窄为 `&self`。
+`session_state_api_is_callable_through_arc` 以 `Arc<Session>` 直接构造这些 future，在编译期
+阻止可变接口回退；streaming、tool execution 与 task registry 中因此多余的
+17 处生产路径可变 guard 同步移除。本批仍保留外层 `Arc<Mutex<Session>>`：剩余阻塞集中在
+conversation history、`MemoryManager`、`ToolRegistry` 和 MCP 热加载等真实可变状态，
+后续批次须先继续收口这些所有权边界，再替换 `SessionTask` 与 server 的 handle 类型。
 
 ### Phase C：工具运行时
 

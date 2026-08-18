@@ -265,7 +265,7 @@ pub(super) async fn run_sampling_request(
     tool_specs: Vec<serde_json::Value>,
 ) -> Result<super::types::AssistantContentStream, String> {
     {
-        let mut agent = session.lock().await;
+        let agent = session.lock().await;
         let sid = agent.session_id().to_string();
         let turn_id = agent.current_turn_id().await;
         let _ = agent.fire_hook(
@@ -282,7 +282,7 @@ pub(super) async fn run_sampling_request(
         .await
     {
         Ok(s) => {
-            let mut agent = session.lock().await;
+            let agent = session.lock().await;
             let sid = agent.session_id().to_string();
             let turn_id = agent.current_turn_id().await;
             let _ = agent.fire_hook(
@@ -296,7 +296,7 @@ pub(super) async fn run_sampling_request(
             Ok(s)
         }
         Err(err) => {
-            let mut agent = session.lock().await;
+            let agent = session.lock().await;
             let sid = agent.session_id().to_string();
             let turn_id = agent.current_turn_id().await;
             let _ = agent.fire_hook(
