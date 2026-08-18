@@ -228,17 +228,8 @@ impl Session {
         F: Future<Output = ()>,
     {
         let _admission = self.task_admission.lock().await;
-        if let Err(error) = self.abort_all_tasks_inner(TurnAbortReason::Replaced).await {
-            let Some(previous_turn_id) = self.current_turn_id().await else {
-                return Err(error);
-            };
-            tracing::warn!(
-                %error,
-                %previous_turn_id,
-                "waiting for the previous task supervisor before replacement"
-            );
-            self.wait_for_task(&previous_turn_id).await;
-        }
+        self.abort_all_tasks_inner(TurnAbortReason::Replaced)
+            .await?;
 
         let task: Arc<dyn AnySessionTask> = Arc::new(task);
         let cancellation_token = CancellationToken::new();
@@ -314,6 +305,27 @@ impl Session {
         if let Some(completion) = completion {
             completion.cancelled().await;
         }
+    }
+
+    pub(crate) async fn terminating_turn_id(&self) -> Option<String> {
+        if let Some(running) = self
+            .active_turn
+            .lock()
+            .await
+            .as_ref()
+            .and_then(|turn| turn.task.as_ref())
+        {
+            return running
+                .cancellation_token
+                .is_cancelled()
+                .then(|| running.turn_context.sub_id().to_string());
+        }
+        let turn_id = self.current_turn_id().await?;
+        self.task_completions
+            .lock()
+            .await
+            .contains_key(&turn_id)
+            .then_some(turn_id)
     }
 
     async fn complete_task_lifecycle(&self, turn_id: &str, completion: &CancellationToken) {
@@ -504,12 +516,12 @@ impl Session {
 
 #[cfg(test)]
 mod tests {
-    use std::sync::atomic::{AtomicBool, Ordering};
+    use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
     use agent_rollout::{RolloutRecorder, ThreadHistoryMode};
 
     use super::*;
-    use crate::runtime::{AstroThread, Config};
+    use crate::runtime::{AgentStatus, AstroThread, Config};
 
     struct NoopTask;
 
@@ -1300,6 +1312,169 @@ mod tests {
         async fn abort(&self, _session: Arc<Session>, _ctx: Arc<TurnContext>) {
             self.hook_called.store(true, Ordering::SeqCst);
         }
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn shutdown_waits_for_real_task_completion_and_is_shared_by_all_callers() {
+        let (_dir, session, thread) = task_test_thread("sync-run-shutdown-test").await;
+        let finalize_hits = Arc::new(AtomicUsize::new(0));
+        let finalize_counter = Arc::clone(&finalize_hits);
+        session
+            .hook_bus
+            .register(::hooks::ON_SESSION_FINALIZE, move |_| {
+                finalize_counter.fetch_add(1, Ordering::SeqCst);
+                ::hooks::HookOutcome::Continue
+            });
+        let run_started = Arc::new(Notify::new());
+        let hook_called = Arc::new(AtomicBool::new(false));
+        let (release_tx, release_rx) = std::sync::mpsc::channel();
+        let context = session
+            .create_turn_context("turn-sync-run-shutdown".into())
+            .await;
+        session
+            .spawn_task(
+                context,
+                Vec::new(),
+                SyncBlockingRunTask {
+                    run_started: Arc::clone(&run_started),
+                    run_release: std::sync::Mutex::new(release_rx),
+                    hook_called,
+                },
+            )
+            .await
+            .unwrap();
+        run_started.notified().await;
+
+        thread.submit(agent_protocol::Op::Shutdown).await.unwrap();
+        while !session.cancel_signal().is_cancelled() {
+            tokio::task::yield_now().await;
+        }
+        let concurrent_shutdown = tokio::spawn({
+            let session = Arc::clone(&session);
+            async move { session.shutdown_runtime().await }
+        });
+
+        tokio::time::sleep(Duration::from_millis(150)).await;
+        assert_ne!(thread.status(), AgentStatus::Shutdown);
+        assert!(!concurrent_shutdown.is_finished());
+        assert!(
+            tokio::time::timeout(Duration::from_millis(10), thread.wait_terminated())
+                .await
+                .is_err(),
+            "thread termination must wait for the blocked run to really exit"
+        );
+
+        release_tx.send(()).unwrap();
+        tokio::time::timeout(Duration::from_secs(1), concurrent_shutdown)
+            .await
+            .expect("all shutdown callers should observe the shared completion")
+            .unwrap();
+        tokio::time::timeout(Duration::from_secs(1), thread.wait_terminated())
+            .await
+            .expect("thread should terminate after the task lifecycle completes");
+        assert_eq!(thread.status(), AgentStatus::Shutdown);
+        assert_eq!(finalize_hits.load(Ordering::SeqCst), 1);
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn terminating_task_rejects_new_turn_without_blocking_actor_controls() {
+        let (_dir, session, thread) = task_test_thread("terminating-control-test").await;
+        let run_started = Arc::new(Notify::new());
+        let hook_called = Arc::new(AtomicBool::new(false));
+        let (release_tx, release_rx) = std::sync::mpsc::channel();
+        let context = session
+            .create_turn_context("turn-terminating-control".into())
+            .await;
+        session
+            .spawn_task(
+                context,
+                Vec::new(),
+                SyncBlockingRunTask {
+                    run_started: Arc::clone(&run_started),
+                    run_release: std::sync::Mutex::new(release_rx),
+                    hook_called,
+                },
+            )
+            .await
+            .unwrap();
+        run_started.notified().await;
+
+        thread.submit(agent_protocol::Op::Interrupt).await.unwrap();
+        let abort_error = tokio::time::timeout(Duration::from_millis(250), thread.next_event())
+            .await
+            .expect("interrupt should return its bounded abort error")
+            .unwrap();
+        assert!(matches!(
+            abort_error.msg,
+            agent_protocol::EventMsg::Error(_)
+        ));
+
+        let (_, result) = tokio::time::timeout(
+            Duration::from_millis(250),
+            thread.submit_turn(
+                agent_protocol::TurnInputRequest {
+                    input: vec![TurnInput {
+                        content: "must not start yet".into(),
+                        image_data_urls: Vec::new(),
+                    }],
+                },
+                agent_protocol::TurnInputMode::StartIfIdle,
+            ),
+        )
+        .await
+        .expect("terminating admission must not block the submission actor")
+        .unwrap();
+        assert!(matches!(
+            result,
+            agent_protocol::TurnInputSubmission::NotSubmitted { ref reason }
+                if reason == "terminating"
+        ));
+        let (_, result) = tokio::time::timeout(
+            Duration::from_millis(250),
+            thread.submit_turn(
+                agent_protocol::TurnInputRequest {
+                    input: vec![TurnInput {
+                        content: "must not steer a detached terminating task".into(),
+                        image_data_urls: Vec::new(),
+                    }],
+                },
+                agent_protocol::TurnInputMode::StartOrSteer,
+            ),
+        )
+        .await
+        .expect("start-or-steer must also reject a terminating lifecycle promptly")
+        .unwrap();
+        assert!(matches!(
+            result,
+            agent_protocol::TurnInputSubmission::NotSubmitted { ref reason }
+                if reason == "terminating"
+        ));
+
+        thread
+            .submit(agent_protocol::Op::EmitExtension {
+                item: agent_protocol::ExtensionItem {
+                    id: "control-probe".into(),
+                    namespace: "control_probe".into(),
+                    payload: serde_json::json!({"responsive": true}),
+                },
+            })
+            .await
+            .unwrap();
+        let extension = tokio::time::timeout(Duration::from_millis(250), thread.next_event())
+            .await
+            .expect("extension control must remain responsive")
+            .unwrap();
+        assert!(matches!(
+            extension.msg,
+            agent_protocol::EventMsg::ItemCompleted(_)
+        ));
+
+        release_tx.send(()).unwrap();
+        session.wait_for_task("turn-terminating-control").await;
+        thread.submit(agent_protocol::Op::Shutdown).await.unwrap();
+        tokio::time::timeout(Duration::from_secs(1), thread.wait_terminated())
+            .await
+            .unwrap();
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]

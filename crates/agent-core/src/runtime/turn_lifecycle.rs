@@ -116,15 +116,27 @@ impl Session {
                 "turn input must contain text or an image".into(),
             ));
         }
+        let active_turn_id = self.active_turn_id().await;
+        if active_turn_id.is_none()
+            && matches!(
+                mode,
+                TurnInputMode::StartOrSteer | TurnInputMode::StartIfIdle
+            )
+            && self.terminating_turn_id().await.is_some()
+        {
+            return Ok(TurnInputSubmission::NotSubmitted {
+                reason: "terminating".into(),
+            });
+        }
         match mode {
-            TurnInputMode::StartOrSteer => match self.active_turn_id().await {
+            TurnInputMode::StartOrSteer => match active_turn_id {
                 Some(turn_id) => self.steer_turn(Some(&turn_id), request.input).await,
                 None => {
                     self.start_turn(submission_id, request.input, chat_override)
                         .await
                 }
             },
-            TurnInputMode::StartIfIdle => match self.active_turn_id().await {
+            TurnInputMode::StartIfIdle => match active_turn_id {
                 Some(_) => Ok(TurnInputSubmission::NotSubmitted {
                     reason: "not_idle".into(),
                 }),
@@ -146,6 +158,7 @@ impl Session {
             .as_ref()?
             .task
             .as_ref()
+            .filter(|running| !running.cancellation_token.is_cancelled())
             .map(|running| running.turn_context.sub_id().to_string())
     }
 

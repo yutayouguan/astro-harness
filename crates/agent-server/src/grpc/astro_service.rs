@@ -439,6 +439,15 @@ impl AstroServiceImpl {
         let operation = self.generation_operation(session_id);
         let (registration, old_registration, old_registry_gate) = {
             let _admission = operation.lock().await;
+            let is_current_session = self
+                .sessions
+                .read()
+                .await
+                .get(session_id)
+                .is_some_and(|current| Arc::ptr_eq(current, session));
+            if !is_current_session {
+                return None;
+            }
             if let Some(current_gate) = self.hitl_registry.get(session_id).await {
                 if current_gate.is_waiting().await {
                     return None;
@@ -481,6 +490,7 @@ impl AstroServiceImpl {
         Some(registration)
     }
 
+    #[cfg(test)]
     async fn launch_current_pause_generation_with<F, Fut, T>(
         &self,
         session_id: &str,
@@ -491,6 +501,31 @@ impl AstroServiceImpl {
         F: FnOnce() -> Fut,
         Fut: Future<Output = T>,
     {
+        let session = registration.session.upgrade()?;
+        self.launch_current_pause_generation_with_setup(
+            session_id,
+            registration,
+            &session,
+            |_| async {},
+            launch,
+        )
+        .await
+    }
+
+    async fn launch_current_pause_generation_with_setup<S, SetupFut, F, Fut, T>(
+        &self,
+        session_id: &str,
+        registration: &PauseRegistration,
+        session: &SessionHandle,
+        setup: S,
+        launch: F,
+    ) -> Option<T>
+    where
+        S: FnOnce(SessionHandle) -> SetupFut,
+        SetupFut: Future<Output = ()>,
+        F: FnOnce() -> Fut,
+        Fut: Future<Output = T>,
+    {
         let _admission = registration.operation.lock().await;
         let is_current = self
             .pause_controls
@@ -498,9 +533,24 @@ impl AstroServiceImpl {
             .await
             .get(session_id)
             .is_some_and(|current| Arc::ptr_eq(&current.control, &registration.control));
-        if !is_current || registration.control.is_cancelled() {
+        let is_current_session = self
+            .sessions
+            .read()
+            .await
+            .get(session_id)
+            .is_some_and(|current| Arc::ptr_eq(current, session));
+        let registration_matches_session = registration
+            .session
+            .upgrade()
+            .is_some_and(|registered| Arc::ptr_eq(&registered, session));
+        if !is_current
+            || !is_current_session
+            || !registration_matches_session
+            || registration.control.is_cancelled()
+        {
             return None;
         }
+        setup(Arc::clone(session)).await;
         Some(launch().await)
     }
 
@@ -562,14 +612,9 @@ impl AstroServiceImpl {
     ) -> anyhow::Result<Option<PauseRegistration>> {
         self.cancel_current_pause_generation_with(session_id, |session| async move {
             if let Some(session) = session {
-                let turn_id = session.current_turn_id().await;
-                let abort_result = session.abort_all_tasks(TurnAbortReason::Interrupted).await;
-                if abort_result.is_err() {
-                    if let Some(turn_id) = turn_id {
-                        session.wait_for_task(&turn_id).await;
-                    }
-                }
-                abort_result?;
+                session
+                    .abort_all_tasks(TurnAbortReason::Interrupted)
+                    .await?;
             }
             Ok(())
         })
@@ -1163,38 +1208,17 @@ impl AstroService for AstroServiceImpl {
             );
         }
         let (hook_tx, mut hook_rx) = tokio::sync::mpsc::unbounded_channel::<::hooks::UiHookEvent>();
-        {
-            let agent = session.as_ref();
-            agent.set_image_gen_targets(image_targets);
-            agent.set_chat_credentials(&provider_name, &model, &api_key, &base_url);
-            // 五类辅助目标随本轮 ChatRequest 刷新；未下传的任务在 Session 内回退主模型。
-            agent.set_auxiliary_targets(auxiliary_targets);
-            if req.context_window > 0 {
-                agent.set_context_window(req.context_window);
-            }
-            agent
-                .set_interaction_mode(tools::InteractionMode::parse(&req.interaction_mode))
-                .await;
-            let project_root = req.project_root.trim();
-            if project_root.is_empty() {
-                agent.set_project_root(None);
-            } else {
-                agent.set_project_root(Some(std::path::PathBuf::from(project_root)));
-            }
-            if let Some(t) = req.temperature {
-                if t.is_finite() && (0.0..=2.0).contains(&t) {
-                    agent.set_temperature(t);
-                }
-            }
-            let raw_params = req.additional_params_json.trim();
-            if !raw_params.is_empty() {
-                if let Ok(v) = serde_json::from_str::<serde_json::Value>(raw_params) {
-                    if v.is_object() {
-                        agent.set_additional_params(v);
-                    }
-                }
-            }
-        }
+        let interaction_mode = tools::InteractionMode::parse(&req.interaction_mode);
+        let project_root = (!req.project_root.trim().is_empty())
+            .then(|| std::path::PathBuf::from(req.project_root.trim()));
+        let temperature_override = req
+            .temperature
+            .filter(|temperature| temperature.is_finite() && (0.0..=2.0).contains(temperature));
+        let additional_params_override =
+            serde_json::from_str::<serde_json::Value>(req.additional_params_json.trim())
+                .ok()
+                .filter(serde_json::Value::is_object);
+        let context_window = (req.context_window > 0).then_some(req.context_window);
         let hitl_gate = HitlGate::new(session_id.clone());
         let Some(registration) = self
             .admit_pause_generation(&session_id, &session, Arc::clone(&hitl_gate), hook_tx)
@@ -1216,46 +1240,23 @@ impl AstroService for AstroServiceImpl {
             return Ok(Response::new(Box::pin(ReceiverStream::new(rx))));
         };
         let pause = Arc::clone(&registration.control);
-        let (temperature, additional_params) = (session.temperature(), session.additional_params());
-        let config = ProviderConfig {
-            model: if model.is_empty() {
-                providers::dispatch::default_model(&provider_name)
-            } else {
-                model.clone()
-            },
-            api_key: {
-                let from_req = api_key.trim().to_string();
-                if !from_req.is_empty() {
-                    from_req
-                } else {
-                    providers::read_env_api_key(&provider_name).unwrap_or_default()
-                }
-            },
-            base_url: {
-                let from_req = base_url.trim().to_string();
-                if from_req.is_empty() {
-                    None
-                } else {
-                    Some(from_req)
-                }
-            },
-            temperature,
-            thinking_enabled,
-            reasoning_effort: reasoning_effort.clone(),
-            additional_params,
-            max_tokens: if chat_max_output_tokens > 0 {
-                chat_max_output_tokens
-            } else {
-                8192
-            },
-            ..ProviderConfig::default()
+        let resolved_model = if model.is_empty() {
+            providers::dispatch::default_model(&provider_name)
+        } else {
+            model.clone()
         };
+        let resolved_api_key = if api_key.trim().is_empty() {
+            providers::read_env_api_key(&provider_name).unwrap_or_default()
+        } else {
+            api_key.trim().to_string()
+        };
+        let resolved_base_url = (!base_url.trim().is_empty()).then(|| base_url.trim().to_string());
         let mut chat_targets = vec![types::ChatTarget {
             provider_id: String::new(),
             backend_id: provider_name.clone(),
-            model: config.model.clone(),
-            api_key: config.api_key.clone(),
-            base_url: config.base_url.clone().unwrap_or_default(),
+            model: resolved_model.clone(),
+            api_key: resolved_api_key.clone(),
+            base_url: resolved_base_url.clone().unwrap_or_default(),
         }];
         for fb in chat_fallbacks {
             chat_targets.push(types::ChatTarget {
@@ -1266,24 +1267,71 @@ impl AstroService for AstroServiceImpl {
                 base_url: fb.base_url,
             });
         }
-        session.set_chat_targets(chat_targets.clone());
+        let setup_targets = chat_targets.clone();
+        let setup_provider_name = provider_name.clone();
+        let setup_model = model.clone();
+        let setup_api_key = api_key.clone();
+        let setup_base_url = base_url.clone();
         let launch_session = Arc::clone(&session);
+        let setup_session = Arc::clone(&session);
         let launch_gate = Arc::clone(&hitl_gate);
         let Some(mut stream) = self
-            .launch_current_pause_generation_with(&session_id, &registration, move || async move {
-                stream_multi_turn_with_hitl(
-                    launch_session,
-                    chat_targets,
-                    config,
-                    vec![TurnInput {
-                        content,
-                        image_data_urls,
-                    }],
-                    pause,
-                    Some(launch_gate),
-                )
-                .await
-            })
+            .launch_current_pause_generation_with_setup(
+                &session_id,
+                &registration,
+                &setup_session,
+                move |session| async move {
+                    session.set_image_gen_targets(image_targets);
+                    session.set_chat_credentials(
+                        &setup_provider_name,
+                        &setup_model,
+                        &setup_api_key,
+                        &setup_base_url,
+                    );
+                    session.set_auxiliary_targets(auxiliary_targets);
+                    if let Some(context_window) = context_window {
+                        session.set_context_window(context_window);
+                    }
+                    session.set_interaction_mode(interaction_mode).await;
+                    session.set_project_root(project_root);
+                    if let Some(temperature) = temperature_override {
+                        session.set_temperature(temperature);
+                    }
+                    if let Some(additional_params) = additional_params_override {
+                        session.set_additional_params(additional_params);
+                    }
+                    session.set_chat_targets(setup_targets);
+                },
+                move || async move {
+                    let config = ProviderConfig {
+                        model: resolved_model,
+                        api_key: resolved_api_key,
+                        base_url: resolved_base_url,
+                        temperature: launch_session.temperature(),
+                        thinking_enabled,
+                        reasoning_effort,
+                        additional_params: launch_session.additional_params(),
+                        max_tokens: if chat_max_output_tokens > 0 {
+                            chat_max_output_tokens
+                        } else {
+                            8192
+                        },
+                        ..ProviderConfig::default()
+                    };
+                    stream_multi_turn_with_hitl(
+                        launch_session,
+                        chat_targets,
+                        config,
+                        vec![TurnInput {
+                            content,
+                            image_data_urls,
+                        }],
+                        pause,
+                        Some(launch_gate),
+                    )
+                    .await
+                },
+            )
             .await
         else {
             self.cleanup_pause_generation(&session_id, &registration)
@@ -2116,6 +2164,130 @@ mod tests {
             .unwrap();
         old_turn.await.unwrap();
         replacement_turn.await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn stale_session_arc_cannot_admit_over_its_same_id_replacement() {
+        let dir = TempDir::new().unwrap();
+        let service = AstroServiceImpl::new(dir.path().to_path_buf());
+        let session_id = "stale-admission-session";
+        let stale = service.get_session(session_id).await.unwrap();
+        service.sessions.write().await.remove(session_id);
+        let replacement = service.get_session(session_id).await.unwrap();
+        assert!(!Arc::ptr_eq(&stale, &replacement));
+
+        let (stale_ui_tx, _stale_ui_rx) = tokio::sync::mpsc::unbounded_channel();
+        assert!(
+            service
+                .admit_pause_generation(session_id, &stale, HitlGate::new(session_id), stale_ui_tx,)
+                .await
+                .is_none(),
+            "an Arc removed from sessions must not overwrite the replacement generation"
+        );
+        assert!(service
+            .pause_controls
+            .read()
+            .await
+            .get(session_id)
+            .is_none());
+
+        let (replacement_ui_tx, _replacement_ui_rx) = tokio::sync::mpsc::unbounded_channel();
+        assert!(service
+            .admit_pause_generation(
+                session_id,
+                &replacement,
+                HitlGate::new(session_id),
+                replacement_ui_tx,
+            )
+            .await
+            .is_some());
+    }
+
+    #[tokio::test]
+    async fn concurrent_generation_setup_and_install_keep_request_settings_together() {
+        let dir = TempDir::new().unwrap();
+        let service = Arc::new(AstroServiceImpl::new(dir.path().to_path_buf()));
+        let session_id = "generation-config-isolation";
+        let session = service.get_session(session_id).await.unwrap();
+        let (ui_tx, _ui_rx) = tokio::sync::mpsc::unbounded_channel();
+        let registration = service
+            .admit_pause_generation(session_id, &session, HitlGate::new(session_id), ui_tx)
+            .await
+            .unwrap();
+        let first_setup_started = Arc::new(tokio::sync::Notify::new());
+        let release_first_setup = Arc::new(tokio::sync::Notify::new());
+        let second_setup_started = Arc::new(AtomicBool::new(false));
+        let first = {
+            let service = Arc::clone(&service);
+            let session = Arc::clone(&session);
+            let launch_session = Arc::clone(&session);
+            let registration = registration.clone();
+            let first_setup_started = Arc::clone(&first_setup_started);
+            let release_first_setup = Arc::clone(&release_first_setup);
+            tokio::spawn(async move {
+                service
+                    .launch_current_pause_generation_with_setup(
+                        session_id,
+                        &registration,
+                        &session,
+                        move |session| async move {
+                            session
+                                .set_interaction_mode(tools::InteractionMode::Plan)
+                                .await;
+                            session.set_temperature(0.2);
+                            first_setup_started.notify_one();
+                            release_first_setup.notified().await;
+                        },
+                        move || {
+                            let session = Arc::clone(&launch_session);
+                            async move { (session.interaction_mode().await, session.temperature()) }
+                        },
+                    )
+                    .await
+                    .unwrap()
+            })
+        };
+        first_setup_started.notified().await;
+
+        let second = {
+            let service = Arc::clone(&service);
+            let session = Arc::clone(&session);
+            let launch_session = Arc::clone(&session);
+            let registration = registration.clone();
+            let second_setup_started = Arc::clone(&second_setup_started);
+            tokio::spawn(async move {
+                service
+                    .launch_current_pause_generation_with_setup(
+                        session_id,
+                        &registration,
+                        &session,
+                        move |session| async move {
+                            second_setup_started.store(true, Ordering::SeqCst);
+                            session
+                                .set_interaction_mode(tools::InteractionMode::Ask)
+                                .await;
+                            session.set_temperature(1.4);
+                        },
+                        move || {
+                            let session = Arc::clone(&launch_session);
+                            async move { (session.interaction_mode().await, session.temperature()) }
+                        },
+                    )
+                    .await
+                    .unwrap()
+            })
+        };
+        tokio::task::yield_now().await;
+        assert!(
+            !second_setup_started.load(Ordering::SeqCst),
+            "the second request must not apply settings before the first installs"
+        );
+        release_first_setup.notify_one();
+
+        let first = first.await.unwrap();
+        let second = second.await.unwrap();
+        assert_eq!(first, (tools::InteractionMode::Plan, 0.2));
+        assert_eq!(second, (tools::InteractionMode::Ask, 1.4));
     }
 
     #[tokio::test]

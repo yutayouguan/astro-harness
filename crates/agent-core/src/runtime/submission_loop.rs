@@ -164,15 +164,19 @@ impl Session {
 
     pub async fn shutdown_runtime(self: &Arc<Self>) {
         if !self.begin_runtime_shutdown() {
+            self.wait_runtime_shutdown_complete().await;
             return;
         }
+        let turn_id = self.current_turn_id().await;
         if let Err(error) = self
             .abort_all_tasks(agent_protocol::TurnAbortReason::Interrupted)
             .await
         {
             tracing::warn!(%error, session_id = %self.session_id(), "failed to abort session task during shutdown");
         }
-        let turn_id = self.current_turn_id().await;
+        if let Some(turn_id) = turn_id.as_deref() {
+            self.wait_for_task(turn_id).await;
+        }
         let _ = self.fire_hook(
             ::hooks::ON_SESSION_FINALIZE,
             ::hooks::HookPayload {
@@ -193,6 +197,7 @@ impl Session {
         }
         let stopped_jobs = tools::shutdown_background_jobs_for_session(self.session_id());
         tracing::debug!(stopped_jobs, session_id = %self.session_id(), "session runtime shutdown complete");
+        self.complete_runtime_shutdown();
     }
 }
 

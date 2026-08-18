@@ -152,6 +152,8 @@ pub struct Session {
     runtime_io: OnceLock<RuntimeIoBindings>,
     /// Guards one-time release of task, hook, MCP, and terminal resources.
     runtime_shutdown: AtomicBool,
+    /// Shared completion observed by every concurrent shutdown caller.
+    runtime_shutdown_complete: tokio_util::sync::CancellationToken,
 }
 
 /// Compatibility name retained while downstream crates migrate to [`Config`].
@@ -256,6 +258,7 @@ impl Session {
             task_completions: TokioMutex::new(HashMap::new()),
             runtime_io: OnceLock::new(),
             runtime_shutdown: AtomicBool::new(false),
+            runtime_shutdown_complete: tokio_util::sync::CancellationToken::new(),
         })
     }
 
@@ -296,6 +299,14 @@ impl Session {
 
     pub(crate) fn begin_runtime_shutdown(&self) -> bool {
         !self.runtime_shutdown.swap(true, Ordering::AcqRel)
+    }
+
+    pub(crate) async fn wait_runtime_shutdown_complete(&self) {
+        self.runtime_shutdown_complete.cancelled().await;
+    }
+
+    pub(crate) fn complete_runtime_shutdown(&self) {
+        self.runtime_shutdown_complete.cancel();
     }
 
     pub(crate) fn set_status(&self, status: AgentStatus) {
