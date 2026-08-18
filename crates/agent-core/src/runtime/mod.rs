@@ -117,6 +117,8 @@ pub struct Session {
     pub(crate) model_ctx: model_ctx::ModelContext,
     /// Codex-style session-wide mutable runtime state.
     pub(crate) state: TokioMutex<session_state::SessionState>,
+    /// Serializes persisted conversation writes with their in-memory history mirror.
+    pub(crate) conversation_write_lock: TokioMutex<()>,
 
     // ── 会话级服务与注册表 ──────────────────────────
     pub(crate) memory: MemoryManager,
@@ -218,6 +220,7 @@ impl Session {
             session_id,
             model_ctx: model_ctx::ModelContext::default(),
             state: TokioMutex::new(session_state::SessionState::new(history)),
+            conversation_write_lock: TokioMutex::new(()),
             memory,
             services: SessionServices::new(sessions, compression_policy),
             tool_registry,
@@ -913,6 +916,11 @@ impl Session {
 
     /// Append conversation items to the session-owned history.
     pub async fn record_items(&self, items: Vec<Message>) {
+        let _write_guard = self.conversation_write_lock.lock().await;
+        self.record_items_unlocked(items).await;
+    }
+
+    async fn record_items_unlocked(&self, items: Vec<Message>) {
         self.state.lock().await.record_items(items);
     }
 
@@ -924,6 +932,7 @@ impl Session {
     /// Replace the current conversation history with an owned snapshot.
     #[cfg(test)]
     pub async fn replace_history(&self, history: Vec<Message>) {
+        let _write_guard = self.conversation_write_lock.lock().await;
         self.state.lock().await.replace_history(history);
     }
 
@@ -1063,28 +1072,40 @@ mod tests {
     #[test]
     fn session_state_api_is_callable_through_arc() {
         fn assert_arc_api(session: Arc<Session>) {
-            let _ = session.set_current_turn_id("turn");
-            let _ = session.create_turn_context("turn".to_string());
-            let _ = session.clear_current_turn_id();
-            let _ = session.current_turn_id();
-            let _ = session.take_inject_context();
-            let _ = session.queue_inject_context("context");
-            let _ = session.session_turn();
-            let _ = session.is_tool_depth_exhausted();
-            let _ = session.mid_run_summary_done();
-            let _ = session.mid_run_handoff();
-            let _ = session.set_mid_run_handoff("handoff".to_string());
-            let _ = session.mark_mid_run_summary_skipped();
-            let _ = session.should_recommend_compact();
-            let _ = session.take_recommend_compact();
-            let _ = session.turn_wrote_disk();
-            let _ = session.increment_tool_round();
-            let _ = session.recalled_context();
-            let _ = session.is_budget_exhausted();
-            let _ = session.increment_turn();
-            let _ = session.set_interaction_mode(types::InteractionMode::Agent);
-            let _ = session.interaction_mode();
-            let _ = session.schemas_for_api();
+            drop(session.set_current_turn_id("turn"));
+            drop(session.create_turn_context("turn".to_string()));
+            drop(session.clear_current_turn_id());
+            drop(session.current_turn_id());
+            drop(session.take_inject_context());
+            drop(session.queue_inject_context("context"));
+            drop(session.session_turn());
+            drop(session.is_tool_depth_exhausted());
+            drop(session.mid_run_summary_done());
+            drop(session.mid_run_handoff());
+            drop(session.set_mid_run_handoff("handoff".to_string()));
+            drop(session.mark_mid_run_summary_skipped());
+            drop(session.should_recommend_compact());
+            drop(session.take_recommend_compact());
+            drop(session.turn_wrote_disk());
+            drop(session.increment_tool_round());
+            drop(session.recalled_context());
+            drop(session.is_budget_exhausted());
+            drop(session.increment_turn());
+            drop(session.set_interaction_mode(types::InteractionMode::Agent));
+            drop(session.interaction_mode());
+            drop(session.schemas_for_api());
+            drop(session.record_assistant_message("assistant"));
+            drop(session.record_user_message("user"));
+            drop(session.record_tool_result("tool"));
+            drop(session.provider_history());
+            drop(session.maintain_tool_context());
+            drop(session.compress_tool_results_if_needed());
+            drop(
+                session.record_turn_input(crate::tasks::TurnInput::UserInput {
+                    content: "input".to_string(),
+                    image_data_urls: Vec::new(),
+                }),
+            );
         }
 
         let _ = assert_arc_api;
@@ -1117,6 +1138,39 @@ mod tests {
         let history = session.clone_history().await;
         assert_eq!(history.len(), 1);
         assert_eq!(history[0].content_str(), "replacement");
+    }
+
+    #[tokio::test]
+    async fn conversation_write_lock_serializes_persistence_and_history() {
+        let dir = TempDir::new().unwrap();
+        let session = Arc::new(Session::new(test_config(&dir)).unwrap());
+        let write_guard = session.conversation_write_lock.lock().await;
+        let writer = {
+            let session = Arc::clone(&session);
+            tokio::spawn(async move { session.record_user_message("serialized").await })
+        };
+
+        tokio::task::yield_now().await;
+        assert!(session
+            .services
+            .sessions
+            .get_messages(session.session_id())
+            .unwrap()
+            .is_empty());
+        assert!(session.clone_history().await.is_empty());
+
+        drop(write_guard);
+        writer.await.unwrap().unwrap();
+        assert_eq!(
+            session
+                .services
+                .sessions
+                .get_messages(session.session_id())
+                .unwrap()
+                .len(),
+            1
+        );
+        assert_eq!(session.clone_history().await.len(), 1);
     }
 
     #[test]

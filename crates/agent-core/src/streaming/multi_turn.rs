@@ -184,7 +184,7 @@ async fn record_pending_input(
     if pending_input.is_empty() {
         return Ok(());
     }
-    let mut sess = session.lock().await;
+    let sess = session.lock().await;
     for input in pending_input {
         sess.record_turn_input(input).await?;
     }
@@ -511,7 +511,7 @@ pub(crate) async fn run_turn(args: RunTurnArgs, cancellation_token: Cancellation
                     attempt = thinking_only_retries,
                     "model returned reasoning only with no text; injecting retry prompt"
                 );
-                let mut agent = session.lock().await;
+                let agent = session.lock().await;
                 let details = types::message::merge_google_thought_signature(
                     Some(timeline.reasoning_details_snapshot()),
                     thought_signature.as_deref(),
@@ -592,7 +592,7 @@ pub(crate) async fn run_turn(args: RunTurnArgs, cancellation_token: Cancellation
                 }
             };
             if let Some(::hooks::HookOutcome::KeepGoing(prompt)) = verify_outcome {
-                let mut agent = session.lock().await;
+                let agent = session.lock().await;
                 let details = types::message::merge_google_thought_signature(
                     Some(timeline.reasoning_details_snapshot()),
                     thought_signature.as_deref(),
@@ -683,7 +683,7 @@ pub(crate) async fn run_turn(args: RunTurnArgs, cancellation_token: Cancellation
         }
 
         {
-            let mut agent = session.lock().await;
+            let agent = session.lock().await;
             for c in &calls {
                 timeline.upsert_activity(&c.id, now_ms());
             }

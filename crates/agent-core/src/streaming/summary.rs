@@ -178,7 +178,7 @@ pub(crate) async fn run_max_iterations_summary(a: MaxIterationsSummaryArgs<'_>) 
                 }
                 // 持久化已积累的部分回复，保证历史连贯
                 if !full_response.is_empty() {
-                    let mut agent = session.lock().await;
+                    let agent = session.lock().await;
                     let details = Some(timeline.reasoning_details_snapshot());
                     let _ = agent
                         .record_assistant_message_with_tools(
@@ -218,7 +218,7 @@ pub(crate) async fn run_max_iterations_summary(a: MaxIterationsSummaryArgs<'_>) 
     }
 
     {
-        let mut agent = session.lock().await;
+        let agent = session.lock().await;
         let details = Some(timeline.reasoning_details_snapshot());
         if let Err(err) = agent
             .record_assistant_message_with_tools(

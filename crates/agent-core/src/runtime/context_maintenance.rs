@@ -9,7 +9,7 @@ use super::AgentLoop;
 
 impl AgentLoop {
     /// Provider 发送用历史：若有 mid-run handoff 则折叠中间轮次。
-    pub async fn provider_history(&mut self) -> Vec<Message> {
+    pub async fn provider_history(&self) -> Vec<Message> {
         let (handoff, history) = {
             let state = self.state.lock().await;
             (
@@ -39,7 +39,7 @@ impl AgentLoop {
     /// Run 内 tool 上下文维护：委托 [`CompressionPolicy`] 生成计划，执行 prune/LLM 摘要/head-tail。
     ///
     /// 不变量：`content` 全文保留；仅改 `compressed_content`（Provider 视图）。
-    pub async fn maintain_tool_context(&mut self) -> anyhow::Result<ContextMaintenanceResult> {
+    pub async fn maintain_tool_context(&self) -> anyhow::Result<ContextMaintenanceResult> {
         let mut result = ContextMaintenanceResult::default();
         if !self.compression_config().enabled {
             return Ok(result);
@@ -162,7 +162,7 @@ impl AgentLoop {
     }
 
     async fn apply_tool_compressed_view(
-        &mut self,
+        &self,
         stored_msg: &::session::StoredMessage,
         content: &str,
         view: &str,
@@ -185,7 +185,7 @@ impl AgentLoop {
     }
 
     /// 压缩本 run 中尚未压缩的 tool 结果（兼容旧调用；委托 [`Self::maintain_tool_context`]）。
-    pub async fn compress_tool_results_if_needed(&mut self) -> anyhow::Result<usize> {
+    pub async fn compress_tool_results_if_needed(&self) -> anyhow::Result<usize> {
         let report = self.maintain_tool_context().await?;
         Ok(report.pruned + report.compressed)
     }

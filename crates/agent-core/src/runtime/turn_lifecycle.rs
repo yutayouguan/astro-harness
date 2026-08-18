@@ -209,7 +209,8 @@ impl Session {
         }
     }
 
-    pub(crate) async fn record_turn_input(&mut self, input: TurnInput) -> anyhow::Result<()> {
+    pub(crate) async fn record_turn_input(&self, input: TurnInput) -> anyhow::Result<()> {
+        let _write_guard = self.conversation_write_lock.lock().await;
         let TurnInput::UserInput {
             content,
             image_data_urls,
@@ -240,7 +241,7 @@ impl Session {
             media_json: media_json.as_deref(),
             ..NewMessage::empty(&self.session_id, "user")
         })?;
-        self.record_items(vec![Message::user_with_images(&content, &image_data_urls)])
+        self.record_items_unlocked(vec![Message::user_with_images(&content, &image_data_urls)])
             .await;
         Ok(())
     }
