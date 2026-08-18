@@ -206,11 +206,19 @@ async fn tool_argument_events_keep_stable_ids_across_late_start_and_rounds() {
         })
         .collect::<Vec<_>>();
     assert_eq!(argument_events.len(), 4);
-    let first_id = &argument_events[0].item_id;
-    let second_id = &argument_events[2].item_id;
-    assert_eq!(argument_events[1].item_id, *first_id);
-    assert_eq!(argument_events[3].item_id, *second_id);
-    assert_ne!(first_id, second_id);
+    let expected_ids = [
+        "provider-call-1",
+        "provider-call-1",
+        "provider-call-2",
+        "provider-call-2",
+    ];
+    assert_eq!(
+        argument_events
+            .iter()
+            .map(|request| request.item_id.as_str())
+            .collect::<Vec<_>>(),
+        expected_ids
+    );
     for request in argument_events {
         assert!(request.request_id.contains(turn_id));
         assert!(request.request_id.contains(&request.item_id));
@@ -233,9 +241,46 @@ async fn tool_argument_events_keep_stable_ids_across_late_start_and_rounds() {
             _ => None,
         })
         .collect::<Vec<_>>();
+    assert_eq!(started_tool_ids, vec!["provider-call-1", "provider-call-2"]);
+    let completed_tool_ids = events
+        .iter()
+        .filter_map(|event| match &event.msg {
+            EventMsg::ItemCompleted(item)
+                if matches!(
+                    item.item,
+                    agent_protocol::TurnItem::CommandExecution(_)
+                        | agent_protocol::TurnItem::DynamicToolCall(_)
+                        | agent_protocol::TurnItem::McpToolCall(_)
+                        | agent_protocol::TurnItem::CollabAgentToolCall(_)
+                ) =>
+            {
+                Some(item.item.id())
+            }
+            _ => None,
+        })
+        .collect::<Vec<_>>();
     assert_eq!(
-        started_tool_ids,
-        vec![first_id.as_str(), second_id.as_str()]
+        completed_tool_ids,
+        vec!["provider-call-1", "provider-call-2"]
+    );
+
+    let history = session.clone_history().await;
+    let recorded_call_ids = history
+        .iter()
+        .flat_map(|message| message.tool_calls.iter().flatten())
+        .map(|call| call.id.as_str())
+        .collect::<Vec<_>>();
+    assert_eq!(
+        recorded_call_ids,
+        vec!["provider-call-1", "provider-call-2"]
+    );
+    let recorded_result_ids = history
+        .iter()
+        .filter_map(|message| message.tool_call_id.as_deref())
+        .collect::<Vec<_>>();
+    assert_eq!(
+        recorded_result_ids,
+        vec!["provider-call-1", "provider-call-2"]
     );
 }
 

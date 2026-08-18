@@ -8,7 +8,7 @@
 //!
 //! HITL park/resume 桥见 [`super::hitl_bridge`]；预算耗尽后的总结轮见 [`super::summary`]。
 
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap};
 use std::sync::Arc;
 
 use agent_protocol::{ControlRequestEvent, Event, EventMsg, ItemEvent, ToolStatus, TurnInput};
@@ -44,6 +44,38 @@ const MAX_VERIFY_ATTEMPTS: usize = 2;
 
 /// 模型只返回思考/推理内容而没有文本回复时，允许的最大重试次数。
 const MAX_THINKING_ONLY_RETRIES: usize = 1;
+
+/// Per-index buffer that delays argument events until the provider call id is known.
+#[derive(Default)]
+struct PendingToolArgumentEvents {
+    item_id: Option<String>,
+    deltas: Vec<types::ToolCallDelta>,
+}
+
+async fn emit_tool_argument_events(
+    session: &Session,
+    turn_context: &TurnContext,
+    item_id: &str,
+    deltas: Vec<types::ToolCallDelta>,
+) {
+    for delta in deltas {
+        emit(
+            session,
+            turn_context,
+            EventMsg::DynamicToolCallRequest(ControlRequestEvent {
+                turn_id: turn_context.sub_id().to_string(),
+                request_id: format!("{}:{item_id}:arguments", turn_context.sub_id()),
+                item_id: item_id.to_string(),
+                payload: serde_json::json!({
+                    "index": delta.index,
+                    "name": delta.name,
+                    "delta": delta.arguments,
+                }),
+            }),
+        )
+        .await;
+    }
+}
 
 /// [`run_multi_turn_stream`] 入参打包。
 pub struct MultiTurnStreamArgs {
@@ -699,7 +731,8 @@ pub(crate) async fn run_turn(
         let mut full_reasoning = String::new();
         let mut thought_signature: Option<String> = None;
         let mut tool_acc = types::ToolCallAccumulator::new();
-        let mut tool_item_ids: HashMap<u32, String> = HashMap::new();
+        let mut tool_argument_events: HashMap<u32, PendingToolArgumentEvents> = HashMap::new();
+        let mut tool_call_indices = BTreeSet::new();
         let mut round_usage: Option<Usage> = None;
         let assistant_item_id = uuid::Uuid::new_v4().to_string();
         let reasoning_item_id = uuid::Uuid::new_v4().to_string();
@@ -775,31 +808,30 @@ pub(crate) async fn run_turn(
                     thought_signature = Some(sig);
                 }
                 Some(Ok(StreamedAssistantContent::ToolCallDelta(d))) => {
-                    let item_id = tool_item_ids
-                        .entry(d.index)
-                        .or_insert_with(|| {
-                            d.id.as_ref()
-                                .filter(|id| !id.is_empty())
-                                .cloned()
-                                .unwrap_or_else(|| uuid::Uuid::new_v4().to_string())
-                        })
-                        .clone();
-                    tool_acc.push(&d);
-                    emit(
-                        &session,
-                        &turn_context,
-                        EventMsg::DynamicToolCallRequest(ControlRequestEvent {
-                            turn_id: turn_context.sub_id().to_string(),
-                            request_id: format!("{}:{item_id}:arguments", turn_context.sub_id()),
-                            item_id,
-                            payload: serde_json::json!({
-                                "index": d.index,
-                                "name": d.name,
-                                "delta": d.arguments,
-                            }),
-                        }),
-                    )
-                    .await;
+                    if d.name.as_deref().is_some_and(|name| !name.is_empty()) {
+                        tool_call_indices.insert(d.index);
+                    }
+                    let (item_id, buffered) = {
+                        let pending = tool_argument_events.entry(d.index).or_default();
+                        pending.deltas.push(d.clone());
+                        if pending.item_id.is_none() {
+                            pending.item_id = d.id.as_ref().filter(|id| !id.is_empty()).cloned();
+                        }
+                        pending
+                            .item_id
+                            .clone()
+                            .map(|item_id| (item_id, std::mem::take(&mut pending.deltas)))
+                            .unzip()
+                    };
+                    let mut accumulated_delta = d;
+                    if let Some(item_id) = item_id.as_ref() {
+                        accumulated_delta.id = Some(item_id.clone());
+                    }
+                    tool_acc.push(&accumulated_delta);
+                    if let (Some(item_id), Some(buffered)) = (item_id, buffered) {
+                        emit_tool_argument_events(&session, &turn_context, &item_id, buffered)
+                            .await;
+                    }
                 }
                 Some(Ok(StreamedAssistantContent::FinalUsage(u))) => {
                     round_usage = Some(u);
@@ -847,11 +879,26 @@ pub(crate) async fn run_turn(
             saw_usage = true;
         }
 
+        let mut indices = tool_argument_events.keys().copied().collect::<Vec<_>>();
+        indices.sort_unstable();
+        for index in indices {
+            let pending = tool_argument_events
+                .get_mut(&index)
+                .expect("tool argument index collected above");
+            let item_id = pending
+                .item_id
+                .get_or_insert_with(|| uuid::Uuid::new_v4().to_string())
+                .clone();
+            let buffered = std::mem::take(&mut pending.deltas);
+            emit_tool_argument_events(&session, &turn_context, &item_id, buffered).await;
+        }
+
         let mut native_calls = tool_acc.finish();
-        let mut tool_indices = tool_item_ids.keys().copied().collect::<Vec<_>>();
-        tool_indices.sort_unstable();
-        for (call, index) in native_calls.iter_mut().zip(tool_indices) {
-            if let Some(item_id) = tool_item_ids.get(&index) {
+        for (call, index) in native_calls.iter_mut().zip(tool_call_indices) {
+            if let Some(item_id) = tool_argument_events
+                .get(&index)
+                .and_then(|pending| pending.item_id.as_ref())
+            {
                 call.id.clone_from(item_id);
             }
         }
