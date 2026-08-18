@@ -1,11 +1,11 @@
 //! Hermes 风格 HITL 阻塞闸门：工具执行路径 park，resume 完成 oneshot。
 
 use std::collections::HashMap;
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 use std::time::Duration;
 
 use serde_json::Value;
-use tokio::sync::{oneshot, Mutex, RwLock};
+use tokio::sync::{oneshot, Mutex};
 use uuid::Uuid;
 
 use crate::control::interrupt::{Interrupt, ResumeItem};
@@ -244,16 +244,31 @@ impl HitlRegistry {
     pub async fn insert(&self, gate: Arc<HitlGate>) {
         self.inner
             .write()
-            .await
+            .expect("HITL registry lock poisoned")
             .insert(gate.session_id().to_string(), gate);
     }
 
+    /// Atomically replace one session gate from a cancellation-safe synchronous commit.
+    pub fn replace_for_admission(&self, gate: Arc<HitlGate>) -> Option<Arc<HitlGate>> {
+        self.inner
+            .write()
+            .expect("HITL registry lock poisoned")
+            .insert(gate.session_id().to_string(), gate)
+    }
+
     pub async fn get(&self, session_id: &str) -> Option<Arc<HitlGate>> {
-        self.inner.read().await.get(session_id).cloned()
+        self.inner
+            .read()
+            .expect("HITL registry lock poisoned")
+            .get(session_id)
+            .cloned()
     }
 
     pub async fn remove(&self, session_id: &str) -> Option<Arc<HitlGate>> {
-        self.inner.write().await.remove(session_id)
+        self.inner
+            .write()
+            .expect("HITL registry lock poisoned")
+            .remove(session_id)
     }
 
     pub async fn cancel_and_remove(&self, session_id: &str) {
@@ -264,7 +279,7 @@ impl HitlRegistry {
 
     pub async fn cancel_and_remove_if(&self, session_id: &str, expected: &Arc<HitlGate>) -> bool {
         let removed = {
-            let mut gates = self.inner.write().await;
+            let mut gates = self.inner.write().expect("HITL registry lock poisoned");
             if gates
                 .get(session_id)
                 .is_some_and(|current| Arc::ptr_eq(current, expected))
