@@ -29,10 +29,10 @@ async fn test_turn_budget_enforcement() {
     let mut config = test_config(&dir);
     config.max_turns = 2;
     let mut agent = AgentLoop::new(config).unwrap();
-    assert!(!agent.is_budget_exhausted());
-    agent.increment_turn();
-    agent.increment_turn();
-    assert!(agent.is_budget_exhausted());
+    assert!(!agent.is_budget_exhausted().await);
+    agent.increment_turn().await;
+    agent.increment_turn().await;
+    assert!(agent.is_budget_exhausted().await);
 }
 
 #[tokio::test]
@@ -41,10 +41,10 @@ async fn test_multi_turn_max_depth() {
     let mut config = test_config(&dir);
     config.multi_turn = 2;
     let mut agent = AgentLoop::new(config).unwrap();
-    agent.begin_user_turn();
-    agent.increment_tool_round().unwrap();
-    agent.increment_tool_round().unwrap();
-    let err = agent.increment_tool_round().unwrap_err();
+    agent.begin_user_turn().await;
+    agent.increment_tool_round().await.unwrap();
+    agent.increment_tool_round().await.unwrap();
+    let err = agent.increment_tool_round().await.unwrap_err();
     assert!(matches!(err, MaxDepthError { limit: 2, used: 2 }));
 }
 
@@ -178,7 +178,7 @@ async fn pre_llm_call_inject_context_via_hook_bus() {
         .start_or_steer_turn("你好", "inject-test")
         .await
         .unwrap();
-    let ctx = agent.take_inject_context();
+    let ctx = agent.take_inject_context().await;
     assert_eq!(ctx.as_deref(), Some("tz=Asia/Shanghai"));
 }
 
@@ -217,7 +217,7 @@ async fn transform_tool_result_replaces_before_post_tool_call() {
 async fn turn_wrote_disk_tracks_writes_and_resets_on_new_turn() {
     let dir = TempDir::new().unwrap();
     let mut agent = AgentLoop::new(test_config(&dir)).unwrap();
-    assert!(!agent.turn_wrote_disk());
+    assert!(!agent.turn_wrote_disk().await);
 
     // 只读操作不应置位
     let _ = agent
@@ -227,7 +227,7 @@ async fn turn_wrote_disk_tracks_writes_and_resets_on_new_turn() {
         )
         .await
         .unwrap();
-    assert!(!agent.turn_wrote_disk());
+    assert!(!agent.turn_wrote_disk().await);
 
     // 写操作应置位
     let _ = agent
@@ -237,18 +237,18 @@ async fn turn_wrote_disk_tracks_writes_and_resets_on_new_turn() {
         )
         .await
         .unwrap();
-    assert!(agent.turn_wrote_disk());
+    assert!(agent.turn_wrote_disk().await);
 
     // 新用户轮次开始应清零
-    agent.begin_user_turn();
-    assert!(!agent.turn_wrote_disk());
+    agent.begin_user_turn().await;
+    assert!(!agent.turn_wrote_disk().await);
 
     // terminal 工具调用也应置位
     let _ = agent
         .handle_tool_call_async("terminal", &serde_json::json!({"command": "true"}))
         .await
         .unwrap();
-    assert!(agent.turn_wrote_disk());
+    assert!(agent.turn_wrote_disk().await);
 }
 
 #[tokio::test]

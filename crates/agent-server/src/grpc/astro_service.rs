@@ -348,9 +348,9 @@ impl AstroServiceImpl {
             .fire_plugin(::hooks::ON_SESSION_FINALIZE, &payload);
 
         if let Some(handle) = self.release_session_runtime(session_id).await {
-            let agent = handle.lock().await;
+            let mut agent = handle.lock().await;
             let bus = agent.hook_bus();
-            let turn_id = agent.current_turn_id().map(str::to_string);
+            let turn_id = agent.current_turn_id().await;
             let payload = ::hooks::HookPayload {
                 session_id: session_id.to_string(),
                 turn_id,
@@ -849,7 +849,9 @@ impl AstroService for AstroServiceImpl {
             if req.context_window > 0 {
                 agent.set_context_window(req.context_window);
             }
-            agent.set_interaction_mode(tools::InteractionMode::parse(&req.interaction_mode));
+            agent
+                .set_interaction_mode(tools::InteractionMode::parse(&req.interaction_mode))
+                .await;
             let project_root = req.project_root.trim();
             if project_root.is_empty() {
                 agent.set_project_root(None);

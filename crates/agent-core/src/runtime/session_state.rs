@@ -2,8 +2,8 @@
 //!
 //! This boundary follows Codex's `SessionState`: mutable state that survives
 //! across sampling steps lives together, while the active task registry remains
-//! directly on [`super::Session`]. The container is intentionally not locked
-//! yet; adding synchronization is a separate lifecycle change.
+//! directly on [`super::Session`]. [`super::Session`] owns this container behind
+//! a Tokio mutex so callers never expose references tied to a state guard.
 
 use std::sync::Arc;
 

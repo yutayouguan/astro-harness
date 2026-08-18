@@ -78,8 +78,8 @@ pub async fn run_multi_turn_stream(args: MultiTurnStreamArgs) {
     };
     let sub_id = uuid::Uuid::new_v4().to_string();
     let turn_context = {
-        let sess = session.lock().await;
-        sess.create_turn_context(sub_id.clone())
+        let mut sess = session.lock().await;
+        sess.create_turn_context(sub_id.clone()).await
     };
     let task = RegularTask::new(RunTurnArgs {
         session: session.clone(),
@@ -567,11 +567,11 @@ pub(crate) async fn run_turn(args: RunTurnArgs, cancellation_token: Cancellation
         // `pre_verify` hook
         if calls.is_empty() {
             let verify_outcome = {
-                let agent = session.lock().await;
-                if agent.turn_wrote_disk() && verify_attempt < MAX_VERIFY_ATTEMPTS {
+                let mut agent = session.lock().await;
+                if agent.turn_wrote_disk().await && verify_attempt < MAX_VERIFY_ATTEMPTS {
                     verify_attempt += 1;
                     let sid = agent.session_id().to_string();
-                    let turn_id = agent.current_turn_id().map(str::to_string);
+                    let turn_id = agent.current_turn_id().await;
                     Some(agent.fire_hook(
                         ::hooks::PRE_VERIFY,
                         ::hooks::HookPayload {
@@ -631,9 +631,9 @@ pub(crate) async fn run_turn(args: RunTurnArgs, cancellation_token: Cancellation
         }
 
         {
-            let agent = session.lock().await;
+            let mut agent = session.lock().await;
             let sid = agent.session_id().to_string();
-            let turn_id = agent.current_turn_id().map(str::to_string);
+            let turn_id = agent.current_turn_id().await;
             let transformed = agent.fire_hook(
                 ::hooks::TRANSFORM_LLM_OUTPUT,
                 ::hooks::HookPayload {
@@ -849,10 +849,10 @@ pub(crate) async fn run_turn(args: RunTurnArgs, cancellation_token: Cancellation
     }
 
     {
-        let agent = session.lock().await;
+        let mut agent = session.lock().await;
         let sid = agent.session_id().to_string();
-        let turn = agent.session_turn();
-        let turn_id = agent.current_turn_id().map(str::to_string);
+        let turn = agent.session_turn().await;
+        let turn_id = agent.current_turn_id().await;
         let _ = agent.fire_hook(
             ::hooks::ON_SESSION_END,
             ::hooks::HookPayload {

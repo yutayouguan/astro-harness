@@ -23,10 +23,10 @@ async fn test_turn_budget_enforcement() {
     let mut config = test_config(&dir);
     config.max_turns = 2;
     let mut agent = AgentLoop::new(config).unwrap();
-    assert!(!agent.is_budget_exhausted());
-    agent.increment_turn();
-    agent.increment_turn();
-    assert!(agent.is_budget_exhausted());
+    assert!(!agent.is_budget_exhausted().await);
+    agent.increment_turn().await;
+    agent.increment_turn().await;
+    assert!(agent.is_budget_exhausted().await);
 }
 
 #[tokio::test]
@@ -103,7 +103,8 @@ async fn test_agent_loop_fts_recall_after_long_session() {
     match result {
         TurnResult::Continue { system_prompt, .. } => {
             assert!(
-                system_prompt.contains("Aurora") || agent.recalled_context().contains("Aurora")
+                system_prompt.contains("Aurora")
+                    || agent.recalled_context().await.contains("Aurora")
             );
         }
         _ => panic!("expected Continue"),
@@ -224,8 +225,10 @@ async fn system_prompt_includes_interaction_mode_guidance() {
     let dir = TempDir::new().unwrap();
     let mut agent = AgentLoop::new(test_config(&dir)).unwrap();
 
-    agent.set_interaction_mode(tools::InteractionMode::Plan);
-    let plan_prompt = agent.build_system_prompt();
+    agent
+        .set_interaction_mode(tools::InteractionMode::Plan)
+        .await;
+    let plan_prompt = agent.build_system_prompt().await;
     assert!(
         plan_prompt.contains("Interaction mode: Plan") && plan_prompt.contains("交互模式：Plan"),
         "Plan guidance missing from system prompt:\n{plan_prompt}"
@@ -238,14 +241,16 @@ async fn system_prompt_includes_interaction_mode_guidance() {
         "mode guidance should precede TOOL_GUIDANCE"
     );
 
-    agent.set_interaction_mode(tools::InteractionMode::Ask);
-    let ask_prompt = agent.build_system_prompt();
+    agent
+        .set_interaction_mode(tools::InteractionMode::Ask)
+        .await;
+    let ask_prompt = agent.build_system_prompt().await;
     assert!(
         ask_prompt.contains("Interaction mode: Ask") && ask_prompt.contains("交互模式：Ask"),
         "Ask guidance missing from system prompt:\n{ask_prompt}"
     );
 
     // 估算层与真实组装共用同源 guidance+timestamp
-    let (system_chars, _, _, _) = agent.system_prompt_layer_chars();
+    let (system_chars, _, _, _) = agent.system_prompt_layer_chars().await;
     assert!(system_chars > 0);
 }

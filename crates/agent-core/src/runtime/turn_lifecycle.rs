@@ -13,16 +13,19 @@ impl Session {
     /// 开始新的用户消息处理：重置 `tool_rounds` 与 `turn_wrote_disk`。
     ///
     /// 若上一轮工具次数达到 `learning.complex_task_tool_threshold`，为本轮挂起学习 nudge。
-    pub fn begin_user_turn(&mut self) {
-        let prev_rounds = self.state.turn.begin_new_turn();
+    pub async fn begin_user_turn(&mut self) {
         let compression = memory::load_compression_config(&self.memory.base_dir);
-        self.state.compression.reset_for_new_turn(&compression);
+        {
+            let mut state = self.state.lock().await;
+            let prev_rounds = state.turn.begin_new_turn();
+            state.compression.reset_for_new_turn(&compression);
+            state.pending_learning_nudge =
+                Self::compute_learning_nudge(&self.memory.base_dir, prev_rounds);
+        }
         self.compression_policy = Box::new(
             crate::compression::StagedCompressionPolicy::from_config(&compression)
                 .with_context_window(self.context_window()),
         );
-        self.state.pending_learning_nudge =
-            Self::compute_learning_nudge(&self.memory.base_dir, prev_rounds);
     }
 
     /// 根据上一轮工具次数与 DecisionLog 计算本轮是否注入学习提示。
@@ -101,11 +104,11 @@ impl Session {
             .collect::<Vec<_>>()
             .join("\n");
         self.cancel.reset();
-        if self.is_budget_exhausted() {
+        if self.is_budget_exhausted().await {
             return Ok(TurnResult::BudgetExhausted);
         }
 
-        self.begin_user_turn();
+        self.begin_user_turn().await;
         if looks_like_user_correction(&user_message)
             && self
                 .session_messages
@@ -127,7 +130,8 @@ impl Session {
             self.record_turn_input(item)?;
         }
 
-        let fts_keywords = if self.state.turn.current_turn >= self.config.recent_turns {
+        let current_turn = self.state.lock().await.turn.current_turn;
+        let fts_keywords = if current_turn >= self.config.recent_turns {
             Some(user_message.as_str())
         } else {
             None
@@ -138,15 +142,17 @@ impl Session {
             self.config.recent_turns,
             fts_keywords,
         )?;
-        self.state.compression.last_recalled_context = format_recalled_context(&recalled);
+        self.state.lock().await.compression.last_recalled_context =
+            format_recalled_context(&recalled);
 
-        self.increment_turn();
-        let system_prompt = self.build_system_prompt();
+        self.increment_turn().await;
+        let system_prompt = self.build_system_prompt().await;
+        let turn_id = self.current_turn_id().await;
         let _ = self.fire_hook(
             ::hooks::ON_SESSION_START,
             ::hooks::HookPayload {
                 session_id: self.session_id.clone(),
-                turn_id: self.state.turn.current_turn_id.clone(),
+                turn_id: turn_id.clone(),
                 detail: format!("session={}", self.session_id),
                 ..Default::default()
             },
@@ -155,20 +161,20 @@ impl Session {
             ::hooks::PRE_LLM_CALL,
             ::hooks::HookPayload {
                 session_id: self.session_id.clone(),
-                turn_id: self.state.turn.current_turn_id.clone(),
+                turn_id,
                 system_prompt_chars: Some(system_prompt.len()),
                 detail: format!("system_prompt_chars={}", system_prompt.len()),
                 ..Default::default()
             },
         );
         if let ::hooks::HookOutcome::InjectContext(ctx) = inject {
-            self.state.pending_inject_context = Some(ctx);
+            self.state.lock().await.pending_inject_context = Some(ctx);
         }
         if self.cancel.is_cancelled() {
             return Ok(TurnResult::Interrupted);
         }
         Ok(TurnResult::Continue {
-            turn: self.state.turn.current_turn,
+            turn: self.session_turn().await,
             system_prompt,
         })
     }
@@ -259,26 +265,29 @@ impl Session {
     /// 与 Agent Thread 路径共享同一捕获入口。
     pub(crate) async fn capture_step_context(&mut self) -> anyhow::Result<Arc<StepContext>> {
         self.reload_tools_and_mcp().await?;
-        let mut history = self.provider_history();
-        if let Some(ctx) = self.take_inject_context() {
+        let mut history = self.provider_history().await;
+        if let Some(ctx) = self.take_inject_context().await {
             history.push(Message::user(&format!("[astro:hook-context]\n{ctx}")));
         }
-        let tool_specs = self.schemas_for_api();
-        let turn_context = self.state.current_turn_context.clone().unwrap_or_else(|| {
-            Arc::new(TurnContext::new(
-                self.state
-                    .turn
-                    .current_turn_id()
-                    .map(str::to_owned)
-                    .unwrap_or_else(|| uuid::Uuid::new_v4().to_string()),
-                self.state.turn.current_turn(),
-                self.state.interaction_mode,
-                self.permission_profile.clone(),
-                self.project_root.clone(),
-            ))
-        });
+        let tool_specs = self.schemas_for_api().await;
+        let turn_context = {
+            let state = self.state.lock().await;
+            state.current_turn_context.clone().unwrap_or_else(|| {
+                Arc::new(TurnContext::new(
+                    state
+                        .turn
+                        .current_turn_id()
+                        .map(str::to_owned)
+                        .unwrap_or_else(|| uuid::Uuid::new_v4().to_string()),
+                    state.turn.current_turn(),
+                    state.interaction_mode,
+                    self.permission_profile.clone(),
+                    self.project_root.clone(),
+                ))
+            })
+        };
         let step_context = Arc::new(StepContext::new(turn_context, history, tool_specs));
-        self.state.current_step_context = Some(Arc::clone(&step_context));
+        self.state.lock().await.current_step_context = Some(Arc::clone(&step_context));
         Ok(step_context)
     }
 }
@@ -296,8 +305,10 @@ mod tests {
         let dir = TempDir::new().unwrap();
         let config = crate::runtime::Config::with_defaults(dir.path().to_path_buf());
         let mut session = Session::with_session_id(config, "step-context-test".into()).unwrap();
-        session.set_interaction_mode(types::InteractionMode::Plan);
-        session.set_current_turn_id("turn-1");
+        session
+            .set_interaction_mode(types::InteractionMode::Plan)
+            .await;
+        session.set_current_turn_id("turn-1").await;
 
         let first = session.capture_step_context().await.unwrap();
         let second = session.capture_step_context().await.unwrap();

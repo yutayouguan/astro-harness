@@ -8,11 +8,12 @@ use super::AgentLoop;
 
 impl AgentLoop {
     /// Provider 发送用历史：若有 mid-run handoff 则折叠中间轮次。
-    pub fn provider_history(&self) -> Vec<Message> {
-        match self.state.compression.mid_run_handoff.as_deref() {
+    pub async fn provider_history(&mut self) -> Vec<Message> {
+        let handoff = self.state.lock().await.compression.mid_run_handoff.clone();
+        match handoff {
             Some(handoff) => crate::exec::mid_run_summary::collapse_history_with_handoff(
                 &self.session_messages,
-                handoff,
+                &handoff,
                 self.config_protect_first_n(),
                 self.config_protect_last_n(),
             ),
@@ -35,7 +36,7 @@ impl AgentLoop {
         if !self.compression_config().enabled {
             return Ok(result);
         }
-        if !self.state.compression.guard.allow_run() {
+        if !self.state.lock().await.compression.guard.allow_run() {
             result.thrashing_disabled = true;
             return Ok(result);
         }
@@ -116,16 +117,17 @@ impl AgentLoop {
         let mgr = ToolCompressionManager::from_config(&self.compression_config())
             .with_context_window(self.context_window());
         result.occupancy_after = mgr.occupancy_ratio(&self.session_messages);
-        self.state
+        let mut state = self.state.lock().await;
+        state
             .compression
             .guard
             .record_outcome(result.occupancy_before, result.occupancy_after);
-        result.thrashing_disabled = self.state.compression.guard.disabled;
+        result.thrashing_disabled = state.compression.guard.disabled;
         result.recommend_session_compact = self
             .compression_policy
             .should_recommend_compact(result.occupancy_after);
         if result.recommend_session_compact {
-            self.state.compression.pending_recommend_compact = true;
+            state.compression.pending_recommend_compact = true;
         }
         Ok(result)
     }

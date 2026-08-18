@@ -208,7 +208,7 @@ impl Session {
         {
             let mut sess = session.lock().await;
             sess.cancel_signal().reset();
-            sess.bind_turn_context(Arc::clone(&turn_context));
+            sess.bind_turn_context(Arc::clone(&turn_context)).await;
             let mut active_turn = sess.active_turn.lock().await;
             let active_turn = active_turn.get_or_insert_with(ActiveTurn::default);
             active_turn.start(
@@ -239,8 +239,8 @@ impl Session {
                 }
             }
         }
-        if sess.current_turn_id() == Some(turn_context.sub_id()) {
-            sess.clear_current_turn_id();
+        if sess.current_turn_id().await.as_deref() == Some(turn_context.sub_id()) {
+            sess.clear_current_turn_id().await;
         }
         task_result
     }
@@ -298,8 +298,8 @@ impl Session {
                 }
             }
         }
-        if sess.current_turn_id() == Some(turn_context.sub_id()) {
-            sess.clear_current_turn_id();
+        if sess.current_turn_id().await.as_deref() == Some(turn_context.sub_id()) {
+            sess.clear_current_turn_id().await;
         }
         Ok(())
     }
@@ -420,8 +420,8 @@ mod tests {
             .unwrap(),
         ));
         let turn_context = {
-            let sess = session.lock().await;
-            sess.create_turn_context("turn-abort".into())
+            let mut sess = session.lock().await;
+            sess.create_turn_context("turn-abort".into()).await
         };
         let started = Arc::new(Notify::new());
         let task = PendingTask {

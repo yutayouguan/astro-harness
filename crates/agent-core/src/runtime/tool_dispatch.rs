@@ -104,9 +104,10 @@ impl AgentLoop {
         let workspace_dir = self.resolve_workspace_dir();
         skills::set_workspace_override(&workspace_dir);
         let session_id = self.session_id.clone();
+        let fallback_turn_id = self.current_turn_id().await;
         let turn_id = step_context
             .map(|step_context| step_context.turn.sub_id().to_string())
-            .or_else(|| self.state.turn.current_turn_id.clone());
+            .or(fallback_turn_id);
         let memory_dir = self.config.memory_dir.clone();
         let sessions: &dyn ConversationStore = &*self.sessions;
         let execution = Some(self.execution());
@@ -248,13 +249,14 @@ impl AgentLoop {
         if self.cancel.is_cancelled() {
             return Err(ToolCallError::Cancelled);
         }
-        self.increment_tool_round()?;
+        self.increment_tool_round().await?;
+        let turn_id = self.current_turn_id().await;
         // 可拦截：PluginHookBus 优先
         let bus_out = self.fire_hook(
             ::hooks::PRE_TOOL_CALL,
             ::hooks::HookPayload {
                 session_id: self.session_id.clone(),
-                turn_id: self.state.turn.current_turn_id.clone(),
+                turn_id,
                 tool_name: Some(name.into()),
                 tool_args: Some(args.clone()),
                 detail: format!("{name} {args}"),
@@ -293,11 +295,15 @@ impl AgentLoop {
         } else {
             (name, args_owned)
         };
-        let step_context = self.state.current_step_context.clone();
-        let interaction_mode = step_context
-            .as_ref()
-            .map(|step_context| step_context.turn.mode())
-            .unwrap_or(self.state.interaction_mode);
+        let (step_context, interaction_mode) = {
+            let state = self.state.lock().await;
+            let step_context = state.current_step_context.clone();
+            let interaction_mode = step_context
+                .as_ref()
+                .map(|step_context| step_context.turn.mode())
+                .unwrap_or(state.interaction_mode);
+            (step_context, interaction_mode)
+        };
         if let Err(msg) = tools::check_tool_call(interaction_mode, exec_name, &exec_args) {
             return Ok(msg.into());
         }
@@ -345,7 +351,7 @@ impl AgentLoop {
             );
         }
         if super::tool_writes_disk(exec_name, &exec_args) {
-            self.state.turn.mark_wrote_disk();
+            self.state.lock().await.turn.mark_wrote_disk();
         }
         Ok(self
             .finalize_tool_call_result(exec_name, &exec_args, raw_result)
@@ -382,17 +388,18 @@ impl AgentLoop {
 
     /// 统一应用工具结果 hook 与媒体保留逻辑。
     pub(crate) async fn finalize_tool_call_result(
-        &self,
+        &mut self,
         name: &str,
         args_owned: &serde_json::Value,
         raw_result: types::ToolOutput,
     ) -> types::ToolOutput {
         let raw_text = raw_result.text().to_string();
+        let turn_id = self.current_turn_id().await;
         let transformed = self.fire_hook(
             ::hooks::TRANSFORM_TOOL_RESULT,
             ::hooks::HookPayload {
                 session_id: self.session_id.clone(),
-                turn_id: self.state.turn.current_turn_id.clone(),
+                turn_id: turn_id.clone(),
                 tool_name: Some(name.into()),
                 tool_args: Some(args_owned.clone()),
                 tool_result: Some(raw_text.clone()),
@@ -412,7 +419,7 @@ impl AgentLoop {
             ::hooks::POST_TOOL_CALL,
             ::hooks::HookPayload {
                 session_id: self.session_id.clone(),
-                turn_id: self.state.turn.current_turn_id.clone(),
+                turn_id,
                 tool_name: Some(name.into()),
                 tool_result: Some(result.text().to_string()),
                 detail: {

@@ -20,8 +20,8 @@ pub const MID_RUN_SUMMARY_RATIO: f32 = 0.80;
 pub const PROTECT_FIRST_MESSAGES: usize = 4;
 
 /// 是否应尝试 mid-run 摘要。
-pub fn should_attempt(agent: &AgentLoop) -> bool {
-    if agent.mid_run_summary_done() {
+pub async fn should_attempt(agent: &mut AgentLoop) -> bool {
+    if agent.mid_run_summary_done().await {
         return false;
     }
     let cfg = agent.compression_config();
@@ -136,21 +136,21 @@ async fn complete_summary_chat(target: &types::ChatTarget, prompt: &str) -> anyh
 
 /// 尝试 mid-run 摘要；成功则写入 AgentLoop handoff，返回 true。
 pub async fn maybe_apply_mid_run_summary(agent: &mut AgentLoop) -> anyhow::Result<bool> {
-    if !should_attempt(agent) {
+    if !should_attempt(agent).await {
         return Ok(false);
     }
     let protect_first = agent.config_protect_first_n();
     let protect_last = agent.config_protect_last_n();
     let transcript = build_transcript(&agent.session_messages, protect_first, protect_last);
     if transcript.chars().count() < 400 {
-        agent.mark_mid_run_summary_skipped();
+        agent.mark_mid_run_summary_skipped().await;
         return Ok(false);
     }
 
     let targets = agent.auxiliary_targets(types::AuxiliaryTask::Compaction);
     if targets.is_empty() {
         warn!("mid-run summary skipped: no compaction targets");
-        agent.mark_mid_run_summary_skipped();
+        agent.mark_mid_run_summary_skipped().await;
         return Ok(false);
     }
 
@@ -175,7 +175,7 @@ pub async fn maybe_apply_mid_run_summary(agent: &mut AgentLoop) -> anyhow::Resul
         }
     }
     let Some(text) = summary else {
-        agent.mark_mid_run_summary_skipped();
+        agent.mark_mid_run_summary_skipped().await;
         if let Some(e) = last_err {
             return Err(e);
         }
@@ -183,7 +183,7 @@ pub async fn maybe_apply_mid_run_summary(agent: &mut AgentLoop) -> anyhow::Resul
     };
 
     let before = estimate_messages_tokens(&agent.session_messages);
-    agent.set_mid_run_handoff(text.clone());
+    agent.set_mid_run_handoff(text.clone()).await;
     let collapsed =
         collapse_history_with_handoff(&agent.session_messages, &text, protect_first, protect_last);
     let after = estimate_messages_tokens(&collapsed);

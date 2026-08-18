@@ -1,6 +1,6 @@
 # Agent 生命周期详细设计
 
-> 版本：v2.5
+> 版本：v2.6
 > 日期：2026-08-18
 > 状态：实施基线  
 > 上游参考：[OpenAI Codex](https://github.com/openai/codex) `632e35ce8d5dec43b75dbf99f9e6fa52bed47c3d`  
@@ -510,7 +510,7 @@ schema 和 RPC 字段改名都必须提供 migration 或 serde alias。
 - [ ] 将 `Arc<Mutex<Session>>` 内锁化为 Codex 的 `Arc<Session>`。
   - [x] `active_turn` 收敛为 Codex 同构的 `Mutex<Option<ActiveTurn>>`。
   - [x] 提取 Codex 同名 `SessionState`，集中轮次、压缩、注入上下文、交互模式与 Turn/Step 快照。
-  - [ ] 将 `Session.state` 升级为内部 `Mutex<SessionState>`。
+  - [x] 将 `Session.state` 升级为内部 `Mutex<SessionState>`。
   - [ ] 将 `SessionTask`、streaming、background 和 server 签名迁移为 `Arc<Session>`。
 
 v2.3 落地说明：foreground、background、Cron 与 SubAgent 不再先调用
@@ -532,6 +532,14 @@ v2.5 内锁化批次 2：先建立状态所有权边界，不同时改变同步�
 `active_turn` 继续作为独立内部锁，与 Codex 的字段布局一致。本批仍由现有 `&mut Session`
 路径提供互斥，后续批次再把 `state` 包装为 `Mutex<SessionState>` 并逐层收敛到
 `Arc<Session>`，因此不引入新的锁跨 `await` 行为。
+
+v2.6 内锁化批次 3：`Session.state` 已升级为 Codex 同构的
+`tokio::sync::Mutex<SessionState>`。轮次、压缩、注入上下文、交互模式与 Turn/Step 快照的
+读写统一通过 `.lock().await`；`current_turn_id`、`recalled_context`、`mid_run_handoff` 等读取
+返回拥有所有权的快照，禁止把 guard 引用泄漏到调用方。所有 provider、MCP、工具执行和 LLM
+摘要 `await` 前均释放 state guard，避免锁跨外部 I/O。由于 `ConversationStore` 与
+`CompressionPolicy` 尚未完成内部锁化，相关 async 访问器本批继续接收 `&mut Session`，以维持
+`SessionTask` future 的 `Send` 约束；下一批再迁移剩余状态与 `Arc<Session>` 签名。
 
 ### Phase C：工具运行时
 

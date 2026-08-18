@@ -362,7 +362,7 @@ async fn audit_hardline_terminal_denial(
     description: &str,
 ) {
     let (memory_dir, settings, profile_id, session_id, turn_id) = {
-        let agent = session.lock().await;
+        let mut agent = session.lock().await;
         let settings = memory::load_permission_settings(agent.memory_dir());
         let profile_id = agent
             .permission_profile()
@@ -373,7 +373,7 @@ async fn audit_hardline_terminal_denial(
             settings,
             profile_id,
             agent.session_id().to_string(),
-            agent.current_turn_id().map(str::to_string),
+            agent.current_turn_id().await,
         )
     };
     let request = types::PermissionRequest {
@@ -420,9 +420,9 @@ async fn preflight_read_only_write(
     }
 
     let (session_id, turn_id, profile_id, memory_dir, settings) = {
-        let agent = session.lock().await;
+        let mut agent = session.lock().await;
         let session_id = agent.session_id().to_string();
-        let turn_id = agent.current_turn_id().map(str::to_string);
+        let turn_id = agent.current_turn_id().await;
         let settings = memory::load_permission_settings(agent.memory_dir());
         let profile_id = agent
             .permission_profile()
@@ -505,7 +505,7 @@ async fn preflight_mcp_tool_approval(
     }
 
     let (session_id, turn_id, profile_id, memory_dir, settings) = {
-        let agent = session.lock().await;
+        let mut agent = session.lock().await;
         let settings = memory::load_permission_settings(agent.memory_dir());
         let profile_id = agent
             .permission_profile()
@@ -513,7 +513,7 @@ async fn preflight_mcp_tool_approval(
             .to_string();
         (
             agent.session_id().to_string(),
-            agent.current_turn_id().map(str::to_string),
+            agent.current_turn_id().await,
             profile_id,
             agent.memory_dir().to_path_buf(),
             settings,
@@ -580,7 +580,7 @@ async fn preflight_in_process_network(
     }
 
     let (session_id, turn_id, profile_id, memory_dir, settings) = {
-        let agent = session.lock().await;
+        let mut agent = session.lock().await;
         let settings = memory::load_permission_settings(agent.memory_dir());
         let profile_id = agent
             .permission_profile()
@@ -588,7 +588,7 @@ async fn preflight_in_process_network(
             .to_string();
         (
             agent.session_id().to_string(),
-            agent.current_turn_id().map(str::to_string),
+            agent.current_turn_id().await,
             profile_id,
             agent.memory_dir().to_path_buf(),
             settings,
@@ -782,9 +782,9 @@ async fn execute_tools_serial_inner(
                             active_profile_id,
                             permission_settings,
                         ) = {
-                            let agent = session.lock().await;
+                            let mut agent = session.lock().await;
                             let approval_session_id = agent.session_id().to_string();
-                            let approval_turn_id = agent.current_turn_id().map(str::to_string);
+                            let approval_turn_id = agent.current_turn_id().await;
                             let base = agent.memory_dir().to_path_buf();
                             let permissions = memory::config::load_permission_settings(&base);
                             let active_profile_id = agent

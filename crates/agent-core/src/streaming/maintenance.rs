@@ -56,8 +56,8 @@ pub(super) async fn emit_context_usage(
     history: &[types::message::Message],
     tools: &[serde_json::Value],
 ) {
-    let agent = session.lock().await;
-    let layers = agent.system_prompt_layer_breakdown();
+    let mut agent = session.lock().await;
+    let layers = agent.system_prompt_layer_breakdown().await;
     let recommend_compact_ratio = agent.compression_config().recommend_compact_ratio;
     let snap = crate::prompt::context_usage::build_snapshot(
         crate::prompt::context_usage::ContextUsageInput {
@@ -74,7 +74,7 @@ pub(super) async fn emit_context_usage(
             messages: history,
             context_window: agent.context_window(),
             updated_at_ms: chrono::Utc::now().timestamp_millis(),
-            recommend_compact: agent.should_recommend_compact(),
+            recommend_compact: agent.should_recommend_compact().await,
             recommend_compact_ratio,
         },
     );
@@ -265,9 +265,9 @@ pub(super) async fn run_sampling_request(
     tool_specs: Vec<serde_json::Value>,
 ) -> Result<super::types::AssistantContentStream, String> {
     {
-        let agent = session.lock().await;
+        let mut agent = session.lock().await;
         let sid = agent.session_id().to_string();
-        let turn_id = agent.current_turn_id().map(str::to_string);
+        let turn_id = agent.current_turn_id().await;
         let _ = agent.fire_hook(
             ::hooks::PRE_API_REQUEST,
             ::hooks::HookPayload {
@@ -282,9 +282,9 @@ pub(super) async fn run_sampling_request(
         .await
     {
         Ok(s) => {
-            let agent = session.lock().await;
+            let mut agent = session.lock().await;
             let sid = agent.session_id().to_string();
-            let turn_id = agent.current_turn_id().map(str::to_string);
+            let turn_id = agent.current_turn_id().await;
             let _ = agent.fire_hook(
                 ::hooks::POST_API_REQUEST,
                 ::hooks::HookPayload {
@@ -296,9 +296,9 @@ pub(super) async fn run_sampling_request(
             Ok(s)
         }
         Err(err) => {
-            let agent = session.lock().await;
+            let mut agent = session.lock().await;
             let sid = agent.session_id().to_string();
-            let turn_id = agent.current_turn_id().map(str::to_string);
+            let turn_id = agent.current_turn_id().await;
             let _ = agent.fire_hook(
                 ::hooks::POST_API_REQUEST,
                 ::hooks::HookPayload {
