@@ -1,5 +1,5 @@
 use anyhow::{bail, Context};
-use rusqlite::{Connection, OptionalExtension, Transaction};
+use rusqlite::{Connection, OptionalExtension, Transaction, TransactionBehavior};
 use serde::{Deserialize, Serialize};
 
 pub(crate) const SCHEMA_VERSION: i32 = 2;
@@ -92,7 +92,7 @@ pub struct HistoricalAgentMessage {
 }
 
 pub(crate) fn migrate(conn: &mut Connection) -> anyhow::Result<()> {
-    let tx = conn.transaction()?;
+    let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
     let existing_version = read_schema_version(&tx)?;
     match existing_version {
         Some(SCHEMA_VERSION) => {

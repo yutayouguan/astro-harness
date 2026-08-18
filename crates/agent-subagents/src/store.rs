@@ -3,7 +3,7 @@ use std::time::{Duration, Instant};
 
 use anyhow::{bail, Context};
 use chrono::{SecondsFormat, Utc};
-use rusqlite::{params, types::Type, Connection, OptionalExtension};
+use rusqlite::{params, types::Type, Connection, OptionalExtension, TransactionBehavior};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -147,7 +147,7 @@ impl AgentGraphStore {
     pub fn rollback_pending_thread(&self, thread_id: &str) -> anyhow::Result<()> {
         require_non_empty("thread_id", thread_id)?;
         let mut conn = self.connect()?;
-        let tx = conn.transaction()?;
+        let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
         let status_kind = tx
             .query_row(
                 "SELECT status_kind FROM agent_threads WHERE thread_id = ?1",
@@ -202,12 +202,25 @@ impl AgentGraphStore {
         thread_id: &str,
         event: RunnerEvent,
     ) -> anyhow::Result<AgentThreadV2> {
+        self.apply_status_event_with_after_read(thread_id, event, || {})
+    }
+
+    fn apply_status_event_with_after_read<F>(
+        &self,
+        thread_id: &str,
+        event: RunnerEvent,
+        after_read: F,
+    ) -> anyhow::Result<AgentThreadV2>
+    where
+        F: FnOnce(),
+    {
         require_non_empty("thread_id", thread_id)?;
         let mut conn = self.connect()?;
-        let tx = conn.transaction()?;
+        let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
         if query_v2_thread_by_id(&tx, thread_id)?.is_none() {
             bail!("unknown agent thread {thread_id:?}");
         }
+        after_read();
 
         let status = status_for_event(&event);
         let event_kind = event_kind(&event);
@@ -744,6 +757,9 @@ fn now() -> String {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::mpsc;
+    use std::thread;
+
     use super::*;
     use crate::{AgentPath, AgentStatusV2, RunnerEvent, ThreadReservation};
 
@@ -894,6 +910,62 @@ mod tests {
             assert_eq!(projected.status, expected);
         }
         assert_eq!(store.status_events("child").unwrap().len(), 5);
+    }
+
+    #[test]
+    fn concurrent_status_writer_does_not_invalidate_first_transaction_snapshot() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = AgentGraphStore::open(dir.path().join("subagents-v2.db")).unwrap();
+        store
+            .reserve_thread(&reservation("child", "/root/child"))
+            .unwrap();
+
+        let (writer_result_tx, writer_result_rx) = mpsc::channel();
+        let mut writer_handle = None;
+        let mut early_writer_result = None;
+        let first_result = store.apply_status_event_with_after_read(
+            "child",
+            RunnerEvent::TurnStarted {
+                turn_id: "first-turn".into(),
+            },
+            || {
+                let writer = store.clone();
+                let (writer_started_tx, writer_started_rx) = mpsc::channel();
+                writer_handle = Some(thread::spawn(move || {
+                    writer_started_tx.send(()).unwrap();
+                    let result = writer.apply_status_event(
+                        "child",
+                        RunnerEvent::TurnStarted {
+                            turn_id: "second-turn".into(),
+                        },
+                    );
+                    writer_result_tx.send(result).unwrap();
+                }));
+                writer_started_rx
+                    .recv_timeout(Duration::from_secs(1))
+                    .unwrap();
+                early_writer_result = writer_result_rx
+                    .recv_timeout(Duration::from_millis(100))
+                    .ok();
+            },
+        );
+
+        let second_result = early_writer_result.unwrap_or_else(|| {
+            writer_result_rx
+                .recv_timeout(Duration::from_secs(2))
+                .unwrap()
+        });
+        writer_handle.unwrap().join().unwrap();
+        first_result.unwrap();
+        second_result.unwrap();
+
+        let source_turn_ids = store
+            .status_events("child")
+            .unwrap()
+            .into_iter()
+            .map(|event| event.source_turn_id.unwrap())
+            .collect::<Vec<_>>();
+        assert_eq!(source_turn_ids, vec!["first-turn", "second-turn"]);
     }
 
     #[test]
