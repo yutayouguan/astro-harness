@@ -103,6 +103,21 @@ enum RuntimeSlot {
     Running(Box<ActiveAgentTurn>),
 }
 
+enum RuntimeTerminationState {
+    Missing,
+    Starting,
+    Running {
+        control: Arc<AgentThreadControl>,
+        terminated: watch::Receiver<Option<RunnerAck>>,
+    },
+}
+
+pub(super) enum CloseThreadStart {
+    Complete,
+    Starting,
+    TerminationRequested(watch::Receiver<Option<RunnerAck>>),
+}
+
 struct PendingFollowup {
     request: RunAgentTurnRequest,
     result_rx: watch::Receiver<Option<Result<(), String>>>,
@@ -280,7 +295,7 @@ pub(super) struct AckSubscribeHook {
 #[derive(Default)]
 pub struct AgentRuntimeManager {
     active: Mutex<HashMap<String, RuntimeSlot>>,
-    subtree_close: tokio::sync::Mutex<()>,
+    subtree_close: Arc<tokio::sync::Mutex<()>>,
     #[cfg(test)]
     ack_subscribe_hook: Mutex<Option<AckSubscribeHook>>,
     #[cfg(test)]
@@ -303,6 +318,8 @@ pub struct AgentRuntimeManager {
     after_startup_permit_hook: Mutex<Option<AckSubscribeHook>>,
     #[cfg(test)]
     start_status_failure: Mutex<Option<String>>,
+    #[cfg(test)]
+    close_timeout: Mutex<Option<std::time::Duration>>,
 }
 
 impl AgentRuntimeManager {
@@ -683,52 +700,55 @@ impl AgentRuntimeManager {
         Ok(())
     }
 
-    pub(super) async fn close_thread(
+    /// Advance one thread close until it is either complete, waiting for a
+    /// Starting slot, or has synchronously sent a termination signal.  The
+    /// caller can safely transfer its subtree admission guard only after the
+    /// `TerminationRequested` result is returned.
+    pub(super) async fn begin_close_thread(
         &self,
         control: &subagents::AgentControl,
         thread: &AgentThreadV2,
-    ) -> anyhow::Result<()> {
+    ) -> anyhow::Result<CloseThreadStart> {
         let thread_id = thread.thread_id.as_str();
-        tokio::time::timeout(std::time::Duration::from_secs(30), async {
-            loop {
-                let current = control.resolve_desktop_target(thread.canonical_path.as_str())?;
-                if current.status == AgentStatusV2::Shutdown {
-                    return Ok(());
-                }
-
-                if self.is_running(thread_id) {
-                    match self.terminate(thread_id).await {
-                        Ok(()) => return Ok(()),
-                        Err(_) if !self.is_running(thread_id) => continue,
-                        Err(error) if error.to_string().contains("is starting a runtime turn") => {
-                            tokio::task::yield_now().await;
-                            continue;
-                        }
-                        Err(error) => return Err(error),
-                    }
+        let current = control.resolve_desktop_target(thread.canonical_path.as_str())?;
+        match self.runtime_termination_state(thread_id)? {
+            RuntimeTerminationState::Running {
+                control: runtime_control,
+                terminated,
+            } => {
+                self.pause_after_ack_subscribe().await;
+                runtime_control.close();
+                Ok(CloseThreadStart::TerminationRequested(terminated))
+            }
+            RuntimeTerminationState::Starting => Ok(CloseThreadStart::Starting),
+            RuntimeTerminationState::Missing => {
+                if current.status == AgentStatusV2::Shutdown
+                    && control.runtime_handle(thread_id)?.is_none()
+                {
+                    return Ok(CloseThreadStart::Complete);
                 }
 
                 // No live runner exists to acknowledge shutdown. The durable
                 // RuntimeTerminated event is the acknowledgement for this idle
-                // generation and atomically closes its spawn edge.
+                // generation and atomically closes its spawn edge. Reapplying
+                // it to Shutdown also clears a stale runtime handle.
                 control.record_runner_event(thread_id, RunnerEvent::RuntimeTerminated)?;
-
-                // A racing follow-up may have reserved a Starting slot just
-                // before the durable shutdown. It cannot start a new turn on a
-                // Shutdown thread; wait for its normal cleanup before reporting
-                // the desktop close complete.
-                while self.is_running(thread_id) {
-                    tokio::task::yield_now().await;
-                }
-                return Ok(());
+                Ok(CloseThreadStart::Complete)
             }
-        })
-        .await
-        .map_err(|_| anyhow::anyhow!("timed out closing agent runtime {thread_id:?}"))?
+        }
     }
 
-    pub(super) async fn lock_subtree_close(&self) -> tokio::sync::MutexGuard<'_, ()> {
-        self.subtree_close.lock().await
+    pub(super) async fn wait_for_close_ack(
+        &self,
+        terminated: watch::Receiver<Option<RunnerAck>>,
+    ) -> anyhow::Result<()> {
+        let termination = wait_for_termination(terminated, "termination").await?;
+        expect_terminal_ack("termination", termination, AgentStatusV2::Shutdown)?;
+        Ok(())
+    }
+
+    pub(super) async fn lock_subtree_close(&self) -> tokio::sync::OwnedMutexGuard<()> {
+        Arc::clone(&self.subtree_close).lock_owned().await
     }
 
     pub fn is_running(&self, thread_id: &str) -> bool {
@@ -854,17 +874,32 @@ impl AgentRuntimeManager {
         &self,
         thread_id: &str,
     ) -> anyhow::Result<(Arc<AgentThreadControl>, watch::Receiver<Option<RunnerAck>>)> {
-        let active = self.lock_active()?;
-        let slot = active.get(thread_id).ok_or_else(|| {
-            anyhow::anyhow!("agent thread {thread_id:?} has no active runtime turn")
-        })?;
-        match slot {
-            RuntimeSlot::Running(turn) => {
-                Ok((Arc::clone(&turn.interrupt), turn.terminated.clone()))
-            }
-            RuntimeSlot::Starting(_) => {
+        match self.runtime_termination_state(thread_id)? {
+            RuntimeTerminationState::Running {
+                control,
+                terminated,
+            } => Ok((control, terminated)),
+            RuntimeTerminationState::Starting => {
                 anyhow::bail!("agent thread {thread_id:?} is starting a runtime turn")
             }
+            RuntimeTerminationState::Missing => {
+                anyhow::bail!("agent thread {thread_id:?} has no active runtime turn")
+            }
+        }
+    }
+
+    fn runtime_termination_state(
+        &self,
+        thread_id: &str,
+    ) -> anyhow::Result<RuntimeTerminationState> {
+        let active = self.lock_active()?;
+        match active.get(thread_id) {
+            Some(RuntimeSlot::Running(turn)) => Ok(RuntimeTerminationState::Running {
+                control: Arc::clone(&turn.interrupt),
+                terminated: turn.terminated.clone(),
+            }),
+            Some(RuntimeSlot::Starting(_)) => Ok(RuntimeTerminationState::Starting),
+            None => Ok(RuntimeTerminationState::Missing),
         }
     }
 
@@ -900,8 +935,26 @@ impl AgentRuntimeManager {
     }
 
     #[cfg(test)]
-    fn set_before_terminal_persist_hook(&self, hook: Option<AckSubscribeHook>) {
+    pub(super) fn set_before_terminal_persist_hook(&self, hook: Option<AckSubscribeHook>) {
         *self.before_terminal_persist_hook.lock().unwrap() = hook;
+    }
+
+    #[cfg(test)]
+    pub(super) fn set_close_timeout(&self, timeout: std::time::Duration) {
+        *self.close_timeout.lock().unwrap() = Some(timeout);
+    }
+
+    #[cfg(test)]
+    pub(super) fn close_timeout(&self) -> std::time::Duration {
+        self.close_timeout
+            .lock()
+            .unwrap()
+            .unwrap_or_else(|| std::time::Duration::from_secs(30))
+    }
+
+    #[cfg(not(test))]
+    pub(super) fn close_timeout(&self) -> std::time::Duration {
+        std::time::Duration::from_secs(30)
     }
 
     #[cfg(test)]
@@ -1362,7 +1415,8 @@ mod tests {
 
     use super::{
         sandbox_profile, wait_for_termination, AckSubscribeHook, ActiveAgentTurn,
-        AgentRuntimeManager, RunAgentTurnRequest, RuntimeSlot, StartTurnOwnerGuard,
+        AgentRuntimeManager, CloseThreadStart, RunAgentTurnRequest, RuntimeSlot,
+        StartTurnOwnerGuard, StartingAgentTurn,
     };
 
     #[test]
@@ -1371,6 +1425,36 @@ mod tests {
         assert_eq!(
             sandbox_profile(Some("workspace_write")).as_deref(),
             Some(types::WORKSPACE_PROFILE)
+        );
+    }
+
+    #[tokio::test]
+    async fn close_start_reports_starting_as_a_typed_state_without_mutating_durable_status() {
+        let dir = tempfile::tempdir().unwrap();
+        let (control, thread) = setup(&dir, "worker");
+        let manager = AgentRuntimeManager::default();
+        let (_result_tx, result_rx) = watch::channel(None);
+        manager.active.lock().unwrap().insert(
+            thread.thread_id.clone(),
+            RuntimeSlot::Starting(StartingAgentTurn {
+                token: "starting-token".into(),
+                result_rx,
+            }),
+        );
+
+        assert!(matches!(
+            manager
+                .begin_close_thread(control.as_ref(), &thread)
+                .await
+                .unwrap(),
+            CloseThreadStart::Starting
+        ));
+        assert_eq!(
+            control
+                .resolve_desktop_target(thread.canonical_path.as_str())
+                .unwrap()
+                .status,
+            AgentStatusV2::PendingInit
         );
     }
 
