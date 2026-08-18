@@ -191,7 +191,7 @@ async fn steered_input_is_consumed_by_the_active_regular_task() {
 
     first_started.notified().await;
     let root_control = agent::exec::agent_control_directory::AgentControlDirectory::global()
-        .get("steer-session")
+        .get_at("steer-session", &dir.path().join("subagents-v2.db"))
         .expect("session root control");
     let steer_cursor = root_control.activity_cursor();
     let turn_id = session

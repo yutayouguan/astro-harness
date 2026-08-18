@@ -211,6 +211,10 @@ impl AgentRuntimeManager {
         let interrupt = Arc::new(AgentThreadControl::default());
         interrupt.begin_turn();
         let (terminated_tx, terminated_rx) = watch::channel(None);
+        let recover_interrupted_boundary = control
+            .status_events(&thread_id)?
+            .last()
+            .is_some_and(|event| matches!(event.event, RunnerEvent::TurnInterrupted { .. }));
 
         {
             let mut active = self.lock_active()?;
@@ -227,14 +231,34 @@ impl AgentRuntimeManager {
             );
         }
 
-        if let Err(error) = control.record_runner_event(
+        if let Err(error) = self.record_terminal_event(
+            &control,
             &thread_id,
             RunnerEvent::TurnStarted {
                 turn_id: turn_id.clone(),
             },
         ) {
-            let _ = self.remove_active_if_turn(&thread_id, &turn_id);
-            return Err(error);
+            self.run_before_cleanup_hook();
+            let active_result = self
+                .remove_active_if_turn(&thread_id, &turn_id)
+                .and_then(|removed| {
+                    self.run_cleanup_failure_hook("active")?;
+                    Ok(removed)
+                })
+                .map(|_| ());
+            drop(permit);
+            let completion_result = combine_completion_results([
+                Err(error.context("persist TurnStarted")),
+                active_result,
+                Ok(()),
+            ]);
+            let message = completion_result
+                .as_ref()
+                .err()
+                .map(|error| format!("{error:#}"))
+                .unwrap_or_else(|| "persist TurnStarted failed".to_string());
+            let _ = terminated_tx.send(Some(RunnerAck::Failed(message)));
+            return completion_result;
         }
 
         let runtime_interrupt = Arc::clone(&interrupt);
@@ -273,7 +297,12 @@ impl AgentRuntimeManager {
             permit: Some(permit),
         };
 
-        let result = run_request(&request, Arc::clone(&interrupt)).await;
+        let result = run_request(
+            &request,
+            Arc::clone(&interrupt),
+            recover_interrupted_boundary,
+        )
+        .await;
         let terminal_boundary_result = if (interrupt.is_closed() || interrupt.is_interrupted())
             && request.runtime.interrupt_message
         {
@@ -613,6 +642,7 @@ fn ensure_interrupted_history_boundary(
 async fn run_request(
     request: &RunAgentTurnRequest,
     interrupt: Arc<AgentThreadControl>,
+    recover_interrupted_boundary: bool,
 ) -> anyhow::Result<String> {
     let mut config = Config::with_defaults(request.memory_dir.clone());
     config.soul = format!(
@@ -629,6 +659,9 @@ async fn run_request(
         Arc::clone(&request.control),
         request.thread.canonical_path.clone(),
     )?;
+    if recover_interrupted_boundary {
+        session.ensure_assistant_interrupted_boundary().await?;
+    }
     session.set_project_root(request.runtime.project_root.clone());
     session.set_permission_profile(sandbox_profile(request.runtime.sandbox_mode.as_deref()));
     session.set_mcp_config_override(mcp::decode_inline_mcp_servers(
@@ -935,6 +968,177 @@ mod tests {
                 RunnerEvent::TurnCompleted { .. }
             ]
         ));
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn turn_started_persistence_failure_is_shared_with_all_waiters_after_cleanup() {
+        let dir = tempfile::tempdir().unwrap();
+        let (control, thread) = setup(&dir, "worker");
+        let manager = Arc::new(AgentRuntimeManager::default());
+        let persistence_entered = Arc::new(std::sync::Barrier::new(2));
+        let persistence_release = Arc::new(std::sync::Barrier::new(2));
+        manager.set_terminal_persistence_hook(Some(Arc::new({
+            let persistence_entered = Arc::clone(&persistence_entered);
+            let persistence_release = Arc::clone(&persistence_release);
+            move |event| {
+                if matches!(event, RunnerEvent::TurnStarted { .. }) {
+                    persistence_entered.wait();
+                    persistence_release.wait();
+                    anyhow::bail!("injected TurnStarted persistence failure");
+                }
+                Ok(())
+            }
+        })));
+        let start = tokio::spawn({
+            let manager = Arc::clone(&manager);
+            let control = Arc::clone(&control);
+            let thread = thread.clone();
+            let memory_dir = dir.path().join("memory");
+            async move {
+                manager
+                    .start_turn(request(control, thread, memory_dir, pending_chat()))
+                    .await
+            }
+        });
+        tokio::task::spawn_blocking({
+            let persistence_entered = Arc::clone(&persistence_entered);
+            move || persistence_entered.wait()
+        })
+        .await
+        .unwrap();
+
+        assert!(manager.is_running(&thread.thread_id));
+        let (_, observer_one) = manager.termination_subscription(&thread.thread_id).unwrap();
+        let (_, observer_two) = manager.termination_subscription(&thread.thread_id).unwrap();
+        let subscribe_hook = AckSubscribeHook {
+            entered: Arc::new(tokio::sync::Notify::new()),
+            release: Arc::new(tokio::sync::Notify::new()),
+        };
+        manager.set_ack_subscribe_hook(Some(subscribe_hook.clone()));
+        let interrupt = tokio::spawn({
+            let manager = Arc::clone(&manager);
+            let thread_id = thread.thread_id.clone();
+            async move { manager.interrupt(&thread_id).await }
+        });
+        subscribe_hook.entered.notified().await;
+        subscribe_hook.release.notify_one();
+        let terminate = tokio::spawn({
+            let manager = Arc::clone(&manager);
+            let thread_id = thread.thread_id.clone();
+            async move { manager.terminate(&thread_id).await }
+        });
+        subscribe_hook.entered.notified().await;
+        subscribe_hook.release.notify_one();
+        let observer_one =
+            tokio::spawn(async move { wait_for_termination(observer_one, "first observer").await });
+        let observer_two =
+            tokio::spawn(
+                async move { wait_for_termination(observer_two, "second observer").await },
+            );
+
+        tokio::task::spawn_blocking({
+            let persistence_release = Arc::clone(&persistence_release);
+            move || persistence_release.wait()
+        })
+        .await
+        .unwrap();
+
+        let start_error = start.await.unwrap().unwrap_err();
+        let interrupt_error = interrupt.await.unwrap().unwrap_err();
+        let terminate_error = terminate.await.unwrap().unwrap_err();
+        let observer_one_error = observer_one.await.unwrap().unwrap_err();
+        let observer_two_error = observer_two.await.unwrap().unwrap_err();
+        for error in [
+            &start_error,
+            &interrupt_error,
+            &terminate_error,
+            &observer_one_error,
+            &observer_two_error,
+        ] {
+            assert!(
+                format!("{error:#}").contains("injected TurnStarted persistence failure"),
+                "unexpected error: {error:#}"
+            );
+        }
+        assert!(!manager.is_running(&thread.thread_id));
+        assert!(control.runtime_handle(&thread.thread_id).unwrap().is_none());
+        assert!(control.status_events(&thread.thread_id).unwrap().is_empty());
+        let permit = control.acquire_execution(&thread.thread_id).unwrap();
+        drop(permit);
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn recovered_running_turn_inserts_interrupted_boundary_before_follow_up() {
+        let dir = tempfile::tempdir().unwrap();
+        let graph_path = dir.path().join("agents.db");
+        let store = AgentGraphStore::open(graph_path.clone()).unwrap();
+        let initial_control = AgentControl::open(
+            "root".into(),
+            store,
+            Limits {
+                max_threads: 8,
+                max_depth: 4,
+                max_running: 1,
+            },
+        )
+        .unwrap();
+        let reservation = initial_control
+            .reserve_spawn(&AgentPath::root(), "worker")
+            .unwrap();
+        let thread = reservation.thread().clone();
+        reservation.commit().unwrap();
+        initial_control
+            .record_runner_event(
+                &thread.thread_id,
+                RunnerEvent::TurnStarted {
+                    turn_id: "crashed-turn".into(),
+                },
+            )
+            .unwrap();
+        drop(initial_control);
+
+        let memory_dir = dir.path().join("memory");
+        let sessions =
+            session::SessionStore::open_sessions_dir(&memory_dir.join("sessions")).unwrap();
+        sessions
+            .ensure_session(&thread.session_id, "tauri")
+            .unwrap();
+        sessions
+            .append_message(session::NewMessage {
+                content: Some("unfinished request"),
+                ..session::NewMessage::empty(&thread.session_id, "user")
+            })
+            .unwrap();
+
+        let recovered = crate::exec::agent_control_directory::AgentControlDirectory::global()
+            .open_root_at("root", &graph_path)
+            .unwrap();
+        let recovered_thread = recovered
+            .resolve_target(&AgentPath::root(), "worker")
+            .unwrap();
+        assert_eq!(recovered_thread.status, AgentStatusV2::Interrupted);
+        let captured_roles = Arc::new(std::sync::Mutex::new(Vec::new()));
+        AgentRuntimeManager::default()
+            .start_turn(request(
+                Arc::clone(&recovered),
+                recovered_thread,
+                memory_dir,
+                role_capturing_chat(Arc::clone(&captured_roles)),
+            ))
+            .await
+            .unwrap();
+
+        assert_eq!(
+            captured_roles.lock().unwrap().as_slice(),
+            &["user", "assistant", "user"]
+        );
+        let roles = sessions
+            .get_messages(&thread.session_id)
+            .unwrap()
+            .into_iter()
+            .map(|message| message.role)
+            .collect::<Vec<_>>();
+        assert_eq!(roles, ["user", "assistant", "user", "assistant"]);
     }
 
     #[tokio::test(flavor = "current_thread")]

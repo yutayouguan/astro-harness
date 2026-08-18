@@ -4,7 +4,10 @@ use anyhow::Result;
 use rusqlite::{params, OptionalExtension};
 use serde_json::Value;
 
-use super::{json_from_db, json_to_db, now_epoch_secs, NewMessage, SessionStore, StoredMessage};
+use super::{
+    is_unique_constraint, json_from_db, json_to_db, now_epoch_secs, truncate_chars, NewMessage,
+    SessionStore, StoredMessage,
+};
 
 impl SessionStore {
     /// 追加一条富消息，并递增 `sessions.message_count`（`role=tool` 时同时 `tool_call_count++`）。
@@ -335,78 +338,122 @@ impl SessionStore {
         if source_id == new_id {
             anyhow::bail!("fork_session_recent_turns: source and target session ids must differ");
         }
-        if self.get_session(new_id)?.is_some() {
+        let tx = self.conn.unchecked_transaction()?;
+        let parent = tx
+            .query_row(
+                "SELECT model, title FROM sessions WHERE id = ?1",
+                params![source_id],
+                |row| {
+                    Ok((
+                        row.get::<_, Option<String>>(0)?,
+                        row.get::<_, Option<String>>(1)?,
+                    ))
+                },
+            )
+            .optional()?
+            .ok_or_else(|| {
+                anyhow::anyhow!(
+                    "fork_session_recent_turns: source session not found: {source_id:?}"
+                )
+            })?;
+        let target_exists = tx.query_row(
+            "SELECT EXISTS(SELECT 1 FROM sessions WHERE id = ?1)",
+            params![new_id],
+            |row| row.get::<_, bool>(0),
+        )?;
+        if target_exists {
             anyhow::bail!("fork_session_recent_turns: target session already exists");
         }
+        tx.execute(
+            "INSERT INTO sessions (id, source, model, parent_session_id, started_at)
+             VALUES (?1, 'tauri', ?2, ?3, ?4)",
+            params![new_id, parent.0, source_id, now_epoch_secs()?],
+        )?;
 
-        let parent = self.get_session(source_id)?;
-        let model = parent.as_ref().and_then(|session| session.model.clone());
-        self.create_session(new_id, "tauri", model.as_deref(), None, Some(source_id))?;
-
-        let messages = self.get_messages(source_id)?;
-        let start = match recent_turns {
-            None => 0,
-            Some(0) => messages.len(),
-            Some(turns) => messages
-                .iter()
-                .enumerate()
-                .rev()
-                .filter(|(_, message)| message.role == "user")
-                .nth(turns - 1)
-                .map(|(index, _)| index)
-                .unwrap_or(0),
-        };
-
-        let tx = self.conn.unchecked_transaction()?;
-        let mut message_count = 0i64;
-        let mut tool_call_count = 0i64;
-        for message in &messages[start..] {
-            let tool_calls = json_to_db(&message.tool_calls)?;
-            let reasoning_details = json_to_db(&message.reasoning_details)?;
-            let codex_reasoning_items = json_to_db(&message.codex_reasoning_items)?;
-            let codex_message_items = json_to_db(&message.codex_message_items)?;
-            tx.execute(
-                "INSERT INTO messages (
-                    session_id, role, content, compressed_content, tool_call_id, tool_calls, tool_name,
+        let copy_sql = "INSERT INTO messages (
+                session_id, role, content, compressed_content, tool_call_id, tool_calls, tool_name,
+                timestamp, token_count, finish_reason,
+                reasoning, reasoning_content, reasoning_details,
+                codex_reasoning_items, codex_message_items, media_json
+             )
+             SELECT ?1, role, content, compressed_content, tool_call_id, tool_calls, tool_name,
                     timestamp, token_count, finish_reason,
                     reasoning, reasoning_content, reasoning_details,
                     codex_reasoning_items, codex_message_items, media_json
-                 ) VALUES (
-                    ?1, ?2, ?3, ?4, ?5, ?6, ?7,
-                    ?8, ?9, ?10,
-                    ?11, ?12, ?13,
-                    ?14, ?15, ?16
-                 )",
-                params![
-                    new_id,
-                    message.role,
-                    message.content,
-                    message.compressed_content,
-                    message.tool_call_id,
-                    tool_calls,
-                    message.tool_name,
-                    message.timestamp,
-                    message.token_count,
-                    message.finish_reason,
-                    message.reasoning,
-                    message.reasoning_content,
-                    reasoning_details,
-                    codex_reasoning_items,
-                    codex_message_items,
-                    message.media_json,
-                ],
-            )?;
-            message_count += 1;
-            if message.role == "tool" {
-                tool_call_count += 1;
+             FROM messages
+             WHERE session_id = ?2";
+        match recent_turns {
+            Some(0) => {}
+            None => {
+                tx.execute(
+                    &format!("{copy_sql} ORDER BY timestamp ASC, id ASC"),
+                    params![new_id, source_id],
+                )?;
+            }
+            Some(turns) => {
+                let offset = i64::try_from(turns - 1).unwrap_or(i64::MAX);
+                let boundary = tx
+                    .query_row(
+                        "SELECT timestamp, id
+                         FROM messages
+                         WHERE session_id = ?1 AND role = 'user'
+                         ORDER BY timestamp DESC, id DESC
+                         LIMIT 1 OFFSET ?2",
+                        params![source_id, offset],
+                        |row| Ok((row.get::<_, f64>(0)?, row.get::<_, i64>(1)?)),
+                    )
+                    .optional()?;
+                if let Some((timestamp, message_id)) = boundary {
+                    tx.execute(
+                        &format!(
+                            "{copy_sql}
+                             AND (timestamp > ?3 OR (timestamp = ?3 AND id >= ?4))
+                             ORDER BY timestamp ASC, id ASC"
+                        ),
+                        params![new_id, source_id, timestamp, message_id],
+                    )?;
+                } else {
+                    tx.execute(
+                        &format!("{copy_sql} ORDER BY timestamp ASC, id ASC"),
+                        params![new_id, source_id],
+                    )?;
+                }
             }
         }
+        let (message_count, tool_call_count) = tx.query_row(
+            "SELECT COUNT(*), SUM(CASE WHEN role = 'tool' THEN 1 ELSE 0 END)
+             FROM messages WHERE session_id = ?1",
+            params![new_id],
+            |row| {
+                Ok((
+                    row.get::<_, i64>(0)?,
+                    row.get::<_, Option<i64>>(1)?.unwrap_or(0),
+                ))
+            },
+        )?;
         tx.execute(
             "UPDATE sessions
              SET message_count = ?1, tool_call_count = ?2
              WHERE id = ?3",
             params![message_count, tool_call_count, new_id],
         )?;
+        if let Some(title) = parent.1.filter(|title| !title.trim().is_empty()) {
+            let branched = format!("{title} · branch");
+            if let Err(error) = tx.execute(
+                "UPDATE sessions SET title = ?1 WHERE id = ?2",
+                params![branched, new_id],
+            ) {
+                if !is_unique_constraint(&error) {
+                    return Err(error.into());
+                }
+                let suffix: String = new_id.chars().take(8).collect();
+                let unique = format!("{} · {}", truncate_chars(&branched, 60), suffix);
+                tx.execute(
+                    "UPDATE sessions SET title = ?1 WHERE id = ?2",
+                    params![unique, new_id],
+                )?;
+            }
+        }
         tx.commit()?;
 
         Ok(())

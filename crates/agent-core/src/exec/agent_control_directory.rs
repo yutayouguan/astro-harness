@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, OnceLock, Weak};
 
 use subagents::{AgentControl, AgentGraphStore, Limits};
@@ -9,11 +10,13 @@ const DEFAULT_LIMITS: Limits = Limits {
     max_running: 8,
 };
 
+type StoreFactory = dyn Fn(&Path) -> anyhow::Result<AgentGraphStore> + Send + Sync;
+
 /// Process locator for the one root-scoped control plane shared by all
 /// sessions and short-lived agent turn runtimes belonging to that root.
 pub struct AgentControlDirectory {
-    controls: Mutex<HashMap<String, Weak<AgentControl>>>,
-    store_factory: Arc<dyn Fn() -> anyhow::Result<AgentGraphStore> + Send + Sync>,
+    controls: Mutex<HashMap<(PathBuf, String), Weak<AgentControl>>>,
+    store_factory: Arc<StoreFactory>,
 }
 
 impl AgentControlDirectory {
@@ -21,38 +24,80 @@ impl AgentControlDirectory {
         static DIRECTORY: OnceLock<AgentControlDirectory> = OnceLock::new();
         DIRECTORY.get_or_init(|| AgentControlDirectory {
             controls: Mutex::new(HashMap::new()),
-            store_factory: Arc::new(AgentGraphStore::open_default_v2),
+            store_factory: Arc::new(|path| AgentGraphStore::open(path.to_path_buf())),
         })
     }
 
     pub fn open_root(&self, root_session_id: &str) -> anyhow::Result<Arc<AgentControl>> {
+        self.open_root_at(
+            root_session_id,
+            &home::default_memory_dir().join("subagents-v2.db"),
+        )
+    }
+
+    pub fn open_root_at(
+        &self,
+        root_session_id: &str,
+        graph_db_path: &Path,
+    ) -> anyhow::Result<Arc<AgentControl>> {
         anyhow::ensure!(
             !root_session_id.trim().is_empty(),
             "root session id must not be empty"
         );
+        let graph_db_path = normalize_graph_db_path(graph_db_path)?;
+        let key = (graph_db_path.clone(), root_session_id.to_string());
         let mut controls = self
             .controls
             .lock()
             .map_err(|_| anyhow::anyhow!("agent control directory mutex is poisoned"))?;
-        if let Some(control) = controls.get(root_session_id).and_then(Weak::upgrade) {
+        if let Some(control) = controls.get(&key).and_then(Weak::upgrade) {
             return Ok(control);
         }
 
-        let store = (self.store_factory)()?;
+        let store = (self.store_factory)(&graph_db_path)?;
         store.cleanup_pending_reservations(root_session_id)?;
         store.recover_running_as_interrupted(root_session_id)?;
         let control = AgentControl::open(root_session_id.to_string(), store, DEFAULT_LIMITS)?;
-        controls.insert(root_session_id.to_string(), Arc::downgrade(&control));
+        controls.insert(key, Arc::downgrade(&control));
         Ok(control)
     }
 
     pub fn get(&self, root_session_id: &str) -> Option<Arc<AgentControl>> {
+        self.get_at(
+            root_session_id,
+            &home::default_memory_dir().join("subagents-v2.db"),
+        )
+    }
+
+    pub fn get_at(&self, root_session_id: &str, graph_db_path: &Path) -> Option<Arc<AgentControl>> {
+        let graph_db_path = normalize_graph_db_path(graph_db_path).ok()?;
         self.controls
             .lock()
             .ok()?
-            .get(root_session_id)
+            .get(&(graph_db_path, root_session_id.to_string()))
             .and_then(Weak::upgrade)
     }
+}
+
+fn normalize_graph_db_path(path: &Path) -> anyhow::Result<PathBuf> {
+    if let Ok(path) = path.canonicalize() {
+        return Ok(path);
+    }
+    let absolute = if path.is_absolute() {
+        path.to_path_buf()
+    } else {
+        std::env::current_dir()?.join(path)
+    };
+    let Some(parent) = absolute.parent() else {
+        return Ok(absolute);
+    };
+    let Some(file_name) = absolute.file_name() else {
+        return Ok(absolute);
+    };
+    Ok(parent
+        .canonicalize()
+        .unwrap_or_else(|_| parent.to_path_buf())
+        .join(file_name))
 }
 
 #[cfg(test)]
@@ -65,12 +110,12 @@ mod tests {
         AgentControl, AgentGraphStore, AgentPath, AgentStatusV2, RunnerEvent, ThreadReservation,
     };
 
-    use super::AgentControlDirectory;
+    use super::{normalize_graph_db_path, AgentControlDirectory};
 
     fn directory(store: AgentGraphStore, opens: Arc<AtomicUsize>) -> AgentControlDirectory {
         AgentControlDirectory {
-            controls: Mutex::new(HashMap::<String, Weak<AgentControl>>::new()),
-            store_factory: Arc::new(move || {
+            controls: Mutex::new(HashMap::new()),
+            store_factory: Arc::new(move |_| {
                 opens.fetch_add(1, Ordering::SeqCst);
                 Ok(store.clone())
             }),
@@ -105,6 +150,45 @@ mod tests {
         let rebuilt = directory.open_root("root-a").unwrap();
         assert_eq!(rebuilt.root_thread_id(), "root-a");
         assert_eq!(opens.load(Ordering::SeqCst), 3);
+    }
+
+    #[test]
+    fn same_root_id_is_isolated_by_graph_database_path() {
+        let first_dir = tempfile::tempdir().unwrap();
+        let second_dir = tempfile::tempdir().unwrap();
+        let first_path = first_dir.path().join("subagents-v2.db");
+        let second_path = second_dir.path().join("subagents-v2.db");
+        let opens = Arc::new(AtomicUsize::new(0));
+        let opened_paths = Arc::new(Mutex::new(Vec::new()));
+        let directory = AgentControlDirectory {
+            controls: Mutex::new(HashMap::<_, Weak<AgentControl>>::new()),
+            store_factory: {
+                let opens = Arc::clone(&opens);
+                let opened_paths = Arc::clone(&opened_paths);
+                Arc::new(move |path| {
+                    opens.fetch_add(1, Ordering::SeqCst);
+                    opened_paths.lock().unwrap().push(path.to_path_buf());
+                    AgentGraphStore::open(path.to_path_buf())
+                })
+            },
+        };
+
+        let first = directory.open_root_at("shared-root", &first_path).unwrap();
+        let first_again = directory.open_root_at("shared-root", &first_path).unwrap();
+        let second = directory.open_root_at("shared-root", &second_path).unwrap();
+
+        assert!(Arc::ptr_eq(&first, &first_again));
+        assert!(!Arc::ptr_eq(&first, &second));
+        assert_eq!(opens.load(Ordering::SeqCst), 2);
+        assert_eq!(
+            opened_paths.lock().unwrap().as_slice(),
+            &[
+                normalize_graph_db_path(&first_path).unwrap(),
+                normalize_graph_db_path(&second_path).unwrap(),
+            ]
+        );
+        assert!(first_path.exists());
+        assert!(second_path.exists());
     }
 
     #[test]

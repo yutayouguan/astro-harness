@@ -195,8 +195,9 @@ impl Session {
         session_id: String,
         memory: MemoryManager,
     ) -> anyhow::Result<Self> {
+        let graph_db_path = config.memory_dir.join("subagents-v2.db");
         let agent_control = crate::exec::agent_control_directory::AgentControlDirectory::global()
-            .open_root(&session_id)?;
+            .open_root_at(&session_id, &graph_db_path)?;
         Self::from_memory_with_agent_control(
             config,
             session_id,
@@ -995,6 +996,46 @@ mod tests {
             api_key: format!("k-{id}"),
             base_url: format!("https://{id}.example"),
         }
+    }
+
+    #[test]
+    fn sessions_share_controls_only_within_the_same_memory_root() {
+        fn file_snapshot(path: &std::path::Path) -> Option<(Vec<u8>, std::time::SystemTime)> {
+            Some((
+                fs::read(path).ok()?,
+                fs::metadata(path).ok()?.modified().ok()?,
+            ))
+        }
+
+        let default_graph = home::default_memory_dir().join("subagents-v2.db");
+        let default_wal = default_graph.with_extension("db-wal");
+        let default_before = file_snapshot(&default_graph);
+        let default_wal_before = file_snapshot(&default_wal);
+        let first_root = TempDir::new().unwrap();
+        let second_root = TempDir::new().unwrap();
+
+        let first =
+            AgentLoop::with_session_id(test_config(&first_root), "shared-session-id".to_string())
+                .unwrap();
+        let first_again =
+            AgentLoop::with_session_id(test_config(&first_root), "shared-session-id".to_string())
+                .unwrap();
+        let second =
+            AgentLoop::with_session_id(test_config(&second_root), "shared-session-id".to_string())
+                .unwrap();
+
+        assert!(Arc::ptr_eq(
+            &first.services.agent_control,
+            &first_again.services.agent_control
+        ));
+        assert!(!Arc::ptr_eq(
+            &first.services.agent_control,
+            &second.services.agent_control
+        ));
+        assert!(first_root.path().join("subagents-v2.db").exists());
+        assert!(second_root.path().join("subagents-v2.db").exists());
+        assert_eq!(file_snapshot(&default_graph), default_before);
+        assert_eq!(file_snapshot(&default_wal), default_wal_before);
     }
 
     #[test]

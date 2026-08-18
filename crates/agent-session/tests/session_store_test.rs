@@ -1278,6 +1278,69 @@ fn fork_session_recent_turns_preserves_complete_rows_and_turn_boundaries() {
 }
 
 #[test]
+fn fork_recent_turns_rejects_missing_source_without_creating_target() {
+    let (_dir, store) = test_store();
+
+    let error = store
+        .fork_session_recent_turns("missing", "target", None)
+        .unwrap_err();
+
+    assert!(error.to_string().contains("source session not found"));
+    assert!(store.get_session("target").unwrap().is_none());
+}
+
+#[test]
+fn fork_recent_turns_rolls_back_target_and_retries_after_insert_failure() {
+    let (dir, store) = test_store();
+    store
+        .create_session("source", "tauri", Some("model-a"), None, None)
+        .unwrap();
+    store
+        .append_message(NewMessage {
+            content: Some("question"),
+            ..NewMessage::empty("source", "user")
+        })
+        .unwrap();
+    store
+        .append_message(NewMessage {
+            content: Some("answer"),
+            ..NewMessage::empty("source", "assistant")
+        })
+        .unwrap();
+    let raw = rusqlite::Connection::open(dir.path().join("state.db")).unwrap();
+    raw.execute_batch(
+        "CREATE TRIGGER fail_recent_fork
+         BEFORE INSERT ON messages
+         WHEN NEW.session_id = 'target'
+         BEGIN
+           SELECT RAISE(ABORT, 'injected fork insert failure');
+         END;",
+    )
+    .unwrap();
+
+    let error = store
+        .fork_session_recent_turns("source", "target", None)
+        .unwrap_err();
+    assert!(error.to_string().contains("injected fork insert failure"));
+    assert!(store.get_session("target").unwrap().is_none());
+    assert!(store.get_messages("target").unwrap().is_empty());
+
+    raw.execute_batch("DROP TRIGGER fail_recent_fork;").unwrap();
+    store
+        .fork_session_recent_turns("source", "target", None)
+        .unwrap();
+    let target = store.get_session("target").unwrap().unwrap();
+    assert_eq!(target.parent_session_id.as_deref(), Some("source"));
+    assert_eq!(target.message_count, 2);
+    assert_eq!(store.get_messages("target").unwrap().len(), 2);
+    assert!(store
+        .search_messages("question", None, None, 10)
+        .unwrap()
+        .iter()
+        .any(|hit| hit.session_id == "target"));
+}
+
+#[test]
 fn truncate_session_to_bubbles_drops_tail_and_trailing_tools() {
     let dir = TempDir::new().unwrap();
     let store = SessionStore::open(&dir.path().join("state.db")).unwrap();

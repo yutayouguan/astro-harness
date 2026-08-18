@@ -9,6 +9,20 @@ impl AgentLoop {
     pub(crate) async fn ensure_assistant_error_boundary(&mut self) -> anyhow::Result<()> {
         const CONTENT: &str =
             "[astro:system]\nThe agent turn failed before producing an assistant response.";
+        self.ensure_assistant_boundary(CONTENT, "error").await
+    }
+
+    pub(crate) async fn ensure_assistant_interrupted_boundary(&self) -> anyhow::Result<()> {
+        const CONTENT: &str =
+            "[astro:system]\nThe previous agent turn was interrupted before producing an assistant response.";
+        self.ensure_assistant_boundary(CONTENT, "interrupted").await
+    }
+
+    async fn ensure_assistant_boundary(
+        &self,
+        content: &str,
+        finish_reason: &str,
+    ) -> anyhow::Result<()> {
         self.services
             .sessions
             .ensure_session(&self.session_id, "tauri")?;
@@ -20,8 +34,8 @@ impl AgentLoop {
             .is_some_and(|message| message.role == "user")
         {
             self.services.sessions.append_message(NewMessage {
-                content: Some(CONTENT),
-                finish_reason: Some("error"),
+                content: Some(content),
+                finish_reason: Some(finish_reason),
                 ..NewMessage::empty(&self.session_id, "assistant")
             })?;
         }
@@ -31,7 +45,7 @@ impl AgentLoop {
             .last()
             .is_some_and(|message| message.role == types::message::Role::User)
         {
-            self.record_items(vec![Message::assistant(CONTENT)]).await;
+            self.record_items(vec![Message::assistant(content)]).await;
         }
         Ok(())
     }
