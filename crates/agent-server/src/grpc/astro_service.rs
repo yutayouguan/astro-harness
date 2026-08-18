@@ -24,7 +24,7 @@ use proto::{
 };
 use providers::PauseControl;
 use providers::ProviderConfig;
-use tokio::sync::{Mutex, RwLock};
+use tokio::sync::RwLock;
 use tokio_stream::wrappers::ReceiverStream;
 use tonic::{Request, Response, Status};
 use uuid::Uuid;
@@ -89,7 +89,7 @@ fn parse_auxiliary_targets(
 }
 
 /// 会话 Agent 循环的共享句柄。
-type SessionHandle = Arc<Mutex<Session>>;
+type SessionHandle = Arc<Session>;
 /// Chat RPC 返回的事件流类型别名。
 type ChatStream = Pin<Box<dyn futures::Stream<Item = Result<ChatEvent, Status>> + Send>>;
 /// SubscribeSessionEvents RPC 返回的事件流类型别名。
@@ -153,10 +153,10 @@ async fn spawn_review_to_hub(session: &SessionHandle, session_id: &str, hub: &Se
     let sid = session_id.to_string();
     let (notify_tx, mut notify_rx) = tokio::sync::mpsc::unbounded_channel();
     let (agent_id, memory_dir) = {
-        let agent = session.lock().await;
+        let agent = session.as_ref();
         let id = agent.agent_id();
         let dir = agent.memory_dir().to_path_buf();
-        agent::exec::memory_review::spawn_background_review_after_turn(&agent, Some(notify_tx))
+        agent::exec::memory_review::spawn_background_review_after_turn(agent, Some(notify_tx))
             .await;
         (id, dir)
     };
@@ -199,9 +199,9 @@ async fn spawn_title_to_hub(session: &SessionHandle, hub: &SessionEventHub) {
     let hub = hub.clone();
     let (notify_tx, mut notify_rx) = tokio::sync::mpsc::unbounded_channel();
     let agent_id = {
-        let agent = session.lock().await;
+        let agent = session.as_ref();
         let id = agent.agent_id();
-        agent::exec::title_generation::spawn_title_generation_after_turn(&agent, Some(notify_tx));
+        agent::exec::title_generation::spawn_title_generation_after_turn(agent, Some(notify_tx));
         id
     };
     tokio::spawn(async move {
@@ -290,7 +290,7 @@ impl AstroServiceImpl {
         let (agent, _) = builder
             .build_with_session_id(session_id.to_string())
             .map_err(|e| Status::internal(e.to_string()))?;
-        let handle = Arc::new(Mutex::new(agent));
+        let handle = Arc::new(agent);
         sessions.insert(session_id.to_string(), handle.clone());
         Ok(handle)
     }
@@ -323,8 +323,7 @@ impl AstroServiceImpl {
             sessions.remove(session_id)
         };
         if let Some(handle) = removed.as_ref() {
-            if let Err(error) = Session::abort_all_tasks(handle, TurnAbortReason::Interrupted).await
-            {
+            if let Err(error) = handle.abort_all_tasks(TurnAbortReason::Interrupted).await {
                 tracing::warn!(%error, session_id, "failed to abort session task");
             }
         }
@@ -349,7 +348,7 @@ impl AstroServiceImpl {
             .fire_plugin(::hooks::SESSION_FINALIZE, &payload);
 
         if let Some(handle) = self.release_session_runtime(session_id).await {
-            let agent = handle.lock().await;
+            let agent = handle.as_ref();
             let bus = agent.hook_bus();
             let turn_id = agent.current_turn_id().await;
             let payload = ::hooks::HookPayload {
@@ -637,7 +636,7 @@ impl AstroService for AstroServiceImpl {
                 )));
             };
             drop(sessions);
-            let agent = session.lock().await;
+            let agent = session.as_ref();
             agent
                 .refresh_memory()
                 .map_err(|e| Status::internal(e.to_string()))?;
@@ -662,7 +661,8 @@ impl AstroService for AstroServiceImpl {
                 self.hitl_registry.cancel_and_remove(&req.session_id).await;
                 clear_interrupt_file(&self.memory_dir, &req.session_id);
                 if let Ok(session) = self.get_session(&req.session_id).await {
-                    Session::abort_all_tasks(&session, TurnAbortReason::Interrupted)
+                    session
+                        .abort_all_tasks(TurnAbortReason::Interrupted)
                         .await
                         .map_err(|error| Status::internal(error.to_string()))?;
                 }
@@ -818,7 +818,7 @@ impl AstroService for AstroServiceImpl {
 
         let session = self.get_session(&session_id).await?;
         let steered_turn_id = {
-            let sess = session.lock().await;
+            let sess = session.as_ref();
             sess.steer_input(&content, &image_data_urls).await
         };
         if steered_turn_id.is_some() {
@@ -842,7 +842,7 @@ impl AstroService for AstroServiceImpl {
         }
         let (hook_tx, mut hook_rx) = tokio::sync::mpsc::unbounded_channel::<::hooks::UiHookEvent>();
         {
-            let agent = session.lock().await;
+            let agent = session.as_ref();
             agent.set_image_gen_targets(image_targets);
             agent.set_chat_credentials(&provider_name, &model, &api_key, &base_url);
             // 五类辅助目标随本轮 ChatRequest 刷新；未下传的任务在 Session 内回退主模型。
@@ -929,7 +929,7 @@ impl AstroService for AstroServiceImpl {
             };
 
             let (temperature, additional_params) = {
-                let agent = session.lock().await;
+                let agent = session.as_ref();
                 (agent.temperature(), agent.additional_params().clone())
             };
 
@@ -991,13 +991,13 @@ impl AstroService for AstroServiceImpl {
                 });
             }
             {
-                let agent = session.lock().await;
+                let agent = session.as_ref();
                 agent.set_chat_targets(chat_targets.clone());
             }
 
             let session_for_review = session.clone();
             let agent_id_for_events = {
-                let agent = session.lock().await;
+                let agent = session.as_ref();
                 agent.agent_id()
             };
             let mut stream = stream_multi_turn_with_hitl(
@@ -1288,7 +1288,7 @@ impl AstroService for AstroServiceImpl {
         // 优先：指定 agent 的 hub（实时连接状态）；勿用任意会话以免串 agent。
         let sessions = self.sessions.read().await;
         for handle in sessions.values() {
-            let agent = handle.lock().await;
+            let agent = handle.as_ref();
             let hub = agent.mcp_hub();
             let hub_guard = hub.lock().await;
             if hub_guard.agent_id() != Some(agent_id.as_str()) {
@@ -1347,7 +1347,7 @@ impl AstroService for AstroServiceImpl {
 
         let handles: Vec<_> = self.sessions.read().await.values().cloned().collect();
         for handle in handles {
-            let agent = handle.lock().await;
+            let agent = handle.as_ref();
             if agent.agent_id() != agent_id {
                 continue;
             }
@@ -1360,7 +1360,6 @@ impl AstroService for AstroServiceImpl {
                 }
             }
             let hub = agent.mcp_hub();
-            drop(agent);
             let servers = hub
                 .lock()
                 .await

@@ -7,7 +7,7 @@ use std::time::Duration;
 use providers::types::stream::StreamChunk;
 use providers::{CompletionStream, ProviderConfig};
 use providers::{PauseControl, Usage};
-use tokio::sync::{Mutex, Notify};
+use tokio::sync::Notify;
 
 use agent::runtime::{AgentConfig, AgentLoop};
 use agent::streaming::{
@@ -57,9 +57,8 @@ fn pending_chat() -> ChatOverride {
 async fn regular_task_owns_initial_input_persistence() {
     let dir = tempfile::tempdir().unwrap();
     let config = AgentConfig::with_defaults(dir.path().to_path_buf());
-    let session = Arc::new(Mutex::new(
-        AgentLoop::with_session_id(config, "regular-task-input".into()).unwrap(),
-    ));
+    let session =
+        Arc::new(AgentLoop::with_session_id(config, "regular-task-input".into()).unwrap());
     let saw_initial_input = Arc::new(std::sync::atomic::AtomicBool::new(false));
     let chat_fn: ChatOverride = {
         let saw_initial_input = Arc::clone(&saw_initial_input);
@@ -110,7 +109,7 @@ async fn regular_task_owns_initial_input_persistence() {
     while rx.recv().await.is_some() {}
 
     assert!(saw_initial_input.load(Ordering::SeqCst));
-    let sess = session.lock().await;
+    let sess = session.as_ref();
     let history = sess.clone_history().await;
     assert_eq!(history[0].content_str(), "owned by regular task");
 }
@@ -120,10 +119,8 @@ async fn steered_input_is_consumed_by_the_active_regular_task() {
     let dir = tempfile::tempdir().unwrap();
     let config = AgentConfig::with_defaults(dir.path().to_path_buf());
     let agent = AgentLoop::with_session_id(config, "steer-session".into()).unwrap();
-    let session = Arc::new(Mutex::new(agent));
+    let session = Arc::new(agent);
     session
-        .lock()
-        .await
         .record_items(vec![types::message::Message::user("initial")])
         .await;
 
@@ -186,8 +183,6 @@ async fn steered_input_is_consumed_by_the_active_regular_task() {
 
     first_started.notified().await;
     let turn_id = session
-        .lock()
-        .await
         .steer_input("follow up", &[])
         .await
         .expect("active regular task accepts steer");
@@ -198,7 +193,7 @@ async fn steered_input_is_consumed_by_the_active_regular_task() {
 
     assert_eq!(calls.load(Ordering::SeqCst), 2);
     assert!(saw_follow_up.load(Ordering::SeqCst));
-    let messages = session.lock().await.clone_history().await;
+    let messages = session.clone_history().await;
     assert!(messages.iter().any(|message| {
         matches!(
             &message.content,
@@ -212,9 +207,9 @@ async fn multi_turn_emits_text_tool_result_and_usage() {
     let dir = tempfile::tempdir().unwrap();
     let config = AgentConfig::with_defaults(dir.path().to_path_buf());
     let agent = AgentLoop::with_session_id(config, "test-session".into()).unwrap();
-    let session = Arc::new(Mutex::new(agent));
+    let session = Arc::new(agent);
     {
-        let a = session.lock().await;
+        let a = session.as_ref();
         a.record_items(vec![types::message::Message::user("call a tool")])
             .await;
     }
@@ -307,10 +302,8 @@ async fn multi_turn_tool_exec_works_on_current_thread_runtime() {
     let dir = tempfile::tempdir().unwrap();
     let config = AgentConfig::with_defaults(dir.path().to_path_buf());
     let agent = AgentLoop::with_session_id(config, "current-thread-session".into()).unwrap();
-    let session = Arc::new(Mutex::new(agent));
+    let session = Arc::new(agent);
     session
-        .lock()
-        .await
         .record_items(vec![types::message::Message::user("call a tool")])
         .await;
 
@@ -395,9 +388,9 @@ async fn multi_turn_persists_reasoning_and_tool_activities() {
     let dir = tempfile::tempdir().unwrap();
     let config = AgentConfig::with_defaults(dir.path().to_path_buf());
     let agent = AgentLoop::with_session_id(config, "persist-session".into()).unwrap();
-    let session = Arc::new(Mutex::new(agent));
+    let session = Arc::new(agent);
     {
-        let a = session.lock().await;
+        let a = session.as_ref();
         a.ensure_session("test").unwrap();
         a.record_items(vec![types::message::Message::user("call a tool")])
             .await;
@@ -488,7 +481,7 @@ async fn multi_turn_fires_post_llm_call_after_model_stream() {
     agent
         .record_items(vec![types::message::Message::user("say hi")])
         .await;
-    let session = Arc::new(Mutex::new(agent));
+    let session = Arc::new(agent);
 
     let chat_fn = scripted_chat(vec![vec![
         StreamChunk::Text("hello".into()),
@@ -545,7 +538,7 @@ async fn transform_llm_output_replaces_before_post_llm_call() {
     agent
         .record_items(vec![types::message::Message::user("say hi")])
         .await;
-    let session = Arc::new(Mutex::new(agent));
+    let session = Arc::new(agent);
     let session_for_check = Arc::clone(&session);
 
     let chat_fn = scripted_chat(vec![vec![
@@ -590,7 +583,7 @@ async fn transform_llm_output_replaces_before_post_llm_call() {
         "expected TransformLlmOutput before PostLlmCall with replaced length, events={events:?}"
     );
 
-    let agent = session_for_check.lock().await;
+    let agent = session_for_check.as_ref();
     let history = agent.clone_history().await;
     assert_eq!(
         history.last().map(|m| m.content_str().to_string()),
@@ -609,7 +602,7 @@ async fn stop_never_fires_without_disk_write() {
     agent
         .record_items(vec![types::message::Message::user("just say hi, no tools")])
         .await;
-    let session = Arc::new(Mutex::new(agent));
+    let session = Arc::new(agent);
 
     let chat_fn = scripted_chat(vec![vec![
         StreamChunk::Text("hi there".into()),
@@ -670,7 +663,7 @@ async fn stop_keep_going_retries_capped_at_two() {
             "write a file then confirm",
         )])
         .await;
-    let session = Arc::new(Mutex::new(agent));
+    let session = Arc::new(agent);
     let session_for_check = Arc::clone(&session);
 
     let chat_fn = scripted_chat(vec![
@@ -773,7 +766,7 @@ async fn stop_keep_going_retries_capped_at_two() {
     )));
     assert!(matches!(items.last(), Some(MultiTurnStreamItem::Done)));
 
-    let agent = session_for_check.lock().await;
+    let agent = session_for_check.as_ref();
     let history = agent.clone_history().await;
     assert!(
         agent::runtime::validate_message_order(&history),
@@ -822,7 +815,6 @@ async fn stop_keep_going_retries_capped_at_two() {
             "to_provider_messages must not contain consecutive user entries"
         );
     }
-    drop(agent);
 }
 
 #[tokio::test]
@@ -842,9 +834,9 @@ async fn cumulative_usage_chunks_use_last_per_round() {
     let dir = tempfile::tempdir().unwrap();
     let config = AgentConfig::with_defaults(dir.path().to_path_buf());
     let agent = AgentLoop::with_session_id(config, "usage-session".into()).unwrap();
-    let session = Arc::new(Mutex::new(agent));
+    let session = Arc::new(agent);
     {
-        let a = session.lock().await;
+        let a = session.as_ref();
         a.record_items(vec![types::message::Message::user("hi")])
             .await;
     }
@@ -891,9 +883,9 @@ async fn error_has_single_error_terminal_before_done() {
     let dir = tempfile::tempdir().unwrap();
     let config = AgentConfig::with_defaults(dir.path().to_path_buf());
     let agent = AgentLoop::with_session_id(config, "err-session".into()).unwrap();
-    let session = Arc::new(Mutex::new(agent));
+    let session = Arc::new(agent);
     {
-        let a = session.lock().await;
+        let a = session.as_ref();
         a.record_items(vec![types::message::Message::user("x")])
             .await;
     }
@@ -942,9 +934,9 @@ async fn cancellation_has_single_interrupt_terminal_before_done() {
     let dir = tempfile::tempdir().unwrap();
     let config = AgentConfig::with_defaults(dir.path().to_path_buf());
     let agent = AgentLoop::with_session_id(config, "cancel-session".into()).unwrap();
-    let session = Arc::new(Mutex::new(agent));
+    let session = Arc::new(agent);
     {
-        let agent = session.lock().await;
+        let agent = session.as_ref();
         agent
             .record_items(vec![types::message::Message::user("wait")])
             .await;
@@ -996,9 +988,9 @@ async fn tool_call_delta_and_memory_path() {
     let dir = tempfile::tempdir().unwrap();
     let config = AgentConfig::with_defaults(dir.path().to_path_buf());
     let agent = AgentLoop::with_session_id(config, "mem-session".into()).unwrap();
-    let session = Arc::new(Mutex::new(agent));
+    let session = Arc::new(agent);
     {
-        let a = session.lock().await;
+        let a = session.as_ref();
         a.record_items(vec![types::message::Message::user("remember this")])
             .await;
     }
@@ -1083,9 +1075,9 @@ async fn hitl_waiting_parks_then_continues_same_run() {
     let dir = tempfile::tempdir().unwrap();
     let config = AgentConfig::with_defaults(dir.path().to_path_buf());
     let agent = AgentLoop::with_session_id(config, "hitl-session".into()).unwrap();
-    let session = Arc::new(Mutex::new(agent));
+    let session = Arc::new(agent);
     {
-        let a = session.lock().await;
+        let a = session.as_ref();
         a.record_items(vec![types::message::Message::user("please confirm")])
             .await;
     }
@@ -1218,9 +1210,9 @@ async fn approval_hooks_fire_pre_then_post_on_allow() {
             hooks::HookOutcome::Continue
         });
 
-    let session = Arc::new(Mutex::new(agent));
+    let session = Arc::new(agent);
     {
-        let a = session.lock().await;
+        let a = session.as_ref();
         a.record_items(vec![types::message::Message::user("clean up the temp dir")])
             .await;
     }
@@ -1406,9 +1398,9 @@ async fn approval_hooks_fire_pre_then_post_on_deny() {
             hooks::HookOutcome::Continue
         });
 
-    let session = Arc::new(Mutex::new(agent));
+    let session = Arc::new(agent);
     {
-        let a = session.lock().await;
+        let a = session.as_ref();
         a.record_items(vec![types::message::Message::user("clean up the temp dir")])
             .await;
     }
@@ -1540,9 +1532,9 @@ async fn multi_turn_budget_exhausted_forces_toolless_summary() {
     let mut config = AgentConfig::with_defaults(dir.path().to_path_buf());
     config.multi_turn = 1;
     let agent = AgentLoop::with_session_id(config, "budget-session".into()).unwrap();
-    let session = Arc::new(Mutex::new(agent));
+    let session = Arc::new(agent);
     {
-        let a = session.lock().await;
+        let a = session.as_ref();
         a.record_items(vec![types::message::Message::user("keep using tools")])
             .await;
     }

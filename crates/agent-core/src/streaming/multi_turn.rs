@@ -14,7 +14,7 @@ use futures::stream::{AbortHandle, Abortable};
 use futures::StreamExt;
 use providers::ProviderConfig;
 use providers::{PauseControl, Usage};
-use tokio::sync::{mpsc, Mutex};
+use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
 use types::ChatTarget;
 
@@ -42,7 +42,7 @@ const MAX_THINKING_ONLY_RETRIES: usize = 1;
 
 /// [`run_multi_turn_stream`] 入参打包。
 pub struct MultiTurnStreamArgs {
-    pub session: Arc<Mutex<Session>>,
+    pub session: Arc<Session>,
     pub targets: Vec<ChatTarget>,
     pub base_config: ProviderConfig,
     pub input: Vec<TurnInput>,
@@ -73,12 +73,12 @@ pub async fn run_multi_turn_stream(args: MultiTurnStreamArgs) {
         chat_override,
     } = args;
     let session_id = {
-        let agent = session.lock().await;
+        let agent = session.as_ref();
         agent.session_id().to_string()
     };
     let sub_id = uuid::Uuid::new_v4().to_string();
     let turn_context = {
-        let sess = session.lock().await;
+        let sess = session.as_ref();
         sess.create_turn_context(sub_id.clone()).await
     };
     let task = RegularTask::new(RunTurnArgs {
@@ -95,7 +95,7 @@ pub async fn run_multi_turn_stream(args: MultiTurnStreamArgs) {
         chat_override,
     });
     tracing::info!(session_id = %session_id, turn_id = %sub_id, "turn started");
-    if let Err(error) = Session::spawn_task(&session, turn_context, input, task).await {
+    if let Err(error) = session.spawn_task(turn_context, input, task).await {
         let _ = tx
             .send(Ok(MultiTurnStreamItem::Error(error.to_string())))
             .await;
@@ -106,7 +106,7 @@ pub async fn run_multi_turn_stream(args: MultiTurnStreamArgs) {
 
 /// 测试入口：以自定义 chat 函数替代 dispatch，驱动多轮工具循环。
 pub async fn run_multi_turn_stream_with_chat_fn(
-    session: Arc<Mutex<Session>>,
+    session: Arc<Session>,
     chat_fn: super::provider::ChatOverride,
     config: ProviderConfig,
     system_prompt: String,
@@ -138,7 +138,7 @@ pub async fn run_multi_turn_stream_with_chat_fn(
 
 #[derive(Clone)]
 pub(crate) struct RunTurnArgs {
-    session: Arc<Mutex<Session>>,
+    session: Arc<Session>,
     turn_context: Arc<TurnContext>,
     targets: Vec<ChatTarget>,
     base_config: ProviderConfig,
@@ -154,7 +154,7 @@ pub(crate) struct RunTurnArgs {
 impl RunTurnArgs {
     pub(crate) fn with_session_and_turn(
         &self,
-        session: Arc<Mutex<Session>>,
+        session: Arc<Session>,
         turn_context: Arc<TurnContext>,
     ) -> Self {
         Self {
@@ -178,13 +178,13 @@ impl RunTurnArgs {
 }
 
 async fn record_pending_input(
-    session: &Arc<Mutex<Session>>,
+    session: &Arc<Session>,
     pending_input: Vec<TurnInput>,
 ) -> anyhow::Result<()> {
     if pending_input.is_empty() {
         return Ok(());
     }
-    let sess = session.lock().await;
+    let sess = session.as_ref();
     for input in pending_input {
         sess.record_turn_input(input).await?;
     }
@@ -215,7 +215,7 @@ pub(crate) async fn run_turn(args: RunTurnArgs, cancellation_token: Cancellation
     let mut saw_usage = false;
 
     {
-        let agent = session.lock().await;
+        let agent = session.as_ref();
         let _ = agent.ensure_session("tauri");
     }
     let _ = emit(
@@ -228,7 +228,7 @@ pub(crate) async fn run_turn(args: RunTurnArgs, cancellation_token: Cancellation
     .await;
 
     let max_rounds = {
-        let agent = session.lock().await;
+        let agent = session.as_ref();
         let n = agent.multi_turn();
         if n == 0 {
             crate::runtime::budget::DEFAULT_MAX_ITERATIONS
@@ -292,7 +292,7 @@ pub(crate) async fn run_turn(args: RunTurnArgs, cancellation_token: Cancellation
         pre_llm_maintenance(&session).await;
 
         let step_context = {
-            let agent = session.lock().await;
+            let agent = session.as_ref();
             agent.capture_step_context().await
         };
         let step_context = match step_context {
@@ -511,7 +511,7 @@ pub(crate) async fn run_turn(args: RunTurnArgs, cancellation_token: Cancellation
                     attempt = thinking_only_retries,
                     "model returned reasoning only with no text; injecting retry prompt"
                 );
-                let agent = session.lock().await;
+                let agent = session.as_ref();
                 let details = types::message::merge_google_thought_signature(
                     Some(timeline.reasoning_details_snapshot()),
                     thought_signature.as_deref(),
@@ -525,7 +525,6 @@ pub(crate) async fn run_turn(args: RunTurnArgs, cancellation_token: Cancellation
                     )
                     .await
                 {
-                    drop(agent);
                     finish_error(
                         &session,
                         &streamer,
@@ -542,7 +541,6 @@ pub(crate) async fn run_turn(args: RunTurnArgs, cancellation_token: Cancellation
                 )
                 .await
                 {
-                    drop(agent);
                     finish_error(
                         &session,
                         &streamer,
@@ -554,7 +552,6 @@ pub(crate) async fn run_turn(args: RunTurnArgs, cancellation_token: Cancellation
                     .await;
                     return;
                 }
-                drop(agent);
                 continue;
             }
             finish_error(
@@ -572,7 +569,7 @@ pub(crate) async fn run_turn(args: RunTurnArgs, cancellation_token: Cancellation
         // `Stop` hook
         if calls.is_empty() {
             let verify_outcome = {
-                let agent = session.lock().await;
+                let agent = session.as_ref();
                 if agent.turn_wrote_disk().await && verify_attempt < MAX_VERIFY_ATTEMPTS {
                     verify_attempt += 1;
                     let sid = agent.session_id().to_string();
@@ -592,7 +589,7 @@ pub(crate) async fn run_turn(args: RunTurnArgs, cancellation_token: Cancellation
                 }
             };
             if let Some(::hooks::HookOutcome::KeepGoing(prompt)) = verify_outcome {
-                let agent = session.lock().await;
+                let agent = session.as_ref();
                 let details = types::message::merge_google_thought_signature(
                     Some(timeline.reasoning_details_snapshot()),
                     thought_signature.as_deref(),
@@ -606,7 +603,6 @@ pub(crate) async fn run_turn(args: RunTurnArgs, cancellation_token: Cancellation
                     )
                     .await
                 {
-                    drop(agent);
                     finish_error(
                         &session,
                         &streamer,
@@ -622,7 +618,6 @@ pub(crate) async fn run_turn(args: RunTurnArgs, cancellation_token: Cancellation
                     .record_user_message(&format!("[astro:hook-context]\n{prompt}"))
                     .await
                 {
-                    drop(agent);
                     finish_error(
                         &session,
                         &streamer,
@@ -634,13 +629,12 @@ pub(crate) async fn run_turn(args: RunTurnArgs, cancellation_token: Cancellation
                     .await;
                     return;
                 }
-                drop(agent);
                 continue;
             }
         }
 
         {
-            let agent = session.lock().await;
+            let agent = session.as_ref();
             let sid = agent.session_id().to_string();
             let turn_id = agent.current_turn_id().await;
             let transformed = agent.fire_hook(
@@ -668,7 +662,6 @@ pub(crate) async fn run_turn(args: RunTurnArgs, cancellation_token: Cancellation
                 },
             );
             let cancelled = agent.cancel_signal().is_cancelled();
-            drop(agent);
             if cancelled {
                 finish_interrupted(
                     &session,
@@ -683,7 +676,7 @@ pub(crate) async fn run_turn(args: RunTurnArgs, cancellation_token: Cancellation
         }
 
         {
-            let agent = session.lock().await;
+            let agent = session.as_ref();
             for c in &calls {
                 timeline.upsert_activity(&c.id, now_ms());
             }
@@ -700,7 +693,6 @@ pub(crate) async fn run_turn(args: RunTurnArgs, cancellation_token: Cancellation
                 )
                 .await
             {
-                drop(agent);
                 finish_error(
                     &session,
                     &streamer,
@@ -753,7 +745,7 @@ pub(crate) async fn run_turn(args: RunTurnArgs, cancellation_token: Cancellation
 
         run_state.set_phase(RunPhase::ExecutingTools);
         let force_serial = {
-            let agent = session.lock().await;
+            let agent = session.as_ref();
             let names: Vec<&str> = calls.iter().map(|c| c.name.as_str()).collect();
             let registry = agent.tool_registry();
             registry.any_needs_confirmation(&names)
@@ -862,7 +854,7 @@ pub(crate) async fn run_turn(args: RunTurnArgs, cancellation_token: Cancellation
     }
 
     {
-        let agent = session.lock().await;
+        let agent = session.as_ref();
         let sid = agent.session_id().to_string();
         let turn = agent.session_turn().await;
         let turn_id = agent.current_turn_id().await;
@@ -892,7 +884,7 @@ pub(crate) async fn run_turn(args: RunTurnArgs, cancellation_token: Cancellation
 ///
 /// channel 容量为 32；消费者 drop 后发送方通过 [`emit`] 返回 `false` 自然退出。
 pub fn stream_multi_turn(
-    session: Arc<Mutex<Session>>,
+    session: Arc<Session>,
     targets: Vec<ChatTarget>,
     base_config: ProviderConfig,
     input: Vec<TurnInput>,
@@ -903,7 +895,7 @@ pub fn stream_multi_turn(
 
 /// 带 HITL 闸门的多轮流。
 pub fn stream_multi_turn_with_hitl(
-    session: Arc<Mutex<Session>>,
+    session: Arc<Session>,
     targets: Vec<ChatTarget>,
     base_config: ProviderConfig,
     input: Vec<TurnInput>,

@@ -18,7 +18,6 @@ use cron::{cron_db_path, cron_dir, CronJob, CronRunDb, NewCronRun};
 use home::default_memory_dir;
 use providers::Usage;
 use session::{SessionStore, StoredMessage};
-use tokio::sync::Mutex as AsyncMutex;
 use types::ChatTarget;
 use uuid::Uuid;
 
@@ -707,7 +706,7 @@ async fn run_agent_job(
     let targets = creds.effective_targets();
     session.set_chat_targets(targets.clone());
 
-    let session = Arc::new(AsyncMutex::new(session));
+    let session = Arc::new(session);
     run_background_multi_turn(
         session,
         targets,

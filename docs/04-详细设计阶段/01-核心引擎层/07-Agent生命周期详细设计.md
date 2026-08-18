@@ -1,6 +1,6 @@
 # Agent 生命周期详细设计
 
-> 版本：v2.14
+> 版本：v2.15
 > 日期：2026-08-18
 > 状态：实施基线  
 > 上游参考：[OpenAI Codex](https://github.com/openai/codex) `632e35ce8d5dec43b75dbf99f9e6fa52bed47c3d`  
@@ -128,8 +128,8 @@ pub trait SessionTask: Send + Sync + 'static {
 不新增第四个 kind，而是作为独立 task 实现处理。现有
 foreground/background/subagent 三套入口最终都必须创建 `RegularTask`，而不是分别持有多轮循环。
 
-Astro 迁移期内部使用 `Arc<Mutex<Session>>`，因为旧 `AgentLoop` 尚含需要串行访问的
-SQLite/memory 状态；当状态完成内部锁化后，签名收敛为 Codex 的 `Arc<Session>`。
+Astro 与 Codex 一致只共享 `Arc<Session>`；会话状态、配置、任务注册表、记忆、工具注册表与
+MCP Hub 分别在 `Session` 内部维护最小粒度同步边界，调用方不得再增加外层 session mutex。
 
 `Session::spawn_task` 是唯一任务启动入口，负责替换旧任务、绑定 `TurnContext`、
 登记 `RunningTask` 和统一收尾。`Session::abort_all_tasks` 使用与 Codex 一致的
@@ -507,7 +507,7 @@ schema 和 RPC 字段改名都必须提供 migration 或 serde alias。
 - [x] 实现 pending-input mailbox steer 和 `Session::abort_all_tasks`。
 - [x] Chat 重入时优先 steer，不替换 `PauseControl`、不创建第二条流。
 - [x] 将首次用户输入的持久化从 adapter 移入 `RegularTask::run`。
-- [ ] 将 `Arc<Mutex<Session>>` 内锁化为 Codex 的 `Arc<Session>`。
+- [x] 将 `Arc<Mutex<Session>>` 内锁化为 Codex 的 `Arc<Session>`。
   - [x] `active_turn` 收敛为 Codex 同构的 `Mutex<Option<ActiveTurn>>`。
   - [x] 提取 Codex 同名 `SessionState`，集中轮次、压缩、注入上下文、交互模式与 Turn/Step 快照。
   - [x] 将 `Session.state` 升级为内部 `Mutex<SessionState>`。
@@ -525,7 +525,7 @@ schema 和 RPC 字段改名都必须提供 migration 或 serde alias。
     任意工具、MCP、SubAgent 或 provider `await`。
   - [x] 引入 Codex 同名 `SessionConfiguration`，把模型、凭证、权限、项目根、hooks、MCP 与
     skill override 内锁化；所有运行时 setter 均可通过 `Arc<Session>` 调用。
-  - [ ] 将 `SessionTask`、streaming、background 和 server 签名迁移为 `Arc<Session>`。
+  - [x] 将 `SessionTask`、streaming、background 和 server 签名迁移为 `Arc<Session>`。
 
 v2.3 落地说明：foreground、background、Cron 与 SubAgent 不再先调用
 `start_or_steer_turn*` 获取预构建 system prompt，而是把 `Vec<TurnInput>` 直接交给
@@ -629,6 +629,15 @@ tool future 保持 `!Send` 是当前线程工具执行器的明确契约；生�
 进入独立 current-thread worker，任务 future 仍满足 `Send`，无需为迁移共享会话句柄而扩大工具
 线程安全边界。下一批可直接将 SessionTask、streaming、background 与 server 的唯一句柄替换为
 `Arc<Session>`。
+
+v2.15 Arc<Session> 句柄收敛批次：`SessionTask::run/abort`、`AnySessionTask`、
+`Session::spawn_task/abort_all_tasks`、foreground streaming、background/Cron、SubAgent runner 与
+server `SessionHandle` 统一共享同一个 `Arc<Session>`。`spawn_task` 与 `abort_all_tasks` 改为
+Codex 同构的 `self: &Arc<Self>` 方法；生产代码和测试夹具删除全部外层 session mutex 与无意义
+guard/drop。`session_task_lifecycle_is_callable_through_arc_session` 以编译期契约固定任务 API，
+全仓库残留扫描禁止 `Arc<Mutex<Session>>`、`Mutex::new(Session)` 和 session `.lock().await`
+重新出现。会话竞争控制仍由 `active_turn`、`SessionState`、`SessionConfiguration` 等内部锁负责，
+built-in tool 的 current-thread `!Send` 契约保持不变。
 
 ### Phase C：工具运行时
 

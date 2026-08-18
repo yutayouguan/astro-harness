@@ -7,7 +7,7 @@ use subagents::{
     AgentThreadCommand, AgentThreadControl, AgentThreadStatus, AgentThreadStore, LiveAgentThreads,
     SpawnAgentRequest,
 };
-use tokio::sync::{mpsc, Mutex};
+use tokio::sync::mpsc;
 
 use crate::runtime::{Config, Session};
 use crate::streaming::ChatOverride;
@@ -41,8 +41,8 @@ async fn run_agent_thread_inner(
     memory_dir: PathBuf,
     chat_override: Option<ChatOverride>,
 ) -> anyhow::Result<()> {
-    let agent = Arc::new(Mutex::new(build_agent(&thread_id, &request, &memory_dir)?));
-    let targets = agent.lock().await.chat_targets().to_vec();
+    let agent = Arc::new(build_agent(&thread_id, &request, &memory_dir)?);
+    let targets = agent.chat_targets();
     if targets.is_empty() {
         anyhow::bail!("subagent thread has no chat target");
     }
@@ -84,10 +84,11 @@ async fn run_agent_thread_inner(
             }
             if control.is_interrupted() {
                 if request.interrupt_message {
-                    let _ = agent.lock().await.record_user_message(
-                        "[astro:system]\nThe previous agent turn was interrupted by the parent.",
-                    )
-                    .await;
+                    let _ = agent
+                        .record_user_message(
+                            "[astro:system]\nThe previous agent turn was interrupted by the parent.",
+                        )
+                        .await;
                 }
                 store.set_status(
                     &thread_id,
@@ -223,7 +224,7 @@ fn initial_message(request: &SpawnAgentRequest) -> String {
 }
 
 async fn run_turn(
-    session: &Arc<Mutex<Session>>,
+    session: &Arc<Session>,
     targets: &[types::ChatTarget],
     message: String,
     control: Arc<AgentThreadControl>,

@@ -3,7 +3,7 @@
 use std::sync::Arc;
 
 use providers::Usage;
-use tokio::sync::{mpsc, Mutex};
+use tokio::sync::mpsc;
 
 use super::provider::ProviderStreamer;
 use super::run_state::{RunPhase, RunState};
@@ -22,14 +22,14 @@ pub(crate) async fn emit(
 /// 尽力双写 `kind=llm` 事件与会话账单；失败忽略。
 /// `meta` 优先使用本轮实际命中目标；缺省时回退到 AgentLoop 上的会话凭据（不应在 failover 时写入）。
 pub(super) async fn record_llm_usage(
-    session: &Arc<Mutex<AgentLoop>>,
+    session: &Arc<AgentLoop>,
     streamer: &ProviderStreamer,
     usage: &Usage,
 ) {
     if usage.is_empty() {
         return;
     }
-    let agent = session.lock().await;
+    let agent = session.as_ref();
     let agent_id = agent.agent_id();
     let session_id = agent.session_id().to_string();
     let turn_id = agent.current_turn_id().await;
@@ -72,7 +72,7 @@ pub(super) async fn record_llm_usage(
 
 /// 发送 Error、RunFinished(error)、Done；若有已累计 usage 则先写入 `usage.db`。
 pub(super) async fn finish_error(
-    session: &Arc<Mutex<AgentLoop>>,
+    session: &Arc<AgentLoop>,
     streamer: &ProviderStreamer,
     tx: &mpsc::Sender<anyhow::Result<MultiTurnStreamItem>>,
     msg: impl Into<String>,
@@ -90,7 +90,7 @@ async fn finish_done(tx: &mpsc::Sender<anyhow::Result<MultiTurnStreamItem>>) {
 
 /// 发送唯一 RunFinished 终态后 Done。
 async fn finish_run(
-    session: &Arc<Mutex<AgentLoop>>,
+    session: &Arc<AgentLoop>,
     streamer: &ProviderStreamer,
     tx: &mpsc::Sender<anyhow::Result<MultiTurnStreamItem>>,
     usage: Option<Usage>,
@@ -125,7 +125,7 @@ async fn finish_run(
 
 /// 正常完成：可选发送累计 usage，再发送 RunFinished(success) 与 Done。
 pub(crate) async fn finish_success(
-    session: &Arc<Mutex<AgentLoop>>,
+    session: &Arc<AgentLoop>,
     streamer: &ProviderStreamer,
     tx: &mpsc::Sender<anyhow::Result<MultiTurnStreamItem>>,
     usage: Option<Usage>,
@@ -136,7 +136,7 @@ pub(crate) async fn finish_success(
 
 /// 用户取消或流控制中断：发送 RunFinished(interrupt) 与 Done。
 pub(crate) async fn finish_interrupted(
-    session: &Arc<Mutex<AgentLoop>>,
+    session: &Arc<AgentLoop>,
     streamer: &ProviderStreamer,
     tx: &mpsc::Sender<anyhow::Result<MultiTurnStreamItem>>,
     usage: Option<Usage>,

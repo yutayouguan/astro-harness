@@ -1,6 +1,5 @@
 use std::sync::Arc;
 
-use tokio::sync::Mutex;
 use tokio_util::sync::CancellationToken;
 
 use crate::runtime::{Session, TurnContext, TurnResult};
@@ -30,7 +29,7 @@ impl SessionTask for RegularTask {
 
     async fn run(
         self: Arc<Self>,
-        sess: Arc<Mutex<Session>>,
+        sess: Arc<Session>,
         ctx: Arc<TurnContext>,
         input: Vec<TurnInput>,
         cancellation_token: CancellationToken,
@@ -45,7 +44,7 @@ impl SessionTask for RegularTask {
                 system_prompt
             }
             None => {
-                let turn = sess.lock().await.prepare_turn(&input).await?;
+                let turn = sess.prepare_turn(&input).await?;
                 match turn {
                     TurnResult::Continue { system_prompt, .. } => system_prompt,
                     TurnResult::BudgetExhausted => {
