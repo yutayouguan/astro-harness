@@ -4,19 +4,25 @@
 //! lifecycle controls. The actual model/tool loop is implemented by
 //! `agent::exec::subagents` to avoid a dependency cycle with the main runtime.
 
+mod activity;
 mod config;
 mod control;
 mod mailbox;
 mod migration;
 mod model;
 pub mod path;
+mod registry;
 mod store;
 
+pub use activity::{ActivityBus, ActivityCursor, AgentActivity, AgentActivityKind};
 pub use config::{
     load_agent_catalog, load_agents_settings, resolve_agent, AgentCatalog, AgentConfigDiagnostic,
     AgentDefinition, AgentsSettings, ResolvedAgent, SkillConfigEntry, SkillsLayer,
 };
-pub use control::{AgentThreadCommand, AgentThreadControl, LiveAgentThreads};
+pub use control::{
+    AgentControl, AgentRuntimeHandle, AgentThreadCommand, AgentThreadControl, LiveAgentThreads,
+    RuntimeHandleRegistry, WaitAgentResult, WaitOutcome,
+};
 pub use mailbox::{MailboxKind, MailboxMessage, NewMailboxMessage};
 pub use migration::{HistoricalAgentMessage, HistoricalAgentThread};
 pub use model::{
@@ -32,4 +38,5 @@ pub use model::{
     WaitAgentThreadsRequest,
 };
 pub use path::AgentPath;
+pub use registry::{AgentRegistry, ExecutionPermit, Limits, SpawnReservation};
 pub use store::{AgentGraphStore, AgentThreadStore, StoredStatusEvent};

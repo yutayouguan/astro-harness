@@ -103,6 +103,50 @@ impl AgentGraphStore {
         migration::schema_version(&self.connect()?)
     }
 
+    pub fn ensure_root_thread(&self, root_thread_id: &str) -> anyhow::Result<AgentThreadV2> {
+        require_non_empty("root_thread_id", root_thread_id)?;
+        let mut conn = self.connect()?;
+        let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
+        let timestamp = now();
+        let status = AgentStatusV2::Running;
+        tx.execute(
+            "INSERT INTO agent_threads (
+                thread_id, root_thread_id, parent_thread_id, canonical_path,
+                task_name, agent_type, session_id, status_kind, status_payload,
+                last_status_sequence, created_at, updated_at
+             ) VALUES (?1, ?1, NULL, '/root', 'root', 'root', ?1, ?2, ?3, 0, ?4, ?4)
+             ON CONFLICT DO NOTHING",
+            params![
+                root_thread_id,
+                status_kind_str(status.kind()),
+                serde_json::to_string(&status)?,
+                timestamp,
+            ],
+        )?;
+        let root = tx
+            .query_row(
+                &format!(
+                    "SELECT {V2_THREAD_SELECT} FROM agent_threads
+                     WHERE root_thread_id = ?1 AND canonical_path = '/root'"
+                ),
+                [root_thread_id],
+                v2_thread_from_row,
+            )
+            .optional()?
+            .with_context(|| {
+                format!("root agent row for thread {root_thread_id:?} could not be ensured")
+            })?;
+        if root.thread_id != root_thread_id
+            || root.root_thread_id != root_thread_id
+            || root.parent_thread_id.is_some()
+            || root.session_id != root_thread_id
+        {
+            bail!("existing root agent row does not match root thread {root_thread_id:?}");
+        }
+        tx.commit()?;
+        Ok(root)
+    }
+
     pub fn reserve_thread(&self, reservation: &ThreadReservation) -> anyhow::Result<AgentThreadV2> {
         validate_reservation(reservation)?;
         let mut conn = self.connect()?;
