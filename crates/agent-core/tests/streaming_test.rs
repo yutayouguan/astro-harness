@@ -41,6 +41,7 @@ async fn scripted_tool_turn_emits_item_lifecycle_and_one_terminal() {
             },
         ],
         vec![
+            StreamChunk::Thinking("because".into()),
             StreamChunk::Text("done".into()),
             StreamChunk::Done {
                 finish_reason: "stop".into(),
@@ -70,12 +71,171 @@ async fn scripted_tool_turn_emits_item_lifecycle_and_one_terminal() {
         &event.msg,
         EventMsg::AgentMessageContentDelta(delta) if delta.delta == "done"
     )));
+    assert_text_item_lifecycle(&events, false, "done");
+    assert_text_item_lifecycle(&events, true, "because");
     assert_eq!(
         events
             .iter()
             .filter(|event| event.msg.is_terminal())
             .count(),
         1
+    );
+}
+
+fn assert_text_item_lifecycle(
+    events: &[agent_protocol::Event],
+    reasoning: bool,
+    expected_delta: &str,
+) {
+    let delta = events
+        .iter()
+        .enumerate()
+        .find_map(|(index, event)| match &event.msg {
+            EventMsg::AgentMessageContentDelta(delta)
+                if !reasoning && delta.delta == expected_delta =>
+            {
+                Some((index, delta.item_id.clone()))
+            }
+            EventMsg::ReasoningContentDelta(delta)
+                if reasoning && delta.delta == expected_delta =>
+            {
+                Some((index, delta.item_id.clone()))
+            }
+            _ => None,
+        })
+        .expect("text item must emit its delta");
+    let started = events
+        .iter()
+        .enumerate()
+        .find_map(|(index, event)| match &event.msg {
+            EventMsg::ItemStarted(item)
+                if item.item.id() == delta.1
+                    && matches!(
+                        (&item.item, reasoning),
+                        (agent_protocol::TurnItem::AgentMessage(_), false)
+                            | (agent_protocol::TurnItem::Reasoning(_), true)
+                    ) =>
+            {
+                Some((index, item.item.id().to_string()))
+            }
+            _ => None,
+        })
+        .expect("text item must start");
+    let completed = events
+        .iter()
+        .enumerate()
+        .find_map(|(index, event)| match &event.msg {
+            EventMsg::ItemCompleted(item)
+                if item.item.id() == started.1
+                    && matches!(
+                        (&item.item, reasoning),
+                        (agent_protocol::TurnItem::AgentMessage(_), false)
+                            | (agent_protocol::TurnItem::Reasoning(_), true)
+                    ) =>
+            {
+                Some((index, item.item.id().to_string()))
+            }
+            _ => None,
+        })
+        .expect("text item must complete");
+
+    assert_eq!(started.1, delta.1);
+    assert_eq!(delta.1, completed.1);
+    assert!(started.0 < delta.0, "ItemStarted must precede delta");
+    assert!(delta.0 < completed.0, "delta must precede ItemCompleted");
+}
+
+#[tokio::test]
+async fn tool_argument_events_keep_stable_ids_across_late_start_and_rounds() {
+    let (_dir, session, thread, _recorder, _path) = common::new_thread().await;
+    let turn_id = "stable-tool-ids";
+    let turn_context = session.create_turn_context(turn_id.into()).await;
+    let chat = scripted_chat(vec![
+        vec![
+            StreamChunk::ToolCallDelta {
+                index: 0,
+                arguments: r#"{"command":"pwd"}"#.into(),
+            },
+            StreamChunk::ToolCallStart {
+                index: 0,
+                id: "provider-call-1".into(),
+                name: "terminal".into(),
+            },
+            StreamChunk::Done {
+                finish_reason: "tool_calls".into(),
+            },
+        ],
+        vec![
+            StreamChunk::ToolCallDelta {
+                index: 0,
+                arguments: r#"{"command":"pwd"}"#.into(),
+            },
+            StreamChunk::ToolCallStart {
+                index: 0,
+                id: "provider-call-2".into(),
+                name: "terminal".into(),
+            },
+            StreamChunk::Done {
+                finish_reason: "tool_calls".into(),
+            },
+        ],
+        vec![
+            StreamChunk::Text("done".into()),
+            StreamChunk::Done {
+                finish_reason: "stop".into(),
+            },
+        ],
+    ]);
+    let run = tokio::spawn(run_multi_turn_stream_with_chat_fn(
+        Arc::clone(&session),
+        turn_context,
+        vec![TurnInput {
+            content: "run twice".into(),
+            image_data_urls: Vec::new(),
+        }],
+        chat,
+    ));
+    let events = common::collect_through_terminal(&thread, turn_id).await;
+    run.await.unwrap().unwrap();
+
+    let argument_events = events
+        .iter()
+        .filter_map(|event| match &event.msg {
+            EventMsg::DynamicToolCallRequest(request) => Some(request),
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(argument_events.len(), 4);
+    let first_id = &argument_events[0].item_id;
+    let second_id = &argument_events[2].item_id;
+    assert_eq!(argument_events[1].item_id, *first_id);
+    assert_eq!(argument_events[3].item_id, *second_id);
+    assert_ne!(first_id, second_id);
+    for request in argument_events {
+        assert!(request.request_id.contains(turn_id));
+        assert!(request.request_id.contains(&request.item_id));
+    }
+
+    let started_tool_ids = events
+        .iter()
+        .filter_map(|event| match &event.msg {
+            EventMsg::ItemStarted(item)
+                if matches!(
+                    item.item,
+                    agent_protocol::TurnItem::CommandExecution(_)
+                        | agent_protocol::TurnItem::DynamicToolCall(_)
+                        | agent_protocol::TurnItem::McpToolCall(_)
+                        | agent_protocol::TurnItem::CollabAgentToolCall(_)
+                ) =>
+            {
+                Some(item.item.id())
+            }
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(
+        started_tool_ids,
+        vec![first_id.as_str(), second_id.as_str()]
     );
 }
 
@@ -214,6 +374,7 @@ async fn regular_task_prepare_failure_emits_error_then_done() {
     assert!(matches!(
         items.as_slice(),
         [
+            MultiTurnStreamItem::RunStarted { .. },
             MultiTurnStreamItem::Error(message),
             MultiTurnStreamItem::RunFinished { outcome_type, .. },
             MultiTurnStreamItem::Done,
@@ -261,6 +422,7 @@ async fn regular_task_prepare_error_emits_error_then_done() {
     assert!(matches!(
         items.as_slice(),
         [
+            MultiTurnStreamItem::RunStarted { .. },
             MultiTurnStreamItem::Error(message),
             MultiTurnStreamItem::RunFinished { outcome_type, .. },
             MultiTurnStreamItem::Done,
@@ -1664,6 +1826,13 @@ async fn multi_turn_budget_exhausted_forces_toolless_summary() {
     config.multi_turn = 1;
     let agent = AgentLoop::with_session_id(config, "budget-session".into()).unwrap();
     let session = Arc::new(agent);
+    let recorder = agent_rollout::RolloutRecorder::open(
+        dir.path().join("budget-rollout.jsonl"),
+        agent_rollout::ThreadHistoryMode::Paginated,
+    )
+    .await
+    .unwrap();
+    let thread = agent::AstroThread::spawn(Arc::clone(&session), recorder).unwrap();
     {
         let a = session.as_ref();
         a.record_items(vec![types::message::Message::user("keep using tools")])
@@ -1688,6 +1857,7 @@ async fn multi_turn_budget_exhausted_forces_toolless_summary() {
         ],
         // 预算耗尽后的无工具总结轮
         vec![
+            StreamChunk::Thinking("summary-reasoning".into()),
             StreamChunk::Text("summary-after-budget".into()),
             StreamChunk::Usage(Usage::from_parts(6, 4)),
             StreamChunk::Done {
@@ -1718,6 +1888,15 @@ async fn multi_turn_budget_exhausted_forces_toolless_summary() {
     while let Some(item) = rx.recv().await {
         items.push(item.expect("stream item"));
     }
+    let mut events = Vec::new();
+    loop {
+        let event = thread.next_event().await.unwrap();
+        let terminal = event.msg.is_terminal();
+        events.push(event);
+        if terminal {
+            break;
+        }
+    }
 
     assert!(
         !items
@@ -1740,4 +1919,6 @@ async fn multi_turn_budget_exhausted_forces_toolless_summary() {
         MultiTurnStreamItem::RunFinished { outcome_type, .. } if outcome_type == "success"
     )));
     assert!(matches!(items.last(), Some(MultiTurnStreamItem::Done)));
+    assert_text_item_lifecycle(&events, false, "summary-after-budget");
+    assert_text_item_lifecycle(&events, true, "summary-reasoning");
 }

@@ -100,6 +100,63 @@ pub(crate) async fn emit_assistant_completed(
     .await;
 }
 
+pub(crate) async fn emit_text_item_started(
+    session: &Session,
+    turn_context: &TurnContext,
+    item_id: String,
+    reasoning: bool,
+) {
+    emit(
+        session,
+        turn_context,
+        EventMsg::ItemStarted(ItemEvent {
+            turn_id: turn_context.sub_id().to_string(),
+            item: text_item(item_id, String::new(), reasoning),
+        }),
+    )
+    .await;
+}
+
+pub(crate) async fn emit_reasoning_completed(
+    session: &Session,
+    turn_context: &TurnContext,
+    item_id: String,
+    content: String,
+) {
+    emit(
+        session,
+        turn_context,
+        EventMsg::ItemCompleted(ItemEvent {
+            turn_id: turn_context.sub_id().to_string(),
+            item: text_item(item_id, content, true),
+        }),
+    )
+    .await;
+}
+
+pub(crate) async fn emit_response_items_completed(
+    session: &Session,
+    turn_context: &TurnContext,
+    assistant_item_id: String,
+    assistant_content: String,
+    reasoning_item_id: String,
+    reasoning_content: String,
+) {
+    emit_assistant_completed(session, turn_context, assistant_item_id, assistant_content).await;
+    if !reasoning_content.is_empty() {
+        emit_reasoning_completed(session, turn_context, reasoning_item_id, reasoning_content).await;
+    }
+}
+
+fn text_item(id: String, content: String, reasoning: bool) -> TurnItem {
+    let item = TextItem { id, content };
+    if reasoning {
+        TurnItem::Reasoning(item)
+    } else {
+        TurnItem::AgentMessage(item)
+    }
+}
+
 pub(crate) async fn emit_extension_completed(
     session: &Session,
     turn_context: &TurnContext,
@@ -316,7 +373,7 @@ mod tests {
     #[tokio::test]
     async fn hook_started_and_completed_share_stable_item_id() {
         let (_dir, session, context) = session().await;
-        let mut rx = session.subscribe_live_events();
+        let rx = session.subscribe_turn_events("turn-1").await;
         let item_id = emit_hook_started(&session, &context, "pre_api_request").await;
         emit_hook_completed(&session, &context, item_id.clone(), "pre_api_request").await;
 
@@ -335,7 +392,7 @@ mod tests {
     #[tokio::test]
     async fn compaction_helper_emits_context_compacted() {
         let (_dir, session, context) = session().await;
-        let mut rx = session.subscribe_live_events();
+        let rx = session.subscribe_turn_events("turn-1").await;
         emit_context_compacted(&session, &context, "pruned=1 compressed=1".into()).await;
 
         let event = rx.recv().await.unwrap();
@@ -349,7 +406,7 @@ mod tests {
     #[tokio::test]
     async fn subagent_helper_emits_subagent_activity() {
         let (_dir, session, context) = session().await;
-        let mut rx = session.subscribe_live_events();
+        let rx = session.subscribe_turn_events("turn-1").await;
         emit_subagent_activity(
             &session,
             &context,

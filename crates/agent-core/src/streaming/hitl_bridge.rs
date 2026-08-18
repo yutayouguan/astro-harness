@@ -189,7 +189,7 @@ mod event_tests {
         );
         let turn_context = session.create_turn_context("turn-1".into()).await;
         let gate = HitlGate::new("hitl-event-test");
-        let mut events = session.subscribe_live_events();
+        let events = session.subscribe_turn_events("turn-1").await;
 
         let run = tokio::spawn({
             let gate = Arc::clone(&gate);

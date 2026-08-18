@@ -18,7 +18,7 @@ use std::sync::{Arc, Mutex as StdMutex, MutexGuard, OnceLock};
 
 use agent_protocol::{Event, EventMsg};
 use agent_rollout::{RolloutItem, RolloutRecorder};
-use tokio::sync::{broadcast, watch, Mutex as TokioMutex};
+use tokio::sync::{watch, Mutex as TokioMutex};
 use uuid::Uuid;
 
 use ::session::{ConversationStore, SessionStore};
@@ -152,8 +152,8 @@ pub struct Session {
     runtime_io: OnceLock<RuntimeIoBindings>,
     /// Serializes rollout persistence, status reduction, and live delivery.
     event_dispatch: TokioMutex<()>,
-    /// Compatibility tap for adapters that consume the unified event stream.
-    live_events: broadcast::Sender<Event>,
+    /// Exact-turn event taps registered before task installation.
+    turn_event_taps: TokioMutex<HashMap<String, Vec<async_channel::Sender<Event>>>>,
     /// Guards one-time release of task, hook, MCP, and terminal resources.
     runtime_shutdown: AtomicBool,
     /// Shared completion observed by every concurrent shutdown caller.
@@ -255,7 +255,6 @@ impl Session {
         state.temperature = config.temperature;
         state.additional_params = config.additional_params.clone();
 
-        let (live_events, _) = broadcast::channel(1024);
         Ok(Session {
             config,
             session_id,
@@ -273,7 +272,7 @@ impl Session {
             task_completions: TokioMutex::new(HashMap::new()),
             runtime_io: OnceLock::new(),
             event_dispatch: TokioMutex::new(()),
-            live_events,
+            turn_event_taps: TokioMutex::new(HashMap::new()),
             runtime_shutdown: AtomicBool::new(false),
             runtime_shutdown_complete: tokio_util::sync::CancellationToken::new(),
         })
@@ -309,8 +308,23 @@ impl Session {
         self.send_event_raw_with_persistence(event, true).await;
     }
 
-    pub(crate) fn subscribe_live_events(&self) -> broadcast::Receiver<Event> {
-        self.live_events.subscribe()
+    /// Register a lossless in-process receiver for one exact turn.
+    pub(crate) async fn subscribe_turn_events(
+        &self,
+        turn_id: &str,
+    ) -> async_channel::Receiver<Event> {
+        let (tx, rx) = async_channel::unbounded();
+        self.turn_event_taps
+            .lock()
+            .await
+            .entry(turn_id.to_string())
+            .or_default()
+            .push(tx);
+        rx
+    }
+
+    pub(crate) async fn remove_turn_event_taps(&self, turn_id: &str) {
+        self.turn_event_taps.lock().await.remove(turn_id);
     }
 
     pub(crate) async fn send_event_raw_with_persistence(&self, event: Event, persist: bool) {
@@ -365,25 +379,39 @@ impl Session {
     }
 
     async fn deliver_event_raw_inner(&self, event: Event) {
-        let _ = self.live_events.send(event.clone());
-        let Some(bindings) = self.runtime_io.get() else {
-            return;
-        };
-        match &event.msg {
-            EventMsg::TurnStarted(started) => {
-                let _ = bindings.status_tx.send(AgentStatus::Running {
-                    turn_id: started.turn_id.clone(),
-                });
+        if let Some(bindings) = self.runtime_io.get() {
+            match &event.msg {
+                EventMsg::TurnStarted(started) => {
+                    let _ = bindings.status_tx.send(AgentStatus::Running {
+                        turn_id: started.turn_id.clone(),
+                    });
+                }
+                EventMsg::TurnComplete(_) | EventMsg::TurnAborted(_) => {
+                    let _ = bindings.status_tx.send(AgentStatus::Idle);
+                }
+                EventMsg::ShutdownComplete => {
+                    let _ = bindings.status_tx.send(AgentStatus::Shutdown);
+                }
+                _ => {}
             }
-            EventMsg::TurnComplete(_) | EventMsg::TurnAborted(_) => {
-                let _ = bindings.status_tx.send(AgentStatus::Idle);
-            }
-            EventMsg::ShutdownComplete => {
-                let _ = bindings.status_tx.send(AgentStatus::Shutdown);
-            }
-            _ => {}
+            let _ = bindings.event_tx.send(event.clone()).await;
         }
-        let _ = bindings.event_tx.send(event).await;
+        let exact_turn_senders = {
+            let mut taps = self.turn_event_taps.lock().await;
+            if event.msg.is_terminal() {
+                taps.remove(&event.id).unwrap_or_default()
+            } else {
+                taps.get_mut(&event.id)
+                    .map(|senders| {
+                        senders.retain(|sender| !sender.is_closed());
+                        senders.clone()
+                    })
+                    .unwrap_or_default()
+            }
+        };
+        for sender in exact_turn_senders {
+            let _ = sender.send(event.clone()).await;
+        }
     }
 
     pub(crate) fn begin_runtime_shutdown(&self) -> bool {

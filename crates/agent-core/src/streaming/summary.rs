@@ -9,7 +9,7 @@ use types::message::Message;
 
 use crate::runtime::{AgentLoop, TurnContext};
 
-use super::lifecycle::{emit_assistant_completed, emit_delta};
+use super::lifecycle::{emit_delta, emit_response_items_completed, emit_text_item_started};
 use super::provider::ProviderStreamer;
 use super::traits::StreamingChat;
 use super::types::StreamedAssistantContent;
@@ -57,6 +57,8 @@ pub(crate) async fn run_max_iterations_summary(a: MaxIterationsSummaryArgs<'_>) 
         format!("⚠️ 迭代预算已用尽（{used}/{max_total}），正在请求模型总结（不再调用工具）…\n\n");
     let assistant_item_id = uuid::Uuid::new_v4().to_string();
     let reasoning_item_id = uuid::Uuid::new_v4().to_string();
+    let mut reasoning_started = false;
+    emit_text_item_started(session, turn_context, assistant_item_id.clone(), false).await;
     emit_delta(session, turn_context, &assistant_item_id, notice, false).await;
 
     let history = {
@@ -120,6 +122,11 @@ pub(crate) async fn run_max_iterations_summary(a: MaxIterationsSummaryArgs<'_>) 
             Some(Ok(StreamedAssistantContent::Reasoning(r))) => {
                 full_reasoning.push_str(&r);
                 timeline.push_reasoning_delta(&r, now_ms());
+                if !reasoning_started {
+                    emit_text_item_started(session, turn_context, reasoning_item_id.clone(), true)
+                        .await;
+                    reasoning_started = true;
+                }
                 emit_delta(session, turn_context, &reasoning_item_id, r, true).await;
             }
             // 总结轮禁止再调工具：忽略 tool delta
@@ -150,11 +157,13 @@ pub(crate) async fn run_max_iterations_summary(a: MaxIterationsSummaryArgs<'_>) 
                         .await
                         .is_ok()
                     {
-                        emit_assistant_completed(
+                        emit_response_items_completed(
                             session,
                             turn_context,
                             assistant_item_id,
                             full_response.clone(),
+                            reasoning_item_id,
+                            full_reasoning.clone(),
                         )
                         .await;
                     }
@@ -196,7 +205,15 @@ pub(crate) async fn run_max_iterations_summary(a: MaxIterationsSummaryArgs<'_>) 
         }
     }
 
-    emit_assistant_completed(session, turn_context, assistant_item_id, full_response).await;
+    emit_response_items_completed(
+        session,
+        turn_context,
+        assistant_item_id,
+        full_response,
+        reasoning_item_id,
+        full_reasoning,
+    )
+    .await;
 
     SummaryOutcome::Finished
 }

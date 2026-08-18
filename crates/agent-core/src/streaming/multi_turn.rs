@@ -11,9 +11,7 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use agent_protocol::{
-    ControlRequestEvent, Event, EventMsg, ItemEvent, ToolStatus, TurnInput, TurnStartedEvent,
-};
+use agent_protocol::{ControlRequestEvent, Event, EventMsg, ItemEvent, ToolStatus, TurnInput};
 use futures::stream::{AbortHandle, Abortable};
 use futures::StreamExt;
 use providers::ProviderConfig;
@@ -23,8 +21,8 @@ use tokio_util::sync::CancellationToken;
 use types::ChatTarget;
 
 use super::lifecycle::{
-    emit, emit_assistant_completed, emit_delta, emit_hook_completed, emit_hook_started, emit_usage,
-    tool_turn_item,
+    emit, emit_delta, emit_hook_completed, emit_hook_started, emit_response_items_completed,
+    emit_text_item_started, emit_usage, tool_turn_item,
 };
 use super::maintenance::{
     emit_context_usage, post_tool_maintenance, pre_llm_maintenance, record_tool_outcomes,
@@ -62,31 +60,100 @@ pub struct MultiTurnStreamArgs {
     pub chat_override: Option<super::provider::ChatOverride>,
 }
 
+pub(crate) struct MultiTurnTaskArgs {
+    pub(crate) session: Arc<Session>,
+    pub(crate) targets: Vec<ChatTarget>,
+    pub(crate) base_config: ProviderConfig,
+    pub(crate) input: Vec<TurnInput>,
+    pub(crate) system_prompt: Option<String>,
+    pub(crate) pause: Arc<PauseControl>,
+    pub(crate) hitl_gate: Option<Arc<HitlGate>>,
+    pub(crate) chat_override: Option<super::provider::ChatOverride>,
+}
+
+impl MultiTurnStreamArgs {
+    fn into_task_args(
+        self,
+    ) -> (
+        MultiTurnTaskArgs,
+        mpsc::Sender<anyhow::Result<MultiTurnStreamItem>>,
+    ) {
+        let Self {
+            session,
+            targets,
+            base_config,
+            input,
+            system_prompt,
+            pause,
+            hitl_gate,
+            tx,
+            chat_override,
+        } = self;
+        (
+            MultiTurnTaskArgs {
+                session,
+                targets,
+                base_config,
+                input,
+                system_prompt,
+                pause,
+                hitl_gate,
+                chat_override,
+            },
+            tx,
+        )
+    }
+}
+
 /// 多轮工具调用流式循环：从 gRPC handler 收拢到 Agent 层的核心编排。
 ///
 /// 每轮：锁定 session → 流式 LLM → 累积 tool_calls → 执行工具 → 写入历史 → 下一轮。
 /// 取消/暂停时清理 abort handle 并以 usage + Done 收尾。
 /// `hitl_gate` 非空时，confirm/clarify/危险命令在同回合 park，不结束 run。
 pub async fn run_multi_turn_stream(args: MultiTurnStreamArgs) {
-    let legacy_tx = args.tx.clone();
-    let live_rx = args.session.subscribe_live_events();
-    let (session, session_id, sub_id, installed) = install_multi_turn_task(args).await;
-    if installed {
-        let forward = tokio::spawn(forward_unified_to_legacy(
-            live_rx,
-            sub_id.clone(),
-            legacy_tx,
-        ));
-        session.wait_for_task(&sub_id).await;
-        let _ = forward.await;
+    let (task_args, legacy_tx) = args.into_task_args();
+    match install_multi_turn_task(task_args).await {
+        Ok(installed) => {
+            let InstalledMultiTurn {
+                session,
+                session_id,
+                turn_id,
+                events,
+            } = installed;
+            let forward = tokio::spawn(forward_unified_to_legacy(
+                events,
+                turn_id.clone(),
+                legacy_tx,
+            ));
+            session.wait_for_task(&turn_id).await;
+            let _ = forward.await;
+            tracing::info!(session_id = %session_id, turn_id = %turn_id, "turn finished");
+        }
+        Err(error) => {
+            let _ = legacy_tx
+                .send(Ok(MultiTurnStreamItem::Error(error.message)))
+                .await;
+            let _ = legacy_tx.send(Ok(MultiTurnStreamItem::Done)).await;
+        }
     }
-    tracing::info!(session_id = %session_id, turn_id = %sub_id, "turn finished");
 }
 
-async fn install_multi_turn_task(
-    args: MultiTurnStreamArgs,
-) -> (Arc<Session>, String, String, bool) {
-    let MultiTurnStreamArgs {
+pub(crate) struct InstalledMultiTurn {
+    pub(crate) session: Arc<Session>,
+    pub(crate) session_id: String,
+    pub(crate) turn_id: String,
+    pub(crate) events: async_channel::Receiver<Event>,
+}
+
+pub(crate) struct MultiTurnInstallError {
+    pub(crate) turn_id: String,
+    pub(crate) message: String,
+}
+
+pub(crate) async fn install_multi_turn_task(
+    args: MultiTurnTaskArgs,
+) -> Result<InstalledMultiTurn, MultiTurnInstallError> {
+    let MultiTurnTaskArgs {
         session,
         targets,
         base_config,
@@ -94,11 +161,11 @@ async fn install_multi_turn_task(
         system_prompt,
         pause,
         hitl_gate,
-        tx,
         chat_override,
     } = args;
     let session_id = session.session_id().to_string();
     let sub_id = uuid::Uuid::new_v4().to_string();
+    let events = session.subscribe_turn_events(&sub_id).await;
     let turn_context = session.create_turn_context(sub_id.clone()).await;
     let task = RegularTask::new(RunTurnArgs {
         session: session.clone(),
@@ -111,17 +178,19 @@ async fn install_multi_turn_task(
         chat_override,
     });
     tracing::info!(session_id = %session_id, turn_id = %sub_id, "turn started");
-    let installed = match session.spawn_task(turn_context, input, task).await {
-        Ok(()) => true,
-        Err(error) => {
-            let _ = tx
-                .send(Ok(MultiTurnStreamItem::Error(error.to_string())))
-                .await;
-            let _ = tx.send(Ok(MultiTurnStreamItem::Done)).await;
-            false
-        }
-    };
-    (session, session_id, sub_id, installed)
+    if let Err(error) = session.spawn_task(turn_context, input, task).await {
+        session.remove_turn_event_taps(&sub_id).await;
+        return Err(MultiTurnInstallError {
+            turn_id: sub_id.clone(),
+            message: error.to_string(),
+        });
+    }
+    Ok(InstalledMultiTurn {
+        session,
+        session_id,
+        turn_id: sub_id,
+        events,
+    })
 }
 
 fn legacy_items_from_event(event: Event) -> Vec<MultiTurnStreamItem> {
@@ -300,15 +369,13 @@ fn legacy_items_from_event(event: Event) -> Vec<MultiTurnStreamItem> {
 }
 
 async fn forward_unified_to_legacy(
-    mut rx: tokio::sync::broadcast::Receiver<Event>,
+    rx: async_channel::Receiver<Event>,
     turn_id: String,
     tx: mpsc::Sender<anyhow::Result<MultiTurnStreamItem>>,
 ) {
     loop {
-        let event = match rx.recv().await {
-            Ok(event) => event,
-            Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => continue,
-            Err(tokio::sync::broadcast::error::RecvError::Closed) => return,
+        let Ok(event) = rx.recv().await else {
+            return;
         };
         if event.id != turn_id {
             continue;
@@ -441,6 +508,10 @@ impl RunTurnArgs {
         &self.session
     }
 
+    pub(crate) fn turn_context(&self) -> &Arc<TurnContext> {
+        &self.turn_context
+    }
+
     pub(crate) fn with_system_prompt(&self, system_prompt: String) -> Self {
         Self {
             system_prompt: Some(system_prompt),
@@ -515,15 +586,6 @@ pub(crate) async fn run_turn(
         let agent = session.as_ref();
         let _ = agent.ensure_session("tauri");
     }
-    emit(
-        &session,
-        &turn_context,
-        EventMsg::TurnStarted(TurnStartedEvent {
-            turn_id: turn_context.sub_id().to_string(),
-        }),
-    )
-    .await;
-
     let max_rounds = {
         let agent = session.as_ref();
         let n = agent.multi_turn();
@@ -641,6 +703,8 @@ pub(crate) async fn run_turn(
         let mut round_usage: Option<Usage> = None;
         let assistant_item_id = uuid::Uuid::new_v4().to_string();
         let reasoning_item_id = uuid::Uuid::new_v4().to_string();
+        let mut reasoning_started = false;
+        emit_text_item_started(&session, &turn_context, assistant_item_id.clone(), false).await;
 
         loop {
             if !pause.wait_if_paused().await {
@@ -695,27 +759,39 @@ pub(crate) async fn run_turn(
                 Some(Ok(StreamedAssistantContent::Reasoning(r))) => {
                     full_reasoning.push_str(&r);
                     timeline.push_reasoning_delta(&r, now_ms());
+                    if !reasoning_started {
+                        emit_text_item_started(
+                            &session,
+                            &turn_context,
+                            reasoning_item_id.clone(),
+                            true,
+                        )
+                        .await;
+                        reasoning_started = true;
+                    }
                     emit_delta(&session, &turn_context, &reasoning_item_id, r, true).await;
                 }
                 Some(Ok(StreamedAssistantContent::ThoughtSignature(sig))) => {
                     thought_signature = Some(sig);
                 }
                 Some(Ok(StreamedAssistantContent::ToolCallDelta(d))) => {
-                    if let Some(id) = d.id.as_ref().filter(|id| !id.is_empty()) {
-                        tool_item_ids.insert(d.index, id.clone());
-                    }
-                    tool_acc.push(&d);
                     let item_id = tool_item_ids
-                        .get(&d.index)
-                        .cloned()
-                        .unwrap_or_else(|| format!("tool-{}", d.index));
+                        .entry(d.index)
+                        .or_insert_with(|| {
+                            d.id.as_ref()
+                                .filter(|id| !id.is_empty())
+                                .cloned()
+                                .unwrap_or_else(|| uuid::Uuid::new_v4().to_string())
+                        })
+                        .clone();
+                    tool_acc.push(&d);
                     emit(
                         &session,
                         &turn_context,
                         EventMsg::DynamicToolCallRequest(ControlRequestEvent {
                             turn_id: turn_context.sub_id().to_string(),
+                            request_id: format!("{}:{item_id}:arguments", turn_context.sub_id()),
                             item_id,
-                            request_id: format!("tool-args-{}", d.index),
                             payload: serde_json::json!({
                                 "index": d.index,
                                 "name": d.name,
@@ -771,7 +847,14 @@ pub(crate) async fn run_turn(
             saw_usage = true;
         }
 
-        let native_calls = tool_acc.finish();
+        let mut native_calls = tool_acc.finish();
+        let mut tool_indices = tool_item_ids.keys().copied().collect::<Vec<_>>();
+        tool_indices.sort_unstable();
+        for (call, index) in native_calls.iter_mut().zip(tool_indices) {
+            if let Some(item_id) = tool_item_ids.get(&index) {
+                call.id.clone_from(item_id);
+            }
+        }
         let calls = types::resolve_tool_calls(native_calls, &full_response);
 
         if full_response.is_empty() && calls.is_empty() {
@@ -805,11 +888,13 @@ pub(crate) async fn run_turn(
                     )
                     .await;
                 }
-                emit_assistant_completed(
+                emit_response_items_completed(
                     &session,
                     &turn_context,
                     assistant_item_id,
                     full_response.clone(),
+                    reasoning_item_id,
+                    full_reasoning.clone(),
                 )
                 .await;
                 if let Err(err) = agent.record_user_message(
@@ -889,11 +974,13 @@ pub(crate) async fn run_turn(
                     )
                     .await;
                 }
-                emit_assistant_completed(
+                emit_response_items_completed(
                     &session,
                     &turn_context,
                     assistant_item_id,
                     full_response.clone(),
+                    reasoning_item_id,
+                    full_reasoning.clone(),
                 )
                 .await;
                 if let Err(err) = agent
@@ -993,11 +1080,13 @@ pub(crate) async fn run_turn(
                 .await;
             }
         }
-        emit_assistant_completed(
+        emit_response_items_completed(
             &session,
             &turn_context,
             assistant_item_id,
             full_response.clone(),
+            reasoning_item_id,
+            full_reasoning.clone(),
         )
         .await;
 
@@ -1203,9 +1292,8 @@ pub async fn stream_multi_turn_with_hitl(
     hitl_gate: Option<Arc<HitlGate>>,
 ) -> MultiTurnStream {
     let (tx, rx) = mpsc::channel(32);
-    let live_rx = session.subscribe_live_events();
     let legacy_tx = tx.clone();
-    let (session, session_id, sub_id, installed) = install_multi_turn_task(MultiTurnStreamArgs {
+    let installed = install_multi_turn_task(MultiTurnTaskArgs {
         session,
         targets,
         base_config,
@@ -1213,21 +1301,34 @@ pub async fn stream_multi_turn_with_hitl(
         system_prompt: None,
         pause,
         hitl_gate,
-        tx,
         chat_override: None,
     })
     .await;
-    if installed {
-        tokio::spawn(async move {
-            let forward = tokio::spawn(forward_unified_to_legacy(
-                live_rx,
-                sub_id.clone(),
-                legacy_tx,
-            ));
-            session.wait_for_task(&sub_id).await;
-            let _ = forward.await;
-            tracing::info!(session_id = %session_id, turn_id = %sub_id, "turn finished");
-        });
+    match installed {
+        Ok(installed) => {
+            let InstalledMultiTurn {
+                session,
+                session_id,
+                turn_id,
+                events,
+            } = installed;
+            tokio::spawn(async move {
+                let forward = tokio::spawn(forward_unified_to_legacy(
+                    events,
+                    turn_id.clone(),
+                    legacy_tx,
+                ));
+                session.wait_for_task(&turn_id).await;
+                let _ = forward.await;
+                tracing::info!(session_id = %session_id, turn_id = %turn_id, "turn finished");
+            });
+        }
+        Err(error) => {
+            let _ = legacy_tx
+                .send(Ok(MultiTurnStreamItem::Error(error.message)))
+                .await;
+            let _ = legacy_tx.send(Ok(MultiTurnStreamItem::Done)).await;
+        }
     }
     Box::pin(futures::stream::unfold(rx, |mut rx| async move {
         rx.recv().await.map(|item| (item, rx))

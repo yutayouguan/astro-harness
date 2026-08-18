@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use agent_protocol::{EventMsg, TurnStartedEvent};
 use tokio_util::sync::CancellationToken;
 
 use crate::runtime::{Session, TurnContext, TurnResult};
@@ -24,6 +25,14 @@ impl RegularTask {
         cancellation_token: CancellationToken,
     ) -> SessionTaskResult {
         let args = self.args.with_turn_context(ctx);
+        args.session()
+            .send_event(
+                args.turn_context().sub_id(),
+                EventMsg::TurnStarted(TurnStartedEvent {
+                    turn_id: args.turn_context().sub_id().to_string(),
+                }),
+            )
+            .await;
         let prepared = match args.prepared_system_prompt().map(str::to_owned) {
             Some(system_prompt) => {
                 anyhow::ensure!(

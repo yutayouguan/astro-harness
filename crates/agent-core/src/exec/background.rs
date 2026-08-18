@@ -16,7 +16,10 @@ use types::message::{MessageContent, Role};
 use types::ChatTarget;
 
 use crate::runtime::Session;
-use crate::streaming::{run_multi_turn_stream, ChatOverride, MultiTurnStreamArgs};
+use crate::streaming::multi_turn::{
+    install_multi_turn_task, InstalledMultiTurn, MultiTurnTaskArgs,
+};
+use crate::streaming::ChatOverride;
 use agent_protocol::{Event, EventMsg, TurnInput};
 
 #[derive(Debug)]
@@ -73,25 +76,7 @@ pub(crate) async fn run_background_multi_turn_controlled_with_chat(
             pause.cancel();
         })
     });
-    let mut live_rx = session.subscribe_live_events();
-    let (event_tx, event_rx) = async_channel::unbounded();
-    let relay = tokio::spawn(async move {
-        loop {
-            let event = match live_rx.recv().await {
-                Ok(event) => event,
-                Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => continue,
-                Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
-            };
-            let terminal = event.msg.is_terminal();
-            if event_tx.send(event).await.is_err() || terminal {
-                break;
-            }
-        }
-    });
-    let (tx, legacy_rx) = tokio::sync::mpsc::channel(32);
-    drop(legacy_rx);
-
-    let engine = run_multi_turn_stream(MultiTurnStreamArgs {
+    let installed = install_multi_turn_task(MultiTurnTaskArgs {
         session: Arc::clone(&session),
         targets,
         base_config,
@@ -99,12 +84,30 @@ pub(crate) async fn run_background_multi_turn_controlled_with_chat(
         system_prompt: None,
         pause,
         hitl_gate: None,
-        tx,
         chat_override,
-    });
-    let collector = collect_background_events(event_rx, "");
+    })
+    .await;
+    let InstalledMultiTurn {
+        session: installed_session,
+        turn_id,
+        events,
+        ..
+    } = match installed {
+        Ok(installed) => installed,
+        Err(error) => {
+            if let Some(bridge) = cancellation_bridge {
+                bridge.abort();
+            }
+            anyhow::bail!(
+                "background turn {} install failed: {}",
+                error.turn_id,
+                error.message
+            );
+        }
+    };
+    let engine = installed_session.wait_for_task(&turn_id);
+    let collector = collect_background_events(events, &turn_id);
     let ((), collected) = tokio::join!(engine, collector);
-    let _ = relay.await;
 
     if let Some(bridge) = cancellation_bridge {
         bridge.abort();
@@ -235,6 +238,7 @@ async fn latest_assistant_text(session: &Arc<Session>, message_start: usize) -> 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::streaming::{run_multi_turn_stream_with_chat_fn_legacy, MultiTurnStreamItem};
     use agent_protocol::{
         ErrorEvent, Event, EventMsg, ItemEvent, TokenCountEvent, TurnCompleteEvent,
     };
@@ -246,6 +250,29 @@ mod tests {
                 Ok(Box::pin(futures::stream::pending()) as providers::CompletionStream)
             })
         })
+    }
+
+    fn completed_chat() -> ChatOverride {
+        Arc::new(move |_messages, _tools, _config| {
+            Box::pin(async move {
+                Ok(Box::pin(futures::stream::iter(vec![
+                    Ok(providers::types::stream::StreamChunk::Text("done".into())),
+                    Ok(providers::types::stream::StreamChunk::Done {
+                        finish_reason: "stop".into(),
+                    }),
+                ])) as providers::CompletionStream)
+            })
+        })
+    }
+
+    fn test_target() -> ChatTarget {
+        ChatTarget {
+            provider_id: "test".into(),
+            backend_id: "openai".into(),
+            model: "test".into(),
+            api_key: "test".into(),
+            base_url: "http://127.0.0.1.invalid".into(),
+        }
     }
 
     #[tokio::test]
@@ -389,5 +416,115 @@ mod tests {
         let (result, ()) = tokio::join!(run, interrupt);
 
         assert_eq!(result.unwrap_err().to_string(), "agent thread interrupted");
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn replacement_collects_only_the_new_background_turn() {
+        let temp = tempfile::tempdir().unwrap();
+        let config = crate::runtime::Config::with_defaults(temp.path().to_path_buf());
+        let session =
+            Arc::new(Session::with_session_id(config, "background-replace".into()).unwrap());
+        let (legacy_tx, mut legacy_rx) = tokio::sync::mpsc::channel(8);
+        let old_run = tokio::spawn(run_multi_turn_stream_with_chat_fn_legacy(
+            Arc::clone(&session),
+            pending_chat(),
+            ProviderConfig::default(),
+            "system".into(),
+            PauseControl::new(),
+            None,
+            legacy_tx,
+        ));
+        tokio::time::timeout(std::time::Duration::from_secs(1), async {
+            loop {
+                if matches!(
+                    legacy_rx.recv().await,
+                    Some(Ok(MultiTurnStreamItem::RunStarted { .. }))
+                ) {
+                    break;
+                }
+            }
+        })
+        .await
+        .expect("old turn must start");
+
+        let result = tokio::time::timeout(
+            std::time::Duration::from_secs(2),
+            run_background_multi_turn_controlled_with_chat(
+                Arc::clone(&session),
+                vec![test_target()],
+                vec![TurnInput {
+                    content: "replace old turn".into(),
+                    image_data_urls: Vec::new(),
+                }],
+                None,
+                Some(completed_chat()),
+            ),
+        )
+        .await
+        .expect("background replacement must not hang")
+        .expect("new background turn must complete");
+        assert_eq!(result.0, "done");
+        tokio::time::timeout(std::time::Duration::from_secs(1), old_run)
+            .await
+            .expect("old run must observe replacement")
+            .unwrap();
+    }
+
+    #[tokio::test]
+    async fn runtime_shutdown_install_failure_returns_without_hanging() {
+        let temp = tempfile::tempdir().unwrap();
+        let config = crate::runtime::Config::with_defaults(temp.path().to_path_buf());
+        let session =
+            Arc::new(Session::with_session_id(config, "background-shutdown".into()).unwrap());
+        session.begin_runtime_shutdown();
+
+        let result = tokio::time::timeout(
+            std::time::Duration::from_secs(1),
+            run_background_multi_turn_controlled_with_chat(
+                session,
+                vec![test_target()],
+                vec![TurnInput {
+                    content: "must reject".into(),
+                    image_data_urls: Vec::new(),
+                }],
+                None,
+                Some(completed_chat()),
+            ),
+        )
+        .await
+        .expect("install failure must return without hanging")
+        .expect_err("runtime shutdown must reject the turn");
+        assert!(result.to_string().contains("shutting down"));
+    }
+
+    #[tokio::test]
+    async fn install_failure_is_structured_without_legacy_channel() {
+        let temp = tempfile::tempdir().unwrap();
+        let config = crate::runtime::Config::with_defaults(temp.path().to_path_buf());
+        let session =
+            Arc::new(Session::with_session_id(config, "structured-install-error".into()).unwrap());
+        session.begin_runtime_shutdown();
+
+        let error = match install_multi_turn_task(MultiTurnTaskArgs {
+            session,
+            targets: vec![test_target()],
+            base_config: ProviderConfig::default(),
+            input: vec![TurnInput {
+                content: "must reject".into(),
+                image_data_urls: Vec::new(),
+            }],
+            system_prompt: None,
+            pause: PauseControl::new(),
+            hitl_gate: None,
+            chat_override: Some(completed_chat()),
+        })
+        .await
+        {
+            Ok(_) => panic!("runtime shutdown must reject the turn"),
+            Err(error) => error,
+        };
+
+        assert!(!error.turn_id.is_empty());
+        assert!(error.message.contains("shutting down"));
     }
 }

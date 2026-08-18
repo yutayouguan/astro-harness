@@ -216,6 +216,15 @@ async fn prepare_failure_emits_one_error_and_complete_with_error() {
     assert_eq!(
         events
             .iter()
+            .filter(|event| matches!(event.msg, EventMsg::TurnStarted(_)))
+            .count(),
+        1
+    );
+    assert!(matches!(events[0].msg, EventMsg::TurnStarted(_)));
+    assert!(matches!(events[1].msg, EventMsg::Error(_)));
+    assert_eq!(
+        events
+            .iter()
             .filter(|event| matches!(event.msg, EventMsg::Error(_)))
             .count(),
         1
