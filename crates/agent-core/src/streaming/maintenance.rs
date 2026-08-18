@@ -8,7 +8,8 @@ use agent_protocol::{
 
 use super::lifecycle::{
     bounded_tool_completed_event, emit, emit_context_compacted, emit_extension_completed,
-    emit_hook_completed, emit_hook_started, emit_subagent_activity, is_subagent_tool,
+    emit_hook_completed, emit_hook_started, emit_prepared, emit_subagent_activity,
+    is_subagent_tool,
 };
 use super::provider::ProviderStreamer;
 use super::traits::StreamingChat;
@@ -263,7 +264,7 @@ pub(super) async fn record_tool_outcomes(
             .await;
         }
 
-        emit(
+        emit_prepared(
             session,
             turn_context,
             bounded_tool_completed_event(

@@ -9,7 +9,7 @@ use agent_protocol::{
 use providers::Usage;
 
 use super::provider::ProviderStreamer;
-use crate::runtime::event_identity::{event_item_id, event_tool_name, event_turn_id};
+use crate::runtime::event_identity::{event_turn_id, normalize_event_msg};
 use crate::runtime::usage::{apply_llm_usage_dual_write, LlmUsageWrite};
 use crate::runtime::{Session, TurnContext};
 
@@ -21,6 +21,15 @@ pub(crate) const TOOL_COMPLETED_EVENT_MAX_BYTES: usize = 1024 * 1024;
 /// Persist an event before delivering it to live consumers.
 pub(crate) async fn emit(session: &Session, turn_context: &TurnContext, msg: EventMsg) {
     session.send_event(turn_context.sub_id(), msg).await;
+}
+
+/// Send an event whose protocol-facing identities were normalized while its
+/// bounded payload copy was constructed. This deliberately skips a second
+/// identity projection while retaining raw-turn tap routing.
+pub(crate) async fn emit_prepared(session: &Session, turn_context: &TurnContext, msg: EventMsg) {
+    session
+        .send_prepared_event(turn_context.sub_id(), msg)
+        .await;
 }
 
 pub(crate) async fn emit_delta(
@@ -55,22 +64,22 @@ pub(crate) fn tool_turn_item(
     media: Vec<types::MediaAsset>,
     status: ToolStatus,
 ) -> TurnItem {
-    let raw_id = id.into();
-    let raw_name = name.into();
+    let id = id.into();
+    let name = name.into();
     let item = ToolItem {
-        id: event_item_id(&raw_id),
-        name: event_tool_name(&raw_name),
+        id,
+        name: name.clone(),
         arguments,
         output,
         media,
         status,
     };
-    if raw_name == "terminal" || raw_name == "code_exec" {
+    if name == "terminal" || name == "code_exec" {
         TurnItem::CommandExecution(item)
-    } else if raw_name.starts_with("mcp__") {
+    } else if name.starts_with("mcp__") {
         TurnItem::McpToolCall(item)
     } else if matches!(
-        raw_name.as_str(),
+        name.as_str(),
         "spawn_agent"
             | "list_agents"
             | "read_agent"
@@ -98,10 +107,12 @@ fn tool_completed_event(
     media: &[types::MediaAsset],
     status: ToolStatus,
 ) -> EventMsg {
-    EventMsg::ItemCompleted(ItemEvent {
-        turn_id: event_turn_id(turn_id),
+    let mut event = EventMsg::ItemCompleted(ItemEvent {
+        turn_id: turn_id.to_string(),
         item: tool_turn_item(id, name, arguments.clone(), output, media.to_vec(), status),
-    })
+    });
+    normalize_event_msg(&mut event, turn_id);
+    event
 }
 
 fn serialized_event_len(turn_id: &str, event: &EventMsg) -> usize {

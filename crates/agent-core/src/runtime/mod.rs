@@ -308,6 +308,18 @@ impl Session {
             .await;
     }
 
+    /// Send an already normalized event while routing exact-turn taps by the
+    /// raw internal turn id. Used by bounded event builders that must measure
+    /// the final protocol envelope before dispatch.
+    pub(crate) async fn send_prepared_event(&self, raw_turn_id: &str, msg: EventMsg) {
+        let event = Event {
+            id: event_identity::event_turn_id(raw_turn_id),
+            msg,
+        };
+        self.send_event_raw_with_persistence_and_hook(event, raw_turn_id, true, async {})
+            .await;
+    }
+
     /// Register a lossless in-process receiver for one exact turn.
     pub(crate) async fn subscribe_turn_events(
         &self,
