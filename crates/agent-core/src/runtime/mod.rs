@@ -54,6 +54,7 @@ pub(crate) mod usage;
 mod validate;
 
 pub use astro_thread::AstroThread;
+pub use session_io::AgentStatus;
 pub(crate) use step_context::StepContext;
 pub use tool_dispatch::ToolCallError;
 pub use turn_budget::MaxDepthError;
@@ -141,12 +142,8 @@ pub struct Session {
     pub(crate) cancel: CancelSignal,
     /// Codex-style single-active-task registry for this session.
     pub(crate) active_turn: TokioMutex<Option<ActiveTurn>>,
-    /// Bound once by [`AstroThread`] to emit protocol events for this session.
-    pub(crate) event_tx: OnceLock<async_channel::Sender<Event>>,
-    /// Bound once by [`AstroThread`] to expose the long-lived task's status.
-    pub(crate) status_tx: OnceLock<watch::Sender<session_io::AgentStatus>>,
-    /// Bound once by [`AstroThread`] to persist the session rollout.
-    pub(crate) rollout: OnceLock<RolloutRecorder>,
+    /// Bound atomically once by [`AstroThread`] for session runtime I/O.
+    runtime_io: OnceLock<RuntimeIoBindings>,
 }
 
 /// Compatibility name retained while downstream crates migrate to [`Config`].
@@ -154,6 +151,18 @@ pub type AgentConfig = Config;
 
 /// Compatibility name retained while downstream crates migrate to [`Session`].
 pub type AgentLoop = Session;
+
+struct RuntimeIoBindings {
+    event_tx: async_channel::Sender<Event>,
+    status_tx: watch::Sender<AgentStatus>,
+    rollout: RolloutRecorder,
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum RuntimeIoBindError {
+    #[error("session runtime I/O is already bound")]
+    AlreadyBound,
+}
 
 impl Session {
     /// 以随机 UUID 作为 session_id 创建 Agent 实例。
@@ -231,35 +240,40 @@ impl Session {
             execution,
             cancel: CancelSignal::new(),
             active_turn: TokioMutex::new(None),
-            event_tx: OnceLock::new(),
-            status_tx: OnceLock::new(),
-            rollout: OnceLock::new(),
+            runtime_io: OnceLock::new(),
         })
     }
 
     pub(crate) fn bind_runtime_io(
         &self,
         event_tx: async_channel::Sender<Event>,
-        status_tx: watch::Sender<session_io::AgentStatus>,
+        status_tx: watch::Sender<AgentStatus>,
         rollout: RolloutRecorder,
-    ) {
-        assert!(
-            self.event_tx.set(event_tx).is_ok(),
-            "session runtime event I/O already bound"
-        );
-        assert!(
-            self.status_tx.set(status_tx).is_ok(),
-            "session runtime status I/O already bound"
-        );
-        assert!(
-            self.rollout.set(rollout).is_ok(),
-            "session runtime rollout recorder already bound"
-        );
+    ) -> Result<(), RuntimeIoBindError> {
+        self.runtime_io
+            .set(RuntimeIoBindings {
+                event_tx,
+                status_tx,
+                rollout,
+            })
+            .map_err(|_| RuntimeIoBindError::AlreadyBound)
+    }
+
+    pub(crate) fn close_event_stream(&self) {
+        if let Some(bindings) = self.runtime_io.get() {
+            bindings.event_tx.close();
+        }
+    }
+
+    pub(crate) fn set_status(&self, status: AgentStatus) {
+        if let Some(bindings) = self.runtime_io.get() {
+            let _ = bindings.status_tx.send(status);
+        }
     }
 
     pub async fn flush_rollout(&self) -> io::Result<()> {
-        match self.rollout.get() {
-            Some(rollout) => rollout.flush().await,
+        match self.runtime_io.get() {
+            Some(bindings) => bindings.rollout.flush().await,
             None => Ok(()),
         }
     }

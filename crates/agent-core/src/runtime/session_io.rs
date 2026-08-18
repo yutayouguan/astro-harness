@@ -15,7 +15,6 @@ pub(crate) fn event_channel() -> (Sender<Event>, Receiver<Event>) {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-#[allow(dead_code)] // Task 6 owns the first status transitions.
 pub enum AgentStatus {
     Idle,
     Running { turn_id: String },
@@ -26,9 +25,7 @@ pub enum AgentStatus {
 pub struct SessionIo {
     pub(crate) tx_sub: Sender<Submission>,
     pub(crate) rx_event: Receiver<Event>,
-    #[allow(dead_code)] // Exposed once production callers migrate in a later task.
     pub(crate) status_rx: watch::Receiver<AgentStatus>,
-    #[allow(dead_code)] // Exposed once production callers migrate in a later task.
     pub(crate) termination_rx: watch::Receiver<bool>,
 }
 
@@ -68,17 +65,14 @@ impl SessionIo {
         self.rx_event.recv().await
     }
 
-    #[allow(dead_code)] // The stable thread handle is introduced before callers migrate.
     pub fn status(&self) -> AgentStatus {
         self.status_rx.borrow().clone()
     }
 
-    #[allow(dead_code)] // The stable thread handle is introduced before callers migrate.
     pub fn subscribe_status(&self) -> watch::Receiver<AgentStatus> {
         self.status_rx.clone()
     }
 
-    #[allow(dead_code)] // The stable thread handle is introduced before callers migrate.
     pub async fn wait_terminated(&self) {
         let mut termination_rx = self.termination_rx.clone();
         loop {
