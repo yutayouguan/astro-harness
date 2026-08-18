@@ -301,6 +301,10 @@ impl Session {
         !self.runtime_shutdown.swap(true, Ordering::AcqRel)
     }
 
+    pub(crate) fn runtime_is_shutting_down(&self) -> bool {
+        self.runtime_shutdown.load(Ordering::Acquire)
+    }
+
     pub(crate) async fn wait_runtime_shutdown_complete(&self) {
         self.runtime_shutdown_complete.cancelled().await;
     }

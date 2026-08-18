@@ -228,6 +228,10 @@ impl Session {
         F: Future<Output = ()>,
     {
         let _admission = self.task_admission.lock().await;
+        anyhow::ensure!(
+            !self.runtime_is_shutting_down(),
+            "session runtime is shutting down"
+        );
         self.abort_all_tasks_inner(TurnAbortReason::Replaced)
             .await?;
 
@@ -377,6 +381,40 @@ impl Session {
     pub async fn abort_all_tasks(self: &Arc<Self>, reason: TurnAbortReason) -> anyhow::Result<()> {
         let _admission = self.task_admission.lock().await;
         self.abort_all_tasks_inner(reason).await
+    }
+
+    pub(crate) async fn abort_all_tasks_for_shutdown(
+        self: &Arc<Self>,
+        reason: TurnAbortReason,
+    ) -> (Option<(String, CancellationToken)>, anyhow::Result<()>) {
+        let _admission = self.task_admission.lock().await;
+        let lifecycle = {
+            let active_turn = self.active_turn.lock().await;
+            active_turn
+                .as_ref()
+                .and_then(|turn| turn.task.as_ref())
+                .map(|running| {
+                    (
+                        running.turn_context.sub_id().to_string(),
+                        running.completion.clone(),
+                    )
+                })
+        };
+        let lifecycle = match lifecycle {
+            Some(lifecycle) => Some(lifecycle),
+            None => match self.current_turn_id().await {
+                Some(turn_id) => self
+                    .task_completions
+                    .lock()
+                    .await
+                    .get(&turn_id)
+                    .cloned()
+                    .map(|completion| (turn_id, completion)),
+                None => None,
+            },
+        };
+        let result = self.abort_all_tasks_inner(reason).await;
+        (lifecycle, result)
     }
 
     async fn abort_all_tasks_inner(
@@ -1374,6 +1412,74 @@ mod tests {
             .expect("thread should terminate after the task lifecycle completes");
         assert_eq!(thread.status(), AgentStatus::Shutdown);
         assert_eq!(finalize_hits.load(Ordering::SeqCst), 1);
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn shutdown_captures_task_installed_before_turn_context_bind() {
+        let (_dir, session, thread) = task_test_thread("install-bind-shutdown-test").await;
+        let install_reached = Arc::new(Notify::new());
+        let release_install = Arc::new(Notify::new());
+        let run_started = Arc::new(Notify::new());
+        let hook_called = Arc::new(AtomicBool::new(false));
+        let (release_run_tx, release_run_rx) = std::sync::mpsc::channel();
+        let spawn = tokio::spawn({
+            let session = Arc::clone(&session);
+            let install_reached = Arc::clone(&install_reached);
+            let release_install = Arc::clone(&release_install);
+            let run_started = Arc::clone(&run_started);
+            async move {
+                let context = session
+                    .create_turn_context("turn-install-bind-shutdown".into())
+                    .await;
+                session
+                    .spawn_task_with_install_hook(
+                        context,
+                        Vec::new(),
+                        SyncBlockingRunTask {
+                            run_started,
+                            run_release: std::sync::Mutex::new(release_run_rx),
+                            hook_called,
+                        },
+                        async move {
+                            install_reached.notify_one();
+                            release_install.notified().await;
+                        },
+                    )
+                    .await
+            }
+        });
+        install_reached.notified().await;
+
+        thread.submit(agent_protocol::Op::Shutdown).await.unwrap();
+        tokio::task::yield_now().await;
+        assert_ne!(thread.status(), AgentStatus::Shutdown);
+        assert!(
+            tokio::time::timeout(Duration::from_millis(10), thread.wait_terminated())
+                .await
+                .is_err(),
+            "shutdown must wait behind install-before-bind admission"
+        );
+
+        release_install.notify_one();
+        run_started.notified().await;
+        while !session.cancel_signal().is_cancelled() {
+            tokio::task::yield_now().await;
+        }
+        tokio::time::sleep(Duration::from_millis(150)).await;
+        assert_ne!(thread.status(), AgentStatus::Shutdown);
+        assert!(
+            tokio::time::timeout(Duration::from_millis(10), thread.wait_terminated())
+                .await
+                .is_err(),
+            "bounded abort failure must retain the precise installed lifecycle"
+        );
+
+        release_run_tx.send(()).unwrap();
+        spawn.await.unwrap().unwrap();
+        tokio::time::timeout(Duration::from_secs(1), thread.wait_terminated())
+            .await
+            .expect("shutdown should finish after the installed lifecycle completes");
+        assert_eq!(thread.status(), AgentStatus::Shutdown);
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]

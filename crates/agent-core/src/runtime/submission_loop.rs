@@ -167,15 +167,15 @@ impl Session {
             self.wait_runtime_shutdown_complete().await;
             return;
         }
-        let turn_id = self.current_turn_id().await;
-        if let Err(error) = self
-            .abort_all_tasks(agent_protocol::TurnAbortReason::Interrupted)
-            .await
-        {
+        let (task_lifecycle, abort_result) = self
+            .abort_all_tasks_for_shutdown(agent_protocol::TurnAbortReason::Interrupted)
+            .await;
+        if let Err(error) = abort_result {
             tracing::warn!(%error, session_id = %self.session_id(), "failed to abort session task during shutdown");
         }
-        if let Some(turn_id) = turn_id.as_deref() {
-            self.wait_for_task(turn_id).await;
+        let turn_id = task_lifecycle.as_ref().map(|(turn_id, _)| turn_id.clone());
+        if let Some((_, task_completion)) = task_lifecycle {
+            task_completion.cancelled().await;
         }
         let _ = self.fire_hook(
             ::hooks::ON_SESSION_FINALIZE,
