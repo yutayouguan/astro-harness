@@ -6,6 +6,8 @@
 
 mod config;
 mod control;
+mod mailbox;
+mod migration;
 mod model;
 pub mod path;
 mod store;
@@ -15,6 +17,8 @@ pub use config::{
     AgentDefinition, AgentsSettings, ResolvedAgent, SkillConfigEntry, SkillsLayer,
 };
 pub use control::{AgentThreadCommand, AgentThreadControl, LiveAgentThreads};
+pub use mailbox::{MailboxKind, MailboxMessage, NewMailboxMessage};
+pub use migration::{HistoricalAgentMessage, HistoricalAgentThread};
 pub use model::{
     AgentStatusKind, AgentStatusV2, AgentThreadV2, AgentTreeSnapshotV2, InterruptAgentV2Request,
     InterruptAgentV2Result, ListAgentsV2Request, MessageAgentV2Request, MessageAgentV2Result,
@@ -28,4 +32,4 @@ pub use model::{
     WaitAgentThreadsRequest,
 };
 pub use path::AgentPath;
-pub use store::AgentThreadStore;
+pub use store::{AgentGraphStore, AgentThreadStore, StoredStatusEvent};
