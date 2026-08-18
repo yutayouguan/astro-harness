@@ -8,8 +8,9 @@ use uuid::Uuid;
 
 use crate::{
     ActivityBus, ActivityCursor, AgentActivityKind, AgentGraphStore, AgentPath, AgentRegistry,
-    AgentStatusV2, AgentThreadV2, ExecutionPermit, Limits, MailboxKind, MailboxMessage,
-    MessageAgentV2Request, NewMailboxMessage, RunnerEvent, SpawnReservation, ThreadReservation,
+    AgentStatusV2, AgentThreadV2, AgentTreeSnapshotV2, ExecutionPermit, Limits, MailboxKind,
+    MailboxMessage, MessageAgentV2Request, NewMailboxMessage, RunnerEvent, SpawnReservation,
+    ThreadReservation,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -376,6 +377,24 @@ impl AgentControl {
 
     pub fn identity_count(&self) -> anyhow::Result<usize> {
         self.registry.identity_count()
+    }
+
+    pub fn active_execution_count(&self) -> anyhow::Result<usize> {
+        self.registry.active_execution_count()
+    }
+
+    pub fn snapshot(&self) -> anyhow::Result<AgentTreeSnapshotV2> {
+        self.store.snapshot(&self.root_thread_id)
+    }
+
+    /// Resolve a desktop target from the root namespace. Unlike model target
+    /// resolution this deliberately permits `/root`, whose close semantics are
+    /// defined as "close descendants only" by the desktop controller.
+    pub fn resolve_desktop_target(&self, target: &str) -> anyhow::Result<AgentThreadV2> {
+        let path = AgentPath::root()
+            .resolve(target.trim())
+            .map_err(anyhow::Error::msg)?;
+        self.require_path(&path, "desktop agent target")
     }
 
     /// Roll back a spawn that was committed only long enough for the runtime

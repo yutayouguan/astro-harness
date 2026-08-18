@@ -7,11 +7,10 @@ use std::time::Duration;
 
 use async_trait::async_trait;
 use subagents::{
-    AgentControl, AgentPath, AgentThread, AgentThreadMessage, AgentThreadStatus, AgentThreadStore,
-    CloseAgentRequest, InterruptAgentRequest, InterruptAgentV2Request, InterruptAgentV2Result,
-    ListAgentThreadsRequest, ListAgentsV2Request, MessageAgentV2Request, MessageAgentV2Result,
-    ReadAgentThreadRequest, SendAgentMessageRequest, SpawnAgentV2Result, SpawnRuntimeV2Request,
-    WaitAgentV2Request, WaitAgentV2Result, WaitOutcome,
+    AgentControl, AgentPath, AgentStatusV2, AgentThreadDetailV2, AgentThreadMessageV2,
+    AgentThreadV2, AgentTreeSnapshotV2, InterruptAgentV2Request, InterruptAgentV2Result,
+    ListAgentsV2Request, MessageAgentV2Request, MessageAgentV2Result, SpawnAgentV2Result,
+    SpawnRuntimeV2Request, WaitAgentV2Request, WaitAgentV2Result, WaitOutcome,
 };
 use tools::{AgentThreadDispatch, SpawnAgentDispatchRequest};
 
@@ -640,81 +639,261 @@ fn validate_runtime_setup(
     Ok(())
 }
 
-/// Desktop-only legacy bridge retained until Task 7 rewrites Tauri commands.
-/// It is not implemented by, or reachable through, [`AgentThreadDispatch`].
-pub struct LegacyDesktopAgentThreadControl;
-
-#[allow(non_upper_case_globals)]
-pub const DefaultAgentThreadDispatch: LegacyDesktopAgentThreadControl =
-    LegacyDesktopAgentThreadControl;
-
-impl LegacyDesktopAgentThreadControl {
-    pub async fn list_agents(
+/// Desktop-only operations. This trait deliberately remains separate from the
+/// six model-visible methods in [`AgentThreadDispatch`].
+#[async_trait]
+pub trait DesktopAgentThreadControl: Send + Sync {
+    async fn snapshot(&self, root_session_id: &str) -> anyhow::Result<AgentTreeSnapshotV2>;
+    async fn read_thread(
         &self,
-        request: ListAgentThreadsRequest,
-    ) -> anyhow::Result<Vec<AgentThread>> {
-        AgentThreadStore::open_default()?
-            .list(Some(&request.parent_session_id), request.include_closed)
+        root_session_id: &str,
+        target: &str,
+    ) -> anyhow::Result<AgentThreadDetailV2>;
+    async fn followup(
+        &self,
+        root_session_id: &str,
+        target: &str,
+        message: String,
+    ) -> anyhow::Result<AgentThreadV2>;
+    async fn interrupt(
+        &self,
+        root_session_id: &str,
+        target: &str,
+    ) -> anyhow::Result<InterruptAgentV2Result>;
+    async fn close_subtree(
+        &self,
+        root_session_id: &str,
+        target: &str,
+    ) -> anyhow::Result<AgentTreeSnapshotV2>;
+}
+
+#[derive(Debug)]
+pub struct CloseSubtreeError {
+    failed_path: String,
+    cause: String,
+    snapshot: AgentTreeSnapshotV2,
+}
+
+impl CloseSubtreeError {
+    pub fn failed_path(&self) -> &str {
+        &self.failed_path
     }
 
-    pub async fn read_agent(
-        &self,
-        request: ReadAgentThreadRequest,
-    ) -> anyhow::Result<(AgentThread, Vec<AgentThreadMessage>)> {
-        let store = AgentThreadStore::open_default()?;
-        let thread = require_legacy_owned(&store, &request.parent_session_id, &request.thread_id)?;
-        Ok((thread, store.messages(&request.thread_id)?))
-    }
-
-    pub async fn send_message(
-        &self,
-        request: SendAgentMessageRequest,
-    ) -> anyhow::Result<AgentThread> {
-        let store = AgentThreadStore::open_default()?;
-        let thread = require_legacy_owned(&store, &request.parent_session_id, &request.thread_id)?;
-        anyhow::ensure!(
-            thread.status != AgentThreadStatus::Closed,
-            "agent thread is closed"
-        );
-        subagents::LiveAgentThreads::global()
-            .send_follow_up(&request.thread_id, request.message.trim().to_string())?;
-        Ok(thread)
-    }
-
-    pub async fn interrupt_agent(
-        &self,
-        request: InterruptAgentRequest,
-    ) -> anyhow::Result<AgentThread> {
-        let store = AgentThreadStore::open_default()?;
-        let thread = require_legacy_owned(&store, &request.parent_session_id, &request.thread_id)?;
-        if matches!(
-            thread.status,
-            AgentThreadStatus::Pending | AgentThreadStatus::Running
-        ) {
-            subagents::LiveAgentThreads::global().interrupt(&request.thread_id)?;
-        }
-        Ok(thread)
-    }
-
-    pub async fn close_agent(&self, request: CloseAgentRequest) -> anyhow::Result<AgentThread> {
-        let store = AgentThreadStore::open_default()?;
-        let thread = require_legacy_owned(&store, &request.parent_session_id, &request.thread_id)?;
-        if subagents::LiveAgentThreads::global().is_live(&request.thread_id) {
-            subagents::LiveAgentThreads::global().close(&request.thread_id)?;
-        }
-        Ok(thread)
+    pub fn snapshot(&self) -> &AgentTreeSnapshotV2 {
+        &self.snapshot
     }
 }
 
-fn require_legacy_owned(
-    store: &AgentThreadStore,
-    parent_session_id: &str,
-    thread_id: &str,
-) -> anyhow::Result<AgentThread> {
-    store
-        .get(thread_id)?
-        .filter(|thread| thread.parent_session_id == parent_session_id)
-        .ok_or_else(|| anyhow::anyhow!("unknown historical desktop agent thread: {thread_id}"))
+impl std::fmt::Display for CloseSubtreeError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            formatter,
+            "agent subtree close stopped at {}: {}",
+            self.failed_path, self.cause
+        )
+    }
+}
+
+impl std::error::Error for CloseSubtreeError {}
+
+pub struct DefaultDesktopAgentThreadControl {
+    memory_dir: PathBuf,
+    runtime_manager: Arc<AgentRuntimeManager>,
+    runtime_requests: Arc<RuntimeRequestRegistry>,
+    control_override: Option<Arc<AgentControl>>,
+    #[cfg(test)]
+    chat_override: Option<crate::streaming::ChatOverride>,
+}
+
+impl DefaultDesktopAgentThreadControl {
+    pub fn new(memory_dir: PathBuf) -> Self {
+        Self {
+            memory_dir,
+            runtime_manager: AgentRuntimeManager::global(),
+            runtime_requests: RuntimeRequestRegistry::global(),
+            control_override: None,
+            #[cfg(test)]
+            chat_override: None,
+        }
+    }
+
+    #[cfg(test)]
+    fn for_test(
+        memory_dir: PathBuf,
+        control: Arc<AgentControl>,
+        runtime_manager: Arc<AgentRuntimeManager>,
+        runtime_requests: Arc<RuntimeRequestRegistry>,
+        chat_override: Option<crate::streaming::ChatOverride>,
+    ) -> Self {
+        Self {
+            memory_dir,
+            runtime_manager,
+            runtime_requests,
+            control_override: Some(control),
+            chat_override,
+        }
+    }
+
+    fn control(&self, root_session_id: &str) -> anyhow::Result<Arc<AgentControl>> {
+        anyhow::ensure!(
+            !root_session_id.trim().is_empty(),
+            "root session id must not be empty"
+        );
+        if let Some(control) = self.control_override.as_ref() {
+            anyhow::ensure!(
+                control.root_thread_id() == root_session_id,
+                "desktop control root does not match requested root session"
+            );
+            return Ok(Arc::clone(control));
+        }
+        crate::exec::agent_control_directory::AgentControlDirectory::global()
+            .open_root_at(root_session_id, &self.memory_dir.join("subagents-v2.db"))
+    }
+
+    fn dispatch(&self, control: Arc<AgentControl>) -> DefaultAgentThreadDispatch {
+        DefaultAgentThreadDispatch {
+            current_thread_id: control.root_thread_id().to_string(),
+            control,
+            current_path: AgentPath::root(),
+            runtime_manager: Arc::clone(&self.runtime_manager),
+            runtime_requests: Arc::clone(&self.runtime_requests),
+            #[cfg(test)]
+            chat_override: self.chat_override.clone(),
+            #[cfg(test)]
+            before_followup_atomic_hook: None,
+        }
+    }
+}
+
+#[async_trait]
+impl DesktopAgentThreadControl for DefaultDesktopAgentThreadControl {
+    async fn snapshot(&self, root_session_id: &str) -> anyhow::Result<AgentTreeSnapshotV2> {
+        self.control(root_session_id)?.snapshot()
+    }
+
+    async fn read_thread(
+        &self,
+        root_session_id: &str,
+        target: &str,
+    ) -> anyhow::Result<AgentThreadDetailV2> {
+        let control = self.control(root_session_id)?;
+        let thread = control.resolve_desktop_target(target)?;
+        let messages = session::SessionStore::open_sessions_dir(&self.memory_dir.join("sessions"))?
+            .get_messages(&thread.session_id)?
+            .into_iter()
+            .map(|message| AgentThreadMessageV2 {
+                id: message.id,
+                session_id: message.session_id,
+                role: message.role,
+                content: message.content,
+                compressed_content: message.compressed_content,
+                tool_call_id: message.tool_call_id,
+                tool_calls: message.tool_calls,
+                tool_name: message.tool_name,
+                timestamp: message.timestamp,
+                token_count: message.token_count,
+                finish_reason: message.finish_reason,
+                reasoning: message.reasoning,
+                reasoning_content: message.reasoning_content,
+                reasoning_details: message.reasoning_details,
+                codex_reasoning_items: message.codex_reasoning_items,
+                codex_message_items: message.codex_message_items,
+                media_json: message.media_json,
+            })
+            .collect();
+        Ok(AgentThreadDetailV2 { thread, messages })
+    }
+
+    async fn followup(
+        &self,
+        root_session_id: &str,
+        target: &str,
+        message: String,
+    ) -> anyhow::Result<AgentThreadV2> {
+        let control = self.control(root_session_id)?;
+        let target_thread = control.resolve_desktop_target(target)?;
+        anyhow::ensure!(
+            target_thread.canonical_path != AgentPath::root(),
+            "the root agent cannot receive a desktop subagent follow-up"
+        );
+        self.dispatch(Arc::clone(&control))
+            .followup_task(MessageAgentV2Request {
+                target: target_thread.canonical_path.to_string(),
+                message,
+            })
+            .await?;
+        control.resolve_desktop_target(target_thread.canonical_path.as_str())
+    }
+
+    async fn interrupt(
+        &self,
+        root_session_id: &str,
+        target: &str,
+    ) -> anyhow::Result<InterruptAgentV2Result> {
+        let control = self.control(root_session_id)?;
+        let target_thread = control.resolve_desktop_target(target)?;
+        anyhow::ensure!(
+            target_thread.canonical_path != AgentPath::root(),
+            "the root agent cannot be interrupted through desktop subagent controls"
+        );
+        let previous_status = target_thread.status;
+        self.runtime_manager
+            .interrupt(&target_thread.thread_id)
+            .await?;
+        let thread = control.resolve_desktop_target(target_thread.canonical_path.as_str())?;
+        Ok(InterruptAgentV2Result {
+            thread,
+            previous_status,
+        })
+    }
+
+    async fn close_subtree(
+        &self,
+        root_session_id: &str,
+        target: &str,
+    ) -> anyhow::Result<AgentTreeSnapshotV2> {
+        let control = self.control(root_session_id)?;
+        let target_thread = control.resolve_desktop_target(target)?;
+        let _close = self.runtime_manager.lock_subtree_close().await;
+        let mut threads = control
+            .snapshot()?
+            .threads
+            .into_iter()
+            .filter(|thread| {
+                thread.canonical_path != AgentPath::root()
+                    && thread
+                        .canonical_path
+                        .starts_with(&target_thread.canonical_path)
+            })
+            .collect::<Vec<_>>();
+        threads.sort_by(|left, right| {
+            right
+                .canonical_path
+                .depth()
+                .cmp(&left.canonical_path.depth())
+                .then_with(|| right.canonical_path.cmp(&left.canonical_path))
+        });
+
+        for thread in threads {
+            if thread.status == AgentStatusV2::Shutdown {
+                continue;
+            }
+            if let Err(error) = self
+                .runtime_manager
+                .close_thread(control.as_ref(), &thread)
+                .await
+            {
+                let snapshot = control.snapshot()?;
+                return Err(CloseSubtreeError {
+                    failed_path: thread.canonical_path.to_string(),
+                    cause: error.to_string(),
+                    snapshot,
+                }
+                .into());
+            }
+        }
+        control.snapshot()
+    }
 }
 
 #[cfg(test)]
@@ -724,7 +903,7 @@ mod tests {
     use providers::types::stream::StreamChunk;
     use providers::CompletionStream;
     use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
-    use subagents::{AgentGraphStore, AgentStatusV2, Limits};
+    use subagents::{AgentGraphStore, AgentStatusV2, Limits, RunnerEvent};
 
     fn dispatch(dir: &tempfile::TempDir) -> DefaultAgentThreadDispatch {
         let store = AgentGraphStore::open(dir.path().join("subagents-v2.db")).unwrap();
@@ -900,6 +1079,388 @@ mod tests {
             project_root: None,
             hook_bus: None,
         }
+    }
+
+    fn desktop_control(
+        dispatch: &DefaultAgentThreadDispatch,
+        memory_dir: &Path,
+    ) -> DefaultDesktopAgentThreadControl {
+        DefaultDesktopAgentThreadControl::for_test(
+            memory_dir.to_path_buf(),
+            Arc::clone(&dispatch.control),
+            Arc::clone(&dispatch.runtime_manager),
+            Arc::clone(&dispatch.runtime_requests),
+            dispatch.chat_override.clone(),
+        )
+    }
+
+    #[tokio::test]
+    async fn desktop_read_returns_complete_session_store_timeline() {
+        let dir = tempfile::tempdir().unwrap();
+        let memory_dir = dir.path().join("memory");
+        let dispatch = dispatch(&dir);
+        let child = committed_child(&dispatch, "worker");
+        let sessions =
+            session::SessionStore::open_sessions_dir(&memory_dir.join("sessions")).unwrap();
+        sessions
+            .ensure_session(&child.session_id, "agent-thread")
+            .unwrap();
+        sessions
+            .append_message(session::NewMessage {
+                content: Some("user task"),
+                ..session::NewMessage::empty(&child.session_id, "user")
+            })
+            .unwrap();
+        sessions
+            .append_message(session::NewMessage {
+                content: Some("calling tool"),
+                compressed_content: Some("compressed assistant"),
+                tool_calls: Some(serde_json::json!([{"id":"call-1","name":"terminal"}])),
+                reasoning: Some("summary"),
+                reasoning_content: Some("private reasoning"),
+                reasoning_details: Some(serde_json::json!({"phase":"analysis"})),
+                codex_reasoning_items: Some(serde_json::json!([{"type":"reasoning"}])),
+                codex_message_items: Some(serde_json::json!([{"type":"message"}])),
+                media_json: Some(r#"[{"kind":"image","path":"artifact.png"}]"#),
+                ..session::NewMessage::empty(&child.session_id, "assistant")
+            })
+            .unwrap();
+        sessions
+            .append_message(session::NewMessage {
+                content: Some("tool output"),
+                tool_call_id: Some("call-1"),
+                tool_name: Some("terminal"),
+                ..session::NewMessage::empty(&child.session_id, "tool")
+            })
+            .unwrap();
+
+        let detail = desktop_control(&dispatch, &memory_dir)
+            .read_thread("root-session", "/root/worker")
+            .await
+            .unwrap();
+
+        assert_eq!(detail.thread.thread_id, child.thread_id);
+        assert_eq!(detail.messages.len(), 3);
+        assert_eq!(detail.messages[0].role, "user");
+        assert_eq!(
+            detail.messages[1].compressed_content.as_deref(),
+            Some("compressed assistant")
+        );
+        assert!(detail.messages[1].tool_calls.is_some());
+        assert!(detail.messages[1].reasoning_details.is_some());
+        assert!(detail.messages[1].codex_reasoning_items.is_some());
+        assert!(detail.messages[1].codex_message_items.is_some());
+        assert!(detail.messages[1].media_json.is_some());
+        assert_eq!(detail.messages[2].role, "tool");
+        assert_eq!(detail.messages[2].tool_call_id.as_deref(), Some("call-1"));
+    }
+
+    #[tokio::test]
+    async fn desktop_close_subtree_is_leaf_first_idempotent_and_root_safe() {
+        let dir = tempfile::tempdir().unwrap();
+        let memory_dir = dir.path().join("memory");
+        let dispatch = dispatch(&dir);
+        let parent = committed_child(&dispatch, "parent");
+        dispatch
+            .control
+            .record_runner_event(
+                &parent.thread_id,
+                RunnerEvent::TurnCompleted {
+                    turn_id: "parent-turn".into(),
+                    last_message: "parent done".into(),
+                },
+            )
+            .unwrap();
+        let reservation = dispatch
+            .control
+            .reserve_spawn(&parent.canonical_path, "child")
+            .unwrap();
+        let child = reservation.thread().clone();
+        reservation.commit().unwrap();
+        dispatch
+            .control
+            .record_runner_event(
+                &child.thread_id,
+                RunnerEvent::TurnInterrupted {
+                    turn_id: "child-turn".into(),
+                    reason: "stopped".into(),
+                },
+            )
+            .unwrap();
+        let desktop = desktop_control(&dispatch, &memory_dir);
+
+        let first = desktop
+            .close_subtree("root-session", "/root/parent")
+            .await
+            .unwrap();
+        let second = desktop
+            .close_subtree("root-session", "/root/parent")
+            .await
+            .unwrap();
+
+        for path in ["/root/parent", "/root/parent/child"] {
+            assert!(first
+                .threads
+                .iter()
+                .any(|thread| thread.canonical_path.as_str() == path
+                    && thread.status == AgentStatusV2::Shutdown));
+        }
+        assert_eq!(first.threads, second.threads);
+        assert_eq!(
+            dispatch
+                .control
+                .status_events(&parent.thread_id)
+                .unwrap()
+                .len(),
+            2
+        );
+        assert_eq!(
+            dispatch
+                .control
+                .status_events(&child.thread_id)
+                .unwrap()
+                .len(),
+            2
+        );
+        assert_eq!(dispatch.control.active_execution_count().unwrap(), 0);
+        assert_eq!(dispatch.runtime_manager.active_count(), 0);
+        assert!(dispatch
+            .control
+            .runtime_handle(&parent.thread_id)
+            .unwrap()
+            .is_none());
+        assert!(dispatch
+            .control
+            .runtime_handle(&child.thread_id)
+            .unwrap()
+            .is_none());
+
+        let root_close = desktop
+            .close_subtree("root-session", "/root")
+            .await
+            .unwrap();
+        assert_eq!(
+            root_close
+                .threads
+                .iter()
+                .find(|thread| thread.canonical_path == AgentPath::root())
+                .unwrap()
+                .status,
+            AgentStatusV2::Running
+        );
+    }
+
+    #[tokio::test]
+    async fn desktop_close_partial_failure_keeps_parent_open_and_retryable() {
+        let dir = tempfile::tempdir().unwrap();
+        let memory_dir = dir.path().join("memory");
+        let dispatch = dispatch(&dir);
+        let parent = committed_child(&dispatch, "parent");
+        let reservation = dispatch
+            .control
+            .reserve_spawn(&parent.canonical_path, "leaf")
+            .unwrap();
+        let leaf = reservation.thread().clone();
+        reservation.commit().unwrap();
+        let graph = rusqlite::Connection::open(dir.path().join("subagents-v2.db")).unwrap();
+        graph
+            .execute_batch(&format!(
+                "CREATE TRIGGER fail_parent_shutdown
+                 BEFORE UPDATE OF status_kind ON agent_threads
+                 WHEN NEW.thread_id = '{}' AND NEW.status_kind = 'shutdown'
+                 BEGIN
+                   SELECT RAISE(ABORT, 'injected parent shutdown failure');
+                 END;",
+                parent.thread_id
+            ))
+            .unwrap();
+        let desktop = desktop_control(&dispatch, &memory_dir);
+
+        let error = desktop
+            .close_subtree("root-session", "/root/parent")
+            .await
+            .unwrap_err();
+        let partial = error.downcast_ref::<CloseSubtreeError>().unwrap();
+        assert_eq!(partial.failed_path(), "/root/parent");
+        assert!(partial
+            .snapshot()
+            .threads
+            .iter()
+            .any(|thread| thread.thread_id == leaf.thread_id
+                && thread.status == AgentStatusV2::Shutdown));
+        assert_ne!(
+            partial
+                .snapshot()
+                .threads
+                .iter()
+                .find(|thread| thread.thread_id == parent.thread_id)
+                .unwrap()
+                .status,
+            AgentStatusV2::Shutdown
+        );
+
+        graph
+            .execute_batch("DROP TRIGGER fail_parent_shutdown;")
+            .unwrap();
+        let retried = desktop
+            .close_subtree("root-session", "/root/parent")
+            .await
+            .unwrap();
+        assert!(retried.threads.iter().any(|thread| {
+            thread.thread_id == parent.thread_id && thread.status == AgentStatusV2::Shutdown
+        }));
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn desktop_close_active_runtime_waits_for_shutdown_ack_and_cleanup() {
+        let dir = tempfile::tempdir().unwrap();
+        let memory_dir = dir.path().join("memory");
+        let sessions =
+            session::SessionStore::open_sessions_dir(&memory_dir.join("sessions")).unwrap();
+        sessions.ensure_session("root-session", "test").unwrap();
+        let mut dispatch = dispatch(&dir);
+        dispatch.chat_override = Some(pending_chat());
+        let spawned = AgentThreadDispatch::spawn_agent(&dispatch, spawn_request(&memory_dir))
+            .await
+            .unwrap();
+        let desktop = desktop_control(&dispatch, &memory_dir);
+
+        let snapshot = desktop
+            .close_subtree("root-session", "/root/worker")
+            .await
+            .unwrap();
+
+        assert_eq!(
+            snapshot
+                .threads
+                .iter()
+                .find(|thread| thread.thread_id == spawned.thread.thread_id)
+                .unwrap()
+                .status,
+            AgentStatusV2::Shutdown
+        );
+        assert_eq!(dispatch.runtime_manager.active_count(), 0);
+        assert_eq!(dispatch.control.active_execution_count().unwrap(), 0);
+        assert!(dispatch
+            .control
+            .runtime_handle(&spawned.thread.thread_id)
+            .unwrap()
+            .is_none());
+        assert_eq!(
+            dispatch
+                .control
+                .status_events(&spawned.thread.thread_id)
+                .unwrap()
+                .into_iter()
+                .map(|event| event.event)
+                .filter(|event| matches!(event, RunnerEvent::RuntimeTerminated))
+                .count(),
+            1
+        );
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn desktop_interrupt_is_ack_driven_and_reports_previous_status() {
+        let dir = tempfile::tempdir().unwrap();
+        let memory_dir = dir.path().join("memory");
+        let sessions =
+            session::SessionStore::open_sessions_dir(&memory_dir.join("sessions")).unwrap();
+        sessions.ensure_session("root-session", "test").unwrap();
+        let mut dispatch = dispatch(&dir);
+        dispatch.chat_override = Some(pending_chat());
+        let spawned = AgentThreadDispatch::spawn_agent(&dispatch, spawn_request(&memory_dir))
+            .await
+            .unwrap();
+        let desktop = desktop_control(&dispatch, &memory_dir);
+
+        let result = desktop
+            .interrupt("root-session", "/root/worker")
+            .await
+            .unwrap();
+
+        assert_eq!(result.previous_status, AgentStatusV2::Running);
+        assert_eq!(result.thread.status, AgentStatusV2::Interrupted);
+        assert!(!dispatch
+            .runtime_manager
+            .is_running(&spawned.thread.thread_id));
+        assert!(desktop.interrupt("root-session", "/root").await.is_err());
+    }
+
+    #[tokio::test]
+    async fn concurrent_desktop_close_callers_share_idempotent_shutdown() {
+        let dir = tempfile::tempdir().unwrap();
+        let memory_dir = dir.path().join("memory");
+        let dispatch = dispatch(&dir);
+        let child = committed_child(&dispatch, "worker");
+        let desktop = Arc::new(desktop_control(&dispatch, &memory_dir));
+
+        let (first, second) = tokio::join!(
+            desktop.close_subtree("root-session", "/root/worker"),
+            desktop.close_subtree("root-session", "/root/worker")
+        );
+        first.unwrap();
+        second.unwrap();
+
+        assert_eq!(
+            dispatch
+                .control
+                .status_events(&child.thread_id)
+                .unwrap()
+                .into_iter()
+                .filter(|event| matches!(event.event, RunnerEvent::RuntimeTerminated))
+                .count(),
+            1
+        );
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn desktop_followup_reuses_runtime_manager_handoff() {
+        let dir = tempfile::tempdir().unwrap();
+        let memory_dir = dir.path().join("memory");
+        let sessions =
+            session::SessionStore::open_sessions_dir(&memory_dir.join("sessions")).unwrap();
+        sessions.ensure_session("root-session", "test").unwrap();
+        let mut dispatch = dispatch(&dir);
+        dispatch.chat_override = Some(scripted_chat("done"));
+        let spawned = AgentThreadDispatch::spawn_agent(&dispatch, spawn_request(&memory_dir))
+            .await
+            .unwrap();
+        while dispatch
+            .runtime_manager
+            .is_running(&spawned.thread.thread_id)
+        {
+            tokio::task::yield_now().await;
+        }
+        let desktop = desktop_control(&dispatch, &memory_dir);
+
+        desktop
+            .followup(
+                "root-session",
+                "/root/worker",
+                "desktop continuation".into(),
+            )
+            .await
+            .unwrap();
+        while dispatch
+            .runtime_manager
+            .is_running(&spawned.thread.thread_id)
+        {
+            tokio::task::yield_now().await;
+        }
+
+        assert!(matches!(
+            dispatch
+                .control
+                .resolve_desktop_target("/root/worker")
+                .unwrap()
+                .status,
+            AgentStatusV2::Completed { .. }
+        ));
+        assert!(sessions
+            .get_messages(&spawned.thread.session_id)
+            .unwrap()
+            .iter()
+            .any(|message| message.content.as_deref() == Some("desktop continuation")));
     }
 
     #[tokio::test(flavor = "current_thread")]

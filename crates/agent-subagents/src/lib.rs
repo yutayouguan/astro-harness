@@ -26,10 +26,11 @@ pub use control::{
 pub use mailbox::{MailboxKind, MailboxMessage, NewMailboxMessage};
 pub use migration::{HistoricalAgentMessage, HistoricalAgentThread};
 pub use model::{
-    AgentStatusKind, AgentStatusV2, AgentThreadV2, AgentTreeSnapshotV2, InterruptAgentV2Request,
-    InterruptAgentV2Result, ListAgentsV2Request, MessageAgentV2Request, MessageAgentV2Result,
-    RunnerEvent, SpawnAgentV2Request, SpawnAgentV2Result, SpawnRuntimeV2Request, ThreadReservation,
-    WaitAgentV2Request, WaitAgentV2Result,
+    AgentStatusKind, AgentStatusV2, AgentThreadDetailV2, AgentThreadMessageV2, AgentThreadV2,
+    AgentTreeSnapshotV2, InterruptAgentV2Request, InterruptAgentV2Result, ListAgentsV2Request,
+    MessageAgentV2Request, MessageAgentV2Result, RunnerEvent, SpawnAgentV2Request,
+    SpawnAgentV2Result, SpawnRuntimeV2Request, ThreadReservation, WaitAgentV2Request,
+    WaitAgentV2Result,
 };
 // Transitional legacy exports; removed in Tasks 6/10.
 pub use model::{

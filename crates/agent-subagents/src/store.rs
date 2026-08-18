@@ -428,6 +428,13 @@ impl AgentGraphStore {
             .with_context(|| format!("unknown agent thread {thread_id:?}"))?;
         after_read();
 
+        if existing.status == AgentStatusV2::Shutdown
+            && matches!(event, RunnerEvent::RuntimeTerminated)
+        {
+            tx.commit()?;
+            return Ok(existing);
+        }
+
         let status = status_for_event(&event);
         let event_kind = event_kind(&event);
         let source_turn_id = source_turn_id(&event);
@@ -1154,6 +1161,77 @@ mod tests {
             .unwrap();
 
         assert_eq!(terminated.status, AgentStatusV2::Shutdown);
+        assert_eq!(
+            store.edge_state("child").unwrap().as_deref(),
+            Some("closed")
+        );
+    }
+
+    #[test]
+    fn restart_recovery_preserves_turn_identity_and_is_idempotent() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = AgentGraphStore::open(dir.path().join("subagents-v2.db")).unwrap();
+        store.ensure_root_thread("root-thread").unwrap();
+        store
+            .reserve_thread(&reservation("child", "/root/child"))
+            .unwrap();
+        store
+            .apply_status_event(
+                "child",
+                RunnerEvent::TurnStarted {
+                    turn_id: "durable-turn".into(),
+                },
+            )
+            .unwrap();
+
+        assert_eq!(
+            store.recover_running_as_interrupted("root-thread").unwrap(),
+            1
+        );
+        assert_eq!(
+            store.recover_running_as_interrupted("root-thread").unwrap(),
+            0
+        );
+        assert_eq!(
+            store.get_thread("child").unwrap().unwrap().status,
+            AgentStatusV2::Interrupted
+        );
+        assert_eq!(
+            store
+                .status_events("child")
+                .unwrap()
+                .into_iter()
+                .map(|event| event.event)
+                .collect::<Vec<_>>(),
+            vec![
+                RunnerEvent::TurnStarted {
+                    turn_id: "durable-turn".into(),
+                },
+                RunnerEvent::TurnInterrupted {
+                    turn_id: "durable-turn".into(),
+                    reason: "runtime recovered after process interruption".into(),
+                },
+            ]
+        );
+    }
+
+    #[test]
+    fn runtime_terminated_is_idempotent_after_shutdown() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = AgentGraphStore::open(dir.path().join("subagents-v2.db")).unwrap();
+        store.ensure_root_thread("root-thread").unwrap();
+        store
+            .reserve_thread(&reservation("child", "/root/child"))
+            .unwrap();
+
+        store
+            .apply_status_event("child", RunnerEvent::RuntimeTerminated)
+            .unwrap();
+        store
+            .apply_status_event("child", RunnerEvent::RuntimeTerminated)
+            .unwrap();
+
+        assert_eq!(store.status_events("child").unwrap().len(), 1);
         assert_eq!(
             store.edge_state("child").unwrap().as_deref(),
             Some("closed")

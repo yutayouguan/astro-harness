@@ -280,6 +280,7 @@ pub(super) struct AckSubscribeHook {
 #[derive(Default)]
 pub struct AgentRuntimeManager {
     active: Mutex<HashMap<String, RuntimeSlot>>,
+    subtree_close: tokio::sync::Mutex<()>,
     #[cfg(test)]
     ack_subscribe_hook: Mutex<Option<AckSubscribeHook>>,
     #[cfg(test)]
@@ -682,11 +683,66 @@ impl AgentRuntimeManager {
         Ok(())
     }
 
+    pub(super) async fn close_thread(
+        &self,
+        control: &subagents::AgentControl,
+        thread: &AgentThreadV2,
+    ) -> anyhow::Result<()> {
+        let thread_id = thread.thread_id.as_str();
+        tokio::time::timeout(std::time::Duration::from_secs(30), async {
+            loop {
+                let current = control.resolve_desktop_target(thread.canonical_path.as_str())?;
+                if current.status == AgentStatusV2::Shutdown {
+                    return Ok(());
+                }
+
+                if self.is_running(thread_id) {
+                    match self.terminate(thread_id).await {
+                        Ok(()) => return Ok(()),
+                        Err(_) if !self.is_running(thread_id) => continue,
+                        Err(error) if error.to_string().contains("is starting a runtime turn") => {
+                            tokio::task::yield_now().await;
+                            continue;
+                        }
+                        Err(error) => return Err(error),
+                    }
+                }
+
+                // No live runner exists to acknowledge shutdown. The durable
+                // RuntimeTerminated event is the acknowledgement for this idle
+                // generation and atomically closes its spawn edge.
+                control.record_runner_event(thread_id, RunnerEvent::RuntimeTerminated)?;
+
+                // A racing follow-up may have reserved a Starting slot just
+                // before the durable shutdown. It cannot start a new turn on a
+                // Shutdown thread; wait for its normal cleanup before reporting
+                // the desktop close complete.
+                while self.is_running(thread_id) {
+                    tokio::task::yield_now().await;
+                }
+                return Ok(());
+            }
+        })
+        .await
+        .map_err(|_| anyhow::anyhow!("timed out closing agent runtime {thread_id:?}"))?
+    }
+
+    pub(super) async fn lock_subtree_close(&self) -> tokio::sync::MutexGuard<'_, ()> {
+        self.subtree_close.lock().await
+    }
+
     pub fn is_running(&self, thread_id: &str) -> bool {
         self.active
             .lock()
             .map(|active| active.contains_key(thread_id))
             .unwrap_or(false)
+    }
+
+    pub fn active_count(&self) -> usize {
+        self.active
+            .lock()
+            .map(|active| active.len())
+            .unwrap_or_default()
     }
 
     /// Atomically decide whether a durable follow-up must start immediately or

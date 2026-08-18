@@ -101,6 +101,36 @@ pub struct AgentTreeSnapshotV2 {
     pub activity_sequence: u64,
 }
 
+/// Complete durable Session timeline row exposed only to the desktop control
+/// plane.  Keeping every structured field prevents the UI from falling back
+/// to the lossy historical subagent transcript table.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct AgentThreadMessageV2 {
+    pub id: i64,
+    pub session_id: String,
+    pub role: String,
+    pub content: Option<String>,
+    pub compressed_content: Option<String>,
+    pub tool_call_id: Option<String>,
+    pub tool_calls: Option<serde_json::Value>,
+    pub tool_name: Option<String>,
+    pub timestamp: f64,
+    pub token_count: Option<i64>,
+    pub finish_reason: Option<String>,
+    pub reasoning: Option<String>,
+    pub reasoning_content: Option<String>,
+    pub reasoning_details: Option<serde_json::Value>,
+    pub codex_reasoning_items: Option<serde_json::Value>,
+    pub codex_message_items: Option<serde_json::Value>,
+    pub media_json: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct AgentThreadDetailV2 {
+    pub thread: AgentThreadV2,
+    pub messages: Vec<AgentThreadMessageV2>,
+}
+
 /// Model-visible V2 spawn input. The final public name will be
 /// `SpawnAgentRequest` after legacy request removal.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
