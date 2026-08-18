@@ -2391,7 +2391,7 @@ mod tests {
 
     use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
-    use agent::streaming::{run_multi_turn_stream_with_chat_fn, ChatOverride};
+    use agent::streaming::{run_multi_turn_stream_with_chat_fn_legacy, ChatOverride};
     use providers::CompletionStream;
     use tempfile::TempDir;
 
@@ -2523,7 +2523,7 @@ mod tests {
             Box::pin(async move { Ok(Box::pin(futures::stream::pending()) as CompletionStream) })
         });
         let (tx, mut rx) = tokio::sync::mpsc::channel(8);
-        let handle = tokio::spawn(run_multi_turn_stream_with_chat_fn(
+        let handle = tokio::spawn(run_multi_turn_stream_with_chat_fn_legacy(
             session,
             chat,
             ProviderConfig {

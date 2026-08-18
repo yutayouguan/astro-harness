@@ -169,21 +169,12 @@ impl Session {
         chat_override: Option<crate::streaming::ChatOverride>,
     ) -> Result<TurnInputSubmission, TurnInputError> {
         let context = self.create_turn_context(turn_id.clone()).await;
-        let (args, mut legacy_rx) = crate::streaming::multi_turn::RunTurnArgs::submitted(
+        let args = crate::streaming::multi_turn::RunTurnArgs::submitted(
             Arc::clone(self),
             Arc::clone(&context),
             chat_override,
         );
-        let event_drain = tokio::spawn(async move {
-            while let Some(item) = legacy_rx.recv().await {
-                match item {
-                    Ok(crate::streaming::MultiTurnStreamItem::Error(_)) => {}
-                    Ok(crate::streaming::MultiTurnStreamItem::Done) | Err(_) => break,
-                    Ok(_) => {}
-                }
-            }
-        });
-        self.spawn_task(context, input, RegularTask::submitted(args, event_drain))
+        self.spawn_task(context, input, RegularTask::new(args))
             .await
             .map_err(|error| TurnInputError::Invalid(error.to_string()))?;
         Ok(TurnInputSubmission::Started { turn_id })

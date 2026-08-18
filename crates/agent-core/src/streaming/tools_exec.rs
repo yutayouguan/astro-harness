@@ -4,14 +4,12 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use providers::PauseControl;
-use tokio::sync::mpsc;
 use tokio::task::JoinSet;
 
 use crate::control::hitl::HitlGate;
-use crate::runtime::{AgentLoop, StepContext};
+use crate::runtime::{AgentLoop, StepContext, TurnContext};
 
 use super::hitl_bridge::{park_astro_hitl, park_confirm, parse_astro_hitl};
-use super::types::MultiTurnStreamItem;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum ApprovalRoute {
@@ -170,8 +168,7 @@ async fn review_once_permission(
     session: &Arc<AgentLoop>,
     selection: &types::SessionPermissions,
     audit: PermissionAuditReceipt,
-    tx: &mpsc::Sender<anyhow::Result<MultiTurnStreamItem>>,
-    run_id: &str,
+    turn_context: &TurnContext,
     hitl_gate: Option<&Arc<HitlGate>>,
     hook_detail: &str,
     title: &str,
@@ -291,8 +288,16 @@ async fn review_once_permission(
             "Permission blocked: user approval is unavailable".to_string(),
         ));
     };
-    let Some(confirm) =
-        park_confirm(gate, tx, run_id, &request.tool_call_id, title, body, false).await
+    let Some(confirm) = park_confirm(
+        gate,
+        session.as_ref(),
+        turn_context,
+        &request.tool_call_id,
+        title,
+        body,
+        false,
+    )
+    .await
     else {
         audit.record_review(
             selection.approvals_reviewer,
@@ -410,8 +415,7 @@ async fn audit_hardline_terminal_denial(
 async fn preflight_read_only_write(
     session: &Arc<AgentLoop>,
     call: &types::ParsedToolCall,
-    tx: &mpsc::Sender<anyhow::Result<MultiTurnStreamItem>>,
-    run_id: &str,
+    turn_context: &TurnContext,
     hitl_gate: Option<&Arc<HitlGate>>,
 ) -> Option<PermissionPreflight> {
     if !tools::tool_requires_in_process_write(&call.name, &call.arguments) {
@@ -470,8 +474,7 @@ async fn preflight_read_only_write(
         session,
         &selection,
         audit,
-        tx,
-        run_id,
+        turn_context,
         hitl_gate,
         "surface=permission reason=read_only_mutation",
         "批准本次写入",
@@ -483,8 +486,7 @@ async fn preflight_read_only_write(
 async fn preflight_mcp_tool_approval(
     session: &Arc<AgentLoop>,
     call: &types::ParsedToolCall,
-    tx: &mpsc::Sender<anyhow::Result<MultiTurnStreamItem>>,
-    run_id: &str,
+    turn_context: &TurnContext,
     hitl_gate: Option<&Arc<HitlGate>>,
 ) -> Option<PermissionPreflight> {
     let approval = {
@@ -553,8 +555,7 @@ async fn preflight_mcp_tool_approval(
         session,
         &selection,
         audit,
-        tx,
-        run_id,
+        turn_context,
         hitl_gate,
         &format!(
             "surface=mcp reason=tool_policy mode={}",
@@ -569,8 +570,7 @@ async fn preflight_mcp_tool_approval(
 async fn preflight_in_process_network(
     session: &Arc<AgentLoop>,
     call: &types::ParsedToolCall,
-    tx: &mpsc::Sender<anyhow::Result<MultiTurnStreamItem>>,
-    run_id: &str,
+    turn_context: &TurnContext,
     hitl_gate: Option<&Arc<HitlGate>>,
 ) -> Option<PermissionPreflight> {
     if !tools::tool_requires_in_process_network(&call.name) {
@@ -636,8 +636,7 @@ async fn preflight_in_process_network(
         session,
         &selection,
         audit,
-        tx,
-        run_id,
+        turn_context,
         hitl_gate,
         "surface=permission reason=network_disabled",
         "批准本次网络访问",
@@ -663,11 +662,10 @@ pub(crate) async fn execute_tools_serial(
     step_context: Arc<StepContext>,
     calls: &[types::ParsedToolCall],
     pause: &Arc<PauseControl>,
-    tx: &mpsc::Sender<anyhow::Result<MultiTurnStreamItem>>,
-    run_id: &str,
+    turn_context: &TurnContext,
     hitl_gate: Option<&Arc<HitlGate>>,
 ) -> Option<Vec<types::ToolOutput>> {
-    execute_tools_serial_inner(session, step_context, calls, pause, tx, run_id, hitl_gate).await
+    execute_tools_serial_inner(session, step_context, calls, pause, turn_context, hitl_gate).await
 }
 
 async fn execute_tools_serial_inner(
@@ -675,8 +673,7 @@ async fn execute_tools_serial_inner(
     step_context: Arc<StepContext>,
     calls: &[types::ParsedToolCall],
     pause: &Arc<PauseControl>,
-    tx: &mpsc::Sender<anyhow::Result<MultiTurnStreamItem>>,
-    run_id: &str,
+    turn_context: &TurnContext,
     hitl_gate: Option<&Arc<HitlGate>>,
 ) -> Option<Vec<types::ToolOutput>> {
     let mut out: Vec<types::ToolOutput> = Vec::with_capacity(calls.len());
@@ -702,7 +699,7 @@ async fn execute_tools_serial_inner(
         let mut network_grant = tools::InProcessNetworkGrant::default();
         let mut permission_audits = Vec::new();
         if !call.args_parse_error {
-            match preflight_mcp_tool_approval(session, call, tx, run_id, hitl_gate).await? {
+            match preflight_mcp_tool_approval(session, call, turn_context, hitl_gate).await? {
                 PermissionPreflight::NotRequired => {}
                 PermissionPreflight::Granted(audit) => permission_audits.push(*audit),
                 PermissionPreflight::Denied(message) => {
@@ -712,7 +709,7 @@ async fn execute_tools_serial_inner(
                     continue;
                 }
             }
-            match preflight_read_only_write(session, call, tx, run_id, hitl_gate).await? {
+            match preflight_read_only_write(session, call, turn_context, hitl_gate).await? {
                 PermissionPreflight::NotRequired => {}
                 PermissionPreflight::Granted(audit) => {
                     workspace_write_grant = true;
@@ -725,7 +722,7 @@ async fn execute_tools_serial_inner(
                     continue;
                 }
             }
-            match preflight_in_process_network(session, call, tx, run_id, hitl_gate).await? {
+            match preflight_in_process_network(session, call, turn_context, hitl_gate).await? {
                 PermissionPreflight::NotRequired => {}
                 PermissionPreflight::Granted(audit) => {
                     network_grant = tools::InProcessNetworkGrant::for_hosts(
@@ -968,9 +965,16 @@ async fn execute_tools_serial_inner(
                                     "检测到潜在危险操作（{}）：\n\n```\n{cmd}\n```",
                                     decision.description
                                 );
-                                let confirm =
-                                    park_confirm(gate, tx, run_id, &call.id, title, &body, true)
-                                        .await?;
+                                let confirm = park_confirm(
+                                    gate,
+                                    session.as_ref(),
+                                    turn_context,
+                                    &call.id,
+                                    title,
+                                    &body,
+                                    true,
+                                )
+                                .await?;
                                 let choice = match confirm.status.as_str() {
                                     "timeout" => "timeout",
                                     _ if confirm.approved => "allow",
@@ -1095,7 +1099,7 @@ async fn execute_tools_serial_inner(
         // confirm/clarify：astro_hitl → 同回合 park
         if let Some(hitl) = parse_astro_hitl(result.text()) {
             if let Some(gate) = hitl_gate {
-                result = park_astro_hitl(gate, tx, run_id, &call.id, hitl)
+                result = park_astro_hitl(gate, session.as_ref(), turn_context, &call.id, hitl)
                     .await?
                     .into();
             } else {

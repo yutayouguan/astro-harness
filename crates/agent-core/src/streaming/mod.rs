@@ -38,8 +38,9 @@ mod traits;
 mod types;
 
 pub use multi_turn::{
-    run_multi_turn_stream, run_multi_turn_stream_with_chat_fn, stream_multi_turn,
-    stream_multi_turn_with_hitl, MultiTurnStreamArgs,
+    run_multi_turn_stream, run_multi_turn_stream_with_chat_fn,
+    run_multi_turn_stream_with_chat_fn_legacy, stream_multi_turn, stream_multi_turn_with_hitl,
+    MultiTurnStreamArgs,
 };
 pub use provider::{ChatOverride, ProviderStreamer};
 pub use run_state::{RunPhase, RunRequirements, RunState};

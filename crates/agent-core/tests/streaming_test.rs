@@ -1,5 +1,7 @@
 //! 多轮流式与 `PauseControl` 集成测试。
 
+mod common;
+
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
@@ -11,10 +13,71 @@ use tokio::sync::Notify;
 
 use agent::runtime::{AgentConfig, AgentLoop};
 use agent::streaming::{
-    run_multi_turn_stream, run_multi_turn_stream_with_chat_fn, ChatOverride, MultiTurnStreamArgs,
+    run_multi_turn_stream, run_multi_turn_stream_with_chat_fn,
+    run_multi_turn_stream_with_chat_fn_legacy, ChatOverride, MultiTurnStreamArgs,
     MultiTurnStreamItem, StreamedAssistantContent,
 };
 use agent::TurnInput;
+use agent_protocol::EventMsg;
+
+#[tokio::test]
+async fn scripted_tool_turn_emits_item_lifecycle_and_one_terminal() {
+    let (_dir, session, thread, _recorder, _path) = common::new_thread().await;
+    let turn_id = "scripted-tool-turn";
+    let turn_context = session.create_turn_context(turn_id.into()).await;
+    let chat = scripted_chat(vec![
+        vec![
+            StreamChunk::ToolCallStart {
+                index: 0,
+                id: "call-1".into(),
+                name: "terminal".into(),
+            },
+            StreamChunk::ToolCallDelta {
+                index: 0,
+                arguments: r#"{"command":"pwd"}"#.into(),
+            },
+            StreamChunk::Done {
+                finish_reason: "tool_calls".into(),
+            },
+        ],
+        vec![
+            StreamChunk::Text("done".into()),
+            StreamChunk::Done {
+                finish_reason: "stop".into(),
+            },
+        ],
+    ]);
+    let run = tokio::spawn(run_multi_turn_stream_with_chat_fn(
+        Arc::clone(&session),
+        turn_context,
+        vec![TurnInput {
+            content: "run pwd".into(),
+            image_data_urls: Vec::new(),
+        }],
+        chat,
+    ));
+    let events = common::collect_through_terminal(&thread, turn_id).await;
+    run.await.unwrap().unwrap();
+    assert!(events.iter().any(|event| matches!(
+        &event.msg,
+        EventMsg::ItemStarted(item) if item.item.id() == "call-1"
+    )));
+    assert!(events.iter().any(|event| matches!(
+        &event.msg,
+        EventMsg::ItemCompleted(item) if item.item.id() == "call-1"
+    )));
+    assert!(events.iter().any(|event| matches!(
+        &event.msg,
+        EventMsg::AgentMessageContentDelta(delta) if delta.delta == "done"
+    )));
+    assert_eq!(
+        events
+            .iter()
+            .filter(|event| event.msg.is_terminal())
+            .count(),
+        1
+    );
+}
 
 /// 从脚本化轮次列表构造 [`ChatOverride`]。
 ///
@@ -150,8 +213,13 @@ async fn regular_task_prepare_failure_emits_error_then_done() {
     }
     assert!(matches!(
         items.as_slice(),
-        [MultiTurnStreamItem::Error(message), MultiTurnStreamItem::Done]
+        [
+            MultiTurnStreamItem::Error(message),
+            MultiTurnStreamItem::RunFinished { outcome_type, .. },
+            MultiTurnStreamItem::Done,
+        ]
             if message.contains("budget exhausted")
+                && outcome_type == "error"
     ));
 }
 
@@ -192,8 +260,13 @@ async fn regular_task_prepare_error_emits_error_then_done() {
     }
     assert!(matches!(
         items.as_slice(),
-        [MultiTurnStreamItem::Error(message), MultiTurnStreamItem::Done]
+        [
+            MultiTurnStreamItem::Error(message),
+            MultiTurnStreamItem::RunFinished { outcome_type, .. },
+            MultiTurnStreamItem::Done,
+        ]
             if message.contains("requires initial input")
+                && outcome_type == "error"
     ));
 }
 
@@ -248,7 +321,7 @@ async fn steered_input_is_consumed_by_the_active_regular_task() {
     let run = tokio::spawn({
         let session = Arc::clone(&session);
         async move {
-            run_multi_turn_stream_with_chat_fn(
+            run_multi_turn_stream_with_chat_fn_legacy(
                 session,
                 chat_fn,
                 ProviderConfig {
@@ -331,7 +404,7 @@ async fn multi_turn_emits_text_tool_result_and_usage() {
     };
 
     tokio::spawn(async move {
-        run_multi_turn_stream_with_chat_fn(
+        run_multi_turn_stream_with_chat_fn_legacy(
             session,
             chat_fn,
             cfg,
@@ -414,7 +487,7 @@ async fn multi_turn_tool_exec_works_on_current_thread_runtime() {
     ]);
     let (tx, mut rx) = tokio::sync::mpsc::channel(64);
 
-    run_multi_turn_stream_with_chat_fn(
+    run_multi_turn_stream_with_chat_fn_legacy(
         session,
         chat_fn,
         ProviderConfig {
@@ -515,7 +588,7 @@ async fn multi_turn_persists_reasoning_and_tool_activities() {
     };
 
     tokio::spawn(async move {
-        run_multi_turn_stream_with_chat_fn(
+        run_multi_turn_stream_with_chat_fn_legacy(
             session,
             chat_fn,
             cfg,
@@ -582,7 +655,7 @@ async fn multi_turn_fires_post_llm_call_after_model_stream() {
     };
 
     tokio::spawn(async move {
-        run_multi_turn_stream_with_chat_fn(
+        run_multi_turn_stream_with_chat_fn_legacy(
             session,
             chat_fn,
             cfg,
@@ -639,7 +712,7 @@ async fn transform_llm_output_replaces_before_post_llm_call() {
     };
 
     tokio::spawn(async move {
-        run_multi_turn_stream_with_chat_fn(
+        run_multi_turn_stream_with_chat_fn_legacy(
             session,
             chat_fn,
             cfg,
@@ -699,7 +772,7 @@ async fn pre_verify_never_fires_without_disk_write() {
     };
 
     tokio::spawn(async move {
-        run_multi_turn_stream_with_chat_fn(
+        run_multi_turn_stream_with_chat_fn_legacy(
             session,
             chat_fn,
             cfg,
@@ -793,7 +866,7 @@ async fn pre_verify_keep_going_retries_capped_at_two() {
     };
 
     tokio::spawn(async move {
-        run_multi_turn_stream_with_chat_fn(
+        run_multi_turn_stream_with_chat_fn_legacy(
             session,
             chat_fn,
             cfg,
@@ -929,7 +1002,7 @@ async fn cumulative_usage_chunks_use_last_per_round() {
     let (tx, mut rx) = tokio::sync::mpsc::channel(64);
     let pause = PauseControl::new();
     tokio::spawn(async move {
-        run_multi_turn_stream_with_chat_fn(
+        run_multi_turn_stream_with_chat_fn_legacy(
             session,
             chat_fn,
             ProviderConfig {
@@ -970,7 +1043,7 @@ async fn error_has_single_error_terminal_before_done() {
     let (tx, mut rx) = tokio::sync::mpsc::channel(64);
     let pause = PauseControl::new();
     tokio::spawn(async move {
-        run_multi_turn_stream_with_chat_fn(
+        run_multi_turn_stream_with_chat_fn_legacy(
             session,
             chat_fn,
             ProviderConfig {
@@ -1023,7 +1096,7 @@ async fn cancellation_has_single_interrupt_terminal_before_done() {
     let pause = PauseControl::new();
     let run_pause = pause.clone();
     tokio::spawn(async move {
-        run_multi_turn_stream_with_chat_fn(
+        run_multi_turn_stream_with_chat_fn_legacy(
             session,
             pending_chat(),
             ProviderConfig {
@@ -1102,7 +1175,7 @@ async fn tool_call_delta_and_memory_path() {
     let (tx, mut rx) = tokio::sync::mpsc::channel(64);
     let pause = PauseControl::new();
     tokio::spawn(async move {
-        run_multi_turn_stream_with_chat_fn(
+        run_multi_turn_stream_with_chat_fn_legacy(
             session,
             chat_fn,
             ProviderConfig {
@@ -1190,7 +1263,7 @@ async fn hitl_waiting_parks_then_continues_same_run() {
     let pause = PauseControl::new();
 
     tokio::spawn(async move {
-        run_multi_turn_stream_with_chat_fn(
+        run_multi_turn_stream_with_chat_fn_legacy(
             session,
             chat_fn,
             ProviderConfig {
@@ -1324,7 +1397,7 @@ async fn approval_hooks_fire_pre_then_post_on_allow() {
     let pause = PauseControl::new();
 
     tokio::spawn(async move {
-        run_multi_turn_stream_with_chat_fn(
+        run_multi_turn_stream_with_chat_fn_legacy(
             session,
             chat_fn,
             ProviderConfig {
@@ -1493,7 +1566,7 @@ async fn approval_hooks_fire_pre_then_post_on_deny() {
     let pause = PauseControl::new();
 
     tokio::spawn(async move {
-        run_multi_turn_stream_with_chat_fn(
+        run_multi_turn_stream_with_chat_fn_legacy(
             session,
             chat_fn,
             ProviderConfig {
@@ -1626,7 +1699,7 @@ async fn multi_turn_budget_exhausted_forces_toolless_summary() {
     let (tx, mut rx) = tokio::sync::mpsc::channel(64);
     let pause = PauseControl::new();
     tokio::spawn(async move {
-        run_multi_turn_stream_with_chat_fn(
+        run_multi_turn_stream_with_chat_fn_legacy(
             session,
             chat_fn,
             ProviderConfig {

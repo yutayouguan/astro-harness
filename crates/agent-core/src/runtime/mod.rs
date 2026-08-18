@@ -18,7 +18,7 @@ use std::sync::{Arc, Mutex as StdMutex, MutexGuard, OnceLock};
 
 use agent_protocol::{Event, EventMsg};
 use agent_rollout::{RolloutItem, RolloutRecorder};
-use tokio::sync::{watch, Mutex as TokioMutex};
+use tokio::sync::{broadcast, watch, Mutex as TokioMutex};
 use uuid::Uuid;
 
 use ::session::{ConversationStore, SessionStore};
@@ -152,6 +152,8 @@ pub struct Session {
     runtime_io: OnceLock<RuntimeIoBindings>,
     /// Serializes rollout persistence, status reduction, and live delivery.
     event_dispatch: TokioMutex<()>,
+    /// Compatibility tap for adapters that consume the unified event stream.
+    live_events: broadcast::Sender<Event>,
     /// Guards one-time release of task, hook, MCP, and terminal resources.
     runtime_shutdown: AtomicBool,
     /// Shared completion observed by every concurrent shutdown caller.
@@ -253,6 +255,7 @@ impl Session {
         state.temperature = config.temperature;
         state.additional_params = config.additional_params.clone();
 
+        let (live_events, _) = broadcast::channel(1024);
         Ok(Session {
             config,
             session_id,
@@ -270,6 +273,7 @@ impl Session {
             task_completions: TokioMutex::new(HashMap::new()),
             runtime_io: OnceLock::new(),
             event_dispatch: TokioMutex::new(()),
+            live_events,
             runtime_shutdown: AtomicBool::new(false),
             runtime_shutdown_complete: tokio_util::sync::CancellationToken::new(),
         })
@@ -303,6 +307,10 @@ impl Session {
             msg,
         };
         self.send_event_raw_with_persistence(event, true).await;
+    }
+
+    pub(crate) fn subscribe_live_events(&self) -> broadcast::Receiver<Event> {
+        self.live_events.subscribe()
     }
 
     pub(crate) async fn send_event_raw_with_persistence(&self, event: Event, persist: bool) {
@@ -357,6 +365,7 @@ impl Session {
     }
 
     async fn deliver_event_raw_inner(&self, event: Event) {
+        let _ = self.live_events.send(event.clone());
         let Some(bindings) = self.runtime_io.get() else {
             return;
         };
@@ -453,7 +462,8 @@ impl Session {
         state.current_turn_context = Some(turn_context);
     }
 
-    pub(crate) async fn create_turn_context(&self, sub_id: String) -> Arc<TurnContext> {
+    #[doc(hidden)]
+    pub async fn create_turn_context(&self, sub_id: String) -> Arc<TurnContext> {
         let state = self.lock_state();
         Arc::new(TurnContext::new(
             sub_id,

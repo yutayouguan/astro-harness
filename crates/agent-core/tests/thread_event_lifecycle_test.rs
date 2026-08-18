@@ -2,7 +2,7 @@ mod common;
 
 use std::sync::Arc;
 
-use agent::streaming::{run_multi_turn_stream_with_chat_fn, ChatOverride};
+use agent::streaming::{run_multi_turn_stream_with_chat_fn_legacy, ChatOverride};
 use agent::{AgentStatus, Config, Event, EventMsg, Op, Session};
 use agent_protocol::{
     TurnInput, TurnInputMode, TurnInputRequest, TurnInputSubmission, TurnStartedEvent,
@@ -117,7 +117,7 @@ async fn rollout_shutdown_error_is_live_and_precedes_shutdown_complete() {
 async fn provider_error_emits_one_error_and_complete_with_error() {
     let (_dir, session, thread, _recorder, _path) = new_thread().await;
     let (legacy_tx, _legacy_rx) = tokio::sync::mpsc::channel(8);
-    let run = tokio::spawn(run_multi_turn_stream_with_chat_fn(
+    let run = tokio::spawn(run_multi_turn_stream_with_chat_fn_legacy(
         Arc::clone(&session),
         provider_error_chat(),
         ProviderConfig::default(),
@@ -158,7 +158,7 @@ async fn pause_control_cancel_emits_only_turn_aborted() {
         })
     };
     let (legacy_tx, _legacy_rx) = tokio::sync::mpsc::channel(8);
-    let run = tokio::spawn(run_multi_turn_stream_with_chat_fn(
+    let run = tokio::spawn(run_multi_turn_stream_with_chat_fn_legacy(
         Arc::clone(&session),
         chat,
         ProviderConfig::default(),

@@ -1,28 +1,226 @@
-//! 多轮流式循环的生命周期辅助：事件发送、usage 记录、终态收尾。
+//! Unified turn-event helpers for the model/tool loop.
 
 use std::sync::Arc;
 
+use agent_protocol::{
+    DeltaEvent, EventMsg, ExtensionItem, ItemEvent, TextItem, TokenCountEvent, ToolItem,
+    ToolStatus, TurnItem,
+};
 use providers::Usage;
-use tokio::sync::mpsc;
 
 use super::provider::ProviderStreamer;
-use super::run_state::{RunPhase, RunState};
-use super::types::{MultiTurnStreamItem, StreamedAssistantContent};
 use crate::runtime::usage::{apply_llm_usage_dual_write, LlmUsageWrite};
-use crate::runtime::AgentLoop;
+use crate::runtime::{Session, TurnContext};
 
-/// 向 mpsc 发送单个成功事件；接收方关闭时返回 `false`。
-pub(crate) async fn emit(
-    tx: &mpsc::Sender<anyhow::Result<MultiTurnStreamItem>>,
-    item: MultiTurnStreamItem,
-) -> bool {
-    tx.send(Ok(item)).await.is_ok()
+/// Persist an event before delivering it to live consumers.
+pub(crate) async fn emit(session: &Session, turn_context: &TurnContext, msg: EventMsg) {
+    session.send_event(turn_context.sub_id(), msg).await;
 }
 
-/// 尽力双写 `kind=llm` 事件与会话账单；失败忽略。
-/// `meta` 优先使用本轮实际命中目标；缺省时回退到 AgentLoop 上的会话凭据（不应在 failover 时写入）。
+pub(crate) async fn emit_delta(
+    session: &Session,
+    turn_context: &TurnContext,
+    item_id: &str,
+    delta: String,
+    reasoning: bool,
+) {
+    let event = DeltaEvent {
+        turn_id: turn_context.sub_id().to_string(),
+        item_id: item_id.to_string(),
+        delta,
+    };
+    emit(
+        session,
+        turn_context,
+        if reasoning {
+            EventMsg::ReasoningContentDelta(event)
+        } else {
+            EventMsg::AgentMessageContentDelta(event)
+        },
+    )
+    .await;
+}
+
+pub(crate) fn tool_turn_item(
+    id: impl Into<String>,
+    name: impl Into<String>,
+    arguments: serde_json::Value,
+    output: Option<serde_json::Value>,
+    status: ToolStatus,
+) -> TurnItem {
+    let id = id.into();
+    let name = name.into();
+    let item = ToolItem {
+        id,
+        name: name.clone(),
+        arguments,
+        output,
+        status,
+    };
+    if name == "terminal" || name == "code_exec" {
+        TurnItem::CommandExecution(item)
+    } else if name.starts_with("mcp__") {
+        TurnItem::McpToolCall(item)
+    } else if matches!(
+        name.as_str(),
+        "spawn_agent"
+            | "list_agents"
+            | "read_agent"
+            | "send_message_to_agent"
+            | "send_message"
+            | "followup_task"
+            | "wait_agents"
+            | "wait_agent"
+            | "interrupt_agent"
+            | "close_agent"
+    ) {
+        TurnItem::CollabAgentToolCall(item)
+    } else {
+        TurnItem::DynamicToolCall(item)
+    }
+}
+
+pub(crate) async fn emit_assistant_completed(
+    session: &Session,
+    turn_context: &TurnContext,
+    item_id: String,
+    content: String,
+) {
+    emit(
+        session,
+        turn_context,
+        EventMsg::ItemCompleted(ItemEvent {
+            turn_id: turn_context.sub_id().to_string(),
+            item: TurnItem::AgentMessage(TextItem {
+                id: item_id,
+                content,
+            }),
+        }),
+    )
+    .await;
+}
+
+pub(crate) async fn emit_extension_completed(
+    session: &Session,
+    turn_context: &TurnContext,
+    id: String,
+    namespace: &str,
+    payload: serde_json::Value,
+) {
+    emit(
+        session,
+        turn_context,
+        EventMsg::ItemCompleted(ItemEvent {
+            turn_id: turn_context.sub_id().to_string(),
+            item: TurnItem::Extension(ExtensionItem {
+                id,
+                namespace: namespace.to_string(),
+                payload,
+            }),
+        }),
+    )
+    .await;
+}
+
+pub(crate) async fn emit_hook_started(
+    session: &Session,
+    turn_context: &TurnContext,
+    hook_name: &str,
+) -> String {
+    let item_id = format!("hook-{}", uuid::Uuid::new_v4());
+    emit(
+        session,
+        turn_context,
+        EventMsg::HookStarted(ItemEvent {
+            turn_id: turn_context.sub_id().to_string(),
+            item: TurnItem::HookPrompt(TextItem {
+                id: item_id.clone(),
+                content: hook_name.to_string(),
+            }),
+        }),
+    )
+    .await;
+    item_id
+}
+
+pub(crate) async fn emit_hook_completed(
+    session: &Session,
+    turn_context: &TurnContext,
+    item_id: String,
+    hook_name: &str,
+) {
+    emit(
+        session,
+        turn_context,
+        EventMsg::HookCompleted(ItemEvent {
+            turn_id: turn_context.sub_id().to_string(),
+            item: TurnItem::HookPrompt(TextItem {
+                id: item_id,
+                content: hook_name.to_string(),
+            }),
+        }),
+    )
+    .await;
+}
+
+pub(crate) async fn emit_context_compacted(
+    session: &Session,
+    turn_context: &TurnContext,
+    content: String,
+) {
+    emit(
+        session,
+        turn_context,
+        EventMsg::ContextCompacted(ItemEvent {
+            turn_id: turn_context.sub_id().to_string(),
+            item: TurnItem::ContextCompaction(TextItem {
+                id: format!("compaction-{}", uuid::Uuid::new_v4()),
+                content,
+            }),
+        }),
+    )
+    .await;
+}
+
+pub(crate) fn is_subagent_tool(name: &str) -> bool {
+    matches!(
+        name,
+        "spawn_agent"
+            | "list_agents"
+            | "read_agent"
+            | "send_message_to_agent"
+            | "send_message"
+            | "followup_task"
+            | "wait_agents"
+            | "wait_agent"
+            | "interrupt_agent"
+            | "close_agent"
+    )
+}
+
+pub(crate) async fn emit_subagent_activity(
+    session: &Session,
+    turn_context: &TurnContext,
+    item_id: String,
+    content: String,
+) {
+    emit(
+        session,
+        turn_context,
+        EventMsg::SubAgentActivity(ItemEvent {
+            turn_id: turn_context.sub_id().to_string(),
+            item: TurnItem::SubAgentActivity(TextItem {
+                id: item_id,
+                content,
+            }),
+        }),
+    )
+    .await;
+}
+
+/// Best-effort dual write of LLM usage to usage.db and the session bill.
 pub(super) async fn record_llm_usage(
-    session: &Arc<AgentLoop>,
+    session: &Arc<Session>,
     streamer: &ProviderStreamer,
     usage: &Usage,
 ) {
@@ -70,77 +268,101 @@ pub(super) async fn record_llm_usage(
     );
 }
 
-/// 发送 Error、RunFinished(error)、Done；若有已累计 usage 则先写入 `usage.db`。
-pub(super) async fn finish_error(
-    session: &Arc<AgentLoop>,
+pub(crate) async fn emit_usage(
+    session: &Arc<Session>,
+    turn_context: &TurnContext,
     streamer: &ProviderStreamer,
-    tx: &mpsc::Sender<anyhow::Result<MultiTurnStreamItem>>,
-    msg: impl Into<String>,
     usage: Option<Usage>,
-    run_id: &str,
 ) {
-    let _ = emit(tx, MultiTurnStreamItem::Error(msg.into())).await;
-    finish_run(session, streamer, tx, usage, run_id, RunPhase::Error).await;
-}
-
-/// 仅发送 Done，表示正常结束。
-async fn finish_done(tx: &mpsc::Sender<anyhow::Result<MultiTurnStreamItem>>) {
-    let _ = emit(tx, MultiTurnStreamItem::Done).await;
-}
-
-/// 发送唯一 RunFinished 终态后 Done。
-async fn finish_run(
-    session: &Arc<AgentLoop>,
-    streamer: &ProviderStreamer,
-    tx: &mpsc::Sender<anyhow::Result<MultiTurnStreamItem>>,
-    usage: Option<Usage>,
-    run_id: &str,
-    phase: RunPhase,
-) {
-    debug_assert!(matches!(
-        phase,
-        RunPhase::Finished | RunPhase::Cancelled | RunPhase::Error
-    ));
-    if let Some(u) = usage {
-        record_llm_usage(session, streamer, &u).await;
-        let _ = emit(
-            tx,
-            MultiTurnStreamItem::Assistant(StreamedAssistantContent::FinalUsage(u)),
-        )
-        .await;
-    }
-    let mut state = RunState::new();
-    state.set_phase(phase);
-    let _ = emit(
-        tx,
-        MultiTurnStreamItem::RunFinished {
-            run_id: run_id.to_string(),
-            outcome_type: state.outcome_type().into(),
-            interrupts_json: "[]".into(),
-        },
+    let Some(usage) = usage else {
+        return;
+    };
+    record_llm_usage(session, streamer, &usage).await;
+    emit(
+        session,
+        turn_context,
+        EventMsg::TokenCount(TokenCountEvent {
+            turn_id: Some(turn_context.sub_id().to_string()),
+            input_tokens: u64::from(usage.input_tokens),
+            output_tokens: u64::from(usage.output_tokens),
+            total_tokens: u64::from(usage.input_tokens) + u64::from(usage.output_tokens),
+            cache_read_tokens: u64::from(usage.cache_read_tokens),
+            cache_write_tokens: u64::from(usage.cache_write_tokens),
+            reasoning_tokens: u64::from(usage.reasoning_tokens),
+            request_count: u64::from(usage.request_count),
+        }),
     )
     .await;
-    finish_done(tx).await;
 }
 
-/// 正常完成：可选发送累计 usage，再发送 RunFinished(success) 与 Done。
-pub(crate) async fn finish_success(
-    session: &Arc<AgentLoop>,
-    streamer: &ProviderStreamer,
-    tx: &mpsc::Sender<anyhow::Result<MultiTurnStreamItem>>,
-    usage: Option<Usage>,
-    run_id: &str,
-) {
-    finish_run(session, streamer, tx, usage, run_id, RunPhase::Finished).await;
-}
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::runtime::Config;
 
-/// 用户取消或流控制中断：发送 RunFinished(interrupt) 与 Done。
-pub(crate) async fn finish_interrupted(
-    session: &Arc<AgentLoop>,
-    streamer: &ProviderStreamer,
-    tx: &mpsc::Sender<anyhow::Result<MultiTurnStreamItem>>,
-    usage: Option<Usage>,
-    run_id: &str,
-) {
-    finish_run(session, streamer, tx, usage, run_id, RunPhase::Cancelled).await;
+    async fn session() -> (tempfile::TempDir, Arc<Session>, Arc<TurnContext>) {
+        let dir = tempfile::tempdir().unwrap();
+        let session = Arc::new(
+            Session::with_session_id(
+                Config::with_defaults(dir.path().to_path_buf()),
+                "event-helper-test".into(),
+            )
+            .unwrap(),
+        );
+        let context = session.create_turn_context("turn-1".into()).await;
+        (dir, session, context)
+    }
+
+    #[tokio::test]
+    async fn hook_started_and_completed_share_stable_item_id() {
+        let (_dir, session, context) = session().await;
+        let mut rx = session.subscribe_live_events();
+        let item_id = emit_hook_started(&session, &context, "pre_api_request").await;
+        emit_hook_completed(&session, &context, item_id.clone(), "pre_api_request").await;
+
+        let started = rx.recv().await.unwrap();
+        let completed = rx.recv().await.unwrap();
+        assert!(matches!(
+            started.msg,
+            EventMsg::HookStarted(ItemEvent { item, .. }) if item.id() == item_id
+        ));
+        assert!(matches!(
+            completed.msg,
+            EventMsg::HookCompleted(ItemEvent { item, .. }) if item.id() == item_id
+        ));
+    }
+
+    #[tokio::test]
+    async fn compaction_helper_emits_context_compacted() {
+        let (_dir, session, context) = session().await;
+        let mut rx = session.subscribe_live_events();
+        emit_context_compacted(&session, &context, "pruned=1 compressed=1".into()).await;
+
+        let event = rx.recv().await.unwrap();
+        assert!(matches!(
+            event.msg,
+            EventMsg::ContextCompacted(ItemEvent { item, .. })
+                if matches!(item, TurnItem::ContextCompaction(_))
+        ));
+    }
+
+    #[tokio::test]
+    async fn subagent_helper_emits_subagent_activity() {
+        let (_dir, session, context) = session().await;
+        let mut rx = session.subscribe_live_events();
+        emit_subagent_activity(
+            &session,
+            &context,
+            "subagent-call-1".into(),
+            "running".into(),
+        )
+        .await;
+
+        let event = rx.recv().await.unwrap();
+        assert!(matches!(
+            event.msg,
+            EventMsg::SubAgentActivity(ItemEvent { item, .. })
+                if item.id() == "subagent-call-1"
+        ));
+    }
 }

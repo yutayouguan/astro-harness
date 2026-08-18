@@ -3,13 +3,13 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use tokio::sync::mpsc;
+use agent_protocol::{ControlRequestEvent, EventMsg};
 
 use crate::control::hitl::{HitlGate, HitlResolution, HITL_DEFAULT_TIMEOUT_SECS};
 use crate::control::interrupt::Interrupt;
+use crate::runtime::{Session, TurnContext};
 
 use super::lifecycle::emit;
-use super::types::MultiTurnStreamItem;
 
 pub(crate) struct AstroHitlPayload {
     pub reason: String,
@@ -60,8 +60,8 @@ pub(crate) struct ConfirmOutcome {
 /// `allow_always` 为 true 时额外提供「批准并永久放行」按钮，其结果 `ConfirmOutcome::always`。
 pub(crate) async fn park_confirm(
     gate: &Arc<HitlGate>,
-    tx: &mpsc::Sender<anyhow::Result<MultiTurnStreamItem>>,
-    run_id: &str,
+    session: &Session,
+    turn_context: &TurnContext,
     tool_call_id: &str,
     title: &str,
     body: &str,
@@ -73,8 +73,8 @@ pub(crate) async fn park_confirm(
     let ops_value = serde_json::Value::Array(operations);
     let resolution = park_astro_hitl_resolution(
         gate,
-        tx,
-        run_id,
+        session,
+        turn_context,
         tool_call_id,
         AstroHitlPayload {
             reason: "confirmation".into(),
@@ -114,12 +114,12 @@ pub(crate) async fn park_confirm(
 /// `outcome_type` 由 [`super::run_state::RunState`] 派生，与 Agno requirements 语义对齐。
 pub(crate) async fn park_astro_hitl(
     gate: &Arc<HitlGate>,
-    tx: &mpsc::Sender<anyhow::Result<MultiTurnStreamItem>>,
-    run_id: &str,
+    session: &Session,
+    turn_context: &TurnContext,
     tool_call_id: &str,
     hitl: AstroHitlPayload,
 ) -> Option<String> {
-    park_astro_hitl_resolution(gate, tx, run_id, tool_call_id, hitl)
+    park_astro_hitl_resolution(gate, session, turn_context, tool_call_id, hitl)
         .await
         .map(|r| r.to_tool_result())
 }
@@ -129,27 +129,11 @@ pub(crate) async fn park_astro_hitl(
 /// 暴露转换后的 tool-result 字符串。
 async fn park_astro_hitl_resolution(
     gate: &Arc<HitlGate>,
-    tx: &mpsc::Sender<anyhow::Result<MultiTurnStreamItem>>,
-    run_id: &str,
+    session: &Session,
+    turn_context: &TurnContext,
     tool_call_id: &str,
     hitl: AstroHitlPayload,
 ) -> Option<HitlResolution> {
-    let message_id = format!("a2ui-surface-{tool_call_id}");
-    let content_json = serde_json::json!({ "operations": hitl.operations }).to_string();
-    if !emit(
-        tx,
-        MultiTurnStreamItem::Activity {
-            message_id,
-            activity_type: "a2ui-surface".into(),
-            content_json,
-            replace: true,
-        },
-    )
-    .await
-    {
-        return None;
-    }
-
     let interrupt = Interrupt {
         id: uuid::Uuid::new_v4().to_string(),
         reason: hitl.reason.clone(),
@@ -159,26 +143,24 @@ async fn park_astro_hitl_resolution(
         expires_at: String::new(),
         metadata_json: String::new(),
     };
-    let interrupts_json = serde_json::to_string(&vec![&interrupt]).unwrap_or_else(|_| "[]".into());
-    let mut hitl_state = super::run_state::RunState::new();
-    hitl_state.await_hitl(super::run_state::RunRequirements::for_hitl_reason(
-        &hitl.reason,
-        interrupt.id.clone(),
-    ));
-    if !emit(
-        tx,
-        MultiTurnStreamItem::RunFinished {
-            run_id: run_id.to_string(),
-            outcome_type: hitl_state.outcome_type().into(),
-            interrupts_json,
-        },
-    )
-    .await
-    {
-        return None;
-    }
-
     let rx = gate.begin_wait(interrupt.clone()).await;
+    emit(
+        session,
+        turn_context,
+        EventMsg::RequestUserInput(ControlRequestEvent {
+            turn_id: turn_context.sub_id().to_string(),
+            item_id: tool_call_id.to_string(),
+            request_id: interrupt.id.clone(),
+            payload: serde_json::json!({
+                "reason": hitl.reason,
+                "message": hitl.message,
+                "operations": hitl.operations,
+                "response_schema": hitl.response_schema,
+            }),
+        }),
+    )
+    .await;
+
     let resolution = gate
         .finish_wait(
             &interrupt.id,
@@ -187,4 +169,69 @@ async fn park_astro_hitl_resolution(
         )
         .await;
     Some(resolution)
+}
+
+#[cfg(test)]
+mod event_tests {
+    use super::*;
+    use crate::control::interrupt::ResumeItem;
+    use crate::runtime::{Config, Session};
+
+    #[tokio::test]
+    async fn hitl_request_event_uses_stable_registered_request_id() {
+        let dir = tempfile::tempdir().unwrap();
+        let session = Arc::new(
+            Session::with_session_id(
+                Config::with_defaults(dir.path().to_path_buf()),
+                "hitl-event-test".into(),
+            )
+            .unwrap(),
+        );
+        let turn_context = session.create_turn_context("turn-1".into()).await;
+        let gate = HitlGate::new("hitl-event-test");
+        let mut events = session.subscribe_live_events();
+
+        let run = tokio::spawn({
+            let gate = Arc::clone(&gate);
+            let session = Arc::clone(&session);
+            let turn_context = Arc::clone(&turn_context);
+            async move {
+                park_astro_hitl(
+                    &gate,
+                    &session,
+                    &turn_context,
+                    "call-1",
+                    AstroHitlPayload {
+                        reason: "confirmation".into(),
+                        message: "approve".into(),
+                        operations: serde_json::json!([]),
+                        response_schema: serde_json::json!({
+                            "type": "object",
+                            "properties": { "approved": { "type": "boolean" } },
+                            "required": ["approved"]
+                        }),
+                    },
+                )
+                .await
+            }
+        });
+
+        let event = events.recv().await.unwrap();
+        let EventMsg::RequestUserInput(request) = event.msg else {
+            panic!("expected request_user_input event");
+        };
+        assert_eq!(request.item_id, "call-1");
+        assert!(!request.request_id.is_empty());
+        let pending = gate.pending_interrupts().await;
+        assert_eq!(pending.len(), 1);
+        assert_eq!(pending[0].id, request.request_id);
+        gate.resolve(&[ResumeItem {
+            interrupt_id: request.request_id,
+            status: "resolved".into(),
+            payload_json: serde_json::json!({ "approved": true }).to_string(),
+        }])
+        .await
+        .unwrap();
+        assert!(run.await.unwrap().is_some());
+    }
 }

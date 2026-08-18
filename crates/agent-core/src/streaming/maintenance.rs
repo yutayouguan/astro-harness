@@ -2,22 +2,33 @@
 
 use std::sync::Arc;
 
-use tokio::sync::mpsc;
+use agent_protocol::{DeltaEvent, EventMsg, ItemEvent, TokenCountEvent, ToolStatus};
 
-use super::lifecycle::emit;
+use super::lifecycle::{
+    emit, emit_context_compacted, emit_extension_completed, emit_hook_completed, emit_hook_started,
+    emit_subagent_activity, is_subagent_tool, tool_turn_item,
+};
 use super::provider::ProviderStreamer;
 use super::traits::StreamingChat;
-use super::types::MultiTurnStreamItem;
-use crate::runtime::AgentLoop;
+use crate::runtime::{AgentLoop, TurnContext};
 
 /// Gateway 预压安全网 + mid-run 辅模型摘要，统一进 LLM 前的上下文维护。
-pub(super) async fn pre_llm_maintenance(session: &Arc<AgentLoop>) {
+pub(super) async fn pre_llm_maintenance(session: &Arc<AgentLoop>, turn_context: &TurnContext) {
     {
         let agent = session.as_ref();
         let recommend_ratio = agent.compression_config().recommend_compact_ratio;
         if agent.occupancy_ratio().await >= recommend_ratio {
             match agent.maintain_tool_context().await {
                 Ok(report) if report.pruned + report.compressed > 0 => {
+                    emit_context_compacted(
+                        session,
+                        turn_context,
+                        format!(
+                            "pruned={} compressed={} llm_summarized={}",
+                            report.pruned, report.compressed, report.llm_summarized
+                        ),
+                    )
+                    .await;
                     tracing::info!(
                         pruned = report.pruned,
                         compressed = report.compressed,
@@ -52,7 +63,7 @@ pub(super) async fn pre_llm_maintenance(session: &Arc<AgentLoop>) {
 /// 构建并推送上下文占用估算快照。
 pub(super) async fn emit_context_usage(
     session: &Arc<AgentLoop>,
-    tx: &mpsc::Sender<anyhow::Result<MultiTurnStreamItem>>,
+    turn_context: &TurnContext,
     history: &[types::message::Message],
     tools: &[serde_json::Value],
 ) {
@@ -78,7 +89,21 @@ pub(super) async fn emit_context_usage(
             recommend_compact_ratio,
         },
     );
-    let _ = emit(tx, MultiTurnStreamItem::ContextUsage(snap)).await;
+    emit(
+        session,
+        turn_context,
+        EventMsg::TokenCount(TokenCountEvent {
+            turn_id: Some(turn_context.sub_id().to_string()),
+            input_tokens: u64::from(snap.total_tokens),
+            output_tokens: 0,
+            total_tokens: u64::from(snap.total_tokens),
+            cache_read_tokens: 0,
+            cache_write_tokens: 0,
+            reasoning_tokens: 0,
+            request_count: 0,
+        }),
+    )
+    .await;
 }
 
 /// 工具执行后的上下文维护（压缩 + mid-run 摘要）+ stop_after 检查。
@@ -86,12 +111,22 @@ pub(super) async fn emit_context_usage(
 /// 返回 `true` 表示 `stop_after_tool_call` 触发，主循环应跳出。
 pub(super) async fn post_tool_maintenance(
     session: &Arc<AgentLoop>,
+    turn_context: &TurnContext,
     calls: &[types::ParsedToolCall],
 ) -> bool {
     {
         let agent = session.as_ref();
         match agent.maintain_tool_context().await {
             Ok(report) if report.pruned + report.compressed > 0 => {
+                emit_context_compacted(
+                    session,
+                    turn_context,
+                    format!(
+                        "pruned={} compressed={} llm_summarized={}",
+                        report.pruned, report.compressed, report.llm_summarized
+                    ),
+                )
+                .await;
                 tracing::info!(
                     pruned = report.pruned,
                     compressed = report.compressed,
@@ -143,7 +178,7 @@ pub(super) async fn record_tool_outcomes(
     calls: &[types::ParsedToolCall],
     outcomes: Vec<types::ToolOutput>,
     pause: &Arc<providers::PauseControl>,
-    tx: &mpsc::Sender<anyhow::Result<MultiTurnStreamItem>>,
+    turn_context: &TurnContext,
     timeline: &mut crate::timeline::TimelineBuilder,
     now_ms: impl Fn() -> i64,
 ) -> bool {
@@ -154,46 +189,9 @@ pub(super) async fn record_tool_outcomes(
 
         let tool_media = result.media().to_vec();
         let result_text = result.text().to_string();
-        if !emit(
-            tx,
-            MultiTurnStreamItem::ToolResult {
-                id: call.id.clone(),
-                name: call.name.clone(),
-                arguments_json: call.arguments.to_string(),
-                result: result_text.clone(),
-                media: tool_media.clone(),
-            },
-        )
-        .await
-        {
-            return false;
-        }
-
-        if matches!(call.name.as_str(), "memory")
-            && !result_text.starts_with("工具错误")
+        let is_success = !result_text.starts_with("工具错误")
             && !result_text.starts_with("工具已禁用")
-            && !result_text.starts_with("工具参数 JSON 解析失败")
-        {
-            let preview = {
-                let s = result_text.trim();
-                if s.chars().count() > 240 {
-                    format!("{}…", s.chars().take(240).collect::<String>())
-                } else {
-                    s.to_string()
-                }
-            };
-            if !emit(
-                tx,
-                MultiTurnStreamItem::MemoryUpdate {
-                    op: call.name.clone(),
-                    content: preview,
-                },
-            )
-            .await
-            {
-                return false;
-            }
-        }
+            && !result_text.starts_with("工具参数 JSON 解析失败");
 
         let info_ui = parse_astro_ui(&result_text);
         let result_for_history = if let Some(ref ui) = info_ui {
@@ -204,7 +202,6 @@ pub(super) async fn record_tool_outcomes(
 
         if let Some(ref ui) = info_ui {
             let message_id = format!("a2ui-surface-{}", call.id);
-            let content_json = serde_json::json!({ "operations": ui.operations }).to_string();
             timeline.upsert_surface(
                 serde_json::json!({
                     "messageId": message_id,
@@ -214,24 +211,11 @@ pub(super) async fn record_tool_outcomes(
                 }),
                 now_ms(),
             );
-            if !emit(
-                tx,
-                MultiTurnStreamItem::Activity {
-                    message_id,
-                    activity_type: "a2ui-surface".into(),
-                    content_json,
-                    replace: true,
-                },
-            )
-            .await
-            {
-                return false;
-            }
         }
 
-        {
+        let recorded = {
             let agent = session.as_ref();
-            let _ = agent
+            let recorded = agent
                 .record_tool_result_with_id(Some(&call.id), Some(&call.name), &result_for_history)
                 .await;
             if !tool_media.is_empty() {
@@ -242,6 +226,86 @@ pub(super) async fn record_tool_outcomes(
                     }
                 }
             }
+            recorded
+        };
+        if let Err(error) = recorded {
+            tracing::warn!(%error, tool_call_id = %call.id, "failed to record tool result");
+            return false;
+        }
+
+        if matches!(call.name.as_str(), "terminal" | "code_exec") && !result_text.is_empty() {
+            emit(
+                session,
+                turn_context,
+                EventMsg::ExecCommandOutputDelta(DeltaEvent {
+                    turn_id: turn_context.sub_id().to_string(),
+                    item_id: call.id.clone(),
+                    delta: result_text.clone(),
+                }),
+            )
+            .await;
+        }
+
+        emit(
+            session,
+            turn_context,
+            EventMsg::ItemCompleted(ItemEvent {
+                turn_id: turn_context.sub_id().to_string(),
+                item: tool_turn_item(
+                    call.id.clone(),
+                    call.name.clone(),
+                    call.arguments.clone(),
+                    Some(serde_json::Value::String(result_text.clone())),
+                    if is_success {
+                        ToolStatus::Completed
+                    } else {
+                        ToolStatus::Failed
+                    },
+                ),
+            }),
+        )
+        .await;
+
+        if call.name == "memory" && is_success {
+            let s = result_text.trim();
+            let preview = if s.chars().count() > 240 {
+                format!("{}…", s.chars().take(240).collect::<String>())
+            } else {
+                s.to_string()
+            };
+            emit_extension_completed(
+                session,
+                turn_context,
+                format!("memory-{}", call.id),
+                "astro.memory",
+                serde_json::json!({ "op": call.name, "content": preview }),
+            )
+            .await;
+        }
+
+        if is_subagent_tool(&call.name) {
+            emit_subagent_activity(
+                session,
+                turn_context,
+                format!("subagent-{}", call.id),
+                result_text.clone(),
+            )
+            .await;
+        }
+
+        if let Some(ui) = info_ui {
+            emit_extension_completed(
+                session,
+                turn_context,
+                format!("a2ui-{}", call.id),
+                "astro.a2ui",
+                serde_json::json!({
+                    "operations": ui.operations,
+                    "summary": ui.summary,
+                    "replace": true,
+                }),
+            )
+            .await;
         }
     }
 
@@ -260,6 +324,7 @@ pub(super) async fn record_tool_outcomes(
 /// 成功返回 `Ok(stream)`；失败返回 `Err(error_string)` 并已在 hook 中记录。
 pub(super) async fn run_sampling_request(
     session: &Arc<AgentLoop>,
+    turn_context: &TurnContext,
     streamer: &ProviderStreamer,
     system_prompt: &str,
     history: &[types::message::Message],
@@ -269,6 +334,7 @@ pub(super) async fn run_sampling_request(
         let agent = session.as_ref();
         let sid = agent.session_id().to_string();
         let turn_id = agent.current_turn_id().await;
+        let hook_item = emit_hook_started(session, turn_context, ::hooks::PRE_API_REQUEST).await;
         let _ = agent.fire_hook(
             ::hooks::PRE_API_REQUEST,
             ::hooks::HookPayload {
@@ -277,6 +343,7 @@ pub(super) async fn run_sampling_request(
                 ..Default::default()
             },
         );
+        emit_hook_completed(session, turn_context, hook_item, ::hooks::PRE_API_REQUEST).await;
     }
     match streamer
         .stream_chat(system_prompt, history, tool_specs)
@@ -286,6 +353,8 @@ pub(super) async fn run_sampling_request(
             let agent = session.as_ref();
             let sid = agent.session_id().to_string();
             let turn_id = agent.current_turn_id().await;
+            let hook_item =
+                emit_hook_started(session, turn_context, ::hooks::POST_API_REQUEST).await;
             let _ = agent.fire_hook(
                 ::hooks::POST_API_REQUEST,
                 ::hooks::HookPayload {
@@ -294,12 +363,15 @@ pub(super) async fn run_sampling_request(
                     ..Default::default()
                 },
             );
+            emit_hook_completed(session, turn_context, hook_item, ::hooks::POST_API_REQUEST).await;
             Ok(s)
         }
         Err(err) => {
             let agent = session.as_ref();
             let sid = agent.session_id().to_string();
             let turn_id = agent.current_turn_id().await;
+            let hook_item =
+                emit_hook_started(session, turn_context, ::hooks::POST_API_REQUEST).await;
             let _ = agent.fire_hook(
                 ::hooks::POST_API_REQUEST,
                 ::hooks::HookPayload {
@@ -310,6 +382,7 @@ pub(super) async fn run_sampling_request(
                     ..Default::default()
                 },
             );
+            emit_hook_completed(session, turn_context, hook_item, ::hooks::POST_API_REQUEST).await;
             Err(err.to_string())
         }
     }

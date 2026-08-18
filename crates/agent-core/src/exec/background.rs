@@ -12,16 +12,19 @@
 use std::sync::Arc;
 
 use providers::{PauseControl, ProviderConfig, Usage};
-use tokio::sync::mpsc;
 use types::message::{MessageContent, Role};
 use types::ChatTarget;
 
 use crate::runtime::Session;
-use crate::streaming::{
-    run_multi_turn_stream, ChatOverride, MultiTurnStreamArgs, MultiTurnStreamItem,
-    StreamedAssistantContent,
-};
-use agent_protocol::TurnInput;
+use crate::streaming::{run_multi_turn_stream, ChatOverride, MultiTurnStreamArgs};
+use agent_protocol::{Event, EventMsg, TurnInput};
+
+#[derive(Debug)]
+struct BackgroundCollected {
+    usage: Usage,
+    event_kinds: Vec<&'static str>,
+    terminal_kind: &'static str,
+}
 
 /// 使用统一多轮引擎执行后台任务。
 pub async fn run_background_multi_turn(
@@ -70,7 +73,23 @@ pub(crate) async fn run_background_multi_turn_controlled_with_chat(
             pause.cancel();
         })
     });
-    let (tx, rx) = mpsc::channel(32);
+    let mut live_rx = session.subscribe_live_events();
+    let (event_tx, event_rx) = async_channel::unbounded();
+    let relay = tokio::spawn(async move {
+        loop {
+            let event = match live_rx.recv().await {
+                Ok(event) => event,
+                Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => continue,
+                Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
+            };
+            let terminal = event.msg.is_terminal();
+            if event_tx.send(event).await.is_err() || terminal {
+                break;
+            }
+        }
+    });
+    let (tx, legacy_rx) = tokio::sync::mpsc::channel(32);
+    drop(legacy_rx);
 
     let engine = run_multi_turn_stream(MultiTurnStreamArgs {
         session: Arc::clone(&session),
@@ -83,8 +102,9 @@ pub(crate) async fn run_background_multi_turn_controlled_with_chat(
         tx,
         chat_override,
     });
-    let collector = collect_background_events(rx);
+    let collector = collect_background_events(event_rx, "");
     let ((), collected) = tokio::join!(engine, collector);
+    let _ = relay.await;
 
     if let Some(bridge) = cancellation_bridge {
         bridge.abort();
@@ -95,7 +115,13 @@ pub(crate) async fn run_background_multi_turn_controlled_with_chat(
     {
         anyhow::bail!("agent thread interrupted");
     }
-    let usage = collected?;
+    let collected = collected?;
+    tracing::debug!(
+        event_kinds = ?collected.event_kinds,
+        terminal_kind = collected.terminal_kind,
+        "background turn collected unified events"
+    );
+    let usage = collected.usage;
     let output = latest_assistant_text(&session, message_start)
         .await
         .filter(|text| !text.is_empty())
@@ -104,31 +130,90 @@ pub(crate) async fn run_background_multi_turn_controlled_with_chat(
 }
 
 async fn collect_background_events(
-    mut rx: mpsc::Receiver<anyhow::Result<MultiTurnStreamItem>>,
-) -> anyhow::Result<Usage> {
+    rx: async_channel::Receiver<Event>,
+    turn_id: &str,
+) -> anyhow::Result<BackgroundCollected> {
     let mut usage = Usage::default();
+    let mut selected_turn = (!turn_id.is_empty()).then(|| turn_id.to_string());
+    let mut event_kinds = Vec::new();
     let mut stream_error = None;
-    while let Some(item) = rx.recv().await {
-        match item? {
-            MultiTurnStreamItem::Assistant(StreamedAssistantContent::FinalUsage(value)) => {
-                usage = value;
+    while let Ok(event) = rx.recv().await {
+        if selected_turn.is_none() && matches!(event.msg, EventMsg::TurnStarted(_)) {
+            selected_turn = Some(event.id.clone());
+        }
+        if selected_turn.as_deref() != Some(event.id.as_str()) {
+            continue;
+        }
+        match event.msg {
+            EventMsg::ItemStarted(_) => event_kinds.push("item_started"),
+            EventMsg::ItemCompleted(_) => event_kinds.push("item_completed"),
+            EventMsg::TokenCount(tokens) => {
+                // Context-occupancy snapshots also use TokenCount but carry no requests.
+                // Only provider aggregate usage contributes to background billing totals.
+                if tokens.request_count > 0 {
+                    usage.input_tokens = u32::try_from(tokens.input_tokens).unwrap_or(u32::MAX);
+                    usage.output_tokens = u32::try_from(tokens.output_tokens).unwrap_or(u32::MAX);
+                    usage.cache_read_tokens =
+                        u32::try_from(tokens.cache_read_tokens).unwrap_or(u32::MAX);
+                    usage.cache_write_tokens =
+                        u32::try_from(tokens.cache_write_tokens).unwrap_or(u32::MAX);
+                    usage.reasoning_tokens =
+                        u32::try_from(tokens.reasoning_tokens).unwrap_or(u32::MAX);
+                    usage.request_count = u32::try_from(tokens.request_count).unwrap_or(u32::MAX);
+                }
             }
-            MultiTurnStreamItem::Error(message) => stream_error = Some(message),
-            MultiTurnStreamItem::Done => break,
-            MultiTurnStreamItem::Assistant(_)
-            | MultiTurnStreamItem::ToolStarted { .. }
-            | MultiTurnStreamItem::ToolResult { .. }
-            | MultiTurnStreamItem::MemoryUpdate { .. }
-            | MultiTurnStreamItem::ContextUsage(_)
-            | MultiTurnStreamItem::RunStarted { .. }
-            | MultiTurnStreamItem::Activity { .. }
-            | MultiTurnStreamItem::RunFinished { .. } => {}
+            EventMsg::Error(error) | EventMsg::StreamError(error) => {
+                stream_error = Some(error.message)
+            }
+            EventMsg::TurnComplete(complete) => {
+                if let Some(error) = complete.error {
+                    anyhow::bail!(error.message);
+                }
+                if let Some(error) = stream_error {
+                    anyhow::bail!(error);
+                }
+                return Ok(BackgroundCollected {
+                    usage,
+                    event_kinds,
+                    terminal_kind: "turn_complete",
+                });
+            }
+            EventMsg::TurnAborted(event) => {
+                anyhow::bail!("background turn aborted: {:?}", event.reason);
+            }
+            EventMsg::Warning(_)
+            | EventMsg::TurnStarted(_)
+            | EventMsg::AgentMessageContentDelta(_)
+            | EventMsg::PlanDelta(_)
+            | EventMsg::ReasoningContentDelta(_)
+            | EventMsg::ExecCommandOutputDelta(_)
+            | EventMsg::PatchApplyUpdated(_)
+            | EventMsg::ExecApprovalRequest(_)
+            | EventMsg::ApplyPatchApprovalRequest(_)
+            | EventMsg::RequestPermissions(_)
+            | EventMsg::RequestUserInput(_)
+            | EventMsg::ElicitationRequest(_)
+            | EventMsg::DynamicToolCallRequest(_)
+            | EventMsg::DynamicToolCallResponse(_)
+            | EventMsg::McpToolCallBegin(_)
+            | EventMsg::McpToolCallEnd(_)
+            | EventMsg::HookStarted(_)
+            | EventMsg::HookCompleted(_)
+            | EventMsg::SubAgentActivity(_)
+            | EventMsg::ContextCompacted(_)
+            | EventMsg::LegacyUserMessage(_)
+            | EventMsg::LegacyAgentMessage(_)
+            | EventMsg::LegacyReasoning(_)
+            | EventMsg::LegacyMcpToolCallEnd(_)
+            | EventMsg::LegacyPatchApplyEnd(_)
+            | EventMsg::LegacyContextCompacted(_)
+            | EventMsg::LegacySubAgentActivity(_)
+            | EventMsg::ThreadSettingsApplied(_)
+            | EventMsg::ThreadRolledBack(_)
+            | EventMsg::ShutdownComplete => {}
         }
     }
-    if let Some(error) = stream_error {
-        anyhow::bail!(error);
-    }
-    Ok(usage)
+    anyhow::bail!("background event stream closed before terminal event")
 }
 
 async fn latest_assistant_text(session: &Arc<Session>, message_start: usize) -> Option<String> {
@@ -150,6 +235,10 @@ async fn latest_assistant_text(session: &Arc<Session>, message_start: usize) -> 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use agent_protocol::{
+        ErrorEvent, Event, EventMsg, ItemEvent, TokenCountEvent, TurnCompleteEvent,
+    };
+    use agent_protocol::{ToolItem, ToolStatus, TurnItem};
 
     fn pending_chat() -> ChatOverride {
         Arc::new(move |_messages, _tools, _config| {
@@ -160,38 +249,112 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn collector_returns_error_even_when_done_follows() {
-        let (tx, rx) = mpsc::channel(4);
-        tx.send(Ok(MultiTurnStreamItem::Error("blocked".into())))
+    async fn background_collector_observes_tool_and_terminal_events() {
+        let (tx, rx) = async_channel::unbounded();
+        let item = TurnItem::CommandExecution(ToolItem {
+            id: "call-1".into(),
+            name: "terminal".into(),
+            arguments: serde_json::json!({"command": "pwd"}),
+            output: None,
+            status: ToolStatus::InProgress,
+        });
+        for msg in [
+            EventMsg::ItemStarted(ItemEvent {
+                turn_id: "turn-1".into(),
+                item: item.clone(),
+            }),
+            EventMsg::ItemCompleted(ItemEvent {
+                turn_id: "turn-1".into(),
+                item,
+            }),
+            EventMsg::TurnComplete(TurnCompleteEvent {
+                turn_id: "turn-1".into(),
+                last_agent_message: Some("done".into()),
+                error: None,
+            }),
+        ] {
+            tx.send(Event {
+                id: "turn-1".into(),
+                msg,
+            })
             .await
             .unwrap();
-        tx.send(Ok(MultiTurnStreamItem::Done)).await.unwrap();
+        }
+        drop(tx);
+        let result = collect_background_events(rx, "turn-1").await.unwrap();
+        assert!(result.event_kinds.contains(&"item_started"));
+        assert!(result.event_kinds.contains(&"item_completed"));
+        assert_eq!(result.terminal_kind, "turn_complete");
+    }
+
+    #[tokio::test]
+    async fn collector_returns_error_even_when_done_follows() {
+        let (tx, rx) = async_channel::unbounded();
+        let error = ErrorEvent {
+            message: "blocked".into(),
+            error_type: "internal".into(),
+        };
+        tx.send(Event {
+            id: "turn-1".into(),
+            msg: EventMsg::Error(error.clone()),
+        })
+        .await
+        .unwrap();
+        tx.send(Event {
+            id: "turn-1".into(),
+            msg: EventMsg::TurnComplete(TurnCompleteEvent {
+                turn_id: "turn-1".into(),
+                last_agent_message: None,
+                error: Some(error),
+            }),
+        })
+        .await
+        .unwrap();
         drop(tx);
 
         assert_eq!(
-            collect_background_events(rx).await.unwrap_err().to_string(),
+            collect_background_events(rx, "turn-1")
+                .await
+                .unwrap_err()
+                .to_string(),
             "blocked"
         );
     }
 
     #[tokio::test]
     async fn collector_uses_final_aggregate_usage() {
-        let (tx, rx) = mpsc::channel(4);
-        tx.send(Ok(MultiTurnStreamItem::Assistant(
-            StreamedAssistantContent::FinalUsage(Usage {
+        let (tx, rx) = async_channel::unbounded();
+        tx.send(Event {
+            id: "turn-1".into(),
+            msg: EventMsg::TokenCount(TokenCountEvent {
+                turn_id: Some("turn-1".into()),
                 input_tokens: 12,
                 output_tokens: 3,
-                ..Usage::default()
+                total_tokens: 15,
+                cache_read_tokens: 4,
+                cache_write_tokens: 2,
+                reasoning_tokens: 1,
+                request_count: 2,
             }),
-        )))
+        })
         .await
         .unwrap();
-        tx.send(Ok(MultiTurnStreamItem::Done)).await.unwrap();
+        tx.send(Event {
+            id: "turn-1".into(),
+            msg: EventMsg::TurnComplete(TurnCompleteEvent {
+                turn_id: "turn-1".into(),
+                last_agent_message: Some("done".into()),
+                error: None,
+            }),
+        })
+        .await
+        .unwrap();
         drop(tx);
 
-        let usage = collect_background_events(rx).await.unwrap();
+        let usage = collect_background_events(rx, "turn-1").await.unwrap().usage;
         assert_eq!(usage.input_tokens, 12);
         assert_eq!(usage.output_tokens, 3);
+        assert_eq!(usage.cache_read_tokens, 4);
     }
 
     #[tokio::test]
