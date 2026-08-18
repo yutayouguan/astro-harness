@@ -62,6 +62,16 @@ pub struct MultiTurnStreamArgs {
 /// 取消/暂停时清理 abort handle 并以 usage + Done 收尾。
 /// `hitl_gate` 非空时，confirm/clarify/危险命令在同回合 park，不结束 run。
 pub async fn run_multi_turn_stream(args: MultiTurnStreamArgs) {
+    let (session, session_id, sub_id, installed) = install_multi_turn_task(args).await;
+    if installed {
+        session.wait_for_task(&sub_id).await;
+    }
+    tracing::info!(session_id = %session_id, turn_id = %sub_id, "turn finished");
+}
+
+async fn install_multi_turn_task(
+    args: MultiTurnStreamArgs,
+) -> (Arc<Session>, String, String, bool) {
     let MultiTurnStreamArgs {
         session,
         targets,
@@ -90,14 +100,17 @@ pub async fn run_multi_turn_stream(args: MultiTurnStreamArgs) {
         chat_override,
     });
     tracing::info!(session_id = %session_id, turn_id = %sub_id, "turn started");
-    if let Err(error) = session.spawn_task(turn_context, input, task).await {
-        let _ = tx
-            .send(Ok(MultiTurnStreamItem::Error(error.to_string())))
-            .await;
-        let _ = tx.send(Ok(MultiTurnStreamItem::Done)).await;
-    }
-    session.wait_for_task(&sub_id).await;
-    tracing::info!(session_id = %session_id, turn_id = %sub_id, "turn finished");
+    let installed = match session.spawn_task(turn_context, input, task).await {
+        Ok(()) => true,
+        Err(error) => {
+            let _ = tx
+                .send(Ok(MultiTurnStreamItem::Error(error.to_string())))
+                .await;
+            let _ = tx.send(Ok(MultiTurnStreamItem::Done)).await;
+            false
+        }
+    };
+    (session, session_id, sub_id, installed)
 }
 
 /// 测试入口：以自定义 chat 函数替代 dispatch，驱动多轮工具循环。
@@ -923,21 +936,21 @@ pub(crate) async fn run_turn(args: RunTurnArgs, cancellation_token: Cancellation
     .await;
 }
 
-/// 在后台 task 启动 [`run_multi_turn_stream`]，并返回可消费的 [`MultiTurnStream`]。
+/// 先完成 Session task 安装，再返回可消费的 [`MultiTurnStream`]。
 ///
 /// channel 容量为 32；消费者 drop 后发送方通过 [`emit`] 返回 `false` 自然退出。
-pub fn stream_multi_turn(
+pub async fn stream_multi_turn(
     session: Arc<Session>,
     targets: Vec<ChatTarget>,
     base_config: ProviderConfig,
     input: Vec<TurnInput>,
     pause: Arc<PauseControl>,
 ) -> MultiTurnStream {
-    stream_multi_turn_with_hitl(session, targets, base_config, input, pause, None)
+    stream_multi_turn_with_hitl(session, targets, base_config, input, pause, None).await
 }
 
 /// 带 HITL 闸门的多轮流。
-pub fn stream_multi_turn_with_hitl(
+pub async fn stream_multi_turn_with_hitl(
     session: Arc<Session>,
     targets: Vec<ChatTarget>,
     base_config: ProviderConfig,
@@ -946,20 +959,24 @@ pub fn stream_multi_turn_with_hitl(
     hitl_gate: Option<Arc<HitlGate>>,
 ) -> MultiTurnStream {
     let (tx, rx) = mpsc::channel(32);
-    tokio::spawn(async move {
-        run_multi_turn_stream(MultiTurnStreamArgs {
-            session,
-            targets,
-            base_config,
-            input,
-            system_prompt: None,
-            pause,
-            hitl_gate,
-            tx,
-            chat_override: None,
-        })
-        .await;
-    });
+    let (session, session_id, sub_id, installed) = install_multi_turn_task(MultiTurnStreamArgs {
+        session,
+        targets,
+        base_config,
+        input,
+        system_prompt: None,
+        pause,
+        hitl_gate,
+        tx,
+        chat_override: None,
+    })
+    .await;
+    if installed {
+        tokio::spawn(async move {
+            session.wait_for_task(&sub_id).await;
+            tracing::info!(session_id = %session_id, turn_id = %sub_id, "turn finished");
+        });
+    }
     Box::pin(futures::stream::unfold(rx, |mut rx| async move {
         rx.recv().await.map(|item| (item, rx))
     }))

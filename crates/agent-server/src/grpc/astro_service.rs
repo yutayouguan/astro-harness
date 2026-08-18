@@ -481,7 +481,29 @@ impl AstroServiceImpl {
         Some(registration)
     }
 
-    #[cfg(test)]
+    async fn launch_current_pause_generation_with<F, Fut, T>(
+        &self,
+        session_id: &str,
+        registration: &PauseRegistration,
+        launch: F,
+    ) -> Option<T>
+    where
+        F: FnOnce() -> Fut,
+        Fut: Future<Output = T>,
+    {
+        let _admission = registration.operation.lock().await;
+        let is_current = self
+            .pause_controls
+            .read()
+            .await
+            .get(session_id)
+            .is_some_and(|current| Arc::ptr_eq(&current.control, &registration.control));
+        if !is_current || registration.control.is_cancelled() {
+            return None;
+        }
+        Some(launch().await)
+    }
+
     async fn cleanup_pause_generation(
         &self,
         session_id: &str,
@@ -1194,6 +1216,86 @@ impl AstroService for AstroServiceImpl {
             return Ok(Response::new(Box::pin(ReceiverStream::new(rx))));
         };
         let pause = Arc::clone(&registration.control);
+        let (temperature, additional_params) = (session.temperature(), session.additional_params());
+        let config = ProviderConfig {
+            model: if model.is_empty() {
+                providers::dispatch::default_model(&provider_name)
+            } else {
+                model.clone()
+            },
+            api_key: {
+                let from_req = api_key.trim().to_string();
+                if !from_req.is_empty() {
+                    from_req
+                } else {
+                    providers::read_env_api_key(&provider_name).unwrap_or_default()
+                }
+            },
+            base_url: {
+                let from_req = base_url.trim().to_string();
+                if from_req.is_empty() {
+                    None
+                } else {
+                    Some(from_req)
+                }
+            },
+            temperature,
+            thinking_enabled,
+            reasoning_effort: reasoning_effort.clone(),
+            additional_params,
+            max_tokens: if chat_max_output_tokens > 0 {
+                chat_max_output_tokens
+            } else {
+                8192
+            },
+            ..ProviderConfig::default()
+        };
+        let mut chat_targets = vec![types::ChatTarget {
+            provider_id: String::new(),
+            backend_id: provider_name.clone(),
+            model: config.model.clone(),
+            api_key: config.api_key.clone(),
+            base_url: config.base_url.clone().unwrap_or_default(),
+        }];
+        for fb in chat_fallbacks {
+            chat_targets.push(types::ChatTarget {
+                provider_id: fb.provider_id,
+                backend_id: fb.provider,
+                model: fb.model,
+                api_key: fb.api_key,
+                base_url: fb.base_url,
+            });
+        }
+        session.set_chat_targets(chat_targets.clone());
+        let launch_session = Arc::clone(&session);
+        let launch_gate = Arc::clone(&hitl_gate);
+        let Some(mut stream) = self
+            .launch_current_pause_generation_with(&session_id, &registration, move || async move {
+                stream_multi_turn_with_hitl(
+                    launch_session,
+                    chat_targets,
+                    config,
+                    vec![TurnInput {
+                        content,
+                        image_data_urls,
+                    }],
+                    pause,
+                    Some(launch_gate),
+                )
+                .await
+            })
+            .await
+        else {
+            self.cleanup_pause_generation(&session_id, &registration)
+                .await;
+            let (tx, rx) = tokio::sync::mpsc::channel::<Result<ChatEvent, Status>>(1);
+            let _ = tx
+                .send(Ok(ChatEvent {
+                    payload: Some(proto::chat_event::Payload::Done(true)),
+                }))
+                .await;
+            return Ok(Response::new(Box::pin(ReceiverStream::new(rx))));
+        };
         let registration_for_cleanup = registration.clone();
         let pause_controls = self.pause_controls.clone();
         let generation_operations = self.generation_operations.clone();
@@ -1221,82 +1323,8 @@ impl AstroService for AstroServiceImpl {
         });
 
         tokio::spawn(async move {
-            let (temperature, additional_params) = {
-                let agent = session.as_ref();
-                (agent.temperature(), agent.additional_params())
-            };
-
-            let config = ProviderConfig {
-                model: if model.is_empty() {
-                    providers::dispatch::default_model(&provider_name)
-                } else {
-                    model.clone()
-                },
-                api_key: {
-                    let from_req = api_key.trim().to_string();
-                    if !from_req.is_empty() {
-                        from_req
-                    } else {
-                        providers::read_env_api_key(&provider_name).unwrap_or_default()
-                    }
-                },
-                base_url: {
-                    let from_req = base_url.trim().to_string();
-                    if from_req.is_empty() {
-                        None
-                    } else {
-                        Some(from_req)
-                    }
-                },
-                temperature,
-                thinking_enabled,
-                reasoning_effort: reasoning_effort.clone(),
-                additional_params,
-                // 优先用当前模型元数据的 max_output_tokens；未知(0)时回退 8192。
-                // 默认 4096 对会写文件的 agent 偏低，单次写大文件时 tool-call 参数
-                // JSON 易被截断（EOF 解析失败）。
-                max_tokens: if chat_max_output_tokens > 0 {
-                    chat_max_output_tokens
-                } else {
-                    8192
-                },
-                ..ProviderConfig::default()
-            };
-
-            // primary（ChatRequest 字段）+ chat_fallbacks → Vec<ChatTarget>
-            let mut chat_targets = vec![types::ChatTarget {
-                provider_id: String::new(),
-                backend_id: provider_name.clone(),
-                model: config.model.clone(),
-                api_key: config.api_key.clone(),
-                base_url: config.base_url.clone().unwrap_or_default(),
-            }];
-            for fb in chat_fallbacks {
-                chat_targets.push(types::ChatTarget {
-                    provider_id: fb.provider_id,
-                    backend_id: fb.provider,
-                    model: fb.model,
-                    api_key: fb.api_key,
-                    base_url: fb.base_url,
-                });
-            }
-            {
-                session.set_chat_targets(chat_targets.clone());
-            }
-
             let session_for_review = session.clone();
             let agent_id_for_events = { session.agent_id().to_string() };
-            let mut stream = stream_multi_turn_with_hitl(
-                session,
-                chat_targets,
-                config,
-                vec![TurnInput {
-                    content,
-                    image_data_urls,
-                }],
-                pause,
-                Some(hitl_gate),
-            );
             let mut run_succeeded = false;
             while let Some(item) = stream.next().await {
                 match item {
@@ -1899,7 +1927,7 @@ impl AstroService for AstroServiceImpl {
 mod tests {
     use super::*;
 
-    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
     use agent::streaming::{run_multi_turn_stream_with_chat_fn, ChatOverride};
     use providers::CompletionStream;
@@ -2381,6 +2409,73 @@ mod tests {
         assert!(
             !new_turn.is_finished(),
             "the completed old cancel must not abort the newly admitted turn"
+        );
+        session
+            .abort_all_tasks(TurnAbortReason::Replaced)
+            .await
+            .unwrap();
+        new_turn.await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn stale_launcher_cannot_replace_a_newly_installed_generation() {
+        let dir = TempDir::new().unwrap();
+        let service = Arc::new(AstroServiceImpl::new(dir.path().to_path_buf()));
+        let session_id = "stale-launcher-generation";
+        let session = service.get_session(session_id).await.unwrap();
+        let (old_ui_tx, _old_ui_rx) = tokio::sync::mpsc::unbounded_channel();
+        let old_registration = service
+            .admit_pause_generation(session_id, &session, HitlGate::new(session_id), old_ui_tx)
+            .await
+            .unwrap();
+        let old_ready = Arc::new(tokio::sync::Barrier::new(2));
+        let release_old = Arc::new(tokio::sync::Barrier::new(2));
+        let old_touched_session = Arc::new(AtomicBool::new(false));
+        let old_launcher = {
+            let service = Arc::clone(&service);
+            let old_ready = Arc::clone(&old_ready);
+            let release_old = Arc::clone(&release_old);
+            let old_touched_session = Arc::clone(&old_touched_session);
+            tokio::spawn(async move {
+                old_ready.wait().await;
+                release_old.wait().await;
+                service
+                    .launch_current_pause_generation_with(
+                        session_id,
+                        &old_registration,
+                        move || async move {
+                            old_touched_session.store(true, Ordering::SeqCst);
+                        },
+                    )
+                    .await
+            })
+        };
+        old_ready.wait().await;
+
+        service
+            .cancel_current_pause_generation(session_id)
+            .await
+            .unwrap()
+            .unwrap();
+        let (new_ui_tx, _new_ui_rx) = tokio::sync::mpsc::unbounded_channel();
+        let new_registration = service
+            .admit_pause_generation(session_id, &session, HitlGate::new(session_id), new_ui_tx)
+            .await
+            .unwrap();
+        let (new_turn, _new_rx) = service
+            .launch_current_pause_generation_with(session_id, &new_registration, {
+                let session = Arc::clone(&session);
+                move || async move { spawn_pending_turn(session).await }
+            })
+            .await
+            .expect("the current generation must install its task");
+
+        release_old.wait().await;
+        assert!(old_launcher.await.unwrap().is_none());
+        assert!(!old_touched_session.load(Ordering::SeqCst));
+        assert!(
+            !new_turn.is_finished(),
+            "the stale launcher must not replace or abort the new task"
         );
         session
             .abort_all_tasks(TurnAbortReason::Replaced)

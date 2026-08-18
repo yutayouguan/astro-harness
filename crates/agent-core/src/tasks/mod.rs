@@ -196,8 +196,39 @@ impl Session {
         input: Vec<TurnInput>,
         task: T,
     ) -> anyhow::Result<()> {
+        self.spawn_task_inner(turn_context, input, task, async {})
+            .await
+    }
+
+    #[cfg(test)]
+    async fn spawn_task_with_install_hook<T, F>(
+        self: &Arc<Self>,
+        turn_context: Arc<TurnContext>,
+        input: Vec<TurnInput>,
+        task: T,
+        install_hook: F,
+    ) -> anyhow::Result<()>
+    where
+        T: SessionTask,
+        F: Future<Output = ()>,
+    {
+        self.spawn_task_inner(turn_context, input, task, install_hook)
+            .await
+    }
+
+    async fn spawn_task_inner<T, F>(
+        self: &Arc<Self>,
+        turn_context: Arc<TurnContext>,
+        input: Vec<TurnInput>,
+        task: T,
+        install_hook: F,
+    ) -> anyhow::Result<()>
+    where
+        T: SessionTask,
+        F: Future<Output = ()>,
+    {
         let _admission = self.task_admission.lock().await;
-        if let Err(error) = self.abort_all_tasks(TurnAbortReason::Replaced).await {
+        if let Err(error) = self.abort_all_tasks_inner(TurnAbortReason::Replaced).await {
             let Some(previous_turn_id) = self.current_turn_id().await else {
                 return Err(error);
             };
@@ -254,6 +285,7 @@ impl Session {
             .await;
         if installed_result.is_ok() {
             self.cancel_signal().reset();
+            install_hook.await;
             self.bind_turn_context(turn_context).await;
             installed.notify_one();
         } else {
@@ -331,6 +363,14 @@ impl Session {
 
     /// Cooperatively abort the active task and wait for its lifecycle to finish.
     pub async fn abort_all_tasks(self: &Arc<Self>, reason: TurnAbortReason) -> anyhow::Result<()> {
+        let _admission = self.task_admission.lock().await;
+        self.abort_all_tasks_inner(reason).await
+    }
+
+    async fn abort_all_tasks_inner(
+        self: &Arc<Self>,
+        reason: TurnAbortReason,
+    ) -> anyhow::Result<()> {
         let running = {
             let mut active_turn = self.active_turn.lock().await;
             let running = active_turn.as_mut().and_then(|turn| turn.task.as_mut());
@@ -599,6 +639,92 @@ mod tests {
             .await
             .unwrap();
         assert!(session.active_turn.lock().await.is_none());
+    }
+
+    #[tokio::test]
+    async fn external_abort_cannot_observe_task_between_install_and_bind() {
+        let dir = tempfile::tempdir().unwrap();
+        let session = Arc::new(
+            Session::with_session_id(
+                crate::runtime::Config::with_defaults(dir.path().to_path_buf()),
+                "install-bind-abort-race".into(),
+            )
+            .unwrap(),
+        );
+        let context = session
+            .create_turn_context("turn-install-bind-race".into())
+            .await;
+        let install_entered = Arc::new(tokio::sync::Barrier::new(2));
+        let release_install = Arc::new(tokio::sync::Barrier::new(2));
+        let run_finished = Arc::new(AtomicBool::new(false));
+        let hook_started = Arc::new(Notify::new());
+        let hook_release = Arc::new(Notify::new());
+        let hook_saw_run_finished = Arc::new(AtomicBool::new(false));
+        let spawn = {
+            let session = Arc::clone(&session);
+            let install_entered = Arc::clone(&install_entered);
+            let release_install = Arc::clone(&release_install);
+            let run_finished = Arc::clone(&run_finished);
+            let hook_started = Arc::clone(&hook_started);
+            let hook_release = Arc::clone(&hook_release);
+            let hook_saw_run_finished = Arc::clone(&hook_saw_run_finished);
+            tokio::spawn(async move {
+                session
+                    .spawn_task_with_install_hook(
+                        context,
+                        Vec::new(),
+                        OrderedAbortTask {
+                            run_finished,
+                            hook_started,
+                            hook_release,
+                            hook_saw_run_finished,
+                        },
+                        async move {
+                            install_entered.wait().await;
+                            release_install.wait().await;
+                        },
+                    )
+                    .await
+            })
+        };
+        install_entered.wait().await;
+
+        let abort = {
+            let session = Arc::clone(&session);
+            tokio::spawn(async move { session.abort_all_tasks(TurnAbortReason::Interrupted).await })
+        };
+        tokio::task::yield_now().await;
+        assert!(
+            !abort.is_finished(),
+            "external abort must wait for install + current_turn bind to commit"
+        );
+
+        release_install.wait().await;
+        spawn.await.unwrap().unwrap();
+        hook_started.notified().await;
+        assert_eq!(
+            session.current_turn_id().await.as_deref(),
+            Some("turn-install-bind-race"),
+            "abort must observe the exact committed current_turn"
+        );
+        let completion_wait = {
+            let session = Arc::clone(&session);
+            tokio::spawn(async move {
+                session.wait_for_task("turn-install-bind-race").await;
+            })
+        };
+        tokio::task::yield_now().await;
+        assert!(
+            !completion_wait.is_finished(),
+            "completion wait must remain pending for the installed turn lifecycle"
+        );
+        hook_release.notify_one();
+        abort.await.unwrap().unwrap();
+        completion_wait.await.unwrap();
+        assert!(session.active_turn.lock().await.is_none());
+        assert!(session.current_turn_id().await.is_none());
+        assert!(run_finished.load(Ordering::SeqCst));
+        assert!(hook_saw_run_finished.load(Ordering::SeqCst));
     }
 
     struct OrderedAbortTask {
