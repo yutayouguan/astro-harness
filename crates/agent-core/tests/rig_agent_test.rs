@@ -40,7 +40,7 @@ async fn test_multi_turn_max_depth() {
     let dir = TempDir::new().unwrap();
     let mut config = test_config(&dir);
     config.multi_turn = 2;
-    let mut agent = AgentLoop::new(config).unwrap();
+    let agent = AgentLoop::new(config).unwrap();
     agent.begin_user_turn().await;
     agent.increment_tool_round().await.unwrap();
     agent.increment_tool_round().await.unwrap();
@@ -127,7 +127,7 @@ async fn test_agent_builder_from_runtime_config() {
 #[tokio::test]
 async fn test_prompt_hooks_on_run_turn() {
     let dir = TempDir::new().unwrap();
-    let (mut agent, _) = AgentBuilder::new(dir.path())
+    let (agent, _) = AgentBuilder::new(dir.path())
         .preamble("你是测试助手")
         .build()
         .unwrap();
@@ -178,7 +178,7 @@ async fn pre_tool_call_block_via_hook_bus() {
 #[tokio::test]
 async fn pre_llm_call_inject_context_via_hook_bus() {
     let dir = TempDir::new().unwrap();
-    let mut agent = AgentLoop::new(test_config(&dir)).unwrap();
+    let agent = AgentLoop::new(test_config(&dir)).unwrap();
     let bus = agent.hook_bus();
     bus.register(hooks::PRE_LLM_CALL, |_| {
         hooks::HookOutcome::InjectContext("tz=Asia/Shanghai".into())
@@ -284,7 +284,7 @@ async fn test_agent_loop_memory_injection() {
         .unwrap();
     assert!(wrote.text().contains("已写盘（live）") || wrote.text().contains("已存在"));
 
-    let mut agent = AgentLoop::new(test_config(&dir)).unwrap();
+    let agent = AgentLoop::new(test_config(&dir)).unwrap();
     let result = agent.start_or_steer_turn("你好", "task-1").await.unwrap();
     match result {
         agent::TurnResult::Continue { system_prompt, .. } => {

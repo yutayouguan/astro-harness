@@ -56,7 +56,7 @@ pub(super) async fn emit_context_usage(
     history: &[types::message::Message],
     tools: &[serde_json::Value],
 ) {
-    let mut agent = session.lock().await;
+    let agent = session.lock().await;
     let layers = agent.system_prompt_layer_breakdown().await;
     let recommend_compact_ratio = agent.compression_config().recommend_compact_ratio;
     let snap = crate::prompt::context_usage::build_snapshot(
@@ -122,7 +122,8 @@ pub(super) async fn post_tool_maintenance(
     let names: Vec<&str> = calls.iter().map(|c| c.name.as_str()).collect();
     let stop_after = {
         let agent = session.lock().await;
-        agent.tool_registry().any_stop_after(&names)
+        let registry = agent.tool_registry();
+        registry.any_stop_after(&names)
     };
     if stop_after {
         tracing::info!(

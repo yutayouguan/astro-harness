@@ -64,7 +64,8 @@ impl AgentLoop {
         step_context: Option<&super::StepContext>,
     ) -> anyhow::Result<types::ToolOutput> {
         let agent_id = self.memory.agent_id.clone();
-        self.tool_registry.reload_enabled_from_disk(Some(&agent_id));
+        self.tool_registry_mut()
+            .reload_enabled_from_disk(Some(&agent_id));
 
         let is_mcp_broker = matches!(name, mcp::MCP_RESOURCES_TOOL | mcp::MCP_PROMPTS_TOOL);
 
@@ -74,7 +75,7 @@ impl AgentLoop {
             self.attach_mcp_tools().await;
         }
 
-        let allowed = self.tool_registry.is_tool_allowed(name)
+        let allowed = self.tool_registry().is_tool_allowed(name)
             && step_context.is_none_or(|step_context| step_context.advertises_tool(name));
 
         // 在构造 ToolContext 之前，从 Hub 解析 peer（lock → resolve → release）
@@ -82,24 +83,27 @@ impl AgentLoop {
         let mcp_handler: Option<DynToolHandler> = if is_mcp_tool_name(name) {
             let (peer, native, timeout_secs) = self.mcp_hub.lock().await.resolve_tool_peer(name)?;
             let qname = name.to_string();
-            Some(Box::new(move |_name: &str, args: &serde_json::Value| {
-                let peer = peer.clone();
-                let qname = qname.clone();
-                let native = native.clone();
-                let a = args.clone();
-                Box::pin(async move {
-                    call_tool_with_peer(&peer, &qname, &native, &a, timeout_secs).await
-                })
-                    as std::pin::Pin<
-                        Box<
-                            dyn std::future::Future<Output = anyhow::Result<types::ToolOutput>>
-                                + Send,
-                        >,
-                    >
-            }))
+            Some(std::sync::Arc::new(
+                move |_name: &str, args: &serde_json::Value| {
+                    let peer = peer.clone();
+                    let qname = qname.clone();
+                    let native = native.clone();
+                    let a = args.clone();
+                    Box::pin(async move {
+                        call_tool_with_peer(&peer, &qname, &native, &a, timeout_secs).await
+                    })
+                        as std::pin::Pin<
+                            Box<
+                                dyn std::future::Future<Output = anyhow::Result<types::ToolOutput>>
+                                    + Send,
+                            >,
+                        >
+                },
+            ))
         } else {
             None
         };
+        let dynamic_handler = mcp_handler.or_else(|| self.tool_registry().dynamic_handler(name));
 
         let workspace_dir = self.resolve_workspace_dir();
         skills::set_workspace_override(&workspace_dir);
@@ -134,10 +138,7 @@ impl AgentLoop {
             workspace_write_grant,
             network_grant,
         };
-        let dynamic_handler = mcp_handler
-            .as_ref()
-            .or_else(|| self.tool_registry.dynamic_handler(name));
-        dispatch_tool(|_| allowed, &mut ctx, name, args, dynamic_handler).await
+        dispatch_tool(|_| allowed, &mut ctx, name, args, dynamic_handler.as_ref()).await
     }
 
     /// 同步执行工具调用：multi-thread runtime 使用 `block_in_place`；current-thread
@@ -277,9 +278,13 @@ impl AgentLoop {
             return Err(ToolCallError::Cancelled);
         }
         // Soft-alias：模型把 Skill 名当工具名时，改写成 skills(skill_id=…)
+        let (has_tool, skills_allowed) = {
+            let registry = self.tool_registry();
+            (registry.has_tool(name), registry.is_tool_allowed("skills"))
+        };
         let (exec_name, exec_args) = if !is_mcp_tool_name(name)
-            && !self.tool_registry.has_tool(name)
-            && self.tool_registry.is_tool_allowed("skills")
+            && !has_tool
+            && skills_allowed
             && skills::list_installed()
                 .into_iter()
                 .any(|s| s.name == name && s.enabled)
@@ -359,7 +364,7 @@ impl AgentLoop {
     }
 
     /// `skills` 工具成功加载后：按 frontmatter `astro_tools` additive 放宽 toolset。
-    fn activate_skill_toolsets_from_args(&mut self, args: &serde_json::Value) {
+    fn activate_skill_toolsets_from_args(&self, args: &serde_json::Value) {
         let Some(skill_id) = args
             .get("skill_id")
             .and_then(|v| v.as_str())
@@ -382,7 +387,8 @@ impl AgentLoop {
                 toolsets = ?astro_tools,
                 "skill activated toolsets (additive)"
             );
-            self.tool_registry.activate_skill_toolsets(&astro_tools);
+            self.tool_registry_mut()
+                .activate_skill_toolsets(&astro_tools);
         }
     }
 

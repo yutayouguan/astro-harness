@@ -498,8 +498,8 @@ async fn preflight_mcp_tool_approval(
 ) -> Option<PermissionPreflight> {
     let approval = {
         let agent = session.lock().await;
-        agent
-            .tool_registry()
+        let registry = agent.tool_registry();
+        registry
             .get(&call.name)
             .and_then(|entry| entry.mcp_approval.clone())
     };

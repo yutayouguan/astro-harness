@@ -1,6 +1,6 @@
 # Agent 生命周期详细设计
 
-> 版本：v2.11
+> 版本：v2.12
 > 日期：2026-08-18
 > 状态：实施基线  
 > 上游参考：[OpenAI Codex](https://github.com/openai/codex) `632e35ce8d5dec43b75dbf99f9e6fa52bed47c3d`  
@@ -519,6 +519,8 @@ schema 和 RPC 字段改名都必须提供 migration 或 serde alias。
   - [x] 将 `session_messages` 真实迁入 `SessionState.history`，并收口记录、压缩回写与测试夹具。
   - [x] 将消息记录、provider history、tool context maintenance 与 pending input 记录
     收窄为 `&Session`，并用 `Arc<Session>` 编译期契约锁定。
+  - [x] 将 `ToolRegistry` 与 MCP instructions 内锁化，并把回合准备、Step 快照与 system prompt
+    API 收窄为 `&Session`。
   - [ ] 将 `SessionTask`、streaming、background 和 server 签名迁移为 `Arc<Session>`。
 
 v2.3 落地说明：foreground、background、Cron 与 SubAgent 不再先调用
@@ -591,6 +593,16 @@ v2.11 shared receiver 批次：将 `record_assistant_message*`、`record_user_me
 `conversation_write_lock_serializes_persistence_and_history` 固定该契约。本批不提前双包装
 background handle：background、streaming 与 `SessionTask` 必须在下一批共享同一个
 `Arc<Session>`，避免 `Arc<Mutex<Session>>` 与 `Arc<Session>` 并存造成身份分裂。
+
+v2.12 ToolRegistry/MCP 内锁化批次：`Session.tool_registry` 与 MCP instructions 快照改由
+`RwLock` 持有；动态工具 handler 提升为拥有所有权的 `Arc` 快照，工具执行前从注册表克隆，
+因此 registry guard 不跨工具、MCP 或 provider I/O。`begin_user_turn`、
+`reload_tools_and_mcp`、`prepare_turn`、`capture_step_context`、system prompt 构建与分层统计
+统一收窄为 `&Session`，`session_state_api_is_callable_through_arc` 锁定共享调用契约，
+`dynamic_handler_snapshot_survives_registry_reload` 锁定热加载后在途 handler 仍可完成。本批仍不
+替换外层 `Arc<Mutex<Session>>`：工具执行会把 `&mut MemoryManager` 借入 `ToolContext`，这是
+下一批必须先内锁化的最后一类核心可变借用；完成后才能一次性迁移 SessionTask、streaming、
+background 与 server handle，避免双重 session 身份。
 
 ### Phase C：工具运行时
 

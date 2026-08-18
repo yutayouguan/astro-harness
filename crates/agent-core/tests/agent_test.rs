@@ -72,7 +72,7 @@ async fn test_agent_loop_memory_injection() {
     assert!(wrote.text().contains("已写盘（live）") || wrote.text().contains("已存在"));
 
     // 工具写入只改 live；新 AgentLoop（新 session）open/reload 会把盘上内容固化进 snapshot
-    let mut agent = AgentLoop::new(test_config(&dir)).unwrap();
+    let agent = AgentLoop::new(test_config(&dir)).unwrap();
     let result = agent.start_or_steer_turn("你好", "task-1").await.unwrap();
     match result {
         TurnResult::Continue { system_prompt, .. } => {
@@ -88,7 +88,7 @@ async fn test_agent_loop_fts_recall_after_long_session() {
     let dir = TempDir::new().unwrap();
     let mut config = test_config(&dir);
     config.recent_turns = 2;
-    let mut agent = AgentLoop::new(config).unwrap();
+    let agent = AgentLoop::new(config).unwrap();
 
     agent.start_or_steer_turn("消息一", "task-1").await.unwrap();
     agent.record_assistant_message("回复一").await.unwrap();
@@ -115,8 +115,8 @@ async fn test_agent_loop_fts_recall_after_long_session() {
 async fn test_memory_tools_registered() {
     let dir = TempDir::new().unwrap();
     let agent = AgentLoop::new(test_config(&dir)).unwrap();
-    let names: Vec<_> = agent
-        .tool_registry()
+    let registry = agent.tool_registry();
+    let names: Vec<_> = registry
         .available_tools()
         .iter()
         .map(|t| t.name.as_str())
@@ -210,7 +210,7 @@ async fn test_set_fallback_models_keeps_primary() {
 #[tokio::test]
 async fn run_turn_clears_prior_cancel_signal() {
     let dir = TempDir::new().unwrap();
-    let mut agent = AgentLoop::new(test_config(&dir)).unwrap();
+    let agent = AgentLoop::new(test_config(&dir)).unwrap();
     agent.cancel_signal().cancel();
     let result = agent
         .start_or_steer_turn("重试", "task-retry")
@@ -223,7 +223,7 @@ async fn run_turn_clears_prior_cancel_signal() {
 #[tokio::test]
 async fn system_prompt_includes_interaction_mode_guidance() {
     let dir = TempDir::new().unwrap();
-    let mut agent = AgentLoop::new(test_config(&dir)).unwrap();
+    let agent = AgentLoop::new(test_config(&dir)).unwrap();
 
     agent
         .set_interaction_mode(tools::InteractionMode::Plan)

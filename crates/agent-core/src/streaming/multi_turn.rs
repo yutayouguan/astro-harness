@@ -292,7 +292,7 @@ pub(crate) async fn run_turn(args: RunTurnArgs, cancellation_token: Cancellation
         pre_llm_maintenance(&session).await;
 
         let step_context = {
-            let mut agent = session.lock().await;
+            let agent = session.lock().await;
             agent.capture_step_context().await
         };
         let step_context = match step_context {
@@ -755,8 +755,9 @@ pub(crate) async fn run_turn(args: RunTurnArgs, cancellation_token: Cancellation
         let force_serial = {
             let agent = session.lock().await;
             let names: Vec<&str> = calls.iter().map(|c| c.name.as_str()).collect();
-            agent.tool_registry().any_needs_confirmation(&names)
-                || agent.tool_registry().any_exclusive_access(&names)
+            let registry = agent.tool_registry();
+            registry.any_needs_confirmation(&names)
+                || registry.any_exclusive_access(&names)
                 || calls
                     .iter()
                     .any(|c| tool_may_require_permission(&c.name, &c.arguments))

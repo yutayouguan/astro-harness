@@ -11,7 +11,7 @@
 //! - 取消信号（`CancelSignal`）在工具调用前后均会检查，已取消则立即中断
 
 use std::path::PathBuf;
-use std::sync::Arc;
+use std::sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 use tokio::sync::Mutex as TokioMutex;
 use uuid::Uuid;
@@ -123,12 +123,12 @@ pub struct Session {
     // ── 会话级服务与注册表 ──────────────────────────
     pub(crate) memory: MemoryManager,
     pub(crate) services: SessionServices,
-    pub(crate) tool_registry: ToolRegistry,
+    pub(crate) tool_registry: RwLock<ToolRegistry>,
     pub(crate) mcp_hub: Arc<TokioMutex<McpHub>>,
     /// Per-thread MCP overlay from a Codex custom agent file.
     pub(crate) mcp_config_override: Vec<mcp::McpServerConfig>,
     /// 最近一次成功 reload 后的已连接 Server instructions 快照。
-    pub(crate) mcp_instructions: Vec<mcp::McpServerInstructions>,
+    pub(crate) mcp_instructions: RwLock<Vec<mcp::McpServerInstructions>>,
 
     // ── 注入的依赖 ─────────────────────────────────────────
     /// 进程内插件钩子总线（Block / Modify / Inject）。
@@ -223,10 +223,10 @@ impl Session {
             conversation_write_lock: TokioMutex::new(()),
             memory,
             services: SessionServices::new(sessions, compression_policy),
-            tool_registry,
+            tool_registry: RwLock::new(tool_registry),
             mcp_hub,
             mcp_config_override: Vec::new(),
-            mcp_instructions: Vec::new(),
+            mcp_instructions: RwLock::new(Vec::new()),
             hook_bus: Arc::new(::hooks::PluginHookBus::new()),
             execution,
             cancel: CancelSignal::new(),
@@ -649,13 +649,17 @@ impl Session {
     }
 
     /// 内置与 MCP 工具的注册表只读引用。
-    pub fn tool_registry(&self) -> &ToolRegistry {
-        &self.tool_registry
+    pub fn tool_registry(&self) -> RwLockReadGuard<'_, ToolRegistry> {
+        self.tool_registry
+            .read()
+            .expect("tool registry lock poisoned")
     }
 
     /// 工具注册表可变引用。
-    pub fn tool_registry_mut(&mut self) -> &mut ToolRegistry {
-        &mut self.tool_registry
+    pub fn tool_registry_mut(&self) -> RwLockWriteGuard<'_, ToolRegistry> {
+        self.tool_registry
+            .write()
+            .expect("tool registry lock poisoned")
     }
 
     /// MCP Hub 共享句柄，用于外部查询或调试。
@@ -672,16 +676,17 @@ impl Session {
     }
 
     /// 从磁盘重载当前 Agent 的工具启用开关（gate 配置）。
-    pub fn reload_tool_gates(&mut self) {
+    pub fn reload_tool_gates(&self) {
         let agent_id = self.memory.agent_id.clone();
-        self.tool_registry.reload_enabled_from_disk(Some(&agent_id));
+        self.tool_registry_mut()
+            .reload_enabled_from_disk(Some(&agent_id));
     }
 
     /// 从磁盘重载 MCP 配置，并将启用工具挂接到 [`ToolRegistry`]。
     ///
     /// optional Server 失败仅降级；required Server 失败向调用方传播。
     /// 无论是否存在 required 失败，已成功连接的工具都会同步到 `MCP_TOOLSET`。
-    pub async fn reload_mcp(&mut self) -> anyhow::Result<()> {
+    pub async fn reload_mcp(&self) -> anyhow::Result<()> {
         let agent_id = self.memory.agent_id.clone();
         let execution_root = self
             .project_root
@@ -741,7 +746,10 @@ impl Session {
             let instructions = hub.server_instructions();
             (reload_result, instructions)
         };
-        self.mcp_instructions = mcp_instructions;
+        *self
+            .mcp_instructions
+            .write()
+            .expect("MCP instructions lock poisoned") = mcp_instructions;
         self.attach_mcp_tools().await;
         if let Err(error) = &reload_result {
             tracing::warn!(%error, "reload MCP failed");
@@ -750,7 +758,7 @@ impl Session {
     }
 
     /// 清除指定 MCP Server 的退避状态并立即执行一次真实 Hub 重连。
-    pub async fn reconnect_mcp_server(&mut self, server_id: &str) -> anyhow::Result<()> {
+    pub async fn reconnect_mcp_server(&self, server_id: &str) -> anyhow::Result<()> {
         {
             let mut hub = self.mcp_hub.lock().await;
             hub.force_reconnect(server_id)?;
@@ -759,7 +767,7 @@ impl Session {
     }
 
     /// 同时重载工具 gate 与 MCP 配置，通常在每轮用户输入开始时调用。
-    pub async fn reload_tools_and_mcp(&mut self) -> anyhow::Result<()> {
+    pub async fn reload_tools_and_mcp(&self) -> anyhow::Result<()> {
         self.reload_tool_gates();
         self.reload_mcp().await
     }
@@ -767,12 +775,13 @@ impl Session {
     /// 将 MCP Hub 中已启用的工具条目同步到 [`ToolRegistry`]。
     ///
     /// 先卸载旧 `MCP_TOOLSET` 再逐条注册，保证与磁盘 enablement 一致。
-    async fn attach_mcp_tools(&mut self) {
+    async fn attach_mcp_tools(&self) {
         let (entries, broker_capabilities) = {
             let mut hub = self.mcp_hub.lock().await;
             (hub.enabled_tool_entries(), hub.broker_capabilities())
         };
-        self.tool_registry.unregister_toolset(MCP_TOOLSET);
+        let mut tool_registry = self.tool_registry_mut();
+        tool_registry.unregister_toolset(MCP_TOOLSET);
         for spec in entries {
             let mcp_approval = types::McpToolApproval {
                 server_id: spec.server_id,
@@ -781,7 +790,7 @@ impl Session {
                 annotations: spec.annotations,
             };
             let needs_confirmation = mcp_approval.needs_review();
-            self.tool_registry.register(ToolEntry {
+            tool_registry.register(ToolEntry {
                 name: spec.qualified_name,
                 toolset: MCP_TOOLSET.to_string(),
                 description: spec.description,
@@ -797,7 +806,7 @@ impl Session {
             let server_ids = broker_capabilities.resource_servers.clone();
             let server_summary = server_ids.join(", ");
             let hub = Arc::clone(&self.mcp_hub);
-            self.tool_registry.register_dynamic(
+            tool_registry.register_dynamic(
                 ToolEntry {
                     name: mcp::MCP_RESOURCES_TOOL.to_string(),
                     toolset: MCP_TOOLSET.to_string(),
@@ -820,7 +829,7 @@ impl Session {
                     icon: "database",
                     ..ToolEntry::lifecycle_defaults()
                 },
-                Box::new(move |_name, args| {
+                Arc::new(move |_name, args| {
                     let hub = Arc::clone(&hub);
                     let args = args.clone();
                     Box::pin(async move { mcp::call_resource_broker(&hub, &args).await })
@@ -831,7 +840,7 @@ impl Session {
             let server_ids = broker_capabilities.prompt_servers.clone();
             let server_summary = server_ids.join(", ");
             let hub = Arc::clone(&self.mcp_hub);
-            self.tool_registry.register_dynamic(
+            tool_registry.register_dynamic(
                 ToolEntry {
                     name: mcp::MCP_PROMPTS_TOOL.to_string(),
                     toolset: MCP_TOOLSET.to_string(),
@@ -854,7 +863,7 @@ impl Session {
                     icon: "message-square-text",
                     ..ToolEntry::lifecycle_defaults()
                 },
-                Box::new(move |_name, args| {
+                Arc::new(move |_name, args| {
                     let hub = Arc::clone(&hub);
                     let args = args.clone();
                     Box::pin(async move { mcp::call_prompt_broker(&hub, &args).await })
@@ -908,10 +917,8 @@ impl Session {
 
     /// 按当前交互模式过滤后的工具 schema（OpenAI tools 数组）。
     pub async fn schemas_for_api(&self) -> Vec<serde_json::Value> {
-        tools::filter_schemas(
-            self.state.lock().await.interaction_mode,
-            self.tool_registry.schemas_for_api(),
-        )
+        let interaction_mode = self.state.lock().await.interaction_mode;
+        tools::filter_schemas(interaction_mode, self.tool_registry().schemas_for_api())
     }
 
     /// Append conversation items to the session-owned history.
@@ -1106,6 +1113,18 @@ mod tests {
                     image_data_urls: Vec::new(),
                 }),
             );
+            drop(session.begin_user_turn());
+            drop(session.reload_tools_and_mcp());
+            drop(session.build_system_prompt());
+            drop(session.system_prompt_layer_chars());
+            drop(session.system_prompt_layer_breakdown());
+            let input = vec![crate::tasks::TurnInput::UserInput {
+                content: "prepare".to_string(),
+                image_data_urls: Vec::new(),
+            }];
+            drop(session.prepare_turn(&input));
+            drop(session.capture_step_context());
+            drop(session.start_or_steer_turn("turn", "submission"));
         }
 
         let _ = assert_arc_api;

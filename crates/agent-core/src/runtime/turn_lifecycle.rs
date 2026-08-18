@@ -13,7 +13,7 @@ impl Session {
     /// 开始新的用户消息处理：重置 `tool_rounds` 与 `turn_wrote_disk`。
     ///
     /// 若上一轮工具次数达到 `learning.complex_task_tool_threshold`，为本轮挂起学习 nudge。
-    pub async fn begin_user_turn(&mut self) {
+    pub async fn begin_user_turn(&self) {
         let compression = memory::load_compression_config(&self.memory.base_dir);
         {
             let mut state = self.state.lock().await;
@@ -67,7 +67,7 @@ impl Session {
     /// 返回 [`TurnResult::Continue`] 供上层发起 LLM 请求；预算耗尽或已取消时提前返回。
     /// 注意：本方法不直接调用 LLM，仅完成 Agent 侧准备工作。
     pub async fn start_or_steer_turn(
-        &mut self,
+        &self,
         user_message: &str,
         submission_id: &str,
     ) -> anyhow::Result<TurnResult> {
@@ -79,7 +79,7 @@ impl Session {
     ///
     /// FTS 仍只索引文本；附图写入 `messages.media_json` 并进入内存 `SessionState.history`。
     pub async fn start_or_steer_turn_with_images(
-        &mut self,
+        &self,
         user_message: &str,
         image_data_urls: &[String],
         _submission_id: &str,
@@ -99,7 +99,7 @@ impl Session {
     /// Production paths call this from [`crate::tasks::RegularTask`]. The
     /// public `start_or_steer_turn*` methods remain compatibility adapters for
     /// callers that have not yet moved input ownership into `SessionTask`.
-    pub(crate) async fn prepare_turn(&mut self, input: &[TurnInput]) -> anyhow::Result<TurnResult> {
+    pub(crate) async fn prepare_turn(&self, input: &[TurnInput]) -> anyhow::Result<TurnResult> {
         anyhow::ensure!(!input.is_empty(), "regular turn requires initial input");
         let user_message = input
             .iter()
@@ -249,7 +249,7 @@ impl Session {
     /// Compatibility adapter for callers not yet migrated to Codex naming.
     #[deprecated(note = "use start_or_steer_turn")]
     pub async fn run_turn(
-        &mut self,
+        &self,
         user_message: &str,
         submission_id: &str,
     ) -> anyhow::Result<TurnResult> {
@@ -259,7 +259,7 @@ impl Session {
     /// Compatibility adapter for callers not yet migrated to Codex naming.
     #[deprecated(note = "use start_or_steer_turn_with_images")]
     pub async fn run_turn_with_images(
-        &mut self,
+        &self,
         user_message: &str,
         image_data_urls: &[String],
         submission_id: &str,
@@ -272,7 +272,7 @@ impl Session {
     ///
     /// 返回当前 sampling request 的不可变 [`StepContext`]。foreground、background
     /// 与 Agent Thread 路径共享同一捕获入口。
-    pub(crate) async fn capture_step_context(&mut self) -> anyhow::Result<Arc<StepContext>> {
+    pub(crate) async fn capture_step_context(&self) -> anyhow::Result<Arc<StepContext>> {
         self.reload_tools_and_mcp().await?;
         let mut history = self.provider_history().await;
         if let Some(ctx) = self.take_inject_context().await {
@@ -313,7 +313,7 @@ mod tests {
     async fn capture_step_context_reuses_the_turn_snapshot() {
         let dir = TempDir::new().unwrap();
         let config = crate::runtime::Config::with_defaults(dir.path().to_path_buf());
-        let mut session = Session::with_session_id(config, "step-context-test".into()).unwrap();
+        let session = Session::with_session_id(config, "step-context-test".into()).unwrap();
         session
             .set_interaction_mode(types::InteractionMode::Plan)
             .await;

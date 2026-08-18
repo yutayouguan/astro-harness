@@ -8,6 +8,7 @@
 use std::collections::HashMap;
 use std::future::Future;
 use std::pin::Pin;
+use std::sync::Arc;
 
 use crate::context::ToolContext;
 
@@ -46,7 +47,7 @@ inventory::collect!(BuiltinToolRegistrar);
 ///
 /// 与 `BuiltinToolHandler` 不同，这不需要 `ToolContext` — MCP 工具通过
 /// 捕获的 `Arc<McpHub>` 自行完成调用。
-pub type DynToolHandler = Box<
+pub type DynToolHandler = Arc<
     dyn Fn(
             &str,
             &serde_json::Value,
@@ -84,9 +85,9 @@ impl ToolRegistry {
         self.dynamic_handlers.insert(name, handler);
     }
 
-    /// 获取动态 handler 的引用（供 `dispatch_tool` 使用）。
-    pub fn dynamic_handler(&self, name: &str) -> Option<&DynToolHandler> {
-        self.dynamic_handlers.get(name)
+    /// 获取动态 handler 的共享快照（供释放注册表锁后执行）。
+    pub fn dynamic_handler(&self, name: &str) -> Option<DynToolHandler> {
+        self.dynamic_handlers.get(name).cloned()
     }
 
     /// 用外部加载的 toolset 启用映射覆盖当前状态（通常来自 Tauri 或磁盘同步）。
@@ -403,5 +404,30 @@ mod tests {
         assert!(reg.get("persona_create").unwrap().exclusive_access);
         assert!(reg.get("context_search").is_some());
         assert!(reg.get("pin_context").unwrap().exclusive_access);
+    }
+
+    #[tokio::test]
+    async fn dynamic_handler_snapshot_survives_registry_reload() {
+        let mut reg = ToolRegistry::new();
+        reg.register_dynamic(
+            ToolEntry {
+                name: "dynamic".into(),
+                toolset: "mcp".into(),
+                description: "dynamic test tool".into(),
+                schema: serde_json::json!({"type": "object", "properties": {}}),
+                check_fn: None,
+                icon: "plug",
+                ..ToolEntry::lifecycle_defaults()
+            },
+            std::sync::Arc::new(|_name, _args| {
+                Box::pin(async { Ok(types::ToolOutput::from("snapshot")) })
+            }),
+        );
+
+        let handler = reg.dynamic_handler("dynamic").expect("handler snapshot");
+        reg.unregister_toolset("mcp");
+
+        let output = handler("dynamic", &serde_json::json!({})).await.unwrap();
+        assert_eq!(output.text(), "snapshot");
     }
 }
