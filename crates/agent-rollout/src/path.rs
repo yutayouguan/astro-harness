@@ -65,7 +65,7 @@ fn encode_thread_id(thread_id: &str) -> String {
 
     let mut encoded = String::with_capacity(thread_id.len());
     for byte in thread_id.bytes() {
-        if byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_') {
+        if is_safe_literal(byte) {
             encoded.push(char::from(byte));
         } else {
             encoded.push('%');
@@ -93,7 +93,7 @@ fn is_encoded_thread_id(encoded: &str) -> bool {
     let mut index = 0;
     while index < bytes.len() {
         match bytes[index] {
-            byte if byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_') => index += 1,
+            byte if is_safe_literal(byte) => index += 1,
             b'%' if index + 2 < bytes.len()
                 && is_upper_hex(bytes[index + 1])
                 && is_upper_hex(bytes[index + 2]) =>
@@ -104,6 +104,10 @@ fn is_encoded_thread_id(encoded: &str) -> bool {
         }
     }
     true
+}
+
+fn is_safe_literal(byte: u8) -> bool {
+    byte.is_ascii_digit() || byte.is_ascii_lowercase() || matches!(byte, b'-' | b'_')
 }
 
 fn is_upper_hex(byte: u8) -> bool {
@@ -162,5 +166,30 @@ mod tests {
         std::fs::write(&path, b"{}").unwrap();
 
         assert_eq!(find_rollout(temp.path(), "1").unwrap(), None);
+    }
+
+    #[test]
+    fn case_distinct_thread_ids_have_case_insensitive_distinct_paths_and_lookups() {
+        let temp = TempDir::new().unwrap();
+        let now = chrono::Utc.with_ymd_and_hms(2026, 8, 18, 9, 0, 0).unwrap();
+        let uppercase = new_rollout_path(temp.path(), "Thread-A", now);
+        let lowercase = new_rollout_path(temp.path(), "thread-a", now);
+
+        assert_ne!(
+            uppercase.to_string_lossy().to_ascii_lowercase(),
+            lowercase.to_string_lossy().to_ascii_lowercase()
+        );
+        std::fs::create_dir_all(uppercase.parent().unwrap()).unwrap();
+        std::fs::write(&uppercase, b"{}").unwrap();
+        std::fs::write(&lowercase, b"{}").unwrap();
+
+        assert_eq!(
+            find_rollout(temp.path(), "Thread-A").unwrap(),
+            Some(uppercase)
+        );
+        assert_eq!(
+            find_rollout(temp.path(), "thread-a").unwrap(),
+            Some(lowercase)
+        );
     }
 }

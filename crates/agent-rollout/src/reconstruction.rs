@@ -17,18 +17,27 @@ pub async fn read_rollout(path: &Path) -> io::Result<Vec<RolloutItem>> {
 
 pub async fn read_rollout_with_diagnostics(path: &Path) -> io::Result<RolloutRead> {
     let file = tokio::fs::File::open(path).await?;
-    let mut lines = BufReader::new(file).lines();
+    let mut reader = BufReader::new(file);
     let mut items = Vec::new();
     let mut parse_errors = 0;
+    let mut record = Vec::new();
 
-    while let Some(line) = lines.next_line().await? {
-        if line.trim().is_empty() {
+    while reader.read_until(b'\n', &mut record).await? != 0 {
+        if record.last() == Some(&b'\n') {
+            record.pop();
+        }
+        if record.last() == Some(&b'\r') {
+            record.pop();
+        }
+        if record.iter().all(u8::is_ascii_whitespace) {
+            record.clear();
             continue;
         }
-        match serde_json::from_str(&line) {
+        match serde_json::from_slice(&record) {
             Ok(item) => items.push(item),
             Err(_) => parse_errors += 1,
         }
+        record.clear();
     }
 
     Ok(RolloutRead {
@@ -77,6 +86,19 @@ mod tests {
             ),
         )
         .unwrap();
+
+        let rollout = read_rollout_with_diagnostics(&path).await.unwrap();
+        assert_eq!(rollout.parse_errors, 1);
+        assert_eq!(rollout.items.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn retains_valid_prefix_before_a_truncated_utf8_final_record() {
+        let temp = TempDir::new().unwrap();
+        let path = temp.path().join("rollout.jsonl");
+        let mut bytes = b"{\"type\":\"session_meta\",\"data\":{\"index\":1}}\n".to_vec();
+        bytes.extend_from_slice(&[0xe4, 0xb8]);
+        std::fs::write(&path, bytes).unwrap();
 
         let rollout = read_rollout_with_diagnostics(&path).await.unwrap();
         assert_eq!(rollout.parse_errors, 1);
