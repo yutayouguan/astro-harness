@@ -171,7 +171,10 @@ mod tests {
             turn_context.acknowledge_mailbox_inputs(&["old-generation-message".into()]),
             0
         );
-        assert_eq!(turn_context.acknowledge_mailbox_inputs(&[first.clone()]), 1);
+        assert_eq!(
+            turn_context.acknowledge_mailbox_inputs(std::slice::from_ref(&first)),
+            1
+        );
         assert_eq!(turn_context.acknowledge_mailbox_inputs(&[first]), 0);
         assert!(!turn_context.close_if_no_pending_input());
         assert_eq!(turn_context.acknowledge_mailbox_inputs(&[second]), 1);
