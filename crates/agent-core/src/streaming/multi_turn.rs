@@ -439,11 +439,12 @@ async fn forward_unified_to_legacy(
     turn_id: String,
     tx: mpsc::Sender<anyhow::Result<MultiTurnStreamItem>>,
 ) {
+    let event_turn_id = crate::runtime::event_identity::event_turn_id(&turn_id);
     loop {
         let Ok(event) = rx.recv().await else {
             return;
         };
-        if event.id != turn_id {
+        if event.id != event_turn_id {
             continue;
         }
         let terminal = event.msg.is_terminal();

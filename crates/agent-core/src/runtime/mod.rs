@@ -39,6 +39,7 @@ mod astro_thread;
 pub mod budget;
 pub(crate) mod compression_state;
 mod context_maintenance;
+pub(crate) mod event_identity;
 pub(crate) mod model_ctx;
 mod recording;
 mod session;
@@ -300,12 +301,11 @@ impl Session {
     }
 
     /// Persist one unified event according to rollout policy before making it live.
-    pub async fn send_event(&self, turn_id: &str, msg: EventMsg) {
-        let event = Event {
-            id: turn_id.to_string(),
-            msg,
-        };
-        self.send_event_raw_with_persistence(event, true).await;
+    pub async fn send_event(&self, turn_id: &str, mut msg: EventMsg) {
+        let event_id = event_identity::normalize_event_msg(&mut msg, turn_id);
+        let event = Event { id: event_id, msg };
+        self.send_event_raw_with_persistence_and_hook(event, turn_id, true, async {})
+            .await;
     }
 
     /// Register a lossless in-process receiver for one exact turn.
@@ -328,13 +328,15 @@ impl Session {
     }
 
     pub(crate) async fn send_event_raw_with_persistence(&self, event: Event, persist: bool) {
-        self.send_event_raw_with_persistence_and_hook(event, persist, async {})
+        let route_id = event.id.clone();
+        self.send_event_raw_with_persistence_and_hook(event, &route_id, persist, async {})
             .await;
     }
 
     async fn send_event_raw_with_persistence_and_hook<F>(
         &self,
         event: Event,
+        route_id: &str,
         persist: bool,
         after_persist: F,
     ) where
@@ -353,7 +355,7 @@ impl Session {
             }
         }
         after_persist.await;
-        self.deliver_event_raw_inner(event).await;
+        self.deliver_event_raw_inner(event, route_id).await;
     }
 
     #[cfg(test)]
@@ -365,20 +367,22 @@ impl Session {
     ) where
         F: std::future::Future<Output = ()>,
     {
+        let mut msg = msg;
         let event = Event {
-            id: turn_id.to_string(),
+            id: event_identity::normalize_event_msg(&mut msg, turn_id),
             msg,
         };
-        self.send_event_raw_with_persistence_and_hook(event, true, after_persist)
+        self.send_event_raw_with_persistence_and_hook(event, turn_id, true, after_persist)
             .await;
     }
 
     pub(crate) async fn deliver_event_raw(&self, event: Event) {
+        let route_id = event.id.clone();
         let _dispatch = self.event_dispatch.lock().await;
-        self.deliver_event_raw_inner(event).await;
+        self.deliver_event_raw_inner(event, &route_id).await;
     }
 
-    async fn deliver_event_raw_inner(&self, event: Event) {
+    async fn deliver_event_raw_inner(&self, event: Event, route_id: &str) {
         if let Some(bindings) = self.runtime_io.get() {
             match &event.msg {
                 EventMsg::TurnStarted(started) => {
@@ -399,9 +403,9 @@ impl Session {
         let exact_turn_senders = {
             let mut taps = self.turn_event_taps.lock().await;
             if event.msg.is_terminal() {
-                taps.remove(&event.id).unwrap_or_default()
+                taps.remove(route_id).unwrap_or_default()
             } else {
-                taps.get_mut(&event.id)
+                taps.get_mut(route_id)
                     .map(|senders| {
                         senders.retain(|sender| !sender.is_closed());
                         senders.clone()

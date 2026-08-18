@@ -137,7 +137,8 @@ async fn collect_background_events(
     turn_id: &str,
 ) -> anyhow::Result<BackgroundCollected> {
     let mut usage = Usage::default();
-    let mut selected_turn = (!turn_id.is_empty()).then(|| turn_id.to_string());
+    let mut selected_turn =
+        (!turn_id.is_empty()).then(|| crate::runtime::event_identity::event_turn_id(turn_id));
     let mut event_kinds = Vec::new();
     let mut stream_error = None;
     while let Ok(event) = rx.recv().await {

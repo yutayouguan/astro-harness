@@ -9,6 +9,7 @@ use agent_protocol::{
 use providers::Usage;
 
 use super::provider::ProviderStreamer;
+use crate::runtime::event_identity::{event_item_id, event_tool_name, event_turn_id};
 use crate::runtime::usage::{apply_llm_usage_dual_write, LlmUsageWrite};
 use crate::runtime::{Session, TurnContext};
 
@@ -54,22 +55,22 @@ pub(crate) fn tool_turn_item(
     media: Vec<types::MediaAsset>,
     status: ToolStatus,
 ) -> TurnItem {
-    let id = id.into();
-    let name = name.into();
+    let raw_id = id.into();
+    let raw_name = name.into();
     let item = ToolItem {
-        id,
-        name: name.clone(),
+        id: event_item_id(&raw_id),
+        name: event_tool_name(&raw_name),
         arguments,
         output,
         media,
         status,
     };
-    if name == "terminal" || name == "code_exec" {
+    if raw_name == "terminal" || raw_name == "code_exec" {
         TurnItem::CommandExecution(item)
-    } else if name.starts_with("mcp__") {
+    } else if raw_name.starts_with("mcp__") {
         TurnItem::McpToolCall(item)
     } else if matches!(
-        name.as_str(),
+        raw_name.as_str(),
         "spawn_agent"
             | "list_agents"
             | "read_agent"
@@ -98,14 +99,14 @@ fn tool_completed_event(
     status: ToolStatus,
 ) -> EventMsg {
     EventMsg::ItemCompleted(ItemEvent {
-        turn_id: turn_id.to_string(),
+        turn_id: event_turn_id(turn_id),
         item: tool_turn_item(id, name, arguments.clone(), output, media.to_vec(), status),
     })
 }
 
 fn serialized_event_len(turn_id: &str, event: &EventMsg) -> usize {
     let live = Event {
-        id: turn_id.to_string(),
+        id: event_turn_id(turn_id),
         msg: event.clone(),
     };
     let durable = agent_rollout::RolloutItem::EventMsg(event.clone());
@@ -240,12 +241,32 @@ pub(crate) fn bounded_tool_completed_event(
         );
     }
 
-    // The marker-only event should fit for normal provider IDs/tool names. If
-    // it does not, returning it is still safer than reintroducing the original
-    // multi-megabyte result; IDs remain untouched for lifecycle correlation.
-    if serialized_event_len(turn_id, &bounded) > TOOL_COMPLETED_EVENT_MAX_BYTES
-        || preview_source.is_empty()
-    {
+    // Final hard-stop fallback. Event-facing identities are already capped, so
+    // a null-arguments/no-media marker has a small, deterministic upper bound.
+    // The assertion prevents an oversized event from ever reaching dispatch if
+    // that invariant is changed later.
+    if serialized_event_len(turn_id, &bounded) > TOOL_COMPLETED_EVENT_MAX_BYTES {
+        event_arguments = serde_json::Value::Null;
+        stable_media_omitted = stable_media_omitted.saturating_add(stable_media.len());
+        stable_media.clear();
+        bounded = truncated_tool_completed_event(
+            turn_id,
+            id,
+            name,
+            &event_arguments,
+            &stable_media,
+            status,
+            original_serialized_bytes,
+            inline_media_omitted,
+            stable_media_omitted,
+            "",
+        );
+    }
+    assert!(
+        serialized_event_len(turn_id, &bounded) <= TOOL_COMPLETED_EVENT_MAX_BYTES,
+        "minimal completed event exceeded the hard payload cap"
+    );
+    if preview_source.is_empty() {
         return bounded;
     }
 
@@ -605,6 +626,91 @@ mod tests {
         let serialized = serde_json::to_string(&event).unwrap();
         assert!(serialized.contains("event_payload_truncated"));
         assert!(!serialized.contains(&data_url));
+    }
+
+    fn completed_event_with_identity(turn_id: &str, call_id: &str, name: &str) -> EventMsg {
+        bounded_tool_completed_event(
+            turn_id,
+            call_id,
+            name,
+            serde_json::json!({}),
+            Some(serde_json::Value::String("done".into())),
+            Vec::new(),
+            ToolStatus::Completed,
+        )
+    }
+
+    #[test]
+    fn oversized_provider_call_id_cannot_break_completed_event_cap() {
+        let call_id = "provider-call-id".repeat(TOOL_COMPLETED_EVENT_MAX_BYTES / 8);
+        let first = completed_event_with_identity("turn-1", &call_id, "terminal");
+        let second = completed_event_with_identity("turn-1", &call_id, "terminal");
+        assert!(serialized_event_len("turn-1", &first) <= TOOL_COMPLETED_EVENT_MAX_BYTES);
+        assert_eq!(first, second, "bounded correlation id must be stable");
+    }
+
+    #[test]
+    fn oversized_provider_tool_name_cannot_break_completed_event_cap() {
+        let name = "provider-tool-name".repeat(TOOL_COMPLETED_EVENT_MAX_BYTES / 8);
+        let first = completed_event_with_identity("turn-1", "call-1", &name);
+        let second = completed_event_with_identity("turn-1", "call-1", &name);
+        assert!(serialized_event_len("turn-1", &first) <= TOOL_COMPLETED_EVENT_MAX_BYTES);
+        assert_eq!(first, second, "bounded display name must be stable");
+    }
+
+    #[test]
+    fn oversized_turn_id_cannot_break_completed_event_cap() {
+        let turn_id = "provider-turn-id".repeat(TOOL_COMPLETED_EVENT_MAX_BYTES / 8);
+        let first = completed_event_with_identity(&turn_id, "call-1", "terminal");
+        let second = completed_event_with_identity(&turn_id, "call-1", "terminal");
+        assert!(serialized_event_len(&turn_id, &first) <= TOOL_COMPLETED_EVENT_MAX_BYTES);
+        assert_eq!(first, second, "bounded turn correlation id must be stable");
+    }
+
+    #[test]
+    fn normal_provider_identity_remains_exact() {
+        let event = completed_event_with_identity("turn-1", "provider-call-1", "mcp__server__tool");
+        let EventMsg::ItemCompleted(ItemEvent {
+            turn_id,
+            item: TurnItem::McpToolCall(tool),
+        }) = event
+        else {
+            panic!("expected MCP completed item");
+        };
+
+        assert_eq!(turn_id, "turn-1");
+        assert_eq!(tool.id, "provider-call-1");
+        assert_eq!(tool.name, "mcp__server__tool");
+    }
+
+    #[tokio::test]
+    async fn oversized_turn_exact_tap_receives_normalized_terminal_without_hanging() {
+        let (_dir, session, _context) = session().await;
+        let raw_turn_id = "raw-turn-routing".repeat(TOOL_COMPLETED_EVENT_MAX_BYTES / 8);
+        let rx = session.subscribe_turn_events(&raw_turn_id).await;
+        session
+            .send_event(
+                &raw_turn_id,
+                EventMsg::TurnComplete(agent_protocol::TurnCompleteEvent {
+                    turn_id: raw_turn_id.clone(),
+                    last_agent_message: Some("done".into()),
+                    error: None,
+                }),
+            )
+            .await;
+
+        let event = tokio::time::timeout(std::time::Duration::from_secs(1), rx.recv())
+            .await
+            .expect("exact turn tap timed out")
+            .expect("exact turn tap closed");
+        assert!(event.msg.is_terminal());
+        assert_ne!(event.id, raw_turn_id);
+        assert!(serde_json::to_vec(&event).unwrap().len() <= TOOL_COMPLETED_EVENT_MAX_BYTES);
+        assert!(matches!(
+            event.msg,
+            EventMsg::TurnComplete(agent_protocol::TurnCompleteEvent { turn_id, .. })
+                if turn_id == event.id
+        ));
     }
 
     #[tokio::test]
