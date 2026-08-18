@@ -11,6 +11,14 @@ use tracing::{debug, warn};
 use crate::outcome::HookPayload;
 
 const DEFAULT_TIMEOUT: Duration = Duration::from_secs(5);
+const RESERVED_HOOK_ENV: [&str; 6] = [
+    "ASTRO_HOOK_EVENT",
+    "ASTRO_HOOK_SESSION",
+    "ASTRO_HOOK_DETAIL",
+    "ASTRO_HOOK_TURN",
+    "ASTRO_HOOK_TOOL",
+    "ASTRO_HOOK_MESSAGE",
+];
 
 #[derive(Debug, Clone, Default)]
 pub struct ShellHookRunner {
@@ -89,8 +97,9 @@ impl ShellHookRunner {
 }
 
 pub(crate) fn env_from_payload(event: &str, payload: &HookPayload) -> Vec<(String, String)> {
+    let event = crate::event::canonical_hook_event_name(event);
     let mut env = vec![
-        ("ASTRO_HOOK_EVENT".into(), event.into()),
+        ("ASTRO_HOOK_EVENT".into(), event.into_owned()),
         ("ASTRO_HOOK_SESSION".into(), payload.session_id.clone()),
         ("ASTRO_HOOK_DETAIL".into(), payload.detail.clone()),
     ];
@@ -118,6 +127,9 @@ async fn run_shell(cmd: &str, env: &[(String, String)], timeout: Duration) -> an
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::piped());
+    for key in RESERVED_HOOK_ENV {
+        child.env_remove(key);
+    }
     for (k, v) in env {
         child.env(k, v);
     }
@@ -140,8 +152,46 @@ pub fn load_shell_runner(_root: &Path, hooks: HashMap<String, String>) -> ShellH
 
 #[cfg(test)]
 mod tests {
+    use std::ffi::OsString;
+    use std::sync::Mutex;
+
     use super::*;
     use crate::outcome::HookPayload;
+
+    static ENV_LOCK: Mutex<()> = Mutex::new(());
+
+    struct EnvRestore {
+        previous: Vec<(&'static str, Option<OsString>)>,
+    }
+
+    impl EnvRestore {
+        fn preset(entries: &[(&'static str, &'static str)]) -> Self {
+            let previous = entries
+                .iter()
+                .map(|(key, _)| (*key, std::env::var_os(key)))
+                .collect();
+            for (key, value) in entries {
+                std::env::set_var(key, value);
+            }
+            Self { previous }
+        }
+    }
+
+    impl Drop for EnvRestore {
+        fn drop(&mut self) {
+            for (key, value) in self.previous.drain(..) {
+                match value {
+                    Some(value) => std::env::set_var(key, value),
+                    None => std::env::remove_var(key),
+                }
+            }
+        }
+    }
+
+    fn env_value<'a>(env: &'a [(String, String)], key: &str) -> Option<&'a str> {
+        env.iter()
+            .find_map(|(candidate, value)| (candidate == key).then_some(value.as_str()))
+    }
 
     #[test]
     fn legacy_yaml_key_is_stored_under_canonical_name() {
@@ -178,6 +228,91 @@ mod tests {
             Some("true"),
             "the canonical spelling wins deterministically"
         );
+    }
+
+    #[test]
+    fn legacy_env_is_derived_from_canonical_input() {
+        let env = env_from_payload(
+            crate::names::PRE_TOOL_USE,
+            &HookPayload {
+                session_id: "session-1".into(),
+                turn_id: Some("turn-1".into()),
+                detail: "running terminal".into(),
+                prompt: Some("canonical prompt".into()),
+                tool_name: Some("terminal".into()),
+                tool_input: Some(serde_json::json!({"message": "do not infer this"})),
+                ..Default::default()
+            },
+        );
+
+        assert_eq!(
+            env_value(&env, "ASTRO_HOOK_EVENT"),
+            Some(crate::names::PRE_TOOL_USE)
+        );
+        assert_eq!(env_value(&env, "ASTRO_HOOK_SESSION"), Some("session-1"));
+        assert_eq!(env_value(&env, "ASTRO_HOOK_TURN"), Some("turn-1"));
+        assert_eq!(
+            env_value(&env, "ASTRO_HOOK_DETAIL"),
+            Some("running terminal")
+        );
+        assert_eq!(env_value(&env, "ASTRO_HOOK_TOOL"), Some("terminal"));
+        assert_eq!(
+            env_value(&env, "ASTRO_HOOK_MESSAGE"),
+            Some("canonical prompt")
+        );
+    }
+
+    #[test]
+    fn legacy_event_label_is_canonicalized_on_direct_call() {
+        let env = env_from_payload("pre_tool_call", &HookPayload::default());
+
+        assert_eq!(
+            env_value(&env, "ASTRO_HOOK_EVENT"),
+            Some(crate::names::PRE_TOOL_USE)
+        );
+    }
+
+    #[test]
+    fn legacy_message_falls_back_to_last_assistant_message() {
+        let env = env_from_payload(
+            crate::names::STOP,
+            &HookPayload {
+                last_assistant_message: Some("assistant fallback".into()),
+                ..Default::default()
+            },
+        );
+
+        assert_eq!(
+            env_value(&env, "ASTRO_HOOK_MESSAGE"),
+            Some("assistant fallback")
+        );
+    }
+
+    #[test]
+    fn legacy_message_prefers_prompt_over_last_assistant_message() {
+        let env = env_from_payload(
+            crate::names::USER_PROMPT_SUBMIT,
+            &HookPayload {
+                prompt: Some("user prompt".into()),
+                last_assistant_message: Some("assistant message".into()),
+                ..Default::default()
+            },
+        );
+
+        assert_eq!(env_value(&env, "ASTRO_HOOK_MESSAGE"), Some("user prompt"));
+    }
+
+    #[test]
+    fn legacy_message_does_not_infer_text_from_tool_input() {
+        let env = env_from_payload(
+            crate::names::PRE_TOOL_USE,
+            &HookPayload {
+                tool_input: Some(serde_json::json!({"message": "not a prompt"})),
+                ..Default::default()
+            },
+        );
+
+        assert_eq!(env_value(&env, "ASTRO_HOOK_MESSAGE"), None);
     }
 
     #[test]
@@ -225,6 +360,49 @@ mod tests {
             },
         );
         assert!(!env.iter().any(|(k, _)| k == "ASTRO_HOOK_TURN"));
+    }
+
+    #[tokio::test]
+    async fn child_does_not_inherit_reserved_hook_env_for_missing_payload_fields() {
+        let _lock = ENV_LOCK
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let _restore = EnvRestore::preset(&[
+            ("ASTRO_HOOK_EVENT", "parent-event"),
+            ("ASTRO_HOOK_SESSION", "parent-session"),
+            ("ASTRO_HOOK_DETAIL", "parent-detail"),
+            ("ASTRO_HOOK_TURN", "parent-turn"),
+            ("ASTRO_HOOK_TOOL", "parent-tool"),
+            ("ASTRO_HOOK_MESSAGE", "parent-message"),
+            ("HOOK_TEST_PASSTHROUGH", "parent-visible"),
+        ]);
+        let dir = tempfile::tempdir().unwrap();
+        let output = dir.path().join("child-env.txt");
+        let mut env = env_from_payload(
+            crate::names::POST_TOOL_USE,
+            &HookPayload {
+                session_id: "child-session".into(),
+                detail: "child-detail".into(),
+                ..Default::default()
+            },
+        );
+        env.push((
+            "HOOK_TEST_OUTPUT".into(),
+            output.to_string_lossy().into_owned(),
+        ));
+
+        run_shell(
+            r#"printf '%s\n' "$ASTRO_HOOK_EVENT" "$ASTRO_HOOK_SESSION" "$ASTRO_HOOK_DETAIL" "${ASTRO_HOOK_TURN-unset}" "${ASTRO_HOOK_TOOL-unset}" "${ASTRO_HOOK_MESSAGE-unset}" "$HOOK_TEST_PASSTHROUGH" > "$HOOK_TEST_OUTPUT""#,
+            &env,
+            DEFAULT_TIMEOUT,
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(
+            std::fs::read_to_string(output).unwrap(),
+            "PostToolUse\nchild-session\nchild-detail\nunset\nunset\nunset\nparent-visible\n"
+        );
     }
 
     #[tokio::test]

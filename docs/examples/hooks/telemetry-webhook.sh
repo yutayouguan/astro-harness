@@ -2,7 +2,7 @@
 # telemetry-webhook.sh — 将 Astro hook 事件以 JSON 格式 POST 到外部端点。
 #
 # 环境变量（由 Astro 自动注入）：
-#   ASTRO_HOOK_EVENT    — 事件名（如 post_tool_call）
+#   ASTRO_HOOK_EVENT    — canonical 事件名（如 PreGatewayDispatch）
 #   ASTRO_HOOK_SESSION  — 会话 ID
 #   ASTRO_HOOK_TURN     — turn_id（若有）
 #   ASTRO_HOOK_TOOL     — 工具名（若有）
@@ -14,9 +14,9 @@
 #
 # 使用示例（~/.astro/config.yaml）：
 #   hooks:
-#     post_tool_call:   '"$HOME/.astro/hooks/telemetry-webhook.sh"'
-#     post_llm_call:    '"$HOME/.astro/hooks/telemetry-webhook.sh"'
-#     on_session_end:   '"$HOME/.astro/hooks/telemetry-webhook.sh"'
+#     GatewayStartup:     '"$HOME/.astro/hooks/telemetry-webhook.sh"'
+#     PreGatewayDispatch:  '"$HOME/.astro/hooks/telemetry-webhook.sh"'
+#     CommandNewChat:      '"$HOME/.astro/hooks/telemetry-webhook.sh"'
 #
 # 兼容端点：Langfuse HTTP ingestion、OpenTelemetry HTTP/JSON 桥、自建 webhook。
 
@@ -34,7 +34,7 @@ TOOL="${ASTRO_HOOK_TOOL:-}"
 DETAIL="${ASTRO_HOOK_DETAIL:-}"
 TS="$(date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u +%Y-%m-%dT%H:%M:%SZ)"
 
-# 构造 JSON payload（不含 tool_args/tool_result，避免敏感数据外泄）。
+# 构造 JSON payload（不含 tool_input/tool_response，避免敏感数据外泄）。
 PAYLOAD="$(printf '{"event":%s,"session_id":%s,"turn_id":%s,"tool":%s,"detail":%s,"ts":%s}' \
     "$(printf '%s' "$EVENT"   | jq -Rs '.')" \
     "$(printf '%s' "$SESSION" | jq -Rs '.')" \

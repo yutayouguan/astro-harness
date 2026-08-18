@@ -15,7 +15,7 @@ impl<'a> PluginContext<'a> {
         Self { plugin, gateway }
     }
 
-    /// `ctx.register_hook("post_tool_call", callback)`
+    /// `ctx.register_hook("PostToolUse", callback)`
     pub fn register_hook<F>(&self, name: &str, f: F)
     where
         F: Fn(&HookPayload) -> HookOutcome + Send + Sync + 'static,

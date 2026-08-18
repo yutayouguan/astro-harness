@@ -1,7 +1,14 @@
 # 复制到 ~/.astro/config.yaml（可与其它配置合并）
 hooks:
-  post_tool_call: 'mkdir -p "$HOME/.astro/logs" && echo "$(date -Iseconds) tool=$ASTRO_HOOK_TOOL session=$ASTRO_HOOK_SESSION" >> "$HOME/.astro/logs/tool-audit.log"'
-  agent:end: 'true'
+  PreGatewayDispatch: 'mkdir -p "$HOME/.astro/logs" && echo "$(date -Iseconds) event=$ASTRO_HOOK_EVENT session=$ASTRO_HOOK_SESSION" >> "$HOME/.astro/logs/chat-audit.log"'
+  CommandNewChat: 'true'
+  # GatewayStartup: '"$HOME/.astro/hooks/telemetry-webhook.sh"'
+
+# 等价 legacy key（只用于迁移对照，不要与上述 canonical key 重复配置）：
+# post_tool_call -> PostToolUse
+# agent:end / on_session_end -> AgentEnd
+# post_llm_call -> PostLlmCall
+# pre_llm_call -> PreLlmCall
 
 # 委派子任务（delegate）与嵌套深度
 delegation:
@@ -11,8 +18,6 @@ delegation:
   worktree: true              # 在 git 仓库内自动为子任务建独立检出（.worktrees/astro-*）
   orchestrator_enabled: true  # false 时强制所有子任务为 leaf
 
-# 遥测旁路（复制 telemetry-webhook.sh 后启用）
-# hooks:
-#   post_tool_call: '"$HOME/.astro/hooks/telemetry-webhook.sh"'
-#   post_llm_call: '"$HOME/.astro/hooks/telemetry-webhook.sh"'
-#   on_session_end: '"$HOME/.astro/hooks/telemetry-webhook.sh"'
+# 遥测旁路：复制 telemetry-webhook.sh 后，可将上方 PreGatewayDispatch /
+# CommandNewChat 的 command 替换为该脚本，或取消 GatewayStartup 的注释。
+# PostToolUse / PostLlmCall / PreLlmCall 等 AgentLoop 直接事件当前不会自动投递 Shell。

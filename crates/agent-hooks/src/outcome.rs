@@ -71,21 +71,21 @@ pub type HookPayload = HookInput;
 pub enum HookOutcome {
     #[default]
     Continue,
-    /// `pre_tool_call`：阻断工具执行。
+    /// `PreToolUse`：阻断工具执行。
     Block(String),
-    /// `pre_tool_call`：替换参数。
+    /// `PreToolUse`：替换参数。
     Modify(Value),
-    /// `pre_llm_call`：注入本轮附加上下文。
+    /// `PreLlmCall`：注入本轮附加上下文。
     InjectContext(String),
-    /// `pre_gateway_dispatch`：放行。
+    /// `PreGatewayDispatch`：放行。
     Allow,
-    /// `pre_gateway_dispatch`：跳过入队。
+    /// `PreGatewayDispatch`：跳过入队。
     Skip(String),
-    /// `pre_gateway_dispatch`：改写用户消息。
+    /// `PreGatewayDispatch`：改写用户消息。
     Rewrite(String),
     /// transform 类钩子：替换文本。
     ReplaceText(String),
-    /// `pre_verify`：继续本轮并注入提示。
+    /// `Stop`：继续本轮并注入提示。
     KeepGoing(String),
 }
 
