@@ -21,6 +21,9 @@ pub enum WaitOutcome {
 
 pub type WaitAgentResult = WaitOutcome;
 
+#[cfg(test)]
+type BeforeRuntimeInsertHook = Arc<dyn Fn() + Send + Sync>;
+
 #[derive(Clone)]
 pub struct AgentRuntimeHandle {
     pub interrupt: Arc<dyn Fn() + Send + Sync>,
@@ -73,6 +76,9 @@ pub struct AgentControl {
     registry: Arc<AgentRegistry>,
     activity: Arc<ActivityBus>,
     runtimes: Arc<RuntimeHandleRegistry>,
+    runtime_lifecycle: Arc<Mutex<()>>,
+    #[cfg(test)]
+    before_runtime_insert_hook: Arc<Mutex<Option<BeforeRuntimeInsertHook>>>,
 }
 
 impl AgentControl {
@@ -98,6 +104,9 @@ impl AgentControl {
             registry: Arc::new(registry),
             activity: Arc::new(ActivityBus::default()),
             runtimes: Arc::new(RuntimeHandleRegistry::default()),
+            runtime_lifecycle: Arc::new(Mutex::new(())),
+            #[cfg(test)]
+            before_runtime_insert_hook: Arc::new(Mutex::new(None)),
         }))
     }
 
@@ -200,6 +209,12 @@ impl AgentControl {
         thread_id: &str,
         event: RunnerEvent,
     ) -> anyhow::Result<AgentThreadV2> {
+        let terminated = matches!(&event, RunnerEvent::RuntimeTerminated);
+        let _lifecycle = if terminated {
+            Some(self.lock_runtime_lifecycle()?)
+        } else {
+            None
+        };
         let existing = self
             .store
             .get_thread(thread_id)?
@@ -217,7 +232,6 @@ impl AgentControl {
                 existing.canonical_path
             );
         }
-        let terminated = matches!(event, RunnerEvent::RuntimeTerminated);
         let thread = self.store.apply_status_event(thread_id, event)?;
         if terminated {
             self.runtimes.remove(thread_id)?;
@@ -268,6 +282,7 @@ impl AgentControl {
         thread_id: &str,
         handle: AgentRuntimeHandle,
     ) -> anyhow::Result<()> {
+        let _lifecycle = self.lock_runtime_lifecycle()?;
         let path = self
             .registry
             .committed_path_for_thread(thread_id)?
@@ -277,8 +292,32 @@ impl AgentControl {
         if path == AgentPath::root() {
             anyhow::bail!("cannot register a child runtime handle for the root agent");
         }
-        self.require_path(&path, "runtime agent")?;
+        let thread = self.require_path(&path, "runtime agent")?;
+        if thread.status == crate::AgentStatusV2::Shutdown {
+            anyhow::bail!("cannot register a runtime handle for Shutdown agent {thread_id:?}");
+        }
+        #[cfg(test)]
+        if let Some(hook) = self
+            .before_runtime_insert_hook
+            .lock()
+            .map_err(|_| anyhow::anyhow!("runtime insert hook mutex is poisoned"))?
+            .clone()
+        {
+            hook();
+        }
         self.runtimes.register(thread_id, handle)
+    }
+
+    #[cfg(test)]
+    fn set_before_runtime_insert_hook(
+        &self,
+        hook: Option<BeforeRuntimeInsertHook>,
+    ) -> anyhow::Result<()> {
+        *self
+            .before_runtime_insert_hook
+            .lock()
+            .map_err(|_| anyhow::anyhow!("runtime insert hook mutex is poisoned"))? = hook;
+        Ok(())
     }
 
     pub fn runtime_handle(&self, thread_id: &str) -> anyhow::Result<Option<AgentRuntimeHandle>> {
@@ -287,6 +326,12 @@ impl AgentControl {
 
     pub fn remove_runtime(&self, thread_id: &str) -> anyhow::Result<Option<AgentRuntimeHandle>> {
         self.runtimes.remove(thread_id)
+    }
+
+    fn lock_runtime_lifecycle(&self) -> anyhow::Result<MutexGuard<'_, ()>> {
+        self.runtime_lifecycle
+            .lock()
+            .map_err(|_| anyhow::anyhow!("agent runtime lifecycle mutex is poisoned"))
     }
 
     fn require_path(&self, path: &AgentPath, label: &str) -> anyhow::Result<AgentThreadV2> {
@@ -495,6 +540,7 @@ fn check_capacity(
 #[cfg(test)]
 mod tests {
     use std::sync::atomic::AtomicUsize;
+    use std::sync::Barrier;
     use std::time::Duration;
 
     use tempfile::TempDir;
@@ -730,6 +776,46 @@ mod tests {
         assert!(control.resolve_target(&root, "worker").is_err());
         let replacement = control.reserve_spawn(&root, "worker").unwrap();
         assert_ne!(replacement.thread().thread_id, thread_id);
+    }
+
+    #[test]
+    fn validation_failure_rolls_back_durable_reservation_before_releasing_memory() {
+        let dir = TempDir::new().unwrap();
+        let (control, store) = open_control(&dir, "root-thread");
+        let root = crate::AgentPath::root();
+        let reservation = control.reserve_spawn(&root, "worker").unwrap();
+        let thread_id = reservation.thread().thread_id.clone();
+        store.close_edge(&thread_id).unwrap();
+
+        let error = reservation.commit().unwrap_err();
+
+        assert!(error.to_string().contains("durable pending reservation"));
+        assert!(store.get_thread(&thread_id).unwrap().is_none());
+        assert!(store.edge_state(&thread_id).unwrap().is_none());
+        assert!(control.reserve_spawn(&root, "worker").is_ok());
+    }
+
+    #[test]
+    fn validation_and_rollback_failures_are_both_reported() {
+        let dir = TempDir::new().unwrap();
+        let (control, store) = open_control(&dir, "root-thread");
+        let reservation = control
+            .reserve_spawn(&crate::AgentPath::root(), "worker")
+            .unwrap();
+        let thread_id = reservation.thread().thread_id.clone();
+        store
+            .apply_status_event(
+                &thread_id,
+                crate::RunnerEvent::TurnStarted {
+                    turn_id: "invalid-early-start".into(),
+                },
+            )
+            .unwrap();
+
+        let error = reservation.commit().unwrap_err().to_string();
+
+        assert!(error.contains("durable pending reservation validation failed"));
+        assert!(error.contains("durable rollback failed"));
     }
 
     #[test]
@@ -1109,6 +1195,61 @@ mod tests {
         assert_eq!(
             store.edge_state(&worker.thread_id).unwrap().as_deref(),
             Some("closed")
+        );
+        assert!(control.runtime_handle(&worker.thread_id).unwrap().is_none());
+    }
+
+    #[test]
+    fn shutdown_agent_rejects_runtime_registration() {
+        let dir = TempDir::new().unwrap();
+        let (control, _store) = open_control(&dir, "root-thread");
+        let worker = commit_spawn(&control, &crate::AgentPath::root(), "worker");
+        control
+            .record_runner_event(&worker.thread_id, crate::RunnerEvent::RuntimeTerminated)
+            .unwrap();
+
+        let error = control
+            .register_runtime(&worker.thread_id, runtime_handle())
+            .unwrap_err();
+
+        assert!(error.to_string().contains("Shutdown"));
+        assert!(control.runtime_handle(&worker.thread_id).unwrap().is_none());
+    }
+
+    #[test]
+    fn concurrent_runtime_registration_and_termination_leave_no_stale_handle() {
+        let dir = TempDir::new().unwrap();
+        let (control, store) = open_control(&dir, "root-thread");
+        let worker = commit_spawn(&control, &crate::AgentPath::root(), "worker");
+        let start_termination = Arc::new(Barrier::new(2));
+        let hook_barrier = Arc::clone(&start_termination);
+        control
+            .set_before_runtime_insert_hook(Some(Arc::new(move || {
+                hook_barrier.wait();
+                std::thread::sleep(Duration::from_millis(100));
+            })))
+            .unwrap();
+
+        let register_control = Arc::clone(&control);
+        let register_thread_id = worker.thread_id.clone();
+        let register = std::thread::spawn(move || {
+            register_control.register_runtime(&register_thread_id, runtime_handle())
+        });
+        let terminate_control = Arc::clone(&control);
+        let terminate_thread_id = worker.thread_id.clone();
+        let terminate = std::thread::spawn(move || {
+            start_termination.wait();
+            terminate_control
+                .record_runner_event(&terminate_thread_id, crate::RunnerEvent::RuntimeTerminated)
+        });
+
+        register.join().unwrap().unwrap();
+        terminate.join().unwrap().unwrap();
+        control.set_before_runtime_insert_hook(None).unwrap();
+
+        assert_eq!(
+            store.get_thread(&worker.thread_id).unwrap().unwrap().status,
+            crate::AgentStatusV2::Shutdown
         );
         assert!(control.runtime_handle(&worker.thread_id).unwrap().is_none());
     }

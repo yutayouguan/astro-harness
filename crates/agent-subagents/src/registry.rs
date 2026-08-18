@@ -276,8 +276,9 @@ impl<'a> SpawnReservation<'a> {
         }
         if let Some(store) = self.persisted_store {
             if let Err(error) = store.validate_pending_reservation(&self.thread) {
-                self.release_memory();
-                return Err(error.context("durable pending reservation validation failed"));
+                return self.rollback_after_commit_error(
+                    error.context("durable pending reservation validation failed"),
+                );
             }
         }
         let commit_result = (|| {
