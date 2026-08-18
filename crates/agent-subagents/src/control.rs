@@ -524,6 +524,16 @@ impl AgentControl {
         self.activity.cursor()
     }
 
+    /// Returns the next activity in strict sequence order for read-only
+    /// projection observers. Runtime wait semantics remain on [`Self::wait_activity`].
+    pub async fn next_activity_after(
+        &self,
+        cursor: ActivityCursor,
+        timeout: Duration,
+    ) -> Option<crate::AgentActivity> {
+        self.activity.next_after(cursor, timeout).await
+    }
+
     pub fn notify_main_steer(&self) {
         self.activity.publish(AgentActivityKind::MainSteer, None);
     }
@@ -541,7 +551,22 @@ impl AgentControl {
     }
 
     pub fn snapshot(&self) -> anyhow::Result<AgentTreeSnapshotV2> {
-        self.store.snapshot(&self.root_thread_id)
+        self.snapshot_with_after_cursor(|| {})
+    }
+
+    fn snapshot_with_after_cursor<F>(&self, after_cursor: F) -> anyhow::Result<AgentTreeSnapshotV2>
+    where
+        F: FnOnce(),
+    {
+        // Capture the observer-generation cursor before reading durable state.
+        // A concurrent mutation can therefore be present in both the snapshot
+        // and a later event (an idempotent duplicate), but can never be skipped
+        // because the snapshot advertised a cursor newer than its contents.
+        let activity_sequence = self.activity.cursor().0;
+        after_cursor();
+        let mut snapshot = self.store.snapshot(&self.root_thread_id)?;
+        snapshot.activity_sequence = activity_sequence;
+        Ok(snapshot)
     }
 
     /// Resolve a desktop target from the root namespace. Unlike model target
@@ -1030,6 +1055,66 @@ mod tests {
         assert!(control
             .resolve_target(&crate::AgentPath::root(), "/root/worker")
             .is_err());
+    }
+
+    #[test]
+    fn reopened_control_snapshot_uses_new_activity_generation_cursor() {
+        let dir = tempfile::tempdir().unwrap();
+        let (initial, store) = open_control(&dir, "root-thread");
+        let worker = commit_spawn(&initial, &crate::AgentPath::root(), "worker");
+        initial
+            .record_runner_event(
+                &worker.thread_id,
+                crate::RunnerEvent::TurnStarted {
+                    turn_id: "turn-1".into(),
+                },
+            )
+            .unwrap();
+        initial
+            .record_runner_event(
+                &worker.thread_id,
+                crate::RunnerEvent::TurnCompleted {
+                    turn_id: "turn-1".into(),
+                    last_message: "done".into(),
+                },
+            )
+            .unwrap();
+        assert!(store.snapshot("root-thread").unwrap().activity_sequence > 0);
+        drop(initial);
+
+        let reopened = AgentControl::open("root-thread".into(), store, limits()).unwrap();
+        let snapshot = reopened.snapshot().unwrap();
+        assert_eq!(snapshot.activity_sequence, 0);
+        reopened
+            .enqueue_message(
+                &crate::AgentPath::root(),
+                crate::MessageAgentV2Request {
+                    target: "/root/worker".into(),
+                    message: "next".into(),
+                },
+                false,
+            )
+            .unwrap();
+        assert!(reopened.activity_cursor().0 > snapshot.activity_sequence);
+    }
+
+    #[test]
+    fn snapshot_cursor_before_store_read_allows_racing_activity_replay() {
+        let dir = tempfile::tempdir().unwrap();
+        let (control, _store) = open_control(&dir, "root-thread");
+
+        let snapshot = control
+            .snapshot_with_after_cursor(|| {
+                commit_spawn(&control, &crate::AgentPath::root(), "racing_worker");
+            })
+            .unwrap();
+
+        assert_eq!(snapshot.activity_sequence, 0);
+        assert!(snapshot
+            .threads
+            .iter()
+            .any(|thread| thread.canonical_path.as_str() == "/root/racing_worker"));
+        assert!(control.activity_cursor().0 > snapshot.activity_sequence);
     }
 
     fn runtime_handle() -> AgentRuntimeHandle {

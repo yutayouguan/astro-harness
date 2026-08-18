@@ -3,7 +3,8 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::pin::Pin;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex as StdMutex, Weak};
+use std::time::Duration;
 
 use agent::builder::AgentBuilder;
 use agent::runtime::Session;
@@ -31,8 +32,8 @@ use uuid::Uuid;
 
 use super::interrupt_store::{clear_interrupt_file, resume_items_from_proto, save_interrupt_file};
 use crate::{
-    to_proto, MemoryUpdatedPayload, PendingChangedPayload, SessionEventHub, SessionEventMsg,
-    SubscribeFilter,
+    to_proto, AgentThreadChangedPayload, MemoryUpdatedPayload, PendingChangedPayload,
+    SessionEventHub, SessionEventMsg, SubscribeFilter,
 };
 
 fn open_sessions(memory_dir: &std::path::Path) -> Result<session::SessionStore, String> {
@@ -109,6 +110,41 @@ fn allows_post_turn_side_effects(outcome_type: &str) -> bool {
     outcome_type == "success"
 }
 
+fn agent_thread_projection(
+    activity: subagents::AgentActivity,
+) -> Option<AgentThreadChangedPayload> {
+    let activity_kind = match activity.kind {
+        subagents::AgentActivityKind::Spawned { .. } => "spawned",
+        subagents::AgentActivityKind::Mailbox { .. } => "mailbox",
+        subagents::AgentActivityKind::StatusChanged { .. } => "status_changed",
+        subagents::AgentActivityKind::EdgeClosed { .. } => "edge_closed",
+        subagents::AgentActivityKind::MainSteer => return None,
+    };
+    let thread = activity.thread?;
+    let status_kind = match thread.status.kind() {
+        subagents::AgentStatusKind::PendingInit => "pending_init",
+        subagents::AgentStatusKind::Running => "running",
+        subagents::AgentStatusKind::Interrupted => "interrupted",
+        subagents::AgentStatusKind::Completed => "completed",
+        subagents::AgentStatusKind::Errored => "errored",
+        subagents::AgentStatusKind::Shutdown => "shutdown",
+    };
+    let status_payload_json = serde_json::to_string(&thread.status).ok()?;
+    Some(AgentThreadChangedPayload {
+        activity_sequence: activity.sequence,
+        root_thread_id: thread.root_thread_id,
+        thread_id: thread.thread_id,
+        parent_thread_id: thread.parent_thread_id.unwrap_or_default(),
+        canonical_path: thread.canonical_path.to_string(),
+        task_name: thread.task_name,
+        agent_type: thread.agent_type,
+        session_id: thread.session_id,
+        status_kind: status_kind.to_string(),
+        status_payload_json,
+        activity_kind: activity_kind.to_string(),
+    })
+}
+
 /// 工具入 pending 时 publish 全局 `pending_changed`（+ live_written=false 的 memory_updated）。
 ///
 /// 回合内 **live** 工具写仍只走 Chat `MemoryUpdate`，不调用本函数。
@@ -132,6 +168,7 @@ fn publish_tool_pending_to_hub(
         }),
         pending_changed: None,
         session_metadata_changed: None,
+        agent_thread_changed: None,
     });
     hub.publish(SessionEventMsg {
         session_id: None,
@@ -142,6 +179,7 @@ fn publish_tool_pending_to_hub(
             reason: "enqueued".into(),
         }),
         session_metadata_changed: None,
+        agent_thread_changed: None,
     });
 }
 
@@ -174,6 +212,7 @@ async fn spawn_review_to_hub(session: &SessionHandle, session_id: &str, hub: &Se
                 }),
                 pending_changed: None,
                 session_metadata_changed: None,
+                agent_thread_changed: None,
             });
             if !live_written {
                 let pending_count = memory::list_pending(&memory_dir)
@@ -188,6 +227,7 @@ async fn spawn_review_to_hub(session: &SessionHandle, session_id: &str, hub: &Se
                         reason: "enqueued".into(),
                     }),
                     session_metadata_changed: None,
+                    agent_thread_changed: None,
                 });
             }
         }
@@ -214,6 +254,7 @@ async fn spawn_title_to_hub(session: &SessionHandle, hub: &SessionEventHub) {
                 session_metadata_changed: Some(crate::SessionMetadataChangedPayload {
                     title: n.title,
                 }),
+                agent_thread_changed: None,
             });
         }
     });
@@ -231,8 +272,10 @@ pub struct AstroServiceImpl {
     memory_dir: PathBuf,
     /// Plugin / Gateway / Shell 钩子运行时。
     hook_runtime: Arc<::hooks::HookRuntime>,
-    /// 会话记忆副作用事件 fan-out（SubscribeSessionEvents）。
+    /// 会话副作用与 Agent Thread 活动 fan-out（SubscribeSessionEvents）。
     session_events: SessionEventHub,
+    /// root session → attached V2 activity watcher control.
+    agent_thread_watchers: Arc<StdMutex<HashMap<String, Weak<subagents::AgentControl>>>>,
 }
 
 impl AstroServiceImpl {
@@ -262,12 +305,84 @@ impl AstroServiceImpl {
             memory_dir,
             hook_runtime,
             session_events: SessionEventHub::new(64),
+            agent_thread_watchers: Arc::new(StdMutex::new(HashMap::new())),
         }
     }
 
-    /// 会话记忆事件 hub（供 Chat / 其它 RPC 发布副作用）。
+    /// 会话事件 hub（供 Chat / Agent Thread watcher 发布）。
     pub(crate) fn session_event_hub(&self) -> &SessionEventHub {
         &self.session_events
+    }
+
+    fn attach_agent_thread_watcher(
+        &self,
+        root_thread_id: &str,
+        root_agent_id: &str,
+        control: Arc<subagents::AgentControl>,
+    ) {
+        let weak_control = Arc::downgrade(&control);
+        {
+            let mut watchers = match self.agent_thread_watchers.lock() {
+                Ok(watchers) => watchers,
+                Err(poisoned) => poisoned.into_inner(),
+            };
+            if watchers
+                .get(root_thread_id)
+                .and_then(Weak::upgrade)
+                .is_some()
+            {
+                return;
+            }
+            watchers.insert(root_thread_id.to_string(), weak_control.clone());
+        }
+
+        let root_thread_id = root_thread_id.to_string();
+        let root_agent_id = root_agent_id.to_string();
+        let session_events = self.session_events.clone();
+        let watcher_registry = Arc::clone(&self.agent_thread_watchers);
+        tokio::spawn(async move {
+            // Start at zero so activity racing between control creation and
+            // watcher scheduling is replayed from the ActivityBus buffer.
+            let mut cursor = subagents::ActivityCursor(0);
+            loop {
+                let Some(control) = weak_control.upgrade() else {
+                    break;
+                };
+                let next = control
+                    .next_activity_after(cursor, Duration::from_millis(250))
+                    .await;
+                drop(control);
+                let Some(activity) = next else {
+                    continue;
+                };
+                if activity.sequence <= cursor.0 {
+                    continue;
+                }
+                cursor = subagents::ActivityCursor(activity.sequence);
+                let Some(projection) = agent_thread_projection(activity) else {
+                    continue;
+                };
+                session_events.publish(SessionEventMsg {
+                    session_id: Some(root_thread_id.clone()),
+                    agent_id: root_agent_id.clone(),
+                    memory_updated: None,
+                    pending_changed: None,
+                    session_metadata_changed: None,
+                    agent_thread_changed: Some(projection),
+                });
+            }
+
+            let mut watchers = match watcher_registry.lock() {
+                Ok(watchers) => watchers,
+                Err(poisoned) => poisoned.into_inner(),
+            };
+            let owns_entry = watchers
+                .get(&root_thread_id)
+                .is_some_and(|registered| Weak::ptr_eq(registered, &weak_control));
+            if owns_entry {
+                watchers.remove(&root_thread_id);
+            }
+        });
     }
 
     /// 获取或惰性创建会话对应的 [`Session`]。
@@ -279,6 +394,11 @@ impl AstroServiceImpl {
     async fn get_session(&self, session_id: &str) -> Result<SessionHandle, Status> {
         let mut sessions = self.sessions.write().await;
         if let Some(handle) = sessions.get(session_id) {
+            let agent_id = home::active_agent_id(&self.memory_dir);
+            let control = agent::exec::agent_control_directory::AgentControlDirectory::global()
+                .get_at(session_id, &self.memory_dir.join("subagents-v2.db"))
+                .ok_or_else(|| Status::internal("root AgentControl is unavailable"))?;
+            self.attach_agent_thread_watcher(session_id, &agent_id, control);
             return Ok(handle.clone());
         }
 
@@ -291,6 +411,10 @@ impl AstroServiceImpl {
             .build_with_session_id(session_id.to_string())
             .map_err(|e| Status::internal(e.to_string()))?;
         let handle = Arc::new(Mutex::new(agent));
+        let control = agent::exec::agent_control_directory::AgentControlDirectory::global()
+            .get_at(session_id, &self.memory_dir.join("subagents-v2.db"))
+            .ok_or_else(|| Status::internal("root AgentControl was not registered"))?;
+        self.attach_agent_thread_watcher(session_id, &agent_id, control);
         sessions.insert(session_id.to_string(), handle.clone());
         Ok(handle)
     }
@@ -1427,7 +1551,7 @@ impl AstroService for AstroServiceImpl {
         Ok(Response::new(FileListResponse { entries }))
     }
 
-    /// 订阅会话级记忆副作用事件（记忆更新 / pending 变化），与 Chat 流生命周期解耦。
+    /// 订阅会话级副作用事件（记忆 / pending / Agent Thread），与 Chat 流生命周期解耦。
     ///
     /// - `session_id` 为空：仅全局 pending
     /// - `session_id` 非空：该 session 事件 + 全局 pending
@@ -1664,6 +1788,20 @@ mod tests {
             .get(session_id)
             .is_none());
         assert!(service.hitl_registry.get(session_id).await.is_none());
+        tokio::time::timeout(Duration::from_secs(1), async {
+            loop {
+                let watcher_count = match service.agent_thread_watchers.lock() {
+                    Ok(watchers) => watchers.len(),
+                    Err(poisoned) => poisoned.into_inner().len(),
+                };
+                if watcher_count == 0 {
+                    break;
+                }
+                tokio::time::sleep(Duration::from_millis(20)).await;
+            }
+        })
+        .await
+        .expect("released root watcher is reclaimed");
         drop(pause);
         drop(gate);
     }

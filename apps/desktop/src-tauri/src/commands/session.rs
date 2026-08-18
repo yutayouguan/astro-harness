@@ -421,6 +421,7 @@ pub async fn regenerate_session_title(
             session_metadata_changed: Some(SessionMetadataChangedDto {
                 title: title.clone(),
             }),
+            agent_thread_changed: None,
         },
     );
 

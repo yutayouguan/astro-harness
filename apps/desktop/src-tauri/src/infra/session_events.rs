@@ -25,6 +25,7 @@ pub struct SessionEventDto {
     pub memory_updated: Option<MemoryUpdatedDto>,
     pub pending_changed: Option<PendingChangedDto>,
     pub session_metadata_changed: Option<SessionMetadataChangedDto>,
+    pub agent_thread_changed: Option<AgentThreadChangedDto>,
 }
 
 /// 记忆已更新（或仅入 pending）摘要。
@@ -50,6 +51,23 @@ pub struct PendingChangedDto {
 #[serde(rename_all = "camelCase")]
 pub struct SessionMetadataChangedDto {
     pub title: String,
+}
+
+/// Codex V2 Agent Thread activity with a complete current projection.
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentThreadChangedDto {
+    pub activity_sequence: u64,
+    pub root_thread_id: String,
+    pub thread_id: String,
+    pub parent_thread_id: String,
+    pub canonical_path: String,
+    pub task_name: String,
+    pub agent_type: String,
+    pub session_id: String,
+    pub status_kind: String,
+    pub status_payload_json: String,
+    pub activity_kind: String,
 }
 
 /// 订阅过滤（可热更新）。
@@ -96,32 +114,54 @@ fn proto_to_dto(ev: proto::SessionEvent) -> SessionEventDto {
             Some(s.to_string())
         }
     };
-    let (memory_updated, pending_changed, session_metadata_changed) = match ev.payload {
-        Some(proto::session_event::Payload::MemoryUpdated(m)) => (
-            Some(MemoryUpdatedDto {
-                source: m.source,
-                target: m.target,
-                summary: m.summary,
-                live_written: m.live_written,
-            }),
-            None,
-            None,
-        ),
-        Some(proto::session_event::Payload::PendingChanged(p)) => (
-            None,
-            Some(PendingChangedDto {
-                pending_count: p.pending_count,
-                reason: p.reason,
-            }),
-            None,
-        ),
-        Some(proto::session_event::Payload::SessionMetadataChanged(m)) => (
-            None,
-            None,
-            Some(SessionMetadataChangedDto { title: m.title }),
-        ),
-        None => (None, None, None),
-    };
+    let (memory_updated, pending_changed, session_metadata_changed, agent_thread_changed) =
+        match ev.payload {
+            Some(proto::session_event::Payload::MemoryUpdated(m)) => (
+                Some(MemoryUpdatedDto {
+                    source: m.source,
+                    target: m.target,
+                    summary: m.summary,
+                    live_written: m.live_written,
+                }),
+                None,
+                None,
+                None,
+            ),
+            Some(proto::session_event::Payload::PendingChanged(p)) => (
+                None,
+                Some(PendingChangedDto {
+                    pending_count: p.pending_count,
+                    reason: p.reason,
+                }),
+                None,
+                None,
+            ),
+            Some(proto::session_event::Payload::SessionMetadataChanged(m)) => (
+                None,
+                None,
+                Some(SessionMetadataChangedDto { title: m.title }),
+                None,
+            ),
+            Some(proto::session_event::Payload::AgentThreadChanged(thread)) => (
+                None,
+                None,
+                None,
+                Some(AgentThreadChangedDto {
+                    activity_sequence: thread.activity_sequence,
+                    root_thread_id: thread.root_thread_id,
+                    thread_id: thread.thread_id,
+                    parent_thread_id: thread.parent_thread_id,
+                    canonical_path: thread.canonical_path,
+                    task_name: thread.task_name,
+                    agent_type: thread.agent_type,
+                    session_id: thread.session_id,
+                    status_kind: thread.status_kind,
+                    status_payload_json: thread.status_payload_json,
+                    activity_kind: thread.activity_kind,
+                }),
+            ),
+            None => (None, None, None, None),
+        };
     SessionEventDto {
         session_id,
         agent_id: ev.agent_id,
@@ -131,6 +171,7 @@ fn proto_to_dto(ev: proto::SessionEvent) -> SessionEventDto {
         memory_updated,
         pending_changed,
         session_metadata_changed,
+        agent_thread_changed,
     }
 }
 
@@ -262,5 +303,49 @@ async fn subscribe_once(
             *after_event_id = ev.event_id;
         }
         emit_session_event(app, proto_to_dto(ev));
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn proto_to_dto_maps_complete_agent_thread_projection() {
+        let dto = proto_to_dto(proto::SessionEvent {
+            session_id: "root".into(),
+            agent_id: "reviewer".into(),
+            ts_ms: 1,
+            event_id: 2,
+            stream_id: "stream".into(),
+            payload: Some(proto::session_event::Payload::AgentThreadChanged(
+                proto::AgentThreadChangedEvent {
+                    activity_sequence: 7,
+                    root_thread_id: "root".into(),
+                    thread_id: "thread".into(),
+                    parent_thread_id: "root".into(),
+                    canonical_path: "/root/worker".into(),
+                    task_name: "worker".into(),
+                    agent_type: "reviewer".into(),
+                    session_id: "thread-session".into(),
+                    status_kind: "running".into(),
+                    status_payload_json: r#"{"kind":"running"}"#.into(),
+                    activity_kind: "status_changed".into(),
+                },
+            )),
+        });
+
+        let projection = dto.agent_thread_changed.expect("agent thread projection");
+        assert_eq!(projection.activity_sequence, 7);
+        assert_eq!(projection.root_thread_id, "root");
+        assert_eq!(projection.thread_id, "thread");
+        assert_eq!(projection.parent_thread_id, "root");
+        assert_eq!(projection.canonical_path, "/root/worker");
+        assert_eq!(projection.task_name, "worker");
+        assert_eq!(projection.agent_type, "reviewer");
+        assert_eq!(projection.session_id, "thread-session");
+        assert_eq!(projection.status_kind, "running");
+        assert_eq!(projection.status_payload_json, r#"{"kind":"running"}"#);
+        assert_eq!(projection.activity_kind, "status_changed");
     }
 }

@@ -1,10 +1,13 @@
-//! Session-scoped memory event fan-out for gRPC subscribers.
+//! Session-scoped memory, metadata, and Agent Thread event fan-out.
 
 use std::collections::VecDeque;
 use std::sync::{Arc, Mutex};
 
 use proto::session_event::Payload;
-use proto::{MemoryUpdatedEvent, PendingChangedEvent, SessionEvent, SessionMetadataChangedEvent};
+use proto::{
+    AgentThreadChangedEvent, MemoryUpdatedEvent, PendingChangedEvent, SessionEvent,
+    SessionMetadataChangedEvent,
+};
 use tokio::sync::broadcast;
 use uuid::Uuid;
 
@@ -39,6 +42,22 @@ pub struct SessionMetadataChangedPayload {
     pub title: String,
 }
 
+/// Complete V2 Agent Thread projection carried by one activity event.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AgentThreadChangedPayload {
+    pub activity_sequence: u64,
+    pub root_thread_id: String,
+    pub thread_id: String,
+    pub parent_thread_id: String,
+    pub canonical_path: String,
+    pub task_name: String,
+    pub agent_type: String,
+    pub session_id: String,
+    pub status_kind: String,
+    pub status_payload_json: String,
+    pub activity_kind: String,
+}
+
 /// Hub message: one memory, pending, or metadata notification.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SessionEventMsg {
@@ -47,6 +66,7 @@ pub struct SessionEventMsg {
     pub memory_updated: Option<MemoryUpdatedPayload>,
     pub pending_changed: Option<PendingChangedPayload>,
     pub session_metadata_changed: Option<SessionMetadataChangedPayload>,
+    pub agent_thread_changed: Option<AgentThreadChangedPayload>,
 }
 
 /// Hub-assigned event envelope used for ordered delivery and reconnect replay.
@@ -240,10 +260,26 @@ pub fn to_proto(msg: &SequencedSessionEvent, stream_id: &str) -> SessionEvent {
             pending_count: pend.pending_count,
             reason: pend.reason.clone(),
         }))
-    } else {
-        event.session_metadata_changed.as_ref().map(|meta| {
-            Payload::SessionMetadataChanged(SessionMetadataChangedEvent {
+    } else if let Some(ref meta) = event.session_metadata_changed {
+        Some(Payload::SessionMetadataChanged(
+            SessionMetadataChangedEvent {
                 title: meta.title.clone(),
+            },
+        ))
+    } else {
+        event.agent_thread_changed.as_ref().map(|thread| {
+            Payload::AgentThreadChanged(AgentThreadChangedEvent {
+                activity_sequence: thread.activity_sequence,
+                root_thread_id: thread.root_thread_id.clone(),
+                thread_id: thread.thread_id.clone(),
+                parent_thread_id: thread.parent_thread_id.clone(),
+                canonical_path: thread.canonical_path.clone(),
+                task_name: thread.task_name.clone(),
+                agent_type: thread.agent_type.clone(),
+                session_id: thread.session_id.clone(),
+                status_kind: thread.status_kind.clone(),
+                status_payload_json: thread.status_payload_json.clone(),
+                activity_kind: thread.activity_kind.clone(),
             })
         })
     };
@@ -262,6 +298,107 @@ pub fn to_proto(msg: &SequencedSessionEvent, stream_id: &str) -> SessionEvent {
 #[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
+
+    fn agent_thread_event(
+        root_thread_id: &str,
+        activity_sequence: u64,
+        canonical_path: &str,
+        status_kind: &str,
+    ) -> SessionEventMsg {
+        SessionEventMsg {
+            session_id: Some(root_thread_id.to_string()),
+            agent_id: "reviewer".into(),
+            memory_updated: None,
+            pending_changed: None,
+            session_metadata_changed: None,
+            agent_thread_changed: Some(AgentThreadChangedPayload {
+                activity_sequence,
+                root_thread_id: root_thread_id.to_string(),
+                thread_id: "worker-thread".into(),
+                parent_thread_id: root_thread_id.to_string(),
+                canonical_path: canonical_path.into(),
+                task_name: "worker".into(),
+                agent_type: "reviewer".into(),
+                session_id: "worker-session".into(),
+                status_kind: status_kind.into(),
+                status_payload_json: format!(r#"{{"kind":"{status_kind}"}}"#),
+                activity_kind: "status_changed".into(),
+            }),
+        }
+    }
+
+    #[tokio::test]
+    async fn agent_thread_events_replay_after_cursor_in_order() {
+        let hub = SessionEventHub::new(16);
+        hub.publish(agent_thread_event("root", 7, "/root/a", "running"));
+        hub.publish(agent_thread_event("root", 8, "/root/a", "completed"));
+
+        let mut rx = hub.subscribe(
+            SubscribeFilter {
+                session_id: Some("root".into()),
+                agent_id: None,
+            },
+            hub.stream_id(),
+            1,
+        );
+        let event = rx.recv().await.unwrap();
+
+        assert_eq!(event.event_id, 2);
+        assert_eq!(
+            event
+                .event
+                .agent_thread_changed
+                .as_ref()
+                .unwrap()
+                .activity_sequence,
+            8
+        );
+    }
+
+    #[test]
+    fn agent_thread_events_only_match_their_root_session() {
+        let event = agent_thread_event("root-a", 1, "/root/worker", "running");
+        assert!(event_matches(
+            &SubscribeFilter {
+                session_id: Some("root-a".into()),
+                agent_id: None,
+            },
+            &event,
+        ));
+        assert!(!event_matches(
+            &SubscribeFilter {
+                session_id: Some("root-b".into()),
+                agent_id: None,
+            },
+            &event,
+        ));
+        assert!(!event_matches(&SubscribeFilter::default(), &event));
+    }
+
+    #[test]
+    fn agent_thread_projection_maps_to_proto_without_loss() {
+        let event = SequencedSessionEvent {
+            event_id: 9,
+            ts_ms: 10,
+            event: agent_thread_event("root", 8, "/root/a", "completed"),
+        };
+
+        let proto = to_proto(&event, "stream");
+        let Some(Payload::AgentThreadChanged(projection)) = proto.payload else {
+            panic!("expected agent thread payload");
+        };
+        assert_eq!(projection.activity_sequence, 8);
+        assert_eq!(projection.root_thread_id, "root");
+        assert_eq!(projection.thread_id, "worker-thread");
+        assert_eq!(projection.parent_thread_id, "root");
+        assert_eq!(projection.canonical_path, "/root/a");
+        assert_eq!(projection.task_name, "worker");
+        assert_eq!(projection.agent_type, "reviewer");
+        assert_eq!(projection.session_id, "worker-session");
+        assert_eq!(projection.status_kind, "completed");
+        assert_eq!(projection.status_payload_json, r#"{"kind":"completed"}"#);
+        assert_eq!(projection.activity_kind, "status_changed");
+    }
 
     #[tokio::test]
     async fn publish_reaches_matching_subscriber() {
@@ -285,6 +422,7 @@ mod tests {
             }),
             pending_changed: None,
             session_metadata_changed: None,
+            agent_thread_changed: None,
         });
         let ev = tokio::time::timeout(std::time::Duration::from_millis(200), rx.recv())
             .await
@@ -315,6 +453,7 @@ mod tests {
                 reason: "enqueued".into(),
             }),
             session_metadata_changed: None,
+            agent_thread_changed: None,
         });
         let ev = rx.recv().await.unwrap();
         assert_eq!(ev.event.pending_changed.unwrap().pending_count, 2);
@@ -335,6 +474,7 @@ mod tests {
                 }),
                 pending_changed: None,
                 session_metadata_changed: None,
+                agent_thread_changed: None,
             });
         }
 
@@ -365,6 +505,7 @@ mod tests {
             }),
             pending_changed: None,
             session_metadata_changed: None,
+            agent_thread_changed: None,
         });
 
         let mut rx = hub.subscribe(
@@ -396,6 +537,7 @@ mod tests {
                             reason: "test".into(),
                         }),
                         session_metadata_changed: None,
+                        agent_thread_changed: None,
                     });
                 })
             })
@@ -423,6 +565,7 @@ mod tests {
             }),
             pending_changed: None,
             session_metadata_changed: None,
+            agent_thread_changed: None,
         });
     }
 
@@ -440,6 +583,7 @@ mod tests {
             session_metadata_changed: Some(SessionMetadataChangedPayload {
                 title: "新标题".into(),
             }),
+            agent_thread_changed: None,
         };
         assert!(event_matches(&filter, &ev));
     }

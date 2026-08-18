@@ -5050,6 +5050,7 @@ dependencies = [
  "serde_json",
  "session",
  "skills",
+ "subagents",
  "tempfile",
  "tokio",
  "tokio-stream",

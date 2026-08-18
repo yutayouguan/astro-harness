@@ -91,6 +91,34 @@ impl ActivityBus {
         .flatten()
     }
 
+    /// Returns the earliest buffered activity after `cursor` without applying
+    /// the model wait path's `MainSteer` priority. This is the read-only
+    /// observer surface used by projection streams that must preserve order.
+    pub async fn next_after(
+        &self,
+        cursor: ActivityCursor,
+        wait_timeout: Duration,
+    ) -> Option<AgentActivity> {
+        let mut rx = self.tx.subscribe();
+        if let Some(activity) = self.first_after_in_order(cursor) {
+            return Some(activity);
+        }
+
+        tokio::time::timeout(wait_timeout, async {
+            loop {
+                if rx.changed().await.is_err() {
+                    return None;
+                }
+                if let Some(activity) = self.first_after_in_order(cursor) {
+                    return Some(activity);
+                }
+            }
+        })
+        .await
+        .ok()
+        .flatten()
+    }
+
     fn first_after(&self, cursor: ActivityCursor) -> Option<AgentActivity> {
         let events = self.lock_events();
         let mut first = None;
@@ -103,6 +131,13 @@ impl ActivityBus {
             }
         }
         first
+    }
+
+    fn first_after_in_order(&self, cursor: ActivityCursor) -> Option<AgentActivity> {
+        self.lock_events()
+            .iter()
+            .find(|event| event.sequence > cursor.0)
+            .cloned()
     }
 
     fn lock_events(&self) -> MutexGuard<'_, VecDeque<AgentActivity>> {
@@ -181,5 +216,56 @@ mod tests {
             bus.wait_after(cursor, Duration::from_millis(10)).await,
             Some(steer)
         );
+    }
+
+    #[tokio::test]
+    async fn observer_next_after_preserves_every_activity_in_sequence_order() {
+        let bus = ActivityBus::default();
+        let start = bus.cursor();
+        let status = bus.publish(
+            AgentActivityKind::StatusChanged {
+                thread_id: "worker".into(),
+            },
+            None,
+        );
+        let steer = bus.publish(AgentActivityKind::MainSteer, None);
+
+        assert_eq!(
+            bus.next_after(start, Duration::from_millis(10))
+                .await
+                .unwrap(),
+            status
+        );
+        assert_eq!(
+            bus.next_after(ActivityCursor(status.sequence), Duration::from_millis(10))
+                .await
+                .unwrap(),
+            steer
+        );
+    }
+
+    #[tokio::test]
+    async fn observer_cursor_advances_after_lag_and_does_not_regress_after_timeout() {
+        let bus = ActivityBus::default();
+        for _ in 0..(MAX_BUFFERED_ACTIVITIES + 32) {
+            bus.publish(AgentActivityKind::MainSteer, None);
+        }
+
+        let recovered = bus
+            .next_after(ActivityCursor(1), Duration::from_millis(10))
+            .await
+            .unwrap();
+        assert!(recovered.sequence > 1);
+
+        let end = bus.cursor();
+        assert_eq!(bus.next_after(end, Duration::from_millis(1)).await, None);
+        let fresh = bus.publish(AgentActivityKind::MainSteer, None);
+        assert_eq!(
+            bus.next_after(end, Duration::from_millis(10))
+                .await
+                .unwrap(),
+            fresh
+        );
+        assert!(fresh.sequence > end.0);
     }
 }

@@ -147,6 +147,7 @@ pub async fn approve_pending_memory_write(app: AppHandle, id: String) -> Result<
                 reason: "approved".into(),
             }),
             session_metadata_changed: None,
+            agent_thread_changed: None,
         },
     );
     Ok(msg)
@@ -182,6 +183,7 @@ pub async fn reject_pending_memory_write(app: AppHandle, id: String) -> Result<(
                 reason: "rejected".into(),
             }),
             session_metadata_changed: None,
+            agent_thread_changed: None,
         },
     );
     Ok(())
@@ -762,6 +764,7 @@ pub async fn approve_all_pending_memory_writes(app: AppHandle) -> Result<String,
                             reason: "approved".into(),
                         }),
                         session_metadata_changed: None,
+                        agent_thread_changed: None,
                     },
                 );
             }
@@ -800,6 +803,7 @@ pub async fn reject_all_pending_memory_writes(app: AppHandle) -> Result<String, 
                             reason: "rejected".into(),
                         }),
                         session_metadata_changed: None,
+                        agent_thread_changed: None,
                     },
                 );
             }
