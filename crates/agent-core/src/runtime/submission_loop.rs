@@ -4,8 +4,13 @@ use agent_protocol::{ErrorEvent, EventMsg, ItemEvent, Op, Submission, TurnItem};
 use async_channel::Receiver;
 
 use super::Session;
+use crate::streaming::ChatOverride;
 
-pub(crate) async fn submission_loop(session: Arc<Session>, rx_sub: Receiver<Submission>) {
+pub(crate) async fn submission_loop(
+    session: Arc<Session>,
+    rx_sub: Receiver<Submission>,
+    chat_override: Option<ChatOverride>,
+) {
     let mut shutdown_received = false;
     while let Ok(submission) = rx_sub.recv().await {
         let should_exit = match submission.op {
@@ -15,7 +20,7 @@ pub(crate) async fn submission_loop(session: Arc<Session>, rx_sub: Receiver<Subm
                 reply,
             } => {
                 let result = session
-                    .submit_turn_input(submission.id, request, mode)
+                    .submit_turn_input(submission.id, request, mode, chat_override.clone())
                     .await;
                 let _ = reply.send(result);
                 false
@@ -175,7 +180,7 @@ impl Session {
         {
             tracing::warn!(%error, session_id = %self.session_id(), "failed to shut down MCP connections");
         }
-        let stopped_jobs = tools::shutdown_background_jobs();
+        let stopped_jobs = tools::shutdown_background_jobs_for_session(self.session_id());
         tracing::debug!(stopped_jobs, session_id = %self.session_id(), "session runtime shutdown complete");
     }
 }
@@ -243,7 +248,7 @@ mod tests {
         started.notified().await;
 
         let (tx, rx) = async_channel::bounded(4);
-        let loop_task = tokio::spawn(submission_loop(Arc::clone(&session), rx));
+        let loop_task = tokio::spawn(submission_loop(Arc::clone(&session), rx, None));
         tx.send(Submission {
             id: "interrupt-1".into(),
             op: Op::Interrupt,

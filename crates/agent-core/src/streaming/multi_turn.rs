@@ -148,6 +148,54 @@ pub(crate) struct RunTurnArgs {
 }
 
 impl RunTurnArgs {
+    pub(crate) fn submitted(
+        session: Arc<Session>,
+        turn_context: Arc<TurnContext>,
+        chat_override: Option<super::provider::ChatOverride>,
+    ) -> (Self, mpsc::Receiver<anyhow::Result<MultiTurnStreamItem>>) {
+        let mut targets = session.chat_targets();
+        let provider = session.chat_provider();
+        let model = session.chat_model();
+        let api_key = session.chat_api_key();
+        let base_url = session.chat_base_url();
+        if targets.is_empty() {
+            targets.push(ChatTarget {
+                provider_id: provider.clone(),
+                backend_id: provider,
+                model: model.clone(),
+                api_key: api_key.clone(),
+                base_url: base_url.clone(),
+            });
+        }
+        let base_config = ProviderConfig {
+            model,
+            api_key,
+            base_url: (!base_url.is_empty()).then_some(base_url),
+            temperature: session.temperature(),
+            additional_params: session.additional_params(),
+            ..ProviderConfig::default()
+        };
+        let (tx, rx) = mpsc::channel(32);
+        let turn_id = turn_context.sub_id().to_string();
+        let thread_id = session.session_id().to_string();
+        (
+            Self {
+                session,
+                turn_context,
+                targets,
+                base_config,
+                system_prompt: None,
+                pause: PauseControl::new(),
+                hitl_gate: None,
+                tx,
+                thread_id,
+                run_id: turn_id,
+                chat_override,
+            },
+            rx,
+        )
+    }
+
     pub(crate) fn with_turn_context(&self, turn_context: Arc<TurnContext>) -> Self {
         Self {
             turn_context,
@@ -169,6 +217,10 @@ impl RunTurnArgs {
 
     pub(crate) fn prepared_system_prompt(&self) -> Option<&str> {
         self.system_prompt.as_deref()
+    }
+
+    pub(crate) fn sender(&self) -> &mpsc::Sender<anyhow::Result<MultiTurnStreamItem>> {
+        &self.tx
     }
 }
 

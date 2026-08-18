@@ -104,6 +104,7 @@ impl Session {
         submission_id: String,
         request: TurnInputRequest,
         mode: TurnInputMode,
+        chat_override: Option<crate::streaming::ChatOverride>,
     ) -> Result<TurnInputSubmission, TurnInputError> {
         if request.input.is_empty()
             || request
@@ -118,13 +119,19 @@ impl Session {
         match mode {
             TurnInputMode::StartOrSteer => match self.active_turn_id().await {
                 Some(turn_id) => self.steer_turn(Some(&turn_id), request.input).await,
-                None => self.start_turn(submission_id, request.input).await,
+                None => {
+                    self.start_turn(submission_id, request.input, chat_override)
+                        .await
+                }
             },
             TurnInputMode::StartIfIdle => match self.active_turn_id().await {
                 Some(_) => Ok(TurnInputSubmission::NotSubmitted {
                     reason: "not_idle".into(),
                 }),
-                None => self.start_turn(submission_id, request.input).await,
+                None => {
+                    self.start_turn(submission_id, request.input, chat_override)
+                        .await
+                }
             },
             TurnInputMode::Steer { expected_turn_id } => {
                 self.steer_turn(Some(&expected_turn_id), request.input)
@@ -146,9 +153,36 @@ impl Session {
         self: &Arc<Self>,
         turn_id: String,
         input: Vec<TurnInput>,
+        chat_override: Option<crate::streaming::ChatOverride>,
     ) -> Result<TurnInputSubmission, TurnInputError> {
         let context = self.create_turn_context(turn_id.clone()).await;
-        self.spawn_task(context, input, RegularTask::submitted())
+        let (args, mut legacy_rx) = crate::streaming::multi_turn::RunTurnArgs::submitted(
+            Arc::clone(self),
+            Arc::clone(&context),
+            chat_override,
+        );
+        let event_session = Arc::clone(self);
+        let event_turn_id = turn_id.clone();
+        tokio::spawn(async move {
+            while let Some(item) = legacy_rx.recv().await {
+                match item {
+                    Ok(crate::streaming::MultiTurnStreamItem::Error(message)) => {
+                        event_session
+                            .emit_runtime_event(
+                                event_turn_id.clone(),
+                                agent_protocol::EventMsg::Error(agent_protocol::ErrorEvent {
+                                    message,
+                                    error_type: "turn_execution".into(),
+                                }),
+                            )
+                            .await;
+                    }
+                    Ok(crate::streaming::MultiTurnStreamItem::Done) | Err(_) => break,
+                    Ok(_) => {}
+                }
+            }
+        });
+        self.spawn_task(context, input, RegularTask::submitted(args))
             .await
             .map_err(|error| TurnInputError::Invalid(error.to_string()))?;
         Ok(TurnInputSubmission::Started { turn_id })

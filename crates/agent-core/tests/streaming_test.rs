@@ -113,6 +113,90 @@ async fn regular_task_owns_initial_input_persistence() {
     assert_eq!(history[0].content_str(), "owned by regular task");
 }
 
+#[tokio::test]
+async fn regular_task_prepare_failure_emits_error_then_done() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut config = AgentConfig::with_defaults(dir.path().to_path_buf());
+    config.max_turns = 0;
+    let session =
+        Arc::new(AgentLoop::with_session_id(config, "regular-task-prepare-error".into()).unwrap());
+    let (tx, mut rx) = tokio::sync::mpsc::channel(8);
+
+    run_multi_turn_stream(MultiTurnStreamArgs {
+        session,
+        targets: vec![types::ChatTarget {
+            provider_id: "scripted".into(),
+            backend_id: "scripted".into(),
+            model: "test".into(),
+            api_key: String::new(),
+            base_url: String::new(),
+        }],
+        base_config: ProviderConfig::default(),
+        input: vec![TurnInput {
+            content: "over budget".into(),
+            image_data_urls: Vec::new(),
+        }],
+        system_prompt: None,
+        pause: PauseControl::new(),
+        hitl_gate: None,
+        tx,
+        chat_override: Some(pending_chat()),
+    })
+    .await;
+
+    let mut items = Vec::new();
+    while let Some(item) = rx.recv().await {
+        items.push(item.unwrap());
+    }
+    assert!(matches!(
+        items.as_slice(),
+        [MultiTurnStreamItem::Error(message), MultiTurnStreamItem::Done]
+            if message.contains("budget exhausted")
+    ));
+}
+
+#[tokio::test]
+async fn regular_task_prepare_error_emits_error_then_done() {
+    let dir = tempfile::tempdir().unwrap();
+    let session = Arc::new(
+        AgentLoop::with_session_id(
+            AgentConfig::with_defaults(dir.path().to_path_buf()),
+            "regular-task-prepare-error".into(),
+        )
+        .unwrap(),
+    );
+    let (tx, mut rx) = tokio::sync::mpsc::channel(8);
+
+    run_multi_turn_stream(MultiTurnStreamArgs {
+        session,
+        targets: vec![types::ChatTarget {
+            provider_id: "scripted".into(),
+            backend_id: "scripted".into(),
+            model: "test".into(),
+            api_key: String::new(),
+            base_url: String::new(),
+        }],
+        base_config: ProviderConfig::default(),
+        input: Vec::new(),
+        system_prompt: None,
+        pause: PauseControl::new(),
+        hitl_gate: None,
+        tx,
+        chat_override: Some(pending_chat()),
+    })
+    .await;
+
+    let mut items = Vec::new();
+    while let Some(item) = rx.recv().await {
+        items.push(item.unwrap());
+    }
+    assert!(matches!(
+        items.as_slice(),
+        [MultiTurnStreamItem::Error(message), MultiTurnStreamItem::Done]
+            if message.contains("requires initial input")
+    ));
+}
+
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn steered_input_is_consumed_by_the_active_regular_task() {
     let dir = tempfile::tempdir().unwrap();

@@ -10,6 +10,7 @@
 //! - `SessionState.history` 中相邻消息不得连续出现相同角色（见 `validate_message_order`）
 //! - 取消信号（`CancelSignal`）在工具调用前后均会检查，已取消则立即中断
 
+use std::collections::HashMap;
 use std::io;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -143,6 +144,8 @@ pub struct Session {
     pub(crate) cancel: CancelSignal,
     /// Codex-style single-active-task registry for this session.
     pub(crate) active_turn: TokioMutex<Option<ActiveTurn>>,
+    /// Persistent completion signals survive `RunningTask` being taken for abort.
+    pub(crate) task_completions: TokioMutex<HashMap<String, tokio_util::sync::CancellationToken>>,
     /// Bound atomically once by [`AstroThread`] for session runtime I/O.
     runtime_io: OnceLock<RuntimeIoBindings>,
     /// Guards one-time release of task, hook, MCP, and terminal resources.
@@ -247,6 +250,7 @@ impl Session {
             execution,
             cancel: CancelSignal::new(),
             active_turn: TokioMutex::new(None),
+            task_completions: TokioMutex::new(HashMap::new()),
             runtime_io: OnceLock::new(),
             runtime_shutdown: AtomicBool::new(false),
         })

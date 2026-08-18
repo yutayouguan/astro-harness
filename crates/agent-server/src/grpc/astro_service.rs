@@ -647,7 +647,8 @@ impl AstroService for AstroServiceImpl {
                 drop(map);
                 self.hitl_registry.cancel_and_remove(&req.session_id).await;
                 clear_interrupt_file(&self.memory_dir, &req.session_id);
-                if let Ok(session) = self.get_session(&req.session_id).await {
+                let session = self.sessions.read().await.get(&req.session_id).cloned();
+                if let Some(session) = session {
                     session
                         .abort_all_tasks(TurnAbortReason::Interrupted)
                         .await
@@ -1642,6 +1643,32 @@ mod tests {
         assert!(service.hitl_registry.get(session_id).await.is_none());
         drop(pause);
         drop(gate);
+    }
+
+    #[tokio::test]
+    async fn cancel_with_stale_pause_does_not_recreate_released_session() {
+        let dir = TempDir::new().unwrap();
+        let service = AstroServiceImpl::new(dir.path().to_path_buf());
+        let session_id = "released-session-with-stale-pause";
+        service
+            .pause_controls
+            .write()
+            .await
+            .insert(session_id.into(), PauseControl::new());
+        assert!(service.sessions.read().await.get(session_id).is_none());
+
+        service
+            .chat_control(Request::new(ChatControlRequest {
+                session_id: session_id.into(),
+                action: ChatControlAction::ChatControlCancel as i32,
+            }))
+            .await
+            .expect("stale cancel should remain idempotent");
+
+        assert!(
+            service.sessions.read().await.get(session_id).is_none(),
+            "cancel must not lazily recreate a released session"
+        );
     }
 
     #[tokio::test]

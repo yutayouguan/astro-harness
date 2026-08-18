@@ -357,10 +357,19 @@ fn kill_job(job: &Arc<Job>) {
 /// 对每个进程组先 `SIGTERM` 再 `SIGKILL`（Unix），返回被终止的任务数。
 /// 由于后台任务处于**独立进程组**，本进程退出不会自动带走它们，须显式清理。
 pub fn shutdown_all_jobs() -> usize {
+    shutdown_matching_jobs(|_| true)
+}
+
+/// 仅终止指定会话仍在运行的后台任务，不影响其他活会话。
+pub fn shutdown_jobs_for_session(session_id: &str) -> usize {
+    shutdown_matching_jobs(|job| job.session_id == session_id)
+}
+
+fn shutdown_matching_jobs(mut matches: impl FnMut(&Job) -> bool) -> usize {
     let reg = registry().lock().unwrap();
     let mut killed = 0usize;
     for job in reg.jobs.iter() {
-        if job.status().is_terminal() {
+        if !matches(job) || job.status().is_terminal() {
             continue;
         }
         let mut guard = job.child.lock().unwrap();
@@ -604,5 +613,21 @@ mod tests {
             !body.contains("abcdef"),
             "output body after offset should be empty: {body:?}"
         );
+    }
+
+    #[test]
+    fn shutdown_session_jobs_does_not_touch_other_sessions() {
+        let dir = tempfile::tempdir().unwrap();
+        let first = spawn_background("shutdown-owner", "sleep 30", dir.path(), ".").unwrap();
+        let second = spawn_background("shutdown-other", "sleep 30", dir.path(), ".").unwrap();
+        std::thread::sleep(Duration::from_millis(200));
+
+        assert_eq!(shutdown_jobs_for_session("shutdown-owner"), 1);
+        let first_job = registry().lock().unwrap().get(&first).unwrap();
+        let second_job = registry().lock().unwrap().get(&second).unwrap();
+        assert!(matches!(first_job.status(), JobStatus::Killed));
+        assert!(matches!(second_job.status(), JobStatus::Running));
+
+        assert_eq!(shutdown_jobs_for_session("shutdown-other"), 1);
     }
 }

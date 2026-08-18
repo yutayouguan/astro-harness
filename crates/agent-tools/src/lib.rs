@@ -25,7 +25,10 @@ pub use interaction_mode::{
     check_tool_call, filter_schemas, tool_visible_in_mode, InteractionMode,
 };
 
-pub use builtin::shell::jobs::shutdown_all_jobs as shutdown_background_jobs;
+pub use builtin::shell::jobs::{
+    shutdown_all_jobs as shutdown_background_jobs,
+    shutdown_jobs_for_session as shutdown_background_jobs_for_session,
+};
 pub use catalog::{
     builtin_catalog, catalog_for_ui, params_from_schema, ToolCatalogItem, ToolFunctionInfo,
     ToolParamInfo,
