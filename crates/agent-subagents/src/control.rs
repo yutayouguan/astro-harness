@@ -67,6 +67,26 @@ impl RuntimeHandleRegistry {
             .map_err(|_| anyhow::anyhow!("runtime handle registry mutex is poisoned"))?
             .remove(thread_id))
     }
+
+    pub fn remove_if_same(
+        &self,
+        thread_id: &str,
+        expected: &AgentRuntimeHandle,
+    ) -> anyhow::Result<Option<AgentRuntimeHandle>> {
+        let mut handles = self
+            .handles
+            .lock()
+            .map_err(|_| anyhow::anyhow!("runtime handle registry mutex is poisoned"))?;
+        let matches = handles.get(thread_id).is_some_and(|current| {
+            Arc::ptr_eq(&current.interrupt, &expected.interrupt)
+                && Arc::ptr_eq(&current.terminate, &expected.terminate)
+        });
+        if matches {
+            Ok(handles.remove(thread_id))
+        } else {
+            Ok(None)
+        }
+    }
 }
 
 #[derive(Clone)]
@@ -365,6 +385,14 @@ impl AgentControl {
 
     pub fn remove_runtime(&self, thread_id: &str) -> anyhow::Result<Option<AgentRuntimeHandle>> {
         self.runtimes.remove(thread_id)
+    }
+
+    pub fn remove_runtime_if_same(
+        &self,
+        thread_id: &str,
+        expected: &AgentRuntimeHandle,
+    ) -> anyhow::Result<Option<AgentRuntimeHandle>> {
+        self.runtimes.remove_if_same(thread_id, expected)
     }
 
     fn lock_runtime_lifecycle(&self) -> anyhow::Result<MutexGuard<'_, ()>> {
@@ -1263,6 +1291,34 @@ mod tests {
         assert!(second.runtime_handle(&worker.thread_id).unwrap().is_none());
         assert!(first.remove_runtime(&worker.thread_id).unwrap().is_some());
         assert!(first.runtime_handle(&worker.thread_id).unwrap().is_none());
+    }
+
+    #[test]
+    fn conditional_runtime_removal_preserves_a_replacement_handle() {
+        let dir = TempDir::new().unwrap();
+        let (control, _store) = open_control(&dir, "root-thread");
+        let worker = commit_spawn(&control, &crate::AgentPath::root(), "worker");
+        let original = runtime_handle();
+        let replacement = runtime_handle();
+        control
+            .register_runtime(&worker.thread_id, original.clone())
+            .unwrap();
+        assert!(control.remove_runtime(&worker.thread_id).unwrap().is_some());
+        control
+            .register_runtime(&worker.thread_id, replacement.clone())
+            .unwrap();
+
+        assert!(control
+            .remove_runtime_if_same(&worker.thread_id, &original)
+            .unwrap()
+            .is_none());
+        let current = control.runtime_handle(&worker.thread_id).unwrap().unwrap();
+        assert!(Arc::ptr_eq(&current.interrupt, &replacement.interrupt));
+        assert!(Arc::ptr_eq(&current.terminate, &replacement.terminate));
+        assert!(control
+            .remove_runtime_if_same(&worker.thread_id, &replacement)
+            .unwrap()
+            .is_some());
     }
 
     #[test]

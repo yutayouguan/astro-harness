@@ -27,8 +27,119 @@ pub struct RunnerTermination {
 }
 
 struct ActiveAgentTurn {
+    turn_id: String,
     interrupt: Arc<AgentThreadControl>,
     terminated: watch::Receiver<Option<RunnerTermination>>,
+}
+
+struct StartTurnOwnerGuard<'a> {
+    manager: &'a AgentRuntimeManager,
+    control: &'a subagents::AgentControl,
+    thread_id: String,
+    turn_id: String,
+    runtime_handle: AgentRuntimeHandle,
+    terminated_tx: watch::Sender<Option<RunnerTermination>>,
+    memory_dir: PathBuf,
+    session_id: String,
+    interrupt_message: bool,
+    armed: bool,
+    _permit: subagents::ExecutionPermit<'a>,
+}
+
+impl StartTurnOwnerGuard<'_> {
+    fn publish_termination(&self, terminal_status: AgentStatusV2) {
+        let _ = self
+            .terminated_tx
+            .send(Some(RunnerTermination { terminal_status }));
+    }
+
+    fn disarm(&mut self) {
+        self.armed = false;
+    }
+}
+
+impl Drop for StartTurnOwnerGuard<'_> {
+    fn drop(&mut self) {
+        if !self.armed {
+            return;
+        }
+        let owns_turn = match self
+            .manager
+            .remove_active_if_turn(&self.thread_id, &self.turn_id)
+        {
+            Ok(owns_turn) => owns_turn,
+            Err(error) => {
+                tracing::warn!(
+                    thread_id = %self.thread_id,
+                    turn_id = %self.turn_id,
+                    %error,
+                    "failed to remove cancelled agent turn from active runtime map"
+                );
+                false
+            }
+        };
+        if owns_turn {
+            let durable_running = match self.control.status_events(&self.thread_id) {
+                Ok(events) => events.last().is_some_and(|event| {
+                    matches!(
+                        &event.event,
+                        RunnerEvent::TurnStarted { turn_id } if turn_id == &self.turn_id
+                    )
+                }),
+                Err(error) => {
+                    tracing::warn!(
+                        thread_id = %self.thread_id,
+                        turn_id = %self.turn_id,
+                        %error,
+                        "failed to inspect durable state for cancelled agent turn"
+                    );
+                    false
+                }
+            };
+            if durable_running {
+                if self.interrupt_message {
+                    if let Err(error) = ensure_interrupted_history_boundary(
+                        &self.memory_dir,
+                        &self.session_id,
+                        "[astro:system]\nThe previous agent turn was interrupted because its runtime owner was dropped.",
+                    ) {
+                        tracing::warn!(
+                            thread_id = %self.thread_id,
+                            turn_id = %self.turn_id,
+                            %error,
+                            "failed to record cancelled agent history boundary"
+                        );
+                    }
+                }
+                if let Err(error) = self.control.record_runner_event(
+                    &self.thread_id,
+                    RunnerEvent::TurnInterrupted {
+                        turn_id: self.turn_id.clone(),
+                        reason: "start_turn future cancelled or owner dropped".into(),
+                    },
+                ) {
+                    tracing::warn!(
+                        thread_id = %self.thread_id,
+                        turn_id = %self.turn_id,
+                        %error,
+                        "failed to record cancelled agent turn"
+                    );
+                }
+            }
+            if let Err(error) = self
+                .control
+                .remove_runtime_if_same(&self.thread_id, &self.runtime_handle)
+            {
+                tracing::warn!(
+                    thread_id = %self.thread_id,
+                    turn_id = %self.turn_id,
+                    %error,
+                    "failed to remove cancelled agent runtime handle"
+                );
+            }
+        }
+        self.publish_termination(AgentStatusV2::Interrupted);
+    }
 }
 
 #[cfg(test)]
@@ -49,7 +160,7 @@ impl AgentRuntimeManager {
     pub async fn start_turn(&self, request: RunAgentTurnRequest) -> anyhow::Result<()> {
         let thread_id = request.thread.thread_id.clone();
         let control = Arc::clone(&request.control);
-        let _permit = control.acquire_execution(&thread_id)?;
+        let permit = control.acquire_execution(&thread_id)?;
         let turn_id = Uuid::new_v4().to_string();
         let interrupt = Arc::new(AgentThreadControl::default());
         interrupt.begin_turn();
@@ -63,6 +174,7 @@ impl AgentRuntimeManager {
             active.insert(
                 thread_id.clone(),
                 ActiveAgentTurn {
+                    turn_id: turn_id.clone(),
                     interrupt: Arc::clone(&interrupt),
                     terminated: terminated_rx,
                 },
@@ -75,19 +187,17 @@ impl AgentRuntimeManager {
                 turn_id: turn_id.clone(),
             },
         ) {
-            self.remove_active(&thread_id);
+            let _ = self.remove_active_if_turn(&thread_id, &turn_id);
             return Err(error);
         }
 
         let runtime_interrupt = Arc::clone(&interrupt);
         let runtime_terminate = Arc::clone(&interrupt);
-        if let Err(error) = control.register_runtime(
-            &thread_id,
-            AgentRuntimeHandle {
-                interrupt: Arc::new(move || runtime_interrupt.interrupt()),
-                terminate: Arc::new(move || runtime_terminate.close()),
-            },
-        ) {
+        let runtime_handle = AgentRuntimeHandle {
+            interrupt: Arc::new(move || runtime_interrupt.interrupt()),
+            terminate: Arc::new(move || runtime_terminate.close()),
+        };
+        if let Err(error) = control.register_runtime(&thread_id, runtime_handle.clone()) {
             let error = error.context("register agent runtime handle");
             self.finish_failed_start(
                 &control,
@@ -99,12 +209,27 @@ impl AgentRuntimeManager {
             return Err(error);
         }
 
+        let mut owner_guard = StartTurnOwnerGuard {
+            manager: self,
+            control: control.as_ref(),
+            thread_id: thread_id.clone(),
+            turn_id: turn_id.clone(),
+            runtime_handle,
+            terminated_tx,
+            memory_dir: request.memory_dir.clone(),
+            session_id: request.thread.session_id.clone(),
+            interrupt_message: request.runtime.interrupt_message,
+            armed: true,
+            _permit: permit,
+        };
+
         let result = run_request(&request, Arc::clone(&interrupt)).await;
         let (event, terminal_status) = if interrupt.is_closed() || interrupt.is_interrupted() {
             if request.runtime.interrupt_message {
                 if let Err(error) = ensure_interrupted_history_boundary(
                     &request.memory_dir,
                     &request.thread.session_id,
+                    "[astro:system]\nThe previous agent turn was interrupted by the parent.",
                 ) {
                     tracing::warn!(%error, "failed to record interrupted agent history boundary");
                 }
@@ -151,13 +276,15 @@ impl AgentRuntimeManager {
         } else {
             Ok(())
         };
-        let _ = control.remove_runtime(&thread_id);
-        self.remove_active(&thread_id);
+        let active_result = self.remove_active_if_turn(&thread_id, &turn_id);
+        let runtime_result =
+            control.remove_runtime_if_same(&thread_id, &owner_guard.runtime_handle);
+        owner_guard.publish_termination(terminal_status.clone());
+        owner_guard.disarm();
         finish_result?;
         shutdown_result?;
-        let _ = terminated_tx.send(Some(RunnerTermination {
-            terminal_status: terminal_status.clone(),
-        }));
+        active_result?;
+        runtime_result?;
 
         match result {
             Err(error) if !interrupt.is_interrupted() && !interrupt.is_closed() => Err(error),
@@ -238,7 +365,7 @@ impl AgentRuntimeManager {
             },
         );
         let _ = control.remove_runtime(thread_id);
-        self.remove_active(thread_id);
+        let _ = self.remove_active_if_turn(thread_id, turn_id);
         event_result?;
         let _ = terminated_tx.send(Some(RunnerTermination {
             terminal_status: status,
@@ -246,10 +373,15 @@ impl AgentRuntimeManager {
         Ok(())
     }
 
-    fn remove_active(&self, thread_id: &str) {
-        if let Ok(mut active) = self.active.lock() {
+    fn remove_active_if_turn(&self, thread_id: &str, turn_id: &str) -> anyhow::Result<bool> {
+        let mut active = self.lock_active()?;
+        let matches = active
+            .get(thread_id)
+            .is_some_and(|turn| turn.turn_id == turn_id);
+        if matches {
             active.remove(thread_id);
         }
+        Ok(matches)
     }
 
     fn lock_active(
@@ -278,6 +410,7 @@ async fn wait_for_termination(
 fn ensure_interrupted_history_boundary(
     memory_dir: &std::path::Path,
     session_id: &str,
+    content: &str,
 ) -> anyhow::Result<()> {
     let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("sessions"))?;
     let messages = sessions.get_messages(session_id)?;
@@ -286,7 +419,7 @@ fn ensure_interrupted_history_boundary(
         .is_some_and(|message| message.role == "user")
     {
         sessions.append_message(session::NewMessage {
-            content: Some("[astro:system]\nThe previous agent turn was interrupted by the parent."),
+            content: Some(content),
             finish_reason: Some("interrupted"),
             ..session::NewMessage::empty(session_id, "assistant")
         })?;
@@ -389,7 +522,7 @@ mod tests {
 
     use crate::streaming::ChatOverride;
 
-    use super::{AckSubscribeHook, AgentRuntimeManager, RunAgentTurnRequest};
+    use super::{wait_for_termination, AckSubscribeHook, AgentRuntimeManager, RunAgentTurnRequest};
 
     fn scripted_chat(reply: &str) -> ChatOverride {
         let reply = reply.to_string();
@@ -409,6 +542,16 @@ mod tests {
     fn pending_chat() -> ChatOverride {
         Arc::new(move |_messages, _tools, _config| {
             Box::pin(async move {
+                Ok(Box::pin(stream::pending::<anyhow::Result<StreamChunk>>()) as CompletionStream)
+            })
+        })
+    }
+
+    fn barrier_pending_chat(barrier: Arc<tokio::sync::Barrier>) -> ChatOverride {
+        Arc::new(move |_messages, _tools, _config| {
+            let barrier = Arc::clone(&barrier);
+            Box::pin(async move {
+                barrier.wait().await;
                 Ok(Box::pin(stream::pending::<anyhow::Result<StreamChunk>>()) as CompletionStream)
             })
         })
@@ -733,6 +876,101 @@ mod tests {
         assert!(control.runtime_handle(&thread.thread_id).unwrap().is_none());
         let permit = control.acquire_execution(&thread.thread_id).unwrap();
         drop(permit);
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn aborted_start_turn_owner_cleans_runtime_and_allows_follow_up() {
+        let dir = tempfile::tempdir().unwrap();
+        let (control, thread) = setup(&dir, "worker");
+        let manager = Arc::new(AgentRuntimeManager::default());
+        let barrier = Arc::new(tokio::sync::Barrier::new(2));
+        let owner = tokio::spawn({
+            let manager = Arc::clone(&manager);
+            let request = request(
+                Arc::clone(&control),
+                thread.clone(),
+                dir.path().join("memory"),
+                barrier_pending_chat(Arc::clone(&barrier)),
+            );
+            async move { manager.start_turn(request).await }
+        });
+
+        barrier.wait().await;
+        assert!(manager.is_running(&thread.thread_id));
+        assert!(control.runtime_handle(&thread.thread_id).unwrap().is_some());
+        assert_eq!(
+            control
+                .resolve_target(&AgentPath::root(), "worker")
+                .unwrap()
+                .status,
+            AgentStatusV2::Running
+        );
+        let (_, termination) = manager.termination_subscription(&thread.thread_id).unwrap();
+
+        owner.abort();
+        assert!(owner.await.unwrap_err().is_cancelled());
+
+        let termination = wait_for_termination(termination, "owner cancellation")
+            .await
+            .ok();
+        let active = manager.is_running(&thread.thread_id);
+        let has_runtime = control.runtime_handle(&thread.thread_id).unwrap().is_some();
+        let permit = control.acquire_execution(&thread.thread_id).ok();
+        let permit_available = permit.is_some();
+        drop(permit);
+        let status_after_abort = control
+            .resolve_target(&AgentPath::root(), "worker")
+            .unwrap()
+            .status;
+
+        assert!(!active);
+        assert!(!has_runtime);
+        assert!(permit_available);
+        assert_eq!(status_after_abort, AgentStatusV2::Interrupted);
+        assert_eq!(
+            termination.map(|termination| termination.terminal_status),
+            Some(AgentStatusV2::Interrupted)
+        );
+        assert!(matches!(
+            control
+                .status_events(&thread.thread_id)
+                .unwrap()
+                .last()
+                .map(|event| &event.event),
+            Some(RunnerEvent::TurnInterrupted { reason, .. })
+                if reason.contains("start_turn future cancelled")
+        ));
+
+        manager
+            .start_turn(request(
+                Arc::clone(&control),
+                thread.clone(),
+                dir.path().join("memory"),
+                scripted_chat("follow-up completed"),
+            ))
+            .await
+            .unwrap();
+        assert!(!manager.is_running(&thread.thread_id));
+        assert!(control.runtime_handle(&thread.thread_id).unwrap().is_none());
+        assert_eq!(
+            control
+                .resolve_target(&AgentPath::root(), "worker")
+                .unwrap()
+                .status,
+            AgentStatusV2::Completed {
+                last_message: "follow-up completed".into()
+            }
+        );
+        assert_eq!(
+            session::SessionStore::open_sessions_dir(&dir.path().join("memory/sessions"))
+                .unwrap()
+                .get_messages(&thread.session_id)
+                .unwrap()
+                .into_iter()
+                .map(|message| message.role)
+                .collect::<Vec<_>>(),
+            vec!["user", "assistant", "user", "assistant"]
+        );
     }
 
     #[tokio::test(flavor = "current_thread")]
