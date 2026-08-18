@@ -217,6 +217,27 @@ impl AgentGraphStore {
         Ok(())
     }
 
+    pub fn cleanup_pending_reservations(&self, root_thread_id: &str) -> anyhow::Result<usize> {
+        require_non_empty("root_thread_id", root_thread_id)?;
+        let mut conn = self.connect()?;
+        let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
+        tx.execute(
+            "DELETE FROM agent_spawn_edges
+             WHERE child_thread_id IN (
+                 SELECT thread_id FROM agent_threads
+                 WHERE root_thread_id = ?1 AND status_kind = 'pending_init'
+             )",
+            [root_thread_id],
+        )?;
+        let removed = tx.execute(
+            "DELETE FROM agent_threads
+             WHERE root_thread_id = ?1 AND status_kind = 'pending_init'",
+            [root_thread_id],
+        )?;
+        tx.commit()?;
+        Ok(removed)
+    }
+
     pub fn get_thread(&self, thread_id: &str) -> anyhow::Result<Option<AgentThreadV2>> {
         require_non_empty("thread_id", thread_id)?;
         query_v2_thread_by_id(&self.connect()?, thread_id)
@@ -261,9 +282,8 @@ impl AgentGraphStore {
         require_non_empty("thread_id", thread_id)?;
         let mut conn = self.connect()?;
         let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
-        if query_v2_thread_by_id(&tx, thread_id)?.is_none() {
-            bail!("unknown agent thread {thread_id:?}");
-        }
+        let existing = query_v2_thread_by_id(&tx, thread_id)?
+            .with_context(|| format!("unknown agent thread {thread_id:?}"))?;
         after_read();
 
         let status = status_for_event(&event);
@@ -298,6 +318,17 @@ impl AgentGraphStore {
                 timestamp,
             ],
         )?;
+        if matches!(event, RunnerEvent::RuntimeTerminated) && existing.parent_thread_id.is_some() {
+            let updated_edges = tx.execute(
+                "UPDATE agent_spawn_edges
+                 SET edge_state = 'closed', closed_at = COALESCE(closed_at, ?2)
+                 WHERE child_thread_id = ?1",
+                params![thread_id, timestamp],
+            )?;
+            if updated_edges != 1 {
+                bail!("missing spawn edge for terminated agent thread {thread_id:?}");
+            }
+        }
         let thread =
             query_v2_thread_by_id(&tx, thread_id)?.context("updated agent thread is missing")?;
         tx.commit()?;
@@ -387,6 +418,18 @@ impl AgentGraphStore {
         )?;
         tx.commit()?;
         Ok(())
+    }
+
+    pub fn edge_state(&self, child_thread_id: &str) -> anyhow::Result<Option<String>> {
+        require_non_empty("child_thread_id", child_thread_id)?;
+        self.connect()?
+            .query_row(
+                "SELECT edge_state FROM agent_spawn_edges WHERE child_thread_id = ?1",
+                [child_thread_id],
+                |row| row.get(0),
+            )
+            .optional()
+            .map_err(Into::into)
     }
 
     pub fn list_historical_threads(&self) -> anyhow::Result<Vec<HistoricalAgentThread>> {
@@ -957,6 +1000,53 @@ mod tests {
     }
 
     #[test]
+    fn runtime_terminated_atomically_projects_shutdown_and_closes_edge() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = AgentGraphStore::open(dir.path().join("subagents-v2.db")).unwrap();
+        store
+            .reserve_thread(&reservation("child", "/root/child"))
+            .unwrap();
+
+        let terminated = store
+            .apply_status_event("child", RunnerEvent::RuntimeTerminated)
+            .unwrap();
+
+        assert_eq!(terminated.status, AgentStatusV2::Shutdown);
+        assert_eq!(
+            store.edge_state("child").unwrap().as_deref(),
+            Some("closed")
+        );
+    }
+
+    #[test]
+    fn runtime_terminated_missing_child_edge_rolls_back_status_transaction() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = AgentGraphStore::open(dir.path().join("subagents-v2.db")).unwrap();
+        store
+            .reserve_thread(&reservation("child", "/root/child"))
+            .unwrap();
+        store
+            .connect()
+            .unwrap()
+            .execute(
+                "DELETE FROM agent_spawn_edges WHERE child_thread_id = 'child'",
+                [],
+            )
+            .unwrap();
+
+        let error = store
+            .apply_status_event("child", RunnerEvent::RuntimeTerminated)
+            .unwrap_err();
+
+        assert!(error.to_string().contains("spawn edge"));
+        assert_eq!(
+            store.get_thread("child").unwrap().unwrap().status,
+            AgentStatusV2::PendingInit
+        );
+        assert!(store.status_events("child").unwrap().is_empty());
+    }
+
+    #[test]
     fn concurrent_status_writer_does_not_invalidate_first_transaction_snapshot() {
         let dir = tempfile::tempdir().unwrap();
         let store = AgentGraphStore::open(dir.path().join("subagents-v2.db")).unwrap();
@@ -1049,6 +1139,51 @@ mod tests {
             store.get_thread("running").unwrap().unwrap().status,
             AgentStatusV2::Running
         );
+    }
+
+    #[test]
+    fn cleanup_pending_reservations_is_root_scoped_and_preserves_started_threads() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = AgentGraphStore::open(dir.path().join("subagents-v2.db")).unwrap();
+        store
+            .reserve_thread(&reservation("pending", "/root/pending"))
+            .unwrap();
+        store
+            .reserve_thread(&reservation("running", "/root/running"))
+            .unwrap();
+        store
+            .apply_status_event(
+                "running",
+                RunnerEvent::TurnStarted {
+                    turn_id: "turn".into(),
+                },
+            )
+            .unwrap();
+        let mut other_root = reservation("other-pending", "/root/pending");
+        other_root.root_thread_id = "other-root".into();
+        other_root.parent_thread_id = "other-root".into();
+        store.reserve_thread(&other_root).unwrap();
+
+        assert_eq!(
+            store.cleanup_pending_reservations("root-thread").unwrap(),
+            1
+        );
+        assert!(store.get_thread("pending").unwrap().is_none());
+        assert_eq!(
+            store.get_thread("running").unwrap().unwrap().status,
+            AgentStatusV2::Running
+        );
+        assert!(store.get_thread("other-pending").unwrap().is_some());
+        let pending_edge_count: i64 = store
+            .connect()
+            .unwrap()
+            .query_row(
+                "SELECT COUNT(*) FROM agent_spawn_edges WHERE child_thread_id = 'pending'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(pending_edge_count, 0);
     }
 
     #[test]

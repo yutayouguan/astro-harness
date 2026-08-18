@@ -92,10 +92,17 @@ impl ActivityBus {
     }
 
     fn first_after(&self, cursor: ActivityCursor) -> Option<AgentActivity> {
-        self.lock_events()
-            .iter()
-            .find(|activity| activity.sequence > cursor.0)
-            .cloned()
+        let events = self.lock_events();
+        let mut first = None;
+        for activity in events.iter().filter(|event| event.sequence > cursor.0) {
+            if activity.kind == AgentActivityKind::MainSteer {
+                return Some(activity.clone());
+            }
+            if first.is_none() {
+                first = Some(activity.clone());
+            }
+        }
+        first
     }
 
     fn lock_events(&self) -> MutexGuard<'_, VecDeque<AgentActivity>> {
@@ -155,6 +162,24 @@ mod tests {
         assert_eq!(
             bus.wait_after(bus.cursor(), Duration::from_millis(1)).await,
             None
+        );
+    }
+
+    #[tokio::test]
+    async fn main_steer_takes_priority_over_earlier_ordinary_activity() {
+        let bus = ActivityBus::default();
+        let cursor = bus.cursor();
+        bus.publish(
+            AgentActivityKind::Mailbox {
+                thread_id: "worker".into(),
+            },
+            None,
+        );
+        let steer = bus.publish(AgentActivityKind::MainSteer, None);
+
+        assert_eq!(
+            bus.wait_after(cursor, Duration::from_millis(10)).await,
+            Some(steer)
         );
     }
 }

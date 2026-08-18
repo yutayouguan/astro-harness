@@ -82,6 +82,7 @@ impl AgentControl {
         limits: Limits,
     ) -> anyhow::Result<Arc<Self>> {
         store.ensure_root_thread(&root_thread_id)?;
+        store.cleanup_pending_reservations(&root_thread_id)?;
         let snapshot = store.snapshot(&root_thread_id)?;
         let registry = AgentRegistry::from_threads(limits, &snapshot.threads)?;
         Ok(Arc::new(Self {
@@ -102,10 +103,7 @@ impl AgentControl {
         parent: &AgentPath,
         task_name: &str,
     ) -> anyhow::Result<SpawnReservation<'a>> {
-        let parent_thread = self
-            .store
-            .get_by_path(&self.root_thread_id, parent)?
-            .ok_or_else(|| anyhow::anyhow!("unknown parent agent path {parent:?}"))?;
+        let parent_thread = self.require_path(parent, "parent agent")?;
         let thread_id = Uuid::new_v4().to_string();
         let mut reservation = self.registry.reserve_spawn(parent, task_name, &thread_id)?;
         let identity = reservation.thread();
@@ -132,9 +130,7 @@ impl AgentControl {
         if &resolved == current {
             anyhow::bail!("an agent cannot target itself: {resolved}");
         }
-        self.store
-            .get_by_path(&self.root_thread_id, &resolved)?
-            .ok_or_else(|| anyhow::anyhow!("unknown agent target {resolved}"))
+        self.require_path(&resolved, "agent target")
     }
 
     pub fn list_agents(
@@ -148,11 +144,13 @@ impl AgentControl {
             None => AgentPath::root(),
         };
         let snapshot = self.store.snapshot(&self.root_thread_id)?;
-        Ok(snapshot
-            .threads
-            .into_iter()
-            .filter(|thread| thread.canonical_path.starts_with(&prefix))
-            .collect())
+        let mut threads = Vec::new();
+        for thread in snapshot.threads {
+            if thread.canonical_path.starts_with(&prefix) && self.is_committed_thread(&thread)? {
+                threads.push(thread);
+            }
+        }
+        Ok(threads)
     }
 
     pub fn enqueue_message(
@@ -214,8 +212,10 @@ impl AgentControl {
         }
         let terminated = matches!(event, RunnerEvent::RuntimeTerminated);
         let thread = self.store.apply_status_event(thread_id, event)?;
+        if terminated {
+            self.runtimes.remove(thread_id)?;
+        }
         let kind = if terminated {
-            self.store.close_edge(thread_id)?;
             AgentActivityKind::EdgeClosed {
                 thread_id: thread_id.to_string(),
             }
@@ -261,6 +261,16 @@ impl AgentControl {
         thread_id: &str,
         handle: AgentRuntimeHandle,
     ) -> anyhow::Result<()> {
+        let path = self
+            .registry
+            .committed_path_for_thread(thread_id)?
+            .ok_or_else(|| {
+                anyhow::anyhow!("agent thread {thread_id:?} is unknown or not committed")
+            })?;
+        if path == AgentPath::root() {
+            anyhow::bail!("cannot register a child runtime handle for the root agent");
+        }
+        self.require_path(&path, "runtime agent")?;
         self.runtimes.register(thread_id, handle)
     }
 
@@ -273,9 +283,22 @@ impl AgentControl {
     }
 
     fn require_path(&self, path: &AgentPath, label: &str) -> anyhow::Result<AgentThreadV2> {
-        self.store
+        let thread = self
+            .store
             .get_by_path(&self.root_thread_id, path)?
-            .ok_or_else(|| anyhow::anyhow!("unknown {label} path {path}"))
+            .ok_or_else(|| anyhow::anyhow!("unknown {label} path {path}"))?;
+        if !self.is_committed_thread(&thread)? {
+            anyhow::bail!("{label} path {path} is not committed");
+        }
+        Ok(thread)
+    }
+
+    fn is_committed_thread(&self, thread: &AgentThreadV2) -> anyhow::Result<bool> {
+        Ok(self
+            .registry
+            .thread_id_for_path(&thread.canonical_path)?
+            .as_deref()
+            == Some(thread.thread_id.as_str()))
     }
 }
 
@@ -499,6 +522,13 @@ mod tests {
         thread
     }
 
+    fn runtime_handle() -> AgentRuntimeHandle {
+        AgentRuntimeHandle {
+            interrupt: Arc::new(|| {}),
+            terminate: Arc::new(|| {}),
+        }
+    }
+
     #[tokio::test]
     async fn follow_up_interrupt_and_close_are_independent_controls() {
         let registry = LiveAgentThreads::default();
@@ -597,6 +627,31 @@ mod tests {
     }
 
     #[test]
+    fn open_recovers_crashed_pending_reservations_before_restoring_registry() {
+        let dir = TempDir::new().unwrap();
+        let store = crate::AgentGraphStore::open(dir.path().join("subagents-v2.db")).unwrap();
+        store.ensure_root_thread("root-thread").unwrap();
+        store
+            .reserve_thread(&crate::ThreadReservation {
+                thread_id: "crashed-pending".into(),
+                root_thread_id: "root-thread".into(),
+                parent_thread_id: "root-thread".into(),
+                canonical_path: crate::AgentPath::parse("/root/worker").unwrap(),
+                task_name: "worker".into(),
+                agent_type: "default".into(),
+                session_id: "crashed-pending".into(),
+            })
+            .unwrap();
+
+        let control = AgentControl::open("root-thread".into(), store.clone(), limits()).unwrap();
+        assert!(store.get_thread("crashed-pending").unwrap().is_none());
+        let replacement = control
+            .reserve_spawn(&crate::AgentPath::root(), "worker")
+            .unwrap();
+        assert_ne!(replacement.thread().thread_id, "crashed-pending");
+    }
+
+    #[test]
     fn control_spawn_reservation_rolls_back_store_and_registry() {
         let dir = TempDir::new().unwrap();
         let (control, store) = open_control(&dir, "root-thread");
@@ -616,6 +671,21 @@ mod tests {
         assert!(store.get_by_path("root-thread", &path).unwrap().is_some());
         drop(retry);
         assert!(store.get_by_path("root-thread", &path).unwrap().is_none());
+    }
+
+    #[test]
+    fn explicit_abort_synchronously_rolls_back_durable_and_memory_reservation() {
+        let dir = TempDir::new().unwrap();
+        let (control, store) = open_control(&dir, "root-thread");
+        let root = crate::AgentPath::root();
+        let reservation = control.reserve_spawn(&root, "worker").unwrap();
+        let thread_id = reservation.thread().thread_id.clone();
+
+        reservation.abort().unwrap();
+
+        assert!(store.get_thread(&thread_id).unwrap().is_none());
+        let replacement = control.reserve_spawn(&root, "worker").unwrap();
+        assert_ne!(replacement.thread().thread_id, thread_id);
     }
 
     #[test]
@@ -671,6 +741,78 @@ mod tests {
                 .status,
             crate::AgentStatusV2::Running
         );
+    }
+
+    #[test]
+    fn uncommitted_reservations_are_not_model_visible_or_messageable() {
+        let dir = TempDir::new().unwrap();
+        let (control, store) = open_control(&dir, "root-thread");
+        let root = crate::AgentPath::root();
+        let reservation = control.reserve_spawn(&root, "worker").unwrap();
+        let pending = reservation.thread().clone();
+
+        assert_eq!(
+            control
+                .list_agents(&root, None)
+                .unwrap()
+                .into_iter()
+                .map(|thread| thread.canonical_path)
+                .collect::<Vec<_>>(),
+            vec![root.clone()]
+        );
+        assert!(control.resolve_target(&root, "worker").is_err());
+        assert!(control
+            .enqueue_message(
+                &root,
+                crate::MessageAgentV2Request {
+                    target: "worker".into(),
+                    message: "too early".into(),
+                },
+                true,
+            )
+            .is_err());
+        assert!(store.pending_for(&pending.thread_id, 0).unwrap().is_empty());
+
+        drop(reservation);
+        assert!(store.get_thread(&pending.thread_id).unwrap().is_none());
+        assert!(store.pending_for(&pending.thread_id, 0).unwrap().is_empty());
+
+        let committed = control.reserve_spawn(&root, "worker").unwrap();
+        let worker = committed.thread().clone();
+        committed.commit().unwrap();
+        assert!(control
+            .list_agents(&root, None)
+            .unwrap()
+            .iter()
+            .any(|thread| thread.thread_id == worker.thread_id));
+        assert_eq!(
+            control.resolve_target(&root, "worker").unwrap().thread_id,
+            worker.thread_id
+        );
+        control
+            .enqueue_message(
+                &root,
+                crate::MessageAgentV2Request {
+                    target: "worker".into(),
+                    message: "ready".into(),
+                },
+                true,
+            )
+            .unwrap();
+        assert_eq!(store.pending_for(&worker.thread_id, 0).unwrap().len(), 1);
+
+        let uncommitted_sender = control.reserve_spawn(&root, "sender").unwrap();
+        assert!(control
+            .enqueue_message(
+                &uncommitted_sender.thread().canonical_path,
+                crate::MessageAgentV2Request {
+                    target: "/root/worker".into(),
+                    message: "orphan sender".into(),
+                },
+                false,
+            )
+            .is_err());
+        assert_eq!(store.pending_for(&worker.thread_id, 0).unwrap().len(), 1);
     }
 
     #[test]
@@ -804,6 +946,25 @@ mod tests {
                 .await,
             WaitOutcome::TimedOut
         );
+
+        let priority_cursor = control.activity_cursor();
+        control
+            .enqueue_message(
+                &root,
+                crate::MessageAgentV2Request {
+                    target: "worker".into(),
+                    message: "mail before steer".into(),
+                },
+                false,
+            )
+            .unwrap();
+        control.notify_main_steer();
+        assert_eq!(
+            control
+                .wait_activity(priority_cursor, Duration::from_millis(20))
+                .await,
+            WaitOutcome::Steered
+        );
     }
 
     #[tokio::test]
@@ -842,13 +1003,30 @@ mod tests {
         let second_dir = TempDir::new().unwrap();
         let (first, _first_store) = open_control(&first_dir, "first-root");
         let (second, _second_store) = open_control(&second_dir, "second-root");
+        let worker = commit_spawn(&first, &crate::AgentPath::root(), "worker");
+        let pending = first
+            .reserve_spawn(&crate::AgentPath::root(), "pending")
+            .unwrap();
+
+        assert!(first.register_runtime("unknown", runtime_handle()).is_err());
+        assert!(first
+            .register_runtime("first-root", runtime_handle())
+            .is_err());
+        assert!(first
+            .register_runtime(&pending.thread().thread_id, runtime_handle())
+            .is_err());
+        assert!(second
+            .register_runtime(&worker.thread_id, runtime_handle())
+            .is_err());
+        pending.abort().unwrap();
+
         let interrupt_count = Arc::new(AtomicUsize::new(0));
         let terminate_count = Arc::new(AtomicUsize::new(0));
         let interrupt_counter = Arc::clone(&interrupt_count);
         let terminate_counter = Arc::clone(&terminate_count);
         first
             .register_runtime(
-                "worker",
+                &worker.thread_id,
                 AgentRuntimeHandle {
                     interrupt: Arc::new(move || {
                         interrupt_counter.fetch_add(1, Ordering::SeqCst);
@@ -860,13 +1038,34 @@ mod tests {
             )
             .unwrap();
 
-        let handle = first.runtime_handle("worker").unwrap().unwrap();
+        let handle = first.runtime_handle(&worker.thread_id).unwrap().unwrap();
         (handle.interrupt)();
         (handle.terminate)();
         assert_eq!(interrupt_count.load(Ordering::SeqCst), 1);
         assert_eq!(terminate_count.load(Ordering::SeqCst), 1);
-        assert!(second.runtime_handle("worker").unwrap().is_none());
-        assert!(first.remove_runtime("worker").unwrap().is_some());
-        assert!(first.runtime_handle("worker").unwrap().is_none());
+        assert!(second.runtime_handle(&worker.thread_id).unwrap().is_none());
+        assert!(first.remove_runtime(&worker.thread_id).unwrap().is_some());
+        assert!(first.runtime_handle(&worker.thread_id).unwrap().is_none());
+    }
+
+    #[test]
+    fn runtime_termination_removes_registered_handle_after_durable_transition() {
+        let dir = TempDir::new().unwrap();
+        let (control, store) = open_control(&dir, "root-thread");
+        let worker = commit_spawn(&control, &crate::AgentPath::root(), "worker");
+        control
+            .register_runtime(&worker.thread_id, runtime_handle())
+            .unwrap();
+
+        let terminated = control
+            .record_runner_event(&worker.thread_id, crate::RunnerEvent::RuntimeTerminated)
+            .unwrap();
+
+        assert_eq!(terminated.status, crate::AgentStatusV2::Shutdown);
+        assert_eq!(
+            store.edge_state(&worker.thread_id).unwrap().as_deref(),
+            Some("closed")
+        );
+        assert!(control.runtime_handle(&worker.thread_id).unwrap().is_none());
     }
 }

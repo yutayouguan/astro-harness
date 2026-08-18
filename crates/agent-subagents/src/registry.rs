@@ -251,8 +251,15 @@ impl<'a> SpawnReservation<'a> {
         self.thread = thread;
     }
 
+    pub fn abort(mut self) -> anyhow::Result<()> {
+        self.rollback_durable()
+            .context("failed to abort durable agent reservation")?;
+        self.release_memory();
+        Ok(())
+    }
+
     pub fn commit(mut self) -> anyhow::Result<()> {
-        {
+        let commit_result = (|| {
             let mut state = self.registry.lock_state()?;
             if state.thread_paths.contains_key(&self.thread_id) {
                 bail!("agent thread id {:?} already exists", self.thread_id);
@@ -269,6 +276,18 @@ impl<'a> SpawnReservation<'a> {
             state
                 .thread_paths
                 .insert(self.thread_id.clone(), self.path.clone());
+            Ok(())
+        })();
+        if let Err(commit_error) = commit_result {
+            return match self.rollback_durable() {
+                Ok(()) => {
+                    self.release_memory();
+                    Err(commit_error)
+                }
+                Err(rollback_error) => Err(anyhow::anyhow!(
+                    "agent identity commit failed: {commit_error:#}; durable rollback failed: {rollback_error:#}"
+                )),
+            };
         }
         self.active = false;
         if let Some(activity) = self.activity {
@@ -281,22 +300,35 @@ impl<'a> SpawnReservation<'a> {
         }
         Ok(())
     }
+
+    fn rollback_durable(&mut self) -> anyhow::Result<()> {
+        if let Some(store) = self.persisted_store {
+            store.rollback_pending_thread(&self.thread_id)?;
+            self.persisted_store = None;
+        }
+        Ok(())
+    }
+
+    fn release_memory(&mut self) {
+        if self.active {
+            self.registry
+                .release_reservation(&self.path, &self.thread_id);
+            self.active = false;
+        }
+    }
 }
 
 impl Drop for SpawnReservation<'_> {
     fn drop(&mut self) {
         if self.active {
-            if let Some(store) = self.persisted_store {
-                if let Err(error) = store.rollback_pending_thread(&self.thread_id) {
-                    tracing::warn!(
-                        thread_id = %self.thread_id,
-                        %error,
-                        "failed to roll back pending agent thread"
-                    );
-                }
+            if let Err(error) = self.rollback_durable() {
+                tracing::warn!(
+                    thread_id = %self.thread_id,
+                    %error,
+                    "failed to roll back pending agent thread"
+                );
             }
-            self.registry
-                .release_reservation(&self.path, &self.thread_id);
+            self.release_memory();
         }
     }
 }
@@ -361,6 +393,26 @@ mod tests {
         }
     }
 
+    fn attach_persisted<'a>(
+        reservation: &mut SpawnReservation<'a>,
+        store: &'a AgentGraphStore,
+        activity: &'a ActivityBus,
+    ) {
+        let thread = reservation.thread().clone();
+        let persisted = store
+            .reserve_thread(&crate::ThreadReservation {
+                thread_id: thread.thread_id,
+                root_thread_id: thread.root_thread_id,
+                parent_thread_id: thread.parent_thread_id.unwrap(),
+                canonical_path: thread.canonical_path,
+                task_name: thread.task_name,
+                agent_type: thread.agent_type,
+                session_id: thread.session_id,
+            })
+            .unwrap();
+        reservation.attach_persisted(store, activity, persisted);
+    }
+
     #[test]
     fn dropped_spawn_reservation_releases_path_and_identity_slot() {
         let registry = AgentRegistry::from_threads(
@@ -412,6 +464,73 @@ mod tests {
         assert_eq!(registry.identity_count().unwrap(), 1);
         assert!(registry
             .reserve_spawn(&AgentPath::root(), "second", "new-thread")
+            .is_ok());
+    }
+
+    #[test]
+    fn failed_commit_rolls_back_attached_pending_row() {
+        let registry = AgentRegistry::from_threads(
+            limits(3, 1, 1),
+            &[thread("/root", AgentStatusV2::Running)],
+        )
+        .unwrap();
+        registry
+            .reserve_spawn(&AgentPath::root(), "first", "shared-thread")
+            .unwrap()
+            .commit()
+            .unwrap();
+        let dir = tempfile::tempdir().unwrap();
+        let store = AgentGraphStore::open(dir.path().join("subagents-v2.db")).unwrap();
+        store.ensure_root_thread("root-thread").unwrap();
+        let activity = ActivityBus::default();
+        let mut reservation = registry
+            .reserve_spawn(&AgentPath::root(), "second", "shared-thread")
+            .unwrap();
+        attach_persisted(&mut reservation, &store, &activity);
+
+        reservation.commit().unwrap_err();
+
+        assert!(store.get_thread("shared-thread").unwrap().is_none());
+        assert!(registry
+            .reserve_spawn(&AgentPath::root(), "second", "replacement")
+            .is_ok());
+    }
+
+    #[test]
+    fn failed_commit_reports_durable_rollback_failure() {
+        let registry = AgentRegistry::from_threads(
+            limits(3, 1, 1),
+            &[thread("/root", AgentStatusV2::Running)],
+        )
+        .unwrap();
+        registry
+            .reserve_spawn(&AgentPath::root(), "first", "shared-thread")
+            .unwrap()
+            .commit()
+            .unwrap();
+        let dir = tempfile::tempdir().unwrap();
+        let store = AgentGraphStore::open(dir.path().join("subagents-v2.db")).unwrap();
+        store.ensure_root_thread("root-thread").unwrap();
+        let activity = ActivityBus::default();
+        let mut reservation = registry
+            .reserve_spawn(&AgentPath::root(), "second", "shared-thread")
+            .unwrap();
+        attach_persisted(&mut reservation, &store, &activity);
+        store
+            .apply_status_event(
+                "shared-thread",
+                crate::RunnerEvent::TurnStarted {
+                    turn_id: "invalid-early-start".into(),
+                },
+            )
+            .unwrap();
+
+        let error = reservation.commit().unwrap_err();
+
+        assert!(error.to_string().contains("thread id"));
+        assert!(error.to_string().contains("durable rollback"));
+        assert!(registry
+            .reserve_spawn(&AgentPath::root(), "second", "replacement")
             .is_ok());
     }
 
