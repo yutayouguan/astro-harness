@@ -1,4 +1,5 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
+use std::ops::{Deref, DerefMut};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
@@ -95,12 +96,33 @@ struct ActiveAgentTurn {
 
 struct StartingAgentTurn {
     token: String,
+    result_tx: watch::Sender<Option<Result<(), String>>>,
     result_rx: watch::Receiver<Option<Result<(), String>>>,
 }
 
 enum RuntimeSlot {
     Starting(StartingAgentTurn),
     Running(Box<ActiveAgentTurn>),
+}
+
+#[derive(Default)]
+struct RuntimeState {
+    slots: HashMap<String, RuntimeSlot>,
+    close_intents: HashSet<String>,
+}
+
+impl Deref for RuntimeState {
+    type Target = HashMap<String, RuntimeSlot>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.slots
+    }
+}
+
+impl DerefMut for RuntimeState {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.slots
+    }
 }
 
 enum RuntimeTerminationState {
@@ -110,6 +132,12 @@ enum RuntimeTerminationState {
         control: Arc<AgentThreadControl>,
         terminated: watch::Receiver<Option<RunnerAck>>,
     },
+}
+
+enum CloseSlotAdmission {
+    Missing,
+    Starting,
+    TerminationRequested(watch::Receiver<Option<RunnerAck>>),
 }
 
 pub(super) enum CloseThreadStart {
@@ -292,9 +320,17 @@ pub(super) struct AckSubscribeHook {
     pub(super) release: Arc<tokio::sync::Notify>,
 }
 
+#[cfg(test)]
+#[derive(Clone)]
+pub(super) struct CloseAdmissionHook {
+    pub(super) entered: Arc<tokio::sync::Notify>,
+    pub(super) release: Arc<(std::sync::Mutex<bool>, std::sync::Condvar)>,
+}
+
 #[derive(Default)]
 pub struct AgentRuntimeManager {
-    active: Mutex<HashMap<String, RuntimeSlot>>,
+    active: Mutex<RuntimeState>,
+    active_changed: tokio::sync::Notify,
     subtree_close: Arc<tokio::sync::Mutex<()>>,
     #[cfg(test)]
     ack_subscribe_hook: Mutex<Option<AckSubscribeHook>>,
@@ -320,6 +356,8 @@ pub struct AgentRuntimeManager {
     start_status_failure: Mutex<Option<String>>,
     #[cfg(test)]
     close_timeout: Mutex<Option<std::time::Duration>>,
+    #[cfg(test)]
+    close_admission_hook: Mutex<Option<CloseAdmissionHook>>,
 }
 
 impl AgentRuntimeManager {
@@ -360,6 +398,13 @@ impl AgentRuntimeManager {
         self.pause_before_followup_start(&request).await;
         let thread_id = request.thread.thread_id.clone();
         let control = Arc::clone(&request.control);
+        let current = control.resolve_desktop_target(request.thread.canonical_path.as_str())?;
+        if current.status == AgentStatusV2::Shutdown {
+            let error =
+                anyhow::anyhow!("cannot start a runtime turn for Shutdown agent {thread_id:?}");
+            self.fail_starting_request(&request, &error);
+            return Err(error);
+        }
         let permit = match control.acquire_execution(&thread_id) {
             Ok(permit) => permit,
             Err(error) => {
@@ -407,7 +452,12 @@ impl AgentRuntimeManager {
                     pending_followup: None,
                 }))
             };
-            match (active.entry(thread_id.clone()), request.start_token.as_deref()) {
+            if active.close_intents.contains(&thread_id) {
+                Err(anyhow::anyhow!(
+                    "agent thread {thread_id:?} has a pending close intent"
+                ))
+            } else {
+                match (active.entry(thread_id.clone()), request.start_token.as_deref()) {
                 (std::collections::hash_map::Entry::Vacant(entry), None) => {
                     entry.insert(running());
                     Ok(())
@@ -424,8 +474,12 @@ impl AgentRuntimeManager {
                 (_, None) => Err(anyhow::anyhow!(
                     "agent thread {thread_id:?} already has an active runtime turn"
                 )),
+                }
             }
         };
+        if claim_result.is_ok() {
+            self.active_changed.notify_one();
+        }
         if let Err(error) = claim_result {
             drop(permit);
             self.fail_starting_request(&request, &error);
@@ -700,8 +754,8 @@ impl AgentRuntimeManager {
         Ok(())
     }
 
-    /// Advance one thread close until it is either complete, waiting for a
-    /// Starting slot, or has synchronously sent a termination signal.  The
+    /// Advance one thread close until it is either complete, has atomically
+    /// cancelled a Starting slot, or has synchronously sent a termination signal.  The
     /// caller can safely transfer its subtree admission guard only after the
     /// `TerminationRequested` result is returned.
     pub(super) async fn begin_close_thread(
@@ -711,20 +765,16 @@ impl AgentRuntimeManager {
     ) -> anyhow::Result<CloseThreadStart> {
         let thread_id = thread.thread_id.as_str();
         let current = control.resolve_desktop_target(thread.canonical_path.as_str())?;
-        match self.runtime_termination_state(thread_id)? {
-            RuntimeTerminationState::Running {
-                control: runtime_control,
-                terminated,
-            } => {
-                self.pause_after_ack_subscribe().await;
-                runtime_control.close();
+        match self.request_close_slot(thread_id)? {
+            CloseSlotAdmission::TerminationRequested(terminated) => {
                 Ok(CloseThreadStart::TerminationRequested(terminated))
             }
-            RuntimeTerminationState::Starting => Ok(CloseThreadStart::Starting),
-            RuntimeTerminationState::Missing => {
+            CloseSlotAdmission::Starting => Ok(CloseThreadStart::Starting),
+            CloseSlotAdmission::Missing => {
                 if current.status == AgentStatusV2::Shutdown
                     && control.runtime_handle(thread_id)?.is_none()
                 {
+                    self.clear_close_intent(thread_id);
                     return Ok(CloseThreadStart::Complete);
                 }
 
@@ -732,7 +782,13 @@ impl AgentRuntimeManager {
                 // RuntimeTerminated event is the acknowledgement for this idle
                 // generation and atomically closes its spawn edge. Reapplying
                 // it to Shutdown also clears a stale runtime handle.
-                control.record_runner_event(thread_id, RunnerEvent::RuntimeTerminated)?;
+                if let Err(error) =
+                    control.record_runner_event(thread_id, RunnerEvent::RuntimeTerminated)
+                {
+                    self.clear_close_intent(thread_id);
+                    return Err(error);
+                }
+                self.clear_close_intent(thread_id);
                 Ok(CloseThreadStart::Complete)
             }
         }
@@ -741,10 +797,13 @@ impl AgentRuntimeManager {
     pub(super) async fn wait_for_close_ack(
         &self,
         terminated: watch::Receiver<Option<RunnerAck>>,
-    ) -> anyhow::Result<()> {
+    ) -> anyhow::Result<AgentStatusV2> {
         let termination = wait_for_termination(terminated, "termination").await?;
-        expect_terminal_ack("termination", termination, AgentStatusV2::Shutdown)?;
-        Ok(())
+        Ok(termination.terminal_status)
+    }
+
+    pub(super) async fn wait_for_runtime_change(&self) {
+        self.active_changed.notified().await;
     }
 
     pub(super) async fn lock_subtree_close(&self) -> tokio::sync::OwnedMutexGuard<()> {
@@ -775,15 +834,19 @@ impl AgentRuntimeManager {
         mut request: RunAgentTurnRequest,
     ) -> anyhow::Result<FollowupAdmission> {
         let mut active = self.lock_active()?;
+        if active.close_intents.contains(thread_id) {
+            anyhow::bail!("agent thread {thread_id:?} has a pending close intent");
+        }
         let Some(slot) = active.get_mut(thread_id) else {
             let (result_tx, result_rx) = watch::channel(None);
             let token = Uuid::new_v4().to_string();
-            request.followup_start_tx = Some(result_tx);
+            request.followup_start_tx = Some(result_tx.clone());
             request.start_token = Some(token.clone());
             active.insert(
                 thread_id.to_string(),
                 RuntimeSlot::Starting(StartingAgentTurn {
                     token,
+                    result_tx: result_tx.clone(),
                     result_rx: result_rx.clone(),
                 }),
             );
@@ -903,6 +966,67 @@ impl AgentRuntimeManager {
         }
     }
 
+    fn request_close_slot(&self, thread_id: &str) -> anyhow::Result<CloseSlotAdmission> {
+        let mut rejected_followup = None;
+        let mut rejected_starting = None;
+        let admission = {
+            let mut active = self.lock_active()?;
+            active.close_intents.insert(thread_id.to_string());
+            if matches!(active.get(thread_id), Some(RuntimeSlot::Starting(_))) {
+                let starting = active
+                    .remove(thread_id)
+                    .and_then(|slot| match slot {
+                        RuntimeSlot::Starting(starting) => Some(starting),
+                        RuntimeSlot::Running(_) => None,
+                    })
+                    .expect("checked Starting runtime slot");
+                rejected_starting = Some(starting.result_tx);
+                CloseSlotAdmission::Starting
+            } else {
+                match active.get_mut(thread_id) {
+                    Some(RuntimeSlot::Running(turn)) => {
+                        let terminated = turn.terminated.clone();
+                        rejected_followup = turn.pending_followup.take();
+                        self.pause_before_close_signal();
+                        turn.interrupt.close();
+                        CloseSlotAdmission::TerminationRequested(terminated)
+                    }
+                    Some(RuntimeSlot::Starting(_)) => unreachable!("handled above"),
+                    None => CloseSlotAdmission::Missing,
+                }
+            }
+        };
+        if let Some(start_tx) = rejected_starting {
+            if start_tx.borrow().is_none() {
+                let _ = start_tx.send(Some(Err(
+                    "agent subtree close cancelled starting follow-up".to_string(),
+                )));
+            }
+            self.active_changed.notify_one();
+        }
+        if let Some(pending) = rejected_followup {
+            Self::reject_pending_followup(
+                pending,
+                "agent subtree close rejected pending follow-up",
+            );
+        }
+        Ok(admission)
+    }
+
+    pub(super) fn clear_close_intent(&self, thread_id: &str) {
+        if let Ok(mut active) = self.lock_active() {
+            active.close_intents.remove(thread_id);
+        }
+    }
+
+    fn reject_pending_followup(pending: PendingFollowup, reason: &str) {
+        if let Some(start_tx) = pending.request.followup_start_tx {
+            if start_tx.borrow().is_none() {
+                let _ = start_tx.send(Some(Err(reason.to_string())));
+            }
+        }
+    }
+
     #[cfg(test)]
     async fn pause_after_ack_subscribe(&self) {
         let barrier = self.ack_subscribe_barrier.lock().unwrap().clone();
@@ -943,6 +1067,27 @@ impl AgentRuntimeManager {
     pub(super) fn set_close_timeout(&self, timeout: std::time::Duration) {
         *self.close_timeout.lock().unwrap() = Some(timeout);
     }
+
+    #[cfg(test)]
+    pub(super) fn set_close_admission_hook(&self, hook: Option<CloseAdmissionHook>) {
+        *self.close_admission_hook.lock().unwrap() = hook;
+    }
+
+    #[cfg(test)]
+    fn pause_before_close_signal(&self) {
+        let hook = self.close_admission_hook.lock().unwrap().clone();
+        if let Some(hook) = hook {
+            hook.entered.notify_one();
+            let (released, wake) = &*hook.release;
+            let mut released = released.lock().unwrap();
+            while !*released {
+                released = wake.wait(released).unwrap();
+            }
+        }
+    }
+
+    #[cfg(not(test))]
+    fn pause_before_close_signal(&self) {}
 
     #[cfg(test)]
     pub(super) fn close_timeout(&self) -> std::time::Duration {
@@ -1169,10 +1314,19 @@ impl AgentRuntimeManager {
                     thread_id.to_string(),
                     RuntimeSlot::Starting(StartingAgentTurn {
                         token,
+                        result_tx: pending
+                            .request
+                            .followup_start_tx
+                            .as_ref()
+                            .expect("pending follow-up owns a result sender")
+                            .clone(),
                         result_rx: pending.result_rx.clone(),
                     }),
                 );
             }
+        }
+        if matches {
+            self.active_changed.notify_one();
         }
         Ok((matches, pending))
     }
@@ -1181,13 +1335,18 @@ impl AgentRuntimeManager {
         let Some(token) = request.start_token.as_deref() else {
             return;
         };
+        let mut removed = false;
         if let Ok(mut active) = self.lock_active() {
             let matches = active.get(&request.thread.thread_id).is_some_and(
                 |slot| matches!(slot, RuntimeSlot::Starting(starting) if starting.token == token),
             );
             if matches {
                 active.remove(&request.thread.thread_id);
+                removed = true;
             }
+        }
+        if removed {
+            self.active_changed.notify_one();
         }
         if let Some(start_tx) = request.followup_start_tx.as_ref() {
             if start_tx.borrow().is_none() {
@@ -1206,9 +1365,7 @@ impl AgentRuntimeManager {
         ))
     }
 
-    fn lock_active(
-        &self,
-    ) -> anyhow::Result<std::sync::MutexGuard<'_, HashMap<String, RuntimeSlot>>> {
+    fn lock_active(&self) -> anyhow::Result<std::sync::MutexGuard<'_, RuntimeState>> {
         self.active
             .lock()
             .map_err(|_| anyhow::anyhow!("agent runtime manager mutex is poisoned"))
@@ -1433,11 +1590,13 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let (control, thread) = setup(&dir, "worker");
         let manager = AgentRuntimeManager::default();
-        let (_result_tx, result_rx) = watch::channel(None);
+        let (result_tx, result_rx) = watch::channel(None);
+        let result_observer = result_rx.clone();
         manager.active.lock().unwrap().insert(
             thread.thread_id.clone(),
             RuntimeSlot::Starting(StartingAgentTurn {
                 token: "starting-token".into(),
+                result_tx,
                 result_rx,
             }),
         );
@@ -1456,6 +1615,11 @@ mod tests {
                 .status,
             AgentStatusV2::PendingInit
         );
+        assert!(!manager.is_running(&thread.thread_id));
+        assert!(matches!(
+            result_observer.borrow().as_ref(),
+            Some(Err(message)) if message.contains("cancelled starting follow-up")
+        ));
     }
 
     fn scripted_chat(reply: &str) -> ChatOverride {

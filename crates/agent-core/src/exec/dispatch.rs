@@ -723,14 +723,18 @@ async fn finish_close_operation(
     mut terminated: tokio::sync::watch::Receiver<Option<super::agent_runtime::RunnerAck>>,
 ) -> anyhow::Result<AgentTreeSnapshotV2> {
     loop {
-        if let Err(error) = runtime_manager.wait_for_close_ack(terminated).await {
-            return Err(close_subtree_error(
-                control.as_ref(),
-                &threads[index].canonical_path,
-                error,
-            ));
+        // A successful non-Shutdown acknowledgement can belong to a generation
+        // that crossed the close-admission boundary.  Re-read durable/runtime
+        // state below instead of treating that acknowledgement as completion.
+        let acknowledgement = runtime_manager.wait_for_close_ack(terminated).await;
+        if acknowledgement.is_err() {
+            // A closed acknowledgement channel can otherwise be re-subscribed
+            // in a tight loop while terminal cleanup is still converging.
+            tokio::select! {
+                () = runtime_manager.wait_for_runtime_change() => {}
+                () = tokio::time::sleep(Duration::from_millis(50)) => {}
+            }
         }
-        index += 1;
 
         loop {
             let Some(thread) = threads.get(index) else {
@@ -741,12 +745,28 @@ async fn finish_close_operation(
                 .await
             {
                 Ok(CloseThreadStart::Complete) => index += 1,
-                Ok(CloseThreadStart::Starting) => tokio::task::yield_now().await,
+                // request_close_slot removes and rejects Starting atomically,
+                // so re-read immediately; waiting here could miss the removal
+                // notification that was emitted before this result returned.
+                Ok(CloseThreadStart::Starting) => continue,
                 Ok(CloseThreadStart::TerminationRequested(receiver)) => {
                     terminated = receiver;
                     break;
                 }
                 Err(error) => {
+                    let runtime_may_still_be_live = runtime_manager.is_running(&thread.thread_id)
+                        || control
+                            .runtime_handle(&thread.thread_id)
+                            .map(|handle| handle.is_some())
+                            .unwrap_or(true);
+                    if runtime_may_still_be_live {
+                        tokio::select! {
+                            () = runtime_manager.wait_for_runtime_change() => {}
+                            () = tokio::time::sleep(Duration::from_millis(50)) => {}
+                        }
+                        continue;
+                    }
+                    runtime_manager.clear_close_intent(&thread.thread_id);
                     return Err(close_subtree_error(
                         control.as_ref(),
                         &thread.canonical_path,
@@ -974,7 +994,10 @@ impl DesktopAgentThreadControl for DefaultDesktopAgentThreadControl {
                             "timed out before a runtime termination request was sent",
                         ));
                     }
-                    tokio::task::yield_now().await;
+                    // Starting was atomically removed and its shared result was
+                    // completed by begin_close_thread.  The next read observes
+                    // Missing and records the idle RuntimeTerminated event.
+                    continue;
                 }
                 Ok(CloseThreadStart::TerminationRequested(terminated)) => {
                     let failed_path = thread.canonical_path.clone();
@@ -1084,6 +1107,26 @@ mod tests {
         Arc::new(move |_messages, _tools, _config| {
             Box::pin(async move {
                 Ok(Box::pin(stream::pending::<anyhow::Result<StreamChunk>>()) as CompletionStream)
+            })
+        })
+    }
+
+    fn gated_scripted_chat(
+        entered: Arc<tokio::sync::Notify>,
+        release: Arc<tokio::sync::Notify>,
+    ) -> crate::streaming::ChatOverride {
+        Arc::new(move |_messages, _tools, _config| {
+            let entered = Arc::clone(&entered);
+            let release = Arc::clone(&release);
+            Box::pin(async move {
+                entered.notify_one();
+                release.notified().await;
+                Ok(Box::pin(stream::iter(vec![
+                    Ok(StreamChunk::Text("done".into())),
+                    Ok(StreamChunk::Done {
+                        finish_reason: "stop".into(),
+                    }),
+                ])) as CompletionStream)
             })
         })
     }
@@ -1531,6 +1574,220 @@ mod tests {
             .control
             .reserve_spawn(&spawned.thread.canonical_path, "too_late")
             .is_err());
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn close_retries_after_old_generation_completes_before_atomic_signal() {
+        let dir = tempfile::tempdir().unwrap();
+        let memory_dir = dir.path().join("memory");
+        let sessions =
+            session::SessionStore::open_sessions_dir(&memory_dir.join("sessions")).unwrap();
+        sessions.ensure_session("root-session", "test").unwrap();
+        let provider_entered = Arc::new(tokio::sync::Notify::new());
+        let provider_release = Arc::new(tokio::sync::Notify::new());
+        let mut dispatch = dispatch(&dir);
+        dispatch.chat_override = Some(gated_scripted_chat(
+            Arc::clone(&provider_entered),
+            Arc::clone(&provider_release),
+        ));
+        let spawned = AgentThreadDispatch::spawn_agent(&dispatch, spawn_request(&memory_dir))
+            .await
+            .unwrap();
+        provider_entered.notified().await;
+        let close_hook = super::super::agent_runtime::CloseAdmissionHook {
+            entered: Arc::new(tokio::sync::Notify::new()),
+            release: Arc::new((std::sync::Mutex::new(false), std::sync::Condvar::new())),
+        };
+        dispatch
+            .runtime_manager
+            .set_close_admission_hook(Some(close_hook.clone()));
+        let cleanup_entered = Arc::new(tokio::sync::Notify::new());
+        dispatch
+            .runtime_manager
+            .set_before_cleanup_hook(Some(Arc::new({
+                let cleanup_entered = Arc::clone(&cleanup_entered);
+                move || cleanup_entered.notify_one()
+            })));
+        let desktop = Arc::new(desktop_control(&dispatch, &memory_dir));
+        let close = tokio::spawn({
+            let desktop = Arc::clone(&desktop);
+            async move { desktop.close_subtree("root-session", "/root/worker").await }
+        });
+        close_hook.entered.notified().await;
+
+        provider_release.notify_one();
+        cleanup_entered.notified().await;
+        assert!(dispatch
+            .control
+            .is_path_closing(&spawned.thread.canonical_path)
+            .unwrap());
+        let (released, wake) = &*close_hook.release;
+        *released.lock().unwrap() = true;
+        wake.notify_all();
+
+        let snapshot = close.await.unwrap().unwrap();
+        assert_eq!(
+            snapshot
+                .threads
+                .iter()
+                .find(|thread| thread.thread_id == spawned.thread.thread_id)
+                .unwrap()
+                .status,
+            AgentStatusV2::Shutdown
+        );
+        assert!(!dispatch
+            .control
+            .is_path_closing(&spawned.thread.canonical_path)
+            .unwrap());
+        assert!(!dispatch
+            .runtime_manager
+            .is_running(&spawned.thread.thread_id));
+        assert!(dispatch
+            .control
+            .runtime_handle(&spawned.thread.thread_id)
+            .unwrap()
+            .is_none());
+        let edge_state: String = rusqlite::Connection::open(dir.path().join("subagents-v2.db"))
+            .unwrap()
+            .query_row(
+                "SELECT edge_state FROM agent_spawn_edges WHERE child_thread_id = ?1",
+                [&spawned.thread.thread_id],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(edge_state, "closed");
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn close_rejects_previously_admitted_handoff_without_starting_a_new_generation() {
+        let dir = tempfile::tempdir().unwrap();
+        let memory_dir = dir.path().join("memory");
+        let sessions =
+            session::SessionStore::open_sessions_dir(&memory_dir.join("sessions")).unwrap();
+        sessions.ensure_session("root-session", "test").unwrap();
+        let mut dispatch = dispatch(&dir);
+        dispatch.chat_override = Some(pending_chat());
+        let dispatch = Arc::new(dispatch);
+        let spawned = AgentThreadDispatch::spawn_agent(&*dispatch, spawn_request(&memory_dir))
+            .await
+            .unwrap();
+        let followup = tokio::spawn({
+            let dispatch = Arc::clone(&dispatch);
+            let target = spawned.thread.canonical_path.to_string();
+            async move {
+                AgentThreadDispatch::followup_task(
+                    &*dispatch,
+                    MessageAgentV2Request {
+                        target,
+                        message: "must remain queued".into(),
+                    },
+                )
+                .await
+            }
+        });
+        tokio::time::timeout(Duration::from_secs(1), async {
+            while dispatch
+                .control
+                .drain_mailbox(&spawned.thread.canonical_path)
+                .unwrap()
+                .is_empty()
+            {
+                tokio::task::yield_now().await;
+            }
+        })
+        .await
+        .unwrap();
+
+        let snapshot = desktop_control(&dispatch, &memory_dir)
+            .close_subtree("root-session", spawned.thread.canonical_path.as_str())
+            .await
+            .unwrap();
+        let followup_error = followup.await.unwrap().unwrap_err().to_string();
+        assert!(followup_error.contains("close rejected pending follow-up"));
+        assert_eq!(
+            snapshot
+                .threads
+                .iter()
+                .find(|thread| thread.thread_id == spawned.thread.thread_id)
+                .unwrap()
+                .status,
+            AgentStatusV2::Shutdown
+        );
+        assert_eq!(
+            dispatch
+                .control
+                .drain_mailbox(&spawned.thread.canonical_path)
+                .unwrap()
+                .len(),
+            1
+        );
+        assert_eq!(dispatch.runtime_manager.active_count(), 0);
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn close_cancels_starting_followup_without_missing_its_state_change() {
+        let dir = tempfile::tempdir().unwrap();
+        let memory_dir = dir.path().join("memory");
+        let sessions =
+            session::SessionStore::open_sessions_dir(&memory_dir.join("sessions")).unwrap();
+        sessions.ensure_session("root-session", "test").unwrap();
+        let mut dispatch = dispatch(&dir);
+        dispatch.chat_override = Some(scripted_chat("done"));
+        let dispatch = Arc::new(dispatch);
+        let spawned = AgentThreadDispatch::spawn_agent(&*dispatch, spawn_request(&memory_dir))
+            .await
+            .unwrap();
+        while dispatch
+            .runtime_manager
+            .is_running(&spawned.thread.thread_id)
+        {
+            tokio::task::yield_now().await;
+        }
+
+        let start_entered = Arc::new(tokio::sync::Notify::new());
+        let start_release = Arc::new(tokio::sync::Notify::new());
+        dispatch
+            .runtime_manager
+            .set_before_followup_start_hook(Some(crate::exec::agent_runtime::AckSubscribeHook {
+                entered: Arc::clone(&start_entered),
+                release: Arc::clone(&start_release),
+            }));
+        let followup = tokio::spawn({
+            let dispatch = Arc::clone(&dispatch);
+            let target = spawned.thread.canonical_path.to_string();
+            async move {
+                AgentThreadDispatch::followup_task(
+                    &*dispatch,
+                    MessageAgentV2Request {
+                        target,
+                        message: "must be cancelled while Starting".into(),
+                    },
+                )
+                .await
+            }
+        });
+        start_entered.notified().await;
+
+        let snapshot = tokio::time::timeout(
+            Duration::from_secs(1),
+            desktop_control(&dispatch, &memory_dir)
+                .close_subtree("root-session", spawned.thread.canonical_path.as_str()),
+        )
+        .await
+        .expect("close must not wait for a notification emitted before Starting was returned")
+        .unwrap();
+        start_release.notify_one();
+        assert!(followup.await.unwrap().is_err());
+        assert_eq!(
+            snapshot
+                .threads
+                .iter()
+                .find(|thread| thread.thread_id == spawned.thread.thread_id)
+                .unwrap()
+                .status,
+            AgentStatusV2::Shutdown
+        );
+        assert_eq!(dispatch.runtime_manager.active_count(), 0);
     }
 
     #[tokio::test(flavor = "current_thread")]
