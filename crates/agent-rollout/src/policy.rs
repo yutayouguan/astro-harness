@@ -137,4 +137,26 @@ mod tests {
             ThreadHistoryMode::Paginated
         ));
     }
+
+    #[test]
+    fn response_items_compare_structurally() {
+        let item = RolloutItem::ResponseItem(types::message::Message::assistant_with_tools(
+            "run it",
+            vec![types::message::ToolCall {
+                id: "call-1".into(),
+                name: "terminal".into(),
+                arguments: serde_json::json!({"command": "pwd"}),
+                signature: Some("sig-1".into()),
+            }],
+        ));
+        let equal = item.clone();
+        let mut changed = item.clone();
+        if let RolloutItem::ResponseItem(message) = &mut changed {
+            message.tool_calls.as_mut().unwrap()[0].arguments =
+                serde_json::json!({"command": "ls"});
+        }
+
+        assert_eq!(item, equal);
+        assert_ne!(item, changed);
+    }
 }

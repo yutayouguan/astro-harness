@@ -21,7 +21,7 @@ pub enum Role {
 }
 
 /// 一条对话消息。
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Message {
     /// 角色。
     pub role: Role,
@@ -48,7 +48,7 @@ pub struct Message {
 }
 
 /// 消息正文：单段文本，或分段（多模态 text + image_url）。
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum MessageContent {
     /// 纯文本。
@@ -58,7 +58,7 @@ pub enum MessageContent {
 }
 
 /// 多段正文中的一段（text / image_url / audio_url / video_url）。
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ContentPart {
     /// 段类型：`text` / `image_url` / `audio_url` / `video_url`。
     #[serde(rename = "type")]
@@ -78,13 +78,13 @@ pub struct ContentPart {
 }
 
 /// `image_url` 载荷。
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ContentImageUrl {
     pub url: String,
 }
 
 /// `audio_url` / `video_url` 载荷。
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ContentMediaUrl {
     pub url: String,
     #[serde(default, skip_serializing_if = "String::is_empty")]
@@ -313,7 +313,7 @@ impl Message {
 }
 
 /// 一次工具调用请求（助手侧）。
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ToolCall {
     /// 调用 id，与工具结果对应。
     pub id: String,
@@ -386,6 +386,30 @@ pub fn merge_google_thought_signature(
         serde_json::Value::String(sig.to_string()),
     );
     Some(serde_json::Value::Object(obj))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{Message, ToolCall};
+
+    #[test]
+    fn messages_compare_structurally_through_nested_tool_calls() {
+        let message = Message::assistant_with_tools(
+            "run it",
+            vec![ToolCall {
+                id: "call-1".into(),
+                name: "terminal".into(),
+                arguments: serde_json::json!({"command": "pwd"}),
+                signature: Some("sig-1".into()),
+            }],
+        );
+        let equal = message.clone();
+        let mut changed = message.clone();
+        changed.tool_calls.as_mut().unwrap()[0].arguments = serde_json::json!({"command": "ls"});
+
+        assert_eq!(message, equal);
+        assert_ne!(message, changed);
+    }
 }
 
 /// 从 `reasoning_details` 读出 Google `thought.signature`。

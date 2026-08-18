@@ -11,7 +11,7 @@ pub enum ThreadHistoryMode {
     Paginated,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", content = "data", rename_all = "snake_case")]
 pub enum RolloutItem {
     SessionMeta(serde_json::Value),
@@ -21,21 +21,4 @@ pub enum RolloutItem {
     WorldState(serde_json::Value),
     Compacted(serde_json::Value),
     InterAgentCommunication(serde_json::Value),
-}
-
-impl PartialEq for RolloutItem {
-    fn eq(&self, other: &Self) -> bool {
-        match (self, other) {
-            (Self::SessionMeta(a), Self::SessionMeta(b))
-            | (Self::TurnContext(a), Self::TurnContext(b))
-            | (Self::WorldState(a), Self::WorldState(b))
-            | (Self::Compacted(a), Self::Compacted(b))
-            | (Self::InterAgentCommunication(a), Self::InterAgentCommunication(b)) => a == b,
-            (Self::ResponseItem(a), Self::ResponseItem(b)) => {
-                serde_json::to_value(a).ok() == serde_json::to_value(b).ok()
-            }
-            (Self::EventMsg(a), Self::EventMsg(b)) => a == b,
-            _ => false,
-        }
-    }
 }
