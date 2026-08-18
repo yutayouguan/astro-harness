@@ -1,9 +1,10 @@
 //! Astro 三套 Hook 体系：Plugin（Agent 生命周期）、Gateway（外壳事件）、Shell（配置命令）。
 //!
-//! 注册风格对齐：`ctx.register_hook("post_tool_call", callback)`。
+//! 注册风格对齐：`ctx.register_hook("PostToolUse", callback)`。
 
 pub mod config;
 pub mod context;
+pub mod event;
 pub mod gateway;
 pub mod names;
 pub mod outcome;
@@ -13,6 +14,7 @@ pub mod ui;
 
 pub use config::{default_astro_root, load_config, load_config_or_default, AstroConfig};
 pub use context::PluginContext;
+pub use event::{canonical_hook_event_name, normalize_hook_event_name, HookEvent};
 pub use gateway::{DiscoveredHook, GatewayHookRegistry, HookManifest};
 pub use names::*;
 pub use outcome::{HookOutcome, HookPayload};
