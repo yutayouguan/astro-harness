@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 
 use crate::runtime::{Session, TurnContext, TurnResult};
@@ -10,15 +11,22 @@ use super::{SessionTask, SessionTaskResult, TaskKind, TurnInput};
 /// Standard model-and-tool turn.
 pub(crate) struct RegularTask {
     args: RunTurnArgs,
+    auxiliary_handles: std::sync::Mutex<Vec<JoinHandle<()>>>,
 }
 
 impl RegularTask {
     pub(crate) fn new(args: RunTurnArgs) -> Self {
-        Self { args }
+        Self {
+            args,
+            auxiliary_handles: std::sync::Mutex::new(Vec::new()),
+        }
     }
 
-    pub(crate) fn submitted(args: RunTurnArgs) -> Self {
-        Self { args }
+    pub(crate) fn submitted(args: RunTurnArgs, event_drain: JoinHandle<()>) -> Self {
+        Self {
+            args,
+            auxiliary_handles: std::sync::Mutex::new(vec![event_drain]),
+        }
     }
 
     async fn run_with_args(
@@ -80,6 +88,15 @@ impl SessionTask for RegularTask {
 
     fn span_name(&self) -> &'static str {
         "session_task.turn"
+    }
+
+    fn take_auxiliary_handles(&self) -> Vec<JoinHandle<()>> {
+        std::mem::take(
+            &mut *self
+                .auxiliary_handles
+                .lock()
+                .expect("regular task auxiliary mutex poisoned"),
+        )
     }
 
     async fn run(

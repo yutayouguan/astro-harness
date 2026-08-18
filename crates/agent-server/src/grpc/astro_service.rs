@@ -3,7 +3,7 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::pin::Pin;
-use std::sync::Arc;
+use std::sync::{Arc, Weak};
 
 use agent::builder::AgentBuilder;
 use agent::runtime::Session;
@@ -90,6 +90,12 @@ fn parse_auxiliary_targets(
 
 /// 会话 Agent 循环的共享句柄。
 type SessionHandle = Arc<Session>;
+
+#[derive(Clone)]
+struct PauseRegistration {
+    control: Arc<PauseControl>,
+    session: Weak<Session>,
+}
 /// Chat RPC 返回的事件流类型别名。
 type ChatStream = Pin<Box<dyn futures::Stream<Item = Result<ChatEvent, Status>> + Send>>;
 /// SubscribeSessionEvents RPC 返回的事件流类型别名。
@@ -224,7 +230,7 @@ pub struct AstroServiceImpl {
     /// session_id → Agent 循环句柄。
     sessions: Arc<RwLock<HashMap<String, SessionHandle>>>,
     /// session_id → 暂停控制器。
-    pause_controls: Arc<RwLock<HashMap<String, Arc<PauseControl>>>>,
+    pause_controls: Arc<RwLock<HashMap<String, PauseRegistration>>>,
     /// session_id → 活 HITL 闸门。
     hitl_registry: HitlRegistry,
     /// 记忆根目录。
@@ -297,11 +303,15 @@ impl AstroServiceImpl {
     }
 
     /// 同一 session 重入时取消旧 PauseControl，避免幽灵 pause
-    async fn register_pause(&self, session_id: &str) -> Arc<PauseControl> {
+    async fn register_pause(&self, session_id: &str, session: &SessionHandle) -> Arc<PauseControl> {
         let pause = PauseControl::new();
         let mut map = self.pause_controls.write().await;
-        if let Some(old) = map.insert(session_id.to_string(), pause.clone()) {
-            old.cancel();
+        let registration = PauseRegistration {
+            control: Arc::clone(&pause),
+            session: Arc::downgrade(session),
+        };
+        if let Some(old) = map.insert(session_id.to_string(), registration) {
+            old.control.cancel();
         }
         pause
     }
@@ -313,7 +323,7 @@ impl AstroServiceImpl {
         {
             let mut map = self.pause_controls.write().await;
             if let Some(pause) = map.remove(session_id) {
-                pause.cancel();
+                pause.control.cancel();
             }
         }
         self.hitl_registry.cancel_and_remove(session_id).await;
@@ -630,13 +640,19 @@ impl AstroService for AstroServiceImpl {
             return Ok(Response::new(Empty {}));
         }
 
-        let map = self.pause_controls.read().await;
-        let Some(pause) = map.get(&req.session_id) else {
+        let registration = self
+            .pause_controls
+            .read()
+            .await
+            .get(&req.session_id)
+            .cloned();
+        let Some(registration) = registration else {
             return Err(Status::not_found(format!(
                 "会话 {} 当前没有进行中的流式对话",
                 req.session_id
             )));
         };
+        let pause = &registration.control;
         match action {
             ChatControlAction::ChatControlPause => pause.pause(),
             ChatControlAction::ChatControlResume | ChatControlAction::ChatControlStreamResume => {
@@ -644,10 +660,17 @@ impl AstroService for AstroServiceImpl {
             }
             ChatControlAction::ChatControlCancel => {
                 pause.cancel();
-                drop(map);
-                self.hitl_registry.cancel_and_remove(&req.session_id).await;
-                clear_interrupt_file(&self.memory_dir, &req.session_id);
-                let session = self.sessions.read().await.get(&req.session_id).cloned();
+                let is_current_registration = self
+                    .pause_controls
+                    .read()
+                    .await
+                    .get(&req.session_id)
+                    .is_some_and(|current| Arc::ptr_eq(&current.control, &registration.control));
+                if is_current_registration {
+                    self.hitl_registry.cancel_and_remove(&req.session_id).await;
+                    clear_interrupt_file(&self.memory_dir, &req.session_id);
+                }
+                let session = registration.session.upgrade();
                 if let Some(session) = session {
                     session
                         .abort_all_tasks(TurnAbortReason::Interrupted)
@@ -879,7 +902,8 @@ impl AstroService for AstroServiceImpl {
             }
         }
 
-        let pause = self.register_pause(&session_id).await;
+        let pause = self.register_pause(&session_id, &session).await;
+        let pause_for_cleanup = Arc::clone(&pause);
         let pause_controls = self.pause_controls.clone();
         let hitl_registry = self.hitl_registry.clone();
         let memory_dir = self.memory_dir.clone();
@@ -907,9 +931,20 @@ impl AstroService for AstroServiceImpl {
         tokio::spawn(async move {
             let cleanup = || async {
                 ui_slot.set_tx(None);
-                let mut map = pause_controls.write().await;
-                map.remove(&sid_cleanup);
-                hitl_registry.cancel_and_remove(&sid_cleanup).await;
+                let removed_current = {
+                    let mut map = pause_controls.write().await;
+                    if map.get(&sid_cleanup).is_some_and(|registration| {
+                        Arc::ptr_eq(&registration.control, &pause_for_cleanup)
+                    }) {
+                        map.remove(&sid_cleanup);
+                        true
+                    } else {
+                        false
+                    }
+                };
+                if removed_current {
+                    hitl_registry.cancel_and_remove(&sid_cleanup).await;
+                }
             };
 
             let (temperature, additional_params) = {
@@ -1571,6 +1606,8 @@ mod tests {
 
     use std::sync::atomic::{AtomicUsize, Ordering};
 
+    use agent::streaming::{run_multi_turn_stream_with_chat_fn, ChatOverride};
+    use providers::CompletionStream;
     use tempfile::TempDir;
 
     #[test]
@@ -1616,8 +1653,8 @@ mod tests {
         let service = AstroServiceImpl::new(dir.path().to_path_buf());
         let session_id = "release-session-runtime-idempotent";
 
-        service.get_session(session_id).await.unwrap();
-        let pause = service.register_pause(session_id).await;
+        let session = service.get_session(session_id).await.unwrap();
+        let pause = service.register_pause(session_id, &session).await;
         let gate = HitlGate::new(session_id.to_string());
         service.hitl_registry.insert(gate.clone()).await;
 
@@ -1650,11 +1687,13 @@ mod tests {
         let dir = TempDir::new().unwrap();
         let service = AstroServiceImpl::new(dir.path().to_path_buf());
         let session_id = "released-session-with-stale-pause";
-        service
-            .pause_controls
-            .write()
-            .await
-            .insert(session_id.into(), PauseControl::new());
+        service.pause_controls.write().await.insert(
+            session_id.into(),
+            PauseRegistration {
+                control: PauseControl::new(),
+                session: Weak::new(),
+            },
+        );
         assert!(service.sessions.read().await.get(session_id).is_none());
 
         service
@@ -1669,6 +1708,72 @@ mod tests {
             service.sessions.read().await.get(session_id).is_none(),
             "cancel must not lazily recreate a released session"
         );
+    }
+
+    async fn spawn_pending_turn(
+        session: SessionHandle,
+    ) -> (
+        tokio::task::JoinHandle<()>,
+        tokio::sync::mpsc::Receiver<anyhow::Result<MultiTurnStreamItem>>,
+    ) {
+        let chat: ChatOverride = Arc::new(|_, _, _| {
+            Box::pin(async move { Ok(Box::pin(futures::stream::pending()) as CompletionStream) })
+        });
+        let (tx, mut rx) = tokio::sync::mpsc::channel(8);
+        let handle = tokio::spawn(run_multi_turn_stream_with_chat_fn(
+            session,
+            chat,
+            ProviderConfig {
+                model: "scripted".into(),
+                ..ProviderConfig::default()
+            },
+            "system".into(),
+            PauseControl::new(),
+            None,
+            tx,
+        ));
+        let started = rx.recv().await.expect("pending turn should start").unwrap();
+        assert!(matches!(started, MultiTurnStreamItem::RunStarted { .. }));
+        (handle, rx)
+    }
+
+    #[tokio::test]
+    async fn stale_cancel_targets_the_session_generation_that_registered_pause() {
+        let dir = TempDir::new().unwrap();
+        let service = AstroServiceImpl::new(dir.path().to_path_buf());
+        let session_id = "cancel-generation-race";
+        let old_session = service.get_session(session_id).await.unwrap();
+        let (old_turn, _old_rx) = spawn_pending_turn(Arc::clone(&old_session)).await;
+        let _old_pause = service.register_pause(session_id, &old_session).await;
+
+        service.sessions.write().await.remove(session_id);
+        let replacement = service.get_session(session_id).await.unwrap();
+        let (replacement_turn, _replacement_rx) =
+            spawn_pending_turn(Arc::clone(&replacement)).await;
+
+        service
+            .chat_control(Request::new(ChatControlRequest {
+                session_id: session_id.into(),
+                action: ChatControlAction::ChatControlCancel as i32,
+            }))
+            .await
+            .expect("stale cancel should remain valid for its exact generation");
+
+        assert!(
+            old_session.cancel_signal().is_cancelled(),
+            "the pause registration must retain the old session generation"
+        );
+        assert!(
+            !replacement.cancel_signal().is_cancelled(),
+            "a same-id replacement session must not be cancelled"
+        );
+
+        replacement
+            .abort_all_tasks(TurnAbortReason::Replaced)
+            .await
+            .unwrap();
+        old_turn.await.unwrap();
+        replacement_turn.await.unwrap();
     }
 
     #[tokio::test]

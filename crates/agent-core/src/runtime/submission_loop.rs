@@ -26,9 +26,20 @@ pub(crate) async fn submission_loop(
                 false
             }
             Op::Interrupt => {
-                let _ = session
+                if let Err(error) = session
                     .abort_all_tasks(agent_protocol::TurnAbortReason::Interrupted)
-                    .await;
+                    .await
+                {
+                    session
+                        .emit_runtime_event(
+                            submission.id,
+                            EventMsg::Error(ErrorEvent {
+                                message: error.to_string(),
+                                error_type: "task_abort".into(),
+                            }),
+                        )
+                        .await;
+                }
                 false
             }
             Op::EmitExtension { item } => {

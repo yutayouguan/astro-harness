@@ -163,7 +163,7 @@ impl Session {
         );
         let event_session = Arc::clone(self);
         let event_turn_id = turn_id.clone();
-        tokio::spawn(async move {
+        let event_drain = tokio::spawn(async move {
             while let Some(item) = legacy_rx.recv().await {
                 match item {
                     Ok(crate::streaming::MultiTurnStreamItem::Error(message)) => {
@@ -182,7 +182,7 @@ impl Session {
                 }
             }
         });
-        self.spawn_task(context, input, RegularTask::submitted(args))
+        self.spawn_task(context, input, RegularTask::submitted(args, event_drain))
             .await
             .map_err(|error| TurnInputError::Invalid(error.to_string()))?;
         Ok(TurnInputSubmission::Started { turn_id })
