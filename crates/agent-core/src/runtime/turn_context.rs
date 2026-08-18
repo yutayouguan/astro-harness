@@ -85,12 +85,14 @@ impl TurnContext {
         true
     }
 
-    pub(crate) fn take_pending_input(&self) -> Vec<TurnInput> {
+    pub(crate) fn acknowledge_pending_input(&self, delivered: usize) -> usize {
         let mut state = self
             .input_state
             .lock()
             .expect("turn input state mutex poisoned");
-        std::mem::take(&mut state.pending)
+        let acknowledged = delivered.min(state.pending.len());
+        state.pending.drain(..acknowledged);
+        acknowledged
     }
 
     pub(crate) fn retract_input(&self, input: &TurnInput) {
@@ -103,17 +105,17 @@ impl TurnContext {
         }
     }
 
-    /// Atomically take queued input, or close steering if the queue is empty.
-    pub(crate) fn take_pending_input_or_close(&self) -> Vec<TurnInput> {
+    /// Atomically close steering only when no durable-delivery signal remains.
+    pub(crate) fn close_if_no_pending_input(&self) -> bool {
         let mut state = self
             .input_state
             .lock()
             .expect("turn input state mutex poisoned");
         if state.pending.is_empty() {
             state.accepting = false;
-            Vec::new()
+            true
         } else {
-            std::mem::take(&mut state.pending)
+            false
         }
     }
 }
@@ -139,8 +141,27 @@ mod tests {
             None,
         );
         assert!(turn_context.push_input(input("first")));
-        assert_eq!(turn_context.take_pending_input(), vec![input("first")]);
-        assert!(turn_context.take_pending_input_or_close().is_empty());
+        assert!(!turn_context.close_if_no_pending_input());
+        assert_eq!(turn_context.acknowledge_pending_input(1), 1);
+        assert!(turn_context.close_if_no_pending_input());
         assert!(!turn_context.push_input(input("late")));
+    }
+
+    #[test]
+    fn acknowledgement_removes_only_the_delivered_pending_prefix() {
+        let turn_context = TurnContext::new(
+            "turn-1".into(),
+            1,
+            types::InteractionMode::Agent,
+            None,
+            None,
+        );
+        assert!(turn_context.push_input(input("first")));
+        assert!(turn_context.push_input(input("second")));
+
+        assert_eq!(turn_context.acknowledge_pending_input(1), 1);
+        assert!(!turn_context.close_if_no_pending_input());
+        assert_eq!(turn_context.acknowledge_pending_input(1), 1);
+        assert!(turn_context.close_if_no_pending_input());
     }
 }

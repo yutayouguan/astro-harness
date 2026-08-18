@@ -23,6 +23,13 @@ struct DurableSteerInput {
     image_data_urls: Vec<String>,
 }
 
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub(crate) struct MailboxDrainOutcome {
+    pub(crate) delivered: usize,
+    pub(crate) delivered_steers: usize,
+    pub(crate) deferred: bool,
+}
+
 pub(crate) fn encode_main_steer_input(input: &TurnInput) -> anyhow::Result<String> {
     let TurnInput::UserInput {
         content,
@@ -40,7 +47,9 @@ pub(crate) fn encode_main_steer_input(input: &TurnInput) -> anyhow::Result<Strin
 /// Drain durable mailbox input only at a sampling boundary. A batch is
 /// acknowledged after its structured user message has been accepted by
 /// SessionStore and the in-memory history.
-pub(crate) async fn drain_mailbox_at_safe_boundary(session: &mut Session) -> anyhow::Result<usize> {
+pub(crate) async fn drain_mailbox_at_safe_boundary(
+    session: &mut Session,
+) -> anyhow::Result<MailboxDrainOutcome> {
     if session.cancel_signal().is_cancelled() {
         anyhow::bail!("agent turn interrupted before mailbox drain");
     }
@@ -48,7 +57,7 @@ pub(crate) async fn drain_mailbox_at_safe_boundary(session: &mut Session) -> any
     let path = session.services.agent_path.clone();
     let messages = control.drain_mailbox(&path)?;
     if messages.is_empty() {
-        return Ok(0);
+        return Ok(MailboxDrainOutcome::default());
     }
     if session.cancel_signal().is_cancelled() {
         anyhow::bail!("agent turn interrupted during mailbox drain");
@@ -101,16 +110,21 @@ pub(crate) async fn drain_mailbox_at_safe_boundary(session: &mut Session) -> any
             .last()
             .is_some_and(|message| message.role == types::message::Role::User)
     {
-        return Ok(0);
+        return Ok(MailboxDrainOutcome {
+            deferred: true,
+            ..MailboxDrainOutcome::default()
+        });
     }
     let mut contents = Vec::with_capacity(delivered);
     let mut image_data_urls = Vec::new();
+    let mut delivered_steers = 0usize;
     for message in messages.into_iter().take(delivered) {
         if message.sender_thread_id == message.recipient_thread_id {
             if let Some(encoded) = message.payload.strip_prefix(MAIN_STEER_PREFIX) {
                 let input: DurableSteerInput = serde_json::from_str(encoded)?;
                 contents.push(input.content);
                 image_data_urls.extend(input.image_data_urls);
+                delivered_steers += 1;
                 continue;
             }
         }
@@ -136,7 +150,11 @@ pub(crate) async fn drain_mailbox_at_safe_boundary(session: &mut Session) -> any
         anyhow::bail!("agent turn interrupted after in-memory mailbox history write");
     }
     control.ack_mailbox(&path, through_sequence)?;
-    Ok(delivered)
+    Ok(MailboxDrainOutcome {
+        delivered,
+        delivered_steers,
+        deferred: false,
+    })
 }
 
 pub async fn run_agent_thread(
@@ -574,9 +592,21 @@ mod tests {
             thread.canonical_path,
         )
         .unwrap();
-        assert_eq!(drain_mailbox_at_safe_boundary(&mut retry).await.unwrap(), 2);
+        assert_eq!(
+            drain_mailbox_at_safe_boundary(&mut retry)
+                .await
+                .unwrap()
+                .delivered,
+            2
+        );
         assert!(graph.pending_for(&thread.thread_id, 0).unwrap().is_empty());
-        assert_eq!(drain_mailbox_at_safe_boundary(&mut retry).await.unwrap(), 0);
+        assert_eq!(
+            drain_mailbox_at_safe_boundary(&mut retry)
+                .await
+                .unwrap()
+                .delivered,
+            0
+        );
         let history = retry.clone_history().await;
         assert_eq!(history.len(), 1);
         assert_eq!(history[0].role, types::message::Role::User);
@@ -658,7 +688,13 @@ mod tests {
         .unwrap();
         assert_eq!(retry.clone_history().await.len(), 1);
 
-        assert_eq!(drain_mailbox_at_safe_boundary(&mut retry).await.unwrap(), 1);
+        assert_eq!(
+            drain_mailbox_at_safe_boundary(&mut retry)
+                .await
+                .unwrap()
+                .delivered,
+            1
+        );
         assert!(graph.pending_for(&thread.thread_id, 0).unwrap().is_empty());
         assert_eq!(sessions.get_messages(&thread.session_id).unwrap().len(), 1);
         assert_eq!(retry.clone_history().await.len(), 1);
@@ -723,9 +759,21 @@ mod tests {
         .unwrap();
         assert_eq!(retry.clone_history().await.len(), 1);
 
-        assert_eq!(drain_mailbox_at_safe_boundary(&mut retry).await.unwrap(), 1);
+        assert_eq!(
+            drain_mailbox_at_safe_boundary(&mut retry)
+                .await
+                .unwrap()
+                .delivered,
+            1
+        );
         assert!(graph.pending_for(&thread.thread_id, 0).unwrap().is_empty());
-        assert_eq!(drain_mailbox_at_safe_boundary(&mut retry).await.unwrap(), 0);
+        assert_eq!(
+            drain_mailbox_at_safe_boundary(&mut retry)
+                .await
+                .unwrap()
+                .delivered,
+            0
+        );
         let stored = session::SessionStore::open_sessions_dir(&memory_dir.join("sessions"))
             .unwrap()
             .get_messages(&thread.session_id)
@@ -808,9 +856,21 @@ mod tests {
         )
         .unwrap();
 
-        assert_eq!(drain_mailbox_at_safe_boundary(&mut retry).await.unwrap(), 1);
+        assert_eq!(
+            drain_mailbox_at_safe_boundary(&mut retry)
+                .await
+                .unwrap()
+                .delivered,
+            1
+        );
         assert!(graph.pending_for("root-v2", 0).unwrap().is_empty());
-        assert_eq!(drain_mailbox_at_safe_boundary(&mut retry).await.unwrap(), 0);
+        assert_eq!(
+            drain_mailbox_at_safe_boundary(&mut retry)
+                .await
+                .unwrap()
+                .delivered,
+            0
+        );
         let stored = session::SessionStore::open_sessions_dir(&memory_dir.join("sessions"))
             .unwrap()
             .get_messages("root-v2")
@@ -895,7 +955,13 @@ mod tests {
         )
         .unwrap();
 
-        assert_eq!(drain_mailbox_at_safe_boundary(&mut retry).await.unwrap(), 1);
+        assert_eq!(
+            drain_mailbox_at_safe_boundary(&mut retry)
+                .await
+                .unwrap()
+                .delivered,
+            1
+        );
         assert_eq!(graph.pending_for(&thread.thread_id, 0).unwrap().len(), 1);
         assert_eq!(sessions.get_messages(&thread.session_id).unwrap().len(), 1);
         let history = retry.clone_history().await;
@@ -908,7 +974,13 @@ mod tests {
                 .count(),
             1
         );
-        assert_eq!(drain_mailbox_at_safe_boundary(&mut retry).await.unwrap(), 0);
+        assert_eq!(
+            drain_mailbox_at_safe_boundary(&mut retry)
+                .await
+                .unwrap()
+                .delivered,
+            0
+        );
         assert_eq!(graph.pending_for(&thread.thread_id, 0).unwrap().len(), 1);
     }
 
@@ -964,7 +1036,13 @@ mod tests {
         retry.set_turn_input_after_memory_write_hook(None);
         retry.cancel_signal().reset();
 
-        assert_eq!(drain_mailbox_at_safe_boundary(&mut retry).await.unwrap(), 1);
+        assert_eq!(
+            drain_mailbox_at_safe_boundary(&mut retry)
+                .await
+                .unwrap()
+                .delivered,
+            1
+        );
         assert!(graph.pending_for(&thread.thread_id, 0).unwrap().is_empty());
         assert_eq!(sessions.get_messages(&thread.session_id).unwrap().len(), 1);
         let history = retry.clone_history().await;
@@ -976,7 +1054,13 @@ mod tests {
                 .count(),
             1
         );
-        assert_eq!(drain_mailbox_at_safe_boundary(&mut retry).await.unwrap(), 0);
+        assert_eq!(
+            drain_mailbox_at_safe_boundary(&mut retry)
+                .await
+                .unwrap()
+                .delivered,
+            0
+        );
     }
 
     #[tokio::test(flavor = "current_thread")]
@@ -1029,13 +1113,25 @@ mod tests {
         retry.set_turn_input_after_db_write_hook(None);
         retry.cancel_signal().reset();
 
-        assert_eq!(drain_mailbox_at_safe_boundary(&mut retry).await.unwrap(), 1);
+        assert_eq!(
+            drain_mailbox_at_safe_boundary(&mut retry)
+                .await
+                .unwrap()
+                .delivered,
+            1
+        );
         assert!(graph.pending_for("root-v2", 0).unwrap().is_empty());
         let history = retry.clone_history().await;
         assert_eq!(history.len(), 1);
         assert_eq!(history[0].content_str(), "steer through failure");
         assert_eq!(history[0].media.len(), 1);
-        assert_eq!(drain_mailbox_at_safe_boundary(&mut retry).await.unwrap(), 0);
+        assert_eq!(
+            drain_mailbox_at_safe_boundary(&mut retry)
+                .await
+                .unwrap()
+                .delivered,
+            0
+        );
     }
 
     #[tokio::test(flavor = "current_thread")]
@@ -1073,19 +1169,18 @@ mod tests {
             .record_items(vec![types::message::Message::user("initial")])
             .await;
 
-        assert_eq!(
-            drain_mailbox_at_safe_boundary(&mut session).await.unwrap(),
-            0
-        );
+        let deferred = drain_mailbox_at_safe_boundary(&mut session).await.unwrap();
+        assert_eq!(deferred.delivered, 0);
+        assert!(deferred.deferred);
         assert_eq!(graph.pending_for("root-v2", 0).unwrap().len(), 1);
 
         session
             .record_items(vec![types::message::Message::assistant("first answer")])
             .await;
-        assert_eq!(
-            drain_mailbox_at_safe_boundary(&mut session).await.unwrap(),
-            1
-        );
+        let delivered = drain_mailbox_at_safe_boundary(&mut session).await.unwrap();
+        assert_eq!(delivered.delivered, 1);
+        assert_eq!(delivered.delivered_steers, 1);
+        assert!(!delivered.deferred);
         assert!(graph.pending_for("root-v2", 0).unwrap().is_empty());
         assert!(crate::runtime::validate_message_order(
             &session.clone_history().await

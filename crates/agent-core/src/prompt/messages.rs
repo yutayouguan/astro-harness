@@ -35,20 +35,7 @@ pub fn to_provider_messages(system_prompt: &str, session: &[Message]) -> Vec<Pro
                 messages.push(ProviderMessage::system(message.content_text()));
             }
             Role::Tool => {
-                let content = match &message.content {
-                    MessageContent::Text(s) => message
-                        .compressed_content
-                        .as_ref()
-                        .filter(|s| !s.trim().is_empty())
-                        .cloned()
-                        .unwrap_or_else(|| s.clone()),
-                    MessageContent::Parts(_) => message
-                        .compressed_content
-                        .as_ref()
-                        .filter(|s| !s.trim().is_empty())
-                        .cloned()
-                        .unwrap_or_else(|| message.content_text()),
-                };
+                let content = message.provider_view_text().into_owned();
                 let is_error = content.starts_with("Error");
                 messages.push(ProviderMessage::Tool {
                     tool_call_id: message.tool_call_id.clone().unwrap_or_default(),
