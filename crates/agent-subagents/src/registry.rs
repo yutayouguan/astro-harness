@@ -178,6 +178,10 @@ impl AgentRegistry {
         Ok(self.lock_state()?.identities.get(path).cloned())
     }
 
+    pub fn committed_path_for_thread(&self, thread_id: &str) -> anyhow::Result<Option<AgentPath>> {
+        Ok(self.lock_state()?.thread_paths.get(thread_id).cloned())
+    }
+
     pub fn root_thread_id(&self) -> &str {
         &self.root_thread_id
     }

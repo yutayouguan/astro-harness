@@ -145,7 +145,7 @@ impl AgentControl {
         self.require_path(current, "current agent")?;
         let prefix = match prefix {
             Some(prefix) => current.resolve(prefix.trim()).map_err(anyhow::Error::msg)?,
-            None => current.clone(),
+            None => AgentPath::root(),
         };
         let snapshot = self.store.snapshot(&self.root_thread_id)?;
         Ok(snapshot
@@ -201,6 +201,16 @@ impl AgentControl {
             .ok_or_else(|| anyhow::anyhow!("unknown agent thread {thread_id:?}"))?;
         if existing.root_thread_id != self.root_thread_id {
             anyhow::bail!("agent thread {thread_id:?} belongs to a different root");
+        }
+        let committed_path = self
+            .registry
+            .committed_path_for_thread(thread_id)?
+            .ok_or_else(|| anyhow::anyhow!("agent thread {thread_id:?} is not committed"))?;
+        if committed_path != existing.canonical_path {
+            anyhow::bail!(
+                "committed agent identity path {committed_path} does not match durable path {}",
+                existing.canonical_path
+            );
         }
         let terminated = matches!(event, RunnerEvent::RuntimeTerminated);
         let thread = self.store.apply_status_event(thread_id, event)?;
@@ -609,6 +619,61 @@ mod tests {
     }
 
     #[test]
+    fn runner_events_require_committed_identity_and_drop_still_rolls_back() {
+        let dir = TempDir::new().unwrap();
+        let (control, store) = open_control(&dir, "root-thread");
+        let root = crate::AgentPath::root();
+        let reservation = control.reserve_spawn(&root, "worker").unwrap();
+        let thread_id = reservation.thread().thread_id.clone();
+        assert_eq!(
+            store.get_thread(&thread_id).unwrap().unwrap().status,
+            crate::AgentStatusV2::PendingInit
+        );
+
+        let error = control
+            .record_runner_event(
+                &thread_id,
+                crate::RunnerEvent::TurnStarted {
+                    turn_id: "too-early".into(),
+                },
+            )
+            .unwrap_err();
+        assert!(error.to_string().contains("not committed"));
+        assert_eq!(
+            store.get_thread(&thread_id).unwrap().unwrap().status,
+            crate::AgentStatusV2::PendingInit
+        );
+
+        drop(reservation);
+        assert!(store.get_thread(&thread_id).unwrap().is_none());
+        let edge_count: i64 = rusqlite::Connection::open(store.path())
+            .unwrap()
+            .query_row(
+                "SELECT COUNT(*) FROM agent_spawn_edges WHERE child_thread_id = ?1",
+                [&thread_id],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(edge_count, 0);
+
+        let committed = control.reserve_spawn(&root, "worker").unwrap();
+        let committed_id = committed.thread().thread_id.clone();
+        committed.commit().unwrap();
+        assert_eq!(
+            control
+                .record_runner_event(
+                    &committed_id,
+                    crate::RunnerEvent::TurnStarted {
+                        turn_id: "allowed".into(),
+                    },
+                )
+                .unwrap()
+                .status,
+            crate::AgentStatusV2::Running
+        );
+    }
+
+    #[test]
     fn store_reservation_failure_does_not_leak_registry_slot() {
         let dir = TempDir::new().unwrap();
         let (control, store) = open_control(&dir, "root-thread");
@@ -654,7 +719,7 @@ mod tests {
                 .iter()
                 .map(|thread| thread.canonical_path.as_str())
                 .collect::<Vec<_>>(),
-            vec!["/root/alpha", "/root/alpha/nested"]
+            vec!["/root", "/root/alpha", "/root/alpha/nested", "/root/beta"]
         );
         assert_eq!(
             control
@@ -664,6 +729,15 @@ mod tests {
                 .map(|thread| thread.canonical_path.as_str())
                 .collect::<Vec<_>>(),
             vec!["/root/alpha", "/root/alpha/nested"]
+        );
+        assert_eq!(
+            control
+                .list_agents(&alpha.canonical_path, Some("nested"))
+                .unwrap()
+                .iter()
+                .map(|thread| thread.canonical_path.as_str())
+                .collect::<Vec<_>>(),
+            vec!["/root/alpha/nested"]
         );
         assert_eq!(
             control.resolve_target(&root, "alpha").unwrap().thread_id,
