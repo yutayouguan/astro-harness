@@ -248,7 +248,11 @@ struct ReleaseSessionRuntimeReply {
 }
 
 impl ReleaseSessionRuntimeReply {
-    fn into_result(self) -> ReleaseSessionRuntimeResult {
+    fn into_shared_result(self) -> ReleaseSessionRuntimeResult {
+        self.shared
+    }
+
+    fn claim_fallback(self) -> ReleaseSessionRuntimeResult {
         ReleaseSessionRuntimeResult {
             should_finalize_without_runtime: self.shared.should_finalize_without_runtime
                 && self
@@ -967,6 +971,28 @@ impl AstroServiceImpl {
         session_id: &str,
         ownership: ReleaseGenerationOwnershipLease,
     ) -> ReleaseSessionRuntimeResult {
+        self.release_session_runtime_reply_with_ownership(session_id, ownership)
+            .await
+            .map(ReleaseSessionRuntimeReply::into_shared_result)
+            .unwrap_or_default()
+    }
+
+    async fn release_session_runtime_for_new_chat(
+        &self,
+        session_id: &str,
+    ) -> ReleaseSessionRuntimeResult {
+        let ownership = self.release_generation_ownership(session_id);
+        self.release_session_runtime_reply_with_ownership(session_id, ownership)
+            .await
+            .map(ReleaseSessionRuntimeReply::claim_fallback)
+            .unwrap_or_default()
+    }
+
+    async fn release_session_runtime_reply_with_ownership(
+        &self,
+        session_id: &str,
+        ownership: ReleaseGenerationOwnershipLease,
+    ) -> Option<ReleaseSessionRuntimeReply> {
         let service = self.clone();
         let session_id = session_id.to_string();
         let (reply_tx, reply_rx) = tokio::sync::oneshot::channel();
@@ -975,10 +1001,7 @@ impl AstroServiceImpl {
                 .run_release_session_runtime_worker(session_id, ownership, reply_tx)
                 .await;
         });
-        reply_rx
-            .await
-            .map(ReleaseSessionRuntimeReply::into_result)
-            .unwrap_or_default()
+        reply_rx.await.ok()
     }
 
     async fn run_release_session_runtime_worker(
@@ -1087,7 +1110,7 @@ impl AstroServiceImpl {
             .hook_runtime
             .fire_plugin(::hooks::ON_SESSION_RESET, &payload);
         if self
-            .release_session_runtime(session_id)
+            .release_session_runtime_for_new_chat(session_id)
             .await
             .should_finalize_without_runtime
         {
@@ -3655,7 +3678,7 @@ mod tests {
         let result = surviving_rx
             .await
             .expect("surviving caller must receive the shared completion")
-            .into_result();
+            .claim_fallback();
         if result.should_finalize_without_runtime {
             let _ = service.hook_runtime.fire_plugin(
                 ::hooks::ON_SESSION_FINALIZE,
@@ -3667,6 +3690,77 @@ mod tests {
         }
 
         assert!(result.should_finalize_without_runtime);
+        assert_eq!(finalize_hits.load(Ordering::SeqCst), 1);
+        assert!(service.release_ownerships.lock().unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn release_only_completion_does_not_consume_new_chat_fallback() {
+        let dir = TempDir::new().unwrap();
+        let service = Arc::new(AstroServiceImpl::new(dir.path().to_path_buf()));
+        let session_id = "release-only-before-new-chat-fallback";
+        let finalize_hits = Arc::new(AtomicUsize::new(0));
+        let finalize_counter = Arc::clone(&finalize_hits);
+        service
+            .hook_runtime
+            .plugin
+            .register(::hooks::ON_SESSION_FINALIZE, move |_| {
+                finalize_counter.fetch_add(1, Ordering::SeqCst);
+                ::hooks::HookOutcome::Continue
+            });
+        let acquired = Arc::new(tokio::sync::Barrier::new(3));
+        let (ownership_tx, mut ownership_rx) = tokio::sync::mpsc::unbounded_channel();
+        for is_new_chat in [false, true] {
+            tokio::spawn({
+                let service = Arc::clone(&service);
+                let acquired = Arc::clone(&acquired);
+                let ownership_tx = ownership_tx.clone();
+                async move {
+                    let ownership = service.release_generation_ownership(session_id);
+                    ownership_tx.send((is_new_chat, ownership)).unwrap();
+                    acquired.wait().await;
+                }
+            });
+        }
+        drop(ownership_tx);
+        acquired.wait().await;
+        let mut release_only = None;
+        let mut new_chat = None;
+        while let Some((is_new_chat, ownership)) = ownership_rx.recv().await {
+            if is_new_chat {
+                new_chat = Some(ownership);
+            } else {
+                release_only = Some(ownership);
+            }
+        }
+        let release_only = release_only.expect("release-only ownership");
+        let new_chat = new_chat.expect("new-chat ownership");
+        assert_eq!(release_only.entry_ptr(), new_chat.entry_ptr());
+
+        let release_result = service
+            .release_session_runtime_with_ownership(session_id, release_only)
+            .await;
+        assert!(release_result.should_finalize_without_runtime);
+
+        let (new_chat_tx, new_chat_rx) = tokio::sync::oneshot::channel();
+        service
+            .run_release_session_runtime_worker(session_id.to_string(), new_chat, new_chat_tx)
+            .await;
+        let new_chat_result = new_chat_rx
+            .await
+            .expect("new-chat caller must receive the shared completion")
+            .claim_fallback();
+        assert!(
+            new_chat_result.should_finalize_without_runtime,
+            "release-only completion must not consume fallback ownership"
+        );
+        let _ = service.hook_runtime.fire_plugin(
+            ::hooks::ON_SESSION_FINALIZE,
+            &::hooks::HookPayload {
+                session_id: session_id.into(),
+                ..Default::default()
+            },
+        );
         assert_eq!(finalize_hits.load(Ordering::SeqCst), 1);
         assert!(service.release_ownerships.lock().unwrap().is_empty());
     }
