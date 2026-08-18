@@ -8,6 +8,7 @@
 use std::collections::HashMap;
 use std::future::Future;
 use std::pin::Pin;
+use std::sync::Arc;
 
 use crate::context::ToolContext;
 
@@ -46,7 +47,7 @@ inventory::collect!(BuiltinToolRegistrar);
 ///
 /// 与 `BuiltinToolHandler` 不同，这不需要 `ToolContext` — MCP 工具通过
 /// 捕获的 `Arc<McpHub>` 自行完成调用。
-pub type DynToolHandler = Box<
+pub type DynToolHandler = Arc<
     dyn Fn(
             &str,
             &serde_json::Value,
@@ -87,6 +88,11 @@ impl ToolRegistry {
     /// 获取动态 handler 的引用（供 `dispatch_tool` 使用）。
     pub fn dynamic_handler(&self, name: &str) -> Option<&DynToolHandler> {
         self.dynamic_handlers.get(name)
+    }
+
+    /// 克隆动态 handler 句柄，供调用方在释放注册表锁后执行。
+    pub fn dynamic_handler_cloned(&self, name: &str) -> Option<DynToolHandler> {
+        self.dynamic_handlers.get(name).cloned()
     }
 
     /// 用外部加载的 toolset 启用映射覆盖当前状态（通常来自 Tauri 或磁盘同步）。

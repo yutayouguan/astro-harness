@@ -79,20 +79,21 @@ impl AgentLoop {
             self.attach_mcp_tools().await;
         }
 
-        let allowed = self
-            .services
-            .tool_registry
-            .read()
-            .await
-            .is_tool_allowed(name)
-            && step_context.is_none_or(|step_context| step_context.advertises_tool(name));
+        let (allowed, registered_handler) = {
+            let tool_registry = self.services.tool_registry.read().await;
+            (
+                tool_registry.is_tool_allowed(name)
+                    && step_context.is_none_or(|context| context.advertises_tool(name)),
+                tool_registry.dynamic_handler_cloned(name),
+            )
+        };
 
         // 在构造 ToolContext 之前，从 Hub 解析 peer（lock → resolve → release）
         // 构建 MCP 动态 handler，持有 Peer（Send + Sync），无需跨 await 持锁。
         let mcp_handler: Option<DynToolHandler> = if is_mcp_tool_name(name) {
             let (peer, native, timeout_secs) = self.mcp_hub.lock().await.resolve_tool_peer(name)?;
             let qname = name.to_string();
-            Some(Box::new(move |_name: &str, args: &serde_json::Value| {
+            Some(Arc::new(move |_name: &str, args: &serde_json::Value| {
                 let peer = peer.clone();
                 let qname = qname.clone();
                 let native = native.clone();
@@ -109,14 +110,14 @@ impl AgentLoop {
             }))
         } else if name == mcp::MCP_RESOURCES_TOOL {
             let hub = Arc::clone(&self.mcp_hub);
-            Some(Box::new(move |_name: &str, args: &serde_json::Value| {
+            Some(Arc::new(move |_name: &str, args: &serde_json::Value| {
                 let hub = Arc::clone(&hub);
                 let args = args.clone();
                 Box::pin(async move { mcp::call_resource_broker(&hub, &args).await })
             }))
         } else if name == mcp::MCP_PROMPTS_TOOL {
             let hub = Arc::clone(&self.mcp_hub);
-            Some(Box::new(move |_name: &str, args: &serde_json::Value| {
+            Some(Arc::new(move |_name: &str, args: &serde_json::Value| {
                 let hub = Arc::clone(&hub);
                 let args = args.clone();
                 Box::pin(async move { mcp::call_prompt_broker(&hub, &args).await })
@@ -168,7 +169,8 @@ impl AgentLoop {
             workspace_write_grant,
             network_grant,
         };
-        dispatch_tool(|_| allowed, &mut ctx, name, args, mcp_handler.as_ref()).await
+        let dynamic_handler = mcp_handler.or(registered_handler);
+        dispatch_tool(|_| allowed, &mut ctx, name, args, dynamic_handler.as_ref()).await
     }
 
     /// 同步执行工具调用：multi-thread runtime 使用 `block_in_place`；current-thread

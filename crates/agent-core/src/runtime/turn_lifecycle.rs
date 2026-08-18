@@ -15,13 +15,14 @@ impl Session {
     /// 若上一轮工具次数达到 `learning.complex_task_tool_threshold`，为本轮挂起学习 nudge。
     pub async fn begin_user_turn(&mut self) {
         let compression = memory::load_compression_config(self.memory_dir());
-        {
+        let prev_rounds = {
             let mut state = self.lock_state();
             let prev_rounds = state.turn.begin_new_turn();
             state.compression.reset_for_new_turn(&compression);
-            state.pending_learning_nudge =
-                Self::compute_learning_nudge(self.memory_dir(), prev_rounds);
-        }
+            prev_rounds
+        };
+        let learning_nudge = Self::compute_learning_nudge(self.memory_dir(), prev_rounds);
+        self.lock_state().pending_learning_nudge = learning_nudge;
         let context_window = self.context_window();
         *self
             .services

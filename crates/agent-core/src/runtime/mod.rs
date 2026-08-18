@@ -812,7 +812,7 @@ impl Session {
                     icon: "database",
                     ..ToolEntry::lifecycle_defaults()
                 },
-                Box::new(move |_name, args| {
+                Arc::new(move |_name, args| {
                     let hub = Arc::clone(&hub);
                     let args = args.clone();
                     Box::pin(async move { mcp::call_resource_broker(&hub, &args).await })
@@ -846,7 +846,7 @@ impl Session {
                     icon: "message-square-text",
                     ..ToolEntry::lifecycle_defaults()
                 },
-                Box::new(move |_name, args| {
+                Arc::new(move |_name, args| {
                     let hub = Arc::clone(&hub);
                     let args = args.clone();
                     Box::pin(async move { mcp::call_prompt_broker(&hub, &args).await })
@@ -1123,6 +1123,42 @@ mod tests {
             session.permission_profile_snapshot().await.as_deref(),
             Some("workspace-write")
         );
+    }
+
+    #[tokio::test]
+    async fn session_dispatches_registered_non_mcp_dynamic_handler() {
+        let dir = TempDir::new().unwrap();
+        let mut session = Session::new(test_config(&dir)).unwrap();
+        session.tool_registry_mut().register_dynamic(
+            ToolEntry {
+                name: "custom_dynamic".to_string(),
+                toolset: "custom_dynamic".to_string(),
+                description: "Test-only dynamic tool".to_string(),
+                schema: serde_json::json!({
+                    "type": "object",
+                    "properties": { "value": { "type": "string" } },
+                    "required": ["value"]
+                }),
+                ..ToolEntry::lifecycle_defaults()
+            },
+            Arc::new(|_name, args| {
+                let value = args
+                    .get("value")
+                    .and_then(serde_json::Value::as_str)
+                    .unwrap_or_default()
+                    .to_string();
+                Box::pin(async move { Ok(types::ToolOutput::from(format!("dynamic:{value}"))) })
+            }),
+        );
+        session.reload_tool_gates().await;
+        session.attach_mcp_tools().await;
+
+        let output = session
+            .handle_tool_call_async("custom_dynamic", &serde_json::json!({ "value": "ok" }))
+            .await
+            .unwrap();
+
+        assert_eq!(output.text(), "dynamic:ok");
     }
 
     #[test]
