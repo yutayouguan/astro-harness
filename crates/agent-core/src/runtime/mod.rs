@@ -7,7 +7,7 @@
 //!
 //! **关键不变量**
 //! - 每条用户消息开始时 `tool_rounds` 归零；工具调用次数不得超过 `multi_turn`（默认 90，对齐 Hermes）
-//! - `session_messages` 中相邻消息不得连续出现相同角色（见 `validate_message_order`）
+//! - `SessionState.history` 中相邻消息不得连续出现相同角色（见 `validate_message_order`）
 //! - 取消信号（`CancelSignal`）在工具调用前后均会检查，已取消则立即中断
 
 use std::path::PathBuf;
@@ -26,7 +26,7 @@ use types::ToolEntry;
 
 use crate::prompt::context::StaticContext;
 use crate::prompt::hooks::CancelSignal;
-use crate::runtime::session::{hydrate_session_messages, resolve_session_project_root};
+use crate::runtime::session::{hydrate_history, resolve_session_project_root};
 use crate::tasks::ActiveTurn;
 use session_services::SessionServices;
 
@@ -111,8 +111,6 @@ impl Config {
 pub struct Session {
     pub(crate) config: Config,
     pub(crate) session_id: String,
-    /// 内存中的会话消息镜像，与磁盘记忆同步追加。
-    pub session_messages: Vec<Message>,
 
     // ── 提取的子结构体 ──────────────────────────────────────
     /// LLM 模型配置、凭证与 fallback 链。
@@ -190,7 +188,7 @@ impl Session {
         let sessions: Box<dyn ConversationStore> = Box::new(SessionStore::open_sessions_dir(
             &config.memory_dir.join("sessions"),
         )?);
-        let session_messages = hydrate_session_messages(&*sessions, &session_id)?;
+        let history = hydrate_history(&*sessions, &session_id)?;
         let mut tool_registry = ToolRegistry::new();
         register_all(&mut tool_registry);
         tool_registry.reload_enabled_from_disk(Some(&agent_id));
@@ -218,9 +216,8 @@ impl Session {
         Ok(Session {
             config,
             session_id,
-            session_messages,
             model_ctx: model_ctx::ModelContext::default(),
-            state: TokioMutex::new(session_state::SessionState::default()),
+            state: TokioMutex::new(session_state::SessionState::new(history)),
             memory,
             services: SessionServices::new(sessions, compression_policy),
             tool_registry,
@@ -332,7 +329,7 @@ impl Session {
     /// 排队下一轮注入上下文（复用 `pre_llm_call` 的注入机制）。
     ///
     /// 供 `pre_verify` 的 `KeepGoing(msg)` 等下游控制流场景使用：不回写
-    /// `session_messages`，仅在下一轮构建 API history 时以 `[astro:hook-context]`
+    /// `SessionState.history`，仅在下一轮构建 API history 时以 `[astro:hook-context]`
     /// 形式追加一条 user 消息。
     pub async fn queue_inject_context(&self, ctx: impl Into<String>) {
         self.state.lock().await.pending_inject_context = Some(ctx.into());
@@ -914,13 +911,20 @@ impl Session {
         )
     }
 
+    /// Append conversation items to the session-owned history.
+    pub async fn record_items(&self, items: Vec<Message>) {
+        self.state.lock().await.record_items(items);
+    }
+
     /// Return an owned snapshot of the current conversation history.
-    ///
-    /// The async shape matches Codex's `Session::clone_history` contract and
-    /// allows the backing storage to move into [`session_state::SessionState`]
-    /// without changing callers.
     pub async fn clone_history(&self) -> Vec<Message> {
-        self.session_messages.clone()
+        self.state.lock().await.clone_history()
+    }
+
+    /// Replace the current conversation history with an owned snapshot.
+    #[cfg(test)]
+    pub async fn replace_history(&self, history: Vec<Message>) {
+        self.state.lock().await.replace_history(history);
     }
 
     pub fn context_window(&self) -> u32 {
@@ -1089,9 +1093,8 @@ mod tests {
     #[tokio::test]
     async fn clone_history_returns_an_owned_snapshot_through_arc() {
         let dir = TempDir::new().unwrap();
-        let mut session = Session::new(test_config(&dir)).unwrap();
-        session.session_messages.push(Message::user("original"));
-        let session = Arc::new(session);
+        let session = Arc::new(Session::new(test_config(&dir)).unwrap());
+        session.record_items(vec![Message::user("original")]).await;
 
         let mut snapshot = session.clone_history().await;
         snapshot.push(Message::assistant("snapshot-only"));
@@ -1099,6 +1102,21 @@ mod tests {
         let current = session.clone_history().await;
         assert_eq!(current.len(), 1);
         assert_eq!(current[0].content_str(), "original");
+    }
+
+    #[tokio::test]
+    async fn replace_history_replaces_the_session_state_snapshot() {
+        let dir = TempDir::new().unwrap();
+        let session = Session::new(test_config(&dir)).unwrap();
+        session.record_items(vec![Message::user("discarded")]).await;
+
+        session
+            .replace_history(vec![Message::assistant("replacement")])
+            .await;
+
+        let history = session.clone_history().await;
+        assert_eq!(history.len(), 1);
+        assert_eq!(history[0].content_str(), "replacement");
     }
 
     #[test]

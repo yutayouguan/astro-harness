@@ -15,7 +15,7 @@ pub(super) async fn pre_llm_maintenance(session: &Arc<Mutex<AgentLoop>>) {
     {
         let mut agent = session.lock().await;
         let recommend_ratio = agent.compression_config().recommend_compact_ratio;
-        if agent.occupancy_ratio() >= recommend_ratio {
+        if agent.occupancy_ratio().await >= recommend_ratio {
             match agent.maintain_tool_context().await {
                 Ok(report) if report.pruned + report.compressed > 0 => {
                     tracing::info!(
@@ -229,13 +229,12 @@ pub(super) async fn record_tool_outcomes(
 
         {
             let mut agent = session.lock().await;
-            let _ = agent.record_tool_result_with_id(
-                Some(&call.id),
-                Some(&call.name),
-                &result_for_history,
-            );
+            let _ = agent
+                .record_tool_result_with_id(Some(&call.id), Some(&call.name), &result_for_history)
+                .await;
             if !tool_media.is_empty() {
-                if let Some(last) = agent.session_messages.last_mut() {
+                let mut state = agent.state.lock().await;
+                if let Some(last) = state.history.last_mut() {
                     if last.role == types::message::Role::Tool && last.media.is_empty() {
                         last.media = tool_media;
                     }

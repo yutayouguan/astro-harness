@@ -10,23 +10,30 @@ use super::AgentLoop;
 impl AgentLoop {
     /// Provider 发送用历史：若有 mid-run handoff 则折叠中间轮次。
     pub async fn provider_history(&mut self) -> Vec<Message> {
-        let handoff = self.state.lock().await.compression.mid_run_handoff.clone();
+        let (handoff, history) = {
+            let state = self.state.lock().await;
+            (
+                state.compression.mid_run_handoff.clone(),
+                state.clone_history(),
+            )
+        };
         match handoff {
             Some(handoff) => crate::exec::mid_run_summary::collapse_history_with_handoff(
-                &self.session_messages,
+                &history,
                 &handoff,
                 self.config_protect_first_n(),
                 self.config_protect_last_n(),
             ),
-            None => self.session_messages.clone(),
+            None => history,
         }
     }
 
     /// 当前会话占用比例（ceil chars/4 ÷ context_window）。
-    pub fn occupancy_ratio(&self) -> f32 {
+    pub async fn occupancy_ratio(&self) -> f32 {
+        let history = self.clone_history().await;
         ToolCompressionManager::from_config(&self.compression_config())
             .with_context_window(self.context_window())
-            .occupancy_ratio(&self.session_messages)
+            .occupancy_ratio(&history)
     }
 
     /// Run 内 tool 上下文维护：委托 [`CompressionPolicy`] 生成计划，执行 prune/LLM 摘要/head-tail。
@@ -37,10 +44,14 @@ impl AgentLoop {
         if !self.compression_config().enabled {
             return Ok(result);
         }
-        if !self.state.lock().await.compression.guard.allow_run() {
-            result.thrashing_disabled = true;
-            return Ok(result);
-        }
+        let history = {
+            let state = self.state.lock().await;
+            if !state.compression.guard.allow_run() {
+                result.thrashing_disabled = true;
+                return Ok(result);
+            }
+            state.clone_history()
+        };
 
         let stored = self.services.sessions.get_messages(&self.session_id)?;
         let protect_last_n = self.compression_config().protect_last_n.max(1);
@@ -52,7 +63,7 @@ impl AgentLoop {
             .expect("compression policy mutex poisoned")
             .plan(
                 &stored,
-                &self.session_messages,
+                &history,
                 self.memory_dir(),
                 &self.session_id,
                 protect_last_n,
@@ -72,7 +83,8 @@ impl AgentLoop {
                 continue;
             };
             let content = stored_msg.content.as_deref().unwrap_or_default();
-            self.apply_tool_compressed_view(stored_msg, content, &view)?;
+            self.apply_tool_compressed_view(stored_msg, content, &view)
+                .await?;
             result.pruned += 1;
         }
 
@@ -121,14 +133,15 @@ impl AgentLoop {
             let Some(stored_msg) = stored_again.iter().find(|m| m.id == job.message_id) else {
                 continue;
             };
-            self.apply_tool_compressed_view(stored_msg, &job.content, &view)?;
+            self.apply_tool_compressed_view(stored_msg, &job.content, &view)
+                .await?;
             result.compressed += 1;
         }
 
         // ── 防抖 + compact 建议 ──
         let mgr = ToolCompressionManager::from_config(&self.compression_config())
             .with_context_window(self.context_window());
-        result.occupancy_after = mgr.occupancy_ratio(&self.session_messages);
+        result.occupancy_after = mgr.occupancy_ratio(&self.clone_history().await);
         let recommend_session_compact = self
             .services
             .compression_policy
@@ -148,7 +161,7 @@ impl AgentLoop {
         Ok(result)
     }
 
-    fn apply_tool_compressed_view(
+    async fn apply_tool_compressed_view(
         &mut self,
         stored_msg: &::session::StoredMessage,
         content: &str,
@@ -157,7 +170,8 @@ impl AgentLoop {
         self.services
             .sessions
             .update_message_compressed_content(stored_msg.id, Some(view))?;
-        if let Some(runtime_msg) = self.session_messages.iter_mut().find(|m| {
+        let mut state = self.state.lock().await;
+        if let Some(runtime_msg) = state.history.iter_mut().find(|m| {
             m.role == Role::Tool
                 && match (&m.tool_call_id, &stored_msg.tool_call_id) {
                     (Some(a), Some(b)) => a == b,

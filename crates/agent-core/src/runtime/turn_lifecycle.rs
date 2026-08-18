@@ -77,7 +77,7 @@ impl Session {
 
     /// 同 [`Self::start_or_steer_turn`]，附带本轮图片 data URL（`data:image/...;base64,...`）。
     ///
-    /// FTS 仍只索引文本；附图写入 `messages.media_json` 并进入内存 `session_messages`。
+    /// FTS 仍只索引文本；附图写入 `messages.media_json` 并进入内存 `SessionState.history`。
     pub async fn start_or_steer_turn_with_images(
         &mut self,
         user_message: &str,
@@ -116,7 +116,8 @@ impl Session {
         self.begin_user_turn().await;
         if looks_like_user_correction(&user_message)
             && self
-                .session_messages
+                .clone_history()
+                .await
                 .iter()
                 .any(|m| matches!(m.role, types::message::Role::Assistant))
         {
@@ -132,7 +133,7 @@ impl Session {
         self.reload_tools_and_mcp().await?;
 
         for item in input.iter().cloned() {
-            self.record_turn_input(item)?;
+            self.record_turn_input(item).await?;
         }
 
         let current_turn = self.state.lock().await.turn.current_turn;
@@ -208,7 +209,7 @@ impl Session {
         }
     }
 
-    pub(crate) fn record_turn_input(&mut self, input: TurnInput) -> anyhow::Result<()> {
+    pub(crate) async fn record_turn_input(&mut self, input: TurnInput) -> anyhow::Result<()> {
         let TurnInput::UserInput {
             content,
             image_data_urls,
@@ -239,8 +240,8 @@ impl Session {
             media_json: media_json.as_deref(),
             ..NewMessage::empty(&self.session_id, "user")
         })?;
-        self.session_messages
-            .push(Message::user_with_images(&content, &image_data_urls));
+        self.record_items(vec![Message::user_with_images(&content, &image_data_urls)])
+            .await;
         Ok(())
     }
 

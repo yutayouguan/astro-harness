@@ -397,12 +397,12 @@ pub trait CompressionPolicy: Send {
     /// 分析当前消息状态，生成压缩计划。
     ///
     /// `stored_messages` 为 DB 中的完整消息列表；
-    /// `session_messages` 为内存镜像（含 `compressed_content`，用于占用率估算）；
+    /// `history` 为内存镜像（含 `compressed_content`，用于占用率估算）；
     /// `protect_last_n` 为尾部保护消息数。
     fn plan(
         &self,
         stored_messages: &[::session::StoredMessage],
-        session_messages: &[Message],
+        history: &[Message],
         memory_dir: &std::path::Path,
         session_id: &str,
         protect_last_n: usize,
@@ -444,7 +444,7 @@ impl CompressionPolicy for StagedCompressionPolicy {
     fn plan(
         &self,
         stored_messages: &[::session::StoredMessage],
-        session_messages: &[Message],
+        history: &[Message],
         memory_dir: &std::path::Path,
         session_id: &str,
         protect_last_n: usize,
@@ -453,12 +453,12 @@ impl CompressionPolicy for StagedCompressionPolicy {
         if !self.manager.enabled {
             return plan;
         }
-        let Some(stage) = self.manager.stage_for_compress(session_messages) else {
+        let Some(stage) = self.manager.stage_for_compress(history) else {
             return plan;
         };
 
         plan.stage_ratio = Some(stage.min_ratio);
-        plan.occupancy_before = self.manager.occupancy_ratio(session_messages);
+        plan.occupancy_before = self.manager.occupancy_ratio(history);
 
         let protect_start = protect_tail_start_index(stored_messages.len(), protect_last_n.max(1));
 

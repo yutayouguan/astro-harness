@@ -2,7 +2,7 @@
 //!
 //! **关键不变量**
 //! - Pause/Cancel 对齐 Rig：`wait_if_paused` 先于上游 poll；取消时通过 `Abortable` 中止 Provider 流
-//! - 每轮 assistant 回复必须写入 `session_messages`（含 tool_calls）后再执行工具
+//! - 每轮 assistant 回复必须写入 `SessionState.history`（含 tool_calls）后再执行工具
 //! - 迭代预算对齐 Hermes：默认 90 轮；`code_exec` 独占轮可 refund；耗尽后无工具强制总结再 Done
 //! - usage 采用覆盖式累加，兼容 Google 等 Provider 的累计式 `usageMetadata`
 //!
@@ -186,7 +186,7 @@ async fn record_pending_input(
     }
     let mut sess = session.lock().await;
     for input in pending_input {
-        sess.record_turn_input(input)?;
+        sess.record_turn_input(input).await?;
     }
     Ok(())
 }
@@ -516,12 +516,15 @@ pub(crate) async fn run_turn(args: RunTurnArgs, cancellation_token: Cancellation
                     Some(timeline.reasoning_details_snapshot()),
                     thought_signature.as_deref(),
                 );
-                if let Err(err) = agent.record_assistant_with_calls(
-                    &full_response,
-                    &[],
-                    Some(full_reasoning.as_str()),
-                    details,
-                ) {
+                if let Err(err) = agent
+                    .record_assistant_with_calls(
+                        &full_response,
+                        &[],
+                        Some(full_reasoning.as_str()),
+                        details,
+                    )
+                    .await
+                {
                     drop(agent);
                     finish_error(
                         &session,
@@ -536,7 +539,9 @@ pub(crate) async fn run_turn(args: RunTurnArgs, cancellation_token: Cancellation
                 }
                 if let Err(err) = agent.record_user_message(
                     "[astro:system]\n你的思考过程已记录，但没有生成回复内容。请直接给出你的回答。",
-                ) {
+                )
+                .await
+                {
                     drop(agent);
                     finish_error(
                         &session,
@@ -592,12 +597,15 @@ pub(crate) async fn run_turn(args: RunTurnArgs, cancellation_token: Cancellation
                     Some(timeline.reasoning_details_snapshot()),
                     thought_signature.as_deref(),
                 );
-                if let Err(err) = agent.record_assistant_with_calls(
-                    &full_response,
-                    &[],
-                    (!full_reasoning.is_empty()).then_some(full_reasoning.as_str()),
-                    details,
-                ) {
+                if let Err(err) = agent
+                    .record_assistant_with_calls(
+                        &full_response,
+                        &[],
+                        (!full_reasoning.is_empty()).then_some(full_reasoning.as_str()),
+                        details,
+                    )
+                    .await
+                {
                     drop(agent);
                     finish_error(
                         &session,
@@ -610,8 +618,9 @@ pub(crate) async fn run_turn(args: RunTurnArgs, cancellation_token: Cancellation
                     .await;
                     return;
                 }
-                if let Err(err) =
-                    agent.record_user_message(&format!("[astro:hook-context]\n{prompt}"))
+                if let Err(err) = agent
+                    .record_user_message(&format!("[astro:hook-context]\n{prompt}"))
+                    .await
                 {
                     drop(agent);
                     finish_error(
@@ -682,12 +691,15 @@ pub(crate) async fn run_turn(args: RunTurnArgs, cancellation_token: Cancellation
                 Some(timeline.reasoning_details_snapshot()),
                 thought_signature.as_deref(),
             );
-            if let Err(err) = agent.record_assistant_with_calls(
-                &full_response,
-                &calls,
-                (!full_reasoning.is_empty()).then_some(full_reasoning.as_str()),
-                details,
-            ) {
+            if let Err(err) = agent
+                .record_assistant_with_calls(
+                    &full_response,
+                    &calls,
+                    (!full_reasoning.is_empty()).then_some(full_reasoning.as_str()),
+                    details,
+                )
+                .await
+            {
                 drop(agent);
                 finish_error(
                     &session,

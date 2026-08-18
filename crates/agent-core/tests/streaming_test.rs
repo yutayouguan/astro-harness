@@ -111,10 +111,8 @@ async fn regular_task_owns_initial_input_persistence() {
 
     assert!(saw_initial_input.load(Ordering::SeqCst));
     let sess = session.lock().await;
-    assert_eq!(
-        sess.session_messages[0].content_str(),
-        "owned by regular task"
-    );
+    let history = sess.clone_history().await;
+    assert_eq!(history[0].content_str(), "owned by regular task");
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -126,8 +124,8 @@ async fn steered_input_is_consumed_by_the_active_regular_task() {
     session
         .lock()
         .await
-        .session_messages
-        .push(types::message::Message::user("initial"));
+        .record_items(vec![types::message::Message::user("initial")])
+        .await;
 
     let calls = Arc::new(AtomicUsize::new(0));
     let saw_follow_up = Arc::new(std::sync::atomic::AtomicBool::new(false));
@@ -200,7 +198,7 @@ async fn steered_input_is_consumed_by_the_active_regular_task() {
 
     assert_eq!(calls.load(Ordering::SeqCst), 2);
     assert!(saw_follow_up.load(Ordering::SeqCst));
-    let messages = &session.lock().await.session_messages;
+    let messages = session.lock().await.clone_history().await;
     assert!(messages.iter().any(|message| {
         matches!(
             &message.content,
@@ -216,9 +214,9 @@ async fn multi_turn_emits_text_tool_result_and_usage() {
     let agent = AgentLoop::with_session_id(config, "test-session".into()).unwrap();
     let session = Arc::new(Mutex::new(agent));
     {
-        let mut a = session.lock().await;
-        a.session_messages
-            .push(types::message::Message::user("call a tool"));
+        let a = session.lock().await;
+        a.record_items(vec![types::message::Message::user("call a tool")])
+            .await;
     }
 
     let chat_fn = scripted_chat(vec![
@@ -313,8 +311,8 @@ async fn multi_turn_tool_exec_works_on_current_thread_runtime() {
     session
         .lock()
         .await
-        .session_messages
-        .push(types::message::Message::user("call a tool"));
+        .record_items(vec![types::message::Message::user("call a tool")])
+        .await;
 
     let chat_fn = scripted_chat(vec![
         vec![
@@ -369,8 +367,8 @@ async fn multi_turn_tool_exec_works_on_current_thread_runtime() {
     assert!(matches!(items.last(), Some(MultiTurnStreamItem::Done)));
 }
 
-#[test]
-fn cold_start_hydrates_session_messages_from_db() {
+#[tokio::test]
+async fn cold_start_hydrates_history_from_db() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().to_path_buf();
     {
@@ -380,21 +378,16 @@ fn cold_start_hydrates_session_messages_from_db() {
         )
         .unwrap();
         agent.ensure_session("test").unwrap();
-        let rt = tokio::runtime::Builder::new_current_thread()
-            .enable_all()
-            .build()
-            .unwrap();
-        rt.block_on(async {
-            agent.start_or_steer_turn("hello", "hydrate").await.unwrap();
-        });
-        agent.record_assistant_message("world").unwrap();
+        agent.start_or_steer_turn("hello", "hydrate").await.unwrap();
+        agent.record_assistant_message("world").await.unwrap();
     }
 
     let agent =
         AgentLoop::with_session_id(AgentConfig::with_defaults(path), "hydrate-me".into()).unwrap();
-    assert_eq!(agent.session_messages.len(), 2);
-    assert_eq!(agent.session_messages[0].content_str(), "hello");
-    assert_eq!(agent.session_messages[1].content_str(), "world");
+    let history = agent.clone_history().await;
+    assert_eq!(history.len(), 2);
+    assert_eq!(history[0].content_str(), "hello");
+    assert_eq!(history[1].content_str(), "world");
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -404,10 +397,10 @@ async fn multi_turn_persists_reasoning_and_tool_activities() {
     let agent = AgentLoop::with_session_id(config, "persist-session".into()).unwrap();
     let session = Arc::new(Mutex::new(agent));
     {
-        let mut a = session.lock().await;
+        let a = session.lock().await;
         a.ensure_session("test").unwrap();
-        a.session_messages
-            .push(types::message::Message::user("call a tool"));
+        a.record_items(vec![types::message::Message::user("call a tool")])
+            .await;
     }
 
     let chat_fn = scripted_chat(vec![
@@ -489,12 +482,12 @@ async fn multi_turn_persists_reasoning_and_tool_activities() {
 async fn multi_turn_fires_post_llm_call_after_model_stream() {
     let dir = tempfile::tempdir().unwrap();
     let config = AgentConfig::with_defaults(dir.path().to_path_buf());
-    let mut agent = AgentLoop::with_session_id(config, "completion-hook".into()).unwrap();
+    let agent = AgentLoop::with_session_id(config, "completion-hook".into()).unwrap();
     let log: Arc<std::sync::Mutex<Vec<String>>> = Arc::new(std::sync::Mutex::new(vec![]));
     ::hooks::install_recording(&agent.hook_bus(), Arc::clone(&log));
     agent
-        .session_messages
-        .push(types::message::Message::user("say hi"));
+        .record_items(vec![types::message::Message::user("say hi")])
+        .await;
     let session = Arc::new(Mutex::new(agent));
 
     let chat_fn = scripted_chat(vec![vec![
@@ -540,7 +533,7 @@ async fn multi_turn_fires_post_llm_call_after_model_stream() {
 async fn transform_llm_output_replaces_before_post_llm_call() {
     let dir = tempfile::tempdir().unwrap();
     let config = AgentConfig::with_defaults(dir.path().to_path_buf());
-    let mut agent = AgentLoop::with_session_id(config, "transform-llm-session".into()).unwrap();
+    let agent = AgentLoop::with_session_id(config, "transform-llm-session".into()).unwrap();
     let log: Arc<std::sync::Mutex<Vec<String>>> = Arc::new(std::sync::Mutex::new(vec![]));
     ::hooks::install_recording(&agent.hook_bus(), Arc::clone(&log));
     agent
@@ -549,8 +542,8 @@ async fn transform_llm_output_replaces_before_post_llm_call() {
             ::hooks::HookOutcome::ReplaceText("REPLACED".into())
         });
     agent
-        .session_messages
-        .push(types::message::Message::user("say hi"));
+        .record_items(vec![types::message::Message::user("say hi")])
+        .await;
     let session = Arc::new(Mutex::new(agent));
     let session_for_check = Arc::clone(&session);
 
@@ -595,11 +588,9 @@ async fn transform_llm_output_replaces_before_post_llm_call() {
     );
 
     let agent = session_for_check.lock().await;
+    let history = agent.clone_history().await;
     assert_eq!(
-        agent
-            .session_messages
-            .last()
-            .map(|m| m.content_str().to_string()),
+        history.last().map(|m| m.content_str().to_string()),
         Some("REPLACED".to_string()),
         "final assistant message should reflect transform_llm_output replacement"
     );
@@ -609,12 +600,12 @@ async fn transform_llm_output_replaces_before_post_llm_call() {
 async fn pre_verify_never_fires_without_disk_write() {
     let dir = tempfile::tempdir().unwrap();
     let config = AgentConfig::with_defaults(dir.path().to_path_buf());
-    let mut agent = AgentLoop::with_session_id(config, "pre-verify-no-write".into()).unwrap();
+    let agent = AgentLoop::with_session_id(config, "pre-verify-no-write".into()).unwrap();
     let log: Arc<std::sync::Mutex<Vec<String>>> = Arc::new(std::sync::Mutex::new(vec![]));
     ::hooks::install_recording(&agent.hook_bus(), Arc::clone(&log));
     agent
-        .session_messages
-        .push(types::message::Message::user("just say hi, no tools"));
+        .record_items(vec![types::message::Message::user("just say hi, no tools")])
+        .await;
     let session = Arc::new(Mutex::new(agent));
 
     let chat_fn = scripted_chat(vec![vec![
@@ -665,15 +656,17 @@ async fn pre_verify_never_fires_without_disk_write() {
 async fn pre_verify_keep_going_retries_capped_at_two() {
     let dir = tempfile::tempdir().unwrap();
     let config = AgentConfig::with_defaults(dir.path().to_path_buf());
-    let mut agent = AgentLoop::with_session_id(config, "pre-verify-keep-going".into()).unwrap();
+    let agent = AgentLoop::with_session_id(config, "pre-verify-keep-going".into()).unwrap();
     let log: Arc<std::sync::Mutex<Vec<String>>> = Arc::new(std::sync::Mutex::new(vec![]));
     ::hooks::install_recording(&agent.hook_bus(), Arc::clone(&log));
     agent.hook_bus().register(::hooks::PRE_VERIFY, |_| {
         ::hooks::HookOutcome::KeepGoing("请再检查一下你的改动".into())
     });
     agent
-        .session_messages
-        .push(types::message::Message::user("write a file then confirm"));
+        .record_items(vec![types::message::Message::user(
+            "write a file then confirm",
+        )])
+        .await;
     let session = Arc::new(Mutex::new(agent));
     let session_for_check = Arc::clone(&session);
 
@@ -775,18 +768,17 @@ async fn pre_verify_keep_going_retries_capped_at_two() {
     assert!(matches!(items.last(), Some(MultiTurnStreamItem::Done)));
 
     let agent = session_for_check.lock().await;
+    let history = agent.clone_history().await;
     assert!(
-        agent::runtime::validate_message_order(&agent.session_messages),
-        "session_messages must alternate roles (no consecutive same role) after capped KeepGoing retries, messages={:?}",
-        agent
-            .session_messages
+        agent::runtime::validate_message_order(&history),
+        "history must alternate roles (no consecutive same role) after capped KeepGoing retries, messages={:?}",
+        history
             .iter()
             .map(|m| (m.role.clone(), m.content_str().to_string()))
             .collect::<Vec<_>>()
     );
 
-    let bridge_users: Vec<&types::message::Message> = agent
-        .session_messages
+    let bridge_users: Vec<&types::message::Message> = history
         .iter()
         .filter(|m| {
             m.role == types::message::Role::User
@@ -797,8 +789,7 @@ async fn pre_verify_keep_going_retries_capped_at_two() {
         bridge_users.len(),
         2,
         "expect one persisted bridging user message per KeepGoing attempt (capped at 2), messages={:?}",
-        agent
-            .session_messages
+        history
             .iter()
             .map(|m| (m.role.clone(), m.content_str().to_string()))
             .collect::<Vec<_>>()
@@ -811,8 +802,7 @@ async fn pre_verify_keep_going_retries_capped_at_two() {
         );
     }
 
-    let provider_messages =
-        agent::prompt::messages::to_provider_messages("sys", &agent.session_messages);
+    let provider_messages = agent::prompt::messages::to_provider_messages("sys", &history);
     for window in provider_messages.windows(2) {
         let (a, b) = (window[0].role(), window[1].role());
         assert!(
@@ -848,8 +838,9 @@ async fn cumulative_usage_chunks_use_last_per_round() {
     let agent = AgentLoop::with_session_id(config, "usage-session".into()).unwrap();
     let session = Arc::new(Mutex::new(agent));
     {
-        let mut a = session.lock().await;
-        a.session_messages.push(types::message::Message::user("hi"));
+        let a = session.lock().await;
+        a.record_items(vec![types::message::Message::user("hi")])
+            .await;
     }
     let chat_fn = scripted_chat(vec![vec![
         StreamChunk::Text("a".into()),
@@ -896,8 +887,9 @@ async fn error_has_single_error_terminal_before_done() {
     let agent = AgentLoop::with_session_id(config, "err-session".into()).unwrap();
     let session = Arc::new(Mutex::new(agent));
     {
-        let mut a = session.lock().await;
-        a.session_messages.push(types::message::Message::user("x"));
+        let a = session.lock().await;
+        a.record_items(vec![types::message::Message::user("x")])
+            .await;
     }
     let chat_fn = boom_chat();
     let (tx, mut rx) = tokio::sync::mpsc::channel(64);
@@ -946,10 +938,10 @@ async fn cancellation_has_single_interrupt_terminal_before_done() {
     let agent = AgentLoop::with_session_id(config, "cancel-session".into()).unwrap();
     let session = Arc::new(Mutex::new(agent));
     {
-        let mut agent = session.lock().await;
+        let agent = session.lock().await;
         agent
-            .session_messages
-            .push(types::message::Message::user("wait"));
+            .record_items(vec![types::message::Message::user("wait")])
+            .await;
     }
 
     let (tx, mut rx) = tokio::sync::mpsc::channel(64);
@@ -1000,9 +992,9 @@ async fn tool_call_delta_and_memory_path() {
     let agent = AgentLoop::with_session_id(config, "mem-session".into()).unwrap();
     let session = Arc::new(Mutex::new(agent));
     {
-        let mut a = session.lock().await;
-        a.session_messages
-            .push(types::message::Message::user("remember this"));
+        let a = session.lock().await;
+        a.record_items(vec![types::message::Message::user("remember this")])
+            .await;
     }
 
     let chat_fn = scripted_chat(vec![
@@ -1087,9 +1079,9 @@ async fn hitl_waiting_parks_then_continues_same_run() {
     let agent = AgentLoop::with_session_id(config, "hitl-session".into()).unwrap();
     let session = Arc::new(Mutex::new(agent));
     {
-        let mut a = session.lock().await;
-        a.session_messages
-            .push(types::message::Message::user("please confirm"));
+        let a = session.lock().await;
+        a.record_items(vec![types::message::Message::user("please confirm")])
+            .await;
     }
 
     let chat_fn = scripted_chat(vec![
@@ -1222,9 +1214,9 @@ async fn approval_hooks_fire_pre_then_post_on_allow() {
 
     let session = Arc::new(Mutex::new(agent));
     {
-        let mut a = session.lock().await;
-        a.session_messages
-            .push(types::message::Message::user("clean up the temp dir"));
+        let a = session.lock().await;
+        a.record_items(vec![types::message::Message::user("clean up the temp dir")])
+            .await;
     }
 
     let cmd = "rm -rf /tmp/astro-approval-test-allow";
@@ -1391,9 +1383,9 @@ async fn approval_hooks_fire_pre_then_post_on_deny() {
 
     let session = Arc::new(Mutex::new(agent));
     {
-        let mut a = session.lock().await;
-        a.session_messages
-            .push(types::message::Message::user("clean up the temp dir"));
+        let a = session.lock().await;
+        a.record_items(vec![types::message::Message::user("clean up the temp dir")])
+            .await;
     }
 
     let cmd = "rm -rf /tmp/astro-approval-test-deny";
@@ -1525,9 +1517,9 @@ async fn multi_turn_budget_exhausted_forces_toolless_summary() {
     let agent = AgentLoop::with_session_id(config, "budget-session".into()).unwrap();
     let session = Arc::new(Mutex::new(agent));
     {
-        let mut a = session.lock().await;
-        a.session_messages
-            .push(types::message::Message::user("keep using tools"));
+        let a = session.lock().await;
+        a.record_items(vec![types::message::Message::user("keep using tools")])
+            .await;
     }
 
     let chat_fn = scripted_chat(vec![
