@@ -22,6 +22,10 @@ pub struct RunAgentTurnRequest {
     /// Follow-up turns obtain their user input from the durable mailbox at the
     /// first sampling boundary instead of duplicating it as an initial input.
     pub consume_mailbox: bool,
+    /// Independent admission acknowledgement used by spawn.  It is published
+    /// once TurnStarted is durable and the active runtime handle is registered;
+    /// terminal turn completion is deliberately not part of this protocol.
+    pub(super) startup_tx: Option<watch::Sender<Option<Result<(), String>>>>,
     pub(super) followup_start_tx: Option<watch::Sender<Option<Result<(), String>>>>,
     pub(super) start_token: Option<String>,
 }
@@ -260,6 +264,21 @@ impl AgentRuntimeManager {
     }
 
     pub async fn start_turn(&self, request: RunAgentTurnRequest) -> anyhow::Result<()> {
+        let startup_tx = request.startup_tx.clone();
+        let result = self.start_turn_inner(request).await;
+        if let Some(startup_tx) = startup_tx {
+            if startup_tx.borrow().is_none() {
+                let shared = result
+                    .as_ref()
+                    .map(|_| ())
+                    .map_err(|error| format!("{error:#}"));
+                let _ = startup_tx.send(Some(shared));
+            }
+        }
+        result
+    }
+
+    async fn start_turn_inner(&self, request: RunAgentTurnRequest) -> anyhow::Result<()> {
         self.pause_before_followup_start(&request).await;
         let thread_id = request.thread.thread_id.clone();
         let control = Arc::clone(&request.control);
@@ -396,6 +415,9 @@ impl AgentRuntimeManager {
             armed: true,
             permit: Some(permit),
         };
+        if let Some(startup_tx) = request.startup_tx.as_ref() {
+            let _ = startup_tx.send(Some(Ok(())));
+        }
 
         let result =
             run_request(&request, Arc::clone(&interrupt), prior_turn_was_interrupted).await;
@@ -1056,34 +1078,13 @@ async fn run_request(
     anyhow::ensure!(!targets.is_empty(), "agent turn has no chat target");
     session.set_chat_targets(targets.clone());
     let prepared_system_prompt = if request.consume_mailbox {
-        let messages = request
-            .control
-            .drain_mailbox(&request.thread.canonical_path)?;
-        anyhow::ensure!(
-            !messages.is_empty(),
-            "follow-up turn has no durable mailbox input"
-        );
-        let through_sequence = messages.last().expect("non-empty mailbox").sequence;
-        let input = TurnInput::UserInput {
-            content: messages
-                .iter()
-                .map(|message| message.payload.as_str())
-                .collect::<Vec<_>>()
-                .join("\n\n"),
-            image_data_urls: Vec::new(),
-        };
-        let turn = session.prepare_turn(std::slice::from_ref(&input)).await?;
+        let turn = session.prepare_mailbox_turn().await?;
         let system_prompt = match turn {
             TurnResult::Continue { system_prompt, .. } => system_prompt,
             TurnResult::BudgetExhausted => anyhow::bail!("conversation turn budget exhausted"),
             TurnResult::Interrupted => anyhow::bail!("follow-up turn interrupted while preparing"),
             other => anyhow::bail!("unexpected follow-up preparation result: {other:?}"),
         };
-        // Acknowledge only after the combined mailbox input is durable and in
-        // memory. A failed start before this point therefore remains retryable.
-        request
-            .control
-            .ack_mailbox(&request.thread.canonical_path, through_sequence)?;
         Some(system_prompt)
     } else {
         None
@@ -1339,6 +1340,7 @@ mod tests {
             memory_dir,
             chat_override: Some(chat_override),
             consume_mailbox: false,
+            startup_tx: None,
             followup_start_tx: None,
             start_token: None,
         }
@@ -1398,6 +1400,145 @@ mod tests {
                 RunnerEvent::TurnStarted { .. },
                 RunnerEvent::TurnCompleted { .. }
             ]
+        ));
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn followup_turn_persists_sequence_marker_before_acknowledging_mailbox() {
+        let dir = tempfile::tempdir().unwrap();
+        let (control, thread) = setup(&dir, "worker");
+        let memory_dir = dir.path().join("memory");
+        control
+            .enqueue_message(
+                &AgentPath::root(),
+                subagents::MessageAgentV2Request {
+                    target: thread.canonical_path.to_string(),
+                    message: "first follow-up".into(),
+                },
+                false,
+            )
+            .unwrap();
+        control
+            .enqueue_message(
+                &AgentPath::root(),
+                subagents::MessageAgentV2Request {
+                    target: thread.canonical_path.to_string(),
+                    message: "second follow-up".into(),
+                },
+                false,
+            )
+            .unwrap();
+        let mut run = request(
+            Arc::clone(&control),
+            thread.clone(),
+            memory_dir.clone(),
+            scripted_chat("done"),
+        );
+        run.consume_mailbox = true;
+
+        AgentRuntimeManager::default()
+            .start_turn(run)
+            .await
+            .unwrap();
+
+        assert!(control
+            .drain_mailbox(&thread.canonical_path)
+            .unwrap()
+            .is_empty());
+        let sessions =
+            session::SessionStore::open_sessions_dir(&memory_dir.join("sessions")).unwrap();
+        let user_messages = sessions
+            .get_messages(&thread.session_id)
+            .unwrap()
+            .into_iter()
+            .filter(|message| message.role == "user")
+            .collect::<Vec<_>>();
+        assert_eq!(user_messages.len(), 1);
+        assert_eq!(
+            user_messages[0].content.as_deref(),
+            Some("first follow-up\n\nsecond follow-up")
+        );
+        assert!(user_messages[0].finish_reason.as_deref().is_some_and(
+            |reason| reason.starts_with(crate::exec::subagents::MAILBOX_FINISH_PREFIX)
+        ));
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn followup_retry_after_ack_failure_reuses_marker_without_duplicate_user() {
+        let dir = tempfile::tempdir().unwrap();
+        let (control, thread) = setup(&dir, "worker");
+        let memory_dir = dir.path().join("memory");
+        control
+            .enqueue_message(
+                &AgentPath::root(),
+                subagents::MessageAgentV2Request {
+                    target: thread.canonical_path.to_string(),
+                    message: "retry-safe follow-up".into(),
+                },
+                false,
+            )
+            .unwrap();
+        let graph = rusqlite::Connection::open(dir.path().join("agents.db")).unwrap();
+        graph
+            .execute_batch(
+                "CREATE TRIGGER fail_mailbox_ack
+                 BEFORE UPDATE OF delivery_state ON agent_mailbox
+                 WHEN NEW.delivery_state = 'delivered'
+                 BEGIN
+                   SELECT RAISE(ABORT, 'injected mailbox ack failure');
+                 END;",
+            )
+            .unwrap();
+        let mut first = request(
+            Arc::clone(&control),
+            thread.clone(),
+            memory_dir.clone(),
+            scripted_chat("must not sample"),
+        );
+        first.consume_mailbox = true;
+        let first_error = AgentRuntimeManager::default()
+            .start_turn(first)
+            .await
+            .unwrap_err();
+        assert!(format!("{first_error:#}").contains("injected mailbox ack failure"));
+        graph
+            .execute_batch("DROP TRIGGER fail_mailbox_ack;")
+            .unwrap();
+
+        let retry_thread = control
+            .resolve_target(&AgentPath::root(), "worker")
+            .unwrap();
+        let mut retry = request(
+            Arc::clone(&control),
+            retry_thread,
+            memory_dir.clone(),
+            scripted_chat("done"),
+        );
+        retry.consume_mailbox = true;
+        AgentRuntimeManager::default()
+            .start_turn(retry)
+            .await
+            .unwrap();
+
+        assert!(control
+            .drain_mailbox(&thread.canonical_path)
+            .unwrap()
+            .is_empty());
+        let sessions =
+            session::SessionStore::open_sessions_dir(&memory_dir.join("sessions")).unwrap();
+        let user_messages = sessions
+            .get_messages(&thread.session_id)
+            .unwrap()
+            .into_iter()
+            .filter(|message| message.role == "user")
+            .collect::<Vec<_>>();
+        assert_eq!(user_messages.len(), 1);
+        assert_eq!(
+            user_messages[0].content.as_deref(),
+            Some("retry-safe follow-up")
+        );
+        assert!(user_messages[0].finish_reason.as_deref().is_some_and(
+            |reason| reason.starts_with(crate::exec::subagents::MAILBOX_FINISH_PREFIX)
         ));
     }
 

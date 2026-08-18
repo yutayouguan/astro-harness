@@ -24,6 +24,59 @@ struct StoredRuntimeRequest {
     memory_dir: PathBuf,
 }
 
+struct ForkedSessionGuard {
+    sessions_dir: PathBuf,
+    child_session_id: String,
+    parent_session_id: String,
+    armed: bool,
+}
+
+impl ForkedSessionGuard {
+    fn rollback(&mut self) -> anyhow::Result<()> {
+        if !self.armed {
+            return Ok(());
+        }
+        let sessions = session::SessionStore::open_sessions_dir(&self.sessions_dir)?;
+        let child = sessions
+            .get_session(&self.child_session_id)?
+            .ok_or_else(|| anyhow::anyhow!("forked child session disappeared before rollback"))?;
+        anyhow::ensure!(
+            child.parent_session_id.as_deref() == Some(self.parent_session_id.as_str()),
+            "refusing to delete child session whose fork ownership changed"
+        );
+        sessions.delete_session_permanently(&self.child_session_id)?;
+        self.armed = false;
+        Ok(())
+    }
+
+    fn disarm(&mut self) {
+        self.armed = false;
+    }
+}
+
+impl Drop for ForkedSessionGuard {
+    fn drop(&mut self) {
+        if self.armed {
+            if let Err(error) = self.rollback() {
+                tracing::warn!(%error, child_session_id = %self.child_session_id, "failed to compensate forked child session");
+            }
+        }
+    }
+}
+
+fn rollback_fork_error(
+    guard: &mut ForkedSessionGuard,
+    operation: &str,
+    error: anyhow::Error,
+) -> anyhow::Error {
+    match guard.rollback() {
+        Ok(()) => anyhow::anyhow!("{operation} failed: {error:#}"),
+        Err(rollback_error) => anyhow::anyhow!(
+            "{operation} failed: {error:#}; child session rollback failed: {rollback_error:#}"
+        ),
+    }
+}
+
 #[derive(Default)]
 struct RuntimeRequestRegistry {
     requests: Mutex<HashMap<String, StoredRuntimeRequest>>,
@@ -113,22 +166,22 @@ impl DefaultAgentThreadDispatch {
         }
     }
 
-    async fn launch_turn(&self, request: RunAgentTurnRequest) -> anyhow::Result<()> {
-        let thread_id = request.thread.thread_id.clone();
-        let manager = Arc::clone(&self.runtime_manager);
-        let run_manager = Arc::clone(&manager);
-        let mut handle = tokio::spawn(async move { run_manager.start_turn(request).await });
+    async fn launch_turn(&self, mut request: RunAgentTurnRequest) -> anyhow::Result<()> {
+        let (startup_tx, mut startup_rx) = tokio::sync::watch::channel(None);
+        request.startup_tx = Some(startup_tx);
+        let run_manager = Arc::clone(&self.runtime_manager);
+        let handle = tokio::spawn(async move { run_manager.start_turn(request).await });
         loop {
-            if manager.is_running(&thread_id) && self.control.runtime_handle(&thread_id)?.is_some()
-            {
-                return Ok(());
+            if let Some(result) = startup_rx.borrow().clone() {
+                return result.map_err(anyhow::Error::msg);
             }
             tokio::select! {
-                result = &mut handle => {
-                    return result
-                        .map_err(|error| anyhow::anyhow!("agent runtime task failed to start: {error}"))?;
+                changed = startup_rx.changed() => {
+                    if changed.is_err() {
+                        return handle.await
+                            .map_err(|error| anyhow::anyhow!("agent runtime task failed to start: {error}"))?;
+                    }
                 }
-                _ = tokio::task::yield_now() => {}
             }
         }
     }
@@ -149,6 +202,7 @@ impl DefaultAgentThreadDispatch {
             #[cfg(not(test))]
             chat_override: None,
             consume_mailbox,
+            startup_tx: None,
             followup_start_tx: None,
             start_token: None,
         }
@@ -208,42 +262,63 @@ impl AgentThreadDispatch for DefaultAgentThreadDispatch {
             settings.interrupt_message,
         );
 
-        fork_parent_session(
+        let mut forked_session = fork_parent_session(
             &memory_dir,
             &runtime,
             &thread.session_id,
             &runtime.model_request.fork_turns,
         )?;
-        validate_runtime_setup(
+        if let Err(error) = validate_runtime_setup(
             &memory_dir,
             &self.control,
             &thread,
             &runtime,
             &thread.session_id,
-        )?;
+        ) {
+            return Err(rollback_fork_error(
+                &mut forked_session,
+                "validate agent runtime setup",
+                error,
+            ));
+        }
 
         let stored = StoredRuntimeRequest {
             memory_dir,
             runtime,
         };
-        self.runtime_requests
-            .insert(&thread.thread_id, stored.clone())?;
+        if let Err(error) = self
+            .runtime_requests
+            .insert(&thread.thread_id, stored.clone())
+        {
+            return Err(rollback_fork_error(
+                &mut forked_session,
+                "register agent runtime request",
+                error,
+            ));
+        }
         if let Err(error) = reservation.commit() {
             self.runtime_requests.remove(&thread.thread_id);
-            return Err(error);
+            return Err(rollback_fork_error(
+                &mut forked_session,
+                "commit agent thread reservation",
+                error,
+            ));
         }
         if let Err(start_error) = self
             .launch_turn(self.run_request(thread.clone(), stored, false))
             .await
         {
             self.runtime_requests.remove(&thread.thread_id);
-            return match self.control.abort_committed_pending_spawn(&thread) {
-                Ok(()) => Err(start_error.context("start agent runtime")),
-                Err(rollback_error) => Err(anyhow::anyhow!(
-                    "start agent runtime failed: {start_error:#}; pending spawn rollback failed: {rollback_error:#}"
-                )),
-            };
+            let graph_error = self.control.abort_committed_pending_spawn(&thread).err();
+            let mut error =
+                rollback_fork_error(&mut forked_session, "start agent runtime", start_error);
+            if let Some(graph_error) = graph_error {
+                error =
+                    anyhow::anyhow!("{error:#}; pending spawn rollback failed: {graph_error:#}");
+            }
+            return Err(error);
         }
+        forked_session.disarm();
         Ok(SpawnAgentV2Result { thread })
     }
 
@@ -435,10 +510,21 @@ fn fork_parent_session(
     runtime: &SpawnRuntimeV2Request,
     child_session_id: &str,
     fork_turns: &Option<String>,
-) -> anyhow::Result<()> {
-    let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("sessions"))?;
+) -> anyhow::Result<ForkedSessionGuard> {
+    let sessions_dir = memory_dir.join("sessions");
+    let sessions = session::SessionStore::open_sessions_dir(&sessions_dir)?;
     let recent_turns = parse_fork_turns(fork_turns.as_deref())?;
-    sessions.fork_session_recent_turns(&runtime.parent_session_id, child_session_id, recent_turns)
+    sessions.fork_session_recent_turns(
+        &runtime.parent_session_id,
+        child_session_id,
+        recent_turns,
+    )?;
+    Ok(ForkedSessionGuard {
+        sessions_dir,
+        child_session_id: child_session_id.to_string(),
+        parent_session_id: runtime.parent_session_id.clone(),
+        armed: true,
+    })
 }
 
 fn parse_fork_turns(value: Option<&str>) -> anyhow::Result<Option<usize>> {
@@ -623,6 +709,12 @@ mod tests {
         })
     }
 
+    fn immediate_error_chat() -> crate::streaming::ChatOverride {
+        Arc::new(move |_messages, _tools, _config| {
+            Box::pin(async move { anyhow::bail!("injected immediate provider failure") })
+        })
+    }
+
     fn gated_first_turn_chat(
         entered: Arc<tokio::sync::Notify>,
         release: Arc<tokio::sync::Notify>,
@@ -777,6 +869,46 @@ mod tests {
             .lock()
             .unwrap()
             .is_empty());
+        assert_eq!(
+            sessions
+                .list_sessions(session::SessionListFilter::Active, 10)
+                .unwrap()
+                .len(),
+            1
+        );
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn spawn_accepts_durable_start_even_when_provider_errors_immediately() {
+        let dir = tempfile::tempdir().unwrap();
+        let memory_dir = dir.path().join("memory");
+        let sessions =
+            session::SessionStore::open_sessions_dir(&memory_dir.join("sessions")).unwrap();
+        sessions.ensure_session("root-session", "test").unwrap();
+        let mut dispatch = dispatch(&dir);
+        dispatch.chat_override = Some(immediate_error_chat());
+
+        let spawned = AgentThreadDispatch::spawn_agent(&dispatch, spawn_request(&memory_dir))
+            .await
+            .expect("durably started runtime must be accepted independently of completion");
+
+        assert!(dispatch
+            .runtime_requests
+            .get(&spawned.thread.thread_id)
+            .unwrap()
+            .is_some());
+        assert!(sessions
+            .get_session(&spawned.thread.session_id)
+            .unwrap()
+            .is_some());
+        assert!(matches!(
+            dispatch
+                .control
+                .resolve_target(&AgentPath::root(), "worker")
+                .unwrap()
+                .status,
+            AgentStatusV2::Errored { .. }
+        ));
     }
 
     #[tokio::test(flavor = "current_thread")]
@@ -814,6 +946,62 @@ mod tests {
         );
         assert_eq!(control.identity_count().unwrap(), 0);
         assert_eq!(graph.snapshot("root-session").unwrap().threads.len(), 1);
+        assert_eq!(
+            sessions
+                .list_sessions(session::SessionListFilter::Active, 10)
+                .unwrap()
+                .len(),
+            1
+        );
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn startup_status_failure_removes_forked_session_and_all_spawn_state() {
+        let dir = tempfile::tempdir().unwrap();
+        let memory_dir = dir.path().join("memory");
+        let sessions =
+            session::SessionStore::open_sessions_dir(&memory_dir.join("sessions")).unwrap();
+        sessions.ensure_session("root-session", "test").unwrap();
+        sessions
+            .append_message(session::NewMessage {
+                content: Some("parent history"),
+                ..session::NewMessage::empty("root-session", "user")
+            })
+            .unwrap();
+        let dispatch = dispatch(&dir);
+        dispatch
+            .runtime_manager
+            .set_start_status_failure(Some("injected startup status failure"));
+        let mut request = spawn_request(&memory_dir);
+        request.request.fork_turns = Some("all".into());
+
+        let error = AgentThreadDispatch::spawn_agent(&dispatch, request)
+            .await
+            .unwrap_err();
+        assert!(format!("{error:#}").contains("injected startup status failure"));
+        assert_eq!(dispatch.control.identity_count().unwrap(), 0);
+        assert!(dispatch
+            .runtime_requests
+            .requests
+            .lock()
+            .unwrap()
+            .is_empty());
+        assert_eq!(
+            sessions
+                .list_sessions(session::SessionListFilter::Active, 10)
+                .unwrap()
+                .len(),
+            1
+        );
+        let parent = sessions.get_session("root-session").unwrap().unwrap();
+        assert_eq!(parent.parent_session_id, None);
+        assert_eq!(parent.message_count, 1);
+        assert_eq!(
+            sessions.get_messages("root-session").unwrap()[0]
+                .content
+                .as_deref(),
+            Some("parent history")
+        );
     }
 
     #[tokio::test(flavor = "current_thread")]

@@ -136,9 +136,47 @@ impl Session {
             self.record_turn_input(item).await?;
         }
 
+        self.finish_prepared_turn(&user_message).await
+    }
+
+    /// Prepare a follow-up whose durable mailbox input is persisted with its
+    /// sequence marker before sampling. Retries converge on the existing
+    /// marker and therefore never append a duplicate user message.
+    pub(crate) async fn prepare_mailbox_turn(&mut self) -> anyhow::Result<TurnResult> {
+        self.cancel.reset();
+        if self.is_budget_exhausted().await {
+            return Ok(TurnResult::BudgetExhausted);
+        }
+        self.begin_user_turn().await;
+        self.reload_tools_and_mcp().await?;
+        let outcome = crate::exec::subagents::drain_mailbox_at_safe_boundary(self).await?;
+        anyhow::ensure!(!outcome.deferred, "follow-up mailbox input was deferred");
+        anyhow::ensure!(
+            outcome.delivered > 0,
+            "follow-up turn has no durable mailbox input"
+        );
+        let user_message = self
+            .clone_history()
+            .await
+            .iter()
+            .rev()
+            .find(|message| {
+                matches!(message.role, types::message::Role::User)
+                    && message.compressed_content.as_deref().is_some_and(|marker| {
+                        marker.starts_with(crate::exec::subagents::MAILBOX_FINISH_PREFIX)
+                    })
+            })
+            .map(|message| message.content_text())
+            .ok_or_else(|| {
+                anyhow::anyhow!("follow-up mailbox input is missing from runtime history")
+            })?;
+        self.finish_prepared_turn(&user_message).await
+    }
+
+    async fn finish_prepared_turn(&mut self, user_message: &str) -> anyhow::Result<TurnResult> {
         let current_turn = self.state.lock().await.turn.current_turn;
         let fts_keywords = if current_turn >= self.config.recent_turns {
-            Some(user_message.as_str())
+            Some(user_message)
         } else {
             None
         };
