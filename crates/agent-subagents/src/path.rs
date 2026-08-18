@@ -32,7 +32,8 @@ impl AgentPath {
         if target.starts_with('/') {
             Self::parse(target)
         } else {
-            self.child(target)
+            validate_relative_reference(target)?;
+            Self::parse(&format!("{}/{}", self.as_str(), target))
         }
     }
 
@@ -103,6 +104,9 @@ fn validate_segment(value: &str) -> Result<(), String> {
     if value.is_empty() || value.contains('/') {
         return Err("agent task name must be exactly one non-empty segment".to_string());
     }
+    if value == "root" {
+        return Err("agent task name `root` is reserved".to_string());
+    }
     if value == "." || value == ".." {
         return Err("agent task name must not be a dot segment".to_string());
     }
@@ -113,6 +117,16 @@ fn validate_segment(value: &str) -> Result<(), String> {
         return Err(
             "agent task name must use lowercase ASCII letters, digits, or underscores".to_string(),
         );
+    }
+    Ok(())
+}
+
+fn validate_relative_reference(value: &str) -> Result<(), String> {
+    if value.is_empty() || value.ends_with('/') {
+        return Err("relative agent path must not be empty or end with a slash".to_string());
+    }
+    for segment in value.split('/') {
+        validate_segment(segment)?;
     }
     Ok(())
 }
@@ -140,8 +154,30 @@ mod tests {
 
     #[test]
     fn rejects_invalid_task_segments() {
-        for value in ["", "UPPER", "has-dash", "../escape", "two/parts"] {
+        for value in ["", "root", "UPPER", "has-dash", "../escape", "two/parts"] {
             assert!(AgentPath::root().child(value).is_err(), "accepted {value}");
+        }
+    }
+
+    #[test]
+    fn rejects_reserved_root_segment_in_absolute_paths() {
+        assert!(AgentPath::parse("/root/root").is_err());
+    }
+
+    #[test]
+    fn resolves_nested_relative_agent_paths() {
+        let parent = AgentPath::parse("/root/research").unwrap();
+        assert_eq!(
+            parent.resolve("citations/review").unwrap().as_str(),
+            "/root/research/citations/review"
+        );
+    }
+
+    #[test]
+    fn rejects_invalid_relative_agent_paths() {
+        let parent = AgentPath::root();
+        for value in ["", "UPPER/child", "has-dash/child", "one//two", "one/./two"] {
+            assert!(parent.resolve(value).is_err(), "accepted {value}");
         }
     }
 

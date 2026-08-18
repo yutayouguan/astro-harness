@@ -186,6 +186,7 @@ pub struct InterruptAgentV2Result {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+/// Transitional legacy status; removed in Tasks 6/10.
 pub enum AgentThreadStatus {
     Pending,
     Running,
@@ -225,6 +226,7 @@ impl AgentThreadStatus {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+/// Transitional legacy durable thread projection; removed in Tasks 6/10.
 pub struct AgentThread {
     pub id: String,
     pub parent_session_id: String,
@@ -244,6 +246,7 @@ pub struct AgentThread {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+/// Transitional legacy thread message projection; removed in Tasks 6/10.
 pub struct AgentThreadMessage {
     pub id: i64,
     pub thread_id: String,
@@ -252,8 +255,8 @@ pub struct AgentThreadMessage {
     pub created_at: String,
 }
 
-/// In-memory spawn request. Credentials are intentionally never persisted in
-/// the subagent database.
+/// Transitional legacy in-memory spawn request; removed in Tasks 6/10.
+/// Credentials are intentionally never persisted in the subagent database.
 #[derive(Clone)]
 pub struct SpawnAgentRequest {
     pub parent_session_id: String,
@@ -274,12 +277,14 @@ pub struct SpawnAgentRequest {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+/// Transitional legacy read request; removed in Tasks 6/10.
 pub struct ReadAgentThreadRequest {
     pub parent_session_id: String,
     pub thread_id: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+/// Transitional legacy message request; removed in Tasks 6/10.
 pub struct SendAgentMessageRequest {
     pub parent_session_id: String,
     pub thread_id: String,
@@ -287,18 +292,21 @@ pub struct SendAgentMessageRequest {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+/// Transitional legacy interrupt request; removed in Tasks 6/10.
 pub struct InterruptAgentRequest {
     pub parent_session_id: String,
     pub thread_id: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+/// Transitional legacy close request; removed in Tasks 6/10.
 pub struct CloseAgentRequest {
     pub parent_session_id: String,
     pub thread_id: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+/// Transitional legacy list request; removed in Tasks 6/10.
 pub struct ListAgentThreadsRequest {
     pub parent_session_id: String,
     #[serde(default)]
@@ -306,6 +314,7 @@ pub struct ListAgentThreadsRequest {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+/// Transitional legacy wait request; removed in Tasks 6/10.
 pub struct WaitAgentThreadsRequest {
     pub parent_session_id: String,
     pub thread_ids: Vec<String>,
@@ -315,10 +324,10 @@ pub struct WaitAgentThreadsRequest {
 #[cfg(test)]
 mod tests {
     use super::{
-        AgentStatusV2, AgentThreadV2, AgentTreeSnapshotV2, InterruptAgentV2Result,
-        ListAgentsV2Request, MessageAgentV2Request, MessageAgentV2Result, RunnerEvent,
-        SpawnAgentV2Request, SpawnAgentV2Result, ThreadReservation, WaitAgentV2Request,
-        WaitAgentV2Result,
+        AgentStatusV2, AgentThreadV2, AgentTreeSnapshotV2, InterruptAgentV2Request,
+        InterruptAgentV2Result, ListAgentsV2Request, MessageAgentV2Request, MessageAgentV2Result,
+        RunnerEvent, SpawnAgentV2Request, SpawnAgentV2Result, ThreadReservation,
+        WaitAgentV2Request, WaitAgentV2Result,
     };
     use crate::AgentPath;
 
@@ -328,17 +337,127 @@ mod tests {
             serde_json::from_str::<ListAgentsV2Request>(r#"{"include_closed":true}"#).unwrap_err();
         assert!(error.to_string().contains("unknown field"));
 
-        let error =
-            serde_json::from_str::<MessageAgentV2Request>(r#"{"thread_id":"x","message":"m"}"#)
-                .unwrap_err();
+        let error = serde_json::from_str::<MessageAgentV2Request>(
+            r#"{"target":"/root/research","message":"m","thread_id":"x"}"#,
+        )
+        .unwrap_err();
         assert!(error.to_string().contains("unknown field"));
 
         let error =
             serde_json::from_str::<WaitAgentV2Request>(r#"{"thread_ids":["x"]}"#).unwrap_err();
         assert!(error.to_string().contains("unknown field"));
 
-        let error = serde_json::from_str::<SpawnAgentV2Request>(r#"{"task":"x"}"#).unwrap_err();
+        let error = serde_json::from_str::<SpawnAgentV2Request>(
+            r#"{"task_name":"research","message":"investigate","task":"x"}"#,
+        )
+        .unwrap_err();
         assert!(error.to_string().contains("unknown field"));
+
+        let error = serde_json::from_str::<InterruptAgentV2Request>(
+            r#"{"target":"/root/research","thread_id":"x"}"#,
+        )
+        .unwrap_err();
+        assert!(error.to_string().contains("unknown field"));
+    }
+
+    #[test]
+    fn v2_requests_accept_only_their_canonical_shapes() {
+        assert!(serde_json::from_str::<SpawnAgentV2Request>(
+            r#"{"task_name":"research","message":"investigate"}"#
+        )
+        .is_ok());
+        assert!(serde_json::from_str::<ListAgentsV2Request>(r#"{}"#).is_ok());
+        assert!(serde_json::from_str::<MessageAgentV2Request>(
+            r#"{"target":"/root/research","message":"continue"}"#
+        )
+        .is_ok());
+        assert!(serde_json::from_str::<WaitAgentV2Request>(r#"{}"#).is_ok());
+        assert!(
+            serde_json::from_str::<InterruptAgentV2Request>(r#"{"target":"/root/research"}"#)
+                .is_ok()
+        );
+    }
+
+    #[test]
+    fn v2_statuses_and_runner_events_have_stable_json_shapes() {
+        let statuses = [
+            (
+                AgentStatusV2::PendingInit,
+                serde_json::json!({"kind":"pending_init"}),
+            ),
+            (
+                AgentStatusV2::Running,
+                serde_json::json!({"kind":"running"}),
+            ),
+            (
+                AgentStatusV2::Interrupted,
+                serde_json::json!({"kind":"interrupted"}),
+            ),
+            (
+                AgentStatusV2::Completed {
+                    last_message: "done".into(),
+                },
+                serde_json::json!({"kind":"completed","payload":{"last_message":"done"}}),
+            ),
+            (
+                AgentStatusV2::Errored {
+                    message: "failed".into(),
+                },
+                serde_json::json!({"kind":"errored","payload":{"message":"failed"}}),
+            ),
+            (
+                AgentStatusV2::Shutdown,
+                serde_json::json!({"kind":"shutdown"}),
+            ),
+        ];
+        for (status, expected) in statuses {
+            assert_eq!(serde_json::to_value(&status).unwrap(), expected);
+            assert_eq!(
+                serde_json::from_value::<AgentStatusV2>(expected).unwrap(),
+                status
+            );
+        }
+
+        let events = [
+            (
+                RunnerEvent::TurnStarted {
+                    turn_id: "t1".into(),
+                },
+                serde_json::json!({"kind":"turn_started","turn_id":"t1"}),
+            ),
+            (
+                RunnerEvent::TurnCompleted {
+                    turn_id: "t2".into(),
+                    last_message: "done".into(),
+                },
+                serde_json::json!({"kind":"turn_completed","turn_id":"t2","last_message":"done"}),
+            ),
+            (
+                RunnerEvent::TurnInterrupted {
+                    turn_id: "t3".into(),
+                    reason: "cancelled".into(),
+                },
+                serde_json::json!({"kind":"turn_interrupted","turn_id":"t3","reason":"cancelled"}),
+            ),
+            (
+                RunnerEvent::TurnErrored {
+                    turn_id: "t4".into(),
+                    message: "failed".into(),
+                },
+                serde_json::json!({"kind":"turn_errored","turn_id":"t4","message":"failed"}),
+            ),
+            (
+                RunnerEvent::RuntimeTerminated,
+                serde_json::json!({"kind":"runtime_terminated"}),
+            ),
+        ];
+        for (event, expected) in events {
+            assert_eq!(serde_json::to_value(&event).unwrap(), expected);
+            assert_eq!(
+                serde_json::from_value::<RunnerEvent>(expected).unwrap(),
+                event
+            );
+        }
     }
 
     #[test]

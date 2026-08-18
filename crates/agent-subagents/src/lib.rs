@@ -16,13 +16,16 @@ pub use config::{
 };
 pub use control::{AgentThreadCommand, AgentThreadControl, LiveAgentThreads};
 pub use model::{
-    AgentStatusKind, AgentStatusV2, AgentThread, AgentThreadMessage, AgentThreadStatus,
-    AgentThreadV2, AgentTreeSnapshotV2, CloseAgentRequest, InterruptAgentRequest,
-    InterruptAgentV2Request, InterruptAgentV2Result, ListAgentThreadsRequest, ListAgentsV2Request,
-    MessageAgentV2Request, MessageAgentV2Result, ReadAgentThreadRequest, RunnerEvent,
-    SendAgentMessageRequest, SpawnAgentRequest, SpawnAgentV2Request, SpawnAgentV2Result,
-    SpawnRuntimeV2Request, ThreadReservation, WaitAgentThreadsRequest, WaitAgentV2Request,
-    WaitAgentV2Result,
+    AgentStatusKind, AgentStatusV2, AgentThreadV2, AgentTreeSnapshotV2, InterruptAgentV2Request,
+    InterruptAgentV2Result, ListAgentsV2Request, MessageAgentV2Request, MessageAgentV2Result,
+    RunnerEvent, SpawnAgentV2Request, SpawnAgentV2Result, SpawnRuntimeV2Request, ThreadReservation,
+    WaitAgentV2Request, WaitAgentV2Result,
+};
+// Transitional legacy exports; removed in Tasks 6/10.
+pub use model::{
+    AgentThread, AgentThreadMessage, AgentThreadStatus, CloseAgentRequest, InterruptAgentRequest,
+    ListAgentThreadsRequest, ReadAgentThreadRequest, SendAgentMessageRequest, SpawnAgentRequest,
+    WaitAgentThreadsRequest,
 };
 pub use path::AgentPath;
 pub use store::AgentThreadStore;
