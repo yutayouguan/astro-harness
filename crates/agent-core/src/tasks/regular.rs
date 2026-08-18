@@ -6,7 +6,7 @@ use tokio_util::sync::CancellationToken;
 use crate::runtime::{Session, TurnContext, TurnResult};
 use crate::streaming::multi_turn::{run_turn, RunTurnArgs};
 
-use super::{SessionTask, SessionTaskResult, TaskKind, TurnInput};
+use super::{SessionTask, SessionTaskResult, TaskKind, TurnCancelled, TurnInput};
 
 /// Standard model-and-tool turn.
 pub(crate) struct RegularTask {
@@ -50,7 +50,7 @@ impl RegularTask {
                 Ok(TurnResult::BudgetExhausted) => {
                     Err(anyhow::anyhow!("conversation turn budget exhausted"))
                 }
-                Ok(TurnResult::Interrupted) => Err(anyhow::anyhow!("regular turn interrupted")),
+                Ok(TurnResult::Interrupted) => Err(TurnCancelled.into()),
                 Ok(
                     TurnResult::Steered { .. }
                     | TurnResult::ToolCalls(_)

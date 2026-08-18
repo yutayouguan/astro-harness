@@ -225,3 +225,46 @@ async fn prepare_failure_emits_one_error_and_complete_with_error() {
         EventMsg::TurnComplete(ref event) if event.error.is_some()
     ));
 }
+
+#[tokio::test]
+async fn prepare_hook_cancellation_emits_only_turn_aborted() {
+    let (_dir, session, thread, _recorder, _path) = new_thread().await;
+    let cancel = session.cancel_signal();
+    session.hook_bus().register(hooks::PRE_LLM_CALL, move |_| {
+        cancel.cancel();
+        hooks::HookOutcome::Continue
+    });
+    let (_submission_id, submitted) = thread
+        .submit_turn(
+            TurnInputRequest {
+                input: vec![TurnInput {
+                    content: "cancel while preparing".into(),
+                    image_data_urls: Vec::new(),
+                }],
+            },
+            TurnInputMode::StartIfIdle,
+        )
+        .await
+        .unwrap();
+    assert!(matches!(submitted, TurnInputSubmission::Started { .. }));
+
+    let events = collect_next_terminal(&thread).await;
+    assert_eq!(
+        events
+            .iter()
+            .filter(|event| matches!(event.msg, EventMsg::Error(_)))
+            .count(),
+        0
+    );
+    assert!(matches!(
+        events.last().unwrap().msg,
+        EventMsg::TurnAborted(_)
+    ));
+    assert_eq!(
+        events
+            .iter()
+            .filter(|event| event.msg.is_terminal())
+            .count(),
+        1
+    );
+}
