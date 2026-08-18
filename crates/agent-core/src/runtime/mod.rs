@@ -1061,16 +1061,49 @@ mod tests {
 
     #[tokio::test]
     async fn arc_session_owns_concurrent_history_snapshots() {
+        use std::sync::atomic::{AtomicBool, Ordering};
+
         let dir = TempDir::new().unwrap();
         let session = Arc::new(Session::new(test_config(&dir)).unwrap());
-        let writer = Arc::clone(&session);
+        let barrier = Arc::new(tokio::sync::Barrier::new(3));
+        let write_complete = Arc::new(AtomicBool::new(false));
+        let writer = {
+            let session = Arc::clone(&session);
+            let barrier = Arc::clone(&barrier);
+            let write_complete = Arc::clone(&write_complete);
+            tokio::spawn(async move {
+                barrier.wait().await;
+                session.record_items(vec![Message::user("first")]).await;
+                write_complete.store(true, Ordering::Release);
+            })
+        };
+        let reader = {
+            let session = Arc::clone(&session);
+            let barrier = Arc::clone(&barrier);
+            let write_complete = Arc::clone(&write_complete);
+            tokio::spawn(async move {
+                barrier.wait().await;
+                tokio::time::timeout(std::time::Duration::from_secs(1), async move {
+                    loop {
+                        let snapshot = session.clone_history().await;
+                        if snapshot.first().is_some_and(|message| {
+                            message.content_str() == "first"
+                                && write_complete.load(Ordering::Acquire)
+                        }) {
+                            break snapshot;
+                        }
+                        tokio::task::yield_now().await;
+                    }
+                })
+                .await
+                .expect("reader timed out waiting for concurrent history write")
+            })
+        };
 
-        tokio::spawn(async move {
-            writer.record_items(vec![Message::user("first")]).await;
-        })
-        .await
-        .unwrap();
-
+        barrier.wait().await;
+        writer.await.unwrap();
+        let snapshot = reader.await.unwrap();
+        assert_eq!(snapshot[0].content_str(), "first");
         assert_eq!(session.clone_history().await[0].content_str(), "first");
     }
 
