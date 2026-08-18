@@ -10,6 +10,7 @@ pub mod cron_runner;
 pub mod grpc;
 pub mod session_events;
 pub mod thread_state;
+pub mod transport;
 pub mod webhook_server;
 pub mod workflow_ticker;
 
