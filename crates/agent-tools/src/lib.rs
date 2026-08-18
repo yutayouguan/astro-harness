@@ -38,7 +38,7 @@ pub use dispatch::{
     builtin_handler_names, dispatch_tool, in_process_network_hosts,
     tool_requires_in_process_network, tool_requires_in_process_write,
 };
-pub use engine::execution::AgentThreadDispatch;
+pub use engine::execution::{AgentThreadDispatch, SpawnAgentDispatchRequest};
 pub use engine::network::InProcessNetworkGrant;
 pub use parse::{
     extract_tool_calls, resolve_tool_calls, ParsedToolCall, ToolCallAccumulator, ToolCallDelta,
@@ -187,8 +187,11 @@ mod inventory_register_tests {
             "speech_gen",
             "ask_user",
             "spawn_agent",
-            "wait_agents",
+            "list_agents",
+            "send_message",
+            "followup_task",
             "wait_agent",
+            "interrupt_agent",
             "present",
             "file_ops",
             "web_search",

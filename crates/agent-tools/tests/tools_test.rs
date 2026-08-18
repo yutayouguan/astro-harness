@@ -33,18 +33,65 @@ async fn register_all_includes_panel_tools() {
         "ask_user",
         "spawn_agent",
         "list_agents",
-        "read_agent",
-        "send_message_to_agent",
         "followup_task",
         "send_message",
-        "wait_agents",
         "wait_agent",
         "interrupt_agent",
-        "close_agent",
         "persona_create",
         "todo",
     ] {
         assert!(names.contains(&expected), "missing {expected}");
+    }
+}
+
+#[test]
+fn registers_only_codex_v2_agent_tools() {
+    assert_eq!(
+        tools::builtin::subagent::CODEX_V2_AGENT_TOOL_NAMES,
+        [
+            "spawn_agent",
+            "list_agents",
+            "send_message",
+            "followup_task",
+            "wait_agent",
+            "interrupt_agent",
+        ]
+    );
+    let mut registry = ToolRegistry::new();
+    register_all(&mut registry);
+    let mut names = registry
+        .all_tools()
+        .into_iter()
+        .filter(|entry| entry.toolset == "subagents")
+        .map(|entry| entry.name.as_str())
+        .collect::<Vec<_>>();
+    names.sort_unstable();
+
+    let mut expected = vec![
+        "spawn_agent",
+        "list_agents",
+        "send_message",
+        "followup_task",
+        "wait_agent",
+        "interrupt_agent",
+    ];
+    expected.sort_unstable();
+    assert_eq!(names, expected);
+
+    for removed in [
+        "read_agent",
+        "close_agent",
+        "send_message_to_agent",
+        "wait_agents",
+        "subagent",
+        "delegate",
+        "run_delegate",
+        "direct_agent",
+    ] {
+        assert!(
+            registry.get(removed).is_none(),
+            "legacy tool remains: {removed}"
+        );
     }
 }
 

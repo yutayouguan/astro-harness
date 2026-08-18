@@ -139,9 +139,20 @@ impl AgentControl {
         parent: &AgentPath,
         task_name: &str,
     ) -> anyhow::Result<SpawnReservation<'a>> {
+        self.reserve_spawn_typed(parent, task_name, "default")
+    }
+
+    pub fn reserve_spawn_typed<'a>(
+        &'a self,
+        parent: &AgentPath,
+        task_name: &str,
+        agent_type: &str,
+    ) -> anyhow::Result<SpawnReservation<'a>> {
         let parent_thread = self.require_path(parent, "parent agent")?;
         let thread_id = Uuid::new_v4().to_string();
-        let mut reservation = self.registry.reserve_spawn(parent, task_name, &thread_id)?;
+        let mut reservation = self
+            .registry
+            .reserve_spawn_typed(parent, task_name, agent_type, &thread_id)?;
         let identity = reservation.thread();
         let persisted = self.store.reserve_thread(&ThreadReservation {
             thread_id: identity.thread_id.clone(),
@@ -344,6 +355,21 @@ impl AgentControl {
 
     pub fn identity_count(&self) -> anyhow::Result<usize> {
         self.registry.identity_count()
+    }
+
+    /// Roll back a spawn that was committed only long enough for the runtime
+    /// manager to attempt admission. This is intentionally limited to a
+    /// durable `PendingInit` row with no registered runtime.
+    pub fn abort_committed_pending_spawn(&self, thread: &AgentThreadV2) -> anyhow::Result<()> {
+        if thread.root_thread_id != self.root_thread_id {
+            anyhow::bail!("agent thread belongs to a different root");
+        }
+        if self.runtimes.get(&thread.thread_id)?.is_some() {
+            anyhow::bail!("cannot abort a spawn with a registered runtime");
+        }
+        self.store.rollback_pending_thread(&thread.thread_id)?;
+        self.registry
+            .rollback_committed_spawn(&thread.canonical_path, &thread.thread_id)
     }
 
     pub fn register_runtime(
@@ -674,6 +700,39 @@ mod tests {
         let thread = reservation.thread().clone();
         reservation.commit().unwrap();
         thread
+    }
+
+    #[test]
+    fn typed_spawn_persists_requested_agent_type() {
+        let dir = tempfile::tempdir().unwrap();
+        let (control, store) = open_control(&dir, "root-thread");
+        let reservation = control
+            .reserve_spawn_typed(&crate::AgentPath::root(), "review", "reviewer")
+            .unwrap();
+        let thread_id = reservation.thread_id().to_string();
+        reservation.commit().unwrap();
+
+        let thread = store.get_thread(&thread_id).unwrap().unwrap();
+        assert_eq!(thread.agent_type, "reviewer");
+    }
+
+    #[test]
+    fn committed_pending_spawn_can_be_aborted_after_start_rejection() {
+        let dir = tempfile::tempdir().unwrap();
+        let (control, store) = open_control(&dir, "root-thread");
+        let reservation = control
+            .reserve_spawn(&crate::AgentPath::root(), "worker")
+            .unwrap();
+        let thread = reservation.thread().clone();
+        reservation.commit().unwrap();
+
+        control.abort_committed_pending_spawn(&thread).unwrap();
+
+        assert!(store.get_thread(&thread.thread_id).unwrap().is_none());
+        assert_eq!(control.identity_count().unwrap(), 0);
+        assert!(control
+            .resolve_target(&crate::AgentPath::root(), "/root/worker")
+            .is_err());
     }
 
     fn runtime_handle() -> AgentRuntimeHandle {

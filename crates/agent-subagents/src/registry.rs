@@ -76,8 +76,21 @@ impl AgentRegistry {
         task_name: &str,
         thread_id: &str,
     ) -> anyhow::Result<SpawnReservation<'a>> {
+        self.reserve_spawn_typed(parent, task_name, "default", thread_id)
+    }
+
+    pub fn reserve_spawn_typed<'a>(
+        &'a self,
+        parent: &AgentPath,
+        task_name: &str,
+        agent_type: &str,
+        thread_id: &str,
+    ) -> anyhow::Result<SpawnReservation<'a>> {
         if thread_id.trim().is_empty() {
             bail!("agent thread id must not be empty");
+        }
+        if agent_type.trim().is_empty() {
+            bail!("agent type must not be empty");
         }
         let path = parent.child(task_name).map_err(anyhow::Error::msg)?;
         if path.depth() > self.limits.max_depth {
@@ -119,7 +132,7 @@ impl AgentRegistry {
             parent_thread_id: Some(parent_thread_id),
             canonical_path: path.clone(),
             task_name: task_name.to_string(),
-            agent_type: "default".to_string(),
+            agent_type: agent_type.trim().to_string(),
             session_id: thread_id.to_string(),
             status: AgentStatusV2::PendingInit,
             created_at: String::new(),
@@ -180,6 +193,25 @@ impl AgentRegistry {
 
     pub fn committed_path_for_thread(&self, thread_id: &str) -> anyhow::Result<Option<AgentPath>> {
         Ok(self.lock_state()?.thread_paths.get(thread_id).cloned())
+    }
+
+    pub(crate) fn rollback_committed_spawn(
+        &self,
+        path: &AgentPath,
+        thread_id: &str,
+    ) -> anyhow::Result<()> {
+        let mut state = self.lock_state()?;
+        if state.active_executions.contains(thread_id) {
+            bail!("cannot roll back agent thread {thread_id:?} with an active execution");
+        }
+        if state.thread_paths.get(thread_id) != Some(path)
+            || state.identities.get(path).map(String::as_str) != Some(thread_id)
+        {
+            bail!("agent thread {thread_id:?} is not committed at path {path}");
+        }
+        state.thread_paths.remove(thread_id);
+        state.identities.remove(path);
+        Ok(())
     }
 
     pub fn root_thread_id(&self) -> &str {

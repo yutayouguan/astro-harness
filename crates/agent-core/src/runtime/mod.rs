@@ -228,17 +228,13 @@ impl Session {
         mcp_hub_inner.set_agent_id(Some(agent_id));
         let mcp_hub = Arc::new(TokioMutex::new(mcp_hub_inner));
 
-        let execution: Arc<dyn tools::AgentThreadDispatch> =
-            Arc::new(crate::exec::dispatch::DefaultAgentThreadDispatch);
-
-        static RECOVER_THREADS_ONCE: std::sync::Once = std::sync::Once::new();
-        RECOVER_THREADS_ONCE.call_once(|| {
-            if let Ok(store) = subagents::AgentThreadStore::open_default() {
-                if let Err(error) = store.interrupt_stale_running() {
-                    tracing::warn!(%error, "failed to recover stale subagent threads");
-                }
-            }
-        });
+        let execution: Arc<dyn tools::AgentThreadDispatch> = Arc::new(
+            crate::exec::dispatch::DefaultAgentThreadDispatch::for_session(
+                Arc::clone(&agent_control),
+                agent_path.clone(),
+                session_id.clone(),
+            ),
+        );
 
         let compression_cfg = memory::load_compression_config(&config.memory_dir);
         let compression_policy: Box<dyn crate::compression::CompressionPolicy> = Box::new(

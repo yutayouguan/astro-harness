@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, OnceLock};
 
 use subagents::{
     AgentRuntimeHandle, AgentStatusV2, AgentThreadControl, AgentThreadV2, RunnerEvent,
@@ -215,6 +215,13 @@ pub struct AgentRuntimeManager {
 }
 
 impl AgentRuntimeManager {
+    /// Process-wide active-turn manager. Thread ids are globally unique and
+    /// every session under one Agent Tree must observe the same acknowledgements.
+    pub fn global() -> Arc<Self> {
+        static MANAGER: OnceLock<Arc<AgentRuntimeManager>> = OnceLock::new();
+        Arc::clone(MANAGER.get_or_init(|| Arc::new(AgentRuntimeManager::default())))
+    }
+
     pub async fn start_turn(&self, request: RunAgentTurnRequest) -> anyhow::Result<()> {
         let thread_id = request.thread.thread_id.clone();
         let control = Arc::clone(&request.control);

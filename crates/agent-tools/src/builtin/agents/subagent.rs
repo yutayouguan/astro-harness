@@ -1,152 +1,119 @@
-//! Codex-style first-class subagent thread tools.
+//! Strict Codex V2 Agent Thread model tools.
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use crate::context::ToolContext;
+use crate::engine::execution::SpawnAgentDispatchRequest;
 use crate::registry::{ToolEntry, ToolRegistry};
 use crate::schema::schema_for_args;
 
+pub const CODEX_V2_AGENT_TOOL_NAMES: [&str; 6] = [
+    "spawn_agent",
+    "list_agents",
+    "send_message",
+    "followup_task",
+    "wait_agent",
+    "interrupt_agent",
+];
+
+const WAIT_DEFAULT_MS: i64 = 30_000;
+const WAIT_MIN_MS: i64 = 10_000;
+const WAIT_MAX_MS: i64 = 3_600_000;
+
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
 struct SpawnAgentArgs {
-    #[serde(default, alias = "message")]
-    task: Option<String>,
+    task_name: String,
+    message: String,
     #[serde(default)]
-    agent: Option<String>,
+    agent_type: Option<String>,
     #[serde(default)]
     model: Option<String>,
     #[serde(default)]
-    model_reasoning_effort: Option<String>,
-    /// none|all|N. Defaults to all parent user/assistant messages.
+    reasoning_effort: Option<String>,
     #[serde(default)]
     fork_turns: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
 struct ListAgentsArgs {
     #[serde(default)]
-    include_closed: Option<bool>,
+    path_prefix: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
-struct ThreadIdArgs {
-    #[serde(default, alias = "target")]
-    thread_id: Option<String>,
-}
-
-#[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
-struct SendMessageArgs {
-    #[serde(default, alias = "target")]
-    thread_id: Option<String>,
+#[serde(deny_unknown_fields)]
+struct MessageArgs {
+    target: String,
     message: String,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
-struct WaitAgentsArgs {
+#[serde(deny_unknown_fields)]
+struct WaitAgentArgs {
     #[serde(default)]
-    thread_ids: Vec<String>,
-    #[serde(default, alias = "thread_id")]
-    target: Option<String>,
-    #[serde(default)]
-    timeout_ms: Option<u64>,
+    timeout_ms: Option<i64>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+struct InterruptAgentArgs {
+    target: String,
 }
 
 pub fn register(registry: &mut ToolRegistry) {
     let lifecycle = ToolEntry::lifecycle_defaults;
-    registry.register(ToolEntry {
-        name: "spawn_agent".into(),
-        toolset: "subagents".into(),
-        description: "Spawn a first-class subagent thread. The child has its own context and tool loop; manage it with list/read/wait/send/interrupt/close.".into(),
-        schema: schema_for_args::<SpawnAgentArgs>(),
-        check_fn: None,
-        icon: "bot",
-        ..lifecycle()
-    });
-    registry.register(ToolEntry {
-        name: "list_agents".into(),
-        toolset: "subagents".into(),
-        description: "List subagent threads owned by the current parent session.".into(),
-        schema: schema_for_args::<ListAgentsArgs>(),
-        check_fn: None,
-        icon: "list-tree",
-        ..lifecycle()
-    });
-    registry.register(ToolEntry {
-        name: "read_agent".into(),
-        toolset: "subagents".into(),
-        description: "Inspect one subagent thread and its conversation messages.".into(),
-        schema: schema_for_args::<ThreadIdArgs>(),
-        check_fn: None,
-        icon: "messages-square",
-        ..lifecycle()
-    });
-    registry.register(ToolEntry {
-        name: "send_message_to_agent".into(),
-        toolset: "subagents".into(),
-        description:
-            "Steer a live subagent by queueing a follow-up message at the next model boundary."
-                .into(),
-        schema: schema_for_args::<SendMessageArgs>(),
-        check_fn: None,
-        icon: "send",
-        ..lifecycle()
-    });
-    registry.register(ToolEntry {
-        name: "followup_task".into(),
-        toolset: "subagents".into(),
-        description: "Codex-compatible alias: steer a subagent thread with a follow-up task."
-            .into(),
-        schema: schema_for_args::<SendMessageArgs>(),
-        check_fn: None,
-        icon: "send",
-        ..lifecycle()
-    });
-    registry.register(ToolEntry {
-        name: "send_message".into(),
-        toolset: "subagents".into(),
-        description: "Codex-compatible alias: send a message to an existing subagent thread."
-            .into(),
-        schema: schema_for_args::<SendMessageArgs>(),
-        check_fn: None,
-        icon: "send",
-        ..lifecycle()
-    });
-    registry.register(ToolEntry {
-        name: "wait_agents".into(),
-        toolset: "subagents".into(),
-        description: "Wait for requested subagent threads to finish their current turns and return their summaries.".into(),
-        schema: schema_for_args::<WaitAgentsArgs>(),
-        check_fn: None,
-        icon: "clock",
-        ..lifecycle()
-    });
-    registry.register(ToolEntry {
-        name: "wait_agent".into(),
-        toolset: "subagents".into(),
-        description: "Codex-compatible alias: wait for one target thread, or all active threads when target is omitted.".into(),
-        schema: schema_for_args::<WaitAgentsArgs>(),
-        check_fn: None,
-        icon: "clock",
-        ..lifecycle()
-    });
-    registry.register(ToolEntry {
-        name: "interrupt_agent".into(),
-        toolset: "subagents".into(),
-        description: "Interrupt the currently running turn of a subagent thread.".into(),
-        schema: schema_for_args::<ThreadIdArgs>(),
-        check_fn: None,
-        icon: "circle-stop",
-        ..lifecycle()
-    });
-    registry.register(ToolEntry {
-        name: "close_agent".into(),
-        toolset: "subagents".into(),
-        description: "Close a subagent thread and release its live controls.".into(),
-        schema: schema_for_args::<ThreadIdArgs>(),
-        check_fn: None,
-        icon: "x",
-        ..lifecycle()
-    });
+    let entries = [
+        (
+            "spawn_agent",
+            "Spawn an independent Codex V2 agent task under the current agent path.",
+            schema_for_args::<SpawnAgentArgs>(),
+            "bot",
+        ),
+        (
+            "list_agents",
+            "List the root Agent Thread tree, optionally below a canonical or relative path prefix.",
+            schema_for_args::<ListAgentsArgs>(),
+            "list-tree",
+        ),
+        (
+            "send_message",
+            "Queue a durable message for an existing agent without starting a new turn.",
+            schema_for_args::<MessageArgs>(),
+            "send",
+        ),
+        (
+            "followup_task",
+            "Queue a durable follow-up and start or steer the target agent turn.",
+            schema_for_args::<MessageArgs>(),
+            "send",
+        ),
+        (
+            "wait_agent",
+            "Wait for Agent Thread activity or a main-session steer.",
+            schema_for_args::<WaitAgentArgs>(),
+            "clock",
+        ),
+        (
+            "interrupt_agent",
+            "Interrupt a child agent's active turn and wait for runner acknowledgement.",
+            schema_for_args::<InterruptAgentArgs>(),
+            "circle-stop",
+        ),
+    ];
+    for (name, description, schema, icon) in entries {
+        registry.register(ToolEntry {
+            name: name.into(),
+            toolset: "subagents".into(),
+            description: description.into(),
+            schema,
+            check_fn: None,
+            icon,
+            ..lifecycle()
+        });
+    }
 }
 
 crate::submit_builtin_tool! {
@@ -154,14 +121,10 @@ crate::submit_builtin_tool! {
     names: [
         "spawn_agent",
         "list_agents",
-        "read_agent",
-        "send_message_to_agent",
-        "followup_task",
         "send_message",
-        "wait_agents",
+        "followup_task",
         "wait_agent",
-        "interrupt_agent",
-        "close_agent"
+        "interrupt_agent"
     ],
     async_named: handle,
 }
@@ -178,58 +141,36 @@ async fn handle(
     match name {
         "spawn_agent" => {
             let parsed: SpawnAgentArgs = parse(name, args)?;
-            let task = parsed.task.as_deref().unwrap_or_default().trim();
-            if task.is_empty() {
-                anyhow::bail!("spawn_agent requires a non-empty task");
-            }
-            let project_root = ctx.project_root.as_deref();
-            let settings = subagents::load_agents_settings(&ctx.memory_dir, project_root);
-            if !settings.enabled {
-                anyhow::bail!("subagent threads are disabled by [agents].enabled");
-            }
-            let catalog = subagents::load_agent_catalog(&ctx.memory_dir, project_root);
-            let agent_name = parsed
-                .agent
-                .as_deref()
-                .map(str::trim)
-                .filter(|value| !value.is_empty())
-                .unwrap_or("default");
-            let parent_model = format!("{}:{}", ctx.credentials.provider, ctx.credentials.model);
-            let parent_sandbox = current_sandbox_mode(ctx);
-            let resolved = subagents::resolve_agent(
-                &catalog,
-                &settings,
-                agent_name,
-                parsed.model.as_deref(),
-                parsed.model_reasoning_effort.as_deref(),
-                Some(&parent_model),
-                Some(&parent_sandbox),
-            )?;
-            let active =
-                subagents::AgentThreadStore::open_default()?.count_active(&ctx.session_id)?;
-            if active >= settings.max_concurrent_threads_per_session {
-                anyhow::bail!(
-                    "subagent concurrency limit reached ({active}/{})",
-                    settings.max_concurrent_threads_per_session
-                );
-            }
-            let definition = resolved.definition;
-            let request = subagents::SpawnAgentRequest {
-                parent_session_id: ctx.session_id.clone(),
+            require_non_empty("task_name", &parsed.task_name)?;
+            require_non_empty("message", &parsed.message)?;
+            validate_fork_turns(parsed.fork_turns.as_deref())?;
+            let parent_model = if ctx.credentials.provider.trim().is_empty()
+                && ctx.credentials.model.trim().is_empty()
+            {
+                None
+            } else {
+                Some(format!(
+                    "{}:{}",
+                    ctx.credentials.provider, ctx.credentials.model
+                ))
+            };
+            let request = SpawnAgentDispatchRequest {
+                request: subagents::SpawnAgentV2Request {
+                    task_name: parsed.task_name.trim().to_string(),
+                    message: parsed.message.trim().to_string(),
+                    agent_type: clean_optional(parsed.agent_type),
+                    model: clean_optional(parsed.model),
+                    reasoning_effort: clean_optional(parsed.reasoning_effort),
+                    fork_turns: clean_optional(parsed.fork_turns),
+                },
+                memory_dir: ctx.memory_dir.clone(),
                 parent_agent_id: ctx.memory.agent_id.clone(),
-                task: task.to_string(),
-                agent_name: definition.name,
-                developer_instructions: definition.developer_instructions,
-                context_snapshot: fork_context(ctx, parsed.fork_turns.as_deref())?,
-                model: resolved.model,
-                model_reasoning_effort: resolved.model_reasoning_effort,
-                sandbox_mode: resolved.sandbox_mode,
-                mcp_servers: definition.mcp_servers,
-                skills_config: definition.skills.config,
+                parent_model,
+                parent_sandbox_mode: current_sandbox_mode(ctx),
+                inherited_skill_config: ctx.skill_config_overrides.to_vec(),
                 chat_targets: ctx.chat_targets.to_vec(),
                 project_root: ctx.project_root.clone(),
                 hook_bus: ctx.hook_bus.clone(),
-                interrupt_message: settings.interrupt_message,
             };
             Ok(serde_json::to_string(
                 &dispatch.spawn_agent(request).await?,
@@ -239,89 +180,45 @@ async fn handle(
             let parsed: ListAgentsArgs = parse(name, args)?;
             Ok(serde_json::to_string(
                 &dispatch
-                    .list_agents(subagents::ListAgentThreadsRequest {
-                        parent_session_id: ctx.session_id.clone(),
-                        include_closed: parsed.include_closed.unwrap_or(false),
+                    .list_agents(subagents::ListAgentsV2Request {
+                        path_prefix: clean_optional(parsed.path_prefix),
                     })
                     .await?,
             )?)
         }
-        "read_agent" => {
-            let parsed: ThreadIdArgs = parse(name, args)?;
-            let (thread, messages) = dispatch
-                .read_agent(subagents::ReadAgentThreadRequest {
-                    parent_session_id: ctx.session_id.clone(),
-                    thread_id: parsed.thread_id()?,
-                })
-                .await?;
-            Ok(serde_json::json!({ "thread": thread, "messages": messages }).to_string())
-        }
-        "send_message_to_agent" | "followup_task" | "send_message" => {
-            let parsed: SendMessageArgs = parse(name, args)?;
-            if parsed.message.trim().is_empty() {
-                anyhow::bail!("send_message_to_agent requires a non-empty message");
-            }
-            Ok(serde_json::to_string(
-                &dispatch
-                    .send_message(subagents::SendAgentMessageRequest {
-                        parent_session_id: ctx.session_id.clone(),
-                        thread_id: parsed.thread_id()?,
-                        message: parsed.message.trim().to_string(),
-                    })
-                    .await?,
-            )?)
-        }
-        "wait_agents" | "wait_agent" => {
-            let parsed: WaitAgentsArgs = parse(name, args)?;
-            let requested_ids = parsed.requested_ids();
-            let ids = if requested_ids.is_empty() {
-                dispatch
-                    .list_agents(subagents::ListAgentThreadsRequest {
-                        parent_session_id: ctx.session_id.clone(),
-                        include_closed: false,
-                    })
-                    .await?
-                    .into_iter()
-                    .filter(|thread| {
-                        matches!(
-                            thread.status,
-                            subagents::AgentThreadStatus::Pending
-                                | subagents::AgentThreadStatus::Running
-                        )
-                    })
-                    .map(|thread| thread.id)
-                    .collect()
-            } else {
-                requested_ids
+        "send_message" | "followup_task" => {
+            let parsed: MessageArgs = parse(name, args)?;
+            require_non_empty("target", &parsed.target)?;
+            require_non_empty("message", &parsed.message)?;
+            let request = subagents::MessageAgentV2Request {
+                target: parsed.target.trim().to_string(),
+                message: parsed.message.trim().to_string(),
             };
+            let result = if name == "send_message" {
+                dispatch.send_message(request).await?
+            } else {
+                dispatch.followup_task(request).await?
+            };
+            Ok(serde_json::to_string(&result)?)
+        }
+        "wait_agent" => {
+            let parsed: WaitAgentArgs = parse(name, args)?;
+            let timeout_ms = normalize_wait_timeout(parsed.timeout_ms)?;
             Ok(serde_json::to_string(
                 &dispatch
-                    .wait_agents(subagents::WaitAgentThreadsRequest {
-                        parent_session_id: ctx.session_id.clone(),
-                        thread_ids: ids,
-                        timeout_ms: parsed.timeout_ms.unwrap_or(120_000).clamp(0, 600_000),
+                    .wait_agent(subagents::WaitAgentV2Request {
+                        timeout_ms: Some(timeout_ms),
                     })
                     .await?,
             )?)
         }
         "interrupt_agent" => {
-            let parsed: ThreadIdArgs = parse(name, args)?;
+            let parsed: InterruptAgentArgs = parse(name, args)?;
+            require_non_empty("target", &parsed.target)?;
             Ok(serde_json::to_string(
                 &dispatch
-                    .interrupt_agent(subagents::InterruptAgentRequest {
-                        parent_session_id: ctx.session_id.clone(),
-                        thread_id: parsed.thread_id()?,
-                    })
-                    .await?,
-            )?)
-        }
-        "close_agent" => {
-            let parsed: ThreadIdArgs = parse(name, args)?;
-            Ok(serde_json::to_string(
-                &dispatch
-                    .close_agent(subagents::CloseAgentRequest {
-                        parent_session_id: ctx.session_id.clone(),
-                        thread_id: parsed.thread_id()?,
+                    .interrupt_agent(subagents::InterruptAgentV2Request {
+                        target: parsed.target.trim().to_string(),
                     })
                     .await?,
             )?)
@@ -335,46 +232,45 @@ fn parse<T: for<'de> Deserialize<'de>>(name: &str, args: &serde_json::Value) -> 
         .map_err(|error| anyhow::anyhow!("{name} arguments: {error}"))
 }
 
-fn non_empty_id(value: &str) -> anyhow::Result<&str> {
-    let value = value.trim();
-    if value.is_empty() {
-        anyhow::bail!("thread_id cannot be empty");
+fn require_non_empty(field: &str, value: &str) -> anyhow::Result<()> {
+    if value.trim().is_empty() {
+        anyhow::bail!("{field} cannot be empty");
     }
-    Ok(value)
+    Ok(())
 }
 
-impl ThreadIdArgs {
-    fn thread_id(&self) -> anyhow::Result<String> {
-        Ok(non_empty_id(self.thread_id.as_deref().unwrap_or_default())?.to_string())
-    }
+fn clean_optional(value: Option<String>) -> Option<String> {
+    value
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
 }
 
-impl SendMessageArgs {
-    fn thread_id(&self) -> anyhow::Result<String> {
-        Ok(non_empty_id(self.thread_id.as_deref().unwrap_or_default())?.to_string())
+fn validate_fork_turns(value: Option<&str>) -> anyhow::Result<()> {
+    let Some(value) = value.map(str::trim).filter(|value| !value.is_empty()) else {
+        return Ok(());
+    };
+    if matches!(value, "all" | "none") {
+        return Ok(());
     }
+    let turns = value
+        .parse::<usize>()
+        .map_err(|_| anyhow::anyhow!("fork_turns must be all, none, or a positive integer"))?;
+    if turns == 0 {
+        anyhow::bail!("fork_turns must be all, none, or a positive integer");
+    }
+    Ok(())
 }
 
-impl WaitAgentsArgs {
-    fn requested_ids(&self) -> Vec<String> {
-        if !self.thread_ids.is_empty() {
-            return self.thread_ids.clone();
-        }
-        self.target
-            .as_deref()
-            .map(str::trim)
-            .filter(|target| !target.is_empty())
-            .map(|target| vec![target.to_string()])
-            .unwrap_or_default()
+fn normalize_wait_timeout(value: Option<i64>) -> anyhow::Result<i64> {
+    let value = value.unwrap_or(WAIT_DEFAULT_MS);
+    if value > WAIT_MAX_MS {
+        anyhow::bail!("timeout_ms must not exceed {WAIT_MAX_MS}");
     }
+    Ok(value.max(WAIT_MIN_MS))
 }
 
 fn current_sandbox_mode(ctx: &ToolContext<'_>) -> String {
-    let profile = ctx.permission_profile.clone().unwrap_or_else(|| {
-        memory::load_permission_settings(&ctx.memory_dir)
-            .selection
-            .profile_id
-    });
+    let profile = ctx.active_permission_profile_id();
     match profile.as_str() {
         types::READ_ONLY_PROFILE => "read-only".into(),
         types::WORKSPACE_PROFILE => "workspace-write".into(),
@@ -383,46 +279,142 @@ fn current_sandbox_mode(ctx: &ToolContext<'_>) -> String {
     }
 }
 
-fn fork_context(ctx: &ToolContext<'_>, fork_turns: Option<&str>) -> anyhow::Result<String> {
-    let mode = fork_turns
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .unwrap_or("all");
-    if mode.eq_ignore_ascii_case("none") {
-        return Ok(String::new());
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn v2_tool_arguments_reject_legacy_aliases() {
+        assert!(parse::<SpawnAgentArgs>("spawn_agent", &json!({ "task": "x" })).is_err());
+        assert!(parse::<MessageArgs>(
+            "send_message",
+            &json!({
+                "thread_id": "x", "message": "m"
+            })
+        )
+        .is_err());
+        assert!(parse::<WaitAgentArgs>("wait_agent", &json!({ "thread_ids": ["x"] })).is_err());
+        assert!(parse::<InterruptAgentArgs>(
+            "interrupt_agent",
+            &json!({ "target": "x", "extra": true })
+        )
+        .is_err());
     }
-    let mut messages: Vec<_> = ctx
-        .sessions
-        .get_messages(&ctx.session_id)?
-        .into_iter()
-        .filter(|message| matches!(message.role.as_str(), "user" | "assistant"))
-        .collect();
-    if !mode.eq_ignore_ascii_case("all") {
-        let turns = mode
-            .parse::<usize>()
-            .map_err(|_| anyhow::anyhow!("fork_turns must be none, all, or a positive integer"))?;
-        if turns == 0 {
-            return Ok(String::new());
+
+    #[test]
+    fn v2_tool_arguments_accept_only_canonical_shapes() {
+        let spawn: SpawnAgentArgs = parse(
+            "spawn_agent",
+            &json!({
+                "task_name": "review",
+                "message": "review the patch",
+                "agent_type": "reviewer",
+                "model": "openai:gpt-5.6",
+                "reasoning_effort": "high",
+                "fork_turns": "2"
+            }),
+        )
+        .unwrap();
+        assert_eq!(
+            serde_json::to_value(spawn).unwrap(),
+            json!({
+                "task_name": "review",
+                "message": "review the patch",
+                "agent_type": "reviewer",
+                "model": "openai:gpt-5.6",
+                "reasoning_effort": "high",
+                "fork_turns": "2"
+            })
+        );
+        assert!(parse::<ListAgentsArgs>("list_agents", &json!({"path_prefix":"/root"})).is_ok());
+        assert!(
+            parse::<MessageArgs>("send_message", &json!({"target":"worker","message":"note"}))
+                .is_ok()
+        );
+        assert!(parse::<WaitAgentArgs>("wait_agent", &json!({"timeout_ms":30000})).is_ok());
+        assert!(
+            parse::<InterruptAgentArgs>("interrupt_agent", &json!({"target":"worker"})).is_ok()
+        );
+    }
+
+    #[test]
+    fn wait_timeout_contract_is_bounded() {
+        assert_eq!(normalize_wait_timeout(None).unwrap(), 30_000);
+        assert_eq!(normalize_wait_timeout(Some(-1)).unwrap(), 10_000);
+        assert_eq!(normalize_wait_timeout(Some(1)).unwrap(), 10_000);
+        assert_eq!(normalize_wait_timeout(Some(3_600_000)).unwrap(), 3_600_000);
+        assert!(normalize_wait_timeout(Some(3_600_001)).is_err());
+        assert!(parse::<WaitAgentArgs>("wait_agent", &json!({"timeout_ms":"10"})).is_err());
+    }
+
+    #[test]
+    fn fork_turns_rejects_zero_and_malformed_values() {
+        for valid in [None, Some("all"), Some("none"), Some("1"), Some("25")] {
+            validate_fork_turns(valid).unwrap();
         }
-        let keep = turns.saturating_mul(2);
-        if messages.len() > keep {
-            messages.drain(..messages.len() - keep);
+        for invalid in [Some("0"), Some("-1"), Some("1.5"), Some("recent")] {
+            assert!(
+                validate_fork_turns(invalid).is_err(),
+                "accepted {invalid:?}"
+            );
         }
     }
-    let mut out = String::new();
-    for message in messages {
-        let content = message.content.unwrap_or_default();
-        if content.trim().is_empty() {
-            continue;
+
+    #[test]
+    fn schemas_have_exact_required_and_optional_fields() {
+        fn fields(schema: &serde_json::Value) -> (Vec<String>, Vec<String>) {
+            let mut properties = schema["properties"]
+                .as_object()
+                .unwrap()
+                .keys()
+                .cloned()
+                .collect::<Vec<_>>();
+            let mut required = schema["required"]
+                .as_array()
+                .cloned()
+                .unwrap_or_default()
+                .into_iter()
+                .map(|value| value.as_str().unwrap().to_string())
+                .collect::<Vec<_>>();
+            properties.sort();
+            required.sort();
+            (properties, required)
         }
-        out.push_str(&format!(
-            "## {}\n{}\n\n",
-            message.role,
-            types::truncate_chars(&content, 6_000)
-        ));
-        if out.len() >= 32_000 {
-            break;
-        }
+
+        let strings = |values: &[&str]| values.iter().map(|value| (*value).to_string()).collect();
+        assert_eq!(
+            fields(&schema_for_args::<SpawnAgentArgs>()),
+            (
+                strings(&[
+                    "agent_type",
+                    "fork_turns",
+                    "message",
+                    "model",
+                    "reasoning_effort",
+                    "task_name"
+                ]),
+                strings(&["message", "task_name"]),
+            )
+        );
+        assert_eq!(
+            fields(&schema_for_args::<ListAgentsArgs>()),
+            (strings(&["path_prefix"]), vec![])
+        );
+        assert_eq!(
+            fields(&schema_for_args::<MessageArgs>()),
+            (
+                strings(&["message", "target"]),
+                strings(&["message", "target"]),
+            )
+        );
+        assert_eq!(
+            fields(&schema_for_args::<WaitAgentArgs>()),
+            (strings(&["timeout_ms"]), vec![])
+        );
+        assert_eq!(
+            fields(&schema_for_args::<InterruptAgentArgs>()),
+            (strings(&["target"]), strings(&["target"]),)
+        );
     }
-    Ok(types::truncate_chars(&out, 32_000))
 }
