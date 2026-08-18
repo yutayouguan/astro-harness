@@ -168,6 +168,16 @@ struct RuntimeIoBindings {
     rollout: RolloutRecorder,
 }
 
+#[derive(Clone)]
+/// Opaque rollback point for Chat request-scoped settings.
+pub struct SessionRequestSettingsSnapshot {
+    model_ctx: model_ctx::ModelContext,
+    interaction_mode: types::InteractionMode,
+    project_root: Option<PathBuf>,
+    temperature: f32,
+    additional_params: Value,
+}
+
 #[derive(Debug, thiserror::Error)]
 pub enum RuntimeIoBindError {
     #[error("session runtime I/O is already bound")]
@@ -311,6 +321,28 @@ impl Session {
 
     pub(crate) fn complete_runtime_shutdown(&self) {
         self.runtime_shutdown_complete.cancel();
+    }
+
+    /// Atomically snapshot every Session field mutated while admitting a Chat request.
+    pub fn snapshot_request_settings(&self) -> SessionRequestSettingsSnapshot {
+        let state = self.lock_state();
+        SessionRequestSettingsSnapshot {
+            model_ctx: state.model_ctx.clone(),
+            interaction_mode: state.interaction_mode,
+            project_root: state.project_root.clone(),
+            temperature: state.temperature,
+            additional_params: state.additional_params.clone(),
+        }
+    }
+
+    /// Roll request-scoped settings back when their generation is abandoned before handoff.
+    pub fn restore_request_settings(&self, snapshot: SessionRequestSettingsSnapshot) {
+        let mut state = self.lock_state();
+        state.model_ctx = snapshot.model_ctx;
+        state.interaction_mode = snapshot.interaction_mode;
+        state.project_root = snapshot.project_root;
+        state.temperature = snapshot.temperature;
+        state.additional_params = snapshot.additional_params;
     }
 
     pub(crate) fn set_status(&self, status: AgentStatus) {

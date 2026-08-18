@@ -1483,6 +1483,61 @@ mod tests {
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn cancelled_shutdown_owner_does_not_cancel_session_owned_teardown() {
+        let (_dir, session, thread) = task_test_thread("cancelled-shutdown-owner-test").await;
+        let finalize_hits = Arc::new(AtomicUsize::new(0));
+        let finalize_counter = Arc::clone(&finalize_hits);
+        session
+            .hook_bus
+            .register(::hooks::ON_SESSION_FINALIZE, move |_| {
+                finalize_counter.fetch_add(1, Ordering::SeqCst);
+                ::hooks::HookOutcome::Continue
+            });
+        let run_started = Arc::new(Notify::new());
+        let hook_called = Arc::new(AtomicBool::new(false));
+        let (release_run_tx, release_run_rx) = std::sync::mpsc::channel();
+        let context = session
+            .create_turn_context("turn-cancelled-shutdown-owner".into())
+            .await;
+        session
+            .spawn_task(
+                context,
+                Vec::new(),
+                SyncBlockingRunTask {
+                    run_started: Arc::clone(&run_started),
+                    run_release: std::sync::Mutex::new(release_run_rx),
+                    hook_called,
+                },
+            )
+            .await
+            .unwrap();
+        run_started.notified().await;
+
+        let owner = tokio::spawn({
+            let session = Arc::clone(&session);
+            async move { session.shutdown_runtime().await }
+        });
+        while !session.cancel_signal().is_cancelled() {
+            tokio::task::yield_now().await;
+        }
+        tokio::time::sleep(Duration::from_millis(150)).await;
+        assert!(!owner.is_finished());
+        owner.abort();
+        assert!(owner.await.unwrap_err().is_cancelled());
+
+        release_run_tx.send(()).unwrap();
+        tokio::time::timeout(Duration::from_secs(1), session.shutdown_runtime())
+            .await
+            .expect("a later caller must observe the detached teardown completion");
+        assert_eq!(finalize_hits.load(Ordering::SeqCst), 1);
+
+        thread.submit(agent_protocol::Op::Shutdown).await.unwrap();
+        tokio::time::timeout(Duration::from_secs(1), thread.wait_terminated())
+            .await
+            .unwrap();
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
     async fn terminating_task_rejects_new_turn_without_blocking_actor_controls() {
         let (_dir, session, thread) = task_test_thread("terminating-control-test").await;
         let run_started = Arc::new(Notify::new());

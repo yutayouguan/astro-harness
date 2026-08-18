@@ -12,7 +12,7 @@ use agent::streaming::{
     stream_multi_turn_with_hitl, MultiTurnStreamItem, StreamedAssistantContent,
 };
 use agent::{HitlGate, HitlRegistry, TurnAbortReason, TurnInput};
-use futures::StreamExt;
+use futures::{FutureExt, StreamExt};
 use home::AgentRuntimeConfig;
 use memory::MemoryManager;
 use proto::astro_service_server::AstroService;
@@ -99,6 +99,29 @@ struct PauseRegistration {
     hitl_gate: Arc<HitlGate>,
     ui_generation: ::hooks::UiTimelineGeneration,
     operation: Arc<Mutex<()>>,
+}
+
+struct GenerationLaunchReply<T> {
+    /// The worker retains the generation operation until this handoff is accepted or dropped.
+    value: Option<T>,
+    accepted: Option<tokio::sync::oneshot::Sender<bool>>,
+}
+
+impl<T> GenerationLaunchReply<T> {
+    fn into_value(mut self) -> T {
+        if let Some(accepted) = self.accepted.take() {
+            let _ = accepted.send(true);
+        }
+        self.value.take().expect("generation launch value missing")
+    }
+}
+
+impl<T> Drop for GenerationLaunchReply<T> {
+    fn drop(&mut self) {
+        if let Some(accepted) = self.accepted.take() {
+            let _ = accepted.send(false);
+        }
+    }
 }
 
 type GenerationOperations = Arc<StdMutex<HashMap<String, Weak<Mutex<()>>>>>;
@@ -335,6 +358,7 @@ async fn spawn_title_to_hub(session: &SessionHandle, hub: &SessionEventHub) {
 }
 
 /// Astro gRPC 服务实现：会话 Agent、流式聊天、记忆与技能等 RPC。
+#[derive(Clone)]
 pub struct AstroServiceImpl {
     /// session_id → Agent 循环句柄。
     sessions: Arc<RwLock<HashMap<String, SessionHandle>>>,
@@ -436,6 +460,57 @@ impl AstroServiceImpl {
         hitl_gate: Arc<HitlGate>,
         hook_tx: tokio::sync::mpsc::UnboundedSender<::hooks::UiHookEvent>,
     ) -> Option<PauseRegistration> {
+        let service = self.clone();
+        let session_id = session_id.to_string();
+        let session = Arc::clone(session);
+        let (reply_tx, reply_rx) = tokio::sync::oneshot::channel();
+        tokio::spawn(async move {
+            let registration = service
+                .admit_pause_generation_inner(&session_id, &session, hitl_gate, hook_tx)
+                .await;
+            let Some(registration) = registration else {
+                let _ = reply_tx.send(None);
+                return;
+            };
+            let cleanup_registration = registration.clone();
+            let (accepted_tx, accepted_rx) = tokio::sync::oneshot::channel();
+            let guarded_reply = GenerationLaunchReply {
+                value: Some(registration),
+                accepted: Some(accepted_tx),
+            };
+            let accepted = match reply_tx.send(Some(guarded_reply)) {
+                Ok(()) => matches!(accepted_rx.await, Ok(true)),
+                Err(returned) => {
+                    drop(returned);
+                    false
+                }
+            };
+            if !accepted {
+                cleanup_pause_generation_parts(
+                    &service.generation_operations,
+                    &service.pause_controls,
+                    &service.hitl_registry,
+                    &service.hook_runtime.ui_slot,
+                    &service.memory_dir,
+                    &session_id,
+                    &cleanup_registration,
+                )
+                .await;
+            }
+        });
+        reply_rx
+            .await
+            .unwrap_or(None)
+            .map(GenerationLaunchReply::into_value)
+    }
+
+    async fn admit_pause_generation_inner(
+        &self,
+        session_id: &str,
+        session: &SessionHandle,
+        hitl_gate: Arc<HitlGate>,
+        hook_tx: tokio::sync::mpsc::UnboundedSender<::hooks::UiHookEvent>,
+    ) -> Option<PauseRegistration> {
         let operation = self.generation_operation(session_id);
         let (registration, old_registration, old_registry_gate) = {
             let _admission = operation.lock().await;
@@ -498,8 +573,9 @@ impl AstroServiceImpl {
         launch: F,
     ) -> Option<T>
     where
-        F: FnOnce() -> Fut,
-        Fut: Future<Output = T>,
+        F: FnOnce() -> Fut + Send + 'static,
+        Fut: Future<Output = T> + Send + 'static,
+        T: Send + 'static,
     {
         let session = registration.session.upgrade()?;
         self.launch_current_pause_generation_with_setup(
@@ -521,37 +597,134 @@ impl AstroServiceImpl {
         launch: F,
     ) -> Option<T>
     where
-        S: FnOnce(SessionHandle) -> SetupFut,
-        SetupFut: Future<Output = ()>,
-        F: FnOnce() -> Fut,
-        Fut: Future<Output = T>,
+        S: FnOnce(SessionHandle) -> SetupFut + Send + 'static,
+        SetupFut: Future<Output = ()> + Send + 'static,
+        F: FnOnce() -> Fut + Send + 'static,
+        Fut: Future<Output = T> + Send + 'static,
+        T: Send + 'static,
     {
-        let _admission = registration.operation.lock().await;
+        let service = self.clone();
+        let session_id = session_id.to_string();
+        let registration = registration.clone();
+        let session = Arc::clone(session);
+        let (reply_tx, reply_rx) = tokio::sync::oneshot::channel();
+        tokio::spawn(async move {
+            service
+                .run_generation_launch_worker(
+                    session_id,
+                    registration,
+                    session,
+                    setup,
+                    launch,
+                    reply_tx,
+                )
+                .await;
+        });
+        reply_rx
+            .await
+            .unwrap_or(None)
+            .map(GenerationLaunchReply::into_value)
+    }
+
+    async fn run_generation_launch_worker<S, SetupFut, F, Fut, T>(
+        &self,
+        session_id: String,
+        registration: PauseRegistration,
+        session: SessionHandle,
+        setup: S,
+        launch: F,
+        reply: tokio::sync::oneshot::Sender<Option<GenerationLaunchReply<T>>>,
+    ) where
+        S: FnOnce(SessionHandle) -> SetupFut + Send + 'static,
+        SetupFut: Future<Output = ()> + Send + 'static,
+        F: FnOnce() -> Fut + Send + 'static,
+        Fut: Future<Output = T> + Send + 'static,
+        T: Send + 'static,
+    {
+        let admission = Arc::clone(&registration.operation).lock_owned().await;
         let is_current = self
             .pause_controls
             .read()
             .await
-            .get(session_id)
+            .get(&session_id)
             .is_some_and(|current| Arc::ptr_eq(&current.control, &registration.control));
         let is_current_session = self
             .sessions
             .read()
             .await
-            .get(session_id)
-            .is_some_and(|current| Arc::ptr_eq(current, session));
+            .get(&session_id)
+            .is_some_and(|current| Arc::ptr_eq(current, &session));
         let registration_matches_session = registration
             .session
             .upgrade()
-            .is_some_and(|registered| Arc::ptr_eq(&registered, session));
+            .is_some_and(|registered| Arc::ptr_eq(&registered, &session));
         if !is_current
             || !is_current_session
             || !registration_matches_session
             || registration.control.is_cancelled()
         {
-            return None;
+            let _ = reply.send(None);
+            return;
         }
-        setup(Arc::clone(session)).await;
-        Some(launch().await)
+        let settings_snapshot = session.snapshot_request_settings();
+        let launch_result = std::panic::AssertUnwindSafe(async {
+            setup(Arc::clone(&session)).await;
+            launch().await
+        })
+        .catch_unwind()
+        .await;
+        if let Ok(value) = launch_result {
+            let (accepted_tx, accepted_rx) = tokio::sync::oneshot::channel();
+            let guarded_reply = GenerationLaunchReply {
+                value: Some(value),
+                accepted: Some(accepted_tx),
+            };
+            match reply.send(Some(guarded_reply)) {
+                Ok(()) if matches!(accepted_rx.await, Ok(true)) => return,
+                Ok(()) => {}
+                Err(returned) => drop(returned),
+            }
+        }
+
+        self.cleanup_abandoned_generation_with_admission(
+            session_id,
+            registration,
+            session,
+            settings_snapshot,
+            admission,
+        )
+        .await;
+    }
+
+    async fn cleanup_abandoned_generation_with_admission(
+        &self,
+        session_id: String,
+        registration: PauseRegistration,
+        session: SessionHandle,
+        settings_snapshot: agent::runtime::SessionRequestSettingsSnapshot,
+        admission: tokio::sync::OwnedMutexGuard<()>,
+    ) {
+        registration.control.cancel();
+        let _ = session.abort_all_tasks(TurnAbortReason::Interrupted).await;
+        session.restore_request_settings(settings_snapshot);
+        let detached_gate = detach_pause_generation_parts(
+            &self.pause_controls,
+            &self.hitl_registry,
+            &self.hook_runtime.ui_slot,
+            &self.memory_dir,
+            &session_id,
+            &registration,
+        )
+        .await
+        .1;
+        drop(admission);
+        cancel_pause_generation(&registration, detached_gate).await;
+        prune_generation_operation(
+            &self.generation_operations,
+            &session_id,
+            &registration.operation,
+            2,
+        );
     }
 
     async fn cleanup_pause_generation(
@@ -559,19 +732,50 @@ impl AstroServiceImpl {
         session_id: &str,
         registration: &PauseRegistration,
     ) -> bool {
-        cleanup_pause_generation_parts(
-            &self.generation_operations,
-            &self.pause_controls,
-            &self.hitl_registry,
-            &self.hook_runtime.ui_slot,
-            &self.memory_dir,
-            session_id,
-            registration,
-        )
-        .await
+        let service = self.clone();
+        let session_id = session_id.to_string();
+        let registration = registration.clone();
+        let (reply_tx, reply_rx) = tokio::sync::oneshot::channel();
+        tokio::spawn(async move {
+            let removed = cleanup_pause_generation_parts(
+                &service.generation_operations,
+                &service.pause_controls,
+                &service.hitl_registry,
+                &service.hook_runtime.ui_slot,
+                &service.memory_dir,
+                &session_id,
+                &registration,
+            )
+            .await;
+            let _ = reply_tx.send(removed);
+        });
+        reply_rx.await.unwrap_or(false)
     }
 
     async fn cancel_current_pause_generation_with<F, Fut>(
+        &self,
+        session_id: &str,
+        abort: F,
+    ) -> anyhow::Result<Option<PauseRegistration>>
+    where
+        F: FnOnce(Option<SessionHandle>) -> Fut + Send + 'static,
+        Fut: Future<Output = anyhow::Result<()>> + Send + 'static,
+    {
+        let service = self.clone();
+        let session_id = session_id.to_string();
+        let (reply_tx, reply_rx) = tokio::sync::oneshot::channel();
+        tokio::spawn(async move {
+            let result = service
+                .cancel_current_pause_generation_inner(&session_id, abort)
+                .await;
+            let _ = reply_tx.send(result);
+        });
+        reply_rx
+            .await
+            .map_err(|_| anyhow::anyhow!("cancel generation worker stopped unexpectedly"))?
+    }
+
+    async fn cancel_current_pause_generation_inner<F, Fut>(
         &self,
         session_id: &str,
         abort: F,
@@ -625,6 +829,17 @@ impl AstroServiceImpl {
     ///
     /// 返回被移除的会话句柄；Session 自身清理由幂等 `shutdown_runtime` 统一承接。
     async fn release_session_runtime(&self, session_id: &str) -> Option<SessionHandle> {
+        let service = self.clone();
+        let session_id = session_id.to_string();
+        let (reply_tx, reply_rx) = tokio::sync::oneshot::channel();
+        tokio::spawn(async move {
+            let removed = service.release_session_runtime_inner(&session_id).await;
+            let _ = reply_tx.send(removed);
+        });
+        reply_rx.await.unwrap_or(None)
+    }
+
+    async fn release_session_runtime_inner(&self, session_id: &str) -> Option<SessionHandle> {
         let operation = self.generation_operation(session_id);
         let (registration, detached_gate, orphan_gate, removed) = {
             let _admission = operation.lock().await;
@@ -2291,6 +2506,94 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn cancelled_generation_launch_cleans_registration_and_restores_settings() {
+        let dir = TempDir::new().unwrap();
+        let service = Arc::new(AstroServiceImpl::new(dir.path().to_path_buf()));
+        let session_id = "cancelled-generation-launch";
+        let session = service.get_session(session_id).await.unwrap();
+        let initial_temperature = session.temperature();
+        let (ui_tx, mut ui_rx) = tokio::sync::mpsc::unbounded_channel();
+        let gate = HitlGate::new(session_id);
+        let registration = service
+            .admit_pause_generation(session_id, &session, Arc::clone(&gate), ui_tx)
+            .await
+            .unwrap();
+        let setup_applied = Arc::new(tokio::sync::Notify::new());
+        let release_launch = Arc::new(tokio::sync::Notify::new());
+        let launch_owner = tokio::spawn({
+            let service = Arc::clone(&service);
+            let session = Arc::clone(&session);
+            let setup_applied = Arc::clone(&setup_applied);
+            let release_launch = Arc::clone(&release_launch);
+            async move {
+                service
+                    .launch_current_pause_generation_with_setup(
+                        session_id,
+                        &registration,
+                        &session,
+                        move |session| async move {
+                            session.set_temperature(0.2);
+                            session
+                                .set_interaction_mode(tools::InteractionMode::Ask)
+                                .await;
+                            setup_applied.notify_one();
+                        },
+                        move || async move {
+                            release_launch.notified().await;
+                        },
+                    )
+                    .await
+            }
+        });
+        setup_applied.notified().await;
+        launch_owner.abort();
+        assert!(launch_owner.await.unwrap_err().is_cancelled());
+        release_launch.notify_one();
+
+        tokio::time::timeout(std::time::Duration::from_secs(1), async {
+            loop {
+                if service
+                    .pause_controls
+                    .read()
+                    .await
+                    .get(session_id)
+                    .is_none()
+                    && service.hitl_registry.get(session_id).await.is_none()
+                {
+                    break;
+                }
+                tokio::task::yield_now().await;
+            }
+        })
+        .await
+        .expect("abandoned generation must be cleaned by service-owned work");
+        assert!(matches!(
+            ui_rx.try_recv(),
+            Err(tokio::sync::mpsc::error::TryRecvError::Disconnected)
+        ));
+
+        let (next_ui_tx, _next_ui_rx) = tokio::sync::mpsc::unbounded_channel();
+        let next = service
+            .admit_pause_generation(session_id, &session, HitlGate::new(session_id), next_ui_tx)
+            .await
+            .unwrap();
+        let inherited = service
+            .launch_current_pause_generation_with_setup(
+                session_id,
+                &next,
+                &session,
+                |_| async {},
+                {
+                    let session = Arc::clone(&session);
+                    move || async move { session.temperature() }
+                },
+            )
+            .await
+            .unwrap();
+        assert_eq!(inherited, initial_temperature);
+    }
+
+    #[tokio::test]
     async fn stale_chat_cleanup_preserves_replacement_pause_gate_and_ui() {
         let dir = TempDir::new().unwrap();
         let service = AstroServiceImpl::new(dir.path().to_path_buf());
@@ -2587,6 +2890,136 @@ mod tests {
             .await
             .unwrap();
         new_turn.await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn cancelled_cancel_owner_still_finishes_gate_cleanup() {
+        let dir = TempDir::new().unwrap();
+        let service = Arc::new(AstroServiceImpl::new(dir.path().to_path_buf()));
+        let session_id = "cancelled-cancel-owner";
+        let session = service.get_session(session_id).await.unwrap();
+        let gate = HitlGate::new(session_id);
+        let (ui_tx, _ui_rx) = tokio::sync::mpsc::unbounded_channel();
+        service
+            .admit_pause_generation(session_id, &session, Arc::clone(&gate), ui_tx)
+            .await
+            .unwrap();
+        let mut gate_wait = gate
+            .begin_wait(agent::Interrupt {
+                id: "cancel-owner-gate".into(),
+                ..Default::default()
+            })
+            .await;
+        let abort_entered = Arc::new(tokio::sync::Notify::new());
+        let release_abort = Arc::new(tokio::sync::Notify::new());
+        let owner = tokio::spawn({
+            let service = Arc::clone(&service);
+            let abort_entered = Arc::clone(&abort_entered);
+            let release_abort = Arc::clone(&release_abort);
+            async move {
+                service
+                    .cancel_current_pause_generation_with(session_id, move |_| async move {
+                        abort_entered.notify_one();
+                        release_abort.notified().await;
+                        Ok(())
+                    })
+                    .await
+            }
+        });
+        abort_entered.notified().await;
+        owner.abort();
+        assert!(matches!(owner.await, Err(error) if error.is_cancelled()));
+        release_abort.notify_one();
+
+        let resolution = tokio::time::timeout(std::time::Duration::from_secs(1), &mut gate_wait)
+            .await
+            .expect("detached cancel worker must resolve the exact gate")
+            .expect("gate resolution");
+        assert_eq!(resolution.status, "cancelled");
+        tokio::time::timeout(std::time::Duration::from_secs(1), async {
+            loop {
+                if !service
+                    .generation_operations
+                    .lock()
+                    .unwrap()
+                    .contains_key(session_id)
+                {
+                    break;
+                }
+                tokio::task::yield_now().await;
+            }
+        })
+        .await
+        .expect("cancel worker must prune its generation operation");
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn cancelled_release_owner_still_finishes_session_cleanup() {
+        let dir = TempDir::new().unwrap();
+        let service = Arc::new(AstroServiceImpl::new(dir.path().to_path_buf()));
+        let session_id = "cancelled-release-owner";
+        let finalize_hits = Arc::new(AtomicUsize::new(0));
+        let finalize_counter = Arc::clone(&finalize_hits);
+        let (finalize_entered_tx, finalize_entered_rx) = std::sync::mpsc::channel();
+        let (release_finalize_tx, release_finalize_rx) = std::sync::mpsc::channel();
+        let release_finalize_rx = Arc::new(std::sync::Mutex::new(release_finalize_rx));
+        service
+            .hook_runtime
+            .plugin
+            .register(::hooks::ON_SESSION_FINALIZE, move |_| {
+                finalize_counter.fetch_add(1, Ordering::SeqCst);
+                let _ = finalize_entered_tx.send(());
+                let _ = release_finalize_rx
+                    .lock()
+                    .expect("finalize release mutex poisoned")
+                    .recv();
+                ::hooks::HookOutcome::Continue
+            });
+        let session = service.get_session(session_id).await.unwrap();
+        let gate = HitlGate::new(session_id);
+        let (ui_tx, _ui_rx) = tokio::sync::mpsc::unbounded_channel();
+        service
+            .admit_pause_generation(session_id, &session, gate, ui_tx)
+            .await
+            .unwrap();
+
+        let owner = tokio::spawn({
+            let service = Arc::clone(&service);
+            async move { service.release_session_runtime(session_id).await }
+        });
+        tokio::task::spawn_blocking(move || finalize_entered_rx.recv())
+            .await
+            .unwrap()
+            .unwrap();
+        owner.abort();
+        assert!(matches!(owner.await, Err(error) if error.is_cancelled()));
+        release_finalize_tx.send(()).unwrap();
+        session.shutdown_runtime().await;
+
+        tokio::time::timeout(std::time::Duration::from_secs(1), async {
+            loop {
+                if !service
+                    .generation_operations
+                    .lock()
+                    .unwrap()
+                    .contains_key(session_id)
+                {
+                    break;
+                }
+                tokio::task::yield_now().await;
+            }
+        })
+        .await
+        .expect("release worker must prune its generation operation");
+        assert_eq!(finalize_hits.load(Ordering::SeqCst), 1);
+        assert!(service.sessions.read().await.get(session_id).is_none());
+        assert!(service
+            .pause_controls
+            .read()
+            .await
+            .get(session_id)
+            .is_none());
+        assert!(service.hitl_registry.get(session_id).await.is_none());
     }
 
     #[tokio::test]

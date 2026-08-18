@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use agent_protocol::{ErrorEvent, EventMsg, ItemEvent, Op, Submission, TurnItem};
 use async_channel::Receiver;
+use futures::FutureExt;
 
 use super::Session;
 use crate::streaming::ChatOverride;
@@ -163,10 +164,22 @@ impl Session {
     }
 
     pub async fn shutdown_runtime(self: &Arc<Self>) {
-        if !self.begin_runtime_shutdown() {
-            self.wait_runtime_shutdown_complete().await;
-            return;
+        if self.begin_runtime_shutdown() {
+            let session = Arc::clone(self);
+            tokio::spawn(async move {
+                let result = std::panic::AssertUnwindSafe(session.run_shutdown_worker())
+                    .catch_unwind()
+                    .await;
+                if result.is_err() {
+                    tracing::error!(session_id = %session.session_id(), "session shutdown worker panicked");
+                }
+                session.complete_runtime_shutdown();
+            });
         }
+        self.wait_runtime_shutdown_complete().await;
+    }
+
+    async fn run_shutdown_worker(self: &Arc<Self>) {
         let (task_lifecycle, abort_result) = self
             .abort_all_tasks_for_shutdown(agent_protocol::TurnAbortReason::Interrupted)
             .await;
@@ -197,7 +210,6 @@ impl Session {
         }
         let stopped_jobs = tools::shutdown_background_jobs_for_session(self.session_id());
         tracing::debug!(stopped_jobs, session_id = %self.session_id(), "session runtime shutdown complete");
-        self.complete_runtime_shutdown();
     }
 }
 
