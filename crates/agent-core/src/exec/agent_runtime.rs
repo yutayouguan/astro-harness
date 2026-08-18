@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
 
 use subagents::{
@@ -27,8 +28,51 @@ pub struct RunAgentTurnRequest {
     /// terminal turn completion is deliberately not part of this protocol.
     pub(super) startup_tx: Option<watch::Sender<Option<Result<(), String>>>>,
     pub(super) startup_accept_rx: Option<tokio::sync::oneshot::Receiver<()>>,
+    pub(super) unaccepted_spawn_cleanup: Option<Arc<UnacceptedSpawnCleanup>>,
     pub(super) followup_start_tx: Option<watch::Sender<Option<Result<(), String>>>>,
     pub(super) start_token: Option<String>,
+}
+
+type UnacceptedSpawnCleanupFn = dyn Fn(Option<&str>) -> anyhow::Result<()> + Send + Sync + 'static;
+
+pub(super) struct UnacceptedSpawnCleanup {
+    accepted: AtomicBool,
+    turn_id: Mutex<Option<String>>,
+    cleanup: Arc<UnacceptedSpawnCleanupFn>,
+}
+
+impl UnacceptedSpawnCleanup {
+    pub(super) fn new(
+        cleanup: impl Fn(Option<&str>) -> anyhow::Result<()> + Send + Sync + 'static,
+    ) -> Self {
+        Self {
+            accepted: AtomicBool::new(false),
+            turn_id: Mutex::new(None),
+            cleanup: Arc::new(cleanup),
+        }
+    }
+
+    fn set_turn_id(&self, turn_id: &str) {
+        if let Ok(mut stored) = self.turn_id.lock() {
+            *stored = Some(turn_id.to_string());
+        }
+    }
+
+    fn accept(&self) {
+        self.accepted.store(true, Ordering::Release);
+    }
+
+    pub(super) fn run(&self) -> anyhow::Result<()> {
+        if self.accepted.load(Ordering::Acquire) {
+            return Ok(());
+        }
+        let turn_id = self
+            .turn_id
+            .lock()
+            .map_err(|_| anyhow::anyhow!("unaccepted spawn cleanup mutex is poisoned"))?
+            .clone();
+        (self.cleanup)(turn_id.as_deref())
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -255,6 +299,8 @@ pub struct AgentRuntimeManager {
     #[cfg(test)]
     before_startup_ack_hook: Mutex<Option<AckSubscribeHook>>,
     #[cfg(test)]
+    after_startup_permit_hook: Mutex<Option<AckSubscribeHook>>,
+    #[cfg(test)]
     start_status_failure: Mutex<Option<String>>,
 }
 
@@ -268,7 +314,18 @@ impl AgentRuntimeManager {
 
     pub async fn start_turn(&self, request: RunAgentTurnRequest) -> anyhow::Result<()> {
         let startup_tx = request.startup_tx.clone();
-        let result = self.start_turn_inner(request).await;
+        let unaccepted_cleanup = request.unaccepted_spawn_cleanup.clone();
+        let mut result = self.start_turn_inner(request).await;
+        if let Some(cleanup) = unaccepted_cleanup.as_ref() {
+            if let Err(cleanup_error) = cleanup.run() {
+                result = Err(match result {
+                    Ok(()) => cleanup_error.context("unaccepted spawn cleanup"),
+                    Err(start_error) => anyhow::anyhow!(
+                        "{start_error:#}; unaccepted spawn cleanup failed: {cleanup_error:#}"
+                    ),
+                });
+            }
+        }
         if let Some(startup_tx) = startup_tx {
             if startup_tx.borrow().is_none() {
                 let shared = result
@@ -292,7 +349,11 @@ impl AgentRuntimeManager {
                 return Err(error);
             }
         };
+        self.pause_after_startup_permit(&request).await;
         let turn_id = Uuid::new_v4().to_string();
+        if let Some(cleanup) = request.unaccepted_spawn_cleanup.as_ref() {
+            cleanup.set_turn_id(&turn_id);
+        }
         let interrupt = Arc::new(AgentThreadControl::default());
         interrupt.begin_turn();
         let (terminated_tx, terminated_rx) = watch::channel(None);
@@ -396,6 +457,7 @@ impl AgentRuntimeManager {
                 &thread_id,
                 &turn_id,
                 error.to_string(),
+                request.unaccepted_spawn_cleanup.is_none(),
                 FailedStartResources {
                     runtime_handle,
                     permit,
@@ -444,10 +506,8 @@ impl AgentRuntimeManager {
                     .map(|_| ());
                 owner_guard.release_permit();
                 owner_guard.disarm();
-                let graph_result =
-                    control.abort_unaccepted_started_spawn(&request.thread, &turn_id);
                 let cleanup_result =
-                    combine_completion_results([active_result, runtime_result, graph_result]);
+                    combine_completion_results([active_result, runtime_result, Ok(())]);
                 let error = match cleanup_result {
                     Ok(()) => cancelled,
                     Err(cleanup_error) => anyhow::anyhow!(
@@ -456,6 +516,9 @@ impl AgentRuntimeManager {
                 };
                 owner_guard.publish_failure(&error);
                 return Err(error);
+            }
+            if let Some(cleanup) = request.unaccepted_spawn_cleanup.as_ref() {
+                cleanup.accept();
             }
         }
 
@@ -716,6 +779,21 @@ impl AgentRuntimeManager {
     #[cfg(not(test))]
     async fn pause_before_startup_ack(&self, _request: &RunAgentTurnRequest) {}
 
+    #[cfg(test)]
+    async fn pause_after_startup_permit(&self, request: &RunAgentTurnRequest) {
+        if request.startup_tx.is_none() {
+            return;
+        }
+        let hook = self.after_startup_permit_hook.lock().unwrap().take();
+        if let Some(hook) = hook {
+            hook.entered.notify_one();
+            hook.release.notified().await;
+        }
+    }
+
+    #[cfg(not(test))]
+    async fn pause_after_startup_permit(&self, _request: &RunAgentTurnRequest) {}
+
     fn termination_subscription(
         &self,
         thread_id: &str,
@@ -806,6 +884,11 @@ impl AgentRuntimeManager {
     }
 
     #[cfg(test)]
+    pub(super) fn set_after_startup_permit_hook(&self, hook: Option<AckSubscribeHook>) {
+        *self.after_startup_permit_hook.lock().unwrap() = hook;
+    }
+
+    #[cfg(test)]
     pub(super) fn set_start_status_failure(&self, message: Option<&str>) {
         *self.start_status_failure.lock().unwrap() = message.map(str::to_string);
     }
@@ -883,19 +966,25 @@ impl AgentRuntimeManager {
         thread_id: &str,
         turn_id: &str,
         message: String,
+        persist_error_event: bool,
         resources: FailedStartResources<'_>,
     ) -> anyhow::Result<()> {
         let status = AgentStatusV2::Errored {
             message: message.clone(),
         };
-        let event_result = self.record_terminal_event(
-            control,
-            thread_id,
-            RunnerEvent::TurnErrored {
-                turn_id: turn_id.to_string(),
-                message,
-            },
-        );
+        let event_result = if persist_error_event {
+            self.record_terminal_event(
+                control,
+                thread_id,
+                RunnerEvent::TurnErrored {
+                    turn_id: turn_id.to_string(),
+                    message,
+                },
+            )
+            .map(|_| ())
+        } else {
+            Ok(())
+        };
         let active_result = self
             .remove_active_if_turn(thread_id, turn_id)
             .and_then(|removed| {
@@ -912,7 +1001,7 @@ impl AgentRuntimeManager {
             .map(|_| ());
         drop(resources.permit);
         let completion_result =
-            combine_completion_results([event_result.map(|_| ()), active_result, runtime_result]);
+            combine_completion_results([event_result, active_result, runtime_result]);
         match &completion_result {
             Ok(()) => {
                 let _ =
@@ -1402,6 +1491,7 @@ mod tests {
             consume_mailbox: false,
             startup_tx: None,
             startup_accept_rx: None,
+            unaccepted_spawn_cleanup: None,
             followup_start_tx: None,
             start_token: None,
         }

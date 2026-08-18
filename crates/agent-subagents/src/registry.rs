@@ -214,6 +214,28 @@ impl AgentRegistry {
         Ok(())
     }
 
+    pub(crate) fn rollback_committed_spawn_if_matches(
+        &self,
+        path: &AgentPath,
+        thread_id: &str,
+    ) -> anyhow::Result<bool> {
+        let mut state = self.lock_state()?;
+        if state.active_executions.contains(thread_id) {
+            bail!("cannot roll back agent thread {thread_id:?} with an active execution");
+        }
+        let path_owner = state.identities.get(path).map(String::as_str);
+        let thread_path = state.thread_paths.get(thread_id);
+        match (path_owner, thread_path) {
+            (None, None) => Ok(false),
+            (Some(owner), Some(stored_path)) if owner == thread_id && stored_path == path => {
+                state.thread_paths.remove(thread_id);
+                state.identities.remove(path);
+                Ok(true)
+            }
+            _ => bail!("refusing to roll back stale agent identity {thread_id:?} at path {path}"),
+        }
+    }
+
     pub fn root_thread_id(&self) -> &str {
         &self.root_thread_id
     }

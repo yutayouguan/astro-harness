@@ -8,8 +8,8 @@ use uuid::Uuid;
 
 use crate::{
     ActivityBus, ActivityCursor, AgentActivityKind, AgentGraphStore, AgentPath, AgentRegistry,
-    AgentThreadV2, ExecutionPermit, Limits, MailboxKind, MailboxMessage, MessageAgentV2Request,
-    NewMailboxMessage, RunnerEvent, SpawnReservation, ThreadReservation,
+    AgentStatusV2, AgentThreadV2, ExecutionPermit, Limits, MailboxKind, MailboxMessage,
+    MessageAgentV2Request, NewMailboxMessage, RunnerEvent, SpawnReservation, ThreadReservation,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -393,23 +393,44 @@ impl AgentControl {
             .rollback_committed_spawn(&thread.canonical_path, &thread.thread_id)
     }
 
-    /// Complete manager-owned cleanup when the spawn caller disappears after
-    /// TurnStarted was made durable but before it accepted the startup ack.
-    pub fn abort_unaccepted_started_spawn(
+    /// Idempotent final cleanup owned by the runtime launch task. It may run
+    /// after the caller already removed durable state, but only releases the
+    /// exact matching in-memory identity after execution has ended.
+    pub fn finalize_unaccepted_spawn(
         &self,
         thread: &AgentThreadV2,
-        turn_id: &str,
+        turn_id: Option<&str>,
     ) -> anyhow::Result<()> {
         if thread.root_thread_id != self.root_thread_id {
             anyhow::bail!("agent thread belongs to a different root");
         }
         if self.runtimes.get(&thread.thread_id)?.is_some() {
-            anyhow::bail!("cannot abort an unaccepted spawn with a registered runtime");
+            anyhow::bail!("cannot finalize an unaccepted spawn with a registered runtime");
         }
-        self.store
-            .rollback_unaccepted_started_thread(&thread.thread_id, turn_id)?;
+        if let Some(current) = self.store.get_thread(&thread.thread_id)? {
+            anyhow::ensure!(
+                current.canonical_path == thread.canonical_path,
+                "refusing to clean a replacement agent thread"
+            );
+            match current.status {
+                AgentStatusV2::PendingInit => {
+                    self.store.rollback_pending_thread(&thread.thread_id)?;
+                }
+                AgentStatusV2::Running => {
+                    let turn_id = turn_id.ok_or_else(|| {
+                        anyhow::anyhow!("running unaccepted spawn is missing its generation token")
+                    })?;
+                    self.store
+                        .rollback_unaccepted_started_thread(&thread.thread_id, turn_id)?;
+                }
+                _ => anyhow::bail!(
+                    "refusing to clean unaccepted spawn after its durable generation advanced"
+                ),
+            }
+        }
         self.registry
-            .rollback_committed_spawn(&thread.canonical_path, &thread.thread_id)
+            .rollback_committed_spawn_if_matches(&thread.canonical_path, &thread.thread_id)?;
+        Ok(())
     }
 
     pub fn register_runtime(

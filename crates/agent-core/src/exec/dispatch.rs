@@ -15,7 +15,9 @@ use subagents::{
 };
 use tools::{AgentThreadDispatch, SpawnAgentDispatchRequest};
 
-use super::agent_runtime::{AgentRuntimeManager, FollowupAdmission, RunAgentTurnRequest};
+use super::agent_runtime::{
+    AgentRuntimeManager, FollowupAdmission, RunAgentTurnRequest, UnacceptedSpawnCleanup,
+};
 use crate::runtime::{Config, Session};
 
 #[derive(Clone)]
@@ -37,9 +39,10 @@ impl ForkedSessionGuard {
             return Ok(());
         }
         let sessions = session::SessionStore::open_sessions_dir(&self.sessions_dir)?;
-        let child = sessions
-            .get_session(&self.child_session_id)?
-            .ok_or_else(|| anyhow::anyhow!("forked child session disappeared before rollback"))?;
+        let Some(child) = sessions.get_session(&self.child_session_id)? else {
+            self.armed = false;
+            return Ok(());
+        };
         anyhow::ensure!(
             child.parent_session_id.as_deref() == Some(self.parent_session_id.as_str()),
             "refusing to delete child session whose fork ownership changed"
@@ -117,10 +120,7 @@ impl RuntimeRequestRegistry {
 }
 
 struct SpawnStartupGuard {
-    control: Arc<AgentControl>,
-    runtime_requests: Arc<RuntimeRequestRegistry>,
-    thread: subagents::AgentThreadV2,
-    forked_session: Option<ForkedSessionGuard>,
+    cleanup: Arc<UnacceptedSpawnCleanup>,
     armed: bool,
 }
 
@@ -129,28 +129,12 @@ impl SpawnStartupGuard {
         if !self.armed {
             return Ok(());
         }
-        self.runtime_requests.remove(&self.thread.thread_id);
-        let graph_result = self.control.abort_committed_pending_spawn(&self.thread);
-        let session_result = self
-            .forked_session
-            .as_mut()
-            .map(ForkedSessionGuard::rollback)
-            .unwrap_or(Ok(()));
+        let result = self.cleanup.run();
         self.armed = false;
-        match (graph_result, session_result) {
-            (Ok(()), Ok(())) => Ok(()),
-            (Err(graph), Ok(())) => Err(graph.context("spawn graph rollback")),
-            (Ok(()), Err(session)) => Err(session.context("child session rollback")),
-            (Err(graph), Err(session)) => Err(anyhow::anyhow!(
-                "spawn graph rollback failed: {graph:#}; child session rollback failed: {session:#}"
-            )),
-        }
+        result
     }
 
     fn disarm(&mut self) {
-        if let Some(forked_session) = self.forked_session.as_mut() {
-            forked_session.disarm();
-        }
         self.armed = false;
     }
 }
@@ -161,7 +145,7 @@ impl Drop for SpawnStartupGuard {
             if let Err(error) = self.cleanup() {
                 // A running status here means the manager owns the second half
                 // of the unaccepted-start rollback after observing accept drop.
-                tracing::warn!(%error, thread_id = %self.thread.thread_id, "spawn caller cleanup deferred to runtime manager");
+                tracing::warn!(%error, "spawn caller cleanup deferred to runtime manager");
             }
         }
     }
@@ -261,6 +245,7 @@ impl DefaultAgentThreadDispatch {
             consume_mailbox,
             startup_tx: None,
             startup_accept_rx: None,
+            unaccepted_spawn_cleanup: None,
             followup_start_tx: None,
             start_token: None,
         }
@@ -362,17 +347,43 @@ impl AgentThreadDispatch for DefaultAgentThreadDispatch {
                 error,
             ));
         }
+        let sessions_dir = forked_session.sessions_dir.clone();
+        let child_session_id = forked_session.child_session_id.clone();
+        let parent_session_id = forked_session.parent_session_id.clone();
+        forked_session.disarm();
+        let cleanup_control = Arc::clone(&self.control);
+        let cleanup_requests = Arc::clone(&self.runtime_requests);
+        let cleanup_thread = thread.clone();
+        let unaccepted_cleanup = Arc::new(UnacceptedSpawnCleanup::new(move |turn_id| {
+            cleanup_requests.remove(&cleanup_thread.thread_id);
+            let graph_result = cleanup_control
+                .finalize_unaccepted_spawn(&cleanup_thread, turn_id)
+                .map_err(|error| error.context("spawn graph and identity rollback"));
+            let mut owned_session = ForkedSessionGuard {
+                sessions_dir: sessions_dir.clone(),
+                child_session_id: child_session_id.clone(),
+                parent_session_id: parent_session_id.clone(),
+                armed: true,
+            };
+            let session_result = owned_session
+                .rollback()
+                .map_err(|error| error.context("child session rollback"));
+            match (graph_result, session_result) {
+                (Ok(()), Ok(())) => Ok(()),
+                (Err(graph), Ok(())) => Err(graph),
+                (Ok(()), Err(session)) => Err(session),
+                (Err(graph), Err(session)) => Err(anyhow::anyhow!(
+                    "{graph:#}; child session rollback failed: {session:#}"
+                )),
+            }
+        }));
         let mut startup_guard = SpawnStartupGuard {
-            control: Arc::clone(&self.control),
-            runtime_requests: Arc::clone(&self.runtime_requests),
-            thread: thread.clone(),
-            forked_session: Some(forked_session),
+            cleanup: Arc::clone(&unaccepted_cleanup),
             armed: true,
         };
-        if let Err(start_error) = self
-            .launch_turn(self.run_request(thread.clone(), stored, false))
-            .await
-        {
+        let mut run_request = self.run_request(thread.clone(), stored, false);
+        run_request.unaccepted_spawn_cleanup = Some(unaccepted_cleanup);
+        if let Err(start_error) = self.launch_turn(run_request).await {
             return match startup_guard.cleanup() {
                 Ok(()) => Err(start_error.context("start agent runtime")),
                 Err(cleanup_error) => Err(anyhow::anyhow!(
@@ -1195,6 +1206,97 @@ mod tests {
             .is_none());
         assert!(sessions.get_session(&child.session_id).unwrap().is_none());
         assert_eq!(sessions.get_messages("root-session").unwrap().len(), 1);
+
+        let retried = AgentThreadDispatch::spawn_agent(&*dispatch, spawn_request(&memory_dir))
+            .await
+            .unwrap();
+        assert_eq!(retried.thread.canonical_path.as_str(), "/root/worker");
+        while dispatch
+            .runtime_manager
+            .is_running(&retried.thread.thread_id)
+        {
+            tokio::task::yield_now().await;
+        }
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn cancelling_spawn_after_permit_before_turn_started_releases_identity() {
+        let dir = tempfile::tempdir().unwrap();
+        let memory_dir = dir.path().join("memory");
+        let sessions =
+            session::SessionStore::open_sessions_dir(&memory_dir.join("sessions")).unwrap();
+        sessions.ensure_session("root-session", "test").unwrap();
+        let mut dispatch = dispatch(&dir);
+        dispatch.chat_override = Some(scripted_chat("must not survive cancellation"));
+        let hook = super::super::agent_runtime::AckSubscribeHook {
+            entered: Arc::new(tokio::sync::Notify::new()),
+            release: Arc::new(tokio::sync::Notify::new()),
+        };
+        dispatch
+            .runtime_manager
+            .set_after_startup_permit_hook(Some(hook.clone()));
+        let dispatch = Arc::new(dispatch);
+        let spawn = tokio::spawn({
+            let dispatch = Arc::clone(&dispatch);
+            let memory_dir = memory_dir.clone();
+            async move { AgentThreadDispatch::spawn_agent(&*dispatch, spawn_request(&memory_dir)).await }
+        });
+        hook.entered.notified().await;
+        let child = dispatch
+            .control
+            .list_agents(&AgentPath::root(), Some("worker"))
+            .unwrap()
+            .into_iter()
+            .find(|thread| thread.canonical_path.as_str() == "/root/worker")
+            .unwrap();
+
+        spawn.abort();
+        assert!(spawn.await.unwrap_err().is_cancelled());
+        hook.release.notify_one();
+        tokio::time::timeout(Duration::from_secs(2), async {
+            loop {
+                if !dispatch.runtime_manager.is_running(&child.thread_id)
+                    && dispatch.control.identity_count().unwrap() == 0
+                {
+                    break;
+                }
+                tokio::task::yield_now().await;
+            }
+        })
+        .await
+        .unwrap();
+
+        assert!(dispatch
+            .runtime_requests
+            .requests
+            .lock()
+            .unwrap()
+            .is_empty());
+        assert!(dispatch
+            .control
+            .runtime_handle(&child.thread_id)
+            .unwrap()
+            .is_none());
+        assert!(sessions.get_session(&child.session_id).unwrap().is_none());
+        let graph = rusqlite::Connection::open(dir.path().join("subagents-v2.db")).unwrap();
+        assert_eq!(
+            graph
+                .query_row(
+                    "SELECT COUNT(*) FROM agent_threads WHERE canonical_path <> '/root'",
+                    [],
+                    |row| row.get::<_, i64>(0),
+                )
+                .unwrap(),
+            0
+        );
+        assert_eq!(
+            graph
+                .query_row("SELECT COUNT(*) FROM agent_spawn_edges", [], |row| {
+                    row.get::<_, i64>(0)
+                })
+                .unwrap(),
+            0
+        );
 
         let retried = AgentThreadDispatch::spawn_agent(&*dispatch, spawn_request(&memory_dir))
             .await
