@@ -842,7 +842,7 @@ impl AstroService for AstroServiceImpl {
         }
         let (hook_tx, mut hook_rx) = tokio::sync::mpsc::unbounded_channel::<::hooks::UiHookEvent>();
         {
-            let mut agent = session.lock().await;
+            let agent = session.lock().await;
             agent.set_image_gen_targets(image_targets);
             agent.set_chat_credentials(&provider_name, &model, &api_key, &base_url);
             // 五类辅助目标随本轮 ChatRequest 刷新；未下传的任务在 Session 内回退主模型。
@@ -991,7 +991,7 @@ impl AstroService for AstroServiceImpl {
                 });
             }
             {
-                let mut agent = session.lock().await;
+                let agent = session.lock().await;
                 agent.set_chat_targets(chat_targets.clone());
             }
 

@@ -117,6 +117,7 @@ impl AgentLoop {
         let sessions: &dyn ConversationStore = &self.services.sessions;
         let execution = Some(self.execution());
         let hook_bus = Some(self.hook_bus());
+        let session_configuration = self.session_configuration().clone();
         let mut ctx = ToolContext {
             memory: &self.memory,
             sessions,
@@ -124,17 +125,17 @@ impl AgentLoop {
             workspace_dir,
             project_root: step_context
                 .and_then(|step_context| step_context.turn.project_root().map(ToOwned::to_owned))
-                .or_else(|| self.project_root.clone()),
-            image_gen_targets: &self.model_ctx.image_gen_targets,
+                .or(session_configuration.project_root),
+            image_gen_targets: &session_configuration.model_ctx.image_gen_targets,
             session_id,
             turn_id,
-            credentials: &self.model_ctx.credentials,
-            chat_targets: &self.model_ctx.chat_targets,
+            credentials: &session_configuration.model_ctx.credentials,
+            chat_targets: &session_configuration.model_ctx.chat_targets,
             execution,
             permission_profile: step_context
                 .and_then(|step_context| step_context.turn.permission_profile().map(str::to_string))
-                .or_else(|| self.permission_profile.clone()),
-            skill_config_overrides: &self.skill_config_overrides,
+                .or(session_configuration.permission_profile),
+            skill_config_overrides: &session_configuration.skill_config_overrides,
             hook_bus,
             workspace_write_grant,
             network_grant,

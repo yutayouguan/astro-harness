@@ -163,7 +163,7 @@ fn build_agent(
     if let Some(effort) = request.model_reasoning_effort.as_deref() {
         config.additional_params = serde_json::json!({ "reasoning_effort": effort });
     }
-    let mut session = Session::with_session_id_for_agent(
+    let session = Session::with_session_id_for_agent(
         config,
         thread_id.to_string(),
         &request.parent_agent_id,

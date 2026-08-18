@@ -697,7 +697,7 @@ async fn run_agent_job(
         config.soul = soul;
     }
 
-    let mut session = Session::with_session_id_for_agent(config, sid, &agent_id)?;
+    let session = Session::with_session_id_for_agent(config, sid, &agent_id)?;
     session.set_chat_credentials(
         &creds.provider,
         &creds.model,

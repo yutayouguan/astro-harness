@@ -279,6 +279,7 @@ impl Session {
             history.push(Message::user(&format!("[astro:hook-context]\n{ctx}")));
         }
         let tool_specs = self.schemas_for_api().await;
+        let session_configuration = self.session_configuration().clone();
         let turn_context = {
             let state = self.state.lock().await;
             state.current_turn_context.clone().unwrap_or_else(|| {
@@ -290,8 +291,8 @@ impl Session {
                         .unwrap_or_else(|| uuid::Uuid::new_v4().to_string()),
                     state.turn.current_turn(),
                     state.interaction_mode,
-                    self.permission_profile.clone(),
-                    self.project_root.clone(),
+                    session_configuration.permission_profile.clone(),
+                    session_configuration.project_root.clone(),
                 ))
             })
         };

@@ -43,7 +43,8 @@ impl AgentLoop {
         };
         let (project_memory, user_profile, daily) = self.memory().prompt_snapshot_with_daily();
         let skill_pairs = if self.tool_registry().is_toolset_enabled("skills") {
-            skills::list_enabled_for_prompt_with_config(&self.skill_config_overrides)
+            let skill_config_overrides = self.skill_config_overrides();
+            skills::list_enabled_for_prompt_with_config(&skill_config_overrides)
         } else {
             Vec::new()
         };

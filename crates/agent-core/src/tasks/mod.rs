@@ -206,7 +206,7 @@ impl Session {
         let cancellation_token = CancellationToken::new();
         let done = Arc::new(Notify::new());
         {
-            let mut sess = session.lock().await;
+            let sess = session.lock().await;
             sess.cancel_signal().reset();
             sess.bind_turn_context(Arc::clone(&turn_context)).await;
             let mut active_turn = sess.active_turn.lock().await;

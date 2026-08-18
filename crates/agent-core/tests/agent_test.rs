@@ -131,7 +131,7 @@ async fn test_memory_tools_registered() {
 #[tokio::test]
 async fn test_set_model_agno_style_entry() {
     let dir = TempDir::new().unwrap();
-    let mut agent = AgentLoop::new(test_config(&dir)).unwrap();
+    let agent = AgentLoop::new(test_config(&dir)).unwrap();
     agent.set_chat_credentials("openai", "gpt-old", "sk-test", "https://api.openai.com/v1");
     agent.set_chat_targets(vec![types::ChatTarget {
         provider_id: "openai".into(),
@@ -170,7 +170,7 @@ async fn test_set_model_agno_style_entry() {
 #[tokio::test]
 async fn test_set_fallback_models_keeps_primary() {
     let dir = TempDir::new().unwrap();
-    let mut agent = AgentLoop::new(test_config(&dir)).unwrap();
+    let agent = AgentLoop::new(test_config(&dir)).unwrap();
     agent.set_chat_targets(vec![types::ChatTarget {
         provider_id: "claude".into(),
         backend_id: "claude".into(),

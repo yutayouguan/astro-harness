@@ -1,6 +1,6 @@
 # Agent 生命周期详细设计
 
-> 版本：v2.13
+> 版本：v2.14
 > 日期：2026-08-18
 > 状态：实施基线  
 > 上游参考：[OpenAI Codex](https://github.com/openai/codex) `632e35ce8d5dec43b75dbf99f9e6fa52bed47c3d`  
@@ -523,6 +523,8 @@ schema 和 RPC 字段改名都必须提供 migration 或 serde alias。
     API 收窄为 `&Session`。
   - [x] 将 `MemoryManager` 内锁化，并把完整工具调用链收窄为 `&Session`；memory guard 不跨
     任意工具、MCP、SubAgent 或 provider `await`。
+  - [x] 引入 Codex 同名 `SessionConfiguration`，把模型、凭证、权限、项目根、hooks、MCP 与
+    skill override 内锁化；所有运行时 setter 均可通过 `Arc<Session>` 调用。
   - [ ] 将 `SessionTask`、streaming、background 和 server 签名迁移为 `Arc<Session>`。
 
 v2.3 落地说明：foreground、background、Cron 与 SubAgent 不再先调用
@@ -616,6 +618,17 @@ v2.13 MemoryManager 内锁化批次：`Session.memory` 改由 `RwLock<MemoryMana
 阻塞记忆读取。外层 `Arc<Mutex<Session>>` 的真实可变状态阻塞已消除；下一批迁移 handle 前仍须
 明确 `ToolContext.sessions` 与 built-in tool future 的 non-Send 执行契约，避免把 current-thread
 运行时约束误改成跨线程 `tokio::spawn`。
+
+v2.14 SessionConfiguration 内锁化批次：对照 Codex 的 `SessionConfiguration` 命名，将会话期
+可更新的 `ModelContext`、采样参数、hook bus、project root、permission profile、MCP overlay 与
+skill override 收口到同步 `RwLock<SessionConfiguration>`。setter 统一收窄为 `&Session`，读取端
+只返回拥有所有权的快照，`session_runtime_settings_are_mutable_through_arc` 和
+`session_runtime_settings_return_owned_snapshots` 分别固定 `Arc<Session>` 可调用性与快照隔离。
+同步锁只用于复制轻量配置，不跨任何 provider、MCP、工具或 Tokio `await`。同时确认 built-in
+tool future 保持 `!Send` 是当前线程工具执行器的明确契约；生产 `SessionTask` 通过同步工具桥接
+进入独立 current-thread worker，任务 future 仍满足 `Send`，无需为迁移共享会话句柄而扩大工具
+线程安全边界。下一批可直接将 SessionTask、streaming、background 与 server 的唯一句柄替换为
+`Arc<Session>`。
 
 ### Phase C：工具运行时
 

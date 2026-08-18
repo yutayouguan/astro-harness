@@ -373,8 +373,7 @@ async fn audit_hardline_terminal_denial(
         let settings = memory::load_permission_settings(agent.memory_dir());
         let profile_id = agent
             .permission_profile()
-            .unwrap_or(&settings.selection.profile_id)
-            .to_string();
+            .unwrap_or_else(|| settings.selection.profile_id.clone());
         (
             agent.memory_dir().to_path_buf(),
             settings,
@@ -433,8 +432,7 @@ async fn preflight_read_only_write(
         let settings = memory::load_permission_settings(agent.memory_dir());
         let profile_id = agent
             .permission_profile()
-            .unwrap_or(&settings.selection.profile_id)
-            .to_string();
+            .unwrap_or_else(|| settings.selection.profile_id.clone());
         if profile_id != types::READ_ONLY_PROFILE {
             return Some(PermissionPreflight::NotRequired);
         }
@@ -516,8 +514,7 @@ async fn preflight_mcp_tool_approval(
         let settings = memory::load_permission_settings(agent.memory_dir());
         let profile_id = agent
             .permission_profile()
-            .unwrap_or(&settings.selection.profile_id)
-            .to_string();
+            .unwrap_or_else(|| settings.selection.profile_id.clone());
         (
             agent.session_id().to_string(),
             agent.current_turn_id().await,
@@ -591,8 +588,7 @@ async fn preflight_in_process_network(
         let settings = memory::load_permission_settings(agent.memory_dir());
         let profile_id = agent
             .permission_profile()
-            .unwrap_or(&settings.selection.profile_id)
-            .to_string();
+            .unwrap_or_else(|| settings.selection.profile_id.clone());
         (
             agent.session_id().to_string(),
             agent.current_turn_id().await,
@@ -798,8 +794,7 @@ async fn execute_tools_serial_inner(
                             let permissions = memory::config::load_permission_settings(&base);
                             let active_profile_id = agent
                                 .permission_profile()
-                                .unwrap_or(&permissions.selection.profile_id)
-                                .to_string();
+                                .unwrap_or_else(|| permissions.selection.profile_id.clone());
                             agent.fire_hook(
                                 hooks::PERMISSION_REQUEST,
                                 hooks::HookPayload {
@@ -1161,7 +1156,7 @@ pub(crate) async fn execute_tools_concurrent(
             chat_targets: agent.chat_targets().to_vec(),
             image_gen_targets: agent.image_gen_targets().clone(),
             execution: agent.execution(),
-            skill_config_overrides: agent.skill_config_overrides.clone(),
+            skill_config_overrides: agent.skill_config_overrides(),
             hook_bus: Some(agent.hook_bus()),
         }
     };

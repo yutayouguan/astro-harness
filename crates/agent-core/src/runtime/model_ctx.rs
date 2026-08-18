@@ -10,6 +10,7 @@ use types::{AuxiliaryTask, ChatTarget, ModelSpec, MAX_CHAT_FALLBACKS};
 use types::{ImageGenTargets, ModelCredentials};
 
 /// LLM 模型配置、凭证与 fallback 链。
+#[derive(Clone)]
 pub struct ModelContext {
     /// 当前聊天会话的 LLM 凭证（provider / model / api_key / base_url）。
     pub(crate) credentials: ModelCredentials,
