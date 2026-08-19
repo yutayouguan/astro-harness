@@ -897,13 +897,13 @@ cargo test -p agent --test streaming_test budget_summary_active_stream_cancels_w
 
 - [x] **Step 1: Write failing AgentEnd failure-path and duplicate-reset tests**
 
-Extend the existing provider-error streaming test by registering AgentEnd and asserting one call after the stream ends:
+Extend the existing provider-error streaming test by capturing AgentEnd errors and asserting one call with the original provider failure after the stream ends:
 
 ```rust
-let agent_end_hits = Arc::new(AtomicUsize::new(0));
-let agent_end_counter = Arc::clone(&agent_end_hits);
-agent.hook_bus().register(::hooks::AGENT_END, move |_| {
-    agent_end_counter.fetch_add(1, Ordering::SeqCst);
+let agent_end_errors = Arc::new(std::sync::Mutex::new(Vec::new()));
+let errors = Arc::clone(&agent_end_errors);
+agent.hook_bus().register(::hooks::AGENT_END, move |input| {
+    errors.lock().unwrap().push(input.error.clone());
     ::hooks::HookOutcome::Continue
 });
 ```
@@ -911,8 +911,14 @@ agent.hook_bus().register(::hooks::AGENT_END, move |_| {
 After draining the stream:
 
 ```rust
-assert_eq!(agent_end_hits.load(Ordering::SeqCst), 1);
+let errors = agent_end_errors.lock().unwrap();
+assert_eq!(errors.len(), 1);
+assert!(errors[0]
+    .as_deref()
+    .is_some_and(|error| error.contains("boom")));
 ```
+
+Reuse `budget_summary_provider_failure_leaves_no_synthetic_user` to assert that a non-first-round summary setup/provider failure also produces exactly one AgentEnd whose error contains `summary provider failure`. Keep success, cancellation, and early receiver-drop coverage explicit: success/cancel/receiver drop each fire AgentEnd exactly once with `error=None`. Preparation failure remains a separate assertion that AgentEnd contains the `turn budget exhausted` error.
 
 In `new_chat_preserves_hooks_while_release_session_skips_them`, pre-create a Session and bind the shared runtime before sending the new-chat control request:
 
@@ -931,16 +937,17 @@ assert_eq!(finalize_hits.load(Ordering::SeqCst), 1);
 
 This fails on the current post-release direct Plugin bus duplicate.
 
-- [x] **Step 2: Run both tests and verify RED**
+- [x] **Step 2: Run focused tests and verify RED**
 
 Run:
 
 ```bash
 cargo test -p agent error_has_single_error_terminal_before_done -- --exact
+cargo test -p agent budget_summary_provider_failure_leaves_no_synthetic_user -- --exact
 cargo test -p server grpc::astro_service::tests::new_chat_preserves_hooks_while_release_session_skips_them -- --exact
 ```
 
-Expected: AgentEnd is absent on the early error return, and the pre-created new-chat Session causes reset/finalize to be counted twice.
+Expected: runtime provider and summary failures currently emit their stream terminal sequence but lose the error before AgentEnd, while the pre-created new-chat Session causes reset/finalize to be counted twice.
 
 - [x] **Step 3: Finalize AgentEnd in RegularTask**
 
@@ -952,10 +959,31 @@ let args = self
     .with_session_and_turn(Arc::clone(&sess), Arc::clone(&ctx));
 ```
 
-Wrap preparation and `run_turn` in a result-producing async block, then dispatch AgentEnd unconditionally before returning that result:
+Make `run_turn` return a crate-private typed terminal classification after preparation succeeds:
 
 ```rust
-let result: SessionTaskResult = async {
+pub(crate) enum RunTurnOutcome {
+    Success,
+    Failed(String),
+    Interrupted,
+}
+
+impl RunTurnOutcome {
+    pub(crate) fn error(&self) -> Option<&str> {
+        match self {
+            Self::Failed(error) => Some(error),
+            Self::Success | Self::Interrupted => None,
+        }
+    }
+}
+```
+
+Every runtime branch that already calls `finish_error` returns `RunTurnOutcome::Failed` with that same error string. Success returns `Success`; cancellation, summary abort, and receiver drop return the non-error `Interrupted` outcome. Runtime `Failed` must not become a `SessionTask Err`, because its Error/RunFinished/Done sequence was already emitted and returning an error would create a second terminal sequence.
+
+Wrap preparation and `run_turn` in a result-producing async block. Preparation errors remain `SessionTask Err`; a completed runtime outcome always maps to `Ok(None)` and is used only to populate AgentEnd.error. Then dispatch AgentEnd unconditionally before returning the SessionTask result:
+
+```rust
+let runtime_result: anyhow::Result<RunTurnOutcome> = async {
     let system_prompt = match args.prepared_system_prompt().map(str::to_owned) {
         Some(system_prompt) => {
             anyhow::ensure!(
@@ -981,10 +1009,17 @@ let result: SessionTaskResult = async {
             }
         }
     };
-    run_turn(args.with_system_prompt(system_prompt), cancellation_token).await;
-    Ok(None)
+    Ok(run_turn(args.with_system_prompt(system_prompt), cancellation_token).await)
 }
 .await;
+
+let (result, error): (SessionTaskResult, Option<String>) = match runtime_result {
+    Ok(outcome) => (Ok(None), outcome.error().map(str::to_owned)),
+    Err(error) => {
+        let hook_error = error.to_string();
+        (Err(error), Some(hook_error))
+    }
+};
 
 let turn = sess.session_turn().await;
 let _ = sess.fire_hook(
@@ -992,7 +1027,7 @@ let _ = sess.fire_hook(
     ::hooks::HookPayload {
         turn_id: Some(ctx.sub_id().to_string()),
         turn: Some(turn),
-        error: result.as_ref().err().map(ToString::to_string),
+        error,
         detail: format!("turn={turn}"),
         ..Default::default()
     },
@@ -1023,12 +1058,18 @@ Run:
 
 ```bash
 cargo test -p agent error_has_single_error_terminal_before_done -- --exact
+cargo test -p agent budget_summary_provider_failure_leaves_no_synthetic_user -- --exact
+cargo test -p agent agent_end_fires_once_on_success -- --exact
+cargo test -p agent agent_end_fires_once_when_turn_preparation_fails -- --exact
+cargo test -p agent agent_end_fires_once_when_stream_receiver_is_dropped -- --exact
+cargo test -p agent cancellation_has_single_interrupt_terminal_before_done -- --exact
 cargo test -p server grpc::astro_service::tests::new_chat_preserves_hooks_while_release_session_skips_them -- --exact
+cargo test -p agent --test streaming_test
 cargo test -p agent --all-targets
 cargo test -p server --all-targets
 ```
 
-Expected: AgentEnd fires once on error, new-chat reset/finalize fire once, and both crates pass all targets.
+Expected: provider and summary failures preserve their original message in exactly one AgentEnd; success, cancel, and receiver drop fire exactly one AgentEnd with no error; preparation failure remains a SessionTask error; stream terminal counts remain unchanged; new-chat reset/finalize fire once; and both crates pass all targets.
 
 - [x] **Step 6: Commit Task 5**
 
