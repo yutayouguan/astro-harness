@@ -78,36 +78,57 @@ pub async fn active_root_runtime_material(
     memory_dir: &Path,
     root_session_id: &str,
 ) -> anyhow::Result<Option<ParentRuntimeMaterial>> {
+    active_root_runtime_material_with_upgrade_hook(memory_dir, root_session_id, || {}).await
+}
+
+async fn active_root_runtime_material_with_upgrade_hook(
+    memory_dir: &Path,
+    root_session_id: &str,
+    mut after_upgrade: impl FnMut(),
+) -> anyhow::Result<Option<ParentRuntimeMaterial>> {
     let key = (memory_dir.to_path_buf(), root_session_id.to_string());
-    let session = {
-        let mut sessions = active_root_sessions()
+    loop {
+        let session = {
+            let mut sessions = active_root_sessions()
+                .sessions
+                .lock()
+                .map_err(|_| anyhow::anyhow!("active root session registry mutex is poisoned"))?;
+            let Some(session) = sessions.get(&key).and_then(Weak::upgrade) else {
+                sessions.remove(&key);
+                return Ok(None);
+            };
+            session
+        };
+        after_upgrade();
+        let locked = session.lock().await;
+        let remains_current = active_root_sessions()
             .sessions
             .lock()
-            .map_err(|_| anyhow::anyhow!("active root session registry mutex is poisoned"))?;
-        let Some(session) = sessions.get(&key).and_then(Weak::upgrade) else {
-            sessions.remove(&key);
-            return Ok(None);
-        };
-        session
-    };
-    let session = session.lock().await;
-    let parent_model = session
-        .chat_targets()
-        .first()
-        .map(|target| format!("{}:{}", target.backend_id.trim(), target.model.trim()));
-    Ok(Some(ParentRuntimeMaterial {
-        memory_dir: session.memory_dir().to_path_buf(),
-        parent_agent_id: session.agent_id().to_string(),
-        parent_model,
-        parent_sandbox_mode: session
-            .permission_profile()
-            .unwrap_or(types::WORKSPACE_PROFILE)
-            .to_string(),
-        inherited_skill_config: session.skill_config_overrides().to_vec(),
-        chat_targets: session.chat_targets().to_vec(),
-        project_root: session.project_root().cloned(),
-        hook_bus: Some(session.hook_bus()),
-    }))
+            .map_err(|_| anyhow::anyhow!("active root session registry mutex is poisoned"))?
+            .get(&key)
+            .is_some_and(|registered| Weak::ptr_eq(registered, &Arc::downgrade(&session)));
+        if !remains_current {
+            drop(locked);
+            continue;
+        }
+        let parent_model = locked
+            .chat_targets()
+            .first()
+            .map(|target| format!("{}:{}", target.backend_id.trim(), target.model.trim()));
+        return Ok(Some(ParentRuntimeMaterial {
+            memory_dir: locked.memory_dir().to_path_buf(),
+            parent_agent_id: locked.agent_id().to_string(),
+            parent_model,
+            parent_sandbox_mode: locked
+                .permission_profile()
+                .unwrap_or(types::WORKSPACE_PROFILE)
+                .to_string(),
+            inherited_skill_config: locked.skill_config_overrides().to_vec(),
+            chat_targets: locked.chat_targets().to_vec(),
+            project_root: locked.project_root().cloned(),
+            hook_bus: Some(locked.hook_bus()),
+        }));
+    }
 }
 
 #[derive(Clone)]
@@ -1832,6 +1853,57 @@ mod tests {
                 .count(),
             1
         );
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn live_root_lookup_revalidates_arc_identity_after_replacement() {
+        let dir = tempfile::tempdir().unwrap();
+        let memory_dir = dir.path().join("memory");
+        let make_session = |api_key: &str, permission: &str| {
+            let mut session = Session::with_session_id(
+                Config::with_defaults(memory_dir.clone()),
+                "root-session".into(),
+            )
+            .unwrap();
+            session.set_chat_targets(vec![types::ChatTarget {
+                provider_id: "openai".into(),
+                backend_id: "openai".into(),
+                model: "test".into(),
+                api_key: api_key.into(),
+                base_url: "https://openai.invalid".into(),
+            }]);
+            session.set_permission_profile(Some(permission.into()));
+            Arc::new(tokio::sync::Mutex::new(session))
+        };
+        let old = make_session("old-key-must-not-win", types::DANGER_FULL_ACCESS_PROFILE);
+        let replacement = make_session("replacement-key", types::READ_ONLY_PROFILE);
+        register_active_root_session(&memory_dir, "root-session", &old).unwrap();
+
+        let old_guard = old.lock().await;
+        let lookup_memory_dir = memory_dir.clone();
+        let (upgraded_tx, upgraded_rx) = tokio::sync::oneshot::channel();
+        let mut upgraded_tx = Some(upgraded_tx);
+        let lookup = tokio::spawn(async move {
+            active_root_runtime_material_with_upgrade_hook(
+                &lookup_memory_dir,
+                "root-session",
+                || {
+                    if let Some(upgraded_tx) = upgraded_tx.take() {
+                        upgraded_tx.send(()).unwrap();
+                    }
+                },
+            )
+            .await
+            .unwrap()
+            .unwrap()
+        });
+        upgraded_rx.await.unwrap();
+        register_active_root_session(&memory_dir, "root-session", &replacement).unwrap();
+        drop(old_guard);
+
+        let material = lookup.await.unwrap();
+        assert_eq!(material.chat_targets[0].api_key, "replacement-key");
+        assert_eq!(material.parent_sandbox_mode, types::READ_ONLY_PROFILE);
     }
 
     #[tokio::test]
@@ -4056,6 +4128,98 @@ mod tests {
             .lock()
             .unwrap()
             .is_empty());
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn cold_followup_recovers_trusted_descriptor_from_early_v3_schema() {
+        let dir = tempfile::tempdir().unwrap();
+        let memory_dir = dir.path().join("memory");
+        let sessions =
+            session::SessionStore::open_sessions_dir(&memory_dir.join("sessions")).unwrap();
+        sessions.ensure_session("root-session", "test").unwrap();
+        let mut initial = dispatch(&dir);
+        initial.chat_override = Some(scripted_chat("initial"));
+        let mut spawn = spawn_request(&memory_dir);
+        spawn.request.model = Some("openai:pinned-v3-model".into());
+        let mut runtime_material = spawn.runtime.clone();
+        runtime_material.chat_targets[0].api_key = "current-key-after-v3-upgrade".into();
+        let child = AgentThreadDispatch::spawn_agent(&initial, spawn)
+            .await
+            .unwrap()
+            .thread;
+        while initial.runtime_manager.is_running(&child.thread_id) {
+            tokio::task::yield_now().await;
+        }
+        drop(initial);
+
+        let graph_path = dir.path().join("subagents-v2.db");
+        let graph = rusqlite::Connection::open(&graph_path).unwrap();
+        graph
+            .execute_batch(
+                "PRAGMA foreign_keys=OFF;
+                 ALTER TABLE agent_runtime_descriptors RENAME TO descriptors_v4;
+                 CREATE TABLE agent_runtime_descriptors (
+                     thread_id TEXT PRIMARY KEY,
+                     model TEXT,
+                     reasoning_effort TEXT,
+                     FOREIGN KEY(thread_id) REFERENCES agent_threads(thread_id) ON DELETE CASCADE
+                 );
+                 INSERT INTO agent_runtime_descriptors (thread_id, model, reasoning_effort)
+                     SELECT thread_id, model, reasoning_effort FROM descriptors_v4;
+                 DROP TABLE descriptors_v4;
+                 UPDATE schema_meta SET value = '3' WHERE key = 'schema_version';
+                 PRAGMA foreign_keys=ON;",
+            )
+            .unwrap();
+        drop(graph);
+
+        let control = AgentControl::open(
+            "root-session".into(),
+            AgentGraphStore::open(graph_path).unwrap(),
+            Limits {
+                max_threads: 8,
+                max_depth: 4,
+                max_running: 2,
+            },
+        )
+        .unwrap();
+        let mut recovered = DefaultAgentThreadDispatch::for_test(
+            control,
+            AgentPath::root(),
+            "root-session".into(),
+            Arc::new(AgentRuntimeManager::default()),
+        );
+        recovered.chat_override = Some(scripted_chat("recovered"));
+
+        AgentThreadDispatch::followup_task(
+            &recovered,
+            FollowupAgentDispatchRequest {
+                request: MessageAgentV2Request {
+                    target: child.canonical_path.to_string(),
+                    message: "resume old v3 safely".into(),
+                },
+                runtime: Some(runtime_material),
+            },
+        )
+        .await
+        .unwrap();
+        while recovered.runtime_manager.is_running(&child.thread_id) {
+            tokio::task::yield_now().await;
+        }
+
+        let stored = recovered
+            .runtime_requests
+            .get(&child.thread_id)
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            stored.runtime.model_request.model.as_deref(),
+            Some("openai:pinned-v3-model")
+        );
+        assert_eq!(
+            stored.runtime.chat_targets[0].api_key,
+            "current-key-after-v3-upgrade"
+        );
     }
 
     #[tokio::test(flavor = "current_thread")]
