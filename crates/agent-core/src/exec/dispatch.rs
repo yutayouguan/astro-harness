@@ -374,15 +374,61 @@ impl DefaultAgentThreadDispatch {
         );
         let catalog =
             subagents::load_agent_catalog(&material.memory_dir, material.project_root.as_deref());
-        let resolved = subagents::resolve_agent(
+        let mut recovered_material = material.clone();
+        let mut ancestors = Vec::new();
+        let mut cursor = target.canonical_path.parent();
+        while let Some(path) = cursor {
+            if path == AgentPath::root() {
+                break;
+            }
+            cursor = path.parent();
+            ancestors.push(path);
+        }
+        ancestors.reverse();
+        for path in ancestors {
+            let ancestor = self.control.resolve_desktop_target(path.as_str())?;
+            let ancestor_descriptor = self
+                .control
+                .runtime_descriptor(&ancestor.thread_id)?
+                .with_context(|| {
+                    format!("runtime descriptor is unavailable for ancestor {path}")
+                })?;
+            let ancestor_resolved = subagents::resolve_agent(
+                &catalog,
+                &settings,
+                &ancestor.agent_type,
+                ancestor_descriptor.model.as_deref(),
+                ancestor_descriptor.reasoning_effort.as_deref(),
+                recovered_material.parent_model.as_deref(),
+                Some(&recovered_material.parent_sandbox_mode),
+            )?;
+            for overlay in ancestor_resolved.definition.skills.config {
+                recovered_material
+                    .inherited_skill_config
+                    .retain(|(path, _)| path != &overlay.path);
+                recovered_material
+                    .inherited_skill_config
+                    .push((overlay.path, overlay.enabled));
+            }
+            if let Some(sandbox_mode) = ancestor_resolved.sandbox_mode {
+                recovered_material.parent_sandbox_mode = sandbox_mode;
+            }
+        }
+        let mut resolved = subagents::resolve_agent(
             &catalog,
             &settings,
             &target.agent_type,
             descriptor.model.as_deref(),
             descriptor.reasoning_effort.as_deref(),
-            material.parent_model.as_deref(),
-            Some(&material.parent_sandbox_mode),
+            recovered_material.parent_model.as_deref(),
+            Some(&recovered_material.parent_sandbox_mode),
         )?;
+        // Current catalog content supplies behavior/config overlays, but a
+        // restart must not silently switch the model contract accepted at
+        // spawn time. The durable descriptor is authoritative for these two
+        // non-secret choices.
+        resolved.model = descriptor.model.clone();
+        resolved.model_reasoning_effort = descriptor.reasoning_effort.clone();
         let parent_path = target
             .canonical_path
             .parent()
@@ -401,7 +447,7 @@ impl DefaultAgentThreadDispatch {
                     reasoning_effort: descriptor.reasoning_effort,
                     fork_turns: None,
                 },
-                runtime: material.clone(),
+                runtime: recovered_material,
             },
             resolved,
             &parent_path,
@@ -3555,13 +3601,22 @@ mod tests {
     async fn cold_followup_recovers_exact_model_effort_and_current_credentials() {
         let dir = tempfile::tempdir().unwrap();
         let memory_dir = dir.path().join("memory");
+        let project = dir.path().join("project");
+        std::fs::create_dir_all(project.join(".codex/agents")).unwrap();
+        let definition = project.join(".codex/agents/reviewer.toml");
+        std::fs::write(
+            &definition,
+            "name = \"reviewer\"\ndescription = \"review\"\ndeveloper_instructions = \"review\"\nmodel = \"openai:original-model\"\n",
+        )
+        .unwrap();
         let sessions =
             session::SessionStore::open_sessions_dir(&memory_dir.join("sessions")).unwrap();
         sessions.ensure_session("root-session", "test").unwrap();
         let mut initial = dispatch(&dir);
         initial.chat_override = Some(scripted_chat("initial"));
         let mut spawn = spawn_request(&memory_dir);
-        spawn.request.model = Some("openai:original-model".into());
+        spawn.request.agent_type = Some("reviewer".into());
+        spawn.runtime.project_root = Some(project);
         spawn.request.reasoning_effort = Some("max".into());
         let mut runtime_material = spawn.runtime.clone();
         runtime_material.chat_targets[0].api_key = "restarted-key".into();
@@ -3582,6 +3637,11 @@ mod tests {
                 .as_deref(),
             Some("openai:original-model")
         );
+        std::fs::write(
+            &definition,
+            "name = \"reviewer\"\ndescription = \"review\"\ndeveloper_instructions = \"review changed\"\nmodel = \"openai:changed-model\"\n",
+        )
+        .unwrap();
 
         let control = AgentControl::open(
             "root-session".into(),
@@ -3644,6 +3704,118 @@ mod tests {
                 .count(),
             1
         );
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn cold_nested_followup_rebuilds_ancestor_skill_inheritance() {
+        let dir = tempfile::tempdir().unwrap();
+        let memory_dir = dir.path().join("memory");
+        let project = dir.path().join("project");
+        std::fs::create_dir_all(project.join(".codex/agents")).unwrap();
+        std::fs::write(
+            project.join(".codex/agents/parent.toml"),
+            "name = \"parent\"\ndescription = \"parent\"\ndeveloper_instructions = \"parent\"\n[[skills.config]]\npath = \"skills/parent/SKILL.md\"\nenabled = true\n",
+        )
+        .unwrap();
+        std::fs::write(
+            project.join(".codex/agents/leaf.toml"),
+            "name = \"leaf\"\ndescription = \"leaf\"\ndeveloper_instructions = \"leaf\"\n[[skills.config]]\npath = \"skills/leaf/SKILL.md\"\nenabled = true\n",
+        )
+        .unwrap();
+        let sessions =
+            session::SessionStore::open_sessions_dir(&memory_dir.join("sessions")).unwrap();
+        sessions.ensure_session("root-session", "test").unwrap();
+        let mut initial = dispatch(&dir);
+        initial.chat_override = Some(scripted_chat("done"));
+        let mut parent_request = spawn_request(&memory_dir);
+        parent_request.request.task_name = "parent".into();
+        parent_request.request.agent_type = Some("parent".into());
+        parent_request.runtime.project_root = Some(project.clone());
+        let root_material = parent_request.runtime.clone();
+        let parent = AgentThreadDispatch::spawn_agent(&initial, parent_request)
+            .await
+            .unwrap()
+            .thread;
+        while initial.runtime_manager.is_running(&parent.thread_id) {
+            tokio::task::yield_now().await;
+        }
+        let inherited = initial
+            .runtime_requests
+            .get(&parent.thread_id)
+            .unwrap()
+            .unwrap()
+            .runtime
+            .skills_config
+            .iter()
+            .map(|entry| (entry.path.clone(), entry.enabled))
+            .collect();
+        let child_dispatch = DefaultAgentThreadDispatch {
+            control: Arc::clone(&initial.control),
+            current_path: parent.canonical_path.clone(),
+            current_thread_id: parent.thread_id.clone(),
+            runtime_manager: Arc::clone(&initial.runtime_manager),
+            runtime_requests: Arc::clone(&initial.runtime_requests),
+            chat_override: initial.chat_override.clone(),
+            before_followup_atomic_hook: None,
+        };
+        let mut leaf_request = spawn_request(&memory_dir);
+        leaf_request.request.task_name = "leaf".into();
+        leaf_request.request.agent_type = Some("leaf".into());
+        leaf_request.runtime.project_root = Some(project);
+        leaf_request.runtime.inherited_skill_config = inherited;
+        let leaf = AgentThreadDispatch::spawn_agent(&child_dispatch, leaf_request)
+            .await
+            .unwrap()
+            .thread;
+        while initial.runtime_manager.is_running(&leaf.thread_id) {
+            tokio::task::yield_now().await;
+        }
+
+        let control = AgentControl::open(
+            "root-session".into(),
+            AgentGraphStore::open(dir.path().join("subagents-v2.db")).unwrap(),
+            Limits {
+                max_threads: 8,
+                max_depth: 4,
+                max_running: 2,
+            },
+        )
+        .unwrap();
+        let mut recovered = DefaultAgentThreadDispatch::for_test(
+            control,
+            AgentPath::root(),
+            "root-session".into(),
+            Arc::new(AgentRuntimeManager::default()),
+        );
+        recovered.chat_override = Some(scripted_chat("recovered"));
+        AgentThreadDispatch::followup_task_with_runtime(
+            &recovered,
+            FollowupAgentDispatchRequest {
+                request: MessageAgentV2Request {
+                    target: leaf.canonical_path.to_string(),
+                    message: "continue".into(),
+                },
+                runtime: Some(root_material),
+            },
+        )
+        .await
+        .unwrap();
+        while recovered.runtime_manager.is_running(&leaf.thread_id) {
+            tokio::task::yield_now().await;
+        }
+        let stored = recovered
+            .runtime_requests
+            .get(&leaf.thread_id)
+            .unwrap()
+            .unwrap();
+        let paths = stored
+            .runtime
+            .skills_config
+            .iter()
+            .map(|entry| entry.path.to_string_lossy().to_string())
+            .collect::<Vec<_>>();
+        assert!(paths.iter().any(|path| path.contains("skills/parent")));
+        assert!(paths.iter().any(|path| path.contains("skills/leaf")));
     }
 
     #[tokio::test(flavor = "current_thread")]
