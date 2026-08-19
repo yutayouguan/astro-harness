@@ -108,9 +108,11 @@ impl ActivityBus {
         &self,
         cursor: ActivityCursor,
         wait_timeout: Duration,
+        caller_thread_id: &str,
+        caller_is_root: bool,
     ) -> Option<AgentActivity> {
         let mut rx = self.tx.subscribe();
-        if let Some(activity) = self.first_model_after(cursor) {
+        if let Some(activity) = self.first_model_after(cursor, caller_thread_id, caller_is_root) {
             return Some(activity);
         }
 
@@ -119,7 +121,9 @@ impl ActivityBus {
                 if rx.changed().await.is_err() {
                     return None;
                 }
-                if let Some(activity) = self.first_model_after(cursor) {
+                if let Some(activity) =
+                    self.first_model_after(cursor, caller_thread_id, caller_is_root)
+                {
                     return Some(activity);
                 }
             }
@@ -204,27 +208,32 @@ impl ActivityBus {
             .cloned()
     }
 
-    fn first_model_after(&self, cursor: ActivityCursor) -> Option<AgentActivity> {
+    fn first_model_after(
+        &self,
+        cursor: ActivityCursor,
+        caller_thread_id: &str,
+        caller_is_root: bool,
+    ) -> Option<AgentActivity> {
         let events = self.lock_events();
-        let mut first = None;
         for activity in events.iter().filter(|event| event.sequence > cursor.0) {
-            if activity.kind == AgentActivityKind::MainSteer {
+            if caller_is_root && activity.kind == AgentActivityKind::MainSteer {
                 return Some(activity.clone());
             }
             let visible = match (&activity.kind, activity.thread.as_ref()) {
-                (AgentActivityKind::Mailbox { .. }, _)
-                | (AgentActivityKind::EdgeClosed { .. }, _) => true,
-                (AgentActivityKind::StatusChanged { .. }, Some(thread)) => !matches!(
-                    thread.status,
-                    crate::AgentStatusV2::PendingInit | crate::AgentStatusV2::Running
-                ),
+                (AgentActivityKind::Mailbox { thread_id }, _) => thread_id == caller_thread_id,
+                (AgentActivityKind::StatusChanged { .. }, Some(thread)) => {
+                    !matches!(
+                        thread.status,
+                        crate::AgentStatusV2::PendingInit | crate::AgentStatusV2::Running
+                    ) && thread.parent_thread_id.as_deref() == Some(caller_thread_id)
+                }
                 _ => false,
             };
-            if visible && first.is_none() {
-                first = Some(activity.clone());
+            if visible {
+                return Some(activity.clone());
             }
         }
-        first
+        None
     }
 
     fn observation_after(&self, cursor: ActivityCursor) -> Option<ActivityObservation> {

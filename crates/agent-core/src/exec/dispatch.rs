@@ -837,7 +837,12 @@ impl AgentThreadDispatch for DefaultAgentThreadDispatch {
         let mut cursor = self.wait_cursor.lock().await;
         let (outcome, next_cursor) = self
             .control
-            .wait_model_activity(*cursor, Duration::from_millis(timeout_ms as u64))
+            .wait_model_activity(
+                *cursor,
+                Duration::from_millis(timeout_ms as u64),
+                &self.current_thread_id,
+                self.current_path == AgentPath::root(),
+            )
             .await;
         *cursor = next_cursor;
         Ok(match outcome {
@@ -1518,6 +1523,22 @@ mod tests {
         let thread = reservation.thread().clone();
         reservation.commit().unwrap();
         thread
+    }
+
+    fn dispatch_for_thread(
+        dispatch: &DefaultAgentThreadDispatch,
+        thread: &subagents::AgentThreadV2,
+    ) -> DefaultAgentThreadDispatch {
+        DefaultAgentThreadDispatch {
+            control: Arc::clone(&dispatch.control),
+            current_path: thread.canonical_path.clone(),
+            current_thread_id: thread.thread_id.clone(),
+            runtime_manager: Arc::clone(&dispatch.runtime_manager),
+            runtime_requests: Arc::clone(&dispatch.runtime_requests),
+            wait_cursor: Arc::new(tokio::sync::Mutex::new(dispatch.control.activity_cursor())),
+            chat_override: dispatch.chat_override.clone(),
+            before_followup_atomic_hook: None,
+        }
     }
 
     fn scripted_chat(reply: &str) -> crate::streaming::ChatOverride {
@@ -3930,10 +3951,11 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let dispatch = dispatch(&dir);
         let child = committed_child(&dispatch, "worker");
+        let child_dispatch = dispatch_for_thread(&dispatch, &child);
         AgentThreadDispatch::send_message(
             &dispatch,
             MessageAgentV2Request {
-                target: child.thread_id,
+                target: child.thread_id.clone(),
                 message: "already queued".into(),
             },
         )
@@ -3943,7 +3965,7 @@ mod tests {
         let result = tokio::time::timeout(
             Duration::from_millis(100),
             AgentThreadDispatch::wait_agent(
-                &dispatch,
+                &child_dispatch,
                 WaitAgentV2Request {
                     timeout_ms: Some(10_000),
                 },
@@ -3954,6 +3976,162 @@ mod tests {
         .unwrap();
         assert_eq!(result.message, "Wait completed.");
         assert!(!result.timed_out);
+    }
+
+    #[tokio::test]
+    async fn wait_mailbox_scope_is_the_recipient_not_root_or_sibling() {
+        let dir = tempfile::tempdir().unwrap();
+        let dispatch = dispatch(&dir);
+        let alpha = committed_child(&dispatch, "alpha");
+        let beta = committed_child(&dispatch, "beta");
+        let alpha_dispatch = dispatch_for_thread(&dispatch, &alpha);
+        let beta_dispatch = dispatch_for_thread(&dispatch, &beta);
+
+        AgentThreadDispatch::send_message(
+            &dispatch,
+            MessageAgentV2Request {
+                target: beta.thread_id.clone(),
+                message: "only beta".into(),
+            },
+        )
+        .await
+        .unwrap();
+
+        let mut root_wait = Box::pin(AgentThreadDispatch::wait_agent(
+            &dispatch,
+            WaitAgentV2Request {
+                timeout_ms: Some(10_000),
+            },
+        ));
+        assert!(
+            tokio::time::timeout(Duration::from_millis(20), root_wait.as_mut())
+                .await
+                .is_err()
+        );
+        AgentThreadDispatch::notify_main_steer(&dispatch);
+        let root_result = tokio::time::timeout(Duration::from_millis(100), root_wait.as_mut())
+            .await
+            .expect("a later root input should wake the existing wait")
+            .unwrap();
+        assert_eq!(root_result.message, "Wait interrupted by new input.");
+
+        let mut alpha_wait = Box::pin(AgentThreadDispatch::wait_agent(
+            &alpha_dispatch,
+            WaitAgentV2Request {
+                timeout_ms: Some(10_000),
+            },
+        ));
+        assert!(
+            tokio::time::timeout(Duration::from_millis(20), alpha_wait.as_mut())
+                .await
+                .is_err()
+        );
+        AgentThreadDispatch::send_message(
+            &dispatch,
+            MessageAgentV2Request {
+                target: alpha.thread_id.clone(),
+                message: "now alpha".into(),
+            },
+        )
+        .await
+        .unwrap();
+        let alpha_result = tokio::time::timeout(Duration::from_millis(100), alpha_wait.as_mut())
+            .await
+            .expect("a later matching mailbox should wake the existing wait")
+            .unwrap();
+        assert_eq!(alpha_result.message, "Wait completed.");
+
+        let beta_result = AgentThreadDispatch::wait_agent(
+            &beta_dispatch,
+            WaitAgentV2Request {
+                timeout_ms: Some(10_000),
+            },
+        )
+        .await
+        .unwrap();
+        assert_eq!(beta_result.message, "Wait completed.");
+    }
+
+    #[tokio::test]
+    async fn wait_final_status_is_visible_only_to_the_direct_parent() {
+        let dir = tempfile::tempdir().unwrap();
+        let dispatch = dispatch(&dir);
+        let parent = committed_child(&dispatch, "parent");
+        let sibling = committed_child(&dispatch, "sibling");
+        let leaf_reservation = dispatch
+            .control
+            .reserve_spawn(&parent.canonical_path, "leaf")
+            .unwrap();
+        let leaf = leaf_reservation.thread().clone();
+        leaf_reservation.commit().unwrap();
+        let parent_dispatch = dispatch_for_thread(&dispatch, &parent);
+        let sibling_dispatch = dispatch_for_thread(&dispatch, &sibling);
+
+        dispatch
+            .control
+            .record_runner_event(
+                &leaf.thread_id,
+                RunnerEvent::TurnCompleted {
+                    turn_id: "leaf-turn".into(),
+                    last_message: "leaf done".into(),
+                },
+            )
+            .unwrap();
+
+        let parent_result = AgentThreadDispatch::wait_agent(
+            &parent_dispatch,
+            WaitAgentV2Request {
+                timeout_ms: Some(10_000),
+            },
+        )
+        .await
+        .unwrap();
+        assert_eq!(parent_result.message, "Wait completed.");
+
+        for unrelated in [&dispatch, &sibling_dispatch] {
+            let mut wait = Box::pin(AgentThreadDispatch::wait_agent(
+                unrelated,
+                WaitAgentV2Request {
+                    timeout_ms: Some(10_000),
+                },
+            ));
+            assert!(
+                tokio::time::timeout(Duration::from_millis(20), wait.as_mut())
+                    .await
+                    .is_err()
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn wait_main_steer_is_visible_only_to_root() {
+        let dir = tempfile::tempdir().unwrap();
+        let dispatch = dispatch(&dir);
+        let child = committed_child(&dispatch, "worker");
+        let child_dispatch = dispatch_for_thread(&dispatch, &child);
+        AgentThreadDispatch::notify_main_steer(&dispatch);
+
+        let root_result = AgentThreadDispatch::wait_agent(
+            &dispatch,
+            WaitAgentV2Request {
+                timeout_ms: Some(10_000),
+            },
+        )
+        .await
+        .unwrap();
+        assert_eq!(root_result.message, "Wait interrupted by new input.");
+
+        let mut child_wait = Box::pin(AgentThreadDispatch::wait_agent(
+            &child_dispatch,
+            WaitAgentV2Request {
+                timeout_ms: Some(10_000),
+            },
+        ));
+        assert!(
+            tokio::time::timeout(Duration::from_millis(20), child_wait.as_mut())
+                .await
+                .is_err()
+        );
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]

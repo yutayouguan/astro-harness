@@ -587,8 +587,14 @@ impl AgentControl {
         &self,
         cursor: ActivityCursor,
         timeout: Duration,
+        caller_thread_id: &str,
+        caller_is_root: bool,
     ) -> (WaitAgentResult, ActivityCursor) {
-        match self.activity.wait_model_after(cursor, timeout).await {
+        match self
+            .activity
+            .wait_model_after(cursor, timeout, caller_thread_id, caller_is_root)
+            .await
+        {
             Some(activity) if activity.kind == AgentActivityKind::MainSteer => {
                 (WaitOutcome::Steered, ActivityCursor(activity.sequence))
             }
