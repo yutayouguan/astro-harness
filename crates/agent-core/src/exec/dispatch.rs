@@ -2,7 +2,7 @@
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, OnceLock, Weak};
 use std::time::Duration;
 
@@ -346,7 +346,7 @@ pub struct DefaultAgentThreadDispatch {
     current_thread_id: String,
     runtime_manager: Arc<AgentRuntimeManager>,
     runtime_requests: Arc<RuntimeRequestRegistry>,
-    wait_cursor: Arc<tokio::sync::Mutex<ActivityCursor>>,
+    wait_cursor: Arc<AtomicU64>,
     #[cfg(any(test, feature = "test-support"))]
     chat_override: Option<crate::streaming::ChatOverride>,
     #[cfg(test)]
@@ -366,7 +366,7 @@ impl DefaultAgentThreadDispatch {
             current_thread_id,
             runtime_manager: AgentRuntimeManager::global(),
             runtime_requests: RuntimeRequestRegistry::global(),
-            wait_cursor: Arc::new(tokio::sync::Mutex::new(wait_cursor)),
+            wait_cursor: Arc::new(AtomicU64::new(wait_cursor.0)),
             #[cfg(any(test, feature = "test-support"))]
             chat_override: None,
             #[cfg(test)]
@@ -388,7 +388,7 @@ impl DefaultAgentThreadDispatch {
             current_thread_id,
             runtime_manager,
             runtime_requests: Arc::new(RuntimeRequestRegistry::default()),
-            wait_cursor: Arc::new(tokio::sync::Mutex::new(wait_cursor)),
+            wait_cursor: Arc::new(AtomicU64::new(wait_cursor.0)),
             chat_override: None,
             before_followup_atomic_hook: None,
         }
@@ -834,17 +834,17 @@ impl AgentThreadDispatch for DefaultAgentThreadDispatch {
             (10_000..=3_600_000).contains(&timeout_ms),
             "normalized timeout_ms must be between 10000 and 3600000"
         );
-        let mut cursor = self.wait_cursor.lock().await;
+        let cursor = ActivityCursor(self.wait_cursor.load(Ordering::Acquire));
         let (outcome, next_cursor) = self
             .control
             .wait_model_activity(
-                *cursor,
+                cursor,
                 Duration::from_millis(timeout_ms as u64),
                 &self.current_thread_id,
                 self.current_path == AgentPath::root(),
             )
-            .await;
-        *cursor = next_cursor;
+            .await?;
+        self.wait_cursor.fetch_max(next_cursor.0, Ordering::AcqRel);
         Ok(match outcome {
             WaitOutcome::MailboxActivity => WaitAgentV2Result {
                 message: "Wait completed.".into(),
@@ -1260,7 +1260,7 @@ impl DefaultDesktopAgentThreadControl {
             current_path: AgentPath::root(),
             runtime_manager: Arc::clone(&self.runtime_manager),
             runtime_requests: Arc::clone(&self.runtime_requests),
-            wait_cursor: Arc::new(tokio::sync::Mutex::new(wait_cursor)),
+            wait_cursor: Arc::new(AtomicU64::new(wait_cursor.0)),
             #[cfg(any(test, feature = "test-support"))]
             chat_override: self.chat_override.clone(),
             #[cfg(test)]
@@ -1535,7 +1535,7 @@ mod tests {
             current_thread_id: thread.thread_id.clone(),
             runtime_manager: Arc::clone(&dispatch.runtime_manager),
             runtime_requests: Arc::clone(&dispatch.runtime_requests),
-            wait_cursor: Arc::new(tokio::sync::Mutex::new(dispatch.control.activity_cursor())),
+            wait_cursor: Arc::new(AtomicU64::new(dispatch.control.activity_cursor().0)),
             chat_override: dispatch.chat_override.clone(),
             before_followup_atomic_hook: None,
         }
@@ -4132,6 +4132,92 @@ mod tests {
                 .await
                 .is_err()
         );
+    }
+
+    #[tokio::test]
+    async fn concurrent_waits_share_the_same_relevant_wakeup() {
+        let dir = tempfile::tempdir().unwrap();
+        let dispatch = dispatch(&dir);
+        let child = committed_child(&dispatch, "worker");
+        let child_dispatch = dispatch_for_thread(&dispatch, &child);
+
+        let first = AgentThreadDispatch::wait_agent(
+            &child_dispatch,
+            WaitAgentV2Request {
+                timeout_ms: Some(10_000),
+            },
+        );
+        let second = AgentThreadDispatch::wait_agent(
+            &child_dispatch,
+            WaitAgentV2Request {
+                timeout_ms: Some(10_000),
+            },
+        );
+        let publish = async {
+            tokio::task::yield_now().await;
+            AgentThreadDispatch::send_message(
+                &dispatch,
+                MessageAgentV2Request {
+                    target: child.thread_id.clone(),
+                    message: "wake both waits".into(),
+                },
+            )
+            .await
+            .unwrap();
+        };
+
+        let (first, second, ()) = tokio::time::timeout(Duration::from_millis(250), async {
+            tokio::join!(first, second, publish)
+        })
+        .await
+        .expect("both waits should observe the same caller input");
+        assert_eq!(first.unwrap().message, "Wait completed.");
+        assert_eq!(second.unwrap().message, "Wait completed.");
+    }
+
+    #[tokio::test]
+    async fn runtime_terminated_wakes_only_the_direct_parent() {
+        let dir = tempfile::tempdir().unwrap();
+        let dispatch = dispatch(&dir);
+        let parent = committed_child(&dispatch, "parent");
+        let sibling = committed_child(&dispatch, "sibling");
+        let leaf_reservation = dispatch
+            .control
+            .reserve_spawn(&parent.canonical_path, "leaf")
+            .unwrap();
+        let leaf = leaf_reservation.thread().clone();
+        leaf_reservation.commit().unwrap();
+        let parent_dispatch = dispatch_for_thread(&dispatch, &parent);
+        let sibling_dispatch = dispatch_for_thread(&dispatch, &sibling);
+
+        dispatch
+            .control
+            .record_runner_event(&leaf.thread_id, RunnerEvent::RuntimeTerminated)
+            .unwrap();
+
+        let parent_result = AgentThreadDispatch::wait_agent(
+            &parent_dispatch,
+            WaitAgentV2Request {
+                timeout_ms: Some(10_000),
+            },
+        )
+        .await
+        .unwrap();
+        assert_eq!(parent_result.message, "Wait completed.");
+
+        for unrelated in [&dispatch, &sibling_dispatch] {
+            let mut wait = Box::pin(AgentThreadDispatch::wait_agent(
+                unrelated,
+                WaitAgentV2Request {
+                    timeout_ms: Some(10_000),
+                },
+            ));
+            assert!(
+                tokio::time::timeout(Duration::from_millis(20), wait.as_mut())
+                    .await
+                    .is_err()
+            );
+        }
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]

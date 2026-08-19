@@ -38,6 +38,18 @@ pub enum ActivityObservation {
     TimedOut,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum DurableModelActivity {
+    Mailbox,
+    Steer,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum ModelWaitSignal {
+    Activity(Box<AgentActivity>),
+    Durable(DurableModelActivity),
+}
+
 pub struct ActivityBus {
     sequence: AtomicU64,
     tx: watch::Sender<ActivityCursor>,
@@ -104,33 +116,46 @@ impl ActivityBus {
     /// Wait for activity that is visible to the Codex V2 model wait tool.
     /// Spawn/start noise is deliberately skipped; durable mailbox delivery,
     /// final lifecycle changes, and main-task steering wake the caller.
-    pub async fn wait_model_after(
+    pub(crate) async fn wait_model_after<F>(
         &self,
         cursor: ActivityCursor,
         wait_timeout: Duration,
         caller_thread_id: &str,
         caller_is_root: bool,
-    ) -> Option<AgentActivity> {
+        mut durable_activity: F,
+    ) -> anyhow::Result<Option<ModelWaitSignal>>
+    where
+        F: FnMut() -> anyhow::Result<Option<DurableModelActivity>>,
+    {
         let mut rx = self.tx.subscribe();
-        if let Some(activity) = self.first_model_after(cursor, caller_thread_id, caller_is_root) {
-            return Some(activity);
+        if let Some(signal) = self.first_model_after(
+            cursor,
+            caller_thread_id,
+            caller_is_root,
+            durable_activity()?,
+        ) {
+            return Ok(Some(signal));
         }
 
-        tokio::time::timeout(wait_timeout, async {
-            loop {
-                if rx.changed().await.is_err() {
-                    return None;
+        let signal: anyhow::Result<Option<ModelWaitSignal>> =
+            tokio::time::timeout(wait_timeout, async {
+                loop {
+                    if rx.changed().await.is_err() {
+                        return Ok(None);
+                    }
+                    if let Some(signal) = self.first_model_after(
+                        cursor,
+                        caller_thread_id,
+                        caller_is_root,
+                        durable_activity()?,
+                    ) {
+                        return Ok(Some(signal));
+                    }
                 }
-                if let Some(activity) =
-                    self.first_model_after(cursor, caller_thread_id, caller_is_root)
-                {
-                    return Some(activity);
-                }
-            }
-        })
-        .await
-        .ok()
-        .flatten()
+            })
+            .await
+            .unwrap_or(Ok(None));
+        signal
     }
 
     /// Returns the earliest buffered activity after `cursor` without applying
@@ -213,27 +238,42 @@ impl ActivityBus {
         cursor: ActivityCursor,
         caller_thread_id: &str,
         caller_is_root: bool,
-    ) -> Option<AgentActivity> {
+        durable_activity: Option<DurableModelActivity>,
+    ) -> Option<ModelWaitSignal> {
         let events = self.lock_events();
-        for activity in events.iter().filter(|event| event.sequence > cursor.0) {
-            if caller_is_root && activity.kind == AgentActivityKind::MainSteer {
-                return Some(activity.clone());
+        if caller_is_root {
+            if let Some(activity) = events
+                .iter()
+                .filter(|event| event.sequence > cursor.0)
+                .find(|activity| activity.kind == AgentActivityKind::MainSteer)
+            {
+                return Some(ModelWaitSignal::Activity(Box::new(activity.clone())));
             }
+        }
+        if durable_activity == Some(DurableModelActivity::Steer) {
+            return Some(ModelWaitSignal::Durable(DurableModelActivity::Steer));
+        }
+        for activity in events.iter().filter(|event| event.sequence > cursor.0) {
             let visible = match (&activity.kind, activity.thread.as_ref()) {
-                (AgentActivityKind::Mailbox { thread_id }, _) => thread_id == caller_thread_id,
+                (AgentActivityKind::Mailbox { thread_id }, _) => {
+                    thread_id == caller_thread_id && durable_activity.is_some()
+                }
                 (AgentActivityKind::StatusChanged { .. }, Some(thread)) => {
                     !matches!(
                         thread.status,
                         crate::AgentStatusV2::PendingInit | crate::AgentStatusV2::Running
                     ) && thread.parent_thread_id.as_deref() == Some(caller_thread_id)
                 }
+                (AgentActivityKind::EdgeClosed { .. }, Some(thread)) => {
+                    thread.parent_thread_id.as_deref() == Some(caller_thread_id)
+                }
                 _ => false,
             };
             if visible {
-                return Some(activity.clone());
+                return Some(ModelWaitSignal::Activity(Box::new(activity.clone())));
             }
         }
-        None
+        durable_activity.map(ModelWaitSignal::Durable)
     }
 
     fn observation_after(&self, cursor: ActivityCursor) -> Option<ActivityObservation> {

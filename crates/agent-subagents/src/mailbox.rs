@@ -8,6 +8,7 @@ use serde::{Deserialize, Serialize};
 pub enum MailboxKind {
     Message,
     Followup,
+    Steer,
     Result,
     Status,
 }
@@ -86,7 +87,8 @@ pub(crate) fn pending_for(
     }
     let mut stmt = conn.prepare(
         "SELECT sequence, message_id, sender_thread_id, recipient_thread_id,
-                kind, payload, trigger_turn
+                CASE WHEN idempotency_key LIKE 'main-steer:%' THEN 'steer' ELSE kind END,
+                payload, trigger_turn
          FROM agent_mailbox
          WHERE recipient_thread_id = ?1
            AND delivery_state = 'pending'
@@ -141,6 +143,7 @@ impl MailboxKind {
         match self {
             Self::Message => "message",
             Self::Followup => "followup",
+            Self::Steer => "steer",
             Self::Result => "result",
             Self::Status => "status",
         }
@@ -150,6 +153,7 @@ impl MailboxKind {
         match value {
             "message" => Some(Self::Message),
             "followup" => Some(Self::Followup),
+            "steer" => Some(Self::Steer),
             "result" => Some(Self::Result),
             "status" => Some(Self::Status),
             _ => None,
@@ -198,7 +202,9 @@ fn load_by_sequence(
     use rusqlite::OptionalExtension;
     conn.query_row(
         "SELECT sequence, message_id, idempotency_key, sender_thread_id,
-                recipient_thread_id, kind, payload, trigger_turn
+                recipient_thread_id,
+                CASE WHEN idempotency_key LIKE 'main-steer:%' THEN 'steer' ELSE kind END,
+                payload, trigger_turn
          FROM agent_mailbox WHERE sequence = ?1",
         [sequence],
         persisted_mailbox_message_from_row,
@@ -213,7 +219,9 @@ fn load_by_idempotency_key(
     use rusqlite::OptionalExtension;
     conn.query_row(
         "SELECT sequence, message_id, idempotency_key, sender_thread_id,
-                recipient_thread_id, kind, payload, trigger_turn
+                recipient_thread_id,
+                CASE WHEN idempotency_key LIKE 'main-steer:%' THEN 'steer' ELSE kind END,
+                payload, trigger_turn
          FROM agent_mailbox WHERE idempotency_key = ?1",
         [key],
         persisted_mailbox_message_from_row,
@@ -340,6 +348,27 @@ mod tests {
         store.mark_delivered("recipient", first.sequence).unwrap();
         assert_eq!(store.pending_for("recipient", 0).unwrap(), vec![second]);
         assert_eq!(store.pending_for("other", 0).unwrap(), vec![other]);
+    }
+
+    #[test]
+    fn legacy_main_steer_followup_rows_project_as_steer() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("subagents.db");
+        let store = AgentGraphStore::open(path.clone()).unwrap();
+        let conn = rusqlite::Connection::open(path).unwrap();
+        conn.execute(
+            "INSERT INTO agent_mailbox (
+                message_id, idempotency_key, sender_thread_id, recipient_thread_id,
+                kind, payload, trigger_turn, delivery_state, created_at, delivered_at
+             ) VALUES ('legacy-steer', 'main-steer:legacy-steer', 'root', 'root',
+                       'followup', 'resume', 1, 'pending', 'now', NULL)",
+            [],
+        )
+        .unwrap();
+
+        let pending = store.pending_for("root", 0).unwrap();
+        assert_eq!(pending.len(), 1);
+        assert_eq!(pending[0].kind, MailboxKind::Steer);
     }
 
     #[test]

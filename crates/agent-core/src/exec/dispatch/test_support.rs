@@ -1,5 +1,6 @@
 use std::collections::VecDeque;
 use std::path::PathBuf;
+use std::sync::atomic::AtomicU64;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
@@ -171,7 +172,7 @@ impl LifecycleTestApp {
             current_thread_id: thread.thread_id,
             runtime_manager: Arc::clone(&self.runtime_manager),
             runtime_requests: Arc::clone(&self.runtime_requests),
-            wait_cursor: Arc::new(tokio::sync::Mutex::new(self.control.activity_cursor())),
+            wait_cursor: Arc::new(AtomicU64::new(self.control.activity_cursor().0)),
             chat_override: Some(Arc::clone(&self.chat_override)),
             #[cfg(test)]
             before_followup_atomic_hook: None,

@@ -8,6 +8,7 @@ use std::time::Duration;
 use tokio::sync::Notify;
 use uuid::Uuid;
 
+use crate::activity::{DurableModelActivity, ModelWaitSignal};
 use crate::{
     ActivityBus, ActivityCursor, AgentActivityKind, AgentGraphStore, AgentPath, AgentRegistry,
     AgentStatusV2, AgentThreadV2, AgentTreeSnapshotV2, ExecutionPermit, Limits, MailboxKind,
@@ -506,7 +507,7 @@ impl AgentControl {
             message_id,
             sender_thread_id: thread.thread_id.clone(),
             recipient_thread_id: thread.thread_id,
-            kind: MailboxKind::Followup,
+            kind: MailboxKind::Steer,
             payload,
             trigger_turn: true,
         })
@@ -589,20 +590,47 @@ impl AgentControl {
         timeout: Duration,
         caller_thread_id: &str,
         caller_is_root: bool,
-    ) -> (WaitAgentResult, ActivityCursor) {
-        match self
+    ) -> anyhow::Result<(WaitAgentResult, ActivityCursor)> {
+        let signal = self
             .activity
-            .wait_model_after(cursor, timeout, caller_thread_id, caller_is_root)
-            .await
-        {
-            Some(activity) if activity.kind == AgentActivityKind::MainSteer => {
+            .wait_model_after(cursor, timeout, caller_thread_id, caller_is_root, || {
+                self.pending_model_activity(caller_thread_id)
+            })
+            .await?;
+        Ok(match signal {
+            Some(ModelWaitSignal::Activity(activity))
+                if activity.kind == AgentActivityKind::MainSteer =>
+            {
                 (WaitOutcome::Steered, ActivityCursor(activity.sequence))
             }
-            Some(activity) => (
+            Some(ModelWaitSignal::Activity(activity)) => (
                 WaitOutcome::MailboxActivity,
                 ActivityCursor(activity.sequence),
             ),
+            Some(ModelWaitSignal::Durable(DurableModelActivity::Steer)) => {
+                (WaitOutcome::Steered, cursor)
+            }
+            Some(ModelWaitSignal::Durable(DurableModelActivity::Mailbox)) => {
+                (WaitOutcome::MailboxActivity, cursor)
+            }
             None => (WaitOutcome::TimedOut, cursor),
+        })
+    }
+
+    fn pending_model_activity(
+        &self,
+        caller_thread_id: &str,
+    ) -> anyhow::Result<Option<DurableModelActivity>> {
+        let pending = self.store.pending_for(caller_thread_id, 0)?;
+        if pending
+            .iter()
+            .any(|message| message.kind == MailboxKind::Steer)
+        {
+            Ok(Some(DurableModelActivity::Steer))
+        } else if pending.is_empty() {
+            Ok(None)
+        } else {
+            Ok(Some(DurableModelActivity::Mailbox))
         }
     }
 
@@ -1567,6 +1595,7 @@ mod tests {
             .unwrap();
 
         assert_eq!(first.message_id, "steer-message-1");
+        assert_eq!(first.kind, MailboxKind::Steer);
         assert_eq!(retry, first);
         assert_eq!(store.pending_for("root-thread", 0).unwrap(), vec![first]);
     }
@@ -1633,6 +1662,89 @@ mod tests {
                 .await,
             WaitOutcome::Steered
         );
+    }
+
+    #[tokio::test]
+    async fn model_wait_recovers_pending_mailbox_after_activity_eviction() {
+        let dir = TempDir::new().unwrap();
+        let (control, _store) = open_control(&dir, "root-thread");
+        let root = crate::AgentPath::root();
+        let worker = commit_spawn(&control, &root, "worker");
+        let cursor = control.activity_cursor();
+        control
+            .enqueue_message(
+                &root,
+                crate::MessageAgentV2Request {
+                    target: worker.thread_id.clone(),
+                    message: "durable input".into(),
+                },
+                false,
+            )
+            .unwrap();
+
+        for index in 0..1_025 {
+            control.activity.publish(
+                AgentActivityKind::Mailbox {
+                    thread_id: format!("unrelated-{index}"),
+                },
+                None,
+            );
+        }
+
+        let (outcome, _) = control
+            .wait_model_activity(cursor, Duration::from_millis(20), &worker.thread_id, false)
+            .await
+            .unwrap();
+        assert_eq!(outcome, WaitOutcome::MailboxActivity);
+    }
+
+    #[tokio::test]
+    async fn model_wait_prioritizes_durable_steer_then_returns_remaining_mailbox() {
+        let dir = TempDir::new().unwrap();
+        let (control, store) = open_control(&dir, "root-thread");
+        let root = crate::AgentPath::root();
+        let cursor = control.activity_cursor();
+        control
+            .enqueue_message(
+                &root,
+                crate::MessageAgentV2Request {
+                    target: "/root".into(),
+                    message: "mail before steer".into(),
+                },
+                false,
+            )
+            .unwrap();
+        let steer = control
+            .persist_main_steer(&root, "new root input".into())
+            .unwrap();
+        control.notify_main_steer();
+        let later_mailbox = control
+            .enqueue_message(
+                &root,
+                crate::MessageAgentV2Request {
+                    target: "/root".into(),
+                    message: "mail after steer".into(),
+                },
+                false,
+            )
+            .unwrap();
+
+        let (first, next_cursor) = control
+            .wait_model_activity(cursor, Duration::from_millis(20), "root-thread", true)
+            .await
+            .unwrap();
+        assert_eq!(first, WaitOutcome::Steered);
+
+        store.mark_delivered("root-thread", steer.sequence).unwrap();
+        assert_eq!(
+            store.pending_for("root-thread", 0).unwrap(),
+            vec![later_mailbox]
+        );
+        let (second, _) = control
+            .wait_model_activity(next_cursor, Duration::from_millis(20), "root-thread", true)
+            .await
+            .unwrap();
+        assert_eq!(second, WaitOutcome::MailboxActivity);
     }
 
     #[tokio::test]
