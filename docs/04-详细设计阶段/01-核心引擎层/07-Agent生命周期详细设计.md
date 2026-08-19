@@ -1,6 +1,6 @@
 # Agent 生命周期详细设计
 
-> 版本：v2.25
+> 版本：v2.26
 > 日期：2026-08-19
 > 状态：实施基线  
 > 上游参考：[OpenAI Codex](https://github.com/openai/codex) `ede5247893a50297a47c9aa5038e6ab28312ff50`
@@ -663,6 +663,8 @@ built-in tool 的 current-thread `!Send` 契约保持不变。
     typed `SandboxErr::Denied`，orchestrator 只负责审批、审计和单次 escalated retry。
   - [x] 引入 Codex 同名 `NetworkPolicyDecisionPayload` 并挂载到 `SandboxErr::Denied`；
     orchestrator 将结构化网络拒绝与文件系统拒绝分流，禁止误触发文件系统权限升级。
+  - [x] 引入 `agent-network-proxy` 策略核心，对齐 Codex 的 host 规则、本地地址纵深防御、
+    `NetworkPolicyRequest` / `NetworkDecision` / `NetworkPolicyDecider` 与 structured decision attribution。
   - [ ] 实现命令网络代理的 host 级 enforcement 与 decision attribution，再将 managed
     subprocess network approval 接入 orchestrator；禁止在代理落地前猜测域名或开放全网。
 - [ ] 删除工具执行时重新加载权限/工具的路径。
@@ -765,6 +767,22 @@ v2.25 Structured network denial contract 批次：`agent-types::network_policy` 
 本批刻意不实现伪 host 授权：在命令网络代理能够按 call 归因请求、执行 host 级规则并为重试注入
 临时 policy 前，所有结构化网络拒绝继续 fail closed。后续批次再实现 proxy、即时/延迟审批、
 session host cache 与受限 network retry。
+
+v2.26 Network proxy policy core 批次：新增 workspace crate `agent-network-proxy`（package
+`network-proxy`），依 Codex 职责边界将域名策略从 `agent-sandbox` 和 `ToolOrchestrator`
+中独立出来。`NetworkProxyState::host_blocked` 实现 allowlist-first：精确 host、
+`*.example.com`（仅子域）、`**.example.com`（根域与子域）和 allow-only `*`；
+deny 先于任何 allow，`**.*` 等展开后等价的全局 deny 同样拒绝。
+`NetworkProxyState::new` 仅接受 `network.enabled=true` 的策略，禁止将“代理未启用”降级为
+可被 decider 覆盖的 allowlist miss。当 `allow_local_binding=false` 时，通配符不能放行 loopback、
+link-local、私网、保留地址或解析失败的域名；只有精确写出的本地 host/IP 可作为
+显式例外，与 Codex 当前语义一致。同时引入 Codex 同名 `NetworkProtocol`、
+`NetworkPolicyRequest`、`NetworkDecision` 与 `NetworkPolicyDecider`；允许 allowlist miss 交给
+decider，但显式 deny 和本地地址防御不可被覆盖。`NetworkDecision::to_policy_decision_payload`
+将 protocol/host/port/reason/source 无损转换为 v2.25 的 sandbox denial payload。本批仍未
+启动 HTTP/HTTPS CONNECT/SOCKS listener，也未修改子进程 proxy env；因此配置层继续不宣称
+host 规则已对真实 socket 生效。下一批才把 listener、blocked-request observer 与
+per-execution attribution 接到 `SandboxRunner`。
 
 ### Phase D：ThreadManager 与 AgentControl
 

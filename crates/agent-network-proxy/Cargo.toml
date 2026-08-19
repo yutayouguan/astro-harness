@@ -1,0 +1,13 @@
+[package]
+name = "network-proxy"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+types = { path = "../agent-types" }
+anyhow = { workspace = true }
+globset = { workspace = true }
+tokio = { workspace = true, features = ["net", "time"] }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt"] }
