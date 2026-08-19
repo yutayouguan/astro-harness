@@ -13,7 +13,7 @@ use super::providers::{
 };
 use crate::infra::grpc::{default_grpc_address, endpoint_url};
 use crate::infra::thread_events::{
-    accepted_turn_id, submission_failure_events, ThreadEventsBridge,
+    accepted_turn_id, emit_chat_events, submission_failure_events, ThreadEventsBridge,
 };
 
 // ---------------------------------------------------------------------------
@@ -600,9 +600,10 @@ pub async fn start_chat(app: AppHandle, request: StartChatRequest) -> Result<Str
                 .map_err(|error| error.to_string())?
                 .into_inner();
             let turn_id = accepted_turn_id(response)?;
-            bridge
+            let terminal = bridge
                 .bind_submitted_turn_if_current(&sid2, activation, &turn_id)
                 .await;
+            emit_chat_events(&app2, &sid2, terminal);
             Ok::<(), String>(())
         }
         .await;

@@ -27,7 +27,14 @@ struct ActiveState {
     threads: HashSet<String>,
     turn_epochs: HashMap<String, HashMap<String, u64>>,
     activations: HashMap<String, u64>,
+    awaiting_submissions: HashMap<String, u64>,
+    deferred_terminals: HashMap<String, HashMap<String, DeferredTerminal>>,
     next_activation: u64,
+}
+
+struct DeferredTerminal {
+    awaiting_activation: u64,
+    events: Vec<ChatStreamEvent>,
 }
 
 /// Process-wide connection state shared by chat commands and the event pump.
@@ -98,6 +105,10 @@ impl ThreadEventsBridge {
         state.next_activation = state.next_activation.wrapping_add(1).max(1);
         let activation = state.next_activation;
         state.threads.insert(thread_id.clone());
+        state.deferred_terminals.remove(&thread_id);
+        state
+            .awaiting_submissions
+            .insert(thread_id.clone(), activation);
         state.activations.insert(thread_id, activation);
         activation
     }
@@ -106,11 +117,10 @@ impl ThreadEventsBridge {
         let mut state = self.active_threads.write().await;
         if state.activations.get(thread_id).copied() != Some(activation) {
             Self::remove_turn_epoch(&mut state, thread_id, activation);
+            Self::remove_deferred_activation(&mut state, thread_id, activation);
             return false;
         }
-        state.threads.remove(thread_id);
-        state.turn_epochs.remove(thread_id);
-        state.activations.remove(thread_id);
+        Self::clear_thread(&mut state, thread_id);
         true
     }
 
@@ -137,18 +147,34 @@ impl ThreadEventsBridge {
         thread_id: &str,
         activation: u64,
         turn_id: &str,
-    ) {
+    ) -> Vec<ChatStreamEvent> {
         if turn_id.is_empty() {
-            return;
+            return Vec::new();
         }
         let mut state = self.active_threads.write().await;
-        if state.activations.get(thread_id).copied() == Some(activation) {
-            state
-                .turn_epochs
-                .entry(thread_id.into())
-                .or_default()
-                .insert(turn_id.into(), activation);
+        if state.activations.get(thread_id).copied() != Some(activation) {
+            Self::remove_deferred_activation(&mut state, thread_id, activation);
+            return Vec::new();
         }
+        if state.awaiting_submissions.get(thread_id).copied() == Some(activation) {
+            state.awaiting_submissions.remove(thread_id);
+        }
+        state
+            .turn_epochs
+            .entry(thread_id.into())
+            .or_default()
+            .insert(turn_id.into(), activation);
+
+        let deferred = state
+            .deferred_terminals
+            .remove(thread_id)
+            .and_then(|mut terminals| terminals.remove(turn_id))
+            .filter(|terminal| terminal.awaiting_activation == activation);
+        let Some(deferred) = deferred else {
+            return Vec::new();
+        };
+        Self::clear_thread(&mut state, thread_id);
+        deferred.events
     }
 
     async fn active_ids(&self) -> Vec<String> {
@@ -166,16 +192,62 @@ impl ThreadEventsBridge {
         self.active_threads.read().await.threads.contains(thread_id)
     }
 
-    /// Accept each terminal once and never let a stale terminal retire a newer Turn.
-    async fn accept_terminal(&self, thread_id: &str, turn_id: &str) -> bool {
+    /// Accept each terminal once, or defer it while a newer SubmitTurn ack can still steer the
+    /// same turn id into the current activation.
+    async fn accept_terminal(
+        &self,
+        thread_id: &str,
+        turn_id: &str,
+        events: Vec<ChatStreamEvent>,
+    ) -> Vec<ChatStreamEvent> {
         let mut state = self.active_threads.write().await;
+        if state
+            .deferred_terminals
+            .get(thread_id)
+            .is_some_and(|terminals| terminals.contains_key(turn_id))
+        {
+            return Vec::new();
+        }
         let Some(turn_epoch) = state
             .turn_epochs
-            .get_mut(thread_id)
-            .and_then(|turns| turns.remove(turn_id))
+            .get(thread_id)
+            .and_then(|turns| turns.get(turn_id))
+            .copied()
         else {
-            return false;
+            return Vec::new();
         };
+        let current_activation = state.activations.get(thread_id).copied();
+        if current_activation == Some(turn_epoch) {
+            Self::clear_thread(&mut state, thread_id);
+            return events;
+        }
+
+        if let Some(current_activation) = current_activation.filter(|activation| {
+            state.awaiting_submissions.get(thread_id).copied() == Some(*activation)
+        }) {
+            Self::remove_turn(&mut state, thread_id, turn_id);
+            state
+                .deferred_terminals
+                .entry(thread_id.into())
+                .or_default()
+                .insert(
+                    turn_id.into(),
+                    DeferredTerminal {
+                        awaiting_activation: current_activation,
+                        events,
+                    },
+                );
+            return Vec::new();
+        }
+
+        Self::remove_turn(&mut state, thread_id, turn_id);
+        Vec::new()
+    }
+
+    fn remove_turn(state: &mut ActiveState, thread_id: &str, turn_id: &str) {
+        if let Some(turns) = state.turn_epochs.get_mut(thread_id) {
+            turns.remove(turn_id);
+        }
         if state
             .turn_epochs
             .get(thread_id)
@@ -183,13 +255,14 @@ impl ThreadEventsBridge {
         {
             state.turn_epochs.remove(thread_id);
         }
-        if state.activations.get(thread_id).copied() != Some(turn_epoch) {
-            return false;
-        }
+    }
+
+    fn clear_thread(state: &mut ActiveState, thread_id: &str) {
         state.threads.remove(thread_id);
         state.turn_epochs.remove(thread_id);
         state.activations.remove(thread_id);
-        true
+        state.awaiting_submissions.remove(thread_id);
+        state.deferred_terminals.remove(thread_id);
     }
 
     fn remove_turn_epoch(state: &mut ActiveState, thread_id: &str, activation: u64) {
@@ -197,6 +270,18 @@ impl ThreadEventsBridge {
             turns.retain(|_, epoch| *epoch != activation);
             if turns.is_empty() {
                 state.turn_epochs.remove(thread_id);
+            }
+        }
+    }
+
+    fn remove_deferred_activation(state: &mut ActiveState, thread_id: &str, activation: u64) {
+        if state.awaiting_submissions.get(thread_id).copied() == Some(activation) {
+            state.awaiting_submissions.remove(thread_id);
+        }
+        if let Some(terminals) = state.deferred_terminals.get_mut(thread_id) {
+            terminals.retain(|_, terminal| terminal.awaiting_activation != activation);
+            if terminals.is_empty() {
+                state.deferred_terminals.remove(thread_id);
             }
         }
     }
@@ -383,9 +468,10 @@ async fn subscribe_connection(
                 if !reconciled.keep_active {
                     let terminal_turn_id =
                         reconciled.terminal_turn_id.as_deref().unwrap_or_default();
-                    if bridge.accept_terminal(&thread_id, terminal_turn_id).await {
-                        emit_chat_events(app, &thread_id, reconciled.terminal);
-                    }
+                    let terminal = bridge
+                        .accept_terminal(&thread_id, terminal_turn_id, reconciled.terminal)
+                        .await;
+                    emit_chat_events(app, &thread_id, terminal);
                 }
             }
             ReconnectDelivery::Live(event) => {
@@ -427,10 +513,13 @@ async fn process_live_event(
         Some(proto::thread_event::Payload::TurnComplete(_))
             | Some(proto::thread_event::Payload::TurnAborted(_))
     );
-    if terminal && !bridge.accept_terminal(&thread_id, &turn_id).await {
-        return;
-    }
-    emit_chat_events(app, &thread_id, map_thread_event(event));
+    let events = map_thread_event(event);
+    let events = if terminal {
+        bridge.accept_terminal(&thread_id, &turn_id, events).await
+    } else {
+        events
+    };
+    emit_chat_events(app, &thread_id, events);
 }
 
 enum ReconnectDelivery {
@@ -449,7 +538,7 @@ fn reconnect_delivery_order(
         .collect()
 }
 
-fn emit_chat_events(app: &AppHandle, thread_id: &str, events: Vec<ChatStreamEvent>) {
+pub(crate) fn emit_chat_events(app: &AppHandle, thread_id: &str, events: Vec<ChatStreamEvent>) {
     let event_name = format!("chat_stream_{thread_id}");
     for event in events {
         let is_done = matches!(event, ChatStreamEvent::Done);
@@ -990,6 +1079,21 @@ mod tests {
         }
     }
 
+    fn terminal_projection(turn_id: &str) -> Vec<ChatStreamEvent> {
+        map_thread_event(terminal_event("session-1", turn_id))
+    }
+
+    async fn deferred_terminal_count(bridge: &ThreadEventsBridge, thread_id: &str) -> usize {
+        bridge
+            .active_threads
+            .read()
+            .await
+            .deferred_terminals
+            .get(thread_id)
+            .map(HashMap::len)
+            .unwrap_or_default()
+    }
+
     #[test]
     fn terminal_thread_event_maps_to_run_finished_then_done() {
         let mapped = map_thread_event(terminal_event("session-1", "turn-1"));
@@ -1104,8 +1208,14 @@ mod tests {
         bridge
             .bind_submitted_turn_if_current("session-1", activation, "turn-1")
             .await;
-        assert!(bridge.accept_terminal("session-1", "turn-1").await);
-        assert!(!bridge.accept_terminal("session-1", "turn-1").await);
+        assert!(!bridge
+            .accept_terminal("session-1", "turn-1", terminal_projection("turn-1"))
+            .await
+            .is_empty());
+        assert!(bridge
+            .accept_terminal("session-1", "turn-1", terminal_projection("turn-1"))
+            .await
+            .is_empty());
         assert!(!bridge.is_active("session-1").await);
     }
 
@@ -1133,13 +1243,23 @@ mod tests {
         // promote that turn into the new activation epoch.
         bridge.bind_observed_turn("session-1", "turn-old").await;
 
-        assert!(!bridge.accept_terminal("session-1", "turn-old").await);
+        assert!(bridge
+            .accept_terminal("session-1", "turn-old", terminal_projection("turn-old"))
+            .await
+            .is_empty());
         assert!(bridge.is_active("session-1").await);
 
         bridge
             .bind_submitted_turn_if_current("session-1", current, "turn-current")
             .await;
-        assert!(bridge.accept_terminal("session-1", "turn-current").await);
+        assert!(!bridge
+            .accept_terminal(
+                "session-1",
+                "turn-current",
+                terminal_projection("turn-current")
+            )
+            .await
+            .is_empty());
         assert!(!bridge.is_active("session-1").await);
     }
 
@@ -1156,8 +1276,95 @@ mod tests {
             .bind_submitted_turn_if_current("session-1", current, "turn-1")
             .await;
 
-        assert!(bridge.accept_terminal("session-1", "turn-1").await);
+        assert!(!bridge
+            .accept_terminal("session-1", "turn-1", terminal_projection("turn-1"))
+            .await
+            .is_empty());
         assert!(!bridge.is_active("session-1").await);
+    }
+
+    #[tokio::test]
+    async fn pre_ack_terminal_is_released_by_authoritative_steered_binding() {
+        let bridge = ThreadEventsBridge::new();
+        let old = bridge.activate("session-1").await;
+        bridge
+            .bind_submitted_turn_if_current("session-1", old, "turn-1")
+            .await;
+
+        let current = bridge.activate("session-1").await;
+        assert!(bridge
+            .accept_terminal("session-1", "turn-1", terminal_projection("turn-1"))
+            .await
+            .is_empty());
+        assert!(bridge.is_active("session-1").await);
+
+        let released = bridge
+            .bind_submitted_turn_if_current("session-1", current, "turn-1")
+            .await;
+        assert!(matches!(
+            released.as_slice(),
+            [
+                ChatStreamEvent::RunFinished {
+                    run_id,
+                    outcome_type,
+                    ..
+                },
+                ChatStreamEvent::Done
+            ] if run_id == "turn-1" && outcome_type == "success"
+        ));
+        assert!(!bridge.is_active("session-1").await);
+    }
+
+    #[tokio::test]
+    async fn submission_failure_clears_its_deferred_terminal() {
+        let bridge = ThreadEventsBridge::new();
+        let old = bridge.activate("session-1").await;
+        bridge
+            .bind_submitted_turn_if_current("session-1", old, "turn-1")
+            .await;
+        let failed = bridge.activate("session-1").await;
+        assert!(bridge
+            .accept_terminal("session-1", "turn-1", terminal_projection("turn-1"))
+            .await
+            .is_empty());
+        assert_eq!(deferred_terminal_count(&bridge, "session-1").await, 1);
+
+        assert!(bridge.deactivate_if_current("session-1", failed).await);
+        assert_eq!(deferred_terminal_count(&bridge, "session-1").await, 0);
+
+        let next = bridge.activate("session-1").await;
+        assert!(bridge
+            .bind_submitted_turn_if_current("session-1", next, "turn-1")
+            .await
+            .is_empty());
+        assert!(bridge.is_active("session-1").await);
+    }
+
+    #[tokio::test]
+    async fn replacement_activation_clears_older_deferred_terminal() {
+        let bridge = ThreadEventsBridge::new();
+        let old = bridge.activate("session-1").await;
+        bridge
+            .bind_submitted_turn_if_current("session-1", old, "turn-1")
+            .await;
+        let replaced = bridge.activate("session-1").await;
+        assert!(bridge
+            .accept_terminal("session-1", "turn-1", terminal_projection("turn-1"))
+            .await
+            .is_empty());
+        assert_eq!(deferred_terminal_count(&bridge, "session-1").await, 1);
+
+        let current = bridge.activate("session-1").await;
+        assert_eq!(deferred_terminal_count(&bridge, "session-1").await, 0);
+        assert!(bridge
+            .bind_submitted_turn_if_current("session-1", replaced, "turn-1")
+            .await
+            .is_empty());
+        assert!(bridge
+            .bind_submitted_turn_if_current("session-1", current, "turn-1")
+            .await
+            .is_empty());
+        assert!(bridge.is_active("session-1").await);
     }
 
     #[tokio::test]
