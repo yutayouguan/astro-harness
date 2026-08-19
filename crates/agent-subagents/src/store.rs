@@ -155,8 +155,9 @@ impl AgentGraphStore {
     ) -> anyhow::Result<()> {
         require_non_empty("thread_id", &descriptor.thread_id)?;
         self.connect()?.execute(
-            "INSERT INTO agent_runtime_descriptors (thread_id, model, reasoning_effort)
-             VALUES (?1, ?2, ?3)",
+            "INSERT INTO agent_runtime_descriptors (
+                 thread_id, model, reasoning_effort, recovery_state
+             ) VALUES (?1, ?2, ?3, 'available')",
             params![
                 descriptor.thread_id,
                 descriptor.model,
@@ -171,21 +172,31 @@ impl AgentGraphStore {
         thread_id: &str,
     ) -> anyhow::Result<Option<AgentRuntimeDescriptorV2>> {
         require_non_empty("thread_id", thread_id)?;
-        Ok(self
+        let row = self
             .connect()?
             .query_row(
-                "SELECT thread_id, model, reasoning_effort
+                "SELECT thread_id, model, reasoning_effort, recovery_state
                  FROM agent_runtime_descriptors WHERE thread_id = ?1",
                 [thread_id],
                 |row| {
-                    Ok(AgentRuntimeDescriptorV2 {
-                        thread_id: row.get(0)?,
-                        model: row.get(1)?,
-                        reasoning_effort: row.get(2)?,
-                    })
+                    Ok((
+                        AgentRuntimeDescriptorV2 {
+                            thread_id: row.get(0)?,
+                            model: row.get(1)?,
+                            reasoning_effort: row.get(2)?,
+                        },
+                        row.get::<_, String>(3)?,
+                    ))
                 },
             )
-            .optional()?)
+            .optional()?;
+        match row {
+            Some((_, state)) if state == "legacy_unavailable" => {
+                Err(crate::LegacyRuntimeDescriptorUnavailable.into())
+            }
+            Some((descriptor, _)) => Ok(Some(descriptor)),
+            None => Ok(None),
+        }
     }
 
     pub fn rollback_pending_thread(&self, thread_id: &str) -> anyhow::Result<()> {

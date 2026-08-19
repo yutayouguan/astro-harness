@@ -3987,6 +3987,80 @@ mod tests {
     }
 
     #[tokio::test(flavor = "current_thread")]
+    async fn migrated_v2_child_reports_legacy_recovery_boundary_without_ghosts() {
+        let dir = tempfile::tempdir().unwrap();
+        let memory_dir = dir.path().join("memory");
+        let sessions =
+            session::SessionStore::open_sessions_dir(&memory_dir.join("sessions")).unwrap();
+        sessions.ensure_session("root-session", "test").unwrap();
+        let mut initial = dispatch(&dir);
+        initial.chat_override = Some(scripted_chat("initial"));
+        let spawn = spawn_request(&memory_dir);
+        let runtime_material = spawn.runtime.clone();
+        let child = AgentThreadDispatch::spawn_agent(&initial, spawn)
+            .await
+            .unwrap()
+            .thread;
+        while initial.runtime_manager.is_running(&child.thread_id) {
+            tokio::task::yield_now().await;
+        }
+        drop(initial);
+
+        let graph_path = dir.path().join("subagents-v2.db");
+        let graph = rusqlite::Connection::open(&graph_path).unwrap();
+        graph
+            .execute_batch(
+                "DROP TABLE agent_runtime_descriptors;
+                 UPDATE schema_meta SET value = '2' WHERE key = 'schema_version';",
+            )
+            .unwrap();
+        drop(graph);
+
+        let control = AgentControl::open(
+            "root-session".into(),
+            AgentGraphStore::open(graph_path).unwrap(),
+            Limits {
+                max_threads: 8,
+                max_depth: 4,
+                max_running: 2,
+            },
+        )
+        .unwrap();
+        let recovered = DefaultAgentThreadDispatch::for_test(
+            control,
+            AgentPath::root(),
+            "root-session".into(),
+            Arc::new(AgentRuntimeManager::default()),
+        );
+
+        let error = AgentThreadDispatch::followup_task_with_runtime(
+            &recovered,
+            FollowupAgentDispatchRequest {
+                request: MessageAgentV2Request {
+                    target: child.canonical_path.to_string(),
+                    message: "must not guess a legacy model".into(),
+                },
+                runtime: Some(runtime_material),
+            },
+        )
+        .await
+        .unwrap_err();
+
+        assert!(format!("{error:#}").contains("predates resumable runtime descriptors"));
+        assert!(recovered
+            .control
+            .drain_mailbox(&child.canonical_path)
+            .unwrap()
+            .is_empty());
+        assert!(recovered
+            .runtime_requests
+            .requests
+            .lock()
+            .unwrap()
+            .is_empty());
+    }
+
+    #[tokio::test(flavor = "current_thread")]
     async fn spawn_rejects_cross_provider_model_without_matching_credentials() {
         let dir = tempfile::tempdir().unwrap();
         let memory_dir = dir.path().join("memory");

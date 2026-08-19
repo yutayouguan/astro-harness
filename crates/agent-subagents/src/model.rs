@@ -79,6 +79,19 @@ pub struct AgentRuntimeDescriptorV2 {
     pub reasoning_effort: Option<String>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LegacyRuntimeDescriptorUnavailable;
+
+impl std::fmt::Display for LegacyRuntimeDescriptorUnavailable {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str(
+            "this Agent Thread predates resumable runtime descriptors; create a new Agent Thread to continue safely",
+        )
+    }
+}
+
+impl std::error::Error for LegacyRuntimeDescriptorUnavailable {}
+
 /// Events emitted by one V2 runner for state projection and waiting callers.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]

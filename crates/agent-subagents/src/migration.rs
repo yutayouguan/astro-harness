@@ -66,6 +66,8 @@ CREATE TABLE IF NOT EXISTS agent_runtime_descriptors (
     thread_id TEXT PRIMARY KEY,
     model TEXT,
     reasoning_effort TEXT,
+    recovery_state TEXT NOT NULL DEFAULT 'available'
+        CHECK(recovery_state IN ('available', 'legacy_unavailable')),
     FOREIGN KEY(thread_id) REFERENCES agent_threads(thread_id) ON DELETE CASCADE
 );
 "#;
@@ -75,6 +77,8 @@ CREATE TABLE IF NOT EXISTS agent_runtime_descriptors (
     thread_id TEXT PRIMARY KEY,
     model TEXT,
     reasoning_effort TEXT,
+    recovery_state TEXT NOT NULL DEFAULT 'available'
+        CHECK(recovery_state IN ('available', 'legacy_unavailable')),
     FOREIGN KEY(thread_id) REFERENCES agent_threads(thread_id) ON DELETE CASCADE
 );
 "#;
@@ -117,6 +121,15 @@ pub(crate) fn migrate(conn: &mut Connection) -> anyhow::Result<()> {
         }
         Some(2) => {
             tx.execute_batch(V3_DDL)?;
+            tx.execute(
+                "INSERT INTO agent_runtime_descriptors (
+                     thread_id, model, reasoning_effort, recovery_state
+                 )
+                 SELECT thread_id, NULL, NULL, 'legacy_unavailable'
+                 FROM agent_threads
+                 WHERE parent_thread_id IS NOT NULL",
+                [],
+            )?;
             tx.execute(
                 "UPDATE schema_meta SET value = ?1 WHERE key = 'schema_version'",
                 [SCHEMA_VERSION.to_string()],
@@ -450,6 +463,11 @@ mod tests {
                  'root', 'root', NULL, '/root', 'root', 'root', 'root',
                  'running', '{\"kind\":\"running\"}', 0,
                  '2026-08-19T00:00:00Z', '2026-08-19T00:00:00Z'
+             );
+             INSERT INTO agent_threads VALUES (
+                 'child', 'root', 'root', '/root/child', 'child', 'default', 'child-session',
+                 'interrupted', '{\"kind\":\"interrupted\",\"reason\":\"restart\"}', 0,
+                 '2026-08-19T00:00:00Z', '2026-08-19T00:00:00Z'
              );",
         )
         .unwrap();
@@ -470,6 +488,15 @@ mod tests {
             )
             .unwrap();
         assert_eq!(descriptor_table, 1);
+        let legacy_markers: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM agent_runtime_descriptors
+                 WHERE recovery_state = 'legacy_unavailable'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(legacy_markers, 1);
     }
 
     #[test]
