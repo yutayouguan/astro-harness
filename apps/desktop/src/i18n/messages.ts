@@ -704,7 +704,7 @@ export const zh = {
   "agentTools.present.title": "信息卡片",
   "agentTools.present.desc": "在对话中展示只读信息卡（ui/callout/metrics/result），不打断流程",
   "agentTools.subagents.title": "Agent Threads",
-  "agentTools.subagents.desc": "启动、检查、追问、等待、中断或关闭独立子 Agent 线程",
+  "agentTools.subagents.desc": "创建并列出 Agent Thread，排队消息、触发追问、等待活动或中断当前回合",
   "agentTools.cron.title": "计划任务",
   "agentTools.cron.desc": "创建和管理定时任务（cron：add/list/remove/enable/disable）",
   "subagents.open": "查看 Subagents",
@@ -2742,7 +2742,7 @@ export const en: Record<MessageKey, string> = {
   "agentTools.present.desc":
     "Show a read-only info card in chat (kind=ui|callout|metrics|result) without pausing",
   "agentTools.subagents.title": "Agent Threads",
-  "agentTools.subagents.desc": "Spawn, inspect, steer, wait for, interrupt, or close independent subagent threads",
+  "agentTools.subagents.desc": "Spawn and list Agent Threads, queue messages, trigger follow-ups, wait for activity, or interrupt active turns",
   "agentTools.cron.title": "Scheduled Tasks",
   "agentTools.cron.desc": "Create and manage cron jobs (action: add/list/remove/enable/disable)",
   "subagents.open": "View subagents",

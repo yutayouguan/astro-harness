@@ -23,6 +23,7 @@ Astro 只有一套 Subagent 运行时契约：持久化的 Agent Thread 树。�
 - `Interrupted` 和 `Completed` 都可通过 `followup_task` 再次启动。
 - `Shutdown` 是桌面 close 后的不可执行历史节点。
 - 进程重启时，未完成的 `Running` turn 投影为耐久 `Interrupted`；不自动重放 LLM 或工具副作用。
+- `subagent_start` 只在首轮 startup-ready 且 caller 接受后触发一次；`subagent_stop` 只在 Desktop close 耐久化 `Shutdown` 并成功收敛后触发一次。两者都是进程内观察回调，不跨进程重启回放。
 
 通知只用于唤醒。状态事件、mailbox sequence 和投递位点先持久化，Session Event 再以 `stream_id + event_id` 按 cursor 回放。前端先取快照，再应用 cursor 之后的增量事件。
 

@@ -264,7 +264,7 @@ messages 中 tool 结果超阈值
 
 ### 已落地
 - `common::sqlite::{open_wal, delete_sqlite_files, SqliteStore, ExampleSqliteStore}`：共享 WAL 打开 + path/migrate 协议
-- 生产库均已统一 SQLite 连接约定：`UsageDb` / `SessionStore` / `KnowledgeDb` / `ArtifactDb` / `CronRunDb` / `AgentThreadStore`
+- 生产库均已统一 SQLite 连接约定：`UsageDb` / `SessionStore` / `KnowledgeDb` / `ArtifactDb` / `CronRunDb` / `AgentGraphStore`
 - 不合并多库、不上 Postgres；旧 `usage::sqlite_store` 已删除，一律用 `common::sqlite`
 - Memory 仍为 Markdown + `MemoryOps`，不塞进 SQLite trait
 

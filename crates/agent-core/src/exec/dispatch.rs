@@ -2,6 +2,7 @@
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
 use std::time::Duration;
 
@@ -24,6 +25,60 @@ use crate::runtime::{Config, Session};
 struct StoredRuntimeRequest {
     runtime: SpawnRuntimeV2Request,
     memory_dir: PathBuf,
+    lifecycle_hooks: Arc<AgentLifecycleHookState>,
+}
+
+#[derive(Default)]
+struct AgentLifecycleHookState {
+    start_fired: AtomicBool,
+    stop_fired: AtomicBool,
+}
+
+impl StoredRuntimeRequest {
+    fn fire_start_once(&self, thread: &AgentThreadV2) {
+        self.fire_once(
+            thread,
+            hooks::SUBAGENT_START,
+            &self.lifecycle_hooks.start_fired,
+        );
+    }
+
+    fn fire_stop_once(&self, thread: &AgentThreadV2) {
+        self.fire_once(
+            thread,
+            hooks::SUBAGENT_STOP,
+            &self.lifecycle_hooks.stop_fired,
+        );
+    }
+
+    fn fire_once(&self, thread: &AgentThreadV2, name: &str, fired: &AtomicBool) {
+        if fired
+            .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
+            .is_err()
+        {
+            return;
+        }
+        let Some(bus) = self.runtime.hook_bus.as_ref() else {
+            return;
+        };
+        let task = types::truncate_chars(&self.runtime.model_request.message, 200);
+        let payload = hooks::HookPayload {
+            session_id: thread.session_id.clone(),
+            detail: format!(
+                "thread_id={} parent_thread_id={} parent_path={} path={} agent_type={} task={}",
+                thread.thread_id,
+                self.runtime.parent_thread_id,
+                self.runtime.parent_path,
+                thread.canonical_path,
+                thread.agent_type,
+                task,
+            ),
+            ..Default::default()
+        };
+        // Lifecycle hooks are observers. PluginHookBus contains callback
+        // panics, and any non-Continue outcome is deliberately ignored here.
+        let _ = bus.fire(name, &payload);
+    }
 }
 
 struct ForkedSessionGuard {
@@ -328,6 +383,7 @@ impl AgentThreadDispatch for DefaultAgentThreadDispatch {
         let stored = StoredRuntimeRequest {
             memory_dir,
             runtime,
+            lifecycle_hooks: Arc::new(AgentLifecycleHookState::default()),
         };
         if let Err(error) = self
             .runtime_requests
@@ -381,7 +437,7 @@ impl AgentThreadDispatch for DefaultAgentThreadDispatch {
             cleanup: Arc::clone(&unaccepted_cleanup),
             armed: true,
         };
-        let mut run_request = self.run_request(thread.clone(), stored, false);
+        let mut run_request = self.run_request(thread.clone(), stored.clone(), false);
         run_request.unaccepted_spawn_cleanup = Some(unaccepted_cleanup);
         if let Err(start_error) = self.launch_turn(run_request).await {
             return match startup_guard.cleanup() {
@@ -392,6 +448,7 @@ impl AgentThreadDispatch for DefaultAgentThreadDispatch {
             };
         }
         startup_guard.disarm();
+        stored.fire_start_once(&thread);
         Ok(SpawnAgentV2Result { thread })
     }
 
@@ -718,6 +775,7 @@ fn close_subtree_error(
 async fn finish_close_operation(
     runtime_manager: Arc<AgentRuntimeManager>,
     control: Arc<AgentControl>,
+    runtime_requests: Arc<RuntimeRequestRegistry>,
     threads: Vec<AgentThreadV2>,
 ) -> anyhow::Result<AgentTreeSnapshotV2> {
     let mut index = 0;
@@ -729,7 +787,18 @@ async fn finish_close_operation(
             .begin_close_thread(control.as_ref(), thread)
             .await
         {
-            Ok(CloseThreadStart::Complete) => index += 1,
+            Ok(CloseThreadStart::Complete) => {
+                match runtime_requests.get(&thread.thread_id) {
+                    Ok(Some(stored)) => stored.fire_stop_once(thread),
+                    Ok(None) => {}
+                    Err(error) => tracing::warn!(
+                        %error,
+                        thread_id = %thread.thread_id,
+                        "failed to resolve Agent Thread stop hook observer"
+                    ),
+                }
+                index += 1;
+            }
             // request_close_slot removes and rejects Starting atomically,
             // so re-read immediately; waiting here could miss the removal
             // notification that was emitted before this result returned.
@@ -1002,13 +1071,20 @@ impl DesktopAgentThreadControl for DefaultDesktopAgentThreadControl {
         };
         let failed_path = first_thread.canonical_path.clone();
         let runtime_manager = Arc::clone(&self.runtime_manager);
+        let runtime_requests = Arc::clone(&self.runtime_requests);
         let background_control = Arc::clone(&control);
         let mut completion = tokio::spawn(async move {
             // Coordination and lifecycle admission belong to the manager-owned
             // convergence task before the first runtime close intent is created.
             let _subtree_close = _close;
             let _close_admission = close_admission;
-            finish_close_operation(runtime_manager, background_control, threads).await
+            finish_close_operation(
+                runtime_manager,
+                background_control,
+                runtime_requests,
+                threads,
+            )
+            .await
         });
         match tokio::time::timeout_at(response_deadline, &mut completion).await {
             Ok(Ok(result)) => result,
@@ -1243,6 +1319,15 @@ mod tests {
         }
     }
 
+    fn request_with_hook_bus(
+        memory_dir: &Path,
+        hook_bus: Arc<hooks::PluginHookBus>,
+    ) -> SpawnAgentDispatchRequest {
+        let mut request = spawn_request(memory_dir);
+        request.hook_bus = Some(hook_bus);
+        request
+    }
+
     fn desktop_control(
         dispatch: &DefaultAgentThreadDispatch,
         memory_dir: &Path,
@@ -1412,18 +1497,49 @@ mod tests {
         );
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "current_thread")]
     async fn desktop_close_partial_failure_keeps_parent_open_and_retryable() {
         let dir = tempfile::tempdir().unwrap();
         let memory_dir = dir.path().join("memory");
-        let dispatch = dispatch(&dir);
-        let parent = committed_child(&dispatch, "parent");
-        let reservation = dispatch
-            .control
-            .reserve_spawn(&parent.canonical_path, "leaf")
-            .unwrap();
-        let leaf = reservation.thread().clone();
-        reservation.commit().unwrap();
+        let sessions =
+            session::SessionStore::open_sessions_dir(&memory_dir.join("sessions")).unwrap();
+        sessions.ensure_session("root-session", "test").unwrap();
+        let bus = Arc::new(hooks::PluginHookBus::new());
+        let stopped_paths = Arc::new(Mutex::new(Vec::<String>::new()));
+        let observed = Arc::clone(&stopped_paths);
+        bus.register(hooks::SUBAGENT_STOP, move |payload| {
+            observed.lock().unwrap().push(payload.detail.clone());
+            hooks::HookOutcome::Continue
+        });
+        let mut dispatch = dispatch(&dir);
+        dispatch.chat_override = Some(scripted_chat("done"));
+        let mut parent_request = request_with_hook_bus(&memory_dir, Arc::clone(&bus));
+        parent_request.request.task_name = "parent".into();
+        let parent = AgentThreadDispatch::spawn_agent(&dispatch, parent_request)
+            .await
+            .unwrap()
+            .thread;
+        while dispatch.runtime_manager.is_running(&parent.thread_id) {
+            tokio::task::yield_now().await;
+        }
+        let child_dispatch = DefaultAgentThreadDispatch {
+            control: Arc::clone(&dispatch.control),
+            current_path: parent.canonical_path.clone(),
+            current_thread_id: parent.thread_id.clone(),
+            runtime_manager: Arc::clone(&dispatch.runtime_manager),
+            runtime_requests: Arc::clone(&dispatch.runtime_requests),
+            chat_override: Some(scripted_chat("done")),
+            before_followup_atomic_hook: None,
+        };
+        let mut leaf_request = request_with_hook_bus(&memory_dir, bus);
+        leaf_request.request.task_name = "leaf".into();
+        let leaf = AgentThreadDispatch::spawn_agent(&child_dispatch, leaf_request)
+            .await
+            .unwrap()
+            .thread;
+        while dispatch.runtime_manager.is_running(&leaf.thread_id) {
+            tokio::task::yield_now().await;
+        }
         let graph = rusqlite::Connection::open(dir.path().join("subagents-v2.db")).unwrap();
         graph
             .execute_batch(&format!(
@@ -1460,6 +1576,8 @@ mod tests {
                 .status,
             AgentStatusV2::Shutdown
         );
+        assert_eq!(stopped_paths.lock().unwrap().len(), 1);
+        assert!(stopped_paths.lock().unwrap()[0].contains("path=/root/parent/leaf"));
 
         graph
             .execute_batch("DROP TRIGGER fail_parent_shutdown;")
@@ -1471,6 +1589,9 @@ mod tests {
         assert!(retried.threads.iter().any(|thread| {
             thread.thread_id == parent.thread_id && thread.status == AgentStatusV2::Shutdown
         }));
+        let stopped_paths = stopped_paths.lock().unwrap();
+        assert_eq!(stopped_paths.len(), 2);
+        assert!(stopped_paths[1].contains("path=/root/parent"));
     }
 
     #[tokio::test(flavor = "current_thread")]
@@ -2470,6 +2591,195 @@ mod tests {
         panic!("spawned turn did not complete");
     }
 
+    #[tokio::test(flavor = "current_thread")]
+    async fn spawn_start_hook_fires_once_after_acceptance_and_not_for_followup() {
+        let dir = tempfile::tempdir().unwrap();
+        let memory_dir = dir.path().join("memory");
+        let sessions =
+            session::SessionStore::open_sessions_dir(&memory_dir.join("sessions")).unwrap();
+        sessions.ensure_session("root-session", "test").unwrap();
+        let mut dispatch = dispatch(&dir);
+        dispatch.chat_override = Some(scripted_chat("done"));
+        let bus = Arc::new(hooks::PluginHookBus::new());
+        bus.register(hooks::SUBAGENT_START, |_| panic!("injected hook panic"));
+        let payloads = Arc::new(Mutex::new(Vec::<hooks::HookPayload>::new()));
+        let observed = Arc::clone(&payloads);
+        bus.register(hooks::SUBAGENT_START, move |payload| {
+            observed.lock().unwrap().push(payload.clone());
+            hooks::HookOutcome::Continue
+        });
+
+        let mut request = request_with_hook_bus(&memory_dir, Arc::clone(&bus));
+        let long_task = "sensitive".repeat(40);
+        request.request.message = long_task.clone();
+        let spawned = AgentThreadDispatch::spawn_agent(&dispatch, request)
+            .await
+            .unwrap();
+        while dispatch
+            .runtime_manager
+            .is_running(&spawned.thread.thread_id)
+        {
+            tokio::task::yield_now().await;
+        }
+        AgentThreadDispatch::followup_task(
+            &dispatch,
+            MessageAgentV2Request {
+                target: spawned.thread.canonical_path.to_string(),
+                message: "continue once".into(),
+            },
+        )
+        .await
+        .unwrap();
+        while dispatch
+            .runtime_manager
+            .is_running(&spawned.thread.thread_id)
+        {
+            tokio::task::yield_now().await;
+        }
+
+        let payloads = payloads.lock().unwrap();
+        assert_eq!(payloads.len(), 1);
+        assert_eq!(payloads[0].session_id, spawned.thread.session_id);
+        assert!(payloads[0]
+            .detail
+            .contains(&format!("thread_id={}", spawned.thread.thread_id)));
+        assert!(payloads[0].detail.contains("parent_thread_id=root-session"));
+        assert!(payloads[0].detail.contains("path=/root/worker"));
+        assert!(payloads[0].detail.contains("agent_type=default"));
+        assert!(payloads[0]
+            .detail
+            .contains(&format!("task={}", types::truncate_chars(&long_task, 200))));
+        assert!(!payloads[0].detail.contains(&long_task));
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn stop_hook_observes_only_durable_close_once_and_is_panic_safe() {
+        let dir = tempfile::tempdir().unwrap();
+        let memory_dir = dir.path().join("memory");
+        let sessions =
+            session::SessionStore::open_sessions_dir(&memory_dir.join("sessions")).unwrap();
+        sessions.ensure_session("root-session", "test").unwrap();
+        let mut dispatch = dispatch(&dir);
+        dispatch.chat_override = Some(scripted_chat("done"));
+        let bus = Arc::new(hooks::PluginHookBus::new());
+        bus.register(hooks::SUBAGENT_STOP, |_| panic!("injected hook panic"));
+        let payloads = Arc::new(Mutex::new(Vec::<hooks::HookPayload>::new()));
+        let observed = Arc::clone(&payloads);
+        bus.register(hooks::SUBAGENT_STOP, move |payload| {
+            observed.lock().unwrap().push(payload.clone());
+            hooks::HookOutcome::Block("observer outcomes are ignored".into())
+        });
+        let spawned =
+            AgentThreadDispatch::spawn_agent(&dispatch, request_with_hook_bus(&memory_dir, bus))
+                .await
+                .unwrap();
+        while dispatch
+            .runtime_manager
+            .is_running(&spawned.thread.thread_id)
+        {
+            tokio::task::yield_now().await;
+        }
+        assert!(matches!(
+            dispatch
+                .control
+                .resolve_desktop_target("/root/worker")
+                .unwrap()
+                .status,
+            AgentStatusV2::Completed { .. }
+        ));
+        assert!(payloads.lock().unwrap().is_empty());
+
+        let desktop = desktop_control(&dispatch, &memory_dir);
+        let (first, second) = tokio::join!(
+            desktop.close_subtree("root-session", "/root/worker"),
+            desktop.close_subtree("root-session", "/root/worker")
+        );
+        first.unwrap();
+        second.unwrap();
+        desktop
+            .close_subtree("root-session", "/root/worker")
+            .await
+            .unwrap();
+
+        let payloads = payloads.lock().unwrap();
+        assert_eq!(payloads.len(), 1);
+        assert_eq!(payloads[0].session_id, spawned.thread.session_id);
+        assert!(payloads[0].detail.contains("path=/root/worker"));
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn interrupted_and_errored_turns_do_not_emit_stop_before_close() {
+        let dir = tempfile::tempdir().unwrap();
+        let memory_dir = dir.path().join("memory");
+        let sessions =
+            session::SessionStore::open_sessions_dir(&memory_dir.join("sessions")).unwrap();
+        sessions.ensure_session("root-session", "test").unwrap();
+        let mut dispatch = dispatch(&dir);
+        let bus = Arc::new(hooks::PluginHookBus::new());
+        let stop_count = Arc::new(AtomicUsize::new(0));
+        let observed = Arc::clone(&stop_count);
+        bus.register(hooks::SUBAGENT_STOP, move |_| {
+            observed.fetch_add(1, Ordering::SeqCst);
+            hooks::HookOutcome::Continue
+        });
+
+        dispatch.chat_override = Some(immediate_error_chat());
+        let errored = AgentThreadDispatch::spawn_agent(
+            &dispatch,
+            request_with_hook_bus(&memory_dir, Arc::clone(&bus)),
+        )
+        .await
+        .unwrap();
+        while dispatch
+            .runtime_manager
+            .is_running(&errored.thread.thread_id)
+        {
+            tokio::task::yield_now().await;
+        }
+        assert!(matches!(
+            dispatch
+                .control
+                .resolve_desktop_target("/root/worker")
+                .unwrap()
+                .status,
+            AgentStatusV2::Errored { .. }
+        ));
+        assert_eq!(stop_count.load(Ordering::SeqCst), 0);
+
+        let mut interrupted_request = request_with_hook_bus(&memory_dir, Arc::clone(&bus));
+        interrupted_request.request.task_name = "interrupted".into();
+        dispatch.chat_override = Some(pending_chat());
+        let interrupted = AgentThreadDispatch::spawn_agent(&dispatch, interrupted_request)
+            .await
+            .unwrap();
+        AgentThreadDispatch::interrupt_agent(
+            &dispatch,
+            InterruptAgentV2Request {
+                target: interrupted.thread.canonical_path.to_string(),
+            },
+        )
+        .await
+        .unwrap();
+        while dispatch
+            .runtime_manager
+            .is_running(&interrupted.thread.thread_id)
+        {
+            tokio::task::yield_now().await;
+        }
+        assert_eq!(stop_count.load(Ordering::SeqCst), 0);
+
+        let desktop = desktop_control(&dispatch, &memory_dir);
+        desktop
+            .close_subtree("root-session", errored.thread.canonical_path.as_str())
+            .await
+            .unwrap();
+        desktop
+            .close_subtree("root-session", interrupted.thread.canonical_path.as_str())
+            .await
+            .unwrap();
+        assert_eq!(stop_count.load(Ordering::SeqCst), 2);
+    }
+
     #[tokio::test]
     async fn spawn_preflight_failure_rolls_back_path_row_edge_and_runtime_request() {
         let dir = tempfile::tempdir().unwrap();
@@ -2478,7 +2788,14 @@ mod tests {
             session::SessionStore::open_sessions_dir(&memory_dir.join("sessions")).unwrap();
         sessions.ensure_session("root-session", "test").unwrap();
         let dispatch = dispatch(&dir);
-        let mut request = spawn_request(&memory_dir);
+        let bus = Arc::new(hooks::PluginHookBus::new());
+        let start_count = Arc::new(AtomicUsize::new(0));
+        let observed = Arc::clone(&start_count);
+        bus.register(hooks::SUBAGENT_START, move |_| {
+            observed.fetch_add(1, Ordering::SeqCst);
+            hooks::HookOutcome::Continue
+        });
+        let mut request = request_with_hook_bus(&memory_dir, bus);
         request.chat_targets.clear();
 
         let error = AgentThreadDispatch::spawn_agent(&dispatch, request)
@@ -2515,6 +2832,7 @@ mod tests {
             .lock()
             .unwrap()
             .is_empty());
+        assert_eq!(start_count.load(Ordering::SeqCst), 0);
         assert_eq!(
             sessions
                 .list_sessions(session::SessionListFilter::Active, 10)
@@ -2588,16 +2906,25 @@ mod tests {
             Arc::new(AgentRuntimeManager::default()),
         );
         dispatch.chat_override = Some(pending_chat());
+        let bus = Arc::new(hooks::PluginHookBus::new());
+        let start_count = Arc::new(AtomicUsize::new(0));
+        let observed = Arc::clone(&start_count);
+        bus.register(hooks::SUBAGENT_START, move |_| {
+            observed.fetch_add(1, Ordering::SeqCst);
+            hooks::HookOutcome::Continue
+        });
 
-        let error = AgentThreadDispatch::spawn_agent(&dispatch, spawn_request(&memory_dir))
-            .await
-            .unwrap_err();
+        let error =
+            AgentThreadDispatch::spawn_agent(&dispatch, request_with_hook_bus(&memory_dir, bus))
+                .await
+                .unwrap_err();
         assert!(
             format!("{error:#}").contains("active agent execution limit"),
             "{error:#}"
         );
         assert_eq!(control.identity_count().unwrap(), 0);
         assert_eq!(graph.snapshot("root-session").unwrap().threads.len(), 1);
+        assert_eq!(start_count.load(Ordering::SeqCst), 0);
         assert_eq!(
             sessions
                 .list_sessions(session::SessionListFilter::Active, 10)
@@ -2678,11 +3005,25 @@ mod tests {
         dispatch
             .runtime_manager
             .set_before_startup_ack_hook(Some(hook.clone()));
+        let bus = Arc::new(hooks::PluginHookBus::new());
+        let start_count = Arc::new(AtomicUsize::new(0));
+        let observed = Arc::clone(&start_count);
+        bus.register(hooks::SUBAGENT_START, move |_| {
+            observed.fetch_add(1, Ordering::SeqCst);
+            hooks::HookOutcome::Continue
+        });
         let dispatch = Arc::new(dispatch);
         let spawn = tokio::spawn({
             let dispatch = Arc::clone(&dispatch);
             let memory_dir = memory_dir.clone();
-            async move { AgentThreadDispatch::spawn_agent(&*dispatch, spawn_request(&memory_dir)).await }
+            let bus = Arc::clone(&bus);
+            async move {
+                AgentThreadDispatch::spawn_agent(
+                    &*dispatch,
+                    request_with_hook_bus(&memory_dir, bus),
+                )
+                .await
+            }
         });
         hook.entered.notified().await;
         let child = dispatch
@@ -2741,6 +3082,7 @@ mod tests {
             .is_none());
         assert!(sessions.get_session(&child.session_id).unwrap().is_none());
         assert_eq!(sessions.get_messages("root-session").unwrap().len(), 1);
+        assert_eq!(start_count.load(Ordering::SeqCst), 0);
 
         let retried = AgentThreadDispatch::spawn_agent(&*dispatch, spawn_request(&memory_dir))
             .await

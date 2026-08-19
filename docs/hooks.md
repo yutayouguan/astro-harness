@@ -29,8 +29,8 @@ Astro 提供与常见 Agent 生命周期对齐的 **三套 Hook**：
 | `transform_terminal_output` | `terminal` 原始 stdout/stderr 后、64KiB 截断前 | `ReplaceText` |
 | `transform_tool_result` | 任意工具返回后、`post_tool_call` 前 | `ReplaceText` |
 | `post_tool_call` | 工具返回后（已应用 `transform_tool_result`） | 观察 |
-| `subagent_start` | Agent Thread 构造完、首轮执行前（每个 thread 一次） | 观察 |
-| `subagent_stop` | Agent Thread 通过 Desktop close 控制面进入 `Shutdown` 后 | 观察 |
+| `subagent_start` | Agent Thread 首轮 startup-ready 且 caller 已接受后（每个 thread 一次） | 观察 |
+| `subagent_stop` | Desktop close 已耐久化 `Shutdown` 并成功收敛后（每个 thread 一次） | 观察 |
 | `pre_verify` | 无工具调用的最终回复，且本轮执行过写盘工具（`terminal`；`file_ops` 的 `write`/`append`/`delete`/`mkdir`） | `KeepGoing(msg)` |
 | `transform_llm_output` | 最终 assistant 文本定稿、`post_llm_call` 前 | `ReplaceText` |
 | `post_llm_call` | 该 turn 成功结束后（已应用 `transform_llm_output`） | 观察 |
@@ -100,6 +100,8 @@ ctx.register_hook("pre_llm_call", |_| {
 ```
 
 `InjectContext` 只影响**本轮**送给模型的消息视图（追加 `[astro:hook-context]`），不改写数据库里的用户原文。
+
+Agent Thread 生命周期回调是观察型：返回阻断结果或抛出 panic 都不会改变 spawn/close 结果。`PluginHookBus` 是进程内对象，因此只有当前进程注册并保留了 runtime request 的 bus 能观察 `subagent_stop`；进程重启后仍可耐久关闭线程，但不会回放上一进程的回调。
 
 ---
 

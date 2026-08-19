@@ -445,10 +445,10 @@ schema 和 RPC 字段改名都必须提供 migration 或 serde alias。
 | --- | --- | --- |
 | `AgentLoop` | `Session` | 已更名为真实主类；`AgentLoop` 仅保留兼容 type alias |
 | `AgentConfig` | `Config` | 已更名为真实主类；`AgentConfig` 仅保留兼容 type alias |
-| `AgentThreadDispatch` | `AgentControl` | 根树共享控制面 |
-| `DefaultAgentThreadDispatch` | `AgentControl` | 删除无状态 dispatcher |
-| `AgentThreadStore` | `ThreadStore` / `LocalThreadStore` | 接口与本地实现分离 |
-| `AgentThreadStatus` | `AgentStatus` | 保留旧序列化值兼容 |
+| `AgentThreadDispatch` | 模型工具边界 trait | V2 保留，只暴露六个模型工具 |
+| `DefaultAgentThreadDispatch` | session-bound V2 dispatcher | V2 保留，共享 root-scoped `AgentControl` |
+| `AgentGraphStore` | Agent graph projection | V2 已落地；只存 graph、mailbox、status event 与恢复元数据 |
+| `AgentStatusV2` | `AgentStatus` | V2 严格六态；旧序列化值只由一次性迁移器识别 |
 | `ToolContext` | `ToolInvocation` | 可变 memory facade 移出调用参数 |
 | 无 | `TurnContext` | 已落地，Turn 级不可变状态 |
 | 无 | `StepContext` | 已落地，sampling 级不可变快照 |
@@ -468,7 +468,7 @@ schema 和 RPC 字段改名都必须提供 migration 或 serde alias。
 | `stream_chat_with_hooks` | `run_sampling_request`（已落地） |
 | `handle_tool_call_async_scoped` | `ToolCallRuntime::run` |
 | `dispatch_named_tool` | `ToolRouter::dispatch_tool_call` |
-| `run_agent_thread` | `ThreadManager::spawn_thread` + `RegularTask` |
+| `AgentRuntimeManager::start_turn` | `ThreadManager::spawn_thread` + `RegularTask` |
 | `run_background_multi_turn` | 删除；保留 event collector adapter |
 
 ### 10.3 局部变量
@@ -584,11 +584,11 @@ v2.10 history 内锁化批次 2：删除 `Session.session_messages`，由
 - 审批、沙箱、network approval 和 retry 收口。
 - 删除工具执行时重新加载权限/工具的路径。
 
-### Phase D：ThreadManager 与 AgentControl
+### Phase D：AgentRuntimeManager 与 AgentControl（V2 已替换旧实现）
 
-- root/subagent 都由 `ThreadManager` 创建。
+- root/subagent 都由 V2 runtime manager 启动 turn。
 - `AgentControl` 在一棵 Agent 树内共享。
-- 迁移 `subagents.db` 到 `ThreadStore`/Agent graph projection。
+- 当前投影库为 `subagents-v2.db`；旧 V1 库只在启动迁移/归档时读取，不再是可调用 runtime。
 
 ### Phase E：Rollout 与记忆
 
