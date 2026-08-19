@@ -28,11 +28,11 @@ pub use control::{
 pub use mailbox::{MailboxKind, MailboxMessage, NewMailboxMessage};
 pub use migration::{HistoricalAgentMessage, HistoricalAgentThread};
 pub use model::{
-    AgentStatusKind, AgentStatusV2, AgentThreadDetailV2, AgentThreadMessageV2, AgentThreadV2,
-    AgentTreeSnapshotV2, InterruptAgentV2Request, InterruptAgentV2Result, ListAgentsV2Request,
-    MessageAgentV2Request, MessageAgentV2Result, RunnerEvent, SpawnAgentV2Request,
-    SpawnAgentV2Result, SpawnRuntimeV2Request, ThreadReservation, WaitAgentV2Request,
-    WaitAgentV2Result,
+    AgentRuntimeDescriptorV2, AgentStatusKind, AgentStatusV2, AgentThreadDetailV2,
+    AgentThreadMessageV2, AgentThreadV2, AgentTreeSnapshotV2, InterruptAgentV2Request,
+    InterruptAgentV2Result, ListAgentsV2Request, MessageAgentV2Request, MessageAgentV2Result,
+    RunnerEvent, SpawnAgentV2Request, SpawnAgentV2Result, SpawnRuntimeV2Request, ThreadReservation,
+    WaitAgentV2Request, WaitAgentV2Result,
 };
 pub use path::AgentPath;
 pub use registry::{AgentRegistry, ExecutionPermit, Limits, SpawnReservation};

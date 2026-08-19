@@ -4,7 +4,9 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use crate::context::ToolContext;
-use crate::engine::execution::SpawnAgentDispatchRequest;
+use crate::engine::execution::{
+    FollowupAgentDispatchRequest, ParentRuntimeMaterial, SpawnAgentDispatchRequest,
+};
 use crate::registry::{ToolEntry, ToolRegistry};
 use crate::schema::schema_for_args;
 
@@ -144,16 +146,6 @@ async fn handle(
             require_non_empty("task_name", &parsed.task_name)?;
             require_non_empty("message", &parsed.message)?;
             validate_fork_turns(parsed.fork_turns.as_deref())?;
-            let parent_model = if ctx.credentials.provider.trim().is_empty()
-                && ctx.credentials.model.trim().is_empty()
-            {
-                None
-            } else {
-                Some(format!(
-                    "{}:{}",
-                    ctx.credentials.provider, ctx.credentials.model
-                ))
-            };
             let request = SpawnAgentDispatchRequest {
                 request: subagents::SpawnAgentV2Request {
                     task_name: parsed.task_name.trim().to_string(),
@@ -163,14 +155,7 @@ async fn handle(
                     reasoning_effort: clean_optional(parsed.reasoning_effort),
                     fork_turns: clean_optional(parsed.fork_turns),
                 },
-                memory_dir: ctx.memory_dir.clone(),
-                parent_agent_id: ctx.memory.agent_id.clone(),
-                parent_model,
-                parent_sandbox_mode: current_sandbox_mode(ctx),
-                inherited_skill_config: ctx.skill_config_overrides.to_vec(),
-                chat_targets: ctx.chat_targets.to_vec(),
-                project_root: ctx.project_root.clone(),
-                hook_bus: ctx.hook_bus.clone(),
+                runtime: parent_runtime_material(ctx),
             };
             Ok(serde_json::to_string(
                 &dispatch.spawn_agent(request).await?,
@@ -197,7 +182,12 @@ async fn handle(
             let result = if name == "send_message" {
                 dispatch.send_message(request).await?
             } else {
-                dispatch.followup_task(request).await?
+                dispatch
+                    .followup_task_with_runtime(FollowupAgentDispatchRequest {
+                        request,
+                        runtime: Some(parent_runtime_material(ctx)),
+                    })
+                    .await?
             };
             Ok(serde_json::to_string(&result)?)
         }
@@ -224,6 +214,28 @@ async fn handle(
             )?)
         }
         _ => anyhow::bail!("unknown agent thread tool: {name}"),
+    }
+}
+
+fn parent_runtime_material(ctx: &ToolContext<'_>) -> ParentRuntimeMaterial {
+    let parent_model =
+        if ctx.credentials.provider.trim().is_empty() && ctx.credentials.model.trim().is_empty() {
+            None
+        } else {
+            Some(format!(
+                "{}:{}",
+                ctx.credentials.provider, ctx.credentials.model
+            ))
+        };
+    ParentRuntimeMaterial {
+        memory_dir: ctx.memory_dir.clone(),
+        parent_agent_id: ctx.memory.agent_id.clone(),
+        parent_model,
+        parent_sandbox_mode: current_sandbox_mode(ctx),
+        inherited_skill_config: ctx.skill_config_overrides.to_vec(),
+        chat_targets: ctx.chat_targets.to_vec(),
+        project_root: ctx.project_root.clone(),
+        hook_bus: ctx.hook_bus.clone(),
     }
 }
 

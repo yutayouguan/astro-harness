@@ -38,7 +38,10 @@ pub use dispatch::{
     builtin_handler_names, dispatch_tool, in_process_network_hosts,
     tool_requires_in_process_network, tool_requires_in_process_write,
 };
-pub use engine::execution::{AgentThreadDispatch, SpawnAgentDispatchRequest};
+pub use engine::execution::{
+    AgentThreadDispatch, FollowupAgentDispatchRequest, ParentRuntimeMaterial,
+    SpawnAgentDispatchRequest,
+};
 pub use engine::network::InProcessNetworkGrant;
 pub use parse::{
     extract_tool_calls, resolve_tool_calls, ParsedToolCall, ToolCallAccumulator, ToolCallDelta,

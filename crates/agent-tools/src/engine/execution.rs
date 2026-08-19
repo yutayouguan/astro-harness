@@ -10,12 +10,11 @@ use subagents::{
     WaitAgentV2Request, WaitAgentV2Result,
 };
 
-/// Non-serializable parent runtime material accompanying a model-visible spawn
-/// request. Credentials and process-local dependencies must never enter the
-/// tool schema or durable graph.
+/// Non-serializable parent runtime material accompanying model-visible Agent
+/// Thread requests. Credentials and process-local dependencies must never
+/// enter the tool schema or durable graph.
 #[derive(Clone)]
-pub struct SpawnAgentDispatchRequest {
-    pub request: SpawnAgentV2Request,
+pub struct ParentRuntimeMaterial {
     pub memory_dir: PathBuf,
     pub parent_agent_id: String,
     pub parent_model: Option<String>,
@@ -24,6 +23,29 @@ pub struct SpawnAgentDispatchRequest {
     pub chat_targets: Vec<types::ChatTarget>,
     pub project_root: Option<PathBuf>,
     pub hook_bus: Option<Arc<hooks::PluginHookBus>>,
+}
+
+#[derive(Clone)]
+pub struct SpawnAgentDispatchRequest {
+    pub request: SpawnAgentV2Request,
+    pub runtime: ParentRuntimeMaterial,
+}
+
+#[derive(Clone)]
+pub struct FollowupAgentDispatchRequest {
+    pub request: MessageAgentV2Request,
+    /// Desktop callers do not own the active parent model credentials. They
+    /// may use a process-local registered runtime, but cannot cold-recover it.
+    pub runtime: Option<ParentRuntimeMaterial>,
+}
+
+impl From<MessageAgentV2Request> for FollowupAgentDispatchRequest {
+    fn from(request: MessageAgentV2Request) -> Self {
+        Self {
+            request,
+            runtime: None,
+        }
+    }
 }
 
 /// The six model-visible Codex V2 Agent Thread operations.
@@ -46,6 +68,13 @@ pub trait AgentThreadDispatch: Send + Sync {
     async fn followup_task(
         &self,
         request: MessageAgentV2Request,
+    ) -> anyhow::Result<MessageAgentV2Result>;
+
+    /// Runtime-enriched entry used by the model tool boundary. Desktop may
+    /// only call the plain method and therefore cannot cold-recover secrets.
+    async fn followup_task_with_runtime(
+        &self,
+        request: FollowupAgentDispatchRequest,
     ) -> anyhow::Result<MessageAgentV2Result>;
 
     async fn wait_agent(&self, request: WaitAgentV2Request) -> anyhow::Result<WaitAgentV2Result>;

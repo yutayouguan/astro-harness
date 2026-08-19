@@ -241,6 +241,20 @@ impl AgentControl {
         self.store.path()
     }
 
+    pub fn record_runtime_descriptor(
+        &self,
+        descriptor: &crate::AgentRuntimeDescriptorV2,
+    ) -> anyhow::Result<()> {
+        self.store.record_runtime_descriptor(descriptor)
+    }
+
+    pub fn runtime_descriptor(
+        &self,
+        thread_id: &str,
+    ) -> anyhow::Result<Option<crate::AgentRuntimeDescriptorV2>> {
+        self.store.runtime_descriptor(thread_id)
+    }
+
     pub fn reserve_spawn<'a>(
         &'a self,
         parent: &AgentPath,
@@ -352,6 +366,17 @@ impl AgentControl {
         request: MessageAgentV2Request,
         trigger_turn: bool,
     ) -> anyhow::Result<MailboxMessage> {
+        self.enqueue_message_locked_with_publish(lifecycle, sender, request, trigger_turn, true)
+    }
+
+    fn enqueue_message_locked_with_publish(
+        &self,
+        lifecycle: &RuntimeLifecycleState,
+        sender: &AgentPath,
+        request: MessageAgentV2Request,
+        trigger_turn: bool,
+        publish: bool,
+    ) -> anyhow::Result<MailboxMessage> {
         let sender_thread = self.require_path(sender, "message sender")?;
         let target = self.resolve_target(sender, &request.target)?;
         if target.status == AgentStatusV2::Shutdown {
@@ -385,13 +410,19 @@ impl AgentControl {
             payload: message.to_string(),
             trigger_turn,
         })?;
+        if publish {
+            self.publish_mailbox_activity(&target);
+        }
+        Ok(stored)
+    }
+
+    fn publish_mailbox_activity(&self, target: &AgentThreadV2) {
         self.activity.publish(
             AgentActivityKind::Mailbox {
                 thread_id: target.thread_id.clone(),
             },
-            Some(target),
+            Some(target.clone()),
         );
-        Ok(stored)
     }
 
     /// Linearize a follow-up's Shutdown check, durable enqueue, and runtime
@@ -411,8 +442,23 @@ impl AgentControl {
                 target.canonical_path
             );
         }
-        let message = self.enqueue_message_locked(&lifecycle, sender, request, true)?;
-        let admitted = admission(&target)?;
+        let message =
+            self.enqueue_message_locked_with_publish(&lifecycle, sender, request, true, false)?;
+        let admitted = match admission(&target) {
+            Ok(admitted) => admitted,
+            Err(error) => {
+                return match self
+                    .store
+                    .delete_pending_mailbox_message(&message.message_id)
+                {
+                    Ok(()) => Err(error),
+                    Err(rollback) => Err(anyhow::anyhow!(
+                        "follow-up admission failed: {error:#}; mailbox rollback failed: {rollback:#}"
+                    )),
+                };
+            }
+        };
+        self.publish_mailbox_activity(&target);
         Ok((message, admitted))
     }
 

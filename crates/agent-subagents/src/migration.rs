@@ -2,7 +2,7 @@ use anyhow::{bail, Context};
 use rusqlite::{Connection, OptionalExtension, Transaction, TransactionBehavior};
 use serde::{Deserialize, Serialize};
 
-pub(crate) const SCHEMA_VERSION: i32 = 2;
+pub(crate) const SCHEMA_VERSION: i32 = 3;
 
 const V2_DDL: &str = r#"
 CREATE TABLE IF NOT EXISTS agent_threads (
@@ -61,6 +61,22 @@ CREATE TABLE IF NOT EXISTS agent_status_events (
 );
 CREATE INDEX IF NOT EXISTS idx_agent_status_events_thread_sequence
     ON agent_status_events(thread_id, sequence);
+
+CREATE TABLE IF NOT EXISTS agent_runtime_descriptors (
+    thread_id TEXT PRIMARY KEY,
+    model TEXT,
+    reasoning_effort TEXT,
+    FOREIGN KEY(thread_id) REFERENCES agent_threads(thread_id) ON DELETE CASCADE
+);
+"#;
+
+const V3_DDL: &str = r#"
+CREATE TABLE IF NOT EXISTS agent_runtime_descriptors (
+    thread_id TEXT PRIMARY KEY,
+    model TEXT,
+    reasoning_effort TEXT,
+    FOREIGN KEY(thread_id) REFERENCES agent_threads(thread_id) ON DELETE CASCADE
+);
 "#;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -96,6 +112,15 @@ pub(crate) fn migrate(conn: &mut Connection) -> anyhow::Result<()> {
     let existing_version = read_schema_version(&tx)?;
     match existing_version {
         Some(SCHEMA_VERSION) => {
+            tx.commit()?;
+            return Ok(());
+        }
+        Some(2) => {
+            tx.execute_batch(V3_DDL)?;
+            tx.execute(
+                "UPDATE schema_meta SET value = ?1 WHERE key = 'schema_version'",
+                [SCHEMA_VERSION.to_string()],
+            )?;
             tx.commit()?;
             return Ok(());
         }
@@ -362,7 +387,7 @@ mod tests {
         create_v1_fixture(&path, true);
 
         let store = AgentGraphStore::open(path.clone()).unwrap();
-        assert_eq!(store.schema_version().unwrap(), 2);
+        assert_eq!(store.schema_version().unwrap(), 3);
         let historical_threads = store.list_historical_threads().unwrap();
         assert_eq!(historical_threads.len(), 1);
         assert_eq!(historical_threads[0].id, "legacy-thread");
@@ -385,16 +410,66 @@ mod tests {
     }
 
     #[test]
-    fn fresh_database_has_v2_schema_without_history() {
+    fn fresh_database_has_v3_schema_without_history() {
         let dir = tempfile::tempdir().unwrap();
         let store = AgentGraphStore::open(dir.path().join("subagents.db")).unwrap();
 
-        assert_eq!(store.schema_version().unwrap(), 2);
+        assert_eq!(store.schema_version().unwrap(), 3);
         assert!(store.list_historical_threads().unwrap().is_empty());
         assert!(store
             .list_historical_messages("missing")
             .unwrap()
             .is_empty());
+    }
+
+    #[test]
+    fn migrates_v2_schema_additively_and_preserves_threads() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("subagents-v2.db");
+        let conn = Connection::open(&path).unwrap();
+        conn.execute_batch(
+            "PRAGMA foreign_keys=ON;
+             CREATE TABLE schema_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+             INSERT INTO schema_meta(key, value) VALUES ('schema_version', '2');
+             CREATE TABLE agent_threads (
+                 thread_id TEXT PRIMARY KEY,
+                 root_thread_id TEXT NOT NULL,
+                 parent_thread_id TEXT,
+                 canonical_path TEXT NOT NULL,
+                 task_name TEXT NOT NULL,
+                 agent_type TEXT NOT NULL,
+                 session_id TEXT NOT NULL,
+                 status_kind TEXT NOT NULL,
+                 status_payload TEXT NOT NULL,
+                 last_status_sequence INTEGER NOT NULL DEFAULT 0,
+                 created_at TEXT NOT NULL,
+                 updated_at TEXT NOT NULL,
+                 UNIQUE(root_thread_id, canonical_path)
+             );
+             INSERT INTO agent_threads VALUES (
+                 'root', 'root', NULL, '/root', 'root', 'root', 'root',
+                 'running', '{\"kind\":\"running\"}', 0,
+                 '2026-08-19T00:00:00Z', '2026-08-19T00:00:00Z'
+             );",
+        )
+        .unwrap();
+        drop(conn);
+
+        let store = AgentGraphStore::open(path.clone()).unwrap();
+        assert_eq!(store.schema_version().unwrap(), 3);
+        assert!(store.get_thread("root").unwrap().is_some());
+        drop(store);
+
+        let conn = Connection::open(path).unwrap();
+        let descriptor_table: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master
+                 WHERE type = 'table' AND name = 'agent_runtime_descriptors'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(descriptor_table, 1);
     }
 
     #[test]
@@ -433,7 +508,7 @@ mod tests {
         drop(conn);
 
         let store = AgentGraphStore::open(path.clone()).unwrap();
-        assert_eq!(store.schema_version().unwrap(), 2);
+        assert_eq!(store.schema_version().unwrap(), 3);
         let archived = store.list_historical_messages("orphan-thread").unwrap();
         assert_eq!(archived.len(), 1);
         assert_eq!(archived[0].content, "preserve me");

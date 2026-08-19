@@ -6,6 +6,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
 use std::time::Duration;
 
+use anyhow::Context;
 use async_trait::async_trait;
 use subagents::{
     AgentControl, AgentPath, AgentThreadDetailV2, AgentThreadMessageV2, AgentThreadV2,
@@ -13,7 +14,10 @@ use subagents::{
     MessageAgentV2Request, MessageAgentV2Result, SpawnAgentV2Result, SpawnRuntimeV2Request,
     WaitAgentV2Request, WaitAgentV2Result, WaitOutcome,
 };
-use tools::{AgentThreadDispatch, SpawnAgentDispatchRequest};
+use tools::{
+    AgentThreadDispatch, FollowupAgentDispatchRequest, ParentRuntimeMaterial,
+    SpawnAgentDispatchRequest,
+};
 
 use super::agent_runtime::{
     AgentRuntimeManager, CloseThreadStart, FollowupAdmission, RunAgentTurnRequest,
@@ -165,6 +169,21 @@ impl RuntimeRequestRegistry {
             .map_err(|_| anyhow::anyhow!("agent runtime request registry mutex is poisoned"))?
             .get(thread_id)
             .cloned())
+    }
+
+    fn get_or_insert(
+        &self,
+        thread_id: &str,
+        candidate: Arc<StoredRuntimeRequest>,
+    ) -> anyhow::Result<Arc<StoredRuntimeRequest>> {
+        let mut requests = self
+            .requests
+            .lock()
+            .map_err(|_| anyhow::anyhow!("agent runtime request registry mutex is poisoned"))?;
+        Ok(requests
+            .entry(thread_id.to_string())
+            .or_insert(candidate)
+            .clone())
     }
 
     fn take(&self, thread_id: &str) -> anyhow::Result<Option<Arc<StoredRuntimeRequest>>> {
@@ -326,6 +345,77 @@ impl DefaultAgentThreadDispatch {
             })?;
         }
     }
+
+    fn recover_runtime_request(
+        &self,
+        target: &AgentThreadV2,
+        material: Option<&ParentRuntimeMaterial>,
+    ) -> anyhow::Result<Arc<StoredRuntimeRequest>> {
+        let material = material.ok_or_else(|| {
+            anyhow::anyhow!(
+                "agent runtime configuration is unavailable for {}; cold recovery requires an active parent runtime context",
+                target.canonical_path
+            )
+        })?;
+        let descriptor = self
+            .control
+            .runtime_descriptor(&target.thread_id)?
+            .with_context(|| {
+                format!(
+                    "runtime descriptor is unavailable for {}",
+                    target.canonical_path
+                )
+            })?;
+        let settings =
+            subagents::load_agents_settings(&material.memory_dir, material.project_root.as_deref());
+        anyhow::ensure!(
+            settings.enabled,
+            "agent threads are disabled by Codex agent settings"
+        );
+        let catalog =
+            subagents::load_agent_catalog(&material.memory_dir, material.project_root.as_deref());
+        let resolved = subagents::resolve_agent(
+            &catalog,
+            &settings,
+            &target.agent_type,
+            descriptor.model.as_deref(),
+            descriptor.reasoning_effort.as_deref(),
+            material.parent_model.as_deref(),
+            Some(&material.parent_sandbox_mode),
+        )?;
+        let parent_path = target
+            .canonical_path
+            .parent()
+            .context("non-root Agent Thread is missing its parent path")?;
+        let parent_thread_id = target
+            .parent_thread_id
+            .as_deref()
+            .context("non-root Agent Thread is missing its parent thread id")?;
+        let runtime = build_runtime_request(
+            SpawnAgentDispatchRequest {
+                request: subagents::SpawnAgentV2Request {
+                    task_name: target.task_name.clone(),
+                    message: target.task_name.clone(),
+                    agent_type: Some(target.agent_type.clone()),
+                    model: descriptor.model,
+                    reasoning_effort: descriptor.reasoning_effort,
+                    fork_turns: None,
+                },
+                runtime: material.clone(),
+            },
+            resolved,
+            &parent_path,
+            parent_thread_id,
+            self.control.root_thread_id(),
+            settings.interrupt_message,
+        );
+        validate_recovered_runtime_setup(&material.memory_dir, &self.control, target, &runtime)?;
+        Ok(Arc::new(StoredRuntimeRequest {
+            runtime,
+            memory_dir: material.memory_dir.clone(),
+            lifecycle_hooks: Arc::new(AgentLifecycleHookState::default()),
+        }))
+    }
 }
 
 #[async_trait]
@@ -334,22 +424,26 @@ impl AgentThreadDispatch for DefaultAgentThreadDispatch {
         &self,
         request: SpawnAgentDispatchRequest,
     ) -> anyhow::Result<SpawnAgentV2Result> {
-        let settings =
-            subagents::load_agents_settings(&request.memory_dir, request.project_root.as_deref());
+        let settings = subagents::load_agents_settings(
+            &request.runtime.memory_dir,
+            request.runtime.project_root.as_deref(),
+        );
         if !settings.enabled {
             anyhow::bail!("agent threads are disabled by Codex agent settings");
         }
         let agent_type = request.request.agent_type.as_deref().unwrap_or("default");
-        let catalog =
-            subagents::load_agent_catalog(&request.memory_dir, request.project_root.as_deref());
+        let catalog = subagents::load_agent_catalog(
+            &request.runtime.memory_dir,
+            request.runtime.project_root.as_deref(),
+        );
         let resolved = subagents::resolve_agent(
             &catalog,
             &settings,
             agent_type,
             request.request.model.as_deref(),
             request.request.reasoning_effort.as_deref(),
-            request.parent_model.as_deref(),
-            Some(&request.parent_sandbox_mode),
+            request.runtime.parent_model.as_deref(),
+            Some(&request.runtime.parent_sandbox_mode),
         )?;
 
         let reservation = self.control.reserve_spawn_typed(
@@ -358,7 +452,7 @@ impl AgentThreadDispatch for DefaultAgentThreadDispatch {
             &resolved.definition.name,
         )?;
         let thread = reservation.thread().clone();
-        let memory_dir = request.memory_dir.clone();
+        let memory_dir = request.runtime.memory_dir.clone();
         let runtime = build_runtime_request(
             request,
             resolved,
@@ -367,6 +461,13 @@ impl AgentThreadDispatch for DefaultAgentThreadDispatch {
             self.control.root_thread_id(),
             settings.interrupt_message,
         );
+
+        self.control
+            .record_runtime_descriptor(&subagents::AgentRuntimeDescriptorV2 {
+                thread_id: thread.thread_id.clone(),
+                model: runtime.model_request.model.clone(),
+                reasoning_effort: runtime.model_request.reasoning_effort.clone(),
+            })?;
 
         let mut forked_session = fork_parent_session(
             &memory_dir,
@@ -486,30 +587,37 @@ impl AgentThreadDispatch for DefaultAgentThreadDispatch {
         &self,
         request: MessageAgentV2Request,
     ) -> anyhow::Result<MessageAgentV2Result> {
-        let followup_text = request.message.trim().to_string();
+        self.followup_task_with_runtime(request.into()).await
+    }
+
+    async fn followup_task_with_runtime(
+        &self,
+        request: FollowupAgentDispatchRequest,
+    ) -> anyhow::Result<MessageAgentV2Result> {
+        let followup_text = request.request.message.trim().to_string();
         #[cfg(test)]
         if let Some(hook) = self.before_followup_atomic_hook.as_ref() {
             // Deliberately model a stale pre-check; the control-layer atomic
             // admission below must re-check after this race window.
             let _ = self
                 .control
-                .resolve_target(&self.current_path, &request.target)?;
+                .resolve_target(&self.current_path, &request.request.target)?;
             hook.entered.notify_one();
             hook.release.notified().await;
         }
         let (message, admission) = self.control.enqueue_followup_with_admission(
             &self.current_path,
-            request,
+            request.request,
             |target| {
-                let stored = self
-                    .runtime_requests
-                    .get(&target.thread_id)?
-                    .ok_or_else(|| {
-                        anyhow::anyhow!(
-                            "agent runtime configuration is unavailable for {}",
-                            target.canonical_path
-                        )
-                    })?;
+                let stored = match self.runtime_requests.get(&target.thread_id)? {
+                    Some(stored) => stored,
+                    None => {
+                        let recovered =
+                            self.recover_runtime_request(target, request.runtime.as_ref())?;
+                        self.runtime_requests
+                            .get_or_insert(&target.thread_id, recovered)?
+                    }
+                };
                 let mut turn_request = stored.as_ref().clone();
                 turn_request.runtime.model_request.message = followup_text;
                 let run = self.run_request(target.clone(), turn_request, true);
@@ -611,12 +719,13 @@ fn build_runtime_request(
     root_thread_id: &str,
     interrupt_message: bool,
 ) -> SpawnRuntimeV2Request {
+    let material = request.runtime;
     let mut model_request = request.request;
     model_request.agent_type = Some(resolved.definition.name.clone());
     model_request.model = resolved.model;
     model_request.reasoning_effort = resolved.model_reasoning_effort;
 
-    let mut skills = request
+    let mut skills = material
         .inherited_skill_config
         .into_iter()
         .map(|(path, enabled)| subagents::SkillConfigEntry { path, enabled })
@@ -631,15 +740,15 @@ fn build_runtime_request(
         parent_path: parent_path.clone(),
         root_thread_id: root_thread_id.to_string(),
         parent_session_id: parent_thread_id.to_string(),
-        parent_agent_id: request.parent_agent_id,
+        parent_agent_id: material.parent_agent_id,
         developer_instructions: resolved.definition.developer_instructions,
         context_snapshot: String::new(),
         sandbox_mode: resolved.sandbox_mode,
         mcp_servers: resolved.definition.mcp_servers,
         skills_config: skills,
-        chat_targets: request.chat_targets,
-        project_root: request.project_root,
-        hook_bus: request.hook_bus,
+        chat_targets: material.chat_targets,
+        project_root: material.project_root,
+        hook_bus: material.hook_bus,
         interrupt_message,
     }
 }
@@ -704,6 +813,23 @@ fn validate_runtime_setup(
         thread.canonical_path.clone(),
     )?;
     Ok(())
+}
+
+fn validate_recovered_runtime_setup(
+    memory_dir: &Path,
+    control: &Arc<AgentControl>,
+    thread: &subagents::AgentThreadV2,
+    runtime: &SpawnRuntimeV2Request,
+) -> anyhow::Result<()> {
+    let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("sessions"))?;
+    let stored = sessions
+        .get_session(&thread.session_id)?
+        .with_context(|| format!("child session {:?} is unavailable", thread.session_id))?;
+    anyhow::ensure!(
+        stored.parent_session_id.as_deref() == thread.parent_thread_id.as_deref(),
+        "child session ownership no longer matches the durable Agent Thread parent"
+    );
+    validate_runtime_setup(memory_dir, control, thread, runtime, &thread.session_id)
 }
 
 /// Desktop-only operations. This trait deliberately remains separate from the
@@ -1274,6 +1400,22 @@ mod tests {
         })
     }
 
+    fn capturing_config_chat(
+        captured: Arc<Mutex<Vec<providers::types::ProviderConfig>>>,
+    ) -> crate::streaming::ChatOverride {
+        Arc::new(move |_messages, _tools, config| {
+            captured.lock().unwrap().push(config.clone());
+            Box::pin(async move {
+                Ok(Box::pin(stream::iter(vec![
+                    Ok(StreamChunk::Text("recovered".into())),
+                    Ok(StreamChunk::Done {
+                        finish_reason: "stop".into(),
+                    }),
+                ])) as CompletionStream)
+            })
+        })
+    }
+
     fn gated_first_turn_chat(
         entered: Arc<tokio::sync::Notify>,
         release: Arc<tokio::sync::Notify>,
@@ -1333,20 +1475,22 @@ mod tests {
                 reasoning_effort: None,
                 fork_turns: Some("none".into()),
             },
-            memory_dir: memory_dir.to_path_buf(),
-            parent_agent_id: home::DEFAULT_AGENT_ID.into(),
-            parent_model: Some("openai:test".into()),
-            parent_sandbox_mode: "workspace-write".into(),
-            inherited_skill_config: Vec::new(),
-            chat_targets: vec![types::ChatTarget {
-                provider_id: "test".into(),
-                backend_id: "openai".into(),
-                model: "test".into(),
-                api_key: "test".into(),
-                base_url: "http://127.0.0.1.invalid".into(),
-            }],
-            project_root: None,
-            hook_bus: None,
+            runtime: ParentRuntimeMaterial {
+                memory_dir: memory_dir.to_path_buf(),
+                parent_agent_id: home::DEFAULT_AGENT_ID.into(),
+                parent_model: Some("openai:test".into()),
+                parent_sandbox_mode: "workspace-write".into(),
+                inherited_skill_config: Vec::new(),
+                chat_targets: vec![types::ChatTarget {
+                    provider_id: "test".into(),
+                    backend_id: "openai".into(),
+                    model: "test".into(),
+                    api_key: "test".into(),
+                    base_url: "http://127.0.0.1.invalid".into(),
+                }],
+                project_root: None,
+                hook_bus: None,
+            },
         }
     }
 
@@ -1355,7 +1499,7 @@ mod tests {
         hook_bus: Arc<hooks::PluginHookBus>,
     ) -> SpawnAgentDispatchRequest {
         let mut request = spawn_request(memory_dir);
-        request.hook_bus = Some(hook_bus);
+        request.runtime.hook_bus = Some(hook_bus);
         request
     }
 
@@ -1431,6 +1575,36 @@ mod tests {
         assert!(detail.messages[1].media_json.is_some());
         assert_eq!(detail.messages[2].role, "tool");
         assert_eq!(detail.messages[2].tool_call_id.as_deref(), Some("call-1"));
+    }
+
+    #[tokio::test]
+    async fn desktop_cold_followup_requires_active_parent_context_without_queuing() {
+        let dir = tempfile::tempdir().unwrap();
+        let memory_dir = dir.path().join("memory");
+        let dispatch = dispatch(&dir);
+        let child = committed_child(&dispatch, "worker");
+
+        let error = desktop_control(&dispatch, &memory_dir)
+            .followup(
+                "root-session",
+                child.canonical_path.as_str(),
+                "continue".into(),
+            )
+            .await
+            .unwrap_err();
+
+        assert!(format!("{error:#}").contains("active parent runtime context"));
+        assert!(dispatch
+            .control
+            .drain_mailbox(&child.canonical_path)
+            .unwrap()
+            .is_empty());
+        assert!(dispatch
+            .runtime_requests
+            .requests
+            .lock()
+            .unwrap()
+            .is_empty());
     }
 
     #[tokio::test]
@@ -1512,6 +1686,31 @@ mod tests {
             .runtime_handle(&child.thread_id)
             .unwrap()
             .is_none());
+
+        let shutdown_followup = AgentThreadDispatch::followup_task_with_runtime(
+            &dispatch,
+            FollowupAgentDispatchRequest {
+                request: MessageAgentV2Request {
+                    target: child.canonical_path.to_string(),
+                    message: "must stay closed".into(),
+                },
+                runtime: Some(spawn_request(&memory_dir).runtime),
+            },
+        )
+        .await
+        .unwrap_err();
+        assert!(format!("{shutdown_followup:#}").contains("Shutdown"));
+        assert!(dispatch
+            .runtime_requests
+            .requests
+            .lock()
+            .unwrap()
+            .is_empty());
+        assert!(dispatch
+            .control
+            .drain_mailbox(&child.canonical_path)
+            .unwrap()
+            .is_empty());
 
         let root_close = desktop
             .close_subtree("root-session", "/root")
@@ -2890,7 +3089,7 @@ mod tests {
             hooks::HookOutcome::Continue
         });
         let mut request = request_with_hook_bus(&memory_dir, bus);
-        request.chat_targets.clear();
+        request.runtime.chat_targets.clear();
 
         let error = AgentThreadDispatch::spawn_agent(&dispatch, request)
             .await
@@ -3348,9 +3547,103 @@ mod tests {
             .control
             .drain_mailbox(&child.canonical_path)
             .unwrap();
-        assert_eq!(mailbox.len(), 2);
+        assert_eq!(mailbox.len(), 1);
         assert!(!mailbox[0].trigger_turn);
-        assert!(mailbox[1].trigger_turn);
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn cold_followup_recovers_exact_model_effort_and_current_credentials() {
+        let dir = tempfile::tempdir().unwrap();
+        let memory_dir = dir.path().join("memory");
+        let sessions =
+            session::SessionStore::open_sessions_dir(&memory_dir.join("sessions")).unwrap();
+        sessions.ensure_session("root-session", "test").unwrap();
+        let mut initial = dispatch(&dir);
+        initial.chat_override = Some(scripted_chat("initial"));
+        let mut spawn = spawn_request(&memory_dir);
+        spawn.request.model = Some("openai:original-model".into());
+        spawn.request.reasoning_effort = Some("max".into());
+        let mut runtime_material = spawn.runtime.clone();
+        runtime_material.chat_targets[0].api_key = "restarted-key".into();
+        let child = AgentThreadDispatch::spawn_agent(&initial, spawn)
+            .await
+            .unwrap()
+            .thread;
+        while initial.runtime_manager.is_running(&child.thread_id) {
+            tokio::task::yield_now().await;
+        }
+        assert_eq!(
+            initial
+                .control
+                .runtime_descriptor(&child.thread_id)
+                .unwrap()
+                .unwrap()
+                .model
+                .as_deref(),
+            Some("openai:original-model")
+        );
+
+        let control = AgentControl::open(
+            "root-session".into(),
+            AgentGraphStore::open(dir.path().join("subagents-v2.db")).unwrap(),
+            Limits {
+                max_threads: 8,
+                max_depth: 4,
+                max_running: 2,
+            },
+        )
+        .unwrap();
+        let mut recovered = DefaultAgentThreadDispatch::for_test(
+            control,
+            AgentPath::root(),
+            "root-session".into(),
+            Arc::new(AgentRuntimeManager::default()),
+        );
+        let captured = Arc::new(Mutex::new(Vec::new()));
+        recovered.chat_override = Some(capturing_config_chat(Arc::clone(&captured)));
+
+        AgentThreadDispatch::followup_task_with_runtime(
+            &recovered,
+            FollowupAgentDispatchRequest {
+                request: MessageAgentV2Request {
+                    target: child.canonical_path.to_string(),
+                    message: "resume exactly once".into(),
+                },
+                runtime: Some(runtime_material),
+            },
+        )
+        .await
+        .unwrap();
+        while recovered.runtime_manager.is_running(&child.thread_id) {
+            tokio::task::yield_now().await;
+        }
+
+        let configs = captured.lock().unwrap();
+        assert_eq!(configs.len(), 1);
+        assert_eq!(configs[0].additional_params["reasoning_effort"], "max");
+        drop(configs);
+        let stored = recovered
+            .runtime_requests
+            .get(&child.thread_id)
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            stored.runtime.model_request.model.as_deref(),
+            Some("openai:original-model")
+        );
+        assert_eq!(
+            stored.runtime.model_request.reasoning_effort.as_deref(),
+            Some("max")
+        );
+        assert_eq!(stored.runtime.chat_targets[0].api_key, "restarted-key");
+        let messages = sessions.get_messages(&child.session_id).unwrap();
+        assert_eq!(
+            messages
+                .iter()
+                .filter(|message| message.content.as_deref() == Some("resume exactly once"))
+                .count(),
+            1
+        );
     }
 
     #[tokio::test(flavor = "current_thread")]
@@ -3684,7 +3977,7 @@ mod tests {
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-    async fn concurrent_idle_followups_share_one_starting_generation() {
+    async fn concurrent_cold_followups_recover_once_and_share_one_starting_generation() {
         let dir = tempfile::tempdir().unwrap();
         let memory_dir = dir.path().join("memory");
         let sessions =
@@ -3693,7 +3986,9 @@ mod tests {
         let mut dispatch = dispatch(&dir);
         dispatch.chat_override = Some(scripted_chat("done"));
         let dispatch = Arc::new(dispatch);
-        let spawned = AgentThreadDispatch::spawn_agent(&*dispatch, spawn_request(&memory_dir))
+        let spawn = spawn_request(&memory_dir);
+        let runtime_material = spawn.runtime.clone();
+        let spawned = AgentThreadDispatch::spawn_agent(&*dispatch, spawn)
             .await
             .unwrap();
         tokio::time::timeout(Duration::from_secs(2), async {
@@ -3706,6 +4001,12 @@ mod tests {
         })
         .await
         .unwrap();
+        dispatch.runtime_requests.remove(&spawned.thread.thread_id);
+        assert!(dispatch
+            .runtime_requests
+            .get(&spawned.thread.thread_id)
+            .unwrap()
+            .is_none());
 
         let admission = Arc::new(tokio::sync::Barrier::new(3));
         dispatch
@@ -3713,24 +4014,32 @@ mod tests {
             .set_followup_admission_barrier(Some(Arc::clone(&admission)));
         let first_dispatch = Arc::clone(&dispatch);
         let first_target = spawned.thread.canonical_path.to_string();
+        let first_runtime = runtime_material.clone();
         let first = tokio::spawn(async move {
-            AgentThreadDispatch::followup_task(
+            AgentThreadDispatch::followup_task_with_runtime(
                 &*first_dispatch,
-                MessageAgentV2Request {
-                    target: first_target,
-                    message: "idle one".into(),
+                FollowupAgentDispatchRequest {
+                    request: MessageAgentV2Request {
+                        target: first_target,
+                        message: "idle one".into(),
+                    },
+                    runtime: Some(first_runtime),
                 },
             )
             .await
         });
         let second_dispatch = Arc::clone(&dispatch);
         let second_target = spawned.thread.canonical_path.to_string();
+        let second_runtime = runtime_material;
         let second = tokio::spawn(async move {
-            AgentThreadDispatch::followup_task(
+            AgentThreadDispatch::followup_task_with_runtime(
                 &*second_dispatch,
-                MessageAgentV2Request {
-                    target: second_target,
-                    message: "idle two".into(),
+                FollowupAgentDispatchRequest {
+                    request: MessageAgentV2Request {
+                        target: second_target,
+                        message: "idle two".into(),
+                    },
+                    runtime: Some(second_runtime),
                 },
             )
             .await
@@ -3760,6 +4069,7 @@ mod tests {
             .filter(|event| matches!(event.event, subagents::RunnerEvent::TurnStarted { .. }))
             .count();
         assert_eq!(starts, 2);
+        assert_eq!(dispatch.runtime_requests.requests.lock().unwrap().len(), 1);
         assert!(dispatch
             .control
             .drain_mailbox(&spawned.thread.canonical_path)
@@ -4318,14 +4628,16 @@ enabled = true
                     reasoning_effort: Some("high".into()),
                     fork_turns: None,
                 },
-                memory_dir: dir.path().to_path_buf(),
-                parent_agent_id: "parent-agent".into(),
-                parent_model: Some("openai:gpt-5.6".into()),
-                parent_sandbox_mode: "locked".into(),
-                inherited_skill_config: vec![(PathBuf::from("parent/SKILL.md"), true)],
-                chat_targets: Vec::new(),
-                project_root: Some(project),
-                hook_bus: None,
+                runtime: ParentRuntimeMaterial {
+                    memory_dir: dir.path().to_path_buf(),
+                    parent_agent_id: "parent-agent".into(),
+                    parent_model: Some("openai:gpt-5.6".into()),
+                    parent_sandbox_mode: "locked".into(),
+                    inherited_skill_config: vec![(PathBuf::from("parent/SKILL.md"), true)],
+                    chat_targets: Vec::new(),
+                    project_root: Some(project),
+                    hook_bus: None,
+                },
             },
             resolved,
             &AgentPath::root(),

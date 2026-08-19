@@ -10,8 +10,8 @@ use serde::{Deserialize, Serialize};
 use crate::mailbox::{self, MailboxMessage, NewMailboxMessage};
 use crate::migration::{self, HistoricalAgentMessage, HistoricalAgentThread};
 use crate::{
-    AgentPath, AgentStatusKind, AgentStatusV2, AgentThreadV2, AgentTreeSnapshotV2, RunnerEvent,
-    ThreadReservation,
+    AgentPath, AgentRuntimeDescriptorV2, AgentStatusKind, AgentStatusV2, AgentThreadV2,
+    AgentTreeSnapshotV2, RunnerEvent, ThreadReservation,
 };
 
 const V2_THREAD_SELECT: &str =
@@ -147,6 +147,45 @@ impl AgentGraphStore {
             .context("reserved agent thread is missing")?;
         tx.commit()?;
         Ok(thread)
+    }
+
+    pub fn record_runtime_descriptor(
+        &self,
+        descriptor: &AgentRuntimeDescriptorV2,
+    ) -> anyhow::Result<()> {
+        require_non_empty("thread_id", &descriptor.thread_id)?;
+        self.connect()?.execute(
+            "INSERT INTO agent_runtime_descriptors (thread_id, model, reasoning_effort)
+             VALUES (?1, ?2, ?3)",
+            params![
+                descriptor.thread_id,
+                descriptor.model,
+                descriptor.reasoning_effort,
+            ],
+        )?;
+        Ok(())
+    }
+
+    pub fn runtime_descriptor(
+        &self,
+        thread_id: &str,
+    ) -> anyhow::Result<Option<AgentRuntimeDescriptorV2>> {
+        require_non_empty("thread_id", thread_id)?;
+        Ok(self
+            .connect()?
+            .query_row(
+                "SELECT thread_id, model, reasoning_effort
+                 FROM agent_runtime_descriptors WHERE thread_id = ?1",
+                [thread_id],
+                |row| {
+                    Ok(AgentRuntimeDescriptorV2 {
+                        thread_id: row.get(0)?,
+                        model: row.get(1)?,
+                        reasoning_effort: row.get(2)?,
+                    })
+                },
+            )
+            .optional()?)
     }
 
     pub fn rollback_pending_thread(&self, thread_id: &str) -> anyhow::Result<()> {
@@ -472,6 +511,10 @@ impl AgentGraphStore {
         mailbox::mark_delivered(&mut self.connect()?, recipient, through_sequence)
     }
 
+    pub(crate) fn delete_pending_mailbox_message(&self, message_id: &str) -> anyhow::Result<()> {
+        mailbox::delete_pending(&self.connect()?, message_id)
+    }
+
     pub fn snapshot(&self, root_thread_id: &str) -> anyhow::Result<AgentTreeSnapshotV2> {
         self.snapshot_with_after_threads(root_thread_id, || {})
     }
@@ -735,6 +778,27 @@ mod tests {
     #[test]
     fn v2_default_database_path_is_canonical() {
         assert_eq!(v2_default_db_path().file_name().unwrap(), "subagents-v2.db");
+    }
+
+    #[test]
+    fn runtime_descriptor_round_trips_without_credentials_and_cascades_on_rollback() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = AgentGraphStore::open(dir.path().join("subagents-v2.db")).unwrap();
+        store.ensure_root_thread("root-thread").unwrap();
+        store
+            .reserve_thread(&reservation("child", "/root/child"))
+            .unwrap();
+        let descriptor = AgentRuntimeDescriptorV2 {
+            thread_id: "child".into(),
+            model: Some("openai:gpt-5.6".into()),
+            reasoning_effort: Some("high".into()),
+        };
+
+        store.record_runtime_descriptor(&descriptor).unwrap();
+        assert_eq!(store.runtime_descriptor("child").unwrap(), Some(descriptor));
+
+        store.rollback_pending_thread("child").unwrap();
+        assert!(store.runtime_descriptor("child").unwrap().is_none());
     }
 
     #[test]

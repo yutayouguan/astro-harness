@@ -120,6 +120,22 @@ pub(crate) fn mark_delivered(
     Ok(())
 }
 
+pub(crate) fn delete_pending(conn: &Connection, message_id: &str) -> anyhow::Result<()> {
+    if message_id.trim().is_empty() {
+        bail!("mailbox message_id must not be empty");
+    }
+    let deleted = conn.execute(
+        "DELETE FROM agent_mailbox
+         WHERE message_id = ?1 AND delivery_state = 'pending'",
+        [message_id],
+    )?;
+    anyhow::ensure!(
+        deleted == 1,
+        "pending mailbox message {message_id:?} could not be rolled back"
+    );
+    Ok(())
+}
+
 impl MailboxKind {
     fn as_str(&self) -> &'static str {
         match self {

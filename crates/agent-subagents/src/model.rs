@@ -70,6 +70,15 @@ pub struct ThreadReservation {
     pub session_id: String,
 }
 
+/// Minimal non-secret runtime choices required to resume a durable thread
+/// without silently changing an explicit spawn model or reasoning effort.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AgentRuntimeDescriptorV2 {
+    pub thread_id: String,
+    pub model: Option<String>,
+    pub reasoning_effort: Option<String>,
+}
+
 /// Events emitted by one V2 runner for state projection and waiting callers.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
