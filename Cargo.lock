@@ -34,6 +34,7 @@ dependencies = [
  "memory",
  "providers",
  "rusqlite",
+ "sandbox",
  "serde",
  "serde_json",
  "session",

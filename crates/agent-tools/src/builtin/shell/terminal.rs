@@ -215,10 +215,14 @@ async fn dispatch_run(
         .await
         .map_err(|_| anyhow::anyhow!("命令超时（{timeout_secs}s）"))??;
 
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    let stderr = String::from_utf8_lossy(&output.stderr);
     let code = output.status.code().unwrap_or(-1);
-    let body = format!("exit={code}\n--- stdout ---\n{stdout}\n--- stderr ---\n{stderr}");
+    let output = sandbox::ExecToolCallOutput::new(
+        code,
+        String::from_utf8_lossy(&output.stdout).into_owned(),
+        String::from_utf8_lossy(&output.stderr).into_owned(),
+    );
+    let sandbox_denied = sandbox::is_likely_sandbox_denied(policy.mode, &output);
+    let body = output.render_text();
     let body = if let Some(bus) = &ctx.hook_bus {
         let outcome = bus.fire(
             hooks::TRANSFORM_TERMINAL_OUTPUT,
@@ -238,6 +242,19 @@ async fn dispatch_run(
     } else {
         body
     };
+    if sandbox_denied {
+        audit.record(
+            sandbox::SandboxAuditKind::Denied,
+            Some(&policy),
+            "sh",
+            "sandbox_denied",
+            Some(spawn_started.elapsed().as_millis() as u64),
+        );
+        return Err(sandbox::SandboxErr::Denied {
+            output: Box::new(output.with_aggregated_output(body)),
+        }
+        .into());
+    }
     Ok(types::truncate_tool_result(
         &body,
         types::MAX_TOOL_RESULT_BYTES,
@@ -248,6 +265,55 @@ async fn dispatch_run(
 mod tests {
     use super::*;
     use crate::context::{ImageGenTargets, ToolContext};
+
+    #[cfg(target_os = "macos")]
+    #[tokio::test]
+    async fn foreground_denial_returns_typed_sandbox_error() {
+        let dir = tempfile::tempdir().unwrap();
+        let ws = dir.path().join("ws");
+        std::fs::create_dir_all(&ws).unwrap();
+        memory::set_permission_preset(dir.path(), types::PermissionPreset::ReadOnly).unwrap();
+        let memory = memory::MemoryManager::new(dir.path().to_path_buf()).unwrap();
+        let sessions =
+            session::SessionStore::open_sessions_dir(&memory.base_dir.join("sessions")).unwrap();
+        let memory = std::sync::RwLock::new(memory);
+        let targets = ImageGenTargets::default();
+        let creds = crate::context::ModelCredentials::default();
+        let bus = std::sync::Arc::new(hooks::PluginHookBus::new());
+        bus.register(hooks::TRANSFORM_TERMINAL_OUTPUT, |_payload| {
+            hooks::HookOutcome::ReplaceText("[redacted-denial]".into())
+        });
+        let ctx = ToolContext {
+            memory: &memory,
+            sessions: &sessions,
+            memory_dir: dir.path().to_path_buf(),
+            workspace_dir: ws.clone(),
+            project_root: None,
+            image_gen_targets: &targets,
+            session_id: "test".into(),
+            turn_id: None,
+            credentials: &creds,
+            chat_targets: &[],
+            execution: None,
+            permission_profile: Some(types::READ_ONLY_PROFILE.into()),
+            skill_config_overrides: &[],
+            hook_bus: Some(bus),
+            workspace_write_grant: false,
+            network_grant: crate::InProcessNetworkGrant::default(),
+        };
+
+        let error = dispatch(&ctx, &serde_json::json!({"command": "touch denied.txt"}))
+            .await
+            .unwrap_err();
+        let Some(sandbox::SandboxErr::Denied { output }) =
+            error.downcast_ref::<sandbox::SandboxErr>()
+        else {
+            panic!("expected typed sandbox denial: {error}");
+        };
+        assert_ne!(output.exit_code, 0);
+        assert_eq!(output.aggregated_output, "[redacted-denial]");
+        assert!(!ws.join("denied.txt").exists());
+    }
 
     #[tokio::test]
     async fn large_stdout_is_truncated() {

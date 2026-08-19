@@ -14,6 +14,8 @@ use super::{AgentLoop, StepContext, ToolInvocation};
 pub enum ToolCallError {
     /// 用户或上层触发了取消。
     Cancelled,
+    /// A sandboxed process was denied and retains its structured output for retry.
+    SandboxDenied(sandbox::SandboxErr),
     /// 工具深度耗尽。
     DepthExhausted(super::turn_budget::MaxDepthError),
     /// 工具执行或分发错误。
@@ -24,6 +26,7 @@ impl std::fmt::Display for ToolCallError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Cancelled => write!(f, "prompt cancelled"),
+            Self::SandboxDenied(error) => write!(f, "{error}"),
             Self::DepthExhausted(e) => write!(f, "{e}"),
             Self::Execution(e) => write!(f, "{e}"),
         }
@@ -34,6 +37,7 @@ impl std::error::Error for ToolCallError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
             Self::Execution(e) => Some(e.as_ref()),
+            Self::SandboxDenied(error) => Some(error),
             Self::DepthExhausted(e) => Some(e),
             Self::Cancelled => None,
         }
@@ -42,7 +46,11 @@ impl std::error::Error for ToolCallError {
 
 impl From<anyhow::Error> for ToolCallError {
     fn from(e: anyhow::Error) -> Self {
-        Self::Execution(e)
+        match e.downcast::<sandbox::SandboxErr>() {
+            Ok(error @ sandbox::SandboxErr::Denied { .. }) => Self::SandboxDenied(error),
+            Ok(error) => Self::Execution(error.into()),
+            Err(error) => Self::Execution(error),
+        }
     }
 }
 
@@ -502,5 +510,33 @@ impl AgentLoop {
             },
         );
         result
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn sandbox_denial_survives_anyhow_dispatch_boundary() {
+        let error = anyhow::Error::new(sandbox::SandboxErr::Denied {
+            output: Box::new(sandbox::ExecToolCallOutput::new(
+                1,
+                "partial stdout",
+                "Operation not permitted",
+            )),
+        });
+
+        let error = ToolCallError::from(error);
+        assert!(matches!(
+            error,
+            ToolCallError::SandboxDenied(sandbox::SandboxErr::Denied { output })
+                if output.exit_code == 1
+        ));
+
+        let setup_error = ToolCallError::from(anyhow::Error::new(
+            sandbox::SandboxErr::BackendUnavailable("missing backend".into()),
+        ));
+        assert!(matches!(setup_error, ToolCallError::Execution(_)));
     }
 }

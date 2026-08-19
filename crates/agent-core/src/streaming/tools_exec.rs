@@ -646,22 +646,16 @@ impl<'a> ToolOrchestrator<'a> {
         let memory_dir = agent.memory_dir().to_path_buf();
         let session_id = agent.session_id().to_string();
         let execution_started = std::time::Instant::now();
-        let invocation = ToolInvocation {
-            session: Arc::clone(self.session),
-            step_context: Arc::clone(self.step_context),
-            cancellation_token: CancellationToken::new(),
-            call_id: call.id.clone(),
-            tool_name: call.name.clone(),
-            payload: call.arguments.clone(),
-        };
-        let executed = self.session.handle_tool_invocation_with_once_grants(
-            invocation,
+        let executed = self.run_attempt(
+            call,
             workspace_write_grant,
             network_grant,
+            CancellationToken::new(),
         );
         let execution_result = match &executed {
             Ok(_) => "success",
             Err(crate::runtime::ToolCallError::Cancelled) => "cancelled",
+            Err(crate::runtime::ToolCallError::SandboxDenied(_)) => "sandbox_denied",
             Err(_) => "error",
         };
         for audit in &permission_audits {
@@ -675,6 +669,17 @@ impl<'a> ToolOrchestrator<'a> {
         let output = match executed {
             Ok(output) => output,
             Err(crate::runtime::ToolCallError::Cancelled) => return None,
+            Err(crate::runtime::ToolCallError::SandboxDenied(sandbox::SandboxErr::Denied {
+                output,
+            })) => {
+                self.session
+                    .finalize_tool_call_result(
+                        &call.name,
+                        &call.arguments,
+                        output.aggregated_output.into(),
+                    )
+                    .await
+            }
             Err(error) => {
                 memory::try_append_decision(
                     &memory_dir,
@@ -689,6 +694,28 @@ impl<'a> ToolOrchestrator<'a> {
             }
         };
         Some(OrchestratorRunResult { output })
+    }
+
+    fn run_attempt(
+        &self,
+        call: &types::ParsedToolCall,
+        workspace_write_grant: bool,
+        network_grant: tools::InProcessNetworkGrant,
+        cancellation_token: CancellationToken,
+    ) -> Result<types::ToolOutput, crate::runtime::ToolCallError> {
+        let invocation = ToolInvocation {
+            session: Arc::clone(self.session),
+            step_context: Arc::clone(self.step_context),
+            cancellation_token,
+            call_id: call.id.clone(),
+            tool_name: call.name.clone(),
+            payload: call.arguments.clone(),
+        };
+        self.session.handle_tool_invocation_with_once_grants(
+            invocation,
+            workspace_write_grant,
+            network_grant,
+        )
     }
 }
 
@@ -1468,6 +1495,64 @@ mod tests {
 
         assert!(result.output.text().contains("denied by policy"));
         assert!(result.output.text().contains("dangerous"));
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn tool_orchestrator_finalizes_typed_denial_without_retrying() {
+        let dir = tempfile::tempdir().unwrap();
+        let session = Arc::new(
+            AgentLoop::with_session_id(
+                crate::runtime::Config::with_defaults(dir.path().to_path_buf()),
+                "orchestrator-denial-test".into(),
+            )
+            .unwrap(),
+        );
+        session
+            .hook_bus()
+            .register(hooks::TRANSFORM_TOOL_RESULT, |_payload| {
+                hooks::HookOutcome::ReplaceText("[redacted-tool-denial]".into())
+            });
+        let attempts = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let handler_attempts = Arc::clone(&attempts);
+        session.tool_registry_mut().register_dynamic(
+            types::ToolEntry {
+                name: "sandbox_denial_probe".into(),
+                toolset: "core".into(),
+                description: "return a typed sandbox denial".into(),
+                schema: json!({"type": "object", "properties": {}}),
+                check_fn: None,
+                icon: "shield-alert",
+                ..types::ToolEntry::lifecycle_defaults()
+            },
+            Arc::new(move |_name, _args| {
+                handler_attempts.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                Box::pin(async {
+                    Err(anyhow::Error::new(sandbox::SandboxErr::Denied {
+                        output: Box::new(sandbox::ExecToolCallOutput::new(
+                            1,
+                            "partial stdout",
+                            "Operation not permitted",
+                        )),
+                    }))
+                })
+            }),
+        );
+        session.set_current_turn_id("turn-denial").await;
+        let step_context = session.capture_step_context().await.unwrap();
+        let (tx, _rx) = mpsc::channel(4);
+        let orchestrator = ToolOrchestrator::new(&session, &step_context, &tx, "run-1", None);
+
+        let result = orchestrator
+            .run(&types::ParsedToolCall::with_id(
+                "call-1",
+                "sandbox_denial_probe",
+                json!({}),
+            ))
+            .await
+            .unwrap();
+
+        assert_eq!(result.output.text(), "[redacted-tool-denial]");
+        assert_eq!(attempts.load(std::sync::atomic::Ordering::SeqCst), 1);
     }
 
     #[test]

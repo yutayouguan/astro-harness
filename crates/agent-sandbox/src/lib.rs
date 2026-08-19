@@ -40,6 +40,66 @@ pub struct SandboxHealth {
     pub detail: String,
 }
 
+/// Structured process result retained for sandbox-denial analysis and retry.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ExecToolCallOutput {
+    pub exit_code: i32,
+    pub stdout: String,
+    pub stderr: String,
+    pub aggregated_output: String,
+}
+
+impl ExecToolCallOutput {
+    pub fn new(exit_code: i32, stdout: impl Into<String>, stderr: impl Into<String>) -> Self {
+        let mut output = Self {
+            exit_code,
+            stdout: stdout.into(),
+            stderr: stderr.into(),
+            aggregated_output: String::new(),
+        };
+        output.aggregated_output = output.render_text();
+        output
+    }
+
+    pub fn render_text(&self) -> String {
+        format!(
+            "exit={}\n--- stdout ---\n{}\n--- stderr ---\n{}",
+            self.exit_code, self.stdout, self.stderr
+        )
+    }
+
+    pub fn with_aggregated_output(mut self, output: impl Into<String>) -> Self {
+        self.aggregated_output = output.into();
+        self
+    }
+}
+
+/// Conservative classifier matching Codex's retry gate: only a failed,
+/// sandboxed attempt with a known denial signal is eligible for escalation.
+pub fn is_likely_sandbox_denied(sandbox_mode: SandboxMode, output: &ExecToolCallOutput) -> bool {
+    if sandbox_mode == SandboxMode::DangerFullAccess || output.exit_code == 0 {
+        return false;
+    }
+    if [2, 126, 127].contains(&output.exit_code) {
+        return false;
+    }
+    const DENIAL_SIGNALS: [&str; 7] = [
+        "operation not permitted",
+        "permission denied",
+        "read-only file system",
+        "seccomp",
+        "sandbox",
+        "landlock",
+        "failed to write file",
+    ];
+    [&output.stderr, &output.stdout, &output.aggregated_output]
+        .into_iter()
+        .any(|section| {
+            let lower = section.to_ascii_lowercase();
+            DENIAL_SIGNALS.iter().any(|needle| lower.contains(needle))
+        })
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SandboxPolicy {
     pub mode: SandboxMode,
@@ -99,7 +159,14 @@ fn canonical_directory(path: &Path) -> Result<PathBuf, SandboxError> {
 }
 
 #[derive(Debug, thiserror::Error)]
-pub enum SandboxError {
+pub enum SandboxErr {
+    #[error(
+        "sandbox denied exec error, exit code: {}, stdout: {}, stderr: {}",
+        .output.exit_code,
+        .output.stdout,
+        .output.stderr
+    )]
+    Denied { output: Box<ExecToolCallOutput> },
     #[error("sandbox root cannot be resolved: {path}: {source}")]
     InvalidRoot {
         path: PathBuf,
@@ -111,6 +178,9 @@ pub enum SandboxError {
     #[error("sandbox backend unavailable: {0}")]
     BackendUnavailable(String),
 }
+
+/// Compatibility alias for the pre-Codex-alignment public name.
+pub type SandboxError = SandboxErr;
 
 #[derive(Debug, Clone, Default)]
 pub struct SandboxRunner;
@@ -273,6 +343,51 @@ mod tests {
             SandboxPolicy::new(SandboxMode::DangerFullAccess, dir.path(), Vec::new(), false)
                 .unwrap();
         assert!(SandboxRunner.tokio_command(&policy, "sh").is_ok());
+    }
+
+    #[test]
+    fn denial_classifier_requires_active_sandbox_and_known_signal() {
+        let denied = ExecToolCallOutput::new(1, "", "touch: Operation not permitted");
+        assert!(is_likely_sandbox_denied(
+            SandboxMode::WorkspaceWrite,
+            &denied
+        ));
+        assert!(!is_likely_sandbox_denied(
+            SandboxMode::DangerFullAccess,
+            &denied
+        ));
+
+        let ordinary_failure = ExecToolCallOutput::new(1, "", "cargo test failed");
+        assert!(!is_likely_sandbox_denied(
+            SandboxMode::WorkspaceWrite,
+            &ordinary_failure
+        ));
+    }
+
+    #[test]
+    fn denial_classifier_ignores_quick_command_rejections() {
+        for exit_code in [2, 126, 127] {
+            let output = ExecToolCallOutput::new(exit_code, "", "sandbox: permission denied");
+            assert!(!is_likely_sandbox_denied(SandboxMode::ReadOnly, &output));
+        }
+    }
+
+    #[test]
+    fn sandbox_denied_preserves_structured_process_output() {
+        let error = SandboxErr::Denied {
+            output: Box::new(ExecToolCallOutput::new(
+                1,
+                "partial stdout",
+                "Operation not permitted",
+            )),
+        };
+        let SandboxErr::Denied { output } = error else {
+            panic!("expected denied error");
+        };
+        assert_eq!(output.exit_code, 1);
+        assert_eq!(output.stdout, "partial stdout");
+        assert_eq!(output.stderr, "Operation not permitted");
+        assert_eq!(output.aggregated_output, output.render_text());
     }
 
     #[cfg(target_os = "macos")]

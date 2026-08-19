@@ -237,10 +237,26 @@ pub async fn dispatch(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow
     // Drop cleans the temp file; keep explicit remove for clarity in success path.
     drop(script);
 
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    let stderr = String::from_utf8_lossy(&output.stderr);
     let code_status = output.status.code().unwrap_or(-1);
-    let body = format!("exit={code_status}\n--- stdout ---\n{stdout}\n--- stderr ---\n{stderr}");
+    let output = sandbox::ExecToolCallOutput::new(
+        code_status,
+        String::from_utf8_lossy(&output.stdout).into_owned(),
+        String::from_utf8_lossy(&output.stderr).into_owned(),
+    );
+    if sandbox::is_likely_sandbox_denied(policy.mode, &output) {
+        audit.record(
+            sandbox::SandboxAuditKind::Denied,
+            Some(&policy),
+            program,
+            "sandbox_denied",
+            Some(spawn_started.elapsed().as_millis() as u64),
+        );
+        return Err(sandbox::SandboxErr::Denied {
+            output: Box::new(output),
+        }
+        .into());
+    }
+    let body = output.render_text();
     Ok(types::truncate_tool_result(
         &body,
         types::MAX_TOOL_RESULT_BYTES,
@@ -350,6 +366,36 @@ mod tests {
                 && event.tool_name == "code_exec"
                 && event.target == "python3"
         }));
+    }
+
+    #[cfg(target_os = "macos")]
+    #[tokio::test]
+    async fn sandbox_denial_returns_typed_error() {
+        let dir = tempfile::tempdir().unwrap();
+        memory::set_permission_preset(dir.path(), types::PermissionPreset::ReadOnly).unwrap();
+        let memory = memory::MemoryManager::new(dir.path().to_path_buf()).unwrap();
+        let sessions =
+            session::SessionStore::open_sessions_dir(&memory.base_dir.join("sessions")).unwrap();
+        let targets = ImageGenTargets::default();
+        let creds = crate::context::ModelCredentials::default();
+        let memory = std::sync::RwLock::new(memory);
+        let mut ctx = test_ctx(&dir, &memory, &sessions, &targets, &creds);
+        ctx.permission_profile = Some(types::READ_ONLY_PROFILE.into());
+
+        let error = dispatch(
+            &ctx,
+            &serde_json::json!({
+                "language": "python",
+                "code": "open('denied.txt', 'w').write('no')",
+            }),
+        )
+        .await
+        .unwrap_err();
+        assert!(matches!(
+            error.downcast_ref::<sandbox::SandboxErr>(),
+            Some(sandbox::SandboxErr::Denied { output }) if output.exit_code != 0
+        ));
+        assert!(!ctx.workspace_dir.join("denied.txt").exists());
     }
 
     #[tokio::test]
