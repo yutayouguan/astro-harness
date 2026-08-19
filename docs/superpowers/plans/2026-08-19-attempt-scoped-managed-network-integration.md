@@ -659,7 +659,7 @@ Expected: foreground process tools receive only the managed endpoint, blocked re
 - Modify: `AGENTS.md`
 - Modify: `docs/superpowers/plans/2026-08-19-attempt-scoped-managed-network-integration.md`
 
-- [ ] **Step 1: Update the architecture baseline to v2.28**
+- [x] **Step 1: Update the architecture baseline to v2.28**
 
 Document the real call chain:
 
@@ -677,7 +677,7 @@ ToolOrchestrator::run
 
 Record these invariants explicitly: attempt ownership, global-plus-leaf-profile gate, no inherited network policy, no full-access proxy, no background lease, no in-process/MCP/provider change, no approval/retry, and 502 is not a policy denial. Update the `AGENTS.md` lifecycle summary and crate map only where the implementation is now true.
 
-- [ ] **Step 2: Run the full layered verification**
+- [x] **Step 2: Run the full layered verification**
 
 ```bash
 cargo test -p network-proxy -p sandbox -p tools -p agent -p types -p memory
@@ -690,7 +690,7 @@ git diff --check
 
 Expected: every command exits 0. If an unrelated workspace target fails, capture the exact pre-existing failure and still keep all six changed crates green; do not weaken or skip a batch-owned test.
 
-- [ ] **Step 3: Perform security-focused manual checks**
+- [x] **Step 3: Perform security-focused manual checks**
 
 Run these read-only inspections:
 
@@ -704,11 +704,11 @@ git diff --check
 
 Confirm unrestricted Seatbelt remains only in the legacy `network_access=true` branch, every `ToolContext` fixture explicitly chooses `None` or a test lease, and no session/global proxy state was introduced.
 
-- [ ] **Step 4: Request independent review and fix all Critical/Important findings**
+- [x] **Step 4: Request independent review and fix all Critical/Important findings**
 
 Use `superpowers:requesting-code-review`. Review only the explicit batch commits and focus on direct-connect bypass, stale inherited proxy variables, DNS rebinding attribution, exact-port Seatbelt rules, listener lifetime, background escape, typed error ordering, and filesystem retry suppression. Re-run the affected crate tests after each correction.
 
-- [ ] **Step 5: Mark this plan complete and commit documentation**
+- [x] **Step 5: Mark this plan complete and commit documentation**
 
 Change every completed checkbox in this file to `[x]`, then:
 
