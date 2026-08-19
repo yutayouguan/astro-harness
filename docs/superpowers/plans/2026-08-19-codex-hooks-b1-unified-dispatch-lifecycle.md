@@ -1082,8 +1082,9 @@ git commit -m "fix(hooks): align main turn lifecycle"
 
 **Files:**
 - Modify: `docs/hooks.md`
+- Modify: `docs/superpowers/plans/2026-08-19-codex-hooks-b1-unified-dispatch-lifecycle.md`
 
-- [ ] **Step 1: Update runtime documentation**
+- [x] **Step 1: Update runtime documentation**
 
 Make these factual changes:
 
@@ -1097,7 +1098,7 @@ Make these factual changes:
 - move `SessionEnd`, PreCompact/PostCompact, and SubagentStop continuation into the remaining lifecycle gap list;
 - retain the warning that Batch C command JSON/matcher/trust behavior is not implemented.
 
-- [ ] **Step 2: Check documentation for stale B1 claims**
+- [x] **Step 2: Check documentation for stale B1 claims**
 
 Run:
 
@@ -1107,7 +1108,7 @@ rg -n "每次 run_turn|Gateway SessionStart|Gateway AgentEnd|不会自动投递|
 
 Expected: no stale statement says SessionStart fires every turn, AgentLoop bypasses HookRuntime, Stop requires disk writes, or server emits a second AgentEnd. Any matches must describe removed behavior explicitly as migration history, not current behavior.
 
-- [ ] **Step 3: Run formatting and the full relevant verification suite**
+- [x] **Step 3: Run formatting and the full relevant verification suite**
 
 Run:
 
@@ -1122,7 +1123,7 @@ git diff --check
 
 Expected: every command exits 0 with zero test failures and no formatting or whitespace errors.
 
-- [ ] **Step 4: Review scope and compatibility**
+- [x] **Step 4: Review scope and compatibility**
 
 Run:
 
@@ -1139,10 +1140,10 @@ Expected:
 - no Agent core call bypasses `HookRuntime::dispatch`;
 - no server-side SessionStart or AgentEnd duplicate remains.
 
-- [ ] **Step 5: Commit documentation**
+- [x] **Step 5: Commit documentation**
 
 ```bash
-git add docs/hooks.md
+git add docs/hooks.md docs/superpowers/plans/2026-08-19-codex-hooks-b1-unified-dispatch-lifecycle.md
 git commit -m "docs(hooks): describe unified lifecycle dispatch"
 ```
 

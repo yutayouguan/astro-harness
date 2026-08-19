@@ -6,7 +6,7 @@ Astro 有三条 Hook 通道：
 2. **Gateway Event Hooks** — `~/.astro/hooks/<name>/HOOK.yaml` 声明的 Gateway 事件。
 3. **Shell Hooks** — `~/.astro/config.yaml` 中的异步 shell 命令。
 
-对外配置与 `HookInput.hook_event_name` 统一使用 PascalCase canonical 名称。本页记录 Batch A 的**命名与 serialization 契约**；不表示本批改动了事件触发时机。
+对外配置与 `HookInput.hook_event_name` 统一使用 PascalCase canonical 名称。本页同时记录 Batch A 的**命名与 serialization 契约**，以及 B1 的**统一派发与生命周期契约**。
 
 可复制的配置样例见 [`docs/examples/hooks/`](./examples/hooks/)。
 
@@ -91,14 +91,15 @@ Gateway manifest 是一个例外：discovery 保留 `HOOK.yaml` 原文，不改�
 
 ## 2. 当前实际触发行为
 
-Canonical 名称集比当前已接线的生命周期更完整。下表记录现有 runtime 真实的 fire 点；Batch A 没有新增或移动这些 fire 点。
+Canonical 名称集仍比当前已接线的生命周期更完整。下表只记录 B1 后真实的 fire 点和结果；每个由 `Session::fire_hook` 发出的事件都会补全会话字段，并经同一个 `HookRuntime::dispatch` 一次投递到 Plugin、Gateway 与 Shell。
 
 ### Plugin/Agent 事件矩阵
 
 | Canonical 名称 | 分类 | 当前实际 fire 点 | 可用 `HookOutcome` |
 |---|---|---|---|
-| `SessionStart` | Codex | `AgentLoop::run_turn` 完成上下文与 system prompt 构建后；当前是每次 `run_turn` 初始化，不仅是新会话 | 观察 |
-| `PreLlmCall` | Astro | 紧接 `SessionStart`，每次 `run_turn` 一次 | `InjectContext` |
+| `SessionStart` | Codex | 首次 prompt admission 时、`UserPromptSubmit` 前；每个 Session 仅一次，`source` 为 `startup`（空历史）或 `resume`（已恢复历史） | `Block(reason)` / `InjectContext(context)` |
+| `UserPromptSubmit` | Codex | 每个初始或 steer 用户输入持久化前；带输入 `prompt` 和活跃 `turn_id`（若已有） | `Block(reason)` / `InjectContext(context)` |
+| `PreLlmCall` | Astro | 初始用户输入已经接纳、system prompt 构建后，在首个 sampling 前 | `InjectContext` |
 | `PreApiRequest` | Astro | 每次 Provider sampling request 前 | 观察 |
 | `PostApiRequest` | Astro | `ProviderStreamer::stream_chat` 返回 stream 或 error 后；当前不等待 token stream 消费完毕 | 观察 |
 | `PermissionRequest` | Codex | 串行工具权限 preflight 需要审批时，在决议与 `PreToolUse` 前 | 观察 |
@@ -109,15 +110,19 @@ Canonical 名称集比当前已接线的生命周期更完整。下表记录现�
 | `PostToolUse` | Codex | 工具结果已应用 `TransformToolResult` 后 | 观察 |
 | `SubagentStart` | Codex | Agent Thread 构造完、首轮执行前（每个 thread 一次） | 观察 |
 | `SubagentStop` | Codex | Agent Thread 进入 closed 状态后 | 观察 |
-| `Stop` | Codex | 最终候选回复无工具调用，且本 turn 有写盘标记时 | `KeepGoing(prompt)` |
+| `Stop` | Codex | 每个无工具的普通 terminal candidate，以及 budget-exhaustion summary 的完整 terminal candidate | `KeepGoing(prompt)` |
 | `TransformLlmOutput` | Astro | 最终 assistant 文本定稿、`PostLlmCall` 前 | `ReplaceText(text)` |
 | `PostLlmCall` | Astro | turn 成功结束前，且已应用 `TransformLlmOutput` | 观察 |
-| `AgentEnd` | Astro | 常规 streaming multi-turn 成功收尾 | 观察 |
+| `AgentEnd` | Astro | `RegularTask` 在每次 regular run 收尾时唯一派发：成功、runtime failure、准备失败、取消或 receiver close 都恰好一次 | 观察 |
 | `PreGatewayDispatch` | Astro | gRPC/Tauri chat 入站、加载会话前 | `Allow` / `Skip(reason)` / `Rewrite(message)` |
 | `SessionReset` | Astro | UI `new_chat` 释放旧会话时 | 观察 |
 | `SessionFinalize` | Astro | UI `new_chat` 释放旧会话时 | 观察 |
 
-当前尚无 runtime fire 点的 Codex 公开事件是 `PreCompact`、`PostCompact`、`SessionEnd` 和 `UserPromptSubmit`。`AgentEnd` 是已接线的 Astro run 收尾事件，不能当作 `SessionEnd` 已实现。
+`UserPromptSubmit` 的 `Block` 会在输入写入前阻断该 admission；`InjectContext` 与该输入绑定、按 FIFO 进入随后的 response chain，并受 prompt 预算约束。初始输入的 context 参与其首个请求；steer context 不会被 Stop 的 bridge sampling 提前消费。
+
+当前尚无 runtime fire 点的 Codex 公开事件是 `PreCompact`、`PostCompact` 和 `SessionEnd`。`AgentEnd` 是已接线的 Astro run 收尾事件，不是 `SessionEnd`。
+
+`AgentEnd` 的 runtime failure 会保留原始失败文本于 `error`；取消与 receiver close 属于非错误收尾，`error` 为空。准备阶段的失败也同样派发一次 `AgentEnd`，但保持其原有 task error 返回，避免把 runtime 已经输出过的 terminal 再输出一次。
 
 Plugin callbacks 按注册顺序同步执行。`Continue` 和 `Allow` 会继续下一个 callback；首个其他 outcome 立即短路，余下 callbacks 不再执行。Callback panic 被记录并当作 `Continue`。Shell Hook 是异步旁路，不参与 outcome 聚合。
 
@@ -125,9 +130,8 @@ Plugin callbacks 按注册顺序同步执行。`Continue` 和 `Allow` 会继续�
 
 ```text
 PreGatewayDispatch
-  → Gateway SessionStart?                        # 仅新内存会话
-  → Plugin SessionStart → PreLlmCall          # 每次 run_turn
-  → [sampling / 工具循环]
+  → SessionStart (startup | resume, once) → UserPromptSubmit
+  → 输入持久化 → PreLlmCall → [sampling / 工具循环]
       → PreApiRequest → Provider API → PostApiRequest
       → PermissionRequest? → 审批 → PostApprovalResponse?
           → 拒绝 / 超时 / unavailable：返回工具结果，不进入 PreToolUse
@@ -136,30 +140,28 @@ PreGatewayDispatch
           → TransformTerminalOutput?             # 仅 terminal
           → TransformToolResult → PostToolUse
           → SubagentStart ... SubagentStop?       # Agent Thread 生命周期
-  → Stop?                                         # 无 tool calls 且本 turn 写盘
-      → KeepGoing 时注入 prompt，回到 sampling
-  → TransformLlmOutput → PostLlmCall → Plugin AgentEnd
-  → Gateway AgentEnd
+  → Stop                                          # 每个 terminal candidate；普通或 budget summary
+      → KeepGoing 最多接受两次，持久化 assistant + hook bridge 后回到 sampling
+  → TransformLlmOutput → PostLlmCall
+  → RegularTask AgentEnd                           # Plugin/Gateway/Shell 各一次的统一 dispatch
 ```
 
-### `Stop` 写盘条件
+### `Stop` continuation guard
 
-`turn_wrote_disk` 在用户 turn 开始时清零。当前会置位该标记的工具是：
+`Stop` 不依赖 `turn_wrote_disk`。每个 terminal candidate 都会得到包含 `turn_id`、完整 `last_assistant_message` 和 `attempt=N` detail 的 payload。新 response chain 的首个 candidate 设置 `stop_hook_active=false`；在接受 continuation 后的候选设置为 `true`。
 
-- 任意 `terminal` 调用；
-- `file_ops` 的 `write`、`append`、`delete`、`mkdir` 和 `patch`；
-- `skills` 的 `manage` action。
+每个 response chain 最多接受两次 `KeepGoing(prompt)`：接受时持久化 candidate assistant 与 `[astro:hook-context]` bridge user，再继续 sampling。第三个及之后的 candidate 仍派发 `Stop`（且 `stop_hook_active=true`），但忽略 `KeepGoing` 并正常收尾。新的已持久化 steer 输入会开始独立 response chain 并重置这个配额。budget summary 与主循环共享同一配额；summary instruction 是 request-local，notice 只出现一次。
 
-Streaming 路径的 `MAX_VERIFY_ATTEMPTS = 2`（包含首次结束尝试）。只有 `Stop` 返回 `KeepGoing(prompt)` 才会把 prompt 注入下一次 sampling；达到上限后不再 fire `Stop`，直接进入 `TransformLlmOutput` 和 `PostLlmCall`。
+为了维持角色交替，Stop bridge 后已排队的 steer 会先让 provider 响应 bridge；bridge 经过 reasoning-only retry 时这个顺序仍被保留。terminal assistant 持久化后才会消费 queued input；其绑定 context 也只在相应新 chain 的 sampling 使用。
 
 ### Gateway 当前触发点
 
 | Gateway 事件 | 当前触发点 |
 |---|---|
 | `GatewayStartup` | Hook runtime bootstrap 成功后，backend service 就绪 |
-| `SessionStart` | 新内存 session 的首次 chat |
-| `AgentEnd` | 单次 chat stream/run 收尾清理 |
-| `CommandNewChat` | UI `chat_control(new_chat)`；之后 fire Plugin `SessionReset` / `SessionFinalize` 并卸载会话 runtime |
+| `PreGatewayDispatch` | gRPC/Tauri chat 入站、加载 session 前 |
+| `SessionStart` / `UserPromptSubmit` / `AgentEnd` | 由 session 的统一 dispatch 到达 Gateway；server 不再单独派发 lifecycle 事件 |
+| `CommandNewChat` | UI `chat_control(new_chat)`；随后依次统一 dispatch `SessionReset`、`SessionFinalize`，各一次后释放 runtime |
 
 未为 manifest 注册自定义 handler 时，bootstrap 会为已发现 manifest 安装 tracing fallback。Gateway handlers 是观察型，其返回值不参与 Plugin `HookOutcome`。
 
@@ -168,7 +170,7 @@ Streaming 路径的 `MAX_VERIFY_ATTEMPTS = 2`（包含首次结束尝试）。�
 - Hook 流事件使用 `ChatEvent.hook` 的 `name` / `detail` / `outcome`，不借用 `memory_update`。
 - 前端将其渲染为 `kind: "hook"` 的活动卡，标题是 canonical 事件名。
 - 设置中的「Hook 事件」开关控制可见性；`normal` / `detailed` 预设开启，`compact` 关闭。
-- UI 新建对话调用 `chat_control(new_chat)`，对应上表的 `CommandNewChat` / `SessionReset` / `SessionFinalize` 与 runtime 卸载。
+- UI 新建对话调用 `chat_control(new_chat)`，对应上表的 `CommandNewChat` → `SessionReset` → `SessionFinalize` 与 runtime 卸载。
 
 ## 3. Canonical `HookInput` JSON
 
@@ -246,7 +248,7 @@ fn register(ctx: &PluginContext<'_>) {
 }
 ```
 
-当前 `HookOutcome` 保留 `Continue`、`Block`、`Modify`、`InjectContext`、`Allow`、`Skip`、`Rewrite`、`ReplaceText` 和 `KeepGoing`。这些返回值的时机与聚合规则不在 Batch A 中改动。
+当前 `HookOutcome` 保留 `Continue`、`Block`、`Modify`、`InjectContext`、`Allow`、`Skip`、`Rewrite`、`ReplaceText` 和 `KeepGoing`。Plugin callbacks 按注册顺序同步聚合；首个非继续结果会短路 Plugin callbacks。Gateway 与 Shell 是观察型 transport：Gateway handler 不改变该 outcome，Shell 异步旁路也不阻塞或改变它。
 
 ### Gateway Event Hooks
 
@@ -280,9 +282,9 @@ hooks:
   CommandNewChat: 'true'
 ```
 
-Shell Hook 异步执行，默认超时 5 秒，失败只记录日志。`HookRuntime::fire_plugin` / `fire_gateway` 会旁路触发同名 Shell Hook；AgentLoop 直接在共享 `PluginHookBus` 上 fire 的循环事件当前不会自动转发给 `ShellHookRunner`。配置可被加载不等于对应生命周期已接线；该对齐留在后续批次。
+Shell Hook 异步执行，默认超时 5 秒，失败只记录日志。`HookRuntime::dispatch` 会在同一次标准化 dispatch 中同步调用 Plugin、通知 Gateway，并旁路调度同名 Shell Hook；因此所有 `Session::fire_hook` 事件都能到达 Shell。Shell 的异步结果不参与 Plugin outcome 聚合，也不会阻塞 Agent。
 
-当前已经过 `HookRuntime` 并能实际投递给 Shell 的事件包括 `GatewayStartup`、`SessionStart`、`AgentEnd`、`CommandNewChat`、`PreGatewayDispatch`、`SessionReset` 和 `SessionFinalize`。其中 `SessionStart` / `AgentEnd` 指 Gateway 路由；AgentLoop 直接 fire 的同名/其他 Plugin 事件仍不会自动投递 Shell。
+下列是现已接线、可作为 Shell 配置依据的代表事件：`GatewayStartup`、`PreGatewayDispatch`、`SessionStart`、`UserPromptSubmit`、`PreLlmCall`、`PreToolUse`、`PostToolUse`、`Stop`、`PostLlmCall`、`AgentEnd`、`CommandNewChat`、`SessionReset` 和 `SessionFinalize`。配置仍只在真实 fire 点执行；声明一个未接线事件不会创造生命周期。
 
 一版兼容环境变量：
 
@@ -302,37 +304,41 @@ Shell Hook 异步执行，默认超时 5 秒，失败只记录日志。`HookRunt
 
 [`docs/examples/hooks/telemetry-webhook.sh`](./examples/hooks/telemetry-webhook.sh) 把 `ASTRO_HOOK_EVENT`、session、turn、tool 和 detail 序列化为 JSON 并 POST 到 `ASTRO_TELEMETRY_URL`；可选 token 通过 `Authorization: Bearer` 头发送。脚本需要 `curl` 和 `jq`，未配置 URL 时静默退出，发送失败不阻塞 Agent。
 
-推荐从已接线的 `GatewayStartup`、`PreGatewayDispatch` 或 `CommandNewChat` 开始配置该脚本。`PostToolUse`、`PreLlmCall`、`PostLlmCall` 等 AgentLoop 直接 Plugin 事件在 Batch A 中不会自动投递到 Shell，不应当作当前可运行的 telemetry 配置。
+推荐从已接线的 `GatewayStartup`、`PreGatewayDispatch`、`UserPromptSubmit` 或 `CommandNewChat` 开始配置该脚本。`PostToolUse`、`PreLlmCall`、`PostLlmCall` 等同样通过统一 runtime 路由；它们可用于 telemetry，但 Shell 失败仍只会留下日志。
 
 - 不要在日志、echo 或 hook detail 中输出 telemetry token。
 - 示例脚本不发送 `ASTRO_HOOK_MESSAGE`、`tool_input` 或 `tool_response`；自定义脚本如果增加这些字段，需要先评估 prompt、assistant 文本和工具参数的敏感性。
 - Shell 失败只记录 warning，不是投递成功保证；需要可靠导出时应在自有端点实现幂等和重试。
 
-## 5. Batch A 边界与后续批次
+## 5. Batch A、B1 边界与后续批次
 
-Batch A 仅完成：
+Batch A 完成：
 
 - canonical 事件名与 legacy 名称归一化；
 - `HookInput`/`HookPayload` 的 canonical JSON serialization；
 - 旧 `ASTRO_HOOK_*` 环境变量的一版弃用兼容。
 
-以下工作明确留给后续批次：
+B1 完成：
 
-- 对齐每个事件的生命周期触发时机；
-- Command Hook JSON stdin/stdout 协议及新 command handler 语义；
-- matcher 匹配、多 handler 聚合与冲突规则；
-- trust 模型与 UI 管理界面。
+- `Session::fire_hook` 到 Plugin、Gateway、Shell 的一次标准化 dispatch；
+- one-shot `SessionStart`、输入 admission、Stop continuation guard 与 `RegularTask` 唯一 `AgentEnd`；
+- server lifecycle 去重，以及 `new_chat` 的 command/reset/finalize 次序。
 
-因此，本批不应依据新名称推断新的调用次序、阻塞行为、matcher 或 shell JSON I/O 能力。
+以下仍是明确缺口或后续批次范围：
+
+- `SessionEnd`；以及 `SessionStart` 的 `clear` / `compact` source；
+- `PreCompact` / `PostCompact`；
+- `SubagentStop` 已可观察地 fire，但 `KeepGoing` continuation 尚未实现；
+- Batch C 的 Command Hook JSON stdin/stdout、matcher、multi-handler 聚合/冲突和 trust 模型/UI 管理。
+
+不要从 canonical 名称推断尚未实现的 Command Hook matcher、trust 或 JSON I/O 语义。
 
 ## 6. 验证
 
 ```bash
 cargo test -p hooks
-cargo test -p agent --test rig_agent_test
-cargo test -p agent --test streaming_test
-cargo test -p tools transform_terminal_output
-cargo test -p server new_chat
+cargo test -p agent --all-targets
+cargo test -p server --all-targets
 cargo check --workspace --all-targets
 cargo fmt --all -- --check
 git diff --check
