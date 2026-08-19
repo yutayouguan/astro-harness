@@ -399,7 +399,7 @@ export function useParallelTasks(deps: Deps) {
     };
 
     try {
-      const eventName = `chat-stream-${sessionId}`;
+      const eventName = `chat_stream_${sessionId}`;
       let terminalError: string | undefined;
       const unlisten = await listen<{
         type: string;

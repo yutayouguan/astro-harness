@@ -507,6 +507,7 @@ pub fn run() {
             }
 
             infra::session_events::start_bridge(app.handle());
+            infra::thread_events::start_bridge(app.handle());
 
             app.manage(Mutex::new(AppLocale::Zh));
 

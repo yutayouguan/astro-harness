@@ -418,7 +418,7 @@ export function useSend(deps: UseSendDeps) {
       try {
         unlistenRef.current?.();
 
-        const eventName = `chat-stream-${sid}`;
+        const eventName = `chat_stream_${sid}`;
         const gen = ++streamGenRef.current;
         let terminalOutcome: string | null = null;
         let terminalError: string | null = null;
