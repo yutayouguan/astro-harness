@@ -302,6 +302,7 @@ mod tests {
             workspace_write_grant: false,
             sandbox_policy: None,
             network_grant: crate::InProcessNetworkGrant::default(),
+            managed_network: None,
         };
 
         let error = dispatch(&ctx, &serde_json::json!({"command": "touch denied.txt"}))
@@ -346,6 +347,7 @@ mod tests {
             workspace_write_grant: false,
             sandbox_policy: None,
             network_grant: crate::InProcessNetworkGrant::default(),
+            managed_network: None,
         };
 
         let n = types::MAX_TOOL_RESULT_BYTES + 8 * 1024;
@@ -396,6 +398,7 @@ mod tests {
             workspace_write_grant: false,
             sandbox_policy: None,
             network_grant: crate::InProcessNetworkGrant::default(),
+            managed_network: None,
         };
 
         let n = types::MAX_TOOL_RESULT_BYTES + 8 * 1024;

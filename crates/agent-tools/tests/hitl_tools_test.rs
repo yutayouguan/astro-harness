@@ -50,6 +50,7 @@ async fn confirm_emits_valid_a2ui_hitl() {
         workspace_write_grant: false,
         sandbox_policy: None,
         network_grant: tools::InProcessNetworkGrant::default(),
+        managed_network: None,
     };
 
     let raw = tools::dispatch_tool(
@@ -96,6 +97,7 @@ async fn clarify_emits_valid_a2ui_hitl() {
         workspace_write_grant: false,
         sandbox_policy: None,
         network_grant: tools::InProcessNetworkGrant::default(),
+        managed_network: None,
     };
 
     let raw = tools::dispatch_tool(
@@ -157,6 +159,7 @@ async fn clarify_free_text_step_allows_empty_options() {
         workspace_write_grant: false,
         sandbox_policy: None,
         network_grant: tools::InProcessNetworkGrant::default(),
+        managed_network: None,
     };
 
     let raw = tools::dispatch_tool(
@@ -224,6 +227,7 @@ async fn clarify_multi_emits_wizard_hitl() {
         workspace_write_grant: false,
         sandbox_policy: None,
         network_grant: tools::InProcessNetworkGrant::default(),
+        managed_network: None,
     };
 
     let raw = tools::dispatch_tool(
@@ -296,6 +300,7 @@ async fn ask_user_location_mode_emits_valid_a2ui_hitl() {
         workspace_write_grant: false,
         sandbox_policy: None,
         network_grant: tools::InProcessNetworkGrant::default(),
+        managed_network: None,
     };
 
     let raw = tools::dispatch_tool(
@@ -341,6 +346,7 @@ async fn present_emits_valid_astro_ui() {
         workspace_write_grant: false,
         sandbox_policy: None,
         network_grant: tools::InProcessNetworkGrant::default(),
+        managed_network: None,
     };
 
     let raw = tools::dispatch_tool(
@@ -388,6 +394,7 @@ async fn ask_user_rejects_mixed_questions_and_body() {
         workspace_write_grant: false,
         sandbox_policy: None,
         network_grant: tools::InProcessNetworkGrant::default(),
+        managed_network: None,
     };
 
     let err = tools::dispatch_tool(

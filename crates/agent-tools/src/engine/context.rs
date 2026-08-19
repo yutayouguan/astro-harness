@@ -64,6 +64,10 @@ pub struct ToolContext<'a> {
     ///
     /// 与命令沙箱的 `network.enabled` 相互独立，不会持久化或跨工具调用复用。
     pub network_grant: InProcessNetworkGrant,
+    /// Current attempt-scoped managed proxy lease.
+    ///
+    /// The lease keeps the listener alive through sandbox setup and process execution.
+    pub managed_network: Option<Arc<network_proxy::StartedNetworkProxy>>,
 }
 
 impl<'a> ToolContext<'a> {
@@ -272,6 +276,7 @@ permissions:
             workspace_write_grant: true,
             sandbox_policy: None,
             network_grant: InProcessNetworkGrant::default(),
+            managed_network: None,
         };
 
         let policy = ctx.command_sandbox_policy().unwrap();

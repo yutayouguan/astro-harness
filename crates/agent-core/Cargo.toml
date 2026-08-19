@@ -20,6 +20,7 @@ a2ui = { path = "../agent-a2ui" }
 artifacts = { path = "../agent-artifacts" }
 hooks = { path = "../agent-hooks" }
 sandbox = { path = "../agent-sandbox" }
+network-proxy = { path = "../agent-network-proxy" }
 tracing = { workspace = true }
 tokio = { workspace = true }
 tokio-util = { workspace = true }

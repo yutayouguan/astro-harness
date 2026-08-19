@@ -296,6 +296,7 @@ mod tests {
             workspace_write_grant: false,
             sandbox_policy: None,
             network_grant: crate::InProcessNetworkGrant::default(),
+            managed_network: None,
         }
     }
 

@@ -7,6 +7,7 @@ edition = "2021"
 types = { path = "../agent-types" }
 memory = { path = "../agent-memory" }
 sandbox = { path = "../agent-sandbox" }
+network-proxy = { path = "../agent-network-proxy" }
 session = { path = "../agent-session" }
 home = { path = "../agent-home" }
 subagents = { path = "../agent-subagents" }

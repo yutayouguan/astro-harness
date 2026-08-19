@@ -270,6 +270,7 @@ mod permission_tests {
             network_grant: crate::InProcessNetworkGrant::for_hosts(
                 network_hosts.iter().map(|host| (*host).to_string()),
             ),
+            managed_network: None,
         };
         f(&ctx);
     }

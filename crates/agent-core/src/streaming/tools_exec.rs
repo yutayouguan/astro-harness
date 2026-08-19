@@ -40,6 +40,41 @@ fn approval_route(
     }
 }
 
+fn call_uses_managed_network(call: &types::ParsedToolCall) -> bool {
+    match call.name.as_str() {
+        "code_exec" => true,
+        "terminal" => match call.arguments.get("action") {
+            None => true,
+            Some(serde_json::Value::String(action)) => {
+                let action = action.trim();
+                action.is_empty() || action.eq_ignore_ascii_case("run")
+            }
+            Some(_) => false,
+        },
+        _ => false,
+    }
+}
+
+fn managed_network_policy_for_call(
+    call: &types::ParsedToolCall,
+    settings: &memory::LoadedPermissionSettings,
+    active_profile_id: &str,
+) -> Option<types::NetworkPolicy> {
+    if !settings.network_proxy_enabled
+        || active_profile_id == types::DANGER_FULL_ACCESS_PROFILE
+        || !call_uses_managed_network(call)
+    {
+        return None;
+    }
+
+    settings
+        .permissions
+        .profiles
+        .get(active_profile_id)
+        .map(|profile| profile.network.clone())
+        .filter(|policy| policy.enabled)
+}
+
 /// 触发 `post_approval_response`（观察型，忽略返回值）：`choice` 为
 /// `auto`（辅模型降级）/ `allow`（用户批准）/ `deny`（用户拒绝或 cancelled）/
 /// `timeout`（park 超时）/ `unavailable`（无 HITL gate）。
@@ -196,14 +231,20 @@ struct SandboxAttempt {
     workspace_write_grant: bool,
     sandbox_policy: Option<sandbox::SandboxPolicy>,
     network_grant: tools::InProcessNetworkGrant,
+    managed_network: Option<Arc<network_proxy::StartedNetworkProxy>>,
 }
 
 impl SandboxAttempt {
-    fn initial(workspace_write_grant: bool, network_grant: tools::InProcessNetworkGrant) -> Self {
+    fn initial(
+        workspace_write_grant: bool,
+        network_grant: tools::InProcessNetworkGrant,
+        managed_network: Option<Arc<network_proxy::StartedNetworkProxy>>,
+    ) -> Self {
         Self {
             workspace_write_grant,
             sandbox_policy: None,
             network_grant,
+            managed_network,
         }
     }
 
@@ -215,6 +256,7 @@ impl SandboxAttempt {
                 false,
             )?),
             network_grant: self.network_grant.clone(),
+            managed_network: self.managed_network.clone(),
         })
     }
 }
@@ -675,7 +717,25 @@ impl<'a> ToolOrchestrator<'a> {
         let agent = self.session.as_ref();
         let memory_dir = agent.memory_dir().to_path_buf();
         let session_id = agent.session_id().to_string();
-        let initial_attempt = SandboxAttempt::initial(workspace_write_grant, network_grant);
+        let managed_network = match self.start_managed_network(call).await {
+            Ok(managed_network) => managed_network,
+            Err(error) => {
+                memory::try_append_decision(
+                    &memory_dir,
+                    memory::DecisionEntry::new(
+                        memory::DecisionKind::ToolFailure,
+                        format!("managed network setup failed: {error}"),
+                    )
+                    .with_tool(call.name.clone())
+                    .with_session(session_id),
+                );
+                return Some(OrchestratorRunResult {
+                    output: format!("Tool error: managed network setup failed: {error}").into(),
+                });
+            }
+        };
+        let initial_attempt =
+            SandboxAttempt::initial(workspace_write_grant, network_grant, managed_network);
         let execution_started = std::time::Instant::now();
         let executed = self.run_attempt(call, &initial_attempt, CancellationToken::new());
         let execution_result = match &executed {
@@ -821,8 +881,28 @@ impl<'a> ToolOrchestrator<'a> {
                 workspace_write: attempt.workspace_write_grant,
                 sandbox_policy,
                 network: attempt.network_grant.clone(),
+                managed_network: attempt.managed_network.clone(),
             },
         )
+    }
+
+    async fn start_managed_network(
+        &self,
+        call: &types::ParsedToolCall,
+    ) -> anyhow::Result<Option<Arc<network_proxy::StartedNetworkProxy>>> {
+        let settings = memory::load_permission_settings(self.session.memory_dir());
+        let active_profile_id = self
+            .step_context
+            .turn
+            .permission_profile()
+            .unwrap_or(settings.selection.profile_id.as_str());
+        let Some(policy) = managed_network_policy_for_call(call, &settings, active_profile_id)
+        else {
+            return Ok(None);
+        };
+        let state = Arc::new(network_proxy::NetworkProxyState::new(policy)?);
+        let started = network_proxy::StartedNetworkProxy::start(state).await?;
+        Ok(Some(Arc::new(started)))
     }
 
     fn execution_root(&self) -> std::path::PathBuf {
@@ -838,32 +918,41 @@ impl<'a> ToolOrchestrator<'a> {
         call: &types::ParsedToolCall,
         attempt: &SandboxAttempt,
     ) -> Result<Option<sandbox::SandboxPolicy>, crate::runtime::ToolCallError> {
-        if let Some(policy) = &attempt.sandbox_policy {
-            return Ok(Some(policy.clone()));
-        }
-        let preference = self.step_context.tool_router.sandbox_preference(&call.name);
-        if preference == types::SandboxablePreference::Forbid {
-            return Ok(None);
-        }
+        let mut policy = if let Some(policy) = &attempt.sandbox_policy {
+            policy.clone()
+        } else {
+            let preference = self.step_context.tool_router.sandbox_preference(&call.name);
+            if preference == types::SandboxablePreference::Forbid {
+                return Ok(None);
+            }
 
-        let execution_root = self.execution_root();
-        let mut policy = tools::context::build_command_sandbox_policy(
-            self.session.memory_dir(),
-            &execution_root,
-            self.step_context.turn.permission_profile(),
-            attempt.workspace_write_grant,
-            None,
-        )
-        .map_err(crate::runtime::ToolCallError::from)?;
-        if preference == types::SandboxablePreference::Require
-            && policy.mode == types::SandboxMode::DangerFullAccess
-        {
-            policy = sandbox::SandboxPolicy::unrestricted_file_system(
+            let execution_root = self.execution_root();
+            let mut policy = tools::context::build_command_sandbox_policy(
+                self.session.memory_dir(),
                 &execution_root,
-                policy.network_access,
+                self.step_context.turn.permission_profile(),
+                attempt.workspace_write_grant,
+                None,
             )
-            .map_err(anyhow::Error::new)
             .map_err(crate::runtime::ToolCallError::from)?;
+            if preference == types::SandboxablePreference::Require
+                && policy.mode == types::SandboxMode::DangerFullAccess
+            {
+                policy = sandbox::SandboxPolicy::unrestricted_file_system(
+                    &execution_root,
+                    policy.network_access,
+                )
+                .map_err(anyhow::Error::new)
+                .map_err(crate::runtime::ToolCallError::from)?;
+            }
+            policy
+        };
+        if let Some(started) = &attempt.managed_network {
+            let context = started
+                .proxy()
+                .prepare(std::collections::HashMap::new())
+                .sandbox_context;
+            policy = policy.with_managed_network(context);
         }
         Ok(Some(policy))
     }
@@ -1672,8 +1761,10 @@ mod tests {
         global_enabled: bool,
         leaf_enabled: bool,
     ) -> memory::LoadedPermissionSettings {
-        let mut settings = memory::LoadedPermissionSettings::default();
-        settings.network_proxy_enabled = global_enabled;
+        let mut settings = memory::LoadedPermissionSettings {
+            network_proxy_enabled: global_enabled,
+            ..Default::default()
+        };
         settings.selection.profile_id = "leaf".into();
         settings.permissions.profiles.insert(
             "parent".into(),
@@ -1765,7 +1856,7 @@ mod tests {
     #[test]
     fn escalated_sandbox_attempt_preserves_restricted_network() {
         let dir = tempfile::tempdir().unwrap();
-        let initial = SandboxAttempt::initial(false, tools::InProcessNetworkGrant::default());
+        let initial = SandboxAttempt::initial(false, tools::InProcessNetworkGrant::default(), None);
         let escalated = initial.escalated(dir.path()).unwrap();
         let policy = escalated
             .sandbox_policy
@@ -1794,7 +1885,7 @@ mod tests {
         let (tx, _rx) = mpsc::channel(8);
         let orchestrator = ToolOrchestrator::new(&session, &step_context, &tx, "run-1", None);
         let call = types::ParsedToolCall::with_id("call-1", "terminal", json!({"command": "pwd"}));
-        let attempt = SandboxAttempt::initial(true, tools::InProcessNetworkGrant::default());
+        let attempt = SandboxAttempt::initial(true, tools::InProcessNetworkGrant::default(), None);
 
         let policy = orchestrator
             .sandbox_policy_for_attempt(&call, &attempt)
@@ -1889,7 +1980,7 @@ mod tests {
         let (tx, _rx) = mpsc::channel(8);
         let orchestrator = ToolOrchestrator::new(&session, &step_context, &tx, "run-1", None);
         let call = types::ParsedToolCall::with_id("call-1", "non_process_probe", json!({}));
-        let attempt = SandboxAttempt::initial(false, tools::InProcessNetworkGrant::default());
+        let attempt = SandboxAttempt::initial(false, tools::InProcessNetworkGrant::default(), None);
 
         let policy = orchestrator
             .sandbox_policy_for_attempt(&call, &attempt)

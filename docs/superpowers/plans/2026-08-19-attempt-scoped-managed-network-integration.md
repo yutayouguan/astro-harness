@@ -397,7 +397,7 @@ Expected: prior full-access/network-access tests remain green and exact-port tes
 - Modify: `crates/agent-tools/tests/tools_test.rs`
 - Modify: `Cargo.lock`
 
-- [ ] **Step 1: Add failing profile-selection and propagation tests**
+- [x] **Step 1: Add failing profile-selection and propagation tests**
 
 Add pure tests in `tools_exec.rs` for a helper named `managed_network_policy_for_call`:
 
@@ -434,7 +434,7 @@ Add cases proving all of the following return `None`: global proxy disabled, bui
 
 Add a `tools_exec.rs` test that builds a `SandboxAttempt` with `Some(Arc<StartedNetworkProxy>)`, calls `sandbox_policy_for_attempt`, and asserts the result contains the exact bound port and local-binding flag. Run the same assertion with an escalated filesystem policy to prove the early override path cannot drop the managed network context. Add a `tool_dispatch.rs` test that `ToolExecutionGrants::default().managed_network` is `None`; the real dispatch path must copy the attempt lease into `ToolContext` rather than reconstructing it from env.
 
-- [ ] **Step 2: Run focused tests and verify RED**
+- [x] **Step 2: Run focused tests and verify RED**
 
 ```bash
 cargo test -p agent managed_network_uses_only_selected_custom_leaf_policy
@@ -444,7 +444,7 @@ cargo test -p agent tool_execution_grants_default_to_no_managed_network
 
 Expected: compile failures for the helper and `managed_network` fields.
 
-- [ ] **Step 3: Add the attempt lease across all three boundaries**
+- [x] **Step 3: Add the attempt lease across all three boundaries**
 
 Add `network-proxy` dependencies to `agent-core` and `agent-tools`. Extend the contracts exactly once:
 
@@ -471,7 +471,7 @@ pub struct ToolContext<'a> {
 
 `SandboxAttempt::escalated` must clone the same lease; it must not start a second listener. Add `managed_network: None` to every direct `ToolContext` fixture and preserve `Default` behavior for `ToolExecutionGrants`.
 
-- [ ] **Step 4: Resolve and start the listener before sandbox policy construction**
+- [x] **Step 4: Resolve and start the listener before sandbox policy construction**
 
 Implement:
 
@@ -514,7 +514,7 @@ let managed_network = match managed_network_policy_for_call(call, &settings, &pr
 
 Proxy setup errors return an execution error before `run_attempt`; never fall back to an unproxied child.
 
-- [ ] **Step 5: Attach the already-bound port to the initial sandbox policy**
+- [x] **Step 5: Attach the already-bound port to the initial sandbox policy**
 
 In `sandbox_policy_for_attempt`, refactor the current early return for `attempt.sandbox_policy` into base-policy selection. After resolving either the attempt override or the normal filesystem/mode policy, attach:
 
@@ -527,7 +527,7 @@ if let Some(started) = &attempt.managed_network {
 
 Then pass the same lease through `run_attempt` into `ToolExecutionGrants` and from `dispatch_named_tool` into `ToolContext`. Do not alter `network_grant`; it remains the separate in-process HTTP grant.
 
-- [ ] **Step 6: Run propagation regressions and commit Task 3**
+- [x] **Step 6: Run propagation regressions and commit Task 3**
 
 ```bash
 cargo fmt --all

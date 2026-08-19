@@ -65,6 +65,7 @@ pub(crate) struct ToolExecutionGrants {
     pub(crate) workspace_write: bool,
     pub(crate) sandbox_policy: Option<sandbox::SandboxPolicy>,
     pub(crate) network: tools::InProcessNetworkGrant,
+    pub(crate) managed_network: Option<std::sync::Arc<network_proxy::StartedNetworkProxy>>,
 }
 
 impl AgentLoop {
@@ -166,6 +167,7 @@ impl AgentLoop {
             workspace_write_grant: grants.workspace_write,
             sandbox_policy: grants.sandbox_policy,
             network_grant: grants.network,
+            managed_network: grants.managed_network,
         };
         dispatch_tool(|_| allowed, &mut ctx, name, args, dynamic_handler.as_ref()).await
     }

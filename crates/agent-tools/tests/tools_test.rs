@@ -97,6 +97,7 @@ async fn file_ops_write_and_read() {
         workspace_write_grant: false,
         sandbox_policy: None,
         network_grant: tools::InProcessNetworkGrant::default(),
+        managed_network: None,
     };
 
     let w = tools::dispatch_tool(
