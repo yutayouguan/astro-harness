@@ -47,6 +47,56 @@ fn session_fire_hook_uses_shared_runtime_and_common_payload() {
     assert!(Arc::ptr_eq(&agent.hook_runtime(), &runtime));
 }
 
+#[test]
+fn session_hook_payload_preserves_explicit_values_and_falls_back_to_defaults() {
+    let dir = TempDir::new().unwrap();
+    let (agent, _) = AgentBuilder::new(dir.path()).build().unwrap();
+    let runtime = Arc::new(hooks::HookRuntime::new());
+    let captured = Arc::new(std::sync::Mutex::new(Vec::new()));
+    let capture = Arc::clone(&captured);
+    runtime
+        .plugin
+        .register(hooks::USER_PROMPT_SUBMIT, move |input| {
+            capture.lock().unwrap().push(input.clone());
+            hooks::HookOutcome::Continue
+        });
+    agent.set_hook_runtime(runtime);
+    agent.set_project_root(None);
+    agent.set_permission_profile(Some("workspace-write".into()));
+    agent.set_chat_targets(vec![types::ChatTarget {
+        provider_id: String::new(),
+        backend_id: String::new(),
+        model: "model-only".into(),
+        api_key: String::new(),
+        base_url: String::new(),
+    }]);
+
+    agent.fire_hook(hooks::USER_PROMPT_SUBMIT, hooks::HookInput::default());
+    agent.fire_hook(
+        hooks::USER_PROMPT_SUBMIT,
+        hooks::HookInput {
+            session_id: "provided-session".into(),
+            cwd: "/provided/cwd".into(),
+            model: "provided/model".into(),
+            permission_mode: Some("read-only".into()),
+            ..Default::default()
+        },
+    );
+
+    let payloads = captured.lock().unwrap();
+    assert_eq!(payloads[0].session_id, agent.session_id());
+    assert_eq!(payloads[0].cwd, dir.path().to_string_lossy());
+    assert_eq!(payloads[0].model, "model-only");
+    assert_eq!(
+        payloads[0].permission_mode.as_deref(),
+        Some("workspace-write")
+    );
+    assert_eq!(payloads[1].session_id, "provided-session");
+    assert_eq!(payloads[1].cwd, "/provided/cwd");
+    assert_eq!(payloads[1].model, "provided/model");
+    assert_eq!(payloads[1].permission_mode.as_deref(), Some("read-only"));
+}
+
 fn test_config(dir: &TempDir) -> AgentConfig {
     AgentConfig::with_defaults(dir.path().to_path_buf())
 }

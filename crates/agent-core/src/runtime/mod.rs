@@ -370,9 +370,18 @@ impl Session {
 
     /// 设置插件钩子总线。
     ///
-    /// 兼容旧调用方：替换为持有该 bus 的全新共享运行时。
+    /// 兼容旧调用方：仅替换 plugin，保留共享运行时的 transport 与 UI slot。
     pub fn set_hook_bus(&self, bus: Arc<::hooks::PluginHookBus>) {
-        self.set_hook_runtime(Arc::new(::hooks::HookRuntime::with_plugin_bus(bus)));
+        let current = self.hook_runtime();
+        if Arc::ptr_eq(&current.plugin, &bus) {
+            return;
+        }
+        self.set_hook_runtime(Arc::new(::hooks::HookRuntime {
+            plugin: bus,
+            gateway: Arc::clone(&current.gateway),
+            shell: Arc::clone(&current.shell),
+            ui_slot: current.ui_slot.clone(),
+        }));
     }
 
     /// 当前插件钩子总线。
@@ -1131,6 +1140,45 @@ mod tests {
             api_key: format!("k-{id}"),
             base_url: format!("https://{id}.example"),
         }
+    }
+
+    #[test]
+    fn set_hook_bus_is_idempotent_and_preserves_runtime_transports() {
+        let dir = TempDir::new().unwrap();
+        let session = Session::new(test_config(&dir)).unwrap();
+        let runtime = Arc::new(::hooks::HookRuntime::new());
+        let original_plugin = Arc::clone(&runtime.plugin);
+        let gateway = Arc::clone(&runtime.gateway);
+        let shell = Arc::clone(&runtime.shell);
+        session.set_hook_runtime(runtime);
+
+        let bus = Arc::new(::hooks::PluginHookBus::new());
+        session.set_hook_bus(Arc::clone(&bus));
+        let first = session.hook_runtime();
+        assert!(Arc::ptr_eq(&session.hook_bus(), &bus));
+        assert!(Arc::ptr_eq(&first.gateway, &gateway));
+        assert!(Arc::ptr_eq(&first.shell, &shell));
+
+        let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
+        first.ui_slot.set_tx(Some(tx));
+        original_plugin.fire(::hooks::SESSION_START, &::hooks::HookPayload::default());
+        assert_eq!(
+            rx.try_recv()
+                .expect("replacement preserves the original UI slot")
+                .name,
+            ::hooks::SESSION_START
+        );
+        first
+            .plugin
+            .fire(::hooks::SESSION_START, &::hooks::HookPayload::default());
+        assert!(matches!(
+            rx.try_recv(),
+            Err(tokio::sync::mpsc::error::TryRecvError::Empty)
+        ));
+
+        session.set_hook_bus(bus);
+        let second = session.hook_runtime();
+        assert!(Arc::ptr_eq(&first, &second));
     }
 
     #[test]
