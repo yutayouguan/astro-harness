@@ -171,6 +171,7 @@ impl LifecycleTestApp {
             current_thread_id: thread.thread_id,
             runtime_manager: Arc::clone(&self.runtime_manager),
             runtime_requests: Arc::clone(&self.runtime_requests),
+            wait_cursor: Arc::new(tokio::sync::Mutex::new(self.control.activity_cursor())),
             chat_override: Some(Arc::clone(&self.chat_override)),
             #[cfg(test)]
             before_followup_atomic_hook: None,

@@ -753,6 +753,22 @@ impl AgentRuntimeManager {
         expect_terminal_ack("interruption", termination, AgentStatusV2::Interrupted)
     }
 
+    /// Interrupt the active generation when one exists. Idle, completed, and
+    /// not-yet-started threads are idempotent no-ops at the V2 tool boundary.
+    pub async fn interrupt_active_if_any(&self, thread_id: &str) -> anyhow::Result<()> {
+        let RuntimeTerminationState::Running {
+            control,
+            terminated,
+        } = self.runtime_termination_state(thread_id)?
+        else {
+            return Ok(());
+        };
+        self.pause_after_ack_subscribe().await;
+        control.interrupt();
+        wait_for_termination(terminated, "interruption").await?;
+        Ok(())
+    }
+
     pub async fn terminate(&self, thread_id: &str) -> anyhow::Result<()> {
         let (interrupt, terminated) = self.termination_subscription(thread_id)?;
         self.pause_after_ack_subscribe().await;

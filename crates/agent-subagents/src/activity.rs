@@ -101,6 +101,34 @@ impl ActivityBus {
         .flatten()
     }
 
+    /// Wait for activity that is visible to the Codex V2 model wait tool.
+    /// Spawn/start noise is deliberately skipped; durable mailbox delivery,
+    /// final lifecycle changes, and main-task steering wake the caller.
+    pub async fn wait_model_after(
+        &self,
+        cursor: ActivityCursor,
+        wait_timeout: Duration,
+    ) -> Option<AgentActivity> {
+        let mut rx = self.tx.subscribe();
+        if let Some(activity) = self.first_model_after(cursor) {
+            return Some(activity);
+        }
+
+        tokio::time::timeout(wait_timeout, async {
+            loop {
+                if rx.changed().await.is_err() {
+                    return None;
+                }
+                if let Some(activity) = self.first_model_after(cursor) {
+                    return Some(activity);
+                }
+            }
+        })
+        .await
+        .ok()
+        .flatten()
+    }
+
     /// Returns the earliest buffered activity after `cursor` without applying
     /// the model wait path's `MainSteer` priority. This is the read-only
     /// observer surface used by projection streams that must preserve order.
@@ -174,6 +202,29 @@ impl ActivityBus {
             .iter()
             .find(|event| event.sequence > cursor.0)
             .cloned()
+    }
+
+    fn first_model_after(&self, cursor: ActivityCursor) -> Option<AgentActivity> {
+        let events = self.lock_events();
+        let mut first = None;
+        for activity in events.iter().filter(|event| event.sequence > cursor.0) {
+            if activity.kind == AgentActivityKind::MainSteer {
+                return Some(activity.clone());
+            }
+            let visible = match (&activity.kind, activity.thread.as_ref()) {
+                (AgentActivityKind::Mailbox { .. }, _)
+                | (AgentActivityKind::EdgeClosed { .. }, _) => true,
+                (AgentActivityKind::StatusChanged { .. }, Some(thread)) => !matches!(
+                    thread.status,
+                    crate::AgentStatusV2::PendingInit | crate::AgentStatusV2::Running
+                ),
+                _ => false,
+            };
+            if visible && first.is_none() {
+                first = Some(activity.clone());
+            }
+        }
+        first
     }
 
     fn observation_after(&self, cursor: ActivityCursor) -> Option<ActivityObservation> {

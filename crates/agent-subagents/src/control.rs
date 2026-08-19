@@ -322,10 +322,23 @@ impl AgentControl {
         target: &str,
     ) -> anyhow::Result<AgentThreadV2> {
         self.require_path(current, "current agent")?;
-        let resolved = current.resolve(target.trim()).map_err(anyhow::Error::msg)?;
-        if &resolved == current {
-            anyhow::bail!("an agent cannot target itself: {resolved}");
+        let target = target.trim();
+        if Uuid::parse_str(target).is_ok() {
+            let thread = self
+                .store
+                .get_thread(target)?
+                .ok_or_else(|| anyhow::anyhow!("unknown agent target thread {target:?}"))?;
+            anyhow::ensure!(
+                thread.root_thread_id == self.root_thread_id,
+                "agent target thread belongs to a different root"
+            );
+            anyhow::ensure!(
+                self.is_committed_thread(&thread)?,
+                "agent target thread {target:?} is not committed"
+            );
+            return Ok(thread);
         }
+        let resolved = current.resolve(target).map_err(anyhow::Error::msg)?;
         self.require_path(&resolved, "agent target")
     }
 
@@ -342,7 +355,10 @@ impl AgentControl {
         let snapshot = self.store.snapshot(&self.root_thread_id)?;
         let mut threads = Vec::new();
         for thread in snapshot.threads {
-            if thread.canonical_path.starts_with(&prefix) && self.is_committed_thread(&thread)? {
+            if thread.status != AgentStatusV2::Shutdown
+                && thread.canonical_path.starts_with(&prefix)
+                && self.is_committed_thread(&thread)?
+            {
                 threads.push(thread);
             }
         }
@@ -564,6 +580,23 @@ impl AgentControl {
             Some(activity) if activity.kind == AgentActivityKind::MainSteer => WaitOutcome::Steered,
             Some(_) => WaitOutcome::MailboxActivity,
             None => WaitOutcome::TimedOut,
+        }
+    }
+
+    pub async fn wait_model_activity(
+        &self,
+        cursor: ActivityCursor,
+        timeout: Duration,
+    ) -> (WaitAgentResult, ActivityCursor) {
+        match self.activity.wait_model_after(cursor, timeout).await {
+            Some(activity) if activity.kind == AgentActivityKind::MainSteer => {
+                (WaitOutcome::Steered, ActivityCursor(activity.sequence))
+            }
+            Some(activity) => (
+                WaitOutcome::MailboxActivity,
+                ActivityCursor(activity.sequence),
+            ),
+            None => (WaitOutcome::TimedOut, cursor),
         }
     }
 
@@ -1433,6 +1466,13 @@ mod tests {
         );
         assert_eq!(
             control
+                .resolve_target(&root, &alpha.thread_id)
+                .unwrap()
+                .canonical_path,
+            alpha.canonical_path
+        );
+        assert_eq!(
+            control
                 .resolve_target(&alpha.canonical_path, "nested")
                 .unwrap()
                 .thread_id,
@@ -1445,8 +1485,66 @@ mod tests {
                 .thread_id,
             beta.thread_id
         );
-        assert!(control.resolve_target(&root, "/root").is_err());
+        assert_eq!(
+            control
+                .resolve_target(&root, "/root")
+                .unwrap()
+                .canonical_path,
+            root
+        );
         assert!(control.resolve_target(&root, "missing").is_err());
+    }
+
+    #[test]
+    fn list_agents_excludes_shutdown_threads() {
+        let dir = TempDir::new().unwrap();
+        let (control, _store) = open_control(&dir, "root-thread");
+        let root = crate::AgentPath::root();
+        let live = commit_spawn(&control, &root, "live");
+        let shutdown = commit_spawn(&control, &root, "shutdown");
+        control
+            .record_runner_event(&shutdown.thread_id, crate::RunnerEvent::RuntimeTerminated)
+            .unwrap();
+
+        let listed = control.list_agents(&root, None).unwrap();
+        assert!(listed
+            .iter()
+            .any(|thread| thread.thread_id == live.thread_id));
+        assert!(!listed
+            .iter()
+            .any(|thread| thread.thread_id == shutdown.thread_id));
+    }
+
+    #[test]
+    fn send_and_non_root_followup_may_target_the_sender() {
+        let dir = TempDir::new().unwrap();
+        let (control, _store) = open_control(&dir, "root-thread");
+        let root = crate::AgentPath::root();
+        let child = commit_spawn(&control, &root, "worker");
+
+        let root_message = control
+            .enqueue_message(
+                &root,
+                crate::MessageAgentV2Request {
+                    target: "/root".into(),
+                    message: "note to self".into(),
+                },
+                false,
+            )
+            .unwrap();
+        assert!(!root_message.trigger_turn);
+
+        let child_followup = control
+            .enqueue_message(
+                &child.canonical_path,
+                crate::MessageAgentV2Request {
+                    target: child.thread_id.clone(),
+                    message: "continue my task".into(),
+                },
+                true,
+            )
+            .unwrap();
+        assert!(child_followup.trigger_turn);
     }
 
     #[test]

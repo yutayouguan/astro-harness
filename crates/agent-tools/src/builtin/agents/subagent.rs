@@ -157,19 +157,17 @@ async fn handle(
                 },
                 runtime: parent_runtime_material(ctx),
             };
-            Ok(serde_json::to_string(
-                &dispatch.spawn_agent(request).await?,
-            )?)
+            model_visible_spawn_output(&dispatch.spawn_agent(request).await?)
         }
         "list_agents" => {
             let parsed: ListAgentsArgs = parse(name, args)?;
-            Ok(serde_json::to_string(
+            model_visible_list_output(
                 &dispatch
                     .list_agents(subagents::ListAgentsV2Request {
                         path_prefix: clean_optional(parsed.path_prefix),
                     })
                     .await?,
-            )?)
+            )
         }
         "send_message" | "followup_task" => {
             let parsed: MessageArgs = parse(name, args)?;
@@ -179,7 +177,7 @@ async fn handle(
                 target: parsed.target.trim().to_string(),
                 message: parsed.message.trim().to_string(),
             };
-            let result = if name == "send_message" {
+            if name == "send_message" {
                 dispatch.send_message(request).await?
             } else {
                 dispatch
@@ -189,31 +187,96 @@ async fn handle(
                     })
                     .await?
             };
-            Ok(serde_json::to_string(&result)?)
+            Ok(model_visible_message_output().into())
         }
         "wait_agent" => {
             let parsed: WaitAgentArgs = parse(name, args)?;
             let timeout_ms = normalize_wait_timeout(parsed.timeout_ms)?;
-            Ok(serde_json::to_string(
-                &dispatch
-                    .wait_agent(subagents::WaitAgentV2Request {
-                        timeout_ms: Some(timeout_ms),
-                    })
-                    .await?,
-            )?)
+            let mut result = dispatch
+                .wait_agent(subagents::WaitAgentV2Request {
+                    timeout_ms: Some(timeout_ms),
+                })
+                .await?;
+            append_wait_clamp_message(&mut result, parsed.timeout_ms, timeout_ms);
+            Ok(serde_json::to_string(&result)?)
         }
         "interrupt_agent" => {
             let parsed: InterruptAgentArgs = parse(name, args)?;
             require_non_empty("target", &parsed.target)?;
-            Ok(serde_json::to_string(
+            model_visible_interrupt_output(
                 &dispatch
                     .interrupt_agent(subagents::InterruptAgentV2Request {
                         target: parsed.target.trim().to_string(),
                     })
                     .await?,
-            )?)
+            )
         }
         _ => anyhow::bail!("unknown agent thread tool: {name}"),
+    }
+}
+
+fn model_visible_status(status: &subagents::AgentStatusV2) -> serde_json::Value {
+    match status {
+        subagents::AgentStatusV2::PendingInit => serde_json::json!("pending_init"),
+        subagents::AgentStatusV2::Running => serde_json::json!("running"),
+        subagents::AgentStatusV2::Interrupted => serde_json::json!("interrupted"),
+        subagents::AgentStatusV2::Completed { last_message } => {
+            serde_json::json!({"completed": last_message})
+        }
+        subagents::AgentStatusV2::Errored { message } => {
+            serde_json::json!({"errored": message})
+        }
+        subagents::AgentStatusV2::Shutdown => serde_json::json!("shutdown"),
+    }
+}
+
+fn model_visible_spawn_output(result: &subagents::SpawnAgentV2Result) -> anyhow::Result<String> {
+    // Codex V2 defaults `hide_spawn_agent_metadata` to true. Astro exposes the
+    // same default contract and keeps internal thread/session ids off-model.
+    Ok(serde_json::to_string(&serde_json::json!({
+        "task_name": result.thread.canonical_path.as_str()
+    }))?)
+}
+
+fn model_visible_list_output(threads: &[subagents::AgentThreadV2]) -> anyhow::Result<String> {
+    let agents = threads
+        .iter()
+        .map(|thread| {
+            serde_json::json!({
+                "agent_name": thread.canonical_path.as_str(),
+                "agent_status": model_visible_status(&thread.status),
+            })
+        })
+        .collect::<Vec<_>>();
+    Ok(serde_json::to_string(
+        &serde_json::json!({"agents": agents}),
+    )?)
+}
+
+fn model_visible_interrupt_output(
+    result: &subagents::InterruptAgentV2Result,
+) -> anyhow::Result<String> {
+    Ok(serde_json::to_string(&serde_json::json!({
+        "previous_status": model_visible_status(&result.previous_status)
+    }))?)
+}
+
+fn model_visible_message_output() -> &'static str {
+    ""
+}
+
+fn append_wait_clamp_message(
+    result: &mut subagents::WaitAgentV2Result,
+    requested_timeout_ms: Option<i64>,
+    effective_timeout_ms: i64,
+) {
+    if let Some(requested) =
+        requested_timeout_ms.filter(|requested| *requested < effective_timeout_ms)
+    {
+        result.message = format!(
+            "{}\n\nRequested timeout of {requested}ms was clamped to the minimum of {effective_timeout_ms}ms.",
+            result.message
+        );
     }
 }
 
@@ -296,6 +359,59 @@ mod tests {
     use super::*;
     use serde_json::json;
 
+    fn thread(status: subagents::AgentStatusV2) -> subagents::AgentThreadV2 {
+        subagents::AgentThreadV2 {
+            thread_id: "internal-thread-id-must-not-leak".into(),
+            root_thread_id: "internal-root-id-must-not-leak".into(),
+            parent_thread_id: Some("internal-parent-id-must-not-leak".into()),
+            canonical_path: subagents::AgentPath::parse("/root/worker").unwrap(),
+            task_name: "worker".into(),
+            agent_type: "default".into(),
+            session_id: "internal-session-id-must-not-leak".into(),
+            status,
+            created_at: "created".into(),
+            updated_at: "updated".into(),
+        }
+    }
+
+    #[test]
+    fn model_visible_outputs_match_default_codex_v2_shapes() {
+        let spawned = subagents::SpawnAgentV2Result {
+            thread: thread(subagents::AgentStatusV2::Running),
+        };
+        assert_eq!(
+            model_visible_spawn_output(&spawned).unwrap(),
+            r#"{"task_name":"/root/worker"}"#
+        );
+
+        let listed = vec![
+            thread(subagents::AgentStatusV2::Running),
+            thread(subagents::AgentStatusV2::Completed {
+                last_message: "done".into(),
+            }),
+        ];
+        assert_eq!(
+            serde_json::from_str::<serde_json::Value>(&model_visible_list_output(&listed).unwrap())
+                .unwrap(),
+            json!({
+                "agents": [
+                    {"agent_name":"/root/worker","agent_status":"running"},
+                    {"agent_name":"/root/worker","agent_status":{"completed":"done"}}
+                ]
+            })
+        );
+
+        let interrupted = subagents::InterruptAgentV2Result {
+            thread: thread(subagents::AgentStatusV2::Interrupted),
+            previous_status: subagents::AgentStatusV2::Running,
+        };
+        assert_eq!(
+            model_visible_interrupt_output(&interrupted).unwrap(),
+            r#"{"previous_status":"running"}"#
+        );
+        assert_eq!(model_visible_message_output(), "");
+    }
+
     #[test]
     fn v2_tool_arguments_reject_legacy_aliases() {
         assert!(parse::<SpawnAgentArgs>("spawn_agent", &json!({ "task": "x" })).is_err());
@@ -358,6 +474,16 @@ mod tests {
         assert_eq!(normalize_wait_timeout(Some(3_600_000)).unwrap(), 3_600_000);
         assert!(normalize_wait_timeout(Some(3_600_001)).is_err());
         assert!(parse::<WaitAgentArgs>("wait_agent", &json!({"timeout_ms":"10"})).is_err());
+
+        let mut result = subagents::WaitAgentV2Result {
+            message: "Wait completed.".into(),
+            timed_out: false,
+        };
+        append_wait_clamp_message(&mut result, Some(1), 10_000);
+        assert_eq!(
+            result.message,
+            "Wait completed.\n\nRequested timeout of 1ms was clamped to the minimum of 10000ms."
+        );
     }
 
     #[test]

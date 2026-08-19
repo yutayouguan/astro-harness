@@ -9,10 +9,10 @@ use std::time::Duration;
 use anyhow::Context;
 use async_trait::async_trait;
 use subagents::{
-    AgentControl, AgentPath, AgentThreadDetailV2, AgentThreadMessageV2, AgentThreadV2,
-    AgentTreeSnapshotV2, InterruptAgentV2Request, InterruptAgentV2Result, ListAgentsV2Request,
-    MessageAgentV2Request, MessageAgentV2Result, SpawnAgentV2Result, SpawnRuntimeV2Request,
-    WaitAgentV2Request, WaitAgentV2Result, WaitOutcome,
+    ActivityCursor, AgentControl, AgentPath, AgentThreadDetailV2, AgentThreadMessageV2,
+    AgentThreadV2, AgentTreeSnapshotV2, InterruptAgentV2Request, InterruptAgentV2Result,
+    ListAgentsV2Request, MessageAgentV2Request, MessageAgentV2Result, SpawnAgentV2Result,
+    SpawnRuntimeV2Request, WaitAgentV2Request, WaitAgentV2Result, WaitOutcome,
 };
 use tools::{
     AgentThreadDispatch, FollowupAgentDispatchRequest, ParentRuntimeMaterial,
@@ -346,6 +346,7 @@ pub struct DefaultAgentThreadDispatch {
     current_thread_id: String,
     runtime_manager: Arc<AgentRuntimeManager>,
     runtime_requests: Arc<RuntimeRequestRegistry>,
+    wait_cursor: Arc<tokio::sync::Mutex<ActivityCursor>>,
     #[cfg(any(test, feature = "test-support"))]
     chat_override: Option<crate::streaming::ChatOverride>,
     #[cfg(test)]
@@ -358,12 +359,14 @@ impl DefaultAgentThreadDispatch {
         current_path: AgentPath,
         current_thread_id: String,
     ) -> Self {
+        let wait_cursor = control.activity_cursor();
         Self {
             control,
             current_path,
             current_thread_id,
             runtime_manager: AgentRuntimeManager::global(),
             runtime_requests: RuntimeRequestRegistry::global(),
+            wait_cursor: Arc::new(tokio::sync::Mutex::new(wait_cursor)),
             #[cfg(any(test, feature = "test-support"))]
             chat_override: None,
             #[cfg(test)]
@@ -378,12 +381,14 @@ impl DefaultAgentThreadDispatch {
         current_thread_id: String,
         runtime_manager: Arc<AgentRuntimeManager>,
     ) -> Self {
+        let wait_cursor = control.activity_cursor();
         Self {
             control,
             current_path,
             current_thread_id,
             runtime_manager,
             runtime_requests: Arc::new(RuntimeRequestRegistry::default()),
+            wait_cursor: Arc::new(tokio::sync::Mutex::new(wait_cursor)),
             chat_override: None,
             before_followup_atomic_hook: None,
         }
@@ -752,6 +757,13 @@ impl AgentThreadDispatch for DefaultAgentThreadDispatch {
         &self,
         request: FollowupAgentDispatchRequest,
     ) -> anyhow::Result<MessageAgentV2Result> {
+        let resolved = self
+            .control
+            .resolve_target(&self.current_path, &request.request.target)?;
+        anyhow::ensure!(
+            resolved.canonical_path != AgentPath::root(),
+            "follow-up tasks cannot target the root agent"
+        );
         let followup_text = request.request.message.trim().to_string();
         #[cfg(test)]
         if let Some(hook) = self.before_followup_atomic_hook.as_ref() {
@@ -821,22 +833,23 @@ impl AgentThreadDispatch for DefaultAgentThreadDispatch {
             (10_000..=3_600_000).contains(&timeout_ms),
             "normalized timeout_ms must be between 10000 and 3600000"
         );
-        let cursor = self.control.activity_cursor();
-        let outcome = self
+        let mut cursor = self.wait_cursor.lock().await;
+        let (outcome, next_cursor) = self
             .control
-            .wait_activity(cursor, Duration::from_millis(timeout_ms as u64))
+            .wait_model_activity(*cursor, Duration::from_millis(timeout_ms as u64))
             .await;
+        *cursor = next_cursor;
         Ok(match outcome {
             WaitOutcome::MailboxActivity => WaitAgentV2Result {
-                message: "Agent Thread activity is available.".into(),
+                message: "Wait completed.".into(),
                 timed_out: false,
             },
             WaitOutcome::Steered => WaitAgentV2Result {
-                message: "The main task received new input.".into(),
+                message: "Wait interrupted by new input.".into(),
                 timed_out: false,
             },
             WaitOutcome::TimedOut => WaitAgentV2Result {
-                message: "Timed out waiting for Agent Thread activity.".into(),
+                message: "Wait timed out.".into(),
                 timed_out: true,
             },
         })
@@ -853,8 +866,14 @@ impl AgentThreadDispatch for DefaultAgentThreadDispatch {
             target.canonical_path != AgentPath::root(),
             "the root agent cannot be interrupted through model tools"
         );
+        anyhow::ensure!(
+            target.canonical_path != self.current_path,
+            "an agent cannot interrupt itself"
+        );
         let previous_status = target.status.clone();
-        self.runtime_manager.interrupt(&target.thread_id).await?;
+        self.runtime_manager
+            .interrupt_active_if_any(&target.thread_id)
+            .await?;
         let thread = self
             .control
             .resolve_target(&self.current_path, target.canonical_path.as_str())?;
@@ -1228,12 +1247,14 @@ impl DefaultDesktopAgentThreadControl {
     }
 
     fn dispatch(&self, control: Arc<AgentControl>) -> DefaultAgentThreadDispatch {
+        let wait_cursor = control.activity_cursor();
         DefaultAgentThreadDispatch {
             current_thread_id: control.root_thread_id().to_string(),
             control,
             current_path: AgentPath::root(),
             runtime_manager: Arc::clone(&self.runtime_manager),
             runtime_requests: Arc::clone(&self.runtime_requests),
+            wait_cursor: Arc::new(tokio::sync::Mutex::new(wait_cursor)),
             #[cfg(any(test, feature = "test-support"))]
             chat_override: self.chat_override.clone(),
             #[cfg(test)]
@@ -2057,6 +2078,7 @@ mod tests {
             current_thread_id: parent.thread_id.clone(),
             runtime_manager: Arc::clone(&dispatch.runtime_manager),
             runtime_requests: Arc::clone(&dispatch.runtime_requests),
+            wait_cursor: Arc::clone(&dispatch.wait_cursor),
             chat_override: Some(scripted_chat("done")),
             before_followup_atomic_hook: None,
         };
@@ -3818,6 +3840,70 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn interrupt_completed_thread_is_an_idempotent_noop() {
+        let dir = tempfile::tempdir().unwrap();
+        let dispatch = dispatch(&dir);
+        let child = committed_child(&dispatch, "worker");
+        dispatch
+            .control
+            .record_runner_event(
+                &child.thread_id,
+                RunnerEvent::TurnCompleted {
+                    turn_id: "completed-turn".into(),
+                    last_message: "done".into(),
+                },
+            )
+            .unwrap();
+
+        let result = AgentThreadDispatch::interrupt_agent(
+            &dispatch,
+            InterruptAgentV2Request {
+                target: child.thread_id.clone(),
+            },
+        )
+        .await
+        .unwrap();
+        assert_eq!(
+            result.previous_status,
+            AgentStatusV2::Completed {
+                last_message: "done".into()
+            }
+        );
+        assert_eq!(result.thread.status, result.previous_status);
+    }
+
+    #[tokio::test]
+    async fn wait_observes_mailbox_activity_already_pending_at_call_time() {
+        let dir = tempfile::tempdir().unwrap();
+        let dispatch = dispatch(&dir);
+        let child = committed_child(&dispatch, "worker");
+        AgentThreadDispatch::send_message(
+            &dispatch,
+            MessageAgentV2Request {
+                target: child.thread_id,
+                message: "already queued".into(),
+            },
+        )
+        .await
+        .unwrap();
+
+        let result = tokio::time::timeout(
+            Duration::from_millis(100),
+            AgentThreadDispatch::wait_agent(
+                &dispatch,
+                WaitAgentV2Request {
+                    timeout_ms: Some(10_000),
+                },
+            ),
+        )
+        .await
+        .expect("pending mailbox activity must complete wait immediately")
+        .unwrap();
+        assert_eq!(result.message, "Wait completed.");
+        assert!(!result.timed_out);
+    }
+
+    #[tokio::test]
     async fn send_message_is_queue_only_and_followup_uses_trigger_semantics() {
         let dir = tempfile::tempdir().unwrap();
         let dispatch = dispatch(&dir);
@@ -4311,6 +4397,7 @@ mod tests {
             current_thread_id: parent.thread_id.clone(),
             runtime_manager: Arc::clone(&initial.runtime_manager),
             runtime_requests: Arc::clone(&initial.runtime_requests),
+            wait_cursor: Arc::clone(&initial.wait_cursor),
             chat_override: initial.chat_override.clone(),
             before_followup_atomic_hook: None,
         };
@@ -4413,6 +4500,7 @@ mod tests {
             current_thread_id: beta.thread_id.clone(),
             runtime_manager: Arc::clone(&initial.runtime_manager),
             runtime_requests: Arc::clone(&initial.runtime_requests),
+            wait_cursor: Arc::clone(&initial.wait_cursor),
             chat_override: initial.chat_override.clone(),
             before_followup_atomic_hook: None,
         };
@@ -5396,7 +5484,28 @@ mod tests {
         )
         .await
         .unwrap_err();
-        assert!(root_error.to_string().contains("itself"));
+        assert!(root_error.to_string().contains("root agent"));
+
+        let child = committed_child(&dispatch, "worker");
+        let child_dispatch = DefaultAgentThreadDispatch {
+            control: Arc::clone(&dispatch.control),
+            current_path: child.canonical_path.clone(),
+            current_thread_id: child.thread_id.clone(),
+            runtime_manager: Arc::clone(&dispatch.runtime_manager),
+            runtime_requests: Arc::clone(&dispatch.runtime_requests),
+            wait_cursor: Arc::clone(&dispatch.wait_cursor),
+            chat_override: None,
+            before_followup_atomic_hook: None,
+        };
+        let self_error = AgentThreadDispatch::interrupt_agent(
+            &child_dispatch,
+            InterruptAgentV2Request {
+                target: child.thread_id,
+            },
+        )
+        .await
+        .unwrap_err();
+        assert!(self_error.to_string().contains("interrupt itself"));
     }
 
     #[tokio::test]
@@ -5419,7 +5528,7 @@ mod tests {
         assert_eq!(
             value,
             serde_json::json!({
-                "message": "The main task received new input.",
+                "message": "Wait interrupted by new input.",
                 "timed_out": false
             })
         );
