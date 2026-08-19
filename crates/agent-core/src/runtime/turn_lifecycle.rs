@@ -133,19 +133,8 @@ impl Session {
             return Ok(TurnResult::BudgetExhausted);
         }
 
-        let mut admission_contexts = Vec::new();
-        if let Some(context) = self.admit_session_start().await? {
-            admission_contexts.push(context);
-        }
         let turn_id = self.current_turn_id().await;
-        for item in input {
-            let TurnInput::UserInput { content, .. } = item;
-            if let Some(context) = self.admit_user_prompt(content, turn_id.clone())? {
-                admission_contexts.push(context);
-            }
-        }
-        let admission_context =
-            (!admission_contexts.is_empty()).then(|| admission_contexts.join("\n\n"));
+        let admission_context = self.admit_initial_input(input, turn_id).await?;
 
         self.begin_user_turn().await;
         if looks_like_user_correction(&user_message)
@@ -230,7 +219,32 @@ impl Session {
         }
     }
 
+    async fn admit_initial_input(
+        &self,
+        input: &[TurnInput],
+        turn_id: Option<String>,
+    ) -> anyhow::Result<Option<String>> {
+        let _admission_guard = self.admission_lock.lock().await;
+        let mut contexts = Vec::new();
+        if let Some(context) = self.admit_session_start_locked().await? {
+            contexts.push(context);
+        }
+        for item in input {
+            let TurnInput::UserInput { content, .. } = item;
+            if let Some(context) = self.admit_user_prompt(content, turn_id.clone())? {
+                contexts.push(context);
+            }
+        }
+        Ok((!contexts.is_empty()).then(|| contexts.join("\n\n")))
+    }
+
+    #[cfg(test)]
     async fn admit_session_start(&self) -> anyhow::Result<Option<String>> {
+        let _admission_guard = self.admission_lock.lock().await;
+        self.admit_session_start_locked().await
+    }
+
+    async fn admit_session_start_locked(&self) -> anyhow::Result<Option<String>> {
         let Some(source) = self.state.lock().await.pending_session_start_source.clone() else {
             return Ok(None);
         };
@@ -286,6 +300,7 @@ impl Session {
         if running.0 != TaskKind::Regular {
             return Ok(None);
         }
+        let _admission_guard = self.admission_lock.lock().await;
         let turn_id = running.1.sub_id().to_string();
         let Some(reservation) = running.1.reserve_input() else {
             return Ok(None);
@@ -520,6 +535,69 @@ mod tests {
         assert_eq!(hits.load(Ordering::SeqCst), 2);
         assert_eq!(sources.lock().unwrap().as_slice(), ["startup", "startup"]);
         assert_eq!(session.clone_history().await[0].content_str(), "second");
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn concurrent_session_start_admission_fires_once() {
+        let dir = TempDir::new().unwrap();
+        let config = crate::runtime::Config::with_defaults(dir.path().to_path_buf());
+        let session =
+            Arc::new(Session::with_session_id(config, "concurrent-session-start".into()).unwrap());
+        let hits = Arc::new(AtomicUsize::new(0));
+        let first_entered = Arc::new(tokio::sync::Notify::new());
+        let second_entered = Arc::new(tokio::sync::Notify::new());
+        let first_release = Arc::new((std::sync::Mutex::new(false), std::sync::Condvar::new()));
+        let hook_hits = Arc::clone(&hits);
+        let hook_entered = Arc::clone(&first_entered);
+        let hook_second_entered = Arc::clone(&second_entered);
+        let hook_release = Arc::clone(&first_release);
+        session
+            .hook_bus()
+            .register(::hooks::SESSION_START, move |_| {
+                if hook_hits.fetch_add(1, Ordering::SeqCst) == 0 {
+                    hook_entered.notify_one();
+                    let (released, ready) = &*hook_release;
+                    let mut released = released.lock().unwrap();
+                    while !*released {
+                        released = ready.wait(released).unwrap();
+                    }
+                } else {
+                    hook_second_entered.notify_one();
+                }
+                ::hooks::HookOutcome::Continue
+            });
+
+        let first = tokio::spawn({
+            let session = Arc::clone(&session);
+            async move { session.admit_session_start().await }
+        });
+        first_entered.notified().await;
+        let second_started = Arc::new(tokio::sync::Notify::new());
+        let second = tokio::spawn({
+            let session = Arc::clone(&session);
+            let second_started = Arc::clone(&second_started);
+            async move {
+                second_started.notify_one();
+                session.admit_session_start().await
+            }
+        });
+        second_started.notified().await;
+        let second_fired_before_release = tokio::time::timeout(
+            std::time::Duration::from_millis(200),
+            second_entered.notified(),
+        )
+        .await
+        .is_ok();
+        {
+            let (released, ready) = &*first_release;
+            *released.lock().unwrap() = true;
+            ready.notify_all();
+        }
+
+        first.await.unwrap().unwrap();
+        second.await.unwrap().unwrap();
+        assert!(!second_fired_before_release);
+        assert_eq!(hits.load(Ordering::SeqCst), 1);
     }
 
     #[tokio::test]

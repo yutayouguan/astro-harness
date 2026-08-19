@@ -321,6 +321,7 @@ git commit -m "refactor(agent): own shared hook runtime"
 ### Task 3: Align SessionStart and UserPromptSubmit lifecycle
 
 **Files:**
+- Modify: `crates/agent-core/src/runtime/mod.rs`
 - Modify: `crates/agent-core/src/runtime/session_state.rs:14-63`
 - Modify: `crates/agent-core/src/runtime/turn_context.rs`
 - Modify: `crates/agent-core/src/runtime/turn_lifecycle.rs:69-220`
@@ -336,6 +337,8 @@ The quality-review correction is authoritative for this task:
 - initial and pending input slices are coalesced into one logical user message (`\n\n` text join plus stable image flattening) before their single persistence write;
 - initial SessionStart/UserPromptSubmit contexts are staged locally, discarded on any later Block, and enter `assemble_system_layers` through its budgeted inject layer;
 - steering InjectContext remains a next-sampling message-side context and is committed to Session state before its input reservation wakes terminal close;
+- a session-scoped FIFO `admission_lock` serializes the complete initial SessionStart/UserPromptSubmit admission sequence and each steer admission. Steering clones the active TurnContext first, then acquires this lock before reserving; a queue closed while waiting returns `Ok(None)` without firing a hook;
+- the same admission lock makes pending SessionStart consumption strictly one-shot under concurrent compatibility admission. It is deliberately released before begin/reload/persistence and never substitutes for the conversation write lock;
 - `run_turn` does not drain pending input at the first loop top. `has_sampled` becomes true only after `run_sampling_request` succeeds, so an early steer stays queued until the first assistant is recorded; the no-tool terminal branch then records it as the next user turn. Later tool-loop iterations may drain pending input at the top because assistant/tool history already separates the roles;
 - a blocked SessionStart retains its pending `startup`/`resume` source for retry; any non-Block outcome consumes the expected source. A later prompt Block or infrastructure/reload failure does not restore SessionStart after it has successfully fired;
 - server full-runtime injection and duplicate SessionStart removal move forward from Task 5; AgentEnd/reset/finalize cleanup remains Task 5.
@@ -457,6 +460,8 @@ Also add these approved control cases:
 - `admission_context_respects_system_prompt_budget`: a long admission context cannot bypass `context_budget_chars`.
 - reservation unit tests prove terminal close waits for commit and resumes on commit or Drop; the steering integration test uses a hook barrier and proves one hook fire plus model-visible follow-up.
 - `steer_during_initial_prompt_preparation_preserves_role_order`: a barrier pauses the initial `UserPromptSubmit`, admits a follow-up steer, and proves one follow-up hook plus provider/history order `user initial -> assistant first -> user follow-up -> assistant second`.
+- `concurrent_session_start_admission_fires_once`: a barrier holds the first callback while a second admission queues, then proves SessionStart fires exactly once.
+- `concurrent_steers_preserve_submission_order`: the first steer callback is held while the second queues; before release the second hook has not fired, and afterward hook context, coalesced input, provider view, and history all preserve first-then-second order.
 - `chat_delegates_session_start_to_the_shared_session_runtime`: production server source has no direct SessionStart dispatch or Plugin-only replacement.
 
 Extend `steered_input_is_consumed_by_the_active_regular_task` to register `USER_PROMPT_SUBMIT`, capture both `prompt` and `turn_id`, call `.await.unwrap().expect(...)`, and assert the hook has already seen `follow up` plus the non-empty active turn id before releasing the first provider call.
@@ -475,11 +480,13 @@ cargo test -p agent --test rig_agent_test session_and_prompt_contexts_enter_init
 cargo test -p agent --test rig_agent_test prompt_skip_is_not_treated_as_block -- --exact
 cargo test -p agent --test streaming_test steered_input_is_consumed_by_the_active_regular_task -- --exact
 cargo test -p agent --test streaming_test steer_during_initial_prompt_preparation_preserves_role_order -- --exact
+cargo test -p agent --test streaming_test concurrent_steers_preserve_submission_order -- --exact
 cargo test -p agent --lib runtime::turn_context::tests::reservation_blocks_terminal_close_until_commit -- --exact
 cargo test -p agent --lib runtime::turn_context::tests::dropping_reservation_unblocks_terminal_close_and_closes_queue -- --exact
 cargo test -p agent --lib runtime::turn_lifecycle::tests::initial_inputs_are_persisted_as_one_logical_user_message -- --exact
 cargo test -p agent --lib runtime::turn_lifecycle::tests::later_prompt_block_discards_staged_context_and_all_input -- --exact
 cargo test -p agent --lib runtime::turn_lifecycle::tests::session_start_block_retries_same_source -- --exact
+cargo test -p agent --lib runtime::turn_lifecycle::tests::concurrent_session_start_admission_fires_once -- --exact
 cargo test -p agent --lib runtime::turn_lifecycle::tests::admission_context_respects_system_prompt_budget -- --exact
 cargo test -p server --lib grpc::astro_service::tests::chat_delegates_session_start_to_the_shared_session_runtime -- --exact
 ```
@@ -540,7 +547,7 @@ fn apply_admission_outcome(
 }
 ```
 
-In `prepare_turn`, stage SessionStart and each prompt context locally before `begin_user_turn`, reload, or persistence. If every prompt passes, join contexts in event order and coalesce all `TurnInput` values into one logical user message. Persist exactly once, then pass the staged context into `build_system_prompt_with_inject` so it shares the configured prompt budget:
+In `prepare_turn`, acquire the session FIFO admission lock and stage SessionStart plus every prompt context locally before `begin_user_turn`, reload, or persistence. Release the admission lock after the complete hook sequence. If every prompt passes, join contexts in event order and coalesce all `TurnInput` values into one logical user message. Persist exactly once, then pass the staged context into `build_system_prompt_with_inject` so it shares the configured prompt budget:
 
 ```rust
 let mut contexts = Vec::new();
@@ -573,7 +580,7 @@ loop {
 
 Do not set `has_sampled` before `run_sampling_request` succeeds: cancellation or provider setup failure must not pretend a sampling occurred or consume the early steer out of role order.
 
-For steering, clone the active regular task's `Arc<TurnContext>` under `active_turn`, release that lock, and reserve input before firing the hook. Terminal close asynchronously waits while reservations exist. Block/error/Drop cancels the reservation; success commits exactly once:
+For steering, clone the active regular task's `Arc<TurnContext>` under `active_turn`, release that lock, acquire the FIFO admission lock, and only then reserve input before firing the hook. Terminal close asynchronously waits while reservations exist. Block/error/Drop cancels the reservation; success commits exactly once. Do not hold `active_turn` or Session state while invoking the callback:
 
 ```rust
 pub async fn steer_input(
@@ -594,6 +601,7 @@ pub async fn steer_input(
     if running.0 != TaskKind::Regular {
         return Ok(None);
     }
+    let _admission_guard = self.admission_lock.lock().await;
     let turn_id = running.1.sub_id().to_string();
     let Some(reservation) = running.1.reserve_input() else {
         return Ok(None);
@@ -624,6 +632,12 @@ sess.steer_input(&content, &image_data_urls)
 ```
 
 Remove `is_new_session`, direct server Gateway SessionStart, and later `set_hook_bus`. Preserve AgentEnd/reset/finalize lifecycle work for Task 5.
+
+**Boundary: active-task best-effort steering**
+
+B1 keeps steering scoped to the active `TurnContext`; `Done(true)` after a steer acknowledges enqueue, not durable persistence or eventual model consumption. The pre-Task-3 baseline (`916e95bf^`) already stored pending input only in `TurnContext`, drained it from the running loop, and returned directly on provider error/cancellation, so unconsumed steering could be lost when that active task ended. The reservation protocol preserves this baseline: a hook Block does not enqueue, Drop cancels an unfinished admission, and commit is equivalent to the former successful `push_input`. A durable receipt plus session-level recovery queue is a separate runtime reliability project and is not part of the Hooks B1 contract.
+
+Initial admission context is present in the real budgeted system prompt. `system_prompt_layer_breakdown`, however, independently reconstructs static/dynamic layers for the pre-sampling `ContextUsage` estimate and has no request-level inject argument. Counting it would require plumbing the actual request prompt into the emitter or adding mutable last-prompt state; this batch does neither, so the estimate retains that existing limitation.
 
 - [ ] **Step 5: Run lifecycle tests and Agent tests**
 

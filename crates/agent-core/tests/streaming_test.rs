@@ -149,10 +149,12 @@ async fn steer_during_initial_prompt_preparation_preserves_role_order() {
     let calls = Arc::new(AtomicUsize::new(0));
     let first_sampling_was_clean = Arc::new(std::sync::atomic::AtomicBool::new(false));
     let second_sampling_saw_follow_up = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let release_first_sampling = Arc::new(Notify::new());
     let chat_fn: ChatOverride = {
         let calls = Arc::clone(&calls);
         let first_sampling_was_clean = Arc::clone(&first_sampling_was_clean);
         let second_sampling_saw_follow_up = Arc::clone(&second_sampling_saw_follow_up);
+        let release_first_sampling = Arc::clone(&release_first_sampling);
         Arc::new(move |messages, _tools, _config| {
             let call = calls.fetch_add(1, Ordering::SeqCst);
             let texts: Vec<&str> = messages
@@ -174,7 +176,11 @@ async fn steer_during_initial_prompt_preparation_preserves_role_order() {
                 );
             }
             let text = if call == 0 { "first" } else { "second" };
+            let release_first_sampling = Arc::clone(&release_first_sampling);
             Box::pin(async move {
+                if call == 0 {
+                    release_first_sampling.notified().await;
+                }
                 Ok(Box::pin(futures::stream::iter(vec![
                     Ok(StreamChunk::Text(text.into())),
                     Ok(StreamChunk::Done {
@@ -216,17 +222,29 @@ async fn steer_during_initial_prompt_preparation_preserves_role_order() {
     });
 
     initial_hook_entered.notified().await;
-    let steered_turn_id = session
-        .steer_input("follow up", &[])
-        .await
-        .unwrap()
-        .expect("active task accepts early steer");
-    assert!(!steered_turn_id.is_empty());
+    let steer_started = Arc::new(Notify::new());
+    let steer = tokio::spawn({
+        let session = Arc::clone(&session);
+        let steer_started = Arc::clone(&steer_started);
+        async move {
+            steer_started.notify_one();
+            session.steer_input("follow up", &[]).await
+        }
+    });
+    steer_started.notified().await;
+    assert_eq!(follow_up_hook_hits.load(Ordering::SeqCst), 0);
     {
         let (released, ready) = &*initial_hook_release;
         *released.lock().unwrap() = true;
         ready.notify_all();
     }
+    let steered_turn_id = steer
+        .await
+        .unwrap()
+        .unwrap()
+        .expect("active task accepts early steer");
+    assert!(!steered_turn_id.is_empty());
+    release_first_sampling.notify_one();
     tokio::time::timeout(Duration::from_secs(2), async {
         while rx.recv().await.is_some() {}
         run.await.unwrap();
@@ -404,6 +422,178 @@ async fn steered_input_is_consumed_by_the_active_regular_task() {
             types::message::MessageContent::Text(text) if text == "follow up"
         )
     }));
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn concurrent_steers_preserve_submission_order() {
+    let dir = tempfile::tempdir().unwrap();
+    let config = AgentConfig::with_defaults(dir.path().to_path_buf());
+    let session =
+        Arc::new(AgentLoop::with_session_id(config, "concurrent-steer-order".into()).unwrap());
+    session
+        .record_items(vec![types::message::Message::user("initial")])
+        .await;
+
+    let hook_order = Arc::new(std::sync::Mutex::new(Vec::new()));
+    let first_hook_entered = Arc::new(Notify::new());
+    let second_hook_entered = Arc::new(Notify::new());
+    let first_hook_release = Arc::new((std::sync::Mutex::new(false), std::sync::Condvar::new()));
+    let captured_order = Arc::clone(&hook_order);
+    let first_entered = Arc::clone(&first_hook_entered);
+    let second_entered = Arc::clone(&second_hook_entered);
+    let hook_release = Arc::clone(&first_hook_release);
+    session
+        .hook_bus()
+        .register(hooks::USER_PROMPT_SUBMIT, move |input| {
+            let prompt = input.prompt.clone().unwrap();
+            captured_order.lock().unwrap().push(prompt.clone());
+            if prompt == "first steer" {
+                first_entered.notify_one();
+                let (released, ready) = &*hook_release;
+                let mut released = released.lock().unwrap();
+                while !*released {
+                    released = ready.wait(released).unwrap();
+                }
+                hooks::HookOutcome::InjectContext("FIRST_CONTEXT".into())
+            } else {
+                second_entered.notify_one();
+                hooks::HookOutcome::InjectContext("SECOND_CONTEXT".into())
+            }
+        });
+
+    let provider_calls = Arc::new(AtomicUsize::new(0));
+    let first_sampling_started = Arc::new(Notify::new());
+    let release_first_sampling = Arc::new(Notify::new());
+    let saw_fifo_input = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let saw_fifo_context = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let chat_fn: ChatOverride = {
+        let provider_calls = Arc::clone(&provider_calls);
+        let first_sampling_started = Arc::clone(&first_sampling_started);
+        let release_first_sampling = Arc::clone(&release_first_sampling);
+        let saw_fifo_input = Arc::clone(&saw_fifo_input);
+        let saw_fifo_context = Arc::clone(&saw_fifo_context);
+        Arc::new(move |messages, _tools, _config| {
+            let provider_calls = Arc::clone(&provider_calls);
+            let first_sampling_started = Arc::clone(&first_sampling_started);
+            let release_first_sampling = Arc::clone(&release_first_sampling);
+            let saw_fifo_input = Arc::clone(&saw_fifo_input);
+            let saw_fifo_context = Arc::clone(&saw_fifo_context);
+            Box::pin(async move {
+                let call = provider_calls.fetch_add(1, Ordering::SeqCst);
+                if call == 0 {
+                    first_sampling_started.notify_one();
+                    release_first_sampling.notified().await;
+                } else if call == 1 {
+                    saw_fifo_input.store(
+                        messages
+                            .iter()
+                            .any(|message| message.text_content() == "first steer\n\nsecond steer"),
+                        Ordering::SeqCst,
+                    );
+                    let joined = messages
+                        .iter()
+                        .map(|message| message.text_content())
+                        .collect::<Vec<_>>()
+                        .join("\n");
+                    let first = joined.find("FIRST_CONTEXT");
+                    let second = joined.find("SECOND_CONTEXT");
+                    saw_fifo_context.store(
+                        matches!((first, second), (Some(first), Some(second)) if first < second),
+                        Ordering::SeqCst,
+                    );
+                }
+                let text = if call == 0 {
+                    "first answer"
+                } else {
+                    "second answer"
+                };
+                Ok(Box::pin(futures::stream::iter(vec![
+                    Ok(StreamChunk::Text(text.into())),
+                    Ok(StreamChunk::Done {
+                        finish_reason: "stop".into(),
+                    }),
+                ])) as CompletionStream)
+            })
+        })
+    };
+    let (tx, mut rx) = tokio::sync::mpsc::channel(64);
+    let run = tokio::spawn({
+        let session = Arc::clone(&session);
+        async move {
+            run_multi_turn_stream_with_chat_fn(
+                session,
+                chat_fn,
+                ProviderConfig {
+                    model: "test".into(),
+                    ..Default::default()
+                },
+                "system".into(),
+                PauseControl::new(),
+                None,
+                tx,
+            )
+            .await;
+        }
+    });
+
+    first_sampling_started.notified().await;
+    let first_steer = tokio::spawn({
+        let session = Arc::clone(&session);
+        async move { session.steer_input("first steer", &[]).await }
+    });
+    first_hook_entered.notified().await;
+    let second_call_started = Arc::new(Notify::new());
+    let second_steer = tokio::spawn({
+        let session = Arc::clone(&session);
+        let second_call_started = Arc::clone(&second_call_started);
+        async move {
+            second_call_started.notify_one();
+            session.steer_input("second steer", &[]).await
+        }
+    });
+    second_call_started.notified().await;
+    let second_hook_ran_before_release =
+        tokio::time::timeout(Duration::from_millis(200), second_hook_entered.notified())
+            .await
+            .is_ok();
+    {
+        let (released, ready) = &*first_hook_release;
+        *released.lock().unwrap() = true;
+        ready.notify_all();
+    }
+
+    first_steer.await.unwrap().unwrap().unwrap();
+    second_steer.await.unwrap().unwrap().unwrap();
+    release_first_sampling.notify_one();
+    tokio::time::timeout(Duration::from_secs(2), async {
+        while rx.recv().await.is_some() {}
+        run.await.unwrap();
+    })
+    .await
+    .expect("stream completes after both steers commit");
+
+    assert!(!second_hook_ran_before_release);
+    assert_eq!(
+        hook_order.lock().unwrap().as_slice(),
+        ["first steer", "second steer"]
+    );
+    assert_eq!(provider_calls.load(Ordering::SeqCst), 2);
+    assert!(saw_fifo_input.load(Ordering::SeqCst));
+    assert!(saw_fifo_context.load(Ordering::SeqCst));
+    assert_eq!(
+        session
+            .clone_history()
+            .await
+            .iter()
+            .map(|message| message.content_str())
+            .collect::<Vec<_>>(),
+        [
+            "initial",
+            "first answer",
+            "first steer\n\nsecond steer",
+            "second answer",
+        ]
+    );
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]

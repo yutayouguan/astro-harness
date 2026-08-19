@@ -168,6 +168,8 @@ pub struct Session {
     pub(crate) state: TokioMutex<session_state::SessionState>,
     /// Serializes persisted conversation writes with their in-memory history mirror.
     pub(crate) conversation_write_lock: TokioMutex<()>,
+    /// Serializes SessionStart/UserPromptSubmit admission in submission order.
+    pub(crate) admission_lock: TokioMutex<()>,
 
     // ── 会话级服务与注册表 ──────────────────────────
     pub(crate) memory: RwLock<MemoryManager>,
@@ -262,6 +264,7 @@ impl Session {
             session_configuration: RwLock::new(session_configuration),
             state: TokioMutex::new(session_state::SessionState::new(history)),
             conversation_write_lock: TokioMutex::new(()),
+            admission_lock: TokioMutex::new(()),
             memory: RwLock::new(memory),
             services: SessionServices::new(sessions, compression_policy),
             tool_registry: RwLock::new(tool_registry),
@@ -1371,6 +1374,7 @@ mod tests {
                 image_data_urls: Vec::new(),
             }];
             drop(session.prepare_turn(&input));
+            drop(session.admission_lock.lock());
             drop(session.capture_step_context());
             drop(session.start_or_steer_turn("turn", "submission"));
             drop(session.handle_tool_call_async("echo", &serde_json::json!({})));
