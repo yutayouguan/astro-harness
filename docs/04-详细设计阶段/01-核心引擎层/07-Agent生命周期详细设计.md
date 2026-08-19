@@ -1,6 +1,6 @@
 # Agent 生命周期详细设计
 
-> 版本：v2.26
+> 版本：v2.27
 > 日期：2026-08-19
 > 状态：实施基线  
 > 上游参考：[OpenAI Codex](https://github.com/openai/codex) `ede5247893a50297a47c9aa5038e6ab28312ff50`
@@ -665,6 +665,8 @@ built-in tool 的 current-thread `!Send` 契约保持不变。
     orchestrator 将结构化网络拒绝与文件系统拒绝分流，禁止误触发文件系统权限升级。
   - [x] 引入 `agent-network-proxy` 策略核心，对齐 Codex 的 host 规则、本地地址纵深防御、
     `NetworkPolicyRequest` / `NetworkDecision` / `NetworkPolicyDecider` 与 structured decision attribution。
+  - [x] 实现 loopback-only HTTP/1 CONNECT listener，在上游 dial 前执行 host policy，并对实际解析的
+    `SocketAddr` 做二次私网检查，防止 DNS rebinding 绕过。
   - [ ] 实现命令网络代理的 host 级 enforcement 与 decision attribution，再将 managed
     subprocess network approval 接入 orchestrator；禁止在代理落地前猜测域名或开放全网。
 - [ ] 删除工具执行时重新加载权限/工具的路径。
@@ -783,6 +785,33 @@ decider，但显式 deny 和本地地址防御不可被覆盖。`NetworkDecision
 启动 HTTP/HTTPS CONNECT/SOCKS listener，也未修改子进程 proxy env；因此配置层继续不宣称
 host 规则已对真实 socket 生效。下一批才把 listener、blocked-request observer 与
 per-execution attribution 接到 `SandboxRunner`。
+
+v2.27 Managed CONNECT listener 批次：`agent-network-proxy` 新增与 Codex 同名的
+`NetworkProxyBuilder`、`NetworkProxy` 和 `NetworkProxyHandle`。builder 必须接收
+`Arc<NetworkProxyState>`，仅允许 loopback bind，并在 `build` 阶段立即保留 listener，
+避免暴露尚未实际绑定的端口。`run` 只能取走 listener 一次；handle 提供
+`wait` / `shutdown`，accept loop 内的 `JoinSet` 在 listener task 取消时同步取消活跃 tunnel。
+`wait` 保留 task handle 直到 await 结束，因此等待方被取消时 `Drop` 仍会 abort listener，
+不会留下脱离所有权的后台代理。accept loop 以 semaphore 将同时处理的客户端限制为 256，
+超额连接返回 503；瞬时 accept 错误会短暂退避后继续监听，不直接终止代理。
+
+listener 只解析单个最大 32 KiB、五秒超时的 HTTP/1.0 或 HTTP/1.1 request head，
+校验 header name 语法，且方括号 authority 只允许 IPv6 literal。当前仅接受
+`CONNECT host:port`；malformed authority、超大 header 和普通 absolute-form HTTP 分别以
+400/431/405 关闭，不把同一 keep-alive 连接盲目转发给第二个 host。请求通过
+`NetworkPolicyRequest { protocol: HttpsConnect, host, port, client_addr, method }` 进入现有
+policy/decider；deny 返回 403 及 decision/source 响应头，allow 才允许连接。DNS 解析后
+代理只使用已检查的 `SocketAddr` dial；公网 hostname 即使第二次解析到私网地址也
+不能利用 allowlist 绕过，只有 `allow_local_binding=true` 或已由策略接受的同一精确
+IP/`localhost` 例外可连接 non-public address。这类实际地址拒绝保留为 typed policy denial，
+返回带 `proxy_state` 归因的 403，而 DNS 或 dial 故障才返回 502。成功后用 `copy_bidirectional` 转发，并保留
+与 request head 同包到达的首批 tunnel bytes。
+
+本批仍不实现 plain HTTP forwarding、SOCKS、MITM、blocked-request 持久化、子进程 proxy env
+注入或 orchestrator network retry。因此仅能声明 CONNECT listener 的 socket enforcement 已存在，
+不能声明 permission profile 的本地命令网络已端到端生效。下一批应将代理地址作为
+attempt-scoped 环境注入 `SandboxRunner`，并将 403 policy decision 还原为 typed
+`SandboxErr::Denied`。
 
 ### Phase D：ThreadManager 与 AgentControl
 

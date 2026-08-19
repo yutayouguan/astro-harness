@@ -7,7 +7,8 @@ edition = "2021"
 types = { path = "../agent-types" }
 anyhow = { workspace = true }
 globset = { workspace = true }
-tokio = { workspace = true, features = ["net", "time"] }
+thiserror = { workspace = true }
+tokio = { workspace = true, features = ["io-util", "net", "rt", "sync", "time"] }
 
 [dev-dependencies]
-tokio = { workspace = true, features = ["macros", "rt"] }
+tokio = { workspace = true, features = ["io-util", "macros", "rt"] }

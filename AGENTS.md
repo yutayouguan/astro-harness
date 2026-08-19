@@ -68,7 +68,7 @@ cd apps/desktop && npm run tauri:build:universal    # universal-apple-darwin
 | `crates/agent-home` | `home` | `~/.astro` 路径约定、日志、agent config YAML、tool-enable gates。无 SQLite。 |
 | `crates/agent-skills` | `skills` | Skill 管理 — 安装、加载、注册表、摘要、备份。Skill frontmatter `astro_tools` 可 additive 开放 toolset。 |
 | `crates/agent-sandbox` | `sandbox` | 派生进程平台沙箱、typed denial、audit 与 attempt-scoped `SandboxPolicy`。 |
-| `crates/agent-network-proxy` | `network-proxy` | Codex 对齐的受管子进程网络策略核心：host allow/deny、本地地址防御、decision attribution；代理 listener 待接入。 |
+| `crates/agent-network-proxy` | `network-proxy` | Codex 对齐的受管子进程网络边界：host allow/deny、本地地址防御、decision attribution 与 loopback HTTP/1 CONNECT listener；plain HTTP/SOCKS 与子进程注入待接入。 |
 
 ### actions/ — 工具实现
 

@@ -1,10 +1,13 @@
 //! Codex-compatible policy core for the managed subprocess network proxy.
 //!
-//! This crate deliberately does not open proxy sockets yet. It owns the host
-//! enforcement boundary that a later HTTP/HTTPS/SOCKS listener must call.
+//! The crate owns the managed-network enforcement boundary and a loopback-only
+//! HTTP/1 CONNECT listener. Plain HTTP forwarding and SOCKS are not implemented.
 
+mod connect_policy;
+mod http_proxy;
 mod network_policy;
 mod policy;
+mod proxy;
 mod runtime;
 
 pub use network_policy::{
@@ -12,5 +15,6 @@ pub use network_policy::{
     NetworkPolicyRequestArgs, NetworkProtocol,
 };
 pub use policy::{is_loopback_host, is_non_public_ip, normalize_host, Host};
+pub use proxy::{NetworkProxy, NetworkProxyBuilder, NetworkProxyHandle};
 pub use runtime::{HostBlockDecision, HostBlockReason, NetworkProxyState};
 pub use types::{NetworkDecisionSource, NetworkPolicyDecision};

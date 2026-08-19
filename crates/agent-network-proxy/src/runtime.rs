@@ -105,6 +105,10 @@ impl NetworkProxyState {
         }
     }
 
+    pub fn allow_local_binding(&self) -> bool {
+        self.allow_local_binding
+    }
+
     pub async fn evaluate_host_policy(
         &self,
         decider: Option<&Arc<dyn NetworkPolicyDecider>>,
