@@ -314,13 +314,18 @@ impl ThreadEventsBridge {
         deferred.events
     }
 
-    async fn active_ids(&self) -> Vec<String> {
-        self.active_threads
-            .read()
-            .await
+    async fn active_activations(&self) -> Vec<(String, u64)> {
+        let state = self.active_threads.read().await;
+        state
             .threads
             .iter()
-            .cloned()
+            .filter_map(|thread_id| {
+                state
+                    .activations
+                    .get(thread_id)
+                    .copied()
+                    .map(|activation| (thread_id.clone(), activation))
+            })
             .collect()
     }
 
@@ -620,6 +625,44 @@ impl ThreadEventsBridge {
             .await;
         Ok(true)
     }
+
+    /// Linearize recovery ResumeThread with activation-owned terminal cleanup.
+    ///
+    /// The gate remains held across the RPC: if cleanup wins first, the owner/current checks
+    /// skip the stale resume; if resume wins first, cleanup waits and unsubscribes afterwards.
+    async fn run_resume_if_owned<F, Fut, T>(
+        &self,
+        thread_id: String,
+        activation: u64,
+        resume: F,
+    ) -> Result<Option<T>, String>
+    where
+        F: FnOnce() -> Fut,
+        Fut: Future<Output = Result<T, String>>,
+    {
+        let gate = self.terminal_cleanup.gate(&thread_id);
+        let _owner_guard = gate.lock().await;
+        let is_current = self
+            .active_threads
+            .read()
+            .await
+            .activations
+            .get(&thread_id)
+            .copied()
+            == Some(activation);
+        let is_owner = self
+            .terminal_cleanup
+            .owners
+            .read()
+            .await
+            .get(&thread_id)
+            .copied()
+            == Some(activation);
+        if !is_current || !is_owner {
+            return Ok(None);
+        }
+        resume().await.map(Some)
+    }
 }
 
 #[derive(Debug)]
@@ -849,20 +892,28 @@ async fn subscribe_connection(
     // this accepted stream. Public readiness remains false until recovery completes, so a new
     // SubmitTurn cannot race an old terminal snapshot.
     let mut snapshots = Vec::new();
-    for thread_id in bridge.active_ids().await {
-        match client
-            .resume_thread(proto::ResumeThreadRequest {
-                connection_id: bridge.connection_id().into(),
-                thread_id: thread_id.clone(),
-                include_turns: true,
+    for (thread_id, activation) in bridge.active_activations().await {
+        let connection_id = bridge.connection_id().to_string();
+        match bridge
+            .run_resume_if_owned(thread_id.clone(), activation, || async {
+                client
+                    .resume_thread(proto::ResumeThreadRequest {
+                        connection_id,
+                        thread_id: thread_id.clone(),
+                        include_turns: true,
+                    })
+                    .await
+                    .map(|response| response.into_inner())
+                    .map_err(|error| error.to_string())
             })
             .await
         {
-            Ok(response) => {
-                if let Some(snapshot) = response.into_inner().thread {
+            Ok(Some(response)) => {
+                if let Some(snapshot) = response.thread {
                     snapshots.push(snapshot);
                 }
             }
+            Ok(None) => {}
             Err(error) => {
                 return bridge.complete_recovery(Err(format!(
                     "failed to resume active thread {thread_id}: {error}"
@@ -1572,7 +1623,7 @@ fn emit_snapshot(app: &AppHandle, snapshot: &proto::ThreadSnapshot) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
     fn terminal_event(thread_id: &str, turn_id: &str) -> proto::ThreadEvent {
         proto::ThreadEvent {
@@ -1981,6 +2032,191 @@ mod tests {
             .await
             .unwrap());
         assert_eq!(calls.load(Ordering::SeqCst), 1);
+    }
+
+    #[tokio::test]
+    async fn recovery_skips_captured_activation_after_failure_cleanup_wins() {
+        let bridge = Arc::new(ThreadEventsBridge::new());
+        let mut cleanup = bridge.take_terminal_unsubscribe_requests();
+        let activation = bridge.activate("session-1").await;
+        let captured = bridge.active_activations().await;
+        let [(thread_id, captured_activation)] = captured.as_slice() else {
+            panic!("one captured activation expected");
+        };
+        let thread_id = thread_id.clone();
+        let captured_activation = *captured_activation;
+        let subscriber = Arc::new(AtomicBool::new(true));
+        let paused = Arc::new(tokio::sync::Notify::new());
+        let release = Arc::new(tokio::sync::Notify::new());
+
+        let resume_bridge = Arc::clone(&bridge);
+        let resume_subscriber = Arc::clone(&subscriber);
+        let resume_paused = Arc::clone(&paused);
+        let resume_release = Arc::clone(&release);
+        let resume = tokio::spawn(async move {
+            resume_paused.notify_one();
+            resume_release.notified().await;
+            resume_bridge
+                .run_resume_if_owned(thread_id, captured_activation, move || async move {
+                    resume_subscriber.store(true, Ordering::SeqCst);
+                    Ok::<_, String>(())
+                })
+                .await
+        });
+        paused.notified().await;
+
+        assert!(bridge.fail_activation("session-1", activation).await);
+        let request = cleanup.recv().await.expect("failed activation cleanup");
+        let cleanup_subscriber = Arc::clone(&subscriber);
+        assert!(bridge
+            .run_terminal_unsubscribe_if_owned(request, move |_| async move {
+                cleanup_subscriber.store(false, Ordering::SeqCst);
+                Ok(())
+            })
+            .await
+            .unwrap());
+
+        release.notify_one();
+        assert_eq!(resume.await.unwrap().unwrap(), None);
+        assert!(!subscriber.load(Ordering::SeqCst));
+    }
+
+    #[tokio::test]
+    async fn failure_cleanup_runs_after_in_flight_recovery_resume() {
+        let bridge = Arc::new(ThreadEventsBridge::new());
+        let mut cleanup = bridge.take_terminal_unsubscribe_requests();
+        let activation = bridge.activate("session-1").await;
+        let subscriber = Arc::new(AtomicBool::new(true));
+        let resume_entered = Arc::new(tokio::sync::Notify::new());
+        let resume_release = Arc::new(tokio::sync::Notify::new());
+
+        let resume_bridge = Arc::clone(&bridge);
+        let resume_subscriber = Arc::clone(&subscriber);
+        let entered = Arc::clone(&resume_entered);
+        let release = Arc::clone(&resume_release);
+        let resume = tokio::spawn(async move {
+            resume_bridge
+                .run_resume_if_owned("session-1".into(), activation, move || async move {
+                    entered.notify_one();
+                    release.notified().await;
+                    resume_subscriber.store(true, Ordering::SeqCst);
+                    Ok::<_, String>(())
+                })
+                .await
+        });
+        resume_entered.notified().await;
+
+        assert!(bridge.fail_activation("session-1", activation).await);
+        let request = cleanup.recv().await.expect("failed activation cleanup");
+        let cleanup_bridge = Arc::clone(&bridge);
+        let cleanup_subscriber = Arc::clone(&subscriber);
+        let mut cleanup_task = tokio::spawn(async move {
+            cleanup_bridge
+                .run_terminal_unsubscribe_if_owned(request, move |_| async move {
+                    cleanup_subscriber.store(false, Ordering::SeqCst);
+                    Ok(())
+                })
+                .await
+        });
+        assert!(
+            tokio::time::timeout(Duration::from_millis(10), &mut cleanup_task)
+                .await
+                .is_err()
+        );
+
+        resume_release.notify_one();
+        assert_eq!(resume.await.unwrap().unwrap(), Some(()));
+        assert!(cleanup_task.await.unwrap().unwrap());
+        assert!(!subscriber.load(Ordering::SeqCst));
+    }
+
+    #[tokio::test]
+    async fn captured_recovery_cannot_resume_over_a_new_activation_owner() {
+        let bridge = ThreadEventsBridge::new();
+        let old = bridge.activate("session-1").await;
+        let captured = bridge.active_activations().await;
+        let [(thread_id, captured_activation)] = captured.as_slice() else {
+            panic!("one captured activation expected");
+        };
+        assert_eq!(*captured_activation, old);
+        let thread_id = thread_id.clone();
+
+        let current = bridge.activate("session-1").await;
+        let calls = Arc::new(AtomicUsize::new(0));
+        let counted = Arc::clone(&calls);
+        assert_eq!(
+            bridge
+                .run_resume_if_owned(thread_id, old, move || async move {
+                    counted.fetch_add(1, Ordering::SeqCst);
+                    Ok::<_, String>(())
+                })
+                .await
+                .unwrap(),
+            None
+        );
+        assert_eq!(calls.load(Ordering::SeqCst), 0);
+        assert_eq!(
+            bridge
+                .active_threads
+                .read()
+                .await
+                .activations
+                .get("session-1"),
+            Some(&current)
+        );
+        assert_eq!(
+            bridge.terminal_cleanup.owners.read().await.get("session-1"),
+            Some(&current)
+        );
+    }
+
+    #[tokio::test]
+    async fn new_activation_waits_for_in_flight_recovery_and_then_owns_subscription() {
+        let bridge = Arc::new(ThreadEventsBridge::new());
+        let old = bridge.activate("session-1").await;
+        let resume_entered = Arc::new(tokio::sync::Notify::new());
+        let resume_release = Arc::new(tokio::sync::Notify::new());
+
+        let resume_bridge = Arc::clone(&bridge);
+        let entered = Arc::clone(&resume_entered);
+        let release = Arc::clone(&resume_release);
+        let resume = tokio::spawn(async move {
+            resume_bridge
+                .run_resume_if_owned("session-1".into(), old, move || async move {
+                    entered.notify_one();
+                    release.notified().await;
+                    Ok::<_, String>(())
+                })
+                .await
+        });
+        resume_entered.notified().await;
+
+        let activation_bridge = Arc::clone(&bridge);
+        let mut activation =
+            tokio::spawn(async move { activation_bridge.activate("session-1").await });
+        assert!(
+            tokio::time::timeout(Duration::from_millis(10), &mut activation)
+                .await
+                .is_err()
+        );
+
+        resume_release.notify_one();
+        assert_eq!(resume.await.unwrap().unwrap(), Some(()));
+        let current = activation.await.unwrap();
+        assert_ne!(current, old);
+        assert_eq!(
+            bridge
+                .active_threads
+                .read()
+                .await
+                .activations
+                .get("session-1"),
+            Some(&current)
+        );
+        assert_eq!(
+            bridge.terminal_cleanup.owners.read().await.get("session-1"),
+            Some(&current)
+        );
     }
 
     #[tokio::test]
