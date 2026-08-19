@@ -668,15 +668,19 @@ git commit -m "fix(agent): make prompt admission race safe"
 - Modify: `crates/agent-core/src/streaming/multi_turn.rs:560-635`
 - Test: `crates/agent-core/tests/streaming_test.rs:596-818`
 
-- [ ] **Step 1: Rewrite the no-write test for the Codex behavior**
+- [x] **Step 1: Rewrite the no-write test for the Codex behavior**
 
-Rename it to `stop_fires_without_disk_write` and capture the stop flag:
+Rename it to `stop_fires_without_disk_write` and capture the Stop fields supplied by the runtime:
 
 ```rust
-let stop_flags = Arc::new(std::sync::Mutex::new(Vec::new()));
-let flags = Arc::clone(&stop_flags);
+let stop_inputs = Arc::new(std::sync::Mutex::new(Vec::new()));
+let inputs = Arc::clone(&stop_inputs);
 agent.hook_bus().register(::hooks::STOP, move |input| {
-    flags.lock().unwrap().push(input.stop_hook_active);
+    inputs.lock().unwrap().push((
+        input.stop_hook_active,
+        input.last_assistant_message.clone(),
+        input.turn_id.clone(),
+    ));
     ::hooks::HookOutcome::Continue
 });
 ```
@@ -684,7 +688,11 @@ agent.hook_bus().register(::hooks::STOP, move |input| {
 Replace the old negative assertion with:
 
 ```rust
-assert_eq!(stop_flags.lock().unwrap().as_slice(), [Some(false)]);
+let stop_inputs = stop_inputs.lock().unwrap().clone();
+assert_eq!(stop_inputs.len(), 1);
+assert_eq!(stop_inputs[0].0, Some(false));
+assert_eq!(stop_inputs[0].1.as_deref(), Some("hi there"));
+assert!(stop_inputs[0].2.is_some());
 assert_eq!(
     events.iter().filter(|event| event.as_str() == ::hooks::STOP).count(),
     1
@@ -699,7 +707,7 @@ assert_eq!(api_request_count, 3);
 assert_eq!(post_llm_count, 1);
 ```
 
-- [ ] **Step 2: Run both tests and verify RED**
+- [x] **Step 2: Run both tests and verify RED**
 
 Run:
 
@@ -710,7 +718,7 @@ cargo test -p agent stop_keep_going_retries_capped_at_two -- --exact
 
 Expected: the first test reports zero Stop calls and the text-only KeepGoing test finishes without the expected two continuations.
 
-- [ ] **Step 3: Remove the disk-write gate and set stop_hook_active**
+- [x] **Step 3: Remove the disk-write gate and set stop_hook_active**
 
 Replace the Stop gate with:
 
@@ -781,7 +789,7 @@ if let Some(::hooks::HookOutcome::KeepGoing(prompt)) = verify_outcome {
 
 Keep `MAX_VERIFY_ATTEMPTS = 2`. Do not remove `turn_wrote_disk`; it remains unrelated runtime state.
 
-- [ ] **Step 4: Run Stop and streaming tests**
+- [x] **Step 4: Run Stop and streaming tests**
 
 Run:
 
@@ -793,7 +801,7 @@ cargo test -p agent --test streaming_test
 
 Expected: both focused tests and all streaming tests pass.
 
-- [ ] **Step 5: Commit Task 4**
+- [x] **Step 5: Commit Task 4**
 
 ```bash
 git add crates/agent-core/src/streaming/multi_turn.rs crates/agent-core/tests/streaming_test.rs

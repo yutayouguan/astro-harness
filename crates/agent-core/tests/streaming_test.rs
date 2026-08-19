@@ -1017,12 +1017,22 @@ async fn transform_llm_output_replaces_before_post_llm_call() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn stop_never_fires_without_disk_write() {
+async fn stop_fires_without_disk_write() {
     let dir = tempfile::tempdir().unwrap();
     let config = AgentConfig::with_defaults(dir.path().to_path_buf());
     let agent = AgentLoop::with_session_id(config, "pre-verify-no-write".into()).unwrap();
     let log: Arc<std::sync::Mutex<Vec<String>>> = Arc::new(std::sync::Mutex::new(vec![]));
     ::hooks::install_recording(&agent.hook_bus(), Arc::clone(&log));
+    let stop_inputs = Arc::new(std::sync::Mutex::new(Vec::new()));
+    let inputs = Arc::clone(&stop_inputs);
+    agent.hook_bus().register(::hooks::STOP, move |input| {
+        inputs.lock().unwrap().push((
+            input.stop_hook_active,
+            input.last_assistant_message.clone(),
+            input.turn_id.clone(),
+        ));
+        ::hooks::HookOutcome::Continue
+    });
     agent
         .record_items(vec![types::message::Message::user("just say hi, no tools")])
         .await;
@@ -1061,9 +1071,25 @@ async fn stop_never_fires_without_disk_write() {
     }
 
     let events = log.lock().unwrap().clone();
+    let stop_inputs = stop_inputs.lock().unwrap().clone();
+    assert_eq!(
+        stop_inputs.len(),
+        1,
+        "Stop must fire once for a terminal text-only turn, inputs={stop_inputs:?}"
+    );
+    assert_eq!(stop_inputs[0].0, Some(false));
+    assert_eq!(stop_inputs[0].1.as_deref(), Some("hi there"));
     assert!(
-        !events.iter().any(|e| e == ::hooks::STOP),
-        "Stop must not fire when no disk write happened this turn, events={events:?}"
+        stop_inputs[0].2.is_some(),
+        "Stop must receive the runtime turn id, inputs={stop_inputs:?}"
+    );
+    assert_eq!(
+        events
+            .iter()
+            .filter(|event| event.as_str() == ::hooks::STOP)
+            .count(),
+        1,
+        "Stop must fire once for a terminal text-only turn, events={events:?}"
     );
     assert!(items.iter().any(|i| matches!(
         i,
@@ -1079,48 +1105,34 @@ async fn stop_keep_going_retries_capped_at_two() {
     let agent = AgentLoop::with_session_id(config, "pre-verify-keep-going".into()).unwrap();
     let log: Arc<std::sync::Mutex<Vec<String>>> = Arc::new(std::sync::Mutex::new(vec![]));
     ::hooks::install_recording(&agent.hook_bus(), Arc::clone(&log));
-    agent.hook_bus().register(::hooks::STOP, |_| {
+    let stop_flags = Arc::new(std::sync::Mutex::new(Vec::new()));
+    let flags = Arc::clone(&stop_flags);
+    agent.hook_bus().register(::hooks::STOP, move |input| {
+        flags.lock().unwrap().push(input.stop_hook_active);
         ::hooks::HookOutcome::KeepGoing("请再检查一下你的改动".into())
     });
     agent
-        .record_items(vec![types::message::Message::user(
-            "write a file then confirm",
-        )])
+        .record_items(vec![types::message::Message::user("confirm")])
         .await;
     let session = Arc::new(agent);
     let session_for_check = Arc::clone(&session);
 
     let chat_fn = scripted_chat(vec![
-        // round 1: 写盘工具调用，置位 turn_wrote_disk
-        vec![
-            StreamChunk::ToolCallStart {
-                index: 0,
-                id: "call_write".into(),
-                name: "file_ops".into(),
-            },
-            StreamChunk::ToolCallDelta {
-                index: 0,
-                arguments: r#"{"path":"verify.txt","operation":"write","content":"hi"}"#.into(),
-            },
-            StreamChunk::Done {
-                finish_reason: "tool_calls".into(),
-            },
-        ],
-        // round 2: 无工具终态草稿一 -> Stop attempt 1 -> KeepGoing
+        // round 1: 无工具终态草稿一 -> Stop attempt 1 -> KeepGoing
         vec![
             StreamChunk::Text("draft one".into()),
             StreamChunk::Done {
                 finish_reason: "stop".into(),
             },
         ],
-        // round 3: 无工具终态草稿二 -> Stop attempt 2 -> KeepGoing
+        // round 2: 无工具终态草稿二 -> Stop attempt 2 -> KeepGoing
         vec![
             StreamChunk::Text("draft two".into()),
             StreamChunk::Done {
                 finish_reason: "stop".into(),
             },
         ],
-        // round 4: 尝试次数已达上限，直接收尾
+        // round 3: 尝试次数已达上限，直接收尾
         vec![
             StreamChunk::Text("final answer".into()),
             StreamChunk::Done {
@@ -1155,6 +1167,11 @@ async fn stop_keep_going_retries_capped_at_two() {
     }
 
     let events = log.lock().unwrap().clone();
+    assert_eq!(
+        stop_flags.lock().unwrap().as_slice(),
+        [Some(false), Some(true)],
+        "Stop must mark only the second continuation as active"
+    );
     let stop_count = events
         .iter()
         .filter(|e| e.as_str() == ::hooks::STOP)
@@ -1168,16 +1185,16 @@ async fn stop_keep_going_retries_capped_at_two() {
         .filter(|e| e.as_str() == ::hooks::PRE_API_REQUEST)
         .count();
     assert_eq!(
-        api_request_count, 4,
-        "expect one PreApiRequest round per LLM call (1 tool round + 2 keep-going + 1 final), events={events:?}"
+        api_request_count, 3,
+        "expect one PreApiRequest round per LLM call (2 keep-going + 1 final), events={events:?}"
     );
     let post_llm_count = events
         .iter()
         .filter(|e| e.starts_with(::hooks::POST_LLM_CALL))
         .count();
     assert_eq!(
-        post_llm_count, 2,
-        "PostLlmCall must be skipped while Stop keeps going; only the tool round and the final round should fire it, events={events:?}"
+        post_llm_count, 1,
+        "PostLlmCall must be skipped while Stop keeps going; only the final round should fire it, events={events:?}"
     );
 
     assert!(items.iter().any(|i| matches!(

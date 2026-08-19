@@ -570,27 +570,26 @@ pub(crate) async fn run_turn(args: RunTurnArgs, cancellation_token: Cancellation
 
         // `Stop` hook
         if calls.is_empty() {
-            let verify_outcome = {
+            let verify_outcome = if verify_attempt < MAX_VERIFY_ATTEMPTS {
                 let agent = session.as_ref();
-                if agent.turn_wrote_disk().await && verify_attempt < MAX_VERIFY_ATTEMPTS {
-                    verify_attempt += 1;
-                    let sid = agent.session_id().to_string();
-                    let turn_id = agent.current_turn_id().await;
-                    Some(agent.fire_hook(
-                        ::hooks::STOP,
-                        ::hooks::HookPayload {
-                            session_id: sid,
-                            turn_id,
-                            last_assistant_message: Some(full_response.clone()),
-                            detail: format!("attempt={verify_attempt}"),
-                            ..Default::default()
-                        },
-                    ))
-                } else {
-                    None
-                }
+                let sid = agent.session_id().to_string();
+                let turn_id = agent.current_turn_id().await;
+                Some(agent.fire_hook(
+                    ::hooks::STOP,
+                    ::hooks::HookPayload {
+                        session_id: sid,
+                        turn_id,
+                        stop_hook_active: Some(verify_attempt > 0),
+                        last_assistant_message: Some(full_response.clone()),
+                        detail: format!("attempt={}", verify_attempt + 1),
+                        ..Default::default()
+                    },
+                ))
+            } else {
+                None
             };
             if let Some(::hooks::HookOutcome::KeepGoing(prompt)) = verify_outcome {
+                verify_attempt += 1;
                 let agent = session.as_ref();
                 let details = types::message::merge_google_thought_signature(
                     Some(timeline.reasoning_details_snapshot()),
