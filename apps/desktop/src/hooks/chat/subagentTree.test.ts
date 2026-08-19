@@ -1,12 +1,15 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  classifyAgentThreadSessionEvent,
   fromSnapshot,
   fromSnapshotWithBufferedEvents,
   markThreadRead,
   normalizeAgentThreadChanged,
   normalizeAgentThreadDetail,
   normalizeAgentTreeSnapshot,
+  isAgentTreeGenerationCurrent,
+  isAgentTreeRequestCurrent,
   reduceAgentThreadEvent,
   type AgentThread,
   type AgentThreadChanged,
@@ -20,7 +23,6 @@ function thread(
 ): AgentThread {
   const segments = canonicalPath.split("/").filter(Boolean);
   const taskName = segments.at(-1) ?? "root";
-  const parentPath = `/${segments.slice(0, -1).join("/")}`;
   return {
     threadId: `${taskName}-id`,
     rootThreadId: "root-session",
@@ -298,4 +300,39 @@ test("normalizes the real SessionStore timeline including tool metadata", () => 
   assert.equal(detail.messages[0]?.toolName, "exec");
   assert.equal(detail.messages[0]?.toolCallId, "call-1");
   assert.deepEqual(detail.messages[0]?.toolCalls, [{ name: "exec" }]);
+});
+
+test("ignores same-session local events before inspecting their empty stream id", () => {
+  const result = classifyAgentThreadSessionEvent({
+    sessionId: "root-session",
+    streamId: "",
+    memoryUpdated: { summary: "unrelated" },
+  }, "root-session", "server-stream");
+  assert.deepEqual(result, { kind: "ignore" });
+});
+
+test("classifies field 14 as refresh even when the stream id is unchanged", () => {
+  const result = classifyAgentThreadSessionEvent({
+    sessionId: "root-session",
+    streamId: "server-stream",
+    resyncRequired: { reason: "activity_gap" },
+  }, "root-session", "server-stream");
+  assert.equal(result.kind, "refresh");
+  if (result.kind === "refresh") {
+    assert.equal(result.streamChanged, false);
+    assert.equal(result.nextStreamId, "server-stream");
+  }
+});
+
+test("root generation and latest request reject stale async completions", () => {
+  const ticket = { root: "root-a", generation: 3, request: 7 };
+  assert.equal(isAgentTreeRequestCurrent(ticket, "root-a", 3, 7), true);
+  assert.equal(isAgentTreeRequestCurrent(ticket, "root-b", 4, 7), false);
+  assert.equal(isAgentTreeRequestCurrent(ticket, "root-a", 3, 8), false);
+});
+
+test("listener cleanup invalidates its captured root generation", () => {
+  const listenerToken = { root: "root-a", generation: 5 };
+  assert.equal(isAgentTreeGenerationCurrent(listenerToken, "root-a", 5), true);
+  assert.equal(isAgentTreeGenerationCurrent(listenerToken, "root-a", 6), false);
 });

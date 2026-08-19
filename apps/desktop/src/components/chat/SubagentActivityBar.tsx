@@ -1,4 +1,4 @@
-import { useMemo, useState, type CSSProperties } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { Bot, ChevronDown, Square } from "lucide-react";
 import { useI18n } from "../../i18n/LocaleContext";
@@ -36,6 +36,13 @@ export default function SubagentActivityBar({
   onOpenPanel,
 }: Props) {
   const { t } = useI18n();
+  const root = rootSessionId?.trim() ?? "";
+  const activeRootRef = useRef(root);
+  const generationRef = useRef(0);
+  if (activeRootRef.current !== root) {
+    activeRootRef.current = root;
+    generationRef.current += 1;
+  }
   const [expanded, setExpanded] = useState(true);
   const [stopping, setStopping] = useState(false);
   const visibleRoots = useMemo(
@@ -48,33 +55,50 @@ export default function SubagentActivityBar({
     [visible],
   );
 
-  if (!rootSessionId || visible.length === 0) return null;
+  useEffect(() => {
+    const generation = generationRef.current;
+    setStopping(false);
+    return () => {
+      if (activeRootRef.current === root && generationRef.current === generation) {
+        generationRef.current += 1;
+      }
+    };
+  }, [root]);
+
+  if (!root || visible.length === 0) return null;
 
   const stopAll = async () => {
     if (running.length === 0 || stopping) return;
+    const generation = generationRef.current;
+    const isCurrentRoot = () => activeRootRef.current === root
+      && generationRef.current === generation;
+    if (!isCurrentRoot()) return;
     setStopping(true);
     try {
       await Promise.allSettled(
         running.map(({ thread }) =>
           invoke("interrupt_subagent_thread", {
             args: {
-              rootSessionId,
+              rootSessionId: root,
               target: thread.canonicalPath,
             },
           })),
       );
+      if (!isCurrentRoot()) return;
       await onRefresh();
     } finally {
-      setStopping(false);
+      if (isCurrentRoot()) setStopping(false);
     }
   };
 
   const renderNode = (node: AgentTreeNode, depth: number) => {
     const status = statusKey(node.thread.status);
     return (
-      <div className="subagent-activity-branch" key={node.thread.threadId}>
+      <div className="subagent-activity-branch" key={node.thread.threadId} role="none">
         <button
           type="button"
+          role="treeitem"
+          aria-level={depth + 1}
           className={`is-${status}${node.unread ? " has-unread" : ""}`}
           style={{ "--depth": depth } as CSSProperties}
           onClick={() => onOpenThread(node.thread.canonicalPath)}
@@ -89,7 +113,11 @@ export default function SubagentActivityBar({
           ) : null}
           <em>{t(`subagents.status.${status}` as never)}</em>
         </button>
-        {node.children.map((child) => renderNode(child, depth + 1))}
+        {node.children.length > 0 ? (
+          <div role="group">
+            {node.children.map((child) => renderNode(child, depth + 1))}
+          </div>
+        ) : null}
       </div>
     );
   };
@@ -125,7 +153,7 @@ export default function SubagentActivityBar({
         </span>
       </div>
       {expanded ? (
-        <div className="subagent-activity-list">
+        <div className="subagent-activity-list" role="tree" aria-label={t("subagents.threadList")}>
           {visibleRoots.map((node) => renderNode(node, 0))}
         </div>
       ) : null}

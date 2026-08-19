@@ -62,6 +62,36 @@ export type BufferedAgentThreadChanged = {
   changed: AgentThreadChanged;
 };
 
+export type AgentThreadSessionEventPayload = {
+  sessionId?: string | null;
+  streamId?: string;
+  agentThreadChanged?: unknown | null;
+  resyncRequired?: { reason?: string } | null;
+  [key: string]: unknown;
+};
+
+export type AgentThreadSessionEventClassification =
+  | { kind: "ignore" }
+  | {
+    kind: "delta";
+    changed: AgentThreadChanged;
+    nextStreamId: string;
+  }
+  | {
+    kind: "refresh";
+    changed: AgentThreadChanged | null;
+    nextStreamId: string;
+    streamChanged: boolean;
+  };
+
+export type AgentTreeRequestTicket = {
+  root: string;
+  generation: number;
+  request: number;
+};
+
+export type AgentTreeGenerationToken = Omit<AgentTreeRequestTicket, "request">;
+
 export type AgentTreeNode = {
   thread: AgentThread;
   children: AgentTreeNode[];
@@ -254,6 +284,51 @@ export function normalizeAgentThreadChanged(value: unknown): AgentThreadChanged 
     activitySequence: numberField(event.activitySequence, "event activity sequence"),
     activityKind: stringField(event.activityKind, "event activity kind"),
   };
+}
+
+export function classifyAgentThreadSessionEvent(
+  payload: AgentThreadSessionEventPayload,
+  root: string,
+  desiredStreamId: string | null,
+): AgentThreadSessionEventClassification {
+  const hasChanged = payload.agentThreadChanged != null;
+  const hasResync = payload.resyncRequired != null;
+  // Memory/title/local-only events share the same channel and often carry an
+  // empty stream id. They must not participate in Agent Tree generations.
+  if (!hasChanged && !hasResync) return { kind: "ignore" };
+  if (payload.sessionId?.trim() !== root) return { kind: "ignore" };
+
+  const nextStreamId = payload.streamId ?? "";
+  const streamChanged = desiredStreamId != null
+    && desiredStreamId !== nextStreamId;
+  const changed = hasChanged
+    ? normalizeAgentThreadChanged(payload.agentThreadChanged)
+    : null;
+  if (changed && changed.rootThreadId !== root) return { kind: "ignore" };
+  if (hasResync || streamChanged) {
+    return { kind: "refresh", changed, nextStreamId, streamChanged };
+  }
+  if (!changed) return { kind: "ignore" };
+  return { kind: "delta", changed, nextStreamId };
+}
+
+export function isAgentTreeRequestCurrent(
+  ticket: AgentTreeRequestTicket,
+  activeRoot: string,
+  activeGeneration: number,
+  latestRequest: number,
+): boolean {
+  return ticket.root === activeRoot
+    && ticket.generation === activeGeneration
+    && ticket.request === latestRequest;
+}
+
+export function isAgentTreeGenerationCurrent(
+  token: AgentTreeGenerationToken,
+  activeRoot: string,
+  activeGeneration: number,
+): boolean {
+  return token.root === activeRoot && token.generation === activeGeneration;
 }
 
 function compareNodes(left: AgentTreeNode, right: AgentTreeNode): number {

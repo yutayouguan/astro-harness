@@ -19,10 +19,11 @@ test("Agent Thread UI has no polling timers", () => {
 
 test("hook reacts to field 14 and stream generation changes", () => {
   const hook = source("./useSubagentThreads.ts");
-  assert.match(hook, /payload\.resyncRequired\s*\|\|\s*streamChanged/);
+  assert.match(hook, /classifyAgentThreadSessionEvent/);
+  assert.match(hook, /classification\.kind === "refresh"/);
   assert.match(hook, /bufferedRef\.current\.push/);
-  assert.match(hook, /request\s*!==\s*refreshRef\.current/);
-  assert.match(hook, /lifecycle\s*!==\s*lifecycleRef\.current/);
+  assert.match(hook, /isAgentTreeRequestCurrent/);
+  assert.match(hook, /isAgentTreeGenerationCurrent/);
 });
 
 test("desktop commands use only canonical rootSessionId and target arguments", () => {
@@ -38,8 +39,14 @@ test("desktop commands use only canonical rootSessionId and target arguments", (
 
 test("hierarchy styling uses depth and honors reduced motion", () => {
   const activity = source("../../components/chat/SubagentActivityBar.tsx");
+  const panel = source("../../components/chat/SubagentsPanel.tsx");
   const css = source("../../styles/features/chat/subagents.css");
   assert.match(activity, /"--depth": depth/);
+  assert.match(activity, /role="tree"/);
+  assert.match(activity, /role="treeitem"/);
+  assert.match(activity, /role="group"/);
+  assert.match(panel, /!initialized/);
+  assert.match(panel, /loading/);
   assert.match(css, /var\(--depth/);
   assert.match(css, /prefers-reduced-motion:\s*reduce/);
 });

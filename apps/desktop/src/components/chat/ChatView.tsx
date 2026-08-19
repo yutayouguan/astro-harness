@@ -714,6 +714,8 @@ export default function ChatView({
     threads: subagentThreads,
     roots: subagentRoots,
     error: subagentError,
+    loading: subagentsLoading,
+    initialized: subagentsInitialized,
     refresh: refreshSubagentThreads,
     markRead: markSubagentRead,
   } = useSubagentThreads(sessionId);
@@ -2134,6 +2136,7 @@ export default function ChatView({
         }}
       >
         <SubagentActivityBar
+          key={sessionId ?? "no-session"}
           rootSessionId={sessionId}
           roots={subagentRoots}
           onRefresh={refreshSubagentThreads}
@@ -2963,12 +2966,15 @@ export default function ChatView({
         </div>
       </form>
       <SubagentsPanel
+        key={sessionId ?? "no-session"}
         open={subagentsOpen}
         rootSessionId={sessionId}
         roots={subagentRoots}
         threads={subagentThreads}
         initialTarget={selectedSubagentPath}
         streamError={subagentError}
+        loading={subagentsLoading}
+        initialized={subagentsInitialized}
         refreshThreads={refreshSubagentThreads}
         markRead={markSubagentRead}
         onClose={() => setSubagentsOpen(false)}

@@ -17,6 +17,8 @@ type Props = {
   threads: AgentThread[];
   initialTarget?: string | null;
   streamError?: string | null;
+  loading: boolean;
+  initialized: boolean;
   refreshThreads: () => Promise<void>;
   markRead: (canonicalPath: string) => void;
   onClose: () => void;
@@ -55,11 +57,20 @@ export default function SubagentsPanel({
   threads,
   initialTarget,
   streamError,
+  loading,
+  initialized,
   refreshThreads,
   markRead,
   onClose,
 }: Props) {
   const { t } = useI18n();
+  const root = rootSessionId?.trim() ?? "";
+  const activeRootRef = useRef(root);
+  const generationRef = useRef(0);
+  if (activeRootRef.current !== root) {
+    activeRootRef.current = root;
+    generationRef.current += 1;
+  }
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
   const [detail, setDetail] = useState<AgentThreadDetail | null>(null);
   const [message, setMessage] = useState("");
@@ -67,6 +78,7 @@ export default function SubagentsPanel({
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const detailRequestRef = useRef(0);
+  const actionRequestRef = useRef(0);
   const flatNodes = useMemo(() => flattenWithDepth(roots), [roots]);
 
   const selected = useMemo(
@@ -76,8 +88,11 @@ export default function SubagentsPanel({
   );
 
   const loadDetail = useCallback(async (canonicalPath: string) => {
-    const root = rootSessionId?.trim();
     if (!root) return;
+    const generation = generationRef.current;
+    const isCurrentRoot = () => activeRootRef.current === root
+      && generationRef.current === generation;
+    if (!isCurrentRoot()) return;
     const request = ++detailRequestRef.current;
     setDetail((current) =>
       current?.thread.canonicalPath === canonicalPath ? current : null);
@@ -86,7 +101,7 @@ export default function SubagentsPanel({
       const raw = await invoke<unknown>("read_subagent_thread", {
         args: { rootSessionId: root, target: canonicalPath },
       });
-      if (request !== detailRequestRef.current) return;
+      if (!isCurrentRoot() || request !== detailRequestRef.current) return;
       const next = normalizeAgentThreadDetail(raw);
       if (next.thread.canonicalPath !== canonicalPath) {
         throw new Error("agent thread detail belongs to another target");
@@ -94,20 +109,33 @@ export default function SubagentsPanel({
       setDetail(next);
       setError(null);
     } catch (reason) {
-      if (request !== detailRequestRef.current) return;
+      if (!isCurrentRoot() || request !== detailRequestRef.current) return;
       setError(String(reason));
     } finally {
-      if (request === detailRequestRef.current) setLoadingDetail(false);
+      if (isCurrentRoot() && request === detailRequestRef.current) {
+        setLoadingDetail(false);
+      }
     }
-  }, [rootSessionId]);
+  }, [root]);
 
   useEffect(() => {
+    const generation = generationRef.current;
     detailRequestRef.current += 1;
+    actionRequestRef.current += 1;
     setSelectedPath(null);
     setDetail(null);
     setMessage("");
+    setBusy(false);
+    setLoadingDetail(false);
     setError(null);
-  }, [rootSessionId]);
+    return () => {
+      if (activeRootRef.current === root && generationRef.current === generation) {
+        generationRef.current += 1;
+      }
+      detailRequestRef.current += 1;
+      actionRequestRef.current += 1;
+    };
+  }, [root]);
 
   useEffect(() => {
     if (!open || !initialTarget) return;
@@ -143,19 +171,27 @@ export default function SubagentsPanel({
     target: string,
     extra: Record<string, unknown> = {},
   ): Promise<boolean> => {
-    const root = rootSessionId?.trim();
     if (!root) return false;
+    const generation = generationRef.current;
+    const actionRequest = ++actionRequestRef.current;
+    const isCurrentAction = () => activeRootRef.current === root
+      && generationRef.current === generation
+      && actionRequest === actionRequestRef.current;
+    if (!isCurrentAction()) return false;
     setBusy(true);
     try {
       await invoke(command, { args: { rootSessionId: root, target, ...extra } });
+      if (!isCurrentAction()) return false;
       await refreshThreads();
+      if (!isCurrentAction()) return false;
       setError(null);
       return true;
     } catch (reason) {
+      if (!isCurrentAction()) return false;
       setError(String(reason));
       return false;
     } finally {
-      setBusy(false);
+      if (isCurrentAction()) setBusy(false);
     }
   };
 
@@ -196,19 +232,25 @@ export default function SubagentsPanel({
           </div>
         </header>
 
-        {!rootSessionId ? (
+        {!root ? (
           <div className="subagents-empty">{t("subagents.noSession")}</div>
+        ) : !initialized && streamError ? (
+          <div className="subagents-empty">{t("subagents.loadFailed")}</div>
+        ) : !initialized || (loading && threads.length === 0) ? (
+          <div className="subagents-empty">{t("subagents.loading")}</div>
         ) : threads.length === 0 ? (
           <div className="subagents-empty">{t("subagents.empty")}</div>
         ) : (
           <div className="subagents-layout">
-            <nav className="subagents-list" aria-label={t("subagents.threadList")}>
+            <nav className="subagents-list" role="tree" aria-label={t("subagents.threadList")}>
               {flatNodes.map(({ node, depth }) => {
                 const thread = node.thread;
                 const kind = thread.status.kind;
                 return (
                   <button
                     type="button"
+                    role="treeitem"
+                    aria-level={depth + 1}
                     key={thread.threadId}
                     className={`${thread.canonicalPath === selectedPath ? "is-active" : ""}${node.archived ? " is-archived" : ""}`.trim()}
                     style={{ "--depth": depth } as CSSProperties}
