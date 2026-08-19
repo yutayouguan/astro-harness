@@ -188,7 +188,10 @@ pub enum SandboxErr {
         .output.stdout,
         .output.stderr
     )]
-    Denied { output: Box<ExecToolCallOutput> },
+    Denied {
+        output: Box<ExecToolCallOutput>,
+        network_policy_decision: Option<types::NetworkPolicyDecisionPayload>,
+    },
     #[error("sandbox root cannot be resolved: {path}: {source}")]
     InvalidRoot {
         path: PathBuf,
@@ -431,10 +434,16 @@ mod tests {
                 "partial stdout",
                 "Operation not permitted",
             )),
+            network_policy_decision: None,
         };
-        let SandboxErr::Denied { output } = error else {
+        let SandboxErr::Denied {
+            output,
+            network_policy_decision,
+        } = error
+        else {
             panic!("expected denied error");
         };
+        assert!(network_policy_decision.is_none());
         assert_eq!(output.exit_code, 1);
         assert_eq!(output.stdout, "partial stdout");
         assert_eq!(output.stderr, "Operation not permitted");

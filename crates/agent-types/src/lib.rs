@@ -10,6 +10,7 @@ pub mod interaction_mode;
 pub mod media;
 pub mod message;
 pub mod model_spec;
+pub mod network_policy;
 pub mod notify;
 pub mod permissions;
 pub mod sqlite;
@@ -31,6 +32,10 @@ pub use media::{
     MediaRef,
 };
 pub use model_spec::{ModelRole, ModelSpec};
+pub use network_policy::{
+    NetworkApprovalProtocol, NetworkDecisionSource, NetworkPolicyDecision,
+    NetworkPolicyDecisionPayload,
+};
 pub use notify::{
     dream_success_body, notify_important, notify_kind, set_important_notify_handler,
     set_notify_locale, truncate_notify, ImportantKind, ImportantNotice,

@@ -1,6 +1,6 @@
 # Agent 生命周期详细设计
 
-> 版本：v2.24
+> 版本：v2.25
 > 日期：2026-08-19
 > 状态：实施基线  
 > 上游参考：[OpenAI Codex](https://github.com/openai/codex) `ede5247893a50297a47c9aa5038e6ab28312ff50`
@@ -661,8 +661,10 @@ built-in tool 的 current-thread `!Send` 契约保持不变。
     为初始 attempt 选择完整 sandbox policy；兼容入口仍可在 `ToolContext` 内回退解析。
   - [x] 与 Codex 对齐 denial analysis 边界：具体 `ToolCallRuntime` 将原始进程结果分类为
     typed `SandboxErr::Denied`，orchestrator 只负责审批、审计和单次 escalated retry。
-  - [ ] 在命令网络代理能够返回结构化 network-policy decision 后，将 managed subprocess
-    network approval 接入 orchestrator；禁止在代理落地前用命令文本猜测域名或直接开放全网。
+  - [x] 引入 Codex 同名 `NetworkPolicyDecisionPayload` 并挂载到 `SandboxErr::Denied`；
+    orchestrator 将结构化网络拒绝与文件系统拒绝分流，禁止误触发文件系统权限升级。
+  - [ ] 实现命令网络代理的 host 级 enforcement 与 decision attribution，再将 managed
+    subprocess network approval 接入 orchestrator；禁止在代理落地前猜测域名或开放全网。
 - [ ] 删除工具执行时重新加载权限/工具的路径。
 
 v2.16 ToolInvocation / ToolCallRuntime 首批：新运行时保留 Codex 的 `session`、
@@ -751,6 +753,18 @@ v2.24 Sandbox denial ownership 复核：对照 Codex 当前
 迁入 orchestrator”的清单项属于职责边界误判，现已纠正。managed subprocess network approval
 仍需以命令网络代理产生的结构化 network-policy decision 为前提；代理缺失时继续 fail closed，
 不通过解析 `curl` / `wget` 命令文本推断 host，也不把一次网络批准降级为 unrestricted network。
+
+v2.25 Structured network denial contract 批次：`agent-types::network_policy` 引入与 Codex
+同名的 `NetworkPolicyDecision`、`NetworkDecisionSource`、`NetworkApprovalProtocol` 和
+`NetworkPolicyDecisionPayload`，包括 proxy 使用的 HTTPS protocol aliases 与
+`is_ask_from_decider()` 判定。`SandboxErr::Denied` 现同时保留原始 `ExecToolCallOutput` 和可选
+`network_policy_decision`；现有 terminal / code_exec 文件系统拒绝显式写入 `None`，未来代理可在
+同一 typed boundary 写入结构化 decision。`ToolOrchestrator::run` 看到该字段后不再调用
+`review_sandbox_denial`，因此不会把网络 allowlist miss 错误展示成“完全文件系统访问”审批，也不会
+用 filesystem escalation 重试网络请求；原始输出仍经过统一 tool finalization 返回。
+本批刻意不实现伪 host 授权：在命令网络代理能够按 call 归因请求、执行 host 级规则并为重试注入
+临时 policy 前，所有结构化网络拒绝继续 fail closed。后续批次再实现 proxy、即时/延迟审批、
+session host cache 与受限 network retry。
 
 ### Phase D：ThreadManager 与 AgentControl
 

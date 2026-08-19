@@ -697,8 +697,20 @@ impl<'a> ToolOrchestrator<'a> {
             Err(crate::runtime::ToolCallError::Cancelled) => return None,
             Err(crate::runtime::ToolCallError::SandboxDenied(sandbox::SandboxErr::Denied {
                 output,
+                network_policy_decision,
             })) => {
                 let denial_output = output.aggregated_output.clone();
+                if network_policy_decision.is_some() {
+                    let output = self
+                        .session
+                        .finalize_tool_call_result(
+                            &call.name,
+                            &call.arguments,
+                            denial_output.into(),
+                        )
+                        .await;
+                    return Some(OrchestratorRunResult { output });
+                }
                 match self.review_sandbox_denial(call, output.as_ref()).await? {
                     PermissionPreflight::Granted(retry_audit) => {
                         let retry_started = std::time::Instant::now();
@@ -727,7 +739,7 @@ impl<'a> ToolOrchestrator<'a> {
                             Ok(output) => output,
                             Err(crate::runtime::ToolCallError::Cancelled) => return None,
                             Err(crate::runtime::ToolCallError::SandboxDenied(
-                                sandbox::SandboxErr::Denied { output },
+                                sandbox::SandboxErr::Denied { output, .. },
                             )) => {
                                 self.session
                                     .finalize_tool_call_result(
@@ -1845,6 +1857,7 @@ mod tests {
                             "partial stdout",
                             "Operation not permitted",
                         )),
+                        network_policy_decision: None,
                     }))
                 })
             }),
@@ -1865,6 +1878,80 @@ mod tests {
 
         assert_eq!(result.output.text(), "[redacted-tool-denial]");
         assert_eq!(attempts.load(std::sync::atomic::Ordering::SeqCst), 1);
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn tool_orchestrator_does_not_escalate_structured_network_denial_as_filesystem() {
+        let dir = tempfile::tempdir().unwrap();
+        let session = Arc::new(
+            AgentLoop::with_session_id(
+                crate::runtime::Config::with_defaults(dir.path().to_path_buf()),
+                "orchestrator-network-denial-test".into(),
+            )
+            .unwrap(),
+        );
+        let approval_requests = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let hook_requests = Arc::clone(&approval_requests);
+        session
+            .hook_bus()
+            .register(hooks::PERMISSION_REQUEST, move |_payload| {
+                hook_requests.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                hooks::HookOutcome::Continue
+            });
+        let attempts = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let handler_attempts = Arc::clone(&attempts);
+        session.tool_registry_mut().register_dynamic(
+            types::ToolEntry {
+                name: "network_denial_probe".into(),
+                toolset: "core".into(),
+                description: "return a structured network-policy denial".into(),
+                schema: json!({"type": "object", "properties": {}}),
+                check_fn: None,
+                icon: "wifi-off",
+                ..types::ToolEntry::lifecycle_defaults()
+            },
+            Arc::new(move |_name, _args| {
+                handler_attempts.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                Box::pin(async {
+                    Err(anyhow::Error::new(sandbox::SandboxErr::Denied {
+                        output: Box::new(sandbox::ExecToolCallOutput::new(
+                            1,
+                            "",
+                            "network request blocked",
+                        )),
+                        network_policy_decision: Some(types::NetworkPolicyDecisionPayload {
+                            decision: types::NetworkPolicyDecision::Ask,
+                            source: types::NetworkDecisionSource::Decider,
+                            protocol: Some(types::NetworkApprovalProtocol::Https),
+                            host: Some("example.com".into()),
+                            reason: Some("not_allowed".into()),
+                            port: Some(443),
+                        }),
+                    }))
+                })
+            }),
+        );
+        session.set_current_turn_id("turn-network-denial").await;
+        let step_context = session.capture_step_context().await.unwrap();
+        let (tx, _rx) = mpsc::channel(4);
+        let orchestrator = ToolOrchestrator::new(&session, &step_context, &tx, "run-1", None);
+
+        let result = orchestrator
+            .run(&types::ParsedToolCall::with_id(
+                "call-1",
+                "network_denial_probe",
+                json!({}),
+            ))
+            .await
+            .unwrap();
+
+        assert!(result.output.text().contains("network request blocked"));
+        assert_eq!(attempts.load(std::sync::atomic::Ordering::SeqCst), 1);
+        assert_eq!(
+            approval_requests.load(std::sync::atomic::Ordering::SeqCst),
+            0,
+            "network denial must not request filesystem escalation"
+        );
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -1899,6 +1986,7 @@ mod tests {
                                 "",
                                 "Operation not permitted",
                             )),
+                            network_policy_decision: None,
                         }))
                     } else {
                         Ok(types::ToolOutput::from("retried with escalation"))
@@ -1968,6 +2056,7 @@ mod tests {
                             "",
                             format!("Operation not permitted on attempt {attempt}"),
                         )),
+                        network_policy_decision: None,
                     }))
                 })
             }),

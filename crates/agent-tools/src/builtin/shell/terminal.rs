@@ -252,6 +252,7 @@ async fn dispatch_run(
         );
         return Err(sandbox::SandboxErr::Denied {
             output: Box::new(output.with_aggregated_output(body)),
+            network_policy_decision: None,
         }
         .into());
     }
@@ -306,7 +307,7 @@ mod tests {
         let error = dispatch(&ctx, &serde_json::json!({"command": "touch denied.txt"}))
             .await
             .unwrap_err();
-        let Some(sandbox::SandboxErr::Denied { output }) =
+        let Some(sandbox::SandboxErr::Denied { output, .. }) =
             error.downcast_ref::<sandbox::SandboxErr>()
         else {
             panic!("expected typed sandbox denial: {error}");

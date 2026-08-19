@@ -253,6 +253,7 @@ pub async fn dispatch(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow
         );
         return Err(sandbox::SandboxErr::Denied {
             output: Box::new(output),
+            network_policy_decision: None,
         }
         .into());
     }
@@ -394,7 +395,7 @@ mod tests {
         .unwrap_err();
         assert!(matches!(
             error.downcast_ref::<sandbox::SandboxErr>(),
-            Some(sandbox::SandboxErr::Denied { output }) if output.exit_code != 0
+            Some(sandbox::SandboxErr::Denied { output, .. }) if output.exit_code != 0
         ));
         assert!(!ctx.workspace_dir.join("denied.txt").exists());
     }

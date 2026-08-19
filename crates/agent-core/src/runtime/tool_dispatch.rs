@@ -513,12 +513,13 @@ mod tests {
                 "partial stdout",
                 "Operation not permitted",
             )),
+            network_policy_decision: None,
         });
 
         let error = ToolCallError::from(error);
         assert!(matches!(
             error,
-            ToolCallError::SandboxDenied(sandbox::SandboxErr::Denied { output })
+            ToolCallError::SandboxDenied(sandbox::SandboxErr::Denied { output, .. })
                 if output.exit_code == 1
         ));
 
