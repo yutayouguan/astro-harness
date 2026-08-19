@@ -696,6 +696,10 @@ impl Session {
         self.skill_config_overrides = config;
     }
 
+    pub fn skill_config_overrides(&self) -> &[(PathBuf, bool)] {
+        &self.skill_config_overrides
+    }
+
     /// 从磁盘重载当前 Agent 的工具启用开关（gate 配置）。
     pub fn reload_tool_gates(&mut self) {
         let agent_id = self.memory.agent_id.clone();

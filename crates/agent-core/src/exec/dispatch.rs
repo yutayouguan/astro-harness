@@ -3,7 +3,7 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex, OnceLock};
+use std::sync::{Arc, Mutex, OnceLock, Weak};
 use std::time::Duration;
 
 use anyhow::Context;
@@ -24,6 +24,91 @@ use super::agent_runtime::{
     RunAgentTurnRequest, UnacceptedSpawnCleanup,
 };
 use crate::runtime::{Config, Session};
+
+type ActiveRootSession = tokio::sync::Mutex<Session>;
+
+#[derive(Default)]
+struct ActiveRootSessionRegistry {
+    sessions: Mutex<HashMap<(PathBuf, String), Weak<ActiveRootSession>>>,
+}
+
+fn active_root_sessions() -> &'static ActiveRootSessionRegistry {
+    static REGISTRY: OnceLock<ActiveRootSessionRegistry> = OnceLock::new();
+    REGISTRY.get_or_init(ActiveRootSessionRegistry::default)
+}
+
+pub fn register_active_root_session(
+    memory_dir: &Path,
+    root_session_id: &str,
+    session: &Arc<ActiveRootSession>,
+) -> anyhow::Result<()> {
+    anyhow::ensure!(
+        !root_session_id.trim().is_empty(),
+        "root session id must not be empty"
+    );
+    active_root_sessions()
+        .sessions
+        .lock()
+        .map_err(|_| anyhow::anyhow!("active root session registry mutex is poisoned"))?
+        .insert(
+            (memory_dir.to_path_buf(), root_session_id.to_string()),
+            Arc::downgrade(session),
+        );
+    Ok(())
+}
+
+pub fn unregister_active_root_session(
+    memory_dir: &Path,
+    root_session_id: &str,
+    session: &Arc<ActiveRootSession>,
+) {
+    let Ok(mut sessions) = active_root_sessions().sessions.lock() else {
+        return;
+    };
+    let key = (memory_dir.to_path_buf(), root_session_id.to_string());
+    if sessions
+        .get(&key)
+        .is_some_and(|registered| Weak::ptr_eq(registered, &Arc::downgrade(session)))
+    {
+        sessions.remove(&key);
+    }
+}
+
+pub async fn active_root_runtime_material(
+    memory_dir: &Path,
+    root_session_id: &str,
+) -> anyhow::Result<Option<ParentRuntimeMaterial>> {
+    let key = (memory_dir.to_path_buf(), root_session_id.to_string());
+    let session = {
+        let mut sessions = active_root_sessions()
+            .sessions
+            .lock()
+            .map_err(|_| anyhow::anyhow!("active root session registry mutex is poisoned"))?;
+        let Some(session) = sessions.get(&key).and_then(Weak::upgrade) else {
+            sessions.remove(&key);
+            return Ok(None);
+        };
+        session
+    };
+    let session = session.lock().await;
+    let parent_model = session
+        .chat_targets()
+        .first()
+        .map(|target| format!("{}:{}", target.backend_id.trim(), target.model.trim()));
+    Ok(Some(ParentRuntimeMaterial {
+        memory_dir: session.memory_dir().to_path_buf(),
+        parent_agent_id: session.agent_id().to_string(),
+        parent_model,
+        parent_sandbox_mode: session
+            .permission_profile()
+            .unwrap_or(types::WORKSPACE_PROFILE)
+            .to_string(),
+        inherited_skill_config: session.skill_config_overrides().to_vec(),
+        chat_targets: session.chat_targets().to_vec(),
+        project_root: session.project_root().cloned(),
+        hook_bus: Some(session.hook_bus()),
+    }))
+}
 
 #[derive(Clone)]
 struct StoredRuntimeRequest {
@@ -917,6 +1002,19 @@ pub trait DesktopAgentThreadControl: Send + Sync {
 }
 
 #[derive(Debug)]
+pub struct DesktopFollowupContextUnavailable;
+
+impl std::fmt::Display for DesktopFollowupContextUnavailable {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str(
+            "the root task is not active; open or resume the root task before following up this Agent Thread",
+        )
+    }
+}
+
+impl std::error::Error for DesktopFollowupContextUnavailable {}
+
+#[derive(Debug)]
 pub struct CloseSubtreeError {
     failed_path: String,
     cause: String,
@@ -1181,10 +1279,27 @@ impl DesktopAgentThreadControl for DefaultDesktopAgentThreadControl {
             target_thread.canonical_path != AgentPath::root(),
             "the root agent cannot receive a desktop subagent follow-up"
         );
-        self.dispatch(Arc::clone(&control))
-            .followup_task(MessageAgentV2Request {
-                target: target_thread.canonical_path.to_string(),
-                message,
+        let dispatch = self.dispatch(Arc::clone(&control));
+        let runtime = if self
+            .runtime_requests
+            .get(&target_thread.thread_id)?
+            .is_some()
+        {
+            None
+        } else {
+            Some(
+                active_root_runtime_material(&self.memory_dir, root_session_id)
+                    .await?
+                    .ok_or(DesktopFollowupContextUnavailable)?,
+            )
+        };
+        dispatch
+            .followup_task_with_runtime(FollowupAgentDispatchRequest {
+                request: MessageAgentV2Request {
+                    target: target_thread.canonical_path.to_string(),
+                    message,
+                },
+                runtime,
             })
             .await?;
         control.resolve_desktop_target(target_thread.canonical_path.as_str())
@@ -1649,7 +1764,10 @@ mod tests {
             .await
             .unwrap_err();
 
-        assert!(format!("{error:#}").contains("active parent runtime context"));
+        assert!(error
+            .downcast_ref::<DesktopFollowupContextUnavailable>()
+            .is_some());
+        assert!(format!("{error:#}").contains("open or resume the root task"));
         assert!(dispatch
             .control
             .drain_mailbox(&child.canonical_path)
@@ -1661,6 +1779,66 @@ mod tests {
             .lock()
             .unwrap()
             .is_empty());
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn desktop_cold_followup_recovers_from_exact_live_root_session() {
+        let dir = tempfile::tempdir().unwrap();
+        let memory_dir = dir.path().join("memory");
+        let sessions =
+            session::SessionStore::open_sessions_dir(&memory_dir.join("sessions")).unwrap();
+        sessions.ensure_session("root-session", "test").unwrap();
+        let mut dispatch = dispatch(&dir);
+        dispatch.chat_override = Some(scripted_chat("done"));
+        let request = spawn_request(&memory_dir);
+        let root_material = request.runtime.clone();
+        let child = AgentThreadDispatch::spawn_agent(&dispatch, request)
+            .await
+            .unwrap()
+            .thread;
+        while dispatch.runtime_manager.is_running(&child.thread_id) {
+            tokio::task::yield_now().await;
+        }
+        dispatch.runtime_requests.remove(&child.thread_id);
+
+        let root_session = Arc::new(tokio::sync::Mutex::new(
+            Session::with_session_id(
+                Config::with_defaults(memory_dir.clone()),
+                "root-session".into(),
+            )
+            .unwrap(),
+        ));
+        register_active_root_session(&memory_dir, "root-session", &root_session).unwrap();
+        {
+            let mut root_session = root_session.lock().await;
+            root_session.set_chat_targets(root_material.chat_targets);
+            root_session.set_permission_profile(Some(root_material.parent_sandbox_mode));
+            root_session.set_project_root(root_material.project_root);
+            root_session.set_skill_config_overrides(root_material.inherited_skill_config);
+        }
+
+        desktop_control(&dispatch, &memory_dir)
+            .followup(
+                "root-session",
+                child.canonical_path.as_str(),
+                "continue from desktop after restart".into(),
+            )
+            .await
+            .unwrap();
+        while dispatch.runtime_manager.is_running(&child.thread_id) {
+            tokio::task::yield_now().await;
+        }
+
+        let messages = sessions.get_messages(&child.session_id).unwrap();
+        assert_eq!(
+            messages
+                .iter()
+                .filter(|message| {
+                    message.content.as_deref() == Some("continue from desktop after restart")
+                })
+                .count(),
+            1
+        );
     }
 
     #[tokio::test]

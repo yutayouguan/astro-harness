@@ -1,5 +1,6 @@
 use agent::exec::dispatch::{
     CloseSubtreeError, DefaultDesktopAgentThreadControl, DesktopAgentThreadControl,
+    DesktopFollowupContextUnavailable,
 };
 use serde::{Deserialize, Serialize};
 
@@ -41,6 +42,16 @@ fn command_error(operation: &str, error: anyhow::Error) -> String {
     if let Some(partial) = error.downcast_ref::<CloseSubtreeError>() {
         tracing::warn!(operation, "desktop Agent Thread command failed");
         return format!("agent subtree close stopped at {}", partial.failed_path());
+    }
+    if error
+        .downcast_ref::<DesktopFollowupContextUnavailable>()
+        .is_some()
+    {
+        tracing::warn!(
+            operation,
+            "desktop Agent Thread root context is unavailable"
+        );
+        return "Open or resume the root task before following up this Agent Thread.".into();
     }
     tracing::warn!(operation, "desktop Agent Thread command failed");
     format!("{operation} failed")
@@ -154,6 +165,21 @@ mod tests {
             anyhow::anyhow!("api_key=secret payload=user-private base_url=https://private"),
         );
         assert_eq!(error, "read agent thread failed");
+        assert!(!error.contains("secret"));
+        assert!(!error.contains("user-private"));
+    }
+
+    #[test]
+    fn missing_root_context_is_actionable_without_reflecting_payloads() {
+        let error = command_error(
+            "follow up agent thread",
+            anyhow::Error::new(DesktopFollowupContextUnavailable)
+                .context("api_key=secret payload=user-private"),
+        );
+        assert_eq!(
+            error,
+            "Open or resume the root task before following up this Agent Thread."
+        );
         assert!(!error.contains("secret"));
         assert!(!error.contains("user-private"));
     }

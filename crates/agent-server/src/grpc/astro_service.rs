@@ -433,6 +433,12 @@ impl AstroServiceImpl {
                 .get_at(session_id, &self.memory_dir.join("subagents-v2.db"))
                 .ok_or_else(|| Status::internal("root AgentControl is unavailable"))?;
             self.attach_agent_thread_watcher(session_id, &agent_id, control);
+            agent::exec::dispatch::register_active_root_session(
+                &self.memory_dir,
+                session_id,
+                handle,
+            )
+            .map_err(|error| Status::internal(error.to_string()))?;
             return Ok(handle.clone());
         }
 
@@ -450,6 +456,8 @@ impl AstroServiceImpl {
             .ok_or_else(|| Status::internal("root AgentControl was not registered"))?;
         self.attach_agent_thread_watcher(session_id, &agent_id, control);
         sessions.insert(session_id.to_string(), handle.clone());
+        agent::exec::dispatch::register_active_root_session(&self.memory_dir, session_id, &handle)
+            .map_err(|error| Status::internal(error.to_string()))?;
         Ok(handle)
     }
 
@@ -481,6 +489,11 @@ impl AstroServiceImpl {
             sessions.remove(session_id)
         };
         if let Some(handle) = removed.as_ref() {
+            agent::exec::dispatch::unregister_active_root_session(
+                &self.memory_dir,
+                session_id,
+                handle,
+            );
             if let Err(error) = Session::abort_all_tasks(handle, TurnAbortReason::Interrupted).await
             {
                 tracing::warn!(%error, session_id, "failed to abort session task");
@@ -1797,6 +1810,12 @@ mod tests {
         let session_id = "release-session-runtime-idempotent";
 
         service.get_session(session_id).await.unwrap();
+        assert!(
+            agent::exec::dispatch::active_root_runtime_material(dir.path(), session_id)
+                .await
+                .unwrap()
+                .is_some()
+        );
         let pause = service.register_pause(session_id).await;
         let gate = HitlGate::new(session_id.to_string());
         service.hitl_registry.insert(gate.clone()).await;
@@ -1814,6 +1833,12 @@ mod tests {
         service.chat_control(request).await.expect("second release");
 
         assert!(service.sessions.read().await.get(session_id).is_none());
+        assert!(
+            agent::exec::dispatch::active_root_runtime_material(dir.path(), session_id)
+                .await
+                .unwrap()
+                .is_none()
+        );
         assert!(service
             .pause_controls
             .read()
