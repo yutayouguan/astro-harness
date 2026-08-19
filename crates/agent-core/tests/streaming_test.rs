@@ -114,6 +114,153 @@ async fn regular_task_owns_initial_input_persistence() {
     assert_eq!(history[0].content_str(), "owned by regular task");
 }
 
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn steer_during_initial_prompt_preparation_preserves_role_order() {
+    let dir = tempfile::tempdir().unwrap();
+    let config = AgentConfig::with_defaults(dir.path().to_path_buf());
+    let session =
+        Arc::new(AgentLoop::with_session_id(config, "early-steer-role-order".into()).unwrap());
+    let initial_hook_entered = Arc::new(Notify::new());
+    let initial_hook_release = Arc::new((std::sync::Mutex::new(false), std::sync::Condvar::new()));
+    let follow_up_hook_hits = Arc::new(AtomicUsize::new(0));
+    let entered = Arc::clone(&initial_hook_entered);
+    let release = Arc::clone(&initial_hook_release);
+    let follow_up_hits = Arc::clone(&follow_up_hook_hits);
+    session
+        .hook_bus()
+        .register(hooks::USER_PROMPT_SUBMIT, move |input| {
+            match input.prompt.as_deref() {
+                Some("initial") => {
+                    entered.notify_one();
+                    let (released, ready) = &*release;
+                    let mut released = released.lock().unwrap();
+                    while !*released {
+                        released = ready.wait(released).unwrap();
+                    }
+                }
+                Some("follow up") => {
+                    follow_up_hits.fetch_add(1, Ordering::SeqCst);
+                }
+                _ => {}
+            }
+            hooks::HookOutcome::Continue
+        });
+
+    let calls = Arc::new(AtomicUsize::new(0));
+    let first_sampling_was_clean = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let second_sampling_saw_follow_up = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let chat_fn: ChatOverride = {
+        let calls = Arc::clone(&calls);
+        let first_sampling_was_clean = Arc::clone(&first_sampling_was_clean);
+        let second_sampling_saw_follow_up = Arc::clone(&second_sampling_saw_follow_up);
+        Arc::new(move |messages, _tools, _config| {
+            let call = calls.fetch_add(1, Ordering::SeqCst);
+            let texts: Vec<&str> = messages
+                .iter()
+                .map(|message| message.text_content())
+                .collect();
+            if call == 0 {
+                first_sampling_was_clean.store(
+                    texts.iter().any(|text| *text == "initial")
+                        && !texts.iter().any(|text| *text == "follow up"),
+                    Ordering::SeqCst,
+                );
+            } else if call == 1 {
+                let first = texts.iter().position(|text| *text == "first");
+                let follow_up = texts.iter().position(|text| *text == "follow up");
+                second_sampling_saw_follow_up.store(
+                    matches!((first, follow_up), (Some(first), Some(follow_up)) if first < follow_up),
+                    Ordering::SeqCst,
+                );
+            }
+            let text = if call == 0 { "first" } else { "second" };
+            Box::pin(async move {
+                Ok(Box::pin(futures::stream::iter(vec![
+                    Ok(StreamChunk::Text(text.into())),
+                    Ok(StreamChunk::Done {
+                        finish_reason: "stop".into(),
+                    }),
+                ])) as CompletionStream)
+            })
+        })
+    };
+    let (tx, mut rx) = tokio::sync::mpsc::channel(64);
+    let run = tokio::spawn({
+        let session = Arc::clone(&session);
+        async move {
+            run_multi_turn_stream(MultiTurnStreamArgs {
+                session,
+                targets: vec![types::ChatTarget {
+                    provider_id: "scripted".into(),
+                    backend_id: "scripted".into(),
+                    model: "test".into(),
+                    api_key: String::new(),
+                    base_url: String::new(),
+                }],
+                base_config: ProviderConfig {
+                    model: "test".into(),
+                    ..Default::default()
+                },
+                input: vec![TurnInput::UserInput {
+                    content: "initial".into(),
+                    image_data_urls: Vec::new(),
+                }],
+                system_prompt: None,
+                pause: PauseControl::new(),
+                hitl_gate: None,
+                tx,
+                chat_override: Some(chat_fn),
+            })
+            .await;
+        }
+    });
+
+    initial_hook_entered.notified().await;
+    let steered_turn_id = session
+        .steer_input("follow up", &[])
+        .await
+        .unwrap()
+        .expect("active task accepts early steer");
+    assert!(!steered_turn_id.is_empty());
+    {
+        let (released, ready) = &*initial_hook_release;
+        *released.lock().unwrap() = true;
+        ready.notify_all();
+    }
+    tokio::time::timeout(Duration::from_secs(2), async {
+        while rx.recv().await.is_some() {}
+        run.await.unwrap();
+    })
+    .await
+    .expect("stream completes after releasing initial prompt hook");
+
+    assert_eq!(follow_up_hook_hits.load(Ordering::SeqCst), 1);
+    assert_eq!(calls.load(Ordering::SeqCst), 2);
+    assert!(first_sampling_was_clean.load(Ordering::SeqCst));
+    assert!(second_sampling_saw_follow_up.load(Ordering::SeqCst));
+    let history = session.clone_history().await;
+    assert!(agent::runtime::validate_message_order(&history));
+    assert_eq!(
+        history
+            .iter()
+            .map(|message| message.content_str())
+            .collect::<Vec<_>>(),
+        ["initial", "first", "follow up", "second"]
+    );
+    assert_eq!(
+        history
+            .iter()
+            .map(|message| message.role.clone())
+            .collect::<Vec<_>>(),
+        [
+            types::message::Role::User,
+            types::message::Role::Assistant,
+            types::message::Role::User,
+            types::message::Role::Assistant,
+        ]
+    );
+}
+
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn steered_input_is_consumed_by_the_active_regular_task() {
     let dir = tempfile::tempdir().unwrap();

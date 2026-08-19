@@ -336,6 +336,7 @@ The quality-review correction is authoritative for this task:
 - initial and pending input slices are coalesced into one logical user message (`\n\n` text join plus stable image flattening) before their single persistence write;
 - initial SessionStart/UserPromptSubmit contexts are staged locally, discarded on any later Block, and enter `assemble_system_layers` through its budgeted inject layer;
 - steering InjectContext remains a next-sampling message-side context and is committed to Session state before its input reservation wakes terminal close;
+- `run_turn` does not drain pending input at the first loop top. `has_sampled` becomes true only after `run_sampling_request` succeeds, so an early steer stays queued until the first assistant is recorded; the no-tool terminal branch then records it as the next user turn. Later tool-loop iterations may drain pending input at the top because assistant/tool history already separates the roles;
 - a blocked SessionStart retains its pending `startup`/`resume` source for retry; any non-Block outcome consumes the expected source. A later prompt Block or infrastructure/reload failure does not restore SessionStart after it has successfully fired;
 - server full-runtime injection and duplicate SessionStart removal move forward from Task 5; AgentEnd/reset/finalize cleanup remains Task 5.
 
@@ -455,6 +456,7 @@ Also add these approved control cases:
 - `initial_inputs_are_persisted_as_one_logical_user_message` and `later_prompt_block_discards_staged_context_and_all_input`: multi-input admission is atomic and role-safe.
 - `admission_context_respects_system_prompt_budget`: a long admission context cannot bypass `context_budget_chars`.
 - reservation unit tests prove terminal close waits for commit and resumes on commit or Drop; the steering integration test uses a hook barrier and proves one hook fire plus model-visible follow-up.
+- `steer_during_initial_prompt_preparation_preserves_role_order`: a barrier pauses the initial `UserPromptSubmit`, admits a follow-up steer, and proves one follow-up hook plus provider/history order `user initial -> assistant first -> user follow-up -> assistant second`.
 - `chat_delegates_session_start_to_the_shared_session_runtime`: production server source has no direct SessionStart dispatch or Plugin-only replacement.
 
 Extend `steered_input_is_consumed_by_the_active_regular_task` to register `USER_PROMPT_SUBMIT`, capture both `prompt` and `turn_id`, call `.await.unwrap().expect(...)`, and assert the hook has already seen `follow up` plus the non-empty active turn id before releasing the first provider call.
@@ -472,6 +474,7 @@ cargo test -p agent --test rig_agent_test session_start_block_prevents_prompt_an
 cargo test -p agent --test rig_agent_test session_and_prompt_contexts_enter_initial_system_prompt_in_order -- --exact
 cargo test -p agent --test rig_agent_test prompt_skip_is_not_treated_as_block -- --exact
 cargo test -p agent --test streaming_test steered_input_is_consumed_by_the_active_regular_task -- --exact
+cargo test -p agent --test streaming_test steer_during_initial_prompt_preparation_preserves_role_order -- --exact
 cargo test -p agent --lib runtime::turn_context::tests::reservation_blocks_terminal_close_until_commit -- --exact
 cargo test -p agent --lib runtime::turn_context::tests::dropping_reservation_unblocks_terminal_close_and_closes_queue -- --exact
 cargo test -p agent --lib runtime::turn_lifecycle::tests::initial_inputs_are_persisted_as_one_logical_user_message -- --exact
@@ -552,6 +555,23 @@ let system_prompt = self.build_system_prompt_with_inject(context.as_deref()).awa
 ```
 
 `build_system_prompt()` delegates to the same internal builder with `None`. Do not manually append unbudgeted context after prompt assembly. Pending steers use the same coalescing helper before a single persistence write, but do not fire their hooks again.
+
+At the streaming loop top, gate pending-input persistence until a provider sampling request has successfully returned. This preserves the role invariant for steers admitted while the initial prompt is still being prepared without changing normal tool-loop steering:
+
+```rust
+let mut has_sampled = false;
+loop {
+    if has_sampled {
+        record_pending_input(&session, turn_context.take_pending_input()).await?;
+    }
+    // maintenance and request setup
+    let raw_stream = run_sampling_request(/* ... */).await?;
+    has_sampled = true;
+    // consume the stream, then persist the assistant before terminal pending input
+}
+```
+
+Do not set `has_sampled` before `run_sampling_request` succeeds: cancellation or provider setup failure must not pretend a sampling occurred or consume the early steer out of role order.
 
 For steering, clone the active regular task's `Arc<TurnContext>` under `active_turn`, release that lock, and reserve input before firing the hook. Terminal close asynchronously waits while reservations exist. Block/error/Drop cancels the reservation; success commits exactly once:
 

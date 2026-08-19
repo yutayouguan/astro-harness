@@ -239,6 +239,7 @@ pub(crate) async fn run_turn(args: RunTurnArgs, cancellation_token: Cancellation
     let mut raw_rounds: usize = 0;
     let mut verify_attempt: usize = 0;
     let mut thinking_only_retries: usize = 0;
+    let mut has_sampled = false;
 
     let mut timeline = crate::timeline::TimelineBuilder::new();
     let now_ms = || chrono::Utc::now().timestamp_millis();
@@ -272,18 +273,21 @@ pub(crate) async fn run_turn(args: RunTurnArgs, cancellation_token: Cancellation
             return;
         }
 
-        if let Err(error) = record_pending_input(&session, turn_context.take_pending_input()).await
-        {
-            finish_error(
-                &session,
-                &streamer,
-                &tx,
-                error.to_string(),
-                saw_usage.then_some(total_usage),
-                &run_id,
-            )
-            .await;
-            return;
+        if has_sampled {
+            if let Err(error) =
+                record_pending_input(&session, turn_context.take_pending_input()).await
+            {
+                finish_error(
+                    &session,
+                    &streamer,
+                    &tx,
+                    error.to_string(),
+                    saw_usage.then_some(total_usage),
+                    &run_id,
+                )
+                .await;
+                return;
+            }
         }
 
         pre_llm_maintenance(&session).await;
@@ -335,6 +339,7 @@ pub(crate) async fn run_turn(args: RunTurnArgs, cancellation_token: Cancellation
                     return;
                 }
             };
+        has_sampled = true;
 
         let (abort_handle, abort_reg) = AbortHandle::new_pair();
         pause.attach_abort(abort_handle);
