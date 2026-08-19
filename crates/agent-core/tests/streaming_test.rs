@@ -14,7 +14,7 @@ use agent::streaming::{
     run_multi_turn_stream, run_multi_turn_stream_with_chat_fn, ChatOverride, MultiTurnStreamArgs,
     MultiTurnStreamItem, StreamedAssistantContent,
 };
-use agent::TurnInput;
+use agent::{TurnAbortReason, TurnInput};
 
 /// 从脚本化轮次列表构造 [`ChatOverride`]。
 ///
@@ -2831,4 +2831,261 @@ async fn budget_summary_stop_consumes_queued_steer_before_terminal_close() {
             .count(),
         1
     );
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn main_stop_continuation_then_budget_summary_preserves_role_order() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut config = AgentConfig::with_defaults(dir.path().to_path_buf());
+    config.multi_turn = 1;
+    let agent = AgentLoop::with_session_id(config, "budget-summary-role-order".into()).unwrap();
+    let stop_calls = Arc::new(AtomicUsize::new(0));
+    let calls = Arc::clone(&stop_calls);
+    agent.hook_bus().register(hooks::STOP, move |_| {
+        if calls.fetch_add(1, Ordering::SeqCst) == 0 {
+            hooks::HookOutcome::KeepGoing("review before summary".into())
+        } else {
+            hooks::HookOutcome::Continue
+        }
+    });
+    agent
+        .record_items(vec![types::message::Message::user("initial")])
+        .await;
+    let session = Arc::new(agent);
+    let chat_fn = scripted_chat(vec![
+        vec![
+            StreamChunk::Text("main draft".into()),
+            StreamChunk::Done {
+                finish_reason: "stop".into(),
+            },
+        ],
+        vec![
+            StreamChunk::Text("budget summary".into()),
+            StreamChunk::Done {
+                finish_reason: "stop".into(),
+            },
+        ],
+    ]);
+
+    let (tx, mut rx) = tokio::sync::mpsc::channel(32);
+    run_multi_turn_stream_with_chat_fn(
+        Arc::clone(&session),
+        chat_fn,
+        ProviderConfig {
+            model: "test".into(),
+            ..Default::default()
+        },
+        "sys".into(),
+        PauseControl::new(),
+        None,
+        tx,
+    )
+    .await;
+    while rx.recv().await.is_some() {}
+
+    let history = session.clone_history().await;
+    assert!(
+        agent::runtime::validate_message_order(&history),
+        "budget summary must not append a synthetic user after the Stop bridge: {history:?}"
+    );
+    assert!(history.iter().all(|message| !message
+        .content_str()
+        .contains("你已达到本回合允许的最大工具调用迭代次数")));
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn budget_summary_provider_failure_leaves_no_synthetic_user() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut config = AgentConfig::with_defaults(dir.path().to_path_buf());
+    config.multi_turn = 1;
+    let agent = AgentLoop::with_session_id(config, "budget-summary-provider-error".into()).unwrap();
+    agent
+        .record_items(vec![types::message::Message::user("initial")])
+        .await;
+    let session = Arc::new(agent);
+    let provider_calls = Arc::new(AtomicUsize::new(0));
+    let chat_fn: ChatOverride = {
+        let provider_calls = Arc::clone(&provider_calls);
+        Arc::new(move |_messages, _tools, _config| {
+            let call = provider_calls.fetch_add(1, Ordering::SeqCst);
+            Box::pin(async move {
+                if call == 0 {
+                    Ok(Box::pin(futures::stream::iter(vec![
+                        Ok(StreamChunk::ToolCallStart {
+                            index: 0,
+                            id: "call_summary_error".into(),
+                            name: "echo".into(),
+                        }),
+                        Ok(StreamChunk::ToolCallDelta {
+                            index: 0,
+                            arguments: r#"{"text":"x"}"#.into(),
+                        }),
+                        Ok(StreamChunk::Done {
+                            finish_reason: "tool_calls".into(),
+                        }),
+                    ])) as CompletionStream)
+                } else {
+                    Err(anyhow::anyhow!("summary provider failure"))
+                }
+            })
+        })
+    };
+
+    let (tx, mut rx) = tokio::sync::mpsc::channel(32);
+    run_multi_turn_stream_with_chat_fn(
+        Arc::clone(&session),
+        chat_fn,
+        ProviderConfig {
+            model: "test".into(),
+            ..Default::default()
+        },
+        "sys".into(),
+        PauseControl::new(),
+        None,
+        tx,
+    )
+    .await;
+    while rx.recv().await.is_some() {}
+
+    let history = session.clone_history().await;
+    assert!(history.iter().all(|message| !message
+        .content_str()
+        .contains("你已达到本回合允许的最大工具调用迭代次数")));
+    session
+        .record_items(vec![types::message::Message::user(
+            "real user after summary failure",
+        )])
+        .await;
+    let history = session.clone_history().await;
+    assert!(
+        agent::runtime::validate_message_order(&history),
+        "a later real user message must remain role-safe after summary setup/provider failure"
+    );
+    assert_eq!(provider_calls.load(Ordering::SeqCst), 2);
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn budget_summary_cancel_after_stop_continuation_skips_next_provider_request() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut config = AgentConfig::with_defaults(dir.path().to_path_buf());
+    config.multi_turn = 1;
+    let session = Arc::new(
+        AgentLoop::with_session_id(config, "budget-summary-cancel-after-stop".into()).unwrap(),
+    );
+    session
+        .record_items(vec![types::message::Message::user("initial")])
+        .await;
+
+    let stop_entered = Arc::new(Notify::new());
+    let stop_release = Arc::new((std::sync::Mutex::new(false), std::sync::Condvar::new()));
+    let entered = Arc::clone(&stop_entered);
+    let release = Arc::clone(&stop_release);
+    session.hook_bus().register(hooks::STOP, move |_| {
+        entered.notify_one();
+        let (released, ready) = &*release;
+        let mut released = released.lock().unwrap();
+        while !*released {
+            released = ready.wait(released).unwrap();
+        }
+        hooks::HookOutcome::KeepGoing("continue summary".into())
+    });
+
+    let provider_calls = Arc::new(AtomicUsize::new(0));
+    let chat_fn: ChatOverride = {
+        let provider_calls = Arc::clone(&provider_calls);
+        Arc::new(move |_messages, _tools, _config| {
+            let call = provider_calls.fetch_add(1, Ordering::SeqCst);
+            Box::pin(async move {
+                let chunks = match call {
+                    0 => vec![
+                        StreamChunk::ToolCallStart {
+                            index: 0,
+                            id: "call_summary_cancel".into(),
+                            name: "echo".into(),
+                        },
+                        StreamChunk::ToolCallDelta {
+                            index: 0,
+                            arguments: r#"{"text":"x"}"#.into(),
+                        },
+                        StreamChunk::Done {
+                            finish_reason: "tool_calls".into(),
+                        },
+                    ],
+                    _ => vec![
+                        StreamChunk::Text("summary candidate".into()),
+                        StreamChunk::Done {
+                            finish_reason: "stop".into(),
+                        },
+                    ],
+                };
+                Ok(Box::pin(futures::stream::iter(
+                    chunks.into_iter().map(Ok::<_, anyhow::Error>),
+                )) as CompletionStream)
+            })
+        })
+    };
+
+    let (tx, mut rx) = tokio::sync::mpsc::channel(64);
+    let pause = PauseControl::new();
+    let run = tokio::spawn({
+        let session = Arc::clone(&session);
+        let pause = Arc::clone(&pause);
+        async move {
+            run_multi_turn_stream_with_chat_fn(
+                session,
+                chat_fn,
+                ProviderConfig {
+                    model: "test".into(),
+                    ..Default::default()
+                },
+                "sys".into(),
+                pause,
+                None,
+                tx,
+            )
+            .await;
+        }
+    });
+
+    stop_entered.notified().await;
+    pause.cancel();
+    let abort = tokio::spawn({
+        let session = Arc::clone(&session);
+        async move {
+            session
+                .abort_all_tasks(TurnAbortReason::Interrupted)
+                .await
+                .unwrap();
+        }
+    });
+    {
+        let (released, ready) = &*stop_release;
+        *released.lock().unwrap() = true;
+        ready.notify_all();
+    }
+
+    let mut items = Vec::new();
+    while let Some(item) = rx.recv().await {
+        items.push(item.expect("stream item"));
+    }
+    run.await.unwrap();
+    abort.await.unwrap();
+
+    assert_eq!(
+        provider_calls.load(Ordering::SeqCst),
+        2,
+        "cancellation after Stop continuation must prevent the next summary request"
+    );
+    assert!(!items
+        .iter()
+        .any(|item| matches!(item, MultiTurnStreamItem::Error(_))));
+    let terminal_outcomes: Vec<&str> = items
+        .iter()
+        .filter_map(|item| match item {
+            MultiTurnStreamItem::RunFinished { outcome_type, .. } => Some(outcome_type.as_str()),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(terminal_outcomes, ["interrupt"]);
+    assert!(matches!(items.last(), Some(MultiTurnStreamItem::Done)));
 }

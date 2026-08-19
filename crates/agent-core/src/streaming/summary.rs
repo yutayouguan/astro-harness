@@ -6,7 +6,7 @@ use futures::stream::{AbortHandle, Abortable};
 use futures::StreamExt;
 use providers::{PauseControl, Usage};
 use tokio::sync::mpsc;
-use types::message::Message;
+use tokio_util::sync::CancellationToken;
 
 use crate::runtime::{AgentLoop, TurnContext};
 
@@ -48,6 +48,8 @@ pub(crate) struct MaxIterationsSummaryArgs<'a> {
     pub max_total: usize,
     /// Shares the response-chain quota accumulated by the normal turn loop.
     pub verify_attempt: &'a mut usize,
+    /// The owning regular-task cancellation must also gate summary setup.
+    pub cancellation_token: &'a CancellationToken,
 }
 
 /// 预算耗尽后：注入总结提示，再发一轮 **无 tools** 的 completion（对齐 Hermes）。
@@ -66,6 +68,7 @@ pub(crate) async fn run_max_iterations_summary(a: MaxIterationsSummaryArgs<'_>) 
         used,
         max_total,
         verify_attempt,
+        cancellation_token,
     } = a;
     let notice =
         format!("⚠️ 迭代预算已用尽（{used}/{max_total}），正在请求模型总结（不再调用工具）…\n\n");
@@ -78,29 +81,84 @@ pub(crate) async fn run_max_iterations_summary(a: MaxIterationsSummaryArgs<'_>) 
         return SummaryOutcome::Aborted;
     }
 
-    {
-        let agent = session.as_ref();
-        agent
-            .record_items(vec![Message::user(MAX_ITERATIONS_SUMMARY_PROMPT)])
-            .await;
-    }
+    // The summary instruction is request-local: persisting it as a user message
+    // could produce user/user after a main-loop Stop bridge, and would leave a
+    // synthetic dangling user on setup or provider failure.
+    let summary_system_prompt = format!("{system_prompt}\n\n{MAX_ITERATIONS_SUMMARY_PROMPT}");
 
     loop {
-        let history = {
+        if cancellation_token.is_cancelled() || pause.is_cancelled() {
+            finish_interrupted(
+                session,
+                streamer,
+                tx,
+                saw_usage.then_some(*total_usage),
+                run_id,
+            )
+            .await;
+            return SummaryOutcome::Aborted;
+        }
+
+        let step_context = {
             let agent = session.as_ref();
-            match agent.capture_step_context().await {
-                Ok(step_context) => step_context.history.clone(),
-                Err(err) => {
-                    return SummaryOutcome::Failed(format!(
-                        "迭代预算已用尽（{used}/{max_total}），且总结请求准备失败: {err}"
-                    ));
+            tokio::select! {
+                biased;
+                _ = cancellation_token.cancelled() => {
+                    finish_interrupted(
+                        session,
+                        streamer,
+                        tx,
+                        saw_usage.then_some(*total_usage),
+                        run_id,
+                    ).await;
+                    return SummaryOutcome::Aborted;
                 }
+                _ = pause.wait_cancelled() => {
+                    finish_interrupted(
+                        session,
+                        streamer,
+                        tx,
+                        saw_usage.then_some(*total_usage),
+                        run_id,
+                    ).await;
+                    return SummaryOutcome::Aborted;
+                }
+                result = agent.capture_step_context() => result,
             }
         };
-        let raw_stream = match streamer
-            .stream_chat(system_prompt, &history, Vec::new())
-            .await
-        {
+        let history = match step_context {
+            Ok(step_context) => step_context.history.clone(),
+            Err(err) => {
+                return SummaryOutcome::Failed(format!(
+                    "迭代预算已用尽（{used}/{max_total}），且总结请求准备失败: {err}"
+                ));
+            }
+        };
+        let stream_result = tokio::select! {
+            biased;
+            _ = cancellation_token.cancelled() => {
+                finish_interrupted(
+                    session,
+                    streamer,
+                    tx,
+                    saw_usage.then_some(*total_usage),
+                    run_id,
+                ).await;
+                return SummaryOutcome::Aborted;
+            }
+            _ = pause.wait_cancelled() => {
+                finish_interrupted(
+                    session,
+                    streamer,
+                    tx,
+                    saw_usage.then_some(*total_usage),
+                    run_id,
+                ).await;
+                return SummaryOutcome::Aborted;
+            }
+            result = streamer.stream_chat(&summary_system_prompt, &history, Vec::new()) => result,
+        };
+        let raw_stream = match stream_result {
             Ok(s) => s,
             Err(err) => {
                 return SummaryOutcome::Failed(format!(

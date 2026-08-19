@@ -849,8 +849,10 @@ git commit -m "fix(agent): run stop hooks for terminal turns"
 #### Follow-up: budget-exhaustion summaries share the Stop chain
 
 `run_max_iterations_summary` is also a terminal-candidate producer. It emits the budget
-notice and appends `MAX_ITERATIONS_SUMMARY_PROMPT` once, then every complete tool-less
-summary response dispatches `Stop` with the same session, turn id, last assistant message,
+notice once and adds `MAX_ITERATIONS_SUMMARY_PROMPT` only to the request-local system prompt;
+it never persists a synthetic user message. This keeps an existing main-loop Stop bridge from
+becoming user/user and leaves no dangling synthetic input when summary setup or the provider
+fails. Every complete tool-less summary response dispatches `Stop` with the same session, turn id, last assistant message,
 `stop_hook_active`, and attempt detail as the main loop. Pass the main loop's mutable
 `verify_attempt` into the summary runner: accepted `KeepGoing` outcomes persist the summary
 assistant reply plus one `[astro:hook-context]` user bridge and re-sample without tools; the
@@ -864,6 +866,11 @@ resets the response-chain Stop quota, and receives a subsequent no-tools summary
 This avoids a Stop-hook admission window that could otherwise be acknowledged then discarded,
 while retaining the normal assistant/user role ordering.
 
+Summary setup receives the owning `CancellationToken`. Each outer iteration checks that token
+and `PauseControl` before work, then uses biased cancellation selects around both step-context
+capture and provider setup. A cancellation that arrives after a Stop `KeepGoing` continuation
+therefore emits the normal interrupt terminal without starting another provider request.
+
 Focused coverage:
 
 ```bash
@@ -871,6 +878,9 @@ cargo test -p agent --test streaming_test multi_turn_budget_exhausted_forces_too
 cargo test -p agent --test streaming_test budget_summary_stop_keep_going_retries_capped_at_two -- --exact
 cargo test -p agent --test streaming_test budget_summary_reuses_main_stop_keep_going_quota -- --exact
 cargo test -p agent --test streaming_test budget_summary_stop_consumes_queued_steer_before_terminal_close -- --exact
+cargo test -p agent --test streaming_test main_stop_continuation_then_budget_summary_preserves_role_order -- --exact
+cargo test -p agent --test streaming_test budget_summary_provider_failure_leaves_no_synthetic_user -- --exact
+cargo test -p agent --test streaming_test budget_summary_cancel_after_stop_continuation_skips_next_provider_request -- --exact
 ```
 
 ### Task 5: Make RegularTask the single AgentEnd authority and update server wiring

@@ -850,6 +850,7 @@ pub(crate) async fn run_turn(args: RunTurnArgs, cancellation_token: Cancellation
             used: budget.used(),
             max_total: budget.max_total(),
             verify_attempt: &mut verify_attempt,
+            cancellation_token: &cancellation_token,
         })
         .await
         {
