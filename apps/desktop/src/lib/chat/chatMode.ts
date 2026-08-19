@@ -1,15 +1,10 @@
 /** 用户直接选择的工作模式。 */
 export type ChatWorkMode = "agent" | "plan" | "ask";
 
-/**
- * 发给后端的交互模式。
- *
- * `multitask` 是 Agent + 并行任务开关组合出的运行态，不再作为顶层工作模式展示。
- */
-export type ChatInteractionMode = ChatWorkMode | "multitask";
+/** 发给后端的交互模式；独立任务调度与工作模式正交。 */
+export type ChatInteractionMode = ChatWorkMode;
 
 const STORAGE_KEY = "astro.chat.mode";
-const PARALLEL_TASKS_STORAGE_KEY = "astro.chat.parallelTasks";
 
 /** 模式切换授权条默认倒计时（秒） */
 export const MODE_SWITCH_COUNTDOWN_SEC = 10;
@@ -21,24 +16,6 @@ export const CHAT_MODES: ChatWorkMode[] = ["agent", "plan", "ask"];
 export function normalizeStoredChatMode(value: string | null): ChatWorkMode {
   if (value === "plan" || value === "ask") return value;
   return "agent";
-}
-
-/** 新开关未写入时，继承历史 `multitask` 配置。 */
-export function resolveStoredParallelTasks(
-  storedMode: string | null,
-  storedParallel: string | null,
-): boolean {
-  if (storedParallel === "true") return true;
-  if (storedParallel === "false") return false;
-  return storedMode === "multitask";
-}
-
-/** 工作模式与并行开关组合成后端已有的交互模式。 */
-export function resolveInteractionMode(
-  workMode: ChatWorkMode,
-  parallelTasksEnabled: boolean,
-): ChatInteractionMode {
-  return workMode === "agent" && parallelTasksEnabled ? "multitask" : workMode;
 }
 
 /** 从 localStorage 读取模式，缺省 `agent` */
@@ -55,27 +32,6 @@ export function loadChatMode(): ChatWorkMode {
 export function saveChatMode(mode: ChatWorkMode) {
   try {
     localStorage.setItem(STORAGE_KEY, mode);
-  } catch {
-    /* ignore */
-  }
-}
-
-/** 读取 Agent 并行任务开关，并兼容旧版 MultiTask 顶层模式。 */
-export function loadParallelTasksEnabled(): boolean {
-  try {
-    return resolveStoredParallelTasks(
-      localStorage.getItem(STORAGE_KEY),
-      localStorage.getItem(PARALLEL_TASKS_STORAGE_KEY),
-    );
-  } catch {
-    return false;
-  }
-}
-
-/** 持久化 Agent 并行任务开关。 */
-export function saveParallelTasksEnabled(enabled: boolean) {
-  try {
-    localStorage.setItem(PARALLEL_TASKS_STORAGE_KEY, String(enabled));
   } catch {
     /* ignore */
   }

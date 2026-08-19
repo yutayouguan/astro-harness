@@ -116,6 +116,7 @@ mod tests {
         TurnInput::UserInput {
             content: text.to_string(),
             image_data_urls: Vec::new(),
+            client_message_id: None,
         }
     }
 

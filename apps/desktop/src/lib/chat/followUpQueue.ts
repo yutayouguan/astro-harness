@@ -1,6 +1,5 @@
 /**
- * 单线程模式（Agent / Plan / Ask）的 follow-up 队列项。
- * MultiTask 不使用此队列（见 chat-mode-scheduling 设计）。
+ * 当前任务繁忙时使用的 follow-up 队列项。
  */
 
 import type { ChatAttachment } from "../../types";
@@ -10,6 +9,7 @@ export type QueuedFollowUp = {
   text: string;
   attachments: ChatAttachment[];
   createdAt: number;
+  delivery?: "queued" | "steering";
 };
 
 export const MAX_QUEUED_FOLLOWUPS = 20;

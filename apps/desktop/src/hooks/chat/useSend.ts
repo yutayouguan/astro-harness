@@ -133,8 +133,6 @@ export interface UseSendDeps {
   /** 主会话整轮未结束（含 HITL 停顿）；供队列软边界 */
   turnInFlightRef: MutableRefObject<boolean>;
   setTurnInFlight: Dispatch<SetStateAction<boolean>>;
-  /** 流式活动时间戳（token/tool）；供长任务 idle checkpoint */
-  lastStreamActivityAtRef: MutableRefObject<number>;
   /** Agent 会话级 worktree（按 sessionId 复用） */
   sessionWorktreeRef: MutableRefObject<{
     sessionId: string;
@@ -146,6 +144,8 @@ export interface UseSendDeps {
   onModeSwitchDetected?: (req: ModeSwitchRequest) => void;
   /** 流正常结束后，若本轮有模式切换请求则提示 UI */
   onModeSwitchPrompt?: (req: ModeSwitchRequest) => void;
+  /** A steered queue item is durable in the active turn history. */
+  onUserInputCommitted?: (clientMessageId: string) => void;
 }
 
 function calcTokensPerSec(completionTokens: number, durationMs: number): number | undefined {
@@ -221,18 +221,15 @@ export function useSend(deps: UseSendDeps) {
         showTransientToast,
         turnInFlightRef,
         setTurnInFlight,
-        lastStreamActivityAtRef,
         sessionWorktreeRef,
         onModeSwitchDetected,
         onModeSwitchPrompt,
+        onUserInputCommitted,
       } = depsRef.current;
 
       const markTurnEnded = () => {
         turnInFlightRef.current = false;
         setTurnInFlight(false);
-      };
-      const touchActivity = () => {
-        lastStreamActivityAtRef.current = Date.now();
       };
 
       let pendingModeSwitch: ModeSwitchRequest | null = null;
@@ -393,7 +390,6 @@ export function useSend(deps: UseSendDeps) {
       setStreaming(true);
       turnInFlightRef.current = true;
       setTurnInFlight(true);
-      touchActivity();
       setStreamPaused(false);
       setTokenUsage(null);
       setContextUsage(null);
@@ -458,15 +454,14 @@ export function useSend(deps: UseSendDeps) {
           outcome_type?: string;
           interrupts_json?: string;
           citations?: string;
+          client_message_id?: string;
         }>(eventName, (event) => {
           if (streamGenRef.current !== gen) return;
           const payload = event.payload;
 
           if (payload.type === "token" && payload.content) {
-            touchActivity();
             enqueueStreamToken(assistantId, payload.content);
           } else if (payload.type === "reasoning" && payload.content) {
-            touchActivity();
             enqueueStreamReasoning(assistantId, payload.content);
             setStatusPhase("generating");
           } else if (payload.type === "citations" && payload.citations) {
@@ -507,6 +502,11 @@ export function useSend(deps: UseSendDeps) {
             const runId = payload.run_id ?? null;
             currentRunIdRef.current = runId;
             setCurrentTurnId(runId);
+          } else if (
+            payload.type === "user_input_committed" &&
+            payload.client_message_id
+          ) {
+            onUserInputCommitted?.(payload.client_message_id);
           } else if (payload.type === "activity") {
             let operations: unknown[] = [];
             try {
@@ -604,7 +604,6 @@ export function useSend(deps: UseSendDeps) {
               setStatusPhase("error");
             }
           } else if (payload.type === "tool_call_delta") {
-            touchActivity();
             enqueueToolDelta(assistantId, {
               index: payload.index ?? 0,
               id: payload.id,
@@ -619,7 +618,6 @@ export function useSend(deps: UseSendDeps) {
             });
             setStatusPhase("generating");
           } else if (payload.type === "tool_call") {
-            touchActivity();
             if (toolDeltaRafRef.current != null) {
               cancelAnimationFrame(toolDeltaRafRef.current);
               flushToolDeltas();
@@ -925,7 +923,7 @@ export function useSend(deps: UseSendDeps) {
             projectRoot = existing.path;
           } else {
             if (existing) {
-              void invoke("cleanup_multitask_worktree", {
+              void invoke("cleanup_task_worktree", {
                 path: existing.path,
                 repoRoot: existing.repoRoot,
                 branch: existing.branch,
@@ -937,7 +935,7 @@ export function useSend(deps: UseSendDeps) {
                 path: string;
                 repoRoot: string;
                 branch: string;
-              } | null>("prepare_multitask_worktree", { taskId: sid });
+              } | null>("prepare_task_worktree", { taskId: sid });
               if (prepared?.path) {
                 sessionWorktreeRef.current = {
                   sessionId: sid,
@@ -953,7 +951,7 @@ export function useSend(deps: UseSendDeps) {
           }
         } else if (sessionWorktreeRef.current) {
           const existing = sessionWorktreeRef.current;
-          void invoke("cleanup_multitask_worktree", {
+          void invoke("cleanup_task_worktree", {
             path: existing.path,
             repoRoot: existing.repoRoot,
             branch: existing.branch,

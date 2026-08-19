@@ -104,6 +104,8 @@ pub enum MultiTurnStreamItem {
     ContextUsage(crate::prompt::context_usage::ContextUsageSnapshot),
     /// AG-UI `RUN_STARTED`：一次用户发送对应一个 run。
     RunStarted { thread_id: String, run_id: String },
+    /// A steered queue item has been persisted into the active turn history.
+    UserInputCommitted { client_message_id: String },
     /// AG-UI `ACTIVITY_SNAPSHOT`（如 A2UI surface）。
     Activity {
         message_id: String,

@@ -1,4 +1,4 @@
-//! 聊天交互模式枚举（Agent / Plan / Ask / MultiTask）。
+//! 聊天交互模式枚举（Agent / Plan / Ask）。
 
 use serde::{Deserialize, Serialize};
 
@@ -10,7 +10,6 @@ pub enum InteractionMode {
     Agent,
     Plan,
     Ask,
-    Multitask,
 }
 
 impl InteractionMode {
@@ -18,7 +17,6 @@ impl InteractionMode {
         match s.trim().to_ascii_lowercase().as_str() {
             "plan" => Self::Plan,
             "ask" => Self::Ask,
-            "multitask" => Self::Multitask,
             _ => Self::Agent,
         }
     }
@@ -28,7 +26,6 @@ impl InteractionMode {
             Self::Agent => "agent",
             Self::Plan => "plan",
             Self::Ask => "ask",
-            Self::Multitask => "multitask",
         }
     }
 
@@ -49,11 +46,6 @@ Read-only: file_ops(read/list/search), web_search, todo. No writes, terminal, co
                 "# Interaction mode: Ask (read-only Q&A) / 交互模式：Ask（只读问答）\n\
 Explain and retrieve; do not modify files or run side effects. To implement, call switch_mode(to=\"agent\", reason=…, summary=plan).\n\
 以解释与检索为主，不要修改文件或执行有副作用的操作。若需落地实现，可 switch_mode(to=\"agent\", reason=…, summary=计划摘要)。"
-            }
-            Self::Multitask => {
-                "# Interaction mode: MultiTask / 交互模式：MultiTask\n\
-Spawn first-class agent threads with spawn_agent, inspect or steer them as needed, wait with wait_agent, then summarize.\n\
-用 spawn_agent 并行启动独立 Agent Thread，按需检查或追问，用 wait_agent 等待后汇总。"
             }
         }
     }

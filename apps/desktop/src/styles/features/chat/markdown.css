@@ -681,12 +681,6 @@ html[data-theme="dark"] .composer-agent-validate-hint {
   border-color: color-mix(in srgb, var(--tone-green, #22c55e) 28%, transparent);
 }
 
-.composer-parallel-toggle.is-on {
-  color: var(--tone, var(--accent));
-  background: color-mix(in srgb, var(--tone-soft, var(--accent)) 52%, transparent);
-  border-color: color-mix(in srgb, var(--tone, var(--accent)) 26%, transparent);
-}
-
 .composer-approval-pill.is-full-access {
   color: var(--tone-orange);
   border-color: color-mix(in srgb, var(--tone-orange) 28%, var(--glass-edge));
@@ -1142,6 +1136,10 @@ html[data-theme="dark"] .composer-icon-btn.is-open {
   overflow: hidden;
 }
 
+.composer-queue.has-open-menu {
+  overflow: visible;
+}
+
 .composer-mode-switch {
   display: flex;
   flex-direction: row;
@@ -1235,16 +1233,38 @@ html[data-theme="dark"] .composer-icon-btn.is-open {
 }
 
 .composer-queue-card-actions {
+  position: relative;
   display: inline-flex;
   align-items: center;
   gap: 2px;
   flex-shrink: 0;
-  opacity: 0;
-  transition: opacity 0.15s ease;
+  opacity: 1;
 }
 
-.composer-queue-card:hover .composer-queue-card-actions {
-  opacity: 1;
+.composer-queue-steer {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 26px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--ink-mute);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.composer-queue-steer:hover:not(:disabled) {
+  color: var(--ink);
+  background: color-mix(in srgb, var(--tone, transparent) 10%, transparent);
+}
+
+.composer-queue-steer:disabled {
+  opacity: 0.35;
+  cursor: default;
 }
 
 .composer-queue-btn {
@@ -1270,6 +1290,58 @@ html[data-theme="dark"] .composer-icon-btn.is-open {
   cursor: default;
 }
 
+.composer-queue-menu {
+  position: absolute;
+  z-index: 80;
+  top: calc(100% + 6px);
+  right: 0;
+  width: max-content;
+  min-width: 184px;
+  padding: 5px;
+  border: 1px solid color-mix(in srgb, var(--glass-edge) 88%, transparent);
+  border-radius: 11px;
+  background: color-mix(in srgb, var(--glass-solid, #fff) 94%, transparent);
+  box-shadow: 0 14px 34px rgba(15, 23, 42, 0.16);
+  backdrop-filter: blur(18px) saturate(1.2);
+  -webkit-backdrop-filter: blur(18px) saturate(1.2);
+}
+
+.composer-queue-menu button {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  min-height: 32px;
+  padding: 0 9px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--ink-soft);
+  font: inherit;
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.composer-queue-menu button:hover:not(:disabled),
+.composer-queue-menu button:focus-visible {
+  color: var(--ink);
+  background: color-mix(in srgb, var(--tone, var(--ink)) 9%, transparent);
+  outline: none;
+}
+
+.composer-queue-menu button:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.composer-queue-menu-separator {
+  display: block;
+  height: 1px;
+  margin: 4px 6px;
+  background: color-mix(in srgb, var(--glass-edge) 78%, transparent);
+}
+
 html[data-theme="dark"] .composer-queue {
   background:
     linear-gradient(160deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.02)),
@@ -1289,6 +1361,12 @@ html[data-theme="dark"] .composer-queue-card:hover {
 html[data-theme="dark"] .composer-queue-edit {
   background: rgba(8, 6, 18, 0.55);
   border-color: rgba(255, 255, 255, 0.14);
+}
+
+html[data-theme="dark"] .composer-queue-menu {
+  background: color-mix(in srgb, var(--glass-solid, #17131f) 96%, transparent);
+  border-color: rgba(255, 255, 255, 0.12);
+  box-shadow: 0 16px 38px rgba(0, 0, 0, 0.36);
 }
 
 .composer-task-status {
@@ -1858,12 +1936,6 @@ html[data-theme="dark"] .composer-mode-pill--ghost {
   background: transparent;
   border-color: transparent;
   box-shadow: none;
-}
-
-html[data-theme="dark"] .composer-parallel-toggle.is-on {
-  color: color-mix(in srgb, var(--tone, var(--accent)) 82%, white);
-  background: color-mix(in srgb, var(--tone, var(--accent)) 15%, transparent);
-  border-color: color-mix(in srgb, var(--tone, var(--accent)) 28%, transparent);
 }
 
 html[data-theme="dark"] .composer-approval-pill.is-full-access {
@@ -3897,16 +3969,6 @@ html[data-theme="dark"] .chat-agent-icon-plus {
 
   .composer-bar-right {
     margin-left: auto;
-  }
-
-  .composer-parallel-toggle span {
-    display: none;
-  }
-
-  .composer-parallel-toggle {
-    width: 32px;
-    justify-content: center;
-    padding-inline: 0;
   }
 
   .composer-mode-pill {

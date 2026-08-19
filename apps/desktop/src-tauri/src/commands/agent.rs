@@ -1,4 +1,4 @@
-//! Agent 配置与管理 Tauri 命令：配置读取、Agent 创建/切换、图标、每日记忆、MultiTask worktree。
+//! Agent 配置与管理 Tauri 命令：配置读取、Agent 创建/切换、图标、每日记忆、任务 worktree。
 
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter};
@@ -36,7 +36,7 @@ pub struct AgentInfoDto {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct MultitaskWorktreeDto {
+pub struct TaskWorktreeDto {
     pub path: String,
     pub repo_root: String,
     pub branch: String,
@@ -202,9 +202,9 @@ pub async fn write_daily_memory(
     std::fs::write(&path, content).map_err(|e| e.to_string())
 }
 
-/// MultiTask：若能解析到 git root 则创建隔离 worktree；否则返回 `None`（降级共工作区）。
+/// 独立任务：若能解析到 git root 则创建隔离 worktree；否则返回 `None`（降级共工作区）。
 #[tauri::command]
-pub fn prepare_multitask_worktree(task_id: String) -> Result<Option<MultitaskWorktreeDto>, String> {
+pub fn prepare_task_worktree(task_id: String) -> Result<Option<TaskWorktreeDto>, String> {
     let Some(root) = worktree::resolve_project_root(None) else {
         return Ok(None);
     };
@@ -212,21 +212,21 @@ pub fn prepare_multitask_worktree(task_id: String) -> Result<Option<MultitaskWor
         return Ok(None);
     };
     match worktree::create_task_worktree(&repo, &task_id) {
-        Ok(handle) => Ok(Some(MultitaskWorktreeDto {
+        Ok(handle) => Ok(Some(TaskWorktreeDto {
             path: handle.path().to_string_lossy().into_owned(),
             repo_root: handle.repo_root.to_string_lossy().into_owned(),
             branch: handle.branch.clone(),
         })),
         Err(e) => {
-            tracing::warn!(error = %e, "prepare_multitask_worktree failed; continuing without");
+            tracing::warn!(error = %e, "prepare_task_worktree failed; continuing without");
             Ok(None)
         }
     }
 }
 
-/// 清理 MultiTask worktree；脏树按 clean_only 保留。
+/// 清理任务 worktree；脏树按 clean_only 保留。
 #[tauri::command]
-pub fn cleanup_multitask_worktree(
+pub fn cleanup_task_worktree(
     path: String,
     repo_root: String,
     branch: String,

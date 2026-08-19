@@ -2,7 +2,7 @@
 
 ## 目标
 
-让单线程 Agent / Plan / Ask 会话在任务运行期间继续接受用户输入，并采用与 Codex 相同的两阶段交互：按 Enter 默认加入 follow-up 队列；用户可在队列项上点击“调整方向”，将该消息显式注入当前活动任务。Shift+Enter 继续换行，MultiTask 保持独立任务语义。
+让 Agent / Plan / Ask 会话在任务运行期间继续接受用户输入，并采用与 Codex 相同的两阶段交互：按 Enter 默认加入 follow-up 队列；用户可在队列项上点击“调整方向”，将该消息显式注入当前活动任务。Shift+Enter 继续换行，独立并行工作通过“在新任务中打开”表达，不再设置 MultiTask 顶层模式。
 
 ## 已确认交互
 
@@ -12,26 +12,26 @@
 - 每条队列项显示文本摘要、附件数量，以及“调整方向”、删除、更多菜单。
 - 更多菜单提供编辑消息、在新任务中打开、上移、下移和关闭排队。
 - “调整方向”仅在存在可 steering 的活动普通回合时可用；点击后进入 pending-steer 状态。
-- Steering 被接受后，队列项不立刻伪装成正式历史消息。后端提交该用户输入时发出正式事件，前端再将它写入聊天记录。
+- Steering 被接受后，队列项不立刻出队。后端持久化该用户输入时发出提交事件，前端收到后才移除队列项。
 - Steering 因无活动回合或竞态失败时，该消息作为队首 follow-up 保留，并在当前回合结束后作为普通新回合发送。
 - Review、Compact 等不可 steering 的回合也采用相同降级，不丢消息。
 - 删除只删除尚未提交的 follow-up；已被后端接受的 pending steer 不允许删除。
-- “在新任务中打开”从当前队列移除该消息，并以独立会话立即执行；它不改变当前会话是否启用 MultiTask。
+- “在新任务中打开”从当前队列移除该消息，并以独立会话立即执行。
 - “关闭排队”将全部 follow-up 按原顺序恢复到输入框并清空队列，不删除文字或附件。
 
 ## 架构
 
 ### 显式 Steering 契约
 
-新增独立的 `SteerChat` gRPC 与 Tauri command，不复用 `start_chat`。请求携带 `session_id`、`expected_turn_id`、稳定的 `client_user_message_id`、文本及附件。服务端只允许注入匹配的活动普通回合，返回已接受的 turn id；无活动回合、turn id 不匹配和不可 steering 使用结构化拒绝原因。
+新增独立的 `SteerChat` gRPC 与 Tauri command，不复用 `start_chat`。请求携带 `session_id`、`expected_turn_id`、稳定的 `client_message_id`、文本及附件。服务端只允许注入匹配的活动普通回合，返回 `accepted` 与已接受的 turn id；无活动回合、turn id 不匹配和不可 steering 均返回未接受。
 
 该契约避免第二个 `start_chat` 与现有 `chat-stream-{sessionId}` 共用终止事件，也避免在活动回合刚结束的竞态中误开一个没有前端监听的新流。
 
 ### Pending steer 与正式提交事件
 
-前端分别维护 follow-up 队列与 pending steers。点击“调整方向”后，队列项从 follow-up 移入 pending steers；后端在下一次模型采样前记录该用户输入时，通过主会话事件流发送包含 `client_user_message_id` 的用户输入提交事件。
+前端在 follow-up 队列项上维护 `queued` / `steering` 状态。点击“调整方向”并被接受后，队列项进入 `steering`；后端在下一次模型采样前记录该用户输入时，通过主会话事件流发送包含 `client_message_id` 的 `UserInputCommitted` 事件。
 
-前端收到提交事件后才从 pending steers 移除并渲染正式用户消息。后续 token、工具活动和最终回复继续属于当前活动回合，从而保持真实历史顺序。回合结束时仍未提交的 pending steer 回到 follow-up 队首。
+前端收到提交事件后才移除该队列项；正式用户输入已由后端写入会话历史。后续 token、工具活动和最终回复继续属于当前活动回合。回合结束时仍未提交的 pending steer 回到 follow-up 队首。
 
 ### Follow-up 队列
 
@@ -78,6 +78,6 @@ Pending steer 在同一区域以“正在调整方向”状态显示，不提供
 ## 非目标
 
 - 本批不实现服务端持久化 follow-up 队列。
-- 不改变 MultiTask 的独立 session 行为。
+- 本批不实现全局 MultiTask 模式；独立 session 由显式的“在新任务中打开”操作创建。
 - 不允许 follow-up 自动取消当前任务。
 - 不修改 Provider 协议或模型消息格式。

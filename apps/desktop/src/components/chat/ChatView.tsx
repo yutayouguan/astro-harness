@@ -21,15 +21,18 @@ import {
   ChevronDown,
   CornerDownRight,
   Copy,
+  ArrowDown,
+  ArrowUp,
   Eye,
+  ExternalLink,
   File,
   FileVideo,
   GitBranch,
   Hand,
   Image,
   Infinity as InfinityIcon,
-  Layers2,
   Lightbulb,
+  ListX,
   ListTree,
   MessageCircle,
   Music2,
@@ -245,11 +248,14 @@ type Props = {
   onRemoveQueuedFollowUp?: (id: string) => void;
   onUpdateQueuedFollowUpText?: (id: string, text: string) => void;
   onMoveQueuedFollowUp?: (id: string, dir: -1 | 1) => void;
+  onSteerQueuedFollowUp?: (id: string) => void | Promise<boolean>;
+  onOpenQueuedFollowUpInNewTask?: (id: string) => void | Promise<boolean>;
+  onCloseQueuedFollowUps?: () => boolean;
   /** `switch_mode` 流结束后的授权请求 */
   modeSwitchPrompt?: ModeSwitchRequest | null;
   onApproveModeSwitch?: () => void;
   onDismissModeSwitch?: () => void;
-  /** MultiTask 并行任务 */
+  /** 用户显式创建的独立任务 */
   parallelTasks?: ParallelChatTask[];
   onCancelParallelTask?: (id: string) => void;
   onWriteParallelSummary?: () => void;
@@ -291,9 +297,6 @@ type Props = {
   /** Agent / Plan / Ask 工作模式 */
   chatMode: ChatWorkMode;
   onChatModeChange: (mode: ChatWorkMode) => void;
-  /** Agent 模式下，每条消息是否创建独立并行任务 */
-  parallelTasksEnabled: boolean;
-  onParallelTasksEnabledChange: (enabled: boolean) => void;
   /** 打开右侧上下文面板 */
   onOpenContext: () => void;
   /** 简易上下文占用 0–100，用于按钮提示 */
@@ -642,6 +645,9 @@ export default function ChatView({
   onRemoveQueuedFollowUp,
   onUpdateQueuedFollowUpText,
   onMoveQueuedFollowUp,
+  onSteerQueuedFollowUp,
+  onOpenQueuedFollowUpInNewTask,
+  onCloseQueuedFollowUps,
   modeSwitchPrompt = null,
   onApproveModeSwitch,
   onDismissModeSwitch,
@@ -669,8 +675,6 @@ export default function ChatView({
   onOpenMcpSettings,
   chatMode,
   onChatModeChange,
-  parallelTasksEnabled,
-  onParallelTasksEnabledChange,
   onOpenContext,
   contextUsagePercent = null,
   contextUsage = null,
@@ -695,6 +699,7 @@ export default function ChatView({
   const modeMenuPanelRef = useRef<HTMLDivElement>(null);
   const approvalMenuRef = useRef<HTMLDivElement>(null);
   const approvalMenuPanelRef = useRef<HTMLDivElement>(null);
+  const queueMenuRef = useRef<HTMLDivElement>(null);
   const approvalRequestIdRef = useRef(0);
   const mcpWrapRef = useRef<HTMLDivElement>(null);
   const contextWrapRef = useRef<HTMLDivElement>(null);
@@ -705,6 +710,7 @@ export default function ChatView({
   const [approvalBusy, setApprovalBusy] = useState(false);
   const [tasksOpen, setTasksOpen] = useState(true);
   const [editingQueueId, setEditingQueueId] = useState<string | null>(null);
+  const [queueMenuId, setQueueMenuId] = useState<string | null>(null);
   const [modeSwitchSecLeft, setModeSwitchSecLeft] = useState(MODE_SWITCH_COUNTDOWN_SEC);
   const [contextPopoverOpen, setContextPopoverOpen] = useState(false);
   const [mcpOpen, setMcpOpen] = useState(false);
@@ -855,6 +861,23 @@ export default function ChatView({
     document.addEventListener("mousedown", onDoc);
     return () => document.removeEventListener("mousedown", onDoc);
   }, [approvalMenuOpen, refreshApprovalMode]);
+
+  useEffect(() => {
+    if (!queueMenuId) return;
+    const onPointerDown = (event: MouseEvent) => {
+      if (queueMenuRef.current?.contains(event.target as Node)) return;
+      setQueueMenuId(null);
+    };
+    const onKeyDown = (event: globalThis.KeyboardEvent) => {
+      if (event.key === "Escape") setQueueMenuId(null);
+    };
+    document.addEventListener("mousedown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [queueMenuId]);
 
   const modeMenuStyle = useClampPopover({
     open: modeMenuOpen,
@@ -1626,20 +1649,17 @@ export default function ChatView({
   };
 
   const interruptBlocked = pendingInterrupts.length > 0;
-  const isParallelMode = chatMode === "agent" && parallelTasksEnabled;
-  const queueEnabled = !isParallelMode;
   const canQueueWhileBusy =
-    queueEnabled && (streaming || turnInFlight || interruptBlocked);
+    streaming || turnInFlight || interruptBlocked;
   const canSend =
     !sendBlocked &&
     (input.trim().length > 0 || attachments.length > 0) &&
-    (!streaming || canQueueWhileBusy || isParallelMode) &&
-    (queueEnabled || !interruptBlocked);
+    (!streaming || canQueueWhileBusy);
   const parallelRunningCount = useMemo(
     () => countRunningParallel(parallelTasks),
     [parallelTasks],
   );
-  /** 主会话流式 / HITL 等待 / MultiTask 有并行：显示 Stop；Pause 仅主会话 streaming */
+  /** 主会话流式或同一 turn 未收束时显示 Stop；独立任务在各自卡片停止。 */
   const toggleMic = useCallback(async () => {
     if (recording) {
       mediaRecorderRef.current?.stop();
@@ -1675,14 +1695,10 @@ export default function ChatView({
     }
   }, [recording, onInputChange, input]);
 
-  const showStopControl =
-    streaming ||
-    (turnInFlight && !isParallelMode) ||
-    (isParallelMode && parallelRunningCount > 0);
+  const showStopControl = streaming || turnInFlight;
   const showPauseResume = streaming;
-  const showSendButton = isParallelMode || !streaming;
-  const modeSwitchLocked =
-    streaming || turnInFlight || interruptBlocked || parallelRunningCount > 0;
+  const showSendButton = !streaming;
+  const modeSwitchLocked = streaming || turnInFlight || interruptBlocked;
   const parallelRunningIds = useMemo(
     () =>
       new Set(
@@ -1765,19 +1781,11 @@ export default function ChatView({
   };
 
   const composerPlaceholder =
-    streaming || (turnInFlight && queueEnabled)
-      ? isParallelMode
-        ? t("chat.placeholderMultitask")
-        : queueEnabled
-          ? t("chat.placeholderStreaming")
-          : t("chat.placeholderStreamingBusy")
-      : isParallelMode && parallelRunningCount > 0
-        ? t("chat.placeholderMultitask")
+    streaming || turnInFlight
+      ? t("chat.placeholderStreaming")
       : sendBlocked && sendBlockedReason
         ? sendBlockedReason
-        : interruptBlocked && !queueEnabled
-          ? t("chat.interrupt.pending")
-          : emptyMode === "chat"
+        : emptyMode === "chat"
             ? ""
             : attachments.length
               ? t("chat.placeholderWithAttach")
@@ -1815,9 +1823,7 @@ export default function ChatView({
                 m.role === "assistant" &&
                 !m.error &&
                 (parallelRunningIds.has(m.id) ||
-                  (!isParallelMode &&
-                    streaming &&
-                    index === messages.length - 1));
+                  (streaming && index === messages.length - 1));
               const reasoningActive = Boolean(
                 isStreamingBubble && m.reasoning && !m.content,
               );
@@ -2186,13 +2192,21 @@ export default function ChatView({
           </div>
         )}
         {queuedFollowUps.length > 0 && (
-          <div className="composer-queue" aria-label={t("chat.queue.title", { count: String(queuedFollowUps.length) })}>
-              {queuedFollowUps.map((item, index) => (
-                  <div key={item.id} className="composer-queue-card">
+          <div
+            className={`composer-queue ${queueMenuId ? "has-open-menu" : ""}`.trim()}
+            aria-label={t("chat.queue.title", { count: String(queuedFollowUps.length) })}
+          >
+              {queuedFollowUps.map((item, index) => {
+                const isSteering = item.delivery === "steering";
+                return (
+                  <div
+                    key={item.id}
+                    className={`composer-queue-card ${isSteering ? "is-steering" : ""}`.trim()}
+                  >
                     <span className="composer-queue-card-icon" aria-hidden>
                       <CornerDownRight size={14} strokeWidth={2} />
                     </span>
-                    {editingQueueId === item.id ? (
+                    {editingQueueId === item.id && !isSteering ? (
                       <input
                         className="composer-queue-edit"
                         value={item.text}
@@ -2217,21 +2231,29 @@ export default function ChatView({
                           : ""}
                       </span>
                     )}
-                    <span className="composer-queue-card-actions">
+                    <div className="composer-queue-card-actions">
                       <button
                         type="button"
-                        className="composer-queue-btn"
-                        title={t("chat.queue.edit")}
-                        aria-label={t("chat.queue.edit")}
-                        onClick={() => setEditingQueueId(item.id)}
+                        className="composer-queue-steer"
+                        title={t("chat.queue.steer")}
+                        aria-label={t("chat.queue.steer")}
+                        disabled={!sessionId || !turnInFlight || isSteering}
+                        onClick={() => {
+                          setQueueMenuId(null);
+                          void onSteerQueuedFollowUp?.(item.id);
+                        }}
                       >
-                        <Pencil size={13} strokeWidth={2} />
+                        <CornerDownRight size={13} strokeWidth={2.1} />
+                        <span>
+                          {isSteering ? t("chat.queue.steering") : t("chat.queue.steer")}
+                        </span>
                       </button>
                       <button
                         type="button"
                         className="composer-queue-btn"
                         title={t("chat.queue.remove")}
                         aria-label={t("chat.queue.remove")}
+                        disabled={isSteering}
                         onClick={() => onRemoveQueuedFollowUp?.(item.id)}
                       >
                         <Trash2 size={13} strokeWidth={2} />
@@ -2239,23 +2261,85 @@ export default function ChatView({
                       <button
                         type="button"
                         className="composer-queue-btn composer-queue-menu-btn"
-                        title={t("chat.queue.more" as never)}
-                        aria-label={t("chat.queue.more" as never)}
-                        onClick={() => {
-                          const actions = [
-                            { label: t("chat.queue.edit"), action: () => setEditingQueueId(item.id) },
-                            ...(index > 0 ? [{ label: t("chat.queue.moveUp"), action: () => onMoveQueuedFollowUp?.(item.id, -1) }] : []),
-                            ...(index < queuedFollowUps.length - 1 ? [{ label: t("chat.queue.moveDown"), action: () => onMoveQueuedFollowUp?.(item.id, 1) }] : []),
-                            { label: t("chat.queue.remove"), action: () => onRemoveQueuedFollowUp?.(item.id) },
-                          ];
-                          void actions;
-                        }}
+                        title={t("chat.queue.more")}
+                        aria-label={t("chat.queue.more")}
+                        aria-haspopup="menu"
+                        aria-expanded={queueMenuId === item.id}
+                        disabled={isSteering}
+                        onClick={() => setQueueMenuId((current) => current === item.id ? null : item.id)}
                       >
                         <MoreHorizontal size={14} strokeWidth={2} />
                       </button>
-                    </span>
+                      {queueMenuId === item.id && !isSteering ? (
+                        <div
+                          ref={queueMenuRef}
+                          className="composer-queue-menu"
+                          role="menu"
+                          aria-label={t("chat.queue.more")}
+                        >
+                          <button
+                            type="button"
+                            role="menuitem"
+                            onClick={() => {
+                              setQueueMenuId(null);
+                              setEditingQueueId(item.id);
+                            }}
+                          >
+                            <Pencil size={14} strokeWidth={2} />
+                            <span>{t("chat.queue.edit")}</span>
+                          </button>
+                          <button
+                            type="button"
+                            role="menuitem"
+                            onClick={() => {
+                              setQueueMenuId(null);
+                              void onOpenQueuedFollowUpInNewTask?.(item.id);
+                            }}
+                          >
+                            <ExternalLink size={14} strokeWidth={2} />
+                            <span>{t("chat.queue.openInNewTask")}</span>
+                          </button>
+                          <button
+                            type="button"
+                            role="menuitem"
+                            disabled={index === 0}
+                            onClick={() => {
+                              setQueueMenuId(null);
+                              onMoveQueuedFollowUp?.(item.id, -1);
+                            }}
+                          >
+                            <ArrowUp size={14} strokeWidth={2} />
+                            <span>{t("chat.queue.moveUp")}</span>
+                          </button>
+                          <button
+                            type="button"
+                            role="menuitem"
+                            disabled={index === queuedFollowUps.length - 1}
+                            onClick={() => {
+                              setQueueMenuId(null);
+                              onMoveQueuedFollowUp?.(item.id, 1);
+                            }}
+                          >
+                            <ArrowDown size={14} strokeWidth={2} />
+                            <span>{t("chat.queue.moveDown")}</span>
+                          </button>
+                          <span className="composer-queue-menu-separator" role="separator" />
+                          <button
+                            type="button"
+                            role="menuitem"
+                            onClick={() => {
+                              if (onCloseQueuedFollowUps?.()) setQueueMenuId(null);
+                            }}
+                          >
+                            <ListX size={14} strokeWidth={2} />
+                            <span>{t("chat.queue.close")}</span>
+                          </button>
+                        </div>
+                      ) : null}
+                    </div>
                   </div>
-                ))}
+                );
+              })}
           </div>
         )}
 
@@ -2511,10 +2595,7 @@ export default function ChatView({
                     ? t("chat.welcomePlaceholder")
                     : composerPlaceholder || t("chat.placeholder")
               }
-              disabled={
-                (streaming && !isParallelMode) ||
-                (interruptBlocked && !queueEnabled)
-              }
+              disabled={sendBlocked}
               autoFocus
             />
           </div>
@@ -2679,23 +2760,6 @@ export default function ChatView({
                     )
                   : null}
               </div>
-
-              <button
-                type="button"
-                className={`composer-mode-pill composer-mode-pill--ghost composer-parallel-toggle ${parallelTasksEnabled ? "is-on" : ""}`.trim()}
-                disabled={modeSwitchLocked || chatMode !== "agent"}
-                title={
-                  chatMode === "agent"
-                    ? t("chat.parallelTasks.desc")
-                    : t("chat.parallelTasks.agentOnly")
-                }
-                aria-label={t("chat.parallelTasks")}
-                aria-pressed={parallelTasksEnabled}
-                onClick={() => onParallelTasksEnabledChange(!parallelTasksEnabled)}
-              >
-                <Layers2 size={14} strokeWidth={2} />
-                <span>{t("chat.parallelTasks")}</span>
-              </button>
 
               {showThinkingControls ? (
                 <button

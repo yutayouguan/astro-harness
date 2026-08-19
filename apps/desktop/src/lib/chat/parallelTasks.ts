@@ -1,5 +1,5 @@
 /**
- * MultiTask 并行任务：每条用户消息对应独立 session_id 流式执行。
+ * 显式独立任务：每条用户消息对应独立 session_id 流式执行。
  * 同 session 禁止并发（后端 pause 重入会 cancel）。
  */
 
@@ -28,7 +28,7 @@ export type ParallelChatTask = {
   error?: string;
   createdAt: number;
   finishedAt?: number;
-  /** MultiTask git worktree；无仓时为空 */
+  /** 独立任务 git worktree；无仓时为空 */
   worktree?: ParallelWorktreeInfo;
   /** 该 task 会话内未决 HITL（不写入主会话 sessionPendingInterrupts） */
   pendingInterrupts?: PendingInterrupt[];
@@ -72,7 +72,7 @@ export function buildParallelTasksSummaryMarkdown(
   replyByAssistantId: Map<string, string>,
   maxReplyChars = 400,
 ): string {
-  const lines: string[] = ["## MultiTask 汇总", ""];
+  const lines: string[] = ["## 独立任务汇总", ""];
   tasks.forEach((task, i) => {
     const n = i + 1;
     lines.push(`### ${n}. [${task.status}] ${task.prompt.trim() || "(empty)"}`);

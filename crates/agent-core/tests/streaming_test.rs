@@ -98,6 +98,7 @@ async fn regular_task_owns_initial_input_persistence() {
         input: vec![TurnInput::UserInput {
             content: "owned by regular task".into(),
             image_data_urls: Vec::new(),
+            client_message_id: None,
         }],
         system_prompt: None,
         pause: PauseControl::new(),
@@ -182,13 +183,20 @@ async fn steered_input_is_consumed_by_the_active_regular_task() {
     });
 
     first_started.notified().await;
+    assert!(session
+        .steer_input_for_turn("stale", &[], Some("stale-turn"), Some("queue-stale"))
+        .await
+        .is_none());
     let turn_id = session
-        .steer_input("follow up", &[])
+        .steer_input_for_turn("follow up", &[], None, Some("queue-1"))
         .await
         .expect("active regular task accepts steer");
     assert!(!turn_id.is_empty());
     release_first.notify_one();
-    while rx.recv().await.is_some() {}
+    let mut items = Vec::new();
+    while let Some(item) = rx.recv().await {
+        items.push(item.unwrap());
+    }
     run.await.unwrap();
 
     assert_eq!(calls.load(Ordering::SeqCst), 2);
@@ -200,6 +208,16 @@ async fn steered_input_is_consumed_by_the_active_regular_task() {
             types::message::MessageContent::Text(text) if text == "follow up"
         )
     }));
+    assert!(items.iter().any(|item| matches!(
+        item,
+        MultiTurnStreamItem::UserInputCommitted { client_message_id }
+            if client_message_id == "queue-1"
+    )));
+    assert!(!items.iter().any(|item| matches!(
+        item,
+        MultiTurnStreamItem::UserInputCommitted { client_message_id }
+            if client_message_id == "queue-stale"
+    )));
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]

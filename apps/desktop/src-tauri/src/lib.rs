@@ -230,13 +230,14 @@ pub fn run() {
             // — chat —
             commands::chat::start_chat,
             commands::chat::chat_control,
+            commands::chat::steer_chat,
             commands::chat::interrupt_resume,
             commands::chat::generate_image,
             commands::chat::query_memory,
             commands::chat::count_tokens,
             // — agent —
-            commands::agent::prepare_multitask_worktree,
-            commands::agent::cleanup_multitask_worktree,
+            commands::agent::prepare_task_worktree,
+            commands::agent::cleanup_task_worktree,
             commands::agent::get_config,
             commands::agent::list_agents,
             commands::agent::create_agent,

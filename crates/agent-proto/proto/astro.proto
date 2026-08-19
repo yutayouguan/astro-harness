@@ -9,6 +9,8 @@ service AstroService {
   rpc Chat(ChatRequest) returns (stream ChatEvent);
   // 对进行中的 Chat 流执行暂停 / 继续 / 取消。
   rpc ChatControl(ChatControlRequest) returns (Empty);
+  // 将用户补充指令注入当前活动 turn；在下一次模型采样前消费。
+  rpc SteerChat(SteerChatRequest) returns (SteerChatResponse);
   // 校验并登记 interrupt 的 resume 项（随后 Chat 携带 resume_json 续跑）。
   rpc InterruptResume(InterruptResumeRequest) returns (Empty);
   // 文生图流：进度、图片字节或错误。
@@ -105,9 +107,9 @@ message ChatRequest {
   uint32 context_window = 29;
   // 主模型最大输出 token（来自模型元数据）；0 = 后端用默认（8192）
   uint32 max_output_tokens = 30;
-  // 交互模式：agent | plan | ask | multitask（空=agent）；用于 Plan/Ask 工具门禁
+  // 交互模式：agent | plan | ask（空=agent）；用于 Plan/Ask 工具门禁
   string interaction_mode = 31;
-  // MultiTask / 委派隔离：非空则 AgentLoop 以该路径为 project_root（file_ops/terminal 沙箱根）
+  // 任务隔离：非空则 AgentLoop 以该路径为 project_root（file_ops/terminal 沙箱根）
   string project_root = 32;
   // OpenRouter default_parameters：未设置则沿用 Agent 默认温度
   optional float temperature = 33;
@@ -143,6 +145,20 @@ enum ChatControlAction {
 message ChatControlRequest {
   string session_id = 1;
   ChatControlAction action = 2;
+}
+
+// Codex-style steering：只接受已有活动 turn，不会隐式创建新任务。
+message SteerChatRequest {
+  string session_id = 1;
+  string content = 2;
+  repeated ChatImageAttachment images = 3;
+  string expected_turn_id = 4;
+  string client_message_id = 5;
+}
+
+message SteerChatResponse {
+  bool accepted = 1;
+  string turn_id = 2;
 }
 
 // Token 用量（OpenAI 风格字段）。
@@ -198,7 +214,12 @@ message ChatEvent {
     ContextUsageEvent context_usage = 13;
     // Anthropic citations delta（JSON 数组序列化）
     string citations_json = 14;
+    UserInputCommittedEvent user_input_committed = 15;
   }
+}
+
+message UserInputCommittedEvent {
+  string client_message_id = 1;
 }
 
 // Plugin Hooks 等生命周期事件（UI 时间线；与 MemoryUpdate 分流）。

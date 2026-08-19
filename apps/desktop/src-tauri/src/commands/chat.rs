@@ -1,7 +1,9 @@
 //! 聊天相关 Tauri 命令：流式聊天、控制、中断恢复、token 计数、记忆查询、图片生成。
 
 use proto::astro_service_client::AstroServiceClient;
-use proto::{ChatControlAction, ChatControlRequest, ChatRequest, ImageRequest, MemoryQuery};
+use proto::{
+    ChatControlAction, ChatControlRequest, ChatRequest, ImageRequest, MemoryQuery, SteerChatRequest,
+};
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter};
 use uuid::Uuid;
@@ -108,6 +110,9 @@ pub enum ChatStreamEvent {
     RunStarted {
         thread_id: String,
         run_id: String,
+    },
+    UserInputCommitted {
+        client_message_id: String,
     },
     Activity {
         message_id: String,
@@ -390,7 +395,7 @@ pub async fn start_chat(app: AppHandle, request: StartChatRequest) -> Result<Str
         .trim()
         .to_ascii_lowercase();
     let interaction_mode = match interaction_mode.as_str() {
-        "plan" | "ask" | "multitask" => interaction_mode,
+        "plan" | "ask" => interaction_mode,
         _ => "agent".to_string(),
     };
     let project_root = project_root.unwrap_or_default().trim().to_string();
@@ -596,6 +601,44 @@ pub async fn chat_control(session_id: String, action: String) -> Result<(), Stri
         .await
         .map_err(|e| e.to_string())?;
     Ok(())
+}
+
+/// 将补充指令注入当前活动任务；活动 turn 已结束时返回 `false`。
+#[tauri::command]
+pub async fn steer_chat(
+    session_id: String,
+    expected_turn_id: String,
+    client_message_id: String,
+    content: String,
+    attachments: Option<Vec<ChatAttachmentDto>>,
+) -> Result<bool, String> {
+    let sid = session_id.trim();
+    if sid.is_empty() {
+        return Ok(false);
+    }
+    let BuiltChatPayload {
+        content: merged,
+        images,
+    } = build_chat_payload(&content, &attachments.unwrap_or_default());
+    if merged.trim().is_empty() && images.is_empty() {
+        return Ok(false);
+    }
+    let endpoint = endpoint_url(&default_grpc_address());
+    let mut client = AstroServiceClient::connect(endpoint)
+        .await
+        .map_err(|e| e.to_string())?;
+    let response = client
+        .steer_chat(SteerChatRequest {
+            session_id: sid.to_string(),
+            content: merged,
+            images,
+            expected_turn_id,
+            client_message_id,
+        })
+        .await
+        .map_err(|e| e.to_string())?
+        .into_inner();
+    Ok(response.accepted)
 }
 
 /// 提交 interrupt resume（HITL 阻塞闸门）；同回合续跑，无需再调 start_chat。
@@ -845,6 +888,14 @@ async fn run_chat_stream(p: ChatStreamParams<'_>) -> Result<(), String> {
                     ChatStreamEvent::RunStarted {
                         thread_id: rs.thread_id,
                         run_id: rs.run_id,
+                    },
+                );
+            }
+            Some(proto::chat_event::Payload::UserInputCommitted(event)) => {
+                let _ = p.app.emit(
+                    p.event_name,
+                    ChatStreamEvent::UserInputCommitted {
+                        client_message_id: event.client_message_id,
                     },
                 );
             }

@@ -90,6 +90,7 @@ impl Session {
         self.prepare_turn(&[TurnInput::UserInput {
             content: user_message.to_string(),
             image_data_urls: image_data_urls.to_vec(),
+            client_message_id: None,
         }])
         .await
     }
@@ -191,6 +192,17 @@ impl Session {
         user_message: &'a str,
         image_data_urls: &'a [String],
     ) -> impl std::future::Future<Output = Option<String>> + Send + 'a {
+        self.steer_input_for_turn(user_message, image_data_urls, None, None)
+    }
+
+    /// Queue user input only when the expected active turn still owns the session.
+    pub fn steer_input_for_turn<'a>(
+        &'a self,
+        user_message: &'a str,
+        image_data_urls: &'a [String],
+        expected_turn_id: Option<&'a str>,
+        client_message_id: Option<&'a str>,
+    ) -> impl std::future::Future<Output = Option<String>> + Send + 'a {
         let active_turn = &self.active_turn;
         async move {
             if user_message.trim().is_empty() && image_data_urls.is_empty() {
@@ -201,9 +213,16 @@ impl Session {
             if running.kind != TaskKind::Regular {
                 return None;
             }
+            if expected_turn_id
+                .filter(|expected| !expected.is_empty())
+                .is_some_and(|expected| expected != running.turn_context.sub_id())
+            {
+                return None;
+            }
             let accepted = running.turn_context.push_input(TurnInput::UserInput {
                 content: user_message.to_string(),
                 image_data_urls: image_data_urls.to_vec(),
+                client_message_id: client_message_id.map(str::to_string),
             });
             accepted.then(|| running.turn_context.sub_id().to_string())
         }
@@ -214,6 +233,7 @@ impl Session {
         let TurnInput::UserInput {
             content,
             image_data_urls,
+            client_message_id: _,
         } = input;
         self.services
             .sessions

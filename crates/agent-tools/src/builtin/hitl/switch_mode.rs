@@ -9,7 +9,7 @@ use serde_json::json;
 use crate::context::ToolContext;
 use crate::schema::schema_for_args;
 
-/// 允许切换的目标模式（不含 ask / multitask）。
+/// 允许切换的目标模式（不含 ask）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, JsonSchema)]
 #[serde(rename_all = "lowercase")]
 enum ModeSwitchTarget {
@@ -42,7 +42,7 @@ pub fn register(registry: &mut crate::registry::ToolRegistry) {
         name: "switch_mode".to_string(),
         toolset: "switch_mode".to_string(),
         description: "Request switching chat interaction mode between Agent and Plan only \
-(not ask/multitask). Use for Agent→Plan when a complex task needs a written plan first, \
+(not ask). Use for Agent→Plan when a complex task needs a written plan first, \
 or Plan→Agent when the plan is ready to execute. \
 User confirms via a post-stream countdown authorize bar — do not assume the switch until approved. \
 Always set `reason`; when `to=\"agent\"`, `summary` is required (confirmed plan text). \

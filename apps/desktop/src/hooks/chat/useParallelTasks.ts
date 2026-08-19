@@ -1,5 +1,5 @@
 /**
- * MultiTask：每条消息独立 session 并行流式，不占用主会话 unlisten / sessionId。
+ * 用户显式创建的独立任务：每条消息使用独立 session 并行流式。
  */
 import { useCallback, useEffect, useRef, useState, type Dispatch, type SetStateAction } from "react";
 import { invoke } from "@tauri-apps/api/core";
@@ -18,6 +18,7 @@ import {
   modelPrefsToApi,
 } from "../../lib/model/modelPrefs";
 import { shouldShowThinkingControls } from "../../lib/chat/shouldShowThinkingControls";
+import { dispatchSessionsChanged } from "../../lib/chat/sessionManagement";
 import type {
   ChatActivity,
   ChatAttachment,
@@ -35,6 +36,8 @@ type ShowToastFn = (msg: string, opts?: ShowToastOptions) => void;
 export type StartParallelTaskOpts = {
   text: string;
   attachments?: ChatAttachment[];
+  /** 直接从输入框发送时清空 composer；队列转移到新任务时保持当前草稿。 */
+  clearComposer?: boolean;
 };
 
 type Deps = {
@@ -108,7 +111,7 @@ export function useParallelTasks(deps: Deps) {
     setParallelTasks((prev) => {
       for (const task of prev) {
         if (task.worktree) {
-          void invoke("cleanup_multitask_worktree", {
+          void invoke("cleanup_task_worktree", {
             path: task.worktree.path,
             repoRoot: task.worktree.repoRoot,
             branch: task.worktree.branch,
@@ -163,8 +166,9 @@ export function useParallelTasks(deps: Deps) {
             : t,
         ),
       );
+      dispatchSessionsChanged();
       if (task.worktree) {
-        void invoke("cleanup_multitask_worktree", {
+        void invoke("cleanup_task_worktree", {
           path: task.worktree.path,
           repoRoot: task.worktree.repoRoot,
           branch: task.worktree.branch,
@@ -314,7 +318,7 @@ export function useParallelTasks(deps: Deps) {
         path: string;
         repoRoot: string;
         branch: string;
-      } | null>("prepare_multitask_worktree", { taskId });
+      } | null>("prepare_task_worktree", { taskId });
       if (prepared?.path) {
         worktree = {
           path: prepared.path,
@@ -323,7 +327,7 @@ export function useParallelTasks(deps: Deps) {
         };
       }
     } catch (e) {
-      console.warn("prepare_multitask_worktree failed", e);
+      console.warn("prepare_task_worktree failed", e);
     }
 
     const task: ParallelChatTask = {
@@ -364,8 +368,10 @@ export function useParallelTasks(deps: Deps) {
       },
     ]);
     setEmptyMode(null);
-    setInput("");
-    setAttachments([]);
+    if (opts.clearComposer !== false) {
+      setInput("");
+      setAttachments([]);
+    }
 
     // 交互模式说明由后端写入 system prompt，不拼进用户消息
     const contentForModel = text;
@@ -618,7 +624,7 @@ export function useParallelTasks(deps: Deps) {
           useMemory: true,
           thinkingEnabled: modelApi.thinkingEnabled,
           reasoningEffort: modelApi.reasoningEffort,
-          interactionMode: "multitask",
+          interactionMode: "agent",
           projectRoot: worktree?.path,
           attachments: pending.map((a) => ({
             name: a.name,
@@ -630,12 +636,13 @@ export function useParallelTasks(deps: Deps) {
           })),
         },
       });
+      window.setTimeout(dispatchSessionsChanged, 120);
       return true;
     } catch (err) {
       const errMsg = String(err);
       finish("error", errMsg);
       if (worktree) {
-        void invoke("cleanup_multitask_worktree", {
+        void invoke("cleanup_task_worktree", {
           path: worktree.path,
           repoRoot: worktree.repoRoot,
           branch: worktree.branch,
@@ -658,7 +665,7 @@ export function useParallelTasks(deps: Deps) {
       for (const task of prev) {
         if (isParallelTaskActive(task.status)) continue;
         if (task.worktree) {
-          void invoke("cleanup_multitask_worktree", {
+          void invoke("cleanup_task_worktree", {
             path: task.worktree.path,
             repoRoot: task.worktree.repoRoot,
             branch: task.worktree.branch,

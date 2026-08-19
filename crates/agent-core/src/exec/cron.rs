@@ -713,6 +713,7 @@ async fn run_agent_job(
         vec![TurnInput::UserInput {
             content: job.task.clone(),
             image_data_urls: Vec::new(),
+            client_message_id: None,
         }],
     )
     .await

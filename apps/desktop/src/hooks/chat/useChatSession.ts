@@ -139,14 +139,13 @@ export function useChatSession({
   const [streaming, setStreaming] = useState(false);
   const [turnInFlight, setTurnInFlight] = useState(false);
   const turnInFlightRef = useRef(false);
-  const lastStreamActivityAtRef = useRef(0);
   const sessionWorktreeRef = useRef<{
     sessionId: string;
     path: string;
     repoRoot: string;
     branch: string;
   } | null>(null);
-  const checkpointFiredForTurnRef = useRef(false);
+  const steeringQueueIdsRef = useRef(new Set<string>());
   const [streamPaused, setStreamPaused] = useState(false);
   const [tokenUsage, setTokenUsage] = useState<MessageTokenUsage | null>(null);
   const [contextUsage, setContextUsage] = useState<ContextUsageSnapshot | null>(
@@ -221,11 +220,9 @@ export function useChatSession({
 
   const {
     parallelTasks,
-    parallelRunning,
     startParallelTask,
     cancelParallelTask,
     resumeParallelHitl,
-    clearAllParallel,
     clearSettledParallel,
   } = useParallelTasks({
     activeProvider,
@@ -246,6 +243,22 @@ export function useChatSession({
     modeSwitchArmedRef.current = false;
     setModeSwitchPrompt(req);
   }, []);
+  const onUserInputCommitted = useCallback(
+    (clientMessageId: string) => {
+      if (!steeringQueueIdsRef.current.delete(clientMessageId)) return;
+      setQueuedFollowUps((prev) => {
+        const hit = prev.find((item) => item.id === clientMessageId);
+        if (!hit) return prev;
+        for (const attachment of hit.attachments) {
+          if (attachment.previewUrl) URL.revokeObjectURL(attachment.previewUrl);
+        }
+        return prev.filter((item) => item.id !== clientMessageId);
+      });
+      setQueueKick((value) => value + 1);
+      showTransientToast(t("chat.queue.steerSent"), { tone: "success" });
+    },
+    [showTransientToast, t],
+  );
 
   const { send: sendImmediate } = useSend({
     input,
@@ -305,47 +318,22 @@ export function useChatSession({
     showTransientToast,
     turnInFlightRef,
     setTurnInFlight,
-    lastStreamActivityAtRef,
     sessionWorktreeRef,
     onModeSwitchDetected,
     onModeSwitchPrompt,
+    onUserInputCommitted,
   });
 
-  const chatModeRef = useRef(chatMode);
-  chatModeRef.current = chatMode;
   const prevChatModeRef = useRef(chatMode);
   useEffect(() => {
     const prev = prevChatModeRef.current;
     if (prev === chatMode) return;
     prevChatModeRef.current = chatMode;
 
-    if (chatMode === "multitask" && prev !== "multitask") {
-      let hadQueue = false;
-      setQueuedFollowUps((q) => {
-        hadQueue = q.length > 0;
-        for (const item of q) {
-          for (const a of item.attachments) {
-            if (a.previewUrl) URL.revokeObjectURL(a.previewUrl);
-          }
-        }
-        return [];
-      });
-      setModeSwitchPrompt(null);
-      modeSwitchArmedRef.current = false;
-      modeSwitchPromptRef.current = null;
-      if (hadQueue) {
-        showTransientToast(t("chat.mode.clearedQueueForMultitask"), {
-          tone: "warning",
-        });
-      }
-    }
-    if (prev === "multitask" && chatMode !== "multitask") {
-      clearAllParallel();
-    }
     if (prev === "agent" && chatMode !== "agent") {
       const wt = sessionWorktreeRef.current;
       if (wt) {
-        void invoke("cleanup_multitask_worktree", {
+        void invoke("cleanup_task_worktree", {
           path: wt.path,
           repoRoot: wt.repoRoot,
           branch: wt.branch,
@@ -353,7 +341,7 @@ export function useChatSession({
         sessionWorktreeRef.current = null;
       }
     }
-  }, [chatMode, clearAllParallel, showTransientToast, t]);
+  }, [chatMode]);
 
   const onChatModeChangeRef = useRef(onChatModeChange);
   onChatModeChangeRef.current = onChatModeChange;
@@ -364,6 +352,17 @@ export function useChatSession({
   const queueFailedIdRef = useRef<string | null>(null);
   const modeSwitchPromptRef = useRef(modeSwitchPrompt);
   modeSwitchPromptRef.current = modeSwitchPrompt;
+
+  useEffect(() => {
+    if (turnInFlight) return;
+    steeringQueueIdsRef.current.clear();
+    setQueuedFollowUps((prev) => {
+      if (!prev.some((item) => item.delivery === "steering")) return prev;
+      return prev.map((item) =>
+        item.delivery === "steering" ? { ...item, delivery: "queued" } : item,
+      );
+    });
+  }, [turnInFlight]);
 
   const dismissModeSwitch = useCallback(() => {
     const req = modeSwitchPromptRef.current;
@@ -449,32 +448,9 @@ export function useChatSession({
     setQueueKick((k) => k + 1);
   }, []);
 
-  /** 单线程：流式中入队；MultiTask：立即开独立 session 并行 */
+  /** 当前任务忙时入队；空闲时立即发送。 */
   const send = useCallback(
     async (opts?: SendOpts) => {
-      const mode = chatModeRef.current;
-      if (mode === "multitask") {
-        const text = (opts?.text ?? input).trim();
-        const pending = opts?.attachments ?? attachments;
-        if (!text && pending.length === 0) return;
-        if (sessionPendingInterrupts.length > 0) {
-          showTransientToast(t("chat.interrupt.pending"));
-          return;
-        }
-        if (sessionReadOnly || isCompacting) {
-          showTransientToast(
-            isCompacting
-              ? t("chat.compactInProgress")
-              : sessionEndReason === "compacted" || !sessionEndReason
-                ? t("chat.sessionCompactedReadOnly")
-                : t("chat.sessionEndedReadOnly"),
-            { tone: "warning" },
-          );
-          return;
-        }
-        await startParallelTask({ text, attachments: pending });
-        return;
-      }
       if (streaming || turnInFlightRef.current || sessionPendingInterrupts.length > 0) {
         const text = (opts?.text ?? input).trim();
         const pending = opts?.attachments ?? attachments;
@@ -528,7 +504,6 @@ export function useChatSession({
       isCompacting,
       sessionEndReason,
       sendImmediate,
-      startParallelTask,
       showTransientToast,
       t,
     ],
@@ -538,11 +513,11 @@ export function useChatSession({
     if (streaming || turnInFlight || isCompacting || sessionReadOnly) return;
     if (sessionPendingInterrupts.length > 0) return;
     if (modeSwitchPrompt) return;
-    if (chatModeRef.current === "multitask") return;
     if (queueDrainLockRef.current) return;
 
     const head = queuedFollowUps[0];
     if (!head) return;
+    if (head.delivery === "steering") return;
     if (queueFailedIdRef.current === head.id) return;
 
     queueDrainLockRef.current = true;
@@ -584,11 +559,11 @@ export function useChatSession({
     t,
   ]);
 
-  const removeQueuedFollowUp = useCallback((id: string) => {
+  const dropQueuedFollowUp = useCallback((id: string, revokePreview: boolean) => {
     if (queueFailedIdRef.current === id) queueFailedIdRef.current = null;
     setQueuedFollowUps((prev) => {
       const hit = prev.find((q) => q.id === id);
-      if (hit) {
+      if (hit && revokePreview) {
         for (const a of hit.attachments) {
           if (a.previewUrl) URL.revokeObjectURL(a.previewUrl);
         }
@@ -598,7 +573,13 @@ export function useChatSession({
     setQueueKick((k) => k + 1);
   }, []);
 
+  const removeQueuedFollowUp = useCallback((id: string) => {
+    if (steeringQueueIdsRef.current.has(id)) return;
+    dropQueuedFollowUp(id, true);
+  }, [dropQueuedFollowUp]);
+
   const updateQueuedFollowUpText = useCallback((id: string, text: string) => {
+    if (steeringQueueIdsRef.current.has(id)) return;
     if (queueFailedIdRef.current === id) queueFailedIdRef.current = null;
     setQueuedFollowUps((prev) =>
       prev.map((q) => (q.id === id ? { ...q, text } : q)),
@@ -607,6 +588,7 @@ export function useChatSession({
   }, []);
 
   const moveQueuedFollowUp = useCallback((id: string, dir: -1 | 1) => {
+    if (steeringQueueIdsRef.current.has(id)) return;
     if (queueFailedIdRef.current === id) queueFailedIdRef.current = null;
     setQueuedFollowUps((prev) => {
       const i = prev.findIndex((q) => q.id === id);
@@ -621,6 +603,97 @@ export function useChatSession({
     });
     setQueueKick((k) => k + 1);
   }, []);
+
+  const steerQueuedFollowUp = useCallback(async (id: string) => {
+    const item = queuedFollowUps.find((queued) => queued.id === id);
+    if (
+      !item ||
+      !sessionId ||
+      !currentTurnId ||
+      !turnInFlightRef.current ||
+      steeringQueueIdsRef.current.has(id)
+    ) return false;
+    steeringQueueIdsRef.current.add(id);
+    try {
+      const accepted = await invoke<boolean>("steer_chat", {
+        sessionId,
+        expectedTurnId: currentTurnId,
+        clientMessageId: id,
+        content: item.text,
+        attachments: item.attachments.map((a) => ({
+          name: a.name,
+          mime: a.mime,
+          kind: a.kind,
+          size: a.size,
+          dataBase64: a.dataBase64 ?? null,
+          localPath: a.localPath ?? null,
+        })),
+      });
+      if (!accepted) {
+        steeringQueueIdsRef.current.delete(id);
+        showTransientToast(t("chat.queue.steerUnavailable"), { tone: "warning" });
+        return false;
+      }
+      setQueuedFollowUps((prev) =>
+        prev.map((queued) =>
+          queued.id === id ? { ...queued, delivery: "steering" } : queued,
+        ),
+      );
+      return true;
+    } catch (error) {
+      steeringQueueIdsRef.current.delete(id);
+      showTransientToast(t("chat.queue.steerFailed", { error: String(error) }), {
+        tone: "error",
+      });
+      return false;
+    }
+  }, [currentTurnId, queuedFollowUps, sessionId, showTransientToast, t, turnInFlightRef]);
+
+  const openQueuedFollowUpInNewTask = useCallback(async (id: string) => {
+    const item = queuedFollowUps.find((queued) => queued.id === id);
+    if (!item) return false;
+    const started = await startParallelTask({
+      text: item.text,
+      attachments: item.attachments,
+      clearComposer: false,
+    });
+    if (!started) return false;
+    // 附件预览 URL 已转移给独立任务气泡，不能在这里 revoke。
+    dropQueuedFollowUp(id, false);
+    showTransientToast(t("chat.queue.openedInNewTask"), { tone: "success" });
+    return true;
+  }, [dropQueuedFollowUp, queuedFollowUps, showTransientToast, startParallelTask, t]);
+
+  const closeQueuedFollowUps = useCallback(() => {
+    if (queuedFollowUps.length === 0) return true;
+    if (steeringQueueIdsRef.current.size > 0) {
+      showTransientToast(t("chat.queue.steerPending"), { tone: "warning" });
+      return false;
+    }
+    if (input.trim() || attachments.length > 0) {
+      showTransientToast(t("chat.queue.closeNeedsEmptyComposer"), { tone: "warning" });
+      return false;
+    }
+    const restoredAttachments = queuedFollowUps.flatMap((item) => item.attachments);
+    if (restoredAttachments.length > MAX_ATTACHMENTS) {
+      showTransientToast(
+        t("chat.queue.closeTooManyAttachments", { max: String(MAX_ATTACHMENTS) }),
+        { tone: "warning" },
+      );
+      return false;
+    }
+    const restoredText = queuedFollowUps
+      .map((item) => item.text.trim())
+      .filter(Boolean)
+      .join("\n\n");
+    setInput(restoredText);
+    setAttachments(restoredAttachments);
+    setQueuedFollowUps([]);
+    queueFailedIdRef.current = null;
+    setQueueKick((k) => k + 1);
+    showTransientToast(t("chat.queue.closed"), { tone: "success" });
+    return true;
+  }, [attachments.length, input, queuedFollowUps, showTransientToast, t]);
 
   // ── Persist session ───────────────────────────────────────────────────────
   useEffect(() => {
@@ -894,15 +967,14 @@ export function useChatSession({
     modeSwitchArmedRef.current = false;
     const wt = sessionWorktreeRef.current;
     if (wt) {
-      void invoke("cleanup_multitask_worktree", {
+      void invoke("cleanup_task_worktree", {
         path: wt.path,
         repoRoot: wt.repoRoot,
         branch: wt.branch,
       }).catch(() => {});
       sessionWorktreeRef.current = null;
     }
-    clearAllParallel();
-  }, [activeAssistantIdRef, clearStreamBuffers, currentRunIdRef, setNav, clearAllParallel]);
+  }, [activeAssistantIdRef, clearStreamBuffers, currentRunIdRef, setNav]);
 
   /** 永久删除当前会话前：先取消流并丢弃本地监听，避免 ghost token。 */
   const prepareDeleteCurrentSession = useCallback(async () => {
@@ -1056,12 +1128,6 @@ export function useChatSession({
   }, [sessionId, streaming, streamPaused]);
 
   const stopStream = useCallback(async () => {
-    if (parallelRunning > 0) {
-      const active = parallelTasks.filter(
-        (t) => t.status === "running" || t.status === "waiting",
-      );
-      await Promise.all(active.map((t) => cancelParallelTask(t.id)));
-    }
     if (!streaming && !turnInFlightRef.current) {
       setSessionPendingInterrupts([]);
       return;
@@ -1133,9 +1199,6 @@ export function useChatSession({
   }, [
     sessionId,
     streaming,
-    parallelRunning,
-    parallelTasks,
-    cancelParallelTask,
     clearStreamBuffers,
     flushStreamTokens,
     flushToolDeltas,
@@ -1146,38 +1209,6 @@ export function useChatSession({
     pendingUsageRef,
     firstTokenRef,
     streamStartRef,
-  ]);
-
-  /** 长任务空闲巡检：无 token/tool 活动超阈值且有排队时，暂停当前回合以出队 */
-  const QUEUE_CHECKPOINT_IDLE_MS = 60_000;
-  useEffect(() => {
-    if (!turnInFlight) {
-      checkpointFiredForTurnRef.current = false;
-      return;
-    }
-    if (chatModeRef.current === "multitask") return;
-    const timer = window.setInterval(() => {
-      if (!turnInFlightRef.current) return;
-      if (checkpointFiredForTurnRef.current) return;
-      if (sessionPendingInterrupts.length > 0) return;
-      if (queuedFollowUps.length === 0) return;
-      if (queueDrainLockRef.current) return;
-      const last = lastStreamActivityAtRef.current;
-      if (!last || Date.now() - last < QUEUE_CHECKPOINT_IDLE_MS) return;
-      checkpointFiredForTurnRef.current = true;
-      showTransientToast(t("chat.queue.checkpointDrain"), { tone: "warning" });
-      void stopStream().then(() => {
-        setQueueKick((k) => k + 1);
-      });
-    }, 5_000);
-    return () => window.clearInterval(timer);
-  }, [
-    turnInFlight,
-    queuedFollowUps.length,
-    sessionPendingInterrupts.length,
-    showTransientToast,
-    t,
-    stopStream,
   ]);
 
   // ── Message operations ────────────────────────────────────────────────────
@@ -1566,12 +1597,12 @@ export function useChatSession({
   }, [sessionId, clearLocalChatSurface]);
 
   const confirmIfStreaming = useCallback(async () => {
-    if (!streaming && !turnInFlight && parallelRunning === 0) return true;
+    if (!streaming && !turnInFlight) return true;
     return confirm({
       title: t("chat.newSession"),
       message: t("chat.newSessionStreamingConfirm"),
     });
-  }, [streaming, turnInFlight, parallelRunning, t, confirm]);
+  }, [streaming, turnInFlight, t, confirm]);
 
   const startNewChat = useCallback(async () => {
     if (!(await confirmIfStreaming())) return;
@@ -1613,21 +1644,20 @@ export function useChatSession({
     modeSwitchPromptRef.current = null;
     turnInFlightRef.current = false;
     setTurnInFlight(false);
-    checkpointFiredForTurnRef.current = false;
+    steeringQueueIdsRef.current.clear();
     queueFailedIdRef.current = null;
     setStreaming(false);
     setStreamPaused(false);
     const wt = sessionWorktreeRef.current;
     if (wt) {
-      void invoke("cleanup_multitask_worktree", {
+      void invoke("cleanup_task_worktree", {
         path: wt.path,
         repoRoot: wt.repoRoot,
         branch: wt.branch,
       }).catch(() => {});
       sessionWorktreeRef.current = null;
     }
-    clearAllParallel();
-  }, [clearAllParallel]);
+  }, []);
 
   // ── Open session from file space ──────────────────────────────────────────
   const openSessionFromFilespace = useCallback(
@@ -1767,9 +1797,8 @@ export function useChatSession({
     attachments,
     queuedFollowUps,
     parallelTasks,
-    parallelRunning,
     modeSwitchPrompt,
-    streaming: streaming || parallelRunning > 0,
+    streaming,
     primaryStreaming: streaming,
     turnInFlight,
     streamPaused,
@@ -1805,6 +1834,9 @@ export function useChatSession({
     removeQueuedFollowUp,
     updateQueuedFollowUpText,
     moveQueuedFollowUp,
+    steerQueuedFollowUp,
+    openQueuedFollowUpInNewTask,
+    closeQueuedFollowUps,
     cancelParallelTask,
     clearSettledParallel,
     writeParallelSummary,

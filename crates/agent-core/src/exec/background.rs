@@ -116,6 +116,7 @@ async fn collect_background_events(
             | MultiTurnStreamItem::MemoryUpdate { .. }
             | MultiTurnStreamItem::ContextUsage(_)
             | MultiTurnStreamItem::RunStarted { .. }
+            | MultiTurnStreamItem::UserInputCommitted { .. }
             | MultiTurnStreamItem::Activity { .. }
             | MultiTurnStreamItem::RunFinished { .. } => {}
         }
@@ -210,6 +211,7 @@ mod tests {
             vec![TurnInput::UserInput {
                 content: "wait".into(),
                 image_data_urls: Vec::new(),
+                client_message_id: None,
             }],
             Some(Arc::clone(&control)),
             Some(pending_chat()),

@@ -1,4 +1,4 @@
-//! 聊天交互模式（Agent / Plan / Ask / MultiTask）的工具能力档。
+//! 聊天交互模式（Agent / Plan / Ask）的工具能力档。
 //!
 //! 枚举已下沉到 `types::interaction_mode`，本模块 re-export 并保留工具过滤逻辑。
 
@@ -207,15 +207,11 @@ mod tests {
         assert!(InteractionMode::Agent.system_guidance().contains("Agent"));
         assert!(InteractionMode::Plan.system_guidance().contains("Plan"));
         assert!(InteractionMode::Ask.system_guidance().contains("Ask"));
-        assert!(InteractionMode::Multitask
-            .system_guidance()
-            .contains("MultiTask"));
         // 中英并列，避免英文 UI 丢失指引
         for mode in [
             InteractionMode::Agent,
             InteractionMode::Plan,
             InteractionMode::Ask,
-            InteractionMode::Multitask,
         ] {
             let g = mode.system_guidance();
             assert!(

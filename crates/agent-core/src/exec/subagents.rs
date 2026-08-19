@@ -236,6 +236,7 @@ async fn run_turn(
         vec![TurnInput::UserInput {
             content: message,
             image_data_urls: Vec::new(),
+            client_message_id: None,
         }],
         Some(control),
         chat_override,

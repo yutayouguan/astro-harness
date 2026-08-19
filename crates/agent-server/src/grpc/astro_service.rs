@@ -20,7 +20,7 @@ use proto::{
     ContextUsageSegment, Empty, FileListRequest, FileListResponse, ImageEvent, ImageRequest,
     McpReconnectRequest, McpServerList, McpServerListRequest, MemoryQuery, MemoryResult,
     SessionEvent, SessionSnippet as ProtoSessionSnippet, SkillEvent, SkillInfo, SkillList,
-    SkillRequest, SubscribeSessionEventsRequest, UsageEvent,
+    SkillRequest, SteerChatRequest, SteerChatResponse, SubscribeSessionEventsRequest, UsageEvent,
 };
 use providers::PauseControl;
 use providers::ProviderConfig;
@@ -542,6 +542,11 @@ fn multi_turn_to_chat_event(item: MultiTurnStreamItem) -> Option<ChatEvent> {
                 proto::RunStartedEvent { thread_id, run_id },
             )),
         }),
+        MultiTurnStreamItem::UserInputCommitted { client_message_id } => Some(ChatEvent {
+            payload: Some(proto::chat_event::Payload::UserInputCommitted(
+                proto::UserInputCommittedEvent { client_message_id },
+            )),
+        }),
         MultiTurnStreamItem::Activity {
             message_id,
             activity_type,
@@ -673,6 +678,60 @@ impl AstroService for AstroServiceImpl {
             | ChatControlAction::ChatControlUnspecified => {}
         }
         Ok(Response::new(Empty {}))
+    }
+
+    /// 将用户补充输入排入当前活动的普通 turn。
+    ///
+    /// 与 [`Self::chat`] 的兼容 steering 分支不同，这个 RPC 不创建 Session、
+    /// 不启动新流，也不会向现有前端流发送额外的 `Done`。
+    async fn steer_chat(
+        &self,
+        request: Request<SteerChatRequest>,
+    ) -> Result<Response<SteerChatResponse>, Status> {
+        let req = request.into_inner();
+        let session_id = req.session_id.trim();
+        if session_id.is_empty() {
+            return Err(Status::invalid_argument("session_id 不能为空"));
+        }
+        if req.content.trim().is_empty() && req.images.is_empty() {
+            return Err(Status::invalid_argument("steering 内容不能为空"));
+        }
+
+        let session = {
+            let sessions = self.sessions.read().await;
+            sessions.get(session_id).cloned()
+        };
+        let Some(session) = session else {
+            return Ok(Response::new(SteerChatResponse {
+                accepted: false,
+                turn_id: String::new(),
+            }));
+        };
+        let image_data_urls = req
+            .images
+            .iter()
+            .filter_map(|image| {
+                let mime = image.mime.trim();
+                let data = image.data_base64.trim();
+                (!mime.is_empty() && !data.is_empty()).then(|| format!("data:{mime};base64,{data}"))
+            })
+            .collect::<Vec<_>>();
+        let expected_turn_id =
+            (!req.expected_turn_id.trim().is_empty()).then_some(req.expected_turn_id.trim());
+        let client_message_id =
+            (!req.client_message_id.trim().is_empty()).then_some(req.client_message_id.trim());
+        let turn_id = session
+            .steer_input_for_turn(
+                &req.content,
+                &image_data_urls,
+                expected_turn_id,
+                client_message_id,
+            )
+            .await;
+        Ok(Response::new(SteerChatResponse {
+            accepted: turn_id.is_some(),
+            turn_id: turn_id.unwrap_or_default(),
+        }))
     }
 
     /// 完成同回合 HITL 等待（解析活闸门 oneshot）；不注入 user 消息、不新开 run。
@@ -1007,6 +1066,7 @@ impl AstroService for AstroServiceImpl {
                 vec![TurnInput::UserInput {
                     content,
                     image_data_urls,
+                    client_message_id: None,
                 }],
                 pause,
                 Some(hitl_gate),

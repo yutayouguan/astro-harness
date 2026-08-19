@@ -37,6 +37,8 @@ pub enum TurnInput {
     UserInput {
         content: String,
         image_data_urls: Vec<String>,
+        /// Frontend queue item acknowledged once this input is persisted.
+        client_message_id: Option<String>,
     },
 }
 

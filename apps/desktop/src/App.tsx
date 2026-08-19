@@ -73,10 +73,7 @@ import { shouldShowThinkingControls } from "./lib/chat/shouldShowThinkingControl
 import {
   CHAT_MODES,
   loadChatMode,
-  loadParallelTasksEnabled,
-  resolveInteractionMode,
   saveChatMode,
-  saveParallelTasksEnabled,
   type ChatWorkMode,
 } from "./lib/chat/chatMode";
 import type { SlashAction } from "./lib/chat/composerCommands";
@@ -139,22 +136,10 @@ export default function App() {
 
   // ── App-level state ───────────────────────────────────────────────────────
   const [chatMode, setChatMode] = useState<ChatWorkMode>(() => loadChatMode());
-  const [parallelTasksEnabled, setParallelTasksEnabled] = useState(() =>
-    loadParallelTasksEnabled(),
-  );
   const onChatModeChange = useCallback((mode: ChatWorkMode) => {
     setChatMode(mode);
     saveChatMode(mode);
-    if (mode !== "agent") {
-      setParallelTasksEnabled(false);
-      saveParallelTasksEnabled(false);
-    }
   }, []);
-  const onParallelTasksEnabledChange = useCallback((enabled: boolean) => {
-    setParallelTasksEnabled(enabled);
-    saveParallelTasksEnabled(enabled);
-  }, []);
-  const interactionMode = resolveInteractionMode(chatMode, parallelTasksEnabled);
   const syncComposerFromModelPrefs = useCallback(
     (prefs: ModelRuntimePrefs, globals: ModelPickerGlobals) => {
       setThinkingLevel(modelPrefsToThinkingLevel(prefs, globals));
@@ -199,7 +184,7 @@ export default function App() {
   const chat = useChatSession({
     activeProvider,
     providers,
-    chatMode: interactionMode,
+    chatMode,
     onChatModeChange,
     chatDisplayPrefsRef,
     locale,
@@ -907,6 +892,9 @@ export default function App() {
                       onRemoveQueuedFollowUp={chat.removeQueuedFollowUp}
                       onUpdateQueuedFollowUpText={chat.updateQueuedFollowUpText}
                       onMoveQueuedFollowUp={chat.moveQueuedFollowUp}
+                      onSteerQueuedFollowUp={chat.steerQueuedFollowUp}
+                      onOpenQueuedFollowUpInNewTask={chat.openQueuedFollowUpInNewTask}
+                      onCloseQueuedFollowUps={chat.closeQueuedFollowUps}
                       modeSwitchPrompt={chat.modeSwitchPrompt}
                       onApproveModeSwitch={chat.approveModeSwitch}
                       onDismissModeSwitch={chat.dismissModeSwitch}
@@ -933,8 +921,6 @@ export default function App() {
                       }}
                       chatMode={chatMode}
                       onChatModeChange={onChatModeChange}
-                      parallelTasksEnabled={parallelTasksEnabled}
-                      onParallelTasksEnabledChange={onParallelTasksEnabledChange}
                       onOpenContext={() => {
                         setChatRightTab("context");
                         setChatRightOpen(true);

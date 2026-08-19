@@ -1222,6 +1222,7 @@ mod tests {
                 session.record_turn_input(crate::tasks::TurnInput::UserInput {
                     content: "input".to_string(),
                     image_data_urls: Vec::new(),
+                    client_message_id: None,
                 }),
             );
             drop(session.begin_user_turn());
@@ -1232,6 +1233,7 @@ mod tests {
             let input = vec![crate::tasks::TurnInput::UserInput {
                 content: "prepare".to_string(),
                 image_data_urls: Vec::new(),
+                client_message_id: None,
             }];
             drop(session.prepare_turn(&input));
             drop(session.capture_step_context());

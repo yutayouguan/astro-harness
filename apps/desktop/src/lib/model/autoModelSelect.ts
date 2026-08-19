@@ -110,7 +110,6 @@ export function classifyTask(input: {
   }
   if (
     input.chatMode === "agent" ||
-    input.chatMode === "multitask" ||
     /代码|实现|bug|修复|函数|组件|refactor|typescript|rust|python|写一?个|fix|debug|报错|编译/.test(
       text,
     )

@@ -177,18 +177,36 @@ impl RunTurnArgs {
     }
 }
 
-async fn record_pending_input(
+async fn record_and_ack_pending_input(
     session: &Arc<Session>,
-    pending_input: Vec<TurnInput>,
-) -> anyhow::Result<()> {
-    if pending_input.is_empty() {
-        return Ok(());
+    turn_context: &TurnContext,
+    tx: &mpsc::Sender<anyhow::Result<MultiTurnStreamItem>>,
+    close_when_empty: bool,
+) -> anyhow::Result<bool> {
+    let pending = if close_when_empty {
+        turn_context.take_pending_input_or_close()
+    } else {
+        turn_context.take_pending_input()
+    };
+    if pending.is_empty() {
+        return Ok(false);
     }
-    let sess = session.as_ref();
-    for input in pending_input {
-        sess.record_turn_input(input).await?;
+    for input in pending {
+        let client_message_id = match &input {
+            TurnInput::UserInput {
+                client_message_id, ..
+            } => client_message_id.clone(),
+        };
+        session.record_turn_input(input).await?;
+        if let Some(client_message_id) = client_message_id {
+            let _ = emit(
+                tx,
+                MultiTurnStreamItem::UserInputCommitted { client_message_id },
+            )
+            .await;
+        }
     }
-    Ok(())
+    Ok(true)
 }
 
 /// Codex-aligned regular turn loop shared by foreground and background adapters.
@@ -275,7 +293,7 @@ pub(crate) async fn run_turn(args: RunTurnArgs, cancellation_token: Cancellation
             return;
         }
 
-        if let Err(error) = record_pending_input(&session, turn_context.take_pending_input()).await
+        if let Err(error) = record_and_ack_pending_input(&session, &turn_context, &tx, false).await
         {
             finish_error(
                 &session,
@@ -707,9 +725,13 @@ pub(crate) async fn run_turn(args: RunTurnArgs, cancellation_token: Cancellation
         }
 
         if calls.is_empty() {
-            let pending_input = turn_context.take_pending_input_or_close();
-            if !pending_input.is_empty() {
-                if let Err(error) = record_pending_input(&session, pending_input).await {
+            match record_and_ack_pending_input(&session, &turn_context, &tx, true).await {
+                Ok(true) => {
+                    run_state.set_phase(RunPhase::StreamingLlm);
+                    continue;
+                }
+                Ok(false) => {}
+                Err(error) => {
                     finish_error(
                         &session,
                         &streamer,
@@ -721,8 +743,6 @@ pub(crate) async fn run_turn(args: RunTurnArgs, cancellation_token: Cancellation
                     .await;
                     return;
                 }
-                run_state.set_phase(RunPhase::StreamingLlm);
-                continue;
             }
             need_summary = false;
             break;
