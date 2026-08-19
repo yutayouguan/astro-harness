@@ -132,6 +132,11 @@ async fn dispatch_run(
     let audit = ctx.sandbox_audit_metadata("terminal");
 
     if parsed.background.unwrap_or(false) {
+        if ctx.managed_network.is_some() {
+            anyhow::bail!(
+                "managed network does not support background jobs; use foreground terminal instead"
+            );
+        }
         let cwd_display = parsed
             .cwd
             .as_deref()
@@ -182,22 +187,27 @@ async fn dispatch_run(
             return Err(error.into());
         }
     };
-    let child = sandboxed_command
+    sandboxed_command
         .arg("-c")
         .arg(command)
         .current_dir(&cwd)
         .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .inspect_err(|_error| {
-            audit.record(
-                sandbox::SandboxAuditKind::Denied,
-                Some(&policy),
-                "sh",
-                "spawn_failed",
-                Some(spawn_started.elapsed().as_millis() as u64),
-            );
-        })?;
+        .stderr(Stdio::piped());
+    if ctx.managed_network.is_some() {
+        let prepared = ctx
+            .prepare_managed_network_env(std::env::vars().collect())
+            .expect("managed network lease checked above");
+        sandboxed_command.env_clear().envs(prepared.env);
+    }
+    let child = sandboxed_command.spawn().inspect_err(|_error| {
+        audit.record(
+            sandbox::SandboxAuditKind::Denied,
+            Some(&policy),
+            "sh",
+            "spawn_failed",
+            Some(spawn_started.elapsed().as_millis() as u64),
+        );
+    })?;
     audit.record(
         sandbox::SandboxAuditKind::Spawned,
         Some(&policy),
@@ -221,6 +231,20 @@ async fn dispatch_run(
         String::from_utf8_lossy(&output.stdout).into_owned(),
         String::from_utf8_lossy(&output.stderr).into_owned(),
     );
+    if let Some(decision) = ctx.take_managed_network_denial() {
+        audit.record(
+            sandbox::SandboxAuditKind::Denied,
+            Some(&policy),
+            "sh",
+            "network_policy_denied",
+            Some(spawn_started.elapsed().as_millis() as u64),
+        );
+        return Err(sandbox::SandboxErr::Denied {
+            output: Box::new(output),
+            network_policy_decision: Some(decision),
+        }
+        .into());
+    }
     let sandbox_denied = sandbox::is_likely_sandbox_denied(policy.mode, &output);
     let body = output.render_text();
     let body = if let Some(bus) = &ctx.hook_bus {
@@ -266,6 +290,189 @@ async fn dispatch_run(
 mod tests {
     use super::*;
     use crate::context::{ImageGenTargets, ToolContext};
+    use std::collections::BTreeMap;
+    use std::sync::Arc;
+
+    fn test_ctx<'a>(
+        dir: &'a tempfile::TempDir,
+        memory: &'a std::sync::RwLock<memory::MemoryManager>,
+        sessions: &'a session::SessionStore,
+        targets: &'a ImageGenTargets,
+        creds: &'a crate::context::ModelCredentials,
+        session_id: &str,
+    ) -> ToolContext<'a> {
+        let workspace = dir.path().join("ws");
+        std::fs::create_dir_all(&workspace).unwrap();
+        ToolContext {
+            memory,
+            sessions,
+            memory_dir: dir.path().to_path_buf(),
+            workspace_dir: workspace,
+            project_root: None,
+            image_gen_targets: targets,
+            session_id: session_id.into(),
+            turn_id: None,
+            credentials: creds,
+            chat_targets: &[],
+            execution: None,
+            permission_profile: None,
+            skill_config_overrides: &[],
+            hook_bus: None,
+            workspace_write_grant: false,
+            sandbox_policy: None,
+            network_grant: crate::InProcessNetworkGrant::default(),
+            managed_network: None,
+        }
+    }
+
+    async fn enable_managed_network(ctx: &mut ToolContext<'_>) -> String {
+        let started = Arc::new(
+            network_proxy::StartedNetworkProxy::start(Arc::new(
+                network_proxy::NetworkProxyState::new(types::NetworkPolicy {
+                    enabled: true,
+                    domains: BTreeMap::from([(
+                        "allowed.example".into(),
+                        types::NetworkAccess::Allow,
+                    )]),
+                    ..Default::default()
+                })
+                .unwrap(),
+            ))
+            .await
+            .unwrap(),
+        );
+        let prepared = started.proxy().prepare(Default::default());
+        let endpoint = prepared.env["HTTPS_PROXY"].clone();
+        let policy = sandbox::SandboxPolicy::new(
+            types::SandboxMode::WorkspaceWrite,
+            ctx.project_or_workspace(),
+            Vec::new(),
+            false,
+        )
+        .unwrap()
+        .with_managed_network(prepared.sandbox_context);
+        ctx.sandbox_policy = Some(policy);
+        ctx.managed_network = Some(started);
+        endpoint
+    }
+
+    #[tokio::test]
+    async fn terminal_uses_managed_proxy_environment() {
+        let dir = tempfile::tempdir().unwrap();
+        let memory = memory::MemoryManager::new(dir.path().to_path_buf()).unwrap();
+        let sessions =
+            session::SessionStore::open_sessions_dir(&memory.base_dir.join("sessions")).unwrap();
+        let memory = std::sync::RwLock::new(memory);
+        let targets = ImageGenTargets::default();
+        let creds = crate::context::ModelCredentials::default();
+        let mut ctx = test_ctx(&dir, &memory, &sessions, &targets, &creds, "managed-env");
+        let endpoint = enable_managed_network(&mut ctx).await;
+
+        let output = dispatch(
+            &ctx,
+            &serde_json::json!({"command": "printf '%s' \"$HTTPS_PROXY\""}),
+        )
+        .await
+        .unwrap();
+
+        assert!(output.contains(&endpoint), "{output}");
+    }
+
+    #[tokio::test]
+    async fn terminal_managed_network_rejects_background_before_spawn() {
+        let dir = tempfile::tempdir().unwrap();
+        let memory = memory::MemoryManager::new(dir.path().to_path_buf()).unwrap();
+        let sessions =
+            session::SessionStore::open_sessions_dir(&memory.base_dir.join("sessions")).unwrap();
+        let memory = std::sync::RwLock::new(memory);
+        let targets = ImageGenTargets::default();
+        let creds = crate::context::ModelCredentials::default();
+        let mut ctx = test_ctx(
+            &dir,
+            &memory,
+            &sessions,
+            &targets,
+            &creds,
+            "managed-background",
+        );
+        enable_managed_network(&mut ctx).await;
+
+        let error = dispatch(
+            &ctx,
+            &serde_json::json!({"command": "sleep 30", "background": true}),
+        )
+        .await
+        .unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .contains("managed network does not support background jobs"),
+            "{error}"
+        );
+        let jobs = dispatch(&ctx, &serde_json::json!({"action": "list"}))
+            .await
+            .unwrap();
+        assert!(jobs.contains("当前会话没有后台任务"), "{jobs}");
+    }
+
+    #[tokio::test]
+    async fn terminal_managed_network_denial_is_typed() {
+        let dir = tempfile::tempdir().unwrap();
+        let memory = memory::MemoryManager::new(dir.path().to_path_buf()).unwrap();
+        let sessions =
+            session::SessionStore::open_sessions_dir(&memory.base_dir.join("sessions")).unwrap();
+        let memory = std::sync::RwLock::new(memory);
+        let targets = ImageGenTargets::default();
+        let creds = crate::context::ModelCredentials::default();
+        let mut ctx = test_ctx(&dir, &memory, &sessions, &targets, &creds, "managed-denial");
+        enable_managed_network(&mut ctx).await;
+        let script = r#"python3 - <<'PY'
+import os, socket
+endpoint = os.environ['HTTPS_PROXY'].removeprefix('http://')
+host, port = endpoint.rsplit(':', 1)
+sock = socket.create_connection((host, int(port)))
+sock.sendall(b'CONNECT 127.0.0.1:9 HTTP/1.1\r\nHost: 127.0.0.1:9\r\n\r\n')
+print(sock.recv(4096).decode())
+PY"#;
+
+        let error = dispatch(&ctx, &serde_json::json!({"command": script}))
+            .await
+            .unwrap_err();
+        let Some(sandbox::SandboxErr::Denied {
+            network_policy_decision: Some(decision),
+            ..
+        }) = error.downcast_ref::<sandbox::SandboxErr>()
+        else {
+            panic!("expected typed managed-network denial: {error}");
+        };
+        assert_eq!(decision.host.as_deref(), Some("127.0.0.1"));
+        assert_eq!(decision.port, Some(9));
+        assert_eq!(decision.decision, types::NetworkPolicyDecision::Deny);
+        assert_eq!(
+            decision.source,
+            types::NetworkDecisionSource::BaselinePolicy
+        );
+    }
+
+    #[tokio::test]
+    async fn terminal_without_managed_network_keeps_inherited_environment() {
+        let dir = tempfile::tempdir().unwrap();
+        let memory = memory::MemoryManager::new(dir.path().to_path_buf()).unwrap();
+        let sessions =
+            session::SessionStore::open_sessions_dir(&memory.base_dir.join("sessions")).unwrap();
+        let memory = std::sync::RwLock::new(memory);
+        let targets = ImageGenTargets::default();
+        let creds = crate::context::ModelCredentials::default();
+        let ctx = test_ctx(&dir, &memory, &sessions, &targets, &creds, "unmanaged-env");
+
+        let output = dispatch(
+            &ctx,
+            &serde_json::json!({"command": "printf '%s' \"${HOME:+present}\""}),
+        )
+        .await
+        .unwrap();
+        assert!(output.contains("present"), "{output}");
+    }
 
     #[cfg(target_os = "macos")]
     #[tokio::test]

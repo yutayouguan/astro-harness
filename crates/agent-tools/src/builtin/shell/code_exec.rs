@@ -171,6 +171,13 @@ pub async fn dispatch(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow
     let script = TempScript(path);
 
     let env = scrubbed_env(std::env::vars());
+    let env = if ctx.managed_network.is_some() {
+        ctx.prepare_managed_network_env(env)
+            .expect("managed network lease checked above")
+            .env
+    } else {
+        env
+    };
 
     let audit = ctx.sandbox_audit_metadata("code_exec");
     let policy = ctx.command_sandbox_policy().inspect_err(|_error| {
@@ -243,6 +250,20 @@ pub async fn dispatch(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow
         String::from_utf8_lossy(&output.stdout).into_owned(),
         String::from_utf8_lossy(&output.stderr).into_owned(),
     );
+    if let Some(decision) = ctx.take_managed_network_denial() {
+        audit.record(
+            sandbox::SandboxAuditKind::Denied,
+            Some(&policy),
+            program,
+            "network_policy_denied",
+            Some(spawn_started.elapsed().as_millis() as u64),
+        );
+        return Err(sandbox::SandboxErr::Denied {
+            output: Box::new(output),
+            network_policy_decision: Some(decision),
+        }
+        .into());
+    }
     if sandbox::is_likely_sandbox_denied(policy.mode, &output) {
         audit.record(
             sandbox::SandboxAuditKind::Denied,
@@ -268,6 +289,8 @@ pub async fn dispatch(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow
 mod tests {
     use super::*;
     use crate::context::{ImageGenTargets, ToolContext};
+    use std::collections::BTreeMap;
+    use std::sync::Arc;
 
     fn test_ctx<'a>(
         dir: &'a tempfile::TempDir,
@@ -298,6 +321,127 @@ mod tests {
             network_grant: crate::InProcessNetworkGrant::default(),
             managed_network: None,
         }
+    }
+
+    async fn enable_managed_network(ctx: &mut ToolContext<'_>) -> String {
+        let started = Arc::new(
+            network_proxy::StartedNetworkProxy::start(Arc::new(
+                network_proxy::NetworkProxyState::new(types::NetworkPolicy {
+                    enabled: true,
+                    domains: BTreeMap::from([(
+                        "allowed.example".into(),
+                        types::NetworkAccess::Allow,
+                    )]),
+                    ..Default::default()
+                })
+                .unwrap(),
+            ))
+            .await
+            .unwrap(),
+        );
+        let prepared = started.proxy().prepare(Default::default());
+        let endpoint = prepared.env["HTTPS_PROXY"].clone();
+        let policy = sandbox::SandboxPolicy::new(
+            types::SandboxMode::WorkspaceWrite,
+            ctx.project_or_workspace(),
+            Vec::new(),
+            false,
+        )
+        .unwrap()
+        .with_managed_network(prepared.sandbox_context);
+        ctx.sandbox_policy = Some(policy);
+        ctx.managed_network = Some(started);
+        endpoint
+    }
+
+    #[tokio::test]
+    async fn code_exec_adds_proxy_after_secret_scrub() {
+        let dir = tempfile::tempdir().unwrap();
+        let memory = memory::MemoryManager::new(dir.path().to_path_buf()).unwrap();
+        let sessions =
+            session::SessionStore::open_sessions_dir(&memory.base_dir.join("sessions")).unwrap();
+        let targets = ImageGenTargets::default();
+        let creds = crate::context::ModelCredentials::default();
+        let memory = std::sync::RwLock::new(memory);
+        let mut ctx = test_ctx(&dir, &memory, &sessions, &targets, &creds);
+        let endpoint = enable_managed_network(&mut ctx).await;
+
+        let output = dispatch(
+            &ctx,
+            &serde_json::json!({
+                "language": "python",
+                "code": "import os; print(os.environ.get('HTTPS_PROXY')); print('safe=' + ('present' if os.environ.get('PATH') else 'missing')); print('secret=' + os.environ.get('OPENAI_API_KEY', 'MISSING'))",
+            }),
+        )
+        .await
+        .unwrap();
+
+        assert!(output.contains(&endpoint), "{output}");
+        assert!(output.contains("safe=present"), "{output}");
+        assert!(output.contains("secret=MISSING"), "{output}");
+    }
+
+    #[tokio::test]
+    async fn code_exec_managed_network_denial_is_typed() {
+        let dir = tempfile::tempdir().unwrap();
+        let memory = memory::MemoryManager::new(dir.path().to_path_buf()).unwrap();
+        let sessions =
+            session::SessionStore::open_sessions_dir(&memory.base_dir.join("sessions")).unwrap();
+        let targets = ImageGenTargets::default();
+        let creds = crate::context::ModelCredentials::default();
+        let memory = std::sync::RwLock::new(memory);
+        let mut ctx = test_ctx(&dir, &memory, &sessions, &targets, &creds);
+        enable_managed_network(&mut ctx).await;
+        let code = r#"import os, socket
+endpoint = os.environ['HTTPS_PROXY'].removeprefix('http://')
+host, port = endpoint.rsplit(':', 1)
+sock = socket.create_connection((host, int(port)))
+sock.sendall(b'CONNECT 127.0.0.1:9 HTTP/1.1\r\nHost: 127.0.0.1:9\r\n\r\n')
+print(sock.recv(4096).decode())"#;
+
+        let error = dispatch(
+            &ctx,
+            &serde_json::json!({"language": "python", "code": code}),
+        )
+        .await
+        .unwrap_err();
+        let Some(sandbox::SandboxErr::Denied {
+            network_policy_decision: Some(decision),
+            ..
+        }) = error.downcast_ref::<sandbox::SandboxErr>()
+        else {
+            panic!("expected typed managed-network denial: {error}");
+        };
+        assert_eq!(decision.host.as_deref(), Some("127.0.0.1"));
+        assert_eq!(decision.port, Some(9));
+        assert_eq!(decision.decision, types::NetworkPolicyDecision::Deny);
+        assert_eq!(
+            decision.source,
+            types::NetworkDecisionSource::BaselinePolicy
+        );
+    }
+
+    #[tokio::test]
+    async fn code_exec_without_managed_network_keeps_proxy_marker_absent() {
+        let dir = tempfile::tempdir().unwrap();
+        let memory = memory::MemoryManager::new(dir.path().to_path_buf()).unwrap();
+        let sessions =
+            session::SessionStore::open_sessions_dir(&memory.base_dir.join("sessions")).unwrap();
+        let targets = ImageGenTargets::default();
+        let creds = crate::context::ModelCredentials::default();
+        let memory = std::sync::RwLock::new(memory);
+        let ctx = test_ctx(&dir, &memory, &sessions, &targets, &creds);
+
+        let output = dispatch(
+            &ctx,
+            &serde_json::json!({
+                "language": "python",
+                "code": "import os; print(os.environ.get('ASTRO_NETWORK_PROXY_ACTIVE', 'MISSING'))",
+            }),
+        )
+        .await
+        .unwrap();
+        assert!(output.contains("MISSING"), "{output}");
     }
 
     #[test]

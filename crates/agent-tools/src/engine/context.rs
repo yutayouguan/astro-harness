@@ -132,6 +132,32 @@ impl<'a> ToolContext<'a> {
         }
     }
 
+    /// Prepare the managed network environment for a child process.
+    ///
+    /// Returns `None` when no managed proxy is active for this attempt, meaning
+    /// the caller should not alter the child environment for network proxying.
+    pub fn prepare_managed_network_env(
+        &self,
+        env: std::collections::HashMap<String, String>,
+    ) -> Option<network_proxy::PreparedManagedNetwork> {
+        self.managed_network
+            .as_ref()
+            .map(|started| started.proxy().prepare(env))
+    }
+
+    /// Drain the managed proxy's blocked-request queue and return the latest denial.
+    ///
+    /// The queue is drained per attempt; `.pop()` reports the most recent denial
+    /// deterministically when a process made several blocked requests.
+    pub fn take_managed_network_denial(&self) -> Option<types::NetworkPolicyDecisionPayload> {
+        self.managed_network
+            .as_ref()?
+            .proxy()
+            .take_blocked_requests()
+            .pop()
+            .map(|blocked| blocked.to_policy_decision_payload())
+    }
+
     /// 当前调用的有效权限 profile id。
     pub fn active_permission_profile_id(&self) -> String {
         self.permission_profile.clone().unwrap_or_else(|| {

@@ -559,7 +559,7 @@ Before staging, inspect `git diff --name-only`; every staged path must appear in
 - Modify: `crates/agent-tools/src/builtin/shell/terminal.rs`
 - Modify: `crates/agent-tools/src/builtin/shell/code_exec.rs`
 
-- [ ] **Step 1: Write failing terminal and code-exec behavior tests**
+- [x] **Step 1: Write failing terminal and code-exec behavior tests**
 
 Add inline async tests using a real `StartedNetworkProxy` and a custom `ToolContext`:
 
@@ -571,7 +571,7 @@ Add inline async tests using a real `StartedNetworkProxy` and a custom `ToolCont
 
 For the typed denial test, invoke a portable client from the child using Python's socket library to send a raw CONNECT request to `$HTTPS_PROXY`; this avoids depending on `curl`. Strip the `http://` prefix in the test script and read the 403 before exit.
 
-- [ ] **Step 2: Run focused tests and verify RED**
+- [x] **Step 2: Run focused tests and verify RED**
 
 ```bash
 cargo test -p tools terminal_uses_managed_proxy_environment
@@ -581,7 +581,7 @@ cargo test -p tools code_exec_adds_proxy_after_secret_scrub
 
 Expected: environment assertions fail; denial is still ordinary output; background currently starts.
 
-- [ ] **Step 3: Add `ToolContext` helpers with one denial conversion point**
+- [x] **Step 3: Add `ToolContext` helpers with one denial conversion point**
 
 Implement helpers:
 
@@ -609,7 +609,7 @@ pub fn take_managed_network_denial(
 
 The queue is drained per attempt; choosing `.pop()` reports the latest denial deterministically when a process made several blocked requests.
 
-- [ ] **Step 4: Wire foreground terminal and reject background before spawn**
+- [x] **Step 4: Wire foreground terminal and reject background before spawn**
 
 Immediately after resolving cwd, reject `background=true` when `ctx.managed_network.is_some()`. For foreground execution, collect `std::env::vars()` into a `HashMap`, pass it through `prepare_managed_network_env`, and apply the complete returned environment with `env_clear().envs(env)` before spawn. This makes stale inherited proxy variables impossible.
 
@@ -625,15 +625,15 @@ return Err(sandbox::SandboxErr::Denied {
 
 Do not classify 502/upstream failures as policy denials and do not request filesystem escalation.
 
-- [ ] **Step 5: Wire `code_exec` after the existing secret scrub**
+- [x] **Step 5: Wire `code_exec` after the existing secret scrub**
 
 Preserve the current `safe_child_env()`/scrub result. Only after that map is finalized, call `prepare_managed_network_env`; pass the returned complete map to the existing `env_clear().envs(...)` path. After process exit, perform the same blocked-request check before filesystem classification. Never copy missing parent keys back into the scrubbed map.
 
-- [ ] **Step 6: Prove the orchestrator skips filesystem retry for network denial**
+- [x] **Step 6: Prove the orchestrator skips filesystem retry for network denial**
 
 Add/extend the existing `tools_exec.rs` test around `OrchestratorRunResult::SandboxDenied` so a denial containing `network_policy_decision: Some(...)` finalizes immediately and the test executor records exactly one attempt. Assert `review_sandbox_denial` is not invoked and no unrestricted filesystem policy is constructed.
 
-- [ ] **Step 7: Run tool/core regressions and commit Task 4**
+- [x] **Step 7: Run tool/core regressions and commit Task 4**
 
 ```bash
 cargo fmt --all
