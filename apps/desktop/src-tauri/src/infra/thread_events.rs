@@ -114,7 +114,8 @@ impl ThreadEventsBridge {
         true
     }
 
-    pub async fn bind_turn(&self, thread_id: &str, turn_id: &str) {
+    /// Bind a turn observed from snapshot/live delivery without rewriting an existing epoch.
+    pub async fn bind_observed_turn(&self, thread_id: &str, turn_id: &str) {
         if turn_id.is_empty() {
             return;
         }
@@ -129,7 +130,14 @@ impl ThreadEventsBridge {
         }
     }
 
-    pub async fn bind_turn_if_current(&self, thread_id: &str, activation: u64, turn_id: &str) {
+    /// Bind the authoritative SubmitTurn response, which may steer an existing turn id into
+    /// the current activation epoch.
+    pub async fn bind_submitted_turn_if_current(
+        &self,
+        thread_id: &str,
+        activation: u64,
+        turn_id: &str,
+    ) {
         if turn_id.is_empty() {
             return;
         }
@@ -139,8 +147,7 @@ impl ThreadEventsBridge {
                 .turn_epochs
                 .entry(thread_id.into())
                 .or_default()
-                .entry(turn_id.into())
-                .or_insert(activation);
+                .insert(turn_id.into(), activation);
         }
     }
 
@@ -371,7 +378,7 @@ async fn subscribe_connection(
                 emit_snapshot(app, &snapshot);
                 let reconciled = reconcile_snapshot(&snapshot);
                 if let Some(turn_id) = reconciled.active_turn_id.as_deref() {
-                    bridge.bind_turn(&thread_id, turn_id).await;
+                    bridge.bind_observed_turn(&thread_id, turn_id).await;
                 }
                 if !reconciled.keep_active {
                     let terminal_turn_id =
@@ -406,7 +413,9 @@ async fn process_live_event(
     let thread_id = event.thread_id.clone();
     let turn_id = event.turn_id.clone();
     if let Some(proto::thread_event::Payload::TurnStarted(started)) = event.payload.as_ref() {
-        bridge.bind_turn(&thread_id, &started.turn_id).await;
+        bridge
+            .bind_observed_turn(&thread_id, &started.turn_id)
+            .await;
     }
     if let Some(proto::thread_event::Payload::Extension(extension)) = event.payload.as_ref() {
         if let Some(session_event) = extension_to_session_event(&thread_id, extension.clone()) {
@@ -1093,7 +1102,7 @@ mod tests {
         let bridge = ThreadEventsBridge::new();
         let activation = bridge.activate("session-1").await;
         bridge
-            .bind_turn_if_current("session-1", activation, "turn-1")
+            .bind_submitted_turn_if_current("session-1", activation, "turn-1")
             .await;
         assert!(bridge.accept_terminal("session-1", "turn-1").await);
         assert!(!bridge.accept_terminal("session-1", "turn-1").await);
@@ -1116,22 +1125,75 @@ mod tests {
         let bridge = ThreadEventsBridge::new();
         let old = bridge.activate("session-1").await;
         bridge
-            .bind_turn_if_current("session-1", old, "turn-old")
+            .bind_submitted_turn_if_current("session-1", old, "turn-old")
             .await;
         let current = bridge.activate("session-1").await;
 
         // A reconnect snapshot can observe the old active turn again. Rebinding it must not
         // promote that turn into the new activation epoch.
-        bridge.bind_turn("session-1", "turn-old").await;
+        bridge.bind_observed_turn("session-1", "turn-old").await;
 
         assert!(!bridge.accept_terminal("session-1", "turn-old").await);
         assert!(bridge.is_active("session-1").await);
 
         bridge
-            .bind_turn_if_current("session-1", current, "turn-current")
+            .bind_submitted_turn_if_current("session-1", current, "turn-current")
             .await;
         assert!(bridge.accept_terminal("session-1", "turn-current").await);
         assert!(!bridge.is_active("session-1").await);
+    }
+
+    #[tokio::test]
+    async fn authoritative_steered_submit_rebinds_same_turn_to_current_activation() {
+        let bridge = ThreadEventsBridge::new();
+        let old = bridge.activate("session-1").await;
+        bridge
+            .bind_submitted_turn_if_current("session-1", old, "turn-1")
+            .await;
+
+        let current = bridge.activate("session-1").await;
+        bridge
+            .bind_submitted_turn_if_current("session-1", current, "turn-1")
+            .await;
+
+        assert!(bridge.accept_terminal("session-1", "turn-1").await);
+        assert!(!bridge.is_active("session-1").await);
+    }
+
+    #[tokio::test]
+    async fn start_chat_registers_new_epoch_before_blocked_ready_wait() {
+        let bridge = ThreadEventsBridge::new();
+        let old = bridge.activate("session-1").await;
+        bridge.mark_recovering();
+
+        // The invocation is registered synchronously even though its RPC must wait for recovery.
+        let current = bridge.activate("session-1").await;
+        assert!(
+            tokio::time::timeout(std::time::Duration::from_millis(10), bridge.wait_ready())
+                .await
+                .is_err()
+        );
+
+        let old_is_current = bridge.deactivate_if_current("session-1", old).await;
+        assert!(submission_failure_events(old_is_current, "old failure").is_empty());
+        assert!(bridge.is_active("session-1").await);
+
+        assert!(bridge.deactivate_if_current("session-1", current).await);
+        assert!(!bridge.is_active("session-1").await);
+
+        // Keep the command integration honest: activation must happen before the task can block
+        // on readiness, otherwise the state assertions above do not describe `start_chat`.
+        let source = include_str!("../commands/chat.rs");
+        let activation = source
+            .find("let activation = bridge.activate(sid2.clone()).await;")
+            .expect("start_chat activation marker");
+        let spawn = source
+            .find("tauri::async_runtime::spawn(async move {")
+            .expect("start_chat spawn marker");
+        let wait_ready = source
+            .find("bridge.wait_ready().await;")
+            .expect("start_chat readiness marker");
+        assert!(activation < spawn && spawn < wait_ready);
     }
 
     #[tokio::test]

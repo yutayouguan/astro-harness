@@ -577,13 +577,13 @@ pub async fn start_chat(app: AppHandle, request: StartChatRequest) -> Result<Str
         .state::<std::sync::Arc<ThreadEventsBridge>>()
         .inner()
         .clone();
-    let app2 = app.clone();
     let sid2 = sid.clone();
+    let activation = bridge.activate(sid2.clone()).await;
+    let app2 = app.clone();
     let event_name2 = event_name.clone();
 
     tauri::async_runtime::spawn(async move {
         bridge.wait_ready().await;
-        let activation = bridge.activate(sid2.clone()).await;
         let result = async {
             let endpoint = endpoint_url(&grpc_address);
             let mut client = AstroServiceClient::connect(endpoint)
@@ -601,7 +601,7 @@ pub async fn start_chat(app: AppHandle, request: StartChatRequest) -> Result<Str
                 .into_inner();
             let turn_id = accepted_turn_id(response)?;
             bridge
-                .bind_turn_if_current(&sid2, activation, &turn_id)
+                .bind_submitted_turn_if_current(&sid2, activation, &turn_id)
                 .await;
             Ok::<(), String>(())
         }
