@@ -11,7 +11,10 @@ use subagents::{
     AgentTreeSnapshotV2, InterruptAgentV2Request, InterruptAgentV2Result, Limits,
     MessageAgentV2Request, MessageAgentV2Result, SpawnAgentV2Request,
 };
-use tools::{AgentThreadDispatch, SpawnAgentDispatchRequest};
+use tools::{
+    AgentThreadDispatch, FollowupAgentDispatchRequest, ParentRuntimeMaterial,
+    SpawnAgentDispatchRequest,
+};
 
 use super::{
     DefaultAgentThreadDispatch, DefaultDesktopAgentThreadControl, DesktopAgentThreadControl,
@@ -26,6 +29,14 @@ pub enum ScriptedTurn {
     Pending,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CapturedProviderCall {
+    pub messages: Vec<(String, String)>,
+    pub tool_names: Vec<String>,
+    pub model: String,
+    pub additional_params: serde_json::Value,
+}
+
 pub struct LifecycleTestApp {
     memory_dir: PathBuf,
     root_thread_id: String,
@@ -33,8 +44,87 @@ pub struct LifecycleTestApp {
     runtime_manager: Arc<AgentRuntimeManager>,
     runtime_requests: Arc<RuntimeRequestRegistry>,
     chat_override: ChatOverride,
+    provider_calls: Arc<Mutex<Vec<CapturedProviderCall>>>,
     hook_bus: Arc<hooks::PluginHookBus>,
     hook_events: Arc<Mutex<Vec<String>>>,
+}
+
+fn scripted_chat(
+    script: Vec<ScriptedTurn>,
+) -> (ChatOverride, Arc<Mutex<Vec<CapturedProviderCall>>>) {
+    let script = Arc::new(Mutex::new(VecDeque::from(script)));
+    let calls = Arc::new(Mutex::new(Vec::new()));
+    let observed = Arc::clone(&calls);
+    let chat: ChatOverride = Arc::new(
+        move |messages: Vec<providers::Message>,
+              tools: Vec<serde_json::Value>,
+              config: providers::ProviderConfig| {
+            observed.lock().unwrap().push(CapturedProviderCall {
+                messages: messages
+                    .iter()
+                    .map(|message| {
+                        (
+                            message.role().as_str().to_string(),
+                            message.text_content().to_string(),
+                        )
+                    })
+                    .collect(),
+                tool_names: tools
+                    .iter()
+                    .filter_map(|tool| {
+                        tool.get("function")
+                            .and_then(|function| function.get("name"))
+                            .or_else(|| tool.get("name"))
+                            .and_then(serde_json::Value::as_str)
+                            .map(str::to_string)
+                    })
+                    .collect(),
+                model: config.model.clone(),
+                additional_params: config.additional_params.clone(),
+            });
+            let next = script
+                .lock()
+                .expect("script mutex")
+                .pop_front()
+                .expect("unexpected provider turn");
+            Box::pin(async move {
+                match next {
+                    ScriptedTurn::Complete(reply) => Ok(Box::pin(stream::iter(vec![
+                        Ok(StreamChunk::Text(reply)),
+                        Ok(StreamChunk::Done {
+                            finish_reason: "stop".into(),
+                        }),
+                    ]))
+                        as CompletionStream),
+                    ScriptedTurn::Pending => Ok(Box::pin(stream::pending::<
+                        anyhow::Result<StreamChunk>,
+                    >()) as CompletionStream),
+                }
+            })
+        },
+    );
+    (chat, calls)
+}
+
+fn lifecycle_hooks() -> (Arc<hooks::PluginHookBus>, Arc<Mutex<Vec<String>>>) {
+    let hook_bus = Arc::new(hooks::PluginHookBus::new());
+    let hook_events = Arc::new(Mutex::new(Vec::new()));
+    for (name, label) in [
+        (hooks::SUBAGENT_START, "start"),
+        (hooks::SUBAGENT_STOP, "stop"),
+    ] {
+        let observed = Arc::clone(&hook_events);
+        hook_bus.register(name, move |payload| {
+            let path = payload
+                .detail
+                .split_whitespace()
+                .find_map(|part| part.strip_prefix("path="))
+                .unwrap_or("<missing>");
+            observed.lock().unwrap().push(format!("{label}:{path}"));
+            hooks::HookOutcome::Continue
+        });
+    }
+    (hook_bus, hook_events)
 }
 
 impl LifecycleTestApp {
@@ -57,45 +147,8 @@ impl LifecycleTestApp {
                 max_running: 4,
             },
         )?;
-        let script = Arc::new(Mutex::new(VecDeque::from(script)));
-        let chat_override: ChatOverride = Arc::new(move |_messages, _tools, _config| {
-            let next = script
-                .lock()
-                .expect("script mutex")
-                .pop_front()
-                .expect("unexpected provider turn");
-            Box::pin(async move {
-                match next {
-                    ScriptedTurn::Complete(reply) => Ok(Box::pin(stream::iter(vec![
-                        Ok(StreamChunk::Text(reply)),
-                        Ok(StreamChunk::Done {
-                            finish_reason: "stop".into(),
-                        }),
-                    ]))
-                        as CompletionStream),
-                    ScriptedTurn::Pending => Ok(Box::pin(stream::pending::<
-                        anyhow::Result<StreamChunk>,
-                    >()) as CompletionStream),
-                }
-            })
-        });
-        let hook_bus = Arc::new(hooks::PluginHookBus::new());
-        let hook_events = Arc::new(Mutex::new(Vec::new()));
-        for (name, label) in [
-            (hooks::SUBAGENT_START, "start"),
-            (hooks::SUBAGENT_STOP, "stop"),
-        ] {
-            let observed = Arc::clone(&hook_events);
-            hook_bus.register(name, move |payload| {
-                let path = payload
-                    .detail
-                    .split_whitespace()
-                    .find_map(|part| part.strip_prefix("path="))
-                    .unwrap_or("<missing>");
-                observed.lock().unwrap().push(format!("{label}:{path}"));
-                hooks::HookOutcome::Continue
-            });
-        }
+        let (chat_override, provider_calls) = scripted_chat(script);
+        let (hook_bus, hook_events) = lifecycle_hooks();
         Ok(Self {
             memory_dir,
             root_thread_id,
@@ -103,6 +156,7 @@ impl LifecycleTestApp {
             runtime_manager: Arc::new(AgentRuntimeManager::default()),
             runtime_requests: Arc::new(RuntimeRequestRegistry::default()),
             chat_override,
+            provider_calls,
             hook_bus,
             hook_events,
         })
@@ -148,20 +202,7 @@ impl LifecycleTestApp {
                 reasoning_effort: None,
                 fork_turns: Some("none".into()),
             },
-            memory_dir: self.memory_dir.clone(),
-            parent_agent_id: home::DEFAULT_AGENT_ID.into(),
-            parent_model: Some("openai:test".into()),
-            parent_sandbox_mode: "workspace-write".into(),
-            inherited_skill_config: Vec::new(),
-            chat_targets: vec![types::ChatTarget {
-                provider_id: "test".into(),
-                backend_id: "openai".into(),
-                model: "test".into(),
-                api_key: "ephemeral-test-key".into(),
-                base_url: "http://127.0.0.1.invalid".into(),
-            }],
-            project_root: None,
-            hook_bus: Some(Arc::clone(&self.hook_bus)),
+            runtime: self.parent_runtime_material(),
         };
         Ok(
             AgentThreadDispatch::spawn_agent(&self.dispatch_at(parent)?, request)
@@ -190,14 +231,36 @@ impl LifecycleTestApp {
         target: &str,
         message: &str,
     ) -> anyhow::Result<MessageAgentV2Result> {
-        AgentThreadDispatch::followup_task(
+        AgentThreadDispatch::followup_task_with_runtime(
             &self.dispatch_at("/root")?,
-            MessageAgentV2Request {
-                target: target.into(),
-                message: message.into(),
+            FollowupAgentDispatchRequest {
+                request: MessageAgentV2Request {
+                    target: target.into(),
+                    message: message.into(),
+                },
+                runtime: Some(self.parent_runtime_material()),
             },
         )
         .await
+    }
+
+    fn parent_runtime_material(&self) -> ParentRuntimeMaterial {
+        ParentRuntimeMaterial {
+            memory_dir: self.memory_dir.clone(),
+            parent_agent_id: home::DEFAULT_AGENT_ID.into(),
+            parent_model: Some("openai:test".into()),
+            parent_sandbox_mode: "workspace-write".into(),
+            inherited_skill_config: Vec::new(),
+            chat_targets: vec![types::ChatTarget {
+                provider_id: "test".into(),
+                backend_id: "openai".into(),
+                model: "test".into(),
+                api_key: "ephemeral-test-key".into(),
+                base_url: "http://127.0.0.1.invalid".into(),
+            }],
+            project_root: None,
+            hook_bus: Some(Arc::clone(&self.hook_bus)),
+        }
     }
 
     pub async fn interrupt(&self, target: &str) -> anyhow::Result<InterruptAgentV2Result> {
@@ -216,7 +279,10 @@ impl LifecycleTestApp {
             .await
     }
 
-    pub async fn restart(&mut self) -> anyhow::Result<()> {
+    pub async fn restart_with(
+        &mut self,
+        script: Vec<ScriptedTurn>,
+    ) -> anyhow::Result<Arc<Mutex<Vec<String>>>> {
         anyhow::ensure!(
             self.runtime_manager.active_count() == 0,
             "cannot restart test app with an active runtime"
@@ -234,12 +300,16 @@ impl LifecycleTestApp {
             },
         )?;
         self.runtime_manager = Arc::new(AgentRuntimeManager::default());
+        self.runtime_requests = Arc::new(RuntimeRequestRegistry::default());
+        (self.chat_override, self.provider_calls) = scripted_chat(script);
+        let previous_hook_events = Arc::clone(&self.hook_events);
+        (self.hook_bus, self.hook_events) = lifecycle_hooks();
         let sessions = session::SessionStore::open_sessions_dir(&self.memory_dir.join("sessions"))?;
         anyhow::ensure!(
             sessions.get_session(&self.root_thread_id)?.is_some(),
             "root session disappeared during restart"
         );
-        Ok(())
+        Ok(previous_hook_events)
     }
 
     pub async fn wait_for_status(
@@ -327,5 +397,9 @@ impl LifecycleTestApp {
 
     pub fn hook_events(&self) -> Vec<String> {
         self.hook_events.lock().unwrap().clone()
+    }
+
+    pub fn provider_calls(&self) -> Vec<CapturedProviderCall> {
+        self.provider_calls.lock().unwrap().clone()
     }
 }

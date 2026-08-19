@@ -13,7 +13,6 @@ async fn nested_agent_tree_survives_interrupt_restart_resume_and_recursive_close
             ScriptedTurn::Complete("research complete".into()),
             ScriptedTurn::Complete("citations complete".into()),
             ScriptedTurn::Pending,
-            ScriptedTurn::Complete("resumed after restart".into()),
         ],
     )
     .unwrap();
@@ -62,8 +61,37 @@ async fn nested_agent_tree_survives_interrupt_restart_resume_and_recursive_close
         .iter()
         .any(|text| text.contains("queued context")));
     assert!(before_restart.iter().any(|text| text.contains("continue")));
+    let pre_restart_calls = app.provider_calls();
+    let interrupted_call = pre_restart_calls.last().unwrap();
+    let interrupted_prompt = interrupted_call
+        .messages
+        .iter()
+        .filter(|(role, _)| role != "system")
+        .map(|(_, content)| content.as_str())
+        .collect::<Vec<_>>()
+        .join("\n");
+    assert_eq!(
+        interrupted_prompt.matches("queued context").count(),
+        1,
+        "{:?}",
+        interrupted_call.messages
+    );
+    assert_eq!(
+        interrupted_prompt.matches("continue").count(),
+        1,
+        "{:?}",
+        interrupted_call.messages
+    );
+    assert!(!interrupted_call.tool_names.is_empty());
+    assert!(interrupted_call
+        .messages
+        .windows(2)
+        .all(|pair| pair[0].0 != pair[1].0));
 
-    app.restart().await.unwrap();
+    let old_process_hooks = app
+        .restart_with(vec![ScriptedTurn::Complete("resumed after restart".into())])
+        .await
+        .unwrap();
     assert_eq!(
         app.status("/root/research/citations").unwrap().kind(),
         AgentStatusKind::Interrupted
@@ -88,6 +116,22 @@ async fn nested_agent_tree_survives_interrupt_restart_resume_and_recursive_close
     assert!(history
         .iter()
         .any(|text| text.contains("resumed after restart")));
+    let recovered_calls = app.provider_calls();
+    let recovered_call = recovered_calls.last().unwrap();
+    let recovered_prompt = recovered_call
+        .messages
+        .iter()
+        .filter(|(role, _)| role != "system")
+        .map(|(_, content)| content.as_str())
+        .collect::<Vec<_>>()
+        .join("\n");
+    for marker in ["queued context", "continue", "resume after restart"] {
+        assert_eq!(recovered_prompt.matches(marker).count(), 1, "{marker}");
+    }
+    assert!(recovered_call
+        .messages
+        .windows(2)
+        .all(|pair| pair[0].0 != pair[1].0));
 
     let first = app.close_subtree("/root/research").await.unwrap();
     let second = app.close_subtree("/root/research").await.unwrap();
@@ -106,13 +150,17 @@ async fn nested_agent_tree_survives_interrupt_restart_resume_and_recursive_close
     let session_ids = app.session_ids().unwrap();
     assert_eq!(session_ids.len(), 3, "session ids: {session_ids:?}");
     assert_eq!(
-        app.hook_events(),
+        old_process_hooks.lock().unwrap().clone(),
         vec![
             "start:/root/research".to_string(),
             "start:/root/research/citations".to_string(),
-            "stop:/root/research/citations".to_string(),
-            "stop:/root/research".to_string(),
         ]
+    );
+    // A new process observes stop only for runtime material it recovered in
+    // that process. The old process hooks are never retained or called.
+    assert_eq!(
+        app.hook_events(),
+        vec!["stop:/root/research/citations".to_string()]
     );
 
     tokio::time::timeout(Duration::from_millis(100), async {

@@ -10,7 +10,7 @@ use server::{
     AgentThreadChangedPayload, MemoryUpdatedPayload, SessionEventHub, SessionEventMsg,
     SubscribeFilter,
 };
-use subagents::{AgentPath, AgentStatusV2, AgentTreeSnapshotV2, RunnerEvent};
+use subagents::{AgentPath, AgentTreeSnapshotV2, RunnerEvent};
 use tempfile::tempdir;
 use tonic::Request;
 
@@ -252,19 +252,17 @@ async fn reconnect_replay_and_targeted_resync_converge_to_the_durable_tree() {
             )
             .unwrap();
     }
-    tokio::time::sleep(Duration::from_millis(500)).await;
+    // Observe every disconnected-period event on the uninterrupted stream so
+    // the replay-gap assertion cannot pass merely because the watcher lagged.
+    for _ in 0..72 {
+        let (_, changed) = next_projection(&mut uninterrupted, "live overflow").await;
+        apply(&mut uninterrupted_projection, &changed);
+    }
     let mut overflow = subscribe(&service, root, &initial_reset.stream_id, stale_cursor).await;
     let (overflow_reset, reset) = next_resync(&mut overflow, "history overflow").await;
     assert_eq!(overflow_reset.stream_id, initial_reset.stream_id);
     assert_eq!(reset.reason, "replay_gap");
     let refreshed = control.snapshot().unwrap();
-    uninterrupted_projection.insert(
-        "/root/research/citations".into(),
-        serde_json::to_string(&AgentStatusV2::Completed {
-            last_message: "overflow result 35".into(),
-        })
-        .unwrap(),
-    );
     assert_eq!(
         projection_from_snapshot(&refreshed),
         uninterrupted_projection
@@ -281,6 +279,8 @@ async fn reconnect_replay_and_targeted_resync_converge_to_the_durable_tree() {
     .await;
     let other = "other-root";
     attach_root(&service, other).await;
+    let mut other_stream = subscribe(&service, other, "", 0).await;
+    let _ = next_resync(&mut other_stream, "other root initial cursor").await;
     let other_control = AgentControlDirectory::global()
         .get_at(other, &graph)
         .expect("other root control");
@@ -289,6 +289,9 @@ async fn reconnect_replay_and_targeted_resync_converge_to_the_durable_tree() {
         .unwrap()
         .commit()
         .unwrap();
+    let (_, observed_other) = next_projection(&mut other_stream, "other root projection").await;
+    assert_eq!(observed_other.root_thread_id, other);
+    assert_eq!(observed_other.canonical_path, "/root/must_not_leak");
     assert!(
         tokio::time::timeout(Duration::from_millis(200), filtered.next())
             .await
@@ -334,12 +337,21 @@ async fn reconnect_replay_and_targeted_resync_converge_to_the_durable_tree() {
 #[tokio::test]
 async fn root_filter_rejects_other_root_memory_events() {
     let hub = SessionEventHub::new(8);
+    let stream_id = hub.stream_id();
     let mut receiver = hub.subscribe(
         SubscribeFilter {
             session_id: Some("root-a".into()),
             agent_id: Some("default".into()),
         },
-        &hub.stream_id(),
+        &stream_id,
+        0,
+    );
+    let mut other_receiver = hub.subscribe(
+        SubscribeFilter {
+            session_id: Some("root-b".into()),
+            agent_id: Some("default".into()),
+        },
+        &stream_id,
         0,
     );
     hub.publish(SessionEventMsg {
@@ -377,6 +389,12 @@ async fn root_filter_rejects_other_root_memory_events() {
         }),
         resync_required: None,
     });
+    for _ in 0..2 {
+        tokio::time::timeout(Duration::from_secs(1), other_receiver.recv())
+            .await
+            .expect("other-root event entered the hub")
+            .expect("other-root receiver stayed open");
+    }
     assert!(
         tokio::time::timeout(Duration::from_millis(100), receiver.recv())
             .await
