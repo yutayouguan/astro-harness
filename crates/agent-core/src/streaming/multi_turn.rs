@@ -31,6 +31,7 @@ use super::tools_exec::{
 };
 use super::types::{MultiTurnStream, MultiTurnStreamItem, StreamedAssistantContent};
 use crate::control::hitl::HitlGate;
+use crate::runtime::turn_context::QueuedTurnInput;
 use crate::runtime::{Session, TurnContext};
 use crate::tasks::{RegularTask, TurnInput};
 
@@ -179,13 +180,13 @@ impl RunTurnArgs {
 
 async fn record_pending_input(
     session: &Arc<Session>,
-    pending_input: Vec<TurnInput>,
+    pending_input: Vec<QueuedTurnInput>,
 ) -> anyhow::Result<()> {
     if pending_input.is_empty() {
         return Ok(());
     }
     let sess = session.as_ref();
-    sess.record_turn_inputs(pending_input).await
+    sess.record_queued_turn_inputs(pending_input).await
 }
 
 /// Codex-aligned regular turn loop shared by foreground and background adapters.
@@ -275,19 +276,23 @@ pub(crate) async fn run_turn(args: RunTurnArgs, cancellation_token: Cancellation
         }
 
         if has_sampled && !defer_pending_input_after_stop {
-            if let Err(error) =
-                record_pending_input(&session, turn_context.take_pending_input()).await
-            {
-                finish_error(
-                    &session,
-                    &streamer,
-                    &tx,
-                    error.to_string(),
-                    saw_usage.then_some(total_usage),
-                    &run_id,
-                )
-                .await;
-                return;
+            let pending_input = turn_context.take_pending_input();
+            if !pending_input.is_empty() {
+                if let Err(error) = record_pending_input(&session, pending_input).await {
+                    finish_error(
+                        &session,
+                        &streamer,
+                        &tx,
+                        error.to_string(),
+                        saw_usage.then_some(total_usage),
+                        &run_id,
+                    )
+                    .await;
+                    return;
+                }
+                verify_attempt = 0;
+                thinking_only_retries = 0;
+                defer_pending_input_after_stop = false;
             }
         }
 
@@ -571,11 +576,11 @@ pub(crate) async fn run_turn(args: RunTurnArgs, cancellation_token: Cancellation
 
         // `Stop` hook
         if calls.is_empty() {
-            let verify_outcome = if verify_attempt < MAX_VERIFY_ATTEMPTS {
+            let verify_outcome = {
                 let agent = session.as_ref();
                 let sid = agent.session_id().to_string();
                 let turn_id = agent.current_turn_id().await;
-                Some(agent.fire_hook(
+                agent.fire_hook(
                     ::hooks::STOP,
                     ::hooks::HookPayload {
                         session_id: sid,
@@ -585,54 +590,54 @@ pub(crate) async fn run_turn(args: RunTurnArgs, cancellation_token: Cancellation
                         detail: format!("attempt={}", verify_attempt + 1),
                         ..Default::default()
                     },
-                ))
-            } else {
-                None
+                )
             };
-            if let Some(::hooks::HookOutcome::KeepGoing(prompt)) = verify_outcome {
-                verify_attempt += 1;
-                let agent = session.as_ref();
-                let details = types::message::merge_google_thought_signature(
-                    Some(timeline.reasoning_details_snapshot()),
-                    thought_signature.as_deref(),
-                );
-                if let Err(err) = agent
-                    .record_assistant_with_calls(
-                        &full_response,
-                        &[],
-                        (!full_reasoning.is_empty()).then_some(full_reasoning.as_str()),
-                        details,
-                    )
-                    .await
-                {
-                    finish_error(
-                        &session,
-                        &streamer,
-                        &tx,
-                        err.to_string(),
-                        saw_usage.then_some(total_usage),
-                        &run_id,
-                    )
-                    .await;
-                    return;
+            if verify_attempt < MAX_VERIFY_ATTEMPTS {
+                if let ::hooks::HookOutcome::KeepGoing(prompt) = verify_outcome {
+                    verify_attempt += 1;
+                    let agent = session.as_ref();
+                    let details = types::message::merge_google_thought_signature(
+                        Some(timeline.reasoning_details_snapshot()),
+                        thought_signature.as_deref(),
+                    );
+                    if let Err(err) = agent
+                        .record_assistant_with_calls(
+                            &full_response,
+                            &[],
+                            (!full_reasoning.is_empty()).then_some(full_reasoning.as_str()),
+                            details,
+                        )
+                        .await
+                    {
+                        finish_error(
+                            &session,
+                            &streamer,
+                            &tx,
+                            err.to_string(),
+                            saw_usage.then_some(total_usage),
+                            &run_id,
+                        )
+                        .await;
+                        return;
+                    }
+                    if let Err(err) = agent
+                        .record_user_message(&format!("[astro:hook-context]\n{prompt}"))
+                        .await
+                    {
+                        finish_error(
+                            &session,
+                            &streamer,
+                            &tx,
+                            err.to_string(),
+                            saw_usage.then_some(total_usage),
+                            &run_id,
+                        )
+                        .await;
+                        return;
+                    }
+                    defer_pending_input_after_stop = true;
+                    continue;
                 }
-                if let Err(err) = agent
-                    .record_user_message(&format!("[astro:hook-context]\n{prompt}"))
-                    .await
-                {
-                    finish_error(
-                        &session,
-                        &streamer,
-                        &tx,
-                        err.to_string(),
-                        saw_usage.then_some(total_usage),
-                        &run_id,
-                    )
-                    .await;
-                    return;
-                }
-                defer_pending_input_after_stop = true;
-                continue;
             }
         }
 
@@ -728,6 +733,9 @@ pub(crate) async fn run_turn(args: RunTurnArgs, cancellation_token: Cancellation
                     .await;
                     return;
                 }
+                verify_attempt = 0;
+                thinking_only_retries = 0;
+                defer_pending_input_after_stop = false;
                 run_state.set_phase(RunPhase::StreamingLlm);
                 continue;
             }

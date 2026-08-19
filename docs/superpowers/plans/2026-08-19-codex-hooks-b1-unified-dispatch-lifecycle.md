@@ -723,11 +723,11 @@ Expected: the first test reports zero Stop calls and the text-only KeepGoing tes
 Replace the Stop gate with:
 
 ```rust
-let verify_outcome = if verify_attempt < MAX_VERIFY_ATTEMPTS {
+let verify_outcome = {
     let agent = session.as_ref();
     let sid = agent.session_id().to_string();
     let turn_id = agent.current_turn_id().await;
-    Some(agent.fire_hook(
+    agent.fire_hook(
         ::hooks::STOP,
         ::hooks::HookPayload {
             session_id: sid,
@@ -737,11 +737,10 @@ let verify_outcome = if verify_attempt < MAX_VERIFY_ATTEMPTS {
             detail: format!("attempt={}", verify_attempt + 1),
             ..Default::default()
         },
-    ))
-} else {
-    None
+    )
 };
-if let Some(::hooks::HookOutcome::KeepGoing(prompt)) = verify_outcome {
+if verify_attempt < MAX_VERIFY_ATTEMPTS {
+    if let ::hooks::HookOutcome::KeepGoing(prompt) = verify_outcome {
     verify_attempt += 1;
     let agent = session.as_ref();
     let details = types::message::merge_google_thought_signature(
@@ -783,11 +782,16 @@ if let Some(::hooks::HookOutcome::KeepGoing(prompt)) = verify_outcome {
         .await;
         return;
     }
+    defer_pending_input_after_stop = true;
     continue;
+    }
 }
 ```
 
-Keep `MAX_VERIFY_ATTEMPTS = 2`. Do not remove `turn_wrote_disk`; it remains unrelated runtime state.
+Keep `MAX_VERIFY_ATTEMPTS = 2`: it limits accepted `KeepGoing` continuations, never Stop
+dispatch. A terminal candidate after the quota still fires Stop with `stop_hook_active=true`,
+then ignores `KeepGoing` and closes normally. Do not remove `turn_wrote_disk`; it remains
+unrelated runtime state.
 
 - [x] **Step 4: Run Stop and streaming tests**
 
@@ -823,6 +827,13 @@ its retry must consume an already queued steer before its next sampling request.
 `stop_keep_going_defers_queued_steer_across_reasoning_only_bridge_retry` verifies the
 Stop bridge keeps the steer deferred through a reasoning-only retry, then consumes it
 only after a normal bridge response is persisted.
+
+Queued steer admission stores `TurnInput` and its `UserPromptSubmit` InjectContext in one
+FIFO TurnContext entry. Only successful pending-input persistence moves those contexts into
+the session injection slot, so a Stop bridge cannot consume a follow-up's context. Contexts
+from multiple queued inputs append in FIFO order. Successfully consuming queued external
+input begins a new response chain: reset its Stop continuation quota and deferral state, while
+the Stop bridge itself never performs that reset.
 
 ```bash
 cargo test -p agent stop_keep_going_with_queued_steer_preserves_role_order -- --exact

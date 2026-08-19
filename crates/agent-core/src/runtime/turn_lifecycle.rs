@@ -7,6 +7,7 @@ use std::sync::Arc;
 
 use crate::tasks::{TaskKind, TurnInput};
 
+use super::turn_context::QueuedTurnInput;
 use super::{looks_like_user_correction, Session, StepContext, TurnContext, TurnResult};
 
 fn coalesce_turn_inputs<I>(inputs: I) -> Option<TurnInput>
@@ -310,14 +311,32 @@ impl Session {
             content: user_message.to_string(),
             image_data_urls: image_data_urls.to_vec(),
         };
-        if let Some(context) = context {
-            let mut state = self.state.lock().await;
-            Self::append_inject_context(&mut state.pending_inject_context, context);
-            reservation.commit(input);
-        } else {
-            reservation.commit(input);
-        }
+        reservation.commit(input, context);
         Ok(Some(turn_id))
+    }
+
+    pub(crate) async fn record_queued_turn_inputs(
+        &self,
+        queued_inputs: Vec<QueuedTurnInput>,
+    ) -> anyhow::Result<()> {
+        if queued_inputs.is_empty() {
+            return Ok(());
+        }
+        let mut contexts = Vec::new();
+        let inputs = queued_inputs.into_iter().map(|queued| {
+            if let Some(context) = queued.inject_context {
+                contexts.push(context);
+            }
+            queued.input
+        });
+        self.record_turn_inputs(inputs).await?;
+        if !contexts.is_empty() {
+            let mut state = self.state.lock().await;
+            for context in contexts {
+                Self::append_inject_context(&mut state.pending_inject_context, context);
+            }
+        }
+        Ok(())
     }
 
     pub(crate) async fn record_turn_inputs<I>(&self, inputs: I) -> anyhow::Result<()>

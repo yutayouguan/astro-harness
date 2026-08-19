@@ -1169,16 +1169,16 @@ async fn stop_keep_going_retries_capped_at_two() {
     let events = log.lock().unwrap().clone();
     assert_eq!(
         stop_flags.lock().unwrap().as_slice(),
-        [Some(false), Some(true)],
-        "Stop must mark only the second continuation as active"
+        [Some(false), Some(true), Some(true)],
+        "Stop must dispatch every terminal candidate while retaining the active continuation state"
     );
     let stop_count = events
         .iter()
         .filter(|e| e.as_str() == ::hooks::STOP)
         .count();
     assert_eq!(
-        stop_count, 2,
-        "Stop attempts must be capped at MAX_VERIFY_ATTEMPTS=2, events={events:?}"
+        stop_count, 3,
+        "Stop must dispatch every terminal candidate, even after its KeepGoing quota is exhausted, events={events:?}"
     );
     let api_request_count = events
         .iter()
@@ -1276,37 +1276,49 @@ async fn stop_keep_going_with_queued_steer_preserves_role_order() {
         .register(::hooks::USER_PROMPT_SUBMIT, move |input| {
             if input.prompt.as_deref() == Some("follow up") {
                 prompt_hits.fetch_add(1, Ordering::SeqCst);
+                ::hooks::HookOutcome::InjectContext("STEER_CONTEXT".into())
+            } else {
+                ::hooks::HookOutcome::Continue
             }
-            ::hooks::HookOutcome::Continue
         });
 
     let stop_calls = Arc::new(AtomicUsize::new(0));
+    let stop_flags = Arc::new(std::sync::Mutex::new(Vec::new()));
     let stop_entered = Arc::new(Notify::new());
     let stop_release = Arc::new((std::sync::Mutex::new(false), std::sync::Condvar::new()));
     let calls = Arc::clone(&stop_calls);
+    let flags = Arc::clone(&stop_flags);
     let entered = Arc::clone(&stop_entered);
     let release = Arc::clone(&stop_release);
-    session.hook_bus().register(::hooks::STOP, move |_| {
-        if calls.fetch_add(1, Ordering::SeqCst) == 0 {
+    session.hook_bus().register(::hooks::STOP, move |input| {
+        let call = calls.fetch_add(1, Ordering::SeqCst);
+        flags.lock().unwrap().push(input.stop_hook_active);
+        if call == 0 {
             entered.notify_one();
             let (released, ready) = &*release;
             let mut released = released.lock().unwrap();
             while !*released {
                 released = ready.wait(released).unwrap();
             }
-            ::hooks::HookOutcome::KeepGoing("review the draft".into())
-        } else {
-            ::hooks::HookOutcome::Continue
+        }
+        match call {
+            0 => ::hooks::HookOutcome::KeepGoing("review the draft".into()),
+            2 | 3 | 4 => ::hooks::HookOutcome::KeepGoing("review the follow up".into()),
+            _ => ::hooks::HookOutcome::Continue,
         }
     });
 
     let provider_calls = Arc::new(AtomicUsize::new(0));
     let bridge_was_responded_to_first = Arc::new(std::sync::atomic::AtomicBool::new(false));
     let follow_up_was_seen_after_bridge = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let bridge_did_not_see_steer_context = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let follow_up_saw_steer_context_once = Arc::new(std::sync::atomic::AtomicBool::new(false));
     let chat_fn: ChatOverride = {
         let provider_calls = Arc::clone(&provider_calls);
         let bridge_was_responded_to_first = Arc::clone(&bridge_was_responded_to_first);
         let follow_up_was_seen_after_bridge = Arc::clone(&follow_up_was_seen_after_bridge);
+        let bridge_did_not_see_steer_context = Arc::clone(&bridge_did_not_see_steer_context);
+        let follow_up_saw_steer_context_once = Arc::clone(&follow_up_saw_steer_context_once);
         Arc::new(move |messages, _tools, _config| {
             let call = provider_calls.fetch_add(1, Ordering::SeqCst);
             let texts: Vec<&str> = messages
@@ -1321,6 +1333,10 @@ async fn stop_keep_going_with_queued_steer_preserves_role_order() {
                         && !texts.iter().any(|text| *text == "follow up"),
                     Ordering::SeqCst,
                 );
+                bridge_did_not_see_steer_context.store(
+                    !texts.iter().any(|text| text.contains("STEER_CONTEXT")),
+                    Ordering::SeqCst,
+                );
             } else if call == 2 {
                 let bridge = texts
                     .iter()
@@ -1330,12 +1346,21 @@ async fn stop_keep_going_with_queued_steer_preserves_role_order() {
                     matches!((bridge, follow_up), (Some(bridge), Some(follow_up)) if bridge < follow_up),
                     Ordering::SeqCst,
                 );
+                follow_up_saw_steer_context_once.store(
+                    texts
+                        .iter()
+                        .filter(|text| text.contains("STEER_CONTEXT"))
+                        .count()
+                        == 1,
+                    Ordering::SeqCst,
+                );
             }
             let text = match call {
                 0 => "draft one",
                 1 => "bridge response",
                 2 => "follow up response",
-                _ => "unexpected response",
+                3 => "follow up review",
+                _ => "final answer",
             };
             Box::pin(async move {
                 Ok(Box::pin(futures::stream::iter(vec![
@@ -1390,9 +1415,16 @@ async fn stop_keep_going_with_queued_steer_preserves_role_order() {
     .expect("stream completes after Stop continuation and queued steer");
 
     assert_eq!(prompt_submit_hits.load(Ordering::SeqCst), 1);
-    assert_eq!(provider_calls.load(Ordering::SeqCst), 3);
+    assert_eq!(provider_calls.load(Ordering::SeqCst), 5);
+    assert_eq!(
+        stop_flags.lock().unwrap().as_slice(),
+        [Some(false), Some(true), Some(false), Some(true), Some(true)],
+        "follow-up must begin an independent Stop continuation chain"
+    );
     assert!(bridge_was_responded_to_first.load(Ordering::SeqCst));
     assert!(follow_up_was_seen_after_bridge.load(Ordering::SeqCst));
+    assert!(bridge_did_not_see_steer_context.load(Ordering::SeqCst));
+    assert!(follow_up_saw_steer_context_once.load(Ordering::SeqCst));
 
     let history = session.clone_history().await;
     assert!(
@@ -1417,6 +1449,15 @@ async fn stop_keep_going_with_queued_steer_preserves_role_order() {
             .count(),
         1
     );
+    let bridge_users: Vec<&types::message::Message> = history
+        .iter()
+        .filter(|message| {
+            message
+                .content_str()
+                .starts_with("[astro:hook-context]\nreview")
+        })
+        .collect();
+    assert_eq!(bridge_users.len(), 3);
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]

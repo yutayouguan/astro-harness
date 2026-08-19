@@ -11,9 +11,15 @@ use tokio::sync::Notify;
 
 use crate::tasks::TurnInput;
 
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) struct QueuedTurnInput {
+    pub(crate) input: TurnInput,
+    pub(crate) inject_context: Option<String>,
+}
+
 #[derive(Debug, Default)]
 struct TurnInputState {
-    pending: Vec<TurnInput>,
+    pending: Vec<QueuedTurnInput>,
     accepting: bool,
     in_flight_admissions: usize,
 }
@@ -99,7 +105,7 @@ impl TurnContext {
         })
     }
 
-    pub(crate) fn take_pending_input(&self) -> Vec<TurnInput> {
+    pub(crate) fn take_pending_input(&self) -> Vec<QueuedTurnInput> {
         let mut state = self
             .input_state
             .lock()
@@ -108,7 +114,7 @@ impl TurnContext {
     }
 
     /// Atomically take queued input, or close steering if the queue is empty.
-    pub(crate) async fn take_pending_input_or_close(&self) -> Vec<TurnInput> {
+    pub(crate) async fn take_pending_input_or_close(&self) -> Vec<QueuedTurnInput> {
         loop {
             let notified = self.input_notify.notified();
             {
@@ -130,11 +136,14 @@ impl TurnContext {
 }
 
 impl TurnInputReservation {
-    pub(crate) fn commit(mut self, input: TurnInput) {
-        self.finish(Some(input));
+    pub(crate) fn commit(mut self, input: TurnInput, inject_context: Option<String>) {
+        self.finish(Some(QueuedTurnInput {
+            input,
+            inject_context,
+        }));
     }
 
-    fn finish(&mut self, input: Option<TurnInput>) {
+    fn finish(&mut self, input: Option<QueuedTurnInput>) {
         if self.finished {
             return;
         }
@@ -186,8 +195,15 @@ mod tests {
         turn_context
             .reserve_input()
             .expect("initial reservation")
-            .commit(input("first"));
-        assert_eq!(turn_context.take_pending_input(), vec![input("first")]);
+            .commit(input("first"), None);
+        assert_eq!(
+            turn_context
+                .take_pending_input()
+                .into_iter()
+                .map(|queued| queued.input)
+                .collect::<Vec<_>>(),
+            vec![input("first")]
+        );
         assert!(turn_context.take_pending_input_or_close().await.is_empty());
         assert!(turn_context.reserve_input().is_none());
     }
@@ -209,9 +225,16 @@ mod tests {
             value = &mut close => panic!("terminal close completed early: {value:?}"),
             _ = tokio::task::yield_now() => {}
         }
-        reservation.commit(input("follow up"));
+        reservation.commit(input("follow up"), None);
 
-        assert_eq!(close.await, vec![input("follow up")]);
+        assert_eq!(
+            close
+                .await
+                .into_iter()
+                .map(|queued| queued.input)
+                .collect::<Vec<_>>(),
+            vec![input("follow up")]
+        );
     }
 
     #[tokio::test]
