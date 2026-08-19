@@ -11,6 +11,7 @@ import {
 import { elapsedSecSince } from "../../lib/chat/elapsedSec";
 import { normalizeContextUsageEvent } from "../../lib/chat/contextUsage";
 import { saveContextUsageForSession } from "../../lib/chat/chatSessionStore";
+import { reconcileAssistantText } from "../../lib/chat/streamReconcile";
 import {
   parseModeSwitchResult,
   type ChatInteractionMode,
@@ -467,6 +468,23 @@ export function useSend(deps: UseSendDeps) {
           if (payload.type === "token" && payload.content) {
             touchActivity();
             enqueueStreamToken(assistantId, payload.content);
+          } else if (payload.type === "text_reconcile") {
+            if (streamRafRef.current != null) {
+              cancelAnimationFrame(streamRafRef.current);
+            }
+            flushStreamTokens();
+            const canonical = payload.content ?? "";
+            setMessages((prev) =>
+              prev.map((message) =>
+                message.id === assistantId
+                  ? {
+                      ...message,
+                      content: reconcileAssistantText(message.content, canonical),
+                    }
+                  : message,
+              ),
+            );
+            touchActivity();
           } else if (payload.type === "reasoning" && payload.content) {
             touchActivity();
             enqueueStreamReasoning(assistantId, payload.content);

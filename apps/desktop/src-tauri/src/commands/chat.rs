@@ -55,6 +55,9 @@ pub enum ChatStreamEvent {
     Token {
         content: String,
     },
+    TextReconcile {
+        content: String,
+    },
     Reasoning {
         content: String,
     },

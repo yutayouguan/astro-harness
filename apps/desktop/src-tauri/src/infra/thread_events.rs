@@ -31,7 +31,7 @@ struct ActiveState {
     awaiting_submissions: HashMap<String, HashSet<u64>>,
     deferred_terminals: HashMap<String, HashMap<String, DeferredTerminal>>,
     delivered_agent_text: HashMap<String, HashMap<String, String>>,
-    delivered_errors: HashMap<String, HashMap<String, HashSet<String>>>,
+    pending_terminal_errors: HashMap<String, HashMap<String, String>>,
     next_activation: u64,
 }
 
@@ -170,14 +170,24 @@ impl ThreadEventsBridge {
         }
         let mut state = self.active_threads.write().await;
         let is_current = state.activations.get(thread_id).copied() == Some(activation);
+        let was_pending = state
+            .awaiting_submissions
+            .get(thread_id)
+            .is_some_and(|pending| pending.contains(&activation));
         Self::remove_pending_submission(&mut state, thread_id, activation);
+        if !was_pending {
+            Self::remove_deferred_activation(&mut state, thread_id, activation);
+            return Vec::new();
+        }
         if !is_current {
-            state
-                .turn_epochs
-                .entry(thread_id.into())
-                .or_default()
-                .entry(turn_id.into())
-                .or_insert(activation);
+            if state.threads.contains(thread_id) {
+                state
+                    .turn_epochs
+                    .entry(thread_id.into())
+                    .or_default()
+                    .entry(turn_id.into())
+                    .or_insert(activation);
+            }
             Self::remove_deferred_activation(&mut state, thread_id, activation);
             return Vec::new();
         }
@@ -233,12 +243,10 @@ impl ThreadEventsBridge {
                     .push_str(content),
                 ChatStreamEvent::Error { message } => {
                     state
-                        .delivered_errors
+                        .pending_terminal_errors
                         .entry(thread_id.into())
                         .or_default()
-                        .entry(turn_id.into())
-                        .or_default()
-                        .insert(message.clone());
+                        .insert(turn_id.into(), message.clone());
                 }
                 _ => {}
             }
@@ -270,24 +278,52 @@ impl ThreadEventsBridge {
                         if !missing.is_empty() {
                             recovered.push(ChatStreamEvent::Token { content: missing });
                         }
-                    }
-                }
-                ChatStreamEvent::Error { message } => {
-                    let first_delivery = state
-                        .delivered_errors
-                        .entry(thread_id.into())
-                        .or_default()
-                        .entry(turn_id.into())
-                        .or_default()
-                        .insert(message.clone());
-                    if first_delivery {
-                        recovered.push(ChatStreamEvent::Error { message });
+                    } else {
+                        *delivered = content.clone();
+                        recovered.push(ChatStreamEvent::TextReconcile { content });
                     }
                 }
                 other => recovered.push(other),
             }
         }
         recovered
+    }
+
+    async fn dedup_terminal_projection(
+        &self,
+        thread_id: &str,
+        turn_id: &str,
+        events: Vec<ChatStreamEvent>,
+    ) -> Vec<ChatStreamEvent> {
+        let mut state = self.active_threads.write().await;
+        let pending = state
+            .pending_terminal_errors
+            .get_mut(thread_id)
+            .and_then(|errors| errors.remove(turn_id));
+        if state
+            .pending_terminal_errors
+            .get(thread_id)
+            .is_some_and(HashMap::is_empty)
+        {
+            state.pending_terminal_errors.remove(thread_id);
+        }
+        let mut suppressed = false;
+        events
+            .into_iter()
+            .filter(|event| {
+                if suppressed {
+                    return true;
+                }
+                let ChatStreamEvent::Error { message } = event else {
+                    return true;
+                };
+                if pending.as_deref() == Some(message.as_str()) {
+                    suppressed = true;
+                    return false;
+                }
+                true
+            })
+            .collect()
     }
 
     #[cfg(test)]
@@ -370,7 +406,7 @@ impl ThreadEventsBridge {
         state.awaiting_submissions.remove(thread_id);
         state.deferred_terminals.remove(thread_id);
         state.delivered_agent_text.remove(thread_id);
-        state.delivered_errors.remove(thread_id);
+        state.pending_terminal_errors.remove(thread_id);
     }
 
     fn remove_turn_epoch(state: &mut ActiveState, thread_id: &str, activation: u64) {
@@ -596,18 +632,26 @@ async fn subscribe_connection(
                 if let Some(turn_id) = reconciled.active_turn_id.as_deref() {
                     bridge.bind_observed_turn(&thread_id, turn_id).await;
                 }
-                if !reconciled.keep_active {
-                    let terminal_turn_id =
-                        reconciled.terminal_turn_id.as_deref().unwrap_or_default();
+                let projection_turn_id = reconciled
+                    .active_turn_id
+                    .as_deref()
+                    .or(reconciled.terminal_turn_id.as_deref())
+                    .unwrap_or_default();
+                let recovered = bridge
+                    .recover_snapshot_projection(
+                        &thread_id,
+                        projection_turn_id,
+                        reconciled.terminal,
+                    )
+                    .await;
+                if reconciled.keep_active {
+                    emit_chat_events(app, &thread_id, recovered);
+                } else {
                     let recovered = bridge
-                        .recover_snapshot_projection(
-                            &thread_id,
-                            terminal_turn_id,
-                            reconciled.terminal,
-                        )
+                        .dedup_terminal_projection(&thread_id, projection_turn_id, recovered)
                         .await;
                     let terminal = bridge
-                        .accept_terminal(&thread_id, terminal_turn_id, recovered)
+                        .accept_terminal(&thread_id, projection_turn_id, recovered)
                         .await;
                     emit_chat_events(app, &thread_id, terminal);
                 }
@@ -656,6 +700,9 @@ async fn process_live_event(
     );
     let events = map_thread_event(event);
     let events = if terminal {
+        let events = bridge
+            .dedup_terminal_projection(&thread_id, &turn_id, events)
+            .await;
         bridge.accept_terminal(&thread_id, &turn_id, events).await
     } else {
         bridge
@@ -754,6 +801,13 @@ fn map_thread_event(event: proto::ThreadEvent) -> Vec<ChatStreamEvent> {
         )],
         Some(Payload::TurnComplete(complete)) => {
             let mut events = Vec::new();
+            if complete.has_error {
+                if let Some(error) = complete.error {
+                    events.push(ChatStreamEvent::Error {
+                        message: error.message,
+                    });
+                }
+            }
             events.extend(terminal_events(
                 turn_id,
                 if complete.has_error { "error" } else { "success" },
@@ -1094,7 +1148,7 @@ fn reconcile_snapshot(snapshot: &proto::ThreadSnapshot) -> SnapshotReconcile {
         if let Some(turn) = snapshot.active_turn.as_ref() {
             if turn.status == "in_progress" {
                 return SnapshotReconcile {
-                    terminal: Vec::new(),
+                    terminal: snapshot_turn_recovery_events(turn),
                     terminal_turn_id: None,
                     active_turn_id: Some(turn.id.clone()),
                     keep_active: true,
@@ -1270,6 +1324,21 @@ mod tests {
         map_thread_event(terminal_event("session-1", turn_id))
     }
 
+    fn agent_message_item(id: &str, content: &str) -> proto::ThreadItem {
+        proto::ThreadItem {
+            id: id.into(),
+            item_type: "agent_message".into(),
+            status: "completed".into(),
+            payload_json: serde_json::to_string(&TurnItem::AgentMessage(
+                agent_protocol::TextItem {
+                    id: id.into(),
+                    content: content.into(),
+                },
+            ))
+            .unwrap(),
+        }
+    }
+
     async fn deferred_terminal_count(bridge: &ThreadEventsBridge, thread_id: &str) -> usize {
         bridge
             .active_threads
@@ -1293,8 +1362,8 @@ mod tests {
         ));
     }
 
-    #[test]
-    fn core_error_then_failed_terminal_projects_one_error() {
+    #[tokio::test]
+    async fn core_error_then_failed_terminal_projects_one_error() {
         let error = proto::ThreadEvent {
             thread_id: "session-1".into(),
             turn_id: "turn-1".into(),
@@ -1317,8 +1386,20 @@ mod tests {
                 },
             )),
         };
+        let bridge = ThreadEventsBridge::new();
+        let activation = bridge.activate("session-1").await;
+        bridge
+            .bind_submitted_turn_if_current("session-1", activation, "turn-1")
+            .await;
         let mut projected = map_thread_event(error);
-        projected.extend(map_thread_event(terminal));
+        bridge
+            .record_delivered_projection("session-1", "turn-1", &projected)
+            .await;
+        projected.extend(
+            bridge
+                .dedup_terminal_projection("session-1", "turn-1", map_thread_event(terminal))
+                .await,
+        );
         assert_eq!(
             projected
                 .iter()
@@ -1334,6 +1415,81 @@ mod tests {
                 ChatStreamEvent::Done
             ] if outcome_type == "error"
         ));
+    }
+
+    #[test]
+    fn terminal_only_error_is_preserved_before_error_outcome() {
+        let terminal = proto::ThreadEvent {
+            thread_id: "session-1".into(),
+            turn_id: "turn-1".into(),
+            payload: Some(proto::thread_event::Payload::TurnComplete(
+                proto::ThreadTurnComplete {
+                    last_agent_message: String::new(),
+                    error: Some(proto::ThreadError {
+                        message: "terminal failure".into(),
+                        error_type: "provider".into(),
+                    }),
+                    has_error: true,
+                },
+            )),
+        };
+
+        assert!(matches!(
+            map_thread_event(terminal).as_slice(),
+            [
+                ChatStreamEvent::Error { message },
+                ChatStreamEvent::RunFinished { outcome_type, .. },
+                ChatStreamEvent::Done
+            ] if message == "terminal failure" && outcome_type == "error"
+        ));
+    }
+
+    #[tokio::test]
+    async fn distinct_standalone_and_terminal_errors_are_both_projected() {
+        let standalone = proto::ThreadEvent {
+            thread_id: "session-1".into(),
+            turn_id: "turn-1".into(),
+            payload: Some(proto::thread_event::Payload::Error(proto::ThreadError {
+                message: "stream failure".into(),
+                error_type: "stream".into(),
+            })),
+        };
+        let terminal = proto::ThreadEvent {
+            thread_id: "session-1".into(),
+            turn_id: "turn-1".into(),
+            payload: Some(proto::thread_event::Payload::TurnComplete(
+                proto::ThreadTurnComplete {
+                    last_agent_message: String::new(),
+                    error: Some(proto::ThreadError {
+                        message: "final failure".into(),
+                        error_type: "provider".into(),
+                    }),
+                    has_error: true,
+                },
+            )),
+        };
+        let bridge = ThreadEventsBridge::new();
+        let activation = bridge.activate("session-1").await;
+        bridge
+            .bind_submitted_turn_if_current("session-1", activation, "turn-1")
+            .await;
+        let mut projected = map_thread_event(standalone);
+        bridge
+            .record_delivered_projection("session-1", "turn-1", &projected)
+            .await;
+        projected.extend(
+            bridge
+                .dedup_terminal_projection("session-1", "turn-1", map_thread_event(terminal))
+                .await,
+        );
+
+        assert_eq!(
+            projected
+                .iter()
+                .filter(|event| matches!(event, ChatStreamEvent::Error { .. }))
+                .count(),
+            2
+        );
     }
 
     #[test]
@@ -1430,6 +1586,48 @@ mod tests {
         assert!(outcome.terminal.is_empty());
     }
 
+    #[tokio::test]
+    async fn running_snapshot_recovers_agent_text_before_buffered_terminal() {
+        let snapshot = proto::ThreadSnapshot {
+            thread_id: "session-1".into(),
+            status: "running".into(),
+            turns: vec![],
+            active_turn: Some(proto::ThreadTurn {
+                id: "turn-1".into(),
+                status: "in_progress".into(),
+                items: vec![agent_message_item("message-1", "done")],
+                last_agent_message: String::new(),
+                error: None,
+                has_error: false,
+            }),
+            has_active_turn: true,
+        };
+        let bridge = ThreadEventsBridge::new();
+        let activation = bridge.activate("session-1").await;
+        bridge
+            .bind_submitted_turn_if_current("session-1", activation, "turn-1")
+            .await;
+
+        let reconciled = reconcile_snapshot(&snapshot);
+        let mut projected = bridge
+            .recover_snapshot_projection("session-1", "turn-1", reconciled.terminal)
+            .await;
+        projected.extend(
+            bridge
+                .accept_terminal("session-1", "turn-1", terminal_projection("turn-1"))
+                .await,
+        );
+
+        assert!(matches!(
+            projected.as_slice(),
+            [
+                ChatStreamEvent::Token { content },
+                ChatStreamEvent::RunFinished { .. },
+                ChatStreamEvent::Done
+            ] if content == "done"
+        ));
+    }
+
     #[test]
     fn reconnect_generation_delivers_every_snapshot_before_buffered_live() {
         let snapshots = vec![proto::ThreadSnapshot {
@@ -1473,6 +1671,30 @@ mod tests {
             .await
             .is_empty());
         assert!(!bridge.is_active("session-1").await);
+    }
+
+    #[tokio::test]
+    async fn late_ack_after_accepted_terminal_cannot_recreate_thread_state() {
+        let bridge = ThreadEventsBridge::new();
+        let activation = bridge.activate("session-1").await;
+        bridge.bind_observed_turn("session-1", "turn-1").await;
+        assert!(!bridge
+            .accept_terminal("session-1", "turn-1", terminal_projection("turn-1"))
+            .await
+            .is_empty());
+
+        assert!(bridge
+            .bind_submitted_turn_if_current("session-1", activation, "turn-1")
+            .await
+            .is_empty());
+        let state = bridge.active_threads.read().await;
+        assert!(!state.threads.contains("session-1"));
+        assert!(!state.turn_epochs.contains_key("session-1"));
+        assert!(!state.activations.contains_key("session-1"));
+        assert!(!state.awaiting_submissions.contains_key("session-1"));
+        assert!(!state.deferred_terminals.contains_key("session-1"));
+        assert!(!state.delivered_agent_text.contains_key("session-1"));
+        assert!(!state.pending_terminal_errors.contains_key("session-1"));
     }
 
     #[tokio::test]
@@ -1768,6 +1990,9 @@ mod tests {
                 ],
             )
             .await;
+        let recovered = bridge
+            .dedup_terminal_projection("session-1", "turn-1", recovered)
+            .await;
 
         assert!(matches!(
             recovered.as_slice(),
@@ -1776,6 +2001,39 @@ mod tests {
                 ChatStreamEvent::RunFinished { .. },
                 ChatStreamEvent::Done
             ] if content == " world"
+        ));
+    }
+
+    #[tokio::test]
+    async fn divergent_snapshot_uses_canonical_text_reconciliation() {
+        let bridge = ThreadEventsBridge::new();
+        let activation = bridge.activate("session-1").await;
+        bridge
+            .bind_submitted_turn_if_current("session-1", activation, "turn-1")
+            .await;
+        bridge
+            .record_delivered_projection(
+                "session-1",
+                "turn-1",
+                &[ChatStreamEvent::Token {
+                    content: "hel world".into(),
+                }],
+            )
+            .await;
+
+        let recovered = bridge
+            .recover_snapshot_projection(
+                "session-1",
+                "turn-1",
+                vec![ChatStreamEvent::Token {
+                    content: "hello world".into(),
+                }],
+            )
+            .await;
+
+        assert!(matches!(
+            recovered.as_slice(),
+            [ChatStreamEvent::TextReconcile { content }] if content == "hello world"
         ));
     }
 
