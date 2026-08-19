@@ -13,12 +13,255 @@ use tokio::sync::Notify;
 
 use agent::runtime::{AgentConfig, AgentLoop};
 use agent::streaming::{
-    run_multi_turn_stream, run_multi_turn_stream_with_chat_fn,
-    run_multi_turn_stream_with_chat_fn_legacy, ChatOverride, MultiTurnStreamArgs,
-    MultiTurnStreamItem, StreamedAssistantContent,
+    run_multi_turn_stream_with_chat_fn, run_thread_turn_events, ChatOverride,
+    StreamedAssistantContent, ThreadTurnEventArgs,
 };
 use agent::TurnInput;
-use agent_protocol::EventMsg;
+use agent_protocol::{Event, EventMsg, TurnItem};
+
+#[derive(Debug, Clone)]
+enum ProjectedStreamItem {
+    Assistant(StreamedAssistantContent),
+    ToolStarted {
+        name: String,
+    },
+    ToolResult {
+        id: String,
+        name: String,
+        result: String,
+        media: Vec<types::MediaAsset>,
+    },
+    MemoryUpdate {
+        op: String,
+    },
+    ContextUsage(agent_protocol::ContextUsageEvent),
+    RunStarted {},
+    RunFinished {
+        outcome_type: String,
+        interrupts_json: String,
+    },
+    Error(String),
+    Done,
+}
+
+struct ProjectedStreamArgs {
+    session: Arc<agent::Session>,
+    targets: Vec<types::ChatTarget>,
+    base_config: ProviderConfig,
+    input: Vec<TurnInput>,
+    system_prompt: Option<String>,
+    pause: Arc<PauseControl>,
+    hitl_gate: Option<Arc<agent::HitlGate>>,
+    tx: tokio::sync::mpsc::Sender<anyhow::Result<ProjectedStreamItem>>,
+    chat_override: Option<ChatOverride>,
+}
+
+fn project_event(event: Event) -> Vec<ProjectedStreamItem> {
+    match event.msg {
+        EventMsg::TurnStarted(_) => vec![ProjectedStreamItem::RunStarted {}],
+        EventMsg::AgentMessageContentDelta(delta) => vec![ProjectedStreamItem::Assistant(
+            StreamedAssistantContent::Text(delta.delta),
+        )],
+        EventMsg::ReasoningContentDelta(delta) => vec![ProjectedStreamItem::Assistant(
+            StreamedAssistantContent::Reasoning(delta.delta),
+        )],
+        EventMsg::DynamicToolCallRequest(request) => vec![ProjectedStreamItem::Assistant(
+            StreamedAssistantContent::ToolCallDelta(types::ToolCallDelta {
+                index: request
+                    .payload
+                    .get("index")
+                    .and_then(serde_json::Value::as_u64)
+                    .unwrap_or_default() as u32,
+                id: Some(request.item_id),
+                name: request
+                    .payload
+                    .get("name")
+                    .and_then(serde_json::Value::as_str)
+                    .map(str::to_string),
+                arguments: request
+                    .payload
+                    .get("delta")
+                    .and_then(serde_json::Value::as_str)
+                    .map(str::to_string),
+                signature: None,
+            }),
+        )],
+        EventMsg::RequestUserInput(request)
+        | EventMsg::RequestPermissions(request)
+        | EventMsg::ExecApprovalRequest(request)
+        | EventMsg::ApplyPatchApprovalRequest(request) => {
+            vec![ProjectedStreamItem::RunFinished {
+                outcome_type: "hitl_waiting".into(),
+                interrupts_json: serde_json::json!([{
+                    "id": request.request_id,
+                    "reason": request.payload.get("reason").cloned().unwrap_or_default(),
+                    "message": request.payload.get("message").cloned().unwrap_or_default(),
+                    "tool_call_id": request.item_id,
+                    "response_schema_json": request
+                        .payload
+                        .get("response_schema")
+                        .cloned()
+                        .unwrap_or_default()
+                        .to_string(),
+                }])
+                .to_string(),
+            }]
+        }
+        EventMsg::ItemStarted(item) => match item.item {
+            TurnItem::CommandExecution(tool)
+            | TurnItem::DynamicToolCall(tool)
+            | TurnItem::McpToolCall(tool)
+            | TurnItem::CollabAgentToolCall(tool) => {
+                vec![ProjectedStreamItem::ToolStarted { name: tool.name }]
+            }
+            _ => Vec::new(),
+        },
+        EventMsg::ItemCompleted(item) => match item.item {
+            TurnItem::CommandExecution(tool)
+            | TurnItem::DynamicToolCall(tool)
+            | TurnItem::McpToolCall(tool)
+            | TurnItem::CollabAgentToolCall(tool) => vec![ProjectedStreamItem::ToolResult {
+                id: tool.id,
+                name: tool.name,
+                result: tool
+                    .output
+                    .map(|value| match value {
+                        serde_json::Value::String(text) => text,
+                        other => other.to_string(),
+                    })
+                    .unwrap_or_default(),
+                media: tool.media,
+            }],
+            TurnItem::Extension(extension) if extension.namespace == "astro.memory" => {
+                vec![ProjectedStreamItem::MemoryUpdate {
+                    op: extension
+                        .payload
+                        .get("op")
+                        .and_then(serde_json::Value::as_str)
+                        .or_else(|| {
+                            extension
+                                .payload
+                                .get("source")
+                                .and_then(serde_json::Value::as_str)
+                                .map(|source| if source == "tool" { "memory" } else { source })
+                        })
+                        .unwrap_or("memory")
+                        .to_string(),
+                }]
+            }
+            _ => Vec::new(),
+        },
+        EventMsg::ContextUsage(context) => vec![ProjectedStreamItem::ContextUsage(context)],
+        EventMsg::TokenCount(tokens) => vec![ProjectedStreamItem::Assistant(
+            StreamedAssistantContent::FinalUsage(Usage {
+                input_tokens: u32::try_from(tokens.input_tokens).unwrap_or(u32::MAX),
+                output_tokens: u32::try_from(tokens.output_tokens).unwrap_or(u32::MAX),
+                cache_read_tokens: u32::try_from(tokens.cache_read_tokens).unwrap_or(u32::MAX),
+                cache_write_tokens: u32::try_from(tokens.cache_write_tokens).unwrap_or(u32::MAX),
+                reasoning_tokens: u32::try_from(tokens.reasoning_tokens).unwrap_or(u32::MAX),
+                request_count: u32::try_from(tokens.request_count).unwrap_or(u32::MAX),
+            }),
+        )],
+        EventMsg::Error(error) => vec![ProjectedStreamItem::Error(error.message)],
+        EventMsg::TurnComplete(complete) => vec![
+            ProjectedStreamItem::RunFinished {
+                outcome_type: if complete.error.is_some() {
+                    "error".into()
+                } else {
+                    "success".into()
+                },
+                interrupts_json: "[]".into(),
+            },
+            ProjectedStreamItem::Done,
+        ],
+        EventMsg::TurnAborted(_) => vec![
+            ProjectedStreamItem::RunFinished {
+                outcome_type: "interrupt".into(),
+                interrupts_json: "[]".into(),
+            },
+            ProjectedStreamItem::Done,
+        ],
+        _ => Vec::new(),
+    }
+}
+
+async fn forward_projected_events(
+    mut rx: tokio::sync::mpsc::Receiver<anyhow::Result<Event>>,
+    tx: tokio::sync::mpsc::Sender<anyhow::Result<ProjectedStreamItem>>,
+) {
+    let mut saw_started = false;
+    let mut saw_terminal = false;
+    while let Some(event) = rx.recv().await {
+        let event = event.unwrap();
+        if matches!(event.msg, EventMsg::TurnStarted(_)) {
+            saw_started = true;
+        } else if matches!(event.msg, EventMsg::Error(_)) && !saw_started {
+            saw_started = true;
+            let _ = tx.send(Ok(ProjectedStreamItem::RunStarted {})).await;
+        }
+        for item in project_event(event) {
+            saw_terminal |= matches!(item, ProjectedStreamItem::Done);
+            if tx.send(Ok(item)).await.is_err() {
+                return;
+            }
+        }
+    }
+    if saw_started && !saw_terminal {
+        let _ = tx
+            .send(Ok(ProjectedStreamItem::RunFinished {
+                outcome_type: "error".into(),
+                interrupts_json: "[]".into(),
+            }))
+            .await;
+        let _ = tx.send(Ok(ProjectedStreamItem::Done)).await;
+    }
+}
+
+async fn run_projected_stream(args: ProjectedStreamArgs) {
+    let (event_tx, event_rx) = tokio::sync::mpsc::channel(64);
+    let projected = forward_projected_events(event_rx, args.tx);
+    let run = run_thread_turn_events(ThreadTurnEventArgs {
+        session: args.session,
+        targets: args.targets,
+        base_config: args.base_config,
+        input: args.input,
+        system_prompt: args.system_prompt,
+        pause: args.pause,
+        hitl_gate: args.hitl_gate,
+        tx: event_tx,
+        chat_override: args.chat_override,
+    });
+    tokio::join!(run, projected);
+}
+
+async fn run_projected_stream_with_chat_fn(
+    session: Arc<agent::Session>,
+    chat_fn: ChatOverride,
+    config: ProviderConfig,
+    system_prompt: String,
+    pause: Arc<PauseControl>,
+    hitl_gate: Option<Arc<agent::HitlGate>>,
+    tx: tokio::sync::mpsc::Sender<anyhow::Result<ProjectedStreamItem>>,
+) {
+    run_projected_stream(ProjectedStreamArgs {
+        session,
+        targets: vec![types::ChatTarget {
+            provider_id: "scripted".into(),
+            backend_id: "scripted".into(),
+            model: config.model.clone(),
+            api_key: config.api_key.clone(),
+            base_url: config.base_url.clone().unwrap_or_default(),
+        }],
+        base_config: config,
+        input: Vec::new(),
+        system_prompt: Some(system_prompt),
+        pause,
+        hitl_gate,
+        tx,
+        chat_override: Some(chat_fn),
+    })
+    .await;
+}
 
 #[tokio::test]
 async fn scripted_tool_turn_emits_item_lifecycle_and_one_terminal() {
@@ -430,7 +673,7 @@ async fn media_tool_result_survives_rollout_and_legacy_adapter() {
         ],
     ]);
     let (tx, mut rx) = tokio::sync::mpsc::channel(64);
-    let run = tokio::spawn(run_multi_turn_stream_with_chat_fn_legacy(
+    let run = tokio::spawn(run_projected_stream_with_chat_fn(
         Arc::clone(&session),
         chat,
         ProviderConfig::default(),
@@ -474,7 +717,7 @@ async fn media_tool_result_survives_rollout_and_legacy_adapter() {
     ));
     assert!(legacy.iter().any(|item| matches!(
         item,
-        MultiTurnStreamItem::ToolResult { id, media, .. }
+        ProjectedStreamItem::ToolResult { id, media, .. }
             if id == "media-call" && media.first().is_some_and(|asset| {
                 asset.id.as_deref() == Some("asset-1")
                     && matches!(
@@ -592,7 +835,7 @@ async fn oversized_inline_media_is_bounded_only_in_completed_event_copy() {
         ],
     ]);
     let (tx, mut rx) = tokio::sync::mpsc::channel(64);
-    let run = tokio::spawn(run_multi_turn_stream_with_chat_fn_legacy(
+    let run = tokio::spawn(run_projected_stream_with_chat_fn(
         Arc::clone(&session),
         chat,
         ProviderConfig::default(),
@@ -736,7 +979,7 @@ async fn regular_task_owns_initial_input_persistence() {
     };
     let (tx, mut rx) = tokio::sync::mpsc::channel(32);
 
-    run_multi_turn_stream(MultiTurnStreamArgs {
+    run_projected_stream(ProjectedStreamArgs {
         session: Arc::clone(&session),
         targets: vec![types::ChatTarget {
             provider_id: "scripted".into(),
@@ -776,7 +1019,7 @@ async fn regular_task_prepare_failure_emits_error_then_done() {
         Arc::new(AgentLoop::with_session_id(config, "regular-task-prepare-error".into()).unwrap());
     let (tx, mut rx) = tokio::sync::mpsc::channel(8);
 
-    run_multi_turn_stream(MultiTurnStreamArgs {
+    run_projected_stream(ProjectedStreamArgs {
         session,
         targets: vec![types::ChatTarget {
             provider_id: "scripted".into(),
@@ -805,10 +1048,10 @@ async fn regular_task_prepare_failure_emits_error_then_done() {
     assert!(matches!(
         items.as_slice(),
         [
-            MultiTurnStreamItem::RunStarted { .. },
-            MultiTurnStreamItem::Error(message),
-            MultiTurnStreamItem::RunFinished { outcome_type, .. },
-            MultiTurnStreamItem::Done,
+            ProjectedStreamItem::RunStarted { .. },
+            ProjectedStreamItem::Error(message),
+            ProjectedStreamItem::RunFinished { outcome_type, .. },
+            ProjectedStreamItem::Done,
         ]
             if message.contains("budget exhausted")
                 && outcome_type == "error"
@@ -827,7 +1070,7 @@ async fn regular_task_prepare_error_emits_error_then_done() {
     );
     let (tx, mut rx) = tokio::sync::mpsc::channel(8);
 
-    run_multi_turn_stream(MultiTurnStreamArgs {
+    run_projected_stream(ProjectedStreamArgs {
         session,
         targets: vec![types::ChatTarget {
             provider_id: "scripted".into(),
@@ -853,10 +1096,10 @@ async fn regular_task_prepare_error_emits_error_then_done() {
     assert!(matches!(
         items.as_slice(),
         [
-            MultiTurnStreamItem::RunStarted { .. },
-            MultiTurnStreamItem::Error(message),
-            MultiTurnStreamItem::RunFinished { outcome_type, .. },
-            MultiTurnStreamItem::Done,
+            ProjectedStreamItem::RunStarted { .. },
+            ProjectedStreamItem::Error(message),
+            ProjectedStreamItem::RunFinished { outcome_type, .. },
+            ProjectedStreamItem::Done,
         ]
             if message.contains("requires initial input")
                 && outcome_type == "error"
@@ -914,7 +1157,7 @@ async fn steered_input_is_consumed_by_the_active_regular_task() {
     let run = tokio::spawn({
         let session = Arc::clone(&session);
         async move {
-            run_multi_turn_stream_with_chat_fn_legacy(
+            run_projected_stream_with_chat_fn(
                 session,
                 chat_fn,
                 ProviderConfig {
@@ -997,7 +1240,7 @@ async fn multi_turn_emits_text_tool_result_and_usage() {
     };
 
     tokio::spawn(async move {
-        run_multi_turn_stream_with_chat_fn_legacy(
+        run_projected_stream_with_chat_fn(
             session,
             chat_fn,
             cfg,
@@ -1016,24 +1259,24 @@ async fn multi_turn_emits_text_tool_result_and_usage() {
 
     assert!(matches!(
         items.first(),
-        Some(MultiTurnStreamItem::RunStarted { .. })
+        Some(ProjectedStreamItem::RunStarted { .. })
     ));
     assert!(items.iter().any(|i| matches!(
         i,
-        MultiTurnStreamItem::Assistant(StreamedAssistantContent::Text(t)) if t == "thinking…"
+        ProjectedStreamItem::Assistant(StreamedAssistantContent::Text(t)) if t == "thinking…"
     )));
     let tool_started_index = items
         .iter()
-        .position(|i| matches!(i, MultiTurnStreamItem::ToolStarted { name, .. } if name == "echo"))
+        .position(|i| matches!(i, ProjectedStreamItem::ToolStarted { name, .. } if name == "echo"))
         .expect("tool started event");
     let tool_completed_index = items
         .iter()
-        .position(|i| matches!(i, MultiTurnStreamItem::ToolResult { name, .. } if name == "echo"))
+        .position(|i| matches!(i, ProjectedStreamItem::ToolResult { name, .. } if name == "echo"))
         .expect("tool completed event");
     assert!(tool_started_index < tool_completed_index);
     assert!(items.iter().any(|i| matches!(
         i,
-        MultiTurnStreamItem::Assistant(StreamedAssistantContent::FinalUsage(u))
+        ProjectedStreamItem::Assistant(StreamedAssistantContent::FinalUsage(u))
         if u.prompt_tokens() == 22 && u.completion_tokens() == 8
     )));
     assert_eq!(
@@ -1041,7 +1284,7 @@ async fn multi_turn_emits_text_tool_result_and_usage() {
             .iter()
             .filter(|item| matches!(
                 item,
-                MultiTurnStreamItem::Assistant(StreamedAssistantContent::FinalUsage(_))
+                ProjectedStreamItem::Assistant(StreamedAssistantContent::FinalUsage(_))
             ))
             .count(),
         1,
@@ -1050,7 +1293,7 @@ async fn multi_turn_emits_text_tool_result_and_usage() {
     let context_snapshots = items
         .iter()
         .filter_map(|item| match item {
-            MultiTurnStreamItem::ContextUsage(snapshot) => Some(snapshot),
+            ProjectedStreamItem::ContextUsage(snapshot) => Some(snapshot),
             _ => None,
         })
         .collect::<Vec<_>>();
@@ -1064,12 +1307,12 @@ async fn multi_turn_emits_text_tool_result_and_usage() {
         .any(|segment| !segment.items.is_empty())));
     assert!(items.iter().any(|i| matches!(
         i,
-        MultiTurnStreamItem::RunFinished {
+        ProjectedStreamItem::RunFinished {
             outcome_type,
             ..
         } if outcome_type == "success"
     )));
-    assert!(matches!(items.last(), Some(MultiTurnStreamItem::Done)));
+    assert!(matches!(items.last(), Some(ProjectedStreamItem::Done)));
 }
 
 #[tokio::test]
@@ -1106,7 +1349,7 @@ async fn multi_turn_tool_exec_works_on_current_thread_runtime() {
     ]);
     let (tx, mut rx) = tokio::sync::mpsc::channel(64);
 
-    run_multi_turn_stream_with_chat_fn_legacy(
+    run_projected_stream_with_chat_fn(
         session,
         chat_fn,
         ProviderConfig {
@@ -1125,14 +1368,14 @@ async fn multi_turn_tool_exec_works_on_current_thread_runtime() {
         items.push(item.unwrap());
     }
     assert!(items.iter().any(
-        |item| matches!(item, MultiTurnStreamItem::ToolResult { name, .. } if name == "echo")
+        |item| matches!(item, ProjectedStreamItem::ToolResult { name, .. } if name == "echo")
     ));
     assert!(items.iter().any(|item| matches!(
         item,
-        MultiTurnStreamItem::Assistant(StreamedAssistantContent::Text(text))
+        ProjectedStreamItem::Assistant(StreamedAssistantContent::Text(text))
             if text == "current-thread ok"
     )));
-    assert!(matches!(items.last(), Some(MultiTurnStreamItem::Done)));
+    assert!(matches!(items.last(), Some(ProjectedStreamItem::Done)));
 }
 
 #[tokio::test]
@@ -1207,7 +1450,7 @@ async fn multi_turn_persists_reasoning_and_tool_activities() {
     };
 
     tokio::spawn(async move {
-        run_multi_turn_stream_with_chat_fn_legacy(
+        run_projected_stream_with_chat_fn(
             session,
             chat_fn,
             cfg,
@@ -1274,7 +1517,7 @@ async fn multi_turn_fires_post_llm_call_after_model_stream() {
     };
 
     tokio::spawn(async move {
-        run_multi_turn_stream_with_chat_fn_legacy(
+        run_projected_stream_with_chat_fn(
             session,
             chat_fn,
             cfg,
@@ -1331,7 +1574,7 @@ async fn transform_llm_output_replaces_before_post_llm_call() {
     };
 
     tokio::spawn(async move {
-        run_multi_turn_stream_with_chat_fn_legacy(
+        run_projected_stream_with_chat_fn(
             session,
             chat_fn,
             cfg,
@@ -1391,7 +1634,7 @@ async fn pre_verify_never_fires_without_disk_write() {
     };
 
     tokio::spawn(async move {
-        run_multi_turn_stream_with_chat_fn_legacy(
+        run_projected_stream_with_chat_fn(
             session,
             chat_fn,
             cfg,
@@ -1415,9 +1658,9 @@ async fn pre_verify_never_fires_without_disk_write() {
     );
     assert!(items.iter().any(|i| matches!(
         i,
-        MultiTurnStreamItem::RunFinished { outcome_type, .. } if outcome_type == "success"
+        ProjectedStreamItem::RunFinished { outcome_type, .. } if outcome_type == "success"
     )));
-    assert!(matches!(items.last(), Some(MultiTurnStreamItem::Done)));
+    assert!(matches!(items.last(), Some(ProjectedStreamItem::Done)));
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -1485,7 +1728,7 @@ async fn pre_verify_keep_going_retries_capped_at_two() {
     };
 
     tokio::spawn(async move {
-        run_multi_turn_stream_with_chat_fn_legacy(
+        run_projected_stream_with_chat_fn(
             session,
             chat_fn,
             cfg,
@@ -1527,13 +1770,13 @@ async fn pre_verify_keep_going_retries_capped_at_two() {
 
     assert!(items.iter().any(|i| matches!(
         i,
-        MultiTurnStreamItem::Assistant(StreamedAssistantContent::Text(t)) if t == "final answer"
+        ProjectedStreamItem::Assistant(StreamedAssistantContent::Text(t)) if t == "final answer"
     )));
     assert!(items.iter().any(|i| matches!(
         i,
-        MultiTurnStreamItem::RunFinished { outcome_type, .. } if outcome_type == "success"
+        ProjectedStreamItem::RunFinished { outcome_type, .. } if outcome_type == "success"
     )));
-    assert!(matches!(items.last(), Some(MultiTurnStreamItem::Done)));
+    assert!(matches!(items.last(), Some(ProjectedStreamItem::Done)));
 
     let agent = session_for_check.as_ref();
     let history = agent.clone_history().await;
@@ -1621,7 +1864,7 @@ async fn cumulative_usage_chunks_use_last_per_round() {
     let (tx, mut rx) = tokio::sync::mpsc::channel(64);
     let pause = PauseControl::new();
     tokio::spawn(async move {
-        run_multi_turn_stream_with_chat_fn_legacy(
+        run_projected_stream_with_chat_fn(
             session,
             chat_fn,
             ProviderConfig {
@@ -1641,10 +1884,10 @@ async fn cumulative_usage_chunks_use_last_per_round() {
     }
     assert!(items.iter().any(|i| matches!(
         i,
-        MultiTurnStreamItem::Assistant(StreamedAssistantContent::FinalUsage(u))
+        ProjectedStreamItem::Assistant(StreamedAssistantContent::FinalUsage(u))
         if u.prompt_tokens() == 10 && u.completion_tokens() == 5
     )));
-    assert!(matches!(items.last(), Some(MultiTurnStreamItem::Done)));
+    assert!(matches!(items.last(), Some(ProjectedStreamItem::Done)));
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -1662,7 +1905,7 @@ async fn error_has_single_error_terminal_before_done() {
     let (tx, mut rx) = tokio::sync::mpsc::channel(64);
     let pause = PauseControl::new();
     tokio::spawn(async move {
-        run_multi_turn_stream_with_chat_fn_legacy(
+        run_projected_stream_with_chat_fn(
             session,
             chat_fn,
             ProviderConfig {
@@ -1682,20 +1925,20 @@ async fn error_has_single_error_terminal_before_done() {
     }
     assert!(matches!(
         items.first(),
-        Some(MultiTurnStreamItem::RunStarted { .. })
+        Some(ProjectedStreamItem::RunStarted { .. })
     ));
     assert!(items
         .iter()
-        .any(|i| matches!(i, MultiTurnStreamItem::Error(_))));
+        .any(|i| matches!(i, ProjectedStreamItem::Error(_))));
     let terminal_outcomes: Vec<&str> = items
         .iter()
         .filter_map(|item| match item {
-            MultiTurnStreamItem::RunFinished { outcome_type, .. } => Some(outcome_type.as_str()),
+            ProjectedStreamItem::RunFinished { outcome_type, .. } => Some(outcome_type.as_str()),
             _ => None,
         })
         .collect();
     assert_eq!(terminal_outcomes, ["error"]);
-    assert!(matches!(items.last(), Some(MultiTurnStreamItem::Done)));
+    assert!(matches!(items.last(), Some(ProjectedStreamItem::Done)));
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -1715,7 +1958,7 @@ async fn cancellation_has_single_interrupt_terminal_before_done() {
     let pause = PauseControl::new();
     let run_pause = pause.clone();
     tokio::spawn(async move {
-        run_multi_turn_stream_with_chat_fn_legacy(
+        run_projected_stream_with_chat_fn(
             session,
             pending_chat(),
             ProviderConfig {
@@ -1731,7 +1974,7 @@ async fn cancellation_has_single_interrupt_terminal_before_done() {
     });
 
     let started = rx.recv().await.unwrap().unwrap();
-    assert!(matches!(started, MultiTurnStreamItem::RunStarted { .. }));
+    assert!(matches!(started, ProjectedStreamItem::RunStarted { .. }));
     pause.cancel();
 
     let mut items = vec![started];
@@ -1740,16 +1983,16 @@ async fn cancellation_has_single_interrupt_terminal_before_done() {
     }
     assert!(!items
         .iter()
-        .any(|item| matches!(item, MultiTurnStreamItem::Error(_))));
+        .any(|item| matches!(item, ProjectedStreamItem::Error(_))));
     let terminal_outcomes: Vec<&str> = items
         .iter()
         .filter_map(|item| match item {
-            MultiTurnStreamItem::RunFinished { outcome_type, .. } => Some(outcome_type.as_str()),
+            ProjectedStreamItem::RunFinished { outcome_type, .. } => Some(outcome_type.as_str()),
             _ => None,
         })
         .collect();
     assert_eq!(terminal_outcomes, ["interrupt"]);
-    assert!(matches!(items.last(), Some(MultiTurnStreamItem::Done)));
+    assert!(matches!(items.last(), Some(ProjectedStreamItem::Done)));
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -1794,7 +2037,7 @@ async fn tool_call_delta_and_memory_path() {
     let (tx, mut rx) = tokio::sync::mpsc::channel(64);
     let pause = PauseControl::new();
     tokio::spawn(async move {
-        run_multi_turn_stream_with_chat_fn_legacy(
+        run_projected_stream_with_chat_fn(
             session,
             chat_fn,
             ProviderConfig {
@@ -1819,22 +2062,22 @@ async fn tool_call_delta_and_memory_path() {
         .filter(|i| {
             matches!(
                 i,
-                MultiTurnStreamItem::Assistant(StreamedAssistantContent::ToolCallDelta(_))
+                ProjectedStreamItem::Assistant(StreamedAssistantContent::ToolCallDelta(_))
             )
         })
         .count();
     assert!(delta_count >= 2, "expected streamed tool_call_deltas");
     assert!(items
         .iter()
-        .any(|i| matches!(i, MultiTurnStreamItem::ToolResult { name, .. } if name == "memory")));
+        .any(|i| matches!(i, ProjectedStreamItem::ToolResult { name, .. } if name == "memory")));
     assert!(
         items.iter().any(|i| {
-            matches!(i, MultiTurnStreamItem::MemoryUpdate { op, .. } if op == "memory")
+            matches!(i, ProjectedStreamItem::MemoryUpdate { op, .. } if op == "memory")
         }),
         "memory success should emit MemoryUpdate; got: {:?}",
         items.iter().map(|i| format!("{i:?}")).collect::<Vec<_>>()
     );
-    assert!(matches!(items.last(), Some(MultiTurnStreamItem::Done)));
+    assert!(matches!(items.last(), Some(ProjectedStreamItem::Done)));
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -1882,7 +2125,7 @@ async fn hitl_waiting_parks_then_continues_same_run() {
     let pause = PauseControl::new();
 
     tokio::spawn(async move {
-        run_multi_turn_stream_with_chat_fn_legacy(
+        run_projected_stream_with_chat_fn(
             session,
             chat_fn,
             ProviderConfig {
@@ -1901,7 +2144,7 @@ async fn hitl_waiting_parks_then_continues_same_run() {
     let deadline = tokio::time::Instant::now() + Duration::from_secs(5);
     while tokio::time::Instant::now() < deadline {
         match tokio::time::timeout(Duration::from_millis(200), rx.recv()).await {
-            Ok(Some(Ok(MultiTurnStreamItem::RunFinished {
+            Ok(Some(Ok(ProjectedStreamItem::RunFinished {
                 outcome_type,
                 interrupts_json,
                 ..
@@ -1934,18 +2177,18 @@ async fn hitl_waiting_parks_then_continues_same_run() {
     }
     assert!(items.iter().any(|i| matches!(
         i,
-        MultiTurnStreamItem::ToolResult { name, result, .. }
+        ProjectedStreamItem::ToolResult { name, result, .. }
         if name == "ask_user" && result.contains("approved")
     )));
     assert!(items.iter().any(|i| matches!(
         i,
-        MultiTurnStreamItem::Assistant(StreamedAssistantContent::Text(t)) if t == "confirmed"
+        ProjectedStreamItem::Assistant(StreamedAssistantContent::Text(t)) if t == "confirmed"
     )));
     assert!(items.iter().any(|i| matches!(
         i,
-        MultiTurnStreamItem::RunFinished { outcome_type, .. } if outcome_type == "success"
+        ProjectedStreamItem::RunFinished { outcome_type, .. } if outcome_type == "success"
     )));
-    assert!(matches!(items.last(), Some(MultiTurnStreamItem::Done)));
+    assert!(matches!(items.last(), Some(ProjectedStreamItem::Done)));
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -2016,7 +2259,7 @@ async fn approval_hooks_fire_pre_then_post_on_allow() {
     let pause = PauseControl::new();
 
     tokio::spawn(async move {
-        run_multi_turn_stream_with_chat_fn_legacy(
+        run_projected_stream_with_chat_fn(
             session,
             chat_fn,
             ProviderConfig {
@@ -2035,7 +2278,7 @@ async fn approval_hooks_fire_pre_then_post_on_allow() {
     let deadline = tokio::time::Instant::now() + Duration::from_secs(5);
     while tokio::time::Instant::now() < deadline {
         match tokio::time::timeout(Duration::from_millis(200), rx.recv()).await {
-            Ok(Some(Ok(MultiTurnStreamItem::RunFinished {
+            Ok(Some(Ok(ProjectedStreamItem::RunFinished {
                 outcome_type,
                 interrupts_json,
                 ..
@@ -2185,7 +2428,7 @@ async fn approval_hooks_fire_pre_then_post_on_deny() {
     let pause = PauseControl::new();
 
     tokio::spawn(async move {
-        run_multi_turn_stream_with_chat_fn_legacy(
+        run_projected_stream_with_chat_fn(
             session,
             chat_fn,
             ProviderConfig {
@@ -2204,7 +2447,7 @@ async fn approval_hooks_fire_pre_then_post_on_deny() {
     let deadline = tokio::time::Instant::now() + Duration::from_secs(5);
     while tokio::time::Instant::now() < deadline {
         match tokio::time::timeout(Duration::from_millis(200), rx.recv()).await {
-            Ok(Some(Ok(MultiTurnStreamItem::RunFinished {
+            Ok(Some(Ok(ProjectedStreamItem::RunFinished {
                 outcome_type,
                 interrupts_json,
                 ..
@@ -2257,7 +2500,7 @@ async fn approval_hooks_fire_pre_then_post_on_deny() {
     assert!(
         items.iter().any(|i| matches!(
             i,
-            MultiTurnStreamItem::ToolResult { name, result, .. }
+            ProjectedStreamItem::ToolResult { name, result, .. }
             if name == "terminal" && result.contains("denied by user")
         )),
         "expected denial tool result; got: {:?}",
@@ -2326,7 +2569,7 @@ async fn multi_turn_budget_exhausted_forces_toolless_summary() {
     let (tx, mut rx) = tokio::sync::mpsc::channel(64);
     let pause = PauseControl::new();
     tokio::spawn(async move {
-        run_multi_turn_stream_with_chat_fn_legacy(
+        run_projected_stream_with_chat_fn(
             session,
             chat_fn,
             ProviderConfig {
@@ -2358,24 +2601,24 @@ async fn multi_turn_budget_exhausted_forces_toolless_summary() {
     assert!(
         !items
             .iter()
-            .any(|i| matches!(i, MultiTurnStreamItem::Error(e) if e.contains("轮次已用尽"))),
+            .any(|i| matches!(i, ProjectedStreamItem::Error(e) if e.contains("轮次已用尽"))),
         "budget exhaustion should not hard-error"
     );
     assert!(items.iter().any(|i| matches!(
         i,
-        MultiTurnStreamItem::Assistant(StreamedAssistantContent::Text(t))
+        ProjectedStreamItem::Assistant(StreamedAssistantContent::Text(t))
         if t.contains("迭代预算已用尽")
     )));
     assert!(items.iter().any(|i| matches!(
         i,
-        MultiTurnStreamItem::Assistant(StreamedAssistantContent::Text(t))
+        ProjectedStreamItem::Assistant(StreamedAssistantContent::Text(t))
         if t == "summary-after-budget"
     )));
     assert!(items.iter().any(|i| matches!(
         i,
-        MultiTurnStreamItem::RunFinished { outcome_type, .. } if outcome_type == "success"
+        ProjectedStreamItem::RunFinished { outcome_type, .. } if outcome_type == "success"
     )));
-    assert!(matches!(items.last(), Some(MultiTurnStreamItem::Done)));
+    assert!(matches!(items.last(), Some(ProjectedStreamItem::Done)));
     assert_text_item_lifecycle(&events, false, "summary-after-budget");
     assert_text_item_lifecycle(&events, true, "summary-reasoning");
 }

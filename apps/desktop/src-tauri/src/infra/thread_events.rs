@@ -8,21 +8,60 @@ use std::time::Duration;
 use agent_protocol::TurnItem;
 use proto::astro_service_client::AstroServiceClient;
 use serde::Serialize;
+use server::WORKSPACE_EVENT_THREAD_ID;
 use tauri::{AppHandle, Emitter, Manager};
 use tokio::sync::{mpsc, watch, Mutex, RwLock};
 use tracing::debug;
 
 use super::grpc::{default_grpc_address, endpoint_url};
-use super::session_events::{
-    emit_session_event, now_ts_ms, MemoryUpdatedDto, PendingChangedDto, SessionEventDto,
-    SessionMetadataChangedDto,
-};
 use crate::commands::chat::{
     ChatStreamEvent, ContextUsageItemDto, ContextUsageSegmentDto, MediaAssetDto,
 };
 
 const SNAPSHOT_EVENT: &str = "thread_snapshot";
+const SESSION_EVENT: &str = "session_event";
 pub(crate) const THREAD_EVENTS_READY_TIMEOUT: Duration = Duration::from_secs(15);
+
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct SessionEventDto {
+    pub session_id: Option<String>,
+    pub agent_id: String,
+    pub ts_ms: i64,
+    pub memory_updated: Option<MemoryUpdatedDto>,
+    pub pending_changed: Option<PendingChangedDto>,
+    pub session_metadata_changed: Option<SessionMetadataChangedDto>,
+}
+
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct MemoryUpdatedDto {
+    pub source: String,
+    pub target: String,
+    pub summary: String,
+    pub live_written: bool,
+}
+
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct PendingChangedDto {
+    pub pending_count: u32,
+    pub reason: String,
+}
+
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct SessionMetadataChangedDto {
+    pub title: String,
+}
+
+pub(crate) fn now_ts_ms() -> i64 {
+    chrono::Utc::now().timestamp_millis()
+}
+
+pub(crate) fn emit_session_event(app: &AppHandle, event: SessionEventDto) {
+    let _ = app.emit(SESSION_EVENT, event);
+}
 
 #[derive(Default)]
 struct ActiveState {
@@ -888,6 +927,17 @@ async fn subscribe_connection(
         }
     });
 
+    // Workspace-wide pending changes have no active chat owner. Subscribe every accepted
+    // desktop connection before recovering chat Threads so those durable extensions are live.
+    client
+        .resume_thread(proto::ResumeThreadRequest {
+            connection_id: bridge.connection_id().into(),
+            thread_id: WORKSPACE_EVENT_THREAD_ID.into(),
+            include_turns: false,
+        })
+        .await
+        .map_err(|error| format!("failed to resume workspace event thread: {error}"))?;
+
     // Generation barrier: every durable snapshot is emitted before any buffered event from
     // this accepted stream. Public readiness remains false until recovery completes, so a new
     // SubmitTurn cannot race an old terminal snapshot.
@@ -1432,8 +1482,6 @@ fn extension_to_session_event(
         session_id: Some(thread_id.into()),
         agent_id: String::new(),
         ts_ms: now_ts_ms(),
-        event_id: 0,
-        stream_id: String::new(),
         memory_updated,
         pending_changed,
         session_metadata_changed,

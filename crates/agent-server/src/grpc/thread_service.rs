@@ -877,10 +877,17 @@ fn memory_update_from_value(payload: &serde_json::Value) -> proto::ChatEvent {
                 operation: payload
                     .get("op")
                     .and_then(serde_json::Value::as_str)
+                    .or_else(|| {
+                        payload
+                            .get("source")
+                            .and_then(serde_json::Value::as_str)
+                            .map(|source| if source == "tool" { "memory" } else { source })
+                    })
                     .unwrap_or("memory")
                     .into(),
                 content: payload
                     .get("content")
+                    .or_else(|| payload.get("summary"))
                     .and_then(serde_json::Value::as_str)
                     .unwrap_or_default()
                     .into(),

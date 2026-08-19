@@ -8,7 +8,6 @@
 
 pub mod cron_runner;
 pub mod grpc;
-pub mod session_events;
 pub mod thread_listener;
 pub mod thread_manager;
 pub mod thread_state;
@@ -16,10 +15,6 @@ pub mod transport;
 pub mod webhook_server;
 pub mod workflow_ticker;
 
-pub use session_events::{
-    event_matches, to_proto, MemoryUpdatedPayload, PendingChangedPayload, SessionEventHub,
-    SessionEventMsg, SessionMetadataChangedPayload, SubscribeFilter,
-};
 pub use thread_listener::{run_listener_commands, run_thread_listener};
 pub use thread_manager::{ManagedThread, ThreadManager};
 pub use thread_state::{
@@ -27,6 +22,9 @@ pub use thread_state::{
     ThreadState, ThreadStateManager, TurnSnapshot,
 };
 pub use transport::{ConnectionGeneration, ConnectionRegistry};
+
+/// Durable Thread used for workspace-wide events that are not owned by one chat session.
+pub const WORKSPACE_EVENT_THREAD_ID: &str = "astro-workspace-events";
 
 use std::time::Duration;
 

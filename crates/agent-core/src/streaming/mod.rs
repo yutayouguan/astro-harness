@@ -2,10 +2,10 @@
 //!
 //! 本模块将 Provider 原始 chunk 流映射为 Agent 语义事件，并实现
 //! `StreamingCompletion` / `StreamingChat` / `StreamingPrompt` 三层 trait，
-//! 最终在 [`run_multi_turn_stream`] 中驱动「LLM 流式 → 工具执行 → 再请求」闭环。
+//! 最终在 canonical Thread task 中驱动「LLM 流式 → 工具执行 → 再请求」闭环。
 //!
 //! 子模块划分：
-//! - [`types`]：事件与内容类型（`StreamedAssistantContent` / `MultiTurnStreamItem` 等）
+//! - [`types`]：Provider assistant 内容类型（`StreamedAssistantContent`）
 //! - [`traits`]：三层 Streaming trait
 //! - [`provider`]：`ProviderStreamer`（trait 实现 + fallback 接入）
 //! - [`fallback`]：聊天主模型故障切换（首包前 fallback）
@@ -38,13 +38,10 @@ mod traits;
 mod types;
 
 pub use multi_turn::{
-    run_multi_turn_stream, run_multi_turn_stream_with_chat_fn,
-    run_multi_turn_stream_with_chat_fn_legacy, stream_multi_turn, stream_multi_turn_with_hitl,
-    MultiTurnStreamArgs,
+    run_multi_turn_events_with_chat_fn, run_multi_turn_stream_with_chat_fn, run_thread_turn_events,
+    ThreadTurnEventArgs,
 };
 pub use provider::{ChatOverride, ProviderStreamer};
 pub use run_state::{RunPhase, RunRequirements, RunState};
 pub use traits::{StreamingChat, StreamingCompletion, StreamingPrompt};
-pub use types::{
-    AssistantContentStream, MultiTurnStream, MultiTurnStreamItem, StreamedAssistantContent,
-};
+pub use types::{AssistantContentStream, StreamedAssistantContent};

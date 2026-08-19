@@ -4,5 +4,4 @@ pub(crate) mod grpc;
 pub(crate) mod ip_location;
 pub(crate) mod keystore;
 pub(crate) mod notify;
-pub(crate) mod session_events;
 pub(crate) mod thread_events;

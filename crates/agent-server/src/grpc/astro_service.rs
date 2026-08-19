@@ -9,18 +9,16 @@ use std::sync::{Arc, Mutex as StdMutex, RwLock as StdRwLock, Weak};
 
 use agent::builder::AgentBuilder;
 use agent::runtime::Session;
-use agent::streaming::{MultiTurnStreamItem, StreamedAssistantContent};
 use agent::{HitlGate, HitlRegistry, TurnAbortReason};
 use futures::FutureExt;
 use home::AgentRuntimeConfig;
 use memory::MemoryManager;
 use proto::astro_service_server::AstroService;
 use proto::{
-    ChatControlAction, ChatControlRequest, ChatEvent, ChatRequest, ContextUsageEvent,
-    ContextUsageSegment, Empty, FileListRequest, FileListResponse, ImageEvent, ImageRequest,
-    McpReconnectRequest, McpServerList, McpServerListRequest, MemoryQuery, MemoryResult,
-    SessionEvent, SessionSnippet as ProtoSessionSnippet, SkillEvent, SkillInfo, SkillList,
-    SkillRequest, SubscribeSessionEventsRequest, UsageEvent,
+    ChatControlAction, ChatControlRequest, ChatEvent, ChatRequest, Empty, FileListRequest,
+    FileListResponse, ImageEvent, ImageRequest, McpReconnectRequest, McpServerList,
+    McpServerListRequest, MemoryQuery, MemoryResult, SessionSnippet as ProtoSessionSnippet,
+    SkillEvent, SkillInfo, SkillList, SkillRequest,
 };
 use providers::PauseControl;
 use providers::ProviderConfig;
@@ -31,9 +29,8 @@ use tonic::{Request, Response, Status};
 use super::interrupt_store::{clear_interrupt_file, resume_items_from_proto, save_interrupt_file};
 use crate::thread_manager::RemoveCurrentThread;
 use crate::{
-    run_thread_listener, to_proto, ConnectionRegistry, ManagedThread, MemoryUpdatedPayload,
-    PendingChangedPayload, SessionEventHub, SessionEventMsg, SubscribeFilter, ThreadActivity,
-    ThreadHistoryBuilder, ThreadManager, ThreadState, ThreadStateManager,
+    ConnectionRegistry, ManagedThread, ThreadActivity, ThreadHistoryBuilder, ThreadManager,
+    ThreadState, ThreadStateManager, WORKSPACE_EVENT_THREAD_ID,
 };
 
 fn open_sessions(memory_dir: &std::path::Path) -> Result<session::SessionStore, String> {
@@ -415,10 +412,6 @@ async fn cancel_pause_generation(
 }
 /// Chat RPC 返回的事件流类型别名。
 pub(crate) type ChatStream = Pin<Box<dyn futures::Stream<Item = Result<ChatEvent, Status>> + Send>>;
-/// SubscribeSessionEvents RPC 返回的事件流类型别名。
-type SessionEventsStream =
-    Pin<Box<dyn futures::Stream<Item = Result<SessionEvent, Status>> + Send>>;
-
 /// `ChatControlAction` 之外的后端保留动作码：仅释放会话运行时，不触发 new_chat hooks。
 const CHAT_CONTROL_RELEASE_SESSION: i32 = 7;
 
@@ -440,112 +433,50 @@ fn can_idle_unload_thread(activity: &ThreadActivity) -> bool {
         )
 }
 
-/// 工具入 pending 时 publish 全局 `pending_changed`（+ live_written=false 的 memory_updated）。
-///
-/// 回合内 **live** 工具写仍只走 Chat `MemoryUpdate`，不调用本函数。
-fn publish_tool_pending_to_hub(
-    hub: &SessionEventHub,
-    memory_dir: &std::path::Path,
-    agent_id: &str,
-    summary: &str,
-) {
-    let pending_count = memory::list_pending(memory_dir)
-        .map(|v| v.len() as u32)
-        .unwrap_or(0);
-    hub.publish(SessionEventMsg {
-        session_id: None,
-        agent_id: agent_id.to_string(),
-        memory_updated: Some(MemoryUpdatedPayload {
-            source: "tool".into(),
-            target: "mixed".into(),
-            summary: summary.to_string(),
-            live_written: false,
-        }),
-        pending_changed: None,
-        session_metadata_changed: None,
-    });
-    hub.publish(SessionEventMsg {
-        session_id: None,
-        agent_id: agent_id.to_string(),
-        memory_updated: None,
-        pending_changed: Some(PendingChangedPayload {
-            pending_count,
-            reason: "enqueued".into(),
-        }),
-        session_metadata_changed: None,
-    });
-}
-
-/// 启动 background review，完成后将结果 fire-and-forget 发布到 [`SessionEventHub`]。
+/// 启动 background review，完成后将结果 fire-and-forget 提交为 durable Thread Extension。
 ///
 /// 本函数只在拿锁并 `spawn` 等待任务后立即返回；**不**阻塞 Chat 流。
-async fn spawn_review_to_hub(session: &SessionHandle, session_id: &str, hub: &SessionEventHub) {
-    let hub = hub.clone();
+async fn spawn_review_to_thread(
+    service: AstroServiceImpl,
+    session: &SessionHandle,
+    session_id: &str,
+) {
     let sid = session_id.to_string();
     let (notify_tx, mut notify_rx) = tokio::sync::mpsc::unbounded_channel();
-    let (agent_id, memory_dir) = {
+    {
         let agent = session.as_ref();
-        let id = agent.agent_id().to_string();
-        let dir = agent.memory_dir().to_path_buf();
         agent::exec::memory_review::spawn_background_review_after_turn(agent, Some(notify_tx))
             .await;
-        (id, dir)
-    };
+    }
     tokio::spawn(async move {
         if let Some(n) = notify_rx.recv().await {
             let live_written = !indicates_pending_enqueue(&n.content);
-            hub.publish(SessionEventMsg {
-                session_id: Some(sid),
-                agent_id: agent_id.clone(),
-                memory_updated: Some(MemoryUpdatedPayload {
-                    source: "review".into(),
-                    target: "mixed".into(),
-                    summary: n.content.clone(),
-                    live_written,
-                }),
-                pending_changed: None,
-                session_metadata_changed: None,
-            });
-            if !live_written {
-                let pending_count = memory::list_pending(&memory_dir)
-                    .map(|v| v.len() as u32)
-                    .unwrap_or(0);
-                hub.publish(SessionEventMsg {
-                    session_id: None,
-                    agent_id,
-                    memory_updated: None,
-                    pending_changed: Some(PendingChangedPayload {
-                        pending_count,
-                        reason: "enqueued".into(),
-                    }),
-                    session_metadata_changed: None,
-                });
+            if let Err(error) = service
+                .emit_background_review_extension(&sid, n.content, live_written)
+                .await
+            {
+                tracing::warn!(%error, session_id = %sid, "background review extension failed");
             }
         }
     });
 }
 
-/// 启动首轮标题生成，成功后发布 `session_metadata_changed`。
-async fn spawn_title_to_hub(session: &SessionHandle, hub: &SessionEventHub) {
-    let hub = hub.clone();
+/// 启动首轮标题生成，成功后提交 `astro.session_metadata` Extension。
+async fn spawn_title_to_thread(service: AstroServiceImpl, session: &SessionHandle) {
     let (notify_tx, mut notify_rx) = tokio::sync::mpsc::unbounded_channel();
-    let agent_id = {
+    {
         let agent = session.as_ref();
-        let id = agent.agent_id().to_string();
         agent::exec::title_generation::spawn_title_generation_after_turn(agent, Some(notify_tx));
-        id
-    };
+    }
     tokio::spawn(async move {
         if let Some(n) = notify_rx.recv().await {
-            hub.publish(SessionEventMsg {
-                session_id: Some(n.session_id),
-                agent_id,
-                memory_updated: None,
-                pending_changed: None,
-                session_metadata_changed: Some(crate::SessionMetadataChangedPayload {
-                    title: n.title,
-                }),
-            });
+            let session_id = n.session_id;
+            if let Err(error) = service
+                .emit_session_metadata_extension(&session_id, n.title)
+                .await
+            {
+                tracing::warn!(%error, %session_id, "session metadata extension failed");
+            }
         }
     });
 }
@@ -570,8 +501,6 @@ pub struct AstroServiceImpl {
     memory_dir: PathBuf,
     /// Plugin / Gateway / Shell 钩子运行时。
     hook_runtime: Arc<::hooks::HookRuntime>,
-    /// 会话记忆副作用事件 fan-out（SubscribeSessionEvents）。
-    session_events: SessionEventHub,
 }
 
 impl AstroServiceImpl {
@@ -605,7 +534,120 @@ impl AstroServiceImpl {
             hitl_registry: HitlRegistry::new(),
             memory_dir,
             hook_runtime,
-            session_events: SessionEventHub::new(64),
+        }
+    }
+
+    fn emit_extension<'a>(
+        &'a self,
+        thread_id: &'a str,
+        namespace: &'a str,
+        payload: serde_json::Value,
+    ) -> Pin<Box<dyn Future<Output = Result<(), Status>> + Send + 'a>> {
+        Box::pin(async move {
+            let managed = self.get_or_create_thread(thread_id).await?;
+            managed
+                .runtime
+                .submit(agent_protocol::Op::EmitExtension {
+                    item: agent_protocol::ExtensionItem {
+                        id: uuid::Uuid::new_v4().to_string(),
+                        namespace: namespace.into(),
+                        payload,
+                    },
+                })
+                .await
+                .map(|_| ())
+                .map_err(|error| Status::internal(error.to_string()))
+        })
+    }
+
+    /// Production background-review emitter; public for durable integration coverage.
+    #[doc(hidden)]
+    pub async fn emit_background_review_extension(
+        &self,
+        thread_id: &str,
+        summary: impl Into<String>,
+        live_written: bool,
+    ) -> Result<(), Status> {
+        self.emit_extension(
+            thread_id,
+            "astro.memory",
+            serde_json::json!({
+                "source": "review",
+                "target": "memory",
+                "summary": summary.into(),
+                "live_written": live_written,
+            }),
+        )
+        .await
+    }
+
+    /// Production session-title emitter; public for durable integration coverage.
+    #[doc(hidden)]
+    pub async fn emit_session_metadata_extension(
+        &self,
+        thread_id: &str,
+        title: impl Into<String>,
+    ) -> Result<(), Status> {
+        self.emit_extension(
+            thread_id,
+            "astro.session_metadata",
+            serde_json::json!({"title": title.into()}),
+        )
+        .await
+    }
+
+    /// Production workspace pending emitter; public for durable integration coverage.
+    #[doc(hidden)]
+    pub async fn emit_pending_extension(
+        &self,
+        pending_count: u32,
+        reason: impl Into<String>,
+    ) -> Result<(), Status> {
+        self.emit_extension(
+            WORKSPACE_EVENT_THREAD_ID,
+            "astro.pending",
+            serde_json::json!({
+                "pending_count": pending_count,
+                "reason": reason.into(),
+            }),
+        )
+        .await
+    }
+
+    async fn observe_thread_side_effects(
+        self,
+        thread_id: String,
+        session: SessionHandle,
+        mut events: tokio::sync::mpsc::UnboundedReceiver<agent_protocol::Event>,
+    ) {
+        while let Some(event) = events.recv().await {
+            match event.msg {
+                agent_protocol::EventMsg::TurnComplete(completed)
+                    if completed.error.is_none() && allows_post_turn_side_effects("success") =>
+                {
+                    spawn_review_to_thread(self.clone(), &session, &thread_id).await;
+                    spawn_title_to_thread(self.clone(), &session).await;
+                }
+                agent_protocol::EventMsg::ItemCompleted(agent_protocol::ItemEvent {
+                    item: agent_protocol::TurnItem::Extension(extension),
+                    ..
+                }) if extension.namespace == "astro.memory"
+                    && !extension
+                        .payload
+                        .get("live_written")
+                        .and_then(serde_json::Value::as_bool)
+                        .unwrap_or(true) =>
+                {
+                    let pending_count = memory::list_pending(&self.memory_dir)
+                        .map(|items| items.len() as u32)
+                        .unwrap_or(0);
+                    if let Err(error) = self.emit_pending_extension(pending_count, "enqueued").await
+                    {
+                        tracing::warn!(%error, "workspace pending extension failed");
+                    }
+                }
+                _ => {}
+            }
         }
     }
 
@@ -670,13 +712,20 @@ impl AstroServiceImpl {
         self.thread_states
             .insert(thread_id.to_string(), Arc::clone(&state))
             .await;
-        let listener = tokio::spawn(run_thread_listener(
+        let (observed_tx, observed_rx) = tokio::sync::mpsc::unbounded_channel();
+        tokio::spawn(self.clone().observe_thread_side_effects(
+            thread_id.to_string(),
+            Arc::clone(&session),
+            observed_rx,
+        ));
+        let listener = tokio::spawn(crate::thread_listener::run_thread_listener_observed(
             thread_id.to_string(),
             Arc::clone(&runtime),
             state,
             commands.clone(),
             command_rx,
             self.connections.clone(),
+            Some(observed_tx),
         ));
         let candidate = Arc::new(ManagedThread::new(runtime, commands, activity_rx, listener));
         if let Err(existing) = self
@@ -862,11 +911,6 @@ impl AstroServiceImpl {
                 }
             }
         });
-    }
-
-    /// 会话记忆事件 hub（供 Chat / 其它 RPC 发布副作用）。
-    pub(crate) fn session_event_hub(&self) -> &SessionEventHub {
-        &self.session_events
     }
 
     fn generation_operation(&self, session_id: &str) -> Arc<Mutex<()>> {
@@ -1455,223 +1499,6 @@ impl AstroServiceImpl {
     }
 }
 
-/// 解析 RunFinished.interrupts_json 为 proto Interrupt 列表。
-fn parse_interrupts_json(raw: &str) -> Vec<proto::Interrupt> {
-    let Ok(value) = serde_json::from_str::<serde_json::Value>(raw) else {
-        return Vec::new();
-    };
-    let Some(arr) = value.as_array() else {
-        return Vec::new();
-    };
-    arr.iter()
-        .filter_map(|item| {
-            Some(proto::Interrupt {
-                id: item.get("id")?.as_str()?.to_string(),
-                reason: item
-                    .get("reason")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("")
-                    .to_string(),
-                message: item
-                    .get("message")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("")
-                    .to_string(),
-                tool_call_id: item
-                    .get("tool_call_id")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("")
-                    .to_string(),
-                response_schema_json: item
-                    .get("response_schema_json")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("")
-                    .to_string(),
-                expires_at: item
-                    .get("expires_at")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("")
-                    .to_string(),
-                metadata_json: item
-                    .get("metadata_json")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("")
-                    .to_string(),
-            })
-        })
-        .collect()
-}
-
-/// 将 agent 多轮流事件映射为 proto [`ChatEvent`]；无对应项时返回 `None`（当前均有映射）。
-fn media_asset_to_proto(asset: types::MediaAsset) -> proto::MediaAsset {
-    let (ref_kind, ref_value) = match asset.reference {
-        types::MediaRef::WorkspacePath(p) => ("workspace_path", p),
-        types::MediaRef::DataUrl(u) => ("data_url", u),
-        types::MediaRef::RemoteUri(u) => ("remote_uri", u),
-    };
-    let kind = match asset.kind {
-        types::MediaKind::Image => "image",
-        types::MediaKind::Audio => "audio",
-        types::MediaKind::Video => "video",
-        types::MediaKind::File => "file",
-    };
-    proto::MediaAsset {
-        kind: kind.into(),
-        mime_type: asset.mime_type,
-        ref_kind: ref_kind.into(),
-        ref_value,
-        label: asset.label.unwrap_or_default(),
-        id: asset.id.unwrap_or_default(),
-    }
-}
-
-fn multi_turn_to_chat_event(item: MultiTurnStreamItem) -> Option<ChatEvent> {
-    match item {
-        MultiTurnStreamItem::Assistant(StreamedAssistantContent::Text(token)) => Some(ChatEvent {
-            payload: Some(proto::chat_event::Payload::Token(token)),
-        }),
-        MultiTurnStreamItem::Assistant(StreamedAssistantContent::Reasoning(r)) => Some(ChatEvent {
-            payload: Some(proto::chat_event::Payload::Reasoning(r)),
-        }),
-        MultiTurnStreamItem::Assistant(StreamedAssistantContent::ThoughtSignature(_)) => None,
-        MultiTurnStreamItem::Assistant(StreamedAssistantContent::ToolCallDelta(d)) => {
-            Some(ChatEvent {
-                payload: Some(proto::chat_event::Payload::ToolCallDelta(
-                    proto::ToolCallDeltaEvent {
-                        index: d.index,
-                        id: d.id.unwrap_or_default(),
-                        name: d.name.unwrap_or_default(),
-                        arguments: d.arguments.unwrap_or_default(),
-                    },
-                )),
-            })
-        }
-        MultiTurnStreamItem::Assistant(StreamedAssistantContent::FinalUsage(u)) => {
-            Some(ChatEvent {
-                payload: Some(proto::chat_event::Payload::Usage(UsageEvent {
-                    prompt_tokens: u.prompt_tokens(),
-                    completion_tokens: u.completion_tokens(),
-                    total_tokens: u.total_tokens(),
-                })),
-            })
-        }
-        MultiTurnStreamItem::Assistant(StreamedAssistantContent::Citations(cites)) => {
-            Some(ChatEvent {
-                payload: Some(proto::chat_event::Payload::CitationsJson(
-                    serde_json::to_string(&cites).unwrap_or_default(),
-                )),
-            })
-        }
-        MultiTurnStreamItem::Assistant(StreamedAssistantContent::InteractionId(_)) => None,
-        MultiTurnStreamItem::ToolStarted {
-            id,
-            name,
-            arguments_json,
-        } => Some(ChatEvent {
-            payload: Some(proto::chat_event::Payload::ToolCall(proto::ToolCallEvent {
-                id,
-                name,
-                arguments_json,
-                result: String::new(),
-                media: Vec::new(),
-                phase: "started".into(),
-            })),
-        }),
-        MultiTurnStreamItem::ToolResult {
-            id,
-            name,
-            arguments_json,
-            result,
-            media,
-        } => Some(ChatEvent {
-            payload: Some(proto::chat_event::Payload::ToolCall(proto::ToolCallEvent {
-                id,
-                name,
-                arguments_json,
-                result,
-                media: media.into_iter().map(media_asset_to_proto).collect(),
-                phase: "completed".into(),
-            })),
-        }),
-        MultiTurnStreamItem::MemoryUpdate { op, content } => Some(ChatEvent {
-            payload: Some(proto::chat_event::Payload::MemoryUpdate(
-                proto::MemoryUpdateEvent {
-                    operation: op,
-                    content,
-                },
-            )),
-        }),
-        MultiTurnStreamItem::ContextUsage(snap) => Some(ChatEvent {
-            payload: Some(proto::chat_event::Payload::ContextUsage(
-                ContextUsageEvent {
-                    context_window: snap.context_window,
-                    total_tokens: snap.total_tokens,
-                    segments: snap
-                        .segments
-                        .into_iter()
-                        .map(|s| ContextUsageSegment {
-                            id: s.id,
-                            tokens: s.tokens,
-                            count: s.meta.and_then(|m| m.count).unwrap_or(0),
-                            items: s
-                                .items
-                                .into_iter()
-                                .map(|it| proto::ContextUsageItem {
-                                    id: it.id,
-                                    label: it.label,
-                                    tokens: it.tokens,
-                                })
-                                .collect(),
-                        })
-                        .collect(),
-                    updated_at: snap.updated_at,
-                    recommend_compact: snap.recommend_compact,
-                },
-            )),
-        }),
-        MultiTurnStreamItem::RunStarted { thread_id, run_id } => Some(ChatEvent {
-            payload: Some(proto::chat_event::Payload::RunStarted(
-                proto::RunStartedEvent { thread_id, run_id },
-            )),
-        }),
-        MultiTurnStreamItem::Activity {
-            message_id,
-            activity_type,
-            content_json,
-            replace,
-        } => Some(ChatEvent {
-            payload: Some(proto::chat_event::Payload::Activity(proto::ActivityEvent {
-                message_id,
-                activity_type,
-                content_json,
-                replace,
-            })),
-        }),
-        MultiTurnStreamItem::RunFinished {
-            run_id,
-            outcome_type,
-            interrupts_json,
-        } => {
-            let interrupts = parse_interrupts_json(&interrupts_json);
-            Some(ChatEvent {
-                payload: Some(proto::chat_event::Payload::RunFinished(
-                    proto::RunFinishedEvent {
-                        run_id,
-                        outcome_type,
-                        interrupts,
-                    },
-                )),
-            })
-        }
-        MultiTurnStreamItem::Error(err) => Some(ChatEvent {
-            payload: Some(proto::chat_event::Payload::Error(err)),
-        }),
-        MultiTurnStreamItem::Done => Some(ChatEvent {
-            payload: Some(proto::chat_event::Payload::Done(true)),
-        }),
-    }
-}
-
 #[tonic::async_trait]
 impl AstroService for AstroServiceImpl {
     /// [`chat`](Self::chat) 流类型。
@@ -1684,9 +1511,6 @@ impl AstroService for AstroServiceImpl {
     /// [`execute_skill`](Self::execute_skill) 流类型。
     type ExecuteSkillStream =
         Pin<Box<dyn futures::Stream<Item = Result<SkillEvent, Status>> + Send>>;
-    /// [`subscribe_session_events`](Self::subscribe_session_events) 流类型。
-    type SubscribeSessionEventsStream = SessionEventsStream;
-
     async fn subscribe_thread_events(
         &self,
         request: Request<proto::SubscribeThreadEventsRequest>,
@@ -2218,44 +2042,6 @@ impl AstroService for AstroServiceImpl {
         Ok(Response::new(FileListResponse { entries }))
     }
 
-    /// 订阅会话级记忆副作用事件（记忆更新 / pending 变化），与 Chat 流生命周期解耦。
-    ///
-    /// - `session_id` 为空：仅全局 pending
-    /// - `session_id` 非空：该 session 事件 + 全局 pending
-    /// - `agent_id` 为空：不过滤 agent
-    async fn subscribe_session_events(
-        &self,
-        request: Request<SubscribeSessionEventsRequest>,
-    ) -> Result<Response<Self::SubscribeSessionEventsStream>, Status> {
-        let req = request.into_inner();
-        let filter = SubscribeFilter {
-            session_id: if req.session_id.trim().is_empty() {
-                None
-            } else {
-                Some(req.session_id)
-            },
-            agent_id: if req.agent_id.trim().is_empty() {
-                None
-            } else {
-                Some(req.agent_id)
-            },
-        };
-        let hub = self.session_events.clone();
-        let resume_stream_id = req.stream_id;
-        let after_event_id = req.after_event_id;
-        let (tx, rx) = tokio::sync::mpsc::channel(16);
-        tokio::spawn(async move {
-            let mut filtered = hub.subscribe(filter, &resume_stream_id, after_event_id);
-            let stream_id = hub.stream_id().to_string();
-            while let Some(ev) = filtered.recv().await {
-                if tx.send(Ok(to_proto(&ev, &stream_id))).await.is_err() {
-                    break;
-                }
-            }
-        });
-        Ok(Response::new(Box::pin(ReceiverStream::new(rx))))
-    }
-
     async fn count_tokens(
         &self,
         request: Request<proto::CountTokensRequest>,
@@ -2386,7 +2172,7 @@ mod tests {
 
     use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
-    use agent::streaming::{run_multi_turn_stream_with_chat_fn_legacy, ChatOverride};
+    use agent::streaming::{run_multi_turn_events_with_chat_fn, ChatOverride};
     use providers::CompletionStream;
     use tempfile::TempDir;
 
@@ -2396,35 +2182,6 @@ mod tests {
         for outcome in ["error", "interrupt", "hitl_waiting", ""] {
             assert!(!allows_post_turn_side_effects(outcome), "outcome={outcome}");
         }
-    }
-
-    #[test]
-    fn tool_lifecycle_maps_to_started_and_completed_phases() {
-        let started = multi_turn_to_chat_event(MultiTurnStreamItem::ToolStarted {
-            id: "call-1".into(),
-            name: "echo".into(),
-            arguments_json: r#"{"text":"hello"}"#.into(),
-        })
-        .expect("started event");
-        let Some(proto::chat_event::Payload::ToolCall(started)) = started.payload else {
-            panic!("tool call payload");
-        };
-        assert_eq!(started.phase, "started");
-        assert!(started.result.is_empty());
-
-        let completed = multi_turn_to_chat_event(MultiTurnStreamItem::ToolResult {
-            id: "call-1".into(),
-            name: "echo".into(),
-            arguments_json: r#"{"text":"hello"}"#.into(),
-            result: "hello".into(),
-            media: Vec::new(),
-        })
-        .expect("completed event");
-        let Some(proto::chat_event::Payload::ToolCall(completed)) = completed.payload else {
-            panic!("tool call payload");
-        };
-        assert_eq!(completed.phase, "completed");
-        assert_eq!(completed.result, "hello");
     }
 
     #[tokio::test]
@@ -2512,13 +2269,13 @@ mod tests {
         session: SessionHandle,
     ) -> (
         tokio::task::JoinHandle<()>,
-        tokio::sync::mpsc::Receiver<anyhow::Result<MultiTurnStreamItem>>,
+        tokio::sync::mpsc::Receiver<anyhow::Result<agent_protocol::Event>>,
     ) {
         let chat: ChatOverride = Arc::new(|_, _, _| {
             Box::pin(async move { Ok(Box::pin(futures::stream::pending()) as CompletionStream) })
         });
         let (tx, mut rx) = tokio::sync::mpsc::channel(8);
-        let handle = tokio::spawn(run_multi_turn_stream_with_chat_fn_legacy(
+        let handle = tokio::spawn(run_multi_turn_events_with_chat_fn(
             session,
             chat,
             ProviderConfig {
@@ -2531,7 +2288,10 @@ mod tests {
             tx,
         ));
         let started = rx.recv().await.expect("pending turn should start").unwrap();
-        assert!(matches!(started, MultiTurnStreamItem::RunStarted { .. }));
+        assert!(matches!(
+            started.msg,
+            agent_protocol::EventMsg::TurnStarted(_)
+        ));
         (handle, rx)
     }
 

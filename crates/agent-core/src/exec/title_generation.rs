@@ -1,6 +1,6 @@
 //! 首轮助手回复后的异步会话标题生成。
 //!
-//! 由 backend 在 Chat 流 `Done` 后 fire-and-forget。仅在标题仍为空时写入
+//! 由 backend 在成功的 Thread terminal 后 fire-and-forget。仅在标题仍为空时写入
 //! （[`session::SessionStore::set_session_title_if_empty`]），迟到任务不会覆盖手动标题。
 
 use futures::StreamExt;
@@ -37,7 +37,7 @@ pub fn job_from_agent(agent: &AgentLoop) -> TitleGenerationJob {
     }
 }
 
-/// Done 后异步生成标题；成功时可选推送 [`TitleChangedNotify`]。
+/// 成功的 Thread terminal 后异步生成标题；成功时可选推送 [`TitleChangedNotify`]。
 pub fn spawn_title_generation_after_turn(
     agent: &AgentLoop,
     notify: Option<tokio::sync::mpsc::UnboundedSender<TitleChangedNotify>>,

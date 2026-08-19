@@ -11,8 +11,6 @@ pub mod builder;
 pub mod compression;
 /// 控制型运行时能力（HITL / interrupt / schema 校验）。
 pub mod control;
-/// Agent 运行期事件广播，供 UI 订阅流式输出与工具调用。
-pub mod event_bus;
 /// 执行域聚合模块（cron / subagents / memory_review）。
 pub mod exec;
 /// 提示词域：上下文、消息转换、hook 与 prompt builder。
@@ -44,10 +42,9 @@ pub use runtime::{
 };
 /// 流式 API re-export。
 pub use streaming::{
-    run_multi_turn_stream, run_multi_turn_stream_with_chat_fn,
-    run_multi_turn_stream_with_chat_fn_legacy, stream_multi_turn, stream_multi_turn_with_hitl,
-    ChatOverride, MultiTurnStreamItem, ProviderStreamer, StreamedAssistantContent, StreamingChat,
-    StreamingCompletion, StreamingPrompt,
+    run_multi_turn_events_with_chat_fn, run_multi_turn_stream_with_chat_fn, run_thread_turn_events,
+    ChatOverride, ProviderStreamer, StreamedAssistantContent, StreamingChat, StreamingCompletion,
+    StreamingPrompt, ThreadTurnEventArgs,
 };
 /// 工具注册表（实现位于 `tools` crate）。
 pub use tools::ToolRegistry;

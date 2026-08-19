@@ -1,7 +1,7 @@
 //! 后台（非 UI）运行适配器，供 Cron 和 Agent Thread 使用。
 //!
 //! 本模块不实现第二套 Agent 循环。foreground 与 background 都由
-//! [`crate::streaming::run_multi_turn_stream`] 驱动；这里只负责：
+//! canonical Thread task 驱动；这里只负责：
 //! - 丢弃 UI 专属事件并收集最终 assistant 文本与 usage；
 //! - 将 Agent Thread 的 interrupt / close 信号桥接到 [`providers::PauseControl`]；
 //! - 把统一引擎的流式错误转换为后台调用方可处理的 `Result`。
@@ -17,7 +17,7 @@ use types::ChatTarget;
 
 use crate::runtime::Session;
 use crate::streaming::multi_turn::{
-    install_multi_turn_task, InstalledMultiTurn, MultiTurnTaskArgs,
+    install_multi_turn_task, InstalledMultiTurn, ThreadTurnTaskArgs,
 };
 use crate::streaming::ChatOverride;
 use agent_protocol::{Event, EventMsg, TurnInput};
@@ -76,7 +76,7 @@ pub(crate) async fn run_background_multi_turn_controlled_with_chat(
             pause.cancel();
         })
     });
-    let installed = install_multi_turn_task(MultiTurnTaskArgs {
+    let installed = install_multi_turn_task(ThreadTurnTaskArgs {
         session: Arc::clone(&session),
         targets,
         base_config,
@@ -235,7 +235,7 @@ async fn latest_assistant_text(session: &Arc<Session>, message_start: usize) -> 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::streaming::{run_multi_turn_stream_with_chat_fn_legacy, MultiTurnStreamItem};
+    use crate::streaming::run_multi_turn_events_with_chat_fn;
     use agent_protocol::{
         ErrorEvent, Event, EventMsg, ItemEvent, TokenCountEvent, TurnCompleteEvent,
     };
@@ -422,21 +422,24 @@ mod tests {
         let config = crate::runtime::Config::with_defaults(temp.path().to_path_buf());
         let session =
             Arc::new(Session::with_session_id(config, "background-replace".into()).unwrap());
-        let (legacy_tx, mut legacy_rx) = tokio::sync::mpsc::channel(8);
-        let old_run = tokio::spawn(run_multi_turn_stream_with_chat_fn_legacy(
+        let (event_tx, mut event_rx) = tokio::sync::mpsc::channel(8);
+        let old_run = tokio::spawn(run_multi_turn_events_with_chat_fn(
             Arc::clone(&session),
             pending_chat(),
             ProviderConfig::default(),
             "system".into(),
             PauseControl::new(),
             None,
-            legacy_tx,
+            event_tx,
         ));
         tokio::time::timeout(std::time::Duration::from_secs(1), async {
             loop {
                 if matches!(
-                    legacy_rx.recv().await,
-                    Some(Ok(MultiTurnStreamItem::RunStarted { .. }))
+                    event_rx.recv().await,
+                    Some(Ok(Event {
+                        msg: EventMsg::TurnStarted(_),
+                        ..
+                    }))
                 ) {
                     break;
                 }
@@ -503,7 +506,7 @@ mod tests {
             Arc::new(Session::with_session_id(config, "structured-install-error".into()).unwrap());
         session.begin_runtime_shutdown();
 
-        let error = match install_multi_turn_task(MultiTurnTaskArgs {
+        let error = match install_multi_turn_task(ThreadTurnTaskArgs {
             session,
             targets: vec![test_target()],
             base_config: ProviderConfig::default(),

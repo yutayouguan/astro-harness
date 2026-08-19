@@ -3,7 +3,7 @@
 //! **关键不变量**
 //! - Pause/Cancel 对齐 Rig：`wait_if_paused` 先于上游 poll；取消时通过 `Abortable` 中止 Provider 流
 //! - 每轮 assistant 回复必须写入 `SessionState.history`（含 tool_calls）后再执行工具
-//! - 迭代预算对齐 Hermes：默认 90 轮；`code_exec` 独占轮可 refund；耗尽后无工具强制总结再 Done
+//! - 迭代预算对齐 Hermes：默认 90 轮；`code_exec` 独占轮可 refund；耗尽后无工具强制总结再终止
 //! - usage 采用覆盖式累加，兼容 Google 等 Provider 的累计式 `usageMetadata`
 //!
 //! HITL park/resume 桥见 [`super::hitl_bridge`]；预算耗尽后的总结轮见 [`super::summary`]。
@@ -34,7 +34,7 @@ use super::summary::{run_max_iterations_summary, SummaryOutcome};
 use super::tools_exec::{
     execute_tools_concurrent, execute_tools_serial, tool_may_require_permission,
 };
-use super::types::{MultiTurnStream, MultiTurnStreamItem, StreamedAssistantContent};
+use super::types::StreamedAssistantContent;
 use crate::control::hitl::HitlGate;
 use crate::runtime::{Session, TurnContext};
 use crate::tasks::{RegularTask, SessionTaskResult, TurnCancelled};
@@ -77,22 +77,7 @@ async fn emit_tool_argument_events(
     }
 }
 
-/// [`run_multi_turn_stream`] 入参打包。
-pub struct MultiTurnStreamArgs {
-    pub session: Arc<Session>,
-    pub targets: Vec<ChatTarget>,
-    pub base_config: ProviderConfig,
-    pub input: Vec<TurnInput>,
-    /// Compatibility path for tests and callers that already prepared a turn.
-    pub system_prompt: Option<String>,
-    pub pause: Arc<PauseControl>,
-    pub hitl_gate: Option<Arc<HitlGate>>,
-    pub tx: mpsc::Sender<anyhow::Result<MultiTurnStreamItem>>,
-    /// 测试覆盖：非空时跳过 dispatch，直接使用此函数获取 CompletionStream。
-    pub chat_override: Option<super::provider::ChatOverride>,
-}
-
-pub(crate) struct MultiTurnTaskArgs {
+pub(crate) struct ThreadTurnTaskArgs {
     pub(crate) session: Arc<Session>,
     pub(crate) targets: Vec<ChatTarget>,
     pub(crate) base_config: ProviderConfig,
@@ -103,76 +88,8 @@ pub(crate) struct MultiTurnTaskArgs {
     pub(crate) chat_override: Option<super::provider::ChatOverride>,
 }
 
-impl MultiTurnStreamArgs {
-    fn into_task_args(
-        self,
-    ) -> (
-        MultiTurnTaskArgs,
-        mpsc::Sender<anyhow::Result<MultiTurnStreamItem>>,
-    ) {
-        let Self {
-            session,
-            targets,
-            base_config,
-            input,
-            system_prompt,
-            pause,
-            hitl_gate,
-            tx,
-            chat_override,
-        } = self;
-        (
-            MultiTurnTaskArgs {
-                session,
-                targets,
-                base_config,
-                input,
-                system_prompt,
-                pause,
-                hitl_gate,
-                chat_override,
-            },
-            tx,
-        )
-    }
-}
-
-/// 多轮工具调用流式循环：从 gRPC handler 收拢到 Agent 层的核心编排。
-///
-/// 每轮：锁定 session → 流式 LLM → 累积 tool_calls → 执行工具 → 写入历史 → 下一轮。
-/// 取消/暂停时清理 abort handle 并以 usage + Done 收尾。
-/// `hitl_gate` 非空时，confirm/clarify/危险命令在同回合 park，不结束 run。
-pub async fn run_multi_turn_stream(args: MultiTurnStreamArgs) {
-    let (task_args, legacy_tx) = args.into_task_args();
-    match install_multi_turn_task(task_args).await {
-        Ok(installed) => {
-            let InstalledMultiTurn {
-                session,
-                session_id,
-                turn_id,
-                events,
-            } = installed;
-            let forward = tokio::spawn(forward_unified_to_legacy(
-                events,
-                turn_id.clone(),
-                legacy_tx,
-            ));
-            session.wait_for_task(&turn_id).await;
-            let _ = forward.await;
-            tracing::info!(session_id = %session_id, turn_id = %turn_id, "turn finished");
-        }
-        Err(error) => {
-            let _ = legacy_tx
-                .send(Ok(MultiTurnStreamItem::Error(error.message)))
-                .await;
-            let _ = legacy_tx.send(Ok(MultiTurnStreamItem::Done)).await;
-        }
-    }
-}
-
 pub(crate) struct InstalledMultiTurn {
     pub(crate) session: Arc<Session>,
-    pub(crate) session_id: String,
     pub(crate) turn_id: String,
     pub(crate) events: async_channel::Receiver<Event>,
 }
@@ -182,10 +99,24 @@ pub(crate) struct MultiTurnInstallError {
     pub(crate) message: String,
 }
 
+/// Canonical Thread-event execution seam used by integration tests and adapters.
+#[doc(hidden)]
+pub struct ThreadTurnEventArgs {
+    pub session: Arc<Session>,
+    pub targets: Vec<ChatTarget>,
+    pub base_config: ProviderConfig,
+    pub input: Vec<TurnInput>,
+    pub system_prompt: Option<String>,
+    pub pause: Arc<PauseControl>,
+    pub hitl_gate: Option<Arc<HitlGate>>,
+    pub tx: mpsc::Sender<anyhow::Result<Event>>,
+    pub chat_override: Option<super::provider::ChatOverride>,
+}
+
 pub(crate) async fn install_multi_turn_task(
-    args: MultiTurnTaskArgs,
+    args: ThreadTurnTaskArgs,
 ) -> Result<InstalledMultiTurn, MultiTurnInstallError> {
-    let MultiTurnTaskArgs {
+    let ThreadTurnTaskArgs {
         session,
         targets,
         base_config,
@@ -219,256 +150,75 @@ pub(crate) async fn install_multi_turn_task(
     }
     Ok(InstalledMultiTurn {
         session,
-        session_id,
         turn_id: sub_id,
         events,
     })
 }
 
-fn legacy_items_from_event(event: Event) -> Vec<MultiTurnStreamItem> {
-    let run_id = event.id;
-    match event.msg {
-        EventMsg::TurnStarted(_) => vec![MultiTurnStreamItem::RunStarted {
-            thread_id: String::new(),
-            run_id,
-        }],
-        EventMsg::AgentMessageContentDelta(delta) => vec![MultiTurnStreamItem::Assistant(
-            StreamedAssistantContent::Text(delta.delta),
-        )],
-        EventMsg::ReasoningContentDelta(delta) => vec![MultiTurnStreamItem::Assistant(
-            StreamedAssistantContent::Reasoning(delta.delta),
-        )],
-        EventMsg::DynamicToolCallRequest(request) => {
-            vec![MultiTurnStreamItem::Assistant(
-                StreamedAssistantContent::ToolCallDelta(types::ToolCallDelta {
-                    index: request
-                        .payload
-                        .get("index")
-                        .and_then(serde_json::Value::as_u64)
-                        .unwrap_or_default() as u32,
-                    id: Some(request.item_id),
-                    name: request
-                        .payload
-                        .get("name")
-                        .and_then(serde_json::Value::as_str)
-                        .map(str::to_string),
-                    arguments: request
-                        .payload
-                        .get("delta")
-                        .and_then(serde_json::Value::as_str)
-                        .map(str::to_string),
-                    signature: None,
-                }),
-            )]
-        }
-        EventMsg::RequestUserInput(request)
-        | EventMsg::RequestPermissions(request)
-        | EventMsg::ExecApprovalRequest(request)
-        | EventMsg::ApplyPatchApprovalRequest(request) => vec![
-            MultiTurnStreamItem::Activity {
-                message_id: format!("a2ui-surface-{}", request.item_id),
-                activity_type: "a2ui-surface".into(),
-                content_json: serde_json::json!({
-                    "operations": request.payload.get("operations").cloned().unwrap_or_default(),
-                })
-                .to_string(),
-                replace: true,
-            },
-            MultiTurnStreamItem::RunFinished {
-                run_id,
-                outcome_type: "hitl_waiting".into(),
-                interrupts_json: serde_json::json!([{
-                    "id": request.request_id,
-                    "reason": request.payload.get("reason").cloned().unwrap_or_default(),
-                    "message": request.payload.get("message").cloned().unwrap_or_default(),
-                    "tool_call_id": request.item_id,
-                    "response_schema_json": request
-                        .payload
-                        .get("response_schema")
-                        .cloned()
-                        .unwrap_or_default()
-                        .to_string(),
-                }])
-                .to_string(),
-            },
-        ],
-        EventMsg::ItemStarted(item) => match item.item {
-            agent_protocol::TurnItem::CommandExecution(tool)
-            | agent_protocol::TurnItem::DynamicToolCall(tool)
-            | agent_protocol::TurnItem::McpToolCall(tool)
-            | agent_protocol::TurnItem::CollabAgentToolCall(tool) => {
-                vec![MultiTurnStreamItem::ToolStarted {
-                    id: tool.id,
-                    name: tool.name,
-                    arguments_json: tool.arguments.to_string(),
-                }]
-            }
-            _ => Vec::new(),
-        },
-        EventMsg::ItemCompleted(item) => match item.item {
-            agent_protocol::TurnItem::CommandExecution(tool)
-            | agent_protocol::TurnItem::DynamicToolCall(tool)
-            | agent_protocol::TurnItem::McpToolCall(tool)
-            | agent_protocol::TurnItem::CollabAgentToolCall(tool) => {
-                vec![MultiTurnStreamItem::ToolResult {
-                    id: tool.id,
-                    name: tool.name,
-                    arguments_json: tool.arguments.to_string(),
-                    result: tool
-                        .output
-                        .map(|value| match value {
-                            serde_json::Value::String(text) => text,
-                            other => other.to_string(),
-                        })
-                        .unwrap_or_default(),
-                    media: tool.media,
-                }]
-            }
-            agent_protocol::TurnItem::Extension(extension)
-                if extension.namespace == "astro.memory" =>
-            {
-                vec![MultiTurnStreamItem::MemoryUpdate {
-                    op: extension
-                        .payload
-                        .get("op")
-                        .and_then(serde_json::Value::as_str)
-                        .unwrap_or("memory")
-                        .to_string(),
-                    content: extension
-                        .payload
-                        .get("content")
-                        .and_then(serde_json::Value::as_str)
-                        .unwrap_or_default()
-                        .to_string(),
-                }]
-            }
-            agent_protocol::TurnItem::Extension(extension)
-                if extension.namespace == "astro.a2ui" =>
-            {
-                vec![MultiTurnStreamItem::Activity {
-                    message_id: extension.id,
-                    activity_type: "a2ui-surface".into(),
-                    content_json: serde_json::json!({
-                        "operations": extension
-                            .payload
-                            .get("operations")
-                            .cloned()
-                            .unwrap_or_default(),
-                    })
-                    .to_string(),
-                    replace: extension
-                        .payload
-                        .get("replace")
-                        .and_then(serde_json::Value::as_bool)
-                        .unwrap_or(true),
-                }]
-            }
-            _ => Vec::new(),
-        },
-        EventMsg::ContextUsage(context) => {
-            vec![MultiTurnStreamItem::ContextUsage(
-                crate::prompt::context_usage::ContextUsageSnapshot {
-                    context_window: context.context_window,
-                    total_tokens: context.total_tokens,
-                    segments: context
-                        .segments
-                        .into_iter()
-                        .map(
-                            |segment| crate::prompt::context_usage::ContextUsageSegment {
-                                id: segment.id,
-                                tokens: segment.tokens,
-                                meta: segment.count.map(|count| {
-                                    crate::prompt::context_usage::ContextUsageSegmentMeta {
-                                        count: Some(count),
-                                    }
-                                }),
-                                items: segment
-                                    .items
-                                    .into_iter()
-                                    .map(|item| crate::prompt::context_usage::ContextUsageItem {
-                                        id: item.id,
-                                        label: item.label,
-                                        tokens: item.tokens,
-                                    })
-                                    .collect(),
-                            },
-                        )
-                        .collect(),
-                    updated_at: context.updated_at,
-                    recommend_compact: context.recommend_compact,
-                },
-            )]
-        }
-        EventMsg::TokenCount(tokens) => vec![MultiTurnStreamItem::Assistant(
-            StreamedAssistantContent::FinalUsage(Usage {
-                input_tokens: u32::try_from(tokens.input_tokens).unwrap_or(u32::MAX),
-                output_tokens: u32::try_from(tokens.output_tokens).unwrap_or(u32::MAX),
-                cache_read_tokens: u32::try_from(tokens.cache_read_tokens).unwrap_or(u32::MAX),
-                cache_write_tokens: u32::try_from(tokens.cache_write_tokens).unwrap_or(u32::MAX),
-                reasoning_tokens: u32::try_from(tokens.reasoning_tokens).unwrap_or(u32::MAX),
-                request_count: u32::try_from(tokens.request_count).unwrap_or(u32::MAX),
-            }),
-        )],
-        EventMsg::Error(error) => vec![MultiTurnStreamItem::Error(error.message)],
-        EventMsg::TurnComplete(complete) => vec![
-            MultiTurnStreamItem::RunFinished {
-                run_id,
-                outcome_type: if complete.error.is_some() {
-                    "error".into()
-                } else {
-                    "success".into()
-                },
-                interrupts_json: "[]".into(),
-            },
-            MultiTurnStreamItem::Done,
-        ],
-        EventMsg::TurnAborted(_) => vec![
-            MultiTurnStreamItem::RunFinished {
-                run_id,
-                outcome_type: "interrupt".into(),
-                interrupts_json: "[]".into(),
-            },
-            MultiTurnStreamItem::Done,
-        ],
-        _ => Vec::new(),
-    }
-}
-
-async fn forward_unified_to_legacy(
-    rx: async_channel::Receiver<Event>,
-    turn_id: String,
-    tx: mpsc::Sender<anyhow::Result<MultiTurnStreamItem>>,
-) {
-    let event_turn_id = crate::runtime::event_identity::event_turn_id(&turn_id);
-    loop {
-        let Ok(event) = rx.recv().await else {
-            return;
-        };
-        if event.id != event_turn_id {
-            continue;
-        }
-        let terminal = event.msg.is_terminal();
-        for item in legacy_items_from_event(event) {
-            if tx.send(Ok(item)).await.is_err() {
-                return;
-            }
-        }
-        if terminal {
-            return;
-        }
-    }
-}
-
-/// Legacy stream adapter retained while app-server migrates to unified thread events.
+/// Canonical Thread-event execution seam used by integration tests and adapters.
 #[doc(hidden)]
-pub async fn run_multi_turn_stream_with_chat_fn_legacy(
+pub async fn run_thread_turn_events(args: ThreadTurnEventArgs) {
+    let ThreadTurnEventArgs {
+        session,
+        targets,
+        base_config,
+        input,
+        system_prompt,
+        pause,
+        hitl_gate,
+        tx,
+        chat_override,
+    } = args;
+    match install_multi_turn_task(ThreadTurnTaskArgs {
+        session: Arc::clone(&session),
+        targets,
+        base_config,
+        input,
+        system_prompt,
+        pause,
+        hitl_gate,
+        chat_override,
+    })
+    .await
+    {
+        Ok(installed) => {
+            let turn_id = installed.turn_id;
+            let event_turn_id = crate::runtime::event_identity::event_turn_id(&turn_id);
+            while let Ok(event) = installed.events.recv().await {
+                if event.id != event_turn_id {
+                    continue;
+                }
+                let terminal = event.msg.is_terminal();
+                if tx.send(Ok(event)).await.is_err() || terminal {
+                    break;
+                }
+            }
+            session.wait_for_task(&turn_id).await;
+        }
+        Err(error) => {
+            let _ = tx
+                .send(Ok(Event {
+                    id: crate::runtime::event_identity::event_turn_id(&error.turn_id),
+                    msg: EventMsg::Error(agent_protocol::ErrorEvent {
+                        message: error.message,
+                        error_type: "turn_prepare".into(),
+                    }),
+                }))
+                .await;
+        }
+    }
+}
+
+/// Prepared-turn convenience seam for existing lifecycle tests.
+#[doc(hidden)]
+pub async fn run_multi_turn_events_with_chat_fn(
     session: Arc<Session>,
     chat_fn: super::provider::ChatOverride,
     config: ProviderConfig,
     system_prompt: String,
     pause: Arc<PauseControl>,
     hitl_gate: Option<Arc<HitlGate>>,
-    tx: mpsc::Sender<anyhow::Result<MultiTurnStreamItem>>,
+    tx: mpsc::Sender<anyhow::Result<Event>>,
 ) {
     let target = ChatTarget {
         provider_id: "scripted".into(),
@@ -477,7 +227,7 @@ pub async fn run_multi_turn_stream_with_chat_fn_legacy(
         api_key: config.api_key.clone(),
         base_url: config.base_url.clone().unwrap_or_default(),
     };
-    run_multi_turn_stream(MultiTurnStreamArgs {
+    run_thread_turn_events(ThreadTurnEventArgs {
         session,
         targets: vec![target],
         base_config: config,
@@ -490,9 +240,6 @@ pub async fn run_multi_turn_stream_with_chat_fn_legacy(
     })
     .await;
 }
-
-/// Integration-test seam that installs the same [`RegularTask`] used in production.
-#[doc(hidden)]
 pub async fn run_multi_turn_stream_with_chat_fn(
     session: Arc<Session>,
     turn_context: Arc<TurnContext>,
@@ -1358,70 +1105,4 @@ pub(crate) async fn run_turn(
     )
     .await;
     Ok(None)
-}
-
-/// 先完成 Session task 安装，再返回可消费的 [`MultiTurnStream`]。
-///
-/// channel 容量为 32；消费者 drop 后发送方通过 [`emit`] 返回 `false` 自然退出。
-pub async fn stream_multi_turn(
-    session: Arc<Session>,
-    targets: Vec<ChatTarget>,
-    base_config: ProviderConfig,
-    input: Vec<TurnInput>,
-    pause: Arc<PauseControl>,
-) -> MultiTurnStream {
-    stream_multi_turn_with_hitl(session, targets, base_config, input, pause, None).await
-}
-
-/// 带 HITL 闸门的多轮流。
-pub async fn stream_multi_turn_with_hitl(
-    session: Arc<Session>,
-    targets: Vec<ChatTarget>,
-    base_config: ProviderConfig,
-    input: Vec<TurnInput>,
-    pause: Arc<PauseControl>,
-    hitl_gate: Option<Arc<HitlGate>>,
-) -> MultiTurnStream {
-    let (tx, rx) = mpsc::channel(32);
-    let legacy_tx = tx.clone();
-    let installed = install_multi_turn_task(MultiTurnTaskArgs {
-        session,
-        targets,
-        base_config,
-        input,
-        system_prompt: None,
-        pause,
-        hitl_gate,
-        chat_override: None,
-    })
-    .await;
-    match installed {
-        Ok(installed) => {
-            let InstalledMultiTurn {
-                session,
-                session_id,
-                turn_id,
-                events,
-            } = installed;
-            tokio::spawn(async move {
-                let forward = tokio::spawn(forward_unified_to_legacy(
-                    events,
-                    turn_id.clone(),
-                    legacy_tx,
-                ));
-                session.wait_for_task(&turn_id).await;
-                let _ = forward.await;
-                tracing::info!(session_id = %session_id, turn_id = %turn_id, "turn finished");
-            });
-        }
-        Err(error) => {
-            let _ = legacy_tx
-                .send(Ok(MultiTurnStreamItem::Error(error.message)))
-                .await;
-            let _ = legacy_tx.send(Ok(MultiTurnStreamItem::Done)).await;
-        }
-    }
-    Box::pin(futures::stream::unfold(rx, |mut rx| async move {
-        rx.recv().await.map(|item| (item, rx))
-    }))
 }

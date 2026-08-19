@@ -34,8 +34,6 @@ service AstroService {
   rpc QueryMemory(MemoryQuery) returns (MemoryResult);
   // 在记忆沙箱内列举文件（受根目录约束）。
   rpc ListFiles(FileListRequest) returns (FileListResponse);
-  // 会话级副作用事件（记忆更新 / pending 变化）；与 Chat 流生命周期解耦。
-  rpc SubscribeSessionEvents(SubscribeSessionEventsRequest) returns (stream SessionEvent);
   // 统计消息 + 工具的 token 数（Anthropic count_tokens）。
   rpc CountTokens(CountTokensRequest) returns (CountTokensResponse);
   // Anthropic Message Batches：创建 / 查询 / 列表 / 结果。
@@ -480,45 +478,6 @@ message SessionSnippet { string session_id = 1; string summary = 2; }
 message FileListRequest { string path = 1; int32 depth = 2; }
 message FileListResponse { repeated FileEntry entries = 1; }
 message FileEntry { string path = 1; bool is_dir = 2; int64 size = 3; }
-
-message SubscribeSessionEventsRequest {
-  // 空 = 只收全局 pending；非空 = 该 session + 全局 pending
-  string session_id = 1;
-  // 可选 agent 过滤；空 = 不过滤
-  string agent_id = 2;
-  // 断线重连游标；仅在 stream_id 匹配当前服务进程时生效。
-  uint64 after_event_id = 3;
-  string stream_id = 4;
-}
-
-message SessionEvent {
-  string session_id = 1;
-  string agent_id = 2;
-  int64 ts_ms = 3;
-  uint64 event_id = 4;
-  string stream_id = 5;
-  oneof payload {
-    MemoryUpdatedEvent memory_updated = 10;
-    PendingChangedEvent pending_changed = 11;
-    SessionMetadataChangedEvent session_metadata_changed = 12;
-  }
-}
-
-message MemoryUpdatedEvent {
-  string source = 1;   // review | approve | dreaming | tool
-  string target = 2;   // memory | user | mixed
-  string summary = 3;
-  bool live_written = 4;
-}
-
-message PendingChangedEvent {
-  uint32 pending_count = 1;
-  string reason = 2;   // enqueued | approved | rejected
-}
-
-message SessionMetadataChangedEvent {
-  string title = 1;
-}
 
 // ---------------------------------------------------------------------------
 // Token Counting & Batch API

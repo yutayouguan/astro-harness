@@ -304,7 +304,7 @@ pub async fn regenerate_session_title(
     app: AppHandle,
     session_id: String,
 ) -> Result<String, String> {
-    use crate::infra::session_events::{
+    use crate::infra::thread_events::{
         emit_session_event, now_ts_ms, SessionEventDto, SessionMetadataChangedDto,
     };
     use crate::meta::auxiliary_resolver::{
@@ -414,8 +414,6 @@ pub async fn regenerate_session_title(
             session_id: Some(sid.clone()),
             agent_id: String::new(),
             ts_ms: now_ts_ms(),
-            event_id: 0,
-            stream_id: String::new(),
             memory_updated: None,
             pending_changed: None,
             session_metadata_changed: Some(SessionMetadataChangedDto {

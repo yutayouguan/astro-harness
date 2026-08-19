@@ -290,12 +290,25 @@ pub(super) async fn record_tool_outcomes(
             } else {
                 s.to_string()
             };
+            let target = call
+                .arguments
+                .get("target")
+                .and_then(serde_json::Value::as_str)
+                .filter(|target| matches!(*target, "memory" | "user" | "mixed"))
+                .unwrap_or("mixed");
             emit_extension_completed(
                 session,
                 turn_context,
                 format!("memory-{}", call.id),
                 "astro.memory",
-                serde_json::json!({ "op": call.name, "content": preview }),
+                serde_json::json!({
+                    "source": "tool",
+                    "target": target,
+                    "summary": preview,
+                    "live_written": !(result_text.contains("待审批")
+                        || result_text.contains("pending")
+                        || result_text.contains("入队")),
+                }),
             )
             .await;
         }

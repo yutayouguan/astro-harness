@@ -1,7 +1,7 @@
 //! 回合后记忆 background review：调用辅助模型并应用建议。
 //!
-//! 由 backend 在 Chat 流 `Done` 后 fire-and-forget；完成后可选通过
-//! [`MemoryReviewNotify`] 通知调用方（再由 backend 发布到 SessionEventHub）。
+//! 由 backend 在成功的 Thread terminal 后 fire-and-forget；完成后可选通过
+//! [`MemoryReviewNotify`] 通知调用方（再由 backend 提交 durable Thread Extension）。
 //! `auxiliary.background_review_enabled` 为 false 时直接跳过。
 //!
 //! 目标链来自 ChatRequest 注入的 `AuxiliaryTask::BackgroundReview`

@@ -15,7 +15,7 @@ use tauri::AppHandle;
 use tauri_plugin_dialog::DialogExt;
 
 use super::chat::chat_control;
-use crate::infra::session_events::{
+use crate::infra::thread_events::{
     emit_session_event, now_ts_ms, MemoryUpdatedDto, PendingChangedDto, SessionEventDto,
 };
 
@@ -134,8 +134,6 @@ pub async fn approve_pending_memory_write(app: AppHandle, id: String) -> Result<
             session_id: None,
             agent_id,
             ts_ms: now_ts_ms(),
-            event_id: 0,
-            stream_id: String::new(),
             memory_updated: Some(MemoryUpdatedDto {
                 source: "approve".into(),
                 target,
@@ -174,8 +172,6 @@ pub async fn reject_pending_memory_write(app: AppHandle, id: String) -> Result<(
             session_id: None,
             agent_id,
             ts_ms: now_ts_ms(),
-            event_id: 0,
-            stream_id: String::new(),
             memory_updated: None,
             pending_changed: Some(PendingChangedDto {
                 pending_count,
@@ -749,8 +745,6 @@ pub async fn approve_all_pending_memory_writes(app: AppHandle) -> Result<String,
                         session_id: None,
                         agent_id: p.agent_id,
                         ts_ms: now_ts_ms(),
-                        event_id: 0,
-                        stream_id: String::new(),
                         memory_updated: Some(MemoryUpdatedDto {
                             source: "approve".into(),
                             target: pending_target_str(p.target).into(),
@@ -792,8 +786,6 @@ pub async fn reject_all_pending_memory_writes(app: AppHandle) -> Result<String, 
                         session_id: None,
                         agent_id: p.agent_id,
                         ts_ms: now_ts_ms(),
-                        event_id: 0,
-                        stream_id: String::new(),
                         memory_updated: None,
                         pending_changed: Some(PendingChangedDto {
                             pending_count,

@@ -285,14 +285,39 @@ pub async fn run_thread_listener(
     command_rx: mpsc::UnboundedReceiver<ListenerCommand>,
     connections: ConnectionRegistry,
 ) {
+    run_thread_listener_observed(
+        thread_id,
+        thread,
+        state,
+        commands,
+        command_rx,
+        connections,
+        None,
+    )
+    .await;
+}
+
+pub(crate) async fn run_thread_listener_observed(
+    thread_id: String,
+    thread: Arc<agent::AstroThread>,
+    state: Arc<Mutex<ThreadState>>,
+    commands: mpsc::UnboundedSender<ListenerCommand>,
+    command_rx: mpsc::UnboundedReceiver<ListenerCommand>,
+    connections: ConnectionRegistry,
+    observed_events: Option<mpsc::UnboundedSender<Event>>,
+) {
     let pump_commands = commands.clone();
     let pump = tokio::spawn(async move {
         while let Ok(event) = thread.next_event().await {
+            let observed = event.clone();
             if pump_commands
                 .send(ListenerCommand::CoreEvent(event))
                 .is_err()
             {
                 break;
+            }
+            if let Some(observed_events) = observed_events.as_ref() {
+                let _ = observed_events.send(observed);
             }
         }
         let _ = pump_commands.send(ListenerCommand::Stop);

@@ -639,15 +639,6 @@ export function useChatSession({
     }
   }, [chatRightOpen]);
 
-  // ── Session events filter ─────────────────────────────────────────────────
-  useEffect(() => {
-    if (typeof window === "undefined" || !("__TAURI_INTERNALS__" in window)) return;
-    void invoke("set_session_events_filter", {
-      sessionId: sessionId ?? null,
-      agentId: null,
-    }).catch(() => {});
-  }, [sessionId]);
-
   // ── Memory pending count init ─────────────────────────────────────────────
   useEffect(() => {
     if (typeof window === "undefined" || !("__TAURI_INTERNALS__" in window)) return;
