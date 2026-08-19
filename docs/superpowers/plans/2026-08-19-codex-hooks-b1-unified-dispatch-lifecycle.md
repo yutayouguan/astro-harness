@@ -937,7 +937,7 @@ Run:
 
 ```bash
 cargo test -p agent error_has_single_error_terminal_before_done -- --exact
-cargo test -p server new_chat_preserves_hooks_while_release_session_skips_them -- --exact
+cargo test -p server grpc::astro_service::tests::new_chat_preserves_hooks_while_release_session_skips_them -- --exact
 ```
 
 Expected: AgentEnd is absent on the early error return, and the pre-created new-chat Session causes reset/finalize to be counted twice.
@@ -1023,7 +1023,7 @@ Run:
 
 ```bash
 cargo test -p agent error_has_single_error_terminal_before_done -- --exact
-cargo test -p server new_chat_preserves_hooks_while_release_session_skips_them -- --exact
+cargo test -p server grpc::astro_service::tests::new_chat_preserves_hooks_while_release_session_skips_them -- --exact
 cargo test -p agent --all-targets
 cargo test -p server --all-targets
 ```

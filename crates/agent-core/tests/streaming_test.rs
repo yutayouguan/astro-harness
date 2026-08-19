@@ -1781,10 +1781,10 @@ async fn error_has_single_error_terminal_before_done() {
     let config = AgentConfig::with_defaults(dir.path().to_path_buf());
     let agent = AgentLoop::with_session_id(config, "err-session".into()).unwrap();
     let session = Arc::new(agent);
-    let agent_end_hits = Arc::new(AtomicUsize::new(0));
-    let agent_end_counter = Arc::clone(&agent_end_hits);
-    session.hook_bus().register(hooks::AGENT_END, move |_| {
-        agent_end_counter.fetch_add(1, Ordering::SeqCst);
+    let agent_end_errors = Arc::new(std::sync::Mutex::new(Vec::new()));
+    let errors = Arc::clone(&agent_end_errors);
+    session.hook_bus().register(hooks::AGENT_END, move |input| {
+        errors.lock().unwrap().push(input.error.clone());
         hooks::HookOutcome::Continue
     });
     {
@@ -1818,9 +1818,13 @@ async fn error_has_single_error_terminal_before_done() {
         items.first(),
         Some(MultiTurnStreamItem::RunStarted { .. })
     ));
-    assert!(items
-        .iter()
-        .any(|i| matches!(i, MultiTurnStreamItem::Error(_))));
+    assert_eq!(
+        items
+            .iter()
+            .filter(|item| matches!(item, MultiTurnStreamItem::Error(_)))
+            .count(),
+        1
+    );
     let terminal_outcomes: Vec<&str> = items
         .iter()
         .filter_map(|item| match item {
@@ -1829,8 +1833,18 @@ async fn error_has_single_error_terminal_before_done() {
         })
         .collect();
     assert_eq!(terminal_outcomes, ["error"]);
-    assert!(matches!(items.last(), Some(MultiTurnStreamItem::Done)));
-    assert_eq!(agent_end_hits.load(Ordering::SeqCst), 1);
+    assert_eq!(
+        items
+            .iter()
+            .filter(|item| matches!(item, MultiTurnStreamItem::Done))
+            .count(),
+        1
+    );
+    let errors = agent_end_errors.lock().unwrap();
+    assert_eq!(errors.len(), 1);
+    assert!(errors[0]
+        .as_deref()
+        .is_some_and(|error| error.contains("boom")));
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -1957,10 +1971,10 @@ async fn agent_end_fires_once_when_stream_receiver_is_dropped() {
     session
         .record_items(vec![types::message::Message::user("drop receiver")])
         .await;
-    let agent_end_hits = Arc::new(AtomicUsize::new(0));
-    let agent_end_counter = Arc::clone(&agent_end_hits);
-    session.hook_bus().register(hooks::AGENT_END, move |_| {
-        agent_end_counter.fetch_add(1, Ordering::SeqCst);
+    let agent_end_errors = Arc::new(std::sync::Mutex::new(Vec::new()));
+    let errors = Arc::clone(&agent_end_errors);
+    session.hook_bus().register(hooks::AGENT_END, move |input| {
+        errors.lock().unwrap().push(input.error.clone());
         hooks::HookOutcome::Continue
     });
 
@@ -1985,7 +1999,7 @@ async fn agent_end_fires_once_when_stream_receiver_is_dropped() {
     )
     .await;
 
-    assert_eq!(agent_end_hits.load(Ordering::SeqCst), 1);
+    assert_eq!(*agent_end_errors.lock().unwrap(), vec![None]);
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -1994,10 +2008,10 @@ async fn cancellation_has_single_interrupt_terminal_before_done() {
     let config = AgentConfig::with_defaults(dir.path().to_path_buf());
     let agent = AgentLoop::with_session_id(config, "cancel-session".into()).unwrap();
     let session = Arc::new(agent);
-    let agent_end_hits = Arc::new(AtomicUsize::new(0));
-    let agent_end_counter = Arc::clone(&agent_end_hits);
-    session.hook_bus().register(hooks::AGENT_END, move |_| {
-        agent_end_counter.fetch_add(1, Ordering::SeqCst);
+    let agent_end_errors = Arc::new(std::sync::Mutex::new(Vec::new()));
+    let errors = Arc::clone(&agent_end_errors);
+    session.hook_bus().register(hooks::AGENT_END, move |input| {
+        errors.lock().unwrap().push(input.error.clone());
         hooks::HookOutcome::Continue
     });
     {
@@ -2046,7 +2060,7 @@ async fn cancellation_has_single_interrupt_terminal_before_done() {
         .collect();
     assert_eq!(terminal_outcomes, ["interrupt"]);
     assert!(matches!(items.last(), Some(MultiTurnStreamItem::Done)));
-    assert_eq!(agent_end_hits.load(Ordering::SeqCst), 1);
+    assert_eq!(*agent_end_errors.lock().unwrap(), vec![None]);
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -3072,6 +3086,12 @@ async fn budget_summary_provider_failure_leaves_no_synthetic_user() {
         .record_items(vec![types::message::Message::user("initial")])
         .await;
     let session = Arc::new(agent);
+    let agent_end_errors = Arc::new(std::sync::Mutex::new(Vec::new()));
+    let errors = Arc::clone(&agent_end_errors);
+    session.hook_bus().register(hooks::AGENT_END, move |input| {
+        errors.lock().unwrap().push(input.error.clone());
+        hooks::HookOutcome::Continue
+    });
     let provider_calls = Arc::new(AtomicUsize::new(0));
     let chat_fn: ChatOverride = {
         let provider_calls = Arc::clone(&provider_calls);
@@ -3131,6 +3151,11 @@ async fn budget_summary_provider_failure_leaves_no_synthetic_user() {
         "a later real user message must remain role-safe after summary setup/provider failure"
     );
     assert_eq!(provider_calls.load(Ordering::SeqCst), 2);
+    let errors = agent_end_errors.lock().unwrap();
+    assert_eq!(errors.len(), 1);
+    assert!(errors[0]
+        .as_deref()
+        .is_some_and(|error| error.contains("summary provider failure")));
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]

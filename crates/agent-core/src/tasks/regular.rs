@@ -3,7 +3,7 @@ use std::sync::Arc;
 use tokio_util::sync::CancellationToken;
 
 use crate::runtime::{Session, TurnContext, TurnResult};
-use crate::streaming::multi_turn::{run_turn, RunTurnArgs};
+use crate::streaming::multi_turn::{run_turn, RunTurnArgs, RunTurnOutcome};
 
 use super::{SessionTask, SessionTaskResult, TaskKind, TurnInput};
 
@@ -37,7 +37,7 @@ impl SessionTask for RegularTask {
         let args = self
             .args
             .with_session_and_turn(Arc::clone(&sess), Arc::clone(&ctx));
-        let result: SessionTaskResult = async {
+        let runtime_result: anyhow::Result<RunTurnOutcome> = async {
             let system_prompt = match args.prepared_system_prompt().map(str::to_owned) {
                 Some(system_prompt) => {
                     anyhow::ensure!(
@@ -63,10 +63,17 @@ impl SessionTask for RegularTask {
                     }
                 }
             };
-            run_turn(args.with_system_prompt(system_prompt), cancellation_token).await;
-            Ok(None)
+            Ok(run_turn(args.with_system_prompt(system_prompt), cancellation_token).await)
         }
         .await;
+
+        let (result, error): (SessionTaskResult, Option<String>) = match runtime_result {
+            Ok(outcome) => (Ok(None), outcome.error().map(str::to_owned)),
+            Err(error) => {
+                let hook_error = error.to_string();
+                (Err(error), Some(hook_error))
+            }
+        };
 
         let turn = sess.session_turn().await;
         let _ = sess.fire_hook(
@@ -74,7 +81,7 @@ impl SessionTask for RegularTask {
             ::hooks::HookPayload {
                 turn_id: Some(ctx.sub_id().to_string()),
                 turn: Some(turn),
-                error: result.as_ref().err().map(ToString::to_string),
+                error,
                 detail: format!("turn={turn}"),
                 ..Default::default()
             },
