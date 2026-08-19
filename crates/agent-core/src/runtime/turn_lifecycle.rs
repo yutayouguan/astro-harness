@@ -9,6 +9,26 @@ use crate::tasks::{TaskKind, TurnInput};
 
 use super::{looks_like_user_correction, Session, StepContext, TurnContext, TurnResult};
 
+fn coalesce_turn_inputs<I>(inputs: I) -> Option<TurnInput>
+where
+    I: IntoIterator<Item = TurnInput>,
+{
+    let mut contents = Vec::new();
+    let mut image_data_urls = Vec::new();
+    for input in inputs {
+        let TurnInput::UserInput {
+            content,
+            image_data_urls: images,
+        } = input;
+        contents.push(content);
+        image_data_urls.extend(images);
+    }
+    (!contents.is_empty()).then(|| TurnInput::UserInput {
+        content: contents.join("\n\n"),
+        image_data_urls,
+    })
+}
+
 impl Session {
     /// 开始新的用户消息处理：重置 `tool_rounds` 与 `turn_wrote_disk`。
     ///
@@ -101,24 +121,31 @@ impl Session {
     /// callers that have not yet moved input ownership into `SessionTask`.
     pub(crate) async fn prepare_turn(&self, input: &[TurnInput]) -> anyhow::Result<TurnResult> {
         anyhow::ensure!(!input.is_empty(), "regular turn requires initial input");
-        let user_message = input
-            .iter()
-            .map(|item| match item {
-                TurnInput::UserInput { content, .. } => content.as_str(),
-            })
-            .collect::<Vec<_>>()
-            .join("\n");
+        let coalesced_input =
+            coalesce_turn_inputs(input.iter().cloned()).expect("non-empty input coalesces");
+        let TurnInput::UserInput {
+            content: user_message,
+            ..
+        } = &coalesced_input;
+        let user_message = user_message.clone();
         self.cancel.reset();
         if self.is_budget_exhausted().await {
             return Ok(TurnResult::BudgetExhausted);
         }
 
-        self.admit_session_start().await?;
+        let mut admission_contexts = Vec::new();
+        if let Some(context) = self.admit_session_start().await? {
+            admission_contexts.push(context);
+        }
         let turn_id = self.current_turn_id().await;
         for item in input {
             let TurnInput::UserInput { content, .. } = item;
-            self.admit_user_prompt(content, turn_id.clone()).await?;
+            if let Some(context) = self.admit_user_prompt(content, turn_id.clone())? {
+                admission_contexts.push(context);
+            }
         }
+        let admission_context =
+            (!admission_contexts.is_empty()).then(|| admission_contexts.join("\n\n"));
 
         self.begin_user_turn().await;
         if looks_like_user_correction(&user_message)
@@ -139,9 +166,7 @@ impl Session {
         }
         self.reload_tools_and_mcp().await?;
 
-        for item in input.iter().cloned() {
-            self.record_turn_input(item).await?;
-        }
+        self.record_turn_input(coalesced_input).await?;
 
         let current_turn = self.state.lock().await.turn.current_turn;
         let fts_keywords = if current_turn >= self.config.recent_turns {
@@ -159,13 +184,9 @@ impl Session {
             format_recalled_context(&recalled);
 
         self.increment_turn().await;
-        let mut system_prompt = self.build_system_prompt().await;
-        if let Some(context) = self.take_inject_context().await {
-            if !system_prompt.is_empty() {
-                system_prompt.push_str("\n\n");
-            }
-            system_prompt.push_str(&context);
-        }
+        let system_prompt = self
+            .build_system_prompt_with_inject(admission_context.as_deref())
+            .await;
         let turn_id = self.current_turn_id().await;
         let inject = self.fire_hook(
             ::hooks::PRE_LLM_CALL,
@@ -189,52 +210,51 @@ impl Session {
         })
     }
 
-    async fn take_session_start_source(&self) -> Option<String> {
-        self.state.lock().await.pending_session_start_source.take()
-    }
-
-    async fn append_inject_context(&self, context: String) {
-        let mut state = self.state.lock().await;
-        state.pending_inject_context = Some(match state.pending_inject_context.take() {
+    fn append_inject_context(slot: &mut Option<String>, context: String) {
+        *slot = Some(match slot.take() {
             Some(existing) => format!("{existing}\n\n{context}"),
             None => context,
         });
     }
 
-    async fn apply_admission_outcome(
-        &self,
+    fn apply_admission_outcome(
         event_name: &str,
         outcome: ::hooks::HookOutcome,
-    ) -> anyhow::Result<()> {
+    ) -> anyhow::Result<Option<String>> {
         match outcome {
             ::hooks::HookOutcome::Block(reason) => {
                 anyhow::bail!("{event_name} blocked by hook: {reason}")
             }
-            ::hooks::HookOutcome::InjectContext(context) => {
-                self.append_inject_context(context).await;
-            }
-            _ => {}
+            ::hooks::HookOutcome::InjectContext(context) => Ok(Some(context)),
+            _ => Ok(None),
         }
-        Ok(())
     }
 
-    async fn admit_session_start(&self) -> anyhow::Result<()> {
-        let Some(source) = self.take_session_start_source().await else {
-            return Ok(());
+    async fn admit_session_start(&self) -> anyhow::Result<Option<String>> {
+        let Some(source) = self.state.lock().await.pending_session_start_source.clone() else {
+            return Ok(None);
         };
         let outcome = self.fire_hook(
             ::hooks::SESSION_START,
             ::hooks::HookPayload {
-                source: Some(source),
+                source: Some(source.clone()),
                 detail: format!("session={}", self.session_id),
                 ..Default::default()
             },
         );
-        self.apply_admission_outcome(::hooks::SESSION_START, outcome)
-            .await
+        let context = Self::apply_admission_outcome(::hooks::SESSION_START, outcome)?;
+        let mut state = self.state.lock().await;
+        if state.pending_session_start_source.as_deref() == Some(source.as_str()) {
+            state.pending_session_start_source = None;
+        }
+        Ok(context)
     }
 
-    async fn admit_user_prompt(&self, prompt: &str, turn_id: Option<String>) -> anyhow::Result<()> {
+    fn admit_user_prompt(
+        &self,
+        prompt: &str,
+        turn_id: Option<String>,
+    ) -> anyhow::Result<Option<String>> {
         let outcome = self.fire_hook(
             ::hooks::USER_PROMPT_SUBMIT,
             ::hooks::HookPayload {
@@ -244,8 +264,7 @@ impl Session {
                 ..Default::default()
             },
         );
-        self.apply_admission_outcome(::hooks::USER_PROMPT_SUBMIT, outcome)
-            .await
+        Self::apply_admission_outcome(::hooks::USER_PROMPT_SUBMIT, outcome)
     }
 
     /// Queue user input for the active regular task.
@@ -268,13 +287,32 @@ impl Session {
             return Ok(None);
         }
         let turn_id = running.1.sub_id().to_string();
-        self.admit_user_prompt(user_message, Some(turn_id.clone()))
-            .await?;
-        let accepted = running.1.push_input(TurnInput::UserInput {
+        let Some(reservation) = running.1.reserve_input() else {
+            return Ok(None);
+        };
+        let context = self.admit_user_prompt(user_message, Some(turn_id.clone()))?;
+        let input = TurnInput::UserInput {
             content: user_message.to_string(),
             image_data_urls: image_data_urls.to_vec(),
-        });
-        Ok(accepted.then_some(turn_id))
+        };
+        if let Some(context) = context {
+            let mut state = self.state.lock().await;
+            Self::append_inject_context(&mut state.pending_inject_context, context);
+            reservation.commit(input);
+        } else {
+            reservation.commit(input);
+        }
+        Ok(Some(turn_id))
+    }
+
+    pub(crate) async fn record_turn_inputs<I>(&self, inputs: I) -> anyhow::Result<()>
+    where
+        I: IntoIterator<Item = TurnInput>,
+    {
+        if let Some(input) = coalesce_turn_inputs(inputs) {
+            self.record_turn_input(input).await?;
+        }
+        Ok(())
     }
 
     pub(crate) async fn record_turn_input(&self, input: TurnInput) -> anyhow::Result<()> {
@@ -372,11 +410,137 @@ impl Session {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::Arc;
 
     use tempfile::TempDir;
 
     use super::*;
+
+    fn input(content: &str) -> TurnInput {
+        TurnInput::UserInput {
+            content: content.to_string(),
+            image_data_urls: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn coalesce_turn_inputs_preserves_text_and_image_order() {
+        let coalesced = coalesce_turn_inputs(vec![
+            TurnInput::UserInput {
+                content: "first".into(),
+                image_data_urls: vec!["image-a".into()],
+            },
+            TurnInput::UserInput {
+                content: String::new(),
+                image_data_urls: vec!["image-b".into(), "image-c".into()],
+            },
+            input("third"),
+        ])
+        .unwrap();
+
+        assert_eq!(
+            coalesced,
+            TurnInput::UserInput {
+                content: "first\n\n\n\nthird".into(),
+                image_data_urls: vec!["image-a".into(), "image-b".into(), "image-c".into()],
+            }
+        );
+    }
+
+    #[tokio::test]
+    async fn initial_inputs_are_persisted_as_one_logical_user_message() {
+        let dir = TempDir::new().unwrap();
+        let config = crate::runtime::Config::with_defaults(dir.path().to_path_buf());
+        let session = Session::with_session_id(config, "coalesced-initial".into()).unwrap();
+
+        session
+            .prepare_turn(&[input("first"), input("second")])
+            .await
+            .unwrap();
+
+        let history = session.clone_history().await;
+        assert_eq!(history.len(), 1);
+        assert_eq!(history[0].content_str(), "first\n\nsecond");
+    }
+
+    #[tokio::test]
+    async fn later_prompt_block_discards_staged_context_and_all_input() {
+        let dir = TempDir::new().unwrap();
+        let config = crate::runtime::Config::with_defaults(dir.path().to_path_buf());
+        let session = Session::with_session_id(config, "atomic-admission".into()).unwrap();
+        session
+            .hook_bus()
+            .register(::hooks::USER_PROMPT_SUBMIT, |input| {
+                match input.prompt.as_deref() {
+                    Some("first") => ::hooks::HookOutcome::InjectContext("staged".into()),
+                    Some("second") => ::hooks::HookOutcome::Block("deny second".into()),
+                    _ => ::hooks::HookOutcome::Continue,
+                }
+            });
+
+        let error = session
+            .prepare_turn(&[input("first"), input("second")])
+            .await
+            .unwrap_err();
+
+        assert!(error.to_string().contains("deny second"));
+        assert!(session.clone_history().await.is_empty());
+        assert!(session.take_inject_context().await.is_none());
+    }
+
+    #[tokio::test]
+    async fn session_start_block_retries_same_source() {
+        let dir = TempDir::new().unwrap();
+        let config = crate::runtime::Config::with_defaults(dir.path().to_path_buf());
+        let session = Session::with_session_id(config, "retry-session-start".into()).unwrap();
+        let hits = Arc::new(AtomicUsize::new(0));
+        let sources = Arc::new(std::sync::Mutex::new(Vec::new()));
+        let hook_hits = Arc::clone(&hits);
+        let hook_sources = Arc::clone(&sources);
+        session
+            .hook_bus()
+            .register(::hooks::SESSION_START, move |input| {
+                hook_sources
+                    .lock()
+                    .unwrap()
+                    .push(input.source.clone().unwrap());
+                if hook_hits.fetch_add(1, Ordering::SeqCst) == 0 {
+                    ::hooks::HookOutcome::Block("retry".into())
+                } else {
+                    ::hooks::HookOutcome::Continue
+                }
+            });
+
+        let first = session.prepare_turn(&[input("first")]).await.unwrap_err();
+        assert!(first.to_string().contains("retry"));
+        assert!(session.clone_history().await.is_empty());
+        session.prepare_turn(&[input("second")]).await.unwrap();
+
+        assert_eq!(hits.load(Ordering::SeqCst), 2);
+        assert_eq!(sources.lock().unwrap().as_slice(), ["startup", "startup"]);
+        assert_eq!(session.clone_history().await[0].content_str(), "second");
+    }
+
+    #[tokio::test]
+    async fn admission_context_respects_system_prompt_budget() {
+        let dir = TempDir::new().unwrap();
+        let mut config = crate::runtime::Config::with_defaults(dir.path().to_path_buf());
+        config.context_budget_chars = 64;
+        let session = Session::with_session_id(config, "budgeted-admission".into()).unwrap();
+        session
+            .hook_bus()
+            .register(::hooks::USER_PROMPT_SUBMIT, |_| {
+                ::hooks::HookOutcome::InjectContext("X".repeat(1_000))
+            });
+
+        let result = session.prepare_turn(&[input("hello")]).await.unwrap();
+        let TurnResult::Continue { system_prompt, .. } = result else {
+            panic!("expected Continue");
+        };
+
+        assert!(system_prompt.chars().count() <= 64, "{system_prompt}");
+    }
 
     #[tokio::test]
     async fn capture_step_context_reuses_the_turn_snapshot() {

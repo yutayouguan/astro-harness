@@ -185,10 +185,7 @@ async fn record_pending_input(
         return Ok(());
     }
     let sess = session.as_ref();
-    for input in pending_input {
-        sess.record_turn_input(input).await?;
-    }
-    Ok(())
+    sess.record_turn_inputs(pending_input).await
 }
 
 /// Codex-aligned regular turn loop shared by foreground and background adapters.
@@ -707,7 +704,7 @@ pub(crate) async fn run_turn(args: RunTurnArgs, cancellation_token: Cancellation
         }
 
         if calls.is_empty() {
-            let pending_input = turn_context.take_pending_input_or_close();
+            let pending_input = turn_context.take_pending_input_or_close().await;
             if !pending_input.is_empty() {
                 if let Err(error) = record_pending_input(&session, pending_input).await {
                     finish_error(

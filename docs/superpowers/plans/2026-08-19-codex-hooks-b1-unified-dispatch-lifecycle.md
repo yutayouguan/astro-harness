@@ -322,10 +322,22 @@ git commit -m "refactor(agent): own shared hook runtime"
 
 **Files:**
 - Modify: `crates/agent-core/src/runtime/session_state.rs:14-63`
+- Modify: `crates/agent-core/src/runtime/turn_context.rs`
 - Modify: `crates/agent-core/src/runtime/turn_lifecycle.rs:69-220`
+- Modify: `crates/agent-core/src/runtime/system_prompt.rs`
+- Modify: `crates/agent-core/src/streaming/multi_turn.rs`
 - Test: `crates/agent-core/tests/rig_agent_test.rs`
 - Test: `crates/agent-core/tests/streaming_test.rs:110-205`
-- Modify: `crates/agent-server/src/grpc/astro_service.rs` (only adapt the steering `Result` caller; runtime injection and duplicate server lifecycle removal remain Task 5)
+- Modify: `crates/agent-server/src/grpc/astro_service.rs` (adapt the steering `Result`, inject the full runtime before steering, and remove the duplicate server SessionStart path)
+
+The quality-review correction is authoritative for this task:
+
+- steering uses an RAII `TurnInputReservation`; terminal close waits for in-flight admissions, so a fired hook cannot race with queue closure;
+- initial and pending input slices are coalesced into one logical user message (`\n\n` text join plus stable image flattening) before their single persistence write;
+- initial SessionStart/UserPromptSubmit contexts are staged locally, discarded on any later Block, and enter `assemble_system_layers` through its budgeted inject layer;
+- steering InjectContext remains a next-sampling message-side context and is committed to Session state before its input reservation wakes terminal close;
+- a blocked SessionStart retains its pending `startup`/`resume` source for retry; any non-Block outcome consumes the expected source. A later prompt Block or infrastructure/reload failure does not restore SessionStart after it has successfully fired;
+- server full-runtime injection and duplicate SessionStart removal move forward from Task 5; AgentEnd/reset/finalize cleanup remains Task 5.
 
 - [ ] **Step 1: Write failing startup, resume, control, context, and steering tests**
 
@@ -439,6 +451,11 @@ Also add these approved control cases:
 - `session_start_block_prevents_prompt_and_persistence`: the error contains the reason, `UserPromptSubmit` hit count remains zero, and history remains empty.
 - `session_and_prompt_contexts_enter_initial_system_prompt_in_order`: both contexts occur in the initial system prompt in event order, joined with `\n\n`.
 - `prompt_skip_is_not_treated_as_block`: `Skip` is specific to `PreGatewayDispatch`; only `Block` blocks SessionStart or UserPromptSubmit admission.
+- `session_start_block_retries_same_source`: the blocked source remains pending and the retry fires the same startup/resume source.
+- `initial_inputs_are_persisted_as_one_logical_user_message` and `later_prompt_block_discards_staged_context_and_all_input`: multi-input admission is atomic and role-safe.
+- `admission_context_respects_system_prompt_budget`: a long admission context cannot bypass `context_budget_chars`.
+- reservation unit tests prove terminal close waits for commit and resumes on commit or Drop; the steering integration test uses a hook barrier and proves one hook fire plus model-visible follow-up.
+- `chat_delegates_session_start_to_the_shared_session_runtime`: production server source has no direct SessionStart dispatch or Plugin-only replacement.
 
 Extend `steered_input_is_consumed_by_the_active_regular_task` to register `USER_PROMPT_SUBMIT`, capture both `prompt` and `turn_id`, call `.await.unwrap().expect(...)`, and assert the hook has already seen `follow up` plus the non-empty active turn id before releasing the first provider call.
 
@@ -455,9 +472,16 @@ cargo test -p agent --test rig_agent_test session_start_block_prevents_prompt_an
 cargo test -p agent --test rig_agent_test session_and_prompt_contexts_enter_initial_system_prompt_in_order -- --exact
 cargo test -p agent --test rig_agent_test prompt_skip_is_not_treated_as_block -- --exact
 cargo test -p agent --test streaming_test steered_input_is_consumed_by_the_active_regular_task -- --exact
+cargo test -p agent --lib runtime::turn_context::tests::reservation_blocks_terminal_close_until_commit -- --exact
+cargo test -p agent --lib runtime::turn_context::tests::dropping_reservation_unblocks_terminal_close_and_closes_queue -- --exact
+cargo test -p agent --lib runtime::turn_lifecycle::tests::initial_inputs_are_persisted_as_one_logical_user_message -- --exact
+cargo test -p agent --lib runtime::turn_lifecycle::tests::later_prompt_block_discards_staged_context_and_all_input -- --exact
+cargo test -p agent --lib runtime::turn_lifecycle::tests::session_start_block_retries_same_source -- --exact
+cargo test -p agent --lib runtime::turn_lifecycle::tests::admission_context_respects_system_prompt_budget -- --exact
+cargo test -p server --lib grpc::astro_service::tests::chat_delegates_session_start_to_the_shared_session_runtime -- --exact
 ```
 
-Expected: each behavioral test reports `running 1 test` and fails for the missing lifecycle behavior; the steering test fails to compile because it requires the new Result-returning API. A zero-test run is not accepted as RED evidence.
+Expected: each behavioral test reports `running 1 test` when its wished-for API already compiles; reservation tests initially fail to compile until the new API exists. Runtime RED must expose the old per-input writes, leaked staged context, consumed blocked SessionStart, unbudgeted prompt growth, steering close race, and direct server SessionStart. A zero-test run is not accepted as RED evidence.
 
 - [ ] **Step 3: Add one-shot SessionStart state**
 
@@ -482,64 +506,54 @@ Self {
 }
 ```
 
-Add a Session helper:
+Peek the source before firing. A Block returns without consuming it; every non-Block result conditionally consumes only the same expected source:
 
 ```rust
-async fn take_session_start_source(&self) -> Option<String> {
-    self.state.lock().await.pending_session_start_source.take()
+let source = self.state.lock().await.pending_session_start_source.clone();
+let outcome = self.fire_hook(::hooks::SESSION_START, payload);
+let context = apply_admission_outcome(::hooks::SESSION_START, outcome)?;
+let mut state = self.state.lock().await;
+if state.pending_session_start_source.as_deref() == source.as_deref() {
+    state.pending_session_start_source = None;
 }
 ```
 
 - [ ] **Step 4: Add prompt admission helper and lifecycle ordering**
 
-Add a shared context append helper so multiple admission contexts preserve event order:
+Admission outcomes return staged context instead of mutating Session state:
 
 ```rust
-async fn append_inject_context(&self, context: String) {
-    let mut state = self.state.lock().await;
-    state.pending_inject_context = Some(match state.pending_inject_context.take() {
-        Some(existing) => format!("{existing}\n\n{context}"),
-        None => context,
-    });
-}
-```
-
-Add a shared admission-outcome helper. Only `Block` blocks these two events; do not include the `PreGatewayDispatch`-specific `Skip` outcome:
-
-```rust
-async fn apply_admission_outcome(
-    &self,
+fn apply_admission_outcome(
     event_name: &str,
     outcome: ::hooks::HookOutcome,
-) -> anyhow::Result<()> {
+) -> anyhow::Result<Option<String>> {
     match outcome {
         ::hooks::HookOutcome::Block(reason) => {
             anyhow::bail!("{event_name} blocked by hook: {reason}")
         }
-        ::hooks::HookOutcome::InjectContext(context) => {
-            self.append_inject_context(context).await;
-        }
-        _ => {}
+        ::hooks::HookOutcome::InjectContext(context) => Ok(Some(context)),
+        _ => Ok(None),
     }
-    Ok(())
 }
 ```
 
-Use it from `admit_session_start` and `admit_user_prompt`, with the event-specific `source` and `prompt` payloads. In `prepare_turn`, admission occurs after the budget check but before `begin_user_turn`, tool reload, or persistence:
+In `prepare_turn`, stage SessionStart and each prompt context locally before `begin_user_turn`, reload, or persistence. If every prompt passes, join contexts in event order and coalesce all `TurnInput` values into one logical user message. Persist exactly once, then pass the staged context into `build_system_prompt_with_inject` so it shares the configured prompt budget:
 
 ```rust
-self.admit_session_start().await?;
-let turn_id = self.current_turn_id().await;
-for item in input {
-    let TurnInput::UserInput { content, .. } = item;
-    self.admit_user_prompt(content, turn_id.clone()).await?;
-}
+let mut contexts = Vec::new();
+// SessionStart, then one UserPromptSubmit per input item; collect Option<String>.
+// A Block returns before begin/reset/reload/write and drops all staged contexts.
+let coalesced = coalesce_turn_inputs(input.iter().cloned()).unwrap();
 self.begin_user_turn().await;
+self.reload_tools_and_mcp().await?;
+self.record_turn_input(coalesced).await?;
+let context = (!contexts.is_empty()).then(|| contexts.join("\n\n"));
+let system_prompt = self.build_system_prompt_with_inject(context.as_deref()).await;
 ```
 
-All input items must pass admission before the turn/compression reset or any record. Delete the old per-turn SessionStart block near `PRE_LLM_CALL`. After building the initial system prompt, consume the ordered admission context and append it to that prompt; keep later `PreLlmCall` injection queued for the sampling-step path.
+`build_system_prompt()` delegates to the same internal builder with `None`. Do not manually append unbudgeted context after prompt assembly. Pending steers use the same coalescing helper before a single persistence write, but do not fire their hooks again.
 
-Change steering to return admission errors and fire before queueing. Clone the active regular task's `Arc<TurnContext>` while holding `active_turn`, then release the lock before firing the synchronous hook callback:
+For steering, clone the active regular task's `Arc<TurnContext>` under `active_turn`, release that lock, and reserve input before firing the hook. Terminal close asynchronously waits while reservations exist. Block/error/Drop cancels the reservation; success commits exactly once:
 
 ```rust
 pub async fn steer_input(
@@ -561,29 +575,35 @@ pub async fn steer_input(
         return Ok(None);
     }
     let turn_id = running.1.sub_id().to_string();
-    self.admit_user_prompt(
-        user_message,
-        Some(turn_id.clone()),
-    )
-    .await?;
-    let accepted = running.1.push_input(TurnInput::UserInput {
+    let Some(reservation) = running.1.reserve_input() else {
+        return Ok(None);
+    };
+    let context = self.admit_user_prompt(user_message, Some(turn_id.clone()))?;
+    let input = TurnInput::UserInput {
         content: user_message.to_string(),
         image_data_urls: image_data_urls.to_vec(),
-    });
-    Ok(accepted.then_some(turn_id))
+    };
+    if let Some(context) = context {
+        let mut state = self.state.lock().await;
+        append_context(&mut state.pending_inject_context, context);
+        reservation.commit(input); // synchronous; notify happens after context write
+    } else {
+        reservation.commit(input);
+    }
+    Ok(Some(turn_id))
 }
 ```
 
-Update `start_or_steer_turn_with_images` to use `self.steer_input(...).await?`.
-Minimally adapt the server caller before its `is_some()` check:
+Immediately after server `get_session`, install the full runtime before steering:
 
 ```rust
+session.set_hook_runtime(Arc::clone(&self.hook_runtime));
 sess.steer_input(&content, &image_data_urls)
     .await
     .map_err(|error| Status::failed_precondition(error.to_string()))?
 ```
 
-Do not move runtime injection or remove server lifecycle dispatch in this task; those remain Task 5.
+Remove `is_new_session`, direct server Gateway SessionStart, and later `set_hook_bus`. Preserve AgentEnd/reset/finalize lifecycle work for Task 5.
 
 - [ ] **Step 5: Run lifecycle tests and Agent tests**
 
@@ -593,7 +613,8 @@ Run:
 cargo test -p agent --test rig_agent_test
 cargo test -p agent --test streaming_test
 cargo test -p agent --lib
-cargo check -p server
+cargo test -p server --lib
+cargo check --workspace --all-targets
 cargo fmt --all -- --check
 git diff --check
 ```
@@ -603,8 +624,8 @@ Expected: all focused tests previously ran exactly one test, and both integratio
 - [ ] **Step 6: Commit Task 3**
 
 ```bash
-git add crates/agent-core/src/runtime/session_state.rs crates/agent-core/src/runtime/turn_lifecycle.rs crates/agent-core/tests/rig_agent_test.rs crates/agent-core/tests/streaming_test.rs crates/agent-server/src/grpc/astro_service.rs docs/superpowers/plans/2026-08-19-codex-hooks-b1-unified-dispatch-lifecycle.md
-git commit -m "feat(agent): align session and prompt hooks"
+git add crates/agent-core/src/runtime/turn_context.rs crates/agent-core/src/runtime/turn_lifecycle.rs crates/agent-core/src/runtime/system_prompt.rs crates/agent-core/src/streaming/multi_turn.rs crates/agent-core/tests/streaming_test.rs crates/agent-server/src/grpc/astro_service.rs docs/superpowers/plans/2026-08-19-codex-hooks-b1-unified-dispatch-lifecycle.md
+git commit -m "fix(agent): make prompt admission race safe"
 ```
 
 ### Task 4: Fire Stop for every terminal candidate
@@ -861,20 +882,9 @@ result
 
 Delete the AgentEnd block from `multi_turn.rs`.
 
-- [ ] **Step 4: Inject full runtime before steering and remove server duplicates**
+- [ ] **Step 4: Remove the remaining server AgentEnd/reset/finalize duplicates**
 
-Immediately after `get_session`, before `steer_input`, add:
-
-```rust
-let session = self.get_session(&session_id).await?;
-session.set_hook_runtime(Arc::clone(&self.hook_runtime));
-let steered_turn_id = session
-    .steer_input(&content, &image_data_urls)
-    .await
-    .map_err(|error| Status::failed_precondition(error.to_string()))?;
-```
-
-Remove `is_new_session`, the server-side Gateway SessionStart block, the later `set_hook_bus` call, and the stream-cleanup Gateway AgentEnd block.
+Task 3 already injects the full runtime before steering and removes `is_new_session`, direct server SessionStart, and the later `set_hook_bus`. In this task remove only the stream-cleanup Gateway AgentEnd duplicate and simplify reset/finalize delivery.
 
 Simplify `release_session_for_new_chat` so each event is dispatched exactly once before release:
 

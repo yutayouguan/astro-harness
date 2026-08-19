@@ -86,12 +86,15 @@ impl AgentLoop {
     /// MEMORY / USER 仅注入 **snapshot**（同会话冻结）；日记读盘后截断注入。
     /// 各层经 [`crate::prompt::ContextSource`] 共享字符预算（优先 static）。
     ///
-    /// **不**把 `pending_inject_context` 编入 system：hooks / KeepGoing 注入仍走
-    /// [`Self::take_inject_context`] → 消息侧 `[astro:hook-context]`（见 `multi_turn`），
-    /// 避免与 system 层双重注入。
+    /// `pending_inject_context` 仍走 [`Self::take_inject_context`] 的消息侧注入；初始
+    /// SessionStart/UserPromptSubmit admission context 由内部带预算入口单独传入。
     ///
     /// 副作用：设置 workspace 目录覆盖供 skills 发现使用。
     pub async fn build_system_prompt(&self) -> String {
+        self.build_system_prompt_with_inject(None).await
+    }
+
+    pub(crate) async fn build_system_prompt_with_inject(&self, inject: Option<&str>) -> String {
         let (static_ctx, dynamic_ctx, skill_pairs) = self.system_prompt_parts().await;
         skills::set_workspace_override(&self.workspace_dir());
         let skill_index: Vec<(&str, &str)> = skill_pairs
@@ -110,7 +113,7 @@ impl AgentLoop {
         crate::prompt::assemble_system_layers(
             &mut budget,
             &static_ctx,
-            None, // inject 走 take_inject_context / user 消息，不进 system
+            inject,
             &skill_index,
             &dynamic_ctx,
             crate::prompt::context_source::RuntimeSystemLayers {

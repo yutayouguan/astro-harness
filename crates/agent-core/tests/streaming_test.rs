@@ -124,26 +124,42 @@ async fn steered_input_is_consumed_by_the_active_regular_task() {
         .record_items(vec![types::message::Message::user("initial")])
         .await;
     let prompt_hook_payload = Arc::new(std::sync::Mutex::new(None));
+    let prompt_hook_hits = Arc::new(AtomicUsize::new(0));
+    let prompt_hook_entered = Arc::new(Notify::new());
+    let prompt_hook_release = Arc::new((std::sync::Mutex::new(false), std::sync::Condvar::new()));
     let capture = Arc::clone(&prompt_hook_payload);
+    let hook_hits = Arc::clone(&prompt_hook_hits);
+    let hook_entered = Arc::clone(&prompt_hook_entered);
+    let hook_release = Arc::clone(&prompt_hook_release);
     session
         .hook_bus()
         .register(hooks::USER_PROMPT_SUBMIT, move |input| {
+            hook_hits.fetch_add(1, Ordering::SeqCst);
             *capture.lock().unwrap() = Some((input.prompt.clone(), input.turn_id.clone()));
-            hooks::HookOutcome::Continue
+            hook_entered.notify_one();
+            let (released, ready) = &*hook_release;
+            let mut released = released.lock().unwrap();
+            while !*released {
+                released = ready.wait(released).unwrap();
+            }
+            hooks::HookOutcome::InjectContext("STEER_CONTEXT".into())
         });
 
     let calls = Arc::new(AtomicUsize::new(0));
     let saw_follow_up = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let saw_hook_context = Arc::new(std::sync::atomic::AtomicBool::new(false));
     let first_started = Arc::new(Notify::new());
     let release_first = Arc::new(Notify::new());
     let chat_fn: ChatOverride = {
         let calls = Arc::clone(&calls);
         let saw_follow_up = Arc::clone(&saw_follow_up);
+        let saw_hook_context = Arc::clone(&saw_hook_context);
         let first_started = Arc::clone(&first_started);
         let release_first = Arc::clone(&release_first);
         Arc::new(move |messages, _tools, _config| {
             let calls = Arc::clone(&calls);
             let saw_follow_up = Arc::clone(&saw_follow_up);
+            let saw_hook_context = Arc::clone(&saw_hook_context);
             let first_started = Arc::clone(&first_started);
             let release_first = Arc::clone(&release_first);
             Box::pin(async move {
@@ -154,6 +170,13 @@ async fn steered_input_is_consumed_by_the_active_regular_task() {
                         .any(|message| message.text_content() == "follow up")
                 {
                     saw_follow_up.store(true, Ordering::SeqCst);
+                }
+                if call > 0
+                    && messages
+                        .iter()
+                        .any(|message| message.text_content().contains("STEER_CONTEXT"))
+                {
+                    saw_hook_context.store(true, Ordering::SeqCst);
                 }
                 if call == 0 {
                     first_started.notify_one();
@@ -190,11 +213,30 @@ async fn steered_input_is_consumed_by_the_active_regular_task() {
     });
 
     first_started.notified().await;
-    let turn_id = session
-        .steer_input("follow up", &[])
-        .await
-        .unwrap()
-        .expect("active regular task accepts steer");
+    let steer = tokio::spawn({
+        let session = Arc::clone(&session);
+        async move { session.steer_input("follow up", &[]).await }
+    });
+    prompt_hook_entered.notified().await;
+    release_first.notify_one();
+    let terminal_waited = tokio::time::timeout(Duration::from_millis(200), async {
+        while !run.is_finished() {
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .is_err();
+    {
+        let (released, ready) = &*prompt_hook_release;
+        *released.lock().unwrap() = true;
+        ready.notify_all();
+    }
+    let steer_result = steer.await.unwrap().unwrap();
+    while rx.recv().await.is_some() {}
+    run.await.unwrap();
+
+    assert!(terminal_waited, "terminal closed during prompt admission");
+    let turn_id = steer_result.expect("active regular task accepts steer");
     assert!(!turn_id.is_empty());
     let captured = prompt_hook_payload
         .lock()
@@ -203,12 +245,11 @@ async fn steered_input_is_consumed_by_the_active_regular_task() {
         .expect("prompt hook fires before provider release");
     assert_eq!(captured.0.as_deref(), Some("follow up"));
     assert_eq!(captured.1.as_deref(), Some(turn_id.as_str()));
-    release_first.notify_one();
-    while rx.recv().await.is_some() {}
-    run.await.unwrap();
 
     assert_eq!(calls.load(Ordering::SeqCst), 2);
+    assert_eq!(prompt_hook_hits.load(Ordering::SeqCst), 1);
     assert!(saw_follow_up.load(Ordering::SeqCst));
+    assert!(saw_hook_context.load(Ordering::SeqCst));
     let messages = session.clone_history().await;
     assert!(messages.iter().any(|message| {
         matches!(
