@@ -97,28 +97,28 @@ Canonical 名称集仍比当前已接线的生命周期更完整。下表只记�
 
 | Canonical 名称 | 分类 | 当前实际 fire 点 | 可用 `HookOutcome` |
 |---|---|---|---|
-| `SessionStart` | Codex | 首次 prompt admission 时、`UserPromptSubmit` 前；每个 Session 仅一次，`source` 为 `startup`（空历史）或 `resume`（已恢复历史） | `Block(reason)` / `InjectContext(context)` |
+| `SessionStart` | Codex | 首次**成功（非 `Block`）**的 prompt admission 时、`UserPromptSubmit` 前；`source` 为 `startup`（空历史）或 `resume`（已恢复历史） | `Block(reason)` / `InjectContext(context)` |
 | `UserPromptSubmit` | Codex | 每个初始或 steer 用户输入持久化前；带输入 `prompt` 和活跃 `turn_id`（若已有） | `Block(reason)` / `InjectContext(context)` |
 | `PreLlmCall` | Astro | 初始用户输入已经接纳、system prompt 构建后，在首个 sampling 前 | `InjectContext` |
-| `PreApiRequest` | Astro | 每次 Provider sampling request 前 | 观察 |
-| `PostApiRequest` | Astro | `ProviderStreamer::stream_chat` 返回 stream 或 error 后；当前不等待 token stream 消费完毕 | 观察 |
+| `PreApiRequest` | Astro | 每次**普通主循环** Provider sampling request 前 | 观察 |
+| `PostApiRequest` | Astro | 每次**普通主循环** `ProviderStreamer::stream_chat` 返回 stream 或 error 后；当前不等待 token stream 消费完毕 | 观察 |
 | `PermissionRequest` | Codex | 串行工具权限 preflight 需要审批时，在决议与 `PreToolUse` 前 | 观察 |
 | `PostApprovalResponse` | Astro | 审批决议后、`PreToolUse` 前；`choice` 当前可为 `allowlist`、`auto`、`allow`、`allow_once`、`deny`、`timeout` 或 `unavailable` | 观察 |
 | `PreToolUse` | Codex | 所有 preflight 均已授权或无需授权后，在工具 dispatch 前；被拒绝/超时/无审批通道的调用不会 fire | `Block(reason)` / `Modify(args)` |
 | `TransformTerminalOutput` | Astro | `terminal` 原始 stdout/stderr 组合后、64 KiB 截断前 | `ReplaceText(text)` |
 | `TransformToolResult` | Astro | 任意工具返回后、`PostToolUse` 前 | `ReplaceText(text)` |
 | `PostToolUse` | Codex | 工具结果已应用 `TransformToolResult` 后 | 观察 |
-| `SubagentStart` | Codex | Agent Thread 构造完、首轮执行前（每个 thread 一次） | 观察 |
-| `SubagentStop` | Codex | Agent Thread 进入 closed 状态后 | 观察 |
+| `SubagentStart` | Codex | Agent Thread 构造完、首轮执行前（每个 thread 一次）；当前经 request 的 `hook_bus` direct fire，**仅 Plugin** | 观察 |
+| `SubagentStop` | Codex | Agent Thread 进入 closed 状态后；当前经 request 的 `hook_bus` direct fire，**仅 Plugin** | 观察 |
 | `Stop` | Codex | 每个无工具的普通 terminal candidate，以及 budget-exhaustion summary 的完整 terminal candidate | `KeepGoing(prompt)` |
-| `TransformLlmOutput` | Astro | 最终 assistant 文本定稿、`PostLlmCall` 前 | `ReplaceText(text)` |
-| `PostLlmCall` | Astro | turn 成功结束前，且已应用 `TransformLlmOutput` | 观察 |
+| `TransformLlmOutput` | Astro | 每个通过 Stop guard 的普通 candidate（含 tool-call 中间轮）定稿、`PostLlmCall` 前 | `ReplaceText(text)` |
+| `PostLlmCall` | Astro | 每个通过 Stop guard 的普通 candidate，且已应用 `TransformLlmOutput` | 观察 |
 | `AgentEnd` | Astro | `RegularTask` 在每次 regular run 收尾时唯一派发：成功、runtime failure、准备失败、取消或 receiver close 都恰好一次 | 观察 |
 | `PreGatewayDispatch` | Astro | gRPC/Tauri chat 入站、加载会话前 | `Allow` / `Skip(reason)` / `Rewrite(message)` |
 | `SessionReset` | Astro | UI `new_chat` 释放旧会话时 | 观察 |
 | `SessionFinalize` | Astro | UI `new_chat` 释放旧会话时 | 观察 |
 
-`UserPromptSubmit` 的 `Block` 会在输入写入前阻断该 admission；`InjectContext` 与该输入绑定、按 FIFO 进入随后的 response chain，并受 prompt 预算约束。初始输入的 context 参与其首个请求；steer context 不会被 Stop 的 bridge sampling 提前消费。
+`SessionStart` 只有在其 outcome 非 `Block` 时才清除 pending source。若它被 `Block`，source 会保留，下一次 admission 会再次向 Plugin、Gateway、Shell 派发同一 `SessionStart`；因此 handler 应保持幂等。`UserPromptSubmit` 的 `Block` 会在输入写入前阻断该 admission；`InjectContext` 与该输入绑定、按 FIFO 进入随后的 response chain，并受 prompt 预算约束。初始输入的 context 参与其首个请求；steer context 不会被 Stop 的 bridge sampling 提前消费。
 
 当前尚无 runtime fire 点的 Codex 公开事件是 `PreCompact`、`PostCompact` 和 `SessionEnd`。`AgentEnd` 是已接线的 Astro run 收尾事件，不是 `SessionEnd`。
 
@@ -130,9 +130,9 @@ Plugin callbacks 按注册顺序同步执行。`Continue` 和 `Allow` 会继续�
 
 ```text
 PreGatewayDispatch
-  → SessionStart (startup | resume, once) → UserPromptSubmit
+  → SessionStart (startup | resume；首个 non-Block admission 后一次) → UserPromptSubmit
   → 输入持久化 → PreLlmCall → [sampling / 工具循环]
-      → PreApiRequest → Provider API → PostApiRequest
+      → PreApiRequest → Provider API → PostApiRequest    # 每个主循环 request
       → PermissionRequest? → 审批 → PostApprovalResponse?
           → 拒绝 / 超时 / unavailable：返回工具结果，不进入 PreToolUse
       → PreToolUse                                     # 仅 preflight 通过/无需审批
@@ -140,10 +140,15 @@ PreGatewayDispatch
           → TransformTerminalOutput?             # 仅 terminal
           → TransformToolResult → PostToolUse
           → SubagentStart ... SubagentStop?       # Agent Thread 生命周期
-  → Stop                                          # 每个 terminal candidate；普通或 budget summary
-      → KeepGoing 最多接受两次，持久化 assistant + hook bridge 后回到 sampling
-  → TransformLlmOutput → PostLlmCall
+  → 普通 candidate：无 tool calls 时 Stop
+      → KeepGoing：持久化 assistant + hook bridge 后继续；不 fire Transform/PostLlm
+      → 通过 Stop guard（或含 tool calls）：TransformLlmOutput → PostLlmCall
   → RegularTask AgentEnd                           # Plugin/Gateway/Shell 各一次的统一 dispatch
+
+预算耗尽 summary（独立分支）：
+  → 直接 ProviderStreamer::stream_chat（无 PreApiRequest/PostApiRequest）
+  → Stop → KeepGoing 时持久化 bridge 并继续 summary sampling
+  → 通过 guard 时持久化/收尾（无 TransformLlmOutput/PostLlmCall）
 ```
 
 ### `Stop` continuation guard
@@ -152,13 +157,15 @@ PreGatewayDispatch
 
 每个 response chain 最多接受两次 `KeepGoing(prompt)`：接受时持久化 candidate assistant 与 `[astro:hook-context]` bridge user，再继续 sampling。第三个及之后的 candidate 仍派发 `Stop`（且 `stop_hook_active=true`），但忽略 `KeepGoing` 并正常收尾。新的已持久化 steer 输入会开始独立 response chain 并重置这个配额。budget summary 与主循环共享同一配额；summary instruction 是 request-local，notice 只出现一次。
 
+普通主循环每个 provider request 都会 fire `PreApiRequest` / `PostApiRequest`。每个普通 candidate（包括含 tool-call 的中间轮）只有在没有被 `Stop::KeepGoing` 提前 continue 后，才 fire `TransformLlmOutput` 和 `PostLlmCall`。budget summary 则直接调用 `ProviderStreamer::stream_chat`：它只处理 summary candidate 的 `Stop`、持久化与 continuation，不 fire `PreApiRequest`、`PostApiRequest`、`TransformLlmOutput` 或 `PostLlmCall`。
+
 为了维持角色交替，Stop bridge 后已排队的 steer 会先让 provider 响应 bridge；bridge 经过 reasoning-only retry 时这个顺序仍被保留。terminal assistant 持久化后才会消费 queued input；其绑定 context 也只在相应新 chain 的 sampling 使用。
 
 ### Gateway 当前触发点
 
 | Gateway 事件 | 当前触发点 |
 |---|---|
-| `GatewayStartup` | Hook runtime bootstrap 成功后，backend service 就绪 |
+| `GatewayStartup` | `HookRuntime` bootstrap 与 `AstroServiceImpl` construction 完成时；早于 listener bind，不是 readiness 信号 |
 | `PreGatewayDispatch` | gRPC/Tauri chat 入站、加载 session 前 |
 | `SessionStart` / `UserPromptSubmit` / `AgentEnd` | 由 session 的统一 dispatch 到达 Gateway；server 不再单独派发 lifecycle 事件 |
 | `CommandNewChat` | UI `chat_control(new_chat)`；随后依次统一 dispatch `SessionReset`、`SessionFinalize`，各一次后释放 runtime |
@@ -212,7 +219,7 @@ PreGatewayDispatch
 
 ### Astro 私有字段
 
-`detail`、`system_prompt_chars`、`assistant_chars`、`turn` 和 `error` 只用于 Astro 运行时/UI，不序列化到 canonical JSON。`turn` 是会话轮次计数，不等于 `turn_id`。
+`detail`、`system_prompt_chars`、`assistant_chars`、`turn` 和 `error` 这五个字段都不序列化到 canonical JSON，但 Plugin 与 Gateway 的 Rust callback 可直接读取它们。`detail` 会写入 `ASTRO_HOOK_DETAIL`，并且是 UI timeline 的首选显示；若它为空，UI 才依次回退到 tool、prompt/assistant message、`system_prompt_chars`、`assistant_chars` 和 `turn`。`error` 目前既不进入 Shell 环境变量，也不进入 canonical JSON，UI detail 也不会自动展示它。`turn` 是会话轮次计数，不等于 `turn_id`。
 
 示例：
 
@@ -328,7 +335,7 @@ B1 完成：
 
 - `SessionEnd`；以及 `SessionStart` 的 `clear` / `compact` source；
 - `PreCompact` / `PostCompact`；
-- `SubagentStop` 已可观察地 fire，但 `KeepGoing` continuation 尚未实现；
+- `SubagentStart` / `SubagentStop` 的 Gateway、Shell 统一 transport（两者当前都是 Plugin-only direct fire）；`SubagentStop` 的 `KeepGoing` continuation 也尚未实现；
 - Batch C 的 Command Hook JSON stdin/stdout、matcher、multi-handler 聚合/冲突和 trust 模型/UI 管理。
 
 不要从 canonical 名称推断尚未实现的 Command Hook matcher、trust 或 JSON I/O 语义。

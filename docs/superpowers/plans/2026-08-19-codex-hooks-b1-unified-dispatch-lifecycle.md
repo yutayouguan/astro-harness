@@ -1082,6 +1082,8 @@ git commit -m "fix(hooks): align main turn lifecycle"
 
 **Files:**
 - Modify: `docs/hooks.md`
+- Modify: `docs/examples/hooks/README.md`
+- Modify: `docs/examples/hooks/config.yaml.snippet`
 - Modify: `docs/superpowers/plans/2026-08-19-codex-hooks-b1-unified-dispatch-lifecycle.md`
 
 - [x] **Step 1: Update runtime documentation**
@@ -1090,7 +1092,7 @@ Make these factual changes:
 
 - change the page introduction from “Batch A naming/serialization only” to “Batch A contract plus B1 dispatch/lifecycle”;
 - document that Session events from `Session::fire_hook` now reach Plugin, Gateway, and Shell through one normalized dispatch;
-- change SessionStart to one-shot `startup` or `resume` and list `clear`/`compact` as B2 gaps;
+- change SessionStart to one-shot after its first non-`Block` `startup` or `resume` admission, and list `clear`/`compact` as B2 gaps;
 - add UserPromptSubmit before persistence, including Block and InjectContext behavior;
 - change Stop to every terminal candidate, with `stop_hook_active=false` first and `true` on continuation, capped at two KeepGoing attempts;
 - state that AgentEnd is emitted once by RegularTask for success or failure and is not SessionEnd;
@@ -1140,11 +1142,13 @@ Expected:
 - no Agent core call bypasses `HookRuntime::dispatch`;
 - no server-side SessionStart or AgentEnd duplicate remains.
 
+**Review correction (after `69f6e77d`):** distinguish retried blocked `SessionStart`; normal-loop API/transform/post hooks from direct summary streaming; all five private payload fields; construction-time (not readiness) `GatewayStartup`; and Plugin-only subagent lifecycle events. Keep the Shell examples in sync with Session runtime routing without claiming subagent delivery.
+
 - [x] **Step 5: Commit documentation**
 
 ```bash
-git add docs/hooks.md docs/superpowers/plans/2026-08-19-codex-hooks-b1-unified-dispatch-lifecycle.md
-git commit -m "docs(hooks): describe unified lifecycle dispatch"
+git add docs/hooks.md docs/examples/hooks/README.md docs/examples/hooks/config.yaml.snippet docs/superpowers/plans/2026-08-19-codex-hooks-b1-unified-dispatch-lifecycle.md
+git commit -m "docs(hooks): correct lifecycle edge cases"
 ```
 
 ## Self-review checklist

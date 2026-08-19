@@ -20,4 +20,5 @@ delegation:
 
 # 遥测旁路：复制 telemetry-webhook.sh 后，可将上方 PreGatewayDispatch /
 # CommandNewChat 的 command 替换为该脚本，或取消 GatewayStartup 的注释。
-# PostToolUse / PostLlmCall / PreLlmCall 等 AgentLoop 直接事件当前不会自动投递 Shell。
+# Session runtime 的 PostToolUse / PreLlmCall / PostLlmCall / AgentEnd 也会统一投递 Shell；
+# 只为实际 fire 的事件配置命令。
