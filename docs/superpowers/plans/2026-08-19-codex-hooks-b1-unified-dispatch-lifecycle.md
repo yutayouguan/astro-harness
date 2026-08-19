@@ -247,16 +247,7 @@ pub fn hook_runtime(&self) -> Arc<::hooks::HookRuntime> {
 }
 
 pub fn set_hook_bus(&self, bus: Arc<::hooks::PluginHookBus>) {
-    let current = self.hook_runtime();
-    if Arc::ptr_eq(&current.plugin, &bus) {
-        return;
-    }
-    self.set_hook_runtime(Arc::new(::hooks::HookRuntime {
-        plugin: bus,
-        gateway: Arc::clone(&current.gateway),
-        shell: Arc::clone(&current.shell),
-        ui_slot: current.ui_slot.clone(),
-    }));
+    self.session_configuration_mut().replace_hook_bus(bus);
 }
 
 pub fn hook_bus(&self) -> Arc<::hooks::PluginHookBus> {
@@ -264,10 +255,12 @@ pub fn hook_bus(&self) -> Arc<::hooks::PluginHookBus> {
 }
 ```
 
-`set_hook_bus` is an idempotent compatibility replacement: it swaps only the
-plugin bus while preserving the current Gateway, Shell, and UI slot transports.
-It must not call `ui_slot.install`; callers that create a standalone
-`HookRuntime` continue to use `HookRuntime::new` or `with_plugin_bus`.
+`SessionConfiguration::replace_hook_bus(&mut self, bus)` performs the
+idempotent compatibility replacement inside the single configuration write
+guard: it swaps only the plugin bus while preserving the current Gateway,
+Shell, and UI slot transports. It must not call `ui_slot.install`; callers that
+create a standalone `HookRuntime` continue to use `HookRuntime::new` or
+`with_plugin_bus`.
 
 Add payload enrichment and route `fire_hook` through the dispatcher:
 

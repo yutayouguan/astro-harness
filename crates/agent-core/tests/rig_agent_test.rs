@@ -72,6 +72,22 @@ fn session_hook_payload_preserves_explicit_values_and_falls_back_to_defaults() {
     }]);
 
     agent.fire_hook(hooks::USER_PROMPT_SUBMIT, hooks::HookInput::default());
+    agent.set_chat_targets(vec![types::ChatTarget {
+        provider_id: String::new(),
+        backend_id: "backend-only".into(),
+        model: String::new(),
+        api_key: String::new(),
+        base_url: String::new(),
+    }]);
+    agent.fire_hook(hooks::USER_PROMPT_SUBMIT, hooks::HookInput::default());
+    agent.set_chat_targets(vec![types::ChatTarget {
+        provider_id: String::new(),
+        backend_id: String::new(),
+        model: String::new(),
+        api_key: String::new(),
+        base_url: String::new(),
+    }]);
+    agent.fire_hook(hooks::USER_PROMPT_SUBMIT, hooks::HookInput::default());
     agent.fire_hook(
         hooks::USER_PROMPT_SUBMIT,
         hooks::HookInput {
@@ -91,10 +107,12 @@ fn session_hook_payload_preserves_explicit_values_and_falls_back_to_defaults() {
         payloads[0].permission_mode.as_deref(),
         Some("workspace-write")
     );
-    assert_eq!(payloads[1].session_id, "provided-session");
-    assert_eq!(payloads[1].cwd, "/provided/cwd");
-    assert_eq!(payloads[1].model, "provided/model");
-    assert_eq!(payloads[1].permission_mode.as_deref(), Some("read-only"));
+    assert_eq!(payloads[1].model, "backend-only");
+    assert_eq!(payloads[2].model, "");
+    assert_eq!(payloads[3].session_id, "provided-session");
+    assert_eq!(payloads[3].cwd, "/provided/cwd");
+    assert_eq!(payloads[3].model, "provided/model");
+    assert_eq!(payloads[3].permission_mode.as_deref(), Some("read-only"));
 }
 
 fn test_config(dir: &TempDir) -> AgentConfig {

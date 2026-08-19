@@ -139,6 +139,19 @@ impl SessionConfiguration {
             skill_config_overrides: Vec::new(),
         }
     }
+
+    fn replace_hook_bus(&mut self, bus: Arc<::hooks::PluginHookBus>) {
+        let current = &self.hook_runtime;
+        if Arc::ptr_eq(&current.plugin, &bus) {
+            return;
+        }
+        self.hook_runtime = Arc::new(::hooks::HookRuntime {
+            plugin: bus,
+            gateway: Arc::clone(&current.gateway),
+            shell: Arc::clone(&current.shell),
+            ui_slot: current.ui_slot.clone(),
+        });
+    }
 }
 
 /// Session runtime: owns conversation state, memory, tools, and provider credentials.
@@ -372,16 +385,7 @@ impl Session {
     ///
     /// 兼容旧调用方：仅替换 plugin，保留共享运行时的 transport 与 UI slot。
     pub fn set_hook_bus(&self, bus: Arc<::hooks::PluginHookBus>) {
-        let current = self.hook_runtime();
-        if Arc::ptr_eq(&current.plugin, &bus) {
-            return;
-        }
-        self.set_hook_runtime(Arc::new(::hooks::HookRuntime {
-            plugin: bus,
-            gateway: Arc::clone(&current.gateway),
-            shell: Arc::clone(&current.shell),
-            ui_slot: current.ui_slot.clone(),
-        }));
+        self.session_configuration_mut().replace_hook_bus(bus);
     }
 
     /// 当前插件钩子总线。
@@ -1140,6 +1144,51 @@ mod tests {
             api_key: format!("k-{id}"),
             base_url: format!("https://{id}.example"),
         }
+    }
+
+    #[test]
+    fn session_configuration_replace_hook_bus_is_atomic() {
+        let dir = TempDir::new().unwrap();
+        let config = test_config(&dir);
+        let mut session_configuration = SessionConfiguration::new(&config);
+        let initial_runtime = Arc::new(::hooks::HookRuntime::new());
+        session_configuration.hook_runtime = Arc::clone(&initial_runtime);
+
+        let first_bus = Arc::new(::hooks::PluginHookBus::new());
+        session_configuration.replace_hook_bus(Arc::clone(&first_bus));
+        let first_replacement = Arc::clone(&session_configuration.hook_runtime);
+        assert!(Arc::ptr_eq(&first_replacement.plugin, &first_bus));
+        assert!(Arc::ptr_eq(
+            &first_replacement.gateway,
+            &initial_runtime.gateway
+        ));
+        assert!(Arc::ptr_eq(
+            &first_replacement.shell,
+            &initial_runtime.shell
+        ));
+
+        session_configuration.replace_hook_bus(Arc::clone(&first_bus));
+        assert!(Arc::ptr_eq(
+            &session_configuration.hook_runtime,
+            &first_replacement
+        ));
+
+        let current_runtime = Arc::new(::hooks::HookRuntime::new());
+        session_configuration.hook_runtime = Arc::clone(&current_runtime);
+        let second_bus = Arc::new(::hooks::PluginHookBus::new());
+        session_configuration.replace_hook_bus(Arc::clone(&second_bus));
+        assert!(Arc::ptr_eq(
+            &session_configuration.hook_runtime.plugin,
+            &second_bus
+        ));
+        assert!(Arc::ptr_eq(
+            &session_configuration.hook_runtime.gateway,
+            &current_runtime.gateway
+        ));
+        assert!(Arc::ptr_eq(
+            &session_configuration.hook_runtime.shell,
+            &current_runtime.shell
+        ));
     }
 
     #[test]
