@@ -165,6 +165,7 @@ async fn park_astro_hitl_resolution(
         &hitl.reason,
         interrupt.id.clone(),
     ));
+    let rx = gate.begin_wait(interrupt.clone()).await;
     if !emit(
         tx,
         MultiTurnStreamItem::RunFinished {
@@ -175,10 +176,10 @@ async fn park_astro_hitl_resolution(
     )
     .await
     {
+        gate.abort_wait(&interrupt.id).await;
         return None;
     }
 
-    let rx = gate.begin_wait(interrupt.clone()).await;
     let resolution = gate
         .finish_wait(
             &interrupt.id,

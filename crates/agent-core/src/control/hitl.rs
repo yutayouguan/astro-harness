@@ -163,6 +163,17 @@ impl HitlGate {
         resolution
     }
 
+    /// Remove one pre-registered wait when publishing its interrupt fails.
+    pub(crate) async fn abort_wait(&self, interrupt_id: &str) {
+        if let Some(waiting) = self.waiting.lock().await.remove(interrupt_id) {
+            let _ = waiting.tx.send(HitlResolution {
+                interrupt_id: interrupt_id.to_string(),
+                status: "cancelled".into(),
+                payload_json: String::new(),
+            });
+        }
+    }
+
     /// 由 `interrupt_resume` 完成等待；对 `resolved` 做 schema 校验。
     pub async fn resolve(&self, items: &[ResumeItem]) -> Result<(), String> {
         if items.is_empty() {
