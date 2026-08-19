@@ -1218,11 +1218,12 @@ fn snapshot_turn_recovery_events(turn: &proto::ThreadTurn) -> Vec<ChatStreamEven
     let final_item_matches_terminal = item_agent_messages
         .last()
         .is_some_and(|message| message == &turn.last_agent_message);
+    let has_agent_message_item = !item_agent_messages.is_empty();
     let mut message = item_agent_messages.concat();
     if message.is_empty() || (!turn.last_agent_message.is_empty() && !final_item_matches_terminal) {
         message.push_str(&turn.last_agent_message);
     }
-    if !message.is_empty() {
+    if has_agent_message_item || !message.is_empty() {
         events.push(ChatStreamEvent::Token { content: message });
     }
     events
@@ -2034,6 +2035,52 @@ mod tests {
         assert!(matches!(
             recovered.as_slice(),
             [ChatStreamEvent::TextReconcile { content }] if content == "hello world"
+        ));
+    }
+
+    #[tokio::test]
+    async fn completed_empty_agent_message_clears_delivered_draft_before_terminal() {
+        let bridge = ThreadEventsBridge::new();
+        let activation = bridge.activate("session-1").await;
+        bridge
+            .bind_submitted_turn_if_current("session-1", activation, "turn-1")
+            .await;
+        bridge
+            .record_delivered_projection(
+                "session-1",
+                "turn-1",
+                &[ChatStreamEvent::Token {
+                    content: "draft".into(),
+                }],
+            )
+            .await;
+        let snapshot = proto::ThreadSnapshot {
+            thread_id: "session-1".into(),
+            status: "completed".into(),
+            turns: vec![proto::ThreadTurn {
+                id: "turn-1".into(),
+                status: "completed".into(),
+                items: vec![agent_message_item("message-1", "")],
+                last_agent_message: String::new(),
+                error: None,
+                has_error: false,
+            }],
+            active_turn: None,
+            has_active_turn: false,
+        };
+
+        let reconciled = reconcile_snapshot(&snapshot);
+        let recovered = bridge
+            .recover_snapshot_projection("session-1", "turn-1", reconciled.terminal)
+            .await;
+
+        assert!(matches!(
+            recovered.as_slice(),
+            [
+                ChatStreamEvent::TextReconcile { content },
+                ChatStreamEvent::RunFinished { .. },
+                ChatStreamEvent::Done
+            ] if content.is_empty()
         ));
     }
 

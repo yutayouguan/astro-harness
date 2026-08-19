@@ -6,6 +6,10 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { applyActivityUpsert, applySurfaceUpsert, sealOpenReasoning } from "../../lib/chat/chatTimeline";
 import {
+  consumeBufferedTextReconcile,
+  reconcileAssistantText,
+} from "../../lib/chat/streamReconcile";
+import {
   countRunningParallel,
   isParallelTaskActive,
   MAX_PARALLEL_RUNNING,
@@ -425,6 +429,33 @@ export function useParallelTasks(deps: Deps) {
         const payload = event.payload;
         if (payload.type === "token" && payload.content) {
           enqueueToken(assistantId, payload.content);
+        } else if (payload.type === "text_reconcile") {
+          const raf = rafMapRef.current.get(assistantId);
+          if (raf != null) {
+            cancelAnimationFrame(raf);
+            rafMapRef.current.delete(assistantId);
+          }
+          const buffered = streamBufRef.current.get(assistantId) ?? "";
+          flushToken(assistantId);
+          const reconciled = consumeBufferedTextReconcile(
+            "",
+            buffered,
+            payload.content ?? "",
+          );
+          streamBufRef.current.set(assistantId, reconciled.buffered);
+          setMessages((prev) =>
+            prev.map((message) =>
+              message.id === assistantId
+                ? {
+                    ...message,
+                    content: reconcileAssistantText(
+                      message.content,
+                      reconciled.content,
+                    ),
+                  }
+                : message,
+            ),
+          );
         } else if (payload.type === "reasoning" && payload.content) {
           setMessages((prev) =>
             prev.map((m) =>

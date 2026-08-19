@@ -69,6 +69,12 @@ impl ThreadHistoryBuilder {
             EventMsg::ItemCompleted(item) => {
                 self.upsert_item(&item.turn_id, &item.item, "completed");
             }
+            EventMsg::AgentMessageContentDelta(delta) => {
+                self.append_text_delta(&delta.turn_id, &delta.item_id, &delta.delta, false);
+            }
+            EventMsg::ReasoningContentDelta(delta) => {
+                self.append_text_delta(&delta.turn_id, &delta.item_id, &delta.delta, true);
+            }
             EventMsg::TurnComplete(completed) => {
                 let completes_active = self
                     .active
@@ -136,6 +142,27 @@ impl ThreadHistoryBuilder {
                 status: status.into(),
                 item: item.clone(),
             });
+        }
+    }
+
+    fn append_text_delta(&mut self, turn_id: &str, item_id: &str, delta: &str, reasoning: bool) {
+        let Some(item) = self
+            .active
+            .as_mut()
+            .filter(|turn| turn.id == turn_id)
+            .and_then(|turn| {
+                turn.items
+                    .iter_mut()
+                    .find(|item| item.id == item_id && item.status == "in_progress")
+            })
+        else {
+            return;
+        };
+        match (&mut item.item, reasoning) {
+            (TurnItem::AgentMessage(message), false) | (TurnItem::Reasoning(message), true) => {
+                message.content.push_str(delta)
+            }
+            _ => {}
         }
     }
 
@@ -258,8 +285,8 @@ impl ThreadStateManager {
 mod tests {
     use super::*;
     use agent_protocol::{
-        Event, EventMsg, ItemEvent, TextItem, TurnAbortReason, TurnAbortedEvent, TurnCompleteEvent,
-        TurnItem, TurnStartedEvent,
+        DeltaEvent, Event, EventMsg, ItemEvent, TextItem, TurnAbortReason, TurnAbortedEvent,
+        TurnCompleteEvent, TurnItem, TurnStartedEvent,
     };
     use tokio::sync::{mpsc, watch, Mutex};
 
@@ -288,6 +315,84 @@ mod tests {
                 EventMsg::ItemStarted(event)
             },
         }
+    }
+
+    fn content_delta(turn_id: &str, item_id: &str, delta: &str, reasoning: bool) -> Event {
+        let delta = DeltaEvent {
+            turn_id: turn_id.into(),
+            item_id: item_id.into(),
+            delta: delta.into(),
+        };
+        Event {
+            id: format!("delta-{turn_id}-{item_id}"),
+            msg: if reasoning {
+                EventMsg::ReasoningContentDelta(delta)
+            } else {
+                EventMsg::AgentMessageContentDelta(delta)
+            },
+        }
+    }
+
+    #[test]
+    fn builder_accumulates_agent_delta_into_matching_active_item() {
+        let mut builder = ThreadHistoryBuilder::default();
+        builder.track(&started("turn-1"));
+        builder.track(&item("turn-1", "item-1", "", false));
+        builder.track(&content_delta("turn-1", "item-1", "lost", false));
+
+        let active = builder.active_turn_snapshot().expect("active turn");
+        assert!(matches!(
+            &active.items[0].item,
+            TurnItem::AgentMessage(message) if message.content == "lost"
+        ));
+    }
+
+    #[test]
+    fn builder_routes_delta_by_turn_and_item_then_accepts_completed_canonical() {
+        let mut builder = ThreadHistoryBuilder::default();
+        builder.track(&started("turn-1"));
+        builder.track(&item("turn-1", "item-1", "", false));
+        builder.track(&content_delta("turn-old", "item-1", "wrong-turn", false));
+        builder.track(&content_delta("turn-1", "item-other", "wrong-item", false));
+        builder.track(&content_delta("turn-1", "item-1", "draft", false));
+
+        let active = builder.active_turn_snapshot().expect("active turn");
+        assert!(matches!(
+            &active.items[0].item,
+            TurnItem::AgentMessage(message) if message.content == "draft"
+        ));
+
+        builder.track(&item("turn-1", "item-1", "canonical", true));
+        builder.track(&content_delta("turn-1", "item-1", "-late", false));
+        let active = builder.active_turn_snapshot().expect("active turn");
+        assert!(matches!(
+            &active.items[0].item,
+            TurnItem::AgentMessage(message) if message.content == "canonical"
+        ));
+    }
+
+    #[test]
+    fn builder_accumulates_reasoning_delta_into_matching_active_item() {
+        let mut builder = ThreadHistoryBuilder::default();
+        builder.track(&started("turn-1"));
+        let started_reasoning = ItemEvent {
+            turn_id: "turn-1".into(),
+            item: TurnItem::Reasoning(TextItem {
+                id: "reasoning-1".into(),
+                content: String::new(),
+            }),
+        };
+        builder.track(&Event {
+            id: "reasoning-started".into(),
+            msg: EventMsg::ItemStarted(started_reasoning),
+        });
+        builder.track(&content_delta("turn-1", "reasoning-1", "thinking", true));
+
+        let active = builder.active_turn_snapshot().expect("active turn");
+        assert!(matches!(
+            &active.items[0].item,
+            TurnItem::Reasoning(reasoning) if reasoning.content == "thinking"
+        ));
     }
 
     #[test]
