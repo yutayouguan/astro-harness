@@ -137,7 +137,7 @@ fn rollback_fork_error(
 
 #[derive(Default)]
 struct RuntimeRequestRegistry {
-    requests: Mutex<HashMap<String, StoredRuntimeRequest>>,
+    requests: Mutex<HashMap<String, Arc<StoredRuntimeRequest>>>,
 }
 
 impl RuntimeRequestRegistry {
@@ -146,7 +146,7 @@ impl RuntimeRequestRegistry {
         Arc::clone(REGISTRY.get_or_init(|| Arc::new(Self::default())))
     }
 
-    fn insert(&self, thread_id: &str, request: StoredRuntimeRequest) -> anyhow::Result<()> {
+    fn insert(&self, thread_id: &str, request: Arc<StoredRuntimeRequest>) -> anyhow::Result<()> {
         let mut requests = self
             .requests
             .lock()
@@ -158,13 +158,21 @@ impl RuntimeRequestRegistry {
         Ok(())
     }
 
-    fn get(&self, thread_id: &str) -> anyhow::Result<Option<StoredRuntimeRequest>> {
+    fn get(&self, thread_id: &str) -> anyhow::Result<Option<Arc<StoredRuntimeRequest>>> {
         Ok(self
             .requests
             .lock()
             .map_err(|_| anyhow::anyhow!("agent runtime request registry mutex is poisoned"))?
             .get(thread_id)
             .cloned())
+    }
+
+    fn take(&self, thread_id: &str) -> anyhow::Result<Option<Arc<StoredRuntimeRequest>>> {
+        Ok(self
+            .requests
+            .lock()
+            .map_err(|_| anyhow::anyhow!("agent runtime request registry mutex is poisoned"))?
+            .remove(thread_id))
     }
 
     fn remove(&self, thread_id: &str) {
@@ -380,11 +388,11 @@ impl AgentThreadDispatch for DefaultAgentThreadDispatch {
             ));
         }
 
-        let stored = StoredRuntimeRequest {
+        let stored = Arc::new(StoredRuntimeRequest {
             memory_dir,
             runtime,
             lifecycle_hooks: Arc::new(AgentLifecycleHookState::default()),
-        };
+        });
         if let Err(error) = self
             .runtime_requests
             .insert(&thread.thread_id, stored.clone())
@@ -437,7 +445,7 @@ impl AgentThreadDispatch for DefaultAgentThreadDispatch {
             cleanup: Arc::clone(&unaccepted_cleanup),
             armed: true,
         };
-        let mut run_request = self.run_request(thread.clone(), stored.clone(), false);
+        let mut run_request = self.run_request(thread.clone(), stored.as_ref().clone(), false);
         run_request.unaccepted_spawn_cleanup = Some(unaccepted_cleanup);
         if let Err(start_error) = self.launch_turn(run_request).await {
             return match startup_guard.cleanup() {
@@ -493,17 +501,18 @@ impl AgentThreadDispatch for DefaultAgentThreadDispatch {
             &self.current_path,
             request,
             |target| {
-                let mut stored =
-                    self.runtime_requests
-                        .get(&target.thread_id)?
-                        .ok_or_else(|| {
-                            anyhow::anyhow!(
-                                "agent runtime configuration is unavailable for {}",
-                                target.canonical_path
-                            )
-                        })?;
-                stored.runtime.model_request.message = followup_text;
-                let run = self.run_request(target.clone(), stored, true);
+                let stored = self
+                    .runtime_requests
+                    .get(&target.thread_id)?
+                    .ok_or_else(|| {
+                        anyhow::anyhow!(
+                            "agent runtime configuration is unavailable for {}",
+                            target.canonical_path
+                        )
+                    })?;
+                let mut turn_request = stored.as_ref().clone();
+                turn_request.runtime.model_request.message = followup_text;
+                let run = self.run_request(target.clone(), turn_request, true);
                 self.runtime_manager
                     .request_or_start_followup(&target.thread_id, run)
             },
@@ -788,7 +797,7 @@ async fn finish_close_operation(
             .await
         {
             Ok(CloseThreadStart::Complete) => {
-                match runtime_requests.get(&thread.thread_id) {
+                match runtime_requests.take(&thread.thread_id) {
                     Ok(Some(stored)) => stored.fire_stop_once(thread),
                     Ok(None) => {}
                     Err(error) => tracing::warn!(
@@ -1578,6 +1587,16 @@ mod tests {
         );
         assert_eq!(stopped_paths.lock().unwrap().len(), 1);
         assert!(stopped_paths.lock().unwrap()[0].contains("path=/root/parent/leaf"));
+        assert!(dispatch
+            .runtime_requests
+            .get(&leaf.thread_id)
+            .unwrap()
+            .is_none());
+        assert!(dispatch
+            .runtime_requests
+            .get(&parent.thread_id)
+            .unwrap()
+            .is_some());
 
         graph
             .execute_batch("DROP TRIGGER fail_parent_shutdown;")
@@ -1592,6 +1611,11 @@ mod tests {
         let stopped_paths = stopped_paths.lock().unwrap();
         assert_eq!(stopped_paths.len(), 2);
         assert!(stopped_paths[1].contains("path=/root/parent"));
+        assert!(dispatch
+            .runtime_requests
+            .get(&parent.thread_id)
+            .unwrap()
+            .is_none());
     }
 
     #[tokio::test(flavor = "current_thread")]
@@ -1730,8 +1754,13 @@ mod tests {
             .to_string()
             .contains("remains closing in background"));
 
+        // Root A deliberately proves the 20ms timeout path. Give root B an
+        // internal deadline that tolerates parallel-test scheduler jitter,
+        // while the outer 500ms bound still proves A's live close lock does
+        // not serialize an unrelated root.
+        manager.set_close_timeout(Duration::from_secs(1));
         let close_b = tokio::time::timeout(
-            Duration::from_millis(100),
+            Duration::from_millis(500),
             desktop_control(&dispatch_b, &memory_b).close_subtree("root-b", "/root/worker"),
         )
         .await;
@@ -2663,6 +2692,23 @@ mod tests {
         dispatch.chat_override = Some(scripted_chat("done"));
         let bus = Arc::new(hooks::PluginHookBus::new());
         bus.register(hooks::SUBAGENT_STOP, |_| panic!("injected hook panic"));
+        let registry = Arc::clone(&dispatch.runtime_requests);
+        bus.register(hooks::SUBAGENT_STOP, move |_| {
+            assert!(registry
+                .requests
+                .try_lock()
+                .expect("stop hook must not run under the registry lock")
+                .is_empty());
+            hooks::HookOutcome::Continue
+        });
+        let sensitive_probe = Arc::new(());
+        let sensitive_probe_weak = Arc::downgrade(&sensitive_probe);
+        let captured_probe = Arc::clone(&sensitive_probe);
+        bus.register(hooks::SUBAGENT_STOP, move |_| {
+            let _ = Arc::strong_count(&captured_probe);
+            hooks::HookOutcome::Continue
+        });
+        drop(sensitive_probe);
         let payloads = Arc::new(Mutex::new(Vec::<hooks::HookPayload>::new()));
         let observed = Arc::clone(&payloads);
         bus.register(hooks::SUBAGENT_STOP, move |payload| {
@@ -2705,6 +2751,12 @@ mod tests {
         assert_eq!(payloads.len(), 1);
         assert_eq!(payloads[0].session_id, spawned.thread.session_id);
         assert!(payloads[0].detail.contains("path=/root/worker"));
+        assert!(dispatch
+            .runtime_requests
+            .get(&spawned.thread.thread_id)
+            .unwrap()
+            .is_none());
+        assert!(sensitive_probe_weak.upgrade().is_none());
     }
 
     #[tokio::test(flavor = "current_thread")]
@@ -2745,6 +2797,11 @@ mod tests {
             AgentStatusV2::Errored { .. }
         ));
         assert_eq!(stop_count.load(Ordering::SeqCst), 0);
+        assert!(dispatch
+            .runtime_requests
+            .get(&errored.thread.thread_id)
+            .unwrap()
+            .is_some());
 
         let mut interrupted_request = request_with_hook_bus(&memory_dir, Arc::clone(&bus));
         interrupted_request.request.task_name = "interrupted".into();
@@ -2767,6 +2824,11 @@ mod tests {
             tokio::task::yield_now().await;
         }
         assert_eq!(stop_count.load(Ordering::SeqCst), 0);
+        assert!(dispatch
+            .runtime_requests
+            .get(&interrupted.thread.thread_id)
+            .unwrap()
+            .is_some());
 
         let desktop = desktop_control(&dispatch, &memory_dir);
         desktop
@@ -2778,6 +2840,16 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(stop_count.load(Ordering::SeqCst), 2);
+        assert!(dispatch
+            .runtime_requests
+            .get(&errored.thread.thread_id)
+            .unwrap()
+            .is_none());
+        assert!(dispatch
+            .runtime_requests
+            .get(&interrupted.thread.thread_id)
+            .unwrap()
+            .is_none());
     }
 
     #[tokio::test]
