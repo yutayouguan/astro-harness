@@ -2,7 +2,7 @@ use anyhow::{bail, Context};
 use rusqlite::{Connection, OptionalExtension, Transaction, TransactionBehavior};
 use serde::{Deserialize, Serialize};
 
-pub(crate) const SCHEMA_VERSION: i32 = 3;
+pub(crate) const SCHEMA_VERSION: i32 = 4;
 
 const V2_DDL: &str = r#"
 CREATE TABLE IF NOT EXISTS agent_threads (
@@ -72,7 +72,7 @@ CREATE TABLE IF NOT EXISTS agent_runtime_descriptors (
 );
 "#;
 
-const V3_DDL: &str = r#"
+const V4_DDL: &str = r#"
 CREATE TABLE IF NOT EXISTS agent_runtime_descriptors (
     thread_id TEXT PRIMARY KEY,
     model TEXT,
@@ -119,17 +119,18 @@ pub(crate) fn migrate(conn: &mut Connection) -> anyhow::Result<()> {
             tx.commit()?;
             return Ok(());
         }
-        Some(2) => {
-            tx.execute_batch(V3_DDL)?;
+        Some(3) => {
+            ensure_runtime_descriptor_recovery_state(&tx)?;
             tx.execute(
-                "INSERT INTO agent_runtime_descriptors (
-                     thread_id, model, reasoning_effort, recovery_state
-                 )
-                 SELECT thread_id, NULL, NULL, 'legacy_unavailable'
-                 FROM agent_threads
-                 WHERE parent_thread_id IS NOT NULL",
-                [],
+                "UPDATE schema_meta SET value = ?1 WHERE key = 'schema_version'",
+                [SCHEMA_VERSION.to_string()],
             )?;
+            tx.commit()?;
+            return Ok(());
+        }
+        Some(2) => {
+            tx.execute_batch(V4_DDL)?;
+            ensure_runtime_descriptor_recovery_state(&tx)?;
             tx.execute(
                 "UPDATE schema_meta SET value = ?1 WHERE key = 'schema_version'",
                 [SCHEMA_VERSION.to_string()],
@@ -308,6 +309,27 @@ fn column_exists(conn: &Connection, table: &str, column: &str) -> rusqlite::Resu
     Ok(columns.iter().any(|candidate| candidate == column))
 }
 
+fn ensure_runtime_descriptor_recovery_state(conn: &Connection) -> anyhow::Result<()> {
+    if !column_exists(conn, "agent_runtime_descriptors", "recovery_state")? {
+        conn.execute(
+            "ALTER TABLE agent_runtime_descriptors
+             ADD COLUMN recovery_state TEXT NOT NULL DEFAULT 'available'
+             CHECK(recovery_state IN ('available', 'legacy_unavailable'))",
+            [],
+        )?;
+    }
+    conn.execute(
+        "INSERT OR IGNORE INTO agent_runtime_descriptors (
+             thread_id, model, reasoning_effort, recovery_state
+         )
+         SELECT thread_id, NULL, NULL, 'legacy_unavailable'
+         FROM agent_threads
+         WHERE parent_thread_id IS NOT NULL",
+        [],
+    )?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use rusqlite::{params, Connection};
@@ -400,7 +422,7 @@ mod tests {
         create_v1_fixture(&path, true);
 
         let store = AgentGraphStore::open(path.clone()).unwrap();
-        assert_eq!(store.schema_version().unwrap(), 3);
+        assert_eq!(store.schema_version().unwrap(), 4);
         let historical_threads = store.list_historical_threads().unwrap();
         assert_eq!(historical_threads.len(), 1);
         assert_eq!(historical_threads[0].id, "legacy-thread");
@@ -423,11 +445,11 @@ mod tests {
     }
 
     #[test]
-    fn fresh_database_has_v3_schema_without_history() {
+    fn fresh_database_has_v4_schema_without_history() {
         let dir = tempfile::tempdir().unwrap();
         let store = AgentGraphStore::open(dir.path().join("subagents.db")).unwrap();
 
-        assert_eq!(store.schema_version().unwrap(), 3);
+        assert_eq!(store.schema_version().unwrap(), 4);
         assert!(store.list_historical_threads().unwrap().is_empty());
         assert!(store
             .list_historical_messages("missing")
@@ -474,7 +496,7 @@ mod tests {
         drop(conn);
 
         let store = AgentGraphStore::open(path.clone()).unwrap();
-        assert_eq!(store.schema_version().unwrap(), 3);
+        assert_eq!(store.schema_version().unwrap(), 4);
         assert!(store.get_thread("root").unwrap().is_some());
         drop(store);
 
@@ -497,6 +519,89 @@ mod tests {
             )
             .unwrap();
         assert_eq!(legacy_markers, 1);
+    }
+
+    #[test]
+    fn self_heals_early_v3_descriptor_table_and_marks_missing_children() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("subagents-v2.db");
+        let conn = Connection::open(&path).unwrap();
+        conn.execute_batch(
+            "PRAGMA foreign_keys=ON;
+             CREATE TABLE schema_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+             INSERT INTO schema_meta(key, value) VALUES ('schema_version', '3');
+             CREATE TABLE agent_threads (
+                 thread_id TEXT PRIMARY KEY,
+                 root_thread_id TEXT NOT NULL,
+                 parent_thread_id TEXT,
+                 canonical_path TEXT NOT NULL,
+                 task_name TEXT NOT NULL,
+                 agent_type TEXT NOT NULL,
+                 session_id TEXT NOT NULL,
+                 status_kind TEXT NOT NULL,
+                 status_payload TEXT NOT NULL,
+                 last_status_sequence INTEGER NOT NULL DEFAULT 0,
+                 created_at TEXT NOT NULL,
+                 updated_at TEXT NOT NULL,
+                 UNIQUE(root_thread_id, canonical_path)
+             );
+             INSERT INTO agent_threads VALUES (
+                 'root', 'root', NULL, '/root', 'root', 'root', 'root',
+                 'running', '{\"kind\":\"running\"}', 0,
+                 '2026-08-19T00:00:00Z', '2026-08-19T00:00:00Z'
+             );
+             INSERT INTO agent_threads VALUES (
+                 'child', 'root', 'root', '/root/child', 'child', 'default', 'child-session',
+                 'interrupted', '{\"kind\":\"interrupted\",\"reason\":\"restart\"}', 0,
+                 '2026-08-19T00:00:00Z', '2026-08-19T00:00:00Z'
+             );
+             INSERT INTO agent_threads VALUES (
+                 'missing', 'root', 'root', '/root/missing', 'missing', 'default', 'missing-session',
+                 'interrupted', '{\"kind\":\"interrupted\",\"reason\":\"restart\"}', 0,
+                 '2026-08-19T00:00:00Z', '2026-08-19T00:00:00Z'
+             );
+             CREATE TABLE agent_runtime_descriptors (
+                 thread_id TEXT PRIMARY KEY,
+                 model TEXT,
+                 reasoning_effort TEXT,
+                 FOREIGN KEY(thread_id) REFERENCES agent_threads(thread_id) ON DELETE CASCADE
+             );
+             INSERT INTO agent_runtime_descriptors VALUES (
+                 'child', 'openai:trusted-v3-model', 'high'
+             );",
+        )
+        .unwrap();
+        drop(conn);
+
+        let store = AgentGraphStore::open(path.clone()).unwrap();
+        let descriptor = store.runtime_descriptor("child").unwrap().unwrap();
+        assert_eq!(descriptor.model.as_deref(), Some("openai:trusted-v3-model"));
+        assert_eq!(descriptor.reasoning_effort.as_deref(), Some("high"));
+        let error = store.runtime_descriptor("missing").unwrap_err();
+        assert!(error
+            .downcast_ref::<crate::LegacyRuntimeDescriptorUnavailable>()
+            .is_some());
+        drop(store);
+        let conn = Connection::open(path).unwrap();
+        let states = conn
+            .prepare(
+                "SELECT thread_id, recovery_state FROM agent_runtime_descriptors
+                 ORDER BY thread_id",
+            )
+            .unwrap()
+            .query_map([], |row| {
+                Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+            })
+            .unwrap()
+            .collect::<rusqlite::Result<Vec<_>>>()
+            .unwrap();
+        assert_eq!(
+            states,
+            vec![
+                ("child".into(), "available".into()),
+                ("missing".into(), "legacy_unavailable".into()),
+            ]
+        );
     }
 
     #[test]
@@ -535,7 +640,7 @@ mod tests {
         drop(conn);
 
         let store = AgentGraphStore::open(path.clone()).unwrap();
-        assert_eq!(store.schema_version().unwrap(), 3);
+        assert_eq!(store.schema_version().unwrap(), 4);
         let archived = store.list_historical_messages("orphan-thread").unwrap();
         assert_eq!(archived.len(), 1);
         assert_eq!(archived[0].content, "preserve me");
