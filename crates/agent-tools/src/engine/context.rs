@@ -55,11 +55,11 @@ pub struct ToolContext<'a> {
     ///
     /// 该值只存在于本次 `ToolContext` 生命周期，不会持久化或扩大到后续工具调用。
     pub workspace_write_grant: bool,
-    /// Current attempt-only sandbox policy override.
+    /// Current attempt-scoped sandbox policy selected by the orchestrator.
     ///
-    /// Only the orchestrator may set this after a fresh sandbox-denial approval.
+    /// Only the orchestrator may set this for initial or escalated attempts.
     /// It is never persisted or inherited by later tool calls.
-    pub sandbox_policy_override: Option<sandbox::SandboxPolicy>,
+    pub sandbox_policy: Option<sandbox::SandboxPolicy>,
     /// 当前单次工具调用已获得的进程内网络主机授权。
     ///
     /// 与命令沙箱的 `network.enabled` 相互独立，不会持久化或跨工具调用复用。
@@ -110,7 +110,7 @@ impl<'a> ToolContext<'a> {
             &root,
             self.permission_profile.as_deref(),
             self.workspace_write_grant,
-            self.sandbox_policy_override.clone(),
+            self.sandbox_policy.clone(),
         )
     }
 
@@ -153,15 +153,18 @@ impl<'a> ToolContext<'a> {
 ///
 /// terminal、code_exec 与 MCP stdio 共用此入口，避免不同进程启动路径对 profile
 /// 产生不同解释。`workspace_write_grant` 仅供单次已审批的工具调用使用；
-/// `sandbox_policy_override` 仅供 orchestrator 在 sandbox denial 获得 fresh approval 后的
-/// 一次 retry 使用。常驻 MCP 连接必须传 `false, None`，不得继承临时授权。
+/// `sandbox_policy` 由 orchestrator 为当前 attempt 选择；兼容入口传 `None` 时仍在此解析。
+/// 常驻 MCP 连接必须传 `false, None`，不得继承临时授权。
 pub fn build_command_sandbox_policy(
     memory_dir: &Path,
     execution_root: &Path,
     permission_profile: Option<&str>,
     workspace_write_grant: bool,
-    sandbox_policy_override: Option<sandbox::SandboxPolicy>,
+    sandbox_policy: Option<sandbox::SandboxPolicy>,
 ) -> anyhow::Result<sandbox::SandboxPolicy> {
+    if let Some(policy) = sandbox_policy {
+        return Ok(policy);
+    }
     std::fs::create_dir_all(execution_root)?;
     let loaded = memory::load_permission_settings(memory_dir);
     let profile_id = permission_profile.unwrap_or(&loaded.selection.profile_id);
@@ -173,9 +176,6 @@ pub fn build_command_sandbox_policy(
             "custom permission profile {:?} is not executable until its filesystem rules are fully resolved",
             profile_id
         );
-    }
-    if let Some(policy) = sandbox_policy_override {
-        return Ok(policy);
     }
     let mut mode = loaded.permissions.sandbox_mode_for(profile_id)?;
     if workspace_write_grant && mode == types::SandboxMode::ReadOnly {
@@ -216,7 +216,7 @@ mod tests {
             skill_config_overrides: &[],
             hook_bus: None,
             workspace_write_grant: true,
-            sandbox_policy_override: None,
+            sandbox_policy: None,
             network_grant: InProcessNetworkGrant::default(),
         };
 
@@ -252,6 +252,31 @@ mod tests {
         assert_eq!(policy.mode, types::SandboxMode::WorkspaceWrite);
         assert_eq!(policy.writable_roots, vec![workspace, filesystem_root]);
         assert!(!policy.network_access);
+    }
+
+    #[test]
+    fn selected_attempt_policy_wins_over_later_profile_change() {
+        let dir = tempfile::tempdir().unwrap();
+        let workspace = dir.path().join("workspace");
+        std::fs::create_dir_all(&workspace).unwrap();
+        let selected = sandbox::SandboxPolicy::new(
+            types::SandboxMode::ReadOnly,
+            &workspace,
+            Vec::new(),
+            false,
+        )
+        .unwrap();
+
+        let policy = build_command_sandbox_policy(
+            dir.path(),
+            &workspace,
+            Some("profile-changed-after-selection"),
+            false,
+            Some(selected.clone()),
+        )
+        .unwrap();
+
+        assert_eq!(policy, selected);
     }
 
     #[test]

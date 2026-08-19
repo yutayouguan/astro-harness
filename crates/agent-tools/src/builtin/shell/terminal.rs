@@ -60,7 +60,7 @@ stdout/stderr capped at 64KiB (run) / 60KiB per poll (jobs)."
         schema: schema_for_args::<TerminalArgs>(),
         check_fn: None,
         icon: "terminal",
-        ..ToolEntry::lifecycle_defaults()
+        ..ToolEntry::lifecycle_defaults().sandboxable()
     });
 }
 
@@ -299,7 +299,7 @@ mod tests {
             skill_config_overrides: &[],
             hook_bus: Some(bus),
             workspace_write_grant: false,
-            sandbox_policy_override: None,
+            sandbox_policy: None,
             network_grant: crate::InProcessNetworkGrant::default(),
         };
 
@@ -343,7 +343,7 @@ mod tests {
             skill_config_overrides: &[],
             hook_bus: None,
             workspace_write_grant: false,
-            sandbox_policy_override: None,
+            sandbox_policy: None,
             network_grant: crate::InProcessNetworkGrant::default(),
         };
 
@@ -393,7 +393,7 @@ mod tests {
             skill_config_overrides: &[],
             hook_bus: Some(bus),
             workspace_write_grant: false,
-            sandbox_policy_override: None,
+            sandbox_policy: None,
             network_grant: crate::InProcessNetworkGrant::default(),
         };
 

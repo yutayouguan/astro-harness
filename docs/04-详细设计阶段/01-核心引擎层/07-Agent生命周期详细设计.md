@@ -1,6 +1,6 @@
 # Agent 生命周期详细设计
 
-> 版本：v2.22
+> 版本：v2.23
 > 日期：2026-08-19
 > 状态：实施基线  
 > 上游参考：[OpenAI Codex](https://github.com/openai/codex) `632e35ce8d5dec43b75dbf99f9e6fa52bed47c3d`  
@@ -657,7 +657,9 @@ built-in tool 的 current-thread `!Send` 契约保持不变。
     attempt-scoped policy override 重试一次，不持久化、不扩大网络授权。
   - [x] 将 escalation 的文件系统与网络策略解耦：文件系统扩大到 unrestricted，网络继续
     restricted，禁止用绕过平台沙箱的 `DangerFullAccess` 冒充文件系统单项授权。
-  - [ ] 将 sandbox selection、denial analysis、network approval 与 retry 迁入 orchestrator。
+  - [x] 将 `SandboxablePreference` 固定到 `ToolRouter` step snapshot，并由 orchestrator
+    为初始 attempt 选择完整 sandbox policy；兼容入口仍可在 `ToolContext` 内回退解析。
+  - [ ] 将 denial analysis 与 managed subprocess network approval 迁入 orchestrator。
 - [ ] 删除工具执行时重新加载权限/工具的路径。
 
 v2.16 ToolInvocation / ToolCallRuntime 首批：新运行时保留 Codex 的 `session`、
@@ -715,14 +717,26 @@ attempt-scoped sandbox override 扩大文件系统访问；session permission pr
 
 v2.22 Sandbox policy separation 修正：复核真实 runner 后确认
 `SandboxMode::DangerFullAccess` 会完全绕过平台沙箱，因而无法兑现 v2.21 的“网络授权不扩大”
-约束。现改为传递完整的 `sandbox_policy_override`：
+约束。现改为传递完整的 attempt-scoped `sandbox_policy`：
 `SandboxPolicy::unrestricted_file_system(execution_root, false)` 使用
 `WorkspaceWrite + filesystem root` 表达 unrestricted 文件系统，同时继续经过平台 sandbox，
 保留 workspace metadata deny，并保持 `network_access = false`。
 `SandboxAttempt -> ToolExecutionGrants -> ToolContext` 全链路
 传递不可变 policy，而不再只传 mode。该修正与 Codex 当前将 filesystem/network permission
-正交建模的边界一致；初始 sandbox selection 与 managed subprocess network approval 仍留待
-后续批次迁入 orchestrator。
+正交建模的边界一致；managed subprocess network approval 仍留待后续批次迁入 orchestrator。
+
+v2.23 Initial sandbox selection 批次：引入 Codex 同名
+`SandboxablePreference::{Auto, Require, Forbid}`，并作为 `ToolEntry -> ToolRoute` 元数据固定到
+生成当前调用的 `ToolRouter` snapshot。`terminal` 与 `code_exec` 标为 `Auto`；普通 built-in、
+动态工具与 MCP 工具缺省 `Forbid`，不会因无关的 custom filesystem profile 提前失败。
+`ToolOrchestrator::sandbox_policy_for_attempt` 在 dispatch 前根据该快照、turn permission profile、
+execution root 与 one-shot workspace-write grant 选择完整 policy，再经
+`SandboxAttempt -> ToolExecutionGrants -> ToolContext` 传递。`Require` 在 ambient full-access
+profile 下仍强制使用平台 sandbox；escalated attempt 的显式 policy 优先于初始选择。
+共享 helper 收到显式 attempt policy 时立即返回，不再重读或重新校验可能已热更新的 profile，
+从而保持同一 step/attempt 的不可变权限语义。
+无 `StepContext` 的兼容调用和常驻 MCP 启动仍保留 `ToolContext`/共享 helper 回退，等待后续
+删除旧入口时一并收口。
 
 ### Phase D：ThreadManager 与 AgentControl
 

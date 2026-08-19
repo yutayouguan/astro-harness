@@ -57,6 +57,7 @@ pub use tool_call::{
     extract_tool_calls, resolve_tool_calls, ParsedToolCall, ToolCallAccumulator, ToolCallDelta,
 };
 pub use tool_entry::{
-    McpToolAnnotations, McpToolApproval, McpToolApprovalMode, McpToolApprovalRoute, ToolEntry,
+    McpToolAnnotations, McpToolApproval, McpToolApprovalMode, McpToolApprovalRoute,
+    SandboxablePreference, ToolEntry,
 };
 pub use tool_output::ToolOutput;

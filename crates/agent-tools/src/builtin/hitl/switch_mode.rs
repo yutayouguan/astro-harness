@@ -121,7 +121,7 @@ mod tests {
             skill_config_overrides: &[],
             hook_bus: None,
             workspace_write_grant: false,
-            sandbox_policy_override: None,
+            sandbox_policy: None,
             network_grant: crate::InProcessNetworkGrant::default(),
         };
         f(&ctx);

@@ -194,7 +194,7 @@ struct ToolRunContext {
 #[derive(Clone)]
 struct SandboxAttempt {
     workspace_write_grant: bool,
-    sandbox_policy_override: Option<sandbox::SandboxPolicy>,
+    sandbox_policy: Option<sandbox::SandboxPolicy>,
     network_grant: tools::InProcessNetworkGrant,
 }
 
@@ -202,7 +202,7 @@ impl SandboxAttempt {
     fn initial(workspace_write_grant: bool, network_grant: tools::InProcessNetworkGrant) -> Self {
         Self {
             workspace_write_grant,
-            sandbox_policy_override: None,
+            sandbox_policy: None,
             network_grant,
         }
     }
@@ -210,7 +210,7 @@ impl SandboxAttempt {
     fn escalated(&self, execution_root: &std::path::Path) -> Result<Self, sandbox::SandboxErr> {
         Ok(Self {
             workspace_write_grant: self.workspace_write_grant,
-            sandbox_policy_override: Some(sandbox::SandboxPolicy::unrestricted_file_system(
+            sandbox_policy: Some(sandbox::SandboxPolicy::unrestricted_file_system(
                 execution_root,
                 false,
             )?),
@@ -674,12 +674,6 @@ impl<'a> ToolOrchestrator<'a> {
         let agent = self.session.as_ref();
         let memory_dir = agent.memory_dir().to_path_buf();
         let session_id = agent.session_id().to_string();
-        let execution_root = self
-            .step_context
-            .turn
-            .project_root()
-            .map(ToOwned::to_owned)
-            .unwrap_or_else(|| agent.memory().workspace_dir.clone());
         let initial_attempt = SandboxAttempt::initial(workspace_write_grant, network_grant);
         let execution_started = std::time::Instant::now();
         let executed = self.run_attempt(call, &initial_attempt, CancellationToken::new());
@@ -708,7 +702,7 @@ impl<'a> ToolOrchestrator<'a> {
                     PermissionPreflight::Granted(retry_audit) => {
                         let retry_started = std::time::Instant::now();
                         let retry = initial_attempt
-                            .escalated(&execution_root)
+                            .escalated(&self.execution_root())
                             .map_err(anyhow::Error::new)
                             .map_err(crate::runtime::ToolCallError::from)
                             .and_then(|attempt| {
@@ -799,6 +793,7 @@ impl<'a> ToolOrchestrator<'a> {
         attempt: &SandboxAttempt,
         cancellation_token: CancellationToken,
     ) -> Result<types::ToolOutput, crate::runtime::ToolCallError> {
+        let sandbox_policy = self.sandbox_policy_for_attempt(call, attempt)?;
         let invocation = ToolInvocation {
             session: Arc::clone(self.session),
             step_context: Arc::clone(self.step_context),
@@ -811,10 +806,53 @@ impl<'a> ToolOrchestrator<'a> {
             invocation,
             crate::runtime::ToolExecutionGrants {
                 workspace_write: attempt.workspace_write_grant,
-                sandbox_policy_override: attempt.sandbox_policy_override.clone(),
+                sandbox_policy,
                 network: attempt.network_grant.clone(),
             },
         )
+    }
+
+    fn execution_root(&self) -> std::path::PathBuf {
+        self.step_context
+            .turn
+            .project_root()
+            .map(ToOwned::to_owned)
+            .unwrap_or_else(|| self.session.memory().workspace_dir.clone())
+    }
+
+    fn sandbox_policy_for_attempt(
+        &self,
+        call: &types::ParsedToolCall,
+        attempt: &SandboxAttempt,
+    ) -> Result<Option<sandbox::SandboxPolicy>, crate::runtime::ToolCallError> {
+        if let Some(policy) = &attempt.sandbox_policy {
+            return Ok(Some(policy.clone()));
+        }
+        let preference = self.step_context.tool_router.sandbox_preference(&call.name);
+        if preference == types::SandboxablePreference::Forbid {
+            return Ok(None);
+        }
+
+        let execution_root = self.execution_root();
+        let mut policy = tools::context::build_command_sandbox_policy(
+            self.session.memory_dir(),
+            &execution_root,
+            self.step_context.turn.permission_profile(),
+            attempt.workspace_write_grant,
+            None,
+        )
+        .map_err(crate::runtime::ToolCallError::from)?;
+        if preference == types::SandboxablePreference::Require
+            && policy.mode == types::SandboxMode::DangerFullAccess
+        {
+            policy = sandbox::SandboxPolicy::unrestricted_file_system(
+                &execution_root,
+                policy.network_access,
+            )
+            .map_err(anyhow::Error::new)
+            .map_err(crate::runtime::ToolCallError::from)?;
+        }
+        Ok(Some(policy))
     }
 
     async fn review_sandbox_denial(
@@ -1622,12 +1660,78 @@ mod tests {
         let initial = SandboxAttempt::initial(false, tools::InProcessNetworkGrant::default());
         let escalated = initial.escalated(dir.path()).unwrap();
         let policy = escalated
-            .sandbox_policy_override
+            .sandbox_policy
             .expect("escalated attempt should carry a complete policy");
 
         assert_eq!(policy.mode, types::SandboxMode::WorkspaceWrite);
         assert_eq!(policy.writable_roots[0], dir.path().canonicalize().unwrap());
         assert!(!policy.network_access);
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn tool_orchestrator_selects_initial_sandbox_policy_from_step_router() {
+        let dir = tempfile::tempdir().unwrap();
+        let project = dir.path().join("project");
+        std::fs::create_dir_all(&project).unwrap();
+        memory::set_permission_preset(dir.path(), types::PermissionPreset::ReadOnly).unwrap();
+        let session = Arc::new(
+            AgentLoop::with_session_id(
+                crate::runtime::Config::with_defaults(dir.path().to_path_buf()),
+                "orchestrator-sandbox-selection-test".into(),
+            )
+            .unwrap(),
+        );
+        session.set_project_root(Some(project.clone()));
+        let step_context = session.capture_step_context().await.unwrap();
+        let (tx, _rx) = mpsc::channel(8);
+        let orchestrator = ToolOrchestrator::new(&session, &step_context, &tx, "run-1", None);
+        let call = types::ParsedToolCall::with_id("call-1", "terminal", json!({"command": "pwd"}));
+        let attempt = SandboxAttempt::initial(true, tools::InProcessNetworkGrant::default());
+
+        let policy = orchestrator
+            .sandbox_policy_for_attempt(&call, &attempt)
+            .unwrap()
+            .expect("terminal should select an initial sandbox policy");
+
+        assert_eq!(policy.mode, types::SandboxMode::WorkspaceWrite);
+        assert_eq!(policy.writable_roots, vec![project.canonicalize().unwrap()]);
+        assert!(!policy.network_access);
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn tool_orchestrator_skips_sandbox_selection_for_non_process_tool() {
+        let dir = tempfile::tempdir().unwrap();
+        let session = Arc::new(
+            AgentLoop::with_session_id(
+                crate::runtime::Config::with_defaults(dir.path().to_path_buf()),
+                "orchestrator-non-process-test".into(),
+            )
+            .unwrap(),
+        );
+        session.tool_registry_mut().register_dynamic(
+            types::ToolEntry {
+                name: "non_process_probe".into(),
+                toolset: "core".into(),
+                description: "does not launch a command".into(),
+                schema: json!({"type": "object", "properties": {}}),
+                check_fn: None,
+                icon: "wrench",
+                ..types::ToolEntry::lifecycle_defaults()
+            },
+            Arc::new(|_name, _args| Box::pin(async { Ok(types::ToolOutput::from("ok")) })),
+        );
+        session.set_permission_profile(Some("custom-profile".into()));
+        let step_context = session.capture_step_context().await.unwrap();
+        let (tx, _rx) = mpsc::channel(8);
+        let orchestrator = ToolOrchestrator::new(&session, &step_context, &tx, "run-1", None);
+        let call = types::ParsedToolCall::with_id("call-1", "non_process_probe", json!({}));
+        let attempt = SandboxAttempt::initial(false, tools::InProcessNetworkGrant::default());
+
+        let policy = orchestrator
+            .sandbox_policy_for_attempt(&call, &attempt)
+            .unwrap();
+
+        assert!(policy.is_none());
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]

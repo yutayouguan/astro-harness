@@ -46,7 +46,7 @@ pub fn register(registry: &mut ToolRegistry) {
         toolset: "code_exec".to_string(),
         description: "Execute a short code snippet for quick computation or data processing. \
 language must be python|javascript (default python). \
-Not a hard sandbox—runs on the host with the workspace as cwd. \
+Runs through the active command sandbox policy with the workspace as cwd. \
 Guardrails: env scrubbing (no API keys/tokens), Unix resource limits (CPU/memory/file size/fd), 30s timeout. \
 stdout/stderr capped at 64KiB. \
 For shell commands, use terminal."
@@ -54,7 +54,7 @@ For shell commands, use terminal."
         schema: schema_for_args::<CodeExecArgs>(),
         check_fn: None,
         icon: "code-2",
-            ..ToolEntry::lifecycle_defaults()
+        ..ToolEntry::lifecycle_defaults().sandboxable()
     });
 }
 
@@ -293,7 +293,7 @@ mod tests {
             skill_config_overrides: &[],
             hook_bus: None,
             workspace_write_grant: false,
-            sandbox_policy_override: None,
+            sandbox_policy: None,
             network_grant: crate::InProcessNetworkGrant::default(),
         }
     }

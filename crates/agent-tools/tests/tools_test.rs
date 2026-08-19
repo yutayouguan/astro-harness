@@ -95,7 +95,7 @@ async fn file_ops_write_and_read() {
         skill_config_overrides: &[],
         hook_bus: None,
         workspace_write_grant: false,
-        sandbox_policy_override: None,
+        sandbox_policy: None,
         network_grant: tools::InProcessNetworkGrant::default(),
     };
 

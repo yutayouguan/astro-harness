@@ -2,6 +2,18 @@
 
 use serde::{Deserialize, Serialize};
 
+/// Tool-level preference for process sandbox selection, aligned with Codex.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum SandboxablePreference {
+    /// Let the orchestrator select a sandbox from the active permission profile.
+    Auto,
+    /// Require a platform sandbox even when the ambient profile is unrestricted.
+    Require,
+    /// This tool does not launch a process through the command sandbox.
+    #[default]
+    Forbid,
+}
+
 /// MCP 工具审批模式，对齐 Codex `approval_mode` 配置。
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -116,6 +128,7 @@ pub struct ToolEntry {
     pub needs_confirmation: bool,
     pub stop_after_tool_call: bool,
     pub exclusive_access: bool,
+    pub sandbox_preference: SandboxablePreference,
     pub mcp_approval: Option<McpToolApproval>,
 }
 
@@ -131,6 +144,7 @@ impl ToolEntry {
             needs_confirmation: false,
             stop_after_tool_call: false,
             exclusive_access: false,
+            sandbox_preference: SandboxablePreference::Forbid,
             mcp_approval: None,
         }
     }
@@ -147,6 +161,11 @@ impl ToolEntry {
 
     pub fn exclusive(mut self) -> Self {
         self.exclusive_access = true;
+        self
+    }
+
+    pub fn sandboxable(mut self) -> Self {
+        self.sandbox_preference = SandboxablePreference::Auto;
         self
     }
 }

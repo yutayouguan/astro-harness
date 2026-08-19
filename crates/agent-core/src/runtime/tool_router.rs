@@ -12,6 +12,7 @@ struct ToolRoute {
     needs_confirmation: bool,
     stop_after_tool_call: bool,
     exclusive_access: bool,
+    sandbox_preference: types::SandboxablePreference,
     mcp_approval: Option<types::McpToolApproval>,
 }
 
@@ -38,6 +39,7 @@ impl ToolRouter {
                         needs_confirmation: entry.needs_confirmation,
                         stop_after_tool_call: entry.stop_after_tool_call,
                         exclusive_access: entry.exclusive_access,
+                        sandbox_preference: entry.sandbox_preference,
                         mcp_approval: entry.mcp_approval.clone(),
                     },
                 ))
@@ -92,6 +94,14 @@ impl ToolRouter {
             .get(name)
             .and_then(|route| route.mcp_approval.clone())
     }
+
+    pub(crate) fn sandbox_preference(&self, name: &str) -> types::SandboxablePreference {
+        self.routes
+            .get(name)
+            .map_or(types::SandboxablePreference::Forbid, |route| {
+                route.sandbox_preference
+            })
+    }
 }
 
 impl fmt::Debug for ToolRouter {
@@ -100,5 +110,49 @@ impl fmt::Debug for ToolRouter {
             .field("route_count", &self.routes.len())
             .field("model_visible_specs", &self.model_visible_specs)
             .finish()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn snapshots_sandbox_preference_from_registry() {
+        let mut registry = ToolRegistry::new();
+        registry.register(types::ToolEntry {
+            name: "sandboxed".into(),
+            toolset: "core".into(),
+            description: "sandboxed process".into(),
+            schema: serde_json::json!({"type": "object", "properties": {}}),
+            check_fn: None,
+            icon: "terminal",
+            ..types::ToolEntry::lifecycle_defaults().sandboxable()
+        });
+        let router = ToolRouter::from_registry(
+            &registry,
+            vec![serde_json::json!({
+                "type": "function",
+                "function": {"name": "sandboxed", "parameters": {}}
+            })],
+        );
+        registry.register(types::ToolEntry {
+            name: "sandboxed".into(),
+            toolset: "core".into(),
+            description: "replacement".into(),
+            schema: serde_json::json!({"type": "object", "properties": {}}),
+            check_fn: None,
+            icon: "terminal",
+            ..types::ToolEntry::lifecycle_defaults()
+        });
+
+        assert_eq!(
+            router.sandbox_preference("sandboxed"),
+            types::SandboxablePreference::Auto
+        );
+        assert_eq!(
+            router.sandbox_preference("missing"),
+            types::SandboxablePreference::Forbid
+        );
     }
 }

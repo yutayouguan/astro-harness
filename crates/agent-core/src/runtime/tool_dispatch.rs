@@ -63,7 +63,7 @@ impl From<super::turn_budget::MaxDepthError> for ToolCallError {
 #[derive(Clone, Default)]
 pub(crate) struct ToolExecutionGrants {
     pub(crate) workspace_write: bool,
-    pub(crate) sandbox_policy_override: Option<sandbox::SandboxPolicy>,
+    pub(crate) sandbox_policy: Option<sandbox::SandboxPolicy>,
     pub(crate) network: tools::InProcessNetworkGrant,
 }
 
@@ -164,7 +164,7 @@ impl AgentLoop {
             skill_config_overrides: &session_configuration.skill_config_overrides,
             hook_bus,
             workspace_write_grant: grants.workspace_write,
-            sandbox_policy_override: grants.sandbox_policy_override,
+            sandbox_policy: grants.sandbox_policy,
             network_grant: grants.network,
         };
         dispatch_tool(|_| allowed, &mut ctx, name, args, dynamic_handler.as_ref()).await
