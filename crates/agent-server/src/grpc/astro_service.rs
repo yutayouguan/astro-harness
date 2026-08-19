@@ -819,7 +819,9 @@ impl AstroService for AstroServiceImpl {
         let session = self.get_session(&session_id).await?;
         let steered_turn_id = {
             let sess = session.as_ref();
-            sess.steer_input(&content, &image_data_urls).await
+            sess.steer_input(&content, &image_data_urls)
+                .await
+                .map_err(|error| Status::failed_precondition(error.to_string()))?
         };
         if steered_turn_id.is_some() {
             let (tx, rx) = tokio::sync::mpsc::channel::<Result<ChatEvent, Status>>(1);

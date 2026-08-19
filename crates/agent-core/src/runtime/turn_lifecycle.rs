@@ -84,7 +84,7 @@ impl Session {
         image_data_urls: &[String],
         _submission_id: &str,
     ) -> anyhow::Result<TurnResult> {
-        if let Some(turn_id) = self.steer_input(user_message, image_data_urls).await {
+        if let Some(turn_id) = self.steer_input(user_message, image_data_urls).await? {
             return Ok(TurnResult::Steered { turn_id });
         }
         self.prepare_turn(&[TurnInput::UserInput {
@@ -111,6 +111,13 @@ impl Session {
         self.cancel.reset();
         if self.is_budget_exhausted().await {
             return Ok(TurnResult::BudgetExhausted);
+        }
+
+        self.admit_session_start().await?;
+        let turn_id = self.current_turn_id().await;
+        for item in input {
+            let TurnInput::UserInput { content, .. } = item;
+            self.admit_user_prompt(content, turn_id.clone()).await?;
         }
 
         self.begin_user_turn().await;
@@ -152,17 +159,14 @@ impl Session {
             format_recalled_context(&recalled);
 
         self.increment_turn().await;
-        let system_prompt = self.build_system_prompt().await;
+        let mut system_prompt = self.build_system_prompt().await;
+        if let Some(context) = self.take_inject_context().await {
+            if !system_prompt.is_empty() {
+                system_prompt.push_str("\n\n");
+            }
+            system_prompt.push_str(&context);
+        }
         let turn_id = self.current_turn_id().await;
-        let _ = self.fire_hook(
-            ::hooks::SESSION_START,
-            ::hooks::HookPayload {
-                session_id: self.session_id.clone(),
-                turn_id: turn_id.clone(),
-                detail: format!("session={}", self.session_id),
-                ..Default::default()
-            },
-        );
         let inject = self.fire_hook(
             ::hooks::PRE_LLM_CALL,
             ::hooks::HookPayload {
@@ -185,28 +189,92 @@ impl Session {
         })
     }
 
-    /// Queue user input for the active regular task.
-    pub fn steer_input<'a>(
-        &'a self,
-        user_message: &'a str,
-        image_data_urls: &'a [String],
-    ) -> impl std::future::Future<Output = Option<String>> + Send + 'a {
-        let active_turn = &self.active_turn;
-        async move {
-            if user_message.trim().is_empty() && image_data_urls.is_empty() {
-                return None;
+    async fn take_session_start_source(&self) -> Option<String> {
+        self.state.lock().await.pending_session_start_source.take()
+    }
+
+    async fn append_inject_context(&self, context: String) {
+        let mut state = self.state.lock().await;
+        state.pending_inject_context = Some(match state.pending_inject_context.take() {
+            Some(existing) => format!("{existing}\n\n{context}"),
+            None => context,
+        });
+    }
+
+    async fn apply_admission_outcome(
+        &self,
+        event_name: &str,
+        outcome: ::hooks::HookOutcome,
+    ) -> anyhow::Result<()> {
+        match outcome {
+            ::hooks::HookOutcome::Block(reason) => {
+                anyhow::bail!("{event_name} blocked by hook: {reason}")
             }
-            let active_turn = active_turn.lock().await;
-            let running = active_turn.as_ref()?.task.as_ref()?;
-            if running.kind != TaskKind::Regular {
-                return None;
+            ::hooks::HookOutcome::InjectContext(context) => {
+                self.append_inject_context(context).await;
             }
-            let accepted = running.turn_context.push_input(TurnInput::UserInput {
-                content: user_message.to_string(),
-                image_data_urls: image_data_urls.to_vec(),
-            });
-            accepted.then(|| running.turn_context.sub_id().to_string())
+            _ => {}
         }
+        Ok(())
+    }
+
+    async fn admit_session_start(&self) -> anyhow::Result<()> {
+        let Some(source) = self.take_session_start_source().await else {
+            return Ok(());
+        };
+        let outcome = self.fire_hook(
+            ::hooks::SESSION_START,
+            ::hooks::HookPayload {
+                source: Some(source),
+                detail: format!("session={}", self.session_id),
+                ..Default::default()
+            },
+        );
+        self.apply_admission_outcome(::hooks::SESSION_START, outcome)
+            .await
+    }
+
+    async fn admit_user_prompt(&self, prompt: &str, turn_id: Option<String>) -> anyhow::Result<()> {
+        let outcome = self.fire_hook(
+            ::hooks::USER_PROMPT_SUBMIT,
+            ::hooks::HookPayload {
+                turn_id,
+                prompt: Some(prompt.to_string()),
+                detail: prompt.chars().take(200).collect(),
+                ..Default::default()
+            },
+        );
+        self.apply_admission_outcome(::hooks::USER_PROMPT_SUBMIT, outcome)
+            .await
+    }
+
+    /// Queue user input for the active regular task.
+    pub async fn steer_input(
+        &self,
+        user_message: &str,
+        image_data_urls: &[String],
+    ) -> anyhow::Result<Option<String>> {
+        if user_message.trim().is_empty() && image_data_urls.is_empty() {
+            return Ok(None);
+        }
+        let running = {
+            let active_turn = self.active_turn.lock().await;
+            let Some(running) = active_turn.as_ref().and_then(|turn| turn.task.as_ref()) else {
+                return Ok(None);
+            };
+            (running.kind, Arc::clone(&running.turn_context))
+        };
+        if running.0 != TaskKind::Regular {
+            return Ok(None);
+        }
+        let turn_id = running.1.sub_id().to_string();
+        self.admit_user_prompt(user_message, Some(turn_id.clone()))
+            .await?;
+        let accepted = running.1.push_input(TurnInput::UserInput {
+            content: user_message.to_string(),
+            image_data_urls: image_data_urls.to_vec(),
+        });
+        Ok(accepted.then_some(turn_id))
     }
 
     pub(crate) async fn record_turn_input(&self, input: TurnInput) -> anyhow::Result<()> {

@@ -230,26 +230,149 @@ async fn test_agent_builder_from_runtime_config() {
 }
 
 #[tokio::test]
-async fn test_prompt_hooks_on_run_turn() {
+async fn session_start_fires_once_before_each_user_prompt() {
     let dir = TempDir::new().unwrap();
-    let (agent, _) = AgentBuilder::new(dir.path())
-        .preamble("你是测试助手")
-        .build()
-        .unwrap();
-    let log: Arc<std::sync::Mutex<Vec<String>>> = Arc::new(std::sync::Mutex::new(vec![]));
-    ::hooks::install_recording(&agent.hook_bus(), Arc::clone(&log));
+    let (agent, _) = AgentBuilder::new(dir.path()).build().unwrap();
+    let events = Arc::new(std::sync::Mutex::new(Vec::new()));
+    let session_events = Arc::clone(&events);
+    agent
+        .hook_bus()
+        .register(hooks::SESSION_START, move |input| {
+            session_events.lock().unwrap().push(format!(
+                "{}:{}",
+                input.hook_event_name,
+                input.source.as_deref().unwrap_or("")
+            ));
+            hooks::HookOutcome::Continue
+        });
+    let prompt_events = Arc::clone(&events);
+    agent
+        .hook_bus()
+        .register(hooks::USER_PROMPT_SUBMIT, move |input| {
+            prompt_events.lock().unwrap().push(format!(
+                "{}:{}",
+                input.hook_event_name,
+                input.prompt.as_deref().unwrap_or("")
+            ));
+            hooks::HookOutcome::Continue
+        });
 
-    let _ = agent.start_or_steer_turn("你好", "t1").await.unwrap();
-    let events = log.lock().unwrap().clone();
-    assert!(
-        events.iter().any(|e| e.starts_with(hooks::PRE_LLM_CALL)),
-        "events={events:?}"
+    agent.start_or_steer_turn("first", "t1").await.unwrap();
+    agent
+        .record_assistant_message("first answer")
+        .await
+        .unwrap();
+    agent.start_or_steer_turn("second", "t2").await.unwrap();
+
+    assert_eq!(
+        events.lock().unwrap().as_slice(),
+        [
+            "SessionStart:startup",
+            "UserPromptSubmit:first",
+            "UserPromptSubmit:second"
+        ]
     );
-    // AgentEnd 在 streaming 收尾触发；run_turn 仅准备阶段
-    assert!(
-        events.iter().any(|e| e == hooks::SESSION_START),
-        "events={events:?}"
-    );
+}
+
+#[tokio::test]
+async fn user_prompt_submit_block_prevents_persistence() {
+    let dir = TempDir::new().unwrap();
+    let (agent, _) = AgentBuilder::new(dir.path()).build().unwrap();
+    agent.hook_bus().register(hooks::USER_PROMPT_SUBMIT, |_| {
+        hooks::HookOutcome::Block("policy".into())
+    });
+
+    let error = agent
+        .start_or_steer_turn("blocked", "t1")
+        .await
+        .unwrap_err();
+
+    assert!(error.to_string().contains("policy"));
+    assert!(agent.clone_history().await.is_empty());
+}
+
+#[tokio::test]
+async fn user_prompt_submit_context_enters_initial_system_prompt() {
+    let dir = TempDir::new().unwrap();
+    let (agent, _) = AgentBuilder::new(dir.path()).build().unwrap();
+    agent.hook_bus().register(hooks::USER_PROMPT_SUBMIT, |_| {
+        hooks::HookOutcome::InjectContext("PROMPT_HOOK_CONTEXT".into())
+    });
+
+    let result = agent.start_or_steer_turn("hello", "t1").await.unwrap();
+
+    let agent::TurnResult::Continue { system_prompt, .. } = result else {
+        panic!("expected Continue");
+    };
+    assert!(system_prompt.contains("PROMPT_HOOK_CONTEXT"));
+}
+
+#[tokio::test]
+async fn session_start_block_prevents_prompt_and_persistence() {
+    let dir = TempDir::new().unwrap();
+    let (agent, _) = AgentBuilder::new(dir.path()).build().unwrap();
+    let prompt_hits = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    agent.hook_bus().register(hooks::SESSION_START, |_| {
+        hooks::HookOutcome::Block("session policy".into())
+    });
+    let hits = Arc::clone(&prompt_hits);
+    agent
+        .hook_bus()
+        .register(hooks::USER_PROMPT_SUBMIT, move |_| {
+            hits.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            hooks::HookOutcome::Continue
+        });
+
+    let error = agent
+        .start_or_steer_turn("blocked", "t1")
+        .await
+        .unwrap_err();
+
+    assert!(error.to_string().contains("session policy"));
+    assert_eq!(prompt_hits.load(std::sync::atomic::Ordering::SeqCst), 0);
+    assert!(agent.clone_history().await.is_empty());
+}
+
+#[tokio::test]
+async fn session_and_prompt_contexts_enter_initial_system_prompt_in_order() {
+    let dir = TempDir::new().unwrap();
+    let (agent, _) = AgentBuilder::new(dir.path()).build().unwrap();
+    agent.hook_bus().register(hooks::SESSION_START, |_| {
+        hooks::HookOutcome::InjectContext("SESSION_HOOK_CONTEXT".into())
+    });
+    agent.hook_bus().register(hooks::USER_PROMPT_SUBMIT, |_| {
+        hooks::HookOutcome::InjectContext("PROMPT_HOOK_CONTEXT".into())
+    });
+
+    let result = agent.start_or_steer_turn("hello", "t1").await.unwrap();
+
+    let agent::TurnResult::Continue { system_prompt, .. } = result else {
+        panic!("expected Continue");
+    };
+    let session_position = system_prompt.find("SESSION_HOOK_CONTEXT").unwrap();
+    let prompt_position = system_prompt.find("PROMPT_HOOK_CONTEXT").unwrap();
+    assert!(session_position < prompt_position, "{system_prompt}");
+    assert!(system_prompt.contains("SESSION_HOOK_CONTEXT\n\nPROMPT_HOOK_CONTEXT"));
+}
+
+#[tokio::test]
+async fn prompt_skip_is_not_treated_as_block() {
+    let dir = TempDir::new().unwrap();
+    let (agent, _) = AgentBuilder::new(dir.path()).build().unwrap();
+    let hits = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let hook_hits = Arc::clone(&hits);
+    agent
+        .hook_bus()
+        .register(hooks::USER_PROMPT_SUBMIT, move |_| {
+            hook_hits.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            hooks::HookOutcome::Skip("gateway-only".into())
+        });
+
+    let result = agent.start_or_steer_turn("admitted", "t1").await.unwrap();
+
+    assert!(matches!(result, agent::TurnResult::Continue { .. }));
+    assert_eq!(hits.load(std::sync::atomic::Ordering::SeqCst), 1);
+    assert_eq!(agent.clone_history().await[0].content_str(), "admitted");
 }
 
 #[tokio::test]

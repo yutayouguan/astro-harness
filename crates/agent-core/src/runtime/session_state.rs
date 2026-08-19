@@ -13,6 +13,7 @@ use super::{compression_state, turn_budget, StepContext, TurnContext};
 /// Persistent mutable state previously stored directly on [`super::Session`].
 pub(crate) struct SessionState {
     pub(crate) history: Vec<Message>,
+    pub(crate) pending_session_start_source: Option<String>,
     pub(crate) compression: compression_state::CompressionState,
     pub(crate) turn: turn_budget::TurnState,
     pub(crate) pending_inject_context: Option<String>,
@@ -24,8 +25,14 @@ pub(crate) struct SessionState {
 
 impl SessionState {
     pub(crate) fn new(history: Vec<Message>) -> Self {
+        let session_start_source = if history.is_empty() {
+            "startup"
+        } else {
+            "resume"
+        };
         Self {
             history,
+            pending_session_start_source: Some(session_start_source.to_string()),
             compression: compression_state::CompressionState::default(),
             turn: turn_budget::TurnState::default(),
             pending_inject_context: None,

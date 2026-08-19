@@ -123,6 +123,14 @@ async fn steered_input_is_consumed_by_the_active_regular_task() {
     session
         .record_items(vec![types::message::Message::user("initial")])
         .await;
+    let prompt_hook_payload = Arc::new(std::sync::Mutex::new(None));
+    let capture = Arc::clone(&prompt_hook_payload);
+    session
+        .hook_bus()
+        .register(hooks::USER_PROMPT_SUBMIT, move |input| {
+            *capture.lock().unwrap() = Some((input.prompt.clone(), input.turn_id.clone()));
+            hooks::HookOutcome::Continue
+        });
 
     let calls = Arc::new(AtomicUsize::new(0));
     let saw_follow_up = Arc::new(std::sync::atomic::AtomicBool::new(false));
@@ -185,8 +193,16 @@ async fn steered_input_is_consumed_by_the_active_regular_task() {
     let turn_id = session
         .steer_input("follow up", &[])
         .await
+        .unwrap()
         .expect("active regular task accepts steer");
     assert!(!turn_id.is_empty());
+    let captured = prompt_hook_payload
+        .lock()
+        .unwrap()
+        .clone()
+        .expect("prompt hook fires before provider release");
+    assert_eq!(captured.0.as_deref(), Some("follow up"));
+    assert_eq!(captured.1.as_deref(), Some(turn_id.as_str()));
     release_first.notify_one();
     while rx.recv().await.is_some() {}
     run.await.unwrap();
@@ -381,6 +397,36 @@ async fn cold_start_hydrates_history_from_db() {
     assert_eq!(history.len(), 2);
     assert_eq!(history[0].content_str(), "hello");
     assert_eq!(history[1].content_str(), "world");
+}
+
+#[tokio::test]
+async fn hydrated_session_starts_with_resume_source() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().to_path_buf();
+    {
+        let agent = AgentLoop::with_session_id(
+            AgentConfig::with_defaults(path.clone()),
+            "resume-hooks".into(),
+        )
+        .unwrap();
+        agent.ensure_session("test").unwrap();
+        agent.start_or_steer_turn("first", "t1").await.unwrap();
+        agent.record_assistant_message("answer").await.unwrap();
+    }
+    let agent = AgentLoop::with_session_id(AgentConfig::with_defaults(path), "resume-hooks".into())
+        .unwrap();
+    let source = Arc::new(std::sync::Mutex::new(None));
+    let capture = Arc::clone(&source);
+    agent
+        .hook_bus()
+        .register(hooks::SESSION_START, move |input| {
+            *capture.lock().unwrap() = input.source.clone();
+            hooks::HookOutcome::Continue
+        });
+
+    agent.start_or_steer_turn("second", "t2").await.unwrap();
+
+    assert_eq!(source.lock().unwrap().as_deref(), Some("resume"));
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
