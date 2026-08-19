@@ -25,7 +25,7 @@ use super::maintenance::{
 };
 use super::provider::ProviderStreamer;
 use super::run_state::{RunPhase, RunState};
-use super::summary::{run_max_iterations_summary, SummaryOutcome};
+use super::summary::{run_max_iterations_summary, SummaryOutcome, MAX_VERIFY_ATTEMPTS};
 use super::tools_exec::{
     execute_tools_concurrent, execute_tools_serial, tool_may_require_permission,
 };
@@ -34,9 +34,6 @@ use crate::control::hitl::HitlGate;
 use crate::runtime::turn_context::QueuedTurnInput;
 use crate::runtime::{Session, TurnContext};
 use crate::tasks::{RegularTask, TurnInput};
-
-/// `pre_verify` 单次 turn 内允许的最多验证轮次（含首次结束尝试）。
-const MAX_VERIFY_ATTEMPTS: usize = 2;
 
 /// 模型只返回思考/推理内容而没有文本回复时，允许的最大重试次数。
 const MAX_THINKING_ONLY_RETRIES: usize = 1;
@@ -841,6 +838,7 @@ pub(crate) async fn run_turn(args: RunTurnArgs, cancellation_token: Cancellation
     if need_summary {
         match run_max_iterations_summary(crate::streaming::summary::MaxIterationsSummaryArgs {
             session: &session,
+            turn_context: &turn_context,
             streamer: &streamer,
             system_prompt: &system_prompt,
             pause: &pause,
@@ -851,6 +849,7 @@ pub(crate) async fn run_turn(args: RunTurnArgs, cancellation_token: Cancellation
             run_id: &run_id,
             used: budget.used(),
             max_total: budget.max_total(),
+            verify_attempt: &mut verify_attempt,
         })
         .await
         {

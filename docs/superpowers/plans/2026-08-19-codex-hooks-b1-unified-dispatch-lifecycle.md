@@ -846,6 +846,33 @@ git add crates/agent-core/src/streaming/multi_turn.rs crates/agent-core/tests/st
 git commit -m "fix(agent): run stop hooks for terminal turns"
 ```
 
+#### Follow-up: budget-exhaustion summaries share the Stop chain
+
+`run_max_iterations_summary` is also a terminal-candidate producer. It emits the budget
+notice and appends `MAX_ITERATIONS_SUMMARY_PROMPT` once, then every complete tool-less
+summary response dispatches `Stop` with the same session, turn id, last assistant message,
+`stop_hook_active`, and attempt detail as the main loop. Pass the main loop's mutable
+`verify_attempt` into the summary runner: accepted `KeepGoing` outcomes persist the summary
+assistant reply plus one `[astro:hook-context]` user bridge and re-sample without tools; the
+shared maximum remains two accepted continuations. A third candidate still dispatches Stop but
+ignores KeepGoing and finishes normally.
+
+The summary runner captures a fresh step context before each re-sample so queued steering
+contexts are attached only to the matching request. Before final close, it atomically drains
+the active `TurnContext`: an acknowledged steer is persisted after the summary assistant,
+resets the response-chain Stop quota, and receives a subsequent no-tools summary response.
+This avoids a Stop-hook admission window that could otherwise be acknowledged then discarded,
+while retaining the normal assistant/user role ordering.
+
+Focused coverage:
+
+```bash
+cargo test -p agent --test streaming_test multi_turn_budget_exhausted_forces_toolless_summary -- --exact
+cargo test -p agent --test streaming_test budget_summary_stop_keep_going_retries_capped_at_two -- --exact
+cargo test -p agent --test streaming_test budget_summary_reuses_main_stop_keep_going_quota -- --exact
+cargo test -p agent --test streaming_test budget_summary_stop_consumes_queued_steer_before_terminal_close -- --exact
+```
+
 ### Task 5: Make RegularTask the single AgentEnd authority and update server wiring
 
 **Files:**

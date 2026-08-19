@@ -2429,6 +2429,12 @@ async fn multi_turn_budget_exhausted_forces_toolless_summary() {
     let mut config = AgentConfig::with_defaults(dir.path().to_path_buf());
     config.multi_turn = 1;
     let agent = AgentLoop::with_session_id(config, "budget-session".into()).unwrap();
+    let stop_count = Arc::new(AtomicUsize::new(0));
+    let stops = Arc::clone(&stop_count);
+    agent.hook_bus().register(hooks::STOP, move |_| {
+        stops.fetch_add(1, Ordering::SeqCst);
+        hooks::HookOutcome::Continue
+    });
     let session = Arc::new(agent);
     {
         let a = session.as_ref();
@@ -2506,4 +2512,323 @@ async fn multi_turn_budget_exhausted_forces_toolless_summary() {
         MultiTurnStreamItem::RunFinished { outcome_type, .. } if outcome_type == "success"
     )));
     assert!(matches!(items.last(), Some(MultiTurnStreamItem::Done)));
+    assert_eq!(
+        stop_count.load(Ordering::SeqCst),
+        1,
+        "the budget summary terminal response must dispatch Stop"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn budget_summary_stop_keep_going_retries_capped_at_two() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut config = AgentConfig::with_defaults(dir.path().to_path_buf());
+    config.multi_turn = 1;
+    let agent = AgentLoop::with_session_id(config, "budget-summary-stop-retry".into()).unwrap();
+    let stop_flags = Arc::new(std::sync::Mutex::new(Vec::new()));
+    let flags = Arc::clone(&stop_flags);
+    agent.hook_bus().register(hooks::STOP, move |input| {
+        flags.lock().unwrap().push(input.stop_hook_active);
+        hooks::HookOutcome::KeepGoing("please refine the summary".into())
+    });
+    agent
+        .record_items(vec![types::message::Message::user("keep using tools")])
+        .await;
+    let session = Arc::new(agent);
+
+    let chat_fn = scripted_chat(vec![
+        vec![
+            StreamChunk::ToolCallStart {
+                index: 0,
+                id: "call_summary_retry".into(),
+                name: "echo".into(),
+            },
+            StreamChunk::ToolCallDelta {
+                index: 0,
+                arguments: r#"{"text":"x"}"#.into(),
+            },
+            StreamChunk::Done {
+                finish_reason: "tool_calls".into(),
+            },
+        ],
+        vec![
+            StreamChunk::Text("summary draft one".into()),
+            StreamChunk::Done {
+                finish_reason: "stop".into(),
+            },
+        ],
+        vec![
+            StreamChunk::Text("summary draft two".into()),
+            StreamChunk::Done {
+                finish_reason: "stop".into(),
+            },
+        ],
+        vec![
+            StreamChunk::Text("summary final".into()),
+            StreamChunk::Done {
+                finish_reason: "stop".into(),
+            },
+        ],
+    ]);
+
+    let (tx, mut rx) = tokio::sync::mpsc::channel(64);
+    tokio::spawn(async move {
+        run_multi_turn_stream_with_chat_fn(
+            session,
+            chat_fn,
+            ProviderConfig {
+                model: "test".into(),
+                ..Default::default()
+            },
+            "sys".into(),
+            PauseControl::new(),
+            None,
+            tx,
+        )
+        .await;
+    });
+
+    let mut items = Vec::new();
+    while let Some(item) = rx.recv().await {
+        items.push(item.expect("stream item"));
+    }
+
+    assert_eq!(
+        *stop_flags.lock().unwrap(),
+        vec![Some(false), Some(true), Some(true)],
+        "summary Stop dispatches every candidate but only accepts two KeepGoing continuations"
+    );
+    for expected in ["summary draft one", "summary draft two", "summary final"] {
+        assert!(items.iter().any(|item| matches!(
+            item,
+            MultiTurnStreamItem::Assistant(StreamedAssistantContent::Text(text)) if text == expected
+        )));
+    }
+    assert!(items.iter().any(|item| matches!(
+        item,
+        MultiTurnStreamItem::RunFinished { outcome_type, .. } if outcome_type == "success"
+    )));
+    assert!(matches!(items.last(), Some(MultiTurnStreamItem::Done)));
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn budget_summary_reuses_main_stop_keep_going_quota() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut config = AgentConfig::with_defaults(dir.path().to_path_buf());
+    config.multi_turn = 2;
+    let agent = AgentLoop::with_session_id(config, "budget-summary-shared-quota".into()).unwrap();
+    let stop_flags = Arc::new(std::sync::Mutex::new(Vec::new()));
+    let flags = Arc::clone(&stop_flags);
+    agent.hook_bus().register(hooks::STOP, move |input| {
+        flags.lock().unwrap().push(input.stop_hook_active);
+        hooks::HookOutcome::KeepGoing("continue checking".into())
+    });
+    agent
+        .record_items(vec![types::message::Message::user("use the budget")])
+        .await;
+    let session = Arc::new(agent);
+
+    let chat_fn = scripted_chat(vec![
+        vec![
+            StreamChunk::Text("main draft".into()),
+            StreamChunk::Done {
+                finish_reason: "stop".into(),
+            },
+        ],
+        vec![
+            StreamChunk::ToolCallStart {
+                index: 0,
+                id: "call_shared_quota".into(),
+                name: "echo".into(),
+            },
+            StreamChunk::ToolCallDelta {
+                index: 0,
+                arguments: r#"{"text":"x"}"#.into(),
+            },
+            StreamChunk::Done {
+                finish_reason: "tool_calls".into(),
+            },
+        ],
+        vec![
+            StreamChunk::Text("summary gets only one continuation".into()),
+            StreamChunk::Done {
+                finish_reason: "stop".into(),
+            },
+        ],
+        vec![
+            StreamChunk::Text("summary terminal after shared quota".into()),
+            StreamChunk::Done {
+                finish_reason: "stop".into(),
+            },
+        ],
+    ]);
+
+    let (tx, mut rx) = tokio::sync::mpsc::channel(64);
+    tokio::spawn(async move {
+        run_multi_turn_stream_with_chat_fn(
+            session,
+            chat_fn,
+            ProviderConfig {
+                model: "test".into(),
+                ..Default::default()
+            },
+            "sys".into(),
+            PauseControl::new(),
+            None,
+            tx,
+        )
+        .await;
+    });
+
+    while rx.recv().await.is_some() {}
+
+    assert_eq!(
+        *stop_flags.lock().unwrap(),
+        vec![Some(false), Some(true), Some(true)],
+        "summary must inherit the main response chain's already accepted KeepGoing"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn budget_summary_stop_consumes_queued_steer_before_terminal_close() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut config = AgentConfig::with_defaults(dir.path().to_path_buf());
+    config.multi_turn = 1;
+    let session =
+        Arc::new(AgentLoop::with_session_id(config, "budget-summary-queued-steer".into()).unwrap());
+    session
+        .record_items(vec![types::message::Message::user("initial")])
+        .await;
+
+    session
+        .hook_bus()
+        .register(hooks::USER_PROMPT_SUBMIT, |input| {
+            if input.prompt.as_deref() == Some("follow up") {
+                hooks::HookOutcome::InjectContext("SUMMARY_STEER_CONTEXT".into())
+            } else {
+                hooks::HookOutcome::Continue
+            }
+        });
+    let stop_entered = Arc::new(Notify::new());
+    let stop_release = Arc::new((std::sync::Mutex::new(false), std::sync::Condvar::new()));
+    let entered = Arc::clone(&stop_entered);
+    let release = Arc::clone(&stop_release);
+    session.hook_bus().register(hooks::STOP, move |_| {
+        entered.notify_one();
+        let (released, ready) = &*release;
+        let mut released = released.lock().unwrap();
+        while !*released {
+            released = ready.wait(released).unwrap();
+        }
+        hooks::HookOutcome::Continue
+    });
+
+    let provider_calls = Arc::new(AtomicUsize::new(0));
+    let queued_steer_was_sampled = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let chat_fn: ChatOverride = {
+        let provider_calls = Arc::clone(&provider_calls);
+        let queued_steer_was_sampled = Arc::clone(&queued_steer_was_sampled);
+        Arc::new(move |messages, _tools, _config| {
+            let call = provider_calls.fetch_add(1, Ordering::SeqCst);
+            if call == 2 {
+                let texts: Vec<&str> = messages
+                    .iter()
+                    .map(|message| message.text_content())
+                    .collect();
+                queued_steer_was_sampled.store(
+                    texts.iter().filter(|text| **text == "follow up").count() == 1
+                        && texts
+                            .iter()
+                            .filter(|text| text.contains("SUMMARY_STEER_CONTEXT"))
+                            .count()
+                            == 1,
+                    Ordering::SeqCst,
+                );
+            }
+            let chunks = match call {
+                0 => vec![
+                    StreamChunk::ToolCallStart {
+                        index: 0,
+                        id: "call_summary_steer".into(),
+                        name: "echo".into(),
+                    },
+                    StreamChunk::ToolCallDelta {
+                        index: 0,
+                        arguments: r#"{"text":"x"}"#.into(),
+                    },
+                    StreamChunk::Done {
+                        finish_reason: "tool_calls".into(),
+                    },
+                ],
+                1 => vec![
+                    StreamChunk::Text("summary before follow up".into()),
+                    StreamChunk::Done {
+                        finish_reason: "stop".into(),
+                    },
+                ],
+                _ => vec![
+                    StreamChunk::Text("summary follow up response".into()),
+                    StreamChunk::Done {
+                        finish_reason: "stop".into(),
+                    },
+                ],
+            };
+            Box::pin(async move {
+                Ok(Box::pin(futures::stream::iter(
+                    chunks.into_iter().map(Ok::<_, anyhow::Error>),
+                )) as CompletionStream)
+            })
+        })
+    };
+
+    let (tx, mut rx) = tokio::sync::mpsc::channel(64);
+    let run = tokio::spawn({
+        let session = Arc::clone(&session);
+        async move {
+            run_multi_turn_stream_with_chat_fn(
+                session,
+                chat_fn,
+                ProviderConfig {
+                    model: "test".into(),
+                    ..Default::default()
+                },
+                "sys".into(),
+                PauseControl::new(),
+                None,
+                tx,
+            )
+            .await;
+        }
+    });
+
+    stop_entered.notified().await;
+    session
+        .steer_input("follow up", &[])
+        .await
+        .unwrap()
+        .expect("active summary Stop accepts a steer");
+    {
+        let (released, ready) = &*stop_release;
+        *released.lock().unwrap() = true;
+        ready.notify_all();
+    }
+
+    tokio::time::timeout(Duration::from_secs(2), async {
+        while rx.recv().await.is_some() {}
+        run.await.unwrap();
+    })
+    .await
+    .expect("summary consumes queued steer before closing the turn");
+
+    assert_eq!(provider_calls.load(Ordering::SeqCst), 3);
+    assert!(queued_steer_was_sampled.load(Ordering::SeqCst));
+    let history = session.clone_history().await;
+    assert!(agent::runtime::validate_message_order(&history));
+    assert_eq!(
+        history
+            .iter()
+            .filter(|message| message.content_str() == "follow up")
+            .count(),
+        1
+    );
 }
