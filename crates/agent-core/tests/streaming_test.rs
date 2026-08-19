@@ -2965,39 +2965,28 @@ async fn budget_summary_provider_failure_leaves_no_synthetic_user() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-async fn budget_summary_cancel_after_stop_continuation_skips_next_provider_request() {
+async fn budget_summary_active_stream_cancels_with_task_token() {
     let dir = tempfile::tempdir().unwrap();
     let mut config = AgentConfig::with_defaults(dir.path().to_path_buf());
     config.multi_turn = 1;
     let session = Arc::new(
-        AgentLoop::with_session_id(config, "budget-summary-cancel-after-stop".into()).unwrap(),
+        AgentLoop::with_session_id(config, "budget-summary-active-stream-cancel".into()).unwrap(),
     );
     session
         .record_items(vec![types::message::Message::user("initial")])
         .await;
 
-    let stop_entered = Arc::new(Notify::new());
-    let stop_release = Arc::new((std::sync::Mutex::new(false), std::sync::Condvar::new()));
-    let entered = Arc::clone(&stop_entered);
-    let release = Arc::clone(&stop_release);
-    session.hook_bus().register(hooks::STOP, move |_| {
-        entered.notify_one();
-        let (released, ready) = &*release;
-        let mut released = released.lock().unwrap();
-        while !*released {
-            released = ready.wait(released).unwrap();
-        }
-        hooks::HookOutcome::KeepGoing("continue summary".into())
-    });
-
     let provider_calls = Arc::new(AtomicUsize::new(0));
+    let summary_stream_started = Arc::new(Notify::new());
     let chat_fn: ChatOverride = {
         let provider_calls = Arc::clone(&provider_calls);
+        let summary_stream_started = Arc::clone(&summary_stream_started);
         Arc::new(move |_messages, _tools, _config| {
             let call = provider_calls.fetch_add(1, Ordering::SeqCst);
+            let summary_stream_started = Arc::clone(&summary_stream_started);
             Box::pin(async move {
-                let chunks = match call {
-                    0 => vec![
+                if call == 0 {
+                    let chunks = vec![
                         StreamChunk::ToolCallStart {
                             index: 0,
                             id: "call_summary_cancel".into(),
@@ -3010,26 +2999,22 @@ async fn budget_summary_cancel_after_stop_continuation_skips_next_provider_reque
                         StreamChunk::Done {
                             finish_reason: "tool_calls".into(),
                         },
-                    ],
-                    _ => vec![
-                        StreamChunk::Text("summary candidate".into()),
-                        StreamChunk::Done {
-                            finish_reason: "stop".into(),
-                        },
-                    ],
-                };
-                Ok(Box::pin(futures::stream::iter(
-                    chunks.into_iter().map(Ok::<_, anyhow::Error>),
-                )) as CompletionStream)
+                    ];
+                    Ok(Box::pin(futures::stream::iter(
+                        chunks.into_iter().map(Ok::<_, anyhow::Error>),
+                    )) as CompletionStream)
+                } else {
+                    summary_stream_started.notify_one();
+                    Ok(Box::pin(futures::stream::pending()) as CompletionStream)
+                }
             })
         })
     };
 
     let (tx, mut rx) = tokio::sync::mpsc::channel(64);
-    let pause = PauseControl::new();
+    let summary_stream_ready = summary_stream_started.notified();
     let run = tokio::spawn({
         let session = Arc::clone(&session);
-        let pause = Arc::clone(&pause);
         async move {
             run_multi_turn_stream_with_chat_fn(
                 session,
@@ -3039,7 +3024,7 @@ async fn budget_summary_cancel_after_stop_continuation_skips_next_provider_reque
                     ..Default::default()
                 },
                 "sys".into(),
-                pause,
+                PauseControl::new(),
                 None,
                 tx,
             )
@@ -3047,34 +3032,25 @@ async fn budget_summary_cancel_after_stop_continuation_skips_next_provider_reque
         }
     });
 
-    stop_entered.notified().await;
-    pause.cancel();
-    let abort = tokio::spawn({
-        let session = Arc::clone(&session);
-        async move {
-            session
-                .abort_all_tasks(TurnAbortReason::Interrupted)
-                .await
-                .unwrap();
-        }
-    });
-    {
-        let (released, ready) = &*stop_release;
-        *released.lock().unwrap() = true;
-        ready.notify_all();
-    }
+    summary_stream_ready.await;
+    tokio::time::timeout(
+        Duration::from_secs(2),
+        session.abort_all_tasks(TurnAbortReason::Interrupted),
+    )
+    .await
+    .expect("task-token cancellation must interrupt the active summary stream")
+    .unwrap();
 
     let mut items = Vec::new();
     while let Some(item) = rx.recv().await {
         items.push(item.expect("stream item"));
     }
     run.await.unwrap();
-    abort.await.unwrap();
 
     assert_eq!(
         provider_calls.load(Ordering::SeqCst),
         2,
-        "cancellation after Stop continuation must prevent the next summary request"
+        "task-token cancellation must not start another provider request"
     );
     assert!(!items
         .iter()

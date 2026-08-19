@@ -868,8 +868,11 @@ while retaining the normal assistant/user role ordering.
 
 Summary setup receives the owning `CancellationToken`. Each outer iteration checks that token
 and `PauseControl` before work, then uses biased cancellation selects around both step-context
-capture and provider setup. A cancellation that arrives after a Stop `KeepGoing` continuation
-therefore emits the normal interrupt terminal without starting another provider request.
+capture and provider setup. The active summary stream uses the same token branch as its
+PauseControl cancellation path: it clears the abort handle, accumulates the current round usage,
+and emits exactly one interrupt terminal. Thus both a cancellation after a Stop `KeepGoing`
+continuation and `abort_all_tasks()` during a pending summary stream stop without another
+provider request.
 
 Focused coverage:
 
@@ -880,7 +883,7 @@ cargo test -p agent --test streaming_test budget_summary_reuses_main_stop_keep_g
 cargo test -p agent --test streaming_test budget_summary_stop_consumes_queued_steer_before_terminal_close -- --exact
 cargo test -p agent --test streaming_test main_stop_continuation_then_budget_summary_preserves_role_order -- --exact
 cargo test -p agent --test streaming_test budget_summary_provider_failure_leaves_no_synthetic_user -- --exact
-cargo test -p agent --test streaming_test budget_summary_cancel_after_stop_continuation_skips_next_provider_request -- --exact
+cargo test -p agent --test streaming_test budget_summary_active_stream_cancels_with_task_token -- --exact
 ```
 
 ### Task 5: Make RegularTask the single AgentEnd authority and update server wiring

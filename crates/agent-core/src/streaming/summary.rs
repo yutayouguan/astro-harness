@@ -196,6 +196,22 @@ pub(crate) async fn run_max_iterations_summary(a: MaxIterationsSummaryArgs<'_>) 
 
             let next = tokio::select! {
                 biased;
+                _ = cancellation_token.cancelled() => {
+                    pause.clear_abort();
+                    if let Some(u) = round_usage {
+                        total_usage.add_assign(u);
+                        *saw_usage = true;
+                    }
+                    finish_interrupted(
+                        session,
+                        streamer,
+                        tx,
+                        saw_usage.then_some(*total_usage),
+                        run_id,
+                    )
+                    .await;
+                    return SummaryOutcome::Aborted;
+                }
                 _ = pause.wait_cancelled() => {
                     pause.clear_abort();
                     if let Some(u) = round_usage {
