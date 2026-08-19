@@ -14,6 +14,7 @@ use super::providers::{
 use crate::infra::grpc::{default_grpc_address, endpoint_url};
 use crate::infra::thread_events::{
     accepted_turn_id, emit_chat_events, submission_failure_events, ThreadEventsBridge,
+    THREAD_EVENTS_READY_TIMEOUT,
 };
 
 // ---------------------------------------------------------------------------
@@ -583,8 +584,8 @@ pub async fn start_chat(app: AppHandle, request: StartChatRequest) -> Result<Str
     let event_name2 = event_name.clone();
 
     tauri::async_runtime::spawn(async move {
-        bridge.wait_ready().await;
         let result = async {
+            bridge.wait_ready_for(THREAD_EVENTS_READY_TIMEOUT).await?;
             let endpoint = endpoint_url(&grpc_address);
             let mut client = AstroServiceClient::connect(endpoint)
                 .await
