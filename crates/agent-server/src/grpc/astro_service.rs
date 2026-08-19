@@ -339,7 +339,7 @@ impl AstroServiceImpl {
             watchers.insert(root_thread_id.to_string(), weak_control.clone());
         }
 
-        self.session_events.rotate_generation_for_root(
+        self.session_events.publish_resync_for_root(
             root_thread_id,
             root_agent_id,
             "agent_control_generation_changed",
@@ -379,7 +379,7 @@ impl AstroServiceImpl {
                     subagents::ActivityObservation::Activity(activity) => *activity,
                     subagents::ActivityObservation::Gap { latest, .. } => {
                         cursor = latest;
-                        session_events.rotate_generation_for_root(
+                        session_events.publish_resync_for_root(
                             &root_thread_id,
                             &root_agent_id,
                             "activity_gap",

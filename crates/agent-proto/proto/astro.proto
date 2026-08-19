@@ -371,14 +371,16 @@ message SessionEvent {
 }
 
 message SessionResyncRequiredEvent {
+  // A targeted resync may occur without a stream_id change. Clients must
+  // refresh the affected snapshot for every marker.
   // stream_generation_changed | replay_gap | active_receiver_lag |
   // agent_control_generation_changed | activity_gap
   string reason = 1;
 }
 
 message AgentThreadChangedEvent {
-  // Root AgentControl generation cursor. A SessionEvent stream_id change
-  // starts a new generation and clients must fetch a fresh tree snapshot.
+  // Root AgentControl generation cursor. A stream_id change or a targeted
+  // SessionResyncRequiredEvent requires a fresh tree snapshot.
   uint64 activity_sequence = 1;
   string root_thread_id = 2;
   string thread_id = 3;

@@ -87,6 +87,7 @@ async fn one_root_watcher_publishes_runner_status_changes_without_duplicates() {
         .await
         .unwrap()
         .into_inner();
+    let _ = next_resync(&mut stream, "initial watcher generation").await;
     let control = AgentControlDirectory::global()
         .open_root_at(root, &graph)
         .unwrap();
@@ -131,6 +132,15 @@ async fn watcher_replays_activity_published_before_attach() {
     let service = AstroServiceImpl::new(memory.path().to_path_buf());
     let root = "root_attach_race";
     let graph = memory.path().join("subagents-v2.db");
+    let mut stream = service
+        .subscribe_session_events(Request::new(SubscribeSessionEventsRequest {
+            session_id: root.into(),
+            ..Default::default()
+        }))
+        .await
+        .unwrap()
+        .into_inner();
+    let _ = next_resync(&mut stream, "initial empty generation").await;
     let control = AgentControlDirectory::global()
         .open_root_at(root, &graph)
         .unwrap();
@@ -140,14 +150,6 @@ async fn watcher_replays_activity_published_before_attach() {
     reservation.commit().unwrap();
 
     attach_root(&service, root).await;
-    let mut stream = service
-        .subscribe_session_events(Request::new(SubscribeSessionEventsRequest {
-            session_id: root.into(),
-            ..Default::default()
-        }))
-        .await
-        .unwrap()
-        .into_inner();
 
     let (_, projection) = next_thread_projection(&mut stream, "pre-attach activity replay").await;
     assert_eq!(projection.canonical_path, "/root/early_worker");
@@ -169,6 +171,7 @@ async fn watcher_publishes_closed_thread_projection_from_edge_activity() {
         .await
         .unwrap()
         .into_inner();
+    let _ = next_resync(&mut stream, "initial closed generation").await;
     let control = AgentControlDirectory::global()
         .open_root_at(root, &graph)
         .unwrap();
@@ -218,6 +221,7 @@ async fn watcher_skips_projectionless_activity_without_losing_the_next_projectio
         .await
         .unwrap()
         .into_inner();
+    let _ = next_resync(&mut stream, "initial projectionless generation").await;
     let control = AgentControlDirectory::global()
         .open_root_at(root, &graph)
         .unwrap();
@@ -233,7 +237,7 @@ async fn watcher_skips_projectionless_activity_without_losing_the_next_projectio
 }
 
 #[tokio::test]
-async fn release_and_reopen_rotates_stream_before_sequence_restarts() {
+async fn release_and_reopen_resyncs_same_stream_before_sequence_restarts() {
     let memory = tempdir().unwrap();
     let service = AstroServiceImpl::new(memory.path().to_path_buf());
     let root = "root-release-reopen";
@@ -271,7 +275,7 @@ async fn release_and_reopen_rotates_stream_before_sequence_restarts() {
 
     let (reopen_reset, reset) = next_resync(&mut stream, "reopened generation").await;
     assert_eq!(reset.reason, "agent_control_generation_changed");
-    assert_ne!(reopen_reset.stream_id, initial_reset.stream_id);
+    assert_eq!(reopen_reset.stream_id, initial_reset.stream_id);
     assert!(reopen_reset.event_id > initial_reset.event_id);
 
     let reopened = AgentControlDirectory::global()
@@ -291,7 +295,7 @@ async fn release_and_reopen_rotates_stream_before_sequence_restarts() {
 }
 
 #[tokio::test]
-async fn activity_retention_gap_rotates_stream_and_snapshot_precedes_next_projection() {
+async fn activity_retention_gap_resyncs_same_stream_and_snapshot_precedes_next_projection() {
     let memory = tempdir().unwrap();
     let service = AstroServiceImpl::new(memory.path().to_path_buf());
     let root = "root-activity-gap";

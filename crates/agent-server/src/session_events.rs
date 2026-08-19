@@ -91,7 +91,6 @@ pub struct FilteredReceiver {
     filter: SubscribeFilter,
     replay: VecDeque<SequencedSessionEvent>,
     last_seen_event_id: u64,
-    stream_id: String,
     inner: Arc<SessionEventHubInner>,
 }
 
@@ -100,30 +99,11 @@ impl FilteredReceiver {
     pub async fn recv(&mut self) -> Option<SequencedSessionEvent> {
         loop {
             if let Some(ev) = self.replay.pop_front() {
-                if ev.stream_id != self.stream_id {
-                    self.stream_id = ev.stream_id.clone();
-                    self.last_seen_event_id = 0;
-                }
                 self.last_seen_event_id = self.last_seen_event_id.max(ev.event_id);
                 return Some(ev);
             }
             match self.rx.recv().await {
                 Ok(ev) => {
-                    if ev.stream_id != self.stream_id {
-                        self.stream_id = ev.stream_id.clone();
-                        self.last_seen_event_id = ev.event_id;
-                        self.replay.clear();
-                        if ev.event.resync_required.is_some()
-                            && event_matches(&self.filter, &ev.event)
-                        {
-                            return Some(ev);
-                        }
-                        return Some(current_reset_for_filter(
-                            &self.inner,
-                            &self.filter,
-                            "stream_generation_changed",
-                        ));
-                    }
                     if ev.event_id <= self.last_seen_event_id {
                         continue;
                     }
@@ -133,13 +113,8 @@ impl FilteredReceiver {
                     }
                 }
                 Err(broadcast::error::RecvError::Lagged(_)) => {
-                    let reset = rotate_if_current(
-                        &self.inner,
-                        &self.stream_id,
-                        &self.filter,
-                        "active_receiver_lag",
-                    );
-                    self.stream_id = reset.stream_id.clone();
+                    let reset =
+                        current_reset_for_filter(&self.inner, &self.filter, "active_receiver_lag");
                     self.last_seen_event_id = reset.event_id;
                     self.replay.clear();
                     return Some(reset);
@@ -154,14 +129,13 @@ impl FilteredReceiver {
 struct SessionEventHubInner {
     tx: broadcast::Sender<SequencedSessionEvent>,
     history_capacity: usize,
+    stream_id: String,
     state: Mutex<SessionEventHubState>,
 }
 
 #[derive(Debug)]
 struct SessionEventHubState {
-    stream_id: String,
     next_event_id: u64,
-    generation_marker: SequencedSessionEvent,
     history: VecDeque<SequencedSessionEvent>,
 }
 
@@ -176,19 +150,14 @@ impl SessionEventHub {
         let capacity = capacity.max(1);
         let (tx, _) = broadcast::channel(capacity);
         let stream_id = Uuid::new_v4().to_string();
-        let generation_marker =
-            resync_event(1, stream_id.clone(), None, String::new(), "stream_started");
-        let mut history = VecDeque::with_capacity(capacity);
-        history.push_back(generation_marker.clone());
         Self {
             inner: Arc::new(SessionEventHubInner {
                 tx,
                 history_capacity: capacity,
+                stream_id,
                 state: Mutex::new(SessionEventHubState {
-                    stream_id,
-                    next_event_id: 2,
-                    generation_marker,
-                    history,
+                    next_event_id: 1,
+                    history: VecDeque::with_capacity(capacity),
                 }),
             }),
         }
@@ -209,24 +178,32 @@ impl SessionEventHub {
 
     /// Stable identifier for this in-process event stream generation.
     pub fn stream_id(&self) -> String {
-        lock_state(&self.inner).stream_id.clone()
+        self.inner.stream_id.clone()
     }
 
-    /// Starts a new in-process generation and broadcasts an explicit reset
-    /// marker for the affected root. Event ids remain process-monotonic.
-    pub fn rotate_generation_for_root(
+    /// Publishes a root-scoped reset marker without changing the process stream
+    /// or discarding replay history owned by other roots and workspace events.
+    pub fn publish_resync_for_root(
         &self,
         root_thread_id: &str,
         agent_id: &str,
         reason: &str,
     ) -> SequencedSessionEvent {
         let mut state = lock_state(&self.inner);
-        rotate_locked(
+        append_event(
             &self.inner,
             &mut state,
-            Some(root_thread_id.to_string()),
-            agent_id.to_string(),
-            reason,
+            SessionEventMsg {
+                session_id: Some(root_thread_id.to_string()),
+                agent_id: agent_id.to_string(),
+                memory_updated: None,
+                pending_changed: None,
+                session_metadata_changed: None,
+                agent_thread_changed: None,
+                resync_required: Some(ResyncRequiredPayload {
+                    reason: reason.to_string(),
+                }),
+            },
         )
     }
 
@@ -240,46 +217,31 @@ impl SessionEventHub {
         // Subscribe before snapshotting history. Events racing with the snapshot
         // can appear twice, and `last_seen_event_id` removes that duplicate.
         let rx = self.inner.tx.subscribe();
-        let mut state = lock_state(&self.inner);
-        let resume_matches = resume_stream_id == state.stream_id;
+        let state = lock_state(&self.inner);
+        let resume_matches = resume_stream_id == self.inner.stream_id;
         let newest_event_id = state.next_event_id.saturating_sub(1);
-        let oldest_event_id = state
-            .history
-            .front()
-            .map(|event| event.event_id)
-            .unwrap_or(state.generation_marker.event_id);
+        let oldest_event_id = state.history.front().map(|event| event.event_id);
         let replay_gap = resume_matches
             && (after_event_id > newest_event_id
-                || after_event_id.saturating_add(1) < oldest_event_id);
-        let (stream_id, last_seen_event_id, replay) = if replay_gap {
-            let reset = rotate_locked(
-                &self.inner,
-                &mut state,
-                filter.session_id.clone(),
-                filter.agent_id.clone().unwrap_or_default(),
+                || oldest_event_id.is_some_and(|oldest| after_event_id.saturating_add(1) < oldest));
+        let (last_seen_event_id, replay) = if replay_gap {
+            let reset = reset_for_filter(
+                &self.inner.stream_id,
+                newest_event_id,
+                &filter,
                 "replay_gap",
             );
-            (reset.stream_id.clone(), 0, VecDeque::from([reset]))
+            (newest_event_id, VecDeque::from([reset]))
         } else if !resume_matches {
             let reset = reset_for_filter(
-                &state.generation_marker,
+                &self.inner.stream_id,
+                newest_event_id,
                 &filter,
                 "stream_generation_changed",
             );
-            let mut replay = VecDeque::from([reset.clone()]);
-            replay.extend(
-                state
-                    .history
-                    .iter()
-                    .filter(|event| {
-                        event.event_id > reset.event_id && event_matches(&filter, &event.event)
-                    })
-                    .cloned(),
-            );
-            (state.stream_id.clone(), 0, replay)
+            (newest_event_id, VecDeque::from([reset]))
         } else {
             (
-                state.stream_id.clone(),
                 after_event_id,
                 replay_after_locked(&state, &filter, after_event_id),
             )
@@ -289,7 +251,6 @@ impl SessionEventHub {
             rx,
             replay,
             last_seen_event_id,
-            stream_id,
             filter,
             inner: self.inner.clone(),
         }
@@ -324,7 +285,7 @@ fn append_event(
     let sequenced = SequencedSessionEvent {
         event_id: state.next_event_id,
         ts_ms: chrono::Utc::now().timestamp_millis(),
-        stream_id: state.stream_id.clone(),
+        stream_id: inner.stream_id.clone(),
         event,
     };
     state.next_event_id = state.next_event_id.saturating_add(1);
@@ -336,70 +297,29 @@ fn append_event(
     sequenced
 }
 
-fn rotate_locked(
-    inner: &SessionEventHubInner,
-    state: &mut SessionEventHubState,
-    session_id: Option<String>,
-    agent_id: String,
-    reason: &str,
-) -> SequencedSessionEvent {
-    state.stream_id = Uuid::new_v4().to_string();
-    state.history.clear();
-    let marker = resync_event(
-        state.next_event_id,
-        state.stream_id.clone(),
-        session_id,
-        agent_id,
-        reason,
-    );
-    state.next_event_id = state.next_event_id.saturating_add(1);
-    state.history.push_back(marker.clone());
-    state.generation_marker = marker.clone();
-    let _ = inner.tx.send(marker.clone());
-    marker
-}
-
-fn rotate_if_current(
-    inner: &SessionEventHubInner,
-    expected_stream_id: &str,
-    filter: &SubscribeFilter,
-    reason: &str,
-) -> SequencedSessionEvent {
-    let mut state = lock_state(inner);
-    if state.stream_id == expected_stream_id {
-        rotate_locked(
-            inner,
-            &mut state,
-            filter.session_id.clone(),
-            filter.agent_id.clone().unwrap_or_default(),
-            reason,
-        )
-    } else {
-        reset_for_filter(
-            &state.generation_marker,
-            filter,
-            "stream_generation_changed",
-        )
-    }
-}
-
 fn current_reset_for_filter(
     inner: &SessionEventHubInner,
     filter: &SubscribeFilter,
     reason: &str,
 ) -> SequencedSessionEvent {
     let state = lock_state(inner);
-    reset_for_filter(&state.generation_marker, filter, reason)
+    reset_for_filter(
+        &inner.stream_id,
+        state.next_event_id.saturating_sub(1),
+        filter,
+        reason,
+    )
 }
 
 fn reset_for_filter(
-    marker: &SequencedSessionEvent,
+    stream_id: &str,
+    event_id: u64,
     filter: &SubscribeFilter,
     reason: &str,
 ) -> SequencedSessionEvent {
     resync_event(
-        marker.event_id,
-        marker.stream_id.clone(),
+        event_id,
+        stream_id.to_string(),
         filter.session_id.clone(),
         filter.agent_id.clone().unwrap_or_default(),
         reason,
@@ -521,6 +441,8 @@ pub fn to_proto(msg: &SequencedSessionEvent) -> SessionEvent {
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod tests {
+    use std::time::Duration;
+
     use super::*;
 
     fn agent_thread_event(
@@ -564,11 +486,11 @@ mod tests {
                 agent_id: None,
             },
             &hub.stream_id(),
-            2,
+            1,
         );
         let event = rx.recv().await.unwrap();
 
-        assert_eq!(event.event_id, 3);
+        assert_eq!(event.event_id, 2);
         assert_eq!(
             event
                 .event
@@ -629,6 +551,7 @@ mod tests {
     #[tokio::test]
     async fn stale_stream_on_empty_generation_immediately_returns_resync_marker() {
         let hub = SessionEventHub::new(4);
+        let current_stream = hub.stream_id();
         let mut rx = hub.subscribe(
             SubscribeFilter {
                 session_id: Some("root".into()),
@@ -640,6 +563,8 @@ mod tests {
 
         let reset = rx.recv().await.unwrap();
         assert_ne!(reset.stream_id, "previous-process-stream");
+        assert_eq!(reset.stream_id, current_stream);
+        assert_eq!(reset.event_id, 0);
         assert_eq!(
             reset.event.resync_required.as_ref().unwrap().reason,
             "stream_generation_changed"
@@ -650,7 +575,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn history_overflow_reconnect_rotates_and_returns_resync_instead_of_tail() {
+    async fn history_overflow_resyncs_only_target_and_then_delivers_new_events() {
         let hub = SessionEventHub::new(2);
         let stream_id = hub.stream_id();
         for sequence in 1..=4 {
@@ -671,33 +596,45 @@ mod tests {
             1,
         );
         let reset = rx.recv().await.unwrap();
-        assert_ne!(reset.stream_id, stream_id);
+        assert_eq!(reset.stream_id, stream_id);
         assert_eq!(
             reset.event.resync_required.as_ref().unwrap().reason,
             "replay_gap"
         );
-        assert!(reset.event_id > 5);
+        assert_eq!(reset.event_id, 4);
+        hub.publish(agent_thread_event("root", 5, "/root/worker", "completed"));
+        let next = rx.recv().await.unwrap();
+        assert_eq!(next.event_id, 5);
+        assert_eq!(next.stream_id, stream_id);
+        assert_eq!(
+            next.event
+                .agent_thread_changed
+                .as_ref()
+                .unwrap()
+                .activity_sequence,
+            5
+        );
     }
 
     #[tokio::test]
-    async fn active_receiver_lag_rotates_once_and_returns_resync() {
+    async fn active_receiver_lag_resyncs_only_that_receiver_at_current_watermark() {
         let hub = SessionEventHub::new(2);
         let stream_id = hub.stream_id();
-        let mut rx = hub.subscribe(
+        let mut lagging = hub.subscribe(
             SubscribeFilter {
                 session_id: Some("root".into()),
                 agent_id: None,
             },
             &stream_id,
-            1,
+            0,
         );
-        let mut second_rx = hub.subscribe(
+        let mut healthy = hub.subscribe(
             SubscribeFilter {
                 session_id: Some("root".into()),
                 agent_id: None,
             },
             &stream_id,
-            1,
+            0,
         );
         for sequence in 1..=4 {
             hub.publish(agent_thread_event(
@@ -706,61 +643,136 @@ mod tests {
                 "/root/worker",
                 "running",
             ));
+            let observed = healthy.recv().await.unwrap();
+            assert_eq!(observed.event_id, sequence);
+            assert!(observed.event.resync_required.is_none());
         }
 
-        let reset = rx.recv().await.unwrap();
-        assert_ne!(reset.stream_id, stream_id);
+        let reset = lagging.recv().await.unwrap();
+        assert_eq!(reset.stream_id, stream_id);
+        assert_eq!(reset.event_id, 4);
         assert_eq!(
             reset.event.resync_required.as_ref().unwrap().reason,
             "active_receiver_lag"
         );
-        let same_generation_reset = second_rx.recv().await.unwrap();
-        assert_eq!(same_generation_reset.stream_id, reset.stream_id);
-        assert_eq!(same_generation_reset.event_id, reset.event_id);
-        assert_eq!(hub.stream_id(), reset.stream_id);
+        assert_eq!(hub.stream_id(), stream_id);
+        assert!(
+            tokio::time::timeout(Duration::from_millis(30), lagging.recv())
+                .await
+                .is_err()
+        );
 
-        let second = hub.rotate_generation_for_root("root", "reviewer", "manual_test");
-        assert_ne!(second.stream_id, reset.stream_id);
-        assert!(second.event_id > reset.event_id);
+        hub.publish(agent_thread_event("root", 5, "/root/worker", "completed"));
+        let healthy_next = healthy.recv().await.unwrap();
+        let lagging_next = lagging.recv().await.unwrap();
+        assert_eq!(healthy_next.event_id, 5);
+        assert_eq!(lagging_next.event_id, 5);
+        assert!(healthy_next.event.resync_required.is_none());
+        assert!(lagging_next.event.resync_required.is_none());
     }
 
     #[tokio::test]
-    async fn root_scoped_rotation_resets_other_root_without_leaking_rotated_root() {
-        let hub = SessionEventHub::new(4);
+    async fn root_resync_preserves_other_root_and_workspace_replay() {
+        let hub = SessionEventHub::new(16);
         let stream_id = hub.stream_id();
+        hub.publish(SessionEventMsg {
+            session_id: Some("root-b".into()),
+            agent_id: "workspace".into(),
+            memory_updated: Some(MemoryUpdatedPayload {
+                source: "review".into(),
+                target: "memory".into(),
+                summary: "root-b-memory".into(),
+                live_written: true,
+            }),
+            pending_changed: None,
+            session_metadata_changed: None,
+            agent_thread_changed: None,
+            resync_required: None,
+        });
+        hub.publish(SessionEventMsg {
+            session_id: None,
+            agent_id: "workspace".into(),
+            memory_updated: None,
+            pending_changed: Some(PendingChangedPayload {
+                pending_count: 2,
+                reason: "enqueued".into(),
+            }),
+            session_metadata_changed: None,
+            agent_thread_changed: None,
+            resync_required: None,
+        });
+        hub.publish(SessionEventMsg {
+            session_id: Some("root-b".into()),
+            agent_id: "workspace".into(),
+            memory_updated: None,
+            pending_changed: None,
+            session_metadata_changed: Some(SessionMetadataChangedPayload {
+                title: "Root B".into(),
+            }),
+            agent_thread_changed: None,
+            resync_required: None,
+        });
+        let mut root_b_live = hub.subscribe(
+            SubscribeFilter {
+                session_id: Some("root-b".into()),
+                agent_id: None,
+            },
+            &stream_id,
+            3,
+        );
+        let root_a_marker =
+            hub.publish_resync_for_root("root-a", "default", "agent_control_generation_changed");
+        assert_eq!(hub.stream_id(), stream_id);
+        assert_eq!(root_a_marker.stream_id, stream_id);
+        assert!(
+            tokio::time::timeout(Duration::from_millis(30), root_b_live.recv())
+                .await
+                .is_err()
+        );
+
+        let mut root_a = hub.subscribe(
+            SubscribeFilter {
+                session_id: Some("root-a".into()),
+                agent_id: None,
+            },
+            &stream_id,
+            3,
+        );
+        assert_eq!(
+            root_a
+                .recv()
+                .await
+                .unwrap()
+                .event
+                .resync_required
+                .unwrap()
+                .reason,
+            "agent_control_generation_changed"
+        );
+
         let mut root_b = hub.subscribe(
             SubscribeFilter {
                 session_id: Some("root-b".into()),
                 agent_id: None,
             },
             &stream_id,
-            1,
+            0,
         );
-
-        let root_a_marker =
-            hub.rotate_generation_for_root("root-a", "default", "agent_control_generation_changed");
-        assert!(event_matches(
-            &SubscribeFilter {
-                session_id: Some("root-a".into()),
-                agent_id: None,
-            },
-            &root_a_marker.event,
-        ));
-        assert!(!event_matches(
-            &SubscribeFilter {
-                session_id: Some("root-b".into()),
-                agent_id: None,
-            },
-            &root_a_marker.event,
-        ));
-
-        let reset = root_b.recv().await.unwrap();
-        assert_eq!(reset.stream_id, root_a_marker.stream_id);
-        assert_eq!(reset.event_id, root_a_marker.event_id);
-        assert_eq!(reset.event.session_id.as_deref(), Some("root-b"));
-        assert_eq!(
-            reset.event.resync_required.as_ref().unwrap().reason,
-            "stream_generation_changed"
+        let replay = [
+            root_b.recv().await.unwrap(),
+            root_b.recv().await.unwrap(),
+            root_b.recv().await.unwrap(),
+        ];
+        assert!(replay[0].event.memory_updated.is_some());
+        assert!(replay[1].event.pending_changed.is_some());
+        assert!(replay[2].event.session_metadata_changed.is_some());
+        assert!(replay
+            .iter()
+            .all(|event| event.event.resync_required.is_none()));
+        assert!(
+            tokio::time::timeout(Duration::from_millis(30), root_b.recv())
+                .await
+                .is_err()
         );
     }
 
@@ -774,7 +786,7 @@ mod tests {
                 agent_id: None,
             },
             &stream_id,
-            1,
+            0,
         );
         hub.publish(SessionEventMsg {
             session_id: Some("s1".into()),
@@ -794,7 +806,7 @@ mod tests {
             .await
             .unwrap()
             .unwrap();
-        assert_eq!(ev.event_id, 2);
+        assert_eq!(ev.event_id, 1);
         assert_eq!(ev.event.session_id.as_deref(), Some("s1"));
         assert!(ev.event.memory_updated.unwrap().live_written);
     }
@@ -809,7 +821,7 @@ mod tests {
                 agent_id: None,
             },
             &stream_id,
-            1,
+            0,
         );
         hub.publish(SessionEventMsg {
             session_id: None,
@@ -853,15 +865,15 @@ mod tests {
                 agent_id: None,
             },
             &hub.stream_id(),
-            2,
+            1,
         );
         let ev = rx.recv().await.unwrap();
-        assert_eq!(ev.event_id, 3);
+        assert_eq!(ev.event_id, 2);
         assert_eq!(ev.event.memory_updated.unwrap().summary, "second");
     }
 
     #[tokio::test]
-    async fn stale_stream_id_restarts_replay_from_available_history() {
+    async fn stale_stream_resyncs_at_watermark_then_delivers_only_new_events() {
         let hub = SessionEventHub::new(16);
         hub.publish(SessionEventMsg {
             session_id: Some("s1".into()),
@@ -892,6 +904,30 @@ mod tests {
             ev.event.resync_required.as_ref().unwrap().reason,
             "stream_generation_changed"
         );
+        assert!(tokio::time::timeout(Duration::from_millis(30), rx.recv())
+            .await
+            .is_err());
+
+        hub.publish(SessionEventMsg {
+            session_id: Some("s1".into()),
+            agent_id: "workspace".into(),
+            memory_updated: Some(MemoryUpdatedPayload {
+                source: "review".into(),
+                target: "memory".into(),
+                summary: "new-after-reset".into(),
+                live_written: true,
+            }),
+            pending_changed: None,
+            session_metadata_changed: None,
+            agent_thread_changed: None,
+            resync_required: None,
+        });
+        let next = rx.recv().await.unwrap();
+        assert_eq!(next.event_id, 2);
+        assert_eq!(
+            next.event.memory_updated.unwrap().summary,
+            "new-after-reset"
+        );
     }
 
     #[tokio::test]
@@ -921,7 +957,7 @@ mod tests {
             publisher.join().unwrap();
         }
 
-        for expected_id in 2..=9 {
+        for expected_id in 1..=8 {
             assert_eq!(rx.recv().await.unwrap().event_id, expected_id);
         }
     }
