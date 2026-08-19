@@ -163,12 +163,31 @@ impl HitlGate {
         resolution
     }
 
+    /// 只读预校验整批 resume，不消费任何 waiter。
+    pub async fn validate_resolve(&self, items: &[ResumeItem]) -> Result<(), String> {
+        let map = self.waiting.lock().await;
+        Self::prepare_resolutions(&map, items).map(|_| ())
+    }
+
     /// 由 `interrupt_resume` 完成等待；对 `resolved` 做 schema 校验。
     pub async fn resolve(&self, items: &[ResumeItem]) -> Result<(), String> {
+        let mut map = self.waiting.lock().await;
+        let prepared = Self::prepare_resolutions(&map, items)?;
+        for (id, resolution) in prepared {
+            if let Some(waiting) = map.remove(&id) {
+                let _ = waiting.tx.send(resolution);
+            }
+        }
+        Ok(())
+    }
+
+    fn prepare_resolutions(
+        map: &HashMap<String, Waiting>,
+        items: &[ResumeItem],
+    ) -> Result<Vec<(String, HitlResolution)>, String> {
         if items.is_empty() {
             return Err("resume 列表为空".into());
         }
-        let mut map = self.waiting.lock().await;
         if map.is_empty() {
             return Err("当前没有等待中的 HITL".into());
         }
@@ -195,12 +214,7 @@ impl HitlGate {
             ));
         }
 
-        for (id, resolution) in prepared {
-            if let Some(waiting) = map.remove(&id) {
-                let _ = waiting.tx.send(resolution);
-            }
-        }
-        Ok(())
+        Ok(prepared)
     }
 
     /// 取消全部等待（chat cancel）。

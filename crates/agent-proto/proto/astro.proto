@@ -168,7 +168,7 @@ message SubmitTurnRequest {
 message SubmitTurnResponse {
   string submission_id = 1;
   string turn_id = 2;
-  string disposition = 3; // started | steered | not_submitted
+  string disposition = 3; // started | steered | resumed | not_submitted
   string reason = 4;
 }
 

@@ -10,9 +10,15 @@ use crate::{ListenerCommand, ThreadSnapshot, TurnSnapshot};
 
 #[derive(Debug)]
 struct ValidatedChatRequest {
-    turn_request: TurnInputRequest,
+    turn_request: Option<TurnInputRequest>,
     interaction_mode: types::InteractionMode,
     resume_items: Vec<agent::ResumeItem>,
+}
+
+struct PreparedResume {
+    managed: std::sync::Arc<crate::ManagedThread>,
+    gate: std::sync::Arc<agent::HitlGate>,
+    turn_id: String,
 }
 
 pub(crate) type ThreadEventsStream =
@@ -167,17 +173,26 @@ pub(crate) async fn submit_turn(
         .current_generation_key(&connection_id)
         .await
         .ok_or_else(|| Status::failed_precondition("connection is not subscribed"))?;
-    let resume_gate = if validated.resume_items.is_empty() {
-        None
-    } else {
-        Some(
-            service
-                .hitl_registry
-                .get(thread_id)
-                .await
-                .ok_or_else(|| Status::failed_precondition("session has no pending HITL"))?,
-        )
-    };
+    if let Some(prepared) =
+        prepare_resume_before_side_effects(service, thread_id, &validated.resume_items).await?
+    {
+        resume(&prepared.managed, subscription.clone(), false).await?;
+        if let Err(error) = prepared.gate.resolve(&validated.resume_items).await {
+            let _ = prepared
+                .managed
+                .commands
+                .send(ListenerCommand::Unsubscribe { subscription });
+            return Err(Status::invalid_argument(format!(
+                "invalid resume_json: {error}"
+            )));
+        }
+        return Ok(Response::new(proto::SubmitTurnResponse {
+            submission_id: String::new(),
+            turn_id: prepared.turn_id,
+            disposition: "resumed".into(),
+            reason: String::new(),
+        }));
+    }
     let managed = service.get_or_create_thread(thread_id).await?;
     resume(&managed, subscription, false).await?;
     service
@@ -187,11 +202,6 @@ pub(crate) async fn submit_turn(
         managed.runtime.session().interaction_mode().await,
         validated.interaction_mode
     );
-    if let Some(gate) = resume_gate {
-        gate.resolve(&validated.resume_items)
-            .await
-            .map_err(|error| Status::invalid_argument(format!("invalid resume_json: {error}")))?;
-    }
     managed
         .runtime
         .submit(Op::ThreadSettings {
@@ -206,7 +216,12 @@ pub(crate) async fn submit_turn(
         .map_err(|error| Status::unavailable(error.to_string()))?;
     let (submission_id, submission) = managed
         .runtime
-        .submit_turn(validated.turn_request, mode)
+        .submit_turn(
+            validated
+                .turn_request
+                .expect("non-resume validation must produce turn input"),
+            mode,
+        )
         .await
         .map_err(|error| Status::failed_precondition(error.to_string()))?;
     let (turn_id, disposition, reason) = match submission {
@@ -292,7 +307,15 @@ pub(crate) async fn unsubscribe_thread(
 pub(crate) fn turn_request_from_chat(
     chat: &proto::ChatRequest,
 ) -> Result<TurnInputRequest, Status> {
-    if chat.content.trim().is_empty() && chat.images.is_empty() {
+    turn_request_from_chat_with_requirement(chat, true)
+}
+
+#[allow(clippy::result_large_err)]
+fn turn_request_from_chat_with_requirement(
+    chat: &proto::ChatRequest,
+    require_input: bool,
+) -> Result<TurnInputRequest, Status> {
+    if require_input && chat.content.trim().is_empty() && chat.images.is_empty() {
         return Err(Status::invalid_argument("content or images are required"));
     }
     let mut image_data_urls = Vec::with_capacity(chat.images.len());
@@ -361,11 +384,60 @@ fn validate_chat_request(chat: &proto::ChatRequest) -> Result<ValidatedChatReque
         super::interrupt_store::parse_resume_items_json(&chat.resume_json)
             .map_err(Status::invalid_argument)?
     };
+    let turn_request = if resume_items.is_empty() {
+        Some(turn_request_from_chat(chat)?)
+    } else {
+        turn_request_from_chat_with_requirement(chat, false)?;
+        None
+    };
     Ok(ValidatedChatRequest {
-        turn_request: turn_request_from_chat(chat)?,
+        turn_request,
         interaction_mode,
         resume_items,
     })
+}
+
+async fn prepare_resume_before_side_effects(
+    service: &AstroServiceImpl,
+    thread_id: &str,
+    resume_items: &[agent::ResumeItem],
+) -> Result<Option<PreparedResume>, Status> {
+    if resume_items.is_empty() {
+        return Ok(None);
+    }
+    let managed = service
+        .threads
+        .get(thread_id)
+        .await
+        .ok_or_else(|| Status::invalid_argument("resume_json requires a loaded thread"))?;
+    let turn_id = if let Some(state) = service.thread_states.get(thread_id).await {
+        state
+            .lock()
+            .await
+            .history
+            .active_turn_snapshot()
+            .map(|turn| turn.id)
+    } else {
+        None
+    }
+    .or_else(|| match managed.runtime.status() {
+        agent::AgentStatus::Running { turn_id } => Some(turn_id),
+        _ => None,
+    })
+    .ok_or_else(|| Status::invalid_argument("resume_json requires an active turn"))?;
+    let gate = service
+        .hitl_registry
+        .get(thread_id)
+        .await
+        .ok_or_else(|| Status::invalid_argument("thread has no pending HITL"))?;
+    gate.validate_resolve(resume_items)
+        .await
+        .map_err(|error| Status::invalid_argument(format!("invalid resume_json: {error}")))?;
+    Ok(Some(PreparedResume {
+        managed,
+        gate,
+        turn_id,
+    }))
 }
 
 pub(crate) fn thread_event_to_chat_events(event: proto::ThreadEvent) -> Vec<proto::ChatEvent> {
@@ -395,7 +467,7 @@ pub(crate) fn thread_event_to_chat_events(event: proto::ThreadEvent) -> Vec<prot
             vec![activity(delta.item_id, "exec_output_delta", delta.delta)]
         }
         Payload::PatchDelta(delta) => vec![activity(delta.item_id, "patch_delta", delta.delta)],
-        Payload::ControlRequest(control) => vec![control_chat_event(control)],
+        Payload::ControlRequest(control) => vec![control_chat_event(turn_id, control)],
         Payload::TokenCount(tokens) => vec![proto::ChatEvent {
             payload: Some(ChatPayload::Usage(proto::UsageEvent {
                 prompt_tokens: tokens.input_tokens.min(u32::MAX.into()) as u32,
@@ -448,7 +520,11 @@ pub(crate) fn thread_event_to_chat_events(event: proto::ThreadEvent) -> Vec<prot
             &extension.namespace,
             extension.payload_json,
         )],
-        Payload::ShutdownComplete(_) => Vec::new(),
+        Payload::ShutdownComplete(_) => vec![activity(
+            turn_id,
+            "shutdown_complete",
+            serde_json::json!({"shutdown_complete": true}).to_string(),
+        )],
     }
 }
 
@@ -473,23 +549,50 @@ fn terminal_chat_events(
     ]
 }
 
-fn control_chat_event(control: proto::ThreadControlRequest) -> proto::ChatEvent {
+fn control_chat_event(run_id: String, control: proto::ThreadControlRequest) -> proto::ChatEvent {
     let payload = serde_json::from_str::<serde_json::Value>(&control.payload_json)
         .unwrap_or(serde_json::Value::Null);
-    activity(
-        format!("a2ui-surface-{}", control.item_id),
-        "a2ui-surface",
-        serde_json::json!({
-            "operations": payload.get("operations").cloned().unwrap_or_default(),
-            "kind": control.kind,
-            "item_id": control.item_id,
-            "request_id": control.request_id,
-            "reason": payload.get("reason").cloned().unwrap_or_default(),
-            "message": payload.get("message").cloned().unwrap_or_default(),
-            "response_schema": payload.get("response_schema").cloned().unwrap_or_default(),
-        })
-        .to_string(),
-    )
+    proto::ChatEvent {
+        payload: Some(proto::chat_event::Payload::RunFinished(
+            proto::RunFinishedEvent {
+                run_id,
+                outcome_type: "hitl_waiting".into(),
+                interrupts: vec![proto::Interrupt {
+                    id: control.request_id,
+                    reason: payload
+                        .get("reason")
+                        .and_then(serde_json::Value::as_str)
+                        .unwrap_or(&control.kind)
+                        .into(),
+                    message: payload
+                        .get("message")
+                        .and_then(serde_json::Value::as_str)
+                        .unwrap_or_default()
+                        .into(),
+                    tool_call_id: control.item_id,
+                    response_schema_json: payload
+                        .get("response_schema")
+                        .cloned()
+                        .unwrap_or_default()
+                        .to_string(),
+                    expires_at: payload
+                        .get("expires_at")
+                        .and_then(serde_json::Value::as_str)
+                        .unwrap_or_default()
+                        .into(),
+                    metadata_json: serde_json::json!({
+                        "kind": control.kind,
+                        "operations": payload
+                            .get("operations")
+                            .cloned()
+                            .unwrap_or_default(),
+                        "payload": payload,
+                    })
+                    .to_string(),
+                }],
+            },
+        )),
+    }
 }
 
 fn chat_error(message: impl Into<String>) -> proto::ChatEvent {
@@ -621,34 +724,31 @@ pub(crate) async fn chat(
         chat.session_id = uuid::Uuid::new_v4().to_string();
     }
     let validated = validate_chat_request(&chat)?;
-    let resume_gate = if validated.resume_items.is_empty() {
-        None
-    } else {
-        Some(
-            service
-                .hitl_registry
-                .get(&chat.session_id)
-                .await
-                .ok_or_else(|| Status::failed_precondition("session has no pending HITL"))?,
-        )
-    };
+    let prepared_resume =
+        prepare_resume_before_side_effects(service, &chat.session_id, &validated.resume_items)
+            .await?;
     let connection_id = format!("chat-{}", uuid::Uuid::new_v4());
     let (mut event_rx, cancel, generation) =
         service.connections.register(connection_id.clone()).await;
     let subscription = generation.key().clone();
     let mut subscribed_commands = None;
     let setup = async {
-        let managed = service.get_or_create_thread(&chat.session_id).await?;
-        service
-            .configure_thread_from_chat(&managed.runtime, &chat)
-            .await?;
-        if let Some(gate) = resume_gate {
-            gate.resolve(&validated.resume_items)
+        if let Some(prepared) = prepared_resume {
+            resume(&prepared.managed, subscription.clone(), false).await?;
+            subscribed_commands = Some(prepared.managed.commands.clone());
+            prepared
+                .gate
+                .resolve(&validated.resume_items)
                 .await
                 .map_err(|error| {
                     Status::invalid_argument(format!("invalid resume_json: {error}"))
                 })?;
+            return Ok::<_, Status>((prepared.managed, prepared.turn_id));
         }
+        let managed = service.get_or_create_thread(&chat.session_id).await?;
+        service
+            .configure_thread_from_chat(&managed.runtime, &chat)
+            .await?;
         resume(&managed, subscription.clone(), false).await?;
         subscribed_commands = Some(managed.commands.clone());
         managed
@@ -660,7 +760,12 @@ pub(crate) async fn chat(
             .map_err(|error| Status::unavailable(error.to_string()))?;
         let (_, submission) = managed
             .runtime
-            .submit_turn(validated.turn_request, TurnInputMode::StartOrSteer)
+            .submit_turn(
+                validated
+                    .turn_request
+                    .expect("non-resume validation must produce turn input"),
+                TurnInputMode::StartOrSteer,
+            )
             .await
             .map_err(|error| Status::failed_precondition(error.to_string()))?;
         let turn_id = submission
@@ -780,18 +885,25 @@ mod tests {
                         "reason":"confirmation",
                         "message":"continue?",
                         "operations":[],
-                        "response_schema":{}
+                        "response_schema":{"type":"object","properties":{"approved":{"type":"boolean"}}}
                     })
                     .to_string(),
                 },
             )),
         });
         assert_eq!(mapped.len(), 1);
-        let Some(proto::chat_event::Payload::Activity(activity)) = &mapped[0].payload else {
-            panic!("control request must map to exactly one activity event");
+        let Some(proto::chat_event::Payload::RunFinished(finished)) = &mapped[0].payload else {
+            panic!("control request must map to exactly one HITL terminal event");
         };
-        assert!(activity.content_json.contains("request-1"));
-        assert!(activity.content_json.contains("tool-1"));
+        assert_eq!(finished.outcome_type, "hitl_waiting");
+        assert_eq!(finished.run_id, "turn-1");
+        assert_eq!(finished.interrupts.len(), 1);
+        let interrupt = &finished.interrupts[0];
+        assert_eq!(interrupt.id, "request-1");
+        assert_eq!(interrupt.tool_call_id, "tool-1");
+        assert_eq!(interrupt.reason, "confirmation");
+        assert!(interrupt.response_schema_json.contains("properties"));
+        assert!(interrupt.metadata_json.contains("operations"));
     }
 
     #[test]
@@ -801,7 +913,12 @@ mod tests {
             turn_id: "shutdown".into(),
             payload: Some(proto::thread_event::Payload::ShutdownComplete(true)),
         });
-        assert!(mapped.is_empty());
+        assert!(matches!(
+            mapped.as_slice(),
+            [proto::ChatEvent {
+                payload: Some(proto::chat_event::Payload::Activity(activity))
+            }] if activity.activity_type == "shutdown_complete"
+        ));
     }
 
     fn valid_chat_request() -> proto::ChatRequest {
@@ -907,6 +1024,151 @@ mod tests {
                 .expect("rollout lookup")
                 .is_none()
         );
+        service.connections.remove_generation(&generation).await;
+    }
+
+    #[tokio::test]
+    async fn semantic_resume_errors_have_no_subscription_or_config_side_effects() {
+        let dir = TempDir::new().expect("tempdir");
+        memory::ensure_workspace(dir.path()).expect("workspace");
+        let service = AstroServiceImpl::new(dir.path().to_path_buf());
+        let managed = service
+            .get_or_create_thread("semantic-resume")
+            .await
+            .expect("thread");
+        service
+            .configure_thread_from_chat(
+                &managed.runtime,
+                &proto::ChatRequest {
+                    session_id: "semantic-resume".into(),
+                    content: "initial".into(),
+                    use_memory: true,
+                    ..Default::default()
+                },
+            )
+            .await
+            .expect("configure gate");
+        let gate = service
+            .hitl_registry
+            .get("semantic-resume")
+            .await
+            .expect("gate");
+        service
+            .thread_states
+            .get("semantic-resume")
+            .await
+            .expect("thread state")
+            .lock()
+            .await
+            .history
+            .track(&agent_protocol::Event {
+                id: "pending-turn".into(),
+                msg: agent_protocol::EventMsg::TurnStarted(agent_protocol::TurnStartedEvent {
+                    turn_id: "pending-turn".into(),
+                }),
+            });
+        let _wait = gate
+            .begin_wait(agent::Interrupt {
+                id: "known".into(),
+                reason: "confirmation".into(),
+                response_schema_json: serde_json::json!({
+                    "type":"object",
+                    "required":["approved"],
+                    "properties":{"approved":{"type":"boolean"}}
+                })
+                .to_string(),
+                ..Default::default()
+            })
+            .await;
+        let initial_temperature = managed.runtime.session().temperature();
+        let initial_mode = managed.runtime.session().interaction_mode().await;
+        let (_rx, _cancel, generation) =
+            service.connections.register("semantic-client".into()).await;
+
+        for resume_json in [
+            r#"[{"interrupt_id":"unknown","status":"resolved","payload":{"approved":true}}]"#,
+            r#"[{"interrupt_id":"known","status":"bogus","payload":{"approved":true}}]"#,
+            r#"[{"interrupt_id":"known","status":"resolved","payload":{"approved":"yes"}}]"#,
+        ] {
+            let error = submit_turn(
+                &service,
+                Request::new(proto::SubmitTurnRequest {
+                    connection_id: "semantic-client".into(),
+                    chat: Some(proto::ChatRequest {
+                        session_id: "semantic-resume".into(),
+                        content: "must not start a new turn".into(),
+                        use_memory: true,
+                        interaction_mode: "plan".into(),
+                        temperature: Some(1.7),
+                        resume_json: resume_json.into(),
+                        ..Default::default()
+                    }),
+                    mode: "start_or_steer".into(),
+                    expected_turn_id: String::new(),
+                }),
+            )
+            .await
+            .expect_err("semantic resume must fail");
+            assert_eq!(error.code(), tonic::Code::InvalidArgument);
+            assert!(
+                !service
+                    .thread_states
+                    .has_subscribers("semantic-resume")
+                    .await
+            );
+            assert_eq!(managed.runtime.session().temperature(), initial_temperature);
+            assert_eq!(
+                managed.runtime.session().interaction_mode().await,
+                initial_mode
+            );
+            assert_eq!(gate.pending_interrupts().await.len(), 1);
+        }
+
+        service.connections.remove_generation(&generation).await;
+        managed
+            .runtime
+            .submit(Op::Shutdown)
+            .await
+            .expect("shutdown");
+        managed.runtime.wait_terminated().await;
+        managed.stop_listener().await;
+    }
+
+    #[tokio::test]
+    async fn resume_for_unknown_thread_creates_no_thread_state_or_rollout() {
+        let dir = TempDir::new().expect("tempdir");
+        memory::ensure_workspace(dir.path()).expect("workspace");
+        let service = AstroServiceImpl::new(dir.path().to_path_buf());
+        let (_rx, _cancel, generation) = service.connections.register("resume-client".into()).await;
+        let error = submit_turn(
+            &service,
+            Request::new(proto::SubmitTurnRequest {
+                connection_id: "resume-client".into(),
+                chat: Some(proto::ChatRequest {
+                    session_id: "unknown-resume-thread".into(),
+                    use_memory: true,
+                    resume_json: r#"[{"interrupt_id":"missing","status":"resolved"}]"#.into(),
+                    ..Default::default()
+                }),
+                mode: "start_or_steer".into(),
+                expected_turn_id: String::new(),
+            }),
+        )
+        .await
+        .expect_err("unknown resume thread");
+        assert_eq!(error.code(), tonic::Code::InvalidArgument);
+        assert!(!service.threads.contains("unknown-resume-thread").await);
+        assert!(service
+            .thread_states
+            .get("unknown-resume-thread")
+            .await
+            .is_none());
+        assert!(agent_rollout::find_rollout(
+            &dir.path().join("sessions").join("rollouts"),
+            "unknown-resume-thread"
+        )
+        .expect("rollout lookup")
+        .is_none());
         service.connections.remove_generation(&generation).await;
     }
 
@@ -1288,6 +1550,20 @@ mod tests {
             .get("submit-hitl-thread")
             .await
             .expect("gate");
+        service
+            .thread_states
+            .get("submit-hitl-thread")
+            .await
+            .expect("thread state")
+            .lock()
+            .await
+            .history
+            .track(&agent_protocol::Event {
+                id: "submit-pending-turn".into(),
+                msg: agent_protocol::EventMsg::TurnStarted(agent_protocol::TurnStartedEvent {
+                    turn_id: "submit-pending-turn".into(),
+                }),
+            });
         let resolution = gate
             .begin_wait(agent::Interrupt {
                 id: "submit-request".into(),
@@ -1297,13 +1573,12 @@ mod tests {
             .await;
         let (_rx, _cancel, generation) = service.connections.register("hitl-submit".into()).await;
 
-        submit_turn(
+        let response = submit_turn(
             &service,
             Request::new(proto::SubmitTurnRequest {
                 connection_id: "hitl-submit".into(),
                 chat: Some(proto::ChatRequest {
                     session_id: "submit-hitl-thread".into(),
-                    content: "continue".into(),
                     use_memory: true,
                     resume_json:
                         r#"[{"interrupt_id":"submit-request","payload":{"approved":true}}]"#.into(),
@@ -1314,12 +1589,116 @@ mod tests {
             }),
         )
         .await
-        .expect("submit");
+        .expect("submit")
+        .into_inner();
+        assert_eq!(response.disposition, "resumed");
+        assert_eq!(response.turn_id, "submit-pending-turn");
+        assert!(matches!(managed.runtime.status(), agent::AgentStatus::Idle));
         let resolved = resolution.await.expect("resolution");
         assert_eq!(resolved.status, "resolved");
         assert!(resolved.payload_json.contains("approved"));
 
         service.connections.remove_generation(&generation).await;
+        managed
+            .runtime
+            .submit(Op::Shutdown)
+            .await
+            .expect("shutdown");
+        managed.runtime.wait_terminated().await;
+        managed.stop_listener().await;
+    }
+
+    #[tokio::test]
+    async fn chat_resume_subscribes_before_immediate_terminal_and_starts_no_new_turn() {
+        let dir = TempDir::new().expect("tempdir");
+        memory::ensure_workspace(dir.path()).expect("workspace");
+        let service = AstroServiceImpl::new(dir.path().to_path_buf());
+        let managed = service
+            .get_or_create_thread("chat-resume-thread")
+            .await
+            .expect("thread");
+        service
+            .configure_thread_from_chat(
+                &managed.runtime,
+                &proto::ChatRequest {
+                    session_id: "chat-resume-thread".into(),
+                    content: "initial".into(),
+                    use_memory: true,
+                    ..Default::default()
+                },
+            )
+            .await
+            .expect("configure controls");
+        service
+            .thread_states
+            .get("chat-resume-thread")
+            .await
+            .expect("thread state")
+            .lock()
+            .await
+            .history
+            .track(&agent_protocol::Event {
+                id: "chat-pending-turn".into(),
+                msg: agent_protocol::EventMsg::TurnStarted(agent_protocol::TurnStartedEvent {
+                    turn_id: "chat-pending-turn".into(),
+                }),
+            });
+        let gate = service
+            .hitl_registry
+            .get("chat-resume-thread")
+            .await
+            .expect("gate");
+        let resolution = gate
+            .begin_wait(agent::Interrupt {
+                id: "chat-request".into(),
+                reason: "confirmation".into(),
+                ..Default::default()
+            })
+            .await;
+        let commands = managed.commands.clone();
+        let immediate_terminal = tokio::spawn(async move {
+            resolution.await.expect("resolution");
+            commands
+                .send(ListenerCommand::CoreEvent(agent_protocol::Event {
+                    id: "chat-pending-turn".into(),
+                    msg: agent_protocol::EventMsg::TurnComplete(
+                        agent_protocol::TurnCompleteEvent {
+                            turn_id: "chat-pending-turn".into(),
+                            last_agent_message: Some("resumed".into()),
+                            error: None,
+                        },
+                    ),
+                }))
+                .expect("terminal event");
+        });
+
+        let mut stream = chat(
+            &service,
+            Request::new(proto::ChatRequest {
+                session_id: "chat-resume-thread".into(),
+                use_memory: true,
+                resume_json: r#"[{"interrupt_id":"chat-request","payload":{"approved":true}}]"#
+                    .into(),
+                ..Default::default()
+            }),
+        )
+        .await
+        .expect("chat resume")
+        .into_inner();
+        immediate_terminal.await.expect("terminal producer");
+        let finished = stream.next().await.expect("run finished").expect("event");
+        assert!(matches!(
+            finished.payload,
+            Some(proto::chat_event::Payload::RunFinished(ref event))
+                if event.outcome_type == "success" && event.run_id == "chat-pending-turn"
+        ));
+        assert!(matches!(
+            stream.next().await.expect("done").expect("event").payload,
+            Some(proto::chat_event::Payload::Done(true))
+        ));
+        assert!(stream.next().await.is_none());
+        assert!(matches!(managed.runtime.status(), agent::AgentStatus::Idle));
+
         managed
             .runtime
             .submit(Op::Shutdown)
