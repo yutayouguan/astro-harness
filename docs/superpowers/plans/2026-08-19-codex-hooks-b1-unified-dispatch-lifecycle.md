@@ -604,7 +604,7 @@ pub async fn steer_input(
     }
     let _admission_guard = self.admission_lock.lock().await;
     let turn_id = running.1.sub_id().to_string();
-    let Some(reservation) = running.1.reserve_input() else {
+    let Some(reservation) = running.1.reserve_input().await else {
         return Ok(None);
     };
     let context = self.admit_user_prompt(user_message, Some(turn_id.clone()))?;
@@ -1152,6 +1152,37 @@ Expected:
 git add docs/hooks.md docs/examples/hooks/README.md docs/examples/hooks/config.yaml.snippet docs/examples/hooks/telemetry-webhook.sh docs/superpowers/plans/2026-08-19-codex-hooks-b1-unified-dispatch-lifecycle.md
 git commit -m "docs(hooks): align examples with runtime"
 ```
+
+### Final review corrections: preparation admission and synthetic bridges
+
+- [x] **Close the initial-preparation steering race**
+
+`TurnContext` now starts in `Preparing`. `reserve_input()` waits asynchronously until
+`RegularTask` changes readiness to `Accepting` only after a system prompt is prepared.
+Every preparation or prebuilt-prompt validation failure changes readiness to `Closed`
+and wakes waiters before returning the task error. A server chat waiting to steer then
+receives `None` without firing `UserPromptSubmit`, so the same request can start a new
+turn instead of acknowledging input to a failed turn. Terminal close still waits for
+reservations that began after readiness became `Accepting`.
+
+The deterministic regression test
+`failed_initial_admission_closes_waiting_steer_for_new_turn_retry` blocks the initial
+prompt hook, proves the steer has not returned, rejects preparation, and verifies the
+follow-up hook/input are absent until the request is retried as a fresh turn.
+
+- [x] **Generalize queued-steer deferral to every synthetic user bridge**
+
+The main loop tracks one `awaiting_synthetic_bridge_response` state for both Stop
+`KeepGoing` and reasoning-only retry messages. A queued steer remains in
+`TurnContext` while the history ends with a synthetic user bridge, including a
+reasoning-only retry inside an existing Stop continuation. The state clears only after
+a normal assistant message (text or tool call) is durably recorded; the queued input
+and its hook context are then consumed exactly once.
+
+`thinking_only_bridge_defers_queued_steer_until_assistant_response` verifies the
+provider responds to the retry bridge before seeing the steer, provider/history order
+remains valid, and both the input and injected context appear once. The existing Stop
+reasoning-only bridge regression continues to cover consecutive bridge preservation.
 
 ## Self-review checklist
 

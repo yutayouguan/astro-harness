@@ -279,6 +279,159 @@ async fn steer_during_initial_prompt_preparation_preserves_role_order() {
     );
 }
 
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn failed_initial_admission_closes_waiting_steer_for_new_turn_retry() {
+    let dir = tempfile::tempdir().unwrap();
+    let config = AgentConfig::with_defaults(dir.path().to_path_buf());
+    let session =
+        Arc::new(AgentLoop::with_session_id(config, "failed-preparation-steer".into()).unwrap());
+    let initial_hook_entered = Arc::new(Notify::new());
+    let initial_hook_release = Arc::new((std::sync::Mutex::new(false), std::sync::Condvar::new()));
+    let follow_up_hook_hits = Arc::new(AtomicUsize::new(0));
+    let entered = Arc::clone(&initial_hook_entered);
+    let release = Arc::clone(&initial_hook_release);
+    let follow_up_hits = Arc::clone(&follow_up_hook_hits);
+    session
+        .hook_bus()
+        .register(hooks::USER_PROMPT_SUBMIT, move |payload| {
+            match payload.prompt.as_deref() {
+                Some("initial") => {
+                    entered.notify_one();
+                    let (released, ready) = &*release;
+                    let mut released = released.lock().unwrap();
+                    while !*released {
+                        released = ready.wait(released).unwrap();
+                    }
+                    hooks::HookOutcome::Block("reject initial".into())
+                }
+                Some("follow up") => {
+                    follow_up_hits.fetch_add(1, Ordering::SeqCst);
+                    hooks::HookOutcome::Continue
+                }
+                _ => hooks::HookOutcome::Continue,
+            }
+        });
+
+    let provider_calls = Arc::new(AtomicUsize::new(0));
+    let chat_fn: ChatOverride = {
+        let provider_calls = Arc::clone(&provider_calls);
+        Arc::new(move |_messages, _tools, _config| {
+            provider_calls.fetch_add(1, Ordering::SeqCst);
+            Box::pin(async move {
+                Ok(Box::pin(futures::stream::iter(vec![
+                    Ok(StreamChunk::Text("answer".into())),
+                    Ok(StreamChunk::Done {
+                        finish_reason: "stop".into(),
+                    }),
+                ])) as CompletionStream)
+            })
+        })
+    };
+
+    let (tx, mut rx) = tokio::sync::mpsc::channel(64);
+    let failed_run = tokio::spawn({
+        let session = Arc::clone(&session);
+        let chat_fn = Arc::clone(&chat_fn);
+        async move {
+            run_multi_turn_stream(MultiTurnStreamArgs {
+                session,
+                targets: vec![types::ChatTarget {
+                    provider_id: "scripted".into(),
+                    backend_id: "scripted".into(),
+                    model: "test".into(),
+                    api_key: String::new(),
+                    base_url: String::new(),
+                }],
+                base_config: ProviderConfig {
+                    model: "test".into(),
+                    ..Default::default()
+                },
+                input: vec![TurnInput::UserInput {
+                    content: "initial".into(),
+                    image_data_urls: Vec::new(),
+                }],
+                system_prompt: None,
+                pause: PauseControl::new(),
+                hitl_gate: None,
+                tx,
+                chat_override: Some(chat_fn),
+            })
+            .await;
+        }
+    });
+
+    initial_hook_entered.notified().await;
+    let steer_started = Arc::new(Notify::new());
+    let steer = tokio::spawn({
+        let session = Arc::clone(&session);
+        let steer_started = Arc::clone(&steer_started);
+        async move {
+            steer_started.notify_one();
+            session.steer_input("follow up", &[]).await
+        }
+    });
+    steer_started.notified().await;
+    tokio::task::yield_now().await;
+    assert!(
+        !steer.is_finished(),
+        "steer must wait for preparation outcome"
+    );
+    assert_eq!(follow_up_hook_hits.load(Ordering::SeqCst), 0);
+
+    {
+        let (released, ready) = &*initial_hook_release;
+        *released.lock().unwrap() = true;
+        ready.notify_all();
+    }
+    let steered_turn_id = steer.await.unwrap().unwrap();
+    while rx.recv().await.is_some() {}
+    failed_run.await.unwrap();
+
+    assert_eq!(steered_turn_id, None);
+    assert_eq!(follow_up_hook_hits.load(Ordering::SeqCst), 0);
+    assert_eq!(provider_calls.load(Ordering::SeqCst), 0);
+    assert!(session.clone_history().await.is_empty());
+
+    let (tx, mut rx) = tokio::sync::mpsc::channel(64);
+    run_multi_turn_stream(MultiTurnStreamArgs {
+        session: Arc::clone(&session),
+        targets: vec![types::ChatTarget {
+            provider_id: "scripted".into(),
+            backend_id: "scripted".into(),
+            model: "test".into(),
+            api_key: String::new(),
+            base_url: String::new(),
+        }],
+        base_config: ProviderConfig {
+            model: "test".into(),
+            ..Default::default()
+        },
+        input: vec![TurnInput::UserInput {
+            content: "follow up".into(),
+            image_data_urls: Vec::new(),
+        }],
+        system_prompt: None,
+        pause: PauseControl::new(),
+        hitl_gate: None,
+        tx,
+        chat_override: Some(chat_fn),
+    })
+    .await;
+    while rx.recv().await.is_some() {}
+
+    assert_eq!(follow_up_hook_hits.load(Ordering::SeqCst), 1);
+    assert_eq!(provider_calls.load(Ordering::SeqCst), 1);
+    let history = session.clone_history().await;
+    assert!(agent::runtime::validate_message_order(&history));
+    assert_eq!(
+        history
+            .iter()
+            .map(|message| message.content_str())
+            .collect::<Vec<_>>(),
+        ["follow up", "answer"]
+    );
+}
+
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn steered_input_is_consumed_by_the_active_regular_task() {
     let dir = tempfile::tempdir().unwrap();
@@ -1616,7 +1769,7 @@ async fn stop_keep_going_defers_queued_steer_across_reasoning_only_bridge_retry(
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-async fn thinking_only_retry_consumes_queued_steer_before_sampling() {
+async fn thinking_only_bridge_defers_queued_steer_until_assistant_response() {
     let dir = tempfile::tempdir().unwrap();
     let config = AgentConfig::with_defaults(dir.path().to_path_buf());
     let session =
@@ -1628,19 +1781,69 @@ async fn thinking_only_retry_consumes_queued_steer_before_sampling() {
     let provider_calls = Arc::new(AtomicUsize::new(0));
     let first_sampling_started = Arc::new(Notify::new());
     let release_first_sampling = Arc::new(Notify::new());
-    let retry_saw_follow_up = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let prompt_hook_hits = Arc::new(AtomicUsize::new(0));
+    let hook_hits = Arc::clone(&prompt_hook_hits);
+    session
+        .hook_bus()
+        .register(::hooks::USER_PROMPT_SUBMIT, move |payload| {
+            if payload.prompt.as_deref() == Some("follow up") {
+                hook_hits.fetch_add(1, Ordering::SeqCst);
+                ::hooks::HookOutcome::InjectContext("steer context".into())
+            } else {
+                ::hooks::HookOutcome::Continue
+            }
+        });
+
+    let bridge_sampling_was_clean = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let follow_up_was_seen_after_bridge = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let follow_up_context_was_seen_once = Arc::new(std::sync::atomic::AtomicBool::new(false));
     let chat_fn: ChatOverride = {
         let provider_calls = Arc::clone(&provider_calls);
         let first_sampling_started = Arc::clone(&first_sampling_started);
         let release_first_sampling = Arc::clone(&release_first_sampling);
-        let retry_saw_follow_up = Arc::clone(&retry_saw_follow_up);
+        let bridge_sampling_was_clean = Arc::clone(&bridge_sampling_was_clean);
+        let follow_up_was_seen_after_bridge = Arc::clone(&follow_up_was_seen_after_bridge);
+        let follow_up_context_was_seen_once = Arc::clone(&follow_up_context_was_seen_once);
         Arc::new(move |messages, _tools, _config| {
             let call = provider_calls.fetch_add(1, Ordering::SeqCst);
             if call == 1 {
-                retry_saw_follow_up.store(
+                bridge_sampling_was_clean.store(
+                    messages.iter().any(|message| {
+                        message
+                            .text_content()
+                            .starts_with("[astro:system]\n你的思考过程已记录")
+                    }) && !messages
+                        .iter()
+                        .any(|message| message.text_content() == "follow up")
+                        && !messages
+                            .iter()
+                            .any(|message| message.text_content().contains("steer context")),
+                    Ordering::SeqCst,
+                );
+            } else if call == 2 {
+                let bridge = messages.iter().position(|message| {
+                    message
+                        .text_content()
+                        .starts_with("[astro:system]\n你的思考过程已记录")
+                });
+                let bridge_response = messages
+                    .iter()
+                    .position(|message| message.text_content() == "bridge response");
+                let follow_up = messages
+                    .iter()
+                    .position(|message| message.text_content() == "follow up");
+                follow_up_was_seen_after_bridge.store(
+                    matches!((bridge, bridge_response, follow_up),
+                        (Some(bridge), Some(response), Some(follow_up))
+                            if bridge < response && response < follow_up),
+                    Ordering::SeqCst,
+                );
+                follow_up_context_was_seen_once.store(
                     messages
                         .iter()
-                        .any(|message| message.text_content() == "follow up"),
+                        .filter(|message| message.text_content().contains("steer context"))
+                        .count()
+                        == 1,
                     Ordering::SeqCst,
                 );
             }
@@ -1656,9 +1859,16 @@ async fn thinking_only_retry_consumes_queued_steer_before_sampling() {
                             finish_reason: "stop".into(),
                         }),
                     ])) as CompletionStream)
+                } else if call == 1 {
+                    Ok(Box::pin(futures::stream::iter(vec![
+                        Ok(StreamChunk::Text("bridge response".into())),
+                        Ok(StreamChunk::Done {
+                            finish_reason: "stop".into(),
+                        }),
+                    ])) as CompletionStream)
                 } else {
                     Ok(Box::pin(futures::stream::iter(vec![
-                        Ok(StreamChunk::Text("answer".into())),
+                        Ok(StreamChunk::Text("follow up response".into())),
                         Ok(StreamChunk::Done {
                             finish_reason: "stop".into(),
                         }),
@@ -1701,16 +1911,32 @@ async fn thinking_only_retry_consumes_queued_steer_before_sampling() {
         run.await.unwrap();
     })
     .await
-    .expect("thinking-only retry completes");
+    .expect("thinking-only bridge and queued steer complete");
 
     assert_eq!(
         provider_calls.load(Ordering::SeqCst),
-        2,
-        "the non-Stop retry must consume the queued steer before its retry sampling"
+        3,
+        "the bridge must receive an assistant response before the queued steer is sampled"
     );
+    assert_eq!(prompt_hook_hits.load(Ordering::SeqCst), 1);
+    assert!(bridge_sampling_was_clean.load(Ordering::SeqCst));
+    assert!(follow_up_was_seen_after_bridge.load(Ordering::SeqCst));
+    assert!(follow_up_context_was_seen_once.load(Ordering::SeqCst));
+    let history = session.clone_history().await;
     assert!(
-        retry_saw_follow_up.load(Ordering::SeqCst),
-        "the retry sampling must include the queued steer"
+        agent::runtime::validate_message_order(&history),
+        "history must alternate across a thinking-only bridge and queued steer: {:?}",
+        history
+            .iter()
+            .map(|message| (message.role.clone(), message.content_str().to_string()))
+            .collect::<Vec<_>>()
+    );
+    assert_eq!(
+        history
+            .iter()
+            .filter(|message| message.content_str() == "follow up")
+            .count(),
+        1
     );
 }
 

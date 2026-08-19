@@ -274,7 +274,9 @@ pub(crate) async fn run_turn(
     let mut verify_attempt: usize = 0;
     let mut thinking_only_retries: usize = 0;
     let mut has_sampled = false;
-    let mut defer_pending_input_after_stop = false;
+    // Synthetic user bridges (Stop KeepGoing and thinking-only retries) must
+    // receive a normal assistant response before queued user steering is added.
+    let mut awaiting_synthetic_bridge_response = false;
 
     let mut timeline = crate::timeline::TimelineBuilder::new();
     let now_ms = || chrono::Utc::now().timestamp_millis();
@@ -308,7 +310,7 @@ pub(crate) async fn run_turn(
             return RunTurnOutcome::Interrupted;
         }
 
-        if has_sampled && !defer_pending_input_after_stop {
+        if has_sampled && !awaiting_synthetic_bridge_response {
             let pending_input = turn_context.take_pending_input();
             if !pending_input.is_empty() {
                 if let Err(error) = record_pending_input(&session, pending_input).await {
@@ -324,7 +326,6 @@ pub(crate) async fn run_turn(
                 }
                 verify_attempt = 0;
                 thinking_only_retries = 0;
-                defer_pending_input_after_stop = false;
             }
         }
 
@@ -587,6 +588,7 @@ pub(crate) async fn run_turn(
                     )
                     .await;
                 }
+                awaiting_synthetic_bridge_response = true;
                 continue;
             }
             return finish_failed(
@@ -659,7 +661,7 @@ pub(crate) async fn run_turn(
                         )
                         .await;
                     }
-                    defer_pending_input_after_stop = true;
+                    awaiting_synthetic_bridge_response = true;
                     continue;
                 }
             }
@@ -735,10 +737,10 @@ pub(crate) async fn run_turn(
                 )
                 .await;
             }
-            // A Stop bridge can survive reasoning-only retries. Clear its one-shot
-            // deferral only after a normal assistant message (including tool calls)
-            // is durably represented in history.
-            defer_pending_input_after_stop = false;
+            // A synthetic bridge can survive reasoning-only retries. Clear its
+            // deferral only after a normal assistant message (including tool
+            // calls) is durably represented in history.
+            awaiting_synthetic_bridge_response = false;
         }
 
         if calls.is_empty() {
@@ -757,7 +759,7 @@ pub(crate) async fn run_turn(
                 }
                 verify_attempt = 0;
                 thinking_only_retries = 0;
-                defer_pending_input_after_stop = false;
+                awaiting_synthetic_bridge_response = false;
                 run_state.set_phase(RunPhase::StreamingLlm);
                 continue;
             }

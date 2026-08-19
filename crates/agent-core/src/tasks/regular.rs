@@ -37,19 +37,19 @@ impl SessionTask for RegularTask {
         let args = self
             .args
             .with_session_and_turn(Arc::clone(&sess), Arc::clone(&ctx));
-        let runtime_result: anyhow::Result<RunTurnOutcome> = async {
-            let system_prompt = match args.prepared_system_prompt().map(str::to_owned) {
+        let preparation_result: anyhow::Result<String> = async {
+            match args.prepared_system_prompt().map(str::to_owned) {
                 Some(system_prompt) => {
                     anyhow::ensure!(
                         input.is_empty(),
                         "prebuilt system prompt cannot be combined with initial input"
                     );
-                    system_prompt
+                    Ok(system_prompt)
                 }
                 None => {
                     let turn = sess.prepare_turn(&input).await?;
                     match turn {
-                        TurnResult::Continue { system_prompt, .. } => system_prompt,
+                        TurnResult::Continue { system_prompt, .. } => Ok(system_prompt),
                         TurnResult::BudgetExhausted => {
                             anyhow::bail!("conversation turn budget exhausted")
                         }
@@ -62,10 +62,19 @@ impl SessionTask for RegularTask {
                         }
                     }
                 }
-            };
-            Ok(run_turn(args.with_system_prompt(system_prompt), cancellation_token).await)
+            }
         }
         .await;
+        let runtime_result: anyhow::Result<RunTurnOutcome> = match preparation_result {
+            Ok(system_prompt) => {
+                ctx.open_input_admission();
+                Ok(run_turn(args.with_system_prompt(system_prompt), cancellation_token).await)
+            }
+            Err(error) => {
+                ctx.close_input_admission();
+                Err(error)
+            }
+        };
 
         let (result, error): (SessionTaskResult, Option<String>) = match runtime_result {
             Ok(outcome) => (Ok(None), outcome.error().map(str::to_owned)),

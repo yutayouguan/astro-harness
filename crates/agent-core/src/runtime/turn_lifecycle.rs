@@ -303,7 +303,7 @@ impl Session {
         }
         let _admission_guard = self.admission_lock.lock().await;
         let turn_id = running.1.sub_id().to_string();
-        let Some(reservation) = running.1.reserve_input() else {
+        let Some(reservation) = running.1.reserve_input().await else {
             return Ok(None);
         };
         let context = self.admit_user_prompt(user_message, Some(turn_id.clone()))?;
