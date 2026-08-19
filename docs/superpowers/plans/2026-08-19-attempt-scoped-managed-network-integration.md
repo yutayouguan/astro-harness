@@ -22,7 +22,7 @@
 - Modify: `crates/agent-network-proxy/tests/http_connect.rs`
 - Modify: `Cargo.lock`
 
-- [ ] **Step 1: Write failing public-contract tests**
+- [x] **Step 1: Write failing public-contract tests**
 
 Create `managed_attempt.rs` with helpers that construct an enabled `NetworkPolicy`, then lock these Codex-aligned contracts:
 
@@ -123,7 +123,7 @@ async fn dropping_started_proxy_closes_the_reserved_listener() {
 
 Extend the existing real CONNECT denial test to call `proxy.take_blocked_requests()` after the 403 and assert exactly one record with `host`, `port`, `HttpsConnect`, `Deny`, `BaselinePolicy`, client address, and `CONNECT`. Extend the rebinding test to assert a `ProxyState` blocked record. Add a `runtime.rs` unit test that records 65 synthetic denials, takes the queue, and verifies it contains entries 1 through 64 in FIFO order. This proves records come from policy enforcement, remain bounded, and do not depend on stderr parsing.
 
-- [ ] **Step 2: Run the new tests and verify RED**
+- [x] **Step 2: Run the new tests and verify RED**
 
 Run:
 
@@ -134,7 +134,7 @@ cargo test -p network-proxy --test http_connect connect_denial
 
 Expected: compile failures for missing `StartedNetworkProxy`, `ManagedNetworkSandboxContext`, `PreparedManagedNetwork`, `prepare`, and blocked-request APIs.
 
-- [ ] **Step 3: Implement the portable types and bounded FIFO**
+- [x] **Step 3: Implement the portable types and bounded FIFO**
 
 Add to `runtime.rs`:
 
@@ -178,7 +178,7 @@ impl BlockedRequest {
 
 Also implement `BlockedRequest::from_denial(request: &NetworkPolicyRequest, decision: &NetworkDecision) -> Option<Self>` by copying `host`, `port`, `protocol`, `client_addr`, and `method` from the request and `reason`, `decision`, and `source` from the deny variant. Add `blocked_requests: Mutex<VecDeque<BlockedRequest>>` to `NetworkProxyState`. Implement synchronous `record_blocked_request` and `take_blocked_requests`; on insert, pop the oldest item whenever the queue is already at 64. A poisoned mutex returns its inner queue so a reporting path cannot panic after the network decision has already been enforced.
 
-- [ ] **Step 4: Record both policy and rebinding denials**
+- [x] **Step 4: Record both policy and rebinding denials**
 
 In `http_proxy.rs`, construct the `BlockedRequest` from the already-normalized `NetworkPolicyRequest` and `NetworkDecision::Deny` before writing the 403. For `ConnectError::PolicyDenied`, record the same request with:
 
@@ -197,7 +197,7 @@ BlockedRequest {
 
 Do not record malformed requests, overloads, DNS failures, upstream connection failures, or 502 responses as policy denials.
 
-- [ ] **Step 5: Implement environment preparation and listener ownership**
+- [x] **Step 5: Implement environment preparation and listener ownership**
 
 Add to `proxy.rs`:
 
@@ -231,7 +231,7 @@ pub struct StartedNetworkProxy {
 
 Add `serde = { workspace = true }` to `agent-network-proxy`; the portable sandbox context is serialized as part of `SandboxPolicy` audits.
 
-- [ ] **Step 6: Run, format, and commit Task 1**
+- [x] **Step 6: Run, format, and commit Task 1**
 
 ```bash
 cargo fmt --all

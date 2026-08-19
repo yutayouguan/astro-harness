@@ -15,6 +15,9 @@ pub use network_policy::{
     NetworkPolicyRequestArgs, NetworkProtocol,
 };
 pub use policy::{is_loopback_host, is_non_public_ip, normalize_host, Host};
-pub use proxy::{NetworkProxy, NetworkProxyBuilder, NetworkProxyHandle};
-pub use runtime::{HostBlockDecision, HostBlockReason, NetworkProxyState};
+pub use proxy::{
+    ManagedNetworkSandboxContext, NetworkProxy, NetworkProxyBuilder, NetworkProxyHandle,
+    PreparedManagedNetwork, StartedNetworkProxy, DEFAULT_NO_PROXY_VALUE, PROXY_ACTIVE_ENV_KEY,
+};
+pub use runtime::{BlockedRequest, HostBlockDecision, HostBlockReason, NetworkProxyState};
 pub use types::{NetworkDecisionSource, NetworkPolicyDecision};

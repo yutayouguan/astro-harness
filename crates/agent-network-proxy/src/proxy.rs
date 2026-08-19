@@ -1,11 +1,45 @@
 use crate::http_proxy::run_http_proxy_with_listener;
-use crate::{NetworkPolicyDecider, NetworkProxyState};
+use crate::{BlockedRequest, NetworkPolicyDecider, NetworkProxyState};
 use anyhow::{ensure, Context, Result};
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::net::{Ipv4Addr, SocketAddr};
 use std::sync::Arc;
 use tokio::net::TcpListener;
 use tokio::sync::Mutex;
 use tokio::task::JoinHandle;
+
+const PROXY_URL_ENV_KEYS: &[&str] = &[
+    "HTTP_PROXY",
+    "HTTPS_PROXY",
+    "http_proxy",
+    "https_proxy",
+    "ALL_PROXY",
+    "all_proxy",
+];
+const NO_PROXY_ENV_KEYS: &[&str] = &["NO_PROXY", "no_proxy"];
+pub const PROXY_ACTIVE_ENV_KEY: &str = "ASTRO_NETWORK_PROXY_ACTIVE";
+pub const DEFAULT_NO_PROXY_VALUE: &str = concat!(
+    "localhost,127.0.0.1,::1,",
+    "10.0.0.0/8,",
+    "172.16.0.0/12,",
+    "192.168.0.0/16"
+);
+
+#[derive(Clone, Debug, Default, Eq, PartialEq, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ManagedNetworkSandboxContext {
+    #[serde(default)]
+    pub loopback_ports: Vec<u16>,
+    #[serde(default)]
+    pub allow_local_binding: bool,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PreparedManagedNetwork {
+    pub env: HashMap<String, String>,
+    pub sandbox_context: ManagedNetworkSandboxContext,
+}
 
 #[derive(Clone, Default)]
 pub struct NetworkProxyBuilder {
@@ -90,6 +124,33 @@ impl NetworkProxy {
         self.http_addr
     }
 
+    pub fn prepare(&self, mut env: HashMap<String, String>) -> PreparedManagedNetwork {
+        let proxy_url = format!("http://{}", self.http_addr);
+        for key in PROXY_URL_ENV_KEYS {
+            env.insert((*key).to_string(), proxy_url.clone());
+        }
+        let no_proxy = if self.state.allow_local_binding() {
+            DEFAULT_NO_PROXY_VALUE
+        } else {
+            ""
+        };
+        for key in NO_PROXY_ENV_KEYS {
+            env.insert((*key).to_string(), no_proxy.to_string());
+        }
+        env.insert(PROXY_ACTIVE_ENV_KEY.to_string(), "1".to_string());
+        PreparedManagedNetwork {
+            env,
+            sandbox_context: ManagedNetworkSandboxContext {
+                loopback_ports: vec![self.http_addr.port()],
+                allow_local_binding: self.state.allow_local_binding(),
+            },
+        }
+    }
+
+    pub fn take_blocked_requests(&self) -> Vec<BlockedRequest> {
+        self.state.take_blocked_requests()
+    }
+
     pub async fn run(&self) -> Result<NetworkProxyHandle> {
         let listener = self
             .listener
@@ -106,6 +167,26 @@ impl NetworkProxy {
             task: Some(task),
             completed: false,
         })
+    }
+}
+
+pub struct StartedNetworkProxy {
+    proxy: NetworkProxy,
+    _handle: NetworkProxyHandle,
+}
+
+impl StartedNetworkProxy {
+    pub async fn start(state: Arc<NetworkProxyState>) -> Result<Self> {
+        let proxy = NetworkProxy::builder().state(state).build().await?;
+        let handle = proxy.run().await?;
+        Ok(Self {
+            proxy,
+            _handle: handle,
+        })
+    }
+
+    pub fn proxy(&self) -> &NetworkProxy {
+        &self.proxy
     }
 }
 

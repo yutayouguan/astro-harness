@@ -3169,6 +3169,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "globset",
+ "serde",
  "thiserror 1.0.69",
  "tokio",
  "types",

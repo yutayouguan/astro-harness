@@ -2,17 +2,90 @@ use crate::policy::{
     compile_allowlist_globset, compile_denylist_globset, is_loopback_host, is_non_public_ip,
     normalize_host, unscoped_ip_literal, Host,
 };
-use crate::{NetworkDecision, NetworkPolicyDecider, NetworkPolicyRequest};
+use crate::{NetworkDecision, NetworkPolicyDecider, NetworkPolicyRequest, NetworkProtocol};
 use anyhow::{ensure, Result};
 use globset::GlobSet;
+use std::collections::VecDeque;
 use std::net::{IpAddr, SocketAddr};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tokio::net::lookup_host;
 use tokio::time::timeout;
-use types::{NetworkAccess, NetworkDecisionSource, NetworkPolicy};
+use types::{
+    NetworkAccess, NetworkApprovalProtocol, NetworkDecisionSource, NetworkPolicy,
+    NetworkPolicyDecision, NetworkPolicyDecisionPayload,
+};
 
 const DNS_LOOKUP_TIMEOUT: Duration = Duration::from_secs(2);
+const MAX_BLOCKED_REQUESTS: usize = 64;
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct BlockedRequest {
+    pub host: String,
+    pub port: u16,
+    pub protocol: NetworkProtocol,
+    pub reason: String,
+    pub decision: NetworkPolicyDecision,
+    pub source: NetworkDecisionSource,
+    pub client_addr: Option<String>,
+    pub method: Option<String>,
+}
+
+impl BlockedRequest {
+    pub(crate) fn from_denial(
+        request: &NetworkPolicyRequest,
+        decision: &NetworkDecision,
+    ) -> Option<Self> {
+        let NetworkDecision::Deny {
+            reason,
+            source,
+            decision,
+        } = decision
+        else {
+            return None;
+        };
+        Some(Self {
+            host: request.host.clone(),
+            port: request.port,
+            protocol: request.protocol,
+            reason: reason.clone(),
+            decision: *decision,
+            source: *source,
+            client_addr: request.client_addr.clone(),
+            method: request.method.clone(),
+        })
+    }
+
+    pub(crate) fn rebinding_denial(request: &NetworkPolicyRequest) -> Self {
+        Self {
+            host: request.host.clone(),
+            port: request.port,
+            protocol: request.protocol,
+            reason: HostBlockReason::NotAllowedLocal.as_str().to_string(),
+            decision: NetworkPolicyDecision::Deny,
+            source: NetworkDecisionSource::ProxyState,
+            client_addr: request.client_addr.clone(),
+            method: request.method.clone(),
+        }
+    }
+
+    pub fn to_policy_decision_payload(&self) -> NetworkPolicyDecisionPayload {
+        let protocol = match self.protocol {
+            NetworkProtocol::Http => NetworkApprovalProtocol::Http,
+            NetworkProtocol::HttpsConnect => NetworkApprovalProtocol::Https,
+            NetworkProtocol::Socks5Tcp => NetworkApprovalProtocol::Socks5Tcp,
+            NetworkProtocol::Socks5Udp => NetworkApprovalProtocol::Socks5Udp,
+        };
+        NetworkPolicyDecisionPayload {
+            decision: self.decision,
+            source: self.source,
+            protocol: Some(protocol),
+            host: Some(self.host.clone()),
+            reason: Some(self.reason.clone()),
+            port: Some(self.port),
+        }
+    }
+}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum HostBlockReason {
@@ -49,6 +122,7 @@ pub struct NetworkProxyState {
     allow_set: GlobSet,
     deny_set: GlobSet,
     allow_local_binding: bool,
+    blocked_requests: Mutex<VecDeque<BlockedRequest>>,
 }
 
 impl NetworkProxyState {
@@ -71,6 +145,7 @@ impl NetworkProxyState {
             deny_set: compile_denylist_globset(&denied_domains)?,
             allowed_domains,
             allow_local_binding: policy.allow_local_binding,
+            blocked_requests: Mutex::new(VecDeque::new()),
         })
     }
 
@@ -107,6 +182,25 @@ impl NetworkProxyState {
 
     pub fn allow_local_binding(&self) -> bool {
         self.allow_local_binding
+    }
+
+    pub(crate) fn record_blocked_request(&self, request: BlockedRequest) {
+        let mut requests = self
+            .blocked_requests
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        if requests.len() == MAX_BLOCKED_REQUESTS {
+            requests.pop_front();
+        }
+        requests.push_back(request);
+    }
+
+    pub fn take_blocked_requests(&self) -> Vec<BlockedRequest> {
+        let mut requests = self
+            .blocked_requests
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        requests.drain(..).collect()
     }
 
     pub async fn evaluate_host_policy(

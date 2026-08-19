@@ -1,11 +1,13 @@
-use network_proxy::{NetworkDecision, NetworkPolicyRequest, NetworkProxy, NetworkProxyState};
+use network_proxy::{
+    NetworkDecision, NetworkPolicyRequest, NetworkProtocol, NetworkProxy, NetworkProxyState,
+};
 use std::collections::BTreeMap;
 use std::net::{Ipv4Addr, SocketAddr};
 use std::sync::Arc;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::time::{sleep, timeout, Duration};
-use types::{NetworkAccess, NetworkPolicy};
+use types::{NetworkAccess, NetworkDecisionSource, NetworkPolicy, NetworkPolicyDecision};
 
 fn state_for(domain: Option<String>) -> NetworkProxyState {
     NetworkProxyState::new(NetworkPolicy {
@@ -83,6 +85,52 @@ async fn connect_denial_returns_forbidden_without_dialing_target() {
     assert!(timeout(Duration::from_millis(100), target.accept())
         .await
         .is_err());
+    let blocked = proxy.take_blocked_requests();
+    assert_eq!(blocked.len(), 1);
+    assert_eq!(blocked[0].host, target_addr.ip().to_string());
+    assert_eq!(blocked[0].port, target_addr.port());
+    assert_eq!(blocked[0].protocol, NetworkProtocol::HttpsConnect);
+    assert_eq!(blocked[0].reason, "not_allowed_local");
+    assert_eq!(blocked[0].decision, NetworkPolicyDecision::Deny);
+    assert_eq!(blocked[0].source, NetworkDecisionSource::BaselinePolicy);
+    assert!(blocked[0].client_addr.is_some());
+    assert_eq!(blocked[0].method.as_deref(), Some("CONNECT"));
+    let payload = blocked[0].to_policy_decision_payload();
+    assert_eq!(
+        payload.host.as_deref(),
+        Some(target_addr.ip().to_string().as_str())
+    );
+    assert_eq!(payload.port, Some(target_addr.port()));
+    assert_eq!(payload.decision, NetworkPolicyDecision::Deny);
+    handle.shutdown().await.unwrap();
+}
+
+#[tokio::test]
+async fn blocked_request_queue_is_bounded_and_fifo_ordered() {
+    let proxy = NetworkProxy::builder()
+        .state(Arc::new(state_for(None)))
+        .build()
+        .await
+        .unwrap();
+    let handle = proxy.run().await.unwrap();
+
+    for port in 1_000..=1_064 {
+        let mut client = TcpStream::connect(proxy.http_addr()).await.unwrap();
+        client
+            .write_all(
+                format!("CONNECT 127.0.0.1:{port} HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n\r\n")
+                    .as_bytes(),
+            )
+            .await
+            .unwrap();
+        assert!(read_header(&mut client).await.starts_with("HTTP/1.1 403"));
+    }
+
+    let blocked = proxy.take_blocked_requests();
+    assert_eq!(blocked.len(), 64);
+    assert_eq!(blocked.first().map(|request| request.port), Some(1_001));
+    assert_eq!(blocked.last().map(|request| request.port), Some(1_064));
+    assert!(proxy.take_blocked_requests().is_empty());
     handle.shutdown().await.unwrap();
 }
 
@@ -143,6 +191,12 @@ async fn decider_ask_is_preserved_in_forbidden_response_headers() {
     assert!(response.starts_with("HTTP/1.1 403"));
     assert!(response.contains("x-network-policy-decision: ask\r\n"));
     assert!(response.contains("x-network-decision-source: decider\r\n"));
+    let blocked = proxy.take_blocked_requests();
+    assert_eq!(blocked.len(), 1);
+    assert_eq!(blocked[0].host, "example.com");
+    assert_eq!(blocked[0].port, 443);
+    assert_eq!(blocked[0].decision, NetworkPolicyDecision::Ask);
+    assert_eq!(blocked[0].source, NetworkDecisionSource::Decider);
     handle.shutdown().await.unwrap();
 }
 

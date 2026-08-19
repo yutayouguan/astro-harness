@@ -1,7 +1,8 @@
 use crate::connect_policy::{connect_checked, ConnectError};
 use crate::{
-    NetworkDecision, NetworkDecisionSource, NetworkPolicyDecider, NetworkPolicyDecision,
-    NetworkPolicyRequest, NetworkPolicyRequestArgs, NetworkProtocol, NetworkProxyState,
+    BlockedRequest, NetworkDecision, NetworkDecisionSource, NetworkPolicyDecider,
+    NetworkPolicyDecision, NetworkPolicyRequest, NetworkPolicyRequestArgs, NetworkProtocol,
+    NetworkProxyState,
 };
 use anyhow::Result;
 use std::net::SocketAddr;
@@ -108,16 +109,20 @@ async fn handle_connection(
         command: None,
         exec_policy_hint: None,
     });
-    match state
+    let policy_decision = state
         .evaluate_host_policy(policy_decider.as_ref(), &policy_request)
-        .await?
-    {
+        .await?;
+    match &policy_decision {
         NetworkDecision::Allow => {}
         NetworkDecision::Deny {
             reason,
             source,
             decision,
         } => {
+            state.record_blocked_request(
+                BlockedRequest::from_denial(&policy_request, &policy_decision)
+                    .expect("matched network denial must produce a blocked request"),
+            );
             let error_kind = match reason.as_str() {
                 "denied" => "blocked-by-denylist",
                 "not_allowed" | "not_allowed_local" => "blocked-by-allowlist",
@@ -128,8 +133,8 @@ async fn handle_connection(
                 "403 Forbidden",
                 &[
                     ("x-proxy-error", error_kind),
-                    ("x-network-policy-decision", decision_name(decision)),
-                    ("x-network-decision-source", source_name(source)),
+                    ("x-network-policy-decision", decision_name(*decision)),
+                    ("x-network-decision-source", source_name(*source)),
                 ],
             )
             .await?;
@@ -140,6 +145,7 @@ async fn handle_connection(
     let mut upstream = match connect_checked(&state, &request.host, request.port).await {
         Ok(upstream) => upstream,
         Err(ConnectError::PolicyDenied) => {
+            state.record_blocked_request(BlockedRequest::rebinding_denial(&policy_request));
             write_empty_response(
                 &mut client,
                 "403 Forbidden",
@@ -311,6 +317,7 @@ const fn source_name(source: NetworkDecisionSource) -> &'static str {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use types::NetworkPolicy;
 
     #[test]
     fn authority_parser_handles_dns_ipv4_and_bracketed_ipv6() {
@@ -326,6 +333,35 @@ mod tests {
         assert_eq!(parse_authority("[example.com]:443"), None);
         assert_eq!(parse_authority("::1:443"), None);
         assert_eq!(parse_authority("example.com:0"), None);
+    }
+
+    #[test]
+    fn rebinding_denial_records_proxy_state_attribution() {
+        let state = NetworkProxyState::new(NetworkPolicy {
+            enabled: true,
+            ..NetworkPolicy::default()
+        })
+        .unwrap();
+        let request = NetworkPolicyRequest::new(NetworkPolicyRequestArgs {
+            protocol: NetworkProtocol::HttpsConnect,
+            host: "api.example.com".to_string(),
+            port: 443,
+            environment_id: None,
+            client_addr: Some("127.0.0.1:50000".to_string()),
+            method: Some("CONNECT".to_string()),
+            command: None,
+            exec_policy_hint: None,
+        });
+
+        state.record_blocked_request(BlockedRequest::rebinding_denial(&request));
+
+        let blocked = state.take_blocked_requests();
+        assert_eq!(blocked.len(), 1);
+        assert_eq!(blocked[0].host, "api.example.com");
+        assert_eq!(blocked[0].port, 443);
+        assert_eq!(blocked[0].reason, "not_allowed_local");
+        assert_eq!(blocked[0].decision, NetworkPolicyDecision::Deny);
+        assert_eq!(blocked[0].source, NetworkDecisionSource::ProxyState);
     }
 
     #[tokio::test]
