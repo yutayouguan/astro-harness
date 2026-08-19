@@ -819,6 +819,7 @@ impl AgentThreadDispatch for DefaultAgentThreadDispatch {
                 self.runtime_manager.pause_after_followup_admission().await;
                 Self::wait_for_shared_followup_start(result_rx).await?
             }
+            FollowupAdmission::QueuedForActive => {}
         }
         Ok(MessageAgentV2Result {
             message_id: message.message_id,
@@ -1638,6 +1639,57 @@ mod tests {
                 }
                 Ok(Box::pin(stream::iter(vec![
                     Ok(StreamChunk::Text(format!("turn-{call}"))),
+                    Ok(StreamChunk::Done {
+                        finish_reason: "stop".into(),
+                    }),
+                ])) as CompletionStream)
+            })
+        })
+    }
+
+    fn gated_tool_then_final_chat(
+        entered: Arc<tokio::sync::Notify>,
+        release: Arc<tokio::sync::Notify>,
+        saw_followup: Arc<AtomicBool>,
+    ) -> crate::streaming::ChatOverride {
+        let calls = Arc::new(AtomicUsize::new(0));
+        Arc::new(move |messages, _tools, _config| {
+            let call = calls.fetch_add(1, Ordering::SeqCst);
+            let entered = Arc::clone(&entered);
+            let release = Arc::clone(&release);
+            let saw_followup = Arc::clone(&saw_followup);
+            let has_followup = messages.iter().any(|message| match message {
+                providers::Message::User { content } => content.iter().any(|part| {
+                    matches!(
+                        part,
+                        providers::types::message::UserContent::Text { text }
+                            if text.contains("consume in current turn")
+                    )
+                }),
+                _ => false,
+            });
+            Box::pin(async move {
+                if call == 0 {
+                    entered.notify_one();
+                    release.notified().await;
+                    return Ok(Box::pin(stream::iter(vec![
+                        Ok(StreamChunk::ToolCallStart {
+                            index: 0,
+                            id: "list-agents-call".into(),
+                            name: "list_agents".into(),
+                        }),
+                        Ok(StreamChunk::ToolCallDelta {
+                            index: 0,
+                            arguments: "{}".into(),
+                        }),
+                        Ok(StreamChunk::Done {
+                            finish_reason: "tool_calls".into(),
+                        }),
+                    ])) as CompletionStream);
+                }
+                saw_followup.store(has_followup, Ordering::SeqCst);
+                Ok(Box::pin(stream::iter(vec![
+                    Ok(StreamChunk::Text("done after followup".into())),
                     Ok(StreamChunk::Done {
                         finish_reason: "stop".into(),
                     }),
@@ -2568,8 +2620,9 @@ mod tests {
             .close_subtree("root-session", spawned.thread.canonical_path.as_str())
             .await
             .unwrap();
-        let followup_error = followup.await.unwrap().unwrap_err().to_string();
-        assert!(followup_error.contains("close rejected pending follow-up"));
+        let followup_result = followup.await.unwrap().unwrap();
+        assert!(followup_result.queued);
+        assert!(followup_result.turn_triggered);
         assert_eq!(
             snapshot
                 .threads
@@ -3903,6 +3956,117 @@ mod tests {
         assert!(!result.timed_out);
     }
 
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn active_followup_returns_after_queue_admission_before_turn_completion() {
+        let dir = tempfile::tempdir().unwrap();
+        let memory_dir = dir.path().join("memory");
+        let sessions =
+            session::SessionStore::open_sessions_dir(&memory_dir.join("sessions")).unwrap();
+        sessions.ensure_session("root-session", "test").unwrap();
+        let mut dispatch = dispatch(&dir);
+        let entered_sampling = Arc::new(tokio::sync::Notify::new());
+        let release_sampling = Arc::new(tokio::sync::Notify::new());
+        dispatch.chat_override = Some(gated_first_turn_chat(
+            Arc::clone(&entered_sampling),
+            Arc::clone(&release_sampling),
+        ));
+        let dispatch = Arc::new(dispatch);
+        let spawned = AgentThreadDispatch::spawn_agent(&*dispatch, spawn_request(&memory_dir))
+            .await
+            .unwrap();
+        entered_sampling.notified().await;
+
+        let result = tokio::time::timeout(
+            Duration::from_millis(250),
+            AgentThreadDispatch::followup_task(
+                &*dispatch,
+                MessageAgentV2Request {
+                    target: spawned.thread.thread_id.clone(),
+                    message: "consume at the next sampling boundary".into(),
+                }
+                .into(),
+            ),
+        )
+        .await
+        .expect("active followup should return after durable queue admission")
+        .unwrap();
+        assert!(result.queued);
+        assert!(result.turn_triggered);
+        assert!(dispatch
+            .runtime_manager
+            .is_running(&spawned.thread.thread_id));
+
+        release_sampling.notify_one();
+        while dispatch
+            .runtime_manager
+            .is_running(&spawned.thread.thread_id)
+        {
+            tokio::task::yield_now().await;
+        }
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn active_followup_consumed_at_sampling_boundary_does_not_start_empty_generation() {
+        let dir = tempfile::tempdir().unwrap();
+        let memory_dir = dir.path().join("memory");
+        let sessions =
+            session::SessionStore::open_sessions_dir(&memory_dir.join("sessions")).unwrap();
+        sessions.ensure_session("root-session", "test").unwrap();
+        let mut dispatch = dispatch(&dir);
+        let entered_sampling = Arc::new(tokio::sync::Notify::new());
+        let release_sampling = Arc::new(tokio::sync::Notify::new());
+        let saw_followup = Arc::new(AtomicBool::new(false));
+        dispatch.chat_override = Some(gated_tool_then_final_chat(
+            Arc::clone(&entered_sampling),
+            Arc::clone(&release_sampling),
+            Arc::clone(&saw_followup),
+        ));
+        let dispatch = Arc::new(dispatch);
+        let spawned = AgentThreadDispatch::spawn_agent(&*dispatch, spawn_request(&memory_dir))
+            .await
+            .unwrap();
+        entered_sampling.notified().await;
+
+        AgentThreadDispatch::followup_task(
+            &*dispatch,
+            MessageAgentV2Request {
+                target: spawned.thread.thread_id.clone(),
+                message: "consume in current turn".into(),
+            }
+            .into(),
+        )
+        .await
+        .unwrap();
+        release_sampling.notify_one();
+        while dispatch
+            .runtime_manager
+            .is_running(&spawned.thread.thread_id)
+        {
+            tokio::task::yield_now().await;
+        }
+
+        assert!(saw_followup.load(Ordering::SeqCst));
+        assert!(dispatch
+            .control
+            .drain_mailbox(&spawned.thread.canonical_path)
+            .unwrap()
+            .is_empty());
+        let events = dispatch
+            .control
+            .status_events(&spawned.thread.thread_id)
+            .unwrap();
+        assert_eq!(
+            events
+                .iter()
+                .filter(|event| matches!(event.event, RunnerEvent::TurnStarted { .. }))
+                .count(),
+            1
+        );
+        assert!(!events
+            .iter()
+            .any(|event| matches!(event.event, RunnerEvent::TurnErrored { .. })));
+    }
+
     #[tokio::test]
     async fn send_message_is_queue_only_and_followup_uses_trigger_semantics() {
         let dir = tempfile::tempdir().unwrap();
@@ -4798,11 +4962,18 @@ mod tests {
         })
         .await
         .expect("durable followup must start a second turn after cleanup handoff");
-        assert!(dispatch
-            .control
-            .drain_mailbox(&spawned.thread.canonical_path)
-            .unwrap()
-            .is_empty());
+        tokio::time::timeout(Duration::from_secs(1), async {
+            while !dispatch
+                .control
+                .drain_mailbox(&spawned.thread.canonical_path)
+                .unwrap()
+                .is_empty()
+            {
+                tokio::task::yield_now().await;
+            }
+        })
+        .await
+        .expect("second generation must consume the admitted mailbox batch");
         assert!(sessions
             .get_messages(&spawned.thread.session_id)
             .unwrap()
@@ -5342,8 +5513,9 @@ mod tests {
             .terminate(&spawned.thread.thread_id)
             .await
             .unwrap();
-        let error = followup.await.unwrap().unwrap_err();
-        assert!(format!("{error:#}").contains("shutdown"));
+        let accepted = followup.await.unwrap().unwrap();
+        assert!(accepted.queued);
+        assert!(accepted.turn_triggered);
         let starts = dispatch
             .control
             .status_events(&spawned.thread.thread_id)

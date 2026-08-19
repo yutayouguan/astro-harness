@@ -165,6 +165,7 @@ pub(super) enum FollowupAdmission {
     AwaitStart {
         result_rx: watch::Receiver<Option<Result<(), String>>>,
     },
+    QueuedForActive,
 }
 
 #[cfg(test)]
@@ -909,10 +910,8 @@ impl AgentRuntimeManager {
                 result_rx: starting.result_rx.clone(),
             }),
             RuntimeSlot::Running(turn) => {
-                if let Some(handoff) = &turn.pending_followup {
-                    return Ok(FollowupAdmission::AwaitStart {
-                        result_rx: handoff.result_rx.clone(),
-                    });
+                if turn.pending_followup.is_some() {
+                    return Ok(FollowupAdmission::QueuedForActive);
                 }
                 let (result_tx, result_rx) = watch::channel(None);
                 request.followup_start_tx = Some(result_tx);
@@ -921,7 +920,7 @@ impl AgentRuntimeManager {
                     request,
                     result_rx: result_rx.clone(),
                 });
-                Ok(FollowupAdmission::AwaitStart { result_rx })
+                Ok(FollowupAdmission::QueuedForActive)
             }
         }
     }
@@ -3295,6 +3294,9 @@ mod tests {
         let (owner, result_rx) = match admission {
             super::FollowupAdmission::StartNow { request, result_rx } => (request, result_rx),
             super::FollowupAdmission::AwaitStart { .. } => panic!("first admission must own start"),
+            super::FollowupAdmission::QueuedForActive => {
+                panic!("idle admission cannot queue into an active turn")
+            }
         };
         let owner_token = owner.start_token.clone().unwrap();
         assert!(!manager
@@ -3342,6 +3344,9 @@ mod tests {
         let (owner, mut result_rx) = match admission {
             super::FollowupAdmission::StartNow { request, result_rx } => (request, result_rx),
             super::FollowupAdmission::AwaitStart { .. } => panic!("first admission must own start"),
+            super::FollowupAdmission::QueuedForActive => {
+                panic!("idle admission cannot queue into an active turn")
+            }
         };
         let error = manager.start_turn(*owner).await.unwrap_err();
         assert!(format!("{error:#}").contains("active execution"));
