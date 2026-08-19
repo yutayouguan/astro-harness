@@ -52,8 +52,8 @@ The following remain separate B2/B3/C work:
 Add a test that registers the same legacy-named event across Plugin, Gateway, and Shell, dispatches once, and proves that both observable buses receive the canonical name while the Plugin outcome is returned:
 
 ```rust
-#[test]
-fn dispatch_normalizes_once_and_reaches_all_transports() {
+#[tokio::test]
+async fn dispatch_normalizes_once_and_reaches_all_transports() {
     let dir = tempfile::tempdir().unwrap();
     let hook_dir = dir.path().join("hooks").join("audit");
     std::fs::create_dir_all(&hook_dir).unwrap();
