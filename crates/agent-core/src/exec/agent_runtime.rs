@@ -1488,6 +1488,44 @@ fn ensure_interrupted_history_boundary(
     Ok(())
 }
 
+pub(super) fn resolve_chat_targets_for_model(
+    targets: &[types::ChatTarget],
+    model: Option<&str>,
+) -> anyhow::Result<Vec<types::ChatTarget>> {
+    anyhow::ensure!(!targets.is_empty(), "agent turn has no chat target");
+    let Some(model) = model else {
+        return Ok(targets.to_vec());
+    };
+    let spec = types::ModelSpec::parse(model)?;
+    let selected_index = if spec.provider_id.trim().is_empty() {
+        0
+    } else {
+        targets
+            .iter()
+            .position(|target| {
+                target
+                    .backend_id
+                    .eq_ignore_ascii_case(spec.provider_id.trim())
+            })
+            .ok_or_else(|| {
+                anyhow::anyhow!(
+                    "no current chat target is configured for model provider {:?}",
+                    spec.provider_id.trim()
+                )
+            })?
+    };
+    let mut resolved = Vec::with_capacity(targets.len());
+    resolved.push(spec.apply_to(&targets[selected_index]));
+    resolved.extend(
+        targets
+            .iter()
+            .enumerate()
+            .filter(|(index, _)| *index != selected_index)
+            .map(|(_, target)| target.clone()),
+    );
+    Ok(resolved)
+}
+
 async fn run_request(
     request: &RunAgentTurnRequest,
     interrupt: Arc<AgentThreadControl>,
@@ -1533,14 +1571,10 @@ async fn run_request(
         session.set_hook_bus(Arc::clone(bus));
     }
 
-    let mut targets = request.runtime.chat_targets.clone();
-    if let Some(model) = request.runtime.model_request.model.as_deref() {
-        let spec = types::ModelSpec::parse(model)?;
-        if let Some(primary) = targets.first_mut() {
-            *primary = spec.apply_to(primary);
-        }
-    }
-    anyhow::ensure!(!targets.is_empty(), "agent turn has no chat target");
+    let targets = resolve_chat_targets_for_model(
+        &request.runtime.chat_targets,
+        request.runtime.model_request.model.as_deref(),
+    )?;
     session.set_chat_targets(targets.clone());
     let prepared_system_prompt = if request.consume_mailbox {
         let turn = session.prepare_mailbox_turn().await?;

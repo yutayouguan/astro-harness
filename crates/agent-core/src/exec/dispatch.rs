@@ -20,8 +20,8 @@ use tools::{
 };
 
 use super::agent_runtime::{
-    AgentRuntimeManager, CloseThreadStart, FollowupAdmission, RunAgentTurnRequest,
-    UnacceptedSpawnCleanup,
+    resolve_chat_targets_for_model, AgentRuntimeManager, CloseThreadStart, FollowupAdmission,
+    RunAgentTurnRequest, UnacceptedSpawnCleanup,
 };
 use crate::runtime::{Config, Session};
 
@@ -437,7 +437,7 @@ impl DefaultAgentThreadDispatch {
             .parent_thread_id
             .as_deref()
             .context("non-root Agent Thread is missing its parent thread id")?;
-        let runtime = build_runtime_request(
+        let mut runtime = build_runtime_request(
             SpawnAgentDispatchRequest {
                 request: subagents::SpawnAgentV2Request {
                     task_name: target.task_name.clone(),
@@ -455,6 +455,10 @@ impl DefaultAgentThreadDispatch {
             self.control.root_thread_id(),
             settings.interrupt_message,
         );
+        runtime.chat_targets = resolve_chat_targets_for_model(
+            &runtime.chat_targets,
+            runtime.model_request.model.as_deref(),
+        )?;
         validate_recovered_runtime_setup(&material.memory_dir, &self.control, target, &runtime)?;
         Ok(Arc::new(StoredRuntimeRequest {
             runtime,
@@ -468,7 +472,7 @@ impl DefaultAgentThreadDispatch {
 impl AgentThreadDispatch for DefaultAgentThreadDispatch {
     async fn spawn_agent(
         &self,
-        request: SpawnAgentDispatchRequest,
+        mut request: SpawnAgentDispatchRequest,
     ) -> anyhow::Result<SpawnAgentV2Result> {
         let settings = subagents::load_agents_settings(
             &request.runtime.memory_dir,
@@ -490,6 +494,10 @@ impl AgentThreadDispatch for DefaultAgentThreadDispatch {
             request.request.reasoning_effort.as_deref(),
             request.runtime.parent_model.as_deref(),
             Some(&request.runtime.parent_sandbox_mode),
+        )?;
+        request.runtime.chat_targets = resolve_chat_targets_for_model(
+            &request.runtime.chat_targets,
+            resolved.model.as_deref(),
         )?;
 
         let reservation = self.control.reserve_spawn_typed(
@@ -842,13 +850,10 @@ fn validate_runtime_setup(
     runtime: &SpawnRuntimeV2Request,
     child_session_id: &str,
 ) -> anyhow::Result<()> {
-    anyhow::ensure!(
-        !runtime.chat_targets.is_empty(),
-        "agent turn has no chat target"
-    );
-    if let Some(model) = runtime.model_request.model.as_deref() {
-        let _ = types::ModelSpec::parse(model)?;
-    }
+    let _ = resolve_chat_targets_for_model(
+        &runtime.chat_targets,
+        runtime.model_request.model.as_deref(),
+    )?;
     let _ = mcp::decode_inline_mcp_servers(&runtime.mcp_servers)?;
     let config = Config::with_defaults(memory_dir.to_path_buf());
     let _session = Session::with_session_id_for_agent_thread(
@@ -3619,7 +3624,20 @@ mod tests {
         spawn.runtime.project_root = Some(project);
         spawn.request.reasoning_effort = Some("max".into());
         let mut runtime_material = spawn.runtime.clone();
-        runtime_material.chat_targets[0].api_key = "restarted-key".into();
+        runtime_material.chat_targets[0] = types::ChatTarget {
+            provider_id: "current-anthropic".into(),
+            backend_id: "anthropic".into(),
+            model: "claude-current".into(),
+            api_key: "anthropic-key-must-not-leak".into(),
+            base_url: "https://anthropic.invalid".into(),
+        };
+        runtime_material.chat_targets.push(types::ChatTarget {
+            provider_id: "current-openai".into(),
+            backend_id: "openai".into(),
+            model: "openai-current".into(),
+            api_key: "restarted-openai-key".into(),
+            base_url: "https://openai-current.invalid".into(),
+        });
         let child = AgentThreadDispatch::spawn_agent(&initial, spawn)
             .await
             .unwrap()
@@ -3695,7 +3713,15 @@ mod tests {
             stored.runtime.model_request.reasoning_effort.as_deref(),
             Some("max")
         );
-        assert_eq!(stored.runtime.chat_targets[0].api_key, "restarted-key");
+        assert_eq!(stored.runtime.chat_targets[0].backend_id, "openai");
+        assert_eq!(
+            stored.runtime.chat_targets[0].api_key,
+            "restarted-openai-key"
+        );
+        assert_eq!(
+            stored.runtime.chat_targets[0].base_url,
+            "https://openai-current.invalid"
+        );
         let messages = sessions.get_messages(&child.session_id).unwrap();
         assert_eq!(
             messages
@@ -3704,6 +3730,117 @@ mod tests {
                 .count(),
             1
         );
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn cold_followup_rejects_missing_descriptor_provider_without_ghosts() {
+        let dir = tempfile::tempdir().unwrap();
+        let memory_dir = dir.path().join("memory");
+        let sessions =
+            session::SessionStore::open_sessions_dir(&memory_dir.join("sessions")).unwrap();
+        sessions.ensure_session("root-session", "test").unwrap();
+        let mut initial = dispatch(&dir);
+        initial.chat_override = Some(scripted_chat("initial"));
+        let mut spawn = spawn_request(&memory_dir);
+        spawn.request.model = Some("openai:pinned-model".into());
+        let mut runtime_material = spawn.runtime.clone();
+        let child = AgentThreadDispatch::spawn_agent(&initial, spawn)
+            .await
+            .unwrap()
+            .thread;
+        while initial.runtime_manager.is_running(&child.thread_id) {
+            tokio::task::yield_now().await;
+        }
+
+        runtime_material.chat_targets = vec![types::ChatTarget {
+            provider_id: "current-anthropic".into(),
+            backend_id: "anthropic".into(),
+            model: "claude-current".into(),
+            api_key: "anthropic-key-must-not-leak".into(),
+            base_url: "https://anthropic.invalid".into(),
+        }];
+        let control = AgentControl::open(
+            "root-session".into(),
+            AgentGraphStore::open(dir.path().join("subagents-v2.db")).unwrap(),
+            Limits {
+                max_threads: 8,
+                max_depth: 4,
+                max_running: 2,
+            },
+        )
+        .unwrap();
+        let recovered = DefaultAgentThreadDispatch::for_test(
+            control,
+            AgentPath::root(),
+            "root-session".into(),
+            Arc::new(AgentRuntimeManager::default()),
+        );
+
+        let error = AgentThreadDispatch::followup_task_with_runtime(
+            &recovered,
+            FollowupAgentDispatchRequest {
+                request: MessageAgentV2Request {
+                    target: child.canonical_path.to_string(),
+                    message: "must not use anthropic credentials".into(),
+                },
+                runtime: Some(runtime_material),
+            },
+        )
+        .await
+        .unwrap_err();
+
+        assert!(format!("{error:#}").contains("model provider \"openai\""));
+        assert!(recovered
+            .control
+            .drain_mailbox(&child.canonical_path)
+            .unwrap()
+            .is_empty());
+        assert!(recovered
+            .runtime_requests
+            .requests
+            .lock()
+            .unwrap()
+            .is_empty());
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn spawn_rejects_cross_provider_model_without_matching_credentials() {
+        let dir = tempfile::tempdir().unwrap();
+        let memory_dir = dir.path().join("memory");
+        let sessions =
+            session::SessionStore::open_sessions_dir(&memory_dir.join("sessions")).unwrap();
+        sessions.ensure_session("root-session", "test").unwrap();
+        let dispatch = dispatch(&dir);
+        let mut request = spawn_request(&memory_dir);
+        request.request.model = Some("openai:pinned-model".into());
+        request.runtime.chat_targets = vec![types::ChatTarget {
+            provider_id: "current-anthropic".into(),
+            backend_id: "anthropic".into(),
+            model: "claude-current".into(),
+            api_key: "anthropic-key-must-not-leak".into(),
+            base_url: "https://anthropic.invalid".into(),
+        }];
+
+        let error = AgentThreadDispatch::spawn_agent(&dispatch, request)
+            .await
+            .unwrap_err();
+
+        assert!(format!("{error:#}").contains("model provider \"openai\""));
+        assert_eq!(dispatch.control.identity_count().unwrap(), 0);
+        assert_eq!(
+            dispatch
+                .control
+                .list_agents(&AgentPath::root(), None)
+                .unwrap()
+                .len(),
+            1
+        );
+        assert!(dispatch
+            .runtime_requests
+            .requests
+            .lock()
+            .unwrap()
+            .is_empty());
     }
 
     #[tokio::test(flavor = "current_thread")]
