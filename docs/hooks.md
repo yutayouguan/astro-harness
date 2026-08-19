@@ -41,8 +41,8 @@ Astro 有三条 Hook 通道：
 | `PostApiRequest` | Provider API 请求后 |
 | `TransformTerminalOutput` | 替换 terminal 输出 |
 | `TransformToolResult` | 替换工具结果 |
-| `TransformLlmOutput` | 替换 LLM 最终文本 |
-| `PostLlmCall` | LLM turn 成功结束后 |
+| `TransformLlmOutput` | 替换普通 candidate 的 assistant 文本（summary 除外） |
+| `PostLlmCall` | 普通 candidate 已完成 transform 后（summary 除外） |
 | `PostApprovalResponse` | 审批结果产生后 |
 | `PreGatewayDispatch` | Gateway 入队前 |
 | `SessionReset` | 会话重置 |
@@ -133,16 +133,19 @@ PreGatewayDispatch
   → SessionStart (startup | resume；首个 non-Block admission 后一次) → UserPromptSubmit
   → 输入持久化 → PreLlmCall → [sampling / 工具循环]
       → PreApiRequest → Provider API → PostApiRequest    # 每个主循环 request
-      → PermissionRequest? → 审批 → PostApprovalResponse?
-          → 拒绝 / 超时 / unavailable：返回工具结果，不进入 PreToolUse
-      → PreToolUse                                     # 仅 preflight 通过/无需审批
-          → 工具执行
-          → TransformTerminalOutput?             # 仅 terminal
-          → TransformToolResult → PostToolUse
-          → SubagentStart ... SubagentStop?       # Agent Thread 生命周期
-  → 普通 candidate：无 tool calls 时 Stop
-      → KeepGoing：持久化 assistant + hook bridge 后继续；不 fire Transform/PostLlm
-      → 通过 Stop guard（或含 tool calls）：TransformLlmOutput → PostLlmCall
+      → 无 tool calls？Stop
+          → KeepGoing：持久化 assistant + hook bridge 后 continue；不 fire Transform/PostLlm
+          → 否：跳过 Stop
+      → TransformLlmOutput → PostLlmCall           # 通过 Stop guard，或本轮有 tool calls
+      → assistant 持久化
+      → 有 tool calls？
+          → PermissionRequest? → 审批 → PostApprovalResponse?
+              → 拒绝 / 超时 / unavailable：返回工具结果，不进入 PreToolUse
+          → PreToolUse                              # 仅 preflight 通过/无需审批
+              → 工具执行（SubagentStart / SubagentStop 若由子任务工具触发）
+              → TransformTerminalOutput? → TransformToolResult → PostToolUse
+              → loop
+      → 无 tool calls：收尾
   → RegularTask AgentEnd                           # Plugin/Gateway/Shell 各一次的统一 dispatch
 
 预算耗尽 summary（独立分支）：

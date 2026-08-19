@@ -18,7 +18,7 @@
 #     PreGatewayDispatch:  '"$HOME/.astro/hooks/telemetry-webhook.sh"'
 #     CommandNewChat:      '"$HOME/.astro/hooks/telemetry-webhook.sh"'
 #
-# 兼容端点：Langfuse HTTP ingestion、OpenTelemetry HTTP/JSON 桥、自建 webhook。
+# 此脚本发送 Astro 自定义 JSON；请使用自建 webhook，或自行适配后再转发至 Langfuse、OpenTelemetry 等后端。
 
 set -euo pipefail
 

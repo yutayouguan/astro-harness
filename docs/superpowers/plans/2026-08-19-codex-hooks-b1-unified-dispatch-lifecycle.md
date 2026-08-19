@@ -4,7 +4,7 @@
 
 **Goal:** Route Astro Agent lifecycle hooks through one canonical `HookRuntime::dispatch` path and align the main-turn `SessionStart`, `UserPromptSubmit`, `Stop`, and `AgentEnd` behavior with the approved Codex contract.
 
-**Architecture:** `Session` owns an `Arc<HookRuntime>` instead of only a Plugin bus, enriches every payload with stable session/model/cwd/permission fields, and delegates all events to one dispatcher that reaches Plugin, Gateway, and Shell exactly once. The main lifecycle fires a one-shot startup/resume event, evaluates prompt hooks before persistence, evaluates Stop for every terminal candidate with a bounded continuation loop, and emits one AgentEnd from `RegularTask` on both success and failure.
+**Architecture:** `Session` owns an `Arc<HookRuntime>` instead of only a Plugin bus, enriches every **Session-owned** payload with stable session/model/cwd/permission fields, and delegates those events to one dispatcher that reaches Plugin, Gateway, and Shell exactly once. `SubagentStart` / `SubagentStop` remain documented Plugin-only direct-fire exceptions. The main lifecycle retries blocked `SessionStart` admission with the same source, consumes that source once on its first non-`Block` outcome, evaluates prompt hooks before persistence, evaluates Stop for every terminal candidate with a bounded continuation loop, and emits one AgentEnd from `RegularTask` on both success and failure.
 
 **Tech Stack:** Rust 2021 workspace, Tokio, `agent-hooks`, `agent-core`, `agent-server`, Cargo integration tests.
 
@@ -14,9 +14,9 @@
 
 This plan implements B1 only:
 
-- unified Plugin/Gateway/Shell dispatch;
+- Session-owned lifecycle events use unified Plugin/Gateway/Shell dispatch;
 - Session ownership of the shared runtime and common payload enrichment;
-- `SessionStart(source=startup|resume)` once per in-memory Session;
+- `SessionStart(source=startup|resume)` once per in-memory Session after its first non-`Block` admission; a `Block` retains the source and retries;
 - `UserPromptSubmit` block/context behavior before persistence;
 - `Stop` on every terminal candidate, independent of disk writes;
 - one authoritative `AgentEnd` per `RegularTask` run;
@@ -26,7 +26,7 @@ This plan implements B1 only:
 The following remain separate B2/B3/C work:
 
 - `SessionEnd`, clear/compact SessionStart sources, `PreCompact`, and `PostCompact`;
-- resumable `SubagentStop`;
+- Gateway/Shell transport for Plugin-only `SubagentStart` / `SubagentStop`, plus `SubagentStop` `KeepGoing` continuation;
 - Codex command-hook schema, matcher aggregation, JSON stdin/stdout, timeout, trust, and discovery.
 
 ## File map
@@ -41,6 +41,7 @@ The following remain separate B2/B3/C work:
 - `crates/agent-core/tests/rig_agent_test.rs`: startup/resume, prompt block, prompt context, and payload tests.
 - `crates/agent-core/tests/streaming_test.rs`: steering prompt hook, Stop continuation, and AgentEnd success/error tests.
 - `docs/hooks.md`: current B1 runtime truth and remaining gaps.
+- `docs/examples/hooks/{README.md,config.yaml.snippet,telemetry-webhook.sh}`: runnable Shell configuration and custom-webhook examples.
 
 ### Task 1: Add one canonical HookRuntime dispatcher
 
@@ -1084,6 +1085,7 @@ git commit -m "fix(hooks): align main turn lifecycle"
 - Modify: `docs/hooks.md`
 - Modify: `docs/examples/hooks/README.md`
 - Modify: `docs/examples/hooks/config.yaml.snippet`
+- Modify: `docs/examples/hooks/telemetry-webhook.sh`
 - Modify: `docs/superpowers/plans/2026-08-19-codex-hooks-b1-unified-dispatch-lifecycle.md`
 
 - [x] **Step 1: Update runtime documentation**
@@ -1139,22 +1141,22 @@ Expected:
 
 - changed files are limited to the B1 file map and this plan;
 - compatibility `set_hook_bus` remains available but production server wiring uses `set_hook_runtime`;
-- no Agent core call bypasses `HookRuntime::dispatch`;
+- no Session-owned Agent core lifecycle call bypasses `HookRuntime::dispatch`; the documented `SubagentStart` / `SubagentStop` request-bus direct fires are the exception;
 - no server-side SessionStart or AgentEnd duplicate remains.
 
-**Review correction (after `69f6e77d`):** distinguish retried blocked `SessionStart`; normal-loop API/transform/post hooks from direct summary streaming; all five private payload fields; construction-time (not readiness) `GatewayStartup`; and Plugin-only subagent lifecycle events. Keep the Shell examples in sync with Session runtime routing without claiming subagent delivery.
+**Review record:** distinguish retried blocked `SessionStart`; normal-loop API/transform/post hooks from direct summary streaming; all five private payload fields; construction-time (not readiness) `GatewayStartup`; and Plugin-only subagent lifecycle events. Keep Shell examples in sync with Session runtime routing without claiming subagent delivery; telemetry is custom JSON and requires a webhook or explicit adapter for third-party backends.
 
 - [x] **Step 5: Commit documentation**
 
 ```bash
-git add docs/hooks.md docs/examples/hooks/README.md docs/examples/hooks/config.yaml.snippet docs/superpowers/plans/2026-08-19-codex-hooks-b1-unified-dispatch-lifecycle.md
-git commit -m "docs(hooks): correct lifecycle edge cases"
+git add docs/hooks.md docs/examples/hooks/README.md docs/examples/hooks/config.yaml.snippet docs/examples/hooks/telemetry-webhook.sh docs/superpowers/plans/2026-08-19-codex-hooks-b1-unified-dispatch-lifecycle.md
+git commit -m "docs(hooks): align examples with runtime"
 ```
 
 ## Self-review checklist
 
-- Spec coverage: B1 dispatch, startup/resume, prompt admission, Stop, AgentEnd, server de-duplication, compatibility, tests, and docs each map to a task.
-- Deferred scope: SessionEnd, compact/clear, Pre/PostCompact, SubagentStop, and Command Hook behavior are explicitly excluded and remain documented.
+- Spec coverage: Session-owned B1 dispatch, startup/resume admission, prompt admission, Stop, AgentEnd, server de-duplication, documented Plugin-only subagent exceptions, compatibility, tests, and docs each map to a task.
+- Deferred scope: SessionEnd, compact/clear, Pre/PostCompact, SubagentStart/Stop transport, SubagentStop continuation, and Command Hook behavior are explicitly excluded and remain documented.
 - Type consistency: `HookRuntime::dispatch` takes `&HookPayload` and returns `HookOutcome`; Session stores `Arc<HookRuntime>`; steering returns `anyhow::Result<Option<String>>` at every caller.
 - TDD consistency: every production behavior begins with a focused test that fails for the missing behavior.
 - Commit consistency: each task stages only its listed files and produces an independently reviewable commit.
