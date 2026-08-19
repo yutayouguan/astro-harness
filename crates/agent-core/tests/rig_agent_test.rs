@@ -10,6 +10,43 @@ use home::AgentRuntimeConfig;
 use tempfile::TempDir;
 use types::message::Message;
 
+#[test]
+fn session_fire_hook_uses_shared_runtime_and_common_payload() {
+    let dir = TempDir::new().unwrap();
+    let (agent, _) = AgentBuilder::new(dir.path()).build().unwrap();
+    let runtime = Arc::new(hooks::HookRuntime::new());
+    let captured = Arc::new(std::sync::Mutex::new(None));
+    let capture = Arc::clone(&captured);
+    runtime
+        .plugin
+        .register(hooks::USER_PROMPT_SUBMIT, move |input| {
+            *capture.lock().unwrap() = Some(input.clone());
+            hooks::HookOutcome::Continue
+        });
+
+    let project_root = dir.path().join("project");
+    agent.set_hook_runtime(Arc::clone(&runtime));
+    agent.set_project_root(Some(project_root.clone()));
+    agent.set_permission_profile(Some("workspace-write".into()));
+    agent.set_chat_credentials("openai", "gpt-5.6-sol", "test-key", "");
+    agent.fire_hook(
+        hooks::USER_PROMPT_SUBMIT,
+        hooks::HookInput {
+            prompt: Some("hello".into()),
+            ..Default::default()
+        },
+    );
+
+    let payload = captured.lock().unwrap().clone().expect("hook payload");
+    assert_eq!(payload.session_id, agent.session_id());
+    assert_eq!(payload.cwd, project_root.to_string_lossy());
+    assert_eq!(payload.model, "openai/gpt-5.6-sol");
+    assert_eq!(payload.permission_mode.as_deref(), Some("workspace-write"));
+    assert_eq!(payload.hook_event_name, hooks::USER_PROMPT_SUBMIT);
+    assert_eq!(payload.prompt.as_deref(), Some("hello"));
+    assert!(Arc::ptr_eq(&agent.hook_runtime(), &runtime));
+}
+
 fn test_config(dir: &TempDir) -> AgentConfig {
     AgentConfig::with_defaults(dir.path().to_path_buf())
 }
