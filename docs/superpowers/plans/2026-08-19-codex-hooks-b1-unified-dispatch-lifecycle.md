@@ -337,8 +337,8 @@ The quality-review correction is authoritative for this task:
 - steering uses an RAII `TurnInputReservation`; terminal close waits for in-flight admissions, so a fired hook cannot race with queue closure;
 - initial and pending input slices are coalesced into one logical user message (`\n\n` text join plus stable image flattening) before their single persistence write;
 - initial SessionStart/UserPromptSubmit contexts are staged locally, discarded on any later Block, and enter `assemble_system_layers` through its budgeted inject layer;
-- steering InjectContext remains a next-sampling message-side context and is committed to Session state before its input reservation wakes terminal close;
-- a session-scoped FIFO `admission_lock` serializes the complete initial SessionStart/UserPromptSubmit admission sequence and each steer admission. Steering clones the active TurnContext first, then acquires this lock before reserving; a queue closed while waiting returns `Ok(None)` without firing a hook;
+- steering InjectContext remains a next-sampling message-side context and is committed atomically with its `QueuedTurnInput`; only successful input persistence moves that context into Session state;
+- `TurnContext` starts in `Preparing`; steering reserves asynchronously before taking the session-scoped FIFO `admission_lock`. `RegularTask` opens admission only after preparation succeeds and closes it on failure. The lock then serializes each steer hook/commit without blocking initial admission;
 - the same admission lock makes pending SessionStart consumption strictly one-shot under concurrent compatibility admission. It is deliberately released before begin/reload/persistence and never substitutes for the conversation write lock;
 - `run_turn` does not drain pending input at the first loop top. `has_sampled` becomes true only after `run_sampling_request` succeeds, so an early steer stays queued until the first assistant is recorded; the no-tool terminal branch then records it as the next user turn. Later tool-loop iterations may drain pending input at the top because assistant/tool history already separates the roles;
 - a blocked SessionStart retains its pending `startup`/`resume` source for retry; any non-Block outcome consumes the expected source. A later prompt Block or infrastructure/reload failure does not restore SessionStart after it has successfully fired;
@@ -619,13 +619,7 @@ pub async fn steer_input(
         content: user_message.to_string(),
         image_data_urls: image_data_urls.to_vec(),
     };
-    if let Some(context) = context {
-        let mut state = self.state.lock().await;
-        append_context(&mut state.pending_inject_context, context);
-        reservation.commit(input); // synchronous; notify happens after context write
-    } else {
-        reservation.commit(input);
-    }
+    reservation.commit(input, context);
     Ok(Some(turn_id))
 }
 ```
@@ -815,23 +809,20 @@ Expected: both focused tests and all streaming tests pass.
 
 #### Follow-up: queued steer must not overtake a Stop bridge
 
-When `Stop` returns `KeepGoing`, the loop persists its assistant draft followed by the
-`[astro:hook-context]` bridge user message. If an active steer was admitted while the
-Stop hook ran, `multi_turn` sets a one-shot local deferral after successfully writing the
-bridge user message. The next loop-top leaves that queued steer in `TurnContext` exactly
-once, so the provider responds to the bridge first; after that assistant response is
-persisted, the terminal pending-input branch records the steer as the next legal user
-turn. Do not take and requeue the input, and do not apply this deferral to thinking-only
-or other non-Stop retry paths. The Stop-local flag is not consumed when the bridge begins
-sampling: it survives reasoning-only bridge retries and clears only after the normal
-assistant persistence path succeeds (text or tool calls), which also preserves ordering
-for a bridge that resumes with a tool call.
+Both `Stop::KeepGoing` and a reasoning-only retry persist an assistant followed by a
+synthetic user bridge. `multi_turn` therefore uses one shared bridge-response deferral:
+the next loop-top leaves queued steer input in `TurnContext` until the bridge receives a
+normal assistant response. The flag survives consecutive reasoning-only responses and
+clears only after a normal assistant message (text or tool calls) is durably represented.
+The terminal pending-input branch then records the steer as the next legal user turn;
+input and its hook context are each consumed exactly once.
 
 `stop_keep_going_with_queued_steer_preserves_role_order` holds the first Stop hook on a
 Condvar, admits exactly one `follow up` steer during that pause, and verifies the bridge
 is sampled before the steer, both appear once, and the final history alternates roles.
-`thinking_only_retry_consumes_queued_steer_before_sampling` protects the non-Stop path:
-its retry must consume an already queued steer before its next sampling request.
+`thinking_only_bridge_defers_queued_steer_until_assistant_response` proves the thinking-only
+bridge is sampled without the queued steer, then the steer and its context appear once only
+after the bridge assistant response.
 `stop_keep_going_defers_queued_steer_across_reasoning_only_bridge_retry` verifies the
 Stop bridge keeps the steer deferred through a reasoning-only retry, then consumes it
 only after a normal bridge response is persisted.
