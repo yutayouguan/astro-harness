@@ -231,7 +231,7 @@ impl LifecycleTestApp {
         target: &str,
         message: &str,
     ) -> anyhow::Result<MessageAgentV2Result> {
-        AgentThreadDispatch::followup_task_with_runtime(
+        AgentThreadDispatch::followup_task(
             &self.dispatch_at("/root")?,
             FollowupAgentDispatchRequest {
                 request: MessageAgentV2Request {

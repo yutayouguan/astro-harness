@@ -729,13 +729,6 @@ impl AgentThreadDispatch for DefaultAgentThreadDispatch {
 
     async fn followup_task(
         &self,
-        request: MessageAgentV2Request,
-    ) -> anyhow::Result<MessageAgentV2Result> {
-        self.followup_task_with_runtime(request.into()).await
-    }
-
-    async fn followup_task_with_runtime(
-        &self,
         request: FollowupAgentDispatchRequest,
     ) -> anyhow::Result<MessageAgentV2Result> {
         let followup_text = request.request.message.trim().to_string();
@@ -1294,7 +1287,7 @@ impl DesktopAgentThreadControl for DefaultDesktopAgentThreadControl {
             )
         };
         dispatch
-            .followup_task_with_runtime(FollowupAgentDispatchRequest {
+            .followup_task(FollowupAgentDispatchRequest {
                 request: MessageAgentV2Request {
                     target: target_thread.canonical_path.to_string(),
                     message,
@@ -1921,7 +1914,7 @@ mod tests {
             .unwrap()
             .is_none());
 
-        let shutdown_followup = AgentThreadDispatch::followup_task_with_runtime(
+        let shutdown_followup = AgentThreadDispatch::followup_task(
             &dispatch,
             FollowupAgentDispatchRequest {
                 request: MessageAgentV2Request {
@@ -2324,7 +2317,8 @@ mod tests {
                     MessageAgentV2Request {
                         target,
                         message: "close must own this Starting slot".into(),
-                    },
+                    }
+                    .into(),
                 )
                 .await
             }
@@ -2457,7 +2451,8 @@ mod tests {
                     MessageAgentV2Request {
                         target,
                         message: "must remain queued".into(),
-                    },
+                    }
+                    .into(),
                 )
                 .await
             }
@@ -2538,7 +2533,8 @@ mod tests {
                     MessageAgentV2Request {
                         target,
                         message: "must be cancelled while Starting".into(),
-                    },
+                    }
+                    .into(),
                 )
                 .await
             }
@@ -3110,7 +3106,8 @@ mod tests {
             MessageAgentV2Request {
                 target: spawned.thread.canonical_path.to_string(),
                 message: "continue once".into(),
-            },
+            }
+            .into(),
         )
         .await
         .unwrap();
@@ -3772,7 +3769,8 @@ mod tests {
             MessageAgentV2Request {
                 target: child.canonical_path.to_string(),
                 message: "continue".into(),
-            },
+            }
+            .into(),
         )
         .await
         .unwrap_err();
@@ -3863,7 +3861,7 @@ mod tests {
         let captured = Arc::new(Mutex::new(Vec::new()));
         recovered.chat_override = Some(capturing_config_chat(Arc::clone(&captured)));
 
-        AgentThreadDispatch::followup_task_with_runtime(
+        AgentThreadDispatch::followup_task(
             &recovered,
             FollowupAgentDispatchRequest {
                 request: MessageAgentV2Request {
@@ -3959,7 +3957,7 @@ mod tests {
             Arc::new(AgentRuntimeManager::default()),
         );
 
-        let error = AgentThreadDispatch::followup_task_with_runtime(
+        let error = AgentThreadDispatch::followup_task(
             &recovered,
             FollowupAgentDispatchRequest {
                 request: MessageAgentV2Request {
@@ -4033,7 +4031,7 @@ mod tests {
             Arc::new(AgentRuntimeManager::default()),
         );
 
-        let error = AgentThreadDispatch::followup_task_with_runtime(
+        let error = AgentThreadDispatch::followup_task(
             &recovered,
             FollowupAgentDispatchRequest {
                 request: MessageAgentV2Request {
@@ -4182,7 +4180,7 @@ mod tests {
             Arc::new(AgentRuntimeManager::default()),
         );
         recovered.chat_override = Some(scripted_chat("recovered"));
-        AgentThreadDispatch::followup_task_with_runtime(
+        AgentThreadDispatch::followup_task(
             &recovered,
             FollowupAgentDispatchRequest {
                 request: MessageAgentV2Request {
@@ -4282,7 +4280,7 @@ mod tests {
         );
         recovered.chat_override = Some(scripted_chat("must not run"));
 
-        let error = AgentThreadDispatch::followup_task_with_runtime(
+        let error = AgentThreadDispatch::followup_task(
             &recovered,
             FollowupAgentDispatchRequest {
                 request: MessageAgentV2Request {
@@ -4345,7 +4343,8 @@ mod tests {
             MessageAgentV2Request {
                 target: spawned.thread.canonical_path.to_string(),
                 message: "S1".into(),
-            },
+            }
+            .into(),
         )
         .await
         .unwrap_err();
@@ -4359,7 +4358,8 @@ mod tests {
             MessageAgentV2Request {
                 target: spawned.thread.canonical_path.to_string(),
                 message: "S2".into(),
-            },
+            }
+            .into(),
         )
         .await
         .unwrap();
@@ -4410,7 +4410,8 @@ mod tests {
             MessageAgentV2Request {
                 target: spawned.thread.canonical_path.to_string(),
                 message: "S3".into(),
-            },
+            }
+            .into(),
         )
         .await
         .unwrap();
@@ -4485,7 +4486,8 @@ mod tests {
                 MessageAgentV2Request {
                     target,
                     message: "continue after cleanup".into(),
-                },
+                }
+                .into(),
             )
             .await
         });
@@ -4497,7 +4499,8 @@ mod tests {
                 MessageAgentV2Request {
                     target: joined_target,
                     message: "also continue after cleanup".into(),
-                },
+                }
+                .into(),
             )
             .await
         });
@@ -4595,7 +4598,8 @@ mod tests {
                 MessageAgentV2Request {
                     target: first_target,
                     message: "cannot start one".into(),
-                },
+                }
+                .into(),
             )
             .await
         });
@@ -4607,7 +4611,8 @@ mod tests {
                 MessageAgentV2Request {
                     target: second_target,
                     message: "cannot start two".into(),
-                },
+                }
+                .into(),
             )
             .await
         });
@@ -4679,7 +4684,7 @@ mod tests {
         let first_target = spawned.thread.canonical_path.to_string();
         let first_runtime = runtime_material.clone();
         let first = tokio::spawn(async move {
-            AgentThreadDispatch::followup_task_with_runtime(
+            AgentThreadDispatch::followup_task(
                 &*first_dispatch,
                 FollowupAgentDispatchRequest {
                     request: MessageAgentV2Request {
@@ -4695,7 +4700,7 @@ mod tests {
         let second_target = spawned.thread.canonical_path.to_string();
         let second_runtime = runtime_material;
         let second = tokio::spawn(async move {
-            AgentThreadDispatch::followup_task_with_runtime(
+            AgentThreadDispatch::followup_task(
                 &*second_dispatch,
                 FollowupAgentDispatchRequest {
                     request: MessageAgentV2Request {
@@ -4775,7 +4780,8 @@ mod tests {
                     MessageAgentV2Request {
                         target,
                         message: message.into(),
-                    },
+                    }
+                    .into(),
                 )
                 .await
             })
@@ -4813,7 +4819,8 @@ mod tests {
             MessageAgentV2Request {
                 target: spawned.thread.canonical_path.to_string(),
                 message: "retry".into(),
-            },
+            }
+            .into(),
         )
         .await
         .unwrap();
@@ -4866,7 +4873,8 @@ mod tests {
                 MessageAgentV2Request {
                     target,
                     message: "survive caller cancellation".into(),
-                },
+                }
+                .into(),
             )
             .await
         });
@@ -4952,7 +4960,8 @@ mod tests {
                 MessageAgentV2Request {
                     target: second_target,
                     message: "handoff owner".into(),
-                },
+                }
+                .into(),
             )
             .await
         });
@@ -4989,7 +4998,8 @@ mod tests {
                 MessageAgentV2Request {
                     target: third_target,
                     message: "handoff joiner".into(),
-                },
+                }
+                .into(),
             )
             .await
         });
@@ -5058,7 +5068,8 @@ mod tests {
                 MessageAgentV2Request {
                     target,
                     message: "must not run after shutdown".into(),
-                },
+                }
+                .into(),
             )
             .await
         });
@@ -5129,7 +5140,8 @@ mod tests {
                 MessageAgentV2Request {
                     target,
                     message: "racing followup".into(),
-                },
+                }
+                .into(),
             )
             .await
         });

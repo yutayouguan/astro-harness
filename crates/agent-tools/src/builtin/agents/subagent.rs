@@ -183,7 +183,7 @@ async fn handle(
                 dispatch.send_message(request).await?
             } else {
                 dispatch
-                    .followup_task_with_runtime(FollowupAgentDispatchRequest {
+                    .followup_task(FollowupAgentDispatchRequest {
                         request,
                         runtime: Some(parent_runtime_material(ctx)),
                     })

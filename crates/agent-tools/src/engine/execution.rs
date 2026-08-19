@@ -65,14 +65,9 @@ pub trait AgentThreadDispatch: Send + Sync {
         request: MessageAgentV2Request,
     ) -> anyhow::Result<MessageAgentV2Result>;
 
+    /// The serialized model request is paired with process-local runtime
+    /// material at the tool boundary; credentials never enter the schema.
     async fn followup_task(
-        &self,
-        request: MessageAgentV2Request,
-    ) -> anyhow::Result<MessageAgentV2Result>;
-
-    /// Runtime-enriched entry used by the model tool boundary. Desktop may
-    /// only call the plain method and therefore cannot cold-recover secrets.
-    async fn followup_task_with_runtime(
         &self,
         request: FollowupAgentDispatchRequest,
     ) -> anyhow::Result<MessageAgentV2Result>;
