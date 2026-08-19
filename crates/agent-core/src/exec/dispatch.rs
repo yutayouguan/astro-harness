@@ -221,7 +221,7 @@ pub struct DefaultAgentThreadDispatch {
     current_thread_id: String,
     runtime_manager: Arc<AgentRuntimeManager>,
     runtime_requests: Arc<RuntimeRequestRegistry>,
-    #[cfg(test)]
+    #[cfg(any(test, feature = "test-support"))]
     chat_override: Option<crate::streaming::ChatOverride>,
     #[cfg(test)]
     before_followup_atomic_hook: Option<super::agent_runtime::AckSubscribeHook>,
@@ -239,7 +239,7 @@ impl DefaultAgentThreadDispatch {
             current_thread_id,
             runtime_manager: AgentRuntimeManager::global(),
             runtime_requests: RuntimeRequestRegistry::global(),
-            #[cfg(test)]
+            #[cfg(any(test, feature = "test-support"))]
             chat_override: None,
             #[cfg(test)]
             before_followup_atomic_hook: None,
@@ -301,9 +301,9 @@ impl DefaultAgentThreadDispatch {
             thread,
             runtime: stored.runtime,
             memory_dir: stored.memory_dir,
-            #[cfg(test)]
+            #[cfg(any(test, feature = "test-support"))]
             chat_override: self.chat_override.clone(),
-            #[cfg(not(test))]
+            #[cfg(not(any(test, feature = "test-support")))]
             chat_override: None,
             consume_mailbox,
             startup_tx: None,
@@ -855,7 +855,7 @@ pub struct DefaultDesktopAgentThreadControl {
     runtime_manager: Arc<AgentRuntimeManager>,
     runtime_requests: Arc<RuntimeRequestRegistry>,
     control_override: Option<Arc<AgentControl>>,
-    #[cfg(test)]
+    #[cfg(any(test, feature = "test-support"))]
     chat_override: Option<crate::streaming::ChatOverride>,
     #[cfg(test)]
     close_barrier_hook: Option<super::agent_runtime::AckSubscribeHook>,
@@ -868,7 +868,7 @@ impl DefaultDesktopAgentThreadControl {
             runtime_manager: AgentRuntimeManager::global(),
             runtime_requests: RuntimeRequestRegistry::global(),
             control_override: None,
-            #[cfg(test)]
+            #[cfg(any(test, feature = "test-support"))]
             chat_override: None,
             #[cfg(test)]
             close_barrier_hook: None,
@@ -889,6 +889,25 @@ impl DefaultDesktopAgentThreadControl {
             runtime_requests,
             control_override: Some(control),
             chat_override,
+            close_barrier_hook: None,
+        }
+    }
+
+    #[cfg(feature = "test-support")]
+    fn for_acceptance(
+        memory_dir: PathBuf,
+        control: Arc<AgentControl>,
+        runtime_manager: Arc<AgentRuntimeManager>,
+        runtime_requests: Arc<RuntimeRequestRegistry>,
+        chat_override: crate::streaming::ChatOverride,
+    ) -> Self {
+        Self {
+            memory_dir,
+            runtime_manager,
+            runtime_requests,
+            control_override: Some(control),
+            chat_override: Some(chat_override),
+            #[cfg(test)]
             close_barrier_hook: None,
         }
     }
@@ -921,7 +940,7 @@ impl DefaultDesktopAgentThreadControl {
             current_path: AgentPath::root(),
             runtime_manager: Arc::clone(&self.runtime_manager),
             runtime_requests: Arc::clone(&self.runtime_requests),
-            #[cfg(test)]
+            #[cfg(any(test, feature = "test-support"))]
             chat_override: self.chat_override.clone(),
             #[cfg(test)]
             before_followup_atomic_hook: None,
@@ -1110,6 +1129,9 @@ impl DesktopAgentThreadControl for DefaultDesktopAgentThreadControl {
         }
     }
 }
+
+#[cfg(feature = "test-support")]
+pub mod test_support;
 
 #[cfg(test)]
 mod tests {
