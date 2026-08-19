@@ -871,23 +871,6 @@ pub(crate) async fn run_turn(args: RunTurnArgs, cancellation_token: Cancellation
         }
     }
 
-    {
-        let agent = session.as_ref();
-        let sid = agent.session_id().to_string();
-        let turn = agent.session_turn().await;
-        let turn_id = agent.current_turn_id().await;
-        let _ = agent.fire_hook(
-            ::hooks::AGENT_END,
-            ::hooks::HookPayload {
-                session_id: sid,
-                turn_id,
-                turn: Some(turn),
-                detail: format!("turn={turn}"),
-                ..Default::default()
-            },
-        );
-    }
-
     finish_success(
         &session,
         &streamer,

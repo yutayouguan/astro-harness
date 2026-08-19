@@ -34,33 +34,51 @@ impl SessionTask for RegularTask {
         input: Vec<TurnInput>,
         cancellation_token: CancellationToken,
     ) -> SessionTaskResult {
-        let args = self.args.with_session_and_turn(Arc::clone(&sess), ctx);
-        let system_prompt = match args.prepared_system_prompt().map(str::to_owned) {
-            Some(system_prompt) => {
-                anyhow::ensure!(
-                    input.is_empty(),
-                    "prebuilt system prompt cannot be combined with initial input"
-                );
-                system_prompt
-            }
-            None => {
-                let turn = sess.prepare_turn(&input).await?;
-                match turn {
-                    TurnResult::Continue { system_prompt, .. } => system_prompt,
-                    TurnResult::BudgetExhausted => {
-                        anyhow::bail!("conversation turn budget exhausted")
-                    }
-                    TurnResult::Interrupted => anyhow::bail!("regular turn interrupted"),
-                    TurnResult::Steered { .. }
-                    | TurnResult::ToolCalls(_)
-                    | TurnResult::Finished(_)
-                    | TurnResult::MaxDepth => {
-                        anyhow::bail!("unsupported regular turn preparation result")
+        let args = self
+            .args
+            .with_session_and_turn(Arc::clone(&sess), Arc::clone(&ctx));
+        let result: SessionTaskResult = async {
+            let system_prompt = match args.prepared_system_prompt().map(str::to_owned) {
+                Some(system_prompt) => {
+                    anyhow::ensure!(
+                        input.is_empty(),
+                        "prebuilt system prompt cannot be combined with initial input"
+                    );
+                    system_prompt
+                }
+                None => {
+                    let turn = sess.prepare_turn(&input).await?;
+                    match turn {
+                        TurnResult::Continue { system_prompt, .. } => system_prompt,
+                        TurnResult::BudgetExhausted => {
+                            anyhow::bail!("conversation turn budget exhausted")
+                        }
+                        TurnResult::Interrupted => anyhow::bail!("regular turn interrupted"),
+                        TurnResult::Steered { .. }
+                        | TurnResult::ToolCalls(_)
+                        | TurnResult::Finished(_)
+                        | TurnResult::MaxDepth => {
+                            anyhow::bail!("unsupported regular turn preparation result")
+                        }
                     }
                 }
-            }
-        };
-        run_turn(args.with_system_prompt(system_prompt), cancellation_token).await;
-        Ok(None)
+            };
+            run_turn(args.with_system_prompt(system_prompt), cancellation_token).await;
+            Ok(None)
+        }
+        .await;
+
+        let turn = sess.session_turn().await;
+        let _ = sess.fire_hook(
+            ::hooks::AGENT_END,
+            ::hooks::HookPayload {
+                turn_id: Some(ctx.sub_id().to_string()),
+                turn: Some(turn),
+                error: result.as_ref().err().map(ToString::to_string),
+                detail: format!("turn={turn}"),
+                ..Default::default()
+            },
+        );
+        result
     }
 }

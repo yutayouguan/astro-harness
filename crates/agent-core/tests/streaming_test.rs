@@ -1781,6 +1781,12 @@ async fn error_has_single_error_terminal_before_done() {
     let config = AgentConfig::with_defaults(dir.path().to_path_buf());
     let agent = AgentLoop::with_session_id(config, "err-session".into()).unwrap();
     let session = Arc::new(agent);
+    let agent_end_hits = Arc::new(AtomicUsize::new(0));
+    let agent_end_counter = Arc::clone(&agent_end_hits);
+    session.hook_bus().register(hooks::AGENT_END, move |_| {
+        agent_end_counter.fetch_add(1, Ordering::SeqCst);
+        hooks::HookOutcome::Continue
+    });
     {
         let a = session.as_ref();
         a.record_items(vec![types::message::Message::user("x")])
@@ -1824,6 +1830,162 @@ async fn error_has_single_error_terminal_before_done() {
         .collect();
     assert_eq!(terminal_outcomes, ["error"]);
     assert!(matches!(items.last(), Some(MultiTurnStreamItem::Done)));
+    assert_eq!(agent_end_hits.load(Ordering::SeqCst), 1);
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn agent_end_fires_once_on_success() {
+    let dir = tempfile::tempdir().unwrap();
+    let config = AgentConfig::with_defaults(dir.path().to_path_buf());
+    let session =
+        Arc::new(AgentLoop::with_session_id(config, "agent-end-success-session".into()).unwrap());
+    session
+        .record_items(vec![types::message::Message::user("finish")])
+        .await;
+
+    let agent_end_payloads = Arc::new(std::sync::Mutex::new(Vec::new()));
+    let payloads = Arc::clone(&agent_end_payloads);
+    session.hook_bus().register(hooks::AGENT_END, move |input| {
+        payloads
+            .lock()
+            .unwrap()
+            .push((input.turn_id.clone(), input.error.clone()));
+        hooks::HookOutcome::Continue
+    });
+
+    let (tx, mut rx) = tokio::sync::mpsc::channel(64);
+    run_multi_turn_stream_with_chat_fn(
+        Arc::clone(&session),
+        scripted_chat(vec![vec![
+            StreamChunk::Text("done".into()),
+            StreamChunk::Done {
+                finish_reason: "stop".into(),
+            },
+        ]]),
+        ProviderConfig {
+            model: "test".into(),
+            ..Default::default()
+        },
+        "sys".into(),
+        PauseControl::new(),
+        None,
+        tx,
+    )
+    .await;
+    while rx.recv().await.is_some() {}
+
+    let payloads = agent_end_payloads.lock().unwrap();
+    assert_eq!(payloads.len(), 1);
+    assert!(payloads[0]
+        .0
+        .as_deref()
+        .is_some_and(|turn_id| !turn_id.is_empty()));
+    assert_eq!(payloads[0].1, None);
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn agent_end_fires_once_when_turn_preparation_fails() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut config = AgentConfig::with_defaults(dir.path().to_path_buf());
+    config.max_turns = 0;
+    let session =
+        Arc::new(AgentLoop::with_session_id(config, "agent-end-preparation-error".into()).unwrap());
+
+    let agent_end_payloads = Arc::new(std::sync::Mutex::new(Vec::new()));
+    let payloads = Arc::clone(&agent_end_payloads);
+    session.hook_bus().register(hooks::AGENT_END, move |input| {
+        payloads
+            .lock()
+            .unwrap()
+            .push((input.turn_id.clone(), input.error.clone()));
+        hooks::HookOutcome::Continue
+    });
+
+    let (tx, mut rx) = tokio::sync::mpsc::channel(64);
+    run_multi_turn_stream(MultiTurnStreamArgs {
+        session: Arc::clone(&session),
+        targets: vec![types::ChatTarget {
+            provider_id: "scripted".into(),
+            backend_id: "scripted".into(),
+            model: "test".into(),
+            api_key: String::new(),
+            base_url: String::new(),
+        }],
+        base_config: ProviderConfig {
+            model: "test".into(),
+            ..Default::default()
+        },
+        input: vec![TurnInput::UserInput {
+            content: "over budget".into(),
+            image_data_urls: Vec::new(),
+        }],
+        system_prompt: None,
+        pause: PauseControl::new(),
+        hitl_gate: None,
+        tx,
+        chat_override: Some(scripted_chat(Vec::new())),
+    })
+    .await;
+
+    let mut items = Vec::new();
+    while let Some(item) = rx.recv().await {
+        items.push(item.unwrap());
+    }
+    assert!(items.iter().any(
+        |item| matches!(item, MultiTurnStreamItem::Error(error) if error.contains("turn budget exhausted"))
+    ));
+    assert!(matches!(items.last(), Some(MultiTurnStreamItem::Done)));
+
+    let payloads = agent_end_payloads.lock().unwrap();
+    assert_eq!(payloads.len(), 1);
+    assert!(payloads[0]
+        .0
+        .as_deref()
+        .is_some_and(|turn_id| !turn_id.is_empty()));
+    assert!(payloads[0]
+        .1
+        .as_deref()
+        .is_some_and(|error| error.contains("turn budget exhausted")));
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn agent_end_fires_once_when_stream_receiver_is_dropped() {
+    let dir = tempfile::tempdir().unwrap();
+    let config = AgentConfig::with_defaults(dir.path().to_path_buf());
+    let session =
+        Arc::new(AgentLoop::with_session_id(config, "agent-end-dropped-receiver".into()).unwrap());
+    session
+        .record_items(vec![types::message::Message::user("drop receiver")])
+        .await;
+    let agent_end_hits = Arc::new(AtomicUsize::new(0));
+    let agent_end_counter = Arc::clone(&agent_end_hits);
+    session.hook_bus().register(hooks::AGENT_END, move |_| {
+        agent_end_counter.fetch_add(1, Ordering::SeqCst);
+        hooks::HookOutcome::Continue
+    });
+
+    let (tx, rx) = tokio::sync::mpsc::channel(1);
+    drop(rx);
+    run_multi_turn_stream_with_chat_fn(
+        Arc::clone(&session),
+        scripted_chat(vec![vec![
+            StreamChunk::Text("unobserved".into()),
+            StreamChunk::Done {
+                finish_reason: "stop".into(),
+            },
+        ]]),
+        ProviderConfig {
+            model: "test".into(),
+            ..Default::default()
+        },
+        "sys".into(),
+        PauseControl::new(),
+        None,
+        tx,
+    )
+    .await;
+
+    assert_eq!(agent_end_hits.load(Ordering::SeqCst), 1);
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -1832,6 +1994,12 @@ async fn cancellation_has_single_interrupt_terminal_before_done() {
     let config = AgentConfig::with_defaults(dir.path().to_path_buf());
     let agent = AgentLoop::with_session_id(config, "cancel-session".into()).unwrap();
     let session = Arc::new(agent);
+    let agent_end_hits = Arc::new(AtomicUsize::new(0));
+    let agent_end_counter = Arc::clone(&agent_end_hits);
+    session.hook_bus().register(hooks::AGENT_END, move |_| {
+        agent_end_counter.fetch_add(1, Ordering::SeqCst);
+        hooks::HookOutcome::Continue
+    });
     {
         let agent = session.as_ref();
         agent
@@ -1878,6 +2046,7 @@ async fn cancellation_has_single_interrupt_terminal_before_done() {
         .collect();
     assert_eq!(terminal_outcomes, ["interrupt"]);
     assert!(matches!(items.last(), Some(MultiTurnStreamItem::Done)));
+    assert_eq!(agent_end_hits.load(Ordering::SeqCst), 1);
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]

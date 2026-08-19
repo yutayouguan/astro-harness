@@ -895,7 +895,7 @@ cargo test -p agent --test streaming_test budget_summary_active_stream_cancels_w
 - Test: `crates/agent-core/tests/streaming_test.rs`
 - Test: `crates/agent-server/src/grpc/astro_service.rs:1671-1745`
 
-- [ ] **Step 1: Write failing AgentEnd failure-path and duplicate-reset tests**
+- [x] **Step 1: Write failing AgentEnd failure-path and duplicate-reset tests**
 
 Extend the existing provider-error streaming test by registering AgentEnd and asserting one call after the stream ends:
 
@@ -931,7 +931,7 @@ assert_eq!(finalize_hits.load(Ordering::SeqCst), 1);
 
 This fails on the current post-release direct Plugin bus duplicate.
 
-- [ ] **Step 2: Run both tests and verify RED**
+- [x] **Step 2: Run both tests and verify RED**
 
 Run:
 
@@ -942,7 +942,7 @@ cargo test -p server new_chat_preserves_hooks_while_release_session_skips_them -
 
 Expected: AgentEnd is absent on the early error return, and the pre-created new-chat Session causes reset/finalize to be counted twice.
 
-- [ ] **Step 3: Finalize AgentEnd in RegularTask**
+- [x] **Step 3: Finalize AgentEnd in RegularTask**
 
 Clone `ctx` when constructing the arguments so it remains available for finalization:
 
@@ -1002,7 +1002,7 @@ result
 
 Delete the AgentEnd block from `multi_turn.rs`.
 
-- [ ] **Step 4: Remove the remaining server AgentEnd/reset/finalize duplicates**
+- [x] **Step 4: Remove the remaining server AgentEnd/reset/finalize duplicates**
 
 Task 3 already injects the full runtime before steering and removes `is_new_session`, direct server SessionStart, and the later `set_hook_bus`. In this task remove only the stream-cleanup Gateway AgentEnd duplicate and simplify reset/finalize delivery.
 
@@ -1017,7 +1017,7 @@ let _ = self.release_session_runtime(session_id).await;
 
 Do not emit SessionEnd in this batch.
 
-- [ ] **Step 5: Run focused, server, and Agent tests**
+- [x] **Step 5: Run focused, server, and Agent tests**
 
 Run:
 
@@ -1030,7 +1030,7 @@ cargo test -p server --all-targets
 
 Expected: AgentEnd fires once on error, new-chat reset/finalize fire once, and both crates pass all targets.
 
-- [ ] **Step 6: Commit Task 5**
+- [x] **Step 6: Commit Task 5**
 
 ```bash
 git add crates/agent-core/src/tasks/regular.rs crates/agent-core/src/streaming/multi_turn.rs crates/agent-core/tests/streaming_test.rs crates/agent-server/src/grpc/astro_service.rs

@@ -330,7 +330,7 @@ impl AstroServiceImpl {
         removed
     }
 
-    /// UI「新建对话」：Gateway `command:new_chat` + Plugin reset/finalize，并卸内存会话。
+    /// UI「新建对话」：统一投递 command/reset/finalize，并卸内存会话。
     async fn release_session_for_new_chat(&self, session_id: &str) {
         let payload = ::hooks::HookPayload {
             session_id: session_id.to_string(),
@@ -338,28 +338,14 @@ impl AstroServiceImpl {
             detail: "new_chat".into(),
             ..Default::default()
         };
-        self.hook_runtime
-            .fire_gateway(::hooks::COMMAND_NEW_CHAT, &payload);
         let _ = self
             .hook_runtime
-            .fire_plugin(::hooks::SESSION_RESET, &payload);
+            .dispatch(::hooks::COMMAND_NEW_CHAT, &payload);
+        let _ = self.hook_runtime.dispatch(::hooks::SESSION_RESET, &payload);
         let _ = self
             .hook_runtime
-            .fire_plugin(::hooks::SESSION_FINALIZE, &payload);
-
-        if let Some(handle) = self.release_session_runtime(session_id).await {
-            let agent = handle.as_ref();
-            let bus = agent.hook_bus();
-            let turn_id = agent.current_turn_id().await;
-            let payload = ::hooks::HookPayload {
-                session_id: session_id.to_string(),
-                turn_id,
-                detail: format!("session={session_id}"),
-                ..Default::default()
-            };
-            let _ = bus.fire(::hooks::SESSION_RESET, &payload);
-            let _ = bus.fire(::hooks::SESSION_FINALIZE, &payload);
-        }
+            .dispatch(::hooks::SESSION_FINALIZE, &payload);
+        let _ = self.release_session_runtime(session_id).await;
     }
 }
 
@@ -887,7 +873,6 @@ impl AstroService for AstroServiceImpl {
         let hitl_registry = self.hitl_registry.clone();
         let memory_dir = self.memory_dir.clone();
         let sid_cleanup = session_id.clone();
-        let hook_runtime = Arc::clone(&self.hook_runtime);
         let ui_slot = self.hook_runtime.ui_slot.clone();
         let session_events_hub = self.session_event_hub().clone();
 
@@ -1067,14 +1052,6 @@ impl AstroService for AstroServiceImpl {
                 }
             }
             clear_interrupt_file(&memory_dir, &sid_cleanup);
-            hook_runtime.fire_gateway(
-                ::hooks::AGENT_END,
-                &::hooks::HookPayload {
-                    session_id: sid_cleanup.clone(),
-                    turn_id: None,
-                    ..Default::default()
-                },
-            );
             cleanup().await;
         });
 
@@ -1718,6 +1695,8 @@ mod tests {
         assert_eq!(reset_hits.load(Ordering::SeqCst), 0);
         assert_eq!(finalize_hits.load(Ordering::SeqCst), 0);
 
+        let session = service.get_session("new-chat").await.unwrap();
+        session.set_hook_runtime(Arc::clone(&service.hook_runtime));
         service
             .chat_control(Request::new(ChatControlRequest {
                 session_id: "new-chat".into(),
