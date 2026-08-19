@@ -38,6 +38,7 @@ impl ConnectionGenerationKey {
 /// [`ConnectionRegistry::remove_generation`] when that stream exits. Unlike an
 /// id-only removal, cleanup through this handle cannot evict a newer stream
 /// that reused the same connection id.
+#[derive(Clone)]
 pub struct ConnectionGeneration {
     key: ConnectionGenerationKey,
     entry: Arc<ConnectionEntry>,
