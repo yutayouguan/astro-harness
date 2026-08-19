@@ -6,6 +6,7 @@ use tokio_stream::wrappers::ReceiverStream;
 use tonic::{Request, Response, Status};
 
 use super::AstroServiceImpl;
+use crate::transport::ConnectionGenerationKey;
 use crate::{ListenerCommand, ThreadSnapshot, TurnSnapshot};
 
 #[derive(Debug)]
@@ -19,6 +20,45 @@ struct PreparedResume {
     managed: std::sync::Arc<crate::ManagedThread>,
     gate: std::sync::Arc<agent::HitlGate>,
     turn_id: String,
+}
+
+#[cfg(test)]
+#[derive(Default)]
+struct ResumeResolveBarrier {
+    reached: tokio::sync::Notify,
+    release: tokio::sync::Notify,
+}
+
+#[cfg(test)]
+fn resume_resolve_barriers() -> &'static std::sync::Mutex<
+    std::collections::HashMap<String, std::sync::Arc<ResumeResolveBarrier>>,
+> {
+    static BARRIERS: std::sync::OnceLock<
+        std::sync::Mutex<std::collections::HashMap<String, std::sync::Arc<ResumeResolveBarrier>>>,
+    > = std::sync::OnceLock::new();
+    BARRIERS.get_or_init(Default::default)
+}
+
+#[cfg(test)]
+fn install_resume_resolve_barrier(thread_id: &str) -> std::sync::Arc<ResumeResolveBarrier> {
+    let barrier = std::sync::Arc::new(ResumeResolveBarrier::default());
+    resume_resolve_barriers()
+        .lock()
+        .expect("resume barrier registry")
+        .insert(thread_id.into(), barrier.clone());
+    barrier
+}
+
+#[cfg(test)]
+async fn wait_at_resume_resolve_barrier(thread_id: &str) {
+    let barrier = resume_resolve_barriers()
+        .lock()
+        .expect("resume barrier registry")
+        .remove(thread_id);
+    if let Some(barrier) = barrier {
+        barrier.reached.notify_one();
+        barrier.release.notified().await;
+    }
 }
 
 pub(crate) type ThreadEventsStream =
@@ -148,7 +188,9 @@ pub(crate) async fn subscribe_thread_events(
             }
         }
         registry.remove_generation(&generation).await;
-        thread_states.unsubscribe_all(&cleanup_subscription).await;
+        thread_states
+            .unsubscribe_all_detached(&cleanup_subscription)
+            .await;
     });
     Ok(Response::new(Box::pin(ReceiverStream::new(stream_rx))))
 }
@@ -177,11 +219,10 @@ pub(crate) async fn submit_turn(
         prepare_resume_before_side_effects(service, thread_id, &validated.resume_items).await?
     {
         resume(&prepared.managed, subscription.clone(), false).await?;
+        #[cfg(test)]
+        wait_at_resume_resolve_barrier(thread_id).await;
         if let Err(error) = prepared.gate.resolve(&validated.resume_items).await {
-            let _ = prepared
-                .managed
-                .commands
-                .send(ListenerCommand::Unsubscribe { subscription });
+            unsubscribe_and_wait(&prepared.managed.commands, subscription).await?;
             return Err(Status::invalid_argument(format!(
                 "invalid resume_json: {error}"
             )));
@@ -194,47 +235,59 @@ pub(crate) async fn submit_turn(
         }));
     }
     let managed = service.get_or_create_thread(thread_id).await?;
-    resume(&managed, subscription, false).await?;
-    service
-        .configure_thread_from_chat(&managed.runtime, &chat)
-        .await?;
-    debug_assert_eq!(
-        managed.runtime.session().interaction_mode().await,
-        validated.interaction_mode
-    );
-    managed
-        .runtime
-        .submit(Op::ThreadSettings {
-            settings: serde_json::json!({
-                "provider": chat.provider,
-                "model": chat.model,
-                "interaction_mode": chat.interaction_mode,
-                "project_root": chat.project_root,
-            }),
-        })
-        .await
-        .map_err(|error| Status::unavailable(error.to_string()))?;
-    let (submission_id, submission) = managed
-        .runtime
-        .submit_turn(
-            validated
-                .turn_request
-                .expect("non-resume validation must produce turn input"),
-            mode,
-        )
-        .await
-        .map_err(|error| Status::failed_precondition(error.to_string()))?;
-    let (turn_id, disposition, reason) = match submission {
-        TurnInputSubmission::Started { turn_id } => (turn_id, "started", String::new()),
-        TurnInputSubmission::Steered { turn_id } => (turn_id, "steered", String::new()),
-        TurnInputSubmission::NotSubmitted { reason } => (String::new(), "not_submitted", reason),
-    };
-    Ok(Response::new(proto::SubmitTurnResponse {
-        submission_id,
-        turn_id,
-        disposition: disposition.into(),
-        reason,
-    }))
+    resume(&managed, subscription.clone(), false).await?;
+    let submit = async {
+        service
+            .configure_thread_from_chat(&managed.runtime, &chat)
+            .await?;
+        debug_assert_eq!(
+            managed.runtime.session().interaction_mode().await,
+            validated.interaction_mode
+        );
+        managed
+            .runtime
+            .submit(Op::ThreadSettings {
+                settings: serde_json::json!({
+                    "provider": chat.provider,
+                    "model": chat.model,
+                    "interaction_mode": chat.interaction_mode,
+                    "project_root": chat.project_root,
+                }),
+            })
+            .await
+            .map_err(|error| Status::unavailable(error.to_string()))?;
+        let (submission_id, submission) = managed
+            .runtime
+            .submit_turn(
+                validated
+                    .turn_request
+                    .expect("non-resume validation must produce turn input"),
+                mode,
+            )
+            .await
+            .map_err(|error| Status::failed_precondition(error.to_string()))?;
+        let (turn_id, disposition, reason) = match submission {
+            TurnInputSubmission::Started { turn_id } => (turn_id, "started", String::new()),
+            TurnInputSubmission::Steered { turn_id } => (turn_id, "steered", String::new()),
+            TurnInputSubmission::NotSubmitted { reason } => {
+                (String::new(), "not_submitted", reason)
+            }
+        };
+        Ok(Response::new(proto::SubmitTurnResponse {
+            submission_id,
+            turn_id,
+            disposition: disposition.into(),
+            reason,
+        }))
+    }
+    .await;
+    match submit {
+        Ok(response) => Ok(response),
+        Err(error) => {
+            unsubscribe_and_wait(&managed.commands, subscription).await?;
+            Err(error)
+        }
+    }
 }
 
 #[allow(clippy::result_large_err)]
@@ -296,11 +349,34 @@ pub(crate) async fn unsubscribe_thread(
         .get(thread_id)
         .await
         .ok_or_else(|| Status::not_found("thread is not loaded"))?;
-    managed
-        .commands
-        .send(ListenerCommand::Unsubscribe { subscription })
-        .map_err(|_| Status::unavailable("thread listener stopped"))?;
+    unsubscribe_and_wait(&managed.commands, subscription).await?;
     Ok(Response::new(proto::Empty {}))
+}
+
+async fn unsubscribe_and_wait(
+    commands: &tokio::sync::mpsc::UnboundedSender<ListenerCommand>,
+    subscription: ConnectionGenerationKey,
+) -> Result<(), Status> {
+    let (reply, receive) = tokio::sync::oneshot::channel();
+    commands
+        .send(ListenerCommand::Unsubscribe {
+            subscription,
+            reply: Some(reply),
+        })
+        .map_err(|_| Status::unavailable("thread listener stopped"))?;
+    receive
+        .await
+        .map_err(|_| Status::unavailable("thread listener stopped before unsubscribe completed"))
+}
+
+fn unsubscribe_detached(
+    commands: &tokio::sync::mpsc::UnboundedSender<ListenerCommand>,
+    subscription: ConnectionGenerationKey,
+) {
+    let _ = commands.send(ListenerCommand::Unsubscribe {
+        subscription,
+        reply: None,
+    });
 }
 
 #[allow(clippy::result_large_err)]
@@ -736,6 +812,8 @@ pub(crate) async fn chat(
         if let Some(prepared) = prepared_resume {
             resume(&prepared.managed, subscription.clone(), false).await?;
             subscribed_commands = Some(prepared.managed.commands.clone());
+            #[cfg(test)]
+            wait_at_resume_resolve_barrier(&chat.session_id).await;
             prepared
                 .gate
                 .resolve(&validated.resume_items)
@@ -779,9 +857,12 @@ pub(crate) async fn chat(
         Ok(setup) => setup,
         Err(error) => {
             if let Some(commands) = subscribed_commands {
-                let _ = commands.send(ListenerCommand::Unsubscribe {
-                    subscription: subscription.clone(),
-                });
+                if let Err(cleanup_error) =
+                    unsubscribe_and_wait(&commands, subscription.clone()).await
+                {
+                    service.connections.remove_generation(&generation).await;
+                    return Err(cleanup_error);
+                }
             }
             service.connections.remove_generation(&generation).await;
             return Err(error);
@@ -819,9 +900,7 @@ pub(crate) async fn chat(
                 break;
             }
         }
-        let _ = unsubscribe.send(ListenerCommand::Unsubscribe {
-            subscription: cleanup_subscription,
-        });
+        unsubscribe_detached(&unsubscribe, cleanup_subscription);
         registry.remove_generation(&generation).await;
     });
     Ok(Response::new(Box::pin(ReceiverStream::new(rx))))
@@ -1597,6 +1676,116 @@ mod tests {
         let resolved = resolution.await.expect("resolution");
         assert_eq!(resolved.status, "resolved");
         assert!(resolved.payload_json.contains("approved"));
+
+        service.connections.remove_generation(&generation).await;
+        managed
+            .runtime
+            .submit(Op::Shutdown)
+            .await
+            .expect("shutdown");
+        managed.runtime.wait_terminated().await;
+        managed.stop_listener().await;
+    }
+
+    #[tokio::test]
+    async fn concurrent_resume_consumer_waits_for_exact_subscription_cleanup() {
+        let dir = TempDir::new().expect("tempdir");
+        memory::ensure_workspace(dir.path()).expect("workspace");
+        let service = std::sync::Arc::new(AstroServiceImpl::new(dir.path().to_path_buf()));
+        let managed = service
+            .get_or_create_thread("resume-cleanup-race")
+            .await
+            .expect("thread");
+        service
+            .configure_thread_from_chat(
+                &managed.runtime,
+                &proto::ChatRequest {
+                    session_id: "resume-cleanup-race".into(),
+                    use_memory: true,
+                    ..Default::default()
+                },
+            )
+            .await
+            .expect("configure controls");
+        let gate = service
+            .hitl_registry
+            .get("resume-cleanup-race")
+            .await
+            .expect("gate");
+        let state = service
+            .thread_states
+            .get("resume-cleanup-race")
+            .await
+            .expect("thread state");
+        state.lock().await.history.track(&agent_protocol::Event {
+            id: "resume-cleanup-turn".into(),
+            msg: agent_protocol::EventMsg::TurnStarted(agent_protocol::TurnStartedEvent {
+                turn_id: "resume-cleanup-turn".into(),
+            }),
+        });
+        let resolution = gate
+            .begin_wait(agent::Interrupt {
+                id: "resume-cleanup-request".into(),
+                reason: "confirmation".into(),
+                ..Default::default()
+            })
+            .await;
+        let (_rx, _cancel, generation) = service
+            .connections
+            .register("resume-cleanup-client".into())
+            .await;
+        let barrier = install_resume_resolve_barrier("resume-cleanup-race");
+        let service_for_submit = service.clone();
+        let mut submit = tokio::spawn(async move {
+            submit_turn(
+                &service_for_submit,
+                Request::new(proto::SubmitTurnRequest {
+                    connection_id: "resume-cleanup-client".into(),
+                    chat: Some(proto::ChatRequest {
+                        session_id: "resume-cleanup-race".into(),
+                        use_memory: true,
+                        resume_json: r#"[{"interrupt_id":"resume-cleanup-request","payload":{"approved":true}}]"#.into(),
+                        ..Default::default()
+                    }),
+                    mode: "start_or_steer".into(),
+                    expected_turn_id: String::new(),
+                }),
+            )
+            .await
+        });
+
+        barrier.reached.notified().await;
+        let state_guard = state.lock().await;
+        gate.resolve(&[agent::ResumeItem {
+            interrupt_id: "resume-cleanup-request".into(),
+            status: "resolved".into(),
+            payload_json: r#"{"approved":true}"#.into(),
+        }])
+        .await
+        .expect("concurrent consumer wins");
+        barrier.release.notify_one();
+        assert!(
+            tokio::time::timeout(std::time::Duration::from_millis(30), &mut submit)
+                .await
+                .is_err(),
+            "RPC must not return before the serialized unsubscribe can mutate state"
+        );
+        drop(state_guard);
+
+        let error = tokio::time::timeout(std::time::Duration::from_secs(1), submit)
+            .await
+            .expect("submit should complete after cleanup")
+            .expect("submit task")
+            .expect_err("the second resume consumer must be rejected");
+        assert_eq!(error.code(), tonic::Code::InvalidArgument);
+        assert!(
+            !service
+                .thread_states
+                .has_subscribers("resume-cleanup-race")
+                .await,
+            "RPC error must imply the exact generation is already absent"
+        );
+        resolution.await.expect("first consumer resolution");
 
         service.connections.remove_generation(&generation).await;
         managed

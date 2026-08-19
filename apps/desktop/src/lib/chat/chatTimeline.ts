@@ -214,3 +214,15 @@ export function applySurfaceUpsert(
   }
   return { ...m, uiSurfaces: surfaces, segments };
 }
+
+export function parseActivityOperations(contentJson?: string): unknown[] {
+  if (!contentJson?.trim()) return [];
+  try {
+    const parsed = JSON.parse(contentJson) as unknown;
+    if (parsed == null || typeof parsed !== "object" || Array.isArray(parsed)) return [];
+    const operations = (parsed as { operations?: unknown }).operations;
+    return Array.isArray(operations) ? operations : [];
+  } catch {
+    return [];
+  }
+}

@@ -157,6 +157,7 @@ pub enum ListenerCommand {
     },
     Unsubscribe {
         subscription: ConnectionGenerationKey,
+        reply: Option<oneshot::Sender<()>>,
     },
     Stop,
 }
@@ -214,9 +215,17 @@ impl ThreadStateManager {
             return false;
         };
         let command_tx = state.lock().await.listener_command_tx.clone();
-        command_tx
-            .send(ListenerCommand::Unsubscribe { subscription })
-            .is_ok()
+        let (reply, receive) = oneshot::channel();
+        if command_tx
+            .send(ListenerCommand::Unsubscribe {
+                subscription,
+                reply: Some(reply),
+            })
+            .is_err()
+        {
+            return false;
+        }
+        receive.await.is_ok()
     }
 
     pub async fn has_subscribers(&self, thread_id: &str) -> bool {
@@ -227,7 +236,7 @@ impl ThreadStateManager {
         has_subscribers
     }
 
-    pub async fn unsubscribe_all(&self, subscription: &ConnectionGenerationKey) {
+    pub async fn unsubscribe_all_detached(&self, subscription: &ConnectionGenerationKey) {
         let states = self
             .states
             .read()
@@ -239,6 +248,7 @@ impl ThreadStateManager {
             let command_tx = state.lock().await.listener_command_tx.clone();
             let _ = command_tx.send(ListenerCommand::Unsubscribe {
                 subscription: subscription.clone(),
+                reply: None,
             });
         }
     }
@@ -465,23 +475,40 @@ mod tests {
         assert_eq!(ids, ["first", "second"]);
         assert!(manager.has_subscribers("thread-1").await);
         let first = thread_state.lock().await.subscribers["first"].clone();
-        assert!(manager.unsubscribe("thread-1", first.clone()).await);
+        let unsubscribe = tokio::spawn({
+            let manager = manager.clone();
+            let first = first.clone();
+            async move { manager.unsubscribe("thread-1", first).await }
+        });
 
         let command = commands.recv().await.expect("unsubscribe should be queued");
-        assert!(matches!(
-            command,
-            ListenerCommand::Unsubscribe { subscription } if subscription == first
-        ));
+        match command {
+            ListenerCommand::Unsubscribe {
+                subscription,
+                reply: Some(reply),
+            } if subscription == first => reply.send(()).expect("unsubscribe ack"),
+            _ => panic!("expected acknowledged unsubscribe"),
+        }
+        assert!(unsubscribe.await.expect("unsubscribe task"));
         assert!(thread_state.lock().await.subscribers.contains_key("first"));
         let missing = ConnectionGenerationKey::new("missing");
-        assert!(manager.unsubscribe("thread-1", missing.clone()).await);
-        assert!(matches!(
-            commands
-                .recv()
-                .await
-                .expect("unknown subscriber removal should still be serialized"),
-            ListenerCommand::Unsubscribe { subscription } if subscription == missing
-        ));
+        let unsubscribe = tokio::spawn({
+            let manager = manager.clone();
+            let missing = missing.clone();
+            async move { manager.unsubscribe("thread-1", missing).await }
+        });
+        match commands
+            .recv()
+            .await
+            .expect("unknown subscriber removal should still be serialized")
+        {
+            ListenerCommand::Unsubscribe {
+                subscription,
+                reply: Some(reply),
+            } if subscription == missing => reply.send(()).expect("unsubscribe ack"),
+            _ => panic!("expected acknowledged unsubscribe"),
+        }
+        assert!(unsubscribe.await.expect("unsubscribe task"));
         assert!(!manager.unsubscribe("missing", first).await);
     }
 
@@ -501,18 +528,27 @@ mod tests {
                 reply,
             })
             .expect("resume should be queued");
-        assert!(manager.unsubscribe("thread-1", first.clone()).await);
+        let unsubscribe = tokio::spawn({
+            let manager = manager.clone();
+            let first = first.clone();
+            async move { manager.unsubscribe("thread-1", first).await }
+        });
 
         assert!(matches!(
             commands.recv().await.expect("resume command should exist"),
             ListenerCommand::Resume { subscription, .. } if subscription == first
         ));
-        assert!(matches!(
-            commands
-                .recv()
-                .await
-                .expect("unsubscribe command should follow resume"),
-            ListenerCommand::Unsubscribe { subscription } if subscription == first
-        ));
+        match commands
+            .recv()
+            .await
+            .expect("unsubscribe command should follow resume")
+        {
+            ListenerCommand::Unsubscribe {
+                subscription,
+                reply: Some(reply),
+            } if subscription == first => reply.send(()).expect("unsubscribe ack"),
+            _ => panic!("expected acknowledged unsubscribe"),
+        }
+        assert!(unsubscribe.await.expect("unsubscribe task"));
     }
 }

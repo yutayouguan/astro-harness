@@ -385,7 +385,10 @@ pub async fn run_listener_commands(
                 };
                 let _ = reply.send(snapshot);
             }
-            ListenerCommand::Unsubscribe { subscription } => {
+            ListenerCommand::Unsubscribe {
+                subscription,
+                reply,
+            } => {
                 let mut state = state.lock().await;
                 if state
                     .subscribers
@@ -398,6 +401,9 @@ pub async fn run_listener_commands(
                     status: state.status.clone(),
                     has_subscribers: !state.subscribers.is_empty(),
                 });
+                if let Some(reply) = reply {
+                    let _ = reply.send(());
+                }
             }
             ListenerCommand::Stop => break,
         }
