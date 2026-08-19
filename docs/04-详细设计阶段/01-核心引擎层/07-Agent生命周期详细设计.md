@@ -1,10 +1,10 @@
 # Agent 生命周期详细设计
 
-> 版本：v2.27
+> 版本：v2.28
 > 日期：2026-08-19
 > 状态：实施基线  
 > 上游参考：[OpenAI Codex](https://github.com/openai/codex) `ede5247893a50297a47c9aa5038e6ab28312ff50`
-> 适用范围：`agent-core`、`agent-tools`、`agent-subagents`、`agent-memory`、`agent-session`、`agent-hooks`、`agent-mcp`
+> 适用范围：`agent-core`、`agent-tools`、`agent-sandbox`、`agent-network-proxy`、`agent-types`、`agent-subagents`、`agent-memory`、`agent-session`、`agent-hooks`、`agent-mcp`
 
 ---
 
@@ -667,8 +667,8 @@ built-in tool 的 current-thread `!Send` 契约保持不变。
     `NetworkPolicyRequest` / `NetworkDecision` / `NetworkPolicyDecider` 与 structured decision attribution。
   - [x] 实现 loopback-only HTTP/1 CONNECT listener，在上游 dial 前执行 host policy，并对实际解析的
     `SocketAddr` 做二次私网检查，防止 DNS rebinding 绕过。
-  - [ ] 实现命令网络代理的 host 级 enforcement 与 decision attribution，再将 managed
-    subprocess network approval 接入 orchestrator；禁止在代理落地前猜测域名或开放全网。
+  - [x] 将 CONNECT host enforcement 与 decision attribution 接入 `terminal` / `code_exec`
+    attempt；结构化网络拒绝 fail closed，不猜测命令域名、不开放全网、不转成文件系统提权重试。
 - [ ] 删除工具执行时重新加载权限/工具的路径。
 
 v2.16 ToolInvocation / ToolCallRuntime 首批：新运行时保留 Codex 的 `session`、
@@ -812,6 +812,45 @@ IP/`localhost` 例外可连接 non-public address。这类实际地址拒绝保�
 不能声明 permission profile 的本地命令网络已端到端生效。下一批应将代理地址作为
 attempt-scoped 环境注入 `SandboxRunner`，并将 403 policy decision 还原为 typed
 `SandboxErr::Denied`。
+
+v2.28 Attempt-scoped managed network 端到端批次：前台 `terminal action=run` 与
+`code_exec` 的真实执行链已收口为：
+
+```text
+ToolOrchestrator::run
+  -> StartedNetworkProxy::start
+  -> SandboxAttempt.managed_network
+  -> SandboxPolicy.managed_network (exact loopback port)
+  -> ToolExecutionGrants
+  -> ToolContext
+  -> terminal/code_exec prepared env
+  -> BlockedRequest
+  -> SandboxErr::Denied.network_policy_decision
+```
+
+`ToolOrchestrator::run` 在 permission preflight 和 terminal 危险命令审批之后、构造初始
+`SandboxAttempt` 之前启动一个 `StartedNetworkProxy`。`Arc` lease 仅归属该 tool
+attempt，经 `SandboxAttempt -> ToolExecutionGrants -> ToolContext` 传递；文件系统
+escalation 仅 clone 同一 lease，不启动第二个 listener。`SandboxPolicy` 只放行该
+listener 已绑定的精确 loopback port，不恢复旧的任意网络权限。
+
+启用门禁是全局 `network_proxy.enabled` 与当前选中 custom profile 自身
+`network.enabled` 的逻辑与。网络策略只读取选中 leaf profile 的自有字段，不合并
+`extends` 父链；未知 profile、全局开关关闭、leaf 未开启或
+`:danger-full-access` 均不创建 managed proxy。非进程工具、terminal 的
+`list/status/poll/wait/kill`、进程内 HTTP、MCP 与 provider 路径不受影响。
+
+managed terminal 以完整父环境为基础覆盖大小写 proxy keys，并通过
+`env_clear().envs(...)` 防止旧代理变量遗留；`code_exec` 先执行既有 secret scrub，
+再注入 managed proxy，不会把被删除的凭证复制回子进程。`background=true`
+在 spawn 前 fail closed，后台 job 不获得或持有 attempt lease。
+
+代理只将 host policy 或 DNS rebinding 防御产生的拒绝记入有界 `BlockedRequest`
+队列。进程结束后 runtime 排空队列并选择最新一条，转换为
+`SandboxErr::Denied { network_policy_decision: Some(...) }`。上游 DNS/dial 失败的
+502 不是 policy denial。orchestrator 对结构化网络拒绝立即收尾，不发起文件系统
+审批或重试。本批仍不实现 plain HTTP forwarding、SOCKS、MITM、host 审批、
+network retry 或 session/global proxy 状态。
 
 ### Phase D：ThreadManager 与 AgentControl
 

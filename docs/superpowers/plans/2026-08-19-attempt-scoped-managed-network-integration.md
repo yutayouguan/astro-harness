@@ -704,9 +704,14 @@ git diff --check
 
 Confirm unrestricted Seatbelt remains only in the legacy `network_access=true` branch, every `ToolContext` fixture explicitly chooses `None` or a test lease, and no session/global proxy state was introduced.
 
-- [x] **Step 4: Request independent review and fix all Critical/Important findings**
+- [x] **Step 4: Review the explicit batch commits and fix all Critical/Important findings**
 
 Use `superpowers:requesting-code-review`. Review only the explicit batch commits and focus on direct-connect bypass, stale inherited proxy variables, DNS rebinding attribution, exact-port Seatbelt rules, listener lifetime, background escape, typed error ordering, and filesystem retry suppression. Re-run the affected crate tests after each correction.
+
+Review note: `superpowers:requesting-code-review` was unavailable in this session, so the available
+`code-review` skill was used for the same security scope. No Critical/Important finding remained.
+The full verification separately exposed a pre-existing HITL publication race, fixed and verified in
+commit `3766c6f4` without mixing it into the managed-network commits.
 
 - [x] **Step 5: Mark this plan complete and commit documentation**
 

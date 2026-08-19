@@ -67,8 +67,8 @@ cd apps/desktop && npm run tauri:build:universal    # universal-apple-darwin
 | `crates/agent-delegate` | `worktree` | 显式桌面多任务用的 git worktree 工具；Subagent 不会隐式创建 worktree。 |
 | `crates/agent-home` | `home` | `~/.astro` 路径约定、日志、agent config YAML、tool-enable gates。无 SQLite。 |
 | `crates/agent-skills` | `skills` | Skill 管理 — 安装、加载、注册表、摘要、备份。Skill frontmatter `astro_tools` 可 additive 开放 toolset。 |
-| `crates/agent-sandbox` | `sandbox` | 派生进程平台沙箱、typed denial、audit 与 attempt-scoped `SandboxPolicy`。 |
-| `crates/agent-network-proxy` | `network-proxy` | Codex 对齐的受管子进程网络边界：host allow/deny、本地地址防御、decision attribution 与 loopback HTTP/1 CONNECT listener；plain HTTP/SOCKS 与子进程注入待接入。 |
+| `crates/agent-sandbox` | `sandbox` | 派生进程平台沙箱、typed denial、audit 与 attempt-scoped `SandboxPolicy`；managed network 只放行已绑定代理的精确 loopback port。 |
+| `crates/agent-network-proxy` | `network-proxy` | Codex 对齐的受管子进程网络边界：host allow/deny、本地地址防御、DNS rebinding 防御、decision attribution 与 attempt-scoped loopback HTTP/1 CONNECT listener；已接入前台 terminal/code_exec，plain HTTP/SOCKS 尚未实现。 |
 
 ### actions/ — 工具实现
 
@@ -137,6 +137,27 @@ cd apps/desktop && npm run tauri:build:universal    # universal-apple-darwin
       ├─ handle_tool_call_async() × N → record_tool_result_with_id()
       └─ 无工具调用时 → 返回最终文本
 ```
+
+### Managed subprocess network
+
+前台 `terminal action=run` 与 `code_exec` 在全局 proxy 开启且选中 custom
+profile 自身 `network.enabled=true` 时执行以下 attempt-scoped 链路：
+
+```text
+ToolOrchestrator::run
+  → StartedNetworkProxy::start
+  → SandboxAttempt.managed_network
+  → SandboxPolicy.managed_network (exact bound port)
+  → ToolExecutionGrants → ToolContext
+  → terminal/code_exec env injection
+  → BlockedRequest
+  → SandboxErr::Denied.network_policy_decision
+```
+
+策略只取选中 leaf profile 的自有 network 字段，不继承父 profile；
+`:danger-full-access`、非进程工具、进程内 HTTP、MCP/provider 和后台 terminal job
+都不共享该 lease。结构化网络拒绝不进入文件系统 escalation；502/DNS/dial
+错误不是 policy denial。
 
 ### agent-core 模块组织
 
@@ -210,6 +231,8 @@ Plugin bus 事件（可拦截/变更）：`pre_llm_call`、`pre_tool_call`、`pr
 6. **MCP 工具名**：`mcp__{server_id}__{tool_name}` 前缀，`is_mcp_tool_name()` 检测。
 
 7. **交互模式**：`interaction_mode` 经 ChatRequest 下传；行为说明只进 system（`system_guidance`），用户消息不得拼接 `[Mode: …]`。`start_chat` 仅接受 `StartChatRequest` 包装，无扁平字段兼容。schema v17 起剥离历史 Mode 后缀。
+
+8. **Managed network**：proxy listener 只归属单个 tool attempt，沙箱只放行其精确端口；terminal 后台模式在 spawn 前拒绝，code_exec 先 scrub secrets 再注入 proxy env，结构化网络拒绝不得触发文件系统提权。
 
 ## Data Flow: cron.rs → headless.rs
 
