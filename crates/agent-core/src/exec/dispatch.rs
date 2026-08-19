@@ -351,6 +351,11 @@ impl DefaultAgentThreadDispatch {
         target: &AgentThreadV2,
         material: Option<&ParentRuntimeMaterial>,
     ) -> anyhow::Result<Arc<StoredRuntimeRequest>> {
+        anyhow::ensure!(
+            self.current_path == AgentPath::root()
+                || target.canonical_path.starts_with(&self.current_path),
+            "cold Agent Thread recovery must be initiated by the root or an ancestor of the target"
+        );
         let material = material.ok_or_else(|| {
             anyhow::anyhow!(
                 "agent runtime configuration is unavailable for {}; cold recovery requires an active parent runtime context",
@@ -3953,6 +3958,103 @@ mod tests {
             .collect::<Vec<_>>();
         assert!(paths.iter().any(|path| path.contains("skills/parent")));
         assert!(paths.iter().any(|path| path.contains("skills/leaf")));
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn cold_followup_rejects_sibling_runtime_material_without_ghosts() {
+        let dir = tempfile::tempdir().unwrap();
+        let memory_dir = dir.path().join("memory");
+        let sessions =
+            session::SessionStore::open_sessions_dir(&memory_dir.join("sessions")).unwrap();
+        sessions.ensure_session("root-session", "test").unwrap();
+        let mut initial = dispatch(&dir);
+        initial.chat_override = Some(scripted_chat("done"));
+
+        let mut alpha_request = spawn_request(&memory_dir);
+        alpha_request.request.task_name = "alpha".into();
+        let mut sibling_material = alpha_request.runtime.clone();
+        sibling_material.inherited_skill_config =
+            vec![(PathBuf::from("skills/alpha-only/SKILL.md"), true)];
+        sibling_material.parent_sandbox_mode = "danger-full-access".into();
+        let alpha = AgentThreadDispatch::spawn_agent(&initial, alpha_request)
+            .await
+            .unwrap()
+            .thread;
+        while initial.runtime_manager.is_running(&alpha.thread_id) {
+            tokio::task::yield_now().await;
+        }
+
+        let mut beta_request = spawn_request(&memory_dir);
+        beta_request.request.task_name = "beta".into();
+        let beta = AgentThreadDispatch::spawn_agent(&initial, beta_request)
+            .await
+            .unwrap()
+            .thread;
+        while initial.runtime_manager.is_running(&beta.thread_id) {
+            tokio::task::yield_now().await;
+        }
+        let beta_dispatch = DefaultAgentThreadDispatch {
+            control: Arc::clone(&initial.control),
+            current_path: beta.canonical_path.clone(),
+            current_thread_id: beta.thread_id.clone(),
+            runtime_manager: Arc::clone(&initial.runtime_manager),
+            runtime_requests: Arc::clone(&initial.runtime_requests),
+            chat_override: initial.chat_override.clone(),
+            before_followup_atomic_hook: None,
+        };
+        let mut leaf_request = spawn_request(&memory_dir);
+        leaf_request.request.task_name = "leaf".into();
+        let leaf = AgentThreadDispatch::spawn_agent(&beta_dispatch, leaf_request)
+            .await
+            .unwrap()
+            .thread;
+        while initial.runtime_manager.is_running(&leaf.thread_id) {
+            tokio::task::yield_now().await;
+        }
+
+        let control = AgentControl::open(
+            "root-session".into(),
+            AgentGraphStore::open(dir.path().join("subagents-v2.db")).unwrap(),
+            Limits {
+                max_threads: 8,
+                max_depth: 4,
+                max_running: 2,
+            },
+        )
+        .unwrap();
+        let mut recovered = DefaultAgentThreadDispatch::for_test(
+            control,
+            alpha.canonical_path.clone(),
+            alpha.thread_id.clone(),
+            Arc::new(AgentRuntimeManager::default()),
+        );
+        recovered.chat_override = Some(scripted_chat("must not run"));
+
+        let error = AgentThreadDispatch::followup_task_with_runtime(
+            &recovered,
+            FollowupAgentDispatchRequest {
+                request: MessageAgentV2Request {
+                    target: leaf.canonical_path.to_string(),
+                    message: "must not inherit alpha context".into(),
+                },
+                runtime: Some(sibling_material),
+            },
+        )
+        .await
+        .unwrap_err();
+
+        assert!(format!("{error:#}").contains("root or an ancestor"));
+        assert!(recovered
+            .control
+            .drain_mailbox(&leaf.canonical_path)
+            .unwrap()
+            .is_empty());
+        assert!(recovered
+            .runtime_requests
+            .requests
+            .lock()
+            .unwrap()
+            .is_empty());
     }
 
     #[tokio::test(flavor = "current_thread")]
