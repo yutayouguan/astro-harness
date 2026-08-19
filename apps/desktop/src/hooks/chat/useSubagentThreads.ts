@@ -1,12 +1,12 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import {
   EMPTY_AGENT_TREE,
   classifyAgentThreadSessionEvent,
+  createAgentTreeRootLifecycle,
   flattenAgentTree,
   fromSnapshotWithBufferedEvents,
-  isAgentTreeGenerationCurrent,
   isAgentTreeRequestCurrent,
   markThreadRead,
   normalizeAgentTreeSnapshot,
@@ -35,14 +35,7 @@ function visibleTreeRoots(state: AgentTreeState) {
 
 export function useSubagentThreads(rootSessionId?: string | null) {
   const root = rootSessionId?.trim() ?? "";
-  const activeRootRef = useRef(root);
-  const generationRef = useRef(0);
-  // Root identity changes during render, before old callbacks or effects can
-  // run. This closes the render-to-effect window for stale A -> B completions.
-  if (activeRootRef.current !== root) {
-    activeRootRef.current = root;
-    generationRef.current += 1;
-  }
+  const [rootLifecycle] = useState(createAgentTreeRootLifecycle);
 
   const [state, setStateValue] = useState<AgentTreeState>(() => emptyStateFor(root));
   const [error, setError] = useState<string | null>(null);
@@ -61,7 +54,7 @@ export function useSubagentThreads(rootSessionId?: string | null) {
 
   const refresh = useCallback(async () => {
     if (!root) {
-      if (activeRootRef.current === root) {
+      if (rootLifecycle.current().root === root) {
         commitState(EMPTY_AGENT_TREE);
         setError(null);
         setLoadingState(false);
@@ -69,40 +62,35 @@ export function useSubagentThreads(rootSessionId?: string | null) {
       }
       return;
     }
-    if (activeRootRef.current !== root) return;
+    const active = rootLifecycle.current();
+    if (active.root !== root) return;
 
     const request = ++refreshRef.current;
     const ticket: AgentTreeRequestTicket = {
       root,
-      generation: generationRef.current,
+      generation: active.generation,
       request,
     };
-    if (!isAgentTreeRequestCurrent(
-      ticket,
-      activeRootRef.current,
-      generationRef.current,
-      refreshRef.current,
-    )) return;
+    const isCurrentRequest = () => {
+      const current = rootLifecycle.current();
+      return isAgentTreeRequestCurrent(
+        ticket,
+        current.root,
+        current.generation,
+        refreshRef.current,
+      );
+    };
+    if (!isCurrentRequest()) return;
 
     bufferingRef.current = true;
     setLoadingState(true);
     try {
       // Validate once more directly before crossing the async boundary.
-      if (!isAgentTreeRequestCurrent(
-        ticket,
-        activeRootRef.current,
-        generationRef.current,
-        refreshRef.current,
-      )) return;
+      if (!isCurrentRequest()) return;
       const raw = await invoke<unknown>("list_subagent_threads", {
         args: { rootSessionId: root },
       });
-      if (!isAgentTreeRequestCurrent(
-        ticket,
-        activeRootRef.current,
-        generationRef.current,
-        refreshRef.current,
-      )) return;
+      if (!isCurrentRequest()) return;
 
       const snapshot = normalizeAgentTreeSnapshot(raw);
       if (snapshot.rootThreadId !== root) {
@@ -117,12 +105,7 @@ export function useSubagentThreads(rootSessionId?: string | null) {
         bufferedRef.current,
         desiredStreamRef.current,
       );
-      if (!isAgentTreeRequestCurrent(
-        ticket,
-        activeRootRef.current,
-        generationRef.current,
-        refreshRef.current,
-      )) return;
+      if (!isCurrentRequest()) return;
 
       bufferedRef.current = [];
       bufferingRef.current = false;
@@ -131,24 +114,16 @@ export function useSubagentThreads(rootSessionId?: string | null) {
       setLoadingState(false);
       setInitializedState(true);
     } catch (reason) {
-      if (!isAgentTreeRequestCurrent(
-        ticket,
-        activeRootRef.current,
-        generationRef.current,
-        refreshRef.current,
-      )) return;
+      if (!isCurrentRequest()) return;
       // A failed baseline must not let later deltas build an incomplete tree.
       bufferingRef.current = true;
       setError(String(reason));
       setLoadingState(false);
     }
-  }, [commitState, root]);
+  }, [commitState, root, rootLifecycle]);
 
-  useEffect(() => {
-    const token: AgentTreeGenerationToken = {
-      root,
-      generation: generationRef.current,
-    };
+  useLayoutEffect(() => {
+    const token = rootLifecycle.commit(root);
     refreshRef.current += 1;
     bufferedRef.current = [];
     desiredStreamRef.current = null;
@@ -157,15 +132,21 @@ export function useSubagentThreads(rootSessionId?: string | null) {
     setError(null);
     setLoadingState(Boolean(root));
     setInitializedState(false);
+    return () => {
+      rootLifecycle.invalidate(token);
+      refreshRef.current += 1;
+    };
+  }, [commitState, root, rootLifecycle]);
+
+  useEffect(() => {
     if (!root) return;
+
+    const token: AgentTreeGenerationToken = rootLifecycle.current();
+    if (token.root !== root) return;
 
     let disposed = false;
     let unlisten: (() => void) | undefined;
-    const isCurrent = () => !disposed && isAgentTreeGenerationCurrent(
-      token,
-      activeRootRef.current,
-      generationRef.current,
-    );
+    const isCurrent = () => !disposed && rootLifecycle.isCurrent(token);
 
     void listen<SessionAgentThreadEvent>("session_event", (event) => {
       if (!isCurrent()) return;
@@ -227,23 +208,16 @@ export function useSubagentThreads(rootSessionId?: string | null) {
     return () => {
       disposed = true;
       refreshRef.current += 1;
-      if (isAgentTreeGenerationCurrent(
-        token,
-        activeRootRef.current,
-        generationRef.current,
-      )) {
-        generationRef.current += 1;
-      }
       unlisten?.();
     };
-  }, [commitState, refresh, root]);
+  }, [commitState, refresh, root, rootLifecycle]);
 
   const markRead = useCallback((path: string) => {
-    const currentRoot = activeRootRef.current;
+    const currentRoot = rootLifecycle.current().root;
     if (!currentRoot || stateRef.current.rootThreadId !== currentRoot) return;
     const next = markThreadRead(stateRef.current, path);
     if (next !== stateRef.current) commitState(next);
-  }, [commitState]);
+  }, [commitState, rootLifecycle]);
 
   const projectedState = state.rootThreadId === root
     ? state

@@ -92,6 +92,13 @@ export type AgentTreeRequestTicket = {
 
 export type AgentTreeGenerationToken = Omit<AgentTreeRequestTicket, "request">;
 
+export type AgentTreeRootLifecycle = {
+  current: () => AgentTreeGenerationToken;
+  commit: (root: string) => AgentTreeGenerationToken;
+  invalidate: (token: AgentTreeGenerationToken) => void;
+  isCurrent: (token: AgentTreeGenerationToken) => boolean;
+};
+
 export type AgentTreeNode = {
   thread: AgentThread;
   children: AgentTreeNode[];
@@ -329,6 +336,30 @@ export function isAgentTreeGenerationCurrent(
   activeGeneration: number,
 ): boolean {
   return token.root === activeRoot && token.generation === activeGeneration;
+}
+
+export function createAgentTreeRootLifecycle(): AgentTreeRootLifecycle {
+  let root = "";
+  let generation = 0;
+  const current = (): AgentTreeGenerationToken => ({ root, generation });
+  return {
+    current,
+    commit(nextRoot) {
+      if (root !== nextRoot) {
+        root = nextRoot;
+        generation += 1;
+      }
+      return current();
+    },
+    invalidate(token) {
+      if (isAgentTreeGenerationCurrent(token, root, generation)) {
+        generation += 1;
+      }
+    },
+    isCurrent(token) {
+      return isAgentTreeGenerationCurrent(token, root, generation);
+    },
+  };
 }
 
 function compareNodes(left: AgentTreeNode, right: AgentTreeNode): number {

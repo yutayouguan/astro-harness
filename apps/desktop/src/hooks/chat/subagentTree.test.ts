@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   classifyAgentThreadSessionEvent,
+  createAgentTreeRootLifecycle,
   fromSnapshot,
   fromSnapshotWithBufferedEvents,
   markThreadRead,
@@ -335,4 +336,31 @@ test("listener cleanup invalidates its captured root generation", () => {
   const listenerToken = { root: "root-a", generation: 5 };
   assert.equal(isAgentTreeGenerationCurrent(listenerToken, "root-a", 5), true);
   assert.equal(isAgentTreeGenerationCurrent(listenerToken, "root-a", 6), false);
+});
+
+test("aborted renders cannot change the committed Agent Tree root", () => {
+  const lifecycle = createAgentTreeRootLifecycle();
+  const rootA = lifecycle.commit("root-a");
+
+  // Rendering B is intentionally represented by no lifecycle call: only a
+  // committed layout effect may move the active root away from A.
+  const speculativeRootB = { root: "root-b", generation: rootA.generation + 1 };
+  assert.equal(lifecycle.isCurrent(rootA), true);
+  assert.equal(lifecycle.isCurrent(speculativeRootB), false);
+
+  lifecycle.invalidate(rootA);
+  const rootB = lifecycle.commit("root-b");
+  assert.equal(lifecycle.isCurrent(rootA), false);
+  assert.equal(lifecycle.isCurrent(rootB), true);
+});
+
+test("StrictMode layout cleanup invalidates the first mount token", () => {
+  const lifecycle = createAgentTreeRootLifecycle();
+  const firstMount = lifecycle.commit("root-a");
+  lifecycle.invalidate(firstMount);
+  const strictRemount = lifecycle.commit("root-a");
+
+  assert.equal(lifecycle.isCurrent(firstMount), false);
+  assert.equal(lifecycle.isCurrent(strictRemount), true);
+  assert.notEqual(strictRemount.generation, firstMount.generation);
 });

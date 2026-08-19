@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { useLayoutEffect, useMemo, useState, type CSSProperties } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { Bot, ChevronDown, Square } from "lucide-react";
 import { useI18n } from "../../i18n/LocaleContext";
 import {
+  createAgentTreeRootLifecycle,
   flattenAgentTree,
   type AgentThreadStatus,
   type AgentTreeNode,
@@ -37,12 +38,7 @@ export default function SubagentActivityBar({
 }: Props) {
   const { t } = useI18n();
   const root = rootSessionId?.trim() ?? "";
-  const activeRootRef = useRef(root);
-  const generationRef = useRef(0);
-  if (activeRootRef.current !== root) {
-    activeRootRef.current = root;
-    generationRef.current += 1;
-  }
+  const [rootLifecycle] = useState(createAgentTreeRootLifecycle);
   const [expanded, setExpanded] = useState(true);
   const [stopping, setStopping] = useState(false);
   const visibleRoots = useMemo(
@@ -55,23 +51,19 @@ export default function SubagentActivityBar({
     [visible],
   );
 
-  useEffect(() => {
-    const generation = generationRef.current;
+  useLayoutEffect(() => {
+    const token = rootLifecycle.commit(root);
     setStopping(false);
-    return () => {
-      if (activeRootRef.current === root && generationRef.current === generation) {
-        generationRef.current += 1;
-      }
-    };
-  }, [root]);
+    return () => rootLifecycle.invalidate(token);
+  }, [root, rootLifecycle]);
 
   if (!root || visible.length === 0) return null;
 
   const stopAll = async () => {
     if (running.length === 0 || stopping) return;
-    const generation = generationRef.current;
-    const isCurrentRoot = () => activeRootRef.current === root
-      && generationRef.current === generation;
+    const token = rootLifecycle.current();
+    const isCurrentRoot = () => token.root === root
+      && rootLifecycle.isCurrent(token);
     if (!isCurrentRoot()) return;
     setStopping(true);
     try {

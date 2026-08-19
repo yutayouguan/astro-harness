@@ -19,11 +19,18 @@ test("Agent Thread UI has no polling timers", () => {
 
 test("hook reacts to field 14 and stream generation changes", () => {
   const hook = source("./useSubagentThreads.ts");
+  const activity = source("../../components/chat/SubagentActivityBar.tsx");
+  const panel = source("../../components/chat/SubagentsPanel.tsx");
   assert.match(hook, /classifyAgentThreadSessionEvent/);
   assert.match(hook, /classification\.kind === "refresh"/);
   assert.match(hook, /bufferedRef\.current\.push/);
   assert.match(hook, /isAgentTreeRequestCurrent/);
-  assert.match(hook, /isAgentTreeGenerationCurrent/);
+  assert.match(hook, /rootLifecycle\.isCurrent/);
+  for (const component of [hook, activity, panel]) {
+    assert.match(component, /useLayoutEffect/);
+    assert.match(component, /createAgentTreeRootLifecycle/);
+    assert.doesNotMatch(component, /activeRootRef\.current\s*=/);
+  }
 });
 
 test("desktop commands use only canonical rootSessionId and target arguments", () => {

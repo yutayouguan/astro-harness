@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { Bot, RefreshCw, SendHorizontal, Square, Wrench, X } from "lucide-react";
 import { useI18n } from "../../i18n/LocaleContext";
 import {
+  createAgentTreeRootLifecycle,
   normalizeAgentThreadDetail,
   type AgentThread,
   type AgentThreadDetail,
@@ -65,12 +66,7 @@ export default function SubagentsPanel({
 }: Props) {
   const { t } = useI18n();
   const root = rootSessionId?.trim() ?? "";
-  const activeRootRef = useRef(root);
-  const generationRef = useRef(0);
-  if (activeRootRef.current !== root) {
-    activeRootRef.current = root;
-    generationRef.current += 1;
-  }
+  const [rootLifecycle] = useState(createAgentTreeRootLifecycle);
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
   const [detail, setDetail] = useState<AgentThreadDetail | null>(null);
   const [message, setMessage] = useState("");
@@ -89,9 +85,9 @@ export default function SubagentsPanel({
 
   const loadDetail = useCallback(async (canonicalPath: string) => {
     if (!root) return;
-    const generation = generationRef.current;
-    const isCurrentRoot = () => activeRootRef.current === root
-      && generationRef.current === generation;
+    const token = rootLifecycle.current();
+    const isCurrentRoot = () => token.root === root
+      && rootLifecycle.isCurrent(token);
     if (!isCurrentRoot()) return;
     const request = ++detailRequestRef.current;
     setDetail((current) =>
@@ -116,10 +112,10 @@ export default function SubagentsPanel({
         setLoadingDetail(false);
       }
     }
-  }, [root]);
+  }, [root, rootLifecycle]);
 
-  useEffect(() => {
-    const generation = generationRef.current;
+  useLayoutEffect(() => {
+    const token = rootLifecycle.commit(root);
     detailRequestRef.current += 1;
     actionRequestRef.current += 1;
     setSelectedPath(null);
@@ -129,13 +125,11 @@ export default function SubagentsPanel({
     setLoadingDetail(false);
     setError(null);
     return () => {
-      if (activeRootRef.current === root && generationRef.current === generation) {
-        generationRef.current += 1;
-      }
+      rootLifecycle.invalidate(token);
       detailRequestRef.current += 1;
       actionRequestRef.current += 1;
     };
-  }, [root]);
+  }, [root, rootLifecycle]);
 
   useEffect(() => {
     if (!open || !initialTarget) return;
@@ -172,10 +166,10 @@ export default function SubagentsPanel({
     extra: Record<string, unknown> = {},
   ): Promise<boolean> => {
     if (!root) return false;
-    const generation = generationRef.current;
+    const token = rootLifecycle.current();
     const actionRequest = ++actionRequestRef.current;
-    const isCurrentAction = () => activeRootRef.current === root
-      && generationRef.current === generation
+    const isCurrentAction = () => token.root === root
+      && rootLifecycle.isCurrent(token)
       && actionRequest === actionRequestRef.current;
     if (!isCurrentAction()) return false;
     setBusy(true);
