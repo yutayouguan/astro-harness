@@ -1,6 +1,6 @@
 # Agent 生命周期详细设计
 
-> 版本：v2.20
+> 版本：v2.21
 > 日期：2026-08-19
 > 状态：实施基线  
 > 上游参考：[OpenAI Codex](https://github.com/openai/codex) `632e35ce8d5dec43b75dbf99f9e6fa52bed47c3d`  
@@ -652,7 +652,9 @@ built-in tool 的 current-thread `!Send` 契约保持不变。
   - [x] 由 `ToolOrchestrator::run` 统一执行 terminal 审批、step-bound dispatch、Applied
     审计与错误归档，返回 Codex 同名 `OrchestratorRunResult<Out>`。
   - [x] 引入 `ExecToolCallOutput`、`SandboxErr::Denied` 与 `run_attempt`，保留 sandbox
-    denial 的结构化输出并排除普通非零退出；本阶段不自动 retry。
+    denial 的结构化输出并排除普通非零退出。
+  - [x] 引入 Codex 同名 `SandboxAttempt`；typed denial 要求 fresh approval，批准后仅以
+    attempt-scoped `DangerFullAccess` override 重试一次，不持久化、不扩大网络授权。
   - [ ] 将 sandbox selection、denial analysis、network approval 与 retry 迁入 orchestrator。
 - [ ] 删除工具执行时重新加载权限/工具的路径。
 
@@ -695,9 +697,17 @@ foreground terminal 与 code_exec 不再把这类结果压成普通文本，而�
 及经过 terminal transform 的 `aggregated_output`，穿过 anyhow 和
 `ToolCallError::SandboxDenied` 到 `ToolOrchestrator::run_attempt`。orchestrator 当前仍执行
 `transform_tool_result` / `post_tool_use` finalization，将可展示输出返回模型、写入
-`sandbox_denied` Applied audit，且不记录为普通 ToolFailure；不会自动重试或提升权限。下一批
-在此 typed boundary 上增加 fresh approval，批准后最多执行一次 escalated attempt，普通命令
-失败永远不进入 retry。
+`sandbox_denied` Applied audit，且不记录为普通 ToolFailure。该批次仅建立 typed
+boundary，未自动重试或提升权限；v2.21 在此边界上补齐审批与单次重试。
+
+v2.21 Sandbox escalation 批次：`ToolOrchestrator` 以 Codex 同名 `SandboxAttempt`
+表达初始与 escalated attempt。首次 `SandboxErr::Denied` 会构造
+`PermissionReason::SandboxDenied` 的 fresh permission request，经当前 user/auto-reviewer
+明确批准后，只对原 tool call 再执行一次。重试通过
+`ToolContext::sandbox_mode_override = DangerFullAccess` 绕过本地文件 sandbox，但不改写
+session permission profile、不保留到下一调用，也不将网络 grant 升级为 unrestricted。
+用户拒绝、reviewer 不可用或 approval policy 禁止时不重试；第二次 attempt
+无论成功、普通失败或再次 denial 都直接结束，不形成 escalation loop。
 `tool_router_freezes_dynamic_handler_for_step` 通过采样后覆盖 Session 注册表并执行旧 step，
 锁定不可变快照契约。无 `StepContext` 的兼容工具入口仍保留当前注册表路径，待后续删除。
 

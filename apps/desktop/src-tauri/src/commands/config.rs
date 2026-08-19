@@ -460,18 +460,23 @@ pub async fn refresh_mcp_tools(
         "mcp_refresh",
         profile_id,
     );
-    let policy =
-        tools::context::build_command_sandbox_policy(&memory_root, &execution_root, None, false)
-            .map_err(|error| {
-                sandbox_audit.record(
-                    tools::SandboxAuditKind::Denied,
-                    None,
-                    "mcp",
-                    "policy_resolution_failed",
-                    None,
-                );
-                error.to_string()
-            })?;
+    let policy = tools::context::build_command_sandbox_policy(
+        &memory_root,
+        &execution_root,
+        None,
+        false,
+        None,
+    )
+    .map_err(|error| {
+        sandbox_audit.record(
+            tools::SandboxAuditKind::Denied,
+            None,
+            "mcp",
+            "policy_resolution_failed",
+            None,
+        );
+        error.to_string()
+    })?;
     let execution_context = mcp::McpExecutionContext::new(policy, &execution_root)
         .map(|context| context.with_sandbox_audit(sandbox_audit))
         .map_err(|e| e.to_string())?;

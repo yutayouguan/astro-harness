@@ -51,6 +51,7 @@ mod validate;
 
 pub(crate) use step_context::StepContext;
 pub use tool_dispatch::ToolCallError;
+pub(crate) use tool_dispatch::ToolExecutionGrants;
 pub(crate) use tool_router::ToolRouter;
 pub(crate) use tool_runtime::{ToolCallRuntime, ToolInvocation};
 pub use turn_budget::MaxDepthError;
@@ -808,6 +809,7 @@ impl Session {
             &execution_root,
             permission_profile.as_deref(),
             false,
+            None,
         )
         .inspect_err(|_error| {
             sandbox_audit.record(

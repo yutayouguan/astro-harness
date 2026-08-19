@@ -60,6 +60,13 @@ impl From<super::turn_budget::MaxDepthError> for ToolCallError {
     }
 }
 
+#[derive(Clone, Default)]
+pub(crate) struct ToolExecutionGrants {
+    pub(crate) workspace_write: bool,
+    pub(crate) sandbox_mode_override: Option<types::SandboxMode>,
+    pub(crate) network: tools::InProcessNetworkGrant,
+}
+
 impl AgentLoop {
     /// 按名称分发工具调用：MCP 走 Hub，内置工具走 [`dispatch_tool`]。
     ///
@@ -69,8 +76,7 @@ impl AgentLoop {
         &self,
         name: &str,
         args: &serde_json::Value,
-        workspace_write_grant: bool,
-        network_grant: tools::InProcessNetworkGrant,
+        grants: ToolExecutionGrants,
         step_context: Option<&super::StepContext>,
     ) -> anyhow::Result<types::ToolOutput> {
         let (agent_id, workspace_dir) = {
@@ -157,8 +163,9 @@ impl AgentLoop {
                 .or(session_configuration.permission_profile),
             skill_config_overrides: &session_configuration.skill_config_overrides,
             hook_bus,
-            workspace_write_grant,
-            network_grant,
+            workspace_write_grant: grants.workspace_write,
+            sandbox_mode_override: grants.sandbox_mode_override,
+            network_grant: grants.network,
         };
         dispatch_tool(|_| allowed, &mut ctx, name, args, dynamic_handler.as_ref()).await
     }
@@ -175,8 +182,7 @@ impl AgentLoop {
         self.handle_tool_call_scoped(
             name,
             args,
-            false,
-            tools::InProcessNetworkGrant::default(),
+            ToolExecutionGrants::default(),
             None,
             CancellationToken::new(),
         )
@@ -187,19 +193,14 @@ impl AgentLoop {
         self: &Arc<Self>,
         invocation: ToolInvocation,
     ) -> Result<types::ToolOutput, ToolCallError> {
-        self.handle_tool_invocation_with_once_grants(
-            invocation,
-            false,
-            tools::InProcessNetworkGrant::default(),
-        )
+        self.handle_tool_invocation_with_once_grants(invocation, ToolExecutionGrants::default())
     }
 
     /// Execute one step-bound invocation with grants scoped to this attempt.
     pub(crate) fn handle_tool_invocation_with_once_grants(
         self: &Arc<Self>,
         invocation: ToolInvocation,
-        workspace_write_grant: bool,
-        network_grant: tools::InProcessNetworkGrant,
+        grants: ToolExecutionGrants,
     ) -> Result<types::ToolOutput, ToolCallError> {
         debug_assert!(Arc::ptr_eq(self, &invocation.session));
         tracing::trace!(
@@ -210,8 +211,7 @@ impl AgentLoop {
         self.handle_tool_call_scoped(
             &invocation.tool_name,
             &invocation.payload,
-            workspace_write_grant,
-            network_grant,
+            grants,
             Some(invocation.step_context),
             invocation.cancellation_token,
         )
@@ -221,8 +221,7 @@ impl AgentLoop {
         &self,
         name: &str,
         args: &serde_json::Value,
-        workspace_write_grant: bool,
-        network_grant: tools::InProcessNetworkGrant,
+        grants: ToolExecutionGrants,
         step_context: Option<Arc<StepContext>>,
         cancellation_token: CancellationToken,
     ) -> Result<types::ToolOutput, ToolCallError> {
@@ -236,8 +235,7 @@ impl AgentLoop {
                 let fut = self.handle_tool_call_async_scoped(
                     name,
                     args,
-                    workspace_write_grant,
-                    network_grant,
+                    grants,
                     step_context,
                     cancellation_token,
                 );
@@ -253,8 +251,7 @@ impl AgentLoop {
                         rt.block_on(self.handle_tool_call_async_scoped(
                             name,
                             args,
-                            workspace_write_grant,
-                            network_grant,
+                            grants,
                             step_context,
                             cancellation_token,
                         ))
@@ -274,8 +271,7 @@ impl AgentLoop {
                 rt.block_on(self.handle_tool_call_async_scoped(
                     name,
                     args,
-                    workspace_write_grant,
-                    network_grant,
+                    grants,
                     step_context,
                     cancellation_token,
                 ))
@@ -295,8 +291,7 @@ impl AgentLoop {
         self.handle_tool_call_async_scoped(
             name,
             args,
-            false,
-            tools::InProcessNetworkGrant::default(),
+            ToolExecutionGrants::default(),
             None,
             CancellationToken::new(),
         )
@@ -307,8 +302,7 @@ impl AgentLoop {
         &self,
         name: &str,
         args: &serde_json::Value,
-        workspace_write_grant: bool,
-        network_grant: tools::InProcessNetworkGrant,
+        grants: ToolExecutionGrants,
         explicit_step_context: Option<Arc<StepContext>>,
         cancellation_token: CancellationToken,
     ) -> Result<types::ToolOutput, ToolCallError> {
@@ -395,13 +389,7 @@ impl AgentLoop {
             .into());
         }
         let raw_result = self
-            .dispatch_named_tool(
-                exec_name,
-                &exec_args,
-                workspace_write_grant,
-                network_grant,
-                step_context.as_deref(),
-            )
+            .dispatch_named_tool(exec_name, &exec_args, grants, step_context.as_deref())
             .await?;
         if exec_name == "skills" {
             self.activate_skill_toolsets_from_args(&exec_args);

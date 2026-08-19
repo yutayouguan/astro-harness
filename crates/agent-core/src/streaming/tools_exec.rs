@@ -191,6 +191,31 @@ struct ToolRunContext {
     permission_audits: Vec<PermissionAuditReceipt>,
 }
 
+#[derive(Clone)]
+struct SandboxAttempt {
+    workspace_write_grant: bool,
+    sandbox_mode_override: Option<types::SandboxMode>,
+    network_grant: tools::InProcessNetworkGrant,
+}
+
+impl SandboxAttempt {
+    fn initial(workspace_write_grant: bool, network_grant: tools::InProcessNetworkGrant) -> Self {
+        Self {
+            workspace_write_grant,
+            sandbox_mode_override: None,
+            network_grant,
+        }
+    }
+
+    fn escalated(&self) -> Self {
+        Self {
+            workspace_write_grant: self.workspace_write_grant,
+            sandbox_mode_override: Some(types::SandboxMode::DangerFullAccess),
+            network_grant: self.network_grant.clone(),
+        }
+    }
+}
+
 struct OrchestratorRunResult<Out> {
     output: Out,
 }
@@ -202,9 +227,10 @@ enum ToolApprovalOutcome {
 
 /// Codex-compatible tool policy boundary.
 ///
-/// Owns approval preflight, terminal review, one-shot grants, and step-bound
-/// dispatch. Sandbox selection, denial analysis, and escalation remain in the
-/// tool implementations until later slices migrate them here.
+/// Owns approval preflight, terminal review, one-shot grants, step-bound
+/// dispatch, typed sandbox-denial review, and a single escalated retry.
+/// Initial sandbox selection and managed-network approval remain in the tool
+/// implementations until later slices migrate them here.
 struct ToolOrchestrator<'a> {
     session: &'a Arc<AgentLoop>,
     step_context: &'a Arc<StepContext>,
@@ -645,13 +671,9 @@ impl<'a> ToolOrchestrator<'a> {
         let agent = self.session.as_ref();
         let memory_dir = agent.memory_dir().to_path_buf();
         let session_id = agent.session_id().to_string();
+        let initial_attempt = SandboxAttempt::initial(workspace_write_grant, network_grant);
         let execution_started = std::time::Instant::now();
-        let executed = self.run_attempt(
-            call,
-            workspace_write_grant,
-            network_grant,
-            CancellationToken::new(),
-        );
+        let executed = self.run_attempt(call, &initial_attempt, CancellationToken::new());
         let execution_result = match &executed {
             Ok(_) => "success",
             Err(crate::runtime::ToolCallError::Cancelled) => "cancelled",
@@ -672,13 +694,77 @@ impl<'a> ToolOrchestrator<'a> {
             Err(crate::runtime::ToolCallError::SandboxDenied(sandbox::SandboxErr::Denied {
                 output,
             })) => {
-                self.session
-                    .finalize_tool_call_result(
-                        &call.name,
-                        &call.arguments,
-                        output.aggregated_output.into(),
-                    )
-                    .await
+                let denial_output = output.aggregated_output.clone();
+                match self.review_sandbox_denial(call, output.as_ref()).await? {
+                    PermissionPreflight::Granted(retry_audit) => {
+                        let retry_started = std::time::Instant::now();
+                        let retry = self.run_attempt(
+                            call,
+                            &initial_attempt.escalated(),
+                            CancellationToken::new(),
+                        );
+                        let retry_result = match &retry {
+                            Ok(_) => "escalated",
+                            Err(crate::runtime::ToolCallError::Cancelled) => "cancelled",
+                            Err(crate::runtime::ToolCallError::SandboxDenied(_)) => {
+                                "sandbox_denied"
+                            }
+                            Err(_) => "error",
+                        };
+                        retry_audit.record(
+                            memory::PermissionAuditKind::Applied,
+                            None,
+                            Some(retry_result),
+                            Some(retry_started.elapsed().as_millis() as u64),
+                        );
+                        match retry {
+                            Ok(output) => output,
+                            Err(crate::runtime::ToolCallError::Cancelled) => return None,
+                            Err(crate::runtime::ToolCallError::SandboxDenied(
+                                sandbox::SandboxErr::Denied { output },
+                            )) => {
+                                self.session
+                                    .finalize_tool_call_result(
+                                        &call.name,
+                                        &call.arguments,
+                                        output.aggregated_output.into(),
+                                    )
+                                    .await
+                            }
+                            Err(error) => {
+                                memory::try_append_decision(
+                                    &memory_dir,
+                                    memory::DecisionEntry::new(
+                                        memory::DecisionKind::ToolFailure,
+                                        error.to_string(),
+                                    )
+                                    .with_tool(call.name.clone())
+                                    .with_session(session_id.clone()),
+                                );
+                                format!("Tool error after sandbox escalation: {error}").into()
+                            }
+                        }
+                    }
+                    PermissionPreflight::Denied(message) => {
+                        self.session
+                            .finalize_tool_call_result(
+                                &call.name,
+                                &call.arguments,
+                                format!("{denial_output}\n\nSandbox retry denied: {message}")
+                                    .into(),
+                            )
+                            .await
+                    }
+                    PermissionPreflight::NotRequired => {
+                        self.session
+                            .finalize_tool_call_result(
+                                &call.name,
+                                &call.arguments,
+                                denial_output.into(),
+                            )
+                            .await
+                    }
+                }
             }
             Err(error) => {
                 memory::try_append_decision(
@@ -699,8 +785,7 @@ impl<'a> ToolOrchestrator<'a> {
     fn run_attempt(
         &self,
         call: &types::ParsedToolCall,
-        workspace_write_grant: bool,
-        network_grant: tools::InProcessNetworkGrant,
+        attempt: &SandboxAttempt,
         cancellation_token: CancellationToken,
     ) -> Result<types::ToolOutput, crate::runtime::ToolCallError> {
         let invocation = ToolInvocation {
@@ -713,9 +798,85 @@ impl<'a> ToolOrchestrator<'a> {
         };
         self.session.handle_tool_invocation_with_once_grants(
             invocation,
-            workspace_write_grant,
-            network_grant,
+            crate::runtime::ToolExecutionGrants {
+                workspace_write: attempt.workspace_write_grant,
+                sandbox_mode_override: attempt.sandbox_mode_override,
+                network: attempt.network_grant.clone(),
+            },
         )
+    }
+
+    async fn review_sandbox_denial(
+        &self,
+        call: &types::ParsedToolCall,
+        output: &sandbox::ExecToolCallOutput,
+    ) -> Option<PermissionPreflight> {
+        let (session_id, turn_id, profile_id, memory_dir, settings) = {
+            let agent = self.session.as_ref();
+            let settings = memory::load_permission_settings(agent.memory_dir());
+            let profile_id = agent
+                .permission_profile()
+                .unwrap_or_else(|| settings.selection.profile_id.clone());
+            (
+                agent.session_id().to_string(),
+                agent.current_turn_id().await,
+                profile_id,
+                agent.memory_dir().to_path_buf(),
+                settings,
+            )
+        };
+        let selection = settings.selection.clone();
+        let command_preview = call
+            .arguments
+            .get("command")
+            .and_then(|value| value.as_str())
+            .map(str::to_string);
+        let request = types::PermissionRequest {
+            request_id: uuid::Uuid::new_v4().to_string(),
+            session_id,
+            turn_id,
+            tool_call_id: call.id.clone(),
+            tool_name: call.name.clone(),
+            summary: format!(
+                "Retry {} once with full local filesystem access after sandbox denial",
+                call.name
+            ),
+            capabilities: vec![
+                types::PermissionCapability::ProcessSpawn {
+                    program: call.name.clone(),
+                    cwd: None,
+                },
+                types::PermissionCapability::FileWrite {
+                    paths: vec!["outside configured writable roots".to_string()],
+                },
+            ],
+            reason: types::PermissionReason::SandboxDenied,
+            requested_scope: types::GrantScope::Once,
+            command_preview,
+            affected_paths: vec!["outside configured writable roots".to_string()],
+            network_hosts: Vec::new(),
+        };
+        let denial_detail = output
+            .aggregated_output
+            .chars()
+            .take(800)
+            .collect::<String>();
+        let body = format!(
+            "The sandbox denied this tool attempt:\n\n```text\n{denial_detail}\n```\n\nRetry this exact call once with full local filesystem access? Network permissions are unchanged, and the grant will not persist."
+        );
+        let audit = PermissionAuditReceipt::new(memory_dir, &settings, profile_id, request);
+        review_once_permission(
+            self.session,
+            &selection,
+            audit,
+            self.tx,
+            self.run_id,
+            self.hitl_gate,
+            "surface=permission reason=sandbox_denied",
+            "Retry outside sandbox",
+            &body,
+        )
+        .await
     }
 }
 
@@ -1362,6 +1523,27 @@ mod tests {
         json!({ "command": cmd })
     }
 
+    async fn approve_next_interrupt(gate: Arc<HitlGate>) {
+        let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(1);
+        loop {
+            if let Some(interrupt) = gate.pending_interrupts().await.into_iter().next() {
+                gate.resolve(&[crate::control::interrupt::ResumeItem {
+                    interrupt_id: interrupt.id,
+                    status: "resolved".into(),
+                    payload_json: r#"{"approved":true}"#.into(),
+                }])
+                .await
+                .unwrap();
+                return;
+            }
+            assert!(
+                tokio::time::Instant::now() < deadline,
+                "sandbox approval was not requested"
+            );
+            tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+        }
+    }
+
     #[test]
     fn tool_orchestrator_keeps_permission_preflight_order() {
         assert_eq!(
@@ -1553,6 +1735,137 @@ mod tests {
 
         assert_eq!(result.output.text(), "[redacted-tool-denial]");
         assert_eq!(attempts.load(std::sync::atomic::Ordering::SeqCst), 1);
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn tool_orchestrator_retries_typed_denial_once_after_fresh_approval() {
+        let dir = tempfile::tempdir().unwrap();
+        let session = Arc::new(
+            AgentLoop::with_session_id(
+                crate::runtime::Config::with_defaults(dir.path().to_path_buf()),
+                "orchestrator-retry-test".into(),
+            )
+            .unwrap(),
+        );
+        let attempts = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let handler_attempts = Arc::clone(&attempts);
+        session.tool_registry_mut().register_dynamic(
+            types::ToolEntry {
+                name: "sandbox_retry_probe".into(),
+                toolset: "core".into(),
+                description: "deny the first sandbox attempt".into(),
+                schema: json!({"type": "object", "properties": {}}),
+                check_fn: None,
+                icon: "shield-alert",
+                ..types::ToolEntry::lifecycle_defaults()
+            },
+            Arc::new(move |_name, _args| {
+                let attempt = handler_attempts.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                Box::pin(async move {
+                    if attempt == 0 {
+                        Err(anyhow::Error::new(sandbox::SandboxErr::Denied {
+                            output: Box::new(sandbox::ExecToolCallOutput::new(
+                                1,
+                                "",
+                                "Operation not permitted",
+                            )),
+                        }))
+                    } else {
+                        Ok(types::ToolOutput::from("retried with escalation"))
+                    }
+                })
+            }),
+        );
+        session.set_current_turn_id("turn-retry").await;
+        let step_context = session.capture_step_context().await.unwrap();
+        let (tx, _rx) = mpsc::channel(8);
+        let gate = HitlGate::new(session.session_id().to_string());
+        let resolver = tokio::spawn(approve_next_interrupt(Arc::clone(&gate)));
+        let orchestrator =
+            ToolOrchestrator::new(&session, &step_context, &tx, "run-1", Some(&gate));
+
+        let result = orchestrator
+            .run(&types::ParsedToolCall::with_id(
+                "call-1",
+                "sandbox_retry_probe",
+                json!({}),
+            ))
+            .await
+            .unwrap();
+        resolver.await.unwrap();
+
+        assert_eq!(result.output.text(), "retried with escalation");
+        assert_eq!(attempts.load(std::sync::atomic::Ordering::SeqCst), 2);
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn tool_orchestrator_does_not_retry_a_second_sandbox_denial() {
+        let dir = tempfile::tempdir().unwrap();
+        let session = Arc::new(
+            AgentLoop::with_session_id(
+                crate::runtime::Config::with_defaults(dir.path().to_path_buf()),
+                "orchestrator-retry-cap-test".into(),
+            )
+            .unwrap(),
+        );
+        let approval_requests = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let hook_requests = Arc::clone(&approval_requests);
+        session
+            .hook_bus()
+            .register(hooks::PERMISSION_REQUEST, move |_payload| {
+                hook_requests.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                hooks::HookOutcome::Continue
+            });
+        let attempts = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let handler_attempts = Arc::clone(&attempts);
+        session.tool_registry_mut().register_dynamic(
+            types::ToolEntry {
+                name: "sandbox_retry_cap_probe".into(),
+                toolset: "core".into(),
+                description: "deny every sandbox attempt".into(),
+                schema: json!({"type": "object", "properties": {}}),
+                check_fn: None,
+                icon: "shield-alert",
+                ..types::ToolEntry::lifecycle_defaults()
+            },
+            Arc::new(move |_name, _args| {
+                let attempt =
+                    handler_attempts.fetch_add(1, std::sync::atomic::Ordering::SeqCst) + 1;
+                Box::pin(async move {
+                    Err(anyhow::Error::new(sandbox::SandboxErr::Denied {
+                        output: Box::new(sandbox::ExecToolCallOutput::new(
+                            1,
+                            "",
+                            format!("Operation not permitted on attempt {attempt}"),
+                        )),
+                    }))
+                })
+            }),
+        );
+        session.set_current_turn_id("turn-retry-cap").await;
+        let step_context = session.capture_step_context().await.unwrap();
+        let (tx, _rx) = mpsc::channel(8);
+        let gate = HitlGate::new(session.session_id().to_string());
+        let resolver = tokio::spawn(approve_next_interrupt(Arc::clone(&gate)));
+        let orchestrator =
+            ToolOrchestrator::new(&session, &step_context, &tx, "run-1", Some(&gate));
+
+        let result = orchestrator
+            .run(&types::ParsedToolCall::with_id(
+                "call-1",
+                "sandbox_retry_cap_probe",
+                json!({}),
+            ))
+            .await
+            .unwrap();
+        resolver.await.unwrap();
+
+        assert!(result.output.text().contains("attempt 2"));
+        assert_eq!(attempts.load(std::sync::atomic::Ordering::SeqCst), 2);
+        assert_eq!(
+            approval_requests.load(std::sync::atomic::Ordering::SeqCst),
+            1
+        );
     }
 
     #[test]

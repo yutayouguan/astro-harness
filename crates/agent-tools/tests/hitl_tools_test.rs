@@ -48,6 +48,7 @@ async fn confirm_emits_valid_a2ui_hitl() {
         skill_config_overrides: &[],
         hook_bus: None,
         workspace_write_grant: false,
+        sandbox_mode_override: None,
         network_grant: tools::InProcessNetworkGrant::default(),
     };
 
@@ -93,6 +94,7 @@ async fn clarify_emits_valid_a2ui_hitl() {
         skill_config_overrides: &[],
         hook_bus: None,
         workspace_write_grant: false,
+        sandbox_mode_override: None,
         network_grant: tools::InProcessNetworkGrant::default(),
     };
 
@@ -153,6 +155,7 @@ async fn clarify_free_text_step_allows_empty_options() {
         skill_config_overrides: &[],
         hook_bus: None,
         workspace_write_grant: false,
+        sandbox_mode_override: None,
         network_grant: tools::InProcessNetworkGrant::default(),
     };
 
@@ -219,6 +222,7 @@ async fn clarify_multi_emits_wizard_hitl() {
         skill_config_overrides: &[],
         hook_bus: None,
         workspace_write_grant: false,
+        sandbox_mode_override: None,
         network_grant: tools::InProcessNetworkGrant::default(),
     };
 
@@ -290,6 +294,7 @@ async fn ask_user_location_mode_emits_valid_a2ui_hitl() {
         skill_config_overrides: &[],
         hook_bus: None,
         workspace_write_grant: false,
+        sandbox_mode_override: None,
         network_grant: tools::InProcessNetworkGrant::default(),
     };
 
@@ -334,6 +339,7 @@ async fn present_emits_valid_astro_ui() {
         skill_config_overrides: &[],
         hook_bus: None,
         workspace_write_grant: false,
+        sandbox_mode_override: None,
         network_grant: tools::InProcessNetworkGrant::default(),
     };
 
@@ -380,6 +386,7 @@ async fn ask_user_rejects_mixed_questions_and_body() {
         skill_config_overrides: &[],
         hook_bus: None,
         workspace_write_grant: false,
+        sandbox_mode_override: None,
         network_grant: tools::InProcessNetworkGrant::default(),
     };
 

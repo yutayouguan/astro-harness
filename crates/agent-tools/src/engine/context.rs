@@ -55,6 +55,11 @@ pub struct ToolContext<'a> {
     ///
     /// 该值只存在于本次 `ToolContext` 生命周期，不会持久化或扩大到后续工具调用。
     pub workspace_write_grant: bool,
+    /// Current attempt-only sandbox mode override.
+    ///
+    /// Only the orchestrator may set this after a fresh sandbox-denial approval.
+    /// It is never persisted or inherited by later tool calls.
+    pub sandbox_mode_override: Option<types::SandboxMode>,
     /// 当前单次工具调用已获得的进程内网络主机授权。
     ///
     /// 与命令沙箱的 `network.enabled` 相互独立，不会持久化或跨工具调用复用。
@@ -105,6 +110,7 @@ impl<'a> ToolContext<'a> {
             &root,
             self.permission_profile.as_deref(),
             self.workspace_write_grant,
+            self.sandbox_mode_override,
         )
     }
 
@@ -146,13 +152,15 @@ impl<'a> ToolContext<'a> {
 /// 从当前权限配置构造不可变的子进程沙箱策略。
 ///
 /// terminal、code_exec 与 MCP stdio 共用此入口，避免不同进程启动路径对 profile
-/// 产生不同解释。`workspace_write_grant` 仅供单次已审批的工具调用使用；常驻 MCP
-/// 连接必须传 `false`，不得继承临时授权。
+/// 产生不同解释。`workspace_write_grant` 仅供单次已审批的工具调用使用；
+/// `sandbox_mode_override` 仅供 orchestrator 在 sandbox denial 获得 fresh approval 后的
+/// 一次 retry 使用。常驻 MCP 连接必须传 `false, None`，不得继承临时授权。
 pub fn build_command_sandbox_policy(
     memory_dir: &Path,
     execution_root: &Path,
     permission_profile: Option<&str>,
     workspace_write_grant: bool,
+    sandbox_mode_override: Option<types::SandboxMode>,
 ) -> anyhow::Result<sandbox::SandboxPolicy> {
     std::fs::create_dir_all(execution_root)?;
     let loaded = memory::load_permission_settings(memory_dir);
@@ -166,7 +174,8 @@ pub fn build_command_sandbox_policy(
             profile_id
         );
     }
-    let mut mode = loaded.permissions.sandbox_mode_for(profile_id)?;
+    let mut mode =
+        sandbox_mode_override.unwrap_or(loaded.permissions.sandbox_mode_for(profile_id)?);
     if workspace_write_grant && mode == types::SandboxMode::ReadOnly {
         mode = types::SandboxMode::WorkspaceWrite;
     }
@@ -205,6 +214,7 @@ mod tests {
             skill_config_overrides: &[],
             hook_bus: None,
             workspace_write_grant: true,
+            sandbox_mode_override: None,
             network_grant: InProcessNetworkGrant::default(),
         };
 
@@ -215,6 +225,26 @@ mod tests {
             vec![workspace.canonicalize().unwrap()]
         );
         assert!(!policy.network_access);
+    }
+
+    #[test]
+    fn one_attempt_sandbox_override_bypasses_workspace_sandbox() {
+        let dir = tempfile::tempdir().unwrap();
+        let workspace = dir.path().join("workspace");
+        std::fs::create_dir_all(&workspace).unwrap();
+        memory::set_permission_preset(dir.path(), types::PermissionPreset::AskForApproval).unwrap();
+
+        let policy = build_command_sandbox_policy(
+            dir.path(),
+            &workspace,
+            None,
+            false,
+            Some(types::SandboxMode::DangerFullAccess),
+        )
+        .unwrap();
+
+        assert_eq!(policy.mode, types::SandboxMode::DangerFullAccess);
+        assert!(policy.writable_roots.is_empty());
     }
 
     #[test]
