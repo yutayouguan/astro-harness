@@ -6,6 +6,7 @@ import {
   applyActivityUpsert,
   applySurfaceUpsert,
   parseActivityOperations,
+  reconcileReasoning,
   sealOpenReasoning,
 } from "../../lib/chat/chatTimeline";
 import { elapsedSecSince } from "../../lib/chat/elapsedSec";
@@ -488,6 +489,21 @@ export function useSend(deps: UseSendDeps) {
           } else if (payload.type === "reasoning" && payload.content) {
             touchActivity();
             enqueueStreamReasoning(assistantId, payload.content);
+            setStatusPhase("generating");
+          } else if (payload.type === "reasoning_reconcile") {
+            if (streamRafRef.current != null) {
+              cancelAnimationFrame(streamRafRef.current);
+            }
+            flushStreamTokens();
+            const canonical = payload.content ?? "";
+            setMessages((prev) =>
+              prev.map((message) =>
+                message.id === assistantId
+                  ? reconcileReasoning(message, canonical)
+                  : message,
+              ),
+            );
+            touchActivity();
             setStatusPhase("generating");
           } else if (payload.type === "citations" && payload.citations) {
             try {

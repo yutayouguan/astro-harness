@@ -431,6 +431,14 @@ fn allows_post_turn_side_effects(outcome_type: &str) -> bool {
     outcome_type == "success"
 }
 
+fn can_idle_unload_thread(activity: &ThreadActivity) -> bool {
+    !activity.has_subscribers
+        && matches!(
+            activity.status.as_str(),
+            "idle" | "completed" | "failed" | "aborted" | "errored"
+        )
+}
+
 /// 工具入 pending 时 publish 全局 `pending_changed`（+ live_written=false 的 memory_updated）。
 ///
 /// 回合内 **live** 工具写仍只走 Chat `MemoryUpdate`，不调用本函数。
@@ -807,7 +815,7 @@ impl AstroServiceImpl {
             loop {
                 let idle = {
                     let activity = activity_rx.borrow().clone();
-                    activity.status == "idle" && !activity.has_subscribers
+                    can_idle_unload_thread(&activity)
                 };
                 if !idle {
                     if activity_rx.changed().await.is_err() {
@@ -821,11 +829,11 @@ impl AstroServiceImpl {
                     }
                     () = tokio::time::sleep(std::time::Duration::from_secs(30 * 60)) => {
                         let activity = activity_rx.borrow().clone();
-                        if activity.status == "idle" && !activity.has_subscribers {
+                        if can_idle_unload_thread(&activity) {
                             let creation_lock = service.threads.creation_lock(&thread_id).await;
                             let _creation = creation_lock.lock().await;
                             let activity = activity_rx.borrow().clone();
-                            if activity.status != "idle" || activity.has_subscribers {
+                            if !can_idle_unload_thread(&activity) {
                                 continue;
                             }
                             let removed = service.threads.remove_if_current(&thread_id, &managed).await;
@@ -2371,6 +2379,7 @@ impl AstroService for AstroServiceImpl {
 #[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
+    use crate::ListenerCommand;
 
     use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
@@ -4034,5 +4043,154 @@ mod tests {
             .await
             .unwrap();
         replacement.runtime.wait_terminated().await;
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn failed_terminal_unsubscribed_thread_unloads_after_thirty_minutes() {
+        let dir = TempDir::new().unwrap();
+        memory::ensure_workspace(dir.path()).unwrap();
+        let service = AstroServiceImpl::new(dir.path().to_path_buf());
+        let managed = service
+            .get_or_create_thread("failed-thread")
+            .await
+            .expect("create thread");
+        let (_receiver, _cancel, generation) = service
+            .connections
+            .register("connection-failed".into())
+            .await;
+        let subscription = generation.key().clone();
+        let (resume_reply, resume_rx) = tokio::sync::oneshot::channel();
+        managed
+            .commands
+            .send(ListenerCommand::Resume {
+                subscription: subscription.clone(),
+                include_turns: true,
+                reply: resume_reply,
+            })
+            .unwrap();
+        resume_rx.await.unwrap();
+        managed
+            .commands
+            .send(ListenerCommand::CoreEvent(agent_protocol::Event {
+                id: "turn-failed".into(),
+                msg: agent_protocol::EventMsg::TurnStarted(agent_protocol::TurnStartedEvent {
+                    turn_id: "turn-failed".into(),
+                }),
+            }))
+            .unwrap();
+        managed
+            .commands
+            .send(ListenerCommand::CoreEvent(agent_protocol::Event {
+                id: "turn-failed".into(),
+                msg: agent_protocol::EventMsg::TurnComplete(agent_protocol::TurnCompleteEvent {
+                    turn_id: "turn-failed".into(),
+                    last_agent_message: None,
+                    error: Some(agent_protocol::ErrorEvent {
+                        message: "boom".into(),
+                        error_type: "provider".into(),
+                    }),
+                }),
+            }))
+            .unwrap();
+        let (unsubscribe_reply, unsubscribe_rx) = tokio::sync::oneshot::channel();
+        managed
+            .commands
+            .send(ListenerCommand::Unsubscribe {
+                subscription,
+                reply: Some(unsubscribe_reply),
+            })
+            .unwrap();
+        unsubscribe_rx.await.unwrap();
+        assert_eq!(managed.activity_rx.borrow().status, "errored");
+        assert!(!managed.activity_rx.borrow().has_subscribers);
+
+        tokio::time::advance(std::time::Duration::from_secs(30 * 60)).await;
+        for _ in 0..8 {
+            tokio::task::yield_now().await;
+        }
+
+        assert!(!service.threads.contains("failed-thread").await);
+        assert!(service.thread_states.get("failed-thread").await.is_none());
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn completed_snapshot_can_resubscribe_then_unload_after_explicit_unsubscribe() {
+        let dir = TempDir::new().unwrap();
+        memory::ensure_workspace(dir.path()).unwrap();
+        let service = AstroServiceImpl::new(dir.path().to_path_buf());
+        let managed = service
+            .get_or_create_thread("completed-thread")
+            .await
+            .expect("create thread");
+        let (_receiver, _cancel, generation) = service
+            .connections
+            .register("connection-completed".into())
+            .await;
+        let subscription = generation.key().clone();
+        let (resume_reply, resume_rx) = tokio::sync::oneshot::channel();
+        managed
+            .commands
+            .send(ListenerCommand::Resume {
+                subscription: subscription.clone(),
+                include_turns: true,
+                reply: resume_reply,
+            })
+            .unwrap();
+        resume_rx.await.unwrap();
+        for msg in [
+            agent_protocol::EventMsg::TurnStarted(agent_protocol::TurnStartedEvent {
+                turn_id: "turn-completed".into(),
+            }),
+            agent_protocol::EventMsg::TurnComplete(agent_protocol::TurnCompleteEvent {
+                turn_id: "turn-completed".into(),
+                last_agent_message: Some("done".into()),
+                error: None,
+            }),
+        ] {
+            managed
+                .commands
+                .send(ListenerCommand::CoreEvent(agent_protocol::Event {
+                    id: "turn-completed".into(),
+                    msg,
+                }))
+                .unwrap();
+        }
+        let (unsubscribe_reply, unsubscribe_rx) = tokio::sync::oneshot::channel();
+        managed
+            .commands
+            .send(ListenerCommand::Unsubscribe {
+                subscription: subscription.clone(),
+                reply: Some(unsubscribe_reply),
+            })
+            .unwrap();
+        unsubscribe_rx.await.unwrap();
+
+        let (resume_reply, resume_rx) = tokio::sync::oneshot::channel();
+        managed
+            .commands
+            .send(ListenerCommand::Resume {
+                subscription: subscription.clone(),
+                include_turns: true,
+                reply: resume_reply,
+            })
+            .unwrap();
+        let snapshot = resume_rx.await.unwrap();
+        assert_eq!(snapshot.turns.len(), 1);
+        assert_eq!(snapshot.turns[0].status, "completed");
+        let (unsubscribe_reply, unsubscribe_rx) = tokio::sync::oneshot::channel();
+        managed
+            .commands
+            .send(ListenerCommand::Unsubscribe {
+                subscription,
+                reply: Some(unsubscribe_reply),
+            })
+            .unwrap();
+        unsubscribe_rx.await.unwrap();
+
+        tokio::time::advance(std::time::Duration::from_secs(30 * 60)).await;
+        for _ in 0..8 {
+            tokio::task::yield_now().await;
+        }
+        assert!(!service.threads.contains("completed-thread").await);
     }
 }

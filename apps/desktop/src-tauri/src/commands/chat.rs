@@ -61,6 +61,9 @@ pub enum ChatStreamEvent {
     Reasoning {
         content: String,
     },
+    ReasoningReconcile {
+        content: String,
+    },
     ToolCall {
         id: String,
         name: String,

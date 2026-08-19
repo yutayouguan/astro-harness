@@ -4,7 +4,12 @@
 import { useCallback, useEffect, useRef, useState, type Dispatch, type SetStateAction } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
-import { applyActivityUpsert, applySurfaceUpsert, sealOpenReasoning } from "../../lib/chat/chatTimeline";
+import {
+  applyActivityUpsert,
+  applySurfaceUpsert,
+  reconcileReasoning,
+  sealOpenReasoning,
+} from "../../lib/chat/chatTimeline";
 import {
   consumeBufferedTextReconcile,
   reconcileAssistantText,
@@ -462,6 +467,14 @@ export function useParallelTasks(deps: Deps) {
               m.id === assistantId
                 ? { ...m, reasoning: (m.reasoning || "") + payload.content }
                 : m,
+            ),
+          );
+        } else if (payload.type === "reasoning_reconcile") {
+          setMessages((prev) =>
+            prev.map((message) =>
+              message.id === assistantId
+                ? reconcileReasoning(message, payload.content ?? "")
+                : message,
             ),
           );
         } else if (payload.type === "activity") {

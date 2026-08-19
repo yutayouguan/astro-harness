@@ -1,6 +1,7 @@
 //! One long-lived Codex-style Thread event connection for the desktop shell.
 
 use std::collections::{HashMap, HashSet};
+use std::future::Future;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -8,7 +9,7 @@ use agent_protocol::TurnItem;
 use proto::astro_service_client::AstroServiceClient;
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager};
-use tokio::sync::{watch, RwLock};
+use tokio::sync::{mpsc, watch, Mutex, RwLock};
 use tracing::debug;
 
 use super::grpc::{default_grpc_address, endpoint_url};
@@ -31,6 +32,7 @@ struct ActiveState {
     awaiting_submissions: HashMap<String, HashSet<u64>>,
     deferred_terminals: HashMap<String, HashMap<String, DeferredTerminal>>,
     delivered_agent_text: HashMap<String, HashMap<String, String>>,
+    delivered_reasoning: HashMap<String, HashMap<String, String>>,
     pending_terminal_errors: HashMap<String, HashMap<String, String>>,
     next_activation: u64,
 }
@@ -40,11 +42,55 @@ struct DeferredTerminal {
     events: Vec<ChatStreamEvent>,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct TerminalUnsubscribeRequest {
+    thread_id: String,
+    activation: u64,
+}
+
+struct TerminalSubscriptionCleanup {
+    owners: RwLock<HashMap<String, u64>>,
+    gates: std::sync::Mutex<HashMap<String, Arc<Mutex<()>>>>,
+    requests: mpsc::UnboundedSender<TerminalUnsubscribeRequest>,
+    receiver: std::sync::Mutex<Option<mpsc::UnboundedReceiver<TerminalUnsubscribeRequest>>>,
+}
+
+impl TerminalSubscriptionCleanup {
+    fn new() -> Self {
+        let (requests, receiver) = mpsc::unbounded_channel();
+        Self {
+            owners: RwLock::new(HashMap::new()),
+            gates: std::sync::Mutex::new(HashMap::new()),
+            requests,
+            receiver: std::sync::Mutex::new(Some(receiver)),
+        }
+    }
+
+    fn gate(&self, thread_id: &str) -> Arc<Mutex<()>> {
+        Arc::clone(
+            self.gates
+                .lock()
+                .expect("terminal subscription gate lock poisoned")
+                .entry(thread_id.into())
+                .or_insert_with(|| Arc::new(Mutex::new(()))),
+        )
+    }
+
+    fn take_requests(&self) -> mpsc::UnboundedReceiver<TerminalUnsubscribeRequest> {
+        self.receiver
+            .lock()
+            .expect("terminal unsubscribe receiver lock poisoned")
+            .take()
+            .expect("terminal unsubscribe receiver already taken")
+    }
+}
+
 /// Process-wide connection state shared by chat commands and the event pump.
 pub struct ThreadEventsBridge {
     connection_id: String,
     ready: watch::Sender<bool>,
     active_threads: RwLock<ActiveState>,
+    terminal_cleanup: TerminalSubscriptionCleanup,
 }
 
 impl Default for ThreadEventsBridge {
@@ -60,6 +106,7 @@ impl ThreadEventsBridge {
             connection_id: uuid::Uuid::new_v4().to_string(),
             ready,
             active_threads: RwLock::new(ActiveState::default()),
+            terminal_cleanup: TerminalSubscriptionCleanup::new(),
         }
     }
 
@@ -110,6 +157,8 @@ impl ThreadEventsBridge {
 
     pub async fn activate(&self, thread_id: impl Into<String>) -> u64 {
         let thread_id = thread_id.into();
+        let gate = self.terminal_cleanup.gate(&thread_id);
+        let _owner_guard = gate.lock().await;
         let mut state = self.active_threads.write().await;
         state.next_activation = state.next_activation.wrapping_add(1).max(1);
         let activation = state.next_activation;
@@ -120,7 +169,13 @@ impl ThreadEventsBridge {
             .entry(thread_id.clone())
             .or_default()
             .insert(activation);
-        state.activations.insert(thread_id, activation);
+        state.activations.insert(thread_id.clone(), activation);
+        drop(state);
+        self.terminal_cleanup
+            .owners
+            .write()
+            .await
+            .insert(thread_id, activation);
         activation
     }
 
@@ -132,6 +187,8 @@ impl ThreadEventsBridge {
             return false;
         }
         Self::clear_thread(&mut state, thread_id);
+        drop(state);
+        self.clear_terminal_owner_if(thread_id, activation).await;
         true
     }
 
@@ -206,6 +263,8 @@ impl ThreadEventsBridge {
             return Vec::new();
         };
         Self::clear_thread(&mut state, thread_id);
+        drop(state);
+        self.queue_terminal_unsubscribe(thread_id, activation);
         deferred.events
     }
 
@@ -236,6 +295,13 @@ impl ThreadEventsBridge {
             match event {
                 ChatStreamEvent::Token { content } => state
                     .delivered_agent_text
+                    .entry(thread_id.into())
+                    .or_default()
+                    .entry(turn_id.into())
+                    .or_default()
+                    .push_str(content),
+                ChatStreamEvent::Reasoning { content } => state
+                    .delivered_reasoning
                     .entry(thread_id.into())
                     .or_default()
                     .entry(turn_id.into())
@@ -281,6 +347,24 @@ impl ThreadEventsBridge {
                     } else {
                         *delivered = content.clone();
                         recovered.push(ChatStreamEvent::TextReconcile { content });
+                    }
+                }
+                ChatStreamEvent::Reasoning { content } => {
+                    let delivered = state
+                        .delivered_reasoning
+                        .entry(thread_id.into())
+                        .or_default()
+                        .entry(turn_id.into())
+                        .or_default();
+                    if content.starts_with(delivered.as_str()) {
+                        let missing = content[delivered.len()..].to_string();
+                        *delivered = content;
+                        if !missing.is_empty() {
+                            recovered.push(ChatStreamEvent::Reasoning { content: missing });
+                        }
+                    } else {
+                        *delivered = content.clone();
+                        recovered.push(ChatStreamEvent::ReasoningReconcile { content });
                     }
                 }
                 other => recovered.push(other),
@@ -358,6 +442,8 @@ impl ThreadEventsBridge {
         let current_activation = state.activations.get(thread_id).copied();
         if current_activation == Some(turn_epoch) {
             Self::clear_thread(&mut state, thread_id);
+            drop(state);
+            self.queue_terminal_unsubscribe(thread_id, turn_epoch);
             return events;
         }
 
@@ -406,6 +492,7 @@ impl ThreadEventsBridge {
         state.awaiting_submissions.remove(thread_id);
         state.deferred_terminals.remove(thread_id);
         state.delivered_agent_text.remove(thread_id);
+        state.delivered_reasoning.remove(thread_id);
         state.pending_terminal_errors.remove(thread_id);
     }
 
@@ -435,6 +522,57 @@ impl ThreadEventsBridge {
                 state.awaiting_submissions.remove(thread_id);
             }
         }
+    }
+
+    fn queue_terminal_unsubscribe(&self, thread_id: &str, activation: u64) {
+        let _ = self
+            .terminal_cleanup
+            .requests
+            .send(TerminalUnsubscribeRequest {
+                thread_id: thread_id.into(),
+                activation,
+            });
+    }
+
+    fn take_terminal_unsubscribe_requests(
+        &self,
+    ) -> mpsc::UnboundedReceiver<TerminalUnsubscribeRequest> {
+        self.terminal_cleanup.take_requests()
+    }
+
+    async fn clear_terminal_owner_if(&self, thread_id: &str, activation: u64) {
+        let mut owners = self.terminal_cleanup.owners.write().await;
+        if owners.get(thread_id).copied() == Some(activation) {
+            owners.remove(thread_id);
+        }
+    }
+
+    async fn run_terminal_unsubscribe_if_owned<F, Fut>(
+        &self,
+        request: TerminalUnsubscribeRequest,
+        unsubscribe: F,
+    ) -> Result<bool, String>
+    where
+        F: FnOnce(String) -> Fut,
+        Fut: Future<Output = Result<(), String>>,
+    {
+        let gate = self.terminal_cleanup.gate(&request.thread_id);
+        let _owner_guard = gate.lock().await;
+        if self
+            .terminal_cleanup
+            .owners
+            .read()
+            .await
+            .get(&request.thread_id)
+            .copied()
+            != Some(request.activation)
+        {
+            return Ok(false);
+        }
+        unsubscribe(request.thread_id.clone()).await?;
+        self.clear_terminal_owner_if(&request.thread_id, request.activation)
+            .await;
+        Ok(true)
     }
 }
 
@@ -503,11 +641,80 @@ pub fn accepted_turn_id(response: proto::SubmitTurnResponse) -> Result<String, S
 /// Register the shared bridge and start its reconnecting connection loop.
 pub fn start_bridge(app: &AppHandle) {
     let bridge = Arc::new(ThreadEventsBridge::new());
+    let terminal_unsubscribes = bridge.take_terminal_unsubscribe_requests();
     app.manage(Arc::clone(&bridge));
-    let app = app.clone();
+    let subscribe_app = app.clone();
+    let subscribe_bridge = Arc::clone(&bridge);
     tauri::async_runtime::spawn(async move {
-        run_subscribe_loop(app, bridge).await;
+        run_subscribe_loop(subscribe_app, subscribe_bridge).await;
     });
+    tauri::async_runtime::spawn(async move {
+        run_terminal_unsubscribe_loop(bridge, terminal_unsubscribes).await;
+    });
+}
+
+async fn run_terminal_unsubscribe_loop(
+    bridge: Arc<ThreadEventsBridge>,
+    mut requests: mpsc::UnboundedReceiver<TerminalUnsubscribeRequest>,
+) {
+    while let Some(request) = requests.recv().await {
+        let bridge = Arc::clone(&bridge);
+        tauri::async_runtime::spawn(async move {
+            let mut backoff = RetryBackoff::default();
+            loop {
+                let connection_id = bridge.connection_id().to_string();
+                let result = bridge
+                    .run_terminal_unsubscribe_if_owned(request.clone(), move |thread_id| {
+                        unsubscribe_terminal_thread(connection_id, thread_id)
+                    })
+                    .await;
+                match result {
+                    Ok(_) => break,
+                    Err(error) => {
+                        debug!(
+                            thread_id = %request.thread_id,
+                            activation = request.activation,
+                            %error,
+                            "terminal thread unsubscribe failed"
+                        );
+                        tokio::time::sleep(backoff.next_delay()).await;
+                    }
+                }
+            }
+        });
+    }
+}
+
+async fn unsubscribe_terminal_thread(
+    connection_id: String,
+    thread_id: String,
+) -> Result<(), String> {
+    tokio::time::timeout(Duration::from_secs(5), async move {
+        let endpoint = endpoint_url(&default_grpc_address());
+        let mut client = AstroServiceClient::connect(endpoint)
+            .await
+            .map_err(|error| error.to_string())?;
+        match client
+            .unsubscribe_thread(proto::UnsubscribeThreadRequest {
+                connection_id,
+                thread_id,
+            })
+            .await
+        {
+            Ok(_) => Ok(()),
+            Err(error)
+                if matches!(
+                    error.code(),
+                    tonic::Code::NotFound | tonic::Code::FailedPrecondition
+                ) =>
+            {
+                Ok(())
+            }
+            Err(error) => Err(error.to_string()),
+        }
+    })
+    .await
+    .map_err(|_| "terminal thread unsubscribe timed out".to_string())?
 }
 
 async fn run_subscribe_loop(app: AppHandle, bridge: Arc<ThreadEventsBridge>) {
@@ -1200,10 +1407,18 @@ fn reconcile_snapshot(snapshot: &proto::ThreadSnapshot) -> SnapshotReconcile {
 fn snapshot_turn_recovery_events(turn: &proto::ThreadTurn) -> Vec<ChatStreamEvent> {
     let mut events = Vec::new();
     let mut item_agent_messages = Vec::new();
+    let mut item_reasoning = Vec::new();
     for item in &turn.items {
-        if let Ok(TurnItem::AgentMessage(message)) = serde_json::from_str(&item.payload_json) {
-            item_agent_messages.push(message.content);
-            continue;
+        match serde_json::from_str(&item.payload_json) {
+            Ok(TurnItem::AgentMessage(message)) => {
+                item_agent_messages.push(message.content);
+                continue;
+            }
+            Ok(TurnItem::Reasoning(reasoning)) => {
+                item_reasoning.push(reasoning.content);
+                continue;
+            }
+            _ => {}
         }
         events.extend(map_item_event(
             proto::ThreadItemEvent {
@@ -1211,6 +1426,11 @@ fn snapshot_turn_recovery_events(turn: &proto::ThreadTurn) -> Vec<ChatStreamEven
             },
             false,
         ));
+    }
+    if !item_reasoning.is_empty() {
+        events.push(ChatStreamEvent::Reasoning {
+            content: item_reasoning.concat(),
+        });
     }
     // The thread history keeps every assistant item while TurnComplete stores only the final
     // assistant message. Rebuild the same concatenation that live deltas produced, using the
@@ -1306,6 +1526,7 @@ fn emit_snapshot(app: &AppHandle, snapshot: &proto::ThreadSnapshot) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::atomic::{AtomicUsize, Ordering};
 
     fn terminal_event(thread_id: &str, turn_id: &str) -> proto::ThreadEvent {
         proto::ThreadEvent {
@@ -1336,6 +1557,19 @@ mod tests {
                     content: content.into(),
                 },
             ))
+            .unwrap(),
+        }
+    }
+
+    fn reasoning_item(id: &str, content: &str) -> proto::ThreadItem {
+        proto::ThreadItem {
+            id: id.into(),
+            item_type: "reasoning".into(),
+            status: "in_progress".into(),
+            payload_json: serde_json::to_string(&TurnItem::Reasoning(agent_protocol::TextItem {
+                id: id.into(),
+                content: content.into(),
+            }))
             .unwrap(),
         }
     }
@@ -1675,6 +1909,92 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn accepted_terminal_queues_and_executes_exact_unsubscribe() {
+        let bridge = ThreadEventsBridge::new();
+        let mut requests = bridge.take_terminal_unsubscribe_requests();
+        let activation = bridge.activate("session-1").await;
+        bridge
+            .bind_submitted_turn_if_current("session-1", activation, "turn-1")
+            .await;
+        assert!(!bridge
+            .accept_terminal("session-1", "turn-1", terminal_projection("turn-1"))
+            .await
+            .is_empty());
+
+        let request = requests.recv().await.expect("terminal unsubscribe");
+        assert_eq!(request.thread_id, "session-1");
+        assert_eq!(request.activation, activation);
+        let calls = Arc::new(AtomicUsize::new(0));
+        let counted = Arc::clone(&calls);
+        assert!(bridge
+            .run_terminal_unsubscribe_if_owned(request, move |thread_id| async move {
+                assert_eq!(thread_id, "session-1");
+                counted.fetch_add(1, Ordering::SeqCst);
+                Ok(())
+            })
+            .await
+            .unwrap());
+        assert_eq!(calls.load(Ordering::SeqCst), 1);
+    }
+
+    #[tokio::test]
+    async fn stale_terminal_unsubscribe_cannot_remove_new_activation() {
+        let bridge = ThreadEventsBridge::new();
+        let mut requests = bridge.take_terminal_unsubscribe_requests();
+        let old = bridge.activate("session-1").await;
+        bridge
+            .bind_submitted_turn_if_current("session-1", old, "turn-old")
+            .await;
+        bridge
+            .accept_terminal("session-1", "turn-old", terminal_projection("turn-old"))
+            .await;
+        let stale = requests.recv().await.expect("old terminal unsubscribe");
+
+        let current = bridge.activate("session-1").await;
+        let calls = Arc::new(AtomicUsize::new(0));
+        let counted = Arc::clone(&calls);
+        assert!(!bridge
+            .run_terminal_unsubscribe_if_owned(stale, move |_| async move {
+                counted.fetch_add(1, Ordering::SeqCst);
+                Ok(())
+            })
+            .await
+            .unwrap());
+        assert_eq!(calls.load(Ordering::SeqCst), 0);
+        assert!(bridge.is_active("session-1").await);
+        assert_eq!(
+            bridge
+                .active_threads
+                .read()
+                .await
+                .activations
+                .get("session-1"),
+            Some(&current)
+        );
+    }
+
+    #[tokio::test]
+    async fn steered_terminal_unsubscribe_is_owned_by_current_activation() {
+        let bridge = ThreadEventsBridge::new();
+        let mut requests = bridge.take_terminal_unsubscribe_requests();
+        let old = bridge.activate("session-1").await;
+        bridge
+            .bind_submitted_turn_if_current("session-1", old, "turn-1")
+            .await;
+        let current = bridge.activate("session-1").await;
+        bridge
+            .bind_submitted_turn_if_current("session-1", current, "turn-1")
+            .await;
+        assert!(!bridge
+            .accept_terminal("session-1", "turn-1", terminal_projection("turn-1"))
+            .await
+            .is_empty());
+
+        let request = requests.recv().await.expect("steered unsubscribe");
+        assert_eq!(request.activation, current);
+    }
+
+    #[tokio::test]
     async fn late_ack_after_accepted_terminal_cannot_recreate_thread_state() {
         let bridge = ThreadEventsBridge::new();
         let activation = bridge.activate("session-1").await;
@@ -1695,6 +2015,7 @@ mod tests {
         assert!(!state.awaiting_submissions.contains_key("session-1"));
         assert!(!state.deferred_terminals.contains_key("session-1"));
         assert!(!state.delivered_agent_text.contains_key("session-1"));
+        assert!(!state.delivered_reasoning.contains_key("session-1"));
         assert!(!state.pending_terminal_errors.contains_key("session-1"));
     }
 
@@ -2082,6 +2403,122 @@ mod tests {
                 ChatStreamEvent::Done
             ] if content.is_empty()
         ));
+    }
+
+    #[tokio::test]
+    async fn running_snapshot_recovers_only_missing_reasoning_before_buffered_live() {
+        let bridge = ThreadEventsBridge::new();
+        let activation = bridge.activate("session-1").await;
+        bridge
+            .bind_submitted_turn_if_current("session-1", activation, "turn-1")
+            .await;
+        bridge
+            .record_delivered_projection(
+                "session-1",
+                "turn-1",
+                &[ChatStreamEvent::Reasoning {
+                    content: "seen".into(),
+                }],
+            )
+            .await;
+        let snapshot = proto::ThreadSnapshot {
+            thread_id: "session-1".into(),
+            status: "running".into(),
+            turns: vec![],
+            active_turn: Some(proto::ThreadTurn {
+                id: "turn-1".into(),
+                status: "in_progress".into(),
+                items: vec![reasoning_item("reasoning-1", "seenlost")],
+                last_agent_message: String::new(),
+                error: None,
+                has_error: false,
+            }),
+            has_active_turn: true,
+        };
+
+        let reconciled = reconcile_snapshot(&snapshot);
+        let mut projected = bridge
+            .recover_snapshot_projection("session-1", "turn-1", reconciled.terminal)
+            .await;
+        projected.extend(map_thread_event(proto::ThreadEvent {
+            thread_id: "session-1".into(),
+            turn_id: "turn-1".into(),
+            payload: Some(proto::thread_event::Payload::ReasoningDelta(
+                proto::ThreadDelta {
+                    item_id: "reasoning-1".into(),
+                    delta: "next".into(),
+                },
+            )),
+        }));
+
+        assert!(matches!(
+            projected.as_slice(),
+            [
+                ChatStreamEvent::Reasoning { content: missing },
+                ChatStreamEvent::Reasoning { content: live }
+            ] if missing == "lost" && live == "next"
+        ));
+    }
+
+    #[tokio::test]
+    async fn running_snapshot_recovers_full_reasoning_after_total_disconnect() {
+        let bridge = ThreadEventsBridge::new();
+        let activation = bridge.activate("session-1").await;
+        bridge
+            .bind_submitted_turn_if_current("session-1", activation, "turn-1")
+            .await;
+
+        let recovered = bridge
+            .recover_snapshot_projection(
+                "session-1",
+                "turn-1",
+                snapshot_turn_recovery_events(&proto::ThreadTurn {
+                    id: "turn-1".into(),
+                    status: "in_progress".into(),
+                    items: vec![reasoning_item("reasoning-1", "full")],
+                    last_agent_message: String::new(),
+                    error: None,
+                    has_error: false,
+                }),
+            )
+            .await;
+
+        assert!(matches!(
+            recovered.as_slice(),
+            [ChatStreamEvent::Reasoning { content }] if content == "full"
+        ));
+    }
+
+    #[tokio::test]
+    async fn divergent_snapshot_uses_canonical_reasoning_reconciliation() {
+        let bridge = ThreadEventsBridge::new();
+        let activation = bridge.activate("session-1").await;
+        bridge
+            .bind_submitted_turn_if_current("session-1", activation, "turn-1")
+            .await;
+        bridge
+            .record_delivered_projection(
+                "session-1",
+                "turn-1",
+                &[ChatStreamEvent::Reasoning {
+                    content: "hel world".into(),
+                }],
+            )
+            .await;
+
+        let recovered = bridge
+            .recover_snapshot_projection(
+                "session-1",
+                "turn-1",
+                vec![ChatStreamEvent::Reasoning {
+                    content: "hello world".into(),
+                }],
+            )
+            .await;
+        let serialized = serde_json::to_value(&recovered).unwrap();
+
+        assert_eq!(serialized[0]["type"], "reasoning_reconcile");
+        assert_eq!(serialized[0]["content"], "hello world");
     }
 
     #[tokio::test]
