@@ -1,4 +1,5 @@
 use std::collections::{BTreeSet, HashMap};
+use std::future::Future;
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, OnceLock};
@@ -526,12 +527,13 @@ impl AgentControl {
 
     /// Returns the next activity in strict sequence order for read-only
     /// projection observers. Runtime wait semantics remain on [`Self::wait_activity`].
-    pub async fn next_activity_after(
+    pub fn next_activity_after(
         &self,
         cursor: ActivityCursor,
         timeout: Duration,
-    ) -> Option<crate::AgentActivity> {
-        self.activity.next_after(cursor, timeout).await
+    ) -> impl Future<Output = crate::ActivityObservation> + Send + 'static {
+        let activity = Arc::clone(&self.activity);
+        async move { activity.observe_after(cursor, timeout).await }
     }
 
     pub fn notify_main_steer(&self) {

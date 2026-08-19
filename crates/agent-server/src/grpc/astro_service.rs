@@ -169,6 +169,7 @@ fn publish_tool_pending_to_hub(
         pending_changed: None,
         session_metadata_changed: None,
         agent_thread_changed: None,
+        resync_required: None,
     });
     hub.publish(SessionEventMsg {
         session_id: None,
@@ -180,6 +181,7 @@ fn publish_tool_pending_to_hub(
         }),
         session_metadata_changed: None,
         agent_thread_changed: None,
+        resync_required: None,
     });
 }
 
@@ -213,6 +215,7 @@ async fn spawn_review_to_hub(session: &SessionHandle, session_id: &str, hub: &Se
                 pending_changed: None,
                 session_metadata_changed: None,
                 agent_thread_changed: None,
+                resync_required: None,
             });
             if !live_written {
                 let pending_count = memory::list_pending(&memory_dir)
@@ -228,6 +231,7 @@ async fn spawn_review_to_hub(session: &SessionHandle, session_id: &str, hub: &Se
                     }),
                     session_metadata_changed: None,
                     agent_thread_changed: None,
+                    resync_required: None,
                 });
             }
         }
@@ -255,6 +259,7 @@ async fn spawn_title_to_hub(session: &SessionHandle, hub: &SessionEventHub) {
                     title: n.title,
                 }),
                 agent_thread_changed: None,
+                resync_required: None,
             });
         }
     });
@@ -326,15 +331,19 @@ impl AstroServiceImpl {
                 Ok(watchers) => watchers,
                 Err(poisoned) => poisoned.into_inner(),
             };
-            if watchers
-                .get(root_thread_id)
-                .and_then(Weak::upgrade)
-                .is_some()
-            {
-                return;
+            if let Some(attached) = watchers.get(root_thread_id).and_then(Weak::upgrade) {
+                if Arc::ptr_eq(&attached, &control) {
+                    return;
+                }
             }
             watchers.insert(root_thread_id.to_string(), weak_control.clone());
         }
+
+        self.session_events.rotate_generation_for_root(
+            root_thread_id,
+            root_agent_id,
+            "agent_control_generation_changed",
+        );
 
         let root_thread_id = root_thread_id.to_string();
         let root_agent_id = root_agent_id.to_string();
@@ -348,12 +357,36 @@ impl AstroServiceImpl {
                 let Some(control) = weak_control.upgrade() else {
                     break;
                 };
-                let next = control
-                    .next_activity_after(cursor, Duration::from_millis(250))
-                    .await;
+                let observation = control.next_activity_after(cursor, Duration::from_millis(250));
                 drop(control);
-                let Some(activity) = next else {
-                    continue;
+                let observation = observation.await;
+
+                // Keep the generation registry locked through publication.
+                // A replacement watcher cannot install its reset marker until
+                // every old-generation observation has either published first
+                // or observed that it no longer owns this root entry.
+                let watchers = match watcher_registry.lock() {
+                    Ok(watchers) => watchers,
+                    Err(poisoned) => poisoned.into_inner(),
+                };
+                let owns_entry = watchers
+                    .get(&root_thread_id)
+                    .is_some_and(|registered| Weak::ptr_eq(registered, &weak_control));
+                if !owns_entry {
+                    break;
+                }
+                let activity = match observation {
+                    subagents::ActivityObservation::Activity(activity) => *activity,
+                    subagents::ActivityObservation::Gap { latest, .. } => {
+                        cursor = latest;
+                        session_events.rotate_generation_for_root(
+                            &root_thread_id,
+                            &root_agent_id,
+                            "activity_gap",
+                        );
+                        continue;
+                    }
+                    subagents::ActivityObservation::TimedOut => continue,
                 };
                 if activity.sequence <= cursor.0 {
                     continue;
@@ -369,6 +402,7 @@ impl AstroServiceImpl {
                     pending_changed: None,
                     session_metadata_changed: None,
                     agent_thread_changed: Some(projection),
+                    resync_required: None,
                 });
             }
 
@@ -1579,9 +1613,8 @@ impl AstroService for AstroServiceImpl {
         let (tx, rx) = tokio::sync::mpsc::channel(16);
         tokio::spawn(async move {
             let mut filtered = hub.subscribe(filter, &resume_stream_id, after_event_id);
-            let stream_id = hub.stream_id().to_string();
             while let Some(ev) = filtered.recv().await {
-                if tx.send(Ok(to_proto(&ev, &stream_id))).await.is_err() {
+                if tx.send(Ok(to_proto(&ev))).await.is_err() {
                     break;
                 }
             }
@@ -1804,6 +1837,88 @@ mod tests {
         .expect("released root watcher is reclaimed");
         drop(pause);
         drop(gate);
+    }
+
+    #[tokio::test]
+    async fn replaced_watcher_never_publishes_old_bus_activity_after_new_reset() {
+        let dir = TempDir::new().unwrap();
+        let service = Arc::new(AstroServiceImpl::new(dir.path().to_path_buf()));
+        let root = "watcher-generation-fence";
+        let store = subagents::AgentGraphStore::open(dir.path().join("graph.db")).unwrap();
+        let limits = subagents::Limits {
+            max_threads: 32,
+            max_depth: 8,
+            max_running: 8,
+        };
+        let old = subagents::AgentControl::open(root.into(), store.clone(), limits).unwrap();
+        service.attach_agent_thread_watcher(root, "default", Arc::clone(&old));
+        tokio::time::sleep(Duration::from_millis(20)).await;
+
+        // Block both the old observer's generation check and the replacement
+        // attach. Whichever acquires this lock first after release establishes
+        // a total order: old projection before reset, or no old projection.
+        let registry_guard = match service.agent_thread_watchers.lock() {
+            Ok(watchers) => watchers,
+            Err(poisoned) => poisoned.into_inner(),
+        };
+        let old_activity = old
+            .reserve_spawn(&subagents::AgentPath::root(), "old_pending")
+            .unwrap();
+        let old_thread_id = old_activity.thread_id().to_string();
+        old_activity.commit().unwrap();
+        old.record_runner_event(&old_thread_id, subagents::RunnerEvent::RuntimeTerminated)
+            .unwrap();
+        drop(old);
+
+        let replacement = subagents::AgentControl::open(root.into(), store, limits).unwrap();
+        let mut events = service.session_events.subscribe_raw();
+        let attach_service = Arc::clone(&service);
+        let attach_control = Arc::clone(&replacement);
+        let attach = tokio::task::spawn_blocking(move || {
+            attach_service.attach_agent_thread_watcher(root, "default", attach_control);
+        });
+        std::thread::sleep(Duration::from_millis(20));
+        drop(registry_guard);
+        attach.await.unwrap();
+
+        let reset = tokio::time::timeout(Duration::from_secs(2), async {
+            loop {
+                let event = events.recv().await.unwrap();
+                if event
+                    .event
+                    .resync_required
+                    .as_ref()
+                    .is_some_and(|reset| reset.reason == "agent_control_generation_changed")
+                {
+                    break event;
+                }
+            }
+        })
+        .await
+        .expect("replacement reset timeout");
+
+        let new_activity = replacement
+            .reserve_spawn(&subagents::AgentPath::root(), "new_generation")
+            .unwrap();
+        new_activity.commit().unwrap();
+        let projection = tokio::time::timeout(Duration::from_secs(2), async {
+            loop {
+                let event = events.recv().await.unwrap();
+                if let Some(projection) = event.event.agent_thread_changed {
+                    assert_ne!(
+                        projection.canonical_path, "/root/old_pending",
+                        "old-generation activity crossed the replacement reset"
+                    );
+                    if projection.canonical_path == "/root/new_generation" {
+                        break (event.stream_id, projection);
+                    }
+                }
+            }
+        })
+        .await
+        .expect("new-generation projection timeout");
+        assert_eq!(projection.0, reset.stream_id);
+        assert_eq!(projection.1.activity_sequence, 1);
     }
 
     #[tokio::test]

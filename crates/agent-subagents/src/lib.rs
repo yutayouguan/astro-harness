@@ -14,7 +14,9 @@ pub mod path;
 mod registry;
 mod store;
 
-pub use activity::{ActivityBus, ActivityCursor, AgentActivity, AgentActivityKind};
+pub use activity::{
+    ActivityBus, ActivityCursor, ActivityObservation, AgentActivity, AgentActivityKind,
+};
 pub use config::{
     load_agent_catalog, load_agents_settings, resolve_agent, AgentCatalog, AgentConfigDiagnostic,
     AgentDefinition, AgentsSettings, ResolvedAgent, SkillConfigEntry, SkillsLayer,

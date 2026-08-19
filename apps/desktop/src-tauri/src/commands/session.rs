@@ -422,6 +422,7 @@ pub async fn regenerate_session_title(
                 title: title.clone(),
             }),
             agent_thread_changed: None,
+            resync_required: None,
         },
     );
 

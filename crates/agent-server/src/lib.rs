@@ -14,8 +14,8 @@ pub mod workflow_ticker;
 
 pub use session_events::{
     event_matches, to_proto, AgentThreadChangedPayload, MemoryUpdatedPayload,
-    PendingChangedPayload, SessionEventHub, SessionEventMsg, SessionMetadataChangedPayload,
-    SubscribeFilter,
+    PendingChangedPayload, ResyncRequiredPayload, SessionEventHub, SessionEventMsg,
+    SessionMetadataChangedPayload, SubscribeFilter,
 };
 
 use std::time::Duration;

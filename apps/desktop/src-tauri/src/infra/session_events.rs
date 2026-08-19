@@ -26,6 +26,7 @@ pub struct SessionEventDto {
     pub pending_changed: Option<PendingChangedDto>,
     pub session_metadata_changed: Option<SessionMetadataChangedDto>,
     pub agent_thread_changed: Option<AgentThreadChangedDto>,
+    pub resync_required: Option<SessionResyncRequiredDto>,
 }
 
 /// 记忆已更新（或仅入 pending）摘要。
@@ -68,6 +69,12 @@ pub struct AgentThreadChangedDto {
     pub status_kind: String,
     pub status_payload_json: String,
     pub activity_kind: String,
+}
+
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SessionResyncRequiredDto {
+    pub reason: String,
 }
 
 /// 订阅过滤（可热更新）。
@@ -114,54 +121,72 @@ fn proto_to_dto(ev: proto::SessionEvent) -> SessionEventDto {
             Some(s.to_string())
         }
     };
-    let (memory_updated, pending_changed, session_metadata_changed, agent_thread_changed) =
-        match ev.payload {
-            Some(proto::session_event::Payload::MemoryUpdated(m)) => (
-                Some(MemoryUpdatedDto {
-                    source: m.source,
-                    target: m.target,
-                    summary: m.summary,
-                    live_written: m.live_written,
-                }),
-                None,
-                None,
-                None,
-            ),
-            Some(proto::session_event::Payload::PendingChanged(p)) => (
-                None,
-                Some(PendingChangedDto {
-                    pending_count: p.pending_count,
-                    reason: p.reason,
-                }),
-                None,
-                None,
-            ),
-            Some(proto::session_event::Payload::SessionMetadataChanged(m)) => (
-                None,
-                None,
-                Some(SessionMetadataChangedDto { title: m.title }),
-                None,
-            ),
-            Some(proto::session_event::Payload::AgentThreadChanged(thread)) => (
-                None,
-                None,
-                None,
-                Some(AgentThreadChangedDto {
-                    activity_sequence: thread.activity_sequence,
-                    root_thread_id: thread.root_thread_id,
-                    thread_id: thread.thread_id,
-                    parent_thread_id: thread.parent_thread_id,
-                    canonical_path: thread.canonical_path,
-                    task_name: thread.task_name,
-                    agent_type: thread.agent_type,
-                    session_id: thread.session_id,
-                    status_kind: thread.status_kind,
-                    status_payload_json: thread.status_payload_json,
-                    activity_kind: thread.activity_kind,
-                }),
-            ),
-            None => (None, None, None, None),
-        };
+    let (
+        memory_updated,
+        pending_changed,
+        session_metadata_changed,
+        agent_thread_changed,
+        resync_required,
+    ) = match ev.payload {
+        Some(proto::session_event::Payload::MemoryUpdated(m)) => (
+            Some(MemoryUpdatedDto {
+                source: m.source,
+                target: m.target,
+                summary: m.summary,
+                live_written: m.live_written,
+            }),
+            None,
+            None,
+            None,
+            None,
+        ),
+        Some(proto::session_event::Payload::PendingChanged(p)) => (
+            None,
+            Some(PendingChangedDto {
+                pending_count: p.pending_count,
+                reason: p.reason,
+            }),
+            None,
+            None,
+            None,
+        ),
+        Some(proto::session_event::Payload::SessionMetadataChanged(m)) => (
+            None,
+            None,
+            Some(SessionMetadataChangedDto { title: m.title }),
+            None,
+            None,
+        ),
+        Some(proto::session_event::Payload::AgentThreadChanged(thread)) => (
+            None,
+            None,
+            None,
+            Some(AgentThreadChangedDto {
+                activity_sequence: thread.activity_sequence,
+                root_thread_id: thread.root_thread_id,
+                thread_id: thread.thread_id,
+                parent_thread_id: thread.parent_thread_id,
+                canonical_path: thread.canonical_path,
+                task_name: thread.task_name,
+                agent_type: thread.agent_type,
+                session_id: thread.session_id,
+                status_kind: thread.status_kind,
+                status_payload_json: thread.status_payload_json,
+                activity_kind: thread.activity_kind,
+            }),
+            None,
+        ),
+        Some(proto::session_event::Payload::ResyncRequired(reset)) => (
+            None,
+            None,
+            None,
+            None,
+            Some(SessionResyncRequiredDto {
+                reason: reset.reason,
+            }),
+        ),
+        None => (None, None, None, None, None),
+    };
     SessionEventDto {
         session_id,
         agent_id: ev.agent_id,
@@ -172,6 +197,7 @@ fn proto_to_dto(ev: proto::SessionEvent) -> SessionEventDto {
         pending_changed,
         session_metadata_changed,
         agent_thread_changed,
+        resync_required,
     }
 }
 
@@ -347,5 +373,26 @@ mod tests {
         assert_eq!(projection.status_kind, "running");
         assert_eq!(projection.status_payload_json, r#"{"kind":"running"}"#);
         assert_eq!(projection.activity_kind, "status_changed");
+    }
+
+    #[test]
+    fn proto_to_dto_maps_resync_contract() {
+        let dto = proto_to_dto(proto::SessionEvent {
+            session_id: "root".into(),
+            agent_id: "default".into(),
+            ts_ms: 1,
+            event_id: 3,
+            stream_id: "new-generation".into(),
+            payload: Some(proto::session_event::Payload::ResyncRequired(
+                proto::SessionResyncRequiredEvent {
+                    reason: "replay_gap".into(),
+                },
+            )),
+        });
+
+        assert_eq!(
+            dto.resync_required.expect("resync dto").reason,
+            "replay_gap"
+        );
     }
 }

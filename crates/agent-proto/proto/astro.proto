@@ -366,7 +366,14 @@ message SessionEvent {
     PendingChangedEvent pending_changed = 11;
     SessionMetadataChangedEvent session_metadata_changed = 12;
     AgentThreadChangedEvent agent_thread_changed = 13;
+    SessionResyncRequiredEvent resync_required = 14;
   }
+}
+
+message SessionResyncRequiredEvent {
+  // stream_generation_changed | replay_gap | active_receiver_lag |
+  // agent_control_generation_changed | activity_gap
+  string reason = 1;
 }
 
 message AgentThreadChangedEvent {

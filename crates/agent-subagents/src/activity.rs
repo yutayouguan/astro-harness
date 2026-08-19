@@ -28,6 +28,16 @@ pub struct AgentActivity {
     pub thread: Option<AgentThreadV2>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ActivityObservation {
+    Activity(Box<AgentActivity>),
+    Gap {
+        oldest: ActivityCursor,
+        latest: ActivityCursor,
+    },
+    TimedOut,
+}
+
 pub struct ActivityBus {
     sequence: AtomicU64,
     tx: watch::Sender<ActivityCursor>,
@@ -119,6 +129,32 @@ impl ActivityBus {
         .flatten()
     }
 
+    /// Observes the ordered activity stream while explicitly reporting when
+    /// the requested cursor has fallen behind the bounded retention window.
+    pub async fn observe_after(
+        &self,
+        cursor: ActivityCursor,
+        wait_timeout: Duration,
+    ) -> ActivityObservation {
+        let mut rx = self.tx.subscribe();
+        if let Some(observation) = self.observation_after(cursor) {
+            return observation;
+        }
+
+        tokio::time::timeout(wait_timeout, async {
+            loop {
+                if rx.changed().await.is_err() {
+                    return ActivityObservation::TimedOut;
+                }
+                if let Some(observation) = self.observation_after(cursor) {
+                    return observation;
+                }
+            }
+        })
+        .await
+        .unwrap_or(ActivityObservation::TimedOut)
+    }
+
     fn first_after(&self, cursor: ActivityCursor) -> Option<AgentActivity> {
         let events = self.lock_events();
         let mut first = None;
@@ -138,6 +174,24 @@ impl ActivityBus {
             .iter()
             .find(|event| event.sequence > cursor.0)
             .cloned()
+    }
+
+    fn observation_after(&self, cursor: ActivityCursor) -> Option<ActivityObservation> {
+        let events = self.lock_events();
+        let oldest = events.front()?;
+        let latest = events.back()?;
+        if cursor.0.saturating_add(1) < oldest.sequence {
+            return Some(ActivityObservation::Gap {
+                oldest: ActivityCursor(oldest.sequence),
+                latest: ActivityCursor(latest.sequence),
+            });
+        }
+        events
+            .iter()
+            .find(|event| event.sequence > cursor.0)
+            .cloned()
+            .map(Box::new)
+            .map(ActivityObservation::Activity)
     }
 
     fn lock_events(&self) -> MutexGuard<'_, VecDeque<AgentActivity>> {
@@ -267,5 +321,22 @@ mod tests {
             fresh
         );
         assert!(fresh.sequence > end.0);
+    }
+
+    #[tokio::test]
+    async fn observer_reports_retention_gap_instead_of_silently_returning_tail() {
+        let bus = ActivityBus::default();
+        for _ in 0..(MAX_BUFFERED_ACTIVITIES + 8) {
+            bus.publish(AgentActivityKind::MainSteer, None);
+        }
+
+        let observation = bus
+            .observe_after(ActivityCursor(0), Duration::from_millis(10))
+            .await;
+        let ActivityObservation::Gap { oldest, latest } = observation else {
+            panic!("expected activity retention gap");
+        };
+        assert!(oldest.0 > 1);
+        assert_eq!(latest, bus.cursor());
     }
 }
