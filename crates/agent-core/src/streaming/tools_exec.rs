@@ -1580,6 +1580,7 @@ pub(crate) async fn execute_tools_concurrent(
 mod tests {
     use super::*;
     use serde_json::json;
+    use std::collections::BTreeMap;
 
     fn term(cmd: &str) -> serde_json::Value {
         json!({ "command": cmd })
@@ -1667,6 +1668,100 @@ mod tests {
         assert_eq!(context.permission_audits.len(), 2);
     }
 
+    fn managed_network_settings(
+        global_enabled: bool,
+        leaf_enabled: bool,
+    ) -> memory::LoadedPermissionSettings {
+        let mut settings = memory::LoadedPermissionSettings::default();
+        settings.network_proxy_enabled = global_enabled;
+        settings.selection.profile_id = "leaf".into();
+        settings.permissions.profiles.insert(
+            "parent".into(),
+            types::PermissionProfile {
+                extends: Some(types::WORKSPACE_PROFILE.into()),
+                network: types::NetworkPolicy {
+                    enabled: true,
+                    domains: BTreeMap::from([(
+                        "parent.example".into(),
+                        types::NetworkAccess::Allow,
+                    )]),
+                    ..Default::default()
+                },
+                ..Default::default()
+            },
+        );
+        settings.permissions.profiles.insert(
+            "leaf".into(),
+            types::PermissionProfile {
+                extends: Some("parent".into()),
+                network: types::NetworkPolicy {
+                    enabled: leaf_enabled,
+                    domains: BTreeMap::from([("leaf.example".into(), types::NetworkAccess::Allow)]),
+                    ..Default::default()
+                },
+                ..Default::default()
+            },
+        );
+        settings
+    }
+
+    #[test]
+    fn managed_network_uses_only_selected_custom_leaf_policy() {
+        let terminal = types::ParsedToolCall::new("terminal", json!({"command": "true"}));
+        let mut settings = managed_network_settings(true, false);
+
+        assert!(managed_network_policy_for_call(&terminal, &settings, "leaf").is_none());
+        settings
+            .permissions
+            .profiles
+            .get_mut("leaf")
+            .unwrap()
+            .network
+            .enabled = true;
+        let policy = managed_network_policy_for_call(&terminal, &settings, "leaf").unwrap();
+        assert!(policy.domains.contains_key("leaf.example"));
+        assert!(!policy.domains.contains_key("parent.example"));
+    }
+
+    #[test]
+    fn managed_network_gate_excludes_disabled_full_access_and_non_run_calls() {
+        let settings = managed_network_settings(true, true);
+        for call in [
+            types::ParsedToolCall::new("terminal", json!({"action": "status", "id": "1"})),
+            types::ParsedToolCall::new("web_fetch", json!({"url": "https://leaf.example"})),
+        ] {
+            assert!(managed_network_policy_for_call(&call, &settings, "leaf").is_none());
+        }
+        let terminal = types::ParsedToolCall::new("terminal", json!({"command": "true"}));
+        assert!(managed_network_policy_for_call(
+            &terminal,
+            &settings,
+            types::DANGER_FULL_ACCESS_PROFILE
+        )
+        .is_none());
+        assert!(managed_network_policy_for_call(
+            &terminal,
+            &managed_network_settings(false, true),
+            "leaf"
+        )
+        .is_none());
+    }
+
+    #[test]
+    fn managed_network_gate_accepts_foreground_process_tools() {
+        let settings = managed_network_settings(true, true);
+        for call in [
+            types::ParsedToolCall::new("terminal", json!({"command": "true"})),
+            types::ParsedToolCall::new(
+                "terminal",
+                json!({"action": "run", "command": "true", "background": true}),
+            ),
+            types::ParsedToolCall::new("code_exec", json!({"language": "python", "code": "1"})),
+        ] {
+            assert!(managed_network_policy_for_call(&call, &settings, "leaf").is_some());
+        }
+    }
+
     #[test]
     fn escalated_sandbox_attempt_preserves_restricted_network() {
         let dir = tempfile::tempdir().unwrap();
@@ -1709,6 +1804,62 @@ mod tests {
         assert_eq!(policy.mode, types::SandboxMode::WorkspaceWrite);
         assert_eq!(policy.writable_roots, vec![project.canonicalize().unwrap()]);
         assert!(!policy.network_access);
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn sandbox_policy_for_attempt_carries_managed_network_context() {
+        let dir = tempfile::tempdir().unwrap();
+        let session = Arc::new(
+            AgentLoop::with_session_id(
+                crate::runtime::Config::with_defaults(dir.path().to_path_buf()),
+                "orchestrator-managed-network-test".into(),
+            )
+            .unwrap(),
+        );
+        let step_context = session.capture_step_context().await.unwrap();
+        let (tx, _rx) = mpsc::channel(8);
+        let orchestrator = ToolOrchestrator::new(&session, &step_context, &tx, "run-1", None);
+        let call = types::ParsedToolCall::new("terminal", json!({"command": "true"}));
+        let started = Arc::new(
+            network_proxy::StartedNetworkProxy::start(Arc::new(
+                network_proxy::NetworkProxyState::new(types::NetworkPolicy {
+                    enabled: true,
+                    domains: BTreeMap::from([("example.com".into(), types::NetworkAccess::Allow)]),
+                    ..Default::default()
+                })
+                .unwrap(),
+            ))
+            .await
+            .unwrap(),
+        );
+        let attempt = SandboxAttempt::initial(
+            false,
+            tools::InProcessNetworkGrant::default(),
+            Some(Arc::clone(&started)),
+        );
+
+        let policy = orchestrator
+            .sandbox_policy_for_attempt(&call, &attempt)
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            policy.managed_network.unwrap().loopback_ports,
+            vec![started.proxy().http_addr().port()]
+        );
+
+        let escalated = attempt.escalated(dir.path()).unwrap();
+        assert!(Arc::ptr_eq(
+            escalated.managed_network.as_ref().unwrap(),
+            &started
+        ));
+        let policy = orchestrator
+            .sandbox_policy_for_attempt(&call, &escalated)
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            policy.managed_network.unwrap().loopback_ports,
+            vec![started.proxy().http_addr().port()]
+        );
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]

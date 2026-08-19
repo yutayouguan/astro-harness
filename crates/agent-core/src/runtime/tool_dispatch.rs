@@ -506,6 +506,11 @@ mod tests {
     use super::*;
 
     #[test]
+    fn tool_execution_grants_default_to_no_managed_network() {
+        assert!(ToolExecutionGrants::default().managed_network.is_none());
+    }
+
+    #[test]
     fn sandbox_denial_survives_anyhow_dispatch_boundary() {
         let error = anyhow::Error::new(sandbox::SandboxErr::Denied {
             output: Box::new(sandbox::ExecToolCallOutput::new(

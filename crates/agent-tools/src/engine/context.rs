@@ -8,7 +8,7 @@ use std::sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 use memory::MemoryManager;
 use session::ConversationStore;
-use types::{DANGER_FULL_ACCESS_PROFILE, READ_ONLY_PROFILE, WORKSPACE_PROFILE};
+use types::DANGER_FULL_ACCESS_PROFILE;
 
 use super::network::InProcessNetworkGrant;
 
@@ -168,16 +168,7 @@ pub fn build_command_sandbox_policy(
     std::fs::create_dir_all(execution_root)?;
     let loaded = memory::load_permission_settings(memory_dir);
     let profile_id = permission_profile.unwrap_or(&loaded.selection.profile_id);
-    if !matches!(
-        profile_id,
-        READ_ONLY_PROFILE | WORKSPACE_PROFILE | DANGER_FULL_ACCESS_PROFILE
-    ) {
-        anyhow::bail!(
-            "custom permission profile {:?} is not executable until its filesystem rules are fully resolved",
-            profile_id
-        );
-    }
-    let mut mode = loaded.permissions.sandbox_mode_for(profile_id)?;
+    let mut mode = loaded.permissions.command_sandbox_mode_for(profile_id)?;
     if workspace_write_grant && mode == types::SandboxMode::ReadOnly {
         mode = types::SandboxMode::WorkspaceWrite;
     }
@@ -187,6 +178,69 @@ pub fn build_command_sandbox_policy(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn network_only_custom_profile_uses_inherited_command_sandbox_mode() {
+        let dir = tempfile::tempdir().unwrap();
+        let workspace = dir.path().join("workspace");
+        std::fs::create_dir_all(&workspace).unwrap();
+        std::fs::write(
+            dir.path().join("config.yaml"),
+            r#"
+permissions:
+  default_profile: network-only
+  profiles:
+    network-only:
+      extends: ":workspace"
+      network:
+        enabled: true
+        domains:
+          example.com: allow
+network_proxy:
+  enabled: true
+"#,
+        )
+        .unwrap();
+
+        let policy =
+            build_command_sandbox_policy(dir.path(), &workspace, Some("network-only"), false, None)
+                .unwrap();
+
+        assert_eq!(policy.mode, types::SandboxMode::WorkspaceWrite);
+        assert!(!policy.network_access);
+    }
+
+    #[test]
+    fn custom_filesystem_rules_still_fail_closed() {
+        let dir = tempfile::tempdir().unwrap();
+        let workspace = dir.path().join("workspace");
+        std::fs::create_dir_all(&workspace).unwrap();
+        std::fs::write(
+            dir.path().join("config.yaml"),
+            r#"
+permissions:
+  default_profile: restricted-files
+  profiles:
+    restricted-files:
+      extends: ":workspace"
+      filesystem:
+        paths:
+          /tmp/secret: deny
+"#,
+        )
+        .unwrap();
+
+        let error = build_command_sandbox_policy(
+            dir.path(),
+            &workspace,
+            Some("restricted-files"),
+            false,
+            None,
+        )
+        .unwrap_err();
+
+        assert!(error.to_string().contains("not yet executable"), "{error}");
+    }
 
     #[test]
     fn one_call_grant_upgrades_read_only_to_workspace_write_without_network() {

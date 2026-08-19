@@ -202,6 +202,25 @@ impl PermissionsConfig {
         })
     }
 
+    pub fn command_sandbox_mode_for(
+        &self,
+        profile_id: &str,
+    ) -> Result<SandboxMode, PermissionProfileError> {
+        for id in self.resolve_chain(profile_id)? {
+            let Some(profile) = self.profiles.get(&id) else {
+                continue;
+            };
+            if !profile.workspace_roots.is_empty()
+                || !profile.filesystem.paths.is_empty()
+                || !profile.filesystem.workspace_roots.is_empty()
+                || profile.filesystem.glob_scan_max_depth.is_some()
+            {
+                return Err(PermissionProfileError::UnresolvedFilesystemRules(id));
+            }
+        }
+        self.sandbox_mode_for(profile_id)
+    }
+
     fn validate_profile_ref(&self, id: &str) -> Result<(), PermissionProfileError> {
         if is_builtin_profile(id) || self.profiles.contains_key(id) {
             Ok(())
@@ -263,6 +282,8 @@ pub enum PermissionProfileError {
     InvalidGlobDepth(String),
     #[error("permission profile {0} uses '*' as a deny rule; '*' is allow-only")]
     GlobalDenyWildcard(String),
+    #[error("permission profile {0} has filesystem rules that are not yet executable")]
+    UnresolvedFilesystemRules(String),
 }
 
 /// 会话真正激活的三个正交权限维度。
@@ -349,6 +370,53 @@ impl SessionPermissions {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn network_only_custom_profile_can_resolve_command_sandbox_mode() {
+        let config = PermissionsConfig {
+            default_profile: "network-only".into(),
+            profiles: BTreeMap::from([(
+                "network-only".into(),
+                PermissionProfile {
+                    extends: Some(WORKSPACE_PROFILE.into()),
+                    network: NetworkPolicy {
+                        enabled: true,
+                        ..Default::default()
+                    },
+                    ..Default::default()
+                },
+            )]),
+        };
+
+        assert_eq!(
+            config.command_sandbox_mode_for("network-only").unwrap(),
+            SandboxMode::WorkspaceWrite
+        );
+    }
+
+    #[test]
+    fn custom_filesystem_rules_remain_unresolved_for_command_sandbox() {
+        let config = PermissionsConfig {
+            default_profile: "restricted-files".into(),
+            profiles: BTreeMap::from([(
+                "restricted-files".into(),
+                PermissionProfile {
+                    extends: Some(WORKSPACE_PROFILE.into()),
+                    filesystem: FilesystemPolicy {
+                        paths: BTreeMap::from([("/tmp/secret".into(), FilesystemAccess::Deny)]),
+                        ..Default::default()
+                    },
+                    ..Default::default()
+                },
+            )]),
+        };
+
+        assert!(matches!(
+            config.command_sandbox_mode_for("restricted-files"),
+            Err(PermissionProfileError::UnresolvedFilesystemRules(profile))
+                if profile == "restricted-files"
+        ));
+    }
 
     #[test]
     fn builtins_map_to_expected_sandbox_modes() {
