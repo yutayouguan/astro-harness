@@ -1103,6 +1103,16 @@ impl Session {
         self.state.lock().await.clone_history()
     }
 
+    /// Whether the persisted conversation currently expects an assistant reply.
+    pub(crate) async fn history_ends_with_user(&self) -> bool {
+        self.state
+            .lock()
+            .await
+            .history
+            .last()
+            .is_some_and(|message| message.role == types::message::Role::User)
+    }
+
     /// Replace the current conversation history with an owned snapshot.
     #[cfg(test)]
     pub async fn replace_history(&self, history: Vec<Message>) {

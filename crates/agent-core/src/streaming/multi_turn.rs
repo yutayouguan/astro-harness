@@ -273,7 +273,7 @@ pub(crate) async fn run_turn(args: RunTurnArgs, cancellation_token: Cancellation
             return;
         }
 
-        if has_sampled {
+        if has_sampled && !session.history_ends_with_user().await {
             if let Err(error) =
                 record_pending_input(&session, turn_context.take_pending_input()).await
             {

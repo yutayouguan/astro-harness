@@ -801,6 +801,23 @@ cargo test -p agent --test streaming_test
 
 Expected: both focused tests and all streaming tests pass.
 
+#### Follow-up: queued steer must not overtake a Stop bridge
+
+When `Stop` returns `KeepGoing`, the loop persists its assistant draft followed by the
+`[astro:hook-context]` bridge user message. If an active steer was admitted while the
+Stop hook ran, the next loop-top must leave that queued steer in `TurnContext` whenever
+history already ends with a user message. The provider therefore responds to the bridge
+first; after that assistant response is persisted, the terminal pending-input branch
+records the steer as the next legal user turn. Do not take and requeue the input.
+
+`stop_keep_going_with_queued_steer_preserves_role_order` holds the first Stop hook on a
+Condvar, admits exactly one `follow up` steer during that pause, and verifies the bridge
+is sampled before the steer, both appear once, and the final history alternates roles.
+
+```bash
+cargo test -p agent stop_keep_going_with_queued_steer_preserves_role_order -- --exact
+```
+
 - [x] **Step 5: Commit Task 4**
 
 ```bash

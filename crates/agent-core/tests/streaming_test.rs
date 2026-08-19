@@ -1258,6 +1258,167 @@ async fn stop_keep_going_retries_capped_at_two() {
     }
 }
 
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn stop_keep_going_with_queued_steer_preserves_role_order() {
+    let dir = tempfile::tempdir().unwrap();
+    let config = AgentConfig::with_defaults(dir.path().to_path_buf());
+    let session = Arc::new(
+        AgentLoop::with_session_id(config, "stop-keep-going-queued-steer".into()).unwrap(),
+    );
+    session
+        .record_items(vec![types::message::Message::user("initial")])
+        .await;
+
+    let prompt_submit_hits = Arc::new(AtomicUsize::new(0));
+    let prompt_hits = Arc::clone(&prompt_submit_hits);
+    session
+        .hook_bus()
+        .register(::hooks::USER_PROMPT_SUBMIT, move |input| {
+            if input.prompt.as_deref() == Some("follow up") {
+                prompt_hits.fetch_add(1, Ordering::SeqCst);
+            }
+            ::hooks::HookOutcome::Continue
+        });
+
+    let stop_calls = Arc::new(AtomicUsize::new(0));
+    let stop_entered = Arc::new(Notify::new());
+    let stop_release = Arc::new((std::sync::Mutex::new(false), std::sync::Condvar::new()));
+    let calls = Arc::clone(&stop_calls);
+    let entered = Arc::clone(&stop_entered);
+    let release = Arc::clone(&stop_release);
+    session.hook_bus().register(::hooks::STOP, move |_| {
+        if calls.fetch_add(1, Ordering::SeqCst) == 0 {
+            entered.notify_one();
+            let (released, ready) = &*release;
+            let mut released = released.lock().unwrap();
+            while !*released {
+                released = ready.wait(released).unwrap();
+            }
+            ::hooks::HookOutcome::KeepGoing("review the draft".into())
+        } else {
+            ::hooks::HookOutcome::Continue
+        }
+    });
+
+    let provider_calls = Arc::new(AtomicUsize::new(0));
+    let bridge_was_responded_to_first = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let follow_up_was_seen_after_bridge = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let chat_fn: ChatOverride = {
+        let provider_calls = Arc::clone(&provider_calls);
+        let bridge_was_responded_to_first = Arc::clone(&bridge_was_responded_to_first);
+        let follow_up_was_seen_after_bridge = Arc::clone(&follow_up_was_seen_after_bridge);
+        Arc::new(move |messages, _tools, _config| {
+            let call = provider_calls.fetch_add(1, Ordering::SeqCst);
+            let texts: Vec<&str> = messages
+                .iter()
+                .map(|message| message.text_content())
+                .collect();
+            if call == 1 {
+                bridge_was_responded_to_first.store(
+                    texts
+                        .iter()
+                        .any(|text| *text == "[astro:hook-context]\nreview the draft")
+                        && !texts.iter().any(|text| *text == "follow up"),
+                    Ordering::SeqCst,
+                );
+            } else if call == 2 {
+                let bridge = texts
+                    .iter()
+                    .position(|text| *text == "[astro:hook-context]\nreview the draft");
+                let follow_up = texts.iter().position(|text| *text == "follow up");
+                follow_up_was_seen_after_bridge.store(
+                    matches!((bridge, follow_up), (Some(bridge), Some(follow_up)) if bridge < follow_up),
+                    Ordering::SeqCst,
+                );
+            }
+            let text = match call {
+                0 => "draft one",
+                1 => "bridge response",
+                2 => "follow up response",
+                _ => "unexpected response",
+            };
+            Box::pin(async move {
+                Ok(Box::pin(futures::stream::iter(vec![
+                    Ok(StreamChunk::Text(text.into())),
+                    Ok(StreamChunk::Done {
+                        finish_reason: "stop".into(),
+                    }),
+                ])) as CompletionStream)
+            })
+        })
+    };
+
+    let (tx, mut rx) = tokio::sync::mpsc::channel(64);
+    let run = tokio::spawn({
+        let session = Arc::clone(&session);
+        async move {
+            run_multi_turn_stream_with_chat_fn(
+                session,
+                chat_fn,
+                ProviderConfig {
+                    model: "test".into(),
+                    ..Default::default()
+                },
+                "system".into(),
+                PauseControl::new(),
+                None,
+                tx,
+            )
+            .await;
+        }
+    });
+
+    stop_entered.notified().await;
+    let steered_turn_id = session
+        .steer_input("follow up", &[])
+        .await
+        .unwrap()
+        .expect("active task accepts steer while Stop is paused");
+    assert!(!steered_turn_id.is_empty());
+    assert_eq!(prompt_submit_hits.load(Ordering::SeqCst), 1);
+    {
+        let (released, ready) = &*stop_release;
+        *released.lock().unwrap() = true;
+        ready.notify_all();
+    }
+
+    tokio::time::timeout(Duration::from_secs(2), async {
+        while rx.recv().await.is_some() {}
+        run.await.unwrap();
+    })
+    .await
+    .expect("stream completes after Stop continuation and queued steer");
+
+    assert_eq!(prompt_submit_hits.load(Ordering::SeqCst), 1);
+    assert_eq!(provider_calls.load(Ordering::SeqCst), 3);
+    assert!(bridge_was_responded_to_first.load(Ordering::SeqCst));
+    assert!(follow_up_was_seen_after_bridge.load(Ordering::SeqCst));
+
+    let history = session.clone_history().await;
+    assert!(
+        agent::runtime::validate_message_order(&history),
+        "history must alternate roles after a Stop continuation and queued steer: {:?}",
+        history
+            .iter()
+            .map(|message| (message.role.clone(), message.content_str().to_string()))
+            .collect::<Vec<_>>()
+    );
+    assert_eq!(
+        history
+            .iter()
+            .filter(|message| message.content_str() == "[astro:hook-context]\nreview the draft")
+            .count(),
+        1
+    );
+    assert_eq!(
+        history
+            .iter()
+            .filter(|message| message.content_str() == "follow up")
+            .count(),
+        1
+    );
+}
+
 #[tokio::test]
 async fn pause_control_blocks_then_cancels() {
     let pause = PauseControl::new();
