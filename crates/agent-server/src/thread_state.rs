@@ -1,8 +1,10 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use agent_protocol::{Event, EventMsg, TurnItem};
 use tokio::sync::{mpsc, oneshot, Mutex, RwLock};
+
+use crate::transport::ConnectionGenerationKey;
 
 pub type ConnectionId = String;
 
@@ -149,12 +151,12 @@ impl ThreadHistoryBuilder {
 pub enum ListenerCommand {
     CoreEvent(Event),
     Resume {
-        connection_id: ConnectionId,
+        subscription: ConnectionGenerationKey,
         include_turns: bool,
         reply: oneshot::Sender<ThreadSnapshot>,
     },
     Unsubscribe {
-        connection_id: ConnectionId,
+        subscription: ConnectionGenerationKey,
     },
     Stop,
 }
@@ -168,7 +170,7 @@ pub struct ThreadActivity {
 pub struct ThreadState {
     pub status: String,
     pub history: ThreadHistoryBuilder,
-    pub subscribers: HashSet<ConnectionId>,
+    pub subscribers: HashMap<ConnectionId, ConnectionGenerationKey>,
     pub listener_command_tx: mpsc::UnboundedSender<ListenerCommand>,
     pub activity_tx: tokio::sync::watch::Sender<ThreadActivity>,
 }
@@ -199,19 +201,21 @@ impl ThreadStateManager {
         let Some(state) = self.get(thread_id).await else {
             return Vec::new();
         };
-        let subscribers = state.lock().await.subscribers.iter().cloned().collect();
+        let subscribers = state.lock().await.subscribers.keys().cloned().collect();
         subscribers
     }
 
-    pub async fn unsubscribe(&self, thread_id: &str, connection_id: &str) -> bool {
+    pub async fn unsubscribe(
+        &self,
+        thread_id: &str,
+        subscription: ConnectionGenerationKey,
+    ) -> bool {
         let Some(state) = self.get(thread_id).await else {
             return false;
         };
         let command_tx = state.lock().await.listener_command_tx.clone();
         command_tx
-            .send(ListenerCommand::Unsubscribe {
-                connection_id: connection_id.into(),
-            })
+            .send(ListenerCommand::Unsubscribe { subscription })
             .is_ok()
     }
 
@@ -223,7 +227,7 @@ impl ThreadStateManager {
         has_subscribers
     }
 
-    pub async fn unsubscribe_all(&self, connection_id: &str) {
+    pub async fn unsubscribe_all(&self, subscription: &ConnectionGenerationKey) {
         let states = self
             .states
             .read()
@@ -234,7 +238,7 @@ impl ThreadStateManager {
         for state in states {
             let command_tx = state.lock().await.listener_command_tx.clone();
             let _ = command_tx.send(ListenerCommand::Unsubscribe {
-                connection_id: connection_id.into(),
+                subscription: subscription.clone(),
             });
         }
     }
@@ -408,7 +412,13 @@ mod tests {
             std::sync::Arc::new(Mutex::new(ThreadState {
                 status: "idle".into(),
                 history: ThreadHistoryBuilder::default(),
-                subscribers: subscribers.iter().map(|id| (*id).to_string()).collect(),
+                subscribers: subscribers
+                    .iter()
+                    .map(|id| {
+                        let key = ConnectionGenerationKey::new(*id);
+                        ((*id).to_string(), key)
+                    })
+                    .collect(),
                 listener_command_tx,
                 activity_tx,
             })),
@@ -454,23 +464,25 @@ mod tests {
         ids.sort();
         assert_eq!(ids, ["first", "second"]);
         assert!(manager.has_subscribers("thread-1").await);
-        assert!(manager.unsubscribe("thread-1", "first").await);
+        let first = thread_state.lock().await.subscribers["first"].clone();
+        assert!(manager.unsubscribe("thread-1", first.clone()).await);
 
         let command = commands.recv().await.expect("unsubscribe should be queued");
         assert!(matches!(
             command,
-            ListenerCommand::Unsubscribe { connection_id } if connection_id == "first"
+            ListenerCommand::Unsubscribe { subscription } if subscription == first
         ));
-        assert!(thread_state.lock().await.subscribers.contains("first"));
-        assert!(manager.unsubscribe("thread-1", "missing").await);
+        assert!(thread_state.lock().await.subscribers.contains_key("first"));
+        let missing = ConnectionGenerationKey::new("missing");
+        assert!(manager.unsubscribe("thread-1", missing.clone()).await);
         assert!(matches!(
             commands
                 .recv()
                 .await
                 .expect("unknown subscriber removal should still be serialized"),
-            ListenerCommand::Unsubscribe { connection_id } if connection_id == "missing"
+            ListenerCommand::Unsubscribe { subscription } if subscription == missing
         ));
-        assert!(!manager.unsubscribe("missing", "first").await);
+        assert!(!manager.unsubscribe("missing", first).await);
     }
 
     #[tokio::test]
@@ -481,25 +493,26 @@ mod tests {
         manager.insert("thread-1".into(), thread_state).await;
 
         let (reply, _reply_rx) = tokio::sync::oneshot::channel();
+        let first = ConnectionGenerationKey::new("first");
         command_tx
             .send(ListenerCommand::Resume {
-                connection_id: "first".into(),
+                subscription: first.clone(),
                 include_turns: false,
                 reply,
             })
             .expect("resume should be queued");
-        assert!(manager.unsubscribe("thread-1", "first").await);
+        assert!(manager.unsubscribe("thread-1", first.clone()).await);
 
         assert!(matches!(
             commands.recv().await.expect("resume command should exist"),
-            ListenerCommand::Resume { connection_id, .. } if connection_id == "first"
+            ListenerCommand::Resume { subscription, .. } if subscription == first
         ));
         assert!(matches!(
             commands
                 .recv()
                 .await
                 .expect("unsubscribe command should follow resume"),
-            ListenerCommand::Unsubscribe { connection_id } if connection_id == "first"
+            ListenerCommand::Unsubscribe { subscription } if subscription == first
         ));
     }
 }

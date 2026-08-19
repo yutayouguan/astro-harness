@@ -8,6 +8,13 @@ use tonic::{Request, Response, Status};
 use super::AstroServiceImpl;
 use crate::{ListenerCommand, ThreadSnapshot, TurnSnapshot};
 
+#[derive(Debug)]
+struct ValidatedChatRequest {
+    turn_request: TurnInputRequest,
+    interaction_mode: types::InteractionMode,
+    resume_items: Vec<agent::ResumeItem>,
+}
+
 pub(crate) type ThreadEventsStream =
     Pin<Box<dyn Stream<Item = Result<proto::ThreadEvent, Status>> + Send>>;
 
@@ -82,14 +89,14 @@ fn item_type(item: &agent_protocol::TurnItem) -> &'static str {
 
 async fn resume(
     managed: &crate::ManagedThread,
-    connection_id: String,
+    subscription: crate::transport::ConnectionGenerationKey,
     include_turns: bool,
 ) -> Result<ThreadSnapshot, Status> {
     let (reply, receive) = tokio::sync::oneshot::channel();
     managed
         .commands
         .send(ListenerCommand::Resume {
-            connection_id,
+            subscription,
             include_turns,
             reply,
         })
@@ -107,7 +114,7 @@ pub(crate) async fn subscribe_thread_events(
     let (receiver, cancel, generation) = service.connections.register(connection_id).await;
     let registry = service.connections.clone();
     let thread_states = service.thread_states.clone();
-    let cleanup_connection_id = request.get_ref().connection_id.clone();
+    let cleanup_subscription = generation.key().clone();
     // Keep one slot reserved for the single terminal slow-consumer status.
     let (outbound, stream_rx) = tokio::sync::mpsc::channel(crate::transport::CHANNEL_CAPACITY + 1);
     tokio::spawn(async move {
@@ -134,9 +141,8 @@ pub(crate) async fn subscribe_thread_events(
                 }
             }
         }
-        if registry.remove_generation(&generation).await {
-            thread_states.unsubscribe_all(&cleanup_connection_id).await;
-        }
+        registry.remove_generation(&generation).await;
+        thread_states.unsubscribe_all(&cleanup_subscription).await;
     });
     Ok(Response::new(Box::pin(ReceiverStream::new(stream_rx))))
 }
@@ -147,9 +153,6 @@ pub(crate) async fn submit_turn(
 ) -> Result<Response<proto::SubmitTurnResponse>, Status> {
     let req = request.into_inner();
     let connection_id = require_connection_id(&req.connection_id)?.to_string();
-    if !service.connections.contains(&connection_id).await {
-        return Err(Status::failed_precondition("connection is not subscribed"));
-    }
     let chat = req
         .chat
         .ok_or_else(|| Status::invalid_argument("chat request is required"))?;
@@ -157,11 +160,38 @@ pub(crate) async fn submit_turn(
     if thread_id.is_empty() {
         return Err(Status::invalid_argument("chat.session_id is required"));
     }
+    let mode = validate_turn_mode(&req.mode, &req.expected_turn_id)?;
+    let validated = validate_chat_request(&chat)?;
+    let subscription = service
+        .connections
+        .current_generation_key(&connection_id)
+        .await
+        .ok_or_else(|| Status::failed_precondition("connection is not subscribed"))?;
+    let resume_gate = if validated.resume_items.is_empty() {
+        None
+    } else {
+        Some(
+            service
+                .hitl_registry
+                .get(thread_id)
+                .await
+                .ok_or_else(|| Status::failed_precondition("session has no pending HITL"))?,
+        )
+    };
     let managed = service.get_or_create_thread(thread_id).await?;
-    resume(&managed, connection_id, false).await?;
+    resume(&managed, subscription, false).await?;
     service
         .configure_thread_from_chat(&managed.runtime, &chat)
         .await?;
+    debug_assert_eq!(
+        managed.runtime.session().interaction_mode().await,
+        validated.interaction_mode
+    );
+    if let Some(gate) = resume_gate {
+        gate.resolve(&validated.resume_items)
+            .await
+            .map_err(|error| Status::invalid_argument(format!("invalid resume_json: {error}")))?;
+    }
     managed
         .runtime
         .submit(Op::ThreadSettings {
@@ -174,27 +204,9 @@ pub(crate) async fn submit_turn(
         })
         .await
         .map_err(|error| Status::unavailable(error.to_string()))?;
-    let mode = match req.mode.as_str() {
-        "" | "start_or_steer" => TurnInputMode::StartOrSteer,
-        "start_if_idle" => TurnInputMode::StartIfIdle,
-        "steer" if req.expected_turn_id.trim().is_empty() => {
-            return Err(Status::invalid_argument(
-                "expected_turn_id is required for steer",
-            ));
-        }
-        "steer" => TurnInputMode::Steer {
-            expected_turn_id: req.expected_turn_id,
-        },
-        other => {
-            return Err(Status::invalid_argument(format!(
-                "unsupported mode: {other}"
-            )))
-        }
-    };
-    let turn_request = turn_request_from_chat(&chat)?;
     let (submission_id, submission) = managed
         .runtime
-        .submit_turn(turn_request, mode)
+        .submit_turn(validated.turn_request, mode)
         .await
         .map_err(|error| Status::failed_precondition(error.to_string()))?;
     let (turn_id, disposition, reason) = match submission {
@@ -210,21 +222,40 @@ pub(crate) async fn submit_turn(
     }))
 }
 
+#[allow(clippy::result_large_err)]
+fn validate_turn_mode(mode: &str, expected_turn_id: &str) -> Result<TurnInputMode, Status> {
+    match mode {
+        "" | "start_or_steer" => Ok(TurnInputMode::StartOrSteer),
+        "start_if_idle" => Ok(TurnInputMode::StartIfIdle),
+        "steer" if expected_turn_id.trim().is_empty() => Err(Status::invalid_argument(
+            "expected_turn_id is required for steer",
+        )),
+        "steer" => Ok(TurnInputMode::Steer {
+            expected_turn_id: expected_turn_id.trim().into(),
+        }),
+        other => Err(Status::invalid_argument(format!(
+            "unsupported mode: {other}"
+        ))),
+    }
+}
+
 pub(crate) async fn resume_thread(
     service: &AstroServiceImpl,
     request: Request<proto::ResumeThreadRequest>,
 ) -> Result<Response<proto::ResumeThreadResponse>, Status> {
     let req = request.into_inner();
     let connection_id = require_connection_id(&req.connection_id)?.to_string();
-    if !service.connections.contains(&connection_id).await {
-        return Err(Status::failed_precondition("connection is not subscribed"));
-    }
     let thread_id = req.thread_id.trim();
     if thread_id.is_empty() {
         return Err(Status::invalid_argument("thread_id is required"));
     }
+    let subscription = service
+        .connections
+        .current_generation_key(&connection_id)
+        .await
+        .ok_or_else(|| Status::failed_precondition("connection is not subscribed"))?;
     let managed = service.get_or_create_thread(thread_id).await?;
-    let snapshot = resume(&managed, connection_id, req.include_turns).await?;
+    let snapshot = resume(&managed, subscription, req.include_turns).await?;
     Ok(Response::new(proto::ResumeThreadResponse {
         thread: Some(snapshot_to_proto(snapshot)),
     }))
@@ -240,6 +271,11 @@ pub(crate) async fn unsubscribe_thread(
     if thread_id.is_empty() {
         return Err(Status::invalid_argument("thread_id is required"));
     }
+    let subscription = service
+        .connections
+        .current_generation_key(&connection_id)
+        .await
+        .ok_or_else(|| Status::failed_precondition("connection is not subscribed"))?;
     let managed = service
         .threads
         .get(thread_id)
@@ -247,7 +283,7 @@ pub(crate) async fn unsubscribe_thread(
         .ok_or_else(|| Status::not_found("thread is not loaded"))?;
     managed
         .commands
-        .send(ListenerCommand::Unsubscribe { connection_id })
+        .send(ListenerCommand::Unsubscribe { subscription })
         .map_err(|_| Status::unavailable("thread listener stopped"))?;
     Ok(Response::new(proto::Empty {}))
 }
@@ -278,6 +314,60 @@ pub(crate) fn turn_request_from_chat(
     })
 }
 
+#[allow(clippy::result_large_err)]
+fn validate_chat_request(chat: &proto::ChatRequest) -> Result<ValidatedChatRequest, Status> {
+    if !chat.tool_names.is_empty() {
+        return Err(Status::invalid_argument(
+            "tool_names overrides are not supported by the Thread runtime",
+        ));
+    }
+    if !chat.use_memory {
+        return Err(Status::invalid_argument(
+            "use_memory=false is not supported by the Thread runtime",
+        ));
+    }
+    let interaction_mode = match chat.interaction_mode.trim().to_ascii_lowercase().as_str() {
+        "" | "agent" => types::InteractionMode::Agent,
+        "plan" => types::InteractionMode::Plan,
+        "ask" => types::InteractionMode::Ask,
+        "multitask" => types::InteractionMode::Multitask,
+        other => {
+            return Err(Status::invalid_argument(format!(
+                "unsupported interaction_mode: {other}"
+            )))
+        }
+    };
+    if let Some(temperature) = chat.temperature {
+        if !temperature.is_finite() || !(0.0..=2.0).contains(&temperature) {
+            return Err(Status::invalid_argument(
+                "temperature must be between 0 and 2",
+            ));
+        }
+    }
+    if !chat.additional_params_json.trim().is_empty() {
+        let params: serde_json::Value = serde_json::from_str(&chat.additional_params_json)
+            .map_err(|error| {
+                Status::invalid_argument(format!("invalid additional_params_json: {error}"))
+            })?;
+        if !params.is_object() {
+            return Err(Status::invalid_argument(
+                "additional_params_json must be an object",
+            ));
+        }
+    }
+    let resume_items = if chat.resume_json.trim().is_empty() {
+        Vec::new()
+    } else {
+        super::interrupt_store::parse_resume_items_json(&chat.resume_json)
+            .map_err(Status::invalid_argument)?
+    };
+    Ok(ValidatedChatRequest {
+        turn_request: turn_request_from_chat(chat)?,
+        interaction_mode,
+        resume_items,
+    })
+}
+
 pub(crate) fn thread_event_to_chat_events(event: proto::ThreadEvent) -> Vec<proto::ChatEvent> {
     use proto::chat_event::Payload as ChatPayload;
     use proto::thread_event::Payload;
@@ -305,7 +395,7 @@ pub(crate) fn thread_event_to_chat_events(event: proto::ThreadEvent) -> Vec<prot
             vec![activity(delta.item_id, "exec_output_delta", delta.delta)]
         }
         Payload::PatchDelta(delta) => vec![activity(delta.item_id, "patch_delta", delta.delta)],
-        Payload::ControlRequest(control) => control_chat_events(turn_id, control),
+        Payload::ControlRequest(control) => vec![control_chat_event(control)],
         Payload::TokenCount(tokens) => vec![proto::ChatEvent {
             payload: Some(ChatPayload::Usage(proto::UsageEvent {
                 prompt_tokens: tokens.input_tokens.min(u32::MAX.into()) as u32,
@@ -358,9 +448,7 @@ pub(crate) fn thread_event_to_chat_events(event: proto::ThreadEvent) -> Vec<prot
             &extension.namespace,
             extension.payload_json,
         )],
-        Payload::ShutdownComplete(_) => vec![proto::ChatEvent {
-            payload: Some(ChatPayload::Done(true)),
-        }],
+        Payload::ShutdownComplete(_) => Vec::new(),
     }
 }
 
@@ -385,50 +473,23 @@ fn terminal_chat_events(
     ]
 }
 
-fn control_chat_events(
-    run_id: String,
-    control: proto::ThreadControlRequest,
-) -> Vec<proto::ChatEvent> {
+fn control_chat_event(control: proto::ThreadControlRequest) -> proto::ChatEvent {
     let payload = serde_json::from_str::<serde_json::Value>(&control.payload_json)
         .unwrap_or(serde_json::Value::Null);
-    let surface = activity(
+    activity(
         format!("a2ui-surface-{}", control.item_id),
         "a2ui-surface",
         serde_json::json!({
             "operations": payload.get("operations").cloned().unwrap_or_default(),
+            "kind": control.kind,
+            "item_id": control.item_id,
+            "request_id": control.request_id,
+            "reason": payload.get("reason").cloned().unwrap_or_default(),
+            "message": payload.get("message").cloned().unwrap_or_default(),
+            "response_schema": payload.get("response_schema").cloned().unwrap_or_default(),
         })
         .to_string(),
-    );
-    let waiting = proto::ChatEvent {
-        payload: Some(proto::chat_event::Payload::RunFinished(
-            proto::RunFinishedEvent {
-                run_id,
-                outcome_type: "hitl_waiting".into(),
-                interrupts: vec![proto::Interrupt {
-                    id: control.request_id,
-                    reason: payload
-                        .get("reason")
-                        .and_then(serde_json::Value::as_str)
-                        .unwrap_or_default()
-                        .into(),
-                    message: payload
-                        .get("message")
-                        .and_then(serde_json::Value::as_str)
-                        .unwrap_or_default()
-                        .into(),
-                    tool_call_id: control.item_id,
-                    response_schema_json: payload
-                        .get("response_schema")
-                        .cloned()
-                        .unwrap_or_default()
-                        .to_string(),
-                    expires_at: String::new(),
-                    metadata_json: String::new(),
-                }],
-            },
-        )),
-    };
-    vec![surface, waiting]
+    )
 }
 
 fn chat_error(message: impl Into<String>) -> proto::ChatEvent {
@@ -559,17 +620,36 @@ pub(crate) async fn chat(
     if chat.session_id.trim().is_empty() {
         chat.session_id = uuid::Uuid::new_v4().to_string();
     }
+    let validated = validate_chat_request(&chat)?;
+    let resume_gate = if validated.resume_items.is_empty() {
+        None
+    } else {
+        Some(
+            service
+                .hitl_registry
+                .get(&chat.session_id)
+                .await
+                .ok_or_else(|| Status::failed_precondition("session has no pending HITL"))?,
+        )
+    };
     let connection_id = format!("chat-{}", uuid::Uuid::new_v4());
     let (mut event_rx, cancel, generation) =
         service.connections.register(connection_id.clone()).await;
+    let subscription = generation.key().clone();
     let mut subscribed_commands = None;
     let setup = async {
         let managed = service.get_or_create_thread(&chat.session_id).await?;
         service
             .configure_thread_from_chat(&managed.runtime, &chat)
             .await?;
-        let turn_request = turn_request_from_chat(&chat)?;
-        resume(&managed, connection_id.clone(), false).await?;
+        if let Some(gate) = resume_gate {
+            gate.resolve(&validated.resume_items)
+                .await
+                .map_err(|error| {
+                    Status::invalid_argument(format!("invalid resume_json: {error}"))
+                })?;
+        }
+        resume(&managed, subscription.clone(), false).await?;
         subscribed_commands = Some(managed.commands.clone());
         managed
             .runtime
@@ -580,7 +660,7 @@ pub(crate) async fn chat(
             .map_err(|error| Status::unavailable(error.to_string()))?;
         let (_, submission) = managed
             .runtime
-            .submit_turn(turn_request, TurnInputMode::StartOrSteer)
+            .submit_turn(validated.turn_request, TurnInputMode::StartOrSteer)
             .await
             .map_err(|error| Status::failed_precondition(error.to_string()))?;
         let turn_id = submission
@@ -595,7 +675,7 @@ pub(crate) async fn chat(
         Err(error) => {
             if let Some(commands) = subscribed_commands {
                 let _ = commands.send(ListenerCommand::Unsubscribe {
-                    connection_id: connection_id.clone(),
+                    subscription: subscription.clone(),
                 });
             }
             service.connections.remove_generation(&generation).await;
@@ -604,7 +684,7 @@ pub(crate) async fn chat(
     };
     let registry = service.connections.clone();
     let unsubscribe = managed.commands.clone();
-    let cleanup_connection = connection_id.clone();
+    let cleanup_subscription = subscription;
     let (tx, rx) = tokio::sync::mpsc::channel(128);
     tokio::spawn(async move {
         loop {
@@ -635,7 +715,7 @@ pub(crate) async fn chat(
             }
         }
         let _ = unsubscribe.send(ListenerCommand::Unsubscribe {
-            connection_id: cleanup_connection,
+            subscription: cleanup_subscription,
         });
         registry.remove_generation(&generation).await;
     });
@@ -706,13 +786,128 @@ mod tests {
                 },
             )),
         });
-        assert!(matches!(
-            mapped.as_slice(),
-            [proto::ChatEvent { payload: Some(proto::chat_event::Payload::Activity(_)) },
-             proto::ChatEvent { payload: Some(proto::chat_event::Payload::RunFinished(finished)) }]
-                if finished.outcome_type == "hitl_waiting"
-                    && finished.interrupts.first().is_some_and(|interrupt| interrupt.id == "request-1")
-        ));
+        assert_eq!(mapped.len(), 1);
+        let Some(proto::chat_event::Payload::Activity(activity)) = &mapped[0].payload else {
+            panic!("control request must map to exactly one activity event");
+        };
+        assert!(activity.content_json.contains("request-1"));
+        assert!(activity.content_json.contains("tool-1"));
+    }
+
+    #[test]
+    fn shutdown_complete_is_not_a_legacy_done_boundary() {
+        let mapped = thread_event_to_chat_events(proto::ThreadEvent {
+            thread_id: "session-1".into(),
+            turn_id: "shutdown".into(),
+            payload: Some(proto::thread_event::Payload::ShutdownComplete(true)),
+        });
+        assert!(mapped.is_empty());
+    }
+
+    fn valid_chat_request() -> proto::ChatRequest {
+        proto::ChatRequest {
+            session_id: "validation-thread".into(),
+            content: "hello".into(),
+            use_memory: true,
+            interaction_mode: "agent".into(),
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn chat_contract_rejects_tool_name_override() {
+        let mut chat = valid_chat_request();
+        chat.tool_names = vec!["terminal".into()];
+        assert_eq!(
+            validate_chat_request(&chat)
+                .expect_err("tool override must fail")
+                .code(),
+            tonic::Code::InvalidArgument
+        );
+    }
+
+    #[test]
+    fn chat_contract_rejects_disabled_memory_instead_of_ignoring_it() {
+        let mut chat = valid_chat_request();
+        chat.use_memory = false;
+        assert_eq!(
+            validate_chat_request(&chat)
+                .expect_err("disabled memory must fail")
+                .code(),
+            tonic::Code::InvalidArgument
+        );
+    }
+
+    #[test]
+    fn chat_contract_validates_resume_json() {
+        let mut chat = valid_chat_request();
+        chat.resume_json = "not-json".into();
+        assert_eq!(
+            validate_chat_request(&chat)
+                .expect_err("malformed resume must fail")
+                .code(),
+            tonic::Code::InvalidArgument
+        );
+        chat.resume_json = r#"[{"interrupt_id":"request-1","payload":{"approved":true}}]"#.into();
+        let validated = validate_chat_request(&chat).expect("valid resume payload");
+        assert_eq!(validated.resume_items.len(), 1);
+        assert_eq!(validated.resume_items[0].interrupt_id, "request-1");
+    }
+
+    #[test]
+    fn chat_contract_rejects_unknown_interaction_mode() {
+        let mut chat = valid_chat_request();
+        chat.interaction_mode = "unknown".into();
+        assert_eq!(
+            validate_chat_request(&chat)
+                .expect_err("unknown interaction mode must fail")
+                .code(),
+            tonic::Code::InvalidArgument
+        );
+        chat.interaction_mode = "plan".into();
+        assert_eq!(
+            validate_chat_request(&chat)
+                .expect("known mode")
+                .interaction_mode,
+            types::InteractionMode::Plan
+        );
+    }
+
+    #[tokio::test]
+    async fn invalid_submit_turn_has_no_thread_rollout_or_subscription_side_effects() {
+        let dir = TempDir::new().expect("tempdir");
+        memory::ensure_workspace(dir.path()).expect("workspace");
+        let service = AstroServiceImpl::new(dir.path().to_path_buf());
+        let (_rx, _cancel, generation) = service.connections.register(" submit-id ".into()).await;
+        let mut chat = valid_chat_request();
+        chat.session_id = "invalid-submit-thread".into();
+        chat.interaction_mode = "mystery".into();
+
+        let error = submit_turn(
+            &service,
+            Request::new(proto::SubmitTurnRequest {
+                connection_id: " submit-id ".into(),
+                chat: Some(chat),
+                mode: "start_or_steer".into(),
+                expected_turn_id: String::new(),
+            }),
+        )
+        .await
+        .expect_err("invalid settings must fail before thread creation");
+        assert_eq!(error.code(), tonic::Code::InvalidArgument);
+        assert!(!service.threads.contains("invalid-submit-thread").await);
+        assert!(service
+            .thread_states
+            .get("invalid-submit-thread")
+            .await
+            .is_none());
+        let rollout_root = dir.path().join("sessions").join("rollouts");
+        assert!(
+            agent_rollout::find_rollout(&rollout_root, "invalid-submit-thread")
+                .expect("rollout lookup")
+                .is_none()
+        );
+        service.connections.remove_generation(&generation).await;
     }
 
     #[tokio::test]
@@ -788,6 +983,125 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn slow_connection_unsubscribes_exact_generation_from_every_thread() {
+        let dir = TempDir::new().expect("tempdir");
+        memory::ensure_workspace(dir.path()).expect("workspace");
+        let service = AstroServiceImpl::new(dir.path().to_path_buf());
+        let first = service
+            .get_or_create_thread("slow-first")
+            .await
+            .expect("first");
+        let second = service
+            .get_or_create_thread("slow-second")
+            .await
+            .expect("second");
+        let mut stream = subscribe_thread_events(
+            &service,
+            Request::new(proto::SubscribeThreadEventsRequest {
+                connection_id: " slow-both ".into(),
+            }),
+        )
+        .await
+        .expect("subscribe")
+        .into_inner();
+        let key = service
+            .connections
+            .current_generation_key("slow-both")
+            .await
+            .expect("canonical generation");
+        resume(&first, key.clone(), false)
+            .await
+            .expect("first resume");
+        resume(&second, key.clone(), false)
+            .await
+            .expect("second resume");
+
+        for index in 0..600 {
+            let _ = service
+                .connections
+                .send_to_generation(
+                    &key,
+                    proto::ThreadEvent {
+                        thread_id: "slow-first".into(),
+                        turn_id: format!("turn-{index}"),
+                        payload: Some(proto::thread_event::Payload::TurnStarted(
+                            proto::ThreadTurnStarted {
+                                turn_id: format!("turn-{index}"),
+                            },
+                        )),
+                    },
+                )
+                .await;
+            tokio::task::yield_now().await;
+        }
+        let mut errors = 0;
+        loop {
+            let next = tokio::time::timeout(std::time::Duration::from_secs(2), stream.next())
+                .await
+                .expect("slow stream must terminate");
+            let Some(result) = next else { break };
+            if let Err(error) = result {
+                assert_eq!(error.code(), tonic::Code::ResourceExhausted);
+                errors += 1;
+            }
+        }
+        assert_eq!(errors, 1);
+        for _ in 0..16 {
+            if !service.thread_states.has_subscribers("slow-first").await
+                && !service.thread_states.has_subscribers("slow-second").await
+            {
+                break;
+            }
+            tokio::task::yield_now().await;
+        }
+        assert!(!service.thread_states.has_subscribers("slow-first").await);
+        assert!(!service.thread_states.has_subscribers("slow-second").await);
+        for managed in [first, second] {
+            managed.stop_listener().await;
+            managed
+                .runtime
+                .submit(Op::Shutdown)
+                .await
+                .expect("shutdown");
+            managed.runtime.wait_terminated().await;
+        }
+    }
+
+    #[tokio::test]
+    async fn connection_ids_are_trimmed_for_subscription_membership() {
+        let dir = TempDir::new().expect("tempdir");
+        memory::ensure_workspace(dir.path()).expect("workspace");
+        let service = AstroServiceImpl::new(dir.path().to_path_buf());
+        let stream = subscribe_thread_events(
+            &service,
+            Request::new(proto::SubscribeThreadEventsRequest {
+                connection_id: " spaced-id ".into(),
+            }),
+        )
+        .await
+        .expect("subscribe")
+        .into_inner();
+        resume_thread(
+            &service,
+            Request::new(proto::ResumeThreadRequest {
+                connection_id: " spaced-id ".into(),
+                thread_id: "trim-thread".into(),
+                include_turns: false,
+            }),
+        )
+        .await
+        .expect("resume");
+        assert_eq!(
+            service
+                .thread_states
+                .subscribed_connection_ids("trim-thread")
+                .await,
+            vec!["spaced-id".to_string()]
+        );
+        drop(stream);
+    }
+
+    #[tokio::test]
     async fn dropping_stream_removes_exact_connection_generation() {
         let dir = TempDir::new().expect("tempdir");
         memory::ensure_workspace(dir.path()).expect("workspace");
@@ -830,9 +1144,12 @@ mod tests {
         .await
         .expect("old stream")
         .into_inner();
-        resume(&managed, "same-id-stream".into(), false)
+        let old_key = service
+            .connections
+            .current_generation_key("same-id-stream")
             .await
-            .expect("old resume");
+            .expect("old generation");
+        resume(&managed, old_key, false).await.expect("old resume");
         let replacement_stream = subscribe_thread_events(
             &service,
             Request::new(proto::SubscribeThreadEventsRequest {
@@ -842,7 +1159,12 @@ mod tests {
         .await
         .expect("replacement stream")
         .into_inner();
-        resume(&managed, "same-id-stream".into(), false)
+        let replacement_key = service
+            .connections
+            .current_generation_key("same-id-stream")
+            .await
+            .expect("replacement generation");
+        resume(&managed, replacement_key, false)
             .await
             .expect("replacement resume");
 
@@ -938,5 +1260,72 @@ mod tests {
             .await
             .expect("shutdown");
         managed.runtime.wait_terminated().await;
+    }
+
+    #[tokio::test]
+    async fn submit_turn_resume_json_resolves_existing_thread_hitl_gate() {
+        let dir = TempDir::new().expect("tempdir");
+        memory::ensure_workspace(dir.path()).expect("workspace");
+        let service = AstroServiceImpl::new(dir.path().to_path_buf());
+        let managed = service
+            .get_or_create_thread("submit-hitl-thread")
+            .await
+            .expect("thread");
+        service
+            .configure_thread_from_chat(
+                &managed.runtime,
+                &proto::ChatRequest {
+                    session_id: "submit-hitl-thread".into(),
+                    content: "continue".into(),
+                    use_memory: true,
+                    ..Default::default()
+                },
+            )
+            .await
+            .expect("configure controls");
+        let gate = service
+            .hitl_registry
+            .get("submit-hitl-thread")
+            .await
+            .expect("gate");
+        let resolution = gate
+            .begin_wait(agent::Interrupt {
+                id: "submit-request".into(),
+                reason: "confirmation".into(),
+                ..Default::default()
+            })
+            .await;
+        let (_rx, _cancel, generation) = service.connections.register("hitl-submit".into()).await;
+
+        submit_turn(
+            &service,
+            Request::new(proto::SubmitTurnRequest {
+                connection_id: "hitl-submit".into(),
+                chat: Some(proto::ChatRequest {
+                    session_id: "submit-hitl-thread".into(),
+                    content: "continue".into(),
+                    use_memory: true,
+                    resume_json:
+                        r#"[{"interrupt_id":"submit-request","payload":{"approved":true}}]"#.into(),
+                    ..Default::default()
+                }),
+                mode: "start_or_steer".into(),
+                expected_turn_id: String::new(),
+            }),
+        )
+        .await
+        .expect("submit");
+        let resolved = resolution.await.expect("resolution");
+        assert_eq!(resolved.status, "resolved");
+        assert!(resolved.payload_json.contains("approved"));
+
+        service.connections.remove_generation(&generation).await;
+        managed
+            .runtime
+            .submit(Op::Shutdown)
+            .await
+            .expect("shutdown");
+        managed.runtime.wait_terminated().await;
+        managed.stop_listener().await;
     }
 }

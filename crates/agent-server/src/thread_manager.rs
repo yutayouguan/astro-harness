@@ -9,7 +9,39 @@ pub struct ManagedThread {
     pub runtime: Arc<agent::AstroThread>,
     pub commands: mpsc::UnboundedSender<ListenerCommand>,
     pub activity_rx: watch::Receiver<ThreadActivity>,
-    pub listener: tokio::task::JoinHandle<()>,
+    listener: Mutex<Option<tokio::task::JoinHandle<()>>>,
+}
+
+impl ManagedThread {
+    pub fn new(
+        runtime: Arc<agent::AstroThread>,
+        commands: mpsc::UnboundedSender<ListenerCommand>,
+        activity_rx: watch::Receiver<ThreadActivity>,
+        listener: tokio::task::JoinHandle<()>,
+    ) -> Self {
+        Self {
+            runtime,
+            commands,
+            activity_rx,
+            listener: Mutex::new(Some(listener)),
+        }
+    }
+
+    pub async fn stop_listener(&self) {
+        let _ = self.commands.send(ListenerCommand::Stop);
+        let listener = self.listener.lock().await.take();
+        if let Some(listener) = listener {
+            let _ = listener.await;
+        }
+    }
+
+    pub async fn listener_is_finished(&self) -> bool {
+        self.listener
+            .lock()
+            .await
+            .as_ref()
+            .is_none_or(tokio::task::JoinHandle::is_finished)
+    }
 }
 
 #[derive(Clone, Default)]

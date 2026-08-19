@@ -295,9 +295,11 @@ pub async fn run_thread_listener(
                 break;
             }
         }
+        let _ = pump_commands.send(ListenerCommand::Stop);
     });
     run_listener_commands(thread_id, state, command_rx, connections).await;
     pump.abort();
+    let _ = pump.await;
 }
 
 pub async fn run_listener_commands(
@@ -326,20 +328,29 @@ pub async fn run_listener_commands(
                         has_subscribers: !state.subscribers.is_empty(),
                     });
                     (
-                        state.subscribers.iter().cloned().collect::<Vec<_>>(),
+                        state.subscribers.values().cloned().collect::<Vec<_>>(),
                         event_to_proto(&thread_id, &event),
                     )
                 };
                 let mut disconnected = Vec::new();
-                for connection_id in subscribers {
-                    if !connections.send_to(&connection_id, outbound.clone()).await {
-                        disconnected.push(connection_id);
+                for subscription in subscribers {
+                    if !connections
+                        .send_to_generation(&subscription, outbound.clone())
+                        .await
+                    {
+                        disconnected.push(subscription);
                     }
                 }
                 if !disconnected.is_empty() {
                     let mut state = state.lock().await;
-                    for connection_id in disconnected {
-                        state.subscribers.remove(&connection_id);
+                    for subscription in disconnected {
+                        if state
+                            .subscribers
+                            .get(subscription.connection_id())
+                            .is_some_and(|current| current == &subscription)
+                        {
+                            state.subscribers.remove(subscription.connection_id());
+                        }
                     }
                     let _ = state.activity_tx.send(ThreadActivity {
                         status: state.status.clone(),
@@ -348,13 +359,15 @@ pub async fn run_listener_commands(
                 }
             }
             ListenerCommand::Resume {
-                connection_id,
+                subscription,
                 include_turns,
                 reply,
             } => {
                 let snapshot = {
                     let mut state = state.lock().await;
-                    state.subscribers.insert(connection_id);
+                    state
+                        .subscribers
+                        .insert(subscription.connection_id().into(), subscription);
                     let _ = state.activity_tx.send(ThreadActivity {
                         status: state.status.clone(),
                         has_subscribers: true,
@@ -372,9 +385,15 @@ pub async fn run_listener_commands(
                 };
                 let _ = reply.send(snapshot);
             }
-            ListenerCommand::Unsubscribe { connection_id } => {
+            ListenerCommand::Unsubscribe { subscription } => {
                 let mut state = state.lock().await;
-                state.subscribers.remove(&connection_id);
+                if state
+                    .subscribers
+                    .get(subscription.connection_id())
+                    .is_some_and(|current| current == &subscription)
+                {
+                    state.subscribers.remove(subscription.connection_id());
+                }
                 let _ = state.activity_tx.send(ThreadActivity {
                     status: state.status.clone(),
                     has_subscribers: !state.subscribers.is_empty(),

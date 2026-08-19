@@ -32,14 +32,19 @@ async fn start_listener() -> (ConnectionRegistry, mpsc::UnboundedSender<Listener
 }
 
 async fn resume(
+    connections: &ConnectionRegistry,
     commands: &mpsc::UnboundedSender<ListenerCommand>,
     connection_id: &str,
     include_turns: bool,
 ) -> server::ThreadSnapshot {
     let (reply, recv) = oneshot::channel();
+    let subscription = connections
+        .current_generation_key(connection_id)
+        .await
+        .expect("connection generation");
     commands
         .send(ListenerCommand::Resume {
-            connection_id: connection_id.into(),
+            subscription,
             include_turns,
             reply,
         })
@@ -52,8 +57,8 @@ async fn two_connections_receive_the_same_thread_event_order() {
     let (connections, commands) = start_listener().await;
     let (mut first, _, _) = connections.register("first".into()).await;
     let (mut second, _, _) = connections.register("second".into()).await;
-    resume(&commands, "first", false).await;
-    resume(&commands, "second", false).await;
+    resume(&connections, &commands, "first", false).await;
+    resume(&connections, &commands, "second", false).await;
     for msg in [
         EventMsg::TurnStarted(TurnStartedEvent {
             turn_id: "turn-1".into(),
@@ -88,7 +93,7 @@ async fn running_resume_has_no_snapshot_to_live_gap() {
             }),
         }))
         .expect("listener should accept start");
-    let snapshot = resume(&commands, "resume", true).await;
+    let snapshot = resume(&connections, &commands, "resume", true).await;
     assert_eq!(snapshot.active_turn.expect("active turn").id, "turn-1");
     commands
         .send(ListenerCommand::CoreEvent(Event {
@@ -155,6 +160,7 @@ async fn thread_rpcs_subscribe_resume_unsubscribe_and_validate_submit_connection
             chat: Some(proto::ChatRequest {
                 session_id: "thread-rpc".into(),
                 content: "hello".into(),
+                use_memory: true,
                 ..Default::default()
             }),
             mode: "start_if_idle".into(),

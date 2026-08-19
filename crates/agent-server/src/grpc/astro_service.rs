@@ -672,18 +672,13 @@ impl AstroServiceImpl {
             command_rx,
             self.connections.clone(),
         ));
-        let candidate = Arc::new(ManagedThread {
-            runtime,
-            commands,
-            activity_rx,
-            listener,
-        });
+        let candidate = Arc::new(ManagedThread::new(runtime, commands, activity_rx, listener));
         if let Err(existing) = self
             .threads
             .insert_if_absent(thread_id.to_string(), Arc::clone(&candidate))
             .await
         {
-            candidate.listener.abort();
+            candidate.stop_listener().await;
             let _ = candidate.runtime.submit(agent_protocol::Op::Shutdown).await;
             candidate.runtime.wait_terminated().await;
             return Ok(existing);
@@ -849,6 +844,7 @@ impl AstroServiceImpl {
                             let _ = managed.runtime.submit(agent_protocol::Op::Shutdown).await;
                             managed.runtime.wait_terminated().await;
                             let _ = managed.runtime.flush_rollout().await;
+                            managed.stop_listener().await;
                             break;
                         }
                     }
@@ -1408,6 +1404,7 @@ impl AstroServiceImpl {
             let _ = managed.runtime.submit(agent_protocol::Op::Shutdown).await;
             managed.runtime.wait_terminated().await;
             let _ = managed.runtime.flush_rollout().await;
+            managed.stop_listener().await;
         } else if let Some(handle) = removed.as_ref() {
             handle.shutdown_runtime().await;
         }
@@ -4024,11 +4021,13 @@ mod tests {
         }
         assert!(!service.threads.contains("idle-thread").await);
         assert!(service.thread_states.get("idle-thread").await.is_none());
+        assert!(managed.listener_is_finished().await);
         let replacement = service
             .get_or_create_thread("idle-thread")
             .await
             .expect("idle thread should be reloadable");
         assert!(!Arc::ptr_eq(&managed, &replacement));
+        assert!(!replacement.listener_is_finished().await);
         replacement
             .runtime
             .submit(agent_protocol::Op::Shutdown)

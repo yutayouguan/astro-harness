@@ -10,6 +10,26 @@ pub const CHANNEL_CAPACITY: usize = 128;
 struct ConnectionEntry {
     tx: mpsc::Sender<proto::ThreadEvent>,
     cancel: CancellationToken,
+    key: ConnectionGenerationKey,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct ConnectionGenerationKey {
+    connection_id: String,
+    generation_id: uuid::Uuid,
+}
+
+impl ConnectionGenerationKey {
+    pub(crate) fn new(connection_id: impl Into<String>) -> Self {
+        Self {
+            connection_id: connection_id.into().trim().to_string(),
+            generation_id: uuid::Uuid::new_v4(),
+        }
+    }
+
+    pub fn connection_id(&self) -> &str {
+        &self.connection_id
+    }
 }
 
 /// Opaque identity for one registration of a connection id.
@@ -19,8 +39,14 @@ struct ConnectionEntry {
 /// id-only removal, cleanup through this handle cannot evict a newer stream
 /// that reused the same connection id.
 pub struct ConnectionGeneration {
-    connection_id: String,
+    key: ConnectionGenerationKey,
     entry: Arc<ConnectionEntry>,
+}
+
+impl ConnectionGeneration {
+    pub fn key(&self) -> &ConnectionGenerationKey {
+        &self.key
+    }
 }
 
 /// Registry of bounded, independently backpressured thread-event connections.
@@ -60,14 +86,17 @@ impl ConnectionRegistry {
         CancellationToken,
         ConnectionGeneration,
     ) {
+        let connection_id = connection_id.trim().to_string();
         let (tx, rx) = mpsc::channel(self.capacity);
         let cancel = CancellationToken::new();
+        let key = ConnectionGenerationKey::new(connection_id.clone());
         let entry = Arc::new(ConnectionEntry {
             tx,
             cancel: cancel.clone(),
+            key: key.clone(),
         });
         let generation = ConnectionGeneration {
-            connection_id: connection_id.clone(),
+            key,
             entry: Arc::clone(&entry),
         };
         let replaced = self.entries.write().await.insert(connection_id, entry);
@@ -103,6 +132,48 @@ impl ConnectionRegistry {
         }
     }
 
+    /// Enqueues only when the exact subscription generation remains current.
+    pub async fn send_to_generation(
+        &self,
+        key: &ConnectionGenerationKey,
+        event: proto::ThreadEvent,
+    ) -> bool {
+        let entry = {
+            let entries = self.entries.read().await;
+            let Some(entry) = entries.get(&key.connection_id) else {
+                return false;
+            };
+            if entry.key != *key {
+                return false;
+            }
+            Arc::clone(entry)
+        };
+        match entry.tx.try_send(event) {
+            Ok(()) => true,
+            Err(mpsc::error::TrySendError::Full(_)) => {
+                self.remove_if_current(&key.connection_id, &entry, true)
+                    .await;
+                false
+            }
+            Err(mpsc::error::TrySendError::Closed(_)) => {
+                self.remove_if_current(&key.connection_id, &entry, false)
+                    .await;
+                false
+            }
+        }
+    }
+
+    pub async fn current_generation_key(
+        &self,
+        connection_id: &str,
+    ) -> Option<ConnectionGenerationKey> {
+        self.entries
+            .read()
+            .await
+            .get(connection_id.trim())
+            .map(|entry| entry.key.clone())
+    }
+
     /// Returns whether a live registration currently owns `connection_id`.
     pub async fn contains(&self, connection_id: &str) -> bool {
         self.entries.read().await.contains_key(connection_id)
@@ -113,7 +184,7 @@ impl ConnectionRegistry {
     /// This is the normal stream-cleanup API. It cancels the observed
     /// generation and removes it only while it remains current.
     pub async fn remove_generation(&self, generation: &ConnectionGeneration) -> bool {
-        self.remove_if_current(&generation.connection_id, &generation.entry, true)
+        self.remove_if_current(&generation.key.connection_id, &generation.entry, true)
             .await
     }
 
@@ -227,6 +298,30 @@ mod tests {
         assert_eq!(
             replacement_rx.recv().await.map(|event| event.turn_id),
             Some("replacement".into())
+        );
+    }
+
+    #[tokio::test]
+    async fn generation_scoped_send_never_retargets_replacement() {
+        let registry = ConnectionRegistry::default();
+        let (_old_rx, _old_cancel, old_generation) = registry.register(" connection ".into()).await;
+        let (mut replacement_rx, _replacement_cancel, replacement_generation) =
+            registry.register("connection".into()).await;
+
+        assert!(
+            !registry
+                .send_to_generation(old_generation.key(), event("thread", "stale"))
+                .await
+        );
+        assert!(replacement_rx.try_recv().is_err());
+        assert!(
+            registry
+                .send_to_generation(replacement_generation.key(), event("thread", "current"))
+                .await
+        );
+        assert_eq!(
+            replacement_rx.recv().await.map(|event| event.turn_id),
+            Some("current".into())
         );
     }
 
