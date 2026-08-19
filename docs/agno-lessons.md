@@ -311,7 +311,7 @@ Agno 的 Team 是一等运行时，而不是简单「Agent 调 Agent」。核心
 ### Astro 现状
 Astro 已改为 Codex 风格 Agent Threads：
 
-- `spawn_agent` 启动持久化独立线程，通过 `list/read/send/wait/interrupt/close` 完成全生命周期管理。
+- `spawn_agent` 启动持久化独立线程；模型通过 `list/send/followup/wait/interrupt` 协作，read/close 由 Desktop 控制面完成。
 - 自定义 agent 使用个人或项目 TOML；内置 `default` / `worker` / `explorer`。
 - 线程继承父任务权限，不隐式创建 worktree，凭证不持久化。
 - `persona_create` 仍只用于新建可切换的长期助手 workspace。
@@ -319,8 +319,9 @@ Astro 已改为 Codex 风格 Agent Threads：
 
 | 决策 | 用哪个工具 |
 |------|------------|
-| 并行或长时间子任务 | `spawn_agent` + `wait_agents` |
-| 检查或追问子任务 | `read_agent` + `send_message_to_agent` |
+| 并行或长时间子任务 | `spawn_agent` + `wait_agent` |
+| 排队上下文 / 触发追问 | `send_message` / `followup_task` |
+| 查看时间线 / 递归关闭 | Desktop Agent Thread 控制面 |
 | 新建可切换长期助手 | `persona_create` |
 
 ---

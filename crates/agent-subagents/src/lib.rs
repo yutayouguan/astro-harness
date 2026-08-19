@@ -22,9 +22,8 @@ pub use config::{
     AgentDefinition, AgentsSettings, ResolvedAgent, SkillConfigEntry, SkillsLayer,
 };
 pub use control::{
-    AgentControl, AgentRuntimeHandle, AgentSpawnReservation, AgentThreadCommand,
-    AgentThreadControl, CloseAdmissionGuard, LiveAgentThreads, RuntimeHandleRegistry,
-    WaitAgentResult, WaitOutcome,
+    AgentControl, AgentRuntimeHandle, AgentSpawnReservation, AgentThreadControl,
+    CloseAdmissionGuard, RuntimeHandleRegistry, WaitAgentResult, WaitOutcome,
 };
 pub use mailbox::{MailboxKind, MailboxMessage, NewMailboxMessage};
 pub use migration::{HistoricalAgentMessage, HistoricalAgentThread};
@@ -35,12 +34,6 @@ pub use model::{
     SpawnAgentV2Result, SpawnRuntimeV2Request, ThreadReservation, WaitAgentV2Request,
     WaitAgentV2Result,
 };
-// Transitional legacy exports; removed in Tasks 6/10.
-pub use model::{
-    AgentThread, AgentThreadMessage, AgentThreadStatus, CloseAgentRequest, InterruptAgentRequest,
-    ListAgentThreadsRequest, ReadAgentThreadRequest, SendAgentMessageRequest, SpawnAgentRequest,
-    WaitAgentThreadsRequest,
-};
 pub use path::AgentPath;
 pub use registry::{AgentRegistry, ExecutionPermit, Limits, SpawnReservation};
-pub use store::{AgentGraphStore, AgentThreadStore, StoredStatusEvent};
+pub use store::{AgentGraphStore, StoredStatusEvent};

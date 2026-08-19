@@ -30,7 +30,7 @@ Astro 提供与常见 Agent 生命周期对齐的 **三套 Hook**：
 | `transform_tool_result` | 任意工具返回后、`post_tool_call` 前 | `ReplaceText` |
 | `post_tool_call` | 工具返回后（已应用 `transform_tool_result`） | 观察 |
 | `subagent_start` | Agent Thread 构造完、首轮执行前（每个 thread 一次） | 观察 |
-| `subagent_stop` | Agent Thread 被 `close_agent` 关闭后 | 观察 |
+| `subagent_stop` | Agent Thread 通过 Desktop close 控制面进入 `Shutdown` 后 | 观察 |
 | `pre_verify` | 无工具调用的最终回复，且本轮执行过写盘工具（`terminal`；`file_ops` 的 `write`/`append`/`delete`/`mkdir`） | `KeepGoing(msg)` |
 | `transform_llm_output` | 最终 assistant 文本定稿、`post_llm_call` 前 | `ReplaceText` |
 | `post_llm_call` | 该 turn 成功结束后（已应用 `transform_llm_output`） | 观察 |

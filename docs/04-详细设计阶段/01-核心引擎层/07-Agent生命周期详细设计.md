@@ -328,16 +328,16 @@ pub struct AgentControl {
 }
 ```
 
-内部 handler 和公开工具统一使用：
+模型只能使用六个公开工具：
 
 - `spawn_agent`
 - `list_agents`
-- `read_agent`
 - `send_message`
 - `followup_task`
 - `wait_agent`
 - `interrupt_agent`
-- `close_agent`
+
+读取真实 Session 时间线和递归 close 只存在于 Desktop 控制面，不是模型工具。
 
 旧名称 `delegate_task`、`delegate_async`、`Supervisor::spawn_child` 不再进入新代码。
 

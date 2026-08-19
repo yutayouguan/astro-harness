@@ -62,7 +62,7 @@ cd apps/desktop && npm run tauri:build:universal    # universal-apple-darwin
 | `crates/agent-core` | `agent` | Agent 运行时核心：`AgentLoop` 状态机、流式多轮循环、工具分发、压缩、HITL、hooks、prompt 组装。 |
 | `crates/agent-providers` | `providers` | 多厂商 LLM/图像 Provider 层：`ProviderRegistry`、流式 `ChatStream`、fallback 链。支持 Google、OpenAI、Codex、DeepSeek、MiniMax、Ollama、Azure 等。 |
 | `crates/agent-memory` | `memory` | `MemoryManager` — MEMORY.md/USER.md 快照、dreaming 管道、待审批记忆队列、decision log、workspace bootstrap。 |
-| `crates/agent-subagents` | `subagents` | Codex 风格 Agent Threads：持久化、自定义 agent TOML、spawn/list/read/send/wait/interrupt/close 生命周期。 |
+| `crates/agent-subagents` | `subagents` | Codex V2 Agent Threads：持久化 Agent Graph/mailbox/status、自定义 agent TOML、root-scoped 控制面与恢复。 |
 | `crates/agent-evolution` | `evolution` | 自进化/学习循环：改进提议、评判、信号分析、评估集、DSPy 集成。配套 Python 包 `evolution-dspy/`。 |
 | `crates/agent-delegate` | `worktree` | 显式桌面多任务用的 git worktree 工具；Subagent 不会隐式创建 worktree。 |
 | `crates/agent-home` | `home` | `~/.astro` 路径约定、日志、agent config YAML、tool-enable gates。无 SQLite。 |
@@ -167,7 +167,7 @@ Plugin bus 事件（可拦截/变更）：`pre_llm_call`、`pre_tool_call`、`pr
 
 ### Agent Threads
 
-`crates/agent-subagents` 是唯一 Subagent 模型。父 Agent 用 `spawn_agent` 启动独立线程，并可通过 `list_agents` / `read_agent` / `followup_task` / `wait_agent` / `interrupt_agent` / `close_agent` 管理（旧名 `send_message_to_agent` / `wait_agents` 兼容）。线程持久化到 `~/.astro/subagents.db`，凭证只在内存中传递，权限继承父任务且自定义 agent 仅可收窄，不隐式创建 git worktree。自定义 agent 规范路径为 `~/.codex/agents/*.toml` 和 `<project>/.codex/agents/*.toml`，`.astro/agents` 作为兼容层，project `.codex` 定义优先。
+`crates/agent-subagents` 是唯一 Subagent 模型。模型只有六个工具：`spawn_agent`、`list_agents`、`send_message`、`followup_task`、`wait_agent`、`interrupt_agent`。`send_message` 只入队，`followup_task` 入队并触发/恢复 turn，`wait_agent` 等待任意 mailbox/final/steer 活动。read 真实 Session 时间线和递归 close 只是 Desktop 控制面操作，不是模型工具。状态固定为 `PendingInit` / `Running` / `Interrupted` / `Completed` / `Errored` / `Shutdown`。Agent Graph/mailbox/status 写入 `~/.astro/subagents-v2.db`，真实对话写入 SessionStore；旧 V1 表仅在迁移时转为只读历史归档。凭证只在内存中传递，权限继承父任务且自定义 agent 仅可收窄，不隐式创建 git worktree。自定义 agent 和设置只从 `~/.codex/agents/*.toml`、`<project>/.codex/agents/*.toml`、`~/.codex/config.toml` 和 `<project>/.codex/config.toml` 加载，project 定义优先。
 
 ### 可视化工作流引擎
 
@@ -189,7 +189,7 @@ Plugin bus 事件（可拦截/变更）：`pre_llm_call`、`pre_tool_call`、`pr
     knowledge.db       # 知识内容 FTS
   cron/                # cron.db + jobs.json
   workflows/workflows.json
-  subagents.db          # Agent Thread 状态与消息
+  subagents-v2.db       # Agent Graph、mailbox、状态事件与恢复元数据
   usage/usage.db
 ```
 

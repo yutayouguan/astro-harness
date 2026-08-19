@@ -125,10 +125,6 @@ pub(crate) fn schema_version(conn: &Connection) -> anyhow::Result<i32> {
     read_schema_version(conn)?.context("subagent graph schema_version is missing")
 }
 
-pub(crate) fn detected_schema_version(conn: &Connection) -> anyhow::Result<Option<i32>> {
-    read_schema_version(conn)
-}
-
 pub(crate) fn list_historical_threads(
     conn: &Connection,
 ) -> anyhow::Result<Vec<HistoricalAgentThread>> {

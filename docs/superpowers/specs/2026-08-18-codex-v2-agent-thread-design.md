@@ -125,7 +125,7 @@ mailbox 支持：
 
 `AgentGraphStore` 保存树结构和控制元数据，但不复制完整对话。它与 SessionStore 的责任边界是：
 
-- `subagents.db`：线程身份、spawn edge、mailbox、状态事件、close 和恢复元数据；
+- `subagents-v2.db`：线程身份、spawn edge、mailbox、状态事件、close 和恢复元数据；
 - `state.db`：完整消息、工具调用与结果、usage、搜索与上下文历史。
 
 ## 5. 模型工具契约
@@ -201,7 +201,7 @@ mailbox 支持：
 
 ### 6.1 Read
 
-`read` 根据 thread id 打开其真实 Session 时间线，包括用户消息、assistant 消息、tool calls、tool results、中断与错误事件。不再读取 `subagents.db` 中的简化 transcript 作为对话内容。
+`read` 根据 root 和 canonical target 打开其真实 Session 时间线，包括用户消息、assistant 消息、tool calls、tool results、中断与错误事件。它不从 Agent Graph 数据库读取简化 transcript 作为对话内容。
 
 ### 6.2 Close
 
@@ -253,7 +253,7 @@ API 不得在发出 interrupt、close 或 spawn 命令后乐观写入终态。`C
 
 ## 9. 持久化模型
 
-`~/.astro/subagents.db` 继续作为 Astro Agent Graph/mailbox 数据库，并引入显式 schema version。目标表结构如下：
+`~/.astro/subagents-v2.db` 是 Astro V2 Agent Graph/mailbox 数据库，并使用显式 schema version。目标表结构如下：
 
 ### 9.1 `agent_threads`
 

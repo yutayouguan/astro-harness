@@ -92,6 +92,11 @@ fn registers_only_codex_v2_agent_tools() {
             registry.get(removed).is_none(),
             "legacy tool remains: {removed}"
         );
+        assert_ne!(
+            home::tool_name_to_toolset(removed),
+            "subagents",
+            "legacy tool still routes through the subagents toolset: {removed}"
+        );
     }
 }
 
