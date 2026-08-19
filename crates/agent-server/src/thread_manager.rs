@@ -44,6 +44,12 @@ impl ManagedThread {
     }
 }
 
+pub enum RemoveCurrentThread {
+    Removed(Arc<ManagedThread>),
+    Leased,
+    NotCurrent,
+}
+
 #[derive(Clone, Default)]
 pub struct ThreadManager {
     entries: Arc<RwLock<HashMap<String, Arc<ManagedThread>>>>,
@@ -52,6 +58,13 @@ pub struct ThreadManager {
 
 impl ThreadManager {
     pub async fn get(&self, thread_id: &str) -> Option<Arc<ManagedThread>> {
+        let creation_lock = self.creation_lock(thread_id).await;
+        let _operation = creation_lock.lock().await;
+        self.get_locked(thread_id).await
+    }
+
+    /// Read the current entry while the caller holds this thread's creation lock.
+    pub(crate) async fn get_locked(&self, thread_id: &str) -> Option<Arc<ManagedThread>> {
         self.entries.read().await.get(thread_id).cloned()
     }
 
@@ -72,20 +85,28 @@ impl ThreadManager {
         self.entries.write().await.remove(thread_id)
     }
 
-    pub async fn remove_if_current(
+    pub async fn remove_if_current_and_unleased(
         &self,
         thread_id: &str,
         expected: &Arc<ManagedThread>,
-    ) -> Option<Arc<ManagedThread>> {
+    ) -> RemoveCurrentThread {
         let mut entries = self.entries.write().await;
-        if entries
+        if !entries
             .get(thread_id)
             .is_some_and(|current| Arc::ptr_eq(current, expected))
         {
-            entries.remove(thread_id)
-        } else {
-            None
+            return RemoveCurrentThread::NotCurrent;
         }
+        // The manager entry and idle-unload task are the two owning references.
+        // Any additional reference is an in-flight operation that must finish first.
+        if Arc::strong_count(expected) > 2 {
+            return RemoveCurrentThread::Leased;
+        }
+        RemoveCurrentThread::Removed(
+            entries
+                .remove(thread_id)
+                .expect("current thread disappeared while entries are write-locked"),
+        )
     }
 
     pub async fn contains(&self, thread_id: &str) -> bool {

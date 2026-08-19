@@ -2,7 +2,7 @@
 
 use std::collections::{HashMap, HashSet};
 use std::future::Future;
-use std::sync::Arc;
+use std::sync::{Arc, Weak};
 use std::time::Duration;
 
 use agent_protocol::TurnItem;
@@ -48,9 +48,39 @@ struct TerminalUnsubscribeRequest {
     activation: u64,
 }
 
+type TerminalGateRegistry = Arc<std::sync::Mutex<HashMap<String, Weak<Mutex<()>>>>>;
+
+struct TerminalGateLease {
+    thread_id: String,
+    gate: Arc<Mutex<()>>,
+    registry: TerminalGateRegistry,
+}
+
+impl std::ops::Deref for TerminalGateLease {
+    type Target = Mutex<()>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.gate
+    }
+}
+
+impl Drop for TerminalGateLease {
+    fn drop(&mut self) {
+        let Ok(mut registry) = self.registry.lock() else {
+            return;
+        };
+        let is_current = registry
+            .get(&self.thread_id)
+            .is_some_and(|current| Weak::ptr_eq(current, &Arc::downgrade(&self.gate)));
+        if is_current && Arc::strong_count(&self.gate) == 1 {
+            registry.remove(&self.thread_id);
+        }
+    }
+}
+
 struct TerminalSubscriptionCleanup {
     owners: RwLock<HashMap<String, u64>>,
-    gates: std::sync::Mutex<HashMap<String, Arc<Mutex<()>>>>,
+    gates: TerminalGateRegistry,
     requests: mpsc::UnboundedSender<TerminalUnsubscribeRequest>,
     receiver: std::sync::Mutex<Option<mpsc::UnboundedReceiver<TerminalUnsubscribeRequest>>>,
 }
@@ -60,20 +90,32 @@ impl TerminalSubscriptionCleanup {
         let (requests, receiver) = mpsc::unbounded_channel();
         Self {
             owners: RwLock::new(HashMap::new()),
-            gates: std::sync::Mutex::new(HashMap::new()),
+            gates: Arc::new(std::sync::Mutex::new(HashMap::new())),
             requests,
             receiver: std::sync::Mutex::new(Some(receiver)),
         }
     }
 
-    fn gate(&self, thread_id: &str) -> Arc<Mutex<()>> {
-        Arc::clone(
-            self.gates
-                .lock()
-                .expect("terminal subscription gate lock poisoned")
-                .entry(thread_id.into())
-                .or_insert_with(|| Arc::new(Mutex::new(()))),
-        )
+    fn gate(&self, thread_id: &str) -> TerminalGateLease {
+        let mut registry = self
+            .gates
+            .lock()
+            .expect("terminal subscription gate lock poisoned");
+        registry.retain(|_, gate| gate.strong_count() > 0);
+        let gate = registry
+            .get(thread_id)
+            .and_then(Weak::upgrade)
+            .unwrap_or_else(|| {
+                let gate = Arc::new(Mutex::new(()));
+                registry.insert(thread_id.into(), Arc::downgrade(&gate));
+                gate
+            });
+        drop(registry);
+        TerminalGateLease {
+            thread_id: thread_id.into(),
+            gate,
+            registry: Arc::clone(&self.gates),
+        }
     }
 
     fn take_requests(&self) -> mpsc::UnboundedReceiver<TerminalUnsubscribeRequest> {
@@ -1971,6 +2013,26 @@ mod tests {
                 .get("session-1"),
             Some(&current)
         );
+    }
+
+    #[tokio::test]
+    async fn terminal_subscription_gate_registry_prunes_unique_threads() {
+        let bridge = ThreadEventsBridge::new();
+        for index in 0..1_000 {
+            let gate = bridge
+                .terminal_cleanup
+                .gate(&format!("unique-session-{index}"));
+            let guard = gate.lock().await;
+            drop(guard);
+            drop(gate);
+        }
+
+        assert!(bridge
+            .terminal_cleanup
+            .gates
+            .lock()
+            .expect("terminal gate registry")
+            .is_empty());
     }
 
     #[tokio::test]

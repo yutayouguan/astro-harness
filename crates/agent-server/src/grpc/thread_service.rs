@@ -223,6 +223,28 @@ async fn resume(
         .map_err(|_| Status::unavailable("thread listener stopped"))
 }
 
+async fn submit_turn_response(
+    commands: &tokio::sync::mpsc::UnboundedSender<ListenerCommand>,
+    subscription: ConnectionGenerationKey,
+    submission_id: String,
+    submission: TurnInputSubmission,
+) -> Result<Response<proto::SubmitTurnResponse>, Status> {
+    let (turn_id, disposition, reason) = match submission {
+        TurnInputSubmission::Started { turn_id } => (turn_id, "started", String::new()),
+        TurnInputSubmission::Steered { turn_id } => (turn_id, "steered", String::new()),
+        TurnInputSubmission::NotSubmitted { reason } => {
+            unsubscribe_and_wait(commands, subscription).await?;
+            (String::new(), "not_submitted", reason)
+        }
+    };
+    Ok(Response::new(proto::SubmitTurnResponse {
+        submission_id,
+        turn_id,
+        disposition: disposition.into(),
+        reason,
+    }))
+}
+
 pub(crate) async fn subscribe_thread_events(
     service: &AstroServiceImpl,
     request: Request<proto::SubscribeThreadEventsRequest>,
@@ -327,7 +349,7 @@ pub(crate) async fn submit_turn(
             })
             .await
             .map_err(|error| Status::unavailable(error.to_string()))?;
-        let (submission_id, submission) = managed
+        managed
             .runtime
             .submit_turn(
                 validated
@@ -336,24 +358,13 @@ pub(crate) async fn submit_turn(
                 mode,
             )
             .await
-            .map_err(|error| Status::failed_precondition(error.to_string()))?;
-        let (turn_id, disposition, reason) = match submission {
-            TurnInputSubmission::Started { turn_id } => (turn_id, "started", String::new()),
-            TurnInputSubmission::Steered { turn_id } => (turn_id, "steered", String::new()),
-            TurnInputSubmission::NotSubmitted { reason } => {
-                (String::new(), "not_submitted", reason)
-            }
-        };
-        Ok(Response::new(proto::SubmitTurnResponse {
-            submission_id,
-            turn_id,
-            disposition: disposition.into(),
-            reason,
-        }))
+            .map_err(|error| Status::failed_precondition(error.to_string()))
     }
     .await;
     match submit {
-        Ok(response) => Ok(response),
+        Ok((submission_id, submission)) => {
+            submit_turn_response(&managed.commands, subscription, submission_id, submission).await
+        }
         Err(error) => {
             unsubscribe_and_wait(&managed.commands, subscription).await?;
             Err(error)
@@ -1463,6 +1474,163 @@ mod tests {
                 .is_none()
         );
         service.connections.remove_generation(&generation).await;
+    }
+
+    #[tokio::test]
+    async fn not_submitted_response_unsubscribes_before_returning() {
+        let dir = TempDir::new().expect("tempdir");
+        memory::ensure_workspace(dir.path()).expect("workspace");
+        let service = AstroServiceImpl::new(dir.path().to_path_buf());
+        let managed = service
+            .get_or_create_thread("not-submitted-thread")
+            .await
+            .expect("thread");
+        let (_rx, _cancel, generation) = service
+            .connections
+            .register("not-submitted-connection".into())
+            .await;
+        let subscription = generation.key().clone();
+        resume(&managed, subscription.clone(), false)
+            .await
+            .expect("resume");
+        assert!(
+            service
+                .thread_states
+                .has_subscribers("not-submitted-thread")
+                .await
+        );
+
+        let response = submit_turn_response(
+            &managed.commands,
+            subscription,
+            "submission-1".into(),
+            TurnInputSubmission::NotSubmitted {
+                reason: "terminating".into(),
+            },
+        )
+        .await
+        .expect("not submitted response")
+        .into_inner();
+
+        assert_eq!(response.disposition, "not_submitted");
+        assert_eq!(response.reason, "terminating");
+        assert!(
+            !service
+                .thread_states
+                .has_subscribers("not-submitted-thread")
+                .await
+        );
+        service.connections.remove_generation(&generation).await;
+        managed
+            .runtime
+            .submit(agent_protocol::Op::Shutdown)
+            .await
+            .unwrap();
+        managed.runtime.wait_terminated().await;
+    }
+
+    #[tokio::test]
+    async fn submit_turn_rpc_unsubscribes_a_not_submitted_disposition() {
+        let dir = TempDir::new().expect("tempdir");
+        memory::ensure_workspace(dir.path()).expect("workspace");
+        let service = AstroServiceImpl::new(dir.path().to_path_buf());
+        let (_rx, _cancel, generation) = service
+            .connections
+            .register("rpc-not-submitted-connection".into())
+            .await;
+        let response = submit_turn(
+            &service,
+            Request::new(proto::SubmitTurnRequest {
+                connection_id: "rpc-not-submitted-connection".into(),
+                chat: Some(proto::ChatRequest {
+                    session_id: "rpc-not-submitted-thread".into(),
+                    content: "late steer".into(),
+                    use_memory: true,
+                    interaction_mode: "agent".into(),
+                    ..Default::default()
+                }),
+                mode: "steer".into(),
+                expected_turn_id: "missing-turn".into(),
+            }),
+        )
+        .await
+        .expect("not submitted is a response")
+        .into_inner();
+
+        assert_eq!(response.disposition, "not_submitted");
+        assert_eq!(response.reason, "no_active_turn");
+        assert!(
+            !service
+                .thread_states
+                .has_subscribers("rpc-not-submitted-thread")
+                .await
+        );
+        let managed = service
+            .threads
+            .get("rpc-not-submitted-thread")
+            .await
+            .expect("created thread");
+        service.connections.remove_generation(&generation).await;
+        managed
+            .runtime
+            .submit(agent_protocol::Op::Shutdown)
+            .await
+            .unwrap();
+        managed.runtime.wait_terminated().await;
+    }
+
+    #[tokio::test]
+    async fn accepted_submit_response_keeps_started_and_steered_subscriptions() {
+        let dir = TempDir::new().expect("tempdir");
+        memory::ensure_workspace(dir.path()).expect("workspace");
+        let service = AstroServiceImpl::new(dir.path().to_path_buf());
+        let managed = service
+            .get_or_create_thread("accepted-submit-thread")
+            .await
+            .expect("thread");
+        let (_rx, _cancel, generation) = service
+            .connections
+            .register("accepted-submit-connection".into())
+            .await;
+        let subscription = generation.key().clone();
+        resume(&managed, subscription.clone(), false)
+            .await
+            .expect("resume");
+
+        for submission in [
+            TurnInputSubmission::Started {
+                turn_id: "turn-1".into(),
+            },
+            TurnInputSubmission::Steered {
+                turn_id: "turn-1".into(),
+            },
+        ] {
+            submit_turn_response(
+                &managed.commands,
+                subscription.clone(),
+                "submission-1".into(),
+                submission,
+            )
+            .await
+            .expect("accepted response");
+            assert!(
+                service
+                    .thread_states
+                    .has_subscribers("accepted-submit-thread")
+                    .await
+            );
+        }
+
+        unsubscribe_and_wait(&managed.commands, subscription)
+            .await
+            .expect("cleanup subscription");
+        service.connections.remove_generation(&generation).await;
+        managed
+            .runtime
+            .submit(agent_protocol::Op::Shutdown)
+            .await
+            .unwrap();
+        managed.runtime.wait_terminated().await;
     }
 
     #[tokio::test]

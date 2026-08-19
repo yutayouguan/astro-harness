@@ -29,6 +29,7 @@ use tokio_stream::wrappers::ReceiverStream;
 use tonic::{Request, Response, Status};
 
 use super::interrupt_store::{clear_interrupt_file, resume_items_from_proto, save_interrupt_file};
+use crate::thread_manager::RemoveCurrentThread;
 use crate::{
     run_thread_listener, to_proto, ConnectionRegistry, ManagedThread, MemoryUpdatedPayload,
     PendingChangedPayload, SessionEventHub, SessionEventMsg, SubscribeFilter, ThreadActivity,
@@ -612,12 +613,9 @@ impl AstroServiceImpl {
         &self,
         thread_id: &str,
     ) -> Result<Arc<ManagedThread>, Status> {
-        if let Some(managed) = self.threads.get(thread_id).await {
-            return Ok(managed);
-        }
         let creation_lock = self.threads.creation_lock(thread_id).await;
         let _creation = creation_lock.lock().await;
-        if let Some(managed) = self.threads.get(thread_id).await {
+        if let Some(managed) = self.threads.get_locked(thread_id).await {
             return Ok(managed);
         }
 
@@ -836,9 +834,14 @@ impl AstroServiceImpl {
                             if !can_idle_unload_thread(&activity) {
                                 continue;
                             }
-                            let removed = service.threads.remove_if_current(&thread_id, &managed).await;
-                            if removed.is_none() {
-                                break;
+                            match service
+                                .threads
+                                .remove_if_current_and_unleased(&thread_id, &managed)
+                                .await
+                            {
+                                RemoveCurrentThread::Removed(_) => {}
+                                RemoveCurrentThread::Leased => continue,
+                                RemoveCurrentThread::NotCurrent => break,
                             }
                             service.thread_states.remove(&thread_id).await;
                             {
@@ -4018,6 +4021,8 @@ mod tests {
             .get_or_create_thread("idle-thread")
             .await
             .expect("create idle thread");
+        let old_runtime = Arc::clone(&managed.runtime);
+        drop(managed);
         tokio::task::yield_now().await;
 
         tokio::time::advance(std::time::Duration::from_secs(29 * 60)).await;
@@ -4030,12 +4035,11 @@ mod tests {
         }
         assert!(!service.threads.contains("idle-thread").await);
         assert!(service.thread_states.get("idle-thread").await.is_none());
-        assert!(managed.listener_is_finished().await);
         let replacement = service
             .get_or_create_thread("idle-thread")
             .await
             .expect("idle thread should be reloadable");
-        assert!(!Arc::ptr_eq(&managed, &replacement));
+        assert!(!Arc::ptr_eq(&old_runtime, &replacement.runtime));
         assert!(!replacement.listener_is_finished().await);
         replacement
             .runtime
@@ -4043,6 +4047,38 @@ mod tests {
             .await
             .unwrap();
         replacement.runtime.wait_terminated().await;
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn acquired_managed_handle_prevents_idle_unload_until_released() {
+        let dir = TempDir::new().unwrap();
+        memory::ensure_workspace(dir.path()).unwrap();
+        let service = AstroServiceImpl::new(dir.path().to_path_buf());
+        let managed = service
+            .get_or_create_thread("leased-idle-thread")
+            .await
+            .expect("create idle thread");
+        tokio::task::yield_now().await;
+
+        tokio::time::advance(std::time::Duration::from_secs(30 * 60)).await;
+        for _ in 0..8 {
+            tokio::task::yield_now().await;
+        }
+        let current = service
+            .threads
+            .get("leased-idle-thread")
+            .await
+            .expect("leased thread remains current");
+        assert!(Arc::ptr_eq(&managed, &current));
+        assert!(!managed.listener_is_finished().await);
+
+        drop(current);
+        drop(managed);
+        tokio::time::advance(std::time::Duration::from_secs(30 * 60)).await;
+        for _ in 0..8 {
+            tokio::task::yield_now().await;
+        }
+        assert!(!service.threads.contains("leased-idle-thread").await);
     }
 
     #[tokio::test(start_paused = true)]
@@ -4103,6 +4139,7 @@ mod tests {
         unsubscribe_rx.await.unwrap();
         assert_eq!(managed.activity_rx.borrow().status, "errored");
         assert!(!managed.activity_rx.borrow().has_subscribers);
+        drop(managed);
 
         tokio::time::advance(std::time::Duration::from_secs(30 * 60)).await;
         for _ in 0..8 {
@@ -4186,6 +4223,7 @@ mod tests {
             })
             .unwrap();
         unsubscribe_rx.await.unwrap();
+        drop(managed);
 
         tokio::time::advance(std::time::Duration::from_secs(30 * 60)).await;
         for _ in 0..8 {
