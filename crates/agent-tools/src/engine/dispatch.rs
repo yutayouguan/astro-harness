@@ -266,7 +266,7 @@ mod permission_tests {
             skill_config_overrides: &[],
             hook_bus: None,
             workspace_write_grant: write_grant,
-            sandbox_mode_override: None,
+            sandbox_policy_override: None,
             network_grant: crate::InProcessNetworkGrant::for_hosts(
                 network_hosts.iter().map(|host| (*host).to_string()),
             ),

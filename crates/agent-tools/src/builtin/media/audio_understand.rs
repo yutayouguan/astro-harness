@@ -624,7 +624,7 @@ mod path_escape_tests {
             skill_config_overrides: &[],
             hook_bus: None,
             workspace_write_grant: false,
-            sandbox_mode_override: None,
+            sandbox_policy_override: None,
             network_grant: crate::InProcessNetworkGrant::default(),
         }
     }

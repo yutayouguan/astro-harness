@@ -1,6 +1,6 @@
 # Agent 生命周期详细设计
 
-> 版本：v2.21
+> 版本：v2.22
 > 日期：2026-08-19
 > 状态：实施基线  
 > 上游参考：[OpenAI Codex](https://github.com/openai/codex) `632e35ce8d5dec43b75dbf99f9e6fa52bed47c3d`  
@@ -654,7 +654,9 @@ built-in tool 的 current-thread `!Send` 契约保持不变。
   - [x] 引入 `ExecToolCallOutput`、`SandboxErr::Denied` 与 `run_attempt`，保留 sandbox
     denial 的结构化输出并排除普通非零退出。
   - [x] 引入 Codex 同名 `SandboxAttempt`；typed denial 要求 fresh approval，批准后仅以
-    attempt-scoped `DangerFullAccess` override 重试一次，不持久化、不扩大网络授权。
+    attempt-scoped policy override 重试一次，不持久化、不扩大网络授权。
+  - [x] 将 escalation 的文件系统与网络策略解耦：文件系统扩大到 unrestricted，网络继续
+    restricted，禁止用绕过平台沙箱的 `DangerFullAccess` 冒充文件系统单项授权。
   - [ ] 将 sandbox selection、denial analysis、network approval 与 retry 迁入 orchestrator。
 - [ ] 删除工具执行时重新加载权限/工具的路径。
 
@@ -704,12 +706,23 @@ v2.21 Sandbox escalation 批次：`ToolOrchestrator` 以 Codex 同名 `SandboxAt
 表达初始与 escalated attempt。首次 `SandboxErr::Denied` 会构造
 `PermissionReason::SandboxDenied` 的 fresh permission request，经当前 user/auto-reviewer
 明确批准后，只对原 tool call 再执行一次。重试通过
-`ToolContext::sandbox_mode_override = DangerFullAccess` 绕过本地文件 sandbox，但不改写
-session permission profile、不保留到下一调用，也不将网络 grant 升级为 unrestricted。
+attempt-scoped sandbox override 扩大文件系统访问；session permission profile 不改写，授权
+不保留到下一调用，网络 grant 也不升级为 unrestricted。
 用户拒绝、reviewer 不可用或 approval policy 禁止时不重试；第二次 attempt
 无论成功、普通失败或再次 denial 都直接结束，不形成 escalation loop。
 `tool_router_freezes_dynamic_handler_for_step` 通过采样后覆盖 Session 注册表并执行旧 step，
 锁定不可变快照契约。无 `StepContext` 的兼容工具入口仍保留当前注册表路径，待后续删除。
+
+v2.22 Sandbox policy separation 修正：复核真实 runner 后确认
+`SandboxMode::DangerFullAccess` 会完全绕过平台沙箱，因而无法兑现 v2.21 的“网络授权不扩大”
+约束。现改为传递完整的 `sandbox_policy_override`：
+`SandboxPolicy::unrestricted_file_system(execution_root, false)` 使用
+`WorkspaceWrite + filesystem root` 表达 unrestricted 文件系统，同时继续经过平台 sandbox，
+保留 workspace metadata deny，并保持 `network_access = false`。
+`SandboxAttempt -> ToolExecutionGrants -> ToolContext` 全链路
+传递不可变 policy，而不再只传 mode。该修正与 Codex 当前将 filesystem/network permission
+正交建模的边界一致；初始 sandbox selection 与 managed subprocess network approval 仍留待
+后续批次迁入 orchestrator。
 
 ### Phase D：ThreadManager 与 AgentControl
 

@@ -194,7 +194,7 @@ struct ToolRunContext {
 #[derive(Clone)]
 struct SandboxAttempt {
     workspace_write_grant: bool,
-    sandbox_mode_override: Option<types::SandboxMode>,
+    sandbox_policy_override: Option<sandbox::SandboxPolicy>,
     network_grant: tools::InProcessNetworkGrant,
 }
 
@@ -202,17 +202,20 @@ impl SandboxAttempt {
     fn initial(workspace_write_grant: bool, network_grant: tools::InProcessNetworkGrant) -> Self {
         Self {
             workspace_write_grant,
-            sandbox_mode_override: None,
+            sandbox_policy_override: None,
             network_grant,
         }
     }
 
-    fn escalated(&self) -> Self {
-        Self {
+    fn escalated(&self, execution_root: &std::path::Path) -> Result<Self, sandbox::SandboxErr> {
+        Ok(Self {
             workspace_write_grant: self.workspace_write_grant,
-            sandbox_mode_override: Some(types::SandboxMode::DangerFullAccess),
+            sandbox_policy_override: Some(sandbox::SandboxPolicy::unrestricted_file_system(
+                execution_root,
+                false,
+            )?),
             network_grant: self.network_grant.clone(),
-        }
+        })
     }
 }
 
@@ -671,6 +674,12 @@ impl<'a> ToolOrchestrator<'a> {
         let agent = self.session.as_ref();
         let memory_dir = agent.memory_dir().to_path_buf();
         let session_id = agent.session_id().to_string();
+        let execution_root = self
+            .step_context
+            .turn
+            .project_root()
+            .map(ToOwned::to_owned)
+            .unwrap_or_else(|| agent.memory().workspace_dir.clone());
         let initial_attempt = SandboxAttempt::initial(workspace_write_grant, network_grant);
         let execution_started = std::time::Instant::now();
         let executed = self.run_attempt(call, &initial_attempt, CancellationToken::new());
@@ -698,11 +707,13 @@ impl<'a> ToolOrchestrator<'a> {
                 match self.review_sandbox_denial(call, output.as_ref()).await? {
                     PermissionPreflight::Granted(retry_audit) => {
                         let retry_started = std::time::Instant::now();
-                        let retry = self.run_attempt(
-                            call,
-                            &initial_attempt.escalated(),
-                            CancellationToken::new(),
-                        );
+                        let retry = initial_attempt
+                            .escalated(&execution_root)
+                            .map_err(anyhow::Error::new)
+                            .map_err(crate::runtime::ToolCallError::from)
+                            .and_then(|attempt| {
+                                self.run_attempt(call, &attempt, CancellationToken::new())
+                            });
                         let retry_result = match &retry {
                             Ok(_) => "escalated",
                             Err(crate::runtime::ToolCallError::Cancelled) => "cancelled",
@@ -800,7 +811,7 @@ impl<'a> ToolOrchestrator<'a> {
             invocation,
             crate::runtime::ToolExecutionGrants {
                 workspace_write: attempt.workspace_write_grant,
-                sandbox_mode_override: attempt.sandbox_mode_override,
+                sandbox_policy_override: attempt.sandbox_policy_override.clone(),
                 network: attempt.network_grant.clone(),
             },
         )
@@ -1603,6 +1614,20 @@ mod tests {
         assert!(context.workspace_write_grant);
         assert!(!context.network_grant.is_empty());
         assert_eq!(context.permission_audits.len(), 2);
+    }
+
+    #[test]
+    fn escalated_sandbox_attempt_preserves_restricted_network() {
+        let dir = tempfile::tempdir().unwrap();
+        let initial = SandboxAttempt::initial(false, tools::InProcessNetworkGrant::default());
+        let escalated = initial.escalated(dir.path()).unwrap();
+        let policy = escalated
+            .sandbox_policy_override
+            .expect("escalated attempt should carry a complete policy");
+
+        assert_eq!(policy.mode, types::SandboxMode::WorkspaceWrite);
+        assert_eq!(policy.writable_roots[0], dir.path().canonicalize().unwrap());
+        assert!(!policy.network_access);
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]

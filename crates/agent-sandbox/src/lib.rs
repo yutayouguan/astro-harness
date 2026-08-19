@@ -131,6 +131,28 @@ impl SandboxPolicy {
         })
     }
 
+    /// Allow writes across the filesystem while keeping network policy independent.
+    ///
+    /// Unlike [`SandboxMode::DangerFullAccess`], this policy still runs through the
+    /// platform sandbox, so `network_access = false` and protected workspace metadata
+    /// remain enforceable.
+    pub fn unrestricted_file_system(
+        execution_root: impl AsRef<Path>,
+        network_access: bool,
+    ) -> Result<Self, SandboxError> {
+        let execution_root = canonical_directory(execution_root.as_ref())?;
+        let filesystem_root = execution_root
+            .ancestors()
+            .last()
+            .expect("a canonical path always has an ancestor");
+        Self::new(
+            SandboxMode::WorkspaceWrite,
+            &execution_root,
+            [filesystem_root.to_path_buf()],
+            network_access,
+        )
+    }
+
     pub fn profile_hash_material(&self) -> String {
         format!(
             "{:?}|{}|{}",
@@ -343,6 +365,35 @@ mod tests {
             SandboxPolicy::new(SandboxMode::DangerFullAccess, dir.path(), Vec::new(), false)
                 .unwrap();
         assert!(SandboxRunner.tokio_command(&policy, "sh").is_ok());
+    }
+
+    #[test]
+    fn unrestricted_filesystem_keeps_network_policy_independent() {
+        let dir = tempfile::tempdir().unwrap();
+        let policy = SandboxPolicy::unrestricted_file_system(dir.path(), false).unwrap();
+
+        assert_eq!(policy.mode, SandboxMode::WorkspaceWrite);
+        assert_eq!(policy.writable_roots[0], dir.path().canonicalize().unwrap());
+        assert_eq!(
+            policy.writable_roots.last().unwrap(),
+            dir.path()
+                .canonicalize()
+                .unwrap()
+                .ancestors()
+                .last()
+                .unwrap()
+        );
+        assert!(!policy.network_access);
+
+        #[cfg(target_os = "macos")]
+        {
+            let profile = macos_profile(&policy);
+            assert!(!profile.contains("(allow network*)"));
+            assert!(profile.contains(&format!(
+                "(deny file-write* (subpath \"{}\"))",
+                seatbelt_escape(&dir.path().canonicalize().unwrap().join(".git"))
+            )));
+        }
     }
 
     #[test]
