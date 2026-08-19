@@ -25,8 +25,7 @@ const SNAPSHOT_EVENT: &str = "thread_snapshot";
 #[derive(Default)]
 struct ActiveState {
     threads: HashSet<String>,
-    turns: HashMap<String, String>,
-    terminal_turns: HashMap<String, String>,
+    turn_epochs: HashMap<String, HashMap<String, u64>>,
     activations: HashMap<String, u64>,
     next_activation: u64,
 }
@@ -88,6 +87,7 @@ impl ThreadEventsBridge {
         Ok(())
     }
 
+    #[cfg(test)]
     fn is_ready(&self) -> bool {
         *self.ready.borrow()
     }
@@ -98,19 +98,20 @@ impl ThreadEventsBridge {
         state.next_activation = state.next_activation.wrapping_add(1).max(1);
         let activation = state.next_activation;
         state.threads.insert(thread_id.clone());
-        state.turns.remove(&thread_id);
         state.activations.insert(thread_id, activation);
         activation
     }
 
-    pub async fn deactivate_if_current(&self, thread_id: &str, activation: u64) {
+    pub async fn deactivate_if_current(&self, thread_id: &str, activation: u64) -> bool {
         let mut state = self.active_threads.write().await;
         if state.activations.get(thread_id).copied() != Some(activation) {
-            return;
+            Self::remove_turn_epoch(&mut state, thread_id, activation);
+            return false;
         }
         state.threads.remove(thread_id);
-        state.turns.remove(thread_id);
+        state.turn_epochs.remove(thread_id);
         state.activations.remove(thread_id);
+        true
     }
 
     pub async fn bind_turn(&self, thread_id: &str, turn_id: &str) {
@@ -118,8 +119,13 @@ impl ThreadEventsBridge {
             return;
         }
         let mut state = self.active_threads.write().await;
-        if state.threads.contains(thread_id) {
-            state.turns.insert(thread_id.into(), turn_id.into());
+        if let Some(activation) = state.activations.get(thread_id).copied() {
+            state
+                .turn_epochs
+                .entry(thread_id.into())
+                .or_default()
+                .entry(turn_id.into())
+                .or_insert(activation);
         }
     }
 
@@ -129,7 +135,12 @@ impl ThreadEventsBridge {
         }
         let mut state = self.active_threads.write().await;
         if state.activations.get(thread_id).copied() == Some(activation) {
-            state.turns.insert(thread_id.into(), turn_id.into());
+            state
+                .turn_epochs
+                .entry(thread_id.into())
+                .or_default()
+                .entry(turn_id.into())
+                .or_insert(activation);
         }
     }
 
@@ -151,27 +162,36 @@ impl ThreadEventsBridge {
     /// Accept each terminal once and never let a stale terminal retire a newer Turn.
     async fn accept_terminal(&self, thread_id: &str, turn_id: &str) -> bool {
         let mut state = self.active_threads.write().await;
+        let Some(turn_epoch) = state
+            .turn_epochs
+            .get_mut(thread_id)
+            .and_then(|turns| turns.remove(turn_id))
+        else {
+            return false;
+        };
         if state
-            .terminal_turns
+            .turn_epochs
             .get(thread_id)
-            .is_some_and(|seen| seen == turn_id)
+            .is_some_and(HashMap::is_empty)
         {
+            state.turn_epochs.remove(thread_id);
+        }
+        if state.activations.get(thread_id).copied() != Some(turn_epoch) {
             return false;
         }
-        if state
-            .turns
-            .get(thread_id)
-            .is_some_and(|active| active != turn_id)
-        {
-            return false;
-        }
-        state
-            .terminal_turns
-            .insert(thread_id.into(), turn_id.into());
         state.threads.remove(thread_id);
-        state.turns.remove(thread_id);
+        state.turn_epochs.remove(thread_id);
         state.activations.remove(thread_id);
         true
+    }
+
+    fn remove_turn_epoch(state: &mut ActiveState, thread_id: &str, activation: u64) {
+        if let Some(turns) = state.turn_epochs.get_mut(thread_id) {
+            turns.retain(|_, epoch| *epoch != activation);
+            if turns.is_empty() {
+                state.turn_epochs.remove(thread_id);
+            }
+        }
     }
 }
 
@@ -196,6 +216,33 @@ impl RetryBackoff {
     fn reset(&mut self) {
         self.next_ms = 500;
     }
+
+    fn after_attempt(&mut self, saw_live_event: bool) -> Duration {
+        if saw_live_event {
+            self.reset();
+        }
+        self.next_delay()
+    }
+}
+
+pub(crate) fn submission_failure_events(
+    is_current_activation: bool,
+    message: impl Into<String>,
+) -> Vec<ChatStreamEvent> {
+    if !is_current_activation {
+        return Vec::new();
+    }
+    vec![
+        ChatStreamEvent::Error {
+            message: message.into(),
+        },
+        ChatStreamEvent::RunFinished {
+            run_id: String::new(),
+            outcome_type: "error".into(),
+            interrupts_json: "[]".into(),
+        },
+        ChatStreamEvent::Done,
+    ]
 }
 
 pub fn accepted_turn_id(response: proto::SubmitTurnResponse) -> Result<String, String> {
@@ -224,19 +271,34 @@ async fn run_subscribe_loop(app: AppHandle, bridge: Arc<ThreadEventsBridge>) {
     let mut backoff = RetryBackoff::default();
     loop {
         bridge.mark_recovering();
-        match subscribe_once(&app, &bridge).await {
-            Ok(()) => debug!("thread event stream closed"),
-            Err(error) => debug!(%error, "thread event stream failed"),
-        }
-        if bridge.is_ready() {
-            backoff.reset();
-        }
+        let attempt = subscribe_once(&app, &bridge).await;
+        debug!(error = %attempt.error, saw_live_event = attempt.saw_live_event, "thread event stream ended");
         bridge.mark_recovering();
-        tokio::time::sleep(backoff.next_delay()).await;
+        tokio::time::sleep(backoff.after_attempt(attempt.saw_live_event)).await;
     }
 }
 
-async fn subscribe_once(app: &AppHandle, bridge: &ThreadEventsBridge) -> Result<(), String> {
+struct ConnectionAttempt {
+    saw_live_event: bool,
+    error: String,
+}
+
+async fn subscribe_once(app: &AppHandle, bridge: &ThreadEventsBridge) -> ConnectionAttempt {
+    let mut saw_live_event = false;
+    let result = subscribe_connection(app, bridge, &mut saw_live_event).await;
+    ConnectionAttempt {
+        saw_live_event,
+        error: result
+            .err()
+            .unwrap_or_else(|| "thread event stream closed".into()),
+    }
+}
+
+async fn subscribe_connection(
+    app: &AppHandle,
+    bridge: &ThreadEventsBridge,
+    saw_live_event: &mut bool,
+) -> Result<(), String> {
     let endpoint = endpoint_url(&default_grpc_address());
     let mut client = AstroServiceClient::connect(endpoint)
         .await
@@ -320,7 +382,9 @@ async fn subscribe_once(app: &AppHandle, bridge: &ThreadEventsBridge) -> Result<
                 }
             }
             ReconnectDelivery::Live(event) => {
-                process_live_event(app, bridge, event?).await;
+                let event = event?;
+                *saw_live_event = true;
+                process_live_event(app, bridge, event).await;
             }
         }
     }
@@ -328,6 +392,7 @@ async fn subscribe_once(app: &AppHandle, bridge: &ThreadEventsBridge) -> Result<
 
     while let Some(event) = live_rx.recv().await {
         let event = event?;
+        *saw_live_event = true;
         process_live_event(app, bridge, event).await;
     }
     Err("thread event reader stopped".into())
@@ -1026,7 +1091,10 @@ mod tests {
     #[tokio::test]
     async fn duplicate_terminal_is_suppressed_and_removes_active_thread() {
         let bridge = ThreadEventsBridge::new();
-        bridge.activate("session-1").await;
+        let activation = bridge.activate("session-1").await;
+        bridge
+            .bind_turn_if_current("session-1", activation, "turn-1")
+            .await;
         assert!(bridge.accept_terminal("session-1", "turn-1").await);
         assert!(!bridge.accept_terminal("session-1", "turn-1").await);
         assert!(!bridge.is_active("session-1").await);
@@ -1037,9 +1105,32 @@ mod tests {
         let bridge = ThreadEventsBridge::new();
         let old = bridge.activate("session-1").await;
         let current = bridge.activate("session-1").await;
-        bridge.deactivate_if_current("session-1", old).await;
+        assert!(!bridge.deactivate_if_current("session-1", old).await);
         assert!(bridge.is_active("session-1").await);
-        bridge.deactivate_if_current("session-1", current).await;
+        assert!(bridge.deactivate_if_current("session-1", current).await);
+        assert!(!bridge.is_active("session-1").await);
+    }
+
+    #[tokio::test]
+    async fn old_turn_terminal_cannot_retire_a_new_activation() {
+        let bridge = ThreadEventsBridge::new();
+        let old = bridge.activate("session-1").await;
+        bridge
+            .bind_turn_if_current("session-1", old, "turn-old")
+            .await;
+        let current = bridge.activate("session-1").await;
+
+        // A reconnect snapshot can observe the old active turn again. Rebinding it must not
+        // promote that turn into the new activation epoch.
+        bridge.bind_turn("session-1", "turn-old").await;
+
+        assert!(!bridge.accept_terminal("session-1", "turn-old").await);
+        assert!(bridge.is_active("session-1").await);
+
+        bridge
+            .bind_turn_if_current("session-1", current, "turn-current")
+            .await;
+        assert!(bridge.accept_terminal("session-1", "turn-current").await);
         assert!(!bridge.is_active("session-1").await);
     }
 
@@ -1111,13 +1202,33 @@ mod tests {
     #[test]
     fn reconnect_backoff_starts_at_500ms_and_caps_at_15s() {
         let mut backoff = RetryBackoff::default();
-        assert_eq!(backoff.next_delay(), std::time::Duration::from_millis(500));
+        assert_eq!(
+            backoff.after_attempt(false),
+            std::time::Duration::from_millis(500)
+        );
+        assert_eq!(
+            backoff.after_attempt(false),
+            std::time::Duration::from_secs(1)
+        );
+        assert_eq!(
+            backoff.after_attempt(false),
+            std::time::Duration::from_secs(2)
+        );
         for _ in 0..10 {
-            backoff.next_delay();
+            backoff.after_attempt(false);
         }
-        assert_eq!(backoff.next_delay(), std::time::Duration::from_secs(15));
-        backoff.reset();
-        assert_eq!(backoff.next_delay(), std::time::Duration::from_millis(500));
+        assert_eq!(
+            backoff.after_attempt(false),
+            std::time::Duration::from_secs(15)
+        );
+        assert_eq!(
+            backoff.after_attempt(true),
+            std::time::Duration::from_millis(500)
+        );
+        assert_eq!(
+            backoff.after_attempt(false),
+            std::time::Duration::from_secs(1)
+        );
     }
 
     #[test]
@@ -1140,5 +1251,18 @@ mod tests {
             reason: String::new(),
         };
         assert_eq!(accepted_turn_id(response).unwrap(), "turn-1");
+    }
+
+    #[test]
+    fn stale_submission_failure_has_no_terminal_projection() {
+        assert!(submission_failure_events(false, "old failure").is_empty());
+        assert!(matches!(
+            submission_failure_events(true, "current failure").as_slice(),
+            [
+                ChatStreamEvent::Error { .. },
+                ChatStreamEvent::RunFinished { outcome_type, .. },
+                ChatStreamEvent::Done
+            ] if outcome_type == "error"
+        ));
     }
 }

@@ -12,7 +12,9 @@ use super::providers::{
     resolve_chat_targets, resolve_image_gen_targets, ImageGenTarget,
 };
 use crate::infra::grpc::{default_grpc_address, endpoint_url};
-use crate::infra::thread_events::{accepted_turn_id, ThreadEventsBridge};
+use crate::infra::thread_events::{
+    accepted_turn_id, submission_failure_events, ThreadEventsBridge,
+};
 
 // ---------------------------------------------------------------------------
 // DTOs
@@ -606,22 +608,10 @@ pub async fn start_chat(app: AppHandle, request: StartChatRequest) -> Result<Str
         .await;
 
         if let Err(err) = result {
-            bridge.deactivate_if_current(&sid2, activation).await;
-            let _ = app2.emit(
-                &event_name2,
-                ChatStreamEvent::Error {
-                    message: friendly_error(&err),
-                },
-            );
-            let _ = app2.emit(
-                &event_name2,
-                ChatStreamEvent::RunFinished {
-                    run_id: String::new(),
-                    outcome_type: "error".into(),
-                    interrupts_json: "[]".into(),
-                },
-            );
-            let _ = app2.emit(&event_name2, ChatStreamEvent::Done);
+            let is_current = bridge.deactivate_if_current(&sid2, activation).await;
+            for event in submission_failure_events(is_current, friendly_error(&err)) {
+                let _ = app2.emit(&event_name2, event);
+            }
         }
     });
 
