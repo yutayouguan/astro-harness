@@ -810,13 +810,19 @@ bridge user message. The next loop-top leaves that queued steer in `TurnContext`
 once, so the provider responds to the bridge first; after that assistant response is
 persisted, the terminal pending-input branch records the steer as the next legal user
 turn. Do not take and requeue the input, and do not apply this deferral to thinking-only
-or other non-Stop retry paths.
+or other non-Stop retry paths. The Stop-local flag is not consumed when the bridge begins
+sampling: it survives reasoning-only bridge retries and clears only after the normal
+assistant persistence path succeeds (text or tool calls), which also preserves ordering
+for a bridge that resumes with a tool call.
 
 `stop_keep_going_with_queued_steer_preserves_role_order` holds the first Stop hook on a
 Condvar, admits exactly one `follow up` steer during that pause, and verifies the bridge
 is sampled before the steer, both appear once, and the final history alternates roles.
 `thinking_only_retry_consumes_queued_steer_before_sampling` protects the non-Stop path:
 its retry must consume an already queued steer before its next sampling request.
+`stop_keep_going_defers_queued_steer_across_reasoning_only_bridge_retry` verifies the
+Stop bridge keeps the steer deferred through a reasoning-only retry, then consumes it
+only after a normal bridge response is persisted.
 
 ```bash
 cargo test -p agent stop_keep_going_with_queued_steer_preserves_role_order -- --exact

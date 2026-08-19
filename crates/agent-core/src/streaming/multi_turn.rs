@@ -274,7 +274,7 @@ pub(crate) async fn run_turn(args: RunTurnArgs, cancellation_token: Cancellation
             return;
         }
 
-        if has_sampled && !std::mem::take(&mut defer_pending_input_after_stop) {
+        if has_sampled && !defer_pending_input_after_stop {
             if let Err(error) =
                 record_pending_input(&session, turn_context.take_pending_input()).await
             {
@@ -707,6 +707,10 @@ pub(crate) async fn run_turn(args: RunTurnArgs, cancellation_token: Cancellation
                 .await;
                 return;
             }
+            // A Stop bridge can survive reasoning-only retries. Clear its one-shot
+            // deferral only after a normal assistant message (including tool calls)
+            // is durably represented in history.
+            defer_pending_input_after_stop = false;
         }
 
         if calls.is_empty() {
