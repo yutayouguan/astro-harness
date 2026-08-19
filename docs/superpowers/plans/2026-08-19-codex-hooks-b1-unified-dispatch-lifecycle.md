@@ -89,7 +89,10 @@ fn dispatch_normalizes_once_and_reaches_all_transports() {
     assert!(matches!(outcome, HookOutcome::Block(ref reason) if reason == "blocked"));
     assert_eq!(plugin_hits.load(Ordering::SeqCst), 1);
     assert_eq!(gateway_hits.load(Ordering::SeqCst), 1);
-    assert!(rt.shell.lock().unwrap().has_event(PRE_TOOL_USE));
+    let shell_schedule = rt.shell.lock().unwrap().scheduled();
+    assert_eq!(shell_schedule.len(), 1);
+    assert_eq!(shell_schedule[0].0, PRE_TOOL_USE);
+    assert_eq!(shell_schedule[0].1.hook_event_name, PRE_TOOL_USE);
 }
 ```
 
@@ -139,13 +142,13 @@ impl HookRuntime {
         self.dispatch(name, payload)
     }
 
-    pub fn fire_gateway(&self, name: &str, payload: &HookPayload) -> HookOutcome {
-        self.dispatch(name, payload)
+    pub fn fire_gateway(&self, name: &str, payload: &HookPayload) {
+        let _ = self.dispatch(name, payload);
     }
 }
 ```
 
-Gateway and Shell remain observers in B1; the Plugin outcome remains the controlling result until the multi-handler aggregator lands in Batch C.
+Gateway and Shell remain observers in B1; the Plugin outcome remains the controlling result until the multi-handler aggregator lands in Batch C. New callers that need the Plugin outcome should call `dispatch` directly; `fire_gateway` retains its historical `()` return type for compatibility.
 
 - [ ] **Step 4: Run the focused and crate tests**
 
