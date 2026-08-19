@@ -89,9 +89,9 @@ impl HookRuntime {
         self.dispatch(name, payload)
     }
 
-    /// 兼容包装：统一向三套 transport 投递事件，并返回 Plugin outcome。
-    pub fn fire_gateway(&self, event: &str, payload: &HookPayload) -> HookOutcome {
-        self.dispatch(event, payload)
+    /// 兼容包装：统一向三套 transport 投递事件。
+    pub fn fire_gateway(&self, event: &str, payload: &HookPayload) {
+        let _ = self.dispatch(event, payload);
     }
 }
 
@@ -117,7 +117,10 @@ mod tests {
         let _ = rt.fire_plugin("pre_tool_call", &HookInput::default());
 
         assert_eq!(seen.lock().unwrap().as_deref(), Some(PRE_TOOL_USE));
-        assert!(rt.shell.lock().unwrap().has_event(PRE_TOOL_USE));
+        let shell_schedule = rt.shell.lock().unwrap().scheduled();
+        assert_eq!(shell_schedule.len(), 1);
+        assert_eq!(shell_schedule[0].0, PRE_TOOL_USE);
+        assert_eq!(shell_schedule[0].1.hook_event_name, PRE_TOOL_USE);
     }
 
     #[tokio::test]

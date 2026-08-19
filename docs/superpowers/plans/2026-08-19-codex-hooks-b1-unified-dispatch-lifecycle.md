@@ -98,7 +98,7 @@ fn dispatch_normalizes_once_and_reaches_all_transports() {
 Run:
 
 ```bash
-cargo test -p hooks dispatch_normalizes_once_and_reaches_all_transports -- --exact
+cargo test -p hooks tests::dispatch_normalizes_once_and_reaches_all_transports -- --exact
 ```
 
 Expected: compile failure because `HookRuntime::dispatch` does not exist.
@@ -152,7 +152,7 @@ Gateway and Shell remain observers in B1; the Plugin outcome remains the control
 Run:
 
 ```bash
-cargo test -p hooks dispatch_normalizes_once_and_reaches_all_transports -- --exact
+cargo test -p hooks tests::dispatch_normalizes_once_and_reaches_all_transports -- --exact
 cargo test -p hooks
 ```
 
