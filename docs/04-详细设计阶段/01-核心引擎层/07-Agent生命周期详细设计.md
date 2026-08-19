@@ -1,9 +1,9 @@
 # Agent 生命周期详细设计
 
-> 版本：v2.23
+> 版本：v2.24
 > 日期：2026-08-19
 > 状态：实施基线  
-> 上游参考：[OpenAI Codex](https://github.com/openai/codex) `632e35ce8d5dec43b75dbf99f9e6fa52bed47c3d`  
+> 上游参考：[OpenAI Codex](https://github.com/openai/codex) `ede5247893a50297a47c9aa5038e6ab28312ff50`
 > 适用范围：`agent-core`、`agent-tools`、`agent-subagents`、`agent-memory`、`agent-session`、`agent-hooks`、`agent-mcp`
 
 ---
@@ -659,7 +659,10 @@ built-in tool 的 current-thread `!Send` 契约保持不变。
     restricted，禁止用绕过平台沙箱的 `DangerFullAccess` 冒充文件系统单项授权。
   - [x] 将 `SandboxablePreference` 固定到 `ToolRouter` step snapshot，并由 orchestrator
     为初始 attempt 选择完整 sandbox policy；兼容入口仍可在 `ToolContext` 内回退解析。
-  - [ ] 将 denial analysis 与 managed subprocess network approval 迁入 orchestrator。
+  - [x] 与 Codex 对齐 denial analysis 边界：具体 `ToolCallRuntime` 将原始进程结果分类为
+    typed `SandboxErr::Denied`，orchestrator 只负责审批、审计和单次 escalated retry。
+  - [ ] 在命令网络代理能够返回结构化 network-policy decision 后，将 managed subprocess
+    network approval 接入 orchestrator；禁止在代理落地前用命令文本猜测域名或直接开放全网。
 - [ ] 删除工具执行时重新加载权限/工具的路径。
 
 v2.16 ToolInvocation / ToolCallRuntime 首批：新运行时保留 Codex 的 `session`、
@@ -737,6 +740,17 @@ profile 下仍强制使用平台 sandbox；escalated attempt 的显式 policy �
 从而保持同一 step/attempt 的不可变权限语义。
 无 `StepContext` 的兼容调用和常驻 MCP 启动仍保留 `ToolContext`/共享 helper 回退，等待后续
 删除旧入口时一并收口。
+
+v2.24 Sandbox denial ownership 复核：对照 Codex 当前
+`core/src/tools/runtimes/shell/unix_escalation.rs::process_exec_tool_call`、
+`core/src/tools/runtimes/apply_patch.rs::run` 与 `core/src/tools/orchestrator.rs::run`，拒绝信号的
+识别属于产生 `ExecToolCallOutput` 的具体 runtime；runtime 负责把原始输出转换为 typed
+`SandboxErr::Denied`，`ToolOrchestrator` 只匹配该结构化错误并决定审批、审计和最多一次重试。
+因此 Astro 保持 `terminal` / `code_exec` runtime 的 classifier，不把 stdout/stderr 文本启发式
+上移到 orchestrator，也不让 orchestrator 重新解释普通 `ToolOutput`。此前“将 denial analysis
+迁入 orchestrator”的清单项属于职责边界误判，现已纠正。managed subprocess network approval
+仍需以命令网络代理产生的结构化 network-policy decision 为前提；代理缺失时继续 fail closed，
+不通过解析 `curl` / `wget` 命令文本推断 host，也不把一次网络批准降级为 unrestricted network。
 
 ### Phase D：ThreadManager 与 AgentControl
 

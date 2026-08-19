@@ -232,8 +232,9 @@ enum ToolApprovalOutcome {
 ///
 /// Owns approval preflight, terminal review, one-shot grants, step-bound
 /// dispatch, typed sandbox-denial review, and a single escalated retry.
-/// Initial sandbox selection and managed-network approval remain in the tool
-/// implementations until later slices migrate them here.
+/// Process runtimes classify raw execution output into typed sandbox errors;
+/// managed subprocess-network approval remains pending until the proxy boundary
+/// can report a structured network-policy decision.
 struct ToolOrchestrator<'a> {
     session: &'a Arc<AgentLoop>,
     step_context: &'a Arc<StepContext>,
