@@ -221,7 +221,9 @@ impl ThreadEventsBridge {
         activation
     }
 
-    pub async fn deactivate_if_current(&self, thread_id: &str, activation: u64) -> bool {
+    /// Retire a failed activation and let the generation-owned cleanup worker unsubscribe it.
+    /// A stale failure only removes its own bookkeeping and cannot touch the current subscriber.
+    pub async fn fail_activation(&self, thread_id: &str, activation: u64) -> bool {
         let mut state = self.active_threads.write().await;
         if state.activations.get(thread_id).copied() != Some(activation) {
             Self::remove_turn_epoch(&mut state, thread_id, activation);
@@ -230,7 +232,9 @@ impl ThreadEventsBridge {
         }
         Self::clear_thread(&mut state, thread_id);
         drop(state);
-        self.clear_terminal_owner_if(thread_id, activation).await;
+        // Keep terminal_cleanup.owners intact until the queued RPC succeeds. A newer activation
+        // overwrites the owner first, making this request stale without unsubscribing the new turn.
+        self.queue_terminal_unsubscribe(thread_id, activation);
         true
     }
 
@@ -2084,12 +2088,54 @@ mod tests {
     #[tokio::test]
     async fn stale_submit_failure_cannot_remove_a_newer_activation() {
         let bridge = ThreadEventsBridge::new();
+        let mut cleanup = bridge.take_terminal_unsubscribe_requests();
         let old = bridge.activate("session-1").await;
         let current = bridge.activate("session-1").await;
-        assert!(!bridge.deactivate_if_current("session-1", old).await);
+        bridge
+            .bind_submitted_turn_if_current("session-1", current, "turn-current")
+            .await;
+
+        assert!(!bridge.fail_activation("session-1", old).await);
+        assert!(cleanup.try_recv().is_err());
         assert!(bridge.is_active("session-1").await);
-        assert!(bridge.deactivate_if_current("session-1", current).await);
+        assert_eq!(
+            bridge
+                .active_threads
+                .read()
+                .await
+                .activations
+                .get("session-1"),
+            Some(&current)
+        );
+    }
+
+    #[tokio::test]
+    async fn current_replacement_failure_queues_activation_owned_unsubscribe() {
+        let bridge = ThreadEventsBridge::new();
+        let mut cleanup = bridge.take_terminal_unsubscribe_requests();
+        let _old = bridge.activate("session-1").await;
+        let current = bridge.activate("session-1").await;
+
+        assert!(bridge.fail_activation("session-1", current).await);
         assert!(!bridge.is_active("session-1").await);
+        let request = cleanup.recv().await.expect("current failure cleanup");
+        assert_eq!(request.activation, current);
+        let calls = Arc::new(AtomicUsize::new(0));
+        let counted = Arc::clone(&calls);
+        assert!(bridge
+            .run_terminal_unsubscribe_if_owned(request, move |_| async move {
+                counted.fetch_add(1, Ordering::SeqCst);
+                Ok(())
+            })
+            .await
+            .unwrap());
+        assert_eq!(calls.load(Ordering::SeqCst), 1);
+        assert!(!bridge
+            .terminal_cleanup
+            .owners
+            .read()
+            .await
+            .contains_key("session-1"));
     }
 
     #[tokio::test]
@@ -2234,7 +2280,7 @@ mod tests {
             .is_empty());
         assert_eq!(deferred_terminal_count(&bridge, "session-1").await, 1);
 
-        assert!(bridge.deactivate_if_current("session-1", failed).await);
+        assert!(bridge.fail_activation("session-1", failed).await);
         assert_eq!(deferred_terminal_count(&bridge, "session-1").await, 0);
 
         let next = bridge.activate("session-1").await;
@@ -2286,11 +2332,11 @@ mod tests {
                 .is_err()
         );
 
-        let old_is_current = bridge.deactivate_if_current("session-1", old).await;
+        let old_is_current = bridge.fail_activation("session-1", old).await;
         assert!(submission_failure_events(old_is_current, "old failure").is_empty());
         assert!(bridge.is_active("session-1").await);
 
-        assert!(bridge.deactivate_if_current("session-1", current).await);
+        assert!(bridge.fail_activation("session-1", current).await);
         assert!(!bridge.is_active("session-1").await);
 
         // Keep the command integration honest: activation must happen before the task can block
@@ -2628,6 +2674,7 @@ mod tests {
     #[tokio::test]
     async fn ready_wait_timeout_only_retires_its_own_activation() {
         let bridge = ThreadEventsBridge::new();
+        let mut cleanup = bridge.take_terminal_unsubscribe_requests();
         bridge.mark_recovering();
         let timed_out = bridge.activate("session-1").await;
         assert!(bridge
@@ -2636,22 +2683,24 @@ mod tests {
             .is_err());
 
         let current = bridge.activate("session-1").await;
-        let timed_out_is_current = bridge.deactivate_if_current("session-1", timed_out).await;
+        let timed_out_is_current = bridge.fail_activation("session-1", timed_out).await;
         assert!(submission_failure_events(timed_out_is_current, "backend unavailable").is_empty());
+        assert!(cleanup.try_recv().is_err());
         assert!(bridge.is_active("session-1").await);
-        assert!(bridge.deactivate_if_current("session-1", current).await);
+        assert!(bridge.fail_activation("session-1", current).await);
     }
 
     #[tokio::test]
     async fn current_ready_timeout_emits_one_error_terminal_sequence() {
         let bridge = ThreadEventsBridge::new();
+        let mut cleanup = bridge.take_terminal_unsubscribe_requests();
         bridge.mark_recovering();
         let activation = bridge.activate("session-1").await;
         let error = bridge
             .wait_ready_for(Duration::from_millis(1))
             .await
             .unwrap_err();
-        let is_current = bridge.deactivate_if_current("session-1", activation).await;
+        let is_current = bridge.fail_activation("session-1", activation).await;
         let projected = submission_failure_events(is_current, error);
 
         assert!(matches!(
@@ -2663,6 +2712,14 @@ mod tests {
             ] if outcome_type == "error"
         ));
         assert!(!bridge.is_active("session-1").await);
+        assert_eq!(
+            cleanup
+                .recv()
+                .await
+                .expect("ready timeout cleanup")
+                .activation,
+            activation
+        );
     }
 
     #[tokio::test]

@@ -223,26 +223,21 @@ async fn resume(
         .map_err(|_| Status::unavailable("thread listener stopped"))
 }
 
-async fn submit_turn_response(
-    commands: &tokio::sync::mpsc::UnboundedSender<ListenerCommand>,
-    subscription: ConnectionGenerationKey,
+fn submit_turn_response(
     submission_id: String,
     submission: TurnInputSubmission,
-) -> Result<Response<proto::SubmitTurnResponse>, Status> {
+) -> Response<proto::SubmitTurnResponse> {
     let (turn_id, disposition, reason) = match submission {
         TurnInputSubmission::Started { turn_id } => (turn_id, "started", String::new()),
         TurnInputSubmission::Steered { turn_id } => (turn_id, "steered", String::new()),
-        TurnInputSubmission::NotSubmitted { reason } => {
-            unsubscribe_and_wait(commands, subscription).await?;
-            (String::new(), "not_submitted", reason)
-        }
+        TurnInputSubmission::NotSubmitted { reason } => (String::new(), "not_submitted", reason),
     };
-    Ok(Response::new(proto::SubmitTurnResponse {
+    Response::new(proto::SubmitTurnResponse {
         submission_id,
         turn_id,
         disposition: disposition.into(),
         reason,
-    }))
+    })
 }
 
 pub(crate) async fn subscribe_thread_events(
@@ -315,7 +310,6 @@ pub(crate) async fn submit_turn(
         #[cfg(test)]
         wait_at_resume_resolve_barrier(thread_id, &subscription).await;
         if let Err(error) = prepared.gate.resolve(&validated.resume_items).await {
-            unsubscribe_and_wait(&prepared.managed.commands, subscription).await?;
             return Err(Status::invalid_argument(format!(
                 "invalid resume_json: {error}"
             )));
@@ -362,13 +356,8 @@ pub(crate) async fn submit_turn(
     }
     .await;
     match submit {
-        Ok((submission_id, submission)) => {
-            submit_turn_response(&managed.commands, subscription, submission_id, submission).await
-        }
-        Err(error) => {
-            unsubscribe_and_wait(&managed.commands, subscription).await?;
-            Err(error)
-        }
+        Ok((submission_id, submission)) => Ok(submit_turn_response(submission_id, submission)),
+        Err(error) => Err(error),
     }
 }
 
@@ -1477,7 +1466,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn not_submitted_response_unsubscribes_before_returning() {
+    async fn not_submitted_response_preserves_shared_subscription() {
         let dir = TempDir::new().expect("tempdir");
         memory::ensure_workspace(dir.path()).expect("workspace");
         let service = AstroServiceImpl::new(dir.path().to_path_buf());
@@ -1501,21 +1490,17 @@ mod tests {
         );
 
         let response = submit_turn_response(
-            &managed.commands,
-            subscription,
             "submission-1".into(),
             TurnInputSubmission::NotSubmitted {
                 reason: "terminating".into(),
             },
         )
-        .await
-        .expect("not submitted response")
         .into_inner();
 
         assert_eq!(response.disposition, "not_submitted");
         assert_eq!(response.reason, "terminating");
         assert!(
-            !service
+            service
                 .thread_states
                 .has_subscribers("not-submitted-thread")
                 .await
@@ -1530,7 +1515,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn submit_turn_rpc_unsubscribes_a_not_submitted_disposition() {
+    async fn submit_turn_rpc_preserves_shared_subscription_on_not_submitted() {
         let dir = TempDir::new().expect("tempdir");
         memory::ensure_workspace(dir.path()).expect("workspace");
         let service = AstroServiceImpl::new(dir.path().to_path_buf());
@@ -1560,7 +1545,7 @@ mod tests {
         assert_eq!(response.disposition, "not_submitted");
         assert_eq!(response.reason, "no_active_turn");
         assert!(
-            !service
+            service
                 .thread_states
                 .has_subscribers("rpc-not-submitted-thread")
                 .await
@@ -1597,22 +1582,26 @@ mod tests {
             .await
             .expect("resume");
 
-        for submission in [
-            TurnInputSubmission::Started {
-                turn_id: "turn-1".into(),
-            },
-            TurnInputSubmission::Steered {
-                turn_id: "turn-1".into(),
-            },
+        for (submission, expected) in [
+            (
+                TurnInputSubmission::Started {
+                    turn_id: "turn-1".into(),
+                },
+                "started",
+            ),
+            (
+                TurnInputSubmission::Steered {
+                    turn_id: "turn-1".into(),
+                },
+                "steered",
+            ),
         ] {
-            submit_turn_response(
-                &managed.commands,
-                subscription.clone(),
-                "submission-1".into(),
-                submission,
-            )
-            .await
-            .expect("accepted response");
+            assert_eq!(
+                submit_turn_response("submission-1".into(), submission)
+                    .into_inner()
+                    .disposition,
+                expected
+            );
             assert!(
                 service
                     .thread_states
@@ -2215,7 +2204,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn concurrent_resume_consumer_waits_for_exact_subscription_cleanup() {
+    async fn concurrent_resume_error_preserves_shared_subscription_for_owner_cleanup() {
         let dir = TempDir::new().expect("tempdir");
         memory::ensure_workspace(dir.path()).expect("workspace");
         let service = std::sync::Arc::new(AstroServiceImpl::new(dir.path().to_path_buf()));
@@ -2291,26 +2280,19 @@ mod tests {
         .await
         .expect("concurrent consumer wins");
         barrier.release.notify_one();
-        assert!(
-            tokio::time::timeout(std::time::Duration::from_millis(30), &mut submit)
-                .await
-                .is_err(),
-            "RPC must not return before the serialized unsubscribe can mutate state"
-        );
-        drop(state_guard);
-
-        let error = tokio::time::timeout(std::time::Duration::from_secs(1), submit)
+        let error = tokio::time::timeout(std::time::Duration::from_secs(1), &mut submit)
             .await
-            .expect("submit should complete after cleanup")
+            .expect("server must not perform activation-blind cleanup")
             .expect("submit task")
             .expect_err("the second resume consumer must be rejected");
         assert_eq!(error.code(), tonic::Code::InvalidArgument);
+        drop(state_guard);
         assert!(
-            !service
+            service
                 .thread_states
                 .has_subscribers("resume-cleanup-race")
                 .await,
-            "RPC error must imply the exact generation is already absent"
+            "desktop activation owner must decide whether this shared subscriber is stale"
         );
         resolution.await.expect("first consumer resolution");
 

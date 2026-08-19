@@ -616,7 +616,7 @@ pub async fn start_chat(app: AppHandle, request: StartChatRequest) -> Result<Str
         .await;
 
         if let Err(err) = result {
-            let is_current = bridge.deactivate_if_current(&sid2, activation).await;
+            let is_current = bridge.fail_activation(&sid2, activation).await;
             for event in submission_failure_events(is_current, friendly_error(&err)) {
                 let _ = app2.emit(&event_name2, event);
             }
