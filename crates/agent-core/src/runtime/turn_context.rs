@@ -52,6 +52,8 @@ pub struct TurnContext {
     /// User input steered into the active task, consumed before the next sampling request.
     input_state: Mutex<TurnInputState>,
     input_notify: Notify,
+    #[cfg(test)]
+    preparing_reservation_notify: Notify,
 }
 
 impl TurnContext {
@@ -74,6 +76,8 @@ impl TurnContext {
                 in_flight_admissions: 0,
             }),
             input_notify: Notify::new(),
+            #[cfg(test)]
+            preparing_reservation_notify: Notify::new(),
         }
     }
 
@@ -107,7 +111,10 @@ impl TurnContext {
                     .lock()
                     .expect("turn input state mutex poisoned");
                 match state.readiness {
-                    TurnInputReadiness::Preparing => {}
+                    TurnInputReadiness::Preparing => {
+                        #[cfg(test)]
+                        self.preparing_reservation_notify.notify_one();
+                    }
                     TurnInputReadiness::Accepting => {
                         state.in_flight_admissions += 1;
                         return Some(TurnInputReservation {
@@ -120,6 +127,11 @@ impl TurnContext {
             }
             notified.await;
         }
+    }
+
+    #[cfg(test)]
+    pub(crate) async fn wait_for_preparing_reservation(&self) {
+        self.preparing_reservation_notify.notified().await;
     }
 
     pub(crate) fn open_input_admission(&self) {

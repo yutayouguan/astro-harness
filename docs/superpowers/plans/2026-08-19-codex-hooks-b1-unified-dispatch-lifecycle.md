@@ -581,7 +581,14 @@ loop {
 
 Do not set `has_sampled` before `run_sampling_request` succeeds: cancellation or provider setup failure must not pretend a sampling occurred or consume the early steer out of role order.
 
-For steering, clone the active regular task's `Arc<TurnContext>` under `active_turn`, release that lock, acquire the FIFO admission lock, and only then reserve input before firing the hook. Terminal close asynchronously waits while reservations exist. Block/error/Drop cancels the reservation; success commits exactly once. Do not hold `active_turn` or Session state while invoking the callback:
+For steering, clone the active regular task's `Arc<TurnContext>` under `active_turn`,
+release that lock, wait for the turn's input reservation without holding the Session
+admission lock, and then acquire the FIFO admission lock before firing the hook. Holding
+the Session lock while a `Preparing` turn waits would deadlock the initial admission that
+must complete before `RegularTask` can open input. Terminal close asynchronously waits
+while reservations exist, including while a successful reservation waits for the FIFO
+lock. Block/error/Drop cancels the reservation; success commits exactly once. Do not hold
+`active_turn` or Session state while invoking the callback:
 
 ```rust
 pub async fn steer_input(
@@ -602,11 +609,11 @@ pub async fn steer_input(
     if running.0 != TaskKind::Regular {
         return Ok(None);
     }
-    let _admission_guard = self.admission_lock.lock().await;
     let turn_id = running.1.sub_id().to_string();
     let Some(reservation) = running.1.reserve_input().await else {
         return Ok(None);
     };
+    let _admission_guard = self.admission_lock.lock().await;
     let context = self.admit_user_prompt(user_message, Some(turn_id.clone()))?;
     let input = TurnInput::UserInput {
         content: user_message.to_string(),
@@ -1165,6 +1172,14 @@ and wakes waiters before returning the task error. A server chat waiting to stee
 receives `None` without firing `UserPromptSubmit`, so the same request can start a new
 turn instead of acknowledging input to a failed turn. Terminal close still waits for
 reservations that began after readiness became `Accepting`.
+
+`reserve_input()` must run before acquiring the Session FIFO admission lock. Once it
+returns a reservation, `steer_input` acquires that lock for `UserPromptSubmit` and commit;
+the RAII reservation prevents terminal close while it waits. The deterministic
+`preparing_steer_does_not_block_initial_prompt_admission` regression first proves the
+steer is waiting in `Preparing`, then uses a separate hook barrier to prove SessionStart
+and the initial UserPromptSubmit can still enter before the steer completes. The existing
+concurrent-steer regression continues to verify FIFO hook/input order.
 
 The deterministic regression test
 `failed_initial_admission_closes_waiting_steer_for_new_turn_retry` blocks the initial
