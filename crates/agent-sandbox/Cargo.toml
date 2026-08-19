@@ -5,6 +5,7 @@ edition = "2021"
 
 [dependencies]
 types = { path = "../agent-types" }
+network-proxy = { path = "../agent-network-proxy" }
 anyhow = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true, features = ["process"] }

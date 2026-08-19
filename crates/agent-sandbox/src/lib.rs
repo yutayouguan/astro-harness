@@ -6,6 +6,8 @@ use serde::Serialize;
 use std::path::{Path, PathBuf};
 use types::SandboxMode;
 
+use network_proxy::ManagedNetworkSandboxContext;
+
 mod audit;
 
 pub use audit::{
@@ -105,6 +107,7 @@ pub struct SandboxPolicy {
     pub mode: SandboxMode,
     pub writable_roots: Vec<PathBuf>,
     pub network_access: bool,
+    pub managed_network: Option<ManagedNetworkSandboxContext>,
 }
 
 impl SandboxPolicy {
@@ -128,6 +131,7 @@ impl SandboxPolicy {
             mode,
             writable_roots,
             network_access: mode == SandboxMode::DangerFullAccess || network_access,
+            managed_network: None,
         })
     }
 
@@ -153,8 +157,24 @@ impl SandboxPolicy {
         )
     }
 
+    pub fn with_managed_network(mut self, context: ManagedNetworkSandboxContext) -> Self {
+        let mut loopback_ports = context
+            .loopback_ports
+            .into_iter()
+            .filter(|port| *port != 0)
+            .collect::<Vec<_>>();
+        loopback_ports.sort_unstable();
+        loopback_ports.dedup();
+        self.network_access = false;
+        self.managed_network = Some(ManagedNetworkSandboxContext {
+            loopback_ports,
+            allow_local_binding: context.allow_local_binding,
+        });
+        self
+    }
+
     pub fn profile_hash_material(&self) -> String {
-        format!(
+        let mut material = format!(
             "{:?}|{}|{}",
             self.mode,
             self.network_access,
@@ -163,7 +183,25 @@ impl SandboxPolicy {
                 .map(|path| path.to_string_lossy())
                 .collect::<Vec<_>>()
                 .join("|")
-        )
+        );
+        if let Some(managed_network) = &self.managed_network {
+            material.push_str("|managed_network=");
+            material.push_str(if managed_network.allow_local_binding {
+                "local_binding"
+            } else {
+                "proxy_only"
+            });
+            material.push('|');
+            material.push_str(
+                &managed_network
+                    .loopback_ports
+                    .iter()
+                    .map(u16::to_string)
+                    .collect::<Vec<_>>()
+                    .join(","),
+            );
+        }
+        material
     }
 }
 
@@ -328,7 +366,25 @@ fn macos_profile(policy: &SandboxPolicy) -> String {
             }
         }
     }
-    if policy.network_access {
+    if let Some(managed_network) = &policy.managed_network {
+        if managed_network.allow_local_binding {
+            profile.push_str("; allow local binding and loopback traffic\n");
+            profile.push_str("(allow network-bind (local ip \"*:*\"))\n");
+            profile.push_str("(allow network-inbound (local ip \"localhost:*\"))\n");
+            profile.push_str("(allow network-outbound (remote ip \"localhost:*\"))\n");
+            if !managed_network.loopback_ports.is_empty() {
+                profile.push_str(
+                    "; allow DNS lookups while application traffic remains proxy-routed\n",
+                );
+                profile.push_str("(allow network-outbound (remote ip \"*:53\"))\n");
+            }
+        }
+        for port in &managed_network.loopback_ports {
+            profile.push_str(&format!(
+                "(allow network-outbound (remote ip \"localhost:{port}\"))\n"
+            ));
+        }
+    } else if policy.network_access {
         profile.push_str("(allow network*)\n");
     }
     profile
@@ -346,6 +402,16 @@ fn seatbelt_escape(path: &Path) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn managed_network_context(
+        ports: impl IntoIterator<Item = u16>,
+        allow_local_binding: bool,
+    ) -> network_proxy::ManagedNetworkSandboxContext {
+        network_proxy::ManagedNetworkSandboxContext {
+            loopback_ports: ports.into_iter().collect(),
+            allow_local_binding,
+        }
+    }
 
     #[test]
     fn workspace_policy_canonicalizes_and_deduplicates_roots() {
@@ -397,6 +463,44 @@ mod tests {
                 seatbelt_escape(&dir.path().canonicalize().unwrap().join(".git"))
             )));
         }
+    }
+
+    #[test]
+    fn managed_proxy_port_changes_policy_hash() {
+        let root = tempfile::tempdir().unwrap();
+        let first = SandboxPolicy::new(SandboxMode::ReadOnly, root.path(), [], false)
+            .unwrap()
+            .with_managed_network(managed_network_context([41_001], false));
+        let second = SandboxPolicy::new(SandboxMode::ReadOnly, root.path(), [], false)
+            .unwrap()
+            .with_managed_network(managed_network_context([41_002], false));
+
+        assert_ne!(
+            first.profile_hash_material(),
+            second.profile_hash_material()
+        );
+    }
+
+    #[test]
+    fn managed_network_context_normalizes_proxy_ports() {
+        let root = tempfile::tempdir().unwrap();
+        let policy = SandboxPolicy::new(SandboxMode::ReadOnly, root.path(), [], true)
+            .unwrap()
+            .with_managed_network(managed_network_context([43_117, 0, 43_116, 43_117], false));
+
+        assert!(!policy.network_access);
+        assert_eq!(
+            policy.managed_network,
+            Some(managed_network_context([43_116, 43_117], false))
+        );
+    }
+
+    #[test]
+    fn unmanaged_policy_keeps_legacy_hash_material() {
+        let root = tempfile::tempdir().unwrap();
+        let policy = SandboxPolicy::new(SandboxMode::ReadOnly, root.path(), [], false).unwrap();
+
+        assert_eq!(policy.profile_hash_material(), "ReadOnly|false|");
     }
 
     #[test]
@@ -460,6 +564,90 @@ mod tests {
         assert!(profile.contains("(deny default)"));
         assert!(profile.contains(".git"));
         assert!(!profile.contains("(allow network*)"));
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn unmanaged_network_access_keeps_legacy_allow_rule() {
+        let dir = tempfile::tempdir().unwrap();
+        let policy = SandboxPolicy::new(SandboxMode::WorkspaceWrite, dir.path(), [], true).unwrap();
+        let profile = macos_profile(&policy);
+
+        assert!(policy.managed_network.is_none());
+        assert!(profile.contains("(allow network*)"));
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn managed_network_profile_allows_only_exact_proxy_port() {
+        let root = tempfile::tempdir().unwrap();
+        let policy = SandboxPolicy::new(SandboxMode::WorkspaceWrite, root.path(), [], false)
+            .unwrap()
+            .with_managed_network(managed_network_context([43_117], false));
+        let profile = macos_profile(&policy);
+
+        assert!(profile.contains("(allow network-outbound (remote ip \"localhost:43117\"))"));
+        assert!(!profile.contains("(allow network*)"));
+        assert!(!profile.contains("localhost:*"));
+        assert!(!profile.contains("network-bind"));
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn local_binding_adds_only_minimal_loopback_rules() {
+        let root = tempfile::tempdir().unwrap();
+        let policy = SandboxPolicy::new(SandboxMode::WorkspaceWrite, root.path(), [], false)
+            .unwrap()
+            .with_managed_network(managed_network_context([43_117], true));
+        let profile = macos_profile(&policy);
+
+        assert!(profile.contains("(allow network-bind (local ip \"*:*\"))"));
+        assert!(profile.contains("(allow network-inbound (local ip \"localhost:*\"))"));
+        assert!(profile.contains("(allow network-outbound (remote ip \"localhost:*\"))"));
+        assert!(profile.contains("(allow network-outbound (remote ip \"*:53\"))"));
+        assert!(!profile.contains("(allow network*)"));
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn seatbelt_rejects_non_proxy_loopback_port() {
+        let allowed = std::net::TcpListener::bind((std::net::Ipv4Addr::LOCALHOST, 0)).unwrap();
+        let denied = std::net::TcpListener::bind((std::net::Ipv4Addr::LOCALHOST, 0)).unwrap();
+        let root = tempfile::tempdir().unwrap();
+        let policy = SandboxPolicy::new(SandboxMode::ReadOnly, root.path(), [], false)
+            .unwrap()
+            .with_managed_network(managed_network_context(
+                [allowed.local_addr().unwrap().port()],
+                false,
+            ));
+
+        let mut allowed_command = SandboxRunner.std_command(&policy, "/usr/bin/nc").unwrap();
+        allowed_command.args([
+            "-z",
+            "-w",
+            "1",
+            "127.0.0.1",
+            &allowed.local_addr().unwrap().port().to_string(),
+        ]);
+        allowed_command
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null());
+        let allowed_status = allowed_command.status().unwrap();
+        assert!(allowed_status.success());
+
+        let mut denied_command = SandboxRunner.std_command(&policy, "/usr/bin/nc").unwrap();
+        denied_command.args([
+            "-z",
+            "-w",
+            "1",
+            "127.0.0.1",
+            &denied.local_addr().unwrap().port().to_string(),
+        ]);
+        denied_command
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null());
+        let denied_status = denied_command.status().unwrap();
+        assert!(!denied_status.success());
     }
 
     #[cfg(target_os = "macos")]

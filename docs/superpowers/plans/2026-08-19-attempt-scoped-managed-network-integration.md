@@ -251,7 +251,7 @@ Expected: all `network-proxy` tests pass; only explicit proxy files are committe
 - Modify: `crates/agent-sandbox/src/lib.rs`
 - Modify: `Cargo.lock`
 
-- [ ] **Step 1: Write failing sandbox policy tests**
+- [x] **Step 1: Write failing sandbox policy tests**
 
 Add inline tests beside the existing Seatbelt tests:
 
@@ -312,7 +312,7 @@ fn managed_proxy_port_changes_policy_hash() {
 }
 ```
 
-- [ ] **Step 2: Run the focused tests and verify RED**
+- [x] **Step 2: Run the focused tests and verify RED**
 
 Run:
 
@@ -323,7 +323,7 @@ cargo test -p sandbox managed_proxy_port_changes_policy_hash
 
 Expected: compile failures for the missing dependency, field, and `with_managed_network` method.
 
-- [ ] **Step 3: Extend `SandboxPolicy` without changing legacy behavior**
+- [x] **Step 3: Extend `SandboxPolicy` without changing legacy behavior**
 
 Add `network-proxy = { path = "../agent-network-proxy" }` to the sandbox crate and import `ManagedNetworkSandboxContext`. Extend the policy:
 
@@ -354,7 +354,7 @@ pub fn with_managed_network(mut self, context: ManagedNetworkSandboxContext) -> 
 
 All existing constructors set `managed_network: None`. Include the sorted/deduplicated ports and `allow_local_binding` flag in `profile_hash_material`; do not include environment variables or the proxy URL.
 
-- [ ] **Step 4: Generate exact-port Seatbelt rules**
+- [x] **Step 4: Generate exact-port Seatbelt rules**
 
 In `macos_profile`, preserve existing `(allow network*)` only for legacy `network_access=true` policies that have no managed context. For a managed context emit:
 
@@ -364,7 +364,7 @@ In `macos_profile`, preserve existing `(allow network*)` only for legacy `networ
 
 for every sorted/deduplicated non-zero port. When `allow_local_binding=true`, additionally emit exactly the four official Codex-compatible local rules covered by the test (bind, loopback inbound, loopback outbound, DNS). Never emit unrestricted network access in the managed branch.
 
-- [ ] **Step 5: Run regression tests and commit Task 2**
+- [x] **Step 5: Run regression tests and commit Task 2**
 
 ```bash
 cargo fmt --all
