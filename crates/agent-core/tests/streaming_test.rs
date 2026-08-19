@@ -1419,6 +1419,105 @@ async fn stop_keep_going_with_queued_steer_preserves_role_order() {
     );
 }
 
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn thinking_only_retry_consumes_queued_steer_before_sampling() {
+    let dir = tempfile::tempdir().unwrap();
+    let config = AgentConfig::with_defaults(dir.path().to_path_buf());
+    let session =
+        Arc::new(AgentLoop::with_session_id(config, "thinking-only-queued-steer".into()).unwrap());
+    session
+        .record_items(vec![types::message::Message::user("initial")])
+        .await;
+
+    let provider_calls = Arc::new(AtomicUsize::new(0));
+    let first_sampling_started = Arc::new(Notify::new());
+    let release_first_sampling = Arc::new(Notify::new());
+    let retry_saw_follow_up = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let chat_fn: ChatOverride = {
+        let provider_calls = Arc::clone(&provider_calls);
+        let first_sampling_started = Arc::clone(&first_sampling_started);
+        let release_first_sampling = Arc::clone(&release_first_sampling);
+        let retry_saw_follow_up = Arc::clone(&retry_saw_follow_up);
+        Arc::new(move |messages, _tools, _config| {
+            let call = provider_calls.fetch_add(1, Ordering::SeqCst);
+            if call == 1 {
+                retry_saw_follow_up.store(
+                    messages
+                        .iter()
+                        .any(|message| message.text_content() == "follow up"),
+                    Ordering::SeqCst,
+                );
+            }
+            let first_sampling_started = Arc::clone(&first_sampling_started);
+            let release_first_sampling = Arc::clone(&release_first_sampling);
+            Box::pin(async move {
+                if call == 0 {
+                    first_sampling_started.notify_one();
+                    release_first_sampling.notified().await;
+                    Ok(Box::pin(futures::stream::iter(vec![
+                        Ok(StreamChunk::Thinking("reasoning only".into())),
+                        Ok(StreamChunk::Done {
+                            finish_reason: "stop".into(),
+                        }),
+                    ])) as CompletionStream)
+                } else {
+                    Ok(Box::pin(futures::stream::iter(vec![
+                        Ok(StreamChunk::Text("answer".into())),
+                        Ok(StreamChunk::Done {
+                            finish_reason: "stop".into(),
+                        }),
+                    ])) as CompletionStream)
+                }
+            })
+        })
+    };
+
+    let (tx, mut rx) = tokio::sync::mpsc::channel(64);
+    let run = tokio::spawn({
+        let session = Arc::clone(&session);
+        async move {
+            run_multi_turn_stream_with_chat_fn(
+                session,
+                chat_fn,
+                ProviderConfig {
+                    model: "test".into(),
+                    ..Default::default()
+                },
+                "system".into(),
+                PauseControl::new(),
+                None,
+                tx,
+            )
+            .await;
+        }
+    });
+
+    first_sampling_started.notified().await;
+    session
+        .steer_input("follow up", &[])
+        .await
+        .unwrap()
+        .expect("active task accepts steer while the thinking-only response is pending");
+    release_first_sampling.notify_one();
+
+    tokio::time::timeout(Duration::from_secs(2), async {
+        while rx.recv().await.is_some() {}
+        run.await.unwrap();
+    })
+    .await
+    .expect("thinking-only retry completes");
+
+    assert_eq!(
+        provider_calls.load(Ordering::SeqCst),
+        2,
+        "the non-Stop retry must consume the queued steer before its retry sampling"
+    );
+    assert!(
+        retry_saw_follow_up.load(Ordering::SeqCst),
+        "the retry sampling must include the queued steer"
+    );
+}
+
 #[tokio::test]
 async fn pause_control_blocks_then_cancels() {
     let pause = PauseControl::new();

@@ -240,6 +240,7 @@ pub(crate) async fn run_turn(args: RunTurnArgs, cancellation_token: Cancellation
     let mut verify_attempt: usize = 0;
     let mut thinking_only_retries: usize = 0;
     let mut has_sampled = false;
+    let mut defer_pending_input_after_stop = false;
 
     let mut timeline = crate::timeline::TimelineBuilder::new();
     let now_ms = || chrono::Utc::now().timestamp_millis();
@@ -273,7 +274,7 @@ pub(crate) async fn run_turn(args: RunTurnArgs, cancellation_token: Cancellation
             return;
         }
 
-        if has_sampled && !session.history_ends_with_user().await {
+        if has_sampled && !std::mem::take(&mut defer_pending_input_after_stop) {
             if let Err(error) =
                 record_pending_input(&session, turn_context.take_pending_input()).await
             {
@@ -630,6 +631,7 @@ pub(crate) async fn run_turn(args: RunTurnArgs, cancellation_token: Cancellation
                     .await;
                     return;
                 }
+                defer_pending_input_after_stop = true;
                 continue;
             }
         }
