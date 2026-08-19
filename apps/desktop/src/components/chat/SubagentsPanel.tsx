@@ -1,107 +1,159 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { Bot, RefreshCw, SendHorizontal, Square, X } from "lucide-react";
+import { Bot, RefreshCw, SendHorizontal, Square, Wrench, X } from "lucide-react";
 import { useI18n } from "../../i18n/LocaleContext";
-import type { SubagentThread, SubagentThreadStatus } from "../../hooks/chat/useSubagentThreads";
-
-type ThreadMessage = {
-  id: number;
-  role: string;
-  content: string;
-  created_at: string;
-};
-
-type ThreadDetail = {
-  thread: SubagentThread;
-  messages: ThreadMessage[];
-};
+import {
+  normalizeAgentThreadDetail,
+  type AgentThread,
+  type AgentThreadDetail,
+  type AgentThreadMessage,
+  type AgentTreeNode,
+} from "../../hooks/chat/subagentTree";
 
 type Props = {
   open: boolean;
-  parentSessionId?: string | null;
-  threads: SubagentThread[];
-  initialThreadId?: string | null;
+  rootSessionId?: string | null;
+  roots: AgentTreeNode[];
+  threads: AgentThread[];
+  initialTarget?: string | null;
+  streamError?: string | null;
   refreshThreads: () => Promise<void>;
+  markRead: (canonicalPath: string) => void;
   onClose: () => void;
 };
 
-const ACTIVE_STATUSES = new Set<SubagentThreadStatus>(["pending", "running"]);
+type FlatNode = { node: AgentTreeNode; depth: number };
+
+function flattenWithDepth(nodes: readonly AgentTreeNode[], depth = 0): FlatNode[] {
+  return nodes.flatMap((node) => [
+    { node, depth },
+    ...flattenWithDepth(node.children, depth + 1),
+  ]);
+}
+
+function messageText(message: AgentThreadMessage): string {
+  return message.content
+    ?? message.compressedContent
+    ?? message.reasoningContent
+    ?? message.reasoning
+    ?? "";
+}
+
+function toolMetadata(message: AgentThreadMessage): string | null {
+  const metadata = {
+    ...(message.toolName ? { tool: message.toolName } : {}),
+    ...(message.toolCallId ? { callId: message.toolCallId } : {}),
+    ...(message.toolCalls ? { calls: message.toolCalls } : {}),
+  };
+  return Object.keys(metadata).length > 0 ? JSON.stringify(metadata, null, 2) : null;
+}
 
 export default function SubagentsPanel({
   open,
-  parentSessionId,
+  rootSessionId,
+  roots,
   threads,
-  initialThreadId,
+  initialTarget,
+  streamError,
   refreshThreads,
+  markRead,
   onClose,
 }: Props) {
   const { t } = useI18n();
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [detail, setDetail] = useState<ThreadDetail | null>(null);
+  const [selectedPath, setSelectedPath] = useState<string | null>(null);
+  const [detail, setDetail] = useState<AgentThreadDetail | null>(null);
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
+  const [loadingDetail, setLoadingDetail] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const detailRequestRef = useRef(0);
+  const flatNodes = useMemo(() => flattenWithDepth(roots), [roots]);
 
-  const loadDetail = useCallback(async (threadId: string) => {
-    if (!parentSessionId) return;
+  const selected = useMemo(
+    () => threads.find((thread) => thread.canonicalPath === selectedPath)
+      ?? (detail?.thread.canonicalPath === selectedPath ? detail.thread : null),
+    [threads, selectedPath, detail],
+  );
+
+  const loadDetail = useCallback(async (canonicalPath: string) => {
+    const root = rootSessionId?.trim();
+    if (!root) return;
+    const request = ++detailRequestRef.current;
+    setDetail((current) =>
+      current?.thread.canonicalPath === canonicalPath ? current : null);
+    setLoadingDetail(true);
     try {
-      const next = await invoke<ThreadDetail>("read_subagent_thread", {
-        args: { parentSessionId, threadId },
+      const raw = await invoke<unknown>("read_subagent_thread", {
+        args: { rootSessionId: root, target: canonicalPath },
       });
+      if (request !== detailRequestRef.current) return;
+      const next = normalizeAgentThreadDetail(raw);
+      if (next.thread.canonicalPath !== canonicalPath) {
+        throw new Error("agent thread detail belongs to another target");
+      }
       setDetail(next);
       setError(null);
     } catch (reason) {
+      if (request !== detailRequestRef.current) return;
       setError(String(reason));
+    } finally {
+      if (request === detailRequestRef.current) setLoadingDetail(false);
     }
-  }, [parentSessionId]);
+  }, [rootSessionId]);
+
+  useEffect(() => {
+    detailRequestRef.current += 1;
+    setSelectedPath(null);
+    setDetail(null);
+    setMessage("");
+    setError(null);
+  }, [rootSessionId]);
+
+  useEffect(() => {
+    if (!open || !initialTarget) return;
+    setSelectedPath(initialTarget);
+  }, [open, initialTarget]);
 
   useEffect(() => {
     if (!open) return;
-    if (initialThreadId) setSelectedId(initialThreadId);
-  }, [open, initialThreadId]);
-
-  useEffect(() => {
-    if (!open) return;
-    setSelectedId((current) => {
-      return current && threads.some((thread) => thread.id === current)
+    setSelectedPath((current) =>
+      current && threads.some((thread) => thread.canonicalPath === current)
         ? current
-        : threads[0]?.id ?? null;
-    });
+        : threads[0]?.canonicalPath ?? null);
   }, [open, threads]);
 
   useEffect(() => {
-    if (!open || !selectedId) {
+    if (!open || !selected) {
+      detailRequestRef.current += 1;
       setDetail(null);
+      setLoadingDetail(false);
       return;
     }
-    void loadDetail(selectedId);
-    const timer = window.setInterval(() => void loadDetail(selectedId), 1500);
-    return () => window.clearInterval(timer);
-  }, [open, selectedId, loadDetail]);
+    markRead(selected.canonicalPath);
+    void loadDetail(selected.canonicalPath);
+    return () => {
+      detailRequestRef.current += 1;
+    };
+    // `selected` retains object identity for unrelated Agent Thread events, so
+    // this reloads only on selection or an event/snapshot for this target.
+  }, [open, selected, loadDetail, markRead]);
 
-  const selected = useMemo(
-    () => threads.find((thread) => thread.id === selectedId) ?? detail?.thread ?? null,
-    [threads, selectedId, detail],
-  );
-  const statusLabels: Record<SubagentThreadStatus, string> = {
-    pending: t("subagents.status.pending"),
-    running: t("subagents.status.running"),
-    completed: t("subagents.status.completed"),
-    failed: t("subagents.status.failed"),
-    interrupted: t("subagents.status.interrupted"),
-    closed: t("subagents.status.closed"),
-  };
-
-  const runAction = async (command: string, args: Record<string, unknown>) => {
-    if (!parentSessionId) return;
+  const runAction = async (
+    command: string,
+    target: string,
+    extra: Record<string, unknown> = {},
+  ): Promise<boolean> => {
+    const root = rootSessionId?.trim();
+    if (!root) return false;
     setBusy(true);
     try {
-      await invoke(command, { args: { parentSessionId, ...args } });
+      await invoke(command, { args: { rootSessionId: root, target, ...extra } });
       await refreshThreads();
-      if (selectedId) await loadDetail(selectedId);
       setError(null);
+      return true;
     } catch (reason) {
       setError(String(reason));
+      return false;
     } finally {
       setBusy(false);
     }
@@ -109,12 +161,18 @@ export default function SubagentsPanel({
 
   const sendFollowUp = async () => {
     const text = message.trim();
-    if (!selectedId || !text) return;
-    setMessage("");
-    await runAction("send_subagent_message", { threadId: selectedId, message: text });
+    if (!selected || !text) return;
+    const sent = await runAction(
+      "send_subagent_message",
+      selected.canonicalPath,
+      { message: text },
+    );
+    if (sent) setMessage("");
   };
 
   if (!open) return null;
+  const status = selected?.status.kind;
+  const archived = status === "shutdown";
 
   return (
     <div className="subagents-backdrop" role="presentation" onMouseDown={onClose}>
@@ -138,50 +196,61 @@ export default function SubagentsPanel({
           </div>
         </header>
 
-        {!parentSessionId ? (
+        {!rootSessionId ? (
           <div className="subagents-empty">{t("subagents.noSession")}</div>
         ) : threads.length === 0 ? (
           <div className="subagents-empty">{t("subagents.empty")}</div>
         ) : (
           <div className="subagents-layout">
             <nav className="subagents-list" aria-label={t("subagents.threadList")}>
-              {threads.map((thread) => (
-                <button
-                  type="button"
-                  key={thread.id}
-                  className={thread.id === selectedId ? "is-active" : ""}
-                  onClick={() => setSelectedId(thread.id)}
-                >
-                  <span className={`subagents-status is-${thread.status}`} />
-                  <span className="subagents-list-copy">
-                    <strong>{thread.agent_name}</strong>
-                    <small>{thread.task}</small>
-                  </span>
-                </button>
-              ))}
+              {flatNodes.map(({ node, depth }) => {
+                const thread = node.thread;
+                const kind = thread.status.kind;
+                return (
+                  <button
+                    type="button"
+                    key={thread.threadId}
+                    className={`${thread.canonicalPath === selectedPath ? "is-active" : ""}${node.archived ? " is-archived" : ""}`.trim()}
+                    style={{ "--depth": depth } as CSSProperties}
+                    onClick={() => {
+                      setSelectedPath(thread.canonicalPath);
+                      markRead(thread.canonicalPath);
+                    }}
+                  >
+                    <span className={`subagents-status is-${kind}`} />
+                    <span className="subagents-list-copy">
+                      <strong>{thread.taskName}</strong>
+                      <small>{thread.agentType}</small>
+                    </span>
+                    {node.unread ? (
+                      <span className="subagents-unread" role="img" aria-label={t("subagents.unread")} />
+                    ) : null}
+                  </button>
+                );
+              })}
             </nav>
 
             <section className="subagents-detail">
               {selected ? (
                 <div className="subagents-thread-head">
                   <div>
-                    <strong>{selected.agent_name}</strong>
-                    <span>{statusLabels[selected.status]}</span>
+                    <strong>{selected.taskName}</strong>
+                    <span>{t(`subagents.status.${status}` as never)}</span>
                   </div>
                   <div>
-                    {ACTIVE_STATUSES.has(selected.status) ? (
+                    {status === "running" ? (
                       <button
                         type="button"
                         disabled={busy}
-                        onClick={() => void runAction("interrupt_subagent_thread", { threadId: selected.id })}
+                        onClick={() => void runAction("interrupt_subagent_thread", selected.canonicalPath)}
                         title={t("subagents.interrupt")}
                       ><Square size={13} />{t("subagents.interrupt")}</button>
                     ) : null}
-                    {selected.status !== "closed" ? (
+                    {!archived ? (
                       <button
                         type="button"
                         disabled={busy}
-                        onClick={() => void runAction("close_subagent_thread", { threadId: selected.id })}
+                        onClick={() => void runAction("close_subagent_thread", selected.canonicalPath)}
                         title={t("subagents.close")}
                       ><X size={14} />{t("subagents.close")}</button>
                     ) : null}
@@ -189,17 +258,37 @@ export default function SubagentsPanel({
                 </div>
               ) : null}
 
-              <div className="subagents-messages">
-                {detail?.messages.map((item) => (
-                  <article key={item.id} className={`is-${item.role}`}>
-                    <span>{item.role === "assistant" ? detail.thread.agent_name : t("subagents.parent")}</span>
-                    <p>{item.content}</p>
-                  </article>
-                ))}
-                {selected?.error ? <div className="subagents-error">{selected.error}</div> : null}
+              <div className="subagents-messages" aria-busy={loadingDetail}>
+                {loadingDetail && !detail ? (
+                  <div className="subagents-detail-state">{t("subagents.loading")}</div>
+                ) : null}
+                {detail?.messages.map((item) => {
+                  const metadata = toolMetadata(item);
+                  const isTool = item.role === "tool" || Boolean(item.toolName);
+                  return (
+                    <article key={item.id} className={`is-${item.role}`}>
+                      <span>
+                        {isTool ? <Wrench size={11} aria-hidden /> : null}
+                        {isTool
+                          ? item.toolName ?? t("subagents.tool")
+                          : item.role === "assistant"
+                            ? detail.thread.taskName
+                            : t("subagents.parent")}
+                      </span>
+                      {messageText(item) ? <p>{messageText(item)}</p> : null}
+                      {metadata ? <pre>{metadata}</pre> : null}
+                    </article>
+                  );
+                })}
+                {detail && detail.messages.length === 0 && !loadingDetail ? (
+                  <div className="subagents-detail-state">{t("subagents.noMessages")}</div>
+                ) : null}
+                {status === "errored" && selected?.status.kind === "errored" ? (
+                  <div className="subagents-error">{selected.status.payload.message}</div>
+                ) : null}
               </div>
 
-              {selected && selected.status !== "closed" ? (
+              {selected && !archived ? (
                 <form
                   className="subagents-composer"
                   onSubmit={(event) => {
@@ -217,11 +306,15 @@ export default function SubagentsPanel({
                     <SendHorizontal size={15} />
                   </button>
                 </form>
+              ) : archived ? (
+                <div className="subagents-archive-note">{t("subagents.archiveReadOnly")}</div>
               ) : null}
             </section>
           </div>
         )}
-        {error ? <div className="subagents-error subagents-error-global">{error}</div> : null}
+        {error || streamError ? (
+          <div className="subagents-error subagents-error-global">{error ?? streamError}</div>
+        ) : null}
       </aside>
     </div>
   );
