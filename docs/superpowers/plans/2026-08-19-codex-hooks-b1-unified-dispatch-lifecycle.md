@@ -784,7 +784,7 @@ if verify_attempt < MAX_VERIFY_ATTEMPTS {
         .await;
         return;
     }
-    defer_pending_input_after_stop = true;
+    awaiting_synthetic_bridge_response = true;
     continue;
     }
 }
