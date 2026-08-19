@@ -174,28 +174,24 @@ impl AgentLoop {
         )
     }
 
-    /// 执行已审批的单次调用。授权只进入本次 ToolContext，不保存到 Agent 状态。
-    pub(crate) fn handle_tool_call_with_once_grants(
-        &self,
-        name: &str,
-        args: &serde_json::Value,
-        workspace_write_grant: bool,
-        network_grant: tools::InProcessNetworkGrant,
-    ) -> Result<types::ToolOutput, ToolCallError> {
-        self.handle_tool_call_scoped(
-            name,
-            args,
-            workspace_write_grant,
-            network_grant,
-            None,
-            CancellationToken::new(),
-        )
-    }
-
     /// Execute one call against the exact sampling step that advertised it.
     pub(crate) fn handle_tool_invocation(
         self: &Arc<Self>,
         invocation: ToolInvocation,
+    ) -> Result<types::ToolOutput, ToolCallError> {
+        self.handle_tool_invocation_with_once_grants(
+            invocation,
+            false,
+            tools::InProcessNetworkGrant::default(),
+        )
+    }
+
+    /// Execute one step-bound invocation with grants scoped to this attempt.
+    pub(crate) fn handle_tool_invocation_with_once_grants(
+        self: &Arc<Self>,
+        invocation: ToolInvocation,
+        workspace_write_grant: bool,
+        network_grant: tools::InProcessNetworkGrant,
     ) -> Result<types::ToolOutput, ToolCallError> {
         debug_assert!(Arc::ptr_eq(self, &invocation.session));
         tracing::trace!(
@@ -206,8 +202,8 @@ impl AgentLoop {
         self.handle_tool_call_scoped(
             &invocation.tool_name,
             &invocation.payload,
-            false,
-            tools::InProcessNetworkGrant::default(),
+            workspace_write_grant,
+            network_grant,
             Some(invocation.step_context),
             invocation.cancellation_token,
         )

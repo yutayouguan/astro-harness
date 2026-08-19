@@ -8,7 +8,7 @@ use tokio::task::JoinSet;
 use tokio_util::sync::CancellationToken;
 
 use crate::control::hitl::HitlGate;
-use crate::runtime::{AgentLoop, StepContext, ToolCallRuntime};
+use crate::runtime::{AgentLoop, StepContext, ToolCallRuntime, ToolInvocation};
 
 use super::hitl_bridge::{park_astro_hitl, park_confirm, parse_astro_hitl};
 use super::types::MultiTurnStreamItem;
@@ -191,14 +191,23 @@ struct ToolRunContext {
     permission_audits: Vec<PermissionAuditReceipt>,
 }
 
+struct OrchestratorRunResult<Out> {
+    output: Out,
+}
+
+enum ToolApprovalOutcome {
+    Approved,
+    Denied(types::ToolOutput),
+}
+
 /// Codex-compatible tool policy boundary.
 ///
-/// This first slice centralizes the approval preflight and one-shot grants.
-/// Terminal approval, sandbox selection, attempts, and escalation remain in
-/// the caller until their existing behavior is migrated in later slices.
+/// Owns approval preflight, terminal review, one-shot grants, and step-bound
+/// dispatch. Sandbox selection, denial analysis, and escalation remain in the
+/// tool implementations until later slices migrate them here.
 struct ToolOrchestrator<'a> {
     session: &'a Arc<AgentLoop>,
-    step_context: &'a StepContext,
+    step_context: &'a Arc<StepContext>,
     tx: &'a mpsc::Sender<anyhow::Result<MultiTurnStreamItem>>,
     run_id: &'a str,
     hitl_gate: Option<&'a Arc<HitlGate>>,
@@ -207,7 +216,7 @@ struct ToolOrchestrator<'a> {
 impl<'a> ToolOrchestrator<'a> {
     fn new(
         session: &'a Arc<AgentLoop>,
-        step_context: &'a StepContext,
+        step_context: &'a Arc<StepContext>,
         tx: &'a mpsc::Sender<anyhow::Result<MultiTurnStreamItem>>,
         run_id: &'a str,
         hitl_gate: Option<&'a Arc<HitlGate>>,
@@ -293,6 +302,393 @@ impl<'a> ToolOrchestrator<'a> {
             }
         }
         Some(Ok(context))
+    }
+
+    async fn review_terminal(
+        &self,
+        call: &types::ParsedToolCall,
+        permission_audits: &mut Vec<PermissionAuditReceipt>,
+    ) -> Option<ToolApprovalOutcome> {
+        if call.name != "terminal" {
+            return Some(ToolApprovalOutcome::Approved);
+        }
+        let Some(decision) = call
+            .arguments
+            .get("command")
+            .and_then(|value| value.as_str())
+            .and_then(tools::classify_dangerous_command)
+        else {
+            return Some(ToolApprovalOutcome::Approved);
+        };
+
+        match decision.action {
+            types::ApprovalAction::Deny => {
+                audit_hardline_terminal_denial(self.session, call, decision.description).await;
+                return Some(ToolApprovalOutcome::Denied(
+                    format!(
+                        "Command denied by policy (dangerous: {}). Do not retry without changing the command.",
+                        decision.description
+                    )
+                    .into(),
+                ));
+            }
+            types::ApprovalAction::Auto => return Some(ToolApprovalOutcome::Approved),
+            types::ApprovalAction::Ask => {}
+        }
+
+        let cmd = call
+            .arguments
+            .get("command")
+            .and_then(|value| value.as_str())
+            .unwrap_or("")
+            .to_string();
+        let request_summary = format!("Run a command requiring approval: {}", decision.description);
+        let (
+            approval_session_id,
+            approval_turn_id,
+            permissions,
+            allowlist,
+            memory_dir,
+            active_profile_id,
+            permission_settings,
+        ) = {
+            let agent = self.session.as_ref();
+            let approval_session_id = agent.session_id().to_string();
+            let approval_turn_id = agent.current_turn_id().await;
+            let base = agent.memory_dir().to_path_buf();
+            let permissions = memory::config::load_permission_settings(&base);
+            let active_profile_id = agent
+                .permission_profile()
+                .unwrap_or_else(|| permissions.selection.profile_id.clone());
+            agent.fire_hook(
+                hooks::PERMISSION_REQUEST,
+                hooks::HookPayload {
+                    session_id: approval_session_id.clone(),
+                    turn_id: approval_turn_id.clone(),
+                    tool_name: Some("Bash".to_string()),
+                    tool_input: Some(serde_json::json!({
+                        "command": cmd.clone(),
+                        "description": request_summary.clone(),
+                    })),
+                    detail: format!("surface=terminal ask={}", decision.description),
+                    ..Default::default()
+                },
+            );
+            (
+                approval_session_id,
+                approval_turn_id,
+                permissions.selection.clone(),
+                permissions.legacy_command_allowlist.clone(),
+                base,
+                active_profile_id,
+                permissions,
+            )
+        };
+
+        let route = approval_route(&cmd, &permissions, &allowlist);
+        let permission_request = types::PermissionRequest {
+            request_id: uuid::Uuid::new_v4().to_string(),
+            session_id: approval_session_id.clone(),
+            turn_id: approval_turn_id.clone(),
+            tool_call_id: call.id.clone(),
+            tool_name: call.name.clone(),
+            summary: request_summary,
+            capabilities: vec![types::PermissionCapability::ProcessSpawn {
+                program: "sh".to_string(),
+                cwd: None,
+            }],
+            reason: types::PermissionReason::UntrustedCommand,
+            requested_scope: types::GrantScope::Once,
+            command_preview: Some(cmd.clone()),
+            affected_paths: Vec::new(),
+            network_hosts: Vec::new(),
+        };
+        let approval_audit = PermissionAuditReceipt::new(
+            memory_dir.clone(),
+            &permission_settings,
+            active_profile_id,
+            permission_request.clone(),
+        );
+        let approval_started = std::time::Instant::now();
+        approval_audit.record(
+            memory::PermissionAuditKind::Evaluated,
+            None,
+            Some(match route {
+                ApprovalRoute::Deny => "hardline_denied",
+                ApprovalRoute::Allowlist => "allowlist",
+                ApprovalRoute::Off => "approval_disabled",
+                ApprovalRoute::Smart => "auto_review_required",
+                ApprovalRoute::Manual => "user_review_required",
+            }),
+            None,
+        );
+        if matches!(route, ApprovalRoute::Smart | ApprovalRoute::Manual) {
+            approval_audit.record(
+                memory::PermissionAuditKind::Requested,
+                Some(permissions.approvals_reviewer),
+                None,
+                None,
+            );
+        }
+
+        match route {
+            ApprovalRoute::Deny => {
+                approval_audit.record(
+                    memory::PermissionAuditKind::Denied,
+                    None,
+                    Some("hardline_denied"),
+                    Some(approval_started.elapsed().as_millis() as u64),
+                );
+                Some(ToolApprovalOutcome::Denied(
+                    "Command denied by hardline policy. Do not retry without changing the command."
+                        .into(),
+                ))
+            }
+            ApprovalRoute::Allowlist | ApprovalRoute::Off => {
+                let (choice, result) = if route == ApprovalRoute::Allowlist {
+                    ("allowlist", "allowlist")
+                } else {
+                    ("auto", "approval_disabled")
+                };
+                fire_post_approval_response(
+                    self.session,
+                    &approval_session_id,
+                    approval_turn_id.as_deref(),
+                    &cmd,
+                    &permission_request.summary,
+                    choice,
+                )
+                .await;
+                approval_audit.record(
+                    memory::PermissionAuditKind::Granted,
+                    None,
+                    Some(result),
+                    Some(approval_started.elapsed().as_millis() as u64),
+                );
+                permission_audits.push(approval_audit);
+                Some(ToolApprovalOutcome::Approved)
+            }
+            ApprovalRoute::Smart | ApprovalRoute::Manual => {
+                let smart_action = if route == ApprovalRoute::Smart {
+                    let agent = self.session.as_ref();
+                    let targets: Vec<_> = agent
+                        .auxiliary_targets(types::AuxiliaryTask::SmartApproval)
+                        .iter()
+                        .map(crate::control::smart_approval::ApprovalTarget::from)
+                        .collect();
+                    crate::control::smart_approval::maybe_smart_downgrade_ask(
+                        &permission_request,
+                        &targets,
+                    )
+                    .await
+                } else {
+                    types::ApprovalAction::Ask
+                };
+                if smart_action == types::ApprovalAction::Auto {
+                    tracing::info!(
+                        command = %cmd,
+                        reason = decision.description,
+                        "smart approval auto-approved dangerous command"
+                    );
+                    fire_post_approval_response(
+                        self.session,
+                        &approval_session_id,
+                        approval_turn_id.as_deref(),
+                        &cmd,
+                        &permission_request.summary,
+                        "auto",
+                    )
+                    .await;
+                    approval_audit.record_review(
+                        permissions.approvals_reviewer,
+                        "auto_approved",
+                        true,
+                        approval_started.elapsed().as_millis() as u64,
+                    );
+                    permission_audits.push(approval_audit);
+                    return Some(ToolApprovalOutcome::Approved);
+                }
+                if route == ApprovalRoute::Smart {
+                    fire_post_approval_response(
+                        self.session,
+                        &approval_session_id,
+                        approval_turn_id.as_deref(),
+                        &cmd,
+                        &permission_request.summary,
+                        "deny",
+                    )
+                    .await;
+                    approval_audit.record_review(
+                        permissions.approvals_reviewer,
+                        "auto_denied",
+                        false,
+                        approval_started.elapsed().as_millis() as u64,
+                    );
+                    return Some(ToolApprovalOutcome::Denied(
+                        "Command denied by automatic approval review. Do not retry the same action or attempt a workaround without explicit user authorization."
+                            .into(),
+                    ));
+                }
+                let Some(gate) = self.hitl_gate else {
+                    fire_post_approval_response(
+                        self.session,
+                        &approval_session_id,
+                        approval_turn_id.as_deref(),
+                        &cmd,
+                        &permission_request.summary,
+                        "unavailable",
+                    )
+                    .await;
+                    approval_audit.record_review(
+                        permissions.approvals_reviewer,
+                        "reviewer_unavailable",
+                        false,
+                        approval_started.elapsed().as_millis() as u64,
+                    );
+                    return Some(ToolApprovalOutcome::Denied(
+                        format!(
+                            "Command blocked: dangerous ({}) and no HITL gate available.",
+                            decision.description
+                        )
+                        .into(),
+                    ));
+                };
+                let title = "批准危险命令";
+                let body = format!(
+                    "检测到潜在危险操作（{}）：\n\n```\n{cmd}\n```",
+                    decision.description
+                );
+                let confirm =
+                    park_confirm(gate, self.tx, self.run_id, &call.id, title, &body, true).await?;
+                let choice = match confirm.status.as_str() {
+                    "timeout" => "timeout",
+                    _ if confirm.approved => "allow",
+                    _ => "deny",
+                };
+                fire_post_approval_response(
+                    self.session,
+                    &approval_session_id,
+                    approval_turn_id.as_deref(),
+                    &cmd,
+                    &permission_request.summary,
+                    choice,
+                )
+                .await;
+                approval_audit.record_review(
+                    permissions.approvals_reviewer,
+                    choice,
+                    confirm.approved,
+                    approval_started.elapsed().as_millis() as u64,
+                );
+                if !confirm.approved {
+                    return Some(ToolApprovalOutcome::Denied(
+                        "Command denied by user (dangerous-command approval). Do not retry the same command without explicit user request."
+                            .into(),
+                    ));
+                }
+                if confirm.always {
+                    if let Err(error) = memory::config::add_command_to_allowlist(&memory_dir, &cmd)
+                    {
+                        tracing::warn!(%error, "failed to persist command allowlist");
+                    } else {
+                        tracing::info!(command = %cmd, "added command to approval allowlist");
+                    }
+                }
+                permission_audits.push(approval_audit);
+                Some(ToolApprovalOutcome::Approved)
+            }
+        }
+    }
+
+    async fn run(
+        &self,
+        call: &types::ParsedToolCall,
+    ) -> Option<OrchestratorRunResult<types::ToolOutput>> {
+        if call.args_parse_error {
+            return Some(OrchestratorRunResult {
+                output: format!(
+                    "工具参数 JSON 解析失败: {}",
+                    call.arguments
+                        .get("_parse_error")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("invalid json")
+                )
+                .into(),
+            });
+        }
+
+        let mut context = match self.prepare(call).await? {
+            Ok(context) => context,
+            Err(message) => {
+                return Some(OrchestratorRunResult {
+                    output: format!(
+                        "{message}. Do not retry the same action or attempt a workaround without explicit authorization."
+                    )
+                    .into(),
+                });
+            }
+        };
+        match self
+            .review_terminal(call, &mut context.permission_audits)
+            .await?
+        {
+            ToolApprovalOutcome::Approved => {}
+            ToolApprovalOutcome::Denied(output) => {
+                return Some(OrchestratorRunResult { output });
+            }
+        }
+        let ToolRunContext {
+            workspace_write_grant,
+            network_grant,
+            permission_audits,
+        } = context;
+        let agent = self.session.as_ref();
+        let memory_dir = agent.memory_dir().to_path_buf();
+        let session_id = agent.session_id().to_string();
+        let execution_started = std::time::Instant::now();
+        let invocation = ToolInvocation {
+            session: Arc::clone(self.session),
+            step_context: Arc::clone(self.step_context),
+            cancellation_token: CancellationToken::new(),
+            call_id: call.id.clone(),
+            tool_name: call.name.clone(),
+            payload: call.arguments.clone(),
+        };
+        let executed = self.session.handle_tool_invocation_with_once_grants(
+            invocation,
+            workspace_write_grant,
+            network_grant,
+        );
+        let execution_result = match &executed {
+            Ok(_) => "success",
+            Err(crate::runtime::ToolCallError::Cancelled) => "cancelled",
+            Err(_) => "error",
+        };
+        for audit in &permission_audits {
+            audit.record(
+                memory::PermissionAuditKind::Applied,
+                None,
+                Some(execution_result),
+                Some(execution_started.elapsed().as_millis() as u64),
+            );
+        }
+        let output = match executed {
+            Ok(output) => output,
+            Err(crate::runtime::ToolCallError::Cancelled) => return None,
+            Err(error) => {
+                memory::try_append_decision(
+                    &memory_dir,
+                    memory::DecisionEntry::new(
+                        memory::DecisionKind::ToolFailure,
+                        error.to_string(),
+                    )
+                    .with_tool(call.name.clone())
+                    .with_session(session_id),
+                );
+                format!("工具错误: {error}").into()
+            }
+        };
+        Some(OrchestratorRunResult { output })
     }
 }
 
@@ -825,382 +1221,7 @@ async fn execute_tools_serial_inner(
             continue;
         }
 
-        let ToolRunContext {
-            workspace_write_grant,
-            network_grant,
-            mut permission_audits,
-        } = if call.args_parse_error {
-            ToolRunContext::default()
-        } else {
-            match orchestrator.prepare(call).await? {
-                Ok(context) => context,
-                Err(message) => {
-                    out.push(format!(
-                        "{message}. Do not retry the same action or attempt a workaround without explicit authorization."
-                    ).into());
-                    continue;
-                }
-            }
-        };
-
-        // 危险 terminal：deny / auto / ask
-        if call.name == "terminal" && !call.args_parse_error {
-            if let Some(decision) = call
-                .arguments
-                .get("command")
-                .and_then(|v| v.as_str())
-                .and_then(tools::classify_dangerous_command)
-            {
-                match decision.action {
-                    types::ApprovalAction::Deny => {
-                        audit_hardline_terminal_denial(session, call, decision.description).await;
-                        out.push(format!(
-                            "Command denied by policy (dangerous: {}). Do not retry without changing the command.",
-                            decision.description
-                        ).into());
-                        continue;
-                    }
-                    types::ApprovalAction::Auto => {
-                        // 放行，继续执行
-                    }
-                    types::ApprovalAction::Ask => {
-                        let cmd = call
-                            .arguments
-                            .get("command")
-                            .and_then(|v| v.as_str())
-                            .unwrap_or("")
-                            .to_string();
-                        let request_summary =
-                            format!("Run a command requiring approval: {}", decision.description);
-                        // 读取审批模式 + 白名单，并触发 PermissionRequest 钩子
-                        let (
-                            approval_session_id,
-                            approval_turn_id,
-                            permissions,
-                            allowlist,
-                            memory_dir,
-                            active_profile_id,
-                            permission_settings,
-                        ) = {
-                            let agent = session.as_ref();
-                            let approval_session_id = agent.session_id().to_string();
-                            let approval_turn_id = agent.current_turn_id().await;
-                            let base = agent.memory_dir().to_path_buf();
-                            let permissions = memory::config::load_permission_settings(&base);
-                            let active_profile_id = agent
-                                .permission_profile()
-                                .unwrap_or_else(|| permissions.selection.profile_id.clone());
-                            agent.fire_hook(
-                                hooks::PERMISSION_REQUEST,
-                                hooks::HookPayload {
-                                    session_id: approval_session_id.clone(),
-                                    turn_id: approval_turn_id.clone(),
-                                    tool_name: Some("Bash".to_string()),
-                                    tool_input: Some(serde_json::json!({
-                                        "command": cmd.clone(),
-                                        "description": request_summary.clone(),
-                                    })),
-                                    detail: format!(
-                                        "surface=terminal ask={}",
-                                        decision.description
-                                    ),
-                                    ..Default::default()
-                                },
-                            );
-                            (
-                                approval_session_id,
-                                approval_turn_id,
-                                permissions.selection.clone(),
-                                permissions.legacy_command_allowlist.clone(),
-                                base,
-                                active_profile_id,
-                                permissions,
-                            )
-                        };
-
-                        let route = approval_route(&cmd, &permissions, &allowlist);
-                        let permission_request = types::PermissionRequest {
-                            request_id: uuid::Uuid::new_v4().to_string(),
-                            session_id: approval_session_id.clone(),
-                            turn_id: approval_turn_id.clone(),
-                            tool_call_id: call.id.clone(),
-                            tool_name: call.name.clone(),
-                            summary: request_summary,
-                            capabilities: vec![types::PermissionCapability::ProcessSpawn {
-                                program: "sh".to_string(),
-                                cwd: None,
-                            }],
-                            reason: types::PermissionReason::UntrustedCommand,
-                            requested_scope: types::GrantScope::Once,
-                            command_preview: Some(cmd.clone()),
-                            affected_paths: Vec::new(),
-                            network_hosts: Vec::new(),
-                        };
-                        let approval_audit = PermissionAuditReceipt::new(
-                            memory_dir.clone(),
-                            &permission_settings,
-                            active_profile_id,
-                            permission_request.clone(),
-                        );
-                        let approval_started = std::time::Instant::now();
-                        approval_audit.record(
-                            memory::PermissionAuditKind::Evaluated,
-                            None,
-                            Some(match route {
-                                ApprovalRoute::Deny => "hardline_denied",
-                                ApprovalRoute::Allowlist => "allowlist",
-                                ApprovalRoute::Off => "approval_disabled",
-                                ApprovalRoute::Smart => "auto_review_required",
-                                ApprovalRoute::Manual => "user_review_required",
-                            }),
-                            None,
-                        );
-                        if matches!(route, ApprovalRoute::Smart | ApprovalRoute::Manual) {
-                            approval_audit.record(
-                                memory::PermissionAuditKind::Requested,
-                                Some(permissions.approvals_reviewer),
-                                None,
-                                None,
-                            );
-                        }
-                        // 防御性兜底：即使规则分级未来发生漂移，hardline 仍不可进入 HITL 放行。
-                        if route == ApprovalRoute::Deny {
-                            approval_audit.record(
-                                memory::PermissionAuditKind::Denied,
-                                None,
-                                Some("hardline_denied"),
-                                Some(approval_started.elapsed().as_millis() as u64),
-                            );
-                            out.push(
-                                "Command denied by hardline policy. Do not retry without changing the command."
-                                    .into(),
-                            );
-                            continue;
-                        } else if route == ApprovalRoute::Allowlist {
-                            fire_post_approval_response(
-                                session,
-                                &approval_session_id,
-                                approval_turn_id.as_deref(),
-                                &cmd,
-                                &permission_request.summary,
-                                "allowlist",
-                            )
-                            .await;
-                            approval_audit.record(
-                                memory::PermissionAuditKind::Granted,
-                                None,
-                                Some("allowlist"),
-                                Some(approval_started.elapsed().as_millis() as u64),
-                            );
-                            permission_audits.push(approval_audit);
-                        } else if route == ApprovalRoute::Off {
-                            fire_post_approval_response(
-                                session,
-                                &approval_session_id,
-                                approval_turn_id.as_deref(),
-                                &cmd,
-                                &permission_request.summary,
-                                "auto",
-                            )
-                            .await;
-                            approval_audit.record(
-                                memory::PermissionAuditKind::Granted,
-                                None,
-                                Some("approval_disabled"),
-                                Some(approval_started.elapsed().as_millis() as u64),
-                            );
-                            permission_audits.push(approval_audit);
-                        } else {
-                            // 仅 Smart 模式尝试辅模型降级；Manual 直接弹卡
-                            let smart_action = if route == ApprovalRoute::Smart {
-                                let agent = session.as_ref();
-                                let targets: Vec<_> = agent
-                                    .auxiliary_targets(types::AuxiliaryTask::SmartApproval)
-                                    .iter()
-                                    .map(crate::control::smart_approval::ApprovalTarget::from)
-                                    .collect();
-                                crate::control::smart_approval::maybe_smart_downgrade_ask(
-                                    &permission_request,
-                                    &targets,
-                                )
-                                .await
-                            } else {
-                                types::ApprovalAction::Ask
-                            };
-                            if smart_action == types::ApprovalAction::Auto {
-                                tracing::info!(
-                                    command = %cmd,
-                                    reason = decision.description,
-                                    "smart approval auto-approved dangerous command"
-                                );
-                                fire_post_approval_response(
-                                    session,
-                                    &approval_session_id,
-                                    approval_turn_id.as_deref(),
-                                    &cmd,
-                                    &permission_request.summary,
-                                    "auto",
-                                )
-                                .await;
-                                approval_audit.record_review(
-                                    permissions.approvals_reviewer,
-                                    "auto_approved",
-                                    true,
-                                    approval_started.elapsed().as_millis() as u64,
-                                );
-                                permission_audits.push(approval_audit);
-                            } else if route == ApprovalRoute::Smart {
-                                fire_post_approval_response(
-                                    session,
-                                    &approval_session_id,
-                                    approval_turn_id.as_deref(),
-                                    &cmd,
-                                    &permission_request.summary,
-                                    "deny",
-                                )
-                                .await;
-                                approval_audit.record_review(
-                                    permissions.approvals_reviewer,
-                                    "auto_denied",
-                                    false,
-                                    approval_started.elapsed().as_millis() as u64,
-                                );
-                                out.push(
-                                    "Command denied by automatic approval review. Do not retry the same action or attempt a workaround without explicit user authorization."
-                                        .into(),
-                                );
-                                continue;
-                            } else if let Some(gate) = hitl_gate {
-                                let title = "批准危险命令";
-                                let body = format!(
-                                    "检测到潜在危险操作（{}）：\n\n```\n{cmd}\n```",
-                                    decision.description
-                                );
-                                let confirm =
-                                    park_confirm(gate, tx, run_id, &call.id, title, &body, true)
-                                        .await?;
-                                let choice = match confirm.status.as_str() {
-                                    "timeout" => "timeout",
-                                    _ if confirm.approved => "allow",
-                                    _ => "deny",
-                                };
-                                fire_post_approval_response(
-                                    session,
-                                    &approval_session_id,
-                                    approval_turn_id.as_deref(),
-                                    &cmd,
-                                    &permission_request.summary,
-                                    choice,
-                                )
-                                .await;
-                                approval_audit.record_review(
-                                    permissions.approvals_reviewer,
-                                    choice,
-                                    confirm.approved,
-                                    approval_started.elapsed().as_millis() as u64,
-                                );
-                                if !confirm.approved {
-                                    out.push(
-                                        "Command denied by user (dangerous-command approval). Do not retry the same command without explicit user request.".into(),
-                                    );
-                                    continue;
-                                }
-                                // 「批准并永久放行」→ 写入用户白名单，后续同命令自动放行
-                                if confirm.always {
-                                    if let Err(e) =
-                                        memory::config::add_command_to_allowlist(&memory_dir, &cmd)
-                                    {
-                                        tracing::warn!(error = %e, "failed to persist command allowlist");
-                                    } else {
-                                        tracing::info!(command = %cmd, "added command to approval allowlist");
-                                    }
-                                }
-                                permission_audits.push(approval_audit);
-                            } else {
-                                fire_post_approval_response(
-                                    session,
-                                    &approval_session_id,
-                                    approval_turn_id.as_deref(),
-                                    &cmd,
-                                    &permission_request.summary,
-                                    "unavailable",
-                                )
-                                .await;
-                                approval_audit.record_review(
-                                    permissions.approvals_reviewer,
-                                    "reviewer_unavailable",
-                                    false,
-                                    approval_started.elapsed().as_millis() as u64,
-                                );
-                                out.push(
-                                    format!(
-                                    "Command blocked: dangerous ({}) and no HITL gate available.",
-                                    decision.description
-                                )
-                                    .into(),
-                                );
-                                continue;
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        let mut result: types::ToolOutput = if call.args_parse_error {
-            format!(
-                "工具参数 JSON 解析失败: {}",
-                call.arguments
-                    .get("_parse_error")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("invalid json")
-            )
-            .into()
-        } else {
-            let agent = session.as_ref();
-            let memory_dir = agent.memory_dir().to_path_buf();
-            let session_id = agent.session_id().to_string();
-            let execution_started = std::time::Instant::now();
-            let executed = if workspace_write_grant || !network_grant.is_empty() {
-                agent.handle_tool_call_with_once_grants(
-                    &call.name,
-                    &call.arguments,
-                    workspace_write_grant,
-                    network_grant,
-                )
-            } else {
-                agent.handle_tool_call(&call.name, &call.arguments)
-            };
-            let execution_result = match &executed {
-                Ok(_) => "success",
-                Err(crate::runtime::ToolCallError::Cancelled) => "cancelled",
-                Err(_) => "error",
-            };
-            for audit in &permission_audits {
-                audit.record(
-                    memory::PermissionAuditKind::Applied,
-                    None,
-                    Some(execution_result),
-                    Some(execution_started.elapsed().as_millis() as u64),
-                );
-            }
-            match executed {
-                Ok(output) => output,
-                Err(crate::runtime::ToolCallError::Cancelled) => return None,
-                Err(e) => {
-                    memory::try_append_decision(
-                        &memory_dir,
-                        memory::DecisionEntry::new(
-                            memory::DecisionKind::ToolFailure,
-                            format!("{e}"),
-                        )
-                        .with_tool(call.name.clone())
-                        .with_session(session_id),
-                    );
-                    format!("工具错误: {e}").into()
-                }
-            }
-        };
+        let mut result = orchestrator.run(call).await?.output;
 
         // confirm/clarify：astro_hitl → 同回合 park
         if let Some(hitl) = parse_astro_hitl(result.text()) {
@@ -1373,6 +1394,80 @@ mod tests {
         assert!(context.workspace_write_grant);
         assert!(!context.network_grant.is_empty());
         assert_eq!(context.permission_audits.len(), 2);
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn tool_orchestrator_run_dispatches_against_sampling_step() {
+        let dir = tempfile::tempdir().unwrap();
+        let session = Arc::new(
+            AgentLoop::with_session_id(
+                crate::runtime::Config::with_defaults(dir.path().to_path_buf()),
+                "orchestrator-step-test".into(),
+            )
+            .unwrap(),
+        );
+        fn entry() -> types::ToolEntry {
+            types::ToolEntry {
+                name: "orchestrator_probe".into(),
+                toolset: "core".into(),
+                description: "prove orchestrator dispatch uses the sampling step".into(),
+                schema: json!({"type": "object", "properties": {}}),
+                check_fn: None,
+                icon: "test-tube",
+                ..types::ToolEntry::lifecycle_defaults()
+            }
+        }
+        session.tool_registry_mut().register_dynamic(
+            entry(),
+            Arc::new(|_name, _args| Box::pin(async { Ok("sampled".into()) })),
+        );
+        session.set_current_turn_id("turn-orchestrator").await;
+        let step_context = session.capture_step_context().await.unwrap();
+        session.tool_registry_mut().register_dynamic(
+            entry(),
+            Arc::new(|_name, _args| Box::pin(async { Ok("hot-reloaded".into()) })),
+        );
+        let (tx, _rx) = mpsc::channel(4);
+        let orchestrator = ToolOrchestrator::new(&session, &step_context, &tx, "run-1", None);
+
+        let result = orchestrator
+            .run(&types::ParsedToolCall::with_id(
+                "call-1",
+                "orchestrator_probe",
+                json!({}),
+            ))
+            .await
+            .unwrap();
+
+        assert_eq!(result.output.text(), "sampled");
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn tool_orchestrator_run_stops_hardline_terminal_before_dispatch() {
+        let dir = tempfile::tempdir().unwrap();
+        let session = Arc::new(
+            AgentLoop::with_session_id(
+                crate::runtime::Config::with_defaults(dir.path().to_path_buf()),
+                "orchestrator-hardline-test".into(),
+            )
+            .unwrap(),
+        );
+        session.set_current_turn_id("turn-hardline").await;
+        let step_context = session.capture_step_context().await.unwrap();
+        let (tx, _rx) = mpsc::channel(4);
+        let orchestrator = ToolOrchestrator::new(&session, &step_context, &tx, "run-1", None);
+
+        let result = orchestrator
+            .run(&types::ParsedToolCall::with_id(
+                "call-1",
+                "terminal",
+                term("mkfs.astro-test /dev/not-real"),
+            ))
+            .await
+            .unwrap();
+
+        assert!(result.output.text().contains("denied by policy"));
+        assert!(result.output.text().contains("dangerous"));
     }
 
     #[test]

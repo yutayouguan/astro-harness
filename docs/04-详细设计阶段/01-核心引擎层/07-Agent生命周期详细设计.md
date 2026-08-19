@@ -1,6 +1,6 @@
 # Agent 生命周期详细设计
 
-> 版本：v2.18
+> 版本：v2.19
 > 日期：2026-08-19
 > 状态：实施基线  
 > 上游参考：[OpenAI Codex](https://github.com/openai/codex) `632e35ce8d5dec43b75dbf99f9e6fa52bed47c3d`  
@@ -649,7 +649,9 @@ built-in tool 的 current-thread `!Send` 契约保持不变。
   - [x] 将注册表运行时投影与模型可见 specs 收口为 `ToolRouter`。
   - [x] 引入 `ToolOrchestrator` 第一阶段，将 MCP、只读写入和进程内网络预检按固定顺序
     收口到单一入口，并统一聚合 one-shot grants 与 permission audit receipts。
-  - [ ] 引入 `ToolOrchestrator` 并迁移审批、沙箱、network approval 与 retry。
+  - [x] 由 `ToolOrchestrator::run` 统一执行 terminal 审批、step-bound dispatch、Applied
+    审计与错误归档，返回 Codex 同名 `OrchestratorRunResult<Out>`。
+  - [ ] 将 sandbox selection、denial analysis、network approval 与 retry 迁入 orchestrator。
 - [ ] 删除工具执行时重新加载权限/工具的路径。
 
 v2.16 ToolInvocation / ToolCallRuntime 首批：新运行时保留 Codex 的 `session`、
@@ -673,6 +675,16 @@ v2.18 ToolOrchestrator 预检批次：串行工具执行不再分别内联解释
 任一阶段拒绝即短路，取消或 HITL 通道断开仍沿用 `Option` 终止语义。本批保持 terminal
 危险命令审批、实际 tool dispatch、sandbox selection 与 retry 原路径不变；后续批次再将它们
 迁入 Codex 同构的 `ToolOrchestrator::run`。
+
+v2.19 ToolOrchestrator run 批次：`execute_tools_serial_inner` 只保留 pause/cancel、
+`StepContext` 准入和工具返回后的 Astro HITL 展示；参数错误、三段 permission preflight、
+terminal hardline/allowlist/auto-review/user-review、one-shot grants、实际 dispatch、Applied
+审计与 ToolFailure 归档全部由 `ToolOrchestrator::run` 驱动，并通过
+`OrchestratorRunResult<Out>` 返回。实际调用改用
+`handle_tool_invocation_with_once_grants`，因此串行工具也绑定到产生调用的
+`Arc<StepContext>`，采样后的动态 handler 热替换只影响下一 step。旧的无 step
+`handle_tool_call_with_once_grants` 入口已删除。sandbox selection、denial retry 和 escalation
+仍由当前工具实现负责，留待下一批迁移。
 `tool_router_freezes_dynamic_handler_for_step` 通过采样后覆盖 Session 注册表并执行旧 step，
 锁定不可变快照契约。无 `StepContext` 的兼容工具入口仍保留当前注册表路径，待后续删除。
 
