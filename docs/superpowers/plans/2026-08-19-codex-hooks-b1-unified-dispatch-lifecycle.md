@@ -4,7 +4,7 @@
 
 **Goal:** Route Astro Agent lifecycle hooks through one canonical `HookRuntime::dispatch` path and align the main-turn `SessionStart`, `UserPromptSubmit`, `Stop`, and `AgentEnd` behavior with the approved Codex contract.
 
-**Architecture:** `Session` owns an `Arc<HookRuntime>` instead of only a Plugin bus, enriches every **Session-owned** payload with stable session/model/cwd/permission fields, and delegates those events to one dispatcher that reaches Plugin, Gateway, and Shell exactly once. `SubagentStart` / `SubagentStop` remain documented Plugin-only direct-fire exceptions. The main lifecycle retries blocked `SessionStart` admission with the same source, consumes that source once on its first non-`Block` outcome, evaluates prompt hooks before persistence, evaluates Stop for every terminal candidate with a bounded continuation loop, and emits one AgentEnd from `RegularTask` on both success and failure.
+**Architecture:** `Session` owns an `Arc<HookRuntime>` instead of only a Plugin bus, enriches every **Session-owned** payload with stable session/model/cwd/permission fields, and delegates those events to one dispatcher that reaches Plugin, Gateway, and Shell exactly once. Tool-local `TransformTerminalOutput` and request-bus `SubagentStart` / `SubagentStop` remain documented Plugin-only direct-fire exceptions. The main lifecycle retries blocked `SessionStart` admission with the same source, consumes that source once on its first non-`Block` outcome, evaluates prompt hooks before persistence, evaluates Stop for every terminal candidate with a bounded continuation loop, and emits one AgentEnd from `RegularTask` on both success and failure.
 
 **Tech Stack:** Rust 2021 workspace, Tokio, `agent-hooks`, `agent-core`, `agent-server`, Cargo integration tests.
 
@@ -26,7 +26,7 @@ This plan implements B1 only:
 The following remain separate B2/B3/C work:
 
 - `SessionEnd`, clear/compact SessionStart sources, `PreCompact`, and `PostCompact`;
-- Gateway/Shell transport for Plugin-only `SubagentStart` / `SubagentStop`, plus `SubagentStop` `KeepGoing` continuation;
+- Gateway/Shell transport for Plugin-only `TransformTerminalOutput`, `SubagentStart` / `SubagentStop`, plus `SubagentStop` `KeepGoing` continuation;
 - Codex command-hook schema, matcher aggregation, JSON stdin/stdout, timeout, trust, and discovery.
 
 ## File map
@@ -48,7 +48,7 @@ The following remain separate B2/B3/C work:
 **Files:**
 - Modify: `crates/agent-hooks/src/lib.rs:27-195`
 
-- [ ] **Step 1: Write a failing dispatcher test**
+- [x] **Step 1: Write a failing dispatcher test**
 
 Add a test that registers the same legacy-named event across Plugin, Gateway, and Shell, dispatches once, and proves that both observable buses receive the canonical name while the Plugin outcome is returned:
 
@@ -97,7 +97,7 @@ async fn dispatch_normalizes_once_and_reaches_all_transports() {
 }
 ```
 
-- [ ] **Step 2: Run the test and verify RED**
+- [x] **Step 2: Run the test and verify RED**
 
 Run:
 
@@ -107,7 +107,7 @@ cargo test -p hooks tests::dispatch_normalizes_once_and_reaches_all_transports -
 
 Expected: compile failure because `HookRuntime::dispatch` does not exist.
 
-- [ ] **Step 3: Implement the dispatcher and compatibility constructor**
+- [x] **Step 3: Implement the dispatcher and compatibility constructor**
 
 Refactor construction and dispatch to this shape:
 
@@ -151,7 +151,7 @@ impl HookRuntime {
 
 Gateway and Shell remain observers in B1; the Plugin outcome remains the controlling result until the multi-handler aggregator lands in Batch C. New callers that need the Plugin outcome should call `dispatch` directly; `fire_gateway` retains its historical `()` return type for compatibility.
 
-- [ ] **Step 4: Run the focused and crate tests**
+- [x] **Step 4: Run the focused and crate tests**
 
 Run:
 
@@ -162,7 +162,7 @@ cargo test -p hooks
 
 Expected: the focused test passes and the Hooks crate reports all tests passing.
 
-- [ ] **Step 5: Commit Task 1**
+- [x] **Step 5: Commit Task 1**
 
 ```bash
 git add crates/agent-hooks/src/lib.rs
@@ -175,7 +175,7 @@ git commit -m "refactor(hooks): unify runtime dispatch"
 - Modify: `crates/agent-core/src/runtime/mod.rs:118-138,350-375,1350-1410`
 - Test: `crates/agent-core/tests/rig_agent_test.rs`
 
-- [ ] **Step 1: Write a failing common-payload test**
+- [x] **Step 1: Write a failing common-payload test**
 
 Add this integration test, including `std::sync::Mutex` in the imports if it is not already present:
 
@@ -214,7 +214,7 @@ async fn session_fire_hook_uses_shared_runtime_and_common_payload() {
 }
 ```
 
-- [ ] **Step 2: Run the test and verify RED**
+- [x] **Step 2: Run the test and verify RED**
 
 Run:
 
@@ -224,7 +224,7 @@ cargo test -p agent session_fire_hook_uses_shared_runtime_and_common_payload -- 
 
 Expected: compile failure because `set_hook_runtime` and `hook_runtime` do not exist.
 
-- [ ] **Step 3: Replace the SessionConfiguration Plugin bus with HookRuntime**
+- [x] **Step 3: Replace the SessionConfiguration Plugin bus with HookRuntime**
 
 Change the field and default:
 
@@ -301,7 +301,7 @@ pub fn fire_hook(&self, name: &str, payload: ::hooks::HookPayload) -> ::hooks::H
 
 Update the compile-only Arc API tests to exercise `set_hook_runtime` and `hook_runtime` as owned snapshots.
 
-- [ ] **Step 4: Run focused tests and the Agent library tests**
+- [x] **Step 4: Run focused tests and the Agent library tests**
 
 Run:
 
@@ -312,7 +312,7 @@ cargo test -p agent --lib
 
 Expected: the focused test and all Agent library tests pass.
 
-- [ ] **Step 5: Commit Task 2**
+- [x] **Step 5: Commit Task 2**
 
 ```bash
 git add crates/agent-core/src/runtime/mod.rs crates/agent-core/tests/rig_agent_test.rs
@@ -344,7 +344,7 @@ The quality-review correction is authoritative for this task:
 - a blocked SessionStart retains its pending `startup`/`resume` source for retry; any non-Block outcome consumes the expected source. A later prompt Block or infrastructure/reload failure does not restore SessionStart after it has successfully fired;
 - server full-runtime injection and duplicate SessionStart removal move forward from Task 5; AgentEnd/reset/finalize cleanup remains Task 5.
 
-- [ ] **Step 1: Write failing startup, resume, control, context, and steering tests**
+- [x] **Step 1: Write failing startup, resume, control, context, and steering tests**
 
 Replace `test_prompt_hooks_on_run_turn` with a test that captures exact ordering and one-shot behavior:
 
@@ -467,7 +467,7 @@ Also add these approved control cases:
 
 Extend `steered_input_is_consumed_by_the_active_regular_task` to register `USER_PROMPT_SUBMIT`, capture both `prompt` and `turn_id`, call `.await.unwrap().expect(...)`, and assert the hook has already seen `follow up` plus the non-empty active turn id before releasing the first provider call.
 
-- [ ] **Step 2: Run the new tests and verify RED**
+- [x] **Step 2: Run the new tests and verify RED**
 
 Run:
 
@@ -494,7 +494,7 @@ cargo test -p server --lib grpc::astro_service::tests::chat_delegates_session_st
 
 Expected: each behavioral test reports `running 1 test` when its wished-for API already compiles; reservation tests initially fail to compile until the new API exists. Runtime RED must expose the old per-input writes, leaked staged context, consumed blocked SessionStart, unbudgeted prompt growth, steering close race, and direct server SessionStart. A zero-test run is not accepted as RED evidence.
 
-- [ ] **Step 3: Add one-shot SessionStart state**
+- [x] **Step 3: Add one-shot SessionStart state**
 
 Add the field and initialize it from the hydrated history:
 
@@ -529,7 +529,7 @@ if state.pending_session_start_source.as_deref() == source.as_deref() {
 }
 ```
 
-- [ ] **Step 4: Add prompt admission helper and lifecycle ordering**
+- [x] **Step 4: Add prompt admission helper and lifecycle ordering**
 
 Admission outcomes return staged context instead of mutating Session state:
 
@@ -640,7 +640,7 @@ B1 keeps steering scoped to the active `TurnContext`; `Done(true)` after a steer
 
 Initial admission context is present in the real budgeted system prompt. `system_prompt_layer_breakdown`, however, independently reconstructs static/dynamic layers for the pre-sampling `ContextUsage` estimate and has no request-level inject argument. Counting it would require plumbing the actual request prompt into the emitter or adding mutable last-prompt state; this batch does neither, so the estimate retains that existing limitation.
 
-- [ ] **Step 5: Run lifecycle tests and Agent tests**
+- [x] **Step 5: Run lifecycle tests and Agent tests**
 
 Run:
 
@@ -656,7 +656,7 @@ git diff --check
 
 Expected: all focused tests previously ran exactly one test, and both integration suites, Agent library tests, server check, formatting, and diff checks pass. If `streaming_test` hits the known HITL race, report the first raw failure without retrying to hide it.
 
-- [ ] **Step 6: Commit Task 3**
+- [x] **Step 6: Commit Task 3**
 
 ```bash
 git add crates/agent-core/src/runtime/turn_context.rs crates/agent-core/src/runtime/turn_lifecycle.rs crates/agent-core/src/runtime/system_prompt.rs crates/agent-core/src/streaming/multi_turn.rs crates/agent-core/tests/streaming_test.rs crates/agent-server/src/grpc/astro_service.rs docs/superpowers/plans/2026-08-19-codex-hooks-b1-unified-dispatch-lifecycle.md
@@ -1082,6 +1082,7 @@ git commit -m "fix(hooks): align main turn lifecycle"
 ### Task 6: Document B1 truth and run final verification
 
 **Files:**
+- Modify: `crates/agent-server/src/grpc/astro_service.rs`
 - Modify: `docs/hooks.md`
 - Modify: `docs/examples/hooks/README.md`
 - Modify: `docs/examples/hooks/config.yaml.snippet`
@@ -1141,10 +1142,10 @@ Expected:
 
 - changed files are limited to the B1 file map and this plan;
 - compatibility `set_hook_bus` remains available but production server wiring uses `set_hook_runtime`;
-- no Session-owned Agent core lifecycle call bypasses `HookRuntime::dispatch`; the documented `SubagentStart` / `SubagentStop` request-bus direct fires are the exception;
+- no Session-owned Agent core lifecycle call bypasses `HookRuntime::dispatch`; the documented tool-local `TransformTerminalOutput` and request-bus `SubagentStart` / `SubagentStop` direct fires are the exceptions;
 - no server-side SessionStart or AgentEnd duplicate remains.
 
-**Review record:** distinguish retried blocked `SessionStart`; normal-loop API/transform/post hooks from direct summary streaming; all five private payload fields; construction-time (not readiness) `GatewayStartup`; and Plugin-only subagent lifecycle events. Keep Shell examples in sync with Session runtime routing without claiming subagent delivery; telemetry is custom JSON and requires a webhook or explicit adapter for third-party backends.
+**Review record:** distinguish retried blocked `SessionStart`; normal-loop API/transform/post hooks from direct summary streaming; all five private payload fields; bootstrap-time (not readiness) `GatewayStartup`; and Plugin-only tool/subagent events. Keep Shell examples in sync with Session runtime routing without claiming direct-fire delivery; telemetry is custom JSON, omits detail by default, and requires a webhook or explicit adapter for third-party backends.
 
 - [x] **Step 5: Commit documentation**
 
@@ -1186,8 +1187,8 @@ reasoning-only bridge regression continues to cover consecutive bridge preservat
 
 ## Self-review checklist
 
-- Spec coverage: Session-owned B1 dispatch, startup/resume admission, prompt admission, Stop, AgentEnd, server de-duplication, documented Plugin-only subagent exceptions, compatibility, tests, and docs each map to a task.
-- Deferred scope: SessionEnd, compact/clear, Pre/PostCompact, SubagentStart/Stop transport, SubagentStop continuation, and Command Hook behavior are explicitly excluded and remain documented.
+- Spec coverage: Session-owned B1 dispatch, startup/resume admission, prompt admission, Stop, AgentEnd, server de-duplication, documented Plugin-only tool/subagent exceptions, compatibility, tests, and docs each map to a task.
+- Deferred scope: SessionEnd, compact/clear, Pre/PostCompact, TransformTerminalOutput/SubagentStart/SubagentStop transport, SubagentStop continuation, and Command Hook behavior are explicitly excluded and remain documented.
 - Type consistency: `HookRuntime::dispatch` takes `&HookPayload` and returns `HookOutcome`; Session stores `Arc<HookRuntime>`; steering returns `anyhow::Result<Option<String>>` at every caller.
 - TDD consistency: every production behavior begins with a focused test that fails for the missing behavior.
 - Commit consistency: each task stages only its listed files and produces an independently reviewable commit.

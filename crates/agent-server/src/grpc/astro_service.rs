@@ -244,7 +244,7 @@ impl AstroServiceImpl {
                     ::hooks::GATEWAY_STARTUP,
                     &::hooks::HookPayload {
                         turn_id: None,
-                        detail: "backend ready".into(),
+                        detail: "hook runtime bootstrapped".into(),
                         ..Default::default()
                     },
                 );

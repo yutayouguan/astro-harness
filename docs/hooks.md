@@ -105,7 +105,7 @@ Canonical 名称集仍比当前已接线的生命周期更完整。下表只记�
 | `PermissionRequest` | Codex | 串行工具权限 preflight 需要审批时，在决议与 `PreToolUse` 前 | 观察 |
 | `PostApprovalResponse` | Astro | 审批决议后、`PreToolUse` 前；`choice` 当前可为 `allowlist`、`auto`、`allow`、`allow_once`、`deny`、`timeout` 或 `unavailable` | 观察 |
 | `PreToolUse` | Codex | 所有 preflight 均已授权或无需授权后，在工具 dispatch 前；被拒绝/超时/无审批通道的调用不会 fire | `Block(reason)` / `Modify(args)` |
-| `TransformTerminalOutput` | Astro | `terminal` 原始 stdout/stderr 组合后、64 KiB 截断前 | `ReplaceText(text)` |
+| `TransformTerminalOutput` | Astro | `terminal` 原始 stdout/stderr 组合后、64 KiB 截断前；当前经工具 `hook_bus` direct fire，**仅 Plugin** | `ReplaceText(text)` |
 | `TransformToolResult` | Astro | 任意工具返回后、`PostToolUse` 前 | `ReplaceText(text)` |
 | `PostToolUse` | Codex | 工具结果已应用 `TransformToolResult` 后 | 观察 |
 | `SubagentStart` | Codex | Agent Thread 构造完、首轮执行前（每个 thread 一次）；当前经 request 的 `hook_bus` direct fire，**仅 Plugin** | 观察 |
@@ -168,7 +168,7 @@ PreGatewayDispatch
 
 | Gateway 事件 | 当前触发点 |
 |---|---|
-| `GatewayStartup` | `HookRuntime` bootstrap 与 `AstroServiceImpl` construction 完成时；早于 listener bind，不是 readiness 信号 |
+| `GatewayStartup` | `AstroServiceImpl::new` 内 `HookRuntime` bootstrap 成功后立即触发；此时 `Self` 尚未组装且早于 listener bind，bootstrap 失败则不触发，因此不是 readiness 信号 |
 | `PreGatewayDispatch` | gRPC/Tauri chat 入站、加载 session 前 |
 | `SessionStart` / `UserPromptSubmit` / `AgentEnd` | 由 session 的统一 dispatch 到达 Gateway；server 不再单独派发 lifecycle 事件 |
 | `CommandNewChat` | UI `chat_control(new_chat)`；随后依次统一 dispatch `SessionReset`、`SessionFinalize`，各一次后释放 runtime |
@@ -312,11 +312,12 @@ Shell Hook 异步执行，默认超时 5 秒，失败只记录日志。`HookRunt
 
 ### 遥测旁路与安全
 
-[`docs/examples/hooks/telemetry-webhook.sh`](./examples/hooks/telemetry-webhook.sh) 把 `ASTRO_HOOK_EVENT`、session、turn、tool 和 detail 序列化为 JSON 并 POST 到 `ASTRO_TELEMETRY_URL`；可选 token 通过 `Authorization: Bearer` 头发送。脚本需要 `curl` 和 `jq`，未配置 URL 时静默退出，发送失败不阻塞 Agent。
+[`docs/examples/hooks/telemetry-webhook.sh`](./examples/hooks/telemetry-webhook.sh) 把 `ASTRO_HOOK_EVENT`、session、turn 和 tool 序列化为 JSON 并 POST 到 `ASTRO_TELEMETRY_URL`；默认把 `detail` 留空，只有显式设置 `ASTRO_TELEMETRY_INCLUDE_DETAIL=1` 才发送。可选 token 通过 `Authorization: Bearer` 头发送。脚本需要 `curl` 和 `jq`，未配置 URL 时静默退出，发送失败不阻塞 Agent。
 
 推荐从已接线的 `GatewayStartup`、`PreGatewayDispatch`、`UserPromptSubmit` 或 `CommandNewChat` 开始配置该脚本。`PostToolUse`、`PreLlmCall`、`PostLlmCall` 等同样通过统一 runtime 路由；它们可用于 telemetry，但 Shell 失败仍只会留下日志。
 
 - 不要在日志、echo 或 hook detail 中输出 telemetry token。
+- `ASTRO_HOOK_DETAIL` 可能包含 prompt 原文、工具参数或工具结果预览；示例默认不发送它。只有确认接收端和数据策略安全后，才设置 `ASTRO_TELEMETRY_INCLUDE_DETAIL=1`。
 - 示例脚本不发送 `ASTRO_HOOK_MESSAGE`、`tool_input` 或 `tool_response`；自定义脚本如果增加这些字段，需要先评估 prompt、assistant 文本和工具参数的敏感性。
 - Shell 失败只记录 warning，不是投递成功保证；需要可靠导出时应在自有端点实现幂等和重试。
 
@@ -338,7 +339,7 @@ B1 完成：
 
 - `SessionEnd`；以及 `SessionStart` 的 `clear` / `compact` source；
 - `PreCompact` / `PostCompact`；
-- `SubagentStart` / `SubagentStop` 的 Gateway、Shell 统一 transport（两者当前都是 Plugin-only direct fire）；`SubagentStop` 的 `KeepGoing` continuation 也尚未实现；
+- `TransformTerminalOutput`、`SubagentStart` / `SubagentStop` 的 Gateway、Shell 统一 transport（当前都是 Plugin-only direct fire）；`SubagentStop` 的 `KeepGoing` continuation 也尚未实现；
 - Batch C 的 Command Hook JSON stdin/stdout、matcher、multi-handler 聚合/冲突和 trust 模型/UI 管理。
 
 不要从 canonical 名称推断尚未实现的 Command Hook matcher、trust 或 JSON I/O 语义。
