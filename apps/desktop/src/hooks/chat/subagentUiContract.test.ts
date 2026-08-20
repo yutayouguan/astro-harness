@@ -33,6 +33,15 @@ test("hook reacts to field 14 and stream generation changes", () => {
   }
 });
 
+test("hook retries failed live-listener registration without leaking across roots", () => {
+  const hook = source("./useSubagentThreads.ts");
+  assert.match(hook, /const registerListener = \(\) =>/);
+  assert.match(hook, /setTimeout\(registerListener, 1_000\)/);
+  assert.match(hook, /clearTimeout\(retryTimer\)/);
+  assert.match(hook, /if \(!isCurrent\(\)\) return/);
+  assert.match(hook, /Listener-first startup\/recovery/);
+});
+
 test("desktop commands use only canonical rootSessionId and target arguments", () => {
   const activity = source("../../components/chat/SubagentActivityBar.tsx");
   const panel = source("../../components/chat/SubagentsPanel.tsx");

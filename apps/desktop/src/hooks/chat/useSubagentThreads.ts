@@ -146,9 +146,10 @@ export function useSubagentThreads(rootSessionId?: string | null) {
 
     let disposed = false;
     let unlisten: (() => void) | undefined;
+    let retryTimer: ReturnType<typeof globalThis.setTimeout> | undefined;
     const isCurrent = () => !disposed && rootLifecycle.isCurrent(token);
 
-    void listen<SessionAgentThreadEvent>("session_event", (event) => {
+    const handleEvent = (event: { payload: SessionAgentThreadEvent }) => {
       if (!isCurrent()) return;
 
       let classification;
@@ -189,25 +190,34 @@ export function useSubagentThreads(rootSessionId?: string | null) {
       }
       const next = reduceAgentThreadEvent(stateRef.current, classification.changed);
       if (next !== stateRef.current && isCurrent()) commitState(next);
-    })
-      .then((stop) => {
-        if (!isCurrent()) stop();
-        else {
-          unlisten = stop;
-          // Listener-first startup closes the snapshot/event race.
+    };
+
+    const registerListener = () => {
+      if (!isCurrent()) return;
+      void listen<SessionAgentThreadEvent>("session_event", handleEvent)
+        .then((stop) => {
+          if (!isCurrent()) stop();
+          else {
+            unlisten = stop;
+            // Listener-first startup/recovery closes the snapshot/event race.
+            void refresh();
+          }
+        })
+        .catch((reason) => {
+          if (!isCurrent()) return;
+          setError(String(reason));
+          // Keep a one-shot baseline visible while retrying the live channel.
           void refresh();
-        }
-      })
-      .catch((reason) => {
-        if (!isCurrent()) return;
-        setError(String(reason));
-        // The one-shot snapshot is still useful if event registration fails.
-        void refresh();
-      });
+          retryTimer = globalThis.setTimeout(registerListener, 1_000);
+        });
+    };
+
+    registerListener();
 
     return () => {
       disposed = true;
       refreshRef.current += 1;
+      if (retryTimer !== undefined) globalThis.clearTimeout(retryTimer);
       unlisten?.();
     };
   }, [commitState, refresh, root, rootLifecycle]);
