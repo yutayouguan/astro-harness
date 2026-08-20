@@ -1,5 +1,121 @@
 # agent
 
-Agent 运行时核心：Session 状态机、AstroThread 句柄、submission_loop 有序提交、SessionTask/ActiveTurn 任务生命周期、TurnContext/StepContext 层级上下文、工具路由（ToolRouter）、压缩、HITL、hooks、prompt 组装。
+Agent 运行时核心 crate：组装对话循环、上下文管理、钩子系统与流式多轮输出，驱动 Astro Agent 的完整请求生命周期。
 
-属于 [Astro Agent](../../README.md) workspace，详见根目录 `CLAUDE.md` 的 Crate Map。
+## 核心职责
+
+- 维护单次会话的消息历史、轮次预算（`max_turns` / `multi_turn`）与取消信号
+- 每轮用户输入时召回记忆、组装静态/动态上下文并生成 system prompt
+- 统一路由内置工具与 MCP 工具，调用前后触发三总线 hook
+- 实现流式补全的三层 trait 抽象（`StreamingCompletion` / `StreamingChat` / `StreamingPrompt`）
+- 驱动「LLM 流式 → 工具执行 → 再请求」的多轮闭环
+- 提供声明式 `AgentBuilder` 构建可运行 Agent 实例
+- 管理工具结果压缩（原文保留，压缩视图给 provider）
+- HITL 闸门、中断状态机、schema 校验、smart approval 审批
+- Cron 定时任务执行、子 Agent 委派、记忆回顾、标题生成等辅助执行域
+
+## 模块结构
+
+| 文件/目录 | 职责 |
+|-----------|------|
+| `builder.rs` | 声明式 `AgentBuilder` / `BuiltAgentSpec` 构建器 |
+| `compression.rs` | 工具结果压缩：保留原始 content，给 provider 发送压缩视图 |
+| `control/hitl.rs` | HITL 闸门：`HitlGate` / `HitlRegistry` / `HitlRequest` / `HitlResolution` |
+| `control/interrupt.rs` | 中断状态机：`Interrupt` / `InterruptPending` / `ResumeItem` |
+| `control/schema_validate.rs` | 工具参数 JSON Schema 校验 |
+| `control/smart_approval.rs` | LLM 辅模型智能审批（`AuxiliaryTask::SmartApproval`） |
+| `control/network_approval.rs` | 网络访问审批协议 |
+| `exec/cron.rs` | Cron 定时任务执行入口（`execute_job` → `run_agent_job`） |
+| `exec/subagents.rs` | 子 Agent 线程生命周期管理 |
+| `exec/dispatch.rs` | `DefaultAgentThreadDispatch` 实现 |
+| `exec/background.rs` | 后台 Agent 线程执行 |
+| `exec/memory_review.rs` | 记忆回顾与审批 |
+| `exec/mid_run_summary.rs` | 中途摘要生成 |
+| `exec/title_generation.rs` | 会话标题自动生成 |
+| `exec/tool_llm_compress.rs` | 工具结果 LLM 压缩 |
+| `prompt/context.rs` | 静态/动态上下文组装（`StaticContext`） |
+| `prompt/context_source.rs` | 上下文来源抽象 |
+| `prompt/context_usage.rs` | 上下文预算与用量追踪 |
+| `prompt/prompt_builder.rs` | System prompt 分层构建器 |
+| `prompt/hooks.rs` | Hook 集成与 `CancelSignal` |
+| `prompt/messages.rs` | 消息变换与注入 |
+| `prompt/sanitize.rs` | Prompt 清洗与安全处理 |
+| `runtime/mod.rs` | `Session`（原 `AgentLoop`）核心结构体、`Config`、`TurnResult` |
+| `runtime/session_state.rs` | `SessionState` — 会话级可变运行时状态 |
+| `runtime/session_services.rs` | `SessionServices` — 会话级服务注册表 |
+| `runtime/session_io.rs` | `AgentStatus` 状态枚举与 I/O 绑定 |
+| `runtime/astro_thread.rs` | `AstroThread` — Session 的事件流句柄 |
+| `runtime/model_ctx.rs` | `ModelContext` — LLM 凭证、chat_targets/fallback 链 |
+| `runtime/turn_budget.rs` | `TurnState` — turn_id、轮次/深度计数、`MaxDepthError` |
+| `runtime/turn_lifecycle.rs` | 轮次生命周期 — `begin_user_turn` / `run_turn` / `prepare_llm_context` |
+| `runtime/turn_context.rs` | `TurnContext` — 单轮上下文快照 |
+| `runtime/step_context.rs` | `StepContext` — 单步（工具调用）上下文 |
+| `runtime/compression_state.rs` | `CompressionState` — mid-run 摘要、compact 建议、召回上下文 |
+| `runtime/context_maintenance.rs` | 上下文维护 — `maintain_tool_context` / `provider_history` |
+| `runtime/recording.rs` | 消息记录 — `record_assistant_*` / `record_tool_result_*` |
+| `runtime/tool_dispatch.rs` | 工具调度 — `handle_tool_call_async` / `finalize_tool_call_result` |
+| `runtime/tool_router.rs` | `ToolRouter` — 内置/MCP/动态工具统一路由 |
+| `runtime/system_prompt.rs` | System prompt 构建 — `build_system_prompt` |
+| `runtime/submission_loop.rs` | 有序提交循环 |
+| `runtime/validate.rs` | `validate_message_order` 消息角色顺序校验 |
+| `streaming/multi_turn.rs` | 多轮工具循环编排（核心流式主循环） |
+| `streaming/traits.rs` | 三层 Streaming trait 定义 |
+| `streaming/provider.rs` | `ProviderStreamer` — trait 实现 + fallback 接入 |
+| `streaming/fallback.rs` | 聊天主模型首包前故障切换 |
+| `streaming/tools_exec.rs` | 单轮工具调用执行（串行 HITL / 并发普通） |
+| `streaming/hitl_bridge.rs` | `astro_hitl` 解析与会话 park/resume 桥 |
+| `streaming/summary.rs` | 迭代预算耗尽后的强制总结轮 |
+| `streaming/types.rs` | `StreamedAssistantContent` 流式内容类型 |
+| `tasks/mod.rs` | `ActiveTurn` — Codex 风格单活跃任务注册 |
+| `timeline.rs` | 助手回合时间线（`astro_timeline_v1`） |
+
+## 核心类型与 API
+
+- `Session`（别名 `AgentLoop`）— 会话运行时，拥有对话状态、记忆、工具注册表与 provider 凭证
+- `Config`（别名 `AgentConfig`）— 运行时配置：轮次预算、记忆路径、soul、温度、上下文预算
+- `AstroThread` — Session 的事件流句柄，提供 `next_event()` / `status()` 接口
+- `TurnResult` — 单轮结果枚举：`Continue` / `Steered` / `ToolCalls` / `Finished` / `BudgetExhausted` / `MaxDepth` / `Interrupted`
+- `TurnContext` — 单轮快照：turn_id、轮次序号、交互模式、权限配置、项目根
+- `AgentBuilder` / `BuiltAgentSpec` — 声明式构建可运行 Agent
+- `HitlGate` / `HitlRequest` / `HitlResolution` — 人机交互闸门
+- `Interrupt` / `InterruptPending` — 中断状态机
+- `ProviderStreamer` — 流式补全实现，含 fallback 切换
+- `StreamingChat` / `StreamingCompletion` / `StreamingPrompt` — 三层流式 trait
+- `CancelSignal` — 可克隆取消信号，供 UI 或上层触发中断
+
+## Crate 关系
+
+| 方向 | crate | 说明 |
+|------|-------|------|
+| 依赖 | `types` | 共享类型：Message、ChatTarget、ToolEntry、InteractionMode |
+| 依赖 | `providers` | LLM 流式调用、fallback、media 生成 |
+| 依赖 | `tools` | 工具注册表、分发、审批、ToolContext |
+| 依赖 | `memory` | MemoryManager、配置加载、workspace 引导 |
+| 依赖 | `session` | SessionStore / ConversationStore 消息持久化 |
+| 依赖 | `sandbox` | 子 Agent 进程沙箱策略 |
+| 依赖 | `home` | 路径约定、agent config、tool gates |
+| 依赖 | `hooks` | 三总线 hook 运行时 |
+| 依赖 | `mcp` | MCP 客户端连接池与工具发现 |
+| 依赖 | `skills` | Skill 加载与管理 |
+| 依赖 | `subagents` | AgentControl / AgentPath / AgentGraph |
+| 依赖 | `cron` | Cron job 持久化与运行记录 |
+| 依赖 | `a2ui` | AG-UI 声明式组件 |
+| 依赖 | `artifacts` | 文件空间索引 |
+| 依赖 | `usage` | 用量事件与成本估算 |
+| 被依赖 | `agent-server` | gRPC 服务端通过本 crate 驱动 Agent 循环 |
+| 被依赖 | `astro-agent`（Tauri） | 桌面应用通过本 crate 构建 Session |
+
+## 关键不变量
+
+1. **角色顺序**：`SessionState.history` 中相邻消息不得连续出现相同 role；由 `validate_message_order()` 强制
+2. **工具深度**：`tool_rounds` 在每条用户消息开始时归零；单条用户消息内上限 `multi_turn`（默认 200）；`increment_tool_round()` 超限返回 `MaxDepthError`
+3. **streaming 不变量**：每轮 assistant 回复必须先写入 history 再执行工具；usage 覆盖式累加
+4. **取消信号**：`CancelSignal` 在工具调用前后均检查，已取消则立即中断
+5. **Session 是 Send + Sync**：所有可变状态封装在 `StdMutex` / `TokioMutex` 中，无裸 `RefCell`
+6. **事件有序性**：`event_dispatch` 锁保证 rollout 持久化与 live 投递严格有序
+
+## 测试
+
+```bash
+cargo test -p agent
+```
