@@ -4542,17 +4542,17 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let memory_dir = dir.path().join("memory");
         let project = dir.path().join("project");
-        std::fs::create_dir_all(memory_dir.join(".codex")).unwrap();
-        std::fs::create_dir_all(project.join(".codex/agents")).unwrap();
+        std::fs::create_dir_all(memory_dir.join(".astro")).unwrap();
+        std::fs::create_dir_all(project.join(".astro/agents")).unwrap();
         std::fs::write(
-            memory_dir.join(".codex/config.toml"),
+            memory_dir.join(".astro/config.toml"),
             format!(
                 "[projects.{:?}]\ntrust_level = 'trusted'\n",
                 project.to_string_lossy()
             ),
         )
         .unwrap();
-        let definition = project.join(".codex/agents/reviewer.toml");
+        let definition = project.join(".astro/agents/reviewer.toml");
         std::fs::write(
             &definition,
             "name = \"reviewer\"\ndescription = \"review\"\ndeveloper_instructions = \"review\"\nmodel = \"openai:original-model\"\n",
@@ -4958,10 +4958,10 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let memory_dir = dir.path().join("memory");
         let project = dir.path().join("project");
-        std::fs::create_dir_all(memory_dir.join(".codex")).unwrap();
-        std::fs::create_dir_all(project.join(".codex/agents")).unwrap();
+        std::fs::create_dir_all(memory_dir.join(".astro")).unwrap();
+        std::fs::create_dir_all(project.join(".astro/agents")).unwrap();
         std::fs::write(
-            memory_dir.join(".codex/config.toml"),
+            memory_dir.join(".astro/config.toml"),
             format!(
                 "[projects.{:?}]\ntrust_level = 'trusted'\n",
                 project.to_string_lossy()
@@ -4969,12 +4969,12 @@ mod tests {
         )
         .unwrap();
         std::fs::write(
-            project.join(".codex/agents/parent.toml"),
+            project.join(".astro/agents/parent.toml"),
             "name = \"parent\"\ndescription = \"parent\"\ndeveloper_instructions = \"parent\"\n[[skills.config]]\npath = \"skills/parent/SKILL.md\"\nenabled = true\n",
         )
         .unwrap();
         std::fs::write(
-            project.join(".codex/agents/leaf.toml"),
+            project.join(".astro/agents/leaf.toml"),
             "name = \"leaf\"\ndescription = \"leaf\"\ndeveloper_instructions = \"leaf\"\n[[skills.config]]\npath = \"skills/leaf/SKILL.md\"\nenabled = true\n",
         )
         .unwrap();
@@ -6164,10 +6164,10 @@ mod tests {
     fn custom_layers_preserve_unknown_parent_sandbox_and_merge_skills() {
         let dir = tempfile::tempdir().unwrap();
         let project = dir.path().join("project");
-        std::fs::create_dir_all(dir.path().join(".codex")).unwrap();
-        std::fs::create_dir_all(project.join(".codex/agents")).unwrap();
+        std::fs::create_dir_all(dir.path().join(".astro")).unwrap();
+        std::fs::create_dir_all(project.join(".astro/agents")).unwrap();
         std::fs::write(
-            dir.path().join(".codex/config.toml"),
+            dir.path().join(".astro/config.toml"),
             format!(
                 "[projects.{:?}]\ntrust_level = 'trusted'\n",
                 project.to_string_lossy()
@@ -6175,7 +6175,7 @@ mod tests {
         )
         .unwrap();
         std::fs::write(
-            project.join(".codex/agents/reviewer.toml"),
+            project.join(".astro/agents/reviewer.toml"),
             r#"name = "reviewer"
 description = "review"
 developer_instructions = "review carefully"

@@ -13,7 +13,7 @@ use crate::{
 };
 
 pub const CONFIG_TOML_FILE: &str = "config.toml";
-pub const DOT_CODEX_DIR: &str = ".codex";
+pub const DOT_ASTRO_DIR: &str = ".astro";
 
 /// Machine-local keys that project configuration must not override.
 ///
@@ -37,7 +37,7 @@ pub const PROJECT_PROTECTED_KEYS: &[&str] = &[
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct LocalConfigOptions {
-    pub codex_home: PathBuf,
+    pub astro_home: PathBuf,
     pub cwd: PathBuf,
     pub system_config: Option<PathBuf>,
     pub profile: Option<String>,
@@ -47,9 +47,9 @@ pub struct LocalConfigOptions {
 }
 
 impl LocalConfigOptions {
-    pub fn new(codex_home: impl Into<PathBuf>, cwd: impl Into<PathBuf>) -> Self {
+    pub fn new(astro_home: impl Into<PathBuf>, cwd: impl Into<PathBuf>) -> Self {
         Self {
-            codex_home: codex_home.into(),
+            astro_home: astro_home.into(),
             cwd: cwd.into(),
             system_config: default_system_config_path(),
             profile: None,
@@ -179,7 +179,7 @@ pub fn load_local_config(
         }
     }
 
-    let user_path = options.codex_home.join(CONFIG_TOML_FILE);
+    let user_path = options.astro_home.join(CONFIG_TOML_FILE);
     if let Some(layer) = load_optional_file(
         &user_path,
         ConfigLayerSource::User {
@@ -200,7 +200,7 @@ pub fn load_local_config(
     if let Some(profile) = options.profile.as_deref() {
         validate_profile_name(profile)?;
         reject_legacy_profile_conflict(&discovery_config, profile, &user_path)?;
-        let path = options.codex_home.join(format!("{profile}.config.toml"));
+        let path = options.astro_home.join(format!("{profile}.config.toml"));
         if !path.is_file() {
             return Err(LocalConfigError::MissingProfile(path));
         }
@@ -278,7 +278,7 @@ pub fn validate_profile_name(profile: &str) -> Result<(), LocalConfigError> {
 fn default_system_config_path() -> Option<PathBuf> {
     #[cfg(unix)]
     {
-        Some(PathBuf::from("/etc/codex/config.toml"))
+        Some(PathBuf::from("/etc/astro/config.toml"))
     }
     #[cfg(not(unix))]
     {
@@ -348,7 +348,7 @@ fn project_config_dirs(project_root: &Path, cwd: &Path) -> Vec<PathBuf> {
     let mut directories = cwd
         .ancestors()
         .take_while(|directory| directory.starts_with(project_root))
-        .map(|directory| directory.join(DOT_CODEX_DIR))
+        .map(|directory| directory.join(DOT_ASTRO_DIR))
         .collect::<Vec<_>>();
     directories.reverse();
     directories
@@ -461,7 +461,7 @@ mod tests {
     impl Fixture {
         fn new(trust_level: Option<&str>) -> Self {
             let root = tempfile::tempdir().unwrap();
-            let home = root.path().join("home/.codex");
+            let home = root.path().join("home/.astro");
             let project = root.path().join("repo");
             let nested = project.join("packages/app");
             fs::create_dir_all(&home).unwrap();
@@ -496,9 +496,9 @@ mod tests {
     }
 
     fn write_project_config(directory: &Path, raw: &str) {
-        let dot_codex = directory.join(DOT_CODEX_DIR);
-        fs::create_dir_all(&dot_codex).unwrap();
-        fs::write(dot_codex.join(CONFIG_TOML_FILE), raw).unwrap();
+        let dot_astro = directory.join(DOT_ASTRO_DIR);
+        fs::create_dir_all(&dot_astro).unwrap();
+        fs::write(dot_astro.join(CONFIG_TOML_FILE), raw).unwrap();
     }
 
     #[test]
@@ -522,7 +522,7 @@ mod tests {
             effective.origin_at(["model"].iter()).unwrap().source,
             ConfigLayerSource::Project { ref dot_config_dir }
                 if dot_config_dir
-                    == &fixture.nested.canonicalize().unwrap().join(DOT_CODEX_DIR)
+                    == &fixture.nested.canonicalize().unwrap().join(DOT_ASTRO_DIR)
         ));
     }
 
