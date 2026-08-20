@@ -134,22 +134,22 @@ git commit -m "feat: add session network approval service"
 - Modify: `apps/desktop/src/hooks/chat/useChatSession.ts`
 - Modify: relevant A2UI tests
 
-- [ ] **Step 1: 先写 scope payload 和 cancellation 失败测试**
+- [x] **Step 1: 先写 scope payload 和 cancellation 失败测试**
 
   覆盖 once/session/persistent/deny 四种 payload，以及 tool cancel、command timeout、
   event publish failure 对 pending gate 的清理。
 
-- [ ] **Step 2: 增加专用 network approval surface**
+- [x] **Step 2: 增加专用 network approval surface**
 
   显示 command 摘要、target 和 profile；使用结构化 `scope`，
   不复用 command allowlist 的 `always` bool 解析逻辑。
 
-- [ ] **Step 3: 实现 cancellation-aware park**
+- [x] **Step 3: 实现 cancellation-aware park**
 
   先 `begin_wait`、再 emit；event publish 失败立即 `abort_wait`。
   等待同时监听 attempt cancellation/deadline，任意一路结束都只清理自己的 interrupt。
 
-- [ ] **Step 4: 将 approval policy/reviewer 映射为受限决议**
+- [x] **Step 4: 将 approval policy/reviewer 映射为受限决议**
 
   User reviewer 可返回全部 scope；AutoReview 仅允许 allow-once/deny；
   `ApprovalPolicy::Never` 和 reviewer unavailable 直接 deny。
