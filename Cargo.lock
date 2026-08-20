@@ -5427,6 +5427,7 @@ name = "subagents"
 version = "0.1.0"
 dependencies = [
  "agent",
+ "agent-config",
  "anyhow",
  "chrono",
  "home",

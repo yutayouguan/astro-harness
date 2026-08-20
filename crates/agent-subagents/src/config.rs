@@ -2,6 +2,9 @@ use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use agent_config::loader::{load_local_config, LocalConfigOptions};
+use agent_config::EffectiveConfig;
+use anyhow::Context;
 use serde::Deserialize;
 
 #[derive(Debug, Clone, Deserialize)]
@@ -91,6 +94,23 @@ struct PartialAgentsSettings {
     default_subagent_model: Option<String>,
     default_subagent_reasoning_effort: Option<String>,
     interrupt_message: Option<bool>,
+    #[serde(default, rename = "max_depth")]
+    _max_depth: Option<i32>,
+    #[serde(default, rename = "job_max_runtime_seconds")]
+    _job_max_runtime_seconds: Option<u64>,
+    #[serde(default, flatten)]
+    _roles: BTreeMap<String, AgentRoleSettings>,
+}
+
+#[derive(Debug, Default, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+struct AgentRoleSettings {
+    #[serde(rename = "description")]
+    _description: Option<String>,
+    #[serde(rename = "config_file")]
+    _config_file: Option<PathBuf>,
+    #[serde(rename = "nickname_candidates")]
+    _nickname_candidates: Option<Vec<String>>,
 }
 
 impl AgentsSettings {
@@ -116,27 +136,33 @@ impl AgentsSettings {
     }
 }
 
-pub fn load_agents_settings(memory_dir: &Path, project_root: Option<&Path>) -> AgentsSettings {
-    let mut settings = AgentsSettings::default();
-    apply_settings_file(&mut settings, &codex_home(memory_dir).join("config.toml"));
-    if let Some(root) = project_root {
-        apply_settings_file(&mut settings, &root.join(".codex/config.toml"));
-    }
-    settings
+pub fn load_agents_settings(
+    memory_dir: &Path,
+    project_root: Option<&Path>,
+) -> anyhow::Result<AgentsSettings> {
+    let codex_home = codex_home(memory_dir);
+    let cwd = project_root.unwrap_or(memory_dir);
+    let options = LocalConfigOptions::new(&codex_home, cwd);
+    let loaded = load_local_config(&options).with_context(|| {
+        format!(
+            "failed to load Codex configuration for agent settings from {}",
+            codex_home.display()
+        )
+    })?;
+    agents_settings_from_effective(&loaded.resolve())
 }
 
-fn apply_settings_file(settings: &mut AgentsSettings, path: &Path) {
-    let Ok(text) = fs::read_to_string(path) else {
-        return;
-    };
-    match toml::from_str::<RootConfig>(&text) {
-        Ok(root) => {
-            if let Some(partial) = root.agents {
-                settings.apply(partial);
-            }
-        }
-        Err(error) => tracing::warn!(path = %path.display(), %error, "invalid agents config"),
+pub fn agents_settings_from_effective(
+    effective: &EffectiveConfig,
+) -> anyhow::Result<AgentsSettings> {
+    let root = effective
+        .decode::<RootConfig>()
+        .context("invalid effective [agents] configuration")?;
+    let mut settings = AgentsSettings::default();
+    if let Some(partial) = root.agents {
+        settings.apply(partial);
     }
+    Ok(settings)
 }
 
 pub fn load_agent_catalog(memory_dir: &Path, project_root: Option<&Path>) -> AgentCatalog {
@@ -315,6 +341,10 @@ fn non_empty(value: Option<&str>) -> Option<String> {
 mod tests {
     use super::*;
 
+    fn toml_key(path: &Path) -> String {
+        format!("{:?}", path.to_string_lossy())
+    }
+
     #[test]
     fn astro_agent_directories_are_not_configuration_inputs() {
         let memory = tempfile::tempdir().unwrap();
@@ -347,7 +377,7 @@ mod tests {
         )
         .unwrap();
 
-        assert!(load_agents_settings(memory.path(), None).enabled);
+        assert!(load_agents_settings(memory.path(), None).unwrap().enabled);
     }
 
     #[test]
@@ -361,7 +391,11 @@ mod tests {
         )
         .unwrap();
 
-        assert!(load_agents_settings(memory.path(), Some(project.path())).enabled);
+        assert!(
+            load_agents_settings(memory.path(), Some(project.path()))
+                .unwrap()
+                .enabled
+        );
     }
 
     #[test]
@@ -374,11 +408,14 @@ mod tests {
         fs::create_dir_all(project.path().join(".codex")).unwrap();
         fs::write(
             home.path().join(".codex/config.toml"),
-            "[agents]\nenabled = false\nmax_threads = 7\n",
+            format!(
+                "[agents]\nenabled = false\nmax_threads = 7\n\n[projects.{}]\ntrust_level = 'trusted'\n",
+                toml_key(project.path())
+            ),
         )
         .unwrap();
 
-        let personal = load_agents_settings(&memory, None);
+        let personal = load_agents_settings(&memory, None).unwrap();
         assert!(!personal.enabled);
         assert_eq!(personal.max_concurrent_threads_per_session, 7);
 
@@ -387,9 +424,51 @@ mod tests {
             "[agents]\nenabled = true\nmax_threads = 9\n",
         )
         .unwrap();
-        let combined = load_agents_settings(&memory, Some(project.path()));
+        let combined = load_agents_settings(&memory, Some(project.path())).unwrap();
         assert!(combined.enabled);
         assert_eq!(combined.max_concurrent_threads_per_session, 9);
+    }
+
+    #[test]
+    fn untrusted_project_agent_settings_are_not_applied() {
+        let home = tempfile::tempdir().unwrap();
+        let memory = home.path().join(".astro");
+        let project = tempfile::tempdir().unwrap();
+        fs::create_dir_all(&memory).unwrap();
+        fs::create_dir_all(home.path().join(".codex")).unwrap();
+        fs::create_dir_all(project.path().join(".codex")).unwrap();
+        fs::write(
+            home.path().join(".codex/config.toml"),
+            "[agents]\nenabled = true\nmax_concurrent_threads_per_session = 5\n",
+        )
+        .unwrap();
+        fs::write(
+            project.path().join(".codex/config.toml"),
+            "[agents]\nenabled = false\nmax_concurrent_threads_per_session = 11\n",
+        )
+        .unwrap();
+
+        let settings = load_agents_settings(&memory, Some(project.path())).unwrap();
+
+        assert!(settings.enabled);
+        assert_eq!(settings.max_concurrent_threads_per_session, 5);
+    }
+
+    #[test]
+    fn invalid_agent_settings_fail_instead_of_silently_using_defaults() {
+        let home = tempfile::tempdir().unwrap();
+        let memory = home.path().join(".astro");
+        fs::create_dir_all(&memory).unwrap();
+        fs::create_dir_all(home.path().join(".codex")).unwrap();
+        fs::write(
+            home.path().join(".codex/config.toml"),
+            "[agents]\nmax_concurrent_threads_per_session = 'many'\n",
+        )
+        .unwrap();
+
+        let error = load_agents_settings(&memory, None).unwrap_err();
+
+        assert!(error.to_string().contains("invalid effective [agents]"));
     }
 
     #[test]

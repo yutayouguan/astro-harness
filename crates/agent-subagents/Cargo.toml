@@ -5,6 +5,7 @@ edition = "2021"
 description = "Codex-style first-class subagent threads, custom agent configuration, and lifecycle control"
 
 [dependencies]
+agent-config = { path = "../agent-config" }
 anyhow = { workspace = true }
 types = { path = "../agent-types" }
 home = { path = "../agent-home" }

@@ -481,8 +481,10 @@ impl DefaultAgentThreadDispatch {
                     target.canonical_path
                 )
             })?;
-        let settings =
-            subagents::load_agents_settings(&material.memory_dir, material.project_root.as_deref());
+        let settings = subagents::load_agents_settings(
+            &material.memory_dir,
+            material.project_root.as_deref(),
+        )?;
         anyhow::ensure!(
             settings.enabled,
             "agent threads are disabled by Codex agent settings"
@@ -592,7 +594,7 @@ impl AgentThreadDispatch for DefaultAgentThreadDispatch {
         let settings = subagents::load_agents_settings(
             &request.runtime.memory_dir,
             request.runtime.project_root.as_deref(),
-        );
+        )?;
         if !settings.enabled {
             anyhow::bail!("agent threads are disabled by Codex agent settings");
         }
