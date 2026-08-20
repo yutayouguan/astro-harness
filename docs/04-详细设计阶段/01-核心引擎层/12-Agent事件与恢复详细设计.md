@@ -183,8 +183,9 @@ cargo test -p session --test rollout_projection_test
 ```
 
 另以 workspace all-target tests/clippy、desktop TypeScript/build、legacy deletion rg 和 EventMsg
-coverage rg 做最终回归。2026-08-20 focused suites 全部通过，三份 canonical 文档据此标记为
-已实现；workspace all-target tests（1478 passed，2 ignored）、TypeScript 和生产 build 也通过。
+coverage rg 做最终回归。2026-08-20 focused suites 全部通过，事件与恢复文档及本轮事件对齐设计
+据此标记为已实现；生命周期总文档仍保持“部分实现”。workspace all-target tests（1478 passed，
+2 ignored）、TypeScript 和生产 build 也通过。
 
 全 workspace clippy 的既有 baseline 仍未清零：`agent-types` 的
 `items_after_test_module`、`agent-skills` 的 `unnecessary_sort_by`、`agent-providers` tests 的
