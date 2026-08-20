@@ -52,7 +52,7 @@
   - `pub async fn google_interactions_vision(client: &reqwest::Client, prompt: &str, images: &[VisionImagePart], mode: VisionMode, config: &ProviderConfig) -> anyhow::Result<String>`
 - Consumes: `crate::media_http::google_native_base`；`ProviderConfig`
 
-- [ ] **Step 1: 注册模块（若文件不存在）**
+- [x] **Step 1: 注册模块（若文件不存在）**
 
 `crates/agent-providers/src/protocol/mod.rs` 确保有：
 
@@ -64,7 +64,7 @@ pub mod interactions_http;
 
 若文件已存在（image_gen），跳过创建，只追加视觉部分。
 
-- [ ] **Step 2: 写失败测试（`interactions_http.rs` 底部 `#[cfg(test)]`）**
+- [x] **Step 2: 写失败测试（`interactions_http.rs` 底部 `#[cfg(test)]`）**
 
 ```rust
 #[cfg(test)]
@@ -167,12 +167,12 @@ mod vision_tests {
 }
 ```
 
-- [ ] **Step 3: Run 测试确认失败**
+- [x] **Step 3: Run 测试确认失败**
 
 Run: `cargo test -p providers vision_tests -- --nocapture`  
 Expected: FAIL（模块/符号不存在，或测试未通过）
 
-- [ ] **Step 4: 实现视觉类型与函数**
+- [x] **Step 4: 实现视觉类型与函数**
 
 在 `interactions_http.rs` 追加（保留已有 image_gen 符号不动）：
 
@@ -386,12 +386,12 @@ pub async fn google_interactions_vision(
 
 注意：`trim_slash` / `interactions_url` 若 image_gen 已实现同类函数，合并复用，避免重复。
 
-- [ ] **Step 5: Run 测试确认通过**
+- [x] **Step 5: Run 测试确认通过**
 
 Run: `cargo test -p providers vision_tests -- --nocapture`  
 Expected: PASS
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add providers/src/protocol/interactions_http.rs providers/src/protocol/mod.rs providers/src/lib.rs
@@ -422,7 +422,7 @@ EOF
   - `Detect`/`Segment`：body 增加 `response_format: { type: "json_object" }`（或模型支持的 json schema）；prompt 由调用方传入（已含坐标约定）。
   - 返回 content 字符串（调用方负责解析 boxes / 标记 fallback）。
 
-- [ ] **Step 1: 写单元测试（`media_http` tests 模块）**
+- [x] **Step 1: 写单元测试（`media_http` tests 模块）**
 
 ```rust
 #[test]
@@ -480,7 +480,7 @@ pub(crate) fn build_openai_vision_body(
 }
 ```
 
-- [ ] **Step 2: Run 测试确认失败后实现并改签名**
+- [x] **Step 2: Run 测试确认失败后实现并改签名**
 
 将 `openai_vision_completions` 改为：
 
@@ -520,14 +520,14 @@ pub async fn openai_vision_completions(
 
 若编译因 `vision.rs` 旧签名失败，本任务可先在 `vision.rs` 做最小适配（单 URL 包成 slice、mode=Describe），Task 3 再完整重写。
 
-- [ ] **Step 3: Run 测试**
+- [x] **Step 3: Run 测试**
 
 Run: `cargo test -p providers openai_vision_body -- --nocapture`  
 Expected: PASS  
 Run: `cargo test -p providers --lib`  
 Expected: PASS（或仅 vision/openai 相关失败若 tools 未适配则下一步处理）
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add providers/src/protocol/media_http.rs
@@ -554,7 +554,7 @@ EOF
   - `openai_vision_completions`, `default_vision_model`
 - Produces: 更新后的 `VisionArgs` / `dispatch`
 
-- [ ] **Step 1: 替换参数与 register description**
+- [x] **Step 1: 替换参数与 register description**
 
 ```rust
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
@@ -579,7 +579,7 @@ description（工具英文描述，供模型）：
 Analyze image(s). Modes: describe (default), detect (boxes JSON), segment (boxes+mask JSON). Pass image_urls (workspace paths or http(s)) or legacy image_url. Google uses Interactions API; OpenAI uses chat/completions fallback.
 ```
 
-- [ ] **Step 2: 实现解析与分流**
+- [x] **Step 2: 实现解析与分流**
 
 核心逻辑（保持错误汇总风格）：
 
@@ -715,7 +715,7 @@ async fn call_openai_vision(
 
 `mime_from_path` 扩展：增加 `heic`/`heif` → 对应 MIME；保留 jpeg 默认。
 
-- [ ] **Step 3: 编译与单元级校验**
+- [x] **Step 3: 编译与单元级校验**
 
 Run: `cargo test -p tools --test tools_test register_all_includes_panel_tools -- --nocapture`  
 Expected: PASS  
@@ -735,7 +735,7 @@ fn merges_image_url_into_list() {
 }
 ```
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add tools/src/builtin/media/vision.rs
@@ -756,7 +756,7 @@ EOF
 **Files:**
 - Modify: `apps/desktop/src/i18n/messages.ts`
 
-- [ ] **Step 1: 更新中英描述**
+- [x] **Step 1: 更新中英描述**
 
 ```ts
 "agentTools.vision.desc": "用 Google Interactions 原生接口看图（描述/检测/分割，支持多图）；OpenAI chat/completions 兜底",
@@ -764,7 +764,7 @@ EOF
 "agentTools.vision.desc": "Analyze images via Google Interactions API (describe/detect/segment, multi-image); OpenAI chat/completions fallback",
 ```
 
-- [ ] **Step 2: Commit**
+- [x] **Step 2: Commit**
 
 ```bash
 git add apps/desktop/src/i18n/messages.ts
@@ -775,7 +775,7 @@ git commit -m "docs(i18n): update vision tool description for Interactions API"
 
 ### Task 5: 验收核对
 
-- [ ] **Step 1: 跑相关测试**
+- [x] **Step 1: 跑相关测试**
 
 ```bash
 cargo test -p providers vision_tests openai_vision_body default_vision -- --nocapture
@@ -785,7 +785,7 @@ cargo check -p tools -p providers -p astro-agent
 
 Expected: 全部 PASS / check OK
 
-- [ ] **Step 2: 对照 spec 验收清单（人工，有 Key 时）**
+- [x] **Step 2: 对照 spec 验收清单（人工，有 Key 时）**
 
 对照 `docs/superpowers/specs/2026-07-16-vision-interactions-native-design.md` 验收节：
 
@@ -794,7 +794,7 @@ Expected: 全部 PASS / check OK
 - Google 失败落到 OpenAI
 - 无密钥错误清晰
 
-- [ ] **Step 3: 若有遗漏小修，单独 commit**（勿 amend 已推送提交）
+- [x] **Step 3: 若有遗漏小修，单独 commit**（勿 amend 已推送提交）
 
 ---
 

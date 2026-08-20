@@ -40,7 +40,7 @@
 - Create: `apps/desktop/src/lib/chatTimeline.test.ts`
 - Modify: `apps/desktop/src/types.ts`
 
-- [ ] **Step 1: 扩展类型**
+- [x] **Step 1: 扩展类型**
 
 在 `apps/desktop/src/types.ts` 的 `ChatMessage` 附近加入：
 
@@ -68,7 +68,7 @@ export type ChatTimelineSegment =
 segments?: ChatTimelineSegment[];
 ```
 
-- [ ] **Step 2: 写失败测试**
+- [x] **Step 2: 写失败测试**
 
 `apps/desktop/src/lib/chatTimeline.test.ts`：
 
@@ -148,7 +148,7 @@ test("surface after activity appends surface segment", () => {
 });
 ```
 
-- [ ] **Step 3: 跑测试确认失败**
+- [x] **Step 3: 跑测试确认失败**
 
 Run:
 
@@ -158,7 +158,7 @@ cd frontend && node --test --experimental-strip-types src/lib/chatTimeline.test.
 
 Expected: FAIL（模块不存在）
 
-- [ ] **Step 4: 实现 `chatTimeline.ts`**
+- [x] **Step 4: 实现 `chatTimeline.ts`**
 
 ```ts
 import type {
@@ -258,7 +258,7 @@ export function sealOpenReasoning(
 }
 ```
 
-- [ ] **Step 5: 跑测试确认通过**
+- [x] **Step 5: 跑测试确认通过**
 
 Run:
 
@@ -268,7 +268,7 @@ cd frontend && node --test --experimental-strip-types src/lib/chatTimeline.test.
 
 Expected: PASS
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add apps/desktop/src/types.ts apps/desktop/src/lib/chatTimeline.ts apps/desktop/src/lib/chatTimeline.test.ts
@@ -286,7 +286,7 @@ EOF
 **Files:**
 - Modify: `apps/desktop/src/components/ChatView.tsx`
 
-- [ ] **Step 1: 在助手气泡内分支渲染**
+- [x] **Step 1: 在助手气泡内分支渲染**
 
 找到当前 `m.activities` / `m.uiSurfaces` / `MsgReasoning` / `ChatMarkdown` 区块，改为：
 
@@ -374,7 +374,7 @@ EOF
 
 注意：attachments 仍在最前；token stats 仍在最后。有 segments 时 **不要** 再包一层父级 `ActivityGroup` 整包折叠（`ActivityCards` 单条即可）。
 
-- [ ] **Step 2: 类型检查**
+- [x] **Step 2: 类型检查**
 
 Run:
 
@@ -384,7 +384,7 @@ cd frontend && ./node_modules/.bin/tsc -b --pretty false
 
 Expected: 无错误
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add apps/desktop/src/components/ChatView.tsx
@@ -402,7 +402,7 @@ EOF
 **Files:**
 - Modify: `apps/desktop/src/App.tsx`
 
-- [ ] **Step 1: import helpers**
+- [x] **Step 1: import helpers**
 
 ```ts
 import {
@@ -413,7 +413,7 @@ import {
 } from "./lib/chatTimeline";
 ```
 
-- [ ] **Step 2: `flushStreamTokens` 里对 reasoning 批处理改走 `applyReasoningDelta`**
+- [x] **Step 2: `flushStreamTokens` 里对 reasoning 批处理改走 `applyReasoningDelta`**
 
 在合并 `reasoningBatch` 时，对每条消息：
 
@@ -426,7 +426,7 @@ if (reasoningExtra) {
 // content extra 仍拼到 content
 ```
 
-- [ ] **Step 3: `flushToolDeltas` / `tool_call` / `memory_update` 用 `applyActivityUpsert`**
+- [x] **Step 3: `flushToolDeltas` / `tool_call` / `memory_update` 用 `applyActivityUpsert`**
 
 创建或更新 activity 后：
 
@@ -439,11 +439,11 @@ return applyActivityUpsert(
 
 优先：构造完整 `ChatActivity` 后只调用 `applyActivityUpsert(m, activity)`，避免双写。
 
-- [ ] **Step 4: `activity`（A2UI）事件用 `applySurfaceUpsert`**
+- [x] **Step 4: `activity`（A2UI）事件用 `applySurfaceUpsert`**
 
 替换直接 `uiSurfaces` push 的逻辑。
 
-- [ ] **Step 5: `done` / interrupt 结束时 `sealOpenReasoning`**
+- [x] **Step 5: `done` / interrupt 结束时 `sealOpenReasoning`**
 
 用 `reasoningStartRef` 计算 `durationSec` 后：
 
@@ -451,12 +451,12 @@ return applyActivityUpsert(
 next = sealOpenReasoning(next, durationSec);
 ```
 
-- [ ] **Step 6: tsc**
+- [x] **Step 6: tsc**
 
 Run: `cd frontend && ./node_modules/.bin/tsc -b --pretty false`  
 Expected: 干净
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add apps/desktop/src/App.tsx
@@ -478,7 +478,7 @@ EOF
 - Modify: `crates/agent-core/src/streaming.rs`
 - Test: `crates/agent-core/src/timeline.rs` 内 `#[cfg(test)]` 或 `agent/tests/timeline_test.rs`
 
-- [ ] **Step 1: 实现 `timeline.rs`**
+- [x] **Step 1: 实现 `timeline.rs`**
 
 ```rust
 use serde_json::{json, Value};
@@ -586,12 +586,12 @@ mod tests {
 }
 ```
 
-- [ ] **Step 2: 跑测**
+- [x] **Step 2: 跑测**
 
 Run: `cargo test -p agent timeline -- --nocapture`  
 Expected: PASS
 
-- [ ] **Step 3: 扩展 `record_assistant_message_with_tools`**
+- [x] **Step 3: 扩展 `record_assistant_message_with_tools`**
 
 ```rust
 pub fn record_assistant_message_with_tools(
@@ -618,7 +618,7 @@ pub fn record_assistant_message_with_tools(
 
 更新所有调用点：无 details 传 `None`；`record_assistant_message` 转调时 `None`。
 
-- [ ] **Step 4: `streaming.rs` 维护 `TimelineBuilder`**
+- [x] **Step 4: `streaming.rs` 维护 `TimelineBuilder`**
 
 在 `run_multi_turn_stream` 每轮：
 
@@ -648,7 +648,7 @@ timeline.upsert_surface(json!({
 - **仅在最终成功/中断结束前的最后一次 assistant 文本落盘**带完整 timeline；带 `tool_calls` 的中间 assistant 行 `reasoning_details` 可为阶段性快照或 `None`。  
 - **推荐：** 每次 `record_assistant_message_with_tools` 都写入 **当前** `into_reasoning_details` 克隆，history 折叠时取 **该会话最后一条带 `astro_timeline_v1` 的 assistant** 的 timeline 挂到最终气泡（见 Task 5）。
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add agent/src/timeline.rs agent/src/lib.rs agent/src/loop_.rs agent/src/streaming.rs
@@ -671,7 +671,7 @@ EOF
 - Modify: `apps/desktop/src/types.ts`（history DTO）
 - Modify: `apps/desktop/src/App.tsx`（`mapHistoryMessages`）
 
-- [ ] **Step 1: 扩展 `ChatHistoryMessage`**
+- [x] **Step 1: 扩展 `ChatHistoryMessage`**
 
 ```rust
 pub struct ChatHistoryMessage {
@@ -687,7 +687,7 @@ pub struct ChatHistoryMessage {
 
 所有构造处补 `segments: None, ui_surfaces: None`。
 
-- [ ] **Step 2: `build_chat_history` 在 assistant 分支**
+- [x] **Step 2: `build_chat_history` 在 assistant 分支**
 
 ```rust
 let (segments, ui_surfaces) = match &m.reasoning_details {
@@ -706,7 +706,7 @@ let (segments, ui_surfaces) = match &m.reasoning_details {
 
 单测覆盖：一条 assistant(tool_calls+timeline) + tool + assistant(final+full timeline) → history 一条气泡且 segments 为完整版。
 
-- [ ] **Step 3: 测试**
+- [x] **Step 3: 测试**
 
 ```rust
 #[test]
@@ -719,7 +719,7 @@ fn build_chat_history_restores_timeline() {
 Run: `cargo test -p memory --test session_store_test timeline -- --nocapture`  
 Expected: PASS
 
-- [ ] **Step 4: Tauri DTO**
+- [x] **Step 4: Tauri DTO**
 
 ```rust
 pub struct ChatHistoryMessageDto {
@@ -731,7 +731,7 @@ pub struct ChatHistoryMessageDto {
 
 映射时传入 `m.segments` / `m.ui_surfaces`。
 
-- [ ] **Step 5: 前端 `mapHistoryMessages`**
+- [x] **Step 5: 前端 `mapHistoryMessages`**
 
 ```ts
 segments: Array.isArray(m.segments) ? m.segments : undefined,
@@ -742,7 +742,7 @@ uiSurfaces: Array.isArray(m.uiSurfaces)
 
 （字段名以 camelCase DTO 为准：`uiSurfaces`。）
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add memory apps/desktop/src-tauri/src/commands.rs apps/desktop/src/App.tsx apps/desktop/src/types.ts
@@ -760,7 +760,7 @@ EOF
 **Files:**
 - Modify: `docs/superpowers/specs/2026-07-13-chat-timeline-interleave-design.md`
 
-- [ ] **Step 1: 自动化**
+- [x] **Step 1: 自动化**
 
 ```bash
 cd frontend && node --test --experimental-strip-types src/lib/chatTimeline.test.ts
@@ -771,18 +771,18 @@ cargo test -p memory --test session_store_test
 
 Expected: 全绿
 
-- [ ] **Step 2: 手工清单**
+- [x] **Step 2: 手工清单**
 
 1. DeepSeek 思考模型：想→工具→再想→正文，气泡交错  
 2. `present_ui` 卡插在对应工具附近  
 3. 重启 App / 清 localStorage 后从会话恢复顺序不变  
 4. 无 timeline 的旧消息仍可读  
 
-- [ ] **Step 3: Spec 状态**
+- [x] **Step 3: Spec 状态**
 
 `**状态:** 已批准 / 已实现`
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add docs/superpowers/specs/2026-07-13-chat-timeline-interleave-design.md

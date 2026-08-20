@@ -61,7 +61,7 @@
   - `fn infer_store(install_ref: &str) -> String`
   - `fn infer_folder(install_ref: &str) -> Option<String>`
 
-- [ ] **Step 1: 在 `models.rs` 增加 DTO**
+- [x] **Step 1: 在 `models.rs` 增加 DTO**
 
 ```rust
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -92,7 +92,7 @@ pub struct SkillOriginsFile {
 }
 ```
 
-- [ ] **Step 2: 写失败测试（临时目录）**
+- [x] **Step 2: 写失败测试（临时目录）**
 
 在 `origins.rs` 测试中设 `ASTRO_MEMORY_DIR` 临时目录：
 
@@ -116,23 +116,23 @@ fn infer_folder_from_skillhub_and_clawhub() {
 
 （若 `SkillOriginRecord` 无 `Default`，测试里手填其余字段为 `None`。）
 
-- [ ] **Step 3: Run 确认失败**
+- [x] **Step 3: Run 确认失败**
 
 Run: `cargo test -p skills upsert_same_folder -- --nocapture`  
 Expected: FAIL（module/fn 不存在）
 
-- [ ] **Step 4: 实现 `origins.rs` 并挂到 `lib.rs`**
+- [x] **Step 4: 实现 `origins.rs` 并挂到 `lib.rs`**
 
 - 持久化路径对齐 `installed.rs` 的 `memory_dir()`（复制同函数或抽到共享小模块；为少扰动，可在 `origins.rs` 复制 `memory_dir`，与现有一致）。
 - `upsert` 键：`(agent_id.normalize, folder)`；`agent_id` 缺省与 `"workspace"` 视为同一键时与 install 的 normalize 一致。
 - 空文件/不存在 → `{ version: 1, records: [] }`。
 
-- [ ] **Step 5: Run 确认通过**
+- [x] **Step 5: Run 确认通过**
 
 Run: `cargo test -p skills origins:: -- --nocapture`  
 Expected: PASS
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add skills/src/origins.rs skills/src/models.rs skills/src/lib.rs
@@ -156,7 +156,7 @@ git commit -m "feat(skills): add skill-origins.json persistence"
     （保持兼容：现有调用处传 `None`；或新增重载 `install_from_ref_with_origin`）
   - 成功后：`folder = hint.folder.or_else(|| infer_folder(ref))`；若仍无 folder，打 `tracing::warn!` 且不写清单（不 fail 安装）
 
-- [ ] **Step 1: 写测试 `record_after_install_writes_origin`**
+- [x] **Step 1: 写测试 `record_after_install_writes_origin`**
 
 用临时 `ASTRO_MEMORY_DIR`，直接测公开 helper：
 
@@ -180,13 +180,13 @@ fn record_after_install_upserts() {
 }
 ```
 
-- [ ] **Step 2: Run 确认失败** → implement `record_after_install` → PASS
+- [x] **Step 2: Run 确认失败** → implement `record_after_install` → PASS
 
-- [ ] **Step 3: 在 `install_from_ref` 成功路径末尾调用 `record_after_install`**
+- [x] **Step 3: 在 `install_from_ref` 成功路径末尾调用 `record_after_install`**
 
 SkillHub HTTP 分支与 npx 分支都调用。`hint` 参数加入签名后，更新所有 crate 内调用点（`seed` 可传 `None`）。
 
-- [ ] **Step 4: 扩展 Tauri `install_store_skill`**
+- [x] **Step 4: 扩展 Tauri `install_store_skill`**
 
 ```rust
 pub async fn install_store_skill(
@@ -200,7 +200,7 @@ pub async fn install_store_skill(
 
 前端 `installSkill` 传入 `skill.name` / `skill.store` / 由 `install_ref`/`id` 解析的 folder（可用 TS `storeSkillMatchKeys` 的最后一个 slug，或新增 `inferFolderFromInstallRef` 与 Rust 对齐）。
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git commit -m "feat(skills): persist origin on successful install"
@@ -236,7 +236,7 @@ pub async fn update_all_with_origin(
 ) -> Result<Vec<SkillUpdateItemResult>>; // 串行；单条失败记入 Vec，不中断
 ```
 
-- [ ] **Step 1: 失败测试 — 无 origin**
+- [x] **Step 1: 失败测试 — 无 origin**
 
 ```rust
 #[tokio::test]
@@ -247,9 +247,9 @@ async fn update_without_origin_errors() {
 }
 ```
 
-- [ ] **Step 2: 实现：`find_origin` → `install_from_ref(ref, agent, hint from record)` → 更新 `last_updated_at`**
+- [x] **Step 2: 实现：`find_origin` → `install_from_ref(ref, agent, hint from record)` → 更新 `last_updated_at`**
 
-- [ ] **Step 3: `update_all_with_origin`：过滤当前 `agent_id` 的 records，逐条 `update_installed_skill`，收集结果**
+- [x] **Step 3: `update_all_with_origin`：过滤当前 `agent_id` 的 records，逐条 `update_installed_skill`，收集结果**
 
 （集成安装成功路径用已有 SkillHub/npx 过重；此 Task 以无 origin + origin upsert 后「至少调到 install」可用 `#[cfg(test)]` 注入，或接受 update 在真实 env 才绿。最低要求：无 origin Err + all 空列表返回 `Ok([])`。）
 
@@ -261,7 +261,7 @@ async fn update_all_empty_ok() {
 }
 ```
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git commit -m "feat(skills): update installed skill from origin"
@@ -280,10 +280,10 @@ git commit -m "feat(skills): update installed skill from origin"
 - `update_installed_skill(folder, agent_id?) -> String`
 - `update_all_skills(agent_id?) -> Vec<SkillUpdateItemResult>`
 
-- [ ] **Step 1: 实现三命令，错误 `.map_err(|e| e.to_string())`**
-- [ ] **Step 2: 在 `lib.rs` `invoke_handler` 注册**
-- [ ] **Step 3: `cargo check -p astro-app` 或当前 Tauri 包名通过**
-- [ ] **Step 4: Commit**
+- [x] **Step 1: 实现三命令，错误 `.map_err(|e| e.to_string())`**
+- [x] **Step 2: 在 `lib.rs` `invoke_handler` 注册**
+- [x] **Step 3: `cargo check -p astro-app` 或当前 Tauri 包名通过**
+- [x] **Step 4: Commit**
 
 ```bash
 git commit -m "feat(tauri): expose skill origin list and update commands"
@@ -324,7 +324,7 @@ export function filterUpdateRows(
 
 匹配：origin.folder ↔ `skill.id` 末段；或 `origin.name` ↔ `skill.name`（小写）。仅纳入当前 agent 的 origin（`!origin.agent_id || origin.agent_id === agentId || (workspace 规范化)`）。
 
-- [ ] **Step 1: 写测试（真实 ppt 案例）**
+- [x] **Step 1: 写测试（真实 ppt 案例）**
 
 ```js
 test("folder matches origin when frontmatter name differs", () => {
@@ -342,11 +342,11 @@ test("default filter with_origin hides no_origin", () => {
 });
 ```
 
-- [ ] **Step 2: RED → 实现 → GREEN**
+- [x] **Step 2: RED → 实现 → GREEN**
 
 Run: `node --experimental-strip-types --test apps/desktop/src/lib/skillUpdateRows.test.mjs`
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git commit -m "feat(frontend): merge installed skills with origins for update tab"
@@ -388,10 +388,10 @@ skills.noOriginHint
 skills.updateOverwriteHint
 ```
 
-- [ ] **Step 1: i18n 键**
-- [ ] **Step 2: Tab + 列表 + 调用 update commands**
-- [ ] **Step 3: 手动验：装一个新 skill → 出现在「有来源」；点更新再装一次；旧无 origin 在「无来源」**
-- [ ] **Step 4: Commit**
+- [x] **Step 1: i18n 键**
+- [x] **Step 2: Tab + 列表 + 调用 update commands**
+- [x] **Step 3: 手动验：装一个新 skill → 出现在「有来源」；点更新再装一次；旧无 origin 在「无来源」**
+- [x] **Step 4: Commit**
 
 ```bash
 git commit -m "feat(skills-ui): add Updates tab with reinstall actions"
@@ -404,9 +404,9 @@ git commit -m "feat(skills-ui): add Updates tab with reinstall actions"
 **Files:**
 - Modify: `apps/desktop/src/components/SkillsPanel.tsx`
 
-- [ ] **Step 1: `renderInstalledCard` / `renderMachineCard`：若该 skill 能 match 到 origin，显示次要按钮「更新」，调用同一 `update_installed_skill`**
-- [ ] **Step 2: 无 origin 不显示按钮（避免噪音）**
-- [ ] **Step 3: Commit**
+- [x] **Step 1: `renderInstalledCard` / `renderMachineCard`：若该 skill 能 match 到 origin，显示次要按钮「更新」，调用同一 `update_installed_skill`**
+- [x] **Step 2: 无 origin 不显示按钮（避免噪音）**
+- [x] **Step 3: Commit**
 
 ```bash
 git commit -m "feat(skills-ui): add update action on installed and machine cards"
@@ -416,7 +416,7 @@ git commit -m "feat(skills-ui): add update action on installed and machine cards
 
 ### Task 8: 验收与规格状态回写
 
-- [ ] **Step 1: 跑测试**
+- [x] **Step 1: 跑测试**
 
 ```bash
 cargo test -p skills origins:: update::
@@ -425,10 +425,10 @@ node --experimental-strip-types --test apps/desktop/src/lib/skillUpdateRows.test
 
 Expected: all PASS
 
-- [ ] **Step 2: 将 spec 状态改为「v1 已实现」**（若代码已合入），或保持「待实现」并在文末加「实现计划」链接  
+- [x] **Step 2: 将 spec 状态改为「v1 已实现」**（若代码已合入），或保持「待实现」并在文末加「实现计划」链接  
   文件：`docs/superpowers/specs/2026-07-15-skills-update-tab-design.md`
 
-- [ ] **Step 3: Commit docs if changed**
+- [x] **Step 3: Commit docs if changed**
 
 ```bash
 git commit -m "docs(skills): link update-tab plan and mark v1 status"

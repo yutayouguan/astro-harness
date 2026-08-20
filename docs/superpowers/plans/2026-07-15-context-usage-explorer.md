@@ -49,7 +49,7 @@
 - Create: `crates/agent-core/src/context_usage.rs`
 - Modify: `crates/agent-core/src/lib.rs`
 
-- [ ] **Step 1: 写失败测试（模块内 `#[cfg(test)]`）**
+- [x] **Step 1: 写失败测试（模块内 `#[cfg(test)]`）**
 
 先在 `crates/agent-core/src/context_usage.rs` 写最小类型与空 `build_snapshot`，再写测试；或先写测试文件后实现——按下面完整模块落盘。
 
@@ -114,12 +114,12 @@ fn delegate_tool_result_counts_as_subagent() {
 }
 ```
 
-- [ ] **Step 2: 跑测试确认失败**
+- [x] **Step 2: 跑测试确认失败**
 
 Run: `cargo test -p agent estimate_tokens_ceil_div_4 -- --nocapture`  
 Expected: compile fail 或 test not found（尚未实现）
 
-- [ ] **Step 3: 实现 `crates/agent-core/src/context_usage.rs`**
+- [x] **Step 3: 实现 `crates/agent-core/src/context_usage.rs`**
 
 ```rust
 //! 上下文占用分层估算（ceil(chars/4)），与账单 Usage 无关。
@@ -314,12 +314,12 @@ pub use context_usage::{ContextUsageSnapshot, ContextUsageSegment, build_snapsho
 
 把 Step 1 的三个 `#[test]` 放进同文件 `#[cfg(test)] mod tests { ... }`。
 
-- [ ] **Step 4: 跑测试通过**
+- [x] **Step 4: 跑测试通过**
 
 Run: `cargo test -p agent context_usage -- --nocapture`  
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add agent/src/context_usage.rs agent/src/lib.rs
@@ -337,7 +337,7 @@ EOF
 **Files:**
 - Modify: `crates/agent-core/src/loop_.rs`
 
-- [ ] **Step 1: 新增 `system_prompt_layer_chars`（与 `build_system_prompt` 同源）**
+- [x] **Step 1: 新增 `system_prompt_layer_chars`（与 `build_system_prompt` 同源）**
 
 在 `AgentLoop` impl 中，紧挨 `build_system_prompt`，抽取共用装载逻辑或直接复制装载后分别计量：
 
@@ -419,12 +419,12 @@ let recall_chars = dynamic_ctx.render().len();
 (system_chars, memory_chars, skills_chars, recall_chars)
 ```
 
-- [ ] **Step 2: 编译**
+- [x] **Step 2: 编译**
 
 Run: `cargo check -p agent`  
 Expected: OK
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add agent/src/loop_.rs
@@ -442,13 +442,13 @@ EOF
 **Files:**
 - Modify: `crates/agent-core/src/streaming.rs`
 
-- [ ] **Step 1: 扩展 `MultiTurnStreamItem`**
+- [x] **Step 1: 扩展 `MultiTurnStreamItem`**
 
 ```rust
 ContextUsage(crate::context_usage::ContextUsageSnapshot),
 ```
 
-- [ ] **Step 2: 在 `run_multi_turn_stream` 每次拿到 `(history, tools)` 之后、`stream_chat` 之前 emit**
+- [x] **Step 2: 在 `run_multi_turn_stream` 每次拿到 `(history, tools)` 之后、`stream_chat` 之前 emit**
 
 ```rust
 {
@@ -480,14 +480,14 @@ pub tools: &'a [serde_json::Value],
 
 并在 `build_snapshot` 内直接 `for t in input.tools`。
 
-- [ ] **Step 3: 匹配穷尽处补上 `ContextUsage` 臂（若有）**
+- [x] **Step 3: 匹配穷尽处补上 `ContextUsage` 臂（若有）**
 
-- [ ] **Step 4: 编译**
+- [x] **Step 4: 编译**
 
 Run: `cargo check -p agent -p backend`  
 Expected: 可能 backend 因未映射而 fail——Task 4 接上。可先只 `cargo check -p agent`。
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add agent/src/streaming.rs agent/src/context_usage.rs
@@ -507,7 +507,7 @@ EOF
 - Modify: `crates/agent-server/src/grpc/astro_service.rs`
 - Modify: `apps/desktop/src-tauri/src/commands.rs`
 
-- [ ] **Step 1: Proto 追加**
+- [x] **Step 1: Proto 追加**
 
 ```protobuf
 message ContextUsageSegment {
@@ -530,12 +530,12 @@ message ContextUsageEvent {
 ContextUsageEvent context_usage = 13;
 ```
 
-- [ ] **Step 2: 重新编译 proto**
+- [x] **Step 2: 重新编译 proto**
 
 Run: `cargo build -p proto`  
 Expected: OK（build.rs 生成）
 
-- [ ] **Step 3: `multi_turn_to_chat_event` 映射**
+- [x] **Step 3: `multi_turn_to_chat_event` 映射**
 
 ```rust
 MultiTurnStreamItem::ContextUsage(snap) => Some(ChatEvent {
@@ -558,7 +558,7 @@ MultiTurnStreamItem::ContextUsage(snap) => Some(ChatEvent {
 }),
 ```
 
-- [ ] **Step 4: Tauri `ChatStreamEvent`**
+- [x] **Step 4: Tauri `ChatStreamEvent`**
 
 ```rust
 ContextUsage {
@@ -583,12 +583,12 @@ Serialize 字段名：现有 Usage 用 `prompt_tokens` snake；前端 listen 若
 
 在 `App.tsx` 搜 `prompt_tokens` / `promptTokens`——按**现有惯例**对齐（若为 serde rename camelCase 则 DTO 加 `#[serde(rename_all = "camelCase")]`）。
 
-- [ ] **Step 5: 编译**
+- [x] **Step 5: 编译**
 
 Run: `cargo check -p backend` 与 `cargo check -p astro-frontend`（或 `apps/desktop/src-tauri` package 名）  
 Expected: OK
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add proto/proto/astro.proto backend/src/grpc/astro_service.rs apps/desktop/src-tauri/src/commands.rs
@@ -607,7 +607,7 @@ EOF
 - Create: `apps/desktop/src/lib/contextUsage.ts`
 - Create: `apps/desktop/src/lib/contextUsage.test.ts`
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 ```ts
 import assert from "node:assert/strict";
@@ -650,12 +650,12 @@ test("visibleSegments drops zeros and sorts by tokens desc", () => {
 });
 ```
 
-- [ ] **Step 2: 跑测失败**
+- [x] **Step 2: 跑测失败**
 
 Run: `cd frontend && node --experimental-strip-types --test src/lib/contextUsage.test.ts`  
 Expected: FAIL cannot find module
 
-- [ ] **Step 3: 实现 `contextUsage.ts`**
+- [x] **Step 3: 实现 `contextUsage.ts`**
 
 ```ts
 export type ContextUsageSegmentId =
@@ -738,12 +738,12 @@ export function resolveContextWindow(
 }
 ```
 
-- [ ] **Step 4: 跑测通过**
+- [x] **Step 4: 跑测通过**
 
 Run: `cd frontend && node --experimental-strip-types --test src/lib/contextUsage.test.ts`  
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add apps/desktop/src/lib/contextUsage.ts apps/desktop/src/lib/contextUsage.test.ts
@@ -765,7 +765,7 @@ EOF
 - Modify: `apps/desktop/src/styles/chat.css`
 - Modify: `apps/desktop/src/i18n/messages.ts`
 
-- [ ] **Step 1: `ContextUsageBar`**
+- [x] **Step 1: `ContextUsageBar`**
 
 ```tsx
 import { SEGMENT_TONE, visibleSegments, type ContextUsageSnapshot } from "../lib/contextUsage";
@@ -803,19 +803,19 @@ export default function ContextUsageBar({
 
 （布局用 `display:flex`；rest 为剩余窗口。若 `total > window`，rest 为 0。）
 
-- [ ] **Step 2: `ContextUsagePopover`**
+- [x] **Step 2: `ContextUsagePopover`**
 
 含标题、百分比、`~{formatTokenCount(used)} / {formatTokenCount(window)}`、`ContextUsageBar`、分项简表、「查看详情」按钮、关闭。空快照时显示 placeholder 文案。
 
 Props：`snapshot | null`、`windowTokens`、`onClose`、`onViewDetails`、`open`。
 
-- [ ] **Step 3: ChatView**
+- [x] **Step 3: ChatView**
 
 - 将 composer 上下文按钮改为 toggle 浮层（不再直接 `onOpenContext`，或保留：popover 内「查看详情」才 `onOpenContext`）。
 - `contextUsagePercent` 来自 snap；无 snap 时可不显示 % 数字。
 - 传入新 prop：`contextUsage: ContextUsageSnapshot | null`、`contextWindow`。
 
-- [ ] **Step 4: i18n 键**
+- [x] **Step 4: i18n 键**
 
 ```ts
 "chat.contextUsage": ... // 已有
@@ -834,11 +834,11 @@ Props：`snapshot | null`、`windowTokens`、`onClose`、`onViewDetails`、`open
 
 英文对称添加。
 
-- [ ] **Step 5: CSS**（`chat.css`）
+- [x] **Step 5: CSS**（`chat.css`）
 
 使用 `--menu-glass-bg`、`--menu-glass-border`、`--menu-glass-shadow`；圆角、padding 对齐现有 popover。
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add apps/desktop/src/components/ContextUsageBar.tsx \
@@ -863,7 +863,7 @@ EOF
 - Modify: `apps/desktop/src/styles/chat-right-panel.css`
 - Modify: `apps/desktop/src/i18n/messages.ts`
 
-- [ ] **Step 1: `ContextExplorer` UI**
+- [x] **Step 1: `ContextExplorer` UI**
 
 结构（参考 Context Explorer）：
 1. 指标行：`sessionLabel`、窗口、`~tokens`
@@ -874,7 +874,7 @@ EOF
 
 环形：圆周 `C = 2 * π * r`；每段 `(tokens/window)*C`；剩余用 mute 色。
 
-- [ ] **Step 2: ChatRightPanel**
+- [x] **Step 2: ChatRightPanel**
 
 ```tsx
 {tab === "context" && (
@@ -891,11 +891,11 @@ EOF
 
 新增 props：`contextUsage`、`contextWindow`。
 
-- [ ] **Step 3: CSS**
+- [x] **Step 3: CSS**
 
 `.ctx-explorer`、`.ctx-donut`、`.ctx-explorer-row` 等；暗/亮依赖现有变量。
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add apps/desktop/src/components/ContextExplorer.tsx \
@@ -917,7 +917,7 @@ EOF
 - Modify: `apps/desktop/src/App.tsx`
 - Modify: `apps/desktop/src/components/ChatAgentInfo.tsx`
 
-- [ ] **Step 1: state**
+- [x] **Step 1: state**
 
 ```ts
 const [contextUsage, setContextUsage] = useState<ContextUsageSnapshot | null>(null);
@@ -933,7 +933,7 @@ if (payload.type === "contextUsage" /* 或实际字段 */) {
 
 切换 session 时 **保留上一会话策略**：按 spec「切会话可清空」——`setContextUsage(null)` on session change。
 
-- [ ] **Step 2: contextWindow**
+- [x] **Step 2: contextWindow**
 
 从当前选中 provider 模型列表取：
 
@@ -946,7 +946,7 @@ const contextWindow = resolveContextWindow(
 
 若 App 尚无 model meta，用已有 `get_cached_provider_models` / ModelPicker 缓存；最小实现：先 `invoke` 一次或复用现有 provider state。找不到则 128000。
 
-- [ ] **Step 3: 百分比**
+- [x] **Step 3: 百分比**
 
 ```ts
 contextUsagePercent={
@@ -958,11 +958,11 @@ contextUsagePercent={
 
 去掉硬编码 128k 与纯 chars 回落作为 **有 snap 时的主路径**；无 snap 可继续粗估，但 % 旁不假装有分层。
 
-- [ ] **Step 4: 传给 ChatView / ChatRightPanel**
+- [x] **Step 4: 传给 ChatView / ChatRightPanel**
 
 `onOpenContext` 仍设 `tab=context` + open。Popover「查看详情」调同一回调并关闭浮层。
 
-- [ ] **Step 5: ChatAgentInfo**
+- [x] **Step 5: ChatAgentInfo**
 
 删除或缩小原三维 usage + 单色进度条；改为一行：
 
@@ -974,7 +974,7 @@ contextUsagePercent={
 
 或显示 `usagePercent` 摘要。
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add apps/desktop/src/App.tsx apps/desktop/src/components/ChatAgentInfo.tsx
@@ -992,7 +992,7 @@ EOF
 **Files:**
 - Modify: `docs/superpowers/specs/2026-07-15-context-usage-explorer-design.md`（状态 → 已实现）
 
-- [ ] **Step 1: 回归测试**
+- [x] **Step 1: 回归测试**
 
 ```bash
 cargo test -p agent context_usage
@@ -1003,14 +1003,14 @@ cd frontend && npx tsc -b --pretty false
 
 Expected: all OK
 
-- [ ] **Step 2: 手工验收清单**
+- [x] **Step 2: 手工验收清单**
 
 1. 发一轮对话后 Composer 出现 %，点开浮层见分段条与简表  
 2. 「查看详情」打开右栏上下文 Tab，环图中心 % 与 Composer 一致  
 3. 时间线仍在 Explorer 下方  
 4. 有 MCP 工具时出现 MCP 段；有过 delegate 后出现子 Agent 段  
 
-- [ ] **Step 3: 更新 spec 状态为已实现并 commit**
+- [x] **Step 3: 更新 spec 状态为已实现并 commit**
 
 ```bash
 git add docs/superpowers/specs/2026-07-15-context-usage-explorer-design.md

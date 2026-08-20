@@ -38,7 +38,7 @@
 - Create: `apps/desktop/src/lib/resolveActivityIO.ts`
 - Create: `apps/desktop/src/lib/resolveActivityIO.test.ts`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```ts
 import { test } from "node:test";
@@ -91,7 +91,7 @@ test("empty activity yields empty io", () => {
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 ```bash
 cd frontend && node --test src/lib/resolveActivityIO.test.ts
@@ -99,7 +99,7 @@ cd frontend && node --test src/lib/resolveActivityIO.test.ts
 
 Expected: FAIL (module not found)
 
-- [ ] **Step 3: Extend type + implement helper**
+- [x] **Step 3: Extend type + implement helper**
 
 In `apps/desktop/src/types.ts`，把 `ChatActivity` 改为：
 
@@ -155,7 +155,7 @@ export function activityHasBody(activity: ChatActivity): boolean {
 }
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 ```bash
 cd frontend && node --test src/lib/resolveActivityIO.test.ts
@@ -163,7 +163,7 @@ cd frontend && node --test src/lib/resolveActivityIO.test.ts
 
 Expected: 4 pass
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add apps/desktop/src/types.ts apps/desktop/src/lib/resolveActivityIO.ts apps/desktop/src/lib/resolveActivityIO.test.ts
@@ -181,7 +181,7 @@ EOF
 **Files:**
 - Modify: `apps/desktop/src/App.tsx`
 
-- [ ] **Step 1: Update `flushToolDeltas` activity create/update**
+- [x] **Step 1: Update `flushToolDeltas` activity create/update**
 
 在 `flushToolDeltas` 内，新建活动时改为同时写 `input`（保留 `detail` 兼容）：
 
@@ -213,7 +213,7 @@ activities[idx] = {
 };
 ```
 
-- [ ] **Step 2: Update `tool_call` activity object**
+- [x] **Step 2: Update `tool_call` activity object**
 
 ```ts
 const activity: ChatActivity = {
@@ -231,7 +231,7 @@ const activity: ChatActivity = {
 };
 ```
 
-- [ ] **Step 3: Update `memory_update` activity object**
+- [x] **Step 3: Update `memory_update` activity object**
 
 ```ts
 const activity: ChatActivity = {
@@ -245,7 +245,7 @@ const activity: ChatActivity = {
 };
 ```
 
-- [ ] **Step 4: Typecheck**
+- [x] **Step 4: Typecheck**
 
 ```bash
 cd frontend && npx tsc -b --pretty false
@@ -253,7 +253,7 @@ cd frontend && npx tsc -b --pretty false
 
 Expected: exit 0
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add apps/desktop/src/App.tsx
@@ -271,7 +271,7 @@ EOF
 **Files:**
 - Modify: `apps/desktop/src/i18n/messages.ts`
 
-- [ ] **Step 1: Add Chinese keys**（紧挨 `chat.activityCollapse` 之后）
+- [x] **Step 1: Add Chinese keys**（紧挨 `chat.activityCollapse` 之后）
 
 ```ts
   "chat.activityGroup": "工具与活动 · {n}",
@@ -281,7 +281,7 @@ EOF
   "chat.activityOutput": "Output",
 ```
 
-- [ ] **Step 2: Add English keys**（英文块对应位置）
+- [x] **Step 2: Add English keys**（英文块对应位置）
 
 ```ts
   "chat.activityGroup": "Tools & activity · {n}",
@@ -293,7 +293,7 @@ EOF
 
 （标签用 Input/Output 英文词，符合常见工具调用 UI；如需中文可再改。）
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add apps/desktop/src/i18n/messages.ts
@@ -314,7 +314,7 @@ EOF
 - Modify: `apps/desktop/src/components/ChatView.tsx`
 - Modify: `apps/desktop/src/styles/chat.css`
 
-- [ ] **Step 1: Create `ActivityGroup.tsx`**
+- [x] **Step 1: Create `ActivityGroup.tsx`**
 
 ```tsx
 /** 气泡内活动列表父折叠。 */
@@ -384,7 +384,7 @@ export default function ActivityGroup({
 }
 ```
 
-- [ ] **Step 2: Rewrite `MsgActivity.tsx`**
+- [x] **Step 2: Rewrite `MsgActivity.tsx`**
 
 完整替换为：
 
@@ -509,7 +509,7 @@ export default function MsgActivity({
 
 注意：去掉左侧纯文字 `activity.kind` 大写标签，改用图标（spec：按 kind 图标）。若希望保留文字标签，可在图标旁再加 `span.msg-activity-kind`，但默认按本实现（图标优先）。
 
-- [ ] **Step 3: Wire `ActivityCards` in `ChatView.tsx`**
+- [x] **Step 3: Wire `ActivityCards` in `ChatView.tsx`**
 
 1. 增加 import：
 
@@ -543,7 +543,7 @@ function ActivityCards({
 }
 ```
 
-- [ ] **Step 4: CSS — 在 `.msg-activities` 之前或附近增加父级样式；调整子项**
+- [x] **Step 4: CSS — 在 `.msg-activities` 之前或附近增加父级样式；调整子项**
 
 在 `chat.css` 的 `.msg-activities` 规则前插入：
 
@@ -656,7 +656,7 @@ function ActivityCards({
 }
 ```
 
-- [ ] **Step 5: Typecheck + unit tests**
+- [x] **Step 5: Typecheck + unit tests**
 
 ```bash
 cd frontend && node --test src/lib/resolveActivityIO.test.ts && npx tsc -b --pretty false
@@ -666,7 +666,7 @@ Expected: tests pass；tsc exit 0。
 
 若 `IconTools` / `IconSkills` / `IconMemory` 的 props 不含 `aria-hidden`，去掉 spread，仅传 `width`/`height`。
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add apps/desktop/src/components/ActivityGroup.tsx apps/desktop/src/components/MsgActivity.tsx apps/desktop/src/components/ChatView.tsx apps/desktop/src/styles/chat.css
@@ -684,7 +684,7 @@ EOF
 **Files:**
 - Modify: `docs/superpowers/specs/2026-07-13-activity-group-toolcall-polish-design.md`
 
-- [ ] **Step 1: Manual checklist**
+- [x] **Step 1: Manual checklist**
 
 1. normal：父级默认折；展开后子项默认折；点子项见 Input/Output  
 2. detailed：父级默认开；子项仍默认折  
@@ -693,11 +693,11 @@ EOF
 5. 思考块 / 右侧时间线不变  
 6. 旧消息仅有 `detail` 仍可展开看到内容  
 
-- [ ] **Step 2: Mark spec implemented**
+- [x] **Step 2: Mark spec implemented**
 
 `**状态:** 已批准` → `**状态:** 已批准 / 已实现`
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add docs/superpowers/specs/2026-07-13-activity-group-toolcall-polish-design.md

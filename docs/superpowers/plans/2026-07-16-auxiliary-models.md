@@ -64,7 +64,7 @@
 - Produces: `set_auxiliary_route(base, kind, route)`
 - Produces: `reset_all_auxiliary_routes(base)`
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 在 `crates/agent-memory/src/config.rs` tests 增加：
 
@@ -110,12 +110,12 @@ fn reset_all_routes_keeps_background_review_enabled() {
 }
 ```
 
-- [ ] **Step 2: 运行并确认失败**
+- [x] **Step 2: 运行并确认失败**
 
 Run: `cargo test -p memory config::tests -- --nocapture`  
 Expected: compile FAIL，字段与 API 尚不存在。
 
-- [ ] **Step 3: 扩展类型与稳定 key**
+- [x] **Step 3: 扩展类型与稳定 key**
 
 ```rust
 #[derive(Debug, Clone, Deserialize, PartialEq, Eq, Default)]
@@ -169,16 +169,16 @@ impl AuxiliaryConfig {
 
 让 `resolve_auxiliary` 调用 `aux.route(kind)`。
 
-- [ ] **Step 4: 实现 route 写回与全部重置**
+- [x] **Step 4: 实现 route 写回与全部重置**
 
 `set_auxiliary_route` 在 `["auxiliary", kind.config_key()]` mapping 写入 `provider/model`；`reset_all_auxiliary_routes` 循环写五项 `auto/auto`，一次 load、一次原子 save，不能调用五次 save。
 
-- [ ] **Step 5: 运行 memory 测试**
+- [x] **Step 5: 运行 memory 测试**
 
 Run: `cargo test -p memory -- --nocapture`  
 Expected: PASS。
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add memory/src/config.rs memory/src/lib.rs
@@ -205,7 +205,7 @@ git commit -m "feat(memory): configure five auxiliary model routes"
 - Produces: `resolve_auxiliary_targets(kind, primary) -> AuxiliaryTargets`
 - Produces: 每次 `start_chat` 向 AgentLoop 更新五类已解析目标。
 
-- [ ] **Step 1: 定义 DTO**
+- [x] **Step 1: 定义 DTO**
 
 Rust 与 TypeScript 保持 camelCase：
 
@@ -246,7 +246,7 @@ export type AuxiliaryTaskDto = {
 };
 ```
 
-- [ ] **Step 2: 实现 settings commands**
+- [x] **Step 2: 实现 settings commands**
 
 `task` 通过穷举 match 转成 `AuxiliaryKind`，未知值返回 `unknown auxiliary task`。`set_auxiliary_route` 只接受 `(auto, auto)` 或两个非空值，不允许半自动组合，避免 provider/model 来源不一致：
 
@@ -269,7 +269,7 @@ fn parse_route(provider: String, model: String) -> Result<AuxiliaryRoute, String
 
 显式 `provider` 统一保存 UI Provider ID。`get_auxiliary_settings` 用 `get_providers_state` 检查 provider enabled/hasApiKey，并生成展示标签；模型缓存缺失不判 unavailable，避免离线误报。
 
-- [ ] **Step 3: 实现运行时目标解析**
+- [x] **Step 3: 实现运行时目标解析**
 
 ```rust
 pub struct ResolvedTarget {
@@ -287,7 +287,7 @@ pub struct AuxiliaryTargets {
 
 `auto` 时 preferred 就是 primary 且 fallback=None。显式 route 查 UI provider ID；provider 不存在、禁用或无凭据时 preferred=primary；有效时 preferred=explicit，若与 primary 不同则 fallback=Some(primary)。
 
-- [ ] **Step 4: 定义跨进程目标并随 ChatRequest 透传**
+- [x] **Step 4: 定义跨进程目标并随 ChatRequest 透传**
 
 在 `common/src/auxiliary_target.rs`：
 
@@ -322,12 +322,12 @@ pub fn auxiliary_targets(&self, task: AuxiliaryTask) -> Vec<ChatTarget>
 
 没有传输目标时返回当前主 `ChatTarget`，保持旧客户端兼容。
 
-- [ ] **Step 5: 注册 commands 并编译**
+- [x] **Step 5: 注册 commands 并编译**
 
 Run: `cargo check -p astro-agent`  
 Expected: PASS。
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add apps/desktop/src-tauri/src/auxiliary_commands.rs \
@@ -353,7 +353,7 @@ git commit -m "feat(settings): expose auxiliary model routes"
 - Consumes Task 2 commands/DTO.
 - Produces five-row settings panel and provider-grouped model chooser.
 
-- [ ] **Step 1: 实现 hook**
+- [x] **Step 1: 实现 hook**
 
 hook 暴露：
 
@@ -371,7 +371,7 @@ type UseAuxiliarySettings = {
 
 每个 mutation 使用 Tauri 返回的完整 settings 替换本地值；失败保留旧值并设置 error。
 
-- [ ] **Step 2: 实现五行面板**
+- [x] **Step 2: 实现五行面板**
 
 固定顺序：
 
@@ -387,22 +387,22 @@ const TASK_IDS: AuxiliaryTaskId[] = [
 
 每行显示 i18n 名称/说明、`displayLabel`、不可用警告、“设为主模型”和“更改”。顶部“全部重置为主模型”调用 `resetAll`。
 
-- [ ] **Step 3: 实现 Provider/Model 选择**
+- [x] **Step 3: 实现 Provider/Model 选择**
 
 加载 `get_providers_state`，仅展示 enabled provider；展开 provider 时先用 `get_cached_provider_models`，为空再调用 `list_provider_models`。选择模型后一次提交 provider ID + model ID，不修改主模型。
 
-- [ ] **Step 4: 挂载设置导航并补 i18n**
+- [x] **Step 4: 挂载设置导航并补 i18n**
 
 新增“辅助模型”设置入口；不得把五项塞入 Provider Media tab。中英文文案覆盖五任务、自动、设为主模型、更改、全部重置、不可用降级说明。
 
-- [ ] **Step 5: 构建与冒烟**
+- [x] **Step 5: 构建与冒烟**
 
 Run: `cd frontend && npm run build`  
 Expected: PASS。
 
 手工检查：五行默认均显示主模型；指定模型后重启仍保留；全部重置不改变 `background_review_enabled`。
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add apps/desktop/src/hooks/settings/useAuxiliarySettings.ts \
@@ -422,7 +422,7 @@ git commit -m "feat(settings): add auxiliary models panel"
 **Interfaces:**
 - Consumes: `resolve_auxiliary_targets(AuxiliaryKind::Compaction, primary)`.
 
-- [ ] **Step 1: 抽取可测试的两目标执行函数**
+- [x] **Step 1: 抽取可测试的两目标执行函数**
 
 ```rust
 async fn summarize_with_targets(
@@ -441,11 +441,11 @@ async fn summarize_with_targets(
 
 新增纯函数 `next_compaction_target(targets, failed_index)`，测试 preferred 失败后返回 fallback、fallback 失败后返回 `None`；实际 provider 调用按该顺序循环，避免依赖网络 mock。
 
-- [ ] **Step 2: 接入 compaction**
+- [x] **Step 2: 接入 compaction**
 
 用 active UI provider 构造 primary，再解析 `AuxiliaryKind::Compaction`。只有两次模型调用均失败才进入现有启发式摘要，并保持 `CompactChatResultDto.degraded = true`。
 
-- [ ] **Step 3: 验证**
+- [x] **Step 3: 验证**
 
 Run: `cargo test -p astro-agent compaction -- --nocapture`  
 Expected: PASS。
@@ -453,7 +453,7 @@ Expected: PASS。
 Run: `cargo check -p astro-agent`  
 Expected: PASS。
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add apps/desktop/src-tauri/src/compaction_commands.rs
@@ -472,19 +472,19 @@ git commit -m "feat(compaction): route summaries through auxiliary model"
 - Keeps: `ASTRO_SMART_APPROVAL` as master enable switch.
 - Produces: preferred/fallback completion targets accepted by approval evaluator.
 
-- [ ] **Step 1: 写失败回退测试**
+- [x] **Step 1: 写失败回退测试**
 
 在 `smart_approval.rs` tests 增加带 mock completion closure 的测试：preferred 返回 provider error，fallback 返回 `ASK`，断言 verdict 为 Ask；两者失败时返回原始 Ask，不自动 allow。
 
-- [ ] **Step 2: 重构 evaluator 接受目标序列**
+- [x] **Step 2: 重构 evaluator 接受目标序列**
 
 将单个 session provider 参数改为 `&[ApprovalTarget]`，最多两个目标。循环尝试，首个可解析 verdict 返回；全部失败返回 error，由调用方保留原 Ask。
 
-- [ ] **Step 3: 在 tools_exec 解析 SmartApproval route**
+- [x] **Step 3: 在 tools_exec 解析 SmartApproval route**
 
 保持 `smart_approval_enabled()` 判断；开启后直接读取 Task 2 已注入 AgentLoop 的 `AuxiliaryTask::SmartApproval` 目标序列。agent 不读取 keyring，也不依赖 `apps/desktop/src-tauri`。
 
-- [ ] **Step 4: 运行 agent 测试**
+- [x] **Step 4: 运行 agent 测试**
 
 Run: `cargo test -p agent control::smart_approval -- --nocapture`  
 Expected: PASS。
@@ -492,7 +492,7 @@ Expected: PASS。
 Run: `cargo test -p agent -- --nocapture`  
 Expected: PASS。
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add agent/src/control/smart_approval.rs agent/src/streaming/tools_exec.rs
@@ -512,19 +512,19 @@ git commit -m "feat(approval): use configured auxiliary model"
 - Dreaming uses `AuxiliaryKind::Dreaming`.
 - Background review uses `AuxiliaryKind::BackgroundReview`.
 
-- [ ] **Step 1: 修复 dreaming 静默混用**
+- [x] **Step 1: 修复 dreaming 静默混用**
 
 删除 `find_provider_by_backend(...).unwrap_or(ui)`。显式 provider ID 必须通过统一 resolver：不可用时明确选择 primary；有效时使用该 provider 自己的 endpoint/key/model。首选调用失败后重试 primary 一次。
 
-- [ ] **Step 2: 修复 background review 凭据**
+- [x] **Step 2: 修复 background review 凭据**
 
 当前 review job 不能用 session `api_key/base_url` 搭配显式 provider backend。将 job 从 AgentLoop 的 `AuxiliaryTask::BackgroundReview` 目标序列复制完整 `ChatTarget`；按 preferred、fallback 顺序调用。两次失败只记录 review failure event，不影响 Done。
 
-- [ ] **Step 3: 增加测试**
+- [x] **Step 3: 增加测试**
 
 测试显式路由使用显式目标凭据、显式失败回退 session 目标、两次失败不 panic。
 
-- [ ] **Step 4: 验证**
+- [x] **Step 4: 验证**
 
 Run: `cargo test -p agent exec::memory_review -- --nocapture`  
 Expected: PASS。
@@ -532,7 +532,7 @@ Expected: PASS。
 Run: `cargo check -p astro-agent`  
 Expected: PASS。
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add apps/desktop/src-tauri/src/dreaming_commands.rs \
@@ -559,7 +559,7 @@ git commit -m "fix(auxiliary): retry dreaming and review with main model"
 - Produces: `SessionMetadataChanged { session_id, title }`.
 - Produces command: `regenerate_session_title`.
 
-- [ ] **Step 1: 写标题纯函数测试**
+- [x] **Step 1: 写标题纯函数测试**
 
 ```rust
 #[test]
@@ -575,7 +575,7 @@ fn empty_title_is_rejected() {
 
 另加 Store 并发测试：生成任务读取空标题后，手动标题先写入，`set_session_title_if_empty` 返回 false 且保留手动标题。
 
-- [ ] **Step 2: 实现 title generation executor**
+- [x] **Step 2: 实现 title generation executor**
 
 `spawn_title_generation_after_turn`：
 
@@ -587,23 +587,23 @@ fn empty_title_is_rejected() {
 6. `sanitize_title` 清理 Markdown、引号、换行并截断 40 Unicode chars。
 7. `set_session_title_if_empty` 成功后向 SessionEvent hub 发送 metadata changed。
 
-- [ ] **Step 3: 扩展 proto 和事件桥**
+- [x] **Step 3: 扩展 proto 和事件桥**
 
 在 `SessionEvent` oneof 增加 `session_metadata_changed`，载荷至少含 `session_id` 和 `title`。同步 backend hub、Tauri DTO 与前端类型。运行 proto 生成使用仓库现有 `build.rs`，不得手改生成文件。
 
-- [ ] **Step 4: 在首轮 Done 后触发**
+- [x] **Step 4: 在首轮 Done 后触发**
 
 `astro_service.rs` 的 `is_done` 分支与 background review 并列调用 spawn。任务本身通过 title 是否为空和 first turn 是否完整保证只执行一次。
 
-- [ ] **Step 5: 实现手动重新生成 command**
+- [x] **Step 5: 实现手动重新生成 command**
 
 Tauri command 复用相同 prompt/清理，但最终调用 `set_session_title` 强制覆盖。无完整首轮返回明确错误。成功后 emit metadata event。
 
-- [ ] **Step 6: 前端刷新和启用菜单**
+- [x] **Step 6: 前端刷新和启用菜单**
 
 `ChatSessionList` 收到 metadata event 后更新匹配项 summary，或调用 `loadSessions()`；启用会话管理计划中暂时 disabled 的“重新生成标题”。生成失败用非阻塞错误。
 
-- [ ] **Step 7: 验证**
+- [x] **Step 7: 验证**
 
 Run:
 
@@ -617,7 +617,7 @@ cd frontend && npm run build
 
 Expected: 全部 PASS。
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add agent/src/exec/title_generation.rs agent/src/exec/mod.rs \
@@ -653,7 +653,7 @@ cd frontend && npm run build
 
 Expected: 全部 PASS。
 
-- [ ] **Step 3: 手工集成冒烟**
+- [x] **Step 3: 手工集成冒烟**
 
 验证：
 

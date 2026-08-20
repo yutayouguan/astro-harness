@@ -53,7 +53,7 @@
   - `HookOutcome::ReplaceText(String)` / `KeepGoing(String)`
   - `is_mutating_hook` 含上述 mutating 名
 
-- [ ] **Step 1: 写失败测试（Outcome 短路）**
+- [x] **Step 1: 写失败测试（Outcome 短路）**
 
 在 `crates/agent-hooks/src/plugin.rs` 的 `#[cfg(test)]` 增加：
 
@@ -76,7 +76,7 @@ fn keep_going_short_circuits() {
 }
 ```
 
-- [ ] **Step 2: 跑测确认未实现时失败/编译失败**
+- [x] **Step 2: 跑测确认未实现时失败/编译失败**
 
 ```bash
 cargo test -p hooks transform_replace_text_short_circuits -- --nocapture
@@ -84,7 +84,7 @@ cargo test -p hooks transform_replace_text_short_circuits -- --nocapture
 
 Expected: 编译失败（缺变体/常量）或 FAIL
 
-- [ ] **Step 3: 实现常量与 Outcome**
+- [x] **Step 3: 实现常量与 Outcome**
 
 `names.rs` 增加 7 常量；`is_mutating_hook`：
 
@@ -105,7 +105,7 @@ KeepGoing(String),
 
 `ui.rs`：`UI_HOOK_NAMES` 追加 7 名；若有 `outcome` 格式化函数，为 `ReplaceText`/`KeepGoing` 增加可读字符串（如 `replace_text` / `keep_going`）。
 
-- [ ] **Step 4: 跑通 hooks 测试**
+- [x] **Step 4: 跑通 hooks 测试**
 
 ```bash
 cargo test -p hooks
@@ -113,7 +113,7 @@ cargo test -p hooks
 
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add hooks docs/hooks.md  # docs 可留 Task 8
@@ -136,17 +136,17 @@ EOF
 - Consumes: `TRANSFORM_TOOL_RESULT`、`HookOutcome::ReplaceText`
 - Produces: 工具返回字符串可被钩子替换后再记录 / `POST_TOOL_CALL`
 
-- [ ] **Step 1: 写失败集成测**
+- [x] **Step 1: 写失败集成测**
 
 注册 bus：`TRANSFORM_TOOL_RESULT` → `ReplaceText("REDACTED")`；跑一个简单工具；断言结果与 `POST_TOOL_CALL` payload 为 `REDACTED`。
 
-- [ ] **Step 2: 跑测见红**
+- [x] **Step 2: 跑测见红**
 
 ```bash
 cargo test -p agent --test rig_agent_test <test_name> -- --nocapture
 ```
 
-- [ ] **Step 3: 实现**
+- [x] **Step 3: 实现**
 
 在工具 `dispatch` 返回 `result` 后：
 
@@ -167,7 +167,7 @@ let result = match self.fire_hook(TRANSFORM_TOOL_RESULT, HookPayload {
 
 写盘标记：若 `name == "terminal"` 或 `file_ops` 且 args 表示写入，设 `self.turn_wrote_disk = true`（字段加在 `AgentLoop`，每 `begin_user_turn` 清零）。本 Task 至少落地标记 API，供 Task 7 使用。
 
-- [ ] **Step 4: 测试通过 + Commit**
+- [x] **Step 4: 测试通过 + Commit**
 
 ```bash
 cargo test -p agent --test rig_agent_test
@@ -190,11 +190,11 @@ EOF
 - Consumes: `TRANSFORM_TERMINAL_OUTPUT`
 - Produces: 截断前可替换的 raw 输出
 
-- [ ] **Step 1: 失败测** — 钩子把 raw 换成短串，断言最终结果不含超长 raw、含替换串
+- [x] **Step 1: 失败测** — 钩子把 raw 换成短串，断言最终结果不含超长 raw、含替换串
 
-- [ ] **Step 2: 实现接线** — 截断前 `fire`；`ReplaceText` 替换后再截断/脱敏
+- [x] **Step 2: 实现接线** — 截断前 `fire`；`ReplaceText` 替换后再截断/脱敏
 
-- [ ] **Step 3: `cargo test -p agent`（相关）+ `cargo test -p tools`（若动 terminal）+ Commit**
+- [x] **Step 3: `cargo test -p agent`（相关）+ `cargo test -p tools`（若动 terminal）+ Commit**
 
 ```bash
 git commit -m "$(cat <<'EOF'
@@ -215,9 +215,9 @@ EOF
 - Consumes: `TRANSFORM_LLM_OUTPUT`、`ReplaceText`
 - Produces: 最终 assistant 文本可被替换
 
-- [ ] **Step 1: 失败测** — recording/bus 断言顺序：`transform_llm_output` 在 `post_llm_call` 前；文本被替换
+- [x] **Step 1: 失败测** — recording/bus 断言顺序：`transform_llm_output` 在 `post_llm_call` 前；文本被替换
 
-- [ ] **Step 2: 实现**
+- [x] **Step 2: 实现**
 
 ```rust
 let text = match fire(TRANSFORM_LLM_OUTPUT, payload_with_message) {
@@ -227,7 +227,7 @@ let text = match fire(TRANSFORM_LLM_OUTPUT, payload_with_message) {
 fire(POST_LLM_CALL, ...);
 ```
 
-- [ ] **Step 3: 测试通过 + Commit**
+- [x] **Step 3: 测试通过 + Commit**
 
 ```bash
 git commit -m "$(cat <<'EOF'
@@ -248,13 +248,13 @@ EOF
 - Consumes: `PRE_APPROVAL_REQUEST`、`POST_APPROVAL_RESPONSE`（观察，忽略返回值除 Continue）
 - Payload: `message`=command；`detail` 含 surface/`ask`/`smart`/choice
 
-- [ ] **Step 1: 失败测** — recording 捕获审批前后顺序：`pre_approval_request` → … → `post_approval_response`
+- [x] **Step 1: 失败测** — recording 捕获审批前后顺序：`pre_approval_request` → … → `post_approval_response`
 
-- [ ] **Step 2: 实现**
+- [x] **Step 2: 实现**
 
 在分类为 `Ask` 且即将 smart/park 前 fire pre；在 Auto 降级、Deny、或 park 返回后 fire post（`detail` 写明 `auto`/`deny`/`allow`/`timeout` 等）。
 
-- [ ] **Step 3: 测试 + Commit**
+- [x] **Step 3: 测试 + Commit**
 
 ```bash
 git commit -m "$(cat <<'EOF'
@@ -276,11 +276,11 @@ EOF
 - Consumes: `SUBAGENT_START`
 - Produces: 每个 child 在 stop 前必有 start（有 hook bus 时）
 
-- [ ] **Step 1: 失败测** — 顺序 `subagent_start` → `subagent_stop`
+- [x] **Step 1: 失败测** — 顺序 `subagent_start` → `subagent_stop`
 
-- [ ] **Step 2: 实现** — `run_delegate` 开头 fire start（payload：父 session、任务摘要）；现有 stop 保留
+- [x] **Step 2: 实现** — `run_delegate` 开头 fire start（payload：父 session、任务摘要）；现有 stop 保留
 
-- [ ] **Step 3: 测试 + Commit**
+- [x] **Step 3: 测试 + Commit**
 
 ```bash
 git commit -m "$(cat <<'EOF'
@@ -302,12 +302,12 @@ EOF
 - Consumes: `PRE_VERIFY`、`KeepGoing`、`MAX_VERIFY_ATTEMPTS = 2`
 - Produces: KeepGoing 时注入提示并再进 API 循环
 
-- [ ] **Step 1: 失败测**
+- [x] **Step 1: 失败测**
 
 1. 本轮无写盘 → 不出现 `pre_verify`
 2. 写盘 + KeepGoing → 再出现一轮 `pre_api_request`，且最多 2 次 verify 尝试
 
-- [ ] **Step 2: 实现**
+- [x] **Step 2: 实现**
 
 在「无 tool_calls 的最终 assistant 文本」分支、调用 `transform_llm_output` / `POST_LLM_CALL` 之前：
 
@@ -323,7 +323,7 @@ if agent.turn_wrote_disk() && verify_attempt < MAX {
 }
 ```
 
-- [ ] **Step 3: 全量 agent 相关测 + Commit**
+- [x] **Step 3: 全量 agent 相关测 + Commit**
 
 ```bash
 cargo test -p agent
@@ -342,9 +342,9 @@ EOF
 - Modify: `docs/hooks.md`（表 + 顺序图）
 - Verify: 全量测试
 
-- [ ] **Step 1: 更新 `docs/hooks.md`** — 写入 7 钩子、顺序、`ReplaceText`/`KeepGoing` 说明
+- [x] **Step 1: 更新 `docs/hooks.md`** — 写入 7 钩子、顺序、`ReplaceText`/`KeepGoing` 说明
 
-- [ ] **Step 2: 回归**
+- [x] **Step 2: 回归**
 
 ```bash
 cargo test -p hooks
@@ -354,7 +354,7 @@ cargo check -p backend
 
 Expected: PASS
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git commit -m "$(cat <<'EOF'

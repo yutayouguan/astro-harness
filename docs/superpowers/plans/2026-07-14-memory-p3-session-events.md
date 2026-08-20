@@ -43,7 +43,7 @@
 - Modify: `proto/proto/astro.proto`
 - Regenerates via `proto/build.rs` when dependents build
 
-- [ ] **Step 1: 在 `service AstroService` 增加 RPC，并追加 message**
+- [x] **Step 1: 在 `service AstroService` 增加 RPC，并追加 message**
 
 在 `ListFiles` 后增加：
 
@@ -87,7 +87,7 @@ message PendingChangedEvent {
 
 注意：已有 `message MemoryUpdateEvent`（Chat 用，无 `d`）；新类型名是 **`MemoryUpdatedEvent`**（带 `d`），勿混淆。
 
-- [ ] **Step 2: 编译验证**
+- [x] **Step 2: 编译验证**
 
 ```bash
 cargo check -p proto 2>&1 | tail -20
@@ -95,7 +95,7 @@ cargo check -p proto 2>&1 | tail -20
 
 Expected: 成功（或 workspace 中实际 proto crate 名；若无单独 `proto` package，则 `cargo check -p backend`）
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add proto/proto/astro.proto
@@ -115,7 +115,7 @@ EOF
 - Modify: `crates/agent-server/src/lib.rs`（`mod session_events; pub use …`）
 - Test: unit tests in `session_events.rs`
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 ```rust
 #[cfg(test)]
@@ -186,7 +186,7 @@ mod tests {
 }
 ```
 
-- [ ] **Step 2: 运行测试 — 期望 FAIL**
+- [x] **Step 2: 运行测试 — 期望 FAIL**
 
 ```bash
 cargo test -p backend session_events:: -- --nocapture 2>&1 | tail -30
@@ -194,7 +194,7 @@ cargo test -p backend session_events:: -- --nocapture 2>&1 | tail -30
 
 Expected: 找不到 `SessionEventHub` 或 module
 
-- [ ] **Step 3: 最小实现**
+- [x] **Step 3: 最小实现**
 
 `crates/agent-server/src/session_events.rs` 要点：
 
@@ -285,7 +285,7 @@ pub fn to_proto(ev: &SessionEventMsg) -> proto::SessionEvent {
 
 若 backend 无 `chrono`，用 `std::time` 毫秒。
 
-- [ ] **Step 4: 测试通过**
+- [x] **Step 4: 测试通过**
 
 ```bash
 cargo test -p backend session_events:: -- --nocapture 2>&1 | tail -20
@@ -293,7 +293,7 @@ cargo test -p backend session_events:: -- --nocapture 2>&1 | tail -20
 
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add backend/src/session_events.rs backend/src/lib.rs
@@ -312,7 +312,7 @@ EOF
 - Modify: `crates/agent-server/src/grpc/astro_service.rs`
 - Modify: hub 构造处（`AstroServiceImpl::new` / `main`）
 
-- [ ] **Step 1: `AstroServiceImpl` 增加字段**
+- [x] **Step 1: `AstroServiceImpl` 增加字段**
 
 ```rust
 session_events: SessionEventHub,
@@ -320,7 +320,7 @@ session_events: SessionEventHub,
 
 构造时 `SessionEventHub::new(64)`。
 
-- [ ] **Step 2: 实现 RPC**
+- [x] **Step 2: 实现 RPC**
 
 ```rust
 async fn subscribe_session_events(
@@ -363,11 +363,11 @@ async fn subscribe_session_events(
 
 Stream 关联类型按 tonic 生成签名对齐（可与 `ChatStream` 同样模式）。
 
-- [ ] **Step 3: `cargo check -p backend`**
+- [x] **Step 3: `cargo check -p backend`**
 
 Expected: 通过
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git commit -am "$(cat <<'EOF'
@@ -385,7 +385,7 @@ EOF
 - Modify: `crates/agent-server/src/grpc/astro_service.rs`（删除/改写 `spawn_review_and_emit_update`）
 - Modify: `crates/agent-core/src/memory_review_spawn.rs`（可选：notify 仍返回摘要，backend 映射为 hub 事件）
 
-- [ ] **Step 1: 改写 review 启动**
+- [x] **Step 1: 改写 review 启动**
 
 替换所有 `spawn_review_and_emit_update(&session, &tx).await` 为：
 
@@ -444,9 +444,9 @@ tokio::spawn(async move {
 
 更干净：让 `maybe_run_background_review` 返回结构化结果（已有 `Vec<String>`），backend 根据是否含「待审批」/「入队」决定 `live_written` 与是否另发 `pending_changed`。
 
-- [ ] **Step 2: 删除 `spawn_review_and_emit_update` 整函数**
+- [x] **Step 2: 删除 `spawn_review_and_emit_update` 整函数**
 
-- [ ] **Step 3: 确认 Chat 在 `is_done` 后不再 await review**
+- [x] **Step 3: 确认 Chat 在 `is_done` 后不再 await review**
 
 ```rust
 if is_done {
@@ -455,9 +455,9 @@ if is_done {
 }
 ```
 
-- [ ] **Step 4: `cargo test -p agent memory_review` && `cargo check -p backend`**
+- [x] **Step 4: `cargo test -p agent memory_review` && `cargo check -p backend`**
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git commit -am "$(cat <<'EOF'
@@ -482,7 +482,7 @@ EOF
 1. **Backend** review 路径（Task 4）  
 2. **Tauri** approve/reject/enqueue（工具入 pending 若只在 agent 进程，则 agent/backend 在 `handle_memory_op` 返回含「待审批」时 publish）
 
-- [ ] **Step 1: 在 backend / agent 工具分发后**
+- [x] **Step 1: 在 backend / agent 工具分发后**
 
 当 `handle_memory_op_with_source` 返回字符串含「待审批」或「入队」时：
 
@@ -506,7 +506,7 @@ hub.publish(SessionEventMsg {
 
 工具路径若无 hub：在 `astro_service` multi-turn 处理 tool 结果处拦截（与现有 `MemoryUpdate` Chat 事件并列：live → Chat only；pending → hub）。
 
-- [ ] **Step 2: Tauri approve/reject**
+- [x] **Step 2: Tauri approve/reject**
 
 ```rust
 // approve_pending_memory_write 成功后：
@@ -518,7 +518,7 @@ P3 允许：**Tauri 本机操作**直接 `app.emit("session_event")`；**backend
 
 为免双轨复杂：Tauri 订阅 gRPC 的同时，approve 路径也 `emit` 同一 payload shape（本机即时）。
 
-- [ ] **Step 3: 入梦 live 写成功**
+- [x] **Step 3: 入梦 live 写成功**
 
 在 `dreaming_commands` finalize 成功后 `app.emit`：
 
@@ -535,7 +535,7 @@ P3 允许：**Tauri 本机操作**直接 `app.emit("session_event")`；**backend
 }
 ```
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git commit -am "$(cat <<'EOF'
@@ -554,7 +554,7 @@ EOF
 - Modify: `apps/desktop/src-tauri/src/memory_commands.rs`（`MemorySettingsDto`）
 - Test: `config.rs` 单测
 
-- [ ] **Step 1: 扩展 `MemoryConfig`**
+- [x] **Step 1: 扩展 `MemoryConfig`**
 
 ```rust
 fn default_true() -> bool { true } // 已有
@@ -565,7 +565,7 @@ pub auto_refresh_on_update: bool,
 
 `Default` 与 `set_auto_refresh_on_update(base, enabled)`（同 `set_write_approval` 的 Value 合并）。
 
-- [ ] **Step 2: 测试**
+- [x] **Step 2: 测试**
 
 ```rust
 #[test]
@@ -582,7 +582,7 @@ fn set_auto_refresh_false() {
 }
 ```
 
-- [ ] **Step 3: DTO**
+- [x] **Step 3: DTO**
 
 ```rust
 pub struct MemorySettingsDto {
@@ -594,7 +594,7 @@ pub struct MemorySettingsDto {
 
 增加命令 `set_memory_auto_refresh(enabled: bool)`。
 
-- [ ] **Step 4:**
+- [x] **Step 4:**
 
 ```bash
 cargo test -p memory --lib config:: -- --nocapture 2>&1 | tail -20
@@ -602,7 +602,7 @@ cargo test -p memory --lib config:: -- --nocapture 2>&1 | tail -20
 
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git commit -am "$(cat <<'EOF'
@@ -623,7 +623,7 @@ EOF
 - Modify: nav 渲染（记忆项角标）
 - Modify: `apps/desktop/src/i18n/messages.ts`
 
-- [ ] **Step 1: Tauri 后台任务**
+- [x] **Step 1: Tauri 后台任务**
 
 在 `setup` 或首次拿到 `sessionId` 时：
 
@@ -645,7 +645,7 @@ while let Some(ev) = stream.message().await? {
 
 提供命令 `set_session_events_filter(session_id: Option<String>)` 以便切换会话时重订。
 
-- [ ] **Step 2: 前端 listen**
+- [x] **Step 2: 前端 listen**
 
 ```tsx
 useEffect(() => {
@@ -673,13 +673,13 @@ useEffect(() => {
 
 挂载时 `invoke("get_memory_settings")` 读 `autoRefreshOnUpdate`；`list_pending_memory_writes` 校正角标。
 
-- [ ] **Step 3: Nav 角标**
+- [x] **Step 3: Nav 角标**
 
 记忆 nav 按钮旁：`memoryPendingCount > 0` 时显示数字 badge（CSS：`nav-badge`）。
 
-- [ ] **Step 4: 手测 / `cargo check -p astro-agent`**
+- [x] **Step 4: 手测 / `cargo check -p astro-agent`**
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git commit -am "$(cat <<'EOF'
@@ -698,7 +698,7 @@ EOF
 - Modify: `apps/desktop/src/styles/memory.css`
 - Modify: i18n
 
-- [ ] **Step 1: 审批设置区增加开关**
+- [x] **Step 1: 审批设置区增加开关**
 
 与 `writeApproval` 并列：
 
@@ -713,7 +713,7 @@ EOF
 </label>
 ```
 
-- [ ] **Step 2: 长期记忆 / 顶栏「刷新进对话」**
+- [x] **Step 2: 长期记忆 / 顶栏「刷新进对话」**
 
 ```tsx
 await invoke("refresh_memory", {
@@ -723,7 +723,7 @@ await invoke("refresh_memory", {
 setSaveMsg(t("memory.refresh.done"));
 ```
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git commit -am "$(cat <<'EOF'
@@ -743,7 +743,7 @@ EOF
 - Modify: `apps/desktop/src-tauri/src/memory_commands.rs`
 - Test: 可加 `composerCommands` 的 vitest/纯函数测；或 Rust 侧 all API 测
 
-- [ ] **Step 1: 解析扩展**
+- [x] **Step 1: 解析扩展**
 
 `parseSlashInput`：若 `name === "memory"` 且 `args` 非空，返回新 action：
 
@@ -775,7 +775,7 @@ if (builtin.name === "memory" && args) {
 
 扩展 `SlashAction` 联合类型；`BUILTIN` 仍保留裸 `nav_memory`。
 
-- [ ] **Step 2: Tauri batch API**
+- [x] **Step 2: Tauri batch API**
 
 ```rust
 #[tauri::command]
@@ -796,7 +796,7 @@ pub async fn approve_all_pending_memory_writes() -> Result<String, String> {
 
 `reject_all` 同理。
 
-- [ ] **Step 3: App handler**
+- [x] **Step 3: App handler**
 
 ```ts
 case "memory_approve": {
@@ -815,14 +815,14 @@ case "memory_approve": {
 
 `memory_list`：`list_pending_memory_writes` → toast 摘要（截断）。
 
-- [ ] **Step 4: 纯函数单测（若项目有 vitest）或手工核对解析**
+- [x] **Step 4: 纯函数单测（若项目有 vitest）或手工核对解析**
 
 ```ts
 expect(parseSlashInput("/memory approve all")?.action).toBe("memory_approve");
 expect(parseSlashInput("/memory")?.action).toBe("nav_memory");
 ```
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git commit -am "$(cat <<'EOF'
@@ -840,7 +840,7 @@ EOF
 - Modify: `docs/memory.md`
 - Modify: spec 验收列表（可选勾选）
 
-- [ ] **Step 1: 更新 `docs/memory.md`**
+- [x] **Step 1: 更新 `docs/memory.md`**
 
 增加：
 
@@ -849,7 +849,7 @@ EOF
 - slash 表  
 - 说明 Chat `Done` 不再等待 review  
 
-- [ ] **Step 2: 回归**
+- [x] **Step 2: 回归**
 
 ```bash
 cargo test -p memory --lib 2>&1 | tail -15
@@ -858,7 +858,7 @@ cargo check -p astro-agent 2>&1 | tail -15
 rg -i hermes frontend memory agent backend proto --glob '!docs/**' || true
 ```
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git commit -am "$(cat <<'EOF'

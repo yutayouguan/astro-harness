@@ -29,7 +29,7 @@
 - Produces: `#[tauri::command] async fn infer_ip_location() -> Result<IpLocationDto, String>`
 - Produces DTO serialized as `{ city: string, region: string | null, country: string | null }`
 
-- [ ] **Step 1: 写响应解析失败测试**
+- [x] **Step 1: 写响应解析失败测试**
 
 在 `ip_location.rs` 中先定义测试模块，覆盖成功、服务拒绝和空城市：
 
@@ -69,7 +69,7 @@ mod tests {
 }
 ```
 
-- [ ] **Step 2: 运行测试确认失败**
+- [x] **Step 2: 运行测试确认失败**
 
 Run:
 
@@ -79,7 +79,7 @@ cd apps/desktop/src-tauri && cargo test ip_location
 
 Expected: FAIL，`ip_location` 模块或 `parse_ipwho_response` 尚未定义。
 
-- [ ] **Step 3: 实现 DTO、解析与 HTTP 命令**
+- [x] **Step 3: 实现 DTO、解析与 HTTP 命令**
 
 在 `ip_location.rs` 中实现：
 
@@ -154,7 +154,7 @@ pub async fn infer_ip_location() -> Result<IpLocationDto, String> {
 ip_location::infer_ip_location,
 ```
 
-- [ ] **Step 4: 运行 Rust 测试**
+- [x] **Step 4: 运行 Rust 测试**
 
 Run:
 
@@ -164,7 +164,7 @@ cd apps/desktop/src-tauri && cargo test ip_location
 
 Expected: 4 tests PASS。
 
-- [ ] **Step 5: 提交后端切片**
+- [x] **Step 5: 提交后端切片**
 
 ```bash
 git add apps/desktop/src-tauri/src/ip_location.rs apps/desktop/src-tauri/src/lib.rs
@@ -184,7 +184,7 @@ git commit -m "feat(location): add IP city inference command"
 - Produces: `mergeInitialFieldValues(current, initial): Record<string, unknown>`
 - Extends: `A2UIRenderer` prop `initialFieldValues?: Record<string, unknown>`
 
-- [ ] **Step 1: 写“不覆盖用户输入”测试**
+- [x] **Step 1: 写“不覆盖用户输入”测试**
 
 ```typescript
 import { test } from "node:test";
@@ -213,7 +213,7 @@ test("keeps unrelated fields", () => {
 });
 ```
 
-- [ ] **Step 2: 运行测试确认失败**
+- [x] **Step 2: 运行测试确认失败**
 
 Run:
 
@@ -223,7 +223,7 @@ cd frontend && node --experimental-strip-types --test src/a2ui/initialFieldValue
 
 Expected: FAIL，模块不存在。
 
-- [ ] **Step 3: 实现纯合并函数**
+- [x] **Step 3: 实现纯合并函数**
 
 ```typescript
 export function mergeInitialFieldValues(
@@ -241,7 +241,7 @@ export function mergeInitialFieldValues(
 }
 ```
 
-- [ ] **Step 4: 让渲染器接收异步初值**
+- [x] **Step 4: 让渲染器接收异步初值**
 
 给 `A2UIRenderer` 增加 prop：
 
@@ -262,7 +262,7 @@ useEffect(() => {
 
 保持 key 变化时清空旧 surface 字段；异步城市到达时只填空字段。
 
-- [ ] **Step 5: 运行单测与构建**
+- [x] **Step 5: 运行单测与构建**
 
 Run:
 
@@ -273,7 +273,7 @@ cd frontend && npm run build
 
 Expected: 3 tests PASS；TypeScript/Vite build PASS。
 
-- [ ] **Step 6: 提交 A2UI 切片**
+- [x] **Step 6: 提交 A2UI 切片**
 
 ```bash
 git add apps/desktop/src/a2ui/initialFieldValues.ts apps/desktop/src/a2ui/initialFieldValues.test.ts apps/desktop/src/a2ui/A2UIRenderer.tsx
@@ -298,7 +298,7 @@ git commit -m "feat(a2ui): support safe async field defaults"
 - Produces: `isLocationRequiredSurface(surface: UiSurface): boolean`
 - Produces: `LocationA2UISurface` with the same `operations`, `disabled`, and `onAction` contract as `A2UIRenderer`
 
-- [ ] **Step 1: 写 surface 判定测试**
+- [x] **Step 1: 写 surface 判定测试**
 
 ```typescript
 import { test } from "node:test";
@@ -342,7 +342,7 @@ test("rejects resolved and unrelated surfaces", () => {
 });
 ```
 
-- [ ] **Step 2: 运行判定测试确认失败**
+- [x] **Step 2: 运行判定测试确认失败**
 
 Run:
 
@@ -352,7 +352,7 @@ cd frontend && node --experimental-strip-types --test src/lib/chat/locationSurfa
 
 Expected: FAIL，模块不存在。
 
-- [ ] **Step 3: 实现判定函数**
+- [x] **Step 3: 实现判定函数**
 
 ```typescript
 import type { UiSurface } from "../../types";
@@ -365,7 +365,7 @@ export function isLocationRequiredSurface(surface: UiSurface): boolean {
 }
 ```
 
-- [ ] **Step 4: 实现一次性 IP 城市 hook**
+- [x] **Step 4: 实现一次性 IP 城市 hook**
 
 `useIpCitySuggestion.ts` 定义：
 
@@ -408,7 +408,7 @@ export function useIpCitySuggestion(enabled: boolean): IpCitySuggestionState {
 
 确保成功响应若意外为空也进入 `failed`，不能永久停留在 `loading`。
 
-- [ ] **Step 5: 实现位置包装组件和状态文案**
+- [x] **Step 5: 实现位置包装组件和状态文案**
 
 `LocationA2UISurface.tsx` 调用 hook，并渲染：
 
@@ -454,7 +454,7 @@ return (
 "chat.location.ipFailed": "Could not detect your city — enter it manually",
 ```
 
-- [ ] **Step 6: 在 ChatView 仅替换位置 HITL 渲染**
+- [x] **Step 6: 在 ChatView 仅替换位置 HITL 渲染**
 
 `pushSurface` 中：
 
@@ -479,7 +479,7 @@ isLocationRequiredSurface(surface) ? (
 )
 ```
 
-- [ ] **Step 7: 运行前端测试和构建**
+- [x] **Step 7: 运行前端测试和构建**
 
 Run:
 
@@ -492,7 +492,7 @@ cd frontend && npm run build
 
 Expected: 5 tests PASS；build PASS。
 
-- [ ] **Step 8: 提交前端功能切片**
+- [x] **Step 8: 提交前端功能切片**
 
 ```bash
 git add \
@@ -515,7 +515,7 @@ git commit -m "feat(location): prefill city from IP"
 **Interfaces:**
 - Verifies Tasks 1-3 together.
 
-- [ ] **Step 1: 运行格式检查**
+- [x] **Step 1: 运行格式检查**
 
 ```bash
 cd apps/desktop/src-tauri && cargo fmt --check
@@ -523,7 +523,7 @@ cd apps/desktop/src-tauri && cargo fmt --check
 
 Expected: PASS。若失败，运行 `cargo fmt`，只提交本任务相关 Rust 文件的格式变化。
 
-- [ ] **Step 2: 运行 Rust 测试**
+- [x] **Step 2: 运行 Rust 测试**
 
 ```bash
 cd apps/desktop/src-tauri && cargo test
@@ -531,7 +531,7 @@ cd apps/desktop/src-tauri && cargo test
 
 Expected: PASS。
 
-- [ ] **Step 3: 运行前端测试与构建**
+- [x] **Step 3: 运行前端测试与构建**
 
 ```bash
 cd frontend && node --experimental-strip-types --test \
@@ -542,7 +542,7 @@ cd frontend && npm run build
 
 Expected: tests 与 build 均 PASS。
 
-- [ ] **Step 4: 手工验收**
+- [x] **Step 4: 手工验收**
 
 启动：
 
@@ -558,7 +558,7 @@ cd frontend && npm run tauri dev
 4. 用户点击确认后才提交。
 5. 断网时仍可手工输入城市。
 
-- [ ] **Step 5: 检查仓库状态**
+- [x] **Step 5: 检查仓库状态**
 
 ```bash
 git status --short

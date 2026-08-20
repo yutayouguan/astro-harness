@@ -56,7 +56,7 @@ const COMPACTION_FALLBACK_PREFIX: &str = "[CONTEXT COMPACTION — fallback summa
 - Modify: `crates/agent-memory/src/session/store/messages.rs`（`append_message` 开头调用 guard）
 - Modify: `memory/tests/session_store_test.rs`
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 在 `memory/tests/session_store_test.rs` 追加：
 
@@ -95,7 +95,7 @@ fn append_message_rejects_ended_session() {
 
 （若现有 `NewMessage.content` 类型是 `Option<&'a str>`，用 `Some("x")`；若是 `Option<String>`，跟本文件其它测试一致。）
 
-- [ ] **Step 2: 跑测确认失败**
+- [x] **Step 2: 跑测确认失败**
 
 ```bash
 cargo test -p memory --test session_store_test end_session_sets_ended_at -- --nocapture
@@ -103,7 +103,7 @@ cargo test -p memory --test session_store_test end_session_sets_ended_at -- --no
 
 Expected: FAIL（方法不存在）
 
-- [ ] **Step 3: 实现**
+- [x] **Step 3: 实现**
 
 在 `sessions.rs`：
 
@@ -140,7 +140,7 @@ pub fn assert_session_writable(&self, id: &str) -> Result<()> {
 
 注意：`ensure_session` / `create_session` 不受影响；`compact_and_split` 只往**新**会话 append/拷贝。
 
-- [ ] **Step 4: 跑测通过**
+- [x] **Step 4: 跑测通过**
 
 ```bash
 cargo test -p memory --test session_store_test end_session_sets_ended_at -- --nocapture
@@ -149,7 +149,7 @@ cargo test -p memory --test session_store_test append_message_rejects_ended_sess
 
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add memory/src/session/store/sessions.rs memory/src/session/store/messages.rs memory/tests/session_store_test.rs
@@ -168,7 +168,7 @@ EOF
 - Modify: `crates/agent-memory/src/session/store/messages.rs`
 - Modify: `memory/tests/session_store_test.rs`
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 ```rust
 #[test]
@@ -258,7 +258,7 @@ fn compact_and_split_keep_zero_is_summary_only() {
 }
 ```
 
-- [ ] **Step 2: 跑测确认失败**
+- [x] **Step 2: 跑测确认失败**
 
 ```bash
 cargo test -p memory --test session_store_test compact_and_split -- --nocapture
@@ -266,7 +266,7 @@ cargo test -p memory --test session_store_test compact_and_split -- --nocapture
 
 Expected: FAIL
 
-- [ ] **Step 3: 实现 helper + `compact_and_split`**
+- [x] **Step 3: 实现 helper + `compact_and_split`**
 
 在 `messages.rs`（`end_inclusive_for_bubbles` 旁）：
 
@@ -398,7 +398,7 @@ pub fn compact_and_split(
 - 不要在事务里再调 `append_message`（避免嵌套事务）。
 - 不把父会话 billing 拷到子会话（新行默认 0/NULL）。
 
-- [ ] **Step 4: 跑测通过**
+- [x] **Step 4: 跑测通过**
 
 ```bash
 cargo test -p memory --test session_store_test compact_and_split -- --nocapture
@@ -406,7 +406,7 @@ cargo test -p memory --test session_store_test compact_and_split -- --nocapture
 
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add memory/src/session/store/messages.rs memory/tests/session_store_test.rs
@@ -427,7 +427,7 @@ EOF
 - Modify: `apps/desktop/src-tauri/src/commands.rs`（`RecentSessionDto` + map）
 - Modify: `apps/desktop/src/types.ts`
 
-- [ ] **Step 1: 扩展 `RecentSession`**
+- [x] **Step 1: 扩展 `RecentSession`**
 
 ```rust
 pub struct RecentSession {
@@ -442,7 +442,7 @@ pub struct RecentSession {
 
 `list_recent_sessions` SQL 增加 `s.ended_at, s.end_reason` 并填入结构体。
 
-- [ ] **Step 2: DTO**
+- [x] **Step 2: DTO**
 
 ```rust
 // RecentSessionDto
@@ -458,7 +458,7 @@ export type RecentSessionDto = {
 };
 ```
 
-- [ ] **Step 3: 编译检查**
+- [x] **Step 3: 编译检查**
 
 ```bash
 cargo check -p memory
@@ -467,7 +467,7 @@ cargo check -p frontend-lib 2>/dev/null || cargo check --manifest-path apps/desk
 
 Expected: 无错误（按仓库实际 package 名调整）
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add memory/src/session/store/mod.rs memory/src/session/store/search.rs \
@@ -487,7 +487,7 @@ EOF
 - Create: `apps/desktop/src-tauri/src/compaction_commands.rs`
 - Modify: `apps/desktop/src-tauri/src/lib.rs`
 
-- [ ] **Step 1: 模块骨架与 DTO**
+- [x] **Step 1: 模块骨架与 DTO**
 
 ```rust
 //! 会话压实：LLM/启发式摘要 + SessionStore 拆分。
@@ -515,7 +515,7 @@ pub struct CompactChatResultDto {
 }
 ```
 
-- [ ] **Step 2: 启发式摘要**
+- [x] **Step 2: 启发式摘要**
 
 ```rust
 fn heuristic_summary(messages: &[memory::session_store::StoredMessage], max_chars: usize) -> String {
@@ -542,7 +542,7 @@ fn heuristic_summary(messages: &[memory::session_store::StoredMessage], max_char
 
 （`StoredMessage` 导出路径以 `memory` 实际 `pub use` 为准；若不便导出，则 `get_messages_as_conversation` 拼字符串，避免放大 API。）
 
-- [ ] **Step 3: LLM 摘要（对齐 dreaming `complete_chat`）**
+- [x] **Step 3: LLM 摘要（对齐 dreaming `complete_chat`）**
 
 ```rust
 async fn summarize_with_llm(transcript: &str) -> Result<String, String> {
@@ -596,7 +596,7 @@ Reply in the same language as the transcript. No preamble.";
 
 字段名（`backend_id` / `model`）必须与 `providers_commands::ProviderConfig` 实际字段对齐——打开该结构体抄写，勿猜。
 
-- [ ] **Step 4: 命令**
+- [x] **Step 4: 命令**
 
 ```rust
 #[tauri::command]
@@ -668,7 +668,7 @@ pub async fn compact_chat_session(
 
 在 `lib.rs`：`mod compaction_commands;` 并 `.invoke_handler` 注册 `compaction_commands::compact_chat_session`。
 
-- [ ] **Step 5: 编译**
+- [x] **Step 5: 编译**
 
 ```bash
 cargo check --manifest-path apps/desktop/src-tauri/Cargo.toml
@@ -676,7 +676,7 @@ cargo check --manifest-path apps/desktop/src-tauri/Cargo.toml
 
 Expected: ok
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add apps/desktop/src-tauri/src/compaction_commands.rs apps/desktop/src-tauri/src/lib.rs
@@ -697,7 +697,7 @@ EOF
 - Modify: `apps/desktop/src/App.tsx`
 - Modify: `apps/desktop/src/components/ChatSessionList.tsx`（徽章可本任务一并做）
 
-- [ ] **Step 1: Slash + i18n**
+- [x] **Step 1: Slash + i18n**
 
 `SlashAction` 增加 `"compact"`；`BUILTIN_SLASH_COMMANDS` 增加：
 
@@ -721,7 +721,7 @@ EOF
 - `chat.compactBlockedInterrupt`: 「请先处理待确认操作」
 - `chat.sessionCompactedBadge`: 「已压实」 / `Compacted`
 
-- [ ] **Step 2: `runCompactSession` in App**
+- [x] **Step 2: `runCompactSession` in App**
 
 模式对齐 `branchMessage`：
 
@@ -786,15 +786,15 @@ const runCompactSession = useCallback(async () => {
 
 映射历史时优先复用 `applyRestoredHistory` / hydrate 路径，避免复制一半字段丢 activities。
 
-- [ ] **Step 3: 侧栏徽章**
+- [x] **Step 3: 侧栏徽章**
 
 `ChatSessionList`：若 `s.endReason === "compacted"`，在标题旁加 `<span className="chat-session-badge">{t("chat.sessionCompactedBadge")}</span>`。只读打开仍走 `onOpenSession`（`get_chat_history` 可读 ended 会话）。
 
-- [ ] **Step 4: 手动冒烟**
+- [x] **Step 4: 手动冒烟**
 
 启动 app → 造 ≥2 轮对话 → `/compact` → 确认 `sessionId` 变化、气泡含摘要、侧栏旧会话有徽章、旧会话可打开看全文。
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add apps/desktop/src/lib/composerCommands.ts apps/desktop/src/i18n/messages.ts \
@@ -813,7 +813,7 @@ EOF
 **Files:**
 - Modify: `apps/desktop/src/App.tsx`
 
-- [ ] **Step 1: 在流结束 / 一轮完成处挂检查**
+- [x] **Step 1: 在流结束 / 一轮完成处挂检查**
 
 复用 `App` 里已有 `contextUsagePercent` / `tokenUsage` 计算（约 `contextUsageFallback` 与 `tokenUsage.totalTokens / 128_000`）。
 
@@ -840,11 +840,11 @@ const maybeAutoCompact = useCallback(() => {
 
 发送下一用户消息前可再调用一次 `maybeAutoCompact`（可选二次门闩）；MVP 只做「轮次结束」即可。
 
-- [ ] **Step 2: 冒烟**
+- [x] **Step 2: 冒烟**
 
 临时把阈值改成 `0.01` 或 mock `tokenUsage`，确认一轮后自动压实；再确认流式中不触发。
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add apps/desktop/src/App.tsx
@@ -862,9 +862,9 @@ EOF
 **Files:**
 - Modify: `docs/superpowers/specs/2026-07-14-session-compaction-design.md`
 
-- [ ] **Step 1:** 状态改为 **已实现**；可选加「实现说明」表（store / Tauri / 前端入口）。
+- [x] **Step 1:** 状态改为 **已实现**；可选加「实现说明」表（store / Tauri / 前端入口）。
 
-- [ ] **Step 2: Commit**
+- [x] **Step 2: Commit**
 
 ```bash
 git add docs/superpowers/specs/2026-07-14-session-compaction-design.md

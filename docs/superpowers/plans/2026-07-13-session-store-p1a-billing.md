@@ -42,7 +42,7 @@
 - Modify: `crates/agent-memory/src/session/store/sessions.rs`
 - Modify: `memory/tests/session_store_test.rs`
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 在 `memory/tests/session_store_test.rs` 追加：
 
@@ -109,7 +109,7 @@ fn update_session_billing_accumulates_tokens_and_cost() {
 
 若 `BillingDelta` / `get_session_billing` 路径与导出名不同，测试里改用 crate 实际公开路径（`memory::session_store` 或 `SessionStore` 同模块）。**优先把 `BillingDelta` 与 `SessionBillingRow` 放在 `crates/agent-memory/src/session/store/mod.rs` 并 `pub use`。**
 
-- [ ] **Step 2: 跑测确认失败**
+- [x] **Step 2: 跑测确认失败**
 
 Run:
 
@@ -119,7 +119,7 @@ cargo test -p memory --test session_store_test update_session_billing -- --nocap
 
 Expected: FAIL（方法不存在）
 
-- [ ] **Step 3: 实现类型与 API**
+- [x] **Step 3: 实现类型与 API**
 
 在 `crates/agent-memory/src/session/store/mod.rs` 增加：
 
@@ -242,7 +242,7 @@ pub fn get_session_billing(&self, id: &str) -> Result<Option<SessionBillingRow>>
 
 从 `crates/agent-memory/src/lib.rs` / `session` 模块 re-export `BillingDelta`、`SessionBillingRow`（若测试用 `memory::…`）。
 
-- [ ] **Step 4: 跑测确认通过**
+- [x] **Step 4: 跑测确认通过**
 
 Run:
 
@@ -252,7 +252,7 @@ cargo test -p memory --test session_store_test update_session_billing -- --nocap
 
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add memory/src/session/store/mod.rs memory/src/session/store/sessions.rs memory/tests/session_store_test.rs memory/src/lib.rs
@@ -270,7 +270,7 @@ EOF
 **Files:**
 - Modify: `crates/agent-core/src/streaming.rs`（约 `record_llm_usage`）
 
-- [ ] **Step 1: 替换 `record_llm_usage` 实现**
+- [x] **Step 1: 替换 `record_llm_usage` 实现**
 
 将现有 `UsageDb::try_record(kind=llm)` 改为：
 
@@ -317,7 +317,7 @@ async fn record_llm_usage(session: &Arc<Mutex<AgentLoop>>, model: &str, usage: &
 - 函数可改名为 `apply_session_llm_usage`，同步更新注释（去掉「写入 usage.db」）。
 - **删除**对本函数内 `NewUsageEvent` / `kind: "llm"` 的引用。
 
-- [ ] **Step 2: 编译检查**
+- [x] **Step 2: 编译检查**
 
 Run:
 
@@ -327,7 +327,7 @@ cargo check -p agent 2>&1 | tail -30
 
 Expected: 无 error
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add agent/src/streaming.rs
@@ -346,7 +346,7 @@ EOF
 - Modify: `crates/agent-memory/src/usage/db.rs`
 - Modify: `memory/tests/usage_db_test.rs`（或新建测试）
 
-- [ ] **Step 1: 扩展 DDL + 清空 API**
+- [x] **Step 1: 扩展 DDL + 清空 API**
 
 在 `DDL` 末尾追加：
 
@@ -393,7 +393,7 @@ const CALLS_KIND_SQL: &str =
 
 模块顶注释改为：不再记录 llm 事件（由 sessions 承担）。
 
-- [ ] **Step 2: 测试清空幂等**
+- [x] **Step 2: 测试清空幂等**
 
 ```rust
 #[test]
@@ -430,7 +430,7 @@ fn p1a_clears_usage_events_once() {
 
 若 `conn` 私有，改为：`ensure_p1a` 已在 `new` 内调用；第一次 `new` 后 `insert` tool，第二次 `new` 后 insights KPI calls 仍为 1。**不要**为测试随意把 `conn` 公开；可用 `#[cfg(test)]` 方法 `event_count()`。
 
-- [ ] **Step 3: 跑测**
+- [x] **Step 3: 跑测**
 
 ```bash
 cargo test -p memory --test usage_db_test p1a_clears -- --nocapture
@@ -439,7 +439,7 @@ cargo test -p memory --test usage_db_test -- --nocapture
 
 Expected: PASS（若旧测依赖库内预置 llm 行，同步改掉）
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add memory/src/usage/db.rs memory/tests/usage_db_test.rs
@@ -461,7 +461,7 @@ EOF
 - Modify: `apps/desktop/src-tauri/src/config_commands.rs`
 - Test: `memory/tests/usage_insights_merge_test.rs`
 
-- [ ] **Step 1: 写失败/目标测试**
+- [x] **Step 1: 写失败/目标测试**
 
 ```rust
 #[test]
@@ -516,7 +516,7 @@ fn merged_insights_uses_sessions_for_llm_cost() {
 
 （测试里路径/ENV 与 `default_memory_dir` / `SessionStore::open` 惯例对齐；以仓库现有 `MemoryManager::new` 打开双库更稳则可改用 Manager。）
 
-- [ ] **Step 2: 实现 `query_usage_insights_merged`**
+- [x] **Step 2: 实现 `query_usage_insights_merged`**
 
 `crates/agent-memory/src/usage/insights.rs` 核心逻辑：
 
@@ -553,7 +553,7 @@ GROUP BY COALESCE(model, '')
 
 7. `lib.rs`：`pub use usage::insights::query_usage_insights_merged;`
 
-- [ ] **Step 3: 改 Tauri**
+- [x] **Step 3: 改 Tauri**
 
 `config_commands.rs`：
 
@@ -566,7 +566,7 @@ memory::query_usage_insights_merged(memory::UsageInsightsQuery {
 .map_err(|e| e.to_string())
 ```
 
-- [ ] **Step 4: 跑测**
+- [x] **Step 4: 跑测**
 
 ```bash
 cargo test -p memory --test usage_insights_merge_test -- --nocapture
@@ -576,7 +576,7 @@ cargo check -p astro-ui 2>&1 | tail -20
 
 Expected: PASS / 无 error
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add memory/src/usage/insights.rs memory/src/usage/mod.rs memory/src/lib.rs memory/src/usage/db.rs memory/tests/usage_insights_merge_test.rs apps/desktop/src-tauri/src/config_commands.rs
@@ -596,17 +596,17 @@ EOF
 - Modify: 对应 i18n messages（`apps/desktop/src/i18n/…`）
 - Modify: `docs/superpowers/specs/2026-07-13-session-store-p1a-billing-design.md`
 
-- [ ] **Step 1: i18n**
+- [x] **Step 1: i18n**
 
 增加类似：`insights.billingSinceP1a` → 「LLM 费用自会话计费起统计；历史用量事件已清空。」
 
 在费用 KPI 或空态附近展示一行小字（不改 DTO）。
 
-- [ ] **Step 2: Spec 状态**
+- [x] **Step 2: Spec 状态**
 
 将 P1a design 状态改为：`**状态:** 已批准 / 已实现`
 
-- [ ] **Step 3: 回归**
+- [x] **Step 3: 回归**
 
 ```bash
 cargo test -p memory --test session_store_test update_session_billing
@@ -617,7 +617,7 @@ cargo check -p agent
 
 Expected: 全绿
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add apps/desktop/src/components/InsightsPanel.tsx apps/desktop/src/i18n docs/superpowers/specs/2026-07-13-session-store-p1a-billing-design.md

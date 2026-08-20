@@ -59,7 +59,7 @@
   - `pub fn dispatch_session_tool(store: &SessionStore, name: &str, args: &serde_json::Value) -> anyhow::Result<String>`
   - `pub fn record_message(store: &SessionStore, session_id: &str, role: &str, content: &str) -> anyhow::Result<i64>`（ensure `"tauri"` + append）
 
-- [ ] **Step 1: Write failing tests**
+- [x] **Step 1: Write failing tests**
 
 Create `session/tests/dispatch_session_tool_test.rs`:
 
@@ -119,7 +119,7 @@ fn dispatch_session_search_and_record_message() {
 
 若 `ScrolledMessage` 字段名与现实现不一致，以 `crates/agent-session/src/message_db.rs` 为准调整测试结构体初始化。
 
-- [ ] **Step 2: Run tests — expect FAIL**
+- [x] **Step 2: Run tests — expect FAIL**
 
 ```bash
 cargo test -p session --test dispatch_session_tool_test
@@ -127,11 +127,11 @@ cargo test -p session --test dispatch_session_tool_test
 
 Expected: FAIL（`dispatch_session_tool` / `format_recalled_context` / `record_message` 未定义）
 
-- [ ] **Step 3: Implement `crates/agent-session/src/format.rs`**
+- [x] **Step 3: Implement `crates/agent-session/src/format.rs`**
 
 从 `crates/agent-memory/src/session/manager.rs` 原样迁入 `format_session_search_hits`（`pub(crate)`）与 `format_recalled_context`（`pub`）。`use crate::{SearchHit, ScrolledMessage};`
 
-- [ ] **Step 4: Implement `crates/agent-session/src/tools.rs`**
+- [x] **Step 4: Implement `crates/agent-session/src/tools.rs`**
 
 ```rust
 use anyhow::anyhow;
@@ -172,7 +172,7 @@ pub fn dispatch_session_tool(
 }
 ```
 
-- [ ] **Step 5: Wire `crates/agent-session/src/lib.rs`**
+- [x] **Step 5: Wire `crates/agent-session/src/lib.rs`**
 
 ```rust
 pub mod format;
@@ -186,7 +186,7 @@ pub use store::{ /* 保持现有 */ };
 pub use tools::{dispatch_session_tool, record_message};
 ```
 
-- [ ] **Step 6: Run tests — expect PASS**
+- [x] **Step 6: Run tests — expect PASS**
 
 ```bash
 cargo test -p session --test dispatch_session_tool_test
@@ -195,7 +195,7 @@ cargo test -p session
 
 Expected: PASS
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add session/src/format.rs session/src/tools.rs session/src/lib.rs session/tests/dispatch_session_tool_test.rs
@@ -222,13 +222,13 @@ EOF
 - Consumes: Task 1 APIs（本 task 的 memory 不再调用）
 - Produces: `MemoryManager` 无 `session_store`；`dispatch_memory_tool` 仅 `memory` + 旧名错误
 
-- [ ] **Step 1: Delete or rewrite `memory/tests/memory_manager_session_test.rs`**
+- [x] **Step 1: Delete or rewrite `memory/tests/memory_manager_session_test.rs`**
 
 删除该文件（覆盖已迁至 `session/tests/dispatch_session_tool_test.rs`）。
 
 若保留文件，改为仅断言 `MemoryManager::for_agent` 打开 MEMORY/USER，**禁止**调用 `ensure_session` / `session_store`。
 
-- [ ] **Step 2: Edit `MemoryManager` struct and `for_agent`**
+- [x] **Step 2: Edit `MemoryManager` struct and `for_agent`**
 
 删除字段 `pub session_store: SessionStore`。
 
@@ -244,13 +244,13 @@ session_store: SessionStore::open_sessions_dir(&sessions_dir)?,
 
 保留 `ensure_workspace` 调用（仍初始化会话库文件）。
 
-- [ ] **Step 3: Delete session methods from impl**
+- [x] **Step 3: Delete session methods from impl**
 
 删除整个方法：`ensure_session`、`record_message`、`record_message_ex`、`build_session_context`、`list_recent_sessions`、`handle_session_search`。
 
 删除文件底部 `format_session_search_hits`、`format_recalled_context` 函数。
 
-- [ ] **Step 4: Narrow `dispatch_memory_tool`**
+- [x] **Step 4: Narrow `dispatch_memory_tool`**
 
 ```rust
 pub fn dispatch_memory_tool(
@@ -270,7 +270,7 @@ pub fn dispatch_memory_tool(
 
 更新文档注释：不再声称支持 `session_search`。
 
-- [ ] **Step 5: Verify memory compiles in isolation**
+- [x] **Step 5: Verify memory compiles in isolation**
 
 ```bash
 cargo test -p memory
@@ -284,7 +284,7 @@ Expected: PASS（若其他 crate 尚未改会失败——此时可先 `cargo tes
 cargo test -p memory --tests
 ```
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add memory/src/session/manager.rs memory/src/lib.rs memory/src/session/mod.rs memory/tests/memory_manager_session_test.rs
@@ -312,7 +312,7 @@ EOF
 - Consumes: `session::SessionStore`, `session::dispatch_session_tool`
 - Produces: `ToolContext.sessions: &'a SessionStore`
 
-- [ ] **Step 1: Add dependency**
+- [x] **Step 1: Add dependency**
 
 在 `tools/Cargo.toml` `[dependencies]` 增加：
 
@@ -320,7 +320,7 @@ EOF
 session = { path = "../session" }
 ```
 
-- [ ] **Step 2: Add field to `ToolContext`**
+- [x] **Step 2: Add field to `ToolContext`**
 
 ```rust
 use session::SessionStore;
@@ -333,7 +333,7 @@ pub struct ToolContext<'a> {
 }
 ```
 
-- [ ] **Step 3: Split dispatch**
+- [x] **Step 3: Split dispatch**
 
 `crates/agent-tools/src/engine/dispatch.rs`：
 
@@ -364,7 +364,7 @@ pub fn dispatch_session_search(
 
 更新模块顶注释：`session_search` 走 session crate。
 
-- [ ] **Step 4: Fix every `ToolContext {` site**
+- [x] **Step 4: Fix every `ToolContext {` site**
 
 模式（在已有 `MemoryManager::new` / `for_agent` 之后，因 `ensure_workspace` 已创建 sessions 目录）：
 
@@ -386,7 +386,7 @@ let mut ctx = ToolContext {
 
 本 Task 至少让 `cargo test -p tools` 能编过；agent 可留到 Task 4，但若 tools 不依赖 agent，先修 tools 内所有构造点。
 
-- [ ] **Step 5: Verify**
+- [x] **Step 5: Verify**
 
 ```bash
 cargo test -p tools
@@ -394,7 +394,7 @@ cargo test -p tools
 
 Expected: PASS
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add tools/Cargo.toml tools/src/engine/context.rs tools/src/engine/dispatch.rs tools/src/builtin/memory/memory_tools.rs tools/tests tools/src/builtin/system tools/src/builtin/media/image_gen.rs
@@ -421,7 +421,7 @@ EOF
 - Consumes: `session::{SessionStore, build_conversation_context, format_recalled_context, record_message, NewMessage}`
 - Produces: `AgentLoop { memory, sessions, … }`
 
-- [ ] **Step 1: Add `sessions` to `AgentLoop`**
+- [x] **Step 1: Add `sessions` to `AgentLoop`**
 
 在 struct 中与 `memory: MemoryManager` 并列：
 
@@ -437,7 +437,7 @@ let sessions = SessionStore::open_sessions_dir(&config.memory_dir.join("sessions
 
 （`MemoryManager::new` 已 `ensure_workspace`，目录应存在；若构造顺序是先开 sessions，可先 `memory::ensure_workspace(&config.memory_dir)?`。）
 
-- [ ] **Step 2: Replace session call sites in `loop_.rs`**
+- [x] **Step 2: Replace session call sites in `loop_.rs`**
 
 | 旧 | 新 |
 |----|----|
@@ -457,11 +457,11 @@ use session::{
 use memory::MemoryManager;
 ```
 
-- [ ] **Step 3: ToolContext construction in loop_ / streaming**
+- [x] **Step 3: ToolContext construction in loop_ / streaming**
 
 传入 `sessions: &self.sessions`（注意生命周期：构造 ctx 时 `self.sessions` 与 `self.memory` 同时借用——若 borrow checker 冲突，对 `sessions` 用不可变借用、对 `memory` 可变借用，通常可行）。
 
-- [ ] **Step 4: Verify**
+- [x] **Step 4: Verify**
 
 ```bash
 cargo test -p agent
@@ -470,7 +470,7 @@ cargo check -p agent
 
 Expected: PASS / Finished
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add agent/src/loop_.rs agent/src/streaming.rs
@@ -504,19 +504,19 @@ fn open_sessions() -> Result<session::SessionStore, String> {
 
 纯会话命令用 `open_sessions()`；记忆命令继续 `MemoryManager`。
 
-- [ ] **Step 1: Migrate `commands.rs` session-only sites**
+- [x] **Step 1: Migrate `commands.rs` session-only sites**
 
 把 `mgr.session_store` / `mgr.ensure_session` 换成 `store` / `store.ensure_session`。
 
-- [ ] **Step 2: Migrate `compaction_commands.rs`**
+- [x] **Step 2: Migrate `compaction_commands.rs`**
 
 同上，删除仅为开库而创建的 `MemoryManager`。
 
-- [ ] **Step 3: Migrate `astro_service.rs` session query path**
+- [x] **Step 3: Migrate `astro_service.rs` session query path**
 
 约 1209 行附近：改为 `SessionStore::open_sessions_dir`。
 
-- [ ] **Step 4: Verify**
+- [x] **Step 4: Verify**
 
 ```bash
 cargo check -p backend -p astro-agent
@@ -524,7 +524,7 @@ cargo check -p backend -p astro-agent
 
 Expected: Finished
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add apps/desktop/src-tauri/src/commands.rs apps/desktop/src-tauri/src/compaction_commands.rs backend/src/grpc/astro_service.rs
@@ -542,7 +542,7 @@ EOF
 
 **Files:** none（或修漏网 `rg` 命中）
 
-- [ ] **Step 1: Grep for leftovers**
+- [x] **Step 1: Grep for leftovers**
 
 ```bash
 rg -n 'session_store|MemoryManager::.*ensure_session|handle_session_search|format_recalled_context|build_session_context|record_message_ex' \
@@ -551,7 +551,7 @@ rg -n 'session_store|MemoryManager::.*ensure_session|handle_session_search|forma
 
 Expected: `format_recalled_context` 仅出现在 `session/` 与调用方 `session::`；`MemoryManager` 无 `session_store`；无 `handle_session_search`。
 
-- [ ] **Step 2: Full tests**
+- [x] **Step 2: Full tests**
 
 ```bash
 cargo test -p session -p memory -p agent -p tools
@@ -560,14 +560,14 @@ cargo check -p backend -p astro-agent
 
 Expected: 全部通过
 
-- [ ] **Step 3: Final commit if any stray fixes**
+- [x] **Step 3: Final commit if any stray fixes**
 
 ```bash
 git status -sb
 # 若有漏网修复则 commit
 ```
 
-- [ ] **Step 4: Mark spec status**
+- [x] **Step 4: Mark spec status**
 
 可选：将 `docs/superpowers/specs/2026-07-16-memory-manager-session-split-design.md` 状态改为「已实现」，并勾验收清单。
 

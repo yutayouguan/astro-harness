@@ -82,13 +82,13 @@ pub fn classify_update_status(
 4. 否则若至少有一侧可比信息且未触发 outdated → `Current`
 5. 仅一侧有 version、另一侧无：若仅有 remote version、本地无任何 remote_* 与时间 → 首次基线视为 `Current`（调用方随后应写回 origin，避免下次误 outdated）
 
-- [ ] **Step 1: 写失败测试**（`check.rs`）覆盖：version 不等；updated_at 更大；皆空 → Unknown；相等 → Current；无 remote_* 用 installed_at 作下限
+- [x] **Step 1: 写失败测试**（`check.rs`）覆盖：version 不等；updated_at 更大；皆空 → Unknown；相等 → Current；无 remote_* 用 installed_at 作下限
 
-- [ ] **Step 2:** `cargo test -p skills check::classify` → RED
+- [x] **Step 2:** `cargo test -p skills check::classify` → RED
 
-- [ ] **Step 3:** 实现 `classify_update_status` + DTO + `pub mod check`
+- [x] **Step 3:** 实现 `classify_update_status` + DTO + `pub mod check`
 
-- [ ] **Step 4:** GREEN → commit  
+- [x] **Step 4:** GREEN → commit  
   `feat(skills): classify skill update status from remote metadata`
 
 ---
@@ -120,13 +120,13 @@ pub async fn check_updates_for_agent(
    - check **不写回** baseline；仅返回 CheckResult；前端持有 `lastCheckByFolder` map
    - install/`record_after_install` 在成功后 best-effort `fetch_detail` 填 baseline
 
-- [ ] **Step 1:** 实现 `origin_to_store_skill`（store/install_ref/name/id 从 origin 填）
+- [x] **Step 1:** 实现 `origin_to_store_skill`（store/install_ref/name/id 从 origin 填）
 
-- [ ] **Step 2:** 实现 `check_updates_for_agent`（不覆盖 baseline remote_*）
+- [x] **Step 2:** 实现 `check_updates_for_agent`（不覆盖 baseline remote_*）
 
-- [ ] **Step 3:** 单测：孤儿跳过；classify 路径用手动构造 origin+假远端（可抽 `check_origin_against_detail(origin, &StoreSkillDetail)`）
+- [x] **Step 3:** 单测：孤儿跳过；classify 路径用手动构造 origin+假远端（可抽 `check_origin_against_detail(origin, &StoreSkillDetail)`）
 
-- [ ] **Step 4:** commit  
+- [x] **Step 4:** commit  
   `feat(skills): check skill updates via store detail`
 
 ---
@@ -136,9 +136,9 @@ pub async fn check_updates_for_agent(
 **Files:**
 - Modify: `skills/src/install.rs` `record_after_install`
 
-- [ ] 成功安装后 `tokio` 内 best-effort：若能 `origin_to_store_skill` + `fetch_detail`，把 `version`/`updated_at` 写入 origin；失败忽略（baseline 空 → 之后 check 用 installed_at 规则或 Unknown）。
+- [x] 成功安装后 `tokio` 内 best-effort：若能 `origin_to_store_skill` + `fetch_detail`，把 `version`/`updated_at` 写入 origin；失败忽略（baseline 空 → 之后 check 用 installed_at 规则或 Unknown）。
 
-- [ ] commit  
+- [x] commit  
   `feat(skills): record remote baseline metadata after install`
 
 ---
@@ -155,9 +155,9 @@ v2：`only_outdated == true`（前端默认）时：
 
 为少耦合：Tauri 新命令 `update_outdated_skills` 内部 check→filter→update；或 `update_all_skills` 增加参数。
 
-- [ ] 实现 + 单元测试：mock/构造 — 无 outdated 时返回空成功列表
+- [x] 实现 + 单元测试：mock/构造 — 无 outdated 时返回空成功列表
 
-- [ ] commit  
+- [x] commit  
   `feat(skills): update only outdated skills`
 
 ---
@@ -172,8 +172,8 @@ check_skill_updates(agent_id?) -> Vec<SkillUpdateCheckResult>
 update_all_skills(agent_id?, only_outdated?: bool) // 默认 true for v2 callers
 ```
 
-- [ ] `cargo check -p astro-agent`
-- [ ] commit  
+- [x] `cargo check -p astro-agent`
+- [x] commit  
   `feat(tauri): expose check_skill_updates command`
 
 ---
@@ -185,7 +185,7 @@ update_all_skills(agent_id?, only_outdated?: bool) // 默认 true for v2 callers
 - `skillUpdateRows.ts`：`applyCheckResults(rows, checks) -> rows`；`filterUpdateRows`：`updatable` ≡ `outdated`
 - tests：outdated 进默认筛选；current 不进；unknown 不进 updatable
 
-- [ ] RED → GREEN → commit  
+- [x] RED → GREEN → commit  
   `feat(frontend): apply remote check results to update rows`
 
 ---
@@ -209,18 +209,18 @@ skills.upToDate
 skills.outdatedBadge
 ```
 
-- [ ] 实现 + `tsc -b`
-- [ ] commit  
+- [x] 实现 + `tsc -b`
+- [x] commit  
   `feat(skills-ui): check updates badge and outdated-first filter`
 
 ---
 
 ### Task 8: 验收 + spec
 
-- [ ] `cargo test -p skills check::` / `update::` / `origins::`
-- [ ] node skillUpdateRows + skillInstalledMatch tests
-- [ ] spec 状态 → **v2 已实现**；链到本 plan
-- [ ] commit docs
+- [x] `cargo test -p skills check::` / `update::` / `origins::`
+- [x] node skillUpdateRows + skillInstalledMatch tests
+- [x] spec 状态 → **v2 已实现**；链到本 plan
+- [x] commit docs
 
 ---
 

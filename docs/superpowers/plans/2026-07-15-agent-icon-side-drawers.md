@@ -38,7 +38,7 @@
 
 **Produces:** 下列 MessageKey（写入 `zh` 后 `en` 必须齐全）
 
-- [ ] **Step 1: 在 zh 中增加/调整键**
+- [x] **Step 1: 在 zh 中增加/调整键**
 
 ```ts
 "chat.agentAvatarDrawerTitle": "选择头像",
@@ -55,7 +55,7 @@
 "chat.agentIconEmojiHint": "侧栏等处的小图标",
 ```
 
-- [ ] **Step 2: 为 en 写对齐翻译**
+- [x] **Step 2: 为 en 写对齐翻译**
 
 ```ts
 "chat.agentAvatarDrawerTitle": "Choose avatar",
@@ -73,7 +73,7 @@
 
 保留已有 `chat.lucidePicker*`、`chat.agentIconUpload` / `Clear` / `Replace` 等。
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add apps/desktop/src/i18n/messages.ts
@@ -95,7 +95,7 @@ EOF
 **Consumes:** Task 1 文案（lucide 标题仍用原 key）  
 **Produces:** 侧滑抽屉壳；Lucide 打开时为右侧面板
 
-- [ ] **Step 1: 在 `chat.css` 增加共用壳（对齐 mcp-add）**
+- [x] **Step 1: 在 `chat.css` 增加共用壳（对齐 mcp-add）**
 
 在 Lucide 段之前加入：
 
@@ -184,7 +184,7 @@ html[data-theme="light"] .agent-icon-drawer-backdrop {
 
 暗色：对照 `mcp-add-drawer` dark 规则用 `html[data-theme="dark"] .agent-icon-drawer` 写一套。
 
-- [ ] **Step 2: 改 `LucideIconPicker` 外壳 class**
+- [x] **Step 2: 改 `LucideIconPicker` 外壳 class**
 
 将根结构从居中 panel 改为：
 
@@ -224,15 +224,15 @@ type Props = {
 
 上传按钮放在 scroll 顶部或 head 旁；选中图标仍调用 `onSelect`（Guide 内关抽屉）。
 
-- [ ] **Step 3: 调整旧 `.lucide-picker-backdrop/.panel`**
+- [x] **Step 3: 调整旧 `.lucide-picker-backdrop/.panel`**
 
 删除或改为兼容注释；抽屉内网格用 `.lucide-picker-drawer .lucide-picker-grid { … }` 保证可滚、max-height 取消（由 scroll 容器负责）。
 
-- [ ] **Step 4: 手动冒烟**
+- [x] **Step 4: 手动冒烟**
 
 在已开 `tauri dev` 的创建流程里：临时点开 Lucide（若入口未改可用旧按钮）应看到右侧滑入而非居中弹层。
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add apps/desktop/src/styles/chat.css apps/desktop/src/components/LucideIconPicker.tsx
@@ -265,7 +265,7 @@ type AvatarPickerDrawerProps = {
 };
 ```
 
-- [ ] **Step 1: 实现组件**
+- [x] **Step 1: 实现组件**
 
 ```tsx
 /** Agent 头像选择：右侧抽屉（预设插画 + 上传）。 */
@@ -372,7 +372,7 @@ export default function AvatarPickerDrawer({
 }
 ```
 
-- [ ] **Step 2: Commit**
+- [x] **Step 2: Commit**
 
 ```bash
 git add apps/desktop/src/components/AvatarPickerDrawer.tsx apps/desktop/src/styles/chat.css
@@ -392,7 +392,7 @@ EOF
 
 **Consumes:** AvatarPickerDrawer；LucideIconPicker；现有 `pick` / `pickCover` / `pickLucide` / `clear`
 
-- [ ] **Step 1: 状态与互斥**
+- [x] **Step 1: 状态与互斥**
 
 ```tsx
 const [avatarOpen, setAvatarOpen] = useState(false);
@@ -408,7 +408,7 @@ const openLucide = () => {
 };
 ```
 
-- [ ] **Step 2: 外观区改为两行入口（伪结构）**
+- [x] **Step 2: 外观区改为两行入口（伪结构）**
 
 ```tsx
 <section className="chat-agent-icons">
@@ -468,7 +468,7 @@ const openLucide = () => {
 
 注意：`pickCover` / `pick` 当前返回 Promise；在成功路径关抽屉。`pickLucide` 已 `setLucideOpen(false)`。
 
-- [ ] **Step 3: 手动验收（对照 spec）**
+- [x] **Step 3: 手动验收（对照 spec）**
 
 1. 创建卡无插画网格，仅两行  
 2. 开头像抽屉 → 选插画 → 预览更新、抽屉关  
@@ -477,7 +477,7 @@ const openLucide = () => {
 5. Esc / 遮罩可关；开一头像时 Lucide 应关（互斥）  
 6. 亮/暗色可读  
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add apps/desktop/src/components/AgentCreateGuide.tsx apps/desktop/src/components/LucideIconPicker.tsx
@@ -488,7 +488,7 @@ EOF
 )"
 ```
 
-- [ ] **Step 5: 更新 spec 状态**
+- [x] **Step 5: 更新 spec 状态**
 
 将 `docs/superpowers/specs/2026-07-15-agent-icon-side-drawers-design.md` 顶部状态改为「已实现」，链到本 plan。
 

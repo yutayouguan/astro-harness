@@ -58,7 +58,7 @@
   - `pub async fn google_interactions_audio(client: &reqwest::Client, prompt: &str, media: &AudioMediaPart, mode: AudioUnderstandMode, config: &ProviderConfig) -> anyhow::Result<String>`
 - Consumes: `interactions_url`、`google_native_base`（间接）、`ProviderConfig`、`error_message`（文件内已有可复用）
 
-- [ ] **Step 1: 写失败测试（`interactions_http.rs` 底部新 `mod audio_understand_tests`）**
+- [x] **Step 1: 写失败测试（`interactions_http.rs` 底部新 `mod audio_understand_tests`）**
 
 ```rust
 #[cfg(test)]
@@ -148,12 +148,12 @@ mod audio_understand_tests {
 }
 ```
 
-- [ ] **Step 2: Run 确认失败**
+- [x] **Step 2: Run 确认失败**
 
 Run: `cargo test -p providers audio_understand_tests -- --nocapture`  
 Expected: FAIL（符号不存在）
 
-- [ ] **Step 3: 实现类型与函数**
+- [x] **Step 3: 实现类型与函数**
 
 追加到 `interactions_http.rs`（保留 TTS 不动）：
 
@@ -371,12 +371,12 @@ pub async fn google_interactions_audio(
 
 注意：`response_format` 形状若与 vision 计划已落地版本不一致，**以同文件里 vision（若已存在）或 TTS 旁注释的官方 Interactions 形态为准**，修改测试断言使之一致，禁止 Google 走 openai 兼容。
 
-- [ ] **Step 4: Run 测试通过**
+- [x] **Step 4: Run 测试通过**
 
 Run: `cargo test -p providers audio_understand_tests -- --nocapture`  
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add providers/src/protocol/interactions_http.rs
@@ -408,7 +408,7 @@ EOF
   - describe：`messages[0].content` = `[{type:text},{type:input_audio,input_audio:{data,format}}]`；`format` 从 mime 映射：`wav|mp3|mp4|mpeg|m4a|webm`（未知用 `mp3`）。
   - Whisper：`multipart/form-data`：`file` + `model`。
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 ```rust
 #[test]
@@ -436,7 +436,7 @@ fn default_whisper_is_whisper1() {
 }
 ```
 
-- [ ] **Step 2: Run 确认失败后实现**
+- [x] **Step 2: Run 确认失败后实现**
 
 ```rust
 pub fn default_whisper_model() -> &'static str {
@@ -588,7 +588,7 @@ pub async fn openai_audio_transcriptions(
 }
 ```
 
-- [ ] **Step 3: Run**
+- [x] **Step 3: Run**
 
 Run: `cargo test -p providers openai_audio_describe_body -- --nocapture`  
 Run: `cargo test -p providers whisper_text_to_json -- --nocapture`  
@@ -596,7 +596,7 @@ Expected: PASS
 Run: `cargo test -p providers --lib`  
 Expected: PASS
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add providers/src/protocol/media_http.rs
@@ -626,7 +626,7 @@ EOF
 - Consumes: Task 1/2 全部公开符号；`ToolContext` / `ImageGenCreds`；`default_vision_model`
 - Produces: `register` / `dispatch`；toolset id `audio_understand`
 
-- [ ] **Step 1: 模块挂钩**
+- [x] **Step 1: 模块挂钩**
 
 `media/mod.rs`：
 
@@ -660,7 +660,7 @@ pub use media::{audio_understand, image_gen, music, tts, video_gen, vision};
 "audio_understand" => "audio_understand",
 ```
 
-- [ ] **Step 2: 实现 `audio_understand.rs`**
+- [x] **Step 2: 实现 `audio_understand.rs`**
 
 ```rust
 //! 音频理解：Google Interactions 原生；OpenAI Chat describe / Whisper transcribe。
@@ -1081,14 +1081,14 @@ fn youtube_detect() {
 
 （若 `validate_mmss` / `is_youtube_url` 为私有，测 `dispatch` 参数错误，或 `pub(crate)` 之以便测。）
 
-- [ ] **Step 3: Run**
+- [x] **Step 3: Run**
 
 Run: `cargo test -p providers audio_understand_tests -- --nocapture`  
 Run: `cargo test -p tools audio_understand -- --nocapture`  
 Run: `cargo test -p home tools_enabled -- --nocapture`（若有相关测）  
 Expected: PASS；`cargo check -p tools` PASS
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add tools/src/builtin/media/audio_understand.rs \
@@ -1119,7 +1119,7 @@ EOF
 **Interfaces:**
 - Produces: `AGENT_TOOLS` 条目 `id: "audio_understand"`；中英 i18n；图标组件
 
-- [ ] **Step 1: 图标**
+- [x] **Step 1: 图标**
 
 在 `ToolIcons.tsx` 增加（简洁波形，非 emoji）：
 
@@ -1137,7 +1137,7 @@ export function IconAudioUnderstand(props: IconProps) {
 }
 ```
 
-- [ ] **Step 2: `useAgentTools.ts`**
+- [x] **Step 2: `useAgentTools.ts`**
 
 在 `vision` 条目后插入：
 
@@ -1160,7 +1160,7 @@ export function IconAudioUnderstand(props: IconProps) {
 
 并 import `IconAudioUnderstand`。
 
-- [ ] **Step 3: i18n**
+- [x] **Step 3: i18n**
 
 中文：
 
@@ -1176,12 +1176,12 @@ export function IconAudioUnderstand(props: IconProps) {
 "agentTools.audioUnderstand.desc": "Google Interactions for describe/transcribe (YouTube OK); OpenAI Chat describe + Whisper transcribe",
 ```
 
-- [ ] **Step 4: 确认前端无类型错误**
+- [x] **Step 4: 确认前端无类型错误**
 
 Run: `cd frontend && npx tsc --noEmit`（或项目惯用 `npm run typecheck`）  
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add apps/desktop/src/components/ToolIcons.tsx \

@@ -38,13 +38,13 @@
 
 **Files:** `fileTypeIcon.ts`, `fileTypeIcon.test.ts`, create `filespaceViewerKind.ts` + test
 
-- [ ] **Step 1:** 扩展 `FileOpenMode` 增加 `"media-pdf"`；`pdf` 条目改为 `media-pdf`（不再 `external`）。
+- [x] **Step 1:** 扩展 `FileOpenMode` 增加 `"media-pdf"`；`pdf` 条目改为 `media-pdf`（不再 `external`）。
 
 ```ts
 pdf: entry("pdf", ScrollText, "media-pdf"),
 ```
 
-- [ ] **Step 2:** `mediaKindOf` 增加 pdf 分支，或新增：
+- [x] **Step 2:** `mediaKindOf` 增加 pdf 分支，或新增：
 
 ```ts
 export function isPdfFile(name: string): boolean {
@@ -54,7 +54,7 @@ export function isPdfFile(name: string): boolean {
 
 选用 `isPdfFile`（避免把 pdf 塞进 `GeneratedMediaKind`）。
 
-- [ ] **Step 3:** 新建 `filespaceViewerKind.ts`：
+- [x] **Step 3:** 新建 `filespaceViewerKind.ts`：
 
 ```ts
 export type FilespaceViewerKind =
@@ -78,13 +78,13 @@ export function filespaceViewerKind(input: {
 
 规则：`missing` → missing；`mediaKindOf` → image/video/audio/html；`isPdfFile` → pdf；扩展名 md/markdown/mdx → markdown；`open === "text"` 或 mime `text/*` / json / category code|doc|sheet → text；否则 external。
 
-- [ ] **Step 4:** 测试覆盖 md/html/png/mp4/mp3/pdf/docx/missing。
+- [x] **Step 4:** 测试覆盖 md/html/png/mp4/mp3/pdf/docx/missing。
 
 ```bash
 cd frontend && node --test src/lib/fileTypeIcon.test.ts src/lib/filespaceViewerKind.test.ts
 ```
 
-- [ ] **Step 5:** Commit `feat(filespace): add media-pdf and viewer kind resolver`
+- [x] **Step 5:** Commit `feat(filespace): add media-pdf and viewer kind resolver`
 
 ---
 
@@ -105,34 +105,34 @@ type Props = {
 };
 ```
 
-- [ ] **Step 1:** kind=`text`：`read_file` → `WorkspaceEditor`；draft / lastSaved；脏徽章复用 `t("workspace.unsaved")`；保存按钮 `t("workspace.save")`。
-- [ ] **Step 2:** 防抖 600ms `write_file`；⌘S/Ctrl+S 立即写；保存失败设 error 字符串，不更新 lastSaved。
-- [ ] **Step 3:** `path` 变化时：先 await flush 待写；失败 `window.confirm(t("workspace.unsavedConfirm"))` 后丢弃或重试。
-- [ ] **Step 4:** 手工/tsc 无类型错；commit `feat(filespace): editable text viewer with autosave`
+- [x] **Step 1:** kind=`text`：`read_file` → `WorkspaceEditor`；draft / lastSaved；脏徽章复用 `t("workspace.unsaved")`；保存按钮 `t("workspace.save")`。
+- [x] **Step 2:** 防抖 600ms `write_file`；⌘S/Ctrl+S 立即写；保存失败设 error 字符串，不更新 lastSaved。
+- [x] **Step 3:** `path` 变化时：先 await flush 待写；失败 `window.confirm(t("workspace.unsavedConfirm"))` 后丢弃或重试。
+- [x] **Step 4:** 手工/tsc 无类型错；commit `feat(filespace): editable text viewer with autosave`
 
 ---
 
 ### Task 3: Markdown / HTML 双模式
 
-- [ ] **Step 1:** kind=`markdown`：工具栏预览/源码（文案 `workspace.previewMode` / `previewSource`）。预览：`ChatMarkdown`；源码：Editor + 下方/旁侧 `ChatMarkdown(draft)` 实时预览。
-- [ ] **Step 2:** kind=`html`：预览态 `HtmlPreview`/`MediaPreview kind=html`；源码态 Editor + `HtmlPreview source={draft}` 实时。
-- [ ] **Step 3:** 与 Task 2 共用保存逻辑（抽 `useFileDraft(path)` 或内联 helper）。
-- [ ] **Step 4:** Commit `feat(filespace): markdown and html preview/source modes`
+- [x] **Step 1:** kind=`markdown`：工具栏预览/源码（文案 `workspace.previewMode` / `previewSource`）。预览：`ChatMarkdown`；源码：Editor + 下方/旁侧 `ChatMarkdown(draft)` 实时预览。
+- [x] **Step 2:** kind=`html`：预览态 `HtmlPreview`/`MediaPreview kind=html`；源码态 Editor + `HtmlPreview source={draft}` 实时。
+- [x] **Step 3:** 与 Task 2 共用保存逻辑（抽 `useFileDraft(path)` 或内联 helper）。
+- [x] **Step 4:** Commit `feat(filespace): markdown and html preview/source modes`
 
 ---
 
 ### Task 4: 媒体 + PDF pane
 
-- [ ] **Step 1:** image/video/audio → 现有 `MediaPreview`。
-- [ ] **Step 2:** pdf → `convertFileSrc`/`resolveMediaSrc` + `<iframe className="fs-preview-pdf">`；`onError` / 非 Tauri → BrokenMedia 式提示 + `onOpenExternally`。
-- [ ] **Step 3:** external/missing → 现有文案 + 打开按钮。
-- [ ] **Step 4:** Commit `feat(filespace): embed media and pdf in viewer`
+- [x] **Step 1:** image/video/audio → 现有 `MediaPreview`。
+- [x] **Step 2:** pdf → `convertFileSrc`/`resolveMediaSrc` + `<iframe className="fs-preview-pdf">`；`onError` / 非 Tauri → BrokenMedia 式提示 + `onOpenExternally`。
+- [x] **Step 3:** external/missing → 现有文案 + 打开按钮。
+- [x] **Step 4:** Commit `feat(filespace): embed media and pdf in viewer`
 
 ---
 
 ### Task 5: 接入 Panel + 样式/i18n
 
-- [ ] **Step 1:** `FileSpacePanel` 删除 `PreviewState`、`TEXT_EXTS`、`IMAGE_EXTS`、预览 `useEffect`；aside body 改为：
+- [x] **Step 1:** `FileSpacePanel` 删除 `PreviewState`、`TEXT_EXTS`、`IMAGE_EXTS`、预览 `useEffect`；aside body 改为：
 
 ```tsx
 <FileSpaceViewer
@@ -147,18 +147,18 @@ type Props = {
 
 头栏操作按钮保留在 Panel。
 
-- [ ] **Step 2:** `filespace.css`：`.fs-viewer`、`.fs-viewer-toolbar`、`.fs-viewer-split`、`.fs-preview-pdf`、脏徽章对齐 workspace。
-- [ ] **Step 3:** 需要时增加 `filespace.saving`；其余复用 workspace keys。
-- [ ] **Step 4:** Commit `feat(filespace): wire FileSpaceViewer into panel`
+- [x] **Step 2:** `filespace.css`：`.fs-viewer`、`.fs-viewer-toolbar`、`.fs-viewer-split`、`.fs-preview-pdf`、脏徽章对齐 workspace。
+- [x] **Step 3:** 需要时增加 `filespace.saving`；其余复用 workspace keys。
+- [x] **Step 4:** Commit `feat(filespace): wire FileSpaceViewer into panel`
 
 ---
 
 ### Task 6: 验收
 
-- [ ] `node --test` 相关单测；`npx tsc --noEmit`（frontend）
-- [ ] 手工：文本保存、MD/HTML 切换、图/音/视/PDF（Tauri）
-- [ ] 更新 design spec 状态为「实现中/已实现」
-- [ ] Commit `docs: mark filespace media viewer plan done`
+- [x] `node --test` 相关单测；`npx tsc --noEmit`（frontend）
+- [x] 手工：文本保存、MD/HTML 切换、图/音/视/PDF（Tauri）
+- [x] 更新 design spec 状态为「实现中/已实现」
+- [x] Commit `docs: mark filespace media viewer plan done`
 
 ---
 

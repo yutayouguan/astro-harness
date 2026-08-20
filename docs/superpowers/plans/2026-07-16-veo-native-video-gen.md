@@ -50,7 +50,7 @@
 - Consumes: 现有 `google_native_base`、`VideoGenExtras`（本 Task 先把 `reference_images: Vec<VideoImagePart>` 换掉旧 `reference_image`，并增加 `extend_video: Option<VideoImagePart>`、`extend_video_uri: Option<String>`；`extend_video_id` 保留）
 - 同步改 `GeneratedVideo`：增加 `pub video_uri: Option<String>`；现有构造处补 `video_uri: None` 或实际 URI
 
-- [ ] **Step 1: 扩展类型（先改签名，让编译指向改动点）**
+- [x] **Step 1: 扩展类型（先改签名，让编译指向改动点）**
 
 将 `VideoGenExtras` 改为：
 
@@ -86,7 +86,7 @@ pub struct GeneratedVideo {
 
 暂时把 `google_openai_generate_video` 里旧的 `reference_image` 用法改为遍历 `reference_images`（可先只循环一遍，行为与后 Task 一致）。修复所有构造 `GeneratedVideo` / `VideoGenExtras` 的编译错误。
 
-- [ ] **Step 2: 写失败测试（`media_http.rs` 底部 `#[cfg(test)]`）**
+- [x] **Step 2: 写失败测试（`media_http.rs` 底部 `#[cfg(test)]`）**
 
 ```rust
 #[test]
@@ -186,13 +186,13 @@ fn extract_veo_video_uri_success_and_error() {
 }
 ```
 
-- [ ] **Step 3: 运行测试确认失败**
+- [x] **Step 3: 运行测试确认失败**
 
 Run: `cargo test -p providers google_v1beta_root_strips_openai_suffix build_veo_predict_body extract_veo_video_uri -- --nocapture`
 
 Expected: FAIL（函数未定义或旧字段名）
 
-- [ ] **Step 4: 实现纯函数**
+- [x] **Step 4: 实现纯函数**
 
 ```rust
 pub fn google_v1beta_root(config: &ProviderConfig) -> String {
@@ -328,7 +328,7 @@ pub fn extract_veo_video_uri(status_body: &Value) -> Result<String> {
 
 注意：`build_veo_predict_body` **不**把 `negative_prompt`/`style`/`extend_video_id`/`extend_video_uri` 写入原生 body（URI 由调用方先下载填入 `extend_video`）。
 
-- [ ] **Step 5: 跑测试通过并提交**
+- [x] **Step 5: 跑测试通过并提交**
 
 Run: `cargo test -p providers google_v1beta_root_strips_openai_suffix build_veo_predict_body extract_veo_video_uri -- --nocapture`
 
@@ -358,7 +358,7 @@ EOF
 - Consumes: Task 1 全部助手；下载 URI 时若 `extras.extend_video` 为空且 `extend_video_uri` 有值，先 GET 该 URI（带 API key）填入临时 `VideoImagePart` 再 `build_veo_predict_body`
 - 修改 `google_openai_generate_video`：对 `extras.reference_images` 逐个 `multipart_image("reference_images", …)`；`GeneratedVideo.video_uri` 在兼容完成时可填响应 `url`
 
-- [ ] **Step 1: 写单测覆盖「URI 下载后进 body」的同步准备逻辑（可选薄函数）**
+- [x] **Step 1: 写单测覆盖「URI 下载后进 body」的同步准备逻辑（可选薄函数）**
 
 若抽取：
 
@@ -368,7 +368,7 @@ pub fn veo_extras_with_inline_extend(extras: &VideoGenExtras, downloaded: Option
 
 则测：传入 `extend_video_uri` + downloaded bytes → body 含 `video.inlineData`。若不抽取，可跳过本步，直接实现 HTTP（仍须用 Task 1 测试兜底 body）。
 
-- [ ] **Step 2: 实现 `google_native_generate_video`**
+- [x] **Step 2: 实现 `google_native_generate_video`**
 
 要点（实现时按此顺序）：
 
@@ -391,7 +391,7 @@ Ok(GeneratedVideo {
 
 错误：create/poll/download HTTP 非成功时读 `/error/message` 后 `bail!`。
 
-- [ ] **Step 3: 更新兼容路径多参考图与 `video_uri`**
+- [x] **Step 3: 更新兼容路径多参考图与 `video_uri`**
 
 在 `google_openai_generate_video` 中：
 
@@ -413,13 +413,13 @@ return Ok(GeneratedVideo {
 });
 ```
 
-- [ ] **Step 4: 编译与现有 providers 测试**
+- [x] **Step 4: 编译与现有 providers 测试**
 
 Run: `cargo test -p providers --lib`
 
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add providers/src/protocol/media_http.rs
@@ -444,7 +444,7 @@ EOF
 - Consumes: `google_native_generate_video`、`google_openai_generate_video`、`VideoGenExtras`、`default_video_model`
 - Produces: 工具成功字符串含 `api_path=`、`operation_name`/`operation_id`、`video_uri`、`next_shot_hint`（优先 `extend_video`）
 
-- [ ] **Step 1: 更新 `VideoGenArgs`**
+- [x] **Step 1: 更新 `VideoGenArgs`**
 
 ```rust
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
@@ -483,7 +483,7 @@ pub struct VideoGenArgs {
 
 工具 description 改为说明：原生 Veo；`extend_video` 优先；`reference_images` 最多 3；兼容回退。
 
-- [ ] **Step 2: 合并参考图 + 校验 + duration 强制**
+- [x] **Step 2: 合并参考图 + 校验 + duration 强制**
 
 在 `dispatch` 内：
 
@@ -539,7 +539,7 @@ let needs_eight = has_extend
 
 构建 `VideoGenExtras { reference_images: …, extend_video: …, extend_video_uri: …, extend_video_id: …, … }`。
 
-- [ ] **Step 3: native → compat 调用**
+- [x] **Step 3: native → compat 调用**
 
 ```rust
 let video = match google_native_generate_video(
@@ -577,17 +577,17 @@ let video = match google_native_generate_video(
 
 落盘逻辑保持现有 `vid-…mp4`。
 
-- [ ] **Step 4: 更新 image_gen hint**
+- [x] **Step 4: 更新 image_gen hint**
 
 将 hint 中 `reference_image` 改为 `reference_images`（仍可提单路径字符串放进数组）。
 
-- [ ] **Step 5: 编译相关 crate**
+- [x] **Step 5: 编译相关 crate**
 
 Run: `cargo test -p providers --lib && cargo check -p tools`
 
 Expected: PASS / 无错误
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add tools/src/builtin/media/video_gen.rs tools/src/builtin/media/image_gen.rs
@@ -608,19 +608,19 @@ EOF
 - Modify: `apps/desktop/src/i18n/messages.ts`（中英 `agentTools.videoGen.desc`）
 - Modify: `skills/bundled/storyboard-video/SKILL.md`（`astro_bundled_rev: 3`）
 
-- [ ] **Step 1: i18n**
+- [x] **Step 1: i18n**
 
 中文：`Google Veo 原生生成（失败回退兼容接口）；建议 image_gen 首尾帧，续拍用 extend_video；写入 generated/videos`
 
 英文：`Google Veo native (OpenAI-compat fallback); prefer image_gen frames, extend via extend_video; writes generated/videos`
 
-- [ ] **Step 2: skill**
+- [x] **Step 2: skill**
 
 - 步骤 4 续拍改为：优先把上一段相对路径作 `extend_video=`；可选保留 `extend_video_id` 给回退。
 - 参数表：`reference_images`（最多 3）替换/并列旧 `reference_image`；增加 `extend_video` / `extend_video_uri`。
 - `astro_bundled_rev`：`2` → `3`。
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add apps/desktop/src/i18n/messages.ts skills/bundled/storyboard-video/SKILL.md
@@ -636,19 +636,19 @@ EOF
 
 ### Task 5: 验收清单（人工 / 有 Key 时）
 
-- [ ] **Step 1: 单元回归**
+- [x] **Step 1: 单元回归**
 
 Run: `cargo test -p providers --lib`
 
 Expected: 全部 PASS，含 Task 1 新增用例。
 
-- [ ] **Step 2: 有 Google Key 时（可选）**
+- [x] **Step 2: 有 Google Key 时（可选）**
 
 1. Agent 调用 `video_gen` 纯文生 → `api_path=native`、本地 mp4。
 2. 用结果路径 `extend_video` 续拍 → 成功。
 3. 临时把 model 改成无效值 → 应出现 `fallback=openai_compat` 或双失败合并消息（取决于兼容是否也拒）。
 
-- [ ] **Step 3: 无额外 commit**（除非修 bug）
+- [x] **Step 3: 无额外 commit**（除非修 bug）
 
 ---
 

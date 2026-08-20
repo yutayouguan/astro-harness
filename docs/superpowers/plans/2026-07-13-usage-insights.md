@@ -45,7 +45,7 @@
 - Create: `memory/tests/usage_db_test.rs`
 - Modify: `crates/agent-memory/src/lib.rs`
 
-- [ ] **Step 1: 写失败测试（路径与 insert）**
+- [x] **Step 1: 写失败测试（路径与 insert）**
 
 ```rust
 //! usage.db 事件写入与聚合查询测试。
@@ -106,13 +106,13 @@ fn insert_and_count_events() {
 }
 ```
 
-- [ ] **Step 2: 运行测试确认失败**
+- [x] **Step 2: 运行测试确认失败**
 
 Run: `cargo test -p memory --test usage_db_test insert_and_count_events -- --nocapture`
 
 Expected: 编译失败（模块/类型不存在）
 
-- [ ] **Step 3: 实现 `usage_db.rs`（最小可编译）**
+- [x] **Step 3: 实现 `usage_db.rs`（最小可编译）**
 
 在 `crates/agent-memory/src/usage_db.rs` 实现（对齐 `cron_run_db` / `artifact_db` 风格）：
 
@@ -556,13 +556,13 @@ pub use usage_db::{
 };
 ```
 
-- [ ] **Step 4: 跑通 insert 测试**
+- [x] **Step 4: 跑通 insert 测试**
 
 Run: `cargo test -p memory --test usage_db_test -- --nocapture`
 
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add memory/src/usage_db.rs memory/src/lib.rs memory/tests/usage_db_test.rs
@@ -580,7 +580,7 @@ EOF
 **Files:**
 - Modify: `memory/tests/usage_db_test.rs`
 
-- [ ] **Step 1: 追加测试**
+- [x] **Step 1: 追加测试**
 
 ```rust
 #[test]
@@ -673,13 +673,13 @@ fn skill_events_do_not_inflate_kpi_calls() {
 }
 ```
 
-- [ ] **Step 2: 运行测试**
+- [x] **Step 2: 运行测试**
 
 Run: `cargo test -p memory --test usage_db_test -- --nocapture`
 
 Expected: PASS（若 period 边界或 strftime 失败则修 `period_bounds` / ts 格式）
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add memory/tests/usage_db_test.rs memory/src/usage_db.rs
@@ -700,7 +700,7 @@ EOF
 - Modify: `memory/tests/usage_db_test.rs`
 - Modify: `apps/desktop/src-tauri/src/litellm_meta.rs`
 
-- [ ] **Step 1: 写 pricing 失败测试**
+- [x] **Step 1: 写 pricing 失败测试**
 
 ```rust
 #[test]
@@ -725,7 +725,7 @@ fn estimate_cost_from_litellm_fixture() {
 }
 ```
 
-- [ ] **Step 2: 实现 `usage_pricing.rs`**
+- [x] **Step 2: 实现 `usage_pricing.rs`**
 
 ```rust
 //! 从 `~/.astro/litellm-model-meta.json` 读取单价并估算 LLM 费用（USD）。
@@ -779,7 +779,7 @@ pub fn estimate_llm_cost(model: &str, prompt_tokens: u32, completion_tokens: u32
 
 导出：`pub use usage_pricing::estimate_llm_cost;`
 
-- [ ] **Step 3: 扩展 `litellm_meta.rs` 的 `RawEntry`**
+- [x] **Step 3: 扩展 `litellm_meta.rs` 的 `RawEntry`**
 
 在 `RawEntry` 增加：
 
@@ -794,13 +794,13 @@ output_cost_per_token: Option<f64>,
 
 修改 `parse_map` 保留条件：若存在 `input_cost_per_token` 或 `output_cost_per_token` 也保留条目（不要再跳过「纯定价」项）。
 
-- [ ] **Step 4: 跑测试**
+- [x] **Step 4: 跑测试**
 
 Run: `cargo test -p memory --test usage_db_test estimate_cost_from_litellm_fixture -- --nocapture`
 
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add memory/src/usage_pricing.rs memory/src/lib.rs memory/tests/usage_db_test.rs apps/desktop/src-tauri/src/litellm_meta.rs
@@ -818,7 +818,7 @@ EOF
 **Files:**
 - Modify: `crates/agent-memory/src/usage_stats.rs`
 
-- [ ] **Step 1: 在 `record_tool_call` 成功写 JSON 后追加事件**
+- [x] **Step 1: 在 `record_tool_call` 成功写 JSON 后追加事件**
 
 在 `save_usage_stats(...)?` 之前或之后（推荐 save 成功后）调用：
 
@@ -866,15 +866,15 @@ if tool_name == "skills" {
 
 保留原有 JSON 逻辑与返回值不变。
 
-- [ ] **Step 2: 扩展 `usage_stats` 现有测试**（设 `ASTRO_MEMORY_DIR` 后 `record_tool_call`，再 `UsageDb::open_default().query_insights` 断言有 tool/skill 行）
+- [x] **Step 2: 扩展 `usage_stats` 现有测试**（设 `ASTRO_MEMORY_DIR` 后 `record_tool_call`，再 `UsageDb::open_default().query_insights` 断言有 tool/skill 行）
 
-- [ ] **Step 3: 运行**
+- [x] **Step 3: 运行**
 
 Run: `cargo test -p memory --lib records_toolset_and_skill_counts -- --nocapture`
 
 Expected: PASS
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add memory/src/usage_stats.rs
@@ -893,7 +893,7 @@ EOF
 - Modify: `crates/agent-core/src/loop_.rs`（MCP 分支，约 353–362 行）
 - Modify: `crates/agent-server/src/cron_runner.rs`
 
-- [ ] **Step 1: MCP — 在已有 `record_usage_tool_call` 旁追加**
+- [x] **Step 1: MCP — 在已有 `record_usage_tool_call` 旁追加**
 
 ```rust
 if is_mcp_tool_name(name) {
@@ -919,7 +919,7 @@ if is_mcp_tool_name(name) {
 
 说明：`record_usage_tool_call` 已写 `kind=tool name=mcp`；此处额外写 `kind=mcp` 用完整工具名，供排行。KPI calls 会计 tool+mcp 各 1——若不想双计，改为 MCP 路径**跳过** `record_usage_tool_call` 的 tool 事件、只 bump JSON，或让 `usage_stats` 对 `mcp__` 前缀不写 tool 事件、只写 JSON。**推荐：** 在 `usage_stats::record_tool_call` 里若 `tool_name.starts_with("mcp__")` 则**只更新 JSON、不写 usage_events tool 行**，由 loop 写 `kind=mcp` 事件。
 
-- [ ] **Step 2: 按推荐改 `usage_stats`**
+- [x] **Step 2: 按推荐改 `usage_stats`**
 
 ```rust
 let is_mcp = tool_name.starts_with("mcp__");
@@ -931,7 +931,7 @@ if !is_mcp {
 Ok(())
 ```
 
-- [ ] **Step 3: cron — 在 `tick_and_execute` 成功分支**
+- [x] **Step 3: cron — 在 `tick_and_execute` 成功分支**
 
 ```rust
 Ok(row) => {
@@ -955,11 +955,11 @@ Ok(row) => {
 
 确认 `CronJob` 有 `agent_id` / `title` 字段；若字段名不同则按实际结构调整。
 
-- [ ] **Step 4: `cargo check -p agent -p backend`**
+- [x] **Step 4: `cargo check -p agent -p backend`**
 
 Expected: 成功
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add agent/src/loop_.rs backend/src/cron_runner.rs memory/src/usage_stats.rs
@@ -978,7 +978,7 @@ EOF
 - Modify: `crates/agent-core/src/streaming.rs`
 - Modify: `crates/agent-core/src/loop_.rs`（新增 `agent_id()`）
 
-- [ ] **Step 1: 在 `AgentLoop` 增加只读访问器（`memory` / `session_id` 均为私有）**
+- [x] **Step 1: 在 `AgentLoop` 增加只读访问器（`memory` / `session_id` 均为私有）**
 
 在 `crates/agent-core/src/loop_.rs`：
 
@@ -990,7 +990,7 @@ pub fn agent_id(&self) -> &str {
 
 （已有 `session_id(&self) -> &str`。）
 
-- [ ] **Step 2: 在 `finish_usage_and_done` 调用前记录**
+- [x] **Step 2: 在 `finish_usage_and_done` 调用前记录**
 
 在 `run_multi_turn_stream` 中，每次准备 `finish_usage_and_done(&tx, saw_usage.then_some(total_usage))` 之前（含正常结束与取消路径），若 `saw_usage`：
 
@@ -1022,11 +1022,11 @@ pub fn agent_id(&self) -> &str {
 
 `ProviderConfig.model` 已存在。只在流真正结束时记**一次累计** usage（不要每轮 `round_usage` 都记）。
 
-- [ ] **Step 3: `cargo test -p agent --test streaming_test`**
+- [x] **Step 3: `cargo test -p agent --test streaming_test`**
 
 Expected: PASS（行为不变，仅旁路记账）
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add agent/src/streaming.rs agent/src/loop_.rs
@@ -1045,7 +1045,7 @@ EOF
 - Modify: `apps/desktop/src-tauri/src/config_commands.rs`
 - Modify: `apps/desktop/src-tauri/src/lib.rs`
 
-- [ ] **Step 1: 添加命令**
+- [x] **Step 1: 添加命令**
 
 ```rust
 #[derive(Debug, Deserialize)]
@@ -1078,11 +1078,11 @@ pub async fn get_usage_insights(
 
 在 `lib.rs` 的 `invoke_handler` 注册 `get_usage_insights`。
 
-- [ ] **Step 2: `cargo check -p astro-frontend`（或 workspace 中 tauri crate 名）**
+- [x] **Step 2: `cargo check -p astro-frontend`（或 workspace 中 tauri crate 名）**
 
 Expected: 成功
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add apps/desktop/src-tauri/src/config_commands.rs apps/desktop/src-tauri/src/lib.rs
@@ -1105,11 +1105,11 @@ EOF
 - Modify: `apps/desktop/src/App.tsx`
 - Modify: `apps/desktop/src/i18n/messages.ts`
 
-- [ ] **Step 1: 图标**
+- [x] **Step 1: 图标**
 
 在 `NavIcons.tsx` 增加柱状图风格 `IconInsights`（与现有 `IconBase` 一致）。
 
-- [ ] **Step 2: i18n（中英）**
+- [x] **Step 2: i18n（中英）**
 
 ```ts
 "nav.insights": "洞察",
@@ -1131,7 +1131,7 @@ EOF
 // English 对应键同名
 ```
 
-- [ ] **Step 3: `InsightsPanel.tsx` 骨架**
+- [x] **Step 3: `InsightsPanel.tsx` 骨架**
 
 ```tsx
 import { invoke } from "@tauri-apps/api/core";
@@ -1197,7 +1197,7 @@ export default function InsightsPanel({ active }: { active: boolean }) {
 
 样式对齐 `tools.css` / `cron.css` 的面板间距与卡片；柱状图用 `flex` + 百分比 `height`，**不**加 chart 依赖。
 
-- [ ] **Step 4: 接入 App**
+- [x] **Step 4: 接入 App**
 
 - `NavId` 增加 `"insights"`
 - `NAV` 在 `tools` 与 `cron` 之间插入 insights（tone: `"amber"`）
@@ -1205,13 +1205,13 @@ export default function InsightsPanel({ active }: { active: boolean }) {
 - 主内容区：`{nav === "insights" && <InsightsPanel active={nav === "insights"} />}`
 - import 图标与面板；`index.css` `@import "./insights.css"`
 
-- [ ] **Step 5: 类型检查**
+- [x] **Step 5: 类型检查**
 
 Run: `cd frontend && npx tsc -b --pretty false`
 
 Expected: 无错误
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add apps/desktop/src/components/InsightsPanel.tsx apps/desktop/src/styles/insights.css \
@@ -1230,7 +1230,7 @@ EOF
 
 **Files:** 无新文件（必要时微调）
 
-- [ ] **Step 1: 单元回归**
+- [x] **Step 1: 单元回归**
 
 Run:
 
@@ -1242,21 +1242,21 @@ cd frontend && npx tsc -b
 
 Expected: 全绿
 
-- [ ] **Step 2: 手工冒烟（可选，有桌面环境时）**
+- [x] **Step 2: 手工冒烟（可选，有桌面环境时）**
 
 1. 启动 App，打开「洞察」→ 见空态文案  
 2. 聊天触发工具 / 一轮对话 → 刷新洞察 → KPI / 排行出现数据  
 3. 切换 月/季/年 → series 桶粒度变化  
 4. Tools 面板累计 chip 仍可用  
 
-- [ ] **Step 3: 对照 spec 验收清单勾选**
+- [x] **Step 3: 对照 spec 验收清单勾选**
 
-- [ ] 侧边栏洞察 + period 切换  
-- [ ] tool/skill/mcp/cron/llm 新事件可见  
-- [ ] 费用标注「估」；未知模型不炸  
-- [ ] 不回填；旧 JSON 保留  
+- [x] 侧边栏洞察 + period 切换  
+- [x] tool/skill/mcp/cron/llm 新事件可见  
+- [x] 费用标注「估」；未知模型不炸  
+- [x] 不回填；旧 JSON 保留  
 
-- [ ] **Step 4: 若有小修，单独 commit；否则完成**
+- [x] **Step 4: 若有小修，单独 commit；否则完成**
 
 ---
 

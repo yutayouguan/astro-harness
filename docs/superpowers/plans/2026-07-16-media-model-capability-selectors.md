@@ -37,7 +37,7 @@
 - Produces: LiteLLM metadata signals that distinguish music generation from TTS/audio generation.
 - Consumed by: Task 2 media filtering and Task 5 selectors.
 
-- [ ] **Step 1: Add failing Rust metadata tests**
+- [x] **Step 1: Add failing Rust metadata tests**
 
 In `apps/desktop/src-tauri/src/model_meta.rs`, add fixtures covering the documented mode, the current Lyria metadata shape, and the TTS negative case:
 
@@ -80,7 +80,7 @@ fn litellm_tts_mode_does_not_set_music_gen() {
 }
 ```
 
-- [ ] **Step 2: Run the focused Rust tests and verify failure**
+- [x] **Step 2: Run the focused Rust tests and verify failure**
 
 Run:
 
@@ -91,7 +91,7 @@ cargo test -p astro-agent --lib model_meta::tests::litellm_audio_only_chat_sets_
 
 Expected: FAIL because `music_gen` and `supported_output_modalities` do not exist.
 
-- [ ] **Step 3: Parse music metadata and map it without model-name guessing**
+- [x] **Step 3: Parse music metadata and map it without model-name guessing**
 
 In `apps/desktop/src-tauri/src/litellm_meta.rs`, add the field to both structs:
 
@@ -141,7 +141,7 @@ if !is_music {
 
 Apply the `!is_music` guard in both existing non-chat and chat branches so a Lyria entry is not also exposed as TTS.
 
-- [ ] **Step 4: Run Rust metadata tests**
+- [x] **Step 4: Run Rust metadata tests**
 
 Run:
 
@@ -152,7 +152,7 @@ cargo test -p astro-agent --lib litellm_meta::tests -- --nocapture
 
 Expected: PASS.
 
-- [ ] **Step 5: Add failing frontend capability-order test**
+- [x] **Step 5: Add failing frontend capability-order test**
 
 Update `apps/desktop/src/lib/model/modelCaps.test.ts`:
 
@@ -182,7 +182,7 @@ cd frontend && node --experimental-strip-types --test src/lib/model/modelCaps.te
 
 Expected: FAIL because `music_gen` is not a known capability.
 
-- [ ] **Step 6: Extend frontend types, defaults, and icon metadata**
+- [x] **Step 6: Extend frontend types, defaults, and icon metadata**
 
 Add `music_gen` to `ModelCapabilities`, `ModelCapKey`, `MODEL_CAP_ORDER`, and `EMPTY_MODEL_CAPABILITIES`; keep `inferModelCapabilities()` returning `music_gen: false`. Add a music icon entry to `ModelCapabilityIcons.tsx` and bilingual `modelCaps.musicGen` messages. Update every complete capability literal found by the `rg` command with:
 
@@ -190,7 +190,7 @@ Add `music_gen` to `ModelCapabilities`, `ModelCapKey`, `MODEL_CAP_ORDER`, and `E
 music_gen: false,
 ```
 
-- [ ] **Step 7: Run frontend tests and typecheck**
+- [x] **Step 7: Run frontend tests and typecheck**
 
 Run:
 
@@ -201,7 +201,7 @@ cd frontend && npx tsc -b --pretty false
 
 Expected: all tests PASS and TypeScript exits 0.
 
-- [ ] **Step 8: Commit the capability slice**
+- [x] **Step 8: Commit the capability slice**
 
 ```bash
 git add apps/desktop/src-tauri/src/litellm_meta.rs apps/desktop/src-tauri/src/model_meta.rs apps/desktop/src/types.ts apps/desktop/src/lib/model/modelCaps.ts apps/desktop/src/lib/model/modelCaps.test.ts apps/desktop/src/components/agents/ModelCapabilityIcons.tsx apps/desktop/src/i18n/messages.ts
@@ -222,7 +222,7 @@ git commit -m "feat(models): distinguish music generation capability"
 - Produces: `MediaCapabilityKey`, `MEDIA_CAPABILITY_BY_FIELD`, `filterModelsByCapability`, `buildMediaModelOptions`, and `sanitizeMediaModelValue`.
 - Consumed by: Task 5 `ProvidersPanel`.
 
-- [ ] **Step 1: Write failing pure-function tests**
+- [x] **Step 1: Write failing pure-function tests**
 
 Create `apps/desktop/src/lib/providers/mediaModelOptions.test.ts`:
 
@@ -286,7 +286,7 @@ test("clears saved values absent from the filtered options", () => {
 });
 ```
 
-- [ ] **Step 2: Run the test and verify failure**
+- [x] **Step 2: Run the test and verify failure**
 
 Run:
 
@@ -296,7 +296,7 @@ cd frontend && node --experimental-strip-types --test src/lib/providers/mediaMod
 
 Expected: FAIL with module-not-found for `mediaModelOptions.ts`.
 
-- [ ] **Step 3: Implement the pure module**
+- [x] **Step 3: Implement the pure module**
 
 Create `apps/desktop/src/lib/providers/mediaModelOptions.ts`:
 
@@ -364,7 +364,7 @@ export function sanitizeMediaModelValue(
 }
 ```
 
-- [ ] **Step 4: Run the focused test**
+- [x] **Step 4: Run the focused test**
 
 Run:
 
@@ -374,7 +374,7 @@ cd frontend && node --experimental-strip-types --test src/lib/providers/mediaMod
 
 Expected: 3 tests PASS.
 
-- [ ] **Step 5: Commit the pure selector logic**
+- [x] **Step 5: Commit the pure selector logic**
 
 ```bash
 git add apps/desktop/src/lib/providers/mediaModelOptions.ts apps/desktop/src/lib/providers/mediaModelOptions.test.ts
@@ -397,7 +397,7 @@ git commit -m "feat(providers): add media model filtering helpers"
 - Produces: optional persisted `ProviderConfig.music_model`, DTO/input `music_model`, `ImageGenTarget.music_model`, protobuf `ChatRequest.image_gen_music_model`, and runtime `ImageGenCreds.music_model`.
 - Consumed by: Task 4 `music_gen` model resolution and Task 5 frontend save payload.
 
-- [ ] **Step 1: Add failing provider backward-compatibility and default-resolution tests**
+- [x] **Step 1: Add failing provider backward-compatibility and default-resolution tests**
 
 In `apps/desktop/src-tauri/src/providers_commands.rs` tests, add:
 
@@ -423,7 +423,7 @@ fn google_music_model_defaults_to_lyria_clip() {
 }
 ```
 
-- [ ] **Step 2: Run the focused provider tests and verify failure**
+- [x] **Step 2: Run the focused provider tests and verify failure**
 
 Run:
 
@@ -434,7 +434,7 @@ cargo test -p astro-agent --lib google_music_model_defaults -- --nocapture
 
 Expected: FAIL because the field and helper do not exist.
 
-- [ ] **Step 3: Add the persisted field and resolved target**
+- [x] **Step 3: Add the persisted field and resolved target**
 
 In `providers_commands.rs`, mirror `vision_model` across `ProviderConfig`, `ProviderConfig::new`, `ProviderConfigDto`, `ProviderConfigInput`, `to_dto`, and `save_provider`:
 
@@ -459,7 +459,7 @@ music_model: resolve_media_model(
 ),
 ```
 
-- [ ] **Step 4: Add protobuf and runtime credential fields**
+- [x] **Step 4: Add protobuf and runtime credential fields**
 
 Append to `ChatRequest` in `proto/proto/astro.proto` without renumbering existing fields:
 
@@ -477,7 +477,7 @@ pub music_model: String,
 
 Add `music_model: &str` after `video_model: &str` in `ImageGenTargets::from_parts`; set the primary field with `music_model.trim().to_string()` and the fallback field to `String::new()`.
 
-- [ ] **Step 5: Repair every compiler-identified constructor and transport call**
+- [x] **Step 5: Repair every compiler-identified constructor and transport call**
 
 Use:
 
@@ -505,7 +505,7 @@ For direct test `ImageGenCreds` literals, use:
 music_model: String::new(),
 ```
 
-- [ ] **Step 6: Run formatting, focused tests, and workspace check**
+- [x] **Step 6: Run formatting, focused tests, and workspace check**
 
 Run:
 
@@ -517,7 +517,7 @@ cargo check -p proto -p tools -p backend -p astro-agent
 
 Expected: formatting check, tests, and all four package checks PASS.
 
-- [ ] **Step 7: Commit the transport slice**
+- [x] **Step 7: Commit the transport slice**
 
 ```bash
 git add apps/desktop/src-tauri/src/providers_commands.rs proto/proto/astro.proto apps/desktop/src-tauri/src/commands.rs backend/src/grpc/astro_service.rs tools/src/engine/context.rs
@@ -536,7 +536,7 @@ git commit -m "feat(providers): carry configured music model to tools"
 - Consumes: `ImageGenCreds.music_model` from Task 3.
 - Produces: `validate_music_gen_args(args, configured_music_model)` with precedence `explicit arg > configured model > clip default`.
 
-- [ ] **Step 1: Add failing precedence tests and update existing call sites**
+- [x] **Step 1: Add failing precedence tests and update existing call sites**
 
 Change test calls to pass `""`, then add:
 
@@ -580,7 +580,7 @@ fn empty_configuration_falls_back_to_clip() {
 }
 ```
 
-- [ ] **Step 2: Run focused tests and verify failure**
+- [x] **Step 2: Run focused tests and verify failure**
 
 Run:
 
@@ -590,7 +590,7 @@ cargo test -p tools --lib music_gen::tests -- --nocapture
 
 Expected: FAIL because `validate_music_gen_args` accepts one argument and ignores configuration.
 
-- [ ] **Step 3: Implement model precedence**
+- [x] **Step 3: Implement model precedence**
 
 Change the function signature and alias source:
 
@@ -650,7 +650,7 @@ let (model_id, format) =
     validate_music_gen_args(&parsed, &creds.music_model)?;
 ```
 
-- [ ] **Step 4: Run tool and provider tests**
+- [x] **Step 4: Run tool and provider tests**
 
 Run:
 
@@ -661,7 +661,7 @@ cargo test -p providers --lib interactions_http::tests::resolve_lyria -- --nocap
 
 Expected: all tests PASS.
 
-- [ ] **Step 5: Commit the tool behavior**
+- [x] **Step 5: Commit the tool behavior**
 
 ```bash
 git add tools/src/builtin/media/music_gen.rs
@@ -683,7 +683,7 @@ git commit -m "feat(tools): honor configured music generation model"
 - Consumes: Task 2 option helpers and Task 3 `ProviderDto.music_model`.
 - Produces: five media selectors, post-resolution invalid-value cleanup, and provider save payload including `music_model`.
 
-- [ ] **Step 1: Extend the selector tests for all five field mappings**
+- [x] **Step 1: Extend the selector tests for all five field mappings**
 
 Add to `mediaModelOptions.test.ts`:
 
@@ -709,7 +709,7 @@ cd frontend && node --experimental-strip-types --test src/lib/providers/mediaMod
 
 Expected: PASS, proving the helper contract before component integration.
 
-- [ ] **Step 2: Extend DTO and draft state**
+- [x] **Step 2: Extend DTO and draft state**
 
 In `apps/desktop/src/types.ts` add:
 
@@ -737,7 +737,7 @@ openai: {
 },
 ```
 
-- [ ] **Step 3: Track when model metadata has resolved**
+- [x] **Step 3: Track when model metadata has resolved**
 
 Add:
 
@@ -747,7 +747,7 @@ const [modelsResolved, setModelsResolved] = useState(false);
 
 Set it to `false` when the selected provider changes. Set it to `true` after a cache hit, after `list_provider_models` succeeds or fails, and immediately when the provider cannot list models because it has no key. Do not sanitize while it is false.
 
-- [ ] **Step 4: Build memoized options and sanitize invalid saved values**
+- [x] **Step 4: Build memoized options and sanitize invalid saved values**
 
 Import Task 2 helpers and create a local builder:
 
@@ -809,7 +809,7 @@ useEffect(() => {
 }, [models, modelsResolved, selected?.id, selected?.kind]);
 ```
 
-- [ ] **Step 5: Replace the four inputs and add the Google music selector**
+- [x] **Step 5: Replace the four inputs and add the Google music selector**
 
 For each media field, render `SelectMenu` with `className="providers-media-model-select"`, the draft value, translated aria label, and corresponding filtered options. The image selector pattern is:
 
@@ -832,7 +832,7 @@ For each media field, render `SelectMenu` with `className="providers-media-model
 
 Use `video_gen`, `audio_gen`, `music_gen`, and `vision` for the other fields. Render video and music only for Google. Do not insert the current value as an orphan option.
 
-- [ ] **Step 6: Add translations and selector styling**
+- [x] **Step 6: Add translations and selector styling**
 
 Add bilingual keys:
 
@@ -861,7 +861,7 @@ In `apps/desktop/src/styles/features/providers.css`, make the SelectMenu fill th
 }
 ```
 
-- [ ] **Step 7: Run frontend tests, typecheck, and lints**
+- [x] **Step 7: Run frontend tests, typecheck, and lints**
 
 Run:
 
@@ -872,7 +872,7 @@ cd frontend && npx tsc -b --pretty false
 
 Expected: all Node tests PASS and TypeScript exits 0. Then inspect IDE diagnostics for the five changed frontend files and fix only newly introduced errors.
 
-- [ ] **Step 8: Commit the UI slice**
+- [x] **Step 8: Commit the UI slice**
 
 ```bash
 git add apps/desktop/src/components/settings/ProvidersPanel.tsx apps/desktop/src/types.ts apps/desktop/src/i18n/messages.ts apps/desktop/src/styles/features/providers.css apps/desktop/src/lib/providers/mediaModelOptions.test.ts
@@ -890,7 +890,7 @@ git commit -m "feat(providers): select media models by capability"
 - Consumes: Tasks 1–5.
 - Produces: a verified end-to-end capability-filtered configuration path.
 
-- [ ] **Step 1: Run all focused frontend tests**
+- [x] **Step 1: Run all focused frontend tests**
 
 ```bash
 cd frontend && node --experimental-strip-types --test \
@@ -903,7 +903,7 @@ cd frontend && node --experimental-strip-types --test \
 
 Expected: all tests PASS.
 
-- [ ] **Step 2: Run focused Rust tests**
+- [x] **Step 2: Run focused Rust tests**
 
 ```bash
 cargo test -p astro-agent --lib model_meta::tests -- --nocapture
@@ -914,7 +914,7 @@ cargo test -p providers --lib interactions_http::tests::resolve_lyria -- --nocap
 
 Expected: all tests PASS.
 
-- [ ] **Step 3: Run formatting and compilation checks**
+- [x] **Step 3: Run formatting and compilation checks**
 
 ```bash
 cargo fmt --all -- --check
@@ -924,7 +924,7 @@ cd frontend && npx tsc -b --pretty false
 
 Expected: every command exits 0.
 
-- [ ] **Step 4: Perform desktop smoke checks**
+- [x] **Step 4: Perform desktop smoke checks**
 
 In the Tauri application:
 
@@ -935,7 +935,7 @@ In the Tauri application:
 5. Save `lyria-3-pro-preview`, start a new Agent run, and invoke `music_gen` without `model`; verify output reports `model=lyria-3-pro-preview`.
 6. Invoke `music_gen` with `model=clip`; verify output reports `model=lyria-3-clip-preview`.
 
-- [ ] **Step 5: Commit only if verification required fixes**
+- [x] **Step 5: Commit only if verification required fixes**
 
 ```bash
 git status --short

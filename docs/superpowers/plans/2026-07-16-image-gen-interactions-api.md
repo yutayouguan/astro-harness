@@ -48,7 +48,7 @@
   - `pub fn build_interaction_image_body(model: &str, req: &InteractionImageRequest) -> serde_json::Value`
   - `pub fn parse_interaction_image_response(v: &serde_json::Value) -> anyhow::Result<InteractionImageResult>`
 
-- [ ] **Step 1: 写失败测试（同文件 `#[cfg(test)]`）**
+- [x] **Step 1: 写失败测试（同文件 `#[cfg(test)]`）**
 
 在新建文件底部加入（此时函数尚未实现，或先 stub 再补测试）：
 
@@ -127,7 +127,7 @@ mod tests {
 }
 ```
 
-- [ ] **Step 2: 注册模块**
+- [x] **Step 2: 注册模块**
 
 `crates/agent-providers/src/protocol/mod.rs` 增加：
 
@@ -137,7 +137,7 @@ pub mod interactions_http;
 
 `crates/agent-providers/src/lib.rs` 的 `pub use protocol::{...}` 加入 `interactions_http`。
 
-- [ ] **Step 3: 实现类型与函数**
+- [x] **Step 3: 实现类型与函数**
 
 ```rust
 //! Gemini Interactions API 出图（Nano Banana）。
@@ -326,7 +326,7 @@ pub fn parse_interaction_image_response(v: &Value) -> Result<InteractionImageRes
 }
 ```
 
-- [ ] **Step 4: 跑测试**
+- [x] **Step 4: 跑测试**
 
 Run:
 
@@ -336,7 +336,7 @@ cargo test -p providers interactions_http -- --nocapture
 
 Expected: PASS（3 tests）
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add providers/src/protocol/interactions_http.rs providers/src/protocol/mod.rs providers/src/lib.rs
@@ -355,7 +355,7 @@ git commit -m "feat(providers): add Gemini Interactions image body/parse helpers
 - Produces:
   - `pub async fn google_interactions_image(client: &reqwest::Client, config: &ProviderConfig, req: &InteractionImageRequest) -> Result<InteractionImageResult>`
 
-- [ ] **Step 1: 实现 HTTP 函数**
+- [x] **Step 1: 实现 HTTP 函数**
 
 ```rust
 use reqwest::Client;
@@ -410,7 +410,7 @@ pub async fn google_interactions_image(
 
 注意：`google_native_base` 在 `media_http` 已是 `pub`；若循环依赖（`media_http` 不引用 `interactions_http`，则 OK）。不要在 `media_http` import `interactions_http`。
 
-- [ ] **Step 2: 编译检查**
+- [x] **Step 2: 编译检查**
 
 Run:
 
@@ -420,7 +420,7 @@ cargo check -p providers
 
 Expected: 成功
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add providers/src/protocol/interactions_http.rs
@@ -440,7 +440,7 @@ git commit -m "feat(providers): call Gemini /v1beta/interactions for image gen"
   - `fn validate_image_gen_args(args: &ImageGenArgs) -> anyhow::Result<()>`（或内联于 dispatch 前的清晰校验块）
   - 单元测试：非法 `image_size` / `thinking_level` / `image_search` 缺 `google_search` / `video`+`video_uri`
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 ```rust
 #[cfg(test)]
@@ -517,7 +517,7 @@ mod arg_tests {
 }
 ```
 
-- [ ] **Step 2: 扩展 Args + 实现 validate**
+- [x] **Step 2: 扩展 Args + 实现 validate**
 
 ```rust
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
@@ -578,7 +578,7 @@ fn validate_image_gen_args(args: &ImageGenArgs) -> anyhow::Result<()> {
 }
 ```
 
-- [ ] **Step 3: 跑测试**
+- [x] **Step 3: 跑测试**
 
 Run:
 
@@ -588,7 +588,7 @@ cargo test -p tools arg_tests -- --nocapture
 
 Expected: PASS
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add tools/src/builtin/media/image_gen.rs
@@ -606,13 +606,13 @@ git commit -m "feat(tools): expand image_gen args and validation for Interaction
 - Consumes: `providers::interactions_http::{google_interactions_image, InteractionImageRequest, InteractionImagePart, InteractionVideoInput}`
 - 复用 `video_gen` 同类路径解析逻辑（可内联复制 `resolve_workspace_file` / mime helper，或抽私有 fn；本任务允许在 `image_gen.rs` 内复制精简版以避免跨模块大重构）
 
-- [ ] **Step 1: 更新 `register` 描述**
+- [x] **Step 1: 更新 `register` 描述**
 
 ```rust
 description: "Generate or edit images via Gemini Interactions (Nano Banana): text-to-image, up to 14 reference_images, previous_interaction_id for multi-turn, optional google_search/image_search, thinking_level, video_uri/video. Params: aspect_ratio, image_size (0.5K|1K|2K|4K). Falls back to OpenAI gpt-image-2 for prompt-only. Writes generated/images/."
 ```
 
-- [ ] **Step 2: 重写 `dispatch` / `generate_one`**
+- [x] **Step 2: 重写 `dispatch` / `generate_one`**
 
 逻辑要点：
 
@@ -643,7 +643,7 @@ let config = ProviderConfig {
 };
 ```
 
-- [ ] **Step 3: 编译 + 相关测试**
+- [x] **Step 3: 编译 + 相关测试**
 
 Run:
 
@@ -654,7 +654,7 @@ cargo check -p tools
 
 Expected: PASS / 成功
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add tools/src/builtin/media/image_gen.rs
@@ -667,7 +667,7 @@ git commit -m "feat(tools): route Google image_gen through Interactions API"
 
 **Files:** 无代码变更（除非发现缺陷）
 
-- [ ] **Step 1: 确认导出与描述**
+- [x] **Step 1: 确认导出与描述**
 
 Run:
 
@@ -678,14 +678,14 @@ cargo test -p tools --lib
 
 Expected: PASS
 
-- [ ] **Step 2: （有 Google Key 时）手工冒烟**
+- [x] **Step 2: （有 Google Key 时）手工冒烟**
 
 1. `prompt` only → 出图 + `interaction_id`
 2. 用该 id 调 `previous_interaction_id` 改图
 3. `aspect_ratio=16:9` + `image_size=1K`
 4. 可选：`google_search=true`
 
-- [ ] **Step 3: 若有手工修复则单独 commit；否则跳过**
+- [x] **Step 3: 若有手工修复则单独 commit；否则跳过**
 
 ```bash
 git commit -m "fix(image_gen): address Interactions smoke findings"

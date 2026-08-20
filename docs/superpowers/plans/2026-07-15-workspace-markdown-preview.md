@@ -46,7 +46,7 @@
   - `export function readWorkspaceMdMode(): MdMode` — 默认 `"source"`
   - `export function writeWorkspaceMdMode(mode: MdMode): void` — 失败静默
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```ts
 import assert from "node:assert/strict";
@@ -94,12 +94,12 @@ test("readWorkspaceMdMode defaults to source and accepts stored values", () => {
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `cd frontend && node --test src/lib/workspaceMdMode.test.ts`  
 Expected: FAIL（模块不存在）
 
-- [ ] **Step 3: Write minimal implementation**
+- [x] **Step 3: Write minimal implementation**
 
 ```ts
 /** 工作空间 Markdown 预览/源码模式持久化与判定。 */
@@ -135,12 +135,12 @@ export function writeWorkspaceMdMode(mode: MdMode): void {
 }
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `cd frontend && node --test src/lib/workspaceMdMode.test.ts`  
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add apps/desktop/src/lib/workspaceMdMode.ts apps/desktop/src/lib/workspaceMdMode.test.ts
@@ -161,21 +161,21 @@ EOF
 **Interfaces:**
 - Produces keys: `workspace.previewMode` / `workspace.previewSource`
 
-- [ ] **Step 1: Add Chinese strings**（紧挨 `workspace.openExternally` 附近）
+- [x] **Step 1: Add Chinese strings**（紧挨 `workspace.openExternally` 附近）
 
 ```ts
 "workspace.previewMode": "预览",
 "workspace.previewSource": "源码",
 ```
 
-- [ ] **Step 2: Add English strings**（英文区块对应位置）
+- [x] **Step 2: Add English strings**（英文区块对应位置）
 
 ```ts
 "workspace.previewMode": "Preview",
 "workspace.previewSource": "Source",
 ```
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add apps/desktop/src/i18n/messages.ts
@@ -199,7 +199,7 @@ EOF
 - Consumes: `ChatMarkdown` from `./ChatMarkdown`
 - Consumes: lucide `Eye`, `FileCode2`
 
-- [ ] **Step 1: Imports + state**（在 `WorkspacePanel` 组件内，与其它 useState 并列）
+- [x] **Step 1: Imports + state**（在 `WorkspacePanel` 组件内，与其它 useState 并列）
 
 ```tsx
 import { Eye, FileCode2 } from "lucide-react";
@@ -225,7 +225,7 @@ const showMdPreview = editorIsMarkdown && mdMode === "preview";
 
 注意：`editorName` 已在编辑态存在；若此时变量作用域仅在分支内，把 `editorIsMarkdown` / `showMdPreview` 放在使用它们的 JSX 附近（编辑视图分支内）亦可。
 
-- [ ] **Step 2: 在 `ws-editor-head` 加入分段控件**
+- [x] **Step 2: 在 `ws-editor-head` 加入分段控件**
 
 放在 meta 块之后、dirty badge 之前（或 badge 之后；badge 用 `flex-shrink: 0`，modes 也要 `flex-shrink: 0`）：
 
@@ -264,7 +264,7 @@ const showMdPreview = editorIsMarkdown && mdMode === "preview";
 </div>
 ```
 
-- [ ] **Step 3: 按模式渲染 `ws-editor-wrap`**
+- [x] **Step 3: 按模式渲染 `ws-editor-wrap`**
 
 ```tsx
 <div className="ws-editor-wrap">
@@ -283,7 +283,7 @@ const showMdPreview = editorIsMarkdown && mdMode === "preview";
 </div>
 ```
 
-- [ ] **Step 4: CSS**（追加到 `workspace.css`，建议放在 `.ws-editor-head` 相关规则附近）
+- [x] **Step 4: CSS**（追加到 `workspace.css`，建议放在 `.ws-editor-head` 相关规则附近）
 
 ```css
 .ws-md-modes {
@@ -334,12 +334,12 @@ html[data-theme="dark"] .ws-md-mode.is-active {
 
 窄屏时：`ws-editor-head` 已有 `align-items: center`；若溢出，可为 head 加 `flex-wrap: wrap`（仅当实测换行需要时再加，YAGNI）。
 
-- [ ] **Step 5: Typecheck**
+- [x] **Step 5: Typecheck**
 
 Run: `cd frontend && npx tsc -b --pretty false`  
 Expected: 无新增错误
 
-- [ ] **Step 6: 手动验收（对照 spec）**
+- [x] **Step 6: 手动验收（对照 spec）**
 
 1. 打开 `notes.md` → 见「预览 / 源码」；`a.ts` → 不见  
 2. 源码改字 → 预览更新  
@@ -348,7 +348,7 @@ Expected: 无新增错误
 5. 刷新后模式保持  
 6. 切中英文文案正确  
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add apps/desktop/src/components/WorkspacePanel.tsx apps/desktop/src/styles/workspace.css
@@ -366,9 +366,9 @@ EOF
 **Files:**
 - Modify: `docs/superpowers/specs/2026-07-15-workspace-markdown-preview-design.md`
 
-- [ ] **Step 1:** 将状态改为「已实现」，并链到本 plan。
+- [x] **Step 1:** 将状态改为「已实现」，并链到本 plan。
 
-- [ ] **Step 2: Commit**
+- [x] **Step 2: Commit**
 
 ```bash
 git add docs/superpowers/specs/2026-07-15-workspace-markdown-preview-design.md

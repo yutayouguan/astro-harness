@@ -51,7 +51,7 @@
 - Produces: `StoredSession.archived_at: Option<f64>`
 - Produces: `RecentSession.archived_at: Option<f64>`
 
-- [ ] **Step 1: 将旧的删库测试改成数据保留测试**
+- [x] **Step 1: 将旧的删库测试改成数据保留测试**
 
 在 `session/tests/session_store_test.rs` 将 `outdated_schema_discards_prior_chat_and_billing` 替换为 `v13_schema_migrates_to_v14_without_data_loss`。测试先创建当前库，写入会话、消息和 billing，再把版本改为 13、移除 `archived_at` 列的等价 v13 fixture，重新打开后断言：
 
@@ -68,12 +68,12 @@ assert_eq!(
 );
 ```
 
-- [ ] **Step 2: 运行测试并确认失败**
+- [x] **Step 2: 运行测试并确认失败**
 
 Run: `cargo test -p session --test session_store_test v13_schema_migrates_to_v14_without_data_loss -- --nocapture`  
 Expected: FAIL；当前 `open()` 删除旧数据库或 `archived_at` 不存在。
 
-- [ ] **Step 3: 实现 v14 增量迁移**
+- [x] **Step 3: 实现 v14 增量迁移**
 
 在 `schema.rs`：
 
@@ -109,12 +109,12 @@ pub archived_at: Option<f64>,
 
 并同步 `get_session` SELECT 与 row index。
 
-- [ ] **Step 4: 运行迁移与完整 Store 测试**
+- [x] **Step 4: 运行迁移与完整 Store 测试**
 
 Run: `cargo test -p session --test session_store_test -- --nocapture`  
 Expected: PASS，且旧的“删库”断言已不存在。
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add session/src/store/schema.rs session/src/store/mod.rs \
@@ -140,7 +140,7 @@ git commit -m "feat(session): migrate archived state without data loss"
 - Produces: `delete_session_permanently`
 - Produces: `first_turn_text`
 
-- [ ] **Step 1: 写 Store 失败测试**
+- [x] **Step 1: 写 Store 失败测试**
 
 新增测试：
 
@@ -183,12 +183,12 @@ fn permanent_delete_removes_messages_and_fts() {
 
 再为 `first_turn_text` 增加 user/tool/assistant 混排测试，期望仅返回首个非空 user 和 assistant 文本。
 
-- [ ] **Step 2: 运行测试并确认缺少 API**
+- [x] **Step 2: 运行测试并确认缺少 API**
 
 Run: `cargo test -p session --test session_store_test -- --nocapture`  
 Expected: compile FAIL，方法与枚举尚不存在。
 
-- [ ] **Step 3: 实现过滤枚举和归档 API**
+- [x] **Step 3: 实现过滤枚举和归档 API**
 
 在 `mod.rs`：
 
@@ -232,7 +232,7 @@ pub fn list_recent_sessions(&self, limit: usize) -> Result<Vec<RecentSession>> {
 
 active 条件为 `WHERE s.archived_at IS NULL`，archived 条件为 `WHERE s.archived_at IS NOT NULL`，SELECT 末尾加入 `s.archived_at`。
 
-- [ ] **Step 4: 实现条件标题、首轮读取和删除**
+- [x] **Step 4: 实现条件标题、首轮读取和删除**
 
 ```rust
 pub fn set_session_title_if_empty(&self, id: &str, title: &str) -> Result<bool> {
@@ -260,12 +260,12 @@ pub fn delete_session_permanently(&self, id: &str) -> Result<()> {
 
 `first_turn_text` 用 `ORDER BY timestamp ASC, id ASC` 分别查询首个非空 `role='user'` 与 `role='assistant'` content；任一缺失则返回 `Ok(None)`。
 
-- [ ] **Step 5: 运行完整 session 测试**
+- [x] **Step 5: 运行完整 session 测试**
 
 Run: `cargo test -p session -- --nocapture`  
 Expected: PASS。
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add session/src/store/mod.rs session/src/store/sessions.rs \
@@ -285,16 +285,16 @@ git commit -m "feat(session): add archive title and delete operations"
 - Produces: chat control action `"release_session"`
 - Guarantee: session 不在内存时返回成功。
 
-- [ ] **Step 1: 写释放行为测试**
+- [x] **Step 1: 写释放行为测试**
 
 在现有 service 测试模块增加：创建测试 service，插入可取消的 session runtime，调用 `chat_control` action `release_session` 两次，断言两次均成功且 `sessions.get(session_id)` 为 `None`。
 
-- [ ] **Step 2: 运行测试并确认 action 不支持**
+- [x] **Step 2: 运行测试并确认 action 不支持**
 
 Run: `cargo test -p backend release_session_runtime_is_idempotent -- --nocapture`  
 Expected: FAIL，返回 unsupported action。
 
-- [ ] **Step 3: 抽取释放 helper 并接入 chat control**
+- [x] **Step 3: 抽取释放 helper 并接入 chat control**
 
 从 `release_session_for_new_chat` 抽取不含“创建新会话”语义的核心：
 
@@ -313,12 +313,12 @@ async fn release_session_runtime(&self, session_id: &str) {
 
 `new_chat` 继续先执行原 hooks，再调用 helper；新增 `"release_session"` 分支只调用 helper。缺少 runtime 时保持成功。
 
-- [ ] **Step 4: 运行 backend 测试**
+- [x] **Step 4: 运行 backend 测试**
 
 Run: `cargo test -p backend release_session_runtime_is_idempotent -- --nocapture`  
 Expected: PASS。
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add backend/src/grpc/astro_service.rs
@@ -338,7 +338,7 @@ git commit -m "feat(backend): release session runtime idempotently"
 - Produces commands: `list_sessions`, `rename_session`, `archive_session`, `unarchive_session`, `delete_session_permanently`
 - Produces `RecentSessionDto.archivedAt: string | null`
 
-- [ ] **Step 1: 扩展 DTO 与列表 command**
+- [x] **Step 1: 扩展 DTO 与列表 command**
 
 Rust DTO 增加：
 
@@ -364,7 +364,7 @@ pub async fn list_sessions(
 
 只接受 `"active"` 与 `"archived"`，其它值返回 `invalid session filter`。保留 `list_recent_sessions` 并让它调用 active 查询，避免破坏旧调用方。
 
-- [ ] **Step 2: 新增 rename/archive/unarchive commands**
+- [x] **Step 2: 新增 rename/archive/unarchive commands**
 
 参数统一使用 snake_case Rust 名；Tauri 前端传 camelCase：
 
@@ -381,7 +381,7 @@ pub async fn unarchive_session(session_id: String) -> Result<(), String>
 
 title trim 后为空返回错误；其余直接调用 Store。
 
-- [ ] **Step 3: 新增安全删除编排**
+- [x] **Step 3: 新增安全删除编排**
 
 ```rust
 #[tauri::command]
@@ -395,14 +395,14 @@ pub async fn delete_session_permanently(session_id: String) -> Result<(), String
 
 运行时释放必须先于 DB 删除；release action 幂等，因此冷会话也能删除。
 
-- [ ] **Step 4: 注册并编译**
+- [x] **Step 4: 注册并编译**
 
 在 `generate_handler!` 注册五个新命令。
 
 Run: `cargo check -p astro-agent`  
 Expected: PASS。
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add apps/desktop/src-tauri/src/commands.rs apps/desktop/src-tauri/src/lib.rs \
@@ -426,7 +426,7 @@ git commit -m "feat(tauri): expose session management commands"
 - Produces: `dispatchSessionsChanged()`, `subscribeSessionsChanged(listener)`
 - Produces: `deleteManagedSession(sessionId, activeSessionId, clearActive)`
 
-- [ ] **Step 1: 写纯逻辑失败测试**
+- [x] **Step 1: 写纯逻辑失败测试**
 
 ```typescript
 test("deleting active session clears local chat after backend success", async () => {
@@ -451,12 +451,12 @@ test("failed delete does not clear active chat", async () => {
 });
 ```
 
-- [ ] **Step 2: 运行并确认模块不存在**
+- [x] **Step 2: 运行并确认模块不存在**
 
 Run: `node --import tsx --test apps/desktop/src/lib/chat/sessionManagement.test.ts`  
 Expected: FAIL，无法导入模块。
 
-- [ ] **Step 3: 实现 invoke 封装与 DOM 事件**
+- [x] **Step 3: 实现 invoke 封装与 DOM 事件**
 
 ```typescript
 export type SessionListKind = "active" | "archived";
@@ -483,11 +483,11 @@ export async function deleteManagedSession(
 }
 ```
 
-- [ ] **Step 4: 暴露无二次 chat_control 的本地清理方法**
+- [x] **Step 4: 暴露无二次 chat_control 的本地清理方法**
 
 在 `useChatSession` 增加 `clearDeletedCurrentSession`：调用 `clearChatSession()`，清 `sessionId/messages/pendingInterrupts/readOnly`，但不再调用 `chat_control new_chat`，因为 Tauri 删除 command 已释放 runtime。经 `ChatRightPanel` 和 `App` 传给列表。
 
-- [ ] **Step 5: 运行测试与前端构建**
+- [x] **Step 5: 运行测试与前端构建**
 
 Run: `node --import tsx --test apps/desktop/src/lib/chat/sessionManagement.test.ts`  
 Expected: PASS。
@@ -495,7 +495,7 @@ Expected: PASS。
 Run: `cd frontend && npm run build`  
 Expected: PASS。
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add apps/desktop/src/lib/chat/sessionManagement.ts \
@@ -518,7 +518,7 @@ git commit -m "feat(chat): coordinate session deletion state"
 - Consumes: Task 4 commands and Task 5 events.
 - Produces: active/archived tabs and per-session action menu.
 
-- [ ] **Step 1: 将列表加载改为按页签调用**
+- [x] **Step 1: 将列表加载改为按页签调用**
 
 增加状态：
 
@@ -536,7 +536,7 @@ invoke<RecentSessionDto[]>("list_sessions", { filter: listKind, limit: 50 })
 
 effect 依赖 `listKind`，并订阅 `subscribeSessionsChanged(loadSessions)`。
 
-- [ ] **Step 2: 实现菜单操作**
+- [x] **Step 2: 实现菜单操作**
 
 普通列表菜单：重命名、重新生成标题（先以 disabled + i18n tooltip 标记“辅助模型计划接入”，在配套计划启用）、归档、永久删除。归档列表将“归档”替换为“取消归档”。
 
@@ -549,22 +549,22 @@ dispatchSessionsChanged();
 
 archive/unarchive 同样成功后 dispatch。
 
-- [ ] **Step 3: 实现永久删除二次确认**
+- [x] **Step 3: 实现永久删除二次确认**
 
 确认文案必须包含标题和“不可恢复”。只有确认后调用 `deleteManagedSession`。busy 时禁用该卡片所有菜单动作。
 
-- [ ] **Step 4: 增加中英文 i18n**
+- [x] **Step 4: 增加中英文 i18n**
 
 至少新增：`sessions.active`、`sessions.archived`、`sessions.rename`、`sessions.regenerateTitle`、`sessions.archive`、`sessions.unarchive`、`sessions.deletePermanently`、`sessions.deleteConfirm`、`sessions.deleteIrreversible`、`sessions.actionFailed`。
 
-- [ ] **Step 5: 构建与手工冒烟**
+- [x] **Step 5: 构建与手工冒烟**
 
 Run: `cd frontend && npm run build`  
 Expected: PASS。
 
 手工检查：创建 → 重命名 → 归档 → 归档页查看/继续 → 取消归档 → 删除 → 刷新不恢复。确认归档不改变 `ended_at`，删除不影响产物文件。
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add apps/desktop/src/components/chat/ChatSessionList.tsx \
@@ -579,7 +579,7 @@ git commit -m "feat(chat): add session archive and delete controls"
 **Files:**
 - Modify: `docs/superpowers/specs/2026-07-16-session-management-auxiliary-models-design.md`
 
-- [ ] **Step 1: 运行相关回归**
+- [x] **Step 1: 运行相关回归**
 
 ```bash
 cargo test -p session -- --nocapture
@@ -591,11 +591,11 @@ cd frontend && npm run build
 
 Expected: 全部 PASS。
 
-- [ ] **Step 2: 更新 spec 实现状态**
+- [x] **Step 2: 更新 spec 实现状态**
 
 将会话管理相关范围标记为已实现，并注明自动标题仍由 `2026-07-16-auxiliary-models.md` 跟进；不得把整个联合 spec 提前标成全部完成。
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add docs/superpowers/specs/2026-07-16-session-management-auxiliary-models-design.md

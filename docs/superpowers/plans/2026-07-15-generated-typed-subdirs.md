@@ -52,7 +52,7 @@
   - `pub const GENERATED_SUBDIRS: &[&str]` — 相对工作区：`"generated/images"` … `"generated/other"`
   - `pub fn generated_dir(workspace: &Path, kind: GeneratedKind) -> PathBuf`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 在 `generated.rs` 底部：
 
@@ -96,12 +96,12 @@ mod tests {
 }
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `cargo test -p memory-paths generated_dir_joins_kind_subdir -- --nocapture`  
 Expected: FAIL（模块/符号不存在）
 
-- [ ] **Step 3: Write minimal implementation**
+- [x] **Step 3: Write minimal implementation**
 
 `memory-paths/src/workspace/generated.rs`:
 
@@ -168,12 +168,12 @@ pub use generated::*;
 pub use paths::*;
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `cargo test -p memory-paths generated_ -- --nocapture`  
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add memory-paths/src/workspace/generated.rs memory-paths/src/workspace/mod.rs
@@ -212,7 +212,7 @@ use memory_paths::GENERATED_SUBDIRS;
 
 - Produces: 新 Agent / ensure 后磁盘上存在八个 `generated/*` 目录；`memory::generated_dir` 可供 tools/tauri 调用
 
-- [ ] **Step 1: Write the failing assertion**
+- [x] **Step 1: Write the failing assertion**
 
 在 `ensure_workspace_creates_core_layout` 中 `assert!(ws.join("skills").is_dir());` 之后加入：
 
@@ -225,12 +225,12 @@ for rel in memory_paths::GENERATED_SUBDIRS {
 }
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `cargo test -p memory ensure_workspace_creates_core_layout -- --nocapture`  
 Expected: FAIL `missing workspace/generated/images`（或同类）
 
-- [ ] **Step 3: Implement ensure loop**
+- [x] **Step 3: Implement ensure loop**
 
 在 `ensure_agent_space` 中现有：
 
@@ -259,14 +259,14 @@ pub use memory_paths::workspace::{generated_dir, GeneratedKind, GENERATED_SUBDIR
 
 或 `pub use memory_paths::workspace::*`（若无名字冲突）。优先显式三项 + paths。
 
-- [ ] **Step 4: Run tests**
+- [x] **Step 4: Run tests**
 
 Run: `cargo test -p memory ensure_workspace_creates_core_layout -- --nocapture`  
 Expected: PASS
 
 另跑：`cargo test -p memory-paths generated_ -- --nocapture` 仍绿。
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add memory/src/agent/workspace/lifecycle.rs memory/src/agent/workspace/paths.rs memory/src/lib.rs
@@ -291,7 +291,7 @@ EOF
 - Consumes: `memory::generated_dir`, `memory::GeneratedKind`
 - Produces: 落盘路径含 `/generated/images/` 等；工具返回字符串仍 `图片已生成：{abs}`
 
-- [ ] **Step 1: Write a focused path unit test（tools）**
+- [x] **Step 1: Write a focused path unit test（tools）**
 
 若 tools 尚无对 generate_one 的单测，在 `crates/agent-tools/src/engine/` 或新建 `tools/tests/generated_dir_wiring_test.rs` **不必**真调 API。最小方案：在 `memory-paths` 已测 helper 后，本任务用编译期接线 + 可选：
 
@@ -313,12 +313,12 @@ mod path_tests {
 
 （同类可放 video/tts，或只放一处避免重复。）
 
-- [ ] **Step 2: Run — path_tests 应已 PASS（helper 已存在）；再用 grep 确认旧路径仍在，作为改前基线**
+- [x] **Step 2: Run — path_tests 应已 PASS（helper 已存在）；再用 grep 确认旧路径仍在，作为改前基线**
 
 Run: `rg 'join\("generated"\)' tools/src/builtin/image_gen.rs tools/src/builtin/video_gen.rs tools/src/builtin/tts.rs`  
 Expected: 仍有命中
 
-- [ ] **Step 3: Replace writes**
+- [x] **Step 3: Replace writes**
 
 `image_gen.rs`：
 
@@ -334,7 +334,7 @@ std::fs::create_dir_all(&dir)?;
 
 更新模块注释：`generated/images/` 等。
 
-- [ ] **Step 4: Verify**
+- [x] **Step 4: Verify**
 
 Run: `rg 'join\("generated"\)' tools/src/builtin/{image_gen,video_gen,tts}.rs`  
 Expected: 无命中（或仅注释）
@@ -342,7 +342,7 @@ Expected: 无命中（或仅注释）
 Run: `cargo test -p tools path_tests -- --nocapture`（若加入）及 `cargo check -p tools`  
 Expected: OK
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add tools/src/builtin/image_gen.rs tools/src/builtin/video_gen.rs tools/src/builtin/tts.rs
@@ -363,7 +363,7 @@ EOF
 **Interfaces:**
 - Consumes: `memory::generated_dir`, `memory::GeneratedKind::Images`
 
-- [ ] **Step 1: Locate and replace**
+- [x] **Step 1: Locate and replace**
 
 ```rust
 let dir = memory::generated_dir(
@@ -375,12 +375,12 @@ std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
 
 更新 doc comment：`workspace/generated/images/`。
 
-- [ ] **Step 2: Check compile**
+- [x] **Step 2: Check compile**
 
 Run: `cargo check -p astro-agent`  
 Expected: OK（包名以 `apps/desktop/src-tauri/Cargo.toml` 的 `name = "astro-agent"` 为准）
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add apps/desktop/src-tauri/src/commands.rs
@@ -401,7 +401,7 @@ EOF
 - Modify: `docs/superpowers/specs/2026-07-15-generated-typed-subdirs-design.md` — 状态改为「已规划/实现中」或实现后改为「已实现」
 - Modify: `docs/superpowers/specs/2026-07-15-google-media-gen-tools-design.md` — 输出路径改为 `generated/images/` 等（短注）
 
-- [ ] **Step 1: TOOLS.md 模板追加（新 Agent 才有；不回写已有工作区）**
+- [x] **Step 1: TOOLS.md 模板追加（新 Agent 才有；不回写已有工作区）**
 
 在 `TEMPLATE_TOOLS` 的 `## 写什么` 后或「示例」前加入：
 
@@ -420,7 +420,7 @@ EOF
 - 其它 → `generated/other/`
 ```
 
-- [ ] **Step 2: Frontend test**
+- [x] **Step 2: Frontend test**
 
 在 `absolutizeMediaPath joins relative under workspace baseDir` 测试中追加：
 
@@ -437,7 +437,7 @@ assert.equal(
 Run: `cd frontend && node --experimental-strip-types --test src/lib/resolveMediaSrc.test.ts`  
 Expected: PASS
 
-- [ ] **Step 3: Spec 状态**
+- [x] **Step 3: Spec 状态**
 
 将 typed-subdirs design 状态改为 `已实现`（本计划全部 task 完成后）；google-media-gen 中输出行改为：
 
@@ -445,7 +445,7 @@ Expected: PASS
 - `generated/videos/vid-*.mp4`
 - （音频）`generated/audio/tts-*.wav`
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add memory/src/agent/workspace/templates.rs \
@@ -465,9 +465,9 @@ EOF
 
 **不写代码。** 因 `ensure_agent_space` / `ensure_workspace` 会在启动或 `get_config` 时执行，**已有** Agent 工作区应在下次 bootstrap 时补建空子目录（`create_dir_all` 幂等）。
 
-- [ ] **Step 1:** 启动应用或调用会 `bootstrap_workspace` 的命令后，确认 `~/.astro/workspace/generated/images` 等存在。
-- [ ] **Step 2:** 跑一次 `image_gen`（或 UI 出图），确认新文件在 `generated/images/`，且聊天工具卡能预览；Markdown `generated/images/...` 可预览。
-- [ ] **Step 3:** 确认旧的 `generated/img-*.png`（若有）仍在根下且仍可预览。
+- [x] **Step 1:** 启动应用或调用会 `bootstrap_workspace` 的命令后，确认 `~/.astro/workspace/generated/images` 等存在。
+- [x] **Step 2:** 跑一次 `image_gen`（或 UI 出图），确认新文件在 `generated/images/`，且聊天工具卡能预览；Markdown `generated/images/...` 可预览。
+- [x] **Step 3:** 确认旧的 `generated/img-*.png`（若有）仍在根下且仍可预览。
 
 ---
 

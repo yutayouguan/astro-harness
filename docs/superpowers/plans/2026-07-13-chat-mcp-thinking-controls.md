@@ -37,7 +37,7 @@
 - Create: `apps/desktop/src/lib/shouldShowThinkingControls.ts`
 - Create: `apps/desktop/src/lib/shouldShowThinkingControls.test.ts`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```ts
 import { test } from "node:test";
@@ -73,12 +73,12 @@ test("falls back to deepseek whitelist when capabilities unknown", () => {
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `cd frontend && node --test src/lib/shouldShowThinkingControls.test.ts`  
 Expected: FAIL (module not found)
 
-- [ ] **Step 3: Write minimal implementation**
+- [x] **Step 3: Write minimal implementation**
 
 ```ts
 import type { ModelCapabilities } from "../types";
@@ -94,12 +94,12 @@ export function shouldShowThinkingControls(input: {
 }
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `cd frontend && node --test src/lib/shouldShowThinkingControls.test.ts`  
 Expected: PASS (2 tests)
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add apps/desktop/src/lib/shouldShowThinkingControls.ts apps/desktop/src/lib/shouldShowThinkingControls.test.ts
@@ -118,7 +118,7 @@ EOF
 - Modify: `apps/desktop/src/lib/modelPrefs.ts` (`loadPickerGlobals`, optionally no-op `syncMaxModeWithThinkingLevel` max writes)
 - Create: `apps/desktop/src/lib/modelPrefsGlobals.test.ts`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```ts
 import { test } from "node:test";
@@ -158,12 +158,12 @@ test("loadPickerGlobals forces auto and maxMode off and persists", () => {
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `cd frontend && node --test src/lib/modelPrefsGlobals.test.ts`  
 Expected: FAIL (`auto` still true)
 
-- [ ] **Step 3: Update `loadPickerGlobals`**
+- [x] **Step 3: Update `loadPickerGlobals`**
 
 Replace body of `loadPickerGlobals` in `apps/desktop/src/lib/modelPrefs.ts` with:
 
@@ -222,12 +222,12 @@ export function syncMaxModeWithThinkingLevel(_level: ThinkingLevel): ModelPicker
 }
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `cd frontend && node --test src/lib/modelPrefsGlobals.test.ts`  
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add apps/desktop/src/lib/modelPrefs.ts apps/desktop/src/lib/modelPrefsGlobals.test.ts
@@ -245,7 +245,7 @@ EOF
 **Files:**
 - Modify: `apps/desktop/src/components/ModelPicker.tsx`
 
-- [ ] **Step 1: Remove globals toggles and Auto trigger branch**
+- [x] **Step 1: Remove globals toggles and Auto trigger branch**
 
 In `ModelPicker.tsx`:
 1. Delete the entire `<div className="model-picker-globals">…</div>` block (Auto + MAX Mode `ToggleSwitch`).
@@ -255,12 +255,12 @@ In `ModelPicker.tsx`:
 5. Change `{editing && !globals.auto ? (` edit panel to `{editing ? (`.
 6. Leave `setGlobal` / globals state if still used by edit panel effort sync; if `globals` becomes unused except load, keep `loadPickerGlobals()` call sites that normalize storage.
 
-- [ ] **Step 2: Typecheck**
+- [x] **Step 2: Typecheck**
 
 Run: `cd frontend && npx tsc -b --pretty false 2>&1 | head -40`  
 Expected: no errors in ModelPicker
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add apps/desktop/src/components/ModelPicker.tsx
@@ -278,7 +278,7 @@ EOF
 **Files:**
 - Modify: `apps/desktop/src/i18n/messages.ts`
 
-- [ ] **Step 1: Add zh + en keys**
+- [x] **Step 1: Add zh + en keys**
 
 Add to Chinese map (near other `chat.*` / `mcpTools.*` keys):
 
@@ -302,7 +302,7 @@ Add English counterparts:
 
 Ensure `MessageKey` type (if derived from the zh object) still compiles.
 
-- [ ] **Step 2: Commit**
+- [x] **Step 2: Commit**
 
 ```bash
 git add apps/desktop/src/i18n/messages.ts
@@ -321,7 +321,7 @@ EOF
 - Create: `apps/desktop/src/components/ComposerMcpMenu.tsx`
 - Modify: `apps/desktop/src/styles/chat.css`
 
-- [ ] **Step 1: Create component**
+- [x] **Step 1: Create component**
 
 先核对 `AnimatedSwitch` 现有 props（见 `ToolsPanel` 用法），再创建 `ComposerMcpMenu.tsx`：
 
@@ -432,7 +432,7 @@ export default function ComposerMcpMenu({
 }
 ```
 
-- [ ] **Step 2: Add CSS** near `.composer-palette` in `chat.css`
+- [x] **Step 2: Add CSS** near `.composer-palette` in `chat.css`
 
 ```css
 .composer-mcp-menu {
@@ -540,7 +540,7 @@ export default function ComposerMcpMenu({
 }
 ```
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add apps/desktop/src/components/ComposerMcpMenu.tsx apps/desktop/src/styles/chat.css
@@ -558,7 +558,7 @@ EOF
 **Files:**
 - Modify: `apps/desktop/src/components/ChatView.tsx`
 
-- [ ] **Step 1: Extend props**
+- [x] **Step 1: Extend props**
 
 Add to ChatView props:
 
@@ -567,7 +567,7 @@ agentId?: string | null;
 onOpenMcpSettings?: () => void;
 ```
 
-- [ ] **Step 2: Wire button + menu in composer-bar-left**
+- [x] **Step 2: Wire button + menu in composer-bar-left**
 
 After thinking pill block, before `@` button:
 
@@ -608,12 +608,12 @@ For the green dot: either lift a tiny `useMcpTools(agentId)` in ChatView only fo
 
 Import `PlugZap` from `lucide-react`.
 
-- [ ] **Step 3: Typecheck**
+- [x] **Step 3: Typecheck**
 
 Run: `cd frontend && npx tsc -b --pretty false 2>&1 | head -50`  
 Expected: only missing App props until Task 8, or fix ChatView optional props so tsc passes.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add apps/desktop/src/components/ChatView.tsx
@@ -632,7 +632,7 @@ EOF
 - Modify: `apps/desktop/src/components/ToolsPanel.tsx`
 - Modify: `apps/desktop/src/App.tsx` (minimal: state + pass prop; full ChatView wiring in Task 8)
 
-- [ ] **Step 1: Extend ToolsPanel props**
+- [x] **Step 1: Extend ToolsPanel props**
 
 ```ts
 type Props = {
@@ -662,7 +662,7 @@ export default function ToolsPanel({
 }
 ```
 
-- [ ] **Step 2: In App, add state**
+- [x] **Step 2: In App, add state**
 
 ```ts
 const [toolsInitialTab, setToolsInitialTab] = useState<"builtin" | "mcp" | null>(null);
@@ -678,7 +678,7 @@ const [toolsInitialTab, setToolsInitialTab] = useState<"builtin" | "mcp" | null>
 )}
 ```
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add apps/desktop/src/components/ToolsPanel.tsx apps/desktop/src/App.tsx
@@ -696,7 +696,7 @@ EOF
 **Files:**
 - Modify: `apps/desktop/src/App.tsx`
 
-- [ ] **Step 1: Resolve capabilities for active model**
+- [x] **Step 1: Resolve capabilities for active model**
 
 Near `activeProvider`:
 
@@ -743,7 +743,7 @@ function resolveActiveCapabilities(
 
 实现时：有列表命中用列表；否则 `null`（不要用 infer 填满，以免吃掉 deepseek 回退）。
 
-- [ ] **Step 2: Pass props to ChatView**
+- [x] **Step 2: Pass props to ChatView**
 
 ```tsx
 showThinkingControls={showThinking}
@@ -756,7 +756,7 @@ onOpenMcpSettings={() => {
 
 查找 App 中现有 `activeAgentId` / session agent；若没有，传 `null`（`useMcpTools` 默认 workspace 作用域）。
 
-- [ ] **Step 3: Gate send-path thinking**
+- [x] **Step 3: Gate send-path thinking**
 
 Replace:
 
@@ -781,7 +781,7 @@ const modelApi = sendSupportsThinking
 
 若 UI thinking prefs 与 modelPrefs 双轨：保持现有 `thinkingPrefs` → API 映射路径，但仅当 `sendSupportsThinking` 为真时启用。
 
-- [ ] **Step 4: Typecheck + unit tests**
+- [x] **Step 4: Typecheck + unit tests**
 
 Run:
 
@@ -792,7 +792,7 @@ cd frontend && npx tsc -b --pretty false
 
 Expected: all PASS / no tsc errors
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add apps/desktop/src/App.tsx
@@ -810,9 +810,9 @@ EOF
 **Files:**
 - Modify: `docs/superpowers/specs/2026-07-13-chat-mcp-thinking-controls-design.md`
 
-- [ ] **Step 1: Update status line to `已批准 / 已实现计划`**
+- [x] **Step 1: Update status line to `已批准 / 已实现计划`**
 
-- [ ] **Step 2: Manual smoke (dev)**
+- [x] **Step 2: Manual smoke (dev)**
 
 Run: `cd frontend && npm run tauri dev`（或 `npm run dev` + 已有壳）
 
@@ -822,7 +822,7 @@ Checklist:
 3. deepseek 或 caps.reasoning 模型显示推理 pill；普通模型隐藏
 4. 关 MCP 后下一轮对话不再带该服务（与 Tools 页一致）
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add docs/superpowers/specs/2026-07-13-chat-mcp-thinking-controls-design.md

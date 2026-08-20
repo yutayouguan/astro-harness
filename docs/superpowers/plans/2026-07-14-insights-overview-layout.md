@@ -34,7 +34,7 @@
 - Create: `apps/desktop/src/lib/insightsView.ts`
 - Create: `apps/desktop/src/lib/insightsView.test.ts`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```ts
 // apps/desktop/src/lib/insightsView.test.ts
@@ -81,7 +81,7 @@ test("providerSpendTop sorts by cost then tokens and caps length", () => {
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 ```bash
 cd frontend && node --experimental-strip-types --test src/lib/insightsView.test.ts
@@ -89,7 +89,7 @@ cd frontend && node --experimental-strip-types --test src/lib/insightsView.test.
 
 Expected: FAIL（模块不存在或导出缺失）
 
-- [ ] **Step 3: Minimal implementation**
+- [x] **Step 3: Minimal implementation**
 
 ```ts
 // apps/desktop/src/lib/insightsView.ts
@@ -138,13 +138,13 @@ export function providerSpendTop(
 }
 ```
 
-- [ ] **Step 4: Run tests — expect PASS**
+- [x] **Step 4: Run tests — expect PASS**
 
 ```bash
 cd frontend && node --experimental-strip-types --test src/lib/insightsView.test.ts
 ```
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add apps/desktop/src/lib/insightsView.ts apps/desktop/src/lib/insightsView.test.ts
@@ -162,7 +162,7 @@ EOF
 **Files:**
 - Modify: `apps/desktop/src/i18n/messages.ts`（`zh` 与 `en` 对象，约 insights.view 区块）
 
-- [ ] **Step 1: 在中文 `zh` 增加键（紧挨现有 insights.view.*）**
+- [x] **Step 1: 在中文 `zh` 增加键（紧挨现有 insights.view.*）**
 
 ```ts
 "insights.view.overview": "总览",
@@ -173,7 +173,7 @@ EOF
 
 保留已有 `"insights.view.models"` 等。
 
-- [ ] **Step 2: 在英文 `en` 对称增加**
+- [x] **Step 2: 在英文 `en` 对称增加**
 
 ```ts
 "insights.view.overview": "Overview",
@@ -182,11 +182,11 @@ EOF
 "insights.empty.overview": "No usage yet. Chat and tool calls will show up here.",
 ```
 
-- [ ] **Step 3: 确认类型**
+- [x] **Step 3: 确认类型**
 
 `MessageKey = keyof typeof zh` 会自动纳入。无需改其它文件。
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add apps/desktop/src/i18n/messages.ts
@@ -204,7 +204,7 @@ EOF
 **Files:**
 - Modify: `apps/desktop/src/components/InsightsPanel.tsx`
 
-- [ ] **Step 1: 替换本地 ViewMode / VIEW_TABS / 默认 state / usage effect**
+- [x] **Step 1: 替换本地 ViewMode / VIEW_TABS / 默认 state / usage effect**
 
 将顶部：
 
@@ -264,7 +264,7 @@ if (!active || !isTauri() || (view !== "models" && view !== "tools")) return;
 if (!active || !isTauri() || !needsUsageInsights(view)) return;
 ```
 
-- [ ] **Step 2: Typecheck**
+- [x] **Step 2: Typecheck**
 
 ```bash
 cd frontend && npx tsc -b --pretty false
@@ -272,7 +272,7 @@ cd frontend && npx tsc -b --pretty false
 
 Expected: 可能因尚未渲染 overview 分支而仍通过；若有错误只修类型。
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add apps/desktop/src/components/InsightsPanel.tsx
@@ -291,7 +291,7 @@ EOF
 - Modify: `apps/desktop/src/components/InsightsPanel.tsx`（`return` 内，error 之后、现有 `view === "models"` 之前）
 - Modify: `apps/desktop/src/styles/insights.css`
 
-- [ ] **Step 1: 计算 overview 用 provider Top（面板内）**
+- [x] **Step 1: 计算 overview 用 provider Top（面板内）**
 
 ```ts
 const overviewProviderTop = useMemo(
@@ -305,7 +305,7 @@ const overviewProviderMax = Math.max(
 const overviewUseCost = overviewProviderTop.some((r) => r.cost_usd > 0);
 ```
 
-- [ ] **Step 2: 插入 `view === "overview" && data` 区块**
+- [x] **Step 2: 插入 `view === "overview" && data` 区块**
 
 结构（复用已有 `KpiCard`、`insights-chart`、hbar）：
 
@@ -369,7 +369,7 @@ const overviewUseCost = overviewProviderTop.some((r) => r.cost_usd > 0);
 
 趋势块从现有 models 分支复制结构（metric tabs + series map）。若重复明显，可在同文件抽 `InsightsTrendChart` 小函数组件；不要新建图表依赖。
 
-- [ ] **Step 3: CSS**
+- [x] **Step 3: CSS**
 
 在 `insights.css` 追加：
 
@@ -428,7 +428,7 @@ const overviewUseCost = overviewProviderTop.some((r) => r.cost_usd > 0);
 
 确认 `.insights-panel` 仍有 `overflow-x: hidden`。
 
-- [ ] **Step 4: tsc**
+- [x] **Step 4: tsc**
 
 ```bash
 cd frontend && npx tsc -b --pretty false
@@ -436,7 +436,7 @@ cd frontend && npx tsc -b --pretty false
 
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add apps/desktop/src/components/InsightsPanel.tsx apps/desktop/src/styles/insights.css
@@ -457,12 +457,12 @@ EOF
 
 按 spec 明确取舍：
 
-- [ ] **Step 1: 删除 models 分支内**
+- [x] **Step 1: 删除 models 分支内**
   - 原 6 卡 `insights-kpis-models` 整块
   - `insights-models-grid` 内的整宽趋势 + 右侧厂商占比
   - `hasUnpriced` 横幅（只留总览）
 
-- [ ] **Step 2: 顶部仅 2 个次要 KPI**
+- [x] **Step 2: 顶部仅 2 个次要 KPI**
 
 ```tsx
 <div className="insights-kpis insights-kpis-models-secondary">
@@ -488,12 +488,12 @@ CSS：
 }
 ```
 
-- [ ] **Step 3: 保留**
+- [x] **Step 3: 保留**
   - `insights-hbar-panel` 模型 Tokens 排行（`modelBars`）
   - `insights-ranks` 三列 RankList（provider / model / agent）
   - `modelsEmpty` hint
 
-- [ ] **Step 4: tsc + 单元测试**
+- [x] **Step 4: tsc + 单元测试**
 
 ```bash
 cd frontend && node --experimental-strip-types --test src/lib/insightsView.test.ts && npx tsc -b --pretty false
@@ -501,7 +501,7 @@ cd frontend && node --experimental-strip-types --test src/lib/insightsView.test.
 
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add apps/desktop/src/components/InsightsPanel.tsx apps/desktop/src/styles/insights.css
@@ -519,7 +519,7 @@ EOF
 **Files:**
 - Modify: `docs/superpowers/specs/2026-07-14-insights-overview-layout-design.md`（状态行）
 
-- [ ] **Step 1: 在 Tauri/dev 中核对验收清单**
+- [x] **Step 1: 在 Tauri/dev 中核对验收清单**
 
 1. 进入洞察默认「总览」
 2. 宽屏首屏可见 3 KPI + 趋势 + 厂商 Top
@@ -529,13 +529,13 @@ EOF
 6. 工具 / 协作 / Tracing 仍可用
 7. 触控板横滑不拖偏整页
 
-- [ ] **Step 2: 将 spec 状态改为**
+- [x] **Step 2: 将 spec 状态改为**
 
 ```markdown
 **状态:** 已批准 / 已实现
 ```
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add docs/superpowers/specs/2026-07-14-insights-overview-layout-design.md

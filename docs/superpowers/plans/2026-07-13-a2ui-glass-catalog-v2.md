@@ -41,7 +41,7 @@
 - Modify: `a2ui/src/catalog.rs`
 - Modify: `a2ui/tests/validate_test.rs`
 
-- [ ] **Step 1: Write failing tests**
+- [x] **Step 1: Write failing tests**
 
 Append to `a2ui/tests/validate_test.rs`:
 
@@ -123,13 +123,13 @@ fn rejects_deferred_modal() {
 }
 ```
 
-- [ ] **Step 2: Run tests — expect fail**
+- [x] **Step 2: Run tests — expect fail**
 
 Run: `cargo test -p a2ui --test validate_test catalog_id_is_v2 -- --nocapture`
 
 Expected: FAIL — catalog still `v1`
 
-- [ ] **Step 3: Update catalog**
+- [x] **Step 3: Update catalog**
 
 Replace `a2ui/src/catalog.rs` with:
 
@@ -160,13 +160,13 @@ pub const ALLOWED_COMPONENTS: &[&str] = &[
 ];
 ```
 
-- [ ] **Step 4: Run tests — expect pass**
+- [x] **Step 4: Run tests — expect pass**
 
 Run: `cargo test -p a2ui --test validate_test`
 
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add a2ui/src/catalog.rs a2ui/tests/validate_test.rs
@@ -185,7 +185,7 @@ EOF
 - Modify: `a2ui/src/templates.rs`
 - Modify: `a2ui/tests/templates_test.rs`
 
-- [ ] **Step 1: Write failing template assertions**
+- [x] **Step 1: Write failing template assertions**
 
 Replace/extend `a2ui/tests/templates_test.rs`:
 
@@ -256,13 +256,13 @@ fn info_template_validates_with_optional_image() {
 }
 ```
 
-- [ ] **Step 2: Run — expect fail on Avatar/Badge assertion**
+- [x] **Step 2: Run — expect fail on Avatar/Badge assertion**
 
 Run: `cargo test -p a2ui --test templates_test confirm_template_validates_and_uses_v2 -- --nocapture`
 
 Expected: FAIL — confirm template lacks Avatar/Badge
 
-- [ ] **Step 3: Upgrade `build_confirm_surface`**
+- [x] **Step 3: Upgrade `build_confirm_surface`**
 
 In `a2ui/src/templates.rs`, change confirm components to (keep action names `approve`/`deny`):
 
@@ -359,13 +359,13 @@ Upgrade `build_clarify_surface` header similarly: add optional `Badge` text `"Cl
 
 Upgrade `build_info_surface`: after title, insert a `Badge` `"Info"` / `info` when no image; keep image path as today.
 
-- [ ] **Step 4: Run templates tests**
+- [x] **Step 4: Run templates tests**
 
 Run: `cargo test -p a2ui --test templates_test`
 
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add a2ui/src/templates.rs a2ui/tests/templates_test.rs
@@ -385,7 +385,7 @@ EOF
 - Modify: `a2ui/src/lib.rs` (re-export if templates already `pub mod`)
 - Create: `a2ui/tests/recipes_test.rs`
 
-- [ ] **Step 1: Write failing recipe tests**
+- [x] **Step 1: Write failing recipe tests**
 
 `a2ui/tests/recipes_test.rs`:
 
@@ -421,13 +421,13 @@ fn result_recipe_validates() {
 }
 ```
 
-- [ ] **Step 2: Run — expect compile fail**
+- [x] **Step 2: Run — expect compile fail**
 
 Run: `cargo test -p a2ui --test recipes_test -- --nocapture`
 
 Expected: FAIL — missing functions
 
-- [ ] **Step 3: Implement recipes in `templates.rs`**
+- [x] **Step 3: Implement recipes in `templates.rs`**
 
 ```rust
 /// Metrics list inside a glass Card (title + Metric rows).
@@ -532,13 +532,13 @@ pub fn build_result_surface(
 }
 ```
 
-- [ ] **Step 4: Run recipe tests**
+- [x] **Step 4: Run recipe tests**
 
 Run: `cargo test -p a2ui --test recipes_test`
 
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add a2ui/src/templates.rs a2ui/tests/recipes_test.rs
@@ -557,7 +557,7 @@ EOF
 - Modify: `apps/desktop/src/a2ui/types.ts`
 - Create: `apps/desktop/src/a2ui/types.test.ts`
 
-- [ ] **Step 1: Write failing test**
+- [x] **Step 1: Write failing test**
 
 `apps/desktop/src/a2ui/types.test.ts`:
 
@@ -577,13 +577,13 @@ test("allowlist includes extension components", () => {
 });
 ```
 
-- [ ] **Step 2: Run — expect fail**
+- [x] **Step 2: Run — expect fail**
 
 Run: `cd frontend && node --experimental-strip-types --test src/a2ui/types.test.ts`
 
 Expected: FAIL on catalog id or missing components
 
-- [ ] **Step 3: Update `types.ts`**
+- [x] **Step 3: Update `types.ts`**
 
 ```ts
 export type A2uiComponent = {
@@ -636,9 +636,9 @@ export const ALLOWED_COMPONENTS = new Set([
 
 Keep existing `A2uiOperation` type unchanged.
 
-- [ ] **Step 4: Run test — pass**
+- [x] **Step 4: Run test — pass**
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add apps/desktop/src/a2ui/types.ts apps/desktop/src/a2ui/types.test.ts
@@ -656,7 +656,7 @@ EOF
 **Files:**
 - Modify: `apps/desktop/src/styles/chat.css` (a2ui section ~412+)
 
-- [ ] **Step 1: Replace a2ui CSS block with themed tokens**
+- [x] **Step 1: Replace a2ui CSS block with themed tokens**
 
 Find `.a2ui-surface` through `.a2ui-icon` and replace/extend with:
 
@@ -898,11 +898,11 @@ html[data-theme="light"] .a2ui-surface {
 }
 ```
 
-- [ ] **Step 2: Manual smoke**
+- [x] **Step 2: Manual smoke**
 
 Run app (`npm run tauri dev` if already running), toggle light/dark, confirm existing HITL card picks up glass. No automated CSS test required.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add apps/desktop/src/styles/chat.css
@@ -920,7 +920,7 @@ EOF
 **Files:**
 - Modify: `apps/desktop/src/a2ui/CatalogAdapter.tsx`
 
-- [ ] **Step 1: Extend `RenderCtx` and add cases**
+- [x] **Step 1: Extend `RenderCtx` and add cases**
 
 Update `RenderCtx`:
 
@@ -1012,13 +1012,13 @@ setFieldValue: () => {},
 
 so TypeScript compiles.
 
-- [ ] **Step 2: Typecheck**
+- [x] **Step 2: Typecheck**
 
 Run: `cd frontend && npx tsc -b --pretty false`
 
 Expected: no errors related to CatalogAdapter
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add apps/desktop/src/a2ui/CatalogAdapter.tsx
@@ -1039,7 +1039,7 @@ EOF
 - Modify: `apps/desktop/src/a2ui/CatalogAdapter.tsx`
 - Modify: `apps/desktop/src/a2ui/A2UIRenderer.tsx`
 
-- [ ] **Step 1: Failing tests for merge helper**
+- [x] **Step 1: Failing tests for merge helper**
 
 `apps/desktop/src/a2ui/formState.ts` (create empty stub first if preferred TDD):
 
@@ -1072,9 +1072,9 @@ test("empty base keeps fields", () => {
 });
 ```
 
-- [ ] **Step 2: Run formState tests — pass**
+- [x] **Step 2: Run formState tests — pass**
 
-- [ ] **Step 3: Wire real form controls in CatalogAdapter**
+- [x] **Step 3: Wire real form controls in CatalogAdapter**
 
 Replace TextField / ChoicePicker / CheckBox placeholders:
 
@@ -1169,7 +1169,7 @@ onClick={() =>
 
 Import `mergeActionContext` from `./formState`.
 
-- [ ] **Step 4: Hold field state in `A2UIRenderer`**
+- [x] **Step 4: Hold field state in `A2UIRenderer`**
 
 ```tsx
 import { useState } from "react";
@@ -1183,7 +1183,7 @@ setFieldValue: (id, value) =>
 
 Extend `renderCatalogTree` opts type accordingly.
 
-- [ ] **Step 5: Typecheck + formState tests**
+- [x] **Step 5: Typecheck + formState tests**
 
 Run:
 
@@ -1194,7 +1194,7 @@ cd frontend && node --experimental-strip-types --test src/a2ui/formState.test.ts
 
 Expected: PASS
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add apps/desktop/src/a2ui/formState.ts apps/desktop/src/a2ui/formState.test.ts \
@@ -1215,7 +1215,7 @@ EOF
 - Modify: `crates/agent-tools/src/builtin/confirm.rs` (description only if needed)
 - Modify: `crates/agent-tools/src/builtin/clarify.rs` (description only if needed)
 
-- [ ] **Step 1: Expand `present_ui` description**
+- [x] **Step 1: Expand `present_ui` description**
 
 Set description roughly to:
 
@@ -1223,13 +1223,13 @@ Set description roughly to:
 Present a read-only informational UI card in chat (no interrupt). Prefer shortcut fields title/body/image_url, or pass full A2UI v0.9 operations[] with catalogId astro://a2ui/catalog/v2. Allowed components: Text Icon Divider Card Column Row Button TextField ChoicePicker CheckBox Image List Badge Chip Metric Avatar Callout Spacer. Root should be Card. Use variant for semantics; never put hex colors in JSON. Example metric row: Metric{label,value,hint} inside Column inside Card.
 ```
 
-- [ ] **Step 2: Ensure tools still compile**
+- [x] **Step 2: Ensure tools still compile**
 
 Run: `cargo test -p tools -- --nocapture` (or at least `cargo check -p tools`)
 
 Templates already use v2 via `ASTRO_CATALOG_ID`; confirm/clarify need no logic change unless their tests hardcode v1.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add tools/src/builtin/present_ui.rs tools/src/builtin/confirm.rs tools/src/builtin/clarify.rs
@@ -1247,7 +1247,7 @@ EOF
 **Files:**
 - Modify: `docs/superpowers/specs/2026-07-13-declarative-genui-a2ui-design.md`
 
-- [ ] **Step 1: Update catalog subsection**
+- [x] **Step 1: Update catalog subsection**
 
 In section 「Catalog subset」, change:
 
@@ -1255,7 +1255,7 @@ In section 「Catalog subset」, change:
 - Note extension components + link to `2026-07-13-a2ui-glass-catalog-v2-design.md`
 - Keep Modal/Tabs/... as out of MVP but 「见 glass catalog v2 forward-compat」
 
-- [ ] **Step 2: Full verification**
+- [x] **Step 2: Full verification**
 
 ```bash
 cargo test -p a2ui
@@ -1265,14 +1265,14 @@ cd frontend && node --experimental-strip-types --test src/a2ui/*.test.ts
 
 Expected: all green
 
-- [ ] **Step 3: Manual checklist**
+- [x] **Step 3: Manual checklist**
 
-- [ ] Dark theme: confirm card glass readable  
-- [ ] Light theme: same card Frost readable  
-- [ ] present_ui with free operations including Metric/Badge renders  
-- [ ] TextField + Button submit includes field id in action context  
+- [x] Dark theme: confirm card glass readable  
+- [x] Light theme: same card Frost readable  
+- [x] present_ui with free operations including Metric/Badge renders  
+- [x] TextField + Button submit includes field id in action context  
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add docs/superpowers/specs/2026-07-13-declarative-genui-a2ui-design.md

@@ -25,10 +25,10 @@ The implementation worktree must be clean before Task 1. The main Astro checkout
 
 Those changes move conversation history into `SessionState` and convert recording methods to async. They are a prerequisite for removing the outer `Arc<Mutex<Session>>`, but they must not be copied from a dirty worktree.
 
-- [ ] Run `git -C /Users/iswm/Desktop/04-知识库/Rust/code/astro status --short`.
-- [ ] If any of the four files above are still modified, stop execution and ask their owner to commit them or explicitly discard them.
-- [ ] Rebase `codex/agent-loop-codex-alignment` onto the resulting committed branch tip.
-- [ ] Run `cargo test -p agent runtime:: --lib` and `cargo test -p agent tasks:: --lib`.
+- [x] Run `git -C /Users/iswm/Desktop/04-知识库/Rust/code/astro status --short`.
+- [x] If any of the four files above are still modified, stop execution and ask their owner to commit them or explicitly discard them.
+- [x] Rebase `codex/agent-loop-codex-alignment` onto the resulting committed branch tip.
+- [x] Run `cargo test -p agent runtime:: --lib` and `cargo test -p agent tasks:: --lib`.
 
 Expected: both commands pass before protocol work begins.
 
@@ -67,7 +67,7 @@ Expected: both commands pass before protocol work begins.
 - Create: `crates/agent-protocol/src/event.rs`
 - Create: `crates/agent-protocol/src/submission.rs`
 
-- [ ] **Step 1: Write protocol round-trip and terminal tests**
+- [x] **Step 1: Write protocol round-trip and terminal tests**
 
 Add these tests at the bottom of `crates/agent-protocol/src/event.rs`:
 
@@ -116,7 +116,7 @@ mod tests {
 }
 ```
 
-- [ ] **Step 2: Run the tests and verify they fail**
+- [x] **Step 2: Run the tests and verify they fail**
 
 Run:
 
@@ -126,7 +126,7 @@ cargo test -p agent-protocol
 
 Expected: FAIL because package `agent-protocol` does not exist.
 
-- [ ] **Step 3: Add the package and workspace member**
+- [x] **Step 3: Add the package and workspace member**
 
 Add `"crates/agent-protocol"` to `[workspace].members` in root `Cargo.toml`.
 
@@ -158,7 +158,7 @@ pub use items::*;
 pub use submission::*;
 ```
 
-- [ ] **Step 4: Implement `TurnItem` payloads**
+- [x] **Step 4: Implement `TurnItem` payloads**
 
 Create `crates/agent-protocol/src/items.rs`:
 
@@ -245,7 +245,7 @@ impl TurnItem {
 }
 ```
 
-- [ ] **Step 5: Implement the unified Event envelope**
+- [x] **Step 5: Implement the unified Event envelope**
 
 Create `crates/agent-protocol/src/event.rs` with these public types:
 
@@ -372,7 +372,7 @@ impl EventMsg {
 }
 ```
 
-- [ ] **Step 6: Implement submission operations and turn-input decisions**
+- [x] **Step 6: Implement submission operations and turn-input decisions**
 
 Create `crates/agent-protocol/src/submission.rs`:
 
@@ -458,7 +458,7 @@ pub struct Submission {
 }
 ```
 
-- [ ] **Step 7: Run protocol tests**
+- [x] **Step 7: Run protocol tests**
 
 Run:
 
@@ -469,7 +469,7 @@ cargo check -p agent-protocol
 
 Expected: PASS.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add Cargo.toml Cargo.lock crates/agent-protocol
@@ -484,7 +484,7 @@ git commit -m "feat(protocol): add unified thread event contract"
 - Create: `crates/agent-rollout/src/lib.rs`
 - Create: `crates/agent-rollout/src/policy.rs`
 
-- [ ] **Step 1: Write policy tests**
+- [x] **Step 1: Write policy tests**
 
 Add to `crates/agent-rollout/src/policy.rs`:
 
@@ -541,13 +541,13 @@ mod tests {
 }
 ```
 
-- [ ] **Step 2: Run the test and verify it fails**
+- [x] **Step 2: Run the test and verify it fails**
 
 Run `cargo test -p agent-rollout policy`.
 
 Expected: FAIL because package `agent-rollout` does not exist.
 
-- [ ] **Step 3: Add the rollout package**
+- [x] **Step 3: Add the rollout package**
 
 Add `"crates/agent-rollout"` to root workspace members.
 
@@ -602,7 +602,7 @@ pub enum RolloutItem {
 }
 ```
 
-- [ ] **Step 4: Implement the centralized policy**
+- [x] **Step 4: Implement the centralized policy**
 
 Create `crates/agent-rollout/src/policy.rs`:
 
@@ -666,13 +666,13 @@ pub fn is_persisted_rollout_item(item: &RolloutItem, mode: ThreadHistoryMode) ->
 }
 ```
 
-- [ ] **Step 5: Run policy tests**
+- [x] **Step 5: Run policy tests**
 
 Run `cargo test -p agent-rollout policy`.
 
 Expected: PASS.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add Cargo.toml Cargo.lock crates/agent-rollout
@@ -687,7 +687,7 @@ git commit -m "feat(rollout): add codex persistence policy"
 - Create: `crates/agent-rollout/src/path.rs`
 - Modify: `crates/agent-rollout/src/lib.rs`
 
-- [ ] **Step 1: Write recorder ordering and flush tests**
+- [x] **Step 1: Write recorder ordering and flush tests**
 
 Add to `crates/agent-rollout/src/recorder.rs`:
 
@@ -723,13 +723,13 @@ mod tests {
 }
 ```
 
-- [ ] **Step 2: Run the test and verify it fails**
+- [x] **Step 2: Run the test and verify it fails**
 
 Run `cargo test -p agent-rollout recorder::tests::record_then_flush_preserves_append_order`.
 
 Expected: FAIL because `RolloutRecorder` is not defined.
 
-- [ ] **Step 3: Implement the recorder command loop**
+- [x] **Step 3: Implement the recorder command loop**
 
 First extend `crates/agent-rollout/src/lib.rs`:
 
@@ -854,7 +854,7 @@ impl RolloutRecorder {
 
 Add `features = ["fs", "io-util", "macros", "rt"]` only if the workspace Tokio features are later narrowed; the current workspace already enables `full`.
 
-- [ ] **Step 4: Implement rollout reading**
+- [x] **Step 4: Implement rollout reading**
 
 Create `crates/agent-rollout/src/reconstruction.rs`:
 
@@ -879,7 +879,7 @@ pub async fn read_rollout(path: &Path) -> std::io::Result<Vec<RolloutItem>> {
 }
 ```
 
-- [ ] **Step 5: Implement deterministic rollout creation and lookup**
+- [x] **Step 5: Implement deterministic rollout creation and lookup**
 
 Create `crates/agent-rollout/src/path.rs`:
 
@@ -937,7 +937,7 @@ pub fn find_rollout(root: &Path, thread_id: &str) -> std::io::Result<Option<Path
 
 Add tests that create two dated paths and assert `find_rollout` returns the newest lexical timestamp.
 
-- [ ] **Step 6: Run rollout tests**
+- [x] **Step 6: Run rollout tests**
 
 Run:
 
@@ -948,7 +948,7 @@ cargo check -p agent-rollout
 
 Expected: PASS.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add crates/agent-rollout
@@ -970,7 +970,7 @@ git commit -m "feat(rollout): add ordered jsonl recorder"
 - Modify: `crates/agent-core/src/runtime/turn_lifecycle.rs`
 - Test: unit tests in `crates/agent-core/src/runtime/mod.rs`
 
-- [ ] **Step 1: Add a compile-time Send/Sync test and concurrent history test**
+- [x] **Step 1: Add a compile-time Send/Sync test and concurrent history test**
 
 Add to the existing `runtime::tests` module:
 
@@ -996,7 +996,7 @@ async fn arc_session_owns_concurrent_history_snapshots() {
 }
 ```
 
-- [ ] **Step 2: Run the test and verify the current API fails**
+- [x] **Step 2: Run the test and verify the current API fails**
 
 Run:
 
@@ -1007,7 +1007,7 @@ cargo test -p agent arc_session_owns_concurrent_history_snapshots --lib
 
 Expected: FAIL until the execution-gate history patch is integrated and all shared services are Sync.
 
-- [ ] **Step 3: Add protocol and rollout dependencies**
+- [x] **Step 3: Add protocol and rollout dependencies**
 
 Add to `crates/agent-core/Cargo.toml`:
 
@@ -1017,7 +1017,7 @@ agent-rollout = { path = "../agent-rollout" }
 async-channel = "2"
 ```
 
-- [ ] **Step 4: Make SessionState the owner of mutable conversation state**
+- [x] **Step 4: Make SessionState the owner of mutable conversation state**
 
 The final `SessionState` fields must be:
 
@@ -1042,7 +1042,7 @@ pub(crate) struct SessionState {
 
 Initialize these fields in `SessionState::new(history, project_root)`. Remove their duplicate mutable fields from `Session`.
 
-- [ ] **Step 5: Move mutable services behind focused locks**
+- [x] **Step 5: Move mutable services behind focused locks**
 
 Extend `SessionServices` with:
 
@@ -1053,7 +1053,7 @@ pub(crate) tool_registry: tokio::sync::RwLock<ToolRegistry>,
 
 Change its constructor to accept both values. Keep `SharedConversationStore` behind `std::sync::Mutex`; no SQLite guard may cross an `.await`.
 
-- [ ] **Step 6: Convert recording and history APIs to `&self`**
+- [x] **Step 6: Convert recording and history APIs to `&self`**
 
 The public signatures after this step must be:
 
@@ -1080,7 +1080,7 @@ pub async fn record_tool_result_with_id(
 
 Update call sites in `streaming/summary.rs`, `streaming/maintenance.rs`, and `runtime/turn_lifecycle.rs` to await these methods.
 
-- [ ] **Step 7: Convert model/config reads to snapshots**
+- [x] **Step 7: Convert model/config reads to snapshots**
 
 Add these methods to `Session` and use them instead of returning references tied to a state lock:
 
@@ -1100,7 +1100,7 @@ pub(crate) async fn permission_profile_snapshot(&self) -> Option<String> {
 
 Derive `Clone` for `ModelContext`. Update `context_maintenance.rs`, `system_prompt.rs`, `tool_dispatch.rs`, and `turn_lifecycle.rs` so no state guard is held across provider, tool, MCP, or hook awaits.
 
-- [ ] **Step 8: Run focused and all-target checks**
+- [x] **Step 8: Run focused and all-target checks**
 
 Run:
 
@@ -1111,7 +1111,7 @@ cargo check -p agent --all-targets
 
 Expected: PASS and no `Arc<Mutex<Session>>` is needed for history/config safety.
 
-- [ ] **Step 9: Commit**
+- [x] **Step 9: Commit**
 
 ```bash
 git add crates/agent-core/Cargo.toml crates/agent-core/src/runtime crates/agent-core/src/streaming/summary.rs crates/agent-core/src/streaming/maintenance.rs
@@ -1128,7 +1128,7 @@ git commit -m "refactor(agent): internalize mutable session state"
 - Modify: `crates/agent-core/src/lib.rs`
 - Test: unit tests in the new modules
 
-- [ ] **Step 1: Write bounded submission and ordered receive tests**
+- [x] **Step 1: Write bounded submission and ordered receive tests**
 
 Add to `session_io.rs`:
 
@@ -1176,13 +1176,13 @@ mod tests {
 }
 ```
 
-- [ ] **Step 2: Run tests and verify failure**
+- [x] **Step 2: Run tests and verify failure**
 
 Run `cargo test -p agent session_io::tests --lib`.
 
 Expected: FAIL because `session_io` is not defined.
 
-- [ ] **Step 3: Implement SessionIo channels**
+- [x] **Step 3: Implement SessionIo channels**
 
 Create `session_io.rs`:
 
@@ -1253,7 +1253,7 @@ impl SessionIo {
 }
 ```
 
-- [ ] **Step 4: Implement AstroThread ownership**
+- [x] **Step 4: Implement AstroThread ownership**
 
 Create `astro_thread.rs`:
 
@@ -1328,7 +1328,7 @@ impl AstroThread {
 
 Declare `pub(crate) mod session_io; pub(crate) mod submission_loop; mod astro_thread;` in `runtime/mod.rs`, re-export `AstroThread`, and re-export it from `lib.rs`.
 
-- [ ] **Step 5: Add the compiling submission-loop scaffold**
+- [x] **Step 5: Add the compiling submission-loop scaffold**
 
 Create `submission_loop.rs` so this commit remains buildable before Task 6 adds dispatch:
 
@@ -1353,7 +1353,7 @@ pub(crate) async fn submission_loop(
 
 This scaffold is private and is replaced by the exhaustive dispatcher in Task 6. The `AstroThread` type is public so each intermediate commit compiles, but do not migrate production callers to it until Task 6 completes the dispatcher.
 
-- [ ] **Step 6: Add Session runtime I/O binding**
+- [x] **Step 6: Add Session runtime I/O binding**
 
 Add these fields to `Session`:
 
@@ -1380,7 +1380,7 @@ pub(crate) fn bind_runtime_io(
 
 Initialize all three fields with `OnceLock::new()` in every Session constructor.
 
-- [ ] **Step 7: Run tests**
+- [x] **Step 7: Run tests**
 
 Run:
 
@@ -1391,7 +1391,7 @@ cargo check -p agent --all-targets
 
 Expected: PASS.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add crates/agent-core/src/runtime crates/agent-core/src/lib.rs crates/agent-core/Cargo.toml Cargo.lock
@@ -1408,7 +1408,7 @@ git commit -m "feat(agent): add bounded thread session io"
 - Modify: `crates/agent-core/src/runtime/turn_context.rs`
 - Test: unit tests in `submission_loop.rs` and `tasks/mod.rs`
 
-- [ ] **Step 1: Write a non-blocking dispatch test**
+- [x] **Step 1: Write a non-blocking dispatch test**
 
 Add to `submission_loop.rs`:
 
@@ -1499,13 +1499,13 @@ mod tests {
 }
 ```
 
-- [ ] **Step 2: Run the test and verify it fails**
+- [x] **Step 2: Run the test and verify it fails**
 
 Run `cargo test -p agent interrupt_is_dispatched_while_a_turn_task_is_running --lib`.
 
 Expected: FAIL because `submission_loop` and the asynchronous task handle are not implemented.
 
-- [ ] **Step 3: Change SessionTask to operate on Arc<Session>**
+- [x] **Step 3: Change SessionTask to operate on Arc<Session>**
 
 Replace both trait signatures with:
 
@@ -1529,7 +1529,7 @@ Update `AnySessionTask`, `RegularTask`, and test tasks to match. Remove `Arc<Mut
 
 Delete the local `tasks::TurnInput` enum and import `agent_protocol::TurnInput` throughout Core. Keep `pub use agent_protocol::TurnInput` in `agent-core/src/lib.rs` for downstream source compatibility.
 
-- [ ] **Step 4: Spawn rather than await the task inside dispatch**
+- [x] **Step 4: Spawn rather than await the task inside dispatch**
 
 Add a `tokio::task::JoinHandle<()>` to `RunningTask`. Change `Session::spawn_task` to return after installing the task:
 
@@ -1564,7 +1564,7 @@ pub(crate) async fn spawn_task<T: SessionTask>(
 
 `install_running_task` must reject a second task and store the JoinHandle. `abort_all_tasks` must cancel, wait up to five seconds, abort the JoinHandle, call the task abort hook, emit one `TurnAborted`, and clear the active task.
 
-- [ ] **Step 5: Implement TurnInput start/steer/reject**
+- [x] **Step 5: Implement TurnInput start/steer/reject**
 
 Add these helpers in `turn_lifecycle.rs`:
 
@@ -1611,7 +1611,7 @@ match mode {
 
 Convert protocol `TurnInput` into the existing task input at this boundary.
 
-- [ ] **Step 6: Implement the ordered submission loop**
+- [x] **Step 6: Implement the ordered submission loop**
 
 Create `submission_loop.rs`:
 
@@ -1670,7 +1670,7 @@ At this stage `Shutdown` exits the loop; Task 7 replaces that arm with the full 
 
 `dispatch_control_op` must contain explicit match arms for every remaining `Op`; it may not silently ignore variants. Unsupported operations emit `EventMsg::Error` with `error_type = "unsupported_op"`.
 
-- [ ] **Step 7: Run lifecycle tests**
+- [x] **Step 7: Run lifecycle tests**
 
 Run:
 
@@ -1682,7 +1682,7 @@ cargo check -p agent --all-targets
 
 Expected: PASS; Interrupt is processed before the blocking task exits naturally.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add crates/agent-core/src/runtime crates/agent-core/src/tasks
@@ -1699,7 +1699,7 @@ git commit -m "refactor(agent): route session control through submissions"
 - Create: `crates/agent-core/tests/common/mod.rs`
 - Test: `crates/agent-core/tests/thread_event_lifecycle_test.rs`
 
-- [ ] **Step 1: Write persistence-before-delivery tests**
+- [x] **Step 1: Write persistence-before-delivery tests**
 
 Split the following code at the first `#[tokio::test]`: put the imports plus `new_thread` in `crates/agent-core/tests/common/mod.rs` (make `new_thread` `pub(crate)`), and put the tests in `thread_event_lifecycle_test.rs` with `mod common; use common::new_thread;`:
 
@@ -1774,7 +1774,7 @@ async fn closed_rollout_writer_does_not_suppress_live_event() {
 }
 ```
 
-- [ ] **Step 2: Write exactly-one-terminal tests**
+- [x] **Step 2: Write exactly-one-terminal tests**
 
 Add the tests to the existing `#[cfg(test)]` module in `tasks/mod.rs`, where the private task lifecycle is directly accessible. Reuse the concrete `PendingTask` from Task 6 and add:
 
@@ -1860,7 +1860,7 @@ async fn interrupt_emits_only_turn_aborted() {
 
 Import `Event`, `Op`, `AstroThread`, `RolloutRecorder`, `ThreadHistoryMode`, and `TempDir` in that test module. Keep these helpers test-local; do not add a production `runtime::test_support` module.
 
-- [ ] **Step 3: Run the tests and verify failure**
+- [x] **Step 3: Run the tests and verify failure**
 
 Run:
 
@@ -1870,7 +1870,7 @@ cargo test -p agent --test thread_event_lifecycle_test
 
 Expected: FAIL because Session has no unified `send_event` and task completion still uses legacy terminal items.
 
-- [ ] **Step 4: Implement send_event persistence ordering**
+- [x] **Step 4: Implement send_event persistence ordering**
 
 Add to `Session`:
 
@@ -1932,7 +1932,7 @@ pub async fn flush_rollout(&self) -> std::io::Result<()> {
 }
 ```
 
-- [ ] **Step 5: Centralize task completion**
+- [x] **Step 5: Centralize task completion**
 
 Define the cancellation marker next to the task lifecycle code, then implement `on_task_finished` exactly as this decision table:
 
@@ -1996,7 +1996,7 @@ pub(crate) async fn on_task_finished(
 
 Use a concrete private `TurnCancelled` error type. The explicit abort path must remove the task before emitting `TurnAborted`, so the spawned task cannot emit a second terminal event.
 
-- [ ] **Step 6: Implement shutdown ordering**
+- [x] **Step 6: Implement shutdown ordering**
 
 Add:
 
@@ -2038,7 +2038,7 @@ Op::Shutdown => {
 }
 ```
 
-- [ ] **Step 7: Run tests**
+- [x] **Step 7: Run tests**
 
 Run:
 
@@ -2049,7 +2049,7 @@ cargo test -p agent tasks:: --lib
 
 Expected: PASS and each Turn has exactly one terminal event.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add crates/agent-core/src/runtime crates/agent-core/src/tasks crates/agent-core/tests/thread_event_lifecycle_test.rs
@@ -2071,7 +2071,7 @@ git commit -m "feat(agent): persist and deliver unified turn events"
 - Test: `crates/agent-core/tests/streaming_test.rs`
 - Test: unit tests in `crates/agent-core/src/exec/background.rs`
 
-- [ ] **Step 1: Add EventMsg granularity tests**
+- [x] **Step 1: Add EventMsg granularity tests**
 
 Retain `run_multi_turn_stream_with_chat_fn` as the existing public, `#[doc(hidden)]` integration-test seam, but change it to accept `Arc<Session>`, `Arc<TurnContext>`, and a `ChatOverride`; it must invoke the same inner engine as `RegularTask`. Add this concrete test to `streaming_test.rs`, using the existing `scripted_chat` helper and the `new_thread()` helper from Task 7 (move `new_thread` to a private `tests/common/mod.rs` shared only by integration tests):
 
@@ -2189,7 +2189,7 @@ async fn background_collector_observes_tool_and_terminal_events() {
 }
 ```
 
-- [ ] **Step 2: Run tests and verify failure**
+- [x] **Step 2: Run tests and verify failure**
 
 Run:
 
@@ -2200,7 +2200,7 @@ cargo test -p agent background_collector_observes_tool_and_terminal_events --lib
 
 Expected: FAIL because the loop still emits `MultiTurnStreamItem` and the background collector discards lifecycle events.
 
-- [ ] **Step 3: Replace the streaming emitter**
+- [x] **Step 3: Replace the streaming emitter**
 
 Replace `streaming::lifecycle::emit` with:
 
@@ -2216,7 +2216,7 @@ pub(crate) async fn emit(
 
 Remove the per-run `mpsc::Sender<MultiTurnStreamItem>` from `RunTurnArgs`. `RegularTask` must call the existing model/tool loop with `Arc<Session>`, `Arc<TurnContext>`, and `CancellationToken` only; provider targets and config come from the Session/StepContext snapshot. `run_multi_turn_stream_with_chat_fn` builds a `ProviderStreamer::with_chat_override` and then calls that same inner function; it may not contain a second loop implementation.
 
-- [ ] **Step 4: Apply the exact legacy-to-EventMsg mapping**
+- [x] **Step 4: Apply the exact legacy-to-EventMsg mapping**
 
 Replace each old emission using this table:
 
@@ -2240,7 +2240,7 @@ Replace each old emission using this table:
 
 Use one stable `item_id` for begin/delta/completed events. Tool calls use provider `call_id`; assistant messages use a UUID allocated before their first delta.
 
-- [ ] **Step 5: Record completed assistant and tool items before the next action**
+- [x] **Step 5: Record completed assistant and tool items before the next action**
 
 Immediately after recording an assistant response, emit:
 
@@ -2261,7 +2261,7 @@ session
 
 For tool calls, emit `ItemStarted` before dispatch and `ItemCompleted` after `record_tool_result_with_id(...).await` succeeds. This preserves the existing “assistant with tool_calls before tool execution” invariant while making rollout authoritative.
 
-- [ ] **Step 6: Replace background event dropping with a complete collector**
+- [x] **Step 6: Replace background event dropping with a complete collector**
 
 Replace `collect_background_events` with a collector over `AstroThread::next_event()`:
 
@@ -2336,7 +2336,7 @@ async fn collect_background_events(
 
 Keep cache/read/write/reasoning counters from the existing runtime usage accumulator; the `TokenCount` event supplies the input/output totals shown above.
 
-- [ ] **Step 7: Run Core streaming and background tests**
+- [x] **Step 7: Run Core streaming and background tests**
 
 Run:
 
@@ -2348,7 +2348,7 @@ cargo check -p agent --all-targets
 
 Expected: PASS and no Core execution path emits `Done` or `RunFinished`.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add crates/agent-core/src/streaming crates/agent-core/src/tasks crates/agent-core/src/exec/background.rs crates/agent-core/tests/streaming_test.rs
@@ -2364,7 +2364,7 @@ git commit -m "refactor(agent): emit unified foreground and background events"
 - Modify: `crates/agent-server/src/grpc/astro_service.rs`
 - Test: generated types via `cargo check -p proto`
 
-- [ ] **Step 1: Add RPC signatures**
+- [x] **Step 1: Add RPC signatures**
 
 Add to `service AstroService` after `ChatControl`:
 
@@ -2380,7 +2380,7 @@ Add to `service AstroService` after `ChatControl`:
   rpc UnsubscribeThread(UnsubscribeThreadRequest) returns (Empty);
 ```
 
-- [ ] **Step 2: Add request, snapshot, item, and event messages**
+- [x] **Step 2: Add request, snapshot, item, and event messages**
 
 Add this protocol block near the existing Chat messages:
 
@@ -2515,7 +2515,7 @@ message ThreadExtension {
 
 The new protocol intentionally has no `event_id`, `stream_id`, or `after_event_id`; recovery is snapshot based.
 
-- [ ] **Step 3: Add temporary compiling RPC stubs**
+- [x] **Step 3: Add temporary compiling RPC stubs**
 
 In the `impl AstroService for AstroServiceImpl` block, add:
 
@@ -2554,7 +2554,7 @@ async fn unsubscribe_thread(
 
 These stubs keep every intermediate commit buildable and are deleted when Task 12 delegates to `grpc::thread_service`.
 
-- [ ] **Step 4: Regenerate and compile**
+- [x] **Step 4: Regenerate and compile**
 
 Run:
 
@@ -2565,7 +2565,7 @@ cargo check -p server
 
 Expected: both commands PASS. Do not hand-edit generated files.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add crates/agent-proto/proto/astro.proto crates/agent-server/src/grpc/astro_service.rs
@@ -2580,7 +2580,7 @@ git commit -m "feat(proto): add thread submit resume and event APIs"
 - Modify: `crates/agent-server/src/lib.rs`
 - Test: unit tests in `thread_state.rs`
 
-- [ ] **Step 1: Write active snapshot reconstruction tests**
+- [x] **Step 1: Write active snapshot reconstruction tests**
 
 Add to `thread_state.rs`:
 
@@ -2626,13 +2626,13 @@ mod tests {
 }
 ```
 
-- [ ] **Step 2: Run the test and verify failure**
+- [x] **Step 2: Run the test and verify failure**
 
 Run `cargo test -p server thread_state::tests --lib`.
 
 Expected: FAIL because `ThreadHistoryBuilder` is not defined.
 
-- [ ] **Step 3: Add server dependencies**
+- [x] **Step 3: Add server dependencies**
 
 Add to `crates/agent-server/Cargo.toml`:
 
@@ -2642,7 +2642,7 @@ agent-rollout = { path = "../agent-rollout" }
 tokio-util = { workspace = true }
 ```
 
-- [ ] **Step 4: Implement snapshots and the history builder**
+- [x] **Step 4: Implement snapshots and the history builder**
 
 Create `thread_state.rs` with:
 
@@ -2781,7 +2781,7 @@ pub struct ThreadStateManager {
 
 Implement `insert`, `get`, `remove`, `subscribed_connection_ids`, `unsubscribe`, and `has_subscribers` with short RwLock scopes. `CoreEvent`, `Resume`, and `Unsubscribe` are executed by the serialized listener in Task 12, never directly by an RPC.
 
-- [ ] **Step 5: Run tests**
+- [x] **Step 5: Run tests**
 
 Run:
 
@@ -2792,7 +2792,7 @@ cargo check -p server --all-targets
 
 Expected: PASS with the Task 9 RPC stubs still present.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add crates/agent-server/Cargo.toml crates/agent-server/src/thread_state.rs crates/agent-server/src/lib.rs Cargo.lock
@@ -2806,7 +2806,7 @@ git commit -m "feat(server): track thread history and subscriptions"
 - Modify: `crates/agent-server/src/lib.rs`
 - Test: unit tests in `transport.rs`
 
-- [ ] **Step 1: Write the slow-consumer test**
+- [x] **Step 1: Write the slow-consumer test**
 
 Add to `transport.rs`:
 
@@ -2842,13 +2842,13 @@ mod tests {
 }
 ```
 
-- [ ] **Step 2: Run the test and verify failure**
+- [x] **Step 2: Run the test and verify failure**
 
 Run `cargo test -p server slow_connection_does_not_block_fast_connection --lib`.
 
 Expected: FAIL because `ConnectionRegistry` is not defined.
 
-- [ ] **Step 3: Implement the registry**
+- [x] **Step 3: Implement the registry**
 
 Create `transport.rs`:
 
@@ -2939,7 +2939,7 @@ impl ConnectionRegistry {
 }
 ```
 
-- [ ] **Step 4: Run tests**
+- [x] **Step 4: Run tests**
 
 Run:
 
@@ -2950,7 +2950,7 @@ cargo check -p server --all-targets
 
 Expected: PASS; fast receiver gets its event after slow receiver is disconnected.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add crates/agent-server/src/transport.rs crates/agent-server/src/lib.rs
@@ -2968,7 +2968,7 @@ git commit -m "feat(server): isolate slow thread-event consumers"
 - Modify: `crates/agent-server/src/lib.rs`
 - Test: `crates/agent-server/tests/thread_events_test.rs`
 
-- [ ] **Step 1: Write multi-subscriber and resume-gap integration tests**
+- [x] **Step 1: Write multi-subscriber and resume-gap integration tests**
 
 Create `crates/agent-server/tests/thread_events_test.rs`:
 
@@ -3078,13 +3078,13 @@ async fn running_resume_has_no_snapshot_to_live_gap() {
 }
 ```
 
-- [ ] **Step 2: Run tests and verify failure**
+- [x] **Step 2: Run tests and verify failure**
 
 Run `cargo test -p server --test thread_events_test`.
 
 Expected: FAIL because there is no Thread listener or RPC implementation.
 
-- [ ] **Step 3: Implement Core-to-proto mapping**
+- [x] **Step 3: Implement Core-to-proto mapping**
 
 In `thread_listener.rs`, add these helpers:
 
@@ -3138,7 +3138,7 @@ Implement `event_to_proto(thread_id, event)` as an exhaustive `match`. Use:
 
 This function must return one proto event for every Core `EventMsg` variant; no variant may map to `None`.
 
-- [ ] **Step 4: Implement one serialized listener command loop**
+- [x] **Step 4: Implement one serialized listener command loop**
 
 Use one command queue for Core events and subscriber mutations. `run_thread_listener` owns the only `AstroThread::next_event` pump; the pump translates each event into `ListenerCommand::CoreEvent`, while `run_listener_commands` is the only code allowed to mutate `ThreadState`:
 
@@ -3236,7 +3236,7 @@ The listener queue establishes the recovery boundary: a Core event is either pro
 
 Re-export `run_listener_commands`, `ConnectionRegistry`, `ListenerCommand`, `ThreadHistoryBuilder`, `ThreadSnapshot`, and `ThreadState` from `server::lib` for the integration test. Keep `event_to_proto` private.
 
-- [ ] **Step 5: Replace the Session map with a Thread manager**
+- [x] **Step 5: Replace the Session map with a Thread manager**
 
 In `astro_service.rs`, replace:
 
@@ -3284,7 +3284,7 @@ Implement `get`, `insert_if_absent`, `remove`, `contains`, and `creation_lock(th
 
 The method returns `Arc<ManagedThread>`. Never hold the global entries lock while awaiting Session construction, rollout I/O, or listener startup.
 
-- [ ] **Step 6: Implement the four RPC methods**
+- [x] **Step 6: Implement the four RPC methods**
 
 In `grpc/thread_service.rs`, implement:
 
@@ -3319,7 +3319,7 @@ Required ordering:
 
 The outbound stream bridges the registry receiver to `Result<ThreadEvent, Status>`. On cancellation, return `Status::resource_exhausted("slow thread-event consumer")` once, then close.
 
-- [ ] **Step 7: Convert existing Chat into a compatibility adapter**
+- [x] **Step 7: Convert existing Chat into a compatibility adapter**
 
 Add two private, exhaustive adapter helpers in `grpc/thread_service.rs`:
 
@@ -3357,7 +3357,7 @@ let turn_id = submission
 
 Here `thread` is `Arc::clone(&managed.runtime)`. Spawn a compatibility mapping task that filters by `turn_id`, calls `thread_event_to_chat_events`, and closes after `turn_complete` or `turn_aborted`. The adapter may emit legacy `Done` only after the terminal event; Core must not.
 
-- [ ] **Step 8: Add 30-minute idle unload**
+- [x] **Step 8: Add 30-minute idle unload**
 
 Clone `ManagedThread::activity_rx` into one unload task per loaded Thread. Start the 30-minute timer only when `status == "idle" && !has_subscribers`; any watch change cancels and recomputes the timer:
 
@@ -3391,7 +3391,7 @@ loop {
 
 Add a paused-time test using `#[tokio::test(start_paused = true)]` that advances 29 minutes and asserts loaded, then advances one more minute and asserts unloaded.
 
-- [ ] **Step 9: Run server tests**
+- [x] **Step 9: Run server tests**
 
 Run:
 
@@ -3404,7 +3404,7 @@ cargo check -p server --all-targets
 
 Expected: PASS; no generated AstroService trait method is missing.
 
-- [ ] **Step 10: Commit**
+- [x] **Step 10: Commit**
 
 ```bash
 git add crates/agent-server/src crates/agent-server/tests/thread_events_test.rs
@@ -3422,7 +3422,7 @@ git commit -m "feat(server): add codex-style thread listener and resume"
 - Modify: `apps/desktop/src-tauri/src/commands/chat.rs`
 - Test: unit tests in `apps/desktop/src-tauri/src/infra/thread_events.rs`
 
-- [ ] **Step 1: Write proto-to-UI mapping tests**
+- [x] **Step 1: Write proto-to-UI mapping tests**
 
 Add to `thread_events.rs`:
 
@@ -3468,13 +3468,13 @@ mod tests {
 }
 ```
 
-- [ ] **Step 2: Run tests and verify failure**
+- [x] **Step 2: Run tests and verify failure**
 
 Run `cargo test -p astro-agent thread_events::tests`.
 
 Expected: FAIL because the bridge does not exist.
 
-- [ ] **Step 3: Implement the connection bridge**
+- [x] **Step 3: Implement the connection bridge**
 
 Create `thread_events.rs` with one managed state:
 
@@ -3505,7 +3505,7 @@ At app setup, open `SubscribeThreadEvents(connection_id)` and set ready only aft
 
 On stream failure, reconnect with exponential backoff from 500 ms to 15 seconds. After the new stream is ready, call `ResumeThread(include_turns=true)` for every id in `active_threads`; emit the returned snapshot as `thread_snapshot` before accepting live events. If the snapshot shows the formerly active Turn as completed/failed/aborted, synthesize its terminal UI projection and remove the Thread from `active_threads`; otherwise retain it for live delivery.
 
-- [ ] **Step 4: Change start_chat to SubmitTurn**
+- [x] **Step 4: Change start_chat to SubmitTurn**
 
 Replace the task that calls the streaming `Chat` RPC with:
 
@@ -3534,7 +3534,7 @@ if response.disposition == "not_submitted" {
 
 Do not spawn a second gRPC stream per chat. `chat_control(cancel)` becomes `Op::Interrupt` through the server Thread manager; pause/resume remains a Thread control operation until the pause protocol is migrated.
 
-- [ ] **Step 5: Run Tauri checks**
+- [x] **Step 5: Run Tauri checks**
 
 Run:
 
@@ -3546,7 +3546,7 @@ cd apps/desktop && npx tsc --noEmit
 
 Expected: PASS; start_chat has no direct `.chat(...).into_inner()` stream loop.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add apps/desktop/src-tauri apps/desktop/src
@@ -3568,7 +3568,7 @@ git commit -m "refactor(desktop): consume shared thread event stream"
 - Modify: `apps/desktop/src-tauri/src/infra/mod.rs`
 - Test: `crates/agent-server/tests/thread_events_test.rs`
 
-- [ ] **Step 1: Add Extension migration tests**
+- [x] **Step 1: Add Extension migration tests**
 
 Add server tests that assert:
 
@@ -3628,7 +3628,7 @@ async fn workspace_pending_uses_the_workspace_event_thread() {
 
 Generalize the Task 12 test helper to `start_listener_for(thread_id: &str)` and keep `start_listener()` as a one-line call for `"thread-1"`. Add `ItemEvent`, `TurnItem`, `ExtensionItem`, and `WORKSPACE_EVENT_THREAD_ID` to the imports.
 
-- [ ] **Step 2: Run tests and verify failure**
+- [x] **Step 2: Run tests and verify failure**
 
 Run:
 
@@ -3639,7 +3639,7 @@ cargo test -p server workspace_pending_uses_the_workspace_event_thread --test th
 
 Expected: FAIL while emitters still publish through `SessionEventHub`.
 
-- [ ] **Step 3: Route all side effects through Op::EmitExtension**
+- [x] **Step 3: Route all side effects through Op::EmitExtension**
 
 Use these namespaces and payload keys:
 
@@ -3670,7 +3670,7 @@ thread
 
 Define `pub const WORKSPACE_EVENT_THREAD_ID: &str = "astro-workspace-events";`. Tauri always resumes that Thread after opening its connection. Global pending changes submit `EmitExtension` to this Thread.
 
-- [ ] **Step 4: Remove legacy event implementations**
+- [x] **Step 4: Remove legacy event implementations**
 
 Delete:
 
@@ -3683,7 +3683,7 @@ Delete:
 Keep `ChatEvent.Done` only in the compatibility wire adapter and `ChatStreamEvent::Done` only in the desktop UI adapter.
 Keep `StreamedAssistantContent`, `AssistantContentStream`, and `map_new_provider_stream` in `streaming/types.rs`; only remove the multi-turn wrapper enum and alias.
 
-- [ ] **Step 5: Regenerate and run migration tests**
+- [x] **Step 5: Regenerate and run migration tests**
 
 Run:
 
@@ -3696,7 +3696,7 @@ cargo check -p astro-agent --all-targets
 
 Expected: PASS and `rg -n "SessionEventHub|MultiTurnStreamItem|pub struct EventBus|after_event_id|stream_id" crates/agent-core crates/agent-server apps/desktop/src-tauri` returns no runtime implementation hits.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add -A crates/agent-core crates/agent-server crates/agent-proto apps/desktop/src-tauri
@@ -3714,7 +3714,7 @@ git commit -m "refactor(events): remove duplicate session event paths"
 - Modify: `crates/agent-session/Cargo.toml`
 - Test: `crates/agent-session/tests/rollout_projection_test.rs`
 
-- [ ] **Step 1: Write projection rebuild test**
+- [x] **Step 1: Write projection rebuild test**
 
 Create `rollout_projection_test.rs`:
 
@@ -3736,13 +3736,13 @@ fn fresh_message_projection_rebuilds_from_rollout() {
 }
 ```
 
-- [ ] **Step 2: Run test and verify failure**
+- [x] **Step 2: Run test and verify failure**
 
 Run `cargo test -p session --test rollout_projection_test`.
 
 Expected: FAIL because the projection rebuilder does not exist.
 
-- [ ] **Step 3: Implement deterministic projection**
+- [x] **Step 3: Implement deterministic projection**
 
 Add `agent-protocol` and `agent-rollout` dependencies to `agent-session`. Implement:
 
@@ -3764,7 +3764,7 @@ pub fn rebuild_messages_from_rollout(
 
 `append_runtime_message` maps user/assistant/tool roles, media, tool_call_id, tool_calls, reasoning, reasoning_details, and compressed_content into `NewMessage`. Before rebuilding, delete only rows for the target session inside one transaction; never delete the whole database.
 
-- [ ] **Step 4: Run projection tests**
+- [x] **Step 4: Run projection tests**
 
 Run:
 
@@ -3775,7 +3775,7 @@ cargo test -p session --all-targets
 
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add crates/agent-session Cargo.lock
@@ -3789,7 +3789,7 @@ git commit -m "feat(session): rebuild message projection from rollout"
 - Modify: `docs/04-详细设计阶段/01-核心引擎层/07-Agent生命周期详细设计.md`
 - Create: `docs/04-详细设计阶段/01-核心引擎层/12-Agent事件与恢复详细设计.md`
 
-- [ ] **Step 1: Update canonical diagrams and invariants**
+- [x] **Step 1: Update canonical diagrams and invariants**
 
 Document this exact chain:
 
@@ -3809,7 +3809,7 @@ AstroThread::submit(Op)
 
 Mark the spec status `已实现` only after all tests below pass. State explicitly that recovery is snapshot + live stream and transient deltas are not replayed.
 
-- [ ] **Step 2: Run formatting and focused tests**
+- [x] **Step 2: Run formatting and focused tests**
 
 Run:
 
@@ -3825,7 +3825,7 @@ cargo test -p session --test rollout_projection_test
 
 Expected: all PASS.
 
-- [ ] **Step 3: Run workspace and desktop verification**
+- [x] **Step 3: Run workspace and desktop verification**
 
 Run:
 
@@ -3838,7 +3838,7 @@ cd apps/desktop && npm run build
 
 Expected: all commands exit 0. If a known baseline failure remains, record the exact command and error in the design document; do not describe the alignment as complete until all new focused tests pass.
 
-- [ ] **Step 4: Check architectural deletion and event coverage**
+- [x] **Step 4: Check architectural deletion and event coverage**
 
 Run:
 
@@ -3850,7 +3850,7 @@ git diff --check
 
 Expected: the first command has no runtime implementation hits; the second command finds emitters and mapping tests for every required event family; `git diff --check` is silent.
 
-- [ ] **Step 5: Commit documentation and verification record**
+- [x] **Step 5: Commit documentation and verification record**
 
 ```bash
 git add docs
@@ -3859,14 +3859,14 @@ git commit -m "docs: record codex-aligned agent loop architecture"
 
 ## Final acceptance checklist
 
-- [ ] Every Thread owns one long-lived Session and one 512-capacity submission queue.
-- [ ] Every foreground and background Turn emits the same EventMsg lifecycle.
-- [ ] Every Turn has exactly one `TurnComplete` or `TurnAborted`.
-- [ ] Durable events are appended to rollout before Core delivery.
-- [ ] Multiple subscribers observe the same order.
-- [ ] A full 128-entry connection queue disconnects only that slow connection.
-- [ ] Resume returns durable turns plus an active snapshot with no snapshot/live gap.
-- [ ] Transient token/reasoning/stdout deltas are not promised during recovery.
-- [ ] SQLite messages can be rebuilt from rollout.
-- [ ] `SessionEventHub`, Core `EventBus`, Core `MultiTurnStreamItem`, and cursor replay are removed.
-- [ ] app-server, Tauri, exec, Cron, MCP, Hook, approval, Subagent, patch, and compaction paths use the unified protocol.
+- [x] Every Thread owns one long-lived Session and one 512-capacity submission queue.
+- [x] Every foreground and background Turn emits the same EventMsg lifecycle.
+- [x] Every Turn has exactly one `TurnComplete` or `TurnAborted`.
+- [x] Durable events are appended to rollout before Core delivery.
+- [x] Multiple subscribers observe the same order.
+- [x] A full 128-entry connection queue disconnects only that slow connection.
+- [x] Resume returns durable turns plus an active snapshot with no snapshot/live gap.
+- [x] Transient token/reasoning/stdout deltas are not promised during recovery.
+- [x] SQLite messages can be rebuilt from rollout.
+- [x] `SessionEventHub`, Core `EventBus`, Core `MultiTurnStreamItem`, and cursor replay are removed.
+- [x] app-server, Tauri, exec, Cron, MCP, Hook, approval, Subagent, patch, and compaction paths use the unified protocol.

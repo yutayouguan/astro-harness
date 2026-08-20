@@ -33,7 +33,7 @@
 - Modify: `crates/agent-core/src/streaming.rs`
 - Test: 在 `agent/tests/streaming_test.rs` 或新建小测：设 `ASTRO_MEMORY_DIR`，触发带 usage 的错误收尾，断言 `usage.db` 有 `kind=llm`
 
-- [ ] **Step 1: 抽出辅助函数**（从现有 `finish_usage_and_done` 体中）
+- [x] **Step 1: 抽出辅助函数**（从现有 `finish_usage_and_done` 体中）
 
 ```rust
 /// 尽力写入一条 kind=llm 事件；失败忽略。
@@ -68,7 +68,7 @@ async fn record_llm_usage(
 
 `finish_usage_and_done` 改为调用该函数后再 emit FinalUsage。
 
-- [ ] **Step 2: 扩展 `finish_error`**
+- [x] **Step 2: 扩展 `finish_error`**
 
 ```rust
 async fn finish_error(
@@ -90,7 +90,7 @@ async fn finish_error(
 
 更新所有 `finish_error(...)` 调用点：传入 `session`、`&config.model`（或当前 model）、`saw_usage.then_some(total_usage.clone())`（按各点实际可用变量调整）。无 usage 处传 `None`。
 
-- [ ] **Step 3: 测试**
+- [x] **Step 3: 测试**
 
 用 `ASTRO_MEMORY_DIR` + tempfile：跑一条会 `finish_error` 且 mock provider 先吐 usage 再失败的流（可参考现有 streaming_test fixtures）。断言 `UsageDb::open_default().query_insights(...)` 或直接 SQL count `kind='llm' >= 1`。
 
@@ -98,7 +98,7 @@ async fn finish_error(
 
 Run: `cargo test -p agent --test streaming_test`
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add agent/src/streaming.rs agent/tests/
@@ -117,7 +117,7 @@ EOF
 - Modify: `crates/agent-core/src/cron_exec.rs`
 - Test: `agent/tests/cron_exec_test.rs`（扩展）或 memory 侧不测；优先在 cron_exec 测 usage 累加纯函数
 
-- [ ] **Step 1: `run_provider_loop` 返回 `(String, Usage)`**
+- [x] **Step 1: `run_provider_loop` 返回 `(String, Usage)`**
 
 ```rust
 let mut total_usage = Usage::default();
@@ -137,7 +137,7 @@ Ok((full_response, if saw_usage { total_usage } else { Usage::default() }))
 
 核对 `streaming.rs` 对 usage 是 `add_assign` 还是覆盖；cron **对齐同一策略**。
 
-- [ ] **Step 2: 在 `execute_job_with_roots` 成功/失败处写 llm**
+- [x] **Step 2: 在 `execute_job_with_roots` 成功/失败处写 llm**
 
 成功分支：保留现有 `kind=cron`；若 `usage.total_tokens > 0 || prompt/completion > 0`：
 
@@ -161,7 +161,7 @@ memory::UsageDb::try_record(memory::NewUsageEvent {
 
 把 usage 从 `run_provider_loop` 传到 `execute_job_with_roots` 收尾处（调整返回类型 / 局部变量）。
 
-- [ ] **Step 3: 测试**
+- [x] **Step 3: 测试**
 
 `ASTRO_MEMORY_DIR` + mock/minimal：若现有 cron_exec_test 难接真流，至少单测「给定 Usage 写入后 insights 含 llm」。可抽：
 
@@ -173,7 +173,7 @@ pub(crate) fn record_cron_llm_usage(agent_id: &str, session_id: Option<String>, 
 
 Run: `cargo test -p agent --test cron_exec_test` 与相关 lib 测
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add agent/src/cron_exec.rs agent/tests/
@@ -193,7 +193,7 @@ EOF
 - Modify: `apps/desktop/src/styles/insights.css`
 - Modify: `apps/desktop/src/i18n/messages.ts`
 
-- [ ] **Step 1: i18n**
+- [x] **Step 1: i18n**
 
 ```ts
 "insights.metric.calls": "调用",
@@ -205,7 +205,7 @@ EOF
 "insights.metric.cost": "Cost (est.)",
 ```
 
-- [ ] **Step 2: Panel state + chart**
+- [x] **Step 2: Panel state + chart**
 
 ```tsx
 type Metric = "calls" | "tokens" | "cost";
@@ -222,17 +222,17 @@ const maxVal = Math.max(1, ...(data?.series.map((s) => seriesValue(s, metric)) ?
 
 在图表 heading 旁加与 period tabs 类似的 metric tabs；`height: (seriesValue(s,metric)/maxVal)*100%`；`title` 显示对应值（cost 用 `formatCost`）。
 
-- [ ] **Step 3: 样式**
+- [x] **Step 3: 样式**
 
 复用 `.insights-period-tab` 或新增 `.insights-metric-tab`（同高、同圆角）。
 
-- [ ] **Step 4: 类型检查**
+- [x] **Step 4: 类型检查**
 
 ```bash
 cd frontend && ./node_modules/.bin/tsc -b --pretty false
 ```
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add apps/desktop/src/components/InsightsPanel.tsx apps/desktop/src/styles/insights.css apps/desktop/src/i18n/messages.ts
@@ -247,7 +247,7 @@ EOF
 
 ### Task 4: 回归验收
 
-- [ ] **Step 1: 命令**
+- [x] **Step 1: 命令**
 
 ```bash
 cargo test -p memory --test usage_db_test
@@ -256,13 +256,13 @@ cargo check -p agent -p backend -p astro-agent
 cd frontend && ./node_modules/.bin/tsc -b --pretty false
 ```
 
-- [ ] **Step 2: 对照 spec 验收清单勾选**
+- [x] **Step 2: 对照 spec 验收清单勾选**
 
-- [ ] 错误路径有 llm 事件  
-- [ ] cron 成功有 cron + llm（有 usage 时）  
-- [ ] 趋势图三指标切换  
+- [x] 错误路径有 llm 事件  
+- [x] cron 成功有 cron + llm（有 usage 时）  
+- [x] 趋势图三指标切换  
 
-- [ ] **Step 3: 无额外 commit（除非修 bug）**
+- [x] **Step 3: 无额外 commit（除非修 bug）**
 
 ---
 

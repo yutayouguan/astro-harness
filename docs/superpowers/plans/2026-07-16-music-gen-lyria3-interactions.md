@@ -60,7 +60,7 @@
   - `pub fn music_extension(mime: &str, format: MusicAudioFormat) -> &'static str`
   - `pub async fn google_interactions_music(client: &Client, config: &ProviderConfig, req: &InteractionMusicRequest) -> Result<InteractionMusicResult>`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 在 `interactions_http.rs` 的 `mod tests` 末尾追加（若 `tests` 模块已有 `use super::*` 则复用）：
 
@@ -157,7 +157,7 @@ fn resolve_lyria_model_and_extension() {
 }
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 ```bash
 cargo test -p providers --lib interactions_http::tests::build_music_body_text_only -- --nocapture
@@ -165,7 +165,7 @@ cargo test -p providers --lib interactions_http::tests::build_music_body_text_on
 
 Expected: FAIL（类型/函数未定义）
 
-- [ ] **Step 3: Implement types + body + parse + HTTP**
+- [x] **Step 3: Implement types + body + parse + HTTP**
 
 在 `interactions_http.rs` 末尾（vision 段之后、`mod tests` 之前）追加大致如下（保持与文件现有风格一致：`anyhow`、`json!`、`base64` STANDARD）：
 
@@ -403,7 +403,7 @@ pub async fn google_interactions_music(
 
 注意：`error_message` 若为 `fn` 私有则直接调用；若不可见则复制同文件 TTS 用的指针逻辑。
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 ```bash
 cargo test -p providers --lib interactions_http::tests::build_music_body_ -- --nocapture
@@ -413,7 +413,7 @@ cargo test -p providers --lib interactions_http::tests::resolve_lyria_ -- --noca
 
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add providers/src/protocol/interactions_http.rs
@@ -442,7 +442,7 @@ EOF
 - Consumes: Task 1 全部 Produces；`ToolContext::image_gen_targets.google()`；`home::{generated_dir, GeneratedKind}`；`providers::trait_::ProviderConfig`
 - Produces: `music_gen::register` / `music_gen::dispatch`；toolset id `music_gen`
 
-- [ ] **Step 1: Write failing tool-level unit tests（同文件 `#[cfg(test)]`）**
+- [x] **Step 1: Write failing tool-level unit tests（同文件 `#[cfg(test)]`）**
 
 ```rust
 #[cfg(test)]
@@ -509,7 +509,7 @@ mod tests {
 
 说明：若项目里 `AgentMemory` 难构造，**只测 `validate_music_gen_args`**，不要强行拼完整 `ToolContext`。
 
-- [ ] **Step 2: Run tests — expect fail**
+- [x] **Step 2: Run tests — expect fail**
 
 ```bash
 cargo test -p tools --lib music_gen::tests::reject_empty_prompt -- --nocapture
@@ -517,7 +517,7 @@ cargo test -p tools --lib music_gen::tests::reject_empty_prompt -- --nocapture
 
 Expected: FAIL（模块不存在）
 
-- [ ] **Step 3: Implement `music_gen.rs`**
+- [x] **Step 3: Implement `music_gen.rs`**
 
 ```rust
 //! 音乐生成：Google Lyria 3 via Gemini Interactions（Google only）。
@@ -729,7 +729,7 @@ fn mime_from_name(name: &str) -> &'static str {
 rg 'base64' tools/Cargo.toml
 ```
 
-- [ ] **Step 4: Wire modules / dispatch / toolset**
+- [x] **Step 4: Wire modules / dispatch / toolset**
 
 `crates/agent-tools/src/builtin/media/mod.rs`：
 
@@ -762,7 +762,7 @@ music_gen::register(registry);
 - `KNOWN_TOOLSET_IDS` 在 `"tts"` 后插入 `"music_gen"`
 - `tool_name_to_toolset`：`"music_gen" => "music_gen"`
 
-- [ ] **Step 5: Run tests**
+- [x] **Step 5: Run tests**
 
 ```bash
 cargo test -p tools --lib music_gen -- --nocapture
@@ -772,7 +772,7 @@ cargo check -p tools -p home
 
 Expected: PASS / 无错误
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add tools/src/builtin/media/music_gen.rs tools/src/builtin/media/mod.rs tools/src/builtin/mod.rs tools/src/lib.rs tools/src/engine/dispatch.rs home/src/config/tools_enabled.rs tools/Cargo.toml
@@ -799,7 +799,7 @@ EOF
 - Consumes: 工具返回文案前缀 `音乐已生成：`
 - Produces: AGENT_TOOLS 条目 `music_gen`；i18n keys；parse 识别 audio
 
-- [ ] **Step 1: 更新 `parseGeneratedMedia`**
+- [x] **Step 1: 更新 `parseGeneratedMedia`**
 
 ```ts
 const LABELED =
@@ -823,7 +823,7 @@ expect(parseGeneratedMedia("音乐已生成：generated/audio/music-1.mp3")).toE
 ]);
 ```
 
-- [ ] **Step 2: `useAgentTools.ts`**
+- [x] **Step 2: `useAgentTools.ts`**
 
 在 `tts` 条目后、`skills` 前插入（复用 `IconMusic`，与本地 `music` 区分靠 title/desc）：
 
@@ -845,7 +845,7 @@ expect(parseGeneratedMedia("音乐已生成：generated/audio/music-1.mp3")).toE
 
 同时把 `AgentToolId` 联合类型（若有显式 union）加入 `"music_gen"`。
 
-- [ ] **Step 3: i18n `messages.ts`**
+- [x] **Step 3: i18n `messages.ts`**
 
 中文（靠近 `agentTools.tts`）：
 
@@ -861,7 +861,7 @@ expect(parseGeneratedMedia("音乐已生成：generated/audio/music-1.mp3")).toE
 "agentTools.musicGen.desc": "Google Lyria 3 native (Interactions); clip/pro, optional reference images; writes generated/audio",
 ```
 
-- [ ] **Step 4: 跑前端测（若有）**
+- [x] **Step 4: 跑前端测（若有）**
 
 ```bash
 cd frontend && npm test -- --run src/lib/parseGeneratedMedia.test.ts
@@ -869,7 +869,7 @@ cd frontend && npm test -- --run src/lib/parseGeneratedMedia.test.ts
 
 Expected: PASS（无该文件则跳过）
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add apps/desktop/src/hooks/useAgentTools.ts apps/desktop/src/i18n/messages.ts apps/desktop/src/lib/parseGeneratedMedia.ts apps/desktop/src/lib/parseGeneratedMedia.test.ts
@@ -887,7 +887,7 @@ EOF
 
 **Files:** 无新增；跑命令
 
-- [ ] **Step 1: providers + tools 测试**
+- [x] **Step 1: providers + tools 测试**
 
 ```bash
 cargo test -p providers --lib interactions_http -- --nocapture
@@ -897,18 +897,18 @@ cargo check -p tools -p providers -p home
 
 Expected: 全部 PASS / 无错误
 
-- [ ] **Step 2: Spec 对照清单（人工勾）**
+- [x] **Step 2: Spec 对照清单（人工勾）**
 
-- [ ] Google Interactions URL + `x-goog-api-key`
-- [ ] clip/pro 映射
-- [ ] ≤10 参考图
-- [ ] wav 仅 pro 硬错误
-- [ ] 无 Google 不回退 OpenAI
-- [ ] 落盘 `music-*.{mp3|wav}` + `音乐已生成` + `interaction_id`
-- [ ] 本地 `music` 未改行为
-- [ ] 工具开关 `music_gen`
+- [x] Google Interactions URL + `x-goog-api-key`
+- [x] clip/pro 映射
+- [x] ≤10 参考图
+- [x] wav 仅 pro 硬错误
+- [x] 无 Google 不回退 OpenAI
+- [x] 落盘 `music-*.{mp3|wav}` + `音乐已生成` + `interaction_id`
+- [x] 本地 `music` 未改行为
+- [x] 工具开关 `music_gen`
 
-- [ ] **Step 3: 若有未提交改动则提交**
+- [x] **Step 3: 若有未提交改动则提交**
 
 ```bash
 git status

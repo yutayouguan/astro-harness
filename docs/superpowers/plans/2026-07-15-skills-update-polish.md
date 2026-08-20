@@ -41,8 +41,8 @@
 - 手动按钮仍强制检查（忽略缓存）。
 - 自动检查时可弱化 toast（仅手动检查弹「发现 N 个」），避免一进 Tab 就吵——**选定**：自动检查成功且 count>0 才 toast；count=0 不 toast；错误仍 toast。
 
-- [ ] 实现 + 手动验思路写在 report
-- [ ] commit `feat(skills-ui): auto-check updates when opening Updates tab`
+- [x] 实现 + 手动验思路写在 report
+- [x] commit `feat(skills-ui): auto-check updates when opening Updates tab`
 
 ---
 
@@ -54,7 +54,7 @@
 - `unknown` / `error` 在「有来源」筛选下可显示弱提示（optional 一行）：`skills.updateStatusUnknown` / `skills.updateCheckFailed`。
 - 确认 `updatesNeedCheck` / `upToDate` 空态分支在自动检查后仍正确。
 
-- [ ] commit `feat(skills-ui): show up-to-date badge on current skills`
+- [x] commit `feat(skills-ui): show up-to-date badge on current skills`
 
 ---
 
@@ -64,7 +64,7 @@
 
 - `SkillOriginRecord` 增加可选 `content_digest?: string | null`
 
-- [ ] commit `fix(types): add content_digest to SkillOriginRecord`
+- [x] commit `fix(types): add content_digest to SkillOriginRecord`
 
 ---
 
@@ -85,9 +85,9 @@ pub fn reveal_skill_backup(path: &str) -> Result<()>; // 复用 open folder / re
 
 排序：新→旧。过滤当前 agent（与 normalize 一致）。
 
-- [ ] TDD：temp `ASTRO_MEMORY_DIR` 建 fake backups 结构后 list
-- [ ] Tauri：`list_skill_backups` / `reveal_skill_backup`
-- [ ] commit `feat(skills): list and reveal skill backups`
+- [x] TDD：temp `ASTRO_MEMORY_DIR` 建 fake backups 结构后 list
+- [x] Tauri：`list_skill_backups` / `reveal_skill_backup`
+- [x] commit `feat(skills): list and reveal skill backups`
 
 ---
 
@@ -98,15 +98,15 @@ pub fn reveal_skill_backup(path: &str) -> Result<()>; // 复用 open folder / re
 - 空：`skills.backupsEmpty`
 - i18n zh/en
 
-- [ ] commit `feat(skills-ui): show skill backup list on Updates tab`
+- [x] commit `feat(skills-ui): show skill backup list on Updates tab`
 
 ---
 
 ### Task 6: 验收
 
-- [ ] cargo test backups / 相关；tsc
-- [ ] 短 docs 注记或更新 spec「体验打磨」小节（可选，prefer 在 design 加一小节）
-- [ ] commit
+- [x] cargo test backups / 相关；tsc
+- [x] 短 docs 注记或更新 spec「体验打磨」小节（可选，prefer 在 design 加一小节）
+- [x] commit
 
 ---
 

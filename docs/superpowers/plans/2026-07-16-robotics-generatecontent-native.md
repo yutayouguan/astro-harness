@@ -60,7 +60,7 @@
   - `pub async fn google_robotics_generate(client: &reqwest::Client, model: &str, prompt: &str, images: &[RoboticsImage], thinking_budget: i32, config: &ProviderConfig) -> anyhow::Result<String>`
 - Consumes: `crate::media_http::google_native_base`；`ProviderConfig`
 
-- [ ] **Step 1: 注册模块**
+- [x] **Step 1: 注册模块**
 
 在 `crates/agent-providers/src/protocol/mod.rs` 增加：
 
@@ -70,7 +70,7 @@ pub mod robotics_http;
 
 在 `crates/agent-providers/src/lib.rs` 的 `pub use protocol::{...}` 加入 `robotics_http`。
 
-- [ ] **Step 2: 写失败测试（文件底部 `#[cfg(test)]`）**
+- [x] **Step 2: 写失败测试（文件底部 `#[cfg(test)]`）**
 
 ```rust
 #[cfg(test)]
@@ -167,13 +167,13 @@ mod tests {
 }
 ```
 
-- [ ] **Step 3: Run test to verify it fails**
+- [x] **Step 3: Run test to verify it fails**
 
 Run: `cargo test -p providers robotics_http -- --nocapture`
 
 Expected: FAIL（模块/符号不存在）
 
-- [ ] **Step 4: 最小实现**
+- [x] **Step 4: 最小实现**
 
 创建 `crates/agent-providers/src/protocol/robotics_http.rs`：
 
@@ -422,13 +422,13 @@ pub async fn google_robotics_generate(
 }
 ```
 
-- [ ] **Step 5: Run tests to verify they pass**
+- [x] **Step 5: Run tests to verify they pass**
 
 Run: `cargo test -p providers robotics_http -- --nocapture`
 
 Expected: PASS
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add providers/src/protocol/robotics_http.rs providers/src/protocol/mod.rs providers/src/lib.rs
@@ -456,7 +456,7 @@ EOF
   - `pub async fn dispatch(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow::Result<String>`
   - `pub struct RoboticsArgs { … }`
 
-- [ ] **Step 1: 挂模块**
+- [x] **Step 1: 挂模块**
 
 `crates/agent-tools/src/builtin/media/mod.rs`：
 
@@ -470,7 +470,7 @@ pub mod robotics;
 pub use media::{image_gen, music, robotics, tts, video_gen, vision};
 ```
 
-- [ ] **Step 2: 写失败测试（`robotics.rs` 内 `#[cfg(test)]`）**
+- [x] **Step 2: 写失败测试（`robotics.rs` 内 `#[cfg(test)]`）**
 
 ```rust
 #[cfg(test)]
@@ -505,13 +505,13 @@ mod tests {
 }
 ```
 
-- [ ] **Step 3: Run test to verify it fails**
+- [x] **Step 3: Run test to verify it fails**
 
 Run: `cargo test -p tools robotics -- --nocapture`
 
 Expected: FAIL
 
-- [ ] **Step 4: 实现 `robotics.rs`**
+- [x] **Step 4: 实现 `robotics.rs`**
 
 要点（完整文件由实现者按此骨架编写）：
 
@@ -742,13 +742,13 @@ fn mime_from_extension(ext: &str) -> &'static str {
 }
 ```
 
-- [ ] **Step 5: Run tests**
+- [x] **Step 5: Run tests**
 
 Run: `cargo test -p tools robotics -- --nocapture`
 
 Expected: PASS
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add tools/src/builtin/media/robotics.rs tools/src/builtin/media/mod.rs tools/src/builtin/mod.rs
@@ -774,17 +774,17 @@ EOF
 - Consumes: `robotics::register` / `robotics::dispatch`
 - Produces: 工具名 `robotics` 可注册、可分发、可开关
 
-- [ ] **Step 1: 写失败断言（扩展现有测试）**
+- [x] **Step 1: 写失败断言（扩展现有测试）**
 
 在 `tools/tests/tools_test.rs` 的 `register_all_includes_panel_tools` 期望列表中加入 `"robotics"`。
 
-- [ ] **Step 2: Run to verify fail**
+- [x] **Step 2: Run to verify fail**
 
 Run: `cargo test -p tools register_all_includes_panel_tools -- --nocapture`
 
 Expected: FAIL `missing robotics`
 
-- [ ] **Step 3: 接线**
+- [x] **Step 3: 接线**
 
 `crates/agent-tools/src/lib.rs`：
 
@@ -821,7 +821,7 @@ robotics::register(registry);
 "robotics" => "robotics",
 ```
 
-- [ ] **Step 4: Run tests**
+- [x] **Step 4: Run tests**
 
 Run:
 
@@ -832,7 +832,7 @@ cargo test -p home tools_enabled -- --nocapture
 
 Expected: PASS（若 home 无对应测试名，至少 `cargo test -p home --lib`）
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add tools/src/lib.rs tools/src/engine/dispatch.rs home/src/config/tools_enabled.rs tools/tests/tools_test.rs
@@ -856,7 +856,7 @@ EOF
 **Interfaces:**
 - Produces: UI 工具列表出现 `robotics`，中英文案说明与 `vision` / 多 Agent orchestration 的区别
 
-- [ ] **Step 1: 增加图标**
+- [x] **Step 1: 增加图标**
 
 在 `ToolIcons.tsx` 新增（机械臂风格简笔，复用现有 stroke 风格）：
 
@@ -873,7 +873,7 @@ export function IconRobotics(props: IconProps) {
 }
 ```
 
-- [ ] **Step 2: useAgentTools**
+- [x] **Step 2: useAgentTools**
 
 - `AgentToolId` 联合类型增加 `"robotics"`
 - import `IconRobotics`
@@ -896,7 +896,7 @@ export function IconRobotics(props: IconProps) {
 },
 ```
 
-- [ ] **Step 3: i18n**
+- [x] **Step 3: i18n**
 
 中文（与 `agentTools.vision` 相邻）：
 
@@ -912,13 +912,13 @@ export function IconRobotics(props: IconProps) {
 "agentTools.robotics.desc": "Spatial pointing, boxes, trajectories, and task plans via Google Robotics-ER generateContent (not general vision; not multi-agent orchestration)",
 ```
 
-- [ ] **Step 4: 类型检查（若项目有）**
+- [x] **Step 4: 类型检查（若项目有）**
 
 Run: `cd frontend && npm test -- --run autoModelSelect.test.ts 2>/dev/null || true`
 
 若 `KNOWN_TOOLSET` / 工具 id 列表测试需要更新，同步加入 `"robotics"`（检查 `apps/desktop/src/lib/autoModelSelect.test.ts` 是否枚举全部 tool id；**不要**把 robotics 并入 TaskKind `vision` 自动选模）。
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add apps/desktop/src/components/ToolIcons.tsx apps/desktop/src/hooks/useAgentTools.ts apps/desktop/src/i18n/messages.ts
@@ -936,9 +936,9 @@ EOF
 
 **Files:** 无代码变更（手工）
 
-- [ ] **Step 1:** 配置 Google API Key，工作区放一张桌面物体图 `scene.png`
+- [x] **Step 1:** 配置 Google API Key，工作区放一张桌面物体图 `scene.png`
 
-- [ ] **Step 2:** Agent 调用：
+- [x] **Step 2:** Agent 调用：
 
 ```json
 {"image_url":"scene.png","mode":"point"}
@@ -946,7 +946,7 @@ EOF
 
 预期：JSON 点列表 + `provider=google` + `model=gemini-robotics-er-1.6-preview`
 
-- [ ] **Step 3:** 再试 `mode=plan` + 简短 `robot_api` 文本，预期含 `function`/`args` 或步骤说明
+- [x] **Step 3:** 再试 `mode=plan` + 简短 `robot_api` 文本，预期含 `function`/`args` 或步骤说明
 
 无 Key 时可跳过；自动化仍以 Task 1–4 单测为准。
 

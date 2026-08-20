@@ -59,7 +59,7 @@
   - `pub async fn google_files_delete(client: &Client, config: &ProviderConfig, file_name: &str) -> Result<()>`（best-effort 调用方可忽略 Err）
 - Consumes: `crate::media_http::google_native_base`；`ProviderConfig`
 
-- [ ] **Step 1: 注册模块**
+- [x] **Step 1: 注册模块**
 
 `crates/agent-providers/src/protocol/mod.rs` 增加：
 
@@ -69,7 +69,7 @@ pub mod files_http;
 
 `crates/agent-providers/src/lib.rs` 的 `pub use protocol::{...}` 加入 `files_http`。
 
-- [ ] **Step 2: 写失败测试（`files_http.rs` 底部）**
+- [x] **Step 2: 写失败测试（`files_http.rs` 底部）**
 
 ```rust
 #[cfg(test)]
@@ -133,7 +133,7 @@ mod tests {
 }
 ```
 
-- [ ] **Step 3: Run 确认失败**
+- [x] **Step 3: Run 确认失败**
 
 ```bash
 cargo test -p providers files_http -- --nocapture
@@ -141,7 +141,7 @@ cargo test -p providers files_http -- --nocapture
 
 Expected: compile fail（模块/符号不存在）或 test fail。
 
-- [ ] **Step 4: 最小实现**
+- [x] **Step 4: 最小实现**
 
 ```rust
 //! Google Files API（resumable upload + ACTIVE 轮询）。
@@ -408,7 +408,7 @@ pub async fn google_files_delete(
 
 修掉 `parse_file_status` 里多余的匹配臂（实现时写干净的 `match`，不要重复 `_`）。`other` 未知 state → `Processing`。
 
-- [ ] **Step 5: 跑测试**
+- [x] **Step 5: 跑测试**
 
 ```bash
 cargo test -p providers files_http -- --nocapture
@@ -416,7 +416,7 @@ cargo test -p providers files_http -- --nocapture
 
 Expected: PASS。
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add providers/src/protocol/files_http.rs providers/src/protocol/mod.rs providers/src/lib.rs
@@ -447,7 +447,7 @@ EOF
   - `pub async fn google_interactions_video(client: &Client, config: &ProviderConfig, model: &str, prompt: &str, video: &VideoInputPart, mode: VideoUnderstandMode) -> Result<String>`
 - Consumes: 已有 `interactions_url`；`ProviderConfig`；内部复用与 image 相同的 `error_message`（若为 private，同文件直接用）
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 在 `interactions_http.rs` 增加 `#[cfg(test)] mod video_understand_tests`：
 
@@ -555,7 +555,7 @@ mod video_understand_tests {
 >
 > 若线上 Gemini Interactions 实际要求 `mime_type` + `schema`（与 vision design 一致），以能通的那套为准，并改测试断言。
 
-- [ ] **Step 2: Run 确认失败**
+- [x] **Step 2: Run 确认失败**
 
 ```bash
 cargo test -p providers video_understand_tests -- --nocapture
@@ -563,7 +563,7 @@ cargo test -p providers video_understand_tests -- --nocapture
 
 Expected: FAIL（符号不存在）。
 
-- [ ] **Step 3: 最小实现（追加到 `interactions_http.rs`）**
+- [x] **Step 3: 最小实现（追加到 `interactions_http.rs`）**
 
 ```rust
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -766,7 +766,7 @@ pub async fn google_interactions_video(
 }
 ```
 
-- [ ] **Step 4: 跑测试**
+- [x] **Step 4: 跑测试**
 
 ```bash
 cargo test -p providers video_understand_tests -- --nocapture
@@ -780,7 +780,7 @@ cargo test -p providers interactions_http -- --nocapture
 
 确保 TTS/image 未回归。
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add providers/src/protocol/interactions_http.rs
@@ -812,7 +812,7 @@ EOF
   - `media_http::default_vision_model`
   - `ToolContext` / `ImageGenCreds`
 
-- [ ] **Step 1: 写工具层纯函数测试（同文件 `#[cfg(test)]`）**
+- [x] **Step 1: 写工具层纯函数测试（同文件 `#[cfg(test)]`）**
 
 ```rust
 #[cfg(test)]
@@ -866,7 +866,7 @@ mod tests {
 
 先实现测试引用的分类辅助函数，再写 dispatch。
 
-- [ ] **Step 2: Run 失败**
+- [x] **Step 2: Run 失败**
 
 ```bash
 cargo test -p tools video_understand -- --nocapture
@@ -874,7 +874,7 @@ cargo test -p tools video_understand -- --nocapture
 
 Expected: 模块不存在 → FAIL。
 
-- [ ] **Step 3: 实现工具**
+- [x] **Step 3: 实现工具**
 
 `video_understand.rs` 关键结构（完整实现须覆盖下列逻辑）：
 
@@ -1156,7 +1156,7 @@ pub use media::{image_gen, music, tts, video_gen, video_understand, vision};
 
 `tools_test.rs` 期望名字列表加入 `"video_understand"`。
 
-- [ ] **Step 4: 测试**
+- [x] **Step 4: 测试**
 
 ```bash
 cargo test -p tools video_understand -- --nocapture
@@ -1165,7 +1165,7 @@ cargo test -p tools --test tools_test -- --nocapture
 
 Expected: PASS。
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add tools/src/builtin/media/video_understand.rs tools/src/builtin/media/mod.rs tools/src/builtin/mod.rs tools/src/lib.rs tools/src/engine/dispatch.rs tools/tests/tools_test.rs
@@ -1186,7 +1186,7 @@ EOF
 - Modify: `apps/desktop/src/hooks/useAgentTools.ts`
 - Modify: `apps/desktop/src/i18n/messages.ts`
 
-- [ ] **Step 1: `KNOWN_TOOLSET_IDS` 与映射**
+- [x] **Step 1: `KNOWN_TOOLSET_IDS` 与映射**
 
 在 `"video_gen"` 后加入 `"video_understand"`。
 
@@ -1196,7 +1196,7 @@ EOF
 "video_understand" => "video_understand",
 ```
 
-- [ ] **Step 2: AGENT_TOOLS**
+- [x] **Step 2: AGENT_TOOLS**
 
 在 `video_gen` 条目后插入（可复用 `IconVideoGen` 或现有 film 类图标；若无合适 icon 则临时复用 `IconEye`/`IconVideoGen`）：
 
@@ -1217,7 +1217,7 @@ EOF
 
 同步扩展 `AgentToolId` union 类型加入 `"video_understand"`。
 
-- [ ] **Step 3: i18n（中英）**
+- [x] **Step 3: i18n（中英）**
 
 中文：
 
@@ -1233,7 +1233,7 @@ EOF
 "agentTools.videoUnderstand.desc": "Google Gemini native: ask about workspace/URL/YouTube videos (Interactions; MM:SS timestamps; modes qa/summarize/timeline)",
 ```
 
-- [ ] **Step 4: 编译检查**
+- [x] **Step 4: 编译检查**
 
 ```bash
 cargo check -p home -p tools -p providers
@@ -1247,7 +1247,7 @@ cd frontend && npx tsc --noEmit
 
 （若项目习惯不加严 tsc，至少保证 messages key 与 hooks 一致。）
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add home/src/config/tools_enabled.rs apps/desktop/src/hooks/useAgentTools.ts apps/desktop/src/i18n/messages.ts
@@ -1265,7 +1265,7 @@ EOF
 
 **Files:** 无新文件（手测 / 单测汇总）
 
-- [ ] **Step 1: 跑全量相关测试**
+- [x] **Step 1: 跑全量相关测试**
 
 ```bash
 cargo test -p providers files_http video_understand_tests -- --nocapture
@@ -1275,7 +1275,7 @@ cargo test -p tools --test tools_test -- --nocapture
 
 Expected: 全 PASS。
 
-- [ ] **Step 2: 对照验收清单（spec）**
+- [x] **Step 2: 对照验收清单（spec）**
 
 | 验收项 | 验证方式 |
 |--------|----------|
@@ -1287,9 +1287,9 @@ Expected: 全 PASS。
 | 无 Key | dispatch 立即错误文案含 Google |
 | 面板开关 | `AGENT_TOOLS` id 存在 |
 
-- [ ] **Step 3:（可选）真机冒烟** — 有 Key 时对短 mp4 / YouTube 各跑一次 `video_understand`；不强制写入 CI。
+- [x] **Step 3:（可选）真机冒烟** — 有 Key 时对短 mp4 / YouTube 各跑一次 `video_understand`；不强制写入 CI。
 
-- [ ] **Step 4: 若有文档缺口，更新 spec 勾选状态**（可选小 commit）
+- [x] **Step 4: 若有文档缺口，更新 spec 勾选状态**（可选小 commit）
 
 ---
 

@@ -44,8 +44,8 @@
 pub fn skill_content_digest(skill_root: &Path) -> Result<String>;
 ```
 
-- [ ] RED：临时目录写两文件，digest 稳定；改一文件 digest 变；空目录有确定值
-- [ ] GREEN → commit `feat(skills): skill directory content digest`
+- [x] RED：临时目录写两文件，digest 稳定；改一文件 digest 变；空目录有确定值
+- [x] GREEN → commit `feat(skills): skill directory content digest`
 
 ---
 
@@ -55,8 +55,8 @@ pub fn skill_content_digest(skill_root: &Path) -> Result<String>;
 
 安装/更新成功后：对 `agent_skills_dir/folder` 算 digest 写入 origin（失败仅 debug，不阻断安装）。
 
-- [ ] 单测：upsert 后能找到 digest
-- [ ] commit `feat(skills): persist content_digest on install`
+- [x] 单测：upsert 后能找到 digest
+- [x] commit `feat(skills): persist content_digest on install`
 
 ---
 
@@ -76,8 +76,8 @@ pub fn preview_skill_update(agent_id: Option<&str>, folder: &str) -> Result<Skil
 
 规则：无 baseline digest → `has_local_changes = false`，`has_baseline_digest = false`（未知，UI 仍展示覆盖警告文案，但不弹「检测到改动」强化框）。有 baseline 且 current ≠ baseline → true。
 
-- [ ] 测试：相等 / 不等 / 无 baseline
-- [ ] commit `feat(skills): preview local changes before skill update`
+- [x] 测试：相等 / 不等 / 无 baseline
+- [x] commit `feat(skills): preview local changes before skill update`
 
 ---
 
@@ -103,8 +103,8 @@ fn backup_skill_dir(agent_id, folder) -> Result<PathBuf>; // 拷贝到 skill-bac
 
 `update_outdated_skills` / `update_all`：对 dirty 项若未 force，跳过并记 `ok: false, message: 本地有改动…`；或批量前先返回 previews（UI 批量确认后 force）。**选定 v3 UI：** 单条弹窗；批量「全部更新」先 `preview` 全部 outdated，若任一条 dirty → 汇总确认「N 个有本地改动，将备份后更新」。
 
-- [ ] 测试：backup 创建目录存在拷贝文件；dirty+!force Err；retry 测用可注入闭包或计数（若难则测 backup + preview 为主）
-- [ ] commit `feat(skills): backup and retry on skill update`
+- [x] 测试：backup 创建目录存在拷贝文件；dirty+!force Err；retry 测用可注入闭包或计数（若难则测 backup + preview 为主）
+- [x] commit `feat(skills): backup and retry on skill update`
 
 ---
 
@@ -113,8 +113,8 @@ fn backup_skill_dir(agent_id, folder) -> Result<PathBuf>; // 拷贝到 skill-bac
 - `preview_skill_update(folder, agentId?) -> SkillUpdatePreview`
 - `update_installed_skill(folder, agentId?, force?, backupIfDirty?)` 扩展可选参数（默认 force=true backupIfDirty=true 保兼容）
 
-- [ ] `cargo check -p astro-agent`
-- [ ] commit `feat(tauri): preview and safer skill update options`
+- [x] `cargo check -p astro-agent`
+- [x] commit `feat(tauri): preview and safer skill update options`
 
 ---
 
@@ -143,17 +143,17 @@ skills.updateRetrying
 
 复用现有对话框模式（若 Cron/Agent 有 drawer/confirm，跟项目一致；否则简单 `window.confirm` **不推荐** —— 用轻量 inline modal 或项目已有 Confirm 组件）。
 
-- [ ] 实现 + tsc
-- [ ] commit `feat(skills-ui): confirm before overwrite when skill locally modified`
+- [x] 实现 + tsc
+- [x] commit `feat(skills-ui): confirm before overwrite when skill locally modified`
 
 ---
 
 ### Task 7: 验收 + spec
 
-- [ ] `cargo test -p skills digest:: update:: origins:: -- --test-threads=1`
-- [ ] 前端相关 test / tsc
-- [ ] spec 状态 → **v3 已实现**；链本 plan
-- [ ] commit docs
+- [x] `cargo test -p skills digest:: update:: origins:: -- --test-threads=1`
+- [x] 前端相关 test / tsc
+- [x] spec 状态 → **v3 已实现**；链本 plan
+- [x] commit docs
 
 ---
 

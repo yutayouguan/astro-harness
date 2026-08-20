@@ -52,7 +52,7 @@
 - Create: `a2ui/tests/validate_test.rs`
 - Modify: `Cargo.toml` (workspace members)
 
-- [ ] **Step 1: 添加 workspace 成员与包**
+- [x] **Step 1: 添加 workspace 成员与包**
 
 `Cargo.toml` members 增加 `"a2ui"`。
 
@@ -72,7 +72,7 @@ thiserror = { workspace = true }
 [dev-dependencies]
 ```
 
-- [ ] **Step 2: 写失败测试**
+- [x] **Step 2: 写失败测试**
 
 `a2ui/tests/validate_test.rs`:
 
@@ -137,13 +137,13 @@ fn accepts_text_card_button() {
 }
 ```
 
-- [ ] **Step 3: 运行测试确认失败**
+- [x] **Step 3: 运行测试确认失败**
 
 Run: `cargo test -p a2ui --test validate_test`
 
 Expected: FAIL（crate/函数不存在）
 
-- [ ] **Step 4: 最小实现**
+- [x] **Step 4: 最小实现**
 
 `a2ui/src/catalog.rs` — 允许组件集合：
 
@@ -164,12 +164,12 @@ pub const ALLOWED_COMPONENTS: &[&str] = &[
 
 `a2ui/src/lib.rs` 导出 `validate_operations`、`ASTRO_CATALOG_ID`。
 
-- [ ] **Step 5: 运行测试确认通过**
+- [x] **Step 5: 运行测试确认通过**
 
 Run: `cargo test -p a2ui --test validate_test`  
 Expected: PASS
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add Cargo.toml a2ui
@@ -189,7 +189,7 @@ EOF
 - Modify: `a2ui/src/lib.rs`
 - Modify: `a2ui/tests/validate_test.rs`（或新 `templates_test.rs`）
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 ```rust
 use a2ui::templates::{build_clarify_surface, build_confirm_surface};
@@ -216,12 +216,12 @@ fn clarify_template_validates() {
 }
 ```
 
-- [ ] **Step 2: 运行确认失败**
+- [x] **Step 2: 运行确认失败**
 
 Run: `cargo test -p a2ui templates`  
 Expected: FAIL
 
-- [ ] **Step 3: 实现模板**
+- [x] **Step 3: 实现模板**
 
 `build_confirm_surface(surface_id, title, body) -> Vec<Value>`：
 
@@ -235,7 +235,7 @@ Expected: FAIL
 
 MVP 推荐：**每选项一个 Button**，payload 直接是所选字符串，降低 dataModel 复杂度。
 
-- [ ] **Step 4: 测试通过并 Commit**
+- [x] **Step 4: 测试通过并 Commit**
 
 ```bash
 cargo test -p a2ui
@@ -255,7 +255,7 @@ EOF
 - Modify: `proto/proto/astro.proto`
 - Regenerate via existing proto build（`cargo build -p proto`）
 
-- [ ] **Step 1: 扩展 proto**
+- [x] **Step 1: 扩展 proto**
 
 在 `astro.proto` 增加（字段号避开已用）：
 
@@ -326,12 +326,12 @@ message InterruptResumeRequest {
 string resume_json = 19; // JSON array of InterruptResumeItem；有 pending 时必填
 ```
 
-- [ ] **Step 2: 编译 proto**
+- [x] **Step 2: 编译 proto**
 
 Run: `cargo build -p proto`  
 Expected: SUCCESS
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add proto
@@ -352,7 +352,7 @@ EOF
 - Modify: `crates/agent-core/src/lib.rs`
 - Modify: `agent/Cargo.toml`（依赖 `a2ui` 若需要）
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 ```rust
 use agent::interrupt::{Interrupt, InterruptPending, ResumeItem};
@@ -384,7 +384,7 @@ fn accepts_full_resume() {
 }
 ```
 
-- [ ] **Step 2: 实现 `InterruptPending`**
+- [x] **Step 2: 实现 `InterruptPending`**
 
 - `new(interrupts)`  
 - `apply_resume(items)`：必须覆盖全部 id；校验 `response_schema_json`（若非空则用 `jsonschema` 或手写 approve bool）  
@@ -392,7 +392,7 @@ fn accepts_full_resume() {
 - `cancel_all()`  
 - `is_cleared()`
 
-- [ ] **Step 3: 测试通过并 Commit**
+- [x] **Step 3: 测试通过并 Commit**
 
 ```bash
 cargo test -p agent --test interrupt_test
@@ -412,7 +412,7 @@ EOF
 - Modify: `crates/agent-core/src/streaming.rs`
 - Modify: `crates/agent-server/src/grpc/astro_service.rs`（`multi_turn_to_chat_event`）
 
-- [ ] **Step 1: 扩展枚举**
+- [x] **Step 1: 扩展枚举**
 
 ```rust
 pub enum MultiTurnStreamItem {
@@ -433,17 +433,17 @@ pub enum MultiTurnStreamItem {
 }
 ```
 
-- [ ] **Step 2: 映射到 proto**
+- [x] **Step 2: 映射到 proto**
 
 在 `multi_turn_to_chat_event` 为新变体填 `ChatEvent` payload。
 
-- [ ] **Step 3: 在 `run_multi_turn_stream` 开头 emit `RunStarted`**
+- [x] **Step 3: 在 `run_multi_turn_stream` 开头 emit `RunStarted`**
 
 `thread_id = session_id`，`run_id = Uuid::new_v4()`。
 
-- [ ] **Step 4: 正常结束改为 `RunFinished{success}` + `Done`**
+- [x] **Step 4: 正常结束改为 `RunFinished{success}` + `Done`**
 
-- [ ] **Step 5: `cargo test -p agent` / `cargo build -p backend` 通过后 Commit**
+- [x] **Step 5: `cargo test -p agent` / `cargo build -p backend` 通过后 Commit**
 
 ```bash
 git commit -m "$(cat <<'EOF'
@@ -463,7 +463,7 @@ EOF
 - Modify: `crates/agent-core/src/streaming.rs`（检测 HITL 工具结果 → Activity + RunFinished(interrupt) → 停止续轮）
 - Modify: `crates/agent-memory/src/tools_enabled.rs` / agent toolsets（若需默认启用）
 
-- [ ] **Step 1: `confirm` 工具**
+- [x] **Step 1: `confirm` 工具**
 
 参数：`title: String`, `body: String`。  
 `dispatch` 返回 JSON：
@@ -477,12 +477,12 @@ EOF
 }
 ```
 
-- [ ] **Step 2: 改造 `clarify`**
+- [x] **Step 2: 改造 `clarify`**
 
 同样返回 `astro_hitl` + `build_clarify_surface` + `reason: input_required` + schema `{ "answers": object, "value": string }`。  
 `clarify` 仅接受 `questions[]`，统一渲染 `ClarifyWizard`。
 
-- [ ] **Step 3: Agent 在 `ToolResult` 后解析**
+- [x] **Step 3: Agent 在 `ToolResult` 后解析**
 
 若 `result` JSON 含 `"astro_hitl": true`：
 
@@ -492,9 +492,9 @@ EOF
 4. Emit `RunFinished { outcome_type: "interrupt", interrupts_json }` + `Done`  
 5. **不要**把 HITL JSON 再喂回模型继续多轮  
 
-- [ ] **Step 4: 单测工具输出可被 `a2ui::validate_operations` 通过**
+- [x] **Step 4: 单测工具输出可被 `a2ui::validate_operations` 通过**
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git commit -m "$(cat <<'EOF'
@@ -512,7 +512,7 @@ EOF
 - Modify: `crates/agent-server/src/grpc/astro_service.rs`
 - Create: `crates/agent-server/src/interrupt_store.rs`（或放 agent）
 
-- [ ] **Step 1: 进程内 `Mutex<HashMap<session_id, InterruptPending>>`**
+- [x] **Step 1: 进程内 `Mutex<HashMap<session_id, InterruptPending>>`**
 
 - Chat 开始：若 store 有 pending 且 `resume_json` 为空 → 立即 `Error` + `Done`  
 - 若 `resume_json` 非空 → `apply_resume`；失败则 Error；成功则把 payload 注入为 tool results / 用户旁路消息后继续 `run_multi_turn_stream`  
@@ -521,9 +521,9 @@ EOF
 **注入约定（MVP）：**  
 将 resume payloads 格式化为一条 user 消息，例如：`[interrupt_resume] {"interrupt_id":"...","payload":{...}}`，并在 system/tool 侧说明；或直接 `record_tool_result` 到原 tool_call_id。优先 **`ToolCallResult` 语义：对原 `tool_call_id` 写入摘要结果**（如 `approved=true`），与 AG-UI 工具绑定 interrupt 一致。
 
-- [ ] **Step 2: 集成测或手动脚本：无 resume 被拒；满 resume 继续**
+- [x] **Step 2: 集成测或手动脚本：无 resume 被拒；满 resume 继续**
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git commit -m "$(cat <<'EOF'
@@ -541,7 +541,7 @@ EOF
 - Modify: `apps/desktop/src-tauri/src/commands.rs`
 - Modify: `apps/desktop/src-tauri/src/lib.rs`（注册命令若需要）
 
-- [ ] **Step 1: 扩展 `ChatStreamEvent`**
+- [x] **Step 1: 扩展 `ChatStreamEvent`**
 
 ```rust
 RunStarted { thread_id: String, run_id: String },
@@ -560,14 +560,14 @@ RunFinished {
 
 映射 gRPC → emit。
 
-- [ ] **Step 2: `start_chat` 经 `StartChatRequest` 传 `resumeJson?: string` → `ChatRequest.resume_json`**
+- [x] **Step 2: `start_chat` 经 `StartChatRequest` 传 `resumeJson?: string` → `ChatRequest.resume_json`**
 
 > 现行调用：`invoke("start_chat", { request: { content, provider, model, resumeJson, … } })`。  
 > **不**再支持扁平顶层字段；无双路径兼容。
 
-- [ ] **Step 3: `chat_control`：`resume` 与 `stream_resume` 均映射到流恢复；文档注释标明勿用于 interrupt**
+- [x] **Step 3: `chat_control`：`resume` 与 `stream_resume` 均映射到流恢复；文档注释标明勿用于 interrupt**
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git commit -m "$(cat <<'EOF'
@@ -585,7 +585,7 @@ EOF
 - Modify: `apps/desktop/src/types.ts`
 - Modify: `apps/desktop/src/App.tsx`
 
-- [ ] **Step 1: 类型**
+- [x] **Step 1: 类型**
 
 ```ts
 export type UiSurfaceStatus = "active" | "resolved" | "cancelled";
@@ -606,18 +606,18 @@ export type UiSurface = {
 uiSurfaces?: UiSurface[];
 ```
 
-- [ ] **Step 2: `App.tsx` listen**
+- [x] **Step 2: `App.tsx` listen**
 
 - `run_started`：记录当前 `runId`  
 - `activity`：parse `content_json.operations`，写入当前助手消息 `uiSurfaces`  
 - `run_finished` + `interrupt`：设置 `sessionPendingInterrupts`；`streaming=false`；卡保持 `active`  
 - `run_finished` + `success`：清 pending  
 
-- [ ] **Step 3: 发送闸门**
+- [x] **Step 3: 发送闸门**
 
 若 `sessionPendingInterrupts.length > 0`，`onSend` 普通文本 → toast/禁用，提示先完成卡片。
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git commit -m "$(cat <<'EOF'
@@ -640,20 +640,20 @@ EOF
 - Modify: `apps/desktop/src/styles/chat.css`
 - Modify: `apps/desktop/src/i18n/messages.ts`
 
-- [ ] **Step 1: Adapter 支持子集组件**
+- [x] **Step 1: Adapter 支持子集组件**
 
 `CatalogAdapter`：`Text`→`<p>`/`<h*>`，`Card`→`.a2ui-card`，`Column`/`Row`→flex，`Button`→`<button>`，`Image`→`<img>`，未知→`.a2ui-unknown`。
 
-- [ ] **Step 2: `A2UIRenderer`**
+- [x] **Step 2: `A2UIRenderer`**
 
 Props：`operations`, `disabled`, `onAction(name, context)`。  
 从 `createSurface`/`updateComponents` 建 id→node 树，根为 Card 或第一个无父引用节点。
 
-- [ ] **Step 3: ChatView**
+- [x] **Step 3: ChatView**
 
 在 activities 与 reasoning 之间渲染 `message.uiSurfaces`。
 
-- [ ] **Step 4: 样式与 i18n**
+- [x] **Step 4: 样式与 i18n**
 
 ```ts
 "chat.a2ui.unknown": "不支持的组件",
@@ -662,14 +662,14 @@ Props：`operations`, `disabled`, `onAction(name, context)`。
 "chat.a2ui.deny": "拒绝",
 ```
 
-- [ ] **Step 5: 接线 `onAction`**
+- [x] **Step 5: 接线 `onAction`**
 
 Confirm：`approve`→`interrupt_resume` payload `{"approved":true}`；`deny`→`{"approved":false}`。  
 Clarify：选项按钮 → `{"value":"..."}`。  
 然后 `invoke("interrupt_resume", { sessionId, resumeJson })`（HITL 续跑；**不要**再调扁平 `start_chat`）。  
 新开聊：`invoke("start_chat", { request: { …, resumeJson? } })`。
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git commit -m "$(cat <<'EOF'
@@ -687,7 +687,7 @@ EOF
 - Create: `crates/agent-tools/src/builtin/present_ui.rs`
 - Modify: registry / dispatch / agent 解析
 
-- [ ] **Step 1: 工具参数**
+- [x] **Step 1: 工具参数**
 
 `operations: Value`（数组）或 `title`+`body`+`image_url` 快捷方式。  
 `dispatch`：`a2ui::validate_operations`；失败返回错误字符串。  
@@ -697,11 +697,11 @@ EOF
 { "astro_ui": true, "operations": [ ... ] }
 ```
 
-- [ ] **Step 2: Agent**
+- [x] **Step 2: Agent**
 
 若 `astro_ui` 且非 `astro_hitl`：只 emit `Activity`，**继续**多轮（把短文本摘要写回 tool result 给模型）。
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git commit -m "$(cat <<'EOF'
@@ -719,15 +719,15 @@ EOF
 - 定位现有 session 消息存储（`memory` sessions / Tauri history DTO）
 - Modify: 序列化 `uiSurfaces` + pending interrupts 到 session 旁路文件或 DB 字段
 
-- [ ] **Step 1: 助手消息 JSON 增加 `ui_surfaces`**
+- [x] **Step 1: 助手消息 JSON 增加 `ui_surfaces`**
 
-- [ ] **Step 2: pending interrupts 写入 `sessions/{id}/interrupt.json`**
+- [x] **Step 2: pending interrupts 写入 `sessions/{id}/interrupt.json`**
 
 重载 session 时恢复 pending + 禁用发送直至 resume。
 
-- [ ] **Step 3: 已 resolved 卡 `status=resolved`，按钮 disabled**
+- [x] **Step 3: 已 resolved 卡 `status=resolved`，按钮 disabled**
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git commit -m "$(cat <<'EOF'
@@ -745,7 +745,7 @@ EOF
 - Modify: `docs/superpowers/specs/2026-07-13-declarative-genui-a2ui-design.md`（Status → Implemented）
 - Tests: `cargo test -p a2ui -p agent -p tools`；前端 `npm run build` 或现有 lint
 
-- [ ] **Step 1: 跑测试清单**
+- [x] **Step 1: 跑测试清单**
 
 ```bash
 cargo test -p a2ui
@@ -754,7 +754,7 @@ cargo test -p tools
 cd frontend && npm run build
 ```
 
-- [ ] **Step 2: 手动验收清单（写入 PR/提交说明）**
+- [x] **Step 2: 手动验收清单（写入 PR/提交说明）**
 
 1. 普通聊天仍流式正常  
 2. confirm 卡阻塞 → 批准后续跑  
@@ -763,7 +763,7 @@ cd frontend && npm run build
 5. pending 时无法普通发送  
 6. stream pause/resume/cancel 仍可用且不回答 interrupt  
 
-- [ ] **Step 3: 更新 spec 状态并 Commit**
+- [x] **Step 3: 更新 spec 状态并 Commit**
 
 ```bash
 git commit -m "$(cat <<'EOF'

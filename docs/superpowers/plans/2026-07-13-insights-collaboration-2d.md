@@ -41,7 +41,7 @@
 - Modify: `memory/tests/orchestration_db_test.rs`
 - Modify: `crates/agent-memory/src/lib.rs`（若需导出新类型）
 
-- [ ] **Step 1: 在 `usage_db` 增加可复用窗口 API**
+- [x] **Step 1: 在 `usage_db` 增加可复用窗口 API**
 
 把现有私有 `period_bounds` / `parse_as_of` 包一层公开函数（名称固定）：
 
@@ -57,7 +57,7 @@ pub fn period_window(
 }
 ```
 
-- [ ] **Step 2: 写失败测试 `list_in_period`**
+- [x] **Step 2: 写失败测试 `list_in_period`**
 
 追加到 `memory/tests/orchestration_db_test.rs`：
 
@@ -116,7 +116,7 @@ fn list_in_period_filters_by_created_at_and_agent() {
 
 若不想暴露 `debug_set_created_at`，可用 `#[cfg(test)]` 方法，或测试里 `Connection` 不可用则改为：在 `orchestration_db` 增加仅测试可见的 `#[cfg(test)] pub fn set_created_at_for_test`。
 
-- [ ] **Step 3: 实现**
+- [x] **Step 3: 实现**
 
 ```rust
 impl OrchestrationDb {
@@ -140,7 +140,7 @@ impl OrchestrationDb {
 }
 ```
 
-- [ ] **Step 4: 测试通过并 commit**
+- [x] **Step 4: 测试通过并 commit**
 
 ```bash
 cargo test -p memory --test orchestration_db_test
@@ -161,7 +161,7 @@ EOF
 - Create: `memory/tests/collab_insights_test.rs`
 - Modify: `crates/agent-memory/src/lib.rs`
 
-- [ ] **Step 1: 类型与查询签名（写进测试与实现）**
+- [x] **Step 1: 类型与查询签名（写进测试与实现）**
 
 ```rust
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -295,7 +295,7 @@ pub fn list_orchestration_meta(
 ) -> anyhow::Result<Vec<String>> // meta_json 文本列表
 ```
 
-- [ ] **Step 2: 失败测试**
+- [x] **Step 2: 失败测试**
 
 `memory/tests/collab_insights_test.rs`：
 
@@ -366,13 +366,13 @@ fn graph_counts_end_phase_only_and_filters_agent() {
 
 另测：空库返回空列表/空图不报错。
 
-- [ ] **Step 3: 实现至测试通过**
+- [x] **Step 3: 实现至测试通过**
 
 ```bash
 cargo test -p memory --test collab_insights_test
 ```
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add memory/src/collab_insights.rs memory/src/lib.rs memory/src/usage_db.rs \
@@ -392,7 +392,7 @@ EOF
 - Modify: `apps/desktop/src-tauri/src/config_commands.rs`
 - Modify: `apps/desktop/src-tauri/src/lib.rs`
 
-- [ ] **Step 1: 参数与命令（对齐 `get_usage_insights`）**
+- [x] **Step 1: 参数与命令（对齐 `get_usage_insights`）**
 
 ```rust
 #[derive(Debug, Clone, serde::Deserialize)]
@@ -424,13 +424,13 @@ pub async fn get_collaboration_insights(
 
 在 `lib.rs` 的 `invoke_handler` 列表中注册 `config_commands::get_collaboration_insights`（紧挨 `get_usage_insights`）。
 
-- [ ] **Step 2: Check**
+- [x] **Step 2: Check**
 
 ```bash
 cargo check -p astro-agent
 ```
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add apps/desktop/src-tauri/src/config_commands.rs apps/desktop/src-tauri/src/lib.rs
@@ -448,7 +448,7 @@ EOF
 **Files:**
 - Modify: `apps/desktop/src/i18n/messages.ts`
 
-- [ ] **Step 1: 中英键（固定 key）**
+- [x] **Step 1: 中英键（固定 key）**
 
 ```ts
 // zh + en 均需：
@@ -461,7 +461,7 @@ EOF
 "insights.collab.noSelection": "选择一条编排查看步骤" / "Select an orchestration to view steps",
 ```
 
-- [ ] **Step 2: Commit**
+- [x] **Step 2: Commit**
 
 ```bash
 git add apps/desktop/src/i18n/messages.ts
@@ -480,7 +480,7 @@ EOF
 - Modify: `apps/desktop/src/components/InsightsPanel.tsx`
 - Modify: `apps/desktop/src/styles/insights.css`
 
-- [ ] **Step 1: 状态与加载**
+- [x] **Step 1: 状态与加载**
 
 ```tsx
 type ViewMode = "usage" | "collab";
@@ -494,7 +494,7 @@ const [selectedId, setSelectedId] = useState<string | null>(null);
 
 类型与返回 JSON 字段对齐 Task 2（camelCase：确认 serde 默认 snake 则前端用 snake，或 `#[serde(rename_all = "camelCase")]`——**写死：与 `UsageInsights` 一致用 snake_case 字段名**，前端类型用 `parent_agent_id` 等）。
 
-- [ ] **Step 2: Tab UI**
+- [x] **Step 2: Tab UI**
 
 在 period tabs **上方或左侧**加：
 
@@ -511,7 +511,7 @@ const [selectedId, setSelectedId] = useState<string | null>(null);
 
 AgentPicker + period 两 Tab 共用。
 
-- [ ] **Step 3: 协作布局**
+- [x] **Step 3: 协作布局**
 
 - 左：`orchestrations.map` 列表；点击设 `selectedId`；状态色 class `status-done|failed|running|…`
 - 下方或左下：选中项 steps 条（pill + 箭头）；可 `<details>` 看 output/error
@@ -558,17 +558,17 @@ function CollabGraphSvg({ nodes, edges }: { nodes: ...; edges: ... }) {
 
 空态：`orchestrations.length===0` 显示 `t("insights.collab.empty")`。
 
-- [ ] **Step 4: CSS**
+- [x] **Step 4: CSS**
 
 在 `insights.css` 增加：`.insights-view-tabs`、`.insights-collab-layout`（grid 1.2fr 1fr）、`.insights-collab-list-item`、status 色、`.insights-collab-edge` / node / label、窄屏 `grid-template-columns: 1fr`。
 
-- [ ] **Step 5: 手工/编译检查**
+- [x] **Step 5: 手工/编译检查**
 
 ```bash
 cd frontend && npx tsc --noEmit
 ```
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add apps/desktop/src/components/InsightsPanel.tsx apps/desktop/src/styles/insights.css
@@ -583,7 +583,7 @@ EOF
 
 ### Task 6: 回归与验收对照
 
-- [ ] **Step 1: 命令**
+- [x] **Step 1: 命令**
 
 ```bash
 cargo test -p memory --test orchestration_db_test
@@ -593,7 +593,7 @@ cargo check -p memory -p astro-agent
 cd frontend && npx tsc --noEmit
 ```
 
-- [ ] **Step 2: 对照 spec 验收清单**
+- [x] **Step 2: 对照 spec 验收清单**
 
 1. 空态不报错  
 2. 有 orchestration 时列表/步骤正确  
@@ -602,7 +602,7 @@ cd frontend && npx tsc --noEmit
 5. 用量 calls 不含 orchestration  
 6. 用量 Tab 行为不变  
 
-- [ ] **Step 3: 若全绿，本计划完成**（合并走 finishing-a-development-branch）
+- [x] **Step 3: 若全绿，本计划完成**（合并走 finishing-a-development-branch）
 
 ---
 

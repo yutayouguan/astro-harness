@@ -55,7 +55,7 @@ pub struct OrchestrationSpawnRequest {
 - Create: `memory/tests/orchestration_db_test.rs`
 - Modify: `crates/agent-memory/src/lib.rs`
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 ```rust
 //! orchestration.db 测试
@@ -125,12 +125,12 @@ fn mark_step_failed_stops_semantics_helpers() {
 }
 ```
 
-- [ ] **Step 2: 运行确认失败**
+- [x] **Step 2: 运行确认失败**
 
 `cargo test -p memory --test orchestration_db_test -- --nocapture`  
 Expected: 编译失败
 
-- [ ] **Step 3: 实现 `orchestration_db.rs`**
+- [x] **Step 3: 实现 `orchestration_db.rs`**
 
 对齐 `cron_run_db` / `usage_db`：
 
@@ -140,7 +140,7 @@ Expected: 编译失败
 - `output` 写入前 UTF-8 安全截断至 64KB
 - 状态用 `&str` 常量或小 enum + `as_str()`
 
-- [ ] **Step 4: 测试通过并 commit**
+- [x] **Step 4: 测试通过并 commit**
 
 ```bash
 cargo test -p memory --test orchestration_db_test
@@ -160,7 +160,7 @@ EOF
 - Create: `crates/agent-memory/src/orchestration_spawn.rs`
 - Modify: `crates/agent-memory/src/lib.rs`
 
-- [ ] **Step 1: 实现**
+- [x] **Step 1: 实现**
 
 ```rust
 //! 由 agent 在启动时注入；tools 在 orchestration_run 成功落库后调用。
@@ -198,7 +198,7 @@ pub fn request_orchestration_spawn(req: OrchestrationSpawnRequest) {
 }
 ```
 
-- [ ] **Step 2: 导出 + commit**
+- [x] **Step 2: 导出 + commit**
 
 ```bash
 git add memory/src/orchestration_spawn.rs memory/src/lib.rs
@@ -219,7 +219,7 @@ EOF
 - Modify: `crates/agent-core/src/loop_.rs` 或 `builder` / backend 启动处：调用 `set_orchestration_spawner`
 - Test: `agent/tests/orchestration_test.rs`（可用短超时 + 假失败路径测状态机；真 LLM 可选 ignore）
 
-- [ ] **Step 1: 实现 `run_orchestration(req: OrchestrationSpawnRequest)`**
+- [x] **Step 1: 实现 `run_orchestration(req: OrchestrationSpawnRequest)`**
 
 伪代码：
 
@@ -288,7 +288,7 @@ pub async fn run_orchestration(req: OrchestrationSpawnRequest) -> anyhow::Result
 - 执行：`run_turn`；若 `Continue` 则复用 `cron_exec` 风格短 `run_provider_loop`（可抽公共或复制精简版，**最多 5 轮**）。
 - 禁止子编排无限递归：子 Agent 工具列表可暂时禁用 `orchestration_run`（reload 后过滤或 tools-enabled 覆盖）——MVP 至少在 `run_step` 文档注明；实现上优先在临时角色里 `tool_registry` 去掉 orchestration_*。
 
-- [ ] **Step 2: 注册 spawner**
+- [x] **Step 2: 注册 spawner**
 
 在 `AgentLoop::with_session_id` 末尾或 `backend`/`tauri` 启动时：
 
@@ -304,11 +304,11 @@ memory::set_orchestration_spawner(Arc::new(|req| {
 
 注意：`OnceLock` 只 set 一次；多 AgentLoop 构造时用 `get_or_init` 或先 `SPAWNER.get().is_none()`。
 
-- [ ] **Step 3: 单测**
+- [x] **Step 3: 单测**
 
 最少：手动 insert orchestration + steps，直接 `await run_orchestration` 且 `run_step` 通过 `#[cfg(test)]` 可注入假执行器 **或** 测 `try_claim_running` 双调第二次 no-op。若假执行器成本高，则 DB 状态机测已在 Task 1，本 Task 用 `cargo check -p agent` + 一个 ignore 的集成测骨架。
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add agent/src/orchestration.rs agent/src/lib.rs agent/src/loop_.rs # + tests
@@ -329,7 +329,7 @@ EOF
 - Modify: `crates/agent-memory/src/tools_enabled.rs`：`orchestration_run` | `orchestration_status` → `multi_agent`
 - Modify: `apps/desktop/src/hooks/useAgentTools.ts`（若有工具名录需展示描述；toolset 仍为 multi_agent）
 
-- [ ] **Step 1: 实现工具**
+- [x] **Step 1: 实现工具**
 
 ```rust
 #[derive(Deserialize, Serialize, JsonSchema)]
@@ -358,16 +358,16 @@ pub struct OrchestrationRunArgs {
 
 `dispatch_status`：`get` + `list_steps`，序列化为可读 JSON/Markdown。
 
-- [ ] **Step 2: 接线 dispatch**
+- [x] **Step 2: 接线 dispatch**
 
 ```rust
 "orchestration_run" => crate::orchestration::dispatch_run(ctx, args),
 "orchestration_status" => crate::orchestration::dispatch_status(args),
 ```
 
-- [ ] **Step 3: 更新 `multi_agent` / `delegate` 描述文案**（可选一句：推荐改用 orchestration_*）
+- [x] **Step 3: 更新 `multi_agent` / `delegate` 描述文案**（可选一句：推荐改用 orchestration_*）
 
-- [ ] **Step 4: 测试**
+- [x] **Step 4: 测试**
 
 `tools` 侧单测：校验空 steps / >8 报错（不依赖 spawn）。
 
@@ -376,7 +376,7 @@ cargo test -p tools
 cargo check -p agent -p tools
 ```
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add tools/src/builtin/orchestration.rs tools/src/builtin/mod.rs tools/src/lib.rs \
@@ -396,7 +396,7 @@ EOF
 - Modify: `crates/agent-core/src/orchestration.rs`（step start/end）
 - Optionally extend Insights KPI later — **本 Task 不改前端**
 
-- [ ] **Step 1: 写入 `usage_events`**
+- [x] **Step 1: 写入 `usage_events`**
 
 ```rust
 memory::UsageDb::try_record(NewUsageEvent {
@@ -418,9 +418,9 @@ memory::UsageDb::try_record(NewUsageEvent {
 
 **决定（写死在实现）：** `kind = "orchestration"`，且 **暂不**把该 kind 加入 Insights `CALLS_KIND_SQL`（避免虚高）；协作图二期再读。
 
-- [ ] **Step 2: 单测** — tempfile + `ASTRO_MEMORY_DIR`，跑完一步后查 `usage.db` 有 orchestration 行（可在 executor 测里做）。
+- [x] **Step 2: 单测** — tempfile + `ASTRO_MEMORY_DIR`，跑完一步后查 `usage.db` 有 orchestration 行（可在 executor 测里做）。
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git commit -m "$(cat <<'EOF'
@@ -434,7 +434,7 @@ EOF
 
 ### Task 6: 回归与验收对照
 
-- [ ] **Step 1: 命令**
+- [x] **Step 1: 命令**
 
 ```bash
 cargo test -p memory --test orchestration_db_test
@@ -442,10 +442,10 @@ cargo test -p memory --test usage_db_test
 cargo check -p memory -p tools -p agent -p backend -p astro-agent
 ```
 
-- [ ] **Step 2: 手工（可选）**  
+- [x] **Step 2: 手工（可选）**  
 聊天启用 multi_agent 工具集 → 调 `orchestration_run` 两步（一步临时角色、一步 agent_id）→ 轮询 `orchestration_status` 至 done/failed。
 
-- [ ] **Step 3: 对照 spec 验收清单勾选；无阻断则完成**
+- [x] **Step 3: 对照 spec 验收清单勾选；无阻断则完成**
 
 ---
 

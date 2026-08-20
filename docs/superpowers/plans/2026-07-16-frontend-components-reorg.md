@@ -72,13 +72,13 @@ Expected: `tsc -b` and `vite build` succeed with exit code 0.
 **Interfaces:**
 - Produces: `components/icons/*` and barrel exports matching prior named/default exports
 
-- [ ] **Step 1: Create branch** (or worktree) from current HEAD; leave unrelated WIP unstaged
+- [x] **Step 1: Create branch** (or worktree) from current HEAD; leave unrelated WIP unstaged
 
 ```bash
 git checkout -b chore/frontend-components-reorg
 ```
 
-- [ ] **Step 2: Move icon files**
+- [x] **Step 2: Move icon files**
 
 ```bash
 cd apps/desktop/src/components
@@ -86,11 +86,11 @@ mkdir -p icons
 git mv NavIcons.tsx ProviderIcons.tsx ToolIcons.tsx GlassSolidIcons.tsx McpIcon.tsx LucideByName.tsx icons/
 ```
 
-- [ ] **Step 3: Fix imports inside moved files** (`../` → `../../` for src-level modules; keep `@lobehub/...` unchanged)
+- [x] **Step 3: Fix imports inside moved files** (`../` → `../../` for src-level modules; keep `@lobehub/...` unchanged)
 
-- [ ] **Step 4: Update consumers** (at least `App.tsx`, `useAgentTools.ts`, and any component still importing old paths)
+- [x] **Step 4: Update consumers** (at least `App.tsx`, `useAgentTools.ts`, and any component still importing old paths)
 
-- [ ] **Step 5: Add barrel**
+- [x] **Step 5: Add barrel**
 
 ```ts
 // apps/desktop/src/components/icons/index.ts
@@ -101,13 +101,13 @@ export { default as ProviderIcons } from "./ProviderIcons";
 
 Use the actual export style of each file (default vs named); mirror callers.
 
-- [ ] **Step 6: Verify**
+- [x] **Step 6: Verify**
 
 ```bash
 cd frontend && npm run build
 ```
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add apps/desktop/src/components/icons apps/desktop/src/App.tsx apps/desktop/src/hooks apps/desktop/src/components
@@ -127,12 +127,12 @@ EOF
 - Create: `apps/desktop/src/components/ui/index.ts`
 - Modify: importers (`App.tsx`, `useTransientToast.ts`, components that import SelectMenu/ExpandableSearch/Toast)
 
-- [ ] **Step 1: git mv into `ui/`**
-- [ ] **Step 2: Fix nested relative imports (`../` → `../../`)**
-- [ ] **Step 3: Update all consumers to `components/ui/...`**
-- [ ] **Step 4: Add `ui/index.ts` barrel**
-- [ ] **Step 5: `cd frontend && npm run build`**
-- [ ] **Step 6: Commit** `refactor(ui): move shared controls into components/ui`
+- [x] **Step 1: git mv into `ui/`**
+- [x] **Step 2: Fix nested relative imports (`../` → `../../`)**
+- [x] **Step 3: Update all consumers to `components/ui/...`**
+- [x] **Step 4: Add `ui/index.ts` barrel**
+- [x] **Step 5: `cd frontend && npm run build`**
+- [x] **Step 6: Commit** `refactor(ui): move shared controls into components/ui`
 
 ---
 
@@ -146,13 +146,13 @@ EOF
 **Interfaces:**
 - Produces: chat components under `components/chat/`; `MSG_DISSOLVE_MS` still exported from `MsgDissolveOverlay`
 
-- [ ] **Step 1: git mv chat cluster into `chat/`**
-- [ ] **Step 2: Fix `../` → `../../` for src modules; keep `./media/...` as `../media/...`**
-- [ ] **Step 3: Update sibling imports that now live in other domains (icons/ui already moved)**
-- [ ] **Step 4: Update `App.tsx` paths for Chat*, MsgDissolveOverlay**
-- [ ] **Step 5: Add `chat/index.ts` barrel for publicly imported chat modules**
-- [ ] **Step 6: `cd frontend && npm run build`**
-- [ ] **Step 7: Commit** `refactor(ui): move chat components into components/chat`
+- [x] **Step 1: git mv chat cluster into `chat/`**
+- [x] **Step 2: Fix `../` → `../../` for src modules; keep `./media/...` as `../media/...`**
+- [x] **Step 3: Update sibling imports that now live in other domains (icons/ui already moved)**
+- [x] **Step 4: Update `App.tsx` paths for Chat*, MsgDissolveOverlay**
+- [x] **Step 5: Add `chat/index.ts` barrel for publicly imported chat modules**
+- [x] **Step 6: `cd frontend && npm run build`**
+- [x] **Step 7: Commit** `refactor(ui): move chat components into components/chat`
 
 ---
 
@@ -163,10 +163,10 @@ EOF
 - Create: `apps/desktop/src/components/filespace/index.ts`
 - Modify: `App.tsx`, `lib/workspaceMenuItems.ts`, any chat/workspace importers
 
-- [ ] **Step 1: git mv → `filespace/`**
-- [ ] **Step 2: Fix relative imports**
-- [ ] **Step 3: Update consumers (`FileSpacePanel`, `FileContextMenu` type import)**
-- [ ] **Step 4: Barrel + build + commit** `refactor(ui): move filespace components into components/filespace`
+- [x] **Step 1: git mv → `filespace/`**
+- [x] **Step 2: Fix relative imports**
+- [x] **Step 3: Update consumers (`FileSpacePanel`, `FileContextMenu` type import)**
+- [x] **Step 4: Barrel + build + commit** `refactor(ui): move filespace components into components/filespace`
 
 ---
 
@@ -177,8 +177,8 @@ EOF
 - Create: `apps/desktop/src/components/workspace/index.ts`
 - Modify: `App.tsx` and cross-importers
 
-- [ ] **Step 1–4:** same pattern as Task 4
-- [ ] **Commit:** `refactor(ui): move workspace components into components/workspace`
+- [x] **Step 1–4:** same pattern as Task 4
+- [x] **Commit:** `refactor(ui): move workspace components into components/workspace`
 
 ---
 
@@ -189,8 +189,8 @@ EOF
 - Create: `apps/desktop/src/components/agents/index.ts`
 - Modify: `App.tsx` (`ModelPicker`), chat/settings importers of Agent*/Model*
 
-- [ ] **Step 1–4:** same pattern
-- [ ] **Commit:** `refactor(ui): move agent/model pickers into components/agents`
+- [x] **Step 1–4:** same pattern
+- [x] **Commit:** `refactor(ui): move agent/model pickers into components/agents`
 
 ---
 
@@ -201,8 +201,8 @@ EOF
 - Create: `apps/desktop/src/components/schedule/index.ts`
 - Modify: `App.tsx` and any importers
 
-- [ ] **Step 1–4:** same pattern
-- [ ] **Commit:** `refactor(ui): move cron/schedule components into components/schedule`
+- [x] **Step 1–4:** same pattern
+- [x] **Commit:** `refactor(ui): move cron/schedule components into components/schedule`
 
 ---
 
@@ -214,9 +214,9 @@ EOF
 - Modify: `App.tsx` and remaining importers
 - Verify: `components/` root contains only domain dirs (no leftover `.tsx` at root)
 
-- [ ] **Step 1: git mv settings cluster**
-- [ ] **Step 2: Fix imports + consumers**
-- [ ] **Step 3: Repo-wide search for stale paths**
+- [x] **Step 1: git mv settings cluster**
+- [x] **Step 2: Fix imports + consumers**
+- [x] **Step 3: Repo-wide search for stale paths**
 
 ```bash
 cd frontend && rg "from ['\"].*components/(Chat|Msg|FileSpace|Workspace|Toast|NavIcons|Cron|Preferences|Agent|Model)" src
@@ -224,16 +224,16 @@ cd frontend && rg "from ['\"].*components/(Chat|Msg|FileSpace|Workspace|Toast|Na
 
 Expected: no matches to old flat paths (except comments if any).
 
-- [ ] **Step 4: Confirm root is dirs-only**
+- [x] **Step 4: Confirm root is dirs-only**
 
 ```bash
 ls apps/desktop/src/components
 # expect: agents chat filespace icons media schedule settings ui workspace (+ maybe no loose tsx)
 ```
 
-- [ ] **Step 5: `cd frontend && npm run build`**
-- [ ] **Step 6: Commit** `refactor(ui): move settings panels into components/settings`
-- [ ] **Step 7: Update spec status line to 已实现** in the design doc; commit if changed
+- [x] **Step 5: `cd frontend && npm run build`**
+- [x] **Step 6: Commit** `refactor(ui): move settings panels into components/settings`
+- [x] **Step 7: Update spec status line to 已实现** in the design doc; commit if changed
 
 ---
 

@@ -80,7 +80,7 @@
 - Consumes: 现有各模块公开 API（签名不变）
 - Produces: `pub mod prompt` / `pub mod control`；本 Task **暂不**收紧根导出（留给 Task 5）
 
-- [ ] **Step 1: 创建目录并 git mv 文件**
+- [x] **Step 1: 创建目录并 git mv 文件**
 
 ```bash
 cd agent/src
@@ -96,7 +96,7 @@ git mv smart_approval.rs control/smart_approval.rs
 git mv schema_validate.rs control/schema_validate.rs
 ```
 
-- [ ] **Step 2: 写 `prompt/mod.rs` 与 `control/mod.rs`**
+- [x] **Step 2: 写 `prompt/mod.rs` 与 `control/mod.rs`**
 
 `crates/agent-core/src/prompt/mod.rs`:
 
@@ -117,7 +117,7 @@ pub mod schema_validate;
 pub mod smart_approval;
 ```
 
-- [ ] **Step 3: 更新 `lib.rs` 模块声明（保留旧根 re-export）**
+- [x] **Step 3: 更新 `lib.rs` 模块声明（保留旧根 re-export）**
 
 将原先的 `pub mod context;` 等替换为：
 
@@ -142,7 +142,7 @@ pub use control::interrupt::{Interrupt, InterruptError, InterruptPending, Resume
 
 删除对已搬走文件的顶层 `pub mod context;` / `pub mod hitl;` 等。
 
-- [ ] **Step 4: 更新 crate 内 `use` 路径**
+- [x] **Step 4: 更新 crate 内 `use` 路径**
 
 在 `agent/src` 内批量替换（可用 IDE / `rg` 核对后手动改）：
 
@@ -158,7 +158,7 @@ pub use control::interrupt::{Interrupt, InterruptError, InterruptPending, Resume
 
 `control/hitl.rs` 内对 `interrupt` / `schema_validate` 改为 `crate::control::interrupt` 与 `crate::control::schema_validate`（或同目录 `super::`）。
 
-- [ ] **Step 5: 验证**
+- [x] **Step 5: 验证**
 
 ```bash
 cargo test -p agent
@@ -166,7 +166,7 @@ cargo test -p agent
 
 Expected: PASS（行为不变，仅路径变）
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add agent/src
@@ -202,7 +202,7 @@ pub use exec::multi_agent;
 
 注意：`pub use exec::cron as cron_exec` 让 `agent::cron_exec::CronExecCredentials` 继续可用。`orchestration` / `multi_agent` 名称已与旧模块同名，可直接 `pub use exec::orchestration;` 若与 `pub mod` 冲突则只 `pub mod exec` + `pub use exec::orchestration::{run_orchestration, ...}` 并更新测试——**优先**在本 Task 末尾就改 `agent/tests` 到 `agent::exec::...`，backend/Tauri 留 Task 5。
 
-- [ ] **Step 1: git mv**
+- [x] **Step 1: git mv**
 
 ```bash
 cd agent/src
@@ -214,7 +214,7 @@ git mv multi_agent.rs exec/multi_agent.rs
 git mv memory_review_spawn.rs exec/memory_review.rs
 ```
 
-- [ ] **Step 2: `exec/mod.rs`**
+- [x] **Step 2: `exec/mod.rs`**
 
 ```rust
 pub mod cron;
@@ -224,7 +224,7 @@ pub mod multi_agent;
 pub mod orchestration;
 ```
 
-- [ ] **Step 3: 更新 `lib.rs` 与内部路径**
+- [x] **Step 3: 更新 `lib.rs` 与内部路径**
 
 - 删除顶层 `pub mod cron_exec` 等。
 - 增加 `pub mod exec;`
@@ -249,13 +249,13 @@ pub mod cron_exec {
 - 内部：`crate::cron_exec` → `crate::exec::cron`；`crate::delegate_exec` → `crate::exec::delegate`；以此类推。
 - `exec/multi_agent.rs` / `orchestration` / `delegate` / `cron` / `memory_review` 内对 `loop_` / `messages` / `chat_fallback` 的引用先保持旧名（若尚未搬 runtime/streaming），或按当前已搬路径更新。
 
-- [ ] **Step 4: 更新 agent 集成测试路径（exec 相关）**
+- [x] **Step 4: 更新 agent 集成测试路径（exec 相关）**
 
 - `agent/tests/cron_exec_test.rs`: `agent::cron_exec` → `agent::exec::cron`（或仍走过渡 `cron_exec`）
 - `agent/tests/orchestration_test.rs`: `agent::orchestration` → `agent::exec::orchestration`
 - `agent/tests/multi_agent_test.rs`: `agent::multi_agent` → `agent::exec::multi_agent`
 
-- [ ] **Step 5: 验证**
+- [x] **Step 5: 验证**
 
 ```bash
 cargo test -p agent
@@ -265,7 +265,7 @@ cargo check -p astro-agent
 
 Expected: PASS / 无 error
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add agent backend apps/desktop/src-tauri 2>/dev/null || git add agent
@@ -297,7 +297,7 @@ EOF
   - `runtime::usage::apply_llm_usage_dual_write`（`pub(crate)`）
 - **停止** 从 runtime 再导出 `ImageGenTargets`（改为调用方 `tools::ImageGenTargets`）；`AgentLoop` 字段类型仍用 `tools::ImageGenTargets`
 
-- [ ] **Step 1: 建目录并移 budget/usage**
+- [x] **Step 1: 建目录并移 budget/usage**
 
 ```bash
 mkdir -p agent/src/runtime
@@ -305,7 +305,7 @@ git mv agent/src/iteration_budget.rs agent/src/runtime/budget.rs
 git mv agent/src/usage_record.rs agent/src/runtime/usage.rs
 ```
 
-- [ ] **Step 2: 从 `loop_.rs` 抽出 `validate.rs` 与 `session.rs`**
+- [x] **Step 2: 从 `loop_.rs` 抽出 `validate.rs` 与 `session.rs`**
 
 `crates/agent-core/src/runtime/validate.rs` — 整段搬迁原 `validate_message_order`（约 L994–1006），签名不变：
 
@@ -329,7 +329,7 @@ pub fn validate_message_order(messages: &[Message]) -> bool {
 
 `crates/agent-core/src/runtime/session.rs` — 搬迁 `hydrate_session_messages` / `stored_message_to_runtime` / `resolve_session_project_root`（原 L1008 末尾），按当前 `loop_.rs` 实际依赖调整 `use`（`MemoryManager` / `SessionStore` 以 HEAD 为准）。
 
-- [ ] **Step 3: `runtime/mod.rs` 承接 `AgentConfig` / `AgentLoop` / `TurnResult` / `MaxDepthError`**
+- [x] **Step 3: `runtime/mod.rs` 承接 `AgentConfig` / `AgentLoop` / `TurnResult` / `MaxDepthError`**
 
 ```bash
 git mv agent/src/loop_.rs agent/src/runtime/mod.rs
@@ -348,7 +348,7 @@ pub use validate::validate_message_order;
 
 删除 `pub use tools::{ImageGenCreds, ImageGenTargets};`。`AgentLoop` 内改用 `tools::ImageGenTargets`。`mod.rs` 内调用 hydrate 改为 `session::hydrate_session_messages` 等。默认 `multi_turn` 改为 `budget::DEFAULT_MAX_ITERATIONS`。
 
-- [ ] **Step 4: 更新 `lib.rs`**
+- [x] **Step 4: 更新 `lib.rs`**
 
 ```rust
 pub mod runtime;
@@ -365,13 +365,13 @@ pub mod loop_ {
 }
 ```
 
-- [ ] **Step 5: 全局替换内部引用并更新 agent 测试**
+- [x] **Step 5: 全局替换内部引用并更新 agent 测试**
 
 - `crate::loop_` → `crate::runtime`
 - 测试：`use agent::loop_` → `use agent::runtime` 或 `use agent::{AgentLoop, ...}`
 - `validate_message_order`：`agent::runtime::validate_message_order` 或根 re-export（本 Task 可不根导出，测试走 `agent::runtime::validate_message_order`）
 
-- [ ] **Step 6: 验证**
+- [x] **Step 6: 验证**
 
 ```bash
 cargo test -p agent
@@ -380,7 +380,7 @@ cargo check -p backend
 
 Expected: PASS
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add agent
@@ -413,7 +413,7 @@ EOF
 - `parse_astro_hitl` / `try_park_parent_hitl`：`pub(crate)`，供 `exec::delegate` 使用（`crate::streaming::hitl_bridge::...` 或经 `streaming` re-export）
 - `fallback`：`pub(crate)` 为主；测试需要的符号可 `pub`
 
-- [ ] **Step 1: 建目录，先搬 fallback**
+- [x] **Step 1: 建目录，先搬 fallback**
 
 ```bash
 mkdir -p agent/src/streaming
@@ -437,7 +437,7 @@ pub use multi_turn::*;
 
 确认 `cargo test -p agent` 通过后再继续切开。
 
-- [ ] **Step 2: 抽出 `types.rs` / `traits.rs` / `provider.rs`**
+- [x] **Step 2: 抽出 `types.rs` / `traits.rs` / `provider.rs`**
 
 从 `multi_turn.rs` 剪出类型与 trait / ProviderStreamer 到对应文件；`mod.rs`：
 
@@ -464,11 +464,11 @@ pub use multi_turn::{
 pub(crate) use hitl_bridge::{parse_astro_hitl, try_park_parent_hitl};
 ```
 
-- [ ] **Step 3: 抽出 `hitl_bridge.rs` 与 `summary.rs`**
+- [x] **Step 3: 抽出 `hitl_bridge.rs` 与 `summary.rs`**
 
 将 HITL 桥与 `run_max_iterations_summary` 移出 `multi_turn.rs`。`multi_turn` 通过 `super::hitl_bridge` / `super::summary` 调用。目标：`multi_turn.rs` ≤ ~600–800 行；若仍过大，把 `execute_tools_serial` / `execute_tools_concurrent` 再拆到 `streaming/tools_exec.rs`（可选，同 Task 内完成）。
 
-- [ ] **Step 4: 更新 `lib.rs` streaming 导出**
+- [x] **Step 4: 更新 `lib.rs` streaming 导出**
 
 ```rust
 pub mod streaming;
@@ -483,7 +483,7 @@ pub use streaming::{
 
 （若本 Task 暂留根导出 `chat_target_*`，必须在 Task 5 删除。）
 
-- [ ] **Step 5: 验证**
+- [x] **Step 5: 验证**
 
 ```bash
 cargo test -p agent
@@ -492,7 +492,7 @@ cargo check -p backend
 
 Expected: PASS；`crates/agent-core/src/streaming/` 下单文件目视 < 800 行（理想 < 600）
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add agent/src/streaming agent/src/lib.rs
@@ -551,9 +551,9 @@ pub use tools::{ToolEntry, ToolRegistry};
 - `pub use exec::cron as cron_exec` / `cron_exec` 模块门面
 - `StaticContext` / `DynamicContext` / `context_usage::*` / hooks / budget / `to_provider_messages` / fallback / memory_review / `PauseControl` / `Usage`
 
-- [ ] **Step 1: 改 `lib.rs` 为最终清单**（如上）
+- [x] **Step 1: 改 `lib.rs` 为最终清单**（如上）
 
-- [ ] **Step 2: 更新 backend**
+- [x] **Step 2: 更新 backend**
 
 `astro_service.rs`:
 
@@ -573,13 +573,13 @@ agent::exec::memory_review::spawn_background_review_after_turn(...);
 use agent::exec::cron::{self, CronExecCredentials};
 ```
 
-- [ ] **Step 3: 更新 Tauri**
+- [x] **Step 3: 更新 Tauri**
 
 `commands.rs` 中所有 `agent::cron_exec` → `agent::exec::cron`。
 
 `memory_commands.rs` 注释：`agent::loop_::AgentLoop` → `agent::AgentLoop` / `agent::runtime::AgentLoop`。
 
-- [ ] **Step 4: 更新 `agent/tests`**
+- [x] **Step 4: 更新 `agent/tests`**
 
 | 文件 | 改法 |
 |------|------|
@@ -592,7 +592,7 @@ use agent::exec::cron::{self, CronExecCredentials};
 | `event_bus_test.rs` | 仍 `agent::event_bus` |
 | `memory_snapshot_test.rs` | `AgentLoop` 走根或 `runtime` |
 
-- [ ] **Step 5: grep 清理旧路径**
+- [x] **Step 5: grep 清理旧路径**
 
 ```bash
 rg -n 'agent::(loop_|cron_exec|delegate_exec|chat_fallback|memory_review_spawn|iteration_budget)\b' \
@@ -602,7 +602,7 @@ rg -n 'crate::(loop_|cron_exec|delegate_exec|chat_fallback|iteration_budget|usag
 
 Expected: 无业务代码命中（spec/plan 历史文档除外）
 
-- [ ] **Step 6: 验证**
+- [x] **Step 6: 验证**
 
 ```bash
 cargo test -p agent
@@ -612,7 +612,7 @@ cargo check -p astro-agent
 
 Expected: 全部成功
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add agent backend apps/desktop/src-tauri docs/hooks.md delegate cron tools
@@ -631,7 +631,7 @@ EOF
 - Modify: 任何仍写旧路径的模块头 / `docs/hooks.md` / crate 注释
 - Verify: 目录树与单文件行数
 
-- [ ] **Step 1: 核对目录**
+- [x] **Step 1: 核对目录**
 
 ```bash
 find agent/src -type f -name '*.rs' | sort
@@ -640,11 +640,11 @@ wc -l agent/src/streaming/*.rs agent/src/runtime/*.rs | sort -n
 
 Expected: 顶层仅 `lib.rs`、`builder.rs`、`event_bus.rs`、`timeline.rs` + 域目录；无 `loop_.rs` / 平铺 `streaming.rs`；streaming/runtime 单文件尽量 ≤ 600（`multi_turn` 若略超，在 Step 2 再拆 `tools_exec.rs`）。
 
-- [ ] **Step 2（可选）: 若 `multi_turn.rs` 或 `delegate.rs` > 700 行**
+- [x] **Step 2（可选）: 若 `multi_turn.rs` 或 `delegate.rs` > 700 行**
 
 拆 `streaming/tools_exec.rs`（serial/concurrent tool 执行）或 `exec/delegate/` 子文件；再跑 `cargo test -p agent`。
 
-- [ ] **Step 3: 全量验证**
+- [x] **Step 3: 全量验证**
 
 ```bash
 cargo test -p agent
@@ -652,7 +652,7 @@ cargo check -p backend
 cargo check -p astro-agent
 ```
 
-- [ ] **Step 4: Commit（若有文档/再拆改动）**
+- [x] **Step 4: Commit（若有文档/再拆改动）**
 
 ```bash
 git add agent docs
