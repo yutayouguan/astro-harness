@@ -481,16 +481,16 @@ impl DefaultAgentThreadDispatch {
                     target.canonical_path
                 )
             })?;
-        let settings = subagents::load_agents_settings(
+        let agent_configuration = subagents::load_agent_configuration(
             &material.memory_dir,
             material.project_root.as_deref(),
         )?;
+        let settings = &agent_configuration.settings;
         anyhow::ensure!(
             settings.enabled,
             "agent threads are disabled by Codex agent settings"
         );
-        let catalog =
-            subagents::load_agent_catalog(&material.memory_dir, material.project_root.as_deref());
+        let catalog = &agent_configuration.catalog;
         let mut recovered_material = material.clone();
         let mut ancestors = Vec::new();
         let mut cursor = target.canonical_path.parent();
@@ -511,8 +511,8 @@ impl DefaultAgentThreadDispatch {
                     format!("runtime descriptor is unavailable for ancestor {path}")
                 })?;
             let ancestor_resolved = subagents::resolve_agent(
-                &catalog,
-                &settings,
+                catalog,
+                settings,
                 &ancestor.agent_type,
                 ancestor_descriptor.model.as_deref(),
                 ancestor_descriptor.reasoning_effort.as_deref(),
@@ -532,8 +532,8 @@ impl DefaultAgentThreadDispatch {
             }
         }
         let mut resolved = subagents::resolve_agent(
-            &catalog,
-            &settings,
+            catalog,
+            settings,
             &target.agent_type,
             descriptor.model.as_deref(),
             descriptor.reasoning_effort.as_deref(),
@@ -591,21 +591,18 @@ impl AgentThreadDispatch for DefaultAgentThreadDispatch {
         &self,
         mut request: SpawnAgentDispatchRequest,
     ) -> anyhow::Result<SpawnAgentV2Result> {
-        let settings = subagents::load_agents_settings(
+        let agent_configuration = subagents::load_agent_configuration(
             &request.runtime.memory_dir,
             request.runtime.project_root.as_deref(),
         )?;
+        let settings = &agent_configuration.settings;
         if !settings.enabled {
             anyhow::bail!("agent threads are disabled by Codex agent settings");
         }
         let agent_type = request.request.agent_type.as_deref().unwrap_or("default");
-        let catalog = subagents::load_agent_catalog(
-            &request.runtime.memory_dir,
-            request.runtime.project_root.as_deref(),
-        );
         let resolved = subagents::resolve_agent(
-            &catalog,
-            &settings,
+            &agent_configuration.catalog,
+            settings,
             agent_type,
             request.request.model.as_deref(),
             request.request.reasoning_effort.as_deref(),
@@ -4545,7 +4542,16 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let memory_dir = dir.path().join("memory");
         let project = dir.path().join("project");
+        std::fs::create_dir_all(memory_dir.join(".codex")).unwrap();
         std::fs::create_dir_all(project.join(".codex/agents")).unwrap();
+        std::fs::write(
+            memory_dir.join(".codex/config.toml"),
+            format!(
+                "[projects.{:?}]\ntrust_level = 'trusted'\n",
+                project.to_string_lossy()
+            ),
+        )
+        .unwrap();
         let definition = project.join(".codex/agents/reviewer.toml");
         std::fs::write(
             &definition,
@@ -4952,7 +4958,16 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let memory_dir = dir.path().join("memory");
         let project = dir.path().join("project");
+        std::fs::create_dir_all(memory_dir.join(".codex")).unwrap();
         std::fs::create_dir_all(project.join(".codex/agents")).unwrap();
+        std::fs::write(
+            memory_dir.join(".codex/config.toml"),
+            format!(
+                "[projects.{:?}]\ntrust_level = 'trusted'\n",
+                project.to_string_lossy()
+            ),
+        )
+        .unwrap();
         std::fs::write(
             project.join(".codex/agents/parent.toml"),
             "name = \"parent\"\ndescription = \"parent\"\ndeveloper_instructions = \"parent\"\n[[skills.config]]\npath = \"skills/parent/SKILL.md\"\nenabled = true\n",
@@ -6149,7 +6164,16 @@ mod tests {
     fn custom_layers_preserve_unknown_parent_sandbox_and_merge_skills() {
         let dir = tempfile::tempdir().unwrap();
         let project = dir.path().join("project");
+        std::fs::create_dir_all(dir.path().join(".codex")).unwrap();
         std::fs::create_dir_all(project.join(".codex/agents")).unwrap();
+        std::fs::write(
+            dir.path().join(".codex/config.toml"),
+            format!(
+                "[projects.{:?}]\ntrust_level = 'trusted'\n",
+                project.to_string_lossy()
+            ),
+        )
+        .unwrap();
         std::fs::write(
             project.join(".codex/agents/reviewer.toml"),
             r#"name = "reviewer"
@@ -6166,7 +6190,9 @@ enabled = true
 "#,
         )
         .unwrap();
-        let catalog = subagents::load_agent_catalog(dir.path(), Some(&project));
+        let catalog = subagents::load_agent_configuration(dir.path(), Some(&project))
+            .unwrap()
+            .catalog;
         let resolved = subagents::resolve_agent(
             &catalog,
             &subagents::AgentsSettings::default(),

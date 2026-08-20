@@ -18,8 +18,9 @@ pub use activity::{
     ActivityBus, ActivityCursor, ActivityObservation, AgentActivity, AgentActivityKind,
 };
 pub use config::{
-    load_agent_catalog, load_agents_settings, resolve_agent, AgentCatalog, AgentConfigDiagnostic,
-    AgentDefinition, AgentsSettings, ResolvedAgent, SkillConfigEntry, SkillsLayer,
+    load_agent_configuration, resolve_agent, AgentCatalog, AgentConfigDiagnostic,
+    AgentConfiguration, AgentDefinition, AgentsSettings, ResolvedAgent, SkillConfigEntry,
+    SkillsLayer,
 };
 pub use control::{
     AgentControl, AgentRuntimeHandle, AgentSpawnReservation, AgentThreadControl,

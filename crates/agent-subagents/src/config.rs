@@ -2,8 +2,8 @@ use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use agent_config::loader::{load_local_config, LocalConfigOptions};
-use agent_config::EffectiveConfig;
+use agent_config::loader::{load_local_config, LocalConfigOptions, ProjectTrust};
+use agent_config::{ConfigLayerSource, EffectiveConfig};
 use anyhow::Context;
 use serde::Deserialize;
 
@@ -55,6 +55,15 @@ pub struct AgentConfigDiagnostic {
 pub struct AgentCatalog {
     pub agents: BTreeMap<String, AgentDefinition>,
     pub diagnostics: Vec<AgentConfigDiagnostic>,
+}
+
+#[derive(Debug, Clone)]
+pub struct AgentConfiguration {
+    pub settings: AgentsSettings,
+    pub catalog: AgentCatalog,
+    /// Version of the merged `config.toml` value. Standalone agent files are
+    /// separate layers and are intentionally not represented by this hash.
+    pub effective_config_version: String,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -136,10 +145,10 @@ impl AgentsSettings {
     }
 }
 
-pub fn load_agents_settings(
+pub fn load_agent_configuration(
     memory_dir: &Path,
     project_root: Option<&Path>,
-) -> anyhow::Result<AgentsSettings> {
+) -> anyhow::Result<AgentConfiguration> {
     let codex_home = codex_home(memory_dir);
     let cwd = project_root.unwrap_or(memory_dir);
     let options = LocalConfigOptions::new(&codex_home, cwd);
@@ -149,7 +158,43 @@ pub fn load_agents_settings(
             codex_home.display()
         )
     })?;
-    agents_settings_from_effective(&loaded.resolve())
+    let effective = loaded.resolve();
+    let settings = agents_settings_from_effective(&effective)?;
+
+    let mut catalog = AgentCatalog::default();
+    for definition in builtin_agents() {
+        catalog.agents.insert(definition.name.clone(), definition);
+    }
+    let mut agent_dirs = vec![codex_home.join("agents")];
+    for layer in effective.layers_low_to_high() {
+        let candidate = match &layer.source {
+            ConfigLayerSource::User { file } | ConfigLayerSource::Profile { file, .. } => {
+                file.parent().map(|parent| parent.join("agents"))
+            }
+            ConfigLayerSource::Project { dot_config_dir } => Some(dot_config_dir.join("agents")),
+            _ => None,
+        };
+        if let Some(candidate) = candidate {
+            if !agent_dirs.contains(&candidate) {
+                agent_dirs.push(candidate);
+            }
+        }
+    }
+    if loaded.project_trust == ProjectTrust::Trusted {
+        let standalone_project_dir = loaded.project_root.join(".codex/agents");
+        if !agent_dirs.contains(&standalone_project_dir) {
+            agent_dirs.push(standalone_project_dir);
+        }
+    }
+    for directory in agent_dirs {
+        load_agent_dir(&directory, &mut catalog);
+    }
+
+    Ok(AgentConfiguration {
+        settings,
+        catalog,
+        effective_config_version: effective.version().to_string(),
+    })
 }
 
 pub fn agents_settings_from_effective(
@@ -163,18 +208,6 @@ pub fn agents_settings_from_effective(
         settings.apply(partial);
     }
     Ok(settings)
-}
-
-pub fn load_agent_catalog(memory_dir: &Path, project_root: Option<&Path>) -> AgentCatalog {
-    let mut catalog = AgentCatalog::default();
-    for definition in builtin_agents() {
-        catalog.agents.insert(definition.name.clone(), definition);
-    }
-    load_agent_dir(&codex_home(memory_dir).join("agents"), &mut catalog);
-    if let Some(root) = project_root {
-        load_agent_dir(&root.join(".codex/agents"), &mut catalog);
-    }
-    catalog
 }
 
 fn codex_home(memory_dir: &Path) -> PathBuf {
@@ -362,7 +395,9 @@ mod tests {
         )
         .unwrap();
 
-        let catalog = load_agent_catalog(memory.path(), Some(project.path()));
+        let catalog = load_agent_configuration(memory.path(), Some(project.path()))
+            .unwrap()
+            .catalog;
 
         assert!(!catalog.agents.contains_key("legacy"));
         assert!(!catalog.agents.contains_key("project_legacy"));
@@ -377,7 +412,12 @@ mod tests {
         )
         .unwrap();
 
-        assert!(load_agents_settings(memory.path(), None).unwrap().enabled);
+        assert!(
+            load_agent_configuration(memory.path(), None)
+                .unwrap()
+                .settings
+                .enabled
+        );
     }
 
     #[test]
@@ -392,8 +432,9 @@ mod tests {
         .unwrap();
 
         assert!(
-            load_agents_settings(memory.path(), Some(project.path()))
+            load_agent_configuration(memory.path(), Some(project.path()))
                 .unwrap()
+                .settings
                 .enabled
         );
     }
@@ -405,7 +446,7 @@ mod tests {
         let project = tempfile::tempdir().unwrap();
         fs::create_dir_all(&memory).unwrap();
         fs::create_dir_all(home.path().join(".codex")).unwrap();
-        fs::create_dir_all(project.path().join(".codex")).unwrap();
+        fs::create_dir_all(project.path().join(".codex/agents")).unwrap();
         fs::write(
             home.path().join(".codex/config.toml"),
             format!(
@@ -415,7 +456,7 @@ mod tests {
         )
         .unwrap();
 
-        let personal = load_agents_settings(&memory, None).unwrap();
+        let personal = load_agent_configuration(&memory, None).unwrap().settings;
         assert!(!personal.enabled);
         assert_eq!(personal.max_concurrent_threads_per_session, 7);
 
@@ -424,7 +465,9 @@ mod tests {
             "[agents]\nenabled = true\nmax_threads = 9\n",
         )
         .unwrap();
-        let combined = load_agents_settings(&memory, Some(project.path())).unwrap();
+        let combined = load_agent_configuration(&memory, Some(project.path()))
+            .unwrap()
+            .settings;
         assert!(combined.enabled);
         assert_eq!(combined.max_concurrent_threads_per_session, 9);
     }
@@ -436,7 +479,7 @@ mod tests {
         let project = tempfile::tempdir().unwrap();
         fs::create_dir_all(&memory).unwrap();
         fs::create_dir_all(home.path().join(".codex")).unwrap();
-        fs::create_dir_all(project.path().join(".codex")).unwrap();
+        fs::create_dir_all(project.path().join(".codex/agents")).unwrap();
         fs::write(
             home.path().join(".codex/config.toml"),
             "[agents]\nenabled = true\nmax_concurrent_threads_per_session = 5\n",
@@ -447,11 +490,18 @@ mod tests {
             "[agents]\nenabled = false\nmax_concurrent_threads_per_session = 11\n",
         )
         .unwrap();
+        fs::write(
+            project.path().join(".codex/agents/untrusted.toml"),
+            "name = 'untrusted'\ndescription = 'ignored'\ndeveloper_instructions = 'ignored'\n",
+        )
+        .unwrap();
 
-        let settings = load_agents_settings(&memory, Some(project.path())).unwrap();
+        let configuration = load_agent_configuration(&memory, Some(project.path())).unwrap();
+        let settings = configuration.settings;
 
         assert!(settings.enabled);
         assert_eq!(settings.max_concurrent_threads_per_session, 5);
+        assert!(!configuration.catalog.agents.contains_key("untrusted"));
     }
 
     #[test]
@@ -466,7 +516,7 @@ mod tests {
         )
         .unwrap();
 
-        let error = load_agents_settings(&memory, None).unwrap_err();
+        let error = load_agent_configuration(&memory, None).unwrap_err();
 
         assert!(error.to_string().contains("invalid effective [agents]"));
     }
@@ -485,7 +535,7 @@ model = "provider:custom"
 "#,
         )
         .unwrap();
-        let catalog = load_agent_catalog(root.path(), None);
+        let catalog = load_agent_configuration(root.path(), None).unwrap().catalog;
         let resolved = resolve_agent(
             &catalog,
             &AgentsSettings::default(),
@@ -515,7 +565,7 @@ sandbox_mode = "danger-full-access"
 "#,
         )
         .unwrap();
-        let catalog = load_agent_catalog(root.path(), None);
+        let catalog = load_agent_configuration(root.path(), None).unwrap().catalog;
         let resolved = resolve_agent(
             &catalog,
             &AgentsSettings::default(),
@@ -595,6 +645,14 @@ sandbox_mode = "danger-full-access"
         fs::create_dir_all(memory.path().join(".codex/agents")).unwrap();
         fs::create_dir_all(project.path().join(".codex/agents")).unwrap();
         fs::write(
+            memory.path().join(".codex/config.toml"),
+            format!(
+                "[projects.{}]\ntrust_level = 'trusted'\n",
+                toml_key(project.path())
+            ),
+        )
+        .unwrap();
+        fs::write(
             memory.path().join(".codex/agents/reviewer.toml"),
             r#"name = "reviewer"
 description = "personal codex"
@@ -619,13 +677,67 @@ enabled = false
 "#,
         )
         .unwrap();
+        fs::write(
+            project.path().join(".codex/config.toml"),
+            "[agents]\nenabled = false\n",
+        )
+        .unwrap();
 
-        let catalog = load_agent_catalog(memory.path(), Some(project.path()));
+        let configuration = load_agent_configuration(memory.path(), Some(project.path())).unwrap();
+        assert!(!configuration.settings.enabled);
+        assert!(configuration
+            .effective_config_version
+            .starts_with("sha256:"));
+        let catalog = configuration.catalog;
         let reviewer = catalog.agents.get("reviewer").unwrap();
         assert_eq!(reviewer.description, "project codex");
         assert_eq!(reviewer.sandbox_mode.as_deref(), Some("read-only"));
         assert!(reviewer.mcp_servers.contains_key("docs"));
         assert_eq!(reviewer.skills.config.len(), 1);
         assert!(reviewer.extra.contains_key("future_setting"));
+    }
+
+    #[test]
+    fn trusted_project_agent_directories_follow_root_to_cwd_layer_order() {
+        let home = tempfile::tempdir().unwrap();
+        let memory = home.path().join(".astro");
+        let project = tempfile::tempdir().unwrap();
+        let nested = project.path().join("nested");
+        fs::create_dir_all(&memory).unwrap();
+        fs::create_dir_all(home.path().join(".codex")).unwrap();
+        fs::create_dir_all(project.path().join(".git")).unwrap();
+        fs::create_dir_all(project.path().join(".codex/agents")).unwrap();
+        fs::create_dir_all(nested.join(".codex/agents")).unwrap();
+        fs::write(
+            home.path().join(".codex/config.toml"),
+            format!(
+                "[projects.{}]\ntrust_level = 'trusted'\n",
+                toml_key(project.path())
+            ),
+        )
+        .unwrap();
+        fs::write(
+            project.path().join(".codex/config.toml"),
+            "model = 'root'\n",
+        )
+        .unwrap();
+        fs::write(nested.join(".codex/config.toml"), "model = 'nested'\n").unwrap();
+        fs::write(
+            project.path().join(".codex/agents/reviewer.toml"),
+            "name = 'reviewer'\ndescription = 'root'\ndeveloper_instructions = 'root'\n",
+        )
+        .unwrap();
+        fs::write(
+            nested.join(".codex/agents/reviewer.toml"),
+            "name = 'reviewer'\ndescription = 'nested'\ndeveloper_instructions = 'nested'\n",
+        )
+        .unwrap();
+
+        let configuration = load_agent_configuration(&memory, Some(&nested)).unwrap();
+
+        assert_eq!(
+            configuration.catalog.agents["reviewer"].description,
+            "nested"
+        );
     }
 }
