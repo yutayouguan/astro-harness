@@ -638,8 +638,7 @@ impl AgentControl {
         self.activity.cursor()
     }
 
-    /// Returns the next activity in strict sequence order for read-only
-    /// projection observers. Runtime wait semantics remain on [`Self::wait_activity`].
+    /// 按严格顺序返回下一个活动事件（只读投影观察者用）。
     pub fn next_activity_after(
         &self,
         cursor: ActivityCursor,
@@ -684,9 +683,7 @@ impl AgentControl {
         Ok(snapshot)
     }
 
-    /// Resolve a desktop target from the root namespace. Unlike model target
-    /// resolution this deliberately permits `/root`, whose close semantics are
-    /// defined as "close descendants only" by the desktop controller.
+    /// 从根命名空间解析桌面目标（允许 `/root`，关闭语义为「仅关后代」）。
     pub fn resolve_desktop_target(&self, target: &str) -> anyhow::Result<AgentThreadV2> {
         let path = AgentPath::root()
             .resolve(target.trim())
@@ -720,9 +717,7 @@ impl AgentControl {
             .any(|prefix| path.starts_with(prefix)))
     }
 
-    /// Roll back a spawn that was committed only long enough for the runtime
-    /// manager to attempt admission. This is intentionally limited to a
-    /// durable `PendingInit` row with no registered runtime.
+    /// 回滚仅提交到持久层但未注册运行时的 PendingInit 派生。
     pub fn abort_committed_pending_spawn(&self, thread: &AgentThreadV2) -> anyhow::Result<()> {
         if thread.root_thread_id != self.root_thread_id {
             anyhow::bail!("agent thread belongs to a different root");
@@ -735,8 +730,7 @@ impl AgentControl {
             .rollback_committed_spawn(&thread.canonical_path, &thread.thread_id)
     }
 
-    /// Idempotent final cleanup owned by the runtime launch task. It may run
-    /// after the caller already removed durable state, but only releases the
+    /// 运行时启动任务拥有的幂等最终清理（释放路径和执行槽位）。
     /// exact matching in-memory identity after execution has ended.
     pub fn finalize_unaccepted_spawn(
         &self,
