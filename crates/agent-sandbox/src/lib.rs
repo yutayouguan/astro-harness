@@ -358,7 +358,7 @@ fn macos_profile(policy: &SandboxPolicy) -> String {
                 "(allow file-write* (subpath \"{}\"))\n",
                 seatbelt_escape(root)
             ));
-            for protected in [".git", ".agents", ".codex"] {
+            for protected in [".git", ".agents", ".astro"] {
                 profile.push_str(&format!(
                     "(deny file-write* (subpath \"{}\"))\n",
                     seatbelt_escape(&root.join(protected))

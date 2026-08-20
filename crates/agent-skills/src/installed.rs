@@ -135,7 +135,7 @@ fn machine_skill_roots() -> Vec<PathBuf> {
             ".agents/skills",
             ".cursor/skills",
             ".claude/skills",
-            ".codex/skills",
+            ".astro/skills",
         ] {
             let p = home.join(sub);
             if !p.starts_with(&mem) {

@@ -59,7 +59,7 @@ cd apps/desktop && npm run tauri:build:universal    # universal-apple-darwin
 | `crates/agent-core` | `agent` | Agent 运行时核心：`Session` 状态机、`AstroThread` 句柄、`submission_loop` 有序提交、`SessionTask`/`ActiveTurn` 任务生命周期、`TurnContext`/`StepContext` 层级上下文、工具路由（`ToolRouter`）、压缩、HITL、hooks、prompt 组装。 |
 | `crates/agent-providers` | `providers` | 多厂商 LLM/图像 Provider 层：流式 `ChatStream`、fallback 链。支持 Google Interactions、OpenAI、Claude、DeepSeek、MiniMax、Ollama、Azure 等。 |
 | `crates/agent-memory` | `memory` | `MemoryManager` — MEMORY.md/USER.md 快照、dreaming 管道、待审批记忆队列、decision log、workspace bootstrap、权限审计。 |
-| `crates/agent-subagents` | `subagents` | Codex V2 Agent Thread：`AgentControl`（根级共享控制器）、`AgentGraphStore`（subagents.db 图/邮箱/状态事件）、`AgentRegistry`（RAII 预留/配额）、`ActivityBus`（事件等待）、`.codex` 自定义 agent 配置。 |
+| `crates/agent-subagents` | `subagents` | Codex V2 Agent Thread：`AgentControl`（根级共享控制器）、`AgentGraphStore`（subagents.db 图/邮箱/状态事件）、`AgentRegistry`（RAII 预留/配额）、`ActivityBus`（事件等待）、`.astro` 自定义 agent 配置。 |
 | `crates/agent-evolution` | `evolution` | 自进化/学习循环：改进提议、评判、信号分析、评估集、DSPy 集成。配套 Python 包 `evolution-dspy/`。 |
 | `crates/agent-delegate` | `delegate` | 轻量级工具执行代理（已精简，核心子 Agent 逻辑迁移到 `agent-subagents`）。 |
 | `crates/agent-home` | `home` | `~/.astro` 路径约定、日志、agent config YAML、tool-enable gates。无 SQLite。 |
@@ -122,7 +122,7 @@ AstroThread::submit(Op)
 
 状态：`PendingInit` → `Running` → `Completed { last_message }` / `Interrupted` / `Errored { message }` → `Shutdown`。
 
-配置：仅 `.codex/agents` 和 `.codex/config.toml`（不加载 `.astro/agents`）。
+配置：从 `~/.astro/agents` 和 `<project>/.astro/agents` 加载自定义 agent 定义；设置从 `~/.astro/config.toml` 和 `<project>/.astro/config.toml` 加载。
 
 ### Provider Fallback 链
 
@@ -158,10 +158,9 @@ Plugin bus 事件（Codex 对齐命名）：`PreLlmCall`、`PreToolUse`、`Permi
   workflows/workflows.json
   subagents.db         # V2 Agent 线程图、邮箱、状态事件
   usage/usage.db
-~/.codex/
   config.toml          # 全局 agent 设置
   agents/              # 自定义 agent 定义（.toml）
-<project>/.codex/
+<project>/.astro/
   config.toml          # 项目级 agent 设置覆盖
   agents/              # 项目级 agent 定义
 ```

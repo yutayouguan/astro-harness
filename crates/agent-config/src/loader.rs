@@ -11,7 +11,7 @@ use toml::Value as TomlValue;
 use crate::{ConfigLayerEntry, ConfigLayerError, ConfigLayerSource, ConfigLayerStack};
 
 pub const CONFIG_TOML_FILE: &str = "config.toml";
-pub const DOT_CODEX_DIR: &str = ".codex";
+pub const DOT_ASTRO_DIR: &str = ".astro";
 
 /// Machine-local keys that project configuration must not override.
 ///
@@ -205,13 +205,13 @@ pub fn load_local_config(
 
     let mut diagnostics = Vec::new();
 
-    for dot_codex_dir in project_config_dirs(&project_root, &cwd) {
-        let path = dot_codex_dir.join(CONFIG_TOML_FILE);
+    for dot_astro_dir in project_config_dirs(&project_root, &cwd) {
+        let path = dot_astro_dir.join(CONFIG_TOML_FILE);
         if !path.is_file() {
             continue;
         }
         let source = ConfigLayerSource::Project {
-            dot_config_dir: dot_codex_dir,
+            dot_config_dir: dot_astro_dir,
         };
         if let Some(reason) = project_trust.disabled_reason() {
             // Do not parse or otherwise consume untrusted repository content.
@@ -338,7 +338,7 @@ fn project_config_dirs(project_root: &Path, cwd: &Path) -> Vec<PathBuf> {
     let mut directories = cwd
         .ancestors()
         .take_while(|directory| directory.starts_with(project_root))
-        .map(|directory| directory.join(DOT_CODEX_DIR))
+        .map(|directory| directory.join(DOT_ASTRO_DIR))
         .collect::<Vec<_>>();
     directories.reverse();
     directories
@@ -451,7 +451,7 @@ mod tests {
     impl Fixture {
         fn new(trust_level: Option<&str>) -> Self {
             let root = tempfile::tempdir().unwrap();
-            let home = root.path().join("home/.codex");
+            let home = root.path().join("home/.astro");
             let project = root.path().join("repo");
             let nested = project.join("packages/app");
             fs::create_dir_all(&home).unwrap();
@@ -486,9 +486,9 @@ mod tests {
     }
 
     fn write_project_config(directory: &Path, raw: &str) {
-        let dot_codex = directory.join(DOT_CODEX_DIR);
-        fs::create_dir_all(&dot_codex).unwrap();
-        fs::write(dot_codex.join(CONFIG_TOML_FILE), raw).unwrap();
+        let dot_astro = directory.join(DOT_ASTRO_DIR);
+        fs::create_dir_all(&dot_astro).unwrap();
+        fs::write(dot_astro.join(CONFIG_TOML_FILE), raw).unwrap();
     }
 
     #[test]
@@ -514,7 +514,7 @@ mod tests {
             loaded.layers.origin_at(["model"].iter()).unwrap().source,
             ConfigLayerSource::Project { ref dot_config_dir }
                 if dot_config_dir
-                    == &fixture.nested.canonicalize().unwrap().join(DOT_CODEX_DIR)
+                    == &fixture.nested.canonicalize().unwrap().join(DOT_ASTRO_DIR)
         ));
     }
 

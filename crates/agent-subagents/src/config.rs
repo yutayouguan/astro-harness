@@ -118,9 +118,12 @@ impl AgentsSettings {
 
 pub fn load_agents_settings(memory_dir: &Path, project_root: Option<&Path>) -> AgentsSettings {
     let mut settings = AgentsSettings::default();
-    apply_settings_file(&mut settings, &codex_home(memory_dir).join("config.toml"));
+    apply_settings_file(
+        &mut settings,
+        &astro_config_home(memory_dir).join("config.toml"),
+    );
     if let Some(root) = project_root {
-        apply_settings_file(&mut settings, &root.join(".codex/config.toml"));
+        apply_settings_file(&mut settings, &root.join(".astro/config.toml"));
     }
     settings
 }
@@ -144,18 +147,18 @@ pub fn load_agent_catalog(memory_dir: &Path, project_root: Option<&Path>) -> Age
     for definition in builtin_agents() {
         catalog.agents.insert(definition.name.clone(), definition);
     }
-    load_agent_dir(&codex_home(memory_dir).join("agents"), &mut catalog);
+    load_agent_dir(&astro_config_home(memory_dir).join("agents"), &mut catalog);
     if let Some(root) = project_root {
-        load_agent_dir(&root.join(".codex/agents"), &mut catalog);
+        load_agent_dir(&root.join(".astro/agents"), &mut catalog);
     }
     catalog
 }
 
-fn codex_home(memory_dir: &Path) -> PathBuf {
+fn astro_config_home(memory_dir: &Path) -> PathBuf {
     if memory_dir.file_name().and_then(|name| name.to_str()) == Some(".astro") {
-        return memory_dir.parent().unwrap_or(memory_dir).join(".codex");
+        return memory_dir.to_path_buf();
     }
-    memory_dir.join(".codex")
+    memory_dir.join(".astro")
 }
 
 fn load_agent_dir(dir: &Path, catalog: &mut AgentCatalog) {
@@ -370,10 +373,10 @@ mod tests {
         let memory = home.path().join(".astro");
         let project = tempfile::tempdir().unwrap();
         fs::create_dir_all(&memory).unwrap();
-        fs::create_dir_all(home.path().join(".codex")).unwrap();
-        fs::create_dir_all(project.path().join(".codex")).unwrap();
+        fs::create_dir_all(home.path().join(".astro")).unwrap();
+        fs::create_dir_all(project.path().join(".astro")).unwrap();
         fs::write(
-            home.path().join(".codex/config.toml"),
+            home.path().join(".astro/config.toml"),
             "[agents]\nenabled = false\nmax_threads = 7\n",
         )
         .unwrap();
@@ -383,7 +386,7 @@ mod tests {
         assert_eq!(personal.max_concurrent_threads_per_session, 7);
 
         fs::write(
-            project.path().join(".codex/config.toml"),
+            project.path().join(".astro/config.toml"),
             "[agents]\nenabled = true\nmax_threads = 9\n",
         )
         .unwrap();
@@ -395,7 +398,7 @@ mod tests {
     #[test]
     fn custom_agent_overrides_builtin_and_model_precedence() {
         let root = tempfile::tempdir().unwrap();
-        let agents = root.path().join(".codex/agents");
+        let agents = root.path().join(".astro/agents");
         fs::create_dir_all(&agents).unwrap();
         fs::write(
             agents.join("explorer.toml"),
@@ -425,7 +428,7 @@ model = "provider:custom"
     #[test]
     fn custom_agent_can_narrow_but_not_expand_parent_permissions() {
         let root = tempfile::tempdir().unwrap();
-        let agents = root.path().join(".codex/agents");
+        let agents = root.path().join(".astro/agents");
         fs::create_dir_all(&agents).unwrap();
         fs::write(
             agents.join("unsafe.toml"),
@@ -513,10 +516,10 @@ sandbox_mode = "danger-full-access"
     fn codex_paths_preserve_precedence_and_decode_layers() {
         let memory = tempfile::tempdir().unwrap();
         let project = tempfile::tempdir().unwrap();
-        fs::create_dir_all(memory.path().join(".codex/agents")).unwrap();
-        fs::create_dir_all(project.path().join(".codex/agents")).unwrap();
+        fs::create_dir_all(memory.path().join(".astro/agents")).unwrap();
+        fs::create_dir_all(project.path().join(".astro/agents")).unwrap();
         fs::write(
-            memory.path().join(".codex/agents/reviewer.toml"),
+            memory.path().join(".astro/agents/reviewer.toml"),
             r#"name = "reviewer"
 description = "personal codex"
 developer_instructions = "personal"
@@ -524,7 +527,7 @@ developer_instructions = "personal"
         )
         .unwrap();
         fs::write(
-            project.path().join(".codex/agents/reviewer.toml"),
+            project.path().join(".astro/agents/reviewer.toml"),
             r#"name = "reviewer"
 description = "project codex"
 developer_instructions = "project"

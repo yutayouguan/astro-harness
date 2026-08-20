@@ -343,7 +343,7 @@ mod tests {
 
     fn source_user() -> ConfigLayerSource {
         ConfigLayerSource::User {
-            file: PathBuf::from("/home/test/.codex/config.toml"),
+            file: PathBuf::from("/home/test/.astro/config.toml"),
         }
     }
 
@@ -360,9 +360,9 @@ mod tests {
     #[test]
     fn precedence_and_project_proximity_are_deterministic() {
         let stack = ConfigLayerStack::new(vec![
-            layer(source_project("/repo/.codex"), "model = 'root'"),
+            layer(source_project("/repo/.astro"), "model = 'root'"),
             layer(source_user(), "model = 'user'"),
-            layer(source_project("/repo/sub/.codex"), "model = 'closest'"),
+            layer(source_project("/repo/sub/.astro"), "model = 'closest'"),
             layer(
                 ConfigLayerSource::SessionOverrides,
                 "approval_policy = 'never'",
@@ -375,7 +375,7 @@ mod tests {
         assert!(matches!(
             stack.origin_at(["model"].iter()).unwrap().source,
             ConfigLayerSource::Project { ref dot_config_dir }
-                if dot_config_dir == &PathBuf::from("/repo/sub/.codex")
+                if dot_config_dir == &PathBuf::from("/repo/sub/.astro")
         ));
     }
 
@@ -387,7 +387,7 @@ mod tests {
                 "[features]\na = true\nb = true\nitems = [1, 2]\n",
             ),
             layer(
-                source_project("/repo/.codex"),
+                source_project("/repo/.astro"),
                 "[features]\nb = false\nitems = [3]\n",
             ),
         ]);
@@ -402,7 +402,7 @@ mod tests {
     fn replacing_a_table_removes_descendant_origins() {
         let stack = ConfigLayerStack::new(vec![
             layer(source_user(), "[tools]\na = true\nb = true\n"),
-            layer(source_project("/repo/.codex"), "tools = false\n"),
+            layer(source_project("/repo/.astro"), "tools = false\n"),
         ]);
 
         let origins = stack.origins();
@@ -432,7 +432,7 @@ mod tests {
     fn disabled_layers_are_visible_but_do_not_affect_effective_config() {
         let stack = ConfigLayerStack::new(vec![
             layer(source_user(), "model = 'safe'"),
-            layer(source_project("/repo/.codex"), "model = 'ignored'")
+            layer(source_project("/repo/.astro"), "model = 'ignored'")
                 .disabled("project is untrusted"),
         ]);
 

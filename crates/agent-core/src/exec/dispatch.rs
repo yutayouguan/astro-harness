@@ -1295,8 +1295,8 @@ impl DesktopAgentThreadControl for DefaultDesktopAgentThreadControl {
                 reasoning: message.reasoning,
                 reasoning_content: message.reasoning_content,
                 reasoning_details: message.reasoning_details,
-                codex_reasoning_items: message.codex_reasoning_items,
-                codex_message_items: message.codex_message_items,
+                codex_reasoning_items: message.astro_reasoning_items,
+                codex_message_items: message.astro_message_items,
                 media_json: message.media_json,
             })
             .collect();
@@ -1844,8 +1844,8 @@ mod tests {
         );
         assert!(detail.messages[1].tool_calls.is_some());
         assert!(detail.messages[1].reasoning_details.is_some());
-        assert!(detail.messages[1].codex_reasoning_items.is_some());
-        assert!(detail.messages[1].codex_message_items.is_some());
+        assert!(detail.messages[1].astro_reasoning_items.is_some());
+        assert!(detail.messages[1].astro_message_items.is_some());
         assert!(detail.messages[1].media_json.is_some());
         assert_eq!(detail.messages[2].role, "tool");
         assert_eq!(detail.messages[2].tool_call_id.as_deref(), Some("call-1"));
@@ -4543,8 +4543,8 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let memory_dir = dir.path().join("memory");
         let project = dir.path().join("project");
-        std::fs::create_dir_all(project.join(".codex/agents")).unwrap();
-        let definition = project.join(".codex/agents/reviewer.toml");
+        std::fs::create_dir_all(project.join(".astro/agents")).unwrap();
+        let definition = project.join(".astro/agents/reviewer.toml");
         std::fs::write(
             &definition,
             "name = \"reviewer\"\ndescription = \"review\"\ndeveloper_instructions = \"review\"\nmodel = \"openai:original-model\"\n",
@@ -4950,14 +4950,14 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let memory_dir = dir.path().join("memory");
         let project = dir.path().join("project");
-        std::fs::create_dir_all(project.join(".codex/agents")).unwrap();
+        std::fs::create_dir_all(project.join(".astro/agents")).unwrap();
         std::fs::write(
-            project.join(".codex/agents/parent.toml"),
+            project.join(".astro/agents/parent.toml"),
             "name = \"parent\"\ndescription = \"parent\"\ndeveloper_instructions = \"parent\"\n[[skills.config]]\npath = \"skills/parent/SKILL.md\"\nenabled = true\n",
         )
         .unwrap();
         std::fs::write(
-            project.join(".codex/agents/leaf.toml"),
+            project.join(".astro/agents/leaf.toml"),
             "name = \"leaf\"\ndescription = \"leaf\"\ndeveloper_instructions = \"leaf\"\n[[skills.config]]\npath = \"skills/leaf/SKILL.md\"\nenabled = true\n",
         )
         .unwrap();
@@ -6147,9 +6147,9 @@ mod tests {
     fn custom_layers_preserve_unknown_parent_sandbox_and_merge_skills() {
         let dir = tempfile::tempdir().unwrap();
         let project = dir.path().join("project");
-        std::fs::create_dir_all(project.join(".codex/agents")).unwrap();
+        std::fs::create_dir_all(project.join(".astro/agents")).unwrap();
         std::fs::write(
-            project.join(".codex/agents/reviewer.toml"),
+            project.join(".astro/agents/reviewer.toml"),
             r#"name = "reviewer"
 description = "review"
 developer_instructions = "review carefully"

@@ -337,7 +337,7 @@ fn enforce_file_mutation_policy(
         }
         types::WORKSPACE_PROFILE => {
             let canonical_root = root.canonicalize().unwrap_or_else(|_| root.to_path_buf());
-            for protected in [".git", ".agents", ".codex"] {
+            for protected in [".git", ".agents", ".astro"] {
                 if target.starts_with(root.join(protected))
                     || target.starts_with(canonical_root.join(protected))
                 {
