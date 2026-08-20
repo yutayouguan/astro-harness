@@ -93,6 +93,8 @@ pub enum Op {
     },
     EmitExtension {
         item: ExtensionItem,
+        /// Authoritative turn that owns this item. `None` attaches to the active turn.
+        turn_id: Option<String>,
     },
     Shutdown,
 }

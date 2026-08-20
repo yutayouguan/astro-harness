@@ -433,13 +433,12 @@ fn can_idle_unload_thread(activity: &ThreadActivity) -> bool {
         )
 }
 
-/// 启动 background review，完成后将结果 fire-and-forget 提交为 durable Thread Extension。
-///
-/// 本函数只在拿锁并 `spawn` 等待任务后立即返回；**不**阻塞 Chat 流。
+/// 等待 background review 完成，并将结果提交到原回合的 durable Thread Extension。
 async fn spawn_review_to_thread(
     service: AstroServiceImpl,
     session: &SessionHandle,
     session_id: &str,
+    turn_id: &str,
 ) {
     let sid = session_id.to_string();
     let (notify_tx, mut notify_rx) = tokio::sync::mpsc::unbounded_channel();
@@ -448,37 +447,33 @@ async fn spawn_review_to_thread(
         agent::exec::memory_review::spawn_background_review_after_turn(agent, Some(notify_tx))
             .await;
     }
-    tokio::spawn(async move {
-        if let Some(n) = notify_rx.recv().await {
-            let live_written = !indicates_pending_enqueue(&n.content);
-            if let Err(error) = service
-                .emit_background_review_extension(&sid, n.content, live_written)
-                .await
-            {
-                tracing::warn!(%error, session_id = %sid, "background review extension failed");
-            }
+    if let Some(n) = notify_rx.recv().await {
+        let live_written = !indicates_pending_enqueue(&n.content);
+        if let Err(error) = service
+            .emit_background_review_extension_for_turn(&sid, turn_id, n.content, live_written)
+            .await
+        {
+            tracing::warn!(%error, session_id = %sid, "background review extension failed");
         }
-    });
+    }
 }
 
 /// 启动首轮标题生成，成功后提交 `astro.session_metadata` Extension。
-async fn spawn_title_to_thread(service: AstroServiceImpl, session: &SessionHandle) {
+async fn spawn_title_to_thread(service: AstroServiceImpl, session: &SessionHandle, turn_id: &str) {
     let (notify_tx, mut notify_rx) = tokio::sync::mpsc::unbounded_channel();
     {
         let agent = session.as_ref();
         agent::exec::title_generation::spawn_title_generation_after_turn(agent, Some(notify_tx));
     }
-    tokio::spawn(async move {
-        if let Some(n) = notify_rx.recv().await {
-            let session_id = n.session_id;
-            if let Err(error) = service
-                .emit_session_metadata_extension(&session_id, n.title)
-                .await
-            {
-                tracing::warn!(%error, %session_id, "session metadata extension failed");
-            }
+    if let Some(n) = notify_rx.recv().await {
+        let session_id = n.session_id;
+        if let Err(error) = service
+            .emit_session_metadata_extension_for_turn(&session_id, turn_id, n.title)
+            .await
+        {
+            tracing::warn!(%error, %session_id, "session metadata extension failed");
         }
-    });
+    }
 }
 
 /// Astro gRPC 服务实现：会话 Agent、流式聊天、记忆与技能等 RPC。
@@ -540,23 +535,59 @@ impl AstroServiceImpl {
     fn emit_extension<'a>(
         &'a self,
         thread_id: &'a str,
+        target_turn_id: Option<&'a str>,
+        item_key: &'a str,
         namespace: &'a str,
         payload: serde_json::Value,
     ) -> Pin<Box<dyn Future<Output = Result<(), Status>> + Send + 'a>> {
         Box::pin(async move {
             let managed = self.get_or_create_thread(thread_id).await?;
+            let target_turn_id = match target_turn_id {
+                Some(turn_id) => turn_id.to_string(),
+                None if thread_id == WORKSPACE_EVENT_THREAD_ID => {
+                    format!("{WORKSPACE_EVENT_THREAD_ID}:state")
+                }
+                None => match self.thread_states.get(thread_id).await {
+                    Some(state) => state
+                        .lock()
+                        .await
+                        .history
+                        .completed_turns()
+                        .last()
+                        .map(|turn| turn.id.clone())
+                        .unwrap_or_else(|| format!("{thread_id}:background")),
+                    None => format!("{thread_id}:background"),
+                },
+            };
+            let item_id = format!("{target_turn_id}:{item_key}");
+            let item = agent_protocol::ExtensionItem {
+                id: item_id.clone(),
+                namespace: namespace.into(),
+                payload,
+            };
+            let payload_json =
+                serde_json::to_string(&agent_protocol::TurnItem::Extension(item.clone()))
+                    .map_err(|error| Status::internal(error.to_string()))?;
+            let (reply, materialized) = tokio::sync::oneshot::channel();
+            managed
+                .commands
+                .send(crate::ListenerCommand::WaitForExtension {
+                    item_id,
+                    payload_json,
+                    reply,
+                })
+                .map_err(|_| Status::unavailable("thread listener stopped"))?;
             managed
                 .runtime
                 .submit(agent_protocol::Op::EmitExtension {
-                    item: agent_protocol::ExtensionItem {
-                        id: uuid::Uuid::new_v4().to_string(),
-                        namespace: namespace.into(),
-                        payload,
-                    },
+                    item,
+                    turn_id: Some(target_turn_id),
                 })
                 .await
-                .map(|_| ())
-                .map_err(|error| Status::internal(error.to_string()))
+                .map_err(|error| Status::internal(error.to_string()))?;
+            materialized
+                .await
+                .map_err(|_| Status::unavailable("thread extension was not materialized"))
         })
     }
 
@@ -570,6 +601,30 @@ impl AstroServiceImpl {
     ) -> Result<(), Status> {
         self.emit_extension(
             thread_id,
+            None,
+            "memory:review",
+            "astro.memory",
+            serde_json::json!({
+                "source": "review",
+                "target": "memory",
+                "summary": summary.into(),
+                "live_written": live_written,
+            }),
+        )
+        .await
+    }
+
+    async fn emit_background_review_extension_for_turn(
+        &self,
+        thread_id: &str,
+        turn_id: &str,
+        summary: impl Into<String>,
+        live_written: bool,
+    ) -> Result<(), Status> {
+        self.emit_extension(
+            thread_id,
+            Some(turn_id),
+            "memory:review",
             "astro.memory",
             serde_json::json!({
                 "source": "review",
@@ -590,8 +645,37 @@ impl AstroServiceImpl {
     ) -> Result<(), Status> {
         self.emit_extension(
             thread_id,
+            None,
+            "session_metadata",
             "astro.session_metadata",
             serde_json::json!({"title": title.into()}),
+        )
+        .await
+    }
+
+    async fn emit_session_metadata_extension_for_turn(
+        &self,
+        thread_id: &str,
+        turn_id: &str,
+        title: impl Into<String>,
+    ) -> Result<(), Status> {
+        self.emit_extension(
+            thread_id,
+            Some(turn_id),
+            "session_metadata",
+            "astro.session_metadata",
+            serde_json::json!({"title": title.into()}),
+        )
+        .await
+    }
+
+    async fn emit_background_complete(&self, thread_id: &str, turn_id: &str) -> Result<(), Status> {
+        self.emit_extension(
+            thread_id,
+            Some(turn_id),
+            "background_complete",
+            "astro.background_complete",
+            serde_json::json!({}),
         )
         .await
     }
@@ -605,6 +689,8 @@ impl AstroServiceImpl {
     ) -> Result<(), Status> {
         self.emit_extension(
             WORKSPACE_EVENT_THREAD_ID,
+            None,
+            "pending",
             "astro.pending",
             serde_json::json!({
                 "pending_count": pending_count,
@@ -625,8 +711,21 @@ impl AstroServiceImpl {
                 agent_protocol::EventMsg::TurnComplete(completed)
                     if completed.error.is_none() && allows_post_turn_side_effects("success") =>
                 {
-                    spawn_review_to_thread(self.clone(), &session, &thread_id).await;
-                    spawn_title_to_thread(self.clone(), &session).await;
+                    let service = self.clone();
+                    let session = Arc::clone(&session);
+                    let thread_id = thread_id.clone();
+                    let turn_id = completed.turn_id;
+                    tokio::spawn(async move {
+                        tokio::join!(
+                            spawn_review_to_thread(service.clone(), &session, &thread_id, &turn_id,),
+                            spawn_title_to_thread(service.clone(), &session, &turn_id),
+                        );
+                        if let Err(error) =
+                            service.emit_background_complete(&thread_id, &turn_id).await
+                        {
+                            tracing::warn!(%error, %thread_id, %turn_id, "background completion extension failed");
+                        }
+                    });
                 }
                 agent_protocol::EventMsg::ItemCompleted(agent_protocol::ItemEvent {
                     item: agent_protocol::TurnItem::Extension(extension),
@@ -706,6 +805,7 @@ impl AstroServiceImpl {
             status: activity_rx.borrow().status.clone(),
             history,
             subscribers: Default::default(),
+            background_extension_sinks: Default::default(),
             listener_command_tx: commands.clone(),
             activity_tx,
         }));

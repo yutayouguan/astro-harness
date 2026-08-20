@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::sync::Arc;
 
 use agent_protocol::{Event, EventMsg, TextItem, TurnItem};
@@ -310,10 +311,12 @@ pub(crate) async fn run_thread_listener_observed(
     let pump = tokio::spawn(async move {
         while let Ok(event) = thread.next_event().await {
             let observed = event.clone();
-            if pump_commands
-                .send(ListenerCommand::CoreEvent(event))
-                .is_err()
-            {
+            let command = if observed_events.is_some() {
+                ListenerCommand::ObservedCoreEvent(event)
+            } else {
+                ListenerCommand::CoreEvent(event)
+            };
+            if pump_commands.send(command).is_err() {
                 break;
             }
             if let Some(observed_events) = observed_events.as_ref() {
@@ -333,12 +336,29 @@ pub async fn run_listener_commands(
     mut commands: mpsc::UnboundedReceiver<ListenerCommand>,
     connections: ConnectionRegistry,
 ) {
+    let mut extension_waiters: std::collections::HashMap<
+        (String, String),
+        Vec<tokio::sync::oneshot::Sender<()>>,
+    > = std::collections::HashMap::new();
     while let Some(command) = commands.recv().await {
         match command {
-            ListenerCommand::CoreEvent(event) => {
+            command @ (ListenerCommand::CoreEvent(_) | ListenerCommand::ObservedCoreEvent(_)) => {
+                let (event, retain_background_sink) = match command {
+                    ListenerCommand::CoreEvent(event) => (event, false),
+                    ListenerCommand::ObservedCoreEvent(event) => (event, true),
+                    _ => unreachable!("matched core event variants"),
+                };
                 let (subscribers, outbound) = {
                     let mut state = state.lock().await;
                     state.history.track(&event);
+                    if let EventMsg::TurnComplete(completed) = &event.msg {
+                        if retain_background_sink && completed.error.is_none() {
+                            let retained = state.subscribers.values().cloned().collect();
+                            state
+                                .background_extension_sinks
+                                .insert(completed.turn_id.clone(), retained);
+                        }
+                    }
                     state.status = match &event.msg {
                         EventMsg::TurnStarted(_) => "running".into(),
                         EventMsg::TurnComplete(completed) if completed.error.is_some() => {
@@ -348,12 +368,33 @@ pub async fn run_listener_commands(
                         EventMsg::ShutdownComplete => "shutdown".into(),
                         _ => state.status.clone(),
                     };
+                    let mut subscribers =
+                        state.subscribers.values().cloned().collect::<HashSet<_>>();
+                    let completed_background_turn = match &event.msg {
+                        EventMsg::ItemCompleted(item) => match &item.item {
+                            TurnItem::Extension(extension) => {
+                                if let Some(sink) =
+                                    state.background_extension_sinks.get(&item.turn_id)
+                                {
+                                    subscribers.extend(sink.iter().cloned());
+                                }
+                                (extension.namespace == "astro.background_complete")
+                                    .then(|| item.turn_id.clone())
+                            }
+                            _ => None,
+                        },
+                        _ => None,
+                    };
+                    if let Some(turn_id) = completed_background_turn {
+                        state.background_extension_sinks.remove(&turn_id);
+                    }
                     let _ = state.activity_tx.send(ThreadActivity {
                         status: state.status.clone(),
-                        has_subscribers: !state.subscribers.is_empty(),
+                        has_subscribers: !state.subscribers.is_empty()
+                            || !state.background_extension_sinks.is_empty(),
                     });
                     (
-                        state.subscribers.values().cloned().collect::<Vec<_>>(),
+                        subscribers.into_iter().collect::<Vec<_>>(),
                         event_to_proto(&thread_id, &event),
                     )
                 };
@@ -376,11 +417,28 @@ pub async fn run_listener_commands(
                         {
                             state.subscribers.remove(subscription.connection_id());
                         }
+                        for sink in state.background_extension_sinks.values_mut() {
+                            sink.retain(|retained| retained != &subscription);
+                        }
                     }
                     let _ = state.activity_tx.send(ThreadActivity {
                         status: state.status.clone(),
-                        has_subscribers: !state.subscribers.is_empty(),
+                        has_subscribers: !state.subscribers.is_empty()
+                            || !state.background_extension_sinks.is_empty(),
                     });
+                }
+                if let EventMsg::ItemCompleted(item) = &event.msg {
+                    if let TurnItem::Extension(extension) = &item.item {
+                        if let Ok(payload_json) = serde_json::to_string(&item.item) {
+                            if let Some(waiters) =
+                                extension_waiters.remove(&(extension.id.clone(), payload_json))
+                            {
+                                for waiter in waiters {
+                                    let _ = waiter.send(());
+                                }
+                            }
+                        }
+                    }
                 }
             }
             ListenerCommand::Resume {
@@ -424,10 +482,30 @@ pub async fn run_listener_commands(
                 }
                 let _ = state.activity_tx.send(ThreadActivity {
                     status: state.status.clone(),
-                    has_subscribers: !state.subscribers.is_empty(),
+                    has_subscribers: !state.subscribers.is_empty()
+                        || !state.background_extension_sinks.is_empty(),
                 });
                 if let Some(reply) = reply {
                     let _ = reply.send(());
+                }
+            }
+            ListenerCommand::WaitForExtension {
+                item_id,
+                payload_json,
+                reply,
+            } => {
+                if state
+                    .lock()
+                    .await
+                    .history
+                    .contains_item_payload(&item_id, &payload_json)
+                {
+                    let _ = reply.send(());
+                } else {
+                    extension_waiters
+                        .entry((item_id, payload_json))
+                        .or_default()
+                        .push(reply);
                 }
             }
             ListenerCommand::Stop => break,

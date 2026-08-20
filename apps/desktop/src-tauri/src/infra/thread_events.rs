@@ -73,6 +73,7 @@ struct ActiveState {
     delivered_agent_text: HashMap<String, HashMap<String, String>>,
     delivered_reasoning: HashMap<String, HashMap<String, String>>,
     pending_terminal_errors: HashMap<String, HashMap<String, String>>,
+    delivered_extensions: HashMap<(String, String), String>,
     next_activation: u64,
 }
 
@@ -461,6 +462,18 @@ impl ThreadEventsBridge {
             }
         }
         recovered
+    }
+
+    async fn accept_extension(&self, thread_id: &str, item_id: &str, payload_json: &str) -> bool {
+        let key = (thread_id.into(), item_id.into());
+        let payload_json = payload_json.to_string();
+        let previous = self
+            .active_threads
+            .write()
+            .await
+            .delivered_extensions
+            .insert(key, payload_json.clone());
+        previous.as_deref() != Some(payload_json.as_str())
     }
 
     async fn dedup_terminal_projection(
@@ -929,19 +942,23 @@ async fn subscribe_connection(
 
     // Workspace-wide pending changes have no active chat owner. Subscribe every accepted
     // desktop connection before recovering chat Threads so those durable extensions are live.
-    client
+    let mut snapshots = Vec::new();
+    let workspace = client
         .resume_thread(proto::ResumeThreadRequest {
             connection_id: bridge.connection_id().into(),
             thread_id: WORKSPACE_EVENT_THREAD_ID.into(),
-            include_turns: false,
+            include_turns: true,
         })
         .await
-        .map_err(|error| format!("failed to resume workspace event thread: {error}"))?;
+        .map_err(|error| format!("failed to resume workspace event thread: {error}"))?
+        .into_inner();
+    if let Some(snapshot) = workspace.thread {
+        snapshots.push(snapshot);
+    }
 
     // Generation barrier: every durable snapshot is emitted before any buffered event from
     // this accepted stream. Public readiness remains false until recovery completes, so a new
     // SubmitTurn cannot race an old terminal snapshot.
-    let mut snapshots = Vec::new();
     for (thread_id, activation) in bridge.active_activations().await {
         let connection_id = bridge.connection_id().to_string();
         match bridge
@@ -982,6 +999,18 @@ async fn subscribe_connection(
             ReconnectDelivery::Snapshot(snapshot) => {
                 let thread_id = snapshot.thread_id.clone();
                 emit_snapshot(app, &snapshot);
+                let recovered_extensions = recover_snapshot_extensions(bridge, &snapshot).await;
+                if thread_id == WORKSPACE_EVENT_THREAD_ID {
+                    for extension in recovered_extensions {
+                        if let Some(session_event) =
+                            extension_to_session_event(&thread_id, extension.clone())
+                        {
+                            emit_session_event(app, session_event);
+                        }
+                        emit_chat_events(app, &thread_id, map_extension_to_chat(extension));
+                    }
+                    continue;
+                }
                 let reconciled = reconcile_snapshot(&snapshot);
                 if let Some(turn_id) = reconciled.active_turn_id.as_deref() {
                     bridge.bind_observed_turn(&thread_id, turn_id).await;
@@ -1008,6 +1037,14 @@ async fn subscribe_connection(
                         .accept_terminal(&thread_id, projection_turn_id, recovered)
                         .await;
                     emit_chat_events(app, &thread_id, terminal);
+                }
+                for extension in recovered_extensions {
+                    if let Some(session_event) =
+                        extension_to_session_event(&thread_id, extension.clone())
+                    {
+                        emit_session_event(app, session_event);
+                    }
+                    emit_chat_events(app, &thread_id, map_extension_to_chat(extension));
                 }
             }
             ReconnectDelivery::Live(event) => {
@@ -1043,6 +1080,12 @@ async fn process_live_event(
             .await;
     }
     if let Some(proto::thread_event::Payload::Extension(extension)) = event.payload.as_ref() {
+        if !bridge
+            .accept_extension(&thread_id, &extension.item_id, &extension.payload_json)
+            .await
+        {
+            return;
+        }
         if let Some(session_event) = extension_to_session_event(&thread_id, extension.clone()) {
             emit_session_event(app, session_event);
         }
@@ -1353,6 +1396,7 @@ fn map_extension_to_chat(extension: proto::ThreadExtension) -> Vec<ChatStreamEve
     match extension.namespace.as_str() {
         "astro.thread_settings"
         | "astro.thread_rollback"
+        | "astro.background_complete"
         | "astro.pending"
         | "astro.session_metadata" => Vec::new(),
         "astro.context_usage" => vec![context_usage_event(&extension.payload_json)],
@@ -1375,13 +1419,15 @@ fn map_extension_to_chat(extension: proto::ThreadExtension) -> Vec<ChatStreamEve
 fn memory_update_from_value(payload: &serde_json::Value) -> ChatStreamEvent {
     ChatStreamEvent::MemoryUpdate {
         operation: payload
-            .get("op")
+            .get("source")
             .and_then(serde_json::Value::as_str)
+            .or_else(|| payload.get("op").and_then(serde_json::Value::as_str))
             .unwrap_or("memory")
             .into(),
         content: payload
-            .get("content")
+            .get("summary")
             .and_then(serde_json::Value::as_str)
+            .or_else(|| payload.get("content").and_then(serde_json::Value::as_str))
             .unwrap_or_default()
             .into(),
     }
@@ -1563,6 +1609,7 @@ fn snapshot_turn_recovery_events(turn: &proto::ThreadTurn) -> Vec<ChatStreamEven
                 item_reasoning.push(reasoning.content);
                 continue;
             }
+            Ok(TurnItem::Extension(_)) => continue,
             _ => {}
         }
         events.extend(map_item_event(
@@ -1592,6 +1639,47 @@ fn snapshot_turn_recovery_events(turn: &proto::ThreadTurn) -> Vec<ChatStreamEven
         events.push(ChatStreamEvent::Token { content: message });
     }
     events
+}
+
+fn snapshot_extensions(snapshot: &proto::ThreadSnapshot) -> Vec<proto::ThreadExtension> {
+    snapshot
+        .turns
+        .iter()
+        .chain(snapshot.active_turn.iter())
+        .flat_map(|turn| turn.items.iter())
+        .filter_map(|item| {
+            let TurnItem::Extension(extension) =
+                serde_json::from_str::<TurnItem>(&item.payload_json).ok()?
+            else {
+                return None;
+            };
+            Some(proto::ThreadExtension {
+                item_id: extension.id,
+                namespace: extension.namespace,
+                payload_json: extension.payload.to_string(),
+            })
+        })
+        .collect()
+}
+
+async fn recover_snapshot_extensions(
+    bridge: &ThreadEventsBridge,
+    snapshot: &proto::ThreadSnapshot,
+) -> Vec<proto::ThreadExtension> {
+    let mut recovered = Vec::new();
+    for extension in snapshot_extensions(snapshot) {
+        if bridge
+            .accept_extension(
+                &snapshot.thread_id,
+                &extension.item_id,
+                &extension.payload_json,
+            )
+            .await
+        {
+            recovered.push(extension);
+        }
+    }
+    recovered
 }
 
 #[derive(Clone, Serialize)]
@@ -1890,6 +1978,97 @@ mod tests {
         assert_eq!(mapped.session_id.as_deref(), Some("session-1"));
         assert_eq!(memory.source, "review");
         assert!(memory.live_written);
+    }
+
+    #[test]
+    fn memory_extension_chat_adapter_reads_new_schema_and_keeps_legacy_fallback() {
+        let current = map_extension_to_chat(proto::ThreadExtension {
+            item_id: "memory-current".into(),
+            namespace: "astro.memory".into(),
+            payload_json: serde_json::json!({
+                "source":"review",
+                "target":"memory",
+                "summary":"updated",
+                "live_written":true
+            })
+            .to_string(),
+        });
+        assert!(matches!(
+            current.as_slice(),
+            [ChatStreamEvent::MemoryUpdate { operation, content }]
+                if operation == "review" && content == "updated"
+        ));
+
+        let legacy = map_extension_to_chat(proto::ThreadExtension {
+            item_id: "memory-legacy".into(),
+            namespace: "astro.memory".into(),
+            payload_json: serde_json::json!({"op":"memory","content":"legacy"}).to_string(),
+        });
+        assert!(matches!(
+            legacy.as_slice(),
+            [ChatStreamEvent::MemoryUpdate { operation, content }]
+                if operation == "memory" && content == "legacy"
+        ));
+    }
+
+    #[tokio::test]
+    async fn snapshot_extension_recovery_is_idempotent_by_stable_item_id() {
+        let extension = TurnItem::Extension(agent_protocol::ExtensionItem {
+            id: "turn-1:memory:review".into(),
+            namespace: "astro.memory".into(),
+            payload: serde_json::json!({
+                "source":"review",
+                "target":"memory",
+                "summary":"updated",
+                "live_written":true
+            }),
+        });
+        let mut snapshot = proto::ThreadSnapshot {
+            thread_id: "session-1".into(),
+            status: "idle".into(),
+            turns: vec![proto::ThreadTurn {
+                id: "turn-1".into(),
+                status: "completed".into(),
+                items: vec![proto::ThreadItem {
+                    id: "turn-1:memory:review".into(),
+                    item_type: "extension".into(),
+                    status: "completed".into(),
+                    payload_json: serde_json::to_string(&extension).unwrap(),
+                }],
+                last_agent_message: String::new(),
+                error: None,
+                has_error: false,
+            }],
+            active_turn: None,
+            has_active_turn: false,
+        };
+        let bridge = ThreadEventsBridge::new();
+        let first = recover_snapshot_extensions(&bridge, &snapshot).await;
+        let second = recover_snapshot_extensions(&bridge, &snapshot).await;
+        assert_eq!(first.len(), 1);
+        assert_eq!(first[0].namespace, "astro.memory");
+        assert!(
+            second.is_empty(),
+            "unchanged snapshot must not replay twice"
+        );
+
+        snapshot.turns[0].items[0].payload_json =
+            serde_json::to_string(&TurnItem::Extension(agent_protocol::ExtensionItem {
+                id: "turn-1:memory:review".into(),
+                namespace: "astro.memory".into(),
+                payload: serde_json::json!({
+                    "source":"review",
+                    "target":"memory",
+                    "summary":"updated again",
+                    "live_written":true
+                }),
+            }))
+            .unwrap();
+        assert_eq!(
+            recover_snapshot_extensions(&bridge, &snapshot).await.len(),
+            1,
+            "same stable item id with new state must still be delivered"
+        );
     }
 
     #[test]

@@ -125,13 +125,24 @@ impl ThreadHistoryBuilder {
     }
 
     fn upsert_item(&mut self, turn_id: &str, item: &TurnItem, status: &str) {
-        let turn = self
+        let existing_turn = self
             .active
             .as_mut()
             .filter(|turn| turn.id == turn_id)
             .or_else(|| self.completed.iter_mut().find(|turn| turn.id == turn_id));
-        let Some(turn) = turn else {
-            return;
+        let turn = match existing_turn {
+            Some(turn) => turn,
+            None if matches!(item, TurnItem::Extension(_)) => {
+                self.completed.push(TurnSnapshot {
+                    id: turn_id.into(),
+                    status: "completed".into(),
+                    items: Vec::new(),
+                    last_agent_message: None,
+                    error: None,
+                });
+                self.completed.last_mut().expect("synthetic turn inserted")
+            }
+            None => return,
         };
         if let Some(existing) = turn.items.iter_mut().find(|entry| entry.id == item.id()) {
             existing.status = status.into();
@@ -173,10 +184,22 @@ impl ThreadHistoryBuilder {
     pub fn completed_turns(&self) -> &[TurnSnapshot] {
         &self.completed
     }
+
+    pub fn contains_item_payload(&self, item_id: &str, payload_json: &str) -> bool {
+        self.active.iter().chain(self.completed.iter()).any(|turn| {
+            turn.items.iter().any(|item| {
+                item.id == item_id
+                    && serde_json::to_string(&item.item)
+                        .is_ok_and(|serialized| serialized == payload_json)
+            })
+        })
+    }
 }
 
 pub enum ListenerCommand {
     CoreEvent(Event),
+    /// Runtime event observed by the production side-effect supervisor.
+    ObservedCoreEvent(Event),
     Resume {
         subscription: ConnectionGenerationKey,
         include_turns: bool,
@@ -185,6 +208,11 @@ pub enum ListenerCommand {
     Unsubscribe {
         subscription: ConnectionGenerationKey,
         reply: Option<oneshot::Sender<()>>,
+    },
+    WaitForExtension {
+        item_id: String,
+        payload_json: String,
+        reply: oneshot::Sender<()>,
     },
     Stop,
 }
@@ -199,6 +227,8 @@ pub struct ThreadState {
     pub status: String,
     pub history: ThreadHistoryBuilder,
     pub subscribers: HashMap<ConnectionId, ConnectionGenerationKey>,
+    /// Terminal-time delivery targets retained only until `astro.background_complete`.
+    pub background_extension_sinks: HashMap<String, Vec<ConnectionGenerationKey>>,
     pub listener_command_tx: mpsc::UnboundedSender<ListenerCommand>,
     pub activity_tx: tokio::sync::watch::Sender<ThreadActivity>,
 }
@@ -534,6 +564,7 @@ mod tests {
                         ((*id).to_string(), key)
                     })
                     .collect(),
+                background_extension_sinks: HashMap::new(),
                 listener_command_tx,
                 activity_tx,
             })),

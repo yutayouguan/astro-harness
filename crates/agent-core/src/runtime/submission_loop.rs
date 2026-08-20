@@ -43,8 +43,8 @@ pub(crate) async fn submission_loop(
                 }
                 false
             }
-            Op::EmitExtension { item } => {
-                session.record_extension(submission.id, item).await;
+            Op::EmitExtension { item, turn_id } => {
+                session.record_extension(submission.id, item, turn_id).await;
                 false
             }
             Op::Shutdown => {
@@ -99,19 +99,27 @@ impl Session {
         .await;
     }
 
-    async fn record_extension(&self, submission_id: String, item: agent_protocol::ExtensionItem) {
-        let turn_id = self
-            .active_turn
-            .lock()
-            .await
-            .as_ref()
-            .and_then(|turn| turn.task.as_ref())
-            .map(|running| running.turn_context.sub_id().to_string())
-            .unwrap_or_else(|| submission_id.clone());
+    async fn record_extension(
+        &self,
+        submission_id: String,
+        item: agent_protocol::ExtensionItem,
+        target_turn_id: Option<String>,
+    ) {
+        let turn_id = match target_turn_id {
+            Some(turn_id) => turn_id,
+            None => self
+                .active_turn
+                .lock()
+                .await
+                .as_ref()
+                .and_then(|turn| turn.task.as_ref())
+                .map(|running| running.turn_context.sub_id().to_string())
+                .unwrap_or_else(|| submission_id.clone()),
+        };
         self.send_event(
-            &submission_id,
+            &turn_id,
             EventMsg::ItemCompleted(ItemEvent {
-                turn_id,
+                turn_id: turn_id.clone(),
                 item: TurnItem::Extension(item),
             }),
         )

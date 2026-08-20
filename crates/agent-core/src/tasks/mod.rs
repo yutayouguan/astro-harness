@@ -1766,6 +1766,7 @@ mod tests {
                     namespace: "control_probe".into(),
                     payload: serde_json::json!({"responsive": true}),
                 },
+                turn_id: None,
             })
             .await
             .unwrap();
