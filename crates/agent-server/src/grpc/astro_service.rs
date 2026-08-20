@@ -442,6 +442,7 @@ enum BackgroundPhaseOutcome {
     Cancelled,
 }
 
+#[cfg(test)]
 async fn run_bounded_post_turn_phase<F, E, Finalize>(
     work: F,
     finalize: Finalize,
@@ -451,27 +452,67 @@ where
     E: Send + 'static,
     Finalize: Future<Output = ()>,
 {
-    finish_bounded_post_turn_task(tokio::spawn(work), finalize).await
+    finish_bounded_post_turn_task_with_cancel(tokio::spawn(work), finalize, None).await
 }
 
+async fn run_bounded_post_turn_phase_until_cancelled<F, E, Finalize>(
+    work: F,
+    finalize: Finalize,
+    lifecycle: tokio_util::sync::CancellationToken,
+) -> BackgroundPhaseOutcome
+where
+    F: Future<Output = Result<(), E>> + Send + 'static,
+    E: Send + 'static,
+    Finalize: Future<Output = ()>,
+{
+    finish_bounded_post_turn_task_with_cancel(tokio::spawn(work), finalize, Some(lifecycle)).await
+}
+
+#[cfg(test)]
 async fn finish_bounded_post_turn_task<E, Finalize>(
-    mut task: tokio::task::JoinHandle<Result<(), E>>,
+    task: tokio::task::JoinHandle<Result<(), E>>,
     finalize: Finalize,
 ) -> BackgroundPhaseOutcome
 where
     E: Send + 'static,
     Finalize: Future<Output = ()>,
 {
-    let outcome = match tokio::time::timeout(crate::POST_TURN_SIDE_EFFECT_TIMEOUT, &mut task).await
-    {
-        Ok(Ok(Ok(()))) => BackgroundPhaseOutcome::Completed,
-        Ok(Ok(Err(_))) => BackgroundPhaseOutcome::Failed,
-        Ok(Err(error)) if error.is_panic() => BackgroundPhaseOutcome::Panicked,
-        Ok(Err(_)) => BackgroundPhaseOutcome::Cancelled,
-        Err(_) => {
+    finish_bounded_post_turn_task_with_cancel(task, finalize, None).await
+}
+
+async fn finish_bounded_post_turn_task_with_cancel<E, Finalize>(
+    mut task: tokio::task::JoinHandle<Result<(), E>>,
+    finalize: Finalize,
+    lifecycle: Option<tokio_util::sync::CancellationToken>,
+) -> BackgroundPhaseOutcome
+where
+    E: Send + 'static,
+    Finalize: Future<Output = ()>,
+{
+    let cancelled = async {
+        match lifecycle {
+            Some(lifecycle) => lifecycle.cancelled().await,
+            None => std::future::pending::<()>().await,
+        }
+    };
+    let result = tokio::select! {
+        result = tokio::time::timeout(crate::POST_TURN_SIDE_EFFECT_TIMEOUT, &mut task) => Some(result),
+        () = cancelled => None,
+    };
+    let outcome = match result {
+        Some(Ok(Ok(Ok(())))) => BackgroundPhaseOutcome::Completed,
+        Some(Ok(Ok(Err(_)))) => BackgroundPhaseOutcome::Failed,
+        Some(Ok(Err(error))) if error.is_panic() => BackgroundPhaseOutcome::Panicked,
+        Some(Ok(Err(_))) => BackgroundPhaseOutcome::Cancelled,
+        Some(Err(_)) => {
             task.abort();
             let _ = task.await;
             BackgroundPhaseOutcome::TimedOut
+        }
+        None => {
+            task.abort();
+            let _ = task.await;
+            BackgroundPhaseOutcome::Cancelled
         }
     };
     finalize.await;
@@ -523,11 +564,10 @@ fn register_extension_waiter(
 /// 等待 background review 完成，并将结果提交到原回合的 durable Thread Extension。
 async fn spawn_review_to_thread(
     service: AstroServiceImpl,
+    managed: &Arc<ManagedThread>,
     session: &SessionHandle,
-    session_id: &str,
     turn_id: &str,
 ) -> Result<(), Status> {
-    let sid = session_id.to_string();
     let job = agent::exec::memory_review::job_from_agent(session.as_ref()).await;
     let applied = agent::exec::memory_review::maybe_run_background_review(job)
         .await
@@ -535,7 +575,7 @@ async fn spawn_review_to_thread(
     if let Some(n) = agent::exec::memory_review::review_notify_from_applied(&applied) {
         let live_written = !indicates_pending_enqueue(&n.content);
         service
-            .emit_background_review_extension_for_turn(&sid, turn_id, n.content, live_written)
+            .emit_background_review_extension_for_turn(managed, turn_id, n.content, live_written)
             .await?;
     }
     Ok(())
@@ -544,6 +584,7 @@ async fn spawn_review_to_thread(
 /// 启动首轮标题生成，成功后提交 `astro.session_metadata` Extension。
 async fn spawn_title_to_thread(
     service: AstroServiceImpl,
+    managed: &Arc<ManagedThread>,
     session: &SessionHandle,
     turn_id: &str,
 ) -> Result<(), Status> {
@@ -552,9 +593,8 @@ async fn spawn_title_to_thread(
         .await
         .map_err(|error| Status::internal(error.to_string()))?
     {
-        let session_id = n.session_id;
         service
-            .emit_session_metadata_extension_for_turn(&session_id, turn_id, n.title)
+            .emit_session_metadata_extension_for_turn(managed, turn_id, n.title)
             .await?;
     }
     Ok(())
@@ -643,30 +683,41 @@ impl AstroServiceImpl {
                     None => format!("{thread_id}:background"),
                 },
             };
-            let item_id = format!("{target_turn_id}:{item_key}");
-            let item = agent_protocol::ExtensionItem {
-                id: item_id.clone(),
-                namespace: namespace.into(),
-                payload,
-            };
-            let payload_json =
-                serde_json::to_string(&agent_protocol::TurnItem::Extension(item.clone()))
-                    .map_err(|error| Status::internal(error.to_string()))?;
-            let (_registration, materialized) =
-                register_extension_waiter(&managed.commands, item_id, payload_json)
-                    .ok_or_else(|| Status::unavailable("thread listener stopped"))?;
-            managed
-                .runtime
-                .submit(agent_protocol::Op::EmitExtension {
-                    item,
-                    turn_id: Some(target_turn_id),
-                })
+            Self::emit_extension_on_managed(&managed, target_turn_id, item_key, namespace, payload)
                 .await
-                .map_err(|error| Status::internal(error.to_string()))?;
-            materialized
-                .await
-                .map_err(|_| Status::unavailable("thread extension was not materialized"))
         })
+    }
+
+    async fn emit_extension_on_managed(
+        managed: &Arc<ManagedThread>,
+        target_turn_id: String,
+        item_key: &str,
+        namespace: &str,
+        payload: serde_json::Value,
+    ) -> Result<(), Status> {
+        let item_id = format!("{target_turn_id}:{item_key}");
+        let item = agent_protocol::ExtensionItem {
+            id: item_id.clone(),
+            namespace: namespace.into(),
+            payload,
+        };
+        let payload_json =
+            serde_json::to_string(&agent_protocol::TurnItem::Extension(item.clone()))
+                .map_err(|error| Status::internal(error.to_string()))?;
+        let (_registration, materialized) =
+            register_extension_waiter(&managed.commands, item_id, payload_json)
+                .ok_or_else(|| Status::unavailable("thread listener stopped"))?;
+        managed
+            .runtime
+            .submit(agent_protocol::Op::EmitExtension {
+                item,
+                turn_id: Some(target_turn_id),
+            })
+            .await
+            .map_err(|error| Status::internal(error.to_string()))?;
+        materialized
+            .await
+            .map_err(|_| Status::unavailable("thread extension was not materialized"))
     }
 
     /// Production background-review emitter; public for durable integration coverage.
@@ -694,14 +745,14 @@ impl AstroServiceImpl {
 
     async fn emit_background_review_extension_for_turn(
         &self,
-        thread_id: &str,
+        managed: &Arc<ManagedThread>,
         turn_id: &str,
         summary: impl Into<String>,
         live_written: bool,
     ) -> Result<(), Status> {
-        self.emit_extension(
-            thread_id,
-            Some(turn_id),
+        Self::emit_extension_on_managed(
+            managed,
+            turn_id.to_string(),
             "memory:review",
             "astro.memory",
             serde_json::json!({
@@ -733,13 +784,13 @@ impl AstroServiceImpl {
 
     async fn emit_session_metadata_extension_for_turn(
         &self,
-        thread_id: &str,
+        managed: &Arc<ManagedThread>,
         turn_id: &str,
         title: impl Into<String>,
     ) -> Result<(), Status> {
-        self.emit_extension(
-            thread_id,
-            Some(turn_id),
+        Self::emit_extension_on_managed(
+            managed,
+            turn_id.to_string(),
             "session_metadata",
             "astro.session_metadata",
             serde_json::json!({"title": title.into()}),
@@ -747,10 +798,14 @@ impl AstroServiceImpl {
         .await
     }
 
-    async fn emit_background_complete(&self, thread_id: &str, turn_id: &str) -> Result<(), Status> {
-        self.emit_extension(
-            thread_id,
-            Some(turn_id),
+    async fn emit_background_complete(
+        &self,
+        managed: &Arc<ManagedThread>,
+        turn_id: &str,
+    ) -> Result<(), Status> {
+        Self::emit_extension_on_managed(
+            managed,
+            turn_id.to_string(),
             "background_complete",
             "astro.background_complete",
             serde_json::json!({}),
@@ -782,36 +837,60 @@ impl AstroServiceImpl {
         self,
         thread_id: String,
         session: SessionHandle,
+        managed: std::sync::Weak<ManagedThread>,
+        lifecycle: tokio_util::sync::CancellationToken,
         mut events: tokio::sync::mpsc::UnboundedReceiver<agent_protocol::Event>,
     ) {
-        while let Some(event) = events.recv().await {
+        let mut phases = tokio::task::JoinSet::new();
+        loop {
+            let event = tokio::select! {
+                biased;
+                () = lifecycle.cancelled() => break,
+                completed = phases.join_next(), if !phases.is_empty() => {
+                    if let Some(Err(error)) = completed {
+                        tracing::warn!(%error, %thread_id, "post-turn supervisor task failed");
+                    }
+                    continue;
+                }
+                event = events.recv() => match event {
+                    Some(event) => event,
+                    None => break,
+                },
+            };
             match event.msg {
                 agent_protocol::EventMsg::TurnComplete(completed)
                     if completed.error.is_none() && allows_post_turn_side_effects("success") =>
                 {
+                    let Some(managed) = managed.upgrade() else {
+                        break;
+                    };
                     let service = self.clone();
                     let session = Arc::clone(&session);
                     let thread_id = thread_id.clone();
                     let turn_id = completed.turn_id;
-                    tokio::spawn(async move {
+                    let phase_lifecycle = lifecycle.clone();
+                    let finalize_lifecycle = phase_lifecycle.clone();
+                    phases.spawn(async move {
                         let work_service = service.clone();
+                        let work_managed = Arc::clone(&managed);
                         let work_session = Arc::clone(&session);
                         let work_thread_id = thread_id.clone();
                         let work_turn_id = turn_id.clone();
-                        let finalize_service = service.clone();
-                        let finalize_thread_id = thread_id.clone();
+                        let finalize_service = service;
+                        let finalize_managed = Arc::clone(&managed);
                         let finalize_turn_id = turn_id.clone();
-                        let outcome = run_bounded_post_turn_phase(
+                        let outcome = run_bounded_post_turn_phase_until_cancelled(
                             async move {
                                 let (review, title) = tokio::join!(
                                     spawn_review_to_thread(
                                         work_service.clone(),
+                                        &work_managed,
                                         &work_session,
-                                        &work_thread_id,
                                         &work_turn_id,
                                     ),
                                     spawn_title_to_thread(
                                         work_service,
+                                        &work_managed,
                                         &work_session,
                                         &work_turn_id,
                                     ),
@@ -827,26 +906,31 @@ impl AstroServiceImpl {
                                 Ok::<(), Status>(())
                             },
                             async move {
+                                if finalize_lifecycle.is_cancelled() {
+                                    let _ = finalize_managed.commands.send(
+                                        crate::ListenerCommand::ExpireBackgroundSink {
+                                            turn_id: finalize_turn_id.clone(),
+                                        },
+                                    );
+                                    return;
+                                }
                                 let marker = tokio::time::timeout(
                                     std::time::Duration::from_secs(30),
                                     finalize_service.emit_background_complete(
-                                        &finalize_thread_id,
+                                        &finalize_managed,
                                         &finalize_turn_id,
                                     ),
                                 )
                                 .await;
                                 if !matches!(marker, Ok(Ok(()))) {
-                                    if let Some(managed) =
-                                        finalize_service.threads.get(&finalize_thread_id).await
-                                    {
-                                        let _ = managed.commands.send(
-                                            crate::ListenerCommand::ExpireBackgroundSink {
-                                                turn_id: finalize_turn_id.clone(),
-                                            },
-                                        );
-                                    }
+                                    let _ = finalize_managed.commands.send(
+                                        crate::ListenerCommand::ExpireBackgroundSink {
+                                            turn_id: finalize_turn_id.clone(),
+                                        },
+                                    );
                                 }
                             },
+                            phase_lifecycle,
                         )
                         .await;
                         if outcome != BackgroundPhaseOutcome::Completed {
@@ -867,12 +951,22 @@ impl AstroServiceImpl {
                     let pending_count = memory::list_pending(&self.memory_dir)
                         .map(|items| items.len() as u32)
                         .unwrap_or(0);
-                    if let Err(error) = self.emit_pending_extension(pending_count, "enqueued").await
-                    {
-                        tracing::warn!(%error, "workspace pending extension failed");
+                    tokio::select! {
+                        biased;
+                        () = lifecycle.cancelled() => break,
+                        result = self.emit_pending_extension(pending_count, "enqueued") => {
+                            if let Err(error) = result {
+                                tracing::warn!(%error, "workspace pending extension failed");
+                            }
+                        }
                     }
                 }
                 _ => {}
+            }
+        }
+        while let Some(result) = phases.join_next().await {
+            if let Err(error) = result {
+                tracing::warn!(%error, %thread_id, "post-turn supervisor task failed while stopping");
             }
         }
     }
@@ -940,11 +1034,6 @@ impl AstroServiceImpl {
             .insert(thread_id.to_string(), Arc::clone(&state))
             .await;
         let (observed_tx, observed_rx) = tokio::sync::mpsc::unbounded_channel();
-        tokio::spawn(self.clone().observe_thread_side_effects(
-            thread_id.to_string(),
-            Arc::clone(&session),
-            observed_rx,
-        ));
         let listener = tokio::spawn(crate::thread_listener::run_thread_listener_observed(
             thread_id.to_string(),
             Arc::clone(&runtime),
@@ -965,6 +1054,15 @@ impl AstroServiceImpl {
             candidate.runtime.wait_terminated().await;
             return Ok(existing);
         }
+        let lifecycle = candidate.lifecycle_token();
+        let supervisor = tokio::spawn(self.clone().observe_thread_side_effects(
+            thread_id.to_string(),
+            Arc::clone(&session),
+            Arc::downgrade(&candidate),
+            lifecycle,
+            observed_rx,
+        ));
+        candidate.set_side_effect_supervisor(supervisor).await;
         self.spawn_idle_unload(thread_id.to_string(), Arc::clone(&candidate));
         Ok(candidate)
     }
@@ -1683,6 +1781,7 @@ impl AstroServiceImpl {
             }
         }
         if let Some(managed) = removed_thread.as_ref() {
+            managed.stop_side_effects().await;
             let _ = managed.runtime.submit(agent_protocol::Op::Shutdown).await;
             managed.runtime.wait_terminated().await;
             let _ = managed.runtime.flush_rollout().await;
@@ -4261,6 +4360,95 @@ mod tests {
         .await;
         assert_eq!(cancelled, BackgroundPhaseOutcome::Cancelled);
         assert_eq!(finalized.load(Ordering::SeqCst), 3);
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn released_generation_background_finalizer_cannot_resurrect_thread_or_session() {
+        let dir = TempDir::new().unwrap();
+        memory::ensure_workspace(dir.path()).unwrap();
+        let service = AstroServiceImpl::new(dir.path().to_path_buf());
+        let old = service
+            .get_or_create_thread("released-background")
+            .await
+            .expect("old generation");
+        let lifecycle = old.lifecycle_token();
+        let finalized = Arc::new(AtomicBool::new(false));
+        let finalized_by_task = Arc::clone(&finalized);
+        let commands = old.commands.clone();
+        let supervisor = tokio::spawn(async move {
+            run_bounded_post_turn_phase_until_cancelled(
+                std::future::pending::<Result<(), Status>>(),
+                async move {
+                    let _ = commands.send(crate::ListenerCommand::ExpireBackgroundSink {
+                        turn_id: "turn-old".into(),
+                    });
+                    finalized_by_task.store(true, Ordering::SeqCst);
+                },
+                lifecycle,
+            )
+            .await;
+        });
+        old.set_side_effect_supervisor(supervisor).await;
+
+        let release_service = service.clone();
+        let release = tokio::spawn(async move {
+            release_service
+                .release_session_runtime("released-background")
+                .await
+        });
+        for _ in 0..16 {
+            if release.is_finished() {
+                break;
+            }
+            tokio::task::yield_now().await;
+        }
+        assert!(
+            release.is_finished(),
+            "explicit release must cancel work and expire the old sink without waiting for the 30s marker timeout"
+        );
+        release.await.expect("release task");
+        assert!(!service.threads.contains("released-background").await);
+        assert!(!service
+            .sessions
+            .read()
+            .await
+            .contains_key("released-background"));
+        assert!(finalized.load(Ordering::SeqCst));
+        assert!(old.side_effect_supervisor_is_finished().await);
+        assert!(old.listener_is_finished().await);
+    }
+
+    #[tokio::test]
+    async fn old_background_finalizer_cannot_write_into_new_same_id_generation() {
+        let dir = TempDir::new().unwrap();
+        memory::ensure_workspace(dir.path()).unwrap();
+        let service = AstroServiceImpl::new(dir.path().to_path_buf());
+        let old = service
+            .get_or_create_thread("reused-background")
+            .await
+            .expect("old generation");
+        service.release_session_runtime("reused-background").await;
+        let current = service
+            .get_or_create_thread("reused-background")
+            .await
+            .expect("new generation");
+        assert!(!Arc::ptr_eq(&old, &current));
+
+        let _ = service.emit_background_complete(&old, "turn-old").await;
+        let state = service
+            .thread_states
+            .get("reused-background")
+            .await
+            .expect("new state");
+        let state = state.lock().await;
+        assert!(
+            state
+                .history
+                .completed_turns()
+                .iter()
+                .all(|turn| turn.id != "turn-old"),
+            "an old-generation marker must never mutate the replacement generation"
+        );
     }
 
     #[tokio::test]

@@ -574,6 +574,24 @@ async fn background_sink_survives_a_reconnect_gap_until_same_logical_id_returns(
     tokio::task::yield_now().await;
 
     let (mut replacement, _, _) = connections.register("desktop-gap".into()).await;
+    assert!(
+        tokio::time::timeout(std::time::Duration::from_millis(50), replacement.recv())
+            .await
+            .is_err(),
+        "register alone must not replay durable history; reconnect recovery is a Resume contract"
+    );
+    let snapshot = resume(&connections, &commands, "desktop-gap", true).await;
+    assert!(snapshot.turns.iter().any(|turn| {
+        turn.items.iter().any(|item| {
+            matches!(
+                &item.item,
+                TurnItem::Extension(extension)
+                    if extension.id == "turn-gap:memory"
+                        && extension.namespace == "astro.memory"
+                        && extension.payload["summary"] == "while disconnected"
+            )
+        })
+    }));
     commands
         .send(ListenerCommand::CoreEvent(Event {
             id: "turn-gap".into(),

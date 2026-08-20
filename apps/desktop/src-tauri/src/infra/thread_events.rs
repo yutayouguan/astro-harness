@@ -66,6 +66,8 @@ pub(crate) fn emit_session_event(app: &AppHandle, event: SessionEventDto) {
 #[derive(Default)]
 struct ActiveState {
     threads: HashSet<String>,
+    background_pending: HashMap<String, HashSet<String>>,
+    background_subscriptions: HashMap<String, u64>,
     turn_epochs: HashMap<String, HashMap<String, u64>>,
     activations: HashMap<String, u64>,
     awaiting_submissions: HashMap<String, HashSet<u64>>,
@@ -79,7 +81,13 @@ struct ActiveState {
 
 struct DeferredTerminal {
     awaiting_activation: u64,
+    background_turn: bool,
     events: Vec<ChatStreamEvent>,
+}
+
+struct RecoveredExtension {
+    turn_id: String,
+    extension: proto::ThreadExtension,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -245,6 +253,7 @@ impl ThreadEventsBridge {
         state.next_activation = state.next_activation.wrapping_add(1).max(1);
         let activation = state.next_activation;
         state.threads.insert(thread_id.clone());
+        state.background_subscriptions.remove(&thread_id);
         state.deferred_terminals.remove(&thread_id);
         state
             .awaiting_submissions
@@ -348,6 +357,13 @@ impl ThreadEventsBridge {
         let Some(deferred) = deferred else {
             return Vec::new();
         };
+        if deferred.background_turn {
+            state
+                .background_pending
+                .entry(thread_id.into())
+                .or_default()
+                .insert(turn_id.into());
+        }
         Self::clear_thread(&mut state, thread_id);
         drop(state);
         self.queue_terminal_unsubscribe(thread_id, activation);
@@ -367,6 +383,81 @@ impl ThreadEventsBridge {
                     .map(|activation| (thread_id.clone(), activation))
             })
             .collect()
+    }
+
+    async fn background_resume_threads(&self) -> Vec<String> {
+        let mut threads = self
+            .active_threads
+            .read()
+            .await
+            .background_pending
+            .keys()
+            .cloned()
+            .collect::<Vec<_>>();
+        threads.sort();
+        threads
+    }
+
+    async fn background_resume_targets(&self) -> Vec<(String, u64)> {
+        let threads = self.background_resume_threads().await;
+        let mut targets = Vec::new();
+        for thread_id in threads {
+            let gate = self.terminal_cleanup.gate(&thread_id);
+            let _owner_guard = gate.lock().await;
+            let mut state = self.active_threads.write().await;
+            if state.threads.contains(&thread_id)
+                || !state.background_pending.contains_key(&thread_id)
+            {
+                continue;
+            }
+            let token = match state.background_subscriptions.get(&thread_id).copied() {
+                Some(token) => token,
+                None => {
+                    state.next_activation = state.next_activation.wrapping_add(1).max(1);
+                    let token = state.next_activation;
+                    state
+                        .background_subscriptions
+                        .insert(thread_id.clone(), token);
+                    token
+                }
+            };
+            drop(state);
+            self.terminal_cleanup
+                .owners
+                .write()
+                .await
+                .insert(thread_id.clone(), token);
+            targets.push((thread_id, token));
+        }
+        targets
+    }
+
+    async fn complete_background_turn(&self, thread_id: &str, turn_id: &str) -> bool {
+        let mut state = self.active_threads.write().await;
+        let removed = state
+            .background_pending
+            .get_mut(thread_id)
+            .is_some_and(|turns| turns.remove(turn_id));
+        if !removed {
+            return false;
+        }
+        let empty = state
+            .background_pending
+            .get(thread_id)
+            .is_some_and(HashSet::is_empty);
+        if !empty {
+            return true;
+        }
+        state.background_pending.remove(thread_id);
+        let subscription = state.background_subscriptions.remove(thread_id);
+        let active = state.threads.contains(thread_id);
+        drop(state);
+        if !active {
+            if let Some(subscription) = subscription {
+                self.queue_terminal_unsubscribe(thread_id, subscription);
+            }
+        }
+        true
     }
 
     async fn record_delivered_projection(
@@ -520,11 +611,23 @@ impl ThreadEventsBridge {
 
     /// Accept each terminal once, or defer it while a newer SubmitTurn ack can still steer the
     /// same turn id into the current activation.
+    #[cfg(test)]
     async fn accept_terminal(
         &self,
         thread_id: &str,
         turn_id: &str,
         events: Vec<ChatStreamEvent>,
+    ) -> Vec<ChatStreamEvent> {
+        self.accept_terminal_with_background(thread_id, turn_id, events, false)
+            .await
+    }
+
+    async fn accept_terminal_with_background(
+        &self,
+        thread_id: &str,
+        turn_id: &str,
+        events: Vec<ChatStreamEvent>,
+        background_turn: bool,
     ) -> Vec<ChatStreamEvent> {
         let mut state = self.active_threads.write().await;
         if state
@@ -544,6 +647,13 @@ impl ThreadEventsBridge {
         };
         let current_activation = state.activations.get(thread_id).copied();
         if current_activation == Some(turn_epoch) {
+            if background_turn {
+                state
+                    .background_pending
+                    .entry(thread_id.into())
+                    .or_default()
+                    .insert(turn_id.into());
+            }
             Self::clear_thread(&mut state, thread_id);
             drop(state);
             self.queue_terminal_unsubscribe(thread_id, turn_epoch);
@@ -565,6 +675,7 @@ impl ThreadEventsBridge {
                     turn_id.into(),
                     DeferredTerminal {
                         awaiting_activation: current_activation,
+                        background_turn,
                         events,
                     },
                 );
@@ -711,6 +822,38 @@ impl ThreadEventsBridge {
             .copied()
             == Some(activation);
         if !is_current || !is_owner {
+            return Ok(None);
+        }
+        resume().await.map(Some)
+    }
+
+    async fn run_background_resume_if_owned<F, Fut, T>(
+        &self,
+        thread_id: String,
+        subscription: u64,
+        resume: F,
+    ) -> Result<Option<T>, String>
+    where
+        F: FnOnce() -> Fut,
+        Fut: Future<Output = Result<T, String>>,
+    {
+        let gate = self.terminal_cleanup.gate(&thread_id);
+        let _owner_guard = gate.lock().await;
+        let state = self.active_threads.read().await;
+        let is_pending = state.background_pending.contains_key(&thread_id);
+        let is_current =
+            state.background_subscriptions.get(&thread_id).copied() == Some(subscription);
+        let is_active = state.threads.contains(&thread_id);
+        drop(state);
+        let is_owner = self
+            .terminal_cleanup
+            .owners
+            .read()
+            .await
+            .get(&thread_id)
+            .copied()
+            == Some(subscription);
+        if !is_pending || !is_current || is_active || !is_owner {
             return Ok(None);
         }
         resume().await.map(Some)
@@ -988,6 +1131,35 @@ async fn subscribe_connection(
             }
         }
     }
+    for (thread_id, subscription) in bridge.background_resume_targets().await {
+        let connection_id = bridge.connection_id().to_string();
+        match bridge
+            .run_background_resume_if_owned(thread_id.clone(), subscription, || async {
+                client
+                    .resume_thread(proto::ResumeThreadRequest {
+                        connection_id,
+                        thread_id: thread_id.clone(),
+                        include_turns: true,
+                    })
+                    .await
+                    .map(|response| response.into_inner())
+                    .map_err(|error| error.to_string())
+            })
+            .await
+        {
+            Ok(Some(response)) => {
+                if let Some(snapshot) = response.thread {
+                    snapshots.push(snapshot);
+                }
+            }
+            Ok(None) => {}
+            Err(error) => {
+                return bridge.complete_recovery(Err(format!(
+                    "failed to resume background thread {thread_id}: {error}"
+                )));
+            }
+        }
+    }
 
     boundary_tx
         .send(())
@@ -1001,7 +1173,8 @@ async fn subscribe_connection(
                 emit_snapshot(app, &snapshot);
                 let recovered_extensions = recover_snapshot_extensions(bridge, &snapshot).await;
                 if thread_id == WORKSPACE_EVENT_THREAD_ID {
-                    for extension in recovered_extensions {
+                    for recovered in recovered_extensions {
+                        let extension = recovered.extension;
                         if let Some(session_event) =
                             extension_to_session_event(&thread_id, extension.clone())
                         {
@@ -1034,11 +1207,24 @@ async fn subscribe_connection(
                         .dedup_terminal_projection(&thread_id, projection_turn_id, recovered)
                         .await;
                     let terminal = bridge
-                        .accept_terminal(&thread_id, projection_turn_id, recovered)
+                        .accept_terminal_with_background(
+                            &thread_id,
+                            projection_turn_id,
+                            recovered,
+                            snapshot.turns.iter().any(|turn| {
+                                turn.id == projection_turn_id && turn.status == "completed"
+                            }),
+                        )
                         .await;
                     emit_chat_events(app, &thread_id, terminal);
                 }
-                for extension in recovered_extensions {
+                for recovered in recovered_extensions {
+                    if recovered.extension.namespace == "astro.background_complete" {
+                        bridge
+                            .complete_background_turn(&thread_id, &recovered.turn_id)
+                            .await;
+                    }
+                    let extension = recovered.extension;
                     if let Some(session_event) =
                         extension_to_session_event(&thread_id, extension.clone())
                     {
@@ -1089,7 +1275,14 @@ async fn process_live_event(
         if let Some(session_event) = extension_to_session_event(&thread_id, extension.clone()) {
             emit_session_event(app, session_event);
         }
+        if extension.namespace == "astro.background_complete" {
+            bridge.complete_background_turn(&thread_id, &turn_id).await;
+        }
     }
+    let background_turn = matches!(
+        event.payload.as_ref(),
+        Some(proto::thread_event::Payload::TurnComplete(complete)) if !complete.has_error
+    );
     let terminal = matches!(
         event.payload,
         Some(proto::thread_event::Payload::TurnComplete(_))
@@ -1100,7 +1293,9 @@ async fn process_live_event(
         let events = bridge
             .dedup_terminal_projection(&thread_id, &turn_id, events)
             .await;
-        bridge.accept_terminal(&thread_id, &turn_id, events).await
+        bridge
+            .accept_terminal_with_background(&thread_id, &turn_id, events, background_turn)
+            .await
     } else {
         bridge
             .record_delivered_projection(&thread_id, &turn_id, &events)
@@ -1641,22 +1836,25 @@ fn snapshot_turn_recovery_events(turn: &proto::ThreadTurn) -> Vec<ChatStreamEven
     events
 }
 
-fn snapshot_extensions(snapshot: &proto::ThreadSnapshot) -> Vec<proto::ThreadExtension> {
+fn snapshot_extensions(snapshot: &proto::ThreadSnapshot) -> Vec<RecoveredExtension> {
     snapshot
         .turns
         .iter()
         .chain(snapshot.active_turn.iter())
-        .flat_map(|turn| turn.items.iter())
-        .filter_map(|item| {
+        .flat_map(|turn| turn.items.iter().map(move |item| (turn, item)))
+        .filter_map(|(turn, item)| {
             let TurnItem::Extension(extension) =
                 serde_json::from_str::<TurnItem>(&item.payload_json).ok()?
             else {
                 return None;
             };
-            Some(proto::ThreadExtension {
-                item_id: extension.id,
-                namespace: extension.namespace,
-                payload_json: extension.payload.to_string(),
+            Some(RecoveredExtension {
+                turn_id: turn.id.clone(),
+                extension: proto::ThreadExtension {
+                    item_id: extension.id,
+                    namespace: extension.namespace,
+                    payload_json: extension.payload.to_string(),
+                },
             })
         })
         .collect()
@@ -1665,9 +1863,10 @@ fn snapshot_extensions(snapshot: &proto::ThreadSnapshot) -> Vec<proto::ThreadExt
 async fn recover_snapshot_extensions(
     bridge: &ThreadEventsBridge,
     snapshot: &proto::ThreadSnapshot,
-) -> Vec<proto::ThreadExtension> {
-    let mut recovered = Vec::new();
-    for extension in snapshot_extensions(snapshot) {
+) -> Vec<RecoveredExtension> {
+    let mut accepted = Vec::new();
+    for recovered in snapshot_extensions(snapshot) {
+        let extension = &recovered.extension;
         if bridge
             .accept_extension(
                 &snapshot.thread_id,
@@ -1676,10 +1875,15 @@ async fn recover_snapshot_extensions(
             )
             .await
         {
-            recovered.push(extension);
+            if extension.namespace == "astro.background_complete" {
+                bridge
+                    .complete_background_turn(&snapshot.thread_id, &recovered.turn_id)
+                    .await;
+            }
+            accepted.push(recovered);
         }
     }
-    recovered
+    accepted
 }
 
 #[derive(Clone, Serialize)]
@@ -2046,7 +2250,7 @@ mod tests {
         let first = recover_snapshot_extensions(&bridge, &snapshot).await;
         let second = recover_snapshot_extensions(&bridge, &snapshot).await;
         assert_eq!(first.len(), 1);
-        assert_eq!(first[0].namespace, "astro.memory");
+        assert_eq!(first[0].extension.namespace, "astro.memory");
         assert!(
             second.is_empty(),
             "unchanged snapshot must not replay twice"
@@ -2230,6 +2434,166 @@ mod tests {
             .await
             .is_empty());
         assert!(!bridge.is_active("session-1").await);
+    }
+
+    #[tokio::test]
+    async fn successful_terminal_moves_thread_to_background_resume_set_until_marker() {
+        let bridge = ThreadEventsBridge::new();
+        let activation = bridge.activate("session-1").await;
+        bridge
+            .bind_submitted_turn_if_current("session-1", activation, "turn-1")
+            .await;
+
+        assert!(!bridge
+            .accept_terminal_with_background(
+                "session-1",
+                "turn-1",
+                terminal_projection("turn-1"),
+                true,
+            )
+            .await
+            .is_empty());
+        assert!(!bridge.is_active("session-1").await);
+        assert_eq!(
+            bridge.background_resume_threads().await,
+            vec!["session-1".to_string()]
+        );
+
+        assert!(bridge.complete_background_turn("session-1", "turn-1").await);
+        assert!(bridge.background_resume_threads().await.is_empty());
+    }
+
+    #[tokio::test]
+    async fn offline_review_and_marker_recover_once_then_release_background_subscription() {
+        let bridge = ThreadEventsBridge::new();
+        let mut cleanup = bridge.take_terminal_unsubscribe_requests();
+        let activation = bridge.activate("session-offline").await;
+        bridge
+            .bind_submitted_turn_if_current("session-offline", activation, "turn-offline")
+            .await;
+        bridge
+            .accept_terminal_with_background(
+                "session-offline",
+                "turn-offline",
+                terminal_projection("turn-offline"),
+                true,
+            )
+            .await;
+        let terminal_cleanup = cleanup.recv().await.expect("terminal cleanup");
+        assert!(bridge
+            .run_terminal_unsubscribe_if_owned(terminal_cleanup, |_| async { Ok(()) })
+            .await
+            .unwrap());
+        let background_targets = bridge.background_resume_targets().await;
+        let [(thread_id, subscription)] = background_targets.as_slice() else {
+            panic!("one background Resume target expected");
+        };
+        let subscriber = Arc::new(AtomicBool::new(false));
+        let resumed = Arc::clone(&subscriber);
+        assert_eq!(
+            bridge
+                .run_background_resume_if_owned(
+                    thread_id.clone(),
+                    *subscription,
+                    move || async move {
+                        resumed.store(true, Ordering::SeqCst);
+                        Ok::<_, String>(())
+                    },
+                )
+                .await
+                .unwrap(),
+            Some(())
+        );
+
+        let review = TurnItem::Extension(agent_protocol::ExtensionItem {
+            id: "turn-offline:memory:review".into(),
+            namespace: "astro.memory".into(),
+            payload: serde_json::json!({
+                "source":"review",
+                "target":"memory",
+                "summary":"offline review",
+                "live_written":true
+            }),
+        });
+        let marker = TurnItem::Extension(agent_protocol::ExtensionItem {
+            id: "turn-offline:background_complete".into(),
+            namespace: "astro.background_complete".into(),
+            payload: serde_json::json!({}),
+        });
+        let mut snapshot = proto::ThreadSnapshot {
+            thread_id: "session-offline".into(),
+            status: "idle".into(),
+            turns: vec![proto::ThreadTurn {
+                id: "turn-offline".into(),
+                status: "completed".into(),
+                items: vec![proto::ThreadItem {
+                    id: "turn-offline:memory:review".into(),
+                    item_type: "extension".into(),
+                    status: "completed".into(),
+                    payload_json: serde_json::to_string(&review).unwrap(),
+                }],
+                last_agent_message: "done".into(),
+                error: None,
+                has_error: false,
+            }],
+            active_turn: None,
+            has_active_turn: false,
+        };
+
+        let recovered = recover_snapshot_extensions(&bridge, &snapshot).await;
+        let session_events = recovered
+            .iter()
+            .filter_map(|extension| {
+                extension_to_session_event("session-offline", extension.extension.clone())
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(
+            session_events.len(),
+            1,
+            "offline review must reach session_event"
+        );
+        assert_eq!(
+            session_events[0]
+                .memory_updated
+                .as_ref()
+                .expect("memory event")
+                .summary,
+            "offline review"
+        );
+        assert_eq!(
+            bridge.background_resume_threads().await,
+            vec!["session-offline".to_string()],
+            "without the completion marker the resumed formal subscription stays live"
+        );
+        assert!(subscriber.load(Ordering::SeqCst));
+        assert!(cleanup.try_recv().is_err());
+
+        snapshot.turns[0].items.push(proto::ThreadItem {
+            id: "turn-offline:background_complete".into(),
+            item_type: "extension".into(),
+            status: "completed".into(),
+            payload_json: serde_json::to_string(&marker).unwrap(),
+        });
+        let marker_recovery = recover_snapshot_extensions(&bridge, &snapshot).await;
+        assert_eq!(marker_recovery.len(), 1);
+        assert_eq!(
+            marker_recovery[0].extension.namespace,
+            "astro.background_complete"
+        );
+        assert!(bridge.background_resume_threads().await.is_empty());
+        let background_cleanup = cleanup.recv().await.expect("background cleanup");
+        let unsubscribed = Arc::clone(&subscriber);
+        assert!(bridge
+            .run_terminal_unsubscribe_if_owned(background_cleanup, move |_| async move {
+                unsubscribed.store(false, Ordering::SeqCst);
+                Ok(())
+            })
+            .await
+            .unwrap());
+        assert!(!subscriber.load(Ordering::SeqCst));
+        assert!(recover_snapshot_extensions(&bridge, &snapshot)
+            .await
+            .is_empty());
     }
 
     #[tokio::test]
