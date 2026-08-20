@@ -16,18 +16,18 @@
 - Modify: `crates/agent-types/src/network_policy.rs`
 - Modify: `crates/agent-types/src/lib.rs`
 
-- [ ] **Step 1: 先写 serde/contract 失败测试**
+- [x] **Step 1: 先写 serde/contract 失败测试**
 
   锁定 `NetworkApprovalContext`、`NetworkPolicyRuleAction`、`NetworkPolicyAmendment` 的
   snake_case wire format，以及 `NetworkApprovalProtocol::Https` 对 `https_connect` /
   `http-connect` 的兼容。
 
-- [ ] **Step 2: 实现最小共享类型并 re-export**
+- [x] **Step 2: 实现最小共享类型并 re-export**
 
   名称、字段和 serde 语义与 Codex `protocol/src/approvals.rs` 对齐。
   不在 `types` crate 中加入 persistence 或审批业务逻辑。
 
-- [ ] **Step 3: 验证并提交**
+- [x] **Step 3: 验证并提交**
 
 ```bash
 cargo fmt --all
