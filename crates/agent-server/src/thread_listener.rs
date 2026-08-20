@@ -495,6 +495,12 @@ pub async fn run_listener_commands(
                         status: state.status.clone(),
                         has_subscribers: true,
                     });
+                    let mut pending_background_turn_ids = state
+                        .background_extension_sinks
+                        .keys()
+                        .cloned()
+                        .collect::<Vec<_>>();
+                    pending_background_turn_ids.sort();
                     ThreadSnapshot {
                         thread_id: thread_id.clone(),
                         status: state.status.clone(),
@@ -504,6 +510,7 @@ pub async fn run_listener_commands(
                             Vec::new()
                         },
                         active_turn: state.history.active_turn_snapshot(),
+                        pending_background_turn_ids,
                     }
                 };
                 let _ = reply.send(snapshot);

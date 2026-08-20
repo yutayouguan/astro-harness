@@ -456,6 +456,52 @@ async fn terminal_cleanup_keeps_background_extension_sink_online() {
 }
 
 #[tokio::test]
+async fn resume_snapshot_authoritatively_reports_pending_background_turns() {
+    let (connections, commands) = start_listener().await;
+    let (_connection, _, _) = connections.register("desktop-snapshot".into()).await;
+    resume(&connections, &commands, "desktop-snapshot", false).await;
+    for turn_id in ["turn-pending-2", "turn-pending-1"] {
+        commands
+            .send(ListenerCommand::ObservedCoreEvent(Event {
+                id: turn_id.into(),
+                msg: EventMsg::TurnComplete(TurnCompleteEvent {
+                    turn_id: turn_id.into(),
+                    last_agent_message: Some("done".into()),
+                    error: None,
+                }),
+            }))
+            .expect("listener should retain the background sink");
+    }
+
+    let pending = resume(&connections, &commands, "desktop-snapshot", true).await;
+    assert_eq!(
+        pending.pending_background_turn_ids,
+        vec!["turn-pending-1", "turn-pending-2"],
+        "Resume must expose the authoritative server-side sink set"
+    );
+
+    commands
+        .send(ListenerCommand::ExpireBackgroundSink {
+            turn_id: "turn-pending-1".into(),
+        })
+        .expect("listener should expire the sink");
+    let partially_expired = resume(&connections, &commands, "desktop-snapshot", true).await;
+    assert_eq!(
+        partially_expired.pending_background_turn_ids,
+        vec!["turn-pending-2"]
+    );
+    commands
+        .send(ListenerCommand::ExpireBackgroundSink {
+            turn_id: "turn-pending-2".into(),
+        })
+        .expect("listener should expire the final sink");
+    assert!(resume(&connections, &commands, "desktop-snapshot", true)
+        .await
+        .pending_background_turn_ids
+        .is_empty());
+}
+
+#[tokio::test]
 async fn background_sink_hands_off_to_same_connection_id_replacement_without_resume() {
     let (connections, commands) = start_listener().await;
     let (mut old_connection, old_cancel, _) = connections.register("desktop-replaced".into()).await;

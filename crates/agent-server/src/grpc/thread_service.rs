@@ -153,6 +153,7 @@ fn snapshot_to_proto(snapshot: ThreadSnapshot) -> proto::ThreadSnapshot {
         turns: snapshot.turns.into_iter().map(turn_to_proto).collect(),
         has_active_turn: active_turn.is_some(),
         active_turn,
+        pending_background_turn_ids: snapshot.pending_background_turn_ids,
     }
 }
 
@@ -1159,6 +1160,18 @@ mod tests {
     use tempfile::TempDir;
 
     use super::*;
+
+    #[test]
+    fn snapshot_proto_preserves_authoritative_pending_background_turns() {
+        let mapped = snapshot_to_proto(ThreadSnapshot {
+            thread_id: "session-1".into(),
+            status: "idle".into(),
+            turns: vec![],
+            active_turn: None,
+            pending_background_turn_ids: vec!["turn-1".into(), "turn-2".into()],
+        });
+        assert_eq!(mapped.pending_background_turn_ids, vec!["turn-1", "turn-2"]);
+    }
 
     #[test]
     fn terminal_thread_event_maps_to_run_finished_then_done() {

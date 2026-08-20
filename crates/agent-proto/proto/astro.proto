@@ -209,6 +209,7 @@ message ThreadSnapshot {
   repeated ThreadTurn turns = 3;
   ThreadTurn active_turn = 4;
   bool has_active_turn = 5;
+  repeated string pending_background_turn_ids = 6;
 }
 
 message ThreadTurn {

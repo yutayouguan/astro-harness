@@ -637,21 +637,29 @@ pub async fn start_chat(app: AppHandle, request: StartChatRequest) -> Result<Str
 /// 暂停 / 继续 / 取消进行中的聊天流。
 ///
 /// `resume` / `stream_resume` 仅恢复流式生成，**不可**用于回答 interrupt。
-#[tauri::command]
-pub async fn chat_control(session_id: String, action: String) -> Result<(), String> {
-    let action = match action.trim().to_ascii_lowercase().as_str() {
-        "pause" => ChatControlAction::ChatControlPause,
-        "resume" | "stream_resume" => ChatControlAction::ChatControlStreamResume,
-        "cancel" | "stop" => ChatControlAction::ChatControlCancel,
-        "new_chat" | "new-chat" => ChatControlAction::ChatControlNewChat,
-        "refresh_memory" | "refresh-memory" => ChatControlAction::ChatControlRefreshMemory,
-        "release_session" | "release-session" => ChatControlAction::ReleaseSession,
+fn parse_chat_control_action(action: &str) -> Result<(ChatControlAction, bool), String> {
+    let parsed = match action.trim().to_ascii_lowercase().as_str() {
+        "pause" => (ChatControlAction::ChatControlPause, false),
+        "resume" | "stream_resume" => (ChatControlAction::ChatControlStreamResume, false),
+        "cancel" | "stop" => (ChatControlAction::ChatControlCancel, false),
+        "new_chat" | "new-chat" => (ChatControlAction::ChatControlNewChat, true),
+        "refresh_memory" | "refresh-memory" => {
+            (ChatControlAction::ChatControlRefreshMemory, false)
+        }
+        "release_session" | "release-session" => (ChatControlAction::ReleaseSession, true),
         other => {
             return Err(format!(
                 "未知控制动作: {other}（pause|resume|stream_resume|cancel|new_chat|refresh_memory|release_session）"
             ))
         }
     };
+    Ok(parsed)
+}
+
+pub(crate) async fn chat_control_rpc(
+    session_id: String,
+    action: ChatControlAction,
+) -> Result<(), String> {
     let grpc_address = default_grpc_address();
     let endpoint = endpoint_url(&grpc_address);
     let mut client = AstroServiceClient::connect(endpoint)
@@ -703,6 +711,27 @@ pub async fn steer_chat(
         .map_err(|e| e.to_string())?
         .into_inner();
     Ok(response.accepted)
+}
+
+#[tauri::command]
+pub async fn chat_control(
+    app: AppHandle,
+    session_id: String,
+    action: String,
+) -> Result<(), String> {
+    let (action, forget_thread) = parse_chat_control_action(&action)?;
+    if forget_thread {
+        app.state::<ThreadEventsBridge>()
+            .forget_thread(&session_id)
+            .await;
+    }
+    let result = chat_control_rpc(session_id.clone(), action).await;
+    if forget_thread {
+        app.state::<ThreadEventsBridge>()
+            .forget_thread(&session_id)
+            .await;
+    }
+    result
 }
 
 /// 提交 interrupt resume（HITL 阻塞闸门）；同回合续跑，无需再调 start_chat。
@@ -925,4 +954,26 @@ pub async fn count_tokens(model: String) -> Result<u32, String> {
         .map_err(|e| e.to_string())?
         .into_inner();
     Ok(result.input_tokens)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::parse_chat_control_action;
+    use proto::ChatControlAction;
+
+    #[test]
+    fn explicit_session_lifecycle_actions_forget_thread_recovery_targets() {
+        assert_eq!(
+            parse_chat_control_action("new_chat").unwrap(),
+            (ChatControlAction::ChatControlNewChat, true)
+        );
+        assert_eq!(
+            parse_chat_control_action("release_session").unwrap(),
+            (ChatControlAction::ReleaseSession, true)
+        );
+        assert_eq!(
+            parse_chat_control_action("refresh_memory").unwrap(),
+            (ChatControlAction::ChatControlRefreshMemory, false)
+        );
+    }
 }

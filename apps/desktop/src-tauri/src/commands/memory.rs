@@ -14,7 +14,7 @@ use serde::{Deserialize, Serialize};
 use tauri::AppHandle;
 use tauri_plugin_dialog::DialogExt;
 
-use super::chat::chat_control;
+use super::chat::chat_control_rpc;
 use crate::infra::thread_events::{
     emit_session_event, now_ts_ms, MemoryUpdatedDto, PendingChangedDto, SessionEventDto,
 };
@@ -79,7 +79,7 @@ pub async fn refresh_memory(
 
     let mut session_refreshed = false;
     if let Some(sid) = session_id.filter(|s| !s.trim().is_empty()) {
-        match chat_control(sid, "refresh_memory".into()).await {
+        match chat_control_rpc(sid, proto::ChatControlAction::ChatControlRefreshMemory).await {
             Ok(()) => session_refreshed = true,
             Err(e) => {
                 tracing::debug!(error = %e, "活会话 refresh_memory 跳过（可能无内存会话）");
