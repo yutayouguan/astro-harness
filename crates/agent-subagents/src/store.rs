@@ -17,7 +17,8 @@ use crate::{
 const V2_THREAD_SELECT: &str =
     "thread_id, root_thread_id, parent_thread_id, canonical_path, task_name,
      agent_type, session_id, status_kind, status_payload, created_at, updated_at";
-const FINAL_ERROR_MAX_CHARS: usize = 3_600;
+const ERROR_MAX_TOKENS: usize = 900;
+const APPROX_BYTES_PER_TOKEN: usize = 4;
 
 fn v2_default_db_path() -> PathBuf {
     home::default_memory_dir().join("subagents-v2.db")
@@ -742,7 +743,7 @@ fn final_parent_notification(
         RunnerEvent::TurnErrored {
             turn_id, message, ..
         } => {
-            let message = types::truncate_chars(message, FINAL_ERROR_MAX_CHARS);
+            let message = truncate_terminal_error(message);
             (
                 turn_id.as_str(),
                 format!(
@@ -775,6 +776,42 @@ fn final_parent_notification(
         ),
         trigger_turn: false,
     })
+}
+
+/// Match Codex's terminal-error truncation: retain an even byte-budgeted
+/// prefix and suffix on UTF-8 boundaries and report the omitted token estimate.
+fn truncate_terminal_error(message: &str) -> String {
+    let max_bytes = ERROR_MAX_TOKENS.saturating_mul(APPROX_BYTES_PER_TOKEN);
+    if message.len() <= max_bytes {
+        return message.to_string();
+    }
+
+    let left_budget = max_bytes / 2;
+    let right_budget = max_bytes - left_budget;
+    let tail_start_target = message.len().saturating_sub(right_budget);
+    let mut prefix_end = 0;
+    let mut suffix_start = message.len();
+    for (index, character) in message.char_indices() {
+        let character_end = index + character.len_utf8();
+        if character_end <= left_budget {
+            prefix_end = character_end;
+        } else if index >= tail_start_target && suffix_start == message.len() {
+            suffix_start = index;
+        }
+    }
+    if suffix_start < prefix_end {
+        suffix_start = prefix_end;
+    }
+
+    let removed_tokens = message
+        .len()
+        .saturating_sub(max_bytes)
+        .div_ceil(APPROX_BYTES_PER_TOKEN);
+    format!(
+        "{}…{removed_tokens} tokens truncated…{}",
+        &message[..prefix_end],
+        &message[suffix_start..]
+    )
 }
 
 fn status_kind_str(kind: AgentStatusKind) -> &'static str {
@@ -1087,7 +1124,10 @@ mod tests {
         let child = store
             .reserve_thread(&reservation("child", "/root/child"))
             .unwrap();
-        let long_error = "故障".repeat(4_000);
+        let head = "HEAD-中文-🚀";
+        let tail = "TAIL-DIAGNOSTIC-尾部-🚨";
+        let long_error = format!("{head}{}{tail}", "🙂".repeat(1_000));
+        let removed_tokens = long_error.len().saturating_sub(3_600).div_ceil(4);
         let errored = final_parent_notification(
             &child,
             &RunnerEvent::TurnErrored {
@@ -1096,8 +1136,16 @@ mod tests {
             },
         )
         .unwrap();
-        assert!(errored.payload.contains('…'));
-        assert!(errored.payload.chars().count() < 4_000);
+        let truncated = errored
+            .payload
+            .strip_prefix("Message Type: FINAL_ANSWER\nTask name: /root\nSender: /root/child\nPayload:\nAgent errored: ")
+            .unwrap()
+            .split_once("\n\nThis agent's turn failed.")
+            .unwrap()
+            .0;
+        assert!(truncated.starts_with(head));
+        assert!(truncated.ends_with(tail));
+        assert!(truncated.contains(&format!("…{removed_tokens} tokens truncated…")));
     }
 
     #[test]

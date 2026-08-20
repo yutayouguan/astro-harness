@@ -888,10 +888,6 @@ impl AgentThreadDispatch for DefaultAgentThreadDispatch {
             previous_status,
         })
     }
-
-    fn notify_main_steer(&self) {
-        self.control.notify_main_steer();
-    }
 }
 
 fn build_runtime_request(
@@ -4012,7 +4008,7 @@ mod tests {
             .control
             .persist_main_steer(&AgentPath::root(), "new root input".into())
             .unwrap();
-        AgentThreadDispatch::notify_main_steer(&dispatch);
+        dispatch.control.notify_main_steer();
         let root_result = tokio::time::timeout(Duration::from_millis(100), root_wait.as_mut())
             .await
             .expect("a later root input should wake the existing wait")
@@ -4117,7 +4113,7 @@ mod tests {
             .control
             .persist_main_steer(&AgentPath::root(), "new root input".into())
             .unwrap();
-        AgentThreadDispatch::notify_main_steer(&dispatch);
+        dispatch.control.notify_main_steer();
 
         let root_result = AgentThreadDispatch::wait_agent(
             &dispatch,
@@ -6141,7 +6137,7 @@ mod tests {
                     .control
                     .persist_main_steer(&AgentPath::root(), "new root input".into())
                     .unwrap();
-                AgentThreadDispatch::notify_main_steer(&dispatch);
+                dispatch.control.notify_main_steer();
             }
         );
         let value = serde_json::to_value(result.unwrap()).unwrap();

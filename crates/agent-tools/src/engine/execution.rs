@@ -78,6 +78,62 @@ pub trait AgentThreadDispatch: Send + Sync {
         &self,
         request: InterruptAgentV2Request,
     ) -> anyhow::Result<InterruptAgentV2Result>;
+}
 
-    fn notify_main_steer(&self);
+#[cfg(test)]
+mod contract_tests {
+    use super::*;
+
+    struct SixOperationDispatch;
+
+    #[async_trait]
+    impl AgentThreadDispatch for SixOperationDispatch {
+        async fn spawn_agent(
+            &self,
+            _request: SpawnAgentDispatchRequest,
+        ) -> anyhow::Result<SpawnAgentV2Result> {
+            unreachable!()
+        }
+
+        async fn list_agents(
+            &self,
+            _request: ListAgentsV2Request,
+        ) -> anyhow::Result<Vec<AgentThreadV2>> {
+            unreachable!()
+        }
+
+        async fn send_message(
+            &self,
+            _request: MessageAgentV2Request,
+        ) -> anyhow::Result<MessageAgentV2Result> {
+            unreachable!()
+        }
+
+        async fn followup_task(
+            &self,
+            _request: FollowupAgentDispatchRequest,
+        ) -> anyhow::Result<MessageAgentV2Result> {
+            unreachable!()
+        }
+
+        async fn wait_agent(
+            &self,
+            _request: WaitAgentV2Request,
+        ) -> anyhow::Result<WaitAgentV2Result> {
+            unreachable!()
+        }
+
+        async fn interrupt_agent(
+            &self,
+            _request: InterruptAgentV2Request,
+        ) -> anyhow::Result<InterruptAgentV2Result> {
+            unreachable!()
+        }
+    }
+
+    #[test]
+    fn public_dispatch_contract_has_exactly_six_operations() {
+        fn assert_dispatch<T: AgentThreadDispatch>() {}
+        assert_dispatch::<SixOperationDispatch>();
+    }
 }
