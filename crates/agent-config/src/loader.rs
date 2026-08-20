@@ -8,7 +8,9 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use toml::Value as TomlValue;
 
-use crate::{ConfigLayerEntry, ConfigLayerError, ConfigLayerSource, ConfigLayerStack};
+use crate::{
+    ConfigLayerEntry, ConfigLayerError, ConfigLayerSource, ConfigLayerStack, EffectiveConfig,
+};
 
 pub const CONFIG_TOML_FILE: &str = "config.toml";
 pub const DOT_CODEX_DIR: &str = ".codex";
@@ -97,6 +99,14 @@ pub struct LocalConfigLoad {
     pub diagnostics: Vec<ConfigDiagnostic>,
     pub project_root: PathBuf,
     pub project_trust: ProjectTrust,
+}
+
+impl LocalConfigLoad {
+    /// Freeze the loaded layers into the immutable snapshot consumed by one
+    /// request, turn, or long-lived subsystem configuration generation.
+    pub fn resolve(&self) -> EffectiveConfig {
+        self.layers.resolve()
+    }
 }
 
 #[derive(Debug, Error)]
@@ -505,13 +515,11 @@ mod tests {
         options.profile = Some("review".to_string());
 
         let loaded = load_local_config(&options).unwrap();
+        let effective = loaded.resolve();
         assert_eq!(loaded.project_trust, ProjectTrust::Trusted);
-        assert_eq!(
-            loaded.layers.effective_config()["model"].as_str(),
-            Some("closest-project")
-        );
+        assert_eq!(effective.raw()["model"].as_str(), Some("closest-project"));
         assert!(matches!(
-            loaded.layers.origin_at(["model"].iter()).unwrap().source,
+            effective.origin_at(["model"].iter()).unwrap().source,
             ConfigLayerSource::Project { ref dot_config_dir }
                 if dot_config_dir
                     == &fixture.nested.canonicalize().unwrap().join(DOT_CODEX_DIR)

@@ -10,6 +10,7 @@ use std::collections::BTreeMap;
 use std::fmt;
 use std::path::PathBuf;
 
+use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use thiserror::Error;
@@ -103,6 +104,93 @@ pub struct ConfigOrigin {
     pub version: String,
 }
 
+/// One enabled layer captured in an immutable effective-config snapshot.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct EffectiveConfigLayer {
+    pub source: ConfigLayerSource,
+    pub version: String,
+}
+
+/// Immutable result of resolving a configuration layer stack.
+///
+/// Consumers should keep this snapshot for the lifetime of one request or
+/// turn. That prevents configuration files from being re-read midway through
+/// an operation and makes the exact effective version observable.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct EffectiveConfig {
+    config: TomlValue,
+    origins: BTreeMap<ConfigKeyPath, ConfigOrigin>,
+    layers_low_to_high: Vec<EffectiveConfigLayer>,
+    version: String,
+}
+
+impl EffectiveConfig {
+    pub fn raw(&self) -> &TomlValue {
+        &self.config
+    }
+
+    pub fn into_raw(self) -> TomlValue {
+        self.config
+    }
+
+    pub fn origins(&self) -> &BTreeMap<ConfigKeyPath, ConfigOrigin> {
+        &self.origins
+    }
+
+    pub fn origin_at<'a, I, S>(&self, segments: I) -> Option<&ConfigOrigin>
+    where
+        I: IntoIterator<Item = &'a S>,
+        S: AsRef<str> + 'a + ?Sized,
+    {
+        let path = ConfigKeyPath::from_segments(
+            segments
+                .into_iter()
+                .map(|segment| segment.as_ref().to_string()),
+        );
+        self.origins.get(&path)
+    }
+
+    pub fn layers_low_to_high(&self) -> &[EffectiveConfigLayer] {
+        &self.layers_low_to_high
+    }
+
+    /// Stable fingerprint of the canonical effective value.
+    ///
+    /// Formatting changes and overridden lower-layer values do not change the
+    /// version; a behaviorally different effective value does.
+    pub fn version(&self) -> &str {
+        &self.version
+    }
+
+    /// Decode this snapshot into a consumer-owned strong schema.
+    ///
+    /// Consumers can opt into strict field validation with
+    /// `#[serde(deny_unknown_fields)]` without coupling this crate to every
+    /// domain-specific configuration type.
+    pub fn decode<T>(&self) -> Result<T, EffectiveConfigError>
+    where
+        T: DeserializeOwned,
+    {
+        self.config
+            .clone()
+            .try_into()
+            .map_err(|source| EffectiveConfigError::Decode {
+                target: std::any::type_name::<T>(),
+                source: Box::new(source),
+            })
+    }
+}
+
+#[derive(Debug, Error)]
+pub enum EffectiveConfigError {
+    #[error("effective configuration is invalid for {target}: {source}")]
+    Decode {
+        target: &'static str,
+        #[source]
+        source: Box<toml::de::Error>,
+    },
+}
+
 /// One parsed layer plus its stable raw-content fingerprint.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ConfigLayerEntry {
@@ -186,11 +274,32 @@ impl ConfigLayerStack {
     }
 
     pub fn effective_config(&self) -> TomlValue {
-        self.materialize().0
+        self.resolve().into_raw()
     }
 
     pub fn origins(&self) -> BTreeMap<ConfigKeyPath, ConfigOrigin> {
-        self.materialize().1
+        self.resolve().origins
+    }
+
+    /// Resolve all enabled layers once into an immutable snapshot.
+    pub fn resolve(&self) -> EffectiveConfig {
+        let (config, origins) = self.materialize();
+        let version = fingerprint(&canonical_toml_bytes(&config));
+        let layers_low_to_high = self
+            .layers
+            .iter()
+            .filter(|layer| layer.is_enabled())
+            .map(|layer| EffectiveConfigLayer {
+                source: layer.source.clone(),
+                version: layer.version.clone(),
+            })
+            .collect();
+        EffectiveConfig {
+            config,
+            origins,
+            layers_low_to_high,
+            version,
+        }
     }
 
     pub fn origin_at<'a, I, S>(&self, segments: I) -> Option<ConfigOrigin>
@@ -467,5 +576,90 @@ mod tests {
             ConfigLayerEntry::from_value(source_user(), left).version,
             ConfigLayerEntry::from_value(source_user(), right).version
         );
+    }
+
+    #[derive(Debug, Deserialize, PartialEq)]
+    #[serde(deny_unknown_fields)]
+    struct StrictRuntimeConfig {
+        model: String,
+        features: StrictFeatures,
+    }
+
+    #[derive(Debug, Deserialize, PartialEq)]
+    #[serde(deny_unknown_fields)]
+    struct StrictFeatures {
+        shell: bool,
+    }
+
+    #[test]
+    fn effective_snapshot_decodes_consumer_owned_strict_schema() {
+        let stack = ConfigLayerStack::new(vec![
+            layer(source_user(), "model = 'base'\n[features]\nshell = false\n"),
+            layer(
+                source_project("/repo/.codex"),
+                "model = 'project'\n[features]\nshell = true\n",
+            ),
+        ]);
+
+        let snapshot = stack.resolve();
+        let decoded = snapshot.decode::<StrictRuntimeConfig>().unwrap();
+
+        assert_eq!(
+            decoded,
+            StrictRuntimeConfig {
+                model: "project".to_string(),
+                features: StrictFeatures { shell: true },
+            }
+        );
+        assert!(matches!(
+            snapshot.origin_at(["model"].iter()).unwrap().source,
+            ConfigLayerSource::Project { .. }
+        ));
+        assert_eq!(snapshot.layers_low_to_high().len(), 2);
+    }
+
+    #[test]
+    fn strict_schema_rejects_unknown_effective_keys() {
+        let stack = ConfigLayerStack::new(vec![layer(
+            source_user(),
+            "model = 'base'\nunknown = true\n[features]\nshell = true\n",
+        )]);
+
+        let error = stack.resolve().decode::<StrictRuntimeConfig>().unwrap_err();
+
+        assert!(error.to_string().contains("unknown field"));
+        assert!(error.to_string().contains("unknown"));
+    }
+
+    #[test]
+    fn effective_version_tracks_behavior_not_layer_formatting() {
+        let formatted = ConfigLayerStack::new(vec![layer(source_user(), "model = 'same'\n")]);
+        let compact = ConfigLayerStack::new(vec![layer(source_user(), "model='same'\n")]);
+        let overridden = ConfigLayerStack::new(vec![
+            layer(source_user(), "model = 'ignored'\n"),
+            layer(source_project("/repo/.codex"), "model = 'same'\n"),
+        ]);
+        let changed = ConfigLayerStack::new(vec![layer(source_user(), "model = 'changed'\n")]);
+
+        assert_eq!(formatted.resolve().version(), compact.resolve().version());
+        assert_eq!(
+            formatted.resolve().version(),
+            overridden.resolve().version()
+        );
+        assert_ne!(formatted.resolve().version(), changed.resolve().version());
+    }
+
+    #[test]
+    fn resolved_snapshot_does_not_change_when_stack_changes() {
+        let mut stack = ConfigLayerStack::new(vec![layer(source_user(), "model = 'before'\n")]);
+        let snapshot = stack.resolve();
+
+        stack.push(layer(
+            ConfigLayerSource::RequestOverrides,
+            "model = 'after'\n",
+        ));
+
+        assert_eq!(snapshot.raw()["model"].as_str(), Some("before"));
+        assert_eq!(stack.resolve().raw()["model"].as_str(), Some("after"));
     }
 }
