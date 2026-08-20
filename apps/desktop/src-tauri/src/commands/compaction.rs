@@ -26,6 +26,45 @@ fn open_sessions() -> Result<session::SessionStore, String> {
     session::SessionStore::open_sessions_dir(&root.join("sessions")).map_err(|e| e.to_string())
 }
 
+fn fire_manual_pre_compact(
+    session: Option<&agent::Session>,
+    session_id: &str,
+) -> Result<(), String> {
+    let Some(session) = session else {
+        return Ok(());
+    };
+    let outcome = session.fire_hook(
+        hooks::PRE_COMPACT,
+        hooks::HookPayload {
+            trigger: Some("manual".into()),
+            detail: format!("session={session_id}"),
+            ..Default::default()
+        },
+    );
+    if let hooks::HookOutcome::Block(reason) | hooks::HookOutcome::Skip(reason) = outcome {
+        return Err(format!("manual compaction stopped by hook: {reason}"));
+    }
+    Ok(())
+}
+
+fn fire_manual_post_compact(
+    session: Option<&agent::Session>,
+    session_id: &str,
+    new_session_id: &str,
+) {
+    let Some(session) = session else {
+        return;
+    };
+    let _ = session.fire_hook(
+        hooks::POST_COMPACT,
+        hooks::HookPayload {
+            trigger: Some("manual".into()),
+            detail: format!("session={session_id} new_session={new_session_id}"),
+            ..Default::default()
+        },
+    );
+}
+
 /// 压实结果：新会话 id、摘要预览、是否降级为启发式。
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -158,6 +197,9 @@ pub async fn compact_chat_session(
     let keep = keep_tail_bubbles
         .map(|k| k.max(0) as usize)
         .unwrap_or_else(keep_tail_default);
+    let memory_dir = home::default_memory_dir();
+    let live_session = agent::exec::dispatch::active_root_session_for_hooks(&memory_dir, sid)
+        .map_err(|error| error.to_string())?;
 
     // SessionStore（rusqlite）非 Send：先读出元数据/消息并 drop，再 await LLM。
     let (messages, expected_last_message_id, transcript) = {
@@ -201,6 +243,8 @@ pub async fn compact_chat_session(
         (messages, expected_last_message_id, transcript)
     };
 
+    fire_manual_pre_compact(live_session.as_deref(), sid)?;
+
     let (summary, degraded) = match summarize_with_llm(sid, &transcript).await {
         Ok(s) => (s, false),
         Err(err) => {
@@ -217,6 +261,8 @@ pub async fn compact_chat_session(
             .map_err(|e| e.to_string())?;
     }
 
+    fire_manual_post_compact(live_session.as_deref(), sid, &new_id);
+
     let preview: String = summary.chars().take(160).collect();
     Ok(CompactChatResultDto {
         new_session_id: new_id,
@@ -229,6 +275,7 @@ pub async fn compact_chat_session(
 mod tests {
     use super::*;
     use crate::commands::providers::{ProviderConfig as UiProvider, ProviderKind};
+    use std::sync::{Arc, Mutex};
 
     fn ui_provider(id: &str) -> UiProvider {
         UiProvider {
@@ -284,5 +331,48 @@ mod tests {
 
         assert!(next_compaction_target(&targets, None).is_some());
         assert!(next_compaction_target(&targets, Some(0)).is_none());
+    }
+
+    #[test]
+    fn manual_compaction_fires_canonical_boundaries() {
+        let dir = tempfile::tempdir().unwrap();
+        let session =
+            agent::Session::new(agent::Config::with_defaults(dir.path().to_path_buf())).unwrap();
+        let observed = Arc::new(Mutex::new(Vec::new()));
+        for event in [hooks::PRE_COMPACT, hooks::POST_COMPACT] {
+            let captured = Arc::clone(&observed);
+            session.hook_bus().register(event, move |payload| {
+                captured
+                    .lock()
+                    .unwrap()
+                    .push((payload.hook_event_name.clone(), payload.trigger.clone()));
+                hooks::HookOutcome::Continue
+            });
+        }
+
+        fire_manual_pre_compact(Some(&session), "session-1").unwrap();
+        fire_manual_post_compact(Some(&session), "session-1", "session-2");
+
+        assert_eq!(
+            *observed.lock().unwrap(),
+            vec![
+                (hooks::PRE_COMPACT.into(), Some("manual".into())),
+                (hooks::POST_COMPACT.into(), Some("manual".into())),
+            ]
+        );
+    }
+
+    #[test]
+    fn manual_pre_compact_can_stop_before_side_effects() {
+        let dir = tempfile::tempdir().unwrap();
+        let session =
+            agent::Session::new(agent::Config::with_defaults(dir.path().to_path_buf())).unwrap();
+        session.hook_bus().register(hooks::PRE_COMPACT, |payload| {
+            assert_eq!(payload.trigger.as_deref(), Some("manual"));
+            hooks::HookOutcome::Block("keep current transcript".into())
+        });
+
+        let error = fire_manual_pre_compact(Some(&session), "session-1").unwrap_err();
+        assert!(error.contains("keep current transcript"));
     }
 }

@@ -261,6 +261,9 @@ impl LifecycleTestApp {
                 base_url: "http://127.0.0.1.invalid".into(),
             }],
             project_root: None,
+            hook_runtime: Some(Arc::new(hooks::HookRuntime::with_plugin_bus(Arc::clone(
+                &self.hook_bus,
+            )))),
             hook_bus: Some(Arc::clone(&self.hook_bus)),
         }
     }

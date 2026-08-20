@@ -35,6 +35,14 @@ pub fn is_mutating_hook(name: &str) -> bool {
         name,
         PRE_LLM_CALL
             | PRE_TOOL_USE
+            | PERMISSION_REQUEST
+            | POST_TOOL_USE
+            | PRE_COMPACT
+            | POST_COMPACT
+            | SESSION_START
+            | USER_PROMPT_SUBMIT
+            | SUBAGENT_START
+            | SUBAGENT_STOP
             | PRE_GATEWAY_DISPATCH
             | STOP
             | TRANSFORM_TOOL_RESULT

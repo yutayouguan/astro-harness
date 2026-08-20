@@ -1587,9 +1587,21 @@ async fn run_request(
             .map(|entry| (entry.path.clone(), entry.enabled))
             .collect(),
     );
-    if let Some(bus) = request.runtime.hook_bus.as_ref() {
+    if let Some(runtime) = request.runtime.hook_runtime.as_ref() {
+        session.set_hook_runtime(Arc::clone(runtime));
+    } else if let Some(bus) = request.runtime.hook_bus.as_ref() {
         session.set_hook_bus(Arc::clone(bus));
     }
+    session.set_subagent_hook_context(
+        request.thread.thread_id.clone(),
+        request.thread.agent_type.clone(),
+        request.thread.canonical_path.to_string(),
+    );
+    session.set_pending_session_start_source(if request.consume_mailbox {
+        "resume"
+    } else {
+        "startup"
+    });
 
     let targets = resolve_chat_targets_for_model(
         &request.runtime.chat_targets,
@@ -1635,6 +1647,17 @@ async fn run_request(
         )
         .await
     };
+    if result.is_err() || interrupt.is_interrupted() || interrupt.is_closed() {
+        let _ = session.fire_subagent_stop_once(hooks::HookPayload {
+            turn_id: session.current_turn_id().await,
+            agent_id: Some(request.thread.thread_id.clone()),
+            agent_type: Some(request.thread.agent_type.clone()),
+            agent_transcript_path: session.hook_transcript_path(),
+            stop_hook_active: Some(false),
+            detail: format!("path={} terminal=aborted", request.thread.canonical_path),
+            ..Default::default()
+        });
+    }
     if result.is_err() && !interrupt.is_interrupted() && !interrupt.is_closed() {
         session.ensure_assistant_error_boundary().await?;
     }
@@ -1911,6 +1934,7 @@ mod tests {
                     base_url: "http://127.0.0.1.invalid".into(),
                 }],
                 project_root: None,
+                hook_runtime: None,
                 hook_bus: None,
                 interrupt_message: true,
             },

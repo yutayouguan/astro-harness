@@ -147,6 +147,14 @@ mod tests {
         for canonical in [
             PRE_LLM_CALL,
             PRE_TOOL_USE,
+            PERMISSION_REQUEST,
+            POST_TOOL_USE,
+            PRE_COMPACT,
+            POST_COMPACT,
+            SESSION_START,
+            USER_PROMPT_SUBMIT,
+            SUBAGENT_START,
+            SUBAGENT_STOP,
             PRE_GATEWAY_DISPATCH,
             STOP,
             TRANSFORM_TOOL_RESULT,
@@ -156,7 +164,6 @@ mod tests {
             assert!(is_mutating_hook(canonical), "{canonical}");
         }
 
-        assert!(!is_mutating_hook(POST_TOOL_USE));
         assert!(!is_mutating_hook("post_tool_call"));
         assert!(!is_mutating_hook("pre_tool_call"));
         assert!(!is_mutating_hook("acme:custom_event"));

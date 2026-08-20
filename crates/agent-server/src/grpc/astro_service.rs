@@ -2027,9 +2027,11 @@ impl AstroServiceImpl {
             .await
             .should_finalize_without_runtime
         {
+            let mut end_payload = payload.clone();
+            end_payload.reason = Some("other".into());
             let _ = self
                 .hook_runtime
-                .dispatch(::hooks::SESSION_FINALIZE, &payload);
+                .dispatch(::hooks::SESSION_END, &end_payload);
         }
     }
 }
@@ -4095,7 +4097,7 @@ mod tests {
         service
             .hook_runtime
             .plugin
-            .register(::hooks::SESSION_FINALIZE, move |_| {
+            .register(::hooks::SESSION_END, move |_| {
                 finalize_counter.fetch_add(1, Ordering::SeqCst);
                 let _ = finalize_entered_tx.send(());
                 let _ = release_finalize_rx
@@ -4164,7 +4166,7 @@ mod tests {
         service
             .hook_runtime
             .plugin
-            .register(::hooks::SESSION_FINALIZE, move |_| {
+            .register(::hooks::SESSION_END, move |_| {
                 if finalize_counter.fetch_add(1, Ordering::SeqCst) == 0 {
                     let _ = finalize_entered_tx.send(());
                     let _ = release_finalize_rx
@@ -4212,7 +4214,7 @@ mod tests {
         service
             .hook_runtime
             .plugin
-            .register(::hooks::SESSION_FINALIZE, move |_| {
+            .register(::hooks::SESSION_END, move |_| {
                 finalize_counter.fetch_add(1, Ordering::SeqCst);
                 ::hooks::HookOutcome::Continue
             });
@@ -4270,7 +4272,7 @@ mod tests {
         service
             .hook_runtime
             .plugin
-            .register(::hooks::SESSION_FINALIZE, move |_| {
+            .register(::hooks::SESSION_END, move |_| {
                 finalize_counter.fetch_add(1, Ordering::SeqCst);
                 ::hooks::HookOutcome::Continue
             });
@@ -4299,7 +4301,7 @@ mod tests {
             .claim_fallback();
         if result.should_finalize_without_runtime {
             let _ = service.hook_runtime.fire_plugin(
-                ::hooks::SESSION_FINALIZE,
+                ::hooks::SESSION_END,
                 &::hooks::HookPayload {
                     session_id: session_id.into(),
                     ..Default::default()
@@ -4322,7 +4324,7 @@ mod tests {
         service
             .hook_runtime
             .plugin
-            .register(::hooks::SESSION_FINALIZE, move |_| {
+            .register(::hooks::SESSION_END, move |_| {
                 finalize_counter.fetch_add(1, Ordering::SeqCst);
                 ::hooks::HookOutcome::Continue
             });
@@ -4373,7 +4375,7 @@ mod tests {
             "release-only completion must not consume fallback ownership"
         );
         let _ = service.hook_runtime.fire_plugin(
-            ::hooks::SESSION_FINALIZE,
+            ::hooks::SESSION_END,
             &::hooks::HookPayload {
                 session_id: session_id.into(),
                 ..Default::default()
@@ -4392,7 +4394,7 @@ mod tests {
         service
             .hook_runtime
             .plugin
-            .register(::hooks::SESSION_FINALIZE, move |_| {
+            .register(::hooks::SESSION_END, move |_| {
                 finalize_counter.fetch_add(1, Ordering::SeqCst);
                 ::hooks::HookOutcome::Continue
             });
@@ -4418,7 +4420,7 @@ mod tests {
         service
             .hook_runtime
             .plugin
-            .register(::hooks::SESSION_FINALIZE, move |_| {
+            .register(::hooks::SESSION_END, move |_| {
                 finalize_counter.fetch_add(1, Ordering::SeqCst);
                 ::hooks::HookOutcome::Continue
             });
@@ -4543,7 +4545,7 @@ mod tests {
         service
             .hook_runtime
             .plugin
-            .register(::hooks::SESSION_FINALIZE, move |_| {
+            .register(::hooks::SESSION_END, move |_| {
                 finalize_counter.fetch_add(1, Ordering::SeqCst);
                 ::hooks::HookOutcome::Continue
             });

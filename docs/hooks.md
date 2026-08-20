@@ -26,8 +26,8 @@ Astro 有三条 Hook 通道：
 | `SessionStart` | 会话开始 |
 | `SessionEnd` | 会话结束 |
 | `UserPromptSubmit` | 用户 prompt 提交 |
-| `SubagentStart` | Agent Thread 首轮 startup-ready 且 caller 已接受后（每 thread 一次） |
-| `SubagentStop` | Desktop close 已耐久化 `Shutdown` 并成功收敛后（每 thread 一次） |
+| `SubagentStart` | 子 Agent 首轮开始前（每 thread 一次） |
+| `SubagentStop` | 子 Agent 每个 turn 准备结束时；可 `KeepGoing` |
 | `Stop` | Agent 准备停止 |
 
 ### Astro 扩展事件
@@ -46,7 +46,7 @@ Astro 有三条 Hook 通道：
 | `PostApprovalResponse` | 审批结果产生后 |
 | `PreGatewayDispatch` | Gateway 入队前 |
 | `SessionReset` | 会话重置 |
-| `SessionFinalize` | 会话资源收尾 |
+| `SessionFinalize` | 旧 Astro 扩展常量；canonical shutdown 使用 `SessionEnd` |
 | `GatewayStartup` | Gateway 启动 |
 | `AgentEnd` | 单次 Agent run 收尾 |
 | `CommandNewChat` | 新建对话命令 |
@@ -59,7 +59,7 @@ Plugin 注册与触发、Gateway manifest、Shell config key 均按字符串精�
 
 ## 2. 当前实际触发行为
 
-Canonical 名称集仍比当前已接线的生命周期更完整。下表只记录 B1 后真实的 fire 点和结果；每个由 `Session::fire_hook` 发出的事件都会补全会话字段，并经同一个 `HookRuntime::dispatch` 一次投递到 Plugin、Gateway 与 Shell。
+下表记录当前真实 fire 点和结果。每个由 `Session` 发出的事件都会补全会话字段，并经同一个 `HookRuntime` 投递到 Plugin、Gateway 与 Shell；同步控制决策由 Plugin handlers 聚合，Gateway/Shell 当前为观察型 transport。
 
 ### Plugin/Agent 事件矩阵
 
@@ -70,29 +70,31 @@ Canonical 名称集仍比当前已接线的生命周期更完整。下表只记�
 | `PreLlmCall` | Astro | 初始用户输入已经接纳、system prompt 构建后，在首个 sampling 前 | `InjectContext` |
 | `PreApiRequest` | Astro | 每次**普通主循环** Provider sampling request 前 | 观察 |
 | `PostApiRequest` | Astro | 每次**普通主循环** `ProviderStreamer::stream_chat` 返回 stream 或 error 后；当前不等待 token stream 消费完毕 | 观察 |
-| `PermissionRequest` | Codex | 串行工具权限 preflight 需要审批时，在决议与 `PreToolUse` 前 | 观察 |
+| `PermissionRequest` | Codex | 串行工具权限 preflight 需要审批时，在决议与 `PreToolUse` 前 | deny 优先；否则 allow；全 abstain 进入原审批流 |
 | `PostApprovalResponse` | Astro | 审批决议后、`PreToolUse` 前；`choice` 当前可为 `allowlist`、`auto`、`allow`、`allow_once`、`deny`、`timeout` 或 `unavailable` | 观察 |
 | `PreToolUse` | Codex | 所有 preflight 均已授权或无需授权后，在工具 dispatch 前；被拒绝/超时/无审批通道的调用不会 fire | `Block(reason)` / `Modify(args)` |
 | `TransformTerminalOutput` | Astro | `terminal` 原始 stdout/stderr 组合后、64 KiB 截断前；当前经工具 `hook_bus` direct fire，**仅 Plugin** | `ReplaceText(text)` |
 | `TransformToolResult` | Astro | 任意工具返回后、`PostToolUse` 前 | `ReplaceText(text)` |
-| `PostToolUse` | Codex | 工具结果已应用 `TransformToolResult` 后 | 观察 |
-| `SubagentStart` | Codex | Agent Thread 构造完、首轮执行前（每个 thread 一次）；当前经 request 的 `hook_bus` direct fire，**仅 Plugin** | 观察 |
-| `SubagentStop` | Codex | Agent Thread 进入 closed 状态后；当前经 request 的 `hook_bus` direct fire，**仅 Plugin** | 观察 |
+| `PostToolUse` | Codex | 工具结果已应用 `TransformToolResult` 后 | `Block` 替换模型可见结果；`InjectContext` 追加上下文；`ReplaceText` 追加反馈 |
+| `PreCompact` | Codex | 非空自动压缩计划执行前，或 Desktop 手动压缩前；`trigger=auto|manual` | `Block` / `Skip` 停止压缩；自动路径同时结束当前 turn |
+| `PostCompact` | Codex | 自动压缩写入成功后，或 Desktop 手动 split 成功后 | `Block` / `Skip` 结束当前自动 turn；不回滚已完成压缩 |
+| `SubagentStart` | Codex | 子 Agent startup admission、首次 Provider request 前；继承完整 `HookRuntime` | 仅 `InjectContext`；阻断/停止请求按 Codex 语义忽略 |
+| `SubagentStop` | Codex | 子 Agent 每个 terminal turn；错误/中断也触发；Desktop close 不重复触发 | `KeepGoing(prompt)` 与主 Agent `Stop` 相同 |
 | `Stop` | Codex | 每个无工具的普通 terminal candidate，以及 budget-exhaustion summary 的完整 terminal candidate | `KeepGoing(prompt)` |
 | `TransformLlmOutput` | Astro | 每个通过 Stop guard 的普通 candidate（含 tool-call 中间轮）定稿、`PostLlmCall` 前 | `ReplaceText(text)` |
 | `PostLlmCall` | Astro | 每个通过 Stop guard 的普通 candidate，且已应用 `TransformLlmOutput` | 观察 |
 | `AgentEnd` | Astro | `RegularTask` 在每次 regular run 收尾时唯一派发：成功、runtime failure、准备失败、取消或 receiver close 都恰好一次 | 观察 |
 | `PreGatewayDispatch` | Astro | gRPC/Tauri chat 入站、加载会话前 | `Allow` / `Skip(reason)` / `Rewrite(message)` |
 | `SessionReset` | Astro | UI `new_chat` 释放旧会话时 | 观察 |
-| `SessionFinalize` | Astro | UI `new_chat` 释放旧会话时 | 观察 |
+| `SessionEnd` | Codex | session-owned runtime 真正释放时；没有 live runtime 的 new-chat fallback 同样触发 | 观察；`reason=other` |
 
 `SessionStart` 只有在其 outcome 非 `Block` 时才清除 pending source。若它被 `Block`，source 会保留，下一次 admission 会再次向 Plugin、Gateway、Shell 派发同一 `SessionStart`；因此 handler 应保持幂等。`UserPromptSubmit` 的 `Block` 会在输入写入前阻断该 admission；`InjectContext` 与该输入绑定、按 FIFO 进入随后的 response chain，并受 prompt 预算约束。初始输入的 context 参与其首个请求；steer context 不会被 Stop 的 bridge sampling 提前消费。
 
-当前尚无 runtime fire 点的 Codex 公开事件是 `PreCompact`、`PostCompact` 和 `SessionEnd`。`AgentEnd` 是已接线的 Astro run 收尾事件，不是 `SessionEnd`。
+11 个 Codex 公开事件均有生产 fire 点。`AgentEnd` 仍是 Astro 的单次 run 收尾扩展，不是 `SessionEnd`；`SessionFinalize` 不再承担 canonical shutdown 语义。
 
 `AgentEnd` 的 runtime failure 会保留原始失败文本于 `error`；取消与 receiver close 属于非错误收尾，`error` 为空。准备阶段的失败也同样派发一次 `AgentEnd`，但保持其原有 task error 返回，避免把 runtime 已经输出过的 terminal 再输出一次。
 
-Plugin callbacks 按注册顺序同步执行。`Continue` 和 `Allow` 会继续下一个 callback；首个其他 outcome 立即短路，余下 callbacks 不再执行。Callback panic 被记录并当作 `Continue`。Shell Hook 是异步旁路，不参与 outcome 聚合。
+Plugin callbacks 按注册顺序同步执行。通用事件中 `Continue` 和 `Allow` 会继续下一个 callback，首个其他 outcome 短路；`PermissionRequest` 会遍历全部 callback 并按 deny > allow > abstain 聚合，`PostToolUse` 会遍历全部 callback 聚合 block/context/feedback。Callback panic 被记录并当作 `Continue`。Shell Hook 是异步旁路，不参与 outcome 聚合。
 
 ### 当前执行顺序
 
@@ -110,11 +112,22 @@ PreGatewayDispatch
           → PermissionRequest? → 审批 → PostApprovalResponse?
               → 拒绝 / 超时 / unavailable：返回工具结果，不进入 PreToolUse
           → PreToolUse                              # 仅 preflight 通过/无需审批
-              → 工具执行（SubagentStart / SubagentStop 若由子任务工具触发）
+              → 工具执行
               → TransformTerminalOutput? → TransformToolResult → PostToolUse
               → loop
       → 无 tool calls：收尾
-  → RegularTask AgentEnd                           # Plugin/Gateway/Shell 各一次的统一 dispatch
+  → RegularTask AgentEnd                           # Astro run-level extension
+  → runtime release: SessionEnd(reason=other)       # once per Session
+
+压缩：
+  → PreCompact(trigger=auto|manual)
+  → durable compressed views / manual split
+  → PostCompact(trigger=auto|manual)
+
+子 Agent：
+  → SubagentStart (startup admission, once per thread)
+  → sampling/tool loop
+  → SubagentStop (every terminal turn; KeepGoing may continue)
 
 预算耗尽 summary（独立分支）：
   → 直接 ProviderStreamer::stream_chat（无 PreApiRequest/PostApiRequest）
@@ -138,8 +151,8 @@ PreGatewayDispatch
 |---|---|
 | `GatewayStartup` | `AstroServiceImpl::new` 内 `HookRuntime` bootstrap 成功后立即触发；此时 `Self` 尚未组装且早于 listener bind，bootstrap 失败则不触发，因此不是 readiness 信号 |
 | `PreGatewayDispatch` | gRPC/Tauri chat 入站、加载 session 前 |
-| `SessionStart` / `UserPromptSubmit` / `AgentEnd` | 由 session 的统一 dispatch 到达 Gateway；server 不再单独派发 lifecycle 事件 |
-| `CommandNewChat` | UI `chat_control(new_chat)`；随后依次统一 dispatch `SessionReset`、`SessionFinalize`，各一次后释放 runtime |
+| `SessionStart` / `UserPromptSubmit` / `AgentEnd` / `SessionEnd` | 由 session 的统一 dispatch 到达 Gateway；无 live runtime 时 server 仅补 `SessionEnd` |
+| `CommandNewChat` | UI `chat_control(new_chat)`；随后派发 `SessionReset` 并释放 runtime，释放完成后触发 `SessionEnd` |
 
 未为 manifest 注册自定义 handler 时，bootstrap 会为已发现 manifest 安装 tracing fallback。Gateway handlers 是观察型，其返回值不参与 Plugin `HookOutcome`。
 
@@ -149,7 +162,7 @@ PreGatewayDispatch
   `name` / `detail` / `outcome`，不借用 memory extension。
 - 前端将其渲染为 `kind: "hook"` 的活动卡，标题是 canonical 事件名。
 - 设置中的「Hook 事件」开关控制可见性；`normal` / `detailed` 预设开启，`compact` 关闭。
-- UI 新建对话调用 `chat_control(new_chat)`，对应上表的 `CommandNewChat` → `SessionReset` → `SessionFinalize` 与 runtime 卸载。
+- UI 新建对话调用 `chat_control(new_chat)`，对应上表的 `CommandNewChat` → `SessionReset` → runtime 卸载 → `SessionEnd`。
 
 ## 3. Canonical `HookInput` JSON
 
@@ -227,11 +240,11 @@ fn register(ctx: &PluginContext<'_>) {
 }
 ```
 
-当前 `HookOutcome` 保留 `Continue`、`Block`、`Modify`、`InjectContext`、`Allow`、`Skip`、`Rewrite`、`ReplaceText` 和 `KeepGoing`。Plugin callbacks 按注册顺序同步聚合；首个非继续结果会短路 Plugin callbacks。Gateway 与 Shell 是观察型 transport：Gateway handler 不改变该 outcome，Shell 异步旁路也不阻塞或改变它。
+当前 `HookOutcome` 保留 `Continue`、`Block`、`Modify`、`InjectContext`、`Allow`、`Skip`、`Rewrite`、`ReplaceText` 和 `KeepGoing`。除上文所述 `PermissionRequest` / `PostToolUse` 专用聚合外，Plugin callbacks 使用首个非继续结果。Gateway 与 Shell 是观察型 transport：Gateway handler 不改变该 outcome，Shell 异步旁路也不阻塞或改变它。
 
 ### Gateway Event Hooks
 
-Agent Thread 生命周期回调是观察型：返回阻断结果或抛出 panic 都不会改变 spawn/close 结果。`PluginHookBus` 是进程内对象，因此只有当前进程注册并保留了 runtime request 的 bus 能观察 `SubagentStop`；进程重启后仍可耐久关闭线程，但不会回放上一进程的回调。
+Agent Thread 继承父 Session 的完整 `HookRuntime`，因此 `SubagentStart` / `SubagentStop` 会到达 Plugin、Gateway、Shell 和 UI timeline。Plugin 的 `SubagentStart` 只注入上下文，不会因 block/stop 取消子 Agent；`SubagentStop::KeepGoing` 可继续当前子 Agent turn。Hook 是进程内实时边界，重启不会回放历史回调。
 
 `~/.astro/hooks/<name>/HOOK.yaml`：
 
@@ -265,7 +278,7 @@ hooks:
 
 Shell Hook 异步执行，默认超时 5 秒，失败只记录日志。`HookRuntime::dispatch` 会在同一次标准化 dispatch 中同步调用 Plugin、通知 Gateway，并旁路调度同名 Shell Hook；因此所有 `Session::fire_hook` 事件都能到达 Shell。Shell 的异步结果不参与 Plugin outcome 聚合，也不会阻塞 Agent。
 
-下列是现已接线、可作为 Shell 配置依据的代表事件：`GatewayStartup`、`PreGatewayDispatch`、`SessionStart`、`UserPromptSubmit`、`PreLlmCall`、`PreToolUse`、`PostToolUse`、`Stop`、`PostLlmCall`、`AgentEnd`、`CommandNewChat`、`SessionReset` 和 `SessionFinalize`。配置仍只在真实 fire 点执行；声明一个未接线事件不会创造生命周期。
+11 个 Codex 事件及 Astro 扩展事件都可经统一 runtime 到达 Shell；代表事件包括 `PreCompact`、`PostCompact`、`SessionEnd`、`PermissionRequest`、`PostToolUse`、`SubagentStart`、`SubagentStop`、`Stop`、`AgentEnd` 与 `CommandNewChat`。Shell 是异步观察面，不参与同步决策。
 
 一版兼容环境变量：
 
@@ -292,7 +305,7 @@ Shell Hook 异步执行，默认超时 5 秒，失败只记录日志。`HookRunt
 - 示例脚本不发送 `ASTRO_HOOK_MESSAGE`、`tool_input` 或 `tool_response`；自定义脚本如果增加这些字段，需要先评估 prompt、assistant 文本和工具参数的敏感性。
 - Shell 失败只记录 warning，不是投递成功保证；需要可靠导出时应在自有端点实现幂等和重试。
 
-## 5. Batch A、B1 边界与后续批次
+## 5. 已完成边界与后续范围
 
 Batch A 完成：
 
@@ -300,18 +313,16 @@ Batch A 完成：
 - `HookInput`/`HookPayload` 的 canonical JSON serialization；
 - 旧 `ASTRO_HOOK_*` 环境变量的一版弃用兼容。
 
-B1 完成：
+B1 与 Codex lifecycle alignment 完成：
 
 - `Session::fire_hook` 到 Plugin、Gateway、Shell 的一次标准化 dispatch；
 - one-shot `SessionStart`、输入 admission、Stop continuation guard 与 `RegularTask` 唯一 `AgentEnd`；
-- server lifecycle 去重，以及 `new_chat` 的 command/reset/finalize 次序。
+- canonical `SessionEnd` 与 server lifecycle 去重；
+- 自动/手动 `PreCompact` / `PostCompact`；
+- Permission allow/deny 与 PostToolUse block/context/feedback；
+- Subagent 的完整 runtime transport、startup 与每-turn stop/continuation。
 
-以下仍是明确缺口或后续批次范围：
-
-- `SessionEnd`；以及 `SessionStart` 的 `clear` / `compact` source；
-- `PreCompact` / `PostCompact`；
-- `TransformTerminalOutput`、`SubagentStart` / `SubagentStop` 的 Gateway、Shell 统一 transport（当前都是 Plugin-only direct fire）；`SubagentStop` 的 `KeepGoing` continuation 也尚未实现；
-- Batch C 的 Command Hook JSON stdin/stdout、matcher、multi-handler 聚合/冲突和 trust 模型/UI 管理。
+后续范围是 Batch C 的 Codex `hooks.json` Command Hook JSON stdin/stdout、matcher、multi-handler 聚合/冲突和 trust 模型/UI 管理。当前 Gateway/Shell transport 是观察型，只有同步 Plugin handlers 返回业务决策。`SessionStart(source=clear|compact)` 的 durable handoff 也仍属于后续 Session lifecycle 扩展；它不影响本轮 compact 边界事件。
 
 不要从 canonical 名称推断尚未实现的 Command Hook matcher、trust 或 JSON I/O 语义。
 
