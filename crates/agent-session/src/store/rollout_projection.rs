@@ -1,12 +1,11 @@
 //! Deterministic SQLite message projection rebuilt from the durable rollout.
 
-use std::collections::{HashMap, HashSet, VecDeque};
+use std::collections::HashMap;
 
 use anyhow::{Context, Result};
 use rusqlite::params;
 use serde_json::Value;
-use types::message::{merge_google_thought_signature, Message, MessageContent, Role};
-use types::{MediaAsset, MediaKind, MediaRef};
+use types::message::{merge_google_thought_signature, Message, Role};
 
 use super::messages::insert_message_row;
 use super::{now_epoch_secs, NewMessage, SessionStore};
@@ -92,63 +91,31 @@ pub fn rebuild_messages_from_rollout(
 }
 
 fn project_response_items(items: &[agent_rollout::RolloutItem]) -> Result<Vec<ProjectedMessage>> {
-    let messages = items
+    let tool_names = items
         .iter()
         .filter_map(|item| match item {
-            agent_rollout::RolloutItem::ResponseItem(message)
-                if !matches!(message.role, Role::System) =>
-            {
-                Some(message)
-            }
+            agent_rollout::RolloutItem::ResponseItem(message) => message.tool_calls.as_ref(),
             _ => None,
         })
-        .collect::<Vec<_>>();
-    validate_role_order(&messages)?;
+        .flatten()
+        .map(|call| (call.id.clone(), call.name.clone()))
+        .collect::<HashMap<_, _>>();
 
-    let mut pending_tool_names = HashMap::<String, VecDeque<String>>::new();
-    let mut projected = Vec::with_capacity(messages.len());
-    for message in messages {
-        let tool_name = message.tool_call_id.as_ref().and_then(|tool_call_id| {
-            let name = pending_tool_names
-                .get_mut(tool_call_id)
-                .and_then(VecDeque::pop_front);
-            if pending_tool_names
-                .get(tool_call_id)
-                .is_some_and(VecDeque::is_empty)
-            {
-                pending_tool_names.remove(tool_call_id);
-            }
-            name
-        });
-        if matches!(message.role, Role::Assistant) {
-            for call in message.tool_calls.iter().flatten() {
-                pending_tool_names
-                    .entry(call.id.clone())
-                    .or_default()
-                    .push_back(call.name.clone());
-            }
-        }
-        projected.push(project_message(message, tool_name)?);
-    }
-    Ok(projected)
+    items
+        .iter()
+        .filter_map(|item| match item {
+            agent_rollout::RolloutItem::ResponseItem(message) => Some(message),
+            _ => None,
+        })
+        .filter(|message| !matches!(message.role, Role::System))
+        .map(|message| project_message(message, &tool_names))
+        .collect()
 }
 
-fn validate_role_order(messages: &[&Message]) -> Result<()> {
-    for pair in messages.windows(2) {
-        let duplicate_user =
-            matches!(pair[0].role, Role::User) && matches!(pair[1].role, Role::User);
-        let duplicate_assistant =
-            matches!(pair[0].role, Role::Assistant) && matches!(pair[1].role, Role::Assistant);
-        anyhow::ensure!(
-            !duplicate_user && !duplicate_assistant,
-            "invalid rollout message order: adjacent {:?} messages",
-            pair[1].role
-        );
-    }
-    Ok(())
-}
-
-fn project_message(message: &Message, tool_name: Option<String>) -> Result<ProjectedMessage> {
+fn project_message(
+    message: &Message,
+    tool_names: &HashMap<String, String>,
+) -> Result<ProjectedMessage> {
     let role = match message.role {
         Role::User => "user",
         Role::Assistant => "assistant",
@@ -161,12 +128,16 @@ fn project_message(message: &Message, tool_name: Option<String>) -> Result<Proje
         .map(serde_json::to_value)
         .transpose()
         .context("serialize rollout tool calls")?;
-    let media = merged_message_media(message)?;
-    let media_json = if media.is_empty() {
+    let media_json = if message.media.is_empty() {
         None
     } else {
-        Some(serde_json::to_string(&media).context("serialize rollout media")?)
+        Some(serde_json::to_string(&message.media).context("serialize rollout media")?)
     };
+    let tool_name = message
+        .tool_call_id
+        .as_ref()
+        .and_then(|tool_call_id| tool_names.get(tool_call_id))
+        .cloned();
 
     Ok(ProjectedMessage {
         role,
@@ -182,148 +153,4 @@ fn project_message(message: &Message, tool_name: Option<String>) -> Result<Proje
         ),
         media_json,
     })
-}
-
-fn merged_message_media(message: &Message) -> Result<Vec<MediaAsset>> {
-    let mut merged = message.media.clone();
-    if let MessageContent::Parts(parts) = &message.content {
-        for part in parts {
-            let media = match part.kind.as_str() {
-                "image_url" => {
-                    let image = part
-                        .image_url
-                        .as_ref()
-                        .context("image_url part is missing its URL payload")?;
-                    Some(media_from_part_url(MediaKind::Image, &image.url, None)?)
-                }
-                "audio_url" => {
-                    let audio = part
-                        .audio_url
-                        .as_ref()
-                        .context("audio_url part is missing its URL payload")?;
-                    Some(media_from_part_url(
-                        MediaKind::Audio,
-                        &audio.url,
-                        Some(&audio.mime_type),
-                    )?)
-                }
-                "video_url" => {
-                    let video = part
-                        .video_url
-                        .as_ref()
-                        .context("video_url part is missing its URL payload")?;
-                    Some(media_from_part_url(
-                        MediaKind::Video,
-                        &video.url,
-                        Some(&video.mime_type),
-                    )?)
-                }
-                _ => None,
-            };
-            if let Some(media) = media {
-                merged.push(media);
-            }
-        }
-    }
-
-    let mut seen = HashSet::new();
-    merged.retain(|media| seen.insert(media_identity(media)));
-    Ok(merged)
-}
-
-fn media_from_part_url(
-    kind: MediaKind,
-    url: &str,
-    declared_mime: Option<&str>,
-) -> Result<MediaAsset> {
-    let url = url.trim();
-    anyhow::ensure!(!url.is_empty(), "media part URL is empty");
-    if let Some(data) = url.strip_prefix("data:") {
-        let metadata = data
-            .split_once(',')
-            .map(|(metadata, _)| metadata)
-            .context("malformed data media URL")?;
-        let mime_type = metadata.split(';').next().unwrap_or_default();
-        anyhow::ensure!(
-            !mime_type.is_empty() && mime_matches_kind(kind, mime_type),
-            "data media MIME {mime_type:?} does not match {kind:?}"
-        );
-        return Ok(MediaAsset::data_url(kind, url, mime_type));
-    }
-    anyhow::ensure!(
-        url.starts_with("https://") || url.starts_with("http://"),
-        "unsupported media part URL: {url}"
-    );
-    let mime_type = declared_mime
-        .map(str::trim)
-        .filter(|mime| !mime.is_empty())
-        .map(str::to_string)
-        .unwrap_or_else(|| inferred_remote_mime(kind, url));
-    anyhow::ensure!(
-        mime_matches_kind(kind, &mime_type),
-        "remote media MIME {mime_type:?} does not match {kind:?}"
-    );
-    Ok(MediaAsset {
-        kind,
-        mime_type,
-        reference: MediaRef::RemoteUri(url.into()),
-        label: None,
-        id: None,
-    })
-}
-
-fn mime_matches_kind(kind: MediaKind, mime_type: &str) -> bool {
-    let expected = match kind {
-        MediaKind::Image => "image/",
-        MediaKind::Audio => "audio/",
-        MediaKind::Video => "video/",
-        MediaKind::File => return true,
-    };
-    mime_type.starts_with(expected)
-}
-
-fn inferred_remote_mime(kind: MediaKind, url: &str) -> String {
-    let path = url.split(['?', '#']).next().unwrap_or(url);
-    let extension = path.rsplit_once('.').map(|(_, extension)| extension);
-    match (kind, extension) {
-        (MediaKind::Image, Some("jpg" | "jpeg")) => "image/jpeg",
-        (MediaKind::Image, Some("webp")) => "image/webp",
-        (MediaKind::Image, Some("gif")) => "image/gif",
-        (MediaKind::Image, Some("svg")) => "image/svg+xml",
-        (MediaKind::Image, Some("png")) => "image/png",
-        (MediaKind::Audio, Some("mp3")) => "audio/mpeg",
-        (MediaKind::Audio, Some("wav")) => "audio/wav",
-        (MediaKind::Audio, Some("m4a")) => "audio/mp4",
-        (MediaKind::Video, Some("webm")) => "video/webm",
-        (MediaKind::Video, Some("mov")) => "video/quicktime",
-        (MediaKind::Video, Some("mp4")) => "video/mp4",
-        (MediaKind::Image, _) => "image/*",
-        (MediaKind::Audio, _) => "audio/*",
-        (MediaKind::Video, _) => "video/*",
-        (MediaKind::File, _) => "application/octet-stream",
-    }
-    .into()
-}
-
-fn media_identity(media: &MediaAsset) -> (MediaKindIdentity, String) {
-    let kind = match media.kind {
-        MediaKind::Image => MediaKindIdentity::Image,
-        MediaKind::Audio => MediaKindIdentity::Audio,
-        MediaKind::Video => MediaKindIdentity::Video,
-        MediaKind::File => MediaKindIdentity::File,
-    };
-    let reference = match &media.reference {
-        MediaRef::WorkspacePath(value) | MediaRef::DataUrl(value) | MediaRef::RemoteUri(value) => {
-            value.as_str()
-        }
-    };
-    (kind, reference.to_string())
-}
-
-#[derive(Clone, Copy, PartialEq, Eq, Hash)]
-enum MediaKindIdentity {
-    Image,
-    Audio,
-    Video,
-    File,
 }
