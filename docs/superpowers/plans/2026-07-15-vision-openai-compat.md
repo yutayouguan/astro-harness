@@ -75,7 +75,7 @@ pub async fn openai_vision_completions(
 Google endpoint：`{google_openai_base(config)}/chat/completions`。  
 OpenAI：`{openai_compatible_base(base)}/chat/completions`。
 
-- [ ] **Step 2: 测试默认模型**
+- [x] **Step 2: 测试默认模型**
 
 ```rust
 assert_eq!(default_vision_model("google"), "gemini-3.5-flash");
@@ -85,7 +85,7 @@ assert_eq!(default_vision_model("openai"), "gpt-4o");
 Run: `cargo test -p providers test_default -- --nocapture`（或对应测试名）  
 Expected: PASS
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git commit -m "feat(providers): add OpenAI-compat vision completions helper"
@@ -106,11 +106,11 @@ git commit -m "feat(providers): add OpenAI-compat vision completions helper"
 **Interfaces:**
 - Produces: `ImageGenCreds { ..., vision_model: String }`；resolve 后 Google/OpenAI target 带默认或配置值
 
-- [ ] **Step 1: 扩展 Creds + from_parts**
+- [x] **Step 1: 扩展 Creds + from_parts**
 
 `from_parts` 签名追加 `vision_model: &str, fb_vision_model: &str`，primary/fallback 均写入 `vision_model`（fallback 用 `fb_vision_model`）。
 
-- [ ] **Step 2: proto + 调用点对齐**
+- [x] **Step 2: proto + 调用点对齐**
 
 重建后修全部 `ChatRequest { ... }` / `from_parts(` 编译错误。
 
@@ -123,10 +123,10 @@ vision_model: resolve_media_model(
 ),
 ```
 
-- [ ] **Step 3: `cargo check -p tools -p backend -p astro-agent`**  
+- [x] **Step 3: `cargo check -p tools -p backend -p astro-agent`**  
 Expected: 无错误
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git commit -m "feat(providers): persist and wire vision_model through chat targets"
@@ -145,7 +145,7 @@ git commit -m "feat(providers): persist and wire vision_model through chat targe
 - Consumes: `openai_vision_completions`；`ctx.image_gen_targets.google()/openai()`；`creds.vision_model`
 - Produces: 文本结果 `…\nprovider=…\nmodel=…`
 
-- [ ] **Step 1: 重写 `vision.rs`**
+- [x] **Step 1: 重写 `vision.rs`**
 
 逻辑要点：
 
@@ -163,11 +163,11 @@ provider=google
 model=gemini-3.5-flash
 ```
 
-- [ ] **Step 2: 无凭证单元路径**（可选小型测试或手动）
+- [x] **Step 2: 无凭证单元路径**（可选小型测试或手动）
 
 若有 `tools` 测试夹具：设空 targets，dispatch 期望错误含「API Key」。
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git commit -m "feat(tools): implement vision via OpenAI-compat chat completions"
@@ -182,7 +182,7 @@ git commit -m "feat(tools): implement vision via OpenAI-compat chat completions"
 - Modify: `apps/desktop/src/i18n/messages.ts` — `providers.visionModel`
 - Modify: `apps/desktop/src/types.ts`（若 Task 2 未做完）
 
-- [ ] **Step 1: Draft + defaults**
+- [x] **Step 1: Draft + defaults**
 
 ```ts
 google: { ..., vision: "gemini-3.5-flash" },
@@ -191,14 +191,14 @@ openai: { ..., vision: "gpt-4o" },
 
 字段 `vision_model`：Google 与 OpenAI 媒体 Tab 均显示（视频仍仅 Google）。
 
-- [ ] **Step 2: 更新 `agentTools.vision.desc`**
+- [x] **Step 2: 更新 `agentTools.vision.desc`**
 
 中/英去掉「占位 / stub」，改为说明 OpenAI 兼容看图。
 
-- [ ] **Step 3: `npx tsc -b`**  
+- [x] **Step 3: `npx tsc -b`**  
 Expected: 无错误
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git commit -m "feat(frontend): add vision model field on provider Media tab"
@@ -211,8 +211,8 @@ git commit -m "feat(frontend): add vision model field on provider Media tab"
 **Files:**
 - Modify: `docs/superpowers/specs/2026-07-15-vision-openai-compat-design.md` — 状态改为已实现
 
-- [ ] **Step 1: 勾验收清单**（有 key 时手动；无 key 时至少 `cargo check` + tsc）
-- [ ] **Step 2: Commit**
+- [x] **Step 1: 勾验收清单**（有 key 时手动；无 key 时至少 `cargo check` + tsc）
+- [x] **Step 2: Commit**
 
 ```bash
 git commit -m "docs: mark vision OpenAI-compat design as implemented"
