@@ -683,7 +683,7 @@ fn effective_backend_id(kind: ProviderKind, api_mode: &str) -> &'static str {
         match kind {
             ProviderKind::Openai => "openai-responses",
             ProviderKind::Minimax => "minimax-responses",
-            ProviderKind::Deepseek => "openai-responses",
+            ProviderKind::Deepseek => "deepseek-responses",
             _ => kind.backend_id(),
         }
     } else {

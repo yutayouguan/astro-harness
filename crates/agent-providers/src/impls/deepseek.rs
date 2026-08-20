@@ -20,6 +20,7 @@ impl ProviderExt for DeepSeek {
 
 impl OpenAICompatible for DeepSeek {
     const STREAM_USAGE: bool = true;
+    const SUPPORTS_RESPONSES: bool = true;
 
     fn finalize_body(&self, body: &mut Value) {
         if let Some(tc) = body.get("thinking_config").cloned() {

@@ -26,6 +26,7 @@ impl ProviderExt for MiniMax {
 
 impl OpenAICompatible for MiniMax {
     const STREAM_USAGE: bool = true;
+    const SUPPORTS_RESPONSES: bool = true;
 
     fn finalize_body(&self, body: &mut Value) {
         // reasoning_split=true → thinking 通过 reasoning_content 字段返回（而非 <think> 标签）

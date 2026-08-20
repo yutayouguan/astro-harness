@@ -35,6 +35,7 @@ impl ProviderExt for OpenAI {
 
 impl OpenAICompatible for OpenAI {
     const STREAM_USAGE: bool = true;
+    const SUPPORTS_RESPONSES: bool = true;
 
     fn finalize_body(&self, body: &mut Value) {
         if let Some(tc) = body.get("thinking_config").cloned() {

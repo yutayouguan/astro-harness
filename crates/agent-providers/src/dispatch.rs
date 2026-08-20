@@ -456,8 +456,15 @@ fn register_provider(reg: &mut crate::registry::Registry, provider: &str, config
         "hunyuan" => register_media::<crate::impls::hunyuan::Hunyuan>(reg, key, base, model),
         "mimo" => register_compat::<crate::impls::mimo::Mimo>(reg, key, base, model),
         "gemini-native" => reg.register_gemini_native(key, base, model),
-        "openai-responses" => reg.register_responses("openai-responses", key, base, model),
-        "minimax-responses" => reg.register_responses("minimax-responses", key, base, model),
+        "openai-responses" => reg.register_openai_responses(key, base, model),
+        "deepseek-responses" => reg
+            .register_openai_compat_responses::<crate::impls::deepseek::DeepSeek>(
+                "deepseek-responses",
+                key,
+                base,
+                model,
+            ),
+        "minimax-responses" => reg.register_minimax_responses(key, base, model),
         _ => register_compat::<crate::impls::openai::OpenAI>(reg, key, base, model),
     }
 }
@@ -525,6 +532,7 @@ mod tests {
             "mimo",
             "gemini-native",
             "openai-responses",
+            "deepseek-responses",
             "minimax-responses",
         ];
         for id in providers {
@@ -554,7 +562,11 @@ mod tests {
     #[test]
     fn responses_providers_resolve() {
         let config = ProviderConfig::default();
-        for id in ["openai-responses", "minimax-responses"] {
+        for id in [
+            "openai-responses",
+            "deepseek-responses",
+            "minimax-responses",
+        ] {
             let mut reg = crate::registry::Registry::new();
             register_provider(&mut reg, id, &config);
             assert!(

@@ -25,13 +25,22 @@ pub trait OpenAICompatible: ProviderExt {
     /// 是否支持原生 function calling。
     const SUPPORTS_TOOLS: bool = true;
 
-    /// 请求体微调（线路格式差异修补）。
+    /// 是否支持 Responses API（`/responses` 端点）。
+    const SUPPORTS_RESPONSES: bool = false;
+
+    /// Chat Completions 请求体微调（线路格式差异修补）。
     ///
     /// 在 JSON body 构造完成后、发送前调用。
     /// 可用于：
     /// - DeepSeek: 注入 thinking 参数
     /// - MiniMax: 调整字段名
     fn finalize_body(&self, _body: &mut Value) {}
+
+    /// Responses API 请求体微调。
+    ///
+    /// 在 Responses JSON body 构造完成后、发送前调用。
+    /// 默认空实现；厂商可覆盖以处理 thinking/reasoning 等差异。
+    fn finalize_responses_body(&self, _body: &mut Value) {}
 }
 
 /// 泛型 OpenAI 兼容补全模型。
