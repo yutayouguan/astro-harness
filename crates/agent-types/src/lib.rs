@@ -20,6 +20,7 @@ pub mod tool;
 pub mod tool_call;
 pub mod tool_entry;
 pub mod tool_output;
+pub mod thread_memory_mode;
 pub mod tool_spill;
 
 pub use auxiliary_target::{AuxiliaryTargetChain, AuxiliaryTask};
@@ -66,4 +67,5 @@ pub use tool_entry::{
     ExecApprovalRequirement, McpToolAnnotations, McpToolApproval, McpToolApprovalMode,
     McpToolApprovalRoute, NamespacedToolDef, SandboxablePreference, ToolEntry, ToolName, ToolSpec,
 };
+pub use thread_memory_mode::ThreadMemoryMode;
 pub use tool_output::ToolOutput;

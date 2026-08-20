@@ -424,7 +424,9 @@ impl AgentLoop {
             self.activate_skill_toolsets_from_args(&exec_args);
         }
         // KeyChoice：`confirm` 是关键决策闸口，记一笔供学习闭环。
-        if exec_name == "confirm" {
+        if exec_name == "confirm"
+            && self.config.thread_memory_mode == types::ThreadMemoryMode::Enabled
+        {
             memory::try_append_decision(
                 self.memory_dir(),
                 memory::DecisionEntry::new(

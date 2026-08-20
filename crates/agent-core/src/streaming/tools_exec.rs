@@ -320,6 +320,7 @@ struct PermissionAuditReceipt {
     profile_id: String,
     snapshot_hash: String,
     request: types::PermissionRequest,
+    thread_memory_mode: types::ThreadMemoryMode,
 }
 
 impl PermissionAuditReceipt {
@@ -328,6 +329,7 @@ impl PermissionAuditReceipt {
         settings: &memory::LoadedPermissionSettings,
         profile_id: String,
         request: types::PermissionRequest,
+        thread_memory_mode: types::ThreadMemoryMode,
     ) -> Self {
         let snapshot_hash = memory::permission_snapshot_hash(settings, &profile_id);
         Self {
@@ -335,6 +337,7 @@ impl PermissionAuditReceipt {
             profile_id,
             snapshot_hash,
             request,
+            thread_memory_mode,
         }
     }
 
@@ -345,6 +348,9 @@ impl PermissionAuditReceipt {
         result: Option<&str>,
         duration_ms: Option<u64>,
     ) {
+        if self.thread_memory_mode == types::ThreadMemoryMode::Disabled {
+            return;
+        }
         let mut event = memory::PermissionAuditEvent::new(
             kind,
             &self.request,
@@ -624,7 +630,7 @@ async fn audit_hardline_terminal_denial(
         affected_paths: Vec::new(),
         network_hosts: Vec::new(),
     };
-    let audit = PermissionAuditReceipt::new(memory_dir, &settings, profile_id, request);
+    let audit = PermissionAuditReceipt::new(memory_dir, &settings, profile_id, request, session.config.thread_memory_mode);
     audit.record(
         memory::PermissionAuditKind::Evaluated,
         None,
@@ -696,7 +702,7 @@ async fn preflight_read_only_write(
         "当前为只读模式。是否仅允许本次 `{}` 执行下列写入？\n\n影响路径：\n- {}\n\n不会修改全局权限，也不会提升为完全访问。",
         call.name, paths
     );
-    let audit = PermissionAuditReceipt::new(memory_dir, &settings, profile_id, request);
+    let audit = PermissionAuditReceipt::new(memory_dir, &settings, profile_id, request, session.config.thread_memory_mode);
     review_once_permission(
         session,
         &selection,
@@ -771,7 +777,7 @@ async fn preflight_mcp_tool_approval(
         annotations.destructive_hint.unwrap_or(true),
         annotations.open_world_hint.unwrap_or(true),
     );
-    let audit = PermissionAuditReceipt::new(memory_dir, &settings, profile_id, request);
+    let audit = PermissionAuditReceipt::new(memory_dir, &settings, profile_id, request, session.config.thread_memory_mode);
     review_once_permission(
         session,
         &selection,
@@ -852,7 +858,7 @@ async fn preflight_in_process_network(
         "当前模式未直接授予进程内网络访问。是否仅允许本次 `{}` 访问以下主机？\n\n{}\n\n该授权不会开放 terminal/code_exec 网络，也不会持久化。",
         call.name, host_list
     );
-    let audit = PermissionAuditReceipt::new(memory_dir, &settings, profile_id, request);
+    let audit = PermissionAuditReceipt::new(memory_dir, &settings, profile_id, request, session.config.thread_memory_mode);
     review_once_permission(
         session,
         &selection,
@@ -924,6 +930,7 @@ async fn review_sandbox_denial(
         &settings,
         profile_id,
         request,
+        session.config.thread_memory_mode,
     );
     review_once_permission(
         session,
@@ -1130,6 +1137,7 @@ async fn execute_tools_serial_inner(
                             &permission_settings,
                             active_profile_id,
                             permission_request.clone(),
+                            session.config.thread_memory_mode,
                         );
                         let approval_started = std::time::Instant::now();
                         approval_audit.record(
@@ -1355,15 +1363,19 @@ async fn execute_tools_serial_inner(
                 match start_managed_network(session, &step_context, call, turn_ctx_arc).await {
                     Ok(managed_network) => managed_network,
                     Err(error) => {
-                        memory::try_append_decision(
-                            &memory_dir,
-                            memory::DecisionEntry::new(
-                                memory::DecisionKind::ToolFailure,
-                                format!("managed network setup failed: {error}"),
-                            )
-                            .with_tool(call.name.clone())
-                            .with_session(session_id.clone()),
-                        );
+                        if session.config.thread_memory_mode
+                            == types::ThreadMemoryMode::Enabled
+                        {
+                            memory::try_append_decision(
+                                &memory_dir,
+                                memory::DecisionEntry::new(
+                                    memory::DecisionKind::ToolFailure,
+                                    format!("managed network setup failed: {error}"),
+                                )
+                                .with_tool(call.name.clone())
+                                .with_session(session_id.clone()),
+                            );
+                        }
                         out.push(
                             format!("Tool error: managed network setup failed: {error}").into(),
                         );
@@ -1518,15 +1530,19 @@ async fn execute_tools_serial_inner(
                                             .await
                                     }
                                     Err(error) => {
-                                        memory::try_append_decision(
-                                            &memory_dir,
-                                            memory::DecisionEntry::new(
-                                                memory::DecisionKind::ToolFailure,
-                                                error.to_string(),
-                                            )
-                                            .with_tool(call.name.clone())
-                                            .with_session(session_id.clone()),
-                                        );
+                                        if session.config.thread_memory_mode
+                                            == types::ThreadMemoryMode::Enabled
+                                        {
+                                            memory::try_append_decision(
+                                                &memory_dir,
+                                                memory::DecisionEntry::new(
+                                                    memory::DecisionKind::ToolFailure,
+                                                    error.to_string(),
+                                                )
+                                                .with_tool(call.name.clone())
+                                                .with_session(session_id.clone()),
+                                            );
+                                        }
                                         format!("Tool error after sandbox escalation: {error}")
                                             .into()
                                     }
@@ -1557,15 +1573,19 @@ async fn execute_tools_serial_inner(
                     }
                 }
                 Err(e) => {
-                    memory::try_append_decision(
-                        &memory_dir,
-                        memory::DecisionEntry::new(
-                            memory::DecisionKind::ToolFailure,
-                            format!("{e}"),
-                        )
-                        .with_tool(call.name.clone())
-                        .with_session(session_id),
-                    );
+                    if session.config.thread_memory_mode
+                        == types::ThreadMemoryMode::Enabled
+                    {
+                        memory::try_append_decision(
+                            &memory_dir,
+                            memory::DecisionEntry::new(
+                                memory::DecisionKind::ToolFailure,
+                                format!("{e}"),
+                            )
+                            .with_tool(call.name.clone())
+                            .with_session(session_id),
+                        );
+                    }
                     format!("工具错误: {e}").into()
                 }
             }
@@ -1639,15 +1659,19 @@ pub(crate) async fn execute_tools_concurrent(
                         continue;
                     }
                     Err(error) => {
-                        memory::try_append_decision(
-                            session.memory_dir(),
-                            memory::DecisionEntry::new(
-                                memory::DecisionKind::ToolFailure,
-                                error.to_string(),
-                            )
-                            .with_tool(tool_name)
-                            .with_session(session.session_id().to_string()),
-                        );
+                        if session.config.thread_memory_mode
+                            == types::ThreadMemoryMode::Enabled
+                        {
+                            memory::try_append_decision(
+                                session.memory_dir(),
+                                memory::DecisionEntry::new(
+                                    memory::DecisionKind::ToolFailure,
+                                    error.to_string(),
+                                )
+                                .with_tool(tool_name)
+                                .with_session(session.session_id().to_string()),
+                            );
+                        }
                         format!("工具错误: {error}").into()
                     }
                 };
@@ -1825,6 +1849,7 @@ mod tests {
             &settings,
             types::WORKSPACE_PROFILE.to_string(),
             request,
+            types::ThreadMemoryMode::Enabled,
         );
         receipt.record(
             memory::PermissionAuditKind::Applied,

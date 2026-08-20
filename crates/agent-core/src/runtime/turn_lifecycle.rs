@@ -262,6 +262,7 @@ impl Session {
                 .await
                 .iter()
                 .any(|m| matches!(m.role, types::message::Role::Assistant))
+            && self.config.thread_memory_mode == types::ThreadMemoryMode::Enabled
         {
             memory::try_append_decision(
                 self.memory_dir(),

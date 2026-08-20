@@ -93,6 +93,8 @@ pub struct Config {
     pub context_budget_chars: usize,
     /// 可选的静态上下文覆盖，用于测试或自定义 prompt。
     pub static_override: Option<StaticContext>,
+    /// Per-session memory write policy (Codex-style thread memory mode).
+    pub thread_memory_mode: types::ThreadMemoryMode,
 }
 
 impl Config {
@@ -117,6 +119,7 @@ impl Config {
             dynamic_max_items: 3,
             context_budget_chars: crate::prompt::DEFAULT_CONTEXT_BUDGET_CHARS,
             static_override: None,
+            thread_memory_mode: types::ThreadMemoryMode::Enabled,
         }
     }
 }
