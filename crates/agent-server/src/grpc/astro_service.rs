@@ -813,6 +813,34 @@ impl AstroServiceImpl {
         .await
     }
 
+    async fn finalize_background_phase(
+        &self,
+        managed: &Arc<ManagedThread>,
+        turn_id: &str,
+        lifecycle: &tokio_util::sync::CancellationToken,
+    ) {
+        if lifecycle.is_cancelled() {
+            let _ = managed
+                .commands
+                .send(crate::ListenerCommand::ExpireBackgroundSink {
+                    turn_id: turn_id.to_string(),
+                });
+            return;
+        }
+        let marker = tokio::time::timeout(
+            crate::POST_TURN_COMPLETION_MARKER_TIMEOUT,
+            self.emit_background_complete(managed, turn_id),
+        )
+        .await;
+        if !matches!(marker, Ok(Ok(()))) {
+            let _ = managed
+                .commands
+                .send(crate::ListenerCommand::ExpireBackgroundSink {
+                    turn_id: turn_id.to_string(),
+                });
+        }
+    }
+
     /// Production workspace pending emitter; public for durable integration coverage.
     #[doc(hidden)]
     pub async fn emit_pending_extension(
@@ -906,29 +934,13 @@ impl AstroServiceImpl {
                                 Ok::<(), Status>(())
                             },
                             async move {
-                                if finalize_lifecycle.is_cancelled() {
-                                    let _ = finalize_managed.commands.send(
-                                        crate::ListenerCommand::ExpireBackgroundSink {
-                                            turn_id: finalize_turn_id.clone(),
-                                        },
-                                    );
-                                    return;
-                                }
-                                let marker = tokio::time::timeout(
-                                    std::time::Duration::from_secs(30),
-                                    finalize_service.emit_background_complete(
+                                finalize_service
+                                    .finalize_background_phase(
                                         &finalize_managed,
                                         &finalize_turn_id,
-                                    ),
-                                )
-                                .await;
-                                if !matches!(marker, Ok(Ok(()))) {
-                                    let _ = finalize_managed.commands.send(
-                                        crate::ListenerCommand::ExpireBackgroundSink {
-                                            turn_id: finalize_turn_id.clone(),
-                                        },
-                                    );
-                                }
+                                        &finalize_lifecycle,
+                                    )
+                                    .await;
                             },
                             phase_lifecycle,
                         )
@@ -4283,9 +4295,10 @@ mod tests {
         assert!(managed.activity_rx.borrow().has_subscribers);
         drop(managed);
 
-        // Simulate a provider future that never resolves. The background lease must
-        // expire independently before the normal thirty-minute idle-unload window.
-        tokio::time::advance(std::time::Duration::from_secs(5 * 60)).await;
+        // Simulate a provider future that never resolves. The background lease must retain
+        // the sink through the work timeout plus marker window, then expire independently
+        // before the normal thirty-minute idle-unload window.
+        tokio::time::advance(crate::BACKGROUND_EXTENSION_SINK_TIMEOUT).await;
         for _ in 0..8 {
             tokio::task::yield_now().await;
         }

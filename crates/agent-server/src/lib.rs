@@ -25,6 +25,10 @@ pub use transport::{ConnectionGeneration, ConnectionRegistry};
 
 pub(crate) const POST_TURN_SIDE_EFFECT_TIMEOUT: std::time::Duration =
     std::time::Duration::from_secs(5 * 60);
+pub(crate) const POST_TURN_COMPLETION_MARKER_TIMEOUT: std::time::Duration =
+    std::time::Duration::from_secs(30);
+pub(crate) const BACKGROUND_EXTENSION_SINK_TIMEOUT: std::time::Duration =
+    std::time::Duration::from_secs(6 * 60);
 
 /// Durable Thread used for workspace-wide events that are not owned by one chat session.
 pub const WORKSPACE_EVENT_THREAD_ID: &str = "astro-workspace-events";

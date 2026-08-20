@@ -7,6 +7,10 @@ use tokio::sync::{mpsc, Mutex};
 use crate::thread_state::{ListenerCommand, ThreadActivity, ThreadSnapshot, ThreadState};
 use crate::transport::ConnectionRegistry;
 
+fn background_sink_retention_timeout() -> std::time::Duration {
+    crate::BACKGROUND_EXTENSION_SINK_TIMEOUT
+}
+
 fn item_type(item: &TurnItem) -> &'static str {
     match item {
         TurnItem::UserMessage(_) => "user_message",
@@ -363,7 +367,7 @@ pub async fn run_listener_commands(
                             let commands = state.listener_command_tx.clone();
                             let turn_id = completed.turn_id.clone();
                             tokio::spawn(async move {
-                                tokio::time::sleep(crate::POST_TURN_SIDE_EFFECT_TIMEOUT).await;
+                                tokio::time::sleep(background_sink_retention_timeout()).await;
                                 let _ = commands
                                     .send(ListenerCommand::ExpireBackgroundSink { turn_id });
                             });
@@ -556,5 +560,20 @@ pub async fn run_listener_commands(
             }
             ListenerCommand::Stop => break,
         }
+    }
+}
+
+#[cfg(test)]
+mod background_sink_tests {
+    use super::*;
+
+    #[test]
+    fn retained_sink_outlives_work_and_completion_marker_window() {
+        assert!(
+            background_sink_retention_timeout()
+                > crate::POST_TURN_SIDE_EFFECT_TIMEOUT
+                    + crate::POST_TURN_COMPLETION_MARKER_TIMEOUT,
+            "the sink must remain available while timed-out background work emits its completion marker"
+        );
     }
 }
