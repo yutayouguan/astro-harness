@@ -1,9 +1,9 @@
 # Agent 生命周期详细设计
 
-> 版本：v2.28
-> 日期：2026-08-19
-> 状态：实施基线  
-> 上游参考：[OpenAI Codex](https://github.com/openai/codex) `ede5247893a50297a47c9aa5038e6ab28312ff50`
+> 版本：v2.29
+> 日期：2026-08-20
+> 状态：已实现
+> 上游参考：[OpenAI Codex](https://github.com/openai/codex) `632e35ce8d5dec43b75dbf99f9e6fa52bed47c3d`  
 > 适用范围：`agent-core`、`agent-tools`、`agent-sandbox`、`agent-network-proxy`、`agent-types`、`agent-subagents`、`agent-memory`、`agent-session`、`agent-hooks`、`agent-mcp`
 
 ---
@@ -29,11 +29,11 @@
 
 ## 2. 核心结论
 
-Astro 不再把 Agent 生命周期建模为一个巨大的 `AgentLoop`。目标架构与 Codex 一致，分为五层：
+Astro 不再把 Agent 生命周期建模为一个巨大的 `AgentLoop`。已落地架构与 Codex 一致，分为五层：
 
 ```text
 ThreadManager
-  └─ AgentThread
+  └─ AstroThread / AgentThread
       └─ Session
           └─ SessionTask
               └─ TurnContext
@@ -64,6 +64,12 @@ ThreadManager
 - tool result 必须持久化后才能发起下一次 sampling。
 - 前台、Cron 和 SubAgent 使用同一个 `run_turn`，后台代码只能做事件收集适配。
 - SubAgent 是完整 `AgentThread`，拥有独立 thread id、状态、消息和 rollout。
+- 每个加载的 Thread 只有一个长期 `Session`、一条容量 512 的 submission queue 和一个
+  Server listener。
+- durable `EventMsg` 必须先通过 rollout policy append，再进入 live Core queue。
+- 每个 `TurnStarted` 恰好收敛到一个 `TurnComplete` 或 `TurnAborted`；Core 不产生 `Done`。
+- 恢复契约是 durable snapshot + active snapshot + live，不承诺重放 token、reasoning 或 stdout
+  transient delta。
 
 ---
 
@@ -71,10 +77,13 @@ ThreadManager
 
 ### 3.1 输入接纳
 
-所有用户输入统一进入：
+所有用户输入先通过线程级有界队列统一进入：
 
 ```rust
-Session::start_or_steer_turn(TurnInputRequest)
+AstroThread::submit(Op::TurnInput { request, mode, reply })
+    -> bounded(512)
+    -> Session::submission_loop
+    -> Session::submit_turn_input
     -> TurnInputSubmission
 ```
 
@@ -101,7 +110,8 @@ pub enum TurnInputSubmission {
 ```
 
 `Start` 创建新的 `TurnContext` 和 `RegularTask`；`Steer` 只把输入投递到当前 active turn 的
-mailbox，不重建本轮配置。
+mailbox，不重建本轮配置。Interrupt、approval、settings、extension 和 Shutdown 也共享该提交
+顺序边界，调用方不得绕过 `AstroThread::submit` 直接并发修改 Session。
 
 ### 3.2 SessionTask
 
@@ -433,7 +443,7 @@ pub struct PluginManifestPaths<Resource> {
 
 ```text
 Rollout JSONL / append-only items
-  └─ 耐久历史、审计、resume、fork、replay
+  └─ 耐久历史、审计、resume、fork、稳定状态重建
 
 State DB / SQLite projections
   └─ thread metadata、查询、队列、Agent graph、memory jobs、分页索引
@@ -442,8 +452,14 @@ State DB / SQLite projections
 目标接口统一为 `ThreadStore`，覆盖 create、resume、append、persist、flush、shutdown、
 load history、prepare fork、revert、read 和 list。
 
-现有 `SessionStore` 不立即删除；先成为 `LocalThreadStore` 的 SQLite projection adapter。任何
-schema 和 RPC 字段改名都必须提供 migration 或 serde alias。
+`SessionStore::rebuild_messages_from_rollout` 在一个事务内只删除目标 session 的 messages 并
+重建投影；预验证失败和事务失败都保持原投影。映射保留 user/assistant/tool、tool calls、重复
+tool-call id 的顺序归属、reasoning/thought signature、compressed content，以及 message/parts
+中的 image/audio/video media。冷启动 hydrate 从 `media_json` 恢复完整 `MediaAsset`，仅把 image
+data URL 生成兼容 content parts，audio/video 不再降格为 image。
+
+rollout 是恢复事实源；SQLite 是查询和冷启动投影。任何 schema 和 RPC 字段改名都必须提供
+migration 或 serde alias。
 
 ---
 
@@ -479,7 +495,7 @@ schema 和 RPC 字段改名都必须提供 migration 或 serde alias。
 | `handle_tool_call_async_scoped` | `ToolCallRuntime::run` |
 | `dispatch_named_tool` | `ToolRouter::dispatch_tool_call` |
 | `AgentRuntimeManager::start_turn` | `ThreadManager::spawn_thread` + `RegularTask` |
-| `run_background_multi_turn` | 删除；保留 event collector adapter |
+| `run_background_multi_turn` | 仅保留兼容执行/收集 adapter；真实循环统一进入 `RegularTask::run` |
 
 ### 10.3 局部变量
 
@@ -870,9 +886,10 @@ network retry 或 session/global proxy 状态。
 
 ### Phase E：Rollout 与记忆
 
-- append-only rollout 先双写，再成为 replay contract。
-- SQLite 转为 projection/query store。
-- 上线两阶段 memory pipeline 和引用追踪。
+- [x] append-only rollout 成为 durable history contract，durable event 先写后 live。
+- [x] SQLite messages 可按目标 session 从 rollout 事务重建。
+- [x] 冷启动 hydrate 保留 image/audio/video media kind、reference 与 MIME。
+- [x] memory/title/pending 副作用通过 namespaced `Op::EmitExtension` 进入同一事实链。
 
 ### Phase F：Plugin/Extension
 
@@ -913,6 +930,9 @@ cd apps/desktop && npm run build
 5. memory write 为两阶段后台流水线，read path 为 Extension。
 6. Plugin bundle 与 typed Extension API 已区分。
 7. 旧名称仅存在于兼容层和迁移代码。
+
+事件 fan-out、断线恢复、后台 extension sink、provisional ACK barrier 和兼容边界的权威设计见
+[Agent 事件与恢复详细设计](12-Agent事件与恢复详细设计.md)。
 
 ---
 

@@ -2,7 +2,7 @@
 
 **日期:** 2026-08-18
 
-**状态:** 已确认，待实现
+**状态:** 已实现
 
 **范围:** Agent Core、rollout、app-server、gRPC/Tauri/exec 事件映射
 
@@ -10,31 +10,25 @@
 
 ## 1. 背景
 
-Astro 已具备流式多轮执行、工具生命周期、后台任务和可恢复的部分会话通知，但当前仍存在多套事件路径：
-
-- `MultiTurnStreamItem` 服务单次 Chat 流，生命周期绑定一次请求；
-- `EventBus` 未成为运行时的统一事件出口；
-- `SessionEventHub` 只覆盖记忆、标题等会话副作用，且依赖内存广播；
-- 后台收集器会丢弃工具、活动、上下文和终止事件；
-- 主 Chat 路径仍是“每请求创建队列、单消费者接收”；
-- SQLite `SessionStore` 保存消息，但没有 Codex 风格的顺序 rollout 作为线程恢复事实源。
-
-因此，现状尚不能同时保证运行事件、后台事件、多订阅者、断线恢复、慢消费者隔离和统一事件粒度。
-
-本设计将 Astro 的 Agent Loop 调整为与 Codex 相同的主干结构：
+Astro 原有 `MultiTurnStreamItem`、Core `EventBus` 和 `SessionEventHub` 三套事实路径，无法同时
+保证统一生命周期、多订阅者、断线恢复和后台副作用。迁移完成后，运行时只保留以下事实链：
 
 ```text
 AstroThread::submit(Op)
-  → bounded submission queue (512)
-  → 长期存活的 Session::submission_loop
-  → run_turn / SessionTask
-  → Event { id, msg: EventMsg }
-  → 根据 rollout policy 先追加 rollout
-  → Core 顺序事件队列
-  → app-server 单 listener
-  → ThreadHistoryBuilder + 协议映射
-  → app-server / TUI / exec 多订阅者
+  → bounded(512)
+  → Session::submission_loop
+  → SessionTask::run_turn
+  → EventMsg
+  → rollout policy + append
+  → Core event queue
+  → one Server listener
+  → ThreadHistoryBuilder
+  → connection queues bounded(128)
+  → Tauri / exec / compatibility Chat
 ```
+
+`SessionEventHub`、Core `EventBus`、Core `MultiTurnStreamItem` 和 cursor replay 已从运行时删除。
+兼容类型只能存在于协议/桌面映射边界，不能成为第二个 emitter、history 或恢复事实源。
 
 ## 2. 目标与非目标
 
@@ -72,13 +66,13 @@ AstroThread::submit(Op)
 | 连接队列 | 每连接有界队列 128；`try_send` 失败即断开慢连接 |
 | 恢复 | `thread/resume` 返回持久历史与活动 Turn 快照，再继续实时流 |
 | 空闲卸载 | 无订阅且非活动持续 30 分钟后，提交 `Shutdown` 并 flush rollout |
-| 兼容 | 旧 Chat/SessionEvents 暂时作为新协议适配器，最终删除旧事件源 |
+| 兼容 | Chat/Tauri 边界从 ThreadEvent 单向映射；不存在兼容事件源或 SessionEvents 订阅链 |
 
 ## 4. Core 运行架构
 
 ### 4.1 `AstroThread` 与 `SessionIo`
 
-`AstroThread` 是 Server、TUI 和 exec 持有的稳定线程句柄：
+`AstroThread` 是 Server 持有并供 Tauri、exec 和 Chat 边界间接驱动的稳定线程句柄：
 
 ```rust
 pub struct AstroThread {
@@ -300,12 +294,13 @@ Session::send_event
 `SessionStore` 继续提供消息查询、FTS、billing 和 UI 列表，但不再是运行时恢复的唯一事实源：
 
 - 新运行数据先生成 `RolloutItem`；
-- projection worker 将稳定记录投影到 SQLite；
+- `rebuild_messages_from_rollout` 可在单事务内重建指定 session 的 SQLite messages；
 - 投影失败不修改 rollout；
 - SQLite 可从 rollout 重建；
 - 迁移期允许兼容读旧消息，但禁止长期维持两套独立写入语义。
 
-“assistant 含 tool_calls 的记录先于工具执行”的现有不变量，改由相应 `ResponseItem` 成功进入 rollout writer 保证。
+“assistant 含 tool_calls 的记录先于工具执行”的现有不变量同时由 SQLite 记录顺序和相应
+`ResponseItem` rollout 顺序保证。
 
 ## 7. app-server、多订阅者与背压
 
@@ -333,7 +328,8 @@ AstroThread::next_event()
 - listener command queue；
 - 是否存在订阅者的 watch 状态。
 
-`thread/start` 和 `thread/resume` 自动订阅当前连接；`thread/unsubscribe` 显式移除。一个连接可订阅多个 Thread，一个 Thread 可被 app-server、TUI、exec 等多个连接同时订阅。
+`SubmitTurn`/`ResumeThread` 把当前连接订阅到目标 Thread；`UnsubscribeThread` 显式移除。一个连接
+可订阅多个 Thread，一个 Thread 可被 Tauri、exec 和兼容 Chat 等多个连接同时订阅。
 
 ### 7.3 慢消费者
 
@@ -371,14 +367,29 @@ AstroThread::next_event()
 - token delta、reasoning delta、stdout 等瞬时事件不补发；
 - 未完成 Item 最终通过新的 live event 或终止状态收敛；
 - 活动审批和 server request 重新发送给新连接；
-- `event_id / stream_id / after_event_id` 仅保留短期 wire compatibility，不再作为恢复事实源；
-- Paginated history 使用 turns/items backwards cursor，cursor 只分页稳定历史。
+- `event_id / stream_id / after_event_id` cursor replay 已删除；恢复不接受瞬时事件游标；
+- `include_turns` 控制 Resume 是否返回 completed turns；当前协议不提供 event/history replay
+  cursor。
 
 ## 9. 前台、后台与客户端映射
 
 ### 9.1 前后台统一
 
-前台 Chat、Cron/headless、后台 review、记忆维护和 Subagent 都提交 `Op`，由相同 SessionTask 生命周期产生 `EventMsg`。后台收集器不得再忽略：
+前台 Chat、Cron/headless 和 Subagent 都由同一 `SessionTask` 生命周期产生 `EventMsg`。终态后的
+memory review、title 和 global pending 则提交 `Op::EmitExtension`，继续进入相同的
+rollout-before-live 事实链，而不是创建后台广播总线。命名空间契约为：
+
+- `astro.memory`: `{ source, target, summary, live_written }`；
+- `astro.pending`: `{ pending_count, reason }`，归属固定 workspace thread
+  `astro-workspace-events`；
+- `astro.session_metadata`: `{ title }`；
+- `astro.background_complete`: 正常 payload 为 `{}`，turn id 由事件 envelope 承载；sink 超时时为
+  `{ turn_id, expired: true }`。
+
+Server 在成功终态保留按 logical connection id 归属的 background extension sink；同 id 新代连接
+可接收迟到 extension，不同连接隔离。side-effect supervisor 有总超时，成功、错误、超时和取消
+最终都会完成 marker 或直接 expire 原 sink，且不会通过 `get_or_create` 复活已 release 的线程。
+后台收集器不得忽略：
 
 - `ItemStarted` / `ItemCompleted`；
 - 工具和 MCP 生命周期；
@@ -386,18 +397,19 @@ AstroThread::next_event()
 - `TurnComplete` / `TurnAborted`；
 - Extension item。
 
-没有订阅者时，app-server listener 仍持续消费 Core 事件并更新状态。Thread 只有在“无订阅者且非活动”持续 30 分钟后才能卸载。
+没有订阅者时，Server listener 仍持续消费 Core 事件并更新状态。Thread 只有在“无订阅者、无
+background sink 且非活动”持续 30 分钟后才能卸载。
 
-### 9.2 app-server / TUI / exec
+### 9.2 Server / Tauri / exec
 
 - app-server 是 Core EventMsg 到外部 typed notifications 的唯一映射层；
-- TUI、桌面和 exec 消费同一协议，不各自解释 Core 私有枚举；
+- Tauri、exec 和兼容 Chat 消费同一协议，不各自解释 Core 私有枚举；
 - 同一个 EventMsg 只映射一次，再 fan-out 到连接；
 - UI 的活动卡、正文 delta、审批表面和工具结果都以 `turn_id + item_id` 关联。
 
 ### 9.3 兼容 Chat RPC
 
-旧 `Chat` RPC 暂时保留为适配器：
+`Chat` RPC 保留为边界适配器：
 
 1. 先确保当前连接已订阅 Thread；
 2. 提交 `Op::TurnInput`；
@@ -405,7 +417,8 @@ AstroThread::next_event()
 4. 映射成旧 Chat stream item；
 5. 收到唯一终止事件后结束兼容流。
 
-兼容适配器不能创建独立 Agent Loop、独立事件 hub 或第二份生命周期状态。
+兼容适配器不能创建独立 Agent Loop、独立事件 hub 或第二份生命周期状态。`Done` 只允许存在于
+Chat/Tauri compatibility adapter；Core 终态只有 `TurnComplete` 或 `TurnAborted`。
 
 ## 10. Shutdown 与故障语义
 
@@ -432,33 +445,33 @@ AstroThread::next_event()
 
 ## 11. 迁移策略
 
-### 阶段 A：协议与 rollout 基础
+### 阶段 A：协议与 rollout 基础（已完成）
 
 - 建立 `Op`、`Submission`、`Event`、`EventMsg`、`TurnItem`；
 - 实现 `rollout::policy`、writer、flush 与 reconstruction；
 - 新 Thread 默认 `Paginated`，旧 Thread 标记 `Legacy`。
 
-### 阶段 B：Session actor
+### 阶段 B：Session actor（已完成）
 
 - 引入 `AstroThread` / `SessionIo`；
 - 建立 512 submission queue 和长期 `submission_loop`；
 - 把 Turn、审批、打断、配置和 Shutdown 迁入 `Op`；
 - 收敛终止事件到 `on_task_finished`。
 
-### 阶段 C：Server listener
+### 阶段 C：Server listener（已完成）
 
 - 建立 ThreadStateManager、ThreadHistoryBuilder、单 listener；
 - 建立多连接订阅、128 outbound queue、慢连接断开；
 - 实现 thread start/resume/unsubscribe 和 30 分钟空闲卸载。
 
-### 阶段 D：客户端适配
+### 阶段 D：客户端适配（已完成）
 
 - 迁移 gRPC app-server；
 - 迁移 Tauri 和前端活动时间线；
 - 迁移 exec/headless；
 - 旧 Chat RPC 变为兼容适配器。
 
-### 阶段 E：删除旧路径
+### 阶段 E：删除旧路径（已完成）
 
 - 删除 `MultiTurnStreamItem` 作为内部事实源；
 - 删除未接入的 `EventBus`；
@@ -466,7 +479,7 @@ AstroThread::next_event()
 - 删除后台事件丢弃逻辑；
 - 删除 `after_event_id` 恢复实现和重复状态机。
 
-每个阶段必须独立可测试、独立提交。兼容层只允许存在于迁移期间，最终只能保留一条事件事实链。
+迁移后的兼容层只允许做单向协议投影，最终只保留一条事件事实链。
 
 ## 12. 验证方案
 
@@ -512,16 +525,48 @@ AstroThread::next_event()
 6. `cargo clippy --workspace --all-targets` 无新增告警。
 7. `apps/desktop` TypeScript 检查与生产构建通过。
 
+### 12.5 2026-08-20 实现验证记录
+
+Focused 门全部通过：
+
+- `cargo fmt --all -- --check`；
+- `cargo test -p agent-protocol`：3 passed；
+- `cargo test -p agent-rollout`：16 passed；
+- `cargo test -p agent --test thread_event_lifecycle_test`：8 passed；
+- `cargo test -p agent --test streaming_test`：28 passed；
+- `cargo test -p server --test thread_events_test`：15 passed；
+- `cargo test -p session --test rollout_projection_test`：6 passed。
+
+完整回归结果：
+
+- `cargo test --workspace --all-targets`：51 suites，1478 passed，2 ignored；
+- `cd apps/desktop && npx tsc --noEmit`：通过；
+- `cd apps/desktop && npm run build`：通过；Vite 仍报告既有 dynamic/static import 和
+  大于 500 kB chunk 的非阻断 warning；
+- legacy deletion `rg`：0 个 runtime 命中；
+- EventMsg coverage `rg`：217 个 emitter、mapper 或 test 命中；
+- `git diff --check`：通过。
+
+`cargo clippy --workspace --all-targets -- -D warnings` 未通过既有 workspace baseline。当前改动
+只有文档，报告的 Rust 告警来自未修改文件：
+
+- `crates/agent-types/src/message.rs:392`：`clippy::items_after_test_module`；
+- `crates/agent-skills/src/installed.rs:461`：`clippy::unnecessary_sort_by`；
+- `crates/agent-providers` lib tests：81 个既有 `clippy::unwrap_used`，首个为
+  `src/compat/messages.rs:148`。
+
+该 baseline 不改变 focused 门与运行时验收结论，但 workspace clippy 不能记为全绿。
+
 ## 13. 验收标准
 
-- [ ] 运行事件：所有 Turn/Item 生命周期来自统一 `EventMsg`。
-- [ ] 后台事件：后台路径不再丢弃工具、活动、上下文和终止事件。
-- [ ] 多订阅者：多个客户端可同时订阅，顺序一致。
-- [ ] 断线恢复：rollout + active snapshot 可恢复稳定线程状态。
-- [ ] 慢消费者：慢连接断开，不阻塞 Session 和其他连接。
-- [ ] 事件粒度：消息、reasoning、plan、exec、patch、approval、MCP、Hook、Subagent、Compaction 均有明确 Item/Delta 映射。
-- [ ] 终止一致性：每个 Turn 恰好一个 `TurnComplete` 或 `TurnAborted`。
-- [ ] 单一事实源：不存在第二套运行时事件 hub 或独立后台状态机。
+- [x] 运行事件：所有 Turn/Item 生命周期来自统一 `EventMsg`。
+- [x] 后台事件：后台路径不再丢弃工具、活动、上下文和终止事件。
+- [x] 多订阅者：多个客户端可同时订阅，顺序一致。
+- [x] 断线恢复：rollout + active snapshot 可恢复稳定线程状态。
+- [x] 慢消费者：慢连接断开，不阻塞 Session 和其他连接。
+- [x] 事件粒度：消息、reasoning、plan、exec、patch、approval、MCP、Hook、Subagent、Compaction 均有明确 Item/Delta 映射。
+- [x] 终止一致性：每个 Turn 恰好一个 `TurnComplete` 或 `TurnAborted`。
+- [x] 单一事实源：不存在第二套运行时事件 hub 或独立后台状态机。
 
 ## 14. 风险与约束
 
