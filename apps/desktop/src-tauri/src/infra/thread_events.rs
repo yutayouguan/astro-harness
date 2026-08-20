@@ -399,11 +399,11 @@ impl ThreadEventsBridge {
         }
         let mut state = self.active_threads.write().await;
         if let Some(activation) = state.activations.get(thread_id).copied() {
-            let currently_pending = state
+            let uniquely_pending = state
                 .awaiting_submissions
                 .get(thread_id)
-                .is_some_and(|pending| pending.contains(&activation));
-            if currently_pending {
+                .is_some_and(|pending| pending.len() == 1 && pending.contains(&activation));
+            if uniquely_pending {
                 state
                     .turn_epochs
                     .entry(thread_id.into())
@@ -448,6 +448,7 @@ impl ThreadEventsBridge {
             Self::remove_deferred_activation(&mut state, thread_id, activation);
             return Vec::new();
         }
+        Self::remove_turn_epoch(&mut state, thread_id, activation);
         state
             .turn_epochs
             .entry(thread_id.into())
@@ -3757,23 +3758,130 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn observed_turn_binds_latest_activation_when_older_ack_is_still_pending() {
+    async fn observed_turn_with_multiple_pending_acks_waits_for_authoritative_bindings() {
         let bridge = ThreadEventsBridge::new();
-        bridge.activate("session-observed").await;
-        bridge.activate("session-observed").await;
+        let old = bridge.activate("session-observed").await;
+        let current = bridge.activate("session-observed").await;
 
         bridge
-            .bind_observed_turn("session-observed", "turn-observed")
+            .bind_observed_turn("session-observed", "turn-x")
             .await;
+        assert!(bridge
+            .bind_submitted_turn_if_current("session-observed", old, "turn-x")
+            .await
+            .is_empty());
+        assert!(bridge
+            .bind_submitted_turn_if_current("session-observed", current, "turn-y")
+            .await
+            .is_empty());
+
+        assert!(bridge
+            .accept_terminal("session-observed", "turn-x", terminal_projection("turn-x"),)
+            .await
+            .is_empty());
+        assert!(bridge.is_active("session-observed").await);
         assert!(!bridge
+            .accept_terminal("session-observed", "turn-y", terminal_projection("turn-y"),)
+            .await
+            .is_empty());
+    }
+
+    #[tokio::test]
+    async fn observed_terminal_before_mismatched_current_ack_does_not_finish_current_turn() {
+        let bridge = ThreadEventsBridge::new();
+        let old = bridge.activate("session-observed-preterminal").await;
+        let current = bridge.activate("session-observed-preterminal").await;
+
+        bridge
+            .bind_observed_turn("session-observed-preterminal", "turn-x")
+            .await;
+        assert!(bridge
             .accept_terminal(
-                "session-observed",
-                "turn-observed",
-                terminal_projection("turn-observed"),
+                "session-observed-preterminal",
+                "turn-x",
+                terminal_projection("turn-x"),
             )
             .await
             .is_empty());
-        assert!(!bridge.is_active("session-observed").await);
+        assert!(bridge.is_active("session-observed-preterminal").await);
+        assert!(bridge
+            .bind_submitted_turn_if_current("session-observed-preterminal", old, "turn-x")
+            .await
+            .is_empty());
+        assert!(bridge
+            .bind_submitted_turn_if_current("session-observed-preterminal", current, "turn-y")
+            .await
+            .is_empty());
+        assert!(bridge.is_active("session-observed-preterminal").await);
+        assert_eq!(
+            deferred_terminal_count(&bridge, "session-observed-preterminal").await,
+            0
+        );
+        assert!(bridge
+            .accept_terminal(
+                "session-observed-preterminal",
+                "turn-x",
+                terminal_projection("turn-x"),
+            )
+            .await
+            .is_empty());
+        assert!(bridge.is_active("session-observed-preterminal").await);
+        assert!(!bridge
+            .accept_terminal(
+                "session-observed-preterminal",
+                "turn-y",
+                terminal_projection("turn-y"),
+            )
+            .await
+            .is_empty());
+    }
+
+    #[tokio::test]
+    async fn observed_terminal_with_matching_current_ack_still_releases_current_turn() {
+        let bridge = ThreadEventsBridge::new();
+        let old = bridge.activate("session-observed-match").await;
+        let current = bridge.activate("session-observed-match").await;
+
+        bridge
+            .bind_observed_turn("session-observed-match", "turn-x")
+            .await;
+        assert!(bridge
+            .accept_terminal(
+                "session-observed-match",
+                "turn-x",
+                terminal_projection("turn-x"),
+            )
+            .await
+            .is_empty());
+        assert!(bridge
+            .bind_submitted_turn_if_current("session-observed-match", old, "turn-x")
+            .await
+            .is_empty());
+        assert!(!bridge
+            .bind_submitted_turn_if_current("session-observed-match", current, "turn-x")
+            .await
+            .is_empty());
+        assert!(!bridge.is_active("session-observed-match").await);
+    }
+
+    #[tokio::test]
+    async fn authoritative_current_ack_removes_different_provisional_turn_epoch() {
+        let bridge = ThreadEventsBridge::new();
+        let current = bridge.activate("session-provisional").await;
+        bridge
+            .bind_observed_turn("session-provisional", "turn-x")
+            .await;
+
+        bridge
+            .bind_submitted_turn_if_current("session-provisional", current, "turn-y")
+            .await;
+        let state = bridge.active_threads.read().await;
+        let epochs = state
+            .turn_epochs
+            .get("session-provisional")
+            .expect("authoritative turn epoch");
+        assert_eq!(epochs.get("turn-y"), Some(&current));
+        assert!(!epochs.contains_key("turn-x"));
     }
 
     #[tokio::test]
