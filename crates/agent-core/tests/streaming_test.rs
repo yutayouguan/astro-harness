@@ -1407,7 +1407,7 @@ async fn cold_start_hydrates_history_from_db() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().to_path_buf();
     {
-        let mut agent = AgentLoop::with_session_id(
+        let agent = AgentLoop::with_session_id(
             AgentConfig::with_defaults(path.clone()),
             "hydrate-me".into(),
         )

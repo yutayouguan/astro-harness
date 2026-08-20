@@ -1606,7 +1606,7 @@ mod tests {
             .runtime
             .submit(agent_protocol::Op::Shutdown)
             .await
-            .unwrap();
+            .expect("shutdown submission should succeed");
         managed.runtime.wait_terminated().await;
     }
 
@@ -1656,7 +1656,7 @@ mod tests {
             .runtime
             .submit(agent_protocol::Op::Shutdown)
             .await
-            .unwrap();
+            .expect("shutdown submission should succeed");
         managed.runtime.wait_terminated().await;
     }
 
@@ -1714,7 +1714,7 @@ mod tests {
             .runtime
             .submit(agent_protocol::Op::Shutdown)
             .await
-            .unwrap();
+            .expect("shutdown submission should succeed");
         managed.runtime.wait_terminated().await;
     }
 

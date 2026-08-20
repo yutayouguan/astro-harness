@@ -184,11 +184,6 @@ impl TurnContext {
         }
     }
 
-    #[cfg(test)]
-    pub(crate) async fn wait_for_preparing_reservation(&self) {
-        self.preparing_reservation_notify.notified().await;
-    }
-
     pub(crate) fn open_input_admission(&self) {
         {
             let mut state = self

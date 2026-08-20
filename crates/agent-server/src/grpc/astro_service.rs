@@ -10,6 +10,7 @@ use std::sync::{Arc, Mutex as StdMutex, RwLock as StdRwLock, Weak};
 use agent::builder::AgentBuilder;
 use agent::runtime::Session;
 use agent::{HitlGate, HitlRegistry, TurnAbortReason};
+#[cfg(test)]
 use futures::FutureExt;
 use home::AgentRuntimeConfig;
 use memory::MemoryManager;
@@ -22,7 +23,9 @@ use proto::{
 };
 use providers::PauseControl;
 use providers::ProviderConfig;
-use tokio::sync::{Mutex, OnceCell, OwnedMutexGuard, RwLock};
+#[cfg(test)]
+use tokio::sync::OwnedMutexGuard;
+use tokio::sync::{Mutex, OnceCell, RwLock};
 use tokio_stream::wrappers::ReceiverStream;
 use tonic::{Request, Response, Status};
 
@@ -177,15 +180,18 @@ struct PauseRegistration {
     session: Weak<Session>,
     hitl_gate: Arc<HitlGate>,
     ui_generation: ::hooks::UiTimelineGeneration,
+    #[cfg(test)]
     operation: Arc<Mutex<()>>,
 }
 
+#[cfg(test)]
 struct GenerationLaunchReply<T> {
     /// The worker retains the generation operation until this handoff is accepted or dropped.
     value: Option<T>,
     accepted: Option<tokio::sync::oneshot::Sender<bool>>,
 }
 
+#[cfg(test)]
 struct PreparedPauseGeneration {
     session_id: String,
     session: Weak<Session>,
@@ -201,6 +207,7 @@ struct PreparedPauseGeneration {
     committed: bool,
 }
 
+#[cfg(test)]
 impl PreparedPauseGeneration {
     fn commit(mut self) -> PauseRegistration {
         let ui_generation = self.ui_slot.install_tx(
@@ -247,6 +254,7 @@ impl PreparedPauseGeneration {
     }
 }
 
+#[cfg(test)]
 impl Drop for PreparedPauseGeneration {
     fn drop(&mut self) {
         if self.committed {
@@ -262,6 +270,7 @@ impl Drop for PreparedPauseGeneration {
     }
 }
 
+#[cfg(test)]
 impl<T> GenerationLaunchReply<T> {
     fn into_value(mut self) -> T {
         if let Some(accepted) = self.accepted.take() {
@@ -271,6 +280,7 @@ impl<T> GenerationLaunchReply<T> {
     }
 }
 
+#[cfg(test)]
 impl<T> Drop for GenerationLaunchReply<T> {
     fn drop(&mut self) {
         if let Some(accepted) = self.accepted.take() {
@@ -360,6 +370,7 @@ fn prune_generation_operation(
     }
 }
 
+#[cfg(test)]
 async fn cleanup_pause_generation_parts(
     generation_operations: &GenerationOperations,
     pause_controls: &Arc<StdRwLock<HashMap<String, PauseRegistration>>>,
@@ -1504,6 +1515,7 @@ impl AstroServiceImpl {
     }
 
     /// 原子切换同一 chat generation 的 pause / HITL / UI 状态。
+    #[cfg(test)]
     async fn admit_pause_generation(
         &self,
         session_id: &str,
@@ -1528,6 +1540,7 @@ impl AstroServiceImpl {
             .map(PreparedPauseGeneration::commit)
     }
 
+    #[cfg(test)]
     async fn run_admit_pause_generation_worker(
         &self,
         session_id: String,
@@ -1594,6 +1607,7 @@ impl AstroServiceImpl {
         .await
     }
 
+    #[cfg(test)]
     async fn launch_current_pause_generation_with_setup<S, SetupFut, F, Fut, T>(
         &self,
         session_id: &str,
@@ -1632,6 +1646,7 @@ impl AstroServiceImpl {
             .map(GenerationLaunchReply::into_value)
     }
 
+    #[cfg(test)]
     async fn run_generation_launch_worker<S, SetupFut, F, Fut, T>(
         &self,
         session_id: String,
@@ -1702,6 +1717,7 @@ impl AstroServiceImpl {
         .await;
     }
 
+    #[cfg(test)]
     async fn cleanup_abandoned_generation_with_admission(
         &self,
         session_id: String,
@@ -1733,6 +1749,7 @@ impl AstroServiceImpl {
         );
     }
 
+    #[cfg(test)]
     async fn cleanup_pause_generation(
         &self,
         session_id: &str,
