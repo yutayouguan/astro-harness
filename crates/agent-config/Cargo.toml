@@ -1,0 +1,10 @@
+[package]
+name = "agent-config"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+serde = { workspace = true }
+sha2 = "0.10"
+thiserror = { workspace = true }
+toml = "0.8"
