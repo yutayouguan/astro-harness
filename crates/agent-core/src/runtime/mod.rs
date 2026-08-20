@@ -105,8 +105,14 @@ impl Config {
         let _ = memory::ensure_workspace(&memory_dir);
         let agent_id = home::active_agent_id(&memory_dir);
         let ws = home::agent_workspace_dir(&memory_dir, &agent_id);
-        let soul = std::fs::read_to_string(ws.join("SOUL.md"))
+        let mut soul = std::fs::read_to_string(ws.join("SOUL.md"))
             .unwrap_or_else(|_| "你是 Astro，一个自我进化的 AI 助手".to_string());
+        if let Ok(override_text) = std::fs::read_to_string(ws.join("SOUL.override.md")) {
+            if !override_text.trim().is_empty() {
+                soul.push_str("\n\n");
+                soul.push_str(&override_text);
+            }
+        }
         Self {
             max_turns: 90,
             multi_turn: budget::DEFAULT_MAX_ITERATIONS,
