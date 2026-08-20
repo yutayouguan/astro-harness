@@ -231,6 +231,17 @@ pub struct ThreadEventsBridge {
     terminal_cleanup: TerminalSubscriptionCleanup,
 }
 
+pub(crate) type ManagedThreadEventsBridge = Arc<ThreadEventsBridge>;
+
+pub(crate) fn managed_bridge(app: &AppHandle) -> tauri::State<'_, ManagedThreadEventsBridge> {
+    app.state::<ManagedThreadEventsBridge>()
+}
+
+#[cfg(test)]
+fn managed_bridge_state_type_id() -> std::any::TypeId {
+    std::any::TypeId::of::<ManagedThreadEventsBridge>()
+}
+
 impl Default for ThreadEventsBridge {
     fn default() -> Self {
         Self::new()
@@ -523,7 +534,13 @@ impl ThreadEventsBridge {
                 || state
                     .turn_epochs
                     .get(thread_id)
-                    .is_some_and(|turns| turns.contains_key(turn_id));
+                    .is_some_and(|turns| turns.contains_key(turn_id))
+                || state.activations.get(thread_id).is_some_and(|activation| {
+                    state
+                        .awaiting_submissions
+                        .get(thread_id)
+                        .is_some_and(|pending| pending.len() == 1 && pending.contains(activation))
+                });
             if can_precede_terminal {
                 state
                     .completed_background_turns
@@ -556,6 +573,9 @@ impl ThreadEventsBridge {
     /// The server set is subtractive: turns unknown to this desktop are not adopted, while local
     /// turns whose sink expired or was explicitly released are retired generation-safely.
     async fn reconcile_background_snapshot(&self, snapshot: &proto::ThreadSnapshot) -> bool {
+        if !snapshot.has_pending_background_state {
+            return false;
+        }
         let thread_id = snapshot.thread_id.as_str();
         let server_pending = snapshot
             .pending_background_turn_ids
@@ -720,7 +740,10 @@ impl ThreadEventsBridge {
     ) -> bool {
         // Lifecycle state is authoritative and must advance even when projection delivery is
         // deduplicated (for example, a marker seen live before the deferred terminal ACK).
-        if extension.namespace == "astro.background_complete" {
+        if matches!(
+            extension.namespace.as_str(),
+            "astro.background_complete" | "astro.background_expired"
+        ) {
             self.complete_background_turn(thread_id, turn_id).await;
         }
         self.accept_extension(thread_id, &extension.item_id, &extension.payload_json)
@@ -797,12 +820,35 @@ impl ThreadEventsBridge {
         {
             return Vec::new();
         }
-        let Some(turn_epoch) = state
+        let turn_epoch = state
             .turn_epochs
             .get(thread_id)
             .and_then(|turns| turns.get(turn_id))
-            .copied()
-        else {
+            .copied();
+        let Some(turn_epoch) = turn_epoch else {
+            let current_activation = state.activations.get(thread_id).copied();
+            let uniquely_pending = current_activation.is_some_and(|activation| {
+                state
+                    .awaiting_submissions
+                    .get(thread_id)
+                    .is_some_and(|pending| pending.len() == 1 && pending.contains(&activation))
+            });
+            if let Some(awaiting_activation) = current_activation.filter(|_| uniquely_pending) {
+                let background_completed =
+                    Self::take_completed_background_turn(&mut state, thread_id, turn_id);
+                state
+                    .deferred_terminals
+                    .entry(thread_id.into())
+                    .or_default()
+                    .insert(
+                        turn_id.into(),
+                        DeferredTerminal {
+                            awaiting_activation,
+                            background_turn: background_turn && !background_completed,
+                            events,
+                        },
+                    );
+            }
             return Vec::new();
         };
         let current_activation = state.activations.get(thread_id).copied();
@@ -1090,7 +1136,7 @@ pub fn accepted_turn_id(response: proto::SubmitTurnResponse) -> Result<String, S
 
 /// Register the shared bridge and start its reconnecting connection loop.
 pub fn start_bridge(app: &AppHandle) {
-    let bridge = Arc::new(ThreadEventsBridge::new());
+    let bridge: ManagedThreadEventsBridge = Arc::new(ThreadEventsBridge::new());
     let terminal_unsubscribes = bridge.take_terminal_unsubscribe_requests();
     app.manage(Arc::clone(&bridge));
     let subscribe_app = app.clone();
@@ -1751,6 +1797,7 @@ fn map_extension_to_chat(extension: proto::ThreadExtension) -> Vec<ChatStreamEve
         "astro.thread_settings"
         | "astro.thread_rollback"
         | "astro.background_complete"
+        | "astro.background_expired"
         | "astro.pending"
         | "astro.session_metadata"
         | "astro.agent_thread"
@@ -2221,6 +2268,14 @@ fn emit_snapshot(app: &AppHandle, snapshot: &proto::ThreadSnapshot) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn managed_bridge_state_type_matches_startup_registration() {
+        assert_eq!(
+            managed_bridge_state_type_id(),
+            std::any::TypeId::of::<Arc<ThreadEventsBridge>>()
+        );
+    }
     use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
     fn terminal_event(thread_id: &str, turn_id: &str) -> proto::ThreadEvent {
@@ -2622,6 +2677,7 @@ mod tests {
             active_turn: None,
             has_active_turn: false,
             pending_background_turn_ids: vec![],
+            has_pending_background_state: true,
         };
         let bridge = ThreadEventsBridge::new();
         let first = recover_snapshot_extensions(&bridge, &snapshot).await;
@@ -2693,6 +2749,7 @@ mod tests {
             active_turn: None,
             has_active_turn: false,
             pending_background_turn_ids: vec![],
+            has_pending_background_state: true,
         };
         let outcome = reconcile_snapshot(&snapshot);
         assert!(matches!(
@@ -2722,6 +2779,7 @@ mod tests {
             }),
             has_active_turn: true,
             pending_background_turn_ids: vec![],
+            has_pending_background_state: true,
         };
         let outcome = reconcile_snapshot(&snapshot);
         assert!(outcome.keep_active);
@@ -2744,6 +2802,7 @@ mod tests {
             }),
             has_active_turn: true,
             pending_background_turn_ids: vec![],
+            has_pending_background_state: true,
         };
         let bridge = ThreadEventsBridge::new();
         let activation = bridge.activate("session-1").await;
@@ -2780,6 +2839,7 @@ mod tests {
             active_turn: None,
             has_active_turn: false,
             pending_background_turn_ids: vec![],
+            has_pending_background_state: true,
         }];
         let live = vec![Ok(proto::ThreadEvent {
             thread_id: "session-1".into(),
@@ -2842,6 +2902,53 @@ mod tests {
 
         assert!(bridge.complete_background_turn("session-1", "turn-1").await);
         assert!(bridge.background_resume_threads().await.is_empty());
+    }
+
+    #[tokio::test]
+    async fn live_background_expired_extension_clears_pending_subscription_without_projection() {
+        let bridge = ThreadEventsBridge::new();
+        let mut cleanup = bridge.take_terminal_unsubscribe_requests();
+        let activation = bridge.activate("session-expire").await;
+        bridge
+            .bind_submitted_turn_if_current("session-expire", activation, "turn-expire")
+            .await;
+        bridge
+            .accept_terminal_with_background(
+                "session-expire",
+                "turn-expire",
+                terminal_projection("turn-expire"),
+                true,
+            )
+            .await;
+        let terminal_cleanup = cleanup.recv().await.expect("terminal cleanup");
+        assert!(bridge
+            .run_terminal_unsubscribe_if_owned(terminal_cleanup, |_| async { Ok(()) })
+            .await
+            .unwrap());
+        let background_targets = bridge.background_resume_targets().await;
+        let [(thread_id, subscription)] = background_targets.as_slice() else {
+            panic!("one background subscription expected");
+        };
+        let extension = proto::ThreadExtension {
+            item_id: "turn-expire:background_expired".into(),
+            namespace: "astro.background_expired".into(),
+            payload_json: serde_json::json!({"turn_id":"turn-expire"}).to_string(),
+        };
+
+        assert!(
+            bridge
+                .observe_extension("session-expire", "turn-expire", &extension)
+                .await
+        );
+        assert!(map_extension_to_chat(extension).is_empty());
+        assert!(bridge.background_resume_threads().await.is_empty());
+        let request = cleanup.recv().await.expect("expiration cleanup");
+        assert_eq!(request.thread_id, *thread_id);
+        assert_eq!(request.activation, *subscription);
+        assert!(bridge
+            .run_terminal_unsubscribe_if_owned(request, |_| async { Ok(()) })
+            .await
+            .unwrap());
     }
 
     #[tokio::test]
@@ -2920,6 +3027,7 @@ mod tests {
             active_turn: None,
             has_active_turn: false,
             pending_background_turn_ids: vec![],
+            has_pending_background_state: true,
         };
 
         let recovered = recover_snapshot_extensions(&bridge, &snapshot).await;
@@ -3012,6 +3120,7 @@ mod tests {
             .reconcile_background_snapshot(&proto::ThreadSnapshot {
                 thread_id: "session-expired".into(),
                 pending_background_turn_ids: vec!["turn-2".into()],
+                has_pending_background_state: true,
                 ..Default::default()
             })
             .await;
@@ -3031,6 +3140,7 @@ mod tests {
             .reconcile_background_snapshot(&proto::ThreadSnapshot {
                 thread_id: "session-expired".into(),
                 pending_background_turn_ids: vec![],
+                has_pending_background_state: true,
                 ..Default::default()
             })
             .await;
@@ -3047,6 +3157,38 @@ mod tests {
             .read()
             .await
             .contains_key("session-expired"));
+    }
+
+    #[tokio::test]
+    async fn legacy_snapshot_without_pending_presence_preserves_local_background_state() {
+        let bridge = ThreadEventsBridge::new();
+        let activation = bridge.activate("session-legacy").await;
+        bridge
+            .bind_submitted_turn_if_current("session-legacy", activation, "turn-legacy")
+            .await;
+        bridge
+            .accept_terminal_with_background(
+                "session-legacy",
+                "turn-legacy",
+                terminal_projection("turn-legacy"),
+                true,
+            )
+            .await;
+
+        assert!(
+            !bridge
+                .reconcile_background_snapshot(&proto::ThreadSnapshot {
+                    thread_id: "session-legacy".into(),
+                    pending_background_turn_ids: vec![],
+                    has_pending_background_state: false,
+                    ..Default::default()
+                })
+                .await
+        );
+        assert_eq!(
+            bridge.background_resume_threads().await,
+            vec!["session-legacy"]
+        );
     }
 
     #[tokio::test]
@@ -3611,6 +3753,94 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn completed_snapshot_without_turn_started_defers_until_matching_ack() {
+        let bridge = ThreadEventsBridge::new();
+        let activation = bridge.activate("session-snapshot").await;
+
+        assert!(bridge
+            .accept_terminal_with_background(
+                "session-snapshot",
+                "turn-snapshot",
+                terminal_projection("turn-snapshot"),
+                true,
+            )
+            .await
+            .is_empty());
+        assert_eq!(
+            deferred_terminal_count(&bridge, "session-snapshot").await,
+            1
+        );
+        assert!(bridge.is_active("session-snapshot").await);
+
+        assert!(!bridge
+            .bind_submitted_turn_if_current("session-snapshot", activation, "turn-snapshot",)
+            .await
+            .is_empty());
+        assert!(!bridge.is_active("session-snapshot").await);
+        assert_eq!(
+            bridge.background_resume_threads().await,
+            vec!["session-snapshot"]
+        );
+    }
+
+    #[tokio::test]
+    async fn snapshot_marker_before_terminal_without_turn_started_survives_delayed_ack() {
+        let bridge = ThreadEventsBridge::new();
+        let activation = bridge.activate("session-snapshot").await;
+        let marker = proto::ThreadExtension {
+            item_id: "turn-snapshot:background_complete".into(),
+            namespace: "astro.background_complete".into(),
+            payload_json: "{}".into(),
+        };
+        assert!(
+            bridge
+                .observe_extension("session-snapshot", "turn-snapshot", &marker)
+                .await
+        );
+        assert!(bridge
+            .accept_terminal_with_background(
+                "session-snapshot",
+                "turn-snapshot",
+                terminal_projection("turn-snapshot"),
+                true,
+            )
+            .await
+            .is_empty());
+
+        assert!(!bridge
+            .bind_submitted_turn_if_current("session-snapshot", activation, "turn-snapshot",)
+            .await
+            .is_empty());
+        assert!(bridge.background_resume_threads().await.is_empty());
+    }
+
+    #[tokio::test]
+    async fn completed_snapshot_terminal_cannot_clear_different_ack_turn() {
+        let bridge = ThreadEventsBridge::new();
+        let activation = bridge.activate("session-snapshot").await;
+        assert!(bridge
+            .accept_terminal_with_background(
+                "session-snapshot",
+                "turn-snapshot",
+                terminal_projection("turn-snapshot"),
+                true,
+            )
+            .await
+            .is_empty());
+
+        assert!(bridge
+            .bind_submitted_turn_if_current("session-snapshot", activation, "turn-other")
+            .await
+            .is_empty());
+        assert!(bridge.is_active("session-snapshot").await);
+        assert_eq!(
+            deferred_terminal_count(&bridge, "session-snapshot").await,
+            0
+        );
+        assert!(bridge.background_resume_threads().await.is_empty());
+    }
+
+    #[tokio::test]
     async fn completion_marker_before_deferred_terminal_ack_does_not_recreate_background_pending() {
         let bridge = ThreadEventsBridge::new();
         let old = bridge.activate("session-1").await;
@@ -3919,6 +4149,7 @@ mod tests {
             active_turn: None,
             has_active_turn: false,
             pending_background_turn_ids: vec![],
+            has_pending_background_state: true,
         };
 
         let reconciled = reconcile_snapshot(&snapshot);
@@ -3966,6 +4197,7 @@ mod tests {
             }),
             has_active_turn: true,
             pending_background_turn_ids: vec![],
+            has_pending_background_state: true,
         };
 
         let reconciled = reconcile_snapshot(&snapshot);
@@ -4182,6 +4414,7 @@ mod tests {
             active_turn: None,
             has_active_turn: false,
             pending_background_turn_ids: vec![],
+            has_pending_background_state: true,
         };
         let value = serde_json::to_value(snapshot_dto(&snapshot)).unwrap();
         assert_eq!(value["turns"][0]["items"][0]["id"], "tool-1");

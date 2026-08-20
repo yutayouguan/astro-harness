@@ -5,7 +5,7 @@ use proto::{
     ChatControlAction, ChatControlRequest, ChatRequest, ImageRequest, MemoryQuery, SteerChatRequest,
 };
 use serde::{Deserialize, Serialize};
-use tauri::{AppHandle, Emitter, Manager};
+use tauri::{AppHandle, Emitter};
 use uuid::Uuid;
 
 use super::common::{bootstrap_workspace, friendly_error, open_sessions};
@@ -15,8 +15,8 @@ use super::providers::{
 };
 use crate::infra::grpc::{default_grpc_address, endpoint_url};
 use crate::infra::thread_events::{
-    accepted_turn_id, emit_chat_events, submission_failure_events, ThreadEventsBridge,
-    THREAD_EVENTS_READY_TIMEOUT,
+    accepted_turn_id, emit_chat_events, managed_bridge, submission_failure_events,
+    ThreadEventsBridge, THREAD_EVENTS_READY_TIMEOUT,
 };
 
 // ---------------------------------------------------------------------------
@@ -588,10 +588,7 @@ pub async fn start_chat(app: AppHandle, request: StartChatRequest) -> Result<Str
         client_message_id: String::new(),
     };
 
-    let bridge = app
-        .state::<std::sync::Arc<ThreadEventsBridge>>()
-        .inner()
-        .clone();
+    let bridge = managed_bridge(&app).inner().clone();
     let sid2 = sid.clone();
     let activation = bridge.activate(sid2.clone()).await;
     let app2 = app.clone();
@@ -713,6 +710,24 @@ pub async fn steer_chat(
     Ok(response.accepted)
 }
 
+async fn chat_control_with_lifecycle<F, Fut>(
+    bridge: &ThreadEventsBridge,
+    session_id: &str,
+    forget_thread: bool,
+    rpc: F,
+) -> Result<(), String>
+where
+    F: FnOnce() -> Fut,
+    Fut: std::future::Future<Output = Result<(), String>>,
+{
+    // The backend RPC is the release boundary. Forgetting again afterwards would let a delayed
+    // response erase a new activation that reused the same logical session id (ABA).
+    if forget_thread {
+        bridge.forget_thread(session_id).await;
+    }
+    rpc().await
+}
+
 #[tauri::command]
 pub async fn chat_control(
     app: AppHandle,
@@ -720,18 +735,12 @@ pub async fn chat_control(
     action: String,
 ) -> Result<(), String> {
     let (action, forget_thread) = parse_chat_control_action(&action)?;
-    if forget_thread {
-        app.state::<ThreadEventsBridge>()
-            .forget_thread(&session_id)
-            .await;
-    }
-    let result = chat_control_rpc(session_id.clone(), action).await;
-    if forget_thread {
-        app.state::<ThreadEventsBridge>()
-            .forget_thread(&session_id)
-            .await;
-    }
-    result
+    let bridge = managed_bridge(&app);
+    let rpc_session_id = session_id.clone();
+    chat_control_with_lifecycle(&bridge, &session_id, forget_thread, move || {
+        chat_control_rpc(rpc_session_id, action)
+    })
+    .await
 }
 
 /// 提交 interrupt resume（HITL 阻塞闸门）；同回合续跑，无需再调 start_chat。
@@ -958,7 +967,8 @@ pub async fn count_tokens(model: String) -> Result<u32, String> {
 
 #[cfg(test)]
 mod tests {
-    use super::parse_chat_control_action;
+    use super::{chat_control_with_lifecycle, parse_chat_control_action};
+    use crate::infra::thread_events::ThreadEventsBridge;
     use proto::ChatControlAction;
 
     #[test]
@@ -975,5 +985,33 @@ mod tests {
             parse_chat_control_action("refresh_memory").unwrap(),
             (ChatControlAction::ChatControlRefreshMemory, false)
         );
+    }
+
+    #[tokio::test]
+    async fn lifecycle_control_never_post_forgets_replacement_after_rpc_boundary() {
+        for rpc_result in [Ok(()), Err("rpc failed".to_string())] {
+            let expect_ok = rpc_result.is_ok();
+            let bridge = ThreadEventsBridge::new();
+            bridge.activate("session-aba").await;
+            let replacement = std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0));
+            let replacement_out = std::sync::Arc::clone(&replacement);
+            let result = chat_control_with_lifecycle(&bridge, "session-aba", true, || async {
+                replacement_out.store(
+                    bridge.activate("session-aba").await,
+                    std::sync::atomic::Ordering::SeqCst,
+                );
+                rpc_result
+            })
+            .await;
+            assert_eq!(result.is_ok(), expect_ok);
+            assert!(
+                bridge
+                    .fail_activation(
+                        "session-aba",
+                        replacement.load(std::sync::atomic::Ordering::SeqCst),
+                    )
+                    .await
+            );
+        }
     }
 }

@@ -154,6 +154,7 @@ fn snapshot_to_proto(snapshot: ThreadSnapshot) -> proto::ThreadSnapshot {
         has_active_turn: active_turn.is_some(),
         active_turn,
         pending_background_turn_ids: snapshot.pending_background_turn_ids,
+        has_pending_background_state: snapshot.has_pending_background_state,
     }
 }
 
@@ -1169,7 +1170,9 @@ mod tests {
             turns: vec![],
             active_turn: None,
             pending_background_turn_ids: vec!["turn-1".into(), "turn-2".into()],
+            has_pending_background_state: true,
         });
+        assert!(mapped.has_pending_background_state);
         assert_eq!(mapped.pending_background_turn_ids, vec!["turn-1", "turn-2"]);
     }
 

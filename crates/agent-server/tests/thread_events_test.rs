@@ -474,6 +474,7 @@ async fn resume_snapshot_authoritatively_reports_pending_background_turns() {
     }
 
     let pending = resume(&connections, &commands, "desktop-snapshot", true).await;
+    assert!(pending.has_pending_background_state);
     assert_eq!(
         pending.pending_background_turn_ids,
         vec!["turn-pending-1", "turn-pending-2"],
@@ -499,6 +500,65 @@ async fn resume_snapshot_authoritatively_reports_pending_background_turns() {
         .await
         .pending_background_turn_ids
         .is_empty());
+}
+
+#[tokio::test]
+async fn expiring_background_sink_notifies_current_subscriber_and_logical_replacement() {
+    let (connections, commands) = start_listener().await;
+    let (mut old, _, _) = connections.register("desktop-expire".into()).await;
+    resume(&connections, &commands, "desktop-expire", false).await;
+    commands
+        .send(ListenerCommand::ObservedCoreEvent(Event {
+            id: "turn-expire".into(),
+            msg: EventMsg::TurnComplete(TurnCompleteEvent {
+                turn_id: "turn-expire".into(),
+                last_agent_message: Some("done".into()),
+                error: None,
+            }),
+        }))
+        .expect("listener should retain logical delivery target");
+    old.recv().await.expect("terminal event");
+    let pending = resume(&connections, &commands, "desktop-expire", true).await;
+    assert!(pending.has_pending_background_state);
+    assert_eq!(pending.pending_background_turn_ids, vec!["turn-expire"]);
+
+    let (mut replacement, _, _) = connections.register("desktop-expire".into()).await;
+    let (mut formal, _, _) = connections.register("desktop-formal".into()).await;
+    resume(&connections, &commands, "desktop-formal", false).await;
+    let (mut isolated, _, _) = connections.register("desktop-isolated".into()).await;
+
+    commands
+        .send(ListenerCommand::ExpireBackgroundSink {
+            turn_id: "turn-expire".into(),
+        })
+        .expect("listener should expire the sink");
+
+    let replacement = tokio::time::timeout(std::time::Duration::from_secs(1), replacement.recv())
+        .await
+        .expect("logical replacement timeout")
+        .expect("logical replacement event");
+    let formal = tokio::time::timeout(std::time::Duration::from_secs(1), formal.recv())
+        .await
+        .expect("formal subscriber timeout")
+        .expect("formal subscriber event");
+    for event in [replacement, formal] {
+        let Some(proto::thread_event::Payload::Extension(extension)) = event.payload else {
+            panic!("expiration must use the existing extension event shape");
+        };
+        assert_eq!(event.turn_id, "turn-expire");
+        assert_eq!(extension.item_id, "turn-expire:background_expired");
+        assert_eq!(extension.namespace, "astro.background_expired");
+        assert_eq!(
+            serde_json::from_str::<serde_json::Value>(&extension.payload_json).unwrap(),
+            serde_json::json!({"turn_id":"turn-expire"})
+        );
+    }
+    assert!(
+        tokio::time::timeout(std::time::Duration::from_millis(50), isolated.recv())
+            .await
+            .is_err(),
+        "unsubscribed connection ids must stay isolated"
+    );
 }
 
 #[tokio::test]

@@ -31,6 +31,7 @@ pub struct ThreadSnapshot {
     pub turns: Vec<TurnSnapshot>,
     pub active_turn: Option<TurnSnapshot>,
     pub pending_background_turn_ids: Vec<String>,
+    pub has_pending_background_state: bool,
 }
 
 #[derive(Default)]

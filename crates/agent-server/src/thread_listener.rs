@@ -511,6 +511,7 @@ pub async fn run_listener_commands(
                         },
                         active_turn: state.history.active_turn_snapshot(),
                         pending_background_turn_ids,
+                        has_pending_background_state: true,
                     }
                 };
                 let _ = reply.send(snapshot);
@@ -568,13 +569,71 @@ pub async fn run_listener_commands(
                 let _ = reply.send(extension_waiters.len());
             }
             ListenerCommand::ExpireBackgroundSink { turn_id } => {
-                let mut state = state.lock().await;
-                state.background_extension_sinks.remove(&turn_id);
-                let _ = state.activity_tx.send(ThreadActivity {
-                    status: state.status.clone(),
-                    has_subscribers: !state.subscribers.is_empty()
-                        || !state.background_extension_sinks.is_empty(),
-                });
+                let (subscribers, retained_connection_ids, outbound) = {
+                    let mut state = state.lock().await;
+                    let Some(retained_connection_ids) =
+                        state.background_extension_sinks.remove(&turn_id)
+                    else {
+                        continue;
+                    };
+                    let subscribers = state.subscribers.values().cloned().collect::<Vec<_>>();
+                    let _ = state.activity_tx.send(ThreadActivity {
+                        status: state.status.clone(),
+                        has_subscribers: !state.subscribers.is_empty()
+                            || !state.background_extension_sinks.is_empty(),
+                    });
+                    let item_id = format!("{turn_id}:background_expired");
+                    (
+                        subscribers,
+                        retained_connection_ids,
+                        proto::ThreadEvent {
+                            thread_id: thread_id.clone(),
+                            turn_id: turn_id.clone(),
+                            payload: Some(proto::thread_event::Payload::Extension(
+                                proto::ThreadExtension {
+                                    item_id,
+                                    namespace: "astro.background_expired".into(),
+                                    payload_json: serde_json::json!({"turn_id": turn_id})
+                                        .to_string(),
+                                },
+                            )),
+                        },
+                    )
+                };
+                let mut disconnected_subscribers = Vec::new();
+                let mut delivered_connection_ids = HashSet::new();
+                for subscription in subscribers {
+                    if connections
+                        .send_to_generation(&subscription, outbound.clone())
+                        .await
+                    {
+                        delivered_connection_ids.insert(subscription.connection_id().to_string());
+                    } else {
+                        disconnected_subscribers.push(subscription);
+                    }
+                }
+                for connection_id in retained_connection_ids {
+                    if !delivered_connection_ids.contains(&connection_id) {
+                        let _ = connections.send_to(&connection_id, outbound.clone()).await;
+                    }
+                }
+                if !disconnected_subscribers.is_empty() {
+                    let mut state = state.lock().await;
+                    for subscription in disconnected_subscribers {
+                        if state
+                            .subscribers
+                            .get(subscription.connection_id())
+                            .is_some_and(|current| current == &subscription)
+                        {
+                            state.subscribers.remove(subscription.connection_id());
+                        }
+                    }
+                    let _ = state.activity_tx.send(ThreadActivity {
+                        status: state.status.clone(),
+                        has_subscribers: !state.subscribers.is_empty()
+                            || !state.background_extension_sinks.is_empty(),
+                    });
+                }
             }
             ListenerCommand::Stop => break,
         }
