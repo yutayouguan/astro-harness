@@ -49,10 +49,10 @@ Astro 已有 `crates/agent-subagents`、Subagent 活动条和桌面面板，但�
 | 工具 | 职责 |
 |---|---|
 | `spawn_agent` | 在当前 Agent 下创建命名子线程 |
-| `list_agents` | 查询当前 root 的整棵 Agent Tree |
+| `list_agents` | 查询当前 root 树中的 live agents |
 | `send_message` | 持久化排队消息，不触发 turn |
 | `followup_task` | 追加任务；目标空闲时触发 turn，运行中时在安全边界交付 |
-| `wait_agent` | 等待任一 mailbox 活动、最终通知或主会话 steer |
+| `wait_agent` | 等待 caller mailbox、直接子 agent 最终通知或 root 主会话 steer |
 | `interrupt_agent` | 中断目标当前 turn，线程保留且可继续使用 |
 
 `read_agent`、`close_agent`、`send_message_to_agent` 和 `wait_agents` 不在模型工具集内。
@@ -153,23 +153,23 @@ mailbox 支持：
 - spawn 先原子预留路径、身份配额和 spawn edge；初始化任一步失败必须回滚预留。
 - 父历史按 `fork_turns` 转换为结构化 Session 输入，不得压成字符串塞进第一条用户消息。
 
-输出返回 thread id、canonical path 和初始状态。
+内部 dispatch 结果保留 thread id、Session id、canonical path 和初始状态，供运行时与 Desktop 控制面使用。默认模型可见输出对齐 Codex V2 `hide_spawn_agent_metadata=true` 契约，只返回 canonical `task_name`，不泄露内部 thread/session ID。
 
 ### 5.2 `list_agents`
 
 输入仅允许可选 `path_prefix`。查询边界是当前 root 的整棵树，不是当前 agent 的直接子节点。
 
-结果按 canonical path 稳定排序，包含 path、thread id、parent path、status 和最新状态时间。不接受 `include_closed` 参数；关闭线程在树中以 `Shutdown` 存在，是可查询的历史节点。
+结果按 canonical path 稳定排序，模型可见形状只包含 `agent_name` 和 `agent_status`。不接受 `include_closed` 参数；已 `Shutdown` 或已从 live registry 移除的线程不返回。其完整历史节点仍保留在持久化 graph 中，由 Desktop snapshot/read 控制面查询。
 
 ### 5.3 `send_message`
 
-输入为 `target` 和 `message`。操作只将消息持久化到目标 mailbox 并发布唤醒事件，不创建 turn、不恢复空闲 runtime、不改写目标状态。
+输入为 `target` 和 `message`。`target` 接受相对 task name、canonical task path 或 thread ID，并可以指向当前 agent 自身。操作只将消息持久化到目标 mailbox 并发布唤醒事件，不创建 turn、不恢复空闲 runtime、不改写目标状态。
 
 当目标下次进入消息边界时，按 mailbox 序号注入待读消息。
 
 ### 5.4 `followup_task`
 
-输入为 `target` 和 `message`。消息先以 follow-up 类型持久化，然后根据目标实际运行状态处理：
+输入为 `target` 和 `message`。`target` 接受相对 task name、canonical task path 或 thread ID，且不得指向 root。消息先以 follow-up 类型持久化，然后根据目标实际运行状态处理：
 
 - 目标无活动 turn：延迟恢复 runtime 并触发新 turn；
 - 目标正在运行：在下一个安全消息或工具边界交付；
@@ -180,20 +180,20 @@ mailbox 支持：
 
 输入只允许可选 `timeout_ms`，不接受 target 列表。
 
-调用开始时记录当前 mailbox/activity cursor，等待以下任一事件：
+调用时先检查当前 caller 可见的、已存在但尚未确认的 mailbox/activity，避免在建立 wait 前已发生的活动丢失。若无待处理活动，再从当前 cursor 等待以下任一事件：
 
-- 新的 agent-to-agent mailbox 活动；
-- 任一后代的最终或状态通知；
-- 主会话用户输入对当前 turn 的 steer；
+- 发送给当前 caller 的 agent-to-agent mailbox 活动；
+- 当前 caller 直接子 agent 的最终或状态通知；
+- root caller 主会话用户输入对当前 turn 的 steer；
 - timeout。
 
 工具返回只包含活动概要或 `timed_out`。具体消息作为独立上下文事件按序注入，避免将新内容捆绑进工具结果。
 
 ### 5.6 `interrupt_agent`
 
-输入为 `target`。禁止中断 root 或当前自身。
+输入为 `target`，接受相对 task name、canonical task path 或 thread ID。禁止中断 root 或当前自身。
 
-命令读取并返回目标的前一状态，然后发出中断信号。仅当 runner 确认 turn 终止时，才持久化 `Interrupted` 事件。线程、Session 和 canonical path 保留，之后可接收 follow-up。
+命令读取并返回目标的前一状态。目标存在活跃 turn 时发出中断信号，仅当 runner 确认 turn 终止时才持久化 `Interrupted` 事件；目标空闲、已完成或 runtime 已离线时是成功 no-op。线程、Session 和 canonical path 保留，之后可接收 follow-up。
 
 ## 6. 桌面控制面
 

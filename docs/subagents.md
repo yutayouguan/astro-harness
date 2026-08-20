@@ -7,11 +7,15 @@ Astro 只有一套 Subagent 运行时契约：持久化的 Agent Thread 树。�
 模型仅能调用六个 Agent Thread 工具：
 
 - `spawn_agent(task_name, message, agent_type?, model?, reasoning_effort?, fork_turns?)`：在当前路径下创建子线程并启动首个 turn。`fork_turns` 接受 `none`、`all` 或正整数。
-- `list_agents(path_prefix?)`：按 canonical path 列出 root 树节点。
+- `list_agents(path_prefix?)`：按 canonical path 稳定排序列出 root 树中的 live agents；已 `Shutdown` 节点不进入模型结果。
 - `send_message(target, message)`：只持久化到目标 mailbox，不启动新 turn。
-- `followup_task(target, message)`：持久化 mailbox，并对空闲或已中断线程触发/恢复下一个 turn。
-- `wait_agent(timeout_ms?)`：等待 root 下任意 mailbox、最终状态或主会话 steer 活动，而不是轮询某组 thread id。
-- `interrupt_agent(target)`：中断目标当前活跃 turn；线程仍可被 follow-up 恢复。
+- `followup_task(target, message)`：持久化 mailbox；目标运行中时在安全边界交付，空闲或已中断时触发/恢复下一个 turn。
+- `wait_agent(timeout_ms?)`：先检查已存在的未处理活动，再等待 mailbox、直接后代最终通知或主会话 steer，而不是轮询某组 thread id。
+- `interrupt_agent(target)`：中断目标当前活跃 turn；目标空闲或已结束时是 no-op，线程仍可被 follow-up 恢复。
+
+`send_message`、`followup_task` 和 `interrupt_agent` 的 `target` 均接受相对 task name、canonical task path 或 `spawn_agent` 对应的 thread ID。`send_message` 可向当前 agent 自身排队；`followup_task` 不得目标 root，`interrupt_agent` 不得目标 root 或当前 agent。
+
+模型可见输出保持 Codex V2 紧凑形状：`spawn_agent` 默认只返回 canonical `task_name`，`list_agents` 只返回 `agent_name` 和 `agent_status`，不泄露内部 thread/session ID。完整身份只在运行时与 Desktop 控制面中使用。
 
 `read` 和递归 `close` 仅属于桌面管理控制面。Tauri 命令 `read_subagent_thread` 读取真实 Session 时间线，`close_subagent_thread` 按叶子优先终止目标子树。它们不是模型工具，也不经过模型 dispatch trait。
 

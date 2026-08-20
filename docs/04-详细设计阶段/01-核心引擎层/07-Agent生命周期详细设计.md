@@ -337,6 +337,16 @@ pub struct AgentControl {
 - `wait_agent`
 - `interrupt_agent`
 
+其中 `send_message`、`followup_task` 和 `interrupt_agent` 的 `target` 统一解析相对
+task name、canonical task path 或 thread ID。`list_agents` 只投影 root 树中的 live
+agents，按 canonical path 稳定排序，不把 `Shutdown` 节点暴露给模型。默认
+模型输出只包含 canonical `task_name` 或 `agent_name`/`agent_status`，内部
+thread/session ID 只在 runtime 与 Desktop 控制面传递。
+
+`wait_agent` 先消费 caller 可见的已存在待处理活动，再从 activity cursor 阻塞等待；
+`followup_task` 在运行中 agent 的安全边界交付；`interrupt_agent` 对空闲或已结束
+agent 为 no-op，只在 runner 确认后持久化 `Interrupted`。
+
 读取真实 Session 时间线和递归 close 只存在于 Desktop 控制面，不是模型工具。
 
 旧名称 `delegate_task`、`delegate_async`、`Supervisor::spawn_child` 不再进入新代码。
