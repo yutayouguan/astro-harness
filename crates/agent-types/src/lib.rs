@@ -8,6 +8,7 @@ pub mod error;
 pub mod grpc_addr;
 pub mod interaction_mode;
 pub mod media;
+pub mod memory_citation;
 pub mod message;
 pub mod model_spec;
 pub mod network_policy;
@@ -67,5 +68,6 @@ pub use tool_entry::{
     ExecApprovalRequirement, McpToolAnnotations, McpToolApproval, McpToolApprovalMode,
     McpToolApprovalRoute, NamespacedToolDef, SandboxablePreference, ToolEntry, ToolName, ToolSpec,
 };
+pub use memory_citation::MemoryCitation;
 pub use thread_memory_mode::ThreadMemoryMode;
 pub use tool_output::ToolOutput;
