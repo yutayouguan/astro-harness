@@ -18,7 +18,7 @@ pub enum NetworkDecisionSource {
     Decider,
 }
 
-#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Hash, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum NetworkApprovalProtocol {
     Http,

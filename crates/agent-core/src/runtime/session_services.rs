@@ -25,6 +25,8 @@ pub(crate) struct SessionServices {
     pub(crate) tool_registry: RwLock<tools::ToolRegistry>,
     pub(crate) agent_control: Arc<subagents::AgentControl>,
     pub(crate) agent_path: subagents::AgentPath,
+    #[allow(dead_code)] // wired in Task 4/5 of inline-managed-network-approval
+    pub(crate) network_approval: crate::control::network_approval::NetworkApprovalService,
     #[cfg(test)]
     pub(crate) turn_input_after_db_write: Mutex<Option<TurnInputDbWriteHook>>,
     #[cfg(test)]
@@ -47,6 +49,7 @@ impl SessionServices {
             tool_registry: RwLock::new(tool_registry),
             agent_control,
             agent_path,
+            network_approval: crate::control::network_approval::NetworkApprovalService::new(),
             #[cfg(test)]
             turn_input_after_db_write: Mutex::new(None),
             #[cfg(test)]
