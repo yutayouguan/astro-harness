@@ -10,7 +10,7 @@ use proto::astro_service_client::AstroServiceClient;
 use serde::Serialize;
 use server::WORKSPACE_EVENT_THREAD_ID;
 use tauri::{AppHandle, Emitter, Manager};
-use tokio::sync::{mpsc, watch, Mutex, Notify, RwLock};
+use tokio::sync::{mpsc, oneshot, watch, Mutex, Notify, RwLock};
 use tracing::debug;
 
 use super::grpc::{default_grpc_address, endpoint_url};
@@ -531,13 +531,33 @@ impl ThreadEventsBridge {
 
     /// Release live projection after the command has emitted an ACK-drained provisional batch.
     /// This keeps the event pump behind the batch until the UI observes it in FIFO order.
-    pub(crate) async fn finish_provisional_delivery(&self, thread_id: &str, activation: u64) {
+    async fn finish_provisional_delivery(&self, thread_id: &str, activation: u64) {
         let mut state = self.active_threads.write().await;
         state
             .provisional_delivery_pending
             .remove(&(thread_id.into(), activation));
         drop(state);
         self.provisional_delivery_notify.notify_waiters();
+    }
+
+    /// Own barrier cleanup independently from the SubmitTurn caller. Delivery acceptance releases
+    /// the barrier after synchronous UI emission; dropping the sender (including task abort) also
+    /// releases it so the global event pump cannot remain head-of-line blocked.
+    pub(crate) fn spawn_provisional_delivery_cleanup(
+        self: &Arc<Self>,
+        thread_id: impl Into<String>,
+        activation: u64,
+    ) -> oneshot::Sender<()> {
+        let thread_id = thread_id.into();
+        let bridge = Arc::clone(self);
+        let (accepted_tx, accepted_rx) = oneshot::channel();
+        tauri::async_runtime::spawn(async move {
+            let _ = accepted_rx.await;
+            bridge
+                .finish_provisional_delivery(&thread_id, activation)
+                .await;
+        });
+        accepted_tx
     }
 
     async fn active_activations(&self) -> Vec<(String, u64)> {
@@ -729,10 +749,7 @@ impl ThreadEventsBridge {
                 .get(thread_id)
                 .and_then(|turns| turns.get(turn_id))
                 .copied();
-            if !state.threads.contains(thread_id)
-                || current_activation.is_none()
-                || current_activation != turn_activation
-            {
+            if !state.threads.contains(thread_id) || current_activation.is_none() {
                 return false;
             }
             let activation = current_activation.expect("validated current activation");
@@ -761,6 +778,9 @@ impl ThreadEventsBridge {
                     continue;
                 }
                 buffer.extend(events.iter().cloned());
+                return false;
+            }
+            if turn_activation != Some(activation) {
                 return false;
             }
             Self::record_projection_state(&mut state, thread_id, turn_id, events);
@@ -4168,6 +4188,84 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn current_ack_drains_event_buffered_before_an_old_ack_bound_the_same_turn() {
+        let bridge = ThreadEventsBridge::new();
+        let old = bridge.activate("session-buffer-multi-ack").await;
+        let current = bridge.activate("session-buffer-multi-ack").await;
+        bridge
+            .bind_observed_turn("session-buffer-multi-ack", "turn-x")
+            .await;
+        assert!(
+            !bridge
+                .record_delivered_projection(
+                    "session-buffer-multi-ack",
+                    "turn-x",
+                    &[ChatStreamEvent::Token {
+                        content: "current token".into(),
+                    }],
+                )
+                .await
+        );
+
+        assert!(bridge
+            .bind_submitted_turn_if_current("session-buffer-multi-ack", old, "turn-x")
+            .await
+            .is_empty());
+        let released = bridge
+            .bind_submitted_turn_if_current("session-buffer-multi-ack", current, "turn-x")
+            .await;
+        assert!(matches!(
+            released.as_slice(),
+            [ChatStreamEvent::Token { content }] if content == "current token"
+        ));
+    }
+
+    #[tokio::test]
+    async fn different_current_ack_discards_buffer_even_when_turn_epoch_belongs_to_old_ack() {
+        let bridge = ThreadEventsBridge::new();
+        let old = bridge.activate("session-buffer-multi-ack-y").await;
+        let current = bridge.activate("session-buffer-multi-ack-y").await;
+        assert!(bridge
+            .bind_submitted_turn_if_current("session-buffer-multi-ack-y", old, "turn-x")
+            .await
+            .is_empty());
+        assert!(
+            !bridge
+                .record_delivered_projection(
+                    "session-buffer-multi-ack-y",
+                    "turn-x",
+                    &[ChatStreamEvent::Token {
+                        content: "stale token".into(),
+                    }],
+                )
+                .await
+        );
+        assert_eq!(
+            bridge
+                .active_threads
+                .read()
+                .await
+                .provisional_nonterminal_events
+                .get("session-buffer-multi-ack-y")
+                .map(|buffers| buffers.values().map(Vec::len).sum::<usize>()),
+            Some(1),
+            "current pending activation must buffer despite the old turn epoch"
+        );
+
+        assert!(bridge
+            .bind_submitted_turn_if_current("session-buffer-multi-ack-y", current, "turn-y")
+            .await
+            .is_empty());
+        let state = bridge.active_threads.read().await;
+        assert!(!state
+            .provisional_nonterminal_events
+            .contains_key("session-buffer-multi-ack-y"));
+        assert!(!state
+            .delivered_agent_text
+            .contains_key("session-buffer-multi-ack-y"));
+    }
+
+    #[tokio::test]
     async fn mismatched_ack_discards_provisional_nonterminal_events_without_projection_pollution() {
         let bridge = ThreadEventsBridge::new();
         let activation = bridge.activate("session-buffer-y").await;
@@ -4383,14 +4481,14 @@ mod tests {
             .bind_submitted_turn_if_current("session-buffer-capacity", activation, "turn-x")
             .await;
         assert_eq!(released.len(), 128);
+        let delivery_acceptance =
+            bridge.spawn_provisional_delivery_cleanup("session-buffer-capacity", activation);
         tokio::task::yield_now().await;
         assert!(
             !overflow.is_finished(),
             "the overflow event must remain behind the ACK batch delivery barrier"
         );
-        bridge
-            .finish_provisional_delivery("session-buffer-capacity", activation)
-            .await;
+        let _ = delivery_acceptance.send(());
         assert!(overflow.await.unwrap());
 
         let state = bridge.active_threads.read().await;
@@ -4423,6 +4521,8 @@ mod tests {
             released.as_slice(),
             [ChatStreamEvent::Token { content }] if content == "before terminal"
         ));
+        let delivery_acceptance =
+            bridge.spawn_provisional_delivery_cleanup("session-buffer-terminal-order", activation);
 
         let terminal_bridge = Arc::clone(&bridge);
         let terminal = tokio::spawn(async move {
@@ -4440,10 +4540,82 @@ mod tests {
             "terminal must not overtake the ACK-drained projection batch"
         );
 
-        bridge
-            .finish_provisional_delivery("session-buffer-terminal-order", activation)
-            .await;
+        let _ = delivery_acceptance.send(());
         let terminal = terminal.await.unwrap();
+        assert!(matches!(
+            terminal.as_slice(),
+            [ChatStreamEvent::RunFinished { .. }, ChatStreamEvent::Done]
+        ));
+    }
+
+    #[tokio::test]
+    async fn aborted_delivery_owner_releases_capacity_and_terminal_waiters() {
+        let bridge = Arc::new(ThreadEventsBridge::new());
+        let activation = bridge.activate("session-buffer-owner-abort").await;
+        bridge
+            .bind_observed_turn("session-buffer-owner-abort", "turn-x")
+            .await;
+        for _ in 0..PROVISIONAL_EVENT_BUFFER_CAPACITY {
+            assert!(
+                !bridge
+                    .record_delivered_projection(
+                        "session-buffer-owner-abort",
+                        "turn-x",
+                        &[ChatStreamEvent::Token {
+                            content: "buffered".into(),
+                        }],
+                    )
+                    .await
+            );
+        }
+        let overflow_bridge = Arc::clone(&bridge);
+        let overflow = tokio::spawn(async move {
+            overflow_bridge
+                .record_delivered_projection(
+                    "session-buffer-owner-abort",
+                    "turn-x",
+                    &[ChatStreamEvent::Token {
+                        content: "overflow".into(),
+                    }],
+                )
+                .await
+        });
+        tokio::task::yield_now().await;
+        assert!(!overflow.is_finished());
+
+        let released = bridge
+            .bind_submitted_turn_if_current("session-buffer-owner-abort", activation, "turn-x")
+            .await;
+        assert_eq!(released.len(), PROVISIONAL_EVENT_BUFFER_CAPACITY);
+        let (armed_tx, armed_rx) = oneshot::channel();
+        let owner_bridge = Arc::clone(&bridge);
+        let owner = tokio::spawn(async move {
+            let acceptance = owner_bridge
+                .spawn_provisional_delivery_cleanup("session-buffer-owner-abort", activation);
+            let _ = armed_tx.send(());
+            std::future::pending::<()>().await;
+            drop(acceptance);
+        });
+        armed_rx.await.unwrap();
+        tokio::task::yield_now().await;
+        assert!(
+            !overflow.is_finished(),
+            "cleanup must not release before emit acceptance or owner cancellation"
+        );
+
+        owner.abort();
+        let _ = owner.await;
+        assert!(tokio::time::timeout(Duration::from_secs(1), overflow)
+            .await
+            .expect("owner cancellation must release the delivery barrier")
+            .unwrap());
+        let terminal = bridge
+            .accept_terminal(
+                "session-buffer-owner-abort",
+                "turn-x",
+                terminal_projection("turn-x"),
+            )
+            .await;
         assert!(matches!(
             terminal.as_slice(),
             [ChatStreamEvent::RunFinished { .. }, ChatStreamEvent::Done]

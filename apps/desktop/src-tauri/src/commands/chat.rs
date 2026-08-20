@@ -615,8 +615,10 @@ pub async fn start_chat(app: AppHandle, request: StartChatRequest) -> Result<Str
             let terminal = bridge
                 .bind_submitted_turn_if_current(&sid2, activation, &turn_id)
                 .await;
+            let delivery_acceptance =
+                bridge.spawn_provisional_delivery_cleanup(sid2.clone(), activation);
             emit_chat_events(&app2, &sid2, terminal);
-            bridge.finish_provisional_delivery(&sid2, activation).await;
+            let _ = delivery_acceptance.send(());
             Ok::<(), String>(())
         }
         .await;
