@@ -1,7 +1,7 @@
 //! 富消息读写。
 
 use anyhow::Result;
-use rusqlite::{params, OptionalExtension};
+use rusqlite::{params, OptionalExtension, Transaction};
 use serde_json::Value;
 
 use super::{
@@ -9,64 +9,72 @@ use super::{
     SessionStore, StoredMessage,
 };
 
+pub(crate) fn insert_message_row(
+    tx: &Transaction<'_>,
+    msg: NewMessage<'_>,
+    timestamp: f64,
+) -> Result<i64> {
+    let tool_calls = json_to_db(&msg.tool_calls)?;
+    let reasoning_details = json_to_db(&msg.reasoning_details)?;
+    let codex_reasoning_items = json_to_db(&msg.codex_reasoning_items)?;
+    let codex_message_items = json_to_db(&msg.codex_message_items)?;
+    tx.execute(
+        "INSERT INTO messages (
+            session_id, role, content, compressed_content,
+            tool_call_id, tool_calls, tool_name,
+            timestamp, token_count, finish_reason,
+            reasoning, reasoning_content, reasoning_details,
+            codex_reasoning_items, codex_message_items, media_json
+         ) VALUES (
+            ?1, ?2, ?3, ?4,
+            ?5, ?6, ?7,
+            ?8, ?9, ?10,
+            ?11, ?12, ?13,
+            ?14, ?15, ?16
+         )",
+        params![
+            msg.session_id,
+            msg.role,
+            msg.content,
+            msg.compressed_content,
+            msg.tool_call_id,
+            tool_calls,
+            msg.tool_name,
+            timestamp,
+            msg.token_count,
+            msg.finish_reason,
+            msg.reasoning,
+            msg.reasoning_content,
+            reasoning_details,
+            codex_reasoning_items,
+            codex_message_items,
+            msg.media_json,
+        ],
+    )?;
+    Ok(tx.last_insert_rowid())
+}
+
 impl SessionStore {
     /// 追加一条富消息，并递增 `sessions.message_count`（`role=tool` 时同时 `tool_call_count++`）。
     pub fn append_message(&self, msg: NewMessage<'_>) -> Result<i64> {
         self.assert_session_writable(msg.session_id)?;
-        let timestamp = now_epoch_secs()?;
-        let tool_calls = json_to_db(&msg.tool_calls)?;
-        let reasoning_details = json_to_db(&msg.reasoning_details)?;
-        let codex_reasoning_items = json_to_db(&msg.codex_reasoning_items)?;
-        let codex_message_items = json_to_db(&msg.codex_message_items)?;
-
+        let session_id = msg.session_id;
+        let is_tool = msg.role == "tool";
         let tx = self.conn.unchecked_transaction()?;
-        tx.execute(
-            "INSERT INTO messages (
-                session_id, role, content, compressed_content,
-                tool_call_id, tool_calls, tool_name,
-                timestamp, token_count, finish_reason,
-                reasoning, reasoning_content, reasoning_details,
-                codex_reasoning_items, codex_message_items, media_json
-             ) VALUES (
-                ?1, ?2, ?3, ?4,
-                ?5, ?6, ?7,
-                ?8, ?9, ?10,
-                ?11, ?12, ?13,
-                ?14, ?15, ?16
-             )",
-            params![
-                msg.session_id,
-                msg.role,
-                msg.content,
-                msg.compressed_content,
-                msg.tool_call_id,
-                tool_calls,
-                msg.tool_name,
-                timestamp,
-                msg.token_count,
-                msg.finish_reason,
-                msg.reasoning,
-                msg.reasoning_content,
-                reasoning_details,
-                codex_reasoning_items,
-                codex_message_items,
-                msg.media_json,
-            ],
-        )?;
-        let id = tx.last_insert_rowid();
+        let id = insert_message_row(&tx, msg, now_epoch_secs()?)?;
 
-        if msg.role == "tool" {
+        if is_tool {
             tx.execute(
                 "UPDATE sessions
                  SET message_count = message_count + 1,
                      tool_call_count = tool_call_count + 1
                  WHERE id = ?1",
-                params![msg.session_id],
+                params![session_id],
             )?;
         } else {
             tx.execute(
                 "UPDATE sessions SET message_count = message_count + 1 WHERE id = ?1",
-                params![msg.session_id],
+                params![session_id],
             )?;
         }
 

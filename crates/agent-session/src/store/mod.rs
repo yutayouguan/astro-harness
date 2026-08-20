@@ -1,6 +1,7 @@
 //! 单库会话存储（schema v17）：sessions、富 messages、FTS5；旧库走增量迁移不丢数据。
 
 mod messages;
+mod rollout_projection;
 mod schema;
 mod search;
 mod sessions;
@@ -12,6 +13,7 @@ use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 use types::SqliteStore;
 
+pub use rollout_projection::rebuild_messages_from_rollout;
 pub use schema::SCHEMA_VERSION;
 
 /// 单次 LLM 调用的账单增量（累加到 sessions 行）。

@@ -6,6 +6,8 @@ description = "会话持久化：SessionStore（SQLite）与上下文召回"
 
 [dependencies]
 anyhow = { workspace = true }
+agent-protocol = { path = "../agent-protocol" }
+agent-rollout = { path = "../agent-rollout" }
 types = { path = "../agent-types" }
 rusqlite = { version = "0.31", features = ["bundled"] }
 serde = { workspace = true }
