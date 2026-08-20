@@ -1,6 +1,6 @@
 # Codex Hooks B1 Unified Dispatch and Lifecycle Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Route Astro Agent lifecycle hooks through one canonical `HookRuntime::dispatch` path and align the main-turn `SessionStart`, `UserPromptSubmit`, `Stop`, and `AgentEnd` behavior with the approved Codex contract.
 

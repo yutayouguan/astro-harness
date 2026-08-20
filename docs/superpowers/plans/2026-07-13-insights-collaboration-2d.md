@@ -1,6 +1,6 @@
 # Insights Collaboration 2D Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** 洞察面板新增「协作」Tab：按月/季/年展示近期编排列表+步骤条，以及基于 `orchestration` 遥测边的 SVG 聚合图。
 

@@ -1,6 +1,6 @@
 # image_gen Interactions API Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** 将 Google `image_gen` 升级到 Gemini Interactions API（Nano Banana 全能力：分辨率、参考图、多轮、Search、thinking、视频转图），OpenAI 路径保持现有 prompt 出图。
 

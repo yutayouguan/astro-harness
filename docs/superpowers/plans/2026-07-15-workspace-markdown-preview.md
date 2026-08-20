@@ -1,6 +1,6 @@
 # 工作空间 Markdown 预览切换 Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** 工作空间打开 `.md` / `.markdown` 时，在编辑器顶栏提供「预览 / 源码」切换；预览只读渲染，源码可编辑，并记住上次模式。
 

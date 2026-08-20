@@ -1,6 +1,6 @@
 # 文件空间多类型查看与文本编辑 Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** 文件空间右侧支持文本可编辑（自动+手动保存）、MD/HTML 预览↔源码、图片/视频/音频/PDF 内嵌查看。
 

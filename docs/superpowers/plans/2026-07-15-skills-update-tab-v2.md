@@ -1,6 +1,6 @@
 # Skills Update Tab v2 Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** 在 v1 更新 Tab 上落地「检查更新」：拉取远端 version/`updated_at`，标记 `outdated`，角标显示可更新数，默认筛选改为「可更新」；「全部更新」只处理 outdated。
 

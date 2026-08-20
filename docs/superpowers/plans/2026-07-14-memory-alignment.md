@@ -1,6 +1,6 @@
 # Memory Alignment Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** 将 Astro 记忆升级为有界精炼 `MemoryStore`、Frozen Snapshot、单一 `memory` 工具，并分两阶段交付审批/review/入梦 auxiliary。
 

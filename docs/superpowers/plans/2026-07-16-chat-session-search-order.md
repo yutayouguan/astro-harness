@@ -1,6 +1,6 @@
 # 会话工具栏搜索按钮顺序 Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** 将对话侧栏会话工具栏的搜索按钮移到最右侧，使视觉顺序和键盘焦点顺序均为“新建会话 → Agent → 搜索”。
 

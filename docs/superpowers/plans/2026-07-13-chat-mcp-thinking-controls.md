@@ -1,6 +1,6 @@
 # Chat MCP + Thinking Controls Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** 在智能对话 Composer 增加 MCP 快捷开关弹出层，隐藏 ModelPicker 的 Auto/MAX，并仅在支持推理的模型上显示推理控件。
 

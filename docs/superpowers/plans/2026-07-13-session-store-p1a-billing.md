@@ -2,7 +2,7 @@
 
 > **已废弃：** 请勿按本计划实现。权威设计见 [`docs/superpowers/specs/2026-07-13-route-aware-usage-pricing-design.md`](../specs/2026-07-13-route-aware-usage-pricing-design.md)；待该 spec 审阅通过后另写 implementation plan。
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** 将 LLM token/估算费用累加到 `sessions` billing 列；停写 `usage.db` 的 `kind=llm`；清空历史 `usage_events`；Insights LLM 视图改读 sessions 聚合。
 

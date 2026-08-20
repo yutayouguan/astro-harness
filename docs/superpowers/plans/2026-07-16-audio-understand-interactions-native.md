@@ -1,6 +1,6 @@
 # Audio Understand Interactions 原生 Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** 新增 `audio_understand` 工具：Google 走 Gemini Interactions 原生音频理解（describe + 结构化 transcribe，含 YouTube），OpenAI 分路径（describe→Chat `input_audio`，transcribe→Whisper）并尽力 JSON 兜底。
 

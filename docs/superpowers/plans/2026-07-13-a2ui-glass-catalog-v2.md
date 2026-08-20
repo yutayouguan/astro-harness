@@ -1,6 +1,6 @@
 # A2UI Glass Catalog v2 Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** 将 Astro A2UI 升到 catalog v2：扩展设计系统组件、Soft Dark/Frost 亮暗玻璃拟态、升级 HITL/信息卡模板，并让表单控件真实可交互。
 

@@ -1,6 +1,6 @@
 # agent crate 域重组 Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** 将 `agent` crate 从平铺 `src/*.rs` 重组为 `runtime` / `streaming` / `control` / `prompt` / `exec` 域目录，拆开 `streaming.rs` 与 `loop_.rs`，并按 B 收紧 crate 根导出。
 

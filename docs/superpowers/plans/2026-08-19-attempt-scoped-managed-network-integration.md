@@ -1,6 +1,6 @@
 # Attempt-scoped Managed Network Integration Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Route foreground `terminal action=run` and `code_exec` subprocess traffic through an attempt-scoped managed CONNECT proxy, constrain Seatbelt to that proxy's exact loopback port, and surface proxy policy blocks as typed `SandboxErr::Denied` values.
 

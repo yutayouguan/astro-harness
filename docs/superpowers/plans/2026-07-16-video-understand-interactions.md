@@ -1,6 +1,6 @@
 # Video Understand (Interactions) Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** 新增独立工具 `video_understand`：Google Interactions 原生视频理解（本地/http → inline 或 Files API、YouTube、`mode`=qa|summarize|timeline），纯 Google，不走 OpenAI。
 

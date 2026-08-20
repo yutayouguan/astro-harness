@@ -1,6 +1,6 @@
 # Session Store Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** 将会话持久化升级为单库富消息 `SessionStore`（schema v11），使 UI/Agent 可完整恢复正文、工具活动与 reasoning；命名保持 Astro 中性（禁止 `hermes` 字样）。
 

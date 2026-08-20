@@ -1,6 +1,6 @@
 # Hermes Hooks Parity Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** 为 Astro 补齐 Hermes 有而本地缺失的 7 个 Plugin Hooks（`pre_verify`、`subagent_start`、审批对、三个 `transform_*`）。
 

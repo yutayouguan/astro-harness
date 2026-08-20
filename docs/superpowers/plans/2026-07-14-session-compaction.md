@@ -1,6 +1,6 @@
 # Session Compaction（P1b）Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** 在上下文逼近上限（或手动 `/compact`）时结束旧会话、新建子会话，写入摘要 + 近 K 轮气泡，并让前端无感切换 `sessionId` 续聊。
 

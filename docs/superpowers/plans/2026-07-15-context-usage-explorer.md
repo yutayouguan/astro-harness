@@ -1,6 +1,6 @@
 # Context Usage Explorer Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** 在每轮请求组装时按 8 类估算上下文占用，经聊天事件推到前端；Composer 浮层 + 右栏 Context Explorer（环形图 + 列表）共用快照，下挂原有活动时间线。
 

@@ -1,6 +1,6 @@
 # Robotics generateContent 原生 Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** 新增独立工具 `robotics`，经 Google 原生 `generateContent` 调用 `gemini-robotics-er-1.6-preview`，支持 point / detect / trajectory / plan。
 

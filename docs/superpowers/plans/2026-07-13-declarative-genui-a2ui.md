@@ -1,6 +1,6 @@
 # Declarative GenUI (A2UI + AG-UI) Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** 在现有 gRPC→Tauri 聊天流上对齐 AG-UI 语义，用 A2UI 渲染澄清/确认/信息卡，HITL 走真 interrupt/resume。
 

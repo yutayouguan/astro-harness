@@ -1,6 +1,6 @@
 # Insights Overview Layout Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** 为数据洞察增加默认「总览」Tab（3 KPI + 趋势 + 厂商花钱 Top），并收敛「模型用量」去掉与总览重复的 6 KPI / 整宽趋势 / 未计价横幅。
 

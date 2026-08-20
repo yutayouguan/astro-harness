@@ -1,6 +1,6 @@
 # Vision Interactions 原生图片理解 Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** 将 `vision` 的 Google 路径改为 Gemini Interactions API 原生图片理解（describe / 多图 / detect / segment），OpenAI 仍走独立的 `chat/completions` 并尽力兜底结构化输出。
 

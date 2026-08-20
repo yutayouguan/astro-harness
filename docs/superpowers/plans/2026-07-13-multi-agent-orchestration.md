@@ -1,6 +1,6 @@
 # Multi-Agent Orchestration MVP Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** 主 Agent 通过 `orchestration_run` 异步串行调度 1～N 个子 Agent（已有或临时角色），`orchestration_status` 可查进度；状态进 SQLite，并写遥测边。
 

@@ -1,6 +1,6 @@
 # Usage Insights（洞察面板）Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** 侧边栏新增「洞察」页：用 SQLite 事件表记录今后的 tool/skill/mcp/cron/llm 用量，按月/季/年聚合展示调用、Token 与 LiteLLM 估算费用。
 

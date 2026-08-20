@@ -1,6 +1,6 @@
 # Memory P3 SessionEvents Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** 落地会话级 `SubscribeSessionEvents`，用 toast / pending 角标 / 可配自动 refresh / 完整 `/memory` 子命令补齐记忆 P3 可感知闭环，并撤掉 Chat 流在 `Done` 后挂起等 review 的临时路径。
 

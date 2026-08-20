@@ -1,6 +1,6 @@
 # Veo 原生 video_gen Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** 将 `video_gen` 改为 Google Veo 原生 `predictLongRunning` 优先，失败回退 OpenAI 兼容 `/videos`，并完整支持多参考图与本地/URI/id 续拍。
 

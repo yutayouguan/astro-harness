@@ -1,6 +1,6 @@
 # generated 分类子目录 Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** 工作区初始化时创建 `generated/{images,videos,audio,code,project,docs,html,other}`，媒体生成落盘进对应子目录；旧扁平文件不迁移。
 

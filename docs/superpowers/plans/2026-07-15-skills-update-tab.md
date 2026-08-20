@@ -1,6 +1,6 @@
 # Skills Update Tab (v1) Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** 为 Skills 面板落地「更新」Tab（v1）：安装时写入 origin 清单，支持按原 `install_ref` 单条/批量强制重装；无来源技能可见但不可更新。
 

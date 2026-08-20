@@ -1,6 +1,6 @@
 # MemoryManager / Session Hard Split Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** 硬切拆开 `MemoryManager` 与会话库：精炼记忆留在 `memory`，会话读写 / `session_search` / `format_recalled_context` 归 `session`。
 

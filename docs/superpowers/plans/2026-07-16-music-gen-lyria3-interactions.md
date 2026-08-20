@@ -1,6 +1,6 @@
 # Music Gen Lyria 3 Interactions Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** 新增 `music_gen` 工具，经 Gemini Interactions 原生调用 Lyria 3（clip/pro），支持参考图与 Pro WAV，Google only，与 OpenAI 及本地 `music` 播放完全分开。
 
