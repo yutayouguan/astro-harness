@@ -370,6 +370,11 @@ impl ThreadEventsBridge {
     }
 
     async fn forget_thread_locked(&self, thread_id: &str) {
+=======
+    pub(crate) async fn forget_thread(&self, thread_id: &str) {
+        let gate = self.terminal_cleanup.gate(thread_id);
+        let _owner_guard = gate.lock().await;
+>>>>>>> 7a912aad (fix(events): converge background recovery state)
         let mut state = self.active_threads.write().await;
         Self::clear_thread(&mut state, thread_id);
         state.background_pending.remove(thread_id);
@@ -405,7 +410,6 @@ impl ThreadEventsBridge {
         self.forget_thread_locked(thread_id).await;
         operation().await
     }
-
     /// Bind a turn observed from snapshot/live delivery without rewriting an existing epoch.
     pub async fn bind_observed_turn(&self, thread_id: &str, turn_id: &str) {
         if turn_id.is_empty() {

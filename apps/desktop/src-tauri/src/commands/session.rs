@@ -1,7 +1,7 @@
 //! 会话管理 Tauri 命令：历史记录、分叉、归档、置顶、删除、标题生成。
 
 use serde::Serialize;
-use tauri::AppHandle;
+use tauri::{AppHandle, Manager};
 use uuid::Uuid;
 
 use super::common::open_sessions;
@@ -474,9 +474,13 @@ pub async fn delete_session_permanently(app: AppHandle, session_id: String) -> R
             "release_session before delete failed; deleting DB anyway"
         );
     }
-    open_sessions()?
+    let result = open_sessions()?
         .delete_session_permanently(&session_id)
-        .map_err(|e| e.to_string())
+        .map_err(|e| e.to_string());
+    app.state::<crate::infra::thread_events::ThreadEventsBridge>()
+        .forget_thread(&session_id)
+        .await;
+    result
 }
 
 // ---------------------------------------------------------------------------
