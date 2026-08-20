@@ -95,6 +95,8 @@ pub struct Config {
     pub static_override: Option<StaticContext>,
     /// Per-session memory write policy (Codex-style thread memory mode).
     pub thread_memory_mode: types::ThreadMemoryMode,
+    /// Controls how the compact token limit is measured (total vs body-after-prefix).
+    pub compact_scope: types::CompactTokenLimitScope,
 }
 
 impl Config {
@@ -126,6 +128,7 @@ impl Config {
             context_budget_chars: crate::prompt::DEFAULT_CONTEXT_BUDGET_CHARS,
             static_override: None,
             thread_memory_mode: types::ThreadMemoryMode::Enabled,
+            compact_scope: types::CompactTokenLimitScope::Total,
         }
     }
 }

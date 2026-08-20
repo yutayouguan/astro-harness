@@ -3,6 +3,7 @@
 pub mod approval;
 pub mod auxiliary_target;
 pub mod chat_target;
+pub mod compact_scope;
 pub mod credentials;
 pub mod error;
 pub mod grpc_addr;
@@ -25,6 +26,7 @@ pub mod thread_memory_mode;
 pub mod tool_spill;
 
 pub use auxiliary_target::{AuxiliaryTargetChain, AuxiliaryTask};
+pub use compact_scope::CompactTokenLimitScope;
 pub use chat_target::*;
 pub use grpc_addr::{
     grpc_bind_address, resolve_grpc_address, runtime_grpc_address, set_runtime_grpc_address,
