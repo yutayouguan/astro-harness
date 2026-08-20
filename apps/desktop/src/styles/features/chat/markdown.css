@@ -1624,14 +1624,14 @@ html[data-theme="dark"] .todo-progress-item.is-current {
 
 .composer-palette {
   margin: 0 12px 8px;
-  border-radius: 16px;
+  border-radius: 14px;
   overflow: hidden;
-  border: 1px solid color-mix(in srgb, var(--glass-edge) 82%, rgba(148, 163, 184, 0.28));
+  border: 1px solid color-mix(in srgb, var(--glass-edge) 75%, rgba(148, 163, 184, 0.2));
   background: var(--composer-bg, #fff);
   box-shadow:
-    0 12px 40px rgba(15, 23, 42, 0.1),
-    0 2px 8px rgba(15, 23, 42, 0.05);
-  max-height: min(50vh, 420px);
+    0 16px 48px rgba(15, 23, 42, 0.12),
+    0 2px 8px rgba(15, 23, 42, 0.06);
+  max-height: min(55vh, 480px);
   display: flex;
   flex-direction: column;
 }
@@ -1656,22 +1656,24 @@ html[data-theme="dark"] .composer-palette {
   font-size: 13px;
 }
 
-/* 分组标签 */
+/* 分组标签 — Codex 风格 */
 .composer-palette-group-label {
-  padding: 10px 12px 4px;
-  font-size: 11px;
-  font-weight: 600;
+  padding: 10px 14px 5px;
+  font-size: 12px;
+  font-weight: 650;
   color: var(--ink-mute);
-  opacity: 0.6;
+  opacity: 0.55;
+  text-transform: none;
+  letter-spacing: 0;
 }
 
 .composer-palette-group + .composer-palette-group {
-  border-top: 1px solid color-mix(in srgb, var(--glass-edge) 60%, transparent);
-  margin-top: 4px;
-  padding-top: 4px;
+  border-top: 1px solid color-mix(in srgb, var(--glass-edge) 50%, transparent);
+  margin-top: 2px;
+  padding-top: 2px;
 }
 
-/* 面板项：单行，图标-名称-描述右对齐 */
+/* 面板项 — Codex 风格：图标-名称 左，描述 右 */
 .composer-palette-item {
   width: 100%;
   display: flex;
@@ -1679,8 +1681,8 @@ html[data-theme="dark"] .composer-palette {
   gap: 10px;
   text-align: left;
   border: none;
-  border-radius: 10px;
-  padding: 10px 12px;
+  border-radius: 8px;
+  padding: 9px 12px;
   background: transparent;
   color: var(--ink);
   cursor: pointer;
@@ -1689,39 +1691,39 @@ html[data-theme="dark"] .composer-palette {
 
 .composer-palette-item.is-active,
 .composer-palette-item:hover {
-  background: color-mix(in srgb, var(--ink) 6%, transparent);
+  background: color-mix(in srgb, var(--ink) 5%, transparent);
 }
 
 html[data-theme="dark"] .composer-palette-item.is-active,
 html[data-theme="dark"] .composer-palette-item:hover {
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.07);
 }
 
 .composer-palette-ico {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 24px;
-  height: 24px;
-  border-radius: 6px;
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
   background: color-mix(in srgb, var(--ink) 6%, transparent);
-  font-size: 13px;
+  font-size: 14px;
   flex-shrink: 0;
   color: var(--ink-mute);
 }
 
 .composer-palette-item-name {
-  font-size: 14px;
-  font-weight: 600;
+  font-size: 13.5px;
+  font-weight: 650;
   color: var(--ink);
   white-space: nowrap;
 }
 
 .composer-palette-item-hint {
   flex: 1;
-  font-size: 13px;
+  font-size: 12.5px;
   color: var(--ink-mute);
-  opacity: 0.6;
+  opacity: 0.55;
   text-align: right;
   white-space: nowrap;
   overflow: hidden;
@@ -1738,11 +1740,11 @@ html[data-theme="dark"] .composer-palette-item:hover {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 8px 14px;
-  border-top: 1px solid color-mix(in srgb, var(--glass-edge) 60%, transparent);
+  padding: 7px 14px;
+  border-top: 1px solid color-mix(in srgb, var(--glass-edge) 45%, transparent);
   font-size: 11px;
   color: var(--ink-mute);
-  opacity: 0.6;
+  opacity: 0.5;
 }
 
 .composer-palette-foot kbd {
