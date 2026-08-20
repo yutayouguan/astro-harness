@@ -46,7 +46,7 @@ It explicitly does not change when events fire, add command JSON stdin/stdout, i
 - Modify: `crates/agent-hooks/src/lib.rs`
 - Test: `crates/agent-hooks/src/event.rs`
 
-- [ ] **Step 1: Write failing event-contract tests**
+- [x] **Step 1: Write failing event-contract tests**
 
 Create `crates/agent-hooks/src/event.rs` with the tests first, before adding the production definitions:
 
@@ -93,7 +93,7 @@ mod tests {
 }
 ```
 
-- [ ] **Step 2: Run the tests and verify RED**
+- [x] **Step 2: Run the tests and verify RED**
 
 Run:
 
@@ -103,7 +103,7 @@ cargo test -p hooks event::tests -- --nocapture
 
 Expected: compilation fails because `HookEvent` and `canonical_hook_event_name` are not defined.
 
-- [ ] **Step 3: Implement the event enum and canonicalizer**
+- [x] **Step 3: Implement the event enum and canonicalizer**
 
 Add the production portion above the tests in `event.rs`:
 
@@ -295,7 +295,7 @@ pub mod event;
 pub use event::{HookEvent, canonical_hook_event_name, normalize_hook_event_name};
 ```
 
-- [ ] **Step 4: Run tests and verify GREEN**
+- [x] **Step 4: Run tests and verify GREEN**
 
 Run:
 
@@ -305,7 +305,7 @@ cargo test -p hooks event::tests names:: -- --nocapture
 
 Expected: all event and name tests pass.
 
-- [ ] **Step 5: Commit the canonical event contract**
+- [x] **Step 5: Commit the canonical event contract**
 
 ```bash
 git add crates/agent-hooks/src/event.rs crates/agent-hooks/src/names.rs crates/agent-hooks/src/lib.rs
@@ -319,7 +319,7 @@ git commit -m "refactor(hooks): define codex event names"
 - Modify: `crates/agent-hooks/src/lib.rs`
 - Test: `crates/agent-hooks/src/outcome.rs`
 
-- [ ] **Step 1: Write failing wire-shape tests**
+- [x] **Step 1: Write failing wire-shape tests**
 
 Add these tests before changing the production struct:
 
@@ -383,7 +383,7 @@ mod wire_tests {
 }
 ```
 
-- [ ] **Step 2: Run the tests and verify RED**
+- [x] **Step 2: Run the tests and verify RED**
 
 Run:
 
@@ -393,7 +393,7 @@ cargo test -p hooks outcome::wire_tests -- --nocapture
 
 Expected: compilation fails because `HookInput` and canonical fields do not exist.
 
-- [ ] **Step 3: Implement HookInput while retaining temporary legacy construction fields**
+- [x] **Step 3: Implement HookInput while retaining temporary legacy construction fields**
 
 Replace the current `HookPayload` struct with:
 
@@ -488,7 +488,7 @@ Update the public re-export in `lib.rs`:
 pub use outcome::{HookInput, HookOutcome, HookPayload};
 ```
 
-- [ ] **Step 4: Run tests and verify GREEN**
+- [x] **Step 4: Run tests and verify GREEN**
 
 Run:
 
@@ -498,7 +498,7 @@ cargo test -p hooks outcome::wire_tests -- --nocapture
 
 Expected: all three wire tests pass.
 
-- [ ] **Step 5: Commit the wire input model**
+- [x] **Step 5: Commit the wire input model**
 
 ```bash
 git add crates/agent-hooks/src/outcome.rs crates/agent-hooks/src/lib.rs
@@ -515,7 +515,7 @@ git commit -m "refactor(hooks): add codex input variables"
 - Modify: `crates/agent-hooks/src/lib.rs`
 - Test: the same files' existing unit-test modules
 
-- [ ] **Step 1: Write failing boundary tests**
+- [x] **Step 1: Write failing boundary tests**
 
 Add these focused tests:
 
@@ -578,7 +578,7 @@ fn timeline_emits_canonical_name_for_legacy_fire() {
 }
 ```
 
-- [ ] **Step 2: Run the tests and verify RED**
+- [x] **Step 2: Run the tests and verify RED**
 
 Run:
 
@@ -589,7 +589,7 @@ cargo test -p hooks timeline_emits_canonical_name_for_legacy_fire -- --nocapture
 
 Expected: failures show that registration, discovery, shell maps, or UI still use raw names.
 
-- [ ] **Step 3: Canonicalize each boundary**
+- [x] **Step 3: Canonicalize each boundary**
 
 Apply these exact rules:
 
@@ -635,7 +635,7 @@ Replace `UI_HOOK_NAMES` entries with the canonical constants from `names.rs`. In
 
 In `HookRuntime::fire_plugin` and `fire_gateway`, normalize once before forwarding so Plugin, Gateway, and Shell observe the same label.
 
-- [ ] **Step 4: Run tests and verify GREEN**
+- [x] **Step 4: Run tests and verify GREEN**
 
 Run:
 
@@ -645,7 +645,7 @@ cargo test -p hooks -- --nocapture
 
 Expected: all `hooks` crate tests pass, including existing order/block tests.
 
-- [ ] **Step 5: Commit boundary normalization**
+- [x] **Step 5: Commit boundary normalization**
 
 ```bash
 git add crates/agent-hooks/src/plugin.rs crates/agent-hooks/src/gateway.rs crates/agent-hooks/src/shell.rs crates/agent-hooks/src/ui.rs crates/agent-hooks/src/lib.rs
@@ -670,7 +670,7 @@ git commit -m "refactor(hooks): normalize legacy hook names"
 - Test: `crates/agent-core/tests/streaming_test.rs`
 - Test: `crates/agent-tools/src/builtin/shell/terminal.rs`
 
-- [ ] **Step 1: Update assertions first to require canonical variables**
+- [x] **Step 1: Update assertions first to require canonical variables**
 
 Change focused test callbacks and assertions before production call sites:
 
@@ -705,7 +705,7 @@ assert!(events.iter().any(|event| event == "PreToolUse"));
 assert!(!events.iter().any(|event| event == "pre_tool_call"));
 ```
 
-- [ ] **Step 2: Run focused tests and verify RED**
+- [x] **Step 2: Run focused tests and verify RED**
 
 Run:
 
@@ -716,7 +716,7 @@ cargo test -p agent --test streaming_test approval_hooks_fire_pre_then_post_on_a
 
 Expected: assertions fail or compilation fails because production call sites still populate legacy fields.
 
-- [ ] **Step 3: Migrate constants and struct fields mechanically**
+- [x] **Step 3: Migrate constants and struct fields mechanically**
 
 Use this exact constant replacement table in the listed production and test files:
 
@@ -758,7 +758,7 @@ For `PostApprovalResponse`, retain the command/summary in `tool_input` and put t
 
 After all call sites and tests compile, delete the temporary `tool_args`, `tool_result`, and `message` fields plus fallback copying from `HookInput::normalized_for_event`. Keep only event-name normalization in that method.
 
-- [ ] **Step 4: Verify no internal legacy usage remains**
+- [x] **Step 4: Verify no internal legacy usage remains**
 
 Run:
 
@@ -769,7 +769,7 @@ rg -n "ON_SESSION_START|ON_SESSION_END|PRE_TOOL_CALL|POST_TOOL_CALL|PRE_APPROVAL
 
 Expected: no matches from Hook construction or internal dispatch. Compatibility definitions in `names.rs` are allowed and are excluded by the second command's path list.
 
-- [ ] **Step 5: Run focused tests and verify GREEN**
+- [x] **Step 5: Run focused tests and verify GREEN**
 
 Run:
 
@@ -782,7 +782,7 @@ cargo test -p server new_chat_preserves_hooks_while_release_session_skips_them -
 
 Expected: all focused Hook integration tests pass with canonical event labels and variables.
 
-- [ ] **Step 6: Commit internal migration**
+- [x] **Step 6: Commit internal migration**
 
 ```bash
 git add crates/agent-core/src/exec/subagents.rs crates/agent-core/src/runtime/turn_lifecycle.rs crates/agent-core/src/runtime/tool_dispatch.rs crates/agent-core/src/streaming/maintenance.rs crates/agent-core/src/streaming/multi_turn.rs crates/agent-core/src/streaming/tools_exec.rs crates/agent-tools/src/builtin/shell/terminal.rs crates/agent-server/src/grpc/astro_service.rs crates/agent-core/tests/rig_agent_test.rs crates/agent-core/tests/streaming_test.rs crates/agent-hooks/src/outcome.rs
@@ -798,7 +798,7 @@ git commit -m "refactor(hooks): use codex hook variables"
 - Modify: `docs/examples/hooks/config.yaml.snippet`
 - Test: `crates/agent-hooks/src/shell.rs`
 
-- [ ] **Step 1: Write failing legacy-environment tests**
+- [x] **Step 1: Write failing legacy-environment tests**
 
 Replace the current environment tests with canonical-input assertions:
 
@@ -825,7 +825,7 @@ fn legacy_env_is_derived_from_canonical_input() {
 }
 ```
 
-- [ ] **Step 2: Run the test and verify RED**
+- [x] **Step 2: Run the test and verify RED**
 
 Run:
 
@@ -835,7 +835,7 @@ cargo test -p hooks legacy_env_is_derived_from_canonical_input -- --nocapture
 
 Expected: failure because `env_from_payload` still reads the removed `message` field or emits a legacy event label.
 
-- [ ] **Step 3: Update environment derivation and documentation**
+- [x] **Step 3: Update environment derivation and documentation**
 
 Implement the compatibility message fallback:
 
@@ -861,7 +861,7 @@ Update `docs/hooks.md` with:
 
 Update YAML examples to use canonical keys such as `PostToolUse`, `PreLlmCall`, and `AgentEnd`, and show the equivalent accepted legacy key in a commented migration example.
 
-- [ ] **Step 4: Run tests and full batch verification**
+- [x] **Step 4: Run tests and full batch verification**
 
 Run:
 
@@ -878,7 +878,7 @@ git diff --check
 
 Expected: every command exits 0, all tests report zero failures, and `git diff --check` prints nothing.
 
-- [ ] **Step 5: Commit compatibility docs and batch verification changes**
+- [x] **Step 5: Commit compatibility docs and batch verification changes**
 
 ```bash
 git add crates/agent-hooks/src/shell.rs docs/hooks.md docs/examples/hooks/README.md docs/examples/hooks/config.yaml.snippet
@@ -887,11 +887,11 @@ git commit -m "docs(hooks): document codex naming migration"
 
 ## Completion checklist
 
-- [ ] All eleven Codex names exactly match OpenAI's PascalCase labels.
-- [ ] Astro extension names are PascalCase and distinct from official events.
-- [ ] Every old event name maps to one canonical name at all boundaries.
-- [ ] New Hook JSON contains Codex variable names and omits Astro UI-only fields.
-- [ ] Internal production call sites no longer construct `tool_args`, `tool_result`, or `message` Hook fields.
-- [ ] UI and logging emit canonical names only.
-- [ ] Existing YAML keys and `ASTRO_HOOK_*` variables remain usable for one release.
-- [ ] Focused tests and `cargo check --workspace --all-targets` pass.
+- [x] All eleven Codex names exactly match OpenAI's PascalCase labels.
+- [x] Astro extension names are PascalCase and distinct from official events.
+- [x] Every old event name maps to one canonical name at all boundaries.
+- [x] New Hook JSON contains Codex variable names and omits Astro UI-only fields.
+- [x] Internal production call sites no longer construct `tool_args`, `tool_result`, or `message` Hook fields.
+- [x] UI and logging emit canonical names only.
+- [x] Existing YAML keys and `ASTRO_HOOK_*` variables remain usable for one release.
+- [x] Focused tests and `cargo check --workspace --all-targets` pass.
