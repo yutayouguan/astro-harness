@@ -1,6 +1,6 @@
 //! 危险命令检测与分级审批（Hermes 风格）。
 //!
-//! 枚举类型已下沉到 `types::approval`，本模块 re-export 并保留 regex 规则逻辑。
+//! 危险命令分级与 regex 审批规则。
 
 use regex::Regex;
 use std::sync::OnceLock;

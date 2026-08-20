@@ -1,7 +1,6 @@
 //! 工具执行上下文：由 AgentLoop 注入的运行时依赖与凭证。
 //!
-//! 凭证数据类型已下沉到 `types::credentials`，本模块 re-export 并提供
-//! `ToolContext` 结构体与 Provider 相关的便捷构造。
+//! 工具执行上下文与凭证。
 
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard};

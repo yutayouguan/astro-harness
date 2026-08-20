@@ -4,6 +4,7 @@ pub mod catalog;
 pub mod context;
 pub mod dispatch;
 pub mod execution;
+pub mod executor;
 pub mod network;
 pub mod path_safe;
 pub mod registry;

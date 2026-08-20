@@ -1,6 +1,6 @@
 //! 内置工具实现；经 inventory 自注册元数据与 handler，由 [`crate::dispatch`] 查表执行。
 //!
-//! 按领域分子目录（磁盘组织）；对外仍 re-export 各工具模块名，
+//! 内置工具按领域分子目录。
 //! 便于 `builtin::image_gen` 等路径引用。
 
 pub mod agents;

@@ -44,6 +44,7 @@ pub use engine::execution::{
     AgentThreadDispatch, FollowupAgentDispatchRequest, ParentRuntimeMaterial,
     SpawnAgentDispatchRequest,
 };
+pub use engine::executor::{LegacyToolAdapter, ToolExecutor, ToolExecutorFuture};
 pub use engine::network::InProcessNetworkGrant;
 pub use path_safe::resolve_safe;
 pub use registry::DynToolHandler;

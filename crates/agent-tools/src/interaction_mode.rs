@@ -1,6 +1,6 @@
 //! 聊天交互模式（Agent / Plan / Ask）的工具能力档。
 //!
-//! 枚举已下沉到 `types::interaction_mode`，本模块 re-export 并保留工具过滤逻辑。
+//! 交互模式下的工具可见性过滤。
 
 pub use types::InteractionMode;
 
