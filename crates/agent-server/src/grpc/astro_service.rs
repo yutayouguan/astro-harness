@@ -813,20 +813,7 @@ impl AstroServiceImpl {
         .await
     }
 
-    async fn finalize_background_phase(
-        &self,
-        managed: &Arc<ManagedThread>,
-        turn_id: &str,
-        lifecycle: &tokio_util::sync::CancellationToken,
-    ) {
-        if lifecycle.is_cancelled() {
-            let _ = managed
-                .commands
-                .send(crate::ListenerCommand::ExpireBackgroundSink {
-                    turn_id: turn_id.to_string(),
-                });
-            return;
-        }
+    async fn finalize_background_phase(&self, managed: &Arc<ManagedThread>, turn_id: &str) {
         let marker = tokio::time::timeout(
             crate::POST_TURN_COMPLETION_MARKER_TIMEOUT,
             self.emit_background_complete(managed, turn_id),
@@ -897,7 +884,6 @@ impl AstroServiceImpl {
                     let thread_id = thread_id.clone();
                     let turn_id = completed.turn_id;
                     let phase_lifecycle = lifecycle.clone();
-                    let finalize_lifecycle = phase_lifecycle.clone();
                     phases.spawn(async move {
                         let work_service = service.clone();
                         let work_managed = Arc::clone(&managed);
@@ -938,7 +924,6 @@ impl AstroServiceImpl {
                                     .finalize_background_phase(
                                         &finalize_managed,
                                         &finalize_turn_id,
-                                        &finalize_lifecycle,
                                     )
                                     .await;
                             },
@@ -4461,6 +4446,48 @@ mod tests {
                 .iter()
                 .all(|turn| turn.id != "turn-old"),
             "an old-generation marker must never mutate the replacement generation"
+        );
+    }
+
+    #[tokio::test]
+    async fn cancelled_background_phase_materializes_completion_before_release() {
+        let dir = TempDir::new().unwrap();
+        memory::ensure_workspace(dir.path()).unwrap();
+        let service = AstroServiceImpl::new(dir.path().to_path_buf());
+        let managed = service
+            .get_or_create_thread("cancelled-background")
+            .await
+            .expect("thread generation");
+        let lifecycle = managed.lifecycle_token();
+        lifecycle.cancel();
+
+        service
+            .finalize_background_phase(&managed, "turn-cancelled")
+            .await;
+
+        let state = service
+            .thread_states
+            .get("cancelled-background")
+            .await
+            .expect("thread state");
+        let state = state.lock().await;
+        let marker = state
+            .history
+            .completed_turns()
+            .iter()
+            .find(|turn| turn.id == "turn-cancelled")
+            .and_then(|turn| {
+                turn.items.iter().find(|item| {
+                    matches!(
+                        &item.item,
+                        agent_protocol::TurnItem::Extension(extension)
+                            if extension.namespace == "astro.background_complete"
+                    )
+                })
+            });
+        assert!(
+            marker.is_some(),
+            "release cancellation must converge desktop background-pending state through the unified extension event"
         );
     }
 
