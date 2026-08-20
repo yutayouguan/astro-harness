@@ -38,6 +38,7 @@
 - **等优先级稳定** -- 同优先级层保持插入顺序（项目层从根到 cwd，最近目录优先）
 - **表覆盖清理** -- 高优先级层用标量替换低优先级 Table 时，子键来源记录自动清除
 - **Profile 隔离** -- Profile 不能授予项目信任或改变项目根发现逻辑
+- **Legacy 冲突检测** -- 选择 v2 Profile 时自动检测并拒绝与 legacy `profiles` 表的同名冲突
 
 ## Crate 关系
 
@@ -49,10 +50,11 @@
 ## 测试
 
 ```bash
-# 全部测试
+# 全部测试（lib.rs 核心原语 + loader.rs 文件发现，均含 #[cfg(test)]）
 cargo test -p agent-config
 
 # 单个测试
 cargo test -p agent-config precedence_and_project_proximity_are_deterministic
 cargo test -p agent-config trusted_project_cannot_override_machine_local_keys -- --nocapture
+cargo test -p agent-config disabled_layers_are_visible_but_do_not_affect_effective_config
 ```
