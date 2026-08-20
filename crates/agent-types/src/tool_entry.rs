@@ -1,6 +1,93 @@
 //! 工具注册元数据。
 
+use std::fmt;
+
 use serde::{Deserialize, Serialize};
+
+/// Codex 对齐的工具名——支持普通名和命名空间。
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
+pub enum ToolName {
+    Plain(String),
+    Namespaced { namespace: String, name: String },
+}
+
+impl ToolName {
+    pub fn plain(name: impl Into<String>) -> Self {
+        Self::Plain(name.into())
+    }
+
+    pub fn namespaced(namespace: impl Into<String>, name: impl Into<String>) -> Self {
+        Self::Namespaced {
+            namespace: namespace.into(),
+            name: name.into(),
+        }
+    }
+
+    pub fn wire_name(&self) -> String {
+        match self {
+            Self::Plain(name) => name.clone(),
+            Self::Namespaced { namespace, name } => format!("{namespace}.{name}"),
+        }
+    }
+
+    pub fn parse(wire: &str) -> Self {
+        match wire.split_once('.') {
+            Some((ns, name)) if !ns.is_empty() && !name.is_empty() => Self::Namespaced {
+                namespace: ns.to_string(),
+                name: name.to_string(),
+            },
+            _ => Self::Plain(wire.to_string()),
+        }
+    }
+}
+
+impl fmt::Display for ToolName {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(&self.wire_name())
+    }
+}
+
+/// Codex 对齐的工具规格分类。
+#[derive(Debug, Clone)]
+pub enum ToolSpec {
+    /// 标准 JSON function 工具（绝大多数）。
+    Function { schema: serde_json::Value },
+    /// 命名空间工具组（如 `clock.curr_time`、`clock.sleep`）。
+    Namespace { tools: Vec<NamespacedToolDef> },
+    /// 自定义语法工具（如 apply_patch 的 LARK grammar）。
+    Freeform {
+        grammar: String,
+        description: String,
+    },
+}
+
+/// 命名空间下的单个子工具定义。
+#[derive(Debug, Clone)]
+pub struct NamespacedToolDef {
+    pub name: String,
+    pub description: String,
+    pub schema: serde_json::Value,
+}
+
+impl Default for ToolSpec {
+    fn default() -> Self {
+        Self::Function {
+            schema: serde_json::json!({ "type": "object", "properties": {} }),
+        }
+    }
+}
+
+/// Codex 对齐的工具执行审批需求声明。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ExecApprovalRequirement {
+    /// 不需要审批（只读工具、纯计算等）。
+    #[default]
+    Skip,
+    /// 需要用户/Guardian 审批后才能执行。
+    NeedsApproval,
+    /// 绝对禁止执行（硬线拦截）。
+    Forbidden,
+}
 
 /// Tool-level preference for process sandbox selection, aligned with Codex.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -130,6 +217,7 @@ pub struct ToolEntry {
     pub exclusive_access: bool,
     pub sandbox_preference: SandboxablePreference,
     pub mcp_approval: Option<McpToolApproval>,
+    pub approval_requirement: ExecApprovalRequirement,
 }
 
 impl ToolEntry {
@@ -146,6 +234,7 @@ impl ToolEntry {
             exclusive_access: false,
             sandbox_preference: SandboxablePreference::Forbid,
             mcp_approval: None,
+            approval_requirement: ExecApprovalRequirement::Skip,
         }
     }
 
@@ -173,6 +262,47 @@ impl ToolEntry {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn tool_name_plain_roundtrips() {
+        let name = ToolName::plain("terminal");
+        assert_eq!(name.wire_name(), "terminal");
+        assert_eq!(ToolName::parse("terminal"), name);
+    }
+
+    #[test]
+    fn tool_name_namespaced_roundtrips() {
+        let name = ToolName::namespaced("clock", "curr_time");
+        assert_eq!(name.wire_name(), "clock.curr_time");
+        assert_eq!(ToolName::parse("clock.curr_time"), name);
+        assert_eq!(format!("{name}"), "clock.curr_time");
+    }
+
+    #[test]
+    fn tool_name_parse_edge_cases() {
+        assert_eq!(ToolName::parse(""), ToolName::Plain(String::new()));
+        assert_eq!(ToolName::parse(".name"), ToolName::Plain(".name".into()));
+        assert_eq!(ToolName::parse("ns."), ToolName::Plain("ns.".into()));
+    }
+
+    #[test]
+    fn tool_spec_default_is_function() {
+        assert!(matches!(ToolSpec::default(), ToolSpec::Function { .. }));
+    }
+
+    #[test]
+    fn exec_approval_requirement_default_is_skip() {
+        assert_eq!(
+            ExecApprovalRequirement::default(),
+            ExecApprovalRequirement::Skip
+        );
+    }
+
+    #[test]
+    fn tool_entry_defaults_include_skip_approval() {
+        let entry = ToolEntry::lifecycle_defaults();
+        assert_eq!(entry.approval_requirement, ExecApprovalRequirement::Skip);
+    }
 
     fn approval(mode: McpToolApprovalMode, annotations: McpToolAnnotations) -> McpToolApproval {
         McpToolApproval {
