@@ -4,7 +4,7 @@ use reqwest::header::{HeaderMap, HeaderValue};
 use reqwest::Client;
 use serde_json::{json, Value};
 
-use crate::compat::{OpenAICompatible, OpenAICompletionModel};
+use crate::compat::{apply_thinking_compat, OpenAICompatible, OpenAICompletionModel, ThinkingFormat};
 use crate::traits::{Capabilities, Capable, Nothing, ProviderExt};
 
 const API_VERSION: &str = "2024-06-01";
@@ -27,9 +27,12 @@ impl ProviderExt for Azure {
 
 impl OpenAICompatible for Azure {
     const STREAM_USAGE: bool = true;
+    const THINKING_FORMAT: ThinkingFormat = ThinkingFormat::ReasoningEffort;
+    const EFFORT_MAP: &'static [(&'static str, &'static str)] =
+        &[("max", "high"), ("xhigh", "high")];
 
     fn finalize_body(&self, body: &mut Value) {
-        // Azure 不在 body 里传 model — 在 URL deployment 路径中
+        apply_thinking_compat(Self::THINKING_FORMAT, Self::EFFORT_MAP, body);
         body.as_object_mut().map(|obj| obj.remove("model"));
     }
 }

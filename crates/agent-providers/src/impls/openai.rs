@@ -4,7 +4,7 @@ use reqwest::header::{HeaderMap, HeaderValue, AUTHORIZATION};
 use reqwest::Client;
 use serde_json::{json, Value};
 
-use crate::compat::{OpenAICompatible, OpenAICompletionModel};
+use crate::compat::{OpenAICompatible, OpenAICompletionModel, ThinkingFormat};
 use crate::traits::{
     Capabilities, Capable, EmbeddingModel, FromClient, ImageGenModel, ModelBase, Nothing,
     ProviderClient, ProviderExt, TTSModel,
@@ -36,30 +36,9 @@ impl ProviderExt for OpenAI {
 impl OpenAICompatible for OpenAI {
     const STREAM_USAGE: bool = true;
     const SUPPORTS_RESPONSES: bool = true;
-
-    fn finalize_body(&self, body: &mut Value) {
-        if let Some(tc) = body.get("thinking_config").cloned() {
-            if let Some(obj) = body.as_object_mut() {
-                obj.remove("thinking_config");
-            }
-            let enabled = tc.get("enabled").and_then(|v| v.as_bool()).unwrap_or(false);
-            if enabled {
-                let effort = tc.get("effort").and_then(|v| v.as_str()).unwrap_or("high");
-                let mapped = match effort {
-                    "max" | "xhigh" => "high",
-                    "" => "high",
-                    other => other,
-                };
-                body["reasoning_effort"] = serde_json::json!(mapped);
-                // o 系列模型启用 reasoning 时要求 max_completion_tokens 替代 max_tokens
-                if let Some(obj) = body.as_object_mut() {
-                    if let Some(max) = obj.remove("max_tokens") {
-                        obj.insert("max_completion_tokens".to_string(), max);
-                    }
-                }
-            }
-        }
-    }
+    const THINKING_FORMAT: ThinkingFormat = ThinkingFormat::ReasoningEffort;
+    const EFFORT_MAP: &'static [(&'static str, &'static str)] =
+        &[("max", "high"), ("xhigh", "high")];
 }
 
 impl Capabilities for OpenAI {

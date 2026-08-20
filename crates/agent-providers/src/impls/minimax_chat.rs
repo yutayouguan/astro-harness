@@ -3,7 +3,7 @@
 use reqwest::header::HeaderMap;
 use serde_json::Value;
 
-use crate::compat::{OpenAICompatible, OpenAICompletionModel};
+use crate::compat::{OpenAICompatible, OpenAICompletionModel, ThinkingFormat};
 use crate::traits::{
     Capabilities, Capable, EmbeddingModel, FromClient, ImageGenModel, ModelBase, MusicGenModel,
     ProviderClient, ProviderExt, TTSModel, VideoGenModel,
@@ -27,21 +27,7 @@ impl ProviderExt for MiniMax {
 impl OpenAICompatible for MiniMax {
     const STREAM_USAGE: bool = true;
     const SUPPORTS_RESPONSES: bool = true;
-
-    fn finalize_body(&self, body: &mut Value) {
-        // reasoning_split=true → thinking 通过 reasoning_content 字段返回（而非 <think> 标签）
-        body["reasoning_split"] = Value::Bool(true);
-
-        if let Some(tc) = body.get("thinking_config").cloned() {
-            if let Some(obj) = body.as_object_mut() {
-                obj.remove("thinking_config");
-            }
-            let enabled = tc.get("enabled").and_then(|v| v.as_bool()).unwrap_or(true);
-            body["thinking"] = serde_json::json!({
-                "type": if enabled { "adaptive" } else { "disabled" }
-            });
-        }
-    }
+    const THINKING_FORMAT: ThinkingFormat = ThinkingFormat::MiniMaxAdaptive;
 }
 
 impl Capabilities for MiniMax {

@@ -1,10 +1,8 @@
 //! DeepSeek — OpenAI 兼容 + thinking 参数。
 
 use reqwest::header::HeaderMap;
-use serde_json::Value;
 
-use crate::compat::OpenAICompatible;
-use crate::compat::OpenAICompletionModel;
+use crate::compat::{OpenAICompatible, OpenAICompletionModel, ThinkingFormat};
 use crate::traits::{Capabilities, Capable, Nothing, ProviderExt};
 
 #[derive(Debug, Clone, Copy, Default)]
@@ -21,27 +19,9 @@ impl ProviderExt for DeepSeek {
 impl OpenAICompatible for DeepSeek {
     const STREAM_USAGE: bool = true;
     const SUPPORTS_RESPONSES: bool = true;
-
-    fn finalize_body(&self, body: &mut Value) {
-        if let Some(tc) = body.get("thinking_config").cloned() {
-            if let Some(obj) = body.as_object_mut() {
-                obj.remove("thinking_config");
-            }
-            let enabled = tc.get("enabled").and_then(|v| v.as_bool()).unwrap_or(false);
-            body["thinking"] = serde_json::json!({
-                "type": if enabled { "enabled" } else { "disabled" }
-            });
-            if enabled {
-                let effort = tc.get("effort").and_then(|v| v.as_str()).unwrap_or("high");
-                // DeepSeek API 有效值：high / max（低于 high 的级别会被服务端映射为 high）
-                let mapped = match effort {
-                    "max" | "xhigh" => "max",
-                    _ => "high",
-                };
-                body["reasoning_effort"] = serde_json::json!(mapped);
-            }
-        }
-    }
+    const THINKING_FORMAT: ThinkingFormat = ThinkingFormat::DeepSeek;
+    const EFFORT_MAP: &'static [(&'static str, &'static str)] =
+        &[("max", "max"), ("xhigh", "max")];
 }
 
 impl Capabilities for DeepSeek {

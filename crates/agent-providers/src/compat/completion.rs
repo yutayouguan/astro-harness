@@ -15,9 +15,23 @@ use super::sse::extract_openai_delta;
 use crate::traits::{CompletionModel, FromClient, ProviderClient, ProviderExt};
 use crate::types::{CompletionRequest, CompletionStream};
 
+/// Thinking 请求格式 — 厂商如何将统一 `thinking_config` 映射到线路字段。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ThinkingFormat {
+    /// 不处理 thinking（忽略 thinking_config）。
+    None,
+    /// OpenAI Chat Completions: `reasoning_effort` + `max_tokens→max_completion_tokens`。
+    ReasoningEffort,
+    /// DeepSeek: `thinking.type=enabled/disabled` + `reasoning_effort`。
+    DeepSeek,
+    /// MiniMax: `reasoning_split=true` + `thinking.type=adaptive/disabled`。
+    MiniMaxAdaptive,
+}
+
 /// OpenAI 兼容厂商的 hook trait。
 ///
 /// 实现此 trait + `ProviderExt` + `Capabilities` 即可接入一个 OpenAI 兼容厂商。
+/// 设置 `THINKING_FORMAT` + `EFFORT_MAP` 即可自动处理 thinking，无需覆盖 `finalize_body`。
 pub trait OpenAICompatible: ProviderExt {
     /// 是否支持 `stream_options.include_usage`。
     const STREAM_USAGE: bool = true;
@@ -28,19 +42,79 @@ pub trait OpenAICompatible: ProviderExt {
     /// 是否支持 Responses API（`/responses` 端点）。
     const SUPPORTS_RESPONSES: bool = false;
 
+    /// Thinking 请求格式。
+    const THINKING_FORMAT: ThinkingFormat = ThinkingFormat::None;
+
+    /// 推理 effort 映射表（`(输入, 输出)` 对）。
+    /// 未匹配时直通原始值；空值默认 `"high"`。
+    const EFFORT_MAP: &'static [(&'static str, &'static str)] = &[];
+
     /// Chat Completions 请求体微调（线路格式差异修补）。
     ///
-    /// 在 JSON body 构造完成后、发送前调用。
-    /// 可用于：
-    /// - DeepSeek: 注入 thinking 参数
-    /// - MiniMax: 调整字段名
-    fn finalize_body(&self, _body: &mut Value) {}
+    /// 默认实现根据 `THINKING_FORMAT` + `EFFORT_MAP` 自动处理 thinking 参数。
+    /// 仅在需要非 thinking 相关的特殊处理时才需覆盖（如 Azure 删除 model）。
+    fn finalize_body(&self, body: &mut Value) {
+        apply_thinking_compat(Self::THINKING_FORMAT, Self::EFFORT_MAP, body);
+    }
 
     /// Responses API 请求体微调。
     ///
     /// 在 Responses JSON body 构造完成后、发送前调用。
     /// 默认空实现；厂商可覆盖以处理 thinking/reasoning 等差异。
     fn finalize_responses_body(&self, _body: &mut Value) {}
+}
+
+/// 根据 thinking 格式和 effort 映射表处理 `thinking_config`。
+pub fn apply_thinking_compat(
+    format: ThinkingFormat,
+    effort_map: &[(&str, &str)],
+    body: &mut Value,
+) {
+    let tc = match body.get("thinking_config").cloned() {
+        Some(tc) => tc,
+        None => return,
+    };
+    if let Some(obj) = body.as_object_mut() {
+        obj.remove("thinking_config");
+    }
+    let enabled = tc.get("enabled").and_then(|v| v.as_bool()).unwrap_or(false);
+    let raw_effort = tc
+        .get("effort")
+        .and_then(|v| v.as_str())
+        .unwrap_or("high");
+    let mapped_effort = effort_map
+        .iter()
+        .find(|(k, _)| *k == raw_effort)
+        .map(|(_, v)| *v)
+        .unwrap_or(if raw_effort.is_empty() { "high" } else { raw_effort });
+
+    match format {
+        ThinkingFormat::None => {}
+        ThinkingFormat::ReasoningEffort => {
+            if enabled {
+                body["reasoning_effort"] = json!(mapped_effort);
+                if let Some(obj) = body.as_object_mut() {
+                    if let Some(max) = obj.remove("max_tokens") {
+                        obj.insert("max_completion_tokens".to_string(), max);
+                    }
+                }
+            }
+        }
+        ThinkingFormat::DeepSeek => {
+            body["thinking"] = json!({
+                "type": if enabled { "enabled" } else { "disabled" }
+            });
+            if enabled {
+                body["reasoning_effort"] = json!(mapped_effort);
+            }
+        }
+        ThinkingFormat::MiniMaxAdaptive => {
+            body["reasoning_split"] = Value::Bool(true);
+            body["thinking"] = json!({
+                "type": if enabled { "adaptive" } else { "disabled" }
+            });
+        }
+    }
 }
 
 /// 泛型 OpenAI 兼容补全模型。
