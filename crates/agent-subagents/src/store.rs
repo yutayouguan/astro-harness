@@ -17,6 +17,7 @@ use crate::{
 const V2_THREAD_SELECT: &str =
     "thread_id, root_thread_id, parent_thread_id, canonical_path, task_name,
      agent_type, session_id, status_kind, status_payload, created_at, updated_at";
+const FINAL_ERROR_MAX_CHARS: usize = 3_600;
 
 fn v2_default_db_path() -> PathBuf {
     home::default_memory_dir().join("subagents-v2.db")
@@ -447,9 +448,7 @@ impl AgentGraphStore {
         }
 
         let status = status_for_event(&event);
-        let should_notify_parent = existing.parent_thread_id.is_some()
-            && is_final_status(&status)
-            && !has_prior_final_event(&tx, thread_id)?;
+        let parent_notification = final_parent_notification(&existing, &event);
         let event_kind = event_kind(&event);
         let source_turn_id = source_turn_id(&event);
         let timestamp = now();
@@ -492,9 +491,7 @@ impl AgentGraphStore {
                 bail!("missing spawn edge for terminated agent thread {thread_id:?}");
             }
         }
-        if should_notify_parent {
-            let notification = final_parent_notification(&existing, &status)
-                .context("final child status is missing its parent notification")?;
+        if let Some(notification) = parent_notification {
             mailbox::enqueue_in_transaction(&tx, &notification)?;
         }
         let thread =
@@ -731,45 +728,41 @@ fn status_for_event(event: &RunnerEvent) -> AgentStatusV2 {
     }
 }
 
-fn is_final_status(status: &AgentStatusV2) -> bool {
-    matches!(
-        status,
-        AgentStatusV2::Completed { .. } | AgentStatusV2::Errored { .. } | AgentStatusV2::Shutdown
-    )
-}
-
-fn has_prior_final_event(
-    tx: &rusqlite::Transaction<'_>,
-    thread_id: &str,
-) -> rusqlite::Result<bool> {
-    tx.query_row(
-        "SELECT EXISTS(
-             SELECT 1 FROM agent_status_events
-             WHERE thread_id = ?1
-               AND event_kind IN ('turn_completed', 'turn_errored', 'runtime_terminated')
-         )",
-        [thread_id],
-        |row| row.get(0),
-    )
-}
-
 fn final_parent_notification(
     child: &AgentThreadV2,
-    status: &AgentStatusV2,
+    event: &RunnerEvent,
 ) -> Option<NewMailboxMessage> {
     let parent_thread_id = child.parent_thread_id.as_ref()?;
     let parent_path = child.canonical_path.parent()?;
-    let final_payload = match status {
-        AgentStatusV2::Completed { last_message } => last_message.clone(),
-        AgentStatusV2::Errored { message } => format!("Agent failed: {message}"),
-        AgentStatusV2::Shutdown => {
-            "Agent thread shut down before returning a final answer.".to_string()
+    let (notification_id, final_payload) = match event {
+        RunnerEvent::TurnCompleted {
+            turn_id,
+            last_message,
+        } => (turn_id.as_str(), last_message.clone()),
+        RunnerEvent::TurnErrored {
+            turn_id, message, ..
+        } => {
+            let message = types::truncate_chars(message, FINAL_ERROR_MAX_CHARS);
+            (
+                turn_id.as_str(),
+                format!(
+                    "Agent errored: {message}\n\nThis agent's turn failed. If you still need this agent, use the available collaboration tools to give it another task."
+                ),
+            )
         }
-        AgentStatusV2::PendingInit | AgentStatusV2::Running | AgentStatusV2::Interrupted => {
-            return None;
+        RunnerEvent::RuntimeTerminated
+            if !matches!(
+                child.status,
+                AgentStatusV2::Completed { .. } | AgentStatusV2::Errored { .. }
+            ) =>
+        {
+            ("shutdown", "Agent shut down.".to_string())
         }
+        RunnerEvent::TurnStarted { .. }
+        | RunnerEvent::TurnInterrupted { .. }
+        | RunnerEvent::RuntimeTerminated => return None,
     };
-    let message_id = format!("agent-final:{}", child.thread_id);
+    let message_id = format!("agent-final:{}:{notification_id}", child.thread_id);
     Some(NewMailboxMessage {
         idempotency_key: message_id.clone(),
         message_id,
@@ -927,7 +920,7 @@ mod tests {
     }
 
     #[test]
-    fn first_final_status_enqueues_exactly_one_parent_result() {
+    fn each_terminal_turn_enqueues_one_idempotent_parent_result() {
         let dir = tempfile::tempdir().unwrap();
         let store = AgentGraphStore::open(dir.path().join("subagents-v2.db")).unwrap();
         store
@@ -958,6 +951,9 @@ mod tests {
         assert_eq!(first.len(), 1);
         assert_eq!(first[0].kind, MailboxKind::Result);
         assert!(first[0].payload.ends_with("Payload:\nfirst answer"));
+        store
+            .mark_delivered("root-thread", first[0].sequence)
+            .unwrap();
 
         store
             .apply_status_event(
@@ -977,10 +973,25 @@ mod tests {
             )
             .unwrap();
         store
+            .apply_status_event(
+                "child",
+                RunnerEvent::TurnErrored {
+                    turn_id: "turn-2".into(),
+                    message: "later failure".into(),
+                },
+            )
+            .unwrap();
+        let second = store.pending_for("root-thread", 0).unwrap();
+        assert_eq!(second.len(), 1);
+        assert_eq!(second[0].message_id, "agent-final:child:turn-2");
+        assert!(second[0].payload.ends_with(
+            "Payload:\nAgent errored: later failure\n\nThis agent's turn failed. If you still need this agent, use the available collaboration tools to give it another task."
+        ));
+        store
             .apply_status_event("child", RunnerEvent::RuntimeTerminated)
             .unwrap();
 
-        assert_eq!(store.pending_for("root-thread", 0).unwrap(), first);
+        assert_eq!(store.pending_for("root-thread", 0).unwrap(), second);
     }
 
     #[test]
@@ -992,8 +1003,8 @@ mod tests {
             .unwrap();
         store
             .enqueue(&NewMailboxMessage {
-                message_id: "agent-final:child".into(),
-                idempotency_key: "agent-final:child".into(),
+                message_id: "agent-final:child:turn-1".into(),
+                idempotency_key: "agent-final:child:turn-1".into(),
                 sender_thread_id: "poison".into(),
                 recipient_thread_id: "root-thread".into(),
                 kind: MailboxKind::Message,
@@ -1029,19 +1040,64 @@ mod tests {
 
         let errored = final_parent_notification(
             &child,
-            &AgentStatusV2::Errored {
+            &RunnerEvent::TurnErrored {
+                turn_id: "turn-error".into(),
                 message: "provider unavailable".into(),
             },
         )
         .unwrap();
-        assert!(errored
-            .payload
-            .ends_with("Payload:\nAgent failed: provider unavailable"));
+        assert!(errored.payload.ends_with(
+            "Payload:\nAgent errored: provider unavailable\n\nThis agent's turn failed. If you still need this agent, use the available collaboration tools to give it another task."
+        ));
 
-        let shutdown = final_parent_notification(&child, &AgentStatusV2::Shutdown).unwrap();
-        assert!(shutdown
-            .payload
-            .ends_with("Payload:\nAgent thread shut down before returning a final answer."));
+        let shutdown = final_parent_notification(&child, &RunnerEvent::RuntimeTerminated).unwrap();
+        assert!(shutdown.payload.ends_with("Payload:\nAgent shut down."));
+    }
+
+    #[test]
+    fn direct_shutdown_after_interrupt_notifies_parent_once() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = AgentGraphStore::open(dir.path().join("subagents-v2.db")).unwrap();
+        store
+            .reserve_thread(&reservation("child", "/root/child"))
+            .unwrap();
+        store
+            .apply_status_event(
+                "child",
+                RunnerEvent::TurnInterrupted {
+                    turn_id: "turn-1".into(),
+                    reason: "cancelled".into(),
+                },
+            )
+            .unwrap();
+        store
+            .apply_status_event("child", RunnerEvent::RuntimeTerminated)
+            .unwrap();
+
+        let pending = store.pending_for("root-thread", 0).unwrap();
+        assert_eq!(pending.len(), 1);
+        assert_eq!(pending[0].message_id, "agent-final:child:shutdown");
+        assert!(pending[0].payload.ends_with("Payload:\nAgent shut down."));
+    }
+
+    #[test]
+    fn final_error_payload_is_safely_bounded() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = AgentGraphStore::open(dir.path().join("subagents-v2.db")).unwrap();
+        let child = store
+            .reserve_thread(&reservation("child", "/root/child"))
+            .unwrap();
+        let long_error = "故障".repeat(4_000);
+        let errored = final_parent_notification(
+            &child,
+            &RunnerEvent::TurnErrored {
+                turn_id: "turn-error".into(),
+                message: long_error,
+            },
+        )
+        .unwrap();
+        assert!(errored.payload.contains('…'));
+        assert!(errored.payload.chars().count() < 4_000);
     }
 
     #[test]

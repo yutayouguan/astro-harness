@@ -4281,6 +4281,87 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn each_followup_turn_completion_notifies_parent_after_prior_ack() {
+        let dir = tempfile::tempdir().unwrap();
+        let dispatch = dispatch(&dir);
+        let parent = committed_child(&dispatch, "parent");
+        let leaf_reservation = dispatch
+            .control
+            .reserve_spawn(&parent.canonical_path, "leaf")
+            .unwrap();
+        let leaf = leaf_reservation.thread().clone();
+        leaf_reservation.commit().unwrap();
+        let parent_dispatch = dispatch_for_thread(&dispatch, &parent);
+
+        dispatch
+            .control
+            .record_runner_event(
+                &leaf.thread_id,
+                RunnerEvent::TurnCompleted {
+                    turn_id: "turn-1".into(),
+                    last_message: "first".into(),
+                },
+            )
+            .unwrap();
+        let first_wait = AgentThreadDispatch::wait_agent(
+            &parent_dispatch,
+            WaitAgentV2Request {
+                timeout_ms: Some(10_000),
+            },
+        )
+        .await
+        .unwrap();
+        assert_eq!(first_wait.message, "Wait completed.");
+        let first = dispatch
+            .control
+            .drain_mailbox(&parent.canonical_path)
+            .unwrap();
+        assert_eq!(first.len(), 1);
+        dispatch
+            .control
+            .ack_mailbox(&parent.canonical_path, first[0].sequence)
+            .unwrap();
+
+        dispatch
+            .control
+            .record_runner_event(
+                &leaf.thread_id,
+                RunnerEvent::TurnStarted {
+                    turn_id: "turn-2".into(),
+                },
+            )
+            .unwrap();
+        dispatch
+            .control
+            .record_runner_event(
+                &leaf.thread_id,
+                RunnerEvent::TurnCompleted {
+                    turn_id: "turn-2".into(),
+                    last_message: "second".into(),
+                },
+            )
+            .unwrap();
+        let second_wait = AgentThreadDispatch::wait_agent(
+            &parent_dispatch,
+            WaitAgentV2Request {
+                timeout_ms: Some(10_000),
+            },
+        )
+        .await
+        .unwrap();
+        assert_eq!(second_wait.message, "Wait completed.");
+        let second = dispatch
+            .control
+            .drain_mailbox(&parent.canonical_path)
+            .unwrap();
+        assert_eq!(second.len(), 1);
+        assert_eq!(
+            second[0].message_id,
+            format!("agent-final:{}:turn-2", leaf.thread_id)
+        );
+    }
+
+    #[tokio::test]
     async fn acknowledged_steer_event_does_not_stale_wake_root() {
         let dir = tempfile::tempdir().unwrap();
         let dispatch = dispatch(&dir);
