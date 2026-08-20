@@ -592,9 +592,12 @@ pub async fn run_listener_commands(
                             payload: Some(proto::thread_event::Payload::Extension(
                                 proto::ThreadExtension {
                                     item_id,
-                                    namespace: "astro.background_expired".into(),
-                                    payload_json: serde_json::json!({"turn_id": turn_id})
-                                        .to_string(),
+                                    namespace: "astro.background_complete".into(),
+                                    payload_json: serde_json::json!({
+                                        "turn_id": turn_id,
+                                        "expired": true,
+                                    })
+                                    .to_string(),
                                 },
                             )),
                         },

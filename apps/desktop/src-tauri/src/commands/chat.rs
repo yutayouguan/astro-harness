@@ -720,12 +720,13 @@ where
     F: FnOnce() -> Fut,
     Fut: std::future::Future<Output = Result<(), String>>,
 {
-    // The backend RPC is the release boundary. Forgetting again afterwards would let a delayed
-    // response erase a new activation that reused the same logical session id (ABA).
     if forget_thread {
-        bridge.forget_thread(session_id).await;
+        // The backend RPC is the release boundary. The bridge holds the same per-thread gate used
+        // by activation across this await, preventing either a pre-RPC or post-RPC ABA window.
+        bridge.forget_thread_through(session_id, rpc).await
+    } else {
+        rpc().await
     }
-    rpc().await
 }
 
 #[tauri::command]
@@ -988,27 +989,50 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn lifecycle_control_never_post_forgets_replacement_after_rpc_boundary() {
+    async fn lifecycle_control_fences_replacement_until_rpc_boundary_even_on_error() {
         for rpc_result in [Ok(()), Err("rpc failed".to_string())] {
             let expect_ok = rpc_result.is_ok();
-            let bridge = ThreadEventsBridge::new();
+            let bridge = std::sync::Arc::new(ThreadEventsBridge::new());
             bridge.activate("session-aba").await;
-            let replacement = std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0));
-            let replacement_out = std::sync::Arc::clone(&replacement);
-            let result = chat_control_with_lifecycle(&bridge, "session-aba", true, || async {
-                replacement_out.store(
-                    bridge.activate("session-aba").await,
-                    std::sync::atomic::Ordering::SeqCst,
-                );
-                rpc_result
-            })
-            .await;
+            let rpc_entered = std::sync::Arc::new(tokio::sync::Notify::new());
+            let release_rpc = std::sync::Arc::new(tokio::sync::Notify::new());
+
+            let lifecycle_bridge = std::sync::Arc::clone(&bridge);
+            let entered = std::sync::Arc::clone(&rpc_entered);
+            let release = std::sync::Arc::clone(&release_rpc);
+            let lifecycle = tokio::spawn(async move {
+                chat_control_with_lifecycle(
+                    &lifecycle_bridge,
+                    "session-aba",
+                    true,
+                    move || async move {
+                        entered.notify_one();
+                        release.notified().await;
+                        rpc_result
+                    },
+                )
+                .await
+            });
+            rpc_entered.notified().await;
+
+            let replacement_bridge = std::sync::Arc::clone(&bridge);
+            let mut replacement =
+                tokio::spawn(async move { replacement_bridge.activate("session-aba").await });
+            assert!(
+                tokio::time::timeout(std::time::Duration::from_millis(20), &mut replacement,)
+                    .await
+                    .is_err(),
+                "replacement activation must wait until the lifecycle RPC linearization boundary"
+            );
+
+            release_rpc.notify_one();
+            let result = lifecycle.await.expect("lifecycle task");
             assert_eq!(result.is_ok(), expect_ok);
             assert!(
                 bridge
                     .fail_activation(
                         "session-aba",
-                        replacement.load(std::sync::atomic::Ordering::SeqCst),
+                        replacement.await.expect("replacement activation"),
                     )
                     .await
             );

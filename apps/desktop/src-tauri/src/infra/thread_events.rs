@@ -349,9 +349,14 @@ impl ThreadEventsBridge {
     /// Forget every local recovery target for an explicitly released session. The current
     /// generation remains the cleanup owner until its Unsubscribe RPC succeeds; a reused thread
     /// id overwrites that owner under the same gate, making the queued cleanup safely stale.
+    #[cfg(test)]
     pub(crate) async fn forget_thread(&self, thread_id: &str) {
         let gate = self.terminal_cleanup.gate(thread_id);
         let _owner_guard = gate.lock().await;
+        self.forget_thread_locked(thread_id).await;
+    }
+
+    async fn forget_thread_locked(&self, thread_id: &str) {
         let mut state = self.active_threads.write().await;
         Self::clear_thread(&mut state, thread_id);
         state.background_pending.remove(thread_id);
@@ -373,6 +378,20 @@ impl ThreadEventsBridge {
         }
     }
 
+    /// Linearize an explicit lifecycle RPC with activation of a reused logical thread id.
+    /// `activate` uses the same per-thread gate, so no replacement can exist until the backend
+    /// release boundary returns (successfully or otherwise).
+    pub(crate) async fn forget_thread_through<F, Fut, T>(&self, thread_id: &str, operation: F) -> T
+    where
+        F: FnOnce() -> Fut,
+        Fut: Future<Output = T>,
+    {
+        let gate = self.terminal_cleanup.gate(thread_id);
+        let _owner_guard = gate.lock().await;
+        self.forget_thread_locked(thread_id).await;
+        operation().await
+    }
+
     /// Bind a turn observed from snapshot/live delivery without rewriting an existing epoch.
     pub async fn bind_observed_turn(&self, thread_id: &str, turn_id: &str) {
         if turn_id.is_empty() {
@@ -380,11 +399,11 @@ impl ThreadEventsBridge {
         }
         let mut state = self.active_threads.write().await;
         if let Some(activation) = state.activations.get(thread_id).copied() {
-            let uniquely_pending = state
+            let currently_pending = state
                 .awaiting_submissions
                 .get(thread_id)
-                .is_some_and(|pending| pending.len() == 1 && pending.contains(&activation));
-            if uniquely_pending {
+                .is_some_and(|pending| pending.contains(&activation));
+            if currently_pending {
                 state
                     .turn_epochs
                     .entry(thread_id.into())
@@ -539,7 +558,7 @@ impl ThreadEventsBridge {
                     state
                         .awaiting_submissions
                         .get(thread_id)
-                        .is_some_and(|pending| pending.len() == 1 && pending.contains(activation))
+                        .is_some_and(|pending| pending.contains(activation))
                 });
             if can_precede_terminal {
                 state
@@ -630,13 +649,22 @@ impl ThreadEventsBridge {
         thread_id: &str,
         turn_id: &str,
         events: &[ChatStreamEvent],
-    ) {
+    ) -> bool {
         if turn_id.is_empty() {
-            return;
+            return false;
         }
         let mut state = self.active_threads.write().await;
-        if !state.threads.contains(thread_id) {
-            return;
+        let current_activation = state.activations.get(thread_id).copied();
+        let turn_activation = state
+            .turn_epochs
+            .get(thread_id)
+            .and_then(|turns| turns.get(turn_id))
+            .copied();
+        if !state.threads.contains(thread_id)
+            || current_activation.is_none()
+            || current_activation != turn_activation
+        {
+            return false;
         }
         for event in events {
             match event {
@@ -664,6 +692,7 @@ impl ThreadEventsBridge {
                 _ => {}
             }
         }
+        true
     }
 
     /// Snapshot agent messages are full text while live messages are deltas. Emit only the
@@ -827,13 +856,13 @@ impl ThreadEventsBridge {
             .copied();
         let Some(turn_epoch) = turn_epoch else {
             let current_activation = state.activations.get(thread_id).copied();
-            let uniquely_pending = current_activation.is_some_and(|activation| {
+            let currently_pending = current_activation.is_some_and(|activation| {
                 state
                     .awaiting_submissions
                     .get(thread_id)
-                    .is_some_and(|pending| pending.len() == 1 && pending.contains(&activation))
+                    .is_some_and(|pending| pending.contains(&activation))
             });
-            if let Some(awaiting_activation) = current_activation.filter(|_| uniquely_pending) {
+            if let Some(awaiting_activation) = current_activation.filter(|_| currently_pending) {
                 let background_completed =
                     Self::take_completed_background_turn(&mut state, thread_id, turn_id);
                 state
@@ -1468,6 +1497,10 @@ async fn process_live_event(
 ) {
     let thread_id = event.thread_id.clone();
     let turn_id = event.turn_id.clone();
+    let is_extension = matches!(
+        event.payload.as_ref(),
+        Some(proto::thread_event::Payload::Extension(_))
+    );
     if let Some(proto::thread_event::Payload::TurnStarted(started)) = event.payload.as_ref() {
         bridge
             .bind_observed_turn(&thread_id, &started.turn_id)
@@ -1501,11 +1534,14 @@ async fn process_live_event(
         bridge
             .accept_terminal_with_background(&thread_id, &turn_id, events, background_turn)
             .await
-    } else {
-        bridge
+    } else if is_extension
+        || bridge
             .record_delivered_projection(&thread_id, &turn_id, &events)
-            .await;
+            .await
+    {
         events
+    } else {
+        Vec::new()
     };
     emit_chat_events(app, &thread_id, events);
 }
@@ -3721,6 +3757,75 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn observed_turn_binds_latest_activation_when_older_ack_is_still_pending() {
+        let bridge = ThreadEventsBridge::new();
+        bridge.activate("session-observed").await;
+        bridge.activate("session-observed").await;
+
+        bridge
+            .bind_observed_turn("session-observed", "turn-observed")
+            .await;
+        assert!(!bridge
+            .accept_terminal(
+                "session-observed",
+                "turn-observed",
+                terminal_projection("turn-observed"),
+            )
+            .await
+            .is_empty());
+        assert!(!bridge.is_active("session-observed").await);
+    }
+
+    #[tokio::test]
+    async fn nonterminal_projection_requires_the_current_turn_epoch() {
+        let bridge = ThreadEventsBridge::new();
+        let old = bridge.activate("session-fence").await;
+        bridge
+            .bind_submitted_turn_if_current("session-fence", old, "turn-old")
+            .await;
+        bridge.forget_thread("session-fence").await;
+
+        assert!(
+            !bridge
+                .record_delivered_projection(
+                    "session-fence",
+                    "turn-old",
+                    &[ChatStreamEvent::Token {
+                        content: "stale".into(),
+                    }],
+                )
+                .await
+        );
+
+        let current = bridge.activate("session-fence").await;
+        assert!(
+            !bridge
+                .record_delivered_projection(
+                    "session-fence",
+                    "turn-old",
+                    &[ChatStreamEvent::Token {
+                        content: "still stale".into(),
+                    }],
+                )
+                .await
+        );
+        bridge
+            .bind_submitted_turn_if_current("session-fence", current, "turn-new")
+            .await;
+        assert!(
+            bridge
+                .record_delivered_projection(
+                    "session-fence",
+                    "turn-new",
+                    &[ChatStreamEvent::Token {
+                        content: "current".into(),
+                    }],
+                )
+                .await
+        );
+    }
+
+    #[tokio::test]
     async fn pre_ack_terminal_is_released_by_authoritative_steered_binding() {
         let bridge = ThreadEventsBridge::new();
         let old = bridge.activate("session-1").await;
@@ -3781,6 +3886,70 @@ mod tests {
             bridge.background_resume_threads().await,
             vec!["session-snapshot"]
         );
+    }
+
+    #[tokio::test]
+    async fn unknown_terminal_tracks_latest_pending_activation_across_multiple_acks() {
+        let bridge = ThreadEventsBridge::new();
+        let first = bridge.activate("session-multi-ack").await;
+        let current = bridge.activate("session-multi-ack").await;
+
+        assert!(bridge
+            .accept_terminal(
+                "session-multi-ack",
+                "turn-unknown",
+                terminal_projection("turn-unknown"),
+            )
+            .await
+            .is_empty());
+        assert_eq!(
+            deferred_terminal_count(&bridge, "session-multi-ack").await,
+            1,
+            "an unknown terminal belongs to the latest still-pending activation"
+        );
+
+        assert!(bridge
+            .bind_submitted_turn_if_current("session-multi-ack", first, "turn-unknown",)
+            .await
+            .is_empty());
+        assert!(bridge.is_active("session-multi-ack").await);
+
+        assert!(!bridge
+            .bind_submitted_turn_if_current("session-multi-ack", current, "turn-unknown",)
+            .await
+            .is_empty());
+        assert!(!bridge.is_active("session-multi-ack").await);
+    }
+
+    #[tokio::test]
+    async fn preterminal_marker_tracks_latest_activation_with_multiple_pending_acks() {
+        let bridge = ThreadEventsBridge::new();
+        let first = bridge.activate("session-marker-acks").await;
+        let current = bridge.activate("session-marker-acks").await;
+
+        assert!(
+            !bridge
+                .complete_background_turn("session-marker-acks", "turn-marker")
+                .await
+        );
+        assert!(bridge
+            .accept_terminal_with_background(
+                "session-marker-acks",
+                "turn-marker",
+                terminal_projection("turn-marker"),
+                true,
+            )
+            .await
+            .is_empty());
+        assert!(bridge
+            .bind_submitted_turn_if_current("session-marker-acks", first, "turn-marker",)
+            .await
+            .is_empty());
+        assert!(!bridge
+            .bind_submitted_turn_if_current("session-marker-acks", current, "turn-marker",)
+            .await
+            .is_empty());
+        assert!(bridge.background_resume_threads().await.is_empty());
     }
 
     #[tokio::test]

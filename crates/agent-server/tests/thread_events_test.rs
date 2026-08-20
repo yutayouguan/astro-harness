@@ -547,10 +547,10 @@ async fn expiring_background_sink_notifies_current_subscriber_and_logical_replac
         };
         assert_eq!(event.turn_id, "turn-expire");
         assert_eq!(extension.item_id, "turn-expire:background_expired");
-        assert_eq!(extension.namespace, "astro.background_expired");
+        assert_eq!(extension.namespace, "astro.background_complete");
         assert_eq!(
             serde_json::from_str::<serde_json::Value>(&extension.payload_json).unwrap(),
-            serde_json::json!({"turn_id":"turn-expire"})
+            serde_json::json!({"expired":true,"turn_id":"turn-expire"})
         );
     }
     assert!(
