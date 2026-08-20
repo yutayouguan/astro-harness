@@ -1,4 +1,4 @@
-use std::collections::VecDeque;
+use std::collections::{BTreeSet, VecDeque};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Mutex, MutexGuard};
 use std::time::Duration;
@@ -38,16 +38,18 @@ pub enum ActivityObservation {
     TimedOut,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum DurableModelActivity {
-    Mailbox,
-    Steer,
+#[derive(Debug, Default)]
+pub(crate) struct DurableModelState {
+    pub(crate) has_mailbox: bool,
+    pub(crate) has_steer: bool,
+    pub(crate) result_senders: BTreeSet<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum ModelWaitSignal {
     Activity(Box<AgentActivity>),
-    Durable(DurableModelActivity),
+    DurableMailbox,
+    DurableSteer,
 }
 
 pub struct ActivityBus {
@@ -125,7 +127,7 @@ impl ActivityBus {
         mut durable_activity: F,
     ) -> anyhow::Result<Option<ModelWaitSignal>>
     where
-        F: FnMut() -> anyhow::Result<Option<DurableModelActivity>>,
+        F: FnMut() -> anyhow::Result<DurableModelState>,
     {
         let mut rx = self.tx.subscribe();
         if let Some(signal) = self.first_model_after(
@@ -238,10 +240,10 @@ impl ActivityBus {
         cursor: ActivityCursor,
         caller_thread_id: &str,
         caller_is_root: bool,
-        durable_activity: Option<DurableModelActivity>,
+        durable: DurableModelState,
     ) -> Option<ModelWaitSignal> {
         let events = self.lock_events();
-        if caller_is_root {
+        if caller_is_root && durable.has_steer {
             if let Some(activity) = events
                 .iter()
                 .filter(|event| event.sequence > cursor.0)
@@ -250,22 +252,24 @@ impl ActivityBus {
                 return Some(ModelWaitSignal::Activity(Box::new(activity.clone())));
             }
         }
-        if durable_activity == Some(DurableModelActivity::Steer) {
-            return Some(ModelWaitSignal::Durable(DurableModelActivity::Steer));
+        if durable.has_steer {
+            return Some(ModelWaitSignal::DurableSteer);
         }
         for activity in events.iter().filter(|event| event.sequence > cursor.0) {
             let visible = match (&activity.kind, activity.thread.as_ref()) {
                 (AgentActivityKind::Mailbox { thread_id }, _) => {
-                    thread_id == caller_thread_id && durable_activity.is_some()
+                    thread_id == caller_thread_id && durable.has_mailbox
                 }
                 (AgentActivityKind::StatusChanged { .. }, Some(thread)) => {
                     !matches!(
                         thread.status,
                         crate::AgentStatusV2::PendingInit | crate::AgentStatusV2::Running
                     ) && thread.parent_thread_id.as_deref() == Some(caller_thread_id)
+                        && durable.result_senders.contains(&thread.thread_id)
                 }
                 (AgentActivityKind::EdgeClosed { .. }, Some(thread)) => {
                     thread.parent_thread_id.as_deref() == Some(caller_thread_id)
+                        && durable.result_senders.contains(&thread.thread_id)
                 }
                 _ => false,
             };
@@ -273,7 +277,9 @@ impl ActivityBus {
                 return Some(ModelWaitSignal::Activity(Box::new(activity.clone())));
             }
         }
-        durable_activity.map(ModelWaitSignal::Durable)
+        durable
+            .has_mailbox
+            .then_some(ModelWaitSignal::DurableMailbox)
     }
 
     fn observation_after(&self, cursor: ActivityCursor) -> Option<ActivityObservation> {

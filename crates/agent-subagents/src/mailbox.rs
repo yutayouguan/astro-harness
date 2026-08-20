@@ -1,6 +1,6 @@
 use anyhow::{bail, Context};
 use chrono::{SecondsFormat, Utc};
-use rusqlite::{params, types::Type, Connection};
+use rusqlite::{params, types::Type, Connection, Transaction};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -45,8 +45,17 @@ pub(crate) fn enqueue(
     conn: &mut Connection,
     message: &NewMailboxMessage,
 ) -> anyhow::Result<MailboxMessage> {
-    validate(message)?;
     let tx = conn.transaction()?;
+    let stored = enqueue_in_transaction(&tx, message)?;
+    tx.commit()?;
+    Ok(stored)
+}
+
+pub(crate) fn enqueue_in_transaction(
+    tx: &Transaction<'_>,
+    message: &NewMailboxMessage,
+) -> anyhow::Result<MailboxMessage> {
+    validate(message)?;
     let inserted = tx.execute(
         "INSERT INTO agent_mailbox (
             message_id, idempotency_key, sender_thread_id, recipient_thread_id,
@@ -67,13 +76,12 @@ pub(crate) fn enqueue(
 
     let stored = if inserted == 1 {
         let sequence = tx.last_insert_rowid();
-        load_by_sequence(&tx, sequence)?.context("inserted mailbox row is missing")?
+        load_by_sequence(tx, sequence)?.context("inserted mailbox row is missing")?
     } else {
-        load_by_idempotency_key(&tx, &message.idempotency_key)?
+        load_by_idempotency_key(tx, &message.idempotency_key)?
             .context("idempotent mailbox row is missing")?
     };
     ensure_same_immutable_contents(&stored, message)?;
-    tx.commit()?;
     Ok(stored.message)
 }
 

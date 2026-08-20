@@ -4008,6 +4008,10 @@ mod tests {
                 .await
                 .is_err()
         );
+        dispatch
+            .control
+            .persist_main_steer(&AgentPath::root(), "new root input".into())
+            .unwrap();
         AgentThreadDispatch::notify_main_steer(&dispatch);
         let root_result = tokio::time::timeout(Duration::from_millis(100), root_wait.as_mut())
             .await
@@ -4109,6 +4113,10 @@ mod tests {
         let dispatch = dispatch(&dir);
         let child = committed_child(&dispatch, "worker");
         let child_dispatch = dispatch_for_thread(&dispatch, &child);
+        dispatch
+            .control
+            .persist_main_steer(&AgentPath::root(), "new root input".into())
+            .unwrap();
         AgentThreadDispatch::notify_main_steer(&dispatch);
 
         let root_result = AgentThreadDispatch::wait_agent(
@@ -4218,6 +4226,97 @@ mod tests {
                     .is_err()
             );
         }
+    }
+
+    #[tokio::test]
+    async fn concurrent_waits_observe_an_already_pending_final_result() {
+        let dir = tempfile::tempdir().unwrap();
+        let dispatch = dispatch(&dir);
+        let parent = committed_child(&dispatch, "parent");
+        let leaf_reservation = dispatch
+            .control
+            .reserve_spawn(&parent.canonical_path, "leaf")
+            .unwrap();
+        let leaf = leaf_reservation.thread().clone();
+        leaf_reservation.commit().unwrap();
+        let parent_dispatch = dispatch_for_thread(&dispatch, &parent);
+        dispatch
+            .control
+            .record_runner_event(
+                &leaf.thread_id,
+                RunnerEvent::TurnCompleted {
+                    turn_id: "leaf-turn".into(),
+                    last_message: "done".into(),
+                },
+            )
+            .unwrap();
+        let pending = dispatch
+            .control
+            .drain_mailbox(&parent.canonical_path)
+            .unwrap();
+        assert_eq!(pending.len(), 1);
+        assert_eq!(pending[0].kind, subagents::MailboxKind::Result);
+
+        let waits = async {
+            tokio::join!(
+                AgentThreadDispatch::wait_agent(
+                    &parent_dispatch,
+                    WaitAgentV2Request {
+                        timeout_ms: Some(10_000),
+                    },
+                ),
+                AgentThreadDispatch::wait_agent(
+                    &parent_dispatch,
+                    WaitAgentV2Request {
+                        timeout_ms: Some(10_000),
+                    },
+                )
+            )
+        };
+        let (first, second) = tokio::time::timeout(Duration::from_millis(250), waits)
+            .await
+            .expect("both waits should observe the already-pending final result");
+        assert_eq!(first.unwrap().message, "Wait completed.");
+        assert_eq!(second.unwrap().message, "Wait completed.");
+    }
+
+    #[tokio::test]
+    async fn acknowledged_steer_event_does_not_stale_wake_root() {
+        let dir = tempfile::tempdir().unwrap();
+        let dispatch = dispatch(&dir);
+        let root = AgentPath::root();
+        let steer = dispatch
+            .control
+            .persist_main_steer(&root, "already consumed".into())
+            .unwrap();
+        dispatch.control.notify_main_steer();
+        dispatch.control.ack_mailbox(&root, steer.sequence).unwrap();
+
+        let mut wait = Box::pin(AgentThreadDispatch::wait_agent(
+            &dispatch,
+            WaitAgentV2Request {
+                timeout_ms: Some(10_000),
+            },
+        ));
+        assert!(
+            tokio::time::timeout(Duration::from_millis(20), wait.as_mut())
+                .await
+                .is_err()
+        );
+        AgentThreadDispatch::send_message(
+            &dispatch,
+            MessageAgentV2Request {
+                target: "/root".into(),
+                message: "fresh input".into(),
+            },
+        )
+        .await
+        .unwrap();
+        let result = tokio::time::timeout(Duration::from_millis(100), wait.as_mut())
+            .await
+            .expect("fresh root input should wake the existing wait")
+            .unwrap();
+        assert_eq!(result.message, "Wait completed.");
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -5957,6 +6056,10 @@ mod tests {
             ),
             async {
                 tokio::task::yield_now().await;
+                dispatch
+                    .control
+                    .persist_main_steer(&AgentPath::root(), "new root input".into())
+                    .unwrap();
                 AgentThreadDispatch::notify_main_steer(&dispatch);
             }
         );

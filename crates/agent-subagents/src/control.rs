@@ -8,7 +8,7 @@ use std::time::Duration;
 use tokio::sync::Notify;
 use uuid::Uuid;
 
-use crate::activity::{DurableModelActivity, ModelWaitSignal};
+use crate::activity::{DurableModelState, ModelWaitSignal};
 use crate::{
     ActivityBus, ActivityCursor, AgentActivityKind, AgentGraphStore, AgentPath, AgentRegistry,
     AgentStatusV2, AgentThreadV2, AgentTreeSnapshotV2, ExecutionPermit, Limits, MailboxKind,
@@ -607,31 +607,28 @@ impl AgentControl {
                 WaitOutcome::MailboxActivity,
                 ActivityCursor(activity.sequence),
             ),
-            Some(ModelWaitSignal::Durable(DurableModelActivity::Steer)) => {
-                (WaitOutcome::Steered, cursor)
-            }
-            Some(ModelWaitSignal::Durable(DurableModelActivity::Mailbox)) => {
-                (WaitOutcome::MailboxActivity, cursor)
-            }
+            Some(ModelWaitSignal::DurableSteer) => (WaitOutcome::Steered, cursor),
+            Some(ModelWaitSignal::DurableMailbox) => (WaitOutcome::MailboxActivity, cursor),
             None => (WaitOutcome::TimedOut, cursor),
         })
     }
 
-    fn pending_model_activity(
-        &self,
-        caller_thread_id: &str,
-    ) -> anyhow::Result<Option<DurableModelActivity>> {
+    fn pending_model_activity(&self, caller_thread_id: &str) -> anyhow::Result<DurableModelState> {
         let pending = self.store.pending_for(caller_thread_id, 0)?;
-        if pending
-            .iter()
-            .any(|message| message.kind == MailboxKind::Steer)
-        {
-            Ok(Some(DurableModelActivity::Steer))
-        } else if pending.is_empty() {
-            Ok(None)
-        } else {
-            Ok(Some(DurableModelActivity::Mailbox))
+        let mut state = DurableModelState {
+            has_mailbox: !pending.is_empty(),
+            ..DurableModelState::default()
+        };
+        for message in pending {
+            match message.kind {
+                MailboxKind::Steer => state.has_steer = true,
+                MailboxKind::Result => {
+                    state.result_senders.insert(message.sender_thread_id);
+                }
+                MailboxKind::Message | MailboxKind::Followup | MailboxKind::Status => {}
+            }
         }
+        Ok(state)
     }
 
     pub fn activity_cursor(&self) -> ActivityCursor {
@@ -1745,6 +1742,47 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(second, WaitOutcome::MailboxActivity);
+    }
+
+    #[tokio::test]
+    async fn model_wait_recovers_direct_child_final_after_activity_eviction() {
+        let dir = TempDir::new().unwrap();
+        let (control, store) = open_control(&dir, "root-thread");
+        let root = crate::AgentPath::root();
+        let parent = commit_spawn(&control, &root, "parent");
+        let leaf = commit_spawn(&control, &parent.canonical_path, "leaf");
+        let cursor = control.activity_cursor();
+
+        control
+            .record_runner_event(
+                &leaf.thread_id,
+                crate::RunnerEvent::TurnCompleted {
+                    turn_id: "leaf-turn".into(),
+                    last_message: "citations ready".into(),
+                },
+            )
+            .unwrap();
+        let pending = store.pending_for(&parent.thread_id, 0).unwrap();
+        assert_eq!(pending.len(), 1);
+        assert_eq!(pending[0].kind, MailboxKind::Result);
+        assert_eq!(
+            pending[0].payload,
+            "Message Type: FINAL_ANSWER\nTask name: /root/parent\nSender: /root/parent/leaf\nPayload:\ncitations ready"
+        );
+
+        for index in 0..1_025 {
+            control.activity.publish(
+                AgentActivityKind::Mailbox {
+                    thread_id: format!("unrelated-{index}"),
+                },
+                None,
+            );
+        }
+        let (outcome, _) = control
+            .wait_model_activity(cursor, Duration::from_millis(20), &parent.thread_id, false)
+            .await
+            .unwrap();
+        assert_eq!(outcome, WaitOutcome::MailboxActivity);
     }
 
     #[tokio::test]

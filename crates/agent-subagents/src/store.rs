@@ -11,7 +11,7 @@ use crate::mailbox::{self, MailboxMessage, NewMailboxMessage};
 use crate::migration::{self, HistoricalAgentMessage, HistoricalAgentThread};
 use crate::{
     AgentPath, AgentRuntimeDescriptorV2, AgentStatusKind, AgentStatusV2, AgentThreadV2,
-    AgentTreeSnapshotV2, RunnerEvent, ThreadReservation,
+    AgentTreeSnapshotV2, MailboxKind, RunnerEvent, ThreadReservation,
 };
 
 const V2_THREAD_SELECT: &str =
@@ -447,6 +447,9 @@ impl AgentGraphStore {
         }
 
         let status = status_for_event(&event);
+        let should_notify_parent = existing.parent_thread_id.is_some()
+            && is_final_status(&status)
+            && !has_prior_final_event(&tx, thread_id)?;
         let event_kind = event_kind(&event);
         let source_turn_id = source_turn_id(&event);
         let timestamp = now();
@@ -488,6 +491,11 @@ impl AgentGraphStore {
             if updated_edges != 1 {
                 bail!("missing spawn edge for terminated agent thread {thread_id:?}");
             }
+        }
+        if should_notify_parent {
+            let notification = final_parent_notification(&existing, &status)
+                .context("final child status is missing its parent notification")?;
+            mailbox::enqueue_in_transaction(&tx, &notification)?;
         }
         let thread =
             query_v2_thread_by_id(&tx, thread_id)?.context("updated agent thread is missing")?;
@@ -723,6 +731,59 @@ fn status_for_event(event: &RunnerEvent) -> AgentStatusV2 {
     }
 }
 
+fn is_final_status(status: &AgentStatusV2) -> bool {
+    matches!(
+        status,
+        AgentStatusV2::Completed { .. } | AgentStatusV2::Errored { .. } | AgentStatusV2::Shutdown
+    )
+}
+
+fn has_prior_final_event(
+    tx: &rusqlite::Transaction<'_>,
+    thread_id: &str,
+) -> rusqlite::Result<bool> {
+    tx.query_row(
+        "SELECT EXISTS(
+             SELECT 1 FROM agent_status_events
+             WHERE thread_id = ?1
+               AND event_kind IN ('turn_completed', 'turn_errored', 'runtime_terminated')
+         )",
+        [thread_id],
+        |row| row.get(0),
+    )
+}
+
+fn final_parent_notification(
+    child: &AgentThreadV2,
+    status: &AgentStatusV2,
+) -> Option<NewMailboxMessage> {
+    let parent_thread_id = child.parent_thread_id.as_ref()?;
+    let parent_path = child.canonical_path.parent()?;
+    let final_payload = match status {
+        AgentStatusV2::Completed { last_message } => last_message.clone(),
+        AgentStatusV2::Errored { message } => format!("Agent failed: {message}"),
+        AgentStatusV2::Shutdown => {
+            "Agent thread shut down before returning a final answer.".to_string()
+        }
+        AgentStatusV2::PendingInit | AgentStatusV2::Running | AgentStatusV2::Interrupted => {
+            return None;
+        }
+    };
+    let message_id = format!("agent-final:{}", child.thread_id);
+    Some(NewMailboxMessage {
+        idempotency_key: message_id.clone(),
+        message_id,
+        sender_thread_id: child.thread_id.clone(),
+        recipient_thread_id: parent_thread_id.clone(),
+        kind: MailboxKind::Result,
+        payload: format!(
+            "Message Type: FINAL_ANSWER\nTask name: {parent_path}\nSender: {}\nPayload:\n{final_payload}",
+            child.canonical_path
+        ),
+        trigger_turn: false,
+    })
+}
+
 fn status_kind_str(kind: AgentStatusKind) -> &'static str {
     match kind {
         AgentStatusKind::PendingInit => "pending_init",
@@ -863,6 +924,124 @@ mod tests {
             assert_eq!(projected.status, expected);
         }
         assert_eq!(store.status_events("child").unwrap().len(), 5);
+    }
+
+    #[test]
+    fn first_final_status_enqueues_exactly_one_parent_result() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = AgentGraphStore::open(dir.path().join("subagents-v2.db")).unwrap();
+        store
+            .reserve_thread(&reservation("child", "/root/child"))
+            .unwrap();
+
+        store
+            .apply_status_event(
+                "child",
+                RunnerEvent::TurnInterrupted {
+                    turn_id: "turn-0".into(),
+                    reason: "paused".into(),
+                },
+            )
+            .unwrap();
+        assert!(store.pending_for("root-thread", 0).unwrap().is_empty());
+
+        store
+            .apply_status_event(
+                "child",
+                RunnerEvent::TurnCompleted {
+                    turn_id: "turn-1".into(),
+                    last_message: "first answer".into(),
+                },
+            )
+            .unwrap();
+        let first = store.pending_for("root-thread", 0).unwrap();
+        assert_eq!(first.len(), 1);
+        assert_eq!(first[0].kind, MailboxKind::Result);
+        assert!(first[0].payload.ends_with("Payload:\nfirst answer"));
+
+        store
+            .apply_status_event(
+                "child",
+                RunnerEvent::TurnStarted {
+                    turn_id: "turn-2".into(),
+                },
+            )
+            .unwrap();
+        store
+            .apply_status_event(
+                "child",
+                RunnerEvent::TurnErrored {
+                    turn_id: "turn-2".into(),
+                    message: "later failure".into(),
+                },
+            )
+            .unwrap();
+        store
+            .apply_status_event("child", RunnerEvent::RuntimeTerminated)
+            .unwrap();
+
+        assert_eq!(store.pending_for("root-thread", 0).unwrap(), first);
+    }
+
+    #[test]
+    fn final_notification_failure_rolls_back_status_and_event_atomically() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = AgentGraphStore::open(dir.path().join("subagents-v2.db")).unwrap();
+        store
+            .reserve_thread(&reservation("child", "/root/child"))
+            .unwrap();
+        store
+            .enqueue(&NewMailboxMessage {
+                message_id: "agent-final:child".into(),
+                idempotency_key: "agent-final:child".into(),
+                sender_thread_id: "poison".into(),
+                recipient_thread_id: "root-thread".into(),
+                kind: MailboxKind::Message,
+                payload: "conflict".into(),
+                trigger_turn: false,
+            })
+            .unwrap();
+
+        let error = store
+            .apply_status_event(
+                "child",
+                RunnerEvent::TurnCompleted {
+                    turn_id: "turn-1".into(),
+                    last_message: "must be atomic".into(),
+                },
+            )
+            .unwrap_err();
+        assert!(error.to_string().contains("immutable contents"));
+        assert_eq!(
+            store.get_thread("child").unwrap().unwrap().status,
+            AgentStatusV2::PendingInit
+        );
+        assert!(store.status_events("child").unwrap().is_empty());
+    }
+
+    #[test]
+    fn final_notification_payloads_cover_error_and_shutdown() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = AgentGraphStore::open(dir.path().join("subagents-v2.db")).unwrap();
+        let child = store
+            .reserve_thread(&reservation("child", "/root/child"))
+            .unwrap();
+
+        let errored = final_parent_notification(
+            &child,
+            &AgentStatusV2::Errored {
+                message: "provider unavailable".into(),
+            },
+        )
+        .unwrap();
+        assert!(errored
+            .payload
+            .ends_with("Payload:\nAgent failed: provider unavailable"));
+
+        let shutdown = final_parent_notification(&child, &AgentStatusV2::Shutdown).unwrap();
+        assert!(shutdown
+            .payload
+            .ends_with("Payload:\nAgent thread shut down before returning a final answer."));
     }
 
     #[test]
