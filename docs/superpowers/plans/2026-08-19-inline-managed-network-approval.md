@@ -69,7 +69,7 @@ git commit -m "feat: add network approval contracts"
   测试 explicit deny、local defense 和 rebinding 均不调用 decider，
   `Ask` / `Deny` 仍以 structured 403 返回。
 
-- [ ] **Step 5: 验证并提交**
+- [x] **Step 5: 验证并提交**
 
 ```bash
 cargo fmt --all
@@ -88,7 +88,7 @@ git commit -m "feat: attribute managed network policy requests"
 - Modify: `crates/agent-core/src/runtime/session_services.rs`
 - Modify: `crates/agent-core/src/runtime/mod.rs`
 
-- [ ] **Step 1: 先写 service state-machine 失败测试**
+- [x] **Step 1: 先写 service state-machine 失败测试**
 
   通过测试 reviewer 锁定：
 
@@ -98,22 +98,22 @@ git commit -m "feat: attribute managed network policy requests"
   - 同 `PendingHostApprovalKey` 并发请求只触发一次 reviewer；
   - owner drop 将 waiter 全部 fail closed，且不删除新 generation。
 
-- [ ] **Step 2: 实现 Codex 同名内部类型**
+- [x] **Step 2: 实现 Codex 同名内部类型**
 
   实现 `HostApprovalKey`、`PendingHostApprovalKey`、`PendingHostApproval`、
   `PendingApprovalDecision` 和 `PendingHostApprovalOwner`。
 
-- [ ] **Step 3: 实现 cache/commit 锁顺序**
+- [x] **Step 3: 实现 cache/commit 锁顺序**
 
   所有 allow/deny cache 修改均在 `session_policy_commit_lock` 下执行，
   不跨 await 持有 `std::sync::MutexGuard`。
 
-- [ ] **Step 4: 将 service 绑定到 `SessionServices` lifecycle**
+- [x] **Step 4: 将 service 绑定到 `SessionServices` lifecycle**
 
   不使用全局 singleton，不跨 session 复用 host cache；`AgentLoop` 只通过
   已有 `SessionServices` 边界访问该服务。
 
-- [ ] **Step 5: 验证并提交**
+- [x] **Step 5: 验证并提交**
 
 ```bash
 cargo fmt --all
@@ -154,7 +154,7 @@ git commit -m "feat: add session network approval service"
   User reviewer 可返回全部 scope；AutoReview 仅允许 allow-once/deny；
   `ApprovalPolicy::Never` 和 reviewer unavailable 直接 deny。
 
-- [ ] **Step 5: 验证并提交**
+- [x] **Step 5: 验证并提交**
 
 ```bash
 cargo fmt --all
@@ -174,7 +174,7 @@ git commit -m "feat: add managed network approval surface"
 - Modify: `crates/agent-core/src/runtime/tool_dispatch.rs` only if cancellation ownership requires
 - Modify: focused orchestrator tests
 
-- [ ] **Step 1: 先写端到端 orchestrator 失败测试**
+- [x] **Step 1: 先写端到端 orchestrator 失败测试**
 
   记录 tool handler 执行次数，触发一个 allowlist miss，批准后断言：
 
@@ -183,21 +183,21 @@ git commit -m "feat: add managed network approval surface"
   - 未构造 escalated `SandboxAttempt`；
   - filesystem policy 和 network sandbox context 未改变。
 
-- [ ] **Step 2: 构造 `NetworkApprovalSpec` 和 per-attempt decider**
+- [x] **Step 2: 构造 `NetworkApprovalSpec` 和 per-attempt decider**
 
   Spec 使用 `StepContext` 中已冻结的 profile，turn id、call id、tool name 和
   command preview，不在 proxy callback 中重读可热更新的选择。
 
-- [ ] **Step 3: 将 decider/attribution 传入 `StartedNetworkProxy`**
+- [x] **Step 3: 将 decider/attribution 传入 `StartedNetworkProxy`**
 
   子进程启动前必须完成 proxy bind 和 decider 注入；任一步失败都不 spawn child。
 
-- [ ] **Step 4: 保留 structured denial 分路**
+- [x] **Step 4: 保留 structured denial 分路**
 
   deny/timeout/cancel 仍由 runtime 转成 `SandboxErr::Denied` 且
   `network_policy_decision.is_some()`，orchestrator 不进入 filesystem review/retry。
 
-- [ ] **Step 5: 验证并提交**
+- [x] **Step 5: 验证并提交**
 
 ```bash
 cargo fmt --all
@@ -218,27 +218,27 @@ git commit -m "feat: approve managed network requests inline"
 - Modify: `crates/agent-core/src/control/network_approval.rs`
 - Modify: relevant permission audit tests
 
-- [ ] **Step 1: 先写持久校验失败测试**
+- [x] **Step 1: 先写持久校验失败测试**
 
   覆盖 normalized exact match、mismatch、wildcard、built-in profile、inherited leaf profile、
   YAML 其他键保留和保存失败。
 
-- [ ] **Step 2: 增加 atomic config helper**
+- [x] **Step 2: 增加 atomic config helper**
 
   在选中 custom leaf profile 的 `network.domains` 中写入 exact host action，
   使用现有 YAML 保留式读改写通道，不重建整份 config。
 
-- [ ] **Step 3: 实现 `persist_network_policy_amendment`**
+- [x] **Step 3: 实现 `persist_network_policy_amendment`**
 
   严格比较 amendment/context normalized host。只有持久成功后才更新
   `session_approved_hosts` / `session_denied_hosts` 并放行当前请求。
 
-- [ ] **Step 4: 记录 audit 与非敏感结果**
+- [x] **Step 4: 记录 audit 与非敏感结果**
 
   区分 `persistent_allow`、`persistent_deny`、`persistence_failed`，
   不记录 URL path/query/header/body。
 
-- [ ] **Step 5: 验证并提交**
+- [x] **Step 5: 验证并提交**
 
 ```bash
 cargo fmt --all
@@ -257,12 +257,12 @@ git commit -m "feat: persist exact host network amendments"
 - Modify: this plan checklist
 - Modify: design status only if implementation reveals an approved deviation
 
-- [ ] **Step 1: 把已落地生命周期写入 Agent 架构设计**
+- [x] **Step 1: 把已落地生命周期写入 Agent 架构设计**
 
   记录 inline request continuation、service/cache ownership、persistent amendment 边界、
   cancellation 和实际测试证据；不把未实现的 Deferred/background 标为完成。
 
-- [ ] **Step 2: 运行分层全量验证**
+- [x] **Step 2: 运行分层全量验证**
 
 ```bash
 cargo test -p types -p network-proxy -p memory -p agent -p tools -p sandbox
@@ -275,13 +275,13 @@ cargo fmt --all -- --check
 git diff --check
 ```
 
-- [ ] **Step 3: 安全复审**
+- [x] **Step 3: 安全复审**
 
   重点检查：命令是否可能重跑、hard deny 是否可被覆盖、cache key 是否缺 protocol/port、
   cancellation 是否留下孤儿 HITL、persistent amendment 是否能写 wildcard/错 profile，
   以及审计是否泄露 credential。
 
-- [ ] **Step 4: 只提交本计划的 tracked files**
+- [x] **Step 4: 只提交本计划的 tracked files**
 
 ```bash
 git status --short
