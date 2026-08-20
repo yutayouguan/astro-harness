@@ -10,6 +10,111 @@ use home::AgentRuntimeConfig;
 use tempfile::TempDir;
 use types::message::Message;
 
+#[test]
+fn session_fire_hook_uses_shared_runtime_and_common_payload() {
+    let dir = TempDir::new().unwrap();
+    let (agent, _) = AgentBuilder::new(dir.path()).build().unwrap();
+    let runtime = Arc::new(hooks::HookRuntime::new());
+    let captured = Arc::new(std::sync::Mutex::new(None));
+    let capture = Arc::clone(&captured);
+    runtime
+        .plugin
+        .register(hooks::USER_PROMPT_SUBMIT, move |input| {
+            *capture.lock().unwrap() = Some(input.clone());
+            hooks::HookOutcome::Continue
+        });
+
+    let project_root = dir.path().join("project");
+    agent.set_hook_runtime(Arc::clone(&runtime));
+    agent.set_project_root(Some(project_root.clone()));
+    agent.set_permission_profile(Some("workspace-write".into()));
+    agent.set_chat_credentials("openai", "gpt-5.6-sol", "test-key", "");
+    agent.fire_hook(
+        hooks::USER_PROMPT_SUBMIT,
+        hooks::HookInput {
+            prompt: Some("hello".into()),
+            ..Default::default()
+        },
+    );
+
+    let payload = captured.lock().unwrap().clone().expect("hook payload");
+    assert_eq!(payload.session_id, agent.session_id());
+    assert_eq!(payload.cwd, project_root.to_string_lossy());
+    assert_eq!(payload.model, "openai/gpt-5.6-sol");
+    assert_eq!(payload.permission_mode.as_deref(), Some("workspace-write"));
+    assert_eq!(payload.hook_event_name, hooks::USER_PROMPT_SUBMIT);
+    assert_eq!(payload.prompt.as_deref(), Some("hello"));
+    assert!(Arc::ptr_eq(&agent.hook_runtime(), &runtime));
+}
+
+#[test]
+fn session_hook_payload_preserves_explicit_values_and_falls_back_to_defaults() {
+    let dir = TempDir::new().unwrap();
+    let (agent, _) = AgentBuilder::new(dir.path()).build().unwrap();
+    let runtime = Arc::new(hooks::HookRuntime::new());
+    let captured = Arc::new(std::sync::Mutex::new(Vec::new()));
+    let capture = Arc::clone(&captured);
+    runtime
+        .plugin
+        .register(hooks::USER_PROMPT_SUBMIT, move |input| {
+            capture.lock().unwrap().push(input.clone());
+            hooks::HookOutcome::Continue
+        });
+    agent.set_hook_runtime(runtime);
+    agent.set_project_root(None);
+    agent.set_permission_profile(Some("workspace-write".into()));
+    agent.set_chat_targets(vec![types::ChatTarget {
+        provider_id: String::new(),
+        backend_id: String::new(),
+        model: "model-only".into(),
+        api_key: String::new(),
+        base_url: String::new(),
+    }]);
+
+    agent.fire_hook(hooks::USER_PROMPT_SUBMIT, hooks::HookInput::default());
+    agent.set_chat_targets(vec![types::ChatTarget {
+        provider_id: String::new(),
+        backend_id: "backend-only".into(),
+        model: String::new(),
+        api_key: String::new(),
+        base_url: String::new(),
+    }]);
+    agent.fire_hook(hooks::USER_PROMPT_SUBMIT, hooks::HookInput::default());
+    agent.set_chat_targets(vec![types::ChatTarget {
+        provider_id: String::new(),
+        backend_id: String::new(),
+        model: String::new(),
+        api_key: String::new(),
+        base_url: String::new(),
+    }]);
+    agent.fire_hook(hooks::USER_PROMPT_SUBMIT, hooks::HookInput::default());
+    agent.fire_hook(
+        hooks::USER_PROMPT_SUBMIT,
+        hooks::HookInput {
+            session_id: "provided-session".into(),
+            cwd: "/provided/cwd".into(),
+            model: "provided/model".into(),
+            permission_mode: Some("read-only".into()),
+            ..Default::default()
+        },
+    );
+
+    let payloads = captured.lock().unwrap();
+    assert_eq!(payloads[0].session_id, agent.session_id());
+    assert_eq!(payloads[0].cwd, dir.path().to_string_lossy());
+    assert_eq!(payloads[0].model, "model-only");
+    assert_eq!(
+        payloads[0].permission_mode.as_deref(),
+        Some("workspace-write")
+    );
+    assert_eq!(payloads[1].model, "backend-only");
+    assert_eq!(payloads[2].model, "");
+    assert_eq!(payloads[3].session_id, "provided-session");
+    assert_eq!(payloads[3].cwd, "/provided/cwd");
+    assert_eq!(payloads[3].model, "provided/model");
+    assert_eq!(payloads[3].permission_mode.as_deref(), Some("read-only"));
+}
+
 fn test_config(dir: &TempDir) -> AgentConfig {
     AgentConfig::with_defaults(dir.path().to_path_buf())
 }
@@ -125,26 +230,149 @@ async fn test_agent_builder_from_runtime_config() {
 }
 
 #[tokio::test]
-async fn test_prompt_hooks_on_run_turn() {
+async fn session_start_fires_once_before_each_user_prompt() {
     let dir = TempDir::new().unwrap();
-    let (agent, _) = AgentBuilder::new(dir.path())
-        .preamble("你是测试助手")
-        .build()
-        .unwrap();
-    let log: Arc<std::sync::Mutex<Vec<String>>> = Arc::new(std::sync::Mutex::new(vec![]));
-    ::hooks::install_recording(&agent.hook_bus(), Arc::clone(&log));
+    let (agent, _) = AgentBuilder::new(dir.path()).build().unwrap();
+    let events = Arc::new(std::sync::Mutex::new(Vec::new()));
+    let session_events = Arc::clone(&events);
+    agent
+        .hook_bus()
+        .register(hooks::SESSION_START, move |input| {
+            session_events.lock().unwrap().push(format!(
+                "{}:{}",
+                input.hook_event_name,
+                input.source.as_deref().unwrap_or("")
+            ));
+            hooks::HookOutcome::Continue
+        });
+    let prompt_events = Arc::clone(&events);
+    agent
+        .hook_bus()
+        .register(hooks::USER_PROMPT_SUBMIT, move |input| {
+            prompt_events.lock().unwrap().push(format!(
+                "{}:{}",
+                input.hook_event_name,
+                input.prompt.as_deref().unwrap_or("")
+            ));
+            hooks::HookOutcome::Continue
+        });
 
-    let _ = agent.start_or_steer_turn("你好", "t1").await.unwrap();
-    let events = log.lock().unwrap().clone();
-    assert!(
-        events.iter().any(|e| e.starts_with(hooks::PRE_LLM_CALL)),
-        "events={events:?}"
+    agent.start_or_steer_turn("first", "t1").await.unwrap();
+    agent
+        .record_assistant_message("first answer")
+        .await
+        .unwrap();
+    agent.start_or_steer_turn("second", "t2").await.unwrap();
+
+    assert_eq!(
+        events.lock().unwrap().as_slice(),
+        [
+            "SessionStart:startup",
+            "UserPromptSubmit:first",
+            "UserPromptSubmit:second"
+        ]
     );
-    // AgentEnd 在 streaming 收尾触发；run_turn 仅准备阶段
-    assert!(
-        events.iter().any(|e| e == hooks::SESSION_START),
-        "events={events:?}"
-    );
+}
+
+#[tokio::test]
+async fn user_prompt_submit_block_prevents_persistence() {
+    let dir = TempDir::new().unwrap();
+    let (agent, _) = AgentBuilder::new(dir.path()).build().unwrap();
+    agent.hook_bus().register(hooks::USER_PROMPT_SUBMIT, |_| {
+        hooks::HookOutcome::Block("policy".into())
+    });
+
+    let error = agent
+        .start_or_steer_turn("blocked", "t1")
+        .await
+        .unwrap_err();
+
+    assert!(error.to_string().contains("policy"));
+    assert!(agent.clone_history().await.is_empty());
+}
+
+#[tokio::test]
+async fn user_prompt_submit_context_enters_initial_system_prompt() {
+    let dir = TempDir::new().unwrap();
+    let (agent, _) = AgentBuilder::new(dir.path()).build().unwrap();
+    agent.hook_bus().register(hooks::USER_PROMPT_SUBMIT, |_| {
+        hooks::HookOutcome::InjectContext("PROMPT_HOOK_CONTEXT".into())
+    });
+
+    let result = agent.start_or_steer_turn("hello", "t1").await.unwrap();
+
+    let agent::TurnResult::Continue { system_prompt, .. } = result else {
+        panic!("expected Continue");
+    };
+    assert!(system_prompt.contains("PROMPT_HOOK_CONTEXT"));
+}
+
+#[tokio::test]
+async fn session_start_block_prevents_prompt_and_persistence() {
+    let dir = TempDir::new().unwrap();
+    let (agent, _) = AgentBuilder::new(dir.path()).build().unwrap();
+    let prompt_hits = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    agent.hook_bus().register(hooks::SESSION_START, |_| {
+        hooks::HookOutcome::Block("session policy".into())
+    });
+    let hits = Arc::clone(&prompt_hits);
+    agent
+        .hook_bus()
+        .register(hooks::USER_PROMPT_SUBMIT, move |_| {
+            hits.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            hooks::HookOutcome::Continue
+        });
+
+    let error = agent
+        .start_or_steer_turn("blocked", "t1")
+        .await
+        .unwrap_err();
+
+    assert!(error.to_string().contains("session policy"));
+    assert_eq!(prompt_hits.load(std::sync::atomic::Ordering::SeqCst), 0);
+    assert!(agent.clone_history().await.is_empty());
+}
+
+#[tokio::test]
+async fn session_and_prompt_contexts_enter_initial_system_prompt_in_order() {
+    let dir = TempDir::new().unwrap();
+    let (agent, _) = AgentBuilder::new(dir.path()).build().unwrap();
+    agent.hook_bus().register(hooks::SESSION_START, |_| {
+        hooks::HookOutcome::InjectContext("SESSION_HOOK_CONTEXT".into())
+    });
+    agent.hook_bus().register(hooks::USER_PROMPT_SUBMIT, |_| {
+        hooks::HookOutcome::InjectContext("PROMPT_HOOK_CONTEXT".into())
+    });
+
+    let result = agent.start_or_steer_turn("hello", "t1").await.unwrap();
+
+    let agent::TurnResult::Continue { system_prompt, .. } = result else {
+        panic!("expected Continue");
+    };
+    let session_position = system_prompt.find("SESSION_HOOK_CONTEXT").unwrap();
+    let prompt_position = system_prompt.find("PROMPT_HOOK_CONTEXT").unwrap();
+    assert!(session_position < prompt_position, "{system_prompt}");
+    assert!(system_prompt.contains("SESSION_HOOK_CONTEXT\n\nPROMPT_HOOK_CONTEXT"));
+}
+
+#[tokio::test]
+async fn prompt_skip_is_not_treated_as_block() {
+    let dir = TempDir::new().unwrap();
+    let (agent, _) = AgentBuilder::new(dir.path()).build().unwrap();
+    let hits = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let hook_hits = Arc::clone(&hits);
+    agent
+        .hook_bus()
+        .register(hooks::USER_PROMPT_SUBMIT, move |_| {
+            hook_hits.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            hooks::HookOutcome::Skip("gateway-only".into())
+        });
+
+    let result = agent.start_or_steer_turn("admitted", "t1").await.unwrap();
+
+    assert!(matches!(result, agent::TurnResult::Continue { .. }));
+    assert_eq!(hits.load(std::sync::atomic::Ordering::SeqCst), 1);
+    assert_eq!(agent.clone_history().await[0].content_str(), "admitted");
 }
 
 #[tokio::test]

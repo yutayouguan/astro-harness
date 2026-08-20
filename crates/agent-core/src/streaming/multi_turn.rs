@@ -25,17 +25,15 @@ use super::maintenance::{
 };
 use super::provider::ProviderStreamer;
 use super::run_state::{RunPhase, RunState};
-use super::summary::{run_max_iterations_summary, SummaryOutcome};
+use super::summary::{run_max_iterations_summary, SummaryOutcome, MAX_VERIFY_ATTEMPTS};
 use super::tools_exec::{
     execute_tools_concurrent, execute_tools_serial, tool_may_require_permission,
 };
 use super::types::{MultiTurnStream, MultiTurnStreamItem, StreamedAssistantContent};
 use crate::control::hitl::HitlGate;
+use crate::runtime::turn_context::QueuedTurnInput;
 use crate::runtime::{Session, TurnContext};
 use crate::tasks::{RegularTask, TurnInput};
-
-/// `pre_verify` 单次 turn 内允许的最多验证轮次（含首次结束尝试）。
-const MAX_VERIFY_ATTEMPTS: usize = 2;
 
 /// 模型只返回思考/推理内容而没有文本回复时，允许的最大重试次数。
 const MAX_THINKING_ONLY_RETRIES: usize = 1;
@@ -177,40 +175,72 @@ impl RunTurnArgs {
     }
 }
 
-async fn record_and_ack_pending_input(
-    session: &Arc<Session>,
-    turn_context: &TurnContext,
-    tx: &mpsc::Sender<anyhow::Result<MultiTurnStreamItem>>,
-    close_when_empty: bool,
-) -> anyhow::Result<bool> {
-    let pending = if close_when_empty {
-        turn_context.take_pending_input_or_close()
-    } else {
-        turn_context.take_pending_input()
-    };
-    if pending.is_empty() {
-        return Ok(false);
+/// Terminal classification for a regular turn after preparation succeeds.
+///
+/// Runtime failures have already emitted their stream terminal sequence. They
+/// remain an `Ok` [`SessionTaskResult`](crate::tasks::SessionTaskResult) and are
+/// carried here only so `RegularTask` can populate `AgentEnd.error`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum RunTurnOutcome {
+    Success,
+    Failed(String),
+    Interrupted,
+}
+
+impl RunTurnOutcome {
+    pub(crate) fn error(&self) -> Option<&str> {
+        match self {
+            Self::Failed(error) => Some(error),
+            Self::Success | Self::Interrupted => None,
+        }
     }
-    for input in pending {
-        let client_message_id = match &input {
+}
+
+async fn record_pending_input(
+    session: &Arc<Session>,
+    tx: &mpsc::Sender<anyhow::Result<MultiTurnStreamItem>>,
+    pending_input: Vec<QueuedTurnInput>,
+) -> anyhow::Result<()> {
+    if pending_input.is_empty() {
+        return Ok(());
+    }
+    let client_message_ids = pending_input
+        .iter()
+        .filter_map(|queued| match &queued.input {
             TurnInput::UserInput {
                 client_message_id, ..
             } => client_message_id.clone(),
-        };
-        session.record_turn_input(input).await?;
-        if let Some(client_message_id) = client_message_id {
-            let _ = emit(
-                tx,
-                MultiTurnStreamItem::UserInputCommitted { client_message_id },
-            )
-            .await;
-        }
+        })
+        .collect::<Vec<_>>();
+    let sess = session.as_ref();
+    sess.record_queued_turn_inputs(pending_input).await?;
+    for client_message_id in client_message_ids {
+        let _ = emit(
+            tx,
+            MultiTurnStreamItem::UserInputCommitted { client_message_id },
+        )
+        .await;
     }
-    Ok(true)
+    Ok(())
+}
+
+async fn finish_failed(
+    session: &Arc<Session>,
+    streamer: &ProviderStreamer,
+    tx: &mpsc::Sender<anyhow::Result<MultiTurnStreamItem>>,
+    error: String,
+    usage: Option<Usage>,
+    run_id: &str,
+) -> RunTurnOutcome {
+    finish_error(session, streamer, tx, error.clone(), usage, run_id).await;
+    RunTurnOutcome::Failed(error)
 }
 
 /// Codex-aligned regular turn loop shared by foreground and background adapters.
-pub(crate) async fn run_turn(args: RunTurnArgs, cancellation_token: CancellationToken) {
+pub(crate) async fn run_turn(
+    args: RunTurnArgs,
+    cancellation_token: CancellationToken,
+) -> RunTurnOutcome {
     let RunTurnArgs {
         session,
         turn_context,
@@ -260,6 +290,10 @@ pub(crate) async fn run_turn(args: RunTurnArgs, cancellation_token: Cancellation
     let mut raw_rounds: usize = 0;
     let mut verify_attempt: usize = 0;
     let mut thinking_only_retries: usize = 0;
+    let mut has_sampled = false;
+    // Synthetic user bridges (Stop KeepGoing and thinking-only retries) must
+    // receive a normal assistant response before queued user steering is added.
+    let mut awaiting_synthetic_bridge_response = false;
 
     let mut timeline = crate::timeline::TimelineBuilder::new();
     let now_ms = || chrono::Utc::now().timestamp_millis();
@@ -279,7 +313,7 @@ pub(crate) async fn run_turn(args: RunTurnArgs, cancellation_token: Cancellation
                 &run_id,
             )
             .await;
-            return;
+            return RunTurnOutcome::Interrupted;
         }
         if !pause.wait_if_paused().await {
             finish_interrupted(
@@ -290,21 +324,26 @@ pub(crate) async fn run_turn(args: RunTurnArgs, cancellation_token: Cancellation
                 &run_id,
             )
             .await;
-            return;
+            return RunTurnOutcome::Interrupted;
         }
 
-        if let Err(error) = record_and_ack_pending_input(&session, &turn_context, &tx, false).await
-        {
-            finish_error(
-                &session,
-                &streamer,
-                &tx,
-                error.to_string(),
-                saw_usage.then_some(total_usage),
-                &run_id,
-            )
-            .await;
-            return;
+        if has_sampled && !awaiting_synthetic_bridge_response {
+            let pending_input = turn_context.take_pending_input();
+            if !pending_input.is_empty() {
+                if let Err(error) = record_pending_input(&session, &tx, pending_input).await {
+                    return finish_failed(
+                        &session,
+                        &streamer,
+                        &tx,
+                        error.to_string(),
+                        saw_usage.then_some(total_usage),
+                        &run_id,
+                    )
+                    .await;
+                }
+                verify_attempt = 0;
+                thinking_only_retries = 0;
+            }
         }
 
         pre_llm_maintenance(&session).await;
@@ -316,7 +355,7 @@ pub(crate) async fn run_turn(args: RunTurnArgs, cancellation_token: Cancellation
         let step_context = match step_context {
             Ok(step_context) => step_context,
             Err(error) => {
-                finish_error(
+                return finish_failed(
                     &session,
                     &streamer,
                     &tx,
@@ -325,7 +364,6 @@ pub(crate) async fn run_turn(args: RunTurnArgs, cancellation_token: Cancellation
                     &run_id,
                 )
                 .await;
-                return;
             }
         };
         tracing::debug!(
@@ -344,7 +382,7 @@ pub(crate) async fn run_turn(args: RunTurnArgs, cancellation_token: Cancellation
             {
                 Ok(s) => s,
                 Err(err) => {
-                    finish_error(
+                    return finish_failed(
                         &session,
                         &streamer,
                         &tx,
@@ -353,9 +391,9 @@ pub(crate) async fn run_turn(args: RunTurnArgs, cancellation_token: Cancellation
                         &run_id,
                     )
                     .await;
-                    return;
                 }
             };
+        has_sampled = true;
 
         let (abort_handle, abort_reg) = AbortHandle::new_pair();
         pause.attach_abort(abort_handle);
@@ -384,7 +422,7 @@ pub(crate) async fn run_turn(args: RunTurnArgs, cancellation_token: Cancellation
                     &run_id,
                 )
                 .await;
-                return;
+                return RunTurnOutcome::Interrupted;
             }
 
             let next = tokio::select! {
@@ -399,7 +437,7 @@ pub(crate) async fn run_turn(args: RunTurnArgs, cancellation_token: Cancellation
                         &run_id,
                     )
                     .await;
-                    return;
+                    return RunTurnOutcome::Interrupted;
                 }
                 _ = pause.wait_cancelled() => {
                     pause.clear_abort();
@@ -417,7 +455,7 @@ pub(crate) async fn run_turn(args: RunTurnArgs, cancellation_token: Cancellation
                         &run_id,
                     )
                     .await;
-                    return;
+                    return RunTurnOutcome::Interrupted;
                 }
                 item = stream.next() => item,
             };
@@ -433,7 +471,7 @@ pub(crate) async fn run_turn(args: RunTurnArgs, cancellation_token: Cancellation
                     .await
                     {
                         pause.clear_abort();
-                        return;
+                        return RunTurnOutcome::Interrupted;
                     }
                 }
                 Some(Ok(StreamedAssistantContent::Reasoning(r))) => {
@@ -446,7 +484,7 @@ pub(crate) async fn run_turn(args: RunTurnArgs, cancellation_token: Cancellation
                     .await
                     {
                         pause.clear_abort();
-                        return;
+                        return RunTurnOutcome::Interrupted;
                     }
                 }
                 Some(Ok(StreamedAssistantContent::ThoughtSignature(sig))) => {
@@ -461,7 +499,7 @@ pub(crate) async fn run_turn(args: RunTurnArgs, cancellation_token: Cancellation
                     .await
                     {
                         pause.clear_abort();
-                        return;
+                        return RunTurnOutcome::Interrupted;
                     }
                 }
                 Some(Ok(StreamedAssistantContent::FinalUsage(u))) => {
@@ -481,7 +519,7 @@ pub(crate) async fn run_turn(args: RunTurnArgs, cancellation_token: Cancellation
                         total_usage.add_assign(u);
                         saw_usage = true;
                     }
-                    finish_error(
+                    return finish_failed(
                         &session,
                         &streamer,
                         &tx,
@@ -490,7 +528,6 @@ pub(crate) async fn run_turn(args: RunTurnArgs, cancellation_token: Cancellation
                         &run_id,
                     )
                     .await;
-                    return;
                 }
             }
         }
@@ -510,7 +547,7 @@ pub(crate) async fn run_turn(args: RunTurnArgs, cancellation_token: Cancellation
                 &run_id,
             )
             .await;
-            return;
+            return RunTurnOutcome::Interrupted;
         }
 
         if let Some(u) = round_usage {
@@ -543,7 +580,7 @@ pub(crate) async fn run_turn(args: RunTurnArgs, cancellation_token: Cancellation
                     )
                     .await
                 {
-                    finish_error(
+                    return finish_failed(
                         &session,
                         &streamer,
                         &tx,
@@ -552,14 +589,13 @@ pub(crate) async fn run_turn(args: RunTurnArgs, cancellation_token: Cancellation
                         &run_id,
                     )
                     .await;
-                    return;
                 }
                 if let Err(err) = agent.record_user_message(
                     "[astro:system]\n你的思考过程已记录，但没有生成回复内容。请直接给出你的回答。",
                 )
                 .await
                 {
-                    finish_error(
+                    return finish_failed(
                         &session,
                         &streamer,
                         &tx,
@@ -568,86 +604,83 @@ pub(crate) async fn run_turn(args: RunTurnArgs, cancellation_token: Cancellation
                         &run_id,
                     )
                     .await;
-                    return;
                 }
+                awaiting_synthetic_bridge_response = true;
                 continue;
             }
-            finish_error(
+            return finish_failed(
                 &session,
                 &streamer,
                 &tx,
-                "模型返回了空回复。请重试，或换一个模型。",
+                "模型返回了空回复。请重试，或换一个模型。".to_string(),
                 saw_usage.then_some(total_usage),
                 &run_id,
             )
             .await;
-            return;
         }
 
         // `Stop` hook
         if calls.is_empty() {
             let verify_outcome = {
                 let agent = session.as_ref();
-                if agent.turn_wrote_disk().await && verify_attempt < MAX_VERIFY_ATTEMPTS {
-                    verify_attempt += 1;
-                    let sid = agent.session_id().to_string();
-                    let turn_id = agent.current_turn_id().await;
-                    Some(agent.fire_hook(
-                        ::hooks::STOP,
-                        ::hooks::HookPayload {
-                            session_id: sid,
-                            turn_id,
-                            last_assistant_message: Some(full_response.clone()),
-                            detail: format!("attempt={verify_attempt}"),
-                            ..Default::default()
-                        },
-                    ))
-                } else {
-                    None
-                }
+                let sid = agent.session_id().to_string();
+                let turn_id = agent.current_turn_id().await;
+                agent.fire_hook(
+                    ::hooks::STOP,
+                    ::hooks::HookPayload {
+                        session_id: sid,
+                        turn_id,
+                        stop_hook_active: Some(verify_attempt > 0),
+                        last_assistant_message: Some(full_response.clone()),
+                        detail: format!("attempt={}", verify_attempt + 1),
+                        ..Default::default()
+                    },
+                )
             };
-            if let Some(::hooks::HookOutcome::KeepGoing(prompt)) = verify_outcome {
-                let agent = session.as_ref();
-                let details = types::message::merge_google_thought_signature(
-                    Some(timeline.reasoning_details_snapshot()),
-                    thought_signature.as_deref(),
-                );
-                if let Err(err) = agent
-                    .record_assistant_with_calls(
-                        &full_response,
-                        &[],
-                        (!full_reasoning.is_empty()).then_some(full_reasoning.as_str()),
-                        details,
-                    )
-                    .await
-                {
-                    finish_error(
-                        &session,
-                        &streamer,
-                        &tx,
-                        err.to_string(),
-                        saw_usage.then_some(total_usage),
-                        &run_id,
-                    )
-                    .await;
-                    return;
+            if verify_attempt < MAX_VERIFY_ATTEMPTS {
+                if let ::hooks::HookOutcome::KeepGoing(prompt) = verify_outcome {
+                    verify_attempt += 1;
+                    let agent = session.as_ref();
+                    let details = types::message::merge_google_thought_signature(
+                        Some(timeline.reasoning_details_snapshot()),
+                        thought_signature.as_deref(),
+                    );
+                    if let Err(err) = agent
+                        .record_assistant_with_calls(
+                            &full_response,
+                            &[],
+                            (!full_reasoning.is_empty()).then_some(full_reasoning.as_str()),
+                            details,
+                        )
+                        .await
+                    {
+                        return finish_failed(
+                            &session,
+                            &streamer,
+                            &tx,
+                            err.to_string(),
+                            saw_usage.then_some(total_usage),
+                            &run_id,
+                        )
+                        .await;
+                    }
+                    if let Err(err) = agent
+                        .record_user_message(&format!("[astro:hook-context]\n{prompt}"))
+                        .await
+                    {
+                        return finish_failed(
+                            &session,
+                            &streamer,
+                            &tx,
+                            err.to_string(),
+                            saw_usage.then_some(total_usage),
+                            &run_id,
+                        )
+                        .await;
+                    }
+                    awaiting_synthetic_bridge_response = true;
+                    continue;
                 }
-                if let Err(err) = agent
-                    .record_user_message(&format!("[astro:hook-context]\n{prompt}"))
-                    .await
-                {
-                    finish_error(
-                        &session,
-                        &streamer,
-                        &tx,
-                        err.to_string(),
-                        saw_usage.then_some(total_usage),
-                        &run_id,
-                    )
-                    .await;
-                    return;
-                }
-                continue;
             }
         }
 
@@ -689,7 +722,7 @@ pub(crate) async fn run_turn(args: RunTurnArgs, cancellation_token: Cancellation
                     &run_id,
                 )
                 .await;
-                return;
+                return RunTurnOutcome::Interrupted;
             }
         }
 
@@ -711,7 +744,7 @@ pub(crate) async fn run_turn(args: RunTurnArgs, cancellation_token: Cancellation
                 )
                 .await
             {
-                finish_error(
+                return finish_failed(
                     &session,
                     &streamer,
                     &tx,
@@ -720,19 +753,18 @@ pub(crate) async fn run_turn(args: RunTurnArgs, cancellation_token: Cancellation
                     &run_id,
                 )
                 .await;
-                return;
             }
+            // A synthetic bridge can survive reasoning-only retries. Clear its
+            // deferral only after a normal assistant message (including tool
+            // calls) is durably represented in history.
+            awaiting_synthetic_bridge_response = false;
         }
 
         if calls.is_empty() {
-            match record_and_ack_pending_input(&session, &turn_context, &tx, true).await {
-                Ok(true) => {
-                    run_state.set_phase(RunPhase::StreamingLlm);
-                    continue;
-                }
-                Ok(false) => {}
-                Err(error) => {
-                    finish_error(
+            let pending_input = turn_context.take_pending_input_or_close().await;
+            if !pending_input.is_empty() {
+                if let Err(error) = record_pending_input(&session, &tx, pending_input).await {
+                    return finish_failed(
                         &session,
                         &streamer,
                         &tx,
@@ -741,8 +773,12 @@ pub(crate) async fn run_turn(args: RunTurnArgs, cancellation_token: Cancellation
                         &run_id,
                     )
                     .await;
-                    return;
                 }
+                verify_attempt = 0;
+                thinking_only_retries = 0;
+                awaiting_synthetic_bridge_response = false;
+                run_state.set_phase(RunPhase::StreamingLlm);
+                continue;
             }
             need_summary = false;
             break;
@@ -759,7 +795,7 @@ pub(crate) async fn run_turn(args: RunTurnArgs, cancellation_token: Cancellation
             )
             .await
             {
-                return;
+                return RunTurnOutcome::Interrupted;
             }
         }
 
@@ -802,7 +838,7 @@ pub(crate) async fn run_turn(args: RunTurnArgs, cancellation_token: Cancellation
                 &run_id,
             )
             .await;
-            return;
+            return RunTurnOutcome::Interrupted;
         };
 
         if !record_tool_outcomes(
@@ -824,7 +860,7 @@ pub(crate) async fn run_turn(args: RunTurnArgs, cancellation_token: Cancellation
                 &run_id,
             )
             .await;
-            return;
+            return RunTurnOutcome::Interrupted;
         }
 
         if post_tool_maintenance(&session, &step_context, &calls).await {
@@ -846,6 +882,7 @@ pub(crate) async fn run_turn(args: RunTurnArgs, cancellation_token: Cancellation
     if need_summary {
         match run_max_iterations_summary(crate::streaming::summary::MaxIterationsSummaryArgs {
             session: &session,
+            turn_context: &turn_context,
             streamer: &streamer,
             system_prompt: &system_prompt,
             pause: &pause,
@@ -856,13 +893,15 @@ pub(crate) async fn run_turn(args: RunTurnArgs, cancellation_token: Cancellation
             run_id: &run_id,
             used: budget.used(),
             max_total: budget.max_total(),
+            verify_attempt: &mut verify_attempt,
+            cancellation_token: &cancellation_token,
         })
         .await
         {
             SummaryOutcome::Finished => {}
-            SummaryOutcome::Aborted => return,
+            SummaryOutcome::Aborted => return RunTurnOutcome::Interrupted,
             SummaryOutcome::Failed(err) => {
-                finish_error(
+                return finish_failed(
                     &session,
                     &streamer,
                     &tx,
@@ -871,26 +910,8 @@ pub(crate) async fn run_turn(args: RunTurnArgs, cancellation_token: Cancellation
                     &run_id,
                 )
                 .await;
-                return;
             }
         }
-    }
-
-    {
-        let agent = session.as_ref();
-        let sid = agent.session_id().to_string();
-        let turn = agent.session_turn().await;
-        let turn_id = agent.current_turn_id().await;
-        let _ = agent.fire_hook(
-            ::hooks::AGENT_END,
-            ::hooks::HookPayload {
-                session_id: sid,
-                turn_id,
-                turn: Some(turn),
-                detail: format!("turn={turn}"),
-                ..Default::default()
-            },
-        );
     }
 
     finish_success(
@@ -901,6 +922,7 @@ pub(crate) async fn run_turn(args: RunTurnArgs, cancellation_token: Cancellation
         &run_id,
     )
     .await;
+    RunTurnOutcome::Success
 }
 
 /// 在后台 task 启动 [`run_multi_turn_stream`]，并返回可消费的 [`MultiTurnStream`]。

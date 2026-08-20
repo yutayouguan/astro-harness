@@ -442,4 +442,177 @@ mod tests {
         run.await.unwrap();
         assert!(session.active_turn.lock().await.is_none());
     }
+
+    struct DeferredPreparationTask {
+        started: Arc<Notify>,
+        allow_prepare: Arc<Notify>,
+        follow_up_hook_entered: Arc<Notify>,
+    }
+
+    impl SessionTask for DeferredPreparationTask {
+        fn kind(&self) -> TaskKind {
+            TaskKind::Regular
+        }
+
+        fn span_name(&self) -> &'static str {
+            "session_task.deferred_preparation_test"
+        }
+
+        async fn run(
+            self: Arc<Self>,
+            session: Arc<Session>,
+            ctx: Arc<TurnContext>,
+            input: Vec<TurnInput>,
+            _cancellation_token: CancellationToken,
+        ) -> SessionTaskResult {
+            self.started.notify_one();
+            self.allow_prepare.notified().await;
+            match session.prepare_turn(&input).await {
+                Ok(crate::runtime::TurnResult::Continue { .. }) => {
+                    ctx.open_input_admission();
+                }
+                Ok(other) => {
+                    ctx.close_input_admission();
+                    anyhow::bail!("unexpected preparation result: {other:?}");
+                }
+                Err(error) => {
+                    ctx.close_input_admission();
+                    return Err(error);
+                }
+            }
+
+            self.follow_up_hook_entered.notified().await;
+            session
+                .record_items(vec![types::message::Message::assistant("first")])
+                .await;
+            let pending = ctx.take_pending_input_or_close().await;
+            session.record_queued_turn_inputs(pending).await?;
+            session
+                .record_items(vec![types::message::Message::assistant("second")])
+                .await;
+            assert!(ctx.take_pending_input_or_close().await.is_empty());
+            Ok(None)
+        }
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn preparing_steer_does_not_block_initial_prompt_admission() {
+        let dir = tempfile::tempdir().unwrap();
+        let session = Arc::new(
+            Session::with_session_id(
+                crate::runtime::Config::with_defaults(dir.path().to_path_buf()),
+                "preparing-steer-lock-order".into(),
+            )
+            .unwrap(),
+        );
+        let turn_context = session
+            .create_turn_context("turn-preparing-steer".into())
+            .await;
+        let started = Arc::new(Notify::new());
+        let allow_prepare = Arc::new(Notify::new());
+        let initial_hook_entered = Arc::new(Notify::new());
+        let initial_hook_release =
+            Arc::new((std::sync::Mutex::new(false), std::sync::Condvar::new()));
+        let follow_up_hook_entered = Arc::new(Notify::new());
+        let hook_order = Arc::new(std::sync::Mutex::new(Vec::new()));
+
+        let session_start_order = Arc::clone(&hook_order);
+        session
+            .hook_bus()
+            .register(::hooks::SESSION_START, move |_| {
+                session_start_order
+                    .lock()
+                    .unwrap()
+                    .push("session start".to_string());
+                ::hooks::HookOutcome::Continue
+            });
+        let prompt_order = Arc::clone(&hook_order);
+        let initial_entered = Arc::clone(&initial_hook_entered);
+        let initial_release = Arc::clone(&initial_hook_release);
+        let follow_up_entered = Arc::clone(&follow_up_hook_entered);
+        session
+            .hook_bus()
+            .register(::hooks::USER_PROMPT_SUBMIT, move |payload| {
+                let prompt = payload.prompt.clone().unwrap_or_default();
+                prompt_order.lock().unwrap().push(prompt.clone());
+                if prompt == "initial" {
+                    initial_entered.notify_one();
+                    let (released, ready) = &*initial_release;
+                    let mut released = released.lock().unwrap();
+                    while !*released {
+                        released = ready.wait(released).unwrap();
+                    }
+                } else if prompt == "follow up" {
+                    follow_up_entered.notify_one();
+                }
+                ::hooks::HookOutcome::Continue
+            });
+
+        let task = DeferredPreparationTask {
+            started: Arc::clone(&started),
+            allow_prepare: Arc::clone(&allow_prepare),
+            follow_up_hook_entered: Arc::clone(&follow_up_hook_entered),
+        };
+        let run = tokio::spawn({
+            let session = Arc::clone(&session);
+            let turn_context = Arc::clone(&turn_context);
+            async move {
+                session
+                    .spawn_task(
+                        turn_context,
+                        vec![TurnInput::UserInput {
+                            content: "initial".into(),
+                            image_data_urls: Vec::new(),
+                            client_message_id: None,
+                        }],
+                        task,
+                    )
+                    .await
+            }
+        });
+
+        started.notified().await;
+        let steer = tokio::spawn({
+            let session = Arc::clone(&session);
+            async move { session.steer_input("follow up", &[]).await }
+        });
+        turn_context.wait_for_preparing_reservation().await;
+        assert!(!steer.is_finished());
+
+        allow_prepare.notify_one();
+        tokio::time::timeout(
+            std::time::Duration::from_secs(1),
+            initial_hook_entered.notified(),
+        )
+        .await
+        .expect("initial hook must enter while steer waits for preparation");
+        assert!(!steer.is_finished());
+        {
+            let (released, ready) = &*initial_hook_release;
+            *released.lock().unwrap() = true;
+            ready.notify_all();
+        }
+
+        let turn_id = steer
+            .await
+            .unwrap()
+            .unwrap()
+            .expect("successful preparation accepts the waiting steer");
+        assert_eq!(turn_id, "turn-preparing-steer");
+        run.await.unwrap().unwrap();
+
+        assert_eq!(
+            hook_order.lock().unwrap().as_slice(),
+            ["session start", "initial", "follow up"]
+        );
+        let history = session.clone_history().await;
+        assert!(crate::runtime::validate_message_order(&history));
+        assert_eq!(
+            history
+                .iter()
+                .map(|message| message.content_str())
+                .collect::<Vec<_>>(),
+            ["initial", "first", "follow up", "second"]
+        );
+    }
 }

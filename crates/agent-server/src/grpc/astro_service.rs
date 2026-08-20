@@ -244,7 +244,7 @@ impl AstroServiceImpl {
                     ::hooks::GATEWAY_STARTUP,
                     &::hooks::HookPayload {
                         turn_id: None,
-                        detail: "backend ready".into(),
+                        detail: "hook runtime bootstrapped".into(),
                         ..Default::default()
                     },
                 );
@@ -330,7 +330,7 @@ impl AstroServiceImpl {
         removed
     }
 
-    /// UI「新建对话」：Gateway `command:new_chat` + Plugin reset/finalize，并卸内存会话。
+    /// UI「新建对话」：统一投递 command/reset/finalize，并卸内存会话。
     async fn release_session_for_new_chat(&self, session_id: &str) {
         let payload = ::hooks::HookPayload {
             session_id: session_id.to_string(),
@@ -338,28 +338,14 @@ impl AstroServiceImpl {
             detail: "new_chat".into(),
             ..Default::default()
         };
-        self.hook_runtime
-            .fire_gateway(::hooks::COMMAND_NEW_CHAT, &payload);
         let _ = self
             .hook_runtime
-            .fire_plugin(::hooks::SESSION_RESET, &payload);
+            .dispatch(::hooks::COMMAND_NEW_CHAT, &payload);
+        let _ = self.hook_runtime.dispatch(::hooks::SESSION_RESET, &payload);
         let _ = self
             .hook_runtime
-            .fire_plugin(::hooks::SESSION_FINALIZE, &payload);
-
-        if let Some(handle) = self.release_session_runtime(session_id).await {
-            let agent = handle.as_ref();
-            let bus = agent.hook_bus();
-            let turn_id = agent.current_turn_id().await;
-            let payload = ::hooks::HookPayload {
-                session_id: session_id.to_string(),
-                turn_id,
-                detail: format!("session={session_id}"),
-                ..Default::default()
-            };
-            let _ = bus.fire(::hooks::SESSION_RESET, &payload);
-            let _ = bus.fire(::hooks::SESSION_FINALIZE, &payload);
-        }
+            .dispatch(::hooks::SESSION_FINALIZE, &payload);
+        let _ = self.release_session_runtime(session_id).await;
     }
 }
 
@@ -727,7 +713,8 @@ impl AstroService for AstroServiceImpl {
                 expected_turn_id,
                 client_message_id,
             )
-            .await;
+            .await
+            .map_err(|error| Status::failed_precondition(error.to_string()))?;
         Ok(Response::new(SteerChatResponse {
             accepted: turn_id.is_some(),
             turn_id: turn_id.unwrap_or_default(),
@@ -819,11 +806,6 @@ impl AstroService for AstroServiceImpl {
             _ => {}
         }
 
-        let is_new_session = {
-            let sessions = self.sessions.read().await;
-            !sessions.contains_key(&session_id)
-        };
-
         let provider_name = if req.provider.is_empty() {
             "ollama".to_string()
         } else {
@@ -876,9 +858,12 @@ impl AstroService for AstroServiceImpl {
         });
 
         let session = self.get_session(&session_id).await?;
+        session.set_hook_runtime(Arc::clone(&self.hook_runtime));
         let steered_turn_id = {
             let sess = session.as_ref();
-            sess.steer_input(&content, &image_data_urls).await
+            sess.steer_input(&content, &image_data_urls)
+                .await
+                .map_err(|error| Status::failed_precondition(error.to_string()))?
         };
         if steered_turn_id.is_some() {
             let (tx, rx) = tokio::sync::mpsc::channel::<Result<ChatEvent, Status>>(1);
@@ -888,16 +873,6 @@ impl AstroService for AstroServiceImpl {
                 }))
                 .await;
             return Ok(Response::new(Box::pin(ReceiverStream::new(rx))));
-        }
-        if is_new_session {
-            self.hook_runtime.fire_gateway(
-                ::hooks::SESSION_START,
-                &::hooks::HookPayload {
-                    session_id: session_id.clone(),
-                    turn_id: None,
-                    ..Default::default()
-                },
-            );
         }
         let (hook_tx, mut hook_rx) = tokio::sync::mpsc::unbounded_channel::<::hooks::UiHookEvent>();
         {
@@ -931,7 +906,6 @@ impl AstroService for AstroServiceImpl {
                     }
                 }
             }
-            agent.set_hook_bus(Arc::clone(&self.hook_runtime.plugin));
             self.hook_runtime.ui_slot.set_tx(Some(hook_tx));
         }
         // 有活 HITL 时拒绝新 chat（须在 register_pause 之前，避免取消进行中的流）
@@ -959,7 +933,6 @@ impl AstroService for AstroServiceImpl {
         let hitl_registry = self.hitl_registry.clone();
         let memory_dir = self.memory_dir.clone();
         let sid_cleanup = session_id.clone();
-        let hook_runtime = Arc::clone(&self.hook_runtime);
         let ui_slot = self.hook_runtime.ui_slot.clone();
         let session_events_hub = self.session_event_hub().clone();
 
@@ -1140,14 +1113,6 @@ impl AstroService for AstroServiceImpl {
                 }
             }
             clear_interrupt_file(&memory_dir, &sid_cleanup);
-            hook_runtime.fire_gateway(
-                ::hooks::AGENT_END,
-                &::hooks::HookPayload {
-                    session_id: sid_cleanup.clone(),
-                    turn_id: None,
-                    ..Default::default()
-                },
-            );
             cleanup().await;
         });
 
@@ -1664,6 +1629,17 @@ mod tests {
     }
 
     #[test]
+    fn chat_delegates_session_start_to_the_shared_session_runtime() {
+        let source = include_str!("astro_service.rs");
+        let production = source.split("#[cfg(test)]").next().unwrap();
+        let session_start = ["::hooks::SESSION_", "START"].concat();
+
+        assert!(!production.contains(&session_start));
+        assert!(!production.contains("agent.set_hook_bus("));
+        assert!(production.contains("session.set_hook_runtime("));
+    }
+
+    #[test]
     fn tool_lifecycle_maps_to_started_and_completed_phases() {
         let started = multi_turn_to_chat_event(MultiTurnStreamItem::ToolStarted {
             id: "call-1".into(),
@@ -1780,6 +1756,8 @@ mod tests {
         assert_eq!(reset_hits.load(Ordering::SeqCst), 0);
         assert_eq!(finalize_hits.load(Ordering::SeqCst), 0);
 
+        let session = service.get_session("new-chat").await.unwrap();
+        session.set_hook_runtime(Arc::clone(&service.hook_runtime));
         service
             .chat_control(Request::new(ChatControlRequest {
                 session_id: "new-chat".into(),

@@ -42,7 +42,10 @@ impl Default for HookRuntime {
 
 impl HookRuntime {
     pub fn new() -> Self {
-        let plugin = Arc::new(PluginHookBus::new());
+        Self::with_plugin_bus(Arc::new(PluginHookBus::new()))
+    }
+
+    pub fn with_plugin_bus(plugin: Arc<PluginHookBus>) -> Self {
         let ui_slot = UiTimelineSlot::new();
         ui_slot.install(&plugin);
         Self {
@@ -69,24 +72,26 @@ impl HookRuntime {
         PluginContext::new(&self.plugin, &self.gateway)
     }
 
-    /// Plugin fire + 旁路 Shell（同名事件）。
-    pub fn fire_plugin(&self, name: &str, payload: &HookPayload) -> HookOutcome {
+    /// 统一向 Plugin、Gateway、Shell 三套 transport 投递事件。
+    pub fn dispatch(&self, name: &str, payload: &HookPayload) -> HookOutcome {
         let name = normalize_hook_event_name(name);
         let payload = payload.normalized_for_event(name.as_ref());
         let out = self.plugin.fire(name.as_ref(), &payload);
+        self.gateway.fire(name.as_ref(), &payload);
         if let Ok(sh) = self.shell.lock() {
             sh.fire_async(name.as_ref(), &payload);
         }
         out
     }
 
+    /// 兼容包装：统一向三套 transport 投递事件。
+    pub fn fire_plugin(&self, name: &str, payload: &HookPayload) -> HookOutcome {
+        self.dispatch(name, payload)
+    }
+
+    /// 兼容包装：统一向三套 transport 投递事件。
     pub fn fire_gateway(&self, event: &str, payload: &HookPayload) {
-        let event = normalize_hook_event_name(event);
-        let payload = payload.normalized_for_event(event.as_ref());
-        self.gateway.fire(event.as_ref(), &payload);
-        if let Ok(sh) = self.shell.lock() {
-            sh.fire_async(event.as_ref(), &payload);
-        }
+        let _ = self.dispatch(event, payload);
     }
 }
 
@@ -112,7 +117,53 @@ mod tests {
         let _ = rt.fire_plugin("pre_tool_call", &HookInput::default());
 
         assert_eq!(seen.lock().unwrap().as_deref(), Some(PRE_TOOL_USE));
-        assert!(rt.shell.lock().unwrap().has_event(PRE_TOOL_USE));
+        let shell_schedule = rt.shell.lock().unwrap().scheduled();
+        assert_eq!(shell_schedule.len(), 1);
+        assert_eq!(shell_schedule[0].0, PRE_TOOL_USE);
+        assert_eq!(shell_schedule[0].1.hook_event_name, PRE_TOOL_USE);
+    }
+
+    #[tokio::test]
+    async fn dispatch_normalizes_once_and_reaches_all_transports() {
+        let dir = tempfile::tempdir().unwrap();
+        let hook_dir = dir.path().join("hooks").join("audit");
+        std::fs::create_dir_all(&hook_dir).unwrap();
+        std::fs::write(
+            hook_dir.join("HOOK.yaml"),
+            "name: audit\nevents:\n  - pre_tool_call\n",
+        )
+        .unwrap();
+
+        let rt = HookRuntime::new();
+        rt.gateway.discover(dir.path()).unwrap();
+        let gateway_hits = Arc::new(AtomicUsize::new(0));
+        let gateway_hit_count = Arc::clone(&gateway_hits);
+        rt.gateway.register_handler("audit", move |event, input| {
+            assert_eq!(event, PRE_TOOL_USE);
+            assert_eq!(input.hook_event_name, PRE_TOOL_USE);
+            gateway_hit_count.fetch_add(1, Ordering::SeqCst);
+        });
+        let plugin_hits = Arc::new(AtomicUsize::new(0));
+        let plugin_hit_count = Arc::clone(&plugin_hits);
+        rt.plugin.register(PRE_TOOL_USE, move |input| {
+            assert_eq!(input.hook_event_name, PRE_TOOL_USE);
+            plugin_hit_count.fetch_add(1, Ordering::SeqCst);
+            HookOutcome::Block("blocked".into())
+        });
+        *rt.shell.lock().unwrap() = ShellHookRunner::new(std::collections::HashMap::from([(
+            "pre_tool_call".to_string(),
+            "true".to_string(),
+        )]));
+
+        let out = rt.dispatch("pre_tool_call", &HookInput::default());
+
+        assert!(matches!(out, HookOutcome::Block(ref reason) if reason == "blocked"));
+        assert_eq!(plugin_hits.load(Ordering::SeqCst), 1);
+        assert_eq!(gateway_hits.load(Ordering::SeqCst), 1);
+        let shell_schedule = rt.shell.lock().unwrap().scheduled();
+        assert_eq!(shell_schedule.len(), 1);
+        assert_eq!(shell_schedule[0].0, PRE_TOOL_USE);
+        assert_eq!(shell_schedule[0].1.hook_event_name, PRE_TOOL_USE);
     }
 
     #[tokio::test]

@@ -3,7 +3,7 @@ use std::sync::Arc;
 use tokio_util::sync::CancellationToken;
 
 use crate::runtime::{Session, TurnContext, TurnResult};
-use crate::streaming::multi_turn::{run_turn, RunTurnArgs};
+use crate::streaming::multi_turn::{run_turn, RunTurnArgs, RunTurnOutcome};
 
 use super::{SessionTask, SessionTaskResult, TaskKind, TurnInput};
 
@@ -34,33 +34,67 @@ impl SessionTask for RegularTask {
         input: Vec<TurnInput>,
         cancellation_token: CancellationToken,
     ) -> SessionTaskResult {
-        let args = self.args.with_session_and_turn(Arc::clone(&sess), ctx);
-        let system_prompt = match args.prepared_system_prompt().map(str::to_owned) {
-            Some(system_prompt) => {
-                anyhow::ensure!(
-                    input.is_empty(),
-                    "prebuilt system prompt cannot be combined with initial input"
-                );
-                system_prompt
-            }
-            None => {
-                let turn = sess.prepare_turn(&input).await?;
-                match turn {
-                    TurnResult::Continue { system_prompt, .. } => system_prompt,
-                    TurnResult::BudgetExhausted => {
-                        anyhow::bail!("conversation turn budget exhausted")
-                    }
-                    TurnResult::Interrupted => anyhow::bail!("regular turn interrupted"),
-                    TurnResult::Steered { .. }
-                    | TurnResult::ToolCalls(_)
-                    | TurnResult::Finished(_)
-                    | TurnResult::MaxDepth => {
-                        anyhow::bail!("unsupported regular turn preparation result")
+        let args = self
+            .args
+            .with_session_and_turn(Arc::clone(&sess), Arc::clone(&ctx));
+        let preparation_result: anyhow::Result<String> = async {
+            match args.prepared_system_prompt().map(str::to_owned) {
+                Some(system_prompt) => {
+                    anyhow::ensure!(
+                        input.is_empty(),
+                        "prebuilt system prompt cannot be combined with initial input"
+                    );
+                    Ok(system_prompt)
+                }
+                None => {
+                    let turn = sess.prepare_turn(&input).await?;
+                    match turn {
+                        TurnResult::Continue { system_prompt, .. } => Ok(system_prompt),
+                        TurnResult::BudgetExhausted => {
+                            anyhow::bail!("conversation turn budget exhausted")
+                        }
+                        TurnResult::Interrupted => anyhow::bail!("regular turn interrupted"),
+                        TurnResult::Steered { .. }
+                        | TurnResult::ToolCalls(_)
+                        | TurnResult::Finished(_)
+                        | TurnResult::MaxDepth => {
+                            anyhow::bail!("unsupported regular turn preparation result")
+                        }
                     }
                 }
             }
+        }
+        .await;
+        let runtime_result: anyhow::Result<RunTurnOutcome> = match preparation_result {
+            Ok(system_prompt) => {
+                ctx.open_input_admission();
+                Ok(run_turn(args.with_system_prompt(system_prompt), cancellation_token).await)
+            }
+            Err(error) => {
+                ctx.close_input_admission();
+                Err(error)
+            }
         };
-        run_turn(args.with_system_prompt(system_prompt), cancellation_token).await;
-        Ok(None)
+
+        let (result, error): (SessionTaskResult, Option<String>) = match runtime_result {
+            Ok(outcome) => (Ok(None), outcome.error().map(str::to_owned)),
+            Err(error) => {
+                let hook_error = error.to_string();
+                (Err(error), Some(hook_error))
+            }
+        };
+
+        let turn = sess.session_turn().await;
+        let _ = sess.fire_hook(
+            ::hooks::AGENT_END,
+            ::hooks::HookPayload {
+                turn_id: Some(ctx.sub_id().to_string()),
+                turn: Some(turn),
+                error,
+                detail: format!("turn={turn}"),
+                ..Default::default()
+            },
+        );
+        result
     }
 }

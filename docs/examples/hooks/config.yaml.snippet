@@ -10,14 +10,7 @@ hooks:
 # post_llm_call -> PostLlmCall
 # pre_llm_call -> PreLlmCall
 
-# 委派子任务（delegate）与嵌套深度
-delegation:
-  max_spawn_depth: 1          # 顶层可派一层叶子；设为 2 才允许 role=orchestrator 再派工人
-  max_concurrent_children: 3
-  child_max_iterations: 50    # 子 Agent 默认最大工具跟随轮次
-  worktree: true              # 在 git 仓库内自动为子任务建独立检出（.worktrees/astro-*）
-  orchestrator_enabled: true  # false 时强制所有子任务为 leaf
-
 # 遥测旁路：复制 telemetry-webhook.sh 后，可将上方 PreGatewayDispatch /
 # CommandNewChat 的 command 替换为该脚本，或取消 GatewayStartup 的注释。
-# PostToolUse / PostLlmCall / PreLlmCall 等 AgentLoop 直接事件当前不会自动投递 Shell。
+# Session runtime 的 PostToolUse / PreLlmCall / PostLlmCall / AgentEnd 也会统一投递 Shell；
+# 只为实际 fire 的事件配置命令。

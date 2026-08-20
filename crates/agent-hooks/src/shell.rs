@@ -25,6 +25,8 @@ pub struct ShellHookRunner {
     /// event / hook name → shell command
     commands: HashMap<String, String>,
     timeout: Duration,
+    #[cfg(test)]
+    scheduled: std::sync::Arc<std::sync::Mutex<Vec<(String, HookPayload)>>>,
 }
 
 impl ShellHookRunner {
@@ -50,6 +52,8 @@ impl ShellHookRunner {
         Self {
             commands,
             timeout: DEFAULT_TIMEOUT,
+            #[cfg(test)]
+            scheduled: std::sync::Arc::new(std::sync::Mutex::new(Vec::new())),
         }
     }
 
@@ -67,12 +71,24 @@ impl ShellHookRunner {
             .contains_key(crate::event::canonical_hook_event_name(event).as_ref())
     }
 
+    #[cfg(test)]
+    pub(crate) fn scheduled(&self) -> Vec<(String, HookPayload)> {
+        self.scheduled
+            .lock()
+            .map(|events| events.clone())
+            .unwrap_or_default()
+    }
+
     /// Fire-and-forget：在后台跑命令，不阻塞调用方。
     pub fn fire_async(&self, event: &str, payload: &HookPayload) {
         let event = crate::event::canonical_hook_event_name(event);
         let Some(cmd) = self.commands.get(event.as_ref()).cloned() else {
             return;
         };
+        #[cfg(test)]
+        if let Ok(mut scheduled) = self.scheduled.lock() {
+            scheduled.push((event.to_string(), payload.clone()));
+        }
         let env = env_from_payload(event.as_ref(), payload);
         let event = event.into_owned();
         let timeout = self.timeout;

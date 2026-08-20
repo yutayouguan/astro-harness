@@ -5,14 +5,35 @@
 //! belong to [`super::StepContext`].
 
 use std::path::{Path, PathBuf};
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
+
+use tokio::sync::Notify;
 
 use crate::tasks::TurnInput;
 
-#[derive(Debug, Default)]
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) struct QueuedTurnInput {
+    pub(crate) input: TurnInput,
+    pub(crate) inject_context: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum TurnInputReadiness {
+    Preparing,
+    Accepting,
+    Closed,
+}
+
+#[derive(Debug)]
 struct TurnInputState {
-    pending: Vec<TurnInput>,
-    accepting: bool,
+    pending: Vec<QueuedTurnInput>,
+    readiness: TurnInputReadiness,
+    in_flight_admissions: usize,
+}
+
+pub(crate) struct TurnInputReservation {
+    turn_context: Arc<TurnContext>,
+    finished: bool,
 }
 
 /// Immutable state shared by every sampling step in one user turn.
@@ -30,6 +51,9 @@ pub struct TurnContext {
     pub(crate) project_root: Option<PathBuf>,
     /// User input steered into the active task, consumed before the next sampling request.
     input_state: Mutex<TurnInputState>,
+    input_notify: Notify,
+    #[cfg(test)]
+    preparing_reservation_notify: Notify,
 }
 
 impl TurnContext {
@@ -48,8 +72,12 @@ impl TurnContext {
             project_root,
             input_state: Mutex::new(TurnInputState {
                 pending: Vec::new(),
-                accepting: true,
+                readiness: TurnInputReadiness::Preparing,
+                in_flight_admissions: 0,
             }),
+            input_notify: Notify::new(),
+            #[cfg(test)]
+            preparing_reservation_notify: Notify::new(),
         }
     }
 
@@ -73,19 +101,65 @@ impl TurnContext {
         self.project_root.as_deref()
     }
 
-    pub(crate) fn push_input(&self, input: TurnInput) -> bool {
-        let mut state = self
-            .input_state
-            .lock()
-            .expect("turn input state mutex poisoned");
-        if !state.accepting {
-            return false;
+    /// Wait until initial turn preparation either succeeds or closes admission.
+    pub(crate) async fn reserve_input(self: &Arc<Self>) -> Option<TurnInputReservation> {
+        loop {
+            let notified = self.input_notify.notified();
+            {
+                let mut state = self
+                    .input_state
+                    .lock()
+                    .expect("turn input state mutex poisoned");
+                match state.readiness {
+                    TurnInputReadiness::Preparing => {
+                        #[cfg(test)]
+                        self.preparing_reservation_notify.notify_one();
+                    }
+                    TurnInputReadiness::Accepting => {
+                        state.in_flight_admissions += 1;
+                        return Some(TurnInputReservation {
+                            turn_context: Arc::clone(self),
+                            finished: false,
+                        });
+                    }
+                    TurnInputReadiness::Closed => return None,
+                }
+            }
+            notified.await;
         }
-        state.pending.push(input);
-        true
     }
 
-    pub(crate) fn take_pending_input(&self) -> Vec<TurnInput> {
+    #[cfg(test)]
+    pub(crate) async fn wait_for_preparing_reservation(&self) {
+        self.preparing_reservation_notify.notified().await;
+    }
+
+    pub(crate) fn open_input_admission(&self) {
+        {
+            let mut state = self
+                .input_state
+                .lock()
+                .expect("turn input state mutex poisoned");
+            if state.readiness == TurnInputReadiness::Preparing {
+                state.readiness = TurnInputReadiness::Accepting;
+            }
+        }
+        self.input_notify.notify_waiters();
+    }
+
+    pub(crate) fn close_input_admission(&self) {
+        {
+            let mut state = self
+                .input_state
+                .lock()
+                .expect("turn input state mutex poisoned");
+            state.readiness = TurnInputReadiness::Closed;
+            state.pending.clear();
+        }
+        self.input_notify.notify_waiters();
+    }
+
+    pub(crate) fn take_pending_input(&self) -> Vec<QueuedTurnInput> {
         let mut state = self
             .input_state
             .lock()
@@ -94,22 +168,71 @@ impl TurnContext {
     }
 
     /// Atomically take queued input, or close steering if the queue is empty.
-    pub(crate) fn take_pending_input_or_close(&self) -> Vec<TurnInput> {
-        let mut state = self
-            .input_state
-            .lock()
-            .expect("turn input state mutex poisoned");
-        if state.pending.is_empty() {
-            state.accepting = false;
-            Vec::new()
-        } else {
-            std::mem::take(&mut state.pending)
+    pub(crate) async fn take_pending_input_or_close(&self) -> Vec<QueuedTurnInput> {
+        loop {
+            let notified = self.input_notify.notified();
+            {
+                let mut state = self
+                    .input_state
+                    .lock()
+                    .expect("turn input state mutex poisoned");
+                if !state.pending.is_empty() {
+                    return std::mem::take(&mut state.pending);
+                }
+                match state.readiness {
+                    TurnInputReadiness::Preparing => {}
+                    TurnInputReadiness::Accepting if state.in_flight_admissions == 0 => {
+                        state.readiness = TurnInputReadiness::Closed;
+                        return Vec::new();
+                    }
+                    TurnInputReadiness::Closed => return Vec::new(),
+                    TurnInputReadiness::Accepting => {}
+                }
+            }
+            notified.await;
         }
+    }
+}
+
+impl TurnInputReservation {
+    pub(crate) fn commit(mut self, input: TurnInput, inject_context: Option<String>) {
+        self.finish(Some(QueuedTurnInput {
+            input,
+            inject_context,
+        }));
+    }
+
+    fn finish(&mut self, input: Option<QueuedTurnInput>) {
+        if self.finished {
+            return;
+        }
+        {
+            let mut state = self
+                .turn_context
+                .input_state
+                .lock()
+                .expect("turn input state mutex poisoned");
+            debug_assert!(state.in_flight_admissions > 0);
+            if let Some(input) = input {
+                state.pending.push(input);
+            }
+            state.in_flight_admissions -= 1;
+            self.finished = true;
+        }
+        self.turn_context.input_notify.notify_one();
+    }
+}
+
+impl Drop for TurnInputReservation {
+    fn drop(&mut self) {
+        self.finish(None);
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use std::sync::Arc;
+
     use super::*;
 
     fn input(text: &str) -> TurnInput {
@@ -120,18 +243,105 @@ mod tests {
         }
     }
 
-    #[test]
-    fn closing_an_empty_input_queue_rejects_late_steer() {
-        let turn_context = TurnContext::new(
+    #[tokio::test]
+    async fn closing_an_empty_input_queue_rejects_late_steer() {
+        let turn_context = Arc::new(TurnContext::new(
             "turn-1".into(),
             1,
             types::InteractionMode::Agent,
             None,
             None,
+        ));
+        turn_context.open_input_admission();
+        turn_context
+            .reserve_input()
+            .await
+            .expect("initial reservation")
+            .commit(input("first"), None);
+        assert_eq!(
+            turn_context
+                .take_pending_input()
+                .into_iter()
+                .map(|queued| queued.input)
+                .collect::<Vec<_>>(),
+            vec![input("first")]
         );
-        assert!(turn_context.push_input(input("first")));
-        assert_eq!(turn_context.take_pending_input(), vec![input("first")]);
-        assert!(turn_context.take_pending_input_or_close().is_empty());
-        assert!(!turn_context.push_input(input("late")));
+        assert!(turn_context.take_pending_input_or_close().await.is_empty());
+        assert!(turn_context.reserve_input().await.is_none());
+    }
+
+    #[tokio::test]
+    async fn reservation_blocks_terminal_close_until_commit() {
+        let turn_context = Arc::new(TurnContext::new(
+            "turn-1".into(),
+            1,
+            types::InteractionMode::Agent,
+            None,
+            None,
+        ));
+        turn_context.open_input_admission();
+        let reservation = turn_context.reserve_input().await.expect("reservation");
+        let mut close = Box::pin(turn_context.take_pending_input_or_close());
+
+        tokio::select! {
+            biased;
+            value = &mut close => panic!("terminal close completed early: {value:?}"),
+            _ = tokio::task::yield_now() => {}
+        }
+        reservation.commit(input("follow up"), None);
+
+        assert_eq!(
+            close
+                .await
+                .into_iter()
+                .map(|queued| queued.input)
+                .collect::<Vec<_>>(),
+            vec![input("follow up")]
+        );
+    }
+
+    #[tokio::test]
+    async fn dropping_reservation_unblocks_terminal_close_and_closes_queue() {
+        let turn_context = Arc::new(TurnContext::new(
+            "turn-1".into(),
+            1,
+            types::InteractionMode::Agent,
+            None,
+            None,
+        ));
+        turn_context.open_input_admission();
+        let reservation = turn_context.reserve_input().await.expect("reservation");
+        let mut close = Box::pin(turn_context.take_pending_input_or_close());
+
+        tokio::select! {
+            biased;
+            value = &mut close => panic!("terminal close completed early: {value:?}"),
+            _ = tokio::task::yield_now() => {}
+        }
+        drop(reservation);
+
+        assert!(close.await.is_empty());
+        assert!(turn_context.reserve_input().await.is_none());
+    }
+
+    #[tokio::test]
+    async fn reservation_waits_for_preparation_and_observes_close() {
+        let turn_context = Arc::new(TurnContext::new(
+            "turn-1".into(),
+            1,
+            types::InteractionMode::Agent,
+            None,
+            None,
+        ));
+        let reservation = tokio::spawn({
+            let turn_context = Arc::clone(&turn_context);
+            async move { turn_context.reserve_input().await }
+        });
+
+        tokio::task::yield_now().await;
+        assert!(!reservation.is_finished());
+        turn_context.close_input_admission();
+
+        assert!(reservation.await.unwrap().is_none());
     }
 }

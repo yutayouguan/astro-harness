@@ -21,7 +21,7 @@ on_session_end -> AgentEnd
 pre_llm_call    -> PreLlmCall
 ```
 
-上述四行只是命名迁移对照。`PostToolUse` / `PreLlmCall` 及 AgentLoop 中直接 fire 的 `AgentEnd` 当前不会经 `HookRuntime` 自动投递给 Shell，不要把它们当作 Batch A 的可运行 Shell 示例。
+上述四行只是命名迁移对照。由 Session runtime 触发的 `PostToolUse`、`PreLlmCall`、`PostLlmCall` 与 `AgentEnd` 都会经 `HookRuntime` 投递给 Shell，可作为真实 Shell 配置；仍应只为实际 fire 的事件配置命令。
 
 ## Gateway Event Hooks — `hooks/<name>/HOOK.yaml`
 
@@ -46,13 +46,17 @@ chmod +x ~/.astro/hooks/telemetry-webhook.sh
 |------|------|
 | `ASTRO_TELEMETRY_URL` | 接收 JSON POST 的端点；未设置时脚本静默 `exit 0` |
 | `ASTRO_TELEMETRY_TOKEN` | 可选；若设置则作为 `Authorization: Bearer …` 发送 |
+| `ASTRO_TELEMETRY_INCLUDE_DETAIL` | 可选；仅设为 `1` 时发送 hook detail，默认留空 |
 
-`config.yaml.snippet` 中，`GatewayStartup` 的 telemetry command 只需取消注释；`PreGatewayDispatch` 和 `CommandNewChat` 已有主示例 command，需将它们的 command 替换为 `telemetry-webhook.sh`。这三个事件当前都经过 `HookRuntime`，可实际投递到 Shell。
+`config.yaml.snippet` 中，`GatewayStartup` 的 telemetry command 只需取消注释；`PreGatewayDispatch` 和 `CommandNewChat` 已有主示例 command，需将它们的 command 替换为 `telemetry-webhook.sh`。这些事件以及 Session runtime 的 `PostToolUse`、`PreLlmCall`、`PostLlmCall`、`AgentEnd` 都可实际投递到 Shell。
+
+该脚本发送 Astro 自定义 JSON。请使用自建 webhook，或自行适配后再转发至 Langfuse、OpenTelemetry 等后端；它不声明这些后端的原生 ingestion 协议兼容。
 
 **安全提示**
 
 - 勿在日志或 echo 中打印 `ASTRO_TELEMETRY_TOKEN`。
-- `ASTRO_HOOK_DETAIL` 仅为摘要；`ASTRO_HOOK_MESSAGE` 可能包含 prompt 或 assistant 文本，勿盲目上传到第三方。
+- `ASTRO_HOOK_DETAIL` 可能包含 prompt 原文、工具参数或工具结果预览；脚本默认不发送，确认接收端安全后才设置 `ASTRO_TELEMETRY_INCLUDE_DETAIL=1`。
+- `ASTRO_HOOK_MESSAGE` 可能包含 prompt 或 assistant 文本，勿盲目上传到第三方。
 - `tool_input` / `tool_response` 不会写入 env。如需更完整上下文，请在自有端点侧按 `session_id` + `turn_id` 关联本地 `agent.log`。
 
 完整说明：[docs/hooks.md](../../hooks.md)

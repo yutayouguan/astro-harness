@@ -11,6 +11,7 @@
 # 用户需自行设置：
 #   ASTRO_TELEMETRY_URL   — POST 目标 URL（如 https://your-endpoint/ingest）
 #   ASTRO_TELEMETRY_TOKEN — 可选 Bearer Token（留空则不带 Authorization 头）
+#   ASTRO_TELEMETRY_INCLUDE_DETAIL — 可选；设为 1 才发送可能含敏感内容的 detail
 #
 # 使用示例（~/.astro/config.yaml）：
 #   hooks:
@@ -18,7 +19,7 @@
 #     PreGatewayDispatch:  '"$HOME/.astro/hooks/telemetry-webhook.sh"'
 #     CommandNewChat:      '"$HOME/.astro/hooks/telemetry-webhook.sh"'
 #
-# 兼容端点：Langfuse HTTP ingestion、OpenTelemetry HTTP/JSON 桥、自建 webhook。
+# 此脚本发送 Astro 自定义 JSON；请使用自建 webhook，或自行适配后再转发至 Langfuse、OpenTelemetry 等后端。
 
 set -euo pipefail
 
@@ -31,7 +32,10 @@ EVENT="${ASTRO_HOOK_EVENT:-}"
 SESSION="${ASTRO_HOOK_SESSION:-}"
 TURN="${ASTRO_HOOK_TURN:-}"
 TOOL="${ASTRO_HOOK_TOOL:-}"
-DETAIL="${ASTRO_HOOK_DETAIL:-}"
+DETAIL=""
+if [[ "${ASTRO_TELEMETRY_INCLUDE_DETAIL:-}" == "1" ]]; then
+    DETAIL="${ASTRO_HOOK_DETAIL:-}"
+fi
 TS="$(date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u +%Y-%m-%dT%H:%M:%SZ)"
 
 # 构造 JSON payload（不含 tool_input/tool_response，避免敏感数据外泄）。

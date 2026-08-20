@@ -120,7 +120,7 @@ pub(crate) struct SessionConfiguration {
     pub(crate) model_ctx: model_ctx::ModelContext,
     pub(crate) temperature: f32,
     pub(crate) additional_params: Value,
-    pub(crate) hook_bus: Arc<::hooks::PluginHookBus>,
+    pub(crate) hook_runtime: Arc<::hooks::HookRuntime>,
     pub(crate) project_root: Option<PathBuf>,
     pub(crate) permission_profile: Option<String>,
     pub(crate) mcp_config_override: Vec<mcp::McpServerConfig>,
@@ -133,12 +133,25 @@ impl SessionConfiguration {
             model_ctx: model_ctx::ModelContext::default(),
             temperature: config.temperature,
             additional_params: config.additional_params.clone(),
-            hook_bus: Arc::new(::hooks::PluginHookBus::new()),
+            hook_runtime: Arc::new(::hooks::HookRuntime::new()),
             project_root: resolve_session_project_root(),
             permission_profile: None,
             mcp_config_override: Vec::new(),
             skill_config_overrides: Vec::new(),
         }
+    }
+
+    fn replace_hook_bus(&mut self, bus: Arc<::hooks::PluginHookBus>) {
+        let current = &self.hook_runtime;
+        if Arc::ptr_eq(&current.plugin, &bus) {
+            return;
+        }
+        self.hook_runtime = Arc::new(::hooks::HookRuntime {
+            plugin: bus,
+            gateway: Arc::clone(&current.gateway),
+            shell: Arc::clone(&current.shell),
+            ui_slot: current.ui_slot.clone(),
+        });
     }
 }
 
@@ -156,6 +169,8 @@ pub struct Session {
     pub(crate) state: TokioMutex<session_state::SessionState>,
     /// Serializes persisted conversation writes with their in-memory history mirror.
     pub(crate) conversation_write_lock: TokioMutex<()>,
+    /// Serializes SessionStart/UserPromptSubmit admission in submission order.
+    pub(crate) admission_lock: TokioMutex<()>,
 
     // ── 会话级服务与注册表 ──────────────────────────
     pub(crate) memory: RwLock<MemoryManager>,
@@ -250,6 +265,7 @@ impl Session {
             session_configuration: RwLock::new(session_configuration),
             state: TokioMutex::new(session_state::SessionState::new(history)),
             conversation_write_lock: TokioMutex::new(()),
+            admission_lock: TokioMutex::new(()),
             memory: RwLock::new(memory),
             services: SessionServices::new(sessions, compression_policy),
             tool_registry: RwLock::new(tool_registry),
@@ -359,19 +375,61 @@ impl Session {
         self.memory_mut().refresh_memory_snapshot()
     }
 
+    /// 设置共享钩子运行时。
+    pub fn set_hook_runtime(&self, runtime: Arc<::hooks::HookRuntime>) {
+        self.session_configuration_mut().hook_runtime = runtime;
+    }
+
+    /// 当前共享钩子运行时。
+    pub fn hook_runtime(&self) -> Arc<::hooks::HookRuntime> {
+        Arc::clone(&self.session_configuration().hook_runtime)
+    }
+
     /// 设置插件钩子总线。
+    ///
+    /// 兼容旧调用方：仅替换 plugin，保留共享运行时的 transport 与 UI slot。
     pub fn set_hook_bus(&self, bus: Arc<::hooks::PluginHookBus>) {
-        self.session_configuration_mut().hook_bus = bus;
+        self.session_configuration_mut().replace_hook_bus(bus);
     }
 
     /// 当前插件钩子总线。
     pub fn hook_bus(&self) -> Arc<::hooks::PluginHookBus> {
-        Arc::clone(&self.session_configuration().hook_bus)
+        Arc::clone(&self.hook_runtime().plugin)
     }
 
-    /// 触发插件钩子（UI 观察由进程 `HookRuntime.ui_slot` 承接）。
+    /// 触发共享钩子运行时，并补全会话级通用 payload 字段。
     pub fn fire_hook(&self, name: &str, payload: ::hooks::HookPayload) -> ::hooks::HookOutcome {
-        self.hook_bus().fire(name, &payload)
+        let payload = self.enrich_hook_payload(payload);
+        self.hook_runtime().dispatch(name, &payload)
+    }
+
+    fn enrich_hook_payload(&self, mut payload: ::hooks::HookPayload) -> ::hooks::HookPayload {
+        let session_configuration = self.session_configuration();
+        if payload.session_id.is_empty() {
+            payload.session_id.clone_from(&self.session_id);
+        }
+        if payload.cwd.is_empty() {
+            let cwd = session_configuration
+                .project_root
+                .as_ref()
+                .unwrap_or(&self.config.memory_dir);
+            payload.cwd = cwd.to_string_lossy().into_owned();
+        }
+        if payload.model.is_empty() {
+            let target = session_configuration.model_ctx.primary_chat_target();
+            let backend = target.backend_id.trim();
+            let model = target.model.trim();
+            payload.model = match (backend.is_empty(), model.is_empty()) {
+                (false, false) => format!("{backend}/{model}"),
+                (false, true) => backend.to_string(),
+                (true, false) => model.to_string(),
+                (true, true) => String::new(),
+            };
+        }
+        if payload.permission_mode.is_none() {
+            payload.permission_mode = session_configuration.permission_profile.clone();
+        }
+        payload
     }
 
     /// 取出并清空本轮 `pre_llm_call` 注入上下文。
@@ -1094,6 +1152,90 @@ mod tests {
     }
 
     #[test]
+    fn session_configuration_replace_hook_bus_is_atomic() {
+        let dir = TempDir::new().unwrap();
+        let config = test_config(&dir);
+        let mut session_configuration = SessionConfiguration::new(&config);
+        let initial_runtime = Arc::new(::hooks::HookRuntime::new());
+        session_configuration.hook_runtime = Arc::clone(&initial_runtime);
+
+        let first_bus = Arc::new(::hooks::PluginHookBus::new());
+        session_configuration.replace_hook_bus(Arc::clone(&first_bus));
+        let first_replacement = Arc::clone(&session_configuration.hook_runtime);
+        assert!(Arc::ptr_eq(&first_replacement.plugin, &first_bus));
+        assert!(Arc::ptr_eq(
+            &first_replacement.gateway,
+            &initial_runtime.gateway
+        ));
+        assert!(Arc::ptr_eq(
+            &first_replacement.shell,
+            &initial_runtime.shell
+        ));
+
+        session_configuration.replace_hook_bus(Arc::clone(&first_bus));
+        assert!(Arc::ptr_eq(
+            &session_configuration.hook_runtime,
+            &first_replacement
+        ));
+
+        let current_runtime = Arc::new(::hooks::HookRuntime::new());
+        session_configuration.hook_runtime = Arc::clone(&current_runtime);
+        let second_bus = Arc::new(::hooks::PluginHookBus::new());
+        session_configuration.replace_hook_bus(Arc::clone(&second_bus));
+        assert!(Arc::ptr_eq(
+            &session_configuration.hook_runtime.plugin,
+            &second_bus
+        ));
+        assert!(Arc::ptr_eq(
+            &session_configuration.hook_runtime.gateway,
+            &current_runtime.gateway
+        ));
+        assert!(Arc::ptr_eq(
+            &session_configuration.hook_runtime.shell,
+            &current_runtime.shell
+        ));
+    }
+
+    #[test]
+    fn set_hook_bus_is_idempotent_and_preserves_runtime_transports() {
+        let dir = TempDir::new().unwrap();
+        let session = Session::new(test_config(&dir)).unwrap();
+        let runtime = Arc::new(::hooks::HookRuntime::new());
+        let original_plugin = Arc::clone(&runtime.plugin);
+        let gateway = Arc::clone(&runtime.gateway);
+        let shell = Arc::clone(&runtime.shell);
+        session.set_hook_runtime(runtime);
+
+        let bus = Arc::new(::hooks::PluginHookBus::new());
+        session.set_hook_bus(Arc::clone(&bus));
+        let first = session.hook_runtime();
+        assert!(Arc::ptr_eq(&session.hook_bus(), &bus));
+        assert!(Arc::ptr_eq(&first.gateway, &gateway));
+        assert!(Arc::ptr_eq(&first.shell, &shell));
+
+        let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
+        first.ui_slot.set_tx(Some(tx));
+        original_plugin.fire(::hooks::SESSION_START, &::hooks::HookPayload::default());
+        assert_eq!(
+            rx.try_recv()
+                .expect("replacement preserves the original UI slot")
+                .name,
+            ::hooks::SESSION_START
+        );
+        first
+            .plugin
+            .fire(::hooks::SESSION_START, &::hooks::HookPayload::default());
+        assert!(matches!(
+            rx.try_recv(),
+            Err(tokio::sync::mpsc::error::TryRecvError::Empty)
+        ));
+
+        session.set_hook_bus(bus);
+        let second = session.hook_runtime();
+        assert!(Arc::ptr_eq(&first, &second));
+    }
+
+    #[test]
     fn auxiliary_targets_falls_back_to_chat_credentials_when_nothing_set() {
         let dir = TempDir::new().unwrap();
         let agent = AgentLoop::new(test_config(&dir)).unwrap();
@@ -1236,6 +1378,7 @@ mod tests {
                 client_message_id: None,
             }];
             drop(session.prepare_turn(&input));
+            drop(session.admission_lock.lock());
             drop(session.capture_step_context());
             drop(session.start_or_steer_turn("turn", "submission"));
             drop(session.handle_tool_call_async("echo", &serde_json::json!({})));
@@ -1380,13 +1523,17 @@ mod tests {
         fn assert_arc_settings_api(
             session: Arc<Session>,
             turn_context: Arc<TurnContext>,
+            hook_runtime: Arc<::hooks::HookRuntime>,
             hook_bus: Arc<::hooks::PluginHookBus>,
             image_targets: types::ImageGenTargets,
             model_spec: types::ModelSpec,
         ) {
             drop(session.bind_turn_context(turn_context));
             session.set_permission_profile(Some("workspace-write".to_string()));
+            session.set_hook_runtime(hook_runtime);
             session.set_hook_bus(hook_bus);
+            let _ = session.hook_runtime();
+            let _ = session.hook_bus();
             session.set_temperature(0.2);
             session.set_additional_params(serde_json::json!({"top_p": 0.9}));
             session.set_image_gen_targets(image_targets);
