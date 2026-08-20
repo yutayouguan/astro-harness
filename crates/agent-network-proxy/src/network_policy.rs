@@ -26,7 +26,7 @@ impl NetworkProtocol {
         }
     }
 
-    const fn approval_protocol(self) -> NetworkApprovalProtocol {
+    pub const fn approval_protocol(self) -> NetworkApprovalProtocol {
         match self {
             Self::Http => NetworkApprovalProtocol::Http,
             Self::HttpsConnect => NetworkApprovalProtocol::Https,

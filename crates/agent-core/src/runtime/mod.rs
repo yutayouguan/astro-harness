@@ -636,6 +636,11 @@ impl Session {
         self.lock_state().turn.current_turn_id().map(str::to_owned)
     }
 
+    /// Current turn context (if bound).
+    pub(crate) async fn current_turn_context(&self) -> Option<Arc<TurnContext>> {
+        self.lock_state().current_turn_context.clone()
+    }
+
     /// 子 Agent 执行调度器。
     pub fn execution(&self) -> Arc<dyn tools::AgentThreadDispatch> {
         Arc::clone(&self.execution)

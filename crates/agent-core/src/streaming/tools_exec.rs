@@ -61,6 +61,7 @@ async fn start_managed_network(
     session: &Arc<AgentLoop>,
     step_context: &StepContext,
     call: &types::ParsedToolCall,
+    turn_context: Option<Arc<TurnContext>>,
 ) -> anyhow::Result<Option<Arc<network_proxy::StartedNetworkProxy>>> {
     let settings = memory::load_permission_settings(session.memory_dir());
     let active_profile_id = step_context
@@ -71,8 +72,132 @@ async fn start_managed_network(
         return Ok(None);
     };
     let state = Arc::new(network_proxy::NetworkProxyState::new(policy)?);
-    let started = network_proxy::StartedNetworkProxy::start(state).await?;
-    Ok(Some(Arc::new(started)))
+
+    let Some(tc) = turn_context else {
+        let started = network_proxy::StartedNetworkProxy::start(state).await?;
+        return Ok(Some(Arc::new(started)));
+    };
+
+    let profile_id = active_profile_id.to_string();
+    let command_preview = call
+        .arguments
+        .get("command")
+        .and_then(|v| v.as_str())
+        .map(|s| s.chars().take(80).collect::<String>());
+    let tool_call_id = call.id.clone();
+
+    let decider = build_network_approval_decider(
+        Arc::clone(session),
+        tc,
+        profile_id,
+        tool_call_id,
+        command_preview,
+    );
+
+    let proxy = network_proxy::NetworkProxy::builder()
+        .state(state)
+        .policy_decider_arc(decider)
+        .build()
+        .await?;
+    let handle = proxy.run().await?;
+    Ok(Some(Arc::new(
+        network_proxy::StartedNetworkProxy::from_parts(proxy, handle),
+    )))
+}
+
+fn build_network_approval_decider(
+    session: Arc<AgentLoop>,
+    turn_context: Arc<TurnContext>,
+    profile_id: String,
+    tool_call_id: String,
+    command_preview: Option<String>,
+) -> Arc<dyn network_proxy::NetworkPolicyDecider> {
+    Arc::new(move |request: network_proxy::NetworkPolicyRequest| {
+        let session = Arc::clone(&session);
+        let turn_context = Arc::clone(&turn_context);
+        let profile_id = profile_id.clone();
+        let tool_call_id = tool_call_id.clone();
+        let command_preview = command_preview.clone();
+        Box::pin(async move {
+            let approval_service = &session.services.network_approval;
+            let host_key = crate::control::network_approval::HostApprovalKey {
+                profile_id: profile_id.clone(),
+                host: request.host.clone(),
+                protocol: request.protocol.approval_protocol(),
+                port: request.port,
+            };
+
+            if let Some(cached) = approval_service.cached_decision(&host_key) {
+                return match cached {
+                    crate::control::network_approval::CachedDecision::Allowed => {
+                        network_proxy::NetworkDecision::Allow
+                    }
+                    crate::control::network_approval::CachedDecision::Denied => {
+                        network_proxy::NetworkDecision::deny("session_denied")
+                    }
+                };
+            }
+
+            let pending_key = crate::control::network_approval::PendingHostApprovalKey {
+                profile_id: profile_id.clone(),
+                host: request.host.clone(),
+                protocol: request.protocol.approval_protocol(),
+            };
+
+            let begin = approval_service.begin_or_join(pending_key);
+            match begin {
+                crate::control::network_approval::BeginResult::Owner(owner) => {
+                    let protocol_name = match request.protocol.approval_protocol() {
+                        types::NetworkApprovalProtocol::Http => "http",
+                        types::NetworkApprovalProtocol::Https => "https",
+                        types::NetworkApprovalProtocol::Socks5Tcp => "socks5",
+                        types::NetworkApprovalProtocol::Socks5Udp => "socks5-udp",
+                    };
+
+                    let (_, hitl_gate) = session.ensure_thread_controls();
+                    let outcome = super::hitl_bridge::park_network_approval(
+                        &hitl_gate,
+                        &session,
+                        &turn_context,
+                        &tool_call_id,
+                        super::hitl_bridge::NetworkApprovalRequest {
+                            host: request.host.clone(),
+                            protocol: protocol_name.to_string(),
+                            port: request.port,
+                            profile_id: profile_id.clone(),
+                            command_preview,
+                        },
+                    )
+                    .await;
+
+                    match outcome {
+                        Some(o) => {
+                            let decision = o.decision.clone();
+                            owner.resolve(decision);
+                            match o.decision {
+                                crate::control::network_approval::PendingApprovalDecision::Allow(
+                                    _,
+                                ) => network_proxy::NetworkDecision::Allow,
+                                crate::control::network_approval::PendingApprovalDecision::Deny => {
+                                    network_proxy::NetworkDecision::deny("user_denied")
+                                }
+                            }
+                        }
+                        None => {
+                            drop(owner);
+                            network_proxy::NetworkDecision::deny("hitl_unavailable")
+                        }
+                    }
+                }
+                crate::control::network_approval::BeginResult::Joined(rx) => match rx.await {
+                    Ok(crate::control::network_approval::PendingApprovalDecision::Allow(_)) => {
+                        network_proxy::NetworkDecision::Allow
+                    }
+                    _ => network_proxy::NetworkDecision::deny("shared_denied"),
+                },
+            }
+        }) as network_proxy::NetworkPolicyDeciderFuture<'_>
+    })
 }
 
 fn sandbox_policy_for_call(
@@ -1225,22 +1350,26 @@ async fn execute_tools_serial_inner(
             let agent = session.as_ref();
             let memory_dir = agent.memory_dir().to_path_buf();
             let session_id = agent.session_id().to_string();
-            let managed_network = match start_managed_network(session, &step_context, call).await {
-                Ok(managed_network) => managed_network,
-                Err(error) => {
-                    memory::try_append_decision(
-                        &memory_dir,
-                        memory::DecisionEntry::new(
-                            memory::DecisionKind::ToolFailure,
-                            format!("managed network setup failed: {error}"),
-                        )
-                        .with_tool(call.name.clone())
-                        .with_session(session_id.clone()),
-                    );
-                    out.push(format!("Tool error: managed network setup failed: {error}").into());
-                    continue;
-                }
-            };
+            let turn_ctx_arc = session.current_turn_context().await;
+            let managed_network =
+                match start_managed_network(session, &step_context, call, turn_ctx_arc).await {
+                    Ok(managed_network) => managed_network,
+                    Err(error) => {
+                        memory::try_append_decision(
+                            &memory_dir,
+                            memory::DecisionEntry::new(
+                                memory::DecisionKind::ToolFailure,
+                                format!("managed network setup failed: {error}"),
+                            )
+                            .with_tool(call.name.clone())
+                            .with_session(session_id.clone()),
+                        );
+                        out.push(
+                            format!("Tool error: managed network setup failed: {error}").into(),
+                        );
+                        continue;
+                    }
+                };
             let sandbox_policy = match sandbox_policy_for_call(
                 agent,
                 &step_context,

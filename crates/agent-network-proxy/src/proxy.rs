@@ -185,6 +185,13 @@ impl StartedNetworkProxy {
         })
     }
 
+    pub fn from_parts(proxy: NetworkProxy, handle: NetworkProxyHandle) -> Self {
+        Self {
+            proxy,
+            _handle: handle,
+        }
+    }
+
     pub fn proxy(&self) -> &NetworkProxy {
         &self.proxy
     }
