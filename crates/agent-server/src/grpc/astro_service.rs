@@ -4544,7 +4544,7 @@ mod tests {
         std::fs::create_dir_all(&hook_dir).unwrap();
         std::fs::write(
             hook_dir.join("HOOK.yaml"),
-            "name: audit\nevents:\n  - command:new_chat\n",
+            "name: audit\nevents:\n  - CommandNewChat\n",
         )
         .unwrap();
 

@@ -4,12 +4,6 @@ hooks:
   CommandNewChat: 'true'
   # GatewayStartup: '"$HOME/.astro/hooks/telemetry-webhook.sh"'
 
-# 等价 legacy key（只用于迁移对照，不要与上述 canonical key 重复配置）：
-# post_tool_call -> PostToolUse
-# agent:end / on_session_end -> AgentEnd
-# post_llm_call -> PostLlmCall
-# pre_llm_call -> PreLlmCall
-
 # 遥测旁路：复制 telemetry-webhook.sh 后，可将上方 PreGatewayDispatch /
 # CommandNewChat 的 command 替换为该脚本，或取消 GatewayStartup 的注释。
 # Session runtime 的 PostToolUse / PreLlmCall / PostLlmCall / AgentEnd 也会统一投递 Shell；

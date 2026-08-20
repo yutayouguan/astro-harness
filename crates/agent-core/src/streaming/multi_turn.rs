@@ -42,7 +42,7 @@ use crate::runtime::turn_context::{QueuedTurnInput, TerminalInputDecision};
 use crate::runtime::{Session, TurnContext};
 use crate::tasks::{RegularTask, SessionTaskResult, TurnCancelled};
 
-/// `pre_verify` 单次 turn 内允许的最多验证轮次（含首次结束尝试）。
+/// `Stop` 单次 turn 内允许的最多验证轮次（含首次结束尝试）。
 const MAX_VERIFY_ATTEMPTS: usize = 2;
 
 /// 模型只返回思考/推理内容而没有文本回复时，允许的最大重试次数。
@@ -814,7 +814,7 @@ pub(crate) async fn run_turn(
             .await;
         }
 
-        // Codex `Stop` hook. Legacy `pre_verify` registrations normalize here.
+        // Codex `Stop` hook.
         if calls.is_empty() {
             let verify_outcome = {
                 let agent = session.as_ref();

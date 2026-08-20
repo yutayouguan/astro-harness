@@ -81,7 +81,7 @@
 - `multi_turn` 串行门控改用 `ToolEntry.needs_confirmation`；`is_interactive_tool` 标 deprecated
 - `usage::eval_export::export_session_eval_jsonl`：session trace → JSONL eval 行（复用 usage.db）
 - Skill frontmatter 可选 `astro_tools`；`skills` 工具加载后 `ToolRegistry::activate_skill_toolsets` **additive 放宽**禁用 toolset
-- Hooks：本轮不新增 per-tool hooks，继续用现有 `pre/post_tool_call` 总线
+- Hooks：本轮不新增 per-tool hooks，继续用现有 `PreToolUse` / `PostToolUse` 总线
 
 ---
 

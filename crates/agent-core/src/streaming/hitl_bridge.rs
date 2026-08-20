@@ -47,7 +47,7 @@ pub(crate) fn parse_astro_hitl(result: &str) -> Option<AstroHitlPayload> {
 }
 
 /// `park_confirm` 决议：`approved` 供调用方分支；`status` 对应 [`HitlResolution::status`]
-/// （`resolved` / `cancelled` / `timeout`），供 `post_approval_response` 钩子填充 `choice`。
+/// （`resolved` / `cancelled` / `timeout`），供 `PostApprovalResponse` 钩子填充 `choice`。
 pub(crate) struct ConfirmOutcome {
     pub approved: bool,
     pub status: String,

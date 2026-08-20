@@ -728,8 +728,14 @@ mod tests {
     async fn hook_started_and_completed_share_stable_item_id() {
         let (_dir, session, context) = session().await;
         let rx = session.subscribe_turn_events("turn-1").await;
-        let item_id = emit_hook_started(&session, &context, "pre_api_request").await;
-        emit_hook_completed(&session, &context, item_id.clone(), "pre_api_request").await;
+        let item_id = emit_hook_started(&session, &context, ::hooks::PRE_API_REQUEST).await;
+        emit_hook_completed(
+            &session,
+            &context,
+            item_id.clone(),
+            ::hooks::PRE_API_REQUEST,
+        )
+        .await;
 
         let started = rx.recv().await.unwrap();
         let completed = rx.recv().await.unwrap();

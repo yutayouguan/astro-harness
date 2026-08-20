@@ -50,11 +50,11 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         fs::write(
             dir.path().join("config.yaml"),
-            "hooks:\n  post_tool_call: \"echo hi\"\n  agent:end: \"true\"\n",
+            "hooks:\n  PostToolUse: \"echo hi\"\n  AgentEnd: \"true\"\n",
         )
         .unwrap();
         let cfg = load_config(dir.path()).unwrap();
-        assert_eq!(cfg.hooks.get("post_tool_call").unwrap(), "echo hi");
-        assert_eq!(cfg.hooks.get("agent:end").unwrap(), "true");
+        assert_eq!(cfg.hooks.get("PostToolUse").unwrap(), "echo hi");
+        assert_eq!(cfg.hooks.get("AgentEnd").unwrap(), "true");
     }
 }

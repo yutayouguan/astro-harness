@@ -231,7 +231,7 @@ impl Session {
             task_completion.cancelled().await;
         }
         let _ = self.fire_hook(
-            ::hooks::ON_SESSION_FINALIZE,
+            ::hooks::SESSION_FINALIZE,
             ::hooks::HookPayload {
                 session_id: self.session_id().to_string(),
                 turn_id,

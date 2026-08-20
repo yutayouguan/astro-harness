@@ -14,7 +14,7 @@ pub mod ui;
 
 pub use config::{default_astro_root, load_config, load_config_or_default, AstroConfig};
 pub use context::PluginContext;
-pub use event::{canonical_hook_event_name, normalize_hook_event_name, HookEvent};
+pub use event::HookEvent;
 pub use gateway::{DiscoveredHook, GatewayHookRegistry, HookManifest};
 pub use names::*;
 pub use outcome::{HookInput, HookOutcome, HookPayload};
@@ -76,12 +76,11 @@ impl HookRuntime {
 
     /// 统一向 Plugin、Gateway、Shell 三套 transport 投递事件。
     pub fn dispatch(&self, name: &str, payload: &HookPayload) -> HookOutcome {
-        let name = normalize_hook_event_name(name);
-        let payload = payload.normalized_for_event(name.as_ref());
-        let out = self.plugin.fire(name.as_ref(), &payload);
-        self.gateway.fire(name.as_ref(), &payload);
+        let payload = payload.for_event(name);
+        let out = self.plugin.fire(name, &payload);
+        self.gateway.fire(name, &payload);
         if let Ok(sh) = self.shell.lock() {
-            sh.fire_async(name.as_ref(), &payload);
+            sh.fire_async(name, &payload);
         }
         out
     }
@@ -103,7 +102,7 @@ mod tests {
     use std::sync::atomic::{AtomicUsize, Ordering};
 
     #[tokio::test]
-    async fn runtime_normalizes_plugin_and_shell_to_the_same_event() {
+    async fn runtime_does_not_bridge_legacy_shell_keys_to_canonical_events() {
         let rt = HookRuntime::new();
         let seen = Arc::new(std::sync::Mutex::new(None));
         let capture = Arc::clone(&seen);
@@ -116,23 +115,21 @@ mod tests {
             "true".to_string(),
         )]));
 
-        let _ = rt.fire_plugin("pre_tool_call", &HookInput::default());
+        let _ = rt.fire_plugin(PRE_TOOL_USE, &HookInput::default());
 
         assert_eq!(seen.lock().unwrap().as_deref(), Some(PRE_TOOL_USE));
         let shell_schedule = rt.shell.lock().unwrap().scheduled();
-        assert_eq!(shell_schedule.len(), 1);
-        assert_eq!(shell_schedule[0].0, PRE_TOOL_USE);
-        assert_eq!(shell_schedule[0].1.hook_event_name, PRE_TOOL_USE);
+        assert!(shell_schedule.is_empty());
     }
 
     #[tokio::test]
-    async fn dispatch_normalizes_once_and_reaches_all_transports() {
+    async fn dispatch_reaches_all_transports_with_canonical_name() {
         let dir = tempfile::tempdir().unwrap();
         let hook_dir = dir.path().join("hooks").join("audit");
         std::fs::create_dir_all(&hook_dir).unwrap();
         std::fs::write(
             hook_dir.join("HOOK.yaml"),
-            "name: audit\nevents:\n  - pre_tool_call\n",
+            "name: audit\nevents:\n  - PreToolUse\n",
         )
         .unwrap();
 
@@ -153,11 +150,11 @@ mod tests {
             HookOutcome::Block("blocked".into())
         });
         *rt.shell.lock().unwrap() = ShellHookRunner::new(std::collections::HashMap::from([(
-            "pre_tool_call".to_string(),
+            PRE_TOOL_USE.to_string(),
             "true".to_string(),
         )]));
 
-        let out = rt.dispatch("pre_tool_call", &HookInput::default());
+        let out = rt.dispatch(PRE_TOOL_USE, &HookInput::default());
 
         assert!(matches!(out, HookOutcome::Block(ref reason) if reason == "blocked"));
         assert_eq!(plugin_hits.load(Ordering::SeqCst), 1);
@@ -169,13 +166,13 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn runtime_normalizes_gateway_and_shell_to_the_same_event() {
+    async fn runtime_routes_gateway_and_shell_by_canonical_name() {
         let dir = tempfile::tempdir().unwrap();
         let hook_dir = dir.path().join("hooks").join("audit");
         std::fs::create_dir_all(&hook_dir).unwrap();
         std::fs::write(
             hook_dir.join("HOOK.yaml"),
-            "name: audit\nevents:\n  - gateway:startup\n",
+            "name: audit\nevents:\n  - GatewayStartup\n",
         )
         .unwrap();
         let rt = HookRuntime::new();
@@ -187,11 +184,11 @@ mod tests {
             *capture.lock().unwrap() = Some(event.to_owned());
         });
         *rt.shell.lock().unwrap() = ShellHookRunner::new(std::collections::HashMap::from([(
-            "gateway:startup".to_string(),
+            GATEWAY_STARTUP.to_string(),
             "true".to_string(),
         )]));
 
-        rt.fire_gateway("gateway:startup", &HookInput::default());
+        rt.fire_gateway(GATEWAY_STARTUP, &HookInput::default());
 
         assert_eq!(seen.lock().unwrap().as_deref(), Some(GATEWAY_STARTUP));
         assert!(rt.shell.lock().unwrap().has_event(GATEWAY_STARTUP));

@@ -221,12 +221,12 @@ mod tests {
     use serde_json::json;
 
     #[test]
-    fn timeline_emits_canonical_name_for_legacy_fire() {
+    fn timeline_emits_canonical_name_for_canonical_fire() {
         let bus = PluginHookBus::new();
         let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
         install_ui_timeline(&bus, tx);
 
-        bus.fire("pre_tool_call", &crate::HookInput::default());
+        bus.fire(crate::names::PRE_TOOL_USE, &crate::HookInput::default());
 
         assert_eq!(rx.try_recv().unwrap().name, crate::names::PRE_TOOL_USE);
     }

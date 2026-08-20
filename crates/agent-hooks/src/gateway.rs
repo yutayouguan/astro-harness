@@ -87,8 +87,7 @@ impl GatewayHookRegistry {
 
     /// 触发某 gateway 事件：对订阅了该事件且已绑定 handler 的清单调用。
     pub fn fire(&self, event: &str, payload: &HookPayload) {
-        let event = crate::event::normalize_hook_event_name(event);
-        let payload = payload.normalized_for_event(event.as_ref());
+        let payload = payload.for_event(event);
         let discovered = self
             .discovered
             .lock()
@@ -96,17 +95,18 @@ impl GatewayHookRegistry {
             .unwrap_or_default();
         let handlers = self.handlers.lock().map(|g| g.clone()).unwrap_or_default();
         for d in discovered {
-            if !d.manifest.events.iter().any(|manifest_event| {
-                manifest_event == "*"
-                    || crate::event::canonical_hook_event_name(manifest_event).as_ref()
-                        == event.as_ref()
-            }) {
+            if !d
+                .manifest
+                .events
+                .iter()
+                .any(|manifest_event| manifest_event == "*" || manifest_event == event)
+            {
                 continue;
             }
             match handlers.get(&d.manifest.name) {
                 Some(h) => {
                     let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                        h(event.as_ref(), &payload)
+                        h(event, &payload)
                     }));
                 }
                 None => {
@@ -160,7 +160,7 @@ mod tests {
     use std::sync::atomic::{AtomicUsize, Ordering};
 
     #[test]
-    fn legacy_manifest_event_matches_canonical_dispatch() {
+    fn legacy_manifest_event_does_not_match_canonical_dispatch() {
         let dir = tempfile::tempdir().unwrap();
         let hook_dir = dir.path().join("hooks").join("audit");
         fs::create_dir_all(&hook_dir).unwrap();
@@ -181,7 +181,7 @@ mod tests {
 
         registry.fire(crate::names::GATEWAY_STARTUP, &crate::HookInput::default());
 
-        assert_eq!(hits.load(Ordering::SeqCst), 1);
+        assert_eq!(hits.load(Ordering::SeqCst), 0);
     }
 
     #[test]
@@ -215,7 +215,7 @@ mod tests {
         fs::create_dir_all(&hook_dir).unwrap();
         fs::write(
             hook_dir.join("HOOK.yaml"),
-            "name: audit\nevents:\n  - gateway:startup\n  - agent:end\n",
+            "name: audit\nevents:\n  - GatewayStartup\n  - AgentEnd\n",
         )
         .unwrap();
         let reg = GatewayHookRegistry::new();
@@ -227,7 +227,7 @@ mod tests {
                 h.fetch_add(1, Ordering::SeqCst);
             }
         });
-        reg.fire("gateway:startup", &HookPayload::default());
+        reg.fire(crate::names::GATEWAY_STARTUP, &HookPayload::default());
         assert_eq!(hits.load(Ordering::SeqCst), 1);
     }
 }

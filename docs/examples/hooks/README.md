@@ -12,16 +12,7 @@ hooks:
   GatewayStartup: 'true'
 ```
 
-迁移对照（不要把新旧 key 同时写入配置）：
-
-```text
-post_tool_call  -> PostToolUse
-agent:end       -> AgentEnd
-on_session_end -> AgentEnd
-pre_llm_call    -> PreLlmCall
-```
-
-上述四行只是命名迁移对照。由 Session runtime 触发的 `PostToolUse`、`PreLlmCall`、`PostLlmCall` 与 `AgentEnd` 都会经 `HookRuntime` 投递给 Shell，可作为真实 Shell 配置；仍应只为实际 fire 的事件配置命令。
+Hook key 必须使用 canonical 名称。由 Session runtime 触发的 `PostToolUse`、`PreLlmCall`、`PostLlmCall` 与 `AgentEnd` 都会经 `HookRuntime` 投递给 Shell；仍应只为实际 fire 的事件配置命令。
 
 ## Gateway Event Hooks — `hooks/<name>/HOOK.yaml`
 

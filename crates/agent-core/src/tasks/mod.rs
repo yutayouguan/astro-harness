@@ -1506,7 +1506,7 @@ mod tests {
         let finalize_counter = Arc::clone(&finalize_hits);
         session
             .hook_bus()
-            .register(::hooks::ON_SESSION_FINALIZE, move |_| {
+            .register(::hooks::SESSION_FINALIZE, move |_| {
                 finalize_counter.fetch_add(1, Ordering::SeqCst);
                 ::hooks::HookOutcome::Continue
             });
@@ -1636,7 +1636,7 @@ mod tests {
         let finalize_counter = Arc::clone(&finalize_hits);
         session
             .hook_bus()
-            .register(::hooks::ON_SESSION_FINALIZE, move |_| {
+            .register(::hooks::SESSION_FINALIZE, move |_| {
                 finalize_counter.fetch_add(1, Ordering::SeqCst);
                 ::hooks::HookOutcome::Continue
             });

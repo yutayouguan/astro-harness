@@ -36,7 +36,6 @@ impl PluginHookBus {
         F: Fn(&HookPayload) -> HookOutcome + Send + Sync + 'static,
     {
         let name = name.into();
-        let name = crate::event::normalize_hook_event_name(&name).into_owned();
         if let Ok(mut map) = self.hooks.lock() {
             map.entry(name).or_default().push(Arc::new(f));
         }
@@ -44,10 +43,9 @@ impl PluginHookBus {
 
     /// 触发钩子；对可短路结果返回首个非 Continue/Allow。
     pub fn fire(&self, name: &str, payload: &HookPayload) -> HookOutcome {
-        let name = crate::event::normalize_hook_event_name(name);
-        let payload = payload.normalized_for_event(name.as_ref());
+        let payload = payload.for_event(name);
         let callbacks = match self.hooks.lock() {
-            Ok(map) => map.get(name.as_ref()).cloned().unwrap_or_default(),
+            Ok(map) => map.get(name).cloned().unwrap_or_default(),
             Err(_) => return HookOutcome::Continue,
         };
         for cb in callbacks {
@@ -84,7 +82,7 @@ mod tests {
     use std::sync::atomic::{AtomicUsize, Ordering};
 
     #[test]
-    fn legacy_registration_and_canonical_fire_share_one_slot() {
+    fn legacy_registration_does_not_receive_canonical_fire() {
         let bus = PluginHookBus::new();
         let seen = Arc::new(std::sync::Mutex::new(None));
         let hits = Arc::new(AtomicUsize::new(0));
@@ -98,13 +96,13 @@ mod tests {
 
         bus.fire(PRE_TOOL_USE, &crate::HookInput::default());
 
-        assert_eq!(seen.lock().unwrap().as_deref(), Some(PRE_TOOL_USE));
-        assert_eq!(hits.load(Ordering::SeqCst), 1);
-        assert_eq!(bus.registered_names(), vec![PRE_TOOL_USE]);
+        assert_eq!(seen.lock().unwrap().as_deref(), None);
+        assert_eq!(hits.load(Ordering::SeqCst), 0);
+        assert_eq!(bus.registered_names(), vec!["pre_tool_call"]);
     }
 
     #[test]
-    fn canonical_registration_and_legacy_fire_share_one_slot() {
+    fn canonical_registration_does_not_receive_legacy_fire() {
         let bus = PluginHookBus::new();
         let seen = Arc::new(std::sync::Mutex::new(None));
         let capture = Arc::clone(&seen);
@@ -115,7 +113,7 @@ mod tests {
 
         bus.fire("pre_tool_call", &crate::HookInput::default());
 
-        assert_eq!(seen.lock().unwrap().as_deref(), Some(PRE_TOOL_USE));
+        assert_eq!(seen.lock().unwrap().as_deref(), None);
     }
 
     #[test]

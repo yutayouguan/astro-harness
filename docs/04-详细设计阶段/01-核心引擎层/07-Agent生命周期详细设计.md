@@ -738,7 +738,7 @@ v2.20 Sandbox denial contract 批次：`agent-sandbox` 引入与 Codex 同名的
 foreground terminal 与 code_exec 不再把这类结果压成普通文本，而是保留 exit/stdout/stderr
 及经过 terminal transform 的 `aggregated_output`，穿过 anyhow 和
 `ToolCallError::SandboxDenied` 到 `ToolOrchestrator::run_attempt`。orchestrator 当前仍执行
-`transform_tool_result` / `post_tool_use` finalization，将可展示输出返回模型、写入
+`TransformToolResult` / `PostToolUse` finalization，将可展示输出返回模型、写入
 `sandbox_denied` Applied audit，且不记录为普通 ToolFailure。该批次仅建立 typed
 boundary，未自动重试或提升权限；v2.21 在此边界上补齐审批与单次重试。
 

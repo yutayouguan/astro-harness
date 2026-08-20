@@ -53,41 +53,9 @@ Astro 有三条 Hook 通道：
 
 `AgentEnd` 是 Astro 扩展，不是 `SessionEnd` 的另一种拼写。
 
-### Legacy 名称迁移
+### Canonical-only 名称契约
 
-以下是当前代码实际批准的完整映射。Plugin 注册/触发和 Shell config key 会经过 `normalize_hook_event_name`；legacy 名称会归一化，且同一进程中每个 legacy 拼写最多警告一次。Shell config 的 legacy/canonical 同槽 key 会合并，canonical key 稳定胜出。
-
-| Legacy 名称 | Canonical 名称 |
-|---|---|
-| `pre_tool_call` | `PreToolUse` |
-| `post_tool_call` | `PostToolUse` |
-| `pre_approval_request` | `PermissionRequest` |
-| `pre_verify` | `Stop` |
-| `on_session_start` | `SessionStart` |
-| `session:start` | `SessionStart` |
-| `on_session_end` | `AgentEnd` |
-| `agent:end` | `AgentEnd` |
-| `subagent_start` | `SubagentStart` |
-| `subagent_stop` | `SubagentStop` |
-| `pre_llm_call` | `PreLlmCall` |
-| `pre_api_request` | `PreApiRequest` |
-| `post_api_request` | `PostApiRequest` |
-| `transform_terminal_output` | `TransformTerminalOutput` |
-| `transform_tool_result` | `TransformToolResult` |
-| `transform_llm_output` | `TransformLlmOutput` |
-| `post_llm_call` | `PostLlmCall` |
-| `post_approval_response` | `PostApprovalResponse` |
-| `pre_gateway_dispatch` | `PreGatewayDispatch` |
-| `on_session_reset` | `SessionReset` |
-| `on_session_finalize` | `SessionFinalize` |
-| `gateway:startup` | `GatewayStartup` |
-| `command:new_chat` | `CommandNewChat` |
-
-未列出的名称不会被猜测或自动改写，因此自定义事件名可原样保留。
-
-Legacy 事件名和 `ASTRO_HOOK_*` 环境变量都保留**一个发布版本**的弃用兼容窗口。新配置应立即使用 canonical 名称；不应在同一份配置中同时注册新旧 key。
-
-Gateway manifest 是一个例外：discovery 保留 `HOOK.yaml` 原文，不改写 legacy event，也不因此警告。dispatch 匹配时只用 `canonical_hook_event_name` 做兼容比较，所以 legacy manifest 目前仍能命中 canonical dispatch。
+Plugin 注册与触发、Gateway manifest、Shell config key 均按字符串精确匹配，只接受上表的 canonical 名称或显式自定义事件名。运行时不猜测、不改写，也不提供旧事件名称兼容层。`ASTRO_HOOK_EVENT` 始终原样携带本次 canonical dispatch 名称。
 
 ## 2. 当前实际触发行为
 
@@ -262,7 +230,7 @@ fn register(ctx: &PluginContext<'_>) {
 
 ### Gateway Event Hooks
 
-Agent Thread 生命周期回调是观察型：返回阻断结果或抛出 panic 都不会改变 spawn/close 结果。`PluginHookBus` 是进程内对象，因此只有当前进程注册并保留了 runtime request 的 bus 能观察 `subagent_stop`；进程重启后仍可耐久关闭线程，但不会回放上一进程的回调。
+Agent Thread 生命周期回调是观察型：返回阻断结果或抛出 panic 都不会改变 spawn/close 结果。`PluginHookBus` 是进程内对象，因此只有当前进程注册并保留了 runtime request 的 bus 能观察 `SubagentStop`；进程重启后仍可耐久关闭线程，但不会回放上一进程的回调。
 
 `~/.astro/hooks/<name>/HOOK.yaml`：
 

@@ -1,4 +1,4 @@
-//! Hook 事件的 canonical 名称与 Rust 兼容别名。
+//! Hook 事件的 canonical 名称。
 
 use crate::event::HookEvent;
 
@@ -29,21 +29,10 @@ pub const GATEWAY_STARTUP: &str = HookEvent::GatewayStartup.as_str();
 pub const AGENT_END: &str = HookEvent::AgentEnd.as_str();
 pub const COMMAND_NEW_CHAT: &str = HookEvent::CommandNewChat.as_str();
 
-/// 旧 Rust 常量名的过渡别名。
-pub const PRE_TOOL_CALL: &str = PRE_TOOL_USE;
-pub const POST_TOOL_CALL: &str = POST_TOOL_USE;
-pub const PRE_APPROVAL_REQUEST: &str = PERMISSION_REQUEST;
-pub const PRE_VERIFY: &str = STOP;
-pub const ON_SESSION_START: &str = SESSION_START;
-pub const ON_SESSION_END: &str = AGENT_END;
-pub const ON_SESSION_RESET: &str = SESSION_RESET;
-pub const ON_SESSION_FINALIZE: &str = SESSION_FINALIZE;
-
 /// 可影响流程的钩子（其余为观察型）。
 pub fn is_mutating_hook(name: &str) -> bool {
-    let canonical = crate::event::canonical_hook_event_name(name);
     matches!(
-        canonical.as_ref(),
+        name,
         PRE_LLM_CALL
             | PRE_TOOL_USE
             | PRE_GATEWAY_DISPATCH

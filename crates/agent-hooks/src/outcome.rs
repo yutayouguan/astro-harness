@@ -56,11 +56,10 @@ pub struct HookInput {
 }
 
 impl HookInput {
-    pub fn normalized_for_event(&self, event_name: &str) -> Self {
-        let mut normalized = self.clone();
-        normalized.hook_event_name =
-            crate::event::canonical_hook_event_name(event_name).into_owned();
-        normalized
+    pub fn for_event(&self, event_name: &str) -> Self {
+        let mut input = self.clone();
+        input.hook_event_name = event_name.to_owned();
+        input
     }
 }
 
@@ -161,12 +160,12 @@ mod wire_tests {
     }
 
     #[test]
-    fn normalized_for_event_only_canonicalizes_name() {
+    fn for_event_sets_exact_name_only() {
         let input = HookInput::default();
 
-        let normalized = input.normalized_for_event("pre_tool_call");
+        let event_input = input.for_event("PreToolUse");
 
-        assert_eq!(normalized.hook_event_name, "PreToolUse");
+        assert_eq!(event_input.hook_event_name, "PreToolUse");
         assert!(input.hook_event_name.is_empty());
         assert!(input.tool_input.is_none());
         assert!(input.tool_response.is_none());
@@ -174,7 +173,7 @@ mod wire_tests {
     }
 
     #[test]
-    fn normalized_for_event_preserves_explicit_canonical_values() {
+    fn for_event_preserves_explicit_values() {
         let input = HookInput {
             tool_input: Some(json!({"canonical": true})),
             tool_response: Some(json!({"status": "canonical"})),
@@ -182,11 +181,11 @@ mod wire_tests {
             ..Default::default()
         };
 
-        let normalized = input.normalized_for_event("post_tool_call");
+        let event_input = input.for_event("PostToolUse");
 
-        assert_eq!(normalized.hook_event_name, "PostToolUse");
-        assert_eq!(normalized.tool_input, input.tool_input);
-        assert_eq!(normalized.tool_response, input.tool_response);
-        assert_eq!(normalized.prompt, input.prompt);
+        assert_eq!(event_input.hook_event_name, "PostToolUse");
+        assert_eq!(event_input.tool_input, input.tool_input);
+        assert_eq!(event_input.tool_response, input.tool_response);
+        assert_eq!(event_input.prompt, input.prompt);
     }
 }

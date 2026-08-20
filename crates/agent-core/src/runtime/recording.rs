@@ -144,7 +144,7 @@ impl AgentLoop {
 
     /// 将 user 角色消息写入记忆与会话镜像。
     ///
-    /// 供 `pre_verify` 的 `KeepGoing(msg)` 等下游控制流场景使用：与 `pending_inject_context`
+    /// 供 `Stop` 的 `KeepGoing(msg)` 等下游控制流场景使用：与 `pending_inject_context`
     /// 的临时注入不同，本方法直接落盘并写入 `SessionState.history`，确保下一轮 API 历史与
     /// `SessionStore` 保持一致（角色交替），避免连续 assistant 触发 Provider 400。
     pub async fn record_user_message(&self, content: &str) -> anyhow::Result<()> {

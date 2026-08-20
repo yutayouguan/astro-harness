@@ -3,7 +3,7 @@
 //! 本模块是 Astro Agent 的核心编排层，负责：
 //! - 维护单次会话的消息历史与轮次预算（`max_turns` / `multi_turn`）
 //! - 在每轮用户输入时召回记忆、组装静态/动态上下文并生成 system prompt
-//! - 统一路由内置工具与 MCP 工具，并在调用前后触发 hooks；流式主循环在模型回复聚合后触发 `post_llm_call`
+//! - 统一路由内置工具与 MCP 工具，并在调用前后触发 hooks；流式主循环在模型回复聚合后触发 `PostLlmCall`
 //!
 //! **关键不变量**
 //! - 每条用户消息开始时 `tool_rounds` 归零；工具调用次数不得超过 `multi_turn`（默认 90，对齐 Hermes）
@@ -733,14 +733,14 @@ impl Session {
         self.hook_runtime().dispatch(name, &payload)
     }
 
-    /// 取出并清空本轮 `pre_llm_call` 注入上下文。
+    /// 取出并清空本轮 `PreLlmCall` 注入上下文。
     pub async fn take_inject_context(&self) -> Option<String> {
         self.lock_state().pending_inject_context.take()
     }
 
-    /// 排队下一轮注入上下文（复用 `pre_llm_call` 的注入机制）。
+    /// 排队下一轮注入上下文（复用 `PreLlmCall` 的注入机制）。
     ///
-    /// 供 `pre_verify` 的 `KeepGoing(msg)` 等下游控制流场景使用：不回写
+    /// 供 `Stop` 的 `KeepGoing(msg)` 等下游控制流场景使用：不回写
     /// `SessionState.history`，仅在下一轮构建 API history 时以 `[astro:hook-context]`
     /// 形式追加一条 user 消息。
     pub async fn queue_inject_context(&self, ctx: impl Into<String>) {

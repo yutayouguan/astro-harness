@@ -1868,7 +1868,7 @@ learning:
             dir.path().join("config.yaml"),
             r#"
 hooks:
-  post_tool_call: "echo hi"
+  PostToolUse: "echo hi"
 memory:
   memory_enabled: false
   memory_char_limit: 100
@@ -1926,14 +1926,14 @@ auxiliary:
         let dir = tempfile::tempdir().unwrap();
         fs::write(
             dir.path().join("config.yaml"),
-            "hooks:\n  post_tool_call: \"echo hi\"\nmemory:\n  memory_char_limit: 99\n",
+            "hooks:\n  PostToolUse: \"echo hi\"\nmemory:\n  memory_char_limit: 99\n",
         )
         .unwrap();
         let cfg = set_write_approval(dir.path(), true).unwrap();
         assert!(cfg.write_approval);
         assert_eq!(cfg.memory_char_limit, 99);
         let text = fs::read_to_string(dir.path().join("config.yaml")).unwrap();
-        assert!(text.contains("post_tool_call"));
+        assert!(text.contains("PostToolUse"));
         assert!(text.contains("write_approval: true"));
         assert!(text.contains("99"));
     }

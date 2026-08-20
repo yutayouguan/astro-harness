@@ -1600,7 +1600,7 @@ async fn multi_turn_fires_post_llm_call_after_model_stream() {
     let events = log.lock().unwrap().clone();
     assert!(
         events.iter().any(|e| e == "PostLlmCall:5"),
-        "expected post_llm_call for \"hello\" (5 chars), events={events:?}"
+        "expected PostLlmCall for \"hello\" (5 chars), events={events:?}"
     );
 }
 
@@ -1659,7 +1659,7 @@ async fn transform_llm_output_replaces_before_post_llm_call() {
     let post_idx = events.iter().position(|e| e == "PostLlmCall:8");
     assert!(
         transform_idx.is_some() && post_idx.is_some() && transform_idx < post_idx,
-        "expected transform_llm_output before post_llm_call with replaced length, events={events:?}"
+        "expected TransformLlmOutput before PostLlmCall with replaced length, events={events:?}"
     );
 
     let agent = session_for_check.as_ref();
@@ -1667,7 +1667,7 @@ async fn transform_llm_output_replaces_before_post_llm_call() {
     assert_eq!(
         history.last().map(|m| m.content_str().to_string()),
         Some("REPLACED".to_string()),
-        "final assistant message should reflect transform_llm_output replacement"
+        "final assistant message should reflect TransformLlmOutput replacement"
     );
 }
 
@@ -1734,7 +1734,7 @@ async fn pre_verify_keep_going_retries_capped_at_two() {
     let agent = AgentLoop::with_session_id(config, "pre-verify-keep-going".into()).unwrap();
     let log: Arc<std::sync::Mutex<Vec<String>>> = Arc::new(std::sync::Mutex::new(vec![]));
     ::hooks::install_recording(&agent.hook_bus(), Arc::clone(&log));
-    agent.hook_bus().register(::hooks::PRE_VERIFY, |_| {
+    agent.hook_bus().register(::hooks::STOP, |_| {
         ::hooks::HookOutcome::KeepGoing("请再检查一下你的改动".into())
     });
     agent
@@ -1761,14 +1761,14 @@ async fn pre_verify_keep_going_retries_capped_at_two() {
                 finish_reason: "tool_calls".into(),
             },
         ],
-        // round 2: 无工具终态草稿一 -> pre_verify attempt 1 -> KeepGoing
+        // round 2: 无工具终态草稿一 -> Stop attempt 1 -> KeepGoing
         vec![
             StreamChunk::Text("draft one".into()),
             StreamChunk::Done {
                 finish_reason: "stop".into(),
             },
         ],
-        // round 3: 无工具终态草稿二 -> pre_verify attempt 2 -> KeepGoing
+        // round 3: 无工具终态草稿二 -> Stop attempt 2 -> KeepGoing
         vec![
             StreamChunk::Text("draft two".into()),
             StreamChunk::Done {
@@ -1821,7 +1821,7 @@ async fn pre_verify_keep_going_retries_capped_at_two() {
         .count();
     assert_eq!(
         api_request_count, 4,
-        "expect one pre_api_request round per LLM call (1 tool round + 2 keep-going + 1 final), events={events:?}"
+        "expect one PreApiRequest round per LLM call (1 tool round + 2 keep-going + 1 final), events={events:?}"
     );
     let post_llm_count = events
         .iter()
@@ -1829,7 +1829,7 @@ async fn pre_verify_keep_going_retries_capped_at_two() {
         .count();
     assert_eq!(
         post_llm_count, 2,
-        "post_llm_call must be skipped while pre_verify keeps going; only the tool round and the final round should fire it, events={events:?}"
+        "PostLlmCall must be skipped while Stop keeps going; only the tool round and the final round should fire it, events={events:?}"
     );
 
     assert!(items.iter().any(|i| matches!(
@@ -2271,7 +2271,7 @@ async fn approval_hooks_fire_pre_then_post_on_allow() {
     let captured_pre2 = Arc::clone(&captured_pre);
     agent
         .hook_bus()
-        .register(hooks::PRE_APPROVAL_REQUEST, move |payload| {
+        .register(hooks::PERMISSION_REQUEST, move |payload| {
             let command = payload
                 .tool_input
                 .as_ref()
@@ -2388,19 +2388,19 @@ async fn approval_hooks_fire_pre_then_post_on_allow() {
     let post_idx = events.iter().position(|e| e == "PostApprovalResponse:Bash");
     assert!(
         pre_idx.is_some() && post_idx.is_some() && pre_idx < post_idx,
-        "expected pre_approval_request before post_approval_response, events={events:?}"
+        "expected PermissionRequest before PostApprovalResponse, events={events:?}"
     );
     let post_tool_idx = events.iter().position(|e| e == "PostToolUse:terminal");
     assert!(
         post_idx < post_tool_idx,
-        "expected post_approval_response before post_tool_call, events={events:?}"
+        "expected PostApprovalResponse before PostToolUse, events={events:?}"
     );
 
     let pre = captured_pre
         .lock()
         .unwrap()
         .clone()
-        .expect("pre_approval_request payload captured");
+        .expect("PermissionRequest payload captured");
     assert_eq!(
         pre.0.as_deref(),
         Some(cmd),
@@ -2416,7 +2416,7 @@ async fn approval_hooks_fire_pre_then_post_on_allow() {
         .lock()
         .unwrap()
         .clone()
-        .expect("post_approval_response payload captured");
+        .expect("PostApprovalResponse payload captured");
     assert_eq!(
         post.0.as_deref(),
         Some(cmd),
@@ -2558,14 +2558,14 @@ async fn approval_hooks_fire_pre_then_post_on_deny() {
     let post_idx = events.iter().position(|e| e == "PostApprovalResponse:Bash");
     assert!(
         pre_idx.is_some() && post_idx.is_some() && pre_idx < post_idx,
-        "expected pre_approval_request before post_approval_response, events={events:?}"
+        "expected PermissionRequest before PostApprovalResponse, events={events:?}"
     );
 
     let post_detail = captured_post
         .lock()
         .unwrap()
         .clone()
-        .expect("post_approval_response payload captured");
+        .expect("PostApprovalResponse payload captured");
     assert!(
         post_detail.contains("choice=deny"),
         "post detail should include choice=deny: {post_detail}"

@@ -262,7 +262,7 @@ fn approval_route(
     }
 }
 
-/// 触发 `post_approval_response`（观察型，忽略返回值）：`choice` 为
+/// 触发 `PostApprovalResponse`（观察型，忽略返回值）：`choice` 为
 /// `auto`（辅模型降级）/ `allow`（用户批准）/ `deny`（用户拒绝或 cancelled）/
 /// `timeout`（park 超时）/ `unavailable`（无 HITL gate）。
 async fn fire_post_approval_response(
@@ -417,7 +417,7 @@ async fn review_once_permission(
     {
         let agent = session.as_ref();
         agent.fire_hook(
-            hooks::PRE_APPROVAL_REQUEST,
+            hooks::PERMISSION_REQUEST,
             hooks::HookPayload {
                 session_id: request.session_id.clone(),
                 turn_id: request.turn_id.clone(),
@@ -1061,7 +1061,7 @@ async fn execute_tools_serial_inner(
                             .and_then(|v| v.as_str())
                             .unwrap_or("")
                             .to_string();
-                        // 读取审批模式 + 白名单，并触发 PRE_APPROVAL_REQUEST 钩子
+                        // 读取审批模式 + 白名单，并触发 PermissionRequest 钩子
                         let (
                             approval_session_id,
                             approval_turn_id,
@@ -1080,7 +1080,7 @@ async fn execute_tools_serial_inner(
                                 .permission_profile()
                                 .unwrap_or_else(|| permissions.selection.profile_id.clone());
                             agent.fire_hook(
-                                hooks::PRE_APPROVAL_REQUEST,
+                                hooks::PERMISSION_REQUEST,
                                 hooks::HookPayload {
                                     session_id: approval_session_id.clone(),
                                     turn_id: approval_turn_id.clone(),
