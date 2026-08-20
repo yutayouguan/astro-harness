@@ -2,7 +2,7 @@
 
 > 版本：v2.29
 > 日期：2026-08-20
-> 状态：部分实现（本轮事件与恢复链已实现；Phase C、D、F 待续）
+> 状态：部分实现（事件恢复与 Phase A/B/D/E 已完成；Phase C/F 待续）
 > 上游参考：[OpenAI Codex](https://github.com/openai/codex) `632e35ce8d5dec43b75dbf99f9e6fa52bed47c3d`  
 > 适用范围：`agent-core`、`agent-tools`、`agent-sandbox`、`agent-network-proxy`、`agent-types`、`agent-subagents`、`agent-memory`、`agent-session`、`agent-hooks`、`agent-mcp`
 
