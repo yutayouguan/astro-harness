@@ -1,7 +1,9 @@
 use agent_rollout::RolloutItem;
 use session::store::{NewMessage, SessionStore};
-use types::message::{Message, ToolCall, GOOGLE_THOUGHT_SIGNATURE_KEY};
-use types::{MediaAsset, MediaKind};
+use types::message::{
+    ContentPart, Message, MessageContent, Role, ToolCall, GOOGLE_THOUGHT_SIGNATURE_KEY,
+};
+use types::{MediaAsset, MediaKind, MediaRef};
 
 fn rich_rollout() -> Vec<RolloutItem> {
     let image_url = "data:image/png;base64,aGVsbG8=".to_string();
@@ -203,4 +205,169 @@ fn failed_rebuild_rolls_back_target_delete_and_partial_inserts() {
     );
     assert!(missing_session_result.is_err());
     assert!(store.get_session("thread-new").unwrap().is_none());
+}
+
+#[test]
+fn duplicate_tool_call_ids_bind_results_in_rollout_order() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = SessionStore::open(&dir.path().join("state.db")).unwrap();
+    let call = |name: &str| ToolCall {
+        id: "duplicate-id".into(),
+        name: name.into(),
+        arguments: serde_json::json!({"name": name}),
+        signature: None,
+    };
+    let items = vec![
+        RolloutItem::ResponseItem(Message::assistant_with_tools("first", vec![call("tool-a")])),
+        RolloutItem::ResponseItem(Message::tool_with_id("duplicate-id", "result-a")),
+        RolloutItem::ResponseItem(Message::assistant_with_tools(
+            "second",
+            vec![call("tool-b")],
+        )),
+        RolloutItem::ResponseItem(Message::tool_with_id("duplicate-id", "result-b")),
+        RolloutItem::ResponseItem(Message::tool_with_id("missing-id", "unmatched")),
+    ];
+
+    session::store::rebuild_messages_from_rollout(&store, "thread-tools", &items).unwrap();
+
+    let messages = store.get_messages("thread-tools").unwrap();
+    assert_eq!(messages[1].tool_name.as_deref(), Some("tool-a"));
+    assert_eq!(messages[3].tool_name.as_deref(), Some("tool-b"));
+    assert_eq!(messages[4].tool_name, None);
+}
+
+#[test]
+fn parts_only_media_is_projected_and_redundant_explicit_media_is_deduplicated() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = SessionStore::open(&dir.path().join("state.db")).unwrap();
+    let parts_only = Message {
+        role: Role::User,
+        content: MessageContent::Parts(vec![
+            ContentPart::text("inspect media"),
+            ContentPart::image_url("data:image/png;base64,aW1hZ2U="),
+            ContentPart::audio_url("https://example.test/audio.mp3", "audio/mpeg"),
+            ContentPart::video_url("data:video/webm;base64,dmlkZW8=", "video/ignored"),
+        ]),
+        compressed_content: None,
+        tool_calls: None,
+        tool_call_id: None,
+        media: Vec::new(),
+        reasoning: None,
+        thought_signature: None,
+    };
+    let duplicate_image = "data:image/png;base64,ZHVwbGljYXRl".to_string();
+    let redundant = Message::user_with_images("dedupe", &[duplicate_image]);
+
+    session::store::rebuild_messages_from_rollout(
+        &store,
+        "thread-media",
+        &[
+            RolloutItem::ResponseItem(parts_only),
+            RolloutItem::ResponseItem(Message::assistant("boundary")),
+            RolloutItem::ResponseItem(redundant),
+        ],
+    )
+    .unwrap();
+
+    let messages = store.get_messages("thread-media").unwrap();
+    let media: Vec<MediaAsset> =
+        serde_json::from_str(messages[0].media_json.as_deref().unwrap()).unwrap();
+    assert_eq!(media.len(), 3);
+    assert!(matches!(
+        &media[0],
+        MediaAsset {
+            kind: MediaKind::Image,
+            mime_type,
+            reference: MediaRef::DataUrl(url),
+            ..
+        } if mime_type == "image/png" && url.starts_with("data:image/png;")
+    ));
+    assert!(matches!(
+        &media[1],
+        MediaAsset {
+            kind: MediaKind::Audio,
+            mime_type,
+            reference: MediaRef::RemoteUri(url),
+            ..
+        } if mime_type == "audio/mpeg" && url == "https://example.test/audio.mp3"
+    ));
+    assert!(matches!(
+        &media[2],
+        MediaAsset {
+            kind: MediaKind::Video,
+            mime_type,
+            reference: MediaRef::DataUrl(url),
+            ..
+        } if mime_type == "video/webm" && url.starts_with("data:video/webm;")
+    ));
+    let redundant_media: Vec<MediaAsset> =
+        serde_json::from_str(messages[2].media_json.as_deref().unwrap()).unwrap();
+    assert_eq!(redundant_media.len(), 1);
+
+    let invalid = Message {
+        role: Role::User,
+        content: MessageContent::Parts(vec![ContentPart::audio_url(
+            "relative/audio.mp3",
+            "audio/mpeg",
+        )]),
+        compressed_content: None,
+        tool_calls: None,
+        tool_call_id: None,
+        media: Vec::new(),
+        reasoning: None,
+        thought_signature: None,
+    };
+    assert!(session::store::rebuild_messages_from_rollout(
+        &store,
+        "thread-invalid-media",
+        &[RolloutItem::ResponseItem(invalid)],
+    )
+    .is_err());
+    assert!(store.get_session("thread-invalid-media").unwrap().is_none());
+}
+
+#[test]
+fn invalid_adjacent_roles_are_rejected_before_projection_mutation() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = SessionStore::open(&dir.path().join("state.db")).unwrap();
+    store.ensure_session("thread-existing", "test").unwrap();
+    store
+        .append_message(NewMessage {
+            content: Some("original"),
+            ..NewMessage::empty("thread-existing", "user")
+        })
+        .unwrap();
+
+    let existing_result = session::store::rebuild_messages_from_rollout(
+        &store,
+        "thread-existing",
+        &[
+            RolloutItem::ResponseItem(Message::user("first")),
+            RolloutItem::ResponseItem(Message::system("filtered")),
+            RolloutItem::ResponseItem(Message::user("second")),
+        ],
+    );
+    assert!(existing_result.is_err());
+    let messages = store.get_messages("thread-existing").unwrap();
+    assert_eq!(messages.len(), 1);
+    assert_eq!(messages[0].content.as_deref(), Some("original"));
+    assert_eq!(
+        store
+            .get_session("thread-existing")
+            .unwrap()
+            .unwrap()
+            .message_count,
+        1
+    );
+
+    let new_result = session::store::rebuild_messages_from_rollout(
+        &store,
+        "thread-new-invalid",
+        &[
+            RolloutItem::ResponseItem(Message::assistant("first")),
+            RolloutItem::ResponseItem(Message::assistant("second")),
+        ],
+    );
+    assert!(new_result.is_err());
+    assert!(store.get_session("thread-new-invalid").unwrap().is_none());
 }
