@@ -251,10 +251,7 @@ impl NetworkApprovalService {
         profile_id: &str,
         amendment: &types::NetworkPolicyAmendment,
     ) -> anyhow::Result<()> {
-        let action = match amendment.action {
-            types::NetworkPolicyRuleAction::Allow => types::NetworkPolicyRuleAction::Allow,
-            types::NetworkPolicyRuleAction::Deny => types::NetworkPolicyRuleAction::Deny,
-        };
+        let action = amendment.action;
         memory::amend_network_domain(memory_dir, profile_id, &amendment.host, action)?;
 
         let key = HostApprovalKey {
