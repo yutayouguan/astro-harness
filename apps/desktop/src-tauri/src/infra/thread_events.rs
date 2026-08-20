@@ -448,6 +448,16 @@ impl ThreadEventsBridge {
             Self::remove_deferred_activation(&mut state, thread_id, activation);
             return Vec::new();
         }
+        let mut superseded_turns = state
+            .turn_epochs
+            .get(thread_id)
+            .into_iter()
+            .flat_map(|turns| turns.iter())
+            .filter(|(provisional_turn_id, epoch)| {
+                **epoch == activation && provisional_turn_id.as_str() != turn_id
+            })
+            .map(|(provisional_turn_id, _)| provisional_turn_id.clone())
+            .collect::<HashSet<_>>();
         Self::remove_turn_epoch(&mut state, thread_id, activation);
         state
             .turn_epochs
@@ -458,8 +468,15 @@ impl ThreadEventsBridge {
         let deferred = state
             .deferred_terminals
             .remove(thread_id)
-            .and_then(|mut terminals| terminals.remove(turn_id))
+            .and_then(|mut terminals| {
+                let matching = terminals.remove(turn_id);
+                superseded_turns.extend(terminals.into_keys());
+                matching
+            })
             .filter(|terminal| terminal.awaiting_activation == activation);
+        for superseded_turn_id in superseded_turns {
+            Self::take_completed_background_turn(&mut state, thread_id, &superseded_turn_id);
+        }
         let Some(deferred) = deferred else {
             return Vec::new();
         };
@@ -882,6 +899,29 @@ impl ThreadEventsBridge {
             return Vec::new();
         };
         let current_activation = state.activations.get(thread_id).copied();
+        let current_is_pending = current_activation.is_some_and(|activation| {
+            state
+                .awaiting_submissions
+                .get(thread_id)
+                .is_some_and(|pending| pending.contains(&activation))
+        });
+        if current_activation == Some(turn_epoch) && current_is_pending {
+            let background_completed =
+                Self::take_completed_background_turn(&mut state, thread_id, turn_id);
+            state
+                .deferred_terminals
+                .entry(thread_id.into())
+                .or_default()
+                .insert(
+                    turn_id.into(),
+                    DeferredTerminal {
+                        awaiting_activation: turn_epoch,
+                        background_turn: background_turn && !background_completed,
+                        events,
+                    },
+                );
+            return Vec::new();
+        }
         if current_activation == Some(turn_epoch) {
             let background_completed =
                 Self::take_completed_background_turn(&mut state, thread_id, turn_id);
@@ -898,12 +938,7 @@ impl ThreadEventsBridge {
             return events;
         }
 
-        if let Some(current_activation) = current_activation.filter(|activation| {
-            state
-                .awaiting_submissions
-                .get(thread_id)
-                .is_some_and(|pending| pending.contains(activation))
-        }) {
+        if let Some(current_activation) = current_activation.filter(|_| current_is_pending) {
             let background_completed =
                 Self::take_completed_background_turn(&mut state, thread_id, turn_id);
             let background_turn = background_turn && !background_completed;
@@ -3584,16 +3619,17 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn late_ack_after_accepted_terminal_cannot_recreate_thread_state() {
+    async fn terminal_before_ack_releases_once_and_clears_thread_state() {
         let bridge = ThreadEventsBridge::new();
         let activation = bridge.activate("session-1").await;
         bridge.bind_observed_turn("session-1", "turn-1").await;
-        assert!(!bridge
+        assert!(bridge
             .accept_terminal("session-1", "turn-1", terminal_projection("turn-1"))
             .await
             .is_empty());
+        assert!(bridge.is_active("session-1").await);
 
-        assert!(bridge
+        assert!(!bridge
             .bind_submitted_turn_if_current("session-1", activation, "turn-1")
             .await
             .is_empty());
@@ -3745,13 +3781,18 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn first_turn_started_still_binds_the_only_pending_activation() {
+    async fn first_turn_started_binds_but_terminal_waits_for_authoritative_ack() {
         let bridge = ThreadEventsBridge::new();
-        bridge.activate("session-1").await;
+        let activation = bridge.activate("session-1").await;
         bridge.bind_observed_turn("session-1", "turn-1").await;
 
-        assert!(!bridge
+        assert!(bridge
             .accept_terminal("session-1", "turn-1", terminal_projection("turn-1"))
+            .await
+            .is_empty());
+        assert!(bridge.is_active("session-1").await);
+        assert!(!bridge
+            .bind_submitted_turn_if_current("session-1", activation, "turn-1")
             .await
             .is_empty());
         assert!(!bridge.is_active("session-1").await);
@@ -3882,6 +3923,95 @@ mod tests {
             .expect("authoritative turn epoch");
         assert_eq!(epochs.get("turn-y"), Some(&current));
         assert!(!epochs.contains_key("turn-x"));
+    }
+
+    #[tokio::test]
+    async fn provisional_terminal_and_later_marker_wait_for_mismatched_authoritative_ack() {
+        let bridge = ThreadEventsBridge::new();
+        let activation = bridge.activate("session-provisional-y").await;
+        bridge
+            .bind_observed_turn("session-provisional-y", "turn-x")
+            .await;
+        assert!(bridge
+            .accept_terminal_with_background(
+                "session-provisional-y",
+                "turn-x",
+                terminal_projection("turn-x"),
+                true,
+            )
+            .await
+            .is_empty());
+        assert!(bridge.is_active("session-provisional-y").await);
+        assert_eq!(
+            deferred_terminal_count(&bridge, "session-provisional-y").await,
+            1
+        );
+        assert!(
+            !bridge
+                .complete_background_turn("session-provisional-y", "turn-x")
+                .await
+        );
+
+        assert!(bridge
+            .bind_submitted_turn_if_current("session-provisional-y", activation, "turn-y")
+            .await
+            .is_empty());
+        assert!(bridge.is_active("session-provisional-y").await);
+        assert_eq!(
+            deferred_terminal_count(&bridge, "session-provisional-y").await,
+            0
+        );
+        assert!(bridge.background_resume_threads().await.is_empty());
+        assert!(!bridge
+            .active_threads
+            .read()
+            .await
+            .completed_background_turns
+            .contains_key("session-provisional-y"));
+        assert!(!bridge
+            .accept_terminal(
+                "session-provisional-y",
+                "turn-y",
+                terminal_projection("turn-y"),
+            )
+            .await
+            .is_empty());
+    }
+
+    #[tokio::test]
+    async fn provisional_terminal_and_prior_marker_release_on_matching_authoritative_ack() {
+        let bridge = ThreadEventsBridge::new();
+        let activation = bridge.activate("session-provisional-x").await;
+        bridge
+            .bind_observed_turn("session-provisional-x", "turn-x")
+            .await;
+        assert!(
+            !bridge
+                .complete_background_turn("session-provisional-x", "turn-x")
+                .await
+        );
+
+        assert!(bridge
+            .accept_terminal_with_background(
+                "session-provisional-x",
+                "turn-x",
+                terminal_projection("turn-x"),
+                true,
+            )
+            .await
+            .is_empty());
+        assert!(bridge.is_active("session-provisional-x").await);
+        assert_eq!(
+            deferred_terminal_count(&bridge, "session-provisional-x").await,
+            1
+        );
+
+        assert!(!bridge
+            .bind_submitted_turn_if_current("session-provisional-x", activation, "turn-x")
+            .await
+            .is_empty());
+        assert!(!bridge.is_active("session-provisional-x").await);
+        assert!(bridge.background_resume_threads().await.is_empty());
     }
 
     #[tokio::test]
