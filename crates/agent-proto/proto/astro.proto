@@ -3,10 +3,8 @@
 syntax = "proto3";
 package astro;
 
-// 核心 RPC：聊天流、控制、图片、技能、MCP、记忆与沙箱文件。
+// 核心 RPC：Thread 提交/订阅、控制、图片、技能、MCP、记忆与沙箱文件。
 service AstroService {
-  // 多轮流式对话：token / reasoning / tool_call / usage / done 等事件。
-  rpc Chat(ChatRequest) returns (stream ChatEvent);
   // 对进行中的 Chat 流执行暂停 / 继续 / 取消。
   rpc ChatControl(ChatControlRequest) returns (Empty);
   // 将用户补充指令注入当前活动 turn；在下一次模型采样前消费。
@@ -210,7 +208,7 @@ message ThreadSnapshot {
   ThreadTurn active_turn = 4;
   bool has_active_turn = 5;
   repeated string pending_background_turn_ids = 6;
-  bool has_pending_background_state = 7;
+  reserved 7;
 }
 
 message ThreadTurn {
@@ -299,106 +297,6 @@ message ThreadExtension {
   string payload_json = 3;
 }
 
-// Token 用量（OpenAI 风格字段）。
-message UsageEvent {
-  uint32 prompt_tokens = 1;
-  uint32 completion_tokens = 2;
-  uint32 total_tokens = 3;
-}
-
-// 上下文占用分层片段（count=0 表示未设置）。
-message ContextUsageItem {
-  string id = 1;
-  string label = 2;
-  uint32 tokens = 3;
-}
-
-message ContextUsageSegment {
-  string id = 1;
-  uint32 tokens = 2;
-  uint32 count = 3;
-  repeated ContextUsageItem items = 4;
-}
-
-// 本轮 API 请求前的上下文占用估算。
-message ContextUsageEvent {
-  uint32 context_window = 1;
-  uint32 total_tokens = 2;
-  repeated ContextUsageSegment segments = 3;
-  int64 updated_at = 4;
-  // 建议前端提示会话级 /compact（占用临界）
-  bool recommend_compact = 5;
-}
-
-// Chat 流的单条事件（oneof 互斥）。
-message ChatEvent {
-  oneof payload {
-    string token = 1;
-    ToolCallEvent tool_call = 2;
-    MemoryUpdateEvent memory_update = 3;
-    string error = 4;
-    bool done = 5;
-    // DeepSeek 等模型的 thinking / reasoning_content 流
-    string reasoning = 6;
-    UsageEvent usage = 7;
-    // 原生 function calling 流式片段
-    ToolCallDeltaEvent tool_call_delta = 8;
-    // AG-UI ACTIVITY_SNAPSHOT（A2UI 等）
-    ActivityEvent activity = 9;
-    RunStartedEvent run_started = 10;
-    RunFinishedEvent run_finished = 11;
-    // Plugin / Gateway / Shell 生命周期钩子（非 memory）
-    HookEvent hook = 12;
-    ContextUsageEvent context_usage = 13;
-    // Anthropic citations delta（JSON 数组序列化）
-    string citations_json = 14;
-    UserInputCommittedEvent user_input_committed = 15;
-  }
-}
-
-message UserInputCommittedEvent {
-  string client_message_id = 1;
-}
-
-// Plugin Hooks 等生命周期事件（UI 时间线；与 MemoryUpdate 分流）。
-message HookEvent {
-  string name = 1;
-  string detail = 2;
-  string outcome = 3;
-}
-
-// 结构化活动快照（如 activity_type = "a2ui-surface"）。
-message ActivityEvent {
-  string message_id = 1;
-  string activity_type = 2;
-  // 通常为 {"operations":[...]} JSON
-  string content_json = 3;
-  bool replace = 4;
-}
-
-message RunStartedEvent {
-  string thread_id = 1;
-  string run_id = 2;
-}
-
-message Interrupt {
-  string id = 1;
-  // tool_call | input_required | confirmation
-  string reason = 2;
-  string message = 3;
-  string tool_call_id = 4;
-  string response_schema_json = 5;
-  string expires_at = 6;
-  string metadata_json = 7;
-}
-
-message RunFinishedEvent {
-  string run_id = 1;
-  // "success" | "error" | "interrupt" | "hitl_waiting"
-  string outcome_type = 2;
-  repeated Interrupt interrupts = 3;
-}
-
 message InterruptResumeItem {
   string interrupt_id = 1;
   // resolved | cancelled
@@ -409,44 +307,6 @@ message InterruptResumeItem {
 message InterruptResumeRequest {
   string session_id = 1;
   repeated InterruptResumeItem resume = 2;
-}
-
-// 完整工具调用结果（含执行输出）。
-message ToolCallEvent {
-  string id = 1;
-  string name = 2;
-  string arguments_json = 3;
-  string result = 4;
-  // 结构化媒体（生成图/音/视频）；旧客户端可忽略。
-  repeated MediaAsset media = 5;
-  // started | completed；空值按旧协议由 result 是否为空推断。
-  string phase = 6;
-}
-
-// 统一媒体资产（对齐 common::MediaAsset）。
-message MediaAsset {
-  // image | audio | video | file
-  string kind = 1;
-  string mime_type = 2;
-  // workspace_path | data_url | remote_uri
-  string ref_kind = 3;
-  string ref_value = 4;
-  string label = 5;
-  string id = 6;
-}
-
-// 工具调用参数的流式增量。
-message ToolCallDeltaEvent {
-  uint32 index = 1;
-  string id = 2;
-  string name = 3;
-  // 参数 JSON 增量片段（可能不完整）
-  string arguments = 4;
-}
-
-message MemoryUpdateEvent {
-  string operation = 1;
-  string content = 2;
 }
 
 message ImageRequest {

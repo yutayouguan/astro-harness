@@ -1,3 +1,5 @@
+//! 子 Agent 图数据库 schema 迁移：v1 归档、v2→v4 增量升级。
+
 use anyhow::{bail, Context};
 use rusqlite::{Connection, OptionalExtension, Transaction, TransactionBehavior};
 use serde::{Deserialize, Serialize};
@@ -83,6 +85,7 @@ CREATE TABLE IF NOT EXISTS agent_runtime_descriptors (
 );
 "#;
 
+/// 从 v1 归档的历史线程记录（只读）。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct HistoricalAgentThread {
     pub id: String,
@@ -102,6 +105,7 @@ pub struct HistoricalAgentThread {
     pub closed_at: Option<String>,
 }
 
+/// 从 v1 归档的历史消息记录（只读）。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct HistoricalAgentMessage {
     pub id: i64,
@@ -111,6 +115,7 @@ pub struct HistoricalAgentMessage {
     pub created_at: String,
 }
 
+/// 执行 schema 迁移：检测当前版本并逐步升级到 v4。
 pub(crate) fn migrate(conn: &mut Connection) -> anyhow::Result<()> {
     let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
     let existing_version = read_schema_version(&tx)?;
@@ -164,6 +169,7 @@ pub(crate) fn schema_version(conn: &Connection) -> anyhow::Result<i32> {
     read_schema_version(conn)?.context("subagent graph schema_version is missing")
 }
 
+/// 查询 v1 归档的所有历史线程。
 pub(crate) fn list_historical_threads(
     conn: &Connection,
 ) -> anyhow::Result<Vec<HistoricalAgentThread>> {
@@ -201,6 +207,7 @@ pub(crate) fn list_historical_threads(
     Ok(threads)
 }
 
+/// 查询指定 v1 历史线程的所有消息。
 pub(crate) fn list_historical_messages(
     conn: &Connection,
     legacy_thread_id: &str,

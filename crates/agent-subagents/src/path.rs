@@ -1,8 +1,10 @@
+//! Agent 线程树路径解析与校验。
+
 use std::fmt;
 
 use serde::{Deserialize, Deserializer, Serialize};
 
-/// Canonical persisted path for a Codex V2 agent thread.
+/// V2 Agent 线程的规范化持久路径（如 `/root/research/citations`）。
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize)]
 #[serde(transparent)]
 pub struct AgentPath(String);
@@ -14,6 +16,7 @@ impl AgentPath {
         Self(Self::ROOT.to_string())
     }
 
+    /// 解析并校验绝对路径字符串，必须以 `/root` 开头。
     pub fn parse(value: &str) -> Result<Self, String> {
         validate_absolute_path(value)?;
         Ok(Self(value.to_string()))
@@ -23,11 +26,13 @@ impl AgentPath {
         &self.0
     }
 
+    /// 在当前路径下追加一个子任务段，返回新路径。
     pub fn child(&self, task_name: &str) -> Result<Self, String> {
         validate_segment(task_name)?;
         Self::parse(&format!("{}/{task_name}", self.as_str()))
     }
 
+    /// 解析目标引用：绝对路径直接解析，相对路径拼接到当前路径。
     pub fn resolve(&self, target: &str) -> Result<Self, String> {
         if target.starts_with('/') {
             Self::parse(target)
@@ -45,6 +50,7 @@ impl AgentPath {
         Self::parse(parent).ok()
     }
 
+    /// 判断当前路径是否以指定前缀开头（段级别精确匹配）。
     pub fn starts_with(&self, prefix: &Self) -> bool {
         self == prefix
             || self

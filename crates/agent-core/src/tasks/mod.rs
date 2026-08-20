@@ -1,8 +1,4 @@
-//! Session-owned task lifecycle.
-//!
-//! Names and ownership follow Codex's task model: a [`SessionTask`] describes
-//! one workflow, [`RunningTask`] records the active task, and [`ActiveTurn`]
-//! enforces the single-active-task invariant for a session.
+//! 可恢复任务生命周期——Session 拥有的单活跃任务调度与中断。
 
 mod regular;
 
@@ -34,11 +30,12 @@ const TASK_ABORT_HOOK_TIMEOUT: Duration = Duration::from_secs(5);
 #[cfg(test)]
 const TASK_ABORT_HOOK_TIMEOUT: Duration = Duration::from_millis(50);
 
+/// Turn 被取消时的哨兵错误类型。
 #[derive(Debug, thiserror::Error)]
 #[error("turn cancelled")]
 pub(crate) struct TurnCancelled;
 
-/// The workflow currently owned by a session task.
+/// 任务类型枚举：Regular / Review / Compact。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(dead_code)] // ReviewTask and CompactTask land in the next Phase B batch.
 pub enum TaskKind {
@@ -47,7 +44,7 @@ pub enum TaskKind {
     Compact,
 }
 
-/// Async task that drives one session turn.
+/// 驱动单个 session turn 的异步任务 trait。
 pub(crate) trait SessionTask: Send + Sync + 'static {
     fn kind(&self) -> TaskKind;
 
@@ -76,7 +73,7 @@ pub(crate) trait SessionTask: Send + Sync + 'static {
     }
 }
 
-/// Object-safe adapter used by the active-task registry.
+/// SessionTask 的对象安全适配器，供活跃任务注册表使用。
 pub(crate) trait AnySessionTask: Send + Sync + 'static {
     fn kind(&self) -> TaskKind;
 
@@ -132,7 +129,7 @@ where
     }
 }
 
-/// Metadata for the task currently running in a session.
+/// 当前正在运行的任务元数据（kind、取消令牌、JoinHandle 等）。
 pub(crate) struct RunningTask {
     pub(crate) kind: TaskKind,
     pub(crate) task: Arc<dyn AnySessionTask>,
@@ -143,7 +140,7 @@ pub(crate) struct RunningTask {
     auxiliary_handles: Vec<JoinHandle<()>>,
 }
 
-/// Turn-scoped task registry. A session owns at most one running task.
+/// Turn 级任务注册表，保证 session 内最多一个活跃任务。
 #[derive(Default)]
 pub(crate) struct ActiveTurn {
     pub(crate) task: Option<RunningTask>,
@@ -194,7 +191,7 @@ impl ActiveTurn {
 }
 
 impl Session {
-    /// Start one session-owned task after replacing any previous task.
+    /// 启动一个 session 任务，若已有活跃任务则先中止。
     pub(crate) async fn spawn_task<T: SessionTask>(
         self: &Arc<Self>,
         turn_context: Arc<TurnContext>,

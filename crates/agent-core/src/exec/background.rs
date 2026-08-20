@@ -239,13 +239,6 @@ async fn collect_background_events(
             | EventMsg::SubAgentActivity(_)
             | EventMsg::ContextCompacted(_)
             | EventMsg::ContextUsage(_)
-            | EventMsg::LegacyUserMessage(_)
-            | EventMsg::LegacyAgentMessage(_)
-            | EventMsg::LegacyReasoning(_)
-            | EventMsg::LegacyMcpToolCallEnd(_)
-            | EventMsg::LegacyPatchApplyEnd(_)
-            | EventMsg::LegacyContextCompacted(_)
-            | EventMsg::LegacySubAgentActivity(_)
             | EventMsg::ThreadSettingsApplied(_)
             | EventMsg::ThreadRolledBack(_)
             | EventMsg::ShutdownComplete => {}

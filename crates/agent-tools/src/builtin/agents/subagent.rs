@@ -1,4 +1,4 @@
-//! Strict Codex V2 Agent Thread model tools.
+//! Codex V2 Agent Thread 六个模型工具的注册与分发。
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -10,6 +10,7 @@ use crate::engine::execution::{
 use crate::registry::{ToolEntry, ToolRegistry};
 use crate::schema::schema_for_args;
 
+/// V2 子 Agent 工具名常量集（spawn/list/send/followup/wait/interrupt）。
 pub const CODEX_V2_AGENT_TOOL_NAMES: [&str; 6] = [
     "spawn_agent",
     "list_agents",
@@ -65,6 +66,7 @@ struct InterruptAgentArgs {
     target: String,
 }
 
+/// 将 6 个 V2 Agent Thread 工具批量注册到工具注册表。
 pub fn register(registry: &mut ToolRegistry) {
     let lifecycle = ToolEntry::lifecycle_defaults;
     let entries = [

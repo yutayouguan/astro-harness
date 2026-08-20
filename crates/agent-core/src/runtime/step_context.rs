@@ -1,9 +1,4 @@
-//! Sampling-step immutable runtime state.
-//!
-//! A `StepContext` captures the exact conversation history and tool specs
-//! advertised for one model request. Later phases will bind the same snapshot
-//! to `ToolCallRuntime`; introducing the boundary first removes the old tuple
-//! return from `prepare_llm_context` without changing provider behavior.
+//! Step 级不可变状态——单次模型采样请求的会话快照与工具集。
 
 use std::sync::Arc;
 
@@ -11,7 +6,7 @@ use types::message::Message;
 
 use super::{ToolRouter, TurnContext};
 
-/// Request-scoped state captured immediately before one model sampling call.
+/// 单次采样请求的快照：turn 上下文、历史消息、可用工具。
 #[derive(Debug)]
 pub(crate) struct StepContext {
     pub(crate) turn: Arc<TurnContext>,
@@ -32,7 +27,7 @@ impl StepContext {
         }
     }
 
-    /// Whether the model was offered this tool in the exact sampling request.
+    /// 该工具是否在本次采样请求中被提供给模型。
     pub(crate) fn advertises_tool(&self, name: &str) -> bool {
         self.tool_router.has_tool(name)
     }

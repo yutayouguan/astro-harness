@@ -1,8 +1,4 @@
-//! Turn-scoped immutable runtime state.
-//!
-//! The naming and ownership boundary follow Codex's `TurnContext`: values in
-//! this structure remain fixed for one user turn, while request-scoped values
-//! belong to [`super::StepContext`].
+//! Turn 级不可变运行时状态，一个用户轮次内保持固定。
 
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -17,6 +13,7 @@ struct PendingInputSignal {
     mailbox_message_id: String,
 }
 
+/// 排队等待注入当前 turn 的用户输入及可选上下文。
 #[derive(Debug, PartialEq, Eq)]
 pub(crate) struct QueuedTurnInput {
     pub(crate) input: TurnInput,
@@ -38,6 +35,7 @@ struct TurnInputState {
     in_flight_admissions: usize,
 }
 
+/// 输入准入预留凭证，drop 时自动释放 in-flight 计数。
 pub(crate) struct TurnInputReservation {
     turn_context: Arc<TurnContext>,
     finished: bool,
@@ -49,6 +47,7 @@ struct ChildTracker {
     changed: Notify,
 }
 
+/// 子任务存活凭证，drop 时递减活跃计数并通知等待者。
 #[derive(Debug)]
 pub(crate) struct ChildPermit {
     tracker: Arc<ChildTracker>,
@@ -62,7 +61,7 @@ impl Drop for ChildPermit {
     }
 }
 
-/// Immutable state shared by every sampling step in one user turn.
+/// 单个用户 turn 内所有采样步骤共享的不可变上下文。
 #[derive(Debug)]
 pub struct TurnContext {
     /// Stable identifier for the active turn.
@@ -83,9 +82,7 @@ pub struct TurnContext {
     preparing_reservation_notify: Notify,
 }
 
-/// Decision made at a terminal assistant boundary while steering admission is
-/// still open. Durable mailbox input must return to the sampling loop, whereas
-/// an in-flight prompt hook must finish before the turn can close.
+/// 终态采样边界的输入决策：已排队、邮箱待处理、或关闭。
 pub(crate) enum TerminalInputDecision {
     Queued(Vec<QueuedTurnInput>),
     MailboxPending,
@@ -139,6 +136,7 @@ impl TurnContext {
         self.project_root.as_deref()
     }
 
+    /// 注册一个子任务并返回存活凭证。
     pub(crate) fn track_child(&self) -> ChildPermit {
         self.child_tracker.active.fetch_add(1, Ordering::AcqRel);
         ChildPermit {
@@ -146,6 +144,7 @@ impl TurnContext {
         }
     }
 
+    /// 等待所有子任务完成（活跃计数归零）。
     pub(crate) async fn wait_for_children(&self) {
         loop {
             let changed = self.child_tracker.changed.notified();
@@ -156,7 +155,7 @@ impl TurnContext {
         }
     }
 
-    /// Wait until initial turn preparation either succeeds or closes admission.
+    /// 等待 turn 准备完成后获取输入预留，admission 关闭则返回 None。
     pub(crate) async fn reserve_input(self: &Arc<Self>) -> Option<TurnInputReservation> {
         loop {
             let notified = self.input_notify.notified();
@@ -184,6 +183,7 @@ impl TurnContext {
         }
     }
 
+    /// 将输入准入状态从 Preparing 切换到 Accepting。
     pub(crate) fn open_input_admission(&self) {
         {
             let mut state = self
@@ -197,6 +197,7 @@ impl TurnContext {
         self.input_notify.notify_waiters();
     }
 
+    /// 关闭输入准入并清空待处理队列。
     pub(crate) fn close_input_admission(&self) {
         {
             let mut state = self
@@ -210,6 +211,7 @@ impl TurnContext {
         self.input_notify.notify_waiters();
     }
 
+    /// 取出并清空当前排队的所有待处理输入。
     pub(crate) fn take_pending_input(&self) -> Vec<QueuedTurnInput> {
         let mut state = self
             .input_state
@@ -218,8 +220,7 @@ impl TurnContext {
         std::mem::take(&mut state.pending)
     }
 
-    /// Reserve the stable mailbox identity before its durable write. Using the
-    /// same identity in both places makes delivery acknowledgement race-free.
+    /// 预留邮箱消息 ID，确保持久写入与确认使用相同标识。
     pub(crate) fn reserve_mailbox_input(&self) -> Option<String> {
         let mut state = self
             .input_state
@@ -235,8 +236,7 @@ impl TurnContext {
         Some(mailbox_message_id)
     }
 
-    /// Remove only signals whose durable mailbox identities were delivered.
-    /// Unrelated generations are intentionally kept.
+    /// 确认已投递的邮箱消息，仅移除匹配的 pending 信号。
     pub(crate) fn acknowledge_mailbox_inputs(&self, delivered_message_ids: &[String]) -> usize {
         let mut state = self
             .input_state
@@ -256,6 +256,7 @@ impl TurnContext {
         acknowledged
     }
 
+    /// 撤回指定邮箱消息的 pending 信号。
     pub(crate) fn retract_input(&self, mailbox_message_id: &str) {
         let mut state = self
             .input_state
@@ -286,8 +287,7 @@ impl TurnContext {
         }
     }
 
-    /// Wait for an in-flight admission, then atomically choose queued input,
-    /// durable mailbox delivery, or terminal close.
+    /// 等待 in-flight admission 完成，原子选择排队输入、邮箱投递或关闭。
     pub(crate) async fn wait_for_terminal_input(&self) -> TerminalInputDecision {
         loop {
             let notified = self.input_notify.notified();

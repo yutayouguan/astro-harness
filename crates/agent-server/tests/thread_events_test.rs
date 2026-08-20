@@ -474,7 +474,6 @@ async fn resume_snapshot_authoritatively_reports_pending_background_turns() {
     }
 
     let pending = resume(&connections, &commands, "desktop-snapshot", true).await;
-    assert!(pending.has_pending_background_state);
     assert_eq!(
         pending.pending_background_turn_ids,
         vec!["turn-pending-1", "turn-pending-2"],
@@ -519,7 +518,6 @@ async fn expiring_background_sink_notifies_current_subscriber_and_logical_replac
         .expect("listener should retain logical delivery target");
     old.recv().await.expect("terminal event");
     let pending = resume(&connections, &commands, "desktop-expire", true).await;
-    assert!(pending.has_pending_background_state);
     assert_eq!(pending.pending_background_turn_ids, vec!["turn-expire"]);
 
     let (mut replacement, _, _) = connections.register("desktop-expire".into()).await;
@@ -547,10 +545,10 @@ async fn expiring_background_sink_notifies_current_subscriber_and_logical_replac
         };
         assert_eq!(event.turn_id, "turn-expire");
         assert_eq!(extension.item_id, "turn-expire:background_expired");
-        assert_eq!(extension.namespace, "astro.background_complete");
+        assert_eq!(extension.namespace, "astro.background_expired");
         assert_eq!(
             serde_json::from_str::<serde_json::Value>(&extension.payload_json).unwrap(),
-            serde_json::json!({"expired":true,"turn_id":"turn-expire"})
+            serde_json::json!({"turn_id":"turn-expire"})
         );
     }
     assert!(

@@ -16,10 +16,10 @@ use home::AgentRuntimeConfig;
 use memory::MemoryManager;
 use proto::astro_service_server::AstroService;
 use proto::{
-    ChatControlAction, ChatControlRequest, ChatEvent, ChatRequest, Empty, FileListRequest,
-    FileListResponse, ImageEvent, ImageRequest, McpReconnectRequest, McpServerList,
-    McpServerListRequest, MemoryQuery, MemoryResult, SessionSnippet as ProtoSessionSnippet,
-    SkillEvent, SkillInfo, SkillList, SkillRequest, SteerChatRequest, SteerChatResponse,
+    ChatControlAction, ChatControlRequest, Empty, FileListRequest, FileListResponse, ImageEvent,
+    ImageRequest, McpReconnectRequest, McpServerList, McpServerListRequest, MemoryQuery,
+    MemoryResult, SessionSnippet as ProtoSessionSnippet, SkillEvent, SkillInfo, SkillList,
+    SkillRequest, SteerChatRequest, SteerChatResponse,
 };
 use providers::PauseControl;
 use providers::ProviderConfig;
@@ -54,11 +54,7 @@ fn event_turn_id(msg: &agent_protocol::EventMsg) -> Option<String> {
         | EventMsg::HookStarted(event)
         | EventMsg::HookCompleted(event)
         | EventMsg::SubAgentActivity(event)
-        | EventMsg::ContextCompacted(event)
-        | EventMsg::LegacyMcpToolCallEnd(event)
-        | EventMsg::LegacyPatchApplyEnd(event)
-        | EventMsg::LegacyContextCompacted(event)
-        | EventMsg::LegacySubAgentActivity(event) => Some(event.turn_id.clone()),
+        | EventMsg::ContextCompacted(event) => Some(event.turn_id.clone()),
         EventMsg::AgentMessageContentDelta(event)
         | EventMsg::PlanDelta(event)
         | EventMsg::ReasoningContentDelta(event)
@@ -75,10 +71,7 @@ fn event_turn_id(msg: &agent_protocol::EventMsg) -> Option<String> {
         EventMsg::TokenCount(event) => event.turn_id.clone(),
         EventMsg::TurnComplete(event) => Some(event.turn_id.clone()),
         EventMsg::TurnAborted(event) => event.turn_id.clone(),
-        EventMsg::LegacyUserMessage(_)
-        | EventMsg::LegacyAgentMessage(_)
-        | EventMsg::LegacyReasoning(_)
-        | EventMsg::ThreadSettingsApplied(_)
+        EventMsg::ThreadSettingsApplied(_)
         | EventMsg::ThreadRolledBack(_)
         | EventMsg::Error(_)
         | EventMsg::Warning(_)
@@ -459,8 +452,6 @@ async fn cancel_pause_generation(
             .await;
     }
 }
-/// Chat RPC 返回的事件流类型别名。
-pub(crate) type ChatStream = Pin<Box<dyn futures::Stream<Item = Result<ChatEvent, Status>> + Send>>;
 /// `ChatControlAction` 之外的后端保留动作码：仅释放会话运行时，不触发 new_chat hooks。
 const CHAT_CONTROL_RELEASE_SESSION: i32 = 7;
 
@@ -2048,8 +2039,6 @@ impl AstroServiceImpl {
 
 #[tonic::async_trait]
 impl AstroService for AstroServiceImpl {
-    /// [`chat`](Self::chat) 流类型。
-    type ChatStream = ChatStream;
     type SubscribeThreadEventsStream =
         Pin<Box<dyn futures::Stream<Item = Result<proto::ThreadEvent, Status>> + Send>>;
     /// [`generate_image`](Self::generate_image) 流类型。
@@ -2203,8 +2192,8 @@ impl AstroService for AstroServiceImpl {
 
     /// 将用户补充输入排入当前活动的普通 turn。
     ///
-    /// 与 [`Self::chat`] 的兼容 steering 分支不同，这个 RPC 不创建 Session、
-    /// 不启动新流，也不会向现有前端流发送额外的 `Done`。
+    /// 与 `SubmitTurn(start_or_steer)` 不同，这个 RPC 只接受已有活动 turn：
+    /// 不创建 Session，也不启动新的 Thread 事件流。
     async fn steer_chat(
         &self,
         request: Request<SteerChatRequest>,
@@ -2319,23 +2308,6 @@ impl AstroService for AstroServiceImpl {
         Ok(Response::new(Empty {}))
     }
 
-    /// 多轮流式聊天：返回 `ChatEvent` 流（token / reasoning / tool / usage / done）。
-    ///
-    /// - `session_id` 为空时服务端生成 UUID
-    /// - `provider` 为空时默认 `ollama`
-    /// - 注入图片生成凭证、聊天密钥与 hooks，并注册 [`PauseControl`]
-    ///
-    /// # 返回
-    /// 异步流；客户端断开或取消后会清理 pause 注册。
-    ///
-    /// # 错误
-    /// 会话创建失败时返回 tonic `Status`。
-    async fn chat(
-        &self,
-        request: Request<ChatRequest>,
-    ) -> Result<Response<Self::ChatStream>, Status> {
-        super::thread_service::chat(self, request).await
-    }
     /// 文生图流：先推送 progress，再推送 `image_data` 或 error。
     ///
     /// 默认 provider 为 `google`；模型空则用供应商默认图片模型；api_key 空则读环境变量。

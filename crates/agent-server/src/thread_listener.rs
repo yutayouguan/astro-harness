@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 use std::sync::Arc;
 
-use agent_protocol::{Event, EventMsg, TextItem, TurnItem};
+use agent_protocol::{Event, EventMsg, TurnItem};
 use tokio::sync::{mpsc, Mutex};
 
 use crate::thread_state::{ListenerCommand, ThreadActivity, ThreadSnapshot, ThreadState};
@@ -68,18 +68,6 @@ fn control_payload(
         request_id: request.request_id.clone(),
         payload_json: serde_json::to_string(&request.payload).unwrap_or_else(|_| "null".into()),
     }
-}
-
-fn legacy_item(
-    id: &str,
-    text: &TextItem,
-    kind: fn(TextItem) -> TurnItem,
-) -> proto::ThreadItemEvent {
-    let mut item = text.clone();
-    if item.id.is_empty() {
-        item.id = id.into();
-    }
-    item_payload(&kind(item), "completed")
 }
 
 fn extension_payload(
@@ -194,11 +182,7 @@ fn event_to_proto(thread_id: &str, event: &Event) -> proto::ThreadEvent {
         EventMsg::McpToolCallEnd(item)
         | EventMsg::HookCompleted(item)
         | EventMsg::SubAgentActivity(item)
-        | EventMsg::ContextCompacted(item)
-        | EventMsg::LegacyMcpToolCallEnd(item)
-        | EventMsg::LegacyPatchApplyEnd(item)
-        | EventMsg::LegacyContextCompacted(item)
-        | EventMsg::LegacySubAgentActivity(item) => (
+        | EventMsg::ContextCompacted(item) => (
             item.turn_id.clone(),
             Payload::ItemCompleted(item_payload(&item.item, "completed")),
         ),
@@ -209,18 +193,6 @@ fn event_to_proto(thread_id: &str, event: &Event) -> proto::ThreadEvent {
                 "astro.context_usage",
                 usage,
             )),
-        ),
-        EventMsg::LegacyUserMessage(text) => (
-            event.id.clone(),
-            Payload::ItemCompleted(legacy_item(&event.id, text, TurnItem::UserMessage)),
-        ),
-        EventMsg::LegacyAgentMessage(text) => (
-            event.id.clone(),
-            Payload::ItemCompleted(legacy_item(&event.id, text, TurnItem::AgentMessage)),
-        ),
-        EventMsg::LegacyReasoning(text) => (
-            event.id.clone(),
-            Payload::ItemCompleted(legacy_item(&event.id, text, TurnItem::Reasoning)),
         ),
         EventMsg::TokenCount(tokens) => (
             tokens.turn_id.clone().unwrap_or_else(|| event.id.clone()),
@@ -511,7 +483,6 @@ pub async fn run_listener_commands(
                         },
                         active_turn: state.history.active_turn_snapshot(),
                         pending_background_turn_ids,
-                        has_pending_background_state: true,
                     }
                 };
                 let _ = reply.send(snapshot);
@@ -592,10 +563,9 @@ pub async fn run_listener_commands(
                             payload: Some(proto::thread_event::Payload::Extension(
                                 proto::ThreadExtension {
                                     item_id,
-                                    namespace: "astro.background_complete".into(),
+                                    namespace: "astro.background_expired".into(),
                                     payload_json: serde_json::json!({
                                         "turn_id": turn_id,
-                                        "expired": true,
                                     })
                                     .to_string(),
                                 },

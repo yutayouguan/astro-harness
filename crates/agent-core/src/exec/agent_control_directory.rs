@@ -1,3 +1,5 @@
+//! 根会话级 AgentControl 进程目录，按 (db_path, root_session_id) 去重复用。
+
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, OnceLock, Weak};
@@ -12,14 +14,14 @@ const DEFAULT_LIMITS: Limits = Limits {
 
 type StoreFactory = dyn Fn(&Path) -> anyhow::Result<AgentGraphStore> + Send + Sync;
 
-/// Process locator for the one root-scoped control plane shared by all
-/// sessions and short-lived agent turn runtimes belonging to that root.
+/// 进程级 AgentControl 单例目录，按 root session 去重并弱引用缓存。
 pub struct AgentControlDirectory {
     controls: Mutex<HashMap<(PathBuf, String), Weak<AgentControl>>>,
     store_factory: Arc<StoreFactory>,
 }
 
 impl AgentControlDirectory {
+    /// 获取全局唯一的进程级目录实例。
     pub fn global() -> &'static Self {
         static DIRECTORY: OnceLock<AgentControlDirectory> = OnceLock::new();
         DIRECTORY.get_or_init(|| AgentControlDirectory {
@@ -28,6 +30,7 @@ impl AgentControlDirectory {
         })
     }
 
+    /// 打开或复用根会话的 AgentControl（默认 db 路径），含崩溃恢复。
     pub fn open_root(&self, root_session_id: &str) -> anyhow::Result<Arc<AgentControl>> {
         self.open_root_at(
             root_session_id,
@@ -35,6 +38,7 @@ impl AgentControlDirectory {
         )
     }
 
+    /// 在指定 db 路径打开或复用 AgentControl，清理残留预约并恢复中断线程。
     pub fn open_root_at(
         &self,
         root_session_id: &str,

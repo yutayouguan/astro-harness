@@ -3,16 +3,9 @@ use agent_protocol::EventMsg;
 use crate::{RolloutItem, ThreadHistoryMode};
 
 /// Returns whether an event is part of the durable rollout history for `mode`.
-pub fn should_persist_event_msg(event: &EventMsg, mode: ThreadHistoryMode) -> bool {
+pub fn should_persist_event_msg(event: &EventMsg, _mode: ThreadHistoryMode) -> bool {
     match event {
-        EventMsg::ItemCompleted(_) => mode == ThreadHistoryMode::Paginated,
-        EventMsg::LegacyUserMessage(_)
-        | EventMsg::LegacyAgentMessage(_)
-        | EventMsg::LegacyReasoning(_)
-        | EventMsg::LegacyMcpToolCallEnd(_)
-        | EventMsg::LegacyPatchApplyEnd(_)
-        | EventMsg::LegacyContextCompacted(_)
-        | EventMsg::LegacySubAgentActivity(_) => mode == ThreadHistoryMode::Legacy,
+        EventMsg::ItemCompleted(_) => true,
         EventMsg::TurnStarted(_)
         | EventMsg::UserInputCommitted(_)
         | EventMsg::TurnComplete(_)
@@ -149,24 +142,9 @@ mod tests {
     }
 
     #[test]
-    fn legacy_completion_events_only_persist_in_legacy_mode() {
-        let event = EventMsg::LegacyAgentMessage(TextItem {
-            id: "item-1".into(),
-            content: "done".into(),
-        });
-
-        assert!(should_persist_event_msg(&event, ThreadHistoryMode::Legacy));
-        assert!(!should_persist_event_msg(
-            &event,
-            ThreadHistoryMode::Paginated
-        ));
-    }
-
-    #[test]
     fn non_event_rollout_items_are_always_persisted() {
         let item = RolloutItem::TurnContext(serde_json::json!({"turn_id": "turn-1"}));
 
-        assert!(is_persisted_rollout_item(&item, ThreadHistoryMode::Legacy));
         assert!(is_persisted_rollout_item(
             &item,
             ThreadHistoryMode::Paginated

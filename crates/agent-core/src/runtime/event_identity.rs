@@ -94,11 +94,7 @@ pub(crate) fn normalize_event_msg(msg: &mut EventMsg, raw_turn_id: &str) -> Stri
         | EventMsg::HookStarted(event)
         | EventMsg::HookCompleted(event)
         | EventMsg::SubAgentActivity(event)
-        | EventMsg::ContextCompacted(event)
-        | EventMsg::LegacyMcpToolCallEnd(event)
-        | EventMsg::LegacyPatchApplyEnd(event)
-        | EventMsg::LegacyContextCompacted(event)
-        | EventMsg::LegacySubAgentActivity(event) => {
+        | EventMsg::ContextCompacted(event) => {
             event.turn_id.clone_from(&turn_id);
             normalize_turn_item(&mut event.item);
         }
@@ -129,9 +125,6 @@ pub(crate) fn normalize_event_msg(msg: &mut EventMsg, raw_turn_id: &str) -> Stri
             }
         }
         EventMsg::ContextUsage(event) => event.turn_id.clone_from(&turn_id),
-        EventMsg::LegacyUserMessage(item)
-        | EventMsg::LegacyAgentMessage(item)
-        | EventMsg::LegacyReasoning(item) => normalize_text_item(item),
         EventMsg::TokenCount(event) => {
             if event.turn_id.is_some() {
                 event.turn_id = Some(turn_id.clone());

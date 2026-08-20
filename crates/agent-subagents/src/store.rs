@@ -1,3 +1,5 @@
+//! 子 Agent 图存储层：线程、邮箱、状态事件的 SQLite 持久化。
+
 use std::path::{Path, PathBuf};
 #[cfg(test)]
 use std::time::Duration;
@@ -24,6 +26,7 @@ fn v2_default_db_path() -> PathBuf {
     home::default_memory_dir().join("subagents-v2.db")
 }
 
+/// 已持久化的线程状态事件（含序号和时间戳）。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct StoredStatusEvent {
     pub sequence: i64,
@@ -34,12 +37,14 @@ pub struct StoredStatusEvent {
     pub created_at: String,
 }
 
+/// 子 Agent 图的 SQLite 存储句柄（WAL 模式）。
 #[derive(Debug, Clone)]
 pub struct AgentGraphStore {
     path: PathBuf,
 }
 
 impl AgentGraphStore {
+    /// 打开数据库并执行 schema 迁移。
     pub fn open(path: PathBuf) -> anyhow::Result<Self> {
         let store = Self { path };
         let mut conn = store.connect()?;
@@ -66,6 +71,7 @@ impl AgentGraphStore {
         migration::schema_version(&self.connect()?)
     }
 
+    /// 确保根线程存在，不存在则创建（幂等）。
     pub fn ensure_root_thread(&self, root_thread_id: &str) -> anyhow::Result<AgentThreadV2> {
         require_non_empty("root_thread_id", root_thread_id)?;
         let mut conn = self.connect()?;
@@ -110,6 +116,7 @@ impl AgentGraphStore {
         Ok(root)
     }
 
+    /// 持久化一个 PendingInit 状态的线程预留及其派生边。
     pub fn reserve_thread(&self, reservation: &ThreadReservation) -> anyhow::Result<AgentThreadV2> {
         validate_reservation(reservation)?;
         let mut conn = self.connect()?;
@@ -151,6 +158,7 @@ impl AgentGraphStore {
         Ok(thread)
     }
 
+    /// 记录线程的运行时描述符（模型、推理力度）。
     pub fn record_runtime_descriptor(
         &self,
         descriptor: &AgentRuntimeDescriptorV2,
@@ -201,6 +209,7 @@ impl AgentGraphStore {
         }
     }
 
+    /// 回滚 PendingInit 状态的线程预留，删除线程和派生边。
     pub fn rollback_pending_thread(&self, thread_id: &str) -> anyhow::Result<()> {
         require_non_empty("thread_id", thread_id)?;
         let mut conn = self.connect()?;
@@ -287,6 +296,7 @@ impl AgentGraphStore {
         Ok(())
     }
 
+    /// 批量清理指定根线程下所有 PendingInit 状态的预留。
     pub fn cleanup_pending_reservations(&self, root_thread_id: &str) -> anyhow::Result<usize> {
         require_non_empty("root_thread_id", root_thread_id)?;
         let mut conn = self.connect()?;

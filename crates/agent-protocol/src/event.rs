@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::items::{TextItem, TurnItem};
+use crate::items::TurnItem;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Event {
@@ -139,13 +139,6 @@ pub enum EventMsg {
     SubAgentActivity(ItemEvent),
     ContextCompacted(ItemEvent),
     ContextUsage(ContextUsageEvent),
-    LegacyUserMessage(TextItem),
-    LegacyAgentMessage(TextItem),
-    LegacyReasoning(TextItem),
-    LegacyMcpToolCallEnd(ItemEvent),
-    LegacyPatchApplyEnd(ItemEvent),
-    LegacyContextCompacted(ItemEvent),
-    LegacySubAgentActivity(ItemEvent),
     TokenCount(TokenCountEvent),
     ThreadSettingsApplied(Value),
     ThreadRolledBack(Value),
@@ -251,5 +244,18 @@ mod tests {
             error_type: "internal".into(),
         })
         .is_terminal());
+    }
+
+    #[test]
+    fn removed_legacy_event_variants_are_rejected() {
+        let json = serde_json::json!({
+            "id": "turn-1",
+            "msg": {
+                "type": "legacy_agent_message",
+                "data": {"id": "item-1", "content": "old payload"}
+            }
+        });
+
+        assert!(serde_json::from_value::<Event>(json).is_err());
     }
 }

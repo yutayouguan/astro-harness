@@ -1,3 +1,5 @@
+//! V2 领域类型：Agent 线程状态、请求、结果和运行时描述符。
+
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -6,7 +8,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::path::AgentPath;
 
-/// Stable status discriminator for [`AgentStatusV2`].
+/// 状态判别符，用于索引和匹配 [`AgentStatusV2`]。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum AgentStatusKind {
@@ -18,7 +20,7 @@ pub enum AgentStatusKind {
     Shutdown,
 }
 
-/// Canonical persisted V2 lifecycle status.
+/// V2 持久化生命周期状态（含 payload 的标签联合）。
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", content = "payload", rename_all = "snake_case")]
 pub enum AgentStatusV2 {
@@ -43,7 +45,7 @@ impl AgentStatusV2 {
     }
 }
 
-/// Durable projection of a V2 agent thread.
+/// V2 Agent 线程的持久化投影。
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AgentThreadV2 {
     pub thread_id: String,
@@ -58,7 +60,7 @@ pub struct AgentThreadV2 {
     pub updated_at: String,
 }
 
-/// The identity reserved before a V2 runner is started.
+/// V2 运行器启动前的预留身份。
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ThreadReservation {
     pub thread_id: String,
@@ -70,8 +72,7 @@ pub struct ThreadReservation {
     pub session_id: String,
 }
 
-/// Minimal non-secret runtime choices required to resume a durable thread
-/// without silently changing an explicit spawn model or reasoning effort.
+/// 恢复持久线程所需的最小运行时描述符（不含密钥）。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AgentRuntimeDescriptorV2 {
     pub thread_id: String,
@@ -92,7 +93,7 @@ impl std::fmt::Display for LegacyRuntimeDescriptorUnavailable {
 
 impl std::error::Error for LegacyRuntimeDescriptorUnavailable {}
 
-/// Events emitted by one V2 runner for state projection and waiting callers.
+/// V2 运行器发出的事件，驱动状态投影和等待方唤醒。
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum RunnerEvent {
@@ -114,7 +115,7 @@ pub enum RunnerEvent {
     RuntimeTerminated,
 }
 
-/// Read model for a root thread and all V2 descendants.
+/// 根线程及其所有 V2 后代的只读快照。
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AgentTreeSnapshotV2 {
     pub root_thread_id: String,
@@ -122,9 +123,7 @@ pub struct AgentTreeSnapshotV2 {
     pub activity_sequence: u64,
 }
 
-/// Complete durable Session timeline row exposed only to the desktop control
-/// plane.  Keeping every structured field prevents the UI from falling back
-/// to the lossy historical subagent transcript table.
+/// 桌面控制面专用的完整 Session 时间线行（保留全部结构化字段）。
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct AgentThreadMessageV2 {
     pub id: i64,
@@ -152,7 +151,7 @@ pub struct AgentThreadDetailV2 {
     pub messages: Vec<AgentThreadMessageV2>,
 }
 
-/// Model-visible V2 spawn input.
+/// 模型可见的 V2 派生请求（deny_unknown_fields）。
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct SpawnAgentV2Request {
@@ -164,8 +163,7 @@ pub struct SpawnAgentV2Request {
     pub fork_turns: Option<String>,
 }
 
-/// Runtime-only V2 spawn material. It intentionally does not implement serde
-/// so credentials and process-local dependencies cannot enter projections.
+/// 仅运行时使用的 V2 派生物料（不实现 serde，防止凭证泄入投影）。
 #[derive(Clone)]
 pub struct SpawnRuntimeV2Request {
     pub model_request: SpawnAgentV2Request,

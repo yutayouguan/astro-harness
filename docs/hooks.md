@@ -145,7 +145,8 @@ PreGatewayDispatch
 
 ### UI 当前行为
 
-- Hook 流事件使用 `ChatEvent.hook` 的 `name` / `detail` / `outcome`，不借用 `memory_update`。
+- Hook 流事件使用 `ThreadEvent.item_started/item_completed` 中的 Hook `TurnItem`，Tauri 再投影
+  `name` / `detail` / `outcome`，不借用 memory extension。
 - 前端将其渲染为 `kind: "hook"` 的活动卡，标题是 canonical 事件名。
 - 设置中的「Hook 事件」开关控制可见性；`normal` / `detailed` 预设开启，`compact` 关闭。
 - UI 新建对话调用 `chat_control(new_chat)`，对应上表的 `CommandNewChat` → `SessionReset` → `SessionFinalize` 与 runtime 卸载。

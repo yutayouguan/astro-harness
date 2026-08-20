@@ -9,8 +9,8 @@
 ## 1. 文档地位
 
 本文档是 Astro Thread 事件、持久历史、订阅、恢复和桌面生命周期收敛的权威设计。实现以
-`EventMsg` 与 rollout 为单一事实链；Chat 和 Tauri 事件只能从该事实链投影，不能反向成为
-Core 状态或恢复事实源。
+`EventMsg` 与 rollout 为单一事实链；gRPC `ThreadEvent` 和 Tauri 本地 UI 事件只能从该事实链
+投影，不能反向成为 Core 状态或恢复事实源。
 
 已删除的运行时路径包括：
 
@@ -19,9 +19,10 @@ Core 状态或恢复事实源。
 - Core `MultiTurnStreamItem`、`RunFinished`、`Done`；
 - `stream_id` / `after_event_id` cursor replay；
 - Server `multi_turn_to_chat_event` 独立转换路径。
+- gRPC `Chat` streaming RPC、`ChatEvent` protobuf 与 Server Chat adapter。
 
-Provider 自身的 stream chunk 类型不属于 Core 事件系统，继续保留。`Done` 只允许存在于 Chat
-或 desktop compatibility adapter。
+Provider 自身的 stream chunk 类型不属于 Core 事件系统，继续保留。`Done` 只存在于 desktop
+本地 UI 投影，不是 backend 传输或恢复协议的一部分。
 
 ## 2. 唯一事件主链
 
@@ -36,7 +37,7 @@ AstroThread::submit(Op)
   → one Server listener per loaded Thread
   → ThreadHistoryBuilder
   → ConnectionRegistry queues bounded(128)
-  → Tauri / exec / compatibility Chat
+  → Tauri / exec / external Thread clients
 ```
 
 ### 2.1 提交与执行顺序
@@ -59,16 +60,17 @@ Server 对每个加载 Thread 启动一个 listener。listener 先用 `ThreadHis
 状态，再把同一映射结果 fan-out；连接之间观察相同顺序。每连接内部队列容量 128，fan-out
 使用非阻塞发送。某连接满时只取消该 generation，Session、listener 和其他连接继续运行。
 
-## 3. EventMsg 与兼容投影
+## 3. EventMsg 与客户端投影
 
 稳定生命周期由 `TurnStarted`、`ItemStarted`、`ItemCompleted`、`TurnComplete` 和
 `TurnAborted` 表达。消息、reasoning、exec、patch、approval、MCP、Hook、Subagent、usage 和
 compaction 都映射到同一 EventMsg/TurnItem 模型。token、reasoning 和 stdout delta 服务于
 实时体验，通常不持久化。
 
-Server listener 是 Core → proto 的唯一映射层。Tauri/exec/Chat 接收同一个 ThreadEvent；Chat
-adapter 只按目标 turn 过滤并转换成旧 `ChatEvent`，desktop adapter 才生成
-`ChatStreamEvent::Done`。兼容 adapter 不拥有独立 history、terminal state 或 emitter。
+Server listener 是 Core → proto 的唯一映射层。Tauri、exec 和外部客户端只接收同一个
+`ThreadEvent`。desktop 可在进程内把 terminal 投影成 `ChatStreamEvent::Done` 供现有 React 状态机
+消费，但该 UI 类型不进入 gRPC、rollout 或恢复链，也不拥有独立 history、terminal state 或
+emitter。
 
 ## 4. Snapshot + live 恢复
 
@@ -97,7 +99,8 @@ active turn 和 pending background 集合；token、reasoning、stdout 等 trans
 | `astro.memory` | 原 session thread | `{ source, target, summary, live_written }` |
 | `astro.session_metadata` | 原 session thread | `{ title }` |
 | `astro.pending` | `astro-workspace-events` | `{ pending_count, reason }` |
-| `astro.background_complete` | 原 session thread | 正常为 `{}`；过期为 `{ turn_id, expired: true }` |
+| `astro.background_complete` | 原 session thread | `{}` |
+| `astro.background_expired` | 原 session thread | `{ turn_id }` |
 
 Tauri 每次连接都 Resume workspace event thread。成功前台终态后，Server 为该 turn 保留
 background extension sink，desktop 把 turn 从 active 移到独立 `background_pending`，不会把它
@@ -107,14 +110,13 @@ sink live 到达；断线期间到达的稳定 extension 则由下一次 Resume 
 side-effect supervisor 对整个 post-turn 阶段设置有界总超时，并在成功、错误、超时和 panic
 收敛后发送 `astro.background_complete`；turn id 由 ThreadEvent envelope 承载。marker 失败或
 sink retention 到期时，Server 对正式
-subscriber 和 retained logical ids 投递同 namespace、稳定 expired item id、
-`{ turn_id, expired: true }`；旧 desktop 也能按 complete 语义结束等待。release/cancel 路径直接
-expire 捕获的旧 listener，不等待 marker，也绝不 `get_or_create` 复活已删除 Session。
+subscriber 和 retained logical ids 投递 `astro.background_expired`、稳定 expired item id 与
+`{ turn_id }`。release/cancel 路径直接 expire 捕获的旧 listener，不等待 marker，也绝不
+`get_or_create` 复活已删除 Session。
 
-`ThreadSnapshot.pending_background_turn_ids` 是 Server 当前 sink 集合；
-`has_pending_background_state=true` 表示字段具备权威性。Desktop 仅在 presence 为 true 时做
-subtractive reconcile：清除本地有而 Server 没有的 turn；false 代表旧 backend 未知，不能误清。
-集合支持同 Thread 多个 pending turn。
+`ThreadSnapshot.pending_background_turn_ids` 始终是 Server 当前 sink 的权威集合。Desktop 每次
+snapshot 都做 subtractive reconcile：清除本地有而 Server 没有的 turn。集合支持同 Thread
+多个 pending turn；协议不再提供旧 backend presence capability 分支。
 
 ## 6. Desktop provisional ACK barrier
 

@@ -1,3 +1,5 @@
+//! Agent 线程树的内存注册表与配额管理（派生/执行并发控制）。
+
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::sync::{Mutex, MutexGuard};
 
@@ -7,6 +9,7 @@ use crate::{
     ActivityBus, AgentActivityKind, AgentGraphStore, AgentPath, AgentStatusV2, AgentThreadV2,
 };
 
+/// Agent 线程树的资源配额：最大线程数、最大深度、最大并发执行数。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Limits {
     pub max_threads: usize,
@@ -22,6 +25,7 @@ struct RegistryState {
     active_executions: HashSet<String>,
 }
 
+/// 线程树内存注册表，管理路径→线程映射、预留槽位和执行许可。
 #[derive(Debug)]
 pub struct AgentRegistry {
     root_thread_id: String,
@@ -30,6 +34,7 @@ pub struct AgentRegistry {
 }
 
 impl AgentRegistry {
+    /// 从已有线程列表构建注册表，校验根线程存在且无重复。
     pub fn from_threads(limits: Limits, threads: &[AgentThreadV2]) -> anyhow::Result<Self> {
         let root = threads
             .iter()
@@ -70,6 +75,7 @@ impl AgentRegistry {
         })
     }
 
+    /// 在父路径下预留一个子线程派生槽位（默认类型）。
     pub fn reserve_spawn<'a>(
         &'a self,
         parent: &AgentPath,
@@ -79,6 +85,7 @@ impl AgentRegistry {
         self.reserve_spawn_typed(parent, task_name, "default", thread_id)
     }
 
+    /// 在父路径下预留指定类型的子线程槽位，校验深度和数量配额。
     pub fn reserve_spawn_typed<'a>(
         &'a self,
         parent: &AgentPath,
@@ -150,6 +157,7 @@ impl AgentRegistry {
         })
     }
 
+    /// 获取子线程执行许可，受 `max_running` 并发限制。
     pub fn acquire_execution<'a>(&'a self, thread_id: &str) -> anyhow::Result<ExecutionPermit<'a>> {
         let mut state = self.lock_state()?;
         let path = state
@@ -271,6 +279,7 @@ impl AgentRegistry {
     }
 }
 
+/// 派生预留令牌，drop 时自动回滚未提交的预留。
 pub struct SpawnReservation<'a> {
     registry: &'a AgentRegistry,
     path: AgentPath,
@@ -305,6 +314,7 @@ impl<'a> SpawnReservation<'a> {
         self.thread = thread;
     }
 
+    /// 主动放弃预留，回滚持久层和内存状态。
     pub fn abort(mut self) -> anyhow::Result<()> {
         self.rollback_durable()
             .context("failed to abort durable agent reservation")?;
@@ -312,6 +322,7 @@ impl<'a> SpawnReservation<'a> {
         Ok(())
     }
 
+    /// 提交预留，将线程身份正式注册到注册表。
     pub fn commit(mut self) -> anyhow::Result<()> {
         let precheck_result = (|| {
             let state = self.registry.lock_state()?;
@@ -413,6 +424,7 @@ impl Drop for SpawnReservation<'_> {
     }
 }
 
+/// 执行许可令牌，drop 时自动释放并发执行槽位。
 #[derive(Debug)]
 pub struct ExecutionPermit<'a> {
     registry: &'a AgentRegistry,

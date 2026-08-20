@@ -24,11 +24,12 @@ AstroThread::submit(Op)
   → one Server listener
   → ThreadHistoryBuilder
   → connection queues bounded(128)
-  → Tauri / exec / compatibility Chat
+  → Tauri / exec / external Thread clients
 ```
 
 `SessionEventHub`、Core `EventBus`、Core `MultiTurnStreamItem` 和 cursor replay 已从运行时删除。
-兼容类型只能存在于协议/桌面映射边界，不能成为第二个 emitter、history 或恢复事实源。
+旧 gRPC `Chat` stream、`ChatEvent` protobuf 和 Server adapter 也已删除。desktop 本地 UI 投影类型
+不进入 backend 协议，不能成为第二个 emitter、history 或恢复事实源。
 
 ## 2. 目标与非目标
 
@@ -274,18 +275,17 @@ Session::send_event
 
 ### 6.3 Persistence policy
 
-新 Thread 默认使用 `Paginated` history mode；旧 Astro Thread 迁移期标记为 `Legacy`。
+Thread 只使用 `Paginated` history mode，不再按旧/新线程分叉 persistence policy。
 
-| 类型 | Paginated | Legacy |
-|---|---:|---:|
-| 可持久 `ResponseItem` | 是 | 是 |
-| Session/Turn/WorldState/Compaction marker | 是 | 是 |
-| `TurnStarted` / `TurnComplete` / `TurnAborted` | 是 | 是 |
-| `ThreadSettingsApplied` / rollback / goal / token count | 是 | 是 |
-| `ItemCompleted` | 是 | 仅无等价 raw item 的特殊项 |
-| legacy message/tool completion events | 否 | 是 |
-| `ItemStarted` / begin / delta / stdout / approval request | 否 | 否 |
-| `Error` / `Warning` / `StreamError` | 否 | 否 |
+| 类型 | 持久化 |
+|---|---:|
+| 可持久 `ResponseItem` | 是 |
+| Session/Turn/WorldState/Compaction marker | 是 |
+| `TurnStarted` / `TurnComplete` / `TurnAborted` | 是 |
+| `ThreadSettingsApplied` / rollback / goal / token count | 是 |
+| `ItemCompleted` | 是 |
+| `ItemStarted` / begin / delta / stdout / approval request | 否 |
+| `Error` / `Warning` / `StreamError` | 否 |
 
 具体枚举必须集中在单一 `rollout::policy` 模块，禁止 emitter 自行决定是否落盘。
 
@@ -329,7 +329,7 @@ AstroThread::next_event()
 - 是否存在订阅者的 watch 状态。
 
 `SubmitTurn`/`ResumeThread` 把当前连接订阅到目标 Thread；`UnsubscribeThread` 显式移除。一个连接
-可订阅多个 Thread，一个 Thread 可被 Tauri、exec 和兼容 Chat 等多个连接同时订阅。
+可订阅多个 Thread，一个 Thread 可被 Tauri、exec 和外部 Thread 客户端等多个连接同时订阅。
 
 ### 7.3 慢消费者
 
@@ -383,8 +383,8 @@ rollout-before-live 事实链，而不是创建后台广播总线。命名空间
 - `astro.pending`: `{ pending_count, reason }`，归属固定 workspace thread
   `astro-workspace-events`；
 - `astro.session_metadata`: `{ title }`；
-- `astro.background_complete`: 正常 payload 为 `{}`，turn id 由事件 envelope 承载；sink 超时时为
-  `{ turn_id, expired: true }`。
+- `astro.background_complete`: payload 为 `{}`，turn id 由事件 envelope 承载；
+- `astro.background_expired`: sink 到期时 payload 为 `{ turn_id }`。
 
 Server 在成功终态保留按 logical connection id 归属的 background extension sink；同 id 新代连接
 可接收迟到 extension，不同连接隔离。side-effect supervisor 有总超时，成功、错误、超时和取消
@@ -403,22 +403,15 @@ background sink 且非活动”持续 30 分钟后才能卸载。
 ### 9.2 Server / Tauri / exec
 
 - app-server 是 Core EventMsg 到外部 typed notifications 的唯一映射层；
-- Tauri、exec 和兼容 Chat 消费同一协议，不各自解释 Core 私有枚举；
+- Tauri、exec 和外部客户端消费同一 Thread 协议，不各自解释 Core 私有枚举；
 - 同一个 EventMsg 只映射一次，再 fan-out 到连接；
 - UI 的活动卡、正文 delta、审批表面和工具结果都以 `turn_id + item_id` 关联。
 
-### 9.3 兼容 Chat RPC
+### 9.3 Thread RPC 硬切边界
 
-`Chat` RPC 保留为边界适配器：
-
-1. 先确保当前连接已订阅 Thread；
-2. 提交 `Op::TurnInput`；
-3. 过滤对应 `turn_id` 的共享事件；
-4. 映射成旧 Chat stream item；
-5. 收到唯一终止事件后结束兼容流。
-
-兼容适配器不能创建独立 Agent Loop、独立事件 hub 或第二份生命周期状态。`Done` 只允许存在于
-Chat/Tauri compatibility adapter；Core 终态只有 `TurnComplete` 或 `TurnAborted`。
+客户端必须使用 `SubscribeThreadEvents`、`SubmitTurn`、`ResumeThread` 和 `UnsubscribeThread`。
+backend 不再暴露旧 `Chat` streaming RPC 或 `ChatEvent` protobuf。`Done` 仅可作为 desktop 本地
+UI 状态机的派生事件；Core 与 gRPC 终态只有 `TurnComplete` 或 `TurnAborted`。
 
 ## 10. Shutdown 与故障语义
 
@@ -449,7 +442,7 @@ Chat/Tauri compatibility adapter；Core 终态只有 `TurnComplete` 或 `TurnAbo
 
 - 建立 `Op`、`Submission`、`Event`、`EventMsg`、`TurnItem`；
 - 实现 `rollout::policy`、writer、flush 与 reconstruction；
-- 新 Thread 默认 `Paginated`，旧 Thread 标记 `Legacy`。
+- 所有 Thread 使用单一 `Paginated` policy，不保留 legacy mode。
 
 ### 阶段 B：Session actor（已完成）
 
@@ -469,7 +462,7 @@ Chat/Tauri compatibility adapter；Core 终态只有 `TurnComplete` 或 `TurnAbo
 - 迁移 gRPC app-server；
 - 迁移 Tauri 和前端活动时间线；
 - 迁移 exec/headless；
-- 旧 Chat RPC 变为兼容适配器。
+- 删除旧 Chat RPC，客户端统一迁移到 Thread submit/subscribe/resume。
 
 ### 阶段 E：删除旧路径（已完成）
 
@@ -499,7 +492,7 @@ Chat/Tauri compatibility adapter；Core 终态只有 `TurnComplete` 或 `TurnAbo
 
 1. Paginated `ItemCompleted` 可重建 TurnItem。
 2. delta、stdout、approval request 不写入 rollout。
-3. Legacy 与 Paginated 的 persistence policy 符合表格。
+3. Paginated persistence policy 符合表格，且协议中不存在 legacy event 分支。
 4. completed、errored、aborted、stale Turn 状态重建正确。
 5. Compaction、MCP、Hook、Subagent 和 Extension item 可重建。
 6. SQLite 投影删除后可从 rollout 重新生成。
@@ -515,9 +508,9 @@ Chat/Tauri compatibility adapter；Core 终态只有 `TurnComplete` 或 `TurnAbo
 7. 活动审批可重新发送给恢复连接。
 8. 无订阅且空闲 30 分钟后才执行 Shutdown。
 
-### 12.4 兼容与端到端测试
+### 12.4 客户端与端到端测试
 
-1. 旧 Chat 适配器与新 Thread 事件结果一致。
+1. proto 不再生成 Chat stream API，Tauri 只调用 Thread submit/subscribe/resume。
 2. 前台与后台同类工具产生相同 Item 生命周期。
 3. Tauri、exec 和第二客户端可同时观察同一 Thread。
 4. 工具 stdout、patch、approval、MCP、Hook、Subagent、Compaction 粒度符合协议。

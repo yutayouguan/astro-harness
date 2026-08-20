@@ -1,8 +1,11 @@
+//! Agent 线程间持久化邮箱消息的入队、投递与回滚。
+
 use anyhow::{bail, Context};
 use chrono::{SecondsFormat, Utc};
 use rusqlite::{params, types::Type, Connection, Transaction};
 use serde::{Deserialize, Serialize};
 
+/// 邮箱消息类型：普通消息、追加、转向、结果、状态。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum MailboxKind {
@@ -13,6 +16,7 @@ pub enum MailboxKind {
     Status,
 }
 
+/// 待入队的邮箱消息（含幂等键）。
 #[derive(Debug, Clone)]
 pub struct NewMailboxMessage {
     pub message_id: String,
@@ -24,6 +28,7 @@ pub struct NewMailboxMessage {
     pub trigger_turn: bool,
 }
 
+/// 已持久化的邮箱消息（含自增序号）。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct MailboxMessage {
     pub sequence: i64,
@@ -41,6 +46,7 @@ struct PersistedMailboxMessage {
     idempotency_key: String,
 }
 
+/// 将消息入队到收件人邮箱，支持幂等重试。
 pub(crate) fn enqueue(
     conn: &mut Connection,
     message: &NewMailboxMessage,
@@ -85,6 +91,7 @@ pub(crate) fn enqueue_in_transaction(
     Ok(stored.message)
 }
 
+/// 查询指定收件人在给定序号之后的所有待投递消息。
 pub(crate) fn pending_for(
     conn: &Connection,
     recipient: &str,
@@ -109,6 +116,7 @@ pub(crate) fn pending_for(
     Ok(messages)
 }
 
+/// 将收件人在指定序号及之前的待投递消息标记为已投递。
 pub(crate) fn mark_delivered(
     conn: &mut Connection,
     recipient: &str,
@@ -130,6 +138,7 @@ pub(crate) fn mark_delivered(
     Ok(())
 }
 
+/// 删除指定 ID 的待投递消息（用于回滚）。
 pub(crate) fn delete_pending(conn: &Connection, message_id: &str) -> anyhow::Result<()> {
     if message_id.trim().is_empty() {
         bail!("mailbox message_id must not be empty");

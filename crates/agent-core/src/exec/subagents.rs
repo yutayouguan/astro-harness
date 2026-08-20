@@ -1,4 +1,4 @@
-//! Safe-boundary mailbox delivery for first-class Agent Threads.
+//! 子 Agent 邮箱投递——在安全采样边界消费持久化消息。
 
 use std::sync::Arc;
 
@@ -20,6 +20,7 @@ struct DurableSteerInput {
     inject_context: Option<String>,
 }
 
+/// 邮箱批量消费结果：已投递数、steer ID 列表、是否延迟。
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub(crate) struct MailboxDrainOutcome {
     pub(crate) delivered: usize,
@@ -33,6 +34,7 @@ pub(crate) fn encode_main_steer_input(input: &TurnInput) -> anyhow::Result<Strin
     encode_main_steer_input_with_context(input, None)
 }
 
+/// 将主线程 steer 输入编码为可持久化的邮箱消息格式。
 pub(crate) fn encode_main_steer_input_with_context(
     input: &TurnInput,
     inject_context: Option<String>,
@@ -48,9 +50,7 @@ pub(crate) fn encode_main_steer_input_with_context(
     ))
 }
 
-/// Drain durable mailbox input only at a sampling boundary. A batch is
-/// acknowledged after its structured user message has been accepted by
-/// SessionStore and the in-memory history.
+/// 仅在采样边界消费持久邮箱，写入 SessionStore 和内存历史后才确认。
 pub(crate) async fn drain_mailbox_at_safe_boundary(
     session: &Session,
 ) -> anyhow::Result<MailboxDrainOutcome> {

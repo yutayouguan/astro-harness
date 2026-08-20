@@ -1,8 +1,4 @@
-//! Session-scoped shared services.
-//!
-//! The container follows Codex's `SessionServices` ownership boundary. SQLite
-//! remains synchronous, so its adapter holds a standard mutex for exactly one
-//! [`ConversationStore`] call and never across an async suspension.
+//! Session 生命周期内的共享服务容器（AgentControl、压缩策略等）。
 
 use std::sync::{Arc, Mutex, RwLock};
 
@@ -17,7 +13,7 @@ pub(crate) type TurnInputDbWriteHook = Arc<dyn Fn() -> anyhow::Result<()> + Send
 #[cfg(test)]
 pub(crate) type TurnInputMemoryWriteHook = Arc<dyn Fn() + Send + Sync>;
 
-/// Shared dependencies that remain stable for the lifetime of a session.
+/// Session 级共享依赖：会话存储、压缩策略、记忆、工具注册表等。
 pub(crate) struct SessionServices {
     pub(crate) sessions: SharedConversationStore,
     pub(crate) compression_policy: Mutex<Box<dyn crate::compression::CompressionPolicy>>,
@@ -58,7 +54,7 @@ impl SessionServices {
     }
 }
 
-/// Makes a `Send` conversation store safely shareable by a Codex-style session.
+/// 线程安全的 ConversationStore 包装，通过 Mutex 保证同步访问。
 pub(crate) struct SharedConversationStore {
     inner: Mutex<Box<dyn ConversationStore>>,
 }

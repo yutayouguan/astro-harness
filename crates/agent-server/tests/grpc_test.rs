@@ -1,13 +1,13 @@
 //! Astro gRPC 服务端到端连通与基本 RPC 测试。
 //!
-//! 默认套件不依赖本机 Ollama。真 chat 联调见
-//! `test_grpc_chat_ollama_live`（需 `ASTRO_LIVE_OLLAMA=1` 或 `--ignored`）。
+//! 默认套件不依赖本机 Ollama。真实 Thread 联调见
+//! `test_grpc_thread_ollama_live`（需 `ASTRO_LIVE_OLLAMA=1`）。
 
 use proto::astro_service_client::AstroServiceClient;
 use proto::astro_service_server::AstroServiceServer;
 use proto::{
     ChatControlAction, ChatControlRequest, ChatRequest, McpReconnectRequest, McpServerListRequest,
-    MemoryQuery,
+    MemoryQuery, SubmitTurnRequest, SubscribeThreadEventsRequest,
 };
 use server::grpc::AstroServiceImpl;
 use tempfile::TempDir;
@@ -95,9 +95,9 @@ async fn release_session_runtime_is_idempotent() {
 }
 
 /// Live：依赖本机 Ollama。未设置 `ASTRO_LIVE_OLLAMA=1` 时直接 return（默认套件仍绿）。
-/// 联调：`ASTRO_LIVE_OLLAMA=1 cargo test -p backend --test grpc_test test_grpc_chat_ollama_live -- --nocapture`
+/// 联调：`ASTRO_LIVE_OLLAMA=1 cargo test -p server --test grpc_test test_grpc_thread_ollama_live -- --nocapture`
 #[tokio::test]
-async fn test_grpc_chat_ollama_live() {
+async fn test_grpc_thread_ollama_live() {
     if std::env::var("ASTRO_LIVE_OLLAMA").ok().as_deref() != Some("1") {
         return;
     }
@@ -109,26 +109,44 @@ async fn test_grpc_chat_ollama_live() {
         .await
         .expect("connect grpc");
 
+    let connection_id = "grpc-live-thread".to_string();
     let mut stream = client
-        .chat(ChatRequest {
-            session_id: "grpc-test".into(),
-            content: "你好".into(),
-            provider: "ollama".into(),
-            use_memory: true,
-            thinking_enabled: false,
-            reasoning_effort: String::new(),
-            ..Default::default()
+        .subscribe_thread_events(SubscribeThreadEventsRequest {
+            connection_id: connection_id.clone(),
         })
         .await
-        .expect("chat rpc")
+        .expect("subscribe thread events")
         .into_inner();
+    let submitted = client
+        .submit_turn(SubmitTurnRequest {
+            connection_id,
+            chat: Some(ChatRequest {
+                session_id: "grpc-test".into(),
+                content: "你好".into(),
+                provider: "ollama".into(),
+                use_memory: true,
+                thinking_enabled: false,
+                reasoning_effort: String::new(),
+                ..Default::default()
+            }),
+            mode: "start_or_steer".into(),
+            expected_turn_id: String::new(),
+        })
+        .await
+        .expect("submit turn")
+        .into_inner();
+    assert_eq!(submitted.disposition, "started");
 
     let mut tokens = String::new();
     while let Some(event) = stream.message().await.expect("stream message") {
         match event.payload {
-            Some(proto::chat_event::Payload::Token(token)) => tokens.push_str(&token),
-            Some(proto::chat_event::Payload::Done(true)) => break,
-            Some(proto::chat_event::Payload::Error(err)) => panic!("chat error: {err}"),
+            Some(proto::thread_event::Payload::AgentMessageDelta(delta)) => {
+                tokens.push_str(&delta.delta)
+            }
+            Some(proto::thread_event::Payload::TurnComplete(_)) => break,
+            Some(proto::thread_event::Payload::Error(error)) => {
+                panic!("thread error: {}", error.message)
+            }
             _ => {}
         }
     }

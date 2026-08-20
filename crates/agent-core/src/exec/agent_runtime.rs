@@ -1,3 +1,5 @@
+//! 活跃 Agent Turn 运行时管理——调度、生命周期、中断与清理。
+
 use std::collections::{HashMap, HashSet};
 use std::ops::{Deref, DerefMut};
 use std::path::PathBuf;
@@ -15,6 +17,7 @@ use crate::runtime::{Config, Session, TurnResult};
 use crate::streaming::ChatOverride;
 use crate::tasks::TurnInput;
 
+/// 启动一个 Agent Turn 所需的全部参数（线程、运行时配置、邮箱等）。
 pub struct RunAgentTurnRequest {
     pub control: Arc<subagents::AgentControl>,
     pub thread: AgentThreadV2,
@@ -76,11 +79,13 @@ impl UnacceptedSpawnCleanup {
     }
 }
 
+/// Agent 运行器正常终止时的终态快照。
 #[derive(Debug, Clone)]
 pub struct RunnerTermination {
     pub terminal_status: AgentStatusV2,
 }
 
+/// 运行器完成应答：正常终止或失败。
 #[derive(Debug, Clone)]
 pub enum RunnerAck {
     Terminated(RunnerTermination),

@@ -1,3 +1,5 @@
+//! Agent 活动事件总线：发布、订阅与等待线程生命周期变更。
+
 use std::collections::{BTreeSet, VecDeque};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Mutex, MutexGuard};
@@ -9,9 +11,11 @@ use crate::AgentThreadV2;
 
 const MAX_BUFFERED_ACTIVITIES: usize = 1_024;
 
+/// 单调递增的活动序号游标，用于增量拉取事件。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct ActivityCursor(pub u64);
 
+/// 活动事件类型：派生、邮箱、状态变更、边关闭、主任务转向。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AgentActivityKind {
     Spawned { thread_id: String },
@@ -21,6 +25,7 @@ pub enum AgentActivityKind {
     MainSteer,
 }
 
+/// 带序号的活动事件，可选附带线程快照。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AgentActivity {
     pub sequence: u64,
@@ -28,6 +33,7 @@ pub struct AgentActivity {
     pub thread: Option<AgentThreadV2>,
 }
 
+/// 观察结果：正常事件、因缓冲区滚动产生的间隙、或超时。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ActivityObservation {
     Activity(Box<AgentActivity>),
@@ -52,6 +58,7 @@ pub(crate) enum ModelWaitSignal {
     DurableSteer,
 }
 
+/// 有界环形缓冲活动总线，支持 watch 通知的异步等待。
 pub struct ActivityBus {
     sequence: AtomicU64,
     tx: watch::Sender<ActivityCursor>,
@@ -74,6 +81,7 @@ impl ActivityBus {
         ActivityCursor(self.sequence.load(Ordering::Acquire))
     }
 
+    /// 发布一条活动事件，自动分配序号并通知所有等待者。
     pub fn publish(&self, kind: AgentActivityKind, thread: Option<AgentThreadV2>) -> AgentActivity {
         let mut events = self.lock_events();
         let sequence = self.sequence.fetch_add(1, Ordering::AcqRel) + 1;
@@ -90,6 +98,7 @@ impl ActivityBus {
         activity
     }
 
+    /// 等待游标之后的首条活动事件，MainSteer 优先返回。
     pub async fn wait_after(
         &self,
         cursor: ActivityCursor,

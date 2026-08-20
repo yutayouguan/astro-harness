@@ -7,7 +7,7 @@ use std::time::Duration;
 
 use agent_protocol::TurnItem;
 use proto::astro_service_client::AstroServiceClient;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use server::WORKSPACE_EVENT_THREAD_ID;
 use tauri::{AppHandle, Emitter, Manager};
 use tokio::sync::{mpsc, oneshot, watch, Mutex, Notify, RwLock};
@@ -675,9 +675,6 @@ impl ThreadEventsBridge {
     /// The server set is subtractive: turns unknown to this desktop are not adopted, while local
     /// turns whose sink expired or was explicitly released are retired generation-safely.
     async fn reconcile_background_snapshot(&self, snapshot: &proto::ThreadSnapshot) -> bool {
-        if !snapshot.has_pending_background_state {
-            return false;
-        }
         let thread_id = snapshot.thread_id.as_str();
         let server_pending = snapshot
             .pending_background_turn_ids
@@ -2006,7 +2003,12 @@ fn map_item_event(item_event: proto::ThreadItemEvent, started: bool) -> Vec<Chat
             outcome: if started { "started" } else { "completed" }.into(),
         }],
         Ok(TurnItem::Extension(extension)) if extension.namespace == "astro.memory" => {
-            vec![memory_update_from_value(&extension.payload)]
+            match serde_json::from_value::<MemoryExtensionPayload>(extension.payload) {
+                Ok(payload) => vec![memory_update_from_payload(payload)],
+                Err(error) => vec![ChatStreamEvent::Error {
+                    message: format!("invalid memory update payload: {error}"),
+                }],
+            }
         }
         Ok(_) => vec![activity(item.id, &item.item_type, item.payload_json)],
         Err(error) => vec![ChatStreamEvent::Error {
@@ -2062,8 +2064,8 @@ fn map_extension_to_chat(extension: proto::ThreadExtension) -> Vec<ChatStreamEve
             vec![ChatStreamEvent::UserInputCommitted { client_message_id }]
         }
         "astro.memory" => {
-            match serde_json::from_str::<serde_json::Value>(&extension.payload_json) {
-                Ok(payload) => vec![memory_update_from_value(&payload)],
+            match serde_json::from_str::<MemoryExtensionPayload>(&extension.payload_json) {
+                Ok(payload) => vec![memory_update_from_payload(payload)],
                 Err(error) => vec![ChatStreamEvent::Error {
                     message: format!("invalid memory update payload: {error}"),
                 }],
@@ -2077,20 +2079,18 @@ fn map_extension_to_chat(extension: proto::ThreadExtension) -> Vec<ChatStreamEve
     }
 }
 
-fn memory_update_from_value(payload: &serde_json::Value) -> ChatStreamEvent {
+#[derive(Deserialize)]
+struct MemoryExtensionPayload {
+    source: String,
+    target: String,
+    summary: String,
+    live_written: bool,
+}
+
+fn memory_update_from_payload(payload: MemoryExtensionPayload) -> ChatStreamEvent {
     ChatStreamEvent::MemoryUpdate {
-        operation: payload
-            .get("source")
-            .and_then(serde_json::Value::as_str)
-            .or_else(|| payload.get("op").and_then(serde_json::Value::as_str))
-            .unwrap_or("memory")
-            .into(),
-        content: payload
-            .get("summary")
-            .and_then(serde_json::Value::as_str)
-            .or_else(|| payload.get("content").and_then(serde_json::Value::as_str))
-            .unwrap_or_default()
-            .into(),
+        operation: payload.source,
+        content: payload.summary,
     }
 }
 
@@ -2155,6 +2155,13 @@ fn json_u64(value: &serde_json::Value, key: &str) -> u64 {
         .unwrap_or_default()
 }
 
+fn required_json_str<'a>(value: &'a serde_json::Value, key: &str) -> Option<&'a str> {
+    value
+        .get(key)
+        .and_then(serde_json::Value::as_str)
+        .filter(|value| !value.is_empty())
+}
+
 fn extension_to_session_event(
     thread_id: &str,
     extension: proto::ThreadExtension,
@@ -2171,25 +2178,25 @@ fn extension_to_session_event(
         agent_id,
         session_id,
     ) = match extension.namespace.as_str() {
-        "astro.memory" => (
-            Some(MemoryUpdatedDto {
-                source: json_str(&value, "source"),
-                target: json_str(&value, "target"),
-                summary: json_str(&value, "summary"),
-                live_written: value
-                    .get("live_written")
-                    .and_then(serde_json::Value::as_bool)
-                    .unwrap_or_default(),
-            }),
-            None,
-            None,
-            None,
-            None,
-            0,
-            String::new(),
-            String::new(),
-            thread_id.to_string(),
-        ),
+        "astro.memory" => {
+            let payload = serde_json::from_value::<MemoryExtensionPayload>(value).ok()?;
+            (
+                Some(MemoryUpdatedDto {
+                    source: payload.source,
+                    target: payload.target,
+                    summary: payload.summary,
+                    live_written: payload.live_written,
+                }),
+                None,
+                None,
+                None,
+                None,
+                0,
+                String::new(),
+                String::new(),
+                thread_id.to_string(),
+            )
+        }
         "astro.pending" => (
             None,
             Some(PendingChangedDto {
@@ -2218,14 +2225,9 @@ fn extension_to_session_event(
             thread_id.to_string(),
         ),
         "astro.agent_thread" => {
-            let root_thread_id = json_str(&value, "root_thread_id");
+            let root_thread_id = required_json_str(&value, "root_thread_id")?.to_string();
             let activity_sequence = json_u64(&value, "activity_sequence");
-            let stream_id = value
-                .get("stream_id")
-                .and_then(serde_json::Value::as_str)
-                .filter(|stream_id| !stream_id.is_empty())
-                .unwrap_or(&root_thread_id)
-                .to_string();
+            let stream_id = required_json_str(&value, "stream_id")?.to_string();
             (
                 None,
                 None,
@@ -2251,13 +2253,8 @@ fn extension_to_session_event(
             )
         }
         "astro.agent_thread_resync" => {
-            let root_thread_id = json_str(&value, "root_thread_id");
-            let stream_id = value
-                .get("stream_id")
-                .and_then(serde_json::Value::as_str)
-                .filter(|stream_id| !stream_id.is_empty())
-                .unwrap_or(&root_thread_id)
-                .to_string();
+            let root_thread_id = required_json_str(&value, "root_thread_id")?.to_string();
+            let stream_id = required_json_str(&value, "stream_id")?.to_string();
             (
                 None,
                 None,
@@ -2825,7 +2822,7 @@ mod tests {
     }
 
     #[test]
-    fn agent_thread_extension_without_generation_uses_root_as_legacy_fallback() {
+    fn agent_thread_extension_without_generation_is_rejected() {
         let event = proto::ThreadExtension {
             item_id: "agent-thread-legacy".into(),
             namespace: "astro.agent_thread".into(),
@@ -2836,8 +2833,7 @@ mod tests {
             .to_string(),
         };
 
-        let mapped = extension_to_session_event("root-session", event).expect("legacy event");
-        assert_eq!(mapped.stream_id, "root-session");
+        assert!(extension_to_session_event("root-session", event).is_none());
     }
 
     #[test]
@@ -2861,7 +2857,7 @@ mod tests {
     }
 
     #[test]
-    fn memory_extension_chat_adapter_reads_new_schema_and_keeps_legacy_fallback() {
+    fn memory_extension_chat_adapter_requires_current_schema() {
         let current = map_extension_to_chat(proto::ThreadExtension {
             item_id: "memory-current".into(),
             namespace: "astro.memory".into(),
@@ -2879,15 +2875,15 @@ mod tests {
                 if operation == "review" && content == "updated"
         ));
 
-        let legacy = map_extension_to_chat(proto::ThreadExtension {
-            item_id: "memory-legacy".into(),
+        let obsolete = map_extension_to_chat(proto::ThreadExtension {
+            item_id: "memory-obsolete".into(),
             namespace: "astro.memory".into(),
-            payload_json: serde_json::json!({"op":"memory","content":"legacy"}).to_string(),
+            payload_json: serde_json::json!({"op":"memory","content":"obsolete"}).to_string(),
         });
         assert!(matches!(
-            legacy.as_slice(),
-            [ChatStreamEvent::MemoryUpdate { operation, content }]
-                if operation == "memory" && content == "legacy"
+            obsolete.as_slice(),
+            [ChatStreamEvent::Error { message }]
+                if message.contains("invalid memory update payload")
         ));
     }
 
@@ -2922,7 +2918,6 @@ mod tests {
             active_turn: None,
             has_active_turn: false,
             pending_background_turn_ids: vec![],
-            has_pending_background_state: true,
         };
         let bridge = ThreadEventsBridge::new();
         let first = recover_snapshot_extensions(&bridge, &snapshot).await;
@@ -2994,7 +2989,6 @@ mod tests {
             active_turn: None,
             has_active_turn: false,
             pending_background_turn_ids: vec![],
-            has_pending_background_state: true,
         };
         let outcome = reconcile_snapshot(&snapshot);
         assert!(matches!(
@@ -3024,7 +3018,6 @@ mod tests {
             }),
             has_active_turn: true,
             pending_background_turn_ids: vec![],
-            has_pending_background_state: true,
         };
         let outcome = reconcile_snapshot(&snapshot);
         assert!(outcome.keep_active);
@@ -3047,7 +3040,6 @@ mod tests {
             }),
             has_active_turn: true,
             pending_background_turn_ids: vec![],
-            has_pending_background_state: true,
         };
         let bridge = ThreadEventsBridge::new();
         let activation = bridge.activate("session-1").await;
@@ -3084,7 +3076,6 @@ mod tests {
             active_turn: None,
             has_active_turn: false,
             pending_background_turn_ids: vec![],
-            has_pending_background_state: true,
         }];
         let live = vec![Ok(proto::ThreadEvent {
             thread_id: "session-1".into(),
@@ -3272,7 +3263,6 @@ mod tests {
             active_turn: None,
             has_active_turn: false,
             pending_background_turn_ids: vec![],
-            has_pending_background_state: true,
         };
 
         let recovered = recover_snapshot_extensions(&bridge, &snapshot).await;
@@ -3365,7 +3355,6 @@ mod tests {
             .reconcile_background_snapshot(&proto::ThreadSnapshot {
                 thread_id: "session-expired".into(),
                 pending_background_turn_ids: vec!["turn-2".into()],
-                has_pending_background_state: true,
                 ..Default::default()
             })
             .await;
@@ -3385,7 +3374,6 @@ mod tests {
             .reconcile_background_snapshot(&proto::ThreadSnapshot {
                 thread_id: "session-expired".into(),
                 pending_background_turn_ids: vec![],
-                has_pending_background_state: true,
                 ..Default::default()
             })
             .await;
@@ -3405,7 +3393,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn legacy_snapshot_without_pending_presence_preserves_local_background_state() {
+    async fn empty_authoritative_snapshot_retires_local_background_state() {
         let bridge = ThreadEventsBridge::new();
         let activation = bridge.activate("session-legacy").await;
         bridge
@@ -3421,19 +3409,15 @@ mod tests {
             .await;
 
         assert!(
-            !bridge
+            bridge
                 .reconcile_background_snapshot(&proto::ThreadSnapshot {
                     thread_id: "session-legacy".into(),
                     pending_background_turn_ids: vec![],
-                    has_pending_background_state: false,
                     ..Default::default()
                 })
                 .await
         );
-        assert_eq!(
-            bridge.background_resume_threads().await,
-            vec!["session-legacy"]
-        );
+        assert!(bridge.background_resume_threads().await.is_empty());
     }
 
     #[tokio::test]
@@ -5244,7 +5228,6 @@ mod tests {
             active_turn: None,
             has_active_turn: false,
             pending_background_turn_ids: vec![],
-            has_pending_background_state: true,
         };
 
         let reconciled = reconcile_snapshot(&snapshot);
@@ -5292,7 +5275,6 @@ mod tests {
             }),
             has_active_turn: true,
             pending_background_turn_ids: vec![],
-            has_pending_background_state: true,
         };
 
         let reconciled = reconcile_snapshot(&snapshot);
@@ -5509,7 +5491,6 @@ mod tests {
             active_turn: None,
             has_active_turn: false,
             pending_background_turn_ids: vec![],
-            has_pending_background_state: true,
         };
         let value = serde_json::to_value(snapshot_dto(&snapshot)).unwrap();
         assert_eq!(value["turns"][0]["items"][0]["id"], "tool-1");

@@ -1,3 +1,5 @@
+//! 根级 AgentControl 共享控制器：协调派生、执行、邮箱和生命周期。
+
 use std::collections::{BTreeSet, HashMap};
 use std::future::Future;
 use std::path::Path;
@@ -16,6 +18,7 @@ use crate::{
     ThreadReservation,
 };
 
+/// 等待操作的结果：邮箱活动、被转向、或超时。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum WaitOutcome {
     MailboxActivity,
@@ -28,12 +31,14 @@ pub type WaitAgentResult = WaitOutcome;
 #[cfg(test)]
 type BeforeRuntimeInsertHook = Arc<dyn Fn() + Send + Sync>;
 
+/// Agent 运行时句柄，提供中断和终止回调。
 #[derive(Clone)]
 pub struct AgentRuntimeHandle {
     pub interrupt: Arc<dyn Fn() + Send + Sync>,
     pub terminate: Arc<dyn Fn() + Send + Sync>,
 }
 
+/// 线程 ID 到运行时句柄的注册表。
 #[derive(Default)]
 pub struct RuntimeHandleRegistry {
     handles: Mutex<HashMap<String, AgentRuntimeHandle>>,
@@ -45,8 +50,7 @@ struct RuntimeLifecycleState {
     inflight_spawns: HashMap<String, AgentPath>,
 }
 
-/// A spawn reservation that remains visible to a concurrent desktop subtree
-/// close until it is committed, aborted, or dropped.
+/// 派生预留：在提交/中止/丢弃前对桌面递归关闭可见。
 pub struct AgentSpawnReservation<'a> {
     inner: Option<SpawnReservation<'a>>,
     control: &'a AgentControl,
@@ -107,7 +111,7 @@ impl Drop for AgentSpawnReservation<'_> {
     }
 }
 
-/// Cancel-safe admission barrier for one canonical subtree prefix.
+/// 可取消的子树前缀准入屏障（关闭操作期间阻止新派生）。
 pub struct CloseAdmissionGuard {
     control: Arc<AgentControl>,
     prefix: AgentPath,
@@ -191,6 +195,7 @@ impl RuntimeHandleRegistry {
     }
 }
 
+/// 根级共享控制器：聚合存储、注册表、活动总线和运行时句柄。
 #[derive(Clone)]
 pub struct AgentControl {
     root_thread_id: String,
@@ -205,6 +210,7 @@ pub struct AgentControl {
 }
 
 impl AgentControl {
+    /// 打开控制器：确保根线程、清理残留预留、构建注册表。
     pub fn open(
         root_thread_id: String,
         store: AgentGraphStore,
@@ -256,6 +262,7 @@ impl AgentControl {
         self.store.runtime_descriptor(thread_id)
     }
 
+    /// 预留子线程派生（默认类型），同时检查关闭前缀冲突。
     pub fn reserve_spawn<'a>(
         &'a self,
         parent: &AgentPath,
@@ -264,6 +271,7 @@ impl AgentControl {
         self.reserve_spawn_typed(parent, task_name, "default")
     }
 
+    /// 预留指定类型的子线程派生，校验父线程状态和关闭前缀。
     pub fn reserve_spawn_typed<'a>(
         &'a self,
         parent: &AgentPath,
@@ -442,9 +450,7 @@ impl AgentControl {
         );
     }
 
-    /// Linearize a follow-up's Shutdown check, durable enqueue, and runtime
-    /// admission under the lifecycle lock. The admission closure may take only
-    /// the runtime-manager active mutex; the global lock order is lifecycle → active.
+    /// 在生命周期锁下线性化 follow-up：Shutdown 检查 → 持久入队 → 运行时准入。
     pub fn enqueue_followup_with_admission<T>(
         &self,
         sender: &AgentPath,
@@ -479,9 +485,7 @@ impl AgentControl {
         Ok((message, admitted))
     }
 
-    /// Persist input steered into the currently running main/root turn. This
-    /// intentionally does not publish activity: the caller publishes
-    /// `MainSteer` only after the durable write succeeds.
+    /// 持久化转向到主/根 turn 的输入（调用方在写入成功后发布 MainSteer）。
     pub fn persist_main_steer(
         &self,
         path: &AgentPath,
@@ -490,8 +494,7 @@ impl AgentControl {
         self.persist_main_steer_with_id(path, Uuid::new_v4().to_string(), payload)
     }
 
-    /// Persist a main/root steer using the caller-reserved mailbox identity.
-    /// The running turn uses this same id for exact delivery acknowledgement.
+    /// 使用调用方预留的邮箱 ID 持久化主转向（运行 turn 用同一 ID 确认投递）。
     pub fn persist_main_steer_with_id(
         &self,
         path: &AgentPath,
