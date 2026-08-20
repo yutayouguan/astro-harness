@@ -283,6 +283,7 @@ async fn extension_materialization_barrier_waits_for_the_updated_stable_item_pay
     let (initial_reply, initial_materialized) = oneshot::channel();
     commands
         .send(ListenerCommand::WaitForExtension {
+            waiter_id: uuid::Uuid::new_v4(),
             item_id: first.id.clone(),
             payload_json: serde_json::to_string(&TurnItem::Extension(first)).unwrap(),
             reply: initial_reply,
@@ -298,6 +299,7 @@ async fn extension_materialization_barrier_waits_for_the_updated_stable_item_pay
     let (updated_reply, mut updated_materialized) = oneshot::channel();
     commands
         .send(ListenerCommand::WaitForExtension {
+            waiter_id: uuid::Uuid::new_v4(),
             item_id: updated.id.clone(),
             payload_json: serde_json::to_string(&TurnItem::Extension(updated.clone())).unwrap(),
             reply: updated_reply,
@@ -451,6 +453,149 @@ async fn terminal_cleanup_keeps_background_extension_sink_online() {
             .is_err(),
         "completion marker must release the retained sink"
     );
+}
+
+#[tokio::test]
+async fn background_sink_hands_off_to_same_connection_id_replacement_without_resume() {
+    let (connections, commands) = start_listener().await;
+    let (mut old_connection, old_cancel, _) = connections.register("desktop-replaced".into()).await;
+    resume(&connections, &commands, "desktop-replaced", false).await;
+    commands
+        .send(ListenerCommand::ObservedCoreEvent(Event {
+            id: "turn-replaced".into(),
+            msg: EventMsg::TurnComplete(TurnCompleteEvent {
+                turn_id: "turn-replaced".into(),
+                last_agent_message: Some("done".into()),
+                error: None,
+            }),
+        }))
+        .expect("listener should accept terminal");
+    old_connection.recv().await.expect("terminal event");
+
+    let subscription = connections
+        .current_generation_key("desktop-replaced")
+        .await
+        .expect("old generation");
+    let (reply, unsubscribed) = oneshot::channel();
+    commands
+        .send(ListenerCommand::Unsubscribe {
+            subscription,
+            reply: Some(reply),
+        })
+        .expect("terminal unsubscribe");
+    unsubscribed.await.expect("terminal unsubscribe reply");
+
+    let (mut replacement, replacement_cancel, _) =
+        connections.register("desktop-replaced".into()).await;
+    let (mut unrelated, _, _) = connections.register("desktop-other".into()).await;
+    assert!(old_cancel.is_cancelled());
+    assert!(!replacement_cancel.is_cancelled());
+
+    commands
+        .send(ListenerCommand::CoreEvent(Event {
+            id: "turn-replaced".into(),
+            msg: EventMsg::ItemCompleted(ItemEvent {
+                turn_id: "turn-replaced".into(),
+                item: TurnItem::Extension(ExtensionItem {
+                    id: "turn-replaced:memory".into(),
+                    namespace: "astro.memory".into(),
+                    payload: serde_json::json!({
+                        "source":"review",
+                        "target":"memory",
+                        "summary":"replacement delivery",
+                        "live_written":true
+                    }),
+                }),
+            }),
+        }))
+        .expect("late review extension");
+
+    let delivered = tokio::time::timeout(std::time::Duration::from_secs(1), replacement.recv())
+        .await
+        .expect("replacement extension timeout")
+        .expect("replacement extension");
+    assert!(matches!(
+        delivered.payload,
+        Some(proto::thread_event::Payload::Extension(ref extension))
+            if extension.namespace == "astro.memory"
+    ));
+    assert!(old_connection.try_recv().is_err());
+    assert!(
+        tokio::time::timeout(std::time::Duration::from_millis(50), unrelated.recv())
+            .await
+            .is_err(),
+        "a different logical connection must not inherit the retained sink"
+    );
+}
+
+#[tokio::test]
+async fn background_sink_survives_a_reconnect_gap_until_same_logical_id_returns() {
+    let (connections, commands) = start_listener().await;
+    let (mut original, _, _) = connections.register("desktop-gap".into()).await;
+    resume(&connections, &commands, "desktop-gap", false).await;
+    commands
+        .send(ListenerCommand::ObservedCoreEvent(Event {
+            id: "turn-gap".into(),
+            msg: EventMsg::TurnComplete(TurnCompleteEvent {
+                turn_id: "turn-gap".into(),
+                last_agent_message: Some("done".into()),
+                error: None,
+            }),
+        }))
+        .expect("terminal");
+    original.recv().await.expect("terminal event");
+    let subscription = connections
+        .current_generation_key("desktop-gap")
+        .await
+        .expect("original generation");
+    let (reply, unsubscribed) = oneshot::channel();
+    commands
+        .send(ListenerCommand::Unsubscribe {
+            subscription,
+            reply: Some(reply),
+        })
+        .expect("unsubscribe");
+    unsubscribed.await.expect("unsubscribe reply");
+    connections.force_remove("desktop-gap").await;
+
+    commands
+        .send(ListenerCommand::CoreEvent(Event {
+            id: "turn-gap".into(),
+            msg: EventMsg::ItemCompleted(ItemEvent {
+                turn_id: "turn-gap".into(),
+                item: TurnItem::Extension(ExtensionItem {
+                    id: "turn-gap:memory".into(),
+                    namespace: "astro.memory".into(),
+                    payload: serde_json::json!({"summary":"while disconnected"}),
+                }),
+            }),
+        }))
+        .expect("extension during reconnect gap");
+    tokio::task::yield_now().await;
+
+    let (mut replacement, _, _) = connections.register("desktop-gap".into()).await;
+    commands
+        .send(ListenerCommand::CoreEvent(Event {
+            id: "turn-gap".into(),
+            msg: EventMsg::ItemCompleted(ItemEvent {
+                turn_id: "turn-gap".into(),
+                item: TurnItem::Extension(ExtensionItem {
+                    id: "turn-gap:title".into(),
+                    namespace: "astro.session_metadata".into(),
+                    payload: serde_json::json!({"title":"after reconnect"}),
+                }),
+            }),
+        }))
+        .expect("extension after reconnect");
+    let delivered = tokio::time::timeout(std::time::Duration::from_secs(1), replacement.recv())
+        .await
+        .expect("reconnected extension timeout")
+        .expect("reconnected extension");
+    assert!(matches!(
+        delivered.payload,
+        Some(proto::thread_event::Payload::Extension(ref extension))
+            if extension.namespace == "astro.session_metadata"
+    ));
 }
 
 #[tokio::test]

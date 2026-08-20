@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 use agent_protocol::{Event, EventMsg, TurnItem};
@@ -210,9 +210,20 @@ pub enum ListenerCommand {
         reply: Option<oneshot::Sender<()>>,
     },
     WaitForExtension {
+        waiter_id: uuid::Uuid,
         item_id: String,
         payload_json: String,
         reply: oneshot::Sender<()>,
+    },
+    CancelExtensionWaiter {
+        waiter_id: uuid::Uuid,
+    },
+    #[cfg(test)]
+    ExtensionWaiterCount {
+        reply: oneshot::Sender<usize>,
+    },
+    ExpireBackgroundSink {
+        turn_id: String,
     },
     Stop,
 }
@@ -227,8 +238,8 @@ pub struct ThreadState {
     pub status: String,
     pub history: ThreadHistoryBuilder,
     pub subscribers: HashMap<ConnectionId, ConnectionGenerationKey>,
-    /// Terminal-time delivery targets retained only until `astro.background_complete`.
-    pub background_extension_sinks: HashMap<String, Vec<ConnectionGenerationKey>>,
+    /// Terminal-time logical delivery targets retained only until `astro.background_complete`.
+    pub background_extension_sinks: HashMap<String, HashSet<ConnectionId>>,
     pub listener_command_tx: mpsc::UnboundedSender<ListenerCommand>,
     pub activity_tx: tokio::sync::watch::Sender<ThreadActivity>,
 }

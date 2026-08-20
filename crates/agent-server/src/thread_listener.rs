@@ -336,10 +336,13 @@ pub async fn run_listener_commands(
     mut commands: mpsc::UnboundedReceiver<ListenerCommand>,
     connections: ConnectionRegistry,
 ) {
-    let mut extension_waiters: std::collections::HashMap<
-        (String, String),
-        Vec<tokio::sync::oneshot::Sender<()>>,
-    > = std::collections::HashMap::new();
+    struct ExtensionWaiter {
+        item_id: String,
+        payload_json: String,
+        reply: tokio::sync::oneshot::Sender<()>,
+    }
+    let mut extension_waiters: std::collections::HashMap<uuid::Uuid, ExtensionWaiter> =
+        std::collections::HashMap::new();
     while let Some(command) = commands.recv().await {
         match command {
             command @ (ListenerCommand::CoreEvent(_) | ListenerCommand::ObservedCoreEvent(_)) => {
@@ -348,15 +351,22 @@ pub async fn run_listener_commands(
                     ListenerCommand::ObservedCoreEvent(event) => (event, true),
                     _ => unreachable!("matched core event variants"),
                 };
-                let (subscribers, outbound) = {
+                let (subscribers, retained_connection_ids, outbound) = {
                     let mut state = state.lock().await;
                     state.history.track(&event);
                     if let EventMsg::TurnComplete(completed) = &event.msg {
                         if retain_background_sink && completed.error.is_none() {
-                            let retained = state.subscribers.values().cloned().collect();
+                            let retained = state.subscribers.keys().cloned().collect();
                             state
                                 .background_extension_sinks
                                 .insert(completed.turn_id.clone(), retained);
+                            let commands = state.listener_command_tx.clone();
+                            let turn_id = completed.turn_id.clone();
+                            tokio::spawn(async move {
+                                tokio::time::sleep(crate::POST_TURN_SIDE_EFFECT_TIMEOUT).await;
+                                let _ = commands
+                                    .send(ListenerCommand::ExpireBackgroundSink { turn_id });
+                            });
                         }
                     }
                     state.status = match &event.msg {
@@ -368,15 +378,15 @@ pub async fn run_listener_commands(
                         EventMsg::ShutdownComplete => "shutdown".into(),
                         _ => state.status.clone(),
                     };
-                    let mut subscribers =
-                        state.subscribers.values().cloned().collect::<HashSet<_>>();
+                    let subscribers = state.subscribers.values().cloned().collect::<HashSet<_>>();
+                    let mut retained_connection_ids = HashSet::new();
                     let completed_background_turn = match &event.msg {
                         EventMsg::ItemCompleted(item) => match &item.item {
                             TurnItem::Extension(extension) => {
                                 if let Some(sink) =
                                     state.background_extension_sinks.get(&item.turn_id)
                                 {
-                                    subscribers.extend(sink.iter().cloned());
+                                    retained_connection_ids.extend(sink.iter().cloned());
                                 }
                                 (extension.namespace == "astro.background_complete")
                                     .then(|| item.turn_id.clone())
@@ -395,30 +405,39 @@ pub async fn run_listener_commands(
                     });
                     (
                         subscribers.into_iter().collect::<Vec<_>>(),
+                        retained_connection_ids.into_iter().collect::<Vec<_>>(),
                         event_to_proto(&thread_id, &event),
                     )
                 };
-                let mut disconnected = Vec::new();
+                let mut disconnected_subscribers = Vec::new();
+                let mut delivered_connection_ids = HashSet::new();
                 for subscription in subscribers {
-                    if !connections
+                    if connections
                         .send_to_generation(&subscription, outbound.clone())
                         .await
                     {
-                        disconnected.push(subscription);
+                        delivered_connection_ids.insert(subscription.connection_id().to_string());
+                    } else {
+                        disconnected_subscribers.push(subscription);
                     }
                 }
-                if !disconnected.is_empty() {
+                for connection_id in retained_connection_ids {
+                    if delivered_connection_ids.contains(&connection_id) {
+                        continue;
+                    }
+                    if connections.send_to(&connection_id, outbound.clone()).await {
+                        delivered_connection_ids.insert(connection_id);
+                    }
+                }
+                if !disconnected_subscribers.is_empty() {
                     let mut state = state.lock().await;
-                    for subscription in disconnected {
+                    for subscription in disconnected_subscribers {
                         if state
                             .subscribers
                             .get(subscription.connection_id())
                             .is_some_and(|current| current == &subscription)
                         {
                             state.subscribers.remove(subscription.connection_id());
-                        }
-                        for sink in state.background_extension_sinks.values_mut() {
-                            sink.retain(|retained| retained != &subscription);
                         }
                     }
                     let _ = state.activity_tx.send(ThreadActivity {
@@ -430,11 +449,17 @@ pub async fn run_listener_commands(
                 if let EventMsg::ItemCompleted(item) = &event.msg {
                     if let TurnItem::Extension(extension) = &item.item {
                         if let Ok(payload_json) = serde_json::to_string(&item.item) {
-                            if let Some(waiters) =
-                                extension_waiters.remove(&(extension.id.clone(), payload_json))
-                            {
-                                for waiter in waiters {
-                                    let _ = waiter.send(());
+                            let completed = extension_waiters
+                                .iter()
+                                .filter_map(|(waiter_id, waiter)| {
+                                    (waiter.item_id == extension.id
+                                        && waiter.payload_json == payload_json)
+                                        .then_some(*waiter_id)
+                                })
+                                .collect::<Vec<_>>();
+                            for waiter_id in completed {
+                                if let Some(waiter) = extension_waiters.remove(&waiter_id) {
+                                    let _ = waiter.reply.send(());
                                 }
                             }
                         }
@@ -490,6 +515,7 @@ pub async fn run_listener_commands(
                 }
             }
             ListenerCommand::WaitForExtension {
+                waiter_id,
                 item_id,
                 payload_json,
                 reply,
@@ -502,11 +528,31 @@ pub async fn run_listener_commands(
                 {
                     let _ = reply.send(());
                 } else {
-                    extension_waiters
-                        .entry((item_id, payload_json))
-                        .or_default()
-                        .push(reply);
+                    extension_waiters.insert(
+                        waiter_id,
+                        ExtensionWaiter {
+                            item_id,
+                            payload_json,
+                            reply,
+                        },
+                    );
                 }
+            }
+            ListenerCommand::CancelExtensionWaiter { waiter_id } => {
+                extension_waiters.remove(&waiter_id);
+            }
+            #[cfg(test)]
+            ListenerCommand::ExtensionWaiterCount { reply } => {
+                let _ = reply.send(extension_waiters.len());
+            }
+            ListenerCommand::ExpireBackgroundSink { turn_id } => {
+                let mut state = state.lock().await;
+                state.background_extension_sinks.remove(&turn_id);
+                let _ = state.activity_tx.send(ThreadActivity {
+                    status: state.status.clone(),
+                    has_subscribers: !state.subscribers.is_empty()
+                        || !state.background_extension_sinks.is_empty(),
+                });
             }
             ListenerCommand::Stop => break,
         }
