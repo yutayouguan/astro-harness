@@ -261,7 +261,7 @@ impl PermissionsConfig {
     }
 }
 
-fn is_builtin_profile(id: &str) -> bool {
+pub fn is_builtin_profile(id: &str) -> bool {
     matches!(
         id,
         READ_ONLY_PROFILE | WORKSPACE_PROFILE | DANGER_FULL_ACCESS_PROFILE

@@ -16,7 +16,7 @@ pub mod session;
 pub use agent::store::{parse_memory_entries, MemoryStore, MemoryWriteResult};
 pub use agent::workspace;
 pub use config::{
-    add_command_to_allowlist, load_approvals_config, load_auxiliary_config,
+    add_command_to_allowlist, amend_network_domain, load_approvals_config, load_auxiliary_config,
     load_compression_config, load_evolution_config, load_learning_config, load_memory_config,
     load_permission_settings, remove_command_from_allowlist, reset_all_auxiliary_routes,
     reset_all_evolution_routes, reset_compression_config, resolve_auxiliary, set_approval_mode,

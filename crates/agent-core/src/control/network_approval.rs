@@ -240,6 +240,47 @@ impl NetworkApprovalService {
 
         BeginResult::Owner(owner)
     }
+
+    /// Persist a network domain amendment and update the session cache on success.
+    ///
+    /// Only succeeds for exact hosts on custom leaf profiles. On failure the
+    /// session cache is not modified — fail-closed.
+    pub fn persist_amendment(
+        &self,
+        memory_dir: &std::path::Path,
+        profile_id: &str,
+        amendment: &types::NetworkPolicyAmendment,
+    ) -> anyhow::Result<()> {
+        let action = match amendment.action {
+            types::NetworkPolicyRuleAction::Allow => types::NetworkPolicyRuleAction::Allow,
+            types::NetworkPolicyRuleAction::Deny => types::NetworkPolicyRuleAction::Deny,
+        };
+        memory::amend_network_domain(memory_dir, profile_id, &amendment.host, action)?;
+
+        let key = HostApprovalKey {
+            profile_id: profile_id.to_string(),
+            host: amendment.host.clone(),
+            protocol: types::NetworkApprovalProtocol::Https,
+            port: 0,
+        };
+        match amendment.action {
+            types::NetworkPolicyRuleAction::Allow => {
+                self.inner
+                    .session_allowed
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .insert(key, ());
+            }
+            types::NetworkPolicyRuleAction::Deny => {
+                self.inner
+                    .session_denied
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .insert(key, ());
+            }
+        }
+        Ok(())
+    }
 }
 
 /// Result of `begin_or_join`.
@@ -421,6 +462,118 @@ mod tests {
         assert_eq!(
             decision,
             PendingApprovalDecision::Allow(ApprovalScope::Once)
+        );
+    }
+
+    #[test]
+    fn persist_amendment_updates_session_cache_on_success() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("config.yaml"), "").unwrap();
+        let service = NetworkApprovalService::new();
+
+        service
+            .persist_amendment(
+                dir.path(),
+                "custom-profile",
+                &types::NetworkPolicyAmendment {
+                    host: "api.example.com".into(),
+                    action: types::NetworkPolicyRuleAction::Allow,
+                },
+            )
+            .unwrap();
+
+        let key = test_key("api.example.com");
+        let key = HostApprovalKey {
+            profile_id: "custom-profile".into(),
+            ..key
+        };
+        assert_eq!(service.cached_decision(&key), Some(CachedDecision::Allowed));
+    }
+
+    #[test]
+    fn persist_amendment_rejects_builtin_profiles() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("config.yaml"), "").unwrap();
+        let service = NetworkApprovalService::new();
+
+        let result = service.persist_amendment(
+            dir.path(),
+            types::WORKSPACE_PROFILE,
+            &types::NetworkPolicyAmendment {
+                host: "api.example.com".into(),
+                action: types::NetworkPolicyRuleAction::Allow,
+            },
+        );
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("builtin"));
+    }
+
+    #[test]
+    fn persist_amendment_rejects_wildcard_hosts() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("config.yaml"), "").unwrap();
+        let service = NetworkApprovalService::new();
+
+        let result = service.persist_amendment(
+            dir.path(),
+            "custom-profile",
+            &types::NetworkPolicyAmendment {
+                host: "*.example.com".into(),
+                action: types::NetworkPolicyRuleAction::Allow,
+            },
+        );
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("wildcard"));
+    }
+
+    #[test]
+    fn persist_deny_amendment_enters_deny_cache() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("config.yaml"), "").unwrap();
+        let service = NetworkApprovalService::new();
+
+        service
+            .persist_amendment(
+                dir.path(),
+                "custom-profile",
+                &types::NetworkPolicyAmendment {
+                    host: "blocked.example.com".into(),
+                    action: types::NetworkPolicyRuleAction::Deny,
+                },
+            )
+            .unwrap();
+
+        let key = HostApprovalKey {
+            profile_id: "custom-profile".into(),
+            host: "blocked.example.com".into(),
+            protocol: NetworkApprovalProtocol::Https,
+            port: 443,
+        };
+        assert_eq!(service.cached_decision(&key), Some(CachedDecision::Denied));
+    }
+
+    #[test]
+    fn persist_amendment_preserves_other_yaml_keys() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("config.yaml"), "approvals:\n  mode: user\n").unwrap();
+        let service = NetworkApprovalService::new();
+
+        service
+            .persist_amendment(
+                dir.path(),
+                "net-profile",
+                &types::NetworkPolicyAmendment {
+                    host: "api.example.com".into(),
+                    action: types::NetworkPolicyRuleAction::Allow,
+                },
+            )
+            .unwrap();
+
+        let text = std::fs::read_to_string(dir.path().join("config.yaml")).unwrap();
+        assert!(text.contains("mode: user"), "other keys lost: {text}");
+        assert!(
+            text.contains("api.example.com"),
+            "amendment missing: {text}"
         );
     }
 }

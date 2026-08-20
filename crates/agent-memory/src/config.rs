@@ -1258,6 +1258,64 @@ pub fn remove_command_from_allowlist(base: &Path, entry: &str) -> anyhow::Result
     Ok(load_approvals_config(base))
 }
 
+/// Atomically write a single exact-host domain rule into a custom permission profile.
+///
+/// Only custom leaf profiles may be amended — builtin profiles (`:read-only`,
+/// `:workspace`, `:danger-full-access`) are rejected.  The host is stored
+/// exactly as given (no wildcard expansion).  Other config keys are preserved.
+pub fn amend_network_domain(
+    base: &Path,
+    profile_id: &str,
+    host: &str,
+    action: types::NetworkPolicyRuleAction,
+) -> anyhow::Result<()> {
+    use types::{is_builtin_profile, NetworkPolicyRuleAction};
+
+    let host = host.trim().to_lowercase();
+    anyhow::ensure!(!host.is_empty(), "host must not be empty");
+    anyhow::ensure!(
+        !host.contains('*'),
+        "wildcard hosts cannot be persisted as exact amendments"
+    );
+    anyhow::ensure!(
+        !is_builtin_profile(profile_id),
+        "builtin profile {profile_id} cannot be amended"
+    );
+
+    let mut root = load_yaml_root(base)?;
+    let profile_map = ensure_mapping_path(
+        &mut root,
+        &["permissions", "profiles", profile_id, "network"],
+    )?;
+    let domains_key = serde_yaml::Value::String("domains".into());
+    let domains = match profile_map
+        .get_mut(&domains_key)
+        .and_then(|v| v.as_mapping_mut())
+    {
+        Some(m) => m,
+        None => {
+            profile_map.insert(
+                domains_key.clone(),
+                serde_yaml::Value::Mapping(serde_yaml::Mapping::new()),
+            );
+            profile_map
+                .get_mut(&domains_key)
+                .unwrap()
+                .as_mapping_mut()
+                .unwrap()
+        }
+    };
+    let action_str = match action {
+        NetworkPolicyRuleAction::Allow => "allow",
+        NetworkPolicyRuleAction::Deny => "deny",
+    };
+    domains.insert(
+        serde_yaml::Value::String(host),
+        serde_yaml::Value::String(action_str.into()),
+    );
+    save_yaml_root(base, &root)
+}
+
 /// 设置 `memory.auto_refresh_on_update` 并返回最新配置。
 pub fn set_auto_refresh_on_update(base: &Path, enabled: bool) -> anyhow::Result<MemoryConfig> {
     set_nested_bool(base, &["memory"], "auto_refresh_on_update", enabled)?;
