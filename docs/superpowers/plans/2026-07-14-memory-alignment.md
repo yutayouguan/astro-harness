@@ -48,7 +48,7 @@
 - Modify: `crates/agent-memory/src/agent/files.rs`（改为 `pub use store::*` 或删除后改 import）
 - Test: unit tests in `store.rs` / `scan.rs`
 
-- [ ] **Step 1: Write failing tests for parse/serialize and overflow**
+- [x] **Step 1: Write failing tests for parse/serialize and overflow**
 
 ```rust
 #[test]
@@ -76,12 +76,12 @@ fn add_fails_when_over_limit_without_dropping() {
 }
 ```
 
-- [ ] **Step 2: Run tests — expect FAIL (type missing)**
+- [x] **Step 2: Run tests — expect FAIL (type missing)**
 
 Run: `cargo test -p memory store:: -- --nocapture`  
 Expected: compile error / no `MemoryStore`
 
-- [ ] **Step 3: Implement minimal `MemoryStore`**
+- [x] **Step 3: Implement minimal `MemoryStore`**
 
 API 形状（钉死，后续 task 引用同一签名）：
 
@@ -120,7 +120,7 @@ pub struct MemoryWriteResult {
 - `replace`/`remove`：子串命中数必须为 1
 - save：atomic temp + rename；盘格式仅 `§`
 
-- [ ] **Step 4: Implement `scan.rs`**
+- [x] **Step 4: Implement `scan.rs`**
 
 ```rust
 pub fn scan_memory_content(content: &str) -> Result<(), String>;
@@ -128,7 +128,7 @@ pub fn scan_memory_content(content: &str) -> Result<(), String>;
 
 拦截不可见 Unicode + 至少：`ignore previous instructions`、`authorized_keys`、`curl`+`API`/`TOKEN` 类模式（case-insensitive）。`add`/`replace` 在写入前调用。
 
-- [ ] **Step 5: Tests for unique substring, duplicate add, scan block**
+- [x] **Step 5: Tests for unique substring, duplicate add, scan block**
 
 - [x] **Step 6: `cargo test -p memory`**
 
@@ -156,7 +156,7 @@ EOF
 - Modify: `crates/agent-memory/src/lib.rs`
 - Test: `crates/agent-memory/src/config.rs` 或 manager 集成测
 
-- [ ] **Step 1: Config types**
+- [x] **Step 1: Config types**
 
 ```rust
 #[derive(Debug, Clone, Deserialize)]
@@ -178,7 +178,7 @@ pub struct MemoryConfig {
 
 从 `{base}/config.yaml` 读；缺省文件 → 全默认。
 
-- [ ] **Step 2: `MemoryManager` 持有两个 `MemoryStore` + `MemoryConfig`**
+- [x] **Step 2: `MemoryManager` 持有两个 `MemoryStore` + `MemoryConfig`**
 
 ```rust
 pub struct MemoryManager {
@@ -194,7 +194,7 @@ pub struct MemoryManager {
 
 `for_agent`：`load_memory_config(&base_dir)` → `MemoryStore::open(..., cfg.memory_char_limit)` / user limit。
 
-- [ ] **Step 3: Replace `MemoryTarget`**
+- [x] **Step 3: Replace `MemoryTarget`**
 
 ```rust
 pub enum MemoryTarget { Memory, User }
@@ -202,7 +202,7 @@ pub enum MemoryTarget { Memory, User }
 
 删除 `Daily` / `Project`。`append_daily` 保留为非工具方法。
 
-- [ ] **Step 4: `prompt_snapshot_with_daily`**
+- [x] **Step 4: `prompt_snapshot_with_daily`**
 
 ```rust
 pub fn prompt_snapshot_with_daily(&self) -> (String, String, String) {
@@ -216,7 +216,7 @@ pub fn prompt_snapshot_with_daily(&self) -> (String, String, String) {
 
 保留 `prompt_content` 兼容调用方时改为 **snapshot** 语义，并在 rustdoc 标明。
 
-- [ ] **Step 5: `refresh_memory_snapshot(&mut self)`** — `memory.reload()?; user.reload()?;` 或 live→snapshot 后若需跟盘则 reload
+- [x] **Step 5: `refresh_memory_snapshot(&mut self)`** — `memory.reload()?; user.reload()?;` 或 live→snapshot 后若需跟盘则 reload
 
 - [x] **Step 6: 更新所有 `MemoryTarget::Project` 编译点**
 
@@ -245,7 +245,7 @@ EOF
 - Modify: `crates/agent-core/src/delegate_exec.rs`（工具名列表）
 - Test: manager unit test or tools test
 
-- [ ] **Step 1: Schema**
+- [x] **Step 1: Schema**
 
 ```rust
 #[derive(Deserialize, JsonSchema)]
@@ -259,7 +259,7 @@ pub struct MemoryArgs {
 
 只注册 **一个** `name: "memory"`，`toolset: "memory"`。保留 `session_search`。
 
-- [ ] **Step 2: `dispatch_memory_tool`**
+- [x] **Step 2: `dispatch_memory_tool`**
 
 ```rust
 match name {
@@ -280,7 +280,7 @@ pub fn handle_memory_op(&mut self, action, target, content, old_text) -> Result<
 
 成功消息注明「已写盘（live）；当前会话 prompt 快照未刷新」。
 
-- [ ] **Step 3: `tool_name_to_toolset("memory") => "memory"`**；清理旧三名
+- [x] **Step 3: `tool_name_to_toolset("memory") => "memory"`**；清理旧三名
 
 - [x] **Step 4: `cargo test -p tools -p memory`**
 
@@ -303,9 +303,9 @@ EOF
 - Modify: `crates/agent-core/src/context.rs`（可选：render 标题带 usage，若 snapshot_render 已含 header 则避免双标题）
 - Test: `agent/tests/agent_test.rs` 或新建 `agent/tests/memory_snapshot_test.rs`
 
-- [ ] **Step 1: 构造时 snapshot 已由 `MemoryStore::open` 固化** — 确认 `open` = load disk → live + snapshot
+- [x] **Step 1: 构造时 snapshot 已由 `MemoryStore::open` 固化** — 确认 `open` = load disk → live + snapshot
 
-- [ ] **Step 2: 改 `build_system_prompt`**
+- [x] **Step 2: 改 `build_system_prompt`**
 
 **禁止**每轮 `prompt_content_with_daily` 重读导致「写入立刻进 prompt」。应：
 
@@ -315,11 +315,11 @@ let (project_memory, user_profile, daily) = self.memory.prompt_snapshot_with_dai
 
 `daily` 截断已在 manager 完成；`StaticContext` 今日层标题改为标明流水，例如 `# 今日记忆（流水截断）`。
 
-- [ ] **Step 3: `pub fn refresh_memory(&mut self) -> Result<()>`** → `self.memory.refresh_memory_snapshot()`
+- [x] **Step 3: `pub fn refresh_memory(&mut self) -> Result<()>`** → `self.memory.refresh_memory_snapshot()`
 
-- [ ] **Step 4: 换 `session_id` 的路径**（`with_session_id` / 重置）调用 `refresh_memory`
+- [x] **Step 4: 换 `session_id` 的路径**（`with_session_id` / 重置）调用 `refresh_memory`
 
-- [ ] **Step 5: 集成测**
+- [x] **Step 5: 集成测**
 
 ```rust
 #[test]
@@ -353,7 +353,7 @@ EOF
 - Modify: `crates/agent-memory/src/dreaming/mod.rs` — `finalize_dream_job_with_memory`
 - Modify: 前端记忆页（可选按钮「刷新进对话」）— 最小：命令可用即可
 
-- [ ] **Step 1: Tauri command**
+- [x] **Step 1: Tauri command**
 
 ```rust
 #[tauri::command]
@@ -364,7 +364,7 @@ fn refresh_memory(app_state: ...) -> Result<(), String> {
 
 若当前架构是每请求新建 Manager：则 refresh = 下次构建时 reload（文档写清）；若长驻 `AgentLoop`，必须调实例方法。
 
-- [ ] **Step 2: 入梦 finalize 禁止直接 `write_text_atomic(MEMORY.md)` 整文件覆盖跳过门禁**
+- [x] **Step 2: 入梦 finalize 禁止直接 `write_text_atomic(MEMORY.md)` 整文件覆盖跳过门禁**
 
 改为：用 `MemoryStore::open` 加载 → 将模型输出解析为条目列表（或整页 replace 策略见下）→ 经 scan/limit。
 
@@ -379,7 +379,7 @@ fn refresh_memory(app_state: ...) -> Result<(), String> {
 pub fn replace_all_entries(&mut self, entries: Vec<String>) -> anyhow::Result<()>;
 ```
 
-- [ ] **Step 3: 更新 `count_memory_bullets` 等统计适配 `§`**
+- [x] **Step 3: 更新 `count_memory_bullets` 等统计适配 `§`**
 
 - [x] **Step 4: `cargo test -p memory` dreaming 相关 + tauri check**
 
@@ -423,7 +423,7 @@ EOF
 - Modify: Tauri commands + 设置/记忆页最小 UI
 - Test: `memory/tests/pending_test.rs`
 
-- [ ] **Step 1: Pending 记录**
+- [x] **Step 1: Pending 记录**
 
 ```rust
 pub struct PendingMemoryWrite {
@@ -464,7 +464,7 @@ EOF
 - Modify: `apps/desktop/src-tauri/src/dreaming_commands.rs` — 用 aux 模型调 LLM
 - Test: review 用 mock/scripted provider
 
-- [ ] **Step 1: Config**
+- [x] **Step 1: Config**
 
 ```yaml
 auxiliary:
@@ -476,18 +476,18 @@ auxiliary:
     model: auto
 ```
 
-- [ ] **Step 2: `resolve_auxiliary(route, session_provider, session_model) -> (provider, model)`**
+- [x] **Step 2: `resolve_auxiliary(route, session_provider, session_model) -> (provider, model)`**
 
-- [ ] **Step 3: Review**
+- [x] **Step 3: Review**
   - 输入：最近 N=6 轮原文 + 更早摘要（截断）
   - 输出：JSON 数组建议 `{action,target,content?,old_text?}` + optional `daily_note`
   - 应用：`handle_memory_op` / `append_daily`（走审批）
 
-- [ ] **Step 4: Dreaming command 改用 `auxiliary.dreaming`**
+- [x] **Step 4: Dreaming command 改用 `auxiliary.dreaming`**
 
-- [ ] **Step 5: 通知** — 可选事件 `memory_updated`（已有 event bus 则可复用）；默认一行，可后续做 display 开关
+- [x] **Step 5: 通知** — 可选事件 `memory_updated`（已有 event bus 则可复用）；默认一行，可后续做 display 开关
 
-- [ ] **Step 6: Tests + commit**
+- [x] **Step 6: Tests + commit**
 
 ```bash
 git commit -m "$(cat <<'EOF'
