@@ -13,7 +13,7 @@
 ### Task 1: agent crate
 
 - [x] `src/lib.rs` 及各 `src/*.rs` 模块与公开/私有项注释
-- [ ] 测试文件仅模块级 `//!`（可选简短）
+- [x] 测试文件仅模块级 `//!`（可选简短）
 
 ### Task 2: memory crate
 

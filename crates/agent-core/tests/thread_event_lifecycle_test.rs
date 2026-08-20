@@ -1,3 +1,5 @@
+//! Agent Thread 事件生命周期集成测试。
+
 mod common;
 
 use std::sync::Arc;
