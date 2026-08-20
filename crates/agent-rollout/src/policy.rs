@@ -1,9 +1,9 @@
 use agent_protocol::EventMsg;
 
-use crate::{RolloutItem, ThreadHistoryMode};
+use crate::RolloutItem;
 
-/// Returns whether an event is part of the durable rollout history for `mode`.
-pub fn should_persist_event_msg(event: &EventMsg, _mode: ThreadHistoryMode) -> bool {
+/// Returns whether an event is part of durable rollout history.
+pub fn should_persist_event_msg(event: &EventMsg) -> bool {
     match event {
         EventMsg::ItemCompleted(_) => true,
         EventMsg::TurnStarted(_)
@@ -40,10 +40,10 @@ pub fn should_persist_event_msg(event: &EventMsg, _mode: ThreadHistoryMode) -> b
     }
 }
 
-/// Returns whether a rollout item belongs in durable history for `mode`.
-pub fn is_persisted_rollout_item(item: &RolloutItem, mode: ThreadHistoryMode) -> bool {
+/// Returns whether a rollout item belongs in durable history.
+pub fn is_persisted_rollout_item(item: &RolloutItem) -> bool {
     match item {
-        RolloutItem::EventMsg(event) => should_persist_event_msg(event, mode),
+        RolloutItem::EventMsg(event) => should_persist_event_msg(event),
         RolloutItem::SessionMeta(_)
         | RolloutItem::ResponseItem(_)
         | RolloutItem::TurnContext(_)
@@ -55,9 +55,7 @@ pub fn is_persisted_rollout_item(item: &RolloutItem, mode: ThreadHistoryMode) ->
 
 #[cfg(test)]
 mod tests {
-    use super::super::{
-        is_persisted_rollout_item, should_persist_event_msg, RolloutItem, ThreadHistoryMode,
-    };
+    use super::super::{is_persisted_rollout_item, should_persist_event_msg, RolloutItem};
     use agent_protocol::event::{
         ContextUsageEvent, DeltaEvent, ErrorEvent, EventMsg, ItemEvent, TurnCompleteEvent,
         UserInputCommittedEvent,
@@ -65,7 +63,7 @@ mod tests {
     use agent_protocol::items::{TextItem, TurnItem};
 
     #[test]
-    fn paginated_persists_completed_items_but_not_deltas() {
+    fn durable_policy_persists_completed_items_but_not_deltas() {
         let completed = EventMsg::ItemCompleted(ItemEvent {
             turn_id: "turn-1".into(),
             item: TurnItem::AgentMessage(TextItem {
@@ -79,14 +77,8 @@ mod tests {
             delta: "partial".into(),
         });
 
-        assert!(should_persist_event_msg(
-            &completed,
-            ThreadHistoryMode::Paginated
-        ));
-        assert!(!should_persist_event_msg(
-            &delta,
-            ThreadHistoryMode::Paginated
-        ));
+        assert!(should_persist_event_msg(&completed));
+        assert!(!should_persist_event_msg(&delta));
     }
 
     #[test]
@@ -101,14 +93,8 @@ mod tests {
             error_type: "internal".into(),
         });
 
-        assert!(should_persist_event_msg(
-            &complete,
-            ThreadHistoryMode::Paginated
-        ));
-        assert!(!should_persist_event_msg(
-            &error,
-            ThreadHistoryMode::Paginated
-        ));
+        assert!(should_persist_event_msg(&complete));
+        assert!(!should_persist_event_msg(&error));
     }
 
     #[test]
@@ -122,10 +108,7 @@ mod tests {
             recommend_compact: false,
         });
 
-        assert!(should_persist_event_msg(
-            &context,
-            ThreadHistoryMode::Paginated
-        ));
+        assert!(should_persist_event_msg(&context));
     }
 
     #[test]
@@ -135,20 +118,14 @@ mod tests {
             client_message_id: "client-message-1".into(),
         });
 
-        assert!(should_persist_event_msg(
-            &committed,
-            ThreadHistoryMode::Paginated
-        ));
+        assert!(should_persist_event_msg(&committed));
     }
 
     #[test]
     fn non_event_rollout_items_are_always_persisted() {
         let item = RolloutItem::TurnContext(serde_json::json!({"turn_id": "turn-1"}));
 
-        assert!(is_persisted_rollout_item(
-            &item,
-            ThreadHistoryMode::Paginated
-        ));
+        assert!(is_persisted_rollout_item(&item));
     }
 
     #[test]

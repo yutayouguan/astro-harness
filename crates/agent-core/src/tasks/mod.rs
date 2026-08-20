@@ -605,7 +605,7 @@ mod tests {
     use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
     use agent_protocol::{Event, EventMsg, Op};
-    use agent_rollout::{RolloutRecorder, ThreadHistoryMode};
+    use agent_rollout::RolloutRecorder;
 
     use super::*;
     use crate::runtime::{AgentStatus, AstroThread, Config};
@@ -886,12 +886,9 @@ mod tests {
 
     async fn task_test_thread(name: &str) -> (tempfile::TempDir, Arc<Session>, Arc<AstroThread>) {
         let dir = tempfile::tempdir().unwrap();
-        let rollout = RolloutRecorder::open(
-            dir.path().join("rollout.jsonl"),
-            ThreadHistoryMode::Paginated,
-        )
-        .await
-        .unwrap();
+        let rollout = RolloutRecorder::open(dir.path().join("rollout.jsonl"))
+            .await
+            .unwrap();
         let session = Arc::new(
             Session::with_session_id(Config::with_defaults(dir.path().to_path_buf()), name.into())
                 .unwrap(),

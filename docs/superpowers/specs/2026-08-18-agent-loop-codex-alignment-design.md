@@ -275,7 +275,7 @@ Session::send_event
 
 ### 6.3 Persistence policy
 
-Thread 只使用 `Paginated` history mode，不再按旧/新线程分叉 persistence policy。
+Thread 只使用一套 durable rollout policy，不再暴露 history mode 或按旧/新线程分叉。
 
 | 类型 | 持久化 |
 |---|---:|
@@ -350,7 +350,7 @@ AstroThread::next_event()
 恢复使用 snapshot + live stream，而不是 transient event replay：
 
 1. 定位或重新加载 Thread rollout；
-2. 按 history mode 重建稳定 Turn/Item 历史；
+2. 按统一 rollout policy 重建稳定 Turn/Item 历史；
 3. 对已加载 Thread，从 listener 持有的 `ThreadHistoryBuilder` 取得活动 Turn 快照；
 4. 合并持久历史和活动 Turn，生成 `ThreadResumeResponse`；
 5. 把连接加入 Thread 订阅集合；
@@ -442,7 +442,7 @@ UI 状态机的派生事件；Core 与 gRPC 终态只有 `TurnComplete` 或 `Tur
 
 - 建立 `Op`、`Submission`、`Event`、`EventMsg`、`TurnItem`；
 - 实现 `rollout::policy`、writer、flush 与 reconstruction；
-- 所有 Thread 使用单一 `Paginated` policy，不保留 legacy mode。
+- 所有 Thread 使用单一 rollout policy，不保留 history mode 参数。
 
 ### 阶段 B：Session actor（已完成）
 
@@ -490,9 +490,9 @@ UI 状态机的派生事件；Core 与 gRPC 终态只有 `TurnComplete` 或 `Tur
 
 ### 12.2 Rollout 重建测试
 
-1. Paginated `ItemCompleted` 可重建 TurnItem。
+1. durable `ItemCompleted` 可重建 TurnItem。
 2. delta、stdout、approval request 不写入 rollout。
-3. Paginated persistence policy 符合表格，且协议中不存在 legacy event 分支。
+3. persistence policy 符合表格，且协议中不存在 legacy event 分支。
 4. completed、errored、aborted、stale Turn 状态重建正确。
 5. Compaction、MCP、Hook、Subagent 和 Extension item 可重建。
 6. SQLite 投影删除后可从 rollout 重新生成。

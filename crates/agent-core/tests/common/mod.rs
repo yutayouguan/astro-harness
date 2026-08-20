@@ -1,7 +1,7 @@
 use std::{path::PathBuf, sync::Arc};
 
 use agent::{AstroThread, Config, Session};
-use agent_rollout::{RolloutRecorder, ThreadHistoryMode};
+use agent_rollout::RolloutRecorder;
 use tempfile::TempDir;
 
 pub(crate) async fn new_thread() -> (
@@ -13,9 +13,7 @@ pub(crate) async fn new_thread() -> (
 ) {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("rollout.jsonl");
-    let recorder = RolloutRecorder::open(path.clone(), ThreadHistoryMode::Paginated)
-        .await
-        .unwrap();
+    let recorder = RolloutRecorder::open(path.clone()).await.unwrap();
     let recorder_control = recorder.clone();
     let session = Arc::new(
         Session::with_session_id(

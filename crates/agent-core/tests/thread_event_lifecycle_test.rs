@@ -9,7 +9,7 @@ use agent::{AgentStatus, Config, Event, EventMsg, Op, Session};
 use agent_protocol::{
     TurnInput, TurnInputMode, TurnInputRequest, TurnInputSubmission, TurnStartedEvent,
 };
-use agent_rollout::{read_rollout, RolloutItem, RolloutRecorder, ThreadHistoryMode};
+use agent_rollout::{read_rollout, RolloutItem, RolloutRecorder};
 use providers::{CompletionStream, PauseControl, ProviderConfig};
 use serde_json::json;
 use tokio::sync::Notify;
@@ -192,12 +192,9 @@ async fn prepare_failure_emits_one_error_and_complete_with_error() {
     let dir = tempfile::tempdir().unwrap();
     let mut config = Config::with_defaults(dir.path().to_path_buf());
     config.max_turns = 0;
-    let rollout = RolloutRecorder::open(
-        dir.path().join("prepare-failure.jsonl"),
-        ThreadHistoryMode::Paginated,
-    )
-    .await
-    .unwrap();
+    let rollout = RolloutRecorder::open(dir.path().join("prepare-failure.jsonl"))
+        .await
+        .unwrap();
     let session = Arc::new(Session::with_session_id(config, "prepare-failure".into()).unwrap());
     let thread = agent::AstroThread::spawn(session, rollout).unwrap();
     let (_submission_id, submitted) = thread

@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 use tokio::io::{AsyncWrite, AsyncWriteExt};
 use tokio::sync::{mpsc, oneshot};
 
-use crate::{is_persisted_rollout_item, RolloutItem, ThreadHistoryMode};
+use crate::{is_persisted_rollout_item, RolloutItem};
 
 enum RecorderCommand {
     Record {
@@ -22,12 +22,11 @@ enum RecorderCommand {
 #[derive(Clone)]
 pub struct RolloutRecorder {
     path: PathBuf,
-    mode: ThreadHistoryMode,
     tx: mpsc::UnboundedSender<RecorderCommand>,
 }
 
 impl RolloutRecorder {
-    pub async fn open(path: PathBuf, mode: ThreadHistoryMode) -> io::Result<Self> {
+    pub async fn open(path: PathBuf) -> io::Result<Self> {
         if let Some(parent) = path
             .parent()
             .filter(|parent| !parent.as_os_str().is_empty())
@@ -43,7 +42,7 @@ impl RolloutRecorder {
 
         tokio::spawn(run_writer_loop(file, rx));
 
-        Ok(Self { path, mode, tx })
+        Ok(Self { path, tx })
     }
 
     pub fn path(&self) -> &Path {
@@ -53,7 +52,7 @@ impl RolloutRecorder {
     pub async fn record(&self, items: Vec<RolloutItem>) -> io::Result<()> {
         let items = items
             .into_iter()
-            .filter(|item| is_persisted_rollout_item(item, self.mode))
+            .filter(is_persisted_rollout_item)
             .collect();
         let (reply, receiver) = oneshot::channel();
         self.tx
@@ -142,7 +141,7 @@ mod tests {
     use tokio::sync::{mpsc, oneshot};
 
     use super::{run_writer_loop, RecorderCommand, RolloutRecorder};
-    use crate::{read_rollout, RolloutItem, ThreadHistoryMode};
+    use crate::{read_rollout, RolloutItem};
 
     struct FailAfter {
         remaining: usize,
@@ -175,9 +174,7 @@ mod tests {
     async fn record_then_flush_preserves_append_order() {
         let temp = TempDir::new().unwrap();
         let path = temp.path().join("rollout.jsonl");
-        let recorder = RolloutRecorder::open(path.clone(), ThreadHistoryMode::Paginated)
-            .await
-            .unwrap();
+        let recorder = RolloutRecorder::open(path.clone()).await.unwrap();
 
         recorder
             .record(vec![
@@ -233,9 +230,7 @@ mod tests {
     async fn transient_events_are_filtered_before_writing() {
         let temp = TempDir::new().unwrap();
         let path = temp.path().join("rollout.jsonl");
-        let recorder = RolloutRecorder::open(path.clone(), ThreadHistoryMode::Paginated)
-            .await
-            .unwrap();
+        let recorder = RolloutRecorder::open(path.clone()).await.unwrap();
 
         recorder
             .record(vec![RolloutItem::EventMsg(EventMsg::Warning(

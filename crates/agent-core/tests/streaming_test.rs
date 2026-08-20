@@ -648,12 +648,9 @@ async fn media_tool_result_survives_rollout_and_legacy_adapter() {
         }),
     );
     let session = Arc::new(agent);
-    let recorder = agent_rollout::RolloutRecorder::open(
-        path.clone(),
-        agent_rollout::ThreadHistoryMode::Paginated,
-    )
-    .await
-    .unwrap();
+    let recorder = agent_rollout::RolloutRecorder::open(path.clone())
+        .await
+        .unwrap();
     let thread = agent::AstroThread::spawn(Arc::clone(&session), recorder).unwrap();
     session
         .record_items(vec![types::message::Message::user("generate media")])
@@ -813,12 +810,9 @@ async fn oversized_inline_media_is_bounded_only_in_completed_event_copy() {
         }),
     );
     let session = Arc::new(agent);
-    let recorder = agent_rollout::RolloutRecorder::open(
-        path.clone(),
-        agent_rollout::ThreadHistoryMode::Paginated,
-    )
-    .await
-    .unwrap();
+    let recorder = agent_rollout::RolloutRecorder::open(path.clone())
+        .await
+        .unwrap();
     let thread = agent::AstroThread::spawn(Arc::clone(&session), recorder).unwrap();
     let chat = scripted_chat(vec![
         vec![
@@ -2600,12 +2594,9 @@ async fn multi_turn_budget_exhausted_forces_toolless_summary() {
     config.multi_turn = 1;
     let agent = AgentLoop::with_session_id(config, "budget-session".into()).unwrap();
     let session = Arc::new(agent);
-    let recorder = agent_rollout::RolloutRecorder::open(
-        dir.path().join("budget-rollout.jsonl"),
-        agent_rollout::ThreadHistoryMode::Paginated,
-    )
-    .await
-    .unwrap();
+    let recorder = agent_rollout::RolloutRecorder::open(dir.path().join("budget-rollout.jsonl"))
+        .await
+        .unwrap();
     let thread = agent::AstroThread::spawn(Arc::clone(&session), recorder).unwrap();
     {
         let a = session.as_ref();

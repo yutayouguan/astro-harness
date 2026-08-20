@@ -1035,12 +1035,9 @@ impl AstroServiceImpl {
         } else {
             Vec::new()
         };
-        let rollout = agent_rollout::RolloutRecorder::open(
-            rollout_path,
-            agent_rollout::ThreadHistoryMode::Paginated,
-        )
-        .await
-        .map_err(|error| Status::internal(error.to_string()))?;
+        let rollout = agent_rollout::RolloutRecorder::open(rollout_path)
+            .await
+            .map_err(|error| Status::internal(error.to_string()))?;
         let runtime = agent::AstroThread::spawn(Arc::clone(&session), rollout)
             .map_err(|error| Status::failed_precondition(error.to_string()))?;
 

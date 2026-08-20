@@ -106,7 +106,6 @@ mod tests {
     use std::sync::atomic::{AtomicUsize, Ordering};
     use std::time::Duration;
 
-    use agent_rollout::ThreadHistoryMode;
     use providers::types::stream::StreamChunk;
     use providers::CompletionStream;
     use tempfile::TempDir;
@@ -116,9 +115,7 @@ mod tests {
     use crate::runtime::{AgentStatus, Config, RuntimeIoBindError};
 
     async fn recorder(dir: &TempDir, name: &str) -> RolloutRecorder {
-        RolloutRecorder::open(dir.path().join(name), ThreadHistoryMode::Paginated)
-            .await
-            .unwrap()
+        RolloutRecorder::open(dir.path().join(name)).await.unwrap()
     }
 
     #[tokio::test]

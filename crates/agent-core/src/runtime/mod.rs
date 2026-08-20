@@ -1399,12 +1399,7 @@ mod tests {
     async fn concurrent_events_keep_rollout_live_and_status_in_one_order() {
         let dir = TempDir::new().unwrap();
         let rollout_path = dir.path().join("ordered-events.jsonl");
-        let rollout = RolloutRecorder::open(
-            rollout_path.clone(),
-            agent_rollout::ThreadHistoryMode::Paginated,
-        )
-        .await
-        .unwrap();
+        let rollout = RolloutRecorder::open(rollout_path.clone()).await.unwrap();
         let session = Arc::new(Session::new(test_config(&dir)).unwrap());
         let thread = AstroThread::spawn(Arc::clone(&session), rollout).unwrap();
         let first_persisted = Arc::new(tokio::sync::Barrier::new(2));
