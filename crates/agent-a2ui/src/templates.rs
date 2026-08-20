@@ -511,6 +511,97 @@ pub fn build_form_surface(
     ]
 }
 
+/// Build a network host approval surface for managed proxy denials.
+///
+/// Shows the target host, profile, and four action buttons:
+/// allow-once, allow-for-session, allow-always (persistent), and deny.
+pub fn build_network_approval_surface(
+    surface_id: &str,
+    host: &str,
+    protocol: &str,
+    port: u16,
+    profile_id: &str,
+    command_preview: Option<&str>,
+) -> Vec<Value> {
+    let target = if port == 443 || port == 80 {
+        format!("{protocol}://{host}")
+    } else {
+        format!("{protocol}://{host}:{port}")
+    };
+    let body = if let Some(cmd) = command_preview {
+        format!("Command `{cmd}` is trying to connect to **{target}**\n\nProfile: `{profile_id}`")
+    } else {
+        format!("A subprocess is trying to connect to **{target}**\n\nProfile: `{profile_id}`")
+    };
+
+    let components = vec![
+        json!({ "id": "root", "component": "Card", "child": "col" }),
+        json!({
+            "id": "col",
+            "component": "Column",
+            "children": ["header", "body", "actions"]
+        }),
+        json!({
+            "id": "header",
+            "component": "Row",
+            "children": ["avatar", "header_text", "badge"]
+        }),
+        json!({ "id": "avatar", "component": "Avatar", "name": "globe" }),
+        json!({ "id": "header_text", "component": "Column", "children": ["title"] }),
+        json!({ "id": "title", "component": "Text", "text": "Network Access", "variant": "h2" }),
+        json!({ "id": "badge", "component": "Badge", "text": "Network", "variant": "warn" }),
+        json!({ "id": "body", "component": "Text", "text": body }),
+        json!({
+            "id": "actions",
+            "component": "Row",
+            "children": ["allow_once", "allow_session", "allow_always", "deny"]
+        }),
+        json!({
+            "id": "allow_once",
+            "component": "Button",
+            "child": "allow_once_label",
+            "variant": "primary",
+            "action": { "event": { "name": "allow_once" } }
+        }),
+        json!({ "id": "allow_once_label", "component": "Text", "text": "Allow once" }),
+        json!({
+            "id": "allow_session",
+            "component": "Button",
+            "child": "allow_session_label",
+            "variant": "secondary",
+            "action": { "event": { "name": "allow_session" } }
+        }),
+        json!({ "id": "allow_session_label", "component": "Text", "text": "Allow for session" }),
+        json!({
+            "id": "allow_always",
+            "component": "Button",
+            "child": "allow_always_label",
+            "variant": "secondary",
+            "action": { "event": { "name": "allow_always" } }
+        }),
+        json!({ "id": "allow_always_label", "component": "Text", "text": "Always allow" }),
+        json!({
+            "id": "deny",
+            "component": "Button",
+            "child": "deny_label",
+            "variant": "secondary",
+            "action": { "event": { "name": "deny" } }
+        }),
+        json!({ "id": "deny_label", "component": "Text", "text": "Deny" }),
+    ];
+
+    vec![
+        json!({
+            "version": "v0.9",
+            "createSurface": { "surfaceId": surface_id, "catalogId": ASTRO_CATALOG_ID }
+        }),
+        json!({
+            "version": "v0.9",
+            "updateComponents": { "surfaceId": surface_id, "components": components }
+        }),
+    ]
+}
+
 /// Build a tag/chip-list surface — title row + horizontal row of Chip labels.
 pub fn build_chip_list_surface(
     surface_id: &str,

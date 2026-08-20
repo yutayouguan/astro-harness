@@ -171,6 +171,91 @@ async fn park_astro_hitl_resolution(
     Some(resolution)
 }
 
+/// Network host approval request parameters.
+#[allow(dead_code)] // wired in Task 5 of inline-managed-network-approval
+pub(crate) struct NetworkApprovalRequest {
+    pub host: String,
+    pub protocol: String,
+    pub port: u16,
+    pub profile_id: String,
+    pub command_preview: Option<String>,
+}
+
+/// Result of a network approval HITL interaction.
+#[allow(dead_code)] // wired in Task 5 of inline-managed-network-approval
+pub(crate) struct NetworkApprovalOutcome {
+    pub decision: crate::control::network_approval::PendingApprovalDecision,
+    pub status: String,
+}
+
+/// Show a network host approval surface and wait for the user to decide.
+///
+/// Returns the scoped decision (once/session/persistent/deny) or `None` if the
+/// event channel is closed.
+#[allow(dead_code)] // wired in Task 5 of inline-managed-network-approval
+pub(crate) async fn park_network_approval(
+    gate: &Arc<HitlGate>,
+    session: &Session,
+    turn_context: &TurnContext,
+    tool_call_id: &str,
+    request: NetworkApprovalRequest,
+) -> Option<NetworkApprovalOutcome> {
+    use crate::control::network_approval::{ApprovalScope, PendingApprovalDecision};
+
+    let surface_id = format!("net-approval-{}", uuid::Uuid::new_v4());
+    let operations = a2ui::templates::build_network_approval_surface(
+        &surface_id,
+        &request.host,
+        &request.protocol,
+        request.port,
+        &request.profile_id,
+        request.command_preview.as_deref(),
+    );
+    let ops_value = serde_json::Value::Array(operations);
+    let resolution = park_astro_hitl_resolution(
+        gate,
+        session,
+        turn_context,
+        tool_call_id,
+        AstroHitlPayload {
+            reason: "network_approval".into(),
+            message: format!("Network access: {}", request.host),
+            operations: ops_value,
+            response_schema: serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "scope": {
+                        "type": "string",
+                        "enum": ["allow_once", "allow_session", "allow_always", "deny"]
+                    }
+                },
+                "required": ["scope"]
+            }),
+        },
+    )
+    .await?;
+
+    let decision = if resolution.status == "resolved" {
+        let v = serde_json::from_str::<serde_json::Value>(&resolution.payload_json).ok();
+        match v
+            .as_ref()
+            .and_then(|v| v.get("scope").and_then(|s| s.as_str()))
+        {
+            Some("allow_once") => PendingApprovalDecision::Allow(ApprovalScope::Once),
+            Some("allow_session") => PendingApprovalDecision::Allow(ApprovalScope::Session),
+            Some("allow_always") => PendingApprovalDecision::Allow(ApprovalScope::Persistent),
+            _ => PendingApprovalDecision::Deny,
+        }
+    } else {
+        PendingApprovalDecision::Deny
+    };
+
+    Some(NetworkApprovalOutcome {
+        decision,
+        status: resolution.status,
+    })
+}
+
 #[cfg(test)]
 mod event_tests {
     use super::*;
@@ -233,5 +318,140 @@ mod event_tests {
         .await
         .unwrap();
         assert!(run.await.unwrap().is_some());
+    }
+
+    async fn run_network_approval(
+        scope: &str,
+    ) -> crate::control::network_approval::PendingApprovalDecision {
+        let dir = tempfile::tempdir().unwrap();
+        let session = Arc::new(
+            Session::with_session_id(
+                Config::with_defaults(dir.path().to_path_buf()),
+                format!("net-approval-{scope}"),
+            )
+            .unwrap(),
+        );
+        let turn_context = session.create_turn_context("turn-1".into()).await;
+        let gate = HitlGate::new(format!("net-approval-{scope}"));
+        let events = session.subscribe_turn_events("turn-1").await;
+
+        let scope_owned = scope.to_string();
+        let run = tokio::spawn({
+            let gate = Arc::clone(&gate);
+            let session = Arc::clone(&session);
+            let turn_context = Arc::clone(&turn_context);
+            async move {
+                park_network_approval(
+                    &gate,
+                    &session,
+                    &turn_context,
+                    "call-net",
+                    NetworkApprovalRequest {
+                        host: "api.example.com".into(),
+                        protocol: "https".into(),
+                        port: 443,
+                        profile_id: "custom".into(),
+                        command_preview: Some("curl https://api.example.com".into()),
+                    },
+                )
+                .await
+            }
+        });
+
+        let event = events.recv().await.unwrap();
+        let EventMsg::RequestUserInput(request) = event.msg else {
+            panic!("expected request_user_input event");
+        };
+        gate.resolve(&[ResumeItem {
+            interrupt_id: request.request_id,
+            status: "resolved".into(),
+            payload_json: serde_json::json!({ "scope": scope_owned }).to_string(),
+        }])
+        .await
+        .unwrap();
+        let outcome = run.await.unwrap().unwrap();
+        assert_eq!(outcome.status, "resolved");
+        outcome.decision
+    }
+
+    #[tokio::test]
+    async fn network_approval_allow_once_maps_to_once_scope() {
+        use crate::control::network_approval::{ApprovalScope, PendingApprovalDecision};
+        assert_eq!(
+            run_network_approval("allow_once").await,
+            PendingApprovalDecision::Allow(ApprovalScope::Once)
+        );
+    }
+
+    #[tokio::test]
+    async fn network_approval_allow_session_maps_to_session_scope() {
+        use crate::control::network_approval::{ApprovalScope, PendingApprovalDecision};
+        assert_eq!(
+            run_network_approval("allow_session").await,
+            PendingApprovalDecision::Allow(ApprovalScope::Session)
+        );
+    }
+
+    #[tokio::test]
+    async fn network_approval_allow_always_maps_to_persistent_scope() {
+        use crate::control::network_approval::{ApprovalScope, PendingApprovalDecision};
+        assert_eq!(
+            run_network_approval("allow_always").await,
+            PendingApprovalDecision::Allow(ApprovalScope::Persistent)
+        );
+    }
+
+    #[tokio::test]
+    async fn network_approval_deny_maps_to_deny() {
+        use crate::control::network_approval::PendingApprovalDecision;
+        assert_eq!(
+            run_network_approval("deny").await,
+            PendingApprovalDecision::Deny
+        );
+    }
+
+    #[tokio::test]
+    async fn network_approval_timeout_maps_to_deny() {
+        use crate::control::network_approval::PendingApprovalDecision;
+        let dir = tempfile::tempdir().unwrap();
+        let session = Arc::new(
+            Session::with_session_id(
+                Config::with_defaults(dir.path().to_path_buf()),
+                "net-timeout".into(),
+            )
+            .unwrap(),
+        );
+        let turn_context = session.create_turn_context("turn-1".into()).await;
+        let gate = HitlGate::new("net-timeout");
+
+        let run = tokio::spawn({
+            let gate = Arc::clone(&gate);
+            let session = Arc::clone(&session);
+            let turn_context = Arc::clone(&turn_context);
+            async move {
+                park_network_approval(
+                    &gate,
+                    &session,
+                    &turn_context,
+                    "call-net",
+                    NetworkApprovalRequest {
+                        host: "timeout.example.com".into(),
+                        protocol: "https".into(),
+                        port: 443,
+                        profile_id: "custom".into(),
+                        command_preview: None,
+                    },
+                )
+                .await
+            }
+        });
+
+        // Cancel instead of resolving — simulates gate cancellation
+        tokio::time::sleep(Duration::from_millis(50)).await;
+        gate.cancel_all().await;
+
+        let outcome = run.await.unwrap().unwrap();
+        assert_eq!(outcome.status, "cancelled");
+        assert_eq!(outcome.decision, PendingApprovalDecision::Deny);
     }
 }
