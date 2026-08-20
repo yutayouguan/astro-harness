@@ -14,6 +14,7 @@ struct ToolRoute {
     exclusive_access: bool,
     sandbox_preference: types::SandboxablePreference,
     mcp_approval: Option<types::McpToolApproval>,
+    approval_requirement: types::ExecApprovalRequirement,
 }
 
 /// Immutable registry projection paired with the specs visible to one model request.
@@ -41,6 +42,7 @@ impl ToolRouter {
                         exclusive_access: entry.exclusive_access,
                         sandbox_preference: entry.sandbox_preference,
                         mcp_approval: entry.mcp_approval.clone(),
+                        approval_requirement: entry.approval_requirement,
                     },
                 ))
             })
@@ -93,6 +95,23 @@ impl ToolRouter {
         self.routes
             .get(name)
             .and_then(|route| route.mcp_approval.clone())
+    }
+
+    #[allow(dead_code)]
+    pub(crate) fn approval_requirement(&self, name: &str) -> types::ExecApprovalRequirement {
+        self.routes
+            .get(name)
+            .map_or(types::ExecApprovalRequirement::Skip, |route| {
+                route.approval_requirement
+            })
+    }
+
+    pub(crate) fn any_may_require_approval(&self, names: &[&str]) -> bool {
+        names.iter().any(|name| {
+            self.routes.get(*name).is_some_and(|route| {
+                route.approval_requirement != types::ExecApprovalRequirement::Skip
+            })
+        })
     }
 
     pub(crate) fn sandbox_preference(&self, name: &str) -> types::SandboxablePreference {
@@ -154,5 +173,40 @@ mod tests {
             router.sandbox_preference("missing"),
             types::SandboxablePreference::Forbid
         );
+    }
+
+    #[test]
+    fn snapshots_approval_requirement_from_registry() {
+        let mut registry = ToolRegistry::new();
+        registry.register(types::ToolEntry {
+            name: "needs_approval".into(),
+            toolset: "core".into(),
+            description: "requires approval".into(),
+            approval_requirement: types::ExecApprovalRequirement::NeedsApproval,
+            ..types::ToolEntry::lifecycle_defaults()
+        });
+        registry.register(types::ToolEntry {
+            name: "auto_skip".into(),
+            toolset: "core".into(),
+            description: "auto skip".into(),
+            ..types::ToolEntry::lifecycle_defaults()
+        });
+        let specs = vec![
+            serde_json::json!({"type": "function", "function": {"name": "needs_approval", "parameters": {}}}),
+            serde_json::json!({"type": "function", "function": {"name": "auto_skip", "parameters": {}}}),
+        ];
+        let router = ToolRouter::from_registry(&registry, specs);
+
+        assert_eq!(
+            router.approval_requirement("needs_approval"),
+            types::ExecApprovalRequirement::NeedsApproval
+        );
+        assert_eq!(
+            router.approval_requirement("auto_skip"),
+            types::ExecApprovalRequirement::Skip
+        );
+        assert!(router.any_may_require_approval(&["needs_approval", "auto_skip"]));
+        assert!(!router.any_may_require_approval(&["auto_skip"]));
+        assert!(!router.any_may_require_approval(&["unknown"]));
     }
 }

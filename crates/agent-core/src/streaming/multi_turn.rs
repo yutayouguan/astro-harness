@@ -1051,6 +1051,7 @@ pub(crate) async fn run_turn(
             let names: Vec<&str> = calls.iter().map(|c| c.name.as_str()).collect();
             step_context.tool_router.any_needs_confirmation(&names)
                 || step_context.tool_router.any_exclusive_access(&names)
+                || step_context.tool_router.any_may_require_approval(&names)
                 || calls
                     .iter()
                     .any(|c| tool_may_require_permission(&c.name, &c.arguments))
