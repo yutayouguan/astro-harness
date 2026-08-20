@@ -20,7 +20,7 @@ pub use approval::{
 };
 pub use builtin::context_tools::render_pinned_for_prompt;
 pub(crate) use engine::path_safe;
-pub use engine::{catalog, context, dispatch, parse, registry, schema};
+pub use engine::{catalog, context, dispatch, registry, schema};
 pub use interaction_mode::{
     check_tool_call, filter_schemas, tool_visible_in_mode, InteractionMode,
 };
@@ -46,7 +46,7 @@ pub use engine::execution::{
     SpawnAgentDispatchRequest,
 };
 pub use engine::network::InProcessNetworkGrant;
-pub use parse::{
+pub use types::{
     extract_tool_calls, resolve_tool_calls, ParsedToolCall, ToolCallAccumulator, ToolCallDelta,
 };
 pub use path_safe::resolve_safe;

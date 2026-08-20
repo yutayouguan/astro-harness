@@ -5,7 +5,6 @@ pub mod context;
 pub mod dispatch;
 pub mod execution;
 pub mod network;
-pub mod parse;
 pub mod path_safe;
 pub mod registry;
 pub mod schema;
