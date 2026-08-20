@@ -33,8 +33,8 @@ pub use media::{
 };
 pub use model_spec::{ModelRole, ModelSpec};
 pub use network_policy::{
-    NetworkApprovalProtocol, NetworkDecisionSource, NetworkPolicyDecision,
-    NetworkPolicyDecisionPayload,
+    NetworkApprovalContext, NetworkApprovalProtocol, NetworkDecisionSource, NetworkPolicyAmendment,
+    NetworkPolicyDecision, NetworkPolicyDecisionPayload, NetworkPolicyRuleAction,
 };
 pub use notify::{
     dream_success_body, notify_important, notify_kind, set_important_notify_handler,
