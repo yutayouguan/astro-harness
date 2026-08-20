@@ -1969,6 +1969,7 @@ mod tests {
             &memory::LoadedPermissionSettings::default(),
             types::WORKSPACE_PROFILE.into(),
             allow_request,
+            types::ThreadMemoryMode::Enabled,
         );
         let allow_context = allow_session.create_turn_context("turn-hook".into()).await;
         let allowed = review_once_permission(
@@ -2002,6 +2003,7 @@ mod tests {
             &memory::LoadedPermissionSettings::default(),
             types::WORKSPACE_PROFILE.into(),
             deny_request,
+            types::ThreadMemoryMode::Enabled,
         );
         let deny_context = deny_session.create_turn_context("turn-hook".into()).await;
         let denied = review_once_permission(

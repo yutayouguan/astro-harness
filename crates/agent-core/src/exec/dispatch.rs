@@ -1259,8 +1259,8 @@ impl DesktopAgentThreadControl for DefaultDesktopAgentThreadControl {
                 reasoning: message.reasoning,
                 reasoning_content: message.reasoning_content,
                 reasoning_details: message.reasoning_details,
-                codex_reasoning_items: message.astro_reasoning_items,
-                codex_message_items: message.astro_message_items,
+                codex_reasoning_items: message.codex_reasoning_items,
+                codex_message_items: message.codex_message_items,
                 media_json: message.media_json,
             })
             .collect();
@@ -1809,8 +1809,8 @@ mod tests {
         );
         assert!(detail.messages[1].tool_calls.is_some());
         assert!(detail.messages[1].reasoning_details.is_some());
-        assert!(detail.messages[1].astro_reasoning_items.is_some());
-        assert!(detail.messages[1].astro_message_items.is_some());
+        assert!(detail.messages[1].codex_reasoning_items.is_some());
+        assert!(detail.messages[1].codex_message_items.is_some());
         assert!(detail.messages[1].media_json.is_some());
         assert_eq!(detail.messages[2].role, "tool");
         assert_eq!(detail.messages[2].tool_call_id.as_deref(), Some("call-1"));
