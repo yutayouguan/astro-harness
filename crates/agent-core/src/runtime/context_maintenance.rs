@@ -73,6 +73,27 @@ impl AgentLoop {
             return Ok(result);
         }
 
+        let pre = self.fire_hook(
+            ::hooks::PRE_COMPACT,
+            ::hooks::HookPayload {
+                turn_id: self.current_turn_id().await,
+                trigger: Some("auto".into()),
+                detail: format!(
+                    "prune={} compress={}",
+                    plan.prune.len(),
+                    plan.compress.len()
+                ),
+                ..Default::default()
+            },
+        );
+        if matches!(
+            pre,
+            ::hooks::HookOutcome::Block(_) | ::hooks::HookOutcome::Skip(_)
+        ) {
+            result.hook_stopped = true;
+            return Ok(result);
+        }
+
         result.stage_ratio = plan.stage_ratio;
         result.occupancy_before = plan.occupancy_before;
 
@@ -148,16 +169,34 @@ impl AgentLoop {
             .lock()
             .expect("compression policy mutex poisoned")
             .should_recommend_compact(result.occupancy_after);
-        let mut state = self.lock_state();
-        state
-            .compression
-            .guard
-            .record_outcome(result.occupancy_before, result.occupancy_after);
-        result.thrashing_disabled = state.compression.guard.disabled;
-        result.recommend_session_compact = recommend_session_compact;
-        if result.recommend_session_compact {
-            state.compression.pending_recommend_compact = true;
+        {
+            let mut state = self.lock_state();
+            state
+                .compression
+                .guard
+                .record_outcome(result.occupancy_before, result.occupancy_after);
+            result.thrashing_disabled = state.compression.guard.disabled;
+            result.recommend_session_compact = recommend_session_compact;
+            if result.recommend_session_compact {
+                state.compression.pending_recommend_compact = true;
+            }
         }
+        let post = self.fire_hook(
+            ::hooks::POST_COMPACT,
+            ::hooks::HookPayload {
+                turn_id: self.current_turn_id().await,
+                trigger: Some("auto".into()),
+                detail: format!(
+                    "pruned={} compressed={} llm_summarized={}",
+                    result.pruned, result.compressed, result.llm_summarized
+                ),
+                ..Default::default()
+            },
+        );
+        result.hook_stopped = matches!(
+            post,
+            ::hooks::HookOutcome::Block(_) | ::hooks::HookOutcome::Skip(_)
+        );
         Ok(result)
     }
 
@@ -188,5 +227,78 @@ impl AgentLoop {
     pub async fn compress_tool_results_if_needed(&self) -> anyhow::Result<usize> {
         let report = self.maintain_tool_context().await?;
         Ok(report.pruned + report.compressed)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::{Arc, Mutex};
+
+    use super::*;
+
+    #[tokio::test]
+    async fn automatic_maintenance_fires_pre_and_post_compact() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut compression = memory::CompressionConfig::default();
+        compression.soft_ratio = 0.0;
+        compression.medium_ratio = 0.5;
+        compression.hard_ratio = 0.9;
+        compression.soft_max_chars = 12;
+        compression.soft_head_chars = 5;
+        compression.soft_tail_chars = 5;
+        compression.protect_last_n = 1;
+        compression.protect_first_messages = 0;
+        memory::set_compression_config(dir.path(), &compression).unwrap();
+        let session = AgentLoop::new(super::super::Config::with_defaults(
+            dir.path().to_path_buf(),
+        ))
+        .unwrap();
+        session.record_user_message("run tool").await.unwrap();
+        session
+            .record_assistant_message_with_tools(
+                "",
+                Some(vec![types::message::ToolCall {
+                    id: "call-1".into(),
+                    name: "echo".into(),
+                    arguments: serde_json::json!({}),
+                    signature: None,
+                }]),
+                None,
+                None,
+            )
+            .await
+            .unwrap();
+        session
+            .record_tool_result_with_id(
+                Some("call-1"),
+                Some("echo"),
+                "a tool result that is intentionally longer than the configured soft limit",
+            )
+            .await
+            .unwrap();
+        session.record_assistant_message("done").await.unwrap();
+
+        let events = Arc::new(Mutex::new(Vec::new()));
+        for event in [::hooks::PRE_COMPACT, ::hooks::POST_COMPACT] {
+            let captured = Arc::clone(&events);
+            session.hook_bus().register(event, move |payload| {
+                captured
+                    .lock()
+                    .unwrap()
+                    .push((payload.hook_event_name.clone(), payload.trigger.clone()));
+                ::hooks::HookOutcome::Continue
+            });
+        }
+
+        let report = session.maintain_tool_context().await.unwrap();
+
+        assert!(report.pruned + report.compressed > 0);
+        assert_eq!(
+            *events.lock().unwrap(),
+            vec![
+                (::hooks::PRE_COMPACT.into(), Some("auto".into())),
+                (::hooks::POST_COMPACT.into(), Some("auto".into())),
+            ]
+        );
     }
 }

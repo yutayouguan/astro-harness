@@ -515,7 +515,15 @@ pub(crate) async fn run_turn(
             )
             .await;
         }
-        pre_llm_maintenance(&session, &turn_context).await;
+        if pre_llm_maintenance(&session, &turn_context).await {
+            return finish_task_cancelled(
+                &session,
+                &turn_context,
+                &streamer,
+                saw_usage.then_some(total_usage),
+            )
+            .await;
+        }
 
         let step_context = { session.capture_step_context().await };
         let step_context = match step_context {
@@ -820,19 +828,37 @@ pub(crate) async fn run_turn(
                 let agent = session.as_ref();
                 let sid = agent.session_id().to_string();
                 let turn_id = agent.current_turn_id().await;
-                let hook_item = emit_hook_started(&session, &turn_context, ::hooks::STOP).await;
-                let outcome = agent.fire_hook(
-                    ::hooks::STOP,
-                    ::hooks::HookPayload {
-                        session_id: sid,
-                        turn_id,
-                        stop_hook_active: Some(verify_attempt > 0),
-                        last_assistant_message: Some(full_response.clone()),
-                        detail: format!("attempt={}", verify_attempt + 1),
-                        ..Default::default()
-                    },
-                );
-                emit_hook_completed(&session, &turn_context, hook_item, ::hooks::STOP).await;
+                let subagent = agent.subagent_hook_context();
+                let event_name = if subagent.is_some() {
+                    ::hooks::SUBAGENT_STOP
+                } else {
+                    ::hooks::STOP
+                };
+                let hook_item = emit_hook_started(&session, &turn_context, event_name).await;
+                let payload = ::hooks::HookPayload {
+                    session_id: sid,
+                    turn_id,
+                    agent_id: subagent.as_ref().map(|context| context.agent_id.clone()),
+                    agent_type: subagent.as_ref().map(|context| context.agent_type.clone()),
+                    agent_transcript_path: agent.hook_transcript_path(),
+                    stop_hook_active: Some(verify_attempt > 0),
+                    last_assistant_message: Some(full_response.clone()),
+                    detail: format!(
+                        "attempt={} path={}",
+                        verify_attempt + 1,
+                        subagent
+                            .as_ref()
+                            .map(|context| context.canonical_path.as_str())
+                            .unwrap_or("/root")
+                    ),
+                    ..Default::default()
+                };
+                let outcome = if subagent.is_some() {
+                    agent.fire_subagent_stop_once(payload)
+                } else {
+                    agent.fire_hook(event_name, payload)
+                };
+                emit_hook_completed(&session, &turn_context, hook_item, event_name).await;
                 outcome
             };
             if verify_attempt < MAX_VERIFY_ATTEMPTS {

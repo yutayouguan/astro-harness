@@ -1498,12 +1498,10 @@ mod tests {
         let (_dir, session, thread) = task_test_thread("sync-run-shutdown-test").await;
         let finalize_hits = Arc::new(AtomicUsize::new(0));
         let finalize_counter = Arc::clone(&finalize_hits);
-        session
-            .hook_bus()
-            .register(::hooks::SESSION_FINALIZE, move |_| {
-                finalize_counter.fetch_add(1, Ordering::SeqCst);
-                ::hooks::HookOutcome::Continue
-            });
+        session.hook_bus().register(::hooks::SESSION_END, move |_| {
+            finalize_counter.fetch_add(1, Ordering::SeqCst);
+            ::hooks::HookOutcome::Continue
+        });
         let run_started = Arc::new(Notify::new());
         let hook_called = Arc::new(AtomicBool::new(false));
         let (release_tx, release_rx) = std::sync::mpsc::channel();
@@ -1628,12 +1626,10 @@ mod tests {
         let (_dir, session, thread) = task_test_thread("cancelled-shutdown-owner-test").await;
         let finalize_hits = Arc::new(AtomicUsize::new(0));
         let finalize_counter = Arc::clone(&finalize_hits);
-        session
-            .hook_bus()
-            .register(::hooks::SESSION_FINALIZE, move |_| {
-                finalize_counter.fetch_add(1, Ordering::SeqCst);
-                ::hooks::HookOutcome::Continue
-            });
+        session.hook_bus().register(::hooks::SESSION_END, move |_| {
+            finalize_counter.fetch_add(1, Ordering::SeqCst);
+            ::hooks::HookOutcome::Continue
+        });
         let run_started = Arc::new(Notify::new());
         let hook_called = Arc::new(AtomicBool::new(false));
         let (release_run_tx, release_run_rx) = std::sync::mpsc::channel();

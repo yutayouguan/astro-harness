@@ -17,7 +17,9 @@ pub use context::PluginContext;
 pub use event::HookEvent;
 pub use gateway::{DiscoveredHook, GatewayHookRegistry, HookManifest};
 pub use names::*;
-pub use outcome::{HookInput, HookOutcome, HookPayload};
+pub use outcome::{
+    HookInput, HookOutcome, HookPayload, PermissionRequestDecision, PostToolUseDecision,
+};
 pub use plugin::PluginHookBus;
 pub use shell::{load_shell_runner, ShellHookRunner};
 pub use ui::{
@@ -83,6 +85,46 @@ impl HookRuntime {
             sh.fire_async(name, &payload);
         }
         out
+    }
+
+    pub fn dispatch_permission_request(&self, payload: &HookPayload) -> PermissionRequestDecision {
+        let payload = payload.for_event(PERMISSION_REQUEST);
+        let decision = self.plugin.fire_permission_request(&payload);
+        self.gateway.fire(PERMISSION_REQUEST, &payload);
+        if let Ok(shell) = self.shell.lock() {
+            shell.fire_async(PERMISSION_REQUEST, &payload);
+        }
+        decision
+    }
+
+    pub fn dispatch_post_tool_use(&self, payload: &HookPayload) -> PostToolUseDecision {
+        let payload = payload.for_event(POST_TOOL_USE);
+        let decision = self.plugin.fire_post_tool_use(&payload);
+        self.gateway.fire(POST_TOOL_USE, &payload);
+        if let Ok(shell) = self.shell.lock() {
+            shell.fire_async(POST_TOOL_USE, &payload);
+        }
+        decision
+    }
+
+    pub fn dispatch_subagent_start(&self, payload: &HookPayload) -> Option<String> {
+        let payload = payload.for_event(SUBAGENT_START);
+        let context = self.plugin.fire_subagent_start(&payload);
+        self.gateway.fire(SUBAGENT_START, &payload);
+        if let Ok(shell) = self.shell.lock() {
+            shell.fire_async(SUBAGENT_START, &payload);
+        }
+        context
+    }
+
+    pub fn dispatch_subagent_stop(&self, payload: &HookPayload) -> HookOutcome {
+        let payload = payload.for_event(SUBAGENT_STOP);
+        let outcome = self.plugin.fire_subagent_stop(&payload);
+        self.gateway.fire(SUBAGENT_STOP, &payload);
+        if let Ok(shell) = self.shell.lock() {
+            shell.fire_async(SUBAGENT_STOP, &payload);
+        }
+        outcome
     }
 
     /// 兼容包装：统一向三套 transport 投递事件。

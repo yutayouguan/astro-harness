@@ -65,6 +65,23 @@ impl HookInput {
 
 pub type HookPayload = HookInput;
 
+/// `PermissionRequest` 聚合后的决定。
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub enum PermissionRequestDecision {
+    #[default]
+    Abstain,
+    Allow,
+    Deny(String),
+}
+
+/// `PostToolUse` 聚合后的模型可见控制结果。
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct PostToolUseDecision {
+    pub block_reason: Option<String>,
+    pub additional_contexts: Vec<String>,
+    pub feedback_messages: Vec<String>,
+}
+
 /// 钩子返回值；观察型应返回 [`Continue`](Self::Continue)。
 #[derive(Debug, Clone, Default)]
 pub enum HookOutcome {

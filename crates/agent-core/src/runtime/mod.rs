@@ -10,7 +10,7 @@
 //! - `SessionState.history` 中相邻消息不得连续出现相同角色（见 `validate_message_order`）
 //! - 取消信号（`CancelSignal`）在工具调用前后均会检查，已取消则立即中断
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::io;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -157,6 +157,9 @@ pub struct Session {
     // ── 注入的依赖 ─────────────────────────────────────────
     /// Shared Plugin/Gateway/Shell hook runtime.
     hook_runtime: StdMutex<Arc<::hooks::HookRuntime>>,
+    /// Child-thread identity used to route Codex subagent lifecycle hooks.
+    subagent_hook_context: StdMutex<Option<SubagentHookContext>>,
+    subagent_stop_turns: StdMutex<HashSet<String>>,
     /// First-class subagent thread dispatcher.
     pub(crate) execution: Arc<dyn tools::AgentThreadDispatch>,
 
@@ -181,6 +184,13 @@ pub struct Session {
     runtime_shutdown: AtomicBool,
     /// Shared completion observed by every concurrent shutdown caller.
     runtime_shutdown_complete: tokio_util::sync::CancellationToken,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct SubagentHookContext {
+    pub(crate) agent_id: String,
+    pub(crate) agent_type: String,
+    pub(crate) canonical_path: String,
 }
 
 /// Compatibility name retained while downstream crates migrate to [`Config`].
@@ -346,6 +356,8 @@ impl Session {
             ),
             mcp_hub,
             hook_runtime: StdMutex::new(Arc::new(::hooks::HookRuntime::new())),
+            subagent_hook_context: StdMutex::new(None),
+            subagent_stop_turns: StdMutex::new(HashSet::new()),
             execution,
             cancel: CancelSignal::new(),
             thread_controls: StdMutex::new(None),
@@ -714,9 +726,74 @@ impl Session {
         Arc::clone(&self.hook_runtime().plugin)
     }
 
-    /// 触发插件钩子（UI 观察由进程 `HookRuntime.ui_slot` 承接）。
-    pub fn fire_hook(&self, name: &str, payload: ::hooks::HookPayload) -> ::hooks::HookOutcome {
-        let mut payload = payload;
+    pub(crate) fn set_subagent_hook_context(
+        &self,
+        agent_id: String,
+        agent_type: String,
+        canonical_path: String,
+    ) {
+        *self
+            .subagent_hook_context
+            .lock()
+            .expect("subagent hook context mutex poisoned") = Some(SubagentHookContext {
+            agent_id,
+            agent_type,
+            canonical_path,
+        });
+    }
+
+    pub(crate) fn subagent_hook_context(&self) -> Option<SubagentHookContext> {
+        self.subagent_hook_context
+            .lock()
+            .expect("subagent hook context mutex poisoned")
+            .clone()
+    }
+
+    pub(crate) fn hook_transcript_path(&self) -> Option<String> {
+        self.runtime_io
+            .get()
+            .map(|bindings| bindings.rollout.path().to_string_lossy().into_owned())
+    }
+
+    pub(crate) fn set_pending_session_start_source(&self, source: &str) {
+        self.lock_state().pending_session_start_source = Some(source.to_string());
+    }
+
+    pub(crate) fn fire_subagent_stop_once(
+        &self,
+        mut payload: ::hooks::HookPayload,
+    ) -> ::hooks::HookOutcome {
+        let key = payload
+            .turn_id
+            .clone()
+            .unwrap_or_else(|| "unbound-turn".to_string());
+        if self
+            .subagent_stop_turns
+            .lock()
+            .expect("subagent stop mutex poisoned")
+            .contains(&key)
+        {
+            return ::hooks::HookOutcome::Continue;
+        }
+        if let Some(context) = self.subagent_hook_context() {
+            payload.agent_id.get_or_insert(context.agent_id);
+            payload.agent_type.get_or_insert(context.agent_type);
+            if payload.detail.is_empty() {
+                payload.detail = format!("path={}", context.canonical_path);
+            }
+        }
+        let payload = self.enrich_hook_payload(payload);
+        let outcome = self.hook_runtime().dispatch_subagent_stop(&payload);
+        if !matches!(outcome, ::hooks::HookOutcome::KeepGoing(_)) {
+            self.subagent_stop_turns
+                .lock()
+                .expect("subagent stop mutex poisoned")
+                .insert(key);
+        }
+        outcome
+    }
+
+    fn enrich_hook_payload(&self, mut payload: ::hooks::HookPayload) -> ::hooks::HookPayload {
         if payload.session_id.is_empty() {
             payload.session_id.clone_from(&self.session_id);
         }
@@ -742,7 +819,43 @@ impl Session {
         if payload.permission_mode.is_none() {
             payload.permission_mode = self.lock_state().permission_profile.clone();
         }
+        if let Some(context) = self.subagent_hook_context() {
+            payload.agent_id.get_or_insert(context.agent_id);
+            payload.agent_type.get_or_insert(context.agent_type);
+            if payload.agent_transcript_path.is_none() {
+                payload.agent_transcript_path = self.hook_transcript_path();
+            }
+        } else if payload.transcript_path.is_none() {
+            payload.transcript_path = self.hook_transcript_path();
+        }
+        payload
+    }
+
+    /// 触发插件钩子（UI 观察由进程 `HookRuntime.ui_slot` 承接）。
+    pub fn fire_hook(&self, name: &str, payload: ::hooks::HookPayload) -> ::hooks::HookOutcome {
+        let payload = self.enrich_hook_payload(payload);
         self.hook_runtime().dispatch(name, &payload)
+    }
+
+    pub(crate) fn fire_permission_request_hook(
+        &self,
+        payload: ::hooks::HookPayload,
+    ) -> ::hooks::PermissionRequestDecision {
+        let payload = self.enrich_hook_payload(payload);
+        self.hook_runtime().dispatch_permission_request(&payload)
+    }
+
+    pub(crate) fn fire_subagent_start_hook(&self, payload: ::hooks::HookPayload) -> Option<String> {
+        let payload = self.enrich_hook_payload(payload);
+        self.hook_runtime().dispatch_subagent_start(&payload)
+    }
+
+    pub(crate) fn fire_post_tool_use_hook(
+        &self,
+        payload: ::hooks::HookPayload,
+    ) -> ::hooks::PostToolUseDecision {
+        let payload = self.enrich_hook_payload(payload);
+        self.hook_runtime().dispatch_post_tool_use(&payload)
     }
 
     /// 取出并清空本轮 `PreLlmCall` 注入上下文。

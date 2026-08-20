@@ -323,6 +323,8 @@ pub struct ContextMaintenanceResult {
     pub occupancy_after: f32,
     pub thrashing_disabled: bool,
     pub recommend_session_compact: bool,
+    /// A PreCompact/PostCompact hook requested that the active turn stop.
+    pub hook_stopped: bool,
 }
 
 pub fn protect_tail_start_index(message_len: usize, protect_tail_messages: usize) -> usize {

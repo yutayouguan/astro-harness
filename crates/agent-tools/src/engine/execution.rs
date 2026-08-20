@@ -22,6 +22,7 @@ pub struct ParentRuntimeMaterial {
     pub inherited_skill_config: Vec<(PathBuf, bool)>,
     pub chat_targets: Vec<types::ChatTarget>,
     pub project_root: Option<PathBuf>,
+    pub hook_runtime: Option<Arc<hooks::HookRuntime>>,
     pub hook_bus: Option<Arc<hooks::PluginHookBus>>,
 }
 

@@ -441,15 +441,53 @@ impl Session {
         let Some(source) = self.lock_state().pending_session_start_source.clone() else {
             return Ok(None);
         };
-        let outcome = self.fire_hook(
-            ::hooks::SESSION_START,
-            ::hooks::HookPayload {
+        let subagent = self.subagent_hook_context();
+        let event_name = if subagent.is_some() {
+            ::hooks::SUBAGENT_START
+        } else {
+            ::hooks::SESSION_START
+        };
+        // Codex emits SubagentStart only for the child startup admission. A
+        // resumed/follow-up turn is represented by its own SubagentStop.
+        let context = if subagent.is_some() && source != "startup" {
+            None
+        } else if subagent.is_some() {
+            self.fire_subagent_start_hook(::hooks::HookPayload {
                 source: Some(source.clone()),
-                detail: format!("session={}", self.session_id),
+                agent_id: subagent.as_ref().map(|context| context.agent_id.clone()),
+                agent_type: subagent.as_ref().map(|context| context.agent_type.clone()),
+                agent_transcript_path: self.hook_transcript_path(),
+                detail: format!(
+                    "session={} path={}",
+                    self.session_id,
+                    subagent
+                        .as_ref()
+                        .map(|context| context.canonical_path.as_str())
+                        .unwrap_or("/root")
+                ),
                 ..Default::default()
-            },
-        );
-        let context = Self::apply_admission_outcome(::hooks::SESSION_START, outcome)?;
+            })
+        } else {
+            let outcome = self.fire_hook(
+                event_name,
+                ::hooks::HookPayload {
+                    source: Some(source.clone()),
+                    agent_id: subagent.as_ref().map(|context| context.agent_id.clone()),
+                    agent_type: subagent.as_ref().map(|context| context.agent_type.clone()),
+                    agent_transcript_path: self.hook_transcript_path(),
+                    detail: format!(
+                        "session={} path={}",
+                        self.session_id,
+                        subagent
+                            .as_ref()
+                            .map(|context| context.canonical_path.as_str())
+                            .unwrap_or("/root")
+                    ),
+                    ..Default::default()
+                },
+            );
+            Self::apply_admission_outcome(event_name, outcome)?
+        };
         let mut state = self.lock_state();
         if state.pending_session_start_source.as_deref() == Some(source.as_str()) {
             state.pending_session_start_source = None;
@@ -958,6 +996,31 @@ mod tests {
         assert_eq!(hits.load(Ordering::SeqCst), 2);
         assert_eq!(sources.lock().unwrap().as_slice(), ["startup", "startup"]);
         assert_eq!(session.clone_history().await[0].content_str(), "second");
+    }
+
+    #[tokio::test]
+    async fn subagent_start_is_context_injection_only() {
+        let dir = TempDir::new().unwrap();
+        let config = crate::runtime::Config::with_defaults(dir.path().to_path_buf());
+        let session =
+            Session::with_session_id(config, "subagent-start-context-only".into()).unwrap();
+        session.set_subagent_hook_context(
+            "thread-child".into(),
+            "researcher".into(),
+            "/root/researcher".into(),
+        );
+        session.hook_bus().register(::hooks::SUBAGENT_START, |_| {
+            ::hooks::HookOutcome::Block("must not cancel child admission".into())
+        });
+        session.hook_bus().register(::hooks::SUBAGENT_START, |_| {
+            ::hooks::HookOutcome::InjectContext("child startup context".into())
+        });
+
+        let context = session.admit_session_start().await.unwrap();
+        assert_eq!(context.as_deref(), Some("child startup context"));
+        session.prepare_turn(&[input("first")]).await.unwrap();
+
+        assert_eq!(session.clone_history().await[0].content_str(), "first");
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]

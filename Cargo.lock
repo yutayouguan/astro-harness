@@ -220,6 +220,7 @@ dependencies = [
  "evolution",
  "futures",
  "home",
+ "hooks",
  "keyring",
  "mcp",
  "memory",

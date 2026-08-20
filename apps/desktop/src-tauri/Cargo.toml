@@ -47,6 +47,7 @@ usage = { path = "../../../crates/agent-usage" }
 subagents = { path = "../../../crates/agent-subagents" }
 session = { path = "../../../crates/agent-session" }
 agent = { path = "../../../crates/agent-core" }
+hooks = { path = "../../../crates/agent-hooks" }
 worktree = { path = "../../../crates/agent-delegate" }
 server = { path = "../../../crates/agent-server" }
 tools = { path = "../../../crates/agent-tools" }

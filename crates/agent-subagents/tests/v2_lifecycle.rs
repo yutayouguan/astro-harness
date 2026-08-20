@@ -153,11 +153,14 @@ async fn nested_agent_tree_survives_interrupt_restart_resume_and_recursive_close
         old_process_hooks.lock().unwrap().clone(),
         vec![
             "start:/root/research".to_string(),
+            "stop:/root/research".to_string(),
             "start:/root/research/citations".to_string(),
+            "stop:/root/research/citations".to_string(),
+            "stop:/root/research/citations".to_string(),
         ]
     );
-    // A new process observes stop only for runtime material it recovered in
-    // that process. The old process hooks are never retained or called.
+    // A new process observes the terminal turn only for runtime material it
+    // recovered in that process. Desktop close does not duplicate SubagentStop.
     assert_eq!(
         app.hook_events(),
         vec!["stop:/root/research/citations".to_string()]

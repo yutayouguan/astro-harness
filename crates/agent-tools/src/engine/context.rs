@@ -50,6 +50,8 @@ pub struct ToolContext<'a> {
     pub skill_config_overrides: &'a [(PathBuf, bool)],
     /// 插件钩子总线（由 AgentLoop 注入；无 bus 时对应工具跳过 transform 钩子）。
     pub hook_bus: Option<Arc<hooks::PluginHookBus>>,
+    /// 完整 HookRuntime；Agent Thread 用它继承 Plugin/Gateway/Shell 三套 transport。
+    pub hook_runtime: Option<Arc<hooks::HookRuntime>>,
     /// 当前单次工具调用已获得 workspace-write 临时授权。
     ///
     /// 该值只存在于本次 `ToolContext` 生命周期，不会持久化或扩大到后续工具调用。
@@ -298,6 +300,7 @@ permissions:
             permission_profile: None,
             skill_config_overrides: &[],
             hook_bus: None,
+            hook_runtime: None,
             workspace_write_grant: true,
             sandbox_policy: None,
             network_grant: InProcessNetworkGrant::default(),

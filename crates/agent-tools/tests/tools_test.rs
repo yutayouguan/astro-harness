@@ -146,6 +146,7 @@ async fn file_ops_write_and_read() {
         permission_profile: None,
         skill_config_overrides: &[],
         hook_bus: None,
+        hook_runtime: None,
         workspace_write_grant: false,
         sandbox_policy: None,
         network_grant: tools::InProcessNetworkGrant::default(),

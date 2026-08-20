@@ -5,7 +5,7 @@ use std::sync::Arc;
 
 use tracing::warn;
 
-use crate::outcome::{HookOutcome, HookPayload};
+use crate::outcome::{HookOutcome, HookPayload, PermissionRequestDecision, PostToolUseDecision};
 
 /// 同步钩子回调（panic 会被捕获为 Continue）。
 pub type HookFn = Arc<dyn Fn(&HookPayload) -> HookOutcome + Send + Sync>;
@@ -44,19 +44,9 @@ impl PluginHookBus {
     /// 触发钩子；对可短路结果返回首个非 Continue/Allow。
     pub fn fire(&self, name: &str, payload: &HookPayload) -> HookOutcome {
         let payload = payload.for_event(name);
-        let callbacks = match self.hooks.lock() {
-            Ok(map) => map.get(name).cloned().unwrap_or_default(),
-            Err(_) => return HookOutcome::Continue,
-        };
+        let callbacks = self.callbacks(name);
         for cb in callbacks {
-            let outcome =
-                match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| cb(&payload))) {
-                    Ok(o) => o,
-                    Err(_) => {
-                        warn!(hook = %name, "plugin hook panicked; ignoring");
-                        HookOutcome::Continue
-                    }
-                };
+            let outcome = invoke_callback(name, &payload, &cb);
             match &outcome {
                 HookOutcome::Continue | HookOutcome::Allow => continue,
                 _ => return outcome,
@@ -65,12 +55,108 @@ impl PluginHookBus {
         HookOutcome::Continue
     }
 
+    /// Codex `PermissionRequest` aggregation: any deny wins, otherwise an
+    /// explicit allow wins, otherwise the normal approval flow continues.
+    pub fn fire_permission_request(&self, payload: &HookPayload) -> PermissionRequestDecision {
+        let payload = payload.for_event(crate::PERMISSION_REQUEST);
+        let mut decision = PermissionRequestDecision::Abstain;
+        for callback in self.callbacks(crate::PERMISSION_REQUEST) {
+            match invoke_callback(crate::PERMISSION_REQUEST, &payload, &callback) {
+                HookOutcome::Block(reason) => {
+                    return PermissionRequestDecision::Deny(reason);
+                }
+                HookOutcome::Allow => decision = PermissionRequestDecision::Allow,
+                _ => {}
+            }
+        }
+        decision
+    }
+
+    /// Codex `PostToolUse` aggregation. Tool side effects have already
+    /// happened, so block affects only the model-visible result.
+    pub fn fire_post_tool_use(&self, payload: &HookPayload) -> PostToolUseDecision {
+        let payload = payload.for_event(crate::POST_TOOL_USE);
+        let mut decision = PostToolUseDecision::default();
+        for callback in self.callbacks(crate::POST_TOOL_USE) {
+            match invoke_callback(crate::POST_TOOL_USE, &payload, &callback) {
+                HookOutcome::Block(reason) => {
+                    if decision.block_reason.is_none() {
+                        decision.block_reason = Some(reason);
+                    }
+                }
+                HookOutcome::InjectContext(context) => {
+                    decision.additional_contexts.push(context);
+                }
+                HookOutcome::ReplaceText(feedback) => {
+                    decision.feedback_messages.push(feedback);
+                }
+                _ => {}
+            }
+        }
+        decision
+    }
+
+    /// Codex `SubagentStart` is context-injection-only. Stop/block outcomes
+    /// are deliberately ignored, while context from every handler is kept.
+    pub fn fire_subagent_start(&self, payload: &HookPayload) -> Option<String> {
+        let payload = payload.for_event(crate::SUBAGENT_START);
+        let contexts = self
+            .callbacks(crate::SUBAGENT_START)
+            .into_iter()
+            .filter_map(|callback| {
+                match invoke_callback(crate::SUBAGENT_START, &payload, &callback) {
+                    HookOutcome::InjectContext(context) => Some(context),
+                    _ => None,
+                }
+            })
+            .collect::<Vec<_>>();
+        (!contexts.is_empty()).then(|| contexts.join("\n\n"))
+    }
+
+    /// Codex `SubagentStop` evaluates every handler and combines all
+    /// continuation prompts for the same terminal candidate.
+    pub fn fire_subagent_stop(&self, payload: &HookPayload) -> HookOutcome {
+        let payload = payload.for_event(crate::SUBAGENT_STOP);
+        let prompts = self
+            .callbacks(crate::SUBAGENT_STOP)
+            .into_iter()
+            .filter_map(|callback| {
+                match invoke_callback(crate::SUBAGENT_STOP, &payload, &callback) {
+                    HookOutcome::KeepGoing(prompt) => Some(prompt),
+                    _ => None,
+                }
+            })
+            .collect::<Vec<_>>();
+        if prompts.is_empty() {
+            HookOutcome::Continue
+        } else {
+            HookOutcome::KeepGoing(prompts.join("\n\n"))
+        }
+    }
+
+    fn callbacks(&self, name: &str) -> Vec<HookFn> {
+        self.hooks
+            .lock()
+            .map(|map| map.get(name).cloned().unwrap_or_default())
+            .unwrap_or_default()
+    }
+
     /// 已注册的钩子名列表（测试用）。
     pub fn registered_names(&self) -> Vec<String> {
         self.hooks
             .lock()
             .map(|m| m.keys().cloned().collect())
             .unwrap_or_default()
+    }
+}
+
+fn invoke_callback(name: &str, payload: &HookPayload, callback: &HookFn) -> HookOutcome {
+    match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| callback(payload))) {
+        Ok(outcome) => outcome,
+        Err(_) => {
+            warn!(hook = %name, "plugin hook panicked; ignoring");
+            HookOutcome::Continue
+        }
     }
 }
 
@@ -199,5 +285,77 @@ mod tests {
         bus.register(STOP, |_| HookOutcome::KeepGoing("retry".into()));
         let out = bus.fire(STOP, &HookPayload::default());
         assert!(matches!(out, HookOutcome::KeepGoing(ref s) if s == "retry"));
+    }
+
+    #[test]
+    fn permission_request_denial_wins_over_allow() {
+        let bus = PluginHookBus::new();
+        bus.register(crate::PERMISSION_REQUEST, |_| HookOutcome::Allow);
+        bus.register(crate::PERMISSION_REQUEST, |_| {
+            HookOutcome::Block("policy denied".into())
+        });
+
+        assert_eq!(
+            bus.fire_permission_request(&HookPayload::default()),
+            PermissionRequestDecision::Deny("policy denied".into())
+        );
+    }
+
+    #[test]
+    fn post_tool_use_aggregates_block_context_and_feedback() {
+        let bus = PluginHookBus::new();
+        bus.register(crate::POST_TOOL_USE, |_| {
+            HookOutcome::InjectContext("context".into())
+        });
+        bus.register(crate::POST_TOOL_USE, |_| {
+            HookOutcome::ReplaceText("feedback".into())
+        });
+        bus.register(crate::POST_TOOL_USE, |_| {
+            HookOutcome::Block("blocked".into())
+        });
+
+        assert_eq!(
+            bus.fire_post_tool_use(&HookPayload::default()),
+            PostToolUseDecision {
+                block_reason: Some("blocked".into()),
+                additional_contexts: vec!["context".into()],
+                feedback_messages: vec!["feedback".into()],
+            }
+        );
+    }
+
+    #[test]
+    fn subagent_start_ignores_block_and_aggregates_context() {
+        let bus = PluginHookBus::new();
+        bus.register(crate::SUBAGENT_START, |_| {
+            HookOutcome::Block("ignored".into())
+        });
+        bus.register(crate::SUBAGENT_START, |_| {
+            HookOutcome::InjectContext("first".into())
+        });
+        bus.register(crate::SUBAGENT_START, |_| {
+            HookOutcome::InjectContext("second".into())
+        });
+
+        assert_eq!(
+            bus.fire_subagent_start(&HookPayload::default()).as_deref(),
+            Some("first\n\nsecond")
+        );
+    }
+
+    #[test]
+    fn subagent_stop_aggregates_continuation_prompts() {
+        let bus = PluginHookBus::new();
+        bus.register(crate::SUBAGENT_STOP, |_| {
+            HookOutcome::KeepGoing("first".into())
+        });
+        bus.register(crate::SUBAGENT_STOP, |_| {
+            HookOutcome::KeepGoing("second".into())
+        });
+
+        assert!(matches!(
+            bus.fire_subagent_stop(&HookPayload::default()),
+            HookOutcome::KeepGoing(prompt) if prompt == "first\n\nsecond"
+        ));
     }
 }

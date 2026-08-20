@@ -16,12 +16,17 @@ use super::traits::StreamingChat;
 use crate::runtime::{AgentLoop, TurnContext};
 
 /// Gateway 预压安全网 + mid-run 辅模型摘要，统一进 LLM 前的上下文维护。
-pub(super) async fn pre_llm_maintenance(session: &Arc<AgentLoop>, turn_context: &TurnContext) {
+pub(super) async fn pre_llm_maintenance(
+    session: &Arc<AgentLoop>,
+    turn_context: &TurnContext,
+) -> bool {
+    let mut hook_stopped = false;
     {
         let agent = session.as_ref();
         let recommend_ratio = agent.compression_config().recommend_compact_ratio;
         if agent.occupancy_ratio().await >= recommend_ratio {
             match agent.maintain_tool_context().await {
+                Ok(report) if report.hook_stopped => hook_stopped = true,
                 Ok(report) if report.pruned + report.compressed > 0 => {
                     emit_context_compacted(
                         session,
@@ -61,6 +66,7 @@ pub(super) async fn pre_llm_maintenance(session: &Arc<AgentLoop>, turn_context: 
             Err(e) => tracing::warn!(error = %e, "mid-run summary failed"),
         }
     }
+    hook_stopped
 }
 
 /// 构建并推送上下文占用估算快照。
@@ -133,9 +139,11 @@ pub(super) async fn post_tool_maintenance(
     turn_context: &TurnContext,
     calls: &[types::ParsedToolCall],
 ) -> bool {
+    let mut hook_stopped = false;
     {
         let agent = session.as_ref();
         match agent.maintain_tool_context().await {
+            Ok(report) if report.hook_stopped => hook_stopped = true,
             Ok(report) if report.pruned + report.compressed > 0 => {
                 emit_context_compacted(
                     session,
@@ -180,7 +188,7 @@ pub(super) async fn post_tool_maintenance(
             "stop_after_tool_call: ending run without next LLM round"
         );
     }
-    stop_after
+    stop_after || hook_stopped
 }
 
 /// 处理工具执行结果：推送事件、解析 A2UI、记录到会话历史。

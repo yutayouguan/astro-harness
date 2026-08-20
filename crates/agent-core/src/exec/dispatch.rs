@@ -2,7 +2,7 @@
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, OnceLock, Weak};
 use std::time::Duration;
 
@@ -81,6 +81,25 @@ pub async fn active_root_runtime_material(
     active_root_runtime_material_with_upgrade_hook(memory_dir, root_session_id, || {}).await
 }
 
+/// Resolve the live root Session for Desktop-only lifecycle operations such
+/// as manual compaction. The registry stores Weak references, so this does not
+/// extend the Session lifetime.
+pub fn active_root_session_for_hooks(
+    memory_dir: &Path,
+    root_session_id: &str,
+) -> anyhow::Result<Option<Arc<Session>>> {
+    let key = (memory_dir.to_path_buf(), root_session_id.to_string());
+    let mut sessions = active_root_sessions()
+        .sessions
+        .lock()
+        .map_err(|_| anyhow::anyhow!("active root session registry mutex is poisoned"))?;
+    let session = sessions.get(&key).and_then(Weak::upgrade);
+    if session.is_none() {
+        sessions.remove(&key);
+    }
+    Ok(session)
+}
+
 async fn active_root_runtime_material_with_upgrade_hook(
     memory_dir: &Path,
     root_session_id: &str,
@@ -115,6 +134,7 @@ async fn active_root_runtime_material_with_upgrade_hook(
             inherited_skill_config: session.skill_config_overrides(),
             chat_targets: session.chat_targets(),
             project_root: session.project_root(),
+            hook_runtime: Some(session.hook_runtime()),
             hook_bus: Some(session.hook_bus()),
         };
         let remains_current = active_root_sessions()
@@ -134,60 +154,6 @@ async fn active_root_runtime_material_with_upgrade_hook(
 struct StoredRuntimeRequest {
     runtime: SpawnRuntimeV2Request,
     memory_dir: PathBuf,
-    lifecycle_hooks: Arc<AgentLifecycleHookState>,
-}
-
-#[derive(Default)]
-struct AgentLifecycleHookState {
-    start_fired: AtomicBool,
-    stop_fired: AtomicBool,
-}
-
-impl StoredRuntimeRequest {
-    fn fire_start_once(&self, thread: &AgentThreadV2) {
-        self.fire_once(
-            thread,
-            hooks::SUBAGENT_START,
-            &self.lifecycle_hooks.start_fired,
-        );
-    }
-
-    fn fire_stop_once(&self, thread: &AgentThreadV2) {
-        self.fire_once(
-            thread,
-            hooks::SUBAGENT_STOP,
-            &self.lifecycle_hooks.stop_fired,
-        );
-    }
-
-    fn fire_once(&self, thread: &AgentThreadV2, name: &str, fired: &AtomicBool) {
-        if fired
-            .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
-            .is_err()
-        {
-            return;
-        }
-        let Some(bus) = self.runtime.hook_bus.as_ref() else {
-            return;
-        };
-        let task = types::truncate_chars(&self.runtime.model_request.message, 200);
-        let payload = hooks::HookPayload {
-            session_id: thread.session_id.clone(),
-            detail: format!(
-                "thread_id={} parent_thread_id={} parent_path={} path={} agent_type={} task={}",
-                thread.thread_id,
-                self.runtime.parent_thread_id,
-                self.runtime.parent_path,
-                thread.canonical_path,
-                thread.agent_type,
-                task,
-            ),
-            ..Default::default()
-        };
-        // Lifecycle hooks are observers. PluginHookBus contains callback
-        // panics, and any non-Continue outcome is deliberately ignored here.
-        let _ = bus.fire(name, &payload);
-    }
 }
 
 struct ForkedSessionGuard {
@@ -578,7 +544,6 @@ impl DefaultAgentThreadDispatch {
         Ok(Arc::new(StoredRuntimeRequest {
             runtime,
             memory_dir: material.memory_dir.clone(),
-            lifecycle_hooks: Arc::new(AgentLifecycleHookState::default()),
         }))
     }
 }
@@ -661,7 +626,6 @@ impl AgentThreadDispatch for DefaultAgentThreadDispatch {
         let stored = Arc::new(StoredRuntimeRequest {
             memory_dir,
             runtime,
-            lifecycle_hooks: Arc::new(AgentLifecycleHookState::default()),
         });
         if let Err(error) = self
             .runtime_requests
@@ -726,7 +690,6 @@ impl AgentThreadDispatch for DefaultAgentThreadDispatch {
             };
         }
         startup_guard.disarm();
-        stored.fire_start_once(&thread);
         Ok(SpawnAgentV2Result { thread })
     }
 
@@ -926,6 +889,7 @@ fn build_runtime_request(
         skills_config: skills,
         chat_targets: material.chat_targets,
         project_root: material.project_root,
+        hook_runtime: material.hook_runtime,
         hook_bus: material.hook_bus,
         interrupt_message,
     }
@@ -1112,7 +1076,7 @@ async fn finish_close_operation(
         {
             Ok(CloseThreadStart::Complete) => {
                 match runtime_requests.take(&thread.thread_id) {
-                    Ok(Some(stored)) => stored.fire_stop_once(thread),
+                    Ok(Some(_stored)) => {}
                     Ok(None) => {}
                     Err(error) => tracing::warn!(
                         %error,
@@ -1763,6 +1727,7 @@ mod tests {
                     base_url: "http://127.0.0.1.invalid".into(),
                 }],
                 project_root: None,
+                hook_runtime: None,
                 hook_bus: None,
             },
         }
@@ -2189,8 +2154,12 @@ mod tests {
                 .status,
             AgentStatusV2::Shutdown
         );
-        assert_eq!(stopped_paths.lock().unwrap().len(), 1);
-        assert!(stopped_paths.lock().unwrap()[0].contains("path=/root/parent/leaf"));
+        assert_eq!(stopped_paths.lock().unwrap().len(), 2);
+        assert!(stopped_paths
+            .lock()
+            .unwrap()
+            .iter()
+            .any(|payload| payload.contains("path=/root/parent/leaf")));
         assert!(dispatch
             .runtime_requests
             .get(&leaf.thread_id)
@@ -2214,7 +2183,9 @@ mod tests {
         }));
         let stopped_paths = stopped_paths.lock().unwrap();
         assert_eq!(stopped_paths.len(), 2);
-        assert!(stopped_paths[1].contains("path=/root/parent"));
+        assert!(stopped_paths
+            .iter()
+            .any(|payload| payload.contains("path=/root/parent")));
         assert!(dispatch
             .runtime_requests
             .get(&parent.thread_id)
@@ -3278,20 +3249,64 @@ mod tests {
         let payloads = payloads.lock().unwrap();
         assert_eq!(payloads.len(), 1);
         assert_eq!(payloads[0].session_id, spawned.thread.session_id);
-        assert!(payloads[0]
-            .detail
-            .contains(&format!("thread_id={}", spawned.thread.thread_id)));
-        assert!(payloads[0].detail.contains("parent_thread_id=root-session"));
+        assert_eq!(
+            payloads[0].agent_id.as_deref(),
+            Some(spawned.thread.thread_id.as_str())
+        );
+        assert_eq!(payloads[0].agent_type.as_deref(), Some("default"));
         assert!(payloads[0].detail.contains("path=/root/worker"));
-        assert!(payloads[0].detail.contains("agent_type=default"));
-        assert!(payloads[0]
-            .detail
-            .contains(&format!("task={}", types::truncate_chars(&long_task, 200))));
         assert!(!payloads[0].detail.contains(&long_task));
     }
 
     #[tokio::test(flavor = "current_thread")]
-    async fn stop_hook_observes_only_durable_close_once_and_is_panic_safe() {
+    async fn subagent_stop_keep_going_continues_the_same_turn() {
+        let dir = tempfile::tempdir().unwrap();
+        let memory_dir = dir.path().join("memory");
+        let sessions =
+            session::SessionStore::open_sessions_dir(&memory_dir.join("sessions")).unwrap();
+        sessions.ensure_session("root-session", "test").unwrap();
+        let mut dispatch = dispatch(&dir);
+        dispatch.chat_override = Some(scripted_chat("done"));
+        let bus = Arc::new(hooks::PluginHookBus::new());
+        let stop_count = Arc::new(AtomicUsize::new(0));
+        let observed = Arc::clone(&stop_count);
+        bus.register(hooks::SUBAGENT_STOP, move |_| {
+            if observed.fetch_add(1, Ordering::SeqCst) == 0 {
+                hooks::HookOutcome::KeepGoing("verify once more".into())
+            } else {
+                hooks::HookOutcome::Continue
+            }
+        });
+
+        let spawned =
+            AgentThreadDispatch::spawn_agent(&dispatch, request_with_hook_bus(&memory_dir, bus))
+                .await
+                .unwrap();
+        while dispatch
+            .runtime_manager
+            .is_running(&spawned.thread.thread_id)
+        {
+            tokio::task::yield_now().await;
+        }
+
+        assert_eq!(stop_count.load(Ordering::SeqCst), 2);
+        let messages = sessions.get_messages(&spawned.thread.session_id).unwrap();
+        assert_eq!(
+            messages
+                .iter()
+                .map(|message| message.role.as_str())
+                .collect::<Vec<_>>(),
+            vec!["user", "assistant", "user", "assistant"]
+        );
+        assert!(messages[2]
+            .content
+            .as_deref()
+            .unwrap()
+            .contains("verify once more"));
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn stop_hook_observes_each_terminal_turn_and_close_does_not_duplicate_it() {
         let dir = tempfile::tempdir().unwrap();
         let memory_dir = dir.path().join("memory");
         let sessions =
@@ -3301,15 +3316,6 @@ mod tests {
         dispatch.chat_override = Some(scripted_chat("done"));
         let bus = Arc::new(hooks::PluginHookBus::new());
         bus.register(hooks::SUBAGENT_STOP, |_| panic!("injected hook panic"));
-        let registry = Arc::clone(&dispatch.runtime_requests);
-        bus.register(hooks::SUBAGENT_STOP, move |_| {
-            assert!(registry
-                .requests
-                .try_lock()
-                .expect("stop hook must not run under the registry lock")
-                .is_empty());
-            hooks::HookOutcome::Continue
-        });
         let sensitive_probe = Arc::new(());
         let sensitive_probe_weak = Arc::downgrade(&sensitive_probe);
         let captured_probe = Arc::clone(&sensitive_probe);
@@ -3342,7 +3348,7 @@ mod tests {
                 .status,
             AgentStatusV2::Completed { .. }
         ));
-        assert!(payloads.lock().unwrap().is_empty());
+        assert_eq!(payloads.lock().unwrap().len(), 1);
 
         let desktop = desktop_control(&dispatch, &memory_dir);
         let (first, second) = tokio::join!(
@@ -3369,7 +3375,7 @@ mod tests {
     }
 
     #[tokio::test(flavor = "current_thread")]
-    async fn interrupted_and_errored_turns_do_not_emit_stop_before_close() {
+    async fn interrupted_and_errored_turns_emit_stop_at_turn_end_not_close() {
         let dir = tempfile::tempdir().unwrap();
         let memory_dir = dir.path().join("memory");
         let sessions =
@@ -3405,7 +3411,7 @@ mod tests {
                 .status,
             AgentStatusV2::Errored { .. }
         ));
-        assert_eq!(stop_count.load(Ordering::SeqCst), 0);
+        assert_eq!(stop_count.load(Ordering::SeqCst), 1);
         assert!(dispatch
             .runtime_requests
             .get(&errored.thread.thread_id)
@@ -3432,7 +3438,7 @@ mod tests {
         {
             tokio::task::yield_now().await;
         }
-        assert_eq!(stop_count.load(Ordering::SeqCst), 0);
+        assert_eq!(stop_count.load(Ordering::SeqCst), 2);
         assert!(dispatch
             .runtime_requests
             .get(&interrupted.thread.thread_id)
@@ -6193,6 +6199,7 @@ enabled = true
                     inherited_skill_config: vec![(PathBuf::from("parent/SKILL.md"), true)],
                     chat_targets: Vec::new(),
                     project_root: Some(project),
+                    hook_runtime: None,
                     hook_bus: None,
                 },
             },

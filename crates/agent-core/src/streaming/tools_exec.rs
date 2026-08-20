@@ -420,19 +420,56 @@ async fn review_once_permission(
         None,
         None,
     );
-    {
+    let permission_hook = {
         let agent = session.as_ref();
-        agent.fire_hook(
-            hooks::PERMISSION_REQUEST,
-            hooks::HookPayload {
-                session_id: request.session_id.clone(),
-                turn_id: request.turn_id.clone(),
-                tool_name: Some(request.tool_name.clone()),
-                tool_input: Some(serde_json::json!({ "summary": request.summary })),
-                detail: hook_detail.to_string(),
-                ..Default::default()
-            },
-        );
+        agent.fire_permission_request_hook(hooks::HookPayload {
+            session_id: request.session_id.clone(),
+            turn_id: request.turn_id.clone(),
+            tool_name: Some(request.tool_name.clone()),
+            tool_input: Some(serde_json::json!({ "summary": request.summary })),
+            detail: hook_detail.to_string(),
+            ..Default::default()
+        })
+    };
+
+    match permission_hook {
+        hooks::PermissionRequestDecision::Deny(reason) => {
+            fire_post_permission_response(
+                session,
+                &request.session_id,
+                request.turn_id.as_deref(),
+                request,
+                "deny",
+            )
+            .await;
+            audit.record_review(
+                selection.approvals_reviewer,
+                "hook_denied",
+                false,
+                review_started.elapsed().as_millis() as u64,
+            );
+            return Some(PermissionPreflight::Denied(format!(
+                "Permission denied by hook: {reason}"
+            )));
+        }
+        hooks::PermissionRequestDecision::Allow => {
+            fire_post_permission_response(
+                session,
+                &request.session_id,
+                request.turn_id.as_deref(),
+                request,
+                "allow",
+            )
+            .await;
+            audit.record_review(
+                selection.approvals_reviewer,
+                "hook_allowed",
+                true,
+                review_started.elapsed().as_millis() as u64,
+            );
+            return Some(PermissionPreflight::Granted(Box::new(audit)));
+        }
+        hooks::PermissionRequestDecision::Abstain => {}
     }
 
     if selection.approval_policy == types::ApprovalPolicy::Never {
@@ -1086,20 +1123,6 @@ async fn execute_tools_serial_inner(
                             let active_profile_id = agent
                                 .permission_profile()
                                 .unwrap_or_else(|| permissions.selection.profile_id.clone());
-                            agent.fire_hook(
-                                hooks::PERMISSION_REQUEST,
-                                hooks::HookPayload {
-                                    session_id: approval_session_id.clone(),
-                                    turn_id: approval_turn_id.clone(),
-                                    tool_name: Some("Bash".to_string()),
-                                    tool_input: Some(serde_json::json!({ "command": cmd })),
-                                    detail: format!(
-                                        "surface=terminal ask={}",
-                                        decision.description
-                                    ),
-                                    ..Default::default()
-                                },
-                            );
                             (
                                 approval_session_id,
                                 approval_turn_id,
@@ -1152,6 +1175,36 @@ async fn execute_tools_serial_inner(
                             }),
                             None,
                         );
+                        let permission_hook =
+                            session.fire_permission_request_hook(hooks::HookPayload {
+                                session_id: approval_session_id.clone(),
+                                turn_id: approval_turn_id.clone(),
+                                tool_name: Some("Bash".to_string()),
+                                tool_input: Some(serde_json::json!({ "command": cmd })),
+                                detail: format!("surface=terminal ask={}", decision.description),
+                                ..Default::default()
+                            });
+                        if let hooks::PermissionRequestDecision::Deny(reason) = &permission_hook {
+                            fire_post_approval_response(
+                                session,
+                                &approval_session_id,
+                                approval_turn_id.as_deref(),
+                                &cmd,
+                                "deny",
+                            )
+                            .await;
+                            approval_audit.record_review(
+                                permissions.approvals_reviewer,
+                                "hook_denied",
+                                false,
+                                approval_started.elapsed().as_millis() as u64,
+                            );
+                            out.push(
+                                format!("Command denied by PermissionRequest hook: {reason}")
+                                    .into(),
+                            );
+                            continue;
+                        }
                         if matches!(route, ApprovalRoute::Smart | ApprovalRoute::Manual) {
                             approval_audit.record(
                                 memory::PermissionAuditKind::Requested,
@@ -1173,6 +1226,22 @@ async fn execute_tools_serial_inner(
                                     .into(),
                             );
                             continue;
+                        } else if permission_hook == hooks::PermissionRequestDecision::Allow {
+                            fire_post_approval_response(
+                                session,
+                                &approval_session_id,
+                                approval_turn_id.as_deref(),
+                                &cmd,
+                                "allow",
+                            )
+                            .await;
+                            approval_audit.record_review(
+                                permissions.approvals_reviewer,
+                                "hook_allowed",
+                                true,
+                                approval_started.elapsed().as_millis() as u64,
+                            );
+                            permission_audits.push(approval_audit);
                         } else if route == ApprovalRoute::Allowlist {
                             fire_post_approval_response(
                                 session,
@@ -1863,5 +1932,92 @@ mod tests {
         assert_eq!(events[0].event, memory::PermissionAuditKind::Applied);
         assert_eq!(events[0].result.as_deref(), Some("success"));
         assert_eq!(events[0].duration_ms, Some(12));
+    }
+
+    #[tokio::test]
+    async fn permission_request_hook_can_allow_or_deny_before_hitl() {
+        fn request(session_id: &str) -> types::PermissionRequest {
+            types::PermissionRequest {
+                request_id: "hook-request".into(),
+                session_id: session_id.into(),
+                turn_id: Some("turn-hook".into()),
+                tool_call_id: "call-hook".into(),
+                tool_name: "terminal".into(),
+                summary: "run command".into(),
+                capabilities: Vec::new(),
+                reason: types::PermissionReason::RulePrompt,
+                requested_scope: types::GrantScope::Once,
+                command_preview: Some("echo ok".into()),
+                affected_paths: Vec::new(),
+                network_hosts: Vec::new(),
+            }
+        }
+
+        let allow_dir = tempfile::tempdir().unwrap();
+        let allow_session = Arc::new(
+            AgentLoop::new(crate::runtime::Config::with_defaults(
+                allow_dir.path().to_path_buf(),
+            ))
+            .unwrap(),
+        );
+        allow_session
+            .hook_bus()
+            .register(hooks::PERMISSION_REQUEST, |_| hooks::HookOutcome::Allow);
+        let allow_request = request(allow_session.session_id());
+        let allow_audit = PermissionAuditReceipt::new(
+            allow_dir.path().to_path_buf(),
+            &memory::LoadedPermissionSettings::default(),
+            types::WORKSPACE_PROFILE.into(),
+            allow_request,
+        );
+        let allow_context = allow_session.create_turn_context("turn-hook".into()).await;
+        let allowed = review_once_permission(
+            &allow_session,
+            &types::SessionPermissions::ask_for_approval(),
+            allow_audit,
+            &allow_context,
+            None,
+            "hook allow",
+            "title",
+            "body",
+        )
+        .await;
+        assert!(matches!(allowed, Some(PermissionPreflight::Granted(_))));
+
+        let deny_dir = tempfile::tempdir().unwrap();
+        let deny_session = Arc::new(
+            AgentLoop::new(crate::runtime::Config::with_defaults(
+                deny_dir.path().to_path_buf(),
+            ))
+            .unwrap(),
+        );
+        deny_session
+            .hook_bus()
+            .register(hooks::PERMISSION_REQUEST, |_| {
+                hooks::HookOutcome::Block("organization policy".into())
+            });
+        let deny_request = request(deny_session.session_id());
+        let deny_audit = PermissionAuditReceipt::new(
+            deny_dir.path().to_path_buf(),
+            &memory::LoadedPermissionSettings::default(),
+            types::WORKSPACE_PROFILE.into(),
+            deny_request,
+        );
+        let deny_context = deny_session.create_turn_context("turn-hook".into()).await;
+        let denied = review_once_permission(
+            &deny_session,
+            &types::SessionPermissions::ask_for_approval(),
+            deny_audit,
+            &deny_context,
+            None,
+            "hook deny",
+            "title",
+            "body",
+        )
+        .await;
+        assert!(matches!(
+            denied,
+            Some(PermissionPreflight::Denied(message)) if message.contains("organization policy")
+        ));
     }
 }

@@ -158,6 +158,7 @@ impl AgentLoop {
         let memory_dir = self.config.memory_dir.clone();
         let sessions: &dyn ConversationStore = &self.services.sessions;
         let execution = Some(self.execution());
+        let hook_runtime = Some(self.hook_runtime());
         let hook_bus = Some(self.hook_bus());
         let (project_root, permission_profile, model_ctx, skill_config_overrides) = {
             let state = self.lock_state();
@@ -187,6 +188,7 @@ impl AgentLoop {
                 .or(permission_profile),
             skill_config_overrides: &skill_config_overrides,
             hook_bus,
+            hook_runtime,
             workspace_write_grant: grants.workspace_write,
             sandbox_policy: grants.sandbox_policy,
             network_grant: grants.network,
@@ -516,28 +518,81 @@ impl AgentLoop {
             },
             _ => raw_result,
         };
-        let _ = self.fire_hook(
-            ::hooks::POST_TOOL_USE,
-            ::hooks::HookPayload {
-                session_id: self.session_id.clone(),
-                turn_id,
-                tool_name: Some(name.into()),
-                tool_input: Some(args_owned.clone()),
-                tool_response: Some(serde_json::Value::String(result.text().to_string())),
-                detail: {
-                    let preview: String = result.text().chars().take(200).collect();
-                    format!("{name} → {preview}")
-                },
-                ..Default::default()
+        let post = self.fire_post_tool_use_hook(::hooks::HookPayload {
+            session_id: self.session_id.clone(),
+            turn_id,
+            tool_name: Some(name.into()),
+            tool_input: Some(args_owned.clone()),
+            tool_response: Some(serde_json::Value::String(result.text().to_string())),
+            detail: {
+                let preview: String = result.text().chars().take(200).collect();
+                format!("{name} → {preview}")
             },
-        );
-        result
+            ..Default::default()
+        });
+        let mut model_text = result.text().to_string();
+        if let Some(reason) = post.block_reason {
+            model_text = format!("Tool result blocked by PostToolUse hook: {reason}");
+        }
+        if !post.additional_contexts.is_empty() {
+            model_text.push_str("\n\n[PostToolUse additional context]\n");
+            model_text.push_str(&post.additional_contexts.join("\n\n"));
+        }
+        if !post.feedback_messages.is_empty() {
+            model_text.push_str("\n\n[PostToolUse feedback]\n");
+            model_text.push_str(&post.feedback_messages.join("\n\n"));
+        }
+        if model_text == result.text() {
+            result
+        } else {
+            match result {
+                types::ToolOutput::Media { assets, .. } => types::ToolOutput::Media {
+                    text: model_text,
+                    assets,
+                },
+                _ => types::ToolOutput::from(model_text),
+            }
+        }
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn post_tool_use_controls_model_visible_result() {
+        let dir = tempfile::tempdir().unwrap();
+        let session = AgentLoop::new(super::super::Config::with_defaults(
+            dir.path().to_path_buf(),
+        ))
+        .unwrap();
+        let bus = session.hook_bus();
+        bus.register(::hooks::POST_TOOL_USE, |_| {
+            ::hooks::HookOutcome::Block("policy rejected output".into())
+        });
+        bus.register(::hooks::POST_TOOL_USE, |_| {
+            ::hooks::HookOutcome::InjectContext("safe replacement context".into())
+        });
+        bus.register(::hooks::POST_TOOL_USE, |_| {
+            ::hooks::HookOutcome::ReplaceText("review this failure".into())
+        });
+
+        let output = session
+            .finalize_tool_call_result(
+                "echo",
+                &serde_json::json!({"text": "secret"}),
+                types::ToolOutput::from("raw side-effect result"),
+            )
+            .await;
+
+        assert!(output
+            .text()
+            .contains("Tool result blocked by PostToolUse hook: policy rejected output"));
+        assert!(output.text().contains("safe replacement context"));
+        assert!(output.text().contains("review this failure"));
+        assert!(!output.text().contains("raw side-effect result"));
+    }
 
     #[test]
     fn tool_execution_grants_default_to_no_managed_network() {

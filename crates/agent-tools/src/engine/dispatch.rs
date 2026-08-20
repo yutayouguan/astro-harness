@@ -265,6 +265,7 @@ mod permission_tests {
             permission_profile: None,
             skill_config_overrides: &[],
             hook_bus: None,
+            hook_runtime: None,
             workspace_write_grant: write_grant,
             sandbox_policy: None,
             network_grant: crate::InProcessNetworkGrant::for_hosts(
