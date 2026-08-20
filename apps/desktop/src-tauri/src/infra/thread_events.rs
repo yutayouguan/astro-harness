@@ -10,7 +10,7 @@ use proto::astro_service_client::AstroServiceClient;
 use serde::Serialize;
 use server::WORKSPACE_EVENT_THREAD_ID;
 use tauri::{AppHandle, Emitter, Manager};
-use tokio::sync::{mpsc, watch, Mutex, RwLock};
+use tokio::sync::{mpsc, watch, Mutex, Notify, RwLock};
 use tracing::debug;
 
 use super::grpc::{default_grpc_address, endpoint_url};
@@ -21,6 +21,7 @@ use crate::commands::chat::{
 const SNAPSHOT_EVENT: &str = "thread_snapshot";
 const SESSION_EVENT: &str = "session_event";
 pub(crate) const THREAD_EVENTS_READY_TIMEOUT: Duration = Duration::from_secs(15);
+const PROVISIONAL_EVENT_BUFFER_CAPACITY: usize = 128;
 
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -120,6 +121,8 @@ struct ActiveState {
     activations: HashMap<String, u64>,
     awaiting_submissions: HashMap<String, HashSet<u64>>,
     deferred_terminals: HashMap<String, HashMap<String, DeferredTerminal>>,
+    provisional_nonterminal_events: HashMap<String, HashMap<(String, u64), Vec<ChatStreamEvent>>>,
+    provisional_delivery_pending: HashSet<(String, u64)>,
     delivered_agent_text: HashMap<String, HashMap<String, String>>,
     delivered_reasoning: HashMap<String, HashMap<String, String>>,
     pending_terminal_errors: HashMap<String, HashMap<String, String>>,
@@ -228,6 +231,7 @@ pub struct ThreadEventsBridge {
     connection_id: String,
     ready: watch::Sender<bool>,
     active_threads: RwLock<ActiveState>,
+    provisional_delivery_notify: Notify,
     terminal_cleanup: TerminalSubscriptionCleanup,
 }
 
@@ -255,6 +259,7 @@ impl ThreadEventsBridge {
             connection_id: uuid::Uuid::new_v4().to_string(),
             ready,
             active_threads: RwLock::new(ActiveState::default()),
+            provisional_delivery_notify: Notify::new(),
             terminal_cleanup: TerminalSubscriptionCleanup::new(),
         }
     }
@@ -314,6 +319,10 @@ impl ThreadEventsBridge {
         state.threads.insert(thread_id.clone());
         state.background_subscriptions.remove(&thread_id);
         state.deferred_terminals.remove(&thread_id);
+        state.provisional_nonterminal_events.remove(&thread_id);
+        state
+            .provisional_delivery_pending
+            .retain(|(pending_thread_id, _)| pending_thread_id != &thread_id);
         state
             .awaiting_submissions
             .entry(thread_id.clone())
@@ -321,6 +330,7 @@ impl ThreadEventsBridge {
             .insert(activation);
         state.activations.insert(thread_id.clone(), activation);
         drop(state);
+        self.provisional_delivery_notify.notify_waiters();
         self.terminal_cleanup
             .owners
             .write()
@@ -336,10 +346,13 @@ impl ThreadEventsBridge {
         if state.activations.get(thread_id).copied() != Some(activation) {
             Self::remove_turn_epoch(&mut state, thread_id, activation);
             Self::remove_deferred_activation(&mut state, thread_id, activation);
+            drop(state);
+            self.provisional_delivery_notify.notify_waiters();
             return false;
         }
         Self::clear_thread(&mut state, thread_id);
         drop(state);
+        self.provisional_delivery_notify.notify_waiters();
         // Keep terminal_cleanup.owners intact until the queued RPC succeeds. A newer activation
         // overwrites the owner first, making this request stale without unsubscribing the new turn.
         self.queue_terminal_unsubscribe(thread_id, activation);
@@ -366,6 +379,7 @@ impl ThreadEventsBridge {
             .delivered_extensions
             .retain(|(delivered_thread_id, _), _| delivered_thread_id != thread_id);
         drop(state);
+        self.provisional_delivery_notify.notify_waiters();
         if let Some(owner) = self
             .terminal_cleanup
             .owners
@@ -434,6 +448,8 @@ impl ThreadEventsBridge {
         Self::remove_pending_submission(&mut state, thread_id, activation);
         if !was_pending {
             Self::remove_deferred_activation(&mut state, thread_id, activation);
+            drop(state);
+            self.provisional_delivery_notify.notify_waiters();
             return Vec::new();
         }
         if !is_current {
@@ -446,8 +462,12 @@ impl ThreadEventsBridge {
                     .or_insert(activation);
             }
             Self::remove_deferred_activation(&mut state, thread_id, activation);
+            drop(state);
+            self.provisional_delivery_notify.notify_waiters();
             return Vec::new();
         }
+        let buffered_events =
+            Self::take_provisional_nonterminal_events(&mut state, thread_id, turn_id, activation);
         let mut superseded_turns = state
             .turn_epochs
             .get(thread_id)
@@ -477,9 +497,20 @@ impl ThreadEventsBridge {
         for superseded_turn_id in superseded_turns {
             Self::take_completed_background_turn(&mut state, thread_id, &superseded_turn_id);
         }
+        Self::record_projection_state(&mut state, thread_id, turn_id, &buffered_events);
         let Some(deferred) = deferred else {
-            return Vec::new();
+            if buffered_events.is_empty() {
+                drop(state);
+                self.provisional_delivery_notify.notify_waiters();
+            } else {
+                state
+                    .provisional_delivery_pending
+                    .insert((thread_id.into(), activation));
+            }
+            return buffered_events;
         };
+        let terminal_events =
+            Self::dedup_terminal_projection_state(&mut state, thread_id, turn_id, deferred.events);
         let background_completed =
             Self::take_completed_background_turn(&mut state, thread_id, turn_id);
         if deferred.background_turn && !background_completed {
@@ -491,8 +522,22 @@ impl ThreadEventsBridge {
         }
         Self::clear_thread(&mut state, thread_id);
         drop(state);
+        self.provisional_delivery_notify.notify_waiters();
         self.queue_terminal_unsubscribe(thread_id, activation);
-        deferred.events
+        let mut released = buffered_events;
+        released.extend(terminal_events);
+        released
+    }
+
+    /// Release live projection after the command has emitted an ACK-drained provisional batch.
+    /// This keeps the event pump behind the batch until the UI observes it in FIFO order.
+    pub(crate) async fn finish_provisional_delivery(&self, thread_id: &str, activation: u64) {
+        let mut state = self.active_threads.write().await;
+        state
+            .provisional_delivery_pending
+            .remove(&(thread_id.into(), activation));
+        drop(state);
+        self.provisional_delivery_notify.notify_waiters();
     }
 
     async fn active_activations(&self) -> Vec<(String, u64)> {
@@ -671,19 +716,64 @@ impl ThreadEventsBridge {
         if turn_id.is_empty() {
             return false;
         }
-        let mut state = self.active_threads.write().await;
-        let current_activation = state.activations.get(thread_id).copied();
-        let turn_activation = state
-            .turn_epochs
-            .get(thread_id)
-            .and_then(|turns| turns.get(turn_id))
-            .copied();
-        if !state.threads.contains(thread_id)
-            || current_activation.is_none()
-            || current_activation != turn_activation
-        {
-            return false;
+        loop {
+            // Register the waiter before inspecting state so an ACK/cleanup notification cannot
+            // race between releasing the state lock and awaiting capacity.
+            let notified = self.provisional_delivery_notify.notified();
+            tokio::pin!(notified);
+            notified.as_mut().enable();
+            let mut state = self.active_threads.write().await;
+            let current_activation = state.activations.get(thread_id).copied();
+            let turn_activation = state
+                .turn_epochs
+                .get(thread_id)
+                .and_then(|turns| turns.get(turn_id))
+                .copied();
+            if !state.threads.contains(thread_id)
+                || current_activation.is_none()
+                || current_activation != turn_activation
+            {
+                return false;
+            }
+            let activation = current_activation.expect("validated current activation");
+            if state
+                .provisional_delivery_pending
+                .contains(&(thread_id.into(), activation))
+            {
+                drop(state);
+                notified.await;
+                continue;
+            }
+            let pending = state
+                .awaiting_submissions
+                .get(thread_id)
+                .is_some_and(|pending| pending.contains(&activation));
+            if pending {
+                let buffer = state
+                    .provisional_nonterminal_events
+                    .entry(thread_id.into())
+                    .or_default()
+                    .entry((turn_id.into(), activation))
+                    .or_default();
+                if buffer.len().saturating_add(events.len()) > PROVISIONAL_EVENT_BUFFER_CAPACITY {
+                    drop(state);
+                    notified.await;
+                    continue;
+                }
+                buffer.extend(events.iter().cloned());
+                return false;
+            }
+            Self::record_projection_state(&mut state, thread_id, turn_id, events);
+            return true;
         }
+    }
+
+    fn record_projection_state(
+        state: &mut ActiveState,
+        thread_id: &str,
+        turn_id: &str,
+        events: &[ChatStreamEvent],
+    ) {
         for event in events {
             match event {
                 ChatStreamEvent::Token { content } => state
@@ -710,7 +800,6 @@ impl ThreadEventsBridge {
                 _ => {}
             }
         }
-        true
     }
 
     /// Snapshot agent messages are full text while live messages are deltas. Emit only the
@@ -804,6 +893,15 @@ impl ThreadEventsBridge {
         events: Vec<ChatStreamEvent>,
     ) -> Vec<ChatStreamEvent> {
         let mut state = self.active_threads.write().await;
+        Self::dedup_terminal_projection_state(&mut state, thread_id, turn_id, events)
+    }
+
+    fn dedup_terminal_projection_state(
+        state: &mut ActiveState,
+        thread_id: &str,
+        turn_id: &str,
+        events: Vec<ChatStreamEvent>,
+    ) -> Vec<ChatStreamEvent> {
         let pending = state
             .pending_terminal_errors
             .get_mut(thread_id)
@@ -859,7 +957,22 @@ impl ThreadEventsBridge {
         events: Vec<ChatStreamEvent>,
         background_turn: bool,
     ) -> Vec<ChatStreamEvent> {
-        let mut state = self.active_threads.write().await;
+        let mut state = loop {
+            let notified = self.provisional_delivery_notify.notified();
+            tokio::pin!(notified);
+            notified.as_mut().enable();
+            let state = self.active_threads.write().await;
+            let delivery_pending = state.activations.get(thread_id).is_some_and(|activation| {
+                state
+                    .provisional_delivery_pending
+                    .contains(&(thread_id.into(), *activation))
+            });
+            if !delivery_pending {
+                break state;
+            }
+            drop(state);
+            notified.await;
+        };
         if state
             .deferred_terminals
             .get(thread_id)
@@ -934,6 +1047,7 @@ impl ThreadEventsBridge {
             }
             Self::clear_thread(&mut state, thread_id);
             drop(state);
+            self.provisional_delivery_notify.notify_waiters();
             self.queue_terminal_unsubscribe(thread_id, turn_epoch);
             return events;
         }
@@ -981,6 +1095,10 @@ impl ThreadEventsBridge {
         state.activations.remove(thread_id);
         state.awaiting_submissions.remove(thread_id);
         state.deferred_terminals.remove(thread_id);
+        state.provisional_nonterminal_events.remove(thread_id);
+        state
+            .provisional_delivery_pending
+            .retain(|(pending_thread_id, _)| pending_thread_id != thread_id);
         state.completed_background_turns.remove(thread_id);
         state.delivered_agent_text.remove(thread_id);
         state.delivered_reasoning.remove(thread_id);
@@ -998,10 +1116,45 @@ impl ThreadEventsBridge {
 
     fn remove_deferred_activation(state: &mut ActiveState, thread_id: &str, activation: u64) {
         Self::remove_pending_submission(state, thread_id, activation);
+        Self::remove_provisional_nonterminal_activation(state, thread_id, activation);
         if let Some(terminals) = state.deferred_terminals.get_mut(thread_id) {
             terminals.retain(|_, terminal| terminal.awaiting_activation != activation);
             if terminals.is_empty() {
                 state.deferred_terminals.remove(thread_id);
+            }
+        }
+    }
+
+    fn take_provisional_nonterminal_events(
+        state: &mut ActiveState,
+        thread_id: &str,
+        turn_id: &str,
+        activation: u64,
+    ) -> Vec<ChatStreamEvent> {
+        let Some(mut buffers) = state.provisional_nonterminal_events.remove(thread_id) else {
+            return Vec::new();
+        };
+        let matching = buffers
+            .remove(&(turn_id.into(), activation))
+            .unwrap_or_default();
+        buffers.retain(|(_, buffered_activation), _| *buffered_activation != activation);
+        if !buffers.is_empty() {
+            state
+                .provisional_nonterminal_events
+                .insert(thread_id.into(), buffers);
+        }
+        matching
+    }
+
+    fn remove_provisional_nonterminal_activation(
+        state: &mut ActiveState,
+        thread_id: &str,
+        activation: u64,
+    ) {
+        if let Some(buffers) = state.provisional_nonterminal_events.get_mut(thread_id) {
+            buffers.retain(|(_, buffered_activation), _| *buffered_activation != activation);
+            if buffers.is_empty() {
+                state.provisional_nonterminal_events.remove(thread_id);
             }
         }
     }
@@ -4012,6 +4165,369 @@ mod tests {
             .is_empty());
         assert!(!bridge.is_active("session-provisional-x").await);
         assert!(bridge.background_resume_threads().await.is_empty());
+    }
+
+    #[tokio::test]
+    async fn mismatched_ack_discards_provisional_nonterminal_events_without_projection_pollution() {
+        let bridge = ThreadEventsBridge::new();
+        let activation = bridge.activate("session-buffer-y").await;
+        bridge
+            .bind_observed_turn("session-buffer-y", "turn-x")
+            .await;
+
+        assert!(
+            !bridge
+                .record_delivered_projection(
+                    "session-buffer-y",
+                    "turn-x",
+                    &[
+                        ChatStreamEvent::Token {
+                            content: "stale token".into(),
+                        },
+                        ChatStreamEvent::Reasoning {
+                            content: "stale reasoning".into(),
+                        },
+                        ChatStreamEvent::Error {
+                            message: "stale error".into(),
+                        },
+                    ],
+                )
+                .await
+        );
+        {
+            let state = bridge.active_threads.read().await;
+            assert!(!state.delivered_agent_text.contains_key("session-buffer-y"));
+            assert!(!state.delivered_reasoning.contains_key("session-buffer-y"));
+            assert!(!state
+                .pending_terminal_errors
+                .contains_key("session-buffer-y"));
+        }
+
+        assert!(bridge
+            .bind_submitted_turn_if_current("session-buffer-y", activation, "turn-y")
+            .await
+            .is_empty());
+        let state = bridge.active_threads.read().await;
+        assert!(!state.delivered_agent_text.contains_key("session-buffer-y"));
+        assert!(!state.delivered_reasoning.contains_key("session-buffer-y"));
+        assert!(!state
+            .pending_terminal_errors
+            .contains_key("session-buffer-y"));
+    }
+
+    #[tokio::test]
+    async fn matching_ack_drains_provisional_nonterminal_events_before_terminal_in_order() {
+        let bridge = ThreadEventsBridge::new();
+        let activation = bridge.activate("session-buffer-x").await;
+        bridge
+            .bind_observed_turn("session-buffer-x", "turn-x")
+            .await;
+        let buffered = vec![
+            ChatStreamEvent::RunStarted {
+                thread_id: "session-buffer-x".into(),
+                run_id: "turn-x".into(),
+            },
+            ChatStreamEvent::Token {
+                content: "hello".into(),
+            },
+            ChatStreamEvent::Reasoning {
+                content: "thinking".into(),
+            },
+            ChatStreamEvent::ToolCallDelta {
+                index: 0,
+                id: "tool-1".into(),
+                name: "terminal".into(),
+                arguments: "{}".into(),
+            },
+            ChatStreamEvent::Activity {
+                message_id: "control-1".into(),
+                activity_type: "control".into(),
+                content_json: "{}".into(),
+                replace: false,
+            },
+            ChatStreamEvent::Usage {
+                prompt_tokens: 1,
+                completion_tokens: 2,
+                total_tokens: 3,
+            },
+            ChatStreamEvent::Error {
+                message: "buffered error".into(),
+            },
+        ];
+        assert!(
+            !bridge
+                .record_delivered_projection("session-buffer-x", "turn-x", &buffered)
+                .await
+        );
+        assert!(bridge
+            .accept_terminal("session-buffer-x", "turn-x", terminal_projection("turn-x"),)
+            .await
+            .is_empty());
+
+        let released = bridge
+            .bind_submitted_turn_if_current("session-buffer-x", activation, "turn-x")
+            .await;
+        assert!(matches!(
+            released.as_slice(),
+            [
+                ChatStreamEvent::RunStarted { run_id, .. },
+                ChatStreamEvent::Token { content },
+                ChatStreamEvent::Reasoning { content: reasoning },
+                ChatStreamEvent::ToolCallDelta { id, .. },
+                ChatStreamEvent::Activity { message_id, .. },
+                ChatStreamEvent::Usage { total_tokens: 3, .. },
+                ChatStreamEvent::Error { message },
+                ChatStreamEvent::RunFinished { .. },
+                ChatStreamEvent::Done,
+            ] if run_id == "turn-x"
+                && content == "hello"
+                && reasoning == "thinking"
+                && id == "tool-1"
+                && message_id == "control-1"
+                && message == "buffered error"
+        ));
+    }
+
+    #[tokio::test]
+    async fn replacement_and_failure_drop_provisional_nonterminal_buffers() {
+        let bridge = ThreadEventsBridge::new();
+        let replaced = bridge.activate("session-buffer-cleanup").await;
+        bridge
+            .bind_observed_turn("session-buffer-cleanup", "turn-old")
+            .await;
+        assert!(
+            !bridge
+                .record_delivered_projection(
+                    "session-buffer-cleanup",
+                    "turn-old",
+                    &[ChatStreamEvent::Token {
+                        content: "replaced".into(),
+                    }],
+                )
+                .await
+        );
+
+        let failed = bridge.activate("session-buffer-cleanup").await;
+        assert!(bridge
+            .bind_submitted_turn_if_current("session-buffer-cleanup", replaced, "turn-old")
+            .await
+            .is_empty());
+        bridge
+            .bind_observed_turn("session-buffer-cleanup", "turn-failed")
+            .await;
+        assert!(
+            !bridge
+                .record_delivered_projection(
+                    "session-buffer-cleanup",
+                    "turn-failed",
+                    &[ChatStreamEvent::Token {
+                        content: "failed".into(),
+                    }],
+                )
+                .await
+        );
+        assert!(
+            bridge
+                .fail_activation("session-buffer-cleanup", failed)
+                .await
+        );
+
+        let current = bridge.activate("session-buffer-cleanup").await;
+        assert!(bridge
+            .bind_submitted_turn_if_current("session-buffer-cleanup", current, "turn-current")
+            .await
+            .is_empty());
+    }
+
+    #[tokio::test]
+    async fn provisional_nonterminal_buffer_applies_backpressure_at_live_channel_capacity() {
+        let bridge = Arc::new(ThreadEventsBridge::new());
+        let activation = bridge.activate("session-buffer-capacity").await;
+        bridge
+            .bind_observed_turn("session-buffer-capacity", "turn-x")
+            .await;
+
+        for index in 0..128 {
+            assert!(
+                !bridge
+                    .record_delivered_projection(
+                        "session-buffer-capacity",
+                        "turn-x",
+                        &[ChatStreamEvent::Token {
+                            content: format!("{index},"),
+                        }],
+                    )
+                    .await
+            );
+        }
+
+        let overflow_bridge = Arc::clone(&bridge);
+        let overflow = tokio::spawn(async move {
+            overflow_bridge
+                .record_delivered_projection(
+                    "session-buffer-capacity",
+                    "turn-x",
+                    &[ChatStreamEvent::Token {
+                        content: "overflow".into(),
+                    }],
+                )
+                .await
+        });
+        tokio::task::yield_now().await;
+        assert!(
+            !overflow.is_finished(),
+            "the 129th event must backpressure until the ACK drain is delivered"
+        );
+
+        let released = bridge
+            .bind_submitted_turn_if_current("session-buffer-capacity", activation, "turn-x")
+            .await;
+        assert_eq!(released.len(), 128);
+        tokio::task::yield_now().await;
+        assert!(
+            !overflow.is_finished(),
+            "the overflow event must remain behind the ACK batch delivery barrier"
+        );
+        bridge
+            .finish_provisional_delivery("session-buffer-capacity", activation)
+            .await;
+        assert!(overflow.await.unwrap());
+
+        let state = bridge.active_threads.read().await;
+        let delivered = &state.delivered_agent_text["session-buffer-capacity"]["turn-x"];
+        assert!(delivered.ends_with("127,overflow"));
+    }
+
+    #[tokio::test]
+    async fn terminal_after_ack_drain_waits_for_provisional_delivery_finish() {
+        let bridge = Arc::new(ThreadEventsBridge::new());
+        let activation = bridge.activate("session-buffer-terminal-order").await;
+        bridge
+            .bind_observed_turn("session-buffer-terminal-order", "turn-x")
+            .await;
+        assert!(
+            !bridge
+                .record_delivered_projection(
+                    "session-buffer-terminal-order",
+                    "turn-x",
+                    &[ChatStreamEvent::Token {
+                        content: "before terminal".into(),
+                    }],
+                )
+                .await
+        );
+        let released = bridge
+            .bind_submitted_turn_if_current("session-buffer-terminal-order", activation, "turn-x")
+            .await;
+        assert!(matches!(
+            released.as_slice(),
+            [ChatStreamEvent::Token { content }] if content == "before terminal"
+        ));
+
+        let terminal_bridge = Arc::clone(&bridge);
+        let terminal = tokio::spawn(async move {
+            terminal_bridge
+                .accept_terminal(
+                    "session-buffer-terminal-order",
+                    "turn-x",
+                    terminal_projection("turn-x"),
+                )
+                .await
+        });
+        tokio::task::yield_now().await;
+        assert!(
+            !terminal.is_finished(),
+            "terminal must not overtake the ACK-drained projection batch"
+        );
+
+        bridge
+            .finish_provisional_delivery("session-buffer-terminal-order", activation)
+            .await;
+        let terminal = terminal.await.unwrap();
+        assert!(matches!(
+            terminal.as_slice(),
+            [ChatStreamEvent::RunFinished { .. }, ChatStreamEvent::Done]
+        ));
+    }
+
+    #[tokio::test]
+    async fn replacement_and_failure_release_provisional_capacity_waiters() {
+        let bridge = Arc::new(ThreadEventsBridge::new());
+        let replaced = bridge.activate("session-buffer-waiter-cleanup").await;
+        bridge
+            .bind_observed_turn("session-buffer-waiter-cleanup", "turn-old")
+            .await;
+        for _ in 0..PROVISIONAL_EVENT_BUFFER_CAPACITY {
+            assert!(
+                !bridge
+                    .record_delivered_projection(
+                        "session-buffer-waiter-cleanup",
+                        "turn-old",
+                        &[ChatStreamEvent::Token {
+                            content: "old".into(),
+                        }],
+                    )
+                    .await
+            );
+        }
+        let replaced_waiter_bridge = Arc::clone(&bridge);
+        let replaced_waiter = tokio::spawn(async move {
+            replaced_waiter_bridge
+                .record_delivered_projection(
+                    "session-buffer-waiter-cleanup",
+                    "turn-old",
+                    &[ChatStreamEvent::Token {
+                        content: "stale".into(),
+                    }],
+                )
+                .await
+        });
+        tokio::task::yield_now().await;
+        assert!(!replaced_waiter.is_finished());
+
+        let failed = bridge.activate("session-buffer-waiter-cleanup").await;
+        assert!(!replaced_waiter.await.unwrap());
+        assert!(bridge
+            .bind_submitted_turn_if_current("session-buffer-waiter-cleanup", replaced, "turn-old",)
+            .await
+            .is_empty());
+        bridge
+            .bind_observed_turn("session-buffer-waiter-cleanup", "turn-failed")
+            .await;
+        for _ in 0..PROVISIONAL_EVENT_BUFFER_CAPACITY {
+            assert!(
+                !bridge
+                    .record_delivered_projection(
+                        "session-buffer-waiter-cleanup",
+                        "turn-failed",
+                        &[ChatStreamEvent::Token {
+                            content: "failed".into(),
+                        }],
+                    )
+                    .await
+            );
+        }
+        let failed_waiter_bridge = Arc::clone(&bridge);
+        let failed_waiter = tokio::spawn(async move {
+            failed_waiter_bridge
+                .record_delivered_projection(
+                    "session-buffer-waiter-cleanup",
+                    "turn-failed",
+                    &[ChatStreamEvent::Token {
+                        content: "stale".into(),
+                    }],
+                )
+                .await
+        });
+        tokio::task::yield_now().await;
+        assert!(!failed_waiter.is_finished());
+
+        assert!(
+            bridge
+                .fail_activation("session-buffer-waiter-cleanup", failed)
+                .await
+        );
+        assert!(!failed_waiter.await.unwrap());
     }
 
     #[tokio::test]

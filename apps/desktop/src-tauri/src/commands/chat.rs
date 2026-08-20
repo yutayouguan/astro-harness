@@ -616,6 +616,7 @@ pub async fn start_chat(app: AppHandle, request: StartChatRequest) -> Result<Str
                 .bind_submitted_turn_if_current(&sid2, activation, &turn_id)
                 .await;
             emit_chat_events(&app2, &sid2, terminal);
+            bridge.finish_provisional_delivery(&sid2, activation).await;
             Ok::<(), String>(())
         }
         .await;
