@@ -119,17 +119,17 @@ Skills 采用目录结构，兼容 agentskills.io 开放标准，每个 Skill �
 
 #### F-05 子 Agent 派生
 
-子 Agent 通过 `delegate_task` 工具创建，以全新对话启动，对父 Agent 历史一无所知；父 Agent 必须在 `context` 中传入所有所需信息，只有最终结构化摘要回传，保持 Token 高效。支持单任务和批量并行两种调用形式。子 Agent 继承父 Agent 工具集，特定工具被强制屏蔽以防副作用。嵌套深度与并发配置的技术细节详见[系统设计阶段 04-Skills系统.md](../03-系统设计阶段/02-核心功能模块/04-Skills系统.md)。
+子 Agent 通过 `spawn_agent` 工具创建持久化 Agent Thread，以独立 Session 时间线运行；父 Agent 通过 `send_message`/`followup_task`/`wait_agent` 协作。V2 Agent Thread 共 6 个工具（`spawn_agent/list_agents/send_message/followup_task/wait_agent/interrupt_agent`），详见 [`docs/subagents.md`](../../docs/subagents.md)。
 
 | 功能点 | 描述 | 优先级 |
 | ---- | ---- | ---- |
 | 手动派生子 Agent | 用户主动开启并行子任务 | P1 |
-| **`delegate_task` 工具接口** | `goal`+`context` 结构化调用；单任务和批量并行两种形式 | P1 |
-| 自动派生（Orchestrator 模式） | Agent 自主派生；`role="orchestrator"` 启用嵌套编排 | P2 |
+| **`spawn_agent` 工具接口** | `task_name`+`message` 创建持久化 Agent Thread；配合 `list_agents/send_message/followup_task/wait_agent/interrupt_agent` 协作 | P1 |
+| 自动派生 | Agent 自主调用 `spawn_agent` 派生子线程 | P2 |
 | **工具继承与强制屏蔽** | 继承父 Agent 工具集；5 类工具强制屏蔽防副作用 | P1 |
 | **`/agents` 监控面板** | 树形视图实时监控；费用/Token/文件汇总；支持单独终止子 Agent；支持回放历史 | P1 |
-| **`max_spawn_depth` 嵌套深度** | 1-3 层可配置，默认 1（扁平）；深度 3 时前端配置界面展示费用警告 | P1 |
-| **最大并发数配置** | `max_concurrent_children`（默认 3），超出返回工具错误不静默截断 | P1 |
+| **`max_concurrent_threads_per_session`** | V2 Agent Thread 并发上限（默认 4）；~~旧 `max_spawn_depth` 已废弃~~ | P1 |
+| **最大并发数配置** | `max_concurrent_threads_per_session`（默认 4），超出返回工具错误不静默截断 | P1 |
 | **子 Agent 模型覆盖** | 子 Agent 可指定更便宜的模型，降低简单任务成本 | P1 |
 | **`max_iterations` 迭代上限** | 默认 50 次，防止子 Agent 无限循环 | P1 |
 | **心跳陈旧度监控** | 无硬性挂钟超时；心跳检测卡死子 Agent；超时写诊断日志 | P1 |
@@ -578,7 +578,7 @@ Agent 执行期间的风险拦截、人工介入、中断恢复能力，保障�
 | Agent 暂停 / 恢复 | 任意时刻暂停 Agent，LLM 流式输出立即中止，message_history 保持干净；随时一键恢复 | P0 |
 | L3 完全接管 | 用户手动输入并执行工具调用，操作结果追加到 message_history；释放接管后 Agent 感知上下文继续执行 | P1 |
 | 工具白名单 | 工作区级别配置免审批规则（工具名 + 参数正则），降低频繁确认负担 | P1 |
-| 子 Agent 权限继承 | 子 Agent 权限为父级权限集的交集；递归深度上限 ≤ 3（depth=0 主 Agent，depth=3 为绝对上限） | P1 |
+| 子 Agent 权限继承 | 子 Agent 权限为父级权限集的交集；自定义 sandbox 只能收窄父任务权限 | P1 |
 | 网络失败自动暂停 | LLM 调用重试 3 次仍失败时，Agent 自动切换为 Paused 状态，通知用户检查网络后手动恢复 | P1 |
 | 崩溃恢复 | 应用重启后自动检测中断任务；以 messages 表为日志，仅重跑未完成的工具调用步骤，已完成步骤不重复执行 | P1 |
 

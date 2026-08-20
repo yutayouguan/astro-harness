@@ -1,7 +1,4 @@
-//! 媒体 HTTP 兼容 facade：聚合 Google Veo 与 OpenAI Whisper/视觉。
-//!
-//! 物理实现见 [`crate::google::veo_http`] 与 [`crate::openai::media_compat`]。
-//! 新代码优先直接引用厂商子模块；本 facade 仅保持旧路径稳定。
+//! 媒体 HTTP 工具函数：视觉/语音/视频生成的跨厂商入口。
 
 pub use crate::google::veo_http::*;
 pub use crate::openai::media_compat::*;

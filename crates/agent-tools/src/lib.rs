@@ -13,7 +13,6 @@ pub mod builtin;
 pub mod engine;
 pub mod interaction_mode;
 
-// 保持原有顶层路径，避免破坏下游 crate 引用。
 pub use approval::{
     classify_dangerous_command, is_hardline_blocked, matches_allowlist, resolve_command_action,
     ApprovalAction, ApprovalMode,
