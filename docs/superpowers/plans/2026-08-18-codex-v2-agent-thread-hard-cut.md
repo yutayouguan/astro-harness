@@ -78,7 +78,7 @@
 - Modify: `crates/agent-subagents/src/config.rs`
 - Test: `crates/agent-subagents/src/config.rs`
 
-- [ ] **Step 1: Write failing tests proving Astro compatibility paths are ignored**
+- [x] **Step 1: Write failing tests proving Astro compatibility paths are ignored**
 
 Add tests that create conflicting files under the old and canonical locations:
 
@@ -117,7 +117,7 @@ fn astro_config_toml_does_not_override_codex_agents_settings() {
 }
 ```
 
-- [ ] **Step 2: Run the tests and verify the old paths still affect results**
+- [x] **Step 2: Run the tests and verify the old paths still affect results**
 
 Run:
 
@@ -128,7 +128,7 @@ cargo test -p subagents astro_config_toml_does_not_override_codex_agents_setting
 
 Expected: at least the directory test fails because `memory_dir/agents` and `<project>/.astro/agents` are currently loaded.
 
-- [ ] **Step 3: Remove the compatibility loaders**
+- [x] **Step 3: Remove the compatibility loaders**
 
 Make the load order explicit and canonical:
 
@@ -157,13 +157,13 @@ pub fn load_agent_catalog(memory_dir: &Path, project_root: Option<&Path>) -> Age
 
 Update the existing precedence test so personal `.codex/agents` is overridden by project `.codex/agents`, without creating any legacy file.
 
-- [ ] **Step 4: Run the focused config suite**
+- [x] **Step 4: Run the focused config suite**
 
 Run: `cargo test -p subagents config::tests -- --nocapture`
 
 Expected: all config tests pass; tests prove old Astro paths have no effect and project Codex definitions win.
 
-- [ ] **Step 5: Commit the configuration hard cut**
+- [x] **Step 5: Commit the configuration hard cut**
 
 ```bash
 git add crates/agent-subagents/src/config.rs
@@ -179,7 +179,7 @@ git commit -m "refactor(subagents): hard cut agent config to codex paths"
 - Test: `crates/agent-subagents/src/path.rs`
 - Test: `crates/agent-subagents/src/model.rs`
 
-- [ ] **Step 1: Write failing AgentPath tests**
+- [x] **Step 1: Write failing AgentPath tests**
 
 ```rust
 #[test]
@@ -198,13 +198,13 @@ fn rejects_invalid_task_segments() {
 }
 ```
 
-- [ ] **Step 2: Run the path tests and verify they fail to compile**
+- [x] **Step 2: Run the path tests and verify they fail to compile**
 
 Run: `cargo test -p subagents path::tests -- --nocapture`
 
 Expected: compile failure because `AgentPath` and `path` module do not exist.
 
-- [ ] **Step 3: Implement the V2 domain types**
+- [x] **Step 3: Implement the V2 domain types**
 
 Implement the path API without adding a regex dependency:
 
@@ -381,7 +381,7 @@ pub struct InterruptAgentRequest { pub target: String }
 
 Keep credentials and hook handles only in an in-memory `SpawnRuntimeRequest`; never add them to a serializable stored thread.
 
-- [ ] **Step 4: Add strict deserialization tests and run the crate suite**
+- [x] **Step 4: Add strict deserialization tests and run the crate suite**
 
 ```rust
 #[test]
@@ -396,7 +396,7 @@ Run: `cargo test -p subagents -- --nocapture`
 
 Expected: all path/model/config tests pass after fixing imports and old test fixtures.
 
-- [ ] **Step 5: Commit the V2 domain model**
+- [x] **Step 5: Commit the V2 domain model**
 
 ```bash
 git add crates/agent-subagents/src/path.rs crates/agent-subagents/src/model.rs crates/agent-subagents/src/lib.rs
@@ -413,7 +413,7 @@ git commit -m "feat(subagents): add codex v2 agent thread domain"
 - Test: `crates/agent-subagents/src/migration.rs`
 - Test: `crates/agent-subagents/src/store.rs`
 
-- [ ] **Step 1: Write failing migration and transaction tests**
+- [x] **Step 1: Write failing migration and transaction tests**
 
 Create a v1 fixture with the existing `agent_threads` and `agent_thread_messages` tables, then assert:
 
@@ -465,7 +465,7 @@ fn create_v1_database(path: &Path) {
 }
 ```
 
-- [ ] **Step 2: Run the focused tests and verify missing APIs fail**
+- [x] **Step 2: Run the focused tests and verify missing APIs fail**
 
 Run:
 
@@ -476,7 +476,7 @@ cargo test -p subagents store::tests -- --nocapture
 
 Expected: compile failure because `AgentGraphStore`, schema v2, and mailbox APIs are absent.
 
-- [ ] **Step 3: Implement idempotent schema v2 migration**
+- [x] **Step 3: Implement idempotent schema v2 migration**
 
 Use one SQLite transaction to:
 
@@ -539,7 +539,7 @@ CREATE TABLE agent_status_events (
 
 Only run `ALTER TABLE` when the v1 table exists and the v2 schema marker is absent. Record `schema_version=2` in `schema_meta` in the same transaction.
 
-- [ ] **Step 4: Implement graph and mailbox transactions**
+- [x] **Step 4: Implement graph and mailbox transactions**
 
 Expose focused methods:
 
@@ -588,7 +588,7 @@ pub struct MailboxMessage {
 }
 ```
 
-- [ ] **Step 5: Run store tests and commit**
+- [x] **Step 5: Run store tests and commit**
 
 Run: `cargo test -p subagents -- --nocapture`
 
@@ -609,7 +609,7 @@ git commit -m "feat(subagents): persist agent graph mailbox and status events"
 - Test: `crates/agent-subagents/src/registry.rs`
 - Test: `crates/agent-subagents/src/control.rs`
 
-- [ ] **Step 1: Write failing reservation, quota, and activity tests**
+- [x] **Step 1: Write failing reservation, quota, and activity tests**
 
 ```rust
 #[test]
@@ -655,7 +655,7 @@ fn list_returns_root_and_nested_descendants_in_path_order() {
 }
 ```
 
-- [ ] **Step 2: Run the focused tests and verify missing types fail**
+- [x] **Step 2: Run the focused tests and verify missing types fail**
 
 Run:
 
@@ -666,7 +666,7 @@ cargo test -p subagents control::tests -- --nocapture
 
 Expected: compile failure because the registry/reservation/activity APIs do not exist.
 
-- [ ] **Step 3: Implement RAII reservations and execution permits**
+- [x] **Step 3: Implement RAII reservations and execution permits**
 
 Use guards that commit explicitly and roll back on `Drop`:
 
@@ -733,7 +733,7 @@ impl ActivityBus {
 }
 ```
 
-- [ ] **Step 4: Implement `AgentControl` and activity cursors**
+- [x] **Step 4: Implement `AgentControl` and activity cursors**
 
 ```rust
 pub struct AgentControl {
@@ -781,7 +781,7 @@ Activity notifications are wakeups only. Callers retrieve durable mailbox/status
 
 `AgentControl::open` ensures one root row with canonical path `/root`, parent `None`, and `session_id=root_thread_id`. Root appears in model `list_agents` results but cannot be overwritten by spawn, targeted by self-interrupt, or closed through model tools.
 
-- [ ] **Step 5: Run the crate tests and commit**
+- [x] **Step 5: Run the crate tests and commit**
 
 Run: `cargo test -p subagents -- --nocapture`
 
@@ -808,7 +808,7 @@ git commit -m "feat(subagents): add shared codex v2 agent control"
 - Test: `crates/agent-core/src/exec/agent_runtime.rs`
 - Test: `crates/agent-core/src/exec/subagents.rs`
 
-- [ ] **Step 1: Write failing runtime lifecycle tests**
+- [x] **Step 1: Write failing runtime lifecycle tests**
 
 ```rust
 #[tokio::test]
@@ -856,7 +856,7 @@ fn fork_turns_copies_structured_recent_history_with_tool_rows() {
 }
 ```
 
-- [ ] **Step 2: Run tests and verify the legacy runner behavior fails**
+- [x] **Step 2: Run tests and verify the legacy runner behavior fails**
 
 Run:
 
@@ -867,7 +867,7 @@ cargo test -p agent exec::subagents::tests -- --nocapture
 
 Expected: compile failure for the new harness and lifecycle APIs; existing runner keeps completed threads resident.
 
-- [ ] **Step 3: Implement structured `fork_turns` in SessionStore**
+- [x] **Step 3: Implement structured `fork_turns` in SessionStore**
 
 Add a recent-turn fork API that copies complete stored rows, including tool metadata:
 
@@ -899,7 +899,7 @@ impl SessionStore {
 
 `fork_turns = "all"` maps to `None`, `"none"` maps to `Some(0)`, and a positive integer maps to `Some(value)`. Reject zero strings and malformed values at the tool schema boundary. The copied rows retain `tool_calls`, `tool_call_id`, reasoning, compressed content, Codex items, media, and parent session lineage.
 
-- [ ] **Step 4: Implement the root control directory and active-turn runtime manager**
+- [x] **Step 4: Implement the root control directory and active-turn runtime manager**
 
 The process directory lets backend sessions and Tauri commands find the same control without creating a second root controller:
 
@@ -938,7 +938,7 @@ impl AgentRuntimeManager {
 
 Each turn builds a Session from `state.db`, runs one model/tool turn, emits `TurnStarted`, then exactly one of `TurnCompleted`, `TurnInterrupted`, or `TurnErrored`, releases the execution permit, and drops the resident runtime.
 
-- [ ] **Step 5: Share the root control through Session services**
+- [x] **Step 5: Share the root control through Session services**
 
 Add root and child constructors that pass the same control while binding a different current path:
 
@@ -963,7 +963,7 @@ impl Session {
 
 Do not overwrite the concurrent SessionState refactor in `runtime/mod.rs`; integrate through the existing `clone_history`, `record_items`, and `replace_history` APIs present at execution time.
 
-- [ ] **Step 6: Deliver follow-ups at safe boundaries and wake waits on steer**
+- [x] **Step 6: Deliver follow-ups at safe boundaries and wake waits on steer**
 
 At the start of each streaming iteration, drain ordered mailbox rows for the current thread and queue one structured context block. Mark rows delivered only after the Session history accepts them:
 
@@ -977,7 +977,7 @@ if !mailbox_items.is_empty() {
 
 When `start_or_steer_turn` steers an active main turn, call `agent_control.notify_main_steer()` after the steer input is durably accepted.
 
-- [ ] **Step 7: Run focused runtime tests and commit**
+- [x] **Step 7: Run focused runtime tests and commit**
 
 Run:
 
@@ -1006,7 +1006,7 @@ git commit -m "refactor(agent): run codex v2 agent turns from shared control"
 - Test: `crates/agent-tools/src/builtin/agents/subagent.rs`
 - Test: `crates/agent-core/src/exec/dispatch.rs`
 
-- [ ] **Step 1: Write failing catalog and schema tests**
+- [x] **Step 1: Write failing catalog and schema tests**
 
 ```rust
 #[test]
@@ -1054,7 +1054,7 @@ enabled = true
 }
 ```
 
-- [ ] **Step 2: Run focused tests and verify legacy tools make them fail**
+- [x] **Step 2: Run focused tests and verify legacy tools make them fail**
 
 Run:
 
@@ -1065,7 +1065,7 @@ cargo test -p tools v2_tool_arguments_reject_legacy_aliases -- --nocapture
 
 Expected: failures show ten registered tools and accepted aliases.
 
-- [ ] **Step 3: Replace the dispatch trait with V2 operations**
+- [x] **Step 3: Replace the dispatch trait with V2 operations**
 
 ```rust
 #[async_trait]
@@ -1082,7 +1082,7 @@ pub trait AgentThreadDispatch: Send + Sync {
 
 Desktop read/close must not appear on this trait. Put them on a separate `DesktopAgentThreadControl` implemented in `agent-core/src/exec/dispatch.rs`.
 
-- [ ] **Step 4: Implement strict schemas and semantics**
+- [x] **Step 4: Implement strict schemas and semantics**
 
 Use `#[serde(deny_unknown_fields)]` on every input:
 
@@ -1104,11 +1104,11 @@ struct InterruptAgentArgs { target: String }
 
 Match each tool to its own dispatch method. `send_message` calls queue-only; `followup_task` calls trigger-turn. Use the current Codex V2 defaults `min=10_000ms`, `default=30_000ms`, and `max=3_600_000ms`: reject values above max, clamp lower values to min, and return only `{ message, timed_out }`.
 
-- [ ] **Step 5: Implement session-bound dispatch behavior**
+- [x] **Step 5: Implement session-bound dispatch behavior**
 
 `DefaultAgentThreadDispatch` contains `Arc<AgentControl>`, current `AgentPath`, current thread id, and the runtime manager. `list_agents` queries the entire root tree; `interrupt_agent` rejects root/self and returns the previous status; `spawn_agent` commits its reservation only after Session/runtime setup succeeds. Resolve custom-agent model, reasoning, sandbox, MCP, and skill layers before creating the child Session; pass those values through `SpawnRuntimeRequest`, and enforce sandbox narrowing against the parent profile.
 
-- [ ] **Step 6: Run tools/core tests and commit**
+- [x] **Step 6: Run tools/core tests and commit**
 
 Run:
 
@@ -1135,7 +1135,7 @@ git commit -m "refactor(tools): make codex v2 the only agent tool contract"
 - Test: `crates/agent-subagents/src/control.rs`
 - Test: `crates/agent-core/src/exec/dispatch.rs`
 
-- [ ] **Step 1: Write failing recovery and desktop-control tests**
+- [x] **Step 1: Write failing recovery and desktop-control tests**
 
 ```rust
 #[test]
@@ -1164,7 +1164,7 @@ fn desktop_read_returns_session_store_tool_timeline() {
 }
 ```
 
-- [ ] **Step 2: Run focused tests and verify they fail**
+- [x] **Step 2: Run focused tests and verify they fail**
 
 Run:
 
@@ -1176,7 +1176,7 @@ cargo test -p agent desktop_read_returns_session_store_tool_timeline -- --nocapt
 
 Expected: failures expose optimistic status writes, non-recursive close, and simplified transcript reads.
 
-- [ ] **Step 3: Implement recovery and desktop-only operations**
+- [x] **Step 3: Implement recovery and desktop-only operations**
 
 Recovery appends a durable `turn_interrupted` event for each stored `Running` thread and never restarts an LLM/tool call automatically.
 
@@ -1195,11 +1195,11 @@ pub trait DesktopAgentThreadControl {
 
 Read messages via `SessionStore::open_sessions_dir(&memory_dir.join("sessions"))?.get_messages(&thread.session_id)`. Close descendants leaf-first, await termination acknowledgements, then write closed edges and `Shutdown` events.
 
-- [ ] **Step 4: Rewrite Tauri commands around root session and canonical target**
+- [x] **Step 4: Rewrite Tauri commands around root session and canonical target**
 
 Use DTO inputs `{ rootSessionId, target }`; remove `includeClosed` and direct `threadId` compatibility arguments. Preserve command names used by the desktop shell, but their payload contract is desktop-only and canonical-path based.
 
-- [ ] **Step 5: Run focused crates and commit**
+- [x] **Step 5: Run focused crates and commit**
 
 Run:
 
@@ -1226,7 +1226,7 @@ git commit -m "feat(desktop): add v2 agent thread control plane"
 - Test: `crates/agent-server/src/session_events.rs`
 - Test: `crates/agent-server/tests/agent_thread_events.rs`
 
-- [ ] **Step 1: Write failing replay/filter tests**
+- [x] **Step 1: Write failing replay/filter tests**
 
 ```rust
 #[tokio::test]
@@ -1248,7 +1248,7 @@ async fn one_root_watcher_publishes_runner_status_changes() {
 }
 ```
 
-- [ ] **Step 2: Run the server tests and verify the payload is absent**
+- [x] **Step 2: Run the server tests and verify the payload is absent**
 
 Run:
 
@@ -1259,7 +1259,7 @@ cargo test -p server one_root_watcher_publishes_runner_status_changes -- --nocap
 
 Expected: compile failure because the proto and event hub lack the Agent Thread payload.
 
-- [ ] **Step 3: Extend the proto and internal event message**
+- [x] **Step 3: Extend the proto and internal event message**
 
 Add a payload that contains one complete thread projection so frontend reducers never infer missing state:
 
@@ -1281,11 +1281,11 @@ message AgentThreadChangedEvent {
 
 Add `agent_thread_changed = 13` to `SessionEvent.payload` and the matching internal payload/DTO.
 
-- [ ] **Step 4: Attach one activity watcher per root**
+- [x] **Step 4: Attach one activity watcher per root**
 
 When AstroService creates or resumes a root Session, subscribe once to its `AgentControl` activity bus. Publish each projection to `SessionEventHub` with `session_id=root_thread_id`. Track attached roots in a mutex-protected set and remove them when the watcher ends.
 
-- [ ] **Step 5: Bridge the payload to the desktop and run tests**
+- [x] **Step 5: Bridge the payload to the desktop and run tests**
 
 Extend `SessionEventDto` with `agent_thread_changed: Option<AgentThreadChangedDto>` and map the proto payload in `proto_to_dto`.
 
@@ -1299,7 +1299,7 @@ cargo check -p astro-agent
 
 Expected: sequence replay, filtering, watcher deduplication, proto mapping, and desktop bridge compile pass.
 
-- [ ] **Step 6: Commit the event stream**
+- [x] **Step 6: Commit the event stream**
 
 ```bash
 git add crates/agent-proto/proto/astro.proto crates/agent-server/src/session_events.rs crates/agent-server/src/grpc/astro_service.rs crates/agent-server/tests/agent_thread_events.rs apps/desktop/src-tauri/src/infra/session_events.rs
@@ -1318,7 +1318,7 @@ git commit -m "feat(events): stream codex v2 agent thread activity"
 - Modify: `apps/desktop/src/styles/features/chat/subagents.css`
 - Modify: `apps/desktop/src/i18n/messages.ts`
 
-- [ ] **Step 1: Write failing pure reducer tests**
+- [x] **Step 1: Write failing pure reducer tests**
 
 ```typescript
 it("builds a stable nested tree from a snapshot", () => {
@@ -1343,13 +1343,13 @@ it("marks mailbox and final activity unread until the thread is opened", () => {
 });
 ```
 
-- [ ] **Step 2: Run the reducer test and verify it fails**
+- [x] **Step 2: Run the reducer test and verify it fails**
 
 Run: `cd apps/desktop && npm test -- src/hooks/chat/subagentTree.test.ts`
 
 Expected: failure because the reducer module does not exist.
 
-- [ ] **Step 3: Implement the pure tree projection**
+- [x] **Step 3: Implement the pure tree projection**
 
 Define camelCase frontend DTOs and pure functions:
 
@@ -1369,7 +1369,7 @@ export function markThreadRead(state: AgentTreeState, path: string): AgentTreeSt
 
 Sort siblings by `canonicalPath`; derive nesting only from `parentThreadId`/path and never from arrival order.
 
-- [ ] **Step 4: Rewrite the hook without timers**
+- [x] **Step 4: Rewrite the hook without timers**
 
 On root session change:
 
@@ -1381,7 +1381,7 @@ On root session change:
 
 The resulting hook returns `{ state, threads, roots, error, refresh, markRead }`. Remove both 1.5-second intervals from the hook and detail panel.
 
-- [ ] **Step 5: Render hierarchy and real Session details**
+- [x] **Step 5: Render hierarchy and real Session details**
 
 Activity bar:
 
@@ -1398,7 +1398,7 @@ Panel:
 - show interrupt for Running and close for every non-Shutdown V2 thread;
 - render historical archive rows read-only.
 
-- [ ] **Step 6: Run frontend tests, typecheck, and commit**
+- [x] **Step 6: Run frontend tests, typecheck, and commit**
 
 Run:
 
@@ -1425,7 +1425,7 @@ git commit -m "feat(desktop): render live codex v2 agent tree"
 - Modify: `AGENTS.md`
 - Test: `crates/agent-tools/tests/tools_test.rs`
 
-- [ ] **Step 1: Add a failing source-level legacy scan test**
+- [x] **Step 1: Add a failing source-level legacy scan test**
 
 Extend the tools integration test with the complete removed set and add a repository check command:
 
@@ -1444,13 +1444,13 @@ rg -n 'read_agent|close_agent|send_message_to_agent|wait_agents|include_closed|t
 
 Expected: the scan returns legacy production, prompt, UI, documentation, and old-test references.
 
-- [ ] **Step 2: Remove production and prompt references**
+- [x] **Step 2: Remove production and prompt references**
 
 Delete old match arms, structs, trait methods, fallback catalog items, context-usage grouping, and guidance text. Do not replace removed model tools with deprecated wrappers.
 
 Keep `read_subagent_thread` and `close_subagent_thread` only as explicit Tauri desktop command names. Their DTOs must use V2 root/target fields and their Rust implementations must call `DesktopAgentThreadControl`, never the model dispatch trait.
 
-- [ ] **Step 3: Rewrite the canonical project documentation**
+- [x] **Step 3: Rewrite the canonical project documentation**
 
 `docs/subagents.md` and `AGENTS.md` must state:
 
@@ -1462,7 +1462,7 @@ Keep `read_subagent_thread` and `close_subagent_thread` only as explicit Tauri d
 - only `.codex/agents` and `.codex/config.toml` configure custom agents;
 - `~/.astro/subagents.db` remains Astro runtime storage.
 
-- [ ] **Step 4: Verify the legacy scan has only intentional history/design mentions**
+- [x] **Step 4: Verify the legacy scan has only intentional history/design mentions**
 
 Run the same `rg` command. Expected remaining matches:
 
@@ -1472,7 +1472,7 @@ Run the same `rg` command. Expected remaining matches:
 
 No model registry, prompt, schema, runtime branch, compatibility loader, or frontend fallback catalog match may remain.
 
-- [ ] **Step 5: Run focused tests and commit**
+- [x] **Step 5: Run focused tests and commit**
 
 Run:
 
@@ -1498,7 +1498,7 @@ Before this commit, inspect `git diff --cached --name-only` and unstage every un
 - Create: `crates/agent-server/tests/agent_thread_recovery.rs`
 - Modify: implementation files only when a failing acceptance test exposes a defect
 
-- [ ] **Step 1: Write the cross-layer lifecycle acceptance test**
+- [x] **Step 1: Write the cross-layer lifecycle acceptance test**
 
 Cover this exact sequence:
 
@@ -1522,19 +1522,19 @@ async fn nested_agent_tree_survives_interrupt_restart_resume_and_recursive_close
 }
 ```
 
-- [ ] **Step 2: Run the acceptance test and fix defects through red-green cycles**
+- [x] **Step 2: Run the acceptance test and fix defects through red-green cycles**
 
 Run: `cargo test -p subagents --test v2_lifecycle -- --nocapture`
 
 Expected before fixes: any remaining cross-module defect produces a focused assertion failure. For each defect, add the smallest reproducing test beside the owning module, observe failure, implement the fix, and rerun both tests.
 
-- [ ] **Step 3: Verify backend event reconnect behavior**
+- [x] **Step 3: Verify backend event reconnect behavior**
 
 Run: `cargo test -p server --test agent_thread_recovery -- --nocapture`
 
 Expected: after simulated disconnect, snapshot cursor plus replayed events yield the same final tree as an uninterrupted subscription.
 
-- [ ] **Step 4: Run the complete verification matrix**
+- [x] **Step 4: Run the complete verification matrix**
 
 ```bash
 cargo fmt --all --check
@@ -1552,7 +1552,7 @@ git diff --check
 
 Expected: every command exits zero. If a pre-existing failure appears, capture its exact command/output and prove it reproduces on the worktree base before classifying it as baseline.
 
-- [ ] **Step 5: Commit acceptance coverage**
+- [x] **Step 5: Commit acceptance coverage**
 
 ```bash
 git add crates/agent-subagents/tests/v2_lifecycle.rs crates/agent-server/tests/agent_thread_recovery.rs
@@ -1564,7 +1564,7 @@ git commit -m "test(subagents): cover codex v2 thread lifecycle"
 **Files:**
 - Verify only; modify the owning file when the audit finds a mismatch
 
-- [ ] **Step 1: Compare the six schemas to local Codex source**
+- [x] **Step 1: Compare the six schemas to local Codex source**
 
 Inspect:
 
@@ -1577,7 +1577,7 @@ sed -n '430,670p' /Users/iswm/CodeRope/codex/codex-rs/core/src/agent/control.rs
 
 Verify names, required fields, unknown-field rejection, queue-only versus trigger-turn behavior, list prefix resolution, wait outcome, interrupt previous-status return, and root/self restrictions.
 
-- [ ] **Step 2: Audit resource and status invariants**
+- [x] **Step 2: Audit resource and status invariants**
 
 Confirm from tests and source:
 
@@ -1588,7 +1588,7 @@ Confirm from tests and source:
 - close waits for termination and is idempotent;
 - mailbox acknowledgment occurs after Session history accepts messages.
 
-- [ ] **Step 3: Audit frontend event ownership**
+- [x] **Step 3: Audit frontend event ownership**
 
 Run:
 
@@ -1598,7 +1598,7 @@ rg -n 'setInterval|setTimeout' apps/desktop/src/hooks/chat/useSubagentThreads.ts
 
 Expected: no polling timer. Confirm a single hook owns snapshot/event state and both UI surfaces consume the same projection.
 
-- [ ] **Step 4: Inspect final history and worktree status**
+- [x] **Step 4: Inspect final history and worktree status**
 
 ```bash
 git log --oneline --decorate -15
@@ -1608,6 +1608,6 @@ git diff --check HEAD~12..HEAD
 
 Expected: focused commits, clean implementation worktree, no unrelated user files, no whitespace errors.
 
-- [ ] **Step 5: Present merge and cleanup choices**
+- [x] **Step 5: Present merge and cleanup choices**
 
 Report the worktree path, branch, commits, verification results, baseline exceptions, and any retained historical migration data. Ask the user whether to merge the branch and remove the worktree; do not merge or delete the worktree before approval.
