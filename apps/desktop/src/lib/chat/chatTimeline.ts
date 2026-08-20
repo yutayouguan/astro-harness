@@ -145,6 +145,41 @@ export function applyReasoningDelta(
   };
 }
 
+/** Replace recovered reasoning with one canonical segment while preserving non-reasoning order. */
+export function reconcileReasoning(
+  m: ChatMessage,
+  canonical: string,
+  at: number = Date.now(),
+): ChatMessage {
+  const segments: ChatTimelineSegment[] = [];
+  let inserted = false;
+  for (const segment of m.segments ?? []) {
+    if (segment.type !== "reasoning") {
+      segments.push(segment);
+      continue;
+    }
+    if (!inserted && canonical) {
+      const { durationSec: _, ...open } = segment;
+      segments.push({ ...open, text: canonical });
+      inserted = true;
+    }
+  }
+  if (!inserted && canonical) {
+    segments.push({
+      type: "reasoning",
+      id: `r-${at}-${segments.length}`,
+      text: canonical,
+      at,
+    });
+  }
+  return {
+    ...m,
+    reasoning: canonical,
+    segments,
+    reasoningDurationSec: sumReasoningDurations(segments),
+  };
+}
+
 /** 工具活动 upsert；新 id 入列前封口当前 reasoning；完成态写 durationSec */
 export function applyActivityUpsert(
   m: ChatMessage,
@@ -213,4 +248,16 @@ export function applySurfaceUpsert(
     segments.push({ type: "surface", id: surface.messageId, at });
   }
   return { ...m, uiSurfaces: surfaces, segments };
+}
+
+export function parseActivityOperations(contentJson?: string): unknown[] {
+  if (!contentJson?.trim()) return [];
+  try {
+    const parsed = JSON.parse(contentJson) as unknown;
+    if (parsed == null || typeof parsed !== "object" || Array.isArray(parsed)) return [];
+    const operations = (parsed as { operations?: unknown }).operations;
+    return Array.isArray(operations) ? operations : [];
+  } catch {
+    return [];
+  }
 }

@@ -11,7 +11,7 @@ impl AgentLoop {
     /// Provider 发送用历史：若有 mid-run handoff 则折叠中间轮次。
     pub async fn provider_history(&self) -> Vec<Message> {
         let (handoff, history) = {
-            let state = self.state.lock().await;
+            let state = self.lock_state();
             (
                 state.compression.mid_run_handoff.clone(),
                 state.clone_history(),
@@ -45,7 +45,7 @@ impl AgentLoop {
             return Ok(result);
         }
         let history = {
-            let state = self.state.lock().await;
+            let state = self.lock_state();
             if !state.compression.guard.allow_run() {
                 result.thrashing_disabled = true;
                 return Ok(result);
@@ -148,7 +148,7 @@ impl AgentLoop {
             .lock()
             .expect("compression policy mutex poisoned")
             .should_recommend_compact(result.occupancy_after);
-        let mut state = self.state.lock().await;
+        let mut state = self.lock_state();
         state
             .compression
             .guard
@@ -170,7 +170,7 @@ impl AgentLoop {
         self.services
             .sessions
             .update_message_compressed_content(stored_msg.id, Some(view))?;
-        let mut state = self.state.lock().await;
+        let mut state = self.lock_state();
         if let Some(runtime_msg) = state.history.iter_mut().find(|m| {
             m.role == Role::Tool
                 && match (&m.tool_call_id, &stored_msg.tool_call_id) {

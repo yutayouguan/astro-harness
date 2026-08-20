@@ -22,8 +22,11 @@ name = "agent"
 version = "0.1.0"
 dependencies = [
  "a2ui",
+ "agent-protocol",
+ "agent-rollout",
  "anyhow",
  "artifacts",
+ "async-channel",
  "async-trait",
  "chrono",
  "cron",
@@ -39,6 +42,7 @@ dependencies = [
  "serde",
  "serde_json",
  "session",
+ "sha2",
  "skills",
  "subagents",
  "tempfile",
@@ -51,6 +55,31 @@ dependencies = [
  "usage",
  "uuid",
  "worktree",
+]
+
+[[package]]
+name = "agent-protocol"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror 1.0.69",
+ "tokio",
+ "types",
+]
+
+[[package]]
+name = "agent-rollout"
+version = "0.1.0"
+dependencies = [
+ "agent-protocol",
+ "chrono",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 1.0.69",
+ "tokio",
+ "types",
 ]
 
 [[package]]
@@ -171,6 +200,7 @@ name = "astro-agent"
 version = "0.1.0"
 dependencies = [
  "agent",
+ "agent-protocol",
  "anyhow",
  "artifacts",
  "base64 0.22.1",
@@ -5073,6 +5103,8 @@ name = "server"
 version = "0.1.0"
 dependencies = [
  "agent",
+ "agent-protocol",
+ "agent-rollout",
  "anyhow",
  "chrono",
  "cron",
@@ -5092,6 +5124,7 @@ dependencies = [
  "tempfile",
  "tokio",
  "tokio-stream",
+ "tokio-util",
  "tonic",
  "tools",
  "tracing",

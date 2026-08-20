@@ -5,17 +5,21 @@ import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import {
   applyActivityUpsert,
   applySurfaceUpsert,
+  parseActivityOperations,
+  reconcileReasoning,
   sealOpenReasoning,
 } from "../../lib/chat/chatTimeline";
 import { elapsedSecSince } from "../../lib/chat/elapsedSec";
 import { normalizeContextUsageEvent } from "../../lib/chat/contextUsage";
 import { saveContextUsageForSession } from "../../lib/chat/chatSessionStore";
+import { reconcileAssistantText } from "../../lib/chat/streamReconcile";
 import {
   parseModeSwitchResult,
   type ChatInteractionMode,
   type ModeSwitchRequest,
 } from "../../lib/chat/chatMode";
 import { resolveComposerTurn } from "../../lib/chat/composerResolve";
+import { parseHitlRunFinished } from "../../lib/chat/hitlRunFinished";
 import {
   loadPickerGlobals,
   loadModelPrefs,
@@ -133,6 +137,8 @@ export interface UseSendDeps {
   /** 主会话整轮未结束（含 HITL 停顿）；供队列软边界 */
   turnInFlightRef: MutableRefObject<boolean>;
   setTurnInFlight: Dispatch<SetStateAction<boolean>>;
+  /** 流式活动时间戳（token/tool）；供长任务 idle checkpoint */
+  lastStreamActivityAtRef: MutableRefObject<number>;
   /** Agent 会话级 worktree（按 sessionId 复用） */
   sessionWorktreeRef: MutableRefObject<{
     sessionId: string;
@@ -221,6 +227,7 @@ export function useSend(deps: UseSendDeps) {
         showTransientToast,
         turnInFlightRef,
         setTurnInFlight,
+        lastStreamActivityAtRef,
         sessionWorktreeRef,
         onModeSwitchDetected,
         onModeSwitchPrompt,
@@ -230,6 +237,9 @@ export function useSend(deps: UseSendDeps) {
       const markTurnEnded = () => {
         turnInFlightRef.current = false;
         setTurnInFlight(false);
+      };
+      const touchActivity = () => {
+        lastStreamActivityAtRef.current = Date.now();
       };
 
       let pendingModeSwitch: ModeSwitchRequest | null = null;
@@ -390,6 +400,7 @@ export function useSend(deps: UseSendDeps) {
       setStreaming(true);
       turnInFlightRef.current = true;
       setTurnInFlight(true);
+      touchActivity();
       setStreamPaused(false);
       setTokenUsage(null);
       setContextUsage(null);
@@ -412,7 +423,7 @@ export function useSend(deps: UseSendDeps) {
       try {
         unlistenRef.current?.();
 
-        const eventName = `chat-stream-${sid}`;
+        const eventName = `chat_stream_${sid}`;
         const gen = ++streamGenRef.current;
         let terminalOutcome: string | null = null;
         let terminalError: string | null = null;
@@ -460,9 +471,43 @@ export function useSend(deps: UseSendDeps) {
           const payload = event.payload;
 
           if (payload.type === "token" && payload.content) {
+            touchActivity();
             enqueueStreamToken(assistantId, payload.content);
+          } else if (payload.type === "text_reconcile") {
+            if (streamRafRef.current != null) {
+              cancelAnimationFrame(streamRafRef.current);
+            }
+            flushStreamTokens();
+            const canonical = payload.content ?? "";
+            setMessages((prev) =>
+              prev.map((message) =>
+                message.id === assistantId
+                  ? {
+                      ...message,
+                      content: reconcileAssistantText(message.content, canonical),
+                    }
+                  : message,
+              ),
+            );
+            touchActivity();
           } else if (payload.type === "reasoning" && payload.content) {
+            touchActivity();
             enqueueStreamReasoning(assistantId, payload.content);
+            setStatusPhase("generating");
+          } else if (payload.type === "reasoning_reconcile") {
+            if (streamRafRef.current != null) {
+              cancelAnimationFrame(streamRafRef.current);
+            }
+            flushStreamTokens();
+            const canonical = payload.content ?? "";
+            setMessages((prev) =>
+              prev.map((message) =>
+                message.id === assistantId
+                  ? reconcileReasoning(message, canonical)
+                  : message,
+              ),
+            );
+            touchActivity();
             setStatusPhase("generating");
           } else if (payload.type === "citations" && payload.citations) {
             try {
@@ -508,17 +553,7 @@ export function useSend(deps: UseSendDeps) {
           ) {
             onUserInputCommitted?.(payload.client_message_id);
           } else if (payload.type === "activity") {
-            let operations: unknown[] = [];
-            try {
-              const parsed = JSON.parse(payload.content_json || "{}") as {
-                operations?: unknown;
-              };
-              if (Array.isArray(parsed.operations)) {
-                operations = parsed.operations;
-              }
-            } catch {
-              /* ignore malformed activity */
-            }
+            const operations = parseActivityOperations(payload.content_json);
             const surface: UiSurface = {
               messageId: payload.message_id || `surf-${Date.now()}`,
               activityType: payload.activity_type || "a2ui-surface",
@@ -538,52 +573,33 @@ export function useSend(deps: UseSendDeps) {
               payload.outcome_type === "hitl_waiting" ||
               payload.outcome_type === "interrupt"
             ) {
-              let interrupts: PendingInterrupt[] = [];
-              try {
-                const arr = JSON.parse(payload.interrupts_json || "[]") as unknown;
-                if (Array.isArray(arr)) {
-                  interrupts = arr
-                    .map((raw) => {
-                      const i = raw as Record<string, unknown>;
-                      let responseSchema: unknown;
-                      const schemaRaw = i.response_schema_json;
-                      if (typeof schemaRaw === "string" && schemaRaw.trim()) {
-                        try {
-                          responseSchema = JSON.parse(schemaRaw);
-                        } catch {
-                          responseSchema = undefined;
-                        }
-                      }
-                      return {
-                        id: String(i.id ?? ""),
-                        reason: String(i.reason ?? ""),
-                        message: typeof i.message === "string" ? i.message : undefined,
-                        responseSchema,
-                        assistantMessageId: assistantId,
-                      } satisfies PendingInterrupt;
-                    })
-                    .filter((i) => i.id);
-                }
-              } catch {
-                interrupts = [];
-              }
+              const { interrupts, surface } = parseHitlRunFinished(
+                payload.interrupts_json,
+                assistantId,
+              );
               setSessionPendingInterrupts(interrupts);
               setMessages((prev) =>
                 prev.map((m) => {
                   if (m.id !== assistantId) return m;
                   let next = m;
-                  const surfaces = [...(m.uiSurfaces ?? [])];
-                  if (surfaces.length > 0) {
+                  if (surface) {
+                    next = applySurfaceUpsert(next, surface);
+                  } else {
+                    const surfaces = [...(m.uiSurfaces ?? [])];
                     const last = surfaces[surfaces.length - 1]!;
-                    next = applySurfaceUpsert(next, {
-                      ...last,
-                      interrupts: interrupts.map(({ id, reason, message, responseSchema }) => ({
-                        id,
-                        reason,
-                        message,
-                        responseSchema,
-                      })),
-                    });
+                    if (last) {
+                      next = applySurfaceUpsert(next, {
+                        ...last,
+                        interrupts: interrupts.map(
+                          ({ id, reason, message, responseSchema }) => ({
+                            id,
+                            reason,
+                            message,
+                            responseSchema,
+                          }),
+                        ),
+                      });
+                    }
                   }
                   return sealOpenReasoning(next, Date.now());
                 }),
@@ -604,6 +620,7 @@ export function useSend(deps: UseSendDeps) {
               setStatusPhase("error");
             }
           } else if (payload.type === "tool_call_delta") {
+            touchActivity();
             enqueueToolDelta(assistantId, {
               index: payload.index ?? 0,
               id: payload.id,
@@ -618,6 +635,7 @@ export function useSend(deps: UseSendDeps) {
             });
             setStatusPhase("generating");
           } else if (payload.type === "tool_call") {
+            touchActivity();
             if (toolDeltaRafRef.current != null) {
               cancelAnimationFrame(toolDeltaRafRef.current);
               flushToolDeltas();

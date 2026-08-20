@@ -1,45 +1,87 @@
 //! Astro gRPC [`AstroService`] 实现：聊天流、会话、记忆、MCP、技能与文件列表。
 
 use std::collections::HashMap;
+use std::future::Future;
 use std::path::PathBuf;
 use std::pin::Pin;
-use std::sync::{Arc, Mutex as StdMutex, Weak};
-use std::time::Duration;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex as StdMutex, RwLock as StdRwLock, Weak};
 
 use agent::builder::AgentBuilder;
 use agent::runtime::Session;
-use agent::streaming::{
-    stream_multi_turn_with_hitl, MultiTurnStreamItem, StreamedAssistantContent,
-};
-use agent::{HitlGate, HitlRegistry, TurnAbortReason, TurnInput};
-use futures::StreamExt;
+use agent::{HitlGate, HitlRegistry, TurnAbortReason};
+use futures::FutureExt;
 use home::AgentRuntimeConfig;
 use memory::MemoryManager;
 use proto::astro_service_server::AstroService;
 use proto::{
-    ChatControlAction, ChatControlRequest, ChatEvent, ChatRequest, ContextUsageEvent,
-    ContextUsageSegment, Empty, FileListRequest, FileListResponse, ImageEvent, ImageRequest,
-    McpReconnectRequest, McpServerList, McpServerListRequest, MemoryQuery, MemoryResult,
-    SessionEvent, SessionSnippet as ProtoSessionSnippet, SkillEvent, SkillInfo, SkillList,
-    SkillRequest, SteerChatRequest, SteerChatResponse, SubscribeSessionEventsRequest, UsageEvent,
+    ChatControlAction, ChatControlRequest, ChatEvent, ChatRequest, Empty, FileListRequest,
+    FileListResponse, ImageEvent, ImageRequest, McpReconnectRequest, McpServerList,
+    McpServerListRequest, MemoryQuery, MemoryResult, SessionSnippet as ProtoSessionSnippet,
+    SkillEvent, SkillInfo, SkillList, SkillRequest, SteerChatRequest, SteerChatResponse,
 };
 use providers::PauseControl;
 use providers::ProviderConfig;
-use tokio::sync::RwLock;
+use tokio::sync::{Mutex, OnceCell, OwnedMutexGuard, RwLock};
 use tokio_stream::wrappers::ReceiverStream;
 use tonic::{Request, Response, Status};
-use uuid::Uuid;
 
 use super::interrupt_store::{clear_interrupt_file, resume_items_from_proto, save_interrupt_file};
+use crate::thread_manager::RemoveCurrentThread;
 use crate::{
-    to_proto, AgentThreadChangedPayload, MemoryUpdatedPayload, PendingChangedPayload,
-    SessionEventHub, SessionEventMsg, SubscribeFilter,
+    ConnectionRegistry, ManagedThread, ThreadActivity, ThreadHistoryBuilder, ThreadManager,
+    ThreadState, ThreadStateManager, WORKSPACE_EVENT_THREAD_ID,
 };
 
 fn open_sessions(memory_dir: &std::path::Path) -> Result<session::SessionStore, String> {
     memory::ensure_workspace(memory_dir).map_err(|e| e.to_string())?;
     session::SessionStore::open_sessions_dir(&memory_dir.join("sessions"))
         .map_err(|e| e.to_string())
+}
+
+fn event_turn_id(msg: &agent_protocol::EventMsg) -> Option<String> {
+    use agent_protocol::EventMsg;
+    match msg {
+        EventMsg::TurnStarted(event) => Some(event.turn_id.clone()),
+        EventMsg::UserInputCommitted(event) => Some(event.turn_id.clone()),
+        EventMsg::ItemStarted(event)
+        | EventMsg::ItemCompleted(event)
+        | EventMsg::McpToolCallBegin(event)
+        | EventMsg::McpToolCallEnd(event)
+        | EventMsg::HookStarted(event)
+        | EventMsg::HookCompleted(event)
+        | EventMsg::SubAgentActivity(event)
+        | EventMsg::ContextCompacted(event)
+        | EventMsg::LegacyMcpToolCallEnd(event)
+        | EventMsg::LegacyPatchApplyEnd(event)
+        | EventMsg::LegacyContextCompacted(event)
+        | EventMsg::LegacySubAgentActivity(event) => Some(event.turn_id.clone()),
+        EventMsg::AgentMessageContentDelta(event)
+        | EventMsg::PlanDelta(event)
+        | EventMsg::ReasoningContentDelta(event)
+        | EventMsg::ExecCommandOutputDelta(event)
+        | EventMsg::PatchApplyUpdated(event) => Some(event.turn_id.clone()),
+        EventMsg::ExecApprovalRequest(event)
+        | EventMsg::ApplyPatchApprovalRequest(event)
+        | EventMsg::RequestPermissions(event)
+        | EventMsg::RequestUserInput(event)
+        | EventMsg::ElicitationRequest(event)
+        | EventMsg::DynamicToolCallRequest(event)
+        | EventMsg::DynamicToolCallResponse(event) => Some(event.turn_id.clone()),
+        EventMsg::ContextUsage(event) => Some(event.turn_id.clone()),
+        EventMsg::TokenCount(event) => event.turn_id.clone(),
+        EventMsg::TurnComplete(event) => Some(event.turn_id.clone()),
+        EventMsg::TurnAborted(event) => event.turn_id.clone(),
+        EventMsg::LegacyUserMessage(_)
+        | EventMsg::LegacyAgentMessage(_)
+        | EventMsg::LegacyReasoning(_)
+        | EventMsg::ThreadSettingsApplied(_)
+        | EventMsg::ThreadRolledBack(_)
+        | EventMsg::Error(_)
+        | EventMsg::Warning(_)
+        | EventMsg::StreamError(_)
+        | EventMsg::ShutdownComplete => None,
+    }
 }
 
 fn mcp_server_info(status: mcp::ServerStatus) -> proto::McpServerInfo {
@@ -89,30 +131,10 @@ fn parse_auxiliary_targets(
         .collect()
 }
 
-/// 会话 Agent 循环的共享句柄。
-type SessionHandle = Arc<Session>;
-/// Chat RPC 返回的事件流类型别名。
-type ChatStream = Pin<Box<dyn futures::Stream<Item = Result<ChatEvent, Status>> + Send>>;
-/// SubscribeSessionEvents RPC 返回的事件流类型别名。
-type SessionEventsStream =
-    Pin<Box<dyn futures::Stream<Item = Result<SessionEvent, Status>> + Send>>;
-
-/// `ChatControlAction` 之外的后端保留动作码：仅释放会话运行时，不触发 new_chat hooks。
-const CHAT_CONTROL_RELEASE_SESSION: i32 = 7;
-
-/// 工具 / review 返回文本是否表示写入只入了 pending（未改 live）。
-fn indicates_pending_enqueue(content: &str) -> bool {
-    content.contains("待审批") || content.contains("pending") || content.contains("入队")
-}
-
-/// 仅正常成功的 Run 才允许触发记忆 review、标题生成等回合后副作用。
-fn allows_post_turn_side_effects(outcome_type: &str) -> bool {
-    outcome_type == "success"
-}
-
 fn agent_thread_projection(
     activity: subagents::AgentActivity,
-) -> Option<AgentThreadChangedPayload> {
+    stream_id: &str,
+) -> Option<serde_json::Value> {
     let activity_kind = match activity.kind {
         subagents::AgentActivityKind::Spawned { .. } => "spawned",
         subagents::AgentActivityKind::Mailbox { .. } => "mailbox",
@@ -130,157 +152,514 @@ fn agent_thread_projection(
         subagents::AgentStatusKind::Shutdown => "shutdown",
     };
     let status_payload_json = serde_json::to_string(&thread.status).ok()?;
-    Some(AgentThreadChangedPayload {
-        activity_sequence: activity.sequence,
-        root_thread_id: thread.root_thread_id,
-        thread_id: thread.thread_id,
-        parent_thread_id: thread.parent_thread_id.unwrap_or_default(),
-        canonical_path: thread.canonical_path.to_string(),
-        task_name: thread.task_name,
-        agent_type: thread.agent_type,
-        session_id: thread.session_id,
-        status_kind: status_kind.to_string(),
-        status_payload_json,
-        activity_kind: activity_kind.to_string(),
-    })
+    Some(serde_json::json!({
+        "activity_sequence": activity.sequence,
+        "stream_id": stream_id,
+        "root_thread_id": thread.root_thread_id,
+        "thread_id": thread.thread_id,
+        "parent_thread_id": thread.parent_thread_id.unwrap_or_default(),
+        "canonical_path": thread.canonical_path.to_string(),
+        "task_name": thread.task_name,
+        "agent_type": thread.agent_type,
+        "session_id": thread.session_id,
+        "status_kind": status_kind,
+        "status_payload_json": status_payload_json,
+        "activity_kind": activity_kind,
+    }))
 }
 
-/// 工具入 pending 时 publish 全局 `pending_changed`（+ live_written=false 的 memory_updated）。
-///
-/// 回合内 **live** 工具写仍只走 Chat `MemoryUpdate`，不调用本函数。
-fn publish_tool_pending_to_hub(
-    hub: &SessionEventHub,
-    memory_dir: &std::path::Path,
-    agent_id: &str,
-    summary: &str,
-) {
-    let pending_count = memory::list_pending(memory_dir)
-        .map(|v| v.len() as u32)
-        .unwrap_or(0);
-    hub.publish(SessionEventMsg {
-        session_id: None,
-        agent_id: agent_id.to_string(),
-        memory_updated: Some(MemoryUpdatedPayload {
-            source: "tool".into(),
-            target: "mixed".into(),
-            summary: summary.to_string(),
-            live_written: false,
-        }),
-        pending_changed: None,
-        session_metadata_changed: None,
-        agent_thread_changed: None,
-        resync_required: None,
-    });
-    hub.publish(SessionEventMsg {
-        session_id: None,
-        agent_id: agent_id.to_string(),
-        memory_updated: None,
-        pending_changed: Some(PendingChangedPayload {
-            pending_count,
-            reason: "enqueued".into(),
-        }),
-        session_metadata_changed: None,
-        agent_thread_changed: None,
-        resync_required: None,
-    });
+/// 会话 Agent 循环的共享句柄。
+type SessionHandle = Arc<Session>;
+
+#[derive(Clone)]
+struct PauseRegistration {
+    control: Arc<PauseControl>,
+    session: Weak<Session>,
+    hitl_gate: Arc<HitlGate>,
+    ui_generation: ::hooks::UiTimelineGeneration,
+    operation: Arc<Mutex<()>>,
 }
 
-/// 启动 background review，完成后将结果 fire-and-forget 发布到 [`SessionEventHub`]。
-///
-/// 本函数只在拿锁并 `spawn` 等待任务后立即返回；**不**阻塞 Chat 流。
-async fn spawn_review_to_hub(session: &SessionHandle, session_id: &str, hub: &SessionEventHub) {
-    let hub = hub.clone();
-    let sid = session_id.to_string();
-    let (notify_tx, mut notify_rx) = tokio::sync::mpsc::unbounded_channel();
-    let (agent_id, memory_dir) = {
-        let agent = session.as_ref();
-        let id = agent.agent_id();
-        let dir = agent.memory_dir().to_path_buf();
-        agent::exec::memory_review::spawn_background_review_after_turn(agent, Some(notify_tx))
-            .await;
-        (id, dir)
-    };
-    tokio::spawn(async move {
-        if let Some(n) = notify_rx.recv().await {
-            let live_written = !indicates_pending_enqueue(&n.content);
-            hub.publish(SessionEventMsg {
-                session_id: Some(sid),
-                agent_id: agent_id.clone(),
-                memory_updated: Some(MemoryUpdatedPayload {
-                    source: "review".into(),
-                    target: "mixed".into(),
-                    summary: n.content.clone(),
-                    live_written,
-                }),
-                pending_changed: None,
-                session_metadata_changed: None,
-                agent_thread_changed: None,
-                resync_required: None,
-            });
-            if !live_written {
-                let pending_count = memory::list_pending(&memory_dir)
-                    .map(|v| v.len() as u32)
-                    .unwrap_or(0);
-                hub.publish(SessionEventMsg {
-                    session_id: None,
-                    agent_id,
-                    memory_updated: None,
-                    pending_changed: Some(PendingChangedPayload {
-                        pending_count,
-                        reason: "enqueued".into(),
-                    }),
-                    session_metadata_changed: None,
-                    agent_thread_changed: None,
-                    resync_required: None,
-                });
+struct GenerationLaunchReply<T> {
+    /// The worker retains the generation operation until this handoff is accepted or dropped.
+    value: Option<T>,
+    accepted: Option<tokio::sync::oneshot::Sender<bool>>,
+}
+
+struct PreparedPauseGeneration {
+    session_id: String,
+    session: Weak<Session>,
+    hitl_gate: Arc<HitlGate>,
+    hook_tx: Option<tokio::sync::mpsc::UnboundedSender<::hooks::UiHookEvent>>,
+    operation: Arc<Mutex<()>>,
+    admission: Option<OwnedMutexGuard<()>>,
+    pause_controls: Arc<StdRwLock<HashMap<String, PauseRegistration>>>,
+    hitl_registry: HitlRegistry,
+    generation_operations: GenerationOperations,
+    ui_slot: ::hooks::UiTimelineSlot,
+    memory_dir: PathBuf,
+    committed: bool,
+}
+
+impl PreparedPauseGeneration {
+    fn commit(mut self) -> PauseRegistration {
+        let ui_generation = self.ui_slot.install_tx(
+            &self.session_id,
+            self.hook_tx.take().expect("prepared UI sender missing"),
+        );
+        let registration = PauseRegistration {
+            control: PauseControl::new(),
+            session: self.session.clone(),
+            hitl_gate: Arc::clone(&self.hitl_gate),
+            ui_generation,
+            operation: Arc::clone(&self.operation),
+        };
+        let old_registration = self
+            .pause_controls
+            .write()
+            .expect("pause registry lock poisoned")
+            .insert(self.session_id.clone(), registration.clone());
+        let old_registry_gate = self
+            .hitl_registry
+            .replace_for_admission(Arc::clone(&self.hitl_gate));
+        clear_interrupt_file(&self.memory_dir, &self.session_id);
+        if let Some(old) = old_registration.as_ref() {
+            old.control.cancel();
+        }
+
+        self.admission.take();
+        self.committed = true;
+
+        tokio::spawn(async move {
+            if let Some(old) = old_registration.as_ref() {
+                old.hitl_gate.cancel_all().await;
             }
-        }
-    });
+            if let Some(old_gate) = old_registry_gate {
+                let already_cancelled = old_registration
+                    .as_ref()
+                    .is_some_and(|old| Arc::ptr_eq(&old.hitl_gate, &old_gate));
+                if !already_cancelled {
+                    old_gate.cancel_all().await;
+                }
+            }
+        });
+        registration
+    }
 }
 
-/// 启动首轮标题生成，成功后发布 `session_metadata_changed`。
-async fn spawn_title_to_hub(session: &SessionHandle, hub: &SessionEventHub) {
-    let hub = hub.clone();
-    let (notify_tx, mut notify_rx) = tokio::sync::mpsc::unbounded_channel();
-    let agent_id = {
-        let agent = session.as_ref();
-        let id = agent.agent_id();
-        agent::exec::title_generation::spawn_title_generation_after_turn(agent, Some(notify_tx));
-        id
-    };
-    tokio::spawn(async move {
-        if let Some(n) = notify_rx.recv().await {
-            hub.publish(SessionEventMsg {
-                session_id: Some(n.session_id),
-                agent_id,
-                memory_updated: None,
-                pending_changed: None,
-                session_metadata_changed: Some(crate::SessionMetadataChangedPayload {
-                    title: n.title,
-                }),
-                agent_thread_changed: None,
-                resync_required: None,
-            });
+impl Drop for PreparedPauseGeneration {
+    fn drop(&mut self) {
+        if self.committed {
+            return;
         }
-    });
+        self.admission.take();
+        prune_generation_operation(
+            &self.generation_operations,
+            &self.session_id,
+            &self.operation,
+            1,
+        );
+    }
+}
+
+impl<T> GenerationLaunchReply<T> {
+    fn into_value(mut self) -> T {
+        if let Some(accepted) = self.accepted.take() {
+            let _ = accepted.send(true);
+        }
+        self.value.take().expect("generation launch value missing")
+    }
+}
+
+impl<T> Drop for GenerationLaunchReply<T> {
+    fn drop(&mut self) {
+        if let Some(accepted) = self.accepted.take() {
+            let _ = accepted.send(false);
+        }
+    }
+}
+
+type GenerationOperations = Arc<StdMutex<HashMap<String, Weak<Mutex<()>>>>>;
+type ReleaseOwnerships = Arc<StdMutex<HashMap<String, Weak<ReleaseGenerationOwnership>>>>;
+
+#[derive(Clone, Copy, Default)]
+struct ReleaseSessionRuntimeResult {
+    should_finalize_without_runtime: bool,
+}
+
+#[derive(Default)]
+struct ReleaseGenerationOwnership {
+    completion: OnceCell<ReleaseSessionRuntimeResult>,
+    fallback_claimed: AtomicBool,
+}
+
+struct ReleaseGenerationOwnershipLease {
+    session_id: String,
+    entry: Arc<ReleaseGenerationOwnership>,
+    registry: ReleaseOwnerships,
+}
+
+impl ReleaseGenerationOwnershipLease {
+    #[cfg(test)]
+    fn entry_ptr(&self) -> usize {
+        Arc::as_ptr(&self.entry) as usize
+    }
+}
+
+impl Drop for ReleaseGenerationOwnershipLease {
+    fn drop(&mut self) {
+        let Ok(mut registry) = self.registry.lock() else {
+            return;
+        };
+        let is_current = registry
+            .get(&self.session_id)
+            .is_some_and(|current| Weak::ptr_eq(current, &Arc::downgrade(&self.entry)));
+        if is_current && Arc::strong_count(&self.entry) == 1 {
+            registry.remove(&self.session_id);
+        }
+    }
+}
+
+struct ReleaseSessionRuntimeReply {
+    shared: ReleaseSessionRuntimeResult,
+    ownership: ReleaseGenerationOwnershipLease,
+}
+
+impl ReleaseSessionRuntimeReply {
+    fn into_shared_result(self) -> ReleaseSessionRuntimeResult {
+        self.shared
+    }
+
+    fn claim_fallback(self) -> ReleaseSessionRuntimeResult {
+        ReleaseSessionRuntimeResult {
+            should_finalize_without_runtime: self.shared.should_finalize_without_runtime
+                && self
+                    .ownership
+                    .entry
+                    .fallback_claimed
+                    .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
+                    .is_ok(),
+        }
+    }
+}
+
+fn prune_generation_operation(
+    operations: &GenerationOperations,
+    session_id: &str,
+    operation: &Arc<Mutex<()>>,
+    owned_refs: usize,
+) {
+    let Ok(mut operations) = operations.lock() else {
+        return;
+    };
+    let is_current = operations
+        .get(session_id)
+        .is_some_and(|current| Weak::ptr_eq(current, &Arc::downgrade(operation)));
+    if is_current && Arc::strong_count(operation) <= owned_refs {
+        operations.remove(session_id);
+    }
+}
+
+async fn cleanup_pause_generation_parts(
+    generation_operations: &GenerationOperations,
+    pause_controls: &Arc<StdRwLock<HashMap<String, PauseRegistration>>>,
+    hitl_registry: &HitlRegistry,
+    ui_slot: &::hooks::UiTimelineSlot,
+    memory_dir: &std::path::Path,
+    session_id: &str,
+    registration: &PauseRegistration,
+) -> bool {
+    let (removed_current, detached_gate) = {
+        let _admission = registration.operation.lock().await;
+        detach_pause_generation_parts(
+            pause_controls,
+            hitl_registry,
+            ui_slot,
+            memory_dir,
+            session_id,
+            registration,
+        )
+        .await
+    };
+
+    cancel_pause_generation(registration, detached_gate).await;
+    prune_generation_operation(
+        generation_operations,
+        session_id,
+        &registration.operation,
+        1,
+    );
+    removed_current
+}
+
+async fn detach_pause_generation_parts(
+    pause_controls: &Arc<StdRwLock<HashMap<String, PauseRegistration>>>,
+    hitl_registry: &HitlRegistry,
+    ui_slot: &::hooks::UiTimelineSlot,
+    memory_dir: &std::path::Path,
+    session_id: &str,
+    registration: &PauseRegistration,
+) -> (bool, Option<Arc<HitlGate>>) {
+    let removed_current = {
+        let mut registrations = pause_controls
+            .write()
+            .expect("pause registry lock poisoned");
+        if registrations
+            .get(session_id)
+            .is_some_and(|current| Arc::ptr_eq(&current.control, &registration.control))
+        {
+            registrations.remove(session_id);
+            true
+        } else {
+            false
+        }
+    };
+
+    let detached_gate = if removed_current
+        && hitl_registry
+            .get(session_id)
+            .await
+            .is_some_and(|current| Arc::ptr_eq(&current, &registration.hitl_gate))
+    {
+        hitl_registry.remove(session_id).await
+    } else {
+        None
+    };
+    if removed_current {
+        ui_slot.clear_if(session_id, registration.ui_generation);
+        clear_interrupt_file(memory_dir, session_id);
+    }
+    (removed_current, detached_gate)
+}
+
+async fn cancel_pause_generation(
+    registration: &PauseRegistration,
+    detached_gate: Option<Arc<HitlGate>>,
+) {
+    registration.control.cancel();
+    registration.hitl_gate.cancel_all().await;
+    if detached_gate
+        .as_ref()
+        .is_some_and(|gate| !Arc::ptr_eq(gate, &registration.hitl_gate))
+    {
+        detached_gate
+            .expect("checked detached gate")
+            .cancel_all()
+            .await;
+    }
+}
+/// Chat RPC 返回的事件流类型别名。
+pub(crate) type ChatStream = Pin<Box<dyn futures::Stream<Item = Result<ChatEvent, Status>> + Send>>;
+/// `ChatControlAction` 之外的后端保留动作码：仅释放会话运行时，不触发 new_chat hooks。
+const CHAT_CONTROL_RELEASE_SESSION: i32 = 7;
+
+/// 工具 / review 返回文本是否表示写入只入了 pending（未改 live）。
+fn indicates_pending_enqueue(content: &str) -> bool {
+    content.contains("待审批") || content.contains("pending") || content.contains("入队")
+}
+
+/// 仅正常成功的 Run 才允许触发记忆 review、标题生成等回合后副作用。
+fn allows_post_turn_side_effects(outcome_type: &str) -> bool {
+    outcome_type == "success"
+}
+
+fn can_idle_unload_thread(activity: &ThreadActivity) -> bool {
+    !activity.has_subscribers
+        && matches!(
+            activity.status.as_str(),
+            "idle" | "completed" | "failed" | "aborted" | "errored"
+        )
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum BackgroundPhaseOutcome {
+    Completed,
+    Failed,
+    TimedOut,
+    Panicked,
+    Cancelled,
+}
+
+#[cfg(test)]
+async fn run_bounded_post_turn_phase<F, E, Finalize>(
+    work: F,
+    finalize: Finalize,
+) -> BackgroundPhaseOutcome
+where
+    F: Future<Output = Result<(), E>> + Send + 'static,
+    E: Send + 'static,
+    Finalize: Future<Output = ()>,
+{
+    finish_bounded_post_turn_task_with_cancel(tokio::spawn(work), finalize, None).await
+}
+
+async fn run_bounded_post_turn_phase_until_cancelled<F, E, Finalize>(
+    work: F,
+    finalize: Finalize,
+    lifecycle: tokio_util::sync::CancellationToken,
+) -> BackgroundPhaseOutcome
+where
+    F: Future<Output = Result<(), E>> + Send + 'static,
+    E: Send + 'static,
+    Finalize: Future<Output = ()>,
+{
+    finish_bounded_post_turn_task_with_cancel(tokio::spawn(work), finalize, Some(lifecycle)).await
+}
+
+#[cfg(test)]
+async fn finish_bounded_post_turn_task<E, Finalize>(
+    task: tokio::task::JoinHandle<Result<(), E>>,
+    finalize: Finalize,
+) -> BackgroundPhaseOutcome
+where
+    E: Send + 'static,
+    Finalize: Future<Output = ()>,
+{
+    finish_bounded_post_turn_task_with_cancel(task, finalize, None).await
+}
+
+async fn finish_bounded_post_turn_task_with_cancel<E, Finalize>(
+    mut task: tokio::task::JoinHandle<Result<(), E>>,
+    finalize: Finalize,
+    lifecycle: Option<tokio_util::sync::CancellationToken>,
+) -> BackgroundPhaseOutcome
+where
+    E: Send + 'static,
+    Finalize: Future<Output = ()>,
+{
+    let cancelled = async {
+        match lifecycle {
+            Some(lifecycle) => lifecycle.cancelled().await,
+            None => std::future::pending::<()>().await,
+        }
+    };
+    let result = tokio::select! {
+        result = tokio::time::timeout(crate::POST_TURN_SIDE_EFFECT_TIMEOUT, &mut task) => Some(result),
+        () = cancelled => None,
+    };
+    let outcome = match result {
+        Some(Ok(Ok(Ok(())))) => BackgroundPhaseOutcome::Completed,
+        Some(Ok(Ok(Err(_)))) => BackgroundPhaseOutcome::Failed,
+        Some(Ok(Err(error))) if error.is_panic() => BackgroundPhaseOutcome::Panicked,
+        Some(Ok(Err(_))) => BackgroundPhaseOutcome::Cancelled,
+        Some(Err(_)) => {
+            task.abort();
+            let _ = task.await;
+            BackgroundPhaseOutcome::TimedOut
+        }
+        None => {
+            task.abort();
+            let _ = task.await;
+            BackgroundPhaseOutcome::Cancelled
+        }
+    };
+    finalize.await;
+    outcome
+}
+
+struct ExtensionWaiterRegistration {
+    waiter_id: uuid::Uuid,
+    commands: tokio::sync::mpsc::UnboundedSender<crate::ListenerCommand>,
+}
+
+impl Drop for ExtensionWaiterRegistration {
+    fn drop(&mut self) {
+        let _ = self
+            .commands
+            .send(crate::ListenerCommand::CancelExtensionWaiter {
+                waiter_id: self.waiter_id,
+            });
+    }
+}
+
+fn register_extension_waiter(
+    commands: &tokio::sync::mpsc::UnboundedSender<crate::ListenerCommand>,
+    item_id: String,
+    payload_json: String,
+) -> Option<(
+    ExtensionWaiterRegistration,
+    tokio::sync::oneshot::Receiver<()>,
+)> {
+    let waiter_id = uuid::Uuid::new_v4();
+    let (reply, materialized) = tokio::sync::oneshot::channel();
+    commands
+        .send(crate::ListenerCommand::WaitForExtension {
+            waiter_id,
+            item_id,
+            payload_json,
+            reply,
+        })
+        .ok()?;
+    Some((
+        ExtensionWaiterRegistration {
+            waiter_id,
+            commands: commands.clone(),
+        },
+        materialized,
+    ))
+}
+
+/// 等待 background review 完成，并将结果提交到原回合的 durable Thread Extension。
+async fn spawn_review_to_thread(
+    service: AstroServiceImpl,
+    managed: &Arc<ManagedThread>,
+    session: &SessionHandle,
+    turn_id: &str,
+) -> Result<(), Status> {
+    let job = agent::exec::memory_review::job_from_agent(session.as_ref()).await;
+    let applied = agent::exec::memory_review::maybe_run_background_review(job)
+        .await
+        .map_err(|error| Status::internal(error.to_string()))?;
+    if let Some(n) = agent::exec::memory_review::review_notify_from_applied(&applied) {
+        let live_written = !indicates_pending_enqueue(&n.content);
+        service
+            .emit_background_review_extension_for_turn(managed, turn_id, n.content, live_written)
+            .await?;
+    }
+    Ok(())
+}
+
+/// 启动首轮标题生成，成功后提交 `astro.session_metadata` Extension。
+async fn spawn_title_to_thread(
+    service: AstroServiceImpl,
+    managed: &Arc<ManagedThread>,
+    session: &SessionHandle,
+    turn_id: &str,
+) -> Result<(), Status> {
+    let job = agent::exec::title_generation::job_from_agent(session.as_ref());
+    if let Some(n) = agent::exec::title_generation::maybe_generate_session_title(job)
+        .await
+        .map_err(|error| Status::internal(error.to_string()))?
+    {
+        service
+            .emit_session_metadata_extension_for_turn(managed, turn_id, n.title)
+            .await?;
+    }
+    Ok(())
 }
 
 /// Astro gRPC 服务实现：会话 Agent、流式聊天、记忆与技能等 RPC。
+#[derive(Clone)]
 pub struct AstroServiceImpl {
     /// session_id → Agent 循环句柄。
     sessions: Arc<RwLock<HashMap<String, SessionHandle>>>,
+    pub(crate) threads: ThreadManager,
+    pub(crate) thread_states: ThreadStateManager,
+    pub(crate) connections: ConnectionRegistry,
     /// session_id → 暂停控制器。
-    pause_controls: Arc<RwLock<HashMap<String, Arc<PauseControl>>>>,
+    pause_controls: Arc<StdRwLock<HashMap<String, PauseRegistration>>>,
+    /// session_id → generation 操作锁（Weak 以免 release 后无限增长）。
+    generation_operations: GenerationOperations,
+    /// In-flight release ownership, weakly retained so completed unique ids are reclaimed.
+    release_ownerships: ReleaseOwnerships,
     /// session_id → 活 HITL 闸门。
-    hitl_registry: HitlRegistry,
+    pub(crate) hitl_registry: HitlRegistry,
     /// 记忆根目录。
     memory_dir: PathBuf,
     /// Plugin / Gateway / Shell 钩子运行时。
     hook_runtime: Arc<::hooks::HookRuntime>,
-    /// 会话副作用与 Agent Thread 活动 fan-out（SubscribeSessionEvents）。
-    session_events: SessionEventHub,
-    /// root session → attached V2 activity watcher control.
-    agent_thread_watchers: Arc<StdMutex<HashMap<String, Weak<subagents::AgentControl>>>>,
+    /// root thread → 当前 V2 AgentControl generation。
+    agent_thread_watchers: Arc<Mutex<HashMap<String, Weak<subagents::AgentControl>>>>,
 }
 
 impl AstroServiceImpl {
@@ -305,49 +684,697 @@ impl AstroServiceImpl {
         };
         Self {
             sessions: Arc::new(RwLock::new(HashMap::new())),
-            pause_controls: Arc::new(RwLock::new(HashMap::new())),
+            threads: ThreadManager::default(),
+            thread_states: ThreadStateManager::default(),
+            connections: ConnectionRegistry::default(),
+            pause_controls: Arc::new(StdRwLock::new(HashMap::new())),
+            generation_operations: Arc::new(StdMutex::new(HashMap::new())),
+            release_ownerships: Arc::new(StdMutex::new(HashMap::new())),
             hitl_registry: HitlRegistry::new(),
             memory_dir,
             hook_runtime,
-            session_events: SessionEventHub::new(64),
-            agent_thread_watchers: Arc::new(StdMutex::new(HashMap::new())),
+            agent_thread_watchers: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 
-    /// 会话事件 hub（供 Chat / Agent Thread watcher 发布）。
-    pub(crate) fn session_event_hub(&self) -> &SessionEventHub {
-        &self.session_events
+    fn emit_extension<'a>(
+        &'a self,
+        thread_id: &'a str,
+        target_turn_id: Option<&'a str>,
+        item_key: &'a str,
+        namespace: &'a str,
+        payload: serde_json::Value,
+    ) -> Pin<Box<dyn Future<Output = Result<(), Status>> + Send + 'a>> {
+        Box::pin(async move {
+            let managed = self.get_or_create_thread(thread_id).await?;
+            let target_turn_id = match target_turn_id {
+                Some(turn_id) => turn_id.to_string(),
+                None if thread_id == WORKSPACE_EVENT_THREAD_ID => {
+                    format!("{WORKSPACE_EVENT_THREAD_ID}:state")
+                }
+                None => match self.thread_states.get(thread_id).await {
+                    Some(state) => state
+                        .lock()
+                        .await
+                        .history
+                        .completed_turns()
+                        .last()
+                        .map(|turn| turn.id.clone())
+                        .unwrap_or_else(|| format!("{thread_id}:background")),
+                    None => format!("{thread_id}:background"),
+                },
+            };
+            Self::emit_extension_on_managed(&managed, target_turn_id, item_key, namespace, payload)
+                .await
+        })
     }
 
-    fn attach_agent_thread_watcher(
+    async fn emit_extension_on_managed(
+        managed: &Arc<ManagedThread>,
+        target_turn_id: String,
+        item_key: &str,
+        namespace: &str,
+        payload: serde_json::Value,
+    ) -> Result<(), Status> {
+        let item_id = format!("{target_turn_id}:{item_key}");
+        let item = agent_protocol::ExtensionItem {
+            id: item_id.clone(),
+            namespace: namespace.into(),
+            payload,
+        };
+        let payload_json =
+            serde_json::to_string(&agent_protocol::TurnItem::Extension(item.clone()))
+                .map_err(|error| Status::internal(error.to_string()))?;
+        let (_registration, materialized) =
+            register_extension_waiter(&managed.commands, item_id, payload_json)
+                .ok_or_else(|| Status::unavailable("thread listener stopped"))?;
+        managed
+            .runtime
+            .submit(agent_protocol::Op::EmitExtension {
+                item,
+                turn_id: Some(target_turn_id),
+            })
+            .await
+            .map_err(|error| Status::internal(error.to_string()))?;
+        materialized
+            .await
+            .map_err(|_| Status::unavailable("thread extension was not materialized"))
+    }
+
+    /// Production background-review emitter; public for durable integration coverage.
+    #[doc(hidden)]
+    pub async fn emit_background_review_extension(
+        &self,
+        thread_id: &str,
+        summary: impl Into<String>,
+        live_written: bool,
+    ) -> Result<(), Status> {
+        self.emit_extension(
+            thread_id,
+            None,
+            "memory:review",
+            "astro.memory",
+            serde_json::json!({
+                "source": "review",
+                "target": "memory",
+                "summary": summary.into(),
+                "live_written": live_written,
+            }),
+        )
+        .await
+    }
+
+    async fn emit_background_review_extension_for_turn(
+        &self,
+        managed: &Arc<ManagedThread>,
+        turn_id: &str,
+        summary: impl Into<String>,
+        live_written: bool,
+    ) -> Result<(), Status> {
+        Self::emit_extension_on_managed(
+            managed,
+            turn_id.to_string(),
+            "memory:review",
+            "astro.memory",
+            serde_json::json!({
+                "source": "review",
+                "target": "memory",
+                "summary": summary.into(),
+                "live_written": live_written,
+            }),
+        )
+        .await
+    }
+
+    /// Production session-title emitter; public for durable integration coverage.
+    #[doc(hidden)]
+    pub async fn emit_session_metadata_extension(
+        &self,
+        thread_id: &str,
+        title: impl Into<String>,
+    ) -> Result<(), Status> {
+        self.emit_extension(
+            thread_id,
+            None,
+            "session_metadata",
+            "astro.session_metadata",
+            serde_json::json!({"title": title.into()}),
+        )
+        .await
+    }
+
+    async fn emit_session_metadata_extension_for_turn(
+        &self,
+        managed: &Arc<ManagedThread>,
+        turn_id: &str,
+        title: impl Into<String>,
+    ) -> Result<(), Status> {
+        Self::emit_extension_on_managed(
+            managed,
+            turn_id.to_string(),
+            "session_metadata",
+            "astro.session_metadata",
+            serde_json::json!({"title": title.into()}),
+        )
+        .await
+    }
+
+    async fn emit_background_complete(
+        &self,
+        managed: &Arc<ManagedThread>,
+        turn_id: &str,
+    ) -> Result<(), Status> {
+        Self::emit_extension_on_managed(
+            managed,
+            turn_id.to_string(),
+            "background_complete",
+            "astro.background_complete",
+            serde_json::json!({}),
+        )
+        .await
+    }
+
+    async fn finalize_background_phase(&self, managed: &Arc<ManagedThread>, turn_id: &str) {
+        let marker = tokio::time::timeout(
+            crate::POST_TURN_COMPLETION_MARKER_TIMEOUT,
+            self.emit_background_complete(managed, turn_id),
+        )
+        .await;
+        if !matches!(marker, Ok(Ok(()))) {
+            let _ = managed
+                .commands
+                .send(crate::ListenerCommand::ExpireBackgroundSink {
+                    turn_id: turn_id.to_string(),
+                });
+        }
+    }
+
+    /// Production workspace pending emitter; public for durable integration coverage.
+    #[doc(hidden)]
+    pub async fn emit_pending_extension(
+        &self,
+        pending_count: u32,
+        reason: impl Into<String>,
+    ) -> Result<(), Status> {
+        self.emit_extension(
+            WORKSPACE_EVENT_THREAD_ID,
+            None,
+            "pending",
+            "astro.pending",
+            serde_json::json!({
+                "pending_count": pending_count,
+                "reason": reason.into(),
+            }),
+        )
+        .await
+    }
+
+    async fn observe_thread_side_effects(
+        self,
+        thread_id: String,
+        session: SessionHandle,
+        managed: std::sync::Weak<ManagedThread>,
+        lifecycle: tokio_util::sync::CancellationToken,
+        mut events: tokio::sync::mpsc::UnboundedReceiver<agent_protocol::Event>,
+    ) {
+        let mut phases = tokio::task::JoinSet::new();
+        loop {
+            let event = tokio::select! {
+                biased;
+                () = lifecycle.cancelled() => break,
+                completed = phases.join_next(), if !phases.is_empty() => {
+                    if let Some(Err(error)) = completed {
+                        tracing::warn!(%error, %thread_id, "post-turn supervisor task failed");
+                    }
+                    continue;
+                }
+                event = events.recv() => match event {
+                    Some(event) => event,
+                    None => break,
+                },
+            };
+            match event.msg {
+                agent_protocol::EventMsg::TurnComplete(completed)
+                    if completed.error.is_none() && allows_post_turn_side_effects("success") =>
+                {
+                    let Some(managed) = managed.upgrade() else {
+                        break;
+                    };
+                    let service = self.clone();
+                    let session = Arc::clone(&session);
+                    let thread_id = thread_id.clone();
+                    let turn_id = completed.turn_id;
+                    let phase_lifecycle = lifecycle.clone();
+                    phases.spawn(async move {
+                        let work_service = service.clone();
+                        let work_managed = Arc::clone(&managed);
+                        let work_session = Arc::clone(&session);
+                        let work_thread_id = thread_id.clone();
+                        let work_turn_id = turn_id.clone();
+                        let finalize_service = service;
+                        let finalize_managed = Arc::clone(&managed);
+                        let finalize_turn_id = turn_id.clone();
+                        let outcome = run_bounded_post_turn_phase_until_cancelled(
+                            async move {
+                                let (review, title) = tokio::join!(
+                                    spawn_review_to_thread(
+                                        work_service.clone(),
+                                        &work_managed,
+                                        &work_session,
+                                        &work_turn_id,
+                                    ),
+                                    spawn_title_to_thread(
+                                        work_service,
+                                        &work_managed,
+                                        &work_session,
+                                        &work_turn_id,
+                                    ),
+                                );
+                                if let Err(error) = &review {
+                                    tracing::warn!(%error, thread_id = %work_thread_id, turn_id = %work_turn_id, "background review extension failed");
+                                }
+                                if let Err(error) = &title {
+                                    tracing::warn!(%error, thread_id = %work_thread_id, turn_id = %work_turn_id, "session metadata extension failed");
+                                }
+                                review?;
+                                title?;
+                                Ok::<(), Status>(())
+                            },
+                            async move {
+                                finalize_service
+                                    .finalize_background_phase(
+                                        &finalize_managed,
+                                        &finalize_turn_id,
+                                    )
+                                    .await;
+                            },
+                            phase_lifecycle,
+                        )
+                        .await;
+                        if outcome != BackgroundPhaseOutcome::Completed {
+                            tracing::warn!(?outcome, %thread_id, %turn_id, "post-turn background phase did not complete normally");
+                        }
+                    });
+                }
+                agent_protocol::EventMsg::ItemCompleted(agent_protocol::ItemEvent {
+                    item: agent_protocol::TurnItem::Extension(extension),
+                    ..
+                }) if extension.namespace == "astro.memory"
+                    && !extension
+                        .payload
+                        .get("live_written")
+                        .and_then(serde_json::Value::as_bool)
+                        .unwrap_or(true) =>
+                {
+                    let pending_count = memory::list_pending(&self.memory_dir)
+                        .map(|items| items.len() as u32)
+                        .unwrap_or(0);
+                    tokio::select! {
+                        biased;
+                        () = lifecycle.cancelled() => break,
+                        result = self.emit_pending_extension(pending_count, "enqueued") => {
+                            if let Err(error) = result {
+                                tracing::warn!(%error, "workspace pending extension failed");
+                            }
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+        while let Some(result) = phases.join_next().await {
+            if let Err(error) = result {
+                tracing::warn!(%error, %thread_id, "post-turn supervisor task failed while stopping");
+            }
+        }
+    }
+
+    pub(crate) async fn get_or_create_thread(
+        &self,
+        thread_id: &str,
+    ) -> Result<Arc<ManagedThread>, Status> {
+        let creation_lock = self.threads.creation_lock(thread_id).await;
+        let _creation = creation_lock.lock().await;
+        if let Some(managed) = self.threads.get_locked(thread_id).await {
+            return Ok(managed);
+        }
+
+        let session = self.get_session(thread_id).await?;
+        let rollout_root = self.memory_dir.join("sessions").join("rollouts");
+        let rollout_path = agent_rollout::find_rollout(&rollout_root, thread_id)
+            .map_err(|error| Status::internal(error.to_string()))?
+            .unwrap_or_else(|| {
+                agent_rollout::new_rollout_path(&rollout_root, thread_id, chrono::Utc::now())
+            });
+        let existing_items = if rollout_path.exists() {
+            agent_rollout::read_rollout(&rollout_path)
+                .await
+                .map_err(|error| Status::internal(error.to_string()))?
+        } else {
+            Vec::new()
+        };
+        let rollout = agent_rollout::RolloutRecorder::open(
+            rollout_path,
+            agent_rollout::ThreadHistoryMode::Paginated,
+        )
+        .await
+        .map_err(|error| Status::internal(error.to_string()))?;
+        let runtime = agent::AstroThread::spawn(Arc::clone(&session), rollout)
+            .map_err(|error| Status::failed_precondition(error.to_string()))?;
+
+        let mut history = ThreadHistoryBuilder::default();
+        for item in existing_items {
+            if let agent_rollout::RolloutItem::EventMsg(msg) = item {
+                let id = event_turn_id(&msg).unwrap_or_else(|| thread_id.to_string());
+                history.track(&agent_protocol::Event { id, msg });
+            }
+        }
+        let (commands, command_rx) = tokio::sync::mpsc::unbounded_channel();
+        let (activity_tx, activity_rx) = tokio::sync::watch::channel(ThreadActivity {
+            status: match runtime.status() {
+                agent::AgentStatus::Idle => "idle",
+                agent::AgentStatus::Running { .. } => "running",
+                agent::AgentStatus::Errored(_) => "errored",
+                agent::AgentStatus::Shutdown => "shutdown",
+            }
+            .into(),
+            has_subscribers: false,
+        });
+        let state = Arc::new(Mutex::new(ThreadState {
+            status: activity_rx.borrow().status.clone(),
+            history,
+            subscribers: Default::default(),
+            background_extension_sinks: Default::default(),
+            listener_command_tx: commands.clone(),
+            activity_tx,
+        }));
+        self.thread_states
+            .insert(thread_id.to_string(), Arc::clone(&state))
+            .await;
+        let (observed_tx, observed_rx) = tokio::sync::mpsc::unbounded_channel();
+        let listener = tokio::spawn(crate::thread_listener::run_thread_listener_observed(
+            thread_id.to_string(),
+            Arc::clone(&runtime),
+            state,
+            commands.clone(),
+            command_rx,
+            self.connections.clone(),
+            Some(observed_tx),
+        ));
+        let candidate = Arc::new(ManagedThread::new(runtime, commands, activity_rx, listener));
+        if let Err(existing) = self
+            .threads
+            .insert_if_absent(thread_id.to_string(), Arc::clone(&candidate))
+            .await
+        {
+            candidate.stop_listener().await;
+            let _ = candidate.runtime.submit(agent_protocol::Op::Shutdown).await;
+            candidate.runtime.wait_terminated().await;
+            return Ok(existing);
+        }
+        let lifecycle = candidate.lifecycle_token();
+        let supervisor = tokio::spawn(self.clone().observe_thread_side_effects(
+            thread_id.to_string(),
+            Arc::clone(&session),
+            Arc::downgrade(&candidate),
+            lifecycle,
+            observed_rx,
+        ));
+        candidate.set_side_effect_supervisor(supervisor).await;
+        let agent_id = home::active_agent_id(&self.memory_dir);
+        match agent::exec::agent_control_directory::AgentControlDirectory::global()
+            .get_at(thread_id, &self.memory_dir.join("subagents-v2.db"))
+        {
+            Some(control) => {
+                self.attach_agent_thread_watcher(
+                    thread_id,
+                    &agent_id,
+                    control,
+                    Arc::clone(&candidate),
+                )
+                .await;
+            }
+            None => tracing::warn!(thread_id, "root AgentControl is unavailable"),
+        }
+        self.spawn_idle_unload(thread_id.to_string(), Arc::clone(&candidate));
+        Ok(candidate)
+    }
+
+    pub(crate) async fn configure_thread_from_chat(
+        &self,
+        thread: &agent::AstroThread,
+        req: &proto::ChatRequest,
+    ) -> Result<(), Status> {
+        let provider = if req.provider.trim().is_empty() {
+            "ollama"
+        } else {
+            req.provider.trim()
+        };
+        let model = if req.model.trim().is_empty() {
+            providers::dispatch::default_model(provider).to_string()
+        } else {
+            req.model.trim().to_string()
+        };
+        let api_key = if req.api_key.trim().is_empty() {
+            providers::read_env_api_key(provider).unwrap_or_default()
+        } else {
+            req.api_key.trim().to_string()
+        };
+        let base_url = req.base_url.trim().to_string();
+        let mut targets = vec![types::ChatTarget {
+            provider_id: String::new(),
+            backend_id: provider.into(),
+            model: model.clone(),
+            api_key: api_key.clone(),
+            base_url: base_url.clone(),
+        }];
+        targets.extend(req.chat_fallbacks.iter().map(|fallback| types::ChatTarget {
+            provider_id: fallback.provider_id.clone(),
+            backend_id: fallback.provider.clone(),
+            model: fallback.model.clone(),
+            api_key: fallback.api_key.clone(),
+            base_url: fallback.base_url.clone(),
+        }));
+        let session = thread.session();
+        session.set_hook_runtime(Arc::clone(&self.hook_runtime));
+        let (_, hitl_gate) = session.ensure_thread_controls();
+        if !self
+            .hitl_registry
+            .get(session.session_id())
+            .await
+            .is_some_and(|current| Arc::ptr_eq(&current, &hitl_gate))
+        {
+            if let Some(replaced) = self.hitl_registry.replace_for_admission(hitl_gate) {
+                replaced.cancel_all().await;
+            }
+        }
+        session.set_chat_credentials(provider, &model, &api_key, &base_url);
+        session.set_thread_provider_options(agent::runtime::ThreadProviderOptions {
+            thinking_enabled: req.thinking_enabled,
+            reasoning_effort: if req.reasoning_effort.trim().is_empty() {
+                "high".into()
+            } else {
+                req.reasoning_effort.trim().into()
+            },
+            max_tokens: if req.max_output_tokens > 0 {
+                req.max_output_tokens
+            } else {
+                8192
+            },
+        });
+        session.set_chat_targets(targets);
+        session.set_auxiliary_targets(parse_auxiliary_targets(req.auxiliary_targets.clone()));
+        session.set_image_gen_targets(tools::image_gen_targets_from_parts(tools::ImageGenParts {
+            provider: &req.image_gen_provider,
+            model: &req.image_gen_model,
+            api_key: &req.image_gen_api_key,
+            base_url: &req.image_gen_base_url,
+            fb_provider: &req.image_gen_fallback_provider,
+            fb_model: &req.image_gen_fallback_model,
+            fb_api_key: &req.image_gen_fallback_api_key,
+            fb_base_url: &req.image_gen_fallback_base_url,
+            video_model: &req.image_gen_video_model,
+            music_model: &req.image_gen_music_model,
+            tts_model: &req.image_gen_tts_model,
+            fb_video_model: &req.image_gen_fallback_video_model,
+            fb_music_model: &req.image_gen_fallback_music_model,
+            fb_tts_model: &req.image_gen_fallback_tts_model,
+            vision_model: &req.image_gen_vision_model,
+            fb_vision_model: &req.image_gen_fallback_vision_model,
+        }));
+        if req.context_window > 0 {
+            session.set_context_window(req.context_window);
+        }
+        session
+            .set_interaction_mode(types::InteractionMode::parse(&req.interaction_mode))
+            .await;
+        session.set_project_root(
+            (!req.project_root.trim().is_empty()).then(|| PathBuf::from(req.project_root.trim())),
+        );
+        if let Some(temperature) = req.temperature {
+            if !temperature.is_finite() || !(0.0..=2.0).contains(&temperature) {
+                return Err(Status::invalid_argument(
+                    "temperature must be between 0 and 2",
+                ));
+            }
+            session.set_temperature(temperature);
+        }
+        if !req.additional_params_json.trim().is_empty() {
+            let params: serde_json::Value = serde_json::from_str(&req.additional_params_json)
+                .map_err(|error| {
+                    Status::invalid_argument(format!("invalid additional_params_json: {error}"))
+                })?;
+            if !params.is_object() {
+                return Err(Status::invalid_argument(
+                    "additional_params_json must be an object",
+                ));
+            }
+            session.set_additional_params(params);
+        }
+        Ok(())
+    }
+
+    fn spawn_idle_unload(&self, thread_id: String, managed: Arc<ManagedThread>) {
+        let service = self.clone();
+        let mut activity_rx = managed.activity_rx.clone();
+        tokio::spawn(async move {
+            loop {
+                let idle = {
+                    let activity = activity_rx.borrow().clone();
+                    can_idle_unload_thread(&activity)
+                };
+                if !idle {
+                    if activity_rx.changed().await.is_err() {
+                        break;
+                    }
+                    continue;
+                }
+                tokio::select! {
+                    changed = activity_rx.changed() => {
+                        if changed.is_err() { break; }
+                    }
+                    () = tokio::time::sleep(std::time::Duration::from_secs(30 * 60)) => {
+                        let activity = activity_rx.borrow().clone();
+                        if can_idle_unload_thread(&activity) {
+                            let creation_lock = service.threads.creation_lock(&thread_id).await;
+                            let _creation = creation_lock.lock().await;
+                            let activity = activity_rx.borrow().clone();
+                            if !can_idle_unload_thread(&activity) {
+                                continue;
+                            }
+                            match service
+                                .threads
+                                .remove_if_current_and_unleased(&thread_id, &managed)
+                                .await
+                            {
+                                RemoveCurrentThread::Removed(_) => {}
+                                RemoveCurrentThread::Leased => continue,
+                                RemoveCurrentThread::NotCurrent => break,
+                            }
+                            service.thread_states.remove(&thread_id).await;
+                            let removed_session = {
+                                let mut sessions = service.sessions.write().await;
+                                if sessions.get(&thread_id).is_some_and(|session| {
+                                    Arc::ptr_eq(session, managed.runtime.session())
+                                }) {
+                                    sessions.remove(&thread_id)
+                                } else {
+                                    None
+                                }
+                            };
+                            service.agent_thread_watchers.lock().await.remove(&thread_id);
+                            if let Some(session) = removed_session.as_ref() {
+                                agent::exec::dispatch::unregister_active_root_session(
+                                    &service.memory_dir,
+                                    &thread_id,
+                                    session,
+                                );
+                            }
+                            let _ = managed.runtime.submit(agent_protocol::Op::Shutdown).await;
+                            managed.runtime.wait_terminated().await;
+                            let _ = managed.runtime.flush_rollout().await;
+                            managed.stop_listener().await;
+                            break;
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    fn generation_operation(&self, session_id: &str) -> Arc<Mutex<()>> {
+        let mut operations = self
+            .generation_operations
+            .lock()
+            .expect("generation operation map mutex poisoned");
+        operations.retain(|_, operation| operation.strong_count() > 0);
+        if let Some(operation) = operations.get(session_id).and_then(Weak::upgrade) {
+            return operation;
+        }
+        let operation = Arc::new(Mutex::new(()));
+        operations.insert(session_id.to_string(), Arc::downgrade(&operation));
+        operation
+    }
+
+    fn release_generation_ownership(&self, session_id: &str) -> ReleaseGenerationOwnershipLease {
+        let mut registry = self
+            .release_ownerships
+            .lock()
+            .expect("release ownership registry mutex poisoned");
+        registry.retain(|_, ownership| ownership.strong_count() > 0);
+        let entry = registry
+            .get(session_id)
+            .and_then(Weak::upgrade)
+            .unwrap_or_else(|| {
+                let entry = Arc::new(ReleaseGenerationOwnership::default());
+                registry.insert(session_id.to_string(), Arc::downgrade(&entry));
+                entry
+            });
+        ReleaseGenerationOwnershipLease {
+            session_id: session_id.to_string(),
+            entry,
+            registry: Arc::clone(&self.release_ownerships),
+        }
+    }
+
+    async fn attach_agent_thread_watcher(
         &self,
         root_thread_id: &str,
         root_agent_id: &str,
         control: Arc<subagents::AgentControl>,
+        managed: Arc<ManagedThread>,
     ) {
         let weak_control = Arc::downgrade(&control);
-        {
-            let mut watchers = match self.agent_thread_watchers.lock() {
-                Ok(watchers) => watchers,
-                Err(poisoned) => poisoned.into_inner(),
-            };
-            if let Some(attached) = watchers.get(root_thread_id).and_then(Weak::upgrade) {
-                if Arc::ptr_eq(&attached, &control) {
-                    return;
-                }
+        let weak_managed = Arc::downgrade(&managed);
+        let stream_id = uuid::Uuid::new_v4().to_string();
+        let mut watchers = self.agent_thread_watchers.lock().await;
+        if let Some(attached) = watchers.get(root_thread_id).and_then(Weak::upgrade) {
+            if Arc::ptr_eq(&attached, &control) {
+                return;
             }
-            watchers.insert(root_thread_id.to_string(), weak_control.clone());
         }
-
-        self.session_events.publish_resync_for_root(
-            root_thread_id,
-            root_agent_id,
-            "agent_control_generation_changed",
-        );
+        watchers.insert(root_thread_id.to_string(), weak_control.clone());
+        let reset_key = format!("agent_thread:resync:{}", uuid::Uuid::new_v4());
+        if let Err(error) = Self::emit_extension_on_managed(
+            &managed,
+            format!("{root_thread_id}:background"),
+            &reset_key,
+            "astro.agent_thread_resync",
+            serde_json::json!({
+                "root_thread_id": root_thread_id,
+                "agent_id": root_agent_id,
+                "stream_id": stream_id.clone(),
+                "reason": "agent_control_generation_changed",
+            }),
+        )
+        .await
+        {
+            tracing::warn!(%error, root_thread_id, "failed to emit AgentControl generation reset");
+        }
+        drop(watchers);
 
         let root_thread_id = root_thread_id.to_string();
         let root_agent_id = root_agent_id.to_string();
-        let session_events = self.session_events.clone();
         let watcher_registry = Arc::clone(&self.agent_thread_watchers);
         tokio::spawn(async move {
             // Start at zero so activity racing between control creation and
@@ -357,7 +1384,8 @@ impl AstroServiceImpl {
                 let Some(control) = weak_control.upgrade() else {
                     break;
                 };
-                let observation = control.next_activity_after(cursor, Duration::from_millis(250));
+                let observation =
+                    control.next_activity_after(cursor, std::time::Duration::from_millis(250));
                 drop(control);
                 let observation = observation.await;
 
@@ -365,10 +1393,7 @@ impl AstroServiceImpl {
                 // A replacement watcher cannot install its reset marker until
                 // every old-generation observation has either published first
                 // or observed that it no longer owns this root entry.
-                let watchers = match watcher_registry.lock() {
-                    Ok(watchers) => watchers,
-                    Err(poisoned) => poisoned.into_inner(),
-                };
+                let watchers = watcher_registry.lock().await;
                 let owns_entry = watchers
                     .get(&root_thread_id)
                     .is_some_and(|registered| Weak::ptr_eq(registered, &weak_control));
@@ -379,11 +1404,26 @@ impl AstroServiceImpl {
                     subagents::ActivityObservation::Activity(activity) => *activity,
                     subagents::ActivityObservation::Gap { latest, .. } => {
                         cursor = latest;
-                        session_events.publish_resync_for_root(
-                            &root_thread_id,
-                            &root_agent_id,
-                            "activity_gap",
-                        );
+                        let reset_key = format!("agent_thread:resync:{}", uuid::Uuid::new_v4());
+                        let Some(managed) = weak_managed.upgrade() else {
+                            break;
+                        };
+                        if let Err(error) = AstroServiceImpl::emit_extension_on_managed(
+                            &managed,
+                            format!("{root_thread_id}:background"),
+                            &reset_key,
+                            "astro.agent_thread_resync",
+                            serde_json::json!({
+                                "root_thread_id": root_thread_id,
+                                "agent_id": root_agent_id,
+                                "stream_id": stream_id.clone(),
+                                "reason": "activity_gap",
+                            }),
+                        )
+                        .await
+                        {
+                            tracing::warn!(%error, root_thread_id, "failed to emit agent activity resync");
+                        }
                         continue;
                     }
                     subagents::ActivityObservation::TimedOut => continue,
@@ -392,24 +1432,27 @@ impl AstroServiceImpl {
                     continue;
                 }
                 cursor = subagents::ActivityCursor(activity.sequence);
-                let Some(projection) = agent_thread_projection(activity) else {
+                let Some(projection) = agent_thread_projection(activity, &stream_id) else {
                     continue;
                 };
-                session_events.publish(SessionEventMsg {
-                    session_id: Some(root_thread_id.clone()),
-                    agent_id: root_agent_id.clone(),
-                    memory_updated: None,
-                    pending_changed: None,
-                    session_metadata_changed: None,
-                    agent_thread_changed: Some(projection),
-                    resync_required: None,
-                });
+                let item_key = format!("agent_thread:{}", cursor.0);
+                let Some(managed) = weak_managed.upgrade() else {
+                    break;
+                };
+                if let Err(error) = AstroServiceImpl::emit_extension_on_managed(
+                    &managed,
+                    format!("{root_thread_id}:background"),
+                    &item_key,
+                    "astro.agent_thread",
+                    projection,
+                )
+                .await
+                {
+                    tracing::warn!(%error, root_thread_id, "failed to emit agent activity extension");
+                }
             }
 
-            let mut watchers = match watcher_registry.lock() {
-                Ok(watchers) => watchers,
-                Err(poisoned) => poisoned.into_inner(),
-            };
+            let mut watchers = watcher_registry.lock().await;
             let owns_entry = watchers
                 .get(&root_thread_id)
                 .is_some_and(|registered| Weak::ptr_eq(registered, &weak_control));
@@ -426,20 +1469,14 @@ impl AstroServiceImpl {
     /// # 错误
     /// Agent 构建失败时返回 `Status::internal`。
     async fn get_session(&self, session_id: &str) -> Result<SessionHandle, Status> {
-        let mut sessions = self.sessions.write().await;
-        if let Some(handle) = sessions.get(session_id) {
-            let agent_id = home::active_agent_id(&self.memory_dir);
-            let control = agent::exec::agent_control_directory::AgentControlDirectory::global()
-                .get_at(session_id, &self.memory_dir.join("subagents-v2.db"))
-                .ok_or_else(|| Status::internal("root AgentControl is unavailable"))?;
-            self.attach_agent_thread_watcher(session_id, &agent_id, control);
+        if let Some(handle) = self.sessions.read().await.get(session_id).cloned() {
             agent::exec::dispatch::register_active_root_session(
                 &self.memory_dir,
                 session_id,
-                handle,
+                &handle,
             )
             .map_err(|error| Status::internal(error.to_string()))?;
-            return Ok(handle.clone());
+            return Ok(handle);
         }
 
         let agent_id = home::active_agent_id(&self.memory_dir);
@@ -451,54 +1488,521 @@ impl AstroServiceImpl {
             .build_with_session_id(session_id.to_string())
             .map_err(|e| Status::internal(e.to_string()))?;
         let handle = Arc::new(agent);
-        let control = agent::exec::agent_control_directory::AgentControlDirectory::global()
-            .get_at(session_id, &self.memory_dir.join("subagents-v2.db"))
-            .ok_or_else(|| Status::internal("root AgentControl was not registered"))?;
-        self.attach_agent_thread_watcher(session_id, &agent_id, control);
+        handle.set_hook_runtime(Arc::clone(&self.hook_runtime));
+        let mut sessions = self.sessions.write().await;
+        if let Some(existing) = sessions.get(session_id) {
+            return Ok(existing.clone());
+        }
+        self.release_ownerships
+            .lock()
+            .expect("release ownership registry mutex poisoned")
+            .remove(session_id);
         sessions.insert(session_id.to_string(), handle.clone());
         agent::exec::dispatch::register_active_root_session(&self.memory_dir, session_id, &handle)
             .map_err(|error| Status::internal(error.to_string()))?;
         Ok(handle)
     }
 
-    /// 同一 session 重入时取消旧 PauseControl，避免幽灵 pause
-    async fn register_pause(&self, session_id: &str) -> Arc<PauseControl> {
-        let pause = PauseControl::new();
-        let mut map = self.pause_controls.write().await;
-        if let Some(old) = map.insert(session_id.to_string(), pause.clone()) {
-            old.cancel();
+    /// 原子切换同一 chat generation 的 pause / HITL / UI 状态。
+    async fn admit_pause_generation(
+        &self,
+        session_id: &str,
+        session: &SessionHandle,
+        hitl_gate: Arc<HitlGate>,
+        hook_tx: tokio::sync::mpsc::UnboundedSender<::hooks::UiHookEvent>,
+    ) -> Option<PauseRegistration> {
+        let service = self.clone();
+        let session_id = session_id.to_string();
+        let session = Arc::clone(session);
+        let (reply_tx, reply_rx) = tokio::sync::oneshot::channel();
+        tokio::spawn(async move {
+            service
+                .run_admit_pause_generation_worker(
+                    session_id, session, hitl_gate, hook_tx, reply_tx,
+                )
+                .await;
+        });
+        reply_rx
+            .await
+            .unwrap_or(None)
+            .map(PreparedPauseGeneration::commit)
+    }
+
+    async fn run_admit_pause_generation_worker(
+        &self,
+        session_id: String,
+        session: SessionHandle,
+        hitl_gate: Arc<HitlGate>,
+        hook_tx: tokio::sync::mpsc::UnboundedSender<::hooks::UiHookEvent>,
+        reply: tokio::sync::oneshot::Sender<Option<PreparedPauseGeneration>>,
+    ) {
+        let operation = self.generation_operation(&session_id);
+        let admission = Arc::clone(&operation).lock_owned().await;
+        let is_current_session = self
+            .sessions
+            .read()
+            .await
+            .get(&session_id)
+            .is_some_and(|current| Arc::ptr_eq(current, &session));
+        if !is_current_session {
+            let _ = reply.send(None);
+            return;
         }
-        pause
+        if let Some(current_gate) = self.hitl_registry.get(&session_id).await {
+            if current_gate.is_waiting().await {
+                let _ = reply.send(None);
+                return;
+            }
+        }
+        let prepared = PreparedPauseGeneration {
+            session_id,
+            session: Arc::downgrade(&session),
+            hitl_gate,
+            hook_tx: Some(hook_tx),
+            operation,
+            admission: Some(admission),
+            pause_controls: Arc::clone(&self.pause_controls),
+            hitl_registry: self.hitl_registry.clone(),
+            generation_operations: Arc::clone(&self.generation_operations),
+            ui_slot: self.hook_runtime.ui_slot.clone(),
+            memory_dir: self.memory_dir.clone(),
+            committed: false,
+        };
+        let _ = reply.send(Some(prepared));
+    }
+
+    #[cfg(test)]
+    async fn launch_current_pause_generation_with<F, Fut, T>(
+        &self,
+        session_id: &str,
+        registration: &PauseRegistration,
+        launch: F,
+    ) -> Option<T>
+    where
+        F: FnOnce() -> Fut + Send + 'static,
+        Fut: Future<Output = T> + Send + 'static,
+        T: Send + 'static,
+    {
+        let session = registration.session.upgrade()?;
+        self.launch_current_pause_generation_with_setup(
+            session_id,
+            registration,
+            &session,
+            |_| async {},
+            launch,
+        )
+        .await
+    }
+
+    async fn launch_current_pause_generation_with_setup<S, SetupFut, F, Fut, T>(
+        &self,
+        session_id: &str,
+        registration: &PauseRegistration,
+        session: &SessionHandle,
+        setup: S,
+        launch: F,
+    ) -> Option<T>
+    where
+        S: FnOnce(SessionHandle) -> SetupFut + Send + 'static,
+        SetupFut: Future<Output = ()> + Send + 'static,
+        F: FnOnce() -> Fut + Send + 'static,
+        Fut: Future<Output = T> + Send + 'static,
+        T: Send + 'static,
+    {
+        let service = self.clone();
+        let session_id = session_id.to_string();
+        let registration = registration.clone();
+        let session = Arc::clone(session);
+        let (reply_tx, reply_rx) = tokio::sync::oneshot::channel();
+        tokio::spawn(async move {
+            service
+                .run_generation_launch_worker(
+                    session_id,
+                    registration,
+                    session,
+                    setup,
+                    launch,
+                    reply_tx,
+                )
+                .await;
+        });
+        reply_rx
+            .await
+            .unwrap_or(None)
+            .map(GenerationLaunchReply::into_value)
+    }
+
+    async fn run_generation_launch_worker<S, SetupFut, F, Fut, T>(
+        &self,
+        session_id: String,
+        registration: PauseRegistration,
+        session: SessionHandle,
+        setup: S,
+        launch: F,
+        reply: tokio::sync::oneshot::Sender<Option<GenerationLaunchReply<T>>>,
+    ) where
+        S: FnOnce(SessionHandle) -> SetupFut + Send + 'static,
+        SetupFut: Future<Output = ()> + Send + 'static,
+        F: FnOnce() -> Fut + Send + 'static,
+        Fut: Future<Output = T> + Send + 'static,
+        T: Send + 'static,
+    {
+        let admission = Arc::clone(&registration.operation).lock_owned().await;
+        let is_current = self
+            .pause_controls
+            .read()
+            .expect("pause registry lock poisoned")
+            .get(&session_id)
+            .is_some_and(|current| Arc::ptr_eq(&current.control, &registration.control));
+        let is_current_session = self
+            .sessions
+            .read()
+            .await
+            .get(&session_id)
+            .is_some_and(|current| Arc::ptr_eq(current, &session));
+        let registration_matches_session = registration
+            .session
+            .upgrade()
+            .is_some_and(|registered| Arc::ptr_eq(&registered, &session));
+        if !is_current
+            || !is_current_session
+            || !registration_matches_session
+            || registration.control.is_cancelled()
+        {
+            let _ = reply.send(None);
+            return;
+        }
+        let settings_snapshot = session.snapshot_request_settings();
+        let launch_result = std::panic::AssertUnwindSafe(async {
+            setup(Arc::clone(&session)).await;
+            launch().await
+        })
+        .catch_unwind()
+        .await;
+        if let Ok(value) = launch_result {
+            let (accepted_tx, accepted_rx) = tokio::sync::oneshot::channel();
+            let guarded_reply = GenerationLaunchReply {
+                value: Some(value),
+                accepted: Some(accepted_tx),
+            };
+            match reply.send(Some(guarded_reply)) {
+                Ok(()) if matches!(accepted_rx.await, Ok(true)) => return,
+                Ok(()) => {}
+                Err(returned) => drop(returned),
+            }
+        }
+
+        self.cleanup_abandoned_generation_with_admission(
+            session_id,
+            registration,
+            session,
+            settings_snapshot,
+            admission,
+        )
+        .await;
+    }
+
+    async fn cleanup_abandoned_generation_with_admission(
+        &self,
+        session_id: String,
+        registration: PauseRegistration,
+        session: SessionHandle,
+        settings_snapshot: agent::runtime::SessionRequestSettingsSnapshot,
+        admission: tokio::sync::OwnedMutexGuard<()>,
+    ) {
+        registration.control.cancel();
+        let _ = session.abort_all_tasks(TurnAbortReason::Interrupted).await;
+        session.restore_request_settings(settings_snapshot);
+        let detached_gate = detach_pause_generation_parts(
+            &self.pause_controls,
+            &self.hitl_registry,
+            &self.hook_runtime.ui_slot,
+            &self.memory_dir,
+            &session_id,
+            &registration,
+        )
+        .await
+        .1;
+        drop(admission);
+        cancel_pause_generation(&registration, detached_gate).await;
+        prune_generation_operation(
+            &self.generation_operations,
+            &session_id,
+            &registration.operation,
+            2,
+        );
+    }
+
+    async fn cleanup_pause_generation(
+        &self,
+        session_id: &str,
+        registration: &PauseRegistration,
+    ) -> bool {
+        let service = self.clone();
+        let session_id = session_id.to_string();
+        let registration = registration.clone();
+        let (reply_tx, reply_rx) = tokio::sync::oneshot::channel();
+        tokio::spawn(async move {
+            let removed = cleanup_pause_generation_parts(
+                &service.generation_operations,
+                &service.pause_controls,
+                &service.hitl_registry,
+                &service.hook_runtime.ui_slot,
+                &service.memory_dir,
+                &session_id,
+                &registration,
+            )
+            .await;
+            let _ = reply_tx.send(removed);
+        });
+        reply_rx.await.unwrap_or(false)
+    }
+
+    async fn cancel_current_pause_generation_with<F, Fut>(
+        &self,
+        session_id: &str,
+        abort: F,
+    ) -> anyhow::Result<Option<PauseRegistration>>
+    where
+        F: FnOnce(Option<SessionHandle>) -> Fut + Send + 'static,
+        Fut: Future<Output = anyhow::Result<()>> + Send + 'static,
+    {
+        let service = self.clone();
+        let session_id = session_id.to_string();
+        let (reply_tx, reply_rx) = tokio::sync::oneshot::channel();
+        tokio::spawn(async move {
+            let result = service
+                .cancel_current_pause_generation_inner(&session_id, abort)
+                .await;
+            let _ = reply_tx.send(result);
+        });
+        reply_rx
+            .await
+            .map_err(|_| anyhow::anyhow!("cancel generation worker stopped unexpectedly"))?
+    }
+
+    async fn cancel_current_pause_generation_inner<F, Fut>(
+        &self,
+        session_id: &str,
+        abort: F,
+    ) -> anyhow::Result<Option<PauseRegistration>>
+    where
+        F: FnOnce(Option<SessionHandle>) -> Fut,
+        Fut: Future<Output = anyhow::Result<()>>,
+    {
+        let operation = self.generation_operation(session_id);
+        let admission = operation.lock().await;
+        let Some(registration) = self
+            .pause_controls
+            .read()
+            .expect("pause registry lock poisoned")
+            .get(session_id)
+            .cloned()
+        else {
+            drop(admission);
+            prune_generation_operation(&self.generation_operations, session_id, &operation, 1);
+            return Ok(None);
+        };
+        let detached_gate = detach_pause_generation_parts(
+            &self.pause_controls,
+            &self.hitl_registry,
+            &self.hook_runtime.ui_slot,
+            &self.memory_dir,
+            session_id,
+            &registration,
+        )
+        .await
+        .1;
+        registration.control.cancel();
+        let abort_result = abort(registration.session.upgrade()).await;
+        drop(admission);
+        cancel_pause_generation(&registration, detached_gate).await;
+        prune_generation_operation(&self.generation_operations, session_id, &operation, 2);
+        abort_result?;
+        Ok(Some(registration))
+    }
+
+    async fn cancel_current_pause_generation(
+        &self,
+        session_id: &str,
+    ) -> anyhow::Result<Option<PauseRegistration>> {
+        self.cancel_current_pause_generation_with(session_id, |session| async move {
+            if let Some(session) = session {
+                session
+                    .abort_all_tasks(TurnAbortReason::Interrupted)
+                    .await?;
+            }
+            Ok(())
+        })
+        .await
     }
 
     /// 释放会话运行时：取消暂停/HITL/中断文件，并从内存移除 Session。
     ///
-    /// 返回被移除的会话句柄，供 `new_chat` 在卸载后继续派发 session hooks。
-    async fn release_session_runtime(&self, session_id: &str) -> Option<SessionHandle> {
-        {
-            let mut map = self.pause_controls.write().await;
-            if let Some(pause) = map.remove(session_id) {
-                pause.cancel();
+    /// 返回是否仍需无 runtime 的 finalize fallback；真实 Session 清理由幂等
+    /// `shutdown_runtime` 统一承接并登记 finalization ownership。
+    async fn release_session_runtime(&self, session_id: &str) -> ReleaseSessionRuntimeResult {
+        let ownership = self.release_generation_ownership(session_id);
+        self.release_session_runtime_with_ownership(session_id, ownership)
+            .await
+    }
+
+    async fn release_session_runtime_with_ownership(
+        &self,
+        session_id: &str,
+        ownership: ReleaseGenerationOwnershipLease,
+    ) -> ReleaseSessionRuntimeResult {
+        self.release_session_runtime_reply_with_ownership(session_id, ownership)
+            .await
+            .map(ReleaseSessionRuntimeReply::into_shared_result)
+            .unwrap_or_default()
+    }
+
+    async fn release_session_runtime_for_new_chat(
+        &self,
+        session_id: &str,
+    ) -> ReleaseSessionRuntimeResult {
+        let ownership = self.release_generation_ownership(session_id);
+        self.release_session_runtime_reply_with_ownership(session_id, ownership)
+            .await
+            .map(ReleaseSessionRuntimeReply::claim_fallback)
+            .unwrap_or_default()
+    }
+
+    async fn release_session_runtime_reply_with_ownership(
+        &self,
+        session_id: &str,
+        ownership: ReleaseGenerationOwnershipLease,
+    ) -> Option<ReleaseSessionRuntimeReply> {
+        let service = self.clone();
+        let session_id = session_id.to_string();
+        let (reply_tx, reply_rx) = tokio::sync::oneshot::channel();
+        tokio::spawn(async move {
+            service
+                .run_release_session_runtime_worker(session_id, ownership, reply_tx)
+                .await;
+        });
+        reply_rx.await.ok()
+    }
+
+    async fn run_release_session_runtime_worker(
+        &self,
+        session_id: String,
+        ownership: ReleaseGenerationOwnershipLease,
+        reply: tokio::sync::oneshot::Sender<ReleaseSessionRuntimeReply>,
+    ) {
+        let shared = *ownership
+            .entry
+            .completion
+            .get_or_init(|| self.release_session_runtime_inner(&session_id))
+            .await;
+        let _ = reply.send(ReleaseSessionRuntimeReply { shared, ownership });
+    }
+
+    async fn release_session_runtime_inner(&self, session_id: &str) -> ReleaseSessionRuntimeResult {
+        let creation_lock = self.threads.creation_lock(session_id).await;
+        let _thread_creation = creation_lock.lock().await;
+        let operation = self.generation_operation(session_id);
+        let (
+            registration,
+            detached_gate,
+            orphan_gate,
+            removed,
+            removed_thread,
+            should_finalize_without_runtime,
+        ) = {
+            let _admission = operation.lock().await;
+            let registration = self
+                .pause_controls
+                .read()
+                .expect("pause registry lock poisoned")
+                .get(session_id)
+                .cloned();
+            let expected_session = match registration.as_ref() {
+                Some(registration) => registration.session.upgrade(),
+                None => self.sessions.read().await.get(session_id).cloned(),
+            };
+            let detached_gate = if let Some(registration) = registration.as_ref() {
+                detach_pause_generation_parts(
+                    &self.pause_controls,
+                    &self.hitl_registry,
+                    &self.hook_runtime.ui_slot,
+                    &self.memory_dir,
+                    session_id,
+                    registration,
+                )
+                .await
+                .1
+            } else {
+                None
+            };
+            let orphan_gate = self.hitl_registry.remove(session_id).await;
+            clear_interrupt_file(&self.memory_dir, session_id);
+            let removed_thread = self.threads.remove(session_id).await;
+            if removed_thread.is_some() {
+                self.thread_states.remove(session_id).await;
+            }
+            let mut sessions = self.sessions.write().await;
+            let removed = match expected_session {
+                Some(expected)
+                    if sessions
+                        .get(session_id)
+                        .is_some_and(|current| Arc::ptr_eq(current, &expected)) =>
+                {
+                    sessions.remove(session_id)
+                }
+                Some(_) | None => None,
+            };
+            let has_live_session = sessions.contains_key(session_id);
+            let should_finalize_without_runtime = removed.is_none() && !has_live_session;
+            (
+                registration,
+                detached_gate,
+                orphan_gate,
+                removed,
+                removed_thread,
+                should_finalize_without_runtime,
+            )
+        };
+        if let Some(registration) = registration.as_ref() {
+            cancel_pause_generation(registration, detached_gate).await;
+        } else if let Some(gate) = detached_gate {
+            gate.cancel_all().await;
+        }
+        if let Some(gate) = orphan_gate {
+            let already_cancelled = registration
+                .as_ref()
+                .is_some_and(|registration| Arc::ptr_eq(&registration.hitl_gate, &gate));
+            if !already_cancelled {
+                gate.cancel_all().await;
             }
         }
-        self.hitl_registry.cancel_and_remove(session_id).await;
-        clear_interrupt_file(&self.memory_dir, session_id);
-
-        let removed = {
-            let mut sessions = self.sessions.write().await;
-            sessions.remove(session_id)
-        };
+        self.agent_thread_watchers.lock().await.remove(session_id);
         if let Some(handle) = removed.as_ref() {
             agent::exec::dispatch::unregister_active_root_session(
                 &self.memory_dir,
                 session_id,
                 handle,
             );
-            if let Err(error) = handle.abort_all_tasks(TurnAbortReason::Interrupted).await {
-                tracing::warn!(%error, session_id, "failed to abort session task");
-            }
         }
-        removed
+        if let Some(managed) = removed_thread.as_ref() {
+            managed.stop_side_effects().await;
+            let _ = managed.runtime.submit(agent_protocol::Op::Shutdown).await;
+            managed.runtime.wait_terminated().await;
+            let _ = managed.runtime.flush_rollout().await;
+            managed.stop_listener().await;
+        } else if let Some(handle) = removed.as_ref() {
+            handle.shutdown_runtime().await;
+        }
+        prune_generation_operation(
+            &self.generation_operations,
+            session_id,
+            &operation,
+            if registration.is_some() { 2 } else { 1 },
+        );
+        ReleaseSessionRuntimeResult {
+            should_finalize_without_runtime,
+        }
     }
 
     /// UI「新建对话」：统一投递 command/reset/finalize，并卸内存会话。
@@ -513,232 +2017,15 @@ impl AstroServiceImpl {
             .hook_runtime
             .dispatch(::hooks::COMMAND_NEW_CHAT, &payload);
         let _ = self.hook_runtime.dispatch(::hooks::SESSION_RESET, &payload);
-        let _ = self
-            .hook_runtime
-            .dispatch(::hooks::SESSION_FINALIZE, &payload);
-        let _ = self.release_session_runtime(session_id).await;
-    }
-}
-
-/// 解析 RunFinished.interrupts_json 为 proto Interrupt 列表。
-fn parse_interrupts_json(raw: &str) -> Vec<proto::Interrupt> {
-    let Ok(value) = serde_json::from_str::<serde_json::Value>(raw) else {
-        return Vec::new();
-    };
-    let Some(arr) = value.as_array() else {
-        return Vec::new();
-    };
-    arr.iter()
-        .filter_map(|item| {
-            Some(proto::Interrupt {
-                id: item.get("id")?.as_str()?.to_string(),
-                reason: item
-                    .get("reason")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("")
-                    .to_string(),
-                message: item
-                    .get("message")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("")
-                    .to_string(),
-                tool_call_id: item
-                    .get("tool_call_id")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("")
-                    .to_string(),
-                response_schema_json: item
-                    .get("response_schema_json")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("")
-                    .to_string(),
-                expires_at: item
-                    .get("expires_at")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("")
-                    .to_string(),
-                metadata_json: item
-                    .get("metadata_json")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("")
-                    .to_string(),
-            })
-        })
-        .collect()
-}
-
-/// 将 agent 多轮流事件映射为 proto [`ChatEvent`]；无对应项时返回 `None`（当前均有映射）。
-fn media_asset_to_proto(asset: types::MediaAsset) -> proto::MediaAsset {
-    let (ref_kind, ref_value) = match asset.reference {
-        types::MediaRef::WorkspacePath(p) => ("workspace_path", p),
-        types::MediaRef::DataUrl(u) => ("data_url", u),
-        types::MediaRef::RemoteUri(u) => ("remote_uri", u),
-    };
-    let kind = match asset.kind {
-        types::MediaKind::Image => "image",
-        types::MediaKind::Audio => "audio",
-        types::MediaKind::Video => "video",
-        types::MediaKind::File => "file",
-    };
-    proto::MediaAsset {
-        kind: kind.into(),
-        mime_type: asset.mime_type,
-        ref_kind: ref_kind.into(),
-        ref_value,
-        label: asset.label.unwrap_or_default(),
-        id: asset.id.unwrap_or_default(),
-    }
-}
-
-fn multi_turn_to_chat_event(item: MultiTurnStreamItem) -> Option<ChatEvent> {
-    match item {
-        MultiTurnStreamItem::Assistant(StreamedAssistantContent::Text(token)) => Some(ChatEvent {
-            payload: Some(proto::chat_event::Payload::Token(token)),
-        }),
-        MultiTurnStreamItem::Assistant(StreamedAssistantContent::Reasoning(r)) => Some(ChatEvent {
-            payload: Some(proto::chat_event::Payload::Reasoning(r)),
-        }),
-        MultiTurnStreamItem::Assistant(StreamedAssistantContent::ThoughtSignature(_)) => None,
-        MultiTurnStreamItem::Assistant(StreamedAssistantContent::ToolCallDelta(d)) => {
-            Some(ChatEvent {
-                payload: Some(proto::chat_event::Payload::ToolCallDelta(
-                    proto::ToolCallDeltaEvent {
-                        index: d.index,
-                        id: d.id.unwrap_or_default(),
-                        name: d.name.unwrap_or_default(),
-                        arguments: d.arguments.unwrap_or_default(),
-                    },
-                )),
-            })
+        if self
+            .release_session_runtime_for_new_chat(session_id)
+            .await
+            .should_finalize_without_runtime
+        {
+            let _ = self
+                .hook_runtime
+                .dispatch(::hooks::SESSION_FINALIZE, &payload);
         }
-        MultiTurnStreamItem::Assistant(StreamedAssistantContent::FinalUsage(u)) => {
-            Some(ChatEvent {
-                payload: Some(proto::chat_event::Payload::Usage(UsageEvent {
-                    prompt_tokens: u.prompt_tokens(),
-                    completion_tokens: u.completion_tokens(),
-                    total_tokens: u.total_tokens(),
-                })),
-            })
-        }
-        MultiTurnStreamItem::Assistant(StreamedAssistantContent::Citations(cites)) => {
-            Some(ChatEvent {
-                payload: Some(proto::chat_event::Payload::CitationsJson(
-                    serde_json::to_string(&cites).unwrap_or_default(),
-                )),
-            })
-        }
-        MultiTurnStreamItem::Assistant(StreamedAssistantContent::InteractionId(_)) => None,
-        MultiTurnStreamItem::ToolStarted {
-            id,
-            name,
-            arguments_json,
-        } => Some(ChatEvent {
-            payload: Some(proto::chat_event::Payload::ToolCall(proto::ToolCallEvent {
-                id,
-                name,
-                arguments_json,
-                result: String::new(),
-                media: Vec::new(),
-                phase: "started".into(),
-            })),
-        }),
-        MultiTurnStreamItem::ToolResult {
-            id,
-            name,
-            arguments_json,
-            result,
-            media,
-        } => Some(ChatEvent {
-            payload: Some(proto::chat_event::Payload::ToolCall(proto::ToolCallEvent {
-                id,
-                name,
-                arguments_json,
-                result,
-                media: media.into_iter().map(media_asset_to_proto).collect(),
-                phase: "completed".into(),
-            })),
-        }),
-        MultiTurnStreamItem::MemoryUpdate { op, content } => Some(ChatEvent {
-            payload: Some(proto::chat_event::Payload::MemoryUpdate(
-                proto::MemoryUpdateEvent {
-                    operation: op,
-                    content,
-                },
-            )),
-        }),
-        MultiTurnStreamItem::ContextUsage(snap) => Some(ChatEvent {
-            payload: Some(proto::chat_event::Payload::ContextUsage(
-                ContextUsageEvent {
-                    context_window: snap.context_window,
-                    total_tokens: snap.total_tokens,
-                    segments: snap
-                        .segments
-                        .into_iter()
-                        .map(|s| ContextUsageSegment {
-                            id: s.id,
-                            tokens: s.tokens,
-                            count: s.meta.and_then(|m| m.count).unwrap_or(0),
-                            items: s
-                                .items
-                                .into_iter()
-                                .map(|it| proto::ContextUsageItem {
-                                    id: it.id,
-                                    label: it.label,
-                                    tokens: it.tokens,
-                                })
-                                .collect(),
-                        })
-                        .collect(),
-                    updated_at: snap.updated_at,
-                    recommend_compact: snap.recommend_compact,
-                },
-            )),
-        }),
-        MultiTurnStreamItem::RunStarted { thread_id, run_id } => Some(ChatEvent {
-            payload: Some(proto::chat_event::Payload::RunStarted(
-                proto::RunStartedEvent { thread_id, run_id },
-            )),
-        }),
-        MultiTurnStreamItem::UserInputCommitted { client_message_id } => Some(ChatEvent {
-            payload: Some(proto::chat_event::Payload::UserInputCommitted(
-                proto::UserInputCommittedEvent { client_message_id },
-            )),
-        }),
-        MultiTurnStreamItem::Activity {
-            message_id,
-            activity_type,
-            content_json,
-            replace,
-        } => Some(ChatEvent {
-            payload: Some(proto::chat_event::Payload::Activity(proto::ActivityEvent {
-                message_id,
-                activity_type,
-                content_json,
-                replace,
-            })),
-        }),
-        MultiTurnStreamItem::RunFinished {
-            run_id,
-            outcome_type,
-            interrupts_json,
-        } => {
-            let interrupts = parse_interrupts_json(&interrupts_json);
-            Some(ChatEvent {
-                payload: Some(proto::chat_event::Payload::RunFinished(
-                    proto::RunFinishedEvent {
-                        run_id,
-                        outcome_type,
-                        interrupts,
-                    },
-                )),
-            })
-        }
-        MultiTurnStreamItem::Error(err) => Some(ChatEvent {
-            payload: Some(proto::chat_event::Payload::Error(err)),
-        }),
-        MultiTurnStreamItem::Done => Some(ChatEvent {
-            payload: Some(proto::chat_event::Payload::Done(true)),
-        }),
     }
 }
 
@@ -746,14 +2033,41 @@ fn multi_turn_to_chat_event(item: MultiTurnStreamItem) -> Option<ChatEvent> {
 impl AstroService for AstroServiceImpl {
     /// [`chat`](Self::chat) 流类型。
     type ChatStream = ChatStream;
+    type SubscribeThreadEventsStream =
+        Pin<Box<dyn futures::Stream<Item = Result<proto::ThreadEvent, Status>> + Send>>;
     /// [`generate_image`](Self::generate_image) 流类型。
     type GenerateImageStream =
         Pin<Box<dyn futures::Stream<Item = Result<ImageEvent, Status>> + Send>>;
     /// [`execute_skill`](Self::execute_skill) 流类型。
     type ExecuteSkillStream =
         Pin<Box<dyn futures::Stream<Item = Result<SkillEvent, Status>> + Send>>;
-    /// [`subscribe_session_events`](Self::subscribe_session_events) 流类型。
-    type SubscribeSessionEventsStream = SessionEventsStream;
+    async fn subscribe_thread_events(
+        &self,
+        request: Request<proto::SubscribeThreadEventsRequest>,
+    ) -> Result<Response<Self::SubscribeThreadEventsStream>, Status> {
+        super::thread_service::subscribe_thread_events(self, request).await
+    }
+
+    async fn submit_turn(
+        &self,
+        request: Request<proto::SubmitTurnRequest>,
+    ) -> Result<Response<proto::SubmitTurnResponse>, Status> {
+        super::thread_service::submit_turn(self, request).await
+    }
+
+    async fn resume_thread(
+        &self,
+        request: Request<proto::ResumeThreadRequest>,
+    ) -> Result<Response<proto::ResumeThreadResponse>, Status> {
+        super::thread_service::resume_thread(self, request).await
+    }
+
+    async fn unsubscribe_thread(
+        &self,
+        request: Request<proto::UnsubscribeThreadRequest>,
+    ) -> Result<Response<proto::Empty>, Status> {
+        super::thread_service::unsubscribe_thread(self, request).await
+    }
 
     /// Chat 流控制：暂停 / 继续 / 取消指定 `session_id` 的进行中对话。
     ///
@@ -798,37 +2112,70 @@ impl AstroService for AstroServiceImpl {
                 )));
             };
             drop(sessions);
-            let agent = session.as_ref();
-            agent
+            session
                 .refresh_memory()
+                .await
                 .map_err(|e| Status::internal(e.to_string()))?;
             return Ok(Response::new(Empty {}));
         }
 
-        let map = self.pause_controls.read().await;
-        let Some(pause) = map.get(&req.session_id) else {
+        if matches!(action, ChatControlAction::ChatControlCancel) {
+            if let Some(managed) = self.threads.get(&req.session_id).await {
+                let (_, gate) = managed.runtime.session().ensure_thread_controls();
+                gate.cancel_all().await;
+                managed
+                    .runtime
+                    .submit(agent_protocol::Op::Interrupt)
+                    .await
+                    .map_err(|error| Status::internal(error.to_string()))?;
+                return Ok(Response::new(Empty {}));
+            }
+            let Some(_registration) = self
+                .cancel_current_pause_generation(&req.session_id)
+                .await
+                .map_err(|error| Status::internal(error.to_string()))?
+            else {
+                return Err(Status::not_found(format!(
+                    "会话 {} 当前没有进行中的流式对话",
+                    req.session_id
+                )));
+            };
+            return Ok(Response::new(Empty {}));
+        }
+
+        if let Some(managed) = self.threads.get(&req.session_id).await {
+            let (pause, _) = managed.runtime.session().ensure_thread_controls();
+            match action {
+                ChatControlAction::ChatControlPause => pause.pause(),
+                ChatControlAction::ChatControlResume
+                | ChatControlAction::ChatControlStreamResume => pause.resume(),
+                _ => {}
+            }
+            return Ok(Response::new(Empty {}));
+        }
+
+        let registration = {
+            let operation = self.generation_operation(&req.session_id);
+            let _admission = operation.lock().await;
+            self.pause_controls
+                .read()
+                .expect("pause registry lock poisoned")
+                .get(&req.session_id)
+                .cloned()
+        };
+        let Some(registration) = registration else {
             return Err(Status::not_found(format!(
                 "会话 {} 当前没有进行中的流式对话",
                 req.session_id
             )));
         };
+        let pause = &registration.control;
         match action {
             ChatControlAction::ChatControlPause => pause.pause(),
             ChatControlAction::ChatControlResume | ChatControlAction::ChatControlStreamResume => {
                 pause.resume()
             }
-            ChatControlAction::ChatControlCancel => {
-                pause.cancel();
-                drop(map);
-                self.hitl_registry.cancel_and_remove(&req.session_id).await;
-                clear_interrupt_file(&self.memory_dir, &req.session_id);
-                if let Ok(session) = self.get_session(&req.session_id).await {
-                    session
-                        .abort_all_tasks(TurnAbortReason::Interrupted)
-                        .await
-                        .map_err(|error| Status::internal(error.to_string()))?;
-                }
-            }
+            ChatControlAction::ChatControlCancel => unreachable!("cancel handled above"),
             ChatControlAction::ChatControlNewChat
             | ChatControlAction::ChatControlRefreshMemory
             | ChatControlAction::ReleaseSession
@@ -854,41 +2201,63 @@ impl AstroService for AstroServiceImpl {
             return Err(Status::invalid_argument("steering 内容不能为空"));
         }
 
-        let session = {
-            let sessions = self.sessions.read().await;
-            sessions.get(session_id).cloned()
-        };
-        let Some(session) = session else {
+        let Some(managed) = self.threads.get(session_id).await else {
             return Ok(Response::new(SteerChatResponse {
                 accepted: false,
                 turn_id: String::new(),
             }));
         };
-        let image_data_urls = req
-            .images
-            .iter()
-            .filter_map(|image| {
-                let mime = image.mime.trim();
-                let data = image.data_base64.trim();
-                (!mime.is_empty() && !data.is_empty()).then(|| format!("data:{mime};base64,{data}"))
-            })
-            .collect::<Vec<_>>();
-        let expected_turn_id =
-            (!req.expected_turn_id.trim().is_empty()).then_some(req.expected_turn_id.trim());
-        let client_message_id =
-            (!req.client_message_id.trim().is_empty()).then_some(req.client_message_id.trim());
-        let turn_id = session
-            .steer_input_for_turn(
-                &req.content,
-                &image_data_urls,
-                expected_turn_id,
-                client_message_id,
+        let expected_turn_id = req.expected_turn_id.trim().to_string();
+        if expected_turn_id.is_empty() {
+            return Err(Status::invalid_argument("expected_turn_id 不能为空"));
+        }
+        let mut image_data_urls = Vec::with_capacity(req.images.len());
+        for image in &req.images {
+            let mime = image.mime.trim();
+            let data = image.data_base64.trim();
+            if mime.is_empty() || data.is_empty() {
+                return Err(Status::invalid_argument(
+                    "每个 steering 图片都需要 mime 和 data_base64",
+                ));
+            }
+            image_data_urls.push(format!("data:{mime};base64,{data}"));
+        }
+        let submitted = managed
+            .runtime
+            .submit_turn(
+                agent_protocol::TurnInputRequest {
+                    input: vec![agent_protocol::TurnInput {
+                        content: req.content,
+                        image_data_urls,
+                        client_message_id: (!req.client_message_id.trim().is_empty())
+                            .then(|| req.client_message_id.trim().to_string()),
+                    }],
+                },
+                agent_protocol::TurnInputMode::Steer { expected_turn_id },
             )
-            .await
-            .map_err(|error| Status::failed_precondition(error.to_string()))?;
+            .await;
+        let (_, submission) = match submitted {
+            Ok(submitted) => submitted,
+            Err(error)
+                if matches!(
+                    error.downcast_ref::<agent_protocol::TurnInputError>(),
+                    Some(agent_protocol::TurnInputError::Invalid(_))
+                ) =>
+            {
+                return Ok(Response::new(SteerChatResponse {
+                    accepted: false,
+                    turn_id: String::new(),
+                }));
+            }
+            Err(error) => return Err(Status::failed_precondition(error.to_string())),
+        };
+        let turn_id = submission.turn_id().unwrap_or_default().to_string();
         Ok(Response::new(SteerChatResponse {
-            accepted: turn_id.is_some(),
-            turn_id: turn_id.unwrap_or_default(),
+            accepted: matches!(
+                submission,
+                agent_protocol::TurnInputSubmission::Steered { .. }
+            ),
+            turn_id,
         }))
     }
 
@@ -901,7 +2270,12 @@ impl AstroService for AstroServiceImpl {
         if req.session_id.is_empty() {
             return Err(Status::invalid_argument("session_id 不能为空"));
         }
-        let Some(gate) = self.hitl_registry.get(&req.session_id).await else {
+        let operation = self.generation_operation(&req.session_id);
+        let gate = {
+            let _admission = operation.lock().await;
+            self.hitl_registry.get(&req.session_id).await
+        };
+        let Some(gate) = gate else {
             return Err(Status::failed_precondition(
                 "当前会话没有等待中的 HITL（可能已超时或过期）",
             ));
@@ -912,10 +2286,18 @@ impl AstroService for AstroServiceImpl {
             .map_err(|e| Status::invalid_argument(format!("interrupt resume 无效: {e}")))?;
         // 同批多 HITL：只清已解决项，保留 sibling waiting 的旁路文件
         let remaining = gate.pending_interrupts().await;
-        if remaining.is_empty() {
-            clear_interrupt_file(&self.memory_dir, &req.session_id);
-        } else {
-            let _ = save_interrupt_file(&self.memory_dir, &req.session_id, &remaining);
+        let _admission = operation.lock().await;
+        let is_current = self
+            .hitl_registry
+            .get(&req.session_id)
+            .await
+            .is_some_and(|current| Arc::ptr_eq(&current, &gate));
+        if is_current {
+            if remaining.is_empty() {
+                clear_interrupt_file(&self.memory_dir, &req.session_id);
+            } else {
+                let _ = save_interrupt_file(&self.memory_dir, &req.session_id, &remaining);
+            }
         }
         Ok(Response::new(Empty {}))
     }
@@ -935,361 +2317,8 @@ impl AstroService for AstroServiceImpl {
         &self,
         request: Request<ChatRequest>,
     ) -> Result<Response<Self::ChatStream>, Status> {
-        let req = request.into_inner();
-        let session_id = if req.session_id.is_empty() {
-            Uuid::new_v4().to_string()
-        } else {
-            req.session_id
-        };
-
-        // pre_gateway_dispatch：可 Skip / Rewrite
-        let mut content = req.content;
-        let dispatch = self.hook_runtime.fire_plugin(
-            ::hooks::PRE_GATEWAY_DISPATCH,
-            &::hooks::HookPayload {
-                session_id: session_id.clone(),
-                turn_id: None,
-                prompt: Some(content.clone()),
-                detail: content.chars().take(200).collect(),
-                ..Default::default()
-            },
-        );
-        match dispatch {
-            ::hooks::HookOutcome::Skip(reason) => {
-                let (tx, rx) = tokio::sync::mpsc::channel::<Result<ChatEvent, Status>>(4);
-                let _ = tx
-                    .send(Ok(ChatEvent {
-                        payload: Some(proto::chat_event::Payload::Error(format!(
-                            "请求被钩子跳过: {reason}"
-                        ))),
-                    }))
-                    .await;
-                let _ = tx
-                    .send(Ok(ChatEvent {
-                        payload: Some(proto::chat_event::Payload::Done(true)),
-                    }))
-                    .await;
-                return Ok(Response::new(Box::pin(ReceiverStream::new(rx))));
-            }
-            ::hooks::HookOutcome::Rewrite(msg) => {
-                content = msg;
-            }
-            _ => {}
-        }
-
-        let provider_name = if req.provider.is_empty() {
-            "ollama".to_string()
-        } else {
-            req.provider
-        };
-        let model = req.model;
-        let _resume_json = req.resume_json;
-        let _use_memory = req.use_memory;
-        let api_key = req.api_key;
-        let base_url = req.base_url;
-        let chat_fallbacks = req.chat_fallbacks;
-        let auxiliary_targets = parse_auxiliary_targets(req.auxiliary_targets);
-        let thinking_enabled = req.thinking_enabled;
-        // 当前模型最大输出 token（前端由模型元数据下传）；0 = 用默认。
-        let chat_max_output_tokens = req.max_output_tokens;
-        let image_data_urls: Vec<String> = req
-            .images
-            .iter()
-            .filter_map(|image| {
-                let mime = image.mime.trim();
-                let data = image.data_base64.trim();
-                if mime.is_empty() || data.is_empty() {
-                    return None;
-                }
-                Some(format!("data:{mime};base64,{data}"))
-            })
-            .collect();
-        let reasoning_effort = if req.reasoning_effort.trim().is_empty() {
-            "high".to_string()
-        } else {
-            req.reasoning_effort
-        };
-        let image_targets = tools::image_gen_targets_from_parts(tools::ImageGenParts {
-            provider: &req.image_gen_provider,
-            model: &req.image_gen_model,
-            api_key: &req.image_gen_api_key,
-            base_url: &req.image_gen_base_url,
-            fb_provider: &req.image_gen_fallback_provider,
-            fb_model: &req.image_gen_fallback_model,
-            fb_api_key: &req.image_gen_fallback_api_key,
-            fb_base_url: &req.image_gen_fallback_base_url,
-            video_model: &req.image_gen_video_model,
-            music_model: &req.image_gen_music_model,
-            tts_model: &req.image_gen_tts_model,
-            fb_video_model: &req.image_gen_fallback_video_model,
-            fb_music_model: &req.image_gen_fallback_music_model,
-            fb_tts_model: &req.image_gen_fallback_tts_model,
-            vision_model: &req.image_gen_vision_model,
-            fb_vision_model: &req.image_gen_fallback_vision_model,
-        });
-
-        let session = self.get_session(&session_id).await?;
-        session.set_hook_runtime(Arc::clone(&self.hook_runtime));
-        let steered_turn_id = {
-            let sess = session.as_ref();
-            sess.steer_input(&content, &image_data_urls)
-                .await
-                .map_err(|error| Status::failed_precondition(error.to_string()))?
-        };
-        if steered_turn_id.is_some() {
-            let (tx, rx) = tokio::sync::mpsc::channel::<Result<ChatEvent, Status>>(1);
-            let _ = tx
-                .send(Ok(ChatEvent {
-                    payload: Some(proto::chat_event::Payload::Done(true)),
-                }))
-                .await;
-            return Ok(Response::new(Box::pin(ReceiverStream::new(rx))));
-        }
-        let (hook_tx, mut hook_rx) = tokio::sync::mpsc::unbounded_channel::<::hooks::UiHookEvent>();
-        {
-            let agent = session.as_ref();
-            agent.set_image_gen_targets(image_targets);
-            agent.set_chat_credentials(&provider_name, &model, &api_key, &base_url);
-            // 五类辅助目标随本轮 ChatRequest 刷新；未下传的任务在 Session 内回退主模型。
-            agent.set_auxiliary_targets(auxiliary_targets);
-            if req.context_window > 0 {
-                agent.set_context_window(req.context_window);
-            }
-            agent
-                .set_interaction_mode(tools::InteractionMode::parse(&req.interaction_mode))
-                .await;
-            let project_root = req.project_root.trim();
-            if project_root.is_empty() {
-                agent.set_project_root(None);
-            } else {
-                agent.set_project_root(Some(std::path::PathBuf::from(project_root)));
-            }
-            if let Some(t) = req.temperature {
-                if t.is_finite() && (0.0..=2.0).contains(&t) {
-                    agent.set_temperature(t);
-                }
-            }
-            let raw_params = req.additional_params_json.trim();
-            if !raw_params.is_empty() {
-                if let Ok(v) = serde_json::from_str::<serde_json::Value>(raw_params) {
-                    if v.is_object() {
-                        agent.set_additional_params(v);
-                    }
-                }
-            }
-            self.hook_runtime.ui_slot.set_tx(Some(hook_tx));
-        }
-        // 有活 HITL 时拒绝新 chat（须在 register_pause 之前，避免取消进行中的流）
-        if let Some(gate) = self.hitl_registry.get(&session_id).await {
-            if gate.is_waiting().await {
-                let (tx, rx) = tokio::sync::mpsc::channel::<Result<ChatEvent, Status>>(4);
-                let _ = tx
-                    .send(Ok(ChatEvent {
-                        payload: Some(proto::chat_event::Payload::Error(
-                            "请先完成上方确认或澄清卡片（HITL waiting）".into(),
-                        )),
-                    }))
-                    .await;
-                let _ = tx
-                    .send(Ok(ChatEvent {
-                        payload: Some(proto::chat_event::Payload::Done(true)),
-                    }))
-                    .await;
-                return Ok(Response::new(Box::pin(ReceiverStream::new(rx))));
-            }
-        }
-
-        let pause = self.register_pause(&session_id).await;
-        let pause_controls = self.pause_controls.clone();
-        let hitl_registry = self.hitl_registry.clone();
-        let memory_dir = self.memory_dir.clone();
-        let sid_cleanup = session_id.clone();
-        let ui_slot = self.hook_runtime.ui_slot.clone();
-        let session_events_hub = self.session_event_hub().clone();
-
-        let (tx, rx) = tokio::sync::mpsc::channel::<Result<ChatEvent, Status>>(8);
-        let hook_out = tx.clone();
-        tokio::spawn(async move {
-            while let Some(ev) = hook_rx.recv().await {
-                let _ = hook_out
-                    .send(Ok(ChatEvent {
-                        payload: Some(proto::chat_event::Payload::Hook(proto::HookEvent {
-                            name: ev.name,
-                            detail: ev.detail,
-                            outcome: ev.outcome,
-                        })),
-                    }))
-                    .await;
-            }
-        });
-
-        tokio::spawn(async move {
-            let cleanup = || async {
-                ui_slot.set_tx(None);
-                let mut map = pause_controls.write().await;
-                map.remove(&sid_cleanup);
-                hitl_registry.cancel_and_remove(&sid_cleanup).await;
-            };
-
-            let (temperature, additional_params) = {
-                let agent = session.as_ref();
-                (agent.temperature(), agent.additional_params().clone())
-            };
-
-            let config = ProviderConfig {
-                model: if model.is_empty() {
-                    providers::dispatch::default_model(&provider_name)
-                } else {
-                    model.clone()
-                },
-                api_key: {
-                    let from_req = api_key.trim().to_string();
-                    if !from_req.is_empty() {
-                        from_req
-                    } else {
-                        providers::read_env_api_key(&provider_name).unwrap_or_default()
-                    }
-                },
-                base_url: {
-                    let from_req = base_url.trim().to_string();
-                    if from_req.is_empty() {
-                        None
-                    } else {
-                        Some(from_req)
-                    }
-                },
-                temperature,
-                thinking_enabled,
-                reasoning_effort: reasoning_effort.clone(),
-                additional_params,
-                // 优先用当前模型元数据的 max_output_tokens；未知(0)时回退 8192。
-                // 默认 4096 对会写文件的 agent 偏低，单次写大文件时 tool-call 参数
-                // JSON 易被截断（EOF 解析失败）。
-                max_tokens: if chat_max_output_tokens > 0 {
-                    chat_max_output_tokens
-                } else {
-                    8192
-                },
-                ..ProviderConfig::default()
-            };
-
-            let hitl_gate = HitlGate::new(sid_cleanup.clone());
-            hitl_registry.insert(hitl_gate.clone()).await;
-
-            // primary（ChatRequest 字段）+ chat_fallbacks → Vec<ChatTarget>
-            let mut chat_targets = vec![types::ChatTarget {
-                provider_id: String::new(),
-                backend_id: provider_name.clone(),
-                model: config.model.clone(),
-                api_key: config.api_key.clone(),
-                base_url: config.base_url.clone().unwrap_or_default(),
-            }];
-            for fb in chat_fallbacks {
-                chat_targets.push(types::ChatTarget {
-                    provider_id: fb.provider_id,
-                    backend_id: fb.provider,
-                    model: fb.model,
-                    api_key: fb.api_key,
-                    base_url: fb.base_url,
-                });
-            }
-            {
-                let agent = session.as_ref();
-                agent.set_chat_targets(chat_targets.clone());
-            }
-
-            let session_for_review = session.clone();
-            let agent_id_for_events = {
-                let agent = session.as_ref();
-                agent.agent_id()
-            };
-            let mut stream = stream_multi_turn_with_hitl(
-                session,
-                chat_targets,
-                config,
-                vec![TurnInput::UserInput {
-                    content,
-                    image_data_urls,
-                    client_message_id: None,
-                }],
-                pause,
-                Some(hitl_gate),
-            );
-            let mut run_succeeded = false;
-            while let Some(item) = stream.next().await {
-                match item {
-                    Ok(mt) => {
-                        let is_done = matches!(mt, MultiTurnStreamItem::Done);
-                        if let MultiTurnStreamItem::RunFinished {
-                            ref outcome_type,
-                            ref interrupts_json,
-                            ..
-                        } = mt
-                        {
-                            run_succeeded = allows_post_turn_side_effects(outcome_type);
-                            if outcome_type == "hitl_waiting" || outcome_type == "interrupt" {
-                                let interrupts: Vec<agent::Interrupt> =
-                                    serde_json::from_str(interrupts_json).unwrap_or_default();
-                                if !interrupts.is_empty() {
-                                    let _ =
-                                        save_interrupt_file(&memory_dir, &sid_cleanup, &interrupts);
-                                }
-                            }
-                        }
-                        // 工具入 pending → 只走 Hub（不刷 Chat 时间线）；live 仍走 Chat MemoryUpdate
-                        let skip_chat_memory_update = matches!(
-                            &mt,
-                            MultiTurnStreamItem::MemoryUpdate { content, .. }
-                                if indicates_pending_enqueue(content)
-                        );
-                        if let MultiTurnStreamItem::MemoryUpdate { ref content, .. } = mt {
-                            if indicates_pending_enqueue(content) {
-                                publish_tool_pending_to_hub(
-                                    &session_events_hub,
-                                    &memory_dir,
-                                    &agent_id_for_events,
-                                    content,
-                                );
-                            }
-                        }
-                        if !skip_chat_memory_update {
-                            if let Some(event) = multi_turn_to_chat_event(mt) {
-                                if tx.send(Ok(event)).await.is_err() {
-                                    break;
-                                }
-                            }
-                        }
-                        if is_done {
-                            if run_succeeded {
-                                // 仅成功回合 fire-and-forget review / 标题 → SessionEventHub。
-                                spawn_review_to_hub(
-                                    &session_for_review,
-                                    &sid_cleanup,
-                                    &session_events_hub,
-                                )
-                                .await;
-                                spawn_title_to_hub(&session_for_review, &session_events_hub).await;
-                            }
-                            break;
-                        }
-                    }
-                    Err(err) => {
-                        let _ = tx
-                            .send(Ok(ChatEvent {
-                                payload: Some(proto::chat_event::Payload::Error(err.to_string())),
-                            }))
-                            .await;
-                        break;
-                    }
-                }
-            }
-            clear_interrupt_file(&memory_dir, &sid_cleanup);
-            cleanup().await;
-        });
-
-        Ok(Response::new(Box::pin(ReceiverStream::new(rx))))
+        super::thread_service::chat(self, request).await
     }
-
     /// 文生图流：先推送 progress，再推送 `image_data` 或 error。
     ///
     /// 默认 provider 为 `google`；模型空则用供应商默认图片模型；api_key 空则读环境变量。
@@ -1484,8 +2513,7 @@ impl AstroService for AstroServiceImpl {
         // 优先：指定 agent 的 hub（实时连接状态）；勿用任意会话以免串 agent。
         let sessions = self.sessions.read().await;
         for handle in sessions.values() {
-            let agent = handle.as_ref();
-            let hub = agent.mcp_hub();
+            let hub = handle.mcp_hub();
             let hub_guard = hub.lock().await;
             if hub_guard.agent_id() != Some(agent_id.as_str()) {
                 continue;
@@ -1543,11 +2571,10 @@ impl AstroService for AstroServiceImpl {
 
         let handles: Vec<_> = self.sessions.read().await.values().cloned().collect();
         for handle in handles {
-            let agent = handle.as_ref();
-            if agent.agent_id() != agent_id {
+            if handle.agent_id() != agent_id {
                 continue;
             }
-            if let Err(error) = agent.reconnect_mcp_server(server_id).await {
+            if let Err(error) = handle.reconnect_mcp_server(server_id).await {
                 if error
                     .downcast_ref::<mcp::RequiredMcpServersError>()
                     .is_none()
@@ -1555,7 +2582,7 @@ impl AstroService for AstroServiceImpl {
                     return Err(Status::failed_precondition(error.to_string()));
                 }
             }
-            let hub = agent.mcp_hub();
+            let hub = handle.mcp_hub();
             let servers = hub
                 .lock()
                 .await
@@ -1620,43 +2647,6 @@ impl AstroService for AstroServiceImpl {
             .map_err(|e| Status::invalid_argument(e.to_string()))?;
 
         Ok(Response::new(FileListResponse { entries }))
-    }
-
-    /// 订阅会话级副作用事件（记忆 / pending / Agent Thread），与 Chat 流生命周期解耦。
-    ///
-    /// - `session_id` 为空：仅全局 pending
-    /// - `session_id` 非空：该 session 事件 + 全局 pending
-    /// - `agent_id` 为空：不过滤 agent
-    async fn subscribe_session_events(
-        &self,
-        request: Request<SubscribeSessionEventsRequest>,
-    ) -> Result<Response<Self::SubscribeSessionEventsStream>, Status> {
-        let req = request.into_inner();
-        let filter = SubscribeFilter {
-            session_id: if req.session_id.trim().is_empty() {
-                None
-            } else {
-                Some(req.session_id)
-            },
-            agent_id: if req.agent_id.trim().is_empty() {
-                None
-            } else {
-                Some(req.agent_id)
-            },
-        };
-        let hub = self.session_events.clone();
-        let resume_stream_id = req.stream_id;
-        let after_event_id = req.after_event_id;
-        let (tx, rx) = tokio::sync::mpsc::channel(16);
-        tokio::spawn(async move {
-            let mut filtered = hub.subscribe(filter, &resume_stream_id, after_event_id);
-            while let Some(ev) = filtered.recv().await {
-                if tx.send(Ok(to_proto(&ev))).await.is_err() {
-                    break;
-                }
-            }
-        });
-        Ok(Response::new(Box::pin(ReceiverStream::new(rx))))
     }
 
     async fn count_tokens(
@@ -1785,9 +2775,12 @@ impl AstroService for AstroServiceImpl {
 #[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
+    use crate::ListenerCommand;
 
-    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
+    use agent::streaming::{run_multi_turn_events_with_chat_fn, ChatOverride};
+    use providers::CompletionStream;
     use tempfile::TempDir;
 
     #[test]
@@ -1798,44 +2791,38 @@ mod tests {
         }
     }
 
-    #[test]
-    fn chat_delegates_session_start_to_the_shared_session_runtime() {
-        let source = include_str!("astro_service.rs");
-        let production = source.split("#[cfg(test)]").next().unwrap();
-        let session_start = ["::hooks::SESSION_", "START"].concat();
-
-        assert!(!production.contains(&session_start));
-        assert!(!production.contains("agent.set_hook_bus("));
-        assert!(production.contains("session.set_hook_runtime("));
-    }
-
-    #[test]
-    fn tool_lifecycle_maps_to_started_and_completed_phases() {
-        let started = multi_turn_to_chat_event(MultiTurnStreamItem::ToolStarted {
-            id: "call-1".into(),
-            name: "echo".into(),
-            arguments_json: r#"{"text":"hello"}"#.into(),
-        })
-        .expect("started event");
-        let Some(proto::chat_event::Payload::ToolCall(started)) = started.payload else {
-            panic!("tool call payload");
+    #[tokio::test]
+    async fn agent_thread_projection_carries_unified_stream_generation() {
+        let dir = TempDir::new().unwrap();
+        let control = subagents::AgentControl::open(
+            "projection-root".into(),
+            subagents::AgentGraphStore::open(dir.path().join("graph.db")).unwrap(),
+            subagents::Limits {
+                max_threads: 8,
+                max_depth: 4,
+                max_running: 4,
+            },
+        )
+        .unwrap();
+        control
+            .reserve_spawn(&subagents::AgentPath::root(), "child")
+            .unwrap()
+            .commit()
+            .unwrap();
+        let observation = control
+            .next_activity_after(
+                subagents::ActivityCursor(0),
+                std::time::Duration::from_secs(1),
+            )
+            .await;
+        let subagents::ActivityObservation::Activity(activity) = observation else {
+            panic!("spawn activity missing");
         };
-        assert_eq!(started.phase, "started");
-        assert!(started.result.is_empty());
-
-        let completed = multi_turn_to_chat_event(MultiTurnStreamItem::ToolResult {
-            id: "call-1".into(),
-            name: "echo".into(),
-            arguments_json: r#"{"text":"hello"}"#.into(),
-            result: "hello".into(),
-            media: Vec::new(),
-        })
-        .expect("completed event");
-        let Some(proto::chat_event::Payload::ToolCall(completed)) = completed.payload else {
-            panic!("tool call payload");
-        };
-        assert_eq!(completed.phase, "completed");
-        assert_eq!(completed.result, "hello");
+        let projection = agent_thread_projection(*activity, "generation-2").unwrap();
+        assert_eq!(projection["stream_id"], "generation-2");
+        assert_eq!(projection["activity_sequence"], 1);
+        assert_eq!(projection["canonical_path"], "/root/child");
+        assert_eq!(projection["activity_kind"], "spawned");
     }
 
     #[tokio::test]
@@ -1844,22 +2831,21 @@ mod tests {
         let service = AstroServiceImpl::new(dir.path().to_path_buf());
         let session_id = "release-session-runtime-idempotent";
 
-        service.get_session(session_id).await.unwrap();
-        assert!(
-            agent::exec::dispatch::active_root_runtime_material(dir.path(), session_id)
-                .await
-                .unwrap()
-                .is_some()
-        );
-        let pause = service.register_pause(session_id).await;
+        let session = service.get_session(session_id).await.unwrap();
         let gate = HitlGate::new(session_id.to_string());
-        service.hitl_registry.insert(gate.clone()).await;
+        let (ui_tx, _ui_rx) = tokio::sync::mpsc::unbounded_channel();
+        let pause = service
+            .admit_pause_generation(session_id, &session, Arc::clone(&gate), ui_tx)
+            .await
+            .unwrap();
 
         let request = Request::new(ChatControlRequest {
             session_id: session_id.to_string(),
             action: ChatControlAction::ReleaseSession as i32,
         });
         service.chat_control(request).await.expect("first release");
+        drop(pause);
+        drop(gate);
 
         let request = Request::new(ChatControlRequest {
             session_id: session_id.to_string(),
@@ -1877,108 +2863,1431 @@ mod tests {
         assert!(service
             .pause_controls
             .read()
-            .await
+            .expect("pause registry lock poisoned")
             .get(session_id)
             .is_none());
         assert!(service.hitl_registry.get(session_id).await.is_none());
-        tokio::time::timeout(Duration::from_secs(1), async {
-            loop {
-                let watcher_count = match service.agent_thread_watchers.lock() {
-                    Ok(watchers) => watchers.len(),
-                    Err(poisoned) => poisoned.into_inner().len(),
-                };
-                if watcher_count == 0 {
-                    break;
-                }
-                tokio::time::sleep(Duration::from_millis(20)).await;
-            }
-        })
-        .await
-        .expect("released root watcher is reclaimed");
-        drop(pause);
-        drop(gate);
+        assert!(!service
+            .generation_operations
+            .lock()
+            .unwrap()
+            .contains_key(session_id));
     }
 
     #[tokio::test]
-    async fn replaced_watcher_never_publishes_old_bus_activity_after_new_reset() {
+    async fn cancel_with_stale_pause_does_not_recreate_released_session() {
+        let dir = TempDir::new().unwrap();
+        let service = AstroServiceImpl::new(dir.path().to_path_buf());
+        let session_id = "released-session-with-stale-pause";
+        service
+            .pause_controls
+            .write()
+            .expect("pause registry lock poisoned")
+            .insert(
+                session_id.into(),
+                PauseRegistration {
+                    control: PauseControl::new(),
+                    session: Weak::new(),
+                    hitl_gate: HitlGate::new(session_id),
+                    ui_generation: {
+                        let (tx, _rx) = tokio::sync::mpsc::unbounded_channel();
+                        service.hook_runtime.ui_slot.install_tx(session_id, tx)
+                    },
+                    operation: service.generation_operation(session_id),
+                },
+            );
+        assert!(service.sessions.read().await.get(session_id).is_none());
+
+        service
+            .chat_control(Request::new(ChatControlRequest {
+                session_id: session_id.into(),
+                action: ChatControlAction::ChatControlCancel as i32,
+            }))
+            .await
+            .expect("stale cancel should remain idempotent");
+
+        assert!(
+            service.sessions.read().await.get(session_id).is_none(),
+            "cancel must not lazily recreate a released session"
+        );
+    }
+
+    async fn spawn_pending_turn(
+        session: SessionHandle,
+    ) -> (
+        tokio::task::JoinHandle<()>,
+        tokio::sync::mpsc::Receiver<anyhow::Result<agent_protocol::Event>>,
+    ) {
+        let chat: ChatOverride = Arc::new(|_, _, _| {
+            Box::pin(async move { Ok(Box::pin(futures::stream::pending()) as CompletionStream) })
+        });
+        let (tx, mut rx) = tokio::sync::mpsc::channel(8);
+        let handle = tokio::spawn(run_multi_turn_events_with_chat_fn(
+            session,
+            chat,
+            ProviderConfig {
+                model: "scripted".into(),
+                ..ProviderConfig::default()
+            },
+            "system".into(),
+            PauseControl::new(),
+            None,
+            tx,
+        ));
+        let started = rx.recv().await.expect("pending turn should start").unwrap();
+        assert!(matches!(
+            started.msg,
+            agent_protocol::EventMsg::TurnStarted(_)
+        ));
+        (handle, rx)
+    }
+
+    #[tokio::test]
+    async fn stale_cancel_targets_the_session_generation_that_registered_pause() {
+        let dir = TempDir::new().unwrap();
+        let service = AstroServiceImpl::new(dir.path().to_path_buf());
+        let session_id = "cancel-generation-race";
+        let old_session = service.get_session(session_id).await.unwrap();
+        let (old_turn, _old_rx) = spawn_pending_turn(Arc::clone(&old_session)).await;
+        let old_gate = HitlGate::new(session_id);
+        let (old_ui_tx, _old_ui_rx) = tokio::sync::mpsc::unbounded_channel();
+        let _old_pause = service
+            .admit_pause_generation(session_id, &old_session, old_gate, old_ui_tx)
+            .await
+            .unwrap();
+
+        service.sessions.write().await.remove(session_id);
+        let replacement = service.get_session(session_id).await.unwrap();
+        let (replacement_turn, _replacement_rx) =
+            spawn_pending_turn(Arc::clone(&replacement)).await;
+
+        service
+            .chat_control(Request::new(ChatControlRequest {
+                session_id: session_id.into(),
+                action: ChatControlAction::ChatControlCancel as i32,
+            }))
+            .await
+            .expect("stale cancel should remain valid for its exact generation");
+
+        assert!(
+            old_session.cancel_signal().is_cancelled(),
+            "the pause registration must retain the old session generation"
+        );
+        assert!(
+            !replacement.cancel_signal().is_cancelled(),
+            "a same-id replacement session must not be cancelled"
+        );
+
+        replacement
+            .abort_all_tasks(TurnAbortReason::Replaced)
+            .await
+            .unwrap();
+        old_turn.await.unwrap();
+        replacement_turn.await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn stale_session_arc_cannot_admit_over_its_same_id_replacement() {
+        let dir = TempDir::new().unwrap();
+        let service = AstroServiceImpl::new(dir.path().to_path_buf());
+        let session_id = "stale-admission-session";
+        let stale = service.get_session(session_id).await.unwrap();
+        service.sessions.write().await.remove(session_id);
+        let replacement = service.get_session(session_id).await.unwrap();
+        assert!(!Arc::ptr_eq(&stale, &replacement));
+
+        let (stale_ui_tx, _stale_ui_rx) = tokio::sync::mpsc::unbounded_channel();
+        assert!(
+            service
+                .admit_pause_generation(session_id, &stale, HitlGate::new(session_id), stale_ui_tx,)
+                .await
+                .is_none(),
+            "an Arc removed from sessions must not overwrite the replacement generation"
+        );
+        assert!(service
+            .pause_controls
+            .read()
+            .expect("pause registry lock poisoned")
+            .get(session_id)
+            .is_none());
+
+        let (replacement_ui_tx, _replacement_ui_rx) = tokio::sync::mpsc::unbounded_channel();
+        assert!(service
+            .admit_pause_generation(
+                session_id,
+                &replacement,
+                HitlGate::new(session_id),
+                replacement_ui_tx,
+            )
+            .await
+            .is_some());
+    }
+
+    #[tokio::test]
+    async fn concurrent_generation_setup_and_install_keep_request_settings_together() {
         let dir = TempDir::new().unwrap();
         let service = Arc::new(AstroServiceImpl::new(dir.path().to_path_buf()));
-        let root = "watcher-generation-fence";
-        let store = subagents::AgentGraphStore::open(dir.path().join("graph.db")).unwrap();
-        let limits = subagents::Limits {
-            max_threads: 32,
-            max_depth: 8,
-            max_running: 8,
-        };
-        let old = subagents::AgentControl::open(root.into(), store.clone(), limits).unwrap();
-        service.attach_agent_thread_watcher(root, "default", Arc::clone(&old));
-        tokio::time::sleep(Duration::from_millis(20)).await;
-
-        // Block both the old observer's generation check and the replacement
-        // attach. Whichever acquires this lock first after release establishes
-        // a total order: old projection before reset, or no old projection.
-        let registry_guard = match service.agent_thread_watchers.lock() {
-            Ok(watchers) => watchers,
-            Err(poisoned) => poisoned.into_inner(),
-        };
-        let old_activity = old
-            .reserve_spawn(&subagents::AgentPath::root(), "old_pending")
+        let session_id = "generation-config-isolation";
+        let session = service.get_session(session_id).await.unwrap();
+        let (ui_tx, _ui_rx) = tokio::sync::mpsc::unbounded_channel();
+        let registration = service
+            .admit_pause_generation(session_id, &session, HitlGate::new(session_id), ui_tx)
+            .await
             .unwrap();
-        let old_thread_id = old_activity.thread_id().to_string();
-        old_activity.commit().unwrap();
-        old.record_runner_event(&old_thread_id, subagents::RunnerEvent::RuntimeTerminated)
-            .unwrap();
-        drop(old);
+        let first_setup_started = Arc::new(tokio::sync::Notify::new());
+        let release_first_setup = Arc::new(tokio::sync::Notify::new());
+        let second_setup_started = Arc::new(AtomicBool::new(false));
+        let first = {
+            let service = Arc::clone(&service);
+            let session = Arc::clone(&session);
+            let launch_session = Arc::clone(&session);
+            let registration = registration.clone();
+            let first_setup_started = Arc::clone(&first_setup_started);
+            let release_first_setup = Arc::clone(&release_first_setup);
+            tokio::spawn(async move {
+                service
+                    .launch_current_pause_generation_with_setup(
+                        session_id,
+                        &registration,
+                        &session,
+                        move |session| async move {
+                            session
+                                .set_interaction_mode(tools::InteractionMode::Plan)
+                                .await;
+                            session.set_temperature(0.2);
+                            first_setup_started.notify_one();
+                            release_first_setup.notified().await;
+                        },
+                        move || {
+                            let session = Arc::clone(&launch_session);
+                            async move { (session.interaction_mode().await, session.temperature()) }
+                        },
+                    )
+                    .await
+                    .unwrap()
+            })
+        };
+        first_setup_started.notified().await;
 
-        let replacement = subagents::AgentControl::open(root.into(), store, limits).unwrap();
-        let mut events = service.session_events.subscribe_raw();
-        let attach_service = Arc::clone(&service);
-        let attach_control = Arc::clone(&replacement);
-        let attach = tokio::task::spawn_blocking(move || {
-            attach_service.attach_agent_thread_watcher(root, "default", attach_control);
+        let second = {
+            let service = Arc::clone(&service);
+            let session = Arc::clone(&session);
+            let launch_session = Arc::clone(&session);
+            let registration = registration.clone();
+            let second_setup_started = Arc::clone(&second_setup_started);
+            tokio::spawn(async move {
+                service
+                    .launch_current_pause_generation_with_setup(
+                        session_id,
+                        &registration,
+                        &session,
+                        move |session| async move {
+                            second_setup_started.store(true, Ordering::SeqCst);
+                            session
+                                .set_interaction_mode(tools::InteractionMode::Ask)
+                                .await;
+                            session.set_temperature(1.4);
+                        },
+                        move || {
+                            let session = Arc::clone(&launch_session);
+                            async move { (session.interaction_mode().await, session.temperature()) }
+                        },
+                    )
+                    .await
+                    .unwrap()
+            })
+        };
+        tokio::task::yield_now().await;
+        assert!(
+            !second_setup_started.load(Ordering::SeqCst),
+            "the second request must not apply settings before the first installs"
+        );
+        release_first_setup.notify_one();
+
+        let first = first.await.unwrap();
+        let second = second.await.unwrap();
+        assert_eq!(first, (tools::InteractionMode::Plan, 0.2));
+        assert_eq!(second, (tools::InteractionMode::Ask, 1.4));
+    }
+
+    #[tokio::test]
+    async fn cancelled_generation_launch_cleans_registration_and_restores_settings() {
+        let dir = TempDir::new().unwrap();
+        let service = Arc::new(AstroServiceImpl::new(dir.path().to_path_buf()));
+        let session_id = "cancelled-generation-launch";
+        let session = service.get_session(session_id).await.unwrap();
+        let initial_temperature = session.temperature();
+        let (ui_tx, mut ui_rx) = tokio::sync::mpsc::unbounded_channel();
+        let gate = HitlGate::new(session_id);
+        let registration = service
+            .admit_pause_generation(session_id, &session, Arc::clone(&gate), ui_tx)
+            .await
+            .unwrap();
+        let setup_applied = Arc::new(tokio::sync::Notify::new());
+        let release_launch = Arc::new(tokio::sync::Notify::new());
+        let launch_owner = tokio::spawn({
+            let service = Arc::clone(&service);
+            let session = Arc::clone(&session);
+            let setup_applied = Arc::clone(&setup_applied);
+            let release_launch = Arc::clone(&release_launch);
+            async move {
+                service
+                    .launch_current_pause_generation_with_setup(
+                        session_id,
+                        &registration,
+                        &session,
+                        move |session| async move {
+                            session.set_temperature(0.2);
+                            session
+                                .set_interaction_mode(tools::InteractionMode::Ask)
+                                .await;
+                            setup_applied.notify_one();
+                        },
+                        move || async move {
+                            release_launch.notified().await;
+                        },
+                    )
+                    .await
+            }
         });
-        std::thread::sleep(Duration::from_millis(20));
-        drop(registry_guard);
-        attach.await.unwrap();
+        setup_applied.notified().await;
+        launch_owner.abort();
+        assert!(launch_owner.await.unwrap_err().is_cancelled());
+        release_launch.notify_one();
 
-        let reset = tokio::time::timeout(Duration::from_secs(2), async {
+        tokio::time::timeout(std::time::Duration::from_secs(1), async {
             loop {
-                let event = events.recv().await.unwrap();
-                if event
-                    .event
-                    .resync_required
-                    .as_ref()
-                    .is_some_and(|reset| reset.reason == "agent_control_generation_changed")
+                if service
+                    .pause_controls
+                    .read()
+                    .expect("pause registry lock poisoned")
+                    .get(session_id)
+                    .is_none()
+                    && service.hitl_registry.get(session_id).await.is_none()
                 {
-                    break event;
+                    break;
                 }
+                tokio::task::yield_now().await;
             }
         })
         .await
-        .expect("replacement reset timeout");
+        .expect("abandoned generation must be cleaned by service-owned work");
+        assert!(matches!(
+            ui_rx.try_recv(),
+            Err(tokio::sync::mpsc::error::TryRecvError::Disconnected)
+        ));
 
-        let new_activity = replacement
-            .reserve_spawn(&subagents::AgentPath::root(), "new_generation")
+        let (next_ui_tx, _next_ui_rx) = tokio::sync::mpsc::unbounded_channel();
+        let next = service
+            .admit_pause_generation(session_id, &session, HitlGate::new(session_id), next_ui_tx)
+            .await
             .unwrap();
-        new_activity.commit().unwrap();
-        let projection = tokio::time::timeout(Duration::from_secs(2), async {
-            loop {
-                let event = events.recv().await.unwrap();
-                if let Some(projection) = event.event.agent_thread_changed {
-                    assert_ne!(
-                        projection.canonical_path, "/root/old_pending",
-                        "old-generation activity crossed the replacement reset"
-                    );
-                    if projection.canonical_path == "/root/new_generation" {
-                        break (event.stream_id, projection);
-                    }
+        let inherited = service
+            .launch_current_pause_generation_with_setup(
+                session_id,
+                &next,
+                &session,
+                |_| async {},
+                {
+                    let session = Arc::clone(&session);
+                    move || async move { session.temperature() }
+                },
+            )
+            .await
+            .unwrap();
+        assert_eq!(inherited, initial_temperature);
+    }
+
+    #[tokio::test]
+    async fn abandoned_launch_reply_after_send_rolls_back_exact_generation() {
+        let dir = TempDir::new().unwrap();
+        let service = Arc::new(AstroServiceImpl::new(dir.path().to_path_buf()));
+        let session_id = "abandoned-launch-reply-after-send";
+        let session = service.get_session(session_id).await.unwrap();
+        let initial_temperature = session.temperature();
+        let initial_mode = session.interaction_mode().await;
+        let gate = HitlGate::new(session_id);
+        let mut gate_wait = gate
+            .begin_wait(agent::Interrupt {
+                id: "abandoned-launch-reply-gate".into(),
+                ..Default::default()
+            })
+            .await;
+        let (ui_tx, mut ui_rx) = tokio::sync::mpsc::unbounded_channel();
+        let registration = service
+            .admit_pause_generation(session_id, &session, Arc::clone(&gate), ui_tx)
+            .await
+            .unwrap();
+        let (reply_tx, reply_rx) = tokio::sync::oneshot::channel();
+        let worker = tokio::spawn({
+            let service = Arc::clone(&service);
+            let worker_session = Arc::clone(&session);
+            let launch_session = Arc::clone(&session);
+            async move {
+                service
+                    .run_generation_launch_worker(
+                        session_id.to_string(),
+                        registration,
+                        worker_session,
+                        move |session| async move {
+                            session.set_temperature(0.2);
+                            session
+                                .set_interaction_mode(tools::InteractionMode::Ask)
+                                .await;
+                        },
+                        move || async move { spawn_pending_turn(launch_session).await },
+                        reply_tx,
+                    )
+                    .await;
+            }
+        });
+
+        let guarded_reply = reply_rx
+            .await
+            .expect("worker must send its launch reply")
+            .expect("current generation must launch");
+        tokio::task::yield_now().await;
+        assert!(
+            !worker.is_finished(),
+            "a successful reply send must leave the worker waiting for caller acceptance"
+        );
+        assert_eq!(session.temperature(), 0.2);
+        assert_eq!(
+            session.interaction_mode().await,
+            tools::InteractionMode::Ask
+        );
+        assert!(!session.cancel_signal().is_cancelled());
+
+        drop(guarded_reply);
+        tokio::time::timeout(std::time::Duration::from_secs(1), worker)
+            .await
+            .expect("false acknowledgement must release the launch worker")
+            .unwrap();
+
+        assert!(session.cancel_signal().is_cancelled());
+        assert_eq!(session.temperature(), initial_temperature);
+        assert_eq!(session.interaction_mode().await, initial_mode);
+        assert_eq!(
+            tokio::time::timeout(std::time::Duration::from_secs(1), &mut gate_wait)
+                .await
+                .expect("false acknowledgement must resolve the exact gate")
+                .expect("gate resolution")
+                .status,
+            "cancelled"
+        );
+        assert!(service
+            .pause_controls
+            .read()
+            .expect("pause registry lock poisoned")
+            .get(session_id)
+            .is_none());
+        assert!(service.hitl_registry.get(session_id).await.is_none());
+        loop {
+            match ui_rx.try_recv() {
+                Ok(_) => {}
+                Err(tokio::sync::mpsc::error::TryRecvError::Disconnected) => break,
+                Err(tokio::sync::mpsc::error::TryRecvError::Empty) => {
+                    panic!("false acknowledgement must detach the exact UI generation")
                 }
+            }
+        }
+        assert!(!service
+            .generation_operations
+            .lock()
+            .unwrap()
+            .contains_key(session_id));
+    }
+
+    #[tokio::test]
+    async fn abandoned_prepared_admission_after_send_does_not_commit() {
+        let dir = TempDir::new().unwrap();
+        let service = Arc::new(AstroServiceImpl::new(dir.path().to_path_buf()));
+        let session_id = "abandoned-admission-reply-after-send";
+        let session = service.get_session(session_id).await.unwrap();
+        let live_gate = HitlGate::new(session_id);
+        let (live_ui_tx, mut live_ui_rx) = tokio::sync::mpsc::unbounded_channel();
+        let live = service
+            .admit_pause_generation(session_id, &session, Arc::clone(&live_gate), live_ui_tx)
+            .await
+            .unwrap();
+        let abandoned_gate = HitlGate::new(session_id);
+        let (abandoned_ui_tx, mut abandoned_ui_rx) = tokio::sync::mpsc::unbounded_channel();
+        let (reply_tx, reply_rx) = tokio::sync::oneshot::channel();
+        let worker = tokio::spawn({
+            let service = Arc::clone(&service);
+            let session = Arc::clone(&session);
+            let abandoned_gate = Arc::clone(&abandoned_gate);
+            async move {
+                service
+                    .run_admit_pause_generation_worker(
+                        session_id.to_string(),
+                        session,
+                        abandoned_gate,
+                        abandoned_ui_tx,
+                        reply_tx,
+                    )
+                    .await;
+            }
+        });
+
+        let prepared = reply_rx
+            .await
+            .expect("worker must send its admission reply")
+            .expect("current session must be admitted");
+        tokio::time::timeout(std::time::Duration::from_secs(1), worker)
+            .await
+            .expect("prepare worker must finish after transferring the commit capability")
+            .unwrap();
+        assert!(service
+            .pause_controls
+            .read()
+            .expect("pause registry lock poisoned")
+            .get(session_id)
+            .is_some_and(|current| Arc::ptr_eq(&current.control, &live.control)));
+        assert!(!live.control.is_cancelled());
+
+        drop(prepared);
+        assert!(service
+            .pause_controls
+            .read()
+            .expect("pause registry lock poisoned")
+            .get(session_id)
+            .is_some_and(|current| Arc::ptr_eq(&current.control, &live.control)));
+        assert!(!live.control.is_cancelled());
+        assert!(service
+            .hitl_registry
+            .get(session_id)
+            .await
+            .is_some_and(|gate| Arc::ptr_eq(&gate, &live_gate)));
+        loop {
+            match abandoned_ui_rx.try_recv() {
+                Ok(_) => {}
+                Err(tokio::sync::mpsc::error::TryRecvError::Disconnected) => break,
+                Err(tokio::sync::mpsc::error::TryRecvError::Empty) => {
+                    panic!("false acknowledgement must detach the abandoned UI generation")
+                }
+            }
+        }
+        let _ = service.hook_runtime.plugin.fire(
+            ::hooks::PRE_LLM_CALL,
+            &::hooks::HookPayload {
+                session_id: session_id.into(),
+                ..Default::default()
+            },
+        );
+        assert_eq!(live_ui_rx.try_recv().unwrap().name, ::hooks::PRE_LLM_CALL);
+        assert!(service
+            .generation_operations
+            .lock()
+            .unwrap()
+            .contains_key(session_id));
+
+        let replacement_gate = HitlGate::new(session_id);
+        let (replacement_ui_tx, mut replacement_ui_rx) = tokio::sync::mpsc::unbounded_channel();
+        let replacement = service
+            .admit_pause_generation(
+                session_id,
+                &session,
+                Arc::clone(&replacement_gate),
+                replacement_ui_tx,
+            )
+            .await
+            .expect("a replacement must admit after abandoned handoff cleanup");
+        assert!(!replacement.control.is_cancelled());
+        assert!(service
+            .hitl_registry
+            .get(session_id)
+            .await
+            .is_some_and(|gate| Arc::ptr_eq(&gate, &replacement_gate)));
+        let _ = service.hook_runtime.plugin.fire(
+            ::hooks::PRE_LLM_CALL,
+            &::hooks::HookPayload {
+                session_id: session_id.into(),
+                ..Default::default()
+            },
+        );
+        assert_eq!(
+            replacement_ui_rx.try_recv().unwrap().name,
+            ::hooks::PRE_LLM_CALL
+        );
+    }
+
+    #[tokio::test]
+    async fn abandoned_prepared_admission_without_live_generation_prunes_operation() {
+        let dir = TempDir::new().unwrap();
+        let service = Arc::new(AstroServiceImpl::new(dir.path().to_path_buf()));
+        let session_id = "abandoned-prepared-admission-prunes-operation";
+        let session = service.get_session(session_id).await.unwrap();
+        let (ui_tx, _ui_rx) = tokio::sync::mpsc::unbounded_channel();
+        let (reply_tx, reply_rx) = tokio::sync::oneshot::channel();
+        let worker = tokio::spawn({
+            let service = Arc::clone(&service);
+            let session = Arc::clone(&session);
+            async move {
+                service
+                    .run_admit_pause_generation_worker(
+                        session_id.to_string(),
+                        session,
+                        HitlGate::new(session_id),
+                        ui_tx,
+                        reply_tx,
+                    )
+                    .await;
+            }
+        });
+
+        let prepared = reply_rx
+            .await
+            .expect("worker must send its prepared admission")
+            .expect("current session must prepare admission");
+        worker.await.unwrap();
+        assert!(service
+            .generation_operations
+            .lock()
+            .unwrap()
+            .contains_key(session_id));
+
+        drop(prepared);
+        assert!(!service
+            .generation_operations
+            .lock()
+            .unwrap()
+            .contains_key(session_id));
+    }
+
+    #[tokio::test]
+    async fn closed_admission_reply_does_not_replace_live_generation() {
+        let dir = TempDir::new().unwrap();
+        let service = AstroServiceImpl::new(dir.path().to_path_buf());
+        let session_id = "closed-admission-reply-live-generation";
+        let session = service.get_session(session_id).await.unwrap();
+        let live_gate = HitlGate::new(session_id);
+        let (live_ui_tx, mut live_ui_rx) = tokio::sync::mpsc::unbounded_channel();
+        let live = service
+            .admit_pause_generation(session_id, &session, Arc::clone(&live_gate), live_ui_tx)
+            .await
+            .unwrap();
+
+        let (reply_tx, reply_rx) = tokio::sync::oneshot::channel();
+        drop(reply_rx);
+        let (abandoned_ui_tx, _abandoned_ui_rx) = tokio::sync::mpsc::unbounded_channel();
+        service
+            .run_admit_pause_generation_worker(
+                session_id.to_string(),
+                Arc::clone(&session),
+                HitlGate::new(session_id),
+                abandoned_ui_tx,
+                reply_tx,
+            )
+            .await;
+
+        assert!(
+            !live.control.is_cancelled(),
+            "a closed caller must not irreversibly cancel the live generation"
+        );
+        assert!(service
+            .pause_controls
+            .read()
+            .expect("pause registry lock poisoned")
+            .get(session_id)
+            .is_some_and(|current| Arc::ptr_eq(&current.control, &live.control)));
+        assert!(service
+            .hitl_registry
+            .get(session_id)
+            .await
+            .is_some_and(|gate| Arc::ptr_eq(&gate, &live_gate)));
+        let _ = service.hook_runtime.plugin.fire(
+            ::hooks::PRE_LLM_CALL,
+            &::hooks::HookPayload {
+                session_id: session_id.into(),
+                ..Default::default()
+            },
+        );
+        assert_eq!(live_ui_rx.try_recv().unwrap().name, ::hooks::PRE_LLM_CALL);
+    }
+
+    #[tokio::test]
+    async fn stale_chat_cleanup_preserves_replacement_pause_gate_and_ui() {
+        let dir = TempDir::new().unwrap();
+        let service = AstroServiceImpl::new(dir.path().to_path_buf());
+        let session_id = "cleanup-generation-race";
+        let old_session = service.get_session(session_id).await.unwrap();
+        let old_gate = HitlGate::new(session_id);
+        let old_gate_rx = old_gate
+            .begin_wait(agent::Interrupt {
+                id: "old-gate".into(),
+                ..Default::default()
+            })
+            .await;
+        service.hitl_registry.insert(Arc::clone(&old_gate)).await;
+        let (old_ui_tx, _old_ui_rx) = tokio::sync::mpsc::unbounded_channel();
+        let old_ui_generation = service
+            .hook_runtime
+            .ui_slot
+            .install_tx(session_id, old_ui_tx);
+        let old_registration = PauseRegistration {
+            control: PauseControl::new(),
+            session: Arc::downgrade(&old_session),
+            hitl_gate: Arc::clone(&old_gate),
+            ui_generation: old_ui_generation,
+            operation: service.generation_operation(session_id),
+        };
+        service
+            .pause_controls
+            .write()
+            .expect("pause registry lock poisoned")
+            .insert(session_id.into(), old_registration.clone());
+
+        service.sessions.write().await.remove(session_id);
+        let replacement = service.get_session(session_id).await.unwrap();
+        let replacement_gate = HitlGate::new(session_id);
+        let mut replacement_gate_rx = replacement_gate
+            .begin_wait(agent::Interrupt {
+                id: "replacement-gate".into(),
+                ..Default::default()
+            })
+            .await;
+        service
+            .hitl_registry
+            .insert(Arc::clone(&replacement_gate))
+            .await;
+        let (replacement_ui_tx, mut replacement_ui_rx) = tokio::sync::mpsc::unbounded_channel();
+        let replacement_ui_generation = service
+            .hook_runtime
+            .ui_slot
+            .install_tx(session_id, replacement_ui_tx);
+        let replacement_registration = PauseRegistration {
+            control: PauseControl::new(),
+            session: Arc::downgrade(&replacement),
+            hitl_gate: Arc::clone(&replacement_gate),
+            ui_generation: replacement_ui_generation,
+            operation: service.generation_operation(session_id),
+        };
+        service
+            .pause_controls
+            .write()
+            .expect("pause registry lock poisoned")
+            .insert(session_id.into(), replacement_registration.clone());
+
+        service
+            .cleanup_pause_generation(session_id, &old_registration)
+            .await;
+
+        assert!(old_registration.control.is_cancelled());
+        assert_eq!(old_gate_rx.await.unwrap().status, "cancelled");
+        assert!(replacement_gate_rx.try_recv().is_err());
+        assert!(service
+            .pause_controls
+            .read()
+            .expect("pause registry lock poisoned")
+            .get(session_id)
+            .is_some_and(|registration| Arc::ptr_eq(
+                &registration.control,
+                &replacement_registration.control
+            )));
+        assert!(service
+            .hitl_registry
+            .get(session_id)
+            .await
+            .is_some_and(|gate| Arc::ptr_eq(&gate, &replacement_gate)));
+
+        let _ = service.hook_runtime.plugin.fire(
+            ::hooks::PRE_LLM_CALL,
+            &::hooks::HookPayload {
+                session_id: session_id.into(),
+                system_prompt_chars: Some(17),
+                ..Default::default()
+            },
+        );
+        assert_eq!(
+            replacement_ui_rx.try_recv().unwrap().name,
+            ::hooks::PRE_LLM_CALL
+        );
+    }
+
+    #[tokio::test]
+    async fn concurrent_chat_admission_and_stale_cleanup_preserve_one_generation() {
+        let dir = TempDir::new().unwrap();
+        let service = Arc::new(AstroServiceImpl::new(dir.path().to_path_buf()));
+        let session_id = "concurrent-chat-generation";
+        let session = service.get_session(session_id).await.unwrap();
+        let gate_a = HitlGate::new(session_id);
+        let gate_b = HitlGate::new(session_id);
+        let (ui_tx_a, mut ui_rx_a) = tokio::sync::mpsc::unbounded_channel();
+        let (ui_tx_b, mut ui_rx_b) = tokio::sync::mpsc::unbounded_channel();
+        let barrier = Arc::new(tokio::sync::Barrier::new(3));
+
+        let admission_a = {
+            let service = Arc::clone(&service);
+            let session = Arc::clone(&session);
+            let gate = Arc::clone(&gate_a);
+            let barrier = Arc::clone(&barrier);
+            tokio::spawn(async move {
+                barrier.wait().await;
+                service
+                    .admit_pause_generation(session_id, &session, gate, ui_tx_a)
+                    .await
+                    .unwrap()
+            })
+        };
+        let admission_b = {
+            let service = Arc::clone(&service);
+            let session = Arc::clone(&session);
+            let gate = Arc::clone(&gate_b);
+            let barrier = Arc::clone(&barrier);
+            tokio::spawn(async move {
+                barrier.wait().await;
+                service
+                    .admit_pause_generation(session_id, &session, gate, ui_tx_b)
+                    .await
+                    .unwrap()
+            })
+        };
+        barrier.wait().await;
+        let registration_a = admission_a.await.unwrap();
+        let registration_b = admission_b.await.unwrap();
+
+        let current = service
+            .pause_controls
+            .read()
+            .expect("pause registry lock poisoned")
+            .get(session_id)
+            .cloned()
+            .expect("one generation remains registered");
+        let (winner, loser, winner_gate, winner_ui_rx, loser_ui_rx) =
+            if Arc::ptr_eq(&current.control, &registration_a.control) {
+                (
+                    registration_a,
+                    registration_b,
+                    gate_a,
+                    &mut ui_rx_a,
+                    &mut ui_rx_b,
+                )
+            } else {
+                (
+                    registration_b,
+                    registration_a,
+                    gate_b,
+                    &mut ui_rx_b,
+                    &mut ui_rx_a,
+                )
+            };
+        assert!(service
+            .hitl_registry
+            .get(session_id)
+            .await
+            .is_some_and(|gate| Arc::ptr_eq(&gate, &winner_gate)));
+
+        save_interrupt_file(
+            &service.memory_dir,
+            session_id,
+            &[agent::Interrupt {
+                id: "winner-interrupt".into(),
+                ..Default::default()
+            }],
+        )
+        .unwrap();
+        service.cleanup_pause_generation(session_id, &loser).await;
+
+        assert!(service
+            .pause_controls
+            .read()
+            .expect("pause registry lock poisoned")
+            .get(session_id)
+            .is_some_and(|registration| Arc::ptr_eq(&registration.control, &winner.control)));
+        assert!(service
+            .hitl_registry
+            .get(session_id)
+            .await
+            .is_some_and(|gate| Arc::ptr_eq(&gate, &winner_gate)));
+        let _ = service.hook_runtime.plugin.fire(
+            ::hooks::PRE_LLM_CALL,
+            &::hooks::HookPayload {
+                session_id: session_id.into(),
+                ..Default::default()
+            },
+        );
+        assert_eq!(winner_ui_rx.try_recv().unwrap().name, ::hooks::PRE_LLM_CALL);
+        assert!(loser_ui_rx.try_recv().is_err());
+        let interrupt_path =
+            crate::grpc::interrupt_store::interrupt_file_path(&service.memory_dir, session_id);
+        let interrupts: Vec<agent::Interrupt> =
+            serde_json::from_slice(&std::fs::read(interrupt_path).unwrap()).unwrap();
+        assert_eq!(interrupts[0].id, "winner-interrupt");
+    }
+
+    #[tokio::test]
+    async fn same_session_admission_waits_for_cancel_abort_to_finish() {
+        let dir = TempDir::new().unwrap();
+        let service = Arc::new(AstroServiceImpl::new(dir.path().to_path_buf()));
+        let session_id = "cancel-admission-generation";
+        let session = service.get_session(session_id).await.unwrap();
+        let other_session_id = "independent-generation";
+        let other_session = service.get_session(other_session_id).await.unwrap();
+        let (old_ui_tx, _old_ui_rx) = tokio::sync::mpsc::unbounded_channel();
+        service
+            .admit_pause_generation(session_id, &session, HitlGate::new(session_id), old_ui_tx)
+            .await
+            .unwrap();
+
+        let cancel_entered = Arc::new(tokio::sync::Barrier::new(2));
+        let allow_abort = Arc::new(tokio::sync::Barrier::new(2));
+        let cancel = {
+            let service = Arc::clone(&service);
+            let cancel_entered = Arc::clone(&cancel_entered);
+            let allow_abort = Arc::clone(&allow_abort);
+            tokio::spawn(async move {
+                service
+                    .cancel_current_pause_generation_with(session_id, move |session| async move {
+                        cancel_entered.wait().await;
+                        allow_abort.wait().await;
+                        if let Some(session) = session {
+                            session
+                                .abort_all_tasks(TurnAbortReason::Interrupted)
+                                .await?;
+                        }
+                        Ok(())
+                    })
+                    .await
+            })
+        };
+        cancel_entered.wait().await;
+
+        let (new_ui_tx, _new_ui_rx) = tokio::sync::mpsc::unbounded_channel();
+        let admission = {
+            let service = Arc::clone(&service);
+            let session = Arc::clone(&session);
+            tokio::spawn(async move {
+                service
+                    .admit_pause_generation(
+                        session_id,
+                        &session,
+                        HitlGate::new(session_id),
+                        new_ui_tx,
+                    )
+                    .await
+            })
+        };
+        tokio::task::yield_now().await;
+        assert!(
+            !admission.is_finished(),
+            "new generation must wait until old cancel finishes aborting its Session"
+        );
+        let (other_ui_tx, _other_ui_rx) = tokio::sync::mpsc::unbounded_channel();
+        tokio::time::timeout(
+            std::time::Duration::from_secs(1),
+            service.admit_pause_generation(
+                other_session_id,
+                &other_session,
+                HitlGate::new(other_session_id),
+                other_ui_tx,
+            ),
+        )
+        .await
+        .expect("a different session must not wait behind the blocked cancel")
+        .unwrap();
+
+        allow_abort.wait().await;
+        cancel.await.unwrap().unwrap().unwrap();
+        let new_registration = admission.await.unwrap().unwrap();
+        assert!(!new_registration.control.is_cancelled());
+
+        let (new_turn, _new_rx) = spawn_pending_turn(Arc::clone(&session)).await;
+        tokio::task::yield_now().await;
+        assert!(
+            !new_turn.is_finished(),
+            "the completed old cancel must not abort the newly admitted turn"
+        );
+        session
+            .abort_all_tasks(TurnAbortReason::Replaced)
+            .await
+            .unwrap();
+        new_turn.await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn cancelled_cancel_owner_still_finishes_gate_cleanup() {
+        let dir = TempDir::new().unwrap();
+        let service = Arc::new(AstroServiceImpl::new(dir.path().to_path_buf()));
+        let session_id = "cancelled-cancel-owner";
+        let session = service.get_session(session_id).await.unwrap();
+        let gate = HitlGate::new(session_id);
+        let (ui_tx, _ui_rx) = tokio::sync::mpsc::unbounded_channel();
+        service
+            .admit_pause_generation(session_id, &session, Arc::clone(&gate), ui_tx)
+            .await
+            .unwrap();
+        let mut gate_wait = gate
+            .begin_wait(agent::Interrupt {
+                id: "cancel-owner-gate".into(),
+                ..Default::default()
+            })
+            .await;
+        let abort_entered = Arc::new(tokio::sync::Notify::new());
+        let release_abort = Arc::new(tokio::sync::Notify::new());
+        let owner = tokio::spawn({
+            let service = Arc::clone(&service);
+            let abort_entered = Arc::clone(&abort_entered);
+            let release_abort = Arc::clone(&release_abort);
+            async move {
+                service
+                    .cancel_current_pause_generation_with(session_id, move |_| async move {
+                        abort_entered.notify_one();
+                        release_abort.notified().await;
+                        Ok(())
+                    })
+                    .await
+            }
+        });
+        abort_entered.notified().await;
+        owner.abort();
+        assert!(matches!(owner.await, Err(error) if error.is_cancelled()));
+        release_abort.notify_one();
+
+        let resolution = tokio::time::timeout(std::time::Duration::from_secs(1), &mut gate_wait)
+            .await
+            .expect("detached cancel worker must resolve the exact gate")
+            .expect("gate resolution");
+        assert_eq!(resolution.status, "cancelled");
+        tokio::time::timeout(std::time::Duration::from_secs(1), async {
+            loop {
+                if !service
+                    .generation_operations
+                    .lock()
+                    .unwrap()
+                    .contains_key(session_id)
+                {
+                    break;
+                }
+                tokio::task::yield_now().await;
             }
         })
         .await
-        .expect("new-generation projection timeout");
-        assert_eq!(projection.0, reset.stream_id);
-        assert_eq!(projection.1.activity_sequence, 1);
+        .expect("cancel worker must prune its generation operation");
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn cancelled_release_owner_still_finishes_session_cleanup() {
+        let dir = TempDir::new().unwrap();
+        let service = Arc::new(AstroServiceImpl::new(dir.path().to_path_buf()));
+        let session_id = "cancelled-release-owner";
+        let finalize_hits = Arc::new(AtomicUsize::new(0));
+        let finalize_counter = Arc::clone(&finalize_hits);
+        let (finalize_entered_tx, finalize_entered_rx) = std::sync::mpsc::channel();
+        let (release_finalize_tx, release_finalize_rx) = std::sync::mpsc::channel();
+        let release_finalize_rx = Arc::new(std::sync::Mutex::new(release_finalize_rx));
+        service
+            .hook_runtime
+            .plugin
+            .register(::hooks::SESSION_FINALIZE, move |_| {
+                finalize_counter.fetch_add(1, Ordering::SeqCst);
+                let _ = finalize_entered_tx.send(());
+                let _ = release_finalize_rx
+                    .lock()
+                    .expect("finalize release mutex poisoned")
+                    .recv();
+                ::hooks::HookOutcome::Continue
+            });
+        let session = service.get_session(session_id).await.unwrap();
+        let gate = HitlGate::new(session_id);
+        let (ui_tx, _ui_rx) = tokio::sync::mpsc::unbounded_channel();
+        service
+            .admit_pause_generation(session_id, &session, gate, ui_tx)
+            .await
+            .unwrap();
+
+        let owner = tokio::spawn({
+            let service = Arc::clone(&service);
+            async move { service.release_session_runtime(session_id).await }
+        });
+        tokio::task::spawn_blocking(move || finalize_entered_rx.recv())
+            .await
+            .unwrap()
+            .unwrap();
+        owner.abort();
+        assert!(matches!(owner.await, Err(error) if error.is_cancelled()));
+        release_finalize_tx.send(()).unwrap();
+        session.shutdown_runtime().await;
+
+        tokio::time::timeout(std::time::Duration::from_secs(1), async {
+            loop {
+                if !service
+                    .generation_operations
+                    .lock()
+                    .unwrap()
+                    .contains_key(session_id)
+                {
+                    break;
+                }
+                tokio::task::yield_now().await;
+            }
+        })
+        .await
+        .expect("release worker must prune its generation operation");
+        assert_eq!(finalize_hits.load(Ordering::SeqCst), 1);
+        assert!(service.sessions.read().await.get(session_id).is_none());
+        assert!(service
+            .pause_controls
+            .read()
+            .expect("pause registry lock poisoned")
+            .get(session_id)
+            .is_none());
+        assert!(service.hitl_registry.get(session_id).await.is_none());
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn concurrent_new_chat_release_finalizes_session_once() {
+        let dir = TempDir::new().unwrap();
+        let service = Arc::new(AstroServiceImpl::new(dir.path().to_path_buf()));
+        let session_id = "concurrent-new-chat-finalize-once";
+        let finalize_hits = Arc::new(AtomicUsize::new(0));
+        let finalize_counter = Arc::clone(&finalize_hits);
+        let (finalize_entered_tx, finalize_entered_rx) = std::sync::mpsc::channel();
+        let (release_finalize_tx, release_finalize_rx) = std::sync::mpsc::channel();
+        let release_finalize_rx = Arc::new(std::sync::Mutex::new(release_finalize_rx));
+        service
+            .hook_runtime
+            .plugin
+            .register(::hooks::SESSION_FINALIZE, move |_| {
+                if finalize_counter.fetch_add(1, Ordering::SeqCst) == 0 {
+                    let _ = finalize_entered_tx.send(());
+                    let _ = release_finalize_rx
+                        .lock()
+                        .expect("finalize release mutex poisoned")
+                        .recv();
+                }
+                ::hooks::HookOutcome::Continue
+            });
+        service.get_session(session_id).await.unwrap();
+
+        let first = tokio::spawn({
+            let service = Arc::clone(&service);
+            async move { service.release_session_for_new_chat(session_id).await }
+        });
+        tokio::task::spawn_blocking(move || finalize_entered_rx.recv())
+            .await
+            .unwrap()
+            .unwrap();
+        let second = tokio::spawn({
+            let service = Arc::clone(&service);
+            async move { service.release_session_for_new_chat(session_id).await }
+        });
+        tokio::task::yield_now().await;
+        assert!(
+            !second.is_finished(),
+            "the concurrent release must share the in-flight completion"
+        );
+        assert_eq!(finalize_hits.load(Ordering::SeqCst), 1);
+
+        release_finalize_tx.send(()).unwrap();
+        first.await.unwrap();
+        second.await.unwrap();
+        assert_eq!(finalize_hits.load(Ordering::SeqCst), 1);
+        assert!(service.release_ownerships.lock().unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn concurrent_release_callers_share_ownership_then_reclaim_entry() {
+        let dir = TempDir::new().unwrap();
+        let service = Arc::new(AstroServiceImpl::new(dir.path().to_path_buf()));
+        let session_id = "concurrent-release-shared-ownership";
+        let finalize_hits = Arc::new(AtomicUsize::new(0));
+        let finalize_counter = Arc::clone(&finalize_hits);
+        service
+            .hook_runtime
+            .plugin
+            .register(::hooks::SESSION_FINALIZE, move |_| {
+                finalize_counter.fetch_add(1, Ordering::SeqCst);
+                ::hooks::HookOutcome::Continue
+            });
+        service.get_session(session_id).await.unwrap();
+
+        let acquired = Arc::new(tokio::sync::Barrier::new(3));
+        let release = Arc::new(tokio::sync::Barrier::new(3));
+        let ownership_ptrs = Arc::new(std::sync::Mutex::new(Vec::new()));
+        let mut callers = Vec::new();
+        for _ in 0..2 {
+            callers.push(tokio::spawn({
+                let service = Arc::clone(&service);
+                let acquired = Arc::clone(&acquired);
+                let release = Arc::clone(&release);
+                let ownership_ptrs = Arc::clone(&ownership_ptrs);
+                async move {
+                    let ownership = service.release_generation_ownership(session_id);
+                    ownership_ptrs.lock().unwrap().push(ownership.entry_ptr());
+                    acquired.wait().await;
+                    release.wait().await;
+                    service
+                        .release_session_runtime_with_ownership(session_id, ownership)
+                        .await
+                }
+            }));
+        }
+
+        acquired.wait().await;
+        let ownership_ptrs = ownership_ptrs.lock().unwrap().clone();
+        assert_eq!(ownership_ptrs.len(), 2);
+        assert_eq!(ownership_ptrs[0], ownership_ptrs[1]);
+        assert_eq!(service.release_ownerships.lock().unwrap().len(), 1);
+        release.wait().await;
+        for caller in callers {
+            let result = caller.await.unwrap();
+            assert!(!result.should_finalize_without_runtime);
+        }
+        assert_eq!(finalize_hits.load(Ordering::SeqCst), 1);
+        assert!(service.release_ownerships.lock().unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn cancelled_cold_release_reply_does_not_consume_fallback_claim() {
+        let dir = TempDir::new().unwrap();
+        let service = AstroServiceImpl::new(dir.path().to_path_buf());
+        let session_id = "cancelled-cold-release-fallback-claim";
+        let cancelled_ownership = service.release_generation_ownership(session_id);
+        let surviving_ownership = service.release_generation_ownership(session_id);
+        assert_eq!(
+            cancelled_ownership.entry_ptr(),
+            surviving_ownership.entry_ptr()
+        );
+        let finalize_hits = Arc::new(AtomicUsize::new(0));
+        let finalize_counter = Arc::clone(&finalize_hits);
+        service
+            .hook_runtime
+            .plugin
+            .register(::hooks::SESSION_FINALIZE, move |_| {
+                finalize_counter.fetch_add(1, Ordering::SeqCst);
+                ::hooks::HookOutcome::Continue
+            });
+
+        let (cancelled_tx, cancelled_rx) = tokio::sync::oneshot::channel();
+        drop(cancelled_rx);
+        service
+            .run_release_session_runtime_worker(
+                session_id.to_string(),
+                cancelled_ownership,
+                cancelled_tx,
+            )
+            .await;
+
+        let (surviving_tx, surviving_rx) = tokio::sync::oneshot::channel();
+        service
+            .run_release_session_runtime_worker(
+                session_id.to_string(),
+                surviving_ownership,
+                surviving_tx,
+            )
+            .await;
+        let result = surviving_rx
+            .await
+            .expect("surviving caller must receive the shared completion")
+            .claim_fallback();
+        if result.should_finalize_without_runtime {
+            let _ = service.hook_runtime.fire_plugin(
+                ::hooks::SESSION_FINALIZE,
+                &::hooks::HookPayload {
+                    session_id: session_id.into(),
+                    ..Default::default()
+                },
+            );
+        }
+
+        assert!(result.should_finalize_without_runtime);
+        assert_eq!(finalize_hits.load(Ordering::SeqCst), 1);
+        assert!(service.release_ownerships.lock().unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn release_only_completion_does_not_consume_new_chat_fallback() {
+        let dir = TempDir::new().unwrap();
+        let service = Arc::new(AstroServiceImpl::new(dir.path().to_path_buf()));
+        let session_id = "release-only-before-new-chat-fallback";
+        let finalize_hits = Arc::new(AtomicUsize::new(0));
+        let finalize_counter = Arc::clone(&finalize_hits);
+        service
+            .hook_runtime
+            .plugin
+            .register(::hooks::SESSION_FINALIZE, move |_| {
+                finalize_counter.fetch_add(1, Ordering::SeqCst);
+                ::hooks::HookOutcome::Continue
+            });
+        let acquired = Arc::new(tokio::sync::Barrier::new(3));
+        let (ownership_tx, mut ownership_rx) = tokio::sync::mpsc::unbounded_channel();
+        for is_new_chat in [false, true] {
+            tokio::spawn({
+                let service = Arc::clone(&service);
+                let acquired = Arc::clone(&acquired);
+                let ownership_tx = ownership_tx.clone();
+                async move {
+                    let ownership = service.release_generation_ownership(session_id);
+                    ownership_tx.send((is_new_chat, ownership)).unwrap();
+                    acquired.wait().await;
+                }
+            });
+        }
+        drop(ownership_tx);
+        acquired.wait().await;
+        let mut release_only = None;
+        let mut new_chat = None;
+        while let Some((is_new_chat, ownership)) = ownership_rx.recv().await {
+            if is_new_chat {
+                new_chat = Some(ownership);
+            } else {
+                release_only = Some(ownership);
+            }
+        }
+        let release_only = release_only.expect("release-only ownership");
+        let new_chat = new_chat.expect("new-chat ownership");
+        assert_eq!(release_only.entry_ptr(), new_chat.entry_ptr());
+
+        let release_result = service
+            .release_session_runtime_with_ownership(session_id, release_only)
+            .await;
+        assert!(release_result.should_finalize_without_runtime);
+
+        let (new_chat_tx, new_chat_rx) = tokio::sync::oneshot::channel();
+        service
+            .run_release_session_runtime_worker(session_id.to_string(), new_chat, new_chat_tx)
+            .await;
+        let new_chat_result = new_chat_rx
+            .await
+            .expect("new-chat caller must receive the shared completion")
+            .claim_fallback();
+        assert!(
+            new_chat_result.should_finalize_without_runtime,
+            "release-only completion must not consume fallback ownership"
+        );
+        let _ = service.hook_runtime.fire_plugin(
+            ::hooks::SESSION_FINALIZE,
+            &::hooks::HookPayload {
+                session_id: session_id.into(),
+                ..Default::default()
+            },
+        );
+        assert_eq!(finalize_hits.load(Ordering::SeqCst), 1);
+        assert!(service.release_ownerships.lock().unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn unique_release_ownership_entries_are_reclaimed() {
+        let dir = TempDir::new().unwrap();
+        let service = AstroServiceImpl::new(dir.path().to_path_buf());
+        let finalize_hits = Arc::new(AtomicUsize::new(0));
+        let finalize_counter = Arc::clone(&finalize_hits);
+        service
+            .hook_runtime
+            .plugin
+            .register(::hooks::SESSION_FINALIZE, move |_| {
+                finalize_counter.fetch_add(1, Ordering::SeqCst);
+                ::hooks::HookOutcome::Continue
+            });
+
+        for index in 0..32 {
+            let session_id = format!("unique-release-ownership-{index}");
+            service.get_session(&session_id).await.unwrap();
+            let result = service.release_session_runtime(&session_id).await;
+            assert!(!result.should_finalize_without_runtime);
+        }
+
+        assert_eq!(finalize_hits.load(Ordering::SeqCst), 32);
+        assert!(service.release_ownerships.lock().unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn recreated_session_resets_finalize_ownership_generation() {
+        let dir = TempDir::new().unwrap();
+        let service = AstroServiceImpl::new(dir.path().to_path_buf());
+        let session_id = "recreated-session-finalize-ownership";
+        let finalize_hits = Arc::new(AtomicUsize::new(0));
+        let finalize_counter = Arc::clone(&finalize_hits);
+        service
+            .hook_runtime
+            .plugin
+            .register(::hooks::SESSION_FINALIZE, move |_| {
+                finalize_counter.fetch_add(1, Ordering::SeqCst);
+                ::hooks::HookOutcome::Continue
+            });
+
+        let first = service.get_session(session_id).await.unwrap();
+        let first_release = service.release_session_runtime(session_id).await;
+        assert!(!first_release.should_finalize_without_runtime);
+        assert_eq!(finalize_hits.load(Ordering::SeqCst), 1);
+        assert!(service.release_ownerships.lock().unwrap().is_empty());
+
+        let second = service.get_session(session_id).await.unwrap();
+        assert!(!Arc::ptr_eq(&first, &second));
+        assert!(service.release_ownerships.lock().unwrap().is_empty());
+
+        let second_release = service.release_session_runtime(session_id).await;
+        assert!(!second_release.should_finalize_without_runtime);
+        assert_eq!(finalize_hits.load(Ordering::SeqCst), 2);
+        assert!(service.release_ownerships.lock().unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn stale_launcher_cannot_replace_a_newly_installed_generation() {
+        let dir = TempDir::new().unwrap();
+        let service = Arc::new(AstroServiceImpl::new(dir.path().to_path_buf()));
+        let session_id = "stale-launcher-generation";
+        let session = service.get_session(session_id).await.unwrap();
+        let (old_ui_tx, _old_ui_rx) = tokio::sync::mpsc::unbounded_channel();
+        let old_registration = service
+            .admit_pause_generation(session_id, &session, HitlGate::new(session_id), old_ui_tx)
+            .await
+            .unwrap();
+        let old_ready = Arc::new(tokio::sync::Barrier::new(2));
+        let release_old = Arc::new(tokio::sync::Barrier::new(2));
+        let old_touched_session = Arc::new(AtomicBool::new(false));
+        let old_launcher = {
+            let service = Arc::clone(&service);
+            let old_ready = Arc::clone(&old_ready);
+            let release_old = Arc::clone(&release_old);
+            let old_touched_session = Arc::clone(&old_touched_session);
+            tokio::spawn(async move {
+                old_ready.wait().await;
+                release_old.wait().await;
+                service
+                    .launch_current_pause_generation_with(
+                        session_id,
+                        &old_registration,
+                        move || async move {
+                            old_touched_session.store(true, Ordering::SeqCst);
+                        },
+                    )
+                    .await
+            })
+        };
+        old_ready.wait().await;
+
+        service
+            .cancel_current_pause_generation(session_id)
+            .await
+            .unwrap()
+            .unwrap();
+        let (new_ui_tx, _new_ui_rx) = tokio::sync::mpsc::unbounded_channel();
+        let new_registration = service
+            .admit_pause_generation(session_id, &session, HitlGate::new(session_id), new_ui_tx)
+            .await
+            .unwrap();
+        let (new_turn, _new_rx) = service
+            .launch_current_pause_generation_with(session_id, &new_registration, {
+                let session = Arc::clone(&session);
+                move || async move { spawn_pending_turn(session).await }
+            })
+            .await
+            .expect("the current generation must install its task");
+
+        release_old.wait().await;
+        assert!(old_launcher.await.unwrap().is_none());
+        assert!(!old_touched_session.load(Ordering::SeqCst));
+        assert!(
+            !new_turn.is_finished(),
+            "the stale launcher must not replace or abort the new task"
+        );
+        session
+            .abort_all_tasks(TurnAbortReason::Replaced)
+            .await
+            .unwrap();
+        new_turn.await.unwrap();
     }
 
     #[tokio::test]
@@ -2087,5 +4396,561 @@ mod tests {
         assert_eq!(chain[0].provider_id, "p-pref");
         assert_eq!(chain[1].provider_id, "p-fb");
         assert!(!map.contains_key(&types::AuxiliaryTask::Dreaming));
+    }
+
+    #[tokio::test]
+    async fn concurrent_thread_creation_installs_exactly_one_listener() {
+        let dir = TempDir::new().unwrap();
+        memory::ensure_workspace(dir.path()).unwrap();
+        let service = AstroServiceImpl::new(dir.path().to_path_buf());
+        let first_service = service.clone();
+        let second_service = service.clone();
+        let (first, second) = tokio::join!(
+            first_service.get_or_create_thread("race-thread"),
+            second_service.get_or_create_thread("race-thread")
+        );
+        let first = first.expect("first create");
+        let second = second.expect("second create");
+        assert!(Arc::ptr_eq(&first, &second));
+        assert!(service.threads.contains("race-thread").await);
+        first
+            .runtime
+            .submit(agent_protocol::Op::Shutdown)
+            .await
+            .unwrap();
+        first.runtime.wait_terminated().await;
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn idle_thread_unloads_only_after_thirty_minutes() {
+        let dir = TempDir::new().unwrap();
+        memory::ensure_workspace(dir.path()).unwrap();
+        let service = AstroServiceImpl::new(dir.path().to_path_buf());
+        let managed = service
+            .get_or_create_thread("idle-thread")
+            .await
+            .expect("create idle thread");
+        let old_runtime = Arc::clone(&managed.runtime);
+        drop(managed);
+        tokio::task::yield_now().await;
+
+        tokio::time::advance(std::time::Duration::from_secs(29 * 60)).await;
+        tokio::task::yield_now().await;
+        assert!(service.threads.contains("idle-thread").await);
+
+        tokio::time::advance(std::time::Duration::from_secs(60)).await;
+        for _ in 0..8 {
+            tokio::task::yield_now().await;
+        }
+        assert!(!service.threads.contains("idle-thread").await);
+        assert!(service.thread_states.get("idle-thread").await.is_none());
+        let replacement = service
+            .get_or_create_thread("idle-thread")
+            .await
+            .expect("idle thread should be reloadable");
+        assert!(!Arc::ptr_eq(&old_runtime, &replacement.runtime));
+        assert!(!replacement.listener_is_finished().await);
+        replacement
+            .runtime
+            .submit(agent_protocol::Op::Shutdown)
+            .await
+            .unwrap();
+        replacement.runtime.wait_terminated().await;
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn acquired_managed_handle_prevents_idle_unload_until_released() {
+        let dir = TempDir::new().unwrap();
+        memory::ensure_workspace(dir.path()).unwrap();
+        let service = AstroServiceImpl::new(dir.path().to_path_buf());
+        let managed = service
+            .get_or_create_thread("leased-idle-thread")
+            .await
+            .expect("create idle thread");
+        tokio::task::yield_now().await;
+
+        tokio::time::advance(std::time::Duration::from_secs(30 * 60)).await;
+        for _ in 0..8 {
+            tokio::task::yield_now().await;
+        }
+        let current = service
+            .threads
+            .get("leased-idle-thread")
+            .await
+            .expect("leased thread remains current");
+        assert!(Arc::ptr_eq(&managed, &current));
+        assert!(!managed.listener_is_finished().await);
+
+        drop(current);
+        drop(managed);
+        tokio::time::advance(std::time::Duration::from_secs(30 * 60)).await;
+        for _ in 0..8 {
+            tokio::task::yield_now().await;
+        }
+        assert!(!service.threads.contains("leased-idle-thread").await);
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn failed_terminal_unsubscribed_thread_unloads_after_thirty_minutes() {
+        let dir = TempDir::new().unwrap();
+        memory::ensure_workspace(dir.path()).unwrap();
+        let service = AstroServiceImpl::new(dir.path().to_path_buf());
+        let managed = service
+            .get_or_create_thread("failed-thread")
+            .await
+            .expect("create thread");
+        let (_receiver, _cancel, generation) = service
+            .connections
+            .register("connection-failed".into())
+            .await;
+        let subscription = generation.key().clone();
+        let (resume_reply, resume_rx) = tokio::sync::oneshot::channel();
+        managed
+            .commands
+            .send(ListenerCommand::Resume {
+                subscription: subscription.clone(),
+                include_turns: true,
+                reply: resume_reply,
+            })
+            .unwrap();
+        resume_rx.await.unwrap();
+        managed
+            .commands
+            .send(ListenerCommand::CoreEvent(agent_protocol::Event {
+                id: "turn-failed".into(),
+                msg: agent_protocol::EventMsg::TurnStarted(agent_protocol::TurnStartedEvent {
+                    turn_id: "turn-failed".into(),
+                }),
+            }))
+            .unwrap();
+        managed
+            .commands
+            .send(ListenerCommand::CoreEvent(agent_protocol::Event {
+                id: "turn-failed".into(),
+                msg: agent_protocol::EventMsg::TurnComplete(agent_protocol::TurnCompleteEvent {
+                    turn_id: "turn-failed".into(),
+                    last_agent_message: None,
+                    error: Some(agent_protocol::ErrorEvent {
+                        message: "boom".into(),
+                        error_type: "provider".into(),
+                    }),
+                }),
+            }))
+            .unwrap();
+        let (unsubscribe_reply, unsubscribe_rx) = tokio::sync::oneshot::channel();
+        managed
+            .commands
+            .send(ListenerCommand::Unsubscribe {
+                subscription,
+                reply: Some(unsubscribe_reply),
+            })
+            .unwrap();
+        unsubscribe_rx.await.unwrap();
+        assert_eq!(managed.activity_rx.borrow().status, "errored");
+        assert!(!managed.activity_rx.borrow().has_subscribers);
+        drop(managed);
+
+        tokio::time::advance(std::time::Duration::from_secs(30 * 60)).await;
+        for _ in 0..8 {
+            tokio::task::yield_now().await;
+        }
+
+        assert!(!service.threads.contains("failed-thread").await);
+        assert!(service.thread_states.get("failed-thread").await.is_none());
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn never_returning_background_phase_releases_sink_then_allows_idle_unload() {
+        let dir = TempDir::new().unwrap();
+        memory::ensure_workspace(dir.path()).unwrap();
+        let service = AstroServiceImpl::new(dir.path().to_path_buf());
+        let managed = service
+            .get_or_create_thread("stuck-background-thread")
+            .await
+            .expect("create thread");
+        let (_receiver, _cancel, generation) = service
+            .connections
+            .register("connection-stuck".into())
+            .await;
+        let subscription = generation.key().clone();
+        let (resume_reply, resume_rx) = tokio::sync::oneshot::channel();
+        managed
+            .commands
+            .send(ListenerCommand::Resume {
+                subscription: subscription.clone(),
+                include_turns: true,
+                reply: resume_reply,
+            })
+            .unwrap();
+        resume_rx.await.unwrap();
+        managed
+            .commands
+            .send(ListenerCommand::ObservedCoreEvent(agent_protocol::Event {
+                id: "turn-stuck".into(),
+                msg: agent_protocol::EventMsg::TurnComplete(agent_protocol::TurnCompleteEvent {
+                    turn_id: "turn-stuck".into(),
+                    last_agent_message: Some("done".into()),
+                    error: None,
+                }),
+            }))
+            .unwrap();
+        let (unsubscribe_reply, unsubscribe_rx) = tokio::sync::oneshot::channel();
+        managed
+            .commands
+            .send(ListenerCommand::Unsubscribe {
+                subscription,
+                reply: Some(unsubscribe_reply),
+            })
+            .unwrap();
+        unsubscribe_rx.await.unwrap();
+        assert!(managed.activity_rx.borrow().has_subscribers);
+        drop(managed);
+
+        // Simulate a provider future that never resolves. The background lease must retain
+        // the sink through the work timeout plus marker window, then expire independently
+        // before the normal thirty-minute idle-unload window.
+        tokio::time::advance(crate::BACKGROUND_EXTENSION_SINK_TIMEOUT).await;
+        for _ in 0..8 {
+            tokio::task::yield_now().await;
+        }
+        let current = service
+            .threads
+            .get("stuck-background-thread")
+            .await
+            .expect("thread remains during idle window");
+        assert!(!current.activity_rx.borrow().has_subscribers);
+        drop(current);
+
+        tokio::time::advance(std::time::Duration::from_secs(30 * 60)).await;
+        for _ in 0..8 {
+            tokio::task::yield_now().await;
+        }
+        assert!(!service.threads.contains("stuck-background-thread").await);
+        assert!(service
+            .thread_states
+            .get("stuck-background-thread")
+            .await
+            .is_none());
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn bounded_background_phase_runs_finalizer_after_provider_timeout() {
+        let finalized = Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let finalized_for_task = Arc::clone(&finalized);
+        let phase = tokio::spawn(run_bounded_post_turn_phase(
+            std::future::pending::<Result<(), &'static str>>(),
+            async move {
+                finalized_for_task.store(true, std::sync::atomic::Ordering::SeqCst);
+            },
+        ));
+        tokio::task::yield_now().await;
+        tokio::time::advance(std::time::Duration::from_secs(5 * 60)).await;
+        let outcome = phase.await.expect("phase supervisor");
+        assert_eq!(outcome, BackgroundPhaseOutcome::TimedOut);
+        assert!(finalized.load(std::sync::atomic::Ordering::SeqCst));
+    }
+
+    #[tokio::test]
+    async fn bounded_background_phase_finalizes_error_panic_and_cancellation() {
+        let finalized = Arc::new(AtomicUsize::new(0));
+
+        let error_finalized = Arc::clone(&finalized);
+        let error = run_bounded_post_turn_phase(async { Err::<(), _>("provider") }, async move {
+            error_finalized.fetch_add(1, Ordering::SeqCst);
+        })
+        .await;
+        assert_eq!(error, BackgroundPhaseOutcome::Failed);
+
+        let panic_finalized = Arc::clone(&finalized);
+        let panicked = run_bounded_post_turn_phase(
+            async {
+                panic!("provider panic");
+                #[allow(unreachable_code)]
+                Ok::<(), &'static str>(())
+            },
+            async move {
+                panic_finalized.fetch_add(1, Ordering::SeqCst);
+            },
+        )
+        .await;
+        assert_eq!(panicked, BackgroundPhaseOutcome::Panicked);
+
+        let cancelled_task = tokio::spawn(std::future::pending::<Result<(), &'static str>>());
+        cancelled_task.abort();
+        let cancel_finalized = Arc::clone(&finalized);
+        let cancelled = finish_bounded_post_turn_task(cancelled_task, async move {
+            cancel_finalized.fetch_add(1, Ordering::SeqCst);
+        })
+        .await;
+        assert_eq!(cancelled, BackgroundPhaseOutcome::Cancelled);
+        assert_eq!(finalized.load(Ordering::SeqCst), 3);
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn released_generation_background_finalizer_cannot_resurrect_thread_or_session() {
+        let dir = TempDir::new().unwrap();
+        memory::ensure_workspace(dir.path()).unwrap();
+        let service = AstroServiceImpl::new(dir.path().to_path_buf());
+        let old = service
+            .get_or_create_thread("released-background")
+            .await
+            .expect("old generation");
+        let lifecycle = old.lifecycle_token();
+        let finalized = Arc::new(AtomicBool::new(false));
+        let finalized_by_task = Arc::clone(&finalized);
+        let commands = old.commands.clone();
+        let supervisor = tokio::spawn(async move {
+            run_bounded_post_turn_phase_until_cancelled(
+                std::future::pending::<Result<(), Status>>(),
+                async move {
+                    let _ = commands.send(crate::ListenerCommand::ExpireBackgroundSink {
+                        turn_id: "turn-old".into(),
+                    });
+                    finalized_by_task.store(true, Ordering::SeqCst);
+                },
+                lifecycle,
+            )
+            .await;
+        });
+        old.set_side_effect_supervisor(supervisor).await;
+
+        let release_service = service.clone();
+        let release = tokio::spawn(async move {
+            release_service
+                .release_session_runtime("released-background")
+                .await
+        });
+        for _ in 0..16 {
+            if release.is_finished() {
+                break;
+            }
+            tokio::task::yield_now().await;
+        }
+        assert!(
+            release.is_finished(),
+            "explicit release must cancel work and expire the old sink without waiting for the 30s marker timeout"
+        );
+        release.await.expect("release task");
+        assert!(!service.threads.contains("released-background").await);
+        assert!(!service
+            .sessions
+            .read()
+            .await
+            .contains_key("released-background"));
+        assert!(finalized.load(Ordering::SeqCst));
+        assert!(old.side_effect_supervisor_is_finished().await);
+        assert!(old.listener_is_finished().await);
+    }
+
+    #[tokio::test]
+    async fn old_background_finalizer_cannot_write_into_new_same_id_generation() {
+        let dir = TempDir::new().unwrap();
+        memory::ensure_workspace(dir.path()).unwrap();
+        let service = AstroServiceImpl::new(dir.path().to_path_buf());
+        let old = service
+            .get_or_create_thread("reused-background")
+            .await
+            .expect("old generation");
+        service.release_session_runtime("reused-background").await;
+        let current = service
+            .get_or_create_thread("reused-background")
+            .await
+            .expect("new generation");
+        assert!(!Arc::ptr_eq(&old, &current));
+
+        let _ = service.emit_background_complete(&old, "turn-old").await;
+        let state = service
+            .thread_states
+            .get("reused-background")
+            .await
+            .expect("new state");
+        let state = state.lock().await;
+        assert!(
+            state
+                .history
+                .completed_turns()
+                .iter()
+                .all(|turn| turn.id != "turn-old"),
+            "an old-generation marker must never mutate the replacement generation"
+        );
+    }
+
+    #[tokio::test]
+    async fn cancelled_background_phase_materializes_completion_before_release() {
+        let dir = TempDir::new().unwrap();
+        memory::ensure_workspace(dir.path()).unwrap();
+        let service = AstroServiceImpl::new(dir.path().to_path_buf());
+        let managed = service
+            .get_or_create_thread("cancelled-background")
+            .await
+            .expect("thread generation");
+        let lifecycle = managed.lifecycle_token();
+        lifecycle.cancel();
+
+        service
+            .finalize_background_phase(&managed, "turn-cancelled")
+            .await;
+
+        let state = service
+            .thread_states
+            .get("cancelled-background")
+            .await
+            .expect("thread state");
+        let state = state.lock().await;
+        let marker = state
+            .history
+            .completed_turns()
+            .iter()
+            .find(|turn| turn.id == "turn-cancelled")
+            .and_then(|turn| {
+                turn.items.iter().find(|item| {
+                    matches!(
+                        &item.item,
+                        agent_protocol::TurnItem::Extension(extension)
+                            if extension.namespace == "astro.background_complete"
+                    )
+                })
+            });
+        assert!(
+            marker.is_some(),
+            "release cancellation must converge desktop background-pending state through the unified extension event"
+        );
+    }
+
+    #[tokio::test]
+    async fn cancelled_blocked_extension_submissions_remove_all_registered_waiters() {
+        let connections = ConnectionRegistry::default();
+        let (commands, command_rx) = tokio::sync::mpsc::unbounded_channel();
+        let (activity_tx, _activity_rx) = tokio::sync::watch::channel(ThreadActivity {
+            status: "idle".into(),
+            has_subscribers: false,
+        });
+        let state = Arc::new(Mutex::new(ThreadState {
+            status: "idle".into(),
+            history: ThreadHistoryBuilder::default(),
+            subscribers: Default::default(),
+            background_extension_sinks: Default::default(),
+            listener_command_tx: commands.clone(),
+            activity_tx,
+        }));
+        tokio::spawn(crate::run_listener_commands(
+            "waiter-cleanup".into(),
+            state,
+            command_rx,
+            connections,
+        ));
+
+        let (blocked_submission_tx, _blocked_submission_rx) = tokio::sync::mpsc::channel(1);
+        blocked_submission_tx
+            .send(())
+            .await
+            .expect("fill bounded submission queue");
+        for index in 0..16 {
+            let (registration, _materialized) = register_extension_waiter(
+                &commands,
+                format!("item-{index}"),
+                format!("payload-{index}"),
+            )
+            .expect("register waiter");
+            let blocked_submission_tx = blocked_submission_tx.clone();
+            let blocked = tokio::spawn(async move {
+                let _registration = registration;
+                blocked_submission_tx
+                    .send(())
+                    .await
+                    .expect("queue remains open");
+            });
+            tokio::task::yield_now().await;
+            blocked.abort();
+            let _ = blocked.await;
+        }
+
+        let (count_reply, count_rx) = tokio::sync::oneshot::channel();
+        commands
+            .send(ListenerCommand::ExtensionWaiterCount { reply: count_reply })
+            .expect("inspect waiter count");
+        assert_eq!(count_rx.await.expect("waiter count"), 0);
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn completed_snapshot_can_resubscribe_then_unload_after_explicit_unsubscribe() {
+        let dir = TempDir::new().unwrap();
+        memory::ensure_workspace(dir.path()).unwrap();
+        let service = AstroServiceImpl::new(dir.path().to_path_buf());
+        let managed = service
+            .get_or_create_thread("completed-thread")
+            .await
+            .expect("create thread");
+        let (_receiver, _cancel, generation) = service
+            .connections
+            .register("connection-completed".into())
+            .await;
+        let subscription = generation.key().clone();
+        let (resume_reply, resume_rx) = tokio::sync::oneshot::channel();
+        managed
+            .commands
+            .send(ListenerCommand::Resume {
+                subscription: subscription.clone(),
+                include_turns: true,
+                reply: resume_reply,
+            })
+            .unwrap();
+        resume_rx.await.unwrap();
+        for msg in [
+            agent_protocol::EventMsg::TurnStarted(agent_protocol::TurnStartedEvent {
+                turn_id: "turn-completed".into(),
+            }),
+            agent_protocol::EventMsg::TurnComplete(agent_protocol::TurnCompleteEvent {
+                turn_id: "turn-completed".into(),
+                last_agent_message: Some("done".into()),
+                error: None,
+            }),
+        ] {
+            managed
+                .commands
+                .send(ListenerCommand::CoreEvent(agent_protocol::Event {
+                    id: "turn-completed".into(),
+                    msg,
+                }))
+                .unwrap();
+        }
+        let (unsubscribe_reply, unsubscribe_rx) = tokio::sync::oneshot::channel();
+        managed
+            .commands
+            .send(ListenerCommand::Unsubscribe {
+                subscription: subscription.clone(),
+                reply: Some(unsubscribe_reply),
+            })
+            .unwrap();
+        unsubscribe_rx.await.unwrap();
+
+        let (resume_reply, resume_rx) = tokio::sync::oneshot::channel();
+        managed
+            .commands
+            .send(ListenerCommand::Resume {
+                subscription: subscription.clone(),
+                include_turns: true,
+                reply: resume_reply,
+            })
+            .unwrap();
+        let snapshot = resume_rx.await.unwrap();
+        assert_eq!(snapshot.turns.len(), 1);
+        assert_eq!(snapshot.turns[0].status, "completed");
+        let (unsubscribe_reply, unsubscribe_rx) = tokio::sync::oneshot::channel();
+        managed
+            .commands
+            .send(ListenerCommand::Unsubscribe {
+                subscription,
+                reply: Some(unsubscribe_reply),
+            })
+            .unwrap();
+        unsubscribe_rx.await.unwrap();
+        drop(managed);
+
+        tokio::time::advance(std::time::Duration::from_secs(30 * 60)).await;
+        for _ in 0..8 {
+            tokio::task::yield_now().await;
+        }
+        assert!(!service.threads.contains("completed-thread").await);
     }
 }

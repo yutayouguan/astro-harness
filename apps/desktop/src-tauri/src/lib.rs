@@ -463,7 +463,6 @@ pub fn run() {
             commands::icon::get_app_icon,
             commands::icon::set_app_icon,
             // — infra —
-            infra::session_events::set_session_events_filter,
             infra::ip_location::infer_ip_location,
         ])
         .setup(|app| {
@@ -507,7 +506,7 @@ pub fn run() {
                 );
             }
 
-            infra::session_events::start_bridge(app.handle());
+            infra::thread_events::start_bridge(app.handle());
 
             app.manage(Mutex::new(AppLocale::Zh));
 

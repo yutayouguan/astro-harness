@@ -139,6 +139,7 @@ export function useChatSession({
   const [streaming, setStreaming] = useState(false);
   const [turnInFlight, setTurnInFlight] = useState(false);
   const turnInFlightRef = useRef(false);
+  const lastStreamActivityAtRef = useRef(0);
   const sessionWorktreeRef = useRef<{
     sessionId: string;
     path: string;
@@ -146,6 +147,7 @@ export function useChatSession({
     branch: string;
   } | null>(null);
   const steeringQueueIdsRef = useRef(new Set<string>());
+  const checkpointFiredForTurnRef = useRef(false);
   const [streamPaused, setStreamPaused] = useState(false);
   const [tokenUsage, setTokenUsage] = useState<MessageTokenUsage | null>(null);
   const [contextUsage, setContextUsage] = useState<ContextUsageSnapshot | null>(
@@ -318,6 +320,7 @@ export function useChatSession({
     showTransientToast,
     turnInFlightRef,
     setTurnInFlight,
+    lastStreamActivityAtRef,
     sessionWorktreeRef,
     onModeSwitchDetected,
     onModeSwitchPrompt,
@@ -711,15 +714,6 @@ export function useChatSession({
       // ignore quota / private mode
     }
   }, [chatRightOpen]);
-
-  // ── Session events filter ─────────────────────────────────────────────────
-  useEffect(() => {
-    if (typeof window === "undefined" || !("__TAURI_INTERNALS__" in window)) return;
-    void invoke("set_session_events_filter", {
-      sessionId: sessionId ?? null,
-      agentId: null,
-    }).catch(() => {});
-  }, [sessionId]);
 
   // ── Memory pending count init ─────────────────────────────────────────────
   useEffect(() => {
@@ -1211,6 +1205,37 @@ export function useChatSession({
     streamStartRef,
   ]);
 
+  /** 长任务空闲巡检：无 token/tool 活动超阈值且有排队时，暂停当前回合以出队 */
+  const QUEUE_CHECKPOINT_IDLE_MS = 60_000;
+  useEffect(() => {
+    if (!turnInFlight) {
+      checkpointFiredForTurnRef.current = false;
+      return;
+    }
+    const timer = window.setInterval(() => {
+      if (!turnInFlightRef.current) return;
+      if (checkpointFiredForTurnRef.current) return;
+      if (sessionPendingInterrupts.length > 0) return;
+      if (queuedFollowUps.length === 0) return;
+      if (queueDrainLockRef.current) return;
+      const last = lastStreamActivityAtRef.current;
+      if (!last || Date.now() - last < QUEUE_CHECKPOINT_IDLE_MS) return;
+      checkpointFiredForTurnRef.current = true;
+      showTransientToast(t("chat.queue.checkpointDrain"), { tone: "warning" });
+      void stopStream().then(() => {
+        setQueueKick((k) => k + 1);
+      });
+    }, 5_000);
+    return () => window.clearInterval(timer);
+  }, [
+    turnInFlight,
+    queuedFollowUps.length,
+    sessionPendingInterrupts.length,
+    stopStream,
+    showTransientToast,
+    t,
+  ]);
+
   // ── Message operations ────────────────────────────────────────────────────
   const regenerateMessage = useCallback(
     (assistantId: string) => {
@@ -1644,6 +1669,7 @@ export function useChatSession({
     modeSwitchPromptRef.current = null;
     turnInFlightRef.current = false;
     setTurnInFlight(false);
+    checkpointFiredForTurnRef.current = false;
     steeringQueueIdsRef.current.clear();
     queueFailedIdRef.current = null;
     setStreaming(false);

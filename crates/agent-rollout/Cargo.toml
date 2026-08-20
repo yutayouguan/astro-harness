@@ -1,0 +1,16 @@
+[package]
+name = "agent-rollout"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+agent-protocol = { path = "../agent-protocol" }
+types = { path = "../agent-types" }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tokio = { workspace = true }
+thiserror = { workspace = true }
+chrono = { version = "0.4", features = ["clock"] }
+
+[dev-dependencies]
+tempfile = "3"

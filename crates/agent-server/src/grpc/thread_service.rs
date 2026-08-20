@@ -1,0 +1,2725 @@
+use std::pin::Pin;
+
+use agent_protocol::{Op, TurnInput, TurnInputMode, TurnInputRequest, TurnInputSubmission};
+use futures::Stream;
+use tokio_stream::wrappers::ReceiverStream;
+use tonic::{Request, Response, Status};
+
+use super::AstroServiceImpl;
+use crate::transport::{ConnectionGeneration, ConnectionGenerationKey};
+use crate::{ListenerCommand, ThreadSnapshot, TurnSnapshot};
+
+#[derive(Debug)]
+struct ValidatedChatRequest {
+    turn_request: Option<TurnInputRequest>,
+    interaction_mode: types::InteractionMode,
+    resume_items: Vec<agent::ResumeItem>,
+}
+
+struct PreparedResume {
+    managed: std::sync::Arc<crate::ManagedThread>,
+    gate: std::sync::Arc<agent::HitlGate>,
+    turn_id: String,
+}
+
+struct ChatSetup {
+    event_rx: tokio::sync::mpsc::Receiver<proto::ThreadEvent>,
+    cancel: tokio_util::sync::CancellationToken,
+    generation: ConnectionGeneration,
+    subscription: ConnectionGenerationKey,
+    managed: std::sync::Arc<crate::ManagedThread>,
+    turn_id: String,
+}
+
+struct ChatSetupCleanup {
+    registry: crate::ConnectionRegistry,
+    commands: tokio::sync::mpsc::UnboundedSender<ListenerCommand>,
+    generation: ConnectionGeneration,
+    subscription: ConnectionGenerationKey,
+}
+
+impl ChatSetupCleanup {
+    async fn run(self) {
+        let _ = unsubscribe_and_wait(&self.commands, self.subscription).await;
+        self.registry.remove_generation(&self.generation).await;
+    }
+}
+
+#[cfg(test)]
+#[derive(Default)]
+struct ResumeResolveBarrier {
+    reached: tokio::sync::Notify,
+    release: tokio::sync::Notify,
+    subscription: std::sync::Mutex<Option<ConnectionGenerationKey>>,
+}
+
+#[cfg(test)]
+fn resume_resolve_barriers() -> &'static std::sync::Mutex<
+    std::collections::HashMap<String, std::sync::Arc<ResumeResolveBarrier>>,
+> {
+    static BARRIERS: std::sync::OnceLock<
+        std::sync::Mutex<std::collections::HashMap<String, std::sync::Arc<ResumeResolveBarrier>>>,
+    > = std::sync::OnceLock::new();
+    BARRIERS.get_or_init(Default::default)
+}
+
+#[cfg(test)]
+fn install_resume_resolve_barrier(thread_id: &str) -> std::sync::Arc<ResumeResolveBarrier> {
+    let barrier = std::sync::Arc::new(ResumeResolveBarrier::default());
+    resume_resolve_barriers()
+        .lock()
+        .expect("resume barrier registry")
+        .insert(thread_id.into(), barrier.clone());
+    barrier
+}
+
+#[cfg(test)]
+async fn wait_at_resume_resolve_barrier(thread_id: &str, subscription: &ConnectionGenerationKey) {
+    let barrier = resume_resolve_barriers()
+        .lock()
+        .expect("resume barrier registry")
+        .remove(thread_id);
+    if let Some(barrier) = barrier {
+        *barrier
+            .subscription
+            .lock()
+            .expect("resume barrier subscription") = Some(subscription.clone());
+        barrier.reached.notify_one();
+        barrier.release.notified().await;
+    }
+}
+
+#[cfg(test)]
+#[derive(Default)]
+struct ChatAcceptBarrier {
+    reached: tokio::sync::Notify,
+    subscription: std::sync::Mutex<Option<ConnectionGenerationKey>>,
+}
+
+#[cfg(test)]
+fn chat_accept_barriers(
+) -> &'static std::sync::Mutex<std::collections::HashMap<String, std::sync::Arc<ChatAcceptBarrier>>>
+{
+    static BARRIERS: std::sync::OnceLock<
+        std::sync::Mutex<std::collections::HashMap<String, std::sync::Arc<ChatAcceptBarrier>>>,
+    > = std::sync::OnceLock::new();
+    BARRIERS.get_or_init(Default::default)
+}
+
+#[cfg(test)]
+fn install_chat_accept_barrier(turn_id: &str) -> std::sync::Arc<ChatAcceptBarrier> {
+    let barrier = std::sync::Arc::new(ChatAcceptBarrier::default());
+    chat_accept_barriers()
+        .lock()
+        .expect("chat accept barrier registry")
+        .insert(turn_id.into(), barrier.clone());
+    barrier
+}
+
+#[cfg(test)]
+async fn wait_at_chat_accept_barrier(turn_id: &str, subscription: &ConnectionGenerationKey) {
+    let barrier = chat_accept_barriers()
+        .lock()
+        .expect("chat accept barrier registry")
+        .remove(turn_id);
+    if let Some(barrier) = barrier {
+        *barrier
+            .subscription
+            .lock()
+            .expect("chat accept barrier subscription") = Some(subscription.clone());
+        barrier.reached.notify_one();
+        std::future::pending::<()>().await;
+    }
+}
+
+pub(crate) type ThreadEventsStream =
+    Pin<Box<dyn Stream<Item = Result<proto::ThreadEvent, Status>> + Send>>;
+
+#[allow(clippy::result_large_err)]
+fn require_connection_id(connection_id: &str) -> Result<&str, Status> {
+    let connection_id = connection_id.trim();
+    if connection_id.is_empty() {
+        Err(Status::invalid_argument("connection_id is required"))
+    } else {
+        Ok(connection_id)
+    }
+}
+
+fn snapshot_to_proto(snapshot: ThreadSnapshot) -> proto::ThreadSnapshot {
+    let active_turn = snapshot.active_turn.map(turn_to_proto);
+    proto::ThreadSnapshot {
+        thread_id: snapshot.thread_id,
+        status: snapshot.status,
+        turns: snapshot.turns.into_iter().map(turn_to_proto).collect(),
+        has_active_turn: active_turn.is_some(),
+        active_turn,
+    }
+}
+
+fn turn_to_proto(turn: TurnSnapshot) -> proto::ThreadTurn {
+    let error = turn.error.map(|error| proto::ThreadError {
+        message: error.message,
+        error_type: error.error_type,
+    });
+    proto::ThreadTurn {
+        id: turn.id,
+        status: turn.status,
+        items: turn
+            .items
+            .into_iter()
+            .map(|item| proto::ThreadItem {
+                id: item.id,
+                item_type: item_type(&item.item).into(),
+                status: item.status,
+                payload_json: serde_json::to_string(&item.item).unwrap_or_else(|_| "null".into()),
+            })
+            .collect(),
+        last_agent_message: turn.last_agent_message.unwrap_or_default(),
+        has_error: error.is_some(),
+        error,
+    }
+}
+
+fn item_type(item: &agent_protocol::TurnItem) -> &'static str {
+    use agent_protocol::TurnItem;
+    match item {
+        TurnItem::UserMessage(_) => "user_message",
+        TurnItem::HookPrompt(_) => "hook_prompt",
+        TurnItem::AgentMessage(_) => "agent_message",
+        TurnItem::Plan(_) => "plan",
+        TurnItem::Reasoning(_) => "reasoning",
+        TurnItem::CommandExecution(_) => "command_execution",
+        TurnItem::DynamicToolCall(_) => "dynamic_tool_call",
+        TurnItem::McpToolCall(_) => "mcp_tool_call",
+        TurnItem::CollabAgentToolCall(_) => "collab_agent_tool_call",
+        TurnItem::SubAgentActivity(_) => "subagent_activity",
+        TurnItem::WebSearch(_) => "web_search",
+        TurnItem::ImageView(_) => "image_view",
+        TurnItem::ImageGeneration(_) => "image_generation",
+        TurnItem::FileChange(_) => "file_change",
+        TurnItem::ContextCompaction(_) => "context_compaction",
+        TurnItem::EnteredReviewMode(_) => "entered_review_mode",
+        TurnItem::ExitedReviewMode(_) => "exited_review_mode",
+        TurnItem::Extension(_) => "extension",
+    }
+}
+
+async fn resume(
+    managed: &crate::ManagedThread,
+    subscription: crate::transport::ConnectionGenerationKey,
+    include_turns: bool,
+) -> Result<ThreadSnapshot, Status> {
+    let (reply, receive) = tokio::sync::oneshot::channel();
+    managed
+        .commands
+        .send(ListenerCommand::Resume {
+            subscription,
+            include_turns,
+            reply,
+        })
+        .map_err(|_| Status::unavailable("thread listener stopped"))?;
+    receive
+        .await
+        .map_err(|_| Status::unavailable("thread listener stopped"))
+}
+
+fn submit_turn_response(
+    submission_id: String,
+    submission: TurnInputSubmission,
+) -> Response<proto::SubmitTurnResponse> {
+    let (turn_id, disposition, reason) = match submission {
+        TurnInputSubmission::Started { turn_id } => (turn_id, "started", String::new()),
+        TurnInputSubmission::Steered { turn_id } => (turn_id, "steered", String::new()),
+        TurnInputSubmission::NotSubmitted { reason } => (String::new(), "not_submitted", reason),
+    };
+    Response::new(proto::SubmitTurnResponse {
+        submission_id,
+        turn_id,
+        disposition: disposition.into(),
+        reason,
+    })
+}
+
+pub(crate) async fn subscribe_thread_events(
+    service: &AstroServiceImpl,
+    request: Request<proto::SubscribeThreadEventsRequest>,
+) -> Result<Response<ThreadEventsStream>, Status> {
+    let connection_id = require_connection_id(&request.get_ref().connection_id)?.to_string();
+    let (receiver, cancel, generation) = service.connections.register(connection_id).await;
+    let registry = service.connections.clone();
+    let thread_states = service.thread_states.clone();
+    let cleanup_subscription = generation.key().clone();
+    // Keep one slot reserved for the single terminal slow-consumer status.
+    let (outbound, stream_rx) = tokio::sync::mpsc::channel(crate::transport::CHANNEL_CAPACITY + 1);
+    tokio::spawn(async move {
+        let mut receiver = receiver;
+        loop {
+            tokio::select! {
+                biased;
+                () = outbound.closed() => break,
+                () = cancel.cancelled() => {
+                    let _ = outbound.try_send(Err(Status::resource_exhausted("slow thread-event consumer")));
+                    break;
+                }
+                event = receiver.recv() => match event {
+                    Some(event) => {
+                        if outbound.capacity() <= 1 {
+                            let _ = outbound.try_send(Err(Status::resource_exhausted("slow thread-event consumer")));
+                            break;
+                        }
+                        if outbound.try_send(Ok(event)).is_err() {
+                            break;
+                        }
+                    }
+                    None => break,
+                }
+            }
+        }
+        registry.remove_generation(&generation).await;
+        thread_states
+            .unsubscribe_all_detached(&cleanup_subscription)
+            .await;
+    });
+    Ok(Response::new(Box::pin(ReceiverStream::new(stream_rx))))
+}
+
+pub(crate) async fn submit_turn(
+    service: &AstroServiceImpl,
+    request: Request<proto::SubmitTurnRequest>,
+) -> Result<Response<proto::SubmitTurnResponse>, Status> {
+    let req = request.into_inner();
+    let connection_id = require_connection_id(&req.connection_id)?.to_string();
+    let chat = req
+        .chat
+        .ok_or_else(|| Status::invalid_argument("chat request is required"))?;
+    let thread_id = chat.session_id.trim();
+    if thread_id.is_empty() {
+        return Err(Status::invalid_argument("chat.session_id is required"));
+    }
+    let mode = validate_turn_mode(&req.mode, &req.expected_turn_id)?;
+    let explicit_steer = matches!(&mode, TurnInputMode::Steer { .. });
+    let validated = validate_chat_request(&chat)?;
+    let subscription = service
+        .connections
+        .current_generation_key(&connection_id)
+        .await
+        .ok_or_else(|| Status::failed_precondition("connection is not subscribed"))?;
+    if let Some(prepared) =
+        prepare_resume_before_side_effects(service, thread_id, &validated.resume_items).await?
+    {
+        resume(&prepared.managed, subscription.clone(), false).await?;
+        #[cfg(test)]
+        wait_at_resume_resolve_barrier(thread_id, &subscription).await;
+        if let Err(error) = prepared.gate.resolve(&validated.resume_items).await {
+            return Err(Status::invalid_argument(format!(
+                "invalid resume_json: {error}"
+            )));
+        }
+        return Ok(Response::new(proto::SubmitTurnResponse {
+            submission_id: String::new(),
+            turn_id: prepared.turn_id,
+            disposition: "resumed".into(),
+            reason: String::new(),
+        }));
+    }
+    let managed = service.get_or_create_thread(thread_id).await?;
+    resume(&managed, subscription.clone(), false).await?;
+    let submit = async {
+        service
+            .configure_thread_from_chat(&managed.runtime, &chat)
+            .await?;
+        debug_assert_eq!(
+            managed.runtime.session().interaction_mode().await,
+            validated.interaction_mode
+        );
+        managed
+            .runtime
+            .submit(Op::ThreadSettings {
+                settings: serde_json::json!({
+                    "provider": chat.provider,
+                    "model": chat.model,
+                    "interaction_mode": chat.interaction_mode,
+                    "project_root": chat.project_root,
+                }),
+            })
+            .await
+            .map_err(|error| Status::unavailable(error.to_string()))?;
+        let submitted = managed
+            .runtime
+            .submit_turn(
+                validated
+                    .turn_request
+                    .expect("non-resume validation must produce turn input"),
+                mode,
+            )
+            .await;
+        match submitted {
+            Ok(submitted) => Ok(submitted),
+            Err(error) if explicit_steer => {
+                if let Some(agent_protocol::TurnInputError::Invalid(reason)) =
+                    error.downcast_ref::<agent_protocol::TurnInputError>()
+                {
+                    let reason = if reason == "no active turn available for steering" {
+                        "no_active_turn".to_string()
+                    } else {
+                        reason.clone()
+                    };
+                    Ok((String::new(), TurnInputSubmission::NotSubmitted { reason }))
+                } else {
+                    Err(Status::failed_precondition(error.to_string()))
+                }
+            }
+            Err(error) => Err(Status::failed_precondition(error.to_string())),
+        }
+    }
+    .await;
+    match submit {
+        Ok((submission_id, submission)) => Ok(submit_turn_response(submission_id, submission)),
+        Err(error) => Err(error),
+    }
+}
+
+#[allow(clippy::result_large_err)]
+fn validate_turn_mode(mode: &str, expected_turn_id: &str) -> Result<TurnInputMode, Status> {
+    match mode {
+        "" | "start_or_steer" => Ok(TurnInputMode::StartOrSteer),
+        "start_if_idle" => Ok(TurnInputMode::StartIfIdle),
+        "steer" if expected_turn_id.trim().is_empty() => Err(Status::invalid_argument(
+            "expected_turn_id is required for steer",
+        )),
+        "steer" => Ok(TurnInputMode::Steer {
+            expected_turn_id: expected_turn_id.trim().into(),
+        }),
+        other => Err(Status::invalid_argument(format!(
+            "unsupported mode: {other}"
+        ))),
+    }
+}
+
+pub(crate) async fn resume_thread(
+    service: &AstroServiceImpl,
+    request: Request<proto::ResumeThreadRequest>,
+) -> Result<Response<proto::ResumeThreadResponse>, Status> {
+    let req = request.into_inner();
+    let connection_id = require_connection_id(&req.connection_id)?.to_string();
+    let thread_id = req.thread_id.trim();
+    if thread_id.is_empty() {
+        return Err(Status::invalid_argument("thread_id is required"));
+    }
+    let subscription = service
+        .connections
+        .current_generation_key(&connection_id)
+        .await
+        .ok_or_else(|| Status::failed_precondition("connection is not subscribed"))?;
+    let managed = service.get_or_create_thread(thread_id).await?;
+    let snapshot = resume(&managed, subscription, req.include_turns).await?;
+    Ok(Response::new(proto::ResumeThreadResponse {
+        thread: Some(snapshot_to_proto(snapshot)),
+    }))
+}
+
+pub(crate) async fn unsubscribe_thread(
+    service: &AstroServiceImpl,
+    request: Request<proto::UnsubscribeThreadRequest>,
+) -> Result<Response<proto::Empty>, Status> {
+    let req = request.into_inner();
+    let connection_id = require_connection_id(&req.connection_id)?.to_string();
+    let thread_id = req.thread_id.trim();
+    if thread_id.is_empty() {
+        return Err(Status::invalid_argument("thread_id is required"));
+    }
+    let subscription = service
+        .connections
+        .current_generation_key(&connection_id)
+        .await
+        .ok_or_else(|| Status::failed_precondition("connection is not subscribed"))?;
+    let managed = service
+        .threads
+        .get(thread_id)
+        .await
+        .ok_or_else(|| Status::not_found("thread is not loaded"))?;
+    unsubscribe_and_wait(&managed.commands, subscription).await?;
+    Ok(Response::new(proto::Empty {}))
+}
+
+async fn unsubscribe_and_wait(
+    commands: &tokio::sync::mpsc::UnboundedSender<ListenerCommand>,
+    subscription: ConnectionGenerationKey,
+) -> Result<(), Status> {
+    let (reply, receive) = tokio::sync::oneshot::channel();
+    commands
+        .send(ListenerCommand::Unsubscribe {
+            subscription,
+            reply: Some(reply),
+        })
+        .map_err(|_| Status::unavailable("thread listener stopped"))?;
+    receive
+        .await
+        .map_err(|_| Status::unavailable("thread listener stopped before unsubscribe completed"))
+}
+
+fn unsubscribe_detached(
+    commands: &tokio::sync::mpsc::UnboundedSender<ListenerCommand>,
+    subscription: ConnectionGenerationKey,
+) {
+    let _ = commands.send(ListenerCommand::Unsubscribe {
+        subscription,
+        reply: None,
+    });
+}
+
+#[allow(clippy::result_large_err)]
+pub(crate) fn turn_request_from_chat(
+    chat: &proto::ChatRequest,
+) -> Result<TurnInputRequest, Status> {
+    turn_request_from_chat_with_requirement(chat, true)
+}
+
+#[allow(clippy::result_large_err)]
+fn turn_request_from_chat_with_requirement(
+    chat: &proto::ChatRequest,
+    require_input: bool,
+) -> Result<TurnInputRequest, Status> {
+    if require_input && chat.content.trim().is_empty() && chat.images.is_empty() {
+        return Err(Status::invalid_argument("content or images are required"));
+    }
+    let mut image_data_urls = Vec::with_capacity(chat.images.len());
+    for image in &chat.images {
+        let mime = image.mime.trim();
+        let data = image.data_base64.trim();
+        if mime.is_empty() || data.is_empty() {
+            return Err(Status::invalid_argument(
+                "each image requires mime and data_base64",
+            ));
+        }
+        image_data_urls.push(format!("data:{mime};base64,{data}"));
+    }
+    Ok(TurnInputRequest {
+        input: vec![TurnInput {
+            content: chat.content.clone(),
+            image_data_urls,
+            client_message_id: (!chat.client_message_id.trim().is_empty())
+                .then(|| chat.client_message_id.trim().to_string()),
+        }],
+    })
+}
+
+#[allow(clippy::result_large_err)]
+fn validate_chat_request(chat: &proto::ChatRequest) -> Result<ValidatedChatRequest, Status> {
+    if !chat.tool_names.is_empty() {
+        return Err(Status::invalid_argument(
+            "tool_names overrides are not supported by the Thread runtime",
+        ));
+    }
+    if !chat.use_memory {
+        return Err(Status::invalid_argument(
+            "use_memory=false is not supported by the Thread runtime",
+        ));
+    }
+    let interaction_mode = match chat.interaction_mode.trim().to_ascii_lowercase().as_str() {
+        "" | "agent" => types::InteractionMode::Agent,
+        "plan" => types::InteractionMode::Plan,
+        "ask" => types::InteractionMode::Ask,
+        other => {
+            return Err(Status::invalid_argument(format!(
+                "unsupported interaction_mode: {other}"
+            )))
+        }
+    };
+    if let Some(temperature) = chat.temperature {
+        if !temperature.is_finite() || !(0.0..=2.0).contains(&temperature) {
+            return Err(Status::invalid_argument(
+                "temperature must be between 0 and 2",
+            ));
+        }
+    }
+    if !chat.additional_params_json.trim().is_empty() {
+        let params: serde_json::Value = serde_json::from_str(&chat.additional_params_json)
+            .map_err(|error| {
+                Status::invalid_argument(format!("invalid additional_params_json: {error}"))
+            })?;
+        if !params.is_object() {
+            return Err(Status::invalid_argument(
+                "additional_params_json must be an object",
+            ));
+        }
+    }
+    let resume_items = if chat.resume_json.trim().is_empty() {
+        Vec::new()
+    } else {
+        super::interrupt_store::parse_resume_items_json(&chat.resume_json)
+            .map_err(Status::invalid_argument)?
+    };
+    let turn_request = if resume_items.is_empty() {
+        Some(turn_request_from_chat(chat)?)
+    } else {
+        turn_request_from_chat_with_requirement(chat, false)?;
+        None
+    };
+    Ok(ValidatedChatRequest {
+        turn_request,
+        interaction_mode,
+        resume_items,
+    })
+}
+
+async fn prepare_resume_before_side_effects(
+    service: &AstroServiceImpl,
+    thread_id: &str,
+    resume_items: &[agent::ResumeItem],
+) -> Result<Option<PreparedResume>, Status> {
+    if resume_items.is_empty() {
+        return Ok(None);
+    }
+    let managed = service
+        .threads
+        .get(thread_id)
+        .await
+        .ok_or_else(|| Status::invalid_argument("resume_json requires a loaded thread"))?;
+    let turn_id = if let Some(state) = service.thread_states.get(thread_id).await {
+        state
+            .lock()
+            .await
+            .history
+            .active_turn_snapshot()
+            .map(|turn| turn.id)
+    } else {
+        None
+    }
+    .or_else(|| match managed.runtime.status() {
+        agent::AgentStatus::Running { turn_id } => Some(turn_id),
+        _ => None,
+    })
+    .ok_or_else(|| Status::invalid_argument("resume_json requires an active turn"))?;
+    let gate = service
+        .hitl_registry
+        .get(thread_id)
+        .await
+        .ok_or_else(|| Status::invalid_argument("thread has no pending HITL"))?;
+    gate.validate_resolve(resume_items)
+        .await
+        .map_err(|error| Status::invalid_argument(format!("invalid resume_json: {error}")))?;
+    Ok(Some(PreparedResume {
+        managed,
+        gate,
+        turn_id,
+    }))
+}
+
+pub(crate) fn thread_event_to_chat_events(event: proto::ThreadEvent) -> Vec<proto::ChatEvent> {
+    use proto::chat_event::Payload as ChatPayload;
+    use proto::thread_event::Payload;
+    let turn_id = event.turn_id;
+    let Some(payload) = event.payload else {
+        return vec![chat_error("thread event has no payload")];
+    };
+    match payload {
+        Payload::TurnStarted(started) => vec![proto::ChatEvent {
+            payload: Some(ChatPayload::RunStarted(proto::RunStartedEvent {
+                thread_id: event.thread_id,
+                run_id: started.turn_id,
+            })),
+        }],
+        Payload::ItemStarted(item) => map_item_event(item, true),
+        Payload::ItemCompleted(item) => map_item_event(item, false),
+        Payload::AgentMessageDelta(delta) => vec![proto::ChatEvent {
+            payload: Some(ChatPayload::Token(delta.delta)),
+        }],
+        Payload::ReasoningDelta(delta) => vec![proto::ChatEvent {
+            payload: Some(ChatPayload::Reasoning(delta.delta)),
+        }],
+        Payload::PlanDelta(delta) => vec![activity(delta.item_id, "plan_delta", delta.delta)],
+        Payload::ExecOutputDelta(delta) => {
+            vec![activity(delta.item_id, "exec_output_delta", delta.delta)]
+        }
+        Payload::PatchDelta(delta) => vec![activity(delta.item_id, "patch_delta", delta.delta)],
+        Payload::ControlRequest(control) => control_chat_events(turn_id, control),
+        Payload::TokenCount(tokens) => vec![proto::ChatEvent {
+            payload: Some(ChatPayload::Usage(proto::UsageEvent {
+                prompt_tokens: tokens.input_tokens.min(u32::MAX.into()) as u32,
+                completion_tokens: tokens.output_tokens.min(u32::MAX.into()) as u32,
+                total_tokens: tokens.total_tokens.min(u32::MAX.into()) as u32,
+            })),
+        }],
+        Payload::Error(error) => vec![chat_error(error.message)],
+        Payload::Warning(warning) => vec![activity(
+            turn_id,
+            "warning",
+            serde_json::json!({"message":warning.message,"error_type":warning.error_type})
+                .to_string(),
+        )],
+        Payload::TurnComplete(complete) => terminal_chat_events(
+            turn_id,
+            if complete.has_error {
+                "error"
+            } else {
+                "success"
+            },
+            Vec::new(),
+        ),
+        Payload::TurnAborted(aborted) => terminal_chat_events(
+            turn_id,
+            "interrupt",
+            vec![proto::Interrupt {
+                id: String::new(),
+                reason: aborted.reason,
+                message: String::new(),
+                tool_call_id: String::new(),
+                response_schema_json: String::new(),
+                expires_at: String::new(),
+                metadata_json: String::new(),
+            }],
+        ),
+        Payload::Extension(extension)
+            if matches!(
+                extension.namespace.as_str(),
+                "astro.thread_settings" | "astro.thread_rollback"
+            ) =>
+        {
+            Vec::new()
+        }
+        Payload::Extension(extension) if extension.namespace == "astro.context_usage" => {
+            vec![context_usage_chat_event(&extension.payload_json)]
+        }
+        Payload::Extension(extension) if extension.namespace == "astro.user_input_committed" => {
+            let client_message_id =
+                serde_json::from_str::<serde_json::Value>(&extension.payload_json)
+                    .ok()
+                    .and_then(|payload| {
+                        payload
+                            .get("client_message_id")
+                            .and_then(serde_json::Value::as_str)
+                            .map(str::to_string)
+                    })
+                    .unwrap_or_default();
+            vec![proto::ChatEvent {
+                payload: Some(proto::chat_event::Payload::UserInputCommitted(
+                    proto::UserInputCommittedEvent { client_message_id },
+                )),
+            }]
+        }
+        Payload::Extension(extension) if extension.namespace == "astro.memory" => {
+            vec![memory_update_chat_event(&extension.payload_json)]
+        }
+        Payload::Extension(extension) => vec![activity(
+            extension.item_id,
+            &extension.namespace,
+            extension.payload_json,
+        )],
+        Payload::ShutdownComplete(_) => vec![activity(
+            turn_id,
+            "shutdown_complete",
+            serde_json::json!({"shutdown_complete": true}).to_string(),
+        )],
+    }
+}
+
+fn terminal_chat_events(
+    run_id: String,
+    outcome_type: &str,
+    interrupts: Vec<proto::Interrupt>,
+) -> Vec<proto::ChatEvent> {
+    vec![
+        proto::ChatEvent {
+            payload: Some(proto::chat_event::Payload::RunFinished(
+                proto::RunFinishedEvent {
+                    run_id,
+                    outcome_type: outcome_type.into(),
+                    interrupts,
+                },
+            )),
+        },
+        proto::ChatEvent {
+            payload: Some(proto::chat_event::Payload::Done(true)),
+        },
+    ]
+}
+
+fn control_chat_events(
+    run_id: String,
+    control: proto::ThreadControlRequest,
+) -> Vec<proto::ChatEvent> {
+    let payload = serde_json::from_str::<serde_json::Value>(&control.payload_json)
+        .unwrap_or(serde_json::Value::Null);
+    if control.kind == "dynamic_tool_call" {
+        return vec![proto::ChatEvent {
+            payload: Some(proto::chat_event::Payload::ToolCallDelta(
+                proto::ToolCallDeltaEvent {
+                    index: payload
+                        .get("index")
+                        .and_then(serde_json::Value::as_u64)
+                        .unwrap_or_default()
+                        .min(u32::MAX.into()) as u32,
+                    id: control.item_id,
+                    name: payload
+                        .get("name")
+                        .and_then(serde_json::Value::as_str)
+                        .unwrap_or_default()
+                        .into(),
+                    arguments: payload
+                        .get("delta")
+                        .and_then(serde_json::Value::as_str)
+                        .unwrap_or_default()
+                        .into(),
+                },
+            )),
+        }];
+    }
+    if control.kind == "dynamic_tool_response" {
+        return Vec::new();
+    }
+    if !matches!(
+        control.kind.as_str(),
+        "exec_approval"
+            | "apply_patch_approval"
+            | "request_permissions"
+            | "request_user_input"
+            | "elicitation"
+    ) {
+        return vec![activity(
+            control.item_id,
+            &control.kind,
+            control.payload_json,
+        )];
+    }
+    vec![proto::ChatEvent {
+        payload: Some(proto::chat_event::Payload::RunFinished(
+            proto::RunFinishedEvent {
+                run_id,
+                outcome_type: "hitl_waiting".into(),
+                interrupts: vec![proto::Interrupt {
+                    id: control.request_id,
+                    reason: payload
+                        .get("reason")
+                        .and_then(serde_json::Value::as_str)
+                        .unwrap_or(&control.kind)
+                        .into(),
+                    message: payload
+                        .get("message")
+                        .and_then(serde_json::Value::as_str)
+                        .unwrap_or_default()
+                        .into(),
+                    tool_call_id: control.item_id,
+                    response_schema_json: payload
+                        .get("response_schema")
+                        .cloned()
+                        .unwrap_or_default()
+                        .to_string(),
+                    expires_at: payload
+                        .get("expires_at")
+                        .and_then(serde_json::Value::as_str)
+                        .unwrap_or_default()
+                        .into(),
+                    metadata_json: serde_json::json!({
+                        "kind": control.kind,
+                        "operations": payload
+                            .get("operations")
+                            .cloned()
+                            .unwrap_or_default(),
+                        "payload": payload,
+                    })
+                    .to_string(),
+                }],
+            },
+        )),
+    }]
+}
+
+fn chat_error(message: impl Into<String>) -> proto::ChatEvent {
+    proto::ChatEvent {
+        payload: Some(proto::chat_event::Payload::Error(message.into())),
+    }
+}
+
+fn activity(
+    message_id: impl Into<String>,
+    activity_type: &str,
+    content_json: impl Into<String>,
+) -> proto::ChatEvent {
+    proto::ChatEvent {
+        payload: Some(proto::chat_event::Payload::Activity(proto::ActivityEvent {
+            message_id: message_id.into(),
+            activity_type: activity_type.into(),
+            content_json: content_json.into(),
+            replace: false,
+        })),
+    }
+}
+
+fn map_item_event(item_event: proto::ThreadItemEvent, started: bool) -> Vec<proto::ChatEvent> {
+    let Some(item) = item_event.item else {
+        return vec![chat_error("thread item event has no item")];
+    };
+    match serde_json::from_str::<agent_protocol::TurnItem>(&item.payload_json) {
+        Ok(agent_protocol::TurnItem::CommandExecution(tool))
+        | Ok(agent_protocol::TurnItem::DynamicToolCall(tool))
+        | Ok(agent_protocol::TurnItem::McpToolCall(tool))
+        | Ok(agent_protocol::TurnItem::CollabAgentToolCall(tool))
+        | Ok(agent_protocol::TurnItem::WebSearch(tool))
+        | Ok(agent_protocol::TurnItem::ImageView(tool))
+        | Ok(agent_protocol::TurnItem::ImageGeneration(tool))
+        | Ok(agent_protocol::TurnItem::FileChange(tool)) => vec![proto::ChatEvent {
+            payload: Some(proto::chat_event::Payload::ToolCall(proto::ToolCallEvent {
+                id: tool.id,
+                name: tool.name,
+                arguments_json: tool.arguments.to_string(),
+                result: tool
+                    .output
+                    .map(|value| match value {
+                        serde_json::Value::String(text) => text,
+                        other => other.to_string(),
+                    })
+                    .unwrap_or_default(),
+                media: tool.media.into_iter().map(media_to_proto).collect(),
+                phase: if started { "started" } else { "completed" }.into(),
+            })),
+        }],
+        Ok(agent_protocol::TurnItem::AgentMessage(text)) if started => vec![proto::ChatEvent {
+            payload: Some(proto::chat_event::Payload::Token(text.content)),
+        }],
+        Ok(agent_protocol::TurnItem::Reasoning(text)) if started => vec![proto::ChatEvent {
+            payload: Some(proto::chat_event::Payload::Reasoning(text.content)),
+        }],
+        Ok(agent_protocol::TurnItem::AgentMessage(_))
+        | Ok(agent_protocol::TurnItem::Reasoning(_)) => Vec::new(),
+        Ok(agent_protocol::TurnItem::Extension(extension))
+            if extension.namespace == "astro.memory" =>
+        {
+            vec![memory_update_from_value(&extension.payload)]
+        }
+        Ok(agent_protocol::TurnItem::HookPrompt(text)) => vec![proto::ChatEvent {
+            payload: Some(proto::chat_event::Payload::Hook(proto::HookEvent {
+                name: "hook_prompt".into(),
+                detail: text.content,
+                outcome: if started { "started" } else { "completed" }.into(),
+            })),
+        }],
+        Ok(_) => vec![activity(item.id, &item.item_type, item.payload_json)],
+        Err(error) => vec![chat_error(format!("invalid thread item: {error}"))],
+    }
+}
+
+fn memory_update_chat_event(payload: &str) -> proto::ChatEvent {
+    match serde_json::from_str::<serde_json::Value>(payload) {
+        Ok(payload) => memory_update_from_value(&payload),
+        Err(error) => chat_error(format!("invalid memory update payload: {error}")),
+    }
+}
+
+fn memory_update_from_value(payload: &serde_json::Value) -> proto::ChatEvent {
+    proto::ChatEvent {
+        payload: Some(proto::chat_event::Payload::MemoryUpdate(
+            proto::MemoryUpdateEvent {
+                operation: payload
+                    .get("op")
+                    .and_then(serde_json::Value::as_str)
+                    .or_else(|| {
+                        payload
+                            .get("source")
+                            .and_then(serde_json::Value::as_str)
+                            .map(|source| if source == "tool" { "memory" } else { source })
+                    })
+                    .unwrap_or("memory")
+                    .into(),
+                content: payload
+                    .get("content")
+                    .or_else(|| payload.get("summary"))
+                    .and_then(serde_json::Value::as_str)
+                    .unwrap_or_default()
+                    .into(),
+            },
+        )),
+    }
+}
+
+fn media_to_proto(asset: types::MediaAsset) -> proto::MediaAsset {
+    let (ref_kind, ref_value) = match asset.reference {
+        types::MediaRef::WorkspacePath(path) => ("workspace_path", path),
+        types::MediaRef::DataUrl(url) => ("data_url", url),
+        types::MediaRef::RemoteUri(uri) => ("remote_uri", uri),
+    };
+    let kind = match asset.kind {
+        types::MediaKind::Image => "image",
+        types::MediaKind::Audio => "audio",
+        types::MediaKind::Video => "video",
+        types::MediaKind::File => "file",
+    };
+    proto::MediaAsset {
+        kind: kind.into(),
+        mime_type: asset.mime_type,
+        ref_kind: ref_kind.into(),
+        ref_value,
+        label: asset.label.unwrap_or_default(),
+        id: asset.id.unwrap_or_default(),
+    }
+}
+
+fn context_usage_chat_event(payload: &str) -> proto::ChatEvent {
+    let Ok(usage) = serde_json::from_str::<agent_protocol::ContextUsageEvent>(payload) else {
+        return chat_error("invalid context usage payload");
+    };
+    proto::ChatEvent {
+        payload: Some(proto::chat_event::Payload::ContextUsage(
+            proto::ContextUsageEvent {
+                context_window: usage.context_window,
+                total_tokens: usage.total_tokens,
+                segments: usage
+                    .segments
+                    .into_iter()
+                    .map(|segment| proto::ContextUsageSegment {
+                        id: segment.id,
+                        tokens: segment.tokens,
+                        count: segment.count.unwrap_or_default(),
+                        items: segment
+                            .items
+                            .into_iter()
+                            .map(|item| proto::ContextUsageItem {
+                                id: item.id,
+                                label: item.label,
+                                tokens: item.tokens,
+                            })
+                            .collect(),
+                    })
+                    .collect(),
+                updated_at: usage.updated_at,
+                recommend_compact: usage.recommend_compact,
+            },
+        )),
+    }
+}
+
+async fn prepare_chat_setup(
+    service: &AstroServiceImpl,
+    chat: proto::ChatRequest,
+    validated: ValidatedChatRequest,
+    prepared_resume: Option<PreparedResume>,
+) -> Result<ChatSetup, Status> {
+    let connection_id = format!("chat-{}", uuid::Uuid::new_v4());
+    let (event_rx, cancel, generation) = service.connections.register(connection_id).await;
+    let subscription = generation.key().clone();
+    let mut subscribed_commands = None;
+    let setup = async {
+        if let Some(prepared) = prepared_resume {
+            resume(&prepared.managed, subscription.clone(), false).await?;
+            subscribed_commands = Some(prepared.managed.commands.clone());
+            #[cfg(test)]
+            wait_at_resume_resolve_barrier(&chat.session_id, &subscription).await;
+            prepared
+                .gate
+                .resolve(&validated.resume_items)
+                .await
+                .map_err(|error| {
+                    Status::invalid_argument(format!("invalid resume_json: {error}"))
+                })?;
+            return Ok::<_, Status>((prepared.managed, prepared.turn_id));
+        }
+        let managed = service.get_or_create_thread(&chat.session_id).await?;
+        service
+            .configure_thread_from_chat(&managed.runtime, &chat)
+            .await?;
+        resume(&managed, subscription.clone(), false).await?;
+        subscribed_commands = Some(managed.commands.clone());
+        managed
+            .runtime
+            .submit(Op::ThreadSettings {
+                settings: serde_json::json!({"provider":chat.provider,"model":chat.model}),
+            })
+            .await
+            .map_err(|error| Status::unavailable(error.to_string()))?;
+        let (_, submission) = managed
+            .runtime
+            .submit_turn(
+                validated
+                    .turn_request
+                    .expect("non-resume validation must produce turn input"),
+                TurnInputMode::StartOrSteer,
+            )
+            .await
+            .map_err(|error| Status::failed_precondition(error.to_string()))?;
+        let turn_id = submission
+            .turn_id()
+            .map(str::to_owned)
+            .ok_or_else(|| Status::failed_precondition("turn input was not submitted"))?;
+        Ok::<_, Status>((managed, turn_id))
+    }
+    .await;
+    match setup {
+        Ok((managed, turn_id)) => Ok(ChatSetup {
+            event_rx,
+            cancel,
+            generation,
+            subscription,
+            managed,
+            turn_id,
+        }),
+        Err(error) => {
+            if let Some(commands) = subscribed_commands {
+                if let Err(cleanup_error) =
+                    unsubscribe_and_wait(&commands, subscription.clone()).await
+                {
+                    service.connections.remove_generation(&generation).await;
+                    return Err(cleanup_error);
+                }
+            }
+            service.connections.remove_generation(&generation).await;
+            Err(error)
+        }
+    }
+}
+
+pub(crate) async fn chat(
+    service: &AstroServiceImpl,
+    request: Request<proto::ChatRequest>,
+) -> Result<Response<super::astro_service::ChatStream>, Status> {
+    let mut chat = request.into_inner();
+    if chat.session_id.trim().is_empty() {
+        chat.session_id = uuid::Uuid::new_v4().to_string();
+    }
+    let validated = validate_chat_request(&chat)?;
+    let prepared_resume =
+        prepare_resume_before_side_effects(service, &chat.session_id, &validated.resume_items)
+            .await?;
+    let setup_service = service.clone();
+    let (setup_send, setup_receive) = tokio::sync::oneshot::channel();
+    tokio::spawn(async move {
+        let setup = prepare_chat_setup(&setup_service, chat, validated, prepared_resume).await;
+        match setup {
+            Ok(setup) => {
+                let cleanup = ChatSetupCleanup {
+                    registry: setup_service.connections.clone(),
+                    commands: setup.managed.commands.clone(),
+                    generation: setup.generation.clone(),
+                    subscription: setup.subscription.clone(),
+                };
+                let (accept, accepted) = tokio::sync::oneshot::channel();
+                if setup_send.send(Ok((setup, accept))).is_err() || accepted.await.is_err() {
+                    cleanup.run().await;
+                }
+            }
+            Err(error) => {
+                let _ = setup_send.send(Err(error));
+            }
+        }
+    });
+    let (setup, accept) = setup_receive
+        .await
+        .map_err(|_| Status::unavailable("chat setup worker stopped"))??;
+    #[cfg(test)]
+    wait_at_chat_accept_barrier(&setup.turn_id, &setup.subscription).await;
+    let ChatSetup {
+        mut event_rx,
+        cancel,
+        generation,
+        subscription,
+        managed,
+        turn_id,
+    } = setup;
+    let registry = service.connections.clone();
+    let unsubscribe = managed.commands.clone();
+    let cleanup_subscription = subscription;
+    let (tx, rx) = tokio::sync::mpsc::channel(128);
+    tokio::spawn(async move {
+        loop {
+            let event = tokio::select! {
+                biased;
+                () = tx.closed() => break,
+                () = cancel.cancelled() => {
+                    let _ = tx.send(Err(Status::resource_exhausted("slow thread-event consumer"))).await;
+                    break;
+                }
+                event = event_rx.recv() => match event { Some(event) => event, None => break },
+            };
+            if event.turn_id != turn_id {
+                continue;
+            }
+            let terminal = matches!(
+                event.payload,
+                Some(proto::thread_event::Payload::TurnComplete(_))
+                    | Some(proto::thread_event::Payload::TurnAborted(_))
+            );
+            for mapped in thread_event_to_chat_events(event) {
+                if tx.send(Ok(mapped)).await.is_err() {
+                    break;
+                }
+            }
+            if terminal {
+                break;
+            }
+        }
+        unsubscribe_detached(&unsubscribe, cleanup_subscription);
+        registry.remove_generation(&generation).await;
+    });
+    let _ = accept.send(());
+    Ok(Response::new(Box::pin(ReceiverStream::new(rx))))
+}
+
+#[cfg(test)]
+mod tests {
+    use futures::StreamExt;
+    use tempfile::TempDir;
+
+    use super::*;
+
+    #[test]
+    fn terminal_thread_event_maps_to_run_finished_then_done() {
+        let mapped = thread_event_to_chat_events(proto::ThreadEvent {
+            thread_id: "session-1".into(),
+            turn_id: "turn-1".into(),
+            payload: Some(proto::thread_event::Payload::TurnComplete(
+                proto::ThreadTurnComplete {
+                    last_agent_message: "done".into(),
+                    error: None,
+                    has_error: false,
+                },
+            )),
+        });
+        assert!(matches!(
+            mapped.as_slice(),
+            [proto::ChatEvent { payload: Some(proto::chat_event::Payload::RunFinished(finished)) },
+             proto::ChatEvent { payload: Some(proto::chat_event::Payload::Done(true)) }]
+                if finished.outcome_type == "success"
+        ));
+    }
+
+    #[test]
+    fn settings_extension_is_not_exposed_to_legacy_chat() {
+        let mapped = thread_event_to_chat_events(proto::ThreadEvent {
+            thread_id: "session-1".into(),
+            turn_id: "settings-1".into(),
+            payload: Some(proto::thread_event::Payload::Extension(
+                proto::ThreadExtension {
+                    item_id: "settings-1".into(),
+                    namespace: "astro.thread_settings".into(),
+                    payload_json: "{}".into(),
+                },
+            )),
+        });
+        assert!(mapped.is_empty());
+    }
+
+    #[test]
+    fn control_request_preserves_surface_and_interrupt_identity() {
+        let mapped = thread_event_to_chat_events(proto::ThreadEvent {
+            thread_id: "session-1".into(),
+            turn_id: "turn-1".into(),
+            payload: Some(proto::thread_event::Payload::ControlRequest(
+                proto::ThreadControlRequest {
+                    kind: "request_user_input".into(),
+                    item_id: "tool-1".into(),
+                    request_id: "request-1".into(),
+                    payload_json: serde_json::json!({
+                        "reason":"confirmation",
+                        "message":"continue?",
+                        "operations":[],
+                        "response_schema":{"type":"object","properties":{"approved":{"type":"boolean"}}}
+                    })
+                    .to_string(),
+                },
+            )),
+        });
+        assert_eq!(mapped.len(), 1);
+        let Some(proto::chat_event::Payload::RunFinished(finished)) = &mapped[0].payload else {
+            panic!("control request must map to exactly one HITL terminal event");
+        };
+        assert_eq!(finished.outcome_type, "hitl_waiting");
+        assert_eq!(finished.run_id, "turn-1");
+        assert_eq!(finished.interrupts.len(), 1);
+        let interrupt = &finished.interrupts[0];
+        assert_eq!(interrupt.id, "request-1");
+        assert_eq!(interrupt.tool_call_id, "tool-1");
+        assert_eq!(interrupt.reason, "confirmation");
+        assert!(interrupt.response_schema_json.contains("properties"));
+        assert!(interrupt.metadata_json.contains("operations"));
+    }
+
+    #[test]
+    fn dynamic_tool_control_maps_to_legacy_tool_call_delta() {
+        let mapped = thread_event_to_chat_events(proto::ThreadEvent {
+            thread_id: "session-1".into(),
+            turn_id: "turn-1".into(),
+            payload: Some(proto::thread_event::Payload::ControlRequest(
+                proto::ThreadControlRequest {
+                    kind: "dynamic_tool_call".into(),
+                    item_id: "call-1".into(),
+                    request_id: "turn-1:call-1:arguments".into(),
+                    payload_json: serde_json::json!({
+                        "index": 3,
+                        "name": "file_ops",
+                        "delta": "{\"path\":"
+                    })
+                    .to_string(),
+                },
+            )),
+        });
+        assert!(matches!(
+            mapped.as_slice(),
+            [proto::ChatEvent {
+                payload: Some(proto::chat_event::Payload::ToolCallDelta(delta))
+            }] if delta.index == 3
+                && delta.id == "call-1"
+                && delta.name == "file_ops"
+                && delta.arguments == "{\"path\":"
+        ));
+    }
+
+    #[test]
+    fn completed_text_items_do_not_repeat_streamed_content() {
+        let delta = thread_event_to_chat_events(proto::ThreadEvent {
+            thread_id: "session-1".into(),
+            turn_id: "turn-1".into(),
+            payload: Some(proto::thread_event::Payload::AgentMessageDelta(
+                proto::ThreadDelta {
+                    item_id: "message-1".into(),
+                    delta: "hello".into(),
+                },
+            )),
+        });
+        let completed = thread_event_to_chat_events(proto::ThreadEvent {
+            thread_id: "session-1".into(),
+            turn_id: "turn-1".into(),
+            payload: Some(proto::thread_event::Payload::ItemCompleted(
+                proto::ThreadItemEvent {
+                    item: Some(proto::ThreadItem {
+                        id: "message-1".into(),
+                        item_type: "agent_message".into(),
+                        status: "completed".into(),
+                        payload_json: serde_json::to_string(
+                            &agent_protocol::TurnItem::AgentMessage(agent_protocol::TextItem {
+                                id: "message-1".into(),
+                                content: "hello".into(),
+                            }),
+                        )
+                        .expect("serialize item"),
+                    }),
+                },
+            )),
+        });
+        let text = delta
+            .into_iter()
+            .chain(completed)
+            .filter_map(|event| match event.payload {
+                Some(proto::chat_event::Payload::Token(token)) => Some(token),
+                _ => None,
+            })
+            .collect::<String>();
+        assert_eq!(text, "hello");
+    }
+
+    #[test]
+    fn completed_reasoning_item_emits_no_duplicate_event() {
+        let mapped = thread_event_to_chat_events(proto::ThreadEvent {
+            thread_id: "session-1".into(),
+            turn_id: "turn-1".into(),
+            payload: Some(proto::thread_event::Payload::ItemCompleted(
+                proto::ThreadItemEvent {
+                    item: Some(proto::ThreadItem {
+                        id: "reasoning-1".into(),
+                        item_type: "reasoning".into(),
+                        status: "completed".into(),
+                        payload_json: serde_json::to_string(&agent_protocol::TurnItem::Reasoning(
+                            agent_protocol::TextItem {
+                                id: "reasoning-1".into(),
+                                content: "thought".into(),
+                            },
+                        ))
+                        .expect("serialize item"),
+                    }),
+                },
+            )),
+        });
+        assert!(mapped.is_empty());
+    }
+
+    #[test]
+    fn completed_switch_mode_string_output_preserves_raw_json() {
+        let mapped = thread_event_to_chat_events(proto::ThreadEvent {
+            thread_id: "session-1".into(),
+            turn_id: "turn-1".into(),
+            payload: Some(proto::thread_event::Payload::ItemCompleted(
+                proto::ThreadItemEvent {
+                    item: Some(proto::ThreadItem {
+                        id: "call-mode".into(),
+                        item_type: "dynamic_tool_call".into(),
+                        status: "completed".into(),
+                        payload_json: serde_json::to_string(
+                            &agent_protocol::TurnItem::DynamicToolCall(agent_protocol::ToolItem {
+                                id: "call-mode".into(),
+                                name: "switch_mode".into(),
+                                arguments: serde_json::json!({"mode":"plan"}),
+                                output: Some(serde_json::Value::String(
+                                    r#"{"astro_mode_switch":true,"mode":"plan"}"#.into(),
+                                )),
+                                media: Vec::new(),
+                                status: agent_protocol::ToolStatus::Completed,
+                            }),
+                        )
+                        .expect("serialize item"),
+                    }),
+                },
+            )),
+        });
+        assert!(matches!(
+            mapped.as_slice(),
+            [proto::ChatEvent {
+                payload: Some(proto::chat_event::Payload::ToolCall(tool))
+            }] if tool.result == r#"{"astro_mode_switch":true,"mode":"plan"}"#
+        ));
+    }
+
+    #[test]
+    fn memory_extension_restores_legacy_memory_update() {
+        let mapped = thread_event_to_chat_events(proto::ThreadEvent {
+            thread_id: "session-1".into(),
+            turn_id: "turn-1".into(),
+            payload: Some(proto::thread_event::Payload::Extension(
+                proto::ThreadExtension {
+                    item_id: "memory-1".into(),
+                    namespace: "astro.memory".into(),
+                    payload_json: serde_json::json!({"op":"memory","content":"saved"}).to_string(),
+                },
+            )),
+        });
+        assert!(matches!(
+            mapped.as_slice(),
+            [proto::ChatEvent {
+                payload: Some(proto::chat_event::Payload::MemoryUpdate(memory))
+            }] if memory.operation == "memory" && memory.content == "saved"
+        ));
+    }
+
+    #[test]
+    fn committed_input_extension_restores_legacy_ack() {
+        let mapped = thread_event_to_chat_events(proto::ThreadEvent {
+            thread_id: "session-1".into(),
+            turn_id: "turn-1".into(),
+            payload: Some(proto::thread_event::Payload::Extension(
+                proto::ThreadExtension {
+                    item_id: "ack-1".into(),
+                    namespace: "astro.user_input_committed".into(),
+                    payload_json: serde_json::json!({
+                        "turn_id": "turn-1",
+                        "client_message_id": "queued-7",
+                    })
+                    .to_string(),
+                },
+            )),
+        });
+        assert!(matches!(
+            mapped.as_slice(),
+            [proto::ChatEvent {
+                payload: Some(proto::chat_event::Payload::UserInputCommitted(committed))
+            }] if committed.client_message_id == "queued-7"
+        ));
+    }
+
+    #[test]
+    fn shutdown_complete_is_not_a_legacy_done_boundary() {
+        let mapped = thread_event_to_chat_events(proto::ThreadEvent {
+            thread_id: "session-1".into(),
+            turn_id: "shutdown".into(),
+            payload: Some(proto::thread_event::Payload::ShutdownComplete(true)),
+        });
+        assert!(matches!(
+            mapped.as_slice(),
+            [proto::ChatEvent {
+                payload: Some(proto::chat_event::Payload::Activity(activity))
+            }] if activity.activity_type == "shutdown_complete"
+        ));
+    }
+
+    fn valid_chat_request() -> proto::ChatRequest {
+        proto::ChatRequest {
+            session_id: "validation-thread".into(),
+            content: "hello".into(),
+            use_memory: true,
+            interaction_mode: "agent".into(),
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn turn_request_preserves_client_message_identity() {
+        let mut chat = valid_chat_request();
+        chat.client_message_id = "queued-message-7".into();
+        let request = turn_request_from_chat(&chat).expect("valid turn input");
+        assert_eq!(request.input.len(), 1);
+        assert_eq!(
+            request.input[0].client_message_id.as_deref(),
+            Some("queued-message-7")
+        );
+    }
+
+    #[test]
+    fn chat_contract_rejects_tool_name_override() {
+        let mut chat = valid_chat_request();
+        chat.tool_names = vec!["terminal".into()];
+        assert_eq!(
+            validate_chat_request(&chat)
+                .expect_err("tool override must fail")
+                .code(),
+            tonic::Code::InvalidArgument
+        );
+    }
+
+    #[test]
+    fn chat_contract_rejects_disabled_memory_instead_of_ignoring_it() {
+        let mut chat = valid_chat_request();
+        chat.use_memory = false;
+        assert_eq!(
+            validate_chat_request(&chat)
+                .expect_err("disabled memory must fail")
+                .code(),
+            tonic::Code::InvalidArgument
+        );
+    }
+
+    #[test]
+    fn chat_contract_validates_resume_json() {
+        let mut chat = valid_chat_request();
+        chat.resume_json = "not-json".into();
+        assert_eq!(
+            validate_chat_request(&chat)
+                .expect_err("malformed resume must fail")
+                .code(),
+            tonic::Code::InvalidArgument
+        );
+        chat.resume_json = r#"[{"interrupt_id":"request-1","payload":{"approved":true}}]"#.into();
+        let validated = validate_chat_request(&chat).expect("valid resume payload");
+        assert_eq!(validated.resume_items.len(), 1);
+        assert_eq!(validated.resume_items[0].interrupt_id, "request-1");
+    }
+
+    #[test]
+    fn chat_contract_rejects_unknown_interaction_mode() {
+        let mut chat = valid_chat_request();
+        chat.interaction_mode = "unknown".into();
+        assert_eq!(
+            validate_chat_request(&chat)
+                .expect_err("unknown interaction mode must fail")
+                .code(),
+            tonic::Code::InvalidArgument
+        );
+        chat.interaction_mode = "plan".into();
+        assert_eq!(
+            validate_chat_request(&chat)
+                .expect("known mode")
+                .interaction_mode,
+            types::InteractionMode::Plan
+        );
+    }
+
+    #[tokio::test]
+    async fn invalid_submit_turn_has_no_thread_rollout_or_subscription_side_effects() {
+        let dir = TempDir::new().expect("tempdir");
+        memory::ensure_workspace(dir.path()).expect("workspace");
+        let service = AstroServiceImpl::new(dir.path().to_path_buf());
+        let (_rx, _cancel, generation) = service.connections.register(" submit-id ".into()).await;
+        let mut chat = valid_chat_request();
+        chat.session_id = "invalid-submit-thread".into();
+        chat.interaction_mode = "mystery".into();
+
+        let error = submit_turn(
+            &service,
+            Request::new(proto::SubmitTurnRequest {
+                connection_id: " submit-id ".into(),
+                chat: Some(chat),
+                mode: "start_or_steer".into(),
+                expected_turn_id: String::new(),
+            }),
+        )
+        .await
+        .expect_err("invalid settings must fail before thread creation");
+        assert_eq!(error.code(), tonic::Code::InvalidArgument);
+        assert!(!service.threads.contains("invalid-submit-thread").await);
+        assert!(service
+            .thread_states
+            .get("invalid-submit-thread")
+            .await
+            .is_none());
+        let rollout_root = dir.path().join("sessions").join("rollouts");
+        assert!(
+            agent_rollout::find_rollout(&rollout_root, "invalid-submit-thread")
+                .expect("rollout lookup")
+                .is_none()
+        );
+        service.connections.remove_generation(&generation).await;
+    }
+
+    #[tokio::test]
+    async fn not_submitted_response_preserves_shared_subscription() {
+        let dir = TempDir::new().expect("tempdir");
+        memory::ensure_workspace(dir.path()).expect("workspace");
+        let service = AstroServiceImpl::new(dir.path().to_path_buf());
+        let managed = service
+            .get_or_create_thread("not-submitted-thread")
+            .await
+            .expect("thread");
+        let (_rx, _cancel, generation) = service
+            .connections
+            .register("not-submitted-connection".into())
+            .await;
+        let subscription = generation.key().clone();
+        resume(&managed, subscription.clone(), false)
+            .await
+            .expect("resume");
+        assert!(
+            service
+                .thread_states
+                .has_subscribers("not-submitted-thread")
+                .await
+        );
+
+        let response = submit_turn_response(
+            "submission-1".into(),
+            TurnInputSubmission::NotSubmitted {
+                reason: "terminating".into(),
+            },
+        )
+        .into_inner();
+
+        assert_eq!(response.disposition, "not_submitted");
+        assert_eq!(response.reason, "terminating");
+        assert!(
+            service
+                .thread_states
+                .has_subscribers("not-submitted-thread")
+                .await
+        );
+        service.connections.remove_generation(&generation).await;
+        managed
+            .runtime
+            .submit(agent_protocol::Op::Shutdown)
+            .await
+            .unwrap();
+        managed.runtime.wait_terminated().await;
+    }
+
+    #[tokio::test]
+    async fn submit_turn_rpc_preserves_shared_subscription_on_not_submitted() {
+        let dir = TempDir::new().expect("tempdir");
+        memory::ensure_workspace(dir.path()).expect("workspace");
+        let service = AstroServiceImpl::new(dir.path().to_path_buf());
+        let (_rx, _cancel, generation) = service
+            .connections
+            .register("rpc-not-submitted-connection".into())
+            .await;
+        let response = submit_turn(
+            &service,
+            Request::new(proto::SubmitTurnRequest {
+                connection_id: "rpc-not-submitted-connection".into(),
+                chat: Some(proto::ChatRequest {
+                    session_id: "rpc-not-submitted-thread".into(),
+                    content: "late steer".into(),
+                    use_memory: true,
+                    interaction_mode: "agent".into(),
+                    ..Default::default()
+                }),
+                mode: "steer".into(),
+                expected_turn_id: "missing-turn".into(),
+            }),
+        )
+        .await
+        .expect("not submitted is a response")
+        .into_inner();
+
+        assert_eq!(response.disposition, "not_submitted");
+        assert_eq!(response.reason, "no_active_turn");
+        assert!(
+            service
+                .thread_states
+                .has_subscribers("rpc-not-submitted-thread")
+                .await
+        );
+        let managed = service
+            .threads
+            .get("rpc-not-submitted-thread")
+            .await
+            .expect("created thread");
+        service.connections.remove_generation(&generation).await;
+        managed
+            .runtime
+            .submit(agent_protocol::Op::Shutdown)
+            .await
+            .unwrap();
+        managed.runtime.wait_terminated().await;
+    }
+
+    #[tokio::test]
+    async fn accepted_submit_response_keeps_started_and_steered_subscriptions() {
+        let dir = TempDir::new().expect("tempdir");
+        memory::ensure_workspace(dir.path()).expect("workspace");
+        let service = AstroServiceImpl::new(dir.path().to_path_buf());
+        let managed = service
+            .get_or_create_thread("accepted-submit-thread")
+            .await
+            .expect("thread");
+        let (_rx, _cancel, generation) = service
+            .connections
+            .register("accepted-submit-connection".into())
+            .await;
+        let subscription = generation.key().clone();
+        resume(&managed, subscription.clone(), false)
+            .await
+            .expect("resume");
+
+        for (submission, expected) in [
+            (
+                TurnInputSubmission::Started {
+                    turn_id: "turn-1".into(),
+                },
+                "started",
+            ),
+            (
+                TurnInputSubmission::Steered {
+                    turn_id: "turn-1".into(),
+                },
+                "steered",
+            ),
+        ] {
+            assert_eq!(
+                submit_turn_response("submission-1".into(), submission)
+                    .into_inner()
+                    .disposition,
+                expected
+            );
+            assert!(
+                service
+                    .thread_states
+                    .has_subscribers("accepted-submit-thread")
+                    .await
+            );
+        }
+
+        unsubscribe_and_wait(&managed.commands, subscription)
+            .await
+            .expect("cleanup subscription");
+        service.connections.remove_generation(&generation).await;
+        managed
+            .runtime
+            .submit(agent_protocol::Op::Shutdown)
+            .await
+            .unwrap();
+        managed.runtime.wait_terminated().await;
+    }
+
+    #[tokio::test]
+    async fn semantic_resume_errors_have_no_subscription_or_config_side_effects() {
+        let dir = TempDir::new().expect("tempdir");
+        memory::ensure_workspace(dir.path()).expect("workspace");
+        let service = AstroServiceImpl::new(dir.path().to_path_buf());
+        let managed = service
+            .get_or_create_thread("semantic-resume")
+            .await
+            .expect("thread");
+        service
+            .configure_thread_from_chat(
+                &managed.runtime,
+                &proto::ChatRequest {
+                    session_id: "semantic-resume".into(),
+                    content: "initial".into(),
+                    use_memory: true,
+                    ..Default::default()
+                },
+            )
+            .await
+            .expect("configure gate");
+        let gate = service
+            .hitl_registry
+            .get("semantic-resume")
+            .await
+            .expect("gate");
+        service
+            .thread_states
+            .get("semantic-resume")
+            .await
+            .expect("thread state")
+            .lock()
+            .await
+            .history
+            .track(&agent_protocol::Event {
+                id: "pending-turn".into(),
+                msg: agent_protocol::EventMsg::TurnStarted(agent_protocol::TurnStartedEvent {
+                    turn_id: "pending-turn".into(),
+                }),
+            });
+        let _wait = gate
+            .begin_wait(agent::Interrupt {
+                id: "known".into(),
+                reason: "confirmation".into(),
+                response_schema_json: serde_json::json!({
+                    "type":"object",
+                    "required":["approved"],
+                    "properties":{"approved":{"type":"boolean"}}
+                })
+                .to_string(),
+                ..Default::default()
+            })
+            .await;
+        let initial_temperature = managed.runtime.session().temperature();
+        let initial_mode = managed.runtime.session().interaction_mode().await;
+        let (_rx, _cancel, generation) =
+            service.connections.register("semantic-client".into()).await;
+
+        for resume_json in [
+            r#"[{"interrupt_id":"unknown","status":"resolved","payload":{"approved":true}}]"#,
+            r#"[{"interrupt_id":"known","status":"bogus","payload":{"approved":true}}]"#,
+            r#"[{"interrupt_id":"known","status":"resolved","payload":{"approved":"yes"}}]"#,
+        ] {
+            let error = submit_turn(
+                &service,
+                Request::new(proto::SubmitTurnRequest {
+                    connection_id: "semantic-client".into(),
+                    chat: Some(proto::ChatRequest {
+                        session_id: "semantic-resume".into(),
+                        content: "must not start a new turn".into(),
+                        use_memory: true,
+                        interaction_mode: "plan".into(),
+                        temperature: Some(1.7),
+                        resume_json: resume_json.into(),
+                        ..Default::default()
+                    }),
+                    mode: "start_or_steer".into(),
+                    expected_turn_id: String::new(),
+                }),
+            )
+            .await
+            .expect_err("semantic resume must fail");
+            assert_eq!(error.code(), tonic::Code::InvalidArgument);
+            assert!(
+                !service
+                    .thread_states
+                    .has_subscribers("semantic-resume")
+                    .await
+            );
+            assert_eq!(managed.runtime.session().temperature(), initial_temperature);
+            assert_eq!(
+                managed.runtime.session().interaction_mode().await,
+                initial_mode
+            );
+            assert_eq!(gate.pending_interrupts().await.len(), 1);
+        }
+
+        service.connections.remove_generation(&generation).await;
+        managed
+            .runtime
+            .submit(Op::Shutdown)
+            .await
+            .expect("shutdown");
+        managed.runtime.wait_terminated().await;
+        managed.stop_listener().await;
+    }
+
+    #[tokio::test]
+    async fn resume_for_unknown_thread_creates_no_thread_state_or_rollout() {
+        let dir = TempDir::new().expect("tempdir");
+        memory::ensure_workspace(dir.path()).expect("workspace");
+        let service = AstroServiceImpl::new(dir.path().to_path_buf());
+        let (_rx, _cancel, generation) = service.connections.register("resume-client".into()).await;
+        let error = submit_turn(
+            &service,
+            Request::new(proto::SubmitTurnRequest {
+                connection_id: "resume-client".into(),
+                chat: Some(proto::ChatRequest {
+                    session_id: "unknown-resume-thread".into(),
+                    use_memory: true,
+                    resume_json: r#"[{"interrupt_id":"missing","status":"resolved"}]"#.into(),
+                    ..Default::default()
+                }),
+                mode: "start_or_steer".into(),
+                expected_turn_id: String::new(),
+            }),
+        )
+        .await
+        .expect_err("unknown resume thread");
+        assert_eq!(error.code(), tonic::Code::InvalidArgument);
+        assert!(!service.threads.contains("unknown-resume-thread").await);
+        assert!(service
+            .thread_states
+            .get("unknown-resume-thread")
+            .await
+            .is_none());
+        assert!(agent_rollout::find_rollout(
+            &dir.path().join("sessions").join("rollouts"),
+            "unknown-resume-thread"
+        )
+        .expect("rollout lookup")
+        .is_none());
+        service.connections.remove_generation(&generation).await;
+    }
+
+    #[tokio::test]
+    async fn cancelled_connection_stream_reports_resource_exhausted_once() {
+        let dir = TempDir::new().expect("tempdir");
+        memory::ensure_workspace(dir.path()).expect("workspace");
+        let service = AstroServiceImpl::new(dir.path().to_path_buf());
+        let mut stream = subscribe_thread_events(
+            &service,
+            Request::new(proto::SubscribeThreadEventsRequest {
+                connection_id: "same-id".into(),
+            }),
+        )
+        .await
+        .expect("subscribe")
+        .into_inner();
+        let (_replacement, _cancel, replacement_generation) =
+            service.connections.register("same-id".into()).await;
+
+        let error = stream
+            .next()
+            .await
+            .expect("one cancellation status")
+            .expect_err("cancellation must be an error");
+        assert_eq!(error.code(), tonic::Code::ResourceExhausted);
+        assert!(stream.next().await.is_none());
+        service
+            .connections
+            .remove_generation(&replacement_generation)
+            .await;
+    }
+
+    #[tokio::test]
+    async fn slow_connection_reports_one_resource_exhausted_then_closes() {
+        let dir = TempDir::new().expect("tempdir");
+        memory::ensure_workspace(dir.path()).expect("workspace");
+        let service = AstroServiceImpl::new(dir.path().to_path_buf());
+        let mut stream = subscribe_thread_events(
+            &service,
+            Request::new(proto::SubscribeThreadEventsRequest {
+                connection_id: "slow".into(),
+            }),
+        )
+        .await
+        .expect("subscribe")
+        .into_inner();
+        for index in 0..300 {
+            let _ = service
+                .connections
+                .send_to(
+                    "slow",
+                    proto::ThreadEvent {
+                        thread_id: "thread".into(),
+                        turn_id: format!("turn-{index}"),
+                        payload: Some(proto::thread_event::Payload::TurnStarted(
+                            proto::ThreadTurnStarted {
+                                turn_id: format!("turn-{index}"),
+                            },
+                        )),
+                    },
+                )
+                .await;
+            tokio::task::yield_now().await;
+        }
+        let mut errors = 0;
+        while let Some(result) = stream.next().await {
+            if let Err(status) = result {
+                assert_eq!(status.code(), tonic::Code::ResourceExhausted);
+                errors += 1;
+            }
+        }
+        assert_eq!(errors, 1);
+    }
+
+    #[tokio::test]
+    async fn slow_connection_unsubscribes_exact_generation_from_every_thread() {
+        let dir = TempDir::new().expect("tempdir");
+        memory::ensure_workspace(dir.path()).expect("workspace");
+        let service = AstroServiceImpl::new(dir.path().to_path_buf());
+        let first = service
+            .get_or_create_thread("slow-first")
+            .await
+            .expect("first");
+        let second = service
+            .get_or_create_thread("slow-second")
+            .await
+            .expect("second");
+        let mut stream = subscribe_thread_events(
+            &service,
+            Request::new(proto::SubscribeThreadEventsRequest {
+                connection_id: " slow-both ".into(),
+            }),
+        )
+        .await
+        .expect("subscribe")
+        .into_inner();
+        let key = service
+            .connections
+            .current_generation_key("slow-both")
+            .await
+            .expect("canonical generation");
+        resume(&first, key.clone(), false)
+            .await
+            .expect("first resume");
+        resume(&second, key.clone(), false)
+            .await
+            .expect("second resume");
+
+        for index in 0..600 {
+            let _ = service
+                .connections
+                .send_to_generation(
+                    &key,
+                    proto::ThreadEvent {
+                        thread_id: "slow-first".into(),
+                        turn_id: format!("turn-{index}"),
+                        payload: Some(proto::thread_event::Payload::TurnStarted(
+                            proto::ThreadTurnStarted {
+                                turn_id: format!("turn-{index}"),
+                            },
+                        )),
+                    },
+                )
+                .await;
+            tokio::task::yield_now().await;
+        }
+        let mut errors = 0;
+        loop {
+            let next = tokio::time::timeout(std::time::Duration::from_secs(2), stream.next())
+                .await
+                .expect("slow stream must terminate");
+            let Some(result) = next else { break };
+            if let Err(error) = result {
+                assert_eq!(error.code(), tonic::Code::ResourceExhausted);
+                errors += 1;
+            }
+        }
+        assert_eq!(errors, 1);
+        for _ in 0..16 {
+            if !service.thread_states.has_subscribers("slow-first").await
+                && !service.thread_states.has_subscribers("slow-second").await
+            {
+                break;
+            }
+            tokio::task::yield_now().await;
+        }
+        assert!(!service.thread_states.has_subscribers("slow-first").await);
+        assert!(!service.thread_states.has_subscribers("slow-second").await);
+        for managed in [first, second] {
+            managed.stop_listener().await;
+            managed
+                .runtime
+                .submit(Op::Shutdown)
+                .await
+                .expect("shutdown");
+            managed.runtime.wait_terminated().await;
+        }
+    }
+
+    #[tokio::test]
+    async fn connection_ids_are_trimmed_for_subscription_membership() {
+        let dir = TempDir::new().expect("tempdir");
+        memory::ensure_workspace(dir.path()).expect("workspace");
+        let service = AstroServiceImpl::new(dir.path().to_path_buf());
+        let stream = subscribe_thread_events(
+            &service,
+            Request::new(proto::SubscribeThreadEventsRequest {
+                connection_id: " spaced-id ".into(),
+            }),
+        )
+        .await
+        .expect("subscribe")
+        .into_inner();
+        resume_thread(
+            &service,
+            Request::new(proto::ResumeThreadRequest {
+                connection_id: " spaced-id ".into(),
+                thread_id: "trim-thread".into(),
+                include_turns: false,
+            }),
+        )
+        .await
+        .expect("resume");
+        assert_eq!(
+            service
+                .thread_states
+                .subscribed_connection_ids("trim-thread")
+                .await,
+            vec!["spaced-id".to_string()]
+        );
+        drop(stream);
+    }
+
+    #[tokio::test]
+    async fn dropping_stream_removes_exact_connection_generation() {
+        let dir = TempDir::new().expect("tempdir");
+        memory::ensure_workspace(dir.path()).expect("workspace");
+        let service = AstroServiceImpl::new(dir.path().to_path_buf());
+        let stream = subscribe_thread_events(
+            &service,
+            Request::new(proto::SubscribeThreadEventsRequest {
+                connection_id: "drop-me".into(),
+            }),
+        )
+        .await
+        .expect("subscribe")
+        .into_inner();
+        assert!(service.connections.contains("drop-me").await);
+        drop(stream);
+        for _ in 0..8 {
+            if !service.connections.contains("drop-me").await {
+                return;
+            }
+            tokio::task::yield_now().await;
+        }
+        panic!("dropped stream generation was not removed");
+    }
+
+    #[tokio::test]
+    async fn stale_same_id_stream_cleanup_preserves_replacement_subscription() {
+        let dir = TempDir::new().expect("tempdir");
+        memory::ensure_workspace(dir.path()).expect("workspace");
+        let service = AstroServiceImpl::new(dir.path().to_path_buf());
+        let managed = service
+            .get_or_create_thread("same-id-thread")
+            .await
+            .expect("thread");
+        let old_stream = subscribe_thread_events(
+            &service,
+            Request::new(proto::SubscribeThreadEventsRequest {
+                connection_id: "same-id-stream".into(),
+            }),
+        )
+        .await
+        .expect("old stream")
+        .into_inner();
+        let old_key = service
+            .connections
+            .current_generation_key("same-id-stream")
+            .await
+            .expect("old generation");
+        resume(&managed, old_key, false).await.expect("old resume");
+        let replacement_stream = subscribe_thread_events(
+            &service,
+            Request::new(proto::SubscribeThreadEventsRequest {
+                connection_id: "same-id-stream".into(),
+            }),
+        )
+        .await
+        .expect("replacement stream")
+        .into_inner();
+        let replacement_key = service
+            .connections
+            .current_generation_key("same-id-stream")
+            .await
+            .expect("replacement generation");
+        resume(&managed, replacement_key, false)
+            .await
+            .expect("replacement resume");
+
+        drop(old_stream);
+        for _ in 0..8 {
+            tokio::task::yield_now().await;
+        }
+        assert!(
+            service
+                .thread_states
+                .has_subscribers("same-id-thread")
+                .await
+        );
+
+        drop(replacement_stream);
+        for _ in 0..8 {
+            if !service
+                .thread_states
+                .has_subscribers("same-id-thread")
+                .await
+            {
+                managed
+                    .runtime
+                    .submit(agent_protocol::Op::Shutdown)
+                    .await
+                    .expect("shutdown");
+                managed.runtime.wait_terminated().await;
+                return;
+            }
+            tokio::task::yield_now().await;
+        }
+        panic!("replacement stream cleanup did not unsubscribe the connection");
+    }
+
+    #[tokio::test]
+    async fn thread_hitl_gate_is_resolvable_through_existing_interrupt_rpc() {
+        use proto::astro_service_server::AstroService;
+
+        let dir = TempDir::new().expect("tempdir");
+        memory::ensure_workspace(dir.path()).expect("workspace");
+        let service = AstroServiceImpl::new(dir.path().to_path_buf());
+        let managed = service
+            .get_or_create_thread("hitl-thread")
+            .await
+            .expect("thread");
+        service
+            .configure_thread_from_chat(
+                &managed.runtime,
+                &proto::ChatRequest {
+                    session_id: "hitl-thread".into(),
+                    ..Default::default()
+                },
+            )
+            .await
+            .expect("configure controls");
+        let gate = service
+            .hitl_registry
+            .get("hitl-thread")
+            .await
+            .expect("registered thread gate");
+        let resolution = gate
+            .begin_wait(agent::Interrupt {
+                id: "request-1".into(),
+                reason: "confirmation".into(),
+                message: "continue?".into(),
+                tool_call_id: "tool-1".into(),
+                response_schema_json: "{}".into(),
+                expires_at: String::new(),
+                metadata_json: String::new(),
+            })
+            .await;
+
+        AstroService::interrupt_resume(
+            &service,
+            Request::new(proto::InterruptResumeRequest {
+                session_id: "hitl-thread".into(),
+                resume: vec![proto::InterruptResumeItem {
+                    interrupt_id: "request-1".into(),
+                    status: "resolved".into(),
+                    payload_json: r#"{"approved":true}"#.into(),
+                }],
+            }),
+        )
+        .await
+        .expect("interrupt response");
+        let resolved = resolution.await.expect("gate response");
+        assert_eq!(resolved.status, "resolved");
+        assert_eq!(resolved.payload_json, r#"{"approved":true}"#);
+
+        managed
+            .runtime
+            .submit(agent_protocol::Op::Shutdown)
+            .await
+            .expect("shutdown");
+        managed.runtime.wait_terminated().await;
+    }
+
+    #[tokio::test]
+    async fn submit_turn_resume_json_resolves_existing_thread_hitl_gate() {
+        let dir = TempDir::new().expect("tempdir");
+        memory::ensure_workspace(dir.path()).expect("workspace");
+        let service = AstroServiceImpl::new(dir.path().to_path_buf());
+        let managed = service
+            .get_or_create_thread("submit-hitl-thread")
+            .await
+            .expect("thread");
+        service
+            .configure_thread_from_chat(
+                &managed.runtime,
+                &proto::ChatRequest {
+                    session_id: "submit-hitl-thread".into(),
+                    content: "continue".into(),
+                    use_memory: true,
+                    ..Default::default()
+                },
+            )
+            .await
+            .expect("configure controls");
+        let gate = service
+            .hitl_registry
+            .get("submit-hitl-thread")
+            .await
+            .expect("gate");
+        service
+            .thread_states
+            .get("submit-hitl-thread")
+            .await
+            .expect("thread state")
+            .lock()
+            .await
+            .history
+            .track(&agent_protocol::Event {
+                id: "submit-pending-turn".into(),
+                msg: agent_protocol::EventMsg::TurnStarted(agent_protocol::TurnStartedEvent {
+                    turn_id: "submit-pending-turn".into(),
+                }),
+            });
+        let resolution = gate
+            .begin_wait(agent::Interrupt {
+                id: "submit-request".into(),
+                reason: "confirmation".into(),
+                ..Default::default()
+            })
+            .await;
+        let (_rx, _cancel, generation) = service.connections.register("hitl-submit".into()).await;
+
+        let response = submit_turn(
+            &service,
+            Request::new(proto::SubmitTurnRequest {
+                connection_id: "hitl-submit".into(),
+                chat: Some(proto::ChatRequest {
+                    session_id: "submit-hitl-thread".into(),
+                    use_memory: true,
+                    resume_json:
+                        r#"[{"interrupt_id":"submit-request","payload":{"approved":true}}]"#.into(),
+                    ..Default::default()
+                }),
+                mode: "start_or_steer".into(),
+                expected_turn_id: String::new(),
+            }),
+        )
+        .await
+        .expect("submit")
+        .into_inner();
+        assert_eq!(response.disposition, "resumed");
+        assert_eq!(response.turn_id, "submit-pending-turn");
+        assert!(matches!(managed.runtime.status(), agent::AgentStatus::Idle));
+        let resolved = resolution.await.expect("resolution");
+        assert_eq!(resolved.status, "resolved");
+        assert!(resolved.payload_json.contains("approved"));
+
+        service.connections.remove_generation(&generation).await;
+        managed
+            .runtime
+            .submit(Op::Shutdown)
+            .await
+            .expect("shutdown");
+        managed.runtime.wait_terminated().await;
+        managed.stop_listener().await;
+    }
+
+    #[tokio::test]
+    async fn concurrent_resume_error_preserves_shared_subscription_for_owner_cleanup() {
+        let dir = TempDir::new().expect("tempdir");
+        memory::ensure_workspace(dir.path()).expect("workspace");
+        let service = std::sync::Arc::new(AstroServiceImpl::new(dir.path().to_path_buf()));
+        let managed = service
+            .get_or_create_thread("resume-cleanup-race")
+            .await
+            .expect("thread");
+        service
+            .configure_thread_from_chat(
+                &managed.runtime,
+                &proto::ChatRequest {
+                    session_id: "resume-cleanup-race".into(),
+                    use_memory: true,
+                    ..Default::default()
+                },
+            )
+            .await
+            .expect("configure controls");
+        let gate = service
+            .hitl_registry
+            .get("resume-cleanup-race")
+            .await
+            .expect("gate");
+        let state = service
+            .thread_states
+            .get("resume-cleanup-race")
+            .await
+            .expect("thread state");
+        state.lock().await.history.track(&agent_protocol::Event {
+            id: "resume-cleanup-turn".into(),
+            msg: agent_protocol::EventMsg::TurnStarted(agent_protocol::TurnStartedEvent {
+                turn_id: "resume-cleanup-turn".into(),
+            }),
+        });
+        let resolution = gate
+            .begin_wait(agent::Interrupt {
+                id: "resume-cleanup-request".into(),
+                reason: "confirmation".into(),
+                ..Default::default()
+            })
+            .await;
+        let (_rx, _cancel, generation) = service
+            .connections
+            .register("resume-cleanup-client".into())
+            .await;
+        let barrier = install_resume_resolve_barrier("resume-cleanup-race");
+        let service_for_submit = service.clone();
+        let mut submit = tokio::spawn(async move {
+            submit_turn(
+                &service_for_submit,
+                Request::new(proto::SubmitTurnRequest {
+                    connection_id: "resume-cleanup-client".into(),
+                    chat: Some(proto::ChatRequest {
+                        session_id: "resume-cleanup-race".into(),
+                        use_memory: true,
+                        resume_json: r#"[{"interrupt_id":"resume-cleanup-request","payload":{"approved":true}}]"#.into(),
+                        ..Default::default()
+                    }),
+                    mode: "start_or_steer".into(),
+                    expected_turn_id: String::new(),
+                }),
+            )
+            .await
+        });
+
+        barrier.reached.notified().await;
+        let state_guard = state.lock().await;
+        gate.resolve(&[agent::ResumeItem {
+            interrupt_id: "resume-cleanup-request".into(),
+            status: "resolved".into(),
+            payload_json: r#"{"approved":true}"#.into(),
+        }])
+        .await
+        .expect("concurrent consumer wins");
+        barrier.release.notify_one();
+        let error = tokio::time::timeout(std::time::Duration::from_secs(1), &mut submit)
+            .await
+            .expect("server must not perform activation-blind cleanup")
+            .expect("submit task")
+            .expect_err("the second resume consumer must be rejected");
+        assert_eq!(error.code(), tonic::Code::InvalidArgument);
+        drop(state_guard);
+        assert!(
+            service
+                .thread_states
+                .has_subscribers("resume-cleanup-race")
+                .await,
+            "desktop activation owner must decide whether this shared subscriber is stale"
+        );
+        resolution.await.expect("first consumer resolution");
+
+        service.connections.remove_generation(&generation).await;
+        managed
+            .runtime
+            .submit(Op::Shutdown)
+            .await
+            .expect("shutdown");
+        managed.runtime.wait_terminated().await;
+        managed.stop_listener().await;
+    }
+
+    #[tokio::test]
+    async fn chat_resume_subscribes_before_immediate_terminal_and_starts_no_new_turn() {
+        let dir = TempDir::new().expect("tempdir");
+        memory::ensure_workspace(dir.path()).expect("workspace");
+        let service = AstroServiceImpl::new(dir.path().to_path_buf());
+        let managed = service
+            .get_or_create_thread("chat-resume-thread")
+            .await
+            .expect("thread");
+        service
+            .configure_thread_from_chat(
+                &managed.runtime,
+                &proto::ChatRequest {
+                    session_id: "chat-resume-thread".into(),
+                    content: "initial".into(),
+                    use_memory: true,
+                    ..Default::default()
+                },
+            )
+            .await
+            .expect("configure controls");
+        service
+            .thread_states
+            .get("chat-resume-thread")
+            .await
+            .expect("thread state")
+            .lock()
+            .await
+            .history
+            .track(&agent_protocol::Event {
+                id: "chat-pending-turn".into(),
+                msg: agent_protocol::EventMsg::TurnStarted(agent_protocol::TurnStartedEvent {
+                    turn_id: "chat-pending-turn".into(),
+                }),
+            });
+        let gate = service
+            .hitl_registry
+            .get("chat-resume-thread")
+            .await
+            .expect("gate");
+        let resolution = gate
+            .begin_wait(agent::Interrupt {
+                id: "chat-request".into(),
+                reason: "confirmation".into(),
+                ..Default::default()
+            })
+            .await;
+        let commands = managed.commands.clone();
+        let immediate_terminal = tokio::spawn(async move {
+            resolution.await.expect("resolution");
+            commands
+                .send(ListenerCommand::CoreEvent(agent_protocol::Event {
+                    id: "chat-pending-turn".into(),
+                    msg: agent_protocol::EventMsg::TurnComplete(
+                        agent_protocol::TurnCompleteEvent {
+                            turn_id: "chat-pending-turn".into(),
+                            last_agent_message: Some("resumed".into()),
+                            error: None,
+                        },
+                    ),
+                }))
+                .expect("terminal event");
+        });
+
+        let mut stream = chat(
+            &service,
+            Request::new(proto::ChatRequest {
+                session_id: "chat-resume-thread".into(),
+                use_memory: true,
+                resume_json: r#"[{"interrupt_id":"chat-request","payload":{"approved":true}}]"#
+                    .into(),
+                ..Default::default()
+            }),
+        )
+        .await
+        .expect("chat resume")
+        .into_inner();
+        immediate_terminal.await.expect("terminal producer");
+        let finished = stream.next().await.expect("run finished").expect("event");
+        assert!(matches!(
+            finished.payload,
+            Some(proto::chat_event::Payload::RunFinished(ref event))
+                if event.outcome_type == "success" && event.run_id == "chat-pending-turn"
+        ));
+        assert!(matches!(
+            stream.next().await.expect("done").expect("event").payload,
+            Some(proto::chat_event::Payload::Done(true))
+        ));
+        assert!(stream.next().await.is_none());
+        assert!(matches!(managed.runtime.status(), agent::AgentStatus::Idle));
+
+        managed
+            .runtime
+            .submit(Op::Shutdown)
+            .await
+            .expect("shutdown");
+        managed.runtime.wait_terminated().await;
+        managed.stop_listener().await;
+    }
+
+    #[tokio::test]
+    async fn aborted_chat_setup_cleans_registered_subscription_and_connection() {
+        let dir = TempDir::new().expect("tempdir");
+        memory::ensure_workspace(dir.path()).expect("workspace");
+        let service = std::sync::Arc::new(AstroServiceImpl::new(dir.path().to_path_buf()));
+        let managed = service
+            .get_or_create_thread("cancelled-chat-setup")
+            .await
+            .expect("thread");
+        service
+            .configure_thread_from_chat(
+                &managed.runtime,
+                &proto::ChatRequest {
+                    session_id: "cancelled-chat-setup".into(),
+                    use_memory: true,
+                    ..Default::default()
+                },
+            )
+            .await
+            .expect("configure controls");
+        let state = service
+            .thread_states
+            .get("cancelled-chat-setup")
+            .await
+            .expect("thread state");
+        state.lock().await.history.track(&agent_protocol::Event {
+            id: "cancelled-chat-turn".into(),
+            msg: agent_protocol::EventMsg::TurnStarted(agent_protocol::TurnStartedEvent {
+                turn_id: "cancelled-chat-turn".into(),
+            }),
+        });
+        let gate = service
+            .hitl_registry
+            .get("cancelled-chat-setup")
+            .await
+            .expect("gate");
+        let resolution = gate
+            .begin_wait(agent::Interrupt {
+                id: "cancelled-chat-request".into(),
+                reason: "confirmation".into(),
+                ..Default::default()
+            })
+            .await;
+        let barrier = install_resume_resolve_barrier("cancelled-chat-setup");
+        let service_for_chat = service.clone();
+        let chat_task = tokio::spawn(async move {
+            chat(
+                &service_for_chat,
+                Request::new(proto::ChatRequest {
+                    session_id: "cancelled-chat-setup".into(),
+                    use_memory: true,
+                    resume_json:
+                        r#"[{"interrupt_id":"cancelled-chat-request","payload":{"approved":true}}]"#
+                            .into(),
+                    ..Default::default()
+                }),
+            )
+            .await
+        });
+
+        barrier.reached.notified().await;
+        let subscription = barrier
+            .subscription
+            .lock()
+            .expect("barrier subscription")
+            .clone()
+            .expect("chat registration");
+        assert!(state
+            .lock()
+            .await
+            .subscribers
+            .contains_key(subscription.connection_id()));
+        assert!(
+            service
+                .connections
+                .contains(subscription.connection_id())
+                .await
+        );
+
+        chat_task.abort();
+        let join_error = match chat_task.await {
+            Err(error) => error,
+            Ok(_) => panic!("chat task must be cancelled"),
+        };
+        assert!(join_error.is_cancelled());
+        barrier.release.notify_one();
+
+        tokio::time::timeout(std::time::Duration::from_millis(250), async {
+            loop {
+                let subscribed = state
+                    .lock()
+                    .await
+                    .subscribers
+                    .contains_key(subscription.connection_id());
+                let registered = service
+                    .connections
+                    .contains(subscription.connection_id())
+                    .await;
+                if !subscribed && !registered {
+                    break;
+                }
+                tokio::task::yield_now().await;
+            }
+        })
+        .await
+        .expect("cancelled setup owner must finish exact async cleanup");
+        resolution
+            .await
+            .expect("setup worker should resolve pending HITL");
+
+        managed
+            .runtime
+            .submit(Op::Shutdown)
+            .await
+            .expect("shutdown");
+        managed.runtime.wait_terminated().await;
+        managed.stop_listener().await;
+    }
+
+    #[tokio::test]
+    async fn aborted_chat_after_setup_delivery_closes_accept_and_cleans() {
+        let dir = TempDir::new().expect("tempdir");
+        memory::ensure_workspace(dir.path()).expect("workspace");
+        let service = std::sync::Arc::new(AstroServiceImpl::new(dir.path().to_path_buf()));
+        let managed = service
+            .get_or_create_thread("cancelled-chat-accept")
+            .await
+            .expect("thread");
+        service
+            .configure_thread_from_chat(
+                &managed.runtime,
+                &proto::ChatRequest {
+                    session_id: "cancelled-chat-accept".into(),
+                    use_memory: true,
+                    ..Default::default()
+                },
+            )
+            .await
+            .expect("configure controls");
+        let state = service
+            .thread_states
+            .get("cancelled-chat-accept")
+            .await
+            .expect("thread state");
+        state.lock().await.history.track(&agent_protocol::Event {
+            id: "cancelled-accept-turn".into(),
+            msg: agent_protocol::EventMsg::TurnStarted(agent_protocol::TurnStartedEvent {
+                turn_id: "cancelled-accept-turn".into(),
+            }),
+        });
+        let gate = service
+            .hitl_registry
+            .get("cancelled-chat-accept")
+            .await
+            .expect("gate");
+        let resolution = gate
+            .begin_wait(agent::Interrupt {
+                id: "cancelled-accept-request".into(),
+                reason: "confirmation".into(),
+                ..Default::default()
+            })
+            .await;
+        let barrier = install_chat_accept_barrier("cancelled-accept-turn");
+        let service_for_chat = service.clone();
+        let chat_task = tokio::spawn(async move {
+            chat(
+                &service_for_chat,
+                Request::new(proto::ChatRequest {
+                    session_id: "cancelled-chat-accept".into(),
+                    use_memory: true,
+                    resume_json:
+                        r#"[{"interrupt_id":"cancelled-accept-request","payload":{"approved":true}}]"#
+                            .into(),
+                    ..Default::default()
+                }),
+            )
+            .await
+        });
+
+        barrier.reached.notified().await;
+        let subscription = barrier
+            .subscription
+            .lock()
+            .expect("accept barrier subscription")
+            .clone()
+            .expect("chat registration");
+        assert!(state
+            .lock()
+            .await
+            .subscribers
+            .contains_key(subscription.connection_id()));
+        assert!(
+            service
+                .connections
+                .contains(subscription.connection_id())
+                .await
+        );
+
+        chat_task.abort();
+        let join_error = match chat_task.await {
+            Err(error) => error,
+            Ok(_) => panic!("chat task must be cancelled before accepting setup"),
+        };
+        assert!(join_error.is_cancelled());
+
+        tokio::time::timeout(std::time::Duration::from_millis(250), async {
+            loop {
+                let subscribed = state
+                    .lock()
+                    .await
+                    .subscribers
+                    .contains_key(subscription.connection_id());
+                let registered = service
+                    .connections
+                    .contains(subscription.connection_id())
+                    .await;
+                if !subscribed && !registered {
+                    break;
+                }
+                tokio::task::yield_now().await;
+            }
+        })
+        .await
+        .expect("closed accept handshake must trigger exact async cleanup");
+        resolution
+            .await
+            .expect("setup worker should resolve pending HITL");
+
+        managed
+            .runtime
+            .submit(Op::Shutdown)
+            .await
+            .expect("shutdown");
+        managed.runtime.wait_terminated().await;
+        managed.stop_listener().await;
+    }
+}

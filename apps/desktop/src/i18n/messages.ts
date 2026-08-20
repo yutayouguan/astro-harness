@@ -770,6 +770,7 @@ export const zh = {
   "chat.queue.emptyText": "（无文字）",
   "chat.queue.full": "队列已满（最多 {max} 条）",
   "chat.queue.drainFailed": "排队消息暂时无法发送，已保留在队列中",
+  "chat.queue.checkpointDrain": "长任务空闲巡检：已暂停当前回合以发送排队消息",
   "chat.queue.steerSent": "已发送到当前任务，将在下一次模型调用前生效",
   "chat.queue.steering": "正在调整方向…",
   "chat.queue.steerPending": "请等待当前方向调整提交后再关闭排队",
@@ -2813,6 +2814,8 @@ export const en: Record<MessageKey, string> = {
   "chat.queue.emptyText": "(no text)",
   "chat.queue.full": "Queue full (max {max})",
   "chat.queue.drainFailed": "Could not send queued message; kept in queue",
+  "chat.queue.checkpointDrain":
+    "Idle checkpoint: paused the turn to send the queued follow-up",
   "chat.queue.steerSent": "Sent to the current task; applies before the next model call",
   "chat.queue.steering": "Steering…",
   "chat.queue.steerPending": "Wait for the steering update to commit before closing the queue",

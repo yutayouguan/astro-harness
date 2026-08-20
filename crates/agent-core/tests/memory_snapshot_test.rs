@@ -36,7 +36,7 @@ async fn snapshot_frozen_within_session() {
         "tool write must not enter snapshot prompt until refresh; got:\n{frozen}"
     );
 
-    agent.refresh_memory().unwrap();
+    agent.refresh_memory().await.unwrap();
     let refreshed = agent.build_system_prompt().await;
     assert!(
         refreshed.contains(marker),

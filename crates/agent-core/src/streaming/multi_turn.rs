@@ -3,13 +3,17 @@
 //! **关键不变量**
 //! - Pause/Cancel 对齐 Rig：`wait_if_paused` 先于上游 poll；取消时通过 `Abortable` 中止 Provider 流
 //! - 每轮 assistant 回复必须写入 `SessionState.history`（含 tool_calls）后再执行工具
-//! - 迭代预算对齐 Hermes：默认 90 轮；`code_exec` 独占轮可 refund；耗尽后无工具强制总结再 Done
+//! - 迭代预算对齐 Hermes：默认 90 轮；`code_exec` 独占轮可 refund；耗尽后无工具强制总结再终止
 //! - usage 采用覆盖式累加，兼容 Google 等 Provider 的累计式 `usageMetadata`
 //!
 //! HITL park/resume 桥见 [`super::hitl_bridge`]；预算耗尽后的总结轮见 [`super::summary`]。
 
+use std::collections::{BTreeSet, HashMap};
 use std::sync::Arc;
 
+use agent_protocol::{
+    ControlRequestEvent, Event, EventMsg, ItemEvent, ToolStatus, TurnInput, UserInputCommittedEvent,
+};
 use futures::stream::{AbortHandle, Abortable};
 use futures::StreamExt;
 use providers::ProviderConfig;
@@ -18,48 +22,146 @@ use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
 use types::ChatTarget;
 
-use super::lifecycle::{emit, finish_error, finish_interrupted, finish_success};
+use super::lifecycle::{
+    emit, emit_delta, emit_hook_completed, emit_hook_started, emit_response_items_completed,
+    emit_text_item_started, emit_usage, tool_turn_item,
+};
 use super::maintenance::{
     emit_context_usage, post_tool_maintenance, pre_llm_maintenance, record_tool_outcomes,
     run_sampling_request,
 };
 use super::provider::ProviderStreamer;
 use super::run_state::{RunPhase, RunState};
-use super::summary::{run_max_iterations_summary, SummaryOutcome, MAX_VERIFY_ATTEMPTS};
+use super::summary::{run_max_iterations_summary, SummaryOutcome};
 use super::tools_exec::{
     execute_tools_concurrent, execute_tools_serial, tool_may_require_permission,
 };
-use super::types::{MultiTurnStream, MultiTurnStreamItem, StreamedAssistantContent};
+use super::types::StreamedAssistantContent;
 use crate::control::hitl::HitlGate;
-use crate::runtime::turn_context::QueuedTurnInput;
+use crate::runtime::turn_context::{QueuedTurnInput, TerminalInputDecision};
 use crate::runtime::{Session, TurnContext};
-use crate::tasks::{RegularTask, TurnInput};
+use crate::tasks::{RegularTask, SessionTaskResult, TurnCancelled};
+
+/// `pre_verify` 单次 turn 内允许的最多验证轮次（含首次结束尝试）。
+const MAX_VERIFY_ATTEMPTS: usize = 2;
 
 /// 模型只返回思考/推理内容而没有文本回复时，允许的最大重试次数。
 const MAX_THINKING_ONLY_RETRIES: usize = 1;
 
-/// [`run_multi_turn_stream`] 入参打包。
-pub struct MultiTurnStreamArgs {
+/// Per-index buffer that delays argument events until the provider call id is known.
+#[derive(Default)]
+struct PendingToolArgumentEvents {
+    item_id: Option<String>,
+    deltas: Vec<types::ToolCallDelta>,
+}
+
+async fn emit_tool_argument_events(
+    session: &Session,
+    turn_context: &TurnContext,
+    item_id: &str,
+    deltas: Vec<types::ToolCallDelta>,
+) {
+    for delta in deltas {
+        emit(
+            session,
+            turn_context,
+            EventMsg::DynamicToolCallRequest(ControlRequestEvent {
+                turn_id: turn_context.sub_id().to_string(),
+                request_id: format!("{}:{item_id}:arguments", turn_context.sub_id()),
+                item_id: item_id.to_string(),
+                payload: serde_json::json!({
+                    "index": delta.index,
+                    "name": delta.name,
+                    "delta": delta.arguments,
+                }),
+            }),
+        )
+        .await;
+    }
+}
+
+pub(crate) struct ThreadTurnTaskArgs {
+    pub(crate) session: Arc<Session>,
+    pub(crate) targets: Vec<ChatTarget>,
+    pub(crate) base_config: ProviderConfig,
+    pub(crate) input: Vec<TurnInput>,
+    pub(crate) system_prompt: Option<String>,
+    pub(crate) pause: Arc<PauseControl>,
+    pub(crate) hitl_gate: Option<Arc<HitlGate>>,
+    pub(crate) chat_override: Option<super::provider::ChatOverride>,
+}
+
+pub(crate) struct InstalledMultiTurn {
+    pub(crate) session: Arc<Session>,
+    pub(crate) turn_id: String,
+    pub(crate) events: async_channel::Receiver<Event>,
+}
+
+pub(crate) struct MultiTurnInstallError {
+    pub(crate) turn_id: String,
+    pub(crate) message: String,
+}
+
+/// Canonical Thread-event execution seam used by integration tests and adapters.
+#[doc(hidden)]
+pub struct ThreadTurnEventArgs {
     pub session: Arc<Session>,
     pub targets: Vec<ChatTarget>,
     pub base_config: ProviderConfig,
     pub input: Vec<TurnInput>,
-    /// Compatibility path for tests and callers that already prepared a turn.
     pub system_prompt: Option<String>,
     pub pause: Arc<PauseControl>,
     pub hitl_gate: Option<Arc<HitlGate>>,
-    pub tx: mpsc::Sender<anyhow::Result<MultiTurnStreamItem>>,
-    /// 测试覆盖：非空时跳过 dispatch，直接使用此函数获取 CompletionStream。
+    pub tx: mpsc::Sender<anyhow::Result<Event>>,
     pub chat_override: Option<super::provider::ChatOverride>,
 }
 
-/// 多轮工具调用流式循环：从 gRPC handler 收拢到 Agent 层的核心编排。
-///
-/// 每轮：锁定 session → 流式 LLM → 累积 tool_calls → 执行工具 → 写入历史 → 下一轮。
-/// 取消/暂停时清理 abort handle 并以 usage + Done 收尾。
-/// `hitl_gate` 非空时，confirm/clarify/危险命令在同回合 park，不结束 run。
-pub async fn run_multi_turn_stream(args: MultiTurnStreamArgs) {
-    let MultiTurnStreamArgs {
+pub(crate) async fn install_multi_turn_task(
+    args: ThreadTurnTaskArgs,
+) -> Result<InstalledMultiTurn, MultiTurnInstallError> {
+    let ThreadTurnTaskArgs {
+        session,
+        targets,
+        base_config,
+        input,
+        system_prompt,
+        pause,
+        hitl_gate,
+        chat_override,
+    } = args;
+    let session_id = session.session_id().to_string();
+    let sub_id = uuid::Uuid::new_v4().to_string();
+    let events = session.subscribe_turn_events(&sub_id).await;
+    let turn_context = session.create_turn_context(sub_id.clone()).await;
+    let task = RegularTask::new(RunTurnArgs {
+        session: session.clone(),
+        turn_context: Arc::clone(&turn_context),
+        targets,
+        base_config,
+        system_prompt,
+        pause,
+        hitl_gate,
+        chat_override,
+    });
+    tracing::info!(session_id = %session_id, turn_id = %sub_id, "turn started");
+    if let Err(error) = session.spawn_task(turn_context, input, task).await {
+        session.remove_turn_event_taps(&sub_id).await;
+        return Err(MultiTurnInstallError {
+            turn_id: sub_id.clone(),
+            message: error.to_string(),
+        });
+    }
+    Ok(InstalledMultiTurn {
+        session,
+        turn_id: sub_id,
+        events,
+    })
+}
+
+/// Canonical Thread-event execution seam used by integration tests and adapters.
+#[doc(hidden)]
+pub async fn run_thread_turn_events(args: ThreadTurnEventArgs) {
+    let ThreadTurnEventArgs {
         session,
         targets,
         base_config,
@@ -70,47 +172,56 @@ pub async fn run_multi_turn_stream(args: MultiTurnStreamArgs) {
         tx,
         chat_override,
     } = args;
-    let session_id = {
-        let agent = session.as_ref();
-        agent.session_id().to_string()
-    };
-    let sub_id = uuid::Uuid::new_v4().to_string();
-    let turn_context = {
-        let sess = session.as_ref();
-        sess.create_turn_context(sub_id.clone()).await
-    };
-    let task = RegularTask::new(RunTurnArgs {
-        session: session.clone(),
-        turn_context: Arc::clone(&turn_context),
+    match install_multi_turn_task(ThreadTurnTaskArgs {
+        session: Arc::clone(&session),
         targets,
         base_config,
+        input,
         system_prompt,
         pause,
         hitl_gate,
-        tx: tx.clone(),
-        thread_id: session_id.clone(),
-        run_id: sub_id.clone(),
         chat_override,
-    });
-    tracing::info!(session_id = %session_id, turn_id = %sub_id, "turn started");
-    if let Err(error) = session.spawn_task(turn_context, input, task).await {
-        let _ = tx
-            .send(Ok(MultiTurnStreamItem::Error(error.to_string())))
-            .await;
-        let _ = tx.send(Ok(MultiTurnStreamItem::Done)).await;
+    })
+    .await
+    {
+        Ok(installed) => {
+            let turn_id = installed.turn_id;
+            let event_turn_id = crate::runtime::event_identity::event_turn_id(&turn_id);
+            while let Ok(event) = installed.events.recv().await {
+                if event.id != event_turn_id {
+                    continue;
+                }
+                let terminal = event.msg.is_terminal();
+                if tx.send(Ok(event)).await.is_err() || terminal {
+                    break;
+                }
+            }
+            session.wait_for_task(&turn_id).await;
+        }
+        Err(error) => {
+            let _ = tx
+                .send(Ok(Event {
+                    id: crate::runtime::event_identity::event_turn_id(&error.turn_id),
+                    msg: EventMsg::Error(agent_protocol::ErrorEvent {
+                        message: error.message,
+                        error_type: "turn_prepare".into(),
+                    }),
+                }))
+                .await;
+        }
     }
-    tracing::info!(session_id = %session_id, turn_id = %sub_id, "turn finished");
 }
 
-/// 测试入口：以自定义 chat 函数替代 dispatch，驱动多轮工具循环。
-pub async fn run_multi_turn_stream_with_chat_fn(
+/// Prepared-turn convenience seam for existing lifecycle tests.
+#[doc(hidden)]
+pub async fn run_multi_turn_events_with_chat_fn(
     session: Arc<Session>,
     chat_fn: super::provider::ChatOverride,
     config: ProviderConfig,
     system_prompt: String,
     pause: Arc<PauseControl>,
     hitl_gate: Option<Arc<HitlGate>>,
-    tx: mpsc::Sender<anyhow::Result<MultiTurnStreamItem>>,
+    tx: mpsc::Sender<anyhow::Result<Event>>,
 ) {
     let target = ChatTarget {
         provider_id: "scripted".into(),
@@ -119,10 +230,9 @@ pub async fn run_multi_turn_stream_with_chat_fn(
         api_key: config.api_key.clone(),
         base_url: config.base_url.clone().unwrap_or_default(),
     };
-    let targets = vec![target];
-    run_multi_turn_stream(MultiTurnStreamArgs {
+    run_thread_turn_events(ThreadTurnEventArgs {
         session,
-        targets,
+        targets: vec![target],
         base_config: config,
         input: Vec::new(),
         system_prompt: Some(system_prompt),
@@ -132,6 +242,24 @@ pub async fn run_multi_turn_stream_with_chat_fn(
         chat_override: Some(chat_fn),
     })
     .await;
+}
+pub async fn run_multi_turn_stream_with_chat_fn(
+    session: Arc<Session>,
+    turn_context: Arc<TurnContext>,
+    input: Vec<TurnInput>,
+    chat_fn: super::provider::ChatOverride,
+) -> anyhow::Result<()> {
+    let args = RunTurnArgs::submitted(
+        Arc::clone(&session),
+        Arc::clone(&turn_context),
+        Some(chat_fn),
+    );
+    let turn_id = turn_context.sub_id().to_string();
+    session
+        .spawn_task(turn_context, input, RegularTask::new(args))
+        .await?;
+    session.wait_for_task(&turn_id).await;
+    Ok(())
 }
 
 #[derive(Clone)]
@@ -143,24 +271,67 @@ pub(crate) struct RunTurnArgs {
     system_prompt: Option<String>,
     pause: Arc<PauseControl>,
     hitl_gate: Option<Arc<HitlGate>>,
-    tx: mpsc::Sender<anyhow::Result<MultiTurnStreamItem>>,
-    thread_id: String,
-    run_id: String,
     chat_override: Option<super::provider::ChatOverride>,
 }
 
 impl RunTurnArgs {
-    pub(crate) fn with_session_and_turn(
-        &self,
+    pub(crate) fn submitted(
         session: Arc<Session>,
         turn_context: Arc<TurnContext>,
+        chat_override: Option<super::provider::ChatOverride>,
     ) -> Self {
+        let mut targets = session.chat_targets();
+        let provider = session.chat_provider();
+        let model = session.chat_model();
+        let api_key = session.chat_api_key();
+        let base_url = session.chat_base_url();
+        if targets.is_empty() {
+            targets.push(ChatTarget {
+                provider_id: provider.clone(),
+                backend_id: provider,
+                model: model.clone(),
+                api_key: api_key.clone(),
+                base_url: base_url.clone(),
+            });
+        }
+        let provider_options = session.thread_provider_options();
+        let base_config = ProviderConfig {
+            model,
+            api_key,
+            base_url: (!base_url.is_empty()).then_some(base_url),
+            temperature: session.temperature(),
+            thinking_enabled: provider_options.thinking_enabled,
+            reasoning_effort: provider_options.reasoning_effort,
+            additional_params: session.additional_params(),
+            max_tokens: provider_options.max_tokens,
+            ..ProviderConfig::default()
+        };
+        let (pause, hitl_gate) = session.ensure_thread_controls();
         Self {
             session,
             turn_context,
-            thread_id: self.thread_id.clone(),
+            targets,
+            base_config,
+            system_prompt: None,
+            pause,
+            hitl_gate: Some(hitl_gate),
+            chat_override,
+        }
+    }
+
+    pub(crate) fn with_turn_context(&self, turn_context: Arc<TurnContext>) -> Self {
+        Self {
+            turn_context,
             ..self.clone()
         }
+    }
+
+    pub(crate) fn session(&self) -> &Arc<Session> {
+        &self.session
+    }
+
+    pub(crate) fn turn_context(&self) -> &Arc<TurnContext> {
+        &self.turn_context
     }
 
     pub(crate) fn with_system_prompt(&self, system_prompt: String) -> Self {
@@ -175,30 +346,8 @@ impl RunTurnArgs {
     }
 }
 
-/// Terminal classification for a regular turn after preparation succeeds.
-///
-/// Runtime failures have already emitted their stream terminal sequence. They
-/// remain an `Ok` [`SessionTaskResult`](crate::tasks::SessionTaskResult) and are
-/// carried here only so `RegularTask` can populate `AgentEnd.error`.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) enum RunTurnOutcome {
-    Success,
-    Failed(String),
-    Interrupted,
-}
-
-impl RunTurnOutcome {
-    pub(crate) fn error(&self) -> Option<&str> {
-        match self {
-            Self::Failed(error) => Some(error),
-            Self::Success | Self::Interrupted => None,
-        }
-    }
-}
-
 async fn record_pending_input(
     session: &Arc<Session>,
-    tx: &mpsc::Sender<anyhow::Result<MultiTurnStreamItem>>,
     pending_input: Vec<QueuedTurnInput>,
 ) -> anyhow::Result<()> {
     if pending_input.is_empty() {
@@ -206,40 +355,78 @@ async fn record_pending_input(
     }
     let client_message_ids = pending_input
         .iter()
-        .filter_map(|queued| match &queued.input {
-            TurnInput::UserInput {
-                client_message_id, ..
-            } => client_message_id.clone(),
-        })
+        .filter_map(|queued| queued.input.client_message_id.clone())
         .collect::<Vec<_>>();
-    let sess = session.as_ref();
-    sess.record_queued_turn_inputs(pending_input).await?;
+    session.record_queued_turn_inputs(pending_input).await?;
+    let turn_id = session
+        .current_turn_id()
+        .await
+        .unwrap_or_else(|| session.session_id().to_string());
     for client_message_id in client_message_ids {
-        let _ = emit(
-            tx,
-            MultiTurnStreamItem::UserInputCommitted { client_message_id },
-        )
-        .await;
+        session
+            .send_event(
+                &turn_id,
+                EventMsg::UserInputCommitted(UserInputCommittedEvent {
+                    turn_id: turn_id.clone(),
+                    client_message_id,
+                }),
+            )
+            .await;
     }
     Ok(())
 }
 
-async fn finish_failed(
+async fn drain_available_mailbox(
     session: &Arc<Session>,
-    streamer: &ProviderStreamer,
-    tx: &mpsc::Sender<anyhow::Result<MultiTurnStreamItem>>,
-    error: String,
-    usage: Option<Usage>,
-    run_id: &str,
-) -> RunTurnOutcome {
-    finish_error(session, streamer, tx, error.clone(), usage, run_id).await;
-    RunTurnOutcome::Failed(error)
+    turn_context: &TurnContext,
+) -> anyhow::Result<crate::exec::subagents::MailboxDrainOutcome> {
+    let outcome = crate::exec::subagents::drain_mailbox_at_safe_boundary(session).await?;
+    if outcome.deferred {
+        return Ok(outcome);
+    }
+    turn_context.acknowledge_mailbox_inputs(&outcome.delivered_steer_ids);
+    let turn_id = turn_context.sub_id().to_string();
+    for client_message_id in &outcome.delivered_client_message_ids {
+        session
+            .send_event(
+                &turn_id,
+                EventMsg::UserInputCommitted(UserInputCommittedEvent {
+                    turn_id: turn_id.clone(),
+                    client_message_id: client_message_id.clone(),
+                }),
+            )
+            .await;
+    }
+    Ok(outcome)
 }
+
+async fn finish_task_error(
+    session: &Arc<Session>,
+    turn_context: &TurnContext,
+    streamer: &ProviderStreamer,
+    message: impl Into<String>,
+    usage: Option<Usage>,
+) -> SessionTaskResult {
+    let message = message.into();
+    emit_usage(session, turn_context, streamer, usage).await;
+    Err(anyhow::anyhow!(message))
+}
+
+async fn finish_task_cancelled(
+    session: &Arc<Session>,
+    turn_context: &TurnContext,
+    streamer: &ProviderStreamer,
+    usage: Option<Usage>,
+) -> SessionTaskResult {
+    emit_usage(session, turn_context, streamer, usage).await;
+    Err(TurnCancelled.into())
+}
+
 /// Codex-aligned regular turn loop shared by foreground and background adapters.
 pub(crate) async fn run_turn(
     args: RunTurnArgs,
     cancellation_token: CancellationToken,
-) -> RunTurnOutcome {
+) -> SessionTaskResult {
     let RunTurnArgs {
         session,
         turn_context,
@@ -248,9 +435,6 @@ pub(crate) async fn run_turn(
         system_prompt,
         pause,
         hitl_gate,
-        tx,
-        thread_id,
-        run_id,
         chat_override,
     } = args;
     let system_prompt = system_prompt.expect("RegularTask prepares the system prompt");
@@ -265,15 +449,6 @@ pub(crate) async fn run_turn(
         let agent = session.as_ref();
         let _ = agent.ensure_session("tauri");
     }
-    let _ = emit(
-        &tx,
-        MultiTurnStreamItem::RunStarted {
-            thread_id,
-            run_id: run_id.clone(),
-        },
-    )
-    .await;
-
     let max_rounds = {
         let agent = session.as_ref();
         let n = agent.multi_turn();
@@ -289,10 +464,6 @@ pub(crate) async fn run_turn(
     let mut raw_rounds: usize = 0;
     let mut verify_attempt: usize = 0;
     let mut thinking_only_retries: usize = 0;
-    let mut has_sampled = false;
-    // Synthetic user bridges (Stop KeepGoing and thinking-only retries) must
-    // receive a normal assistant response before queued user steering is added.
-    let mut awaiting_synthetic_bridge_response = false;
 
     let mut timeline = crate::timeline::TimelineBuilder::new();
     let now_ms = || chrono::Utc::now().timestamp_millis();
@@ -304,104 +475,58 @@ pub(crate) async fn run_turn(
             break;
         }
         if cancellation_token.is_cancelled() || pause.is_cancelled() {
-            finish_interrupted(
+            return finish_task_cancelled(
                 &session,
+                &turn_context,
                 &streamer,
-                &tx,
                 saw_usage.then_some(total_usage),
-                &run_id,
             )
             .await;
-            return RunTurnOutcome::Interrupted;
         }
         if !pause.wait_if_paused().await {
-            finish_interrupted(
+            return finish_task_cancelled(
                 &session,
+                &turn_context,
                 &streamer,
-                &tx,
                 saw_usage.then_some(total_usage),
-                &run_id,
-            )
-            .await;
-            return RunTurnOutcome::Interrupted;
-        }
-
-        let mailbox = match pre_llm_maintenance(&session).await {
-            Ok(mailbox) => mailbox,
-            Err(error) => {
-                return finish_failed(
-                    &session,
-                    &streamer,
-                    &tx,
-                    error.to_string(),
-                    saw_usage.then_some(total_usage),
-                    &run_id,
-                )
-                .await;
-            }
-        };
-        if mailbox.deferred {
-            tracing::debug!("mailbox delivery deferred until an assistant boundary exists");
-        } else if mailbox.delivered > 0 {
-            tracing::debug!(
-                delivered = mailbox.delivered,
-                delivered_steers = mailbox.delivered_steer_ids.len(),
-                "mailbox delivered at sampling boundary"
-            );
-        }
-        if !mailbox.delivered_steer_ids.is_empty() {
-            turn_context.acknowledge_mailbox_inputs(&mailbox.delivered_steer_ids);
-        }
-        if mailbox.delivered > 0 {
-            // A durable mailbox delivery is a new user response chain. Stop
-            // verification and reasoning-only retry budgets must not leak from
-            // the assistant boundary that preceded it.
-            verify_attempt = 0;
-            thinking_only_retries = 0;
-        }
-        for client_message_id in &mailbox.delivered_client_message_ids {
-            let _ = emit(
-                &tx,
-                MultiTurnStreamItem::UserInputCommitted {
-                    client_message_id: client_message_id.clone(),
-                },
             )
             .await;
         }
 
-        if has_sampled && !awaiting_synthetic_bridge_response {
-            let pending_input = turn_context.take_pending_input();
-            if !pending_input.is_empty() {
-                if let Err(error) = record_pending_input(&session, &tx, pending_input).await {
-                    return finish_failed(
-                        &session,
-                        &streamer,
-                        &tx,
-                        error.to_string(),
-                        saw_usage.then_some(total_usage),
-                        &run_id,
-                    )
-                    .await;
-                }
-                verify_attempt = 0;
-                thinking_only_retries = 0;
-            }
+        if let Err(error) = record_pending_input(&session, turn_context.take_pending_input()).await
+        {
+            return finish_task_error(
+                &session,
+                &turn_context,
+                &streamer,
+                error.to_string(),
+                saw_usage.then_some(total_usage),
+            )
+            .await;
         }
 
-        let step_context = {
-            let agent = session.as_ref();
-            agent.capture_step_context().await
-        };
+        if let Err(error) = drain_available_mailbox(&session, &turn_context).await {
+            return finish_task_error(
+                &session,
+                &turn_context,
+                &streamer,
+                error.to_string(),
+                saw_usage.then_some(total_usage),
+            )
+            .await;
+        }
+        pre_llm_maintenance(&session, &turn_context).await;
+
+        let step_context = { session.capture_step_context().await };
         let step_context = match step_context {
             Ok(step_context) => step_context,
             Err(error) => {
-                return finish_failed(
+                return finish_task_error(
                     &session,
+                    &turn_context,
                     &streamer,
-                    &tx,
                     error.to_string(),
                     saw_usage.then_some(total_usage),
-                    &run_id,
                 )
                 .await;
             }
@@ -414,26 +539,30 @@ pub(crate) async fn run_turn(
         let history = step_context.history.clone();
         let tool_specs = step_context.tool_router.model_visible_specs().to_vec();
 
-        emit_context_usage(&session, &tx, &history, &tool_specs).await;
+        emit_context_usage(&session, &turn_context, &history, &tool_specs).await;
 
-        let raw_stream =
-            match run_sampling_request(&session, &streamer, &system_prompt, &history, tool_specs)
-                .await
-            {
-                Ok(s) => s,
-                Err(err) => {
-                    return finish_failed(
-                        &session,
-                        &streamer,
-                        &tx,
-                        err,
-                        saw_usage.then_some(total_usage),
-                        &run_id,
-                    )
-                    .await;
-                }
-            };
-        has_sampled = true;
+        let raw_stream = match run_sampling_request(
+            &session,
+            &turn_context,
+            &streamer,
+            &system_prompt,
+            &history,
+            tool_specs,
+        )
+        .await
+        {
+            Ok(s) => s,
+            Err(err) => {
+                return finish_task_error(
+                    &session,
+                    &turn_context,
+                    &streamer,
+                    err,
+                    saw_usage.then_some(total_usage),
+                )
+                .await;
+            }
+        };
 
         let (abort_handle, abort_reg) = AbortHandle::new_pair();
         pause.attach_abort(abort_handle);
@@ -443,48 +572,45 @@ pub(crate) async fn run_turn(
         let mut full_reasoning = String::new();
         let mut thought_signature: Option<String> = None;
         let mut tool_acc = types::ToolCallAccumulator::new();
+        let mut tool_argument_events: HashMap<u32, PendingToolArgumentEvents> = HashMap::new();
+        let mut tool_call_indices = BTreeSet::new();
         let mut round_usage: Option<Usage> = None;
+        let assistant_item_id = uuid::Uuid::new_v4().to_string();
+        let reasoning_item_id = uuid::Uuid::new_v4().to_string();
+        let mut reasoning_started = false;
+        emit_text_item_started(&session, &turn_context, assistant_item_id.clone(), false).await;
 
         loop {
             if !pause.wait_if_paused().await {
                 pause.clear_abort();
-                finish_interrupted(
-                    &session,
-                    &streamer,
-                    &tx,
-                    {
-                        if let Some(u) = round_usage {
-                            total_usage.add_assign(u);
-                            saw_usage = true;
-                        }
-                        saw_usage.then_some(total_usage)
-                    },
-                    &run_id,
-                )
+                return finish_task_cancelled(&session, &turn_context, &streamer, {
+                    if let Some(u) = round_usage {
+                        total_usage.add_assign(u);
+                        saw_usage = true;
+                    }
+                    saw_usage.then_some(total_usage)
+                })
                 .await;
-                return RunTurnOutcome::Interrupted;
             }
 
             let next = tokio::select! {
                 biased;
                 _ = cancellation_token.cancelled() => {
                     pause.clear_abort();
-                    finish_interrupted(
+                    return finish_task_cancelled(
                         &session,
+                        &turn_context,
                         &streamer,
-                        &tx,
                         saw_usage.then_some(total_usage),
-                        &run_id,
                     )
                     .await;
-                    return RunTurnOutcome::Interrupted;
                 }
                 _ = pause.wait_cancelled() => {
                     pause.clear_abort();
-                    finish_interrupted(
+                    return finish_task_cancelled(
                     &session,
+                    &turn_context,
                     &streamer,
-                        &tx,
                         {
                             if let Some(u) = round_usage {
                                 total_usage.add_assign(u);
@@ -492,10 +618,8 @@ pub(crate) async fn run_turn(
                             }
                             saw_usage.then_some(total_usage)
                         },
-                        &run_id,
                     )
                     .await;
-                    return RunTurnOutcome::Interrupted;
                 }
                 item = stream.next() => item,
             };
@@ -504,53 +628,62 @@ pub(crate) async fn run_turn(
                 None => break,
                 Some(Ok(StreamedAssistantContent::Text(text))) => {
                     full_response.push_str(&text);
-                    if !emit(
-                        &tx,
-                        MultiTurnStreamItem::Assistant(StreamedAssistantContent::Text(text)),
-                    )
-                    .await
-                    {
-                        pause.clear_abort();
-                        return RunTurnOutcome::Interrupted;
-                    }
+                    emit_delta(&session, &turn_context, &assistant_item_id, text, false).await;
                 }
                 Some(Ok(StreamedAssistantContent::Reasoning(r))) => {
                     full_reasoning.push_str(&r);
                     timeline.push_reasoning_delta(&r, now_ms());
-                    if !emit(
-                        &tx,
-                        MultiTurnStreamItem::Assistant(StreamedAssistantContent::Reasoning(r)),
-                    )
-                    .await
-                    {
-                        pause.clear_abort();
-                        return RunTurnOutcome::Interrupted;
+                    if !reasoning_started {
+                        emit_text_item_started(
+                            &session,
+                            &turn_context,
+                            reasoning_item_id.clone(),
+                            true,
+                        )
+                        .await;
+                        reasoning_started = true;
                     }
+                    emit_delta(&session, &turn_context, &reasoning_item_id, r, true).await;
                 }
                 Some(Ok(StreamedAssistantContent::ThoughtSignature(sig))) => {
                     thought_signature = Some(sig);
                 }
                 Some(Ok(StreamedAssistantContent::ToolCallDelta(d))) => {
-                    tool_acc.push(&d);
-                    if !emit(
-                        &tx,
-                        MultiTurnStreamItem::Assistant(StreamedAssistantContent::ToolCallDelta(d)),
-                    )
-                    .await
-                    {
-                        pause.clear_abort();
-                        return RunTurnOutcome::Interrupted;
+                    if d.name.as_deref().is_some_and(|name| !name.is_empty()) {
+                        tool_call_indices.insert(d.index);
+                    }
+                    let has_named_call = tool_call_indices.contains(&d.index);
+                    let (item_id, buffered) = {
+                        let pending = tool_argument_events.entry(d.index).or_default();
+                        pending.deltas.push(d.clone());
+                        if pending.item_id.is_none() {
+                            pending.item_id = d.id.as_ref().filter(|id| !id.is_empty()).cloned();
+                        }
+                        if has_named_call {
+                            pending
+                                .item_id
+                                .clone()
+                                .map(|item_id| (item_id, std::mem::take(&mut pending.deltas)))
+                                .unzip()
+                        } else {
+                            (None, None)
+                        }
+                    };
+                    let mut accumulated_delta = d;
+                    if let Some(item_id) = item_id.as_ref() {
+                        accumulated_delta.id = Some(item_id.clone());
+                    }
+                    tool_acc.push(&accumulated_delta);
+                    if let (Some(item_id), Some(buffered)) = (item_id, buffered) {
+                        emit_tool_argument_events(&session, &turn_context, &item_id, buffered)
+                            .await;
                     }
                 }
                 Some(Ok(StreamedAssistantContent::FinalUsage(u))) => {
                     round_usage = Some(u);
                 }
                 Some(Ok(StreamedAssistantContent::Citations(cites))) => {
-                    let _ = emit(
-                        &tx,
-                        MultiTurnStreamItem::Assistant(StreamedAssistantContent::Citations(cites)),
-                    )
-                    .await;
+                    let _ = cites;
                 }
                 Some(Ok(StreamedAssistantContent::InteractionId(_))) => {}
                 Some(Err(err)) => {
@@ -559,13 +692,12 @@ pub(crate) async fn run_turn(
                         total_usage.add_assign(u);
                         saw_usage = true;
                     }
-                    return finish_failed(
+                    return finish_task_error(
                         &session,
+                        &turn_context,
                         &streamer,
-                        &tx,
                         err.to_string(),
                         saw_usage.then_some(total_usage),
-                        &run_id,
                     )
                     .await;
                 }
@@ -579,15 +711,13 @@ pub(crate) async fn run_turn(
                 total_usage.add_assign(u);
                 saw_usage = true;
             }
-            finish_interrupted(
+            return finish_task_cancelled(
                 &session,
+                &turn_context,
                 &streamer,
-                &tx,
                 saw_usage.then_some(total_usage),
-                &run_id,
             )
             .await;
-            return RunTurnOutcome::Interrupted;
         }
 
         if let Some(u) = round_usage {
@@ -595,7 +725,27 @@ pub(crate) async fn run_turn(
             saw_usage = true;
         }
 
-        let native_calls = tool_acc.finish();
+        for index in &tool_call_indices {
+            let pending = tool_argument_events
+                .get_mut(index)
+                .expect("tool argument index collected above");
+            let item_id = pending
+                .item_id
+                .get_or_insert_with(|| uuid::Uuid::new_v4().to_string())
+                .clone();
+            let buffered = std::mem::take(&mut pending.deltas);
+            emit_tool_argument_events(&session, &turn_context, &item_id, buffered).await;
+        }
+
+        let mut native_calls = tool_acc.finish();
+        for (call, index) in native_calls.iter_mut().zip(tool_call_indices) {
+            if let Some(item_id) = tool_argument_events
+                .get(&index)
+                .and_then(|pending| pending.item_id.as_ref())
+            {
+                call.id.clone_from(item_id);
+            }
+        }
         let calls = types::resolve_tool_calls(native_calls, &full_response);
 
         if full_response.is_empty() && calls.is_empty() {
@@ -620,52 +770,58 @@ pub(crate) async fn run_turn(
                     )
                     .await
                 {
-                    return finish_failed(
+                    return finish_task_error(
                         &session,
+                        &turn_context,
                         &streamer,
-                        &tx,
                         err.to_string(),
                         saw_usage.then_some(total_usage),
-                        &run_id,
                     )
                     .await;
                 }
+                emit_response_items_completed(
+                    &session,
+                    &turn_context,
+                    assistant_item_id,
+                    full_response.clone(),
+                    reasoning_item_id,
+                    full_reasoning.clone(),
+                )
+                .await;
                 if let Err(err) = agent.record_user_message(
                     "[astro:system]\n你的思考过程已记录，但没有生成回复内容。请直接给出你的回答。",
                 )
                 .await
                 {
-                    return finish_failed(
+                    return finish_task_error(
                         &session,
+                        &turn_context,
                         &streamer,
-                        &tx,
                         err.to_string(),
                         saw_usage.then_some(total_usage),
-                        &run_id,
                     )
                     .await;
                 }
-                awaiting_synthetic_bridge_response = true;
                 continue;
             }
-            return finish_failed(
+            return finish_task_error(
                 &session,
+                &turn_context,
                 &streamer,
-                &tx,
-                "模型返回了空回复。请重试，或换一个模型。".to_string(),
+                "模型返回了空回复。请重试，或换一个模型。",
                 saw_usage.then_some(total_usage),
-                &run_id,
             )
             .await;
         }
 
-        // `Stop` hook
+        // Codex `Stop` hook. Legacy `pre_verify` registrations normalize here.
         if calls.is_empty() {
             let verify_outcome = {
                 let agent = session.as_ref();
                 let sid = agent.session_id().to_string();
                 let turn_id = agent.current_turn_id().await;
-                agent.fire_hook(
+                let hook_item = emit_hook_started(&session, &turn_context, ::hooks::STOP).await;
+                let outcome = agent.fire_hook(
                     ::hooks::STOP,
                     ::hooks::HookPayload {
                         session_id: sid,
@@ -675,7 +831,9 @@ pub(crate) async fn run_turn(
                         detail: format!("attempt={}", verify_attempt + 1),
                         ..Default::default()
                     },
-                )
+                );
+                emit_hook_completed(&session, &turn_context, hook_item, ::hooks::STOP).await;
+                outcome
             };
             if verify_attempt < MAX_VERIFY_ATTEMPTS {
                 if let ::hooks::HookOutcome::KeepGoing(prompt) = verify_outcome {
@@ -694,31 +852,37 @@ pub(crate) async fn run_turn(
                         )
                         .await
                     {
-                        return finish_failed(
+                        return finish_task_error(
                             &session,
+                            &turn_context,
                             &streamer,
-                            &tx,
                             err.to_string(),
                             saw_usage.then_some(total_usage),
-                            &run_id,
                         )
                         .await;
                     }
+                    emit_response_items_completed(
+                        &session,
+                        &turn_context,
+                        assistant_item_id,
+                        full_response.clone(),
+                        reasoning_item_id,
+                        full_reasoning.clone(),
+                    )
+                    .await;
                     if let Err(err) = agent
                         .record_user_message(&format!("[astro:hook-context]\n{prompt}"))
                         .await
                     {
-                        return finish_failed(
+                        return finish_task_error(
                             &session,
+                            &turn_context,
                             &streamer,
-                            &tx,
                             err.to_string(),
                             saw_usage.then_some(total_usage),
-                            &run_id,
                         )
                         .await;
                     }
-                    awaiting_synthetic_bridge_response = true;
                     continue;
                 }
             }
@@ -728,6 +892,8 @@ pub(crate) async fn run_turn(
             let agent = session.as_ref();
             let sid = agent.session_id().to_string();
             let turn_id = agent.current_turn_id().await;
+            let transform_hook =
+                emit_hook_started(&session, &turn_context, ::hooks::TRANSFORM_LLM_OUTPUT).await;
             let transformed = agent.fire_hook(
                 ::hooks::TRANSFORM_LLM_OUTPUT,
                 ::hooks::HookPayload {
@@ -739,9 +905,18 @@ pub(crate) async fn run_turn(
                     ..Default::default()
                 },
             );
+            emit_hook_completed(
+                &session,
+                &turn_context,
+                transform_hook,
+                ::hooks::TRANSFORM_LLM_OUTPUT,
+            )
+            .await;
             if let ::hooks::HookOutcome::ReplaceText(s) = transformed {
                 full_response = s;
             }
+            let post_hook =
+                emit_hook_started(&session, &turn_context, ::hooks::POST_LLM_CALL).await;
             let _ = agent.fire_hook(
                 ::hooks::POST_LLM_CALL,
                 ::hooks::HookPayload {
@@ -752,17 +927,16 @@ pub(crate) async fn run_turn(
                     ..Default::default()
                 },
             );
+            emit_hook_completed(&session, &turn_context, post_hook, ::hooks::POST_LLM_CALL).await;
             let cancelled = agent.cancel_signal().is_cancelled();
             if cancelled {
-                finish_interrupted(
+                return finish_task_cancelled(
                     &session,
+                    &turn_context,
                     &streamer,
-                    &tx,
                     saw_usage.then_some(total_usage),
-                    &run_id,
                 )
                 .await;
-                return RunTurnOutcome::Interrupted;
             }
         }
 
@@ -784,78 +958,103 @@ pub(crate) async fn run_turn(
                 )
                 .await
             {
-                return finish_failed(
+                return finish_task_error(
                     &session,
+                    &turn_context,
                     &streamer,
-                    &tx,
                     err.to_string(),
                     saw_usage.then_some(total_usage),
-                    &run_id,
                 )
                 .await;
             }
-            // A synthetic bridge can survive reasoning-only retries. Clear its
-            // deferral only after a normal assistant message (including tool
-            // calls) is durably represented in history.
-            awaiting_synthetic_bridge_response = false;
         }
+        emit_response_items_completed(
+            &session,
+            &turn_context,
+            assistant_item_id,
+            full_response.clone(),
+            reasoning_item_id,
+            full_reasoning.clone(),
+        )
+        .await;
 
         if calls.is_empty() {
-            if mailbox.deferred {
-                run_state.set_phase(RunPhase::StreamingLlm);
-                continue;
-            }
             match turn_context.wait_for_terminal_input().await {
-                crate::runtime::turn_context::TerminalInputDecision::Queued(pending_input) => {
-                    if let Err(error) = record_pending_input(&session, &tx, pending_input).await {
-                        return finish_failed(
+                TerminalInputDecision::Queued(pending_input) => {
+                    if let Err(error) = record_pending_input(&session, pending_input).await {
+                        return finish_task_error(
                             &session,
+                            &turn_context,
                             &streamer,
-                            &tx,
                             error.to_string(),
                             saw_usage.then_some(total_usage),
-                            &run_id,
                         )
                         .await;
                     }
-                    verify_attempt = 0;
-                    thinking_only_retries = 0;
-                    awaiting_synthetic_bridge_response = false;
                     run_state.set_phase(RunPhase::StreamingLlm);
                     continue;
                 }
-                crate::runtime::turn_context::TerminalInputDecision::MailboxPending => {
+                TerminalInputDecision::MailboxPending => {
+                    let outcome = match drain_available_mailbox(&session, &turn_context).await {
+                        Ok(outcome) => outcome,
+                        Err(error) => {
+                            return finish_task_error(
+                                &session,
+                                &turn_context,
+                                &streamer,
+                                error.to_string(),
+                                saw_usage.then_some(total_usage),
+                            )
+                            .await;
+                        }
+                    };
+                    if outcome.deferred || outcome.delivered == 0 {
+                        return finish_task_error(
+                            &session,
+                            &turn_context,
+                            &streamer,
+                            "active-turn mailbox signal had no deliverable durable input",
+                            saw_usage.then_some(total_usage),
+                        )
+                        .await;
+                    }
                     run_state.set_phase(RunPhase::StreamingLlm);
                     continue;
                 }
-                crate::runtime::turn_context::TerminalInputDecision::Closed => {}
+                TerminalInputDecision::Closed => {}
             }
             need_summary = false;
             break;
         }
 
         for call in &calls {
-            if !emit(
-                &tx,
-                MultiTurnStreamItem::ToolStarted {
-                    id: call.id.clone(),
-                    name: call.name.clone(),
-                    arguments_json: call.arguments.to_string(),
-                },
+            emit(
+                &session,
+                &turn_context,
+                EventMsg::ItemStarted(ItemEvent {
+                    turn_id: turn_context.sub_id().to_string(),
+                    item: tool_turn_item(
+                        call.id.clone(),
+                        call.name.clone(),
+                        call.arguments.clone(),
+                        None,
+                        Vec::new(),
+                        ToolStatus::InProgress,
+                    ),
+                }),
             )
-            .await
-            {
-                return RunTurnOutcome::Interrupted;
-            }
+            .await;
         }
 
         run_state.set_phase(RunPhase::ExecutingTools);
-        let names: Vec<&str> = calls.iter().map(|c| c.name.as_str()).collect();
-        let force_serial = step_context.tool_router.any_needs_confirmation(&names)
-            || step_context.tool_router.any_exclusive_access(&names)
-            || calls
-                .iter()
-                .any(|c| tool_may_require_permission(&c.name, &c.arguments));
+        let force_serial = {
+            let names: Vec<&str> = calls.iter().map(|c| c.name.as_str()).collect();
+            step_context.tool_router.any_needs_confirmation(&names)
+                || step_context.tool_router.any_exclusive_access(&names)
+                || calls
+                    .iter()
+                    .any(|c| tool_may_require_permission(&c.name, &c.arguments))
+        };
 
         let outcomes = if force_serial || hitl_gate.is_none() {
             execute_tools_serial(
@@ -863,32 +1062,22 @@ pub(crate) async fn run_turn(
                 Arc::clone(&step_context),
                 &calls,
                 &pause,
-                &tx,
-                &run_id,
+                &turn_context,
                 hitl_gate.as_ref(),
             )
             .await
         } else {
-            execute_tools_concurrent(
-                &session,
-                Arc::clone(&step_context),
-                &calls,
-                &pause,
-                cancellation_token.child_token(),
-            )
-            .await
+            execute_tools_concurrent(&session, Arc::clone(&step_context), &calls, &pause).await
         };
 
         let Some(outcomes) = outcomes else {
-            finish_interrupted(
+            return finish_task_cancelled(
                 &session,
+                &turn_context,
                 &streamer,
-                &tx,
                 saw_usage.then_some(total_usage),
-                &run_id,
             )
             .await;
-            return RunTurnOutcome::Interrupted;
         };
 
         if !record_tool_outcomes(
@@ -896,24 +1085,22 @@ pub(crate) async fn run_turn(
             &calls,
             outcomes,
             &pause,
-            &tx,
+            &turn_context,
             &mut timeline,
             now_ms,
         )
         .await
         {
-            finish_interrupted(
+            return finish_task_cancelled(
                 &session,
+                &turn_context,
                 &streamer,
-                &tx,
                 saw_usage.then_some(total_usage),
-                &run_id,
             )
             .await;
-            return RunTurnOutcome::Interrupted;
         }
 
-        if post_tool_maintenance(&session, &step_context, &calls).await {
+        if post_tool_maintenance(&session, &step_context, &turn_context, &calls).await {
             need_summary = false;
             break;
         }
@@ -932,521 +1119,160 @@ pub(crate) async fn run_turn(
     if need_summary {
         match run_max_iterations_summary(crate::streaming::summary::MaxIterationsSummaryArgs {
             session: &session,
-            turn_context: &turn_context,
             streamer: &streamer,
             system_prompt: &system_prompt,
             pause: &pause,
-            tx: &tx,
+            turn_context: &turn_context,
             timeline: &mut timeline,
             total_usage: &mut total_usage,
             saw_usage: &mut saw_usage,
-            run_id: &run_id,
             used: budget.used(),
             max_total: budget.max_total(),
-            verify_attempt: &mut verify_attempt,
-            cancellation_token: &cancellation_token,
         })
         .await
         {
             SummaryOutcome::Finished => {}
-            SummaryOutcome::Aborted => return RunTurnOutcome::Interrupted,
+            SummaryOutcome::Aborted => return Err(TurnCancelled.into()),
             SummaryOutcome::Failed(err) => {
-                return finish_failed(
+                return finish_task_error(
                     &session,
+                    &turn_context,
                     &streamer,
-                    &tx,
                     err,
                     saw_usage.then_some(total_usage),
-                    &run_id,
                 )
                 .await;
             }
         }
     }
 
-    finish_success(
+    if cancellation_token.is_cancelled() || pause.is_cancelled() {
+        return finish_task_cancelled(
+            &session,
+            &turn_context,
+            &streamer,
+            saw_usage.then_some(total_usage),
+        )
+        .await;
+    }
+
+    emit_usage(
         &session,
+        &turn_context,
         &streamer,
-        &tx,
         saw_usage.then_some(total_usage),
-        &run_id,
     )
     .await;
-    RunTurnOutcome::Success
-}
-
-/// 在后台 task 启动 [`run_multi_turn_stream`]，并返回可消费的 [`MultiTurnStream`]。
-///
-/// channel 容量为 32；消费者 drop 后发送方通过 [`emit`] 返回 `false` 自然退出。
-pub fn stream_multi_turn(
-    session: Arc<Session>,
-    targets: Vec<ChatTarget>,
-    base_config: ProviderConfig,
-    input: Vec<TurnInput>,
-    pause: Arc<PauseControl>,
-) -> MultiTurnStream {
-    stream_multi_turn_with_hitl(session, targets, base_config, input, pause, None)
-}
-
-/// 带 HITL 闸门的多轮流。
-pub fn stream_multi_turn_with_hitl(
-    session: Arc<Session>,
-    targets: Vec<ChatTarget>,
-    base_config: ProviderConfig,
-    input: Vec<TurnInput>,
-    pause: Arc<PauseControl>,
-    hitl_gate: Option<Arc<HitlGate>>,
-) -> MultiTurnStream {
-    let (tx, rx) = mpsc::channel(32);
-    tokio::spawn(async move {
-        run_multi_turn_stream(MultiTurnStreamArgs {
-            session,
-            targets,
-            base_config,
-            input,
-            system_prompt: None,
-            pause,
-            hitl_gate,
-            tx,
-            chat_override: None,
-        })
-        .await;
-    });
-    Box::pin(futures::stream::unfold(rx, |mut rx| async move {
-        rx.recv().await.map(|item| (item, rx))
-    }))
+    Ok(None)
 }
 
 #[cfg(test)]
 mod tests {
-    use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+    use std::sync::atomic::{AtomicBool, Ordering};
+    use std::sync::Arc;
 
-    use futures::stream;
-    use providers::types::stream::StreamChunk;
-    use providers::CompletionStream;
+    use tempfile::TempDir;
 
     use super::*;
 
-    #[derive(Clone, Copy)]
-    enum DeferredMailboxKind {
-        OldGenerationSteer,
-        AgentMessage,
+    fn queued_input(client_message_id: &str) -> QueuedTurnInput {
+        QueuedTurnInput {
+            input: TurnInput {
+                content: "steered input".into(),
+                image_data_urls: Vec::new(),
+                client_message_id: Some(client_message_id.into()),
+            },
+            inject_context: None,
+        }
     }
 
-    async fn assert_deferred_mailbox_without_turn_signal(
-        kind: DeferredMailboxKind,
-        provider_fails: bool,
-    ) {
-        let temp = tempfile::tempdir().unwrap();
-        let config = crate::runtime::Config::with_defaults(temp.path().join("memory"));
-        let session_id = match kind {
-            DeferredMailboxKind::OldGenerationSteer => "deferred-old-steer",
-            DeferredMailboxKind::AgentMessage => "deferred-agent-message",
-        };
-        let session = Session::with_session_id(config, session_id.into()).unwrap();
-        session
-            .record_turn_input(TurnInput::UserInput {
-                content: "initial request".into(),
-                image_data_urls: Vec::new(),
-                client_message_id: None,
-            })
+    #[tokio::test]
+    async fn steer_ack_is_emitted_only_after_db_and_memory_recording() {
+        let dir = TempDir::new().unwrap();
+        let config = crate::runtime::Config::with_defaults(dir.path().to_path_buf());
+        let session = Arc::new(Session::with_session_id(config, "steer-ack".into()).unwrap());
+        session.set_current_turn_id("turn-steer-ack").await;
+        let events = session.subscribe_turn_events("turn-steer-ack").await;
+        let memory_recorded = Arc::new(AtomicBool::new(false));
+        session.set_turn_input_after_memory_write_hook(Some({
+            let memory_recorded = Arc::clone(&memory_recorded);
+            Arc::new(move || memory_recorded.store(true, Ordering::SeqCst))
+        }));
+
+        record_pending_input(&session, vec![queued_input("client-steer")])
             .await
             .unwrap();
-        let control = Arc::clone(&session.services.agent_control);
-        let path = session.services.agent_path.clone();
-        let expected = match kind {
-            DeferredMailboxKind::OldGenerationSteer => {
-                let input = TurnInput::UserInput {
-                    content: "old generation steer".into(),
-                    image_data_urls: Vec::new(),
-                    client_message_id: None,
-                };
-                control
-                    .persist_main_steer(
-                        &path,
-                        crate::exec::subagents::encode_main_steer_input(&input).unwrap(),
-                    )
-                    .unwrap();
-                vec!["old generation steer"]
-            }
-            DeferredMailboxKind::AgentMessage => {
-                let reservation = control.reserve_spawn(&path, "sender").unwrap();
-                let sender_path = reservation.thread().canonical_path.clone();
-                reservation.commit().unwrap();
-                control
-                    .enqueue_message(
-                        &sender_path,
-                        subagents::MessageAgentV2Request {
-                            target: "/root".into(),
-                            message: "ordinary agent message one".into(),
-                        },
-                        false,
-                    )
-                    .unwrap();
-                control
-                    .enqueue_message(
-                        &sender_path,
-                        subagents::MessageAgentV2Request {
-                            target: "/root".into(),
-                            message: "ordinary agent message two".into(),
-                        },
-                        false,
-                    )
-                    .unwrap();
-                vec!["ordinary agent message one", "ordinary agent message two"]
-            }
-        };
-        let turn_context = session.create_turn_context("turn-1".into()).await;
-        let session = Arc::new(session);
 
-        let calls = Arc::new(AtomicUsize::new(0));
-        let first_did_not_see_mailbox = Arc::new(AtomicBool::new(false));
-        let second_saw_mailbox = Arc::new(AtomicBool::new(false));
-        let chat_override: super::super::provider::ChatOverride = {
-            let calls = Arc::clone(&calls);
-            let first_did_not_see_mailbox = Arc::clone(&first_did_not_see_mailbox);
-            let second_saw_mailbox = Arc::clone(&second_saw_mailbox);
-            Arc::new(move |messages, _tools, _config| {
-                let call = calls.fetch_add(1, Ordering::SeqCst);
-                let saw_mailbox = expected.iter().all(|expected| {
-                    messages
-                        .iter()
-                        .any(|message| message.text_content().contains(expected))
-                });
-                if call == 0 && !saw_mailbox {
-                    first_did_not_see_mailbox.store(true, Ordering::SeqCst);
-                }
-                if call == 1 && saw_mailbox {
-                    second_saw_mailbox.store(true, Ordering::SeqCst);
-                }
-                Box::pin(async move {
-                    if provider_fails && call == 0 {
-                        anyhow::bail!("scripted provider failure");
-                    }
-                    let text = match call {
-                        0 => "first answer",
-                        1 => "second answer",
-                        _ => panic!("unexpected extra provider call"),
-                    };
-                    Ok(Box::pin(stream::iter(vec![
-                        Ok(StreamChunk::Text(text.into())),
-                        Ok(StreamChunk::Done {
-                            finish_reason: "stop".into(),
-                        }),
-                    ])) as CompletionStream)
-                })
-            })
-        };
-        let (tx, mut rx) = mpsc::channel(64);
-        let args = RunTurnArgs {
-            session: Arc::clone(&session),
-            turn_context,
-            targets: vec![ChatTarget {
-                provider_id: "scripted".into(),
-                backend_id: "scripted".into(),
-                model: "test".into(),
-                api_key: String::new(),
-                base_url: String::new(),
-            }],
-            base_config: ProviderConfig {
-                model: "test".into(),
-                ..Default::default()
-            },
-            system_prompt: Some("system".into()),
-            pause: PauseControl::new(),
-            hitl_gate: None,
-            tx,
-            thread_id: session_id.into(),
-            run_id: "turn-1".into(),
-            chat_override: Some(chat_override),
-        };
-
-        Session::spawn_task(
-            &session,
-            Arc::clone(&args.turn_context),
-            Vec::new(),
-            RegularTask::new(args),
-        )
-        .await
-        .unwrap();
-        while rx.recv().await.is_some() {}
-
-        if provider_fails {
-            assert_eq!(calls.load(Ordering::SeqCst), 1);
-            assert!(!control.drain_mailbox(&path).unwrap().is_empty());
-            return;
-        }
-        assert_eq!(calls.load(Ordering::SeqCst), 2);
-        assert!(first_did_not_see_mailbox.load(Ordering::SeqCst));
-        assert!(second_saw_mailbox.load(Ordering::SeqCst));
-        assert!(control.drain_mailbox(&path).unwrap().is_empty());
+        let event = events.recv().await.unwrap();
+        assert!(memory_recorded.load(Ordering::SeqCst));
+        assert!(matches!(
+            event.msg,
+            EventMsg::UserInputCommitted(UserInputCommittedEvent {
+                turn_id,
+                client_message_id,
+            }) if turn_id == "turn-steer-ack" && client_message_id == "client-steer"
+        ));
     }
 
-    #[tokio::test(flavor = "current_thread")]
-    async fn deferred_old_generation_steer_forces_next_sampling_boundary() {
-        assert_deferred_mailbox_without_turn_signal(DeferredMailboxKind::OldGenerationSteer, false)
-            .await;
-    }
+    #[tokio::test]
+    async fn steer_write_failure_does_not_emit_ack() {
+        let dir = TempDir::new().unwrap();
+        let config = crate::runtime::Config::with_defaults(dir.path().to_path_buf());
+        let session = Arc::new(Session::with_session_id(config, "steer-no-ack".into()).unwrap());
+        session.set_current_turn_id("turn-steer-no-ack").await;
+        let events = session.subscribe_turn_events("turn-steer-no-ack").await;
+        session.set_turn_input_after_db_write_hook(Some(Arc::new(|| {
+            anyhow::bail!("injected post-DB failure")
+        })));
 
-    #[tokio::test(flavor = "current_thread")]
-    async fn deferred_agent_message_forces_next_sampling_boundary() {
-        assert_deferred_mailbox_without_turn_signal(DeferredMailboxKind::AgentMessage, false).await;
-    }
-
-    #[tokio::test(flavor = "current_thread")]
-    async fn deferred_mailbox_does_not_retry_after_provider_error() {
-        assert_deferred_mailbox_without_turn_signal(DeferredMailboxKind::OldGenerationSteer, true)
-            .await;
-    }
-
-    #[tokio::test(flavor = "current_thread")]
-    async fn early_durable_steers_survive_deferred_first_boundary() {
-        let temp = tempfile::tempdir().unwrap();
-        let config = crate::runtime::Config::with_defaults(temp.path().join("memory"));
-        let session_id = "early-steer";
-        let session = Session::with_session_id(config, session_id.into()).unwrap();
-        session
-            .record_turn_input(TurnInput::UserInput {
-                content: "initial request".into(),
-                image_data_urls: Vec::new(),
-                client_message_id: None,
-            })
+        let error = record_pending_input(&session, vec![queued_input("client-failed")])
             .await
-            .unwrap();
-        let control = Arc::clone(&session.services.agent_control);
-        let path = session.services.agent_path.clone();
-        let pending = ["early steer one", "early steer two"].map(|content| TurnInput::UserInput {
-            content: content.into(),
-            image_data_urls: Vec::new(),
-            client_message_id: None,
-        });
-        let turn_context = session.create_turn_context("turn-1".into()).await;
-        for input in &pending {
-            let message_id = turn_context.reserve_mailbox_input().unwrap();
-            let stored = control
-                .persist_main_steer_with_id(
-                    &path,
-                    message_id.clone(),
-                    crate::exec::subagents::encode_main_steer_input(input).unwrap(),
-                )
-                .unwrap();
-            assert_eq!(stored.message_id, message_id);
-        }
-        control.notify_main_steer();
-        let session = Arc::new(session);
+            .unwrap_err();
 
-        let calls = Arc::new(AtomicUsize::new(0));
-        let second_saw_steer = Arc::new(AtomicBool::new(false));
-        let chat_override: super::super::provider::ChatOverride = {
-            let calls = Arc::clone(&calls);
-            let second_saw_steer = Arc::clone(&second_saw_steer);
-            Arc::new(move |messages, _tools, _config| {
-                let call = calls.fetch_add(1, Ordering::SeqCst);
-                if call == 1
-                    && ["early steer one", "early steer two"]
-                        .iter()
-                        .all(|expected| {
-                            messages
-                                .iter()
-                                .any(|message| message.text_content().contains(expected))
-                        })
-                {
-                    second_saw_steer.store(true, Ordering::SeqCst);
-                }
-                Box::pin(async move {
-                    let text = if call == 0 {
-                        "first answer"
-                    } else {
-                        "second answer"
-                    };
-                    Ok(Box::pin(stream::iter(vec![
-                        Ok(StreamChunk::Text(text.into())),
-                        Ok(StreamChunk::Done {
-                            finish_reason: "stop".into(),
-                        }),
-                    ])) as CompletionStream)
-                })
-            })
-        };
-        let (tx, mut rx) = mpsc::channel(64);
-        let args = RunTurnArgs {
-            session: Arc::clone(&session),
-            turn_context,
-            targets: vec![ChatTarget {
-                provider_id: "scripted".into(),
-                backend_id: "scripted".into(),
-                model: "test".into(),
-                api_key: String::new(),
-                base_url: String::new(),
-            }],
-            base_config: ProviderConfig {
-                model: "test".into(),
-                ..Default::default()
-            },
-            system_prompt: Some("system".into()),
-            pause: PauseControl::new(),
-            hitl_gate: None,
-            tx,
-            thread_id: session_id.into(),
-            run_id: "turn-1".into(),
-            chat_override: Some(chat_override),
-        };
-
-        Session::spawn_task(
-            &session,
-            Arc::clone(&args.turn_context),
-            Vec::new(),
-            RegularTask::new(args),
-        )
-        .await
-        .unwrap();
-        while rx.recv().await.is_some() {}
-
-        assert_eq!(calls.load(Ordering::SeqCst), 2);
-        assert!(second_saw_steer.load(Ordering::SeqCst));
-        assert!(control.drain_mailbox(&path).unwrap().is_empty());
-        let history = session.clone_history().await;
-        assert_eq!(
-            history[2].content_str(),
-            "early steer one\n\nearly steer two"
-        );
-        assert_eq!(
-            history
-                .iter()
-                .map(|message| message.role.clone())
-                .collect::<Vec<_>>(),
-            vec![
-                types::message::Role::User,
-                types::message::Role::Assistant,
-                types::message::Role::User,
-                types::message::Role::Assistant,
-            ]
-        );
+        assert!(error.to_string().contains("injected post-DB failure"));
+        assert!(events.try_recv().is_err());
     }
 
-    #[tokio::test(flavor = "current_thread")]
-    async fn repaired_old_steer_does_not_ack_new_generation_signal() {
-        let temp = tempfile::tempdir().unwrap();
-        let config = crate::runtime::Config::with_defaults(temp.path().join("memory"));
-        let session_id = "cross-generation-steer";
-        let session = Session::with_session_id(config, session_id.into()).unwrap();
-        let control = Arc::clone(&session.services.agent_control);
-        let path = session.services.agent_path.clone();
-
-        let old_input = TurnInput::UserInput {
-            content: "old steer S1".into(),
+    #[tokio::test]
+    async fn durable_active_steer_write_failure_does_not_emit_ack() {
+        let dir = TempDir::new().unwrap();
+        let config = crate::runtime::Config::with_defaults(dir.path().to_path_buf());
+        let session =
+            Arc::new(Session::with_session_id(config, "durable-steer-no-ack".into()).unwrap());
+        let turn_context = Arc::new(TurnContext::new(
+            "turn-durable-steer-no-ack".into(),
+            1,
+            types::InteractionMode::Agent,
+            None,
+            None,
+        ));
+        let message_id = turn_context.reserve_mailbox_input().unwrap();
+        let input = TurnInput {
+            content: "durable steered input".into(),
             image_data_urls: Vec::new(),
-            client_message_id: None,
+            client_message_id: Some("client-durable-failed".into()),
         };
-        let old_message = control
-            .persist_main_steer(
-                &path,
-                crate::exec::subagents::encode_main_steer_input(&old_input).unwrap(),
-            )
-            .unwrap();
-        let old_marker = format!(
-            "{}{}",
-            crate::exec::subagents::MAILBOX_FINISH_PREFIX,
-            old_message.sequence
-        );
+        let payload =
+            crate::exec::subagents::encode_main_steer_input_with_context(&input, None).unwrap();
         session
-            .persist_turn_input(&old_input, Some(&old_marker), Some(&old_marker))
+            .services
+            .agent_control
+            .persist_main_steer_with_id(&session.services.agent_path, message_id, payload)
             .unwrap();
-        session
-            .record_turn_input_in_memory(&old_input, Some(&old_marker))
+        let events = session
+            .subscribe_turn_events("turn-durable-steer-no-ack")
             .await;
+        session.set_turn_input_after_db_write_hook(Some(Arc::new(|| {
+            anyhow::bail!("injected durable steer post-DB failure")
+        })));
 
-        let new_input = TurnInput::UserInput {
-            content: "new steer S2".into(),
-            image_data_urls: Vec::new(),
-            client_message_id: None,
-        };
-        let turn_context = session.create_turn_context("turn-2".into()).await;
-        let new_message_id = turn_context.reserve_mailbox_input().unwrap();
-        let new_message = control
-            .persist_main_steer_with_id(
-                &path,
-                new_message_id.clone(),
-                crate::exec::subagents::encode_main_steer_input(&new_input).unwrap(),
-            )
-            .unwrap();
-        assert_eq!(new_message.message_id, new_message_id);
-        control.notify_main_steer();
-        let session = Arc::new(session);
+        let error = drain_available_mailbox(&session, &turn_context)
+            .await
+            .unwrap_err();
 
-        let calls = Arc::new(AtomicUsize::new(0));
-        let first_saw_only_old = Arc::new(AtomicBool::new(false));
-        let second_saw_new = Arc::new(AtomicBool::new(false));
-        let chat_override: super::super::provider::ChatOverride = {
-            let calls = Arc::clone(&calls);
-            let first_saw_only_old = Arc::clone(&first_saw_only_old);
-            let second_saw_new = Arc::clone(&second_saw_new);
-            Arc::new(move |messages, _tools, _config| {
-                let call = calls.fetch_add(1, Ordering::SeqCst);
-                let saw_old = messages
-                    .iter()
-                    .any(|message| message.text_content().contains("old steer S1"));
-                let saw_new = messages
-                    .iter()
-                    .any(|message| message.text_content().contains("new steer S2"));
-                if call == 0 && saw_old && !saw_new {
-                    first_saw_only_old.store(true, Ordering::SeqCst);
-                }
-                if call == 1 && saw_new {
-                    second_saw_new.store(true, Ordering::SeqCst);
-                }
-                Box::pin(async move {
-                    let text = match call {
-                        0 => "old steer answer",
-                        1 => "new steer answer",
-                        _ => panic!("unexpected extra provider call"),
-                    };
-                    Ok(Box::pin(stream::iter(vec![
-                        Ok(StreamChunk::Text(text.into())),
-                        Ok(StreamChunk::Done {
-                            finish_reason: "stop".into(),
-                        }),
-                    ])) as CompletionStream)
-                })
-            })
-        };
-        let (tx, mut rx) = mpsc::channel(64);
-        let args = RunTurnArgs {
-            session: Arc::clone(&session),
-            turn_context,
-            targets: vec![ChatTarget {
-                provider_id: "scripted".into(),
-                backend_id: "scripted".into(),
-                model: "test".into(),
-                api_key: String::new(),
-                base_url: String::new(),
-            }],
-            base_config: ProviderConfig {
-                model: "test".into(),
-                ..Default::default()
-            },
-            system_prompt: Some("system".into()),
-            pause: PauseControl::new(),
-            hitl_gate: None,
-            tx,
-            thread_id: session_id.into(),
-            run_id: "turn-2".into(),
-            chat_override: Some(chat_override),
-        };
-
-        Session::spawn_task(
-            &session,
-            Arc::clone(&args.turn_context),
-            Vec::new(),
-            RegularTask::new(args),
-        )
-        .await
-        .unwrap();
-        while rx.recv().await.is_some() {}
-
-        assert_eq!(calls.load(Ordering::SeqCst), 2);
-        assert!(first_saw_only_old.load(Ordering::SeqCst));
-        assert!(second_saw_new.load(Ordering::SeqCst));
-        assert!(control.drain_mailbox(&path).unwrap().is_empty());
+        assert!(error
+            .to_string()
+            .contains("injected durable steer post-DB failure"));
+        assert!(events.try_recv().is_err());
     }
 }

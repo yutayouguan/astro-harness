@@ -90,6 +90,11 @@ impl ToolRegistry {
         self.dynamic_handlers.get(name).cloned()
     }
 
+    /// 克隆动态 handler 句柄，供调用方在释放注册表锁后执行。
+    pub fn dynamic_handler_cloned(&self, name: &str) -> Option<DynToolHandler> {
+        self.dynamic_handlers.get(name).cloned()
+    }
+
     /// 用外部加载的 toolset 启用映射覆盖当前状态（通常来自 Tauri 或磁盘同步）。
     pub fn set_enabled_map(&mut self, enabled: HashMap<String, bool>) {
         self.enabled = enabled;

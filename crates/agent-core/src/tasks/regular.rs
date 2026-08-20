@@ -1,11 +1,12 @@
 use std::sync::Arc;
 
+use agent_protocol::{EventMsg, TurnStartedEvent};
 use tokio_util::sync::CancellationToken;
 
 use crate::runtime::{Session, TurnContext, TurnResult};
-use crate::streaming::multi_turn::{run_turn, RunTurnArgs, RunTurnOutcome};
+use crate::streaming::multi_turn::{run_turn, RunTurnArgs};
 
-use super::{SessionTask, SessionTaskResult, TaskKind, TurnInput};
+use super::{SessionTask, SessionTaskResult, TaskKind, TurnCancelled, TurnInput};
 
 /// Standard model-and-tool turn.
 pub(crate) struct RegularTask {
@@ -15,6 +16,72 @@ pub(crate) struct RegularTask {
 impl RegularTask {
     pub(crate) fn new(args: RunTurnArgs) -> Self {
         Self { args }
+    }
+
+    async fn run_with_args(
+        &self,
+        ctx: Arc<TurnContext>,
+        input: Vec<TurnInput>,
+        cancellation_token: CancellationToken,
+    ) -> SessionTaskResult {
+        let args = self.args.with_turn_context(Arc::clone(&ctx));
+        args.session()
+            .send_event(
+                args.turn_context().sub_id(),
+                EventMsg::TurnStarted(TurnStartedEvent {
+                    turn_id: args.turn_context().sub_id().to_string(),
+                }),
+            )
+            .await;
+        let prepared = match args.prepared_system_prompt().map(str::to_owned) {
+            Some(system_prompt) => {
+                anyhow::ensure!(
+                    input.is_empty(),
+                    "prebuilt system prompt cannot be combined with initial input"
+                );
+                Ok(system_prompt)
+            }
+            None => match args.session().prepare_turn(&input).await {
+                Err(error) => Err(error),
+                Ok(TurnResult::Continue { system_prompt, .. }) => Ok(system_prompt),
+                Ok(TurnResult::BudgetExhausted) => {
+                    Err(anyhow::anyhow!("conversation turn budget exhausted"))
+                }
+                Ok(TurnResult::Interrupted) => Err(TurnCancelled.into()),
+                Ok(
+                    TurnResult::Steered { .. }
+                    | TurnResult::ToolCalls(_)
+                    | TurnResult::Finished(_)
+                    | TurnResult::MaxDepth,
+                ) => Err(anyhow::anyhow!(
+                    "unsupported regular turn preparation result"
+                )),
+            },
+        };
+        let system_prompt = match prepared {
+            Ok(system_prompt) => {
+                ctx.open_input_admission();
+                system_prompt
+            }
+            Err(error) => {
+                ctx.close_input_admission();
+                return Err(error);
+            }
+        };
+        let result = run_turn(args.with_system_prompt(system_prompt), cancellation_token).await;
+        let error = result.as_ref().err().map(ToString::to_string);
+        let turn = args.session().session_turn().await;
+        let _ = args.session().fire_hook(
+            ::hooks::AGENT_END,
+            ::hooks::HookPayload {
+                turn_id: Some(ctx.sub_id().to_string()),
+                turn: Some(turn),
+                error,
+                detail: format!("turn={turn}"),
+                ..Default::default()
+            },
+        );
+        result
     }
 }
 
@@ -29,72 +96,12 @@ impl SessionTask for RegularTask {
 
     async fn run(
         self: Arc<Self>,
-        sess: Arc<Session>,
+        session: Arc<Session>,
         ctx: Arc<TurnContext>,
         input: Vec<TurnInput>,
         cancellation_token: CancellationToken,
     ) -> SessionTaskResult {
-        let args = self
-            .args
-            .with_session_and_turn(Arc::clone(&sess), Arc::clone(&ctx));
-        let preparation_result: anyhow::Result<String> = async {
-            match args.prepared_system_prompt().map(str::to_owned) {
-                Some(system_prompt) => {
-                    anyhow::ensure!(
-                        input.is_empty(),
-                        "prebuilt system prompt cannot be combined with initial input"
-                    );
-                    Ok(system_prompt)
-                }
-                None => {
-                    let turn = sess.prepare_turn(&input).await?;
-                    match turn {
-                        TurnResult::Continue { system_prompt, .. } => Ok(system_prompt),
-                        TurnResult::BudgetExhausted => {
-                            anyhow::bail!("conversation turn budget exhausted")
-                        }
-                        TurnResult::Interrupted => anyhow::bail!("regular turn interrupted"),
-                        TurnResult::Steered { .. }
-                        | TurnResult::ToolCalls(_)
-                        | TurnResult::Finished(_)
-                        | TurnResult::MaxDepth => {
-                            anyhow::bail!("unsupported regular turn preparation result")
-                        }
-                    }
-                }
-            }
-        }
-        .await;
-        let runtime_result: anyhow::Result<RunTurnOutcome> = match preparation_result {
-            Ok(system_prompt) => {
-                ctx.open_input_admission();
-                Ok(run_turn(args.with_system_prompt(system_prompt), cancellation_token).await)
-            }
-            Err(error) => {
-                ctx.close_input_admission();
-                Err(error)
-            }
-        };
-
-        let (result, error): (SessionTaskResult, Option<String>) = match runtime_result {
-            Ok(outcome) => (Ok(None), outcome.error().map(str::to_owned)),
-            Err(error) => {
-                let hook_error = error.to_string();
-                (Err(error), Some(hook_error))
-            }
-        };
-
-        let turn = sess.session_turn().await;
-        let _ = sess.fire_hook(
-            ::hooks::AGENT_END,
-            ::hooks::HookPayload {
-                turn_id: Some(ctx.sub_id().to_string()),
-                turn: Some(turn),
-                error,
-                detail: format!("turn={turn}"),
-                ..Default::default()
-            },
-        );
-        result
+        debug_assert!(Arc::ptr_eq(self.args.session(), &session));
+        self.run_with_args(ctx, input, cancellation_token).await
     }
 }

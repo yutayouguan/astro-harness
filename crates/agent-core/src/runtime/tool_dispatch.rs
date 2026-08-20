@@ -85,7 +85,10 @@ impl AgentLoop {
             (memory.agent_id.clone(), memory.workspace_dir.clone())
         };
         if step_context.is_none() {
-            self.tool_registry_mut()
+            self.services
+                .tool_registry
+                .write()
+                .expect("tool registry lock poisoned")
                 .reload_enabled_from_disk(Some(&agent_id));
         }
 
@@ -98,7 +101,13 @@ impl AgentLoop {
         }
 
         let allowed = step_context.map_or_else(
-            || self.tool_registry().is_tool_allowed(name),
+            || {
+                self.services
+                    .tool_registry
+                    .read()
+                    .expect("tool registry lock poisoned")
+                    .is_tool_allowed(name)
+            },
             |step_context| step_context.tool_router.has_tool(name),
         );
 
@@ -129,7 +138,13 @@ impl AgentLoop {
         };
         let dynamic_handler = mcp_handler.or_else(|| {
             step_context.map_or_else(
-                || self.tool_registry().dynamic_handler(name),
+                || {
+                    self.services
+                        .tool_registry
+                        .read()
+                        .expect("tool registry lock poisoned")
+                        .dynamic_handler(name)
+                },
                 |step_context| step_context.tool_router.dynamic_handler(name),
             )
         });
@@ -144,25 +159,33 @@ impl AgentLoop {
         let sessions: &dyn ConversationStore = &self.services.sessions;
         let execution = Some(self.execution());
         let hook_bus = Some(self.hook_bus());
-        let session_configuration = self.session_configuration().clone();
+        let (project_root, permission_profile, model_ctx, skill_config_overrides) = {
+            let state = self.lock_state();
+            (
+                state.project_root.clone(),
+                state.permission_profile.clone(),
+                state.model_ctx.clone(),
+                state.skill_config_overrides.clone(),
+            )
+        };
         let mut ctx = ToolContext {
-            memory: &self.memory,
+            memory: &self.services.memory,
             sessions,
             memory_dir,
             workspace_dir,
             project_root: step_context
                 .and_then(|step_context| step_context.turn.project_root().map(ToOwned::to_owned))
-                .or(session_configuration.project_root),
-            image_gen_targets: &session_configuration.model_ctx.image_gen_targets,
+                .or(project_root),
+            image_gen_targets: &model_ctx.image_gen_targets,
             session_id,
             turn_id,
-            credentials: &session_configuration.model_ctx.credentials,
-            chat_targets: &session_configuration.model_ctx.chat_targets,
+            credentials: &model_ctx.credentials,
+            chat_targets: &model_ctx.chat_targets,
             execution,
             permission_profile: step_context
                 .and_then(|step_context| step_context.turn.permission_profile().map(str::to_string))
-                .or(session_configuration.permission_profile),
-            skill_config_overrides: &session_configuration.skill_config_overrides,
+                .or(permission_profile),
+            skill_config_overrides: &skill_config_overrides,
             hook_bus,
             workspace_write_grant: grants.workspace_write,
             sandbox_policy: grants.sandbox_policy,
@@ -339,7 +362,7 @@ impl AgentLoop {
             return Err(ToolCallError::Cancelled);
         }
         let (step_context, interaction_mode) = {
-            let state = self.state.lock().await;
+            let state = self.lock_state();
             let step_context = explicit_step_context.or_else(|| state.current_step_context.clone());
             let interaction_mode = step_context
                 .as_ref()
@@ -350,7 +373,11 @@ impl AgentLoop {
         // Soft-alias：模型把 Skill 名当工具名时，改写成 skills(skill_id=…)
         let (has_tool, skills_allowed) = step_context.as_ref().map_or_else(
             || {
-                let registry = self.tool_registry();
+                let registry = self
+                    .services
+                    .tool_registry
+                    .read()
+                    .expect("tool registry lock poisoned");
                 (registry.has_tool(name), registry.is_tool_allowed("skills"))
             },
             |step_context| {
@@ -419,7 +446,7 @@ impl AgentLoop {
             );
         }
         if super::tool_writes_disk(exec_name, &exec_args) {
-            self.state.lock().await.turn.mark_wrote_disk();
+            self.lock_state().turn.mark_wrote_disk();
         }
         Ok(self
             .finalize_tool_call_result(exec_name, &exec_args, raw_result)
@@ -450,7 +477,10 @@ impl AgentLoop {
                 toolsets = ?astro_tools,
                 "skill activated toolsets (additive)"
             );
-            self.tool_registry_mut()
+            self.services
+                .tool_registry
+                .write()
+                .expect("tool registry lock poisoned")
                 .activate_skill_toolsets(&astro_tools);
         }
     }

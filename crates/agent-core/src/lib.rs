@@ -11,8 +11,6 @@ pub mod builder;
 pub mod compression;
 /// 控制型运行时能力（HITL / interrupt / schema 校验）。
 pub mod control;
-/// Agent 运行期事件广播，供 UI 订阅流式输出与工具调用。
-pub mod event_bus;
 /// 执行域聚合模块（cron / subagents / memory_review）。
 pub mod exec;
 /// 提示词域：上下文、消息转换、hook 与 prompt builder。
@@ -26,6 +24,7 @@ pub(crate) mod tasks;
 /// 助手回合时间线（astro_timeline_v1）。
 pub mod timeline;
 
+pub use agent_protocol::{Event, EventMsg, Op, TurnAbortReason, TurnInput};
 /// 链式构建可运行的 Agent 实例及其规格。
 pub use builder::{AgentBuilder, BuiltAgentSpec};
 /// HITL 闸门 re-export。
@@ -38,15 +37,15 @@ pub use control::hitl::{
 pub use control::interrupt::{Interrupt, InterruptError, InterruptPending, ResumeItem};
 /// 对话循环核心类型 re-export。
 pub use runtime::{
-    AgentConfig, AgentLoop, Config, MaxDepthError, Session, ToolCallError, TurnResult,
+    AgentConfig, AgentLoop, AgentStatus, AstroThread, Config, MaxDepthError, RuntimeIoBindError,
+    Session, ToolCallError, TurnResult,
 };
 /// 流式 API re-export。
 pub use streaming::{
-    run_multi_turn_stream, run_multi_turn_stream_with_chat_fn, stream_multi_turn,
-    stream_multi_turn_with_hitl, ChatOverride, MultiTurnStreamItem, ProviderStreamer,
-    StreamedAssistantContent, StreamingChat, StreamingCompletion, StreamingPrompt,
+    run_multi_turn_events_with_chat_fn, run_multi_turn_stream_with_chat_fn, run_thread_turn_events,
+    ChatOverride, ProviderStreamer, StreamedAssistantContent, StreamingChat, StreamingCompletion,
+    StreamingPrompt, ThreadTurnEventArgs,
 };
-pub use tasks::{TurnAbortReason, TurnInput};
 /// 工具注册表（实现位于 `tools` crate）。
 pub use tools::ToolRegistry;
 /// 工具元数据（定义位于 `common`）。

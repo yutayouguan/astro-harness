@@ -37,17 +37,12 @@ pub(crate) fn encode_main_steer_input_with_context(
     input: &TurnInput,
     inject_context: Option<String>,
 ) -> anyhow::Result<String> {
-    let TurnInput::UserInput {
-        content,
-        image_data_urls,
-        client_message_id,
-    } = input;
     Ok(format!(
         "{MAIN_STEER_PREFIX}{}",
         serde_json::to_string(&DurableSteerInput {
-            content: content.clone(),
-            image_data_urls: image_data_urls.clone(),
-            client_message_id: client_message_id.clone(),
+            content: input.content.clone(),
+            image_data_urls: input.image_data_urls.clone(),
+            client_message_id: input.client_message_id.clone(),
             inject_context,
         })?
     ))
@@ -175,7 +170,7 @@ async fn drain_mailbox_batch_at_safe_boundary(
         contents.push(message.payload);
     }
     let content = contents.join("\n\n");
-    let input = TurnInput::UserInput {
+    let input = TurnInput {
         content,
         image_data_urls,
         client_message_id: None,
@@ -494,7 +489,7 @@ mod tests {
         let image = "data:image/png;base64,bGVnYWN5LXN0ZWVy";
         root.persist_main_steer(
             &subagents::AgentPath::root(),
-            encode_main_steer_input(&TurnInput::UserInput {
+            encode_main_steer_input(&TurnInput {
                 content: "legacy steer".into(),
                 image_data_urls: vec![image.into()],
                 client_message_id: None,
@@ -758,7 +753,7 @@ mod tests {
         .unwrap();
         root.persist_main_steer(
             &subagents::AgentPath::root(),
-            encode_main_steer_input(&TurnInput::UserInput {
+            encode_main_steer_input(&TurnInput {
                 content: "steer through failure".into(),
                 image_data_urls: vec!["data:image/png;base64,c3RlZXI=".into()],
                 client_message_id: None,
@@ -830,7 +825,7 @@ mod tests {
         .unwrap();
         root.persist_main_steer(
             &subagents::AgentPath::root(),
-            encode_main_steer_input(&TurnInput::UserInput {
+            encode_main_steer_input(&TurnInput {
                 content: "early steer".into(),
                 image_data_urls: Vec::new(),
                 client_message_id: None,

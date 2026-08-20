@@ -16,7 +16,7 @@ use providers::types::stream::StreamChunk;
 use providers::ProviderConfig;
 
 use super::providers::{self as providers_commands, resolve_api_key, ProviderConfig as UiProvider};
-use crate::infra::session_events::{
+use crate::infra::thread_events::{
     emit_session_event, now_ts_ms, MemoryUpdatedDto, PendingChangedDto, SessionEventDto,
 };
 use crate::meta::auxiliary_resolver::{
@@ -315,8 +315,6 @@ fn emit_dreaming_session_event(app: &AppHandle, base: &std::path::Path, agent_id
                 session_id: None,
                 agent_id: agent_id.to_string(),
                 ts_ms: now_ts_ms(),
-                event_id: 0,
-                stream_id: String::new(),
                 memory_updated: Some(MemoryUpdatedDto {
                     source: "dreaming".into(),
                     target: "memory".into(),
@@ -339,8 +337,6 @@ fn emit_dreaming_session_event(app: &AppHandle, base: &std::path::Path, agent_id
                 session_id: None,
                 agent_id: agent_id.to_string(),
                 ts_ms: now_ts_ms(),
-                event_id: 0,
-                stream_id: String::new(),
                 memory_updated: Some(MemoryUpdatedDto {
                     source: "dreaming".into(),
                     target: "memory".into(),

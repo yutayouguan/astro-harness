@@ -1,11 +1,11 @@
 //! Hermes 风格 HITL 阻塞闸门：工具执行路径 park，resume 完成 oneshot。
 
 use std::collections::HashMap;
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 use std::time::Duration;
 
 use serde_json::Value;
-use tokio::sync::{oneshot, Mutex, RwLock};
+use tokio::sync::{oneshot, Mutex};
 use uuid::Uuid;
 
 use crate::control::interrupt::{Interrupt, ResumeItem};
@@ -163,23 +163,31 @@ impl HitlGate {
         resolution
     }
 
-    /// Remove one pre-registered wait when publishing its interrupt fails.
-    pub(crate) async fn abort_wait(&self, interrupt_id: &str) {
-        if let Some(waiting) = self.waiting.lock().await.remove(interrupt_id) {
-            let _ = waiting.tx.send(HitlResolution {
-                interrupt_id: interrupt_id.to_string(),
-                status: "cancelled".into(),
-                payload_json: String::new(),
-            });
-        }
+    /// 只读预校验整批 resume，不消费任何 waiter。
+    pub async fn validate_resolve(&self, items: &[ResumeItem]) -> Result<(), String> {
+        let map = self.waiting.lock().await;
+        Self::prepare_resolutions(&map, items).map(|_| ())
     }
 
     /// 由 `interrupt_resume` 完成等待；对 `resolved` 做 schema 校验。
     pub async fn resolve(&self, items: &[ResumeItem]) -> Result<(), String> {
+        let mut map = self.waiting.lock().await;
+        let prepared = Self::prepare_resolutions(&map, items)?;
+        for (id, resolution) in prepared {
+            if let Some(waiting) = map.remove(&id) {
+                let _ = waiting.tx.send(resolution);
+            }
+        }
+        Ok(())
+    }
+
+    fn prepare_resolutions(
+        map: &HashMap<String, Waiting>,
+        items: &[ResumeItem],
+    ) -> Result<Vec<(String, HitlResolution)>, String> {
         if items.is_empty() {
             return Err("resume 列表为空".into());
         }
-        let mut map = self.waiting.lock().await;
         if map.is_empty() {
             return Err("当前没有等待中的 HITL".into());
         }
@@ -206,12 +214,7 @@ impl HitlGate {
             ));
         }
 
-        for (id, resolution) in prepared {
-            if let Some(waiting) = map.remove(&id) {
-                let _ = waiting.tx.send(resolution);
-            }
-        }
-        Ok(())
+        Ok(prepared)
     }
 
     /// 取消全部等待（chat cancel）。
@@ -255,22 +258,54 @@ impl HitlRegistry {
     pub async fn insert(&self, gate: Arc<HitlGate>) {
         self.inner
             .write()
-            .await
+            .expect("HITL registry lock poisoned")
             .insert(gate.session_id().to_string(), gate);
     }
 
+    /// Atomically replace one session gate from a cancellation-safe synchronous commit.
+    pub fn replace_for_admission(&self, gate: Arc<HitlGate>) -> Option<Arc<HitlGate>> {
+        self.inner
+            .write()
+            .expect("HITL registry lock poisoned")
+            .insert(gate.session_id().to_string(), gate)
+    }
+
     pub async fn get(&self, session_id: &str) -> Option<Arc<HitlGate>> {
-        self.inner.read().await.get(session_id).cloned()
+        self.inner
+            .read()
+            .expect("HITL registry lock poisoned")
+            .get(session_id)
+            .cloned()
     }
 
     pub async fn remove(&self, session_id: &str) -> Option<Arc<HitlGate>> {
-        self.inner.write().await.remove(session_id)
+        self.inner
+            .write()
+            .expect("HITL registry lock poisoned")
+            .remove(session_id)
     }
 
     pub async fn cancel_and_remove(&self, session_id: &str) {
         if let Some(gate) = self.remove(session_id).await {
             gate.cancel_all().await;
         }
+    }
+
+    pub async fn cancel_and_remove_if(&self, session_id: &str, expected: &Arc<HitlGate>) -> bool {
+        let removed = {
+            let mut gates = self.inner.write().expect("HITL registry lock poisoned");
+            if gates
+                .get(session_id)
+                .is_some_and(|current| Arc::ptr_eq(current, expected))
+            {
+                gates.remove(session_id);
+                true
+            } else {
+                false
+            }
+        };
+        expected.cancel_all().await;
+        removed
     }
 }
 
@@ -334,6 +369,39 @@ mod tests {
         let (_interrupt, res) = handle.await.unwrap();
         assert_eq!(res.status, "resolved");
         assert!(res.to_tool_result().contains("approved"));
+    }
+
+    #[tokio::test]
+    async fn stale_gate_cleanup_cancels_only_its_exact_generation() {
+        let registry = HitlRegistry::new();
+        let old = HitlGate::new("same-session");
+        let old_rx = old
+            .begin_wait(Interrupt {
+                id: "old".into(),
+                ..Default::default()
+            })
+            .await;
+        registry.insert(Arc::clone(&old)).await;
+
+        let replacement = HitlGate::new("same-session");
+        let mut replacement_rx = replacement
+            .begin_wait(Interrupt {
+                id: "replacement".into(),
+                ..Default::default()
+            })
+            .await;
+        registry.insert(Arc::clone(&replacement)).await;
+
+        assert!(
+            !registry.cancel_and_remove_if("same-session", &old).await,
+            "stale cleanup must not remove the replacement registry entry"
+        );
+        assert_eq!(old_rx.await.unwrap().status, "cancelled");
+        assert!(replacement_rx.try_recv().is_err());
+        assert!(registry
+            .get("same-session")
+            .await
+            .is_some_and(|gate| Arc::ptr_eq(&gate, &replacement)));
     }
 
     #[tokio::test]

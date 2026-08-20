@@ -5,6 +5,7 @@ import {
   applyActivityUpsert,
   applySurfaceUpsert,
   coalesceReasoningSegments,
+  reconcileReasoning,
   sealOpenReasoning,
   sumReasoningDurations,
 } from "./chatTimeline.ts";
@@ -186,4 +187,28 @@ test("coalesceReasoningSegments keeps last open (no duration) while streaming", 
     assert.equal(out[0].durationSec, undefined);
     assert.equal(out[0].at, 1000);
   }
+});
+
+test("canonical reasoning reconciliation replaces divergent text and keeps activities", () => {
+  let m = emptyAssistant();
+  m = applyReasoningDelta(m, "hel", 100);
+  m = applyActivityUpsert(m, {
+    id: "t1",
+    kind: "tool",
+    title: "x",
+    status: "running",
+    at: 200,
+  });
+  m = applyReasoningDelta(m, " world", 300);
+
+  const reconciled = reconcileReasoning(m, "hello world", 400);
+  assert.equal(reconciled.reasoning, "hello world");
+  assert.equal(
+    reconciled.segments
+      ?.filter((segment) => segment.type === "reasoning")
+      .map((segment) => (segment.type === "reasoning" ? segment.text : ""))
+      .join(""),
+    "hello world",
+  );
+  assert.equal(reconciled.segments?.filter((segment) => segment.type === "activity").length, 1);
 });

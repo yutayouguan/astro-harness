@@ -5,6 +5,7 @@
 //! belong to [`super::StepContext`].
 
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 
 use tokio::sync::Notify;
@@ -42,6 +43,25 @@ pub(crate) struct TurnInputReservation {
     finished: bool,
 }
 
+#[derive(Debug, Default)]
+struct ChildTracker {
+    active: AtomicUsize,
+    changed: Notify,
+}
+
+#[derive(Debug)]
+pub(crate) struct ChildPermit {
+    tracker: Arc<ChildTracker>,
+}
+
+impl Drop for ChildPermit {
+    fn drop(&mut self) {
+        if self.tracker.active.fetch_sub(1, Ordering::AcqRel) == 1 {
+            self.tracker.changed.notify_one();
+        }
+    }
+}
+
 /// Immutable state shared by every sampling step in one user turn.
 #[derive(Debug)]
 pub struct TurnContext {
@@ -58,6 +78,7 @@ pub struct TurnContext {
     /// User input steered into the active task, consumed before the next sampling request.
     input_state: Mutex<TurnInputState>,
     input_notify: Notify,
+    child_tracker: Arc<ChildTracker>,
     #[cfg(test)]
     preparing_reservation_notify: Notify,
 }
@@ -92,6 +113,7 @@ impl TurnContext {
                 in_flight_admissions: 0,
             }),
             input_notify: Notify::new(),
+            child_tracker: Arc::new(ChildTracker::default()),
             #[cfg(test)]
             preparing_reservation_notify: Notify::new(),
         }
@@ -115,6 +137,23 @@ impl TurnContext {
 
     pub fn project_root(&self) -> Option<&Path> {
         self.project_root.as_deref()
+    }
+
+    pub(crate) fn track_child(&self) -> ChildPermit {
+        self.child_tracker.active.fetch_add(1, Ordering::AcqRel);
+        ChildPermit {
+            tracker: Arc::clone(&self.child_tracker),
+        }
+    }
+
+    pub(crate) async fn wait_for_children(&self) {
+        loop {
+            let changed = self.child_tracker.changed.notified();
+            if self.child_tracker.active.load(Ordering::Acquire) == 0 {
+                return;
+            }
+            changed.await;
+        }
     }
 
     /// Wait until initial turn preparation either succeeds or closes admission.
@@ -338,7 +377,7 @@ mod tests {
     use super::*;
 
     fn input(text: &str) -> TurnInput {
-        TurnInput::UserInput {
+        TurnInput {
             content: text.to_string(),
             image_data_urls: Vec::new(),
             client_message_id: None,

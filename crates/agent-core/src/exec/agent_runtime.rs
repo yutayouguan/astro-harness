@@ -1620,7 +1620,7 @@ async fn run_request(
         crate::exec::background::run_background_multi_turn_controlled_with_chat(
             Arc::clone(&session),
             targets,
-            vec![TurnInput::UserInput {
+            vec![TurnInput {
                 content: request.runtime.model_request.message.clone(),
                 image_data_urls: Vec::new(),
                 client_message_id: None,

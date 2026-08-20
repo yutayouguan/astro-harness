@@ -5,7 +5,9 @@ use types::message::Message;
 
 use std::sync::Arc;
 
-use crate::tasks::{TaskKind, TurnInput};
+use agent_protocol::{TurnInputError, TurnInputMode, TurnInputRequest, TurnInputSubmission};
+
+use crate::tasks::{RegularTask, TaskKind, TurnInput};
 
 use super::turn_context::QueuedTurnInput;
 use super::{looks_like_user_correction, Session, StepContext, TurnContext, TurnResult};
@@ -17,7 +19,7 @@ where
     let mut contents = Vec::new();
     let mut image_data_urls = Vec::new();
     for input in inputs {
-        let TurnInput::UserInput {
+        let TurnInput {
             content,
             image_data_urls: images,
             client_message_id: _,
@@ -25,7 +27,7 @@ where
         contents.push(content);
         image_data_urls.extend(images);
     }
-    (!contents.is_empty()).then(|| TurnInput::UserInput {
+    (!contents.is_empty()).then(|| TurnInput {
         content: contents.join("\n\n"),
         image_data_urls,
         client_message_id: None,
@@ -40,7 +42,7 @@ impl Session {
         let memory_dir = self.memory_dir().to_path_buf();
         let compression = memory::load_compression_config(&memory_dir);
         {
-            let mut state = self.state.lock().await;
+            let mut state = self.lock_state();
             let prev_rounds = state.turn.begin_new_turn();
             state.compression.reset_for_new_turn(&compression);
             state.pending_learning_nudge = Self::compute_learning_nudge(&memory_dir, prev_rounds);
@@ -110,12 +112,125 @@ impl Session {
         if let Some(turn_id) = self.steer_input(user_message, image_data_urls).await? {
             return Ok(TurnResult::Steered { turn_id });
         }
-        self.prepare_turn(&[TurnInput::UserInput {
+        self.prepare_turn(&[TurnInput {
             content: user_message.to_string(),
             image_data_urls: image_data_urls.to_vec(),
             client_message_id: None,
         }])
         .await
+    }
+
+    pub(crate) async fn submit_turn_input(
+        self: &Arc<Self>,
+        submission_id: String,
+        request: TurnInputRequest,
+        mode: TurnInputMode,
+        chat_override: Option<crate::streaming::ChatOverride>,
+    ) -> Result<TurnInputSubmission, TurnInputError> {
+        if request.input.is_empty()
+            || request
+                .input
+                .iter()
+                .all(|item| item.content.trim().is_empty() && item.image_data_urls.is_empty())
+        {
+            return Err(TurnInputError::Invalid(
+                "turn input must contain text or an image".into(),
+            ));
+        }
+        let active_turn_id = self.active_turn_id().await;
+        if active_turn_id.is_none()
+            && matches!(
+                mode,
+                TurnInputMode::StartOrSteer | TurnInputMode::StartIfIdle
+            )
+            && self.terminating_turn_id().await.is_some()
+        {
+            return Ok(TurnInputSubmission::NotSubmitted {
+                reason: "terminating".into(),
+            });
+        }
+        match mode {
+            TurnInputMode::StartOrSteer => match active_turn_id {
+                Some(turn_id) => self.steer_turn(Some(&turn_id), request.input).await,
+                None => {
+                    self.start_turn(submission_id, request.input, chat_override)
+                        .await
+                }
+            },
+            TurnInputMode::StartIfIdle => match active_turn_id {
+                Some(_) => Ok(TurnInputSubmission::NotSubmitted {
+                    reason: "not_idle".into(),
+                }),
+                None => {
+                    self.start_turn(submission_id, request.input, chat_override)
+                        .await
+                }
+            },
+            TurnInputMode::Steer { expected_turn_id } => {
+                self.steer_turn(Some(&expected_turn_id), request.input)
+                    .await
+            }
+        }
+    }
+
+    async fn active_turn_id(&self) -> Option<String> {
+        let active_turn = self.active_turn.lock().await;
+        active_turn
+            .as_ref()?
+            .task
+            .as_ref()
+            .filter(|running| !running.cancellation_token.is_cancelled())
+            .map(|running| running.turn_context.sub_id().to_string())
+    }
+
+    async fn start_turn(
+        self: &Arc<Self>,
+        turn_id: String,
+        input: Vec<TurnInput>,
+        chat_override: Option<crate::streaming::ChatOverride>,
+    ) -> Result<TurnInputSubmission, TurnInputError> {
+        let context = self.create_turn_context(turn_id.clone()).await;
+        let args = crate::streaming::multi_turn::RunTurnArgs::submitted(
+            Arc::clone(self),
+            Arc::clone(&context),
+            chat_override,
+        );
+        self.spawn_task(context, input, RegularTask::new(args))
+            .await
+            .map_err(|error| TurnInputError::Invalid(error.to_string()))?;
+        Ok(TurnInputSubmission::Started { turn_id })
+    }
+
+    async fn steer_turn(
+        &self,
+        expected_turn_id: Option<&str>,
+        input: Vec<TurnInput>,
+    ) -> Result<TurnInputSubmission, TurnInputError> {
+        let turn_id = self.active_turn_id().await.ok_or_else(|| {
+            TurnInputError::Invalid("no active turn available for steering".into())
+        })?;
+        if expected_turn_id.is_some_and(|expected| expected != turn_id) {
+            return Ok(TurnInputSubmission::NotSubmitted {
+                reason: "turn_id_mismatch".into(),
+            });
+        }
+        for item in input {
+            let accepted = self
+                .steer_input_for_turn(
+                    &item.content,
+                    &item.image_data_urls,
+                    Some(&turn_id),
+                    item.client_message_id.as_deref(),
+                )
+                .await
+                .map_err(|error| TurnInputError::Invalid(error.to_string()))?;
+            if accepted.is_none() {
+                return Ok(TurnInputSubmission::NotSubmitted {
+                    reason: "turn_not_accepting_input".into(),
+                });
+            }
+        }
+        Ok(TurnInputSubmission::Steered { turn_id })
     }
 
     /// Prepare initial task input for the first sampling request.
@@ -125,13 +240,13 @@ impl Session {
     /// callers that have not yet moved input ownership into `SessionTask`.
     pub(crate) async fn prepare_turn(&self, input: &[TurnInput]) -> anyhow::Result<TurnResult> {
         anyhow::ensure!(!input.is_empty(), "regular turn requires initial input");
+        let client_message_ids = input
+            .iter()
+            .filter_map(|item| item.client_message_id.clone())
+            .collect::<Vec<_>>();
         let coalesced_input =
             coalesce_turn_inputs(input.iter().cloned()).expect("non-empty input coalesces");
-        let TurnInput::UserInput {
-            content: user_message,
-            ..
-        } = &coalesced_input;
-        let user_message = user_message.clone();
+        let user_message = coalesced_input.content.clone();
         self.cancel.reset();
         if self.is_budget_exhausted().await {
             return Ok(TurnResult::BudgetExhausted);
@@ -160,6 +275,22 @@ impl Session {
         self.reload_tools_and_mcp().await?;
 
         self.record_turn_input(coalesced_input).await?;
+        let turn_id = self
+            .current_turn_id()
+            .await
+            .unwrap_or_else(|| self.session_id.clone());
+        for client_message_id in client_message_ids {
+            self.send_event(
+                &turn_id,
+                agent_protocol::EventMsg::UserInputCommitted(
+                    agent_protocol::UserInputCommittedEvent {
+                        turn_id: turn_id.clone(),
+                        client_message_id,
+                    },
+                ),
+            )
+            .await;
+        }
 
         self.finish_prepared_turn(&user_message, admission_context.as_deref())
             .await
@@ -181,6 +312,22 @@ impl Session {
             outcome.delivered > 0,
             "follow-up turn has no durable mailbox input"
         );
+        let turn_id = self
+            .current_turn_id()
+            .await
+            .unwrap_or_else(|| self.session_id.clone());
+        for client_message_id in outcome.delivered_client_message_ids {
+            self.send_event(
+                &turn_id,
+                agent_protocol::EventMsg::UserInputCommitted(
+                    agent_protocol::UserInputCommittedEvent {
+                        turn_id: turn_id.clone(),
+                        client_message_id,
+                    },
+                ),
+            )
+            .await;
+        }
         let user_message = self
             .clone_history()
             .await
@@ -204,7 +351,7 @@ impl Session {
         user_message: &str,
         admission_context: Option<&str>,
     ) -> anyhow::Result<TurnResult> {
-        let current_turn = self.state.lock().await.turn.current_turn;
+        let current_turn = self.lock_state().turn.current_turn;
         let fts_keywords = if current_turn >= self.config.recent_turns {
             Some(user_message)
         } else {
@@ -216,8 +363,7 @@ impl Session {
             self.config.recent_turns,
             fts_keywords,
         )?;
-        self.state.lock().await.compression.last_recalled_context =
-            format_recalled_context(&recalled);
+        self.lock_state().compression.last_recalled_context = format_recalled_context(&recalled);
 
         self.increment_turn().await;
         let system_prompt = self
@@ -235,7 +381,7 @@ impl Session {
             },
         );
         if let ::hooks::HookOutcome::InjectContext(ctx) = inject {
-            self.state.lock().await.pending_inject_context = Some(ctx);
+            self.lock_state().pending_inject_context = Some(ctx);
         }
         if self.cancel.is_cancelled() {
             return Ok(TurnResult::Interrupted);
@@ -277,8 +423,7 @@ impl Session {
             contexts.push(context);
         }
         for item in input {
-            let TurnInput::UserInput { content, .. } = item;
-            if let Some(context) = self.admit_user_prompt(content, turn_id.clone())? {
+            if let Some(context) = self.admit_user_prompt(&item.content, turn_id.clone())? {
                 contexts.push(context);
             }
         }
@@ -292,7 +437,7 @@ impl Session {
     }
 
     async fn admit_session_start_locked(&self) -> anyhow::Result<Option<String>> {
-        let Some(source) = self.state.lock().await.pending_session_start_source.clone() else {
+        let Some(source) = self.lock_state().pending_session_start_source.clone() else {
             return Ok(None);
         };
         let outcome = self.fire_hook(
@@ -304,7 +449,7 @@ impl Session {
             },
         );
         let context = Self::apply_admission_outcome(::hooks::SESSION_START, outcome)?;
-        let mut state = self.state.lock().await;
+        let mut state = self.lock_state();
         if state.pending_session_start_source.as_deref() == Some(source.as_str()) {
             state.pending_session_start_source = None;
         }
@@ -371,7 +516,7 @@ impl Session {
         };
         let _admission_guard = self.admission_lock.lock().await;
         let context = self.admit_user_prompt(user_message, Some(turn_id.clone()))?;
-        let input = TurnInput::UserInput {
+        let input = TurnInput {
             content: user_message.to_string(),
             image_data_urls: image_data_urls.to_vec(),
             client_message_id: client_message_id.map(str::to_string),
@@ -404,7 +549,7 @@ impl Session {
     where
         I: IntoIterator<Item = String>,
     {
-        let mut state = self.state.lock().await;
+        let mut state = self.lock_state();
         for context in contexts {
             Self::append_inject_context(&mut state.pending_inject_context, context);
         }
@@ -453,7 +598,7 @@ impl Session {
         finish_reason: Option<&str>,
         memory_marker: Option<&str>,
     ) -> anyhow::Result<()> {
-        let TurnInput::UserInput {
+        let TurnInput {
             content,
             image_data_urls,
             client_message_id: _,
@@ -510,14 +655,14 @@ impl Session {
     }
 
     async fn record_turn_input_in_memory_unlocked(&self, input: &TurnInput, marker: Option<&str>) {
-        let TurnInput::UserInput {
+        let TurnInput {
             content,
             image_data_urls,
             client_message_id: _,
         } = input;
         let mut message = Message::user_with_images(content, image_data_urls);
         message.compressed_content = marker.map(str::to_string);
-        self.record_items_unlocked(vec![message]).await;
+        self.record_items_unlocked(vec![message]);
         #[cfg(test)]
         if let Some(hook) = self
             .services
@@ -603,10 +748,20 @@ impl Session {
         if let Some(ctx) = self.take_inject_context().await {
             history.push(Message::user(&format!("[astro:hook-context]\n{ctx}")));
         }
-        let tool_router = self.build_tool_router().await;
-        let session_configuration = self.session_configuration().clone();
+        let tool_router = {
+            let registry = self
+                .services
+                .tool_registry
+                .read()
+                .expect("tool registry lock poisoned");
+            let specs = tools::filter_schemas(
+                self.lock_state().interaction_mode,
+                registry.schemas_for_api(),
+            );
+            Arc::new(crate::runtime::ToolRouter::from_registry(&registry, specs))
+        };
         let turn_context = {
-            let state = self.state.lock().await;
+            let state = self.lock_state();
             state.current_turn_context.clone().unwrap_or_else(|| {
                 Arc::new(TurnContext::new(
                     state
@@ -616,13 +771,13 @@ impl Session {
                         .unwrap_or_else(|| uuid::Uuid::new_v4().to_string()),
                     state.turn.current_turn(),
                     state.interaction_mode,
-                    session_configuration.permission_profile.clone(),
-                    session_configuration.project_root.clone(),
+                    state.permission_profile.clone(),
+                    state.project_root.clone(),
                 ))
             })
         };
         let step_context = Arc::new(StepContext::new(turn_context, history, tool_router));
-        self.state.lock().await.current_step_context = Some(Arc::clone(&step_context));
+        self.lock_state().current_step_context = Some(Arc::clone(&step_context));
         Ok(step_context)
     }
 }
@@ -637,7 +792,7 @@ mod tests {
     use super::*;
 
     fn input(content: &str) -> TurnInput {
-        TurnInput::UserInput {
+        TurnInput {
             content: content.to_string(),
             image_data_urls: Vec::new(),
             client_message_id: None,
@@ -647,12 +802,12 @@ mod tests {
     #[test]
     fn coalesce_turn_inputs_preserves_text_and_image_order() {
         let coalesced = coalesce_turn_inputs(vec![
-            TurnInput::UserInput {
+            TurnInput {
                 content: "first".into(),
                 image_data_urls: vec!["image-a".into()],
                 client_message_id: None,
             },
-            TurnInput::UserInput {
+            TurnInput {
                 content: String::new(),
                 image_data_urls: vec!["image-b".into(), "image-c".into()],
                 client_message_id: None,
@@ -663,7 +818,7 @@ mod tests {
 
         assert_eq!(
             coalesced,
-            TurnInput::UserInput {
+            TurnInput {
                 content: "first\n\n\n\nthird".into(),
                 image_data_urls: vec!["image-a".into(), "image-b".into(), "image-c".into()],
                 client_message_id: None,
@@ -685,6 +840,65 @@ mod tests {
         let history = session.clone_history().await;
         assert_eq!(history.len(), 1);
         assert_eq!(history[0].content_str(), "first\n\nsecond");
+    }
+
+    #[tokio::test]
+    async fn initial_input_ack_is_emitted_only_after_db_and_memory_recording() {
+        let dir = TempDir::new().unwrap();
+        let config = crate::runtime::Config::with_defaults(dir.path().to_path_buf());
+        let session = Session::with_session_id(config, "initial-input-ack".into()).unwrap();
+        session.set_current_turn_id("turn-initial-ack").await;
+        let events = session.subscribe_turn_events("turn-initial-ack").await;
+        let memory_recorded = Arc::new(std::sync::atomic::AtomicBool::new(false));
+        session.set_turn_input_after_memory_write_hook(Some({
+            let memory_recorded = Arc::clone(&memory_recorded);
+            Arc::new(move || memory_recorded.store(true, Ordering::SeqCst))
+        }));
+
+        session
+            .prepare_turn(&[TurnInput {
+                content: "hello".into(),
+                image_data_urls: Vec::new(),
+                client_message_id: Some("client-initial".into()),
+            }])
+            .await
+            .unwrap();
+
+        let event = events.recv().await.unwrap();
+        assert!(memory_recorded.load(Ordering::SeqCst));
+        assert!(matches!(
+            event.msg,
+            agent_protocol::EventMsg::UserInputCommitted(
+                agent_protocol::UserInputCommittedEvent {
+                    turn_id,
+                    client_message_id,
+                }
+            ) if turn_id == "turn-initial-ack" && client_message_id == "client-initial"
+        ));
+    }
+
+    #[tokio::test]
+    async fn initial_input_write_failure_does_not_emit_ack() {
+        let dir = TempDir::new().unwrap();
+        let config = crate::runtime::Config::with_defaults(dir.path().to_path_buf());
+        let session = Session::with_session_id(config, "initial-input-no-ack".into()).unwrap();
+        session.set_current_turn_id("turn-initial-no-ack").await;
+        let events = session.subscribe_turn_events("turn-initial-no-ack").await;
+        session.set_turn_input_after_db_write_hook(Some(Arc::new(|| {
+            anyhow::bail!("injected post-DB failure")
+        })));
+
+        let error = session
+            .prepare_turn(&[TurnInput {
+                content: "hello".into(),
+                image_data_urls: Vec::new(),
+                client_message_id: Some("client-failed".into()),
+            }])
+            .await
+            .unwrap_err();
+
+        assert!(error.to_string().contains("injected post-DB failure"));
+        assert!(events.try_recv().is_err());
     }
 
     #[tokio::test]
@@ -871,16 +1085,26 @@ mod tests {
             icon: "test-tube",
             ..types::ToolEntry::lifecycle_defaults()
         };
-        session.tool_registry_mut().register_dynamic(
-            entry(),
-            Arc::new(|_name, _args| Box::pin(async { Ok(types::ToolOutput::from("first")) })),
-        );
+        session
+            .services
+            .tool_registry
+            .write()
+            .expect("tool registry lock poisoned")
+            .register_dynamic(
+                entry(),
+                Arc::new(|_name, _args| Box::pin(async { Ok(types::ToolOutput::from("first")) })),
+            );
         let step = session.capture_step_context().await.unwrap();
 
-        session.tool_registry_mut().register_dynamic(
-            entry(),
-            Arc::new(|_name, _args| Box::pin(async { Ok(types::ToolOutput::from("second")) })),
-        );
+        session
+            .services
+            .tool_registry
+            .write()
+            .expect("tool registry lock poisoned")
+            .register_dynamic(
+                entry(),
+                Arc::new(|_name, _args| Box::pin(async { Ok(types::ToolOutput::from("second")) })),
+            );
 
         let runtime = crate::runtime::ToolCallRuntime::new(Arc::clone(&session), step);
         let output = runtime

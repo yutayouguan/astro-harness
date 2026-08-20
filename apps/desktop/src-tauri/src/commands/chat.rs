@@ -5,7 +5,7 @@ use proto::{
     ChatControlAction, ChatControlRequest, ChatRequest, ImageRequest, MemoryQuery, SteerChatRequest,
 };
 use serde::{Deserialize, Serialize};
-use tauri::{AppHandle, Emitter};
+use tauri::{AppHandle, Emitter, Manager};
 use uuid::Uuid;
 
 use super::common::{bootstrap_workspace, friendly_error, open_sessions};
@@ -14,6 +14,10 @@ use super::providers::{
     resolve_chat_targets, resolve_image_gen_targets, ImageGenTarget,
 };
 use crate::infra::grpc::{default_grpc_address, endpoint_url};
+use crate::infra::thread_events::{
+    accepted_turn_id, emit_chat_events, submission_failure_events, ThreadEventsBridge,
+    THREAD_EVENTS_READY_TIMEOUT,
+};
 
 // ---------------------------------------------------------------------------
 // DTOs
@@ -47,28 +51,19 @@ pub struct MediaAssetDto {
     pub id: Option<String>,
 }
 
-fn media_asset_dto(m: proto::MediaAsset) -> MediaAssetDto {
-    MediaAssetDto {
-        kind: m.kind,
-        mime_type: m.mime_type,
-        ref_kind: m.ref_kind,
-        ref_value: m.ref_value,
-        label: if m.label.is_empty() {
-            None
-        } else {
-            Some(m.label)
-        },
-        id: if m.id.is_empty() { None } else { Some(m.id) },
-    }
-}
-
 #[derive(Debug, Clone, Serialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ChatStreamEvent {
     Token {
         content: String,
     },
+    TextReconcile {
+        content: String,
+    },
     Reasoning {
+        content: String,
+    },
+    ReasoningReconcile {
         content: String,
     },
     ToolCall {
@@ -125,6 +120,7 @@ pub enum ChatStreamEvent {
         outcome_type: String,
         interrupts_json: String,
     },
+    #[allow(dead_code)] // Thread protocol currently has no first-class citation payload.
     Citations {
         citations: String,
     },
@@ -380,7 +376,7 @@ pub async fn start_chat(app: AppHandle, request: StartChatRequest) -> Result<Str
     } = build_chat_payload(&content, &attachments);
     let resume_json = resume_json.unwrap_or_default();
     let grpc_address = default_grpc_address();
-    let event_name = format!("chat-stream-{sid}");
+    let event_name = format!("chat_stream_{sid}");
     let thinking_enabled = thinking_enabled.unwrap_or(false);
     let mut reasoning_effort = reasoning_effort
         .unwrap_or_else(|| "high".to_string())
@@ -516,54 +512,122 @@ pub async fn start_chat(app: AppHandle, request: StartChatRequest) -> Result<Str
         }
     };
 
-    let app2 = app.clone();
+    let image_primary = image_targets.first();
+    let image_fallback = image_targets.get(1);
+    let chat_request = ChatRequest {
+        session_id: sid.clone(),
+        content: merged,
+        provider: primary.backend_id.clone(),
+        model: primary.model.clone(),
+        tool_names: vec![],
+        use_memory,
+        api_key: primary.api_key.clone(),
+        base_url: primary.base_url.clone(),
+        image_gen_provider: image_primary
+            .map(|target| target.provider.clone())
+            .unwrap_or_default(),
+        image_gen_model: image_primary
+            .map(|target| target.model.clone())
+            .unwrap_or_default(),
+        image_gen_api_key: image_primary
+            .map(|target| target.api_key.clone())
+            .unwrap_or_default(),
+        image_gen_base_url: image_primary
+            .map(|target| target.base_url.clone())
+            .unwrap_or_default(),
+        image_gen_fallback_provider: image_fallback
+            .map(|target| target.provider.clone())
+            .unwrap_or_default(),
+        image_gen_fallback_model: image_fallback
+            .map(|target| target.model.clone())
+            .unwrap_or_default(),
+        image_gen_fallback_api_key: image_fallback
+            .map(|target| target.api_key.clone())
+            .unwrap_or_default(),
+        image_gen_fallback_base_url: image_fallback
+            .map(|target| target.base_url.clone())
+            .unwrap_or_default(),
+        image_gen_video_model: image_primary
+            .map(|target| target.video_model.clone())
+            .unwrap_or_default(),
+        image_gen_music_model: image_primary
+            .map(|target| target.music_model.clone())
+            .unwrap_or_default(),
+        image_gen_tts_model: image_primary
+            .map(|target| target.tts_model.clone())
+            .unwrap_or_default(),
+        image_gen_fallback_video_model: image_fallback
+            .map(|target| target.video_model.clone())
+            .unwrap_or_default(),
+        image_gen_fallback_music_model: image_fallback
+            .map(|target| target.music_model.clone())
+            .unwrap_or_default(),
+        image_gen_fallback_tts_model: image_fallback
+            .map(|target| target.tts_model.clone())
+            .unwrap_or_default(),
+        image_gen_vision_model: image_primary
+            .map(|target| target.vision_model.clone())
+            .unwrap_or_default(),
+        image_gen_fallback_vision_model: image_fallback
+            .map(|target| target.vision_model.clone())
+            .unwrap_or_default(),
+        thinking_enabled,
+        reasoning_effort,
+        resume_json,
+        chat_fallbacks,
+        images,
+        auxiliary_targets,
+        context_window,
+        max_output_tokens,
+        interaction_mode,
+        project_root,
+        temperature,
+        additional_params_json,
+        // Initial submissions are not queued steer messages and therefore do
+        // not participate in client-side optimistic delivery reconciliation.
+        client_message_id: String::new(),
+    };
+
+    let bridge = app
+        .state::<std::sync::Arc<ThreadEventsBridge>>()
+        .inner()
+        .clone();
     let sid2 = sid.clone();
+    let activation = bridge.activate(sid2.clone()).await;
+    let app2 = app.clone();
     let event_name2 = event_name.clone();
 
     tauri::async_runtime::spawn(async move {
-        let result = run_chat_stream(ChatStreamParams {
-            app: &app2,
-            event_name: &event_name2,
-            grpc_address: &grpc_address,
-            session_id: &sid2,
-            content: &merged,
-            images: &images,
-            provider: &primary.backend_id,
-            model: &primary.model,
-            use_memory,
-            api_key: &primary.api_key,
-            base_url: &primary.base_url,
-            image_targets: &image_targets,
-            chat_fallbacks: &chat_fallbacks,
-            auxiliary_targets: &auxiliary_targets,
-            thinking_enabled,
-            reasoning_effort: &reasoning_effort,
-            resume_json: &resume_json,
-            context_window,
-            max_output_tokens,
-            interaction_mode: &interaction_mode,
-            project_root: &project_root,
-            temperature,
-            additional_params_json: &additional_params_json,
-        })
+        let result = async {
+            bridge.wait_ready_for(THREAD_EVENTS_READY_TIMEOUT).await?;
+            let endpoint = endpoint_url(&grpc_address);
+            let mut client = AstroServiceClient::connect(endpoint)
+                .await
+                .map_err(|error| error.to_string())?;
+            let response = client
+                .submit_turn(proto::SubmitTurnRequest {
+                    connection_id: bridge.connection_id().into(),
+                    chat: Some(chat_request),
+                    mode: "start_or_steer".into(),
+                    expected_turn_id: String::new(),
+                })
+                .await
+                .map_err(|error| error.to_string())?
+                .into_inner();
+            let turn_id = accepted_turn_id(response)?;
+            let terminal = bridge
+                .bind_submitted_turn_if_current(&sid2, activation, &turn_id)
+                .await;
+            emit_chat_events(&app2, &sid2, terminal);
+            Ok::<(), String>(())
+        }
         .await;
 
         if let Err(err) = result {
-            let _ = app2.emit(
-                &event_name2,
-                ChatStreamEvent::Error {
-                    message: friendly_error(&err),
-                },
-            );
-            let _ = app2.emit(
-                &event_name2,
-                ChatStreamEvent::RunFinished {
-                    run_id: String::new(),
-                    outcome_type: "error".into(),
-                    interrupts_json: "[]".into(),
-                },
-            );
-            let _ = app2.emit(&event_name2, ChatStreamEvent::Done);
+            let is_current = bridge.fail_activation(&sid2, activation).await;
+            for event in submission_failure_events(is_current, friendly_error(&err)) {
+                let _ = app2.emit(&event_name2, event);
+            }
         }
     });
 
@@ -691,293 +755,6 @@ fn resolve_chat_credentials(
         .first()
         .ok_or_else(|| "无可用聊天目标".to_string())?;
     Ok((t.api_key.clone(), t.base_url.clone()))
-}
-
-/// 本地流式聊天主循环参数（由 `start_chat` 组装后传入）。
-struct ChatStreamParams<'a> {
-    app: &'a AppHandle,
-    event_name: &'a str,
-    grpc_address: &'a str,
-    session_id: &'a str,
-    content: &'a str,
-    images: &'a [proto::ChatImageAttachment],
-    provider: &'a str,
-    model: &'a str,
-    use_memory: bool,
-    api_key: &'a str,
-    base_url: &'a str,
-    image_targets: &'a [ImageGenTarget],
-    chat_fallbacks: &'a [proto::ChatFallbackTarget],
-    auxiliary_targets: &'a [proto::AuxiliaryModelTarget],
-    thinking_enabled: bool,
-    reasoning_effort: &'a str,
-    resume_json: &'a str,
-    context_window: u32,
-    max_output_tokens: u32,
-    interaction_mode: &'a str,
-    project_root: &'a str,
-    temperature: Option<f32>,
-    additional_params_json: &'a str,
-}
-
-/// 执行本地流式聊天主循环并向窗口发事件。
-async fn run_chat_stream(p: ChatStreamParams<'_>) -> Result<(), String> {
-    let endpoint = endpoint_url(p.grpc_address);
-    let mut client = AstroServiceClient::connect(endpoint)
-        .await
-        .map_err(|e| e.to_string())?;
-
-    let primary = p.image_targets.first();
-    let fallback = p.image_targets.get(1);
-
-    let mut stream = client
-        .chat(ChatRequest {
-            session_id: p.session_id.to_string(),
-            content: p.content.to_string(),
-            provider: p.provider.to_string(),
-            model: p.model.to_string(),
-            tool_names: vec![],
-            use_memory: p.use_memory,
-            api_key: p.api_key.to_string(),
-            base_url: p.base_url.to_string(),
-            image_gen_provider: primary.map(|t| t.provider.clone()).unwrap_or_default(),
-            image_gen_model: primary.map(|t| t.model.clone()).unwrap_or_default(),
-            image_gen_api_key: primary.map(|t| t.api_key.clone()).unwrap_or_default(),
-            image_gen_base_url: primary.map(|t| t.base_url.clone()).unwrap_or_default(),
-            image_gen_fallback_provider: fallback.map(|t| t.provider.clone()).unwrap_or_default(),
-            image_gen_fallback_model: fallback.map(|t| t.model.clone()).unwrap_or_default(),
-            image_gen_fallback_api_key: fallback.map(|t| t.api_key.clone()).unwrap_or_default(),
-            image_gen_fallback_base_url: fallback.map(|t| t.base_url.clone()).unwrap_or_default(),
-            image_gen_video_model: primary.map(|t| t.video_model.clone()).unwrap_or_default(),
-            image_gen_music_model: primary.map(|t| t.music_model.clone()).unwrap_or_default(),
-            image_gen_tts_model: primary.map(|t| t.tts_model.clone()).unwrap_or_default(),
-            image_gen_fallback_video_model: fallback
-                .map(|t| t.video_model.clone())
-                .unwrap_or_default(),
-            image_gen_fallback_music_model: fallback
-                .map(|t| t.music_model.clone())
-                .unwrap_or_default(),
-            image_gen_fallback_tts_model: fallback.map(|t| t.tts_model.clone()).unwrap_or_default(),
-            image_gen_vision_model: primary.map(|t| t.vision_model.clone()).unwrap_or_default(),
-            image_gen_fallback_vision_model: fallback
-                .map(|t| t.vision_model.clone())
-                .unwrap_or_default(),
-            thinking_enabled: p.thinking_enabled,
-            reasoning_effort: p.reasoning_effort.to_string(),
-            resume_json: p.resume_json.to_string(),
-            chat_fallbacks: p.chat_fallbacks.to_vec(),
-            images: p.images.to_vec(),
-            auxiliary_targets: p.auxiliary_targets.to_vec(),
-            context_window: p.context_window,
-            max_output_tokens: p.max_output_tokens,
-            interaction_mode: p.interaction_mode.to_string(),
-            project_root: p.project_root.to_string(),
-            temperature: p.temperature,
-            additional_params_json: p.additional_params_json.to_string(),
-        })
-        .await
-        .map_err(|e| e.to_string())?
-        .into_inner();
-
-    let mut saw_error = false;
-    let mut saw_terminal = false;
-    let mut saw_done = false;
-    while let Some(event) = stream.message().await.map_err(|e| e.to_string())? {
-        match event.payload {
-            Some(proto::chat_event::Payload::Token(token)) => {
-                let _ = p
-                    .app
-                    .emit(p.event_name, ChatStreamEvent::Token { content: token });
-            }
-            Some(proto::chat_event::Payload::Reasoning(reasoning)) => {
-                let _ = p.app.emit(
-                    p.event_name,
-                    ChatStreamEvent::Reasoning { content: reasoning },
-                );
-            }
-            Some(proto::chat_event::Payload::CitationsJson(json)) => {
-                let _ = p
-                    .app
-                    .emit(p.event_name, ChatStreamEvent::Citations { citations: json });
-            }
-            Some(proto::chat_event::Payload::ToolCall(tc)) => {
-                let _ = p.app.emit(
-                    p.event_name,
-                    ChatStreamEvent::ToolCall {
-                        id: tc.id,
-                        name: tc.name,
-                        arguments_json: tc.arguments_json,
-                        result: tc.result,
-                        phase: tc.phase,
-                        media: tc.media.into_iter().map(media_asset_dto).collect(),
-                    },
-                );
-            }
-            Some(proto::chat_event::Payload::ToolCallDelta(d)) => {
-                let _ = p.app.emit(
-                    p.event_name,
-                    ChatStreamEvent::ToolCallDelta {
-                        index: d.index,
-                        id: d.id,
-                        name: d.name,
-                        arguments: d.arguments,
-                    },
-                );
-            }
-            Some(proto::chat_event::Payload::MemoryUpdate(mu)) => {
-                let _ = p.app.emit(
-                    p.event_name,
-                    ChatStreamEvent::MemoryUpdate {
-                        operation: mu.operation,
-                        content: mu.content,
-                    },
-                );
-            }
-            Some(proto::chat_event::Payload::Hook(h)) => {
-                let _ = p.app.emit(
-                    p.event_name,
-                    ChatStreamEvent::Hook {
-                        name: h.name,
-                        detail: h.detail,
-                        outcome: h.outcome,
-                    },
-                );
-            }
-            Some(proto::chat_event::Payload::Usage(u)) => {
-                let _ = p.app.emit(
-                    p.event_name,
-                    ChatStreamEvent::Usage {
-                        prompt_tokens: u.prompt_tokens,
-                        completion_tokens: u.completion_tokens,
-                        total_tokens: u.total_tokens,
-                    },
-                );
-            }
-            Some(proto::chat_event::Payload::ContextUsage(cu)) => {
-                let _ = p.app.emit(
-                    p.event_name,
-                    ChatStreamEvent::ContextUsage {
-                        context_window: cu.context_window,
-                        total_tokens: cu.total_tokens,
-                        segments: cu
-                            .segments
-                            .into_iter()
-                            .map(|s| ContextUsageSegmentDto {
-                                id: s.id,
-                                tokens: s.tokens,
-                                count: s.count,
-                                items: s
-                                    .items
-                                    .into_iter()
-                                    .map(|it| ContextUsageItemDto {
-                                        id: it.id,
-                                        label: it.label,
-                                        tokens: it.tokens,
-                                    })
-                                    .collect(),
-                            })
-                            .collect(),
-                        updated_at: cu.updated_at,
-                        recommend_compact: cu.recommend_compact,
-                    },
-                );
-            }
-            Some(proto::chat_event::Payload::RunStarted(rs)) => {
-                let _ = p.app.emit(
-                    p.event_name,
-                    ChatStreamEvent::RunStarted {
-                        thread_id: rs.thread_id,
-                        run_id: rs.run_id,
-                    },
-                );
-            }
-            Some(proto::chat_event::Payload::UserInputCommitted(event)) => {
-                let _ = p.app.emit(
-                    p.event_name,
-                    ChatStreamEvent::UserInputCommitted {
-                        client_message_id: event.client_message_id,
-                    },
-                );
-            }
-            Some(proto::chat_event::Payload::Activity(a)) => {
-                let _ = p.app.emit(
-                    p.event_name,
-                    ChatStreamEvent::Activity {
-                        message_id: a.message_id,
-                        activity_type: a.activity_type,
-                        content_json: a.content_json,
-                        replace: a.replace,
-                    },
-                );
-            }
-            Some(proto::chat_event::Payload::RunFinished(rf)) => {
-                saw_terminal = true;
-                let interrupts_json = serialize_interrupts(&rf.interrupts);
-                let _ = p.app.emit(
-                    p.event_name,
-                    ChatStreamEvent::RunFinished {
-                        run_id: rf.run_id,
-                        outcome_type: rf.outcome_type,
-                        interrupts_json,
-                    },
-                );
-            }
-            Some(proto::chat_event::Payload::Done(true)) => {
-                saw_done = true;
-                // 不立即结束：Done 之后仍可能有 background review 的 MemoryUpdate
-                let _ = p.app.emit(p.event_name, ChatStreamEvent::Done);
-                // 自动进化：默认关；命令内自守冷却/日限额/最低新决策，仅生成待审提案
-                super::evolution_run::spawn_maybe_auto_evolution(p.app.clone());
-                // 策展到期：仅报告，不入队
-                super::evolution_run::spawn_maybe_curator(p.app.clone());
-            }
-            Some(proto::chat_event::Payload::Error(err)) => {
-                saw_error = true;
-                let _ = p.app.emit(
-                    p.event_name,
-                    ChatStreamEvent::Error {
-                        message: friendly_error(&err),
-                    },
-                );
-            }
-            _ => {}
-        }
-    }
-
-    // 兼容尚未发出统一终态的旧 backend / 早期失败路径。
-    if saw_error && !saw_terminal {
-        let _ = p.app.emit(
-            p.event_name,
-            ChatStreamEvent::RunFinished {
-                run_id: String::new(),
-                outcome_type: "error".into(),
-                interrupts_json: "[]".into(),
-            },
-        );
-    }
-    if saw_error && !saw_done {
-        let _ = p.app.emit(p.event_name, ChatStreamEvent::Done);
-    }
-
-    Ok(())
-}
-
-fn serialize_interrupts(items: &[proto::Interrupt]) -> String {
-    let arr: Vec<_> = items
-        .iter()
-        .map(|i| {
-            serde_json::json!({
-                "id": i.id,
-                "reason": i.reason,
-                "message": i.message,
-                "tool_call_id": i.tool_call_id,
-                "response_schema_json": i.response_schema_json,
-                "expires_at": i.expires_at,
-                "metadata_json": i.metadata_json,
-            })
-        })
-        .collect();
-    serde_json::to_string(&arr).unwrap_or_else(|_| "[]".into())
 }
 
 /// 由 MIME 推断常用文件扩展名。

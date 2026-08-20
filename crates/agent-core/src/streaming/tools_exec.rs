@@ -3,15 +3,15 @@
 use std::sync::Arc;
 
 use providers::PauseControl;
-use tokio::sync::mpsc;
 use tokio::task::JoinSet;
 use tokio_util::sync::CancellationToken;
 
 use crate::control::hitl::HitlGate;
-use crate::runtime::{AgentLoop, StepContext, ToolCallRuntime, ToolInvocation};
+use crate::runtime::{
+    AgentLoop, StepContext, ToolCallRuntime, ToolExecutionGrants, ToolInvocation, TurnContext,
+};
 
 use super::hitl_bridge::{park_astro_hitl, park_confirm, parse_astro_hitl};
-use super::types::MultiTurnStreamItem;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum ApprovalRoute {
@@ -20,24 +20,6 @@ enum ApprovalRoute {
     Off,
     Smart,
     Manual,
-}
-
-fn approval_route(
-    command: &str,
-    selection: &types::SessionPermissions,
-    allowlist: &[String],
-) -> ApprovalRoute {
-    if tools::is_hardline_blocked(command).is_some() {
-        ApprovalRoute::Deny
-    } else if tools::matches_allowlist(command, allowlist) {
-        ApprovalRoute::Allowlist
-    } else {
-        match (selection.approval_policy, selection.approvals_reviewer) {
-            (types::ApprovalPolicy::Never, _) => ApprovalRoute::Off,
-            (_, types::ApprovalsReviewer::AutoReview) => ApprovalRoute::Smart,
-            (_, types::ApprovalsReviewer::User) => ApprovalRoute::Manual,
-        }
-    }
 }
 
 fn call_uses_managed_network(call: &types::ParsedToolCall) -> bool {
@@ -75,6 +57,86 @@ fn managed_network_policy_for_call(
         .filter(|policy| policy.enabled)
 }
 
+async fn start_managed_network(
+    session: &Arc<AgentLoop>,
+    step_context: &StepContext,
+    call: &types::ParsedToolCall,
+) -> anyhow::Result<Option<Arc<network_proxy::StartedNetworkProxy>>> {
+    let settings = memory::load_permission_settings(session.memory_dir());
+    let active_profile_id = step_context
+        .turn
+        .permission_profile()
+        .unwrap_or(settings.selection.profile_id.as_str());
+    let Some(policy) = managed_network_policy_for_call(call, &settings, active_profile_id) else {
+        return Ok(None);
+    };
+    let state = Arc::new(network_proxy::NetworkProxyState::new(policy)?);
+    let started = network_proxy::StartedNetworkProxy::start(state).await?;
+    Ok(Some(Arc::new(started)))
+}
+
+fn sandbox_policy_for_call(
+    session: &AgentLoop,
+    step_context: &StepContext,
+    call: &types::ParsedToolCall,
+    workspace_write_grant: bool,
+    managed_network: Option<&Arc<network_proxy::StartedNetworkProxy>>,
+) -> Result<Option<sandbox::SandboxPolicy>, crate::runtime::ToolCallError> {
+    let preference = step_context.tool_router.sandbox_preference(&call.name);
+    if preference == types::SandboxablePreference::Forbid {
+        return Ok(None);
+    }
+    let execution_root = step_context
+        .turn
+        .project_root()
+        .map(ToOwned::to_owned)
+        .unwrap_or_else(|| session.memory().workspace_dir.clone());
+    let mut policy = tools::context::build_command_sandbox_policy(
+        session.memory_dir(),
+        &execution_root,
+        step_context.turn.permission_profile(),
+        workspace_write_grant,
+        None,
+    )
+    .map_err(crate::runtime::ToolCallError::from)?;
+    if preference == types::SandboxablePreference::Require
+        && policy.mode == types::SandboxMode::DangerFullAccess
+    {
+        policy = sandbox::SandboxPolicy::unrestricted_file_system(
+            &execution_root,
+            policy.network_access,
+        )
+        .map_err(anyhow::Error::new)
+        .map_err(crate::runtime::ToolCallError::from)?;
+    }
+    if let Some(started) = managed_network {
+        let context = started
+            .proxy()
+            .prepare(std::collections::HashMap::new())
+            .sandbox_context;
+        policy = policy.with_managed_network(context);
+    }
+    Ok(Some(policy))
+}
+
+fn approval_route(
+    command: &str,
+    selection: &types::SessionPermissions,
+    allowlist: &[String],
+) -> ApprovalRoute {
+    if tools::is_hardline_blocked(command).is_some() {
+        ApprovalRoute::Deny
+    } else if tools::matches_allowlist(command, allowlist) {
+        ApprovalRoute::Allowlist
+    } else {
+        match (selection.approval_policy, selection.approvals_reviewer) {
+            (types::ApprovalPolicy::Never, _) => ApprovalRoute::Off,
+            (_, types::ApprovalsReviewer::AutoReview) => ApprovalRoute::Smart,
+            (_, types::ApprovalsReviewer::User) => ApprovalRoute::Manual,
+        }
+    }
+}
+
 /// 触发 `post_approval_response`（观察型，忽略返回值）：`choice` 为
 /// `auto`（辅模型降级）/ `allow`（用户批准）/ `deny`（用户拒绝或 cancelled）/
 /// `timeout`（park 超时）/ `unavailable`（无 HITL gate）。
@@ -83,7 +145,6 @@ async fn fire_post_approval_response(
     session_id: &str,
     turn_id: Option<&str>,
     command: &str,
-    request_summary: &str,
     choice: &str,
 ) {
     let agent = session.as_ref();
@@ -93,10 +154,7 @@ async fn fire_post_approval_response(
             session_id: session_id.to_string(),
             turn_id: turn_id.map(str::to_string),
             tool_name: Some("Bash".to_string()),
-            tool_input: Some(serde_json::json!({
-                "command": command,
-                "description": request_summary,
-            })),
+            tool_input: Some(serde_json::json!({ "command": command })),
             detail: format!("surface=terminal choice={choice}"),
             ..Default::default()
         },
@@ -117,7 +175,7 @@ async fn fire_post_permission_response(
             session_id: session_id.to_string(),
             turn_id: turn_id.map(str::to_string),
             tool_name: Some(request.tool_name.clone()),
-            tool_input: Some(serde_json::json!({"summary": request.summary.clone()})),
+            tool_input: Some(serde_json::json!({ "summary": request.summary })),
             detail: format!("surface=permission choice={choice}"),
             ..Default::default()
         },
@@ -130,19 +188,6 @@ enum PermissionPreflight {
     Granted(Box<PermissionAuditReceipt>),
     Denied(String),
 }
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum PermissionStage {
-    Mcp,
-    WorkspaceWrite,
-    InProcessNetwork,
-}
-
-const PERMISSION_STAGES: [PermissionStage; 3] = [
-    PermissionStage::Mcp,
-    PermissionStage::WorkspaceWrite,
-    PermissionStage::InProcessNetwork,
-];
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct PermissionAuditReceipt {
@@ -219,825 +264,12 @@ impl PermissionAuditReceipt {
     }
 }
 
-#[derive(Default)]
-struct ToolRunContext {
-    workspace_write_grant: bool,
-    network_grant: tools::InProcessNetworkGrant,
-    permission_audits: Vec<PermissionAuditReceipt>,
-}
-
-#[derive(Clone)]
-struct SandboxAttempt {
-    workspace_write_grant: bool,
-    sandbox_policy: Option<sandbox::SandboxPolicy>,
-    network_grant: tools::InProcessNetworkGrant,
-    managed_network: Option<Arc<network_proxy::StartedNetworkProxy>>,
-}
-
-impl SandboxAttempt {
-    fn initial(
-        workspace_write_grant: bool,
-        network_grant: tools::InProcessNetworkGrant,
-        managed_network: Option<Arc<network_proxy::StartedNetworkProxy>>,
-    ) -> Self {
-        Self {
-            workspace_write_grant,
-            sandbox_policy: None,
-            network_grant,
-            managed_network,
-        }
-    }
-
-    fn escalated(&self, execution_root: &std::path::Path) -> Result<Self, sandbox::SandboxErr> {
-        Ok(Self {
-            workspace_write_grant: self.workspace_write_grant,
-            sandbox_policy: Some(sandbox::SandboxPolicy::unrestricted_file_system(
-                execution_root,
-                false,
-            )?),
-            network_grant: self.network_grant.clone(),
-            managed_network: self.managed_network.clone(),
-        })
-    }
-}
-
-struct OrchestratorRunResult<Out> {
-    output: Out,
-}
-
-enum ToolApprovalOutcome {
-    Approved,
-    Denied(types::ToolOutput),
-}
-
-/// Codex-compatible tool policy boundary.
-///
-/// Owns approval preflight, terminal review, one-shot grants, step-bound
-/// dispatch, typed sandbox-denial review, and a single escalated retry.
-/// Process runtimes classify raw execution output into typed sandbox errors;
-/// managed subprocess-network approval remains pending until the proxy boundary
-/// can report a structured network-policy decision.
-struct ToolOrchestrator<'a> {
-    session: &'a Arc<AgentLoop>,
-    step_context: &'a Arc<StepContext>,
-    tx: &'a mpsc::Sender<anyhow::Result<MultiTurnStreamItem>>,
-    run_id: &'a str,
-    hitl_gate: Option<&'a Arc<HitlGate>>,
-}
-
-impl<'a> ToolOrchestrator<'a> {
-    fn new(
-        session: &'a Arc<AgentLoop>,
-        step_context: &'a Arc<StepContext>,
-        tx: &'a mpsc::Sender<anyhow::Result<MultiTurnStreamItem>>,
-        run_id: &'a str,
-        hitl_gate: Option<&'a Arc<HitlGate>>,
-    ) -> Self {
-        Self {
-            session,
-            step_context,
-            tx,
-            run_id,
-            hitl_gate,
-        }
-    }
-
-    fn permission_stages() -> &'static [PermissionStage] {
-        &PERMISSION_STAGES
-    }
-
-    fn apply_preflight(
-        context: &mut ToolRunContext,
-        stage: PermissionStage,
-        call: &types::ParsedToolCall,
-        preflight: PermissionPreflight,
-    ) -> Result<(), String> {
-        match preflight {
-            PermissionPreflight::NotRequired => Ok(()),
-            PermissionPreflight::Granted(audit) => {
-                if stage == PermissionStage::WorkspaceWrite {
-                    context.workspace_write_grant = true;
-                } else if stage == PermissionStage::InProcessNetwork {
-                    context.network_grant = tools::InProcessNetworkGrant::for_hosts(
-                        tools::in_process_network_hosts(&call.name, &call.arguments),
-                    );
-                }
-                context.permission_audits.push(*audit);
-                Ok(())
-            }
-            PermissionPreflight::Denied(message) => Err(message),
-        }
-    }
-
-    async fn prepare(
-        &self,
-        call: &types::ParsedToolCall,
-    ) -> Option<Result<ToolRunContext, String>> {
-        let mut context = ToolRunContext::default();
-        for stage in Self::permission_stages() {
-            let preflight = match stage {
-                PermissionStage::Mcp => {
-                    preflight_mcp_tool_approval(
-                        self.session,
-                        self.step_context,
-                        call,
-                        self.tx,
-                        self.run_id,
-                        self.hitl_gate,
-                    )
-                    .await?
-                }
-                PermissionStage::WorkspaceWrite => {
-                    preflight_read_only_write(
-                        self.session,
-                        call,
-                        self.tx,
-                        self.run_id,
-                        self.hitl_gate,
-                    )
-                    .await?
-                }
-                PermissionStage::InProcessNetwork => {
-                    preflight_in_process_network(
-                        self.session,
-                        call,
-                        self.tx,
-                        self.run_id,
-                        self.hitl_gate,
-                    )
-                    .await?
-                }
-            };
-
-            if let Err(message) = Self::apply_preflight(&mut context, *stage, call, preflight) {
-                return Some(Err(message));
-            }
-        }
-        Some(Ok(context))
-    }
-
-    async fn review_terminal(
-        &self,
-        call: &types::ParsedToolCall,
-        permission_audits: &mut Vec<PermissionAuditReceipt>,
-    ) -> Option<ToolApprovalOutcome> {
-        if call.name != "terminal" {
-            return Some(ToolApprovalOutcome::Approved);
-        }
-        let Some(decision) = call
-            .arguments
-            .get("command")
-            .and_then(|value| value.as_str())
-            .and_then(tools::classify_dangerous_command)
-        else {
-            return Some(ToolApprovalOutcome::Approved);
-        };
-
-        match decision.action {
-            types::ApprovalAction::Deny => {
-                audit_hardline_terminal_denial(self.session, call, decision.description).await;
-                return Some(ToolApprovalOutcome::Denied(
-                    format!(
-                        "Command denied by policy (dangerous: {}). Do not retry without changing the command.",
-                        decision.description
-                    )
-                    .into(),
-                ));
-            }
-            types::ApprovalAction::Auto => return Some(ToolApprovalOutcome::Approved),
-            types::ApprovalAction::Ask => {}
-        }
-
-        let cmd = call
-            .arguments
-            .get("command")
-            .and_then(|value| value.as_str())
-            .unwrap_or("")
-            .to_string();
-        let request_summary = format!("Run a command requiring approval: {}", decision.description);
-        let (
-            approval_session_id,
-            approval_turn_id,
-            permissions,
-            allowlist,
-            memory_dir,
-            active_profile_id,
-            permission_settings,
-        ) = {
-            let agent = self.session.as_ref();
-            let approval_session_id = agent.session_id().to_string();
-            let approval_turn_id = agent.current_turn_id().await;
-            let base = agent.memory_dir().to_path_buf();
-            let permissions = memory::config::load_permission_settings(&base);
-            let active_profile_id = agent
-                .permission_profile()
-                .unwrap_or_else(|| permissions.selection.profile_id.clone());
-            agent.fire_hook(
-                hooks::PERMISSION_REQUEST,
-                hooks::HookPayload {
-                    session_id: approval_session_id.clone(),
-                    turn_id: approval_turn_id.clone(),
-                    tool_name: Some("Bash".to_string()),
-                    tool_input: Some(serde_json::json!({
-                        "command": cmd.clone(),
-                        "description": request_summary.clone(),
-                    })),
-                    detail: format!("surface=terminal ask={}", decision.description),
-                    ..Default::default()
-                },
-            );
-            (
-                approval_session_id,
-                approval_turn_id,
-                permissions.selection.clone(),
-                permissions.legacy_command_allowlist.clone(),
-                base,
-                active_profile_id,
-                permissions,
-            )
-        };
-
-        let route = approval_route(&cmd, &permissions, &allowlist);
-        let permission_request = types::PermissionRequest {
-            request_id: uuid::Uuid::new_v4().to_string(),
-            session_id: approval_session_id.clone(),
-            turn_id: approval_turn_id.clone(),
-            tool_call_id: call.id.clone(),
-            tool_name: call.name.clone(),
-            summary: request_summary,
-            capabilities: vec![types::PermissionCapability::ProcessSpawn {
-                program: "sh".to_string(),
-                cwd: None,
-            }],
-            reason: types::PermissionReason::UntrustedCommand,
-            requested_scope: types::GrantScope::Once,
-            command_preview: Some(cmd.clone()),
-            affected_paths: Vec::new(),
-            network_hosts: Vec::new(),
-        };
-        let approval_audit = PermissionAuditReceipt::new(
-            memory_dir.clone(),
-            &permission_settings,
-            active_profile_id,
-            permission_request.clone(),
-        );
-        let approval_started = std::time::Instant::now();
-        approval_audit.record(
-            memory::PermissionAuditKind::Evaluated,
-            None,
-            Some(match route {
-                ApprovalRoute::Deny => "hardline_denied",
-                ApprovalRoute::Allowlist => "allowlist",
-                ApprovalRoute::Off => "approval_disabled",
-                ApprovalRoute::Smart => "auto_review_required",
-                ApprovalRoute::Manual => "user_review_required",
-            }),
-            None,
-        );
-        if matches!(route, ApprovalRoute::Smart | ApprovalRoute::Manual) {
-            approval_audit.record(
-                memory::PermissionAuditKind::Requested,
-                Some(permissions.approvals_reviewer),
-                None,
-                None,
-            );
-        }
-
-        match route {
-            ApprovalRoute::Deny => {
-                approval_audit.record(
-                    memory::PermissionAuditKind::Denied,
-                    None,
-                    Some("hardline_denied"),
-                    Some(approval_started.elapsed().as_millis() as u64),
-                );
-                Some(ToolApprovalOutcome::Denied(
-                    "Command denied by hardline policy. Do not retry without changing the command."
-                        .into(),
-                ))
-            }
-            ApprovalRoute::Allowlist | ApprovalRoute::Off => {
-                let (choice, result) = if route == ApprovalRoute::Allowlist {
-                    ("allowlist", "allowlist")
-                } else {
-                    ("auto", "approval_disabled")
-                };
-                fire_post_approval_response(
-                    self.session,
-                    &approval_session_id,
-                    approval_turn_id.as_deref(),
-                    &cmd,
-                    &permission_request.summary,
-                    choice,
-                )
-                .await;
-                approval_audit.record(
-                    memory::PermissionAuditKind::Granted,
-                    None,
-                    Some(result),
-                    Some(approval_started.elapsed().as_millis() as u64),
-                );
-                permission_audits.push(approval_audit);
-                Some(ToolApprovalOutcome::Approved)
-            }
-            ApprovalRoute::Smart | ApprovalRoute::Manual => {
-                let smart_action = if route == ApprovalRoute::Smart {
-                    let agent = self.session.as_ref();
-                    let targets: Vec<_> = agent
-                        .auxiliary_targets(types::AuxiliaryTask::SmartApproval)
-                        .iter()
-                        .map(crate::control::smart_approval::ApprovalTarget::from)
-                        .collect();
-                    crate::control::smart_approval::maybe_smart_downgrade_ask(
-                        &permission_request,
-                        &targets,
-                    )
-                    .await
-                } else {
-                    types::ApprovalAction::Ask
-                };
-                if smart_action == types::ApprovalAction::Auto {
-                    tracing::info!(
-                        command = %cmd,
-                        reason = decision.description,
-                        "smart approval auto-approved dangerous command"
-                    );
-                    fire_post_approval_response(
-                        self.session,
-                        &approval_session_id,
-                        approval_turn_id.as_deref(),
-                        &cmd,
-                        &permission_request.summary,
-                        "auto",
-                    )
-                    .await;
-                    approval_audit.record_review(
-                        permissions.approvals_reviewer,
-                        "auto_approved",
-                        true,
-                        approval_started.elapsed().as_millis() as u64,
-                    );
-                    permission_audits.push(approval_audit);
-                    return Some(ToolApprovalOutcome::Approved);
-                }
-                if route == ApprovalRoute::Smart {
-                    fire_post_approval_response(
-                        self.session,
-                        &approval_session_id,
-                        approval_turn_id.as_deref(),
-                        &cmd,
-                        &permission_request.summary,
-                        "deny",
-                    )
-                    .await;
-                    approval_audit.record_review(
-                        permissions.approvals_reviewer,
-                        "auto_denied",
-                        false,
-                        approval_started.elapsed().as_millis() as u64,
-                    );
-                    return Some(ToolApprovalOutcome::Denied(
-                        "Command denied by automatic approval review. Do not retry the same action or attempt a workaround without explicit user authorization."
-                            .into(),
-                    ));
-                }
-                let Some(gate) = self.hitl_gate else {
-                    fire_post_approval_response(
-                        self.session,
-                        &approval_session_id,
-                        approval_turn_id.as_deref(),
-                        &cmd,
-                        &permission_request.summary,
-                        "unavailable",
-                    )
-                    .await;
-                    approval_audit.record_review(
-                        permissions.approvals_reviewer,
-                        "reviewer_unavailable",
-                        false,
-                        approval_started.elapsed().as_millis() as u64,
-                    );
-                    return Some(ToolApprovalOutcome::Denied(
-                        format!(
-                            "Command blocked: dangerous ({}) and no HITL gate available.",
-                            decision.description
-                        )
-                        .into(),
-                    ));
-                };
-                let title = "批准危险命令";
-                let body = format!(
-                    "检测到潜在危险操作（{}）：\n\n```\n{cmd}\n```",
-                    decision.description
-                );
-                let confirm =
-                    park_confirm(gate, self.tx, self.run_id, &call.id, title, &body, true).await?;
-                let choice = match confirm.status.as_str() {
-                    "timeout" => "timeout",
-                    _ if confirm.approved => "allow",
-                    _ => "deny",
-                };
-                fire_post_approval_response(
-                    self.session,
-                    &approval_session_id,
-                    approval_turn_id.as_deref(),
-                    &cmd,
-                    &permission_request.summary,
-                    choice,
-                )
-                .await;
-                approval_audit.record_review(
-                    permissions.approvals_reviewer,
-                    choice,
-                    confirm.approved,
-                    approval_started.elapsed().as_millis() as u64,
-                );
-                if !confirm.approved {
-                    return Some(ToolApprovalOutcome::Denied(
-                        "Command denied by user (dangerous-command approval). Do not retry the same command without explicit user request."
-                            .into(),
-                    ));
-                }
-                if confirm.always {
-                    if let Err(error) = memory::config::add_command_to_allowlist(&memory_dir, &cmd)
-                    {
-                        tracing::warn!(%error, "failed to persist command allowlist");
-                    } else {
-                        tracing::info!(command = %cmd, "added command to approval allowlist");
-                    }
-                }
-                permission_audits.push(approval_audit);
-                Some(ToolApprovalOutcome::Approved)
-            }
-        }
-    }
-
-    async fn run(
-        &self,
-        call: &types::ParsedToolCall,
-    ) -> Option<OrchestratorRunResult<types::ToolOutput>> {
-        if call.args_parse_error {
-            return Some(OrchestratorRunResult {
-                output: format!(
-                    "工具参数 JSON 解析失败: {}",
-                    call.arguments
-                        .get("_parse_error")
-                        .and_then(|v| v.as_str())
-                        .unwrap_or("invalid json")
-                )
-                .into(),
-            });
-        }
-
-        let mut context = match self.prepare(call).await? {
-            Ok(context) => context,
-            Err(message) => {
-                return Some(OrchestratorRunResult {
-                    output: format!(
-                        "{message}. Do not retry the same action or attempt a workaround without explicit authorization."
-                    )
-                    .into(),
-                });
-            }
-        };
-        match self
-            .review_terminal(call, &mut context.permission_audits)
-            .await?
-        {
-            ToolApprovalOutcome::Approved => {}
-            ToolApprovalOutcome::Denied(output) => {
-                return Some(OrchestratorRunResult { output });
-            }
-        }
-        let ToolRunContext {
-            workspace_write_grant,
-            network_grant,
-            permission_audits,
-        } = context;
-        let agent = self.session.as_ref();
-        let memory_dir = agent.memory_dir().to_path_buf();
-        let session_id = agent.session_id().to_string();
-        let managed_network = match self.start_managed_network(call).await {
-            Ok(managed_network) => managed_network,
-            Err(error) => {
-                memory::try_append_decision(
-                    &memory_dir,
-                    memory::DecisionEntry::new(
-                        memory::DecisionKind::ToolFailure,
-                        format!("managed network setup failed: {error}"),
-                    )
-                    .with_tool(call.name.clone())
-                    .with_session(session_id),
-                );
-                return Some(OrchestratorRunResult {
-                    output: format!("Tool error: managed network setup failed: {error}").into(),
-                });
-            }
-        };
-        let initial_attempt =
-            SandboxAttempt::initial(workspace_write_grant, network_grant, managed_network);
-        let execution_started = std::time::Instant::now();
-        let executed = self.run_attempt(call, &initial_attempt, CancellationToken::new());
-        let execution_result = match &executed {
-            Ok(_) => "success",
-            Err(crate::runtime::ToolCallError::Cancelled) => "cancelled",
-            Err(crate::runtime::ToolCallError::SandboxDenied(_)) => "sandbox_denied",
-            Err(_) => "error",
-        };
-        for audit in &permission_audits {
-            audit.record(
-                memory::PermissionAuditKind::Applied,
-                None,
-                Some(execution_result),
-                Some(execution_started.elapsed().as_millis() as u64),
-            );
-        }
-        let output = match executed {
-            Ok(output) => output,
-            Err(crate::runtime::ToolCallError::Cancelled) => return None,
-            Err(crate::runtime::ToolCallError::SandboxDenied(sandbox::SandboxErr::Denied {
-                output,
-                network_policy_decision,
-            })) => {
-                let denial_output = output.aggregated_output.clone();
-                if network_policy_decision.is_some() {
-                    let output = self
-                        .session
-                        .finalize_tool_call_result(
-                            &call.name,
-                            &call.arguments,
-                            denial_output.into(),
-                        )
-                        .await;
-                    return Some(OrchestratorRunResult { output });
-                }
-                match self.review_sandbox_denial(call, output.as_ref()).await? {
-                    PermissionPreflight::Granted(retry_audit) => {
-                        let retry_started = std::time::Instant::now();
-                        let retry = initial_attempt
-                            .escalated(&self.execution_root())
-                            .map_err(anyhow::Error::new)
-                            .map_err(crate::runtime::ToolCallError::from)
-                            .and_then(|attempt| {
-                                self.run_attempt(call, &attempt, CancellationToken::new())
-                            });
-                        let retry_result = match &retry {
-                            Ok(_) => "escalated",
-                            Err(crate::runtime::ToolCallError::Cancelled) => "cancelled",
-                            Err(crate::runtime::ToolCallError::SandboxDenied(_)) => {
-                                "sandbox_denied"
-                            }
-                            Err(_) => "error",
-                        };
-                        retry_audit.record(
-                            memory::PermissionAuditKind::Applied,
-                            None,
-                            Some(retry_result),
-                            Some(retry_started.elapsed().as_millis() as u64),
-                        );
-                        match retry {
-                            Ok(output) => output,
-                            Err(crate::runtime::ToolCallError::Cancelled) => return None,
-                            Err(crate::runtime::ToolCallError::SandboxDenied(
-                                sandbox::SandboxErr::Denied { output, .. },
-                            )) => {
-                                self.session
-                                    .finalize_tool_call_result(
-                                        &call.name,
-                                        &call.arguments,
-                                        output.aggregated_output.into(),
-                                    )
-                                    .await
-                            }
-                            Err(error) => {
-                                memory::try_append_decision(
-                                    &memory_dir,
-                                    memory::DecisionEntry::new(
-                                        memory::DecisionKind::ToolFailure,
-                                        error.to_string(),
-                                    )
-                                    .with_tool(call.name.clone())
-                                    .with_session(session_id.clone()),
-                                );
-                                format!("Tool error after sandbox escalation: {error}").into()
-                            }
-                        }
-                    }
-                    PermissionPreflight::Denied(message) => {
-                        self.session
-                            .finalize_tool_call_result(
-                                &call.name,
-                                &call.arguments,
-                                format!("{denial_output}\n\nSandbox retry denied: {message}")
-                                    .into(),
-                            )
-                            .await
-                    }
-                    PermissionPreflight::NotRequired => {
-                        self.session
-                            .finalize_tool_call_result(
-                                &call.name,
-                                &call.arguments,
-                                denial_output.into(),
-                            )
-                            .await
-                    }
-                }
-            }
-            Err(error) => {
-                memory::try_append_decision(
-                    &memory_dir,
-                    memory::DecisionEntry::new(
-                        memory::DecisionKind::ToolFailure,
-                        error.to_string(),
-                    )
-                    .with_tool(call.name.clone())
-                    .with_session(session_id),
-                );
-                format!("工具错误: {error}").into()
-            }
-        };
-        Some(OrchestratorRunResult { output })
-    }
-
-    fn run_attempt(
-        &self,
-        call: &types::ParsedToolCall,
-        attempt: &SandboxAttempt,
-        cancellation_token: CancellationToken,
-    ) -> Result<types::ToolOutput, crate::runtime::ToolCallError> {
-        let sandbox_policy = self.sandbox_policy_for_attempt(call, attempt)?;
-        let invocation = ToolInvocation {
-            session: Arc::clone(self.session),
-            step_context: Arc::clone(self.step_context),
-            cancellation_token,
-            call_id: call.id.clone(),
-            tool_name: call.name.clone(),
-            payload: call.arguments.clone(),
-        };
-        self.session.handle_tool_invocation_with_once_grants(
-            invocation,
-            crate::runtime::ToolExecutionGrants {
-                workspace_write: attempt.workspace_write_grant,
-                sandbox_policy,
-                network: attempt.network_grant.clone(),
-                managed_network: attempt.managed_network.clone(),
-            },
-        )
-    }
-
-    async fn start_managed_network(
-        &self,
-        call: &types::ParsedToolCall,
-    ) -> anyhow::Result<Option<Arc<network_proxy::StartedNetworkProxy>>> {
-        let settings = memory::load_permission_settings(self.session.memory_dir());
-        let active_profile_id = self
-            .step_context
-            .turn
-            .permission_profile()
-            .unwrap_or(settings.selection.profile_id.as_str());
-        let Some(policy) = managed_network_policy_for_call(call, &settings, active_profile_id)
-        else {
-            return Ok(None);
-        };
-        let state = Arc::new(network_proxy::NetworkProxyState::new(policy)?);
-        let started = network_proxy::StartedNetworkProxy::start(state).await?;
-        Ok(Some(Arc::new(started)))
-    }
-
-    fn execution_root(&self) -> std::path::PathBuf {
-        self.step_context
-            .turn
-            .project_root()
-            .map(ToOwned::to_owned)
-            .unwrap_or_else(|| self.session.memory().workspace_dir.clone())
-    }
-
-    fn sandbox_policy_for_attempt(
-        &self,
-        call: &types::ParsedToolCall,
-        attempt: &SandboxAttempt,
-    ) -> Result<Option<sandbox::SandboxPolicy>, crate::runtime::ToolCallError> {
-        let mut policy = if let Some(policy) = &attempt.sandbox_policy {
-            policy.clone()
-        } else {
-            let preference = self.step_context.tool_router.sandbox_preference(&call.name);
-            if preference == types::SandboxablePreference::Forbid {
-                return Ok(None);
-            }
-
-            let execution_root = self.execution_root();
-            let mut policy = tools::context::build_command_sandbox_policy(
-                self.session.memory_dir(),
-                &execution_root,
-                self.step_context.turn.permission_profile(),
-                attempt.workspace_write_grant,
-                None,
-            )
-            .map_err(crate::runtime::ToolCallError::from)?;
-            if preference == types::SandboxablePreference::Require
-                && policy.mode == types::SandboxMode::DangerFullAccess
-            {
-                policy = sandbox::SandboxPolicy::unrestricted_file_system(
-                    &execution_root,
-                    policy.network_access,
-                )
-                .map_err(anyhow::Error::new)
-                .map_err(crate::runtime::ToolCallError::from)?;
-            }
-            policy
-        };
-        if let Some(started) = &attempt.managed_network {
-            let context = started
-                .proxy()
-                .prepare(std::collections::HashMap::new())
-                .sandbox_context;
-            policy = policy.with_managed_network(context);
-        }
-        Ok(Some(policy))
-    }
-
-    async fn review_sandbox_denial(
-        &self,
-        call: &types::ParsedToolCall,
-        output: &sandbox::ExecToolCallOutput,
-    ) -> Option<PermissionPreflight> {
-        let (session_id, turn_id, profile_id, memory_dir, settings) = {
-            let agent = self.session.as_ref();
-            let settings = memory::load_permission_settings(agent.memory_dir());
-            let profile_id = agent
-                .permission_profile()
-                .unwrap_or_else(|| settings.selection.profile_id.clone());
-            (
-                agent.session_id().to_string(),
-                agent.current_turn_id().await,
-                profile_id,
-                agent.memory_dir().to_path_buf(),
-                settings,
-            )
-        };
-        let selection = settings.selection.clone();
-        let command_preview = call
-            .arguments
-            .get("command")
-            .and_then(|value| value.as_str())
-            .map(str::to_string);
-        let request = types::PermissionRequest {
-            request_id: uuid::Uuid::new_v4().to_string(),
-            session_id,
-            turn_id,
-            tool_call_id: call.id.clone(),
-            tool_name: call.name.clone(),
-            summary: format!(
-                "Retry {} once with full local filesystem access after sandbox denial",
-                call.name
-            ),
-            capabilities: vec![
-                types::PermissionCapability::ProcessSpawn {
-                    program: call.name.clone(),
-                    cwd: None,
-                },
-                types::PermissionCapability::FileWrite {
-                    paths: vec!["outside configured writable roots".to_string()],
-                },
-            ],
-            reason: types::PermissionReason::SandboxDenied,
-            requested_scope: types::GrantScope::Once,
-            command_preview,
-            affected_paths: vec!["outside configured writable roots".to_string()],
-            network_hosts: Vec::new(),
-        };
-        let denial_detail = output
-            .aggregated_output
-            .chars()
-            .take(800)
-            .collect::<String>();
-        let body = format!(
-            "The sandbox denied this tool attempt:\n\n```text\n{denial_detail}\n```\n\nRetry this exact call once with full local filesystem access? Network permissions are unchanged, and the grant will not persist."
-        );
-        let audit = PermissionAuditReceipt::new(memory_dir, &settings, profile_id, request);
-        review_once_permission(
-            self.session,
-            &selection,
-            audit,
-            self.tx,
-            self.run_id,
-            self.hitl_gate,
-            "surface=permission reason=sandbox_denied",
-            "Retry outside sandbox",
-            &body,
-        )
-        .await
-    }
-}
-
 #[allow(clippy::too_many_arguments)]
 async fn review_once_permission(
     session: &Arc<AgentLoop>,
     selection: &types::SessionPermissions,
     audit: PermissionAuditReceipt,
-    tx: &mpsc::Sender<anyhow::Result<MultiTurnStreamItem>>,
-    run_id: &str,
+    turn_context: &TurnContext,
     hitl_gate: Option<&Arc<HitlGate>>,
     hook_detail: &str,
     title: &str,
@@ -1060,12 +292,12 @@ async fn review_once_permission(
     {
         let agent = session.as_ref();
         agent.fire_hook(
-            hooks::PERMISSION_REQUEST,
+            hooks::PRE_APPROVAL_REQUEST,
             hooks::HookPayload {
                 session_id: request.session_id.clone(),
                 turn_id: request.turn_id.clone(),
                 tool_name: Some(request.tool_name.clone()),
-                tool_input: Some(serde_json::json!({"summary": request.summary.clone()})),
+                tool_input: Some(serde_json::json!({ "summary": request.summary })),
                 detail: hook_detail.to_string(),
                 ..Default::default()
             },
@@ -1158,8 +390,16 @@ async fn review_once_permission(
             "Permission blocked: user approval is unavailable".to_string(),
         ));
     };
-    let Some(confirm) =
-        park_confirm(gate, tx, run_id, &request.tool_call_id, title, body, false).await
+    let Some(confirm) = park_confirm(
+        gate,
+        session.as_ref(),
+        turn_context,
+        &request.tool_call_id,
+        title,
+        body,
+        false,
+    )
+    .await
     else {
         audit.record_review(
             selection.approvals_reviewer,
@@ -1277,8 +517,7 @@ async fn audit_hardline_terminal_denial(
 async fn preflight_read_only_write(
     session: &Arc<AgentLoop>,
     call: &types::ParsedToolCall,
-    tx: &mpsc::Sender<anyhow::Result<MultiTurnStreamItem>>,
-    run_id: &str,
+    turn_context: &TurnContext,
     hitl_gate: Option<&Arc<HitlGate>>,
 ) -> Option<PermissionPreflight> {
     if !tools::tool_requires_in_process_write(&call.name, &call.arguments) {
@@ -1337,8 +576,7 @@ async fn preflight_read_only_write(
         session,
         &selection,
         audit,
-        tx,
-        run_id,
+        turn_context,
         hitl_gate,
         "surface=permission reason=read_only_mutation",
         "批准本次写入",
@@ -1351,8 +589,7 @@ async fn preflight_mcp_tool_approval(
     session: &Arc<AgentLoop>,
     step_context: &StepContext,
     call: &types::ParsedToolCall,
-    tx: &mpsc::Sender<anyhow::Result<MultiTurnStreamItem>>,
-    run_id: &str,
+    turn_context: &TurnContext,
     hitl_gate: Option<&Arc<HitlGate>>,
 ) -> Option<PermissionPreflight> {
     let approval = step_context.tool_router.mcp_approval(&call.name);
@@ -1414,8 +651,7 @@ async fn preflight_mcp_tool_approval(
         session,
         &selection,
         audit,
-        tx,
-        run_id,
+        turn_context,
         hitl_gate,
         &format!(
             "surface=mcp reason=tool_policy mode={}",
@@ -1430,8 +666,7 @@ async fn preflight_mcp_tool_approval(
 async fn preflight_in_process_network(
     session: &Arc<AgentLoop>,
     call: &types::ParsedToolCall,
-    tx: &mpsc::Sender<anyhow::Result<MultiTurnStreamItem>>,
-    run_id: &str,
+    turn_context: &TurnContext,
     hitl_gate: Option<&Arc<HitlGate>>,
 ) -> Option<PermissionPreflight> {
     if !tools::tool_requires_in_process_network(&call.name) {
@@ -1497,11 +732,82 @@ async fn preflight_in_process_network(
         session,
         &selection,
         audit,
-        tx,
-        run_id,
+        turn_context,
         hitl_gate,
         "surface=permission reason=network_disabled",
         "批准本次网络访问",
+        &body,
+    )
+    .await
+}
+
+async fn review_sandbox_denial(
+    session: &Arc<AgentLoop>,
+    step_context: &StepContext,
+    call: &types::ParsedToolCall,
+    output: &sandbox::ExecToolCallOutput,
+    turn_context: &TurnContext,
+    hitl_gate: Option<&Arc<HitlGate>>,
+) -> Option<PermissionPreflight> {
+    let settings = memory::load_permission_settings(session.memory_dir());
+    let profile_id = step_context
+        .turn
+        .permission_profile()
+        .unwrap_or(settings.selection.profile_id.as_str())
+        .to_string();
+    let selection = settings.selection.clone();
+    let command_preview = call
+        .arguments
+        .get("command")
+        .and_then(serde_json::Value::as_str)
+        .map(str::to_string);
+    let request = types::PermissionRequest {
+        request_id: uuid::Uuid::new_v4().to_string(),
+        session_id: session.session_id().to_string(),
+        turn_id: Some(turn_context.sub_id().to_string()),
+        tool_call_id: call.id.clone(),
+        tool_name: call.name.clone(),
+        summary: format!(
+            "Retry {} once with full local filesystem access after sandbox denial",
+            call.name
+        ),
+        capabilities: vec![
+            types::PermissionCapability::ProcessSpawn {
+                program: call.name.clone(),
+                cwd: None,
+            },
+            types::PermissionCapability::FileWrite {
+                paths: vec!["outside configured writable roots".to_string()],
+            },
+        ],
+        reason: types::PermissionReason::SandboxDenied,
+        requested_scope: types::GrantScope::Once,
+        command_preview,
+        affected_paths: vec!["outside configured writable roots".to_string()],
+        network_hosts: Vec::new(),
+    };
+    let denial_detail = output
+        .aggregated_output
+        .chars()
+        .take(800)
+        .collect::<String>();
+    let body = format!(
+        "The sandbox denied this tool attempt:\n\n```text\n{denial_detail}\n```\n\nRetry this exact call once with full local filesystem access? Network permissions are unchanged, and the grant will not persist."
+    );
+    let audit = PermissionAuditReceipt::new(
+        session.memory_dir().to_path_buf(),
+        &settings,
+        profile_id,
+        request,
+    );
+    review_once_permission(
+        session,
+        &selection,
+        audit,
+        turn_context,
+        hitl_gate,
+        "surface=permission reason=sandbox_denied",
+        "Retry outside sandbox",
         &body,
     )
     .await
@@ -1524,11 +830,10 @@ pub(crate) async fn execute_tools_serial(
     step_context: Arc<StepContext>,
     calls: &[types::ParsedToolCall],
     pause: &Arc<PauseControl>,
-    tx: &mpsc::Sender<anyhow::Result<MultiTurnStreamItem>>,
-    run_id: &str,
+    turn_context: &TurnContext,
     hitl_gate: Option<&Arc<HitlGate>>,
 ) -> Option<Vec<types::ToolOutput>> {
-    execute_tools_serial_inner(session, step_context, calls, pause, tx, run_id, hitl_gate).await
+    execute_tools_serial_inner(session, step_context, calls, pause, turn_context, hitl_gate).await
 }
 
 async fn execute_tools_serial_inner(
@@ -1536,12 +841,10 @@ async fn execute_tools_serial_inner(
     step_context: Arc<StepContext>,
     calls: &[types::ParsedToolCall],
     pause: &Arc<PauseControl>,
-    tx: &mpsc::Sender<anyhow::Result<MultiTurnStreamItem>>,
-    run_id: &str,
+    turn_context: &TurnContext,
     hitl_gate: Option<&Arc<HitlGate>>,
 ) -> Option<Vec<types::ToolOutput>> {
     let mut out: Vec<types::ToolOutput> = Vec::with_capacity(calls.len());
-    let orchestrator = ToolOrchestrator::new(session, &step_context, tx, run_id, hitl_gate);
     for call in calls {
         if pause.is_cancelled() {
             return None;
@@ -1560,12 +863,589 @@ async fn execute_tools_serial_inner(
             continue;
         }
 
-        let mut result = orchestrator.run(call).await?.output;
+        let mut workspace_write_grant = false;
+        let mut network_grant = tools::InProcessNetworkGrant::default();
+        let mut permission_audits = Vec::new();
+        if !call.args_parse_error {
+            match preflight_mcp_tool_approval(session, &step_context, call, turn_context, hitl_gate)
+                .await?
+            {
+                PermissionPreflight::NotRequired => {}
+                PermissionPreflight::Granted(audit) => permission_audits.push(*audit),
+                PermissionPreflight::Denied(message) => {
+                    out.push(format!(
+                        "{message}. Do not retry the same action or attempt a workaround without explicit authorization."
+                    ).into());
+                    continue;
+                }
+            }
+            match preflight_read_only_write(session, call, turn_context, hitl_gate).await? {
+                PermissionPreflight::NotRequired => {}
+                PermissionPreflight::Granted(audit) => {
+                    workspace_write_grant = true;
+                    permission_audits.push(*audit);
+                }
+                PermissionPreflight::Denied(message) => {
+                    out.push(format!(
+                        "{message}. Do not retry the same action or attempt a workaround without explicit authorization."
+                    ).into());
+                    continue;
+                }
+            }
+            match preflight_in_process_network(session, call, turn_context, hitl_gate).await? {
+                PermissionPreflight::NotRequired => {}
+                PermissionPreflight::Granted(audit) => {
+                    network_grant = tools::InProcessNetworkGrant::for_hosts(
+                        tools::in_process_network_hosts(&call.name, &call.arguments),
+                    );
+                    permission_audits.push(*audit);
+                }
+                PermissionPreflight::Denied(message) => {
+                    out.push(format!(
+                        "{message}. Do not retry the same action or attempt a workaround without explicit authorization."
+                    ).into());
+                    continue;
+                }
+            }
+        }
+
+        // 危险 terminal：deny / auto / ask
+        if call.name == "terminal" && !call.args_parse_error {
+            if let Some(decision) = call
+                .arguments
+                .get("command")
+                .and_then(|v| v.as_str())
+                .and_then(tools::classify_dangerous_command)
+            {
+                match decision.action {
+                    types::ApprovalAction::Deny => {
+                        audit_hardline_terminal_denial(session, call, decision.description).await;
+                        out.push(format!(
+                            "Command denied by policy (dangerous: {}). Do not retry without changing the command.",
+                            decision.description
+                        ).into());
+                        continue;
+                    }
+                    types::ApprovalAction::Auto => {
+                        // 放行，继续执行
+                    }
+                    types::ApprovalAction::Ask => {
+                        let cmd = call
+                            .arguments
+                            .get("command")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("")
+                            .to_string();
+                        // 读取审批模式 + 白名单，并触发 PRE_APPROVAL_REQUEST 钩子
+                        let (
+                            approval_session_id,
+                            approval_turn_id,
+                            permissions,
+                            allowlist,
+                            memory_dir,
+                            active_profile_id,
+                            permission_settings,
+                        ) = {
+                            let agent = session.as_ref();
+                            let approval_session_id = agent.session_id().to_string();
+                            let approval_turn_id = agent.current_turn_id().await;
+                            let base = agent.memory_dir().to_path_buf();
+                            let permissions = memory::config::load_permission_settings(&base);
+                            let active_profile_id = agent
+                                .permission_profile()
+                                .unwrap_or_else(|| permissions.selection.profile_id.clone());
+                            agent.fire_hook(
+                                hooks::PRE_APPROVAL_REQUEST,
+                                hooks::HookPayload {
+                                    session_id: approval_session_id.clone(),
+                                    turn_id: approval_turn_id.clone(),
+                                    tool_name: Some("Bash".to_string()),
+                                    tool_input: Some(serde_json::json!({ "command": cmd })),
+                                    detail: format!(
+                                        "surface=terminal ask={}",
+                                        decision.description
+                                    ),
+                                    ..Default::default()
+                                },
+                            );
+                            (
+                                approval_session_id,
+                                approval_turn_id,
+                                permissions.selection.clone(),
+                                permissions.legacy_command_allowlist.clone(),
+                                base,
+                                active_profile_id,
+                                permissions,
+                            )
+                        };
+
+                        let route = approval_route(&cmd, &permissions, &allowlist);
+                        let permission_request = types::PermissionRequest {
+                            request_id: uuid::Uuid::new_v4().to_string(),
+                            session_id: approval_session_id.clone(),
+                            turn_id: approval_turn_id.clone(),
+                            tool_call_id: call.id.clone(),
+                            tool_name: call.name.clone(),
+                            summary: format!(
+                                "Run a command requiring approval: {}",
+                                decision.description
+                            ),
+                            capabilities: vec![types::PermissionCapability::ProcessSpawn {
+                                program: "sh".to_string(),
+                                cwd: None,
+                            }],
+                            reason: types::PermissionReason::UntrustedCommand,
+                            requested_scope: types::GrantScope::Once,
+                            command_preview: Some(cmd.clone()),
+                            affected_paths: Vec::new(),
+                            network_hosts: Vec::new(),
+                        };
+                        let approval_audit = PermissionAuditReceipt::new(
+                            memory_dir.clone(),
+                            &permission_settings,
+                            active_profile_id,
+                            permission_request.clone(),
+                        );
+                        let approval_started = std::time::Instant::now();
+                        approval_audit.record(
+                            memory::PermissionAuditKind::Evaluated,
+                            None,
+                            Some(match route {
+                                ApprovalRoute::Deny => "hardline_denied",
+                                ApprovalRoute::Allowlist => "allowlist",
+                                ApprovalRoute::Off => "approval_disabled",
+                                ApprovalRoute::Smart => "auto_review_required",
+                                ApprovalRoute::Manual => "user_review_required",
+                            }),
+                            None,
+                        );
+                        if matches!(route, ApprovalRoute::Smart | ApprovalRoute::Manual) {
+                            approval_audit.record(
+                                memory::PermissionAuditKind::Requested,
+                                Some(permissions.approvals_reviewer),
+                                None,
+                                None,
+                            );
+                        }
+                        // 防御性兜底：即使规则分级未来发生漂移，hardline 仍不可进入 HITL 放行。
+                        if route == ApprovalRoute::Deny {
+                            approval_audit.record(
+                                memory::PermissionAuditKind::Denied,
+                                None,
+                                Some("hardline_denied"),
+                                Some(approval_started.elapsed().as_millis() as u64),
+                            );
+                            out.push(
+                                "Command denied by hardline policy. Do not retry without changing the command."
+                                    .into(),
+                            );
+                            continue;
+                        } else if route == ApprovalRoute::Allowlist {
+                            fire_post_approval_response(
+                                session,
+                                &approval_session_id,
+                                approval_turn_id.as_deref(),
+                                &cmd,
+                                "allowlist",
+                            )
+                            .await;
+                            approval_audit.record(
+                                memory::PermissionAuditKind::Granted,
+                                None,
+                                Some("allowlist"),
+                                Some(approval_started.elapsed().as_millis() as u64),
+                            );
+                            permission_audits.push(approval_audit);
+                        } else if route == ApprovalRoute::Off {
+                            fire_post_approval_response(
+                                session,
+                                &approval_session_id,
+                                approval_turn_id.as_deref(),
+                                &cmd,
+                                "auto",
+                            )
+                            .await;
+                            approval_audit.record(
+                                memory::PermissionAuditKind::Granted,
+                                None,
+                                Some("approval_disabled"),
+                                Some(approval_started.elapsed().as_millis() as u64),
+                            );
+                            permission_audits.push(approval_audit);
+                        } else {
+                            // 仅 Smart 模式尝试辅模型降级；Manual 直接弹卡
+                            let smart_action = if route == ApprovalRoute::Smart {
+                                let agent = session.as_ref();
+                                let targets: Vec<_> = agent
+                                    .auxiliary_targets(types::AuxiliaryTask::SmartApproval)
+                                    .iter()
+                                    .map(crate::control::smart_approval::ApprovalTarget::from)
+                                    .collect();
+                                crate::control::smart_approval::maybe_smart_downgrade_ask(
+                                    &permission_request,
+                                    &targets,
+                                )
+                                .await
+                            } else {
+                                types::ApprovalAction::Ask
+                            };
+                            if smart_action == types::ApprovalAction::Auto {
+                                tracing::info!(
+                                    command = %cmd,
+                                    reason = decision.description,
+                                    "smart approval auto-approved dangerous command"
+                                );
+                                fire_post_approval_response(
+                                    session,
+                                    &approval_session_id,
+                                    approval_turn_id.as_deref(),
+                                    &cmd,
+                                    "auto",
+                                )
+                                .await;
+                                approval_audit.record_review(
+                                    permissions.approvals_reviewer,
+                                    "auto_approved",
+                                    true,
+                                    approval_started.elapsed().as_millis() as u64,
+                                );
+                                permission_audits.push(approval_audit);
+                            } else if route == ApprovalRoute::Smart {
+                                fire_post_approval_response(
+                                    session,
+                                    &approval_session_id,
+                                    approval_turn_id.as_deref(),
+                                    &cmd,
+                                    "deny",
+                                )
+                                .await;
+                                approval_audit.record_review(
+                                    permissions.approvals_reviewer,
+                                    "auto_denied",
+                                    false,
+                                    approval_started.elapsed().as_millis() as u64,
+                                );
+                                out.push(
+                                    "Command denied by automatic approval review. Do not retry the same action or attempt a workaround without explicit user authorization."
+                                        .into(),
+                                );
+                                continue;
+                            } else if let Some(gate) = hitl_gate {
+                                let title = "批准危险命令";
+                                let body = format!(
+                                    "检测到潜在危险操作（{}）：\n\n```\n{cmd}\n```",
+                                    decision.description
+                                );
+                                let confirm = park_confirm(
+                                    gate,
+                                    session.as_ref(),
+                                    turn_context,
+                                    &call.id,
+                                    title,
+                                    &body,
+                                    true,
+                                )
+                                .await?;
+                                let choice = match confirm.status.as_str() {
+                                    "timeout" => "timeout",
+                                    _ if confirm.approved => "allow",
+                                    _ => "deny",
+                                };
+                                fire_post_approval_response(
+                                    session,
+                                    &approval_session_id,
+                                    approval_turn_id.as_deref(),
+                                    &cmd,
+                                    choice,
+                                )
+                                .await;
+                                approval_audit.record_review(
+                                    permissions.approvals_reviewer,
+                                    choice,
+                                    confirm.approved,
+                                    approval_started.elapsed().as_millis() as u64,
+                                );
+                                if !confirm.approved {
+                                    out.push(
+                                        "Command denied by user (dangerous-command approval). Do not retry the same command without explicit user request.".into(),
+                                    );
+                                    continue;
+                                }
+                                // 「批准并永久放行」→ 写入用户白名单，后续同命令自动放行
+                                if confirm.always {
+                                    if let Err(e) =
+                                        memory::config::add_command_to_allowlist(&memory_dir, &cmd)
+                                    {
+                                        tracing::warn!(error = %e, "failed to persist command allowlist");
+                                    } else {
+                                        tracing::info!(command = %cmd, "added command to approval allowlist");
+                                    }
+                                }
+                                permission_audits.push(approval_audit);
+                            } else {
+                                fire_post_approval_response(
+                                    session,
+                                    &approval_session_id,
+                                    approval_turn_id.as_deref(),
+                                    &cmd,
+                                    "unavailable",
+                                )
+                                .await;
+                                approval_audit.record_review(
+                                    permissions.approvals_reviewer,
+                                    "reviewer_unavailable",
+                                    false,
+                                    approval_started.elapsed().as_millis() as u64,
+                                );
+                                out.push(
+                                    format!(
+                                    "Command blocked: dangerous ({}) and no HITL gate available.",
+                                    decision.description
+                                )
+                                    .into(),
+                                );
+                                continue;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        let mut result: types::ToolOutput = if call.args_parse_error {
+            format!(
+                "工具参数 JSON 解析失败: {}",
+                call.arguments
+                    .get("_parse_error")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("invalid json")
+            )
+            .into()
+        } else {
+            let agent = session.as_ref();
+            let memory_dir = agent.memory_dir().to_path_buf();
+            let session_id = agent.session_id().to_string();
+            let managed_network = match start_managed_network(session, &step_context, call).await {
+                Ok(managed_network) => managed_network,
+                Err(error) => {
+                    memory::try_append_decision(
+                        &memory_dir,
+                        memory::DecisionEntry::new(
+                            memory::DecisionKind::ToolFailure,
+                            format!("managed network setup failed: {error}"),
+                        )
+                        .with_tool(call.name.clone())
+                        .with_session(session_id.clone()),
+                    );
+                    out.push(format!("Tool error: managed network setup failed: {error}").into());
+                    continue;
+                }
+            };
+            let sandbox_policy = match sandbox_policy_for_call(
+                agent,
+                &step_context,
+                call,
+                workspace_write_grant,
+                managed_network.as_ref(),
+            ) {
+                Ok(policy) => policy,
+                Err(error) => {
+                    out.push(format!("Tool error: sandbox setup failed: {error}").into());
+                    continue;
+                }
+            };
+            let execution_started = std::time::Instant::now();
+            let executed = session.handle_tool_invocation_with_once_grants(
+                ToolInvocation {
+                    session: Arc::clone(session),
+                    step_context: Arc::clone(&step_context),
+                    cancellation_token: CancellationToken::new(),
+                    call_id: call.id.clone(),
+                    tool_name: call.name.clone(),
+                    payload: call.arguments.clone(),
+                },
+                ToolExecutionGrants {
+                    workspace_write: workspace_write_grant,
+                    sandbox_policy,
+                    network: network_grant.clone(),
+                    managed_network: managed_network.clone(),
+                },
+            );
+            let execution_result = match &executed {
+                Ok(_) => "success",
+                Err(crate::runtime::ToolCallError::Cancelled) => "cancelled",
+                Err(crate::runtime::ToolCallError::SandboxDenied(_)) => "sandbox_denied",
+                Err(_) => "error",
+            };
+            for audit in &permission_audits {
+                audit.record(
+                    memory::PermissionAuditKind::Applied,
+                    None,
+                    Some(execution_result),
+                    Some(execution_started.elapsed().as_millis() as u64),
+                );
+            }
+            match executed {
+                Ok(output) => output,
+                Err(crate::runtime::ToolCallError::Cancelled) => return None,
+                Err(crate::runtime::ToolCallError::SandboxDenied(
+                    sandbox::SandboxErr::Denied {
+                        output,
+                        network_policy_decision,
+                    },
+                )) => {
+                    let denial_output = output.aggregated_output.clone();
+                    if network_policy_decision.is_some() {
+                        agent
+                            .finalize_tool_call_result(
+                                &call.name,
+                                &call.arguments,
+                                denial_output.into(),
+                            )
+                            .await
+                    } else {
+                        match review_sandbox_denial(
+                            session,
+                            &step_context,
+                            call,
+                            output.as_ref(),
+                            turn_context,
+                            hitl_gate,
+                        )
+                        .await?
+                        {
+                            PermissionPreflight::Granted(retry_audit) => {
+                                let execution_root = step_context
+                                    .turn
+                                    .project_root()
+                                    .map(ToOwned::to_owned)
+                                    .unwrap_or_else(|| agent.memory().workspace_dir.clone());
+                                let mut retry_policy =
+                                    match sandbox::SandboxPolicy::unrestricted_file_system(
+                                        &execution_root,
+                                        false,
+                                    ) {
+                                        Ok(policy) => policy,
+                                        Err(error) => {
+                                            out.push(
+                                                format!(
+                                                "Tool error after sandbox escalation setup: {error}"
+                                            )
+                                                .into(),
+                                            );
+                                            continue;
+                                        }
+                                    };
+                                if let Some(started) = managed_network.as_ref() {
+                                    let context = started
+                                        .proxy()
+                                        .prepare(std::collections::HashMap::new())
+                                        .sandbox_context;
+                                    retry_policy = retry_policy.with_managed_network(context);
+                                }
+                                let retry_started = std::time::Instant::now();
+                                let retry = session.handle_tool_invocation_with_once_grants(
+                                    ToolInvocation {
+                                        session: Arc::clone(session),
+                                        step_context: Arc::clone(&step_context),
+                                        cancellation_token: CancellationToken::new(),
+                                        call_id: call.id.clone(),
+                                        tool_name: call.name.clone(),
+                                        payload: call.arguments.clone(),
+                                    },
+                                    ToolExecutionGrants {
+                                        workspace_write: workspace_write_grant,
+                                        sandbox_policy: Some(retry_policy),
+                                        network: network_grant.clone(),
+                                        managed_network: managed_network.clone(),
+                                    },
+                                );
+                                let retry_result = match &retry {
+                                    Ok(_) => "escalated",
+                                    Err(crate::runtime::ToolCallError::Cancelled) => "cancelled",
+                                    Err(crate::runtime::ToolCallError::SandboxDenied(_)) => {
+                                        "sandbox_denied"
+                                    }
+                                    Err(_) => "error",
+                                };
+                                retry_audit.record(
+                                    memory::PermissionAuditKind::Applied,
+                                    None,
+                                    Some(retry_result),
+                                    Some(retry_started.elapsed().as_millis() as u64),
+                                );
+                                match retry {
+                                    Ok(output) => output,
+                                    Err(crate::runtime::ToolCallError::Cancelled) => return None,
+                                    Err(crate::runtime::ToolCallError::SandboxDenied(
+                                        sandbox::SandboxErr::Denied { output, .. },
+                                    )) => {
+                                        agent
+                                            .finalize_tool_call_result(
+                                                &call.name,
+                                                &call.arguments,
+                                                output.aggregated_output.clone().into(),
+                                            )
+                                            .await
+                                    }
+                                    Err(error) => {
+                                        memory::try_append_decision(
+                                            &memory_dir,
+                                            memory::DecisionEntry::new(
+                                                memory::DecisionKind::ToolFailure,
+                                                error.to_string(),
+                                            )
+                                            .with_tool(call.name.clone())
+                                            .with_session(session_id.clone()),
+                                        );
+                                        format!("Tool error after sandbox escalation: {error}")
+                                            .into()
+                                    }
+                                }
+                            }
+                            PermissionPreflight::Denied(message) => {
+                                agent
+                                    .finalize_tool_call_result(
+                                        &call.name,
+                                        &call.arguments,
+                                        format!(
+                                            "{denial_output}\n\nSandbox retry denied: {message}"
+                                        )
+                                        .into(),
+                                    )
+                                    .await
+                            }
+                            PermissionPreflight::NotRequired => {
+                                agent
+                                    .finalize_tool_call_result(
+                                        &call.name,
+                                        &call.arguments,
+                                        denial_output.into(),
+                                    )
+                                    .await
+                            }
+                        }
+                    }
+                }
+                Err(e) => {
+                    memory::try_append_decision(
+                        &memory_dir,
+                        memory::DecisionEntry::new(
+                            memory::DecisionKind::ToolFailure,
+                            format!("{e}"),
+                        )
+                        .with_tool(call.name.clone())
+                        .with_session(session_id),
+                    );
+                    format!("工具错误: {e}").into()
+                }
+            }
+        };
 
         // confirm/clarify：astro_hitl → 同回合 park
         if let Some(hitl) = parse_astro_hitl(result.text()) {
             if let Some(gate) = hitl_gate {
-                result = park_astro_hitl(gate, tx, run_id, &call.id, hitl)
+                result = park_astro_hitl(gate, session.as_ref(), turn_context, &call.id, hitl)
                     .await?
                     .into();
             } else {
@@ -1588,19 +1468,20 @@ pub(crate) async fn execute_tools_concurrent(
     step_context: Arc<StepContext>,
     calls: &[types::ParsedToolCall],
     pause: &Arc<PauseControl>,
-    cancellation_token: CancellationToken,
 ) -> Option<Vec<types::ToolOutput>> {
     if pause.is_cancelled() || !pause.wait_if_paused().await {
         return None;
     }
 
+    let turn_context = Arc::clone(&step_context.turn);
     let runtime = ToolCallRuntime::new(Arc::clone(session), step_context);
 
     let mut join_set = JoinSet::new();
     for (idx, call) in calls.iter().cloned().enumerate() {
         let runtime = runtime.clone();
-        let cancellation_token = cancellation_token.child_token();
+        let child_permit = turn_context.track_child();
         join_set.spawn_blocking(move || {
+            let _child_permit = child_permit;
             let tool_name = call.name.clone();
             let result = if call.args_parse_error {
                 Ok(types::ToolOutput::from(format!(
@@ -1611,7 +1492,7 @@ pub(crate) async fn execute_tools_concurrent(
                         .unwrap_or("invalid json")
                 )))
             } else {
-                runtime.handle_tool_call(call, cancellation_token)
+                runtime.handle_tool_call(call, CancellationToken::new())
             };
             (idx, tool_name, result)
         });
@@ -1669,664 +1550,9 @@ pub(crate) async fn execute_tools_concurrent(
 mod tests {
     use super::*;
     use serde_json::json;
-    use std::collections::BTreeMap;
 
     fn term(cmd: &str) -> serde_json::Value {
         json!({ "command": cmd })
-    }
-
-    async fn approve_next_interrupt(gate: Arc<HitlGate>) {
-        let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(1);
-        loop {
-            if let Some(interrupt) = gate.pending_interrupts().await.into_iter().next() {
-                gate.resolve(&[crate::control::interrupt::ResumeItem {
-                    interrupt_id: interrupt.id,
-                    status: "resolved".into(),
-                    payload_json: r#"{"approved":true}"#.into(),
-                }])
-                .await
-                .unwrap();
-                return;
-            }
-            assert!(
-                tokio::time::Instant::now() < deadline,
-                "sandbox approval was not requested"
-            );
-            tokio::time::sleep(std::time::Duration::from_millis(5)).await;
-        }
-    }
-
-    #[test]
-    fn tool_orchestrator_keeps_permission_preflight_order() {
-        assert_eq!(
-            ToolOrchestrator::permission_stages(),
-            &[
-                PermissionStage::Mcp,
-                PermissionStage::WorkspaceWrite,
-                PermissionStage::InProcessNetwork,
-            ]
-        );
-    }
-
-    #[test]
-    fn tool_orchestrator_aggregates_one_shot_grants() {
-        let dir = tempfile::tempdir().unwrap();
-        let settings = memory::LoadedPermissionSettings::default();
-        let request = types::PermissionRequest {
-            request_id: "request-1".into(),
-            session_id: "session-1".into(),
-            turn_id: Some("turn-1".into()),
-            tool_call_id: "call-1".into(),
-            tool_name: "web_fetch".into(),
-            summary: "grant one call".into(),
-            capabilities: Vec::new(),
-            reason: types::PermissionReason::NetworkDisabled,
-            requested_scope: types::GrantScope::Once,
-            command_preview: None,
-            affected_paths: Vec::new(),
-            network_hosts: vec!["example.com".into()],
-        };
-        let call = types::ParsedToolCall::with_id(
-            "call-1",
-            "web_fetch",
-            json!({"url": "https://example.com"}),
-        );
-        let mut context = ToolRunContext::default();
-
-        for stage in [
-            PermissionStage::WorkspaceWrite,
-            PermissionStage::InProcessNetwork,
-        ] {
-            let receipt = PermissionAuditReceipt::new(
-                dir.path().to_path_buf(),
-                &settings,
-                types::WORKSPACE_PROFILE.to_string(),
-                request.clone(),
-            );
-            ToolOrchestrator::apply_preflight(
-                &mut context,
-                stage,
-                &call,
-                PermissionPreflight::Granted(Box::new(receipt)),
-            )
-            .unwrap();
-        }
-
-        assert!(context.workspace_write_grant);
-        assert!(!context.network_grant.is_empty());
-        assert_eq!(context.permission_audits.len(), 2);
-    }
-
-    fn managed_network_settings(
-        global_enabled: bool,
-        leaf_enabled: bool,
-    ) -> memory::LoadedPermissionSettings {
-        let mut settings = memory::LoadedPermissionSettings {
-            network_proxy_enabled: global_enabled,
-            ..Default::default()
-        };
-        settings.selection.profile_id = "leaf".into();
-        settings.permissions.profiles.insert(
-            "parent".into(),
-            types::PermissionProfile {
-                extends: Some(types::WORKSPACE_PROFILE.into()),
-                network: types::NetworkPolicy {
-                    enabled: true,
-                    domains: BTreeMap::from([(
-                        "parent.example".into(),
-                        types::NetworkAccess::Allow,
-                    )]),
-                    ..Default::default()
-                },
-                ..Default::default()
-            },
-        );
-        settings.permissions.profiles.insert(
-            "leaf".into(),
-            types::PermissionProfile {
-                extends: Some("parent".into()),
-                network: types::NetworkPolicy {
-                    enabled: leaf_enabled,
-                    domains: BTreeMap::from([("leaf.example".into(), types::NetworkAccess::Allow)]),
-                    ..Default::default()
-                },
-                ..Default::default()
-            },
-        );
-        settings
-    }
-
-    #[test]
-    fn managed_network_uses_only_selected_custom_leaf_policy() {
-        let terminal = types::ParsedToolCall::new("terminal", json!({"command": "true"}));
-        let mut settings = managed_network_settings(true, false);
-
-        assert!(managed_network_policy_for_call(&terminal, &settings, "leaf").is_none());
-        settings
-            .permissions
-            .profiles
-            .get_mut("leaf")
-            .unwrap()
-            .network
-            .enabled = true;
-        let policy = managed_network_policy_for_call(&terminal, &settings, "leaf").unwrap();
-        assert!(policy.domains.contains_key("leaf.example"));
-        assert!(!policy.domains.contains_key("parent.example"));
-    }
-
-    #[test]
-    fn managed_network_gate_excludes_disabled_full_access_and_non_run_calls() {
-        let settings = managed_network_settings(true, true);
-        for call in [
-            types::ParsedToolCall::new("terminal", json!({"action": "status", "id": "1"})),
-            types::ParsedToolCall::new("web_fetch", json!({"url": "https://leaf.example"})),
-        ] {
-            assert!(managed_network_policy_for_call(&call, &settings, "leaf").is_none());
-        }
-        let terminal = types::ParsedToolCall::new("terminal", json!({"command": "true"}));
-        assert!(managed_network_policy_for_call(
-            &terminal,
-            &settings,
-            types::DANGER_FULL_ACCESS_PROFILE
-        )
-        .is_none());
-        assert!(managed_network_policy_for_call(
-            &terminal,
-            &managed_network_settings(false, true),
-            "leaf"
-        )
-        .is_none());
-    }
-
-    #[test]
-    fn managed_network_gate_accepts_foreground_process_tools() {
-        let settings = managed_network_settings(true, true);
-        for call in [
-            types::ParsedToolCall::new("terminal", json!({"command": "true"})),
-            types::ParsedToolCall::new(
-                "terminal",
-                json!({"action": "run", "command": "true", "background": true}),
-            ),
-            types::ParsedToolCall::new("code_exec", json!({"language": "python", "code": "1"})),
-        ] {
-            assert!(managed_network_policy_for_call(&call, &settings, "leaf").is_some());
-        }
-    }
-
-    #[test]
-    fn escalated_sandbox_attempt_preserves_restricted_network() {
-        let dir = tempfile::tempdir().unwrap();
-        let initial = SandboxAttempt::initial(false, tools::InProcessNetworkGrant::default(), None);
-        let escalated = initial.escalated(dir.path()).unwrap();
-        let policy = escalated
-            .sandbox_policy
-            .expect("escalated attempt should carry a complete policy");
-
-        assert_eq!(policy.mode, types::SandboxMode::WorkspaceWrite);
-        assert_eq!(policy.writable_roots[0], dir.path().canonicalize().unwrap());
-        assert!(!policy.network_access);
-    }
-
-    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-    async fn tool_orchestrator_selects_initial_sandbox_policy_from_step_router() {
-        let dir = tempfile::tempdir().unwrap();
-        let project = dir.path().join("project");
-        std::fs::create_dir_all(&project).unwrap();
-        memory::set_permission_preset(dir.path(), types::PermissionPreset::ReadOnly).unwrap();
-        let session = Arc::new(
-            AgentLoop::with_session_id(
-                crate::runtime::Config::with_defaults(dir.path().to_path_buf()),
-                "orchestrator-sandbox-selection-test".into(),
-            )
-            .unwrap(),
-        );
-        session.set_project_root(Some(project.clone()));
-        let step_context = session.capture_step_context().await.unwrap();
-        let (tx, _rx) = mpsc::channel(8);
-        let orchestrator = ToolOrchestrator::new(&session, &step_context, &tx, "run-1", None);
-        let call = types::ParsedToolCall::with_id("call-1", "terminal", json!({"command": "pwd"}));
-        let attempt = SandboxAttempt::initial(true, tools::InProcessNetworkGrant::default(), None);
-
-        let policy = orchestrator
-            .sandbox_policy_for_attempt(&call, &attempt)
-            .unwrap()
-            .expect("terminal should select an initial sandbox policy");
-
-        assert_eq!(policy.mode, types::SandboxMode::WorkspaceWrite);
-        assert_eq!(policy.writable_roots, vec![project.canonicalize().unwrap()]);
-        assert!(!policy.network_access);
-    }
-
-    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-    async fn sandbox_policy_for_attempt_carries_managed_network_context() {
-        let dir = tempfile::tempdir().unwrap();
-        let session = Arc::new(
-            AgentLoop::with_session_id(
-                crate::runtime::Config::with_defaults(dir.path().to_path_buf()),
-                "orchestrator-managed-network-test".into(),
-            )
-            .unwrap(),
-        );
-        let step_context = session.capture_step_context().await.unwrap();
-        let (tx, _rx) = mpsc::channel(8);
-        let orchestrator = ToolOrchestrator::new(&session, &step_context, &tx, "run-1", None);
-        let call = types::ParsedToolCall::new("terminal", json!({"command": "true"}));
-        let started = Arc::new(
-            network_proxy::StartedNetworkProxy::start(Arc::new(
-                network_proxy::NetworkProxyState::new(types::NetworkPolicy {
-                    enabled: true,
-                    domains: BTreeMap::from([("example.com".into(), types::NetworkAccess::Allow)]),
-                    ..Default::default()
-                })
-                .unwrap(),
-            ))
-            .await
-            .unwrap(),
-        );
-        let attempt = SandboxAttempt::initial(
-            false,
-            tools::InProcessNetworkGrant::default(),
-            Some(Arc::clone(&started)),
-        );
-
-        let policy = orchestrator
-            .sandbox_policy_for_attempt(&call, &attempt)
-            .unwrap()
-            .unwrap();
-        assert_eq!(
-            policy.managed_network.unwrap().loopback_ports,
-            vec![started.proxy().http_addr().port()]
-        );
-
-        let escalated = attempt.escalated(dir.path()).unwrap();
-        assert!(Arc::ptr_eq(
-            escalated.managed_network.as_ref().unwrap(),
-            &started
-        ));
-        let policy = orchestrator
-            .sandbox_policy_for_attempt(&call, &escalated)
-            .unwrap()
-            .unwrap();
-        assert_eq!(
-            policy.managed_network.unwrap().loopback_ports,
-            vec![started.proxy().http_addr().port()]
-        );
-    }
-
-    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-    async fn tool_orchestrator_skips_sandbox_selection_for_non_process_tool() {
-        let dir = tempfile::tempdir().unwrap();
-        let session = Arc::new(
-            AgentLoop::with_session_id(
-                crate::runtime::Config::with_defaults(dir.path().to_path_buf()),
-                "orchestrator-non-process-test".into(),
-            )
-            .unwrap(),
-        );
-        session.tool_registry_mut().register_dynamic(
-            types::ToolEntry {
-                name: "non_process_probe".into(),
-                toolset: "core".into(),
-                description: "does not launch a command".into(),
-                schema: json!({"type": "object", "properties": {}}),
-                check_fn: None,
-                icon: "wrench",
-                ..types::ToolEntry::lifecycle_defaults()
-            },
-            Arc::new(|_name, _args| Box::pin(async { Ok(types::ToolOutput::from("ok")) })),
-        );
-        session.set_permission_profile(Some("custom-profile".into()));
-        let step_context = session.capture_step_context().await.unwrap();
-        let (tx, _rx) = mpsc::channel(8);
-        let orchestrator = ToolOrchestrator::new(&session, &step_context, &tx, "run-1", None);
-        let call = types::ParsedToolCall::with_id("call-1", "non_process_probe", json!({}));
-        let attempt = SandboxAttempt::initial(false, tools::InProcessNetworkGrant::default(), None);
-
-        let policy = orchestrator
-            .sandbox_policy_for_attempt(&call, &attempt)
-            .unwrap();
-
-        assert!(policy.is_none());
-    }
-
-    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-    async fn tool_orchestrator_run_dispatches_against_sampling_step() {
-        let dir = tempfile::tempdir().unwrap();
-        let session = Arc::new(
-            AgentLoop::with_session_id(
-                crate::runtime::Config::with_defaults(dir.path().to_path_buf()),
-                "orchestrator-step-test".into(),
-            )
-            .unwrap(),
-        );
-        fn entry() -> types::ToolEntry {
-            types::ToolEntry {
-                name: "orchestrator_probe".into(),
-                toolset: "core".into(),
-                description: "prove orchestrator dispatch uses the sampling step".into(),
-                schema: json!({"type": "object", "properties": {}}),
-                check_fn: None,
-                icon: "test-tube",
-                ..types::ToolEntry::lifecycle_defaults()
-            }
-        }
-        session.tool_registry_mut().register_dynamic(
-            entry(),
-            Arc::new(|_name, _args| Box::pin(async { Ok("sampled".into()) })),
-        );
-        session.set_current_turn_id("turn-orchestrator").await;
-        let step_context = session.capture_step_context().await.unwrap();
-        session.tool_registry_mut().register_dynamic(
-            entry(),
-            Arc::new(|_name, _args| Box::pin(async { Ok("hot-reloaded".into()) })),
-        );
-        let (tx, _rx) = mpsc::channel(4);
-        let orchestrator = ToolOrchestrator::new(&session, &step_context, &tx, "run-1", None);
-
-        let result = orchestrator
-            .run(&types::ParsedToolCall::with_id(
-                "call-1",
-                "orchestrator_probe",
-                json!({}),
-            ))
-            .await
-            .unwrap();
-
-        assert_eq!(result.output.text(), "sampled");
-    }
-
-    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-    async fn tool_orchestrator_run_stops_hardline_terminal_before_dispatch() {
-        let dir = tempfile::tempdir().unwrap();
-        let session = Arc::new(
-            AgentLoop::with_session_id(
-                crate::runtime::Config::with_defaults(dir.path().to_path_buf()),
-                "orchestrator-hardline-test".into(),
-            )
-            .unwrap(),
-        );
-        session.set_current_turn_id("turn-hardline").await;
-        let step_context = session.capture_step_context().await.unwrap();
-        let (tx, _rx) = mpsc::channel(4);
-        let orchestrator = ToolOrchestrator::new(&session, &step_context, &tx, "run-1", None);
-
-        let result = orchestrator
-            .run(&types::ParsedToolCall::with_id(
-                "call-1",
-                "terminal",
-                term("mkfs.astro-test /dev/not-real"),
-            ))
-            .await
-            .unwrap();
-
-        assert!(result.output.text().contains("denied by policy"));
-        assert!(result.output.text().contains("dangerous"));
-    }
-
-    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-    async fn tool_orchestrator_finalizes_typed_denial_without_retrying() {
-        let dir = tempfile::tempdir().unwrap();
-        let session = Arc::new(
-            AgentLoop::with_session_id(
-                crate::runtime::Config::with_defaults(dir.path().to_path_buf()),
-                "orchestrator-denial-test".into(),
-            )
-            .unwrap(),
-        );
-        session
-            .hook_bus()
-            .register(hooks::TRANSFORM_TOOL_RESULT, |_payload| {
-                hooks::HookOutcome::ReplaceText("[redacted-tool-denial]".into())
-            });
-        let attempts = Arc::new(std::sync::atomic::AtomicUsize::new(0));
-        let handler_attempts = Arc::clone(&attempts);
-        session.tool_registry_mut().register_dynamic(
-            types::ToolEntry {
-                name: "sandbox_denial_probe".into(),
-                toolset: "core".into(),
-                description: "return a typed sandbox denial".into(),
-                schema: json!({"type": "object", "properties": {}}),
-                check_fn: None,
-                icon: "shield-alert",
-                ..types::ToolEntry::lifecycle_defaults()
-            },
-            Arc::new(move |_name, _args| {
-                handler_attempts.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-                Box::pin(async {
-                    Err(anyhow::Error::new(sandbox::SandboxErr::Denied {
-                        output: Box::new(sandbox::ExecToolCallOutput::new(
-                            1,
-                            "partial stdout",
-                            "Operation not permitted",
-                        )),
-                        network_policy_decision: None,
-                    }))
-                })
-            }),
-        );
-        session.set_current_turn_id("turn-denial").await;
-        let step_context = session.capture_step_context().await.unwrap();
-        let (tx, _rx) = mpsc::channel(4);
-        let orchestrator = ToolOrchestrator::new(&session, &step_context, &tx, "run-1", None);
-
-        let result = orchestrator
-            .run(&types::ParsedToolCall::with_id(
-                "call-1",
-                "sandbox_denial_probe",
-                json!({}),
-            ))
-            .await
-            .unwrap();
-
-        assert_eq!(result.output.text(), "[redacted-tool-denial]");
-        assert_eq!(attempts.load(std::sync::atomic::Ordering::SeqCst), 1);
-    }
-
-    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-    async fn tool_orchestrator_does_not_escalate_structured_network_denial_as_filesystem() {
-        let dir = tempfile::tempdir().unwrap();
-        let session = Arc::new(
-            AgentLoop::with_session_id(
-                crate::runtime::Config::with_defaults(dir.path().to_path_buf()),
-                "orchestrator-network-denial-test".into(),
-            )
-            .unwrap(),
-        );
-        let approval_requests = Arc::new(std::sync::atomic::AtomicUsize::new(0));
-        let hook_requests = Arc::clone(&approval_requests);
-        session
-            .hook_bus()
-            .register(hooks::PERMISSION_REQUEST, move |_payload| {
-                hook_requests.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-                hooks::HookOutcome::Continue
-            });
-        let attempts = Arc::new(std::sync::atomic::AtomicUsize::new(0));
-        let handler_attempts = Arc::clone(&attempts);
-        session.tool_registry_mut().register_dynamic(
-            types::ToolEntry {
-                name: "network_denial_probe".into(),
-                toolset: "core".into(),
-                description: "return a structured network-policy denial".into(),
-                schema: json!({"type": "object", "properties": {}}),
-                check_fn: None,
-                icon: "wifi-off",
-                ..types::ToolEntry::lifecycle_defaults()
-            },
-            Arc::new(move |_name, _args| {
-                handler_attempts.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-                Box::pin(async {
-                    Err(anyhow::Error::new(sandbox::SandboxErr::Denied {
-                        output: Box::new(sandbox::ExecToolCallOutput::new(
-                            1,
-                            "",
-                            "network request blocked",
-                        )),
-                        network_policy_decision: Some(types::NetworkPolicyDecisionPayload {
-                            decision: types::NetworkPolicyDecision::Ask,
-                            source: types::NetworkDecisionSource::Decider,
-                            protocol: Some(types::NetworkApprovalProtocol::Https),
-                            host: Some("example.com".into()),
-                            reason: Some("not_allowed".into()),
-                            port: Some(443),
-                        }),
-                    }))
-                })
-            }),
-        );
-        session.set_current_turn_id("turn-network-denial").await;
-        let step_context = session.capture_step_context().await.unwrap();
-        let (tx, _rx) = mpsc::channel(4);
-        let orchestrator = ToolOrchestrator::new(&session, &step_context, &tx, "run-1", None);
-
-        let result = orchestrator
-            .run(&types::ParsedToolCall::with_id(
-                "call-1",
-                "network_denial_probe",
-                json!({}),
-            ))
-            .await
-            .unwrap();
-
-        assert!(result.output.text().contains("network request blocked"));
-        assert_eq!(attempts.load(std::sync::atomic::Ordering::SeqCst), 1);
-        assert_eq!(
-            approval_requests.load(std::sync::atomic::Ordering::SeqCst),
-            0,
-            "network denial must not request filesystem escalation"
-        );
-    }
-
-    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-    async fn tool_orchestrator_retries_typed_denial_once_after_fresh_approval() {
-        let dir = tempfile::tempdir().unwrap();
-        let session = Arc::new(
-            AgentLoop::with_session_id(
-                crate::runtime::Config::with_defaults(dir.path().to_path_buf()),
-                "orchestrator-retry-test".into(),
-            )
-            .unwrap(),
-        );
-        let attempts = Arc::new(std::sync::atomic::AtomicUsize::new(0));
-        let handler_attempts = Arc::clone(&attempts);
-        session.tool_registry_mut().register_dynamic(
-            types::ToolEntry {
-                name: "sandbox_retry_probe".into(),
-                toolset: "core".into(),
-                description: "deny the first sandbox attempt".into(),
-                schema: json!({"type": "object", "properties": {}}),
-                check_fn: None,
-                icon: "shield-alert",
-                ..types::ToolEntry::lifecycle_defaults()
-            },
-            Arc::new(move |_name, _args| {
-                let attempt = handler_attempts.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-                Box::pin(async move {
-                    if attempt == 0 {
-                        Err(anyhow::Error::new(sandbox::SandboxErr::Denied {
-                            output: Box::new(sandbox::ExecToolCallOutput::new(
-                                1,
-                                "",
-                                "Operation not permitted",
-                            )),
-                            network_policy_decision: None,
-                        }))
-                    } else {
-                        Ok(types::ToolOutput::from("retried with escalation"))
-                    }
-                })
-            }),
-        );
-        session.set_current_turn_id("turn-retry").await;
-        let step_context = session.capture_step_context().await.unwrap();
-        let (tx, _rx) = mpsc::channel(8);
-        let gate = HitlGate::new(session.session_id().to_string());
-        let resolver = tokio::spawn(approve_next_interrupt(Arc::clone(&gate)));
-        let orchestrator =
-            ToolOrchestrator::new(&session, &step_context, &tx, "run-1", Some(&gate));
-
-        let result = orchestrator
-            .run(&types::ParsedToolCall::with_id(
-                "call-1",
-                "sandbox_retry_probe",
-                json!({}),
-            ))
-            .await
-            .unwrap();
-        resolver.await.unwrap();
-
-        assert_eq!(result.output.text(), "retried with escalation");
-        assert_eq!(attempts.load(std::sync::atomic::Ordering::SeqCst), 2);
-    }
-
-    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-    async fn tool_orchestrator_does_not_retry_a_second_sandbox_denial() {
-        let dir = tempfile::tempdir().unwrap();
-        let session = Arc::new(
-            AgentLoop::with_session_id(
-                crate::runtime::Config::with_defaults(dir.path().to_path_buf()),
-                "orchestrator-retry-cap-test".into(),
-            )
-            .unwrap(),
-        );
-        let approval_requests = Arc::new(std::sync::atomic::AtomicUsize::new(0));
-        let hook_requests = Arc::clone(&approval_requests);
-        session
-            .hook_bus()
-            .register(hooks::PERMISSION_REQUEST, move |_payload| {
-                hook_requests.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-                hooks::HookOutcome::Continue
-            });
-        let attempts = Arc::new(std::sync::atomic::AtomicUsize::new(0));
-        let handler_attempts = Arc::clone(&attempts);
-        session.tool_registry_mut().register_dynamic(
-            types::ToolEntry {
-                name: "sandbox_retry_cap_probe".into(),
-                toolset: "core".into(),
-                description: "deny every sandbox attempt".into(),
-                schema: json!({"type": "object", "properties": {}}),
-                check_fn: None,
-                icon: "shield-alert",
-                ..types::ToolEntry::lifecycle_defaults()
-            },
-            Arc::new(move |_name, _args| {
-                let attempt =
-                    handler_attempts.fetch_add(1, std::sync::atomic::Ordering::SeqCst) + 1;
-                Box::pin(async move {
-                    Err(anyhow::Error::new(sandbox::SandboxErr::Denied {
-                        output: Box::new(sandbox::ExecToolCallOutput::new(
-                            1,
-                            "",
-                            format!("Operation not permitted on attempt {attempt}"),
-                        )),
-                        network_policy_decision: None,
-                    }))
-                })
-            }),
-        );
-        session.set_current_turn_id("turn-retry-cap").await;
-        let step_context = session.capture_step_context().await.unwrap();
-        let (tx, _rx) = mpsc::channel(8);
-        let gate = HitlGate::new(session.session_id().to_string());
-        let resolver = tokio::spawn(approve_next_interrupt(Arc::clone(&gate)));
-        let orchestrator =
-            ToolOrchestrator::new(&session, &step_context, &tx, "run-1", Some(&gate));
-
-        let result = orchestrator
-            .run(&types::ParsedToolCall::with_id(
-                "call-1",
-                "sandbox_retry_cap_probe",
-                json!({}),
-            ))
-            .await
-            .unwrap();
-        resolver.await.unwrap();
-
-        assert!(result.output.text().contains("attempt 2"));
-        assert_eq!(attempts.load(std::sync::atomic::Ordering::SeqCst), 2);
-        assert_eq!(
-            approval_requests.load(std::sync::atomic::Ordering::SeqCst),
-            1
-        );
     }
 
     #[test]
@@ -2345,14 +1571,6 @@ mod tests {
             "terminal",
             &term("rm -rf /tmp/project")
         ));
-    }
-
-    #[test]
-    fn tool_call_runtime_preserves_hardline_defense() {
-        let denial =
-            ToolCallRuntime::hardline_denial("terminal", &term("dd if=/dev/zero of=/dev/sda"))
-                .expect("hardline commands must remain denied after routing");
-        assert!(denial.text().contains("dangerous"));
     }
 
     #[test]
@@ -2491,61 +1709,5 @@ mod tests {
         assert_eq!(events[0].event, memory::PermissionAuditKind::Applied);
         assert_eq!(events[0].result.as_deref(), Some("success"));
         assert_eq!(events[0].duration_ms, Some(12));
-    }
-
-    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-    async fn concurrent_tools_use_session_router_and_hooks() {
-        let dir = tempfile::tempdir().unwrap();
-        let session = Arc::new(
-            AgentLoop::with_session_id(
-                crate::runtime::Config::with_defaults(dir.path().to_path_buf()),
-                "parallel-router-test".into(),
-            )
-            .unwrap(),
-        );
-        session.tool_registry_mut().register_dynamic(
-            types::ToolEntry {
-                name: "parallel_probe".into(),
-                toolset: "core".into(),
-                description: "prove concurrent calls use the session router".into(),
-                schema: json!({"type": "object", "properties": {}}),
-                check_fn: None,
-                icon: "test-tube",
-                ..types::ToolEntry::lifecycle_defaults()
-            },
-            Arc::new(|_name, _args| Box::pin(async { Ok(types::ToolOutput::from("routed")) })),
-        );
-        let saw_post_tool = Arc::new(std::sync::atomic::AtomicBool::new(false));
-        {
-            let saw_post_tool = Arc::clone(&saw_post_tool);
-            session
-                .hook_bus()
-                .register(hooks::POST_TOOL_USE, move |payload| {
-                    if payload.tool_name.as_deref() == Some("parallel_probe") {
-                        saw_post_tool.store(true, std::sync::atomic::Ordering::SeqCst);
-                    }
-                    hooks::HookOutcome::Continue
-                });
-        }
-        session.set_current_turn_id("turn-parallel").await;
-        let step_context = session.capture_step_context().await.unwrap();
-        assert!(step_context.advertises_tool("parallel_probe"));
-
-        let outcomes = execute_tools_concurrent(
-            &session,
-            step_context,
-            &[types::ParsedToolCall::with_id(
-                "call-parallel",
-                "parallel_probe",
-                json!({}),
-            )],
-            &PauseControl::new(),
-            CancellationToken::new(),
-        )
-        .await
-        .unwrap();
-
-        assert_eq!(outcomes[0].text(), "routed");
-        assert!(saw_post_tool.load(std::sync::atomic::Ordering::SeqCst));
     }
 }

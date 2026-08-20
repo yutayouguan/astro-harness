@@ -10,10 +10,15 @@
 //! - `SessionState.history` 中相邻消息不得连续出现相同角色（见 `validate_message_order`）
 //! - 取消信号（`CancelSignal`）在工具调用前后均会检查，已取消则立即中断
 
+use std::collections::HashMap;
+use std::io;
 use std::path::PathBuf;
-use std::sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex as StdMutex, MutexGuard, OnceLock};
 
-use tokio::sync::Mutex as TokioMutex;
+use agent_protocol::{Event, EventMsg};
+use agent_rollout::{RolloutItem, RolloutRecorder};
+use tokio::sync::{watch, Mutex as TokioMutex};
 use uuid::Uuid;
 
 use ::session::{ConversationStore, SessionStore};
@@ -30,15 +35,19 @@ use crate::runtime::session::{hydrate_history, resolve_session_project_root};
 use crate::tasks::ActiveTurn;
 use session_services::SessionServices;
 
+mod astro_thread;
 pub mod budget;
 pub(crate) mod compression_state;
 mod context_maintenance;
+pub(crate) mod event_identity;
 pub(crate) mod model_ctx;
 mod recording;
 mod session;
+pub(crate) mod session_io;
 pub(crate) mod session_services;
 pub(crate) mod session_state;
 pub(crate) mod step_context;
+pub(crate) mod submission_loop;
 mod system_prompt;
 mod tool_dispatch;
 pub(crate) mod tool_router;
@@ -49,6 +58,8 @@ mod turn_lifecycle;
 pub(crate) mod usage;
 mod validate;
 
+pub use astro_thread::AstroThread;
+pub use session_io::AgentStatus;
 pub(crate) use step_context::StepContext;
 pub use tool_dispatch::ToolCallError;
 pub(crate) use tool_dispatch::ToolExecutionGrants;
@@ -110,85 +121,54 @@ impl Config {
     }
 }
 
-/// Mutable session configuration captured by each turn and tool invocation.
-///
-/// Codex keeps the equivalent `SessionConfiguration` inside session state. Astro
-/// uses a synchronous lock because the current built-in tool bridge constructs
-/// owned snapshots before entering its current-thread executor.
-#[derive(Clone)]
-pub(crate) struct SessionConfiguration {
-    pub(crate) model_ctx: model_ctx::ModelContext,
-    pub(crate) temperature: f32,
-    pub(crate) additional_params: Value,
-    pub(crate) hook_runtime: Arc<::hooks::HookRuntime>,
-    pub(crate) project_root: Option<PathBuf>,
-    pub(crate) permission_profile: Option<String>,
-    pub(crate) mcp_config_override: Vec<mcp::McpServerConfig>,
-    pub(crate) skill_config_overrides: Vec<(PathBuf, bool)>,
-}
-
-impl SessionConfiguration {
-    fn new(config: &Config) -> Self {
-        Self {
-            model_ctx: model_ctx::ModelContext::default(),
-            temperature: config.temperature,
-            additional_params: config.additional_params.clone(),
-            hook_runtime: Arc::new(::hooks::HookRuntime::new()),
-            project_root: resolve_session_project_root(),
-            permission_profile: None,
-            mcp_config_override: Vec::new(),
-            skill_config_overrides: Vec::new(),
-        }
-    }
-
-    fn replace_hook_bus(&mut self, bus: Arc<::hooks::PluginHookBus>) {
-        let current = &self.hook_runtime;
-        if Arc::ptr_eq(&current.plugin, &bus) {
-            return;
-        }
-        self.hook_runtime = Arc::new(::hooks::HookRuntime {
-            plugin: bus,
-            gateway: Arc::clone(&current.gateway),
-            shell: Arc::clone(&current.shell),
-            ui_slot: current.ui_slot.clone(),
-        });
-    }
-}
-
 /// Session runtime: owns conversation state, memory, tools, and provider credentials.
 ///
 /// Input enters through `start_or_steer_turn`; a `SessionTask` owns the model/tool loop.
 pub struct Session {
     pub(crate) config: Config,
     pub(crate) session_id: String,
+    pub(crate) agent_id: String,
+    pub(crate) workspace_dir: PathBuf,
 
     // ── 提取的子结构体 ──────────────────────────────────────
-    /// Codex-style mutable provider, permission, project and hook configuration.
-    pub(crate) session_configuration: RwLock<SessionConfiguration>,
     /// Codex-style session-wide mutable runtime state.
-    pub(crate) state: TokioMutex<session_state::SessionState>,
+    pub(crate) state: StdMutex<session_state::SessionState>,
     /// Serializes persisted conversation writes with their in-memory history mirror.
     pub(crate) conversation_write_lock: TokioMutex<()>,
     /// Serializes SessionStart/UserPromptSubmit admission in submission order.
     pub(crate) admission_lock: TokioMutex<()>,
 
     // ── 会话级服务与注册表 ──────────────────────────
-    pub(crate) memory: RwLock<MemoryManager>,
     pub(crate) services: SessionServices,
-    pub(crate) tool_registry: RwLock<ToolRegistry>,
     pub(crate) mcp_hub: Arc<TokioMutex<McpHub>>,
-    /// Per-thread MCP overlay from a Codex custom agent file.
-    /// 最近一次成功 reload 后的已连接 Server instructions 快照。
-    pub(crate) mcp_instructions: RwLock<Vec<mcp::McpServerInstructions>>,
 
     // ── 注入的依赖 ─────────────────────────────────────────
+    /// Shared Plugin/Gateway/Shell hook runtime.
+    hook_runtime: StdMutex<Arc<::hooks::HookRuntime>>,
     /// First-class subagent thread dispatcher.
     pub(crate) execution: Arc<dyn tools::AgentThreadDispatch>,
 
     // ── 轻量状态 ───────────────────────────────────────────
     pub(crate) cancel: CancelSignal,
+    /// Long-lived controls reused by actor-submitted turns and exposed to adapters.
+    thread_controls: StdMutex<Option<ThreadControls>>,
+    thread_provider_options: StdMutex<ThreadProviderOptions>,
     /// Codex-style single-active-task registry for this session.
     pub(crate) active_turn: TokioMutex<Option<ActiveTurn>>,
+    /// Serializes abort-old -> install -> bind -> start admission for session tasks.
+    pub(crate) task_admission: TokioMutex<()>,
+    /// Persistent completion signals survive `RunningTask` being taken for abort.
+    pub(crate) task_completions: TokioMutex<HashMap<String, tokio_util::sync::CancellationToken>>,
+    /// Bound atomically once by [`AstroThread`] for session runtime I/O.
+    runtime_io: OnceLock<RuntimeIoBindings>,
+    /// Serializes rollout persistence, status reduction, and live delivery.
+    event_dispatch: TokioMutex<()>,
+    /// Exact-turn event taps registered before task installation.
+    turn_event_taps: TokioMutex<HashMap<String, Vec<async_channel::Sender<Event>>>>,
+    /// Guards one-time release of task, hook, MCP, and terminal resources.
+    runtime_shutdown: AtomicBool,
+    /// Shared completion observed by every concurrent shutdown caller.
+    runtime_shutdown_complete: tokio_util::sync::CancellationToken,
 }
 
 /// Compatibility name retained while downstream crates migrate to [`Config`].
@@ -196,6 +176,51 @@ pub type AgentConfig = Config;
 
 /// Compatibility name retained while downstream crates migrate to [`Session`].
 pub type AgentLoop = Session;
+
+struct RuntimeIoBindings {
+    event_tx: async_channel::Sender<Event>,
+    status_tx: watch::Sender<AgentStatus>,
+    rollout: RolloutRecorder,
+}
+
+#[derive(Clone)]
+struct ThreadControls {
+    pause: Arc<providers::PauseControl>,
+    hitl_gate: Arc<crate::HitlGate>,
+}
+
+#[derive(Clone)]
+pub struct ThreadProviderOptions {
+    pub thinking_enabled: bool,
+    pub reasoning_effort: String,
+    pub max_tokens: u32,
+}
+
+impl Default for ThreadProviderOptions {
+    fn default() -> Self {
+        Self {
+            thinking_enabled: false,
+            reasoning_effort: "high".into(),
+            max_tokens: 8192,
+        }
+    }
+}
+
+#[derive(Clone)]
+/// Opaque rollback point for Chat request-scoped settings.
+pub struct SessionRequestSettingsSnapshot {
+    model_ctx: model_ctx::ModelContext,
+    interaction_mode: types::InteractionMode,
+    project_root: Option<PathBuf>,
+    temperature: f32,
+    additional_params: Value,
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum RuntimeIoBindError {
+    #[error("session runtime I/O is already bound")]
+    AlreadyBound,
+}
 
 impl Session {
     /// 以随机 UUID 作为 session_id 创建 Agent 实例。
@@ -222,8 +247,7 @@ impl Session {
         Self::from_memory(config, session_id, memory)
     }
 
-    /// Construct a short-lived child runtime that shares its root control
-    /// plane while retaining an independent session id and canonical path.
+    /// Construct a child agent runtime sharing the root Agent Graph control plane.
     pub fn with_session_id_for_agent_thread(
         config: Config,
         session_id: String,
@@ -270,7 +294,7 @@ impl Session {
         register_all(&mut tool_registry);
         tool_registry.reload_enabled_from_disk(Some(&agent_id));
         let mut mcp_hub_inner = McpHub::new();
-        mcp_hub_inner.set_agent_id(Some(agent_id));
+        mcp_hub_inner.set_agent_id(Some(agent_id.clone()));
         let mcp_hub = Arc::new(TokioMutex::new(mcp_hub_inner));
 
         let execution: Arc<dyn tools::AgentThreadDispatch> = Arc::new(
@@ -285,55 +309,293 @@ impl Session {
         let compression_policy: Box<dyn crate::compression::CompressionPolicy> = Box::new(
             crate::compression::StagedCompressionPolicy::from_config(&compression_cfg),
         );
+        let workspace_dir = memory.workspace_dir.clone();
+        let project_root = resolve_session_project_root();
 
-        let session_configuration = SessionConfiguration::new(&config);
+        let mut state = session_state::SessionState::new(history, project_root);
+        state.temperature = config.temperature;
+        state.additional_params = config.additional_params.clone();
+
         Ok(Session {
             config,
             session_id,
-            session_configuration: RwLock::new(session_configuration),
-            state: TokioMutex::new(session_state::SessionState::new(history)),
+            agent_id,
+            workspace_dir,
+            state: StdMutex::new(state),
             conversation_write_lock: TokioMutex::new(()),
             admission_lock: TokioMutex::new(()),
-            memory: RwLock::new(memory),
-            services: SessionServices::new(sessions, compression_policy, agent_control, agent_path),
-            tool_registry: RwLock::new(tool_registry),
+            services: SessionServices::new(
+                sessions,
+                compression_policy,
+                memory,
+                tool_registry,
+                agent_control,
+                agent_path,
+            ),
             mcp_hub,
-            mcp_instructions: RwLock::new(Vec::new()),
+            hook_runtime: StdMutex::new(Arc::new(::hooks::HookRuntime::new())),
             execution,
             cancel: CancelSignal::new(),
+            thread_controls: StdMutex::new(None),
+            thread_provider_options: StdMutex::new(ThreadProviderOptions::default()),
             active_turn: TokioMutex::new(None),
+            task_admission: TokioMutex::new(()),
+            task_completions: TokioMutex::new(HashMap::new()),
+            runtime_io: OnceLock::new(),
+            event_dispatch: TokioMutex::new(()),
+            turn_event_taps: TokioMutex::new(HashMap::new()),
+            runtime_shutdown: AtomicBool::new(false),
+            runtime_shutdown_complete: tokio_util::sync::CancellationToken::new(),
         })
     }
 
-    fn session_configuration(&self) -> RwLockReadGuard<'_, SessionConfiguration> {
-        self.session_configuration
-            .read()
-            .expect("session configuration lock poisoned")
+    pub(crate) fn bind_runtime_io(
+        &self,
+        event_tx: async_channel::Sender<Event>,
+        status_tx: watch::Sender<AgentStatus>,
+        rollout: RolloutRecorder,
+    ) -> Result<(), RuntimeIoBindError> {
+        self.runtime_io
+            .set(RuntimeIoBindings {
+                event_tx,
+                status_tx,
+                rollout,
+            })
+            .map_err(|_| RuntimeIoBindError::AlreadyBound)
     }
 
-    fn session_configuration_mut(&self) -> RwLockWriteGuard<'_, SessionConfiguration> {
-        self.session_configuration
-            .write()
-            .expect("session configuration lock poisoned")
+    /// Returns the stable pause and HITL controls used by actor-submitted turns.
+    pub fn ensure_thread_controls(&self) -> (Arc<providers::PauseControl>, Arc<crate::HitlGate>) {
+        let mut controls = self
+            .thread_controls
+            .lock()
+            .expect("thread controls mutex poisoned");
+        let controls = controls.get_or_insert_with(|| ThreadControls {
+            pause: providers::PauseControl::new(),
+            hitl_gate: crate::HitlGate::new(self.session_id.clone()),
+        });
+        (Arc::clone(&controls.pause), Arc::clone(&controls.hitl_gate))
+    }
+
+    pub fn set_thread_provider_options(&self, options: ThreadProviderOptions) {
+        *self
+            .thread_provider_options
+            .lock()
+            .expect("thread provider options mutex poisoned") = options;
+    }
+
+    pub fn thread_provider_options(&self) -> ThreadProviderOptions {
+        self.thread_provider_options
+            .lock()
+            .expect("thread provider options mutex poisoned")
+            .clone()
+    }
+
+    pub(crate) fn close_event_stream(&self) {
+        if let Some(bindings) = self.runtime_io.get() {
+            bindings.event_tx.close();
+        }
+    }
+
+    /// Persist one unified event according to rollout policy before making it live.
+    pub async fn send_event(&self, turn_id: &str, mut msg: EventMsg) {
+        let event_id = event_identity::normalize_event_msg(&mut msg, turn_id);
+        let event = Event { id: event_id, msg };
+        self.send_event_raw_with_persistence_and_hook(event, turn_id, true, async {})
+            .await;
+    }
+
+    /// Send an already normalized event while routing exact-turn taps by the
+    /// raw internal turn id. Used by bounded event builders that must measure
+    /// the final protocol envelope before dispatch.
+    pub(crate) async fn send_prepared_event(&self, raw_turn_id: &str, msg: EventMsg) {
+        let event = Event {
+            id: event_identity::event_turn_id(raw_turn_id),
+            msg,
+        };
+        self.send_event_raw_with_persistence_and_hook(event, raw_turn_id, true, async {})
+            .await;
+    }
+
+    /// Register a lossless in-process receiver for one exact turn.
+    pub(crate) async fn subscribe_turn_events(
+        &self,
+        turn_id: &str,
+    ) -> async_channel::Receiver<Event> {
+        let (tx, rx) = async_channel::unbounded();
+        self.turn_event_taps
+            .lock()
+            .await
+            .entry(turn_id.to_string())
+            .or_default()
+            .push(tx);
+        rx
+    }
+
+    pub(crate) async fn remove_turn_event_taps(&self, turn_id: &str) {
+        self.turn_event_taps.lock().await.remove(turn_id);
+    }
+
+    pub(crate) async fn send_event_raw_with_persistence(&self, event: Event, persist: bool) {
+        let route_id = event.id.clone();
+        self.send_event_raw_with_persistence_and_hook(event, &route_id, persist, async {})
+            .await;
+    }
+
+    async fn send_event_raw_with_persistence_and_hook<F>(
+        &self,
+        event: Event,
+        route_id: &str,
+        persist: bool,
+        after_persist: F,
+    ) where
+        F: std::future::Future<Output = ()>,
+    {
+        let _dispatch = self.event_dispatch.lock().await;
+        if persist {
+            if let Some(bindings) = self.runtime_io.get() {
+                if let Err(error) = bindings
+                    .rollout
+                    .record(vec![RolloutItem::EventMsg(event.msg.clone())])
+                    .await
+                {
+                    tracing::warn!(%error, event_id = %event.id, "failed to persist event");
+                }
+            }
+        }
+        after_persist.await;
+        self.deliver_event_raw_inner(event, route_id).await;
+    }
+
+    #[cfg(test)]
+    async fn send_event_with_after_persist_hook<F>(
+        &self,
+        turn_id: &str,
+        msg: EventMsg,
+        after_persist: F,
+    ) where
+        F: std::future::Future<Output = ()>,
+    {
+        let mut msg = msg;
+        let event = Event {
+            id: event_identity::normalize_event_msg(&mut msg, turn_id),
+            msg,
+        };
+        self.send_event_raw_with_persistence_and_hook(event, turn_id, true, after_persist)
+            .await;
+    }
+
+    pub(crate) async fn deliver_event_raw(&self, event: Event) {
+        let route_id = event.id.clone();
+        let _dispatch = self.event_dispatch.lock().await;
+        self.deliver_event_raw_inner(event, &route_id).await;
+    }
+
+    async fn deliver_event_raw_inner(&self, event: Event, route_id: &str) {
+        if let Some(bindings) = self.runtime_io.get() {
+            match &event.msg {
+                EventMsg::TurnStarted(started) => {
+                    let _ = bindings.status_tx.send(AgentStatus::Running {
+                        turn_id: started.turn_id.clone(),
+                    });
+                }
+                EventMsg::TurnComplete(_) | EventMsg::TurnAborted(_) => {
+                    let _ = bindings.status_tx.send(AgentStatus::Idle);
+                }
+                EventMsg::ShutdownComplete => {
+                    let _ = bindings.status_tx.send(AgentStatus::Shutdown);
+                }
+                _ => {}
+            }
+            let _ = bindings.event_tx.send(event.clone()).await;
+        }
+        let exact_turn_senders = {
+            let mut taps = self.turn_event_taps.lock().await;
+            if event.msg.is_terminal() {
+                taps.remove(route_id).unwrap_or_default()
+            } else {
+                taps.get_mut(route_id)
+                    .map(|senders| {
+                        senders.retain(|sender| !sender.is_closed());
+                        senders.clone()
+                    })
+                    .unwrap_or_default()
+            }
+        };
+        for sender in exact_turn_senders {
+            let _ = sender.send(event.clone()).await;
+        }
+    }
+
+    pub(crate) fn begin_runtime_shutdown(&self) -> bool {
+        !self.runtime_shutdown.swap(true, Ordering::AcqRel)
+    }
+
+    pub(crate) fn runtime_is_shutting_down(&self) -> bool {
+        self.runtime_shutdown.load(Ordering::Acquire)
+    }
+
+    pub(crate) async fn wait_runtime_shutdown_complete(&self) {
+        self.runtime_shutdown_complete.cancelled().await;
+    }
+
+    pub(crate) fn complete_runtime_shutdown(&self) {
+        self.runtime_shutdown_complete.cancel();
+    }
+
+    /// Atomically snapshot every Session field mutated while admitting a Chat request.
+    pub fn snapshot_request_settings(&self) -> SessionRequestSettingsSnapshot {
+        let state = self.lock_state();
+        SessionRequestSettingsSnapshot {
+            model_ctx: state.model_ctx.clone(),
+            interaction_mode: state.interaction_mode,
+            project_root: state.project_root.clone(),
+            temperature: state.temperature,
+            additional_params: state.additional_params.clone(),
+        }
+    }
+
+    /// Roll request-scoped settings back when their generation is abandoned before handoff.
+    pub fn restore_request_settings(&self, snapshot: SessionRequestSettingsSnapshot) {
+        let mut state = self.lock_state();
+        state.model_ctx = snapshot.model_ctx;
+        state.interaction_mode = snapshot.interaction_mode;
+        state.project_root = snapshot.project_root;
+        state.temperature = snapshot.temperature;
+        state.additional_params = snapshot.additional_params;
+    }
+
+    pub(crate) fn set_status(&self, status: AgentStatus) {
+        if let Some(bindings) = self.runtime_io.get() {
+            let _ = bindings.status_tx.send(status);
+        }
+    }
+
+    pub async fn flush_rollout(&self) -> io::Result<()> {
+        match self.runtime_io.get() {
+            Some(bindings) => bindings.rollout.flush().await,
+            None => Ok(()),
+        }
+    }
+
+    fn lock_state(&self) -> MutexGuard<'_, session_state::SessionState> {
+        self.state.lock().expect("session state mutex poisoned")
+    }
+
+    fn state_mut(&mut self) -> &mut session_state::SessionState {
+        self.state.get_mut().expect("session state mutex poisoned")
     }
 
     /// 绑定当前流式 run 的 turn_id（约定与 `run_id` 相同）。
     pub async fn set_current_turn_id(&self, turn_id: impl Into<String>) {
         let sub_id = turn_id.into();
-        let (permission_profile, project_root) = {
-            let session_configuration = self.session_configuration();
-            (
-                session_configuration.permission_profile.clone(),
-                session_configuration.project_root.clone(),
-            )
-        };
-        let mut state = self.state.lock().await;
+        let mut state = self.lock_state();
         let turn_context = Arc::new(TurnContext::new(
             sub_id,
             state.turn.current_turn(),
             state.interaction_mode,
-            permission_profile,
-            project_root,
+            state.permission_profile.clone(),
+            state.project_root.clone(),
         ));
         state
             .turn
@@ -341,26 +603,20 @@ impl Session {
         state.current_turn_context = Some(turn_context);
     }
 
-    pub(crate) async fn create_turn_context(&self, sub_id: String) -> Arc<TurnContext> {
-        let (permission_profile, project_root) = {
-            let session_configuration = self.session_configuration();
-            (
-                session_configuration.permission_profile.clone(),
-                session_configuration.project_root.clone(),
-            )
-        };
-        let state = self.state.lock().await;
+    #[doc(hidden)]
+    pub async fn create_turn_context(&self, sub_id: String) -> Arc<TurnContext> {
+        let state = self.lock_state();
         Arc::new(TurnContext::new(
             sub_id,
             state.turn.current_turn().saturating_add(1),
             state.interaction_mode,
-            permission_profile,
-            project_root,
+            state.permission_profile.clone(),
+            state.project_root.clone(),
         ))
     }
 
     pub(crate) async fn bind_turn_context(&self, turn_context: Arc<TurnContext>) {
-        let mut state = self.state.lock().await;
+        let mut state = self.lock_state();
         state
             .turn
             .set_current_turn_id(turn_context.sub_id().to_string());
@@ -369,7 +625,7 @@ impl Session {
 
     /// 清除当前 turn_id（run 结束或中断时调用）。
     pub async fn clear_current_turn_id(&self) {
-        let mut state = self.state.lock().await;
+        let mut state = self.lock_state();
         state.turn.clear_current_turn_id();
         state.current_turn_context = None;
         state.current_step_context = None;
@@ -377,12 +633,7 @@ impl Session {
 
     /// 当前绑定的 turn_id（若有）。
     pub async fn current_turn_id(&self) -> Option<String> {
-        self.state
-            .lock()
-            .await
-            .turn
-            .current_turn_id()
-            .map(str::to_owned)
+        self.lock_state().turn.current_turn_id().map(str::to_owned)
     }
 
     /// 子 Agent 执行调度器。
@@ -391,33 +642,54 @@ impl Session {
     }
 
     pub fn set_permission_profile(&self, profile: Option<String>) {
-        self.session_configuration_mut().permission_profile = profile;
+        self.lock_state().permission_profile = profile;
     }
 
     pub fn permission_profile(&self) -> Option<String> {
-        self.session_configuration().permission_profile.clone()
+        self.lock_state().permission_profile.clone()
+    }
+
+    pub async fn permission_profile_snapshot(&self) -> Option<String> {
+        self.lock_state().permission_profile.clone()
     }
 
     /// 从磁盘重载 MEMORY / USER 并更新 prompt 快照（同会话写入默认不刷新）。
-    pub fn refresh_memory(&self) -> anyhow::Result<()> {
-        self.memory_mut().refresh_memory_snapshot()
+    pub async fn refresh_memory(&self) -> anyhow::Result<()> {
+        self.services
+            .memory
+            .write()
+            .expect("memory lock poisoned")
+            .refresh_memory_snapshot()
     }
 
-    /// 设置共享钩子运行时。
     pub fn set_hook_runtime(&self, runtime: Arc<::hooks::HookRuntime>) {
-        self.session_configuration_mut().hook_runtime = runtime;
+        *self
+            .hook_runtime
+            .lock()
+            .expect("hook runtime mutex poisoned") = runtime;
     }
 
-    /// 当前共享钩子运行时。
     pub fn hook_runtime(&self) -> Arc<::hooks::HookRuntime> {
-        Arc::clone(&self.session_configuration().hook_runtime)
+        Arc::clone(
+            &self
+                .hook_runtime
+                .lock()
+                .expect("hook runtime mutex poisoned"),
+        )
     }
 
-    /// 设置插件钩子总线。
-    ///
-    /// 兼容旧调用方：仅替换 plugin，保留共享运行时的 transport 与 UI slot。
+    /// Replace only the plugin bus while preserving Gateway/Shell/UI transports.
     pub fn set_hook_bus(&self, bus: Arc<::hooks::PluginHookBus>) {
-        self.session_configuration_mut().replace_hook_bus(bus);
+        let current = self.hook_runtime();
+        if Arc::ptr_eq(&current.plugin, &bus) {
+            return;
+        }
+        self.set_hook_runtime(Arc::new(::hooks::HookRuntime {
+            plugin: bus,
+            gateway: Arc::clone(&current.gateway),
+            shell: Arc::clone(&current.shell),
+            ui_slot: current.ui_slot.clone(),
+        }));
     }
 
     /// 当前插件钩子总线。
@@ -425,26 +697,22 @@ impl Session {
         Arc::clone(&self.hook_runtime().plugin)
     }
 
-    /// 触发共享钩子运行时，并补全会话级通用 payload 字段。
+    /// 触发插件钩子（UI 观察由进程 `HookRuntime.ui_slot` 承接）。
     pub fn fire_hook(&self, name: &str, payload: ::hooks::HookPayload) -> ::hooks::HookOutcome {
-        let payload = self.enrich_hook_payload(payload);
-        self.hook_runtime().dispatch(name, &payload)
-    }
-
-    fn enrich_hook_payload(&self, mut payload: ::hooks::HookPayload) -> ::hooks::HookPayload {
-        let session_configuration = self.session_configuration();
+        let mut payload = payload;
         if payload.session_id.is_empty() {
             payload.session_id.clone_from(&self.session_id);
         }
         if payload.cwd.is_empty() {
-            let cwd = session_configuration
+            let cwd = self
+                .lock_state()
                 .project_root
-                .as_ref()
-                .unwrap_or(&self.config.memory_dir);
+                .clone()
+                .unwrap_or_else(|| self.config.memory_dir.clone());
             payload.cwd = cwd.to_string_lossy().into_owned();
         }
         if payload.model.is_empty() {
-            let target = session_configuration.model_ctx.primary_chat_target();
+            let target = self.lock_state().model_ctx.primary_chat_target();
             let backend = target.backend_id.trim();
             let model = target.model.trim();
             payload.model = match (backend.is_empty(), model.is_empty()) {
@@ -455,14 +723,14 @@ impl Session {
             };
         }
         if payload.permission_mode.is_none() {
-            payload.permission_mode = session_configuration.permission_profile.clone();
+            payload.permission_mode = self.lock_state().permission_profile.clone();
         }
-        payload
+        self.hook_runtime().dispatch(name, &payload)
     }
 
     /// 取出并清空本轮 `pre_llm_call` 注入上下文。
     pub async fn take_inject_context(&self) -> Option<String> {
-        self.state.lock().await.pending_inject_context.take()
+        self.lock_state().pending_inject_context.take()
     }
 
     /// 排队下一轮注入上下文（复用 `pre_llm_call` 的注入机制）。
@@ -471,12 +739,12 @@ impl Session {
     /// `SessionState.history`，仅在下一轮构建 API history 时以 `[astro:hook-context]`
     /// 形式追加一条 user 消息。
     pub async fn queue_inject_context(&self, ctx: impl Into<String>) {
-        self.state.lock().await.pending_inject_context = Some(ctx.into());
+        self.lock_state().pending_inject_context = Some(ctx.into());
     }
 
     /// 当前会话轮次序号（从 1 起，未开始为 0）。
     pub async fn session_turn(&self) -> usize {
-        self.state.lock().await.turn.current_turn()
+        self.lock_state().turn.current_turn()
     }
 
     /// 返回可克隆的取消信号，供上层 streaming 或 UI 触发中断。
@@ -491,29 +759,27 @@ impl Session {
 
     /// 当前 LLM 采样温度。
     pub fn temperature(&self) -> f32 {
-        self.session_configuration().temperature
+        self.lock_state().temperature
     }
 
     /// 覆盖采样温度（OpenRouter default_parameters 等）。
     pub fn set_temperature(&self, temperature: f32) {
-        self.session_configuration_mut().temperature = temperature;
+        self.lock_state().temperature = temperature;
     }
 
     /// 透传给 Provider 的额外 JSON 参数引用。
     pub fn additional_params(&self) -> Value {
-        self.session_configuration().additional_params.clone()
+        self.lock_state().additional_params.clone()
     }
 
     /// 覆盖 Provider 扩展参数（与已有 map 合并由调用方决定）。
     pub fn set_additional_params(&self, params: Value) {
-        self.session_configuration_mut().additional_params = params;
+        self.lock_state().additional_params = params;
     }
 
     /// 当前用户消息的工具深度是否已达 `multi_turn` 上限。
     pub async fn is_tool_depth_exhausted(&self) -> bool {
-        self.state
-            .lock()
-            .await
+        self.lock_state()
             .turn
             .is_tool_depth_exhausted(self.config.multi_turn)
     }
@@ -532,70 +798,52 @@ impl Session {
     }
 
     pub async fn mid_run_summary_done(&self) -> bool {
-        self.state.lock().await.compression.mid_run_summary_done()
+        self.lock_state().compression.mid_run_summary_done()
     }
 
     pub async fn mid_run_handoff(&self) -> Option<String> {
-        self.state
-            .lock()
-            .await
+        self.lock_state()
             .compression
             .mid_run_handoff()
             .map(str::to_owned)
     }
 
     pub async fn set_mid_run_handoff(&self, text: String) {
-        self.state
-            .lock()
-            .await
-            .compression
-            .set_mid_run_handoff(text);
+        self.lock_state().compression.set_mid_run_handoff(text);
     }
 
     pub async fn mark_mid_run_summary_skipped(&self) {
-        self.state
-            .lock()
-            .await
-            .compression
-            .mark_mid_run_summary_skipped();
+        self.lock_state().compression.mark_mid_run_summary_skipped();
     }
 
     pub async fn should_recommend_compact(&self) -> bool {
-        self.state
-            .lock()
-            .await
-            .compression
-            .should_recommend_compact()
+        self.lock_state().compression.should_recommend_compact()
     }
 
     pub async fn take_recommend_compact(&self) -> bool {
-        self.state.lock().await.compression.take_recommend_compact()
+        self.lock_state().compression.take_recommend_compact()
     }
 
     /// 本轮用户消息内是否已发生磁盘写入（`terminal` / `file_ops` 写类操作）。
     pub async fn turn_wrote_disk(&self) -> bool {
-        self.state.lock().await.turn.turn_wrote_disk()
+        self.lock_state().turn.turn_wrote_disk()
     }
 
     /// 递增工具轮次计数；超出 `multi_turn` 时返回 [`MaxDepthError`]。
     pub async fn increment_tool_round(&self) -> Result<(), MaxDepthError> {
-        self.state
-            .lock()
-            .await
+        self.lock_state()
             .turn
             .increment_tool_round(self.config.multi_turn)
     }
 
     /// 设置图像生成工具的输出目标路径。
     pub fn set_image_gen_targets(&self, targets: types::ImageGenTargets) {
-        self.session_configuration_mut()
-            .model_ctx
-            .set_image_gen_targets(targets);
+        self.lock_state().model_ctx.set_image_gen_targets(targets);
     }
 
     /// 配置 LLM 对话凭据，供需要调用 Provider 的内置工具使用。
     pub fn set_chat_credentials(&self, provider: &str, model: &str, api_key: &str, base_url: &str) {
-        self.session_configuration_mut()
+        self.lock_state()
             .model_ctx
             .set_credentials(provider, model, api_key, base_url);
     }
@@ -604,12 +852,11 @@ impl Session {
     ///
     /// 更新 `chat_provider` / `chat_model` 与可选温度；若已有 `chat_targets`，
     /// 用本规格覆盖 primary 的 provider/model（保留 api_key / base_url）。
-    pub fn set_model(&self, spec: types::ModelSpec) {
-        let mut session_configuration = self.session_configuration_mut();
+    pub fn set_model(&mut self, spec: types::ModelSpec) {
         if let Some(t) = spec.temperature {
-            session_configuration.temperature = t;
+            self.lock_state().temperature = t;
         }
-        let model_ctx = &mut session_configuration.model_ctx;
+        let model_ctx = &mut self.state_mut().model_ctx;
         if !spec.provider_id.trim().is_empty() {
             model_ctx.credentials.provider = spec.provider_id.trim().to_string();
         }
@@ -633,16 +880,14 @@ impl Session {
     }
 
     /// 按角色设置模型（主聊或辅助任务）。
-    pub fn set_role_model(&self, role: types::ModelRole, spec: types::ModelSpec) {
+    pub fn set_role_model(&mut self, role: types::ModelRole, spec: types::ModelSpec) {
         match role {
             types::ModelRole::Main => self.set_model(spec),
             types::ModelRole::Auxiliary(task) => {
-                let base = self.primary_chat_target();
+                let model_ctx = &mut self.state_mut().model_ctx;
+                let base = model_ctx.primary_chat_target();
                 let target = spec.apply_to(&base);
-                self.session_configuration_mut()
-                    .model_ctx
-                    .auxiliary_targets
-                    .insert(task, vec![target]);
+                model_ctx.auxiliary_targets.insert(task, vec![target]);
             }
         }
     }
@@ -653,21 +898,18 @@ impl Session {
     /// - 凭据：默认继承 primary 的 `api_key` / `base_url`（跨厂商且 key 不同时，
     ///   请改用已解析的 [`Self::set_chat_targets`]）
     /// - 同 `provider_id` 去重（对齐 `expand_chat_targets`）
-    pub fn set_fallback_models(&self, specs: &[types::ModelSpec]) {
-        self.session_configuration_mut()
-            .model_ctx
-            .set_fallback_models(specs);
+    pub fn set_fallback_models(&mut self, specs: &[types::ModelSpec]) {
+        self.state_mut().model_ctx.set_fallback_models(specs);
     }
 
     /// 按角色设置 fallback 链（主聊或辅助任务）。
     ///
     /// 辅助任务：保留 preferred（链首；若尚无则先用当前主目标），再接 fallback。
-    pub fn set_role_fallback_models(&self, role: types::ModelRole, specs: &[types::ModelSpec]) {
+    pub fn set_role_fallback_models(&mut self, role: types::ModelRole, specs: &[types::ModelSpec]) {
         match role {
             types::ModelRole::Main => self.set_fallback_models(specs),
             types::ModelRole::Auxiliary(task) => {
-                let mut session_configuration = self.session_configuration_mut();
-                let model_ctx = &mut session_configuration.model_ctx;
+                let model_ctx = &mut self.state_mut().model_ctx;
                 let preferred = model_ctx
                     .auxiliary_targets
                     .get(&task)
@@ -694,36 +936,31 @@ impl Session {
 
     /// 当前主模型声明（若有）。
     pub fn model_spec(&self) -> Option<types::ModelSpec> {
-        self.session_configuration().model_ctx.model_spec().cloned()
-    }
-
-    fn primary_chat_target(&self) -> types::ChatTarget {
-        self.session_configuration().model_ctx.primary_chat_target()
+        self.lock_state().model_ctx.model_spec().cloned()
     }
 
     /// 设置代码/项目根（委派 worktree）；`None` 时文件/终端回退到记忆工作区。
     pub fn set_project_root(&self, root: Option<PathBuf>) {
-        self.session_configuration_mut().project_root = root;
+        self.lock_state().project_root = root;
     }
 
     /// 当前代码/项目根（若有）。
     pub fn project_root(&self) -> Option<PathBuf> {
-        self.session_configuration().project_root.clone()
+        self.lock_state().project_root.clone()
+    }
+
+    pub async fn project_root_snapshot(&self) -> Option<PathBuf> {
+        self.lock_state().project_root.clone()
     }
 
     /// 设置含 primary 的聊天 fallback 链（主聊 / cron / Agent Thread 共用）。
     pub fn set_chat_targets(&self, targets: Vec<types::ChatTarget>) {
-        self.session_configuration_mut()
-            .model_ctx
-            .set_chat_targets(targets);
+        self.lock_state().model_ctx.set_chat_targets(targets);
     }
 
     /// 当前聊天 fallback 链。
     pub fn chat_targets(&self) -> Vec<types::ChatTarget> {
-        self.session_configuration()
-            .model_ctx
-            .chat_targets()
-            .to_vec()
+        self.lock_state().model_ctx.chat_targets().to_vec()
     }
 
     /// 设置五类辅助任务的已解析目标链（每次 `Chat` 请求由 backend 下传后调用）。
@@ -733,9 +970,7 @@ impl Session {
         &self,
         targets: std::collections::HashMap<types::AuxiliaryTask, Vec<types::ChatTarget>>,
     ) {
-        self.session_configuration_mut()
-            .model_ctx
-            .set_auxiliary_targets(targets);
+        self.lock_state().model_ctx.set_auxiliary_targets(targets);
     }
 
     /// 返回指定辅助任务的目标链（preferred + 可选 fallback）。
@@ -743,14 +978,20 @@ impl Session {
     /// 未传输该任务目标时回退当前主 `ChatTarget`（`chat_targets` 的首项，缺失时
     /// 由 `set_chat_credentials` 字段现造一条），保持旧客户端兼容。
     pub fn auxiliary_targets(&self, task: types::AuxiliaryTask) -> Vec<types::ChatTarget> {
-        self.session_configuration()
-            .model_ctx
-            .auxiliary_targets(task)
+        self.lock_state().model_ctx.auxiliary_targets(task)
+    }
+
+    pub async fn model_context_snapshot(&self) -> model_ctx::ModelContext {
+        self.lock_state().model_ctx.clone()
     }
 
     /// 返回 `(project_memory, user_profile)` 原始 prompt 片段。
-    pub fn prompt_content(&self) -> (String, String) {
-        self.memory().prompt_content()
+    pub async fn prompt_content(&self) -> (String, String) {
+        self.services
+            .memory
+            .read()
+            .expect("memory lock poisoned")
+            .prompt_content()
     }
 
     /// 当前会话唯一标识符。
@@ -759,13 +1000,17 @@ impl Session {
     }
 
     /// 当前 Agent 标识（来自 MemoryManager）。
-    pub fn agent_id(&self) -> String {
-        self.memory().agent_id.clone()
+    pub fn agent_id(&self) -> &str {
+        &self.agent_id
     }
 
     /// 记忆根目录。
     pub fn memory_dir(&self) -> &std::path::Path {
         &self.config.memory_dir
+    }
+
+    pub(crate) fn memory(&self) -> std::sync::RwLockReadGuard<'_, MemoryManager> {
+        self.services.memory.read().expect("memory lock poisoned")
     }
 
     /// 与本 Agent 消息落盘共用的会话库。
@@ -775,65 +1020,42 @@ impl Session {
 
     /// 当前 Agent 工作区路径。
     pub fn workspace_dir(&self) -> std::path::PathBuf {
-        self.memory().workspace_dir.clone()
-    }
-
-    /// 当前 Agent 的记忆管理器只读 guard。
-    pub(crate) fn memory(&self) -> RwLockReadGuard<'_, MemoryManager> {
-        self.memory.read().expect("memory manager lock poisoned")
-    }
-
-    /// 当前 Agent 的记忆管理器写 guard。
-    pub(crate) fn memory_mut(&self) -> RwLockWriteGuard<'_, MemoryManager> {
-        self.memory.write().expect("memory manager lock poisoned")
+        self.workspace_dir.clone()
     }
 
     pub fn chat_api_key(&self) -> String {
-        self.session_configuration()
-            .model_ctx
-            .chat_api_key()
-            .to_string()
+        self.lock_state().model_ctx.chat_api_key().to_string()
     }
 
     pub fn chat_base_url(&self) -> String {
-        self.session_configuration()
-            .model_ctx
-            .chat_base_url()
-            .to_string()
+        self.lock_state().model_ctx.chat_base_url().to_string()
     }
 
     pub fn chat_provider(&self) -> String {
-        self.session_configuration()
-            .model_ctx
-            .chat_provider()
-            .to_string()
+        self.lock_state().model_ctx.chat_provider().to_string()
     }
 
     pub fn chat_model(&self) -> String {
-        self.session_configuration()
-            .model_ctx
-            .chat_model()
-            .to_string()
+        self.lock_state().model_ctx.chat_model().to_string()
     }
 
     pub fn image_gen_targets(&self) -> types::ImageGenTargets {
-        self.session_configuration()
-            .model_ctx
-            .image_gen_targets()
-            .clone()
+        self.lock_state().model_ctx.image_gen_targets().clone()
     }
 
     /// 内置与 MCP 工具的注册表只读引用。
-    pub fn tool_registry(&self) -> RwLockReadGuard<'_, ToolRegistry> {
-        self.tool_registry
+    pub async fn tool_registry(&self) -> std::sync::RwLockReadGuard<'_, ToolRegistry> {
+        self.services
+            .tool_registry
             .read()
             .expect("tool registry lock poisoned")
     }
 
     /// 工具注册表可变引用。
-    pub fn tool_registry_mut(&self) -> RwLockWriteGuard<'_, ToolRegistry> {
-        self.tool_registry
-            .write()
+    pub fn tool_registry_mut(&mut self) -> &mut ToolRegistry {
+        self.services
+            .tool_registry
+            .get_mut()
             .expect("tool registry lock poisoned")
     }
 
@@ -843,22 +1065,24 @@ impl Session {
     }
 
     pub fn set_mcp_config_override(&self, configs: Vec<mcp::McpServerConfig>) {
-        self.session_configuration_mut().mcp_config_override = configs;
+        self.lock_state().mcp_config_override = configs;
     }
 
     pub fn set_skill_config_overrides(&self, config: Vec<(PathBuf, bool)>) {
-        self.session_configuration_mut().skill_config_overrides = config;
+        self.lock_state().skill_config_overrides = config;
     }
 
     pub(crate) fn skill_config_overrides(&self) -> Vec<(PathBuf, bool)> {
-        self.session_configuration().skill_config_overrides.clone()
+        self.lock_state().skill_config_overrides.clone()
     }
 
     /// 从磁盘重载当前 Agent 的工具启用开关（gate 配置）。
-    pub fn reload_tool_gates(&self) {
-        let agent_id = self.agent_id();
-        self.tool_registry_mut()
-            .reload_enabled_from_disk(Some(&agent_id));
+    pub async fn reload_tool_gates(&self) {
+        self.services
+            .tool_registry
+            .write()
+            .expect("tool registry lock poisoned")
+            .reload_enabled_from_disk(Some(&self.agent_id));
     }
 
     /// 从磁盘重载 MCP 配置，并将启用工具挂接到 [`ToolRegistry`]。
@@ -866,19 +1090,16 @@ impl Session {
     /// optional Server 失败仅降级；required Server 失败向调用方传播。
     /// 无论是否存在 required 失败，已成功连接的工具都会同步到 `MCP_TOOLSET`。
     pub async fn reload_mcp(&self) -> anyhow::Result<()> {
-        let (agent_id, workspace_dir) = {
-            let memory = self.memory();
-            (memory.agent_id.clone(), memory.workspace_dir.clone())
-        };
+        let agent_id = self.agent_id.clone();
         let (project_root, permission_profile, mcp_config_override) = {
-            let session_configuration = self.session_configuration();
+            let state = self.lock_state();
             (
-                session_configuration.project_root.clone(),
-                session_configuration.permission_profile.clone(),
-                session_configuration.mcp_config_override.clone(),
+                state.project_root.clone(),
+                state.permission_profile.clone(),
+                state.mcp_config_override.clone(),
             )
         };
-        let execution_root = project_root.unwrap_or(workspace_dir);
+        let execution_root = project_root.unwrap_or_else(|| self.workspace_dir.clone());
         let permission_settings = memory::load_permission_settings(&self.config.memory_dir);
         let profile_id = permission_profile
             .clone()
@@ -933,10 +1154,7 @@ impl Session {
             let instructions = hub.server_instructions();
             (reload_result, instructions)
         };
-        *self
-            .mcp_instructions
-            .write()
-            .expect("MCP instructions lock poisoned") = mcp_instructions;
+        self.lock_state().mcp_instructions = mcp_instructions;
         self.attach_mcp_tools().await;
         if let Err(error) = &reload_result {
             tracing::warn!(%error, "reload MCP failed");
@@ -955,7 +1173,7 @@ impl Session {
 
     /// 同时重载工具 gate 与 MCP 配置，通常在每轮用户输入开始时调用。
     pub async fn reload_tools_and_mcp(&self) -> anyhow::Result<()> {
-        self.reload_tool_gates();
+        self.reload_tool_gates().await;
         self.reload_mcp().await
     }
 
@@ -967,7 +1185,11 @@ impl Session {
             let mut hub = self.mcp_hub.lock().await;
             (hub.enabled_tool_entries(), hub.broker_capabilities())
         };
-        let mut tool_registry = self.tool_registry_mut();
+        let mut tool_registry = self
+            .services
+            .tool_registry
+            .write()
+            .expect("tool registry lock poisoned");
         tool_registry.unregister_toolset(MCP_TOOLSET);
         for spec in entries {
             let mcp_approval = types::McpToolApproval {
@@ -1061,12 +1283,7 @@ impl Session {
 
     /// 最近一次记忆召回的格式化文本，已注入动态上下文。
     pub async fn recalled_context(&self) -> String {
-        self.state
-            .lock()
-            .await
-            .compression
-            .recalled_context()
-            .to_string()
+        self.lock_state().compression.recalled_context().to_string()
     }
 
     /// 生成新的任务 UUID，供上层追踪单次 LLM 请求。
@@ -1076,77 +1293,71 @@ impl Session {
 
     /// 会话轮次预算是否已耗尽（`current_turn >= max_turns`）。
     pub async fn is_budget_exhausted(&self) -> bool {
-        self.state
-            .lock()
-            .await
+        self.lock_state()
             .turn
             .is_budget_exhausted(self.config.max_turns)
     }
 
     /// 递增会话轮次计数（每处理一条用户消息调用一次）。
     pub async fn increment_turn(&self) {
-        self.state.lock().await.turn.increment_turn();
+        self.lock_state().turn.increment_turn();
     }
 
     /// 设置主模型上下文窗口（token），供分阶段 tool 压缩使用。
     pub fn set_context_window(&self, window: u32) {
-        self.session_configuration_mut()
-            .model_ctx
-            .set_context_window(window);
+        self.lock_state().model_ctx.set_context_window(window);
     }
 
     /// 设置本轮交互模式（Plan/Ask 启用只读工具门禁）。
     pub async fn set_interaction_mode(&self, mode: types::InteractionMode) {
-        self.state.lock().await.interaction_mode = mode;
+        self.lock_state().interaction_mode = mode;
     }
 
     pub async fn interaction_mode(&self) -> types::InteractionMode {
-        self.state.lock().await.interaction_mode
+        self.lock_state().interaction_mode
     }
 
     /// 按当前交互模式过滤后的工具 schema（OpenAI tools 数组）。
     pub async fn schemas_for_api(&self) -> Vec<serde_json::Value> {
-        let interaction_mode = self.state.lock().await.interaction_mode;
-        tools::filter_schemas(interaction_mode, self.tool_registry().schemas_for_api())
-    }
-
-    async fn build_tool_router(&self) -> Arc<ToolRouter> {
-        let interaction_mode = self.state.lock().await.interaction_mode;
-        let registry = self.tool_registry();
-        let model_visible_specs =
-            tools::filter_schemas(interaction_mode, registry.schemas_for_api());
-        Arc::new(ToolRouter::from_registry(&registry, model_visible_specs))
+        let tool_registry = self
+            .services
+            .tool_registry
+            .read()
+            .expect("tool registry lock poisoned");
+        tools::filter_schemas(
+            self.lock_state().interaction_mode,
+            tool_registry.schemas_for_api(),
+        )
     }
 
     /// Append conversation items to the session-owned history.
     pub async fn record_items(&self, items: Vec<Message>) {
         let _write_guard = self.conversation_write_lock.lock().await;
-        self.record_items_unlocked(items).await;
+        self.record_items_unlocked(items);
     }
 
-    async fn record_items_unlocked(&self, items: Vec<Message>) {
-        self.state.lock().await.record_items(items);
+    fn record_items_unlocked(&self, items: Vec<Message>) {
+        self.lock_state().record_items(items);
     }
 
     /// Return an owned snapshot of the current conversation history.
     pub async fn clone_history(&self) -> Vec<Message> {
-        self.state.lock().await.clone_history()
+        self.lock_state().clone_history()
     }
 
     /// Replace the current conversation history with an owned snapshot.
-    #[cfg(test)]
     pub async fn replace_history(&self, history: Vec<Message>) {
         let _write_guard = self.conversation_write_lock.lock().await;
-        self.state.lock().await.replace_history(history);
+        self.lock_state().replace_history(history);
     }
 
     pub fn context_window(&self) -> u32 {
-        self.session_configuration().model_ctx.context_window()
+        self.lock_state().model_ctx.context_window()
     }
 
     /// 解析当前 Agent 工作区目录，供工具上下文注入。
     fn resolve_workspace_dir(&self) -> PathBuf {
-        self.workspace_dir()
+        self.workspace_dir.clone()
     }
 }
 
@@ -1179,128 +1390,84 @@ mod tests {
         }
     }
 
-    #[test]
-    fn session_configuration_replace_hook_bus_is_atomic() {
+    #[tokio::test]
+    async fn concurrent_events_keep_rollout_live_and_status_in_one_order() {
         let dir = TempDir::new().unwrap();
-        let config = test_config(&dir);
-        let mut session_configuration = SessionConfiguration::new(&config);
-        let initial_runtime = Arc::new(::hooks::HookRuntime::new());
-        session_configuration.hook_runtime = Arc::clone(&initial_runtime);
-
-        let first_bus = Arc::new(::hooks::PluginHookBus::new());
-        session_configuration.replace_hook_bus(Arc::clone(&first_bus));
-        let first_replacement = Arc::clone(&session_configuration.hook_runtime);
-        assert!(Arc::ptr_eq(&first_replacement.plugin, &first_bus));
-        assert!(Arc::ptr_eq(
-            &first_replacement.gateway,
-            &initial_runtime.gateway
-        ));
-        assert!(Arc::ptr_eq(
-            &first_replacement.shell,
-            &initial_runtime.shell
-        ));
-
-        session_configuration.replace_hook_bus(Arc::clone(&first_bus));
-        assert!(Arc::ptr_eq(
-            &session_configuration.hook_runtime,
-            &first_replacement
-        ));
-
-        let current_runtime = Arc::new(::hooks::HookRuntime::new());
-        session_configuration.hook_runtime = Arc::clone(&current_runtime);
-        let second_bus = Arc::new(::hooks::PluginHookBus::new());
-        session_configuration.replace_hook_bus(Arc::clone(&second_bus));
-        assert!(Arc::ptr_eq(
-            &session_configuration.hook_runtime.plugin,
-            &second_bus
-        ));
-        assert!(Arc::ptr_eq(
-            &session_configuration.hook_runtime.gateway,
-            &current_runtime.gateway
-        ));
-        assert!(Arc::ptr_eq(
-            &session_configuration.hook_runtime.shell,
-            &current_runtime.shell
-        ));
-    }
-
-    #[test]
-    fn set_hook_bus_is_idempotent_and_preserves_runtime_transports() {
-        let dir = TempDir::new().unwrap();
-        let session = Session::new(test_config(&dir)).unwrap();
-        let runtime = Arc::new(::hooks::HookRuntime::new());
-        let original_plugin = Arc::clone(&runtime.plugin);
-        let gateway = Arc::clone(&runtime.gateway);
-        let shell = Arc::clone(&runtime.shell);
-        session.set_hook_runtime(runtime);
-
-        let bus = Arc::new(::hooks::PluginHookBus::new());
-        session.set_hook_bus(Arc::clone(&bus));
-        let first = session.hook_runtime();
-        assert!(Arc::ptr_eq(&session.hook_bus(), &bus));
-        assert!(Arc::ptr_eq(&first.gateway, &gateway));
-        assert!(Arc::ptr_eq(&first.shell, &shell));
-
-        let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
-        first.ui_slot.set_tx(Some(tx));
-        original_plugin.fire(::hooks::SESSION_START, &::hooks::HookPayload::default());
-        assert_eq!(
-            rx.try_recv()
-                .expect("replacement preserves the original UI slot")
-                .name,
-            ::hooks::SESSION_START
+        let rollout_path = dir.path().join("ordered-events.jsonl");
+        let rollout = RolloutRecorder::open(
+            rollout_path.clone(),
+            agent_rollout::ThreadHistoryMode::Paginated,
+        )
+        .await
+        .unwrap();
+        let session = Arc::new(Session::new(test_config(&dir)).unwrap());
+        let thread = AstroThread::spawn(Arc::clone(&session), rollout).unwrap();
+        let first_persisted = Arc::new(tokio::sync::Barrier::new(2));
+        let release_first = Arc::new(tokio::sync::Barrier::new(2));
+        let first = {
+            let session = Arc::clone(&session);
+            let first_persisted = Arc::clone(&first_persisted);
+            let release_first = Arc::clone(&release_first);
+            tokio::spawn(async move {
+                session
+                    .send_event_with_after_persist_hook(
+                        "turn-a",
+                        EventMsg::TurnStarted(agent_protocol::TurnStartedEvent {
+                            turn_id: "turn-a".into(),
+                        }),
+                        async move {
+                            first_persisted.wait().await;
+                            release_first.wait().await;
+                        },
+                    )
+                    .await;
+            })
+        };
+        first_persisted.wait().await;
+        let mut second = {
+            let session = Arc::clone(&session);
+            tokio::spawn(async move {
+                session
+                    .send_event(
+                        "turn-b",
+                        EventMsg::TurnStarted(agent_protocol::TurnStartedEvent {
+                            turn_id: "turn-b".into(),
+                        }),
+                    )
+                    .await;
+            })
+        };
+        assert!(
+            tokio::time::timeout(std::time::Duration::from_millis(50), &mut second)
+                .await
+                .is_err(),
+            "second event must not overtake the first after its rollout write"
         );
-        first
-            .plugin
-            .fire(::hooks::SESSION_START, &::hooks::HookPayload::default());
-        assert!(matches!(
-            rx.try_recv(),
-            Err(tokio::sync::mpsc::error::TryRecvError::Empty)
-        ));
+        release_first.wait().await;
+        first.await.unwrap();
+        second.await.unwrap();
 
-        session.set_hook_bus(bus);
-        let second = session.hook_runtime();
-        assert!(Arc::ptr_eq(&first, &second));
-    }
-
-    #[test]
-    fn sessions_share_controls_only_within_the_same_memory_root() {
-        fn file_snapshot(path: &std::path::Path) -> Option<(Vec<u8>, std::time::SystemTime)> {
-            Some((
-                fs::read(path).ok()?,
-                fs::metadata(path).ok()?.modified().ok()?,
-            ))
-        }
-
-        let default_graph = home::default_memory_dir().join("subagents-v2.db");
-        let default_wal = default_graph.with_extension("db-wal");
-        let default_before = file_snapshot(&default_graph);
-        let default_wal_before = file_snapshot(&default_wal);
-        let first_root = TempDir::new().unwrap();
-        let second_root = TempDir::new().unwrap();
-
-        let first =
-            AgentLoop::with_session_id(test_config(&first_root), "shared-session-id".to_string())
-                .unwrap();
-        let first_again =
-            AgentLoop::with_session_id(test_config(&first_root), "shared-session-id".to_string())
-                .unwrap();
-        let second =
-            AgentLoop::with_session_id(test_config(&second_root), "shared-session-id".to_string())
-                .unwrap();
-
-        assert!(Arc::ptr_eq(
-            &first.services.agent_control,
-            &first_again.services.agent_control
-        ));
-        assert!(!Arc::ptr_eq(
-            &first.services.agent_control,
-            &second.services.agent_control
-        ));
-        assert!(first_root.path().join("subagents-v2.db").exists());
-        assert!(second_root.path().join("subagents-v2.db").exists());
-        assert_eq!(file_snapshot(&default_graph), default_before);
-        assert_eq!(file_snapshot(&default_wal), default_wal_before);
+        let first_live = thread.next_event().await.unwrap();
+        let second_live = thread.next_event().await.unwrap();
+        assert_eq!(
+            [first_live.id.as_str(), second_live.id.as_str()],
+            ["turn-a", "turn-b"]
+        );
+        assert_eq!(
+            thread.status(),
+            AgentStatus::Running {
+                turn_id: "turn-b".into()
+            }
+        );
+        let rollout = agent_rollout::read_rollout(&rollout_path).await.unwrap();
+        let turns: Vec<_> = rollout
+            .iter()
+            .filter_map(|item| match item {
+                RolloutItem::EventMsg(EventMsg::TurnStarted(event)) => Some(event.turn_id.as_str()),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(turns, ["turn-a", "turn-b"]);
     }
 
     #[test]
@@ -1376,10 +1543,10 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn session_groups_turn_scoped_mutable_state_behind_async_mutex() {
+    async fn session_groups_mutable_runtime_state_behind_its_internal_lock() {
         let dir = TempDir::new().unwrap();
         let session = Session::new(test_config(&dir)).unwrap();
-        let state = session.state.lock().await;
+        let state = session.lock_state();
 
         assert_eq!(state.turn.current_turn(), 0);
         assert_eq!(state.interaction_mode, types::InteractionMode::Agent);
@@ -1388,13 +1555,120 @@ mod tests {
         assert!(state.current_turn_context.is_none());
         assert!(state.current_step_context.is_none());
         assert!(state.compression.recalled_context().is_empty());
+        assert!(state.model_ctx.chat_targets.is_empty());
+        assert!(state.mcp_config_override.is_empty());
+        assert!(state.mcp_instructions.is_empty());
+        assert!(state.permission_profile.is_none());
+        assert!(state.skill_config_overrides.is_empty());
     }
 
     #[test]
-    fn session_is_send_and_sync() {
+    fn session_is_send_and_sync_without_an_outer_mutex() {
         fn assert_send_sync<T: Send + Sync>() {}
 
         assert_send_sync::<Session>();
+    }
+
+    #[tokio::test]
+    async fn arc_session_owns_concurrent_history_snapshots() {
+        use std::sync::atomic::{AtomicBool, Ordering};
+
+        let dir = TempDir::new().unwrap();
+        let session = Arc::new(Session::new(test_config(&dir)).unwrap());
+        let barrier = Arc::new(tokio::sync::Barrier::new(3));
+        let write_complete = Arc::new(AtomicBool::new(false));
+        let writer = {
+            let session = Arc::clone(&session);
+            let barrier = Arc::clone(&barrier);
+            let write_complete = Arc::clone(&write_complete);
+            tokio::spawn(async move {
+                barrier.wait().await;
+                session.record_items(vec![Message::user("first")]).await;
+                write_complete.store(true, Ordering::Release);
+            })
+        };
+        let reader = {
+            let session = Arc::clone(&session);
+            let barrier = Arc::clone(&barrier);
+            let write_complete = Arc::clone(&write_complete);
+            tokio::spawn(async move {
+                barrier.wait().await;
+                tokio::time::timeout(std::time::Duration::from_secs(1), async move {
+                    loop {
+                        let snapshot = session.clone_history().await;
+                        if snapshot.first().is_some_and(|message| {
+                            message.content_str() == "first"
+                                && write_complete.load(Ordering::Acquire)
+                        }) {
+                            break snapshot;
+                        }
+                        tokio::task::yield_now().await;
+                    }
+                })
+                .await
+                .expect("reader timed out waiting for concurrent history write")
+            })
+        };
+
+        barrier.wait().await;
+        writer.await.unwrap();
+        let snapshot = reader.await.unwrap();
+        assert_eq!(snapshot[0].content_str(), "first");
+        assert_eq!(session.clone_history().await[0].content_str(), "first");
+    }
+
+    #[tokio::test]
+    async fn session_returns_owned_runtime_snapshots() {
+        let dir = TempDir::new().unwrap();
+        let session = Session::new(test_config(&dir)).unwrap();
+        let project_root = dir.path().join("project");
+        session.set_chat_credentials("openai", "gpt-5.6", "key", "https://example.test");
+        session.set_project_root(Some(project_root.clone()));
+        session.set_permission_profile(Some("workspace-write".to_string()));
+
+        let model = session.model_context_snapshot().await;
+        assert_eq!(model.chat_model(), "gpt-5.6");
+        assert_eq!(session.project_root_snapshot().await, Some(project_root));
+        assert_eq!(
+            session.permission_profile_snapshot().await.as_deref(),
+            Some("workspace-write")
+        );
+    }
+
+    #[tokio::test]
+    async fn session_dispatches_registered_non_mcp_dynamic_handler() {
+        let dir = TempDir::new().unwrap();
+        let mut session = Session::new(test_config(&dir)).unwrap();
+        session.tool_registry_mut().register_dynamic(
+            ToolEntry {
+                name: "custom_dynamic".to_string(),
+                toolset: "custom_dynamic".to_string(),
+                description: "Test-only dynamic tool".to_string(),
+                schema: serde_json::json!({
+                    "type": "object",
+                    "properties": { "value": { "type": "string" } },
+                    "required": ["value"]
+                }),
+                ..ToolEntry::lifecycle_defaults()
+            },
+            Arc::new(|_name, args| {
+                let value = args
+                    .get("value")
+                    .and_then(serde_json::Value::as_str)
+                    .unwrap_or_default()
+                    .to_string();
+                Box::pin(async move { Ok(types::ToolOutput::from(format!("dynamic:{value}"))) })
+            }),
+        );
+        session.reload_tool_gates().await;
+        session.attach_mcp_tools().await;
+
+        let output = session
+            .handle_tool_call_async("custom_dynamic", &serde_json::json!({ "value": "ok" }))
+            .await
+            .unwrap();
+
+        assert_eq!(output.text(), "dynamic:ok");
     }
 
     #[test]
@@ -1422,90 +1696,24 @@ mod tests {
             drop(session.set_interaction_mode(types::InteractionMode::Agent));
             drop(session.interaction_mode());
             drop(session.schemas_for_api());
+            drop(session.model_context_snapshot());
+            drop(session.project_root_snapshot());
+            drop(session.permission_profile_snapshot());
+            drop(session.clone_history());
             drop(session.record_assistant_message("assistant"));
             drop(session.record_user_message("user"));
             drop(session.record_tool_result("tool"));
             drop(session.provider_history());
             drop(session.maintain_tool_context());
             drop(session.compress_tool_results_if_needed());
-            drop(
-                session.record_turn_input(crate::tasks::TurnInput::UserInput {
-                    content: "input".to_string(),
-                    image_data_urls: Vec::new(),
-                    client_message_id: None,
-                }),
-            );
-            drop(session.begin_user_turn());
-            drop(session.reload_tools_and_mcp());
-            drop(session.build_system_prompt());
-            drop(session.system_prompt_layer_chars());
-            drop(session.system_prompt_layer_breakdown());
-            let input = vec![crate::tasks::TurnInput::UserInput {
-                content: "prepare".to_string(),
+            drop(session.record_turn_input(agent_protocol::TurnInput {
+                content: "input".to_string(),
                 image_data_urls: Vec::new(),
                 client_message_id: None,
-            }];
-            drop(session.prepare_turn(&input));
-            drop(session.admission_lock.lock());
-            drop(session.capture_step_context());
-            drop(session.start_or_steer_turn("turn", "submission"));
-            drop(session.handle_tool_call_async("echo", &serde_json::json!({})));
+            }));
         }
 
         let _ = assert_arc_api;
-    }
-
-    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-    async fn awaiting_dynamic_tool_does_not_block_memory_reads() {
-        let dir = TempDir::new().unwrap();
-        let session = Arc::new(Session::new(test_config(&dir)).unwrap());
-        let entered = Arc::new(tokio::sync::Notify::new());
-        let release = Arc::new(tokio::sync::Notify::new());
-        {
-            let entered = Arc::clone(&entered);
-            let release = Arc::clone(&release);
-            session.tool_registry_mut().register_dynamic(
-                ToolEntry {
-                    name: "await_memory_probe".into(),
-                    toolset: "core".into(),
-                    description: "wait while memory remains readable".into(),
-                    schema: serde_json::json!({"type": "object", "properties": {}}),
-                    check_fn: None,
-                    icon: "clock",
-                    ..ToolEntry::lifecycle_defaults()
-                },
-                Arc::new(move |_name, _args| {
-                    let entered = Arc::clone(&entered);
-                    let release = Arc::clone(&release);
-                    Box::pin(async move {
-                        entered.notify_one();
-                        release.notified().await;
-                        Ok(types::ToolOutput::from("released"))
-                    })
-                }),
-            );
-        }
-
-        let args = serde_json::json!({});
-        let tool_call = session.handle_tool_call_async("await_memory_probe", &args);
-        let memory_read = async {
-            entered.notified().await;
-            let reader = {
-                let session = Arc::clone(&session);
-                tokio::task::spawn_blocking(move || session.prompt_content())
-            };
-            let result = tokio::time::timeout(std::time::Duration::from_secs(1), reader).await;
-            release.notify_waiters();
-            result
-        };
-
-        let (output, read_result) = tokio::join!(tool_call, memory_read);
-        let output = output.unwrap();
-        assert_eq!(output.text(), "released");
-        assert!(
-            read_result.is_ok(),
-            "memory reads must not wait for unrelated async tools"
-        );
     }
 
     #[tokio::test]
@@ -1571,39 +1779,6 @@ mod tests {
     }
 
     #[test]
-    fn agent_thread_session_keeps_shared_root_control_and_child_path() {
-        let dir = TempDir::new().unwrap();
-        let graph = subagents::AgentGraphStore::open(dir.path().join("agents.db")).unwrap();
-        let control = subagents::AgentControl::open(
-            "root-session".into(),
-            graph,
-            subagents::Limits {
-                max_threads: 8,
-                max_depth: 4,
-                max_running: 2,
-            },
-        )
-        .unwrap();
-        let reservation = control
-            .reserve_spawn(&subagents::AgentPath::root(), "worker")
-            .unwrap();
-        let child = reservation.thread().clone();
-        reservation.commit().unwrap();
-
-        let session = Session::with_session_id_for_agent_thread(
-            test_config(&dir),
-            child.session_id,
-            home::DEFAULT_AGENT_ID,
-            Arc::clone(&control),
-            child.canonical_path.clone(),
-        )
-        .unwrap();
-
-        assert!(Arc::ptr_eq(&session.services.agent_control, &control));
-        assert_eq!(session.services.agent_path, child.canonical_path);
-    }
-
-    #[test]
     fn learning_nudge_arms_only_when_threshold_met() {
         let dir = TempDir::new().unwrap();
         assert!(AgentLoop::compute_learning_nudge(dir.path(), 2).is_none());
@@ -1617,78 +1792,6 @@ mod tests {
         )
         .unwrap();
         assert!(AgentLoop::compute_learning_nudge(dir.path(), 9).is_none());
-    }
-
-    #[test]
-    fn session_runtime_settings_are_mutable_through_arc() {
-        fn assert_arc_settings_api(
-            session: Arc<Session>,
-            turn_context: Arc<TurnContext>,
-            hook_runtime: Arc<::hooks::HookRuntime>,
-            hook_bus: Arc<::hooks::PluginHookBus>,
-            image_targets: types::ImageGenTargets,
-            model_spec: types::ModelSpec,
-        ) {
-            drop(session.bind_turn_context(turn_context));
-            session.set_permission_profile(Some("workspace-write".to_string()));
-            session.set_hook_runtime(hook_runtime);
-            session.set_hook_bus(hook_bus);
-            let _ = session.hook_runtime();
-            let _ = session.hook_bus();
-            session.set_temperature(0.2);
-            session.set_additional_params(serde_json::json!({"top_p": 0.9}));
-            session.set_image_gen_targets(image_targets);
-            session.set_chat_credentials("openai", "gpt-5", "key", "https://example.com");
-            session.set_model(model_spec.clone());
-            session.set_role_model(types::ModelRole::Main, model_spec.clone());
-            session.set_fallback_models(std::slice::from_ref(&model_spec));
-            session.set_role_fallback_models(types::ModelRole::Main, &[model_spec]);
-            session.set_project_root(Some(PathBuf::from("/tmp/project")));
-            session.set_chat_targets(Vec::new());
-            session.set_auxiliary_targets(std::collections::HashMap::new());
-            session.set_mcp_config_override(Vec::new());
-            session.set_skill_config_overrides(Vec::new());
-            session.set_context_window(128_000);
-        }
-
-        let _ = assert_arc_settings_api;
-    }
-
-    #[test]
-    fn session_runtime_settings_return_owned_snapshots() {
-        let dir = TempDir::new().unwrap();
-        let session = Arc::new(Session::new(test_config(&dir)).unwrap());
-        let first = types::ChatTarget {
-            provider_id: "openai".into(),
-            backend_id: "openai".into(),
-            model: "gpt-5".into(),
-            api_key: "first-key".into(),
-            base_url: "https://first.example.com".into(),
-        };
-        session.set_chat_targets(vec![first.clone()]);
-        session.set_permission_profile(Some("workspace-write".into()));
-        session.set_project_root(Some(PathBuf::from("/tmp/first-project")));
-
-        let targets_snapshot = session.chat_targets();
-        let permission_snapshot = session.permission_profile();
-        let project_snapshot = session.project_root();
-
-        session.set_chat_targets(vec![types::ChatTarget {
-            model: "gpt-5-mini".into(),
-            ..first
-        }]);
-        session.set_permission_profile(Some("read-only".into()));
-        session.set_project_root(Some(PathBuf::from("/tmp/second-project")));
-
-        assert_eq!(targets_snapshot[0].model, "gpt-5");
-        assert_eq!(permission_snapshot.as_deref(), Some("workspace-write"));
-        assert_eq!(project_snapshot, Some(PathBuf::from("/tmp/first-project")));
-        assert_eq!(session.chat_targets()[0].model, "gpt-5-mini");
-        assert_eq!(session.permission_profile().as_deref(), Some("read-only"));
-        assert_eq!(
-            session.project_root(),
-            Some(PathBuf::from("/tmp/second-project"))
-        );
     }
 }
 

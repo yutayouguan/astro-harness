@@ -69,70 +69,9 @@ impl StreamedAssistantContent {
     }
 }
 
-/// 多轮 Agent 流式事件，在 assistant 片段之上扩展工具结果与产品语义。
-#[derive(Debug, Clone)]
-pub enum MultiTurnStreamItem {
-    /// 模型输出片段（文本、推理、工具 delta、usage）。
-    Assistant(StreamedAssistantContent),
-    /// 单次工具调用开始执行，对齐 Codex `ItemStarted` 生命周期。
-    ToolStarted {
-        id: String,
-        name: String,
-        arguments_json: String,
-    },
-    /// 单次工具调用完成后的结果，供 UI 展示。
-    ToolResult {
-        /// 与 assistant tool_call 对应的 id。
-        id: String,
-        /// 工具 qualified name。
-        name: String,
-        /// 原始 arguments JSON 字符串。
-        arguments_json: String,
-        /// 工具返回文本（含错误前缀时仍原样传递）。
-        result: String,
-        /// 结构化媒体（生成图/音/视频）；空则前端可回落解析 result 文本。
-        media: Vec<types::MediaAsset>,
-    },
-    /// 记忆工具成功变更，供右侧时间线展示。
-    MemoryUpdate {
-        /// 操作类型：`memory`（单一记忆工具）或其 action 描述。
-        op: String,
-        /// 结果预览（最长 240 字符）。
-        content: String,
-    },
-    /// 本轮 API 请求前的上下文占用估算（分层 token 快照）。
-    ContextUsage(crate::prompt::context_usage::ContextUsageSnapshot),
-    /// AG-UI `RUN_STARTED`：一次用户发送对应一个 run。
-    RunStarted { thread_id: String, run_id: String },
-    /// A steered queue item has been persisted into the active turn history.
-    UserInputCommitted { client_message_id: String },
-    /// AG-UI `ACTIVITY_SNAPSHOT`（如 A2UI surface）。
-    Activity {
-        message_id: String,
-        activity_type: String,
-        content_json: String,
-        replace: bool,
-    },
-    /// AG-UI `RUN_FINISHED`：`outcome_type` 为 `success`、`error`、`interrupt` 或 `hitl_waiting`。
-    /// `hitl_waiting`：同回合阻塞 HITL，流不随后发 Done。
-    RunFinished {
-        run_id: String,
-        outcome_type: String,
-        /// JSON array of Interrupt；success 时为空数组 `[]`。
-        interrupts_json: String,
-    },
-    /// 不可恢复错误，之后必跟 `Done`。
-    Error(String),
-    /// 流正常或异常结束标记。
-    Done,
-}
-
 /// Provider 层 assistant 内容流：每项为 `StreamedAssistantContent` 或错误。
 pub type AssistantContentStream =
     Pin<Box<dyn Stream<Item = anyhow::Result<StreamedAssistantContent>> + Send>>;
-
-/// 多轮 Agent 事件流：由 [`super::stream_multi_turn`] 暴露给 gRPC / UI 消费。
-pub type MultiTurnStream = Pin<Box<dyn Stream<Item = anyhow::Result<MultiTurnStreamItem>> + Send>>;
 
 /// 将新 `CompletionStream`（新类型）直接映射为 [`AssistantContentStream`]。
 ///

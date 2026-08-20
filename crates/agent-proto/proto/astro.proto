@@ -11,6 +11,15 @@ service AstroService {
   rpc ChatControl(ChatControlRequest) returns (Empty);
   // 将用户补充指令注入当前活动 turn；在下一次模型采样前消费。
   rpc SteerChat(SteerChatRequest) returns (SteerChatResponse);
+  // One long-lived outbound stream per client connection.
+  rpc SubscribeThreadEvents(SubscribeThreadEventsRequest)
+      returns (stream ThreadEvent);
+  // Submit one user input operation to a loaded or newly created Thread.
+  rpc SubmitTurn(SubmitTurnRequest) returns (SubmitTurnResponse);
+  // Rebuild durable history, merge an active snapshot, and subscribe the connection.
+  rpc ResumeThread(ResumeThreadRequest) returns (ResumeThreadResponse);
+  // Stop routing one Thread to a connection without stopping the Thread.
+  rpc UnsubscribeThread(UnsubscribeThreadRequest) returns (Empty);
   // 校验并登记 interrupt 的 resume 项（随后 Chat 携带 resume_json 续跑）。
   rpc InterruptResume(InterruptResumeRequest) returns (Empty);
   // 文生图流：进度、图片字节或错误。
@@ -27,8 +36,6 @@ service AstroService {
   rpc QueryMemory(MemoryQuery) returns (MemoryResult);
   // 在记忆沙箱内列举文件（受根目录约束）。
   rpc ListFiles(FileListRequest) returns (FileListResponse);
-  // 会话级副作用事件（记忆更新 / pending 变化）；与 Chat 流生命周期解耦。
-  rpc SubscribeSessionEvents(SubscribeSessionEventsRequest) returns (stream SessionEvent);
   // 统计消息 + 工具的 token 数（Anthropic count_tokens）。
   rpc CountTokens(CountTokensRequest) returns (CountTokensResponse);
   // Anthropic Message Batches：创建 / 查询 / 列表 / 结果。
@@ -118,6 +125,8 @@ message ChatRequest {
   // 备用供应商的视频/音乐模型覆盖
   string image_gen_fallback_video_model = 35;
   string image_gen_fallback_music_model = 36;
+  // 前端队列身份；仅在输入持久化后通过 user_input_committed 回执。
+  string client_message_id = 37;
 }
 
 // 聊天多模态图片附件（OpenAI 兼容 image_url 的 data URL 原料）。
@@ -159,6 +168,133 @@ message SteerChatRequest {
 message SteerChatResponse {
   bool accepted = 1;
   string turn_id = 2;
+}
+
+message SubscribeThreadEventsRequest {
+  string connection_id = 1;
+}
+
+message SubmitTurnRequest {
+  string connection_id = 1;
+  ChatRequest chat = 2;
+  string mode = 3;             // start_or_steer | start_if_idle | steer
+  string expected_turn_id = 4; // required only for steer
+}
+
+message SubmitTurnResponse {
+  string submission_id = 1;
+  string turn_id = 2;
+  string disposition = 3; // started | steered | resumed | not_submitted
+  string reason = 4;
+}
+
+message ResumeThreadRequest {
+  string connection_id = 1;
+  string thread_id = 2;
+  bool include_turns = 3;
+}
+
+message ResumeThreadResponse {
+  ThreadSnapshot thread = 1;
+}
+
+message UnsubscribeThreadRequest {
+  string connection_id = 1;
+  string thread_id = 2;
+}
+
+message ThreadSnapshot {
+  string thread_id = 1;
+  string status = 2; // idle | running | errored | shutdown
+  repeated ThreadTurn turns = 3;
+  ThreadTurn active_turn = 4;
+  bool has_active_turn = 5;
+}
+
+message ThreadTurn {
+  string id = 1;
+  string status = 2; // in_progress | completed | failed | aborted
+  repeated ThreadItem items = 3;
+  string last_agent_message = 4;
+  ThreadError error = 5;
+  bool has_error = 6;
+}
+
+message ThreadItem {
+  string id = 1;
+  string item_type = 2;
+  string status = 3; // in_progress | completed | failed
+  string payload_json = 4;
+}
+
+message ThreadError {
+  string message = 1;
+  string error_type = 2;
+}
+
+message ThreadEvent {
+  string thread_id = 1;
+  string turn_id = 2;
+  oneof payload {
+    ThreadTurnStarted turn_started = 10;
+    ThreadItemEvent item_started = 11;
+    ThreadItemEvent item_completed = 12;
+    ThreadDelta agent_message_delta = 13;
+    ThreadDelta plan_delta = 14;
+    ThreadDelta reasoning_delta = 15;
+    ThreadDelta exec_output_delta = 16;
+    ThreadDelta patch_delta = 17;
+    ThreadControlRequest control_request = 18;
+    ThreadTokenCount token_count = 19;
+    ThreadError error = 20;
+    ThreadError warning = 21;
+    ThreadTurnComplete turn_complete = 22;
+    ThreadTurnAborted turn_aborted = 23;
+    ThreadExtension extension = 24;
+    bool shutdown_complete = 25;
+  }
+}
+
+message ThreadTurnStarted {
+  string turn_id = 1;
+}
+
+message ThreadItemEvent {
+  ThreadItem item = 1;
+}
+
+message ThreadDelta {
+  string item_id = 1;
+  string delta = 2;
+}
+
+message ThreadControlRequest {
+  string kind = 1;
+  string item_id = 2;
+  string request_id = 3;
+  string payload_json = 4;
+}
+
+message ThreadTokenCount {
+  uint64 input_tokens = 1;
+  uint64 output_tokens = 2;
+  uint64 total_tokens = 3;
+}
+
+message ThreadTurnComplete {
+  string last_agent_message = 1;
+  ThreadError error = 2;
+  bool has_error = 3;
+}
+
+message ThreadTurnAborted {
+  string reason = 1;
+}
+
+message ThreadExtension {
+  string item_id = 1;
+  string namespace = 2;
+  string payload_json = 3;
 }
 
 // Token 用量（OpenAI 风格字段）。
@@ -365,71 +501,6 @@ message SessionSnippet { string session_id = 1; string summary = 2; }
 message FileListRequest { string path = 1; int32 depth = 2; }
 message FileListResponse { repeated FileEntry entries = 1; }
 message FileEntry { string path = 1; bool is_dir = 2; int64 size = 3; }
-
-message SubscribeSessionEventsRequest {
-  // 空 = 只收全局 pending；非空 = 该 session + 全局 pending
-  string session_id = 1;
-  // 可选 agent 过滤；空 = 不过滤
-  string agent_id = 2;
-  // 断线重连游标；仅在 stream_id 匹配当前服务进程时生效。
-  uint64 after_event_id = 3;
-  string stream_id = 4;
-}
-
-message SessionEvent {
-  string session_id = 1;
-  string agent_id = 2;
-  int64 ts_ms = 3;
-  uint64 event_id = 4;
-  string stream_id = 5;
-  oneof payload {
-    MemoryUpdatedEvent memory_updated = 10;
-    PendingChangedEvent pending_changed = 11;
-    SessionMetadataChangedEvent session_metadata_changed = 12;
-    AgentThreadChangedEvent agent_thread_changed = 13;
-    SessionResyncRequiredEvent resync_required = 14;
-  }
-}
-
-message SessionResyncRequiredEvent {
-  // A targeted resync may occur without a stream_id change. Clients must
-  // refresh the affected snapshot for every marker.
-  // stream_generation_changed | replay_gap | active_receiver_lag |
-  // agent_control_generation_changed | activity_gap
-  string reason = 1;
-}
-
-message AgentThreadChangedEvent {
-  // Root AgentControl generation cursor. A stream_id change or a targeted
-  // SessionResyncRequiredEvent requires a fresh tree snapshot.
-  uint64 activity_sequence = 1;
-  string root_thread_id = 2;
-  string thread_id = 3;
-  string parent_thread_id = 4;
-  string canonical_path = 5;
-  string task_name = 6;
-  string agent_type = 7;
-  string session_id = 8;
-  string status_kind = 9;
-  string status_payload_json = 10;
-  string activity_kind = 11;
-}
-
-message MemoryUpdatedEvent {
-  string source = 1;   // review | approve | dreaming | tool
-  string target = 2;   // memory | user | mixed
-  string summary = 3;
-  bool live_written = 4;
-}
-
-message PendingChangedEvent {
-  uint32 pending_count = 1;
-  string reason = 2;   // enqueued | approved | rejected
-}
-
-message SessionMetadataChangedEvent {
-  string title = 1;
-}
 
 // ---------------------------------------------------------------------------
 // Token Counting & Batch API

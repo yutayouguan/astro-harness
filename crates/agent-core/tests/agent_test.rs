@@ -72,7 +72,7 @@ async fn test_agent_loop_memory_injection() {
     assert!(wrote.text().contains("已写盘（live）") || wrote.text().contains("已存在"));
 
     // 工具写入只改 live；新 AgentLoop（新 session）open/reload 会把盘上内容固化进 snapshot
-    let agent = AgentLoop::new(test_config(&dir)).unwrap();
+    let mut agent = AgentLoop::new(test_config(&dir)).unwrap();
     let result = agent.start_or_steer_turn("你好", "task-1").await.unwrap();
     match result {
         TurnResult::Continue { system_prompt, .. } => {
@@ -88,7 +88,7 @@ async fn test_agent_loop_fts_recall_after_long_session() {
     let dir = TempDir::new().unwrap();
     let mut config = test_config(&dir);
     config.recent_turns = 2;
-    let agent = AgentLoop::new(config).unwrap();
+    let mut agent = AgentLoop::new(config).unwrap();
 
     agent.start_or_steer_turn("消息一", "task-1").await.unwrap();
     agent.record_assistant_message("回复一").await.unwrap();
@@ -115,7 +115,7 @@ async fn test_agent_loop_fts_recall_after_long_session() {
 async fn test_memory_tools_registered() {
     let dir = TempDir::new().unwrap();
     let agent = AgentLoop::new(test_config(&dir)).unwrap();
-    let registry = agent.tool_registry();
+    let registry = agent.tool_registry().await;
     let names: Vec<_> = registry
         .available_tools()
         .iter()
@@ -131,7 +131,7 @@ async fn test_memory_tools_registered() {
 #[tokio::test]
 async fn test_set_model_agno_style_entry() {
     let dir = TempDir::new().unwrap();
-    let agent = AgentLoop::new(test_config(&dir)).unwrap();
+    let mut agent = AgentLoop::new(test_config(&dir)).unwrap();
     agent.set_chat_credentials("openai", "gpt-old", "sk-test", "https://api.openai.com/v1");
     agent.set_chat_targets(vec![types::ChatTarget {
         provider_id: "openai".into(),
@@ -170,7 +170,7 @@ async fn test_set_model_agno_style_entry() {
 #[tokio::test]
 async fn test_set_fallback_models_keeps_primary() {
     let dir = TempDir::new().unwrap();
-    let agent = AgentLoop::new(test_config(&dir)).unwrap();
+    let mut agent = AgentLoop::new(test_config(&dir)).unwrap();
     agent.set_chat_targets(vec![types::ChatTarget {
         provider_id: "claude".into(),
         backend_id: "claude".into(),
@@ -210,7 +210,7 @@ async fn test_set_fallback_models_keeps_primary() {
 #[tokio::test]
 async fn run_turn_clears_prior_cancel_signal() {
     let dir = TempDir::new().unwrap();
-    let agent = AgentLoop::new(test_config(&dir)).unwrap();
+    let mut agent = AgentLoop::new(test_config(&dir)).unwrap();
     agent.cancel_signal().cancel();
     let result = agent
         .start_or_steer_turn("重试", "task-retry")

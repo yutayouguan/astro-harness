@@ -20,7 +20,9 @@ pub use names::*;
 pub use outcome::{HookInput, HookOutcome, HookPayload};
 pub use plugin::PluginHookBus;
 pub use shell::{load_shell_runner, ShellHookRunner};
-pub use ui::{install_recording, install_ui_timeline, UiHookEvent, UiTimelineSlot};
+pub use ui::{
+    install_recording, install_ui_timeline, UiHookEvent, UiTimelineGeneration, UiTimelineSlot,
+};
 
 use std::sync::Arc;
 

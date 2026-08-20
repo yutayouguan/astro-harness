@@ -4,7 +4,7 @@
 //! remains synchronous, so its adapter holds a standard mutex for exactly one
 //! [`ConversationStore`] call and never across an async suspension.
 
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, RwLock};
 
 use anyhow::{anyhow, Result};
 use serde_json::Value;
@@ -21,6 +21,8 @@ pub(crate) type TurnInputMemoryWriteHook = Arc<dyn Fn() + Send + Sync>;
 pub(crate) struct SessionServices {
     pub(crate) sessions: SharedConversationStore,
     pub(crate) compression_policy: Mutex<Box<dyn crate::compression::CompressionPolicy>>,
+    pub(crate) memory: RwLock<memory::MemoryManager>,
+    pub(crate) tool_registry: RwLock<tools::ToolRegistry>,
     pub(crate) agent_control: Arc<subagents::AgentControl>,
     pub(crate) agent_path: subagents::AgentPath,
     #[cfg(test)]
@@ -33,12 +35,16 @@ impl SessionServices {
     pub(crate) fn new(
         sessions: Box<dyn ConversationStore>,
         compression_policy: Box<dyn crate::compression::CompressionPolicy>,
+        memory: memory::MemoryManager,
+        tool_registry: tools::ToolRegistry,
         agent_control: Arc<subagents::AgentControl>,
         agent_path: subagents::AgentPath,
     ) -> Self {
         Self {
             sessions: SharedConversationStore::new(sessions),
             compression_policy: Mutex::new(compression_policy),
+            memory: RwLock::new(memory),
+            tool_registry: RwLock::new(tool_registry),
             agent_control,
             agent_path,
             #[cfg(test)]
