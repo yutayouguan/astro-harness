@@ -2,7 +2,7 @@
 
 > 版本：v2.29
 > 日期：2026-08-20
-> 状态：已实现
+> 状态：部分实现（本轮事件与恢复链已实现；Phase C、D、F 待续）
 > 上游参考：[OpenAI Codex](https://github.com/openai/codex) `632e35ce8d5dec43b75dbf99f9e6fa52bed47c3d`  
 > 适用范围：`agent-core`、`agent-tools`、`agent-sandbox`、`agent-network-proxy`、`agent-types`、`agent-subagents`、`agent-memory`、`agent-session`、`agent-hooks`、`agent-mcp`
 
@@ -29,7 +29,8 @@
 
 ## 2. 核心结论
 
-Astro 不再把 Agent 生命周期建模为一个巨大的 `AgentLoop`。已落地架构与 Codex 一致，分为五层：
+Astro 不再把 Agent 生命周期建模为一个巨大的 `AgentLoop`。目标架构与 Codex 一致，分为五层；
+本轮已落地事件与恢复主链，完整生命周期对齐仍受 Phase C、D、F 约束：
 
 ```text
 ThreadManager
@@ -42,7 +43,7 @@ ThreadManager
                       └─ ToolCallRuntime
 ```
 
-各层只拥有与自身生命周期一致的状态：
+目标上，各层只拥有与自身生命周期一致的状态：
 
 | 层级 | Codex 对齐名称 | 生命周期 | 主要职责 |
 | --- | --- | --- | --- |
@@ -398,9 +399,11 @@ Phase 2: Global Consolidation
 
 ---
 
-## 8. Plugin 与 Extension 生命周期
+## 8. Plugin 与 Extension 生命周期（目标，未实现）
 
-`Plugin` 是分发单元，`Extension` 是运行时贡献接口，两者不得混称。
+以下是 Phase F 的目标契约，不代表当前仓库已经存在 `PluginManifest` 或 typed
+`ExtensionRegistry`。目标语义中，`Plugin` 是分发单元，`Extension` 是运行时贡献接口，两者
+不得混称。
 
 ```rust
 pub struct PluginManifest<Resource> {
@@ -891,11 +894,11 @@ network retry 或 session/global proxy 状态。
 - [x] 冷启动 hydrate 保留 image/audio/video media kind、reference 与 MIME。
 - [x] memory/title/pending 副作用通过 namespaced `Op::EmitExtension` 进入同一事实链。
 
-### Phase F：Plugin/Extension
+### Phase F：Plugin/Extension（待续）
 
-- 增加 `PluginManifest` bundle。
-- 增加 typed `ExtensionRegistry`。
-- 将现有三类 hook 总线迁移为兼容 adapter。
+- [ ] 增加 `PluginManifest` bundle。
+- [ ] 增加 typed `ExtensionRegistry`。
+- [ ] 将现有三类 hook 总线迁移为兼容 adapter。
 
 ---
 

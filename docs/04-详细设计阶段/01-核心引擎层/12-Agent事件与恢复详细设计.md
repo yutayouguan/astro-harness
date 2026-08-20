@@ -126,10 +126,11 @@ Tauri `ThreadEventsBridge` 用 activation generation 线性化 SubmitTurn ACK �
 - 所有其他映射事件按 `(thread_id, turn_id, activation)` FIFO 缓冲，不 emit，也不更新正文、
   reasoning 或 pending error projection。
 
-每 activation 的 provisional buffer 上限为 128。第 129 个事件对全局 pump 施加等待，直到 ACK、
-replacement、failure 或 forget 释放容量；不静默丢合法事件。matching ACK 原子取出对应 buffer，
-先投影 FIFO 事件，再拼接 matching deferred terminal。mismatched ACK 删除该 activation 的其他
-turn buffer、provisional epoch、marker 和 deferred terminal，防止旧 turn 污染新 turn。
+每个 `(turn_id, activation)` provisional buffer 的上限为 128；同一 activation 下不同 turn key
+分别计数。进入同一个 key 的第 129 个事件对全局 pump 施加等待，直到 ACK、replacement、
+failure 或 forget 释放容量；不静默丢合法事件。matching ACK 原子取出对应 buffer，先投影 FIFO
+事件，再拼接 matching deferred terminal。mismatched ACK 删除该 activation 的其他 turn buffer、
+provisional epoch、marker 和 deferred terminal，防止旧 turn 污染新 turn。
 
 ACK-drained batch 还有一层 delivery barrier：bridge 在 bind 返回后立即启动自有 detached worker，
 worker 等待 oneshot acceptance。正常 UI 同步 emit 完成后 sender 成功；调用者在发送前 drop 或
@@ -186,12 +187,13 @@ coverage rg 做最终回归。2026-08-20 focused suites 全部通过，三份 ca
 已实现；workspace all-target tests（1478 passed，2 ignored）、TypeScript 和生产 build 也通过。
 
 全 workspace clippy 的既有 baseline 仍未清零：`agent-types` 的
-`items_after_test_module`、`agent-skills` 的 `unnecessary_sort_by`，以及 `agent-providers` tests
-的 81 个 `unwrap_used`。这些告警来自本批未修改的 Rust 文件，故不得把
+`items_after_test_module`、`agent-skills` 的 `unnecessary_sort_by`、`agent-providers` tests 的
+81 个 `unwrap_used`（首个 `src/compat/messages.rs:148`），以及 `agent-workflow` tests 的 36 个
+`unwrap_used`（首个 `src/engine/dag.rs:265`）。这些告警来自本批未修改的 Rust 文件，故不得把
 `cargo clippy --workspace --all-targets -- -D warnings` 记为通过。legacy deletion rg 为 0 命中，
 EventMsg coverage rg 为 217 命中，`git diff --check` 通过。
 
 ## 10. 相关设计
 
 - [Agent 生命周期详细设计](07-Agent生命周期详细设计.md)
-- [Agent Loop Codex 架构对齐设计](../../../superpowers/specs/2026-08-18-agent-loop-codex-alignment-design.md)
+- [Agent Loop Codex 架构对齐设计](../../superpowers/specs/2026-08-18-agent-loop-codex-alignment-design.md)

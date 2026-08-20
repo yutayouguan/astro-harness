@@ -554,8 +554,11 @@ Focused 门全部通过：
 - `crates/agent-skills/src/installed.rs:461`：`clippy::unnecessary_sort_by`；
 - `crates/agent-providers` lib tests：81 个既有 `clippy::unwrap_used`，首个为
   `src/compat/messages.rs:148`。
+- `crates/agent-workflow` tests：36 个既有 `clippy::unwrap_used`，首个为
+  `src/engine/dag.rs:265`。
 
-该 baseline 不改变 focused 门与运行时验收结论，但 workspace clippy 不能记为全绿。
+该 baseline 不改变 focused 门与运行时验收结论；
+`cargo clippy --workspace --all-targets -- -D warnings` 仍失败，workspace clippy 不能记为全绿。
 
 ## 13. 验收标准
 
