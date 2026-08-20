@@ -53,7 +53,7 @@ cd apps/desktop && npm run tauri:build:universal    # universal-apple-darwin
 
 ## Workspace Crate Map
 
-仓库按职责分为 7 个顶层目录，共 23 个 crate：
+仓库按职责分为 7 个顶层目录，共 25 个 crate：
 
 ### core/ — Agent 大脑
 
@@ -88,7 +88,9 @@ cd apps/desktop && npm run tauri:build:universal    # universal-apple-darwin
 | 路径 | package name | 职责 |
 |---|---|---|
 | `crates/agent-types` | `types` | 跨 crate 共享类型：`Message`、`Role`、`ToolCall`、`MediaAsset`、`ChatTarget`、`ModelSpec`、SQLite helpers、tool-spill。无业务逻辑。 |
-| `crates/agent-proto` | `proto` | Protobuf / tonic gRPC 服务契约（backend ↔ Tauri shell）。定义 `AstroService` 14 个 RPC（Chat、ChatControl、GenerateImage、ListSkills、ExecuteSkill、ListMcpServers、QueryMemory、SubscribeSessionEvents 等）。 |
+| `crates/agent-protocol` | `agent-protocol` | 统一 Thread 提交与事件协议：`Op`、`EventMsg`、`TurnItem`、approval/control 与扩展事件。 |
+| `crates/agent-rollout` | `agent-rollout` | append-only rollout 持久化、记录策略与 Thread 历史重建；是稳定事件恢复的事实源。 |
+| `crates/agent-proto` | `proto` | Protobuf / tonic gRPC 服务契约（backend ↔ Tauri shell）。定义 `AstroService` 的 Chat、Thread submit/resume/subscribe、媒体、Skill、MCP、Memory、Files、Token 与 Batch RPC。 |
 | `crates/agent-session` | `session` | `SessionStore`（`state.db` WAL SQLite，schema v17，FTS5）— 消息、会话、billing、FTS 召回。 |
 | `crates/agent-artifacts` | `artifacts` | 文件空间索引（`artifacts.db`）+ Knowledge Content DB（`knowledge.db`，FTS）。按来源（agent_write/user_upload/reconcile）注册文件，MIME 分类。 |
 | `crates/agent-usage` | `usage` | 用量事件 DB（`usage.db`）、per-agent 统计、路由感知成本估算（官方定价快照 + OpenRouter API）、trace insights、eval JSONL 导出。 |
@@ -161,16 +163,20 @@ ToolOrchestrator::run
 
 ### agent-core 模块组织
 
-`agent` crate 是中央运行时，7 个子模块：
+`agent` crate 是中央运行时，8 个公开子模块，另有内部 `tasks` 生命周期模块：
 
 - **`builder`** — 声明式 `AgentBuilder` / `BuiltAgentSpec`
 - **`compression`** — tool 结果压缩（原文保留，压缩视图给 provider）
 - **`control`** — HITL gate、中断状态机、schema 校验、smart approval
-- **`event_bus`** — agent 事件广播（UI 流式订阅）
 - **`exec`** — 执行域：cron 执行、delegate、dispatch、headless 多轮、记忆 review、mid-run summary、多 agent、编排、标题生成、tool LLM 压缩
 - **`prompt`** — prompt 域：上下文组装（context/context_source/context_usage）、hook 集成、消息变换、prompt builder、sanitization
 - **`runtime`** — 核心运行时：`AgentLoop`、`AgentConfig`、budget 管理、压缩状态、模型上下文、session 管理、turn budget、usage 追踪、校验
 - **`streaming`** — 流式补全：fallback 处理、HITL bridge、多轮 streaming、provider 抽象、run state、summary、tool 执行
+- **`timeline`** — 助手回合时间线与兼容投影
+
+统一事件不再由 `agent-core::event_bus` 广播：Core 产生 `agent-protocol::EventMsg`，先按策略写入
+`agent-rollout`，再由 Server 的每 Thread listener 投影到 gRPC/Tauri live stream；恢复使用
+rollout snapshot + live boundary。
 
 ### Provider Fallback 链
 
