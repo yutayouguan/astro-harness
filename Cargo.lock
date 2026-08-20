@@ -3053,6 +3053,7 @@ dependencies = [
 name = "mcp"
 version = "0.1.0"
 dependencies = [
+ "agent-config",
  "anyhow",
  "async-trait",
  "futures",

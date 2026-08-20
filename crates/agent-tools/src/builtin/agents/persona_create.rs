@@ -42,7 +42,7 @@ pub struct PersonaCreateArgs {
     /// Switch to this agent after create (updates ASTRO_WORKSPACE / MEMORY); default `false`.
     #[serde(default)]
     pub activate: Option<bool>,
-    /// Copy global tools/MCP into `agents/{id}/config.json` as a starting point; default `true`.
+    /// Copy global tool gates into `agents/{id}/config.json` as a starting point; default `true`.
     #[serde(default)]
     pub inherit_config: Option<bool>,
     #[serde(default)]

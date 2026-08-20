@@ -208,7 +208,6 @@ async fn test_agent_builder_from_runtime_config() {
         max_turns: Some(5),
         additional_params: Some(serde_json::json!({"foo": "bar"})),
         tools_enabled: None,
-        mcp: None,
         created_at: String::new(),
     };
 

@@ -36,11 +36,10 @@ pub fn write_agent_config(
         max_turns: None,
         additional_params: None,
         tools_enabled: None,
-        mcp: None,
         created_at: chrono::Local::now().to_rfc3339(),
     };
 
-    // 若继承：保留旧 tools 快照行为；MCP 改由 config.toml 分层继承。
+    // 若继承：保留 persona 工具开关快照；MCP 始终来自统一 config.toml。
     if inherit && id != DEFAULT_AGENT_ID {
         if let Ok(tools) = fs::read_to_string(base.join("tools-enabled.json")) {
             if let Ok(v) = serde_json::from_str::<serde_json::Value>(&tools) {
@@ -513,10 +512,10 @@ pub fn ensure_agent_space(
 /// ```text
 /// ~/.astro/
 /// ├── config.toml                ← 全局设置、项目信任与 MCP
+/// ├── agents/*.toml              ← 全局自定义 Agent 角色
 /// ├── workspace/                 ← 默认 Agent 工作区
 /// ├── workspace-{id}/            ← 其他 Agent 工作区（同构）
 /// ├── agents/{id}/config.json    ← 每 Agent 的运行时配置
-/// ├── agents/{id}/config.toml    ← 每 Agent 的 MCP 覆盖（按需创建）
 /// └── active-agent.json
 /// ```
 pub fn ensure_workspace(base: &Path) -> anyhow::Result<EnsureWorkspaceReport> {

@@ -428,9 +428,8 @@ export function useMcpTools(agentId?: string | null, watchRuntime = false) {
     (async () => {
       if (!isTauri()) {
         if (!cancelled) {
-          const key = agentId ? `mcp-tools:${agentId}` : "mcp-tools";
           try {
-            const raw = localStorage.getItem(key);
+            const raw = localStorage.getItem("mcp-tools");
             setServers(raw ? (JSON.parse(raw) as McpServer[]).map(normalizeServer) : []);
           } catch {
             setServers([]);
@@ -440,9 +439,7 @@ export function useMcpTools(agentId?: string | null, watchRuntime = false) {
         return;
       }
       try {
-        const list = await invoke<Partial<McpServer>[]>("get_mcp_servers", {
-          agentId: agentId || null,
-        });
+        const list = await invoke<Partial<McpServer>[]>("get_mcp_servers");
         if (!cancelled) {
           setServers(list.map((s) => normalizeServer(s)));
           setReady(true);
@@ -457,7 +454,7 @@ export function useMcpTools(agentId?: string | null, watchRuntime = false) {
     return () => {
       cancelled = true;
     };
-  }, [agentId]);
+  }, []);
 
   const refreshRuntimeStatuses = useCallback(async () => {
     if (!isTauri()) return;
@@ -515,7 +512,7 @@ export function useMcpTools(agentId?: string | null, watchRuntime = false) {
       try {
         const flow = await invoke<{ flowId: string; authorizationUrl: string }>(
           "begin_mcp_oauth",
-          { agentId: agentId || null, serverId },
+          { serverId },
         );
         flowId = flow.flowId;
         await open(flow.authorizationUrl);
@@ -534,7 +531,7 @@ export function useMcpTools(agentId?: string | null, watchRuntime = false) {
         });
       }
     },
-    [agentId, reconnectServer],
+    [reconnectServer],
   );
 
   const logoutServer = useCallback(
@@ -542,7 +539,7 @@ export function useMcpTools(agentId?: string | null, watchRuntime = false) {
       if (!isTauri()) return;
       setAuthenticatingServerIds((current) => new Set(current).add(serverId));
       try {
-        await invoke("logout_mcp_oauth", { agentId: agentId || null, serverId });
+        await invoke("logout_mcp_oauth", { serverId });
         await reconnectServer(serverId);
       } catch (error) {
         setRuntimeStatusError(error instanceof Error ? error.message : String(error));
@@ -554,7 +551,7 @@ export function useMcpTools(agentId?: string | null, watchRuntime = false) {
         });
       }
     },
-    [agentId, reconnectServer],
+    [reconnectServer],
   );
 
   useEffect(() => {
@@ -565,15 +562,14 @@ export function useMcpTools(agentId?: string | null, watchRuntime = false) {
     }
     if (!isTauri()) {
       try {
-        const key = agentId ? `mcp-tools:${agentId}` : "mcp-tools";
-        localStorage.setItem(key, JSON.stringify(servers));
+        localStorage.setItem("mcp-tools", JSON.stringify(servers));
       } catch {
         // ignore
       }
       return;
     }
-    void invoke("set_mcp_servers", { servers, agentId: agentId || null }).catch(() => {});
-  }, [servers, ready, agentId, skipNextSave]);
+    void invoke("set_mcp_servers", { servers }).catch(() => {});
+  }, [servers, ready, skipNextSave]);
 
   const addServers = useCallback((incoming: McpServer[]) => {
     setServers((prev) => [...prev, ...incoming.map((s) => normalizeServer(s))]);

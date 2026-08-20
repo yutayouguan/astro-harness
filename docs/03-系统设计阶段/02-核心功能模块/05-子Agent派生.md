@@ -14,7 +14,8 @@
 - **线程而非一次性委派**：子 Agent 是可追问、可恢复的持久线程，不是一次性同步调用
 - **显式路径寻址**：每个子 Agent 有 `AgentPath`（如 `/root/research`），父 Agent 通过路径名定位子线程
 - **不再有嵌套深度计数**：`AgentRegistry` 通过 `Limits.max_depth` 控制树深度，不使用 `AgentContext.depth` 递增模式
-- **配置从 `.codex/agents` 加载**：自定义 Agent 类型定义在项目 `.codex/agents/*.toml` 或全局 `~/.codex/agents/*.toml`，不使用 `.astro/agents`
+- **配置从 `.astro/agents` 加载**：自定义 Agent 类型定义在可信项目
+  `.astro/agents/*.toml` 或全局 `~/.astro/agents/*.toml`；`.codex` 不生效
 
 ---
 
@@ -46,7 +47,7 @@ V2 提供 **6 个模型工具**（LLM 可直接调用）和 **2 个桌面控制�
 pub struct SpawnAgentV2Request {
     pub task_name: String,              // 子任务名称（同时作为路径段）
     pub message: String,                // 初始任务描述
-    pub agent_type: Option<String>,     // 可选：自定义 Agent 类型（加载 .codex/agents 定义）
+    pub agent_type: Option<String>,     // 可选：自定义 Agent 类型（加载 .astro/agents 定义）
     pub model: Option<String>,          // 可选：指定模型
     pub reasoning_effort: Option<String>, // 可选：推理强度
     pub fork_turns: Option<String>,     // 上下文快照策略：none | all | N

@@ -215,13 +215,13 @@ pub fn load_local_config(
 
     let mut diagnostics = Vec::new();
 
-    for dot_codex_dir in project_config_dirs(&project_root, &cwd) {
-        let path = dot_codex_dir.join(CONFIG_TOML_FILE);
+    for dot_astro_dir in project_config_dirs(&project_root, &cwd) {
+        let path = dot_astro_dir.join(CONFIG_TOML_FILE);
         if !path.is_file() {
             continue;
         }
         let source = ConfigLayerSource::Project {
-            dot_config_dir: dot_codex_dir,
+            dot_config_dir: dot_astro_dir,
         };
         if let Some(reason) = project_trust.disabled_reason() {
             // Do not parse or otherwise consume untrusted repository content.

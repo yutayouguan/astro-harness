@@ -4,7 +4,7 @@
  * - 可链式多个前导 `/skill`（最多 5 个），其后为用户指令
  * - `@Agent`：切换全局活跃 Agent（本轮起用新 session 绑定）
  * - `@Skill`：同 `/skill`，注入全文
- * - `@MCP`：启用对应 MCP server（写入 Agent 私有 config.toml）
+ * - `@MCP`：启用对应 MCP server（写入全局 `.astro/config.toml`）
  */
 
 import { invoke } from "@tauri-apps/api/core";

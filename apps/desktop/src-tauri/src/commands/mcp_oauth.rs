@@ -28,25 +28,9 @@ pub struct McpOAuthBeginResult {
     authorization_url: String,
 }
 
-fn normalize_agent_id(agent_id: Option<String>) -> Option<String> {
-    agent_id
-        .map(|value| value.trim().to_string())
-        .filter(|value| !value.is_empty())
-        .map(|value| {
-            if value == "default" {
-                home::DEFAULT_AGENT_ID.to_string()
-            } else {
-                value
-            }
-        })
-}
-
-fn load_server(agent_id: Option<String>, server_id: &str) -> Result<mcp::McpServerConfig, String> {
-    let memory_root = home::default_memory_dir();
-    let agent_id =
-        normalize_agent_id(agent_id).unwrap_or_else(|| home::active_agent_id(&memory_root));
+fn load_server(server_id: &str) -> Result<mcp::McpServerConfig, String> {
     let project_root = worktree::resolve_project_root(None);
-    mcp::load_mcp_servers_layered(Some(&agent_id), project_root.as_deref())
+    mcp::load_mcp_servers_layered(project_root.as_deref())
         .map_err(|error| error.to_string())?
         .into_iter()
         .find(|config| mcp::sanitize_server_id(&config.id) == mcp::sanitize_server_id(server_id))
@@ -60,11 +44,8 @@ fn load_server(agent_id: Option<String>, server_id: &str) -> Result<mcp::McpServ
 
 /// 开始标准 MCP OAuth 2.1 + PKCE 流程并返回要在系统浏览器打开的 URL。
 #[tauri::command]
-pub async fn begin_mcp_oauth(
-    agent_id: Option<String>,
-    server_id: String,
-) -> Result<McpOAuthBeginResult, String> {
-    let config = load_server(agent_id, &server_id)?;
+pub async fn begin_mcp_oauth(server_id: String) -> Result<McpOAuthBeginResult, String> {
+    let config = load_server(&server_id)?;
     if !config.enabled {
         return Err("enable the MCP server before authentication".into());
     }
@@ -135,8 +116,8 @@ pub async fn cancel_mcp_oauth(flow_id: String) -> Result<(), String> {
 
 /// 删除系统 Keychain 中的 registration/token。调用方随后重连 Server。
 #[tauri::command]
-pub async fn logout_mcp_oauth(agent_id: Option<String>, server_id: String) -> Result<(), String> {
-    let config = load_server(agent_id, &server_id)?;
+pub async fn logout_mcp_oauth(server_id: String) -> Result<(), String> {
+    let config = load_server(&server_id)?;
     mcp::auth::clear_oauth_credentials(&config)
         .await
         .map_err(|error| error.to_string())

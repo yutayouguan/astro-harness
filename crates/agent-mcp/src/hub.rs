@@ -21,8 +21,8 @@ use std::sync::Arc;
 use tokio::sync::Mutex as TokioMutex;
 
 use crate::config::{
-    load_for_active_agent, load_mcp_servers_layered, merge_discovered, persist_discovered_layered,
-    DiscoveredTool, McpHttpAuth, McpServerConfig, McpTransportType,
+    load_mcp_servers_layered, merge_discovered, persist_discovered_layered, DiscoveredTool,
+    McpHttpAuth, McpServerConfig, McpTransportType,
 };
 use crate::names::{
     is_mcp_tool_name, parse_qualified_name, qualify_tool_name, sanitize_server_id, MCP_TOOLSET,
@@ -421,11 +421,7 @@ impl McpHub {
             .execution_context
             .as_ref()
             .map(|context| context.working_dir.as_path());
-        let configs = if let Some(ref a) = id {
-            load_mcp_servers_layered(Some(a), project_root)?
-        } else {
-            load_for_active_agent()?
-        };
+        let configs = load_mcp_servers_layered(project_root)?;
         self.reload_with_configs(configs).await
     }
 
@@ -644,15 +640,9 @@ impl McpHub {
                 .execution_context
                 .as_ref()
                 .map(|context| context.working_dir.as_path());
-            if let Err(e) = persist_discovered_layered(
-                self.agent_id.as_deref(),
-                project_root,
-                &discovered_updates,
-            ) {
+            if let Err(e) = persist_discovered_layered(project_root, &discovered_updates) {
                 warn!(error = %e, "persist MCP discovered failed");
-            } else if let Ok(fresh) =
-                load_mcp_servers_layered(self.agent_id.as_deref(), project_root)
-            {
+            } else if let Ok(fresh) = load_mcp_servers_layered(project_root) {
                 for cfg in fresh {
                     let sid = sanitize_server_id(&cfg.id);
                     if let Some(slot) = self
@@ -719,7 +709,7 @@ impl McpHub {
             .execution_context
             .as_ref()
             .map(|context| context.working_dir.as_path());
-        let fresh = load_mcp_servers_layered(self.agent_id.as_deref(), project_root)?;
+        let fresh = load_mcp_servers_layered(project_root)?;
         let mut seen = std::collections::HashSet::new();
         for cfg in &fresh {
             let sid = sanitize_server_id(&cfg.id);
@@ -1005,11 +995,10 @@ impl McpHub {
 
     /// 短连刷新某 server 的 discovered（供 UI refresh_mcp_tools）
     pub async fn refresh_discovered(
-        agent_id: Option<&str>,
         server_id: Option<&str>,
         execution_context: &McpExecutionContext,
     ) -> anyhow::Result<Vec<McpServerConfig>> {
-        let mut configs = load_mcp_servers_layered(agent_id, Some(&execution_context.working_dir))?;
+        let mut configs = load_mcp_servers_layered(Some(&execution_context.working_dir))?;
         let mut discovered_updates = Vec::new();
         for cfg in configs.iter_mut() {
             if let Some(want) = server_id {
@@ -1044,11 +1033,7 @@ impl McpHub {
                 }
             }
         }
-        persist_discovered_layered(
-            agent_id,
-            Some(&execution_context.working_dir),
-            &discovered_updates,
-        )?;
+        persist_discovered_layered(Some(&execution_context.working_dir), &discovered_updates)?;
         Ok(configs)
     }
 }

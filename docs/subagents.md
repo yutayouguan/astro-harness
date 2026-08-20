@@ -35,8 +35,8 @@ Astro 只有一套 Subagent 运行时契约：持久化的 Agent Thread 树。�
 
 自定义 Agent 只从以下路径加载，项目定义覆盖用户定义：
 
-- `~/.codex/agents/*.toml`
-- `<project>/.codex/agents/*.toml`
+- `~/.astro/agents/*.toml`
+- `<project>/.astro/agents/*.toml`（仅可信项目）
 
 ```toml
 name = "reviewer"
@@ -56,7 +56,8 @@ enabled = true
 
 `name`、`description`、`developer_instructions` 必填。自定义 sandbox 只能收窄父任务权限；MCP 与 skill 也不得扩大父任务的文件、网络、工具或审批权限。内置 agent 为 `default`、`worker`、`explorer`。
 
-全局与项目设置也只从 `~/.codex/config.toml` 和 `<project>/.codex/config.toml` 加载：
+全局与项目设置也只从 `~/.astro/config.toml` 和可信项目的
+`<project>/.astro/config.toml` 加载；`.codex` 不作为 Astro 配置输入：
 
 ```toml
 [agents]

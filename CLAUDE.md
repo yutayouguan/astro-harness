@@ -122,7 +122,7 @@ AstroThread::submit(Op)
 
 状态：`PendingInit` → `Running` → `Completed { last_message }` / `Interrupted` / `Errored { message }` → `Shutdown`。
 
-配置：仅 `.codex/agents` 和 `.codex/config.toml`（不加载 `.astro/agents`）。
+配置：仅 `.astro/agents` 和 `.astro/config.toml`；`.codex` 不作为 Astro 配置输入。
 
 ### Provider Fallback 链
 
@@ -144,6 +144,8 @@ Plugin bus 事件（Codex 对齐命名）：`PreLlmCall`、`PreToolUse`、`Permi
 
 ```
 ~/.astro/
+  config.toml          # 全局统一配置、项目信任与 MCP
+  agents/*.toml        # 全局自定义 agent 定义
   agents/{agent_id}/
     SOUL.md            # Agent 人格
     MEMORY.md          # 项目记忆（快照）
@@ -158,12 +160,9 @@ Plugin bus 事件（Codex 对齐命名）：`PreLlmCall`、`PreToolUse`、`Permi
   workflows/workflows.json
   subagents.db         # V2 Agent 线程图、邮箱、状态事件
   usage/usage.db
-~/.codex/
-  config.toml          # 全局 agent 设置
-  agents/              # 自定义 agent 定义（.toml）
-<project>/.codex/
-  config.toml          # 项目级 agent 设置覆盖
-  agents/              # 项目级 agent 定义
+<project>/.astro/
+  config.toml          # 可信项目配置覆盖
+  agents/*.toml        # 项目级自定义 agent 定义
 ```
 
 ## Key Invariants
