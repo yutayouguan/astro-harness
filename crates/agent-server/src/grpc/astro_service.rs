@@ -2795,10 +2795,55 @@ mod tests {
     use crate::ListenerCommand;
 
     use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+    use std::time::Duration;
 
     use agent::streaming::{run_multi_turn_events_with_chat_fn, ChatOverride};
     use providers::CompletionStream;
     use tempfile::TempDir;
+
+    async fn wait_for_agent_thread_extensions(
+        managed: &Arc<ManagedThread>,
+        memory_dir: &std::path::Path,
+        root_thread_id: &str,
+        ready: impl Fn(&[agent_protocol::ExtensionItem]) -> bool,
+    ) -> Vec<agent_protocol::ExtensionItem> {
+        tokio::time::timeout(Duration::from_secs(3), async {
+            loop {
+                managed.runtime.flush_rollout().await.unwrap();
+                let rollout_root = memory_dir.join("sessions").join("rollouts");
+                let extensions =
+                    match agent_rollout::find_rollout(&rollout_root, root_thread_id).unwrap() {
+                        Some(path) => agent_rollout::read_rollout(&path)
+                            .await
+                            .unwrap()
+                            .into_iter()
+                            .filter_map(|item| match item {
+                                agent_rollout::RolloutItem::EventMsg(
+                                    agent_protocol::EventMsg::ItemCompleted(
+                                        agent_protocol::ItemEvent {
+                                            item: agent_protocol::TurnItem::Extension(extension),
+                                            ..
+                                        },
+                                    ),
+                                ) if extension.namespace == "astro.agent_thread"
+                                    || extension.namespace == "astro.agent_thread_resync" =>
+                                {
+                                    Some(extension)
+                                }
+                                _ => None,
+                            })
+                            .collect::<Vec<_>>(),
+                        None => Vec::new(),
+                    };
+                if ready(&extensions) {
+                    return extensions;
+                }
+                tokio::time::sleep(Duration::from_millis(10)).await;
+            }
+        })
+        .await
+        .expect("agent thread extensions were not materialized")
+    }
 
     #[test]
     fn only_successful_run_allows_post_turn_side_effects() {
@@ -2840,6 +2885,191 @@ mod tests {
         assert_eq!(projection["activity_sequence"], 1);
         assert_eq!(projection["canonical_path"], "/root/child");
         assert_eq!(projection["activity_kind"], "spawned");
+    }
+
+    #[tokio::test]
+    async fn agent_thread_watcher_replays_then_skips_projectionless_activity() {
+        let dir = TempDir::new().unwrap();
+        let service = AstroServiceImpl::new(dir.path().to_path_buf());
+        let root = "agent-thread-replay-root";
+        let managed = service.get_or_create_thread(root).await.unwrap();
+        let control = Arc::new(
+            subagents::AgentControl::open(
+                root.into(),
+                subagents::AgentGraphStore::open(dir.path().join("agent-graph.db")).unwrap(),
+                subagents::Limits {
+                    max_threads: 8,
+                    max_depth: 4,
+                    max_running: 4,
+                },
+            )
+            .unwrap(),
+        );
+        let spawn = control
+            .reserve_spawn(&subagents::AgentPath::root(), "child")
+            .unwrap();
+        let child_thread_id = spawn.thread_id().to_string();
+        spawn.commit().unwrap();
+
+        service
+            .attach_agent_thread_watcher(
+                root,
+                "default",
+                Arc::clone(&control),
+                Arc::clone(&managed),
+            )
+            .await;
+        control.notify_main_steer();
+        control
+            .record_runner_event(&child_thread_id, subagents::RunnerEvent::RuntimeTerminated)
+            .unwrap();
+
+        let extensions = wait_for_agent_thread_extensions(&managed, dir.path(), root, |items| {
+            let Some(stream_id) = items
+                .iter()
+                .find(|item| item.namespace == "astro.agent_thread")
+                .map(|item| &item.payload["stream_id"])
+            else {
+                return false;
+            };
+            items
+                .iter()
+                .filter(|item| {
+                    item.namespace == "astro.agent_thread"
+                        && item.payload["stream_id"] == *stream_id
+                })
+                .count()
+                >= 2
+                && items.iter().any(|item| {
+                    item.namespace == "astro.agent_thread_resync"
+                        && item.payload["stream_id"] == *stream_id
+                })
+        })
+        .await;
+        let projected = extensions
+            .iter()
+            .filter(|extension| extension.namespace == "astro.agent_thread")
+            .collect::<Vec<_>>();
+        assert_eq!(projected.len(), 2, "MainSteer must not create a projection");
+        let stream_id = &projected[0].payload["stream_id"];
+        let resync = extensions
+            .iter()
+            .find(|extension| {
+                extension.namespace == "astro.agent_thread_resync"
+                    && extension.payload["stream_id"] == *stream_id
+            })
+            .unwrap();
+        assert_eq!(projected[0].payload["activity_sequence"], 1);
+        assert_eq!(projected[0].payload["activity_kind"], "spawned");
+        assert_eq!(projected[1].payload["activity_sequence"], 3);
+        assert_eq!(projected[1].payload["activity_kind"], "edge_closed");
+        assert_eq!(
+            projected[0].payload["stream_id"], resync.payload["stream_id"],
+            "replayed and live activity must share the watcher generation"
+        );
+        assert_eq!(
+            projected[1].payload["stream_id"],
+            resync.payload["stream_id"]
+        );
+    }
+
+    #[tokio::test]
+    async fn agent_thread_watcher_resyncs_retention_gap_before_next_projection() {
+        let dir = TempDir::new().unwrap();
+        let service = AstroServiceImpl::new(dir.path().to_path_buf());
+        let root = "agent-thread-gap-root";
+        let managed = service.get_or_create_thread(root).await.unwrap();
+        let control = Arc::new(
+            subagents::AgentControl::open(
+                root.into(),
+                subagents::AgentGraphStore::open(dir.path().join("agent-gap-graph.db")).unwrap(),
+                subagents::Limits {
+                    max_threads: 8,
+                    max_depth: 4,
+                    max_running: 4,
+                },
+            )
+            .unwrap(),
+        );
+        for _ in 0..1_025 {
+            control.notify_main_steer();
+        }
+
+        service
+            .attach_agent_thread_watcher(
+                root,
+                "default",
+                Arc::clone(&control),
+                Arc::clone(&managed),
+            )
+            .await;
+        let gap_extensions =
+            wait_for_agent_thread_extensions(&managed, dir.path(), root, |items| {
+                items.iter().any(|item| {
+                    item.namespace == "astro.agent_thread_resync"
+                        && item.payload["reason"] == "activity_gap"
+                })
+            })
+            .await;
+        let stream_id = gap_extensions
+            .iter()
+            .find(|item| {
+                item.namespace == "astro.agent_thread_resync"
+                    && item.payload["reason"] == "activity_gap"
+            })
+            .unwrap()
+            .payload["stream_id"]
+            .clone();
+        control
+            .reserve_spawn(&subagents::AgentPath::root(), "after_gap")
+            .unwrap()
+            .commit()
+            .unwrap();
+
+        let extensions = wait_for_agent_thread_extensions(&managed, dir.path(), root, |items| {
+            ["agent_control_generation_changed", "activity_gap"]
+                .into_iter()
+                .all(|reason| {
+                    items.iter().any(|item| {
+                        item.namespace == "astro.agent_thread_resync"
+                            && item.payload["stream_id"] == stream_id
+                            && item.payload["reason"] == reason
+                    })
+                })
+                && items.iter().any(|item| {
+                    item.namespace == "astro.agent_thread" && item.payload["stream_id"] == stream_id
+                })
+        })
+        .await;
+        let projection = extensions
+            .iter()
+            .find(|extension| extension.namespace == "astro.agent_thread")
+            .unwrap();
+        let stream_id = &projection.payload["stream_id"];
+        let resyncs = extensions
+            .iter()
+            .filter(|extension| {
+                extension.namespace == "astro.agent_thread_resync"
+                    && extension.payload["stream_id"] == *stream_id
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(resyncs.len(), 2);
+        assert_eq!(
+            resyncs[0].payload["reason"],
+            "agent_control_generation_changed"
+        );
+        assert_eq!(resyncs[1].payload["reason"], "activity_gap");
+        assert_eq!(
+            resyncs[0].payload["stream_id"],
+            resyncs[1].payload["stream_id"]
+        );
+
+        assert_eq!(projection.payload["canonical_path"], "/root/after_gap");
+        assert_eq!(projection.payload["activity_sequence"], 1_026);
+        assert_eq!(
+            projection.payload["stream_id"],
+            resyncs[0].payload["stream_id"]
+        );
     }
 
     #[tokio::test]
