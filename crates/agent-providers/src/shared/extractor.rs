@@ -235,6 +235,7 @@ where
         reasoning_effort: "high".into(),
         additional_params: serde_json::Value::Null,
         previous_interaction_id: None,
+        api_mode: String::new(),
     };
     Ok(ExtractorBuilder::new(provider_id, model, config))
 }

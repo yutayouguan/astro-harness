@@ -361,6 +361,7 @@ pub async fn regenerate_session_title(
             reasoning_effort: "high".to_string(),
             additional_params: serde_json::Value::Null,
             previous_interaction_id: None,
+            api_mode: String::new(),
         };
         let messages = vec![ProviderMessage::user_text(prompt)];
         let mut stream =

@@ -218,6 +218,7 @@ impl CronExecCredentials {
             model,
             api_key: self.api_key.clone(),
             base_url: self.base_url.clone(),
+            api_mode: String::new(),
         }]
     }
 }

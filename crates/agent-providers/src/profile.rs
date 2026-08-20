@@ -62,6 +62,8 @@ pub struct ProviderProfile {
     pub default_asr_model: &'static str,
     /// 嵌入模型默认名（空 = 不支持或用通用 fallback）。
     pub default_embedding_model: &'static str,
+    /// 是否支持 Responses API 协议切换。
+    pub supports_responses: bool,
 }
 
 impl ProviderProfile {
@@ -119,6 +121,7 @@ pub static PROFILES: &[ProviderProfile] = &[
         default_music_model: "",
         default_asr_model: "whisper-v3-turbo",
         default_embedding_model: "text-embedding-4-large",
+        supports_responses: true,
     },
     ProviderProfile {
         id: "claude",
@@ -139,6 +142,7 @@ pub static PROFILES: &[ProviderProfile] = &[
         default_music_model: "",
         default_asr_model: "",
         default_embedding_model: "",
+        supports_responses: false,
     },
     ProviderProfile {
         id: "deepseek",
@@ -159,6 +163,7 @@ pub static PROFILES: &[ProviderProfile] = &[
         default_music_model: "",
         default_asr_model: "",
         default_embedding_model: "",
+        supports_responses: true,
     },
     ProviderProfile {
         id: "google",
@@ -179,6 +184,7 @@ pub static PROFILES: &[ProviderProfile] = &[
         default_music_model: "lyria-3-pro",
         default_asr_model: "google-stt-v2-live",
         default_embedding_model: "gemini-embedding-v3",
+        supports_responses: false,
     },
     ProviderProfile {
         id: "ollama",
@@ -199,6 +205,7 @@ pub static PROFILES: &[ProviderProfile] = &[
         default_music_model: "",
         default_asr_model: "",
         default_embedding_model: "",
+        supports_responses: false,
     },
     ProviderProfile {
         id: "azure",
@@ -219,6 +226,7 @@ pub static PROFILES: &[ProviderProfile] = &[
         default_music_model: "",
         default_asr_model: "",
         default_embedding_model: "",
+        supports_responses: false,
     },
     ProviderProfile {
         id: "zhipu",
@@ -239,6 +247,7 @@ pub static PROFILES: &[ProviderProfile] = &[
         default_music_model: "cogmusic-v1.1",
         default_asr_model: "glm-asr-v1.2",
         default_embedding_model: "cogembedding-v2",
+        supports_responses: false,
     },
     ProviderProfile {
         id: "openrouter",
@@ -259,6 +268,7 @@ pub static PROFILES: &[ProviderProfile] = &[
         default_music_model: "",
         default_asr_model: "",
         default_embedding_model: "",
+        supports_responses: false,
     },
     ProviderProfile {
         id: "bailian",
@@ -279,6 +289,7 @@ pub static PROFILES: &[ProviderProfile] = &[
         default_music_model: "",
         default_asr_model: "qwen-asr-v2.5",
         default_embedding_model: "qwen-embedding-v3",
+        supports_responses: false,
     },
     ProviderProfile {
         id: "nvidia",
@@ -299,6 +310,7 @@ pub static PROFILES: &[ProviderProfile] = &[
         default_music_model: "",
         default_asr_model: "",
         default_embedding_model: "",
+        supports_responses: false,
     },
     ProviderProfile {
         id: "moonshot",
@@ -319,6 +331,7 @@ pub static PROFILES: &[ProviderProfile] = &[
         default_music_model: "",
         default_asr_model: "",
         default_embedding_model: "",
+        supports_responses: false,
     },
     ProviderProfile {
         id: "volcengine",
@@ -339,6 +352,7 @@ pub static PROFILES: &[ProviderProfile] = &[
         default_music_model: "bytedance-music-v2.1",
         default_asr_model: "seed-asr-2.1",
         default_embedding_model: "doubao-embedding-vision-v2",
+        supports_responses: false,
     },
     ProviderProfile {
         id: "minimax",
@@ -359,6 +373,7 @@ pub static PROFILES: &[ProviderProfile] = &[
         default_music_model: "music-3.0",
         default_asr_model: "speech-asr-v2.2",
         default_embedding_model: "minimax-embedding-v3",
+        supports_responses: true,
     },
     ProviderProfile {
         id: "hunyuan",
@@ -379,26 +394,7 @@ pub static PROFILES: &[ProviderProfile] = &[
         default_music_model: "hunyuan-music-v2",
         default_asr_model: "hunyuan-asr-v2.1",
         default_embedding_model: "hunyuan-embedding-v3",
-    },
-    ProviderProfile {
-        id: "openai-responses",
-        api_mode: ApiMode::Responses,
-        default_base_url: "https://api.openai.com/v1",
-        auth: AuthKind::Bearer,
-        env_keys: &["OPENAI_API_KEY"],
-        azure_deployment_style: false,
-        default_model: "gpt-5.6-sol",
-        supports_image_gen: true,
-        supports_embedding: true,
-        image_mode: Some(ImageGenMode::OpenAi),
-        default_image_model: "gpt-image-2",
-        default_vision_model: "gpt-4o",
-        supports_stream_usage: false,
-        default_tts_model: "openai-tts-v3",
-        default_video_model: "",
-        default_music_model: "",
-        default_asr_model: "whisper-v3-turbo",
-        default_embedding_model: "text-embedding-4-large",
+        supports_responses: false,
     },
     ProviderProfile {
         id: "minimax-anthropic",
@@ -419,46 +415,7 @@ pub static PROFILES: &[ProviderProfile] = &[
         default_music_model: "",
         default_asr_model: "",
         default_embedding_model: "",
-    },
-    ProviderProfile {
-        id: "deepseek-responses",
-        api_mode: ApiMode::Responses,
-        default_base_url: "https://api.deepseek.com/v1",
-        auth: AuthKind::Bearer,
-        env_keys: &["DEEPSEEK_API_KEY"],
-        azure_deployment_style: false,
-        default_model: "deepseek-v4-flash",
-        supports_image_gen: false,
-        supports_embedding: false,
-        image_mode: None,
-        default_image_model: "",
-        default_vision_model: "",
-        supports_stream_usage: false,
-        default_tts_model: "",
-        default_video_model: "",
-        default_music_model: "",
-        default_asr_model: "",
-        default_embedding_model: "",
-    },
-    ProviderProfile {
-        id: "minimax-responses",
-        api_mode: ApiMode::Responses,
-        default_base_url: "https://api.minimaxi.com/v1",
-        auth: AuthKind::Bearer,
-        env_keys: &["MINIMAX_API_KEY", "MINMAX_API_KEY"],
-        azure_deployment_style: false,
-        default_model: "MiniMax-M3",
-        supports_image_gen: false,
-        supports_embedding: false,
-        image_mode: None,
-        default_image_model: "",
-        default_vision_model: "",
-        supports_stream_usage: false,
-        default_tts_model: "",
-        default_video_model: "",
-        default_music_model: "",
-        default_asr_model: "",
-        default_embedding_model: "",
+        supports_responses: false,
     },
     ProviderProfile {
         id: "mimo",
@@ -479,6 +436,7 @@ pub static PROFILES: &[ProviderProfile] = &[
         default_music_model: "",
         default_asr_model: "",
         default_embedding_model: "",
+        supports_responses: false,
     },
     ProviderProfile {
         id: "gemini-native",
@@ -499,6 +457,7 @@ pub static PROFILES: &[ProviderProfile] = &[
         default_music_model: "",
         default_asr_model: "",
         default_embedding_model: "",
+        supports_responses: false,
     },
 ];
 
@@ -533,6 +492,7 @@ static OPENAI_COMPAT_FALLBACK: ProviderProfile = ProviderProfile {
     default_music_model: "",
     default_asr_model: "",
     default_embedding_model: "",
+    supports_responses: false,
 };
 
 /// 将常见别名规范化为表内 id。
@@ -771,9 +731,12 @@ mod tests {
     }
 
     #[test]
-    fn minimax_responses_profile_exists() {
-        let p = resolve("minimax-responses").expect("minimax-responses profile");
-        assert_eq!(p.api_mode, ApiMode::Responses);
+    fn supports_responses_flag() {
+        assert!(resolve("openai").unwrap().supports_responses);
+        assert!(resolve("deepseek").unwrap().supports_responses);
+        assert!(resolve("minimax").unwrap().supports_responses);
+        assert!(!resolve("claude").unwrap().supports_responses);
+        assert!(!resolve("google").unwrap().supports_responses);
     }
 
     #[test]

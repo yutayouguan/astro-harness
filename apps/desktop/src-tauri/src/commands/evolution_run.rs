@@ -135,6 +135,7 @@ fn active_primary_target() -> Result<types::ChatTarget, String> {
         model: ui.model,
         api_key: key.unwrap_or_default(),
         base_url: ui.endpoint,
+        api_mode: ui.api_mode,
     })
 }
 
@@ -158,6 +159,7 @@ async fn complete_chat(
         reasoning_effort: "high".to_string(),
         additional_params: serde_json::Value::Null,
         previous_interaction_id: None,
+        api_mode: String::new(),
     };
     let messages = vec![
         ProviderMessage::system(system),

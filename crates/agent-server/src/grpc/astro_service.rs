@@ -115,6 +115,7 @@ fn parse_auxiliary_targets(
                 model: item.model,
                 api_key: item.api_key,
                 base_url: item.base_url,
+                api_mode: String::new(),
             },
         ));
     }
@@ -1146,6 +1147,7 @@ impl AstroServiceImpl {
             model: model.clone(),
             api_key: api_key.clone(),
             base_url: base_url.clone(),
+            api_mode: String::new(),
         }];
         targets.extend(req.chat_fallbacks.iter().map(|fallback| types::ChatTarget {
             provider_id: fallback.provider_id.clone(),
@@ -1153,6 +1155,7 @@ impl AstroServiceImpl {
             model: fallback.model.clone(),
             api_key: fallback.api_key.clone(),
             base_url: fallback.base_url.clone(),
+            api_mode: String::new(),
         }));
         let session = thread.session();
         session.set_hook_runtime(Arc::clone(&self.hook_runtime));

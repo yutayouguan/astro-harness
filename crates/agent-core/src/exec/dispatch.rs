@@ -1725,6 +1725,7 @@ mod tests {
                     model: "test".into(),
                     api_key: "test".into(),
                     base_url: "http://127.0.0.1.invalid".into(),
+                    api_mode: String::new(),
                 }],
                 project_root: None,
                 hook_runtime: None,
@@ -1922,6 +1923,7 @@ mod tests {
                 model: "test".into(),
                 api_key: api_key.into(),
                 base_url: "https://openai.invalid".into(),
+                api_mode: String::new(),
             }]);
             session.set_permission_profile(Some(permission.into()));
             Arc::new(session)
@@ -4572,6 +4574,7 @@ mod tests {
             model: "claude-current".into(),
             api_key: "anthropic-key-must-not-leak".into(),
             base_url: "https://anthropic.invalid".into(),
+            api_mode: String::new(),
         };
         runtime_material.chat_targets.push(types::ChatTarget {
             provider_id: "current-openai".into(),
@@ -4579,6 +4582,7 @@ mod tests {
             model: "openai-current".into(),
             api_key: "restarted-openai-key".into(),
             base_url: "https://openai-current.invalid".into(),
+            api_mode: String::new(),
         });
         let child = AgentThreadDispatch::spawn_agent(&initial, spawn)
             .await
@@ -4700,6 +4704,7 @@ mod tests {
             model: "claude-current".into(),
             api_key: "anthropic-key-must-not-leak".into(),
             base_url: "https://anthropic.invalid".into(),
+            api_mode: String::new(),
         }];
         let control = AgentControl::open(
             "root-session".into(),
@@ -4927,6 +4932,7 @@ mod tests {
             model: "claude-current".into(),
             api_key: "anthropic-key-must-not-leak".into(),
             base_url: "https://anthropic.invalid".into(),
+            api_mode: String::new(),
         }];
 
         let error = AgentThreadDispatch::spawn_agent(&dispatch, request)

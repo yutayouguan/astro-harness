@@ -80,6 +80,7 @@ fn entry_to_target(entry: &ProviderEntry) -> Option<ChatTarget> {
         model: entry.model.clone(),
         api_key,
         base_url,
+        api_mode: String::new(),
     })
 }
 

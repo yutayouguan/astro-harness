@@ -109,6 +109,7 @@ impl ModelSpec {
             model,
             api_key: target.api_key.clone(),
             base_url: target.base_url.clone(),
+            api_mode: String::new(),
         }
     }
 
@@ -125,6 +126,7 @@ impl ModelSpec {
             model: self.model_id.trim().to_string(),
             api_key: api_key.into(),
             base_url: base_url.into(),
+            api_mode: String::new(),
         }
     }
 }
@@ -159,6 +161,7 @@ mod tests {
             model: "old".into(),
             api_key: "sk".into(),
             base_url: "https://api.openai.com/v1".into(),
+            api_mode: String::new(),
         };
         let spec = ModelSpec::parse("claude:opus").unwrap();
         let t = spec.apply_to(&base);
@@ -176,6 +179,7 @@ mod tests {
             model: "old".into(),
             api_key: "k".into(),
             base_url: "https://generativelanguage.googleapis.com".into(),
+            api_mode: String::new(),
         };
         let t = ModelSpec::parse("gemini-2.5-flash")
             .unwrap()

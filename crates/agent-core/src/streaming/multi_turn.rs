@@ -229,6 +229,7 @@ pub async fn run_multi_turn_events_with_chat_fn(
         model: config.model.clone(),
         api_key: config.api_key.clone(),
         base_url: config.base_url.clone().unwrap_or_default(),
+        api_mode: config.api_mode.clone(),
     };
     run_thread_turn_events(ThreadTurnEventArgs {
         session,
@@ -292,6 +293,7 @@ impl RunTurnArgs {
                 model: model.clone(),
                 api_key: api_key.clone(),
                 base_url: base_url.clone(),
+                api_mode: String::new(),
             });
         }
         let provider_options = session.thread_provider_options();

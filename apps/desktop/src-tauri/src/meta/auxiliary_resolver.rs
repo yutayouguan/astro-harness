@@ -28,6 +28,7 @@ impl ResolvedTarget {
             model: self.model.clone(),
             api_key: self.api_key.clone(),
             base_url: self.provider.endpoint.clone(),
+            api_mode: self.provider.api_mode.clone(),
         }
     }
 }
@@ -328,6 +329,7 @@ pub fn primary_chat_target_for_session(session_id: &str) -> Result<types::ChatTa
         model,
         api_key: key.unwrap_or_default(),
         base_url: ui.endpoint,
+        api_mode: ui.api_mode,
     })
 }
 
@@ -394,6 +396,7 @@ mod tests {
             model: "gpt-5.6".into(),
             api_key: "primary-key".into(),
             base_url: "https://prov-primary.example".into(),
+            api_mode: String::new(),
         }
     }
 

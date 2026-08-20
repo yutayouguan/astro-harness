@@ -129,6 +129,7 @@ async fn summarize_with_target(
         reasoning_effort: "high".to_string(),
         additional_params: serde_json::Value::Null,
         previous_interaction_id: None,
+        api_mode: String::new(),
     };
     let system = "You compress a chat transcript into a compact handoff note. \
 Cover: goals, constraints, done, in-progress, key paths/decisions, next steps. \

@@ -425,16 +425,23 @@ fn normalize_provider_id(id: &str) -> &str {
     crate::profile::normalize_provider_id(id)
 }
 
-/// 根据 provider id 注册到注册表。
+/// 根据 provider id + config.api_mode 注册到注册表。
 fn register_provider(reg: &mut crate::registry::Registry, provider: &str, config: &ProviderConfig) {
     let key = &config.api_key;
     let base = config.base_url.as_deref().filter(|s| !s.trim().is_empty());
     let model = &config.model;
+    let responses = config.api_mode == "responses";
 
     match provider {
         "anthropic" | "claude" => reg.register_anthropic(key, base, model),
         "google" => reg.register_google(key, base, model),
+        "openai" if responses => reg.register_openai_responses(key, base, model),
         "openai" => reg.register_openai(key, base, model),
+        "deepseek" if responses => {
+            reg.register_openai_compat_responses::<crate::impls::deepseek::DeepSeek>(
+                "deepseek", key, base, model,
+            )
+        }
         "deepseek" => register_compat::<crate::impls::deepseek::DeepSeek>(reg, key, base, model),
         "azure" => register_compat::<crate::impls::azure::Azure>(reg, key, base, model),
         "zhipu" => register_media::<crate::impls::zhipu::Zhipu>(reg, key, base, model),
@@ -448,6 +455,7 @@ fn register_provider(reg: &mut crate::registry::Registry, provider: &str, config
         "openrouter" => {
             register_compat::<crate::impls::openrouter::OpenRouter>(reg, key, base, model)
         }
+        "minimax" | "minmax" if responses => reg.register_minimax_responses(key, base, model),
         "minimax" | "minmax" => reg.register_minimax(key, base, model),
         "minimax-anthropic" => {
             reg.register_anthropic(key, base, model);
@@ -456,15 +464,6 @@ fn register_provider(reg: &mut crate::registry::Registry, provider: &str, config
         "hunyuan" => register_media::<crate::impls::hunyuan::Hunyuan>(reg, key, base, model),
         "mimo" => register_compat::<crate::impls::mimo::Mimo>(reg, key, base, model),
         "gemini-native" => reg.register_gemini_native(key, base, model),
-        "openai-responses" => reg.register_openai_responses(key, base, model),
-        "deepseek-responses" => reg
-            .register_openai_compat_responses::<crate::impls::deepseek::DeepSeek>(
-                "deepseek-responses",
-                key,
-                base,
-                model,
-            ),
-        "minimax-responses" => reg.register_minimax_responses(key, base, model),
         _ => register_compat::<crate::impls::openai::OpenAI>(reg, key, base, model),
     }
 }
@@ -531,9 +530,6 @@ mod tests {
             "hunyuan",
             "mimo",
             "gemini-native",
-            "openai-responses",
-            "deepseek-responses",
-            "minimax-responses",
         ];
         for id in providers {
             let mut reg = crate::registry::Registry::new();
@@ -560,18 +556,15 @@ mod tests {
     }
 
     #[test]
-    fn responses_providers_resolve() {
-        let config = ProviderConfig::default();
-        for id in [
-            "openai-responses",
-            "deepseek-responses",
-            "minimax-responses",
-        ] {
+    fn responses_mode_routes_correctly() {
+        let mut config = ProviderConfig::default();
+        config.api_mode = "responses".to_string();
+        for id in ["openai", "deepseek", "minimax"] {
             let mut reg = crate::registry::Registry::new();
             register_provider(&mut reg, id, &config);
             assert!(
                 reg.completion_model(id).is_some(),
-                "responses provider {id} should resolve"
+                "provider {id} with api_mode=responses should resolve"
             );
         }
     }

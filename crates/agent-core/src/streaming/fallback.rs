@@ -141,6 +141,7 @@ pub async fn try_stream_completion_with_fallback(
             } else {
                 None
             },
+            api_mode: target.api_mode.clone(),
         };
 
         let attempt = async {

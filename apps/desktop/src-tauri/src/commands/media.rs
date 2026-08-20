@@ -78,6 +78,7 @@ async fn tts_inner(
         reasoning_effort: String::new(),
         additional_params: serde_json::json!({}),
         previous_interaction_id: None,
+        api_mode: String::new(),
     };
 
     let result = providers::dispatch::text_to_speech(pid, text, &config)
@@ -167,6 +168,7 @@ async fn stt_inner(
         reasoning_effort: String::new(),
         additional_params: serde_json::json!({}),
         previous_interaction_id: None,
+        api_mode: String::new(),
     };
 
     let fname = filename.unwrap_or("recording.webm");

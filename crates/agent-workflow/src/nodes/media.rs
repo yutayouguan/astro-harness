@@ -97,6 +97,7 @@ fn build_media_config(node: &WorkflowNode) -> Result<(String, ProviderConfig)> {
             reasoning_effort: String::new(),
             additional_params: serde_json::json!({}),
             previous_interaction_id: None,
+            api_mode: String::new(),
         },
     ))
 }

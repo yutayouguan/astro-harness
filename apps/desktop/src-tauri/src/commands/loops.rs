@@ -364,6 +364,7 @@ pub async fn ai_generate_workflow(
         reasoning_effort: "high".into(),
         additional_params: serde_json::json!(serde_json::Value::Null),
         previous_interaction_id: None,
+        api_mode: String::new(),
     };
 
     // 构建用户消息：包含当前画布状态
@@ -474,6 +475,7 @@ pub async fn loop_ai_polish(
         reasoning_effort: String::new(),
         additional_params: serde_json::json!(null),
         previous_interaction_id: None,
+        api_mode: String::new(),
     };
 
     let system = if text.trim().is_empty() {

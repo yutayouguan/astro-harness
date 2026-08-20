@@ -239,6 +239,7 @@ async fn complete_review_chat(
         reasoning_effort: "high".to_string(),
         additional_params: serde_json::Value::Null,
         previous_interaction_id: None,
+        api_mode: String::new(),
     };
     let messages = vec![
         ProviderMessage::system(system),

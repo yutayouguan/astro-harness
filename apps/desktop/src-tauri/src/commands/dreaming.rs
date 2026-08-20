@@ -84,6 +84,7 @@ async fn complete_chat(
         reasoning_effort: "high".to_string(),
         additional_params: serde_json::Value::Null,
         previous_interaction_id: None,
+        api_mode: String::new(),
     };
     let messages = vec![
         ProviderMessage::system(system),
@@ -128,6 +129,7 @@ async fn extract_or_fallback_dream(
         reasoning_effort: "high".into(),
         additional_params: serde_json::Value::Null,
         previous_interaction_id: None,
+        api_mode: String::new(),
     };
     let (preamble, text) =
         build_dream_extract_inputs(&job.agent_name, &job.memory_before, &job.diaries);
@@ -257,6 +259,7 @@ fn active_chat_target() -> Result<types::ChatTarget, String> {
         model: ui.model,
         api_key: key.unwrap_or_default(),
         base_url: ui.endpoint,
+        api_mode: ui.api_mode,
     })
 }
 

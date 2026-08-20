@@ -47,6 +47,7 @@ impl ModelContext {
                 model: self.credentials.model.clone(),
                 api_key: self.credentials.api_key.clone(),
                 base_url: self.credentials.base_url.clone(),
+                api_mode: String::new(),
             })
     }
 
@@ -136,6 +137,7 @@ impl ModelContext {
                 model: self.credentials.model.clone(),
                 api_key: self.credentials.api_key.clone(),
                 base_url: self.credentials.base_url.clone(),
+                api_mode: String::new(),
             }],
         }
     }

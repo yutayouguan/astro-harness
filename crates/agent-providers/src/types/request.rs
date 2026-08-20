@@ -26,6 +26,8 @@ pub struct ProviderConfig {
     pub additional_params: serde_json::Value,
     /// Google Interactions：续写上一轮 interaction（工具多轮保留 thought/signature）。
     pub previous_interaction_id: Option<String>,
+    /// API 协议模式覆盖（空 = profile 默认；`"responses"` = Responses API）。
+    pub api_mode: String,
 }
 
 impl Default for ProviderConfig {
@@ -41,6 +43,7 @@ impl Default for ProviderConfig {
             reasoning_effort: "high".to_string(),
             additional_params: serde_json::Value::Null,
             previous_interaction_id: None,
+            api_mode: String::new(),
         }
     }
 }

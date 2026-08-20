@@ -257,6 +257,7 @@ pub async fn extract_cron_job(args: ExtractCronJobArgs) -> Result<ExtractCronJob
         reasoning_effort: "high".into(),
         additional_params: serde_json::Value::Null,
         previous_interaction_id: None,
+        api_mode: String::new(),
     };
     let extractor = providers::build_extractor::<cron::CronJobExtract>(
         provider_cfg.kind.backend_id(),

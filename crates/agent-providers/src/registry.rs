@@ -202,15 +202,14 @@ impl Registry {
         use crate::impls::openai::OpenAI;
         use crate::traits::FromClient;
         let client = self.make_client(api_key, base_url, OpenAI);
-        let provider = DynProvider::new("openai-responses", "openai-responses")
+        let provider = DynProvider::new("openai", "openai")
             .with_completion(crate::compat::OpenAIResponsesModel::<OpenAI>::from_client(
                 &client, model,
             ))
             .with_embedding(client.embedding_model(model))
             .with_image_gen(client.image_model(model))
             .with_tts(client.tts_model(model));
-        self.providers
-            .insert("openai-responses".to_string(), provider);
+        self.providers.insert("openai".to_string(), provider);
     }
 
     /// 注册 MiniMax provider 的 Responses API 变体（Chat + 全媒体）。
@@ -223,7 +222,7 @@ impl Registry {
         use crate::impls::minimax_chat::MiniMax;
         use crate::traits::FromClient;
         let client = self.make_client(api_key, base_url, MiniMax);
-        let provider = DynProvider::new("minimax-responses", "minimax-responses")
+        let provider = DynProvider::new("minimax", "minimax")
             .with_completion(crate::compat::OpenAIResponsesModel::<MiniMax>::from_client(
                 &client, model,
             ))
@@ -232,8 +231,7 @@ impl Registry {
             .with_video_gen(client.video_model(model))
             .with_tts(client.tts_model(model))
             .with_music_gen(client.music_model(model));
-        self.providers
-            .insert("minimax-responses".to_string(), provider);
+        self.providers.insert("minimax".to_string(), provider);
     }
 
     /// 注册 Gemini Native provider（仅 Chat — streamGenerateContent）。

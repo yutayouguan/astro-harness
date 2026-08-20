@@ -669,26 +669,9 @@ pub(crate) fn resolve_api_key(
     (false, "none".into(), None, None)
 }
 
-/// 支持 Responses API 切换的厂商。
+/// 支持 Responses API 切换的厂商（表驱动）。
 fn supports_responses_toggle(kind: ProviderKind) -> bool {
-    matches!(
-        kind,
-        ProviderKind::Openai | ProviderKind::Minimax | ProviderKind::Deepseek
-    )
-}
-
-/// 根据 api_mode 覆盖计算实际 backend_id。
-fn effective_backend_id(kind: ProviderKind, api_mode: &str) -> &'static str {
-    if api_mode == "responses" {
-        match kind {
-            ProviderKind::Openai => "openai-responses",
-            ProviderKind::Minimax => "minimax-responses",
-            ProviderKind::Deepseek => "deepseek-responses",
-            _ => kind.backend_id(),
-        }
-    } else {
-        kind.backend_id()
-    }
+    providers::profile::resolve(kind.backend_id()).is_some_and(|p| p.supports_responses)
 }
 
 /// 当前生效的 api_mode 名称（用于前端展示）。
@@ -710,7 +693,7 @@ fn effective_api_mode(kind: ProviderKind, api_mode: &str) -> &'static str {
 /// 单条 Provider → 前端 DTO。
 fn to_dto(p: &ProviderConfig) -> ProviderConfigDto {
     let (has_api_key, key_source, env_key_name, _) = resolve_api_key(p);
-    let bid = effective_backend_id(p.kind, &p.api_mode);
+    let bid = p.kind.backend_id();
     let profile = providers::profile::resolve_or_openai_compat(bid);
     ProviderConfigDto {
         id: p.id.clone(),
@@ -1065,10 +1048,11 @@ pub fn resolve_chat_targets(
 
     let primary = types::ChatTarget {
         provider_id: cfg.id.clone(),
-        backend_id: effective_backend_id(cfg.kind, &cfg.api_mode).to_string(),
+        backend_id: cfg.kind.backend_id().to_string(),
         model,
         api_key: key.unwrap_or_default(),
         base_url: cfg.endpoint.clone(),
+        api_mode: cfg.api_mode.clone(),
     };
 
     let refs: Vec<types::FallbackRef> = cfg
@@ -1089,7 +1073,7 @@ pub fn resolve_chat_targets(
         }
         let (_has, _source, _env, key) = resolve_api_key(&p);
         let api_key = key.unwrap_or_default();
-        let bid = effective_backend_id(p.kind, &p.api_mode);
+        let bid = p.kind.backend_id();
         let allow_empty_key = bid == "ollama";
         if api_key.trim().is_empty() && !allow_empty_key {
             return None;
@@ -1100,6 +1084,7 @@ pub fn resolve_chat_targets(
             model: p.model.clone(),
             api_key,
             base_url: p.endpoint.clone(),
+            api_mode: p.api_mode.clone(),
         })
     });
 
@@ -1735,7 +1720,7 @@ async fn probe_one_model(
 ) -> ProviderTestResult {
     let probe_id = match provider.kind {
         ProviderKind::Custom => "custom",
-        _ => effective_backend_id(provider.kind, &provider.api_mode),
+        _ => provider.kind.backend_id(),
     };
     let config = providers::ProviderConfig {
         api_key: api_key.to_string(),
@@ -1747,6 +1732,7 @@ async fn probe_one_model(
         reasoning_effort: "high".to_string(),
         additional_params: serde_json::Value::Null,
         previous_interaction_id: None,
+        api_mode: provider.api_mode.clone(),
     };
     let result = providers::dispatch::verify(probe_id, &model, &config).await;
     ProviderTestResult {
