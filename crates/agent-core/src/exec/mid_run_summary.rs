@@ -75,11 +75,7 @@ fn build_transcript(messages: &[Message], protect_first: usize, protect_last: us
             Role::System => "system",
             Role::Tool => "tool",
         };
-        let body = m
-            .compressed_content
-            .as_deref()
-            .filter(|s| !s.trim().is_empty())
-            .unwrap_or_else(|| m.content_str());
+        let body = m.provider_view_text();
         let clipped: String = body.chars().take(2_000).collect();
         if clipped.trim().is_empty() {
             continue;
@@ -218,5 +214,20 @@ mod tests {
         let msgs = vec![Message::user("a"), Message::user("b")];
         let out = collapse_history_with_handoff(&msgs, "x", 4, 20);
         assert_eq!(out.len(), 2);
+    }
+
+    #[test]
+    fn transcript_uses_user_content_but_tool_compressed_view() {
+        let mut user = Message::user("follow the real instruction");
+        user.compressed_content = Some("agent-mailbox-through:42".into());
+        let mut tool = Message::tool("very long original tool result");
+        tool.compressed_content = Some("short tool stub".into());
+
+        let transcript = build_transcript(&[user, tool], 0, 0);
+
+        assert!(transcript.contains("user: follow the real instruction"));
+        assert!(!transcript.contains("agent-mailbox-through:42"));
+        assert!(transcript.contains("tool: short tool stub"));
+        assert!(!transcript.contains("very long original tool result"));
     }
 }

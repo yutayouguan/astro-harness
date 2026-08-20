@@ -485,12 +485,14 @@ mod tests {
             session
                 .record_items(vec![types::message::Message::assistant("first")])
                 .await;
-            let pending = ctx.take_pending_input_or_close().await;
-            session.record_queued_turn_inputs(pending).await?;
+            let mailbox = crate::exec::subagents::drain_mailbox_at_safe_boundary(&session).await?;
+            anyhow::ensure!(!mailbox.deferred, "steer mailbox remained deferred");
+            anyhow::ensure!(mailbox.delivered == 1, "expected one delivered steer");
+            ctx.acknowledge_mailbox_inputs(&mailbox.delivered_steer_ids);
             session
                 .record_items(vec![types::message::Message::assistant("second")])
                 .await;
-            assert!(ctx.take_pending_input_or_close().await.is_empty());
+            assert!(ctx.close_if_no_pending_input());
             Ok(None)
         }
     }

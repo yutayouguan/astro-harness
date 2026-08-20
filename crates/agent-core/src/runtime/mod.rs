@@ -222,10 +222,42 @@ impl Session {
         Self::from_memory(config, session_id, memory)
     }
 
+    /// Construct a short-lived child runtime that shares its root control
+    /// plane while retaining an independent session id and canonical path.
+    pub fn with_session_id_for_agent_thread(
+        config: Config,
+        session_id: String,
+        agent_id: &str,
+        agent_control: Arc<subagents::AgentControl>,
+        agent_path: subagents::AgentPath,
+    ) -> anyhow::Result<Self> {
+        let memory = MemoryManager::for_agent(config.memory_dir.clone(), agent_id)?;
+        Self::from_memory_with_agent_control(config, session_id, memory, agent_control, agent_path)
+    }
+
     fn from_memory(
         config: Config,
         session_id: String,
+        memory: MemoryManager,
+    ) -> anyhow::Result<Self> {
+        let graph_db_path = config.memory_dir.join("subagents-v2.db");
+        let agent_control = crate::exec::agent_control_directory::AgentControlDirectory::global()
+            .open_root_at(&session_id, &graph_db_path)?;
+        Self::from_memory_with_agent_control(
+            config,
+            session_id,
+            memory,
+            agent_control,
+            subagents::AgentPath::root(),
+        )
+    }
+
+    fn from_memory_with_agent_control(
+        config: Config,
+        session_id: String,
         mut memory: MemoryManager,
+        agent_control: Arc<subagents::AgentControl>,
+        agent_path: subagents::AgentPath,
     ) -> anyhow::Result<Self> {
         // 新 session / 构造路径：显式固化 MEMORY/USER snapshot（open 已对齐 live，此处钉死契约）。
         memory.refresh_memory_snapshot()?;
@@ -241,17 +273,13 @@ impl Session {
         mcp_hub_inner.set_agent_id(Some(agent_id));
         let mcp_hub = Arc::new(TokioMutex::new(mcp_hub_inner));
 
-        let execution: Arc<dyn tools::AgentThreadDispatch> =
-            Arc::new(crate::exec::dispatch::DefaultAgentThreadDispatch);
-
-        static RECOVER_THREADS_ONCE: std::sync::Once = std::sync::Once::new();
-        RECOVER_THREADS_ONCE.call_once(|| {
-            if let Ok(store) = subagents::AgentThreadStore::open_default() {
-                if let Err(error) = store.interrupt_stale_running() {
-                    tracing::warn!(%error, "failed to recover stale subagent threads");
-                }
-            }
-        });
+        let execution: Arc<dyn tools::AgentThreadDispatch> = Arc::new(
+            crate::exec::dispatch::DefaultAgentThreadDispatch::for_session(
+                Arc::clone(&agent_control),
+                agent_path.clone(),
+                session_id.clone(),
+            ),
+        );
 
         let compression_cfg = memory::load_compression_config(&config.memory_dir);
         let compression_policy: Box<dyn crate::compression::CompressionPolicy> = Box::new(
@@ -267,7 +295,7 @@ impl Session {
             conversation_write_lock: TokioMutex::new(()),
             admission_lock: TokioMutex::new(()),
             memory: RwLock::new(memory),
-            services: SessionServices::new(sessions, compression_policy),
+            services: SessionServices::new(sessions, compression_policy, agent_control, agent_path),
             tool_registry: RwLock::new(tool_registry),
             mcp_hub,
             mcp_instructions: RwLock::new(Vec::new()),
@@ -1236,6 +1264,46 @@ mod tests {
     }
 
     #[test]
+    fn sessions_share_controls_only_within_the_same_memory_root() {
+        fn file_snapshot(path: &std::path::Path) -> Option<(Vec<u8>, std::time::SystemTime)> {
+            Some((
+                fs::read(path).ok()?,
+                fs::metadata(path).ok()?.modified().ok()?,
+            ))
+        }
+
+        let default_graph = home::default_memory_dir().join("subagents-v2.db");
+        let default_wal = default_graph.with_extension("db-wal");
+        let default_before = file_snapshot(&default_graph);
+        let default_wal_before = file_snapshot(&default_wal);
+        let first_root = TempDir::new().unwrap();
+        let second_root = TempDir::new().unwrap();
+
+        let first =
+            AgentLoop::with_session_id(test_config(&first_root), "shared-session-id".to_string())
+                .unwrap();
+        let first_again =
+            AgentLoop::with_session_id(test_config(&first_root), "shared-session-id".to_string())
+                .unwrap();
+        let second =
+            AgentLoop::with_session_id(test_config(&second_root), "shared-session-id".to_string())
+                .unwrap();
+
+        assert!(Arc::ptr_eq(
+            &first.services.agent_control,
+            &first_again.services.agent_control
+        ));
+        assert!(!Arc::ptr_eq(
+            &first.services.agent_control,
+            &second.services.agent_control
+        ));
+        assert!(first_root.path().join("subagents-v2.db").exists());
+        assert!(second_root.path().join("subagents-v2.db").exists());
+        assert_eq!(file_snapshot(&default_graph), default_before);
+        assert_eq!(file_snapshot(&default_wal), default_wal_before);
+    }
+
+    #[test]
     fn auxiliary_targets_falls_back_to_chat_credentials_when_nothing_set() {
         let dir = TempDir::new().unwrap();
         let agent = AgentLoop::new(test_config(&dir)).unwrap();
@@ -1500,6 +1568,39 @@ mod tests {
             1
         );
         assert_eq!(session.clone_history().await.len(), 1);
+    }
+
+    #[test]
+    fn agent_thread_session_keeps_shared_root_control_and_child_path() {
+        let dir = TempDir::new().unwrap();
+        let graph = subagents::AgentGraphStore::open(dir.path().join("agents.db")).unwrap();
+        let control = subagents::AgentControl::open(
+            "root-session".into(),
+            graph,
+            subagents::Limits {
+                max_threads: 8,
+                max_depth: 4,
+                max_running: 2,
+            },
+        )
+        .unwrap();
+        let reservation = control
+            .reserve_spawn(&subagents::AgentPath::root(), "worker")
+            .unwrap();
+        let child = reservation.thread().clone();
+        reservation.commit().unwrap();
+
+        let session = Session::with_session_id_for_agent_thread(
+            test_config(&dir),
+            child.session_id,
+            home::DEFAULT_AGENT_ID,
+            Arc::clone(&control),
+            child.canonical_path.clone(),
+        )
+        .unwrap();
+
+        assert!(Arc::ptr_eq(&session.services.agent_control, &control));
+        assert_eq!(session.services.agent_path, child.canonical_path);
     }
 
     #[test]

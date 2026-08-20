@@ -9,28 +9,20 @@ pub const DEFAULT_CONTEXT_WINDOW: u32 = 128_000;
 const SUBAGENT_TOOLS: &[&str] = &[
     "spawn_agent",
     "list_agents",
-    "read_agent",
-    "send_message_to_agent",
-    "followup_task",
     "send_message",
-    "wait_agents",
+    "followup_task",
     "wait_agent",
     "interrupt_agent",
-    "close_agent",
 ];
 
 /// 写入上下文的 Agent 编排工具定义（与「子 Agent 返回」区分）。
 const AGENT_DEF_TOOLS: &[&str] = &[
     "spawn_agent",
     "list_agents",
-    "read_agent",
-    "send_message_to_agent",
-    "followup_task",
     "send_message",
-    "wait_agents",
+    "followup_task",
     "wait_agent",
     "interrupt_agent",
-    "close_agent",
     "persona_create",
 ];
 
@@ -407,6 +399,29 @@ pub fn build_snapshot(input: ContextUsageInput<'_>) -> ContextUsageSnapshot {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn subagent_context_usage_uses_only_six_v2_tool_names() {
+        assert_eq!(
+            SUBAGENT_TOOLS,
+            [
+                "spawn_agent",
+                "list_agents",
+                "send_message",
+                "followup_task",
+                "wait_agent",
+                "interrupt_agent",
+            ]
+        );
+        for legacy in [
+            "read_agent",
+            "close_agent",
+            "send_message_to_agent",
+            "wait_agents",
+        ] {
+            assert!(!AGENT_DEF_TOOLS.contains(&legacy));
+        }
+    }
     use types::message::{Message, ToolCall};
 
     #[test]
@@ -518,8 +533,8 @@ mod tests {
     fn agent_def_tools_go_to_agents_segment() {
         let tools: Vec<serde_json::Value> = serde_json::json!([
             {"type":"function","function":{"name":"file_ops","parameters":{}}},
-            {"type":"function","function":{"name":"spawn_agent","parameters":{"task":"x"}}},
-            {"type":"function","function":{"name":"wait_agents","parameters":{}}}
+            {"type":"function","function":{"name":"spawn_agent","parameters":{"task_name":"x","message":"work"}}},
+            {"type":"function","function":{"name":"wait_agent","parameters":{}}}
         ])
         .as_array()
         .unwrap()
@@ -545,7 +560,7 @@ mod tests {
         let agents = snap.segment("agents").unwrap();
         assert_eq!(agents.items.len(), 2);
         assert!(agents.items.iter().any(|i| i.id == "spawn_agent"));
-        assert!(agents.items.iter().any(|i| i.id == "wait_agents"));
+        assert!(agents.items.iter().any(|i| i.id == "wait_agent"));
     }
 
     #[test]

@@ -206,16 +206,8 @@ pub fn tool_name_to_toolset(name: &str) -> &str {
         "ask_user" => "ask_user",
         "switch_mode" => "switch_mode",
         "present" => "present",
-        "spawn_agent"
-        | "list_agents"
-        | "read_agent"
-        | "send_message_to_agent"
-        | "followup_task"
-        | "send_message"
-        | "wait_agents"
-        | "wait_agent"
-        | "interrupt_agent"
-        | "close_agent" => "subagents",
+        "spawn_agent" | "list_agents" | "followup_task" | "send_message" | "wait_agent"
+        | "interrupt_agent" => "subagents",
         "persona_create" => "persona",
         "todo" => "todo",
         other => other,

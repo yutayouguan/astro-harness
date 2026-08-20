@@ -4,7 +4,7 @@
 //! remains synchronous, so its adapter holds a standard mutex for exactly one
 //! [`ConversationStore`] call and never across an async suspension.
 
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
 use anyhow::{anyhow, Result};
 use serde_json::Value;
@@ -12,20 +12,39 @@ use session::{
     BillingDelta, ConversationStore, NewMessage, ScrolledMessage, SearchHit, StoredMessage,
 };
 
+#[cfg(test)]
+pub(crate) type TurnInputDbWriteHook = Arc<dyn Fn() -> anyhow::Result<()> + Send + Sync>;
+#[cfg(test)]
+pub(crate) type TurnInputMemoryWriteHook = Arc<dyn Fn() + Send + Sync>;
+
 /// Shared dependencies that remain stable for the lifetime of a session.
 pub(crate) struct SessionServices {
     pub(crate) sessions: SharedConversationStore,
     pub(crate) compression_policy: Mutex<Box<dyn crate::compression::CompressionPolicy>>,
+    pub(crate) agent_control: Arc<subagents::AgentControl>,
+    pub(crate) agent_path: subagents::AgentPath,
+    #[cfg(test)]
+    pub(crate) turn_input_after_db_write: Mutex<Option<TurnInputDbWriteHook>>,
+    #[cfg(test)]
+    pub(crate) turn_input_after_memory_write: Mutex<Option<TurnInputMemoryWriteHook>>,
 }
 
 impl SessionServices {
     pub(crate) fn new(
         sessions: Box<dyn ConversationStore>,
         compression_policy: Box<dyn crate::compression::CompressionPolicy>,
+        agent_control: Arc<subagents::AgentControl>,
+        agent_path: subagents::AgentPath,
     ) -> Self {
         Self {
             sessions: SharedConversationStore::new(sessions),
             compression_policy: Mutex::new(compression_policy),
+            agent_control,
+            agent_path,
+            #[cfg(test)]
+            turn_input_after_db_write: Mutex::new(None),
+            #[cfg(test)]
+            turn_input_after_memory_write: Mutex::new(None),
         }
     }
 }

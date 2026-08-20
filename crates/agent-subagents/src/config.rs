@@ -118,12 +118,8 @@ impl AgentsSettings {
 
 pub fn load_agents_settings(memory_dir: &Path, project_root: Option<&Path>) -> AgentsSettings {
     let mut settings = AgentsSettings::default();
-    // Keep Astro paths as a compatibility layer, then apply Codex-native paths
-    // so a checked-in `.codex/config.toml` is the source of truth.
-    apply_settings_file(&mut settings, &memory_dir.join("config.toml"));
     apply_settings_file(&mut settings, &codex_home(memory_dir).join("config.toml"));
     if let Some(root) = project_root {
-        apply_settings_file(&mut settings, &root.join(".astro/config.toml"));
         apply_settings_file(&mut settings, &root.join(".codex/config.toml"));
     }
     settings
@@ -148,10 +144,8 @@ pub fn load_agent_catalog(memory_dir: &Path, project_root: Option<&Path>) -> Age
     for definition in builtin_agents() {
         catalog.agents.insert(definition.name.clone(), definition);
     }
-    load_agent_dir(&memory_dir.join("agents"), &mut catalog);
     load_agent_dir(&codex_home(memory_dir).join("agents"), &mut catalog);
     if let Some(root) = project_root {
-        load_agent_dir(&root.join(".astro/agents"), &mut catalog);
         load_agent_dir(&root.join(".codex/agents"), &mut catalog);
     }
     catalog
@@ -294,15 +288,19 @@ fn resolve_sandbox_mode(parent: Option<&str>, requested: Option<&str>) -> Option
         return Some(parent);
     };
     let rank = |mode: &str| match mode.trim().to_ascii_lowercase().as_str() {
-        "read-only" | "read_only" => 0,
-        "workspace-write" | "workspace_write" => 1,
-        "danger-full-access" | "danger_full_access" => 2,
-        _ => 3,
+        "read-only" | "read_only" => Some(0),
+        "workspace-write" | "workspace_write" => Some(1),
+        "danger-full-access" | "danger_full_access" => Some(2),
+        _ => None,
     };
-    if rank(&requested) <= rank(&parent) {
-        Some(requested)
-    } else {
-        Some(parent)
+    match (rank(&parent), rank(&requested)) {
+        (Some(parent_rank), Some(requested_rank)) if requested_rank <= parent_rank => {
+            Some(requested)
+        }
+        // Unknown/custom profiles have no comparable privilege ordering.  A
+        // child may never replace one, and an unknown child request may never
+        // replace a known parent, so both cases conservatively inherit.
+        _ => Some(parent),
     }
 }
 
@@ -318,9 +316,86 @@ mod tests {
     use super::*;
 
     #[test]
+    fn astro_agent_directories_are_not_configuration_inputs() {
+        let memory = tempfile::tempdir().unwrap();
+        let project = tempfile::tempdir().unwrap();
+        fs::create_dir_all(memory.path().join("agents")).unwrap();
+        fs::create_dir_all(project.path().join(".astro/agents")).unwrap();
+        fs::write(
+            memory.path().join("agents/legacy.toml"),
+            "name = \"legacy\"\ndescription = \"legacy\"\ndeveloper_instructions = \"legacy\"\n",
+        )
+        .unwrap();
+        fs::write(
+            project.path().join(".astro/agents/project_legacy.toml"),
+            "name = \"project_legacy\"\ndescription = \"legacy\"\ndeveloper_instructions = \"legacy\"\n",
+        )
+        .unwrap();
+
+        let catalog = load_agent_catalog(memory.path(), Some(project.path()));
+
+        assert!(!catalog.agents.contains_key("legacy"));
+        assert!(!catalog.agents.contains_key("project_legacy"));
+    }
+
+    #[test]
+    fn memory_config_toml_is_not_a_configuration_input() {
+        let memory = tempfile::tempdir().unwrap();
+        fs::write(
+            memory.path().join("config.toml"),
+            "[agents]\nenabled = false\n",
+        )
+        .unwrap();
+
+        assert!(load_agents_settings(memory.path(), None).enabled);
+    }
+
+    #[test]
+    fn project_astro_config_toml_is_not_a_configuration_input() {
+        let memory = tempfile::tempdir().unwrap();
+        let project = tempfile::tempdir().unwrap();
+        fs::create_dir_all(project.path().join(".astro")).unwrap();
+        fs::write(
+            project.path().join(".astro/config.toml"),
+            "[agents]\nenabled = false\n",
+        )
+        .unwrap();
+
+        assert!(load_agents_settings(memory.path(), Some(project.path())).enabled);
+    }
+
+    #[test]
+    fn codex_settings_load_from_home_and_project_overrides_personal() {
+        let home = tempfile::tempdir().unwrap();
+        let memory = home.path().join(".astro");
+        let project = tempfile::tempdir().unwrap();
+        fs::create_dir_all(&memory).unwrap();
+        fs::create_dir_all(home.path().join(".codex")).unwrap();
+        fs::create_dir_all(project.path().join(".codex")).unwrap();
+        fs::write(
+            home.path().join(".codex/config.toml"),
+            "[agents]\nenabled = false\nmax_threads = 7\n",
+        )
+        .unwrap();
+
+        let personal = load_agents_settings(&memory, None);
+        assert!(!personal.enabled);
+        assert_eq!(personal.max_concurrent_threads_per_session, 7);
+
+        fs::write(
+            project.path().join(".codex/config.toml"),
+            "[agents]\nenabled = true\nmax_threads = 9\n",
+        )
+        .unwrap();
+        let combined = load_agents_settings(&memory, Some(project.path()));
+        assert!(combined.enabled);
+        assert_eq!(combined.max_concurrent_threads_per_session, 9);
+    }
+
+    #[test]
     fn custom_agent_overrides_builtin_and_model_precedence() {
         let root = tempfile::tempdir().unwrap();
-        let agents = root.path().join("agents");
+        let agents = root.path().join(".codex/agents");
         fs::create_dir_all(&agents).unwrap();
         fs::write(
             agents.join("explorer.toml"),
@@ -350,7 +425,7 @@ model = "provider:custom"
     #[test]
     fn custom_agent_can_narrow_but_not_expand_parent_permissions() {
         let root = tempfile::tempdir().unwrap();
-        let agents = root.path().join("agents");
+        let agents = root.path().join(".codex/agents");
         fs::create_dir_all(&agents).unwrap();
         fs::write(
             agents.join("unsafe.toml"),
@@ -390,20 +465,56 @@ sandbox_mode = "danger-full-access"
     }
 
     #[test]
-    fn codex_paths_override_legacy_astro_paths_and_decode_layers() {
+    fn sandbox_resolution_is_conservative_for_unknown_profiles() {
+        assert_eq!(
+            resolve_sandbox_mode(Some("locked"), Some("danger-full-access")).as_deref(),
+            Some("locked")
+        );
+        assert_eq!(
+            resolve_sandbox_mode(Some("workspace-write"), Some("custom-unconfined")).as_deref(),
+            Some("workspace-write")
+        );
+        assert_eq!(
+            resolve_sandbox_mode(Some("locked"), Some("locked")).as_deref(),
+            Some("locked")
+        );
+    }
+
+    #[test]
+    fn sandbox_resolution_known_matrix_and_aliases_only_narrows() {
+        let cases = [
+            ("read-only", "read-only", "read-only"),
+            ("read-only", "workspace-write", "read-only"),
+            ("read-only", "danger-full-access", "read-only"),
+            ("workspace-write", "read-only", "read-only"),
+            ("workspace-write", "workspace-write", "workspace-write"),
+            ("workspace-write", "danger-full-access", "workspace-write"),
+            ("danger-full-access", "read-only", "read-only"),
+            ("danger-full-access", "workspace-write", "workspace-write"),
+            (
+                "danger-full-access",
+                "danger-full-access",
+                "danger-full-access",
+            ),
+            ("workspace_write", "read_only", "read_only"),
+            ("workspace_write", "danger_full_access", "workspace_write"),
+        ];
+
+        for (parent, requested, expected) in cases {
+            assert_eq!(
+                resolve_sandbox_mode(Some(parent), Some(requested)).as_deref(),
+                Some(expected),
+                "parent={parent}, requested={requested}"
+            );
+        }
+    }
+
+    #[test]
+    fn codex_paths_preserve_precedence_and_decode_layers() {
         let memory = tempfile::tempdir().unwrap();
         let project = tempfile::tempdir().unwrap();
-        fs::create_dir_all(memory.path().join("agents")).unwrap();
         fs::create_dir_all(memory.path().join(".codex/agents")).unwrap();
         fs::create_dir_all(project.path().join(".codex/agents")).unwrap();
-        fs::write(
-            memory.path().join("agents/reviewer.toml"),
-            r#"name = "reviewer"
-description = "legacy"
-developer_instructions = "legacy"
-"#,
-        )
-        .unwrap();
         fs::write(
             memory.path().join(".codex/agents/reviewer.toml"),
             r#"name = "reviewer"

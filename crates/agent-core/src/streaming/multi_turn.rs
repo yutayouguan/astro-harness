@@ -235,7 +235,6 @@ async fn finish_failed(
     finish_error(session, streamer, tx, error.clone(), usage, run_id).await;
     RunTurnOutcome::Failed(error)
 }
-
 /// Codex-aligned regular turn loop shared by foreground and background adapters.
 pub(crate) async fn run_turn(
     args: RunTurnArgs,
@@ -327,6 +326,49 @@ pub(crate) async fn run_turn(
             return RunTurnOutcome::Interrupted;
         }
 
+        let mailbox = match pre_llm_maintenance(&session).await {
+            Ok(mailbox) => mailbox,
+            Err(error) => {
+                return finish_failed(
+                    &session,
+                    &streamer,
+                    &tx,
+                    error.to_string(),
+                    saw_usage.then_some(total_usage),
+                    &run_id,
+                )
+                .await;
+            }
+        };
+        if mailbox.deferred {
+            tracing::debug!("mailbox delivery deferred until an assistant boundary exists");
+        } else if mailbox.delivered > 0 {
+            tracing::debug!(
+                delivered = mailbox.delivered,
+                delivered_steers = mailbox.delivered_steer_ids.len(),
+                "mailbox delivered at sampling boundary"
+            );
+        }
+        if !mailbox.delivered_steer_ids.is_empty() {
+            turn_context.acknowledge_mailbox_inputs(&mailbox.delivered_steer_ids);
+        }
+        if mailbox.delivered > 0 {
+            // A durable mailbox delivery is a new user response chain. Stop
+            // verification and reasoning-only retry budgets must not leak from
+            // the assistant boundary that preceded it.
+            verify_attempt = 0;
+            thinking_only_retries = 0;
+        }
+        for client_message_id in &mailbox.delivered_client_message_ids {
+            let _ = emit(
+                &tx,
+                MultiTurnStreamItem::UserInputCommitted {
+                    client_message_id: client_message_id.clone(),
+                },
+            )
+            .await;
+        }
+
         if has_sampled && !awaiting_synthetic_bridge_response {
             let pending_input = turn_context.take_pending_input();
             if !pending_input.is_empty() {
@@ -345,8 +387,6 @@ pub(crate) async fn run_turn(
                 thinking_only_retries = 0;
             }
         }
-
-        pre_llm_maintenance(&session).await;
 
         let step_context = {
             let agent = session.as_ref();
@@ -761,24 +801,34 @@ pub(crate) async fn run_turn(
         }
 
         if calls.is_empty() {
-            let pending_input = turn_context.take_pending_input_or_close().await;
-            if !pending_input.is_empty() {
-                if let Err(error) = record_pending_input(&session, &tx, pending_input).await {
-                    return finish_failed(
-                        &session,
-                        &streamer,
-                        &tx,
-                        error.to_string(),
-                        saw_usage.then_some(total_usage),
-                        &run_id,
-                    )
-                    .await;
-                }
-                verify_attempt = 0;
-                thinking_only_retries = 0;
-                awaiting_synthetic_bridge_response = false;
+            if mailbox.deferred {
                 run_state.set_phase(RunPhase::StreamingLlm);
                 continue;
+            }
+            match turn_context.wait_for_terminal_input().await {
+                crate::runtime::turn_context::TerminalInputDecision::Queued(pending_input) => {
+                    if let Err(error) = record_pending_input(&session, &tx, pending_input).await {
+                        return finish_failed(
+                            &session,
+                            &streamer,
+                            &tx,
+                            error.to_string(),
+                            saw_usage.then_some(total_usage),
+                            &run_id,
+                        )
+                        .await;
+                    }
+                    verify_attempt = 0;
+                    thinking_only_retries = 0;
+                    awaiting_synthetic_bridge_response = false;
+                    run_state.set_phase(RunPhase::StreamingLlm);
+                    continue;
+                }
+                crate::runtime::turn_context::TerminalInputDecision::MailboxPending => {
+                    run_state.set_phase(RunPhase::StreamingLlm);
+                    continue;
+                }
+                crate::runtime::turn_context::TerminalInputDecision::Closed => {}
             }
             need_summary = false;
             break;
@@ -965,4 +1015,438 @@ pub fn stream_multi_turn_with_hitl(
     Box::pin(futures::stream::unfold(rx, |mut rx| async move {
         rx.recv().await.map(|item| (item, rx))
     }))
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+
+    use futures::stream;
+    use providers::types::stream::StreamChunk;
+    use providers::CompletionStream;
+
+    use super::*;
+
+    #[derive(Clone, Copy)]
+    enum DeferredMailboxKind {
+        OldGenerationSteer,
+        AgentMessage,
+    }
+
+    async fn assert_deferred_mailbox_without_turn_signal(
+        kind: DeferredMailboxKind,
+        provider_fails: bool,
+    ) {
+        let temp = tempfile::tempdir().unwrap();
+        let config = crate::runtime::Config::with_defaults(temp.path().join("memory"));
+        let session_id = match kind {
+            DeferredMailboxKind::OldGenerationSteer => "deferred-old-steer",
+            DeferredMailboxKind::AgentMessage => "deferred-agent-message",
+        };
+        let session = Session::with_session_id(config, session_id.into()).unwrap();
+        session
+            .record_turn_input(TurnInput::UserInput {
+                content: "initial request".into(),
+                image_data_urls: Vec::new(),
+                client_message_id: None,
+            })
+            .await
+            .unwrap();
+        let control = Arc::clone(&session.services.agent_control);
+        let path = session.services.agent_path.clone();
+        let expected = match kind {
+            DeferredMailboxKind::OldGenerationSteer => {
+                let input = TurnInput::UserInput {
+                    content: "old generation steer".into(),
+                    image_data_urls: Vec::new(),
+                    client_message_id: None,
+                };
+                control
+                    .persist_main_steer(
+                        &path,
+                        crate::exec::subagents::encode_main_steer_input(&input).unwrap(),
+                    )
+                    .unwrap();
+                vec!["old generation steer"]
+            }
+            DeferredMailboxKind::AgentMessage => {
+                let reservation = control.reserve_spawn(&path, "sender").unwrap();
+                let sender_path = reservation.thread().canonical_path.clone();
+                reservation.commit().unwrap();
+                control
+                    .enqueue_message(
+                        &sender_path,
+                        subagents::MessageAgentV2Request {
+                            target: "/root".into(),
+                            message: "ordinary agent message one".into(),
+                        },
+                        false,
+                    )
+                    .unwrap();
+                control
+                    .enqueue_message(
+                        &sender_path,
+                        subagents::MessageAgentV2Request {
+                            target: "/root".into(),
+                            message: "ordinary agent message two".into(),
+                        },
+                        false,
+                    )
+                    .unwrap();
+                vec!["ordinary agent message one", "ordinary agent message two"]
+            }
+        };
+        let turn_context = session.create_turn_context("turn-1".into()).await;
+        let session = Arc::new(session);
+
+        let calls = Arc::new(AtomicUsize::new(0));
+        let first_did_not_see_mailbox = Arc::new(AtomicBool::new(false));
+        let second_saw_mailbox = Arc::new(AtomicBool::new(false));
+        let chat_override: super::super::provider::ChatOverride = {
+            let calls = Arc::clone(&calls);
+            let first_did_not_see_mailbox = Arc::clone(&first_did_not_see_mailbox);
+            let second_saw_mailbox = Arc::clone(&second_saw_mailbox);
+            Arc::new(move |messages, _tools, _config| {
+                let call = calls.fetch_add(1, Ordering::SeqCst);
+                let saw_mailbox = expected.iter().all(|expected| {
+                    messages
+                        .iter()
+                        .any(|message| message.text_content().contains(expected))
+                });
+                if call == 0 && !saw_mailbox {
+                    first_did_not_see_mailbox.store(true, Ordering::SeqCst);
+                }
+                if call == 1 && saw_mailbox {
+                    second_saw_mailbox.store(true, Ordering::SeqCst);
+                }
+                Box::pin(async move {
+                    if provider_fails && call == 0 {
+                        anyhow::bail!("scripted provider failure");
+                    }
+                    let text = match call {
+                        0 => "first answer",
+                        1 => "second answer",
+                        _ => panic!("unexpected extra provider call"),
+                    };
+                    Ok(Box::pin(stream::iter(vec![
+                        Ok(StreamChunk::Text(text.into())),
+                        Ok(StreamChunk::Done {
+                            finish_reason: "stop".into(),
+                        }),
+                    ])) as CompletionStream)
+                })
+            })
+        };
+        let (tx, mut rx) = mpsc::channel(64);
+        let args = RunTurnArgs {
+            session: Arc::clone(&session),
+            turn_context,
+            targets: vec![ChatTarget {
+                provider_id: "scripted".into(),
+                backend_id: "scripted".into(),
+                model: "test".into(),
+                api_key: String::new(),
+                base_url: String::new(),
+            }],
+            base_config: ProviderConfig {
+                model: "test".into(),
+                ..Default::default()
+            },
+            system_prompt: Some("system".into()),
+            pause: PauseControl::new(),
+            hitl_gate: None,
+            tx,
+            thread_id: session_id.into(),
+            run_id: "turn-1".into(),
+            chat_override: Some(chat_override),
+        };
+
+        Session::spawn_task(
+            &session,
+            Arc::clone(&args.turn_context),
+            Vec::new(),
+            RegularTask::new(args),
+        )
+        .await
+        .unwrap();
+        while rx.recv().await.is_some() {}
+
+        if provider_fails {
+            assert_eq!(calls.load(Ordering::SeqCst), 1);
+            assert!(!control.drain_mailbox(&path).unwrap().is_empty());
+            return;
+        }
+        assert_eq!(calls.load(Ordering::SeqCst), 2);
+        assert!(first_did_not_see_mailbox.load(Ordering::SeqCst));
+        assert!(second_saw_mailbox.load(Ordering::SeqCst));
+        assert!(control.drain_mailbox(&path).unwrap().is_empty());
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn deferred_old_generation_steer_forces_next_sampling_boundary() {
+        assert_deferred_mailbox_without_turn_signal(DeferredMailboxKind::OldGenerationSteer, false)
+            .await;
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn deferred_agent_message_forces_next_sampling_boundary() {
+        assert_deferred_mailbox_without_turn_signal(DeferredMailboxKind::AgentMessage, false).await;
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn deferred_mailbox_does_not_retry_after_provider_error() {
+        assert_deferred_mailbox_without_turn_signal(DeferredMailboxKind::OldGenerationSteer, true)
+            .await;
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn early_durable_steers_survive_deferred_first_boundary() {
+        let temp = tempfile::tempdir().unwrap();
+        let config = crate::runtime::Config::with_defaults(temp.path().join("memory"));
+        let session_id = "early-steer";
+        let session = Session::with_session_id(config, session_id.into()).unwrap();
+        session
+            .record_turn_input(TurnInput::UserInput {
+                content: "initial request".into(),
+                image_data_urls: Vec::new(),
+                client_message_id: None,
+            })
+            .await
+            .unwrap();
+        let control = Arc::clone(&session.services.agent_control);
+        let path = session.services.agent_path.clone();
+        let pending = ["early steer one", "early steer two"].map(|content| TurnInput::UserInput {
+            content: content.into(),
+            image_data_urls: Vec::new(),
+            client_message_id: None,
+        });
+        let turn_context = session.create_turn_context("turn-1".into()).await;
+        for input in &pending {
+            let message_id = turn_context.reserve_mailbox_input().unwrap();
+            let stored = control
+                .persist_main_steer_with_id(
+                    &path,
+                    message_id.clone(),
+                    crate::exec::subagents::encode_main_steer_input(input).unwrap(),
+                )
+                .unwrap();
+            assert_eq!(stored.message_id, message_id);
+        }
+        control.notify_main_steer();
+        let session = Arc::new(session);
+
+        let calls = Arc::new(AtomicUsize::new(0));
+        let second_saw_steer = Arc::new(AtomicBool::new(false));
+        let chat_override: super::super::provider::ChatOverride = {
+            let calls = Arc::clone(&calls);
+            let second_saw_steer = Arc::clone(&second_saw_steer);
+            Arc::new(move |messages, _tools, _config| {
+                let call = calls.fetch_add(1, Ordering::SeqCst);
+                if call == 1
+                    && ["early steer one", "early steer two"]
+                        .iter()
+                        .all(|expected| {
+                            messages
+                                .iter()
+                                .any(|message| message.text_content().contains(expected))
+                        })
+                {
+                    second_saw_steer.store(true, Ordering::SeqCst);
+                }
+                Box::pin(async move {
+                    let text = if call == 0 {
+                        "first answer"
+                    } else {
+                        "second answer"
+                    };
+                    Ok(Box::pin(stream::iter(vec![
+                        Ok(StreamChunk::Text(text.into())),
+                        Ok(StreamChunk::Done {
+                            finish_reason: "stop".into(),
+                        }),
+                    ])) as CompletionStream)
+                })
+            })
+        };
+        let (tx, mut rx) = mpsc::channel(64);
+        let args = RunTurnArgs {
+            session: Arc::clone(&session),
+            turn_context,
+            targets: vec![ChatTarget {
+                provider_id: "scripted".into(),
+                backend_id: "scripted".into(),
+                model: "test".into(),
+                api_key: String::new(),
+                base_url: String::new(),
+            }],
+            base_config: ProviderConfig {
+                model: "test".into(),
+                ..Default::default()
+            },
+            system_prompt: Some("system".into()),
+            pause: PauseControl::new(),
+            hitl_gate: None,
+            tx,
+            thread_id: session_id.into(),
+            run_id: "turn-1".into(),
+            chat_override: Some(chat_override),
+        };
+
+        Session::spawn_task(
+            &session,
+            Arc::clone(&args.turn_context),
+            Vec::new(),
+            RegularTask::new(args),
+        )
+        .await
+        .unwrap();
+        while rx.recv().await.is_some() {}
+
+        assert_eq!(calls.load(Ordering::SeqCst), 2);
+        assert!(second_saw_steer.load(Ordering::SeqCst));
+        assert!(control.drain_mailbox(&path).unwrap().is_empty());
+        let history = session.clone_history().await;
+        assert_eq!(
+            history[2].content_str(),
+            "early steer one\n\nearly steer two"
+        );
+        assert_eq!(
+            history
+                .iter()
+                .map(|message| message.role.clone())
+                .collect::<Vec<_>>(),
+            vec![
+                types::message::Role::User,
+                types::message::Role::Assistant,
+                types::message::Role::User,
+                types::message::Role::Assistant,
+            ]
+        );
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn repaired_old_steer_does_not_ack_new_generation_signal() {
+        let temp = tempfile::tempdir().unwrap();
+        let config = crate::runtime::Config::with_defaults(temp.path().join("memory"));
+        let session_id = "cross-generation-steer";
+        let session = Session::with_session_id(config, session_id.into()).unwrap();
+        let control = Arc::clone(&session.services.agent_control);
+        let path = session.services.agent_path.clone();
+
+        let old_input = TurnInput::UserInput {
+            content: "old steer S1".into(),
+            image_data_urls: Vec::new(),
+            client_message_id: None,
+        };
+        let old_message = control
+            .persist_main_steer(
+                &path,
+                crate::exec::subagents::encode_main_steer_input(&old_input).unwrap(),
+            )
+            .unwrap();
+        let old_marker = format!(
+            "{}{}",
+            crate::exec::subagents::MAILBOX_FINISH_PREFIX,
+            old_message.sequence
+        );
+        session
+            .persist_turn_input(&old_input, Some(&old_marker), Some(&old_marker))
+            .unwrap();
+        session
+            .record_turn_input_in_memory(&old_input, Some(&old_marker))
+            .await;
+
+        let new_input = TurnInput::UserInput {
+            content: "new steer S2".into(),
+            image_data_urls: Vec::new(),
+            client_message_id: None,
+        };
+        let turn_context = session.create_turn_context("turn-2".into()).await;
+        let new_message_id = turn_context.reserve_mailbox_input().unwrap();
+        let new_message = control
+            .persist_main_steer_with_id(
+                &path,
+                new_message_id.clone(),
+                crate::exec::subagents::encode_main_steer_input(&new_input).unwrap(),
+            )
+            .unwrap();
+        assert_eq!(new_message.message_id, new_message_id);
+        control.notify_main_steer();
+        let session = Arc::new(session);
+
+        let calls = Arc::new(AtomicUsize::new(0));
+        let first_saw_only_old = Arc::new(AtomicBool::new(false));
+        let second_saw_new = Arc::new(AtomicBool::new(false));
+        let chat_override: super::super::provider::ChatOverride = {
+            let calls = Arc::clone(&calls);
+            let first_saw_only_old = Arc::clone(&first_saw_only_old);
+            let second_saw_new = Arc::clone(&second_saw_new);
+            Arc::new(move |messages, _tools, _config| {
+                let call = calls.fetch_add(1, Ordering::SeqCst);
+                let saw_old = messages
+                    .iter()
+                    .any(|message| message.text_content().contains("old steer S1"));
+                let saw_new = messages
+                    .iter()
+                    .any(|message| message.text_content().contains("new steer S2"));
+                if call == 0 && saw_old && !saw_new {
+                    first_saw_only_old.store(true, Ordering::SeqCst);
+                }
+                if call == 1 && saw_new {
+                    second_saw_new.store(true, Ordering::SeqCst);
+                }
+                Box::pin(async move {
+                    let text = match call {
+                        0 => "old steer answer",
+                        1 => "new steer answer",
+                        _ => panic!("unexpected extra provider call"),
+                    };
+                    Ok(Box::pin(stream::iter(vec![
+                        Ok(StreamChunk::Text(text.into())),
+                        Ok(StreamChunk::Done {
+                            finish_reason: "stop".into(),
+                        }),
+                    ])) as CompletionStream)
+                })
+            })
+        };
+        let (tx, mut rx) = mpsc::channel(64);
+        let args = RunTurnArgs {
+            session: Arc::clone(&session),
+            turn_context,
+            targets: vec![ChatTarget {
+                provider_id: "scripted".into(),
+                backend_id: "scripted".into(),
+                model: "test".into(),
+                api_key: String::new(),
+                base_url: String::new(),
+            }],
+            base_config: ProviderConfig {
+                model: "test".into(),
+                ..Default::default()
+            },
+            system_prompt: Some("system".into()),
+            pause: PauseControl::new(),
+            hitl_gate: None,
+            tx,
+            thread_id: session_id.into(),
+            run_id: "turn-2".into(),
+            chat_override: Some(chat_override),
+        };
+
+        Session::spawn_task(
+            &session,
+            Arc::clone(&args.turn_context),
+            Vec::new(),
+            RegularTask::new(args),
+        )
+        .await
+        .unwrap();
+        while rx.recv().await.is_some() {}
+
+        assert_eq!(calls.load(Ordering::SeqCst), 2);
+        assert!(first_saw_only_old.load(Ordering::SeqCst));
+        assert!(second_saw_new.load(Ordering::SeqCst));
+        assert!(control.drain_mailbox(&path).unwrap().is_empty());
+    }
 }

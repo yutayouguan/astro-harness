@@ -161,9 +161,52 @@ impl Session {
 
         self.record_turn_input(coalesced_input).await?;
 
+        self.finish_prepared_turn(&user_message, admission_context.as_deref())
+            .await
+    }
+
+    /// Prepare a follow-up whose durable mailbox input is persisted with its
+    /// sequence marker before sampling. Retries converge on the existing
+    /// marker and therefore never append a duplicate user message.
+    pub(crate) async fn prepare_mailbox_turn(&self) -> anyhow::Result<TurnResult> {
+        self.cancel.reset();
+        if self.is_budget_exhausted().await {
+            return Ok(TurnResult::BudgetExhausted);
+        }
+        self.begin_user_turn().await;
+        self.reload_tools_and_mcp().await?;
+        let outcome = crate::exec::subagents::drain_mailbox_at_safe_boundary(self).await?;
+        anyhow::ensure!(!outcome.deferred, "follow-up mailbox input was deferred");
+        anyhow::ensure!(
+            outcome.delivered > 0,
+            "follow-up turn has no durable mailbox input"
+        );
+        let user_message = self
+            .clone_history()
+            .await
+            .iter()
+            .rev()
+            .find(|message| {
+                matches!(message.role, types::message::Role::User)
+                    && message.compressed_content.as_deref().is_some_and(|marker| {
+                        marker.starts_with(crate::exec::subagents::MAILBOX_FINISH_PREFIX)
+                    })
+            })
+            .map(|message| message.content_text())
+            .ok_or_else(|| {
+                anyhow::anyhow!("follow-up mailbox input is missing from runtime history")
+            })?;
+        self.finish_prepared_turn(&user_message, None).await
+    }
+
+    async fn finish_prepared_turn(
+        &self,
+        user_message: &str,
+        admission_context: Option<&str>,
+    ) -> anyhow::Result<TurnResult> {
         let current_turn = self.state.lock().await.turn.current_turn;
         let fts_keywords = if current_turn >= self.config.recent_turns {
-            Some(user_message.as_str())
+            Some(user_message)
         } else {
             None
         };
@@ -178,7 +221,7 @@ impl Session {
 
         self.increment_turn().await;
         let system_prompt = self
-            .build_system_prompt_with_inject(admission_context.as_deref())
+            .build_system_prompt_with_inject(admission_context)
             .await;
         let turn_id = self.current_turn_id().await;
         let inject = self.fire_hook(
@@ -323,7 +366,7 @@ impl Session {
         {
             return Ok(None);
         }
-        let Some(reservation) = running.1.reserve_input().await else {
+        let Some(admission_reservation) = running.1.reserve_input().await else {
             return Ok(None);
         };
         let _admission_guard = self.admission_lock.lock().await;
@@ -333,8 +376,38 @@ impl Session {
             image_data_urls: image_data_urls.to_vec(),
             client_message_id: client_message_id.map(str::to_string),
         };
-        reservation.commit(input, context);
+        let Some(message_id) = running.1.reserve_mailbox_input() else {
+            return Ok(None);
+        };
+        let payload =
+            match crate::exec::subagents::encode_main_steer_input_with_context(&input, context) {
+                Ok(payload) => payload,
+                Err(error) => {
+                    running.1.retract_input(&message_id);
+                    return Err(error);
+                }
+            };
+        if let Err(error) = self.services.agent_control.persist_main_steer_with_id(
+            &self.services.agent_path,
+            message_id.clone(),
+            payload,
+        ) {
+            running.1.retract_input(&message_id);
+            return Err(error);
+        }
+        self.services.agent_control.notify_main_steer();
+        drop(admission_reservation);
         Ok(Some(turn_id))
+    }
+
+    pub(crate) async fn queue_inject_contexts<I>(&self, contexts: I)
+    where
+        I: IntoIterator<Item = String>,
+    {
+        let mut state = self.state.lock().await;
+        for context in contexts {
+            Self::append_inject_context(&mut state.pending_inject_context, context);
+        }
     }
 
     pub(crate) async fn record_queued_turn_inputs(
@@ -352,12 +425,7 @@ impl Session {
             queued.input
         });
         self.record_turn_inputs(inputs).await?;
-        if !contexts.is_empty() {
-            let mut state = self.state.lock().await;
-            for context in contexts {
-                Self::append_inject_context(&mut state.pending_inject_context, context);
-            }
-        }
+        self.queue_inject_contexts(contexts).await;
         Ok(())
     }
 
@@ -373,6 +441,18 @@ impl Session {
 
     pub(crate) async fn record_turn_input(&self, input: TurnInput) -> anyhow::Result<()> {
         let _write_guard = self.conversation_write_lock.lock().await;
+        self.persist_turn_input(&input, None, None)?;
+        self.record_turn_input_in_memory_unlocked(&input, None)
+            .await;
+        Ok(())
+    }
+
+    pub(crate) fn persist_turn_input(
+        &self,
+        input: &TurnInput,
+        finish_reason: Option<&str>,
+        memory_marker: Option<&str>,
+    ) -> anyhow::Result<()> {
         let TurnInput::UserInput {
             content,
             image_data_urls,
@@ -400,13 +480,95 @@ impl Session {
             Some(serde_json::to_string(&media_assets)?)
         };
         self.services.sessions.append_message(NewMessage {
-            content: Some(&content),
+            content: Some(content),
+            compressed_content: memory_marker,
             media_json: media_json.as_deref(),
+            finish_reason,
             ..NewMessage::empty(&self.session_id, "user")
         })?;
-        self.record_items_unlocked(vec![Message::user_with_images(&content, &image_data_urls)])
-            .await;
+        #[cfg(test)]
+        if let Some(hook) = self
+            .services
+            .turn_input_after_db_write
+            .lock()
+            .map_err(|_| anyhow::anyhow!("turn input DB-write hook mutex poisoned"))?
+            .clone()
+        {
+            hook()?;
+        }
         Ok(())
+    }
+
+    pub(crate) async fn record_turn_input_in_memory(
+        &self,
+        input: &TurnInput,
+        marker: Option<&str>,
+    ) {
+        let _write_guard = self.conversation_write_lock.lock().await;
+        self.record_turn_input_in_memory_unlocked(input, marker)
+            .await;
+    }
+
+    async fn record_turn_input_in_memory_unlocked(&self, input: &TurnInput, marker: Option<&str>) {
+        let TurnInput::UserInput {
+            content,
+            image_data_urls,
+            client_message_id: _,
+        } = input;
+        let mut message = Message::user_with_images(content, image_data_urls);
+        message.compressed_content = marker.map(str::to_string);
+        self.record_items_unlocked(vec![message]).await;
+        #[cfg(test)]
+        if let Some(hook) = self
+            .services
+            .turn_input_after_memory_write
+            .lock()
+            .expect("turn input memory-write hook mutex poisoned")
+            .clone()
+        {
+            hook();
+        }
+    }
+
+    pub(crate) fn ensure_durable_turn_input_marker(&self, marker: &str) -> anyhow::Result<bool> {
+        let messages = self.services.sessions.get_messages(&self.session_id)?;
+        let Some(message) = messages.iter().find(|message| {
+            message.role == "user"
+                && (message.finish_reason.as_deref() == Some(marker)
+                    || message.compressed_content.as_deref() == Some(marker))
+        }) else {
+            return Ok(false);
+        };
+        if message.compressed_content.as_deref() != Some(marker) {
+            self.services
+                .sessions
+                .update_message_compressed_content(message.id, Some(marker))?;
+        }
+        Ok(true)
+    }
+
+    #[cfg(test)]
+    pub(crate) fn set_turn_input_after_db_write_hook(
+        &self,
+        hook: Option<super::session_services::TurnInputDbWriteHook>,
+    ) {
+        *self
+            .services
+            .turn_input_after_db_write
+            .lock()
+            .expect("turn input DB-write hook mutex poisoned") = hook;
+    }
+
+    #[cfg(test)]
+    pub(crate) fn set_turn_input_after_memory_write_hook(
+        &self,
+        hook: Option<super::session_services::TurnInputMemoryWriteHook>,
+    ) {
+        *self
+            .services
+            .turn_input_after_memory_write
+            .lock()
+            .expect("turn input memory-write hook mutex poisoned") = hook;
     }
 
     /// Compatibility adapter for callers not yet migrated to Codex naming.

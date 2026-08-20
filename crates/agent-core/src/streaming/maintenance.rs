@@ -11,7 +11,10 @@ use super::types::MultiTurnStreamItem;
 use crate::runtime::AgentLoop;
 
 /// Gateway 预压安全网 + mid-run 辅模型摘要，统一进 LLM 前的上下文维护。
-pub(super) async fn pre_llm_maintenance(session: &Arc<AgentLoop>) {
+pub(super) async fn pre_llm_maintenance(
+    session: &Arc<AgentLoop>,
+) -> anyhow::Result<crate::exec::subagents::MailboxDrainOutcome> {
+    let mailbox = crate::exec::subagents::drain_mailbox_at_safe_boundary(session.as_ref()).await?;
     {
         let agent = session.as_ref();
         let recommend_ratio = agent.compression_config().recommend_compact_ratio;
@@ -47,6 +50,7 @@ pub(super) async fn pre_llm_maintenance(session: &Arc<AgentLoop>) {
             Err(e) => tracing::warn!(error = %e, "mid-run summary failed"),
         }
     }
+    Ok(mailbox)
 }
 
 /// 构建并推送上下文占用估算快照。

@@ -20,7 +20,7 @@ pub trait ConversationStore: Send {
     /// 获取指定会话的全部消息（按时间 + id 升序）。
     fn get_messages(&self, session_id: &str) -> Result<Vec<StoredMessage>>;
 
-    /// 更新 tool 消息的 provider-facing 压缩视图。
+    /// 更新消息的 provider-facing 压缩视图或内部交付标记。
     ///
     /// `compressed` 为 `None` 时清除压缩视图（恢复原文）。
     /// 不修改原始 `content` 列和 FTS 索引。

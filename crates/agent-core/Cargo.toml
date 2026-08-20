@@ -3,6 +3,9 @@ name = "agent"
 version = "0.1.0"
 edition = "2021"
 
+[features]
+test-support = []
+
 [dependencies]
 types = { path = "../agent-types" }
 memory = { path = "../agent-memory" }

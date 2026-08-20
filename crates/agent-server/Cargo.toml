@@ -7,6 +7,7 @@ edition = "2021"
 proto = { path = "../agent-proto" }
 types = { path = "../agent-types" }
 agent = { path = "../agent-core" }
+subagents = { path = "../agent-subagents" }
 providers = { path = "../agent-providers" }
 memory = { path = "../agent-memory" }
 session = { path = "../agent-session" }

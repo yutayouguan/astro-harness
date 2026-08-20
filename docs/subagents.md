@@ -1,35 +1,38 @@
-# Subagents: Codex-style Agent Threads
+# Subagents: Codex V2 Agent Threads
 
-Astro 的 Subagent 只有一套运行时语义：持久化的 Agent Thread。旧的 `subagent` 一次性委派、`pipeline` / Team 编排、嵌套深度门禁和自动 git worktree 已移除。
+Astro 只有一套 Subagent 运行时契约：持久化的 Agent Thread 树。每个节点有独立 Session 时间线，共享 root-scoped 控制面；不存在一次性 delegate、resident channel、Team/pipeline 兼容层或隐式 git worktree。
 
-## 工具
+## 模型工具契约
 
-- `spawn_agent`：启动独立线程，`fork_turns` 支持 `none` / `all` / 正整数。
-- `list_agents` / `read_agent`：查看父会话的线程及其消息。
-- `followup_task` / `send_message`：Codex 兼容名称，在下一个模型边界追问或 steer。
-- `wait_agent`：等待指定线程（或全部活动线程）完成当前回合并返回摘要。
-- `interrupt_agent`：中断当前 LLM / tool 回合。
-- `close_agent`：关闭线程并释放进程内控制句柄。
+模型仅能调用六个 Agent Thread 工具：
 
-旧名称 `send_message_to_agent` / `wait_agents` 作为兼容别名保留。
+- `spawn_agent(task_name, message, agent_type?, model?, reasoning_effort?, fork_turns?)`：在当前路径下创建子线程并启动首个 turn。`fork_turns` 接受 `none`、`all` 或正整数。
+- `list_agents(path_prefix?)`：按 canonical path 列出 root 树节点。
+- `send_message(target, message)`：只持久化到目标 mailbox，不启动新 turn。
+- `followup_task(target, message)`：持久化 mailbox，并对空闲或已中断线程触发/恢复下一个 turn。
+- `wait_agent(timeout_ms?)`：等待 root 下任意 mailbox、最终状态或主会话 steer 活动，而不是轮询某组 thread id。
+- `interrupt_agent(target)`：中断目标当前活跃 turn；线程仍可被 follow-up 恢复。
 
-线程状态与对话写入 `~/.astro/subagents.db`。Provider 凭证仅在 spawn 时以内存值传递，不写入该数据库。子线程完整继承父任务权限，自定义 agent 不能扩大 sandbox 权限。
+`read` 和递归 `close` 仅属于桌面管理控制面。Tauri 命令 `read_subagent_thread` 读取真实 Session 时间线，`close_subagent_thread` 按叶子优先终止目标子树。它们不是模型工具，也不经过模型 dispatch trait。
 
-## 统一运行内核
+## 生命周期与恢复
 
-普通聊天、Cron 与 Agent Thread 都由 `streaming::run_multi_turn_stream` 驱动同一套多轮循环。
-`exec::background` 只是非 UI 事件适配器，不拥有独立工具循环，也不代表更高权限。
-因此 Provider fallback、上下文维护、hooks、权限预检、工具执行、迭代预算、usage、取消和
-max-iteration summary 在前台与后台保持一致。
+线程只有六种状态：`PendingInit`、`Running`、`Interrupted`、`Completed`、`Errored`、`Shutdown`。
 
-## 自定义 Agent
+- `Running` 仅表示真实活跃 turn，turn 结束就释放执行配额，线程身份仍保留。
+- `Interrupted` 和 `Completed` 都可通过 `followup_task` 再次启动。
+- `Shutdown` 是桌面 close 后的不可执行历史节点。
+- 进程重启时，未完成的 `Running` turn 投影为耐久 `Interrupted`；不自动重放 LLM 或工具副作用。
+- `subagent_start` 只在首轮 startup-ready 且 caller 接受后触发一次；`subagent_stop` 只在 Desktop close 耐久化 `Shutdown` 并成功收敛后触发一次。两者都是进程内观察回调，不跨进程重启回放。
 
-Codex 路径是规范配置层；`.astro` 同名路径作为旧版兼容层保留。后加载的项目
-`.codex` 定义优先级最高：
+通知只用于唤醒。状态事件、mailbox sequence 和投递位点先持久化，Session Event 再以 `stream_id + event_id` 按 cursor 回放。前端先取快照，再应用 cursor 之后的增量事件。
 
-- 个人：`~/.codex/agents/*.toml`
-- 项目：`<project>/.codex/agents/*.toml`
-- 兼容：`~/.astro/agents/*.toml`、`<project>/.astro/agents/*.toml`
+## 配置与权限
+
+自定义 Agent 只从以下路径加载，项目定义覆盖用户定义：
+
+- `~/.codex/agents/*.toml`
+- `<project>/.codex/agents/*.toml`
 
 ```toml
 name = "reviewer"
@@ -47,14 +50,9 @@ path = "/absolute/path/to/SKILL.md"
 enabled = true
 ```
 
-`name`、`description`、`developer_instructions` 必填。自定义 sandbox 只能收窄父任务权限；
-`mcp_servers` 作为父配置之上的 Server 覆盖层，`skills.config` 只在子线程内生效，不修改
-父 Agent 的持久化开关。内置 agent 为 `default`、`worker`、`explorer`。
+`name`、`description`、`developer_instructions` 必填。自定义 sandbox 只能收窄父任务权限；MCP 与 skill 也不得扩大父任务的文件、网络、工具或审批权限。内置 agent 为 `default`、`worker`、`explorer`。
 
-## 全局配置
-
-`~/.codex/config.toml` 和 `<project>/.codex/config.toml` 是规范路径；对应 `.astro`
-路径继续兼容。支持：
+全局与项目设置也只从 `~/.codex/config.toml` 和 `<project>/.codex/config.toml` 加载：
 
 ```toml
 [agents]
@@ -65,5 +63,9 @@ default_subagent_reasoning_effort = "high"
 interrupt_message = true
 ```
 
-主会话输入框上方实时显示活动 Subagent，可展开状态、打开单个线程或停止全部活动线程。
-聊天输入框的 Subagents 按钮仍可打开完整面板，发送 follow-up、中断或关闭线程。
+## 持久化边界
+
+- `~/.astro/subagents-v2.db`：V2 Agent Graph、spawn edge、mailbox、状态事件和恢复元数据。
+- `~/.astro/sessions/state.db`：每个 Agent Thread 的真实消息、reasoning、tool call/result 时间线。
+
+旧 V1 schema 只能被一次性迁移器识别：原 thread/message 表被改名为只读历史归档，不会恢复为可执行 runtime，也不提供旧模型 API。

@@ -375,10 +375,53 @@ export const AGENT_TOOLS: AgentToolDef[] = [
     descKey: "agentTools.subagents.desc",
     Icon: IconMultiAgent,
     tone: "sky",
-    params: [
-      { name: "task", type: "string" },
-      { name: "agent_name", type: "string", optional: true },
-      { name: "fork_turns", type: "string", optional: true },
+    params: [],
+    tools: [
+      "spawn_agent",
+      "list_agents",
+      "send_message",
+      "followup_task",
+      "wait_agent",
+      "interrupt_agent",
+    ],
+    functions: [
+      {
+        name: "spawn_agent",
+        params: [
+          { name: "task_name", type: "string" },
+          { name: "message", type: "string" },
+          { name: "agent_type", type: "string", optional: true },
+          { name: "model", type: "string", optional: true },
+          { name: "reasoning_effort", type: "string", optional: true },
+          { name: "fork_turns", type: "string", optional: true },
+        ],
+      },
+      {
+        name: "list_agents",
+        params: [{ name: "path_prefix", type: "string", optional: true }],
+      },
+      {
+        name: "send_message",
+        params: [
+          { name: "target", type: "string" },
+          { name: "message", type: "string" },
+        ],
+      },
+      {
+        name: "followup_task",
+        params: [
+          { name: "target", type: "string" },
+          { name: "message", type: "string" },
+        ],
+      },
+      {
+        name: "wait_agent",
+        params: [{ name: "timeout_ms", type: "number", optional: true }],
+      },
+      {
+        name: "interrupt_agent",
+        params: [{ name: "target", type: "string" }],
+      },
     ],
   },
   {

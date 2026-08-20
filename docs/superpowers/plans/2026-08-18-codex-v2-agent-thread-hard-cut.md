@@ -1,5 +1,7 @@
 # Codex V2 Agent Thread Hard Cut Implementation Plan
 
+> **历史实施记录：** 本文保留 TDD 任务和当时的预期输出，不是当前 runtime 契约。其中 `subagents.db`、旧工具/参数和 `.astro/agents` 均是已被替换或用于负向验证的历史内容；当前真值以 `docs/subagents.md` 与 `subagents-v2.db` 实现为准。
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Replace Astro's compatibility-based subagent implementation with a single Codex V2 Agent Thread contract, including durable tree/mailbox state, real runner lifecycle events, desktop-only read/close control, and event-driven frontend activity.

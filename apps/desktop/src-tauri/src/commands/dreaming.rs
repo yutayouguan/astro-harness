@@ -328,6 +328,8 @@ fn emit_dreaming_session_event(app: &AppHandle, base: &std::path::Path, agent_id
                     reason: "enqueued".into(),
                 }),
                 session_metadata_changed: None,
+                agent_thread_changed: None,
+                resync_required: None,
             },
         );
     } else {
@@ -347,6 +349,8 @@ fn emit_dreaming_session_event(app: &AppHandle, base: &std::path::Path, agent_id
                 }),
                 pending_changed: None,
                 session_metadata_changed: None,
+                agent_thread_changed: None,
+                resync_required: None,
             },
         );
     }

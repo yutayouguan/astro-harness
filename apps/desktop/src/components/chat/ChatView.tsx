@@ -715,10 +715,15 @@ export default function ChatView({
   const [contextPopoverOpen, setContextPopoverOpen] = useState(false);
   const [mcpOpen, setMcpOpen] = useState(false);
   const [subagentsOpen, setSubagentsOpen] = useState(false);
-  const [selectedSubagentId, setSelectedSubagentId] = useState<string | null>(null);
+  const [selectedSubagentPath, setSelectedSubagentPath] = useState<string | null>(null);
   const {
     threads: subagentThreads,
+    roots: subagentRoots,
+    error: subagentError,
+    loading: subagentsLoading,
+    initialized: subagentsInitialized,
     refresh: refreshSubagentThreads,
+    markRead: markSubagentRead,
   } = useSubagentThreads(sessionId);
   const [recording, setRecording] = useState(false);
   const [transcribing, setTranscribing] = useState(false);
@@ -2137,15 +2142,17 @@ export default function ChatView({
         }}
       >
         <SubagentActivityBar
-          parentSessionId={sessionId}
-          threads={subagentThreads}
+          key={sessionId ?? "no-session"}
+          rootSessionId={sessionId}
+          roots={subagentRoots}
           onRefresh={refreshSubagentThreads}
           onOpenPanel={() => {
-            setSelectedSubagentId(null);
+            setSelectedSubagentPath(null);
             setSubagentsOpen(true);
           }}
-          onOpenThread={(threadId) => {
-            setSelectedSubagentId(threadId);
+          onOpenThread={(canonicalPath) => {
+            markSubagentRead(canonicalPath);
+            setSelectedSubagentPath(canonicalPath);
             setSubagentsOpen(true);
           }}
         />
@@ -2805,7 +2812,7 @@ export default function ChatView({
                   setApprovalMenuOpen(false);
                   setContextPopoverOpen(false);
                   setPaletteKind(null);
-                  setSelectedSubagentId(null);
+                  setSelectedSubagentPath(null);
                   setSubagentsOpen(true);
                 }}
               >
@@ -3023,11 +3030,17 @@ export default function ChatView({
         </div>
       </form>
       <SubagentsPanel
+        key={sessionId ?? "no-session"}
         open={subagentsOpen}
-        parentSessionId={sessionId}
+        rootSessionId={sessionId}
+        roots={subagentRoots}
         threads={subagentThreads}
-        initialThreadId={selectedSubagentId}
+        initialTarget={selectedSubagentPath}
+        streamError={subagentError}
+        loading={subagentsLoading}
+        initialized={subagentsInitialized}
         refreshThreads={refreshSubagentThreads}
+        markRead={markSubagentRead}
         onClose={() => setSubagentsOpen(false)}
       />
     </section>

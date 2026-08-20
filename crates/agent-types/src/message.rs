@@ -2,6 +2,8 @@
 //!
 //! 供 agent / memory / backend 等共享，序列化时角色名为小写。
 
+use std::borrow::Cow;
+
 use serde::{Deserialize, Serialize};
 
 use crate::media::{MediaAsset, MediaKind};
@@ -308,6 +310,27 @@ impl Message {
                 .filter_map(|p| p.text.as_deref())
                 .collect::<Vec<_>>()
                 .join("\n"),
+        }
+    }
+
+    /// Text visible to model-facing semantic consumers.
+    ///
+    /// Only tool results may substitute their compressed provider view. Other
+    /// roles can reuse `compressed_content` as internal metadata, so their
+    /// semantic content must always come from `content`.
+    pub fn provider_view_text(&self) -> Cow<'_, str> {
+        if self.role == Role::Tool {
+            if let Some(compressed) = self
+                .compressed_content
+                .as_deref()
+                .filter(|content| !content.trim().is_empty())
+            {
+                return Cow::Borrowed(compressed);
+            }
+        }
+        match &self.content {
+            MessageContent::Text(content) => Cow::Borrowed(content),
+            MessageContent::Parts(_) => Cow::Owned(self.content_text()),
         }
     }
 }

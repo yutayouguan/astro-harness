@@ -26,8 +26,8 @@ Astro 有三条 Hook 通道：
 | `SessionStart` | 会话开始 |
 | `SessionEnd` | 会话结束 |
 | `UserPromptSubmit` | 用户 prompt 提交 |
-| `SubagentStart` | Subagent 开始 |
-| `SubagentStop` | Subagent 停止 |
+| `SubagentStart` | Agent Thread 首轮 startup-ready 且 caller 已接受后（每 thread 一次） |
+| `SubagentStop` | Desktop close 已耐久化 `Shutdown` 并成功收敛后（每 thread 一次） |
 | `Stop` | Agent 准备停止 |
 
 ### Astro 扩展事件
@@ -261,6 +261,8 @@ fn register(ctx: &PluginContext<'_>) {
 当前 `HookOutcome` 保留 `Continue`、`Block`、`Modify`、`InjectContext`、`Allow`、`Skip`、`Rewrite`、`ReplaceText` 和 `KeepGoing`。Plugin callbacks 按注册顺序同步聚合；首个非继续结果会短路 Plugin callbacks。Gateway 与 Shell 是观察型 transport：Gateway handler 不改变该 outcome，Shell 异步旁路也不阻塞或改变它。
 
 ### Gateway Event Hooks
+
+Agent Thread 生命周期回调是观察型：返回阻断结果或抛出 panic 都不会改变 spawn/close 结果。`PluginHookBus` 是进程内对象，因此只有当前进程注册并保留了 runtime request 的 bus 能观察 `subagent_stop`；进程重启后仍可耐久关闭线程，但不会回放上一进程的回调。
 
 `~/.astro/hooks/<name>/HOOK.yaml`：
 

@@ -164,8 +164,7 @@ async fn steer_during_initial_prompt_preparation_preserves_role_order() {
                 .collect();
             if call == 0 {
                 first_sampling_was_clean.store(
-                    texts.iter().any(|text| *text == "initial")
-                        && !texts.iter().any(|text| *text == "follow up"),
+                    texts.contains(&"initial") && !texts.contains(&"follow up"),
                     Ordering::SeqCst,
                 );
             } else if call == 1 {
@@ -440,11 +439,28 @@ async fn failed_initial_admission_closes_waiting_steer_for_new_turn_retry() {
 async fn steered_input_is_consumed_by_the_active_regular_task() {
     let dir = tempfile::tempdir().unwrap();
     let config = AgentConfig::with_defaults(dir.path().to_path_buf());
+    let sessions = session::SessionStore::open_sessions_dir(&dir.path().join("sessions")).unwrap();
+    sessions
+        .create_session("steer-session", "tauri", None, None, None)
+        .unwrap();
+    sessions
+        .append_message(session::NewMessage {
+            content: Some("initial"),
+            ..session::NewMessage::empty("steer-session", "user")
+        })
+        .unwrap();
     let agent = AgentLoop::with_session_id(config, "steer-session".into()).unwrap();
     let session = Arc::new(agent);
-    session
-        .record_items(vec![types::message::Message::user("initial")])
-        .await;
+    assert_eq!(
+        session
+            .clone_history()
+            .await
+            .iter()
+            .map(|message| message.content_str())
+            .collect::<Vec<_>>(),
+        ["initial"],
+        "the active session hydrates its durable history"
+    );
     let prompt_hook_payload = Arc::new(std::sync::Mutex::new(None));
     let prompt_hook_hits = Arc::new(AtomicUsize::new(0));
     let prompt_hook_entered = Arc::new(Notify::new());
@@ -585,6 +601,27 @@ async fn steered_input_is_consumed_by_the_active_regular_task() {
     assert!(saw_follow_up.load(Ordering::SeqCst));
     assert!(saw_hook_context.load(Ordering::SeqCst));
     let messages = session.clone_history().await;
+    assert!(
+        agent::runtime::validate_message_order(&messages),
+        "steered history must alternate roles: {:?}",
+        messages
+            .iter()
+            .map(|message| (message.role.clone(), message.content_str().to_string()))
+            .collect::<Vec<_>>()
+    );
+    assert_eq!(
+        messages
+            .iter()
+            .filter(|message| message.role != types::message::Role::Tool)
+            .map(|message| message.role.clone())
+            .collect::<Vec<_>>(),
+        vec![
+            types::message::Role::User,
+            types::message::Role::Assistant,
+            types::message::Role::User,
+            types::message::Role::Assistant,
+        ]
+    );
     assert!(messages.iter().any(|message| {
         matches!(
             &message.content,
@@ -1482,7 +1519,7 @@ async fn stop_keep_going_with_queued_steer_preserves_role_order() {
         }
         match call {
             0 => ::hooks::HookOutcome::KeepGoing("review the draft".into()),
-            2 | 3 | 4 => ::hooks::HookOutcome::KeepGoing("review the follow up".into()),
+            2..=4 => ::hooks::HookOutcome::KeepGoing("review the follow up".into()),
             _ => ::hooks::HookOutcome::Continue,
         }
     });
@@ -1506,10 +1543,8 @@ async fn stop_keep_going_with_queued_steer_preserves_role_order() {
                 .collect();
             if call == 1 {
                 bridge_was_responded_to_first.store(
-                    texts
-                        .iter()
-                        .any(|text| *text == "[astro:hook-context]\nreview the draft")
-                        && !texts.iter().any(|text| *text == "follow up"),
+                    texts.contains(&"[astro:hook-context]\nreview the draft")
+                        && !texts.contains(&"follow up"),
                     Ordering::SeqCst,
                 );
                 bridge_did_not_see_steer_context.store(
@@ -1684,10 +1719,8 @@ async fn stop_keep_going_defers_queued_steer_across_reasoning_only_bridge_retry(
                 .collect();
             if call == 1 || call == 2 {
                 reasoning_retry_kept_steer_queued.store(
-                    texts
-                        .iter()
-                        .any(|text| *text == "[astro:hook-context]\nreview the draft")
-                        && !texts.iter().any(|text| *text == "follow up"),
+                    texts.contains(&"[astro:hook-context]\nreview the draft")
+                        && !texts.contains(&"follow up"),
                     Ordering::SeqCst,
                 );
             } else if call == 3 {

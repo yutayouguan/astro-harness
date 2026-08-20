@@ -1,58 +1,117 @@
-import { useMemo, useState } from "react";
+import { useLayoutEffect, useMemo, useState, type CSSProperties } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { Bot, ChevronDown, Square } from "lucide-react";
 import { useI18n } from "../../i18n/LocaleContext";
-import type { SubagentThread, SubagentThreadStatus } from "../../hooks/chat/useSubagentThreads";
+import {
+  createAgentTreeRootLifecycle,
+  flattenAgentTree,
+  type AgentThreadStatus,
+  type AgentTreeNode,
+} from "../../hooks/chat/subagentTree";
 
 type Props = {
-  parentSessionId?: string | null;
-  threads: SubagentThread[];
+  rootSessionId?: string | null;
+  roots: AgentTreeNode[];
   onRefresh: () => Promise<void>;
-  onOpenThread: (threadId: string) => void;
+  onOpenThread: (canonicalPath: string) => void;
   onOpenPanel: () => void;
 };
 
-const ACTIVE = new Set<SubagentThreadStatus>(["pending", "running"]);
+function statusKey(status: AgentThreadStatus): string {
+  return status.kind;
+}
+
+function visibleNode(node: AgentTreeNode): AgentTreeNode | null {
+  if (node.archived) return null;
+  const children = node.children
+    .map(visibleNode)
+    .filter((child): child is AgentTreeNode => child !== null);
+  return { ...node, children };
+}
 
 export default function SubagentActivityBar({
-  parentSessionId,
-  threads,
+  rootSessionId,
+  roots,
   onRefresh,
   onOpenThread,
   onOpenPanel,
 }: Props) {
   const { t } = useI18n();
+  const root = rootSessionId?.trim() ?? "";
+  const [rootLifecycle] = useState(createAgentTreeRootLifecycle);
   const [expanded, setExpanded] = useState(true);
   const [stopping, setStopping] = useState(false);
-  const visible = useMemo(
-    () => threads.filter((thread) => thread.status !== "closed"),
-    [threads],
+  const visibleRoots = useMemo(
+    () => roots.map(visibleNode).filter((node): node is AgentTreeNode => node !== null),
+    [roots],
   );
-  const active = useMemo(
-    () => visible.filter((thread) => ACTIVE.has(thread.status)),
+  const visible = useMemo(() => flattenAgentTree(visibleRoots), [visibleRoots]);
+  const running = useMemo(
+    () => visible.filter((node) => node.thread.status.kind === "running"),
     [visible],
   );
 
-  if (!parentSessionId || visible.length === 0) return null;
+  useLayoutEffect(() => {
+    const token = rootLifecycle.commit(root);
+    setStopping(false);
+    return () => rootLifecycle.invalidate(token);
+  }, [root, rootLifecycle]);
 
-  const statusLabel = (status: SubagentThreadStatus) =>
-    t(`subagents.status.${status}` as never);
+  if (!root || visible.length === 0) return null;
 
   const stopAll = async () => {
-    if (active.length === 0 || stopping) return;
+    if (running.length === 0 || stopping) return;
+    const token = rootLifecycle.current();
+    const isCurrentRoot = () => token.root === root
+      && rootLifecycle.isCurrent(token);
+    if (!isCurrentRoot()) return;
     setStopping(true);
     try {
       await Promise.allSettled(
-        active.map((thread) =>
+        running.map(({ thread }) =>
           invoke("interrupt_subagent_thread", {
-            args: { parentSessionId, threadId: thread.id },
-          }),
-        ),
+            args: {
+              rootSessionId: root,
+              target: thread.canonicalPath,
+            },
+          })),
       );
+      if (!isCurrentRoot()) return;
       await onRefresh();
     } finally {
-      setStopping(false);
+      if (isCurrentRoot()) setStopping(false);
     }
+  };
+
+  const renderNode = (node: AgentTreeNode, depth: number) => {
+    const status = statusKey(node.thread.status);
+    return (
+      <div className="subagent-activity-branch" key={node.thread.threadId} role="none">
+        <button
+          type="button"
+          role="treeitem"
+          aria-level={depth + 1}
+          className={`is-${status}${node.unread ? " has-unread" : ""}`}
+          style={{ "--depth": depth } as CSSProperties}
+          onClick={() => onOpenThread(node.thread.canonicalPath)}
+        >
+          <span className={`subagents-status is-${status}`} aria-hidden />
+          <span>
+            <strong>{node.thread.taskName}</strong>
+            <small>{node.thread.agentType}</small>
+          </span>
+          {node.unread ? (
+            <span className="subagents-unread" role="img" aria-label={t("subagents.unread")} />
+          ) : null}
+          <em>{t(`subagents.status.${status}` as never)}</em>
+        </button>
+        {node.children.length > 0 ? (
+          <div role="group">
+            {node.children.map((child) => renderNode(child, depth + 1))}
+          </div>
+        ) : null}
+      </div>
+    );
   };
 
   return (
@@ -68,15 +127,15 @@ export default function SubagentActivityBar({
           <span className="subagent-activity-copy">
             <strong>{t("subagents.activity.title", { count: String(visible.length) })}</strong>
             <small>
-              {active.length > 0
-                ? t("subagents.activity.running", { count: String(active.length) })
+              {running.length > 0
+                ? t("subagents.activity.running", { count: String(running.length) })
                 : t("subagents.activity.done")}
             </small>
           </span>
           <ChevronDown className={expanded ? "is-open" : ""} size={14} aria-hidden />
         </button>
         <span className="subagent-activity-actions">
-          {active.length > 0 ? (
+          {running.length > 0 ? (
             <button type="button" disabled={stopping} onClick={() => void stopAll()}>
               <Square size={11} strokeWidth={2.4} aria-hidden />
               {t("subagents.activity.stopAll")}
@@ -86,22 +145,8 @@ export default function SubagentActivityBar({
         </span>
       </div>
       {expanded ? (
-        <div className="subagent-activity-list">
-          {visible.map((thread) => (
-            <button
-              type="button"
-              key={thread.id}
-              className={`is-${thread.status}`}
-              onClick={() => onOpenThread(thread.id)}
-            >
-              <span className={`subagents-status is-${thread.status}`} aria-hidden />
-              <span>
-                <strong>{thread.agent_name}</strong>
-                <small>{thread.task}</small>
-              </span>
-              <em>{statusLabel(thread.status)}</em>
-            </button>
-          ))}
+        <div className="subagent-activity-list" role="tree" aria-label={t("subagents.threadList")}>
+          {visibleRoots.map((node) => renderNode(node, 0))}
         </div>
       ) : null}
     </section>

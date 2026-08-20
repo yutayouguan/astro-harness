@@ -249,11 +249,7 @@ pub fn estimate_messages_tokens(messages: &[Message]) -> u32 {
 }
 
 fn provider_facing_chars(m: &Message) -> usize {
-    let body = m
-        .compressed_content
-        .as_deref()
-        .map(|s| s.chars().count())
-        .unwrap_or_else(|| m.content_str().chars().count());
+    let body = m.provider_view_text().chars().count();
     let tool_calls = m
         .tool_calls
         .as_ref()
@@ -665,6 +661,19 @@ mod tests {
         m.compressed_content = Some("short".into());
         let after = estimate_messages_tokens(std::slice::from_ref(&m));
         assert!(after < before);
+    }
+
+    #[test]
+    fn estimate_ignores_user_delivery_marker() {
+        let content = "follow the complete durable instruction ".repeat(20);
+        let mut user = Message::user(&content);
+        let expected = estimate_messages_tokens(std::slice::from_ref(&user));
+        user.compressed_content = Some("agent-mailbox-through:42".into());
+
+        assert_eq!(
+            estimate_messages_tokens(std::slice::from_ref(&user)),
+            expected
+        );
     }
 
     #[test]

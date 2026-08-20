@@ -386,7 +386,33 @@ message SessionEvent {
     MemoryUpdatedEvent memory_updated = 10;
     PendingChangedEvent pending_changed = 11;
     SessionMetadataChangedEvent session_metadata_changed = 12;
+    AgentThreadChangedEvent agent_thread_changed = 13;
+    SessionResyncRequiredEvent resync_required = 14;
   }
+}
+
+message SessionResyncRequiredEvent {
+  // A targeted resync may occur without a stream_id change. Clients must
+  // refresh the affected snapshot for every marker.
+  // stream_generation_changed | replay_gap | active_receiver_lag |
+  // agent_control_generation_changed | activity_gap
+  string reason = 1;
+}
+
+message AgentThreadChangedEvent {
+  // Root AgentControl generation cursor. A stream_id change or a targeted
+  // SessionResyncRequiredEvent requires a fresh tree snapshot.
+  uint64 activity_sequence = 1;
+  string root_thread_id = 2;
+  string thread_id = 3;
+  string parent_thread_id = 4;
+  string canonical_path = 5;
+  string task_name = 6;
+  string agent_type = 7;
+  string session_id = 8;
+  string status_kind = 9;
+  string status_payload_json = 10;
+  string activity_kind = 11;
 }
 
 message MemoryUpdatedEvent {

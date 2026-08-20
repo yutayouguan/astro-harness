@@ -376,14 +376,36 @@ pub(crate) async fn run_max_iterations_summary(a: MaxIterationsSummaryArgs<'_>) 
         // summary candidate is terminal. Close admission only after persisting
         // the assistant reply, then either sample the queued response chain or
         // finish without dropping an acknowledged input.
-        let pending_input = turn_context.take_pending_input_or_close().await;
-        if !pending_input.is_empty() {
-            let agent = session.as_ref();
-            if let Err(err) = agent.record_queued_turn_inputs(pending_input).await {
-                return SummaryOutcome::Failed(err.to_string());
-            }
+        let mailbox = match super::maintenance::pre_llm_maintenance(session).await {
+            Ok(mailbox) => mailbox,
+            Err(error) => return SummaryOutcome::Failed(error.to_string()),
+        };
+        if !mailbox.delivered_steer_ids.is_empty() {
+            turn_context.acknowledge_mailbox_inputs(&mailbox.delivered_steer_ids);
+        }
+        for client_message_id in mailbox.delivered_client_message_ids {
+            let _ = emit(
+                tx,
+                MultiTurnStreamItem::UserInputCommitted { client_message_id },
+            )
+            .await;
+        }
+        if mailbox.deferred || mailbox.delivered > 0 {
             *verify_attempt = 0;
             continue;
+        }
+
+        match turn_context.wait_for_terminal_input().await {
+            crate::runtime::turn_context::TerminalInputDecision::Queued(pending_input) => {
+                let agent = session.as_ref();
+                if let Err(err) = agent.record_queued_turn_inputs(pending_input).await {
+                    return SummaryOutcome::Failed(err.to_string());
+                }
+                *verify_attempt = 0;
+                continue;
+            }
+            crate::runtime::turn_context::TerminalInputDecision::MailboxPending => continue,
+            crate::runtime::turn_context::TerminalInputDecision::Closed => {}
         }
 
         return SummaryOutcome::Finished;

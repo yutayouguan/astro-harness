@@ -11,6 +11,11 @@ use tokio::sync::Notify;
 
 use crate::tasks::TurnInput;
 
+#[derive(Debug)]
+struct PendingInputSignal {
+    mailbox_message_id: String,
+}
+
 #[derive(Debug, PartialEq, Eq)]
 pub(crate) struct QueuedTurnInput {
     pub(crate) input: TurnInput,
@@ -27,6 +32,7 @@ enum TurnInputReadiness {
 #[derive(Debug)]
 struct TurnInputState {
     pending: Vec<QueuedTurnInput>,
+    mailbox_pending: Vec<PendingInputSignal>,
     readiness: TurnInputReadiness,
     in_flight_admissions: usize,
 }
@@ -56,6 +62,15 @@ pub struct TurnContext {
     preparing_reservation_notify: Notify,
 }
 
+/// Decision made at a terminal assistant boundary while steering admission is
+/// still open. Durable mailbox input must return to the sampling loop, whereas
+/// an in-flight prompt hook must finish before the turn can close.
+pub(crate) enum TerminalInputDecision {
+    Queued(Vec<QueuedTurnInput>),
+    MailboxPending,
+    Closed,
+}
+
 impl TurnContext {
     pub(crate) fn new(
         sub_id: String,
@@ -72,6 +87,7 @@ impl TurnContext {
             project_root,
             input_state: Mutex::new(TurnInputState {
                 pending: Vec::new(),
+                mailbox_pending: Vec::new(),
                 readiness: TurnInputReadiness::Preparing,
                 in_flight_admissions: 0,
             }),
@@ -155,6 +171,7 @@ impl TurnContext {
                 .expect("turn input state mutex poisoned");
             state.readiness = TurnInputReadiness::Closed;
             state.pending.clear();
+            state.mailbox_pending.clear();
         }
         self.input_notify.notify_waiters();
     }
@@ -167,8 +184,77 @@ impl TurnContext {
         std::mem::take(&mut state.pending)
     }
 
-    /// Atomically take queued input, or close steering if the queue is empty.
-    pub(crate) async fn take_pending_input_or_close(&self) -> Vec<QueuedTurnInput> {
+    /// Reserve the stable mailbox identity before its durable write. Using the
+    /// same identity in both places makes delivery acknowledgement race-free.
+    pub(crate) fn reserve_mailbox_input(&self) -> Option<String> {
+        let mut state = self
+            .input_state
+            .lock()
+            .expect("turn input state mutex poisoned");
+        if state.readiness == TurnInputReadiness::Closed {
+            return None;
+        }
+        let mailbox_message_id = uuid::Uuid::new_v4().to_string();
+        state.mailbox_pending.push(PendingInputSignal {
+            mailbox_message_id: mailbox_message_id.clone(),
+        });
+        Some(mailbox_message_id)
+    }
+
+    /// Remove only signals whose durable mailbox identities were delivered.
+    /// Unrelated generations are intentionally kept.
+    pub(crate) fn acknowledge_mailbox_inputs(&self, delivered_message_ids: &[String]) -> usize {
+        let mut state = self
+            .input_state
+            .lock()
+            .expect("turn input state mutex poisoned");
+        let before = state.mailbox_pending.len();
+        state.mailbox_pending.retain(|pending| {
+            !delivered_message_ids
+                .iter()
+                .any(|delivered| delivered == &pending.mailbox_message_id)
+        });
+        let acknowledged = before - state.mailbox_pending.len();
+        drop(state);
+        if acknowledged > 0 {
+            self.input_notify.notify_waiters();
+        }
+        acknowledged
+    }
+
+    pub(crate) fn retract_input(&self, mailbox_message_id: &str) {
+        let mut state = self
+            .input_state
+            .lock()
+            .expect("turn input state mutex poisoned");
+        state
+            .mailbox_pending
+            .retain(|pending| pending.mailbox_message_id != mailbox_message_id);
+        drop(state);
+        self.input_notify.notify_waiters();
+    }
+
+    /// Atomically close steering only when neither queue nor an admission is pending.
+    #[cfg(test)]
+    pub(crate) fn close_if_no_pending_input(&self) -> bool {
+        let mut state = self
+            .input_state
+            .lock()
+            .expect("turn input state mutex poisoned");
+        if state.pending.is_empty()
+            && state.mailbox_pending.is_empty()
+            && state.in_flight_admissions == 0
+        {
+            state.readiness = TurnInputReadiness::Closed;
+            true
+        } else {
+            false
+        }
+    }
+
+    /// Wait for an in-flight admission, then atomically choose queued input,
+    /// durable mailbox delivery, or terminal close.
+    pub(crate) async fn wait_for_terminal_input(&self) -> TerminalInputDecision {
         loop {
             let notified = self.input_notify.notified();
             {
@@ -177,24 +263,40 @@ impl TurnContext {
                     .lock()
                     .expect("turn input state mutex poisoned");
                 if !state.pending.is_empty() {
-                    return std::mem::take(&mut state.pending);
+                    return TerminalInputDecision::Queued(std::mem::take(&mut state.pending));
+                }
+                if !state.mailbox_pending.is_empty() {
+                    return TerminalInputDecision::MailboxPending;
                 }
                 match state.readiness {
                     TurnInputReadiness::Preparing => {}
                     TurnInputReadiness::Accepting if state.in_flight_admissions == 0 => {
                         state.readiness = TurnInputReadiness::Closed;
-                        return Vec::new();
+                        return TerminalInputDecision::Closed;
                     }
-                    TurnInputReadiness::Closed => return Vec::new(),
+                    TurnInputReadiness::Closed => return TerminalInputDecision::Closed,
                     TurnInputReadiness::Accepting => {}
                 }
             }
             notified.await;
         }
     }
+
+    /// Test helper retaining the original queue-only assertion surface.
+    #[cfg(test)]
+    pub(crate) async fn take_pending_input_or_close(&self) -> Vec<QueuedTurnInput> {
+        match self.wait_for_terminal_input().await {
+            TerminalInputDecision::Queued(inputs) => inputs,
+            TerminalInputDecision::Closed => Vec::new(),
+            TerminalInputDecision::MailboxPending => {
+                panic!("mailbox input is pending at a queue-only terminal boundary")
+            }
+        }
+    }
 }
 
 impl TurnInputReservation {
+    #[cfg(test)]
     pub(crate) fn commit(mut self, input: TurnInput, inject_context: Option<String>) {
         self.finish(Some(QueuedTurnInput {
             input,
@@ -343,5 +445,34 @@ mod tests {
         turn_context.close_input_admission();
 
         assert!(reservation.await.unwrap().is_none());
+    }
+
+    #[test]
+    fn acknowledgement_removes_only_matching_mailbox_identities() {
+        let turn_context = TurnContext::new(
+            "turn-1".into(),
+            1,
+            types::InteractionMode::Agent,
+            None,
+            None,
+        );
+        let first = turn_context.reserve_mailbox_input().unwrap();
+        let second = turn_context.reserve_mailbox_input().unwrap();
+        let unrelated = turn_context.reserve_mailbox_input().unwrap();
+
+        assert_eq!(
+            turn_context.acknowledge_mailbox_inputs(&["old-generation-message".into()]),
+            0
+        );
+        assert_eq!(
+            turn_context.acknowledge_mailbox_inputs(std::slice::from_ref(&first)),
+            1
+        );
+        assert_eq!(turn_context.acknowledge_mailbox_inputs(&[first]), 0);
+        assert!(!turn_context.close_if_no_pending_input());
+        assert_eq!(turn_context.acknowledge_mailbox_inputs(&[second]), 1);
+        assert!(!turn_context.close_if_no_pending_input());
+        turn_context.retract_input(&unrelated);
+        assert!(turn_context.close_if_no_pending_input());
     }
 }

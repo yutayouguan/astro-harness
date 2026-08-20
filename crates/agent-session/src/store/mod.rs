@@ -58,6 +58,8 @@ pub struct NewMessage<'a> {
     pub session_id: &'a str,
     pub role: &'a str,
     pub content: Option<&'a str>,
+    /// Provider-facing/internal delivery view persisted by the initial INSERT.
+    pub compressed_content: Option<&'a str>,
     pub tool_calls: Option<Value>,
     pub tool_call_id: Option<&'a str>,
     pub tool_name: Option<&'a str>,
@@ -79,6 +81,7 @@ impl<'a> NewMessage<'a> {
             session_id,
             role,
             content: None,
+            compressed_content: None,
             tool_calls: None,
             tool_call_id: None,
             tool_name: None,
