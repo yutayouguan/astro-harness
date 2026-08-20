@@ -12,7 +12,6 @@ use super::{
 pub(crate) fn insert_message_row(
     tx: &Transaction<'_>,
     msg: NewMessage<'_>,
-    compressed_content: Option<&str>,
     timestamp: f64,
 ) -> Result<i64> {
     let tool_calls = json_to_db(&msg.tool_calls)?;
@@ -37,7 +36,7 @@ pub(crate) fn insert_message_row(
             msg.session_id,
             msg.role,
             msg.content,
-            compressed_content,
+            msg.compressed_content,
             msg.tool_call_id,
             tool_calls,
             msg.tool_name,
@@ -62,7 +61,7 @@ impl SessionStore {
         let session_id = msg.session_id;
         let is_tool = msg.role == "tool";
         let tx = self.conn.unchecked_transaction()?;
-        let id = insert_message_row(&tx, msg, None, now_epoch_secs()?)?;
+        let id = insert_message_row(&tx, msg, now_epoch_secs()?)?;
 
         if is_tool {
             tx.execute(

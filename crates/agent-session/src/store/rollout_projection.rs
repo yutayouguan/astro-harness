@@ -65,6 +65,7 @@ pub fn rebuild_messages_from_rollout(
             session_id,
             role: message.role,
             content: Some(&message.content),
+            compressed_content: message.compressed_content.as_deref(),
             tool_calls: message.tool_calls,
             tool_call_id: message.tool_call_id.as_deref(),
             tool_name: message.tool_name.as_deref(),
@@ -77,7 +78,7 @@ pub fn rebuild_messages_from_rollout(
             codex_message_items: None,
             media_json: message.media_json.as_deref(),
         };
-        insert_message_row(&tx, row, message.compressed_content.as_deref(), timestamp)?;
+        insert_message_row(&tx, row, timestamp)?;
     }
     tx.execute(
         "UPDATE sessions

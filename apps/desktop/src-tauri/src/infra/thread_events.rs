@@ -370,11 +370,6 @@ impl ThreadEventsBridge {
     }
 
     async fn forget_thread_locked(&self, thread_id: &str) {
-=======
-    pub(crate) async fn forget_thread(&self, thread_id: &str) {
-        let gate = self.terminal_cleanup.gate(thread_id);
-        let _owner_guard = gate.lock().await;
->>>>>>> 7a912aad (fix(events): converge background recovery state)
         let mut state = self.active_threads.write().await;
         Self::clear_thread(&mut state, thread_id);
         state.background_pending.remove(thread_id);
