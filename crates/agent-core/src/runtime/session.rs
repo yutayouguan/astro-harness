@@ -28,27 +28,24 @@ fn stored_message_to_runtime(m: ::session::StoredMessage) -> anyhow::Result<Opti
             if media.is_empty() {
                 Message::user(&content)
             } else {
-                let urls: Vec<String> = media
+                let image_urls: Vec<String> = media
                     .iter()
-                    .filter_map(|a| match &a.reference {
-                        types::MediaRef::DataUrl(u) => Some(u.clone()),
+                    .filter_map(|asset| match (&asset.kind, &asset.reference) {
+                        (types::MediaKind::Image, types::MediaRef::DataUrl(url)) => {
+                            Some(url.clone())
+                        }
                         _ => None,
                     })
                     .collect();
-                if urls.is_empty() {
-                    let mut msg = Message::user(&content);
-                    msg.media = media;
-                    msg
+                let mut msg = if image_urls.is_empty() {
+                    Message::user(&content)
                 } else {
-                    let mut msg = Message::user_with_images(&content, &urls);
-                    // 保留非 data-url 附件（workspace/remote）
-                    for a in media {
-                        if !matches!(a.reference, types::MediaRef::DataUrl(_)) {
-                            msg.media.push(a);
-                        }
-                    }
-                    msg
-                }
+                    Message::user_with_images(&content, &image_urls)
+                };
+                // `user_with_images` is only the compatibility content-parts adapter. The
+                // authoritative media column retains every kind/reference and richer metadata.
+                msg.media = media;
+                msg
             }
         }
         "system" => Message::system(&content),

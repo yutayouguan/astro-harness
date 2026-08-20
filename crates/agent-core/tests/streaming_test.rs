@@ -1425,6 +1425,46 @@ async fn cold_start_hydrates_history_from_db() {
     assert_eq!(history[1].content_str(), "world");
 }
 
+#[tokio::test]
+async fn cold_start_preserves_projected_user_audio_and_video_media_kinds() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().to_path_buf();
+    let image_url = "data:image/png;base64,aW1hZ2U=";
+    let audio_url = "data:audio/mpeg;base64,YXVkaW8=";
+    let video_url = "data:video/webm;base64,dmlkZW8=";
+    let projected_media = vec![
+        types::MediaAsset::data_url(types::MediaKind::Image, image_url, "image/png"),
+        types::MediaAsset::data_url(types::MediaKind::Audio, audio_url, "audio/mpeg"),
+        types::MediaAsset::data_url(types::MediaKind::Video, video_url, "video/webm"),
+    ];
+    let mut user = types::message::Message::user("inspect cold media");
+    user.media = projected_media.clone();
+    {
+        let store = session::SessionStore::open_sessions_dir(&path.join("sessions")).unwrap();
+        session::store::rebuild_messages_from_rollout(
+            &store,
+            "hydrate-media",
+            &[agent_rollout::RolloutItem::ResponseItem(user)],
+        )
+        .unwrap();
+    }
+
+    let agent =
+        AgentLoop::with_session_id(AgentConfig::with_defaults(path), "hydrate-media".into())
+            .unwrap();
+    let history = agent.clone_history().await;
+    assert_eq!(history.len(), 1);
+    assert_eq!(history[0].media, projected_media);
+    assert!(matches!(
+        &history[0].content,
+        types::message::MessageContent::Parts(parts)
+            if parts.iter().filter(|part| part.kind == "image_url").count() == 1
+                && parts.iter().any(|part| {
+                    part.image_url.as_ref().is_some_and(|image| image.url == image_url)
+                })
+    ));
+}
+
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn multi_turn_persists_reasoning_and_tool_activities() {
     let dir = tempfile::tempdir().unwrap();
