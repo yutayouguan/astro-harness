@@ -48,23 +48,23 @@ git commit -m "feat: add network approval contracts"
 - Modify: `crates/agent-network-proxy/tests/managed_attempt.rs`
 - Modify: `crates/agent-network-proxy/tests/http_connect.rs`
 
-- [ ] **Step 1: 先写原请求内联放行测试**
+- [x] **Step 1: 先写原请求内联放行测试**
 
   启动 decider 初始 park 的 proxy，发送一个 CONNECT，确认在决议前 socket
   未返回 403；释放 `Allow` 后同一 socket 继续到 upstream。
   测试同时断言 request 中的 `environment_id` 和 `execution_id`。
 
-- [ ] **Step 2: 增加启动参数**
+- [x] **Step 2: 增加启动参数**
 
   为 `StartedNetworkProxy` 增加一个显式的 decider/attribution 启动入口，
   保留现有 `start(state)` 作为无 decider 兼容入口。
 
-- [ ] **Step 3: 在 `NetworkPolicyRequest` 写入 attribution**
+- [x] **Step 3: 在 `NetworkPolicyRequest` 写入 attribution**
 
   HTTP proxy 不从 command string 推断归属，而是复制启动时固定的
   environment/execution metadata。
 
-- [ ] **Step 4: 回归 hard denial 不可覆盖**
+- [x] **Step 4: 回归 hard denial 不可覆盖**
 
   测试 explicit deny、local defense 和 rebinding 均不调用 decider，
   `Ask` / `Deny` 仍以 structured 403 返回。

@@ -23,6 +23,8 @@ pub(crate) struct SessionServices {
     pub(crate) compression_policy: Mutex<Box<dyn crate::compression::CompressionPolicy>>,
     pub(crate) agent_control: Arc<subagents::AgentControl>,
     pub(crate) agent_path: subagents::AgentPath,
+    #[allow(dead_code)] // wired in Task 4/5 of inline-managed-network-approval
+    pub(crate) network_approval: crate::control::network_approval::NetworkApprovalService,
     #[cfg(test)]
     pub(crate) turn_input_after_db_write: Mutex<Option<TurnInputDbWriteHook>>,
     #[cfg(test)]
@@ -41,6 +43,7 @@ impl SessionServices {
             compression_policy: Mutex::new(compression_policy),
             agent_control,
             agent_path,
+            network_approval: crate::control::network_approval::NetworkApprovalService::new(),
             #[cfg(test)]
             turn_input_after_db_write: Mutex::new(None),
             #[cfg(test)]
