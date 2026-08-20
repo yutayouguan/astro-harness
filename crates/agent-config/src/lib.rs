@@ -4,6 +4,8 @@
 //! and performs no filesystem discovery. Loaders contribute ordered layers;
 //! consumers receive one effective TOML value plus exact per-key provenance.
 
+pub mod loader;
+
 use std::collections::BTreeMap;
 use std::fmt;
 use std::path::PathBuf;
