@@ -1,7 +1,4 @@
-/**
- * 浮动 TODO 进度条：从聊天活动中提取最新的 todo 计划，
- * 在输入区上方展示折叠进度摘要，点击展开完整步骤列表。
- */
+// 浮动 TODO 进度条：从聊天活动中提取最新计划，输入区上方展示折叠进度。
 
 import { useMemo, useState } from "react";
 import { CheckCircle2, Circle, ChevronDown, ListTodo } from "lucide-react";
@@ -18,10 +15,7 @@ export type TodoPlan = {
   items: TodoPlanItem[];
 };
 
-/**
- * 从消息列表中提取最新的 todo 计划。
- * 扫描所有助手消息的 activities，找到最后一个 todo 工具调用并解析其 input。
- */
+// 扫描助手消息的 activities，提取最后一个 todo 工具调用的计划状态。
 export function extractLatestTodoPlan(
   messages: ChatMessage[],
 ): TodoPlan | null {
@@ -49,7 +43,7 @@ export function extractLatestTodoPlan(
           items,
         };
       } catch {
-        /* skip malformed */
+        /* 跳过格式异常 */
       }
     }
   }
