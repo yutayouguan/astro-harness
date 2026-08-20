@@ -405,6 +405,7 @@ impl ThreadEventsBridge {
         self.forget_thread_locked(thread_id).await;
         operation().await
     }
+
     /// Bind a turn observed from snapshot/live delivery without rewriting an existing epoch.
     pub async fn bind_observed_turn(&self, thread_id: &str, turn_id: &str) {
         if turn_id.is_empty() {
