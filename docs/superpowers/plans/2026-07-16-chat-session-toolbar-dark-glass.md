@@ -26,11 +26,11 @@
 - Consumes: `html[data-theme="dark"]`、`--tone`、`--tone-soft`、`.chat-session-toolbar` 已有局部变量接口。
 - Produces: 暗色主题下的 `--session-toolbar-glass-fill`、`--session-toolbar-glass-fill-hover`、`--session-toolbar-glass-edge`、`--session-toolbar-glass-shadow`、`--session-toolbar-glass-shadow-hover`。
 
-- [ ] **Step 1: 记录修改前验证**
+- [x] **Step 1: 记录修改前验证**
 
 在应用暗色主题的界面打开“对话侧栏 → 会话”，确认“新建会话”和 Agent 选择按钮仍使用明显偏白的亮色玻璃填充；悬停或打开 Agent 菜单时边框也过亮。此项目没有 CSS 视觉测试框架，因此该现象作为手动回归基线。
 
-- [ ] **Step 2: 增加暗色变量覆盖**
+- [x] **Step 2: 增加暗色变量覆盖**
 
 在 `apps/desktop/src/styles/features/chat/right-panel.css` 的 `.chat-session-new svg` 规则之后加入：
 
@@ -62,13 +62,13 @@ html[data-theme="dark"] .chat-session-toolbar .agent-picker-chip.is-open {
 }
 ```
 
-- [ ] **Step 3: 执行前端构建**
+- [x] **Step 3: 执行前端构建**
 
 Run: `cd frontend && npm run build`
 
 Expected: TypeScript 与 Vite 构建成功，命令退出码为 `0`。
 
-- [ ] **Step 4: 手动检查亮暗主题和交互状态**
+- [x] **Step 4: 手动检查亮暗主题和交互状态**
 
 依次检查：
 
@@ -77,7 +77,7 @@ Expected: TypeScript 与 Vite 构建成功，命令退出码为 `0`。
 3. 亮色主题默认与 hover 状态：与修改前一致。
 4. 搜索按钮：高度、圆角、边框和同组按钮一致。
 
-- [ ] **Step 5: 检查并提交**
+- [x] **Step 5: 检查并提交**
 
 Run: `git diff --check && git diff -- apps/desktop/src/styles/features/chat/right-panel.css`
 

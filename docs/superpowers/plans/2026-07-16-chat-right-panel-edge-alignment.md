@@ -25,7 +25,7 @@
 - Consumes: `.chat-layout-with-right` 的相对定位边界。
 - Produces: 与对话容器等高的 `.chat-right-panel` 浮层。
 
-- [ ] **Step 1: 修改上下偏移**
+- [x] **Step 1: 修改上下偏移**
 
 将定位声明改为：
 
@@ -40,19 +40,19 @@
 
 保留该规则中的其余声明。
 
-- [ ] **Step 2: 运行前端构建**
+- [x] **Step 2: 运行前端构建**
 
 Run: `cd frontend && npm run build`
 
 Expected: TypeScript 与 Vite 构建成功，退出码为 0。
 
-- [ ] **Step 3: 检查样式差异**
+- [x] **Step 3: 检查样式差异**
 
 Run: `git diff --check && git diff -- apps/desktop/src/styles/features/chat/right-panel.css`
 
 Expected: `top`、`right` 与 `bottom` 均为 `0`，无空白错误。
 
-- [ ] **Step 4: 提交改动**
+- [x] **Step 4: 提交改动**
 
 ```bash
 git add apps/desktop/src/styles/features/chat/right-panel.css

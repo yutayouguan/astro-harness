@@ -27,7 +27,7 @@
 - Consumes: The existing `.sidebar-pin-btn` class used by both buttons in `apps/desktop/src/App.tsx`.
 - Produces: Shared default, `:hover`, and `:active` visual states for `.sidebar-pin-btn`.
 
-- [ ] **Step 1: Record the failing visual baseline**
+- [x] **Step 1: Record the failing visual baseline**
 
 Run the app with:
 
@@ -38,7 +38,7 @@ npm run dev
 
 Expected before the change: both sidebar icon buttons display a tinted background and border while idle, and pressing a button has no stronger background state.
 
-- [ ] **Step 2: Implement the three button states**
+- [x] **Step 2: Implement the three button states**
 
 In `apps/desktop/src/styles/features/shell/shell.css`, change the base rule and add the press rule:
 
@@ -68,7 +68,7 @@ In `apps/desktop/src/styles/features/shell/shell.css`, change the base rule and 
 }
 ```
 
-- [ ] **Step 3: Verify the frontend build**
+- [x] **Step 3: Verify the frontend build**
 
 Run:
 
@@ -79,7 +79,7 @@ npm run build
 
 Expected: TypeScript and Vite complete successfully with exit code 0.
 
-- [ ] **Step 4: Verify both buttons visually**
+- [x] **Step 4: Verify both buttons visually**
 
 In both light and dark themes, inspect the titlebar sidebar toggle and the sidebar label toggle.
 
@@ -91,7 +91,7 @@ Expected:
 - Pointer up or pointer leave: no selected background remains.
 - Both buttons still execute their existing actions.
 
-- [ ] **Step 5: Commit the implementation**
+- [x] **Step 5: Commit the implementation**
 
 ```bash
 git add apps/desktop/src/styles/features/shell/shell.css

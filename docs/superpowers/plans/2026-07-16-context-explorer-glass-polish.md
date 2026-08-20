@@ -25,7 +25,7 @@
 - Consumes: `ContextUsageSnapshot`、`SEGMENT_TONE`、现有国际化键
 - Produces: 带 `.ctx-explorer-metric-icon`、`.ctx-donut-caption`、`.ctx-explorer-title-icon`、`.ctx-explorer-row-icon` 和 `.ctx-explorer-empty-icon` 的展示结构
 
-- [ ] **Step 1: 引入指标与分层图标**
+- [x] **Step 1: 引入指标与分层图标**
 
 从 `lucide-react` 引入：
 
@@ -63,19 +63,19 @@ const SEG_ICON: Record<string, LucideIcon> = {
 };
 ```
 
-- [ ] **Step 2: 将三个指标改为带图标的卡片**
+- [x] **Step 2: 将三个指标改为带图标的卡片**
 
 每个 `.ctx-explorer-metric` 内加入图标容器，分别渲染 `MessageSquare`、`Database` 和 `Coins`；保留原标签和值。
 
-- [ ] **Step 3: 强化环图和分层标题语义**
+- [x] **Step 3: 强化环图和分层标题语义**
 
 在 `.ctx-donut-center` 的百分比下方渲染现有 `chat.contextExplorer.tokensUsed` 文案；给分层标题加入 `Layers3` 图标。
 
-- [ ] **Step 4: 给分层行和空状态加入图标**
+- [x] **Step 4: 给分层行和空状态加入图标**
 
 在分层循环中通过 `const SegmentIcon = SEG_ICON[s.id] ?? Layers3` 渲染 `.ctx-explorer-row-icon`。空状态改为容器，使用 `Layers3` 图标和原有空状态文案。
 
-- [ ] **Step 5: 运行 TypeScript 构建检查**
+- [x] **Step 5: 运行 TypeScript 构建检查**
 
 Run: `cd frontend && npm run build`
 
@@ -92,23 +92,23 @@ Expected: TypeScript 编译与 Vite 构建成功，退出码为 `0`。
 - Consumes: Task 1 新增的上下文界面类名
 - Produces: 三列指标卡、环图玻璃容器、图标化列表和空状态
 
-- [ ] **Step 1: 美化指标卡**
+- [x] **Step 1: 美化指标卡**
 
 为 `.ctx-explorer-metric` 增加半透明渐变背景、细边框、内高光、圆角和紧凑内边距；为图标添加柔和蓝色底和统一尺寸。
 
-- [ ] **Step 2: 美化环图容器**
+- [x] **Step 2: 美化环图容器**
 
 将 `.ctx-donut-wrap` 扩展为带玻璃背景和柔和径向高光的容器；让中心内容纵向排列，并设置百分比与说明标签层级。
 
-- [ ] **Step 3: 美化标题、列表行和空状态**
+- [x] **Step 3: 美化标题、列表行和空状态**
 
 为分层标题和行图标建立统一尺寸与颜色；让列表行具有细边框和悬停背景；将空状态改为居中虚线玻璃卡。
 
-- [ ] **Step 4: 添加深色主题与窄宽度适配**
+- [x] **Step 4: 添加深色主题与窄宽度适配**
 
 深色主题降低白色高光并增强边框可见度；窄侧栏下保持三列指标卡，但缩小间距和内边距，避免文字溢出。
 
-- [ ] **Step 5: 运行上下文用量测试和前端构建**
+- [x] **Step 5: 运行上下文用量测试和前端构建**
 
 Run:
 
@@ -120,7 +120,7 @@ npm run build
 
 Expected: 5 项测试全部通过，TypeScript/Vite 构建成功。
 
-- [ ] **Step 6: 提交实现**
+- [x] **Step 6: 提交实现**
 
 ```bash
 git add apps/desktop/src/components/chat/ContextExplorer.tsx apps/desktop/src/styles/features/chat/right-panel.css

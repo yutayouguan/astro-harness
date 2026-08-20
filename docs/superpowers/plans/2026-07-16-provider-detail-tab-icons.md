@@ -27,7 +27,7 @@
 - Consumes: `lucide-react` 导出的 `MessageCircle` 与 `Image` React 图标组件；现有 `detailTab: "chat" | "media"` 状态。
 - Produces: 两个保持原有点击和可访问行为、带装饰性 SVG 图标的 `.providers-detail-tab` 按钮。
 
-- [ ] **Step 1: 运行基线构建**
+- [x] **Step 1: 运行基线构建**
 
 Run:
 
@@ -38,7 +38,7 @@ npm run build
 
 Expected: TypeScript 编译和 Vite 构建均成功，命令退出码为 0。
 
-- [ ] **Step 2: 添加 Lucide 图标引用和 Tab 图标**
+- [x] **Step 2: 添加 Lucide 图标引用和 Tab 图标**
 
 在 `apps/desktop/src/components/settings/ProvidersPanel.tsx` 的 `lucide-react` 导入列表中加入：
 
@@ -61,7 +61,7 @@ MessageCircle,
 
 保留按钮现有的 `type`、`role`、`aria-selected`、`className`、`onClick` 和翻译键。
 
-- [ ] **Step 3: 对齐图标与文字**
+- [x] **Step 3: 对齐图标与文字**
 
 在 `apps/desktop/src/styles/features/providers.css` 的 `.providers-detail-tab` 中加入：
 
@@ -74,7 +74,7 @@ gap: 6px;
 
 不修改现有 padding、字体、颜色、边框与选中态规则。Lucide SVG 默认使用 `currentColor`，因此不增加独立图标颜色规则。
 
-- [ ] **Step 4: 运行构建验证**
+- [x] **Step 4: 运行构建验证**
 
 Run:
 
@@ -85,7 +85,7 @@ npm run build
 
 Expected: TypeScript 编译无未使用导入或 JSX 类型错误；Vite 构建成功，命令退出码为 0。
 
-- [ ] **Step 5: 检查编辑文件诊断**
+- [x] **Step 5: 检查编辑文件诊断**
 
 检查以下文件的 IDE linter：
 
@@ -96,7 +96,7 @@ apps/desktop/src/styles/features/providers.css
 
 Expected: 两个文件均无新增诊断。
 
-- [ ] **Step 6: 提交实现**
+- [x] **Step 6: 提交实现**
 
 ```bash
 git add apps/desktop/src/components/settings/ProvidersPanel.tsx apps/desktop/src/styles/features/providers.css

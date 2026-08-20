@@ -26,7 +26,7 @@
 - Consumes: `ChatRightPanel.tsx` 中 `.chat-right-backdrop` 的 `onClick={onClose}`。
 - Produces: 无视觉背景、仍可点击关闭的透明覆盖层。
 
-- [ ] **Step 1: 移除视觉遮罩**
+- [x] **Step 1: 移除视觉遮罩**
 
 将 `.chat-right-backdrop` 的视觉声明改为：
 
@@ -38,7 +38,7 @@
 
 删除该规则中的 `animation: chat-right-fade-in 0.18s ease;`，保留定位、层级、光标和圆角声明。
 
-- [ ] **Step 2: 清理不再使用的动画**
+- [x] **Step 2: 清理不再使用的动画**
 
 删除：
 
@@ -63,19 +63,19 @@
 }
 ```
 
-- [ ] **Step 3: 运行前端构建**
+- [x] **Step 3: 运行前端构建**
 
 Run: `cd frontend && npm run build`
 
 Expected: TypeScript 与 Vite 构建成功，退出码为 0。
 
-- [ ] **Step 4: 检查差异**
+- [x] **Step 4: 检查差异**
 
 Run: `git diff --check && git diff -- apps/desktop/src/styles/features/chat/right-panel.css`
 
 Expected: 仅包含透明背景、遮罩动画移除和 reduced-motion 清理。
 
-- [ ] **Step 5: 提交改动**
+- [x] **Step 5: 提交改动**
 
 ```bash
 git add apps/desktop/src/styles/features/chat/right-panel.css

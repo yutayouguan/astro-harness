@@ -31,7 +31,7 @@
 **Files:**
 - Modify: `apps/desktop/src/i18n/messages.ts`
 
-- [ ] **Step 1: 在中文与英文区块各加两条 key**
+- [x] **Step 1: 在中文与英文区块各加两条 key**
 
 在中文 `chat` 相关键附近（约 `chat.thinkingDoneWithTime` 之后）加入：
 
@@ -47,7 +47,7 @@
   "chat.activityCollapse": "Collapse details",
 ```
 
-- [ ] **Step 2: Commit**
+- [x] **Step 2: Commit**
 
 ```bash
 git add apps/desktop/src/i18n/messages.ts
@@ -65,7 +65,7 @@ EOF
 **Files:**
 - Create: `apps/desktop/src/components/MsgActivity.tsx`
 
-- [ ] **Step 1: 创建组件文件**
+- [x] **Step 1: 创建组件文件**
 
 ```tsx
 /** 单条聊天活动卡：摘要行 + 可折叠详情。 */
@@ -137,7 +137,7 @@ export default function MsgActivity({
 }
 ```
 
-- [ ] **Step 2: Commit**
+- [x] **Step 2: Commit**
 
 ```bash
 git add apps/desktop/src/components/MsgActivity.tsx
@@ -156,7 +156,7 @@ EOF
 - Modify: `apps/desktop/src/components/ChatView.tsx`
 - Modify: `apps/desktop/src/styles/chat.css`
 
-- [ ] **Step 1: 在 `ChatView.tsx` 顶部增加 import**
+- [x] **Step 1: 在 `ChatView.tsx` 顶部增加 import**
 
 在现有 `MsgReasoning` import 旁加入：
 
@@ -164,7 +164,7 @@ EOF
 import MsgActivity from "./MsgActivity";
 ```
 
-- [ ] **Step 2: 替换 `ActivityCards` 实现**
+- [x] **Step 2: 替换 `ActivityCards` 实现**
 
 将现有 `ActivityCards`（约 411–446 行）整段替换为：
 
@@ -198,7 +198,7 @@ function ActivityCards({
 
 注意：删除原先在 `ActivityCards` 内直接渲染 `msg-activity-detail` 且仅 `verbosity === "detailed"` 才显示的逻辑——详情改由 `MsgActivity` 在展开时显示（normal 也可点开查看）。
 
-- [ ] **Step 3: 在 `chat.css` 的 `.msg-activity-title` 附近追加样式**
+- [x] **Step 3: 在 `chat.css` 的 `.msg-activity-title` 附近追加样式**
 
 在 `.msg-activity-title` 规则之后、`.msg-activity-detail` 之前插入：
 
@@ -249,7 +249,7 @@ function ActivityCards({
 
 若文件中已有完全相同的 `.msg-activity.is-running .msg-activity-title::after` 规则，**不要重复粘贴**——保留原有那一段即可，只新增 toggle / chevron / `is-open` 相关规则。
 
-- [ ] **Step 4: 类型检查**
+- [x] **Step 4: 类型检查**
 
 ```bash
 cd frontend && npx tsc -b --pretty false
@@ -257,7 +257,7 @@ cd frontend && npx tsc -b --pretty false
 
 Expected: 无错误退出（exit 0）。
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add apps/desktop/src/components/ChatView.tsx apps/desktop/src/styles/chat.css
@@ -276,7 +276,7 @@ EOF
 **Files:**
 - Modify: `docs/superpowers/specs/2026-07-13-activity-cards-collapse-design.md`（状态）
 
-- [ ] **Step 1: 手动验收清单**
+- [x] **Step 1: 手动验收清单**
 
 启动前端（或已有 Tauri 会话），在智能对话中触发至少一次带 `detail` 的工具/记忆活动（如 `memory_add`），核对：
 
@@ -287,7 +287,7 @@ EOF
 5. **思考块**：流式展开、结束后自动折叠，与改前一致。
 6. running 卡：折叠态仍可见脉冲点。
 
-- [ ] **Step 2: 更新 spec 状态**
+- [x] **Step 2: 更新 spec 状态**
 
 将 spec 头部：
 
@@ -301,7 +301,7 @@ EOF
 **状态:** 已批准 / 已实现
 ```
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add docs/superpowers/specs/2026-07-13-activity-cards-collapse-design.md

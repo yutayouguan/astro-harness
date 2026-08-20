@@ -38,7 +38,7 @@
 - Consumes: `--titlebar-h`、`--titlebar-traffic-w`（`base.css` 已有）
 - Produces: 类名 `.titlebar-sidebar-toggle`（绝对定位容器 + 内部复用或镜像 `.sidebar-pin-btn` 外观）
 
-- [ ] **Step 1: 在 `shell.css` 加入标题栏开关样式**
+- [x] **Step 1: 在 `shell.css` 加入标题栏开关样式**
 
 紧接 `.native-drag-region { ... }` 块之后插入：
 
@@ -66,11 +66,11 @@
 
 说明：按钮本身继续用 `className="sidebar-pin-btn"`，避免复制一整套 tone 变体。
 
-- [ ] **Step 2: 目测样式不破坏现有侧栏品牌按钮**
+- [x] **Step 2: 目测样式不破坏现有侧栏品牌按钮**
 
 在 `npm run tauri dev` 下确认：侧栏内标签开关仍是 28×28；标题栏区域尚无按钮也没关系（Task 2 再挂 markup）。
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add apps/desktop/src/styles/shell.css
@@ -92,7 +92,7 @@ EOF
 - Consumes: `toggleSidebar`、`sidebarPinned`、`activeTone`、`t`、`IconPanelOpen` / `IconPanelClose`；类名 `.titlebar-sidebar-toggle`
 - Produces: 标题栏常驻 pin 按钮；品牌区仅标签开关
 
-- [ ] **Step 1: 在 `native-drag-region` 之后插入标题栏按钮**
+- [x] **Step 1: 在 `native-drag-region` 之后插入标题栏按钮**
 
 在：
 
@@ -129,7 +129,7 @@ EOF
       </div>
 ```
 
-- [ ] **Step 2: 从品牌区删除 pin/unpin 按钮**
+- [x] **Step 2: 从品牌区删除 pin/unpin 按钮**
 
 `sidebar-brand-actions` 内只保留标签开关那一个 `<button>`；删除原先 `onClick={toggleSidebar}` 的第二个 button（含 `IconPanelClose` / `IconPanelOpen`）。
 
@@ -157,7 +157,7 @@ EOF
             </div>
 ```
 
-- [ ] **Step 3: 手动验收（对照规格验收条）**
+- [x] **Step 3: 手动验收（对照规格验收条）**
 
 在 `cd frontend && npm run tauri dev`：
 
@@ -169,7 +169,7 @@ EOF
 
 Expected: 5 条全部通过。
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add apps/desktop/src/App.tsx

@@ -35,7 +35,7 @@
 - Consumes: `nav: NavId`、`NAV` 的固定顺序、现有 `data-tone` 与 `.active` 状态。
 - Produces: `.sidebar-nav` 容器、`.sidebar-nav-indicator` 装饰元素、CSS 自定义属性 `--nav-indicator-y`。
 
-- [ ] **Step 1: 在 React 中计算高亮位置**
+- [x] **Step 1: 在 React 中计算高亮位置**
 
 将 `CSSProperties` 加入 React 类型 import：
 
@@ -65,7 +65,7 @@ const sidebarNavStyle = {
 
 这里使用已计算的像素值，而不是 CSS `calc()` 乘法，保证 Tauri 的 WebView2 和 WKWebView 均可用。
 
-- [ ] **Step 2: 渲染导航定位容器和共享高亮块**
+- [x] **Step 2: 渲染导航定位容器和共享高亮块**
 
 用下面结构替换当前直接位于 `<aside>` 下的 `NAV.map(...)`；按钮内部、徽标、tooltip 和 aria 逻辑保持原样：
 
@@ -102,7 +102,7 @@ const sidebarNavStyle = {
 </div>
 ```
 
-- [ ] **Step 3: 统一导航行布局并定义高亮动画**
+- [x] **Step 3: 统一导航行布局并定义高亮动画**
 
 在 `layout.css` 的导航样式开头加入容器和高亮块样式。导航行高 `42px`、间距 `2px`，与 `NAV_ROW_PITCH_PX = 44` 对齐：
 
@@ -172,7 +172,7 @@ html[data-theme="dark"] .sidebar-nav-indicator {
 
 删除 `.nav-item.active` 和 `.nav-item.active[data-tone]` 中的 `background`、`box-shadow`、`backdrop-filter` 声明以及对应暗色覆盖，只保留活动项的文字颜色。保留 `.sidebar.is-labels .nav-item.active::before` 圆点、活动图标填充和所有 tone 变量。
 
-- [ ] **Step 4: 构建验证类型和样式入口**
+- [x] **Step 4: 构建验证类型和样式入口**
 
 Run:
 
@@ -182,7 +182,7 @@ cd frontend && npm run build
 
 Expected: TypeScript 与 Vite 构建成功，命令退出码为 `0`。
 
-- [ ] **Step 5: 手工验证交互矩阵**
+- [x] **Step 5: 手工验证交互矩阵**
 
 Run:
 
@@ -202,7 +202,7 @@ cd frontend && npm run tauri dev
 
 Expected: 七项全部通过；关闭开发应用后终端无新增运行时错误。
 
-- [ ] **Step 6: 检查并提交实现**
+- [x] **Step 6: 检查并提交实现**
 
 Run:
 

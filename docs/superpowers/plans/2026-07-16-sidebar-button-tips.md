@@ -28,7 +28,7 @@
 - Consumes: Existing `sidebar.pin`, `sidebar.unpin`, `sidebar.showLabels`, `sidebar.hideLabels` keys and their ARIA variants.
 - Produces: State-aware Chinese and English action labels consumed by `App.tsx`.
 
-- [ ] **Step 1: Update Chinese translations**
+- [x] **Step 1: Update Chinese translations**
 
 Set the Chinese values to:
 
@@ -43,7 +43,7 @@ Set the Chinese values to:
 "sidebar.hideLabelsAria": "收起文字",
 ```
 
-- [ ] **Step 2: Update English translations**
+- [x] **Step 2: Update English translations**
 
 Set the English values to:
 
@@ -58,7 +58,7 @@ Set the English values to:
 "sidebar.hideLabelsAria": "Collapse text",
 ```
 
-- [ ] **Step 3: Verify the frontend build**
+- [x] **Step 3: Verify the frontend build**
 
 Run:
 
@@ -69,7 +69,7 @@ npm run build
 
 Expected: TypeScript and Vite complete with exit code 0.
 
-- [ ] **Step 4: Commit the implementation**
+- [x] **Step 4: Commit the implementation**
 
 ```bash
 git add apps/desktop/src/i18n/messages.ts

@@ -26,11 +26,11 @@
 - Consumes: `App.tsx` 中现有 `.status-chip`、`.model-picker-trigger`、`.chat-header-tools` 结构。
 - Produces: 三个顶部控件均为 40px 外部高度，不改变内部图标热区。
 
-- [ ] **Step 1: 记录当前高度差异**
+- [x] **Step 1: 记录当前高度差异**
 
 在聊天页检查三个控件的 computed height。预期修改前 `.status-chip`、`.model-picker-trigger` 与 `.chat-header-tools` 至少有一项高度不是 40px。
 
-- [ ] **Step 2: 添加统一尺寸约束**
+- [x] **Step 2: 添加统一尺寸约束**
 
 在 `header.css` 中为三个外层加入以下约束，并保持其余现有声明：
 
@@ -51,17 +51,17 @@
 }
 ```
 
-- [ ] **Step 3: 运行前端构建**
+- [x] **Step 3: 运行前端构建**
 
 Run: `cd frontend && npm run build`
 
 Expected: TypeScript 与 Vite 构建完成，退出码为 0。
 
-- [ ] **Step 4: 检查顶部视觉**
+- [x] **Step 4: 检查顶部视觉**
 
 在浅色和深色主题下打开聊天页，确认三个控件 computed height 均为 `40px`，垂直中心线一致，模型图标和三个操作按钮未被裁切。
 
-- [ ] **Step 5: 提交顶部高度改动**
+- [x] **Step 5: 提交顶部高度改动**
 
 ```bash
 git add apps/desktop/src/styles/features/shell/header.css
@@ -77,7 +77,7 @@ git commit -m "fix(chat): align header control heights"
 - Consumes: `.chat-session-toolbar` 内现有 `.expandable-search-btn`、`.expandable-search-field`、`.chat-session-new` 和 `.agent-picker-chip`。
 - Produces: 三项共享相同的 36px 高度、12px 圆角、玻璃渐变、边缘高光、阴影和模糊效果。
 
-- [ ] **Step 1: 建立工具栏局部玻璃变量**
+- [x] **Step 1: 建立工具栏局部玻璃变量**
 
 向 `.chat-session-toolbar` 添加：
 
@@ -99,7 +99,7 @@ git commit -m "fix(chat): align header control heights"
 }
 ```
 
-- [ ] **Step 2: 应用一致的默认样式**
+- [x] **Step 2: 应用一致的默认样式**
 
 让搜索控件、新建会话按钮和 Agent 芯片共享：
 
@@ -121,7 +121,7 @@ git commit -m "fix(chat): align header control heights"
 
 删除 `.chat-session-new` 中冲突的边框和背景声明，保留 `color: var(--tone-blue, #2563eb)`。
 
-- [ ] **Step 3: 统一 hover 反馈**
+- [x] **Step 3: 统一 hover 反馈**
 
 为搜索按钮、新建会话按钮和 Agent 芯片使用同一 hover 背景及边框，并保留 Agent 选择器打开态：
 
@@ -136,13 +136,13 @@ git commit -m "fix(chat): align header control heights"
 }
 ```
 
-- [ ] **Step 4: 运行前端构建**
+- [x] **Step 4: 运行前端构建**
 
 Run: `cd frontend && npm run build`
 
 Expected: TypeScript 与 Vite 构建完成，退出码为 0。
 
-- [ ] **Step 5: 验证交互与主题**
+- [x] **Step 5: 验证交互与主题**
 
 在浅色和深色主题下打开会话右栏，确认：
 
@@ -151,7 +151,7 @@ Expected: TypeScript 与 Vite 构建完成，退出码为 0。
 - 搜索展开后仍占满整行，另外两项隐藏。
 - Agent 菜单仍能打开，hover 与 active 状态无跳动或裁切。
 
-- [ ] **Step 6: 提交会话工具栏改动**
+- [x] **Step 6: 提交会话工具栏改动**
 
 ```bash
 git add apps/desktop/src/styles/features/chat/right-panel.css
@@ -168,17 +168,17 @@ git commit -m "fix(chat): unify session toolbar glass styling"
 - Consumes: Task 1 与 Task 2 的 CSS 结果。
 - Produces: 可交付的构建和视觉验证结论。
 
-- [ ] **Step 1: 运行最终构建**
+- [x] **Step 1: 运行最终构建**
 
 Run: `cd frontend && npm run build`
 
 Expected: 退出码为 0，无 TypeScript 或 Vite 错误。
 
-- [ ] **Step 2: 检查窄宽度布局**
+- [x] **Step 2: 检查窄宽度布局**
 
 缩窄应用窗口，确认顶部控件沿现有换行规则排列且高度仍一致；打开会话右栏，确认工具栏无横向溢出。
 
-- [ ] **Step 3: 检查改动范围**
+- [x] **Step 3: 检查改动范围**
 
 Run: `git diff HEAD~2 -- apps/desktop/src/styles/features/shell/header.css apps/desktop/src/styles/features/chat/right-panel.css`
 

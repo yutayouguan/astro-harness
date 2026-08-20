@@ -24,7 +24,7 @@
 - Consumes: `query`、`setQuery`、`onNewSession`、`agents`、`activeAgentId`、`handleAgentChange`、`onNewAgent`
 - Produces: DOM 顺序为 `.chat-session-new`、`.chat-session-agent-picker`、`.chat-session-search`
 
-- [ ] **Step 1: 调整 JSX 顺序**
+- [x] **Step 1: 调整 JSX 顺序**
 
 将 `ExpandableSearch` 从工具栏首位移动到 `AgentPicker` 后，保留所有属性不变：
 
@@ -55,13 +55,13 @@
 </div>
 ```
 
-- [ ] **Step 2: 运行前端构建**
+- [x] **Step 2: 运行前端构建**
 
 Run: `cd frontend && npm run build`
 
 Expected: TypeScript 编译和 Vite 构建成功，命令退出码为 `0`。
 
-- [ ] **Step 3: 手动验证交互与焦点顺序**
+- [x] **Step 3: 手动验证交互与焦点顺序**
 
 启动应用并打开对话侧栏，确认：
 
@@ -70,7 +70,7 @@ Expected: TypeScript 编译和 Vite 构建成功，命令退出码为 `0`。
 3. 键盘 Tab 焦点依次经过新建会话、Agent 和搜索。
 4. 搜索展开时没有遮挡、溢出或布局跳动异常。
 
-- [ ] **Step 4: 提交实现**
+- [x] **Step 4: 提交实现**
 
 ```bash
 git add apps/desktop/src/components/chat/ChatSessionList.tsx
