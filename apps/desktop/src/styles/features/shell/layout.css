@@ -745,7 +745,7 @@ html[data-theme="dark"] .page-title-icon {
   color: var(--ink-mute);
   line-height: 1.2;
 }
-/* ── Settings 分类侧栏布局 ────────────────────────── */
+/* ── Settings 平铺侧栏布局 ────────────────────────── */
 
 .settings-layout {
   display: flex;
@@ -757,58 +757,52 @@ html[data-theme="dark"] .page-title-icon {
 .settings-sidebar {
   width: 200px;
   flex-shrink: 0;
-  padding: 16px 12px;
-  border-right: 1px solid color-mix(in srgb, var(--glass-edge) 50%, transparent);
+  padding: 16px 10px;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: 20px;
-}
-
-html[data-theme="dark"] .settings-sidebar {
-  border-right-color: rgba(255, 255, 255, 0.06);
-}
-
-.settings-sidebar-group {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.settings-sidebar-label {
-  font-size: 11px;
-  font-weight: 650;
-  color: var(--ink-mute);
-  opacity: 0.7;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  padding: 0 10px 4px;
+  gap: 4px;
 }
 
 .settings-sidebar-item {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 7px 10px;
+  gap: 12px;
+  padding: 10px 14px;
   border: none;
-  border-radius: 8px;
+  border-radius: 12px;
   background: transparent;
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 500;
   color: var(--ink);
   cursor: pointer;
   text-align: left;
-  transition: background 0.1s;
+  transition: background 0.12s, color 0.12s;
+}
+
+.settings-sidebar-item svg {
+  flex-shrink: 0;
+  opacity: 0.6;
+  transition: opacity 0.12s;
 }
 
 .settings-sidebar-item:hover {
   background: color-mix(in srgb, var(--tone, #64748b) 8%, transparent);
 }
 
+.settings-sidebar-item:hover svg {
+  opacity: 0.85;
+}
+
 .settings-sidebar-item.is-active {
-  background: color-mix(in srgb, var(--tone, var(--tone-blue)) 12%, transparent);
-  color: var(--tone, var(--tone-blue));
+  background: color-mix(in srgb, var(--tone, var(--tone-purple)) 14%, transparent);
+  color: var(--tone, var(--tone-purple));
   font-weight: 600;
+}
+
+.settings-sidebar-item.is-active svg {
+  opacity: 1;
+  color: var(--tone, var(--tone-purple));
 }
 
 html[data-theme="dark"] .settings-sidebar-item.is-active {
@@ -819,4 +813,9 @@ html[data-theme="dark"] .settings-sidebar-item.is-active {
   flex: 1;
   min-width: 0;
   overflow-y: auto;
+  border-left: 1px solid color-mix(in srgb, var(--glass-edge) 40%, transparent);
+}
+
+html[data-theme="dark"] .settings-content {
+  border-left-color: rgba(255, 255, 255, 0.06);
 }

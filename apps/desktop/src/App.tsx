@@ -92,7 +92,16 @@ import {
   writeFilesSubmode,
   type FilesSubmode,
 } from "./lib/filespace/filesMode";
-import { FolderTree, Sparkles } from "lucide-react";
+import {
+  Brain,
+  ChartPie,
+  Cpu,
+  FolderTree,
+  Settings2,
+  Sparkles,
+  Store,
+  Wrench,
+} from "lucide-react";
 import { syncWindowUnderlay } from "./lib/ui/windowUnderlay";
 import {
   dynamicGradientForTab,
@@ -996,49 +1005,25 @@ export default function App() {
               {nav === "settings" && (
                 <div className="settings-layout">
                   <nav className="settings-sidebar" aria-label="Settings">
-                    <div className="settings-sidebar-group">
-                      <span className="settings-sidebar-label">常规</span>
-                      {([
-                        { id: "preferences", label: "偏好设置" },
-                        { id: "memory", label: "记忆" },
-                      ] as const).map((item) => (
-                        <button key={item.id} type="button"
-                          className={`settings-sidebar-item ${settingsTab === item.id ? "is-active" : ""}`}
-                          onClick={() => setSettingsTab(item.id)}>{item.label}</button>
-                      ))}
-                    </div>
-                    <div className="settings-sidebar-group">
-                      <span className="settings-sidebar-label">模型</span>
-                      {([
-                        { id: "providers", label: "Provider 配置" },
-                        { id: "models", label: "模型市场" },
-                      ] as const).map((item) => (
-                        <button key={item.id} type="button"
-                          className={`settings-sidebar-item ${settingsTab === item.id ? "is-active" : ""}`}
-                          onClick={() => setSettingsTab(item.id)}>{item.label}</button>
-                      ))}
-                    </div>
-                    <div className="settings-sidebar-group">
-                      <span className="settings-sidebar-label">工具</span>
-                      {([
-                        { id: "tools", label: "工具管理" },
-                      ] as const).map((item) => (
-                        <button key={item.id} type="button"
-                          className={`settings-sidebar-item ${settingsTab === item.id ? "is-active" : ""}`}
-                          onClick={() => setSettingsTab(item.id)}>{item.label}</button>
-                      ))}
-                    </div>
-                    <div className="settings-sidebar-group">
-                      <span className="settings-sidebar-label">高级</span>
-                      {([
-                        { id: "insights", label: "洞察" },
-                        { id: "evolution", label: "进化" },
-                      ] as const).map((item) => (
-                        <button key={item.id} type="button"
-                          className={`settings-sidebar-item ${settingsTab === item.id ? "is-active" : ""}`}
-                          onClick={() => setSettingsTab(item.id)}>{item.label}</button>
-                      ))}
-                    </div>
+                    {([
+                      { id: "preferences", label: "通用", Icon: Settings2 },
+                      { id: "providers", label: "模型", Icon: Cpu },
+                      { id: "tools", label: "工具", Icon: Wrench },
+                      { id: "memory", label: "记忆", Icon: Brain },
+                      { id: "models", label: "模型市场", Icon: Store },
+                      { id: "insights", label: "洞察", Icon: ChartPie },
+                      { id: "evolution", label: "进化", Icon: Sparkles },
+                    ] as const).map((item) => (
+                      <button
+                        key={item.id}
+                        type="button"
+                        className={`settings-sidebar-item ${settingsTab === item.id ? "is-active" : ""}`}
+                        onClick={() => setSettingsTab(item.id)}
+                      >
+                        <item.Icon size={18} strokeWidth={1.6} aria-hidden />
+                        {item.label}
+                      </button>
+                    ))}
                   </nav>
                   <div className="settings-content">
                   {settingsTab === "preferences" && (
