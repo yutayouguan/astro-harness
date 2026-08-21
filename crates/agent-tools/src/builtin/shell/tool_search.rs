@@ -43,23 +43,52 @@ crate::submit_builtin_tool! {
     args: ToolSearchArgs,
 }
 
-/// 在内置工具目录中按关键字搜索，返回匹配的工具名和描述。
+/// 在内置工具目录中按关键字搜索，使用 BM25 风格评分，返回按相关性排序的匹配结果。
 pub async fn dispatch(_ctx: &ToolContext<'_>, args: &ToolSearchArgs) -> anyhow::Result<String> {
     let q = args.query.to_lowercase();
-    if q.is_empty() {
+    let terms: Vec<&str> = q.split_whitespace().collect();
+    if terms.is_empty() {
         anyhow::bail!("tool_search requires a non-empty query");
     }
+
     let catalog = crate::catalog::builtin_catalog();
-    let matches: Vec<_> = catalog
+    let mut scored: Vec<_> = catalog
         .iter()
-        .filter(|t| t.name.to_lowercase().contains(&q) || t.description.to_lowercase().contains(&q))
-        .take(args.limit)
         .map(|t| {
+            let name_lower = t.name.to_lowercase();
+            let desc_lower = t.description.to_lowercase();
+            let text = format!("{} {}", name_lower, desc_lower);
+            // BM25-inspired scoring: term frequency + name bonus
+            let mut score: f64 = 0.0;
+            for term in &terms {
+                let tf = text.matches(term).count() as f64;
+                if tf > 0.0 {
+                    // BM25: tf / (tf + k1) where k1 = 1.2
+                    score += tf / (tf + 1.2);
+                }
+                // Name exact match bonus
+                if name_lower.contains(term) {
+                    score += 2.0;
+                }
+            }
+            (t, score)
+        })
+        .filter(|(_, score)| *score > 0.0)
+        .collect();
+
+    scored.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+
+    let matches: Vec<_> = scored
+        .into_iter()
+        .take(args.limit)
+        .map(|(t, score)| {
             serde_json::json!({
                 "name": t.name,
                 "description": t.description,
+                "relevance": (score * 100.0).round() / 100.0,
             })
         })
         .collect();
+
     Ok(serde_json::to_string_pretty(&matches)?)
 }
