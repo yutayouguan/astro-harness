@@ -1523,6 +1523,7 @@ html[data-theme="dark"] .chat-agent-preview {
   font-weight: 500;
 }
 
+@media (prefers-reduced-motion: reduce) {
   .chat-agent-view-all,
   .chat-agent-info .linkish {
     transition: none;
