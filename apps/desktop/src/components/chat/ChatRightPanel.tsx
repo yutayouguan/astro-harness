@@ -1,6 +1,7 @@
-/** 聊天右侧栏（会话 / 上下文等 Tab）。 */
+// 聊天右侧栏（会话 / 任务监控 / 上下文等 Tab）。
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
+  Activity,
   Bot,
   Eye,
   Layers,
@@ -11,16 +12,17 @@ import {
 } from "lucide-react";
 import { useI18n } from "../../i18n/LocaleContext";
 import type { MessageKey } from "../../i18n/messages";
+import type { ChatMessage } from "../../types";
 import type { ContextUsageSnapshot } from "../../lib/chat/contextUsage";
 import type { GeneratingPreview } from "../../hooks/chat/useGeneratingPreview";
 import ChatSessionList from "./ChatSessionList";
 import ChatAgentInfo from "./ChatAgentInfo";
 import ContextExplorer from "./ContextExplorer";
 import GeneratingPreviewPanel from "./GeneratingPreviewPanel";
+import TaskMonitorPanel from "./TaskMonitorPanel";
 import AnimatedSwitch from "../ui/AnimatedSwitch";
 
-/** 聊天右侧栏 Tab */
-export type ChatRightTab = "sessions" | "context" | "preview" | "agent";
+export type ChatRightTab = "sessions" | "monitor" | "context" | "preview" | "agent";
 
 /** 右侧栏入参 */
 type Props = {
@@ -54,10 +56,15 @@ type Props = {
   streamingSessionId?: string | null;
   /** 生成中的文件实时预览（preview Tab） */
   generatingPreview?: GeneratingPreview | null;
+  /** 聊天消息列表（任务监控 Tab 使用） */
+  messages?: ChatMessage[];
+  /** 是否正在流式输出 */
+  streaming?: boolean;
 };
 
 const TAB_KEYS: Record<ChatRightTab, MessageKey> = {
   sessions: "chat.rightPanel.sessions",
+  monitor: "chat.rightPanel.monitor" as MessageKey,
   context: "chat.rightPanel.context",
   preview: "chat.rightPanel.preview",
   agent: "chat.rightPanel.agent",
@@ -65,6 +72,7 @@ const TAB_KEYS: Record<ChatRightTab, MessageKey> = {
 
 const TAB_ICONS: Record<ChatRightTab, LucideIcon> = {
   sessions: MessagesSquare,
+  monitor: Activity,
   context: Layers,
   preview: Eye,
   agent: Bot,
@@ -88,9 +96,11 @@ export default function ChatRightPanel({
   onOpenSkills,
   streamingSessionId = null,
   generatingPreview = null,
+  messages = [],
+  streaming = false,
 }: Props) {
   const { t } = useI18n();
-  const tabs: ChatRightTab[] = ["sessions", "context", "preview", "agent"];
+  const tabs: ChatRightTab[] = ["sessions", "monitor", "context", "preview", "agent"];
   const tabsRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLElement>(null);
   const [indicator, setIndicator] = useState({ left: 0, width: 0, ready: false });
@@ -207,6 +217,12 @@ export default function ChatRightPanel({
                 onNewAgent={onNewAgent}
                 onPrepareDeleteCurrentSession={onPrepareDeleteCurrentSession}
                 onClearDeletedCurrentSession={onClearDeletedCurrentSession}
+              />
+            )}
+            {tab === "monitor" && (
+              <TaskMonitorPanel
+                messages={messages}
+                streaming={streaming}
               />
             )}
             {tab === "context" && (
