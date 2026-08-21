@@ -54,7 +54,7 @@ For shell commands, use terminal."
         schema: schema_for_args::<CodeExecArgs>(),
         check_fn: None,
         icon: "code-2",
-        ..ToolEntry::lifecycle_defaults().sandboxable()
+        ..ToolEntry::lifecycle_defaults().sandboxable().deferred()
     });
 }
 

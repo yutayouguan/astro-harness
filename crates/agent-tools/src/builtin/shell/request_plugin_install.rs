@@ -26,7 +26,7 @@ pub fn register(registry: &mut ToolRegistry) {
         schema: schema_for_args::<RequestPluginInstallArgs>(),
         check_fn: None,
         icon: "download",
-        ..ToolEntry::lifecycle_defaults()
+        ..ToolEntry::lifecycle_defaults().deferred()
     });
 }
 

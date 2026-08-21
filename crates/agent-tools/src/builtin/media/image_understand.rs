@@ -43,7 +43,7 @@ pub fn register(registry: &mut ToolRegistry) {
         schema: schema_for_args::<ImageUnderstandArgs>(),
         check_fn: None,
         icon: "eye",
-            ..ToolEntry::lifecycle_defaults()
+            ..ToolEntry::lifecycle_defaults().deferred()
     });
 }
 

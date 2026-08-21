@@ -30,7 +30,7 @@ pub fn register(registry: &mut ToolRegistry) {
         schema: schema_for_args::<WaitForEnvironmentArgs>(),
         check_fn: None,
         icon: "loader",
-        ..ToolEntry::lifecycle_defaults()
+        ..ToolEntry::lifecycle_defaults().deferred()
     });
 }
 

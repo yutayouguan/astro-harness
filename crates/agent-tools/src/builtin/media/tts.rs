@@ -62,7 +62,7 @@ pub fn register(registry: &mut ToolRegistry) {
         schema: schema_for_args::<TtsArgs>(),
         check_fn: None,
         icon: "mic",
-            ..ToolEntry::lifecycle_defaults()
+            ..ToolEntry::lifecycle_defaults().deferred()
     });
 }
 

@@ -118,7 +118,7 @@ pub fn register(registry: &mut ToolRegistry) {
         schema: schema_for_args::<MusicGenArgs>(),
         check_fn: None,
         icon: "music",
-            ..ToolEntry::lifecycle_defaults()
+            ..ToolEntry::lifecycle_defaults().deferred()
     });
 }
 

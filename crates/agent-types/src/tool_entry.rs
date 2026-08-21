@@ -218,6 +218,9 @@ pub struct ToolEntry {
     pub sandbox_preference: SandboxablePreference,
     pub mcp_approval: Option<McpToolApproval>,
     pub approval_requirement: ExecApprovalRequirement,
+    /// 延迟加载标记：deferred 工具不会注入 LLM tools 列表，
+    /// 仅当 `tool_search` 发现后才对模型可见。
+    pub deferred: bool,
 }
 
 impl ToolEntry {
@@ -235,6 +238,7 @@ impl ToolEntry {
             sandbox_preference: SandboxablePreference::Forbid,
             mcp_approval: None,
             approval_requirement: ExecApprovalRequirement::Skip,
+            deferred: false,
         }
     }
 
@@ -255,6 +259,12 @@ impl ToolEntry {
 
     pub fn sandboxable(mut self) -> Self {
         self.sandbox_preference = SandboxablePreference::Auto;
+        self
+    }
+
+    /// 标记为延迟加载工具——不注入 LLM tools 列表，需经 `tool_search` 发现后可用。
+    pub fn deferred(mut self) -> Self {
+        self.deferred = true;
         self
     }
 }

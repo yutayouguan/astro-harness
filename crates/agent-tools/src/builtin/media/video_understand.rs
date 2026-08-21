@@ -129,7 +129,7 @@ pub fn register(registry: &mut ToolRegistry) {
         schema: schema_for_args::<VideoUnderstandArgs>(),
         check_fn: None,
         icon: "film",
-            ..ToolEntry::lifecycle_defaults()
+            ..ToolEntry::lifecycle_defaults().deferred()
     });
 }
 

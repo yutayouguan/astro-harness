@@ -47,7 +47,7 @@ pub fn register(registry: &mut ToolRegistry) {
         schema: schema_for_args::<WebSearchArgs>(),
         check_fn: None,
         icon: "search",
-            ..ToolEntry::lifecycle_defaults()
+            ..ToolEntry::lifecycle_defaults().deferred()
     });
 }
 

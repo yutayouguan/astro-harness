@@ -63,7 +63,7 @@ pub fn register(registry: &mut ToolRegistry) {
         schema: schema_for_args::<WebFetchArgs>(),
         check_fn: None,
         icon: "file-text",
-        ..ToolEntry::lifecycle_defaults()
+        ..ToolEntry::lifecycle_defaults().deferred()
     });
 }
 

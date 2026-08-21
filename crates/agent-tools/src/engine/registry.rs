@@ -231,7 +231,28 @@ impl ToolRegistry {
     ///
     /// 每个条目的 `parameters` 会经 [`crate::schema::sanitize_tool_schema`] 清理，
     /// 确保不含 `$ref`、`$defs` 等厂商不友好结构。
+    ///
+    /// **延迟加载工具（`deferred = true`）不包含在返回列表中**，仅在 `tool_search`
+    /// 发现后通过 `activate_deferred` 标记为可见才会出现在后续调用中。
     pub fn schemas_for_api(&self) -> Vec<serde_json::Value> {
+        self.available_tools()
+            .iter()
+            .filter(|e| !e.deferred) // 跳过延迟加载工具
+            .map(|e| {
+                serde_json::json!({
+                    "type": "function",
+                    "function": {
+                        "name": e.name,
+                        "description": e.description,
+                        "parameters": crate::schema::sanitize_tool_schema(e.schema.clone()),
+                    }
+                })
+            })
+            .collect()
+    }
+
+    /// 返回全部工具的 API schema（**包括** 延迟加载工具），供 `tool_search` 等搜索使用。
+    pub fn all_tool_schemas_including_deferred(&self) -> Vec<serde_json::Value> {
         self.available_tools()
             .iter()
             .map(|e| {
@@ -245,6 +266,16 @@ impl ToolRegistry {
                 })
             })
             .collect()
+    }
+
+    /// 激活指定的延迟加载工具，使其在后续 `schemas_for_api` 中可见。
+    ///
+    /// 工具分发（`dispatch_named_tool`）不受 `deferred` 标记影响——已注册的工具
+    /// 始终可调用；此方法仅控制是否向 LLM 暴露 schema。
+    pub fn activate_deferred(&mut self, name: &str) {
+        if let Some(entry) = self.tools.get_mut(name) {
+            entry.deferred = false;
+        }
     }
 }
 
@@ -272,12 +303,12 @@ mod tests {
             .collect()
     }
 
-    /// 断言所有内置工具的 parameters schema 不含厂商不友好结构。
+    /// 断言所有内置工具（含 deferred）的 parameters schema 不含厂商不友好结构。
     #[test]
     fn all_registered_tools_have_vendor_safe_parameters() {
         let mut reg = ToolRegistry::new();
         crate::register_all(&mut reg);
-        let schemas = reg.schemas_for_api();
+        let schemas = reg.all_tool_schemas_including_deferred();
         assert!(!schemas.is_empty());
         for s in schemas {
             let name = s
