@@ -347,6 +347,7 @@ impl ProvidersState {
             ProviderKind::Moonshot,
             ProviderKind::Volcengine,
             ProviderKind::Minimax,
+            ProviderKind::Hunyuan,
         ] {
             if !self.providers.iter().any(|p| p.kind == kind) {
                 self.providers.push(ProviderConfig::new_disabled(kind));

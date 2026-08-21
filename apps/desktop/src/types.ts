@@ -575,6 +575,7 @@ export type ProviderKindId =
   | "moonshot"
   | "volcengine"
   | "minimax"
+  | "hunyuan"
   | "custom";
 
 /** 模型能力位 */

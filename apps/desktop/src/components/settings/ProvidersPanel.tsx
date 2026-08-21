@@ -157,6 +157,7 @@ const ADD_KINDS: ProviderKindId[] = [
   "moonshot",
   "volcengine",
   "minimax",
+  "hunyuan",
   "ollama",
   "custom",
 ];

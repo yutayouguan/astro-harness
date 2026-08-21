@@ -55,6 +55,7 @@ export function useProviders() {
               endpoint: provider.endpoint,
               model,
               enabled: provider.enabled,
+              api_mode: provider.api_mode ?? "",
             },
           });
         }
