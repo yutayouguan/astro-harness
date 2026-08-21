@@ -14,6 +14,28 @@ use serde_json::{json, Value};
 use crate::traits::CompletionModel;
 use crate::types::{CompletionRequest, CompletionStream};
 
+/// 自定义模型声明（TOML 中的 `[[custom_providers.<id>.models]]`）。
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CustomModelEntry {
+    pub id: String,
+    #[serde(default)]
+    pub display_name: Option<String>,
+    #[serde(default)]
+    pub context_window: Option<u64>,
+    #[serde(default)]
+    pub max_output_tokens: Option<u64>,
+    #[serde(default)]
+    pub reasoning: bool,
+    #[serde(default)]
+    pub supported_efforts: Vec<String>,
+    #[serde(default)]
+    pub default_effort: Option<String>,
+    #[serde(default)]
+    pub tools: Option<bool>,
+    #[serde(default)]
+    pub vision: Option<bool>,
+}
+
 /// 单个自定义 provider 的 TOML 配置。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CustomProviderConfig {
@@ -28,6 +50,9 @@ pub struct CustomProviderConfig {
     /// 默认模型名。
     #[serde(default)]
     pub default_model: String,
+    /// 模型声明列表（可选；不声明则由 OpenRouter / API 自动发现）。
+    #[serde(default)]
+    pub models: Vec<CustomModelEntry>,
 }
 
 /// 所有自定义 provider 的顶层配置。
@@ -242,5 +267,47 @@ base_url = "https://api.example.com"
         assert!(p.name.is_empty());
         assert!(p.env_keys.is_empty());
         assert!(p.default_model.is_empty());
+        assert!(p.models.is_empty());
+    }
+
+    #[test]
+    fn parse_with_model_declarations() {
+        let toml = r#"
+[custom_providers.my-corp]
+base_url = "https://llm.corp.internal/v1"
+env_keys = ["CORP_API_KEY"]
+default_model = "corp-v3"
+
+[[custom_providers.my-corp.models]]
+id = "corp-v3"
+display_name = "Corp V3"
+context_window = 128000
+max_output_tokens = 32000
+reasoning = true
+supported_efforts = ["high", "max"]
+default_effort = "high"
+
+[[custom_providers.my-corp.models]]
+id = "corp-v3-mini"
+display_name = "Corp V3 Mini"
+context_window = 32000
+"#;
+        let table: CustomProvidersTable = toml::from_str(toml).unwrap();
+        let corp = &table.custom_providers["my-corp"];
+        assert_eq!(corp.models.len(), 2);
+
+        let v3 = &corp.models[0];
+        assert_eq!(v3.id, "corp-v3");
+        assert_eq!(v3.display_name.as_deref(), Some("Corp V3"));
+        assert_eq!(v3.context_window, Some(128000));
+        assert_eq!(v3.max_output_tokens, Some(32000));
+        assert!(v3.reasoning);
+        assert_eq!(v3.supported_efforts, vec!["high", "max"]);
+        assert_eq!(v3.default_effort.as_deref(), Some("high"));
+
+        let mini = &corp.models[1];
+        assert_eq!(mini.id, "corp-v3-mini");
+        assert!(!mini.reasoning);
+        assert!(mini.supported_efforts.is_empty());
     }
 }

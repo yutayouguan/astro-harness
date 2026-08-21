@@ -621,6 +621,83 @@ fn persist_provider_models(
     save_models_cache(&cache)
 }
 
+/// 将 TOML 自定义 provider 声明的模型注入 models.json 缓存。
+fn sync_custom_provider_models() {
+    let home = std::env::var("HOME")
+        .or_else(|_| std::env::var("USERPROFILE"))
+        .unwrap_or_else(|_| ".".to_string());
+    let config_path = std::path::PathBuf::from(home).join(".astro").join("config.toml");
+    let custom = providers::custom::load_custom_providers(&config_path);
+    if custom.is_empty() {
+        return;
+    }
+    let _guard = MODELS_CACHE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let mut cache = load_models_cache();
+    for (id, cfg) in &custom {
+        if cfg.models.is_empty() {
+            continue;
+        }
+        let models: Vec<crate::meta::model_meta::ModelEntryCompat> = cfg
+            .models
+            .iter()
+            .map(|m| {
+                let reasoning = if m.reasoning {
+                    Some(crate::meta::model_meta::ModelReasoningMeta {
+                        supported_efforts: m.supported_efforts.clone(),
+                        default_effort: m.default_effort.clone(),
+                        default_enabled: Some(true),
+                        mandatory: Some(false),
+                        supports_max_tokens: None,
+                    })
+                } else {
+                    None
+                };
+                crate::meta::model_meta::ModelEntryCompat::Full(Box::new(
+                    crate::meta::model_meta::ModelInfo {
+                        id: m.id.clone(),
+                        display_name: m.display_name.clone(),
+                        description: None,
+                        canonical_slug: None,
+                        knowledge_cutoff: None,
+                        expiration_date: None,
+                        created: None,
+                        hugging_face_id: None,
+                        is_moderated: None,
+                        context_window: m.context_window,
+                        max_output_tokens: m.max_output_tokens,
+                        capabilities: crate::meta::model_meta::ModelCapabilities {
+                            tools: m.tools.unwrap_or(true),
+                            vision: m.vision.unwrap_or(false),
+                            reasoning: m.reasoning,
+                            ..Default::default()
+                        },
+                        reasoning,
+                        pricing: None,
+                        default_parameters: None,
+                        meta_source: "toml".to_string(),
+                    },
+                ))
+            })
+            .collect();
+        cache.providers.insert(
+            id.clone(),
+            CachedProviderModels {
+                provider_id: id.clone(),
+                display_name: cfg.name.clone(),
+                kind: "custom".to_string(),
+                models,
+                source: "config.toml".to_string(),
+                latency_ms: 0,
+                updated_at: chrono::Utc::now()
+                    .to_rfc3339_opts(chrono::SecondsFormat::Secs, true),
+            },
+        );
+    }
+    if let Err(e) = save_models_cache(&cache) {
+        tracing::warn!(error = %e, "sync_custom_provider_models 写入失败");
+    }
+}
+
 /// 加载全部 Provider 配置状态。
 fn load_state() -> Result<ProvidersState, String> {
     let path = providers_path();
@@ -639,6 +716,7 @@ fn load_state() -> Result<ProvidersState, String> {
     if changed {
         let _ = save_state(&state);
     }
+    sync_custom_provider_models();
     Ok(state)
 }
 
