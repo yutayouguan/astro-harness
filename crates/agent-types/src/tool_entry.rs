@@ -246,6 +246,9 @@ pub struct ToolEntry {
     /// Tool visibility level: Direct (default), Deferred (discoverable via tool_search),
     /// or Hidden (internal only). Replaces the former `deferred: bool` flag.
     pub exposure: ToolExposure,
+    /// Tool namespace for grouping (e.g., "shell", "media", "system", "mcp").
+    /// Default empty string means the default namespace.
+    pub namespace: String,
 }
 
 impl ToolEntry {
@@ -264,6 +267,7 @@ impl ToolEntry {
             mcp_approval: None,
             approval_requirement: ExecApprovalRequirement::Skip,
             exposure: ToolExposure::Direct,
+            namespace: String::new(),
         }
     }
 

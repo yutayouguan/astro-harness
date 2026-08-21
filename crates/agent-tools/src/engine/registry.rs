@@ -239,13 +239,19 @@ impl ToolRegistry {
             .iter()
             .filter(|e| e.exposure.is_direct()) // 仅注入 Direct 工具
             .map(|e| {
+                let mut func = serde_json::json!({
+                    "name": e.name,
+                    "description": e.description,
+                    "parameters": crate::schema::sanitize_tool_schema(e.schema.clone()),
+                });
+                if !e.namespace.is_empty() {
+                    func.as_object_mut()
+                        .unwrap()
+                        .insert("namespace".to_string(), serde_json::json!(e.namespace));
+                }
                 serde_json::json!({
                     "type": "function",
-                    "function": {
-                        "name": e.name,
-                        "description": e.description,
-                        "parameters": crate::schema::sanitize_tool_schema(e.schema.clone()),
-                    }
+                    "function": func,
                 })
             })
             .collect()
