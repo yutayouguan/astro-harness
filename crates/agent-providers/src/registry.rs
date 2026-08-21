@@ -243,6 +243,30 @@ impl Registry {
         self.providers.insert("gemini-native".to_string(), provider);
     }
 
+    /// 注册 TOML 自定义 provider（Responses API only）。
+    pub fn register_custom(
+        &mut self,
+        id: &str,
+        config: &crate::custom::CustomProviderConfig,
+        api_key: &str,
+        model: &str,
+    ) {
+        let model = if model.is_empty() {
+            &config.default_model
+        } else {
+            model
+        };
+        let completion = crate::custom::ConfigDrivenCompletionModel::new(
+            self.http.clone(),
+            config,
+            api_key.to_string(),
+            model.to_string(),
+            id.to_string(),
+        );
+        let provider = DynProvider::new(id, "custom").with_completion(completion);
+        self.providers.insert(id.to_string(), provider);
+    }
+
     /// 按 id 查找 provider。
     pub fn get(&self, id: &str) -> Option<&DynProvider> {
         let normalized = crate::profile::normalize_provider_id(id);

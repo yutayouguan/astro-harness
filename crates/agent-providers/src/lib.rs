@@ -13,6 +13,7 @@
 
 pub mod anthropic;
 pub mod compat;
+pub mod custom;
 pub mod dispatch;
 pub mod google;
 pub mod impls;

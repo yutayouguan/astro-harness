@@ -464,8 +464,29 @@ fn register_provider(reg: &mut crate::registry::Registry, provider: &str, config
         "hunyuan" => register_media::<crate::impls::hunyuan::Hunyuan>(reg, key, base, model),
         "mimo" => register_compat::<crate::impls::mimo::Mimo>(reg, key, base, model),
         "gemini-native" => reg.register_gemini_native(key, base, model),
-        _ => register_compat::<crate::impls::openai::OpenAI>(reg, key, base, model),
+        other => {
+            if let Some(custom_cfg) = lookup_custom_provider(other) {
+                reg.register_custom(other, &custom_cfg, key, model);
+            } else {
+                register_compat::<crate::impls::openai::OpenAI>(reg, key, base, model);
+            }
+        }
     }
+}
+
+/// 从 ~/.astro/config.toml 查找自定义 provider 配置。
+fn lookup_custom_provider(id: &str) -> Option<crate::custom::CustomProviderConfig> {
+    use std::sync::OnceLock;
+    static CUSTOM: OnceLock<std::collections::HashMap<String, crate::custom::CustomProviderConfig>> =
+        OnceLock::new();
+    let map = CUSTOM.get_or_init(|| {
+        let home = std::env::var("HOME")
+            .or_else(|_| std::env::var("USERPROFILE"))
+            .unwrap_or_else(|_| ".".to_string());
+        let path = std::path::PathBuf::from(home).join(".astro").join("config.toml");
+        crate::custom::load_custom_providers(&path)
+    });
+    map.get(id).cloned()
 }
 
 fn register_compat<Ext>(
