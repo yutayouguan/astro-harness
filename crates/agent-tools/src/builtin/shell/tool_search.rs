@@ -1,5 +1,8 @@
-//! 工具搜索：按关键字在内置工具目录中检索匹配的工具名和描述。
+//! 工具搜索：BM25 索引 + 缓存（对齐 Codex ToolSearchHandler）。
 
+use std::sync::Mutex;
+
+use bm25::{Document, Language, SearchEngineBuilder};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
@@ -14,7 +17,7 @@ fn default_limit() -> usize {
 /// Arguments for the `tool_search` tool.
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 pub struct ToolSearchArgs {
-    /// Search query: matched against tool name and description (case-insensitive substring).
+    /// Search query: matched against tool name and description using BM25 ranking.
     pub query: String,
     /// Maximum number of results to return (default 10).
     #[serde(default = "default_limit")]
@@ -27,7 +30,7 @@ pub fn register(registry: &mut ToolRegistry) {
         name: "tool_search".to_string(),
         toolset: "system".to_string(),
         description:
-            "Search available tools by keyword. Returns matching tool names and descriptions."
+            "Search available tools by keyword. Returns matching tool names and descriptions, ranked by relevance (BM25). Use this to discover specialized tools not in the default tool list."
                 .to_string(),
         schema: schema_for_args::<ToolSearchArgs>(),
         check_fn: None,
@@ -43,49 +46,78 @@ crate::submit_builtin_tool! {
     args: ToolSearchArgs,
 }
 
-/// 在内置工具目录中按关键字搜索，使用 BM25 风格评分，返回按相关性排序的匹配结果。
+// ── BM25 缓存 ──────────────────────────────────────────────
+
+struct ToolSearchEntry {
+    name: String,
+    description: String,
+}
+
+struct CachedIndex {
+    /// 缓存的 BM25 引擎（类型擦除为搜索回调，避免泛型逃逸）。
+    engine: bm25::SearchEngine<usize>,
+    /// 建索引时的工具数量，用于失效判断。
+    tool_count: usize,
+    /// 与索引对齐的工具元数据。
+    entries: Vec<ToolSearchEntry>,
+}
+
+static CACHE: Mutex<Option<CachedIndex>> = Mutex::new(None);
+
+fn build_index(catalog: &[crate::catalog::ToolCatalogItem]) -> CachedIndex {
+    let entries: Vec<ToolSearchEntry> = catalog
+        .iter()
+        .map(|t| ToolSearchEntry {
+            name: t.name.clone(),
+            description: t.description.clone(),
+        })
+        .collect();
+
+    let documents: Vec<Document<usize>> = entries
+        .iter()
+        .enumerate()
+        .map(|(idx, entry)| {
+            // 工具名重复一次以提升名称匹配权重
+            let text = format!("{} {} {}", entry.name, entry.name, entry.description);
+            Document::new(idx, text)
+        })
+        .collect();
+
+    let engine = SearchEngineBuilder::<usize>::with_documents(Language::English, documents).build();
+
+    CachedIndex {
+        engine,
+        tool_count: catalog.len(),
+        entries,
+    }
+}
+
+/// 在内置工具目录中按关键字搜索，使用 BM25 索引，返回按相关性排序的匹配结果。
 pub async fn dispatch(_ctx: &ToolContext<'_>, args: &ToolSearchArgs) -> anyhow::Result<String> {
-    let q = args.query.to_lowercase();
-    let terms: Vec<&str> = q.split_whitespace().collect();
-    if terms.is_empty() {
+    let query = args.query.trim();
+    if query.is_empty() {
         anyhow::bail!("tool_search requires a non-empty query");
     }
 
     let catalog = crate::catalog::builtin_catalog();
-    let mut scored: Vec<_> = catalog
-        .iter()
-        .map(|t| {
-            let name_lower = t.name.to_lowercase();
-            let desc_lower = t.description.to_lowercase();
-            let text = format!("{} {}", name_lower, desc_lower);
-            // BM25-inspired scoring: term frequency + name bonus
-            let mut score: f64 = 0.0;
-            for term in &terms {
-                let tf = text.matches(term).count() as f64;
-                if tf > 0.0 {
-                    // BM25: tf / (tf + k1) where k1 = 1.2
-                    score += tf / (tf + 1.2);
-                }
-                // Name exact match bonus
-                if name_lower.contains(term) {
-                    score += 2.0;
-                }
-            }
-            (t, score)
-        })
-        .filter(|(_, score)| *score > 0.0)
-        .collect();
+    let limit = args.limit.min(50);
 
-    scored.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+    let mut guard = CACHE.lock().unwrap_or_else(|e| e.into_inner());
+    if guard.is_none() || guard.as_ref().unwrap().tool_count != catalog.len() {
+        *guard = Some(build_index(&catalog));
+    }
+    let cached = guard.as_ref().unwrap();
 
-    let matches: Vec<_> = scored
+    let results = cached.engine.search(query, limit);
+
+    let matches: Vec<serde_json::Value> = results
         .into_iter()
-        .take(args.limit)
-        .map(|(t, score)| {
+        .map(|r| {
+            let entry = &cached.entries[r.document.id];
             serde_json::json!({
-                "name": t.name,
-                "description": t.description,
-                "relevance": (score * 100.0).round() / 100.0,
+                "name": entry.name,
+                "description": entry.description,
+                "relevance": (r.score as f64 * 100.0).round() / 100.0,
             })
         })
         .collect();
