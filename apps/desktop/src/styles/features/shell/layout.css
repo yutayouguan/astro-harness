@@ -745,41 +745,78 @@ html[data-theme="dark"] .page-title-icon {
   color: var(--ink-mute);
   line-height: 1.2;
 }
-/* ── Settings tab bar ─────────────────────────────── */
+/* ── Settings 分类侧栏布局 ────────────────────────── */
 
-.settings-tab-bar {
+.settings-layout {
   display: flex;
-  gap: 2px;
-  padding: 8px 16px 0;
-  border-bottom: 1px solid color-mix(in srgb, var(--glass-edge) 60%, transparent);
-  overflow-x: auto;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.settings-sidebar {
+  width: 200px;
   flex-shrink: 0;
+  padding: 16px 12px;
+  border-right: 1px solid color-mix(in srgb, var(--glass-edge) 50%, transparent);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
 }
 
-.settings-tab-btn {
-  display: inline-flex;
-  align-items: center;
-  padding: 8px 14px;
-  border: none;
-  border-bottom: 2px solid transparent;
-  background: transparent;
-  font-size: 12px;
-  font-weight: 600;
+html[data-theme="dark"] .settings-sidebar {
+  border-right-color: rgba(255, 255, 255, 0.06);
+}
+
+.settings-sidebar-group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.settings-sidebar-label {
+  font-size: 11px;
+  font-weight: 650;
   color: var(--ink-mute);
-  cursor: pointer;
-  white-space: nowrap;
-  transition: color 0.12s, border-color 0.12s;
+  opacity: 0.7;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 0 10px 4px;
 }
 
-.settings-tab-btn:hover {
+.settings-sidebar-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  font-size: 13px;
+  font-weight: 500;
   color: var(--ink);
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.1s;
 }
 
-.settings-tab-btn.is-active {
+.settings-sidebar-item:hover {
+  background: color-mix(in srgb, var(--tone, #64748b) 8%, transparent);
+}
+
+.settings-sidebar-item.is-active {
+  background: color-mix(in srgb, var(--tone, var(--tone-blue)) 12%, transparent);
   color: var(--tone, var(--tone-blue));
-  border-bottom-color: var(--tone, var(--tone-blue));
+  font-weight: 600;
 }
 
-html[data-theme="dark"] .settings-tab-bar {
-  border-bottom-color: rgba(255, 255, 255, 0.08);
+html[data-theme="dark"] .settings-sidebar-item.is-active {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.settings-content {
+  flex: 1;
+  min-width: 0;
+  overflow-y: auto;
 }

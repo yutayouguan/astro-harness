@@ -994,31 +994,53 @@ export default function App() {
                 />
               )}
               {nav === "settings" && (
-                <>
-                  <div className="settings-tab-bar" role="tablist">
-                    {(
-                      [
-                        { id: "preferences", label: t("nav.settings") },
-                        { id: "providers", label: t("nav.providers" as never) || "模型" },
-                        { id: "tools", label: t("nav.tools" as never) || "工具" },
-                        { id: "memory", label: t("nav.memory" as never) || "记忆" },
-                        { id: "insights", label: t("nav.insights" as never) || "洞察" },
-                        { id: "models", label: t("nav.models" as never) || "模型市场" },
-                        { id: "evolution", label: t("nav.evolution" as never) || "进化" },
-                      ] as const
-                    ).map((tab) => (
-                      <button
-                        key={tab.id}
-                        type="button"
-                        role="tab"
-                        className={`settings-tab-btn ${settingsTab === tab.id ? "is-active" : ""}`}
-                        aria-selected={settingsTab === tab.id}
-                        onClick={() => setSettingsTab(tab.id)}
-                      >
-                        {tab.label}
-                      </button>
-                    ))}
-                  </div>
+                <div className="settings-layout">
+                  <nav className="settings-sidebar" aria-label="Settings">
+                    <div className="settings-sidebar-group">
+                      <span className="settings-sidebar-label">常规</span>
+                      {([
+                        { id: "preferences", label: "偏好设置" },
+                        { id: "memory", label: "记忆" },
+                      ] as const).map((item) => (
+                        <button key={item.id} type="button"
+                          className={`settings-sidebar-item ${settingsTab === item.id ? "is-active" : ""}`}
+                          onClick={() => setSettingsTab(item.id)}>{item.label}</button>
+                      ))}
+                    </div>
+                    <div className="settings-sidebar-group">
+                      <span className="settings-sidebar-label">模型</span>
+                      {([
+                        { id: "providers", label: "Provider 配置" },
+                        { id: "models", label: "模型市场" },
+                      ] as const).map((item) => (
+                        <button key={item.id} type="button"
+                          className={`settings-sidebar-item ${settingsTab === item.id ? "is-active" : ""}`}
+                          onClick={() => setSettingsTab(item.id)}>{item.label}</button>
+                      ))}
+                    </div>
+                    <div className="settings-sidebar-group">
+                      <span className="settings-sidebar-label">工具</span>
+                      {([
+                        { id: "tools", label: "工具管理" },
+                      ] as const).map((item) => (
+                        <button key={item.id} type="button"
+                          className={`settings-sidebar-item ${settingsTab === item.id ? "is-active" : ""}`}
+                          onClick={() => setSettingsTab(item.id)}>{item.label}</button>
+                      ))}
+                    </div>
+                    <div className="settings-sidebar-group">
+                      <span className="settings-sidebar-label">高级</span>
+                      {([
+                        { id: "insights", label: "洞察" },
+                        { id: "evolution", label: "进化" },
+                      ] as const).map((item) => (
+                        <button key={item.id} type="button"
+                          className={`settings-sidebar-item ${settingsTab === item.id ? "is-active" : ""}`}
+                          onClick={() => setSettingsTab(item.id)}>{item.label}</button>
+                      ))}
+                    </div>
+                  </nav>
+                  <div className="settings-content">
                   {settingsTab === "preferences" && (
                     <PreferencesPanel
                       mode={mode}
@@ -1069,7 +1091,8 @@ export default function App() {
                       onHeaderAgentPickerChange={setMemoryHeaderAgent}
                     />
                   )}
-                </>
+                  </div>
+                </div>
               )}
               {nav === "loop" && (
                 <LoopPanel
