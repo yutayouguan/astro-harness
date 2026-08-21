@@ -193,6 +193,8 @@ impl AgentLoop {
             sandbox_policy: grants.sandbox_policy,
             network_grant: grants.network,
             managed_network: grants.managed_network,
+            context_window: None,
+            context_tokens_used: None,
         };
         dispatch_tool(|_| allowed, &mut ctx, name, args, dynamic_handler.as_ref()).await
     }

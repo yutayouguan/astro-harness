@@ -716,6 +716,8 @@ mod path_tests {
             sandbox_policy: None,
             network_grant: crate::InProcessNetworkGrant::default(),
             managed_network: None,
+            context_window: None,
+            context_tokens_used: None,
         };
 
         let err = resolve_workspace_file(&ctx, "../outside/secret.txt").unwrap_err();
@@ -755,6 +757,8 @@ mod path_tests {
             sandbox_policy: None,
             network_grant: crate::InProcessNetworkGrant::default(),
             managed_network: None,
+            context_window: None,
+            context_tokens_used: None,
         };
 
         let path = resolve_workspace_file(&ctx, "ok.txt").unwrap();

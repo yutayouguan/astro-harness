@@ -125,6 +125,8 @@ mod tests {
             sandbox_policy: None,
             network_grant: crate::InProcessNetworkGrant::default(),
             managed_network: None,
+            context_window: None,
+            context_tokens_used: None,
         };
         f(&ctx);
     }

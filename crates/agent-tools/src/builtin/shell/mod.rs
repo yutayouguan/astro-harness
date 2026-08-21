@@ -1,8 +1,13 @@
-//! 系统能力：文件、终端、代码执行、HTTP 抓取、检索。
+//! 系统能力：文件、终端、代码执行、HTTP 抓取、检索、工具搜索、上下文管理。
 
 pub mod code_exec;
+pub mod context_remaining;
 pub mod file_ops;
 pub mod jobs;
+pub mod new_context_window;
+pub mod request_plugin_install;
 pub mod terminal;
+pub mod tool_search;
+pub mod wait_for_environment;
 pub mod web_fetch;
 pub mod web_search;

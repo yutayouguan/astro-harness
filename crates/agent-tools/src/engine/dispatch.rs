@@ -272,6 +272,8 @@ mod permission_tests {
                 network_hosts.iter().map(|host| (*host).to_string()),
             ),
             managed_network: None,
+            context_window: None,
+            context_tokens_used: None,
         };
         f(&ctx);
     }

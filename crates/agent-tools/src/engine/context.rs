@@ -69,6 +69,10 @@ pub struct ToolContext<'a> {
     ///
     /// The lease keeps the listener alive through sandbox setup and process execution.
     pub managed_network: Option<Arc<network_proxy::StartedNetworkProxy>>,
+    /// 当前模型上下文窗口总容量（token 数）；由 AgentLoop 注入，`None` 表示未知。
+    pub context_window: Option<u64>,
+    /// 当前已使用的上下文 token 数；由 AgentLoop 注入，`None` 表示未知。
+    pub context_tokens_used: Option<u64>,
 }
 
 impl<'a> ToolContext<'a> {
@@ -305,6 +309,8 @@ permissions:
             sandbox_policy: None,
             network_grant: InProcessNetworkGrant::default(),
             managed_network: None,
+            context_window: None,
+            context_tokens_used: None,
         };
 
         let policy = ctx.command_sandbox_policy().unwrap();

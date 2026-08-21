@@ -151,6 +151,8 @@ async fn file_ops_write_and_read() {
         sandbox_policy: None,
         network_grant: tools::InProcessNetworkGrant::default(),
         managed_network: None,
+        context_window: None,
+        context_tokens_used: None,
     };
 
     let w = tools::dispatch_tool(
