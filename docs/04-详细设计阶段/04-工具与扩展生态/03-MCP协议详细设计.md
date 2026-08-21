@@ -14,7 +14,8 @@ Astro 的 MCP 接入以 Codex MCP 配置与运行语义为兼容基线：
 - MCP Server 的配置、认证、启动、工具发现、审批和状态必须是完整的一等能力，不能只保存 `command` 或 `url`。
 - MCP Server 初始化返回的 `instructions` 必须进入受控系统上下文。
 - MCP 工具统一进入 Astro `ToolRegistry`、权限系统、审计链路和用量统计，不能绕过审批。
-- 全局配置和可信项目配置遵循 Codex 语义；Agent 私有覆盖是 Astro 扩展，不改变基础契约。
+- 全局配置和可信项目配置遵循 Codex 分层语义；Astro 统一使用 `.astro/config.toml`，
+  不再读取 Agent 私有 MCP 配置。
 - Codex 公开文档只明确承诺 tools 与 initialize `instructions`；resources/resource templates/prompts 作为 Astro 扩展仅显式按需访问，不宣称为 Codex 自动行为。
 - 当前阶段只设计 Astro 作为 MCP Host/Client。将 Astro 自身暴露为 MCP Server 不属于本轮范围，后续若需要应单独立项。
 
@@ -90,20 +91,20 @@ crates/agent-mcp/src/
 ```text
 ~/.astro/config.toml                 # 全局配置
 <project>/.astro/config.toml         # 可信项目配置
-~/.astro/agents/<agent_id>/config.toml # Agent 私有覆盖（Astro 扩展）
 ```
 
 合并优先级由低到高：
 
 ```text
-全局 → 可信项目 → Agent 私有覆盖
+系统策略 → 全局 → 可信项目
 ```
 
 规则：
 
 1. 项目 MCP 配置仅在项目被标记为可信后加载。
 2. 同名 Server 使用高优先级配置整体覆盖；禁止字段级混合密钥来源。
-3. Agent 覆盖可以关闭 Server、缩小工具集合或提高审批强度。
+3. 自定义角色的 MCP 只通过 `.astro/agents/<role>.toml` 声明，不读取
+   `agents/<agent_id>/config.toml`。
 4. Agent/Subagent 覆盖不得扩大父 Session 的网络、文件系统或审批权限。
 5. 配置解析失败时保留上一份已验证快照，并向 UI 返回诊断。
 

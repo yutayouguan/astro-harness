@@ -207,7 +207,7 @@ pub(crate) const ENSURED_DIRS: &[&str] = &[
 
 /// 数据根下需要确保存在的空状态文件。
 pub(crate) const STATE_FILES: &[(&str, &str)] = &[
-    // 不预建 [mcp_servers]，以便旧 mcp.json 首次加载时安全迁移。
+    // 不预建 [mcp_servers]；统一配置文件由各设置域按需增量写入。
     ("config.toml", "# Astro configuration\n"),
     ("skills-enabled.json", "{\n}\n"),
     ("tools-enabled.json", "{\n}\n"),

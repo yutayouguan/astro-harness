@@ -259,6 +259,7 @@ impl LifecycleTestApp {
                 model: "test".into(),
                 api_key: "ephemeral-test-key".into(),
                 base_url: "http://127.0.0.1.invalid".into(),
+                api_mode: String::new(),
             }],
             project_root: None,
             hook_runtime: Some(Arc::new(hooks::HookRuntime::with_plugin_bus(Arc::clone(

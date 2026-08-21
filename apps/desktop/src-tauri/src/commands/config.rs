@@ -353,16 +353,9 @@ fn config_from_dto(d: McpServerDto) -> Result<mcp::McpServerConfig, String> {
 
 /// Tauri 命令：get_mcp_servers。
 #[tauri::command]
-pub async fn get_mcp_servers(agent_id: Option<String>) -> Result<Vec<McpServerDto>, String> {
-    let id = normalize_agent_id(agent_id);
-    let servers = if id.is_some() {
-        let project_root = worktree::resolve_project_root(None);
-        mcp::load_mcp_servers_layered(id.as_deref(), project_root.as_deref())
-    } else {
-        // `None` 是全局配置编辑语义；不得将项目层有效配置读出后又摊平写回全局。
-        mcp::load_mcp_servers(None)
-    }
-    .map_err(|e| e.to_string())?;
+pub async fn get_mcp_servers() -> Result<Vec<McpServerDto>, String> {
+    // 编辑器只读写全局层，避免把可信项目的有效配置摊平回全局文件。
+    let servers = mcp::load_mcp_servers().map_err(|e| e.to_string())?;
     Ok(servers.into_iter().map(dto_from_config).collect())
 }
 
@@ -425,16 +418,12 @@ pub async fn reconnect_mcp_server(
 
 /// Tauri 命令：set_mcp_servers。
 #[tauri::command]
-pub async fn set_mcp_servers(
-    servers: Vec<McpServerDto>,
-    agent_id: Option<String>,
-) -> Result<(), String> {
-    let id = normalize_agent_id(agent_id);
+pub async fn set_mcp_servers(servers: Vec<McpServerDto>) -> Result<(), String> {
     let configs: Vec<_> = servers
         .into_iter()
         .map(config_from_dto)
         .collect::<Result<_, _>>()?;
-    mcp::save_mcp_servers(id.as_deref(), &configs).map_err(|e| e.to_string())
+    mcp::save_mcp_servers(&configs).map_err(|e| e.to_string())
 }
 
 /// 短连 list_tools，写回 discovered，并合并默认工具开关
@@ -480,10 +469,9 @@ pub async fn refresh_mcp_tools(
     let execution_context = mcp::McpExecutionContext::new(policy, &execution_root)
         .map(|context| context.with_sandbox_audit(sandbox_audit))
         .map_err(|e| e.to_string())?;
-    let configs =
-        mcp::McpHub::refresh_discovered(id.as_deref(), server_id.as_deref(), &execution_context)
-            .await
-            .map_err(|e| e.to_string())?;
+    let configs = mcp::McpHub::refresh_discovered(server_id.as_deref(), &execution_context)
+        .await
+        .map_err(|e| e.to_string())?;
     Ok(configs.into_iter().map(dto_from_config).collect())
 }
 

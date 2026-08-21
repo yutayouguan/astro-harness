@@ -119,8 +119,10 @@ pub async fn close_subagent_thread(
 pub async fn list_subagent_definitions() -> Result<Vec<AgentDefinitionDto>, String> {
     let memory_dir = home::default_memory_dir();
     let project_root = worktree::resolve_project_root(None);
-    let catalog = subagents::load_agent_catalog(&memory_dir, project_root.as_deref());
-    Ok(catalog
+    let configuration = subagents::load_agent_configuration(&memory_dir, project_root.as_deref())
+        .map_err(|error| command_error("load agent configuration", error))?;
+    Ok(configuration
+        .catalog
         .agents
         .into_values()
         .map(|definition| AgentDefinitionDto {

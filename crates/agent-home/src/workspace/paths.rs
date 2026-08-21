@@ -121,7 +121,7 @@ pub fn agent_workspace_dir(base: &Path, agent_id: &str) -> PathBuf {
 /// 默认 Agent 的配置目录名（`agents/default/`），与工作区目录名 `workspace/` 区分。
 pub const DEFAULT_AGENT_CONFIG_DIR: &str = "default";
 
-/// Agent 配置目录：`{base}/agents/{id}/`（模型、工具、MCP 等，不含工作区文件）。
+/// Agent 运行时配置目录：`{base}/agents/{id}/`（模型、工具等，不含 MCP 与工作区文件）。
 ///
 /// 默认 Agent（id = `workspace`）的配置目录固定为 `agents/default/`，
 /// 避免与工作区内容目录 `workspace/` 产生歧义。

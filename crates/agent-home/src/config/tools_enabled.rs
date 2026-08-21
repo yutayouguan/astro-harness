@@ -131,7 +131,6 @@ pub fn save_tools_enabled_for_agent(
                 max_turns: None,
                 additional_params: None,
                 tools_enabled: None,
-                mcp: None,
                 created_at: chrono::Local::now().to_rfc3339(),
             }
         });

@@ -1271,8 +1271,7 @@ impl Session {
             let reload_result = if mcp_config_override.is_empty() {
                 hub.reload_from_disk(Some(&agent_id)).await
             } else {
-                let mut configs =
-                    mcp::load_mcp_servers_layered(Some(&agent_id), Some(&execution_root))?;
+                let mut configs = mcp::load_mcp_servers_layered(Some(&execution_root))?;
                 for overlay in &mcp_config_override {
                     let id = mcp::sanitize_server_id(&overlay.id);
                     configs.retain(|config| mcp::sanitize_server_id(&config.id) != id);
@@ -1517,6 +1516,7 @@ mod tests {
             model: model.into(),
             api_key: format!("k-{id}"),
             base_url: format!("https://{id}.example"),
+            api_mode: String::new(),
         }
     }
 

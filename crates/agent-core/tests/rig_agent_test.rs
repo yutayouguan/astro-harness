@@ -69,6 +69,7 @@ fn session_hook_payload_preserves_explicit_values_and_falls_back_to_defaults() {
         model: "model-only".into(),
         api_key: String::new(),
         base_url: String::new(),
+        api_mode: String::new(),
     }]);
 
     agent.fire_hook(hooks::USER_PROMPT_SUBMIT, hooks::HookInput::default());
@@ -78,6 +79,7 @@ fn session_hook_payload_preserves_explicit_values_and_falls_back_to_defaults() {
         model: String::new(),
         api_key: String::new(),
         base_url: String::new(),
+        api_mode: String::new(),
     }]);
     agent.fire_hook(hooks::USER_PROMPT_SUBMIT, hooks::HookInput::default());
     agent.set_chat_targets(vec![types::ChatTarget {
@@ -86,6 +88,7 @@ fn session_hook_payload_preserves_explicit_values_and_falls_back_to_defaults() {
         model: String::new(),
         api_key: String::new(),
         base_url: String::new(),
+        api_mode: String::new(),
     }]);
     agent.fire_hook(hooks::USER_PROMPT_SUBMIT, hooks::HookInput::default());
     agent.fire_hook(
@@ -208,7 +211,6 @@ async fn test_agent_builder_from_runtime_config() {
         max_turns: Some(5),
         additional_params: Some(serde_json::json!({"foo": "bar"})),
         tools_enabled: None,
-        mcp: None,
         created_at: String::new(),
     };
 

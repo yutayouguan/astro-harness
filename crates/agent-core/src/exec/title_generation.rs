@@ -213,6 +213,7 @@ mod tests {
                 model: "mini".into(),
                 api_key: "k1".into(),
                 base_url: "https://a".into(),
+                api_mode: String::new(),
             },
             types::ChatTarget {
                 provider_id: "b".into(),
@@ -220,6 +221,7 @@ mod tests {
                 model: "gpt".into(),
                 api_key: "k2".into(),
                 base_url: "https://b".into(),
+                api_mode: String::new(),
             },
         ];
         let mut calls = 0usize;

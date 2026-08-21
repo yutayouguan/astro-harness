@@ -242,21 +242,21 @@ pub enum RunnerEvent {
 
 ### 4.1 核心原则：不可升级
 
-子 Agent 的权限上限始终不超出父 Agent 已解析的权限。自定义 Agent 类型（`.codex/agents/*.toml`）可通过 `sandbox_mode` 等字段收紧权限，但不能扩权。
+子 Agent 的权限上限始终不超出父 Agent 已解析的权限。自定义 Agent 类型（`.astro/agents/*.toml`）可通过 `sandbox_mode` 等字段收紧权限，但不能扩权。
 
 ### 4.2 自定义 Agent 配置
 
-配置仅从 `.codex/agents` 目录加载（不使用 `.astro/agents`）：
+配置仅从 `.astro/agents` 目录加载，`.codex/agents` 会被忽略：
 
 ```text
 加载顺序（后加载覆盖前加载）：
 1. 内置 Agent 定义
-2. ~/.codex/agents/*.toml         （全局自定义）
-3. <project>/.codex/agents/*.toml （项目级自定义）
+2. ~/.astro/agents/*.toml         （全局自定义）
+3. <project>/.astro/agents/*.toml （可信项目自定义）
 ```
 
 ```toml
-# .codex/agents/reviewer.toml
+# .astro/agents/reviewer.toml
 name = "reviewer"
 description = "代码审查专家"
 developer_instructions = "你是一个代码审查专家，专注于..."
@@ -413,7 +413,7 @@ pub const CODEX_V2_AGENT_TOOL_NAMES: [&str; 6] = [
 |------|------|------|
 | `task_name` | String（必填） | 子任务名称，同时用于生成 AgentPath 路径段 |
 | `message` | String（必填） | 初始任务描述 |
-| `agent_type` | Option\<String\> | 自定义 Agent 类型（加载 `.codex/agents` 定义） |
+| `agent_type` | Option\<String\> | 自定义 Agent 类型（加载 `.astro/agents` 定义） |
 | `model` | Option\<String\> | 指定模型 |
 | `reasoning_effort` | Option\<String\> | 推理强度 |
 | `fork_turns` | Option\<String\> | 上下文快照策略：`none`（默认）/ `all` / 数字 N |
@@ -602,10 +602,10 @@ pub async fn list_subagent_definitions() -> Result<Vec<AgentDefinitionDto>, Stri
 
 ## 11. 与 Skill 编排的关系
 
-自定义 Agent 定义（`.codex/agents/*.toml`）可在 `skills` 层声明启用的 Skill：
+自定义 Agent 定义（`.astro/agents/*.toml`）可在 `skills` 层声明启用的 Skill：
 
 ```toml
-# .codex/agents/researcher.toml
+# .astro/agents/researcher.toml
 name = "researcher"
 description = "深度研究 Agent"
 developer_instructions = "..."
@@ -692,10 +692,10 @@ INVARIANT 5: SpawnReservation 的 commit/abort/drop 保证槽位释放
 
 ### 13.3 配置约定
 
-- Agent 类型定义仅从 `.codex/agents` 加载，不使用 `.astro/agents`
-- 全局配置：`~/.codex/agents/*.toml`
-- 项目配置：`<project>/.codex/agents/*.toml`（后加载覆盖）
-- 启用/禁用开关：`.codex/config.toml` 中的 `[agents]` 段
+- Agent 类型定义仅从 `.astro/agents` 加载，`.codex/agents` 不生效
+- 全局配置：`~/.astro/agents/*.toml`
+- 项目配置：`<project>/.astro/agents/*.toml`（可信后加载覆盖）
+- 启用/禁用开关：`.astro/config.toml` 中的 `[agents]` 段
 
 ---
 

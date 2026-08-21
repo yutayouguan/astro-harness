@@ -2518,8 +2518,7 @@ impl AstroService for AstroServiceImpl {
         }
         drop(sessions);
 
-        let configs = mcp::load_mcp_servers_layered(Some(&agent_id), project_root.as_deref())
-            .unwrap_or_default();
+        let configs = mcp::load_mcp_servers_layered(project_root.as_deref()).unwrap_or_default();
         let servers = configs
             .into_iter()
             .map(|c| {

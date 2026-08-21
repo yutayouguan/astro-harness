@@ -22,7 +22,7 @@ astro_bundled_rev: 5
 |------|------|
 | `~/.astro/workspace/` | 默认 Agent 工作区（固定 id=`workspace`） |
 | `~/.astro/workspace-{id}/` | 其他 Agent 工作区；新建 id 为 `{slug}--{hex12}`（如 `ppt-expert--a1b2c3d4e5f6`） |
-| `~/.astro/agents/{id}/config.json` | 该 Agent 的模型 / 工具 / MCP 配置 |
+| `~/.astro/agents/{id}/config.json` | 该 Agent 的模型 / 工具配置 |
 | `~/.astro/skills/` | 公共技能（本技能所在） |
 | `workspace-{id}/skills/` | 该 Agent 专属技能 |
 
@@ -33,7 +33,7 @@ astro_bundled_rev: 5
    - `name`：显示名（可中文、可与已有助手重名）
    - **不要传 `id`**（除非用户明确指定）；系统自动生成不可变 `{slug}--{hex12}`（slug 取自 name 的 ASCII 快照，纯中文则用 `agent`）
    - `activate`: false（默认不切换；需要立刻用新 Agent 时再传 true）
-   - `inherit_config`: true（默认继承全局工具/MCP，可再改）
+   - `inherit_config`: true（默认继承全局工具开关；MCP 使用统一配置）
    - `profile`：background / style / focus / avoid / call_me / preferences
 3. 工具会创建 `workspace-{id}/` 与 `agents/{id}/config.json`，并按 profile 填充各 md。
 4. **图标**：无需手工指定。若创建引导页未上传图标，系统会按名称 / 背景 / 职能自动挑选 Lucide 图标写入 `assets/emoji.svg`。

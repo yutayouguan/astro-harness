@@ -8,7 +8,9 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use toml::Value as TomlValue;
 
-use crate::{ConfigLayerEntry, ConfigLayerError, ConfigLayerSource, ConfigLayerStack};
+use crate::{
+    ConfigLayerEntry, ConfigLayerError, ConfigLayerSource, ConfigLayerStack, EffectiveConfig,
+};
 
 pub const CONFIG_TOML_FILE: &str = "config.toml";
 pub const DOT_ASTRO_DIR: &str = ".astro";
@@ -35,7 +37,7 @@ pub const PROJECT_PROTECTED_KEYS: &[&str] = &[
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct LocalConfigOptions {
-    pub codex_home: PathBuf,
+    pub astro_home: PathBuf,
     pub cwd: PathBuf,
     pub system_config: Option<PathBuf>,
     pub profile: Option<String>,
@@ -45,9 +47,9 @@ pub struct LocalConfigOptions {
 }
 
 impl LocalConfigOptions {
-    pub fn new(codex_home: impl Into<PathBuf>, cwd: impl Into<PathBuf>) -> Self {
+    pub fn new(astro_home: impl Into<PathBuf>, cwd: impl Into<PathBuf>) -> Self {
         Self {
-            codex_home: codex_home.into(),
+            astro_home: astro_home.into(),
             cwd: cwd.into(),
             system_config: default_system_config_path(),
             profile: None,
@@ -97,6 +99,14 @@ pub struct LocalConfigLoad {
     pub diagnostics: Vec<ConfigDiagnostic>,
     pub project_root: PathBuf,
     pub project_trust: ProjectTrust,
+}
+
+impl LocalConfigLoad {
+    /// Freeze the loaded layers into the immutable snapshot consumed by one
+    /// request, turn, or long-lived subsystem configuration generation.
+    pub fn resolve(&self) -> EffectiveConfig {
+        self.layers.resolve()
+    }
 }
 
 #[derive(Debug, Error)]
@@ -169,7 +179,7 @@ pub fn load_local_config(
         }
     }
 
-    let user_path = options.codex_home.join(CONFIG_TOML_FILE);
+    let user_path = options.astro_home.join(CONFIG_TOML_FILE);
     if let Some(layer) = load_optional_file(
         &user_path,
         ConfigLayerSource::User {
@@ -190,7 +200,7 @@ pub fn load_local_config(
     if let Some(profile) = options.profile.as_deref() {
         validate_profile_name(profile)?;
         reject_legacy_profile_conflict(&discovery_config, profile, &user_path)?;
-        let path = options.codex_home.join(format!("{profile}.config.toml"));
+        let path = options.astro_home.join(format!("{profile}.config.toml"));
         if !path.is_file() {
             return Err(LocalConfigError::MissingProfile(path));
         }
@@ -268,7 +278,7 @@ pub fn validate_profile_name(profile: &str) -> Result<(), LocalConfigError> {
 fn default_system_config_path() -> Option<PathBuf> {
     #[cfg(unix)]
     {
-        Some(PathBuf::from("/etc/codex/config.toml"))
+        Some(PathBuf::from("/etc/astro/config.toml"))
     }
     #[cfg(not(unix))]
     {
@@ -505,13 +515,11 @@ mod tests {
         options.profile = Some("review".to_string());
 
         let loaded = load_local_config(&options).unwrap();
+        let effective = loaded.resolve();
         assert_eq!(loaded.project_trust, ProjectTrust::Trusted);
-        assert_eq!(
-            loaded.layers.effective_config()["model"].as_str(),
-            Some("closest-project")
-        );
+        assert_eq!(effective.raw()["model"].as_str(), Some("closest-project"));
         assert!(matches!(
-            loaded.layers.origin_at(["model"].iter()).unwrap().source,
+            effective.origin_at(["model"].iter()).unwrap().source,
             ConfigLayerSource::Project { ref dot_config_dir }
                 if dot_config_dir
                     == &fixture.nested.canonicalize().unwrap().join(DOT_ASTRO_DIR)

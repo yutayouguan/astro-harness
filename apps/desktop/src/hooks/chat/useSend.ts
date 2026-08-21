@@ -300,7 +300,7 @@ export function useSend(deps: UseSendDeps) {
           >("list_installed_skills").catch(() => []);
           const mcpList = await invoke<
             { id: string; name: string; enabled?: boolean }[]
-          >("get_mcp_servers", { agentId: null }).catch(() => []);
+          >("get_mcp_servers").catch(() => []);
 
           const resolved = await resolveComposerTurn(text, {
             agents: cfg.agents ?? [],
@@ -340,12 +340,12 @@ export function useSend(deps: UseSendDeps) {
             try {
               const servers = await invoke<
                 { id: string; name: string; enabled: boolean; [k: string]: unknown }[]
-              >("get_mcp_servers", { agentId: null });
+              >("get_mcp_servers");
               const want = new Set(resolved.enableMcpIds);
               const next = (servers ?? []).map((s) =>
                 want.has(s.id) ? { ...s, enabled: true } : s,
               );
-              await invoke("set_mcp_servers", { servers: next, agentId: null });
+              await invoke("set_mcp_servers", { servers: next });
               showTransientToast(
                 t("chat.mentionMcpEnabled", { names: resolved.enableMcpNames.join(", ") }),
               );

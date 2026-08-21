@@ -183,6 +183,7 @@ mod tests {
             model: "test".into(),
             api_key: String::new(),
             base_url: String::new(),
+            api_mode: String::new(),
         }]);
         let calls = Arc::new(AtomicUsize::new(0));
         let called = Arc::new(tokio::sync::Notify::new());
@@ -252,6 +253,7 @@ mod tests {
             model: "test".into(),
             api_key: String::new(),
             base_url: String::new(),
+            api_mode: String::new(),
         }]);
         let calls = Arc::new(AtomicUsize::new(0));
         let chat_override: crate::streaming::ChatOverride = {

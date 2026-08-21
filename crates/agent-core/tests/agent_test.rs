@@ -139,6 +139,7 @@ async fn test_set_model_agno_style_entry() {
         model: "gpt-old".into(),
         api_key: "sk-test".into(),
         base_url: "https://api.openai.com/v1".into(),
+        api_mode: String::new(),
     }]);
 
     let spec = types::ModelSpec::parse("claude:claude-sonnet-4-5")
@@ -177,6 +178,7 @@ async fn test_set_fallback_models_keeps_primary() {
         model: "opus".into(),
         api_key: "sk-claude".into(),
         base_url: "https://api.anthropic.com".into(),
+        api_mode: String::new(),
     }]);
 
     agent.set_fallback_models(&[

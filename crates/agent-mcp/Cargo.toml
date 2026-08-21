@@ -17,6 +17,7 @@ reqwest = { version = "0.13.2", default-features = false, features = ["rustls"] 
 sse-stream = "0.2"
 types         = { path = "../agent-types" }
 home          = { path = "../agent-home" }
+agent-config  = { path = "../agent-config" }
 sandbox       = { path = "../agent-sandbox" }
 rmcp = { version = "2", default-features = false, features = [
     "client",
