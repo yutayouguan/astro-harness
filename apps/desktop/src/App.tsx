@@ -97,6 +97,10 @@ import {
   ChartPie,
   Cpu,
   FolderTree,
+  Info,
+  Layers2,
+  MessageSquare,
+  ScrollText,
   Settings2,
   Sparkles,
   Store,
@@ -1007,18 +1011,22 @@ export default function App() {
                   <nav className="settings-sidebar" aria-label="Settings">
                     {([
                       { id: "preferences", label: "通用", Icon: Settings2 },
-                      { id: "providers", label: "模型", Icon: Cpu },
+                      { id: "preferences:appearance", label: "外观", Icon: Sparkles },
+                      { id: "preferences:conversation", label: "对话", Icon: MessageSquare },
+                      { id: "preferences:context", label: "上下文与压缩", Icon: Layers2 },
+                      { id: "providers", label: "模型配置", Icon: Cpu },
                       { id: "tools", label: "工具", Icon: Wrench },
                       { id: "memory", label: "记忆", Icon: Brain },
                       { id: "models", label: "模型市场", Icon: Store },
                       { id: "insights", label: "洞察", Icon: ChartPie },
-                      { id: "evolution", label: "进化", Icon: Sparkles },
+                      { id: "preferences:diagnostics", label: "诊断", Icon: ScrollText },
+                      { id: "preferences:about", label: "关于", Icon: Info },
                     ] as const).map((item) => (
                       <button
                         key={item.id}
                         type="button"
                         className={`settings-sidebar-item ${settingsTab === item.id ? "is-active" : ""}`}
-                        onClick={() => setSettingsTab(item.id)}
+                        onClick={() => setSettingsTab(item.id as SettingsTabId)}
                       >
                         <item.Icon size={18} strokeWidth={1.6} aria-hidden />
                         {item.label}
@@ -1026,8 +1034,9 @@ export default function App() {
                     ))}
                   </nav>
                   <div className="settings-content">
-                  {settingsTab === "preferences" && (
+                  {settingsTab.startsWith("preferences") && (
                     <PreferencesPanel
+                      section={settingsTab === "preferences" ? "general" : settingsTab.split(":")[1] as import("./components/settings/PreferencesPanel").PreferenceCategory}
                       mode={mode}
                       onChange={setMode}
                       colorStyle={colorStyle}

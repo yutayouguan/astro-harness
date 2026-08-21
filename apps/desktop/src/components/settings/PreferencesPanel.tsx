@@ -47,13 +47,6 @@ type LogScope = "current" | "all";
 /** 内容过滤：全部 / 只看问题（warn 及以上） */
 type LogLevelFilter = "all" | "issues";
 
-type PreferenceCategory =
-  | "appearance"
-  | "conversation"
-  | "context"
-  | "general"
-  | "diagnostics"
-  | "about";
 
 function AutostartSwitch({ tone }: { tone: string }) {
   const [enabled, setEnabled] = useState(false);
@@ -98,12 +91,17 @@ function AutostartSwitch({ tone }: { tone: string }) {
 /** 行数预设 */
 const LINE_PRESETS = [50, 100, 200] as const;
 
-/** 偏好设置入参 */
+export type PreferenceCategory =
+  | "general"
+  | "appearance"
+  | "conversation"
+  | "context"
+  | "diagnostics"
+  | "about";
+
 type Props = {
-  /** 当前主题模式 */
   mode: ThemeMode;
   onChange: (mode: ThemeMode) => void;
-  /** Shell 色彩风格：多彩 / 统一 / 灵动 */
   colorStyle: ShellColorStyle;
   onColorStyleChange: (style: ShellColorStyle) => void;
   gradient: ShellGradient;
@@ -112,9 +110,7 @@ type Props = {
   onPreviewGradient: (gradient: ShellGradient) => void;
   onCommitCustomGradient: (gradient?: ShellGradient) => void;
   onCancelCustomGradient: () => void;
-  /** 灵动模式：重新生成本机配色种子 */
   onReshuffleDynamic: () => void;
-  /** 当前 shell 主题色：blue | green | purple | orange | pink */
   tone?: string;
   chatDisplayPrefs: ChatDisplayPrefs;
   onChatVerbosityChange: (verbosity: ChatVerbosity) => void;
@@ -122,8 +118,9 @@ type Props = {
     key: keyof Omit<ChatDisplayPrefs, "verbosity">,
     value: boolean,
   ) => void;
-  /** 当前聊天会话 ID，用于预填诊断过滤 */
   activeSessionId?: string;
+  /** 由外部 settings 侧栏控制显示哪个分类；未传则显示内部导航 */
+  section?: PreferenceCategory;
 };
 
 /** 聊天展示开关字段（不含 verbosity） */
@@ -196,13 +193,17 @@ export default function PreferencesPanel({
   onChatVerbosityChange,
   onChatToggleChange,
   activeSessionId,
+  section,
 }: Props) {
   const { locale, setLocale, t } = useI18n();
   const { glassLevel, setGlassLevel } = useTheme();
   const { settings: appIcon, setIcon: setAppIcon } = useAppIcon();
   const [gradientEditorOpen, setGradientEditorOpen] = useState(false);
-  const [activeCategory, setActiveCategory] =
+  const [internalCategory, setInternalCategory] =
     useState<PreferenceCategory>("general");
+  const activeCategory = section ?? internalCategory;
+  const setActiveCategory = section ? () => {} : setInternalCategory;
+  const showInternalNav = !section;
 
   const appIconLabel = (id: AppIconId): string => {
     switch (id) {
@@ -410,7 +411,7 @@ export default function PreferencesPanel({
 
   return (
     <div className="prefs-page" data-tone={tone}>
-      <nav className="prefs-category-nav" aria-label={t("prefs.category.aria")}>
+      <nav className="prefs-category-nav" aria-label={t("prefs.category.aria")} hidden={!showInternalNav}>
         {categoryOptions.map(({ id, label, Icon }) => (
           <button
             key={id}

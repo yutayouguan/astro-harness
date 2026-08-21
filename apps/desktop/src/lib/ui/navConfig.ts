@@ -21,9 +21,13 @@ export type NavId =
   | "skills"
   | "settings";
 
-// 合并到 settings 面板的二级 tab
 export type SettingsTabId =
   | "preferences"
+  | "preferences:appearance"
+  | "preferences:conversation"
+  | "preferences:context"
+  | "preferences:diagnostics"
+  | "preferences:about"
   | "providers"
   | "tools"
   | "models"
