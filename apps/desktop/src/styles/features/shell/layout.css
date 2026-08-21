@@ -745,3 +745,41 @@ html[data-theme="dark"] .page-title-icon {
   color: var(--ink-mute);
   line-height: 1.2;
 }
+/* ── Settings tab bar ─────────────────────────────── */
+
+.settings-tab-bar {
+  display: flex;
+  gap: 2px;
+  padding: 8px 16px 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--glass-edge) 60%, transparent);
+  overflow-x: auto;
+  flex-shrink: 0;
+}
+
+.settings-tab-btn {
+  display: inline-flex;
+  align-items: center;
+  padding: 8px 14px;
+  border: none;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink-mute);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: color 0.12s, border-color 0.12s;
+}
+
+.settings-tab-btn:hover {
+  color: var(--ink);
+}
+
+.settings-tab-btn.is-active {
+  color: var(--tone, var(--tone-blue));
+  border-bottom-color: var(--tone, var(--tone-blue));
+}
+
+html[data-theme="dark"] .settings-tab-bar {
+  border-bottom-color: rgba(255, 255, 255, 0.08);
+}
