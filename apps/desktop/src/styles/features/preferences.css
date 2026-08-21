@@ -59,6 +59,10 @@
   --tone-glow: var(--tone-twilight-glow);
 }
 
+.prefs-category-nav[hidden] {
+  display: none;
+}
+
 .prefs-category-nav {
   position: sticky;
   top: 0;
