@@ -64,7 +64,7 @@ type Props = {
 
 const TAB_KEYS: Record<ChatRightTab, MessageKey> = {
   sessions: "chat.rightPanel.sessions",
-  monitor: "chat.rightPanel.monitor" as MessageKey,
+  monitor: "chat.rightPanel.monitor",
   context: "chat.rightPanel.context",
   preview: "chat.rightPanel.preview",
   agent: "chat.rightPanel.agent",

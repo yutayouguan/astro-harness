@@ -139,7 +139,7 @@ export default function TaskMonitorPanel({
         <div className="task-monitor-stat">
           <Activity size={14} strokeWidth={2} aria-hidden />
           <span className="task-monitor-stat-label">
-            {streaming ? t("chat.taskMonitor.streaming" as never) || "运行中" : t("chat.taskMonitor.idle" as never) || "空闲"}
+            {streaming ? t("chat.taskMonitor.streaming" as never) : t("chat.taskMonitor.idle" as never)}
           </span>
         </div>
         {toolRound > 0 && (
@@ -175,7 +175,7 @@ export default function TaskMonitorPanel({
         <div className="task-monitor-section">
           <div className="task-monitor-section-header">
             <Activity size={14} strokeWidth={2} aria-hidden />
-            <span>{t("chat.taskMonitor.recentTools" as never) || "最近工具调用"}</span>
+            <span>{t("chat.taskMonitor.recentTools" as never)}</span>
           </div>
           <ul className="task-monitor-activity-list">
             {recent.map((act) => (
@@ -193,7 +193,7 @@ export default function TaskMonitorPanel({
       {!streaming && summary.total === 0 && !plan && (
         <div className="task-monitor-empty">
           <XCircle size={32} strokeWidth={1.2} aria-hidden />
-          <p>{t("chat.taskMonitor.empty" as never) || "暂无活动"}</p>
+          <p>{t("chat.taskMonitor.empty" as never)}</p>
         </div>
       )}
     </div>
