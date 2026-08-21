@@ -17,17 +17,17 @@ pub mod notify;
 pub mod permissions;
 pub mod sqlite;
 pub mod text;
+pub mod thread_memory_mode;
 pub mod title;
 pub mod tool;
 pub mod tool_call;
 pub mod tool_entry;
 pub mod tool_output;
-pub mod thread_memory_mode;
 pub mod tool_spill;
 
 pub use auxiliary_target::{AuxiliaryTargetChain, AuxiliaryTask};
-pub use compact_scope::CompactTokenLimitScope;
 pub use chat_target::*;
+pub use compact_scope::CompactTokenLimitScope;
 pub use grpc_addr::{
     grpc_bind_address, resolve_grpc_address, runtime_grpc_address, set_runtime_grpc_address,
 };
@@ -62,14 +62,15 @@ pub use tool_spill::{
 pub use approval::{ApprovalAction, ApprovalDecision, ApprovalMode};
 pub use credentials::{ImageGenCreds, ImageGenParts, ImageGenTargets, ModelCredentials};
 pub use interaction_mode::InteractionMode;
+pub use memory_citation::MemoryCitation;
 pub use text::{truncate_chars, truncate_tool_result, truncate_utf8, MAX_TOOL_RESULT_BYTES};
+pub use thread_memory_mode::ThreadMemoryMode;
 pub use tool_call::{
     extract_tool_calls, resolve_tool_calls, ParsedToolCall, ToolCallAccumulator, ToolCallDelta,
 };
 pub use tool_entry::{
     ExecApprovalRequirement, McpToolAnnotations, McpToolApproval, McpToolApprovalMode,
-    McpToolApprovalRoute, NamespacedToolDef, SandboxablePreference, ToolEntry, ToolName, ToolSpec,
+    McpToolApprovalRoute, NamespacedToolDef, SandboxablePreference, ToolEntry, ToolExposure,
+    ToolName, ToolSpec,
 };
-pub use memory_citation::MemoryCitation;
-pub use thread_memory_mode::ThreadMemoryMode;
 pub use tool_output::ToolOutput;

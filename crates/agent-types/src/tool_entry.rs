@@ -101,6 +101,31 @@ pub enum SandboxablePreference {
     Forbid,
 }
 
+/// Tool visibility level for LLM context injection (aligned with Codex ToolExposure).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ToolExposure {
+    /// Always injected into LLM tools parameter.
+    #[default]
+    Direct,
+    /// Not injected; discoverable via tool_search, callable once discovered.
+    Deferred,
+    /// Completely hidden from LLM and tool_search. Internal use only.
+    Hidden,
+}
+
+impl ToolExposure {
+    pub fn is_direct(&self) -> bool {
+        *self == Self::Direct
+    }
+    pub fn is_deferred(&self) -> bool {
+        *self == Self::Deferred
+    }
+    pub fn is_hidden(&self) -> bool {
+        *self == Self::Hidden
+    }
+}
+
 /// MCP 工具审批模式，对齐 Codex `approval_mode` 配置。
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -218,9 +243,9 @@ pub struct ToolEntry {
     pub sandbox_preference: SandboxablePreference,
     pub mcp_approval: Option<McpToolApproval>,
     pub approval_requirement: ExecApprovalRequirement,
-    /// 延迟加载标记：deferred 工具不会注入 LLM tools 列表，
-    /// 仅当 `tool_search` 发现后才对模型可见。
-    pub deferred: bool,
+    /// Tool visibility level: Direct (default), Deferred (discoverable via tool_search),
+    /// or Hidden (internal only). Replaces the former `deferred: bool` flag.
+    pub exposure: ToolExposure,
 }
 
 impl ToolEntry {
@@ -238,7 +263,7 @@ impl ToolEntry {
             sandbox_preference: SandboxablePreference::Forbid,
             mcp_approval: None,
             approval_requirement: ExecApprovalRequirement::Skip,
-            deferred: false,
+            exposure: ToolExposure::Direct,
         }
     }
 
@@ -264,7 +289,13 @@ impl ToolEntry {
 
     /// 标记为延迟加载工具——不注入 LLM tools 列表，需经 `tool_search` 发现后可用。
     pub fn deferred(mut self) -> Self {
-        self.deferred = true;
+        self.exposure = ToolExposure::Deferred;
+        self
+    }
+
+    /// 标记为隐藏工具——对 LLM 和 tool_search 均不可见，仅供内部使用。
+    pub fn hidden(mut self) -> Self {
+        self.exposure = ToolExposure::Hidden;
         self
     }
 }

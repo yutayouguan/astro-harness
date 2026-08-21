@@ -232,12 +232,12 @@ impl ToolRegistry {
     /// 每个条目的 `parameters` 会经 [`crate::schema::sanitize_tool_schema`] 清理，
     /// 确保不含 `$ref`、`$defs` 等厂商不友好结构。
     ///
-    /// **延迟加载工具（`deferred = true`）不包含在返回列表中**，仅在 `tool_search`
-    /// 发现后通过 `activate_deferred` 标记为可见才会出现在后续调用中。
+    /// **非 Direct 工具不包含在返回列表中**，仅在 `tool_search`
+    /// 发现后通过 `activate_deferred` 标记为 Direct 才会出现在后续调用中。
     pub fn schemas_for_api(&self) -> Vec<serde_json::Value> {
         self.available_tools()
             .iter()
-            .filter(|e| !e.deferred) // 跳过延迟加载工具
+            .filter(|e| e.exposure.is_direct()) // 仅注入 Direct 工具
             .map(|e| {
                 serde_json::json!({
                     "type": "function",
@@ -251,10 +251,11 @@ impl ToolRegistry {
             .collect()
     }
 
-    /// 返回全部工具的 API schema（**包括** 延迟加载工具），供 `tool_search` 等搜索使用。
+    /// 返回全部工具的 API schema（包括 Deferred 但排除 Hidden），供 `tool_search` 等搜索使用。
     pub fn all_tool_schemas_including_deferred(&self) -> Vec<serde_json::Value> {
         self.available_tools()
             .iter()
+            .filter(|e| !e.exposure.is_hidden())
             .map(|e| {
                 serde_json::json!({
                     "type": "function",
@@ -270,11 +271,13 @@ impl ToolRegistry {
 
     /// 激活指定的延迟加载工具，使其在后续 `schemas_for_api` 中可见。
     ///
-    /// 工具分发（`dispatch_named_tool`）不受 `deferred` 标记影响——已注册的工具
+    /// 工具分发（`dispatch_named_tool`）不受 `exposure` 标记影响——已注册的工具
     /// 始终可调用；此方法仅控制是否向 LLM 暴露 schema。
     pub fn activate_deferred(&mut self, name: &str) {
         if let Some(entry) = self.tools.get_mut(name) {
-            entry.deferred = false;
+            if entry.exposure == types::ToolExposure::Deferred {
+                entry.exposure = types::ToolExposure::Direct;
+            }
         }
     }
 }
