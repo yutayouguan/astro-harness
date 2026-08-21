@@ -14,7 +14,6 @@ import AnimatedSwitch from "./components/ui/AnimatedSwitch";
 import AboutDialog from "./components/ui/AboutDialog";
 import ChatRightPanel from "./components/chat/ChatRightPanel";
 import ChatView from "./components/chat/ChatView";
-import CronPanel from "./components/schedule/CronPanel";
 import LoopPanel from "./components/loop/LoopPanel";
 import FilesPage from "./components/files/FilesPage";
 import InsightsPanel from "./components/settings/InsightsPanel";
@@ -86,6 +85,7 @@ import {
   PAGE_META,
   showsHeaderAgentPicker,
   type NavId,
+  type SettingsTabId,
 } from "./lib/ui/navConfig";
 import {
   readFilesSubmode,
@@ -147,6 +147,12 @@ export default function App() {
     [setThinkingLevel],
   );
   const [nav, setNav] = useState<NavId>(NAV[0].id);
+  const [settingsTab, setSettingsTab] = useState<SettingsTabId>("preferences");
+  /** 导航到 settings 并切换到指定子 tab */
+  const openSettingsTab = useCallback((tab: SettingsTabId) => {
+    setSettingsTab(tab);
+    setNav("settings");
+  }, []);
   const [filesMode, setFilesMode] = useState<FilesSubmode>(() =>
     readFilesSubmode(),
   );
@@ -469,17 +475,17 @@ export default function App() {
         }
         case "nav_tools":
           setToolsInitialTab("builtin");
-          setNav("tools");
+          openSettingsTab("tools");
           break;
         case "nav_skills":
           setNav("skills");
           break;
         case "nav_mcp":
           setToolsInitialTab("mcp");
-          setNav("tools");
+          openSettingsTab("tools");
           break;
         case "nav_memory":
-          setNav("memory");
+          openSettingsTab("memory");
           break;
         case "memory_list": {
           void (async () => {
@@ -561,10 +567,10 @@ export default function App() {
           showTransientToast(t("memory.slash.help"));
           break;
         case "nav_insights":
-          setNav("insights");
+          openSettingsTab("insights");
           break;
         case "nav_providers":
-          setNav("providers");
+          openSettingsTab("providers");
           break;
         case "nav_settings":
           setNav("settings");
@@ -602,6 +608,7 @@ export default function App() {
       setMemoryPendingCount,
       setChatRightTab,
       setChatRightOpen,
+      openSettingsTab,
     ],
   );
 
@@ -699,7 +706,7 @@ export default function App() {
             {NAV.map((item) => {
               const label = t(item.labelKey);
               const pendingBadge =
-                item.id === "memory" && chat.memoryPendingCount > 0
+                item.id === "settings" && chat.memoryPendingCount > 0
                   ? chat.memoryPendingCount > 99
                     ? "99+"
                     : String(chat.memoryPendingCount)
@@ -767,7 +774,7 @@ export default function App() {
                 <span className={`status-dot ${chat.status}`} />
                 {activeProvider?.display_name ?? t("status.none")} · {statusText}
               </span>
-              {nav === "memory"
+              {nav === "settings" && settingsTab === "memory"
                 ? memoryHeaderAgent?.show && (
                     <AgentPicker
                       className="header-agent-picker"
@@ -917,7 +924,7 @@ export default function App() {
                       onThinkingLevelChange={onThinkingLevelChange}
                       onOpenMcpSettings={() => {
                         setToolsInitialTab("mcp");
-                        setNav("tools");
+                        openSettingsTab("tools");
                       }}
                       chatMode={chatMode}
                       onChatModeChange={onChatModeChange}
@@ -960,18 +967,11 @@ export default function App() {
                       onNewAgent={startNewAgent}
                       onPrepareDeleteCurrentSession={prepareDeleteCurrentSession}
                       onClearDeletedCurrentSession={clearDeletedCurrentSession}
-                      onOpenMemory={() => setNav("memory")}
+                      onOpenMemory={() => openSettingsTab("memory")}
                       onOpenSkills={() => setNav("skills")}
                     />
                   )}
                 </div>
-              )}
-              {nav === "memory" && (
-                <MemoryPanel
-                  onClose={() => setNav("chat")}
-                  sessionId={chat.sessionId}
-                  onHeaderAgentPickerChange={setMemoryHeaderAgent}
-                />
               )}
               {nav === "files" && (
                 <FilesPage
@@ -994,40 +994,58 @@ export default function App() {
                 />
               )}
               {nav === "settings" && (
-                <PreferencesPanel
-                  mode={mode}
-                  onChange={setMode}
-                  colorStyle={colorStyle}
-                  onColorStyleChange={setColorStyle}
-                  gradient={gradient}
-                  onGradientChange={setGradient}
-                  onBeginCustomGradient={beginGradientEdit}
-                  onPreviewGradient={previewGradient}
-                  onCommitCustomGradient={commitGradientEdit}
-                  onCancelCustomGradient={cancelGradientEdit}
-                  onReshuffleDynamic={reshuffleDynamic}
-                  tone={shellTone}
-                  chatDisplayPrefs={chatDisplayPrefs}
-                  onChatVerbosityChange={setVerbosity}
-                  onChatToggleChange={setToggle}
-                  activeSessionId={chat.sessionId ?? undefined}
-                />
-              )}
-              {nav === "tools" && (
-                <ToolsPanel
-                  active={nav === "tools"}
-                  initialTab={toolsInitialTab}
-                  onInitialTabConsumed={() => setToolsInitialTab(null)}
-                />
-              )}
-              {nav === "evolution" && (
-                <EvolutionModelsPanel active={nav === "evolution"} tone={shellTone} />
-              )}
-              {nav === "insights" && (
-                <InsightsPanel active={nav === "insights"} />
-              )}
-              {nav === "models" && (
-                <ModelMarketPanel active={nav === "models"} />
+                <>
+                  {settingsTab === "preferences" && (
+                    <PreferencesPanel
+                      mode={mode}
+                      onChange={setMode}
+                      colorStyle={colorStyle}
+                      onColorStyleChange={setColorStyle}
+                      gradient={gradient}
+                      onGradientChange={setGradient}
+                      onBeginCustomGradient={beginGradientEdit}
+                      onPreviewGradient={previewGradient}
+                      onCommitCustomGradient={commitGradientEdit}
+                      onCancelCustomGradient={cancelGradientEdit}
+                      onReshuffleDynamic={reshuffleDynamic}
+                      tone={shellTone}
+                      chatDisplayPrefs={chatDisplayPrefs}
+                      onChatVerbosityChange={setVerbosity}
+                      onChatToggleChange={setToggle}
+                      activeSessionId={chat.sessionId ?? undefined}
+                    />
+                  )}
+                  {settingsTab === "tools" && (
+                    <ToolsPanel
+                      active={nav === "settings"}
+                      initialTab={toolsInitialTab}
+                      onInitialTabConsumed={() => setToolsInitialTab(null)}
+                    />
+                  )}
+                  {settingsTab === "evolution" && (
+                    <EvolutionModelsPanel active={nav === "settings"} tone={shellTone} />
+                  )}
+                  {settingsTab === "insights" && (
+                    <InsightsPanel active={nav === "settings"} />
+                  )}
+                  {settingsTab === "models" && (
+                    <ModelMarketPanel active={nav === "settings"} />
+                  )}
+                  {settingsTab === "providers" && (
+                    <ProvidersPanel
+                      active={nav === "settings"}
+                      onStateChange={syncProvidersFromState}
+                      tone={shellTone}
+                    />
+                  )}
+                  {settingsTab === "memory" && (
+                    <MemoryPanel
+                      onClose={() => setSettingsTab("preferences")}
+                      sessionId={chat.sessionId}
+                      onHeaderAgentPickerChange={setMemoryHeaderAgent}
+                    />
+                  )}
+                </>
               )}
               {nav === "loop" && (
                 <LoopPanel
@@ -1040,26 +1058,6 @@ export default function App() {
                   }))}
                   onCollapseSidebar={sidebar.collapseSidebar}
                   onExpandSidebar={sidebar.pinSidebar}
-                />
-              )}
-              {nav === "cron" && (
-                <CronPanel
-                  active={nav === "cron"}
-                  providers={providers.map((p) => ({
-                    id: p.id,
-                    name: p.display_name,
-                    model: p.model,
-                    kind: p.kind,
-                  }))}
-                  activeProviderId={activeProviderId}
-                  tone={shellTone}
-                />
-              )}
-              {nav === "providers" && (
-                <ProvidersPanel
-                  active={nav === "providers"}
-                  onStateChange={syncProvidersFromState}
-                  tone={shellTone}
                 />
               )}
             </AnimatedSwitch>
