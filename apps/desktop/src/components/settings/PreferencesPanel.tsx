@@ -410,7 +410,7 @@ export default function PreferencesPanel({
   }
 
   return (
-    <div className="prefs-page" data-tone={tone}>
+    <div className={`prefs-page ${section ? "is-embedded" : ""}`} data-tone={tone}>
       <nav className="prefs-category-nav" aria-label={t("prefs.category.aria")} hidden={!showInternalNav}>
         {categoryOptions.map(({ id, label, Icon }) => (
           <button
