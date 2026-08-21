@@ -1,6 +1,6 @@
 //! OpenAI Responses API — 消息转换与 SSE 解析。
 //!
-//! 供 [`crate::impls::openai_responses::ResponsesCompletionModel`] 使用。
+//! 供 [`crate::compat::OpenAIResponsesModel`] 和 [`crate::custom::ConfigDrivenCompletionModel`] 使用。
 
 use serde_json::{json, Value};
 

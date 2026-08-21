@@ -437,11 +437,10 @@ fn register_provider(reg: &mut crate::registry::Registry, provider: &str, config
         "google" => reg.register_google(key, base, model),
         "openai" if responses => reg.register_openai_responses(key, base, model),
         "openai" => reg.register_openai(key, base, model),
-        "deepseek" if responses => {
-            reg.register_openai_compat_responses::<crate::impls::deepseek::DeepSeek>(
+        "deepseek" if responses => reg
+            .register_openai_compat_responses::<crate::impls::deepseek::DeepSeek>(
                 "deepseek", key, base, model,
-            )
-        }
+            ),
         "deepseek" => register_compat::<crate::impls::deepseek::DeepSeek>(reg, key, base, model),
         "azure" => register_compat::<crate::impls::azure::Azure>(reg, key, base, model),
         "zhipu" => register_media::<crate::impls::zhipu::Zhipu>(reg, key, base, model),
@@ -475,17 +474,17 @@ fn register_provider(reg: &mut crate::registry::Registry, provider: &str, config
 }
 
 /// 从 ~/.astro/config.toml 查找自定义 provider 配置。
+///
+/// 每次调用都重新读取文件，支持运行时修改 config.toml 后无需重启。
+/// 文件读取开销极低（< 1ms），且仅在 dispatch fallback 分支触发。
 fn lookup_custom_provider(id: &str) -> Option<crate::custom::CustomProviderConfig> {
-    use std::sync::OnceLock;
-    static CUSTOM: OnceLock<std::collections::HashMap<String, crate::custom::CustomProviderConfig>> =
-        OnceLock::new();
-    let map = CUSTOM.get_or_init(|| {
-        let home = std::env::var("HOME")
-            .or_else(|_| std::env::var("USERPROFILE"))
-            .unwrap_or_else(|_| ".".to_string());
-        let path = std::path::PathBuf::from(home).join(".astro").join("config.toml");
-        crate::custom::load_custom_providers(&path)
-    });
+    let home = std::env::var("HOME")
+        .or_else(|_| std::env::var("USERPROFILE"))
+        .unwrap_or_else(|_| ".".to_string());
+    let path = std::path::PathBuf::from(home)
+        .join(".astro")
+        .join("config.toml");
+    let map = crate::custom::load_custom_providers(&path);
     map.get(id).cloned()
 }
 

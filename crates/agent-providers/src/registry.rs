@@ -152,28 +152,6 @@ impl Registry {
         self.providers.insert("minimax".to_string(), provider);
     }
 
-    /// 注册 Responses API provider — 旧签名（直接构造 `ResponsesCompletionModel`）。
-    pub fn register_responses(
-        &mut self,
-        id: &'static str,
-        api_key: &str,
-        base_url: Option<&str>,
-        model: &str,
-    ) {
-        let resolved_base = base_url
-            .unwrap_or(crate::profile::default_base_for(id))
-            .to_string();
-        let completion = crate::impls::openai_responses::ResponsesCompletionModel::new(
-            self.http.clone(),
-            resolved_base,
-            api_key.to_string(),
-            model.to_string(),
-            id,
-        );
-        let provider = DynProvider::new(id, id).with_completion(completion);
-        self.providers.insert(id.to_string(), provider);
-    }
-
     /// 注册 OpenAI 兼容 provider（仅 Chat）的 Responses API 变体。
     pub fn register_openai_compat_responses<Ext>(
         &mut self,

@@ -42,7 +42,12 @@ pub async fn probe(
     };
 
     let message = if let Some(p) = profile::resolve(provider_id) {
-        match (p.api_mode, p.azure_deployment_style) {
+        let effective_mode = if config.api_mode == "responses" && p.supports_responses {
+            ApiMode::Responses
+        } else {
+            p.api_mode
+        };
+        match (effective_mode, p.azure_deployment_style) {
             (ApiMode::AnthropicMessages, _) => {
                 let endpoint = resolve_endpoint(config, p.default_base_url);
                 match crate::impls::anthropic::probe_anthropic(client, &model, &endpoint, config)

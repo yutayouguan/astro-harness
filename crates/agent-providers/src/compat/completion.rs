@@ -87,15 +87,16 @@ pub fn apply_thinking_compat(
         obj.remove("thinking_config");
     }
     let enabled = tc.get("enabled").and_then(|v| v.as_bool()).unwrap_or(false);
-    let raw_effort = tc
-        .get("effort")
-        .and_then(|v| v.as_str())
-        .unwrap_or("high");
+    let raw_effort = tc.get("effort").and_then(|v| v.as_str()).unwrap_or("high");
     let mapped_effort = effort_map
         .iter()
         .find(|(k, _)| *k == raw_effort)
         .map(|(_, v)| *v)
-        .unwrap_or(if raw_effort.is_empty() { "high" } else { raw_effort });
+        .unwrap_or(if raw_effort.is_empty() {
+            "high"
+        } else {
+            raw_effort
+        });
 
     match format {
         ThinkingFormat::None => {}
@@ -264,5 +265,69 @@ where
         let stream =
             crate::shared::sse::sse_stream(response, Arc::new(extract_openai_delta)).await?;
         Ok(super::think_tag::wrap_think_tag_extraction(stream))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn thinking_none_ignores_config() {
+        let mut body = json!({"model": "m", "thinking_config": {"enabled": true, "effort": "max"}});
+        apply_thinking_compat(ThinkingFormat::None, &[], &mut body);
+        assert!(body.get("thinking_config").is_none());
+        assert!(body.get("thinking").is_none());
+        assert!(body.get("reasoning_effort").is_none());
+    }
+
+    #[test]
+    fn thinking_deepseek_enabled() {
+        let mut body = json!({"thinking_config": {"enabled": true, "effort": "xhigh"}});
+        let map = &[("max", "max"), ("xhigh", "max")];
+        apply_thinking_compat(ThinkingFormat::DeepSeek, map, &mut body);
+        assert_eq!(body["thinking"]["type"], "enabled");
+        assert_eq!(body["reasoning_effort"], "max");
+        assert!(body.get("thinking_config").is_none());
+    }
+
+    #[test]
+    fn thinking_deepseek_disabled() {
+        let mut body = json!({"thinking_config": {"enabled": false}});
+        apply_thinking_compat(ThinkingFormat::DeepSeek, &[], &mut body);
+        assert_eq!(body["thinking"]["type"], "disabled");
+        assert!(body.get("reasoning_effort").is_none());
+    }
+
+    #[test]
+    fn thinking_reasoning_effort_replaces_max_tokens() {
+        let mut body = json!({"max_tokens": 4096, "thinking_config": {"enabled": true, "effort": "high"}});
+        let map = &[("max", "high"), ("xhigh", "high")];
+        apply_thinking_compat(ThinkingFormat::ReasoningEffort, map, &mut body);
+        assert_eq!(body["reasoning_effort"], "high");
+        assert!(body.get("max_tokens").is_none());
+        assert_eq!(body["max_completion_tokens"], 4096);
+    }
+
+    #[test]
+    fn thinking_minimax_adaptive() {
+        let mut body = json!({"thinking_config": {"enabled": true}});
+        apply_thinking_compat(ThinkingFormat::MiniMaxAdaptive, &[], &mut body);
+        assert_eq!(body["reasoning_split"], true);
+        assert_eq!(body["thinking"]["type"], "adaptive");
+    }
+
+    #[test]
+    fn effort_map_passthrough_unknown() {
+        let mut body = json!({"thinking_config": {"enabled": true, "effort": "medium"}});
+        apply_thinking_compat(ThinkingFormat::DeepSeek, &[("max", "max")], &mut body);
+        assert_eq!(body["reasoning_effort"], "medium");
+    }
+
+    #[test]
+    fn effort_map_empty_defaults_to_high() {
+        let mut body = json!({"thinking_config": {"enabled": true, "effort": ""}});
+        apply_thinking_compat(ThinkingFormat::DeepSeek, &[], &mut body);
+        assert_eq!(body["reasoning_effort"], "high");
     }
 }

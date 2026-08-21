@@ -128,13 +128,15 @@ where
             }
         }
 
-        // Reasoning / Thinking
+        // Reasoning / Thinking — 经过 EFFORT_MAP 映射
         if let Some(ref tc) = request.thinking {
             if tc.enabled {
-                let effort = match tc.effort.trim() {
-                    "" | "high" => "high",
-                    other => other,
-                };
+                let raw = tc.effort.trim();
+                let effort = Ext::EFFORT_MAP
+                    .iter()
+                    .find(|(k, _)| *k == raw)
+                    .map(|(_, v)| *v)
+                    .unwrap_or(if raw.is_empty() { "high" } else { raw });
                 if Ext::RESPONSES_REASONING_SUMMARY {
                     body["reasoning"] = json!({"effort": effort, "summary": "auto"});
                 } else {
