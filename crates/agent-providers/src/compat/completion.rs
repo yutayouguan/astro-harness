@@ -42,6 +42,15 @@ pub trait OpenAICompatible: ProviderExt {
     /// 是否支持 Responses API（`/responses` 端点）。
     const SUPPORTS_RESPONSES: bool = false;
 
+    /// Responses API: 是否设置 `store: false`（OpenAI 平台专有）。
+    const RESPONSES_STORE_FALSE: bool = false;
+
+    /// Responses API: 是否启用 `parallel_tool_calls`。
+    const RESPONSES_PARALLEL_TOOLS: bool = false;
+
+    /// Responses API: reasoning 对象是否包含 `summary: "auto"`。
+    const RESPONSES_REASONING_SUMMARY: bool = false;
+
     /// Thinking 请求格式。
     const THINKING_FORMAT: ThinkingFormat = ThinkingFormat::None;
 

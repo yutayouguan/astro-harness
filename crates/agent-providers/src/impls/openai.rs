@@ -36,6 +36,9 @@ impl ProviderExt for OpenAI {
 impl OpenAICompatible for OpenAI {
     const STREAM_USAGE: bool = true;
     const SUPPORTS_RESPONSES: bool = true;
+    const RESPONSES_STORE_FALSE: bool = true;
+    const RESPONSES_PARALLEL_TOOLS: bool = true;
+    const RESPONSES_REASONING_SUMMARY: bool = true;
     const THINKING_FORMAT: ThinkingFormat = ThinkingFormat::ReasoningEffort;
     const EFFORT_MAP: &'static [(&'static str, &'static str)] =
         &[("max", "high"), ("xhigh", "high")];

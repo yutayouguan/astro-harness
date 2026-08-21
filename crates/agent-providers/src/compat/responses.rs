@@ -65,7 +65,6 @@ where
 
         let base = crate::compat::openai_compatible_base(&self.base_url);
         let url = format!("{base}/responses");
-        let is_openai = Ext::NAME.starts_with("openai");
         let model = if request.model.is_empty() {
             &self.model
         } else {
@@ -87,7 +86,7 @@ where
             "input": input,
             "stream": true,
         });
-        if is_openai {
+        if Ext::RESPONSES_STORE_FALSE {
             body["store"] = json!(false);
         }
         if let Some(inst) = instructions {
@@ -124,7 +123,7 @@ where
                 .collect();
             body["tools"] = Value::Array(tools);
             body["tool_choice"] = json!("auto");
-            if is_openai {
+            if Ext::RESPONSES_PARALLEL_TOOLS {
                 body["parallel_tool_calls"] = json!(true);
             }
         }
@@ -136,7 +135,7 @@ where
                     "" | "high" => "high",
                     other => other,
                 };
-                if is_openai {
+                if Ext::RESPONSES_REASONING_SUMMARY {
                     body["reasoning"] = json!({"effort": effort, "summary": "auto"});
                 } else {
                     body["reasoning"] = json!({"effort": effort});
