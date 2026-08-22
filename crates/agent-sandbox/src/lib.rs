@@ -305,7 +305,11 @@ impl SandboxRunner {
         #[cfg(target_os = "macos")]
         {
             let mut command = tokio::process::Command::new(MACOS_SANDBOX_EXEC);
-            command.arg("-p").arg(macos_profile(policy)).arg(program);
+            command.arg("-p").arg(macos_profile(policy));
+            for (i, root) in policy.writable_roots.iter().enumerate() {
+                command.arg(format!("-DWRITABLE_ROOT_{i}={}", root.display()));
+            }
+            command.arg(program);
             Ok(command)
         }
         #[cfg(not(target_os = "macos"))]
@@ -327,7 +331,11 @@ impl SandboxRunner {
         #[cfg(target_os = "macos")]
         {
             let mut command = std::process::Command::new(MACOS_SANDBOX_EXEC);
-            command.arg("-p").arg(macos_profile(policy)).arg(program);
+            command.arg("-p").arg(macos_profile(policy));
+            for (i, root) in policy.writable_roots.iter().enumerate() {
+                command.arg(format!("-DWRITABLE_ROOT_{i}={}", root.display()));
+            }
+            command.arg(program);
             Ok(command)
         }
         #[cfg(not(target_os = "macos"))]
@@ -348,22 +356,22 @@ impl SandboxRunner {
 }
 
 #[cfg(target_os = "macos")]
+const PROTECTED_METADATA_DIRS: &[&str] = &[".git", ".agents", ".astro", ".codex"];
+
+#[cfg(target_os = "macos")]
 fn macos_profile(policy: &SandboxPolicy) -> String {
     let mut profile = String::from(
         "(version 1)\n(deny default)\n(allow file-read*)\n(allow process*)\n(allow sysctl-read)\n(allow mach-lookup)\n(allow ipc-posix-shm)\n(allow signal)\n",
     );
     if policy.mode == SandboxMode::WorkspaceWrite {
-        for root in &policy.writable_roots {
+        for (i, root) in policy.writable_roots.iter().enumerate() {
             profile.push_str(&format!(
-                "(allow file-write* (subpath \"{}\"))\n",
-                seatbelt_escape(root)
+                "(allow file-write* (subpath (param \"WRITABLE_ROOT_{i}\")))\n"
             ));
-            for protected in [".git", ".agents", ".astro"] {
-                profile.push_str(&format!(
-                    "(deny file-write* (subpath \"{}\"))\n",
-                    seatbelt_escape(&root.join(protected))
-                ));
-            }
+            let _ = root; // used via -D param at command construction time
+        }
+        for dir in PROTECTED_METADATA_DIRS {
+            profile.push_str(&format!("(deny file-write* (regex #\"/{dir}(/|$)\"))\n"));
         }
     }
     if let Some(managed_network) = &policy.managed_network {
@@ -390,14 +398,6 @@ fn macos_profile(policy: &SandboxPolicy) -> String {
     profile
 }
 
-#[cfg(target_os = "macos")]
-fn seatbelt_escape(path: &Path) -> String {
-    path.to_string_lossy()
-        .replace('\\', "\\\\")
-        .replace('"', "\\\"")
-        .replace('\n', "\\n")
-        .replace('\r', "\\r")
-}
 
 #[cfg(test)]
 mod tests {
@@ -458,10 +458,7 @@ mod tests {
         {
             let profile = macos_profile(&policy);
             assert!(!profile.contains("(allow network*)"));
-            assert!(profile.contains(&format!(
-                "(deny file-write* (subpath \"{}\"))",
-                seatbelt_escape(&dir.path().canonicalize().unwrap().join(".git"))
-            )));
+            assert!(profile.contains("(deny file-write* (regex #\"/.git(/|$)\"))"));
         }
     }
 
@@ -562,7 +559,13 @@ mod tests {
             SandboxPolicy::new(SandboxMode::WorkspaceWrite, dir.path(), Vec::new(), false).unwrap();
         let profile = macos_profile(&policy);
         assert!(profile.contains("(deny default)"));
-        assert!(profile.contains(".git"));
+        for dir_name in PROTECTED_METADATA_DIRS {
+            assert!(
+                profile.contains(&format!("(deny file-write* (regex #\"/{dir_name}(/|$)\"))")),
+                "missing protection for {dir_name}"
+            );
+        }
+        assert!(profile.contains("WRITABLE_ROOT_0"));
         assert!(!profile.contains("(allow network*)"));
     }
 
