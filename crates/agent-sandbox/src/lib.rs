@@ -11,6 +11,8 @@ use network_proxy::ManagedNetworkSandboxContext;
 mod audit;
 #[cfg(target_os = "linux")]
 pub mod linux;
+#[cfg(target_os = "macos")]
+pub mod macos;
 #[cfg(target_os = "windows")]
 pub mod windows;
 
@@ -20,8 +22,6 @@ pub use audit::{
     try_append_sandbox_audit, SandboxAuditEvent, SandboxAuditKind, SandboxAuditMetadata,
     MAX_SANDBOX_AUDIT_FILE_BYTES, SANDBOX_AUDIT_ARCHIVE_COUNT,
 };
-
-const MACOS_SANDBOX_EXEC: &str = "/usr/bin/sandbox-exec";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -260,7 +260,7 @@ impl SandboxRunner {
     pub fn probe(&self) -> SandboxHealth {
         #[cfg(target_os = "macos")]
         {
-            let available = Path::new(MACOS_SANDBOX_EXEC).is_file();
+            let available = macos::probe();
             SandboxHealth {
                 backend: SandboxBackend::MacosSeatbelt,
                 status: if available {
@@ -271,7 +271,7 @@ impl SandboxRunner {
                 detail: if available {
                     "macOS Seatbelt sandbox-exec is available".to_string()
                 } else {
-                    format!("{MACOS_SANDBOX_EXEC} is missing")
+                    format!("{} is missing", macos::SANDBOX_EXEC)
                 },
             }
         }
@@ -325,13 +325,7 @@ impl SandboxRunner {
         self.ensure_available()?;
         #[cfg(target_os = "macos")]
         {
-            let mut command = tokio::process::Command::new(MACOS_SANDBOX_EXEC);
-            command.arg("-p").arg(macos_profile(policy));
-            for (i, root) in policy.writable_roots.iter().enumerate() {
-                command.arg(format!("-DWRITABLE_ROOT_{i}={}", root.display()));
-            }
-            command.arg(program);
-            Ok(command)
+            Ok(macos::seatbelt_tokio_command(policy, program))
         }
         #[cfg(target_os = "linux")]
         {
@@ -359,13 +353,7 @@ impl SandboxRunner {
         self.ensure_available()?;
         #[cfg(target_os = "macos")]
         {
-            let mut command = std::process::Command::new(MACOS_SANDBOX_EXEC);
-            command.arg("-p").arg(macos_profile(policy));
-            for (i, root) in policy.writable_roots.iter().enumerate() {
-                command.arg(format!("-DWRITABLE_ROOT_{i}={}", root.display()));
-            }
-            command.arg(program);
-            Ok(command)
+            Ok(macos::seatbelt_std_command(policy, program))
         }
         #[cfg(target_os = "linux")]
         {
@@ -390,49 +378,6 @@ impl SandboxRunner {
             Err(SandboxError::BackendUnavailable(health.detail))
         }
     }
-}
-
-#[cfg(target_os = "macos")]
-const PROTECTED_METADATA_DIRS: &[&str] = &[".git", ".agents", ".astro", ".codex"];
-
-#[cfg(target_os = "macos")]
-fn macos_profile(policy: &SandboxPolicy) -> String {
-    let mut profile = String::from(
-        "(version 1)\n(deny default)\n(allow file-read*)\n(allow process*)\n(allow sysctl-read)\n(allow mach-lookup)\n(allow ipc-posix-shm)\n(allow signal)\n",
-    );
-    if policy.mode == SandboxMode::WorkspaceWrite {
-        for (i, root) in policy.writable_roots.iter().enumerate() {
-            profile.push_str(&format!(
-                "(allow file-write* (subpath (param \"WRITABLE_ROOT_{i}\")))\n"
-            ));
-            let _ = root; // used via -D param at command construction time
-        }
-        for dir in PROTECTED_METADATA_DIRS {
-            profile.push_str(&format!("(deny file-write* (regex #\"/{dir}(/|$)\"))\n"));
-        }
-    }
-    if let Some(managed_network) = &policy.managed_network {
-        if managed_network.allow_local_binding {
-            profile.push_str("; allow local binding and loopback traffic\n");
-            profile.push_str("(allow network-bind (local ip \"*:*\"))\n");
-            profile.push_str("(allow network-inbound (local ip \"localhost:*\"))\n");
-            profile.push_str("(allow network-outbound (remote ip \"localhost:*\"))\n");
-            if !managed_network.loopback_ports.is_empty() {
-                profile.push_str(
-                    "; allow DNS lookups while application traffic remains proxy-routed\n",
-                );
-                profile.push_str("(allow network-outbound (remote ip \"*:53\"))\n");
-            }
-        }
-        for port in &managed_network.loopback_ports {
-            profile.push_str(&format!(
-                "(allow network-outbound (remote ip \"localhost:{port}\"))\n"
-            ));
-        }
-    } else if policy.network_access {
-        profile.push_str("(allow network*)\n");
-    }
-    profile
 }
 
 #[cfg(test)]
@@ -492,7 +437,7 @@ mod tests {
 
         #[cfg(target_os = "macos")]
         {
-            let profile = macos_profile(&policy);
+            let profile = macos::seatbelt_profile(&policy);
             assert!(!profile.contains("(allow network*)"));
             assert!(profile.contains("(deny file-write* (regex #\"/.git(/|$)\"))"));
         }
@@ -593,9 +538,9 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let policy =
             SandboxPolicy::new(SandboxMode::WorkspaceWrite, dir.path(), Vec::new(), false).unwrap();
-        let profile = macos_profile(&policy);
+        let profile = macos::seatbelt_profile(&policy);
         assert!(profile.contains("(deny default)"));
-        for dir_name in PROTECTED_METADATA_DIRS {
+        for dir_name in macos::PROTECTED_METADATA_DIRS {
             assert!(
                 profile.contains(&format!("(deny file-write* (regex #\"/{dir_name}(/|$)\"))")),
                 "missing protection for {dir_name}"
@@ -610,7 +555,7 @@ mod tests {
     fn unmanaged_network_access_keeps_legacy_allow_rule() {
         let dir = tempfile::tempdir().unwrap();
         let policy = SandboxPolicy::new(SandboxMode::WorkspaceWrite, dir.path(), [], true).unwrap();
-        let profile = macos_profile(&policy);
+        let profile = macos::seatbelt_profile(&policy);
 
         assert!(policy.managed_network.is_none());
         assert!(profile.contains("(allow network*)"));
@@ -623,7 +568,7 @@ mod tests {
         let policy = SandboxPolicy::new(SandboxMode::WorkspaceWrite, root.path(), [], false)
             .unwrap()
             .with_managed_network(managed_network_context([43_117], false));
-        let profile = macos_profile(&policy);
+        let profile = macos::seatbelt_profile(&policy);
 
         assert!(profile.contains("(allow network-outbound (remote ip \"localhost:43117\"))"));
         assert!(!profile.contains("(allow network*)"));
@@ -638,7 +583,7 @@ mod tests {
         let policy = SandboxPolicy::new(SandboxMode::WorkspaceWrite, root.path(), [], false)
             .unwrap()
             .with_managed_network(managed_network_context([43_117], true));
-        let profile = macos_profile(&policy);
+        let profile = macos::seatbelt_profile(&policy);
 
         assert!(profile.contains("(allow network-bind (local ip \"*:*\"))"));
         assert!(profile.contains("(allow network-inbound (local ip \"localhost:*\"))"));
