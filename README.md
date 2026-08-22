@@ -145,36 +145,49 @@ cd apps/desktop && npm run tauri dev
 
 ```text
 astro/
-├── Cargo.toml              # Workspace 根
+├── Cargo.toml              # Workspace 根（25 个 crate + 1 个桌面应用）
 ├── crates/                 # 所有 Rust crate（扁平 agent-* 命名）
-│   ├── agent-core/         # Agent 循环、流式输出、工具编排
-│   ├── agent-types/        # 共享类型与错误
-│   ├── agent-providers/    # 模型供应商
-│   ├── agent-tools/        # 工具实现
-│   ├── agent-memory/       # 本地记忆 / 工作区
-│   ├── agent-server/       # gRPC 服务
-│   ├── agent-session/      # 会话库（SQLite）
-│   ├── agent-skills/       # Skills
+│   ├── agent-core/         # Agent 运行时核心（Session、streaming、工具路由）
+│   ├── agent-types/        # 共享类型（Message、ToolEntry、ToolExposure 等）
+│   ├── agent-config/       # 分层配置原语
+│   ├── agent-protocol/     # Core 领域事件协议
+│   ├── agent-rollout/      # JSONL append-only 历史
+│   ├── agent-providers/    # 多厂商 LLM/图像 Provider（15+ 厂商）
+│   ├── agent-tools/        # 工具实现 + ToolRegistry（BM25 搜索、三级暴露）
+│   ├── agent-subagents/    # V2 Agent Thread 子 Agent 系统
+│   ├── agent-memory/       # 记忆管理
+│   ├── agent-server/       # gRPC 服务端
+│   ├── agent-session/      # 会话库（SQLite WAL + FTS5）
+│   ├── agent-sandbox/      # 沙箱权限控制
+│   ├── agent-network-proxy/ # 受管网络代理
+│   ├── agent-skills/       # Skills 管理
 │   ├── agent-mcp/          # MCP 客户端
-│   ├── agent-hooks/        # 生命周期钩子
-│   ├── agent-proto/        # Protobuf / tonic
-│   └── ...                 # 另有 9 个 crate
+│   ├── agent-hooks/        # 三总线 Hook 系统
+│   ├── agent-proto/        # Protobuf / tonic gRPC 契约
+│   └── ...                 # 另有 8 个 crate（artifacts/usage/cron/workflow/a2ui/delegate/evolution/home）
 └── apps/
-    └── desktop/            # React + Vite UI + Tauri 壳
+    └── desktop/            # React + Vite UI + Tauri 2 壳
 ```
 
-| Crate | 说明 |
+| package name | 说明 |
 |-------|------|
 | `astro-agent` | Tauri 桌面应用（`apps/desktop/src-tauri`） |
-| `agent` | 对话与工具调用核心 |
+| `agent` | Agent 运行时核心（Session、AstroThread、streaming） |
 | `server` | gRPC 服务（可独立运行；桌面壳默认同进程内嵌） |
-| `providers` | LLM / 图像等供应商适配 |
-| `memory` | 记忆、工作区 |
-| `session` | 会话消息与账单 |
+| `providers` | 多厂商 LLM / 图像供应商适配 |
+| `tools` | 工具实现 + ToolRegistry（ToolExposure 三级暴露、BM25 搜索） |
+| `subagents` | V2 Agent Thread 子 Agent 系统 |
+| `memory` | 记忆管理（MEMORY.md/USER.md 快照） |
+| `session` | 会话消息与账单（SQLite WAL + FTS5） |
 | `usage` | 用量统计与 Tracing 洞察 |
-| `skills` / `tools` / `mcp` | 扩展能力 |
+| `sandbox` | 沙箱权限控制（PermissionProfile） |
+| `network-proxy` | 受管网络代理 |
+| `agent-config` | 分层配置原语 |
+| `agent-protocol` | Core 领域事件协议（Event、EventMsg） |
+| `agent-rollout` | JSONL append-only 权威历史 |
+| `skills` / `mcp` | 扩展能力（Skills 管理、MCP 客户端） |
 | `hooks` | Plugin / Gateway / Shell 三套生命周期钩子 |
-| `proto` / `types` | 协议与公共类型 |
+| `proto` / `types` | gRPC 契约与公共类型 |
 
 钩子说明见 [`docs/hooks.md`](./docs/hooks.md)。
 

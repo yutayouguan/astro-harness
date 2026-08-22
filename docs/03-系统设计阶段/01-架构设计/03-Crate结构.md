@@ -2,465 +2,186 @@
 
 > 阶段：系统设计 | 状态：定稿 | 说明：各 Rust crate 详细结构与核心 trait 定义
 >
-> 本文档已根据 04-详细设计阶段 的所有详细设计文档进行同步更新（2026-08-10）。
+> 本文档已根据实际代码库同步更新（2026-08-22）。
 
 ## Cargo Workspace 根配置
+
+所有 Rust crate 扁平放置在 `crates/agent-*` 下（package name 保持短名），Tauri 桌面应用在 `apps/desktop/src-tauri`。共 25 个 crate + 1 个桌面应用 = 26 个 workspace 成员。
 
 ```toml
 [workspace]
 members = [
     "crates/agent-types",
-    "crates/agent-core",
+    "crates/agent-config",
+    "crates/agent-protocol",
+    "crates/agent-rollout",
+    "crates/agent-home",
+    "crates/agent-skills",
+    "crates/agent-hooks",
     "crates/agent-providers",
-    "crates/agent-runtime",
-    "crates/agent-mcp-server",
-    "crates/agent-evals",
+    "crates/agent-proto",
+    "crates/agent-session",
+    "crates/agent-artifacts",
+    "crates/agent-usage",
+    "crates/agent-mcp",
+    "crates/agent-memory",
+    "crates/agent-network-proxy",
+    "crates/agent-sandbox",
+    "crates/agent-delegate",
+    "crates/agent-subagents",
+    "crates/agent-evolution",
+    "crates/agent-cron",
+    "crates/agent-workflow",
+    "crates/agent-a2ui",
+    "crates/agent-tools",
+    "crates/agent-core",
+    "crates/agent-server",
     "apps/desktop/src-tauri",
 ]
 resolver = "2"
 
 [workspace.dependencies]
 tokio        = { version = "1", features = ["full"] }
+tokio-util   = { version = "0.7" }
 serde        = { version = "1", features = ["derive"] }
 serde_json   = "1"
 anyhow       = "1"
-thiserror    = "2"
+thiserror    = "1"
 async-trait  = "0.1"
 tracing      = "0.1"
-tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
-uuid         = { version = "1", features = ["v4", "serde"] }
-chrono       = { version = "0.4", features = ["serde"] }
-reqwest      = { version = "0.12", features = ["json", "stream", "multipart"] }
-tokio-stream = "0.1"
-bytes        = "1"
-rhai         = "1"
+schemars     = "0.8"
+globset      = "0.4"
+reqwest      = { version = "0.12", features = ["json", "stream", "rustls-tls", "macos-system-configuration"], default-features = false }
 ```
+
+## Crate 总览表
+
+| 路径 | package name | 职责 |
+|---|---|---|
+| `crates/agent-types` | `types` | 跨 crate 共享类型：`Message`、`Role`、`ToolCall`、`ToolEntry`（含 `ToolExposure`、`namespace`）、`MediaAsset`、`ChatTarget`、`ModelSpec`、`NetworkPolicy`、`PermissionProfile`、SQLite helpers、tool-spill。零业务逻辑。 |
+| `crates/agent-config` | `agent-config` | 分层配置原语：`ConfigLayer`、`ConfigLayerSource`（4 级优先级）、`ConfigKeyPath`。无产品特有字段，不做文件系统发现。 |
+| `crates/agent-protocol` | `agent-protocol` | Core 领域事件协议：`Event`、`EventMsg`、`TurnItem`、`Submission`。运行时唯一事件格式。 |
+| `crates/agent-rollout` | `agent-rollout` | JSONL append-only 历史记录：`RolloutRecorder`、`PersistencePolicy`、`reconstruct` 重建。rollout 是线程历史的权威事实源。 |
+| `crates/agent-home` | `home` | `~/.astro` 路径约定、日志、agent config YAML、tool-enable gates。无 SQLite。 |
+| `crates/agent-skills` | `skills` | Skill 管理 — 安装、加载、注册表、摘要、备份。Skill frontmatter `astro_tools` 可 additive 开放 toolset。 |
+| `crates/agent-hooks` | `hooks` | 三总线 hook 系统：Plugin（进程内同步 `PluginHookBus`）、Gateway（文件扫描外部 manifest）、Shell（config-map 异步 shell 命令）。Codex 对齐事件名。 |
+| `crates/agent-providers` | `providers` | 多厂商 LLM/图像 Provider 层：trait 系统（`OpenAICompatible` + `ThinkingFormat`）、数据驱动兼容、Responses API、TOML 自定义 provider、`ProviderProfile` 表、流式 `ChatStream`、fallback 链。支持 Google Interactions、OpenAI、Claude、DeepSeek、MiniMax、Ollama、Azure、混元等 15+ 厂商。 |
+| `crates/agent-proto` | `proto` | Protobuf / tonic gRPC 服务契约（backend ↔ Tauri shell）。Thread submit/resume/subscribe、ChatControl、媒体、Skill、MCP、Memory、AgentThreadChanged 等 RPC。 |
+| `crates/agent-session` | `session` | `SessionStore`（`state.db` WAL SQLite，schema v17，FTS5）— 消息、会话、billing、FTS 召回、rollout 投影重建。 |
+| `crates/agent-artifacts` | `artifacts` | 文件空间索引（`artifacts.db`）+ Knowledge Content DB（`knowledge.db`，FTS）。按来源注册文件，MIME 分类。 |
+| `crates/agent-usage` | `usage` | 用量事件 DB（`usage.db`）、per-agent 统计、路由感知成本估算（官方定价快照 + OpenRouter API）、trace insights、eval JSONL 导出。 |
+| `crates/agent-mcp` | `mcp` | MCP 客户端 — per-agent 进程级连接池（`McpHub`），工具发现与调用、OAuth 认证。工具名约定：`mcp__{server}__{tool}`。 |
+| `crates/agent-memory` | `memory` | `MemoryManager` — MEMORY.md/USER.md 快照、dreaming 管道、待审批记忆队列、decision log、workspace bootstrap、权限审计。 |
+| `crates/agent-network-proxy` | `network-proxy` | 受管网络代理：HTTP CONNECT 策略、per-attempt 租约、网络审批流。 |
+| `crates/agent-sandbox` | `sandbox` | 沙箱权限控制：`PermissionProfile`（read-only/workspace-write/danger-full-access）、权限审计、网络策略。 |
+| `crates/agent-delegate` | `worktree` | 轻量级工具执行代理（已精简，核心子 Agent 逻辑迁移到 `agent-subagents`）。 |
+| `crates/agent-subagents` | `subagents` | Codex V2 Agent Thread：`AgentControl`（根级共享控制器）、`AgentGraphStore`（subagents.db 图/邮箱/状态事件）、`AgentRegistry`（RAII 预留/配额）、`ActivityBus`（事件等待）、`.astro` 自定义 agent 配置。 |
+| `crates/agent-evolution` | `evolution` | 自进化/学习循环：改进提议、评判、信号分析、评估集、DSPy 集成。配套 Python 包 `evolution-dspy/`。 |
+| `crates/agent-cron` | `cron` | Cron job JSON 持久化、运行记录 DB（`cron.db`）、ticker（每 30s，`current_thread` runtime）。 |
+| `crates/agent-workflow` | `workflow` | 可视化工作流引擎：29 种节点跨 6 类（Trigger/AI/Media/FlowControl/DataProcessing/Action），DAG 执行引擎、变量解析、运行 DB。 |
+| `crates/agent-a2ui` | `a2ui` | AG-UI 声明式生成式 UI 表面：22 种组件（Text、Card、Button、Image、Audio、Video、Metric、ClarifyWizard 等）、模板、校验。 |
+| `crates/agent-tools` | `tools` | 全部内置工具实现（`register_all`）、注册表/分发、ToolExposure 三级暴露（Direct/Deferred/Hidden）、BM25 工具搜索、审批逻辑、HITL、schema sanitization。内部目录：`engine/`（注册表/分发/catalog/schema）、`builtin/`（shell/agents/hitl/media/memory/present）。 |
+| `crates/agent-core` | `agent` | Agent 运行时核心：`Session` 状态机、`AstroThread` 句柄、`submission_loop` 有序提交、`SessionTask`/`ActiveTurn` 任务生命周期、`TurnContext`/`StepContext` 层级上下文、工具路由（`ToolRouter`）、压缩、HITL、hooks、prompt 组装。 |
+| `crates/agent-server` | `server` | gRPC 服务端（tonic）：Thread submit/resume/subscribe RPC、`ThreadHistoryBuilder` 活跃 Turn 快照、per-connection 128 容量队列、慢消费者断连。`run_embedded()` 供 Tauri in-process 使用。 |
+| `apps/desktop/src-tauri` | `astro-agent` | Tauri 2 桌面 shell。默认内嵌 backend（随机端口 `127.0.0.1:0`），单实例，系统托盘。Thread 事件流桥接。插件：window-vibrancy、tauri-plugin-clipboard、tauri-plugin-window-state、tauri-plugin-autostart。 |
 
 ---
 
-## agent-types（共享类型 crate）
-
-> **架构决策**：为打破 agent-core 与 agent-providers 之间的潜在循环依赖，提取所有跨 crate 共享的类型和 trait 定义到独立的 `agent-types` crate。该 crate 是整个项目的最底层依赖，零业务逻辑。
-
-**目录结构**：
+## 依赖方向
 
 ```text
-crates/agent-types/
-├── src/
-│   ├── lib.rs
-│   ├── message.rs          # Message, ContentPart, MessageRole
-│   ├── tool.rs             # Tool trait, ToolInput, ToolOutput, ToolError, ToolCall, ToolResult
-│   ├── provider.rs         # TextClient, EmbeddingClient, TtsClient, AsrClient, ImageClient, VideoClient, MusicClient traits
-│   ├── skill.rs            # Skill trait, SkillManifest
-│   ├── media.rs            # MediaContent, MediaData, ImageSize, VideoGenStatus, MusicPollResult
-│   ├── permission.rs       # Permission(5 核心变体: ReadFile/WriteFile/Network/Execute/SpawnAgent，v0.3 扩展至 12), PermissionSet, RiskLevel(Low/Medium/High/Critical 四级，不含 None)
-│   ├── error.rs            # AgentError, ProviderError(11变体, 含 is_retryable()/should_failover()), ToolError(8变体)
-│   ├── cost.rs             # CostRecord
-│   ├── context.rs          # TurnContext（短生命周期上下文，见 AgentSession/TurnContext 拆分）
-│   ├── event.rs            # AgentEvent enum（TokenChunk/ThinkingDelta/ToolCall/ToolResult/ApprovalRequest/Done/Error）
-│   ├── hook.rs             # HookEvent enum（18种事件），HookContext, HookPayload, HookResult
-│   ├── budget.rs           # BudgetConfig, WorkspaceBudgetConfig, OverflowPolicy
-│   └── lifecycle.rs        # AgentLifecycle enum（Uninitialized/Initializing/Ready/Running{conversation_id}/Paused{reason}/Terminating/Terminated{reason}）
-├── Cargo.toml
-```
-
-**依赖方向**（严格单向，禁止循环）：
-
-```text
-agent-types          ← 零依赖的纯类型层
+agent-types / agent-config / agent-protocol  ← 零业务逻辑的底层基础
     ↑
-agent-providers      ← 实现 Provider traits（依赖 agent-types）
-agent-core           ← 内置工具 + 存储层（依赖 agent-types）
+agent-rollout / agent-home / agent-skills / agent-hooks
+agent-providers / agent-sandbox
     ↑
-agent-runtime        ← 执行循环 + HumanGuard（依赖 core + providers + types）
-agent-mcp-server     ← MCP 暴露（依赖 runtime + types）
-agent-evals          ← 评估套件（依赖 runtime + types）
+agent-session / agent-artifacts / agent-usage / agent-mcp / agent-memory
+agent-delegate / agent-subagents / agent-network-proxy
+    ↑
+agent-tools            ← 工具实现 + ToolRegistry（BM25 搜索、ToolExposure 暴露控制）
+    ↑
+agent-core             ← 运行时核心（Session、streaming、exec、prompt、compression）
+    ↑
+agent-server           ← gRPC 服务端
+    ↑
+apps/desktop/src-tauri ← Tauri 桌面壳
 ```
 
 ---
 
 ## agent-core
 
-**职责边界**：内置工具实现（`tools/builtin/`）、存储访问层、记忆子系统、Hook 引擎、安全策略、预算管理、可观测性及知识库。核心 trait 与共享类型已提取到 `agent-types`，agent-core 依赖 `agent-types` 获取 `Tool`/`Skill`/`Message` 等类型定义，不再直接定义跨 crate 共享的 trait。不包含 Agent 执行主循环等编排逻辑，禁止依赖 agent-runtime 或 agent-providers。
-Agent 主循环（`AgentExecutor::run()`）位于 **agent-runtime**，agent-core 提供内置工具实现与存储层，保证依赖倒置。
+**职责边界**：Agent 运行时核心 — Session 生命周期、AstroThread 句柄、submission_loop 有序提交、SessionTask/ActiveTurn 任务生命周期、TurnContext/StepContext 层级上下文、工具路由（ToolRouter）、流式补全、上下文压缩、HITL 控制、prompt 组装。
+
+主要子模块：
+
+- **`runtime/`** — Session 生命周期、`AstroThread`、`SessionIo`、`submission_loop`、`SessionState`、`SessionServices`、`TurnContext`、`StepContext`、`ToolRouter`、`ToolRuntime`、turn lifecycle、context maintenance、recording、system prompt
+- **`tasks/`** — 可恢复任务生命周期：`SessionTask`、`ActiveTurn`、`TaskKind`、spawn/cancel/terminal 事件保证
+- **`streaming/`** — 流式补全：fallback、HITL bridge、多轮 streaming、provider 抽象、tool 执行、summary
+- **`exec/`** — 执行域：`AgentControlDirectory`（根级 AgentControl 进程目录）、`AgentRuntimeManager`（活跃 turn 管理）、subagents（单 turn 运行器）、dispatch（V2 6 工具分发 + 桌面控制面）、cron、background、memory review、title generation
+- **`compression/`** — tool 结果压缩（原文保留，压缩视图给 provider）
+- **`control/`** — HITL gate、中断状态机、schema 校验、smart approval、网络审批
+- **`prompt/`** — 上下文组装、hook 集成、消息变换、prompt builder、sanitization
+
+---
+
+## agent-tools
+
+**职责边界**：全部内置工具实现与注册表。工具通过 `register_all()` 批量注册到 `ToolRegistry`。
+
+内部目录结构：
 
 ```text
-crates/agent-core/src/
-├── lib.rs
-├── error.rs               # CoreError 统一错误枚举
-├── agent/
-│   ├── mod.rs             # AgentTrait 接口定义
-│   └── state.rs           # AgentState 枚举（9变体，见下文）
-├── skills/
-│   ├── mod.rs             # SkillTrait + SkillManifest
-│   ├── manifest.rs        # SkillManifest 解析与验证
-│   ├── registry.rs        # SkillRegistry + BM25 动态筛选
-│   ├── loader.rs          # 多级发现：内置 → 用户 → 工作区 → 项目
-│   ├── context_inject.rs  # !cmd 预处理与上下文注入
-│   ├── substitution.rs    # $ARGUMENTS 变量替换
-│   ├── invocation.rs      # Skill 调用执行逻辑
-│   ├── lifecycle.rs       # Skill 生命周期管理
-│   ├── overrides.rs       # Skill 覆盖与优先级
-│   ├── permissions.rs     # Skill 权限声明与校验
-│   ├── watcher.rs         # 文件变更检测与热加载
-│   └── evolution.rs       # Skill 自动演进（与自我进化子系统协同）
-├── tools/
-│   ├── mod.rs             # Tool trait + ToolRegistry + ToolInput/ToolOutput/ToolError
-│   ├── builtin/           # 内置原子工具（实现 Tool trait）
-│   │   ├── file.rs        # file_read / file_write / file_edit / ...
-│   │   ├── dir.rs         # dir_list / dir_search
-│   │   ├── shell.rs       # shell_exec / shell_bg / process_kill
-│   │   ├── network.rs     # http_request（Medium 风险）/ web_search
-│   │   ├── code.rs        # python_exec / rhai_exec / wasm_exec
-│   │   ├── memory.rs      # memory_search / memory_manage / memory_snapshot / memory_purge
-│   │   ├── skill.rs       # skill_search / skill_run / skill_manage
-│   │   ├── knowledge.rs   # knowledge_search / knowledge_ingest / knowledge_manage
-│   │   ├── agent.rs       # delegate_task（统一名称）/ agent_pause
-│   │   └── system.rs      # system_info
-│   └── mcp/               # MCP 工具适配层
-│       ├── mod.rs
-│       ├── client.rs      # MCP client 实现
-│       └── transport.rs    # 统一传输层（基于 rmcp crate，仅支持 STDIO / Streamable HTTP）
-│       └── bridge.rs      # McpToolBridge → Tool trait 适配（风险等级可配置：per-server + per-tool override）
-│   # 注：浏览器工具（goto/fetch/screenshot/click/type）通过 MCP Server（mcp-server-puppeteer）提供，
-│   #     不内置。避免捆绑 Chromium（100MB+ 包体积），且浏览器进程天然隔离更安全。
-├── hooks/                 # Hook 引擎
-│   ├── mod.rs
-│   ├── event.rs           # HookEvent 定义与匹配
-│   ├── registry.rs        # HookRegistry — Hook 注册与查找
-│   ├── pipeline.rs        # HookPipeline — 事件触发与链式执行
-│   ├── config.rs          # Hook 配置解析
-│   ├── shell_hook.rs      # Shell Hook 执行器
-│   └── builtin/           # 内置 Hook 实现
-│       ├── privacy.rs     # 隐私保护 Hook
-│       ├── security.rs    # 安全审计 Hook
-│       ├── observability.rs # 可观测性 Hook
-│       ├── budget.rs      # 预算检查 Hook
-│       ├── audit.rs       # 审计日志 Hook
-│       └── prompt_guard.rs # Prompt 注入防护 Hook
-├── security/              # 安全策略引擎
-│   ├── mod.rs
-│   ├── policy.rs          # SecurityPolicy — 安全策略定义与评估
-│   ├── path_guard.rs      # 路径访问守卫
-│   ├── domain_guard.rs    # 域名白名单守卫
-│   ├── shell_guard.rs     # Shell 命令过滤守卫
-│   ├── prompt_guard.rs    # Prompt 注入检测
-│   ├── rate_limiter.rs    # 速率限制器
-│   ├── audit.rs           # 安全审计日志
-│   └── config.rs          # 安全配置
-├── budget/                # 预算管理
-│   ├── mod.rs
-│   ├── manager.rs         # BudgetManager — 预算分配与跟踪
-│   ├── pricing.rs         # ModelPricingTable — 模型定价表
-│   ├── estimator.rs       # CostEstimator — 成本预估
-│   ├── degradation.rs     # 预算耗尽时的降级策略
-│   └── report.rs          # CostReport — 成本报告生成
-├── telemetry/             # 可观测性
-│   ├── mod.rs
-│   ├── logger.rs          # LogEvent — 结构化日志
-│   ├── tracer.rs          # SpanTree, SpanCollector — 分布式追踪
-│   ├── metrics.rs         # MetricsCollector — 指标采集
-│   ├── cost.rs            # TokenUsage — Token 用量统计
-│   └── privacy.rs         # 日志脱敏器
-├── knowledge/             # 知识库
-│   ├── mod.rs
-│   ├── service.rs         # KnowledgeService — 知识库服务入口
-│   ├── ingestor.rs        # KnowledgeIngestor trait — 文档摄入
-│   ├── chunker.rs         # RecursiveChunker — 递归文本分块
-│   ├── retriever.rs       # HybridRetriever — 混合检索（BM25 + 向量）
-│   └── repo.rs            # KnowledgeRepo — 知识库存储
-├── memory/
-│   ├── mod.rs             # MemoryStore trait
-│   ├── episodic.rs        # 情节记忆：短期对话上下文 (Vec<Message>)
-│   ├── semantic.rs        # 语义记忆：sqlite-vec 向量检索
-│   ├── persistent.rs      # 持久记忆：MEMORY.md / USER.md 冻结快照注入
-│   ├── procedural.rs      # 程序性记忆：Skills 索引
-│   └── user_model.rs      # 用户建模：LLM 推理 → USER.md 更新
-├── storage/
-│   ├── mod.rs
-│   ├── repos/             # 存储仓库层
-│   │   ├── conversation.rs # 对话持久化
-│   │   ├── message.rs     # 消息存储
-│   │   ├── memory.rs      # 记忆存储
-│   │   ├── media.rs       # 媒体资源存储
-│   │   ├── knowledge.rs   # 知识库存储
-│   │   ├── usage.rs       # 用量记录
-│   │   └── span.rs        # Span 追踪存储
-│   └── migration/         # 数据迁移
-│       ├── mod.rs         # MigrationRunner — 迁移执行引擎
-│       ├── backup.rs      # 迁移前备份
-│       ├── data_migrator.rs # 数据迁移器
-│       └── online.rs      # 在线迁移（零停机）
-├── evolution/             # 自我进化子系统（v0.3 精简版）
-│   ├── mod.rs
-│   ├── trace.rs           # TaskTrace 记录
-│   ├── reflection.rs      # LLM 反思（任务完成后生成改进建议）
-│   └── skill_extractor.rs # "保存为 Skill" — 从对话提取 SKILL.md
-└── config.rs
-```
-
-### 核心 Trait
-
-```rust
-// Tool trait — 原子能力单元（权威定义，与 05-工具系统设计.md 保持一致）
-#[async_trait]
-pub trait Tool: Send + Sync {
-    fn name(&self) -> &str;
-    fn description(&self) -> &str;
-    fn input_schema(&self) -> serde_json::Value;    // JSON Schema draft-07
-    fn risk_level(&self) -> RiskLevel;
-    fn required_permissions(&self) -> Vec<Permission>;
-    fn is_readonly(&self) -> bool;
-    fn timeout_ms(&self) -> u64 { 30_000 }
-    async fn execute(&self, input: ToolInput) -> Result<ToolOutput, ToolError>;
-}
-// 完整类型定义见 05-工具系统设计.md §2
-
-// Skill trait — 高层能力单元（可编排多个 Tool）
-#[async_trait]
-pub trait Skill: Send + Sync {
-    fn manifest(&self) -> &SkillManifest;
-    async fn execute(
-        &self,
-        session: &AgentSession,
-        ctx: &mut TurnContext,
-        input: SkillInput,
-    ) -> anyhow::Result<SkillOutput>;
-}
-```
-
-### Agent 状态机
-
-```rust
-/// 9 变体状态机，覆盖完整 Agent 生命周期（无关联数据，状态轻量可 Clone）
-pub enum AgentState {
-    Idle,                          // 空闲，等待输入
-    Planning,                      // 正在规划
-    WaitingForPlanConfirmation,    // 等待用户确认计划
-    ExecutingTool,                 // 执行工具中
-    WaitingForApproval,            // 等待人工审批
-    SpawningAgent,                 // 生成子 Agent
-    Paused,                        // 暂停
-    Done,                          // 完成
-    Failed,                        // 失败
-}
-```
-
-### AgentSession + TurnContext — 两层上下文模型
-
-> **设计理由**：将原 `AgentContext` 拆分为两层，解决了"God Object"问题：
->
-> - `AgentSession` 持有 Arc 引用，创建成本低，整个会话复用
-> - `TurnContext` 每轮构建，包含动态变化的消息历史和工具列表
-> - `AgentExecutor` 持有 `AgentSession`，每次 `round_loop` 迭代从 session 构建临时 `TurnContext`
-
-```rust
-/// 长生命周期：整个会话期间持有，存储注册表引用
-/// 位于 agent-runtime
-pub struct AgentSession {
-    pub session_id: Uuid,
-    pub workspace_id: String,
-    pub tools: Arc<ToolRegistry>,
-    pub skills: Arc<SkillRegistry>,
-    pub providers: Arc<ProviderRegistry>,
-    pub supervisor: Arc<Mutex<Supervisor>>,
-    pub memory: Arc<dyn MemoryStore>,
-    pub budget: Arc<TokenBudget>,
-    pub guard: Arc<HumanGuard>,
-    pub span: tracing::Span,
-}
-
-/// 短生命周期：每轮构建，包含当前轮次的上下文数据
-/// 位于 agent-types
-pub struct TurnContext {
-    pub conversation_id: String,
-    pub model: String,
-    pub system_prompt: String,
-    pub messages: Vec<Message>,
-    pub available_tools: Vec<ToolDefinition>,  // 本轮可用工具（BM25 动态筛选后）
-    pub max_tool_rounds: u32,                   // 默认 25
-    pub depth: u8,                              // 子 Agent 深度
-    pub round: u32,                             // 当前轮次计数
-}
+crates/agent-tools/src/
+├── lib.rs                    # register_all()、interaction_mode
+├── engine/                   # 工具引擎核心
+│   ├── registry.rs           # ToolRegistry — schemas_for_api / activate_deferred / BM25 搜索
+│   ├── dispatch.rs           # 工具分发与执行
+│   ├── catalog.rs            # 工具目录列表
+│   ├── context.rs            # 工具执行上下文
+│   ├── execution.rs          # 执行器
+│   ├── executor.rs           # 异步执行器
+│   ├── schema.rs             # JSON Schema 清理（sanitize_tool_schema）
+│   ├── network.rs            # 网络策略检查
+│   └── path_safe.rs          # 路径安全检查
+├── builtin/                  # 内置工具实现
+│   ├── shell/                # Shell / 系统工具
+│   │   ├── terminal.rs       # shell_exec
+│   │   ├── file_ops.rs       # file_read / file_write / file_edit 等
+│   │   ├── code_exec.rs      # python_exec
+│   │   ├── web_fetch.rs      # web_fetch
+│   │   ├── web_search.rs     # web_search
+│   │   ├── jobs.rs           # 后台任务
+│   │   ├── tool_search.rs    # tool_search — BM25 延迟工具发现
+│   │   ├── context_remaining.rs  # get_context_remaining
+│   │   ├── new_context_window.rs # new_context_window
+│   │   ├── request_plugin_install.rs # request_plugin_install
+│   │   └── wait_for_environment.rs   # wait_for_environment
+│   ├── agents/               # 子 Agent 工具（spawn_agent 等 6 个 V2 工具）
+│   ├── hitl/                 # HITL 工具（switch_mode 等）
+│   ├── media/                # 媒体工具（image_gen / tts / video / music）
+│   ├── memory/               # 记忆工具
+│   └── present/              # 展示工具（a2ui）
+└── approval.rs               # 审批逻辑
 ```
 
 ---
 
 ## agent-providers
 
-多模态、多 Provider 实现层。依赖 `agent-types` 获取 `TextClient`/`EmbeddingClient` 等 Provider trait 定义及 `Message`/`MediaContent` 等共享类型，不依赖 `agent-core`。`ProviderError` 统一枚举定义于 `agent-types`，每个变体均实现 `retryability() -> Retryability` 方法以支持上层重试决策。
+多厂商 LLM/图像 Provider 层。trait 系统（`OpenAICompatible` + `ThinkingFormat`）实现数据驱动兼容。
 
-```text
-crates/agent-providers/src/
-├── lib.rs
-├── types/
-│   ├── mod.rs
-│   ├── message.rs          # 统一消息格式
-│   ├── media.rs            # MediaContent 枚举
-│   ├── embedding.rs
-│   └── capabilities.rs     # Provider 能力声明
-├── traits/
-│   ├── mod.rs
-│   ├── text.rs             # TextClient trait
-│   ├── embedding.rs        # EmbeddingClient trait
-│   ├── image.rs            # ImageClient trait
-│   ├── audio.rs            # TtsClient / AsrClient trait
-│   ├── video.rs            # VideoClient trait
-│   └── music.rs            # MusicClient trait
-├── registry.rs             # ProviderRegistry，运行时路由
-├── failover.rs             # FailoverClient — 故障转移客户端，CircuitBreaker 熔断器，CircuitState 状态机
-├── middleware/
-│   └── privacy.rs          # PrivacyMiddleware — 请求/响应隐私过滤
-└── providers/
-    ├── anthropic/
-    ├── openai/
-    ├── google/
-    │   ├── mod.rs
-    │   ├── interactions.rs  # GoogleInteractionsClient — 对话/Agent + Lyria 3 音乐生成
-    │   ├── generate.rs      # GoogleGenerateContentClient — 嵌入/RAG/批量
-    │   ├── image.rs         # Imagen 3（图像生成）
-    │   ├── tts.rs           # Cloud TTS Chirp3-HD（语音合成）
-    │   ├── asr.rs           # Cloud STT（语音识别）
-    │   ├── embedding.rs     # text-embedding-004
-    │   ├── video.rs         # Veo 3.1（视频生成，8秒，LongRunning 轮询）
-    │   └── music.rs         # Lyria 3（音乐生成，via Interactions API，Clip/Pro 两型）
-    ├── deepseek/
-    │   └── mod.rs           # DeepSeekClient — reasoning_content 回传处理
-    ├── minimax/
-    │   ├── mod.rs           # MiniMaxClient — reasoning_split / base_resp / max_completion_tokens
-    │   ├── tts.rs           # speech-2.8-hd（语音合成，流式；支持情感标签/字幕/音色设计/声音克隆）
-    │   ├── asr.rs           # asr-01（语音识别）
-    │   ├── image.rs         # image-01 / image-01-live（文生图+图生图，人物主体参考，画风控制）
-    │   ├── video.rs         # video-01（视频生成，Task 模式轮询）
-    │   ├── music.rs         # music-3.0 / music-cover（音乐生成 + 翻唱，含歌词生成接口）
-    │   └── voice.rs         # 音色设计（/v1/voice_design）+ 声音克隆上传（/v1/files/upload）
-    └── ollama/
-        └── mod.rs           # OllamaClient — 实现 TextClient + EmbeddingClient，本地模型推理
-```
+**协议管线**（5 种 `ApiMode`）：`ChatCompletions`（OpenAI 兼容）、`Responses`（OpenAI Responses API）、`AnthropicMessages`、`Interactions`（Google Gemini）、`GeminiNative`。
 
----
-
-## agent-runtime
-
-**职责边界**：Agent 执行主循环 + 脚本/WASM 沙箱执行器。依赖 agent-core（内置工具 + 存储）、agent-providers（LLM 调用）和 agent-types（共享类型），对应分层架构图中的 **L3 运行时编排层**。`AgentSession`（长生命周期会话上下文）定义于此 crate。
-
-```text
-crates/agent-runtime/src/
-├── lib.rs
-├── executor.rs             # AgentExecutor::round_loop() — Agent 主循环
-├── planner.rs              # Planner — 自适应规划
-├── instance.rs             # AgentInstance — 顶层Agent对象、AgentLifecycle状态机
-├── pending_queue.rs        # PendingQueue — 运行中消息注入
-├── context.rs              # AgentContext construction
-├── retry.rs                # with_retry, IsRetryable, exponential backoff
-├── event_emitter.rs        # EventEmitter trait, TauriEventEmitter
-├── supervisor.rs           # Supervisor — 子Agent生命周期
-├── orchestrator.rs         # SkillOrchestrator
-├── session/
-│   ├── mod.rs
-│   ├── manager.rs          # AgentSessionManager — 并发实例管理、LRU缓存
-│   └── handle.rs           # SessionHandle
-├── guard/
-│   ├── mod.rs
-│   ├── human_guard.rs      # HumanGuard — GuardState状态机
-│   ├── state.rs            # GuardState enum（Running/Pending/Paused/Takeover）
-│   ├── whitelist.rs        # 白名单快速通行
-│   └── sub_agent_guard.rs  # SubAgentGuard — 子Agent资源限制
-├── sandbox/
-│   ├── mod.rs
-│   ├── wasm_sandbox.rs     # [v0.3 暂缓] Wasmtime WASM沙箱，MCP+SKILL.md 已覆盖
-│   ├── rhai_sandbox.rs     # Rhai脚本沙箱
-│   └── shell.rs            # Shell命令沙箱
-├── background/
-│   ├── mod.rs
-│   ├── media_poller.rs     # MediaTaskPoller
-│   ├── distiller.rs        # MemoryDistiller
-│   └── memory_gc.rs        # MemoryGC — 过期记忆清理（按 TTL，非 GDPR 保留策略）
-├── hooks/
-│   ├── mod.rs
-│   ├── wasm_hook.rs        # [v0.3 暂缓] WasmPluginHook
-│   └── integration.rs      # register_builtin_hooks, round_loop集成
-├── skills/
-│   ├── mod.rs
-│   ├── test_runner.rs      # SkillTestRunner
-│   └── subagent.rs         # Skill subagent执行
-├── workflow/
-│   ├── mod.rs
-│   ├── skill_chain.rs      # SkillChain — 顺序执行 + 条件分支（v0.3 精简版）
-│   ├── trigger.rs          # 手动触发 + CronTrigger（v0.3 精简版）
-│   └── compiler.rs         # compile_to_skill() — 工作流→SKILL.md
-└── provider/
-    ├── failover.rs         # FailoverClient
-    ├── circuit_breaker.rs  # CircuitBreaker
-    └── network_monitor.rs  # NetworkMonitor — 离线检测
-```
-
----
-
-## agent-mcp-server
-
-将本 Agent 的能力暴露为标准 MCP server，供其他 Agent 或工具调用。
-
-```text
-crates/agent-mcp-server/src/
-├── main.rs
-├── server.rs           # MCP server 协议实现
-└── handlers.rs         # Agent 能力 → MCP resource/tool 映射
-```
-
----
-
-## agent-evals
-
-独立评估套件，衡量 Agent 质量（非单元测试）。
-
-```text
-crates/agent-evals/src/
-├── main.rs              # CLI入口：astro eval run --dataset xxx.yaml
-├── dataset.rs           # EvalDataset, EvalCase — YAML 格式数据集
-├── runner.rs            # EvalRunner — 顺序执行
-├── judge/
-│   ├── mod.rs
-│   ├── exact.rs         # 精确匹配
-│   ├── contains.rs      # 关键词包含
-│   └── regex.rs         # 正则匹配
-└── report.rs            # 通过率统计 + CI 门控（pass_rate >= threshold）
-```
+**TOML 自定义 Provider**：用户在 `~/.astro/config.toml` 中声明即可接入任何 OpenAI 兼容 API，零代码。
 
 ---
 
 ## apps/desktop（Tauri 桌面应用）
 
-Tauri 2 桌面应用壳层，通过 Tauri Command 暴露 agent-runtime 能力给前端 UI。依赖 agent-runtime 和 agent-types。
+Tauri 2 桌面应用壳层，默认内嵌 gRPC backend（随机端口），通过 Thread 事件流桥接前端 UI。
 
-```text
-apps/desktop/src-tauri/src/
-├── main.rs
-├── lib.rs               # Tauri plugin注册
-├── state.rs             # AppState — 依赖注入容器
-├── error.rs             # AppError — 顶层错误枚举
-├── sidecar.rs           # OllamaSidecar管理
-├── commands/
-│   ├── mod.rs
-│   ├── conversation.rs  # 对话CRUD
-│   ├── message.rs       # 消息发送/流式
-│   ├── workspace.rs     # 工作区管理
-│   ├── guard.rs         # HumanGuard审批
-│   ├── budget.rs        # 预算状态/设置
-│   ├── skill.rs         # Skill操作
-│   ├── knowledge.rs     # 知识库操作
-│   ├── search.rs        # 全局搜索
-│   ├── export.rs        # 导出/分享
-│   ├── settings.rs      # 设置读写
-│   ├── telemetry.rs     # 可观测性/指标
-│   ├── security.rs      # 安全策略
-│   ├── privacy.rs       # 隐私设置
-│   ├── workflow.rs      # 工作流操作
-│   ├── marketplace.rs   # Agent市场
-│   ├── update.rs        # 应用更新
-│   └── agent.rs         # Agent生命周期
-└── events.rs            # Tauri事件定义
-```
+插件：window-vibrancy（窗口毛玻璃）、tauri-plugin-clipboard（剪贴板）、tauri-plugin-window-state（窗口状态持久化）、tauri-plugin-autostart（开机自启）。
 
 ---
 
