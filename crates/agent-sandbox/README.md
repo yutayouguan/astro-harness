@@ -6,7 +6,9 @@ Agent 派生进程的 OS 级平台沙箱入口：基于三级权限模型生成�
 
 - 封装 `SandboxPolicy`：三级权限模型（ReadOnly / WorkspaceWrite / DangerFullAccess）、可写根目录列表、网络访问策略
 - 提供 `SandboxRunner`：探测平台后端可用性，包装 `tokio::process::Command` 和 `std::process::Command` 注入沙箱策略
-- macOS Seatbelt SBPL 配置文件生成：保护工作区元数据（`.git` / `.agents` / `.astro`）为只读
+- macOS Seatbelt SBPL 配置文件生成：参数化路径传递、regex 保护元数据（`.git`/`.agents`/`.astro`/`.codex`）
+- Linux Bubblewrap 后端：用户/PID/IPC/网络命名空间隔离、只读根挂载、元数据只读保护
+- Windows Job Object 后端（v1）：进程隔离、代理环境变量注入
 - 沙箱拒绝检测：`is_likely_sandbox_denied()` 保守分类器，支持 Codex 重试升级决策
 - 托管网络沙箱：`ManagedNetworkSandboxContext` 精确 loopback 端口放行与本地绑定策略
 - 安全审计日志：append-only JSONL（`audit/sandbox.jsonl`），8MB 轮转归档，分页查询
@@ -15,8 +17,10 @@ Agent 派生进程的 OS 级平台沙箱入口：基于三级权限模型生成�
 
 | 文件 | 职责 |
 |------|------|
-| `lib.rs` | 沙箱核心：`SandboxPolicy`（策略封装）、`SandboxRunner`（平台探测与命令包装）、`SandboxBackend` / `SandboxHealth`（后端状态）、`ExecToolCallOutput`（结构化进程输出）、`is_likely_sandbox_denied()`（拒绝分类器）、`SandboxError`（错误类型）、macOS Seatbelt SBPL 生成 |
-| `audit.rs` | 安全审计层：`SandboxAuditEvent`（审计事件）、`SandboxAuditKind`（Spawned / Denied / BackendUnavailable）、`SandboxAuditMetadata`（调用方上下文）、append-only JSONL 写入、8MB 轮转归档、分页查询、批量清理 |
+| `lib.rs` | 沙箱核心：`SandboxPolicy`、`SandboxRunner`（平台探测与命令包装）、macOS Seatbelt SBPL 生成、`is_likely_sandbox_denied()` 拒绝分类器 |
+| `linux.rs` | Linux Bubblewrap 后端：`bwrap_command()` 挂载/命名空间组装、`probe_bwrap()` 探测、seccomp 信号检测 |
+| `windows.rs` | Windows Job Object 后端（v1）：`windows_command()` 进程隔离、`WindowsAclSetup` 类型准备 |
+| `audit.rs` | 安全审计层：append-only JSONL 写入、8MB 轮转归档、分页查询 |
 
 ## 核心类型与 API
 
@@ -53,22 +57,27 @@ Agent 派生进程的 OS 级平台沙箱入口：基于三级权限模型生成�
 
 | 平台 | 后端 | 状态 |
 |------|------|------|
-| macOS | Seatbelt（`sandbox-exec`） | 已实现，生产可用 |
-| Linux | Bubblewrap | 未实现（返回 Unavailable） |
-| Windows | Native | 未实现（返回 Unavailable） |
-| 其他 | Unrestricted | 不支持，返回 Unavailable |
+| macOS | Seatbelt（`sandbox-exec`） | 已实现，参数化路径 + regex 保护 |
+| Linux | Bubblewrap（`bwrap`） | 已实现，命名空间隔离 + 只读挂载 |
+| Windows | Job Object | v1 已实现（进程隔离），v2 计划 ACL + WFP |
+| 其他 | Unrestricted | 不支持，fail-closed |
 
-macOS Seatbelt SBPL 配置文件特性：
-- 默认拒绝所有操作（`deny default`）
-- 全局允许文件读取（`allow file-read*`）
-- WorkspaceWrite 模式下仅允许指定根目录写入
-- `.git` / `.agents` / `.astro` 子目录始终禁止写入
-- 网络策略独立于文件系统策略
+macOS Seatbelt SBPL 特性：
+- `(deny default)` 默认拒绝 + `(allow file-read*)` 全局可读
+- 参数化路径 `-DWRITABLE_ROOT_N=<path>` + `(subpath (param "WRITABLE_ROOT_N"))`
+- Regex 元数据保护 `(deny file-write* (regex #"/.git(/|$)"))` 四目录
+- 网络策略：端口级精确放行（managed）或 `(allow network*)`（unmanaged）
+
+Linux Bubblewrap 特性：
+- `--ro-bind / /` 全局只读 + `--bind` 可写工作区
+- `--ro-bind .git .git` 元数据只读保护
+- `--unshare-user/pid/ipc/net` 命名空间隔离
+- `--setenv` 代理环境变量注入
 
 ## 关键不变量
 
 1. **Fail closed**：受限模式下平台后端不可用时拒绝执行，不回退到无沙箱直跑
-2. **元数据保护**：WorkspaceWrite 模式下 `.git` / `.agents` / `.astro` 目录始终只读
+2. **元数据保护**：WorkspaceWrite 模式下 `.git`/`.agents`/`.astro`/`.codex` 目录始终只读
 3. **DangerFullAccess 跳过沙箱**：该模式直接返回原生 Command，不经过平台沙箱
 4. **拒绝分类保守**：exit code 2/126/127 排除在外（命令本身不存在或语法错误，非沙箱拒绝）
 5. **托管网络精确放行**：`with_managed_network` 仅允许指定 loopback 端口，其余网络访问被拒绝
