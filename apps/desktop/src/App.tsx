@@ -12,6 +12,7 @@ import { listen } from "@tauri-apps/api/event";
 
 import AboutDialog from "./components/ui/AboutDialog";
 import ChatRightPanel from "./components/chat/ChatRightPanel";
+import ProjectContextMenu from "./components/chat/ProjectContextMenu";
 import ChatView from "./components/chat/ChatView";
 import LoopPanel from "./components/loop/LoopPanel";
 import FilesPage from "./components/files/FilesPage";
@@ -162,6 +163,7 @@ export default function App() {
   ]);
   const [activeProjectPath, setActiveProjectPath] = useState("default");
   const [collapsedProjects, setCollapsedProjects] = useState<Set<string>>(new Set());
+  const [projectMenu, setProjectMenu] = useState<{ path: string; name: string; x: number; y: number } | null>(null);
   /** 导航到 settings 并切换到指定子 tab */
   const openSettingsTab = useCallback((tab: SettingsTabId) => {
     setSettingsTab(tab);
@@ -739,7 +741,14 @@ export default function App() {
               </button>
             </div>
             {projects.map((proj) => (
-              <div key={proj.path} className={`sidebar-project ${activeProjectPath === proj.path ? "is-active" : ""}`}>
+              <div
+                key={proj.path}
+                className={`sidebar-project ${activeProjectPath === proj.path ? "is-active" : ""}`}
+                onContextMenu={(e) => {
+                  e.preventDefault();
+                  setProjectMenu({ path: proj.path, name: proj.name, x: e.clientX, y: e.clientY });
+                }}
+              >
                 <div className="sidebar-project-header">
                   <button
                     type="button"
@@ -760,6 +769,21 @@ export default function App() {
                       : <FolderOpen size={16} strokeWidth={1.7} aria-hidden />
                     }
                     <span className="sidebar-item-label">{proj.name}</span>
+                  </button>
+                  <button
+                    type="button"
+                    className="sidebar-project-more"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      const rect = e.currentTarget.getBoundingClientRect();
+                      setProjectMenu({ path: proj.path, name: proj.name, x: rect.right + 4, y: rect.top });
+                    }}
+                    title="更多"
+                    aria-label="更多"
+                  >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+                      <circle cx="12" cy="5" r="1.5" /><circle cx="12" cy="12" r="1.5" /><circle cx="12" cy="19" r="1.5" />
+                    </svg>
                   </button>
                   <button
                     type="button"
@@ -1146,6 +1170,27 @@ export default function App() {
         </div>
       )}
 
+      {projectMenu && (
+        <ProjectContextMenu
+          x={projectMenu.x}
+          y={projectMenu.y}
+          projectName={projectMenu.name}
+          projectPath={projectMenu.path}
+          onAction={(action) => {
+            if (action === "remove") {
+              setProjects((prev) => prev.filter((p) => p.path !== projectMenu.path));
+              if (activeProjectPath === projectMenu.path) {
+                setActiveProjectPath(projects[0]?.path ?? "default");
+              }
+            } else if (action === "reveal" && projectMenu.path !== "default") {
+              void import("@tauri-apps/plugin-shell").then((mod) =>
+                mod.open(projectMenu.path)
+              ).catch(() => {});
+            }
+          }}
+          onClose={() => setProjectMenu(null)}
+        />
+      )}
       {toastHost}
       <AboutDialog open={aboutOpen} onClose={() => setAboutOpen(false)} />
     </div>
