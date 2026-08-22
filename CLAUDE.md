@@ -57,7 +57,7 @@ cd apps/desktop && npm run tauri:build:universal    # universal-apple-darwin
 | 路径 | package name | 职责 |
 |---|---|---|
 | `crates/agent-core` | `agent` | Agent 运行时核心：`Session` 状态机、`AstroThread` 句柄、`submission_loop` 有序提交、`SessionTask`/`ActiveTurn` 任务生命周期、`TurnContext`/`StepContext` 层级上下文、工具路由（`ToolRouter`）、压缩、HITL、hooks、prompt 组装。 |
-| `crates/agent-providers` | `providers` | 多厂商 LLM/图像 Provider 层：流式 `ChatStream`、fallback 链。支持 Google Interactions、OpenAI、Claude、DeepSeek、MiniMax、Ollama、Azure 等。 |
+| `crates/agent-providers` | `providers` | 多厂商 LLM/图像 Provider 层：trait 系统（`OpenAICompatible` + `ThinkingFormat`）、数据驱动兼容、Responses API、TOML 自定义 provider、`ProviderProfile` 表、流式 `ChatStream`、fallback 链。支持 Google Interactions、OpenAI、Claude、DeepSeek、MiniMax、Ollama、Azure、混元等 15+ 厂商。 |
 | `crates/agent-memory` | `memory` | `MemoryManager` — MEMORY.md/USER.md 快照、dreaming 管道、待审批记忆队列、decision log、workspace bootstrap、权限审计。 |
 | `crates/agent-subagents` | `subagents` | Codex V2 Agent Thread：`AgentControl`（根级共享控制器）、`AgentGraphStore`（subagents.db 图/邮箱/状态事件）、`AgentRegistry`（RAII 预留/配额）、`ActivityBus`（事件等待）、`.astro` 自定义 agent 配置。 |
 | `crates/agent-evolution` | `evolution` | 自进化/学习循环：改进提议、评判、信号分析、评估集、DSPy 集成。配套 Python 包 `evolution-dspy/`。 |
@@ -134,9 +134,37 @@ AstroThread::submit(Op)
 
 配置：从 `~/.astro/agents` 和受信任的 `<project>/.astro/agents` 加载自定义 agent 定义；设置从 `~/.astro/config.toml` 和受信任的 `<project>/.astro/config.toml` 加载。`.codex` 不作为 Astro 配置输入。
 
-### Provider Fallback 链
+### Provider 架构（agent-providers）
 
-`chat_targets: Vec<ChatTarget>` — primary + 最多 `MAX_CHAT_FALLBACKS` 个备用。首个 chunk 前失败则自动切换到下一目标。辅助任务（Dreaming、Compaction、SmartApproval、TitleGen 等）各有独立目标链，缺省回退到 primary。
+**协议管线**（5 种 `ApiMode`）：`ChatCompletions`（OpenAI 兼容）、`Responses`（OpenAI Responses API）、`AnthropicMessages`、`Interactions`（Google Gemini）、`GeminiNative`。协议选择由 `ProviderProfile.api_mode` 默认 + `ProviderConfig.api_mode` 运行时覆盖。
+
+**Trait 系统**：
+- `OpenAICompatible` trait — 所有 OpenAI 兼容厂商的 hook 接口。通过声明式常量控制行为：
+  - `THINKING_FORMAT: ThinkingFormat` — 4 种 thinking 线路格式（`None` / `ReasoningEffort` / `DeepSeek` / `MiniMaxAdaptive`）
+  - `EFFORT_MAP: &[(&str, &str)]` — 推理 effort 字符串映射表
+  - `SUPPORTS_RESPONSES` / `RESPONSES_STORE_FALSE` / `RESPONSES_PARALLEL_TOOLS` / `RESPONSES_REASONING_SUMMARY` — Responses API 行为标志
+- `apply_thinking_compat()` — 共享 thinking 转换函数，由 `THINKING_FORMAT` + `EFFORT_MAP` 参数化
+- 新增厂商只需设常量（2-4 行），不需要覆盖 `finalize_body()`
+
+**TOML 自定义 Provider**：用户在 `~/.astro/config.toml` 中声明即可接入任何 OpenAI 兼容 API，零代码：
+```toml
+[custom_providers.my-corp]
+base_url = "https://llm.corp.internal/v1"
+env_keys = ["CORP_API_KEY"]
+default_model = "corp-v3"
+
+[[custom_providers.my-corp.models]]
+id = "corp-v3"
+context_window = 128000
+reasoning = true
+```
+自定义 provider 统一走 Responses API，由 `ConfigDrivenCompletionModel` 实现。TOML 声明的模型元数据在启动时注入 `models.json` 缓存。
+
+**模型元数据**（三层合并）：API 厂商端点发现 → OpenRouter 模型表 enrich → 已知能力补丁 (`apply_known_capability_overrides`)。合并结果持久化到 `~/.astro/cache/models.json`，前端和运行时共用。
+
+**Provider Fallback 链**：`chat_targets: Vec<ChatTarget>` — primary + 最多 `MAX_CHAT_FALLBACKS` 个备用。首个 chunk 前失败则自动切换到下一目标。`ChatTarget.api_mode` 随链路传播到 `ProviderConfig`，确保探测和聊天走同一协议。辅助任务各有独立目标链，缺省回退到 primary。
+
+**Profile 表**：`ProviderProfile` 静态表驱动（`PROFILES` 数组），每厂商一个条目。字段含 `supports_responses: bool`（UI 切换标志）。前端 `supports_responses_toggle()` 读此字段。
 
 ### 三总线 Hook 系统
 
@@ -154,7 +182,7 @@ Plugin bus 事件（Codex 对齐命名）：`PreLlmCall`、`PreToolUse`、`Permi
 
 ```
 ~/.astro/
-  config.toml          # 全局统一配置、项目信任与 MCP
+  config.toml          # 全局统一配置（agent 设置 + MCP + custom_providers）
   agents/*.toml        # 全局自定义 agent 定义
   agents/{agent_id}/
     SOUL.md            # Agent 人格
@@ -166,12 +194,13 @@ Plugin bus 事件（Codex 对齐命名）：`PreLlmCall`、`PreToolUse`、`Permi
     state.db           # 消息、会话、FTS5（schema v17）
     artifacts.db       # 文件空间索引
     knowledge.db       # 知识内容 FTS
+  cache/
+    models.json        # 模型元数据缓存（API + OpenRouter + TOML 合并）
+  providers.json       # 前端 Provider 配置状态
   cron/                # cron.db + jobs.json
   workflows/workflows.json
   subagents.db         # V2 Agent 线程图、邮箱、状态事件
   usage/usage.db
-  config.toml          # 全局 agent 设置
-  agents/              # 自定义 agent 定义（.toml）
 <project>/.astro/
   config.toml          # 受信任的项目级 agent 设置覆盖
   agents/              # 项目级 agent 定义
