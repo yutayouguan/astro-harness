@@ -84,6 +84,16 @@ cd apps/desktop && npm run tauri:build:universal    # universal-apple-darwin
 
 前端 React 应用在 `apps/desktop/`，使用 CodeMirror（多语言）、`@xyflow/react`（流程图编辑器）、`react-markdown`、`lucide-react`。
 
+### 前端 UI 架构
+
+**主侧栏导航**（5 项）：对话 `chat`、任务 `loop`（工作流 + 定时）、文件 `files`、扩展 `skills`（Skills + MCP）、设置 `settings`。定义在 `navConfig.ts`。
+
+**设置面板**（`settings` 页）：左侧平铺 icon 列表（11 项），右侧内容区。平铺项：通用、外观、对话、上下文与压缩、模型配置、工具、记忆、模型市场、洞察、诊断、关于。由 `SettingsTabId` 类型定义，`preferences:xxx` 前缀路由到 `PreferencesPanel` 的对应 section。
+
+**聊天右侧面板**（`ChatRightPanel`，5 tab）：会话列表 `sessions`、任务监控 `monitor`（`TaskMonitorPanel`）、上下文 `context`（`ContextExplorer`）、预览 `preview`（`GeneratingPreviewPanel`）、Agent `agent`（`ChatAgentInfo`）。
+
+**浮动 TODO 进度条**（`TodoProgress`）：输入区上方，从消息 activities 提取最新 `todo` 工具调用的计划状态，显示折叠进度。
+
 ## Core Architecture
 
 ### 事件管线（单一事实链）
