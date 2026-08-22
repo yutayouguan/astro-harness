@@ -876,10 +876,20 @@ html[data-theme="dark"] .settings-content {
 .sidebar-project-header {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 7px 10px;
-  border: none;
+  gap: 4px;
+  padding: 3px 4px 3px 6px;
   border-radius: 8px;
+}
+
+.sidebar-project-name {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 6px;
+  border: none;
+  border-radius: 6px;
   background: transparent;
   font-size: 13px;
   font-weight: 500;
@@ -887,17 +897,43 @@ html[data-theme="dark"] .settings-content {
   cursor: pointer;
   white-space: nowrap;
   overflow: hidden;
+  text-overflow: ellipsis;
   text-align: left;
   transition: background 0.1s;
 }
 
-.sidebar-project-header:hover {
+.sidebar-project-name:hover {
   background: var(--glass);
 }
 
-.sidebar-project.is-active > .sidebar-project-header {
+.sidebar-project.is-active > .sidebar-project-header .sidebar-project-name {
   color: var(--tone, var(--tone-blue));
   font-weight: 600;
+}
+
+.sidebar-project-action {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ink-mute);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.12s, background 0.1s, color 0.1s;
+}
+
+.sidebar-project-header:hover .sidebar-project-action,
+.sidebar-project.is-active .sidebar-project-action {
+  opacity: 1;
+}
+
+.sidebar-project-action:hover {
+  background: var(--glass);
+  color: var(--ink);
 }
 
 .sidebar-sessions {

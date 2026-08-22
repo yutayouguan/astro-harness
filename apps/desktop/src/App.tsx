@@ -156,6 +156,10 @@ export default function App() {
   );
   const [nav, setNav] = useState<NavId>(NAV[0].id);
   const [settingsTab, setSettingsTab] = useState<SettingsTabId>("preferences");
+  const [projects, setProjects] = useState<Array<{ path: string; name: string }>>([
+    { path: "default", name: "默认工作区" },
+  ]);
+  const [activeProjectPath, setActiveProjectPath] = useState("default");
   /** 导航到 settings 并切换到指定子 tab */
   const openSettingsTab = useCallback((tab: SettingsTabId) => {
     setSettingsTab(tab);
@@ -715,12 +719,16 @@ export default function App() {
                   try {
                     const { open } = await import("@tauri-apps/plugin-dialog");
                     const selected = await open({ directory: true, title: "选择项目文件夹" });
-                    if (selected) {
-                      void selected;
+                    if (selected && typeof selected === "string") {
+                      setProjects((prev) => {
+                        if (prev.some((p) => p.path === selected)) return prev;
+                        return [...prev, { path: selected, name: selected.split("/").pop() || selected }];
+                      });
+                      setActiveProjectPath(selected);
                     }
                   } catch {}
                 }}
-                title="新建项目"
+                title="+ 新建项目"
                 aria-label="新建项目"
               >
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
@@ -728,29 +736,34 @@ export default function App() {
                 </svg>
               </button>
             </div>
-            <div className="sidebar-project is-active">
-              <button
-                type="button"
-                className="sidebar-project-header"
-                onClick={() => { setNav("chat"); }}
-              >
-                <FolderTree size={15} strokeWidth={1.8} aria-hidden />
-                <span className="sidebar-item-label">默认工作区</span>
-              </button>
-              <div className="sidebar-sessions">
-                <button
-                  type="button"
-                  className="sidebar-session-new"
-                  onClick={() => { setNav("chat"); startNewChat(); }}
-                >
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-                    <path d="M12 5v14" /><path d="M5 12h14" />
-                  </svg>
-                  <span>新建对话</span>
-                </button>
-                <span className="sidebar-empty">暂无会话</span>
+            {projects.map((proj) => (
+              <div key={proj.path} className={`sidebar-project ${activeProjectPath === proj.path ? "is-active" : ""}`}>
+                <div className="sidebar-project-header">
+                  <button
+                    type="button"
+                    className="sidebar-project-name"
+                    onClick={() => { setActiveProjectPath(proj.path); setNav("chat"); }}
+                  >
+                    <FolderTree size={15} strokeWidth={1.8} aria-hidden />
+                    <span className="sidebar-item-label">{proj.name}</span>
+                  </button>
+                  <button
+                    type="button"
+                    className="sidebar-project-action"
+                    onClick={() => { setActiveProjectPath(proj.path); setNav("chat"); startNewChat(); }}
+                    title="新建会话"
+                    aria-label="新建会话"
+                  >
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                      <path d="M12 20h9" /><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
+                    </svg>
+                  </button>
+                </div>
+                <div className="sidebar-sessions">
+                  <span className="sidebar-empty">暂无会话</span>
+                </div>
               </div>
-            </div>
+            ))}
           </div>
           <button
             type="button"
