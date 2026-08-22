@@ -4937,6 +4937,7 @@ dependencies = [
  "tracing",
  "types",
  "uuid",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
