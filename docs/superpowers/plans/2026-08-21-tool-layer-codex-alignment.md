@@ -40,8 +40,8 @@
 
 ### Batch D — Namespace 工具示范（后续）
 
-- [ ] **Step 1: registry schemas_for_api 支持 Namespace ToolSpec 输出**
-- [ ] **Step 2: dispatch 层支持 namespace.name 路由**
-- [ ] **Step 3: cron 工具迁移为 cron.add/list/remove/enable/disable**
-- [ ] **Step 4: 模型 prompt guidance 适配 namespace 工具名**
-- [ ] **Step 5: 测试 + 提交**
+- [x] **Step 1: registry schemas_for_api 支持 Namespace ToolSpec 输出**
+- [x] **Step 2: dispatch 层支持 namespace.name 路由**
+- [x] **Step 3: cron 工具迁移为 cron.add/list/remove/enable/disable**
+- [x] **Step 4: 模型 prompt guidance 适配 namespace 工具名**
+- [x] **Step 5: 测试 + 提交**
