@@ -6,11 +6,10 @@ import {
   useMemo,
   useRef,
   useState,
-  type CSSProperties,
 } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import AnimatedSwitch from "./components/ui/AnimatedSwitch";
+
 import AboutDialog from "./components/ui/AboutDialog";
 import ChatRightPanel from "./components/chat/ChatRightPanel";
 import ChatView from "./components/chat/ChatView";
@@ -107,10 +106,7 @@ import {
   Wrench,
 } from "lucide-react";
 import { syncWindowUnderlay } from "./lib/ui/windowUnderlay";
-import {
-  dynamicGradientForTab,
-  toneCssVarsFromHex,
-} from "./lib/ui/dynamicGradient";
+import { dynamicGradientForTab } from "./lib/ui/dynamicGradient";
 import {
   applyShellGradientVars,
   clearShellGradientVars,
@@ -123,7 +119,6 @@ import type {
   ProviderModelsResult,
 } from "./types";
 
-const NAV_ROW_PITCH_PX = 44;
 export default function App() {
   // ── Theme / i18n / prefs ──────────────────────────────────────────────────
   const { mode, setMode, resolved, reassert } = useTheme();
@@ -626,12 +621,8 @@ export default function App() {
   );
 
   // ── Layout helpers ────────────────────────────────────────────────────────
-  const meta = PAGE_META[nav];
-  const ActiveIcon = NAV.find((n) => n.id === nav)?.Icon ?? IconChat;
-  const activeNavIndex = NAV.findIndex((item) => item.id === nav);
-  const sidebarNavStyle = {
-    "--nav-indicator-y": `${Math.max(activeNavIndex, 0) * NAV_ROW_PITCH_PX}px`,
-  } as CSSProperties;
+  const meta = PAGE_META["chat"];
+  const ActiveIcon = IconChat;
 
   // ── JSX ───────────────────────────────────────────────────────────────────
   return (
@@ -714,44 +705,40 @@ export default function App() {
               </button>
             </div>
           </div>
-          <div className="sidebar-nav" style={sidebarNavStyle}>
-            <span className="sidebar-nav-indicator" aria-hidden />
-            {NAV.map((item) => {
-              const label = t(item.labelKey);
-              const pendingBadge =
-                item.id === "settings" && chat.memoryPendingCount > 0
-                  ? chat.memoryPendingCount > 99
-                    ? "99+"
-                    : String(chat.memoryPendingCount)
-                  : null;
-              const dynamicToneStyle =
-                colorStyle === "dynamic"
-                  ? (toneCssVarsFromHex(
-                      dynamicGradientForTab(dynamicSeed, item.id, resolved)
-                        .primary.color,
-                    ) as CSSProperties)
-                  : undefined;
-              return (
-                <button
-                  key={item.id}
-                  className={`nav-item ${nav === item.id ? "active" : ""}`}
-                  data-tone={usesShellGradient ? shellTone : item.tone}
-                  style={dynamicToneStyle}
-                  onClick={() => setNav(item.id)}
-                  {...(sidebar.showSidebarLabels
-                    ? {}
-                    : { "data-tip": label, "data-tip-pos": "right" as const })}
-                  aria-label={pendingBadge ? `${label} (${pendingBadge})` : label}
-                >
-                  <span className="nav-icon" aria-hidden>
-                    <item.Icon />
-                    {pendingBadge ? <span className="nav-badge">{pendingBadge}</span> : null}
-                  </span>
-                  <span className="nav-label">{label}</span>
-                </button>
-              );
-            })}
+          <div className="sidebar-projects">
+            <button
+              type="button"
+              className="sidebar-new-chat-btn"
+              onClick={() => { setNav("chat"); startNewChat(); }}
+            >
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                <path d="M12 5v14" /><path d="M5 12h14" />
+              </svg>
+              <span className="sidebar-item-label">{t("sidebar.newChat")}</span>
+            </button>
+            <div className="sidebar-project">
+              <div className="sidebar-project-header">
+                <FolderTree size={15} strokeWidth={1.8} aria-hidden />
+                <span className="sidebar-item-label">默认工作区</span>
+              </div>
+              <div className="sidebar-sessions">
+                <span className="sidebar-empty">暂无会话</span>
+              </div>
+            </div>
           </div>
+          <button
+            type="button"
+            className="sidebar-settings-btn"
+            onClick={() => setNav("settings")}
+          >
+            <Settings2 size={15} strokeWidth={1.8} aria-hidden />
+            <span className="sidebar-item-label">{t("nav.settings")}</span>
+            {chat.memoryPendingCount > 0 && (
+              <span className="nav-badge">
+                {chat.memoryPendingCount > 99 ? "99+" : String(chat.memoryPendingCount)}
+              </span>
+            )}
+          </button>
         </aside>
         {sidebar.sidebarCtx ? (
           <SidebarContextMenu
@@ -787,69 +774,27 @@ export default function App() {
                 <span className={`status-dot ${chat.status}`} />
                 {activeProvider?.display_name ?? t("status.none")} · {statusText}
               </span>
-              {nav === "settings" && settingsTab === "memory"
-                ? memoryHeaderAgent?.show && (
-                    <AgentPicker
-                      className="header-agent-picker"
-                      agents={agents}
-                      value={memoryHeaderAgent.value}
-                      onChange={memoryHeaderAgent.onChange}
-                      allOption={memoryHeaderAgent.allOption}
-                      labelKey="memory.agents"
-                      menuAlign="end"
-                    />
-                  )
-                : showsHeaderAgentPicker(nav) && (
-                    <AgentPicker
-                      className="header-agent-picker"
-                      agents={agents}
-                      value={activeAgentId}
-                      onChange={(id) => {
-                        void setActiveAgent(id).catch((e) => {
-                          console.warn("set_active_agent failed", e);
-                        });
-                      }}
-                      onCreateNew={nav === "chat" ? startNewAgent : undefined}
-                      menuAlign="end"
-                    />
-                  )}
-              {nav === "files" && (
-                <div
-                  className="files-mode-switch"
-                  role="tablist"
-                  aria-label={t("files.mode")}
-                >
-                  <button
-                    type="button"
-                    role="tab"
-                    aria-selected={filesMode === "browse"}
-                    className={`files-mode-tab ${filesMode === "browse" ? "is-active" : ""}`}
-                    onClick={() => changeFilesMode("browse")}
-                  >
-                    <FolderTree size={15} strokeWidth={2.2} aria-hidden />
-                    {t("files.mode.browse")}
-                  </button>
-                  <button
-                    type="button"
-                    role="tab"
-                    aria-selected={filesMode === "artifacts"}
-                    className={`files-mode-tab ${filesMode === "artifacts" ? "is-active" : ""}`}
-                    onClick={() => changeFilesMode("artifacts")}
-                  >
-                    <Sparkles size={15} strokeWidth={2.2} aria-hidden />
-                    {t("files.mode.artifacts")}
-                  </button>
-                </div>
-              )}
-              {nav === "chat" && (
-                <ModelPicker
-                  providers={providers}
-                  value={activeProviderId}
-                  onChange={(id, model) => void onChatModelChange(id, model)}
-                  onActivePrefsChange={syncComposerFromModelPrefs}
-                  disabled={chat.streaming}
+              {showsHeaderAgentPicker(nav) && (
+                <AgentPicker
+                  className="header-agent-picker"
+                  agents={agents}
+                  value={activeAgentId}
+                  onChange={(id) => {
+                    void setActiveAgent(id).catch((e) => {
+                      console.warn("set_active_agent failed", e);
+                    });
+                  }}
+                  onCreateNew={startNewAgent}
+                  menuAlign="end"
                 />
               )}
+              <ModelPicker
+                providers={providers}
+                value={activeProviderId}
+                onChange={(id, model) => void onChatModelChange(id, model)}
+                onActivePrefsChange={syncComposerFromModelPrefs}
+                disabled={chat.streaming}
+              />
               <div className="chat-header-tools">
                 <button
                   type="button"
@@ -863,24 +808,20 @@ export default function App() {
                     <path d="M12 8v8" /><path d="M8 12h8" />
                   </svg>
                 </button>
-                {nav === "chat" && (
-                  <button
-                    type="button"
-                    className={`header-icon-btn ${chat.chatRightOpen ? "is-active" : ""}`}
-                    onClick={() => setChatRightOpen((open) => !open)}
-                    title={t("chat.rightPanel.toggle")}
-                    aria-label={t("chat.rightPanel.toggle")}
-                    aria-pressed={chat.chatRightOpen}
-                  >
-                    <IconRightPanel width={16} height={16} />
-                  </button>
-                )}
+                <button
+                  type="button"
+                  className={`header-icon-btn ${chat.chatRightOpen ? "is-active" : ""}`}
+                  onClick={() => setChatRightOpen((open) => !open)}
+                  title={t("chat.rightPanel.toggle")}
+                  aria-label={t("chat.rightPanel.toggle")}
+                  aria-pressed={chat.chatRightOpen}
+                >
+                  <IconRightPanel width={16} height={16} />
+                </button>
               </div>
             </div>
           </div>
           <div className="page-body">
-            <AnimatedSwitch switchKey={nav} className="anim-switch--fill">
-              {nav === "chat" && (
                 <div className="chat-layout-with-right">
                   <div className="chat-main">
                     <ChatView
@@ -985,126 +926,171 @@ export default function App() {
                     />
                   )}
                 </div>
-              )}
-              {nav === "files" && (
-                <FilesPage
-                  active={nav === "files"}
-                  submode={filesMode}
-                  onSubmodeChange={changeFilesMode}
-                  onOpenSession={openSessionFromFilespace}
-                  onAttachFiles={attachArtifactsToChat}
-                  onClose={() => setNav("chat")}
-                />
-              )}
-              {nav === "skills" && (
-                <SkillsPanel
-                  active={nav === "skills"}
-                  onInstallWithAgent={(prompt) => {
-                    setInput(prompt);
-                    setNav("chat");
-                  }}
-                  tone={shellTone}
-                />
-              )}
-              {nav === "settings" && (
-                <div className="settings-layout">
-                  <nav className="settings-sidebar" aria-label="Settings">
-                    {([
-                      { id: "preferences", label: "通用", Icon: Settings2 },
-                      { id: "preferences:appearance", label: "外观", Icon: Sparkles },
-                      { id: "preferences:conversation", label: "对话", Icon: MessageSquare },
-                      { id: "preferences:context", label: "上下文与压缩", Icon: Layers2 },
-                      { id: "providers", label: "模型配置", Icon: Cpu },
-                      { id: "tools", label: "工具", Icon: Wrench },
-                      { id: "memory", label: "记忆", Icon: Brain },
-                      { id: "models", label: "模型市场", Icon: Store },
-                      { id: "insights", label: "洞察", Icon: ChartPie },
-                      { id: "preferences:diagnostics", label: "诊断", Icon: ScrollText },
-                      { id: "preferences:about", label: "关于", Icon: Info },
-                    ] as const).map((item) => (
-                      <button
-                        key={item.id}
-                        type="button"
-                        className={`settings-sidebar-item ${settingsTab === item.id ? "is-active" : ""}`}
-                        onClick={() => setSettingsTab(item.id as SettingsTabId)}
-                      >
-                        <item.Icon size={18} strokeWidth={1.6} aria-hidden />
-                        {item.label}
-                      </button>
-                    ))}
-                  </nav>
-                  <div className="settings-content">
-                  {settingsTab.startsWith("preferences") && (
-                    <PreferencesPanel
-                      section={settingsTab === "preferences" ? "general" : settingsTab.split(":")[1] as import("./components/settings/PreferencesPanel").PreferenceCategory}
-                      mode={mode}
-                      onChange={setMode}
-                      colorStyle={colorStyle}
-                      onColorStyleChange={setColorStyle}
-                      gradient={gradient}
-                      onGradientChange={setGradient}
-                      onBeginCustomGradient={beginGradientEdit}
-                      onPreviewGradient={previewGradient}
-                      onCommitCustomGradient={commitGradientEdit}
-                      onCancelCustomGradient={cancelGradientEdit}
-                      onReshuffleDynamic={reshuffleDynamic}
-                      tone={shellTone}
-                      chatDisplayPrefs={chatDisplayPrefs}
-                      onChatVerbosityChange={setVerbosity}
-                      onChatToggleChange={setToggle}
-                      activeSessionId={chat.sessionId ?? undefined}
-                    />
-                  )}
-                  {settingsTab === "tools" && (
-                    <ToolsPanel
-                      active={nav === "settings"}
-                      initialTab={toolsInitialTab}
-                      onInitialTabConsumed={() => setToolsInitialTab(null)}
-                    />
-                  )}
-                  {settingsTab === "evolution" && (
-                    <EvolutionModelsPanel active={nav === "settings"} tone={shellTone} />
-                  )}
-                  {settingsTab === "insights" && (
-                    <InsightsPanel active={nav === "settings"} />
-                  )}
-                  {settingsTab === "models" && (
-                    <ModelMarketPanel active={nav === "settings"} />
-                  )}
-                  {settingsTab === "providers" && (
-                    <ProvidersPanel
-                      active={nav === "settings"}
-                      onStateChange={syncProvidersFromState}
-                      tone={shellTone}
-                    />
-                  )}
-                  {settingsTab === "memory" && (
-                    <MemoryPanel
-                      onClose={() => setSettingsTab("preferences")}
-                      sessionId={chat.sessionId}
-                      onHeaderAgentPickerChange={setMemoryHeaderAgent}
-                    />
-                  )}
-                  </div>
-                </div>
-              )}
-              {nav === "loop" && (
-                <LoopPanel
-                  active={nav === "loop"}
-                  providers={providers.map((p) => ({
-                    id: p.id,
-                    name: p.display_name,
-                    model: p.model,
-                    kind: p.kind,
-                  }))}
-                  onCollapseSidebar={sidebar.collapseSidebar}
-                  onExpandSidebar={sidebar.pinSidebar}
-                />
-              )}
-            </AnimatedSwitch>
           </div>
         </section>
       </div>
+
+      {/* ── Overlay panels ─────────────────────────────────────────────────── */}
+      {nav === "settings" && (
+        <div className="settings-overlay" onClick={(e) => { if (e.target === e.currentTarget) setNav("chat"); }}>
+          <div className="settings-overlay-panel">
+            <button type="button" className="settings-overlay-close" onClick={() => setNav("chat")} aria-label="Close">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+            </button>
+            {settingsTab === "memory" && memoryHeaderAgent?.show && (
+              <div className="settings-overlay-agent-picker">
+                <AgentPicker
+                  className="header-agent-picker"
+                  agents={agents}
+                  value={memoryHeaderAgent.value}
+                  onChange={memoryHeaderAgent.onChange}
+                  allOption={memoryHeaderAgent.allOption}
+                  labelKey="memory.agents"
+                  menuAlign="end"
+                />
+              </div>
+            )}
+            <div className="settings-layout">
+              <nav className="settings-sidebar" aria-label="Settings">
+                {([
+                  { id: "preferences", label: "通用", Icon: Settings2 },
+                  { id: "preferences:appearance", label: "外观", Icon: Sparkles },
+                  { id: "preferences:conversation", label: "对话", Icon: MessageSquare },
+                  { id: "preferences:context", label: "上下文与压缩", Icon: Layers2 },
+                  { id: "providers", label: "模型配置", Icon: Cpu },
+                  { id: "tools", label: "工具", Icon: Wrench },
+                  { id: "memory", label: "记忆", Icon: Brain },
+                  { id: "models", label: "模型市场", Icon: Store },
+                  { id: "insights", label: "洞察", Icon: ChartPie },
+                  { id: "preferences:diagnostics", label: "诊断", Icon: ScrollText },
+                  { id: "preferences:about", label: "关于", Icon: Info },
+                ] as const).map((item) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    className={`settings-sidebar-item ${settingsTab === item.id ? "is-active" : ""}`}
+                    onClick={() => setSettingsTab(item.id as SettingsTabId)}
+                  >
+                    <item.Icon size={18} strokeWidth={1.6} aria-hidden />
+                    {item.label}
+                  </button>
+                ))}
+              </nav>
+              <div className="settings-content">
+                {settingsTab.startsWith("preferences") && (
+                  <PreferencesPanel
+                    section={settingsTab === "preferences" ? "general" : settingsTab.split(":")[1] as import("./components/settings/PreferencesPanel").PreferenceCategory}
+                    mode={mode}
+                    onChange={setMode}
+                    colorStyle={colorStyle}
+                    onColorStyleChange={setColorStyle}
+                    gradient={gradient}
+                    onGradientChange={setGradient}
+                    onBeginCustomGradient={beginGradientEdit}
+                    onPreviewGradient={previewGradient}
+                    onCommitCustomGradient={commitGradientEdit}
+                    onCancelCustomGradient={cancelGradientEdit}
+                    onReshuffleDynamic={reshuffleDynamic}
+                    tone={shellTone}
+                    chatDisplayPrefs={chatDisplayPrefs}
+                    onChatVerbosityChange={setVerbosity}
+                    onChatToggleChange={setToggle}
+                    activeSessionId={chat.sessionId ?? undefined}
+                  />
+                )}
+                {settingsTab === "tools" && (
+                  <ToolsPanel
+                    active={nav === "settings"}
+                    initialTab={toolsInitialTab}
+                    onInitialTabConsumed={() => setToolsInitialTab(null)}
+                  />
+                )}
+                {settingsTab === "evolution" && (
+                  <EvolutionModelsPanel active={nav === "settings"} tone={shellTone} />
+                )}
+                {settingsTab === "insights" && (
+                  <InsightsPanel active={nav === "settings"} />
+                )}
+                {settingsTab === "models" && (
+                  <ModelMarketPanel active={nav === "settings"} />
+                )}
+                {settingsTab === "providers" && (
+                  <ProvidersPanel
+                    active={nav === "settings"}
+                    onStateChange={syncProvidersFromState}
+                    tone={shellTone}
+                  />
+                )}
+                {settingsTab === "memory" && (
+                  <MemoryPanel
+                    onClose={() => setSettingsTab("preferences")}
+                    sessionId={chat.sessionId}
+                    onHeaderAgentPickerChange={setMemoryHeaderAgent}
+                  />
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {nav === "files" && (
+        <div className="settings-overlay" onClick={(e) => { if (e.target === e.currentTarget) setNav("chat"); }}>
+          <div className="settings-overlay-panel settings-overlay-panel--wide">
+            <button type="button" className="settings-overlay-close" onClick={() => setNav("chat")} aria-label="Close">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+            </button>
+            <FilesPage
+              active={nav === "files"}
+              submode={filesMode}
+              onSubmodeChange={changeFilesMode}
+              onOpenSession={openSessionFromFilespace}
+              onAttachFiles={attachArtifactsToChat}
+              onClose={() => setNav("chat")}
+            />
+          </div>
+        </div>
+      )}
+
+      {nav === "skills" && (
+        <div className="settings-overlay" onClick={(e) => { if (e.target === e.currentTarget) setNav("chat"); }}>
+          <div className="settings-overlay-panel">
+            <button type="button" className="settings-overlay-close" onClick={() => setNav("chat")} aria-label="Close">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+            </button>
+            <SkillsPanel
+              active={nav === "skills"}
+              onInstallWithAgent={(prompt) => {
+                setInput(prompt);
+                setNav("chat");
+              }}
+              tone={shellTone}
+            />
+          </div>
+        </div>
+      )}
+
+      {nav === "loop" && (
+        <div className="settings-overlay" onClick={(e) => { if (e.target === e.currentTarget) setNav("chat"); }}>
+          <div className="settings-overlay-panel settings-overlay-panel--wide">
+            <button type="button" className="settings-overlay-close" onClick={() => setNav("chat")} aria-label="Close">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+            </button>
+            <LoopPanel
+              active={nav === "loop"}
+              providers={providers.map((p) => ({
+                id: p.id,
+                name: p.display_name,
+                model: p.model,
+                kind: p.kind,
+              }))}
+              onCollapseSidebar={sidebar.collapseSidebar}
+              onExpandSidebar={sidebar.pinSidebar}
+            />
+          </div>
+        </div>
+      )}
+
       {toastHost}
       <AboutDialog open={aboutOpen} onClose={() => setAboutOpen(false)} />
     </div>
