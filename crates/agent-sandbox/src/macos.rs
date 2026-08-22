@@ -23,9 +23,7 @@ pub fn probe() -> bool {
 pub fn seatbelt_tokio_command(policy: &SandboxPolicy, program: &str) -> tokio::process::Command {
     let mut command = tokio::process::Command::new(SANDBOX_EXEC);
     command.arg("-p").arg(seatbelt_profile(policy));
-    for (i, root) in policy.writable_roots.iter().enumerate() {
-        command.arg(format!("-DWRITABLE_ROOT_{i}={}", root.display()));
-    }
+    append_param_args(&mut command, policy);
     command.arg(program);
     command
 }
@@ -34,19 +32,76 @@ pub fn seatbelt_tokio_command(policy: &SandboxPolicy, program: &str) -> tokio::p
 pub fn seatbelt_std_command(policy: &SandboxPolicy, program: &str) -> std::process::Command {
     let mut command = std::process::Command::new(SANDBOX_EXEC);
     command.arg("-p").arg(seatbelt_profile(policy));
-    for (i, root) in policy.writable_roots.iter().enumerate() {
-        command.arg(format!("-DWRITABLE_ROOT_{i}={}", root.display()));
-    }
+    append_param_args(&mut command, policy);
     command.arg(program);
     command
 }
 
+trait SandboxExecArgs {
+    fn push_arg(&mut self, arg: String);
+}
+
+impl SandboxExecArgs for tokio::process::Command {
+    fn push_arg(&mut self, arg: String) {
+        self.arg(arg);
+    }
+}
+
+impl SandboxExecArgs for std::process::Command {
+    fn push_arg(&mut self, arg: String) {
+        self.arg(arg);
+    }
+}
+
+fn append_param_args(cmd: &mut impl SandboxExecArgs, policy: &SandboxPolicy) {
+    for (i, root) in policy.writable_roots.iter().enumerate() {
+        cmd.push_arg(format!("-DWRITABLE_ROOT_{i}={}", root.display()));
+    }
+    for (i, root) in policy.readable_roots.iter().enumerate() {
+        cmd.push_arg(format!("-DREADABLE_ROOT_{i}={}", root.display()));
+    }
+}
+
+/// Platform default readable paths for restricted-read mode.
+const RESTRICTED_READ_PLATFORM_DEFAULTS: &[&str] = &[
+    "/usr",
+    "/bin",
+    "/sbin",
+    "/dev",
+    "/etc",
+    "/var",
+    "/tmp",
+    "/private",
+    "/System",
+    "/Library",
+    "/Applications",
+];
+
 /// Generate the SBPL profile string for the given sandbox policy.
 pub fn seatbelt_profile(policy: &SandboxPolicy) -> String {
-    let mut profile = String::from(concat!(
-        "(version 1)\n",
-        "(deny default)\n",
-        "(allow file-read*)\n",
+    let mut profile = String::from(concat!("(version 1)\n", "(deny default)\n",));
+
+    // File read rules: restricted or full
+    if policy.readable_roots.is_empty() {
+        profile.push_str("(allow file-read*)\n");
+    } else {
+        for path in RESTRICTED_READ_PLATFORM_DEFAULTS {
+            profile.push_str(&format!("(allow file-read* (subpath \"{path}\"))\n"));
+        }
+        for (i, _root) in policy.readable_roots.iter().enumerate() {
+            profile.push_str(&format!(
+                "(allow file-read* (subpath (param \"READABLE_ROOT_{i}\")))\n"
+            ));
+        }
+        // Writable roots are implicitly readable
+        for i in 0..policy.writable_roots.len() {
+            profile.push_str(&format!(
+                "(allow file-read* (subpath (param \"WRITABLE_ROOT_{i}\")))\n"
+            ));
+        }
+    }
+
+    profile.push_str(concat!(
         "(allow process*)\n",
         "(allow sysctl-read)\n",
         "(allow mach-lookup)\n",
@@ -166,5 +221,49 @@ mod tests {
         assert!(profile.contains("(deny default)"));
         assert!(!profile.contains("WRITABLE_ROOT"));
         assert!(!profile.contains("file-write*"));
+    }
+
+    #[test]
+    fn default_policy_has_full_read_access() {
+        let dir = tempfile::tempdir().unwrap();
+        let policy =
+            SandboxPolicy::new(SandboxMode::WorkspaceWrite, dir.path(), Vec::new(), false).unwrap();
+        let profile = seatbelt_profile(&policy);
+
+        assert!(profile.contains("(allow file-read*)"));
+        assert!(!profile.contains("READABLE_ROOT"));
+    }
+
+    #[test]
+    fn restricted_read_replaces_global_with_parameterized() {
+        let dir = tempfile::tempdir().unwrap();
+        let policy = SandboxPolicy::new(SandboxMode::WorkspaceWrite, dir.path(), Vec::new(), false)
+            .unwrap()
+            .with_restricted_read(vec![dir.path().to_path_buf()]);
+        let profile = seatbelt_profile(&policy);
+
+        assert!(
+            !profile.contains("(allow file-read*)\n"),
+            "should not have global file-read"
+        );
+        assert!(profile.contains("READABLE_ROOT_0"));
+        assert!(profile.contains("(allow file-read* (subpath \"/usr\"))"));
+        assert!(profile.contains("(allow file-read* (subpath \"/bin\"))"));
+        assert!(profile.contains("(allow file-read* (subpath \"/dev\"))"));
+        // Writable roots should also be readable
+        assert!(profile.contains("(allow file-read* (subpath (param \"WRITABLE_ROOT_0\")))"));
+    }
+
+    #[test]
+    fn restricted_read_changes_policy_hash() {
+        let dir = tempfile::tempdir().unwrap();
+        let base = SandboxPolicy::new(SandboxMode::ReadOnly, dir.path(), [], false).unwrap();
+        let restricted = base
+            .clone()
+            .with_restricted_read(vec![dir.path().to_path_buf()]);
+        assert_ne!(
+            base.profile_hash_material(),
+            restricted.profile_hash_material()
+        );
     }
 }

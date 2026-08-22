@@ -118,6 +118,9 @@ pub fn is_likely_sandbox_denied(sandbox_mode: SandboxMode, output: &ExecToolCall
 pub struct SandboxPolicy {
     pub mode: SandboxMode,
     pub writable_roots: Vec<PathBuf>,
+    /// Restricted read roots. When non-empty, only these paths are readable;
+    /// when empty, the default `(allow file-read*)` grants full read access.
+    pub readable_roots: Vec<PathBuf>,
     pub network_access: bool,
     pub managed_network: Option<ManagedNetworkSandboxContext>,
 }
@@ -142,6 +145,7 @@ impl SandboxPolicy {
         Ok(Self {
             mode,
             writable_roots,
+            readable_roots: Vec::new(),
             network_access: mode == SandboxMode::DangerFullAccess || network_access,
             managed_network: None,
         })
@@ -167,6 +171,15 @@ impl SandboxPolicy {
             [filesystem_root.to_path_buf()],
             network_access,
         )
+    }
+
+    /// Restrict file reads to only the specified roots.
+    ///
+    /// Platform-specific defaults (like `/usr`, `/bin`, `/dev`) are always readable.
+    /// When `roots` is empty, this is a no-op (full read remains).
+    pub fn with_restricted_read(mut self, roots: Vec<PathBuf>) -> Self {
+        self.readable_roots = roots;
+        self
     }
 
     pub fn with_managed_network(mut self, context: ManagedNetworkSandboxContext) -> Self {
@@ -211,6 +224,17 @@ impl SandboxPolicy {
                     .map(u16::to_string)
                     .collect::<Vec<_>>()
                     .join(","),
+            );
+        }
+        if !self.readable_roots.is_empty() {
+            material.push_str("|readable=");
+            material.push_str(
+                &self
+                    .readable_roots
+                    .iter()
+                    .map(|path| path.to_string_lossy())
+                    .collect::<Vec<_>>()
+                    .join("|"),
             );
         }
         material
