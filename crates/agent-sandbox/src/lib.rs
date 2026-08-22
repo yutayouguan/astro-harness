@@ -9,6 +9,8 @@ use types::SandboxMode;
 use network_proxy::ManagedNetworkSandboxContext;
 
 mod audit;
+#[cfg(target_os = "linux")]
+pub mod linux;
 
 pub use audit::{
     append_sandbox_audit, clear_sandbox_audits, list_recent_sandbox_audits,
@@ -84,6 +86,10 @@ pub fn is_likely_sandbox_denied(sandbox_mode: SandboxMode, output: &ExecToolCall
     }
     if [2, 126, 127].contains(&output.exit_code) {
         return false;
+    }
+    #[cfg(target_os = "linux")]
+    if linux::is_seccomp_signal_exit(output.exit_code) {
+        return true;
     }
     const DENIAL_SIGNALS: [&str; 7] = [
         "operation not permitted",
@@ -269,10 +275,19 @@ impl SandboxRunner {
         }
         #[cfg(target_os = "linux")]
         {
+            let available = linux::probe_bwrap().is_some();
             SandboxHealth {
                 backend: SandboxBackend::LinuxBubblewrap,
-                status: SandboxHealthStatus::Unavailable,
-                detail: "bubblewrap backend is not implemented yet".to_string(),
+                status: if available {
+                    SandboxHealthStatus::Available
+                } else {
+                    SandboxHealthStatus::Unavailable
+                },
+                detail: if available {
+                    "bubblewrap (bwrap) is available".to_string()
+                } else {
+                    "bubblewrap (bwrap) not found in PATH".to_string()
+                },
             }
         }
         #[cfg(target_os = "windows")]
@@ -312,7 +327,11 @@ impl SandboxRunner {
             command.arg(program);
             Ok(command)
         }
-        #[cfg(not(target_os = "macos"))]
+        #[cfg(target_os = "linux")]
+        {
+            Ok(linux::bwrap_tokio_command(policy, program))
+        }
+        #[cfg(not(any(target_os = "macos", target_os = "linux")))]
         {
             let _ = program;
             Err(SandboxError::BackendUnavailable(self.probe().detail))
@@ -338,7 +357,11 @@ impl SandboxRunner {
             command.arg(program);
             Ok(command)
         }
-        #[cfg(not(target_os = "macos"))]
+        #[cfg(target_os = "linux")]
+        {
+            Ok(linux::bwrap_command(policy, program))
+        }
+        #[cfg(not(any(target_os = "macos", target_os = "linux")))]
         {
             let _ = program;
             Err(SandboxError::BackendUnavailable(self.probe().detail))
@@ -397,7 +420,6 @@ fn macos_profile(policy: &SandboxPolicy) -> String {
     }
     profile
 }
-
 
 #[cfg(test)]
 mod tests {
