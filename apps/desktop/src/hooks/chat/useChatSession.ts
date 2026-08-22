@@ -1536,8 +1536,21 @@ export function useChatSession({
         payload = { approved: true };
       } else if (name === "approve_always") {
         payload = { approved: true, always: true };
+      } else if (name === "allow_once") {
+        payload = { scope: "allow_once" };
+      } else if (name === "allow_session") {
+        payload = { scope: "allow_session" };
+      } else if (name === "allow_always") {
+        payload = { scope: "allow_always" };
       } else if (name === "deny") {
-        payload = isLocationHitl ? { denied: true } : { approved: false };
+        const isNetworkApproval = interrupts.some(
+          (p) => p.reason === "network_approval",
+        );
+        payload = isLocationHitl
+          ? { denied: true }
+          : isNetworkApproval
+            ? { scope: "deny" }
+            : { approved: false };
       } else if (name === "choose") {
         const answers = context.answers;
         if (answers && typeof answers === "object" && !Array.isArray(answers)) {
