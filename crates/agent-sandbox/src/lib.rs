@@ -14,6 +14,10 @@ pub mod linux;
 #[cfg(target_os = "macos")]
 pub mod macos;
 #[cfg(target_os = "windows")]
+pub mod restricted_token;
+#[cfg(target_os = "linux")]
+pub mod seccomp;
+#[cfg(target_os = "windows")]
 pub mod windows;
 
 pub use audit::{
