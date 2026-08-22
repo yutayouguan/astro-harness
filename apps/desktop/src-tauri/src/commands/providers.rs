@@ -471,6 +471,8 @@ pub struct ProviderConfigDto {
     pub api_mode: String,
     /// 是否支持 Responses API 模式切换。
     pub supports_responses_api: bool,
+    /// 配置来源：`"builtin"` / `"toml"` / `"user"`。
+    pub config_source: String,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -719,7 +721,46 @@ fn load_state() -> Result<ProvidersState, String> {
         let _ = save_state(&state);
     }
     sync_custom_provider_models();
+    merge_toml_custom_providers(&mut state);
     Ok(state)
+}
+
+/// 将 TOML 自定义 provider 合并进 ProvidersState（UI 可见）。
+///
+/// 以 `toml:<id>` 作为 provider ID，避免与 UI 手动添加的 `prov-*` ID 碰撞。
+/// 已存在同 ID 的条目时跳过（用户可能在 UI 中修改过）。
+fn merge_toml_custom_providers(state: &mut ProvidersState) {
+    let home = std::env::var("HOME")
+        .or_else(|_| std::env::var("USERPROFILE"))
+        .unwrap_or_else(|_| ".".to_string());
+    let config_path = std::path::PathBuf::from(home).join(".astro").join("config.toml");
+    let custom = providers::custom::load_custom_providers(&config_path);
+    for (id, cfg) in &custom {
+        let toml_id = format!("toml:{id}");
+        if state.providers.iter().any(|p| p.id == toml_id) {
+            continue;
+        }
+        let api_key_available = providers::custom::read_env_key(&cfg.env_keys).is_some();
+        state.providers.push(ProviderConfig {
+            id: toml_id,
+            kind: ProviderKind::Custom,
+            display_name: if cfg.name.is_empty() {
+                id.to_string()
+            } else {
+                cfg.name.clone()
+            },
+            endpoint: cfg.base_url.clone(),
+            model: cfg.default_model.clone(),
+            enabled: api_key_available,
+            fallback: Vec::new(),
+            image_model: String::new(),
+            video_model: String::new(),
+            tts_model: String::new(),
+            vision_model: String::new(),
+            music_model: String::new(),
+            api_mode: "responses".to_string(),
+        });
+    }
 }
 
 /// 保存 Provider 配置状态。
@@ -770,11 +811,20 @@ fn effective_api_mode(kind: ProviderKind, api_mode: &str) -> &'static str {
     }
 }
 
+/// TOML 自定义 provider 用 TOML key 作为 backend_id（dispatch 需要此 ID 命中 custom provider）。
+fn toml_backend_id(p: &ProviderConfig) -> String {
+    if let Some(toml_key) = p.id.strip_prefix("toml:") {
+        toml_key.to_string()
+    } else {
+        p.kind.backend_id().to_string()
+    }
+}
+
 /// 单条 Provider → 前端 DTO。
 fn to_dto(p: &ProviderConfig) -> ProviderConfigDto {
     let (has_api_key, key_source, env_key_name, _) = resolve_api_key(p);
-    let bid = p.kind.backend_id();
-    let profile = providers::profile::resolve_or_openai_compat(bid);
+    let bid = toml_backend_id(p);
+    let profile = providers::profile::resolve_or_openai_compat(&bid);
     ProviderConfigDto {
         id: p.id.clone(),
         kind: p.kind.as_str().to_string(),
@@ -822,7 +872,15 @@ fn to_dto(p: &ProviderConfig) -> ProviderConfigDto {
         supports_asr: profile.supports_asr(),
         supports_embedding: profile.supports_embedding,
         api_mode: effective_api_mode(p.kind, &p.api_mode).to_string(),
-        supports_responses_api: supports_responses_toggle(p.kind),
+        supports_responses_api: supports_responses_toggle(p.kind)
+            || p.id.starts_with("toml:"),
+        config_source: if p.id.starts_with("toml:") {
+            "toml".to_string()
+        } else if p.id.starts_with("prov-") {
+            "user".to_string()
+        } else {
+            "builtin".to_string()
+        },
     }
 }
 
@@ -1128,7 +1186,7 @@ pub fn resolve_chat_targets(
 
     let primary = types::ChatTarget {
         provider_id: cfg.id.clone(),
-        backend_id: cfg.kind.backend_id().to_string(),
+        backend_id: toml_backend_id(&cfg),
         model,
         api_key: key.unwrap_or_default(),
         base_url: cfg.endpoint.clone(),
@@ -1153,14 +1211,14 @@ pub fn resolve_chat_targets(
         }
         let (_has, _source, _env, key) = resolve_api_key(&p);
         let api_key = key.unwrap_or_default();
-        let bid = p.kind.backend_id();
+        let bid = toml_backend_id(&p);
         let allow_empty_key = bid == "ollama";
         if api_key.trim().is_empty() && !allow_empty_key {
             return None;
         }
         Some(types::ChatTarget {
             provider_id: p.id.clone(),
-            backend_id: bid.to_string(),
+            backend_id: bid,
             model: p.model.clone(),
             api_key,
             base_url: p.endpoint.clone(),
@@ -1798,10 +1856,8 @@ async fn probe_one_model(
     _client: &reqwest::Client,
     model: String,
 ) -> ProviderTestResult {
-    let probe_id = match provider.kind {
-        ProviderKind::Custom => "custom",
-        _ => provider.kind.backend_id(),
-    };
+    let bid = toml_backend_id(provider);
+    let probe_id = bid.as_str();
     let config = providers::ProviderConfig {
         api_key: api_key.to_string(),
         base_url: Some(provider.endpoint.clone()),

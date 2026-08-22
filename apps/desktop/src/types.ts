@@ -233,6 +233,8 @@ export type ProviderDto = {
   api_mode?: string;
   /** 是否支持 Responses API 模式切换 */
   supports_responses_api?: boolean;
+  /** 配置来源：builtin / toml / user */
+  config_source?: string;
 };
 
 /** 全部供应商 + 当前激活 id */
