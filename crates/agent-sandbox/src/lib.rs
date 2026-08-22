@@ -11,6 +11,8 @@ use network_proxy::ManagedNetworkSandboxContext;
 mod audit;
 #[cfg(target_os = "linux")]
 pub mod linux;
+#[cfg(target_os = "windows")]
+pub mod windows;
 
 pub use audit::{
     append_sandbox_audit, clear_sandbox_audits, list_recent_sandbox_audits,
@@ -294,8 +296,12 @@ impl SandboxRunner {
         {
             SandboxHealth {
                 backend: SandboxBackend::WindowsNative,
-                status: SandboxHealthStatus::Unavailable,
-                detail: "native Windows backend is not implemented yet".to_string(),
+                status: if windows::probe_windows() {
+                    SandboxHealthStatus::Available
+                } else {
+                    SandboxHealthStatus::Unavailable
+                },
+                detail: "Windows Job Object sandbox (v1: process isolation only)".to_string(),
             }
         }
         #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
@@ -331,7 +337,11 @@ impl SandboxRunner {
         {
             Ok(linux::bwrap_tokio_command(policy, program))
         }
-        #[cfg(not(any(target_os = "macos", target_os = "linux")))]
+        #[cfg(target_os = "windows")]
+        {
+            Ok(windows::windows_tokio_command(policy, program))
+        }
+        #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
         {
             let _ = program;
             Err(SandboxError::BackendUnavailable(self.probe().detail))
@@ -361,7 +371,11 @@ impl SandboxRunner {
         {
             Ok(linux::bwrap_command(policy, program))
         }
-        #[cfg(not(any(target_os = "macos", target_os = "linux")))]
+        #[cfg(target_os = "windows")]
+        {
+            Ok(windows::windows_command(policy, program))
+        }
+        #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
         {
             let _ = program;
             Err(SandboxError::BackendUnavailable(self.probe().detail))
