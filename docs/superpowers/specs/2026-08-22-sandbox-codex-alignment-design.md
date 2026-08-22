@@ -73,17 +73,18 @@ regex 匹配任意嵌套深度，优于按 writable root 逐个生成 subpath de
 
 ## Windows Job Object (v1)
 
-### 已实现
+### v2 已实现
 
-- 进程启动 + 代理环境变量注入
-- `WindowsAclSetup` 类型准备
+- **Job Object**: `create_job_object()` + `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE`，进程树容器
+- **ACL**: `apply_workspace_acls()` 通过 `icacls /deny *S-1-1-0:(W)` 保护元数据目录
+- **网络隔离**: 代理环境变量注入 + 离线标记（NPM/Cargo/Pip/Git SSH）
+- `assign_process_to_job()` 将子进程绑定到 Job Object
 
-### v2 计划
+### v3 计划
 
-- **ACL 文件系统控制**: `icacls` 或 Windows API 设置 writable root 的 allow-write ACEs，元数据目录的 deny-write ACEs
-- **WFP 网络过滤**: Windows Filtering Platform 限制网络到代理端口
-- **Restricted Token**: `CreateProcessAsUser` + capability SIDs
-- **私有桌面隔离**: 可选
+- **WFP 网络过滤**: Windows Filtering Platform 端口级阻塞（ICMP/DNS/SMB）
+- **Restricted Token**: `CreateRestrictedToken` + capability SIDs + `WRITE_RESTRICTED`
+- **私有桌面隔离**: `CreateDesktopW` 防窗口消息攻击
 
 ## 否认检测
 
@@ -112,5 +113,5 @@ ToolOrchestrator::run
 |------|------|------|
 | A | macOS 参数化路径 + regex 保护 + .codex | ✓ 已实现 |
 | B | Linux Bubblewrap 后端 | ✓ 已实现 |
-| C | Windows Job Object v1 | ✓ 已实现（仅进程隔离） |
+| C | Windows Job Object + ACL v2 | ✓ 已实现（Job Object + ACL + 离线标记） |
 | D | 设计文档 | ✓ 本文档 |
