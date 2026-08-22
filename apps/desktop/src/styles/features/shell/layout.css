@@ -936,6 +936,16 @@ html[data-theme="dark"] .settings-content {
   color: var(--ink);
 }
 
+.sidebar-project-chevron {
+  flex-shrink: 0;
+  transition: transform 0.15s ease;
+  opacity: 0.5;
+}
+
+.sidebar-project-chevron.is-open {
+  transform: rotate(90deg);
+}
+
 .sidebar-sessions {
   display: flex;
   flex-direction: column;

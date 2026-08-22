@@ -160,6 +160,7 @@ export default function App() {
     { path: "default", name: "默认工作区" },
   ]);
   const [activeProjectPath, setActiveProjectPath] = useState("default");
+  const [collapsedProjects, setCollapsedProjects] = useState<Set<string>>(new Set());
   /** 导航到 settings 并切换到指定子 tab */
   const openSettingsTab = useCallback((tab: SettingsTabId) => {
     setSettingsTab(tab);
@@ -742,8 +743,25 @@ export default function App() {
                   <button
                     type="button"
                     className="sidebar-project-name"
-                    onClick={() => { setActiveProjectPath(proj.path); setNav("chat"); }}
+                    onClick={() => {
+                      setCollapsedProjects((prev) => {
+                        const next = new Set(prev);
+                        if (next.has(proj.path)) next.delete(proj.path);
+                        else next.add(proj.path);
+                        return next;
+                      });
+                      setActiveProjectPath(proj.path);
+                      setNav("chat");
+                    }}
                   >
+                    <svg
+                      width="12" height="12" viewBox="0 0 24 24" fill="none"
+                      stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
+                      className={`sidebar-project-chevron ${collapsedProjects.has(proj.path) ? "" : "is-open"}`}
+                      aria-hidden
+                    >
+                      <path d="m9 18 6-6-6-6" />
+                    </svg>
                     <FolderTree size={15} strokeWidth={1.8} aria-hidden />
                     <span className="sidebar-item-label">{proj.name}</span>
                   </button>
@@ -759,9 +777,11 @@ export default function App() {
                     </svg>
                   </button>
                 </div>
-                <div className="sidebar-sessions">
-                  <span className="sidebar-empty">暂无会话</span>
-                </div>
+                {!collapsedProjects.has(proj.path) && (
+                  <div className="sidebar-sessions">
+                    <span className="sidebar-empty">暂无会话</span>
+                  </div>
+                )}
               </div>
             ))}
           </div>
