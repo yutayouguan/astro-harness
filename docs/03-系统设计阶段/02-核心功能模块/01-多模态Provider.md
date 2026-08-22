@@ -1,329 +1,223 @@
 # 多模态 Provider 系统
 
-> 阶段：系统设计 | 状态：定稿 | 说明：8 个 trait、路由与降级
+> 阶段：系统设计 | 状态：**实现定稿** | 更新：2026-08-22
 
-## 能力矩阵
+## 架构概览
 
-| 能力 | Anthropic | OpenAI | Google | DeepSeek | MiniMax |
-| ---- | :-------: | :----: | :----: | :------: | :-----: |
-| 文本生成 | ✓ | ✓ | ✓ | ✓ | ✓ |
-| 视觉理解 | ✓ | ✓ | ✓ | ✓ | ✓ |
-| 音频输入 | ✓ | ✓ | ✓ | — | ✓ |
-| 视频输入 | — | — | ✓ | — | ✓ |
-| Tool Use | ✓ | ✓ | ✓ | ✓ | ✓ |
-| 嵌入模型 | — | ✓ | ✓ | ✓ | ✓ |
-| 图像生成 | — | △ | ✓ | — | ✓ |
-| TTS | — | △ | ✓ | — | ✓ |
-| ASR | — | △ | ✓ | — | ✓ |
-| 视频生成 | — | — | ✓ | — | ✓ |
-| 音乐生成 | — | — | ✓ | — | ✓ |
+`crates/agent-providers`（package name `providers`）— 多厂商 LLM/图像/音频/视频 Provider 层。
 
-> **多媒体能力主力：Google + MiniMax。** OpenAI 多媒体接口（DALL-E / Whisper / TTS-1，标注 △）保留为备选降级项，不作默认路由。
->
-> Google 对应服务：Imagen 3（图像生成）、Veo 3.1（视频生成，8秒，720p/1080p/4k，含原生音频，LongRunning 轮询）、Lyria 3（音乐生成，走 Interactions API；Clip 30秒 / Pro 数分钟，44.1 kHz 立体声，支持文本+图片输入）、Cloud TTS Chirp3-HD（语音合成）、Cloud STT（语音识别）、text-embedding-004（嵌入）、Gemini（文本/多模态理解，含视频输入）
->
-> MiniMax 对应服务：speech-2.8-hd（TTS，最新 HD，支持流式/情感标签/字幕/音色设计/声音克隆）、asr-01（ASR）、image-01 / image-01-live（图像生成，含图生图/画风/人物主体参考）、video-01（视频生成）、music-3.0（音乐生成）+ music-cover（**翻唱，唯一参考音频翻唱能力**）+ 歌词生成（`/v1/lyrics_generation`，独立接口）；M3 支持图片+视频输入
->
-> ⚠️ MiniMax 所有多媒体接口（TTS/ASR/图像/视频/音乐/歌词/音色设计）均为**专属独立 endpoint**，不走 Chat Completions 兼容路由，`MiniMaxClient` 需为每个模态单独实现。
+```
+dispatch (唯一入口)
+  ├── register_provider() — 按 provider id + config.api_mode 路由
+  │     ├── 内置厂商 → trait 系统 (OpenAICompatible / Anthropic / Google / ...)
+  │     └── TOML 自定义 → ConfigDrivenCompletionModel (Responses API)
+  ├── chat_stream() / chat_stream_direct() — 聊天补全
+  ├── generate_image() / text_to_speech() / generate_video() — 媒体
+  └── verify() — 连通性探测
+```
 
 ---
 
-## Trait 体系
+## 协议管线（5 种 ApiMode）
+
+| ApiMode | 协议 | 厂商 |
+|---|---|---|
+| `ChatCompletions` | OpenAI Chat Completions (`/chat/completions`) | OpenAI、DeepSeek、MiniMax、Azure、智谱、月之暗面、百炼、火山、NVIDIA、OpenRouter、Ollama、混元、Mimo |
+| `Responses` | OpenAI Responses API (`/responses`) | OpenAI、DeepSeek、MiniMax + TOML 自定义 |
+| `AnthropicMessages` | Anthropic Messages API (`/v1/messages`) | Claude |
+| `Interactions` | Google Gemini Interactions (`/v1beta/interactions`) | Google |
+| `GeminiNative` | Gemini streamGenerateContent | Google（备用） |
+
+协议选择：`ProviderProfile.api_mode`（静态默认）+ `ProviderConfig.api_mode`（运行时覆盖）。
+
+---
+
+## Trait 系统
+
+### 核心 Trait 层次
 
 ```text
-ModalityClient (总入口)
-├── TextClient          → 文本生成
-│   └── MultimodalClient → 多模态输入（图像、音频），继承 TextClient（定义见 04-Provider接口规范.md）
-├── EmbeddingClient     → 向量嵌入
-├── ImageClient         → 图像生成/理解
-├── AudioClient
-│   ├── TtsClient       → 文字转语音
-│   └── AsrClient       → 语音转文字
-├── VideoClient         → 视频生成
-└── MusicClient         → 音乐生成
+CompletionModel          — 聊天补全（唯一异步 trait）
+EmbeddingModel           — 向量嵌入
+ImageGenModel            — 图像生成
+VideoGenModel            — 视频生成
+TTSModel                 — 语音合成
+MusicGenModel            — 音乐生成
+
+ProviderExt              — 厂商基础（NAME, BASE_URL, auth_headers）
+OpenAICompatible: ProviderExt — OpenAI 兼容厂商 hook（声明式常量 + finalize hook）
+Capabilities<Chat, Embedding, ImageGen, ...> — 编译期能力声明
 ```
+
+### OpenAICompatible 声明式常量
+
+新增厂商只需设常量，不需要覆盖 `finalize_body()`：
+
+```rust
+impl OpenAICompatible for NewProvider {
+    // 基础能力
+    const STREAM_USAGE: bool = true;
+    const SUPPORTS_TOOLS: bool = true;
+    const SUPPORTS_RESPONSES: bool = true;
+
+    // Thinking 格式（4 种）
+    const THINKING_FORMAT: ThinkingFormat = ThinkingFormat::DeepSeek;
+    //   None             — 不处理 thinking
+    //   ReasoningEffort  — OpenAI: reasoning_effort + max_completion_tokens
+    //   DeepSeek         — thinking.type=enabled/disabled + reasoning_effort
+    //   MiniMaxAdaptive  — reasoning_split=true + thinking.type=adaptive
+
+    // Effort 映射表
+    const EFFORT_MAP: &[(&str, &str)] = &[("max", "max"), ("xhigh", "max")];
+
+    // Responses API 行为
+    const RESPONSES_STORE_FALSE: bool = false;
+    const RESPONSES_PARALLEL_TOOLS: bool = false;
+    const RESPONSES_REASONING_SUMMARY: bool = false;
+}
+```
+
+### 泛型补全模型
+
+| 泛型 | 路径 | 用途 |
+|---|---|---|
+| `OpenAICompletionModel<Ext>` | `compat/completion.rs` | Chat Completions 路径 |
+| `OpenAIResponsesModel<Ext>` | `compat/responses.rs` | Responses API 路径 |
+| `ConfigDrivenCompletionModel` | `custom.rs` | TOML 自定义 provider（仅 Responses） |
+
+共享 thinking 转换：`apply_thinking_compat(ThinkingFormat, &[effort_map], body)` — 4 种格式统一处理。
 
 ---
 
-## 统一类型
+## TOML 自定义 Provider
 
-### 多媒体内容
-
-```rust
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(tag = "type", rename_all = "snake_case")]
-pub enum MediaContent {
-    Text { text: String },
-    Image(ImageContent),
-    Audio(AudioContent),
-    Video(VideoContent),
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum MediaData {
-    Url(String),
-    Base64 { data: String, size_bytes: usize },
-    Path(std::path::PathBuf),       // 延迟上传，调用时才读取
-}
-```
-
-### 统一消息格式
-
-```rust
-pub struct Message {
-    pub role: Role,
-    pub content: Vec<ContentPart>,  // 多模态内容列表
-    pub name: Option<String>,       // agent 名（多 agent 场景）
-}
-
-#[serde(tag = "type", rename_all = "snake_case")]
-pub enum ContentPart {
-    Text { text: String },
-    Image(ImageContent),
-    Audio(AudioContent),
-    Video(VideoContent),
-    ToolCall(ToolCallContent),
-    ToolResult(ToolResultContent),
-}
-```
-
----
-
-## 各模态 Trait 定义
-
-### TextClient
-
-```rust
-#[async_trait]
-pub trait TextClient: Send + Sync {
-    async fn chat(&self, req: ChatRequest) -> Result<ChatResponse, ProviderError>;
-    fn chat_stream(
-        &self,
-        req: ChatRequest,
-    ) -> BoxStream<'static, Result<StreamChunk, ProviderError>>;
-    fn provider_id(&self) -> &str;
-    fn max_context_tokens(&self) -> u32;
-    fn capabilities(&self) -> TextCapabilities;
-}
-
-pub struct TextCapabilities {
-    pub supports_vision: bool,
-    pub supports_audio_input: bool,
-    pub supports_tool_use: bool,
-    pub supports_system_prompt: bool,
-    pub supports_streaming: bool,
-    pub supports_reasoning: bool,
-}
-```
-
-### EmbeddingClient
-
-```rust
-#[async_trait]
-pub trait EmbeddingClient: Send + Sync {
-    async fn embed(&self, req: EmbeddingRequest) -> Result<Vec<Vec<f32>>, ProviderError>;
-    fn embedding_dim(&self) -> usize;
-}
-```
-
-### TtsClient / AsrClient
-
-```rust
-#[async_trait]
-pub trait TtsClient: Send + Sync {
-    fn stream_synthesize(
-        &self,
-        req: TtsRequest,
-    ) -> BoxStream<'static, Result<Bytes, ProviderError>>;
-}
-
-#[async_trait]
-pub trait AsrClient: Send + Sync {
-    async fn transcribe(&self, req: AsrRequest) -> Result<AsrResponse>;
-}
-
-pub struct AsrResponse {
-    pub text: String,
-    pub segments: Vec<AsrSegment>,  // 带时间戳的片段
-}
-```
-
-### ImageClient
-
-```rust
-#[async_trait]
-pub trait ImageClient: Send + Sync {
-    async fn generate(&self, req: ImageRequest) -> Result<ImageResponse, ProviderError>;
-}
-```
-
-### VideoClient
-
-```rust
-// 视频生成是异步任务，统一用 submit + poll 模式轮询
-#[async_trait]
-pub trait VideoClient: Send + Sync {
-    async fn submit(&self, req: VideoRequest) -> Result<String, ProviderError>;  // returns task_id
-    async fn poll(&self, task_id: &str) -> Result<MediaPollResult, ProviderError>;
-}
-
-pub enum VideoGenStatus {
-    Pending,
-    Processing { progress: f32 },
-    Done { url: String, duration_secs: f32 },
-    Failed { reason: String },
-}
-```
-
-### MusicClient
-
-```rust
-#[async_trait]
-pub trait MusicClient: Send + Sync {
-    async fn submit(&self, request: MusicRequest) -> Result<String, ProviderError>;  // returns task_id
-    async fn poll(&self, task_id: &str) -> Result<MusicPollResult, ProviderError>;
-    async fn generate_lyrics(&self, prompt: &str) -> Result<LyricsResponse, ProviderError>;
-    fn max_duration_secs(&self) -> u32 { 300 }
-}
-
-pub struct MusicRequest {
-    pub prompt: String,
-    pub duration_secs: Option<u32>,   // 默认 30s
-    pub vocal: bool,                   // 是否包含人声
-    pub lyrics: Option<String>,        // 可选歌词
-    pub genre: Option<String>,         // 音乐风格
-    pub tempo: Option<u32>,            // BPM
-}
-
-pub struct MusicReferenceRequest {
-    pub reference_audio: MediaData,
-    pub prompt: String,
-    pub duration_secs: Option<u32>,
-}
-
-pub struct LyricsResponse {
-    pub lyrics: String,
-    pub language: String,
-}
-
-pub type MusicTaskId = String;
-
-pub enum MusicPollResult {
-    Pending,
-    Processing { progress: f32 },
-    Done {
-        audio_url: String,
-        duration_secs: f32,
-        format: String,               // "mp3", "wav"
-    },
-    Failed { reason: String },
-}
-```
-
----
-
-## ProviderRegistry — 运行时路由
-
-```rust
-pub struct ProviderRegistry {
-    text_clients:    HashMap<String, Arc<dyn TextClient>>,
-    tts:             Arc<dyn TtsClient>,
-    asr:             Arc<dyn AsrClient>,
-    image:           Arc<dyn ImageClient>,
-    video:           Arc<dyn VideoClient>,
-    music:           Arc<dyn MusicClient>,
-    embedding:       Arc<dyn EmbeddingClient>,
-    fallback_chains: HashMap<String, Vec<String>>,
-}
-
-impl ProviderRegistry {
-    pub fn text(&self, model: &str) -> Result<Arc<dyn TextClient>>;
-    pub fn tts(&self) -> Arc<dyn TtsClient>;
-    pub fn asr(&self) -> Arc<dyn AsrClient>;
-    pub fn image(&self) -> Arc<dyn ImageClient>;
-    pub fn video(&self) -> Arc<dyn VideoClient>;
-    pub fn music(&self) -> Arc<dyn MusicClient>;
-    pub fn embedding(&self) -> Arc<dyn EmbeddingClient>;
-}
-```
-
----
-
-## 配置文件
+用户在 `~/.astro/config.toml` 声明即可接入任何 OpenAI 兼容 API：
 
 ```toml
-# configs/providers.toml
+[custom_providers.my-corp]
+name = "Corp LLM"
+base_url = "https://llm.corp.internal/v1"
+env_keys = ["CORP_API_KEY"]
+default_model = "corp-v3"
 
-[providers.anthropic]
-api_key_env = "ANTHROPIC_API_KEY"
-base_url    = "https://api.anthropic.com"
-models      = ["claude-opus-4", "claude-sonnet-4-5", "claude-haiku-4-5"]
-
-[providers.openai]
-api_key_env = "OPENAI_API_KEY"
-models.text      = ["gpt-4o", "gpt-4o-mini"]
-models.embedding = ["text-embedding-3-small", "text-embedding-3-large"]
-# 以下多媒体模型保留为降级备选，不作默认路由
-models.image     = ["dall-e-3"]
-models.tts       = ["tts-1", "tts-1-hd"]
-models.asr       = ["whisper-1"]
-
-[providers.deepseek]
-api_key_env = "DEEPSEEK_API_KEY"
-base_url    = "https://api.deepseek.com"
-models      = ["deepseek-chat", "deepseek-reasoner"]
-
-[providers.google]
-api_key_env  = "GOOGLE_API_KEY"
-base_url     = "https://generativelanguage.googleapis.com"
-models.text      = ["gemini-2.5-pro", "gemini-2.5-flash", "gemini-2.0-flash"]
-models.image     = ["imagen-3.0-generate-002"]
-models.tts       = ["en-US-Chirp3-HD-Aoede"]          # Cloud TTS Chirp3-HD
-models.asr       = ["latest_long"]                    # Cloud STT
-models.embedding = ["text-embedding-004", "gemini-embedding-exp-03-07"]
-models.video     = ["veo-3.1-generate-preview"]       # Veo 3.1：8秒，720p/1080p/4k，含原生音频
-models.music     = ["lyria-3-pro-preview", "lyria-3-clip-preview"]  # Lyria 3 via Interactions API
-
-[providers.minimax]
-api_key_env  = "MINIMAX_API_KEY"
-group_id = "your_group_id"        # 必填：MiniMax 多媒体接口 URL 中的 GroupId 参数
-models.text  = ["MiniMax-M3", "MiniMax-M2.7"]   # M3 推荐，1M 上下文，支持图片+视频输入
-models.tts   = ["speech-2.8-hd", "speech-2.8-turbo", "speech-2.6-hd"]  # speech-2.8-hd 推荐；支持流式/字幕/emotion tag
-models.asr   = ["asr-01"]
-models.image = ["image-01", "image-01-live"]     # image-01-live 支持画风（漫画/元气/中世纪/水彩）；均支持图生图（人物主体参考）
-models.video = ["video-01"]
-models.music = ["music-3.0", "music-2.6", "music-cover"]  # music-3.0 推荐；music-cover 翻唱（唯一参考音频翻唱能力）
-# 另有独立接口：/v1/lyrics_generation（歌词生成）、/v1/voice_design（音色设计）、/v1/files/upload（声音克隆上传）
-
-[providers.openrouter]
-api_key_env = "OPENROUTER_API_KEY"
-referer_url = "https://astro-agent.app"    # HTTP-Referer header（OpenRouter 要求）
-site_title = "Astro Agent"                  # X-Title header
-
-[routing]
-default_text      = "claude-sonnet-4-5"
-default_embedding = "text-embedding-004"                  # Google
-default_tts       = "minimax/speech-2.8-hd"               # MiniMax 主力（最新 HD）
-default_asr       = "google/latest_long"                  # Google Cloud STT 主力
-default_image     = "google/imagen-3.0-generate-002"      # Google Imagen 3 主力
-default_video     = "google/veo-3.1-generate-preview"     # Google Veo 3.1 主力（含原生音频）
-default_music     = "google/lyria-3-pro-preview"          # Google Lyria 3 主力
-
-[routing.fallback]
-text  = ["claude-sonnet-4-5", "MiniMax-M3", "gpt-4o", "deepseek-chat"]
-tts   = ["minimax/speech-2.8-hd", "google/en-US-Chirp3-HD-Aoede"]
-asr   = ["google/latest_long", "minimax/asr-01", "openai/whisper-1"]
-image = ["google/imagen-3.0-generate-002", "minimax/image-01", "openai/dall-e-3"]
-video = ["google/veo-3.1-generate-preview", "minimax/video-01"]
-music = ["google/lyria-3-pro-preview", "minimax/music-3.0"]
+# 可选：模型声明（不在 OpenRouter 上的私有模型）
+[[custom_providers.my-corp.models]]
+id = "corp-v3"
+display_name = "Corp V3"
+context_window = 128000
+max_output_tokens = 32000
+reasoning = true
+supported_efforts = ["high", "max"]
+default_effort = "high"
 ```
+
+- 统一走 Responses API
+- 运行时读取，修改后无需重启
+- TOML 声明的模型启动时注入 `~/.astro/cache/models.json`
 
 ---
 
-## 设计要点
+## Provider Profile 表
 
-- **MediaData::Path 延迟上传** — 本地文件调用 provider 时才读取上传，不提前 base64
-- **TTS 流式输出** — `stream_synthesize` 返回 `BoxStream<Bytes>`，边生成边播放
-- **视频/音乐异步轮询** — 不阻塞主 Agent 循环，Task 模式统一处理
-- **Provider 降级** — Registry 配置 fallback 链，主 provider 失败自动切换
+`ProviderProfile` 静态表（`profile.rs::PROFILES`），每厂商一个条目：
+
+| 字段 | 说明 |
+|---|---|
+| `id` | provider 标识符 |
+| `api_mode` | 默认协议 |
+| `default_base_url` | 默认 API 基址 |
+| `auth` | 认证方式（Bearer / AnthropicKey / GoogleApiKey / AzureHeader / None） |
+| `env_keys` | 环境变量名列表 |
+| `supports_responses` | 是否支持 Responses API 模式切换（前端 UI 标志） |
+| `supports_stream_usage` | 是否支持 stream_options.include_usage |
+| `image_mode` | 图片生成协议路由（OpenAi / GoogleInteractions / MiniMax） |
+| `default_*_model` | 各模态默认模型名 |
+
+---
+
+## 模型元数据（三层合并）
+
+```
+API 厂商端点 (/models)  →  OpenRouter 模型表  →  已知能力补丁
+         ↓                        ↓                      ↓
+     context_window         pricing / capabilities    DeepSeek thinking
+     display_name           reasoning meta            Google web search
+     max_output_tokens      input modalities          ...
+                    ↓
+            enrich_model_info() 合并
+                    ↓
+         ~/.astro/cache/models.json（单一事实源）
+                    ↓
+     ┌──────────────┴──────────────┐
+     前端模型选择器          运行时 context_window 查询
+```
+
+`ModelInfo` 字段：id、display_name、description、context_window、max_output_tokens、capabilities（tools/vision/web/reasoning/file/audio/image_gen/video_gen/music_gen）、reasoning（supported_efforts/default_effort）、pricing、default_parameters、meta_source。
+
+---
+
+## Fallback 链
+
+`ChatTarget` — primary + 最多 3 个备用。首个 chunk 前失败自动切换。
+
+```rust
+pub struct ChatTarget {
+    pub provider_id: String,
+    pub backend_id: String,      // provider kind（如 "deepseek"）
+    pub model: String,
+    pub api_key: String,
+    pub base_url: String,
+    pub api_mode: String,        // 随链路传播（如 "responses"）
+}
+```
+
+`api_mode` 从 Tauri UI → ChatTarget → ProviderConfig → dispatch，确保探测和聊天走同一协议。
+
+---
+
+## 能力矩阵（实际实现）
+
+| 能力 | Anthropic | OpenAI | Google | DeepSeek | MiniMax | 混元 | 智谱 | 百炼 | 火山 |
+|---|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|
+| 聊天 | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| Responses API | — | ✓ | — | ✓ | ✓ | — | — | — | — |
+| 嵌入 | — | ✓ | ✓ | — | ✓ | ✓ | ✓ | ✓ | ✓ |
+| 图像生成 | — | ✓ | ✓ | — | ✓ | ✓ | ✓ | ✓ | ✓ |
+| TTS | — | ✓ | ✓ | — | ✓ | ✓ | ✓ | ✓ | ✓ |
+| 视频生成 | — | — | ✓ | — | ✓ | ✓ | ✓ | ✓ | ✓ |
+| 音乐生成 | — | — | ✓ | — | ✓ | ✓ | ✓ | — | ✓ |
+| ASR | — | ✓ | ✓ | — | ✓ | ✓ | ✓ | ✓ | ✓ |
+
+---
+
+## Registry + Dispatch
+
+```rust
+// Registry — trait-based，内部持有共享 reqwest::Client
+pub struct Registry {
+    http: reqwest::Client,
+    providers: HashMap<String, DynProvider>,
+}
+
+// DynProvider — 按能力组合
+DynProvider::new(id, name)
+    .with_completion(model)    // CompletionModel
+    .with_embedding(model)     // EmbeddingModel
+    .with_image_gen(model)     // ImageGenModel
+    .with_tts(model)           // TTSModel
+    .with_video_gen(model)     // VideoGenModel
+    .with_music_gen(model)     // MusicGenModel
+
+// dispatch::register_provider — 按 id + api_mode 路由
+fn register_provider(reg, provider, config) {
+    let responses = config.api_mode == "responses";
+    match provider {
+        "openai" if responses => reg.register_openai_responses(...),
+        "openai" => reg.register_openai(...),
+        "deepseek" if responses => reg.register_openai_compat_responses::<DeepSeek>(...),
+        "deepseek" => register_compat::<DeepSeek>(...),
+        // ...
+        other => lookup_custom_provider(other) 或 fallback OpenAI compat
+    }
+}
+```
