@@ -95,7 +95,8 @@ import {
   Brain,
   ChartPie,
   Cpu,
-  FolderTree,
+  FolderClosed,
+  FolderOpen,
   Info,
   Layers2,
   MessageSquare,
@@ -754,15 +755,10 @@ export default function App() {
                       setNav("chat");
                     }}
                   >
-                    <svg
-                      width="12" height="12" viewBox="0 0 24 24" fill="none"
-                      stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
-                      className={`sidebar-project-chevron ${collapsedProjects.has(proj.path) ? "" : "is-open"}`}
-                      aria-hidden
-                    >
-                      <path d="m9 18 6-6-6-6" />
-                    </svg>
-                    <FolderTree size={15} strokeWidth={1.8} aria-hidden />
+                    {collapsedProjects.has(proj.path)
+                      ? <FolderClosed size={16} strokeWidth={1.7} aria-hidden />
+                      : <FolderOpen size={16} strokeWidth={1.7} aria-hidden />
+                    }
                     <span className="sidebar-item-label">{proj.name}</span>
                   </button>
                   <button
