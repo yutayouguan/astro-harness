@@ -706,22 +706,48 @@ export default function App() {
             </div>
           </div>
           <div className="sidebar-projects">
-            <button
-              type="button"
-              className="sidebar-new-chat-btn"
-              onClick={() => { setNav("chat"); startNewChat(); }}
-            >
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-                <path d="M12 5v14" /><path d="M5 12h14" />
-              </svg>
-              <span className="sidebar-item-label">{t("sidebar.newChat")}</span>
-            </button>
-            <div className="sidebar-project">
-              <div className="sidebar-project-header">
+            <div className="sidebar-section-header">
+              <span className="sidebar-section-title">项目</span>
+              <button
+                type="button"
+                className="sidebar-add-btn"
+                onClick={async () => {
+                  try {
+                    const { open } = await import("@tauri-apps/plugin-dialog");
+                    const selected = await open({ directory: true, title: "选择项目文件夹" });
+                    if (selected) {
+                      void selected;
+                    }
+                  } catch {}
+                }}
+                title="新建项目"
+                aria-label="新建项目"
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                  <path d="M12 5v14" /><path d="M5 12h14" />
+                </svg>
+              </button>
+            </div>
+            <div className="sidebar-project is-active">
+              <button
+                type="button"
+                className="sidebar-project-header"
+                onClick={() => { setNav("chat"); }}
+              >
                 <FolderTree size={15} strokeWidth={1.8} aria-hidden />
                 <span className="sidebar-item-label">默认工作区</span>
-              </div>
+              </button>
               <div className="sidebar-sessions">
+                <button
+                  type="button"
+                  className="sidebar-session-new"
+                  onClick={() => { setNav("chat"); startNewChat(); }}
+                >
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                    <path d="M12 5v14" /><path d="M5 12h14" />
+                  </svg>
+                  <span>新建对话</span>
+                </button>
                 <span className="sidebar-empty">暂无会话</span>
               </div>
             </div>
