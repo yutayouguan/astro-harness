@@ -733,7 +733,9 @@ fn merge_toml_custom_providers(state: &mut ProvidersState) {
     let home = std::env::var("HOME")
         .or_else(|_| std::env::var("USERPROFILE"))
         .unwrap_or_else(|_| ".".to_string());
-    let config_path = std::path::PathBuf::from(home).join(".astro").join("config.toml");
+    let config_path = std::path::PathBuf::from(home)
+        .join(".astro")
+        .join("config.toml");
     let custom = providers::custom::load_custom_providers(&config_path);
     for (id, cfg) in &custom {
         let toml_id = format!("toml:{id}");
@@ -872,8 +874,7 @@ fn to_dto(p: &ProviderConfig) -> ProviderConfigDto {
         supports_asr: profile.supports_asr(),
         supports_embedding: profile.supports_embedding,
         api_mode: effective_api_mode(p.kind, &p.api_mode).to_string(),
-        supports_responses_api: supports_responses_toggle(p.kind)
-            || p.id.starts_with("toml:"),
+        supports_responses_api: supports_responses_toggle(p.kind) || p.id.starts_with("toml:"),
         config_source: if p.id.starts_with("toml:") {
             "toml".to_string()
         } else if p.id.starts_with("prov-") {
