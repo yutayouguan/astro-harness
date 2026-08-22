@@ -301,7 +301,8 @@ mod tests {
 
     #[test]
     fn thinking_reasoning_effort_replaces_max_tokens() {
-        let mut body = json!({"max_tokens": 4096, "thinking_config": {"enabled": true, "effort": "high"}});
+        let mut body =
+            json!({"max_tokens": 4096, "thinking_config": {"enabled": true, "effort": "high"}});
         let map = &[("max", "high"), ("xhigh", "high")];
         apply_thinking_compat(ThinkingFormat::ReasoningEffort, map, &mut body);
         assert_eq!(body["reasoning_effort"], "high");

@@ -1,7 +1,6 @@
 //! MiniMax — OpenAI 兼容聊天 + 多媒体能力。
 
 use reqwest::header::HeaderMap;
-use serde_json::Value;
 
 use crate::compat::{OpenAICompatible, OpenAICompletionModel, ThinkingFormat};
 use crate::traits::{

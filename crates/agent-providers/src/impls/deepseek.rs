@@ -20,8 +20,7 @@ impl OpenAICompatible for DeepSeek {
     const STREAM_USAGE: bool = true;
     const SUPPORTS_RESPONSES: bool = true;
     const THINKING_FORMAT: ThinkingFormat = ThinkingFormat::DeepSeek;
-    const EFFORT_MAP: &'static [(&'static str, &'static str)] =
-        &[("max", "max"), ("xhigh", "max")];
+    const EFFORT_MAP: &'static [(&'static str, &'static str)] = &[("max", "max"), ("xhigh", "max")];
 }
 
 impl Capabilities for DeepSeek {

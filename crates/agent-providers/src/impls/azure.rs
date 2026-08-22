@@ -4,7 +4,9 @@ use reqwest::header::{HeaderMap, HeaderValue};
 use reqwest::Client;
 use serde_json::{json, Value};
 
-use crate::compat::{apply_thinking_compat, OpenAICompatible, OpenAICompletionModel, ThinkingFormat};
+use crate::compat::{
+    apply_thinking_compat, OpenAICompatible, OpenAICompletionModel, ThinkingFormat,
+};
 use crate::traits::{Capabilities, Capable, Nothing, ProviderExt};
 
 const API_VERSION: &str = "2024-06-01";

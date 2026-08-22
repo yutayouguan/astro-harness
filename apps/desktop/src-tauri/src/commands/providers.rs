@@ -627,7 +627,9 @@ fn sync_custom_provider_models() {
     let home = std::env::var("HOME")
         .or_else(|_| std::env::var("USERPROFILE"))
         .unwrap_or_else(|_| ".".to_string());
-    let config_path = std::path::PathBuf::from(home).join(".astro").join("config.toml");
+    let config_path = std::path::PathBuf::from(home)
+        .join(".astro")
+        .join("config.toml");
     let custom = providers::custom::load_custom_providers(&config_path);
     if custom.is_empty() {
         return;
@@ -689,8 +691,7 @@ fn sync_custom_provider_models() {
                 models,
                 source: "config.toml".to_string(),
                 latency_ms: 0,
-                updated_at: chrono::Utc::now()
-                    .to_rfc3339_opts(chrono::SecondsFormat::Secs, true),
+                updated_at: chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true),
             },
         );
     }

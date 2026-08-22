@@ -667,7 +667,13 @@ async fn audit_hardline_terminal_denial(
         affected_paths: Vec::new(),
         network_hosts: Vec::new(),
     };
-    let audit = PermissionAuditReceipt::new(memory_dir, &settings, profile_id, request, session.config.thread_memory_mode);
+    let audit = PermissionAuditReceipt::new(
+        memory_dir,
+        &settings,
+        profile_id,
+        request,
+        session.config.thread_memory_mode,
+    );
     audit.record(
         memory::PermissionAuditKind::Evaluated,
         None,
@@ -739,7 +745,13 @@ async fn preflight_read_only_write(
         "当前为只读模式。是否仅允许本次 `{}` 执行下列写入？\n\n影响路径：\n- {}\n\n不会修改全局权限，也不会提升为完全访问。",
         call.name, paths
     );
-    let audit = PermissionAuditReceipt::new(memory_dir, &settings, profile_id, request, session.config.thread_memory_mode);
+    let audit = PermissionAuditReceipt::new(
+        memory_dir,
+        &settings,
+        profile_id,
+        request,
+        session.config.thread_memory_mode,
+    );
     review_once_permission(
         session,
         &selection,
@@ -814,7 +826,13 @@ async fn preflight_mcp_tool_approval(
         annotations.destructive_hint.unwrap_or(true),
         annotations.open_world_hint.unwrap_or(true),
     );
-    let audit = PermissionAuditReceipt::new(memory_dir, &settings, profile_id, request, session.config.thread_memory_mode);
+    let audit = PermissionAuditReceipt::new(
+        memory_dir,
+        &settings,
+        profile_id,
+        request,
+        session.config.thread_memory_mode,
+    );
     review_once_permission(
         session,
         &selection,
@@ -895,7 +913,13 @@ async fn preflight_in_process_network(
         "当前模式未直接授予进程内网络访问。是否仅允许本次 `{}` 访问以下主机？\n\n{}\n\n该授权不会开放 terminal/code_exec 网络，也不会持久化。",
         call.name, host_list
     );
-    let audit = PermissionAuditReceipt::new(memory_dir, &settings, profile_id, request, session.config.thread_memory_mode);
+    let audit = PermissionAuditReceipt::new(
+        memory_dir,
+        &settings,
+        profile_id,
+        request,
+        session.config.thread_memory_mode,
+    );
     review_once_permission(
         session,
         &selection,
@@ -1432,9 +1456,7 @@ async fn execute_tools_serial_inner(
                 match start_managed_network(session, &step_context, call, turn_ctx_arc).await {
                     Ok(managed_network) => managed_network,
                     Err(error) => {
-                        if session.config.thread_memory_mode
-                            == types::ThreadMemoryMode::Enabled
-                        {
+                        if session.config.thread_memory_mode == types::ThreadMemoryMode::Enabled {
                             memory::try_append_decision(
                                 &memory_dir,
                                 memory::DecisionEntry::new(
@@ -1642,9 +1664,7 @@ async fn execute_tools_serial_inner(
                     }
                 }
                 Err(e) => {
-                    if session.config.thread_memory_mode
-                        == types::ThreadMemoryMode::Enabled
-                    {
+                    if session.config.thread_memory_mode == types::ThreadMemoryMode::Enabled {
                         memory::try_append_decision(
                             &memory_dir,
                             memory::DecisionEntry::new(
@@ -1728,9 +1748,7 @@ pub(crate) async fn execute_tools_concurrent(
                         continue;
                     }
                     Err(error) => {
-                        if session.config.thread_memory_mode
-                            == types::ThreadMemoryMode::Enabled
-                        {
+                        if session.config.thread_memory_mode == types::ThreadMemoryMode::Enabled {
                             memory::try_append_decision(
                                 session.memory_dir(),
                                 memory::DecisionEntry::new(
