@@ -304,13 +304,14 @@ mod tests {
     }
 
     #[test]
-    fn cron_uses_calendar_check_icon() {
+    fn cron_namespace_has_five_tools() {
         let cat = builtin_catalog();
         let cron = cat.iter().find(|c| c.id == "cron").expect("cron");
-        assert_eq!(cron.icon, "calendar-check");
-        assert_eq!(cron.functions.len(), 1);
-        assert_eq!(cron.functions[0].name, "cron");
-        assert!(cron.functions[0].params.iter().any(|p| p.name == "action"));
+        assert_eq!(cron.functions.len(), 5);
+        let names: Vec<&str> = cron.functions.iter().map(|f| f.name.as_str()).collect();
+        assert!(names.contains(&"cron.add"));
+        assert!(names.contains(&"cron.list"));
+        assert!(names.contains(&"cron.remove"));
     }
 
     #[test]
