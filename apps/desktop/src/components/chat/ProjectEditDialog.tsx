@@ -117,10 +117,22 @@ export default function ProjectEditDialog({
 
         <h2 id={titleId} className="project-edit-title">编辑项目</h2>
 
-        {/* 项目名称 */}
+        {/* 项目名称（图标内嵌在名称行左侧，点击即可换） */}
         <label className="project-edit-label">项目名称</label>
         <div className="project-edit-name-row">
-          <FolderOpen size={16} strokeWidth={1.7} className="project-edit-name-icon" />
+          <button
+            type="button"
+            className="project-edit-name-icon-btn"
+            onClick={() => setIconPickerOpen(true)}
+            title="点击更换图标"
+            aria-label="更换项目图标"
+          >
+            {iconId ? (
+              <LucideByName name={iconId} size={16} />
+            ) : (
+              <FolderOpen size={16} strokeWidth={1.7} />
+            )}
+          </button>
           <input
             type="text"
             className="project-edit-name-input"
@@ -128,39 +140,6 @@ export default function ProjectEditDialog({
             onChange={(e) => setName(e.target.value)}
             placeholder="项目名称"
           />
-        </div>
-
-        {/* 项目图标 */}
-        <label className="project-edit-label">图标</label>
-        <div className="project-edit-icon-row">
-          <button
-            type="button"
-            className="project-edit-icon-preview"
-            onClick={() => setIconPickerOpen(true)}
-            aria-label="选择图标"
-          >
-            {iconId ? (
-              <LucideByName name={iconId} size={20} />
-            ) : (
-              <FolderOpen size={20} strokeWidth={1.6} />
-            )}
-          </button>
-          <button
-            type="button"
-            className="project-edit-icon-change"
-            onClick={() => setIconPickerOpen(true)}
-          >
-            更换图标
-          </button>
-          {iconId && (
-            <button
-              type="button"
-              className="project-edit-icon-clear"
-              onClick={() => setIconId(null)}
-            >
-              恢复默认
-            </button>
-          )}
         </div>
         <LucideIconPicker
           open={iconPickerOpen}
