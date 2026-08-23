@@ -804,6 +804,7 @@ export default function App() {
                     activeSessionId={chat.sessionId}
                     projectPath={proj.path}
                     onOpenSession={(sid) => { setActiveProjectPath(proj.path); void openSessionFromFilespace(sid); }}
+                    onDeleteCurrentSession={() => { void prepareDeleteCurrentSession(); void clearDeletedCurrentSession(); }}
                   />
                 )}
               </div>
