@@ -1061,8 +1061,10 @@ html[data-theme="dark"] .settings-overlay {
 
 .settings-overlay-panel {
   position: relative;
-  width: min(920px, 90vw);
-  max-height: 85vh;
+  width: 80vw;
+  height: 80vh;
+  max-width: 1100px;
+  max-height: 800px;
   border-radius: 18px;
   background: var(--glass-fill, #fff);
   border: 1px solid var(--glass-edge, rgba(0, 0, 0, 0.1));
@@ -1074,8 +1076,10 @@ html[data-theme="dark"] .settings-overlay {
 }
 
 .settings-overlay-panel--wide {
-  width: min(1100px, 94vw);
-  max-height: 90vh;
+  width: 85vw;
+  height: 85vh;
+  max-width: 1200px;
+  max-height: 900px;
 }
 
 @keyframes overlay-panel-in {
@@ -1275,13 +1279,13 @@ html[data-theme="dark"] .project-context-menu {
 }
 
 .sidebar-session-item:hover .sidebar-session-title {
-  animation: sidebar-title-scroll 6s ease-in-out 0.8s infinite;
+  animation: sidebar-title-scroll 10s ease-in-out 1.2s infinite;
 }
 
 @keyframes sidebar-title-scroll {
-  0%, 15% { transform: translateX(0); }
+  0%, 20% { transform: translateX(0); }
   40%, 60% { transform: translateX(var(--scroll-distance, -40px)); }
-  85%, 100% { transform: translateX(0); }
+  80%, 100% { transform: translateX(0); }
 }
 
 @media (prefers-reduced-motion: reduce) {

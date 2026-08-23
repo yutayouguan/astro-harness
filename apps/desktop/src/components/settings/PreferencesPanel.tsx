@@ -14,6 +14,7 @@ import {
   Sparkles,
   Webhook,
   Layers,
+  List,
   Wrench,
 } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
@@ -734,6 +735,11 @@ export default function PreferencesPanel({
             </label>
           ))}
         </div>
+
+        <div className="prefs-toggle-list" role="group" aria-label="侧栏显示">
+          <h3 className="prefs-toggle-heading">侧栏</h3>
+          <SidebarVisibleSetting tone={tone} />
+        </div>
       </section>
 
       </div>
@@ -1008,5 +1014,41 @@ export default function PreferencesPanel({
       </div>
       </div>
     </div>
+  );
+}
+
+function SidebarVisibleSetting({ tone }: { tone?: string }) {
+  const [count, setCount] = useState(() => {
+    try {
+      const v = localStorage.getItem("astro:sidebar-visible-sessions");
+      if (v) { const n = Number(v); if (n >= 1 && n <= 50) return n; }
+    } catch {}
+    return 5;
+  });
+
+  return (
+    <label className="prefs-toggle-row">
+      <span className="prefs-toggle-icon" aria-hidden>
+        <List size={15} strokeWidth={2.25} />
+      </span>
+      <span className="prefs-toggle-text">
+        <span className="prefs-toggle-label">侧栏默认显示会话数</span>
+        <span className="prefs-toggle-desc">超出部分折叠，点击展开</span>
+      </span>
+      <select
+        className="prefs-select"
+        value={count}
+        data-tone={tone}
+        onChange={(e) => {
+          const n = Number(e.target.value);
+          setCount(n);
+          try { localStorage.setItem("astro:sidebar-visible-sessions", String(n)); } catch {}
+        }}
+      >
+        {[3, 5, 8, 10, 15, 20].map((n) => (
+          <option key={n} value={n}>{n} 条</option>
+        ))}
+      </select>
+    </label>
   );
 }

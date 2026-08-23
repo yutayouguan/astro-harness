@@ -17,7 +17,20 @@ import {
 } from "lucide-react";
 import type { RecentSessionDto } from "../../types";
 
-const VISIBLE_COUNT = 5;
+const DEFAULT_VISIBLE_COUNT = 5;
+const STORAGE_KEY = "astro:sidebar-visible-sessions";
+
+function readVisibleCount(): number {
+  try {
+    const v = localStorage.getItem(STORAGE_KEY);
+    if (v) { const n = Number(v); if (n >= 1 && n <= 50) return n; }
+  } catch {}
+  return DEFAULT_VISIBLE_COUNT;
+}
+
+export function saveVisibleCount(count: number) {
+  try { localStorage.setItem(STORAGE_KEY, String(Math.max(1, Math.min(50, count)))); } catch {}
+}
 
 type Props = {
   activeSessionId: string | null;
@@ -39,6 +52,7 @@ function relativeTime(iso: string | null): string {
 export default function SidebarSessionList({ activeSessionId, onOpenSession }: Props) {
   const [items, setItems] = useState<RecentSessionDto[]>([]);
   const [expanded, setExpanded] = useState(false);
+  const visibleCount = readVisibleCount();
 
   const load = useCallback(async () => {
     try {
@@ -77,8 +91,8 @@ export default function SidebarSessionList({ activeSessionId, onOpenSession }: P
     );
   }
 
-  const visible = expanded ? items : items.slice(0, VISIBLE_COUNT);
-  const hiddenCount = items.length - VISIBLE_COUNT;
+  const visible = expanded ? items : items.slice(0, visibleCount);
+  const hiddenCount = items.length - visibleCount;
 
   return (
     <div className="sidebar-sessions">

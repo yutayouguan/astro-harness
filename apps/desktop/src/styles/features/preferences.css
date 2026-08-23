@@ -1895,3 +1895,20 @@ html[data-theme="dark"] .shell-grad-custom-color-core {
   );
   box-shadow: 0 6px 16px color-mix(in srgb, var(--unified-tone, #2563eb) 28%, transparent);
 }
+
+.prefs-select {
+  padding: 4px 8px;
+  border: 1px solid color-mix(in srgb, var(--glass-edge) 60%, transparent);
+  border-radius: 8px;
+  background: color-mix(in srgb, rgba(255, 255, 255, 0.45) 70%, transparent);
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  outline: none;
+}
+
+html[data-theme="dark"] .prefs-select {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.12);
+}
