@@ -1214,25 +1214,59 @@ html[data-theme="dark"] .project-context-menu {
 /* ── Sidebar session items ────────────────────────── */
 
 .sidebar-session-item {
+  position: relative;
+  display: flex;
+  align-items: center;
+  border-radius: 8px;
+  transition: background 0.1s;
+}
+
+.sidebar-session-item:hover {
+  background: color-mix(in srgb, var(--tone, #64748b) 8%, transparent);
+}
+
+.sidebar-session-item.is-active {
+  background: color-mix(in srgb, var(--tone, var(--tone-blue)) 12%, transparent);
+}
+
+.sidebar-session-main {
+  flex: 1;
+  min-width: 0;
   display: flex;
   align-items: center;
   gap: 8px;
-  width: 100%;
-  padding: 6px 10px;
+  padding: 7px 8px;
   border: none;
-  border-radius: 7px;
+  border-radius: 8px;
   background: transparent;
   font-size: 12.5px;
   font-weight: 450;
   color: var(--ink);
   cursor: pointer;
   text-align: left;
-  transition: background 0.1s;
   overflow: hidden;
 }
 
-.sidebar-session-item:hover {
-  background: color-mix(in srgb, var(--tone, #64748b) 8%, transparent);
+.sidebar-session-item.is-active .sidebar-session-main {
+  font-weight: 550;
+}
+
+.sidebar-session-main svg {
+  flex-shrink: 0;
+  opacity: 0.5;
+}
+
+.sidebar-session-item.is-active .sidebar-session-main svg {
+  opacity: 0.8;
+  color: var(--tone, var(--tone-blue));
+}
+
+.sidebar-session-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  display: inline-block;
 }
 
 .sidebar-session-item:hover .sidebar-session-title {
@@ -1251,32 +1285,45 @@ html[data-theme="dark"] .project-context-menu {
   }
 }
 
-.sidebar-session-item.is-active {
-  background: color-mix(in srgb, var(--tone, var(--tone-blue)) 12%, transparent);
-  font-weight: 550;
-}
-
-.sidebar-session-item svg {
-  flex-shrink: 0;
-  opacity: 0.5;
-}
-
-.sidebar-session-item.is-active svg {
-  opacity: 0.8;
-  color: var(--tone, var(--tone-blue));
-}
-
-.sidebar-session-title {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 .sidebar-session-time {
   flex-shrink: 0;
   font-size: 10px;
   color: var(--ink-mute);
   opacity: 0.6;
+  margin-right: 2px;
+}
+
+/* hover 时隐藏时间，显示操作按钮 */
+.sidebar-session-item:hover .sidebar-session-time {
+  display: none;
+}
+
+.sidebar-session-actions {
+  display: none;
+  align-items: center;
+  gap: 1px;
+  flex-shrink: 0;
+  padding-right: 4px;
+}
+
+.sidebar-session-item:hover .sidebar-session-actions {
+  display: flex;
+}
+
+.sidebar-session-action-btn {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border: none;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--ink-mute);
+  cursor: pointer;
+  transition: background 0.08s, color 0.08s;
+}
+
+.sidebar-session-action-btn:hover {
+  background: color-mix(in srgb, var(--tone, #64748b) 14%, transparent);
+  color: var(--ink);
 }

@@ -1,8 +1,18 @@
-// 侧栏项目下的会话列表（轻量版，直接调 list_sessions）。
+// 侧栏项目下的会话列表。
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { Archive, MessageSquare, Pin, Trash2 } from "lucide-react";
+import {
+  Archive,
+  Download,
+  Edit3,
+  GitBranch,
+  MessageSquare,
+  MoreVertical,
+  Pin,
+  RefreshCw,
+  Trash2,
+} from "lucide-react";
 import type { RecentSessionDto } from "../../types";
 
 type Props = {
@@ -38,8 +48,6 @@ export default function SidebarSessionList({ activeSessionId, onOpenSession }: P
   }, []);
 
   useEffect(() => { void load(); }, [load]);
-
-  // 每次 activeSessionId 变化时刷新（新建会话后）
   useEffect(() => { void load(); }, [activeSessionId, load]);
 
   const [sessionMenu, setSessionMenu] = useState<{ sessionId: string; x: number; y: number } | null>(null);
@@ -73,6 +81,7 @@ export default function SidebarSessionList({ activeSessionId, onOpenSession }: P
           isActive={s.sessionId === activeSessionId}
           onOpen={() => onOpenSession(s.sessionId)}
           onContextMenu={(x, y) => setSessionMenu({ sessionId: s.sessionId, x, y })}
+          onMoreClick={(x, y) => setSessionMenu({ sessionId: s.sessionId, x, y })}
         />
       ))}
       {sessionMenu && (
@@ -81,10 +90,22 @@ export default function SidebarSessionList({ activeSessionId, onOpenSession }: P
             <Pin size={14} strokeWidth={1.8} aria-hidden /><span>置顶</span>
           </button>
           <button type="button" role="menuitem" className="project-context-menu-item" onClick={() => setSessionMenu(null)}>
+            <Edit3 size={14} strokeWidth={1.8} aria-hidden /><span>重命名</span>
+          </button>
+          <button type="button" role="menuitem" className="project-context-menu-item" onClick={() => setSessionMenu(null)}>
+            <RefreshCw size={14} strokeWidth={1.8} aria-hidden /><span>重新生成标题</span>
+          </button>
+          <button type="button" role="menuitem" className="project-context-menu-item" onClick={() => setSessionMenu(null)}>
+            <Download size={14} strokeWidth={1.8} aria-hidden /><span>导出</span>
+          </button>
+          <button type="button" role="menuitem" className="project-context-menu-item" onClick={() => setSessionMenu(null)}>
+            <GitBranch size={14} strokeWidth={1.8} aria-hidden /><span>分支</span>
+          </button>
+          <button type="button" role="menuitem" className="project-context-menu-item" onClick={() => setSessionMenu(null)}>
             <Archive size={14} strokeWidth={1.8} aria-hidden /><span>归档</span>
           </button>
           <button type="button" role="menuitem" className="project-context-menu-item is-danger" onClick={() => setSessionMenu(null)}>
-            <Trash2 size={14} strokeWidth={1.8} aria-hidden /><span>删除</span>
+            <Trash2 size={14} strokeWidth={1.8} aria-hidden /><span>永久删除</span>
           </button>
         </div>
       )}
@@ -97,11 +118,13 @@ function SessionItem({
   isActive,
   onOpen,
   onContextMenu,
+  onMoreClick,
 }: {
   session: RecentSessionDto;
   isActive: boolean;
   onOpen: () => void;
   onContextMenu: (x: number, y: number) => void;
+  onMoreClick: (x: number, y: number) => void;
 }) {
   const titleRef = useRef<HTMLSpanElement>(null);
 
@@ -111,25 +134,46 @@ function SessionItem({
     const overflow = el.scrollWidth - el.clientWidth;
     if (overflow > 0) {
       el.style.setProperty("--scroll-distance", `-${overflow}px`);
+    } else {
+      el.style.removeProperty("--scroll-distance");
     }
   };
 
   return (
-    <button
-      type="button"
+    <div
       className={`sidebar-session-item ${isActive ? "is-active" : ""}`}
-      onClick={onOpen}
-      onMouseEnter={handleMouseEnter}
       onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); onContextMenu(e.clientX, e.clientY); }}
-      title={s.summary || "未命名会话"}
+      onMouseEnter={handleMouseEnter}
     >
-      <MessageSquare size={13} strokeWidth={1.6} aria-hidden />
-      <span className="sidebar-session-title" ref={titleRef}>
-        {s.summary || "未命名会话"}
-      </span>
-      <span className="sidebar-session-time">
-        {relativeTime(s.createdAt)}
-      </span>
-    </button>
+      <button type="button" className="sidebar-session-main" onClick={onOpen}>
+        <MessageSquare size={13} strokeWidth={1.6} aria-hidden />
+        <span className="sidebar-session-title" ref={titleRef}>
+          {s.summary || "未命名会话"}
+        </span>
+        <span className="sidebar-session-time">
+          {relativeTime(s.createdAt)}
+        </span>
+      </button>
+      <div className="sidebar-session-actions">
+        <button type="button" className="sidebar-session-action-btn" title="置顶" onClick={(e) => { e.stopPropagation(); }}>
+          <Pin size={13} strokeWidth={1.8} aria-hidden />
+        </button>
+        <button type="button" className="sidebar-session-action-btn" title="归档" onClick={(e) => { e.stopPropagation(); }}>
+          <Archive size={13} strokeWidth={1.8} aria-hidden />
+        </button>
+        <button
+          type="button"
+          className="sidebar-session-action-btn"
+          title="更多"
+          onClick={(e) => {
+            e.stopPropagation();
+            const rect = e.currentTarget.getBoundingClientRect();
+            onMoreClick(rect.right + 4, rect.top);
+          }}
+        >
+          <MoreVertical size={13} strokeWidth={1.8} aria-hidden />
+        </button>
+      </div>
+    </div>
   );
 }
