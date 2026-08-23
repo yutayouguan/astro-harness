@@ -192,6 +192,7 @@ mod tests {
             supports_embedding: false,
             api_mode: "chat_completions".into(),
             supports_responses_api: false,
+            config_source: "builtin".into(),
         }
     }
 
