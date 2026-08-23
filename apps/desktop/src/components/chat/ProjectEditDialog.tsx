@@ -59,29 +59,12 @@ export default function ProjectEditDialog({
     if (!project || saving) return;
     setSaving(true);
     try {
-      let updated: ProjectDto;
-      const isVirtual = project.id === "default";
-      if (isVirtual) {
-        // 默认工作空间是前端虚拟对象，需要先在 DB 创建
-        updated = await invoke<ProjectDto>("create_project", {
-          name: name.trim() || project.name,
-          roots,
-        });
-        // 创建后再更新图标（create_project 不接受 icon）
-        if (iconId) {
-          updated = await invoke<ProjectDto>("update_project", {
-            projectId: updated.id,
-            icon: iconId,
-          });
-        }
-      } else {
-        updated = await invoke<ProjectDto>("update_project", {
-          projectId: project.id,
-          name: name.trim() || project.name,
-          icon: iconId ?? "",
-          roots,
-        });
-      }
+      const updated = await invoke<ProjectDto>("update_project", {
+        projectId: project.id,
+        name: name.trim() || project.name,
+        icon: iconId ?? "",
+        roots,
+      });
       onUpdated(updated);
       onClose();
     } catch (err) {

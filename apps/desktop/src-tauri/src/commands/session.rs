@@ -547,6 +547,20 @@ pub async fn list_projects() -> Result<Vec<ProjectDto>, String> {
 }
 
 #[tauri::command]
+pub async fn ensure_default_project() -> Result<ProjectDto, String> {
+    let store = open_sessions()?;
+    let projects = store.list_projects().map_err(|e| e.to_string())?;
+    if let Some(existing) = projects.into_iter().find(|p| p.position == 0) {
+        return Ok(project_to_dto(existing));
+    }
+    let ws_path = super::common::workspace_dir();
+    let proj = store
+        .create_project("默认工作空间", &[ws_path.as_str()])
+        .map_err(|e| e.to_string())?;
+    Ok(project_to_dto(proj))
+}
+
+#[tauri::command]
 pub async fn create_project(name: String, roots: Vec<String>) -> Result<ProjectDto, String> {
     let name = name.trim();
     if name.is_empty() {

@@ -265,6 +265,7 @@ pub fn run() {
             // — projects —
             commands::common::get_default_workspace_path,
             commands::session::list_projects,
+            commands::session::ensure_default_project,
             commands::session::create_project,
             commands::session::update_project,
             commands::session::delete_project,
