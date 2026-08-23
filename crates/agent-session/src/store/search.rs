@@ -244,17 +244,40 @@ impl SessionStore {
     }
 
     /// 按 `started_at` 降序列出会话；preview 取首条 user content（截断 120 字）。
+    /// `project_root` 过滤：`Some(path)` = 仅该项目，`None` = 全部。
     pub fn list_sessions(
         &self,
         filter: super::SessionListFilter,
         limit: usize,
     ) -> Result<Vec<RecentSession>> {
+        self.list_sessions_filtered(filter, limit, None)
+    }
+
+    pub fn list_sessions_filtered(
+        &self,
+        filter: super::SessionListFilter,
+        limit: usize,
+        project_root: Option<&str>,
+    ) -> Result<Vec<RecentSession>> {
         if limit == 0 {
             return Ok(Vec::new());
         }
-        let where_clause = match filter {
-            super::SessionListFilter::Active => "WHERE s.archived_at IS NULL",
-            super::SessionListFilter::Archived => "WHERE s.archived_at IS NOT NULL",
+        let mut conditions = Vec::new();
+        match filter {
+            super::SessionListFilter::Active => conditions.push("s.archived_at IS NULL"),
+            super::SessionListFilter::Archived => conditions.push("s.archived_at IS NOT NULL"),
+        }
+        if let Some(root) = project_root {
+            if root.is_empty() || root == "default" {
+                conditions.push("(s.project_root IS NULL OR s.project_root = '')");
+            } else {
+                conditions.push("s.project_root = ?2");
+            }
+        }
+        let where_clause = if conditions.is_empty() {
+            String::new()
+        } else {
+            format!("WHERE {}", conditions.join(" AND "))
         };
         let sql = format!(
             "SELECT s.id, s.title, s.started_at,
@@ -272,8 +295,8 @@ impl SessionStore {
              LIMIT ?1"
         );
         let mut stmt = self.conn.prepare(&sql)?;
-        let rows = stmt
-            .query_map(params![limit as i64], |row| {
+        let rows = if let Some(root) = project_root.filter(|r| !r.is_empty() && *r != "default") {
+            stmt.query_map(params![limit as i64, root], |row| {
                 Ok((
                     row.get::<_, String>(0)?,
                     row.get::<_, Option<String>>(1)?,
@@ -285,7 +308,22 @@ impl SessionStore {
                     row.get::<_, Option<f64>>(7)?,
                 ))
             })?
-            .collect::<Result<Vec<_>, _>>()?;
+            .collect::<Result<Vec<_>, _>>()?
+        } else {
+            stmt.query_map(params![limit as i64], |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, Option<String>>(1)?,
+                    row.get::<_, f64>(2)?,
+                    row.get::<_, Option<String>>(3)?,
+                    row.get::<_, Option<f64>>(4)?,
+                    row.get::<_, Option<String>>(5)?,
+                    row.get::<_, Option<f64>>(6)?,
+                    row.get::<_, Option<f64>>(7)?,
+                ))
+            })?
+            .collect::<Result<Vec<_>, _>>()?
+        };
 
         Ok(rows
             .into_iter()

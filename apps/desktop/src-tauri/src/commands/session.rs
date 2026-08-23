@@ -271,12 +271,13 @@ pub async fn remove_chat_bubbles(session_id: String, start: i32, end: i32) -> Re
 pub async fn list_sessions(
     filter: String,
     limit: Option<i32>,
+    project_root: Option<String>,
 ) -> Result<Vec<RecentSessionDto>, String> {
     let filter = parse_session_filter(&filter)?;
     let store = open_sessions()?;
     let limit = limit.unwrap_or(50).clamp(1, 200) as usize;
     Ok(store
-        .list_sessions(filter, limit)
+        .list_sessions_filtered(filter, limit, project_root.as_deref())
         .map_err(|e| e.to_string())?
         .into_iter()
         .map(recent_session_dto)
@@ -286,7 +287,19 @@ pub async fn list_sessions(
 /// 兼容旧调用：仅列出未归档会话。
 #[tauri::command]
 pub async fn list_recent_sessions(limit: Option<i32>) -> Result<Vec<RecentSessionDto>, String> {
-    list_sessions("active".into(), limit).await
+    list_sessions("active".into(), limit, None).await
+}
+
+/// 设置会话的项目根目录。
+#[tauri::command]
+pub async fn set_session_project_root(
+    session_id: String,
+    project_root: Option<String>,
+) -> Result<(), String> {
+    let store = open_sessions()?;
+    store
+        .set_session_project_root(&session_id, project_root.as_deref())
+        .map_err(|e| e.to_string())
 }
 
 /// 重命名会话。

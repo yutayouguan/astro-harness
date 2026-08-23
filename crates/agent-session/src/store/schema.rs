@@ -5,7 +5,7 @@ use rusqlite::{params, OptionalExtension};
 
 use super::SessionStore;
 
-pub const SCHEMA_VERSION: i32 = 17;
+pub const SCHEMA_VERSION: i32 = 18;
 
 const SCHEMA_V11_DDL: &str = r#"
 CREATE TABLE IF NOT EXISTS schema_version (
@@ -42,6 +42,7 @@ CREATE TABLE IF NOT EXISTS sessions (
     archived_at REAL,
     pinned_at REAL,
     api_call_count INTEGER DEFAULT 0,
+    project_root TEXT,
     FOREIGN KEY (parent_session_id) REFERENCES sessions(id)
 );
 
@@ -141,13 +142,16 @@ impl SessionStore {
         }
 
         if current < SCHEMA_VERSION {
-            // v16→v17：删除历史用户消息末尾的 `chatModeHint`（`---\n[Mode: …]`），
-            // 模式说明已迁入 system prompt，旧后缀会造成混杂信号。
+            // v16→v17：删除历史用户消息末尾的 `chatModeHint`。
             if (1..17).contains(&current) && self.table_exists("messages")? {
                 self.strip_legacy_chat_mode_hints()
                     .context("strip legacy chatModeHint from user messages")?;
             }
-            // 所有 DDL 与数据清洗成功后才提交目标版本，避免留下错误 stamp。
+            // v17→v18：sessions 表加 project_root 列，用于按项目过滤会话。
+            if self.table_exists("sessions")? && !self.column_exists("sessions", "project_root")? {
+                self.conn
+                    .execute("ALTER TABLE sessions ADD COLUMN project_root TEXT", [])?;
+            }
             self.stamp_schema_version()?;
         }
         tx.commit()?;

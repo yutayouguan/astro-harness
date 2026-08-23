@@ -69,6 +69,15 @@ impl SessionStore {
         Ok(())
     }
 
+    /// 设置会话的项目根目录；用于按项目过滤会话列表。
+    pub fn set_session_project_root(&self, id: &str, project_root: Option<&str>) -> Result<()> {
+        self.conn.execute(
+            "UPDATE sessions SET project_root = ?1 WHERE id = ?2",
+            params![project_root, id],
+        )?;
+        Ok(())
+    }
+
     /// 标记会话结束；会话须存在。重复调用会覆盖 ended_at / end_reason。
     pub fn end_session(&self, id: &str, end_reason: &str) -> Result<()> {
         if self.get_session(id)?.is_none() {
