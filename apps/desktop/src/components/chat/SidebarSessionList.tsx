@@ -171,10 +171,11 @@ function SessionItem({
 
   const handleMouseEnter = () => {
     const el = titleRef.current;
-    if (!el) return;
-    const overflow = el.scrollWidth - el.clientWidth;
+    const wrap = el?.parentElement;
+    if (!el || !wrap) return;
+    const overflow = el.scrollWidth - wrap.clientWidth;
     if (overflow > 0) {
-      el.style.setProperty("--scroll-distance", `-${overflow}px`);
+      el.style.setProperty("--scroll-distance", `-${overflow + 4}px`);
     } else {
       el.style.removeProperty("--scroll-distance");
     }
@@ -188,8 +189,10 @@ function SessionItem({
     >
       <button type="button" className="sidebar-session-main" onClick={onOpen}>
         <MessageSquare size={13} strokeWidth={1.6} aria-hidden />
-        <span className="sidebar-session-title" ref={titleRef}>
-          {s.summary || "未命名会话"}
+        <span className="sidebar-session-title-wrap">
+          <span className="sidebar-session-title" ref={titleRef}>
+            {s.summary || "未命名会话"}
+          </span>
         </span>
         <span className="sidebar-session-time">
           {relativeTime(s.createdAt)}

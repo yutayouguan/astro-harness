@@ -1268,14 +1268,17 @@ html[data-theme="dark"] .project-context-menu {
   color: var(--tone, var(--tone-blue));
 }
 
-.sidebar-session-title {
+.sidebar-session-title-wrap {
   flex: 1;
   min-width: 0;
   overflow: hidden;
-  white-space: nowrap;
+  mask-image: linear-gradient(to right, #000 0, #000 calc(100% - 20px), transparent 100%);
+  -webkit-mask-image: linear-gradient(to right, #000 0, #000 calc(100% - 20px), transparent 100%);
+}
+
+.sidebar-session-title {
   display: inline-block;
-  mask-image: linear-gradient(to right, transparent 0, #000 6px, #000 calc(100% - 16px), transparent 100%);
-  -webkit-mask-image: linear-gradient(to right, transparent 0, #000 6px, #000 calc(100% - 16px), transparent 100%);
+  white-space: nowrap;
 }
 
 .sidebar-session-item:hover .sidebar-session-title {
