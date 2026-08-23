@@ -164,11 +164,25 @@ export default function App() {
   const [activeProjectId, setActiveProjectId] = useState("default");
   const [collapsedProjects, setCollapsedProjects] = useState<Set<string>>(new Set());
   const [projectMenu, setProjectMenu] = useState<{ id: string; name: string; x: number; y: number } | null>(null);
-  // 启动时从后端加载项目列表
+  const DEFAULT_PROJECT: ProjectDto = {
+    id: "default",
+    name: "默认工作空间",
+    roots: [],
+    position: -1,
+    createdAt: "",
+    updatedAt: "",
+  };
+  // 启动时从后端加载项目列表，始终保证有默认工作空间
   useEffect(() => {
     void invoke<ProjectDto[]>("list_projects")
-      .then((list) => setProjects(list ?? []))
-      .catch(() => {});
+      .then((list) => {
+        const loaded = list ?? [];
+        if (!loaded.some((p) => p.id === "default")) {
+          loaded.unshift(DEFAULT_PROJECT);
+        }
+        setProjects(loaded);
+      })
+      .catch(() => setProjects([DEFAULT_PROJECT]));
   }, []);
   /** 导航到 settings 并切换到指定子 tab */
   const openSettingsTab = useCallback((tab: SettingsTabId) => {
