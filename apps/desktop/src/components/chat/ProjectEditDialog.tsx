@@ -82,8 +82,8 @@ export default function ProjectEditDialog({
       }
       onUpdated(updated);
       onClose();
-    } catch {
-      /* 保存失败静默 */
+    } catch (err) {
+      console.error("[ProjectEditDialog] save failed:", err);
     } finally {
       setSaving(false);
     }

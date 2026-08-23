@@ -564,23 +564,19 @@ pub async fn create_project(name: String, roots: Vec<String>) -> Result<ProjectD
 pub async fn update_project(
     project_id: String,
     name: Option<String>,
-    icon: Option<Option<String>>,
+    icon: Option<String>,
     roots: Option<Vec<String>>,
 ) -> Result<ProjectDto, String> {
     let store = open_sessions()?;
     let root_strs: Option<Vec<&str>> = roots
         .as_ref()
         .map(|v| v.iter().map(|s| s.as_str()).collect());
-    let icon_ref: Option<Option<&str>> = icon
-        .as_ref()
-        .map(|opt| opt.as_deref());
+    let icon_update: Option<Option<&str>> = icon.as_ref().map(|s| {
+        let s = s.trim();
+        if s.is_empty() { None } else { Some(s) }
+    });
     let proj = store
-        .update_project(
-            &project_id,
-            name.as_deref(),
-            icon_ref,
-            root_strs.as_deref(),
-        )
+        .update_project(&project_id, name.as_deref(), icon_update, root_strs.as_deref())
         .map_err(|e| e.to_string())?;
     Ok(project_to_dto(proj))
 }
@@ -588,9 +584,7 @@ pub async fn update_project(
 #[tauri::command]
 pub async fn delete_project(project_id: String) -> Result<Vec<String>, String> {
     let store = open_sessions()?;
-    store
-        .delete_project(&project_id)
-        .map_err(|e| e.to_string())
+    store.delete_project(&project_id).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
