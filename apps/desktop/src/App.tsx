@@ -747,6 +747,7 @@ export default function App() {
                 className={`sidebar-project ${activeProjectPath === proj.path ? "is-active" : ""}`}
                 onContextMenu={(e) => {
                   e.preventDefault();
+                  e.stopPropagation();
                   setProjectMenu({ path: proj.path, name: proj.name, x: e.clientX, y: e.clientY });
                 }}
               >

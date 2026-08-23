@@ -120,7 +120,7 @@ function SessionItem({
       className={`sidebar-session-item ${isActive ? "is-active" : ""}`}
       onClick={onOpen}
       onMouseEnter={handleMouseEnter}
-      onContextMenu={(e) => { e.preventDefault(); onContextMenu(e.clientX, e.clientY); }}
+      onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); onContextMenu(e.clientX, e.clientY); }}
       title={s.summary || "未命名会话"}
     >
       <MessageSquare size={13} strokeWidth={1.6} aria-hidden />
