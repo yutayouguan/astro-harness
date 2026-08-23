@@ -42,6 +42,20 @@ export default function SidebarSessionList({ activeSessionId, onOpenSession }: P
   // 每次 activeSessionId 变化时刷新（新建会话后）
   useEffect(() => { void load(); }, [activeSessionId, load]);
 
+  const [sessionMenu, setSessionMenu] = useState<{ sessionId: string; x: number; y: number } | null>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!sessionMenu) return;
+    const close = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setSessionMenu(null);
+    };
+    const esc = (e: KeyboardEvent) => { if (e.key === "Escape") setSessionMenu(null); };
+    window.addEventListener("mousedown", close);
+    window.addEventListener("keydown", esc);
+    return () => { window.removeEventListener("mousedown", close); window.removeEventListener("keydown", esc); };
+  }, [sessionMenu]);
+
   if (items.length === 0) {
     return (
       <div className="sidebar-sessions">
@@ -58,26 +72,38 @@ export default function SidebarSessionList({ activeSessionId, onOpenSession }: P
           session={s}
           isActive={s.sessionId === activeSessionId}
           onOpen={() => onOpenSession(s.sessionId)}
+          onContextMenu={(x, y) => setSessionMenu({ sessionId: s.sessionId, x, y })}
         />
       ))}
+      {sessionMenu && (
+        <div ref={menuRef} className="project-context-menu" style={{ top: sessionMenu.y, left: sessionMenu.x }} role="menu">
+          <button type="button" role="menuitem" className="project-context-menu-item" onClick={() => setSessionMenu(null)}>
+            <Pin size={14} strokeWidth={1.8} aria-hidden /><span>置顶</span>
+          </button>
+          <button type="button" role="menuitem" className="project-context-menu-item" onClick={() => setSessionMenu(null)}>
+            <Archive size={14} strokeWidth={1.8} aria-hidden /><span>归档</span>
+          </button>
+          <button type="button" role="menuitem" className="project-context-menu-item is-danger" onClick={() => setSessionMenu(null)}>
+            <Trash2 size={14} strokeWidth={1.8} aria-hidden /><span>删除</span>
+          </button>
+        </div>
+      )}
     </div>
   );
 }
-
-type SessionMenuAction = "pin" | "archive" | "delete";
 
 function SessionItem({
   session: s,
   isActive,
   onOpen,
+  onContextMenu,
 }: {
   session: RecentSessionDto;
   isActive: boolean;
   onOpen: () => void;
+  onContextMenu: (x: number, y: number) => void;
 }) {
   const titleRef = useRef<HTMLSpanElement>(null);
-  const [menuPos, setMenuPos] = useState<{ x: number; y: number } | null>(null);
-  const menuRef = useRef<HTMLDivElement>(null);
 
   const handleMouseEnter = () => {
     const el = titleRef.current;
@@ -88,53 +114,22 @@ function SessionItem({
     }
   };
 
-  useEffect(() => {
-    if (!menuPos) return;
-    const close = (e: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setMenuPos(null);
-    };
-    const esc = (e: KeyboardEvent) => { if (e.key === "Escape") setMenuPos(null); };
-    window.addEventListener("mousedown", close);
-    window.addEventListener("keydown", esc);
-    return () => { window.removeEventListener("mousedown", close); window.removeEventListener("keydown", esc); };
-  }, [menuPos]);
-
-  const handleAction = (action: SessionMenuAction) => {
-    void action;
-    setMenuPos(null);
-  };
-
   return (
-    <>
-      <button
-        type="button"
-        className={`sidebar-session-item ${isActive ? "is-active" : ""}`}
-        onClick={onOpen}
-        onMouseEnter={handleMouseEnter}
-        onContextMenu={(e) => { e.preventDefault(); setMenuPos({ x: e.clientX, y: e.clientY }); }}
-        title={s.summary || "未命名会话"}
-      >
-        <MessageSquare size={13} strokeWidth={1.6} aria-hidden />
-        <span className="sidebar-session-title" ref={titleRef}>
-          {s.summary || "未命名会话"}
-        </span>
-        <span className="sidebar-session-time">
-          {relativeTime(s.createdAt)}
-        </span>
-      </button>
-      {menuPos && (
-        <div ref={menuRef} className="project-context-menu" style={{ top: menuPos.y, left: menuPos.x }} role="menu">
-          <button type="button" role="menuitem" className="project-context-menu-item" onClick={() => handleAction("pin")}>
-            <Pin size={14} strokeWidth={1.8} aria-hidden /><span>置顶</span>
-          </button>
-          <button type="button" role="menuitem" className="project-context-menu-item" onClick={() => handleAction("archive")}>
-            <Archive size={14} strokeWidth={1.8} aria-hidden /><span>归档</span>
-          </button>
-          <button type="button" role="menuitem" className="project-context-menu-item is-danger" onClick={() => handleAction("delete")}>
-            <Trash2 size={14} strokeWidth={1.8} aria-hidden /><span>删除</span>
-          </button>
-        </div>
-      )}
-    </>
+    <button
+      type="button"
+      className={`sidebar-session-item ${isActive ? "is-active" : ""}`}
+      onClick={onOpen}
+      onMouseEnter={handleMouseEnter}
+      onContextMenu={(e) => { e.preventDefault(); onContextMenu(e.clientX, e.clientY); }}
+      title={s.summary || "未命名会话"}
+    >
+      <MessageSquare size={13} strokeWidth={1.6} aria-hidden />
+      <span className="sidebar-session-title" ref={titleRef}>
+        {s.summary || "未命名会话"}
+      </span>
+      <span className="sidebar-session-time">
+        {relativeTime(s.createdAt)}
+      </span>
+    </button>
   );
 }
