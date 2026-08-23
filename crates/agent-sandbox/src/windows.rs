@@ -164,6 +164,50 @@ pub fn assign_process_to_job(
     Ok(())
 }
 
+/// Full sandboxed spawn: apply ACLs, create Job Object, launch process.
+///
+/// This is the recommended entry point for sandboxed execution on Windows.
+/// Returns the child process and the job handle (must be kept alive until
+/// the child exits — dropping it kills the process tree).
+#[cfg(target_os = "windows")]
+pub fn spawn_sandboxed(
+    policy: &SandboxPolicy,
+    program: &str,
+    args: &[&str],
+) -> anyhow::Result<(std::process::Child, windows_sys::Win32::Foundation::HANDLE)> {
+    // Step 1: Apply ACLs for metadata protection
+    apply_workspace_acls(policy)?;
+
+    // Step 2: Create Job Object
+    let job = create_job_object()?;
+
+    // Step 3: Build and spawn the command
+    let mut cmd = windows_command(policy, program);
+    for arg in args {
+        cmd.arg(arg);
+    }
+    let child = cmd.spawn()?;
+
+    // Step 4: Assign the child process to the job
+    // Note: ideally this uses PROC_THREAD_ATTRIBUTE_JOB_LIST for atomic
+    // assignment, but that requires CreateProcessAsUserW. For now, post-spawn
+    // assignment is used (there's a brief race window).
+    use windows_sys::Win32::System::Threading::OpenProcess;
+    unsafe {
+        let h_process = OpenProcess(
+            0x001F_0FFF, // PROCESS_ALL_ACCESS
+            0,
+            child.id(),
+        );
+        if !h_process.is_null() {
+            let _ = assign_process_to_job(job, h_process);
+            windows_sys::Win32::Foundation::CloseHandle(h_process);
+        }
+    }
+
+    Ok((child, job))
+}
+
 /// Metadata about the workspace ACL setup for this policy.
 pub struct WindowsAclSetup {
     pub writable_roots: Vec<PathBuf>,

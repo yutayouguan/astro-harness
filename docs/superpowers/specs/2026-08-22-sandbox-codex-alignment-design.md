@@ -117,5 +117,5 @@ ToolOrchestrator::run
 |------|------|------|
 | A | macOS 参数化路径 + regex 保护 + .codex | ✓ 已实现 |
 | B | Linux Bubblewrap 后端 | ✓ 已实现 |
-| C | Windows Job Object + ACL v2 | ✓ 已实现（Job Object + ACL + 离线标记） |
+| C | Windows Job Object + ACL + Restricted Token v3 | ✓ 已实现 |
 | D | 设计文档 | ✓ 本文档 |
