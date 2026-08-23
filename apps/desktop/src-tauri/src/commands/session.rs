@@ -550,7 +550,7 @@ pub async fn list_projects() -> Result<Vec<ProjectDto>, String> {
 pub async fn ensure_default_project() -> Result<ProjectDto, String> {
     let store = open_sessions()?;
     let projects = store.list_projects().map_err(|e| e.to_string())?;
-    if let Some(existing) = projects.into_iter().find(|p| p.position == 0) {
+    if let Some(existing) = projects.into_iter().next() {
         return Ok(project_to_dto(existing));
     }
     let ws_path = super::common::workspace_dir();
@@ -587,10 +587,19 @@ pub async fn update_project(
         .map(|v| v.iter().map(|s| s.as_str()).collect());
     let icon_update: Option<Option<&str>> = icon.as_ref().map(|s| {
         let s = s.trim();
-        if s.is_empty() { None } else { Some(s) }
+        if s.is_empty() {
+            None
+        } else {
+            Some(s)
+        }
     });
     let proj = store
-        .update_project(&project_id, name.as_deref(), icon_update, root_strs.as_deref())
+        .update_project(
+            &project_id,
+            name.as_deref(),
+            icon_update,
+            root_strs.as_deref(),
+        )
         .map_err(|e| e.to_string())?;
     Ok(project_to_dto(proj))
 }

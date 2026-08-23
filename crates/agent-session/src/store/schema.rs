@@ -140,6 +140,10 @@ impl SessionStore {
             self.conn
                 .execute("ALTER TABLE sessions ADD COLUMN pinned_at REAL", [])?;
         }
+        if self.table_exists("projects")? && !self.column_exists("projects", "icon")? {
+            self.conn
+                .execute("ALTER TABLE projects ADD COLUMN icon TEXT", [])?;
+        }
 
         if current < SCHEMA_VERSION {
             // v16→v17：删除历史用户消息末尾的 `chatModeHint`。
@@ -169,17 +173,7 @@ impl SessionStore {
                     );",
                 )?;
             }
-            if self.table_exists("projects")?
-                && !self.column_exists("projects", "icon")?
-            {
-                self.conn.execute(
-                    "ALTER TABLE projects ADD COLUMN icon TEXT",
-                    [],
-                )?;
-            }
-            if self.table_exists("sessions")?
-                && !self.column_exists("sessions", "project_id")?
-            {
+            if self.table_exists("sessions")? && !self.column_exists("sessions", "project_id")? {
                 self.conn.execute(
                     "ALTER TABLE sessions ADD COLUMN project_id TEXT REFERENCES projects(id)",
                     [],
@@ -286,10 +280,7 @@ impl SessionStore {
 
         for root in &roots {
             let id = uuid::Uuid::new_v4().simple().to_string();
-            let name = root
-                .rsplit('/')
-                .find(|s| !s.is_empty())
-                .unwrap_or(root);
+            let name = root.rsplit('/').find(|s| !s.is_empty()).unwrap_or(root);
             // 取当前最大 position + 1
             let next_pos: i64 = self.conn.query_row(
                 "SELECT COALESCE(MAX(position), -1) + 1 FROM projects",
