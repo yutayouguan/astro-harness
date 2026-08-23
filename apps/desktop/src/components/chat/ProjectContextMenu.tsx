@@ -1,5 +1,5 @@
 // 项目右键菜单 / 更多菜单。
-import { useEffect, useRef } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
   Edit3,
   FolderOpen,
@@ -49,6 +49,24 @@ export default function ProjectContextMenu({
   onClose,
 }: Props) {
   const ref = useRef<HTMLDivElement>(null);
+  const [pos, setPos] = useState({ top: y, left: x });
+
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    const vh = window.innerHeight;
+    const vw = window.innerWidth;
+    let top = y;
+    let left = x;
+    if (top + rect.height > vh - 8) {
+      top = Math.max(8, y - rect.height);
+    }
+    if (left + rect.width > vw - 8) {
+      left = Math.max(8, vw - rect.width - 8);
+    }
+    setPos({ top, left });
+  }, [x, y]);
 
   useEffect(() => {
     const onClick = (e: MouseEvent) => {
@@ -69,7 +87,7 @@ export default function ProjectContextMenu({
     <div
       ref={ref}
       className="project-context-menu"
-      style={{ top: y, left: x }}
+      style={{ top: pos.top, left: pos.left }}
       role="menu"
     >
       {ITEMS.map((item) => (
