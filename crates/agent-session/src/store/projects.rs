@@ -10,6 +10,7 @@ use super::SessionStore;
 pub struct Project {
     pub id: String,
     pub name: String,
+    pub icon: Option<String>,
     pub roots: Vec<String>,
     pub position: i64,
     pub created_at: String,
@@ -20,10 +21,10 @@ impl SessionStore {
     /// 按 position 升序列出所有项目（含 roots）。
     pub fn list_projects(&self) -> Result<Vec<Project>> {
         let mut stmt = self.conn.prepare(
-            "SELECT id, name, position, created_at, updated_at
+            "SELECT id, name, icon, position, created_at, updated_at
              FROM projects ORDER BY position ASC",
         )?;
-        let rows: Vec<(String, String, i64, String, String)> = stmt
+        let rows: Vec<(String, String, Option<String>, i64, String, String)> = stmt
             .query_map([], |row| {
                 Ok((
                     row.get(0)?,
@@ -31,17 +32,19 @@ impl SessionStore {
                     row.get(2)?,
                     row.get(3)?,
                     row.get(4)?,
+                    row.get(5)?,
                 ))
             })?
             .collect::<Result<Vec<_>, _>>()?;
         drop(stmt);
 
         let mut projects = Vec::with_capacity(rows.len());
-        for (id, name, position, created_at, updated_at) in rows {
+        for (id, name, icon, position, created_at, updated_at) in rows {
             let roots = self.load_project_roots(&id)?;
             projects.push(Project {
                 id,
                 name,
+                icon,
                 roots,
                 position,
                 created_at,
@@ -53,10 +56,10 @@ impl SessionStore {
 
     /// 按 id 读取单个项目。
     pub fn get_project(&self, id: &str) -> Result<Option<Project>> {
-        let row: Option<(String, String, i64, String, String)> = self
+        let row: Option<(String, String, Option<String>, i64, String, String)> = self
             .conn
             .query_row(
-                "SELECT id, name, position, created_at, updated_at
+                "SELECT id, name, icon, position, created_at, updated_at
                  FROM projects WHERE id = ?1",
                 params![id],
                 |row| {
@@ -66,16 +69,18 @@ impl SessionStore {
                         row.get(2)?,
                         row.get(3)?,
                         row.get(4)?,
+                        row.get(5)?,
                     ))
                 },
             )
             .optional()?;
         match row {
-            Some((id, name, position, created_at, updated_at)) => {
+            Some((id, name, icon, position, created_at, updated_at)) => {
                 let roots = self.load_project_roots(&id)?;
                 Ok(Some(Project {
                     id,
                     name,
+                    icon,
                     roots,
                     position,
                     created_at,
