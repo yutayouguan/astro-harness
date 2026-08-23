@@ -13,6 +13,7 @@ import { listen } from "@tauri-apps/api/event";
 import AboutDialog from "./components/ui/AboutDialog";
 import ChatRightPanel from "./components/chat/ChatRightPanel";
 import ProjectContextMenu from "./components/chat/ProjectContextMenu";
+import ProjectEditDialog from "./components/chat/ProjectEditDialog";
 import SidebarSessionList from "./components/chat/SidebarSessionList";
 import ChatView from "./components/chat/ChatView";
 import LoopPanel from "./components/loop/LoopPanel";
@@ -164,6 +165,7 @@ export default function App() {
   const [activeProjectId, setActiveProjectId] = useState("default");
   const [collapsedProjects, setCollapsedProjects] = useState<Set<string>>(new Set());
   const [projectMenu, setProjectMenu] = useState<{ id: string; name: string; x: number; y: number } | null>(null);
+  const [editingProject, setEditingProject] = useState<ProjectDto | null>(null);
   const DEFAULT_PROJECT: ProjectDto = {
     id: "default",
     name: "默认工作空间",
@@ -1222,6 +1224,29 @@ export default function App() {
                   mod.open(root)
                 ).catch(() => {});
               }
+            } else if (action === "pin") {
+              void invoke("move_project", { projectId: projectMenu.id, beforeProjectId: null }).then(() =>
+                invoke<ProjectDto[]>("list_projects").then((list) => {
+                  if (list) setProjects(list);
+                }),
+              ).catch(() => {});
+            } else if (action === "edit") {
+              const proj = projects.find((p) => p.id === projectMenu.id);
+              if (proj) setEditingProject(proj);
+            } else if (action === "worktree") {
+              window.alert("功能开发中");
+            } else if (action === "archive") {
+              void invoke<import("./types").RecentSessionDto[]>("list_sessions", {
+                filter: "active",
+                limit: 200,
+                projectId: projectMenu.id,
+              }).then((sessions) => {
+                if (sessions) {
+                  for (const s of sessions) {
+                    void invoke("archive_session", { sessionId: s.sessionId }).catch(() => {});
+                  }
+                }
+              }).catch(() => {});
             }
           }}
           onClose={() => setProjectMenu(null)}
@@ -1229,6 +1254,20 @@ export default function App() {
       )}
       {toastHost}
       <AboutDialog open={aboutOpen} onClose={() => setAboutOpen(false)} />
+      <ProjectEditDialog
+        open={editingProject !== null}
+        project={editingProject}
+        onClose={() => setEditingProject(null)}
+        onUpdated={(updated) => {
+          setProjects((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
+        }}
+        onRemoved={(id) => {
+          setProjects((prev) => prev.filter((p) => p.id !== id));
+          if (activeProjectId === id) {
+            setActiveProjectId(projects[0]?.id ?? "default");
+          }
+        }}
+      />
     </div>
   );
 }
