@@ -5302,6 +5302,7 @@ dependencies = [
  "tempfile",
  "tracing",
  "types",
+ "uuid",
 ]
 
 [[package]]

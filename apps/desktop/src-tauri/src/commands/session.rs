@@ -267,36 +267,50 @@ pub async fn remove_chat_bubbles(session_id: String, start: i32, end: i32) -> Re
 }
 
 /// 按 active / archived 筛选会话供侧栏展示。
+/// `project_id` 优先；兼容旧调用仍支持 `project_root`。
 #[tauri::command]
 pub async fn list_sessions(
     filter: String,
     limit: Option<i32>,
     project_root: Option<String>,
+    project_id: Option<String>,
 ) -> Result<Vec<RecentSessionDto>, String> {
     let filter = parse_session_filter(&filter)?;
     let store = open_sessions()?;
     let limit = limit.unwrap_or(50).clamp(1, 200) as usize;
-    Ok(store
-        .list_sessions_filtered(filter, limit, project_root.as_deref())
-        .map_err(|e| e.to_string())?
-        .into_iter()
-        .map(recent_session_dto)
-        .collect())
+    let sessions = if let Some(pid) = project_id.filter(|s| !s.is_empty()) {
+        store
+            .list_sessions_by_project(filter, limit, &pid)
+            .map_err(|e| e.to_string())?
+    } else {
+        store
+            .list_sessions_filtered(filter, limit, project_root.as_deref())
+            .map_err(|e| e.to_string())?
+    };
+    Ok(sessions.into_iter().map(recent_session_dto).collect())
 }
 
 /// 兼容旧调用：仅列出未归档会话。
 #[tauri::command]
 pub async fn list_recent_sessions(limit: Option<i32>) -> Result<Vec<RecentSessionDto>, String> {
-    list_sessions("active".into(), limit, None).await
+    list_sessions("active".into(), limit, None, None).await
 }
 
-/// 设置会话的项目根目录。
+/// 设置会话的项目根目录（兼容旧调用，内部转 project_id）。
 #[tauri::command]
 pub async fn set_session_project_root(
     session_id: String,
     project_root: Option<String>,
 ) -> Result<(), String> {
     let store = open_sessions()?;
+    // 兼容：尝试按 root 路径查找 project 并关联
+    if let Some(root) = project_root.as_deref().filter(|r| !r.is_empty()) {
+        if let Ok(Some(proj)) = store.find_project_by_root(root) {
+            return store
+                .assign_session_to_project(&session_id, &proj.id)
+                .map_err(|e| e.to_string());
+        }
+    }
     store
         .set_session_project_root(&session_id, project_root.as_deref())
         .map_err(|e| e.to_string())
@@ -490,6 +504,107 @@ pub async fn delete_session_permanently(app: AppHandle, session_id: String) -> R
     }
     open_sessions()?
         .delete_session_permanently(&session_id)
+        .map_err(|e| e.to_string())
+}
+
+// ---------------------------------------------------------------------------
+// Project commands
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectDto {
+    pub id: String,
+    pub name: String,
+    pub roots: Vec<String>,
+    pub position: i64,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+fn project_to_dto(p: session::Project) -> ProjectDto {
+    ProjectDto {
+        id: p.id,
+        name: p.name,
+        roots: p.roots,
+        position: p.position,
+        created_at: p.created_at,
+        updated_at: p.updated_at,
+    }
+}
+
+#[tauri::command]
+pub async fn list_projects() -> Result<Vec<ProjectDto>, String> {
+    let store = open_sessions()?;
+    Ok(store
+        .list_projects()
+        .map_err(|e| e.to_string())?
+        .into_iter()
+        .map(project_to_dto)
+        .collect())
+}
+
+#[tauri::command]
+pub async fn create_project(name: String, roots: Vec<String>) -> Result<ProjectDto, String> {
+    let name = name.trim();
+    if name.is_empty() {
+        return Err("project name cannot be empty".into());
+    }
+    let store = open_sessions()?;
+    let root_refs: Vec<&str> = roots.iter().map(|s| s.as_str()).collect();
+    let proj = store
+        .create_project(name, &root_refs)
+        .map_err(|e| e.to_string())?;
+    Ok(project_to_dto(proj))
+}
+
+#[tauri::command]
+pub async fn update_project(
+    project_id: String,
+    name: Option<String>,
+    roots: Option<Vec<String>>,
+) -> Result<ProjectDto, String> {
+    let store = open_sessions()?;
+    let root_strs: Option<Vec<&str>> = roots
+        .as_ref()
+        .map(|v| v.iter().map(|s| s.as_str()).collect());
+    let proj = store
+        .update_project(
+            &project_id,
+            name.as_deref(),
+            root_strs.as_deref(),
+        )
+        .map_err(|e| e.to_string())?;
+    Ok(project_to_dto(proj))
+}
+
+#[tauri::command]
+pub async fn delete_project(project_id: String) -> Result<Vec<String>, String> {
+    let store = open_sessions()?;
+    store
+        .delete_project(&project_id)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn move_project(
+    project_id: String,
+    before_project_id: Option<String>,
+) -> Result<(), String> {
+    let store = open_sessions()?;
+    store
+        .move_project(&project_id, before_project_id.as_deref())
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn assign_session_to_project(
+    session_id: String,
+    project_id: String,
+) -> Result<(), String> {
+    let store = open_sessions()?;
+    store
+        .assign_session_to_project(&session_id, &project_id)
         .map_err(|e| e.to_string())
 }
 

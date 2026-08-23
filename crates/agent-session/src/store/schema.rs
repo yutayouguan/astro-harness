@@ -5,7 +5,7 @@ use rusqlite::{params, OptionalExtension};
 
 use super::SessionStore;
 
-pub const SCHEMA_VERSION: i32 = 18;
+pub const SCHEMA_VERSION: i32 = 19;
 
 const SCHEMA_V11_DDL: &str = r#"
 CREATE TABLE IF NOT EXISTS schema_version (
@@ -152,6 +152,33 @@ impl SessionStore {
                 self.conn
                     .execute("ALTER TABLE sessions ADD COLUMN project_root TEXT", [])?;
             }
+            // v18→v19：引入 projects / project_roots 实体表，替代 sessions.project_root 字符串。
+            if !self.table_exists("projects")? {
+                self.conn.execute_batch(
+                    "CREATE TABLE IF NOT EXISTS projects (
+                        id TEXT PRIMARY KEY,
+                        name TEXT NOT NULL,
+                        position INTEGER NOT NULL DEFAULT 0,
+                        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                        updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+                    );
+                    CREATE TABLE IF NOT EXISTS project_roots (
+                        project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+                        path TEXT NOT NULL,
+                        PRIMARY KEY (project_id, path)
+                    );",
+                )?;
+            }
+            if self.table_exists("sessions")?
+                && !self.column_exists("sessions", "project_id")?
+            {
+                self.conn.execute(
+                    "ALTER TABLE sessions ADD COLUMN project_id TEXT REFERENCES projects(id)",
+                    [],
+                )?;
+                // 迁移已有 project_root → projects 实体
+                self.migrate_project_root_to_projects()?;
+            }
             self.stamp_schema_version()?;
         }
         tx.commit()?;
@@ -233,6 +260,52 @@ impl SessionStore {
         if !exists {
             self.conn
                 .execute("ALTER TABLE messages ADD COLUMN media_json TEXT", [])?;
+        }
+        Ok(())
+    }
+
+    /// v18→v19 数据迁移：将 `sessions.project_root` 去重后创建 `projects` 实体，
+    /// 并将 `sessions.project_id` 指向对应 project。
+    pub(crate) fn migrate_project_root_to_projects(&self) -> Result<()> {
+        let mut stmt = self.conn.prepare(
+            "SELECT DISTINCT project_root FROM sessions
+             WHERE project_root IS NOT NULL AND TRIM(project_root) != ''",
+        )?;
+        let roots: Vec<String> = stmt
+            .query_map([], |row| row.get::<_, String>(0))?
+            .collect::<Result<Vec<_>, _>>()?;
+        drop(stmt);
+
+        for root in &roots {
+            let id = uuid::Uuid::new_v4().simple().to_string();
+            let name = root
+                .rsplit('/')
+                .find(|s| !s.is_empty())
+                .unwrap_or(root);
+            // 取当前最大 position + 1
+            let next_pos: i64 = self.conn.query_row(
+                "SELECT COALESCE(MAX(position), -1) + 1 FROM projects",
+                [],
+                |row| row.get(0),
+            )?;
+            self.conn.execute(
+                "INSERT INTO projects (id, name, position) VALUES (?1, ?2, ?3)",
+                params![id, name, next_pos],
+            )?;
+            self.conn.execute(
+                "INSERT INTO project_roots (project_id, path) VALUES (?1, ?2)",
+                params![id, root],
+            )?;
+            self.conn.execute(
+                "UPDATE sessions SET project_id = ?1 WHERE project_root = ?2",
+                params![id, root],
+            )?;
+        }
+        if !roots.is_empty() {
+            tracing::info!(
+                count = roots.len(),
+                "migrated project_root strings to project entities"
+            );
         }
         Ok(())
     }

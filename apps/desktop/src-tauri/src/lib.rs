@@ -261,6 +261,13 @@ pub fn run() {
             commands::session::pin_session,
             commands::session::unpin_session,
             commands::session::delete_session_permanently,
+            // — projects —
+            commands::session::list_projects,
+            commands::session::create_project,
+            commands::session::update_project,
+            commands::session::delete_project,
+            commands::session::move_project,
+            commands::session::assign_session_to_project,
             // — files —
             commands::files::list_files,
             commands::files::read_file,

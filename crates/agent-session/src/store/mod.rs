@@ -1,6 +1,7 @@
 //! 单库会话存储（schema v17）：sessions、富 messages、FTS5；旧库走增量迁移不丢数据。
 
 mod messages;
+pub mod projects;
 mod rollout_projection;
 mod schema;
 mod search;

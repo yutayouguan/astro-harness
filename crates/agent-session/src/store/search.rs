@@ -259,6 +259,60 @@ impl SessionStore {
         limit: usize,
         project_root: Option<&str>,
     ) -> Result<Vec<RecentSession>> {
+        // 兼容：如果传了非 default 的 project_root，先尝试按 project_id 查找
+        if let Some(root) = project_root.filter(|r| !r.is_empty() && *r != "default") {
+            if let Some(proj) = self.find_project_by_root(root)? {
+                return self.list_sessions_by_project(filter, limit, &proj.id);
+            }
+        }
+        self.list_sessions_inner(filter, limit, project_root)
+    }
+
+    /// 按 `project_id` 过滤会话列表。
+    pub fn list_sessions_by_project(
+        &self,
+        filter: super::SessionListFilter,
+        limit: usize,
+        project_id: &str,
+    ) -> Result<Vec<RecentSession>> {
+        if limit == 0 {
+            return Ok(Vec::new());
+        }
+        let mut conditions = Vec::new();
+        match filter {
+            super::SessionListFilter::Active => conditions.push("s.archived_at IS NULL"),
+            super::SessionListFilter::Archived => conditions.push("s.archived_at IS NOT NULL"),
+        }
+        conditions.push("s.project_id = ?2");
+        let where_clause = format!("WHERE {}", conditions.join(" AND "));
+        let sql = format!(
+            "SELECT s.id, s.title, s.started_at,
+                    (SELECT m.content FROM messages m
+                     WHERE m.session_id = s.id
+                       AND m.role = 'user'
+                       AND m.content IS NOT NULL
+                       AND TRIM(m.content) != ''
+                     ORDER BY m.timestamp ASC, m.id ASC
+                     LIMIT 1) AS preview,
+                    s.ended_at, s.end_reason, s.archived_at, s.pinned_at
+             FROM sessions s
+             {where_clause}
+             ORDER BY (s.pinned_at IS NULL) ASC, s.pinned_at DESC, s.started_at DESC
+             LIMIT ?1"
+        );
+        let mut stmt = self.conn.prepare(&sql)?;
+        let rows = stmt
+            .query_map(params![limit as i64, project_id], Self::map_recent_row)?
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(Self::to_recent_sessions(rows))
+    }
+
+    fn list_sessions_inner(
+        &self,
+        filter: super::SessionListFilter,
+        limit: usize,
+        project_root: Option<&str>,
+    ) -> Result<Vec<RecentSession>> {
         if limit == 0 {
             return Ok(Vec::new());
         }
@@ -269,7 +323,9 @@ impl SessionStore {
         }
         if let Some(root) = project_root {
             if root.is_empty() || root == "default" {
-                conditions.push("(s.project_root IS NULL OR s.project_root = '')");
+                conditions.push(
+                    "(s.project_id IS NULL AND (s.project_root IS NULL OR s.project_root = ''))",
+                );
             } else {
                 conditions.push("s.project_root = ?2");
             }
@@ -296,37 +352,52 @@ impl SessionStore {
         );
         let mut stmt = self.conn.prepare(&sql)?;
         let rows = if let Some(root) = project_root.filter(|r| !r.is_empty() && *r != "default") {
-            stmt.query_map(params![limit as i64, root], |row| {
-                Ok((
-                    row.get::<_, String>(0)?,
-                    row.get::<_, Option<String>>(1)?,
-                    row.get::<_, f64>(2)?,
-                    row.get::<_, Option<String>>(3)?,
-                    row.get::<_, Option<f64>>(4)?,
-                    row.get::<_, Option<String>>(5)?,
-                    row.get::<_, Option<f64>>(6)?,
-                    row.get::<_, Option<f64>>(7)?,
-                ))
-            })?
-            .collect::<Result<Vec<_>, _>>()?
+            stmt.query_map(params![limit as i64, root], Self::map_recent_row)?
+                .collect::<Result<Vec<_>, _>>()?
         } else {
-            stmt.query_map(params![limit as i64], |row| {
-                Ok((
-                    row.get::<_, String>(0)?,
-                    row.get::<_, Option<String>>(1)?,
-                    row.get::<_, f64>(2)?,
-                    row.get::<_, Option<String>>(3)?,
-                    row.get::<_, Option<f64>>(4)?,
-                    row.get::<_, Option<String>>(5)?,
-                    row.get::<_, Option<f64>>(6)?,
-                    row.get::<_, Option<f64>>(7)?,
-                ))
-            })?
-            .collect::<Result<Vec<_>, _>>()?
+            stmt.query_map(params![limit as i64], Self::map_recent_row)?
+                .collect::<Result<Vec<_>, _>>()?
         };
+        Ok(Self::to_recent_sessions(rows))
+    }
 
-        Ok(rows
-            .into_iter()
+    fn map_recent_row(
+        row: &rusqlite::Row<'_>,
+    ) -> rusqlite::Result<(
+        String,
+        Option<String>,
+        f64,
+        Option<String>,
+        Option<f64>,
+        Option<String>,
+        Option<f64>,
+        Option<f64>,
+    )> {
+        Ok((
+            row.get(0)?,
+            row.get(1)?,
+            row.get(2)?,
+            row.get(3)?,
+            row.get(4)?,
+            row.get(5)?,
+            row.get(6)?,
+            row.get(7)?,
+        ))
+    }
+
+    fn to_recent_sessions(
+        rows: Vec<(
+            String,
+            Option<String>,
+            f64,
+            Option<String>,
+            Option<f64>,
+            Option<String>,
+            Option<f64>,
+            Option<f64>,
+        )>,
+    ) -> Vec<RecentSession> {
+        rows.into_iter()
             .map(
                 |(id, title, started_at, preview, ended_at, end_reason, archived_at, pinned_at)| {
                     RecentSession {
@@ -341,7 +412,7 @@ impl SessionStore {
                     }
                 },
             )
-            .collect())
+            .collect()
     }
 
     /// 兼容旧调用：仅列出未归档会话。
