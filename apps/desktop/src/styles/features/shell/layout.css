@@ -831,6 +831,9 @@ html[data-theme="dark"] .settings-content {
   overflow-y: auto;
   overflow-x: hidden;
   padding: 0 6px;
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--ink-mute) 20%, transparent) transparent;
 }
 
 .sidebar-section-header {
@@ -1267,22 +1270,53 @@ html[data-theme="dark"] .project-context-menu {
   overflow: hidden;
   white-space: nowrap;
   display: inline-block;
+  mask-image: linear-gradient(to right, transparent 0, #000 6px, #000 calc(100% - 16px), transparent 100%);
+  -webkit-mask-image: linear-gradient(to right, transparent 0, #000 6px, #000 calc(100% - 16px), transparent 100%);
 }
 
 .sidebar-session-item:hover .sidebar-session-title {
-  animation: sidebar-title-scroll 4s linear 0.5s infinite;
+  animation: sidebar-title-scroll 6s ease-in-out 0.8s infinite;
 }
 
 @keyframes sidebar-title-scroll {
-  0%, 10% { transform: translateX(0); }
-  45%, 55% { transform: translateX(var(--scroll-distance, -40px)); }
-  90%, 100% { transform: translateX(0); }
+  0%, 15% { transform: translateX(0); }
+  40%, 60% { transform: translateX(var(--scroll-distance, -40px)); }
+  85%, 100% { transform: translateX(0); }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .sidebar-session-item:hover .sidebar-session-title {
     animation: none;
   }
+}
+
+.sidebar-session-expand {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 5px 10px;
+  border: none;
+  border-radius: 7px;
+  background: transparent;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--ink-mute);
+  cursor: pointer;
+  transition: color 0.1s;
+}
+
+.sidebar-session-expand:hover {
+  color: var(--ink);
+}
+
+.sidebar-session-expand svg {
+  transition: transform 0.15s ease;
+  opacity: 0.6;
+}
+
+.sidebar-session-expand svg.is-open {
+  transform: rotate(180deg);
 }
 
 .sidebar-session-time {

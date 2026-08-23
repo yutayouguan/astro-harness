@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import { invoke } from "@tauri-apps/api/core";
 import {
   Archive,
+  ChevronDown,
   Download,
   Edit3,
   GitBranch,
@@ -15,6 +16,8 @@ import {
   Trash2,
 } from "lucide-react";
 import type { RecentSessionDto } from "../../types";
+
+const VISIBLE_COUNT = 5;
 
 type Props = {
   activeSessionId: string | null;
@@ -35,12 +38,13 @@ function relativeTime(iso: string | null): string {
 
 export default function SidebarSessionList({ activeSessionId, onOpenSession }: Props) {
   const [items, setItems] = useState<RecentSessionDto[]>([]);
+  const [expanded, setExpanded] = useState(false);
 
   const load = useCallback(async () => {
     try {
       const list = await invoke<RecentSessionDto[]>("list_sessions", {
         filter: "active",
-        limit: 20,
+        limit: 50,
       });
       setItems(list ?? []);
     } catch {
@@ -73,9 +77,12 @@ export default function SidebarSessionList({ activeSessionId, onOpenSession }: P
     );
   }
 
+  const visible = expanded ? items : items.slice(0, VISIBLE_COUNT);
+  const hiddenCount = items.length - VISIBLE_COUNT;
+
   return (
     <div className="sidebar-sessions">
-      {items.map((s) => (
+      {visible.map((s) => (
         <SessionItem
           key={s.sessionId}
           session={s}
@@ -85,6 +92,24 @@ export default function SidebarSessionList({ activeSessionId, onOpenSession }: P
           onMoreClick={(x, y) => setSessionMenu({ sessionId: s.sessionId, x, y })}
         />
       ))}
+      {hiddenCount > 0 && (
+        <button
+          type="button"
+          className="sidebar-session-expand"
+          onClick={() => setExpanded((v) => !v)}
+        >
+          <ChevronDown
+            size={12} strokeWidth={2}
+            className={expanded ? "is-open" : ""}
+            aria-hidden
+          />
+          <span>
+            {expanded
+              ? "收起"
+              : `展开显示 ${hiddenCount > 99 ? "99+" : hiddenCount} 条`}
+          </span>
+        </button>
+      )}
       {sessionMenu && createPortal(
         <div ref={menuRef} className="project-context-menu" style={{ top: sessionMenu.y, left: sessionMenu.x }} role="menu">
           <button type="button" role="menuitem" className="project-context-menu-item" onClick={() => setSessionMenu(null)}>
