@@ -56,27 +56,70 @@ fn auto_patterns() -> &'static [(Regex, &'static str)] {
     P.get_or_init(|| {
         compile(&[
             (
-                r"(?i)\brm\s+(-[a-zA-Z]*r[a-zA-Z]*f|-[a-zA-Z]*f[a-zA-Z]*r)\s+(\./)?node_modules\b",
+                r"(?i)^\s*rm\s+(-[a-zA-Z]*r[a-zA-Z]*f|-[a-zA-Z]*f[a-zA-Z]*r)\s+(\./)?node_modules/?\s*$",
                 "rm -rf node_modules (auto)",
             ),
             (
-                r"(?i)\brm\s+(-[a-zA-Z]*r[a-zA-Z]*f|-[a-zA-Z]*f[a-zA-Z]*r)\s+(\./)?target\b",
+                r"(?i)^\s*rm\s+(-[a-zA-Z]*r[a-zA-Z]*f|-[a-zA-Z]*f[a-zA-Z]*r)\s+(\./)?target/?\s*$",
                 "rm -rf target (auto)",
             ),
             (
-                r"(?i)\brm\s+(-[a-zA-Z]*r[a-zA-Z]*f|-[a-zA-Z]*f[a-zA-Z]*r)\s+(\./)?dist\b",
+                r"(?i)^\s*rm\s+(-[a-zA-Z]*r[a-zA-Z]*f|-[a-zA-Z]*f[a-zA-Z]*r)\s+(\./)?dist/?\s*$",
                 "rm -rf dist (auto)",
             ),
             (
-                r"(?i)\brm\s+(-[a-zA-Z]*r[a-zA-Z]*f|-[a-zA-Z]*f[a-zA-Z]*r)\s+(\./)?\.next\b",
+                r"(?i)^\s*rm\s+(-[a-zA-Z]*r[a-zA-Z]*f|-[a-zA-Z]*f[a-zA-Z]*r)\s+(\./)?\.next/?\s*$",
                 "rm -rf .next (auto)",
             ),
             (
-                r"(?i)\brm\s+(-[a-zA-Z]*r[a-zA-Z]*f|-[a-zA-Z]*f[a-zA-Z]*r)\s+(\./)?__pycache__\b",
+                r"(?i)^\s*rm\s+(-[a-zA-Z]*r[a-zA-Z]*f|-[a-zA-Z]*f[a-zA-Z]*r)\s+(\./)?__pycache__/?\s*$",
                 "rm -rf __pycache__ (auto)",
             ),
         ])
     })
+}
+
+/// Returns true when the command contains shell syntax whose runtime value
+/// cannot be treated as the literal source text used by approval rules.
+fn contains_dynamic_shell_words(command: &str) -> bool {
+    #[derive(Clone, Copy, PartialEq, Eq)]
+    enum Quote {
+        Unquoted,
+        Single,
+        Double,
+    }
+
+    let mut quote = Quote::Unquoted;
+    let mut chars = command.chars().peekable();
+    while let Some(character) = chars.next() {
+        match quote {
+            Quote::Unquoted => match character {
+                '\'' => quote = Quote::Single,
+                '"' => quote = Quote::Double,
+                '$' | '`' | '{' | '}' | '*' | '?' | '[' | ']' | '\\' | '~' | '^' | '#' => {
+                    return true;
+                }
+                _ => {}
+            },
+            Quote::Single => {
+                if character == '\'' {
+                    quote = Quote::Unquoted;
+                }
+            }
+            Quote::Double => match character {
+                '"' => quote = Quote::Unquoted,
+                '$' | '`' => return true,
+                '\\' if chars
+                    .peek()
+                    .is_some_and(|next| matches!(next, '$' | '`' | '"' | '\\' | '\n')) =>
+                {
+                    return true;
+                }
+                _ => {}
+            },
+        }
+    }
+    quote != Quote::Unquoted
 }
 
 fn compile(raw: &[(&'static str, &'static str)]) -> Vec<(Regex, &'static str)> {
@@ -91,19 +134,29 @@ pub fn classify_dangerous_command(command: &str) -> Option<ApprovalDecision> {
     if cmd.is_empty() {
         return None;
     }
-    // auto 优先于 ask（白名单覆盖 rm -rf node_modules）
-    for (re, desc) in auto_patterns() {
-        if re.is_match(cmd) {
-            return Some(ApprovalDecision {
-                action: ApprovalAction::Auto,
-                description: desc,
-            });
-        }
-    }
+    // hardline 必须最先判定，避免安全前缀掩盖复合命令中的拒绝规则。
     for (re, desc) in deny_patterns() {
         if re.is_match(cmd) {
             return Some(ApprovalDecision {
                 action: ApprovalAction::Deny,
+                description: desc,
+            });
+        }
+    }
+
+    // 未展开的 shell 词不能拿源码字面量证明运行时 argv 安全，也不能命中白名单。
+    if contains_dynamic_shell_words(cmd) {
+        return Some(ApprovalDecision {
+            action: ApprovalAction::Ask,
+            description: "dynamic shell expansion",
+        });
+    }
+
+    // auto 优先于普通 ask，但规则必须整串匹配，不能掩盖后续复合命令。
+    for (re, desc) in auto_patterns() {
+        if re.is_match(cmd) {
+            return Some(ApprovalDecision {
+                action: ApprovalAction::Auto,
                 description: desc,
             });
         }
@@ -140,7 +193,7 @@ pub fn is_hardline_blocked(command: &str) -> Option<&'static str> {
 /// 每个条目：含 `* ? [` 时按大小写不敏感 glob 整串匹配；否则按整串精确匹配（忽略大小写）。
 pub fn matches_allowlist(command: &str, allowlist: &[String]) -> bool {
     let cmd = command.trim();
-    if cmd.is_empty() {
+    if cmd.is_empty() || contains_dynamic_shell_words(cmd) {
         return false;
     }
     allowlist
@@ -228,6 +281,15 @@ mod tests {
     }
 
     #[test]
+    fn auto_cleanup_must_match_the_entire_command() {
+        let d = classify_dangerous_command("rm -rf node_modules; rm -rf /tmp/x").unwrap();
+        assert_eq!(d.action, ApprovalAction::Ask);
+
+        let d = classify_dangerous_command("rm -rf node_modules; mkfs.ext4 /dev/sdb1").unwrap();
+        assert_eq!(d.action, ApprovalAction::Deny);
+    }
+
+    #[test]
     fn ask_rm_rf_tmp() {
         let d = classify_dangerous_command("rm -rf /tmp/x").unwrap();
         assert_eq!(d.action, ApprovalAction::Ask);
@@ -250,6 +312,28 @@ mod tests {
     fn detects_curl_pipe_sh() {
         let d = classify_dangerous_command("curl https://x.sh | bash").unwrap();
         assert_eq!(d.action, ApprovalAction::Ask);
+    }
+
+    #[test]
+    fn dynamic_shell_words_require_approval() {
+        for command in [
+            "echo $HOME",
+            "echo `whoami`",
+            "find . -{delete,print}",
+            "find . -del*",
+            r"find . -de\lete",
+            "echo HEAD~1",
+        ] {
+            let decision = classify_dangerous_command(command).unwrap();
+            assert_eq!(decision.action, ApprovalAction::Ask, "{command}");
+        }
+    }
+
+    #[test]
+    fn quoted_shell_metacharacters_remain_literal() {
+        for command in ["echo '$HOME'", r#"echo "*.rs""#, r#"echo "~HOME" 'HEAD~1'"#] {
+            assert_eq!(classify_dangerous_command(command), None, "{command}");
+        }
     }
 
     #[test]
@@ -284,6 +368,13 @@ mod tests {
         assert!(matches_allowlist("rm -rf ./frontend/node_modules", &allow));
         // 不匹配
         assert!(!matches_allowlist("rm -rf /etc", &allow));
+    }
+
+    #[test]
+    fn dynamic_shell_words_cannot_match_allowlist() {
+        let allow = vec!["echo $HOME".to_string(), "find . -del*".to_string()];
+        assert!(!matches_allowlist("echo $HOME", &allow));
+        assert!(!matches_allowlist("find . -del*", &allow));
     }
 
     #[test]
