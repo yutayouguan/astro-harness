@@ -169,6 +169,14 @@ impl SessionStore {
                     );",
                 )?;
             }
+            if self.table_exists("projects")?
+                && !self.column_exists("projects", "icon")?
+            {
+                self.conn.execute(
+                    "ALTER TABLE projects ADD COLUMN icon TEXT",
+                    [],
+                )?;
+            }
             if self.table_exists("sessions")?
                 && !self.column_exists("sessions", "project_id")?
             {

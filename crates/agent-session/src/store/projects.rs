@@ -129,11 +129,12 @@ impl SessionStore {
             .ok_or_else(|| anyhow!("project just created but not found"))
     }
 
-    /// 更新项目名称和/或 roots。
+    /// 更新项目名称、图标和/或 roots。
     pub fn update_project(
         &self,
         id: &str,
         name: Option<&str>,
+        icon: Option<Option<&str>>,
         roots: Option<&[&str]>,
     ) -> Result<Project> {
         if self.get_project(id)?.is_none() {
@@ -144,6 +145,12 @@ impl SessionStore {
             tx.execute(
                 "UPDATE projects SET name = ?1, updated_at = datetime('now') WHERE id = ?2",
                 params![name, id],
+            )?;
+        }
+        if let Some(icon_val) = icon {
+            tx.execute(
+                "UPDATE projects SET icon = ?1, updated_at = datetime('now') WHERE id = ?2",
+                params![icon_val, id],
             )?;
         }
         if let Some(roots) = roots {
@@ -303,7 +310,7 @@ mod tests {
         let store = open_memory();
         let p = store.create_project("Old Name", &["/a"]).unwrap();
         let updated = store
-            .update_project(&p.id, Some("New Name"), Some(&["/a", "/b"]))
+            .update_project(&p.id, Some("New Name"), None, Some(&["/a", "/b"]))
             .unwrap();
         assert_eq!(updated.name, "New Name");
         assert_eq!(updated.roots.len(), 2);

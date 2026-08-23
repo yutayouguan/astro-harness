@@ -516,6 +516,7 @@ pub async fn delete_session_permanently(app: AppHandle, session_id: String) -> R
 pub struct ProjectDto {
     pub id: String,
     pub name: String,
+    pub icon: Option<String>,
     pub roots: Vec<String>,
     pub position: i64,
     pub created_at: String,
@@ -526,6 +527,7 @@ fn project_to_dto(p: session::Project) -> ProjectDto {
     ProjectDto {
         id: p.id,
         name: p.name,
+        icon: p.icon,
         roots: p.roots,
         position: p.position,
         created_at: p.created_at,
@@ -562,16 +564,21 @@ pub async fn create_project(name: String, roots: Vec<String>) -> Result<ProjectD
 pub async fn update_project(
     project_id: String,
     name: Option<String>,
+    icon: Option<Option<String>>,
     roots: Option<Vec<String>>,
 ) -> Result<ProjectDto, String> {
     let store = open_sessions()?;
     let root_strs: Option<Vec<&str>> = roots
         .as_ref()
         .map(|v| v.iter().map(|s| s.as_str()).collect());
+    let icon_ref: Option<Option<&str>> = icon
+        .as_ref()
+        .map(|opt| opt.as_deref());
     let proj = store
         .update_project(
             &project_id,
             name.as_deref(),
+            icon_ref,
             root_strs.as_deref(),
         )
         .map_err(|e| e.to_string())?;
