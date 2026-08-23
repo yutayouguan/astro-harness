@@ -12,6 +12,7 @@ use crate::runtime::{
 };
 
 use super::hitl_bridge::{park_astro_hitl, park_confirm, parse_astro_hitl};
+use super::lifecycle::emit_async_agent_message;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum ApprovalRoute {
@@ -1690,6 +1691,20 @@ async fn execute_tools_serial_inner(
                 // 无 HitlGate（单测或未注入闸门）：无法 park，返回说明文案
                 result = "HITL gate unavailable; confirmation/clarification could not be shown to the user.".into();
             }
+        }
+
+        if let (true, Some(async_message)) = (
+            call.name == "send_user_message_async",
+            tools::parse_async_user_message(result.text()),
+        ) {
+            emit_async_agent_message(
+                session,
+                turn_context,
+                format!("{}:async-message", call.id),
+                async_message.message,
+            )
+            .await;
+            result = serde_json::json!({"accepted": true}).to_string().into();
         }
 
         if pause.is_cancelled() {

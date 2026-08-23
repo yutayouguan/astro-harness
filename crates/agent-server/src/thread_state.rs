@@ -180,9 +180,8 @@ impl ThreadHistoryBuilder {
             return;
         };
         match (&mut item.item, reasoning) {
-            (TurnItem::AgentMessage(message), false) | (TurnItem::Reasoning(message), true) => {
-                message.content.push_str(delta)
-            }
+            (TurnItem::AgentMessage(message), false) => message.content.push_str(delta),
+            (TurnItem::Reasoning(message), true) => message.content.push_str(delta),
             _ => {}
         }
     }
@@ -353,9 +352,10 @@ mod tests {
     fn item(turn_id: &str, item_id: &str, content: &str, completed: bool) -> Event {
         let event = ItemEvent {
             turn_id: turn_id.into(),
-            item: TurnItem::AgentMessage(TextItem {
+            item: TurnItem::AgentMessage(agent_protocol::AgentMessageItem {
                 id: item_id.into(),
                 content: content.into(),
+                delivery: None,
             }),
         };
         Event {

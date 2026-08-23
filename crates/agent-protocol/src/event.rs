@@ -159,7 +159,7 @@ impl EventMsg {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::items::{TextItem, TurnItem};
+    use crate::items::{AgentMessageItem, TurnItem};
 
     #[test]
     fn item_completed_roundtrips_without_losing_identity() {
@@ -167,15 +167,34 @@ mod tests {
             id: "turn-1".into(),
             msg: EventMsg::ItemCompleted(ItemEvent {
                 turn_id: "turn-1".into(),
-                item: TurnItem::AgentMessage(TextItem {
+                item: TurnItem::AgentMessage(AgentMessageItem {
                     id: "item-1".into(),
                     content: "done".into(),
+                    delivery: None,
                 }),
             }),
         };
         let json = serde_json::to_string(&event).unwrap();
         let restored: Event = serde_json::from_str(&json).unwrap();
         assert_eq!(restored, event);
+    }
+
+    #[test]
+    fn legacy_agent_message_without_delivery_remains_compatible() {
+        let item: TurnItem = serde_json::from_value(serde_json::json!({
+            "type": "agent_message",
+            "data": {"id": "item-1", "content": "done"}
+        }))
+        .unwrap();
+
+        assert_eq!(
+            item,
+            TurnItem::AgentMessage(AgentMessageItem {
+                id: "item-1".into(),
+                content: "done".into(),
+                delivery: None,
+            })
+        );
     }
 
     #[test]

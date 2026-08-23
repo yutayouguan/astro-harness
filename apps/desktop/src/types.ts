@@ -106,6 +106,8 @@ export type ChatMessage = {
   id: string;
   role: "user" | "assistant";
   content: string;
+  /** Non-blocking assistant update emitted while the turn continues. */
+  delivery?: "async";
   /** DeepSeek 等 thinking 模式下的推理过程 */
   reasoning?: string;
   /** 思考耗时（秒），用于折叠头展示 */

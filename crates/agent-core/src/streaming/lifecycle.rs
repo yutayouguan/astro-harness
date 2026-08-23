@@ -3,8 +3,8 @@
 use std::sync::Arc;
 
 use agent_protocol::{
-    DeltaEvent, Event, EventMsg, ExtensionItem, ItemEvent, TextItem, TokenCountEvent, ToolItem,
-    ToolStatus, TurnItem,
+    AgentMessageItem, DeltaEvent, Event, EventMsg, ExtensionItem, ItemEvent, TextItem,
+    TokenCountEvent, ToolItem, ToolStatus, TurnItem,
 };
 use providers::Usage;
 
@@ -322,10 +322,42 @@ pub(crate) async fn emit_assistant_completed(
         turn_context,
         EventMsg::ItemCompleted(ItemEvent {
             turn_id: turn_context.sub_id().to_string(),
-            item: TurnItem::AgentMessage(TextItem {
+            item: TurnItem::AgentMessage(AgentMessageItem {
                 id: item_id,
                 content,
+                delivery: None,
             }),
+        }),
+    )
+    .await;
+}
+
+pub(crate) async fn emit_async_agent_message(
+    session: &Session,
+    turn_context: &TurnContext,
+    item_id: String,
+    content: String,
+) {
+    let item = TurnItem::AgentMessage(AgentMessageItem {
+        id: item_id,
+        content,
+        delivery: Some(agent_protocol::AgentMessageDelivery::Async),
+    });
+    emit(
+        session,
+        turn_context,
+        EventMsg::ItemStarted(ItemEvent {
+            turn_id: turn_context.sub_id().to_string(),
+            item: item.clone(),
+        }),
+    )
+    .await;
+    emit(
+        session,
+        turn_context,
+        EventMsg::ItemCompleted(ItemEvent {
+            turn_id: turn_context.sub_id().to_string(),
+            item,
         }),
     )
     .await;
@@ -384,7 +416,11 @@ fn text_item(id: String, content: String, reasoning: bool) -> TurnItem {
     if reasoning {
         TurnItem::Reasoning(item)
     } else {
-        TurnItem::AgentMessage(item)
+        TurnItem::AgentMessage(AgentMessageItem {
+            id: item.id,
+            content: item.content,
+            delivery: None,
+        })
     }
 }
 

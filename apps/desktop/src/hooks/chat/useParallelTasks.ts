@@ -14,6 +14,7 @@ import {
   consumeBufferedTextReconcile,
   reconcileAssistantText,
 } from "../../lib/chat/streamReconcile";
+import { upsertAsyncAssistantMessage } from "../../lib/chat/asyncMessage";
 import {
   countRunningParallel,
   isParallelTaskActive,
@@ -440,6 +441,14 @@ export function useParallelTasks(deps: Deps) {
         const payload = event.payload;
         if (payload.type === "token" && payload.content) {
           enqueueToken(assistantId, payload.content);
+        } else if (
+          payload.type === "async_message" &&
+          payload.id &&
+          payload.content
+        ) {
+          setMessages((prev) =>
+            upsertAsyncAssistantMessage(prev, assistantId, payload.id!, payload.content!),
+          );
         } else if (payload.type === "text_reconcile") {
           const raf = rafMapRef.current.get(assistantId);
           if (raf != null) {

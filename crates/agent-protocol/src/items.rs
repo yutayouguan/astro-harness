@@ -7,6 +7,20 @@ pub struct TextItem {
     pub content: String,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AgentMessageDelivery {
+    Async,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AgentMessageItem {
+    pub id: String,
+    pub content: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub delivery: Option<AgentMessageDelivery>,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ToolItem {
     pub id: String,
@@ -38,7 +52,7 @@ pub struct ExtensionItem {
 pub enum TurnItem {
     UserMessage(TextItem),
     HookPrompt(TextItem),
-    AgentMessage(TextItem),
+    AgentMessage(AgentMessageItem),
     Plan(TextItem),
     Reasoning(TextItem),
     CommandExecution(ToolItem),
@@ -61,13 +75,13 @@ impl TurnItem {
         match self {
             Self::UserMessage(item)
             | Self::HookPrompt(item)
-            | Self::AgentMessage(item)
             | Self::Plan(item)
             | Self::Reasoning(item)
             | Self::SubAgentActivity(item)
             | Self::ContextCompaction(item)
             | Self::EnteredReviewMode(item)
             | Self::ExitedReviewMode(item) => &item.id,
+            Self::AgentMessage(item) => &item.id,
             Self::CommandExecution(item)
             | Self::DynamicToolCall(item)
             | Self::McpToolCall(item)

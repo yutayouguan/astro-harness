@@ -32,6 +32,7 @@ pub const KNOWN_TOOLSET_IDS: &[&str] = &[
     "context_search",
     "pin_context",
     "ask_user",
+    "send_user_message_async",
     "switch_mode",
     "present",
     "subagents",
@@ -205,6 +206,7 @@ pub fn tool_name_to_toolset(name: &str) -> &str {
         "music_gen" => "music_gen",
         "skills" => "skills",
         "ask_user" => "ask_user",
+        "send_user_message_async" => "send_user_message_async",
         "switch_mode" => "switch_mode",
         "present" => "present",
         "spawn_agent" | "list_agents" | "followup_task" | "send_message" | "wait_agent"

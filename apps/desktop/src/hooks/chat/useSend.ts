@@ -13,6 +13,7 @@ import { elapsedSecSince } from "../../lib/chat/elapsedSec";
 import { normalizeContextUsageEvent } from "../../lib/chat/contextUsage";
 import { saveContextUsageForSession } from "../../lib/chat/chatSessionStore";
 import { reconcileAssistantText } from "../../lib/chat/streamReconcile";
+import { upsertAsyncAssistantMessage } from "../../lib/chat/asyncMessage";
 import {
   parseModeSwitchResult,
   type ChatInteractionMode,
@@ -473,6 +474,15 @@ export function useSend(deps: UseSendDeps) {
           if (payload.type === "token" && payload.content) {
             touchActivity();
             enqueueStreamToken(assistantId, payload.content);
+          } else if (
+            payload.type === "async_message" &&
+            payload.id &&
+            payload.content
+          ) {
+            setMessages((prev) =>
+              upsertAsyncAssistantMessage(prev, assistantId, payload.id!, payload.content!),
+            );
+            touchActivity();
           } else if (payload.type === "text_reconcile") {
             if (streamRafRef.current != null) {
               cancelAnimationFrame(streamRafRef.current);

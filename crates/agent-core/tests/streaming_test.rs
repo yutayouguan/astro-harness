@@ -331,6 +331,83 @@ async fn scripted_tool_turn_emits_item_lifecycle_and_one_terminal() {
     );
 }
 
+#[tokio::test]
+async fn async_user_message_is_a_durable_item_separate_from_the_final_answer() {
+    let (_dir, session, thread, _recorder, _path) = common::new_thread().await;
+    let turn_id = "async-user-message";
+    let turn_context = session.create_turn_context(turn_id.into()).await;
+    let chat = scripted_chat(vec![
+        vec![
+            StreamChunk::ToolCallStart {
+                index: 0,
+                id: "call-async".into(),
+                name: "send_user_message_async".into(),
+            },
+            StreamChunk::ToolCallDelta {
+                index: 0,
+                arguments: r#"{"message":"Still working"}"#.into(),
+            },
+            StreamChunk::Done {
+                finish_reason: "tool_calls".into(),
+            },
+        ],
+        vec![
+            StreamChunk::Text("Final answer".into()),
+            StreamChunk::Done {
+                finish_reason: "stop".into(),
+            },
+        ],
+    ]);
+    let run = tokio::spawn(run_multi_turn_stream_with_chat_fn(
+        Arc::clone(&session),
+        turn_context,
+        vec![TurnInput {
+            content: "do the work".into(),
+            image_data_urls: Vec::new(),
+            client_message_id: None,
+        }],
+        chat,
+    ));
+    let events = common::collect_through_terminal(&thread, turn_id).await;
+    run.await.unwrap().unwrap();
+
+    let async_events = events
+        .iter()
+        .filter_map(|event| match &event.msg {
+            EventMsg::ItemStarted(item) | EventMsg::ItemCompleted(item) => match &item.item {
+                TurnItem::AgentMessage(message)
+                    if message.delivery == Some(agent_protocol::AgentMessageDelivery::Async) =>
+                {
+                    Some((message.id.as_str(), message.content.as_str()))
+                }
+                _ => None,
+            },
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(
+        async_events,
+        vec![
+            ("call-async:async-message", "Still working"),
+            ("call-async:async-message", "Still working"),
+        ]
+    );
+    assert!(events.iter().any(|event| matches!(
+        &event.msg,
+        EventMsg::ItemCompleted(item)
+            if matches!(
+                &item.item,
+                TurnItem::DynamicToolCall(tool)
+                    if tool.id == "call-async"
+                        && tool.output == Some(serde_json::json!("{\"accepted\":true}"))
+            )
+    )));
+    assert!(events.iter().any(|event| matches!(
+        &event.msg,
+        EventMsg::AgentMessageContentDelta(delta) if delta.delta == "Final answer"
+    )));
+}
+
 fn assert_text_item_lifecycle(
     events: &[agent_protocol::Event],
     reasoning: bool,

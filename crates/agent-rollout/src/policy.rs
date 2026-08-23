@@ -60,15 +60,16 @@ mod tests {
         ContextUsageEvent, DeltaEvent, ErrorEvent, EventMsg, ItemEvent, TurnCompleteEvent,
         UserInputCommittedEvent,
     };
-    use agent_protocol::items::{TextItem, TurnItem};
+    use agent_protocol::items::{AgentMessageItem, TurnItem};
 
     #[test]
     fn durable_policy_persists_completed_items_but_not_deltas() {
         let completed = EventMsg::ItemCompleted(ItemEvent {
             turn_id: "turn-1".into(),
-            item: TurnItem::AgentMessage(TextItem {
+            item: TurnItem::AgentMessage(AgentMessageItem {
                 id: "item-1".into(),
                 content: "done".into(),
+                delivery: None,
             }),
         });
         let delta = EventMsg::AgentMessageContentDelta(DeltaEvent {

@@ -13,6 +13,7 @@ const READONLY_ALLOW: &[&str] = &[
     "context_search",
     "skills", // action 级仅 list/load/view/curate
     "ask_user",
+    "send_user_message_async",
     "todo", // Ask 模式下硬拦
     "switch_mode",
     "present",

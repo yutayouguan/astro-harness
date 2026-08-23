@@ -57,6 +57,10 @@ pub enum ChatStreamEvent {
     Token {
         content: String,
     },
+    AsyncMessage {
+        id: String,
+        content: String,
+    },
     TextReconcile {
         content: String,
     },

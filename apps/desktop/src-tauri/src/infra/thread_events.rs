@@ -125,6 +125,7 @@ struct ActiveState {
     provisional_delivery_pending: HashSet<(String, u64)>,
     delivered_agent_text: HashMap<String, HashMap<String, String>>,
     delivered_reasoning: HashMap<String, HashMap<String, String>>,
+    delivered_async_messages: HashMap<String, HashSet<String>>,
     pending_terminal_errors: HashMap<String, HashMap<String, String>>,
     delivered_extensions: HashMap<(String, String), String>,
     next_activation: u64,
@@ -807,6 +808,13 @@ impl ThreadEventsBridge {
                     .entry(turn_id.into())
                     .or_default()
                     .push_str(content),
+                ChatStreamEvent::AsyncMessage { id, .. } => {
+                    state
+                        .delivered_async_messages
+                        .entry(thread_id.into())
+                        .or_default()
+                        .insert(id.clone());
+                }
                 ChatStreamEvent::Error { message } => {
                     state
                         .pending_terminal_errors
@@ -865,6 +873,16 @@ impl ThreadEventsBridge {
                     } else {
                         *delivered = content.clone();
                         recovered.push(ChatStreamEvent::ReasoningReconcile { content });
+                    }
+                }
+                ChatStreamEvent::AsyncMessage { id, content } => {
+                    if state
+                        .delivered_async_messages
+                        .entry(thread_id.into())
+                        .or_default()
+                        .insert(id.clone())
+                    {
+                        recovered.push(ChatStreamEvent::AsyncMessage { id, content });
                     }
                 }
                 other => recovered.push(other),
@@ -1119,6 +1137,7 @@ impl ThreadEventsBridge {
         state.completed_background_turns.remove(thread_id);
         state.delivered_agent_text.remove(thread_id);
         state.delivered_reasoning.remove(thread_id);
+        state.delivered_async_messages.remove(thread_id);
         state.pending_terminal_errors.remove(thread_id);
     }
 
@@ -1986,9 +2005,18 @@ fn map_item_event(item_event: proto::ThreadItemEvent, started: bool) -> Vec<Chat
             phase: if started { "started" } else { "completed" }.into(),
             media: tool.media.into_iter().map(media_asset_dto).collect(),
         }],
-        Ok(TurnItem::AgentMessage(text)) if started => {
+        Ok(TurnItem::AgentMessage(message))
+            if !started
+                && message.delivery == Some(agent_protocol::AgentMessageDelivery::Async) =>
+        {
+            vec![ChatStreamEvent::AsyncMessage {
+                id: message.id,
+                content: message.content,
+            }]
+        }
+        Ok(TurnItem::AgentMessage(message)) if started && message.delivery.is_none() => {
             vec![ChatStreamEvent::Token {
-                content: text.content,
+                content: message.content,
             }]
         }
         Ok(TurnItem::Reasoning(text)) if started => {
@@ -2352,6 +2380,15 @@ fn snapshot_turn_recovery_events(turn: &proto::ThreadTurn) -> Vec<ChatStreamEven
     let mut item_reasoning = Vec::new();
     for item in &turn.items {
         match serde_json::from_str(&item.payload_json) {
+            Ok(TurnItem::AgentMessage(message))
+                if message.delivery == Some(agent_protocol::AgentMessageDelivery::Async) =>
+            {
+                events.push(ChatStreamEvent::AsyncMessage {
+                    id: message.id,
+                    content: message.content,
+                });
+                continue;
+            }
             Ok(TurnItem::AgentMessage(message)) => {
                 item_agent_messages.push(message.content);
                 continue;
@@ -2544,9 +2581,26 @@ mod tests {
             item_type: "agent_message".into(),
             status: "completed".into(),
             payload_json: serde_json::to_string(&TurnItem::AgentMessage(
-                agent_protocol::TextItem {
+                agent_protocol::AgentMessageItem {
                     id: id.into(),
                     content: content.into(),
+                    delivery: None,
+                },
+            ))
+            .unwrap(),
+        }
+    }
+
+    fn async_message_item(id: &str, content: &str) -> proto::ThreadItem {
+        proto::ThreadItem {
+            id: id.into(),
+            item_type: "agent_message".into(),
+            status: "completed".into(),
+            payload_json: serde_json::to_string(&TurnItem::AgentMessage(
+                agent_protocol::AgentMessageItem {
+                    id: id.into(),
+                    content: content.into(),
+                    delivery: Some(agent_protocol::AgentMessageDelivery::Async),
                 },
             ))
             .unwrap(),
@@ -2587,6 +2641,43 @@ mod tests {
                 ChatStreamEvent::Done
             ] if outcome_type == "success"
         ));
+    }
+
+    #[test]
+    fn async_agent_message_maps_only_when_completed() {
+        let item = async_message_item("call-1:async-message", "Still working");
+
+        assert!(map_item_event(
+            proto::ThreadItemEvent {
+                item: Some(item.clone())
+            },
+            true,
+        )
+        .is_empty());
+        assert!(matches!(
+            map_item_event(proto::ThreadItemEvent { item: Some(item) }, false).as_slice(),
+            [ChatStreamEvent::AsyncMessage { id, content }]
+                if id == "call-1:async-message" && content == "Still working"
+        ));
+    }
+
+    #[tokio::test]
+    async fn snapshot_recovery_deduplicates_async_agent_messages_by_item_id() {
+        let bridge = ThreadEventsBridge::new();
+        let event = ChatStreamEvent::AsyncMessage {
+            id: "call-1:async-message".into(),
+            content: "Still working".into(),
+        };
+
+        let first = bridge
+            .recover_snapshot_projection("session-1", "turn-1", vec![event.clone()])
+            .await;
+        let replay = bridge
+            .recover_snapshot_projection("session-1", "turn-1", vec![event])
+            .await;
+
+        assert_eq!(first.len(), 1);
+        assert!(replay.is_empty());
     }
 
     #[tokio::test]
@@ -2962,9 +3053,10 @@ mod tests {
                         item_type: "agent_message".into(),
                         status: "completed".into(),
                         payload_json: serde_json::to_string(&TurnItem::AgentMessage(
-                            agent_protocol::TextItem {
+                            agent_protocol::AgentMessageItem {
                                 id: "message-1".into(),
                                 content: "almost ".into(),
+                                delivery: None,
                             },
                         ))
                         .unwrap(),
@@ -2974,9 +3066,10 @@ mod tests {
                         item_type: "agent_message".into(),
                         status: "completed".into(),
                         payload_json: serde_json::to_string(&TurnItem::AgentMessage(
-                            agent_protocol::TextItem {
+                            agent_protocol::AgentMessageItem {
                                 id: "message-2".into(),
                                 content: "done".into(),
+                                delivery: None,
                             },
                         ))
                         .unwrap(),

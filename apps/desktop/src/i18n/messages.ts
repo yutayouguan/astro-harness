@@ -699,6 +699,8 @@ export const zh = {
   "agentTools.pinContext.desc": "将关键片段钉入 system prompt 持续生效（action=pin|list|unpin|clear）",
   "agentTools.askUser.title": "向用户提问 / 确认 / 定位",
   "agentTools.askUser.desc": "需求不清时提问，敏感操作前请求批准，本地查询前请求定位",
+  "agentTools.sendUserMessageAsync.title": "异步用户消息",
+  "agentTools.sendUserMessageAsync.desc": "在回合继续运行时发送进度更新或阻塞问题",
   "agentTools.switchMode.title": "请求切换模式",
   "agentTools.switchMode.desc": "在 Agent 与 Plan 之间请求切换，需用户授权确认",
   "agentTools.present.title": "信息卡片",
@@ -2747,6 +2749,9 @@ export const en: Record<MessageKey, string> = {
   "agentTools.askUser.title": "Ask / Confirm / Locate",
   "agentTools.askUser.desc":
     "Ask when unclear; request approval before sensitive actions; request location for local weather/nearby",
+  "agentTools.sendUserMessageAsync.title": "Async User Message",
+  "agentTools.sendUserMessageAsync.desc":
+    "Send a progress update or blocking question while the turn keeps running",
   "agentTools.switchMode.title": "Request Mode Switch",
   "agentTools.switchMode.desc":
     "Request switching between Agent and Plan; requires user authorization",
