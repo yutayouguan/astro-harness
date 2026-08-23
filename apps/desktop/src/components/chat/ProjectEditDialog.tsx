@@ -60,12 +60,14 @@ export default function ProjectEditDialog({
     setSaving(true);
     try {
       let updated: ProjectDto;
-      if (project.id === "default" && !project.createdAt) {
-        // 默认工作空间尚未持久化到 DB，先创建
+      const isVirtual = project.id === "default";
+      if (isVirtual) {
+        // 默认工作空间是前端虚拟对象，需要先在 DB 创建
         updated = await invoke<ProjectDto>("create_project", {
           name: name.trim() || project.name,
           roots,
         });
+        // 创建后再更新图标（create_project 不接受 icon）
         if (iconId) {
           updated = await invoke<ProjectDto>("update_project", {
             projectId: updated.id,
@@ -76,7 +78,7 @@ export default function ProjectEditDialog({
         updated = await invoke<ProjectDto>("update_project", {
           projectId: project.id,
           name: name.trim() || project.name,
-          icon: iconId,
+          icon: iconId ?? "",
           roots,
         });
       }
