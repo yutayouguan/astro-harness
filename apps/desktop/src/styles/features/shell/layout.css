@@ -1420,6 +1420,27 @@ html[data-theme="dark"] .project-edit-panel {
   color: var(--ink-mute);
 }
 
+.project-edit-name-icon-btn {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: 1.5px dashed var(--border-mute, rgba(0, 0, 0, 0.12));
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ink-mute);
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s, color 0.15s;
+}
+
+.project-edit-name-icon-btn:hover {
+  border-color: var(--accent, #2563eb);
+  background: var(--surface-hover, rgba(0, 0, 0, 0.04));
+  color: var(--accent, #2563eb);
+}
+
 .project-edit-name-input {
   flex: 1;
   border: none;
