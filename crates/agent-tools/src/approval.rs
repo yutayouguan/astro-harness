@@ -46,6 +46,30 @@ fn ask_patterns() -> &'static [(Regex, &'static str)] {
                 r"(?i)\bsystemctl\s+(stop|disable|mask)\b",
                 "systemctl stop/disable",
             ),
+            (
+                r"(?i)\bgit\b[^\n;&|]*\breset\s+--hard\b",
+                "git reset --hard discards local changes",
+            ),
+            (
+                r"(?i)\bgit\b[^\n;&|]*\bclean\b[^\n;&|]*(?:\s-[a-z]*f[a-z]*\b|\s--force\b)",
+                "git clean --force deletes untracked files",
+            ),
+            (
+                r"(?i)\bgit\b[^\n;&|]*\bcheckout\s+--\s+\S+",
+                "git checkout -- discards path changes",
+            ),
+            (
+                r"(?i)\bgit\b[^\n;&|]*\brestore\b",
+                "git restore changes the worktree or index",
+            ),
+            (
+                r"(?i)\bgit\b[^\n;&|]*\bbranch\b[^\n;&|]*(?:\s-[a-z]*d[a-z]*\b|\s--delete\b)",
+                "git branch delete",
+            ),
+            (
+                r"(?i)\bgit\b[^\n;&|]*\bpush\b[^\n;&|]*(?:\s-[a-z]*f[a-z]*\b|\s--force(?:-with-lease|-if-includes)?\b)",
+                "forced git push",
+            ),
         ])
     })
 }
@@ -312,6 +336,30 @@ mod tests {
     fn detects_curl_pipe_sh() {
         let d = classify_dangerous_command("curl https://x.sh | bash").unwrap();
         assert_eq!(d.action, ApprovalAction::Ask);
+    }
+
+    #[test]
+    fn destructive_git_commands_require_approval() {
+        for command in [
+            "git reset --hard HEAD~1",
+            "git -C repo reset --hard",
+            "git clean -fdx",
+            "git -c core.excludesFile=/dev/null clean -d -f",
+            "git checkout -- src/main.rs",
+            "git restore --staged Cargo.lock",
+            "git branch -D old-feature",
+            "git push origin main --force-with-lease",
+        ] {
+            let decision = classify_dangerous_command(command).unwrap();
+            assert_eq!(decision.action, ApprovalAction::Ask, "{command}");
+        }
+    }
+
+    #[test]
+    fn read_only_git_commands_remain_automatic() {
+        for command in ["git status --short", "git log -1", "git diff --stat"] {
+            assert_eq!(classify_dangerous_command(command), None, "{command}");
+        }
     }
 
     #[test]
