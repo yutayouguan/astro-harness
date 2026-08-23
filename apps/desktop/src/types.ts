@@ -806,6 +806,16 @@ export type RecentSessionDto = {
   pinnedAt?: string | null;
 };
 
+/** 后端持久化的项目实体 */
+export type ProjectDto = {
+  id: string;
+  name: string;
+  roots: string[];
+  position: number;
+  createdAt: string;
+  updatedAt: string;
+};
+
 /** 产物分类筛选 */
 export type ArtifactCategory =
   | "all" | "doc" | "sheet" | "image" | "av" | "code" | "pdf_ppt" | "other";
