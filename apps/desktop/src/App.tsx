@@ -13,6 +13,7 @@ import { listen } from "@tauri-apps/api/event";
 import AboutDialog from "./components/ui/AboutDialog";
 import ChatRightPanel from "./components/chat/ChatRightPanel";
 import ProjectContextMenu from "./components/chat/ProjectContextMenu";
+import SidebarSessionList from "./components/chat/SidebarSessionList";
 import ChatView from "./components/chat/ChatView";
 import LoopPanel from "./components/loop/LoopPanel";
 import FilesPage from "./components/files/FilesPage";
@@ -798,9 +799,10 @@ export default function App() {
                   </button>
                 </div>
                 {!collapsedProjects.has(proj.path) && (
-                  <div className="sidebar-sessions">
-                    <span className="sidebar-empty">暂无会话</span>
-                  </div>
+                  <SidebarSessionList
+                    activeSessionId={chat.sessionId}
+                    onOpenSession={(sid) => { setActiveProjectPath(proj.path); void openSessionFromFilespace(sid); }}
+                  />
                 )}
               </div>
             ))}

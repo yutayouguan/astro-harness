@@ -1210,3 +1210,57 @@ html[data-theme="dark"] .project-context-menu {
   background: var(--glass);
   color: var(--ink);
 }
+
+/* ── Sidebar session items ────────────────────────── */
+
+.sidebar-session-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 10px;
+  border: none;
+  border-radius: 7px;
+  background: transparent;
+  font-size: 12.5px;
+  font-weight: 450;
+  color: var(--ink);
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.1s;
+  overflow: hidden;
+}
+
+.sidebar-session-item:hover {
+  background: color-mix(in srgb, var(--tone, #64748b) 8%, transparent);
+}
+
+.sidebar-session-item.is-active {
+  background: color-mix(in srgb, var(--tone, var(--tone-blue)) 12%, transparent);
+  font-weight: 550;
+}
+
+.sidebar-session-item svg {
+  flex-shrink: 0;
+  opacity: 0.5;
+}
+
+.sidebar-session-item.is-active svg {
+  opacity: 0.8;
+  color: var(--tone, var(--tone-blue));
+}
+
+.sidebar-session-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sidebar-session-time {
+  flex-shrink: 0;
+  font-size: 10px;
+  color: var(--ink-mute);
+  opacity: 0.6;
+}
