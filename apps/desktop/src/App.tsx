@@ -1220,8 +1220,8 @@ export default function App() {
             } else if (action === "reveal") {
               const root = projects.find((p) => p.id === projectMenu.id)?.roots[0];
               if (root) {
-                void import("@tauri-apps/plugin-shell").then((mod) =>
-                  mod.Command.create("open", ["-R", root]).execute()
+                void import("@tauri-apps/plugin-opener").then((mod) =>
+                  mod.revealItemInDir(root)
                 ).catch(() => {});
               }
             } else if (action === "pin") {
