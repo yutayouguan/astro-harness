@@ -1567,3 +1567,44 @@ html[data-theme="dark"] .project-edit-panel {
 .project-edit-btn--danger:hover {
   background: color-mix(in srgb, var(--danger, #ef4444) 10%, transparent);
 }
+
+/* ── Project icon picker ──────────────────────────── */
+
+.project-edit-icon-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: 14px;
+}
+
+.project-edit-icon-btn {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border: 1.5px solid transparent;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--ink-mute) 6%, transparent);
+  color: var(--ink-mute);
+  cursor: pointer;
+  transition: border-color 0.1s, background 0.1s, color 0.1s;
+}
+
+.project-edit-icon-btn:hover {
+  background: color-mix(in srgb, var(--tone, var(--tone-blue)) 10%, transparent);
+  color: var(--ink);
+}
+
+.project-edit-icon-btn.is-active {
+  border-color: var(--tone, var(--tone-blue));
+  background: color-mix(in srgb, var(--tone, var(--tone-blue)) 14%, transparent);
+  color: var(--tone, var(--tone-blue));
+}
+
+html[data-theme="dark"] .project-edit-icon-btn {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+html[data-theme="dark"] .project-edit-icon-btn.is-active {
+  background: rgba(255, 255, 255, 0.12);
+}

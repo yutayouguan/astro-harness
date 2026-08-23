@@ -1,9 +1,11 @@
-/** 编辑项目弹窗：修改名称、管理源文件夹、移除项目。 */
+/** 编辑项目弹窗：修改名称、管理源文件夹、图标选择、移除项目。 */
 import { useCallback, useEffect, useId, useState } from "react";
 import { createPortal } from "react-dom";
 import { invoke } from "@tauri-apps/api/core";
 import { FolderOpen, Plus, Trash2, X } from "lucide-react";
 import type { ProjectDto } from "../../types";
+import LucideIconPicker from "../agents/LucideIconPicker";
+import LucideByName from "../icons/LucideByName";
 
 type Props = {
   open: boolean;
@@ -24,13 +26,15 @@ export default function ProjectEditDialog({
 }: Props) {
   const titleId = useId();
   const [name, setName] = useState("");
+  const [iconId, setIconId] = useState<string | null>(null);
+  const [iconPickerOpen, setIconPickerOpen] = useState(false);
   const [roots, setRoots] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
 
-  // 同步外部 project 到内部表单状态
   useEffect(() => {
     if (project) {
       setName(project.name);
+      setIconId(project.icon ?? null);
       setRoots([...project.roots]);
     }
   }, [project]);
@@ -58,6 +62,7 @@ export default function ProjectEditDialog({
       const updated = await invoke<ProjectDto>("update_project", {
         projectId: project.id,
         name: name.trim() || project.name,
+        icon: iconId,
         roots,
       });
       onUpdated(updated);
@@ -67,7 +72,7 @@ export default function ProjectEditDialog({
     } finally {
       setSaving(false);
     }
-  }, [project, name, roots, saving, onUpdated, onClose]);
+  }, [project, name, iconId, roots, saving, onUpdated, onClose]);
 
   const handleRemoveProject = useCallback(async () => {
     if (!project) return;
@@ -124,6 +129,48 @@ export default function ProjectEditDialog({
             placeholder="项目名称"
           />
         </div>
+
+        {/* 项目图标 */}
+        <label className="project-edit-label">图标</label>
+        <div className="project-edit-icon-row">
+          <button
+            type="button"
+            className="project-edit-icon-preview"
+            onClick={() => setIconPickerOpen(true)}
+            aria-label="选择图标"
+          >
+            {iconId ? (
+              <LucideByName name={iconId} size={20} />
+            ) : (
+              <FolderOpen size={20} strokeWidth={1.6} />
+            )}
+          </button>
+          <button
+            type="button"
+            className="project-edit-icon-change"
+            onClick={() => setIconPickerOpen(true)}
+          >
+            更换图标
+          </button>
+          {iconId && (
+            <button
+              type="button"
+              className="project-edit-icon-clear"
+              onClick={() => setIconId(null)}
+            >
+              恢复默认
+            </button>
+          )}
+        </div>
+        <LucideIconPicker
+          open={iconPickerOpen}
+          selectedId={iconId}
+          onClose={() => setIconPickerOpen(false)}
+          onSelect={(selected) => {
+            setIconId(selected.id);
+            setIconPickerOpen(false);
+          }}
+        />
 
         {/* 源文件夹列表 */}
         <label className="project-edit-label">源文件夹</label>

@@ -810,6 +810,7 @@ export type RecentSessionDto = {
 export type ProjectDto = {
   id: string;
   name: string;
+  icon?: string | null;
   roots: string[];
   position: number;
   createdAt: string;
