@@ -1235,6 +1235,22 @@ html[data-theme="dark"] .project-context-menu {
   background: color-mix(in srgb, var(--tone, #64748b) 8%, transparent);
 }
 
+.sidebar-session-item:hover .sidebar-session-title {
+  animation: sidebar-title-scroll 4s linear 0.5s infinite;
+}
+
+@keyframes sidebar-title-scroll {
+  0%, 10% { transform: translateX(0); }
+  45%, 55% { transform: translateX(var(--scroll-distance, -40px)); }
+  90%, 100% { transform: translateX(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sidebar-session-item:hover .sidebar-session-title {
+    animation: none;
+  }
+}
+
 .sidebar-session-item.is-active {
   background: color-mix(in srgb, var(--tone, var(--tone-blue)) 12%, transparent);
   font-weight: 550;
