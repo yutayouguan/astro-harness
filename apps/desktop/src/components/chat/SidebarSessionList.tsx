@@ -73,7 +73,7 @@ function historyToMarkdown(
 
 type Props = {
   activeSessionId: string | null;
-  projectPath: string;
+  projectId: string;
   onOpenSession: (sessionId: string) => void;
   onDeleteCurrentSession?: () => void;
 };
@@ -90,7 +90,7 @@ function relativeTime(iso: string | null): string {
   return `${days} 天前`;
 }
 
-export default function SidebarSessionList({ activeSessionId, projectPath, onOpenSession, onDeleteCurrentSession }: Props) {
+export default function SidebarSessionList({ activeSessionId, projectId, onOpenSession, onDeleteCurrentSession }: Props) {
   const [items, setItems] = useState<RecentSessionDto[]>([]);
   const [expanded, setExpanded] = useState(false);
   const visibleCount = readVisibleCount();
@@ -100,27 +100,27 @@ export default function SidebarSessionList({ activeSessionId, projectPath, onOpe
       const list = await invoke<RecentSessionDto[]>("list_sessions", {
         filter: "active",
         limit: 50,
-        projectRoot: projectPath === "default" ? null : projectPath,
+        projectId,
       });
       setItems(list ?? []);
     } catch {
       setItems([]);
     }
-  }, [projectPath]);
+  }, [projectId]);
 
   useEffect(() => { void load(); }, [load]);
   useEffect(() => { void load(); }, [activeSessionId, load]);
 
   // 当前会话自动关联到此项目
   useEffect(() => {
-    if (activeSessionId && projectPath !== "default") {
-      void invoke("set_session_project_root", {
+    if (activeSessionId) {
+      void invoke("assign_session_to_project", {
         sessionId: activeSessionId,
-        projectRoot: projectPath,
+        projectId,
       }).catch(() => {});
       void load();
     }
-  }, [activeSessionId, projectPath, load]);
+  }, [activeSessionId, projectId, load]);
 
   const [sessionMenu, setSessionMenu] = useState<{ sessionId: string; x: number; y: number } | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);

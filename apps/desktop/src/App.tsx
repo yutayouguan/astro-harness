@@ -119,6 +119,7 @@ import type {
   ModelCapabilities,
   ModelPricingMeta,
   ModelReasoningMeta,
+  ProjectDto,
   ProviderModelsResult,
 } from "./types";
 
@@ -159,12 +160,16 @@ export default function App() {
   );
   const [nav, setNav] = useState<NavId>(NAV[0].id);
   const [settingsTab, setSettingsTab] = useState<SettingsTabId>("preferences");
-  const [projects, setProjects] = useState<Array<{ path: string; name: string }>>([
-    { path: "default", name: "默认工作区" },
-  ]);
-  const [activeProjectPath, setActiveProjectPath] = useState("default");
+  const [projects, setProjects] = useState<ProjectDto[]>([]);
+  const [activeProjectId, setActiveProjectId] = useState("default");
   const [collapsedProjects, setCollapsedProjects] = useState<Set<string>>(new Set());
-  const [projectMenu, setProjectMenu] = useState<{ path: string; name: string; x: number; y: number } | null>(null);
+  const [projectMenu, setProjectMenu] = useState<{ id: string; name: string; x: number; y: number } | null>(null);
+  // 启动时从后端加载项目列表
+  useEffect(() => {
+    void invoke<ProjectDto[]>("list_projects")
+      .then((list) => setProjects(list ?? []))
+      .catch(() => {});
+  }, []);
   /** 导航到 settings 并切换到指定子 tab */
   const openSettingsTab = useCallback((tab: SettingsTabId) => {
     setSettingsTab(tab);
@@ -725,11 +730,19 @@ export default function App() {
                     const { open } = await import("@tauri-apps/plugin-dialog");
                     const selected = await open({ directory: true, title: "选择项目文件夹" });
                     if (selected && typeof selected === "string") {
+                      const newProject: ProjectDto = {
+                        id: crypto.randomUUID(),
+                        name: selected.split("/").pop() || selected,
+                        roots: [selected],
+                        position: projects.length,
+                        createdAt: new Date().toISOString(),
+                        updatedAt: new Date().toISOString(),
+                      };
                       setProjects((prev) => {
-                        if (prev.some((p) => p.path === selected)) return prev;
-                        return [...prev, { path: selected, name: selected.split("/").pop() || selected }];
+                        if (prev.some((p) => p.roots[0] === selected)) return prev;
+                        return [...prev, newProject];
                       });
-                      setActiveProjectPath(selected);
+                      setActiveProjectId(newProject.id);
                     }
                   } catch {}
                 }}
@@ -743,12 +756,12 @@ export default function App() {
             </div>
             {projects.map((proj) => (
               <div
-                key={proj.path}
-                className={`sidebar-project ${activeProjectPath === proj.path ? "is-active" : ""}`}
+                key={proj.id}
+                className={`sidebar-project ${activeProjectId === proj.id ? "is-active" : ""}`}
                 onContextMenu={(e) => {
                   e.preventDefault();
                   e.stopPropagation();
-                  setProjectMenu({ path: proj.path, name: proj.name, x: e.clientX, y: e.clientY });
+                  setProjectMenu({ ...proj, x: e.clientX, y: e.clientY });
                 }}
               >
                 <div className="sidebar-project-header">
@@ -758,15 +771,15 @@ export default function App() {
                     onClick={() => {
                       setCollapsedProjects((prev) => {
                         const next = new Set(prev);
-                        if (next.has(proj.path)) next.delete(proj.path);
-                        else next.add(proj.path);
+                        if (next.has(proj.id)) next.delete(proj.id);
+                        else next.add(proj.id);
                         return next;
                       });
-                      setActiveProjectPath(proj.path);
+                      setActiveProjectId(proj.id);
                       setNav("chat");
                     }}
                   >
-                    {collapsedProjects.has(proj.path)
+                    {collapsedProjects.has(proj.id)
                       ? <FolderClosed size={16} strokeWidth={1.7} aria-hidden />
                       : <FolderOpen size={16} strokeWidth={1.7} aria-hidden />
                     }
@@ -778,7 +791,7 @@ export default function App() {
                     onClick={(e) => {
                       e.stopPropagation();
                       const rect = e.currentTarget.getBoundingClientRect();
-                      setProjectMenu({ path: proj.path, name: proj.name, x: rect.right + 4, y: rect.top });
+                      setProjectMenu({ ...proj, x: rect.right + 4, y: rect.top });
                     }}
                     title="更多"
                     aria-label="更多"
@@ -790,7 +803,7 @@ export default function App() {
                   <button
                     type="button"
                     className="sidebar-project-action"
-                    onClick={() => { setActiveProjectPath(proj.path); setNav("chat"); startNewChat(); }}
+                    onClick={() => { setActiveProjectId(proj.id); setNav("chat"); startNewChat(); }}
                     title="新建会话"
                     aria-label="新建会话"
                   >
@@ -799,11 +812,11 @@ export default function App() {
                     </svg>
                   </button>
                 </div>
-                {!collapsedProjects.has(proj.path) && (
+                {!collapsedProjects.has(proj.id) && (
                   <SidebarSessionList
                     activeSessionId={chat.sessionId}
-                    projectPath={proj.path}
-                    onOpenSession={(sid) => { setActiveProjectPath(proj.path); void openSessionFromFilespace(sid); }}
+                    projectId={proj.id}
+                    onOpenSession={(sid) => { setActiveProjectId(proj.id); void openSessionFromFilespace(sid); }}
                     onDeleteCurrentSession={() => { void prepareDeleteCurrentSession(); void clearDeletedCurrentSession(); }}
                   />
                 )}
@@ -1180,17 +1193,21 @@ export default function App() {
           x={projectMenu.x}
           y={projectMenu.y}
           projectName={projectMenu.name}
-          projectPath={projectMenu.path}
+          projectPath={projects.find((p) => p.id === projectMenu.id)?.roots[0] ?? ""}
           onAction={(action) => {
             if (action === "remove") {
-              setProjects((prev) => prev.filter((p) => p.path !== projectMenu.path));
-              if (activeProjectPath === projectMenu.path) {
-                setActiveProjectPath(projects[0]?.path ?? "default");
+              void invoke("delete_project", { projectId: projectMenu.id }).catch(() => {});
+              setProjects((prev) => prev.filter((p) => p.id !== projectMenu.id));
+              if (activeProjectId === projectMenu.id) {
+                setActiveProjectId(projects[0]?.id ?? "default");
               }
-            } else if (action === "reveal" && projectMenu.path !== "default") {
-              void import("@tauri-apps/plugin-shell").then((mod) =>
-                mod.open(projectMenu.path)
-              ).catch(() => {});
+            } else if (action === "reveal") {
+              const root = projects.find((p) => p.id === projectMenu.id)?.roots[0];
+              if (root) {
+                void import("@tauri-apps/plugin-shell").then((mod) =>
+                  mod.open(root)
+                ).catch(() => {});
+              }
             }
           }}
           onClose={() => setProjectMenu(null)}
