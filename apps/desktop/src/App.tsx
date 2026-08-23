@@ -1221,7 +1221,7 @@ export default function App() {
               const root = projects.find((p) => p.id === projectMenu.id)?.roots[0];
               if (root) {
                 void import("@tauri-apps/plugin-shell").then((mod) =>
-                  mod.open(root)
+                  mod.Command.create("open", ["-R", root]).execute()
                 ).catch(() => {});
               }
             } else if (action === "pin") {
