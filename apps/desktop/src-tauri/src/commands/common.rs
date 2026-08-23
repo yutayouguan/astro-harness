@@ -31,6 +31,12 @@ pub(super) fn workspace_dir() -> String {
         .into_owned()
 }
 
+/// 暴露默认工作区路径给前端。
+#[tauri::command]
+pub async fn get_default_workspace_path() -> String {
+    workspace_dir()
+}
+
 /// 将底层错误转为面向用户的中文提示。
 pub(super) fn friendly_error(err: &str) -> String {
     if err.contains("transport") || err.contains("Connection refused") || err.contains("connect") {

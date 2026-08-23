@@ -263,6 +263,7 @@ pub fn run() {
             commands::session::unpin_session,
             commands::session::delete_session_permanently,
             // — projects —
+            commands::common::get_default_workspace_path,
             commands::session::list_projects,
             commands::session::create_project,
             commands::session::update_project,

@@ -59,12 +59,27 @@ export default function ProjectEditDialog({
     if (!project || saving) return;
     setSaving(true);
     try {
-      const updated = await invoke<ProjectDto>("update_project", {
-        projectId: project.id,
-        name: name.trim() || project.name,
-        icon: iconId,
-        roots,
-      });
+      let updated: ProjectDto;
+      if (project.id === "default" && !project.createdAt) {
+        // 默认工作空间尚未持久化到 DB，先创建
+        updated = await invoke<ProjectDto>("create_project", {
+          name: name.trim() || project.name,
+          roots,
+        });
+        if (iconId) {
+          updated = await invoke<ProjectDto>("update_project", {
+            projectId: updated.id,
+            icon: iconId,
+          });
+        }
+      } else {
+        updated = await invoke<ProjectDto>("update_project", {
+          projectId: project.id,
+          name: name.trim() || project.name,
+          icon: iconId,
+          roots,
+        });
+      }
       onUpdated(updated);
       onClose();
     } catch {

@@ -166,25 +166,39 @@ export default function App() {
   const [collapsedProjects, setCollapsedProjects] = useState<Set<string>>(new Set());
   const [projectMenu, setProjectMenu] = useState<{ id: string; name: string; x: number; y: number } | null>(null);
   const [editingProject, setEditingProject] = useState<ProjectDto | null>(null);
-  const DEFAULT_PROJECT: ProjectDto = {
-    id: "default",
-    name: "默认工作空间",
-    roots: [],
-    position: -1,
-    createdAt: "",
-    updatedAt: "",
-  };
-  // 启动时从后端加载项目列表，始终保证有默认工作空间
+  // 启动时从后端加载项目列表和默认工作区路径
   useEffect(() => {
+    const fallback = (wsPath: string): ProjectDto => ({
+      id: "default",
+      name: "默认工作空间",
+      icon: null,
+      roots: wsPath ? [wsPath] : [],
+      position: -1,
+      createdAt: "",
+      updatedAt: "",
+    });
     void invoke<ProjectDto[]>("list_projects")
       .then((list) => {
         const loaded = list ?? [];
         if (!loaded.some((p) => p.id === "default")) {
-          loaded.unshift(DEFAULT_PROJECT);
+          invoke<string>("get_default_workspace_path")
+            .then((wsPath) => {
+              loaded.unshift(fallback(wsPath));
+              setProjects(loaded);
+            })
+            .catch(() => {
+              loaded.unshift(fallback(""));
+              setProjects(loaded);
+            });
+        } else {
+          setProjects(loaded);
         }
-        setProjects(loaded);
       })
-      .catch(() => setProjects([DEFAULT_PROJECT]));
+      .catch(() =>
+        invoke<string>("get_default_workspace_path")
+          .then((wsPath) => setProjects([fallback(wsPath)]))
+          .catch(() => setProjects([fallback("")])),
+      );
   }, []);
   /** 导航到 settings 并切换到指定子 tab */
   const openSettingsTab = useCallback((tab: SettingsTabId) => {
