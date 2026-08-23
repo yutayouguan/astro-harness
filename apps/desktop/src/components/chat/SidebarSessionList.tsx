@@ -1,6 +1,7 @@
 // 侧栏项目下的会话列表。
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { invoke } from "@tauri-apps/api/core";
 import {
   Archive,
@@ -84,7 +85,7 @@ export default function SidebarSessionList({ activeSessionId, onOpenSession }: P
           onMoreClick={(x, y) => setSessionMenu({ sessionId: s.sessionId, x, y })}
         />
       ))}
-      {sessionMenu && (
+      {sessionMenu && createPortal(
         <div ref={menuRef} className="project-context-menu" style={{ top: sessionMenu.y, left: sessionMenu.x }} role="menu">
           <button type="button" role="menuitem" className="project-context-menu-item" onClick={() => setSessionMenu(null)}>
             <Pin size={14} strokeWidth={1.8} aria-hidden /><span>置顶</span>
@@ -107,7 +108,8 @@ export default function SidebarSessionList({ activeSessionId, onOpenSession }: P
           <button type="button" role="menuitem" className="project-context-menu-item is-danger" onClick={() => setSessionMenu(null)}>
             <Trash2 size={14} strokeWidth={1.8} aria-hidden /><span>永久删除</span>
           </button>
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   );
