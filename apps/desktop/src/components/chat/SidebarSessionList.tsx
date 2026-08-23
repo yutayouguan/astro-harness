@@ -19,6 +19,7 @@ import type { RecentSessionDto } from "../../types";
 
 const DEFAULT_VISIBLE_COUNT = 5;
 const STORAGE_KEY = "astro:sidebar-visible-sessions";
+const PROJECT_SESSIONS_KEY = "astro:project-sessions";
 
 function readVisibleCount(): number {
   try {
@@ -32,8 +33,31 @@ export function saveVisibleCount(count: number) {
   try { localStorage.setItem(STORAGE_KEY, String(Math.max(1, Math.min(50, count)))); } catch {}
 }
 
+function readProjectSessions(): Record<string, string[]> {
+  try {
+    const v = localStorage.getItem(PROJECT_SESSIONS_KEY);
+    if (v) return JSON.parse(v);
+  } catch {}
+  return {};
+}
+
+function saveProjectSessions(map: Record<string, string[]>) {
+  try { localStorage.setItem(PROJECT_SESSIONS_KEY, JSON.stringify(map)); } catch {}
+}
+
+export function associateSessionWithProject(sessionId: string, projectPath: string) {
+  const map = readProjectSessions();
+  const list = map[projectPath] ?? [];
+  if (!list.includes(sessionId)) {
+    list.unshift(sessionId);
+    map[projectPath] = list;
+    saveProjectSessions(map);
+  }
+}
+
 type Props = {
   activeSessionId: string | null;
+  projectPath: string;
   onOpenSession: (sessionId: string) => void;
 };
 
@@ -49,7 +73,7 @@ function relativeTime(iso: string | null): string {
   return `${days} 天前`;
 }
 
-export default function SidebarSessionList({ activeSessionId, onOpenSession }: Props) {
+export default function SidebarSessionList({ activeSessionId, projectPath, onOpenSession }: Props) {
   const [items, setItems] = useState<RecentSessionDto[]>([]);
   const [expanded, setExpanded] = useState(false);
   const visibleCount = readVisibleCount();
@@ -58,16 +82,32 @@ export default function SidebarSessionList({ activeSessionId, onOpenSession }: P
     try {
       const list = await invoke<RecentSessionDto[]>("list_sessions", {
         filter: "active",
-        limit: 50,
+        limit: 200,
       });
-      setItems(list ?? []);
+      const all = list ?? [];
+      if (projectPath === "default") {
+        const map = readProjectSessions();
+        const assigned = new Set(Object.values(map).flat());
+        setItems(all.filter((s) => !assigned.has(s.sessionId)));
+      } else {
+        const map = readProjectSessions();
+        const ids = new Set(map[projectPath] ?? []);
+        setItems(all.filter((s) => ids.has(s.sessionId)));
+      }
     } catch {
       setItems([]);
     }
-  }, []);
+  }, [projectPath]);
 
   useEffect(() => { void load(); }, [load]);
   useEffect(() => { void load(); }, [activeSessionId, load]);
+
+  // 当前会话自动关联到此项目（非默认项目时）
+  useEffect(() => {
+    if (activeSessionId && projectPath !== "default") {
+      associateSessionWithProject(activeSessionId, projectPath);
+    }
+  }, [activeSessionId, projectPath]);
 
   const [sessionMenu, setSessionMenu] = useState<{ sessionId: string; x: number; y: number } | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
