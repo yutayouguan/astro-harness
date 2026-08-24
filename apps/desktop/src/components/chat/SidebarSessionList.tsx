@@ -109,17 +109,19 @@ export default function SidebarSessionList({ activeSessionId, projectId, onOpenS
   }, [projectId]);
 
   useEffect(() => { void load(); }, [load]);
-  useEffect(() => { void load(); }, [activeSessionId, load]);
 
-  // 当前会话自动关联到此项目
+  // 当前会话自动关联到此项目，关联完成后再刷新列表
   useEffect(() => {
-    if (activeSessionId) {
-      void invoke("assign_session_to_project", {
-        sessionId: activeSessionId,
-        projectId,
-      }).catch(() => {});
-      void load();
-    }
+    if (!activeSessionId) return;
+    void (async () => {
+      try {
+        await invoke("assign_session_to_project", {
+          sessionId: activeSessionId,
+          projectId,
+        });
+      } catch {}
+      await load();
+    })();
   }, [activeSessionId, projectId, load]);
 
   const [sessionMenu, setSessionMenu] = useState<{ sessionId: string; x: number; y: number } | null>(null);
