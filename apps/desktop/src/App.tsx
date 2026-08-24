@@ -95,6 +95,7 @@ import {
   type FilesSubmode,
 } from "./lib/filespace/filesMode";
 import {
+  ArrowLeft,
   Brain,
   ChartPie,
   Cpu,
@@ -705,148 +706,188 @@ export default function App() {
           onMouseLeave={sidebar.scheduleHideSidebar}
           onContextMenu={sidebar.openSidebarContextMenu}
         >
-          <div className="sidebar-brand">
-            <div className="sidebar-logo" aria-hidden>
-              <AstroLogoMark width={26} height={26} />
-            </div>
-            <div className="sidebar-brand-text">Astro Agent</div>
-            <div className="sidebar-brand-actions">
+          {nav === "settings" ? (
+            <>
               <button
                 type="button"
-                className="sidebar-pin-btn"
-                data-tone={shellTone}
-                onClick={sidebar.toggleSidebarLabels}
-                title={sidebar.sidebarLabels ? t("sidebar.hideLabels") : t("sidebar.showLabels")}
-                aria-label={
-                  sidebar.sidebarLabels ? t("sidebar.hideLabelsAria") : t("sidebar.showLabelsAria")
-                }
-                aria-pressed={sidebar.sidebarLabels}
+                className="sidebar-back-btn"
+                onClick={() => setNav("chat")}
               >
-                {sidebar.sidebarLabels ? (
-                  <IconSidebarIcons width={15} height={15} />
-                ) : (
-                  <IconSidebarLabels width={15} height={15} />
-                )}
+                <ArrowLeft size={16} strokeWidth={2} aria-hidden />
+                <span className="sidebar-item-label">返回</span>
               </button>
-            </div>
-          </div>
-          <div className="sidebar-projects">
-            <div className="sidebar-section-header">
-              <span className="sidebar-section-title">项目</span>
-              <button
-                type="button"
-                className="sidebar-add-btn"
-                onClick={async () => {
-                  try {
-                    const { open } = await import("@tauri-apps/plugin-dialog");
-                    const selected = await open({ directory: true, title: "选择项目文件夹" });
-                    if (selected && typeof selected === "string") {
-                      const newProject: ProjectDto = {
-                        id: crypto.randomUUID(),
-                        name: selected.split("/").pop() || selected,
-                        roots: [selected],
-                        position: projects.length,
-                        createdAt: new Date().toISOString(),
-                        updatedAt: new Date().toISOString(),
-                      };
-                      setProjects((prev) => {
-                        if (prev.some((p) => p.roots[0] === selected)) return prev;
-                        return [...prev, newProject];
-                      });
-                      setActiveProjectId(newProject.id);
-                    }
-                  } catch {}
-                }}
-                title="+ 新建项目"
-                aria-label="新建项目"
-              >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-                  <path d="M12 5v14" /><path d="M5 12h14" />
-                </svg>
-              </button>
-            </div>
-            {projects.map((proj) => (
-              <div
-                key={proj.id}
-                className={`sidebar-project ${activeProjectId === proj.id ? "is-active" : ""}`}
-                onContextMenu={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  setProjectMenu({ ...proj, x: e.clientX, y: e.clientY });
-                }}
-              >
-                <div className="sidebar-project-header">
+              <div className="sidebar-settings-nav">
+                {([
+                  { id: "preferences", label: "通用", Icon: Settings2 },
+                  { id: "preferences:appearance", label: "外观", Icon: Sparkles },
+                  { id: "preferences:conversation", label: "对话", Icon: MessageSquare },
+                  { id: "preferences:context", label: "上下文与压缩", Icon: Layers2 },
+                  { id: "providers", label: "模型配置", Icon: Cpu },
+                  { id: "tools", label: "工具", Icon: Wrench },
+                  { id: "memory", label: "记忆", Icon: Brain },
+                  { id: "models", label: "模型市场", Icon: Store },
+                  { id: "insights", label: "洞察", Icon: ChartPie },
+                  { id: "preferences:diagnostics", label: "诊断", Icon: ScrollText },
+                  { id: "preferences:about", label: "关于", Icon: Info },
+                ] as const).map((item) => (
                   <button
+                    key={item.id}
                     type="button"
-                    className="sidebar-project-name"
-                    onClick={() => {
-                      setCollapsedProjects((prev) => {
-                        const next = new Set(prev);
-                        if (next.has(proj.id)) next.delete(proj.id);
-                        else next.add(proj.id);
-                        return next;
-                      });
-                      setActiveProjectId(proj.id);
-                      setNav("chat");
-                    }}
+                    className={`settings-sidebar-item ${settingsTab === item.id ? "is-active" : ""}`}
+                    onClick={() => setSettingsTab(item.id as SettingsTabId)}
                   >
-                    {collapsedProjects.has(proj.id)
-                      ? <FolderClosed size={16} strokeWidth={1.7} aria-hidden />
-                      : <FolderOpen size={16} strokeWidth={1.7} aria-hidden />
-                    }
-                    <span className="sidebar-item-label">{proj.name}</span>
+                    <item.Icon size={18} strokeWidth={1.6} aria-hidden />
+                    <span className="sidebar-item-label">{item.label}</span>
                   </button>
+                ))}
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="sidebar-brand">
+                <div className="sidebar-logo" aria-hidden>
+                  <AstroLogoMark width={26} height={26} />
+                </div>
+                <div className="sidebar-brand-text">Astro Agent</div>
+                <div className="sidebar-brand-actions">
                   <button
                     type="button"
-                    className="sidebar-project-more"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      const rect = e.currentTarget.getBoundingClientRect();
-                      setProjectMenu({ ...proj, x: rect.right + 4, y: rect.top });
-                    }}
-                    title="更多"
-                    aria-label="更多"
+                    className="sidebar-pin-btn"
+                    data-tone={shellTone}
+                    onClick={sidebar.toggleSidebarLabels}
+                    title={sidebar.sidebarLabels ? t("sidebar.hideLabels") : t("sidebar.showLabels")}
+                    aria-label={
+                      sidebar.sidebarLabels ? t("sidebar.hideLabelsAria") : t("sidebar.showLabelsAria")
+                    }
+                    aria-pressed={sidebar.sidebarLabels}
                   >
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
-                      <circle cx="12" cy="5" r="1.5" /><circle cx="12" cy="12" r="1.5" /><circle cx="12" cy="19" r="1.5" />
-                    </svg>
+                    {sidebar.sidebarLabels ? (
+                      <IconSidebarIcons width={15} height={15} />
+                    ) : (
+                      <IconSidebarLabels width={15} height={15} />
+                    )}
                   </button>
+                </div>
+              </div>
+              <div className="sidebar-projects">
+                <div className="sidebar-section-header">
+                  <span className="sidebar-section-title">项目</span>
                   <button
                     type="button"
-                    className="sidebar-project-action"
-                    onClick={() => { setActiveProjectId(proj.id); setNav("chat"); startNewChat(); }}
-                    title="新建会话"
-                    aria-label="新建会话"
+                    className="sidebar-add-btn"
+                    onClick={async () => {
+                      try {
+                        const { open } = await import("@tauri-apps/plugin-dialog");
+                        const selected = await open({ directory: true, title: "选择项目文件夹" });
+                        if (selected && typeof selected === "string") {
+                          const newProject: ProjectDto = {
+                            id: crypto.randomUUID(),
+                            name: selected.split("/").pop() || selected,
+                            roots: [selected],
+                            position: projects.length,
+                            createdAt: new Date().toISOString(),
+                            updatedAt: new Date().toISOString(),
+                          };
+                          setProjects((prev) => {
+                            if (prev.some((p) => p.roots[0] === selected)) return prev;
+                            return [...prev, newProject];
+                          });
+                          setActiveProjectId(newProject.id);
+                        }
+                      } catch {}
+                    }}
+                    title="+ 新建项目"
+                    aria-label="新建项目"
                   >
-                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-                      <path d="M12 20h9" /><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                      <path d="M12 5v14" /><path d="M5 12h14" />
                     </svg>
                   </button>
                 </div>
-                {!collapsedProjects.has(proj.id) && (
-                  <SidebarSessionList
-                    activeSessionId={chat.sessionId}
-                    projectId={proj.id}
-                    onOpenSession={(sid) => { setActiveProjectId(proj.id); void openSessionFromFilespace(sid); }}
-                    onDeleteCurrentSession={() => { void prepareDeleteCurrentSession(); void clearDeletedCurrentSession(); }}
-                  />
-                )}
+                {projects.map((proj) => (
+                  <div
+                    key={proj.id}
+                    className={`sidebar-project ${activeProjectId === proj.id ? "is-active" : ""}`}
+                    onContextMenu={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      setProjectMenu({ ...proj, x: e.clientX, y: e.clientY });
+                    }}
+                  >
+                    <div className="sidebar-project-header">
+                      <button
+                        type="button"
+                        className="sidebar-project-name"
+                        onClick={() => {
+                          setCollapsedProjects((prev) => {
+                            const next = new Set(prev);
+                            if (next.has(proj.id)) next.delete(proj.id);
+                            else next.add(proj.id);
+                            return next;
+                          });
+                          setActiveProjectId(proj.id);
+                          setNav("chat");
+                        }}
+                      >
+                        {collapsedProjects.has(proj.id)
+                          ? <FolderClosed size={16} strokeWidth={1.7} aria-hidden />
+                          : <FolderOpen size={16} strokeWidth={1.7} aria-hidden />
+                        }
+                        <span className="sidebar-item-label">{proj.name}</span>
+                      </button>
+                      <button
+                        type="button"
+                        className="sidebar-project-more"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          const rect = e.currentTarget.getBoundingClientRect();
+                          setProjectMenu({ ...proj, x: rect.right + 4, y: rect.top });
+                        }}
+                        title="更多"
+                        aria-label="更多"
+                      >
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+                          <circle cx="12" cy="5" r="1.5" /><circle cx="12" cy="12" r="1.5" /><circle cx="12" cy="19" r="1.5" />
+                        </svg>
+                      </button>
+                      <button
+                        type="button"
+                        className="sidebar-project-action"
+                        onClick={() => { setActiveProjectId(proj.id); setNav("chat"); startNewChat(); }}
+                        title="新建会话"
+                        aria-label="新建会话"
+                      >
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                          <path d="M12 20h9" /><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
+                        </svg>
+                      </button>
+                    </div>
+                    {!collapsedProjects.has(proj.id) && (
+                      <SidebarSessionList
+                        activeSessionId={chat.sessionId}
+                        projectId={proj.id}
+                        onOpenSession={(sid) => { setActiveProjectId(proj.id); void openSessionFromFilespace(sid); }}
+                        onDeleteCurrentSession={() => { void prepareDeleteCurrentSession(); void clearDeletedCurrentSession(); }}
+                      />
+                    )}
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
-          <button
-            type="button"
-            className="sidebar-settings-btn"
-            onClick={() => setNav("settings")}
-          >
-            <Settings2 size={15} strokeWidth={1.8} aria-hidden />
-            <span className="sidebar-item-label">{t("nav.settings")}</span>
-            {chat.memoryPendingCount > 0 && (
-              <span className="nav-badge">
-                {chat.memoryPendingCount > 99 ? "99+" : String(chat.memoryPendingCount)}
-              </span>
-            )}
-          </button>
+              <button
+                type="button"
+                className="sidebar-settings-btn"
+                onClick={() => setNav("settings")}
+              >
+                <Settings2 size={15} strokeWidth={1.8} aria-hidden />
+                <span className="sidebar-item-label">{t("nav.settings")}</span>
+                {chat.memoryPendingCount > 0 && (
+                  <span className="nav-badge">
+                    {chat.memoryPendingCount > 99 ? "99+" : String(chat.memoryPendingCount)}
+                  </span>
+                )}
+              </button>
+            </>
+          )}
         </aside>
         {sidebar.sidebarCtx ? (
           <SidebarContextMenu
@@ -860,76 +901,163 @@ export default function App() {
         ) : null}
 
         <section className="content-pane">
-          <div className="content-header">
-            <div className="content-heading">
-              <div className="page-title-block">
-                <div className="page-title-icon" data-tone={shellTone} aria-hidden>
-                  <ActiveIcon width={15} height={15} />
+          {nav === "settings" ? (
+            <>
+              <div className="content-header">
+                <div className="content-heading">
+                  <div className="page-title-block">
+                    <div className="page-title-icon" data-tone="twilight" aria-hidden>
+                      <Settings2 width={15} height={15} strokeWidth={1.6} />
+                    </div>
+                    <div className="page-title-text">
+                      <h1 className="content-title" data-tone="twilight">
+                        <span className="content-title-main">偏好设置</span>
+                      </h1>
+                    </div>
+                  </div>
                 </div>
-                <div className="page-title-text">
-                  <h1 className="content-title" data-tone={shellTone}>
-                    <span className="content-title-main">{t(meta.titleKey)}</span>
-                    <span className="content-sub-sep" aria-hidden>
-                      ·
-                    </span>
-                    <span className="content-sub">{t(meta.subKey)}</span>
-                  </h1>
+                <div className="header-actions">
+                  {settingsTab === "memory" && memoryHeaderAgent?.show && (
+                    <AgentPicker
+                      className="header-agent-picker"
+                      agents={agents}
+                      value={memoryHeaderAgent.value}
+                      onChange={memoryHeaderAgent.onChange}
+                      allOption={memoryHeaderAgent.allOption}
+                      labelKey="memory.agents"
+                      menuAlign="end"
+                    />
+                  )}
                 </div>
               </div>
-            </div>
-            <div className="header-actions">
-              <span className="status-chip">
-                <span className={`status-dot ${chat.status}`} />
-                {activeProvider?.display_name ?? t("status.none")} · {statusText}
-              </span>
-              {showsHeaderAgentPicker(nav) && (
-                <AgentPicker
-                  className="header-agent-picker"
-                  agents={agents}
-                  value={activeAgentId}
-                  onChange={(id) => {
-                    void setActiveAgent(id).catch((e) => {
-                      console.warn("set_active_agent failed", e);
-                    });
-                  }}
-                  onCreateNew={startNewAgent}
-                  menuAlign="end"
-                />
-              )}
-              <ModelPicker
-                providers={providers}
-                value={activeProviderId}
-                onChange={(id, model) => void onChatModelChange(id, model)}
-                onActivePrefsChange={syncComposerFromModelPrefs}
-                disabled={chat.streaming}
-              />
-              <div className="chat-header-tools">
-                <button
-                  type="button"
-                  className="header-icon-btn"
-                  onClick={() => { setNav("chat"); startNewChat(); }}
-                  data-tip={t("sidebar.newChat")}
-                  aria-label={t("sidebar.newChat")}
-                >
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z" />
-                    <path d="M12 8v8" /><path d="M8 12h8" />
-                  </svg>
-                </button>
-                <button
-                  type="button"
-                  className={`header-icon-btn ${chat.chatRightOpen ? "is-active" : ""}`}
-                  onClick={() => setChatRightOpen((open) => !open)}
-                  title={t("chat.rightPanel.toggle")}
-                  aria-label={t("chat.rightPanel.toggle")}
-                  aria-pressed={chat.chatRightOpen}
-                >
-                  <IconRightPanel width={16} height={16} />
-                </button>
+              <div className="page-body">
+                <div className="settings-content-inline">
+                  {settingsTab.startsWith("preferences") && (
+                    <PreferencesPanel
+                      section={settingsTab === "preferences" ? "general" : settingsTab.split(":")[1] as import("./components/settings/PreferencesPanel").PreferenceCategory}
+                      mode={mode}
+                      onChange={setMode}
+                      colorStyle={colorStyle}
+                      onColorStyleChange={setColorStyle}
+                      gradient={gradient}
+                      onGradientChange={setGradient}
+                      onBeginCustomGradient={beginGradientEdit}
+                      onPreviewGradient={previewGradient}
+                      onCommitCustomGradient={commitGradientEdit}
+                      onCancelCustomGradient={cancelGradientEdit}
+                      onReshuffleDynamic={reshuffleDynamic}
+                      tone={shellTone}
+                      chatDisplayPrefs={chatDisplayPrefs}
+                      onChatVerbosityChange={setVerbosity}
+                      onChatToggleChange={setToggle}
+                      activeSessionId={chat.sessionId ?? undefined}
+                    />
+                  )}
+                  {settingsTab === "tools" && (
+                    <ToolsPanel
+                      active={nav === "settings"}
+                      initialTab={toolsInitialTab}
+                      onInitialTabConsumed={() => setToolsInitialTab(null)}
+                    />
+                  )}
+                  {settingsTab === "evolution" && (
+                    <EvolutionModelsPanel active={nav === "settings"} tone={shellTone} />
+                  )}
+                  {settingsTab === "insights" && (
+                    <InsightsPanel active={nav === "settings"} />
+                  )}
+                  {settingsTab === "models" && (
+                    <ModelMarketPanel active={nav === "settings"} />
+                  )}
+                  {settingsTab === "providers" && (
+                    <ProvidersPanel
+                      active={nav === "settings"}
+                      onStateChange={syncProvidersFromState}
+                      tone={shellTone}
+                    />
+                  )}
+                  {settingsTab === "memory" && (
+                    <MemoryPanel
+                      onClose={() => setSettingsTab("preferences")}
+                      sessionId={chat.sessionId}
+                      onHeaderAgentPickerChange={setMemoryHeaderAgent}
+                    />
+                  )}
+                </div>
               </div>
-            </div>
-          </div>
-          <div className="page-body">
+            </>
+          ) : (
+            <>
+              <div className="content-header">
+                <div className="content-heading">
+                  <div className="page-title-block">
+                    <div className="page-title-icon" data-tone={shellTone} aria-hidden>
+                      <ActiveIcon width={15} height={15} />
+                    </div>
+                    <div className="page-title-text">
+                      <h1 className="content-title" data-tone={shellTone}>
+                        <span className="content-title-main">{t(meta.titleKey)}</span>
+                        <span className="content-sub-sep" aria-hidden>
+                          ·
+                        </span>
+                        <span className="content-sub">{t(meta.subKey)}</span>
+                      </h1>
+                    </div>
+                  </div>
+                </div>
+                <div className="header-actions">
+                  <span className="status-chip">
+                    <span className={`status-dot ${chat.status}`} />
+                    {activeProvider?.display_name ?? t("status.none")} · {statusText}
+                  </span>
+                  {showsHeaderAgentPicker(nav) && (
+                    <AgentPicker
+                      className="header-agent-picker"
+                      agents={agents}
+                      value={activeAgentId}
+                      onChange={(id) => {
+                        void setActiveAgent(id).catch((e) => {
+                          console.warn("set_active_agent failed", e);
+                        });
+                      }}
+                      onCreateNew={startNewAgent}
+                      menuAlign="end"
+                    />
+                  )}
+                  <ModelPicker
+                    providers={providers}
+                    value={activeProviderId}
+                    onChange={(id, model) => void onChatModelChange(id, model)}
+                    onActivePrefsChange={syncComposerFromModelPrefs}
+                    disabled={chat.streaming}
+                  />
+                  <div className="chat-header-tools">
+                    <button
+                      type="button"
+                      className="header-icon-btn"
+                      onClick={() => { setNav("chat"); startNewChat(); }}
+                      data-tip={t("sidebar.newChat")}
+                      aria-label={t("sidebar.newChat")}
+                    >
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z" />
+                        <path d="M12 8v8" /><path d="M8 12h8" />
+                      </svg>
+                    </button>
+                    <button
+                      type="button"
+                      className={`header-icon-btn ${chat.chatRightOpen ? "is-active" : ""}`}
+                      onClick={() => setChatRightOpen((open) => !open)}
+                      title={t("chat.rightPanel.toggle")}
+                      aria-label={t("chat.rightPanel.toggle")}
+                      aria-pressed={chat.chatRightOpen}
+                    >
+                      <IconRightPanel width={16} height={16} />
+                    </button>
+                  </div>
+                </div>
+              </div>
+              <div className="page-body">
                 <div className="chat-layout-with-right">
                   <div className="chat-main">
                     <ChatView
@@ -1034,114 +1162,13 @@ export default function App() {
                     />
                   )}
                 </div>
-          </div>
+              </div>
+            </>
+          )}
         </section>
       </div>
 
       {/* ── Overlay panels ─────────────────────────────────────────────────── */}
-      {nav === "settings" && (
-        <div className="settings-overlay" onClick={(e) => { if (e.target === e.currentTarget) setNav("chat"); }}>
-          <div className="settings-overlay-panel">
-            <button type="button" className="settings-overlay-close" onClick={() => setNav("chat")} aria-label="Close">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
-            </button>
-            {settingsTab === "memory" && memoryHeaderAgent?.show && (
-              <div className="settings-overlay-agent-picker">
-                <AgentPicker
-                  className="header-agent-picker"
-                  agents={agents}
-                  value={memoryHeaderAgent.value}
-                  onChange={memoryHeaderAgent.onChange}
-                  allOption={memoryHeaderAgent.allOption}
-                  labelKey="memory.agents"
-                  menuAlign="end"
-                />
-              </div>
-            )}
-            <div className="settings-layout">
-              <nav className="settings-sidebar" aria-label="Settings">
-                {([
-                  { id: "preferences", label: "通用", Icon: Settings2 },
-                  { id: "preferences:appearance", label: "外观", Icon: Sparkles },
-                  { id: "preferences:conversation", label: "对话", Icon: MessageSquare },
-                  { id: "preferences:context", label: "上下文与压缩", Icon: Layers2 },
-                  { id: "providers", label: "模型配置", Icon: Cpu },
-                  { id: "tools", label: "工具", Icon: Wrench },
-                  { id: "memory", label: "记忆", Icon: Brain },
-                  { id: "models", label: "模型市场", Icon: Store },
-                  { id: "insights", label: "洞察", Icon: ChartPie },
-                  { id: "preferences:diagnostics", label: "诊断", Icon: ScrollText },
-                  { id: "preferences:about", label: "关于", Icon: Info },
-                ] as const).map((item) => (
-                  <button
-                    key={item.id}
-                    type="button"
-                    className={`settings-sidebar-item ${settingsTab === item.id ? "is-active" : ""}`}
-                    onClick={() => setSettingsTab(item.id as SettingsTabId)}
-                  >
-                    <item.Icon size={18} strokeWidth={1.6} aria-hidden />
-                    {item.label}
-                  </button>
-                ))}
-              </nav>
-              <div className="settings-content">
-                {settingsTab.startsWith("preferences") && (
-                  <PreferencesPanel
-                    section={settingsTab === "preferences" ? "general" : settingsTab.split(":")[1] as import("./components/settings/PreferencesPanel").PreferenceCategory}
-                    mode={mode}
-                    onChange={setMode}
-                    colorStyle={colorStyle}
-                    onColorStyleChange={setColorStyle}
-                    gradient={gradient}
-                    onGradientChange={setGradient}
-                    onBeginCustomGradient={beginGradientEdit}
-                    onPreviewGradient={previewGradient}
-                    onCommitCustomGradient={commitGradientEdit}
-                    onCancelCustomGradient={cancelGradientEdit}
-                    onReshuffleDynamic={reshuffleDynamic}
-                    tone={shellTone}
-                    chatDisplayPrefs={chatDisplayPrefs}
-                    onChatVerbosityChange={setVerbosity}
-                    onChatToggleChange={setToggle}
-                    activeSessionId={chat.sessionId ?? undefined}
-                  />
-                )}
-                {settingsTab === "tools" && (
-                  <ToolsPanel
-                    active={nav === "settings"}
-                    initialTab={toolsInitialTab}
-                    onInitialTabConsumed={() => setToolsInitialTab(null)}
-                  />
-                )}
-                {settingsTab === "evolution" && (
-                  <EvolutionModelsPanel active={nav === "settings"} tone={shellTone} />
-                )}
-                {settingsTab === "insights" && (
-                  <InsightsPanel active={nav === "settings"} />
-                )}
-                {settingsTab === "models" && (
-                  <ModelMarketPanel active={nav === "settings"} />
-                )}
-                {settingsTab === "providers" && (
-                  <ProvidersPanel
-                    active={nav === "settings"}
-                    onStateChange={syncProvidersFromState}
-                    tone={shellTone}
-                  />
-                )}
-                {settingsTab === "memory" && (
-                  <MemoryPanel
-                    onClose={() => setSettingsTab("preferences")}
-                    sessionId={chat.sessionId}
-                    onHeaderAgentPickerChange={setMemoryHeaderAgent}
-                  />
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
       {nav === "files" && (
         <div className="settings-overlay" onClick={(e) => { if (e.target === e.currentTarget) setNav("chat"); }}>
           <div className="settings-overlay-panel settings-overlay-panel--wide">
