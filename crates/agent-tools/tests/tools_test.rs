@@ -17,9 +17,9 @@ async fn register_all_includes_panel_tools() {
         "memory",
         "context_search",
         "pin_context",
-        "cron.add",
-        "cron.list",
-        "cron.remove",
+        "cron_add",
+        "cron_list",
+        "cron_remove",
         "image_gen",
         "video_gen",
         "video_analyze",
@@ -43,6 +43,24 @@ async fn register_all_includes_panel_tools() {
         "todo",
     ] {
         assert!(names.contains(&expected), "missing {expected}");
+    }
+}
+
+#[test]
+fn builtin_tool_names_are_openai_compatible() {
+    let mut registry = ToolRegistry::new();
+    register_all(&mut registry);
+
+    for tool in registry.all_tools() {
+        assert!(
+            !tool.name.is_empty()
+                && tool
+                    .name
+                    .chars()
+                    .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-'),
+            "invalid provider-visible tool name: {}",
+            tool.name
+        );
     }
 }
 

@@ -309,9 +309,9 @@ mod tests {
         let cron = cat.iter().find(|c| c.id == "cron").expect("cron");
         assert_eq!(cron.functions.len(), 5);
         let names: Vec<&str> = cron.functions.iter().map(|f| f.name.as_str()).collect();
-        assert!(names.contains(&"cron.add"));
-        assert!(names.contains(&"cron.list"));
-        assert!(names.contains(&"cron.remove"));
+        assert!(names.contains(&"cron_add"));
+        assert!(names.contains(&"cron_list"));
+        assert!(names.contains(&"cron_remove"));
     }
 
     #[test]
