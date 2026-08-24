@@ -25,6 +25,7 @@ import MemoryPanel, {
 } from "./components/settings/MemoryPanel";
 import AgentPicker from "./components/agents/AgentPicker";
 import ModelPicker from "./components/agents/ModelPicker";
+import ExpandableSearch from "./components/ui/ExpandableSearch";
 import PreferencesPanel from "./components/settings/PreferencesPanel";
 import ProvidersPanel from "./components/settings/ProvidersPanel";
 import SidebarContextMenu from "./components/settings/SidebarContextMenu";
@@ -79,6 +80,7 @@ import {
   type ChatWorkMode,
 } from "./lib/chat/chatMode";
 import type { SlashAction } from "./lib/chat/composerCommands";
+import type { SessionListKind } from "./lib/chat/sessionManagement";
 import {
   resolveContextWindow,
   usagePercent,
@@ -97,6 +99,7 @@ import {
 } from "./lib/filespace/filesMode";
 import {
   ArrowLeft,
+  Archive,
   Brain,
   ChartPie,
   Cpu,
@@ -178,6 +181,10 @@ export default function App() {
   const [collapsedProjects, setCollapsedProjects] = useState<Set<string>>(new Set());
   const [projectMenu, setProjectMenu] = useState<{ id: string; name: string; x: number; y: number } | null>(null);
   const [editingProject, setEditingProject] = useState<ProjectDto | null>(null);
+  // 侧栏会话检索：搜索与归档视图跨全部项目生效
+  const [sessionQuery, setSessionQuery] = useState("");
+  const [sessionListKind, setSessionListKind] = useState<SessionListKind>("active");
+  const searchingSessions = sessionQuery.trim().length > 0;
   // 启动时确保默认项目存在于 DB，然后加载全部项目
   useEffect(() => {
     void (async () => {
@@ -782,8 +789,30 @@ export default function App() {
                 </div>
               </div>
               <div className="sidebar-projects">
+                <div className="sidebar-session-search-bar">
+                  <ExpandableSearch
+                    value={sessionQuery}
+                    onChange={setSessionQuery}
+                    placeholderKey="chat.rightPanel.searchSessions"
+                    className="sidebar-session-search"
+                  />
+                  <button
+                    type="button"
+                    className={`sidebar-session-filter-btn ${sessionListKind === "archived" ? "is-on" : ""}`}
+                    title={sessionListKind === "archived" ? t("sessions.active") : t("sessions.archived")}
+                    aria-label={sessionListKind === "archived" ? t("sessions.active") : t("sessions.archived")}
+                    aria-pressed={sessionListKind === "archived"}
+                    onClick={() =>
+                      setSessionListKind((kind) => (kind === "archived" ? "active" : "archived"))
+                    }
+                  >
+                    <Archive size={13} strokeWidth={1.8} aria-hidden />
+                  </button>
+                </div>
                 <div className="sidebar-section-header">
-                  <span className="sidebar-section-title">项目</span>
+                  <span className="sidebar-section-title">
+                    {searchingSessions ? "搜索结果" : "项目"}
+                  </span>
                   <button
                     type="button"
                     className="sidebar-add-btn"
@@ -816,7 +845,18 @@ export default function App() {
                     </svg>
                   </button>
                 </div>
-                {projects.map((proj) => (
+                {searchingSessions ? (
+                  <SidebarSessionList
+                    activeSessionId={chat.sessionId}
+                    sessionStatuses={sessionStatuses}
+                    projectId={null}
+                    query={sessionQuery}
+                    listKind={sessionListKind}
+                    onOpenSession={(sid) => void openSessionFromFilespace(sid)}
+                    onPrepareDeleteCurrentSession={prepareDeleteCurrentSession}
+                    onClearDeletedCurrentSession={clearDeletedCurrentSession}
+                  />
+                ) : projects.map((proj) => (
                   <div
                     key={proj.id}
                     className={`sidebar-project ${activeProjectId === proj.id ? "is-active" : ""}`}
@@ -879,6 +919,9 @@ export default function App() {
                         activeSessionId={chat.sessionId}
                         sessionStatuses={sessionStatuses}
                         projectId={proj.id}
+                        query=""
+                        listKind={sessionListKind}
+                        autoAssignActiveSession={activeProjectId === proj.id}
                         onOpenSession={(sid) => { setActiveProjectId(proj.id); void openSessionFromFilespace(sid); }}
                         onPrepareDeleteCurrentSession={prepareDeleteCurrentSession}
                         onClearDeletedCurrentSession={clearDeletedCurrentSession}

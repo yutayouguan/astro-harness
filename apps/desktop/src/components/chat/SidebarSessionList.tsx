@@ -1,4 +1,4 @@
-// 侧栏项目下的会话列表：搜索、活跃/归档切换与全部会话操作。
+// 侧栏会话列表：按项目分组或全局搜索结果，含全部会话操作。
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -32,7 +32,6 @@ import { useAppDialog } from "../../hooks/ui/DialogContext";
 import { useTransientToast } from "../../hooks/ui/useTransientToast";
 import { useI18n } from "../../i18n/LocaleContext";
 import type { MessageKey } from "../../i18n/messages";
-import ExpandableSearch from "../ui/ExpandableSearch";
 import type { RecentSessionDto } from "../../types";
 import type { SessionStatusMap } from "../../hooks/chat/useSessionStatusMap";
 import SessionStatusIcon, {
@@ -94,7 +93,13 @@ function historyToMarkdown(
 type Props = {
   activeSessionId: string | null;
   sessionStatuses: SessionStatusMap;
-  projectId: string;
+  /** null 表示跨项目的全局列表：不按项目过滤，也不自动关联会话 */
+  projectId: string | null;
+  /** 侧栏全局搜索词；非空时展示全部匹配结果 */
+  query: string;
+  listKind: SessionListKind;
+  /** 仅激活项目认领当前会话，避免多个展开项目互相抢占归属 */
+  autoAssignActiveSession?: boolean;
   onOpenSession: (sessionId: string) => void;
   /** 删除当前会话前取消流 */
   onPrepareDeleteCurrentSession?: () => void | Promise<void>;
@@ -117,6 +122,9 @@ export default function SidebarSessionList({
   activeSessionId,
   sessionStatuses,
   projectId,
+  query,
+  listKind,
+  autoAssignActiveSession = false,
   onOpenSession,
   onPrepareDeleteCurrentSession,
   onClearDeletedCurrentSession,
@@ -125,8 +133,6 @@ export default function SidebarSessionList({
   const { confirm, prompt } = useAppDialog();
   const { showToast, toastHost } = useTransientToast();
   const [items, setItems] = useState<RecentSessionDto[]>([]);
-  const [listKind, setListKind] = useState<SessionListKind>("active");
-  const [query, setQuery] = useState("");
   const [expanded, setExpanded] = useState(false);
   const [unreadTick, setUnreadTick] = useState(0);
   const visibleCount = readVisibleCount();
@@ -135,7 +141,7 @@ export default function SidebarSessionList({
     try {
       const list = await invoke<RecentSessionDto[]>("list_sessions", {
         filter: listKind,
-        limit: 50,
+        limit: projectId ? 50 : 200,
         projectId,
       });
       setItems(list ?? []);
@@ -181,7 +187,7 @@ export default function SidebarSessionList({
 
   // 当前会话自动关联到此项目，关联完成后再刷新列表
   useEffect(() => {
-    if (!activeSessionId) return;
+    if (!activeSessionId || !projectId || !autoAssignActiveSession) return;
     void (async () => {
       try {
         await invoke("assign_session_to_project", {
@@ -191,7 +197,7 @@ export default function SidebarSessionList({
       } catch {}
       await load();
     })();
-  }, [activeSessionId, projectId, load]);
+  }, [activeSessionId, projectId, autoAssignActiveSession, load]);
 
   const [sessionMenu, setSessionMenu] = useState<{ sessionId: string; x: number; y: number } | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -384,43 +390,19 @@ export default function SidebarSessionList({
 
   const hasQuery = query.trim().length > 0;
   const archived = listKind === "archived";
-  const showToolbar = items.length > 0 || hasQuery || archived;
   const emptyLabel = hasQuery
     ? t("sessions.searchEmpty")
     : archived
       ? t("sessions.noArchived")
       : t("chat.rightPanel.noSessions");
 
-  const visible = expanded ? filtered : filtered.slice(0, visibleCount);
-  const hiddenCount = filtered.length - visibleCount;
+  // 搜索结果不折叠，避免匹配项被藏在「展开显示」后面。
+  const collapsible = !hasQuery && filtered.length > visibleCount;
+  const visible = expanded || !collapsible ? filtered : filtered.slice(0, visibleCount);
+  const hiddenCount = collapsible ? filtered.length - visibleCount : 0;
 
   return (
-    <div className="sidebar-sessions">
-      {showToolbar && (
-        <div className="sidebar-session-toolbar">
-          <ExpandableSearch
-            value={query}
-            onChange={setQuery}
-            placeholderKey="chat.rightPanel.searchSessions"
-            className="sidebar-session-search"
-          />
-          <button
-            type="button"
-            className={`sidebar-session-filter-btn ${archived ? "is-on" : ""}`}
-            title={archived ? t("sessions.active") : t("sessions.archived")}
-            aria-label={archived ? t("sessions.active") : t("sessions.archived")}
-            aria-pressed={archived}
-            onClick={() => {
-              setListKind(archived ? "active" : "archived");
-              setSessionMenu(null);
-              setQuery("");
-              setExpanded(false);
-            }}
-          >
-            <Archive size={13} strokeWidth={1.8} aria-hidden />
-          </button>
-        </div>
-      )}
+    <div className={`sidebar-sessions ${projectId ? "" : "is-global"}`.trim()}>
       {filtered.length === 0 ? (
         <span className="sidebar-empty">{emptyLabel}</span>
       ) : (
