@@ -990,6 +990,51 @@ html[data-theme="dark"] .settings-content {
   text-align: left;
 }
 
+/* ── Icon-only mode: 项目区域精简 ──────────────────── */
+
+.sidebar:not(.is-labels) .sidebar-section-header {
+  justify-content: center;
+  padding: 4px 0;
+}
+
+.sidebar:not(.is-labels) .sidebar-section-title {
+  display: none;
+}
+
+.sidebar:not(.is-labels) .sidebar-add-btn {
+  width: 28px;
+  height: 28px;
+}
+
+.sidebar:not(.is-labels) .sidebar-project-header {
+  justify-content: center;
+  padding: 3px 0;
+}
+
+.sidebar:not(.is-labels) .sidebar-project-name {
+  justify-content: center;
+  padding: 6px;
+  width: 42px;
+  flex: none;
+}
+
+.sidebar:not(.is-labels) .sidebar-project-name .sidebar-item-label {
+  display: none;
+}
+
+.sidebar:not(.is-labels) .sidebar-project-more,
+.sidebar:not(.is-labels) .sidebar-project-action {
+  display: none;
+}
+
+.sidebar:not(.is-labels) .sidebar-sessions {
+  display: none;
+}
+
+.sidebar:not(.is-labels) .sidebar-empty {
+  display: none;
+}
+
 .sidebar-item-label {
   display: none;
 }
