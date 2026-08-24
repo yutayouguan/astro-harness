@@ -1,6 +1,7 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+import { markSessionUnread } from "../../lib/chat/sessionUnread";
 
 export type SessionRuntimeActiveFlag =
   | "waitingOnApproval"
@@ -61,6 +62,7 @@ export function useSessionStatusMap(): SessionStatusMap {
   const [statuses, setStatuses] = useState<Record<string, SessionRuntimeStatus>>(
     {},
   );
+  const statusesRef = useRef<Record<string, SessionRuntimeStatus>>({});
 
   useEffect(() => {
     if (typeof window === "undefined" || !("__TAURI_INTERNALS__" in window)) {
@@ -72,13 +74,14 @@ export function useSessionStatusMap(): SessionStatusMap {
       const normalized = normalizeStatus(payload);
       if (!normalized || disposed) return;
       const [sessionId, next] = normalized;
-      setStatuses((current) => {
-        const previous = current[sessionId];
-        if (previous && previous.updatedAt >= next.updatedAt) {
-          return current;
-        }
-        return { ...current, [sessionId]: next };
-      });
+      const previous = statusesRef.current[sessionId];
+      if (previous && previous.updatedAt >= next.updatedAt) return;
+      // 离开 active 即视为有新结果待查看；点开会话时清除。
+      if (previous?.status === "active" && next.status !== "active") {
+        markSessionUnread(sessionId);
+      }
+      statusesRef.current = { ...statusesRef.current, [sessionId]: next };
+      setStatuses(statusesRef.current);
     };
     const setup = async () => {
       try {

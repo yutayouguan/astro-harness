@@ -1,11 +1,12 @@
-// 侧栏项目下的会话列表。
+// 侧栏项目下的会话列表：搜索、活跃/归档切换与全部会话操作。
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import {
   Archive,
+  ArchiveRestore,
   ChevronDown,
   Download,
   Edit3,
@@ -16,7 +17,22 @@ import {
   RefreshCw,
   Trash2,
 } from "lucide-react";
-import { subscribeSessionsChanged } from "../../lib/chat/sessionManagement";
+import {
+  deleteManagedSession,
+  dispatchSessionsChanged,
+  subscribeSessionsChanged,
+  type SessionListKind,
+} from "../../lib/chat/sessionManagement";
+import {
+  clearSessionUnread,
+  isSessionUnread,
+  subscribeSessionUnread,
+} from "../../lib/chat/sessionUnread";
+import { useAppDialog } from "../../hooks/ui/DialogContext";
+import { useTransientToast } from "../../hooks/ui/useTransientToast";
+import { useI18n } from "../../i18n/LocaleContext";
+import type { MessageKey } from "../../i18n/messages";
+import ExpandableSearch from "../ui/ExpandableSearch";
 import type { RecentSessionDto } from "../../types";
 import type { SessionStatusMap } from "../../hooks/chat/useSessionStatusMap";
 import SessionStatusIcon, {
@@ -24,12 +40,7 @@ import SessionStatusIcon, {
   type SessionActivityStatus,
 } from "./SessionStatusIcon";
 
-const STATUS_LABEL: Record<SessionActivityStatus, string> = {
-  idle: "已完成",
-  running: "生成中",
-  awaiting: "等待授权",
-  error: "出错",
-};
+type Translate = (key: MessageKey, vars?: Record<string, string>) => string;
 
 const DEFAULT_VISIBLE_COUNT = 5;
 const STORAGE_KEY = "astro:sidebar-visible-sessions";
@@ -39,10 +50,6 @@ function readVisibleCount(): number {
     if (v) { const n = Number(v); if (n >= 1 && n <= 50) return n; }
   } catch {}
   return DEFAULT_VISIBLE_COUNT;
-}
-
-export function saveVisibleCount(count: number) {
-  try { localStorage.setItem(STORAGE_KEY, String(Math.max(1, Math.min(50, count)))); } catch {}
 }
 
 type ChatHistoryExportDto = {
@@ -89,19 +96,21 @@ type Props = {
   sessionStatuses: SessionStatusMap;
   projectId: string;
   onOpenSession: (sessionId: string) => void;
-  onDeleteCurrentSession?: () => void;
+  /** 删除当前会话前取消流 */
+  onPrepareDeleteCurrentSession?: () => void | Promise<void>;
+  /** 当前会话被删除后清理本地状态 */
+  onClearDeletedCurrentSession?: () => void | Promise<void>;
 };
 
-function relativeTime(iso: string | null): string {
+function relativeTime(iso: string | null, t: Translate): string {
   if (!iso) return "";
   const diff = Date.now() - new Date(iso).getTime();
   const mins = Math.floor(diff / 60000);
-  if (mins < 1) return "刚刚";
-  if (mins < 60) return `${mins} 分钟前`;
+  if (mins < 1) return t("time.justNow");
+  if (mins < 60) return t("time.minutesAgo", { n: String(mins) });
   const hours = Math.floor(mins / 60);
-  if (hours < 24) return `${hours} 小时前`;
-  const days = Math.floor(hours / 24);
-  return `${days} 天前`;
+  if (hours < 24) return t("time.hoursAgo", { n: String(hours) });
+  return t("time.daysAgo", { n: String(Math.floor(hours / 24)) });
 }
 
 export default function SidebarSessionList({
@@ -109,16 +118,23 @@ export default function SidebarSessionList({
   sessionStatuses,
   projectId,
   onOpenSession,
-  onDeleteCurrentSession,
+  onPrepareDeleteCurrentSession,
+  onClearDeletedCurrentSession,
 }: Props) {
+  const { t } = useI18n();
+  const { confirm, prompt } = useAppDialog();
+  const { showToast, toastHost } = useTransientToast();
   const [items, setItems] = useState<RecentSessionDto[]>([]);
+  const [listKind, setListKind] = useState<SessionListKind>("active");
+  const [query, setQuery] = useState("");
   const [expanded, setExpanded] = useState(false);
+  const [unreadTick, setUnreadTick] = useState(0);
   const visibleCount = readVisibleCount();
 
   const load = useCallback(async () => {
     try {
       const list = await invoke<RecentSessionDto[]>("list_sessions", {
-        filter: "active",
+        filter: listKind,
         limit: 50,
         projectId,
       });
@@ -126,11 +142,13 @@ export default function SidebarSessionList({
     } catch {
       setItems([]);
     }
-  }, [projectId]);
+  }, [listKind, projectId]);
 
   useEffect(() => { void load(); }, [load]);
 
   useEffect(() => subscribeSessionsChanged(() => { void load(); }), [load]);
+
+  useEffect(() => subscribeSessionUnread(() => setUnreadTick((n) => n + 1)), []);
 
   useEffect(() => {
     if (typeof window === "undefined" || !("__TAURI_INTERNALS__" in window)) return;
@@ -191,52 +209,72 @@ export default function SidebarSessionList({
 
   // --- 会话操作 handlers ---
 
+  const runSessionAction = useCallback(
+    async (action: () => Promise<void>) => {
+      setSessionMenu(null);
+      try {
+        await action();
+        dispatchSessionsChanged();
+      } catch (e) {
+        showToast(
+          t("sessions.actionFailed", {
+            error: e instanceof Error ? e.message : String(e),
+          }),
+          { error: true },
+        );
+      }
+    },
+    [showToast, t],
+  );
+
   const findMenuSession = useCallback((): RecentSessionDto | undefined => {
     if (!sessionMenu) return undefined;
     return items.find((s) => s.sessionId === sessionMenu.sessionId);
   }, [sessionMenu, items]);
 
-  const handlePinToggle = useCallback(async (session: RecentSessionDto) => {
-    setSessionMenu(null);
+  const handlePinToggle = useCallback((session: RecentSessionDto) => {
     const command = session.pinnedAt ? "unpin_session" : "pin_session";
-    try {
+    void runSessionAction(async () => {
       await invoke(command, { sessionId: session.sessionId });
-      await load();
-    } catch (e) { console.warn("pin/unpin failed", e); }
-  }, [load]);
+    });
+  }, [runSessionAction]);
 
-  const handleArchive = useCallback(async (session: RecentSessionDto) => {
-    setSessionMenu(null);
-    try {
-      await invoke("archive_session", { sessionId: session.sessionId });
-      await load();
-    } catch (e) { console.warn("archive failed", e); }
-  }, [load]);
+  const handleArchiveToggle = useCallback((session: RecentSessionDto) => {
+    const command = listKind === "archived" ? "unarchive_session" : "archive_session";
+    void runSessionAction(async () => {
+      await invoke(command, { sessionId: session.sessionId });
+    });
+  }, [listKind, runSessionAction]);
 
   const handleRename = useCallback(async () => {
     const session = findMenuSession();
     if (!session) return;
     setSessionMenu(null);
-    const current = session.summary || "未命名会话";
-    const next = window.prompt("输入新标题", current);
+    const current = session.summary || t("chat.rightPanel.untitledSession");
+    const next = await prompt({
+      title: t("sessions.rename"),
+      message: t("sessions.renamePrompt"),
+      defaultValue: current,
+      confirmLabel: t("sessions.renameSave"),
+      cancelLabel: t("sessions.cancel"),
+    });
     if (next === null) return;
     const title = next.trim();
     if (!title) return;
-    try {
+    await runSessionAction(async () => {
       await invoke("rename_session", { sessionId: session.sessionId, title });
       setItems((prev) =>
         prev.map((row) =>
           row.sessionId === session.sessionId ? { ...row, summary: title } : row,
         ),
       );
-    } catch (e) { console.warn("rename failed", e); }
-  }, [findMenuSession]);
+    });
+  }, [findMenuSession, prompt, runSessionAction, t]);
 
-  const handleRegenerateTitle = useCallback(async () => {
+  const handleRegenerateTitle = useCallback(() => {
     const session = findMenuSession();
     if (!session) return;
-    setSessionMenu(null);
-    try {
+    void runSessionAction(async () => {
       const title = await invoke<string>("regenerate_session_title", {
         sessionId: session.sessionId,
       });
@@ -247,33 +285,34 @@ export default function SidebarSessionList({
           row.sessionId === session.sessionId ? { ...row, summary: next } : row,
         ),
       );
-    } catch (e) { console.warn("regenerate title failed", e); }
-  }, [findMenuSession]);
+    });
+  }, [findMenuSession, runSessionAction]);
 
-  const handleExport = useCallback(async () => {
+  const handleExport = useCallback(() => {
     const session = findMenuSession();
     if (!session) return;
-    setSessionMenu(null);
-    try {
+    void runSessionAction(async () => {
       const history = await invoke<ChatHistoryExportDto>("get_chat_history", {
         sessionId: session.sessionId,
         limit: 500,
       });
-      const title = session.summary || "未命名会话";
+      const title = session.summary || t("chat.rightPanel.untitledSession");
       const markdown = historyToMarkdown(title, session.sessionId, history.messages ?? []);
-      if (!markdown.replace(/^#.*$/m, "").trim()) return;
-      await invoke<string>("download_bytes_to_downloads", {
+      if (!markdown.replace(/^#.*$/m, "").trim()) {
+        throw new Error(t("sessions.exportEmpty"));
+      }
+      const savedPath = await invoke<string>("download_bytes_to_downloads", {
         filename: sanitizeExportFilename(title, session.sessionId),
         base64Data: utf8ToBase64(markdown),
       });
-    } catch (e) { console.warn("export failed", e); }
-  }, [findMenuSession]);
+      showToast(t("sessions.exportDone", { path: savedPath }), { tone: "success" });
+    });
+  }, [findMenuSession, runSessionAction, showToast, t]);
 
-  const handleBranch = useCallback(async () => {
+  const handleBranch = useCallback(() => {
     const session = findMenuSession();
     if (!session) return;
-    setSessionMenu(null);
-    try {
+    void runSessionAction(async () => {
       const history = await invoke<ChatHistoryExportDto>("get_chat_history", {
         sessionId: session.sessionId,
         limit: 500,
@@ -282,58 +321,130 @@ export default function SidebarSessionList({
         const role = m.role.trim().toLowerCase();
         return role === "user" || role === "assistant";
       });
-      if (bubbles.length === 0) return;
+      if (bubbles.length === 0) {
+        throw new Error(t("sessions.branchEmpty"));
+      }
       const newId = await invoke<string>("fork_chat_session", {
         sourceSessionId: session.sessionId,
         keepChatBubbles: bubbles.length,
       });
       onOpenSession(newId);
-      await load();
-    } catch (e) { console.warn("branch failed", e); }
-  }, [findMenuSession, onOpenSession, load]);
+    });
+  }, [findMenuSession, onOpenSession, runSessionAction, t]);
 
   const handleDelete = useCallback(async () => {
     const session = findMenuSession();
     if (!session) return;
     setSessionMenu(null);
-    const title = session.summary || "未命名会话";
-    const ok = window.confirm(`确定永久删除会话「${title}」吗？此操作不可撤销。`);
+    const title = session.summary || t("chat.rightPanel.untitledSession");
+    const ok = await confirm({
+      title: t("sessions.deleteTitle"),
+      emphasisLabel: t("sessions.deleteTargetLabel"),
+      emphasis: title,
+      message: t("sessions.deleteConfirm"),
+      confirmLabel: t("sessions.deletePermanently"),
+      cancelLabel: t("sessions.cancel"),
+      variant: "danger",
+    });
     if (!ok) return;
-    try {
+    await runSessionAction(async () => {
       if (session.sessionId === activeSessionId) {
-        onDeleteCurrentSession?.();
+        await onPrepareDeleteCurrentSession?.();
       }
-      await invoke("delete_session_permanently", { sessionId: session.sessionId });
-      await load();
-    } catch (e) { console.warn("delete failed", e); }
-  }, [findMenuSession, activeSessionId, onDeleteCurrentSession, load]);
+      await deleteManagedSession(
+        session.sessionId,
+        activeSessionId,
+        async () => {
+          await invoke("delete_session_permanently", { sessionId: session.sessionId });
+        },
+        async () => {
+          await onClearDeletedCurrentSession?.();
+        },
+      );
+    });
+  }, [
+    findMenuSession,
+    confirm,
+    activeSessionId,
+    onPrepareDeleteCurrentSession,
+    onClearDeletedCurrentSession,
+    runSessionAction,
+    t,
+  ]);
 
-  if (items.length === 0) {
-    return (
-      <div className="sidebar-sessions">
-        <span className="sidebar-empty">暂无会话</span>
-      </div>
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return items;
+    return items.filter(
+      (s) =>
+        (s.summary ?? "").toLowerCase().includes(q) ||
+        s.sessionId.toLowerCase().includes(q),
     );
-  }
+  }, [items, query]);
 
-  const visible = expanded ? items : items.slice(0, visibleCount);
-  const hiddenCount = items.length - visibleCount;
+  const hasQuery = query.trim().length > 0;
+  const archived = listKind === "archived";
+  const showToolbar = items.length > 0 || hasQuery || archived;
+  const emptyLabel = hasQuery
+    ? t("sessions.searchEmpty")
+    : archived
+      ? t("sessions.noArchived")
+      : t("chat.rightPanel.noSessions");
+
+  const visible = expanded ? filtered : filtered.slice(0, visibleCount);
+  const hiddenCount = filtered.length - visibleCount;
 
   return (
     <div className="sidebar-sessions">
-      {visible.map((s) => (
-        <SessionItem
-          key={s.sessionId}
-          session={s}
-          isActive={s.sessionId === activeSessionId}
-          status={resolveSessionStatus(sessionStatuses[s.sessionId])}
-          onOpen={() => onOpenSession(s.sessionId)}
-          onContextMenu={(x, y) => setSessionMenu({ sessionId: s.sessionId, x, y })}
-          onMoreClick={(x, y) => setSessionMenu({ sessionId: s.sessionId, x, y })}
-          onPinToggle={() => void handlePinToggle(s)}
-          onArchive={() => void handleArchive(s)}
-        />
-      ))}
+      {showToolbar && (
+        <div className="sidebar-session-toolbar">
+          <ExpandableSearch
+            value={query}
+            onChange={setQuery}
+            placeholderKey="chat.rightPanel.searchSessions"
+            className="sidebar-session-search"
+          />
+          <button
+            type="button"
+            className={`sidebar-session-filter-btn ${archived ? "is-on" : ""}`}
+            title={archived ? t("sessions.active") : t("sessions.archived")}
+            aria-label={archived ? t("sessions.active") : t("sessions.archived")}
+            aria-pressed={archived}
+            onClick={() => {
+              setListKind(archived ? "active" : "archived");
+              setSessionMenu(null);
+              setQuery("");
+              setExpanded(false);
+            }}
+          >
+            <Archive size={13} strokeWidth={1.8} aria-hidden />
+          </button>
+        </div>
+      )}
+      {filtered.length === 0 ? (
+        <span className="sidebar-empty">{emptyLabel}</span>
+      ) : (
+        visible.map((s) => (
+          <SessionItem
+            key={s.sessionId}
+            session={s}
+            t={t}
+            isActive={s.sessionId === activeSessionId}
+            archived={archived}
+            status={resolveSessionStatus(sessionStatuses[s.sessionId])}
+            unread={isSessionUnread(s.sessionId)}
+            unreadTick={unreadTick}
+            onOpen={() => {
+              clearSessionUnread(s.sessionId);
+              onOpenSession(s.sessionId);
+            }}
+            onContextMenu={(x, y) => setSessionMenu({ sessionId: s.sessionId, x, y })}
+            onMoreClick={(x, y) => setSessionMenu({ sessionId: s.sessionId, x, y })}
+            onPinToggle={() => handlePinToggle(s)}
+            onArchiveToggle={() => handleArchiveToggle(s)}
+          />
+        ))
+      )}
       {hiddenCount > 0 && (
         <button
           type="button"
@@ -347,8 +458,10 @@ export default function SidebarSessionList({
           />
           <span>
             {expanded
-              ? "收起"
-              : `展开显示 ${hiddenCount > 99 ? "99+" : hiddenCount} 条`}
+              ? t("sessions.collapse")
+              : t("sessions.expandMore", {
+                  n: hiddenCount > 99 ? "99+" : String(hiddenCount),
+                })}
           </span>
         </button>
       )}
@@ -357,56 +470,70 @@ export default function SidebarSessionList({
         const pinned = Boolean(menuSession?.pinnedAt);
         return createPortal(
           <div ref={menuRef} className="project-context-menu" style={{ top: sessionMenu.y, left: sessionMenu.x }} role="menu">
-            <button type="button" role="menuitem" className="project-context-menu-item" onClick={() => { if (menuSession) void handlePinToggle(menuSession); }}>
+            <button type="button" role="menuitem" className="project-context-menu-item" onClick={() => { if (menuSession) handlePinToggle(menuSession); }}>
               {pinned ? <PinOff size={14} strokeWidth={1.8} aria-hidden /> : <Pin size={14} strokeWidth={1.8} aria-hidden />}
-              <span>{pinned ? "取消置顶" : "置顶"}</span>
+              <span>{pinned ? t("sessions.unpin") : t("sessions.pin")}</span>
             </button>
             <button type="button" role="menuitem" className="project-context-menu-item" onClick={() => void handleRename()}>
-              <Edit3 size={14} strokeWidth={1.8} aria-hidden /><span>重命名</span>
+              <Edit3 size={14} strokeWidth={1.8} aria-hidden /><span>{t("sessions.rename")}</span>
             </button>
-            <button type="button" role="menuitem" className="project-context-menu-item" onClick={() => void handleRegenerateTitle()}>
-              <RefreshCw size={14} strokeWidth={1.8} aria-hidden /><span>重新生成标题</span>
+            <button type="button" role="menuitem" className="project-context-menu-item" onClick={() => handleRegenerateTitle()}>
+              <RefreshCw size={14} strokeWidth={1.8} aria-hidden /><span>{t("sessions.regenerateTitle")}</span>
             </button>
-            <button type="button" role="menuitem" className="project-context-menu-item" onClick={() => void handleExport()}>
-              <Download size={14} strokeWidth={1.8} aria-hidden /><span>导出</span>
+            <button type="button" role="menuitem" className="project-context-menu-item" onClick={() => handleExport()}>
+              <Download size={14} strokeWidth={1.8} aria-hidden /><span>{t("sessions.export")}</span>
             </button>
-            <button type="button" role="menuitem" className="project-context-menu-item" onClick={() => void handleBranch()}>
-              <GitBranch size={14} strokeWidth={1.8} aria-hidden /><span>分支</span>
+            <button type="button" role="menuitem" className="project-context-menu-item" onClick={() => handleBranch()}>
+              <GitBranch size={14} strokeWidth={1.8} aria-hidden /><span>{t("sessions.branch")}</span>
             </button>
-            <button type="button" role="menuitem" className="project-context-menu-item" onClick={() => { if (menuSession) void handleArchive(menuSession); }}>
-              <Archive size={14} strokeWidth={1.8} aria-hidden /><span>归档</span>
+            <button type="button" role="menuitem" className="project-context-menu-item" onClick={() => { if (menuSession) handleArchiveToggle(menuSession); }}>
+              {archived
+                ? <ArchiveRestore size={14} strokeWidth={1.8} aria-hidden />
+                : <Archive size={14} strokeWidth={1.8} aria-hidden />}
+              <span>{archived ? t("sessions.unarchive") : t("sessions.archive")}</span>
             </button>
             <button type="button" role="menuitem" className="project-context-menu-item is-danger" onClick={() => void handleDelete()}>
-              <Trash2 size={14} strokeWidth={1.8} aria-hidden /><span>永久删除</span>
+              <Trash2 size={14} strokeWidth={1.8} aria-hidden /><span>{t("sessions.deletePermanently")}</span>
             </button>
           </div>,
           document.body,
         );
       })()}
+      {createPortal(toastHost, document.body)}
     </div>
   );
 }
 
 function SessionItem({
   session: s,
+  t,
   isActive,
+  archived,
   status,
+  unread,
+  unreadTick,
   onOpen,
   onContextMenu,
   onMoreClick,
   onPinToggle,
-  onArchive,
+  onArchiveToggle,
 }: {
   session: RecentSessionDto;
+  t: Translate;
   isActive: boolean;
+  archived: boolean;
   status: SessionActivityStatus;
+  unread: boolean;
+  /** 未读集合变更计数；仅用于触发重渲染 */
+  unreadTick: number;
   onOpen: () => void;
   onContextMenu: (x: number, y: number) => void;
   onMoreClick: (x: number, y: number) => void;
   onPinToggle: () => void;
-  onArchive: () => void;
+  onArchiveToggle: () => void;
 }) {
   const titleRef = useRef<HTMLSpanElement>(null);
+  void unreadTick;
 
   const handleMouseEnter = () => {
     const el = titleRef.current;
@@ -420,36 +547,46 @@ function SessionItem({
     }
   };
 
+  const showUnread = unread && status !== "running";
+
   return (
     <div
       className={`sidebar-session-item ${isActive ? "is-active" : ""} ${
         status === "awaiting" ? "is-awaiting" : ""
-      } ${status === "error" ? "is-errored" : ""}`}
+      } ${status === "error" ? "is-errored" : ""} ${showUnread ? "is-unread" : ""}`}
       onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); onContextMenu(e.clientX, e.clientY); }}
       onMouseEnter={handleMouseEnter}
     >
       <button type="button" className="sidebar-session-main" onClick={onOpen}>
-        <SessionStatusIcon status={status} label={STATUS_LABEL[status]} />
+        <SessionStatusIcon
+          status={status}
+          label={t(`sessions.status.${status}` as MessageKey)}
+        />
         <span className="sidebar-session-title-wrap">
           <span className="sidebar-session-title" ref={titleRef}>
-            {s.summary || "未命名会话"}
+            {s.summary || t("chat.rightPanel.untitledSession")}
           </span>
         </span>
+        {s.pinnedAt && (
+          <Pin className="sidebar-session-pin-mark" size={10} strokeWidth={2} aria-hidden />
+        )}
         <span className="sidebar-session-time">
-          {relativeTime(s.createdAt)}
+          {relativeTime(s.createdAt, t)}
         </span>
       </button>
       <div className="sidebar-session-actions">
-        <button type="button" className="sidebar-session-action-btn" title={s.pinnedAt ? "取消置顶" : "置顶"} onClick={(e) => { e.stopPropagation(); onPinToggle(); }}>
+        <button type="button" className="sidebar-session-action-btn" title={s.pinnedAt ? t("sessions.unpin") : t("sessions.pin")} onClick={(e) => { e.stopPropagation(); onPinToggle(); }}>
           {s.pinnedAt ? <PinOff size={13} strokeWidth={1.8} aria-hidden /> : <Pin size={13} strokeWidth={1.8} aria-hidden />}
         </button>
-        <button type="button" className="sidebar-session-action-btn" title="归档" onClick={(e) => { e.stopPropagation(); onArchive(); }}>
-          <Archive size={13} strokeWidth={1.8} aria-hidden />
+        <button type="button" className="sidebar-session-action-btn" title={archived ? t("sessions.unarchive") : t("sessions.archive")} onClick={(e) => { e.stopPropagation(); onArchiveToggle(); }}>
+          {archived
+            ? <ArchiveRestore size={13} strokeWidth={1.8} aria-hidden />
+            : <Archive size={13} strokeWidth={1.8} aria-hidden />}
         </button>
         <button
           type="button"
           className="sidebar-session-action-btn"
-          title="更多"
+          title={t("sessions.moreActions")}
           onClick={(e) => {
             e.stopPropagation();
             const rect = e.currentTarget.getBoundingClientRect();

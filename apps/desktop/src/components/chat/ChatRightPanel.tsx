@@ -1,11 +1,10 @@
-// 聊天右侧栏（会话 / 任务监控 / 上下文等 Tab）。
+// 聊天右侧栏（任务监控 / 上下文 / 预览 / Agent Tab）；会话列表在左侧项目栏。
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
   Activity,
   Bot,
   Eye,
   Layers,
-  MessagesSquare,
   PanelRight,
   X,
   type LucideIcon,
@@ -15,15 +14,13 @@ import type { MessageKey } from "../../i18n/messages";
 import type { ChatMessage } from "../../types";
 import type { ContextUsageSnapshot } from "../../lib/chat/contextUsage";
 import type { GeneratingPreview } from "../../hooks/chat/useGeneratingPreview";
-import type { SessionStatusMap } from "../../hooks/chat/useSessionStatusMap";
-import ChatSessionList from "./ChatSessionList";
 import ChatAgentInfo from "./ChatAgentInfo";
 import ContextExplorer from "./ContextExplorer";
 import GeneratingPreviewPanel from "./GeneratingPreviewPanel";
 import TaskMonitorPanel from "./TaskMonitorPanel";
 import AnimatedSwitch from "../ui/AnimatedSwitch";
 
-export type ChatRightTab = "sessions" | "monitor" | "context" | "preview" | "agent";
+export type ChatRightTab = "monitor" | "context" | "preview" | "agent";
 
 /** 右侧栏入参 */
 type Props = {
@@ -42,18 +39,8 @@ type Props = {
   contextUsage?: ContextUsageSnapshot | null;
   /** 模型上下文窗口；未知时回落 128000 */
   contextWindow?: number;
-  onOpenSession: (sessionId: string) => void;
-  /** 新建空白会话 */
-  onNewSession: () => void;
-  /** 新建 Agent 引导 */
-  onNewAgent: () => void;
-  /** 删除当前会话前取消流 */
-  onPrepareDeleteCurrentSession?: () => void | Promise<void>;
-  /** 当前会话被删除后清理本地状态 */
-  onClearDeletedCurrentSession?: () => void | Promise<void>;
   onOpenMemory: () => void;
   onOpenSkills: () => void;
-  sessionStatuses: SessionStatusMap;
   /** 生成中的文件实时预览（preview Tab） */
   generatingPreview?: GeneratingPreview | null;
   /** 聊天消息列表（任务监控 Tab 使用） */
@@ -63,7 +50,6 @@ type Props = {
 };
 
 const TAB_KEYS: Record<ChatRightTab, MessageKey> = {
-  sessions: "chat.rightPanel.sessions",
   monitor: "chat.rightPanel.monitor",
   context: "chat.rightPanel.context",
   preview: "chat.rightPanel.preview",
@@ -71,7 +57,6 @@ const TAB_KEYS: Record<ChatRightTab, MessageKey> = {
 };
 
 const TAB_ICONS: Record<ChatRightTab, LucideIcon> = {
-  sessions: MessagesSquare,
   monitor: Activity,
   context: Layers,
   preview: Eye,
@@ -87,20 +72,14 @@ export default function ChatRightPanel({
   tokenUsage: _tokenUsage = null,
   contextUsage = null,
   contextWindow = 0,
-  onOpenSession,
-  onNewSession,
-  onNewAgent,
-  onPrepareDeleteCurrentSession,
-  onClearDeletedCurrentSession,
   onOpenMemory,
   onOpenSkills,
-  sessionStatuses,
   generatingPreview = null,
   messages = [],
   streaming = false,
 }: Props) {
   const { t } = useI18n();
-  const tabs: ChatRightTab[] = ["sessions", "monitor", "context", "preview", "agent"];
+  const tabs: ChatRightTab[] = ["monitor", "context", "preview", "agent"];
   const tabsRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLElement>(null);
   const [indicator, setIndicator] = useState({ left: 0, width: 0, ready: false });
@@ -208,17 +187,6 @@ export default function ChatRightPanel({
             variant="fade"
             mode="enter"
           >
-            {tab === "sessions" && (
-              <ChatSessionList
-                activeSessionId={sessionId}
-                sessionStatuses={sessionStatuses}
-                onOpenSession={onOpenSession}
-                onNewSession={onNewSession}
-                onNewAgent={onNewAgent}
-                onPrepareDeleteCurrentSession={onPrepareDeleteCurrentSession}
-                onClearDeletedCurrentSession={onClearDeletedCurrentSession}
-              />
-            )}
             {tab === "monitor" && (
               <TaskMonitorPanel
                 messages={messages}

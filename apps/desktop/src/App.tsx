@@ -880,7 +880,8 @@ export default function App() {
                         sessionStatuses={sessionStatuses}
                         projectId={proj.id}
                         onOpenSession={(sid) => { setActiveProjectId(proj.id); void openSessionFromFilespace(sid); }}
-                        onDeleteCurrentSession={() => { void prepareDeleteCurrentSession(); void clearDeletedCurrentSession(); }}
+                        onPrepareDeleteCurrentSession={prepareDeleteCurrentSession}
+                        onClearDeletedCurrentSession={clearDeletedCurrentSession}
                       />
                     )}
                   </div>
@@ -1173,12 +1174,6 @@ export default function App() {
                       contextUsage={chat.contextUsage}
                       contextWindow={contextWindow}
                       generatingPreview={chat.generatingPreview}
-                      sessionStatuses={sessionStatuses}
-                      onOpenSession={(id) => void openSessionFromFilespace(id)}
-                      onNewSession={startNewChat}
-                      onNewAgent={startNewAgent}
-                      onPrepareDeleteCurrentSession={prepareDeleteCurrentSession}
-                      onClearDeletedCurrentSession={clearDeletedCurrentSession}
                       onOpenMemory={() => openSettingsTab("memory")}
                       onOpenSkills={() => setNav("skills")}
                     />

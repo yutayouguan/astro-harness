@@ -176,7 +176,7 @@ export function useChatSession({
       return false;
     }
   });
-  const [chatRightTab, setChatRightTab] = useState<ChatRightTab>("sessions");
+  const [chatRightTab, setChatRightTab] = useState<ChatRightTab>("monitor");
   const confirm = useConfirm();
 
   // ── 生成中文件实时预览 ──────────────────────────────────────────────────────
