@@ -944,9 +944,9 @@ export default function App() {
                     title="切换为悬浮窗口"
                     aria-label="切换为悬浮窗口"
                   >
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                      <rect x="2" y="3" width="20" height="18" rx="2.5" opacity="0.4" />
-                      <rect x="12" y="11" width="9" height="8" rx="2" fill="currentColor" fillOpacity="0.15" />
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" strokeLinecap="round" strokeLinejoin="round">
+                      <rect x="1.5" y="2.5" width="21" height="19" rx="3" stroke="currentColor" strokeWidth="1.5" strokeDasharray="3 2.5" opacity="0.38" />
+                      <rect x="10.5" y="10" width="11" height="10" rx="2.5" stroke="currentColor" strokeWidth="1.7" fill="currentColor" fillOpacity="0.08" />
                     </svg>
                   </button>
                 </div>
@@ -1203,9 +1203,10 @@ export default function App() {
               title="切换为内嵌模式"
               aria-label="切换为内嵌模式"
             >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                <rect x="2" y="3" width="20" height="18" rx="2.5" />
-                <rect x="3" y="11" width="9" height="8" rx="2" fill="currentColor" fillOpacity="0.15" />
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="1.5" y="2.5" width="21" height="19" rx="3" stroke="currentColor" strokeWidth="1.7" />
+                <line x1="9" y1="2.5" x2="9" y2="21.5" stroke="currentColor" strokeWidth="1.3" opacity="0.35" />
+                <rect x="2.5" y="11" width="11" height="10" rx="2.5" stroke="currentColor" strokeWidth="1.7" fill="currentColor" fillOpacity="0.08" />
               </svg>
             </button>
             {settingsTab === "memory" && memoryHeaderAgent?.show && (
