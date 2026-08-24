@@ -875,6 +875,7 @@ export default function App() {
                     {!collapsedProjects.has(proj.id) && (
                       <SidebarSessionList
                         activeSessionId={chat.sessionId}
+                        streamingSessionId={chat.streaming ? chat.sessionId : null}
                         projectId={proj.id}
                         onOpenSession={(sid) => { setActiveProjectId(proj.id); void openSessionFromFilespace(sid); }}
                         onDeleteCurrentSession={() => { void prepareDeleteCurrentSession(); void clearDeletedCurrentSession(); }}

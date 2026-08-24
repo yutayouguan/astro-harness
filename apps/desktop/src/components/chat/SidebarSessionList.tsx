@@ -3,20 +3,22 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import {
   Archive,
   ChevronDown,
   Download,
   Edit3,
   GitBranch,
-  MessageSquare,
   MoreVertical,
   Pin,
   PinOff,
   RefreshCw,
   Trash2,
 } from "lucide-react";
+import { subscribeSessionsChanged } from "../../lib/chat/sessionManagement";
 import type { RecentSessionDto } from "../../types";
+import SessionStatusIcon from "./SessionStatusIcon";
 
 const DEFAULT_VISIBLE_COUNT = 5;
 const STORAGE_KEY = "astro:sidebar-visible-sessions";
@@ -73,6 +75,7 @@ function historyToMarkdown(
 
 type Props = {
   activeSessionId: string | null;
+  streamingSessionId?: string | null;
   projectId: string;
   onOpenSession: (sessionId: string) => void;
   onDeleteCurrentSession?: () => void;
@@ -90,7 +93,13 @@ function relativeTime(iso: string | null): string {
   return `${days} 天前`;
 }
 
-export default function SidebarSessionList({ activeSessionId, projectId, onOpenSession, onDeleteCurrentSession }: Props) {
+export default function SidebarSessionList({
+  activeSessionId,
+  streamingSessionId = null,
+  projectId,
+  onOpenSession,
+  onDeleteCurrentSession,
+}: Props) {
   const [items, setItems] = useState<RecentSessionDto[]>([]);
   const [expanded, setExpanded] = useState(false);
   const visibleCount = readVisibleCount();
@@ -109,6 +118,37 @@ export default function SidebarSessionList({ activeSessionId, projectId, onOpenS
   }, [projectId]);
 
   useEffect(() => { void load(); }, [load]);
+
+  useEffect(() => subscribeSessionsChanged(() => { void load(); }), [load]);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !("__TAURI_INTERNALS__" in window)) return;
+    let disposed = false;
+    let unlisten: (() => void) | undefined;
+    type SessionEventPayload = {
+      sessionId?: string | null;
+      sessionMetadataChanged?: { title: string } | null;
+    };
+    void listen<SessionEventPayload>("session_event", (ev) => {
+      const sessionId = ev.payload.sessionId?.trim();
+      const title = ev.payload.sessionMetadataChanged?.title?.trim();
+      if (!sessionId || !title) return;
+      setItems((prev) =>
+        prev.map((item) =>
+          item.sessionId === sessionId ? { ...item, summary: title } : item,
+        ),
+      );
+    })
+      .then((fn) => {
+        if (disposed) fn();
+        else unlisten = fn;
+      })
+      .catch(() => {});
+    return () => {
+      disposed = true;
+      unlisten?.();
+    };
+  }, []);
 
   // 当前会话自动关联到此项目，关联完成后再刷新列表
   useEffect(() => {
@@ -275,6 +315,7 @@ export default function SidebarSessionList({ activeSessionId, projectId, onOpenS
           key={s.sessionId}
           session={s}
           isActive={s.sessionId === activeSessionId}
+          inProgress={s.sessionId === streamingSessionId}
           onOpen={() => onOpenSession(s.sessionId)}
           onContextMenu={(x, y) => setSessionMenu({ sessionId: s.sessionId, x, y })}
           onMoreClick={(x, y) => setSessionMenu({ sessionId: s.sessionId, x, y })}
@@ -338,6 +379,7 @@ export default function SidebarSessionList({ activeSessionId, projectId, onOpenS
 function SessionItem({
   session: s,
   isActive,
+  inProgress,
   onOpen,
   onContextMenu,
   onMoreClick,
@@ -346,6 +388,7 @@ function SessionItem({
 }: {
   session: RecentSessionDto;
   isActive: boolean;
+  inProgress: boolean;
   onOpen: () => void;
   onContextMenu: (x: number, y: number) => void;
   onMoreClick: (x: number, y: number) => void;
@@ -373,7 +416,7 @@ function SessionItem({
       onMouseEnter={handleMouseEnter}
     >
       <button type="button" className="sidebar-session-main" onClick={onOpen}>
-        <MessageSquare size={13} strokeWidth={1.6} aria-hidden />
+        <SessionStatusIcon inProgress={inProgress} />
         <span className="sidebar-session-title-wrap">
           <span className="sidebar-session-title" ref={titleRef}>
             {s.summary || "未命名会话"}

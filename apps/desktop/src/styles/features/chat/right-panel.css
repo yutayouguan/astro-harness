@@ -554,35 +554,12 @@ html[data-theme="dark"] .chat-session-row.is-active {
   cursor: wait;
 }
 
-.chat-session-status {
-  width: 14px;
-  height: 14px;
-  flex-shrink: 0;
-  display: grid;
-  place-items: center;
-}
-
-.chat-session-status-spin {
-  color: var(--tone-blue, #2563eb);
-  animation: chat-session-spin 0.85s linear infinite;
-}
-
-.chat-session-status-complete {
-  color: var(--ink-soft);
-}
-
-.chat-session-row.is-unread .chat-session-status-complete {
+.chat-session-row.is-unread .session-status-icon-complete {
   color: var(--tone-blue, #2563eb);
 }
 
 .chat-session-row.is-unread .chat-session-item strong {
   font-weight: 700;
-}
-
-@keyframes chat-session-spin {
-  to {
-    transform: rotate(360deg);
-  }
 }
 
 .chat-session-quick {
@@ -643,12 +620,6 @@ html[data-theme="dark"] .chat-session-row.is-active {
   transform: translateY(-50%);
   opacity: 0;
   transition: opacity 0.12s ease;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .chat-session-status-spin {
-    animation: none;
-  }
 }
 
 .chat-session-row:hover .chat-session-menu-wrap,

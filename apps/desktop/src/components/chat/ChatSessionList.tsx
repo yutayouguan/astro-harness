@@ -5,10 +5,8 @@ import { listen } from "@tauri-apps/api/event";
 import {
   Archive,
   ArchiveRestore,
-  CircleCheck,
   Download,
   GitBranch,
-  LoaderCircle,
   MoreVertical,
   Pencil,
   Pin,
@@ -38,6 +36,7 @@ import type { RecentSessionDto } from "../../types";
 import AgentPicker from "../agents/AgentPicker";
 import ExpandableSearch from "../ui/ExpandableSearch";
 import EmptyIllustration from "../../illustrations/EmptyIllustration";
+import SessionStatusIcon from "./SessionStatusIcon";
 
 type ChatHistoryExportDto = {
   messages: Array<{
@@ -569,21 +568,7 @@ export default function ChatSessionList({
                   }}
                   disabled={busy}
                 >
-                  <span className="chat-session-status" aria-hidden>
-                    {inProgress ? (
-                      <LoaderCircle
-                        className="chat-session-status-spin"
-                        size={14}
-                        strokeWidth={2.2}
-                      />
-                    ) : (
-                      <CircleCheck
-                        className="chat-session-status-complete"
-                        size={14}
-                        strokeWidth={2}
-                      />
-                    )}
-                  </span>
+                  <SessionStatusIcon inProgress={inProgress} />
                   <strong>
                     {title}
                     {pinned ? (

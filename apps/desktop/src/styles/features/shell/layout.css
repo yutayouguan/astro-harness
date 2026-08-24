@@ -1402,6 +1402,35 @@ html[data-theme="dark"] .project-context-menu {
 
 /* ── Sidebar session items ────────────────────────── */
 
+.session-status-icon {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+}
+
+.session-status-icon-spin {
+  color: var(--tone-blue, #2563eb);
+  animation: session-status-spin 0.85s linear infinite;
+}
+
+.session-status-icon-complete {
+  color: var(--ink-soft);
+}
+
+@keyframes session-status-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .session-status-icon-spin {
+    animation: none;
+  }
+}
+
 .sidebar-session-item {
   position: relative;
   display: flex;
