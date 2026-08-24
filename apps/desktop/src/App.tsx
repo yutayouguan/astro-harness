@@ -107,7 +107,6 @@ import {
   PanelLeft,
   PanelTop,
   ScrollText,
-  Settings,
   Settings2,
   Sparkles,
   Store,
@@ -918,7 +917,7 @@ export default function App() {
                 <div className="content-heading">
                   <div className="page-title-block">
                     <div className="page-title-icon" data-tone="twilight" aria-hidden>
-                      <Settings width={15} height={15} strokeWidth={1.6} />
+                      <Settings2 width={15} height={15} strokeWidth={1.6} />
                     </div>
                     <div className="page-title-text">
                       <h1 className="content-title" data-tone="twilight">
