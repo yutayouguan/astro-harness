@@ -254,6 +254,7 @@ pub fn run() {
             commands::session::remove_chat_bubbles,
             commands::session::list_recent_sessions,
             commands::session::list_sessions,
+            commands::session::list_session_statuses,
             commands::session::set_session_project_root,
             commands::session::rename_session,
             commands::session::regenerate_session_title,

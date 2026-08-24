@@ -43,6 +43,7 @@ import {
 import { useActiveAgent } from "./hooks/app/useActiveAgent";
 import { useChatDisplayPrefs } from "./hooks/chat/useChatDisplayPrefs";
 import { useChatSession } from "./hooks/chat/useChatSession";
+import { useSessionStatusMap } from "./hooks/chat/useSessionStatusMap";
 import { useChatThinkingPrefs } from "./hooks/chat/useChatThinkingPrefs";
 import { useBeautifyTips } from "./hooks/ui/useBeautifyTips";
 import { useProviders } from "./hooks/providers/useProviders";
@@ -243,6 +244,7 @@ export default function App() {
     nav,
     setNav,
   });
+  const sessionStatuses = useSessionStatusMap();
   const {
     send,
     startNewChat,
@@ -418,11 +420,6 @@ export default function App() {
     backendId: activeProvider?.backend_id,
   });
   const statusText = chat.statusDetail ?? t(`status.${chat.statusPhase}` as MessageKey);
-  // 会话列表状态指示只覆盖当前会话：后台会话没有可订阅的运行态。
-  const streamingSessionId = chat.streaming ? chat.sessionId : null;
-  const awaitingSessionId =
-    chat.sessionPendingInterrupts.length > 0 ? chat.sessionId : null;
-  const errorSessionId = chat.statusPhase === "error" ? chat.sessionId : null;
   // ── Thinking callbacks ────────────────────────────────────────────────────
   const onThinkingLevelChange = useCallback(
     (level: ThinkingLevel) => {
@@ -880,9 +877,7 @@ export default function App() {
                     {!collapsedProjects.has(proj.id) && (
                       <SidebarSessionList
                         activeSessionId={chat.sessionId}
-                        streamingSessionId={streamingSessionId}
-                        awaitingSessionId={awaitingSessionId}
-                        errorSessionId={errorSessionId}
+                        sessionStatuses={sessionStatuses}
                         projectId={proj.id}
                         onOpenSession={(sid) => { setActiveProjectId(proj.id); void openSessionFromFilespace(sid); }}
                         onDeleteCurrentSession={() => { void prepareDeleteCurrentSession(); void clearDeletedCurrentSession(); }}
@@ -1178,9 +1173,7 @@ export default function App() {
                       contextUsage={chat.contextUsage}
                       contextWindow={contextWindow}
                       generatingPreview={chat.generatingPreview}
-                      streamingSessionId={streamingSessionId}
-                      awaitingSessionId={awaitingSessionId}
-                      errorSessionId={errorSessionId}
+                      sessionStatuses={sessionStatuses}
                       onOpenSession={(id) => void openSessionFromFilespace(id)}
                       onNewSession={startNewChat}
                       onNewAgent={startNewAgent}

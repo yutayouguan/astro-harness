@@ -36,6 +36,7 @@ import type { RecentSessionDto } from "../../types";
 import AgentPicker from "../agents/AgentPicker";
 import ExpandableSearch from "../ui/ExpandableSearch";
 import EmptyIllustration from "../../illustrations/EmptyIllustration";
+import type { SessionStatusMap } from "../../hooks/chat/useSessionStatusMap";
 import SessionStatusIcon, { resolveSessionStatus } from "./SessionStatusIcon";
 
 type ChatHistoryExportDto = {
@@ -136,12 +137,7 @@ function historyToMarkdown(
 type Props = {
   /** 当前打开的会话（高亮） */
   activeSessionId: string | null;
-  /** 正在流式输出的会话；无流式时为 null */
-  streamingSessionId?: string | null;
-  /** 正在等待用户授权（HITL）的会话 */
-  awaitingSessionId?: string | null;
-  /** 最近一次回合出错的会话 */
-  errorSessionId?: string | null;
+  sessionStatuses: SessionStatusMap;
   onOpenSession: (sessionId: string) => void;
   /** 新建空白会话 */
   onNewSession: () => void;
@@ -155,9 +151,7 @@ type Props = {
 
 export default function ChatSessionList({
   activeSessionId,
-  streamingSessionId = null,
-  awaitingSessionId = null,
-  errorSessionId = null,
+  sessionStatuses,
   onOpenSession,
   onNewSession,
   onNewAgent,
@@ -176,7 +170,7 @@ export default function ChatSessionList({
   const [busySessionId, setBusySessionId] = useState<string | null>(null);
   const [unreadTick, setUnreadTick] = useState(0);
   const menuRef = useRef<HTMLDivElement | null>(null);
-  const prevStreamingRef = useRef<string | null>(null);
+  const prevStatusesRef = useRef<SessionStatusMap>(sessionStatuses);
 
   const loadSessions = useCallback(async () => {
     try {
@@ -251,15 +245,22 @@ export default function ChatSessionList({
 
   useEffect(() => subscribeSessionUnread(() => setUnreadTick((n) => n + 1)), []);
 
-  // 流式结束 → 标未读；working 中用动画图标。只有用户点击进入会话才清未读。
+  // 任意会话从 active 进入终态后标未读；只有用户点击进入会话才清未读。
   useEffect(() => {
-    const prev = prevStreamingRef.current;
-    prevStreamingRef.current = streamingSessionId;
-    if (prev && !streamingSessionId) {
-      markSessionUnread(prev);
-      setUnreadTick((n) => n + 1);
+    const previous = prevStatusesRef.current;
+    prevStatusesRef.current = sessionStatuses;
+    let changed = false;
+    for (const [sessionId, status] of Object.entries(sessionStatuses)) {
+      if (
+        previous[sessionId]?.status === "active" &&
+        status.status !== "active"
+      ) {
+        markSessionUnread(sessionId);
+        changed = true;
+      }
     }
-  }, [streamingSessionId]);
+    if (changed) setUnreadTick((n) => n + 1);
+  }, [sessionStatuses]);
 
   const handleAgentChange = useCallback(
     (id: string) => {
@@ -551,12 +552,8 @@ export default function ChatSessionList({
             const title = sessionTitle(s, t("chat.rightPanel.untitledSession"));
             const busy = busySessionId === s.sessionId;
             const menuOpen = menuSessionId === s.sessionId;
-            const inProgress = streamingSessionId === s.sessionId;
-            const status = resolveSessionStatus(s.sessionId, {
-              streamingSessionId,
-              awaitingSessionId,
-              errorSessionId,
-            });
+            const status = resolveSessionStatus(sessionStatuses[s.sessionId]);
+            const inProgress = status === "running";
             const unread = !inProgress && isSessionUnread(s.sessionId);
             void unreadTick;
             const pinned = isPinned(s);

@@ -15,8 +15,8 @@ use super::providers::{
 };
 use crate::infra::grpc::{default_grpc_address, endpoint_url};
 use crate::infra::thread_events::{
-    accepted_turn_id, emit_chat_events, managed_bridge, submission_failure_events,
-    ThreadEventsBridge, THREAD_EVENTS_READY_TIMEOUT,
+    accepted_turn_id, emit_chat_events, emit_session_status, managed_bridge,
+    submission_failure_events, ThreadEventsBridge, THREAD_EVENTS_READY_TIMEOUT,
 };
 
 // ---------------------------------------------------------------------------
@@ -595,6 +595,7 @@ pub async fn start_chat(app: AppHandle, request: StartChatRequest) -> Result<Str
     let bridge = managed_bridge(&app).inner().clone();
     let sid2 = sid.clone();
     let activation = bridge.activate(sid2.clone()).await;
+    emit_session_status(&app, &sid, "active", Vec::new(), None);
     let app2 = app.clone();
     let event_name2 = event_name.clone();
 
@@ -629,6 +630,15 @@ pub async fn start_chat(app: AppHandle, request: StartChatRequest) -> Result<Str
 
         if let Err(err) = result {
             let is_current = bridge.fail_activation(&sid2, activation).await;
+            if is_current {
+                emit_session_status(
+                    &app2,
+                    &sid2,
+                    "systemError",
+                    Vec::new(),
+                    Some(friendly_error(&err)),
+                );
+            }
             for event in submission_failure_events(is_current, friendly_error(&err)) {
                 let _ = app2.emit(&event_name2, event);
             }
@@ -753,7 +763,11 @@ pub async fn chat_control(
 
 /// 提交 interrupt resume（HITL 阻塞闸门）；同回合续跑，无需再调 start_chat。
 #[tauri::command]
-pub async fn interrupt_resume(session_id: String, resume_json: String) -> Result<(), String> {
+pub async fn interrupt_resume(
+    app: AppHandle,
+    session_id: String,
+    resume_json: String,
+) -> Result<(), String> {
     let items: Vec<serde_json::Value> =
         serde_json::from_str(&resume_json).map_err(|e| format!("resume_json 无效: {e}"))?;
     let resume: Vec<proto::InterruptResumeItem> = items
@@ -784,9 +798,13 @@ pub async fn interrupt_resume(session_id: String, resume_json: String) -> Result
         .await
         .map_err(|e| e.to_string())?;
     client
-        .interrupt_resume(proto::InterruptResumeRequest { session_id, resume })
+        .interrupt_resume(proto::InterruptResumeRequest {
+            session_id: session_id.clone(),
+            resume,
+        })
         .await
         .map_err(|e| e.to_string())?;
+    emit_session_status(&app, session_id, "active", Vec::new(), None);
     Ok(())
 }
 

@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { subscribeSessionsChanged } from "../../lib/chat/sessionManagement";
 import type { RecentSessionDto } from "../../types";
+import type { SessionStatusMap } from "../../hooks/chat/useSessionStatusMap";
 import SessionStatusIcon, {
   resolveSessionStatus,
   type SessionActivityStatus,
@@ -85,11 +86,7 @@ function historyToMarkdown(
 
 type Props = {
   activeSessionId: string | null;
-  streamingSessionId?: string | null;
-  /** 正在等待用户授权（HITL）的会话 */
-  awaitingSessionId?: string | null;
-  /** 最近一次回合出错的会话 */
-  errorSessionId?: string | null;
+  sessionStatuses: SessionStatusMap;
   projectId: string;
   onOpenSession: (sessionId: string) => void;
   onDeleteCurrentSession?: () => void;
@@ -109,9 +106,7 @@ function relativeTime(iso: string | null): string {
 
 export default function SidebarSessionList({
   activeSessionId,
-  streamingSessionId = null,
-  awaitingSessionId = null,
-  errorSessionId = null,
+  sessionStatuses,
   projectId,
   onOpenSession,
   onDeleteCurrentSession,
@@ -331,11 +326,7 @@ export default function SidebarSessionList({
           key={s.sessionId}
           session={s}
           isActive={s.sessionId === activeSessionId}
-          status={resolveSessionStatus(s.sessionId, {
-            streamingSessionId,
-            awaitingSessionId,
-            errorSessionId,
-          })}
+          status={resolveSessionStatus(sessionStatuses[s.sessionId])}
           onOpen={() => onOpenSession(s.sessionId)}
           onContextMenu={(x, y) => setSessionMenu({ sessionId: s.sessionId, x, y })}
           onMoreClick={(x, y) => setSessionMenu({ sessionId: s.sessionId, x, y })}

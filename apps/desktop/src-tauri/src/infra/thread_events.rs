@@ -2,7 +2,7 @@
 
 use std::collections::{HashMap, HashSet};
 use std::future::Future;
-use std::sync::{Arc, Weak};
+use std::sync::{Arc, OnceLock, Weak};
 use std::time::Duration;
 
 use agent_protocol::TurnItem;
@@ -20,8 +20,35 @@ use crate::commands::chat::{
 
 const SNAPSHOT_EVENT: &str = "thread_snapshot";
 const SESSION_EVENT: &str = "session_event";
+const SESSION_STATUS_CHANGED_EVENT: &str = "session_status_changed";
 pub(crate) const THREAD_EVENTS_READY_TIMEOUT: Duration = Duration::from_secs(15);
 const PROVISIONAL_EVENT_BUFFER_CAPACITY: usize = 128;
+
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct SessionStatusChangedDto {
+    pub session_id: String,
+    /// `idle` | `active` | `systemError`
+    pub status: String,
+    /// Active-only flags: `waitingOnApproval` | `waitingOnUserInput`.
+    pub active_flags: Vec<String>,
+    pub error: Option<String>,
+    pub ts_ms: i64,
+}
+
+fn session_status_registry() -> &'static std::sync::Mutex<HashMap<String, SessionStatusChangedDto>>
+{
+    static REGISTRY: OnceLock<std::sync::Mutex<HashMap<String, SessionStatusChangedDto>>> =
+        OnceLock::new();
+    REGISTRY.get_or_init(|| std::sync::Mutex::new(HashMap::new()))
+}
+
+pub(crate) fn session_status_snapshot() -> Vec<SessionStatusChangedDto> {
+    session_status_registry()
+        .lock()
+        .map(|statuses| statuses.values().cloned().collect())
+        .unwrap_or_default()
+}
 
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -109,6 +136,26 @@ where
     T: Serialize + Clone,
 {
     let _ = app.emit(SESSION_EVENT, event);
+}
+
+pub(crate) fn emit_session_status(
+    app: &AppHandle,
+    session_id: impl Into<String>,
+    status: &str,
+    active_flags: Vec<String>,
+    error: Option<String>,
+) {
+    let changed = SessionStatusChangedDto {
+        session_id: session_id.into(),
+        status: status.into(),
+        active_flags,
+        error,
+        ts_ms: now_ts_ms(),
+    };
+    if let Ok(mut statuses) = session_status_registry().lock() {
+        statuses.insert(changed.session_id.clone(), changed.clone());
+    }
+    let _ = app.emit(SESSION_STATUS_CHANGED_EVENT, changed);
 }
 
 #[derive(Default)]
@@ -1651,6 +1698,21 @@ async fn subscribe_connection(
                     continue;
                 }
                 let reconciled = reconcile_snapshot(&snapshot);
+                if reconciled.keep_active && reconciled.active_turn_id.is_some() {
+                    emit_session_status(app, &thread_id, "active", Vec::new(), None);
+                } else if let Some(turn_id) = reconciled.terminal_turn_id.as_deref() {
+                    let terminal_turn = snapshot.turns.iter().find(|turn| turn.id == turn_id);
+                    let failed = terminal_turn.is_some_and(|turn| turn.status == "failed");
+                    emit_session_status(
+                        app,
+                        &thread_id,
+                        if failed { "systemError" } else { "idle" },
+                        Vec::new(),
+                        terminal_turn
+                            .and_then(|turn| turn.error.as_ref())
+                            .map(|error| error.message.clone()),
+                    );
+                }
                 if let Some(turn_id) = reconciled.active_turn_id.as_deref() {
                     bridge.bind_observed_turn(&thread_id, turn_id).await;
                 }
@@ -1722,6 +1784,7 @@ async fn process_live_event(
 ) {
     let thread_id = event.thread_id.clone();
     let turn_id = event.turn_id.clone();
+    emit_status_for_thread_event(app, &thread_id, event.payload.as_ref());
     let is_extension = matches!(
         event.payload.as_ref(),
         Some(proto::thread_event::Payload::Extension(_))
@@ -1769,6 +1832,54 @@ async fn process_live_event(
         Vec::new()
     };
     emit_chat_events(app, &thread_id, events);
+}
+
+fn emit_status_for_thread_event(
+    app: &AppHandle,
+    thread_id: &str,
+    payload: Option<&proto::thread_event::Payload>,
+) {
+    use proto::thread_event::Payload;
+
+    match payload {
+        Some(Payload::TurnStarted(_)) => {
+            emit_session_status(app, thread_id, "active", Vec::new(), None);
+        }
+        Some(Payload::ControlRequest(control))
+            if matches!(
+                control.kind.as_str(),
+                "exec_approval"
+                    | "apply_patch_approval"
+                    | "request_permissions"
+                    | "request_user_input"
+                    | "elicitation"
+            ) =>
+        {
+            let flag = if control.kind == "request_user_input" || control.kind == "elicitation" {
+                "waitingOnUserInput"
+            } else {
+                "waitingOnApproval"
+            };
+            emit_session_status(app, thread_id, "active", vec![flag.into()], None);
+        }
+        Some(Payload::TurnComplete(complete)) => {
+            emit_session_status(
+                app,
+                thread_id,
+                if complete.has_error {
+                    "systemError"
+                } else {
+                    "idle"
+                },
+                Vec::new(),
+                complete.error.as_ref().map(|error| error.message.clone()),
+            );
+        }
+        Some(Payload::TurnAborted(_)) => {
+            emit_session_status(app, thread_id, "idle", Vec::new(), None);
+        }
+        _ => {}
+    }
 }
 
 enum ReconnectDelivery {

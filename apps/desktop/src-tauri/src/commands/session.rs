@@ -5,10 +5,16 @@ use tauri::AppHandle;
 use uuid::Uuid;
 
 use super::common::open_sessions;
+use crate::infra::thread_events::{session_status_snapshot, SessionStatusChangedDto};
 
 // ---------------------------------------------------------------------------
 // DTOs
 // ---------------------------------------------------------------------------
+
+#[tauri::command]
+pub fn list_session_statuses() -> Vec<SessionStatusChangedDto> {
+    session_status_snapshot()
+}
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]

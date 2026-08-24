@@ -15,6 +15,7 @@ import type { MessageKey } from "../../i18n/messages";
 import type { ChatMessage } from "../../types";
 import type { ContextUsageSnapshot } from "../../lib/chat/contextUsage";
 import type { GeneratingPreview } from "../../hooks/chat/useGeneratingPreview";
+import type { SessionStatusMap } from "../../hooks/chat/useSessionStatusMap";
 import ChatSessionList from "./ChatSessionList";
 import ChatAgentInfo from "./ChatAgentInfo";
 import ContextExplorer from "./ContextExplorer";
@@ -52,12 +53,7 @@ type Props = {
   onClearDeletedCurrentSession?: () => void | Promise<void>;
   onOpenMemory: () => void;
   onOpenSkills: () => void;
-  /** 正在流式输出的会话 id；无流式时为 null */
-  streamingSessionId?: string | null;
-  /** 正在等待用户授权（HITL）的会话 id */
-  awaitingSessionId?: string | null;
-  /** 最近一次回合出错的会话 id */
-  errorSessionId?: string | null;
+  sessionStatuses: SessionStatusMap;
   /** 生成中的文件实时预览（preview Tab） */
   generatingPreview?: GeneratingPreview | null;
   /** 聊天消息列表（任务监控 Tab 使用） */
@@ -98,9 +94,7 @@ export default function ChatRightPanel({
   onClearDeletedCurrentSession,
   onOpenMemory,
   onOpenSkills,
-  streamingSessionId = null,
-  awaitingSessionId = null,
-  errorSessionId = null,
+  sessionStatuses,
   generatingPreview = null,
   messages = [],
   streaming = false,
@@ -217,9 +211,7 @@ export default function ChatRightPanel({
             {tab === "sessions" && (
               <ChatSessionList
                 activeSessionId={sessionId}
-                streamingSessionId={streamingSessionId}
-                awaitingSessionId={awaitingSessionId}
-                errorSessionId={errorSessionId}
+                sessionStatuses={sessionStatuses}
                 onOpenSession={onOpenSession}
                 onNewSession={onNewSession}
                 onNewAgent={onNewAgent}

@@ -1,20 +1,23 @@
 import { CircleAlert, CircleCheck, LoaderCircle, ShieldAlert } from "lucide-react";
+import type { SessionRuntimeStatus } from "../../hooks/chat/useSessionStatusMap";
 
 /** 会话在列表中的活动状态 */
 export type SessionActivityStatus = "idle" | "running" | "awaiting" | "error";
 
-/** 同一会话可能同时命中多种信号，按紧急度取一个 */
 export function resolveSessionStatus(
-  sessionId: string,
-  ids: {
-    streamingSessionId?: string | null;
-    awaitingSessionId?: string | null;
-    errorSessionId?: string | null;
-  },
+  runtime: SessionRuntimeStatus | undefined,
 ): SessionActivityStatus {
-  if (sessionId === ids.awaitingSessionId) return "awaiting";
-  if (sessionId === ids.errorSessionId) return "error";
-  if (sessionId === ids.streamingSessionId) return "running";
+  if (runtime?.status === "systemError") return "error";
+  if (
+    runtime?.status === "active" &&
+    runtime.activeFlags.some(
+      (flag) =>
+        flag === "waitingOnApproval" || flag === "waitingOnUserInput",
+    )
+  ) {
+    return "awaiting";
+  }
+  if (runtime?.status === "active") return "running";
   return "idle";
 }
 
