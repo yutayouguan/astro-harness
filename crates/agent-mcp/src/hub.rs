@@ -915,7 +915,7 @@ impl McpHub {
         if !is_mcp_tool_name(qualified_name) {
             anyhow::bail!("不是 MCP 工具: {qualified_name}");
         }
-        let (server_id, native) = parse_qualified_name(qualified_name)
+        let (server_id, sanitized_native) = parse_qualified_name(qualified_name)
             .ok_or_else(|| anyhow!("无效 MCP 工具名: {qualified_name}"))?;
 
         let rs = self
@@ -926,12 +926,21 @@ impl McpHub {
         if !rs.config.enabled {
             anyhow::bail!("MCP server 已禁用: {server_id}");
         }
-        if !rs.config.is_tool_enabled(native) {
+
+        // sanitized name → 原始 native name 反查
+        let native = rs
+            .tools
+            .iter()
+            .find(|t| qualify_tool_name(server_id, t.name.as_ref()) == qualified_name)
+            .map(|t| t.name.to_string())
+            .unwrap_or_else(|| sanitized_native.to_string());
+
+        if !rs.config.is_tool_enabled(&native) {
             anyhow::bail!("MCP 工具已禁用: {qualified_name}");
         }
 
         let timeout_secs = rs.config.effective_tool_timeout_secs();
-        Ok((rs.peer.clone(), native.to_string(), timeout_secs))
+        Ok((rs.peer.clone(), native, timeout_secs))
     }
 
     fn resolve_broker_peer(
