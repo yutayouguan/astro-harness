@@ -18,6 +18,10 @@ struct ToolRoute {
 }
 
 /// Immutable registry projection paired with the specs visible to one model request.
+///
+/// `routes` is the callable set for the step and is a superset of
+/// `model_visible_specs`: deferred tools are not advertised to the model but stay
+/// callable once `tool_search` surfaces them.
 pub(crate) struct ToolRouter {
     routes: HashMap<String, ToolRoute>,
     model_visible_specs: Arc<[serde_json::Value]>,
@@ -26,10 +30,12 @@ pub(crate) struct ToolRouter {
 impl ToolRouter {
     pub(crate) fn from_registry(
         registry: &ToolRegistry,
+        callable_specs: &[serde_json::Value],
         model_visible_specs: Vec<serde_json::Value>,
     ) -> Self {
-        let routes = model_visible_specs
+        let routes = callable_specs
             .iter()
+            .chain(model_visible_specs.iter())
             .filter_map(|spec| {
                 let name = spec.pointer("/function/name")?.as_str()?;
                 let entry = registry.get(name)?;
@@ -148,13 +154,11 @@ mod tests {
             icon: "terminal",
             ..types::ToolEntry::lifecycle_defaults().sandboxable()
         });
-        let router = ToolRouter::from_registry(
-            &registry,
-            vec![serde_json::json!({
-                "type": "function",
-                "function": {"name": "sandboxed", "parameters": {}}
-            })],
-        );
+        let specs = vec![serde_json::json!({
+            "type": "function",
+            "function": {"name": "sandboxed", "parameters": {}}
+        })];
+        let router = ToolRouter::from_registry(&registry, &specs, specs.clone());
         registry.register(types::ToolEntry {
             name: "sandboxed".into(),
             toolset: "core".into(),
@@ -173,6 +177,47 @@ mod tests {
             router.sandbox_preference("missing"),
             types::SandboxablePreference::Forbid
         );
+    }
+
+    #[test]
+    fn deferred_tools_are_callable_without_being_advertised() {
+        let mut registry = ToolRegistry::new();
+        registry.register(types::ToolEntry {
+            name: "direct_tool".into(),
+            toolset: "core".into(),
+            description: "always advertised".into(),
+            ..types::ToolEntry::lifecycle_defaults()
+        });
+        registry.register(types::ToolEntry {
+            name: "deferred_tool".into(),
+            toolset: "core".into(),
+            description: "found through tool_search".into(),
+            ..types::ToolEntry::lifecycle_defaults().deferred()
+        });
+        registry.register(types::ToolEntry {
+            name: "hidden_tool".into(),
+            toolset: "core".into(),
+            description: "internal only".into(),
+            ..types::ToolEntry::lifecycle_defaults().hidden()
+        });
+
+        let visible = registry.schemas_for_api();
+        let router = ToolRouter::from_registry(
+            &registry,
+            &registry.all_tool_schemas_including_deferred(),
+            visible,
+        );
+
+        assert!(router.has_tool("direct_tool"));
+        assert!(router.has_tool("deferred_tool"));
+        assert!(!router.has_tool("hidden_tool"));
+
+        let specs = router.model_visible_specs();
+        let advertised: Vec<&str> = specs
+            .iter()
+            .filter_map(|spec| spec.pointer("/function/name")?.as_str())
+            .collect();
+        assert_eq!(advertised, vec!["direct_tool"]);
     }
 
     #[test]
@@ -195,7 +240,7 @@ mod tests {
             serde_json::json!({"type": "function", "function": {"name": "needs_approval", "parameters": {}}}),
             serde_json::json!({"type": "function", "function": {"name": "auto_skip", "parameters": {}}}),
         ];
-        let router = ToolRouter::from_registry(&registry, specs);
+        let router = ToolRouter::from_registry(&registry, &specs, specs.clone());
 
         assert_eq!(
             router.approval_requirement("needs_approval"),

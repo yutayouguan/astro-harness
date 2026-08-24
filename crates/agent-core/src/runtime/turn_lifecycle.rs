@@ -793,11 +793,18 @@ impl Session {
                 .tool_registry
                 .read()
                 .expect("tool registry lock poisoned");
-            let specs = tools::filter_schemas(
-                self.lock_state().interaction_mode,
-                registry.schemas_for_api(),
+            let interaction_mode = self.lock_state().interaction_mode;
+            let visible_specs = tools::filter_schemas(interaction_mode, registry.schemas_for_api());
+            // Deferred 工具不进模型 schema，但发现后仍可调用；两者都要按交互模式过滤。
+            let callable_specs = tools::filter_schemas(
+                interaction_mode,
+                registry.all_tool_schemas_including_deferred(),
             );
-            Arc::new(crate::runtime::ToolRouter::from_registry(&registry, specs))
+            Arc::new(crate::runtime::ToolRouter::from_registry(
+                &registry,
+                &callable_specs,
+                visible_specs,
+            ))
         };
         let turn_context = {
             let state = self.lock_state();
