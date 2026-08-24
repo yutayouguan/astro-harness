@@ -296,7 +296,6 @@ fn to_interactions_input(messages: &[crate::types::Message]) -> (Option<String>,
                         let mut step = json!({
                             "type": "function_call",
                             "id": tc.id,
-                            "call_id": tc.id,
                             "name": tc.name,
                             "arguments": tc.arguments,
                         });
