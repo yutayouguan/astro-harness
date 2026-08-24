@@ -104,9 +104,11 @@ import {
   Info,
   Layers2,
   MessageSquare,
+  PanelLeft,
+  PanelTop,
   ScrollText,
+  Settings,
   Settings2,
-  SlidersHorizontal,
   Sparkles,
   Store,
   Wrench,
@@ -916,7 +918,7 @@ export default function App() {
                 <div className="content-heading">
                   <div className="page-title-block">
                     <div className="page-title-icon" data-tone="twilight" aria-hidden>
-                      <SlidersHorizontal width={15} height={15} strokeWidth={1.6} />
+                      <Settings width={15} height={15} strokeWidth={1.6} />
                     </div>
                     <div className="page-title-text">
                       <h1 className="content-title" data-tone="twilight">
@@ -944,9 +946,7 @@ export default function App() {
                     title="切换为悬浮窗口"
                     aria-label="切换为悬浮窗口"
                   >
-                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none">
-                      <rect x="2" y="3" width="20" height="18" rx="3" stroke="currentColor" strokeWidth="1.8" strokeDasharray="3.5 2.5" />
-                    </svg>
+                    <PanelTop width={16} height={16} strokeWidth={1.7} />
                   </button>
                 </div>
               </div>
@@ -1202,9 +1202,7 @@ export default function App() {
               title="切换为内嵌模式"
               aria-label="切换为内嵌模式"
             >
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none">
-                <rect x="2" y="3" width="20" height="18" rx="3" stroke="currentColor" strokeWidth="1.8" />
-              </svg>
+              <PanelLeft width={16} height={16} strokeWidth={1.7} />
             </button>
             {settingsTab === "memory" && memoryHeaderAgent?.show && (
               <div className="settings-overlay-agent-picker">
