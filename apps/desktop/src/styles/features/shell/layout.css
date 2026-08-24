@@ -1490,8 +1490,7 @@ html[data-theme="dark"] .project-context-menu {
 }
 
 .session-status-icon-awaiting {
-  color: var(--tone-amber, #d97706);
-  animation: session-status-pulse 1.6s ease-in-out infinite;
+  color: var(--danger, #e11d48);
 }
 
 .session-status-icon-error {
@@ -1504,27 +1503,13 @@ html[data-theme="dark"] .project-context-menu {
   }
 }
 
-@keyframes session-status-pulse {
-  0%,
-  100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.4;
-  }
-}
-
 @media (prefers-reduced-motion: reduce) {
-  .session-status-icon-spin,
-  .session-status-icon-awaiting {
+  .session-status-icon-spin {
     animation: none;
   }
 }
 
-.sidebar-session-item.is-awaiting .sidebar-session-title {
-  color: var(--tone-amber, #d97706);
-}
-
+.sidebar-session-item.is-awaiting .sidebar-session-title,
 .sidebar-session-item.is-errored .sidebar-session-title {
   color: var(--danger, #e11d48);
 }
