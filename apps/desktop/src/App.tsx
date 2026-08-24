@@ -106,6 +106,7 @@ import {
   MessageSquare,
   ScrollText,
   Settings2,
+  SlidersHorizontal,
   Sparkles,
   Store,
   Wrench,
@@ -915,7 +916,7 @@ export default function App() {
                 <div className="content-heading">
                   <div className="page-title-block">
                     <div className="page-title-icon" data-tone="twilight" aria-hidden>
-                      <Settings2 width={15} height={15} strokeWidth={1.6} />
+                      <SlidersHorizontal width={15} height={15} strokeWidth={1.6} />
                     </div>
                     <div className="page-title-text">
                       <h1 className="content-title" data-tone="twilight">
@@ -943,10 +944,9 @@ export default function App() {
                     title="切换为悬浮窗口"
                     aria-label="切换为悬浮窗口"
                   >
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <rect x="2" y="7" width="15" height="15" rx="2" />
-                      <path d="M17 2h5v5" />
-                      <path d="M22 2l-7 7" />
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                      <rect x="1" y="5" width="14" height="14" rx="2.5" opacity="0.45" />
+                      <rect x="9" y="5" width="14" height="14" rx="2.5" />
                     </svg>
                   </button>
                 </div>
@@ -1203,9 +1203,9 @@ export default function App() {
               title="切换为内嵌模式"
               aria-label="切换为内嵌模式"
             >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <rect x="2" y="2" width="20" height="20" rx="2" />
-                <path d="M9 2v20" />
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="2" y="3" width="20" height="18" rx="2.5" />
+                <path d="M9 3v18" />
               </svg>
             </button>
             {settingsTab === "memory" && memoryHeaderAgent?.show && (
