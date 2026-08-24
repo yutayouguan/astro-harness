@@ -162,6 +162,14 @@ export default function App() {
   );
   const [nav, setNav] = useState<NavId>(NAV[0].id);
   const [settingsTab, setSettingsTab] = useState<SettingsTabId>("preferences");
+  const [settingsFloat, setSettingsFloat] = useState(() => localStorage.getItem("astro:settings-float") === "true");
+  const toggleSettingsFloat = useCallback(() => {
+    setSettingsFloat((prev) => {
+      const next = !prev;
+      localStorage.setItem("astro:settings-float", String(next));
+      return next;
+    });
+  }, []);
   const [projects, setProjects] = useState<ProjectDto[]>([]);
   const [activeProjectId, setActiveProjectId] = useState("default");
   const [collapsedProjects, setCollapsedProjects] = useState<Set<string>>(new Set());
@@ -706,7 +714,7 @@ export default function App() {
           onMouseLeave={sidebar.scheduleHideSidebar}
           onContextMenu={sidebar.openSidebarContextMenu}
         >
-          {nav === "settings" ? (
+          {nav === "settings" && !settingsFloat ? (
             <>
               <button
                 type="button"
@@ -901,7 +909,7 @@ export default function App() {
         ) : null}
 
         <section className="content-pane">
-          {nav === "settings" ? (
+          {nav === "settings" && !settingsFloat ? (
             <>
               <div className="content-header">
                 <div className="content-heading">
@@ -928,6 +936,19 @@ export default function App() {
                       menuAlign="end"
                     />
                   )}
+                  <button
+                    type="button"
+                    className="header-icon-btn settings-float-toggle"
+                    onClick={toggleSettingsFloat}
+                    title="切换为悬浮窗口"
+                    aria-label="切换为悬浮窗口"
+                  >
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <rect x="2" y="7" width="15" height="15" rx="2" />
+                      <path d="M17 2h5v5" />
+                      <path d="M22 2l-7 7" />
+                    </svg>
+                  </button>
                 </div>
               </div>
               <div className="page-body">
@@ -1169,6 +1190,121 @@ export default function App() {
       </div>
 
       {/* ── Overlay panels ─────────────────────────────────────────────────── */}
+      {nav === "settings" && settingsFloat && (
+        <div className="settings-overlay" onClick={(e) => { if (e.target === e.currentTarget) setNav("chat"); }}>
+          <div className="settings-overlay-panel">
+            <button type="button" className="settings-overlay-close" onClick={() => setNav("chat")} aria-label="Close">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+            </button>
+            <button
+              type="button"
+              className="settings-overlay-embed-btn"
+              onClick={toggleSettingsFloat}
+              title="切换为内嵌模式"
+              aria-label="切换为内嵌模式"
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="2" y="2" width="20" height="20" rx="2" />
+                <path d="M9 2v20" />
+              </svg>
+            </button>
+            {settingsTab === "memory" && memoryHeaderAgent?.show && (
+              <div className="settings-overlay-agent-picker">
+                <AgentPicker
+                  className="header-agent-picker"
+                  agents={agents}
+                  value={memoryHeaderAgent.value}
+                  onChange={memoryHeaderAgent.onChange}
+                  allOption={memoryHeaderAgent.allOption}
+                  labelKey="memory.agents"
+                  menuAlign="end"
+                />
+              </div>
+            )}
+            <div className="settings-layout">
+              <nav className="settings-sidebar" aria-label="Settings">
+                {([
+                  { id: "preferences", label: "通用", Icon: Settings2 },
+                  { id: "preferences:appearance", label: "外观", Icon: Sparkles },
+                  { id: "preferences:conversation", label: "对话", Icon: MessageSquare },
+                  { id: "preferences:context", label: "上下文与压缩", Icon: Layers2 },
+                  { id: "providers", label: "模型配置", Icon: Cpu },
+                  { id: "tools", label: "工具", Icon: Wrench },
+                  { id: "memory", label: "记忆", Icon: Brain },
+                  { id: "models", label: "模型市场", Icon: Store },
+                  { id: "insights", label: "洞察", Icon: ChartPie },
+                  { id: "preferences:diagnostics", label: "诊断", Icon: ScrollText },
+                  { id: "preferences:about", label: "关于", Icon: Info },
+                ] as const).map((item) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    className={`settings-sidebar-item ${settingsTab === item.id ? "is-active" : ""}`}
+                    onClick={() => setSettingsTab(item.id as SettingsTabId)}
+                  >
+                    <item.Icon size={18} strokeWidth={1.6} aria-hidden />
+                    {item.label}
+                  </button>
+                ))}
+              </nav>
+              <div className="settings-content">
+                {settingsTab.startsWith("preferences") && (
+                  <PreferencesPanel
+                    section={settingsTab === "preferences" ? "general" : settingsTab.split(":")[1] as import("./components/settings/PreferencesPanel").PreferenceCategory}
+                    mode={mode}
+                    onChange={setMode}
+                    colorStyle={colorStyle}
+                    onColorStyleChange={setColorStyle}
+                    gradient={gradient}
+                    onGradientChange={setGradient}
+                    onBeginCustomGradient={beginGradientEdit}
+                    onPreviewGradient={previewGradient}
+                    onCommitCustomGradient={commitGradientEdit}
+                    onCancelCustomGradient={cancelGradientEdit}
+                    onReshuffleDynamic={reshuffleDynamic}
+                    tone={shellTone}
+                    chatDisplayPrefs={chatDisplayPrefs}
+                    onChatVerbosityChange={setVerbosity}
+                    onChatToggleChange={setToggle}
+                    activeSessionId={chat.sessionId ?? undefined}
+                  />
+                )}
+                {settingsTab === "tools" && (
+                  <ToolsPanel
+                    active={nav === "settings"}
+                    initialTab={toolsInitialTab}
+                    onInitialTabConsumed={() => setToolsInitialTab(null)}
+                  />
+                )}
+                {settingsTab === "evolution" && (
+                  <EvolutionModelsPanel active={nav === "settings"} tone={shellTone} />
+                )}
+                {settingsTab === "insights" && (
+                  <InsightsPanel active={nav === "settings"} />
+                )}
+                {settingsTab === "models" && (
+                  <ModelMarketPanel active={nav === "settings"} />
+                )}
+                {settingsTab === "providers" && (
+                  <ProvidersPanel
+                    active={nav === "settings"}
+                    onStateChange={syncProvidersFromState}
+                    tone={shellTone}
+                  />
+                )}
+                {settingsTab === "memory" && (
+                  <MemoryPanel
+                    onClose={() => setSettingsTab("preferences")}
+                    sessionId={chat.sessionId}
+                    onHeaderAgentPickerChange={setMemoryHeaderAgent}
+                  />
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {nav === "files" && (
         <div className="settings-overlay" onClick={(e) => { if (e.target === e.currentTarget) setNav("chat"); }}>
           <div className="settings-overlay-panel settings-overlay-panel--wide">

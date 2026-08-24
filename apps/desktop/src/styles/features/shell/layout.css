@@ -1229,6 +1229,28 @@ html[data-theme="dark"] .settings-overlay-panel {
   color: var(--ink);
 }
 
+.settings-overlay-embed-btn {
+  position: absolute;
+  top: 12px;
+  right: 44px;
+  z-index: 10;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ink-soft);
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  transition: background 0.12s, color 0.12s;
+}
+
+.settings-overlay-embed-btn:hover {
+  background: var(--glass);
+  color: var(--ink);
+}
+
 .settings-overlay-agent-picker {
   padding: 12px 48px 0 16px;
   display: flex;
