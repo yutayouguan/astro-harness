@@ -945,8 +945,8 @@ export default function App() {
                     aria-label="切换为悬浮窗口"
                   >
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                      <rect x="1" y="5" width="14" height="14" rx="2.5" opacity="0.45" />
-                      <rect x="9" y="5" width="14" height="14" rx="2.5" />
+                      <rect x="2" y="3" width="20" height="18" rx="2.5" opacity="0.4" />
+                      <rect x="12" y="11" width="9" height="8" rx="2" fill="currentColor" fillOpacity="0.15" />
                     </svg>
                   </button>
                 </div>
@@ -1205,7 +1205,7 @@ export default function App() {
             >
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                 <rect x="2" y="3" width="20" height="18" rx="2.5" />
-                <path d="M9 3v18" />
+                <rect x="3" y="11" width="9" height="8" rx="2" fill="currentColor" fillOpacity="0.15" />
               </svg>
             </button>
             {settingsTab === "memory" && memoryHeaderAgent?.show && (
