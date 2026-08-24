@@ -1419,16 +1419,44 @@ html[data-theme="dark"] .project-context-menu {
   color: var(--ink-soft);
 }
 
+.session-status-icon-awaiting {
+  color: var(--tone-amber, #d97706);
+  animation: session-status-pulse 1.6s ease-in-out infinite;
+}
+
+.session-status-icon-error {
+  color: var(--danger, #e11d48);
+}
+
 @keyframes session-status-spin {
   to {
     transform: rotate(360deg);
   }
 }
 
+@keyframes session-status-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.4;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .session-status-icon-spin {
+  .session-status-icon-spin,
+  .session-status-icon-awaiting {
     animation: none;
   }
+}
+
+.sidebar-session-item.is-awaiting .sidebar-session-title {
+  color: var(--tone-amber, #d97706);
+}
+
+.sidebar-session-item.is-errored .sidebar-session-title {
+  color: var(--danger, #e11d48);
 }
 
 .sidebar-session-item {

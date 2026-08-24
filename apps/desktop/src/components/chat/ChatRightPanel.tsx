@@ -54,6 +54,10 @@ type Props = {
   onOpenSkills: () => void;
   /** 正在流式输出的会话 id；无流式时为 null */
   streamingSessionId?: string | null;
+  /** 正在等待用户授权（HITL）的会话 id */
+  awaitingSessionId?: string | null;
+  /** 最近一次回合出错的会话 id */
+  errorSessionId?: string | null;
   /** 生成中的文件实时预览（preview Tab） */
   generatingPreview?: GeneratingPreview | null;
   /** 聊天消息列表（任务监控 Tab 使用） */
@@ -95,6 +99,8 @@ export default function ChatRightPanel({
   onOpenMemory,
   onOpenSkills,
   streamingSessionId = null,
+  awaitingSessionId = null,
+  errorSessionId = null,
   generatingPreview = null,
   messages = [],
   streaming = false,
@@ -212,6 +218,8 @@ export default function ChatRightPanel({
               <ChatSessionList
                 activeSessionId={sessionId}
                 streamingSessionId={streamingSessionId}
+                awaitingSessionId={awaitingSessionId}
+                errorSessionId={errorSessionId}
                 onOpenSession={onOpenSession}
                 onNewSession={onNewSession}
                 onNewAgent={onNewAgent}

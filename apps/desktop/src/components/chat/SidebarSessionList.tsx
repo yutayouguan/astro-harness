@@ -18,7 +18,17 @@ import {
 } from "lucide-react";
 import { subscribeSessionsChanged } from "../../lib/chat/sessionManagement";
 import type { RecentSessionDto } from "../../types";
-import SessionStatusIcon from "./SessionStatusIcon";
+import SessionStatusIcon, {
+  resolveSessionStatus,
+  type SessionActivityStatus,
+} from "./SessionStatusIcon";
+
+const STATUS_LABEL: Record<SessionActivityStatus, string> = {
+  idle: "已完成",
+  running: "生成中",
+  awaiting: "等待授权",
+  error: "出错",
+};
 
 const DEFAULT_VISIBLE_COUNT = 5;
 const STORAGE_KEY = "astro:sidebar-visible-sessions";
@@ -76,6 +86,10 @@ function historyToMarkdown(
 type Props = {
   activeSessionId: string | null;
   streamingSessionId?: string | null;
+  /** 正在等待用户授权（HITL）的会话 */
+  awaitingSessionId?: string | null;
+  /** 最近一次回合出错的会话 */
+  errorSessionId?: string | null;
   projectId: string;
   onOpenSession: (sessionId: string) => void;
   onDeleteCurrentSession?: () => void;
@@ -96,6 +110,8 @@ function relativeTime(iso: string | null): string {
 export default function SidebarSessionList({
   activeSessionId,
   streamingSessionId = null,
+  awaitingSessionId = null,
+  errorSessionId = null,
   projectId,
   onOpenSession,
   onDeleteCurrentSession,
@@ -315,7 +331,11 @@ export default function SidebarSessionList({
           key={s.sessionId}
           session={s}
           isActive={s.sessionId === activeSessionId}
-          inProgress={s.sessionId === streamingSessionId}
+          status={resolveSessionStatus(s.sessionId, {
+            streamingSessionId,
+            awaitingSessionId,
+            errorSessionId,
+          })}
           onOpen={() => onOpenSession(s.sessionId)}
           onContextMenu={(x, y) => setSessionMenu({ sessionId: s.sessionId, x, y })}
           onMoreClick={(x, y) => setSessionMenu({ sessionId: s.sessionId, x, y })}
@@ -379,7 +399,7 @@ export default function SidebarSessionList({
 function SessionItem({
   session: s,
   isActive,
-  inProgress,
+  status,
   onOpen,
   onContextMenu,
   onMoreClick,
@@ -388,7 +408,7 @@ function SessionItem({
 }: {
   session: RecentSessionDto;
   isActive: boolean;
-  inProgress: boolean;
+  status: SessionActivityStatus;
   onOpen: () => void;
   onContextMenu: (x: number, y: number) => void;
   onMoreClick: (x: number, y: number) => void;
@@ -411,12 +431,14 @@ function SessionItem({
 
   return (
     <div
-      className={`sidebar-session-item ${isActive ? "is-active" : ""}`}
+      className={`sidebar-session-item ${isActive ? "is-active" : ""} ${
+        status === "awaiting" ? "is-awaiting" : ""
+      } ${status === "error" ? "is-errored" : ""}`}
       onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); onContextMenu(e.clientX, e.clientY); }}
       onMouseEnter={handleMouseEnter}
     >
       <button type="button" className="sidebar-session-main" onClick={onOpen}>
-        <SessionStatusIcon inProgress={inProgress} />
+        <SessionStatusIcon status={status} label={STATUS_LABEL[status]} />
         <span className="sidebar-session-title-wrap">
           <span className="sidebar-session-title" ref={titleRef}>
             {s.summary || "未命名会话"}

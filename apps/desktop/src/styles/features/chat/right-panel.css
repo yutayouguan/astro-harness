@@ -558,6 +558,14 @@ html[data-theme="dark"] .chat-session-row.is-active {
   color: var(--tone-blue, #2563eb);
 }
 
+.chat-session-row.is-awaiting .chat-session-item strong {
+  color: var(--tone-amber, #d97706);
+}
+
+.chat-session-row.is-errored .chat-session-item strong {
+  color: var(--danger, #e11d48);
+}
+
 .chat-session-row.is-unread .chat-session-item strong {
   font-weight: 700;
 }

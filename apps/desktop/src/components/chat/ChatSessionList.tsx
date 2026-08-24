@@ -36,7 +36,7 @@ import type { RecentSessionDto } from "../../types";
 import AgentPicker from "../agents/AgentPicker";
 import ExpandableSearch from "../ui/ExpandableSearch";
 import EmptyIllustration from "../../illustrations/EmptyIllustration";
-import SessionStatusIcon from "./SessionStatusIcon";
+import SessionStatusIcon, { resolveSessionStatus } from "./SessionStatusIcon";
 
 type ChatHistoryExportDto = {
   messages: Array<{
@@ -138,6 +138,10 @@ type Props = {
   activeSessionId: string | null;
   /** 正在流式输出的会话；无流式时为 null */
   streamingSessionId?: string | null;
+  /** 正在等待用户授权（HITL）的会话 */
+  awaitingSessionId?: string | null;
+  /** 最近一次回合出错的会话 */
+  errorSessionId?: string | null;
   onOpenSession: (sessionId: string) => void;
   /** 新建空白会话 */
   onNewSession: () => void;
@@ -152,6 +156,8 @@ type Props = {
 export default function ChatSessionList({
   activeSessionId,
   streamingSessionId = null,
+  awaitingSessionId = null,
+  errorSessionId = null,
   onOpenSession,
   onNewSession,
   onNewAgent,
@@ -546,6 +552,11 @@ export default function ChatSessionList({
             const busy = busySessionId === s.sessionId;
             const menuOpen = menuSessionId === s.sessionId;
             const inProgress = streamingSessionId === s.sessionId;
+            const status = resolveSessionStatus(s.sessionId, {
+              streamingSessionId,
+              awaitingSessionId,
+              errorSessionId,
+            });
             const unread = !inProgress && isSessionUnread(s.sessionId);
             void unreadTick;
             const pinned = isPinned(s);
@@ -556,6 +567,8 @@ export default function ChatSessionList({
                   s.sessionId === activeSessionId ? "is-active" : ""
                 } ${menuOpen ? "is-menu-open" : ""} ${
                   inProgress ? "is-in-progress" : ""
+                } ${status === "awaiting" ? "is-awaiting" : ""} ${
+                  status === "error" ? "is-errored" : ""
                 } ${unread ? "is-unread" : ""}`}
               >
                 <button
@@ -568,7 +581,10 @@ export default function ChatSessionList({
                   }}
                   disabled={busy}
                 >
-                  <SessionStatusIcon inProgress={inProgress} />
+                  <SessionStatusIcon
+                    status={status}
+                    label={t(`sessions.status.${status}` as MessageKey)}
+                  />
                   <strong>
                     {title}
                     {pinned ? (

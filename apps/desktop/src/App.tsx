@@ -418,6 +418,11 @@ export default function App() {
     backendId: activeProvider?.backend_id,
   });
   const statusText = chat.statusDetail ?? t(`status.${chat.statusPhase}` as MessageKey);
+  // 会话列表状态指示只覆盖当前会话：后台会话没有可订阅的运行态。
+  const streamingSessionId = chat.streaming ? chat.sessionId : null;
+  const awaitingSessionId =
+    chat.sessionPendingInterrupts.length > 0 ? chat.sessionId : null;
+  const errorSessionId = chat.statusPhase === "error" ? chat.sessionId : null;
   // ── Thinking callbacks ────────────────────────────────────────────────────
   const onThinkingLevelChange = useCallback(
     (level: ThinkingLevel) => {
@@ -875,7 +880,9 @@ export default function App() {
                     {!collapsedProjects.has(proj.id) && (
                       <SidebarSessionList
                         activeSessionId={chat.sessionId}
-                        streamingSessionId={chat.streaming ? chat.sessionId : null}
+                        streamingSessionId={streamingSessionId}
+                        awaitingSessionId={awaitingSessionId}
+                        errorSessionId={errorSessionId}
                         projectId={proj.id}
                         onOpenSession={(sid) => { setActiveProjectId(proj.id); void openSessionFromFilespace(sid); }}
                         onDeleteCurrentSession={() => { void prepareDeleteCurrentSession(); void clearDeletedCurrentSession(); }}
@@ -1171,7 +1178,9 @@ export default function App() {
                       contextUsage={chat.contextUsage}
                       contextWindow={contextWindow}
                       generatingPreview={chat.generatingPreview}
-                      streamingSessionId={chat.streaming ? chat.sessionId : null}
+                      streamingSessionId={streamingSessionId}
+                      awaitingSessionId={awaitingSessionId}
+                      errorSessionId={errorSessionId}
                       onOpenSession={(id) => void openSessionFromFilespace(id)}
                       onNewSession={startNewChat}
                       onNewAgent={startNewAgent}
