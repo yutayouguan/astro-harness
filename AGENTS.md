@@ -161,6 +161,11 @@ ToolOrchestrator::run
 都不共享该 lease。结构化网络拒绝不进入文件系统 escalation；502/DNS/dial
 错误不是 policy denial。
 
+进程内 HTTP 工具（`web_search`、`web_fetch`）不走代理，但共用同一份 leaf profile
+的 `network` 域名规则：allow 命中即直接放行并把授权收窄到命中主机，deny 命中直接
+拒绝，未覆盖或 `network.enabled=false` 时退回一次性审批卡；profile 未定义仍 fail
+closed。本机/内网地址始终由 `assert_public_http_url` 在发请求时拦截。
+
 ### agent-core 模块组织
 
 `agent` crate 是中央运行时，8 个公开子模块，另有内部 `tasks` 生命周期模块：
