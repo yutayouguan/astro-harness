@@ -814,6 +814,7 @@ html[data-theme="dark"] .settings-sidebar-item.is-active {
   min-width: 0;
   overflow-y: auto;
   border-left: 1px solid color-mix(in srgb, var(--glass-edge) 40%, transparent);
+  padding: 20px 24px;
 }
 
 html[data-theme="dark"] .settings-content {
