@@ -6,6 +6,7 @@ use std::collections::{BTreeMap, BTreeSet};
 pub const READ_ONLY_PROFILE: &str = ":read-only";
 pub const WORKSPACE_PROFILE: &str = ":workspace";
 pub const DANGER_FULL_ACCESS_PROFILE: &str = ":danger-full-access";
+pub const CONTROLLED_NETWORK_PROFILE: &str = "astro-controlled-network";
 
 /// 旧 sandbox 配置与平台执行层使用的低层模式。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -294,12 +295,13 @@ pub struct SessionPermissions {
     pub approvals_reviewer: ApprovalsReviewer,
 }
 
-/// 桌面端权限选择器中的四个内置组合。
+/// 桌面端权限选择器中的内置组合。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum PermissionPreset {
     AskForApproval,
     ApproveForMe,
+    ControlledNetwork,
     ReadOnly,
     FullAccess,
 }
@@ -309,6 +311,7 @@ impl PermissionPreset {
         match self {
             Self::AskForApproval => SessionPermissions::ask_for_approval(),
             Self::ApproveForMe => SessionPermissions::approve_for_me(),
+            Self::ControlledNetwork => SessionPermissions::controlled_network(),
             Self::ReadOnly => SessionPermissions::read_only(),
             Self::FullAccess => SessionPermissions::full_access(),
         }
@@ -319,6 +322,8 @@ impl PermissionPreset {
             Some(Self::AskForApproval)
         } else if selection == &SessionPermissions::approve_for_me() {
             Some(Self::ApproveForMe)
+        } else if selection == &SessionPermissions::controlled_network() {
+            Some(Self::ControlledNetwork)
         } else if selection == &SessionPermissions::read_only() {
             Some(Self::ReadOnly)
         } else if selection == &SessionPermissions::full_access() {
@@ -347,6 +352,13 @@ impl SessionPermissions {
     pub fn approve_for_me() -> Self {
         Self {
             approvals_reviewer: ApprovalsReviewer::AutoReview,
+            ..Self::ask_for_approval()
+        }
+    }
+
+    pub fn controlled_network() -> Self {
+        Self {
+            profile_id: CONTROLLED_NETWORK_PROFILE.to_string(),
             ..Self::ask_for_approval()
         }
     }

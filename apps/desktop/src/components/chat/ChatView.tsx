@@ -28,6 +28,7 @@ import {
   File,
   FileVideo,
   GitBranch,
+  Globe2,
   Hand,
   Image,
   Infinity as InfinityIcon,
@@ -355,7 +356,12 @@ const MAX_ATTACHMENTS = 8;
 /** 图片内联 base64 上限（字节） */
 const MAX_INLINE_BYTES = 4 * 1024 * 1024;
 
-type PermissionPreset = "ask_for_approval" | "approve_for_me" | "read_only" | "full_access";
+type PermissionPreset =
+  | "ask_for_approval"
+  | "approve_for_me"
+  | "controlled_network"
+  | "read_only"
+  | "full_access";
 type PermissionSettings = {
   preset: string | null;
   sandboxHealth: { backend: string; status: "available" | "unavailable"; detail: string };
@@ -363,6 +369,7 @@ type PermissionSettings = {
 const PERMISSION_PRESETS: PermissionPreset[] = [
   "ask_for_approval",
   "approve_for_me",
+  "controlled_network",
   "read_only",
   "full_access",
 ];
@@ -944,6 +951,11 @@ export default function ChatView({
       label: t("chat.approval.approveForMe"),
       desc: t("chat.approval.desc.approveForMe"),
       Icon: ShieldCheck,
+    },
+    controlled_network: {
+      label: t("chat.approval.controlledNetwork"),
+      desc: t("chat.approval.desc.controlledNetwork"),
+      Icon: Globe2,
     },
     read_only: {
       label: t("chat.approval.readOnly"),

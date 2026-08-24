@@ -127,12 +127,11 @@ pub fn seatbelt_profile(policy: &SandboxPolicy) -> String {
             profile.push_str("(allow network-bind (local ip \"*:*\"))\n");
             profile.push_str("(allow network-inbound (local ip \"localhost:*\"))\n");
             profile.push_str("(allow network-outbound (remote ip \"localhost:*\"))\n");
-            if !managed_network.loopback_ports.is_empty() {
-                profile.push_str(
-                    "; allow DNS lookups while application traffic remains proxy-routed\n",
-                );
-                profile.push_str("(allow network-outbound (remote ip \"*:53\"))\n");
-            }
+        }
+        if !managed_network.loopback_ports.is_empty() {
+            profile
+                .push_str("; allow DNS lookups while application traffic remains proxy-routed\n");
+            profile.push_str("(allow network-outbound (remote ip \"*:53\"))\n");
         }
         for port in &managed_network.loopback_ports {
             profile.push_str(&format!(
@@ -188,13 +187,14 @@ mod tests {
         let profile = seatbelt_profile(&policy);
 
         assert!(profile.contains("(allow network-outbound (remote ip \"localhost:43117\"))"));
+        assert!(profile.contains("(allow network-outbound (remote ip \"*:53\"))"));
         assert!(!profile.contains("(allow network*)"));
         assert!(!profile.contains("localhost:*"));
         assert!(!profile.contains("network-bind"));
     }
 
     #[test]
-    fn local_binding_adds_loopback_rules_and_dns() {
+    fn local_binding_adds_loopback_rules() {
         let dir = tempfile::tempdir().unwrap();
         let policy = SandboxPolicy::new(SandboxMode::WorkspaceWrite, dir.path(), [], false)
             .unwrap()

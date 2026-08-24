@@ -161,6 +161,11 @@ ToolOrchestrator::run
 都不共享该 lease。结构化网络拒绝不进入文件系统 escalation；502/DNS/dial
 错误不是 policy denial。
 
+桌面端 `controlled_network` 预设写入保留的 `astro-controlled-network` profile：
+允许公网通配域名并启用 managed proxy，但保持 `allow_local_binding=false`，所以本机、
+私网与 metadata 地址仍被拦截。macOS managed sandbox 在存在 proxy lease 时自动允许
+DNS，不再要求用户通过 `allow_local_binding` 一并开放本地回环能力。
+
 进程内 HTTP 工具（`web_search`、`web_fetch`）不走代理，但共用同一份 leaf profile
 的 `network` 域名规则：allow 命中即直接放行并把授权收窄到命中主机，deny 命中直接
 拒绝，未覆盖或 `network.enabled=false` 时退回一次性审批卡；profile 未定义仍 fail

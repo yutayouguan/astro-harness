@@ -867,10 +867,42 @@ pub fn set_permission_preset(
 ) -> anyhow::Result<LoadedPermissionSettings> {
     let selection = preset.selection();
     let mut root = load_yaml_root(base)?;
-    ensure_mapping_path(&mut root, &["permissions"])?.insert(
-        serde_yaml::Value::String("default_profile".into()),
-        serde_yaml::Value::String(selection.profile_id.clone()),
-    );
+    {
+        let permissions = ensure_mapping_path(&mut root, &["permissions"])?;
+        permissions.insert(
+            serde_yaml::Value::String("default_profile".into()),
+            serde_yaml::Value::String(selection.profile_id.clone()),
+        );
+    }
+    if preset == PermissionPreset::ControlledNetwork {
+        let profile = types::PermissionProfile {
+            description: Some(
+                "Astro managed public network access; local and private addresses remain blocked"
+                    .to_string(),
+            ),
+            extends: Some(types::WORKSPACE_PROFILE.to_string()),
+            network: types::NetworkPolicy {
+                enabled: true,
+                domains: std::collections::BTreeMap::from([(
+                    "*".to_string(),
+                    types::NetworkAccess::Allow,
+                )]),
+                // DNS is supplied by the managed sandbox independently. Keep local
+                // binding disabled so wildcard public access cannot reach loopback.
+                allow_local_binding: false,
+                ..types::NetworkPolicy::default()
+            },
+            ..types::PermissionProfile::default()
+        };
+        ensure_mapping_path(&mut root, &["permissions", "profiles"])?.insert(
+            serde_yaml::Value::String(types::CONTROLLED_NETWORK_PROFILE.to_string()),
+            serde_yaml::to_value(profile)?,
+        );
+        ensure_mapping_path(&mut root, &["network_proxy"])?.insert(
+            serde_yaml::Value::String("enabled".into()),
+            serde_yaml::Value::Bool(true),
+        );
+    }
     {
         let top = ensure_mapping_path(&mut root, &[])?;
         top.insert(
@@ -899,7 +931,9 @@ pub fn set_permission_preset(
     let legacy_mode = match preset {
         PermissionPreset::ApproveForMe => "smart",
         PermissionPreset::FullAccess => "off",
-        PermissionPreset::AskForApproval | PermissionPreset::ReadOnly => "manual",
+        PermissionPreset::AskForApproval
+        | PermissionPreset::ControlledNetwork
+        | PermissionPreset::ReadOnly => "manual",
     };
     ensure_mapping_path(&mut root, &["approvals"])?.insert(
         serde_yaml::Value::String("mode".into()),
@@ -1976,6 +2010,17 @@ auxiliary:
         assert_eq!(loaded.selection, SessionPermissions::approve_for_me());
         assert_eq!(load_memory_config(dir.path()).memory_char_limit, 41);
         assert_eq!(load_approvals_config(dir.path()).mode, "smart");
+
+        let loaded =
+            set_permission_preset(dir.path(), PermissionPreset::ControlledNetwork).unwrap();
+        assert_eq!(loaded.selection, SessionPermissions::controlled_network());
+        assert!(loaded.network_proxy_enabled);
+        let network = &loaded.permissions.profiles[types::CONTROLLED_NETWORK_PROFILE].network;
+        assert!(network.enabled);
+        assert_eq!(network.domains.get("*"), Some(&types::NetworkAccess::Allow));
+        assert!(!network.allow_local_binding);
+        assert_eq!(load_approvals_config(dir.path()).mode, "manual");
+        assert_eq!(load_memory_config(dir.path()).memory_char_limit, 41);
 
         let loaded = set_permission_preset(dir.path(), PermissionPreset::FullAccess).unwrap();
         assert_eq!(loaded.selection, SessionPermissions::full_access());

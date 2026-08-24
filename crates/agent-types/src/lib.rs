@@ -48,8 +48,8 @@ pub use permissions::{
     is_builtin_profile, ApprovalPolicy, ApprovalsReviewer, FilesystemAccess, FilesystemPolicy,
     GrantScope, NetworkAccess, NetworkPolicy, PermissionCapability, PermissionPreset,
     PermissionProfile, PermissionProfileError, PermissionReason, PermissionRequest,
-    PermissionsConfig, SandboxMode, SessionPermissions, DANGER_FULL_ACCESS_PROFILE,
-    READ_ONLY_PROFILE, WORKSPACE_PROFILE,
+    PermissionsConfig, SandboxMode, SessionPermissions, CONTROLLED_NETWORK_PROFILE,
+    DANGER_FULL_ACCESS_PROFILE, READ_ONLY_PROFILE, WORKSPACE_PROFILE,
 };
 pub use sqlite::{delete_sqlite_files, open_wal, ExampleSqliteStore, SqliteStore};
 pub use title::sanitize_title;

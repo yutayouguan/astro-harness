@@ -670,6 +670,7 @@ fn permission_settings_dto() -> PermissionSettingsDto {
         match value {
             types::PermissionPreset::AskForApproval => "ask_for_approval",
             types::PermissionPreset::ApproveForMe => "approve_for_me",
+            types::PermissionPreset::ControlledNetwork => "controlled_network",
             types::PermissionPreset::ReadOnly => "read_only",
             types::PermissionPreset::FullAccess => "full_access",
         }
@@ -695,6 +696,7 @@ pub async fn set_permission_preset(
     let preset = match preset.trim().to_ascii_lowercase().as_str() {
         "ask_for_approval" => types::PermissionPreset::AskForApproval,
         "approve_for_me" => types::PermissionPreset::ApproveForMe,
+        "controlled_network" => types::PermissionPreset::ControlledNetwork,
         "read_only" => types::PermissionPreset::ReadOnly,
         "full_access" if confirmed => types::PermissionPreset::FullAccess,
         "full_access" => return Err("启用完全访问需要显式确认".to_string()),
