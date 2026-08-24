@@ -272,6 +272,7 @@ pub fn run() {
             commands::session::delete_project,
             commands::session::move_project,
             commands::session::assign_session_to_project,
+            commands::session::assign_session_to_project_if_unassigned,
             // — files —
             commands::files::list_files,
             commands::files::read_file,

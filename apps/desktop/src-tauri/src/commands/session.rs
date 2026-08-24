@@ -638,6 +638,18 @@ pub async fn assign_session_to_project(
         .map_err(|e| e.to_string())
 }
 
+/// 新会话自动归属项目；已有项目归属的会话不会被当前项目覆盖。
+#[tauri::command]
+pub async fn assign_session_to_project_if_unassigned(
+    session_id: String,
+    project_id: String,
+) -> Result<(), String> {
+    let store = open_sessions()?;
+    store
+        .assign_session_to_project_if_unassigned(&session_id, &project_id)
+        .map_err(|e| e.to_string())
+}
+
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------

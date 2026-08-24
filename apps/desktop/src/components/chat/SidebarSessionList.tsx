@@ -190,7 +190,7 @@ export default function SidebarSessionList({
     if (!activeSessionId || !projectId || !autoAssignActiveSession) return;
     void (async () => {
       try {
-        await invoke("assign_session_to_project", {
+        await invoke("assign_session_to_project_if_unassigned", {
           sessionId: activeSessionId,
           projectId,
         });

@@ -255,6 +255,30 @@ impl SessionStore {
         Ok(())
     }
 
+    /// 仅在会话尚未归属项目时建立关联；已有归属保持不变。
+    pub fn assign_session_to_project_if_unassigned(
+        &self,
+        session_id: &str,
+        project_id: &str,
+    ) -> Result<()> {
+        let changed = self.conn.execute(
+            "UPDATE sessions SET project_id = ?1
+             WHERE id = ?2 AND project_id IS NULL",
+            params![project_id, session_id],
+        )?;
+        if changed == 0 {
+            let exists: bool = self.conn.query_row(
+                "SELECT EXISTS(SELECT 1 FROM sessions WHERE id = ?1)",
+                params![session_id],
+                |row| row.get(0),
+            )?;
+            if !exists {
+                anyhow::bail!("assign_session_to_project_if_unassigned: session not found");
+            }
+        }
+        Ok(())
+    }
+
     /// 解除会话的项目关联。
     pub fn unassign_session_from_project(&self, session_id: &str) -> Result<()> {
         self.conn.execute(
@@ -349,6 +373,30 @@ mod tests {
         store.assign_session_to_project("s1", &p.id).unwrap();
         store.unassign_session_from_project("s1").unwrap();
         // 不应 panic
+    }
+
+    #[test]
+    fn assign_if_unassigned_preserves_existing_project() {
+        let store = open_memory();
+        let first = store.create_project("First", &["/first"]).unwrap();
+        let second = store.create_project("Second", &["/second"]).unwrap();
+        store.ensure_session("s1", "tauri").unwrap();
+
+        store
+            .assign_session_to_project_if_unassigned("s1", &first.id)
+            .unwrap();
+        store
+            .assign_session_to_project_if_unassigned("s1", &second.id)
+            .unwrap();
+
+        let first_sessions = store
+            .list_sessions_by_project(crate::store::SessionListFilter::Active, 10, &first.id)
+            .unwrap();
+        let second_sessions = store
+            .list_sessions_by_project(crate::store::SessionListFilter::Active, 10, &second.id)
+            .unwrap();
+        assert_eq!(first_sessions.len(), 1);
+        assert!(second_sessions.is_empty());
     }
 
     #[test]
