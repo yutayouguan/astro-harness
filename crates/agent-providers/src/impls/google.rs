@@ -254,9 +254,9 @@ fn to_interactions_input(messages: &[crate::types::Message]) -> (Option<String>,
                 ..
             } => {
                 steps.push(json!({
-                    "type": "function_call_output",
+                    "type": "function_result",
                     "call_id": tool_call_id,
-                    "output": content,
+                    "result": content,
                 }));
             }
             Message::Assistant { content } => {
