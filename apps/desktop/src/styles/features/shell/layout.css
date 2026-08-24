@@ -1647,6 +1647,17 @@ html[data-theme="dark"] .project-context-menu {
   margin-right: 2px;
 }
 
+.sidebar-session-time.is-status {
+  color: var(--tone, var(--tone-blue));
+  font-weight: 600;
+  opacity: 1;
+}
+
+.sidebar-session-item.is-awaiting .sidebar-session-time.is-status,
+.sidebar-session-item.is-errored .sidebar-session-time.is-status {
+  color: var(--danger, #e11d48);
+}
+
 /* hover 时隐藏时间，显示操作按钮 */
 .sidebar-session-item:hover .sidebar-session-time {
   display: none;

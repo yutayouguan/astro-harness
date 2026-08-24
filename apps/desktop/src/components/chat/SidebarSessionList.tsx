@@ -552,8 +552,12 @@ function SessionItem({
         {s.pinnedAt && (
           <Pin className="sidebar-session-pin-mark" size={10} strokeWidth={2} aria-hidden />
         )}
-        <span className="sidebar-session-time">
-          {relativeTime(s.createdAt, t)}
+        <span
+          className={`sidebar-session-time ${status !== "idle" ? "is-status" : ""}`}
+        >
+          {status === "idle"
+            ? relativeTime(s.createdAt, t)
+            : t(`sessions.status.${status}` as MessageKey)}
         </span>
       </button>
       <div className="sidebar-session-actions">
