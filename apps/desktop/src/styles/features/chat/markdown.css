@@ -681,10 +681,24 @@ html[data-theme="dark"] .composer-agent-validate-hint {
   border-color: color-mix(in srgb, var(--tone-green, #22c55e) 28%, transparent);
 }
 
-.composer-approval-pill.is-full-access {
+.composer-policy-pill.is-full-access {
   color: var(--tone-orange);
   border-color: color-mix(in srgb, var(--tone-orange) 28%, var(--glass-edge));
   background: color-mix(in srgb, var(--tone-orange-soft) 58%, transparent);
+}
+
+.composer-policy-separator {
+  color: var(--ink-mute);
+  opacity: 0.6;
+}
+
+.composer-policy-approval {
+  max-width: 7.5rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--ink-mute);
+  font-weight: 550;
 }
 
 .composer-mode-pill:disabled {
@@ -708,8 +722,21 @@ html[data-theme="dark"] .composer-agent-validate-hint {
   overflow: auto;
 }
 
-.composer-approval-menu {
+.composer-policy-menu {
   width: min(330px, calc(100vw - 24px));
+}
+
+.composer-policy-section-label {
+  padding: 0.35rem 0.65rem 0.25rem;
+  color: var(--ink-mute);
+  font-size: 0.68rem;
+  font-weight: 650;
+}
+
+.composer-policy-divider {
+  height: 1px;
+  margin: 0.35rem 0.5rem;
+  background: color-mix(in srgb, var(--glass-edge) 72%, transparent);
 }
 
 .composer-approval-item[data-approval-mode="full_access"] {
@@ -1082,6 +1109,14 @@ html[data-theme="light"] .composer-mode-menu {
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.29);
 }
 
+.composer-thinking-btn.is-on,
+.composer-thinking-btn.is-open {
+  color: var(--ink-soft);
+  background: color-mix(in srgb, var(--ink) 7%, transparent);
+  border-color: transparent;
+  box-shadow: none;
+}
+
 .composer-icon-btn.is-recording {
   color: #ef4444;
   background: color-mix(in srgb, #ef4444 12%, transparent);
@@ -1109,6 +1144,14 @@ html[data-theme="dark"] .composer-icon-btn.is-open {
     color-mix(in srgb, var(--tone-green, #4ade80) 18%, transparent);
   border-color: color-mix(in srgb, var(--tone-green, #4ade80) 32%, transparent);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+html[data-theme="dark"] .composer-thinking-btn.is-on,
+html[data-theme="dark"] .composer-thinking-btn.is-open {
+  color: var(--ink-soft);
+  background: rgba(255, 255, 255, 0.06);
+  border-color: transparent;
+  box-shadow: none;
 }
 
 .composer-icon-btn:disabled {
@@ -1940,7 +1983,7 @@ html[data-theme="dark"] .composer-mode-pill--ghost {
   box-shadow: none;
 }
 
-html[data-theme="dark"] .composer-approval-pill.is-full-access {
+html[data-theme="dark"] .composer-policy-pill.is-full-access {
   color: var(--tone-orange);
   background: color-mix(in srgb, var(--tone-orange) 12%, transparent);
   border-color: color-mix(in srgb, var(--tone-orange) 24%, transparent);

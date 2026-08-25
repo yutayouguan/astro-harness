@@ -14,7 +14,6 @@ import { createPortal } from "react-dom";
 import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { useClampPopover } from "../../hooks/ui/useClampPopover";
 import {
-  AtSign,
   Bot,
   ChartPie,
   Check,
@@ -45,7 +44,6 @@ import {
   SendHorizontal,
   ShieldAlert,
   ShieldCheck,
-  Slash,
   Square,
   Trash2,
   Volume2,
@@ -704,14 +702,11 @@ export default function ChatView({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const modeMenuRef = useRef<HTMLDivElement>(null);
   const modeMenuPanelRef = useRef<HTMLDivElement>(null);
-  const approvalMenuRef = useRef<HTMLDivElement>(null);
-  const approvalMenuPanelRef = useRef<HTMLDivElement>(null);
   const queueMenuRef = useRef<HTMLDivElement>(null);
   const approvalRequestIdRef = useRef(0);
   const mcpWrapRef = useRef<HTMLDivElement>(null);
   const contextWrapRef = useRef<HTMLDivElement>(null);
   const [modeMenuOpen, setModeMenuOpen] = useState(false);
-  const [approvalMenuOpen, setApprovalMenuOpen] = useState(false);
   const [approvalMode, setApprovalMode] = useState<PermissionPreset>("ask_for_approval");
   const [sandboxHealth, setSandboxHealth] = useState<PermissionSettings["sandboxHealth"] | null>(null);
   const [approvalBusy, setApprovalBusy] = useState(false);
@@ -748,6 +743,10 @@ export default function ChatView({
   const [agentCreateMissing, setAgentCreateMissing] = useState<number[]>([]);
   const { servers: mcpServers } = useMcpTools(agentId);
   const mcpHasEnabled = mcpServers.some((s) => s.enabled);
+  const showContextControl =
+    contextPopoverOpen ||
+    contextUsage?.recommendCompact === true ||
+    (contextUsagePercent ?? 0) >= 70;
 
   const loadMentionSources = useCallback(async () => {
     try {
@@ -851,6 +850,7 @@ export default function ChatView({
 
   useEffect(() => {
     if (!modeMenuOpen) return;
+    void refreshApprovalMode();
     const onDoc = (ev: MouseEvent) => {
       const target = ev.target as Node;
       if (modeMenuRef.current?.contains(target)) return;
@@ -859,20 +859,7 @@ export default function ChatView({
     };
     document.addEventListener("mousedown", onDoc);
     return () => document.removeEventListener("mousedown", onDoc);
-  }, [modeMenuOpen]);
-
-  useEffect(() => {
-    if (!approvalMenuOpen) return;
-    void refreshApprovalMode();
-    const onDoc = (ev: MouseEvent) => {
-      const target = ev.target as Node;
-      if (approvalMenuRef.current?.contains(target)) return;
-      if (approvalMenuPanelRef.current?.contains(target)) return;
-      setApprovalMenuOpen(false);
-    };
-    document.addEventListener("mousedown", onDoc);
-    return () => document.removeEventListener("mousedown", onDoc);
-  }, [approvalMenuOpen, refreshApprovalMode]);
+  }, [modeMenuOpen, refreshApprovalMode]);
 
   useEffect(() => {
     if (!queueMenuId) return;
@@ -901,20 +888,7 @@ export default function ChatView({
     gap: 8,
     maxHeightCap: 320,
     minMaxHeight: 96,
-    sizeKey: chatMode,
-  });
-
-  const approvalMenuStyle = useClampPopover({
-    open: approvalMenuOpen,
-    anchorRef: approvalMenuRef,
-    popoverRef: approvalMenuPanelRef,
-    mode: "fixed",
-    preferAlign: "start",
-    placement: "above",
-    gap: 8,
-    maxHeightCap: 320,
-    minMaxHeight: 96,
-    sizeKey: approvalMode,
+    sizeKey: `${chatMode}:${approvalMode}`,
   });
 
   const modeMeta = useMemo(() => {
@@ -971,10 +945,10 @@ export default function ChatView({
 
   const changeApprovalMode = useCallback(async (next: PermissionPreset) => {
     if (approvalBusy || next === approvalMode) {
-      setApprovalMenuOpen(false);
+      setModeMenuOpen(false);
       return;
     }
-    setApprovalMenuOpen(false);
+    setModeMenuOpen(false);
     let confirmed = false;
     if (next === "full_access") {
       const approved = await confirm({
@@ -1057,6 +1031,9 @@ export default function ChatView({
       return { id: level, level, title, description };
     });
   }, [t, reasoningMeta]);
+  const thinkingLevelLabel =
+    thinkingItems.find((item) => item.level === thinkingPrefs.level)?.title ??
+    t("chat.thinkingLength");
 
   const slashItems: PaletteItem[] = useMemo(() => {
     return buildSlashPaletteEntries(skills).map((e) => ({
@@ -1136,7 +1113,6 @@ export default function ChatView({
   const openThinkingPalette = useCallback(() => {
     setMcpOpen(false);
     setModeMenuOpen(false);
-    setApprovalMenuOpen(false);
     setContextPopoverOpen(false);
     setPaletteKind((k) => (k === "thinking" ? null : "thinking"));
     setPaletteQuery("");
@@ -2623,20 +2599,16 @@ export default function ChatView({
               <div className="composer-mode" ref={modeMenuRef}>
                 <button
                   type="button"
-                  className={`composer-mode-pill ${modeMenuOpen ? "is-open" : ""}`}
-                  disabled={modeSwitchLocked}
-                  aria-haspopup="listbox"
+                  className={`composer-mode-pill composer-policy-pill ${modeMenuOpen ? "is-open" : ""} ${approvalMode === "full_access" ? "is-full-access" : ""}`.trim()}
+                  disabled={approvalBusy}
+                  aria-haspopup="menu"
                   aria-expanded={modeMenuOpen}
-                  aria-label={t("chat.modeMenu")}
-                  title={
-                    modeSwitchLocked
-                      ? t("chat.modeMenu")
-                      : `${modeMeta[chatMode].label} — ${modeMeta[chatMode].desc}`
-                  }
+                  aria-label={`${t("chat.modeMenu")} · ${t("chat.approval.menu")}`}
+                  title={`${modeMeta[chatMode].label} · ${approvalMeta[approvalMode].label}`}
                   onClick={() => {
                     setMcpOpen(false);
                     setContextPopoverOpen(false);
-                    setApprovalMenuOpen(false);
+                    setPaletteKind(null);
                     setModeMenuOpen((o) => !o);
                   }}
                 >
@@ -2647,6 +2619,10 @@ export default function ChatView({
                       <>
                         <Icon size={15} strokeWidth={2.2} />
                         <span>{Meta.label}</span>
+                        <span className="composer-policy-separator" aria-hidden>·</span>
+                        <span className="composer-policy-approval">
+                          {approvalMeta[approvalMode].label}
+                        </span>
                         {(chatMode === "plan" || chatMode === "ask") && (
                           <span className="composer-mode-readonly">
                             {t("chat.mode.readonlyBadge")}
@@ -2661,10 +2637,13 @@ export default function ChatView({
                   ? createPortal(
                       <div
                         ref={modeMenuPanelRef}
-                        className="composer-mode-menu"
-                        role="listbox"
+                        className="composer-mode-menu composer-policy-menu"
+                        role="menu"
                         style={modeMenuStyle ?? { visibility: "hidden" }}
                       >
+                        <div className="composer-policy-section-label">
+                          {t("chat.modeMenu")}
+                        </div>
                         {CHAT_MODES.map((mode) => {
                           const Meta = modeMeta[mode];
                           const Icon = Meta.Icon;
@@ -2673,8 +2652,9 @@ export default function ChatView({
                             <button
                               key={mode}
                               type="button"
-                              role="option"
-                              aria-selected={selected}
+                              role="menuitemradio"
+                              aria-checked={selected}
+                              disabled={modeSwitchLocked}
                               className={`composer-mode-item ${selected ? "is-selected" : ""}`}
                               onClick={() => {
                                 onChatModeChange(mode);
@@ -2692,50 +2672,10 @@ export default function ChatView({
                             </button>
                           );
                         })}
-                      </div>,
-                      document.body,
-                    )
-                  : null}
-              </div>
-
-              <div className="composer-mode" ref={approvalMenuRef}>
-                <button
-                  type="button"
-                  className={`composer-mode-pill composer-approval-pill ${approvalMenuOpen ? "is-open" : ""} ${approvalMode === "full_access" ? "is-full-access" : ""}`.trim()}
-                  disabled={approvalBusy}
-                  aria-haspopup="listbox"
-                  aria-expanded={approvalMenuOpen}
-                  aria-label={t("chat.approval.menu")}
-                  title={`${approvalMeta[approvalMode].label} — ${approvalMeta[approvalMode].desc}`}
-                  onClick={() => {
-                    setModeMenuOpen(false);
-                    setMcpOpen(false);
-                    setContextPopoverOpen(false);
-                    setPaletteKind(null);
-                    setApprovalMenuOpen((open) => !open);
-                  }}
-                >
-                  {(() => {
-                    const Meta = approvalMeta[approvalMode];
-                    const Icon = Meta.Icon;
-                    return (
-                      <>
-                        <Icon size={14} strokeWidth={2.1} />
-                        <span>{Meta.label}</span>
-                        <ChevronDown size={14} strokeWidth={2} />
-                      </>
-                    );
-                  })()}
-                </button>
-                {approvalMenuOpen && typeof document !== "undefined"
-                  ? createPortal(
-                      <div
-                        ref={approvalMenuPanelRef}
-                        className="composer-mode-menu composer-approval-menu"
-                        role="listbox"
-                        aria-label={t("chat.approval.menu")}
-                        style={approvalMenuStyle ?? { visibility: "hidden" }}
-                      >
+                        <div className="composer-policy-divider" />
+                        <div className="composer-policy-section-label">
+                          {t("chat.approval.menu")}
+                        </div>
                         {PERMISSION_PRESETS.map((mode) => {
                           const Meta = approvalMeta[mode];
                           const Icon = Meta.Icon;
@@ -2744,8 +2684,8 @@ export default function ChatView({
                             <button
                               key={mode}
                               type="button"
-                              role="option"
-                              aria-selected={selected}
+                              role="menuitemradio"
+                              aria-checked={selected}
                               data-approval-mode={mode}
                               className={`composer-mode-item composer-approval-item ${selected ? "is-selected" : ""}`}
                               onClick={() => void changeApprovalMode(mode)}
@@ -2783,33 +2723,16 @@ export default function ChatView({
               {showThinkingControls ? (
                 <button
                   type="button"
-                  className={`composer-mode-pill composer-mode-pill--ghost ${thinkingPrefs.level !== "off" ? "is-on" : ""
-                    } ${paletteKind === "thinking" ? "is-open" : ""}`}
+                  className={`composer-icon-btn composer-thinking-btn ${
+                    thinkingPrefs.level !== "off" ? "is-on" : ""
+                  } ${paletteKind === "thinking" ? "is-open" : ""}`}
                   onClick={openThinkingPalette}
                   disabled={streaming}
-                  title={t("chat.thinkingLength")}
-                  aria-label={t("chat.thinkingLength")}
+                  title={`${t("chat.thinkingLength")} · ${thinkingLevelLabel}`}
+                  aria-label={`${t("chat.thinkingLength")} · ${thinkingLevelLabel}`}
                   aria-pressed={thinkingPrefs.level !== "off"}
                 >
-                  <Lightbulb size={14} strokeWidth={2} />
-                  <span>
-                    {thinkingPrefs.level === "off"
-                      ? t("chat.thinkLevelOff")
-                      : thinkingPrefs.level === "none"
-                        ? t("chat.thinkLevelNone")
-                        : thinkingPrefs.level === "minimal"
-                          ? t("chat.thinkLevelMinimal")
-                          : thinkingPrefs.level === "low"
-                            ? t("chat.thinkLevelLow")
-                            : thinkingPrefs.level === "medium"
-                              ? t("chat.thinkLevelMedium")
-                              : thinkingPrefs.level === "xhigh"
-                                ? t("chat.thinkLevelXhigh")
-                                : thinkingPrefs.level === "max"
-                                  ? t("chat.thinkLevelMax")
-                                  : t("chat.thinkLevelHigh")}
-                  </span>
-                  <ChevronDown size={13} strokeWidth={2} />
+                  <Lightbulb size={17} strokeWidth={2} />
                 </button>
               ) : null}
 
@@ -2821,7 +2744,7 @@ export default function ChatView({
                 aria-expanded={subagentsOpen}
                 onClick={() => {
                   setMcpOpen(false);
-                  setApprovalMenuOpen(false);
+                  setModeMenuOpen(false);
                   setContextPopoverOpen(false);
                   setPaletteKind(null);
                   setSelectedSubagentPath(null);
@@ -2843,7 +2766,6 @@ export default function ChatView({
                   aria-expanded={mcpOpen}
                   onClick={() => {
                     setModeMenuOpen(false);
-                    setApprovalMenuOpen(false);
                     setPaletteKind(null);
                     setContextPopoverOpen(false);
                     setMcpOpen((v) => !v);
@@ -2860,64 +2782,11 @@ export default function ChatView({
                 />
               </div>
 
-              <button
-                type="button"
-                className={`composer-icon-btn ${paletteKind === "mention" ? "is-open" : ""
-                  }`}
-                disabled={streaming}
-                title={t("chat.mentionTitle")}
-                aria-label={t("chat.mentionTitle")}
-                onClick={() => {
-                  setMcpOpen(false);
-                  setApprovalMenuOpen(false);
-                  setContextPopoverOpen(false);
-                  const el = textareaRef.current;
-                  const caret = el?.selectionStart ?? input.length;
-                  const next = `${input.slice(0, caret)}@${input.slice(caret)}`;
-                  onInputChange(next);
-                  setTriggerStart(caret);
-                  setPaletteKind("mention");
-                  setPaletteQuery("");
-                  setPaletteIndex(0);
-                  requestAnimationFrame(() => {
-                    el?.focus();
-                    el?.setSelectionRange(caret + 1, caret + 1);
-                  });
-                }}
-              >
-                <AtSign size={17} strokeWidth={2} />
-              </button>
-              <button
-                type="button"
-                className={`composer-icon-btn ${paletteKind === "slash" ? "is-open" : ""
-                  }`}
-                disabled={streaming}
-                title={t("chat.slashTitle")}
-                aria-label={t("chat.slashTitle")}
-                onClick={() => {
-                  setMcpOpen(false);
-                  setApprovalMenuOpen(false);
-                  setContextPopoverOpen(false);
-                  const el = textareaRef.current;
-                  const caret = el?.selectionStart ?? input.length;
-                  const next = `${input.slice(0, caret)}/${input.slice(caret)}`;
-                  onInputChange(next);
-                  setTriggerStart(caret);
-                  setPaletteKind("slash");
-                  setPaletteQuery("");
-                  setPaletteIndex(0);
-                  requestAnimationFrame(() => {
-                    el?.focus();
-                    el?.setSelectionRange(caret + 1, caret + 1);
-                  });
-                }}
-              >
-                <Slash size={17} strokeWidth={2} />
-              </button>
             </div>
 
             <div className="composer-bar-right">
-              <div className="composer-context-wrap" ref={contextWrapRef}>
+              {showContextControl ? (
+                <div className="composer-context-wrap" ref={contextWrapRef}>
                 <button
                   type="button"
                   className={`composer-icon-btn composer-context-btn ${
@@ -2933,7 +2802,6 @@ export default function ChatView({
                   aria-expanded={contextPopoverOpen}
                   onClick={() => {
                     setModeMenuOpen(false);
-                    setApprovalMenuOpen(false);
                     setMcpOpen(false);
                     setPaletteKind(null);
                     setContextPopoverOpen((v) => !v);
@@ -2957,7 +2825,8 @@ export default function ChatView({
                     onOpenContext();
                   }}
                 />
-              </div>
+                </div>
+              ) : null}
               <button
                 type="button"
                 className="composer-icon-btn"
