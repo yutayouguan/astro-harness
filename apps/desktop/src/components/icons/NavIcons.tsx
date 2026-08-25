@@ -119,9 +119,10 @@ export function IconChat(props: IconProps) {
   return (
     <NavIconBase {...props}>
       <path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z" />
-      <path className="nav-icon-cutout" d="M8 12h.01" />
-      <path className="nav-icon-cutout" d="M12 12h.01" />
-      <path className="nav-icon-cutout" d="M16 12h.01" />
+      {/* v.01 撑开包围盒：零高包围盒会让渐变描边整条不渲染 */}
+      <path className="nav-icon-cutout" d="M8 12h.01v.01" />
+      <path className="nav-icon-cutout" d="M12 12h.01v.01" />
+      <path className="nav-icon-cutout" d="M16 12h.01v.01" />
     </NavIconBase>
   );
 }
@@ -216,22 +217,19 @@ export function IconPlugin(props: IconProps) {
   return (
     <NavIconBase {...props}>
       <circle cx="12" cy="12" r="9" />
-      <path className="nav-icon-cutout" d="M9.7 7.9v2.3" />
-      <path className="nav-icon-cutout" d="M14.3 7.9v2.3" />
-      <path className="nav-icon-cutout" d="M8.5 10.4h7v1.9a3.5 3.5 0 0 1-7 0z" />
-      <path className="nav-icon-cutout" d="M12 15.8v2.1" />
+      {/* 插脚与电线合并进带宽度的路径：渐变描边对零宽包围盒不渲染 */}
+      <path className="nav-icon-cutout" d="M9.7 7.9v2.3M14.3 7.9v2.3" />
+      <path className="nav-icon-cutout" d="M8.5 10.4h7v1.9a3.5 3.5 0 0 1-7 0zM12 15.8v2.1" />
     </NavIconBase>
   );
 }
 
-/** 定时任务 — 闹钟：表盘 + 铃脚，指针在选中时变透镜镂空 */
+/** 定时任务 — 时钟：表盘 + 指针，指针在选中时变透镜镂空 */
 export function IconCron(props: IconProps) {
   return (
     <NavIconBase {...props}>
-      <circle cx="12" cy="13.5" r="7.6" />
-      <path className="nav-icon-stroke" d="M8.4 3.5 6.1 5.9" />
-      <path className="nav-icon-stroke" d="M15.6 3.5 17.9 5.9" />
-      <path className="nav-icon-cutout" d="M12 9.8v3.9h3.1" />
+      <circle cx="12" cy="12" r="8.6" />
+      <path className="nav-icon-cutout" d="M12 7.6V12h3.4" />
     </NavIconBase>
   );
 }
