@@ -669,6 +669,8 @@ export default function App() {
   // ── Layout helpers ────────────────────────────────────────────────────────
   const meta = PAGE_META["chat"];
   const ActiveIcon = IconChat;
+  const singleProject = projects.length === 1 ? projects[0] : null;
+  const showHeaderStatus = chat.statusPhase !== "ready";
 
   // ── JSX ───────────────────────────────────────────────────────────────────
   return (
@@ -800,19 +802,22 @@ export default function App() {
                     onChange={setSessionQuery}
                     placeholderKey="chat.rightPanel.searchSessions"
                     className="sidebar-session-search"
-                  />
-                  <button
-                    type="button"
-                    className={`sidebar-session-filter-btn ${sessionListKind === "archived" ? "is-on" : ""}`}
-                    title={sessionListKind === "archived" ? t("sessions.active") : t("sessions.archived")}
-                    aria-label={sessionListKind === "archived" ? t("sessions.active") : t("sessions.archived")}
-                    aria-pressed={sessionListKind === "archived"}
-                    onClick={() =>
-                      setSessionListKind((kind) => (kind === "archived" ? "active" : "archived"))
+                    forceOpen={sessionListKind === "archived"}
+                    trailingAction={
+                      <button
+                        type="button"
+                        className={`sidebar-session-filter-btn ${sessionListKind === "archived" ? "is-on" : ""}`}
+                        title={sessionListKind === "archived" ? t("sessions.active") : t("sessions.archived")}
+                        aria-label={sessionListKind === "archived" ? t("sessions.active") : t("sessions.archived")}
+                        aria-pressed={sessionListKind === "archived"}
+                        onClick={() =>
+                          setSessionListKind((kind) => (kind === "archived" ? "active" : "archived"))
+                        }
+                      >
+                        <Archive size={13} strokeWidth={1.8} aria-hidden />
+                      </button>
                     }
-                  >
-                    <Archive size={13} strokeWidth={1.8} aria-hidden />
-                  </button>
+                  />
                 </div>
                 <div className="sidebar-section-header">
                   <span className="sidebar-section-title">
@@ -861,6 +866,30 @@ export default function App() {
                     onPrepareDeleteCurrentSession={prepareDeleteCurrentSession}
                     onClearDeletedCurrentSession={clearDeletedCurrentSession}
                   />
+                ) : singleProject ? (
+                  <div
+                    className="sidebar-project sidebar-project--flat"
+                    onContextMenu={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      setProjectMenu({ ...singleProject, x: e.clientX, y: e.clientY });
+                    }}
+                  >
+                    <SidebarSessionList
+                      activeSessionId={chat.sessionId}
+                      sessionStatuses={sessionStatuses}
+                      projectId={singleProject.id}
+                      query=""
+                      listKind={sessionListKind}
+                      autoAssignActiveSession
+                      onOpenSession={(sid) => {
+                        setActiveProjectId(singleProject.id);
+                        void openSessionFromFilespace(sid);
+                      }}
+                      onPrepareDeleteCurrentSession={prepareDeleteCurrentSession}
+                      onClearDeletedCurrentSession={clearDeletedCurrentSession}
+                    />
+                  </div>
                 ) : projects.map((proj) => (
                   <div
                     key={proj.id}
@@ -1090,40 +1119,40 @@ export default function App() {
                     <div className="page-title-text">
                       <h1 className="content-title" data-tone={shellTone}>
                         <span className="content-title-main">{t(meta.titleKey)}</span>
-                        <span className="content-sub-sep" aria-hidden>
-                          ·
-                        </span>
-                        <span className="content-sub">{t(meta.subKey)}</span>
                       </h1>
                     </div>
                   </div>
                 </div>
                 <div className="header-actions">
-                  <span className="status-chip">
-                    <span className={`status-dot ${chat.status}`} />
-                    {activeProvider?.display_name ?? t("status.none")} · {statusText}
-                  </span>
-                  {showsHeaderAgentPicker(nav) && (
-                    <AgentPicker
-                      className="header-agent-picker"
-                      agents={agents}
-                      value={activeAgentId}
-                      onChange={(id) => {
-                        void setActiveAgent(id).catch((e) => {
-                          console.warn("set_active_agent failed", e);
-                        });
-                      }}
-                      onCreateNew={startNewAgent}
-                      menuAlign="end"
-                    />
+                  {showHeaderStatus && (
+                    <span className="status-chip status-chip--transient">
+                      <span className={`status-dot ${chat.status}`} />
+                      {statusText}
+                    </span>
                   )}
-                  <ModelPicker
-                    providers={providers}
-                    value={activeProviderId}
-                    onChange={(id, model) => void onChatModelChange(id, model)}
-                    onActivePrefsChange={syncComposerFromModelPrefs}
-                    disabled={chat.streaming}
-                  />
+                  <div className="header-identity-picker">
+                    {showsHeaderAgentPicker(nav) && (
+                      <AgentPicker
+                        className="header-agent-picker"
+                        agents={agents}
+                        value={activeAgentId}
+                        onChange={(id) => {
+                          void setActiveAgent(id).catch((e) => {
+                            console.warn("set_active_agent failed", e);
+                          });
+                        }}
+                        onCreateNew={startNewAgent}
+                        menuAlign="end"
+                      />
+                    )}
+                    <ModelPicker
+                      providers={providers}
+                      value={activeProviderId}
+                      onChange={(id, model) => void onChatModelChange(id, model)}
+                      onActivePrefsChange={syncComposerFromModelPrefs}
+                      disabled={chat.streaming}
+                    />
+                  </div>
                   <div className="chat-header-tools">
                     <button
                       type="button"

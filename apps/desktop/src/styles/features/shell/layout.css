@@ -964,6 +964,10 @@ html[data-theme="dark"] .settings-content {
   padding: 0 0 0 12px;
 }
 
+.sidebar-project--flat > .sidebar-sessions {
+  padding-left: 0;
+}
+
 .sidebar-session-new {
   display: flex;
   align-items: center;
@@ -1014,6 +1018,13 @@ html[data-theme="dark"] .settings-content {
   width: 100%;
   padding: 0 6px;
   background: color-mix(in srgb, var(--tone, #64748b) 8%, transparent);
+}
+
+.sidebar-session-search-bar .expandable-search-field > .sidebar-session-filter-btn {
+  flex: 0 0 auto;
+  width: 22px;
+  height: 22px;
+  border-radius: 5px;
 }
 
 .sidebar-session-search-bar .expandable-search-input {
