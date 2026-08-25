@@ -785,7 +785,10 @@ export default function App() {
                 </div>
               </div>
               <div className="sidebar-projects">
-                <div className="sidebar-session-search-bar">
+                <div className="sidebar-section-header">
+                  <span className="sidebar-section-title">
+                    {searchingSessions ? "搜索结果" : "项目"}
+                  </span>
                   <ExpandableSearch
                     value={sessionQuery}
                     onChange={setSessionQuery}
@@ -807,11 +810,6 @@ export default function App() {
                       </button>
                     }
                   />
-                </div>
-                <div className="sidebar-section-header">
-                  <span className="sidebar-section-title">
-                    {searchingSessions ? "搜索结果" : "项目"}
-                  </span>
                   <button
                     type="button"
                     className="sidebar-add-btn"

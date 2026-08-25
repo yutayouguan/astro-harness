@@ -847,17 +847,27 @@ html[data-theme="dark"] .settings-content {
 .sidebar-section-header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  gap: 2px;
   padding: 6px 8px 4px;
 }
 
 .sidebar-section-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-size: 11px;
   font-weight: 650;
   color: var(--ink-mute);
   opacity: 0.7;
   text-transform: uppercase;
   letter-spacing: 0.04em;
+}
+
+/* 搜索展开时让出整行，避免窄侧栏里标题与输入框互相挤压 */
+.sidebar-section-header:has(.expandable-search.is-open) .sidebar-section-title {
+  display: none;
 }
 
 .sidebar-add-btn {
@@ -985,50 +995,47 @@ html[data-theme="dark"] .settings-content {
 }
 
 /* 项目区顶部：跨项目会话搜索 + 归档视图切换 */
-.sidebar-session-search-bar {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  padding: 2px 4px 6px;
-}
-
-.sidebar-session-search-bar .sidebar-session-search {
+.sidebar-session-search {
   flex: 0 0 auto;
 }
 
-.sidebar-session-search-bar:has(.expandable-search.is-open) .sidebar-session-search {
+.sidebar-session-search.is-open {
   flex: 1 1 auto;
   min-width: 0;
 }
 
-.sidebar-session-search-bar .expandable-search-btn,
-.sidebar-session-search-bar .expandable-search-field {
-  height: 26px;
-  border-radius: 7px;
+.sidebar-session-search .expandable-search-btn,
+.sidebar-session-search .expandable-search-field {
+  height: 22px;
+  border-radius: 6px;
   border: none;
   background: transparent;
   color: var(--ink-mute);
 }
 
-.sidebar-session-search-bar .expandable-search-field {
+.sidebar-session-search .expandable-search-btn {
+  width: 22px;
+}
+
+.sidebar-session-search .expandable-search-field {
   width: 100%;
-  padding: 0 6px;
+  padding: 0 5px;
   background: color-mix(in srgb, var(--tone, #64748b) 8%, transparent);
 }
 
-.sidebar-session-search-bar .expandable-search-field > .sidebar-session-filter-btn {
+.sidebar-session-search .expandable-search-field > .sidebar-session-filter-btn {
   flex: 0 0 auto;
-  width: 22px;
-  height: 22px;
+  width: 18px;
+  height: 18px;
   border-radius: 5px;
 }
 
-.sidebar-session-search-bar .expandable-search-input {
+.sidebar-session-search .expandable-search-input {
   font-size: 12px;
   min-width: 0;
 }
 
-.sidebar-session-search-bar .expandable-search-btn:hover {
+.sidebar-session-search .expandable-search-btn:hover {
   background: color-mix(in srgb, var(--tone, #64748b) 14%, transparent);
   color: var(--ink);
 }
@@ -1111,7 +1118,8 @@ html[data-theme="dark"] .settings-content {
 }
 
 .sidebar:not(.is-labels) .sidebar-sessions,
-.sidebar:not(.is-labels) .sidebar-session-search-bar {
+/* 图标模式没有横向空间承载输入框 */
+.sidebar:not(.is-labels) .sidebar-session-search {
   display: none;
 }
 
