@@ -37,6 +37,7 @@ import {
 import { useAnchoredMenu } from "../../hooks/ui/useAnchoredMenu";
 import { useConfirm } from "../../hooks/ui/DialogContext";
 import { useI18n } from "../../i18n/LocaleContext";
+import type { MessageKey } from "../../i18n/messages";
 import { formatScheduleLabel } from "../../lib/cron/cronSchedule";
 import { mapHistoryMessages } from "../../lib/chat/mapHistoryMessages";
 import { useActiveAgent } from "../../hooks/app/useActiveAgent";
@@ -56,82 +57,93 @@ import { SelectMenu } from "../ui/SelectMenu";
 import { EmptyIllustration } from "../../illustrations";
 
 type CronTemplate = {
+  id: string;
   icon: LucideIcon;
-  title: string;
-  desc: string;
-  task: string;
+  titleKey: MessageKey;
+  descKey: MessageKey;
+  taskKey: MessageKey;
   schedule: string;
 };
 
 const CRON_TEMPLATES: CronTemplate[] = [
   {
+    id: "news",
     icon: Newspaper,
-    title: "每日 AI 新闻推送",
-    desc: "关注当天 AI 领域的重要动态",
-    task: "请搜索并汇总今天 AI 领域最重要的 3-5 条新闻，包括大模型发布、重要论文、行业动态等。用简洁的中文摘要呈现，每条附上关键要点。",
+    titleKey: "cron.tpl.news.title",
+    descKey: "cron.tpl.news.desc",
+    taskKey: "cron.tpl.news.task",
     schedule: "0 8 * * *",
   },
   {
+    id: "words",
     icon: Languages,
-    title: "每日 5 个英语单词",
-    desc: "每天推荐 5 个高频实用英语单词",
-    task: "请推荐 5 个高频实用英语单词，包含音标、中文释义、例句和记忆技巧。难度适中，适合日常和职场使用。",
+    titleKey: "cron.tpl.words.title",
+    descKey: "cron.tpl.words.desc",
+    taskKey: "cron.tpl.words.task",
     schedule: "0 9 * * *",
   },
   {
+    id: "story",
     icon: BookOpen,
-    title: "每日儿童睡前故事",
-    desc: "生成 3-5 分钟可读的温和睡前故事",
-    task: "请为 4-8 岁的孩子生成一个原创睡前故事，约 500 字，主题温馨正面，语言生动易懂，结尾安宁祥和。",
+    titleKey: "cron.tpl.story.title",
+    descKey: "cron.tpl.story.desc",
+    taskKey: "cron.tpl.story.task",
     schedule: "0 20 * * *",
   },
   {
+    id: "weekly",
     icon: ListTodo,
-    title: "每周工作周报",
-    desc: "每周五汇总仓库 PR 与 Issue 进展",
-    task: "请帮我生成本周工作周报模板：列出本周完成的主要工作、遇到的问题、下周计划。用 Markdown 格式输出。",
+    titleKey: "cron.tpl.weekly.title",
+    descKey: "cron.tpl.weekly.desc",
+    taskKey: "cron.tpl.weekly.task",
     schedule: "0 17 * * 5",
   },
   {
+    id: "movie",
     icon: Film,
-    title: "经典电影推荐",
-    desc: "推荐一部高分经典电影",
-    task: "请推荐一部经典高分电影，包含：电影名称、年份、导演、豆瓣/IMDb 评分、剧情简介（不剧透）、推荐理由。每次推荐不同的电影。",
+    titleKey: "cron.tpl.movie.title",
+    descKey: "cron.tpl.movie.desc",
+    taskKey: "cron.tpl.movie.task",
     schedule: "0 12 * * *",
   },
   {
+    id: "history",
     icon: GraduationCap,
-    title: "历史上的今天",
-    desc: "从科技、文化等领域挑选历史事件",
-    task: "请介绍今天在历史上发生的 2-3 件有趣或重要的事件，涵盖科技、文化、体育等不同领域。每件事用 2-3 句话简述，附上年份。",
+    titleKey: "cron.tpl.history.title",
+    descKey: "cron.tpl.history.desc",
+    taskKey: "cron.tpl.history.task",
     schedule: "0 8 * * *",
   },
   {
+    id: "family",
     icon: Heart,
-    title: "父母联系提醒",
-    desc: "每周日提醒你给家人打电话",
-    task: "提醒：今天是周日，记得给爸妈打个电话或发个消息，聊聊近况。可以问问他们身体状况、最近在忙什么、有没有什么需要帮忙的。",
+    titleKey: "cron.tpl.family.title",
+    descKey: "cron.tpl.family.desc",
+    taskKey: "cron.tpl.family.task",
     schedule: "0 10 * * 0",
   },
   {
+    id: "health",
     icon: Stethoscope,
-    title: "健康日报",
-    desc: "每天提醒你关注健康与运动",
-    task: "每日健康提醒：1) 今天喝够 8 杯水了吗？2) 起身活动一下，做 5 分钟拉伸 3) 注意用眼休息，远眺 20 秒 4) 今天有安排运动吗？建议至少 30 分钟有氧运动。",
+    titleKey: "cron.tpl.health.title",
+    descKey: "cron.tpl.health.desc",
+    taskKey: "cron.tpl.health.task",
     schedule: "0 10 * * *",
   },
   {
+    id: "meeting",
     icon: Phone,
-    title: "会议前准备",
-    desc: "工作日每天早上提醒你整理议题",
-    task: "会议准备提醒：你有一个即将开始的会议。请提前准备：1) 回顾会议议程 2) 整理需要汇报的进展 3) 准备需要讨论的问题 4) 确认所需材料已就绪。",
+    titleKey: "cron.tpl.meeting.title",
+    descKey: "cron.tpl.meeting.desc",
+    taskKey: "cron.tpl.meeting.task",
     schedule: "0 9 * * 1-5",
   },
   {
+    id: "interview",
     icon: BrainCircuit,
-    title: "面试准备提醒",
-    desc: "工作日每 2 小时复习大模型面试要点",
-    task: "每两小时提醒我复习关于大模型的项目亮点、技术难点、常见问答，并生成 3 个模拟面试问题。",
+    titleKey: "cron.tpl.interview.title",
+    descKey: "cron.tpl.interview.desc",
+    taskKey: "cron.tpl.interview.task",
     schedule: "every:2h;wd=1,2,3,4,5",
   },
 ];
@@ -1436,11 +1448,15 @@ export default function CronPanel({
                   const Icon = tpl.icon;
                   return (
                     <button
-                      key={tpl.title}
+                      key={tpl.id}
                       type="button"
                       className="cron-template-card"
                       onClick={() => {
-                        setPrefill({ title: tpl.title, task: tpl.task, schedule: tpl.schedule });
+                        setPrefill({
+                          title: t(tpl.titleKey),
+                          task: t(tpl.taskKey),
+                          schedule: tpl.schedule,
+                        });
                         setEditingJob(null);
                         setShowCreate(true);
                       }}
@@ -1449,8 +1465,8 @@ export default function CronPanel({
                         <Icon size={20} strokeWidth={1.6} />
                       </span>
                       <span className="cron-template-text">
-                        <strong>{tpl.title}</strong>
-                        <span>{tpl.desc}</span>
+                        <strong>{t(tpl.titleKey)}</strong>
+                        <span>{t(tpl.descKey)}</span>
                       </span>
                     </button>
                   );
