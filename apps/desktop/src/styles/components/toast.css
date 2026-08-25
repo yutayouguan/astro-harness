@@ -24,7 +24,7 @@
   box-shadow: 0 10px 32px rgba(15, 23, 42, 0.12);
   backdrop-filter: blur(16px) saturate(1.2);
   -webkit-backdrop-filter: blur(16px) saturate(1.2);
-  animation: astro-toast-in 180ms ease-out;
+  animation: astro-toast-in 360ms var(--ease-spring, cubic-bezier(0.34, 1.56, 0.64, 1));
 }
 
 .astro-toast.tone-info {
@@ -217,13 +217,32 @@ html[data-theme="dark"] .astro-toast.tone-warning {
 }
 
 @keyframes astro-toast-in {
-  from {
+  0% {
     opacity: 0;
-    transform: translateY(8px) scale(0.98);
+    transform: translateY(16px) scale(0.94);
   }
-  to {
+  60% {
+    opacity: 1;
+    transform: translateY(-2px) scale(1.01);
+  }
+  100% {
     opacity: 1;
     transform: translateY(0) scale(1);
+  }
+}
+
+.astro-toast-icon {
+  animation: astro-toast-icon-bounce 320ms var(--ease-spring, cubic-bezier(0.34, 1.56, 0.64, 1)) 60ms both;
+}
+
+@keyframes astro-toast-icon-bounce {
+  0% {
+    opacity: 0;
+    transform: scale(0.5) rotate(-8deg);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) rotate(0deg);
   }
 }
 

@@ -2821,9 +2821,9 @@ html[data-theme="dark"] .chat-welcome-title-brand {
   text-align: left;
   overflow: hidden;
   transition:
-    transform 0.18s ease,
+    transform 0.28s var(--ease-spring, cubic-bezier(0.34, 1.56, 0.64, 1)),
     border-color 0.18s ease,
-    box-shadow 0.18s ease,
+    box-shadow 0.22s var(--ease-out, cubic-bezier(0.22, 1, 0.36, 1)),
     background 0.18s ease;
 }
 
@@ -2909,11 +2909,43 @@ html[data-theme="dark"] .chat-welcome-title-brand {
   --tone-glow: rgba(217, 119, 6, 0.15);
 }
 
+.chat-welcome-card::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  background: linear-gradient(
+    105deg,
+    transparent 38%,
+    rgba(255, 255, 255, 0.12) 44%,
+    rgba(255, 255, 255, 0.04) 50%,
+    transparent 52%
+  );
+  transform: translateX(-100%) skewX(-15deg);
+  pointer-events: none;
+  border-radius: inherit;
+}
+
+.chat-welcome-card:hover::after {
+  animation: shimmer-sweep 0.6s var(--ease-out, cubic-bezier(0.22, 1, 0.36, 1)) forwards;
+}
+
+html[data-theme="dark"] .chat-welcome-card::after {
+  background: linear-gradient(
+    105deg,
+    transparent 38%,
+    rgba(255, 255, 255, 0.06) 44%,
+    rgba(255, 255, 255, 0.02) 50%,
+    transparent 52%
+  );
+}
+
 .chat-welcome-card:hover {
-  transform: translateY(-3px);
+  transform: translateY(-4px) scale(1.01);
   border-color: color-mix(in srgb, var(--tone) 42%, var(--glass-border));
   box-shadow:
-    0 14px 28px color-mix(in srgb, var(--tone) 16%, transparent),
+    0 16px 32px color-mix(in srgb, var(--tone) 18%, transparent),
+    0 4px 8px rgba(0, 0, 0, 0.06),
     var(--glass-rim);
 }
 
@@ -2930,7 +2962,8 @@ html[data-theme="dark"] .chat-welcome-title-brand {
 }
 
 .chat-welcome-card:active {
-  transform: translateY(-1px) scale(0.99);
+  transform: translateY(-1px) scale(0.97);
+  transition-duration: 0.08s;
 }
 
 .chat-welcome-card-icon {
@@ -2959,10 +2992,15 @@ html[data-theme="dark"] .chat-welcome-title-brand {
 }
 
 .chat-welcome-card:hover .chat-welcome-card-lens {
-  border-color: color-mix(in srgb, var(--tone) 28%, rgba(255, 255, 255, 0.35));
+  border-color: color-mix(in srgb, var(--tone) 35%, rgba(255, 255, 255, 0.35));
   box-shadow:
-    0 4px 12px color-mix(in srgb, var(--tone) 18%, transparent),
+    0 4px 16px color-mix(in srgb, var(--tone) 25%, transparent),
+    0 0 0 3px color-mix(in srgb, var(--tone) 8%, transparent),
     inset 0 1px 0 rgba(255, 255, 255, 0.55);
+  transform: scale(1.06);
+  transition: transform 0.28s var(--ease-spring, cubic-bezier(0.34, 1.56, 0.64, 1)),
+              border-color 0.18s ease,
+              box-shadow 0.18s ease;
 }
 
 html[data-theme="dark"] .chat-welcome-card-lens {

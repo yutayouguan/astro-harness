@@ -3,6 +3,7 @@
 @import "./foundation/reset.css";
 @import "./foundation/tones.css";
 @import "./foundation/globals.css";
+@import "./foundation/motion.css";
 
 /* Application shell */
 @import "./features/shell/shell.css";
