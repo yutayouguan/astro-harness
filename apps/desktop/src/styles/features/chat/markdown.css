@@ -3110,9 +3110,11 @@ html[data-theme="dark"] .chat-welcome-card-glyph {
 }
 
 .chat-welcome-marquee-control {
+  /* 停在右侧渐隐带、两行卡片之间，避免压住卡片的实边 */
   position: absolute;
-  top: 0;
-  right: 6%;
+  top: 50%;
+  right: 10px;
+  transform: translateY(-50%);
   z-index: 3;
   display: grid;
   place-items: center;
@@ -3125,6 +3127,7 @@ html[data-theme="dark"] .chat-welcome-card-glyph {
   color: var(--ink-mute);
   line-height: 1;
   cursor: pointer;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.08);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
   transition: color 0.18s ease, border-color 0.18s ease, background 0.18s ease;
