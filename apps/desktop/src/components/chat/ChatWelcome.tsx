@@ -151,21 +151,22 @@ export function ChatWelcome({ onPickCard }: Props) {
         <p className="chat-welcome-sub">{t("chat.welcomeSub")}</p>
       </div>
 
-      <button
-        type="button"
-        className="chat-welcome-marquee-control"
-        aria-pressed={marqueePaused}
-        aria-label={marqueeControlLabel}
-        title={marqueeControlLabel}
-        onClick={() => setMarqueePaused((paused) => !paused)}
-      >
-        {marqueePaused ? <Play size={14} aria-hidden /> : <Pause size={14} aria-hidden />}
-        <span>{marqueeControlLabel}</span>
-      </button>
+      <div className="chat-welcome-marquee-region">
+        <button
+          type="button"
+          className="chat-welcome-marquee-control"
+          aria-pressed={marqueePaused}
+          aria-label={marqueeControlLabel}
+          title={marqueeControlLabel}
+          onClick={() => setMarqueePaused((paused) => !paused)}
+        >
+          {marqueePaused ? <Play size={13} aria-hidden /> : <Pause size={13} aria-hidden />}
+        </button>
 
-      <div className={`chat-welcome-marquee-wrap ${marqueePaused ? "is-paused" : ""}`}>
-        <MarqueeRow cards={ROW1} direction="right" onPick={onPickCard} />
-        <MarqueeRow cards={ROW2} direction="left" onPick={onPickCard} />
+        <div className={`chat-welcome-marquee-wrap ${marqueePaused ? "is-paused" : ""}`}>
+          <MarqueeRow cards={ROW1} direction="right" onPick={onPickCard} />
+          <MarqueeRow cards={ROW2} direction="left" onPick={onPickCard} />
+        </div>
       </div>
     </div>
   );

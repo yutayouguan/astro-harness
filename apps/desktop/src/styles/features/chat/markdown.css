@@ -1156,7 +1156,10 @@ html[data-theme="dark"] .composer-thinking-btn.is-open {
   display: flex;
   flex-direction: column;
   gap: 0;
-  margin: 0;
+  /* 与消息列同宽（.msg-row 860px + 两侧 12px 外边距），避免宽屏下输入区空旷 */
+  width: 100%;
+  max-width: 884px;
+  margin: 0 auto;
   padding: 0;
 }
 
@@ -1512,7 +1515,9 @@ html[data-theme="dark"] .composer-queue-menu {
 /* ── TODO 浮动进度条 ─────────────────────────────────── */
 
 .todo-progress-float {
-  margin: 0 12px 8px;
+  /* 与 composer 可见框同宽（884 外壳减去两侧 12px 外边距），两者是上下贴合的一组 */
+  width: min(calc(100% - 24px), 860px);
+  margin: 0 auto 8px;
   border-radius: 14px;
   border: 1px solid color-mix(in srgb, var(--glass-edge) 80%, rgba(148, 163, 184, 0.25));
   background:
@@ -2268,7 +2273,7 @@ html[data-theme="dark"] .composer-preview {
 }
 
 .composer-input::placeholder {
-  color: var(--ink-mute);
+  color: color-mix(in srgb, var(--ink) 55%, transparent);
 }
 
 .composer--stacked .send-btn,
@@ -2373,7 +2378,7 @@ html[data-theme="light"] .composer--stacked .send-btn:not(.send-btn--stop) {
 
 .chat-welcome {
   position: relative;
-  gap: 16px;
+  gap: 10px;
   isolation: isolate;
 }
 
@@ -3031,7 +3036,7 @@ html[data-theme="dark"] .chat-welcome-card-lens {
 
 .chat-welcome-card-desc {
   font-size: 0.78rem;
-  color: var(--ink-mute);
+  color: color-mix(in srgb, var(--ink) 68%, transparent);
   line-height: 1.4;
 }
 
@@ -3080,8 +3085,8 @@ html[data-theme="dark"] .chat-welcome-card-glyph {
   display: flex;
   flex-direction: column;
   gap: 12px;
-  margin-top: 8px;
-  padding: 16px 0;
+  margin-top: 2px;
+  padding: 14px 0 8px;
   -webkit-mask-image: linear-gradient(
     to right,
     transparent 0%,
@@ -3098,20 +3103,26 @@ html[data-theme="dark"] .chat-welcome-card-glyph {
   );
 }
 
-.chat-welcome-marquee-control {
+/* 播放控制浮在跑马灯右上角，避免它单独占一行显得游离 */
+.chat-welcome-marquee-region {
   position: relative;
-  z-index: 2;
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  align-self: flex-end;
-  margin: -8px 8% -8px 0;
-  padding: 5px 9px;
+  width: 100%;
+}
+
+.chat-welcome-marquee-control {
+  position: absolute;
+  top: 0;
+  right: 6%;
+  z-index: 3;
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
   border: 1px solid color-mix(in srgb, var(--glass-edge) 82%, transparent);
   border-radius: 999px;
   background: color-mix(in srgb, var(--glass-panel) 72%, transparent);
   color: var(--ink-mute);
-  font-size: 0.72rem;
   line-height: 1;
   cursor: pointer;
   backdrop-filter: blur(12px);

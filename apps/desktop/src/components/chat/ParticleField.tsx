@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 
-const PARTICLE_COUNT = 45;
+const PARTICLE_COUNT = 26;
 const SPEED = 0.12;
 
 const PALETTE_DARK = [
@@ -44,10 +44,10 @@ function createParticles(w: number, h: number): Particle[] {
     r: 1 + Math.random() * 2,
     dx: (Math.random() - 0.5) * SPEED,
     dy: (Math.random() - 0.5) * SPEED - 0.04,
-    alpha: 0.3 + Math.random() * 0.5,
+    alpha: 0.2 + Math.random() * 0.34,
     phase: Math.random() * Math.PI * 2,
     colorIdx: Math.floor(Math.random() * PALETTE_DARK.length),
-    glow: Math.random() > 0.6,
+    glow: Math.random() > 0.78,
   }));
 }
 

@@ -851,7 +851,10 @@ html[data-theme="dark"] .settings-content {
   display: flex;
   flex-direction: column;
   gap: 2px;
-  padding: 0 6px 12px;
+  /* 与项目区之间留一条发丝线，否则两组列表会读成同一层 */
+  margin: 0 10px 8px;
+  padding: 0 0 10px;
+  border-bottom: 1px solid color-mix(in srgb, var(--ink) 7%, transparent);
 }
 
 .sidebar-feature-tab {
@@ -864,7 +867,7 @@ html[data-theme="dark"] .settings-content {
   border: 0;
   border-radius: 8px;
   background: transparent;
-  color: color-mix(in srgb, var(--ink) 72%, transparent);
+  color: color-mix(in srgb, var(--ink) 86%, transparent);
   font: inherit;
   font-size: 13px;
   font-weight: 590;
@@ -876,7 +879,7 @@ html[data-theme="dark"] .settings-content {
 
 .sidebar-feature-tab svg {
   flex: 0 0 auto;
-  opacity: 0.72;
+  opacity: 0.9;
 }
 
 .sidebar-feature-tab:hover {
@@ -923,7 +926,7 @@ html[data-theme="dark"] .settings-content {
   font-size: 13px;
   font-weight: 590;
   color: var(--ink-mute);
-  opacity: 0.58;
+  opacity: 0.75;
   letter-spacing: -0.01em;
 }
 
@@ -1013,6 +1016,24 @@ html[data-theme="dark"] .settings-content {
 }
 
 /* 激活项目只加重字重、图标着色，正文让位给激活会话的强调底色 */
+.sidebar-project.is-active > .sidebar-project-header {
+  position: relative;
+}
+
+/* 只用左侧强调条定位当前项目，底色留给当前会话 */
+.sidebar-project.is-active > .sidebar-project-header::before {
+  content: "";
+  position: absolute;
+  left: -2px;
+  top: 50%;
+  translate: 0 -50%;
+  width: 2px;
+  height: 15px;
+  border-radius: 999px;
+  background: var(--tone, var(--tone-blue));
+  opacity: 0.85;
+}
+
 .sidebar-project.is-active > .sidebar-project-header .sidebar-project-name {
   font-weight: 620;
 }
@@ -1142,7 +1163,7 @@ html[data-theme="dark"] .settings-content {
   padding: 4px 10px;
   font-size: 12px;
   color: var(--ink-mute);
-  opacity: 0.45;
+  opacity: 0.62;
   white-space: nowrap;
 }
 
