@@ -109,8 +109,6 @@ import {
   Info,
   Layers2,
   MessageSquare,
-  PanelLeft,
-  PanelTop,
   ScrollText,
   Settings2,
   Sparkles,
@@ -169,23 +167,6 @@ export default function App() {
   );
   const [nav, setNav] = useState<NavId>(NAV[0].id);
   const [settingsTab, setSettingsTab] = useState<SettingsTabId>("preferences");
-  const [settingsFloat, setSettingsFloat] = useState(() => localStorage.getItem("astro:settings-float") === "true");
-  const toggleSettingsFloat = useCallback(() => {
-    const next = !settingsFloat;
-    if (
-      next &&
-      ![
-        "preferences",
-        "preferences:appearance",
-        "preferences:conversation",
-        "preferences:context",
-      ].includes(settingsTab)
-    ) {
-      setSettingsTab("preferences");
-    }
-    localStorage.setItem("astro:settings-float", String(next));
-    setSettingsFloat(next);
-  }, [settingsFloat, settingsTab]);
   const [projects, setProjects] = useState<ProjectDto[]>([]);
   const [activeProjectId, setActiveProjectId] = useState("default");
   const [collapsedProjects, setCollapsedProjects] = useState<Set<string>>(new Set());
@@ -233,45 +214,6 @@ export default function App() {
     useState<ModelPricingMeta | null>(null);
   const [memoryHeaderAgent, setMemoryHeaderAgent] =
     useState<MemoryHeaderAgentPicker | null>(null);
-  const settingsOverlayRef = useRef<HTMLDivElement | null>(null);
-
-  useEffect(() => {
-    if (nav !== "settings" || !settingsFloat) return;
-    const panel = settingsOverlayRef.current;
-    const previousFocus = document.activeElement as HTMLElement | null;
-    const focusableSelector =
-      'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
-    const focusFirst = window.requestAnimationFrame(() => {
-      panel?.querySelector<HTMLElement>(focusableSelector)?.focus();
-    });
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        event.preventDefault();
-        setNav("chat");
-        return;
-      }
-      if (event.key !== "Tab" || !panel) return;
-      const focusable = Array.from(
-        panel.querySelectorAll<HTMLElement>(focusableSelector),
-      ).filter((element) => element.offsetParent !== null);
-      if (focusable.length === 0) return;
-      const first = focusable[0];
-      const last = focusable[focusable.length - 1];
-      if (event.shiftKey && document.activeElement === first) {
-        event.preventDefault();
-        last.focus();
-      } else if (!event.shiftKey && document.activeElement === last) {
-        event.preventDefault();
-        first.focus();
-      }
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => {
-      window.cancelAnimationFrame(focusFirst);
-      window.removeEventListener("keydown", onKeyDown);
-      previousFocus?.focus();
-    };
-  }, [nav, settingsFloat]);
 
   // ── Extracted hooks ───────────────────────────────────────────────────────
   const sidebar = useSidebar();
@@ -780,7 +722,7 @@ export default function App() {
           onMouseLeave={sidebar.scheduleHideSidebar}
           onContextMenu={sidebar.openSidebarContextMenu}
         >
-          {nav === "settings" && !settingsFloat ? (
+          {nav === "settings" ? (
             <>
               <button
                 type="button"
@@ -1062,7 +1004,7 @@ export default function App() {
         ) : null}
 
         <section className="content-pane">
-          {nav === "settings" && !settingsFloat ? (
+          {nav === "settings" ? (
             <>
               <div className="content-header">
                 <div className="content-heading">
@@ -1089,15 +1031,6 @@ export default function App() {
                       menuAlign="end"
                     />
                   )}
-                  <button
-                    type="button"
-                    className="header-icon-btn settings-float-toggle"
-                    onClick={toggleSettingsFloat}
-                    title="切换为悬浮窗口"
-                    aria-label="切换为悬浮窗口"
-                  >
-                    <PanelTop width={16} height={16} strokeWidth={1.7} />
-                  </button>
                 </div>
               </div>
               <div className="page-body">
@@ -1333,109 +1266,6 @@ export default function App() {
       </div>
 
       {/* ── Overlay panels ─────────────────────────────────────────────────── */}
-      {nav === "settings" && settingsFloat && (
-        <div className="settings-overlay settings-overlay--preferences">
-          <div
-            ref={settingsOverlayRef}
-            className="settings-overlay-panel settings-overlay-panel--preferences"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="floating-settings-title"
-          >
-            <header className="settings-overlay-titlebar">
-              <div className="settings-overlay-heading">
-                <span className="settings-overlay-heading-icon" aria-hidden>
-                  <Settings2 size={16} strokeWidth={1.8} />
-                </span>
-                <div>
-                  <strong id="floating-settings-title">
-                    {t("settings.overlay.title")}
-                  </strong>
-                  <span>
-                    {settingsTab === "preferences"
-                      ? t("prefs.category.general")
-                      : settingsTab === "preferences:appearance"
-                        ? t("prefs.category.appearance")
-                        : settingsTab === "preferences:conversation"
-                          ? t("prefs.category.conversation")
-                          : t("prefs.category.context")}
-                  </span>
-                </div>
-              </div>
-              <div className="settings-overlay-actions">
-                <button
-                  type="button"
-                  className="settings-overlay-full-btn"
-                  onClick={toggleSettingsFloat}
-                  title={t("settings.overlay.openFull")}
-                >
-                  <PanelLeft width={15} height={15} strokeWidth={1.7} />
-                  <span>{t("settings.overlay.openFull")}</span>
-                </button>
-                <button
-                  type="button"
-                  className="settings-overlay-title-close"
-                  onClick={() => setNav("chat")}
-                  aria-label={t("common.close")}
-                >
-                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
-                </button>
-              </div>
-            </header>
-            <div className="settings-layout">
-              <nav className="settings-sidebar" aria-label={t("prefs.category.aria")}>
-                {([
-                  { id: "preferences", label: t("prefs.category.general"), Icon: Settings2 },
-                  { id: "preferences:appearance", label: t("prefs.category.appearance"), Icon: Sparkles },
-                  { id: "preferences:conversation", label: t("prefs.category.conversation"), Icon: MessageSquare },
-                  { id: "preferences:context", label: t("prefs.category.context"), Icon: Layers2 },
-                ] as const).map((item) => (
-                  <button
-                    key={item.id}
-                    type="button"
-                    className={`settings-sidebar-item ${settingsTab === item.id ? "is-active" : ""}`}
-                    onClick={() => setSettingsTab(item.id as SettingsTabId)}
-                  >
-                    <item.Icon size={18} strokeWidth={1.6} aria-hidden />
-                    {item.label}
-                  </button>
-                ))}
-                <div className="settings-overlay-nav-spacer" />
-                <button
-                  type="button"
-                  className="settings-overlay-nav-full"
-                  onClick={toggleSettingsFloat}
-                >
-                  <PanelLeft size={16} strokeWidth={1.7} aria-hidden />
-                  <span>{t("settings.overlay.fullHint")}</span>
-                </button>
-              </nav>
-              <div className="settings-content settings-content--preferences">
-                <PreferencesPanel
-                  section={settingsTab === "preferences" ? "general" : settingsTab.split(":")[1] as import("./components/settings/PreferencesPanel").PreferenceCategory}
-                  mode={mode}
-                  onChange={setMode}
-                  colorStyle={colorStyle}
-                  onColorStyleChange={setColorStyle}
-                  gradient={gradient}
-                  onGradientChange={setGradient}
-                  onBeginCustomGradient={beginGradientEdit}
-                  onPreviewGradient={previewGradient}
-                  onCommitCustomGradient={commitGradientEdit}
-                  onCancelCustomGradient={cancelGradientEdit}
-                  onReshuffleDynamic={reshuffleDynamic}
-                  tone={shellTone}
-                  chatDisplayPrefs={chatDisplayPrefs}
-                  onChatVerbosityChange={setVerbosity}
-                  onChatToggleChange={setToggle}
-                  activeSessionId={chat.sessionId ?? undefined}
-                />
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
       {nav === "files" && (
         <div className="settings-overlay" onClick={(e) => { if (e.target === e.currentTarget) setNav("chat"); }}>
           <div className="settings-overlay-panel settings-overlay-panel--wide">
