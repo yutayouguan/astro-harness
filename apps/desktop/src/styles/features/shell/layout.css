@@ -71,8 +71,16 @@ html[data-theme="dark"] .sidebar-nav-indicator {
   padding: 12px;
   cursor: pointer;
   text-align: left;
-  transition: background 0.15s ease, color 0.15s ease;
+  transition:
+    background 0.15s ease,
+    color 0.15s ease,
+    transform 0.2s var(--ease-spring, cubic-bezier(0.34, 1.56, 0.64, 1));
   white-space: nowrap;
+}
+
+.nav-item:active:not(.active) {
+  transform: scale(0.92);
+  transition-duration: 0.08s;
 }
 
 /* 仅图标：固定方形命中区，避免侧栏加宽后选中态被拉成长胶囊 */
@@ -839,6 +847,52 @@ html[data-theme="dark"] .settings-content {
 
 /* ── Sidebar project tree ──────────────────────────────────────────────── */
 
+.sidebar-feature-tabs {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 0 6px 12px;
+}
+
+.sidebar-feature-tab {
+  width: 100%;
+  min-height: 34px;
+  padding: 0 10px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: color-mix(in srgb, var(--ink) 72%, transparent);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 590;
+  letter-spacing: -0.01em;
+  text-align: left;
+  cursor: pointer;
+  transition: color 0.12s ease, background 0.12s ease;
+}
+
+.sidebar-feature-tab svg {
+  flex: 0 0 auto;
+  opacity: 0.72;
+}
+
+.sidebar-feature-tab:hover {
+  color: var(--ink);
+  background: color-mix(in srgb, var(--ink) 5%, transparent);
+}
+
+.sidebar-feature-tab.is-active {
+  color: var(--tone, var(--tone-blue));
+  background: color-mix(in srgb, var(--tone, var(--tone-blue)) 10%, transparent);
+}
+
+.sidebar-feature-tab.is-active svg {
+  opacity: 1;
+}
+
 .sidebar-projects {
   flex: 1;
   display: flex;
@@ -866,12 +920,11 @@ html[data-theme="dark"] .settings-content {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 11px;
-  font-weight: 650;
+  font-size: 13px;
+  font-weight: 590;
   color: var(--ink-mute);
-  opacity: 0.7;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
+  opacity: 0.58;
+  letter-spacing: -0.01em;
 }
 
 /* 搜索展开时让出整行，避免窄侧栏里标题与输入框互相挤压 */
@@ -1098,6 +1151,18 @@ html[data-theme="dark"] .settings-content {
 }
 
 /* ── Icon-only mode: 项目区域精简 ──────────────────── */
+
+.sidebar:not(.is-labels) .sidebar-feature-tabs {
+  align-items: center;
+  padding: 0 0 10px;
+}
+
+.sidebar:not(.is-labels) .sidebar-feature-tab {
+  width: 34px;
+  min-height: 34px;
+  padding: 0;
+  justify-content: center;
+}
 
 .sidebar:not(.is-labels) .sidebar-section-header {
   justify-content: center;

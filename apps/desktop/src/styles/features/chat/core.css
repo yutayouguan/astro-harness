@@ -56,16 +56,19 @@
   display: flex;
   gap: 12px;
   width: min(100%, 860px);
-  animation: rise 0.3s cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation: rise 0.38s var(--ease-spring, cubic-bezier(0.34, 1.56, 0.64, 1)) both;
 }
 
 @keyframes rise {
-  from {
+  0% {
     opacity: 0;
-    transform: translateY(8px);
+    transform: translateY(12px) scale(0.98);
   }
-
-  to {
+  65% {
+    opacity: 1;
+    transform: translateY(-2px) scale(1.002);
+  }
+  100% {
     opacity: 1;
     transform: none;
   }
