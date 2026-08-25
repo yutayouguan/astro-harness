@@ -358,7 +358,22 @@ body:has(.app-dialog-backdrop.is-closing) .app-shell {
   backdrop-filter: blur(24px) saturate(1.4);
   -webkit-backdrop-filter: blur(24px) saturate(1.4);
   color: var(--ink);
-  animation: app-dialog-rise-in 0.22s cubic-bezier(0.22, 1, 0.36, 1);
+  animation: app-dialog-rise-in 0.36s var(--ease-spring, cubic-bezier(0.34, 1.56, 0.64, 1));
+}
+
+.about-dialog-orb {
+  animation: about-orb-entrance 0.5s var(--ease-spring, cubic-bezier(0.34, 1.56, 0.64, 1)) 0.1s both;
+}
+
+@keyframes about-orb-entrance {
+  0% {
+    opacity: 0;
+    transform: scale(0.7);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
 }
 
 html[data-theme="dark"] .about-dialog {
@@ -517,6 +532,20 @@ html[data-theme="dark"] .about-dialog-title {
   font-size: 11.5px;
   font-weight: 600;
   letter-spacing: 0.01em;
+  animation: stagger-fade-up var(--duration-normal, 220ms) var(--ease-out, cubic-bezier(0.22, 1, 0.36, 1)) both;
+}
+
+.about-dialog-features li:nth-child(1) { animation-delay: 0.12s; }
+.about-dialog-features li:nth-child(2) { animation-delay: 0.16s; }
+.about-dialog-features li:nth-child(3) { animation-delay: 0.2s; }
+.about-dialog-features li:nth-child(4) { animation-delay: 0.24s; }
+.about-dialog-features li:nth-child(5) { animation-delay: 0.28s; }
+.about-dialog-features li:nth-child(6) { animation-delay: 0.32s; }
+.about-dialog-features li:nth-child(n+7) { animation-delay: 0.36s; }
+
+.about-dialog-features li:hover {
+  transform: translateY(-1px) scale(1.04);
+  transition: transform 0.2s var(--ease-spring, cubic-bezier(0.34, 1.56, 0.64, 1));
   color: color-mix(in srgb, var(--tone, #3b82f6) 70%, var(--ink));
   background: color-mix(in srgb, var(--tone-soft, transparent) 70%, transparent);
   border: 1px solid color-mix(in srgb, var(--tone, #3b82f6) 18%, transparent);

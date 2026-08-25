@@ -3,6 +3,7 @@ import { useState, type ComponentType, type SVGProps } from "react";
 import { useI18n } from "../../i18n/LocaleContext";
 import type { MessageKey } from "../../i18n/messages";
 import { AstroLogoMark } from "../icons/AstroLogoMark";
+import ParticleField from "./ParticleField";
 import {
   SolidBolt,
   SolidChat,
@@ -126,6 +127,7 @@ export function ChatWelcome({ onPickCard }: Props) {
         <span className="chat-welcome-orb" />
         <span className="chat-welcome-orb chat-welcome-orb--soft" />
         <span className="chat-welcome-orb chat-welcome-orb--spark" />
+        <ParticleField />
       </div>
 
       <div className="chat-welcome-copy">
