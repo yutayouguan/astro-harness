@@ -203,10 +203,23 @@ export function IconSparkles(props: IconProps) {
 export function IconLoop(props: IconProps) {
   return (
     <NavIconBase {...props}>
-      {/* 菱形主体（流程图决策符号） */}
-      <path d="M12 2 22 12 12 22 2 12Z" strokeLinejoin="round" />
+      {/* 圆形主体，与定时任务同一套圆形语言 */}
+      <circle cx="12" cy="12" r="9" />
       {/* 内嵌播放三角（选中时镂空） */}
-      <path className="nav-icon-cutout" d="M10 8.5v7l6-3.5z" />
+      <path className="nav-icon-cutout" d="M10.4 9.1v5.8l5-2.9z" />
+    </NavIconBase>
+  );
+}
+
+/** 插件 — 圆形本体内嵌插头，选中时插头变透镜镂空 */
+export function IconPlugin(props: IconProps) {
+  return (
+    <NavIconBase {...props}>
+      <circle cx="12" cy="12" r="9" />
+      <path className="nav-icon-cutout" d="M9.7 7.9v2.3" />
+      <path className="nav-icon-cutout" d="M14.3 7.9v2.3" />
+      <path className="nav-icon-cutout" d="M8.5 10.4h7v1.9a3.5 3.5 0 0 1-7 0z" />
+      <path className="nav-icon-cutout" d="M12 15.8v2.1" />
     </NavIconBase>
   );
 }

@@ -43,8 +43,8 @@ import {
   IconNewChat,
   IconPanelClose,
   IconPanelOpen,
+  IconPlugin,
   IconRightPanel,
-  IconSkills,
 } from "./components/icons";
 import { useActiveAgent } from "./hooks/app/useActiveAgent";
 import { useChatDisplayPrefs } from "./hooks/chat/useChatDisplayPrefs";
@@ -778,7 +778,7 @@ export default function App() {
                 {([
                   { id: "cron", label: t("nav.cron"), Icon: IconCron },
                   { id: "loop", label: t("nav.loop"), Icon: IconLoop },
-                  { id: "skills", label: t("sidebar.plugins"), Icon: IconSkills },
+                  { id: "skills", label: t("sidebar.plugins"), Icon: IconPlugin },
                 ] as const).map(({ id, label, Icon }) => (
                   <button
                     key={id}

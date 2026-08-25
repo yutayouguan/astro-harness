@@ -3,8 +3,8 @@ import {
   IconChat,
   IconCron,
   IconLoop,
+  IconPlugin,
   IconSettings,
-  IconSkills,
   IconWorkspace,
 } from "../../components/icons";
 import type { MessageKey } from "../../i18n/messages";
@@ -72,7 +72,7 @@ export const NAV: {
   { id: "cron", labelKey: "nav.cron", Icon: IconCron, tone: "cyan" },
   { id: "loop", labelKey: "nav.loop", Icon: IconLoop, tone: "pink" },
   { id: "files", labelKey: "nav.files", Icon: IconWorkspace, tone: "purple" },
-  { id: "skills", labelKey: "nav.skills", Icon: IconSkills, tone: "indigo" },
+  { id: "skills", labelKey: "nav.skills", Icon: IconPlugin, tone: "indigo" },
   { id: "settings", labelKey: "nav.settings", Icon: IconSettings, tone: "twilight" },
 ];
 
