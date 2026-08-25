@@ -19,7 +19,6 @@ import ProjectEditDialog from "./components/chat/ProjectEditDialog";
 import SidebarSessionList from "./components/chat/SidebarSessionList";
 import ChatView from "./components/chat/ChatView";
 import LoopPanel from "./components/loop/LoopPanel";
-import type { LoopDto } from "./components/loop/loopTypes";
 import CronPanel from "./components/schedule/CronPanel";
 import FilesPage from "./components/files/FilesPage";
 import InsightsPanel from "./components/settings/InsightsPanel";
@@ -40,6 +39,7 @@ import {
   AstroLogoMark,
   IconChat,
   IconCron,
+  IconLoop,
   IconNewChat,
   IconPanelClose,
   IconPanelOpen,
@@ -117,7 +117,6 @@ import {
   Settings2,
   Sparkles,
   Store,
-  Workflow,
   Wrench,
 } from "lucide-react";
 import { syncWindowUnderlay } from "./lib/ui/windowUnderlay";
@@ -177,8 +176,6 @@ export default function App() {
   const [collapsedProjects, setCollapsedProjects] = useState<Set<string>>(new Set());
   const [projectMenu, setProjectMenu] = useState<{ id: string; name: string; x: number; y: number } | null>(null);
   const [editingProject, setEditingProject] = useState<ProjectDto | null>(null);
-  const [loops, setLoops] = useState<LoopDto[]>([]);
-  const [loopsCollapsed, setLoopsCollapsed] = useState(false);
   // 侧栏会话检索：搜索与归档视图跨全部项目生效
   const [sessionQuery, setSessionQuery] = useState("");
   const [sessionListKind, setSessionListKind] = useState<SessionListKind>("active");
@@ -198,16 +195,6 @@ export default function App() {
       }
     })();
   }, []);
-  useEffect(() => {
-    void (async () => {
-      try {
-        const list = await invoke<LoopDto[]>("list_loops");
-        setLoops(list ?? []);
-      } catch {
-        setLoops([]);
-      }
-    })();
-  }, [nav]);
   /** 导航到 settings 并切换到指定子 tab */
   const openSettingsTab = useCallback((tab: SettingsTabId) => {
     setSettingsTab(tab);
@@ -790,6 +777,7 @@ export default function App() {
               <nav className="sidebar-feature-tabs" aria-label={t("sidebar.features")}>
                 {([
                   { id: "cron", label: t("nav.cron"), Icon: IconCron },
+                  { id: "loop", label: t("nav.loop"), Icon: IconLoop },
                   { id: "skills", label: t("sidebar.plugins"), Icon: IconSkills },
                 ] as const).map(({ id, label, Icon }) => (
                   <button
@@ -944,54 +932,6 @@ export default function App() {
                     )}
                   </div>
                 ))}
-                {!searchingSessions && (
-                  <div className={`sidebar-project ${nav === "loop" ? "is-active" : ""}`}>
-                    <div className="sidebar-project-header">
-                      <button
-                        type="button"
-                        className="sidebar-project-name"
-                        onClick={() => {
-                          setLoopsCollapsed((prev) => !prev);
-                          setNav("loop");
-                        }}
-                      >
-                        <Workflow size={16} strokeWidth={1.7} aria-hidden />
-                        <span className="sidebar-item-label">{t("nav.loop")}</span>
-                      </button>
-                      <button
-                        type="button"
-                        className="sidebar-add-btn"
-                        onClick={() => setNav("loop")}
-                        title={t("loop.create")}
-                        aria-label={t("loop.create")}
-                      >
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-                          <path d="M12 5v14" /><path d="M5 12h14" />
-                        </svg>
-                      </button>
-                    </div>
-                    {!loopsCollapsed && (
-                      <div className="sidebar-sessions">
-                        {loops.length === 0 ? (
-                          <span className="sidebar-empty">{t("loop.emptyTitle")}</span>
-                        ) : (
-                          loops.map((lp) => (
-                            <button
-                              key={lp.id}
-                              type="button"
-                              className="sidebar-session-main"
-                              onClick={() => setNav("loop")}
-                            >
-                              <span className="sidebar-session-title-wrap">
-                                <span className="sidebar-session-title">{lp.name}</span>
-                              </span>
-                            </button>
-                          ))
-                        )}
-                      </div>
-                    )}
-                  </div>
-                )}
               </div>
               <button
                 type="button"
