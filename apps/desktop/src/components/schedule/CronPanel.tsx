@@ -1415,9 +1415,22 @@ export default function CronPanel({
               className="cron-empty"
               title={t("cron.empty")}
               hint={t("cron.emptyHint")}
-            />
+            >
+              <button
+                type="button"
+                className="cron-btn-primary cron-empty-cta"
+                onClick={() => {
+                  setPrefill(null);
+                  setEditingJob(null);
+                  setShowCreate(true);
+                }}
+              >
+                <CalendarPlus size={15} strokeWidth={2.2} aria-hidden />
+                {t("cron.create")}
+              </button>
+            </EmptyIllustration>
             <section className="cron-templates">
-              <h3 className="cron-templates-title">自动化任务模版</h3>
+              <h3 className="cron-templates-title">{t("cron.templates.title")}</h3>
               <div className="cron-templates-grid">
                 {CRON_TEMPLATES.map((tpl) => {
                   const Icon = tpl.icon;

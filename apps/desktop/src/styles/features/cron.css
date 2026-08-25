@@ -144,45 +144,73 @@ html[data-theme="dark"] .cron-pane {
   display: flex;
   flex-direction: column;
   overflow-y: auto;
-  padding-bottom: 32px;
+  padding: 0 2px 32px;
   mask-image: linear-gradient(to bottom, black calc(100% - 16px), transparent 100%);
   -webkit-mask-image: linear-gradient(to bottom, black calc(100% - 16px), transparent 100%);
 }
 
 .cron-empty-with-templates .cron-empty {
   flex: none;
-  padding: 28px 24px 8px;
+  gap: 6px;
+  padding: 18px 24px 22px;
 }
 
 .cron-empty-with-templates .cron-empty .astro-empty-art {
-  width: 120px;
+  width: 92px;
+}
+
+/* 默认 28ch 在中文下会在词中断行，这里按像素给足一行 */
+.cron-empty-with-templates .cron-empty .astro-empty-hint {
+  max-width: 320px;
+  text-wrap: balance;
+}
+
+.cron-empty-cta {
+  margin-top: 10px;
+  padding: 8px 18px;
 }
 
 /* ── 模板卡片 ── */
 
 .cron-templates {
-  padding: 0 32px;
+  padding: 0 4px;
 }
 
 .cron-templates-title {
-  margin: 0 0 16px;
-  font-size: 16px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 12px;
+  font-size: 12px;
   font-weight: 700;
-  letter-spacing: -0.02em;
-  color: var(--ink);
+  letter-spacing: 0.04em;
+  color: var(--ink-mute);
+}
+
+/* 标题后接一条渐隐发丝线，弱化层级、避免与空态标题抢焦点 */
+.cron-templates-title::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--tone) 24%, transparent),
+    transparent
+  );
 }
 
 .cron-templates-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  gap: 10px;
+  gap: 12px;
 }
 
 .cron-template-card {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 14px;
-  padding: 16px 18px;
+  padding: 15px 46px 15px 16px;
   border-radius: 16px;
   border: 1px solid color-mix(in srgb, var(--chip-border) 85%, transparent);
   background:
@@ -236,6 +264,42 @@ html[data-theme="dark"] .cron-pane {
 .cron-template-card:active {
   transform: scale(0.97);
   transition-duration: 80ms;
+}
+
+.cron-template-card:focus-visible {
+  outline: none;
+  border-color: color-mix(in srgb, var(--tone) 45%, var(--chip-border));
+  box-shadow:
+    0 0 0 2px color-mix(in srgb, var(--tone) 28%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.42);
+}
+
+/* 悬停时出现的「加号」提示卡片可直接建任务 */
+.cron-template-card::after {
+  content: "+";
+  position: absolute;
+  top: 50%;
+  right: 14px;
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  font-size: 15px;
+  font-weight: 500;
+  line-height: 1;
+  color: var(--tone, #6366f1);
+  background: color-mix(in srgb, var(--tone, #6366f1) 13%, transparent);
+  opacity: 0;
+  transform: translateY(-50%) scale(0.86);
+  transition: opacity 0.14s ease, transform 0.14s ease;
+  pointer-events: none;
+}
+
+.cron-template-card:hover::after,
+.cron-template-card:focus-visible::after {
+  opacity: 1;
+  transform: translateY(-50%) scale(1);
 }
 
 .cron-template-icon {
@@ -330,6 +394,10 @@ html[data-theme="dark"] .cron-template-card:hover .cron-template-icon {
   .cron-template-card:hover,
   .cron-template-card:active {
     transform: none;
+  }
+  .cron-template-card::after {
+    transition: none;
+    transform: translateY(-50%);
   }
 }
 
