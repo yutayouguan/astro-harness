@@ -199,14 +199,14 @@ export function IconSparkles(props: IconProps) {
   );
 }
 
-/** 智能流程 — 流程菱形 + 内嵌播放键：决策引擎 × 自动执行 */
+/** 智能流程 — 圆形本体内嵌流程连线：上游节点经折线接到下游节点 */
 export function IconLoop(props: IconProps) {
   return (
     <NavIconBase {...props}>
-      {/* 圆形主体，与定时任务同一套圆形语言 */}
-      <circle cx="12" cy="12" r="9" />
-      {/* 内嵌播放三角（选中时镂空） */}
-      <path className="nav-icon-cutout" d="M10.4 9.1v5.8l5-2.9z" />
+      <circle cx="12" cy="12" r="8.6" />
+      <path className="nav-icon-cutout" d="M9.8 9.2h2a2 2 0 0 1 2 2v2.5" />
+      <circle className="nav-icon-cutout" cx="8.2" cy="9.2" r="1.6" />
+      <circle className="nav-icon-cutout" cx="13.8" cy="15.3" r="1.6" />
     </NavIconBase>
   );
 }
@@ -224,14 +224,14 @@ export function IconPlugin(props: IconProps) {
   );
 }
 
-/** 定时任务 — 默认空心+勾线稿；选中表盘填实，勾变透镜镂空 */
+/** 定时任务 — 闹钟：表盘 + 铃脚，指针在选中时变透镜镂空 */
 export function IconCron(props: IconProps) {
   return (
     <NavIconBase {...props}>
-      <circle cx="12" cy="13" r="8" />
-      <path className="nav-icon-stroke" d="M9 3.2 7.2 5.6" />
-      <path className="nav-icon-stroke" d="M15 3.2 16.8 5.6" />
-      <path className="nav-icon-cutout" d="m9.2 13.1 1.9 1.9 3.8-4" />
+      <circle cx="12" cy="13.5" r="7.6" />
+      <path className="nav-icon-stroke" d="M8.4 3.5 6.1 5.9" />
+      <path className="nav-icon-stroke" d="M15.6 3.5 17.9 5.9" />
+      <path className="nav-icon-cutout" d="M12 9.8v3.9h3.1" />
     </NavIconBase>
   );
 }
