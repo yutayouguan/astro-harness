@@ -1049,7 +1049,7 @@ html[data-theme="dark"] .settings-content {
   height: 24px;
   flex-shrink: 0;
   border: none;
-  border-radius: 6px;
+  border-radius: 999px;
   background: transparent;
   color: var(--ink-mute);
   cursor: pointer;

@@ -427,17 +427,6 @@ export function IconCollapse(props: IconProps) {
 export function IconNewChat(props: IconProps) {
   return (
     <ChromeIconBase {...props}>
-      <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-      <path d="M12 7v6" />
-      <path d="M9 10h6" />
-    </ChromeIconBase>
-  );
-}
-
-/** 新建 Agent */
-export function IconNewSession(props: IconProps) {
-  return (
-    <ChromeIconBase {...props}>
       <path d="M2.992 16.342a2 2 0 0 1 .094 1.167l-1.065 3.29a1 1 0 0 0 1.236 1.168l3.413-.998a2 2 0 0 1 1.099.092a10 10 0 1 0-4.777-4.719" />
       <path d="M12 8v6" />
       <path d="M9 11h6" />
