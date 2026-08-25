@@ -927,9 +927,13 @@ html[data-theme="dark"] .settings-content {
   background: var(--glass);
 }
 
+/* 激活项目只加重字重、图标着色，正文让位给激活会话的强调底色 */
 .sidebar-project.is-active > .sidebar-project-header .sidebar-project-name {
+  font-weight: 620;
+}
+
+.sidebar-project.is-active > .sidebar-project-header .sidebar-project-name svg {
   color: var(--tone, var(--tone-blue));
-  font-weight: 600;
 }
 
 .sidebar-project-action {
@@ -948,7 +952,7 @@ html[data-theme="dark"] .settings-content {
 }
 
 .sidebar-project-header:hover .sidebar-project-action,
-.sidebar-project.is-active .sidebar-project-action {
+.sidebar-project-action:focus-visible {
   opacity: 1;
 }
 
@@ -972,6 +976,27 @@ html[data-theme="dark"] .settings-content {
   flex-direction: column;
   gap: 1px;
   padding: 0 0 0 12px;
+}
+
+/* 缩进之外再给一条淡引导线，多项目展开时才看得出会话归属 */
+.sidebar-project > .sidebar-sessions {
+  position: relative;
+}
+
+.sidebar-project > .sidebar-sessions::before {
+  content: "";
+  position: absolute;
+  top: 2px;
+  bottom: 2px;
+  left: 5px;
+  width: 1px;
+  border-radius: 1px;
+  background: color-mix(in srgb, var(--ink-mute) 18%, transparent);
+  pointer-events: none;
+}
+
+.sidebar-project.is-active > .sidebar-sessions::before {
+  background: color-mix(in srgb, var(--tone, var(--tone-blue)) 26%, transparent);
 }
 
 .sidebar-session-new {
@@ -1455,7 +1480,7 @@ html[data-theme="dark"] .project-context-menu {
 }
 
 .sidebar-project-header:hover .sidebar-project-more,
-.sidebar-project.is-active .sidebar-project-more {
+.sidebar-project-more:focus-visible {
   opacity: 1;
 }
 
@@ -1579,8 +1604,10 @@ html[data-theme="dark"] .project-context-menu {
   flex: 1;
   min-width: 0;
   overflow: hidden;
-  mask-image: linear-gradient(to right, transparent 0, #000 3px, #000 calc(100% - 24px), transparent 100%);
-  -webkit-mask-image: linear-gradient(to right, transparent 0, #000 3px, #000 calc(100% - 24px), transparent 100%);
+  /* 渐隐区收窄并留出右间距，否则淡出的尾字会贴到时间戳上 */
+  margin-right: 2px;
+  mask-image: linear-gradient(to right, transparent 0, #000 3px, #000 calc(100% - 14px), transparent 100%);
+  -webkit-mask-image: linear-gradient(to right, transparent 0, #000 3px, #000 calc(100% - 14px), transparent 100%);
 }
 
 .sidebar-session-title {
@@ -1636,6 +1663,8 @@ html[data-theme="dark"] .project-context-menu {
 .sidebar-session-time {
   flex-shrink: 0;
   font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
   color: var(--ink-mute);
   opacity: 0.6;
   margin-right: 2px;
