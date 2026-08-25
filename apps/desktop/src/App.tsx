@@ -788,29 +788,30 @@ export default function App() {
               <div className="sidebar-projects">
                 <div className="sidebar-section-header">
                   <span className="sidebar-section-title">
-                    {searchingSessions ? "搜索结果" : "项目"}
+                    {searchingSessions
+                      ? "搜索结果"
+                      : sessionListKind === "archived"
+                        ? t("sessions.archived")
+                        : "项目"}
                   </span>
                   <ExpandableSearch
                     value={sessionQuery}
                     onChange={setSessionQuery}
                     placeholderKey="chat.rightPanel.searchSessions"
                     className="sidebar-session-search"
-                    forceOpen={sessionListKind === "archived"}
-                    trailingAction={
-                      <button
-                        type="button"
-                        className={`sidebar-session-filter-btn ${sessionListKind === "archived" ? "is-on" : ""}`}
-                        title={sessionListKind === "archived" ? t("sessions.active") : t("sessions.archived")}
-                        aria-label={sessionListKind === "archived" ? t("sessions.active") : t("sessions.archived")}
-                        aria-pressed={sessionListKind === "archived"}
-                        onClick={() =>
-                          setSessionListKind((kind) => (kind === "archived" ? "active" : "archived"))
-                        }
-                      >
-                        <Archive size={13} strokeWidth={1.8} aria-hidden />
-                      </button>
-                    }
                   />
+                  <button
+                    type="button"
+                    className={`sidebar-session-filter-btn ${sessionListKind === "archived" ? "is-on" : ""}`}
+                    title={sessionListKind === "archived" ? t("sessions.active") : t("sessions.archived")}
+                    aria-label={sessionListKind === "archived" ? t("sessions.active") : t("sessions.archived")}
+                    aria-pressed={sessionListKind === "archived"}
+                    onClick={() =>
+                      setSessionListKind((kind) => (kind === "archived" ? "active" : "archived"))
+                    }
+                  >
+                    <Archive size={14} strokeWidth={1.8} aria-hidden />
+                  </button>
                   <button
                     type="button"
                     className="sidebar-add-btn"

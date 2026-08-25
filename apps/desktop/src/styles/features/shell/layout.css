@@ -879,9 +879,10 @@ html[data-theme="dark"] .settings-content {
   display: none;
 }
 
-/* 搜索与新建项目并排，尺寸/图标/hover 必须共用一套规格；
+/* 标题行三颗按钮（搜索 / 归档 / 新建）共用一套规格；
    搜索按钮需覆盖全局玻璃拟态（阴影 + backdrop-filter），否则会浮起一块 */
 .sidebar-add-btn,
+.sidebar-session-filter-btn,
 .sidebar-session-search .expandable-search-btn {
   display: grid;
   place-items: center;
@@ -899,17 +900,24 @@ html[data-theme="dark"] .settings-content {
 }
 
 .sidebar-add-btn > svg,
+.sidebar-session-filter-btn > svg,
 .sidebar-session-search .expandable-search-btn > svg {
   width: 14px;
   height: 14px;
 }
 
 .sidebar-add-btn:hover,
+.sidebar-session-filter-btn:hover,
 .sidebar-session-search .expandable-search-btn:hover {
   border: none;
   background: var(--glass);
   box-shadow: none;
   color: var(--ink);
+}
+
+.sidebar-session-filter-btn.is-on {
+  background: color-mix(in srgb, var(--tone, var(--tone-blue)) 16%, transparent);
+  color: var(--tone, var(--tone-blue));
 }
 
 .sidebar-project {
@@ -1066,13 +1074,6 @@ html[data-theme="dark"] .settings-content {
   color: var(--ink-mute);
 }
 
-.sidebar-session-search .expandable-search-field > .sidebar-session-filter-btn {
-  flex: 0 0 auto;
-  width: 18px;
-  height: 18px;
-  border-radius: 5px;
-}
-
 .sidebar-session-search .expandable-search-input {
   font-size: 12px;
   min-width: 0;
@@ -1082,28 +1083,6 @@ html[data-theme="dark"] .settings-content {
   padding-left: 0;
 }
 
-.sidebar-session-filter-btn {
-  display: grid;
-  place-items: center;
-  width: 24px;
-  height: 24px;
-  border: none;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--ink-mute);
-  cursor: pointer;
-  transition: background 0.08s, color 0.08s;
-}
-
-.sidebar-session-filter-btn:hover {
-  background: color-mix(in srgb, var(--tone, #64748b) 14%, transparent);
-  color: var(--ink);
-}
-
-.sidebar-session-filter-btn.is-on {
-  background: color-mix(in srgb, var(--tone, var(--tone-blue)) 16%, transparent);
-  color: var(--tone, var(--tone-blue));
-}
 
 .sidebar-empty {
   display: block;
@@ -1156,8 +1135,9 @@ html[data-theme="dark"] .settings-content {
 }
 
 .sidebar:not(.is-labels) .sidebar-sessions,
-/* 图标模式没有横向空间承载输入框 */
-.sidebar:not(.is-labels) .sidebar-session-search {
+/* 图标模式没有横向空间承载输入框与筛选 */
+.sidebar:not(.is-labels) .sidebar-session-search,
+.sidebar:not(.is-labels) .sidebar-session-filter-btn {
   display: none;
 }
 
