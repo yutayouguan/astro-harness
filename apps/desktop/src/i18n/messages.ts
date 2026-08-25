@@ -1516,6 +1516,9 @@ export const zh = {
   "prefs.category.general": "通用",
   "prefs.category.diagnostics": "诊断",
   "prefs.category.about": "关于",
+  "settings.overlay.title": "快速偏好",
+  "settings.overlay.openFull": "完整设置",
+  "settings.overlay.fullHint": "模型、工具与系统设置",
 
   "prefs.glass.title": "视觉风格",
   "prefs.glass.sub": "控制玻璃拟态效果和阴影强度",
@@ -3576,6 +3579,9 @@ export const en: Record<MessageKey, string> = {
   "prefs.category.general": "General",
   "prefs.category.diagnostics": "Diagnostics",
   "prefs.category.about": "About",
+  "settings.overlay.title": "Quick preferences",
+  "settings.overlay.openFull": "Full settings",
+  "settings.overlay.fullHint": "Models, tools & system",
 
   "prefs.glass.title": "Visual Style",
   "prefs.glass.sub": "Control glassmorphism and shadow intensity",

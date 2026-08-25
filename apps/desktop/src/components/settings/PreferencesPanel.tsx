@@ -928,70 +928,74 @@ export default function PreferencesPanel({
       </div>
 
       <div
-        className="prefs-category-stack"
+        className="prefs-category-stack prefs-category-stack--general"
         hidden={activeCategory !== "general"}
       >
-      <section className="prefs-card">
-        <div className="prefs-card-head">
-          <div className="prefs-icon-badge" data-tone={tone} aria-hidden>
-            <IconGlobe width={22} height={22} />
+      <section className="prefs-card prefs-card--general">
+        <div className="prefs-general-group">
+          <div className="prefs-card-head">
+            <div className="prefs-icon-badge" data-tone={tone} aria-hidden>
+              <IconGlobe width={22} height={22} />
+            </div>
+            <div>
+              <h2 className="prefs-card-title">{t("prefs.lang.title")}</h2>
+              <p className="prefs-card-sub">{t("prefs.lang.sub")}</p>
+            </div>
           </div>
-          <div>
-            <h2 className="prefs-card-title">{t("prefs.lang.title")}</h2>
-            <p className="prefs-card-sub">{t("prefs.lang.sub")}</p>
+
+          <div
+            className="theme-options lang-options"
+            role="radiogroup"
+            aria-label={t("prefs.lang.title")}
+          >
+            {langOptions.map(({ id, label, desc }) => (
+              <button
+                key={id}
+                type="button"
+                role="radio"
+                aria-checked={locale === id}
+                className={`theme-option ${locale === id ? "active" : ""}`}
+                data-tone={tone}
+                onClick={() => setLocale(id)}
+              >
+                <span className="theme-option-icon lang-badge" aria-hidden>
+                  {id === "zh" ? "中" : "En"}
+                </span>
+                <span className="theme-option-text">
+                  <span className="theme-option-label">{label}</span>
+                  <span className="theme-option-desc">{desc}</span>
+                </span>
+                <span className="theme-option-check" aria-hidden />
+              </button>
+            ))}
           </div>
         </div>
 
-        <div
-          className="theme-options lang-options"
-          role="radiogroup"
-          aria-label={t("prefs.lang.title")}
-        >
-          {langOptions.map(({ id, label, desc }) => (
-            <button
-              key={id}
-              type="button"
-              role="radio"
-              aria-checked={locale === id}
-              className={`theme-option ${locale === id ? "active" : ""}`}
-              data-tone={tone}
-              onClick={() => setLocale(id)}
-            >
-              <span className="theme-option-icon lang-badge" aria-hidden>
-                {id === "zh" ? "中" : "En"}
+        <div className="prefs-general-divider" aria-hidden />
+
+        <div className="prefs-general-group">
+          <div className="prefs-card-head">
+            <div className="prefs-icon-badge" data-tone={tone} aria-hidden>
+              <Wrench width={22} height={22} />
+            </div>
+            <div>
+              <h2 className="prefs-card-title">{t("prefs.system.title" as never)}</h2>
+              <p className="prefs-card-sub">{t("prefs.system.sub" as never)}</p>
+            </div>
+          </div>
+
+          <div className="prefs-toggle-list" role="group" aria-label={t("prefs.system.title" as never)}>
+            <label className="prefs-toggle-row">
+              <span className="prefs-toggle-icon" aria-hidden>
+                <Play size={15} strokeWidth={2.25} />
               </span>
-              <span className="theme-option-text">
-                <span className="theme-option-label">{label}</span>
-                <span className="theme-option-desc">{desc}</span>
+              <span className="prefs-toggle-text">
+                <span className="prefs-toggle-label">{t("prefs.system.autostart" as never)}</span>
+                <span className="prefs-toggle-desc">{t("prefs.system.autostartDesc" as never)}</span>
               </span>
-              <span className="theme-option-check" aria-hidden />
-            </button>
-          ))}
-        </div>
-      </section>
-
-      <section className="prefs-card">
-        <div className="prefs-card-head">
-          <div className="prefs-icon-badge" data-tone={tone} aria-hidden>
-            <Wrench width={22} height={22} />
+              <AutostartSwitch tone={tone} />
+            </label>
           </div>
-          <div>
-            <h2 className="prefs-card-title">{t("prefs.system.title" as never)}</h2>
-            <p className="prefs-card-sub">{t("prefs.system.sub" as never)}</p>
-          </div>
-        </div>
-
-        <div className="prefs-toggle-list" role="group" aria-label={t("prefs.system.title" as never)}>
-          <label className="prefs-toggle-row">
-            <span className="prefs-toggle-icon" aria-hidden>
-              <Play size={15} strokeWidth={2.25} />
-            </span>
-            <span className="prefs-toggle-text">
-              <span className="prefs-toggle-label">{t("prefs.system.autostart" as never)}</span>
-              <span className="prefs-toggle-desc">{t("prefs.system.autostartDesc" as never)}</span>
-            </span>
-            <AutostartSwitch tone={tone} />
-          </label>
         </div>
       </section>
       </div>

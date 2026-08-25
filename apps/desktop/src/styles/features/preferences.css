@@ -262,6 +262,64 @@ html[data-theme="dark"] .prefs-section {
   margin-bottom: 14px;
 }
 
+.prefs-card--general {
+  padding: 16px;
+}
+
+.prefs-general-group {
+  min-width: 0;
+}
+
+.prefs-general-divider {
+  height: 1px;
+  margin: 16px 0;
+  background: color-mix(in srgb, var(--glass-edge) 52%, transparent);
+}
+
+.prefs-card--general .prefs-card-head {
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.prefs-card--general .prefs-icon-badge {
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+}
+
+.prefs-card--general .prefs-icon-badge svg {
+  width: 18px;
+  height: 18px;
+}
+
+.prefs-card--general .theme-option {
+  align-items: center;
+  min-height: 52px;
+  padding: 8px 10px 8px 8px;
+  border-radius: 12px;
+}
+
+.prefs-card--general .theme-option-icon {
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+}
+
+.prefs-card--general .theme-option-text {
+  gap: 1px;
+}
+
+.prefs-card--general .prefs-toggle-list {
+  margin-top: 0;
+  padding: 4px;
+  border-radius: 12px;
+}
+
+.prefs-card--general .prefs-toggle-row {
+  min-height: 46px;
+  padding: 6px;
+}
+
 .prefs-icon-badge {
   width: 40px;
   height: 40px;
