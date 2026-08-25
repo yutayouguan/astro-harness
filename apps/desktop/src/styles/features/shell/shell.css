@@ -84,6 +84,10 @@
     animation: none;
     opacity: 0;
   }
+
+  .sidebar-resizer::before {
+    transition: none;
+  }
 }
 
 /* Tab 主题色驱动背景渐变（暗色） */
@@ -352,7 +356,7 @@ html[data-theme="dark"][data-unified-surface="dark-neutral"]:is([data-color-styl
 
 .body-row {
   --sidebar-w: 76px;
-    --sidebar-w-wide: 220px;
+  --sidebar-w-wide: 220px;
   flex: 1;
   min-height: 0;
   display: flex;
@@ -592,6 +596,55 @@ html[data-tone="twilight"] {
 .sidebar>* {
   position: relative;
   z-index: 1;
+}
+
+.sidebar-resizer {
+  position: absolute;
+  z-index: 65;
+  top: 38px;
+  bottom: 12px;
+  left: var(--sidebar-w-wide);
+  width: 12px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  cursor: ew-resize;
+  touch-action: none;
+  transform: translateX(-50%);
+}
+
+.sidebar-resizer::before {
+  content: "";
+  position: absolute;
+  top: 12px;
+  left: 5px;
+  bottom: 12px;
+  width: 2px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--tone, #2563eb) 42%, transparent);
+  opacity: 0;
+  transform: scaleY(0.72);
+  transition: opacity 0.14s ease, transform 0.18s ease, background 0.14s ease;
+}
+
+.sidebar-resizer:hover::before,
+.sidebar-resizer:focus-visible::before,
+.sidebar-resizer.is-resizing::before {
+  opacity: 1;
+  transform: scaleY(1);
+  background: color-mix(in srgb, var(--tone, #2563eb) 72%, transparent);
+}
+
+.sidebar-resizer:focus-visible {
+  outline: none;
+}
+
+.sidebar.is-resizing,
+.sidebar.is-open.is-resizing {
+  user-select: none;
+  transition: none;
 }
 
 .sidebar.is-open {

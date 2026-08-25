@@ -6,6 +6,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type CSSProperties,
 } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
@@ -718,9 +719,13 @@ export default function App() {
         />
       )}
 
-      <div className="body-row">
+      <div
+        className="body-row"
+        style={{ "--sidebar-w-wide": `${sidebar.sidebarWidth}px` } as CSSProperties}
+      >
         <aside
-          className={`sidebar ${sidebar.sidebarOpen || sidebar.sidebarPinned ? "is-open" : "is-collapsed"} ${sidebar.sidebarPinned ? "is-pinned" : ""} ${sidebar.showSidebarLabels ? "is-labels" : "is-icons"}`}
+          ref={sidebar.sidebarRef}
+          className={`sidebar ${sidebar.sidebarOpen || sidebar.sidebarPinned ? "is-open" : "is-collapsed"} ${sidebar.sidebarPinned ? "is-pinned" : ""} ${sidebar.showSidebarLabels ? "is-labels" : "is-icons"} ${sidebar.sidebarResizing ? "is-resizing" : ""}`}
           onMouseEnter={sidebar.openSidebar}
           onMouseLeave={sidebar.scheduleHideSidebar}
           onContextMenu={sidebar.openSidebarContextMenu}
@@ -946,6 +951,28 @@ export default function App() {
             </>
           )}
         </aside>
+        {sidebar.showSidebarLabels ? (
+          <button
+            type="button"
+            className={`sidebar-resizer${sidebar.sidebarResizing ? " is-resizing" : ""}`}
+            role="separator"
+            aria-label={t("sidebar.resize")}
+            aria-orientation="vertical"
+            aria-valuemin={sidebar.sidebarMinWidth}
+            aria-valuemax={sidebar.sidebarMaxWidth}
+            aria-valuenow={sidebar.sidebarWidth}
+            title={t("sidebar.resize")}
+            onDoubleClick={sidebar.resetSidebarWidth}
+            onKeyDown={sidebar.onSidebarResizeKeyDown}
+            onMouseEnter={sidebar.openSidebar}
+            onMouseLeave={sidebar.scheduleHideSidebar}
+            onPointerDown={sidebar.onSidebarResizePointerDown}
+            onPointerMove={sidebar.onSidebarResizePointerMove}
+            onPointerUp={sidebar.onSidebarResizePointerUp}
+            onPointerCancel={(event) => sidebar.finishSidebarResize(event.pointerId)}
+            onLostPointerCapture={(event) => sidebar.finishSidebarResize(event.pointerId)}
+          />
+        ) : null}
         {sidebar.sidebarCtx ? (
           <SidebarContextMenu
             x={sidebar.sidebarCtx.x}
