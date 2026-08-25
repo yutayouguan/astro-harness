@@ -41,8 +41,6 @@ import {
   IconPanelClose,
   IconPanelOpen,
   IconRightPanel,
-  IconSidebarIcons,
-  IconSidebarLabels,
 } from "./components/icons";
 import { useActiveAgent } from "./hooks/app/useActiveAgent";
 import { useChatDisplayPrefs } from "./hooks/chat/useChatDisplayPrefs";
@@ -766,25 +764,6 @@ export default function App() {
                   <AstroLogoMark width={26} height={26} />
                 </div>
                 <div className="sidebar-brand-text">Astro Agent</div>
-                <div className="sidebar-brand-actions">
-                  <button
-                    type="button"
-                    className="sidebar-pin-btn"
-                    data-tone={shellTone}
-                    onClick={sidebar.toggleSidebarLabels}
-                    title={sidebar.sidebarLabels ? t("sidebar.hideLabels") : t("sidebar.showLabels")}
-                    aria-label={
-                      sidebar.sidebarLabels ? t("sidebar.hideLabelsAria") : t("sidebar.showLabelsAria")
-                    }
-                    aria-pressed={sidebar.sidebarLabels}
-                  >
-                    {sidebar.sidebarLabels ? (
-                      <IconSidebarIcons width={15} height={15} />
-                    ) : (
-                      <IconSidebarLabels width={15} height={15} />
-                    )}
-                  </button>
-                </div>
               </div>
               <div className="sidebar-projects">
                 <div className="sidebar-section-header">

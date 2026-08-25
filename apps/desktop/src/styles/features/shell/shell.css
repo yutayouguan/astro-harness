@@ -683,13 +683,6 @@ html[data-tone="twilight"] {
   white-space: nowrap;
 }
 
-.sidebar-brand-actions {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 6px;
-}
-
 .sidebar.is-labels .sidebar-brand {
   flex-direction: row;
   align-items: center;
@@ -701,12 +694,6 @@ html[data-tone="twilight"] {
   display: block;
   flex: 1;
   min-width: 0;
-}
-
-.sidebar.is-labels .sidebar-brand-actions {
-  flex-direction: row;
-  margin-left: auto;
-  gap: 4px;
 }
 
 .sidebar-pin-btn {
