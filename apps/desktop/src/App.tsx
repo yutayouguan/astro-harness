@@ -113,6 +113,7 @@ import {
   Info,
   Layers2,
   MessageSquare,
+  MoreHorizontal,
   ScrollText,
   Settings2,
   Sparkles,
@@ -176,6 +177,8 @@ export default function App() {
   const [collapsedProjects, setCollapsedProjects] = useState<Set<string>>(new Set());
   const [projectMenu, setProjectMenu] = useState<{ id: string; name: string; x: number; y: number } | null>(null);
   const [editingProject, setEditingProject] = useState<ProjectDto | null>(null);
+  const [conversationMenuOpen, setConversationMenuOpen] = useState(false);
+  const conversationMenuRef = useRef<HTMLDivElement | null>(null);
   // 侧栏会话检索：搜索与归档视图跨全部项目生效
   const [sessionQuery, setSessionQuery] = useState("");
   const [sessionListKind, setSessionListKind] = useState<SessionListKind>("active");
@@ -669,6 +672,32 @@ export default function App() {
   const FeatureIcon = featureNav
     ? (NAV.find((item) => item.id === featureNav)?.Icon ?? IconChat)
     : IconChat;
+  const conversationTitle = useMemo(() => {
+    const firstUserMessage = chat.messages.find(
+      (message) => message.role === "user" && message.content.trim().length > 0,
+    );
+    if (!chat.sessionId || !firstUserMessage) return t(meta.titleKey);
+    const compact = firstUserMessage.content.replace(/\s+/g, " ").trim();
+    return compact.length > 52 ? `${compact.slice(0, 52)}…` : compact;
+  }, [chat.messages, chat.sessionId, meta.titleKey, t]);
+
+  useEffect(() => {
+    if (!conversationMenuOpen) return;
+    const closeOnPointerDown = (event: PointerEvent) => {
+      if (!conversationMenuRef.current?.contains(event.target as Node)) {
+        setConversationMenuOpen(false);
+      }
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setConversationMenuOpen(false);
+    };
+    window.addEventListener("pointerdown", closeOnPointerDown);
+    window.addEventListener("keydown", closeOnEscape);
+    return () => {
+      window.removeEventListener("pointerdown", closeOnPointerDown);
+      window.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [conversationMenuOpen]);
 
   // ── JSX ───────────────────────────────────────────────────────────────────
   return (
@@ -1127,17 +1156,68 @@ export default function App() {
             </>
           ) : (
             <>
-              <div className="content-header">
+              <div className="content-header content-header--chat">
                 <div className="content-heading">
                   <div className="page-title-block">
                     <div className="page-title-icon" data-tone={shellTone} aria-hidden>
                       <ActiveIcon width={15} height={15} />
                     </div>
                     <div className="page-title-text">
-                      <h1 className="content-title" data-tone={shellTone}>
-                        <span className="content-title-main">{t(meta.titleKey)}</span>
+                      <h1 className="content-title conversation-title" data-tone={shellTone}>
+                        <span className="content-title-main">{conversationTitle}</span>
                       </h1>
                     </div>
+                  </div>
+                  <div className="conversation-menu" ref={conversationMenuRef}>
+                    <button
+                      type="button"
+                      className={`conversation-menu-trigger ${conversationMenuOpen ? "is-open" : ""}`}
+                      aria-label={t("sessions.moreActions")}
+                      aria-haspopup="menu"
+                      aria-expanded={conversationMenuOpen}
+                      onClick={() => setConversationMenuOpen((open) => !open)}
+                    >
+                      <MoreHorizontal size={16} strokeWidth={2} />
+                    </button>
+                    {conversationMenuOpen && (
+                      <div className="conversation-menu-popover" role="menu">
+                        <button
+                          type="button"
+                          role="menuitem"
+                          onClick={() => {
+                            setConversationMenuOpen(false);
+                            void startNewChat();
+                          }}
+                        >
+                          <IconNewChat width={15} height={15} />
+                          <span>{t("chat.newSession")}</span>
+                        </button>
+                        <button
+                          type="button"
+                          role="menuitem"
+                          disabled={!chat.sessionId || chat.streaming || chat.isCompacting}
+                          onClick={() => {
+                            setConversationMenuOpen(false);
+                            void runCompactSession();
+                          }}
+                        >
+                          <Sparkles size={15} strokeWidth={1.9} />
+                          <span>{t("chat.slashCompact")}</span>
+                        </button>
+                        <button
+                          type="button"
+                          role="menuitem"
+                          onClick={() => {
+                            setConversationMenuOpen(false);
+                            setChatRightTab("context");
+                            setChatRightOpen(true);
+                          }}
+                        >
+                          <IconRightPanel width={15} height={15} />
+                          <span>{t("chat.rightPanel.context")}</span>
+                        </button>
+                      </div>
+                    )}
                   </div>
                 </div>
                 <div className="header-actions">
