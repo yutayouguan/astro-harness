@@ -1370,6 +1370,20 @@ html[data-theme="dark"] .sidebar-settings-nav .settings-sidebar-item.is-active {
   overflow-y: auto;
 }
 
+/* 定时任务 / 智能流程 / 插件：内联在内容区，撑满可用高度 */
+.feature-content-inline {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* 内联时外层 page-body 已提供留白，去掉面板自带的大内边距 */
+.feature-content-inline > .loop-panel {
+  padding: 0;
+}
+
 /* ── Settings / panel overlay ──────────────────────────────────────────── */
 
 .settings-overlay {

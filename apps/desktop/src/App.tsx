@@ -677,6 +677,11 @@ export default function App() {
   const meta = PAGE_META["chat"];
   const ActiveIcon = IconChat;
   const showHeaderStatus = chat.statusPhase !== "ready";
+  const featureNav =
+    nav === "cron" || nav === "loop" || nav === "skills" ? nav : null;
+  const FeatureIcon = featureNav
+    ? (NAV.find((item) => item.id === featureNav)?.Icon ?? IconChat)
+    : IconChat;
 
   // ── JSX ───────────────────────────────────────────────────────────────────
   return (
@@ -1123,6 +1128,63 @@ export default function App() {
                 </div>
               </div>
             </>
+          ) : featureNav ? (
+            <>
+              <div className="content-header">
+                <div className="content-heading">
+                  <div className="page-title-block">
+                    <div className="page-title-icon" data-tone={shellTone} aria-hidden>
+                      <FeatureIcon width={15} height={15} />
+                    </div>
+                    <div className="page-title-text">
+                      <h1 className="content-title" data-tone={shellTone}>
+                        <span className="content-title-main">{t(PAGE_META[featureNav].titleKey)}</span>
+                      </h1>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div className="page-body">
+                <div className="feature-content-inline">
+                  {featureNav === "cron" && (
+                    <CronPanel
+                      active
+                      providers={providers.map((p) => ({
+                        id: p.id,
+                        name: p.display_name,
+                        model: p.model,
+                        kind: p.kind,
+                      }))}
+                      activeProviderId={activeProviderId}
+                      tone={shellTone}
+                    />
+                  )}
+                  {featureNav === "loop" && (
+                    <LoopPanel
+                      active
+                      providers={providers.map((p) => ({
+                        id: p.id,
+                        name: p.display_name,
+                        model: p.model,
+                        kind: p.kind,
+                      }))}
+                      onCollapseSidebar={sidebar.collapseSidebar}
+                      onExpandSidebar={sidebar.pinSidebar}
+                    />
+                  )}
+                  {featureNav === "skills" && (
+                    <SkillsPanel
+                      active
+                      onInstallWithAgent={(prompt) => {
+                        setInput(prompt);
+                        setNav("chat");
+                      }}
+                      tone={shellTone}
+                    />
+                  )}
+                </div>
+              </div>
+            </>
           ) : (
             <>
               <div className="content-header">
@@ -1328,114 +1390,6 @@ export default function App() {
               onOpenSession={openSessionFromFilespace}
               onAttachFiles={attachArtifactsToChat}
               onClose={() => setNav("chat")}
-            />
-          </motion.div>
-        </motion.div>
-      )}
-      </AnimatePresence>
-
-      <AnimatePresence>
-      {nav === "cron" && (
-        <motion.div
-          key="overlay-cron"
-          className="settings-overlay"
-          onClick={(e) => { if (e.target === e.currentTarget) setNav("chat"); }}
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          transition={{ duration: 0.18 }}
-        >
-          <motion.div
-            className="settings-overlay-panel settings-overlay-panel--wide"
-            initial={{ opacity: 0, y: 24, scale: 0.96 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 16, scale: 0.97 }}
-            transition={{ type: "spring", stiffness: 380, damping: 30, mass: 0.8 }}
-          >
-            <button type="button" className="settings-overlay-close" onClick={() => setNav("chat")} aria-label={t("common.close")}>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
-            </button>
-            <CronPanel
-              active
-              providers={providers.map((p) => ({
-                id: p.id,
-                name: p.display_name,
-                model: p.model,
-                kind: p.kind,
-              }))}
-              activeProviderId={activeProviderId}
-              tone={shellTone}
-            />
-          </motion.div>
-        </motion.div>
-      )}
-      </AnimatePresence>
-
-      <AnimatePresence>
-      {nav === "skills" && (
-        <motion.div
-          key="overlay-skills"
-          className="settings-overlay"
-          onClick={(e) => { if (e.target === e.currentTarget) setNav("chat"); }}
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          transition={{ duration: 0.18 }}
-        >
-          <motion.div
-            className="settings-overlay-panel"
-            initial={{ opacity: 0, y: 24, scale: 0.96 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 16, scale: 0.97 }}
-            transition={{ type: "spring", stiffness: 380, damping: 30, mass: 0.8 }}
-          >
-            <button type="button" className="settings-overlay-close" onClick={() => setNav("chat")} aria-label="Close">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
-            </button>
-            <SkillsPanel
-              active={nav === "skills"}
-              onInstallWithAgent={(prompt) => {
-                setInput(prompt);
-                setNav("chat");
-              }}
-              tone={shellTone}
-            />
-          </motion.div>
-        </motion.div>
-      )}
-      </AnimatePresence>
-
-      <AnimatePresence>
-      {nav === "loop" && (
-        <motion.div
-          key="overlay-loop"
-          className="settings-overlay"
-          onClick={(e) => { if (e.target === e.currentTarget) setNav("chat"); }}
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          transition={{ duration: 0.18 }}
-        >
-          <motion.div
-            className="settings-overlay-panel settings-overlay-panel--wide"
-            initial={{ opacity: 0, y: 24, scale: 0.96 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 16, scale: 0.97 }}
-            transition={{ type: "spring", stiffness: 380, damping: 30, mass: 0.8 }}
-          >
-            <button type="button" className="settings-overlay-close" onClick={() => setNav("chat")} aria-label="Close">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
-            </button>
-            <LoopPanel
-              active={nav === "loop"}
-              providers={providers.map((p) => ({
-                id: p.id,
-                name: p.display_name,
-                model: p.model,
-                kind: p.kind,
-              }))}
-              onCollapseSidebar={sidebar.collapseSidebar}
-              onExpandSidebar={sidebar.pinSidebar}
             />
           </motion.div>
         </motion.div>
