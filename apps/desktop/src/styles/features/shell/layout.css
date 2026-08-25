@@ -1369,12 +1369,6 @@ html[data-theme="dark"] .settings-overlay-panel {
   color: var(--ink);
 }
 
-/* Settings layout inside overlay: fill the panel */
-.settings-overlay-panel .settings-layout {
-  flex: 1;
-  min-height: 0;
-}
-
 @media (prefers-reduced-motion: reduce) {
   .settings-overlay,
   .settings-overlay-panel {
