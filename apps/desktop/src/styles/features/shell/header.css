@@ -1210,33 +1210,13 @@ html[data-theme="dark"] .mem-glass-btn.is-primary {
   display: flex;
   flex-direction: column;
   border-radius: 28px;
-  background:
-    linear-gradient(
-      165deg,
-      rgba(255, 255, 255, 0.23) 0%,
-      rgba(255, 255, 255, 0.14) 100%
-    ),
-    color-mix(in srgb, var(--tone-soft, transparent) 28%, var(--glass-layer));
-  border: 1px solid color-mix(in srgb, var(--tone, var(--accent)) 10%, var(--glass-edge));
-  box-shadow: var(--shadow-card), var(--glass-rim);
-  backdrop-filter: var(--backdrop-glass);
-  -webkit-backdrop-filter: var(--backdrop-glass);
+  background: transparent;
+  border: none;
+  box-shadow: none;
   overflow: hidden;
 }
 html[data-theme="dark"] .chat-pane {
-  background:
-    linear-gradient(
-      155deg,
-      rgba(255, 255, 255, 0.035) 0%,
-      rgba(255, 255, 255, 0.01) 48%,
-      transparent 100%
-    ),
-    color-mix(in srgb, var(--tone-soft, transparent) 10%, rgba(8, 6, 18, 0.18));
-  border-color: color-mix(in srgb, var(--tone, var(--accent)) 14%, rgba(255, 255, 255, 0.08));
-  box-shadow:
-    var(--shadow-card),
-    inset 0 1px 0 rgba(255, 255, 255, 0.06),
-    inset 0 -1px 0 rgba(0, 0, 0, 0.12);
-  backdrop-filter: blur(28px) saturate(1.55);
-  -webkit-backdrop-filter: blur(28px) saturate(1.55);
+  background: transparent;
+  border: none;
+  box-shadow: none;
 }
