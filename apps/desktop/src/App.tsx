@@ -659,7 +659,6 @@ export default function App() {
   // ── Layout helpers ────────────────────────────────────────────────────────
   const meta = PAGE_META["chat"];
   const ActiveIcon = IconChat;
-  const singleProject = projects.length === 1 ? projects[0] : null;
   const showHeaderStatus = chat.statusPhase !== "ready";
 
   // ── JSX ───────────────────────────────────────────────────────────────────
@@ -856,30 +855,6 @@ export default function App() {
                     onPrepareDeleteCurrentSession={prepareDeleteCurrentSession}
                     onClearDeletedCurrentSession={clearDeletedCurrentSession}
                   />
-                ) : singleProject ? (
-                  <div
-                    className="sidebar-project sidebar-project--flat"
-                    onContextMenu={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      setProjectMenu({ ...singleProject, x: e.clientX, y: e.clientY });
-                    }}
-                  >
-                    <SidebarSessionList
-                      activeSessionId={chat.sessionId}
-                      sessionStatuses={sessionStatuses}
-                      projectId={singleProject.id}
-                      query=""
-                      listKind={sessionListKind}
-                      autoAssignActiveSession
-                      onOpenSession={(sid) => {
-                        setActiveProjectId(singleProject.id);
-                        void openSessionFromFilespace(sid);
-                      }}
-                      onPrepareDeleteCurrentSession={prepareDeleteCurrentSession}
-                      onClearDeletedCurrentSession={clearDeletedCurrentSession}
-                    />
-                  </div>
                 ) : projects.map((proj) => (
                   <div
                     key={proj.id}

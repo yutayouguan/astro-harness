@@ -964,10 +964,6 @@ html[data-theme="dark"] .settings-content {
   padding: 0 0 0 12px;
 }
 
-.sidebar-project--flat > .sidebar-sessions {
-  padding-left: 0;
-}
-
 .sidebar-session-new {
   display: flex;
   align-items: center;
