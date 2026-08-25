@@ -1245,6 +1245,8 @@ export const zh = {
 
   "sidebar.pin": "显示导航栏",
   "sidebar.newChat": "新建会话",
+  "sidebar.features": "自动化与扩展",
+  "sidebar.plugins": "插件",
   "sidebar.unpin": "收起导航栏",
   "sidebar.pinAria": "显示导航栏",
   "sidebar.unpinAria": "收起导航栏",
@@ -3304,6 +3306,8 @@ export const en: Record<MessageKey, string> = {
 
   "sidebar.pin": "Show sidebar",
   "sidebar.newChat": "New chat",
+  "sidebar.features": "Automation and extensions",
+  "sidebar.plugins": "Plugins",
   "sidebar.unpin": "Collapse sidebar",
   "sidebar.pinAria": "Show sidebar",
   "sidebar.unpinAria": "Collapse sidebar",
