@@ -48,6 +48,7 @@ import {
 } from "./components/icons";
 import { useActiveAgent } from "./hooks/app/useActiveAgent";
 import { useChatDisplayPrefs } from "./hooks/chat/useChatDisplayPrefs";
+import { useActiveSessionTitle } from "./hooks/chat/useActiveSessionTitle";
 import { useChatSession } from "./hooks/chat/useChatSession";
 import { useSessionStatusMap } from "./hooks/chat/useSessionStatusMap";
 import { useChatThinkingPrefs } from "./hooks/chat/useChatThinkingPrefs";
@@ -664,7 +665,6 @@ export default function App() {
   );
 
   // ── Layout helpers ────────────────────────────────────────────────────────
-  const meta = PAGE_META["chat"];
   const ActiveIcon = IconChat;
   const showHeaderStatus = chat.statusPhase !== "ready";
   const featureNav =
@@ -672,14 +672,7 @@ export default function App() {
   const FeatureIcon = featureNav
     ? (NAV.find((item) => item.id === featureNav)?.Icon ?? IconChat)
     : IconChat;
-  const conversationTitle = useMemo(() => {
-    const firstUserMessage = chat.messages.find(
-      (message) => message.role === "user" && message.content.trim().length > 0,
-    );
-    if (!chat.sessionId || !firstUserMessage) return t(meta.titleKey);
-    const compact = firstUserMessage.content.replace(/\s+/g, " ").trim();
-    return compact.length > 52 ? `${compact.slice(0, 52)}…` : compact;
-  }, [chat.messages, chat.sessionId, meta.titleKey, t]);
+  const conversationTitle = useActiveSessionTitle(chat.sessionId);
 
   useEffect(() => {
     if (!conversationMenuOpen) return;
@@ -1158,67 +1151,73 @@ export default function App() {
             <>
               <div className="content-header content-header--chat">
                 <div className="content-heading">
-                  <div className="page-title-block">
-                    <div className="page-title-icon" data-tone={shellTone} aria-hidden>
-                      <ActiveIcon width={15} height={15} />
-                    </div>
-                    <div className="page-title-text">
-                      <h1 className="content-title conversation-title" data-tone={shellTone}>
-                        <span className="content-title-main">{conversationTitle}</span>
-                      </h1>
-                    </div>
-                  </div>
-                  <div className="conversation-menu" ref={conversationMenuRef}>
-                    <button
-                      type="button"
-                      className={`conversation-menu-trigger ${conversationMenuOpen ? "is-open" : ""}`}
-                      aria-label={t("sessions.moreActions")}
-                      aria-haspopup="menu"
-                      aria-expanded={conversationMenuOpen}
-                      onClick={() => setConversationMenuOpen((open) => !open)}
-                    >
-                      <MoreHorizontal size={16} strokeWidth={2} />
-                    </button>
-                    {conversationMenuOpen && (
-                      <div className="conversation-menu-popover" role="menu">
-                        <button
-                          type="button"
-                          role="menuitem"
-                          onClick={() => {
-                            setConversationMenuOpen(false);
-                            void startNewChat();
-                          }}
-                        >
-                          <IconNewChat width={15} height={15} />
-                          <span>{t("chat.newSession")}</span>
-                        </button>
-                        <button
-                          type="button"
-                          role="menuitem"
-                          disabled={!chat.sessionId || chat.streaming || chat.isCompacting}
-                          onClick={() => {
-                            setConversationMenuOpen(false);
-                            void runCompactSession();
-                          }}
-                        >
-                          <Sparkles size={15} strokeWidth={1.9} />
-                          <span>{t("chat.slashCompact")}</span>
-                        </button>
-                        <button
-                          type="button"
-                          role="menuitem"
-                          onClick={() => {
-                            setConversationMenuOpen(false);
-                            setChatRightTab("context");
-                            setChatRightOpen(true);
-                          }}
-                        >
-                          <IconRightPanel width={15} height={15} />
-                          <span>{t("chat.rightPanel.context")}</span>
-                        </button>
+                  {conversationTitle && (
+                    <>
+                      <div className="page-title-block">
+                        <div className="page-title-icon" data-tone={shellTone} aria-hidden>
+                          <ActiveIcon width={15} height={15} />
+                        </div>
+                        <div className="page-title-text">
+                          <h1 className="content-title conversation-title" data-tone={shellTone}>
+                            <span className="content-title-main" title={conversationTitle}>
+                              {conversationTitle}
+                            </span>
+                          </h1>
+                        </div>
                       </div>
-                    )}
-                  </div>
+                      <div className="conversation-menu" ref={conversationMenuRef}>
+                        <button
+                          type="button"
+                          className={`conversation-menu-trigger ${conversationMenuOpen ? "is-open" : ""}`}
+                          aria-label={t("sessions.moreActions")}
+                          aria-haspopup="menu"
+                          aria-expanded={conversationMenuOpen}
+                          onClick={() => setConversationMenuOpen((open) => !open)}
+                        >
+                          <MoreHorizontal size={16} strokeWidth={2} />
+                        </button>
+                        {conversationMenuOpen && (
+                          <div className="conversation-menu-popover" role="menu">
+                            <button
+                              type="button"
+                              role="menuitem"
+                              onClick={() => {
+                                setConversationMenuOpen(false);
+                                void startNewChat();
+                              }}
+                            >
+                              <IconNewChat width={15} height={15} />
+                              <span>{t("chat.newSession")}</span>
+                            </button>
+                            <button
+                              type="button"
+                              role="menuitem"
+                              disabled={chat.streaming || chat.isCompacting}
+                              onClick={() => {
+                                setConversationMenuOpen(false);
+                                void runCompactSession();
+                              }}
+                            >
+                              <Sparkles size={15} strokeWidth={1.9} />
+                              <span>{t("chat.slashCompact")}</span>
+                            </button>
+                            <button
+                              type="button"
+                              role="menuitem"
+                              onClick={() => {
+                                setConversationMenuOpen(false);
+                                setChatRightTab("context");
+                                setChatRightOpen(true);
+                              }}
+                            >
+                              <IconRightPanel width={15} height={15} />
+                              <span>{t("chat.rightPanel.context")}</span>
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    </>
+                  )}
                 </div>
                 <div className="header-actions">
                   {showHeaderStatus && (
