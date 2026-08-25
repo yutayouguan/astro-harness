@@ -74,7 +74,7 @@ import {
 import { useActiveAgent } from "../../hooks/app/useActiveAgent";
 import { normalizeAgentId } from "../../types/agent";
 import { useTransientToast } from "../../hooks/ui/useTransientToast";
-import AnimatedSwitch from "../ui/AnimatedSwitch";
+import MotionSwitch from "../ui/MotionSwitch";
 import ExpandableSearch from "../ui/ExpandableSearch";
 import MsgStreamLoader from "../chat/MsgStreamLoader";
 import { IconRefresh } from "../icons/NavIcons";
@@ -2887,7 +2887,7 @@ export default function SkillsPanel({ active, onInstallWithAgent, tone }: Props)
       </div>
       </div>
 
-      <AnimatedSwitch switchKey={tab} className="anim-switch--fill">
+      <MotionSwitch switchKey={tab} className="anim-switch--fill">
       {tab === "installed" && (
         <section className="skills-pane" role="tabpanel">
           <header className="skills-pane-head">
@@ -3240,7 +3240,7 @@ export default function SkillsPanel({ active, onInstallWithAgent, tone }: Props)
           )}
         </section>
       )}
-      </AnimatedSwitch>
+      </MotionSwitch>
 
       {toastHost}
 

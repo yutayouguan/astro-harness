@@ -33,7 +33,7 @@ import {
   IconWsViewGrid,
   IconWsViewList,
 } from "../workspace/WorkspaceIcons";
-import AnimatedSwitch from "../ui/AnimatedSwitch";
+import MotionSwitch from "../ui/MotionSwitch";
 import ExpandableSearch from "../ui/ExpandableSearch";
 import FileContextMenu, { type FileMenuAction } from "./FileContextMenu";
 import FileGlyph from "./FileGlyph";
@@ -662,7 +662,7 @@ export default function FileSpacePanel({
         />
 
         <div className="fs-body">
-          <AnimatedSwitch
+          <MotionSwitch
             switchKey={recentOnly ? "recent" : "all"}
             className="anim-switch--fill"
           >
@@ -837,7 +837,7 @@ export default function FileSpacePanel({
               />
             )}
           </div>
-          </AnimatedSwitch>
+          </MotionSwitch>
 
           <aside className="fs-preview" aria-label={t("filespace.preview")}>
             {!selected ? (

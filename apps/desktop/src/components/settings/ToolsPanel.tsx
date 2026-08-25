@@ -50,7 +50,7 @@ import { useActiveAgent } from "../../hooks/app/useActiveAgent";
 import { useI18n } from "../../i18n/LocaleContext";
 import type { MessageKey } from "../../i18n/messages";
 import McpIcon from "../icons/McpIcon";
-import AnimatedSwitch from "../ui/AnimatedSwitch";
+import MotionSwitch from "../ui/MotionSwitch";
 import ExpandableSearch from "../ui/ExpandableSearch";
 import LucideByName from "../icons/LucideByName";
 import { IconRefresh } from "../icons/NavIcons";
@@ -531,7 +531,7 @@ function McpAddDialog({
         </div>
 
         <div className="mcp-add-drawer-scroll">
-          <AnimatedSwitch switchKey={addTab} variant="fade">
+          <MotionSwitch switchKey={addTab} variant="fade">
             {addTab === "json" && (
               <div className="mcp-add-drawer-body">
                 <label className="mcp-field mcp-field--full">
@@ -772,7 +772,7 @@ function McpAddDialog({
                 ) : null}
               </div>
             )}
-          </AnimatedSwitch>
+          </MotionSwitch>
         </div>
 
         <footer className="mcp-add-drawer-foot">
@@ -1349,7 +1349,7 @@ export default function ToolsPanel({
       </div>
 
       <div className="agent-tools-body">
-      <AnimatedSwitch switchKey={tab} className="anim-switch--fill">
+      <MotionSwitch switchKey={tab} className="anim-switch--fill">
       {tab === "builtin" && (
         <>
           {items.length === 0 ? (
@@ -1962,7 +1962,7 @@ export default function ToolsPanel({
       )}
 
       {tab === "approvals" && <ApprovalsSection active={active} />}
-      </AnimatedSwitch>
+      </MotionSwitch>
       </div>
 
       {showAdd && (

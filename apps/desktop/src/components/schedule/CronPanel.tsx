@@ -42,7 +42,7 @@ import { mapHistoryMessages } from "../../lib/chat/mapHistoryMessages";
 import { useActiveAgent } from "../../hooks/app/useActiveAgent";
 import { normalizeAgentId } from "../../types/agent";
 import type { ChatHistoryDto, ChatMessage } from "../../types";
-import AnimatedSwitch from "../ui/AnimatedSwitch";
+import MotionSwitch from "../ui/MotionSwitch";
 import ExpandableSearch from "../ui/ExpandableSearch";
 import MsgActivity from "../chat/MsgActivity";
 import { ChatMarkdown } from "../chat/ChatMarkdown";
@@ -1401,7 +1401,7 @@ export default function CronPanel({
           )}
         </div>
 
-        <AnimatedSwitch switchKey={activeTab} className="anim-switch--fill">
+        <MotionSwitch switchKey={activeTab} className="anim-switch--fill">
         {activeTab === "jobs" && loading && filteredJobs.length === 0 && (
           <p className="cron-loading">{t("workspace.loading")}</p>
         )}
@@ -1456,7 +1456,7 @@ export default function CronPanel({
         )}
 
         {activeTab === "history" && renderHistory()}
-        </AnimatedSwitch>
+        </MotionSwitch>
       </section>
 
       <CreateCronDialog

@@ -23,7 +23,7 @@ import { useActiveAgent } from "../../hooks/app/useActiveAgent";
 import { useConfirm } from "../../hooks/ui/DialogContext";
 import { useI18n } from "../../i18n/LocaleContext";
 import type { MessageKey } from "../../i18n/messages";
-import AnimatedSwitch from "../ui/AnimatedSwitch";
+import MotionSwitch from "../ui/MotionSwitch";
 import AgentAvatar from "../agents/AgentAvatar";
 import { EmptyIllustration } from "../../illustrations";
 import type { AgentInfo } from "../../types/agent";
@@ -937,7 +937,7 @@ export default function MemoryPanel({
         </div>
       )}
 
-      <AnimatedSwitch switchKey={view} className="anim-switch--fill">
+      <MotionSwitch switchKey={view} className="anim-switch--fill">
       {view === "diary" && (
         <div className="mem-split">
           <aside className="mem-sidebar">
@@ -1445,7 +1445,7 @@ export default function MemoryPanel({
           </section>
         </div>
       )}
-      </AnimatedSwitch>
+      </MotionSwitch>
     </aside>
   );
 }

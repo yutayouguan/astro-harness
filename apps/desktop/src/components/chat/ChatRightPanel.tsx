@@ -35,7 +35,7 @@ import ChatAgentInfo from "./ChatAgentInfo";
 import ContextExplorer from "./ContextExplorer";
 import GeneratingPreviewPanel from "./GeneratingPreviewPanel";
 import TaskMonitorPanel from "./TaskMonitorPanel";
-import AnimatedSwitch from "../ui/AnimatedSwitch";
+import MotionSwitch from "../ui/MotionSwitch";
 
 export type ChatRightTab = "monitor" | "context" | "preview" | "agent";
 
@@ -327,11 +327,10 @@ export default function ChatRightPanel({
           })}
         </div>
         <div className="chat-right-body">
-          <AnimatedSwitch
+          <MotionSwitch
             switchKey={tab}
             className="anim-switch--fill"
             variant="fade"
-            mode="enter"
           >
             {tab === "monitor" && (
               <TaskMonitorPanel
@@ -360,7 +359,7 @@ export default function ChatRightPanel({
                 onOpenContextTab={() => onTabChange("context")}
               />
             )}
-          </AnimatedSwitch>
+          </MotionSwitch>
         </div>
       </aside>
     </>

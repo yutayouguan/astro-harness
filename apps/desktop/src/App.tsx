@@ -11,6 +11,7 @@ import {
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 
+import { AnimatePresence, motion } from "framer-motion";
 import AboutDialog from "./components/ui/AboutDialog";
 import ChatRightPanel from "./components/chat/ChatRightPanel";
 import ProjectContextMenu from "./components/chat/ProjectContextMenu";
@@ -1239,9 +1240,24 @@ export default function App() {
       </div>
 
       {/* ── Overlay panels ─────────────────────────────────────────────────── */}
+      <AnimatePresence>
       {nav === "files" && (
-        <div className="settings-overlay" onClick={(e) => { if (e.target === e.currentTarget) setNav("chat"); }}>
-          <div className="settings-overlay-panel settings-overlay-panel--wide">
+        <motion.div
+          key="overlay-files"
+          className="settings-overlay"
+          onClick={(e) => { if (e.target === e.currentTarget) setNav("chat"); }}
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.18 }}
+        >
+          <motion.div
+            className="settings-overlay-panel settings-overlay-panel--wide"
+            initial={{ opacity: 0, y: 24, scale: 0.96 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 16, scale: 0.97 }}
+            transition={{ type: "spring", stiffness: 380, damping: 30, mass: 0.8 }}
+          >
             <button type="button" className="settings-overlay-close" onClick={() => setNav("chat")} aria-label="Close">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
             </button>
@@ -1253,13 +1269,29 @@ export default function App() {
               onAttachFiles={attachArtifactsToChat}
               onClose={() => setNav("chat")}
             />
-          </div>
-        </div>
+          </motion.div>
+        </motion.div>
       )}
+      </AnimatePresence>
 
+      <AnimatePresence>
       {nav === "skills" && (
-        <div className="settings-overlay" onClick={(e) => { if (e.target === e.currentTarget) setNav("chat"); }}>
-          <div className="settings-overlay-panel">
+        <motion.div
+          key="overlay-skills"
+          className="settings-overlay"
+          onClick={(e) => { if (e.target === e.currentTarget) setNav("chat"); }}
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.18 }}
+        >
+          <motion.div
+            className="settings-overlay-panel"
+            initial={{ opacity: 0, y: 24, scale: 0.96 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 16, scale: 0.97 }}
+            transition={{ type: "spring", stiffness: 380, damping: 30, mass: 0.8 }}
+          >
             <button type="button" className="settings-overlay-close" onClick={() => setNav("chat")} aria-label="Close">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
             </button>
@@ -1271,13 +1303,29 @@ export default function App() {
               }}
               tone={shellTone}
             />
-          </div>
-        </div>
+          </motion.div>
+        </motion.div>
       )}
+      </AnimatePresence>
 
+      <AnimatePresence>
       {nav === "loop" && (
-        <div className="settings-overlay" onClick={(e) => { if (e.target === e.currentTarget) setNav("chat"); }}>
-          <div className="settings-overlay-panel settings-overlay-panel--wide">
+        <motion.div
+          key="overlay-loop"
+          className="settings-overlay"
+          onClick={(e) => { if (e.target === e.currentTarget) setNav("chat"); }}
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.18 }}
+        >
+          <motion.div
+            className="settings-overlay-panel settings-overlay-panel--wide"
+            initial={{ opacity: 0, y: 24, scale: 0.96 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 16, scale: 0.97 }}
+            transition={{ type: "spring", stiffness: 380, damping: 30, mass: 0.8 }}
+          >
             <button type="button" className="settings-overlay-close" onClick={() => setNav("chat")} aria-label="Close">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
             </button>
@@ -1292,9 +1340,10 @@ export default function App() {
               onCollapseSidebar={sidebar.collapseSidebar}
               onExpandSidebar={sidebar.pinSidebar}
             />
-          </div>
-        </div>
+          </motion.div>
+        </motion.div>
       )}
+      </AnimatePresence>
 
       {projectMenu && (
         <ProjectContextMenu

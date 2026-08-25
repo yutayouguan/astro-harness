@@ -24,7 +24,7 @@ import {
   type MdMode,
 } from "../../lib/filespace/workspaceMdMode";
 import { buildWorkspaceMenuItems } from "../../lib/filespace/workspaceMenuItems";
-import AnimatedSwitch from "../ui/AnimatedSwitch";
+import MotionSwitch from "../ui/MotionSwitch";
 import MediaToolbar from "../media/MediaToolbar";
 import FilePreviewContent from "../filespace/FilePreviewContent";
 import ExpandableSearch from "../ui/ExpandableSearch";
@@ -1104,7 +1104,7 @@ export default function WorkspacePanel({
         }
       }}
     >
-      <AnimatedSwitch switchKey={view} className="anim-switch--fill">
+      <MotionSwitch switchKey={view} className="anim-switch--fill">
       {view === "browse" ? (
         <>
           <div className="ws-toolbar">
@@ -1568,7 +1568,7 @@ export default function WorkspacePanel({
           />
         </>
       )}
-      </AnimatedSwitch>
+      </MotionSwitch>
       {toastHost}
     </aside>
   );
