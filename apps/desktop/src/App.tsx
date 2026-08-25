@@ -211,7 +211,8 @@ export default function App() {
     setFilesMode(mode);
     writeFilesSubmode(mode);
   };
-  const [toolsInitialTab, setToolsInitialTab] = useState<"builtin" | "mcp" | null>(null);
+  const [toolsInitialTab, setToolsInitialTab] = useState<"builtin" | null>(null);
+  const [skillsInitialTab, setSkillsInitialTab] = useState<"mcp" | null>(null);
   const [aboutOpen, setAboutOpen] = useState(false);
   const [modelContextWindow, setModelContextWindow] = useState<number | null>(null);
   const [activeModelCapabilities, setActiveModelCapabilities] =
@@ -533,8 +534,8 @@ export default function App() {
           setNav("skills");
           break;
         case "nav_mcp":
-          setToolsInitialTab("mcp");
-          openSettingsTab("tools");
+          setSkillsInitialTab("mcp");
+          setNav("skills");
           break;
         case "nav_memory":
           openSettingsTab("memory");
@@ -1143,6 +1144,8 @@ export default function App() {
                   {featureNav === "skills" && (
                     <SkillsPanel
                       active
+                      initialTab={skillsInitialTab}
+                      onInitialTabConsumed={() => setSkillsInitialTab(null)}
                       onInstallWithAgent={(prompt) => {
                         setInput(prompt);
                         setNav("chat");
@@ -1337,8 +1340,8 @@ export default function App() {
                       onToggleThinking={onToggleThinking}
                       onThinkingLevelChange={onThinkingLevelChange}
                       onOpenMcpSettings={() => {
-                        setToolsInitialTab("mcp");
-                        openSettingsTab("tools");
+                        setSkillsInitialTab("mcp");
+                        setNav("skills");
                       }}
                       chatMode={chatMode}
                       onChatModeChange={onChatModeChange}

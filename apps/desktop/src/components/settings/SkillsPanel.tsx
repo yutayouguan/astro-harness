@@ -12,6 +12,7 @@ import {
   Bot,
   Check,
   ChevronDown,
+  CirclePlus,
   CloudDownload,
   Code2,
   Columns2,
@@ -77,7 +78,9 @@ import { useTransientToast } from "../../hooks/ui/useTransientToast";
 import MotionSwitch from "../ui/MotionSwitch";
 import ExpandableSearch from "../ui/ExpandableSearch";
 import MsgStreamLoader from "../chat/MsgStreamLoader";
+import McpIcon from "../icons/McpIcon";
 import { IconRefresh } from "../icons/NavIcons";
+import { useMcpSection } from "./McpSection";
 import { SelectMenu } from "../ui/SelectMenu";
 import EmptyIllustration from "../../illustrations/EmptyIllustration";
 import {
@@ -136,11 +139,14 @@ type Props = {
   active: boolean;
   /** 跳转对话并用 Agent 安装（填入安装 Prompt） */
   onInstallWithAgent?: (prompt: string) => void;
+  /** 打开时落到该 tab；消费后通知父级清空 */
+  initialTab?: SkillsTab | null;
+  onInitialTabConsumed?: () => void;
   tone?: string;
 };
 
-/** 顶栏 Tab：已安装 / 本机 / 更新 / 商店 */
-type SkillsTab = "installed" | "machine" | "updates" | "online";
+/** 顶栏 Tab：已安装 / 本机 / 更新 / 商店 / MCP */
+type SkillsTab = "installed" | "machine" | "updates" | "online" | "mcp";
 /** 内容布局：画廊 / 列表 / 详情 */
 type SkillsView = "gallery" | "list" | "detail";
 /** 已安装列表排序 */
@@ -369,7 +375,13 @@ type SkillUpdateConfirmState =
       dirtyCount: number;
     };
 
-export default function SkillsPanel({ active, onInstallWithAgent, tone }: Props) {
+export default function SkillsPanel({
+  active,
+  onInstallWithAgent,
+  initialTab = null,
+  onInitialTabConsumed,
+  tone,
+}: Props) {
   const { t, locale } = useI18n();
   const { showToast, toastHost } = useTransientToast();
   const [tab, setTab] = useState<SkillsTab>("installed");
@@ -380,6 +392,7 @@ export default function SkillsPanel({ active, onInstallWithAgent, tone }: Props)
   const [query, setQuery] = useState("");
   const [installedQuery, setInstalledQuery] = useState("");
   const [machineQuery, setMachineQuery] = useState("");
+  const [mcpQuery, setMcpQuery] = useState("");
   const [loadingInstalled, setLoadingInstalled] = useState(false);
   const [loadingMachine, setLoadingMachine] = useState(false);
   const [loadingStore, setLoadingStore] = useState(false);
@@ -391,6 +404,18 @@ export default function SkillsPanel({ active, onInstallWithAgent, tone }: Props)
   const [error, setError] = useState<string | null>(null);
   const { activeAgentId: agentId } = useActiveAgent();
   const [viewMode, setViewMode] = useState<SkillsView>(() => readSkillsView());
+  const pageRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!initialTab) return;
+    setTab(initialTab);
+    onInitialTabConsumed?.();
+  }, [initialTab, onInitialTabConsumed]);
+  const mcp = useMcpSection({
+    active: active && tab === "mcp",
+    query: mcpQuery,
+    viewMode,
+    hostRef: pageRef,
+  });
   const [selectedDetailId, setSelectedDetailId] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [loadingPreview, setLoadingPreview] = useState<string | null>(null);
@@ -2645,7 +2670,7 @@ export default function SkillsPanel({ active, onInstallWithAgent, tone }: Props)
   );
 
   return (
-    <div className="skills-page" data-tone={tone ?? "indigo"}>
+    <div className="skills-page" data-tone={tone ?? "indigo"} ref={pageRef}>
       <div className="skills-toolbar">
       <div
         className="skills-main-tabs"
@@ -2704,6 +2729,19 @@ export default function SkillsPanel({ active, onInstallWithAgent, tone }: Props)
         >
           <CloudDownload size={15} strokeWidth={2.25} aria-hidden />
           {t("skills.tab.online")}
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={tab === "mcp"}
+          className={`skills-main-tab ${tab === "mcp" ? "active" : ""}`}
+          onClick={() => setTab("mcp")}
+        >
+          <McpIcon size={15} />
+          {t("tools.tab.mcp")}
+          {mcp.serverCount > 0 && (
+            <span className="skills-main-tab-count">{mcp.serverCount}</span>
+          )}
         </button>
       </div>
       <div className="skills-toolbar-end">
@@ -2882,6 +2920,25 @@ export default function SkillsPanel({ active, onInstallWithAgent, tone }: Props)
               placeholderKey="skills.searchPlaceholder"
             />
             {viewToggle}
+          </>
+        )}
+        {tab === "mcp" && (
+          <>
+            <ExpandableSearch
+              value={mcpQuery}
+              onChange={setMcpQuery}
+              placeholderKey="tools.searchPlaceholder"
+            />
+            {viewToggle}
+            <button
+              type="button"
+              className="skills-icon-btn"
+              onClick={mcp.openAdd}
+              title={t("mcpTools.add")}
+              aria-label={t("mcpTools.add")}
+            >
+              <CirclePlus size={17} />
+            </button>
           </>
         )}
       </div>
@@ -3238,6 +3295,12 @@ export default function SkillsPanel({ active, onInstallWithAgent, tone }: Props)
               </div>
             </div>
           )}
+        </section>
+      )}
+
+      {tab === "mcp" && (
+        <section className="skills-pane" role="tabpanel">
+          <div className="skills-mcp-body">{mcp.content}</div>
         </section>
       )}
       </MotionSwitch>

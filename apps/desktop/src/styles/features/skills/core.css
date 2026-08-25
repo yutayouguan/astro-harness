@@ -616,6 +616,17 @@ html[data-theme="dark"] .skills-icon-btn.is-active {
   align-content: start;
 }
 
+/* MCP 区块寄居在 skills-pane 里，滚动交给这层 */
+.skills-mcp-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 2px 2px 8px;
+  overflow: auto;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .skills-icon-btn .is-spin {
     animation: none;
