@@ -42,7 +42,7 @@
   right: 0;
   bottom: 0;
   z-index: 21;
-  width: min(360px, calc(100% - 20px));
+  width: min(var(--chat-right-panel-width, 360px), calc(100% - 20px));
   display: flex;
   flex-direction: column;
   border-radius: 20px;
@@ -60,6 +60,51 @@
   min-height: 0;
   overflow: hidden;
   animation: chat-right-slide-in 0.22s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.chat-right-resizer {
+  position: absolute;
+  z-index: 4;
+  top: 12px;
+  bottom: 12px;
+  left: 0;
+  width: 10px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  cursor: ew-resize;
+  touch-action: none;
+}
+
+.chat-right-resizer::before {
+  content: "";
+  position: absolute;
+  top: 14px;
+  bottom: 14px;
+  left: 0;
+  width: 2px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--tone-blue, #2563eb) 42%, transparent);
+  opacity: 0;
+  transform: scaleY(0.72);
+  transition: opacity 0.14s ease, transform 0.18s ease, background 0.14s ease;
+}
+
+.chat-right-resizer:hover::before,
+.chat-right-resizer:focus-visible::before,
+.chat-right-panel.is-resizing .chat-right-resizer::before {
+  opacity: 1;
+  transform: scaleY(1);
+  background: color-mix(in srgb, var(--tone-blue, #2563eb) 72%, transparent);
+}
+
+.chat-right-resizer:focus-visible {
+  outline: none;
+}
+
+.chat-right-panel.is-resizing {
+  user-select: none;
 }
 
 html[data-theme="dark"] .chat-right-panel {
@@ -775,6 +820,7 @@ html[data-theme="dark"] .chat-agent-preview {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .chat-right-resizer::before,
   .chat-right-panel,
   .chat-right-panel.is-closing {
     animation: none;

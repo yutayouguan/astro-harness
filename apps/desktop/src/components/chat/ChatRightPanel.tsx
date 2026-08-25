@@ -1,5 +1,14 @@
 // 聊天右侧栏（任务监控 / 上下文 / 预览 / Agent Tab）；会话列表在左侧项目栏。
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type PointerEvent as ReactPointerEvent,
+} from "react";
 import {
   Activity,
   Bot,
@@ -14,6 +23,14 @@ import type { MessageKey } from "../../i18n/messages";
 import type { ChatMessage } from "../../types";
 import type { ContextUsageSnapshot } from "../../lib/chat/contextUsage";
 import type { GeneratingPreview } from "../../hooks/chat/useGeneratingPreview";
+import {
+  CHAT_RIGHT_PANEL_DEFAULT_WIDTH,
+  CHAT_RIGHT_PANEL_MIN_WIDTH,
+  CHAT_RIGHT_PANEL_WIDTH_KEY,
+  clampChatRightPanelWidth,
+  maxChatRightPanelWidth,
+  parseStoredChatRightPanelWidth,
+} from "../../lib/ui/chatRightPanelWidth";
 import ChatAgentInfo from "./ChatAgentInfo";
 import ContextExplorer from "./ContextExplorer";
 import GeneratingPreviewPanel from "./GeneratingPreviewPanel";
@@ -63,6 +80,9 @@ const TAB_ICONS: Record<ChatRightTab, LucideIcon> = {
   agent: Bot,
 };
 
+const RESIZE_KEYBOARD_STEP = 16;
+const RESIZE_KEYBOARD_LARGE_STEP = 48;
+
 export default function ChatRightPanel({
   tab,
   onTabChange,
@@ -82,7 +102,38 @@ export default function ChatRightPanel({
   const tabs: ChatRightTab[] = ["monitor", "context", "preview", "agent"];
   const tabsRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLElement>(null);
+  const panelWidthRef = useRef(CHAT_RIGHT_PANEL_DEFAULT_WIDTH);
+  const resizeRef = useRef<{ pointerId: number; startX: number; startWidth: number } | null>(null);
   const [indicator, setIndicator] = useState({ left: 0, width: 0, ready: false });
+  const [panelWidth, setPanelWidth] = useState(() => {
+    try {
+      return parseStoredChatRightPanelWidth(localStorage.getItem(CHAT_RIGHT_PANEL_WIDTH_KEY));
+    } catch {
+      return CHAT_RIGHT_PANEL_DEFAULT_WIDTH;
+    }
+  });
+  const [maxPanelWidth, setMaxPanelWidth] = useState(CHAT_RIGHT_PANEL_DEFAULT_WIDTH);
+  const [resizing, setResizing] = useState(false);
+
+  panelWidthRef.current = panelWidth;
+
+  const containerWidth = useCallback(() => {
+    const width = panelRef.current?.parentElement?.getBoundingClientRect().width ?? 0;
+    return width > 0 ? width : Number.POSITIVE_INFINITY;
+  }, []);
+
+  const updatePanelWidth = useCallback((nextWidth: number, persist = false) => {
+    const next = clampChatRightPanelWidth(nextWidth, containerWidth());
+    panelWidthRef.current = next;
+    setPanelWidth(next);
+    if (persist) {
+      try {
+        localStorage.setItem(CHAT_RIGHT_PANEL_WIDTH_KEY, String(next));
+      } catch {
+        // Storage can be unavailable in private or locked-down webviews.
+      }
+    }
+  }, [containerWidth]);
 
   const closeWithAnim = useCallback(() => {
     const el = panelRef.current;
@@ -104,6 +155,78 @@ export default function ChatRightPanel({
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [closeWithAnim]);
+
+  useLayoutEffect(() => {
+    const container = panelRef.current?.parentElement;
+    if (!container) return;
+
+    const syncBounds = () => {
+      const width = container.getBoundingClientRect().width;
+      if (width <= 0) return;
+      const nextMax = maxChatRightPanelWidth(width);
+      setMaxPanelWidth(nextMax);
+      const nextWidth = clampChatRightPanelWidth(panelWidthRef.current, width);
+      panelWidthRef.current = nextWidth;
+      setPanelWidth(nextWidth);
+    };
+
+    syncBounds();
+    const observer = typeof ResizeObserver !== "undefined" ? new ResizeObserver(syncBounds) : null;
+    observer?.observe(container);
+    window.addEventListener("resize", syncBounds);
+    return () => {
+      observer?.disconnect();
+      window.removeEventListener("resize", syncBounds);
+    };
+  }, []);
+
+  const finishResize = useCallback((pointerId: number) => {
+    if (resizeRef.current?.pointerId !== pointerId) return;
+    resizeRef.current = null;
+    setResizing(false);
+    try {
+      localStorage.setItem(CHAT_RIGHT_PANEL_WIDTH_KEY, String(panelWidthRef.current));
+    } catch {
+      // Storage can be unavailable in private or locked-down webviews.
+    }
+  }, []);
+
+  const onResizePointerDown = (event: ReactPointerEvent<HTMLButtonElement>) => {
+    if (event.button !== 0) return;
+    event.preventDefault();
+    resizeRef.current = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startWidth: panelRef.current?.getBoundingClientRect().width ?? panelWidthRef.current,
+    };
+    setResizing(true);
+    event.currentTarget.setPointerCapture(event.pointerId);
+  };
+
+  const onResizePointerMove = (event: ReactPointerEvent<HTMLButtonElement>) => {
+    const drag = resizeRef.current;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    updatePanelWidth(drag.startWidth + drag.startX - event.clientX);
+  };
+
+  const onResizePointerUp = (event: ReactPointerEvent<HTMLButtonElement>) => {
+    finishResize(event.pointerId);
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+  };
+
+  const onResizeKeyDown = (event: ReactKeyboardEvent<HTMLButtonElement>) => {
+    const step = event.shiftKey ? RESIZE_KEYBOARD_LARGE_STEP : RESIZE_KEYBOARD_STEP;
+    let nextWidth: number | null = null;
+    if (event.key === "ArrowLeft") nextWidth = panelWidthRef.current + step;
+    else if (event.key === "ArrowRight") nextWidth = panelWidthRef.current - step;
+    else if (event.key === "Home") nextWidth = CHAT_RIGHT_PANEL_MIN_WIDTH;
+    else if (event.key === "End") nextWidth = maxPanelWidth;
+    if (nextWidth == null) return;
+    event.preventDefault();
+    updatePanelWidth(nextWidth, true);
+  };
 
   useLayoutEffect(() => {
     const root = tabsRef.current;
@@ -138,7 +261,30 @@ export default function ChatRightPanel({
         aria-label={t("chat.rightPanel.close")}
         onClick={closeWithAnim}
       />
-      <aside ref={panelRef} className="chat-right-panel" aria-label={t("chat.rightPanel.title")}>
+      <aside
+        ref={panelRef}
+        className={`chat-right-panel${resizing ? " is-resizing" : ""}`}
+        aria-label={t("chat.rightPanel.title")}
+        style={{ "--chat-right-panel-width": `${panelWidth}px` } as CSSProperties}
+      >
+        <button
+          type="button"
+          className="chat-right-resizer"
+          role="separator"
+          aria-label={t("chat.rightPanel.resize")}
+          aria-orientation="vertical"
+          aria-valuemin={Math.min(CHAT_RIGHT_PANEL_MIN_WIDTH, maxPanelWidth)}
+          aria-valuemax={maxPanelWidth}
+          aria-valuenow={panelWidth}
+          title={t("chat.rightPanel.resize")}
+          onDoubleClick={() => updatePanelWidth(CHAT_RIGHT_PANEL_DEFAULT_WIDTH, true)}
+          onKeyDown={onResizeKeyDown}
+          onPointerDown={onResizePointerDown}
+          onPointerMove={onResizePointerMove}
+          onPointerUp={onResizePointerUp}
+          onPointerCancel={(event) => finishResize(event.pointerId)}
+          onLostPointerCapture={(event) => finishResize(event.pointerId)}
+        />
         <div className="chat-right-header">
           <h2 className="chat-right-title">
             <PanelRight size={17} strokeWidth={1.75} aria-hidden />
