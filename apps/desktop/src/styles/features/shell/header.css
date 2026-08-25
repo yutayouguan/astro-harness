@@ -1337,6 +1337,11 @@ html[data-theme="dark"] .mem-glass-btn.is-primary {
   padding: 0 22px 22px;
 }
 
+/* 无页头的功能页：自己补出标题栏安全区 */
+.page-body--bare {
+  padding-top: 18px;
+}
+
 .chat-pane {
   flex: 1;
   min-height: 0;

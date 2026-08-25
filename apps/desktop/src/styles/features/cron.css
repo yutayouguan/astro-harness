@@ -7,50 +7,15 @@
   gap: 14px;
 }
 
+/* 直接铺在页面底色上：不再套一层玻璃卡片 */
 .cron-pane {
   position: relative;
   flex: 1;
   min-height: 0;
   display: flex;
   flex-direction: column;
-  border-radius: 26px;
-  padding: 16px;
-  isolation: isolate;
-  overflow: hidden;
   container-type: inline-size;
   container-name: cron-pane;
-  border: 1px solid color-mix(in srgb, var(--glass-edge) 90%, transparent);
-  background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.40), rgba(255, 255, 255, 0.12)),
-    color-mix(in srgb, var(--glass-panel, rgba(255, 255, 255, 0.5)) 78%, transparent);
-  box-shadow:
-    var(--shadow-card),
-    var(--glass-rim),
-    0 4px 12px color-mix(in srgb, var(--tone) 6%, transparent);
-  backdrop-filter: blur(18px) saturate(1.25);
-  -webkit-backdrop-filter: blur(18px) saturate(1.25);
-}
-
-.cron-pane::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  z-index: 0;
-  background:
-    radial-gradient(circle at 8% 0%, color-mix(in srgb, var(--tone) 16%, transparent), transparent 42%),
-    radial-gradient(ellipse at 92% 8%, color-mix(in srgb, var(--tone) 10%, transparent), transparent 38%);
-  opacity: 0.85;
-}
-
-html[data-theme="dark"] .cron-pane {
-  background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.05) 0%, rgba(255, 255, 255, 0.01) 100%),
-    rgba(8, 6, 18, 0.58);
-  border-color: rgba(255, 255, 255, 0.08);
-  box-shadow:
-    0 4px 14px rgba(0, 0, 0, 0.24),
-    inset 0 1px 0 rgba(255, 255, 255, 0.06);
 }
 
 .cron-pane > * {
@@ -58,15 +23,23 @@ html[data-theme="dark"] .cron-pane {
   z-index: 1;
 }
 
-/* 顶栏一行：左 Tab，右操作（搜索 / 视图 / 新建） */
+/* 顶栏一行：左 Tab，右操作（搜索 / 视图 / 新建）
+   贴窗顶时要盖过 .native-drag-region（z-index 40），否则按钮点不到；
+   行内空档放行指针事件，把窗口拖拽区还给标题栏 */
 .cron-toolbar {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
   flex-wrap: wrap;
   margin-bottom: 12px;
-  z-index: 40;
+  z-index: 45;
+  pointer-events: none;
+}
+
+.cron-toolbar > * {
+  pointer-events: auto;
 }
 
 .cron-toolbar-end {
@@ -160,7 +133,7 @@ html[data-theme="dark"] .cron-pane {
 }
 
 /* 默认 28ch 在中文下会在词中断行，这里按像素给足一行 */
-.cron-empty-with-templates .cron-empty .astro-empty-hint {
+.cron-page .astro-empty-hint {
   max-width: 320px;
   text-wrap: balance;
 }
