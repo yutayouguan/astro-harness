@@ -9,7 +9,7 @@ import {
   type MdMode,
 } from "../../lib/filespace/workspaceMdMode";
 import { ChatMarkdown } from "./ChatMarkdown";
-import FileGlyph from "../filespace/FileGlyph";
+import FileTypeIcon from "../filespace/FileTypeIcon";
 import WorkspaceEditor from "../workspace/WorkspaceEditor";
 
 export default function ProjectFileEditor({
@@ -65,11 +65,7 @@ export default function ProjectFileEditor({
                 }}
                 title={tab.path ?? tab.name}
               >
-                <FileGlyph
-                  name={tab.name}
-                  className="ws-file-glyph project-file-tab-glyph"
-                  size={13}
-                />
+                <FileTypeIcon className="project-file-icon" name={tab.name} size={15} />
                 <span>{tab.name}</span>
                 {dirty ? <i className="project-file-dirty" aria-label="未保存" /> : null}
                 <button
