@@ -3,6 +3,7 @@ import { LocaleProvider } from "../i18n/LocaleContext";
 import { MorphiconProvider } from "../hooks/app/useMorphicons";
 import { ChatMarkdown } from "../components/chat/ChatMarkdown";
 import MsgActivity from "../components/chat/MsgActivity";
+import MsgActivityGroup from "../components/chat/MsgActivityGroup";
 import { MsgTimeline, MsgTimelineStep } from "../components/chat/MsgTimeline";
 import type { ChatActivity } from "../types";
 
@@ -16,6 +17,36 @@ const terminalActivity: ChatActivity = {
   status: "done",
   durationSec: 3.6,
 };
+
+const groupedActivities: ChatActivity[] = [
+  {
+    id: "storybook-read",
+    kind: "tool",
+    title: "file_ops",
+    input: '{"operation":"read","path":"apps/desktop/src/components/chat/ChatView.tsx"}',
+    output: "读取 2146 行",
+    status: "done",
+    durationSec: 0.4,
+  },
+  {
+    id: "storybook-search",
+    kind: "tool",
+    title: "file_ops",
+    input: '{"operation":"search","query":"msg-activity"}',
+    output: "找到 18 处匹配",
+    status: "done",
+    durationSec: 0.2,
+  },
+  {
+    id: "storybook-run",
+    kind: "tool",
+    title: "terminal",
+    input: '{"cmd":"npm run build"}',
+    output: "Build completed",
+    status: "done",
+    durationSec: 3.6,
+  },
+];
 
 const answer = `当前工作目录为：
 
@@ -47,9 +78,16 @@ function ChatAnswerPanel() {
             <article className="bubble assistant">
               <MsgTimeline>
                 <MsgTimelineStep kind="tool">
+                  <MsgActivityGroup
+                    activities={groupedActivities}
+                    defaultOpen
+                    showTimestamp={false}
+                  />
+                </MsgTimelineStep>
+                <MsgTimelineStep kind="tool">
                   <MsgActivity
                     activity={terminalActivity}
-                    defaultOpen
+                    defaultOpen={false}
                     showTimestamp={false}
                   />
                 </MsgTimelineStep>

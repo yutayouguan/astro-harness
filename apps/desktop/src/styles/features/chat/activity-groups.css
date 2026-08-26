@@ -1,0 +1,138 @@
+/* Native response activity batches: one foldable group, then independently foldable IO rows. */
+.bubble.assistant .msg-activity-kind-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 17px;
+  height: 17px;
+  flex: 0 0 17px;
+  color: color-mix(
+    in srgb,
+    var(--tl-tone, var(--tone, var(--accent))) 68%,
+    var(--ink-mute)
+  );
+}
+
+.bubble.assistant .msg-activity-group {
+  padding: 1px 2px 8px;
+  border-bottom: 1px solid color-mix(
+    in srgb,
+    var(--tone, var(--accent)) 9%,
+    color-mix(in srgb, var(--ink) 8%, transparent)
+  );
+}
+
+.bubble.assistant .msg-activity-group-toggle {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  width: 100%;
+  min-height: 24px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.bubble.assistant .msg-activity-group-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 17px;
+  height: 17px;
+  flex: 0 0 17px;
+  color: color-mix(
+    in srgb,
+    var(--tl-tone, var(--tone, var(--accent))) 72%,
+    var(--ink-mute)
+  );
+}
+
+.bubble.assistant .msg-activity-group-title {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--ink-soft, var(--ink));
+  font-size: 12.75px;
+  font-weight: 600;
+  line-height: 1.45;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bubble.assistant .msg-activity-group-count {
+  margin-left: auto;
+  flex: 0 0 auto;
+  color: var(--ink-mute);
+  font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.bubble.assistant .msg-activity-group-chevron {
+  flex: 0 0 auto;
+  color: var(--ink-mute);
+}
+
+.bubble.assistant .msg-activity-group-collapse {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 200ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.bubble.assistant .msg-activity-group.is-open .msg-activity-group-collapse {
+  grid-template-rows: 1fr;
+}
+
+.bubble.assistant .msg-activity-group-items {
+  min-height: 0;
+  overflow: hidden;
+  opacity: 0;
+  transition: opacity 160ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.bubble.assistant .msg-activity-group.is-open .msg-activity-group-items {
+  padding-top: 8px;
+  opacity: 1;
+}
+
+.bubble.assistant .msg-activity-group-items .msg-activity {
+  padding-left: 24px;
+}
+
+.bubble.assistant .msg-activity-group-items .msg-activity:last-child {
+  padding-bottom: 0;
+  border-bottom: 0;
+}
+
+.bubble.assistant .msg-activity-group.is-running .msg-activity-group-icon {
+  animation: msg-live-glow 1.8s ease-in-out infinite;
+}
+
+.bubble.assistant .msg-activity-group.is-error .msg-activity-group-icon,
+.bubble.assistant .msg-activity-group.is-error .msg-activity-group-count {
+  color: var(--danger, #ef4444);
+}
+
+@media (max-width: 700px) {
+  .bubble.assistant .msg-activity-group {
+    padding: 1px 0 7px;
+  }
+
+  .bubble.assistant .msg-activity-group-items .msg-activity {
+    padding-left: 16px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bubble.assistant .msg-activity-group-collapse,
+  .bubble.assistant .msg-activity-group-items {
+    transition: none;
+  }
+
+  .bubble.assistant .msg-activity-group.is-running .msg-activity-group-icon {
+    animation: none;
+  }
+}

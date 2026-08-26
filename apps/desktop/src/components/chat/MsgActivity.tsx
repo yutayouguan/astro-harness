@@ -1,6 +1,16 @@
 /** 单条聊天活动卡：kind 图标 + 可折叠 IO / 生成媒体。 */
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { Activity, Webhook } from "lucide-react";
+import {
+  Activity,
+  BookOpenText,
+  Globe2,
+  Image as ImageIcon,
+  PencilLine,
+  Search,
+  SquareTerminal,
+  Webhook,
+  Wrench,
+} from "lucide-react";
 import {
   ChevronDown as ChevronDownData,
   ChevronUp as ChevronUpData,
@@ -17,10 +27,15 @@ import {
   looksLikeRelativeLocalPath,
   resolveMediaPreviewPath,
 } from "../../lib/media/resolveMediaSrc";
-import type { ChatActivity, ChatActivityKind } from "../../types";
+import type { ChatActivity } from "../../types";
+import {
+  activityDisplayTarget,
+  activityVisualKind,
+  type ActivityVisualKind,
+} from "../../lib/chat/activityPresentation";
 import McpIcon from "../icons/McpIcon";
 import GeneratedMediaCard from "../media/GeneratedMediaCard";
-import { IconMemory, IconSkills, IconTools } from "../icons/NavIcons";
+import { IconMemory, IconSkills } from "../icons/NavIcons";
 import { MorphToggleIcon } from "../icons/MorphIcon";
 import { ChatMarkdown } from "./ChatMarkdown";
 
@@ -31,20 +46,39 @@ type Props = {
   mediaBaseDir?: string | null;
 };
 
-function KindIcon({ kind }: { kind: ChatActivityKind }) {
-  switch (kind) {
+export function ActivityIcon({
+  activity,
+  size = 14,
+}: {
+  activity: ChatActivity;
+  size?: number;
+}) {
+  const props = { size, strokeWidth: 2, "aria-hidden": true as const };
+  switch (activityVisualKind(activity)) {
+    case "read":
+      return <BookOpenText {...props} />;
+    case "search":
+      return <Search {...props} />;
+    case "run":
+      return <SquareTerminal {...props} />;
+    case "edit":
+      return <PencilLine {...props} />;
+    case "browse":
+      return <Globe2 {...props} />;
+    case "media":
+      return <ImageIcon {...props} />;
     case "mcp":
-      return <McpIcon size={14} />;
-    case "tool":
-      return <IconTools width={14} height={14} />;
+      return <McpIcon size={size} />;
     case "skill":
-      return <IconSkills width={14} height={14} />;
+      return <IconSkills width={size} height={size} />;
     case "memory":
-      return <IconMemory width={14} height={14} />;
+      return <IconMemory width={size} height={size} />;
     case "hook":
-      return <Webhook size={14} strokeWidth={2} aria-hidden />;
+      return <Webhook {...props} />;
     case "status":
-      return <Activity size={14} strokeWidth={2} aria-hidden />;
+      return <Activity {...props} />;
+    case "tool":
+      return <Wrench {...props} />;
   }
 }
 
@@ -88,6 +122,11 @@ export default function MsgActivity({
 
   const statusClass = activity.status ? `is-${activity.status}` : "";
   const openClass = open ? "is-open" : "";
+  const displayTitle = resolveActivityTitle(
+    activity,
+    activityVisualKind(activity),
+    t,
+  );
 
   const durationLabel = running
     ? liveSec != null
@@ -109,9 +148,11 @@ export default function MsgActivity({
   const summary: ReactNode = (
     <>
       <span className="msg-activity-kind-icon">
-        <KindIcon kind={activity.kind} />
+        <ActivityIcon activity={activity} />
       </span>
-      <span className="msg-activity-title">{activity.title}</span>
+      <span className="msg-activity-title" title={activity.title}>
+        {displayTitle}
+      </span>
       {metaLabel || durationLabel ? (
         <span className="msg-activity-meta">
           {metaLabel}
@@ -134,7 +175,7 @@ export default function MsgActivity({
             type="button"
             className="msg-activity-toggle"
             aria-expanded={open}
-            aria-label={`${activity.title}，${open ? t("chat.activityCollapse") : t("chat.activityExpand")}`}
+            aria-label={`${displayTitle}，${open ? t("chat.activityCollapse") : t("chat.activityExpand")}`}
             onClick={() => setOpen((v) => !v)}
           >
             {summary}
@@ -204,4 +245,29 @@ export default function MsgActivity({
       </div>
     </div>
   );
+}
+
+function resolveActivityTitle(
+  activity: ChatActivity,
+  kind: ActivityVisualKind,
+  t: ReturnType<typeof useI18n>["t"],
+): string {
+  const target = activityDisplayTarget(activity);
+  if (!target) return activity.title;
+  switch (kind) {
+    case "read":
+      return t("chat.activity.item.read", { target });
+    case "search":
+      return t("chat.activity.item.search", { target });
+    case "run":
+      return t("chat.activity.item.run", { target });
+    case "edit":
+      return t("chat.activity.item.edit", { target });
+    case "browse":
+      return t("chat.activity.item.browse", { target });
+    case "media":
+      return t("chat.activity.item.media", { target });
+    default:
+      return activity.title;
+  }
 }

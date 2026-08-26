@@ -125,6 +125,7 @@ import ContextUsagePopover from "./ContextUsagePopover";
 import McpIcon from "../icons/McpIcon";
 import { ModelBrandIcon } from "../icons/ProviderIcons";
 import MsgActivity from "./MsgActivity";
+import MsgActivityGroup from "./MsgActivityGroup";
 import MsgDissolveOverlay from "./MsgDissolveOverlay";
 import MsgCitations from "./MsgCitations";
 import MsgReasoning from "./MsgReasoning";
@@ -140,6 +141,10 @@ import SubagentsPanel from "./SubagentsPanel";
 import { useSubagentThreads } from "../../hooks/chat/useSubagentThreads";
 import { formatElapsedSec } from "../../lib/chat/elapsedSec";
 import { coalesceReasoningSegments } from "../../lib/chat/chatTimeline";
+import {
+  groupConsecutiveActivities,
+  isConsecutiveActivityGroup,
+} from "../../lib/chat/groupActivities";
 import { isLocationRequiredSurface } from "../../lib/chat/locationSurface";
 import {
   isAgentIconSrc,
@@ -1882,6 +1887,7 @@ export default function ChatView({
                           key: string;
                           kind: MsgTimelineKind;
                           active?: boolean;
+                          activity?: ChatActivity;
                           node: ReactNode;
                         };
                         const steps: Step[] = [];
@@ -1891,6 +1897,7 @@ export default function ChatView({
                             key: `act-${act.id}`,
                             kind: act.kind,
                             active: act.status === "running",
+                            activity: act,
                             node: (
                               <MsgActivity
                                 activity={act}
@@ -2052,6 +2059,8 @@ export default function ChatView({
 
                         if (steps.length === 0) return null;
 
+                        const groupedSteps = groupConsecutiveActivities(steps);
+
                         if (!hasProcess) {
                           return <>{steps.map((step) => (
                             <div key={step.key}>{step.node}</div>
@@ -2060,16 +2069,40 @@ export default function ChatView({
 
                         return (
                           <MsgTimeline>
-                            {steps.map((step, i) => (
-                              <MsgTimelineStep
-                                key={step.key}
-                                kind={step.kind}
-                                active={step.active}
-                                isLast={i === steps.length - 1}
-                              >
-                                {step.node}
-                              </MsgTimelineStep>
-                            ))}
+                            {groupedSteps.map((step, i) => {
+                              const isLast = i === groupedSteps.length - 1;
+                              if (isConsecutiveActivityGroup(step)) {
+                                const activities = step.items.flatMap((item) =>
+                                  item.activity ? [item.activity] : [],
+                                );
+                                return (
+                                  <MsgTimelineStep
+                                    key={step.key}
+                                    kind={step.items[0]?.kind ?? "tool"}
+                                    active={activities.some(
+                                      (activity) => activity.status === "running",
+                                    )}
+                                    isLast={isLast}
+                                  >
+                                    <MsgActivityGroup
+                                      activities={activities}
+                                      showTimestamp={displayPrefs.showTimestamps}
+                                      mediaBaseDir={mediaBaseDir}
+                                    />
+                                  </MsgTimelineStep>
+                                );
+                              }
+                              return (
+                                <MsgTimelineStep
+                                  key={step.key}
+                                  kind={step.kind}
+                                  active={step.active}
+                                  isLast={isLast}
+                                >
+                                  {step.node}
+                                </MsgTimelineStep>
+                              );
+                            })}
                           </MsgTimeline>
                         );
                       })()}
