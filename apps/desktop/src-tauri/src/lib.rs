@@ -274,6 +274,13 @@ pub fn run() {
             commands::session::assign_session_to_project,
             commands::session::assign_session_to_project_if_unassigned,
             // — files —
+            commands::files::project_list_files,
+            commands::files::project_read_file,
+            commands::files::project_write_file,
+            commands::files::project_create_file,
+            commands::files::project_create_directory,
+            commands::files::project_rename_path,
+            commands::files::project_trash_paths,
             commands::files::list_files,
             commands::files::read_file,
             commands::files::open_path_externally,

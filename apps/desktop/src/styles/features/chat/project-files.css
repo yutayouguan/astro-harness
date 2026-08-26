@@ -1,0 +1,428 @@
+/* 项目文件工作台：右侧目录树是布局的一部分，编辑器只替换聊天消息区。 */
+.project-files-panel {
+  --tone-blue: var(--tone);
+  --tone-blue-soft: var(--tone-soft);
+  position: relative;
+  flex: 0 0 min(var(--project-files-width, 300px), 46%);
+  width: min(var(--project-files-width, 300px), 46%);
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  border-left: 1px solid color-mix(in srgb, var(--tone) 12%, var(--glass-edge));
+  background:
+    linear-gradient(165deg, rgba(255, 255, 255, 0.22), rgba(255, 255, 255, 0.06)),
+    color-mix(in srgb, var(--tone-soft) 18%, var(--glass-panel));
+  backdrop-filter: blur(18px) saturate(1.12);
+  -webkit-backdrop-filter: blur(18px) saturate(1.12);
+  overflow: hidden;
+}
+
+.project-files-resizer {
+  position: absolute;
+  z-index: 3;
+  top: 8px;
+  bottom: 8px;
+  left: -5px;
+  width: 10px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: ew-resize;
+  touch-action: none;
+}
+
+.project-files-resizer::after {
+  content: "";
+  position: absolute;
+  top: 12px;
+  bottom: 12px;
+  left: 4px;
+  width: 2px;
+  border-radius: 999px;
+  background: var(--tone);
+  opacity: 0;
+  transition: opacity 0.14s ease;
+}
+
+.project-files-resizer:hover::after,
+.project-files-resizer:focus-visible::after {
+  opacity: 0.62;
+}
+
+.project-files-header {
+  height: 46px;
+  flex: 0 0 46px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0 10px 0 13px;
+  border-bottom: 1px solid color-mix(in srgb, var(--glass-edge) 72%, transparent);
+}
+
+.project-files-heading,
+.project-files-actions {
+  display: flex;
+  align-items: center;
+}
+
+.project-files-heading {
+  min-width: 0;
+  gap: 7px;
+  color: var(--ink);
+  font-size: 12.5px;
+}
+
+.project-files-heading svg {
+  flex-shrink: 0;
+  color: var(--tone);
+}
+
+.project-files-heading strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 650;
+}
+
+.project-files-actions {
+  gap: 2px;
+}
+
+.project-files-actions button,
+.project-file-tab-actions button {
+  width: 27px;
+  height: 27px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ink-mute);
+  cursor: pointer;
+}
+
+.project-files-actions button:hover,
+.project-file-tab-actions button:hover:not(:disabled) {
+  color: var(--tone);
+  background: color-mix(in srgb, var(--tone) 10%, transparent);
+}
+
+.project-files-search {
+  height: 34px;
+  margin: 8px 10px 6px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 9px;
+  border: 1px solid color-mix(in srgb, var(--tone) 10%, var(--glass-edge));
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--ink) 3.5%, transparent);
+  color: var(--ink-mute);
+}
+
+.project-files-search:focus-within {
+  border-color: color-mix(in srgb, var(--tone) 34%, var(--glass-edge));
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--tone) 9%, transparent);
+}
+
+.project-files-search input {
+  min-width: 0;
+  flex: 1;
+  border: 0;
+  outline: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-size: 12px;
+}
+
+.project-files-tree {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 2px 7px 12px;
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--tone) 18%, transparent) transparent;
+}
+
+.project-file-row {
+  width: 100%;
+  height: 29px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0 7px 0 calc(5px + var(--tree-level, 0) * 14px);
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--ink-soft);
+  text-align: left;
+  cursor: pointer;
+}
+
+.project-file-row:hover {
+  color: var(--ink);
+  background: color-mix(in srgb, var(--ink) 4.5%, transparent);
+}
+
+.project-file-row.is-active {
+  color: color-mix(in srgb, var(--tone) 72%, var(--ink));
+  background: color-mix(in srgb, var(--tone) 11%, transparent);
+}
+
+.project-file-row > svg:not(.project-file-chevron) {
+  flex-shrink: 0;
+  opacity: 0.76;
+}
+
+.project-file-chevron,
+.project-file-chevron-spacer {
+  width: 13px;
+  flex: 0 0 13px;
+}
+
+.project-file-chevron {
+  transition: transform 0.14s ease;
+}
+
+.project-file-chevron.is-open {
+  transform: rotate(90deg);
+}
+
+.project-file-name {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+}
+
+.project-file-loading,
+.project-file-spin {
+  animation: project-file-spin 0.8s linear infinite;
+}
+
+.project-file-loading {
+  width: 8px;
+  height: 8px;
+  border: 1.5px solid color-mix(in srgb, var(--tone) 25%, transparent);
+  border-top-color: var(--tone);
+  border-radius: 50%;
+}
+
+.project-file-empty-row {
+  padding-left: calc(29px + var(--tree-level, 0) * 14px);
+  color: var(--ink-mute);
+  font-size: 11px;
+  line-height: 26px;
+}
+
+.project-files-empty,
+.project-file-editor-state {
+  min-height: 160px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: var(--ink-mute);
+  font-size: 12px;
+  text-align: center;
+}
+
+.project-file-workbench {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--glass-panel) 54%, transparent);
+}
+
+.project-file-tabs {
+  height: 38px;
+  flex: 0 0 38px;
+  display: flex;
+  align-items: stretch;
+  min-width: 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--glass-edge) 72%, transparent);
+  background: color-mix(in srgb, var(--glass-panel) 34%, transparent);
+}
+
+.project-file-tabs-scroll {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.project-file-tab {
+  position: relative;
+  min-width: 112px;
+  max-width: 220px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 6px 0 11px;
+  border-right: 1px solid color-mix(in srgb, var(--glass-edge) 56%, transparent);
+  color: var(--ink-mute);
+  cursor: pointer;
+  outline: none;
+}
+
+.project-file-tab.is-active {
+  color: var(--ink);
+  background: color-mix(in srgb, var(--tone-soft) 34%, var(--glass-panel));
+}
+
+.project-file-tab.is-active::after {
+  content: "";
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  bottom: 0;
+  height: 2px;
+  border-radius: 2px 2px 0 0;
+  background: var(--tone);
+}
+
+.project-file-tab > span:not(.project-file-tab-close) {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11.5px;
+}
+
+.project-file-tab-close {
+  width: 20px;
+  height: 20px;
+  flex: 0 0 20px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 6px;
+  padding: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  opacity: 0.5;
+}
+
+.project-file-tab:hover .project-file-tab-close,
+.project-file-tab.is-active .project-file-tab-close {
+  opacity: 0.9;
+}
+
+.project-file-tab-close:hover {
+  background: color-mix(in srgb, var(--ink) 8%, transparent);
+}
+
+.project-file-dirty {
+  width: 6px;
+  height: 6px;
+  flex: 0 0 6px;
+  border-radius: 50%;
+  background: var(--tone);
+}
+
+.project-file-tab-actions {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 0 6px;
+}
+
+.project-file-tab-actions button:disabled {
+  opacity: 0.28;
+  cursor: default;
+}
+
+.project-file-editor-body {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.project-file-editor-body .ws-codemirror,
+.project-file-editor-body .cm-editor,
+.project-file-editor-body .cm-scroller {
+  height: 100%;
+}
+
+.project-file-editor-body .cm-editor {
+  background: transparent;
+}
+
+.project-file-editor-state {
+  height: 100%;
+}
+
+.project-file-editor-state.is-error {
+  color: var(--danger);
+}
+
+.project-file-editor-state.is-error span {
+  max-width: 420px;
+  color: var(--ink-mute);
+}
+
+.project-file-streaming-badge {
+  position: absolute;
+  z-index: 2;
+  top: 8px;
+  right: 12px;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--tone) 14%, var(--glass-panel));
+  border: 1px solid color-mix(in srgb, var(--tone) 18%, var(--glass-edge));
+  color: var(--tone);
+  font-size: 10px;
+  font-weight: 650;
+  pointer-events: none;
+}
+
+html[data-theme="dark"] .project-files-panel {
+  background:
+    linear-gradient(165deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.012)),
+    color-mix(in srgb, var(--tone-soft) 22%, rgba(8, 6, 18, 0.74));
+}
+
+@media (max-width: 760px) {
+  .project-files-panel {
+    position: absolute;
+    z-index: 18;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: min(var(--project-files-width, 300px), calc(100% - 24px));
+    max-width: calc(100% - 24px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .project-file-chevron,
+  .project-files-resizer::after {
+    transition: none;
+  }
+
+  .project-file-loading,
+  .project-file-spin {
+    animation: none;
+  }
+}
+
+@keyframes project-file-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

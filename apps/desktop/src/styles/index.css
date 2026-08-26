@@ -19,6 +19,7 @@
 @import "./features/chat/drawers.css";
 @import "./features/chat/emoji-picker.css";
 @import "./features/chat/right-panel.css";
+@import "./features/chat/project-files.css";
 @import "./features/chat/subagents.css";
 @import "./components/cards.css";
 

@@ -11,16 +11,16 @@ import {
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 
-import { AnimatePresence, motion } from "framer-motion";
 import AboutDialog from "./components/ui/AboutDialog";
 import ChatRightPanel from "./components/chat/ChatRightPanel";
 import ProjectContextMenu from "./components/chat/ProjectContextMenu";
 import ProjectEditDialog from "./components/chat/ProjectEditDialog";
 import SidebarSessionList from "./components/chat/SidebarSessionList";
 import ChatView from "./components/chat/ChatView";
+import ProjectFileEditor from "./components/chat/ProjectFileEditor";
+import ProjectFilesPanel from "./components/chat/ProjectFilesPanel";
 import LoopPanel from "./components/loop/LoopPanel";
 import CronPanel from "./components/schedule/CronPanel";
-import FilesPage from "./components/files/FilesPage";
 import InsightsPanel from "./components/settings/InsightsPanel";
 import ModelMarketPanel from "./components/settings/ModelMarketPanel";
 import MemoryPanel from "./components/settings/MemoryPanel";
@@ -46,6 +46,7 @@ import {
 import { useChatDisplayPrefs } from "./hooks/chat/useChatDisplayPrefs";
 import { useActiveSessionTitle } from "./hooks/chat/useActiveSessionTitle";
 import { useChatSession } from "./hooks/chat/useChatSession";
+import { useProjectFileWorkbench } from "./hooks/chat/useProjectFileWorkbench";
 import { useSessionStatusMap } from "./hooks/chat/useSessionStatusMap";
 import { useChatThinkingPrefs } from "./hooks/chat/useChatThinkingPrefs";
 import { useBeautifyTips } from "./hooks/ui/useBeautifyTips";
@@ -95,15 +96,11 @@ import {
 } from "./lib/ui/navConfig";
 import { SETTINGS_TABS, settingsTabMeta } from "./lib/ui/settingsTabs";
 import {
-  readFilesSubmode,
-  writeFilesSubmode,
-  type FilesSubmode,
-} from "./lib/filespace/filesMode";
-import {
   ArrowLeft,
   Archive,
   FolderClosed,
   FolderOpen,
+  FolderTree,
   MoreHorizontal,
   Settings2,
   Sparkles,
@@ -191,13 +188,6 @@ export default function App() {
     setSettingsTab(tab);
     setNav("settings");
   }, []);
-  const [filesMode, setFilesMode] = useState<FilesSubmode>(() =>
-    readFilesSubmode(),
-  );
-  const changeFilesMode = (mode: FilesSubmode) => {
-    setFilesMode(mode);
-    writeFilesSubmode(mode);
-  };
   const [toolsInitialTab, setToolsInitialTab] = useState<"builtin" | null>(null);
   const [skillsInitialTab, setSkillsInitialTab] = useState<"mcp" | null>(null);
   const [aboutOpen, setAboutOpen] = useState(false);
@@ -246,7 +236,6 @@ export default function App() {
     branchMessage,
     onUiAction,
     openSessionFromFilespace,
-    attachArtifactsToChat,
     setChatRightOpen,
     setChatRightTab,
     setMemoryPendingCount,
@@ -255,6 +244,29 @@ export default function App() {
     prepareDeleteCurrentSession,
     clearDeletedCurrentSession,
   } = chat;
+  const activeProject = useMemo(
+    () => projects.find((project) => project.id === activeProjectId) ?? null,
+    [activeProjectId, projects],
+  );
+  const projectFiles = useProjectFileWorkbench(activeProject, chat.generatingPreview);
+  const [projectFilesWidth, setProjectFilesWidth] = useState(300);
+  const switchActiveProject = useCallback(
+    (projectId: string) => {
+      if (projectId === activeProjectId) return true;
+      const hasDirtyFile = projectFiles.tabs.some(
+        (tab) => !tab.readonly && tab.content !== tab.savedContent,
+      );
+      if (
+        hasDirtyFile &&
+        !window.confirm("当前项目还有未保存文件，切换项目会丢弃这些修改。仍要继续吗？")
+      ) {
+        return false;
+      }
+      setActiveProjectId(projectId);
+      return true;
+    },
+    [activeProjectId, projectFiles.tabs],
+  );
 
   // ── Model context window + capabilities ───────────────────────────────────
   useEffect(() => {
@@ -831,7 +843,7 @@ export default function App() {
                             roots,
                           });
                           setProjects((prev) => [...prev, newProject]);
-                          setActiveProjectId(newProject.id);
+                          switchActiveProject(newProject.id);
                         }
                       } catch {}
                     }}
@@ -870,7 +882,7 @@ export default function App() {
                         className="sidebar-project-name"
                         onClick={() => {
                           if (activeProjectId !== proj.id) {
-                            setActiveProjectId(proj.id);
+                            if (!switchActiveProject(proj.id)) return;
                             setCollapsedProjects((prev) => {
                               const next = new Set(prev);
                               next.delete(proj.id);
@@ -886,7 +898,7 @@ export default function App() {
                             else next.add(proj.id);
                             return next;
                           });
-                          setActiveProjectId(proj.id);
+                          if (!switchActiveProject(proj.id)) return;
                           setNav("chat");
                         }}
                       >
@@ -914,7 +926,11 @@ export default function App() {
                       <button
                         type="button"
                         className="sidebar-project-action"
-                        onClick={() => { setActiveProjectId(proj.id); setNav("chat"); startNewChat(); }}
+                        onClick={() => {
+                          if (!switchActiveProject(proj.id)) return;
+                          setNav("chat");
+                          startNewChat();
+                        }}
                         title={t("sidebar.newChat")}
                         aria-label={t("sidebar.newChat")}
                       >
@@ -928,7 +944,10 @@ export default function App() {
                         projectId={proj.id}
                         query=""
                         listKind={sessionListKind}
-                        onOpenSession={(sid) => { setActiveProjectId(proj.id); void openSessionFromFilespace(sid); }}
+                        onOpenSession={(sid) => {
+                          if (!switchActiveProject(proj.id)) return;
+                          void openSessionFromFilespace(sid);
+                        }}
                         onPrepareDeleteCurrentSession={prepareDeleteCurrentSession}
                         onClearDeletedCurrentSession={clearDeletedCurrentSession}
                       />
@@ -1223,6 +1242,16 @@ export default function App() {
                     </button>
                     <button
                       type="button"
+                      className={`header-icon-btn ${projectFiles.panelOpen ? "is-active" : ""}`}
+                      onClick={projectFiles.togglePanel}
+                      title="展开项目文件"
+                      aria-label="展开项目文件"
+                      aria-pressed={projectFiles.panelOpen}
+                    >
+                      <FolderTree width={16} height={16} />
+                    </button>
+                    <button
+                      type="button"
                       className={`header-icon-btn ${chat.chatRightOpen ? "is-active" : ""}`}
                       onClick={() => setChatRightOpen((open) => !open)}
                       title={t("chat.rightPanel.toggle")}
@@ -1235,11 +1264,21 @@ export default function App() {
                 </div>
               </div>
               <div className="page-body">
-                <div className="chat-layout-with-right">
+                <div
+                  className={`chat-layout-with-right${projectFiles.panelOpen ? " has-project-files" : ""}`}
+                  style={{
+                    "--project-files-current-width": `${projectFilesWidth}px`,
+                  } as CSSProperties}
+                >
                   <div className="chat-main">
                     <ChatView
                       sessionId={chat.sessionId}
                       messages={chat.messages}
+                      workspaceContent={
+                        projectFiles.tabs.length > 0 ? (
+                          <ProjectFileEditor workbench={projectFiles} theme={resolved} />
+                        ) : null
+                      }
                       input={chat.input}
                       attachments={chat.attachments}
                       streaming={chat.streaming}
@@ -1316,16 +1355,26 @@ export default function App() {
                       }
                     />
                   </div>
+                  {projectFiles.panelOpen ? (
+                    <ProjectFilesPanel
+                      workbench={projectFiles}
+                      onWidthChange={setProjectFilesWidth}
+                    />
+                  ) : null}
                   {chat.chatRightOpen && (
                     <ChatRightPanel
                       tab={chat.chatRightTab}
                       onTabChange={setChatRightTab}
                       onClose={() => setChatRightOpen(false)}
                       sessionId={chat.sessionId}
+                      turnId={chat.currentTurnId}
                       tokenUsage={chat.tokenUsage}
                       contextUsage={chat.contextUsage}
                       contextWindow={contextWindow}
-                      generatingPreview={chat.generatingPreview}
+                      messages={chat.messages}
+                      streaming={chat.streaming}
+                      onOpenMemory={() => openSettingsTab("memory")}
+                      onOpenSkills={() => setNav("skills")}
                     />
                   )}
                 </div>
@@ -1334,41 +1383,6 @@ export default function App() {
           )}
         </section>
       </div>
-
-      {/* ── Overlay panels ─────────────────────────────────────────────────── */}
-      <AnimatePresence>
-      {nav === "files" && (
-        <motion.div
-          key="overlay-files"
-          className="settings-overlay"
-          onClick={(e) => { if (e.target === e.currentTarget) setNav("chat"); }}
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          transition={{ duration: 0.18 }}
-        >
-          <motion.div
-            className="settings-overlay-panel settings-overlay-panel--wide"
-            initial={{ opacity: 0, y: 24, scale: 0.96 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 16, scale: 0.97 }}
-            transition={{ type: "spring", stiffness: 380, damping: 30, mass: 0.8 }}
-          >
-            <button type="button" className="settings-overlay-close" onClick={() => setNav("chat")} aria-label="Close">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
-            </button>
-            <FilesPage
-              active={nav === "files"}
-              submode={filesMode}
-              onSubmodeChange={changeFilesMode}
-              onOpenSession={openSessionFromFilespace}
-              onAttachFiles={attachArtifactsToChat}
-              onClose={() => setNav("chat")}
-            />
-          </motion.div>
-        </motion.div>
-      )}
-      </AnimatePresence>
 
       {projectMenu && (
         <ProjectContextMenu

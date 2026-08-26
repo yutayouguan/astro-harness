@@ -5,7 +5,6 @@ import {
   IconLoop,
   IconPlugin,
   IconSettings,
-  IconWorkspace,
 } from "../../components/icons";
 import type { MessageKey } from "../../i18n/messages";
 
@@ -13,7 +12,6 @@ export type NavId =
   | "chat"
   | "cron"
   | "loop"
-  | "files"
   | "skills"
   | "settings";
 
@@ -65,7 +63,6 @@ export const NAV: {
   { id: "chat", labelKey: "nav.chat", Icon: IconChat, tone: "blue" },
   { id: "cron", labelKey: "nav.cron", Icon: IconCron, tone: "cyan" },
   { id: "loop", labelKey: "nav.loop", Icon: IconLoop, tone: "pink" },
-  { id: "files", labelKey: "nav.files", Icon: IconWorkspace, tone: "purple" },
   { id: "skills", labelKey: "nav.skills", Icon: IconPlugin, tone: "indigo" },
   { id: "settings", labelKey: "nav.settings", Icon: IconSettings, tone: "twilight" },
 ];
@@ -77,7 +74,6 @@ export const PAGE_META: Record<
   chat: { titleKey: "page.chat.title", subKey: "page.chat.sub" },
   cron: { titleKey: "page.cron.title", subKey: "page.cron.sub" },
   loop: { titleKey: "page.loop.title", subKey: "page.loop.sub" },
-  files: { titleKey: "page.files.title", subKey: "page.files.sub" },
   skills: { titleKey: "page.skills.title", subKey: "page.skills.sub" },
   settings: { titleKey: "page.settings.title", subKey: "page.settings.sub" },
 };

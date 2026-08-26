@@ -64,7 +64,7 @@ import { useConfirm } from "../ui/DialogContext";
 type TFn = (key: MessageKey, vars?: Record<string, string>) => string;
 type ShowToastFn = (msg: string, opts?: ShowToastOptions) => void;
 type StatusPhase = "ready" | "connecting" | "generating" | "error";
-type NavId = "chat" | "cron" | "loop" | "files" | "skills" | "settings";
+type NavId = "chat" | "cron" | "loop" | "skills" | "settings";
 
 const MAX_ATTACHMENTS = 8;
 const MAX_INLINE_BYTES = 4 * 1024 * 1024;
@@ -175,17 +175,12 @@ export function useChatSession({
       return false;
     }
   });
-  const [chatRightTab, setChatRightTab] = useState<ChatRightTab>("monitor");
+  const [chatRightTab, setChatRightTab] = useState<ChatRightTab>("agent");
   const confirm = useConfirm();
 
   // ── 生成中文件实时预览 ──────────────────────────────────────────────────────
   const { preview: generatingPreview, api: generatingPreviewApi } =
-    useGeneratingPreview({
-      onActivate: () => {
-        setChatRightTab("preview");
-        setChatRightOpen(true);
-      },
-    });
+    useGeneratingPreview({});
 
   // ── Refs ──────────────────────────────────────────────────────────────────
   const unlistenRef = useRef<(() => void) | null>(null);

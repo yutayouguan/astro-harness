@@ -5,7 +5,7 @@
   min-height: 0;
   min-width: 0;
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   overflow: hidden;
   border-radius: 28px;
 }
@@ -16,7 +16,24 @@
   min-height: 0;
   display: flex;
   flex-direction: column;
-  width: 100%;
+  width: auto;
+}
+
+/* 内嵌文件栏存在时，悬浮运行栏停在它左侧；文件栏仍可独立浏览。
+   窄屏由 project-files.css 把文件栏切为覆盖式，此时运行栏恢复贴右。 */
+.chat-layout-with-right.has-project-files .chat-right-panel {
+  right: min(var(--project-files-current-width, 300px), 46%);
+}
+
+.chat-layout-with-right.has-project-files .chat-right-backdrop {
+  right: min(var(--project-files-current-width, 300px), 46%);
+}
+
+@media (max-width: 760px) {
+  .chat-layout-with-right.has-project-files .chat-right-panel,
+  .chat-layout-with-right.has-project-files .chat-right-backdrop {
+    right: 0;
+  }
 }
 
 .chat-right-backdrop {

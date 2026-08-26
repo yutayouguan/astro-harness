@@ -1,4 +1,4 @@
-// 聊天右侧栏（任务监控 / 上下文 / 预览）；会话列表在左侧项目栏。
+// 聊天悬浮侧栏（Agent / 任务监控 / 上下文）；文件预览在内嵌项目工作台。
 import {
   useCallback,
   useEffect,
@@ -11,7 +11,7 @@ import {
 } from "react";
 import {
   Activity,
-  Eye,
+  Bot,
   Layers,
   PanelRight,
   X,
@@ -21,7 +21,6 @@ import { useI18n } from "../../i18n/LocaleContext";
 import type { MessageKey } from "../../i18n/messages";
 import type { ChatMessage } from "../../types";
 import type { ContextUsageSnapshot } from "../../lib/chat/contextUsage";
-import type { GeneratingPreview } from "../../hooks/chat/useGeneratingPreview";
 import {
   CHAT_RIGHT_PANEL_DEFAULT_WIDTH,
   CHAT_RIGHT_PANEL_MIN_WIDTH,
@@ -31,11 +30,11 @@ import {
   parseStoredChatRightPanelWidth,
 } from "../../lib/ui/chatRightPanelWidth";
 import ContextExplorer from "./ContextExplorer";
-import GeneratingPreviewPanel from "./GeneratingPreviewPanel";
 import TaskMonitorPanel from "./TaskMonitorPanel";
+import ChatAgentInfo from "./ChatAgentInfo";
 import MotionSwitch from "../ui/MotionSwitch";
 
-export type ChatRightTab = "monitor" | "context" | "preview";
+export type ChatRightTab = "agent" | "monitor" | "context";
 
 /** 右侧栏入参 */
 type Props = {
@@ -43,6 +42,7 @@ type Props = {
   onTabChange: (t: ChatRightTab) => void;
   onClose: () => void;
   sessionId: string | null;
+  turnId?: string | null;
   /** 当前会话累计 token（可选展示） */
   tokenUsage?: {
     promptTokens: number;
@@ -53,24 +53,24 @@ type Props = {
   contextUsage?: ContextUsageSnapshot | null;
   /** 模型上下文窗口；未知时回落 128000 */
   contextWindow?: number;
-  /** 生成中的文件实时预览（preview Tab） */
-  generatingPreview?: GeneratingPreview | null;
   /** 聊天消息列表（任务监控 Tab 使用） */
   messages?: ChatMessage[];
   /** 是否正在流式输出 */
   streaming?: boolean;
+  onOpenMemory: () => void;
+  onOpenSkills: () => void;
 };
 
 const TAB_KEYS: Record<ChatRightTab, MessageKey> = {
+  agent: "chat.rightPanel.agent",
   monitor: "chat.rightPanel.monitor",
   context: "chat.rightPanel.context",
-  preview: "chat.rightPanel.preview",
 };
 
 const TAB_ICONS: Record<ChatRightTab, LucideIcon> = {
+  agent: Bot,
   monitor: Activity,
   context: Layers,
-  preview: Eye,
 };
 
 const RESIZE_KEYBOARD_STEP = 16;
@@ -81,15 +81,17 @@ export default function ChatRightPanel({
   onTabChange,
   onClose,
   sessionId,
+  turnId = null,
   tokenUsage: _tokenUsage = null,
   contextUsage = null,
   contextWindow = 0,
-  generatingPreview = null,
   messages = [],
   streaming = false,
+  onOpenMemory,
+  onOpenSkills,
 }: Props) {
   const { t } = useI18n();
-  const tabs: ChatRightTab[] = ["monitor", "context", "preview"];
+  const tabs: ChatRightTab[] = ["agent", "monitor", "context"];
   const tabsRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLElement>(null);
   const panelWidthRef = useRef(CHAT_RIGHT_PANEL_DEFAULT_WIDTH);
@@ -322,6 +324,17 @@ export default function ChatRightPanel({
             className="anim-switch--fill"
             variant="fade"
           >
+            {tab === "agent" && (
+              <ChatAgentInfo
+                sessionId={sessionId}
+                turnId={turnId}
+                contextUsage={contextUsage}
+                contextWindow={contextWindow}
+                onOpenMemory={onOpenMemory}
+                onOpenSkills={onOpenSkills}
+                onOpenContextTab={() => onTabChange("context")}
+              />
+            )}
             {tab === "monitor" && (
               <TaskMonitorPanel
                 messages={messages}
@@ -334,9 +347,6 @@ export default function ChatRightPanel({
                 windowTokens={contextWindow}
                 sessionLabel={sessionId ?? "—"}
               />
-            )}
-            {tab === "preview" && (
-              <GeneratingPreviewPanel preview={generatingPreview} />
             )}
           </MotionSwitch>
         </div>

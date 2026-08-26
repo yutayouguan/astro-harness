@@ -27,7 +27,6 @@ import {
   File,
   FileVideo,
   GitBranch,
-  Globe2,
   Hand,
   Image,
   Infinity as InfinityIcon,
@@ -214,6 +213,8 @@ type Props = {
   sessionId?: string | null;
   /** 当前会话消息（含欢迎占位） */
   messages: ChatMessage[];
+  /** 项目文件打开时替换消息滚动区；输入框与任务条仍保留。 */
+  workspaceContent?: ReactNode;
   /** 输入框文本 */
   input: string;
   /** 待发送附件 */
@@ -351,12 +352,7 @@ const MAX_ATTACHMENTS = 8;
 /** 图片内联 base64 上限（字节） */
 const MAX_INLINE_BYTES = 4 * 1024 * 1024;
 
-type PermissionPreset =
-  | "ask_for_approval"
-  | "approve_for_me"
-  | "controlled_network"
-  | "read_only"
-  | "full_access";
+type PermissionPreset = "ask_for_approval" | "approve_for_me" | "read_only" | "full_access";
 type PermissionSettings = {
   preset: string | null;
   sandboxHealth: { backend: string; status: "available" | "unavailable"; detail: string };
@@ -364,7 +360,6 @@ type PermissionSettings = {
 const PERMISSION_PRESETS: PermissionPreset[] = [
   "ask_for_approval",
   "approve_for_me",
-  "controlled_network",
   "read_only",
   "full_access",
 ];
@@ -629,6 +624,7 @@ function MessageActions({
 export default function ChatView({
   sessionId = null,
   messages,
+  workspaceContent = null,
   input,
   attachments,
   streaming,
@@ -921,11 +917,6 @@ export default function ChatView({
       label: t("chat.approval.approveForMe"),
       desc: t("chat.approval.desc.approveForMe"),
       Icon: ShieldCheck,
-    },
-    controlled_network: {
-      label: t("chat.approval.controlledNetwork"),
-      desc: t("chat.approval.desc.controlledNetwork"),
-      Icon: Globe2,
     },
     read_only: {
       label: t("chat.approval.readOnly"),
@@ -1797,7 +1788,9 @@ export default function ChatView({
       onDrop={(e) => void onDrop(e)}
     >
       {toastHost}
-      {emptyMode === "chat" || emptyMode === "agent" ? (
+      {workspaceContent ? (
+        workspaceContent
+      ) : emptyMode === "chat" || emptyMode === "agent" ? (
         <ChatWelcome onPickCard={onPickWelcomePrompt} />
       ) : (
         <div className="message-list-wrap">
