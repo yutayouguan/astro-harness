@@ -22,6 +22,7 @@ import McpIcon from "../icons/McpIcon";
 import GeneratedMediaCard from "../media/GeneratedMediaCard";
 import { IconMemory, IconSkills, IconTools } from "../icons/NavIcons";
 import { MorphToggleIcon } from "../icons/MorphIcon";
+import { ChatMarkdown } from "./ChatMarkdown";
 
 type Props = {
   activity: ChatActivity;
@@ -98,14 +99,26 @@ export default function MsgActivity({
         })
       : null;
 
+  const metaLabel =
+    showTimestamp && activity.at ? (
+      <span className="msg-activity-time">
+        {new Date(activity.at).toLocaleTimeString()}
+      </span>
+    ) : null;
+
   const summary: ReactNode = (
     <>
       <span className="msg-activity-kind-icon">
         <KindIcon kind={activity.kind} />
       </span>
       <span className="msg-activity-title">{activity.title}</span>
-      {durationLabel ? (
-        <span className="msg-activity-duration">{durationLabel}</span>
+      {metaLabel || durationLabel ? (
+        <span className="msg-activity-meta">
+          {metaLabel}
+          {durationLabel ? (
+            <span className="msg-activity-duration">{durationLabel}</span>
+          ) : null}
+        </span>
       ) : null}
     </>
   );
@@ -160,7 +173,13 @@ export default function MsgActivity({
                       <span className="msg-activity-io-label">
                         {t("chat.activityInput")}
                       </span>
-                      <pre className="msg-activity-detail">{input}</pre>
+                      <div className="msg-activity-detail is-input">
+                        <ChatMarkdown
+                          content={input}
+                          compact
+                          mediaBaseDir={mediaBaseDir}
+                        />
+                      </div>
                     </div>
                   ) : null}
                   {output ? (
@@ -168,18 +187,19 @@ export default function MsgActivity({
                       <span className="msg-activity-io-label">
                         {t("chat.activityOutput")}
                       </span>
-                      <pre className="msg-activity-detail">{output}</pre>
+                      <div className="msg-activity-detail is-output">
+                        <ChatMarkdown
+                          content={output}
+                          compact
+                          mediaBaseDir={mediaBaseDir}
+                        />
+                      </div>
                     </div>
                   ) : null}
                 </div>
               ) : null}
             </div>
           </div>
-        ) : null}
-        {showTimestamp && activity.at ? (
-          <span className="msg-activity-time">
-            {new Date(activity.at).toLocaleTimeString()}
-          </span>
         ) : null}
       </div>
     </div>

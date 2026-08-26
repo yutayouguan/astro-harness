@@ -1105,17 +1105,28 @@ html[data-theme="dark"] .a2ui-clarify-wizard.is-collapsed:hover .a2ui-clarify-co
   align-items: flex-start;
   padding: 8px 10px;
   border-radius: 12px;
-  border: 1px solid color-mix(in srgb, var(--tl-tone, var(--tone, var(--accent))) 14%, var(--glass-edge));
+  border: 1px solid color-mix(in srgb, var(--tl-tone, var(--tone, var(--accent))) 12%, color-mix(in srgb, var(--ink) 9%, transparent));
+  /* 嵌在浅色气泡里的薄玻璃：靠墨色薄底 + 顶部高光分层，不叠白 */
   background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.2) 0%, rgba(255, 255, 255, 0.06) 100%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.14) 0%, transparent 38%),
     color-mix(
       in srgb,
       var(--tone-soft, transparent) 14%,
-      color-mix(in srgb, var(--ink) 5%, transparent)
+      color-mix(in srgb, var(--ink) 6%, transparent)
     );
-  box-shadow: var(--glass-rim);
-  backdrop-filter: blur(calc(12px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.25));
-  -webkit-backdrop-filter: blur(calc(12px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.25));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.58),
+    inset 0 -1px 0 color-mix(in srgb, var(--ink) 4%, transparent),
+    0 1px 3px color-mix(in srgb, var(--ink) 4%, transparent);
+  backdrop-filter: blur(calc(16px * var(--glass-blur-scale, 1))) saturate(min(var(--glass-saturate, 1.25), 1.3));
+  -webkit-backdrop-filter: blur(calc(16px * var(--glass-blur-scale, 1))) saturate(min(var(--glass-saturate, 1.25), 1.3));
+}
+
+/* 关掉透明后玻璃只剩空底，阅读面收回不透明底色 */
+@media (prefers-reduced-transparency: reduce) {
+  html[data-theme="light"] .msg-activity {
+    background: color-mix(in srgb, var(--ink) 6%, rgba(248, 250, 253, 0.97));
+  }
 }
 
 html[data-theme="dark"] .msg-activity {
@@ -1165,13 +1176,7 @@ html[data-theme="dark"] .msg-activity-kind-icon {
 }
 
 html[data-theme="dark"] .msg-activity-detail {
-  background:
-    linear-gradient(160deg, rgba(255, 255, 255, 0.03) 0%, transparent 100%),
-    rgba(0, 0, 0, 0.16);
   color: var(--ink-soft);
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.05);
-  backdrop-filter: blur(calc(10px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.3));
-  -webkit-backdrop-filter: blur(calc(10px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.3));
 }
 
 .msg-activity-kind {
@@ -1194,19 +1199,28 @@ html[data-theme="dark"] .msg-activity-detail {
   font-size: 12.5px;
   font-weight: 600;
   color: var(--ink);
+  min-width: 0;
+  flex: 1;
+}
+
+.msg-activity-meta {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.msg-activity-summary .msg-activity-meta {
+  margin-left: auto;
+}
+
+.msg-activity-meta > * + * {
+  margin-left: 8px;
+  padding-left: 8px;
+  border-left: 1px solid color-mix(in srgb, var(--ink-mute) 30%, transparent);
 }
 
 .msg-activity-duration {
   flex-shrink: 0;
-  margin-left: 4px;
-  font-size: 11px;
-  font-weight: 500;
-  font-variant-numeric: tabular-nums;
-  color: var(--ink-mute);
-}
-
-.msg-activity.is-running .msg-activity-duration {
-  color: color-mix(in srgb, var(--tone, #60a5fa) 45%, var(--ink-mute));
 }
 
 .msg-activity-toggle {
@@ -1225,7 +1239,6 @@ html[data-theme="dark"] .msg-activity-detail {
 }
 
 .msg-activity-toggle .msg-activity-title {
-  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1249,6 +1262,7 @@ html[data-theme="dark"] .msg-activity-detail {
   display: flex;
   align-items: center;
   gap: 6px;
+  width: 100%;
 }
 
 .msg-activity-collapse {
@@ -1283,25 +1297,62 @@ html[data-theme="dark"] .msg-activity-detail {
 
 .msg-activity-io-label {
   font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.04em;
+  font-weight: 700;
+  letter-spacing: 0.075em;
   text-transform: uppercase;
-  color: var(--ink-mute);
+  color: color-mix(
+    in srgb,
+    var(--tone, var(--accent)) 78%,
+    var(--ink)
+  );
 }
 
 .msg-activity-detail {
   margin: 0;
   padding: 6px 8px;
-  border-radius: 8px;
-  background: color-mix(in srgb, var(--ink) 4%, transparent);
-  font-size: 11px;
-  line-height: 1.45;
-  white-space: pre-wrap;
+  border-radius: var(--chat-inset-radius, 10px);
   word-break: break-word;
   max-height: 140px;
   overflow: auto;
   color: var(--ink-soft);
   animation: msg-activity-fade-in 0.12s ease-out both;
+}
+
+.msg-activity-detail.is-input .msg-md {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+.msg-activity-detail .msg-md {
+  font-size: 11px;
+  line-height: 1.5;
+  color: inherit;
+}
+
+.msg-activity-detail .msg-md > :first-child {
+  margin-top: 0;
+}
+
+.msg-activity-detail .msg-md > :last-child {
+  margin-bottom: 0;
+}
+
+.msg-activity-detail .msg-md p,
+.msg-activity-detail .msg-md ul,
+.msg-activity-detail .msg-md ol,
+.msg-activity-detail .msg-md blockquote {
+  margin-block: 0.28em;
+}
+
+.msg-activity-detail .msg-md-codeblock {
+  margin-block: 0.4em;
+}
+
+html[data-theme="dark"] .msg-activity-io-label {
+  color: color-mix(
+    in srgb,
+    var(--tone, #60a5fa) 76%,
+    #fff
+  );
 }
 
 .msg-activity.is-running .msg-activity-title::after {
@@ -1397,12 +1448,6 @@ html[data-theme="dark"] .msg-activity-detail {
 .msg-activity.is-running .msg-activity-kind-icon {
   color: color-mix(in srgb, var(--tone, #60a5fa) 70%, var(--ink-mute));
   animation: msg-live-glow 1.8s ease-in-out infinite;
-}
-
-.msg-activity-time,
-.msg-timestamp {
-  font-size: 10.5px;
-  color: var(--ink-mute);
 }
 
 .msg-reasoning {
