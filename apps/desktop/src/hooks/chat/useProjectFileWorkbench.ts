@@ -29,6 +29,9 @@ export type ProjectFileWorkbench = {
   roots: FileEntryDto[];
   toggleDirectory: (path: string) => void;
   refreshDirectory: (path: string) => void;
+  createEntry: (parent: string, name: string, isDirectory: boolean) => Promise<void>;
+  renameEntry: (entry: FileEntryDto, newName: string) => Promise<void>;
+  trashEntry: (entry: FileEntryDto) => Promise<void>;
   tabs: ProjectFileTab[];
   activeTab: ProjectFileTab | null;
   activeKey: string | null;
@@ -42,6 +45,10 @@ export type ProjectFileWorkbench = {
 
 function basename(path: string): string {
   return path.split(/[\\/]/).filter(Boolean).pop() ?? path;
+}
+
+function dirname(path: string): string {
+  return path.replace(/[\\/][^\\/]+$/, "");
 }
 
 function storedPanelOpen(): boolean {
@@ -151,6 +158,81 @@ export function useProjectFileWorkbench(
     [loadDirectory],
   );
 
+  const renameEntry = useCallback(
+    async (entry: FileEntryDto, newName: string) => {
+      if (!project) return;
+      const renamed = await invoke<FileEntryDto>("project_rename_path", {
+        projectId: project.id,
+        path: entry.path,
+        newName,
+      });
+      const oldPrefix = `${entry.path}/`;
+      const oldPrefixWindows = `${entry.path}\\`;
+      const remapPath = (path: string) =>
+        path === entry.path
+          ? renamed.path
+          : path.startsWith(oldPrefix)
+            ? `${renamed.path}/${path.slice(oldPrefix.length)}`
+            : path.startsWith(oldPrefixWindows)
+              ? `${renamed.path}\\${path.slice(oldPrefixWindows.length)}`
+              : path;
+
+      setTabs((prev) =>
+        prev.map((tab) => {
+          if (!tab.path) return tab;
+          const path = remapPath(tab.path);
+          return path === tab.path
+            ? tab
+            : { ...tab, key: path, path, name: basename(path) };
+        }),
+      );
+      setActiveKeyState((current) => (current ? remapPath(current) : current));
+      setExpandedDirectories((prev) => new Set([...prev].map(remapPath)));
+      setEntriesByDirectory((prev) => {
+        const next: Record<string, FileEntryDto[]> = {};
+        for (const [directory, entries] of Object.entries(prev)) {
+          next[remapPath(directory)] = entries.map((item) => ({
+            ...item,
+            path: remapPath(item.path),
+            name: item.path === entry.path ? renamed.name : item.name,
+          }));
+        }
+        entriesRef.current = next;
+        return next;
+      });
+      const parent = dirname(renamed.path);
+      if (parent) await loadDirectory(parent, true);
+    },
+    [loadDirectory, project],
+  );
+
+  const trashEntry = useCallback(
+    async (entry: FileEntryDto) => {
+      if (!project) return;
+      await invoke("project_trash_paths", {
+        projectId: project.id,
+        paths: [entry.path],
+      });
+      const contains = (path: string | null) =>
+        path === entry.path ||
+        Boolean(path?.startsWith(`${entry.path}/`)) ||
+        Boolean(path?.startsWith(`${entry.path}\\`));
+      setTabs((prev) => {
+        const next = prev.filter((tab) => !contains(tab.path));
+        setActiveKeyState((current) =>
+          contains(current) ? (next[next.length - 1]?.key ?? null) : current,
+        );
+        return next;
+      });
+      setExpandedDirectories(
+        (prev) => new Set([...prev].filter((path) => !contains(path))),
+      );
+      const parent = dirname(entry.path);
+      if (parent) await loadDirectory(parent, true);
+    },
+    [loadDirectory, project],
+  );
+
   const openFile = useCallback(
     (entry: FileEntryDto) => {
       if (!project || entry.is_dir) return;
@@ -198,6 +280,20 @@ export function useProjectFileWorkbench(
         });
     },
     [project, setPanelOpen],
+  );
+
+  const createEntry = useCallback(
+    async (parent: string, name: string, isDirectory: boolean) => {
+      if (!project) return;
+      const entry = await invoke<FileEntryDto>(
+        isDirectory ? "project_create_directory" : "project_create_file",
+        { projectId: project.id, parent, name },
+      );
+      setExpandedDirectories((prev) => new Set(prev).add(parent));
+      await loadDirectory(parent, true);
+      if (!isDirectory) openFile(entry);
+    },
+    [loadDirectory, openFile, project],
   );
 
   useEffect(() => {
@@ -331,6 +427,9 @@ export function useProjectFileWorkbench(
     roots,
     toggleDirectory,
     refreshDirectory: (path) => void loadDirectory(path, true),
+    createEntry,
+    renameEntry,
+    trashEntry,
     tabs,
     activeTab,
     activeKey,

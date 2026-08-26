@@ -3,10 +3,12 @@ import {
   useEffect,
   useRef,
   useState,
+  type ComponentProps,
   type CSSProperties,
   type KeyboardEvent,
   type PointerEvent,
 } from "react";
+import { invoke } from "@tauri-apps/api/core";
 import {
   ChevronRight,
   Folder,
@@ -17,7 +19,11 @@ import {
 } from "lucide-react";
 import type { FileEntryDto } from "../../types";
 import type { ProjectFileWorkbench } from "../../hooks/chat/useProjectFileWorkbench";
-import FileGlyph from "../filespace/FileGlyph";
+import { useAppDialog } from "../../hooks/ui/DialogContext";
+import { useTransientToast } from "../../hooks/ui/useTransientToast";
+import { useI18n } from "../../i18n/LocaleContext";
+import FileContextMenu, { type FileMenuAction } from "../filespace/FileContextMenu";
+import FileTypeIcon from "../filespace/FileTypeIcon";
 
 const WIDTH_KEY = "astro.projectFiles.width";
 const DEFAULT_WIDTH = 264;
@@ -38,9 +44,10 @@ type TreeRowProps = {
   level: number;
   workbench: ProjectFileWorkbench;
   query: string;
+  onContextMenu: (entry: FileEntryDto, x: number, y: number) => void;
 };
 
-function TreeRow({ entry, level, workbench, query }: TreeRowProps) {
+function TreeRow({ entry, level, workbench, query, onContextMenu }: TreeRowProps) {
   const expanded = workbench.expandedDirectories.has(entry.path);
   const loading = workbench.loadingDirectories.has(entry.path);
   const children = workbench.entriesByDirectory[entry.path] ?? [];
@@ -58,6 +65,17 @@ function TreeRow({ entry, level, workbench, query }: TreeRowProps) {
           if (entry.is_dir) workbench.toggleDirectory(entry.path);
           else workbench.openFile(entry);
         }}
+        onContextMenu={(event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          onContextMenu(entry, event.clientX, event.clientY);
+        }}
+        onKeyDown={(event) => {
+          if (event.key !== "ContextMenu" && !(event.shiftKey && event.key === "F10")) return;
+          event.preventDefault();
+          const rect = event.currentTarget.getBoundingClientRect();
+          onContextMenu(entry, rect.left + 24, rect.top + rect.height / 2);
+        }}
         title={entry.path}
       >
         {entry.is_dir ? (
@@ -69,15 +87,13 @@ function TreeRow({ entry, level, workbench, query }: TreeRowProps) {
         ) : (
           <span className="project-file-chevron-spacer" />
         )}
-        {entry.is_dir ? (
-          expanded ? <FolderOpen size={15} aria-hidden /> : <Folder size={15} aria-hidden />
-        ) : (
-          <FileGlyph
-            name={entry.name}
-            className="ws-file-glyph project-file-glyph"
-            size={14}
-          />
-        )}
+        <FileTypeIcon
+          className="project-file-icon"
+          name={entry.name}
+          isDir={entry.is_dir}
+          expanded={expanded}
+          size={16}
+        />
         <span className="project-file-name">{entry.name}</span>
         {loading ? <span className="project-file-loading" aria-label="加载中" /> : null}
       </button>
@@ -90,6 +106,7 @@ function TreeRow({ entry, level, workbench, query }: TreeRowProps) {
               level={level + 1}
               workbench={workbench}
               query={query}
+              onContextMenu={onContextMenu}
             />
           ))}
           {!loading && children.length === 0 ? (
@@ -112,7 +129,11 @@ export default function ProjectFilesPanel({
 }) {
   const [width, setWidth] = useState(initialWidth);
   const [query, setQuery] = useState("");
+  const [menu, setMenu] = useState<{ x: number; y: number; entry: FileEntryDto } | null>(null);
   const dragRef = useRef<{ id: number; x: number; width: number } | null>(null);
+  const { t } = useI18n();
+  const dialog = useAppDialog();
+  const { showToast, toastHost } = useTransientToast();
 
   useEffect(() => {
     onWidthChange?.(width);
@@ -152,6 +173,127 @@ export default function ProjectFilesPanel({
   };
 
   const normalizedQuery = query.trim().toLocaleLowerCase();
+  const rootPaths = new Set(workbench.roots.map((root) => root.path));
+
+  const openContextMenu = (entry: FileEntryDto, x: number, y: number) => {
+    setMenu({ x, y, entry });
+  };
+
+  const runMenuAction = async (action: FileMenuAction) => {
+    if (!menu) return;
+    const { entry } = menu;
+    setMenu(null);
+    try {
+      switch (action) {
+        case "open":
+          workbench.openFile(entry);
+          break;
+        case "newFile":
+        case "newFolder": {
+          const isDirectory = action === "newFolder";
+          const name = await dialog.prompt({
+            title: t(isDirectory ? "workspace.newFolder" : "workspace.newFile"),
+            placeholder: t(
+              isDirectory ? "workspace.newFolderPlaceholder" : "workspace.newFilePlaceholder",
+            ),
+            confirmLabel: t("workspace.create"),
+          });
+          if (name) await workbench.createEntry(entry.path, name, isDirectory);
+          break;
+        }
+        case "rename": {
+          const name = await dialog.prompt({
+            title: t("workspace.menu.rename"),
+            defaultValue: entry.name,
+            confirmLabel: t("dialog.save"),
+          });
+          if (name && name !== entry.name) {
+            await workbench.renameEntry(entry, name);
+            showToast(t("workspace.toast.renamed"), { tone: "success" });
+          }
+          break;
+        }
+        case "reveal":
+          await invoke("reveal_in_folder", { path: entry.path });
+          break;
+        case "openExternally":
+          await invoke("open_path_externally", { path: entry.path });
+          break;
+        case "copyPath":
+          await navigator.clipboard.writeText(entry.path);
+          showToast(t("workspace.toast.copiedPath"), { tone: "success" });
+          break;
+        case "trash": {
+          const hasUnsavedTab = workbench.tabs.some(
+            (tab) =>
+              tab.content !== tab.savedContent &&
+              (tab.path === entry.path ||
+                tab.path?.startsWith(`${entry.path}/`) ||
+                tab.path?.startsWith(`${entry.path}\\`)),
+          );
+          const confirmed = await dialog.confirm({
+            title: t("workspace.menu.trash"),
+            message: t(
+              hasUnsavedTab
+                ? "workspace.deleteUnsavedConfirm"
+                : entry.is_dir
+                  ? "workspace.deleteFolderConfirm"
+                  : "workspace.deleteFileConfirm",
+            ),
+            emphasis: entry.name,
+            confirmLabel: t("workspace.menu.trash"),
+            variant: "danger",
+          });
+          if (confirmed) {
+            await workbench.trashEntry(entry);
+            showToast(t("workspace.toast.trashed"), { tone: "success" });
+          }
+          break;
+        }
+        default:
+          break;
+      }
+    } catch (error) {
+      showToast(String(error), { tone: "error" });
+    }
+  };
+
+  const menuItems: ComponentProps<typeof FileContextMenu>["items"] = menu
+    ? [
+        ...(!menu.entry.is_dir
+          ? [
+              { action: "open" as const, labelKey: "workspace.menu.open" as const },
+              {
+                action: "openExternally" as const,
+                labelKey: "workspace.menu.openExternally" as const,
+              },
+            ]
+          : [
+              { action: "newFile" as const, labelKey: "workspace.menu.newFile" as const },
+              { action: "newFolder" as const, labelKey: "workspace.menu.newFolder" as const },
+            ]),
+        {
+          action: "reveal",
+          labelKey: "workspace.menu.reveal",
+          separatorBefore: true,
+        },
+        { action: "copyPath", labelKey: "workspace.menu.copyPath" },
+        ...(!rootPaths.has(menu.entry.path)
+          ? [
+              {
+                action: "rename" as const,
+                labelKey: "workspace.menu.rename" as const,
+                separatorBefore: true,
+              },
+              {
+                action: "trash" as const,
+                labelKey: "workspace.menu.trash" as const,
+                danger: true,
+              },
+            ]
+          : []),
+      ]
+    : [];
 
   return (
     <aside
@@ -223,6 +365,7 @@ export default function ProjectFilesPanel({
               level={0}
               workbench={workbench}
               query={normalizedQuery}
+              onContextMenu={openContextMenu}
             />
           ))
         ) : (
@@ -232,6 +375,17 @@ export default function ProjectFilesPanel({
           </div>
         )}
       </div>
+      {menu ? (
+        <FileContextMenu
+          x={menu.x}
+          y={menu.y}
+          items={menuItems}
+          onAction={(action) => void runMenuAction(action)}
+          onClose={() => setMenu(null)}
+          className="project-files-context-menu"
+        />
+      ) : null}
+      {toastHost}
     </aside>
   );
 }
