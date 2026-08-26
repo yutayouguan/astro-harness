@@ -12,11 +12,12 @@ pub mod names;
 mod protocol;
 
 pub use config::{
-    decode_inline_mcp_servers, load_mcp_servers, load_mcp_servers_layered,
+    decode_inline_mcp_servers, load_mcp_servers, load_mcp_servers_layered, load_mcp_servers_scoped,
     mcp_config_path_for_project, mcp_config_path_global, merge_discovered, persist_discovered,
-    persist_discovered_layered, save_mcp_servers, DiscoveredTool, McpHttpAuth, McpServerConfig,
-    McpToolConfig, McpToolSettings, McpTransportType, DEFAULT_STARTUP_TIMEOUT_SECS,
-    DEFAULT_TOOL_TIMEOUT_SECS, STARTUP_TIMEOUT_SECS_RANGE, TOOL_TIMEOUT_SECS_RANGE,
+    persist_discovered_layered, save_mcp_servers, save_mcp_servers_scoped, DiscoveredTool,
+    McpHttpAuth, McpServerConfig, McpToolConfig, McpToolSettings, McpTransportType,
+    DEFAULT_STARTUP_TIMEOUT_SECS, DEFAULT_TOOL_TIMEOUT_SECS, STARTUP_TIMEOUT_SECS_RANGE,
+    TOOL_TIMEOUT_SECS_RANGE,
 };
 pub use hub::{
     call_tool_with_peer, filter_enabled_tool_names, toolset_name, McpBrokerCapabilities,

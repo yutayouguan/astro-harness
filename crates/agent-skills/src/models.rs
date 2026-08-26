@@ -46,6 +46,19 @@ pub struct InstalledSkill {
     /// 是否已链接到某 Agent。
     #[serde(default)]
     pub linked: bool,
+    /// 配置来源：packaged / user / agent / project / external。
+    #[serde(default)]
+    pub provenance: String,
+    /// 是否允许从管理界面修改。
+    #[serde(default = "default_true")]
+    pub editable: bool,
+    /// 若同名条目被更高层覆盖，记录覆盖它的作用域。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub shadowed_by: Option<String>,
+}
+
+fn default_true() -> bool {
+    true
 }
 
 /// 商店搜索结果条目。

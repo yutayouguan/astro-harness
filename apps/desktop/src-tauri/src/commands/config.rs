@@ -188,6 +188,15 @@ pub struct McpServerDto {
     /// 最近一次 list_tools 缓存
     #[serde(default)]
     pub discovered: Vec<McpDiscoveredToolDto>,
+    /// 配置作用域：global / builtin / project。
+    #[serde(default = "default_global_scope")]
+    pub scope: String,
+    /// 配置来源层，用于 UI 解释覆盖关系。
+    #[serde(default = "default_user_provenance")]
+    pub provenance: String,
+    /// packaged/builtin 配置为只读。
+    #[serde(default = "default_true")]
+    pub editable: bool,
 }
 
 /// serde 默认传输类型：`stdio`。
@@ -200,12 +209,24 @@ fn default_true() -> bool {
     true
 }
 
+fn default_global_scope() -> String {
+    "global".into()
+}
+
+fn default_user_provenance() -> String {
+    "user".into()
+}
+
 fn default_mcp_approval_mode() -> String {
     "auto".into()
 }
 
 /// `McpServerConfig` → 前端 DTO。
 fn dto_from_config(c: mcp::McpServerConfig) -> McpServerDto {
+    dto_from_config_scoped(c, "global")
+}
+
+fn dto_from_config_scoped(c: mcp::McpServerConfig, scope: &str) -> McpServerDto {
     let tools = c
         .tools
         .iter()
@@ -257,6 +278,13 @@ fn dto_from_config(c: mcp::McpServerConfig) -> McpServerDto {
                 open_world_hint: d.annotations.open_world_hint,
             })
             .collect(),
+        scope: scope.to_string(),
+        provenance: if scope == "builtin" {
+            "packaged".to_string()
+        } else {
+            scope.to_string()
+        },
+        editable: scope != "builtin",
     }
 }
 
@@ -353,10 +381,23 @@ fn config_from_dto(d: McpServerDto) -> Result<mcp::McpServerConfig, String> {
 
 /// Tauri 命令：get_mcp_servers。
 #[tauri::command]
-pub async fn get_mcp_servers() -> Result<Vec<McpServerDto>, String> {
-    // 编辑器只读写全局层，避免把可信项目的有效配置摊平回全局文件。
-    let servers = mcp::load_mcp_servers().map_err(|e| e.to_string())?;
-    Ok(servers.into_iter().map(dto_from_config).collect())
+pub async fn get_mcp_servers(
+    scope: Option<String>,
+    project_root: Option<String>,
+) -> Result<Vec<McpServerDto>, String> {
+    let scope = scope.as_deref().unwrap_or("global");
+    let explicit_root = project_root
+        .as_deref()
+        .map(str::trim)
+        .filter(|root| !root.is_empty())
+        .map(std::path::PathBuf::from);
+    let resolved_root = explicit_root.or_else(|| worktree::resolve_project_root(None));
+    let servers =
+        mcp::load_mcp_servers_scoped(scope, resolved_root.as_deref()).map_err(|e| e.to_string())?;
+    Ok(servers
+        .into_iter()
+        .map(|server| dto_from_config_scoped(server, scope))
+        .collect())
 }
 
 /// 读取指定 Agent 的 MCP Hub 真实连接状态；无活跃 Hub 时返回分层配置状态。
@@ -418,12 +459,24 @@ pub async fn reconnect_mcp_server(
 
 /// Tauri 命令：set_mcp_servers。
 #[tauri::command]
-pub async fn set_mcp_servers(servers: Vec<McpServerDto>) -> Result<(), String> {
+pub async fn set_mcp_servers(
+    servers: Vec<McpServerDto>,
+    scope: Option<String>,
+    project_root: Option<String>,
+) -> Result<(), String> {
+    let scope = scope.as_deref().unwrap_or("global");
+    let explicit_root = project_root
+        .as_deref()
+        .map(str::trim)
+        .filter(|root| !root.is_empty())
+        .map(std::path::PathBuf::from);
+    let resolved_root = explicit_root.or_else(|| worktree::resolve_project_root(None));
     let configs: Vec<_> = servers
         .into_iter()
         .map(config_from_dto)
         .collect::<Result<_, _>>()?;
-    mcp::save_mcp_servers(&configs).map_err(|e| e.to_string())
+    mcp::save_mcp_servers_scoped(scope, resolved_root.as_deref(), &configs)
+        .map_err(|e| e.to_string())
 }
 
 /// 短连 list_tools，写回 discovered，并合并默认工具开关

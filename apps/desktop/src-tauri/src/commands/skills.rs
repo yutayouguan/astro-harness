@@ -1,13 +1,14 @@
 //! Tauri IPC 薄封装 → `skills` 领域层
 
 use serde::Serialize;
+use std::path::PathBuf;
 
 use skills::models::SkillOriginRecord;
 use skills::origins::load_origins;
 use skills::{
     check_updates_for_agent, fetch_detail, install_from_ref, link_skill_to_agent,
-    list_installed_for_agent, list_skill_backups as skills_list_skill_backups, list_skill_files_ex,
-    load_skill_by_name, open_skill_file_externally as open_skill_file_fs,
+    list_installed_scoped_for_agent, list_skill_backups as skills_list_skill_backups,
+    list_skill_files_ex, load_skill_by_name, open_skill_file_externally as open_skill_file_fs,
     open_skill_folder as open_skill_folder_fs, preview_skill_update as skills_preview_skill_update,
     read_skill_file_ex, reveal_skill_backup as skills_reveal_skill_backup,
     reveal_skill_file as reveal_skill_file_fs, search, set_enabled_for_agent,
@@ -139,10 +140,21 @@ pub async fn update_all_skills(
 pub async fn list_installed_skills(
     agent_id: Option<String>,
     scope: Option<String>,
+    project_root: Option<String>,
 ) -> Result<Vec<InstalledSkill>, String> {
     let id = normalize_agent_id(agent_id);
     let scope = scope.as_deref().map(str::trim).filter(|s| !s.is_empty());
-    Ok(list_installed_for_agent(id.as_deref(), scope))
+    let explicit_root = project_root
+        .as_deref()
+        .map(str::trim)
+        .filter(|root| !root.is_empty())
+        .map(PathBuf::from);
+    let resolved_root = explicit_root.or_else(|| worktree::resolve_project_root(None));
+    Ok(list_installed_scoped_for_agent(
+        id.as_deref(),
+        scope,
+        resolved_root.as_deref(),
+    ))
 }
 
 /// Tauri 命令：search_store_skills。

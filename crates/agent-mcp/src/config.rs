@@ -638,10 +638,51 @@ pub fn load_mcp_servers() -> anyhow::Result<Vec<McpServerConfig>> {
     load_mcp_servers_layered(None)
 }
 
+/// 读取单一配置层，不进行跨层合并。
+pub fn load_mcp_servers_scoped(
+    scope: &str,
+    project_root: Option<&Path>,
+) -> anyhow::Result<Vec<McpServerConfig>> {
+    if scope == "builtin" {
+        return Ok(Vec::new());
+    }
+    let path = match scope {
+        "project" => {
+            let root = project_root
+                .ok_or_else(|| anyhow::anyhow!("project scope requires a project root"))?;
+            mcp_config_path_for_project(root)
+        }
+        _ => mcp_config_path_global(),
+    };
+    let root: McpTomlRoot = read_toml_value(&path)?
+        .try_into()
+        .with_context(|| format!("decode MCP config {}", path.display()))?;
+    let mut merged = BTreeMap::new();
+    merge_servers(&mut merged, root.mcp_servers)?;
+    Ok(merged.into_values().collect())
+}
+
 /// 将服务器列表写入统一的 `~/.astro/config.toml`。
 pub fn save_mcp_servers(servers: &[McpServerConfig]) -> anyhow::Result<()> {
+    save_mcp_servers_scoped("global", None, servers)
+}
+
+/// 将服务器列表写回指定可编辑层；builtin 永远只读。
+pub fn save_mcp_servers_scoped(
+    scope: &str,
+    project_root: Option<&Path>,
+    servers: &[McpServerConfig],
+) -> anyhow::Result<()> {
     ensure_default_workspace_dirs()?;
-    let path = mcp_config_path_global();
+    let path = match scope {
+        "builtin" => anyhow::bail!("builtin MCP servers are read-only"),
+        "project" => {
+            let root = project_root
+                .ok_or_else(|| anyhow::anyhow!("project scope requires a project root"))?;
+            mcp_config_path_for_project(root)
+        }
+        _ => mcp_config_path_global(),
+    };
     let mut root = read_toml_value(&path)?;
     let table = root
         .as_table_mut()

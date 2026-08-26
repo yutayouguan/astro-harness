@@ -294,6 +294,16 @@ fn scan_roots(
                 enabled,
                 scope: scope.to_string(),
                 linked,
+                provenance: match scope {
+                    "project" => "project".to_string(),
+                    "machine" => "external".to_string(),
+                    _ if source_dir == memory_dir().join("skills").to_string_lossy() => {
+                        "user".to_string()
+                    }
+                    _ => "agent".to_string(),
+                },
+                editable: scope != "machine",
+                shadowed_by: None,
             });
         }
     }
@@ -305,6 +315,55 @@ fn scan_roots(
         let _ = before;
     }
 
+    out
+}
+
+/// 编译进应用的只读 Skills。磁盘路径仅用于复用现有预览器，不作为来源事实。
+fn scan_builtin() -> Vec<InstalledSkill> {
+    let global_root = memory_dir().join("skills");
+    let mut out = crate::seed::BUNDLED_SKILLS
+        .iter()
+        .map(|(folder, body)| {
+            let (mut name, description) = parse_skill_frontmatter(body);
+            if name.is_empty() {
+                name = (*folder).to_string();
+            }
+            let disk_path = global_root.join(folder).join("SKILL.md");
+            InstalledSkill {
+                id: format!("builtin:{folder}"),
+                name,
+                description,
+                path: disk_path.to_string_lossy().to_string(),
+                source_dir: "builtin".to_string(),
+                enabled: true,
+                scope: "builtin".to_string(),
+                linked: false,
+                provenance: "packaged".to_string(),
+                editable: false,
+                shadowed_by: None,
+            }
+        })
+        .collect::<Vec<_>>();
+    out.sort_by_key(|skill| skill.name.to_lowercase());
+    out
+}
+
+fn scan_project(agent_id: Option<&str>, project_root: Option<&Path>) -> Vec<InstalledSkill> {
+    let Some(root) = project_root else {
+        return Vec::new();
+    };
+    let roots = [
+        root.join(".astro/skills"),
+        root.join(".agents/skills"),
+        root.join(".cursor/skills"),
+    ];
+    let mut state = load_enabled_state(agent_id);
+    let mut dirty = false;
+    let mut out = scan_roots(&roots, agent_id, "project", &mut state, &mut dirty, true);
+    if dirty {
+        let _ = save_enabled_state(agent_id, &state);
+    }
+    out.sort_by_key(|skill| skill.name.to_lowercase());
     out
 }
 
@@ -321,7 +380,7 @@ fn scan_astro(agent_id: Option<&str>) -> Vec<InstalledSkill> {
     let mut state = load_enabled_state(agent_id);
     let mut dirty = false;
     let roots = astro_skill_roots(agent_id);
-    let mut out = scan_roots(&roots, agent_id, "astro", &mut state, &mut dirty, true);
+    let mut out = scan_roots(&roots, agent_id, "global", &mut state, &mut dirty, true);
 
     let seen: std::collections::HashSet<_> = out.iter().map(|s| s.id.clone()).collect();
     let before = state.len();
@@ -364,14 +423,28 @@ pub fn list_installed_for_agent(
     agent_id: Option<&str>,
     scope: Option<&str>,
 ) -> Vec<InstalledSkill> {
-    match scope.unwrap_or("astro") {
+    list_installed_scoped_for_agent(agent_id, scope, crate::workspace_override().as_deref())
+}
+
+/// 按真实作用域列出 Skills；项目层由调用方显式提供项目根。
+pub fn list_installed_scoped_for_agent(
+    agent_id: Option<&str>,
+    scope: Option<&str>,
+    project_root: Option<&Path>,
+) -> Vec<InstalledSkill> {
+    match scope.unwrap_or("global") {
+        "builtin" => scan_builtin(),
+        "project" => scan_project(agent_id, project_root),
         "machine" => scan_machine(agent_id),
         "all" => {
-            let mut all = scan_astro(agent_id);
+            let mut all = scan_builtin();
+            all.extend(scan_astro(agent_id));
+            all.extend(scan_project(agent_id, project_root));
             all.extend(scan_machine(agent_id));
-            all.sort_by_key(|a| a.name.to_lowercase());
+            all.sort_by_key(|skill| skill.name.to_lowercase());
             all
         }
+        "astro" | "global" => scan_astro(agent_id),
         _ => scan_astro(agent_id),
     }
 }
@@ -1228,5 +1301,22 @@ mod tests {
             Some(vec!["terminal".to_string(), "web_search".to_string()])
         );
         assert!(recent_astro_tools("other-skill").is_none());
+    }
+
+    #[test]
+    fn bundled_skills_are_reported_as_read_only() {
+        let _guard = ENV_TEST_LOCK.blocking_lock();
+        let dir = tempdir().unwrap();
+        std::env::set_var("ASTRO_MEMORY_DIR", dir.path());
+
+        let bundled = list_installed_scoped_for_agent(None, Some("builtin"), None);
+
+        assert!(!bundled.is_empty());
+        assert!(bundled.iter().all(|skill| {
+            skill.scope == "builtin"
+                && skill.provenance == "packaged"
+                && !skill.editable
+                && skill.id.starts_with("builtin:")
+        }));
     }
 }
