@@ -11,9 +11,13 @@
   app-region: no-drag;
 }
 
-/* 对话页标题栏：左侧是当前会话，右侧集中放身份与窗口操作。 */
+/* 对话页标题栏：左侧是当前会话，右侧集中放身份与窗口操作。
+   整体比通用 .content-header 更贴窗顶：这里的标题是会话名而非页面名，
+   压低后让正文更早开始。标题区不含交互元素（「⋯」菜单自带 z-index 51），
+   所以压进 --titlebar-h 52px 的拖拽区里不影响点击。 */
 .content-header--chat {
   gap: 12px;
+  padding-top: 16px;
   padding-bottom: 10px;
 }
 
@@ -29,18 +33,22 @@
 }
 
 .content-header--chat .page-title-icon {
-  width: 24px;
-  height: 24px;
-  border-radius: 8px;
+  width: 20px;
+  height: 20px;
+  border-radius: 7px;
 }
 
 .content-header--chat .page-title-icon svg {
-  width: 19px;
-  height: 19px;
+  width: 15px;
+  height: 15px;
 }
 
+/* 会话名不是页面级标题，用比 .content-title(22px) 小一档的字号，
+   与右侧胶囊组的视觉重量对齐。其它页面的 22px 不受影响。 */
 .content-header--chat .conversation-title {
   min-width: 0;
+  font-size: 17px;
+  letter-spacing: -0.02em;
   color: var(--ink);
 }
 
@@ -65,11 +73,11 @@
 }
 
 .conversation-menu-trigger {
-  width: 28px;
-  height: 28px;
+  width: 24px;
+  height: 24px;
   padding: 0;
   border: none;
-  border-radius: 8px;
+  border-radius: 7px;
   display: grid;
   place-items: center;
   color: var(--ink-mute);
@@ -135,12 +143,14 @@ html[data-theme="dark"] .conversation-menu-popover {
 }
 
 /* 操作组：与状态芯片 / 模型选择器同为胶囊形态 */
+/* 高度与 .model-picker-trigger 保持一致，两枚胶囊在同一行才齐平。
+   34 = 28(按钮) + 3*2(内边距)，改任一侧都要一起改。 */
 .chat-header-tools {
   box-sizing: border-box;
   display: inline-flex;
   align-items: center;
   gap: 2px;
-  height: 40px;
+  height: 34px;
   padding: 3px 4px;
   border-radius: 999px;
   background: var(--header-chip-bg);
@@ -156,8 +166,8 @@ html[data-theme="dark"] .conversation-menu-popover {
 }
 
 .chat-header-tools .chat-header-agent-picker .agent-picker-chip {
-  min-height: 32px;
-  height: 32px;
+  min-height: 28px;
+  height: 28px;
   border-radius: 999px;
   padding: 0 10px 0 8px;
   background: transparent;
@@ -168,8 +178,8 @@ html[data-theme="dark"] .conversation-menu-popover {
 }
 
 .header-icon-btn {
-  width: 32px;
-  height: 32px;
+  width: 28px;
+  height: 28px;
   border: none;
   border-radius: 999px;
   background: transparent;
@@ -253,9 +263,9 @@ html[data-theme="dark"] .header-icon-btn.is-active {
   display: inline-flex;
   align-items: center;
   gap: 0;
-  height: 40px;
+  height: 34px;
   max-width: 100%;
-  min-width: 140px;
+  min-width: 130px;
   padding: 0;
   border: none;
   border-radius: 999px;
@@ -285,7 +295,8 @@ html[data-theme="dark"] .header-icon-btn.is-active {
 .model-picker.is-empty {
   display: inline-flex;
   align-items: center;
-  padding: 8px 14px;
+  height: 34px;
+  padding: 0 13px;
   border-radius: 999px;
   background: var(--header-chip-bg);
   border: 1px solid var(--header-chip-border);
@@ -300,9 +311,9 @@ html[data-theme="dark"] .header-icon-btn.is-active {
   display: grid;
   place-items: center;
   flex-shrink: 0;
-  width: 28px;
-  height: 28px;
-  margin: 4px 0 4px 6px;
+  width: 24px;
+  height: 24px;
+  margin: 5px 0 5px 5px;
   border-radius: 50%;
   color: var(--ink);
   background:
@@ -332,10 +343,12 @@ html[data-theme="dark"] .header-icon-btn.is-active {
   text-align: center;
 }
 
+/* 垂直居中交给 trigger 的 align-items:center，这里不再用 padding 撑高度，
+   否则改 trigger 高度时两边要同步算。 */
 .model-picker-label {
   flex: 1;
   min-width: 0;
-  padding: 8px 4px 8px 8px;
+  padding: 0 4px 0 7px;
   font-size: 12px;
   font-weight: 500;
   white-space: nowrap;
@@ -345,7 +358,7 @@ html[data-theme="dark"] .header-icon-btn.is-active {
 
 .model-picker-chevron {
   flex-shrink: 0;
-  margin-right: 10px;
+  margin-right: 9px;
   color: var(--ink-mute);
   transition: transform 0.15s ease;
 }
@@ -974,9 +987,9 @@ html[data-theme="dark"] .model-picker-option.is-selected .model-picker-option-ic
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  height: 40px;
+  height: 34px;
   max-width: min(220px, 36vw);
-  padding: 7px 12px;
+  padding: 0 12px;
   border-radius: 999px;
   background: var(--header-chip-bg);
   border: 1px solid var(--header-chip-border);
@@ -991,9 +1004,9 @@ html[data-theme="dark"] .model-picker-option.is-selected .model-picker-option-ic
 }
 
 .status-chip--transient {
-  height: 32px;
+  height: 28px;
   max-width: min(180px, 30vw);
-  padding: 5px 10px;
+  padding: 0 10px;
   background: color-mix(in srgb, var(--header-chip-bg) 78%, transparent);
   box-shadow: none;
 }
@@ -1004,11 +1017,11 @@ html[data-theme="dark"] .model-picker-option.is-selected .model-picker-option-ic
 }
 
 .header-actions .header-agent-picker .agent-picker-chip {
-  min-height: 40px;
-  height: 40px;
+  min-height: 34px;
+  height: 34px;
   min-width: 0;
   border-radius: 999px;
-  padding: 0 12px 0 6px;
+  padding: 0 11px 0 5px;
   gap: 6px;
   background: var(--header-chip-bg);
   border: 1px solid var(--header-chip-border);
@@ -1027,8 +1040,8 @@ html[data-theme="dark"] .model-picker-option.is-selected .model-picker-option-ic
 }
 
 .header-actions .header-agent-picker .agent-picker-chip .agent-avatar {
-  width: 28px;
-  height: 28px;
+  width: 24px;
+  height: 24px;
   margin: 0;
   background:
     radial-gradient(circle at 30% 24%, rgba(255, 255, 255, 0.62), transparent 55%),
