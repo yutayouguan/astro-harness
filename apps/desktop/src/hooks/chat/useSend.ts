@@ -404,6 +404,7 @@ export function useSend(deps: UseSendDeps) {
           arguments_json?: string;
           arguments?: string;
           result?: string;
+          delta?: string;
           phase?: string;
           media?: Array<{
             kind?: string;
@@ -701,6 +702,30 @@ export function useSend(deps: UseSendDeps) {
                 return applyActivityUpsert(m, merged);
               }),
             );
+          } else if (
+            payload.type === "tool_output_delta" &&
+            payload.id &&
+            payload.delta
+          ) {
+            touchActivity();
+            const { id, delta } = payload as { id: string; delta: string };
+            setMessages((prev) =>
+              prev.map((m) => {
+                if (m.id !== assistantId) return m;
+                // 增量只补已经开卡的工具调用；先于 tool_call started 到达时丢弃，
+                // 完成事件仍会带上完整输出。
+                const existing = (m.activities ?? []).find((a) => a.id === id);
+                if (!existing || existing.status === "done") return m;
+                const output = `${existing.output ?? ""}${delta}`;
+                return applyActivityUpsert(m, {
+                  ...existing,
+                  output,
+                  detail: output,
+                  status: "running",
+                });
+              }),
+            );
+            setStatusPhase("generating");
           } else if (payload.type === "memory_update") {
             const activity: ChatActivity = {
               id: `mem-${Date.now()}`,

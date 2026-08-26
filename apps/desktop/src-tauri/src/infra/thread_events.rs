@@ -1948,7 +1948,10 @@ fn map_thread_event(event: proto::ThreadEvent) -> Vec<ChatStreamEvent> {
         }
         Some(Payload::PlanDelta(delta)) => vec![activity(delta.item_id, "plan_delta", delta.delta)],
         Some(Payload::ExecOutputDelta(delta)) => {
-            vec![activity(delta.item_id, "exec_output_delta", delta.delta)]
+            vec![ChatStreamEvent::ToolOutputDelta {
+                id: delta.item_id,
+                delta: delta.delta,
+            }]
         }
         Some(Payload::PatchDelta(delta)) => {
             vec![activity(delta.item_id, "patch_delta", delta.delta)]
@@ -2740,6 +2743,26 @@ mod tests {
             .get(thread_id)
             .map(HashMap::len)
             .unwrap_or_default()
+    }
+
+    #[test]
+    fn exec_output_delta_feeds_the_tool_card_instead_of_a_surface() {
+        // 通用 activity 会被前端当成 a2ui surface，渲染成标题为事件名的空卡片。
+        let mapped = map_thread_event(proto::ThreadEvent {
+            thread_id: "session-1".into(),
+            turn_id: "turn-1".into(),
+            payload: Some(proto::thread_event::Payload::ExecOutputDelta(
+                proto::ThreadDelta {
+                    item_id: "call-1".into(),
+                    delta: "/tmp\n".into(),
+                },
+            )),
+        });
+        assert!(matches!(
+            mapped.as_slice(),
+            [ChatStreamEvent::ToolOutputDelta { id, delta }]
+                if id == "call-1" && delta == "/tmp\n"
+        ));
     }
 
     #[test]

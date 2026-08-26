@@ -85,6 +85,11 @@ pub enum ChatStreamEvent {
         name: String,
         arguments: String,
     },
+    /// 命令执行过程中的输出增量，`id` 对齐同一工具调用的 item id。
+    ToolOutputDelta {
+        id: String,
+        delta: String,
+    },
     MemoryUpdate {
         operation: String,
         content: String,

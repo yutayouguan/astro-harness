@@ -426,6 +426,7 @@ export function useParallelTasks(deps: Deps) {
         arguments?: string;
         arguments_json?: string;
         result?: string;
+        delta?: string;
         phase?: string;
         index?: number;
         outcome_type?: string;
@@ -603,6 +604,25 @@ export function useParallelTasks(deps: Deps) {
             prev.map((m) =>
               m.id === assistantId ? applyActivityUpsert(m, activity) : m,
             ),
+          );
+        } else if (
+          payload.type === "tool_output_delta" &&
+          payload.id &&
+          payload.delta
+        ) {
+          const { id, delta } = payload as { id: string; delta: string };
+          setMessages((prev) =>
+            prev.map((m) => {
+              if (m.id !== assistantId) return m;
+              const existing = (m.activities ?? []).find((a) => a.id === id);
+              if (!existing || existing.status === "done") return m;
+              const output = `${existing.output ?? ""}${delta}`;
+              return applyActivityUpsert(m, {
+                ...existing,
+                output,
+                status: "running",
+              });
+            }),
           );
         } else if (payload.type === "done") {
           const raf = rafMapRef.current.get(assistantId);
