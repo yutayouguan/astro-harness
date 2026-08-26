@@ -1,0 +1,547 @@
+/* Schedule editor (create dialog) */
+
+.cron-sched {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+  padding: 14px;
+  border-radius: 16px;
+  border: 1px solid color-mix(in srgb, var(--tone) 14%, var(--chip-border));
+  background:
+    linear-gradient(155deg, rgba(255, 255, 255, 0.32), rgba(255, 255, 255, 0.1)),
+    color-mix(in srgb, var(--tone-soft) 28%, transparent);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.49),
+    0 6px 16px color-mix(in srgb, var(--tone) 6%, transparent);
+}
+
+html[data-theme="dark"] .cron-sched {
+  background:
+    linear-gradient(155deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.02)),
+    color-mix(in srgb, var(--tone) 10%, rgba(8, 6, 18, 0.35));
+  border-color: color-mix(in srgb, var(--tone) 18%, rgba(255, 255, 255, 0.1));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+.cron-sched-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 650;
+  color: var(--ink-mute);
+}
+
+.cron-sched-label svg {
+  color: var(--tone);
+  opacity: 0.9;
+}
+
+.cron-sched-modes {
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  border-radius: 10px;
+  background:
+    linear-gradient(155deg, rgba(255, 255, 255, 0.35), rgba(255, 255, 255, 0.1)),
+    color-mix(in srgb, var(--glass-fill) 60%, transparent);
+  border: 1px solid color-mix(in srgb, var(--tone) 10%, var(--chip-border));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.32);
+  backdrop-filter: blur(10px) saturate(1.1);
+  -webkit-backdrop-filter: blur(10px) saturate(1.1);
+}
+
+html[data-theme="dark"] .cron-sched-modes {
+  background:
+    linear-gradient(155deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.02)),
+    rgba(8, 6, 18, 0.4);
+  border-color: rgba(255, 255, 255, 0.09);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+.cron-sched-mode {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  border: none;
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 12.5px;
+  font-weight: 650;
+  cursor: pointer;
+  color: var(--ink-mute);
+  background: transparent;
+  transition: color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease, transform 0.12s ease;
+}
+
+.cron-sched-mode > svg {
+  flex-shrink: 0;
+  opacity: 0.85;
+}
+
+.cron-sched-mode:hover:not(.active) {
+  color: var(--ink);
+  background: color-mix(in srgb, var(--tone) 6%, transparent);
+}
+
+.cron-sched-mode.active {
+  color: var(--tone);
+  background:
+    linear-gradient(165deg, rgba(255, 255, 255, 0.35), rgba(255, 255, 255, 0.12)),
+    var(--tone-soft);
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--tone) 22%, transparent),
+    0 2px 8px color-mix(in srgb, var(--tone) 12%, transparent);
+}
+
+html[data-theme="dark"] .cron-sched-mode:hover:not(.active) {
+  color: var(--ink);
+  background: color-mix(in srgb, var(--tone) 12%, transparent);
+}
+
+html[data-theme="dark"] .cron-sched-mode.active {
+  color: color-mix(in srgb, #fff 28%, var(--tone));
+  background: color-mix(in srgb, var(--tone) 14%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--tone) 28%, transparent);
+}
+
+.cron-sched-mode.active > svg {
+  opacity: 1;
+}
+
+.cron-sched-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+
+.cron-sched-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.cron-sched-interval-label {
+  font-size: 13px;
+  font-weight: 650;
+  color: var(--ink-soft);
+  flex-shrink: 0;
+}
+
+.cron-sched-field-shell,
+.cron-sched-stepper {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  min-height: 40px;
+  box-sizing: border-box;
+  padding: 0 10px;
+  border-radius: 12px;
+  border: 1px solid color-mix(in srgb, var(--tone) 14%, rgba(255, 255, 255, 0.35));
+  background:
+    linear-gradient(165deg, rgba(255, 255, 255, 0.33), rgba(255, 255, 255, 0.1)),
+    rgba(255, 255, 255, 0.17);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.47),
+    0 4px 12px color-mix(in srgb, var(--tone) 8%, transparent);
+  backdrop-filter: blur(16px) saturate(1.25);
+  -webkit-backdrop-filter: blur(16px) saturate(1.25);
+  color: var(--tone);
+  transition: border-color 0.14s ease, box-shadow 0.14s ease, background 0.14s ease;
+}
+
+html[data-theme="dark"] .cron-sched-field-shell,
+html[data-theme="dark"] .cron-sched-stepper {
+  background:
+    linear-gradient(165deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.03)),
+    rgba(255, 255, 255, 0.04);
+  border-color: color-mix(in srgb, var(--tone) 20%, rgba(255, 255, 255, 0.12));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 6px 16px rgba(0, 0, 0, 0.28);
+}
+
+.cron-sched-field-shell--time {
+  flex: 1;
+}
+
+.cron-sched-field-shell--datetime {
+  width: 100%;
+  justify-content: flex-start;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+  color: var(--ink);
+}
+
+.cron-sched-field-shell--datetime > svg {
+  flex-shrink: 0;
+  color: var(--tone);
+}
+
+.cron-sched-field-shell--datetime.is-open,
+.cron-sched-field-shell:focus-within,
+.cron-sched-stepper:focus-within {
+  border-color: color-mix(in srgb, var(--tone) 42%, transparent);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.58),
+    0 0 0 3px color-mix(in srgb, var(--tone) 14%, transparent);
+}
+
+.cron-sched-datetime-label {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  font-weight: 550;
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cron-sched-input {
+  min-width: 0;
+  box-sizing: border-box;
+  padding: 10px 12px;
+  min-height: 38px;
+  border-radius: 12px;
+  border: 1px solid color-mix(in srgb, var(--tone) 12%, var(--chip-border));
+  background:
+    linear-gradient(
+      165deg,
+      color-mix(in srgb, #fff 78%, transparent) 0%,
+      color-mix(in srgb, var(--tone) 5%, rgba(255, 255, 255, 0.5)) 100%
+    ),
+    var(--glass-fill);
+  color: var(--ink);
+  font-size: 13px;
+  font-family: inherit;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.58);
+  backdrop-filter: blur(10px) saturate(1.1);
+  -webkit-backdrop-filter: blur(10px) saturate(1.1);
+  transition: border-color 0.14s ease, box-shadow 0.14s ease;
+}
+
+.cron-sched-input--bare {
+  flex: 1;
+  min-width: 0;
+  width: 100%;
+  border: none;
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  padding: 8px 0;
+  min-height: 0;
+  color: var(--ink);
+}
+
+.cron-sched-input--bare:focus {
+  outline: none;
+  box-shadow: none;
+  border: none;
+}
+
+.cron-sched-input--bare::-webkit-calendar-picker-indicator {
+  opacity: 0.55;
+  cursor: pointer;
+  filter: none;
+}
+
+html[data-theme="dark"] .cron-sched-input--bare::-webkit-calendar-picker-indicator {
+  filter: invert(0.85);
+  opacity: 0.75;
+}
+
+.cron-sched-input:focus {
+  outline: none;
+  border-color: color-mix(in srgb, var(--tone) 42%, transparent);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.62),
+    0 0 0 3px color-mix(in srgb, var(--tone) 14%, transparent);
+}
+
+html[data-theme="dark"] .cron-sched-input {
+  border-color: color-mix(in srgb, var(--tone) 18%, rgba(255, 255, 255, 0.1));
+  background:
+    linear-gradient(165deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.02)),
+    color-mix(in srgb, var(--tone-soft) 22%, rgba(8, 6, 18, 0.5));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+.cron-sched-stepper {
+  padding: 0 4px;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.cron-sched-stepper-btn {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--tone);
+  cursor: pointer;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+
+.cron-sched-stepper-btn:hover {
+  background: color-mix(in srgb, var(--tone) 12%, transparent);
+}
+
+.cron-sched-input--num {
+  width: 48px;
+  flex: 0 0 48px;
+  text-align: center;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  -moz-appearance: textfield;
+}
+
+.cron-sched-input--num::-webkit-outer-spin-button,
+.cron-sched-input--num::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.cron-sched-unit-menu {
+  --select-tone: var(--tone);
+  --select-tone-soft: var(--tone-soft);
+  flex: 1;
+  min-width: 110px;
+  max-width: 160px;
+}
+
+.cron-sched-unit-menu .select-menu-trigger {
+  min-height: 40px;
+}
+
+.cron-sched-weekdays {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.cron-sched-wd {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 36px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  border: 1px solid color-mix(in srgb, var(--tone) 12%, var(--chip-border));
+  background:
+    linear-gradient(160deg, rgba(255, 255, 255, 0.35), rgba(255, 255, 255, 0.1)),
+    color-mix(in srgb, var(--glass-fill) 70%, transparent);
+  color: var(--ink-mute);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  transition: color 0.15s ease, background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+html[data-theme="dark"] .cron-sched-wd {
+  background:
+    linear-gradient(160deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.02)),
+    color-mix(in srgb, var(--tone-soft) 20%, rgba(8, 6, 18, 0.45));
+  border-color: color-mix(in srgb, var(--tone) 18%, rgba(255, 255, 255, 0.1));
+}
+
+.cron-sched-wd.active {
+  color: var(--tone);
+  background:
+    linear-gradient(165deg, rgba(255, 255, 255, 0.35), rgba(255, 255, 255, 0.12)),
+    var(--tone-soft);
+  border-color: color-mix(in srgb, var(--tone) 35%, transparent);
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--tone) 12%, transparent);
+}
+
+html[data-theme="dark"] .cron-sched-wd.active {
+  color: color-mix(in srgb, #fff 28%, var(--tone));
+  background: color-mix(in srgb, var(--tone) 18%, transparent);
+  border-color: color-mix(in srgb, var(--tone) 36%, rgba(255, 255, 255, 0.12));
+  box-shadow: none;
+}
+
+/* 玻璃日期时间弹层（紧凑尺寸；--tone 由触发器经 portal 传入，跟随当前 tab） */
+.cron-dt-pop {
+  position: fixed;
+  z-index: calc(var(--z-menu) + 50);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  border-radius: 14px;
+  border: 1px solid color-mix(in srgb, var(--tone) 18%, rgba(255, 255, 255, 0.35));
+  background:
+    linear-gradient(165deg, rgba(255, 255, 255, 0.36), rgba(255, 255, 255, 0.12)),
+    color-mix(in srgb, var(--tone-soft) 48%, transparent);
+  box-shadow: 0 14px 36px color-mix(in srgb, var(--tone) 14%, rgba(15, 23, 42, 0.14));
+  backdrop-filter: blur(20px) saturate(1.3);
+  -webkit-backdrop-filter: blur(20px) saturate(1.3);
+  animation: cron-dt-pop-in 0.16s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+html[data-theme="dark"] .cron-dt-pop {
+  border-color: color-mix(in srgb, var(--tone) 28%, rgba(255, 255, 255, 0.12));
+  background:
+    linear-gradient(165deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.03)),
+    color-mix(in srgb, var(--tone-soft) 28%, rgba(8, 6, 18, 0.82));
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.36);
+}
+
+@keyframes cron-dt-pop-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.cron-dt-pop-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.cron-dt-month {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.cron-dt-nav {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border: none;
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--tone) 8%, transparent);
+  color: var(--tone);
+  cursor: pointer;
+}
+
+.cron-dt-nav:hover {
+  background: color-mix(in srgb, var(--tone) 16%, transparent);
+}
+
+.cron-dt-nav svg {
+  width: 14px;
+  height: 14px;
+}
+
+.cron-dt-weekdays {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 2px;
+  text-align: center;
+  font-size: 10px;
+  font-weight: 650;
+  color: var(--ink-mute);
+}
+
+.cron-dt-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 2px;
+}
+
+.cron-dt-day {
+  width: 100%;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  border: none;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--ink-soft);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+
+.cron-dt-day.is-empty {
+  pointer-events: none;
+}
+
+.cron-dt-day:hover:not(.is-empty) {
+  background: color-mix(in srgb, var(--tone) 12%, transparent);
+  color: var(--tone);
+}
+
+.cron-dt-day.is-today {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--tone) 35%, transparent);
+}
+
+.cron-dt-day.is-selected {
+  color: var(--tone);
+  background:
+    linear-gradient(165deg, rgba(255, 255, 255, 0.35), rgba(255, 255, 255, 0.1)),
+    var(--tone-soft);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--tone) 28%, transparent);
+}
+
+html[data-theme="dark"] .cron-dt-day.is-selected {
+  color: color-mix(in srgb, #fff 28%, var(--tone));
+  background: color-mix(in srgb, var(--tone) 18%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--tone) 32%, transparent);
+}
+
+.cron-dt-time {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  border-radius: 10px;
+  border: 1px solid color-mix(in srgb, var(--tone) 14%, transparent);
+  background: color-mix(in srgb, var(--tone-soft) 35%, transparent);
+  color: var(--tone);
+}
+
+.cron-dt-time-input {
+  width: 38px;
+  border: none;
+  border-radius: 7px;
+  padding: 4px 2px;
+  text-align: center;
+  font-size: 12px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+  background: color-mix(in srgb, #fff 28%, transparent);
+  -moz-appearance: textfield;
+}
+
+.cron-dt-time-input::-webkit-outer-spin-button,
+.cron-dt-time-input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+html[data-theme="dark"] .cron-dt-time-input {
+  color: var(--ink);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.cron-dt-time-sep {
+  font-weight: 700;
+  color: var(--ink-mute);
+}
+

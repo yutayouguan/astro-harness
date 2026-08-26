@@ -1,0 +1,441 @@
+.cron-create-drawer-backdrop {
+  background:
+    radial-gradient(
+      ellipse 55% 70% at 88% 30%,
+      color-mix(in srgb, var(--tone) 18%, transparent),
+      transparent 65%
+    ),
+    color-mix(in srgb, var(--bg-base, #0f172a) 32%, transparent);
+}
+
+html[data-theme="light"] .cron-create-drawer-backdrop {
+  background:
+    radial-gradient(
+      ellipse 55% 70% at 88% 30%,
+      color-mix(in srgb, var(--tone) 22%, transparent),
+      transparent 65%
+    ),
+    color-mix(in srgb, #64748b 18%, transparent);
+}
+
+.cron-create-drawer {
+  position: relative;
+  isolation: isolate;
+  width: min(520px, 94vw);
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+.cron-create-drawer::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(circle at 12% 8%, color-mix(in srgb, var(--tone) 20%, transparent), transparent 48%),
+    radial-gradient(ellipse at 90% 100%, color-mix(in srgb, var(--tone) 12%, transparent), transparent 42%);
+  opacity: 0.9;
+}
+
+html[data-theme="dark"] .cron-create-drawer::before {
+  background:
+    radial-gradient(circle at 14% 6%, color-mix(in srgb, var(--tone) 26%, transparent), transparent 50%),
+    radial-gradient(ellipse at 88% 96%, color-mix(in srgb, var(--tone) 14%, transparent), transparent 44%);
+  opacity: 0.85;
+}
+
+.cron-create-drawer > * {
+  position: relative;
+  z-index: 1;
+}
+
+.cron-create-drawer-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 18px 18px 12px;
+  border-bottom: 1px solid color-mix(in srgb, var(--tone) 10%, var(--chip-border));
+  flex-shrink: 0;
+}
+
+html[data-theme="dark"] .cron-create-drawer-head {
+  border-bottom-color: color-mix(in srgb, var(--tone) 14%, transparent);
+}
+
+.cron-create-drawer-title {
+  margin: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+}
+
+.cron-create-drawer-title-icon {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 10px;
+  color: var(--tone);
+  background:
+    linear-gradient(160deg, rgba(255, 255, 255, 0.35), rgba(255, 255, 255, 0.1)),
+    color-mix(in srgb, var(--tone-soft) 70%, transparent);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.39),
+    0 2px 8px color-mix(in srgb, var(--tone) 14%, transparent);
+}
+
+html[data-theme="dark"] .cron-create-drawer-title-icon {
+  background:
+    linear-gradient(160deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.04)),
+    color-mix(in srgb, var(--tone) 18%, transparent);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+.cron-dialog-close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border: none;
+  border-radius: 10px;
+  cursor: pointer;
+  color: var(--tone, var(--ink-mute));
+  background: transparent;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.cron-dialog-close:hover {
+  background: var(--tone-soft, var(--chip-bg));
+  color: var(--tone, var(--ink));
+}
+
+.cron-create-drawer-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 16px 18px 12px;
+  box-sizing: border-box;
+}
+
+.cron-create-drawer-foot {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-shrink: 0;
+  padding: 12px 18px 18px;
+  border-top: 1px solid color-mix(in srgb, var(--tone) 8%, transparent);
+  background:
+    linear-gradient(
+      0deg,
+      color-mix(in srgb, var(--tone-soft) 35%, rgba(255, 255, 255, 0.35)),
+      color-mix(in srgb, var(--tone-soft) 6%, transparent)
+    );
+}
+
+html[data-theme="dark"] .cron-create-drawer-foot {
+  border-top-color: color-mix(in srgb, var(--tone) 12%, transparent);
+  background:
+    linear-gradient(
+      0deg,
+      color-mix(in srgb, var(--tone) 12%, rgba(8, 6, 18, 0.5)),
+      transparent
+    );
+}
+
+.cron-dialog-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 0.8fr);
+  gap: 12px;
+  min-width: 0;
+}
+
+@media (max-width: 520px) {
+  .cron-dialog-row {
+    grid-template-columns: 1fr;
+  }
+}
+
+.cron-dialog-field {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  min-width: 0;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--ink-mute);
+}
+
+.cron-dialog-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 650;
+  color: var(--ink-mute);
+}
+
+.cron-dialog-label > svg {
+  flex-shrink: 0;
+  color: var(--tone);
+  opacity: 0.9;
+}
+
+.cron-dialog-req {
+  color: var(--tone);
+  font-weight: 700;
+  margin-left: 1px;
+}
+
+.cron-dialog-control {
+  position: relative;
+  min-width: 0;
+}
+
+.cron-dialog-control-icon {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 1;
+  pointer-events: none;
+  color: color-mix(in srgb, var(--tone) 70%, var(--ink-mute));
+  opacity: 0.9;
+}
+
+.cron-dialog-control--textarea .cron-dialog-control-icon {
+  top: 14px;
+  transform: none;
+}
+
+.cron-dialog-input,
+.cron-dialog-textarea {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  padding: 10px 12px;
+  min-height: 40px;
+  border-radius: 12px;
+  border: 1px solid color-mix(in srgb, var(--tone) 14%, rgba(255, 255, 255, 0.35));
+  background:
+    linear-gradient(165deg, rgba(255, 255, 255, 0.33), rgba(255, 255, 255, 0.1)),
+    rgba(255, 255, 255, 0.17);
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 400;
+  font-family: inherit;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.47);
+  backdrop-filter: blur(16px) saturate(1.25);
+  -webkit-backdrop-filter: blur(16px) saturate(1.25);
+  transition: border-color 0.14s ease, box-shadow 0.14s ease;
+}
+
+.cron-dialog-input.has-leading-icon,
+.cron-dialog-textarea.has-leading-icon {
+  padding-left: 36px;
+}
+
+.cron-dialog-select {
+  width: 100%;
+  min-width: 0;
+}
+
+.cron-dialog-select.has-leading-icon .select-menu-trigger {
+  padding-left: 36px;
+}
+
+.cron-dialog-input:focus,
+.cron-dialog-textarea:focus {
+  outline: none;
+  border-color: color-mix(in srgb, var(--tone) 42%, transparent);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.62),
+    0 0 0 3px color-mix(in srgb, var(--tone) 14%, transparent);
+}
+
+html[data-theme="dark"] .cron-dialog-input,
+html[data-theme="dark"] .cron-dialog-textarea {
+  background:
+    linear-gradient(165deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.03)),
+    rgba(255, 255, 255, 0.04);
+  border-color: color-mix(in srgb, var(--tone) 20%, rgba(255, 255, 255, 0.12));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+.cron-dialog-textarea {
+  resize: vertical;
+  line-height: 1.55;
+  min-height: 96px;
+}
+
+.cron-dialog-advanced {
+  border-radius: 14px;
+  border: 1px solid color-mix(in srgb, var(--tone) 12%, var(--chip-border));
+  background:
+    linear-gradient(155deg, rgba(255, 255, 255, 0.26), rgba(255, 255, 255, 0.07)),
+    color-mix(in srgb, var(--glass-fill) 65%, transparent);
+  padding: 0 12px;
+  overflow: visible;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35);
+}
+
+.cron-dialog-advanced > summary {
+  list-style: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 12px 4px;
+  font-size: 13px;
+  font-weight: 650;
+  color: var(--ink-mute);
+  user-select: none;
+  transition: color 0.14s ease;
+}
+
+.cron-dialog-advanced > summary::-webkit-details-marker {
+  display: none;
+}
+
+.cron-dialog-advanced-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.cron-dialog-advanced-label > svg {
+  color: var(--tone);
+  opacity: 0.9;
+}
+
+.cron-dialog-advanced-chevron {
+  flex-shrink: 0;
+  color: var(--ink-mute);
+  transition: color 0.14s ease;
+}
+
+.cron-dialog-advanced[open] > summary {
+  color: var(--tone);
+  border-bottom: 1px solid var(--chip-border);
+  margin-bottom: 12px;
+}
+
+.cron-dialog-advanced[open] .cron-dialog-advanced-chevron {
+  color: var(--tone);
+}
+
+.cron-dialog-advanced-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 0 4px 14px;
+  /* 下拉菜单需要能溢出高级区 */
+  overflow: visible;
+}
+
+.cron-dialog-error {
+  margin: 0;
+  font-size: 12px;
+  color: #ef4444;
+}
+
+.cron-btn-primary,
+.cron-btn-ghost {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.cron-btn-primary {
+  padding: 9px 20px;
+  border: 1px solid color-mix(in srgb, var(--tone) 22%, rgba(255, 255, 255, 0.35));
+  border-radius: 12px;
+  font-size: 13px;
+  font-weight: 650;
+  cursor: pointer;
+  color: var(--tone);
+  background:
+    linear-gradient(155deg, rgba(255, 255, 255, 0.35) 0%, rgba(255, 255, 255, 0.12) 100%),
+    color-mix(in srgb, var(--tone-soft) 70%, transparent);
+  box-shadow:
+    0 6px 16px color-mix(in srgb, var(--tone) 12%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.49);
+  backdrop-filter: blur(12px) saturate(1.2);
+  -webkit-backdrop-filter: blur(12px) saturate(1.2);
+  transition: opacity 0.15s ease, transform 0.12s ease, box-shadow 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+}
+
+.cron-btn-primary:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--tone) 36%, rgba(255, 255, 255, 0.35));
+  background:
+    linear-gradient(155deg, rgba(255, 255, 255, 0.43) 0%, rgba(255, 255, 255, 0.16) 100%),
+    var(--tone-soft);
+  box-shadow:
+    0 10px 22px color-mix(in srgb, var(--tone) 16%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.55);
+}
+
+.cron-btn-primary:active:not(:disabled) {
+  transform: scale(0.98);
+}
+
+.cron-btn-primary:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+html[data-theme="dark"] .cron-btn-primary {
+  border-color: color-mix(in srgb, var(--tone) 28%, rgba(255, 255, 255, 0.1));
+  background:
+    linear-gradient(155deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0.02) 100%),
+    color-mix(in srgb, var(--tone-soft) 55%, rgba(8, 6, 18, 0.5));
+  box-shadow:
+    0 8px 20px rgba(0, 0, 0, 0.35),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  color: color-mix(in srgb, #fff 22%, var(--tone));
+}
+
+html[data-theme="dark"] .cron-btn-primary:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--tone) 40%, rgba(255, 255, 255, 0.14));
+  background:
+    linear-gradient(155deg, rgba(255, 255, 255, 0.12) 0%, rgba(255, 255, 255, 0.04) 100%),
+    color-mix(in srgb, var(--tone-soft) 70%, rgba(8, 6, 18, 0.45));
+}
+
+.cron-btn-ghost {
+  padding: 9px 16px;
+  border: none;
+  border-radius: 12px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  color: var(--ink-mute);
+  background: transparent;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.cron-btn-ghost:hover {
+  background: var(--chip-bg);
+  color: var(--ink);
+}
+
+.cron-tabs {
+  margin-bottom: 0;
+}
+

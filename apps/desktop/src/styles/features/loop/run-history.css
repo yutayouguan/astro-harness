@@ -1,0 +1,353 @@
+/* ═══════════════════════════════════════════════════════════════════
+   Run History
+   ═══════════════════════════════════════════════════════════════════ */
+
+.loop-run-history {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  flex-direction: column;
+  width: 340px;
+  border-left: 1px solid var(--border);
+  background: var(--bg0, #fff);
+  overflow: hidden;
+  z-index: 30;
+  box-shadow: -2px 0 12px rgba(0, 0, 0, 0.06);
+}
+
+.loop-run-history-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ink);
+  flex-shrink: 0;
+}
+.loop-run-history-header .loop-icon-btn {
+  margin-left: auto;
+}
+
+.loop-run-history-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px;
+}
+
+.loop-run-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.12s;
+  margin-bottom: 4px;
+}
+.loop-run-card:hover {
+  background: var(--glass-hover);
+}
+.loop-run-card.is-selected {
+  background: color-mix(in srgb, var(--tone, #ec4899) 10%, transparent);
+}
+
+.loop-run-card-status {
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+.loop-run-card-status--success { color: #22c55e; }
+.loop-run-card-status--failure { color: #ef4444; }
+.loop-run-card-status--running { color: #3b82f6; }
+
+.loop-run-card-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.loop-run-card-title {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.loop-run-card-meta {
+  display: flex;
+  gap: 8px;
+  font-size: 11px;
+  color: var(--ink-tertiary);
+  margin-top: 3px;
+}
+
+/* ── Run Detail ──────────────────────────────────────────────────── */
+
+.loop-run-detail {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 380px;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg0, #fff);
+  border-left: 1px solid var(--border);
+  overflow: hidden;
+  z-index: 30;
+  box-shadow: -2px 0 12px rgba(0, 0, 0, 0.06);
+}
+
+.loop-run-detail-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.loop-run-detail-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 500;
+}
+.loop-run-detail-badge--success {
+  background: color-mix(in srgb, #22c55e 15%, transparent);
+  color: #22c55e;
+}
+.loop-run-detail-badge--failure {
+  background: color-mix(in srgb, #ef4444 15%, transparent);
+  color: #ef4444;
+}
+.loop-run-detail-badge--running {
+  background: color-mix(in srgb, #3b82f6 15%, transparent);
+  color: #3b82f6;
+}
+
+.loop-run-detail-id {
+  font-size: 11px;
+  color: var(--ink-tertiary);
+  font-family: "SF Mono", "Fira Code", monospace;
+}
+
+.loop-run-detail-summary {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.loop-run-detail-summary dt {
+  color: var(--ink-secondary);
+}
+.loop-run-detail-summary dd {
+  color: var(--ink);
+  margin: 0;
+}
+
+.loop-run-steps {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px 16px;
+}
+
+.loop-run-step {
+  display: flex;
+  gap: 10px;
+  padding: 8px 0;
+  position: relative;
+}
+.loop-run-step:not(:last-child)::before {
+  content: "";
+  position: absolute;
+  left: 7px;
+  top: 24px;
+  bottom: -8px;
+  width: 1px;
+  background: var(--border);
+}
+
+.loop-run-step-dot {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+.loop-run-step-dot--success { background: #22c55e; }
+.loop-run-step-dot--failure { background: #ef4444; }
+.loop-run-step-dot--running { background: #3b82f6; }
+.loop-run-step-dot--skipped { background: var(--ink-tertiary); opacity: 0.4; }
+.loop-run-step-dot--pending { background: var(--border); }
+
+.loop-run-step-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.loop-run-step-label {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ink);
+}
+
+.loop-run-step-type {
+  font-size: 11px;
+  color: var(--ink-tertiary);
+  margin-left: 6px;
+}
+
+.loop-run-step-meta {
+  font-size: 11px;
+  color: var(--ink-tertiary);
+  margin-top: 2px;
+}
+
+.loop-run-step-toggle {
+  font-size: 11px;
+  color: var(--tone, #ec4899);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 2px 0;
+  margin-top: 4px;
+}
+.loop-run-step-toggle:hover {
+  text-decoration: underline;
+}
+
+.loop-run-step-output {
+  margin-top: 6px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: var(--bg0);
+  border: 1px solid var(--border);
+  font-size: 11px;
+  font-family: "SF Mono", "Fira Code", monospace;
+  color: var(--ink-secondary);
+  white-space: pre-wrap;
+  word-break: break-all;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.loop-run-output-section {
+  padding: 12px 16px;
+  border-top: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.loop-run-output-section-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink-secondary);
+  margin-bottom: 8px;
+}
+
+.loop-run-empty {
+  text-align: center;
+  padding: 40px 20px;
+  color: var(--ink-tertiary);
+  font-size: 13px;
+}
+
+/* ── Node execution status overlay ────────────────────────────────── */
+
+.loop-rf-node-status {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 2px solid var(--glass-panel);
+}
+.loop-rf-node-status--success { background: #22c55e; }
+.loop-rf-node-status--failure { background: #ef4444; }
+.loop-rf-node-status--running {
+  background: #3b82f6;
+  animation: loop-pulse 1.2s ease-in-out infinite;
+}
+.loop-rf-node-status--skipped { background: var(--ink-tertiary); opacity: 0.4; }
+
+@keyframes loop-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+/* ── Run history overlay on editor ───────────────────────────────── */
+
+.loop-editor-body-with-history {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+
+/* ── Variables panel ─────────────────────────────────────────────── */
+
+.loop-vars-panel {
+  width: 320px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  border-left: 1px solid var(--border);
+  background: var(--glass-panel);
+  backdrop-filter: blur(14px);
+  overflow-y: auto;
+}
+
+.loop-vars-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.loop-vars-panel-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.loop-vars-panel-body {
+  padding: 12px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.loop-vars-row {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+}
+
+.loop-vars-key {
+  flex: 1;
+  min-width: 0;
+}
+
+.loop-vars-val {
+  flex: 2;
+  min-width: 0;
+}
+
+.loop-vars-panel-hint {
+  padding: 8px 16px;
+  font-size: 11px;
+  color: var(--ink-tertiary);
+  border-top: 1px solid var(--border);
+}
+

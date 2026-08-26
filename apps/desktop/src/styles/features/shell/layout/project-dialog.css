@@ -1,0 +1,209 @@
+/* ── Project edit dialog ─────────────────────────── */
+
+.project-edit-panel {
+  position: relative;
+  width: 460px;
+  max-width: 90vw;
+  padding: 28px 28px 20px;
+}
+
+.project-edit-title {
+  font-size: 17px;
+  font-weight: 600;
+  margin: 0 0 20px;
+  color: var(--ink);
+}
+
+.project-edit-label {
+  display: block;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--ink-soft);
+  margin-bottom: 6px;
+}
+
+.project-edit-name-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--glass-edge, rgba(0, 0, 0, 0.1));
+  background: var(--composer-bg, rgba(0, 0, 0, 0.03));
+  margin-bottom: 16px;
+}
+
+.project-edit-name-icon {
+  flex-shrink: 0;
+  color: var(--ink-mute);
+}
+
+.project-edit-name-icon-btn {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: 1.5px dashed var(--border-mute, rgba(0, 0, 0, 0.12));
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ink-mute);
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s, color 0.15s;
+}
+
+.project-edit-name-icon-btn:hover {
+  border-color: var(--accent, #2563eb);
+  background: var(--surface-hover, rgba(0, 0, 0, 0.04));
+  color: var(--accent, #2563eb);
+}
+
+.project-edit-name-input {
+  flex: 1;
+  border: none;
+  background: transparent;
+  font-size: 14px;
+  color: var(--ink);
+  outline: none;
+}
+
+.project-edit-name-input::placeholder {
+  color: var(--ink-mute);
+}
+
+.project-edit-roots {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 8px;
+  max-height: 180px;
+  overflow-y: auto;
+}
+
+.project-edit-roots-empty {
+  font-size: 13px;
+  color: var(--ink-mute);
+  padding: 6px 0;
+}
+
+.project-edit-root-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: var(--composer-bg, rgba(0, 0, 0, 0.03));
+  border: 1px solid var(--glass-edge, rgba(0, 0, 0, 0.06));
+}
+
+.project-edit-root-path {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.project-edit-root-remove {
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ink-mute);
+  cursor: pointer;
+  transition: background 0.08s, color 0.08s;
+}
+
+.project-edit-root-remove:hover {
+  background: color-mix(in srgb, var(--danger, #ef4444) 12%, transparent);
+  color: var(--danger, #ef4444);
+}
+
+.project-edit-add-folder {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border: 1px dashed var(--glass-edge, rgba(0, 0, 0, 0.15));
+  border-radius: 8px;
+  background: transparent;
+  font-size: 13px;
+  font-weight: 450;
+  color: var(--ink-soft);
+  cursor: pointer;
+  transition: background 0.08s, color 0.08s, border-color 0.08s;
+  margin-bottom: 24px;
+}
+
+.project-edit-add-folder:hover {
+  background: color-mix(in srgb, var(--tone, #64748b) 8%, transparent);
+  color: var(--ink);
+  border-color: var(--ink-mute);
+}
+
+.project-edit-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-top: 1px solid var(--glass-edge, rgba(0, 0, 0, 0.08));
+  padding-top: 16px;
+}
+
+.project-edit-footer-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.project-edit-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 16px;
+  border: none;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.1s, color 0.1s, opacity 0.1s;
+}
+
+.project-edit-btn--primary {
+  background: var(--tone, #64748b);
+  color: #fff;
+}
+
+.project-edit-btn--primary:hover {
+  opacity: 0.9;
+}
+
+.project-edit-btn--primary:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.project-edit-btn--secondary {
+  background: var(--composer-bg, rgba(0, 0, 0, 0.05));
+  color: var(--ink);
+}
+
+.project-edit-btn--secondary:hover {
+  background: color-mix(in srgb, var(--tone, #64748b) 12%, transparent);
+}
+
+.project-edit-btn--danger {
+  background: transparent;
+  color: var(--danger, #ef4444);
+}
+
+.project-edit-btn--danger:hover {
+  background: color-mix(in srgb, var(--danger, #ef4444) 10%, transparent);
+}
+

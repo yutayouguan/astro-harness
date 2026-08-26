@@ -1,0 +1,410 @@
+/* Run log drawer */
+.cron-run-drawer {
+  width: min(480px, 92vw);
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+}
+
+.cron-run-drawer-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 18px 18px 12px;
+  border-bottom: 1px solid var(--chip-border);
+  flex-shrink: 0;
+}
+
+.cron-run-drawer-head-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.cron-history-item-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.cron-timeline-log-btn.is-danger {
+  color: var(--danger, #e11d48);
+  border-color: color-mix(in srgb, var(--danger, #e11d48) 28%, transparent);
+  background: color-mix(in srgb, var(--danger, #e11d48) 8%, transparent);
+}
+
+.cron-timeline-log-btn.is-danger:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--danger, #e11d48) 42%, transparent);
+  background: color-mix(in srgb, var(--danger, #e11d48) 14%, transparent);
+}
+
+.cron-timeline-log-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.cron-run-md {
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--chip-border);
+  background: color-mix(in srgb, var(--ink) 3.5%, transparent);
+  max-height: min(44vh, 360px);
+  overflow: auto;
+  font-size: 0.86rem;
+  line-height: 1.55;
+  color: var(--ink);
+}
+
+.cron-run-drawer-block.is-error .cron-run-md {
+  border-color: color-mix(in srgb, var(--danger, #e11d48) 28%, transparent);
+  background: color-mix(in srgb, var(--danger, #e11d48) 6%, transparent);
+  color: var(--danger, #e11d48);
+}
+
+.cron-run-drawer-title {
+  margin: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.cron-run-drawer-title svg {
+  flex-shrink: 0;
+  color: color-mix(in srgb, var(--accent, #14b8a6) 75%, var(--ink-mute));
+}
+
+.cron-run-drawer-sub {
+  margin: 6px 0 0;
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--ink-mute);
+}
+
+.cron-run-drawer-sub svg {
+  flex-shrink: 0;
+  margin-top: 1px;
+  opacity: 0.85;
+}
+
+.cron-run-drawer-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 14px 18px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.cron-run-drawer-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.cron-run-drawer-summary {
+  margin: 0;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--ink-soft);
+}
+
+.cron-run-drawer-summary svg {
+  flex-shrink: 0;
+  margin-top: 2px;
+  color: var(--ink-mute);
+}
+
+.cron-run-drawer-block.is-error .cron-run-drawer-label {
+  color: var(--danger, #e11d48);
+}
+
+.cron-run-drawer-block-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.cron-run-drawer-label {
+  margin: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ink-mute);
+}
+
+.cron-run-drawer-label svg {
+  flex-shrink: 0;
+}
+
+.cron-run-drawer-copy {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border-radius: 8px;
+  border: 1px solid color-mix(in srgb, var(--glass-edge) 85%, transparent);
+  background:
+    linear-gradient(
+      155deg,
+      color-mix(in srgb, #fff 16%, transparent) 0%,
+      color-mix(in srgb, #fff 4%, transparent) 100%
+    ),
+    color-mix(in srgb, var(--glass-inner, rgba(255, 255, 255, 0.1)) 65%, transparent);
+  color: var(--ink-mute);
+  cursor: pointer;
+  backdrop-filter: blur(10px) saturate(1.1);
+  -webkit-backdrop-filter: blur(10px) saturate(1.1);
+  transition:
+    color 0.15s ease,
+    border-color 0.15s ease,
+    background 0.15s ease;
+}
+
+.cron-run-drawer-copy:hover {
+  color: var(--ink);
+  border-color: color-mix(in srgb, var(--accent, #14b8a6) 40%, var(--glass-edge));
+}
+
+.cron-run-drawer-copy.is-copied {
+  color: #059669;
+  border-color: color-mix(in srgb, #34d399 45%, var(--glass-edge));
+}
+
+.cron-run-drawer-log {
+  margin: 0;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--chip-border);
+  background: color-mix(in srgb, var(--ink) 4%, transparent);
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--ink-soft);
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: min(40vh, 320px);
+  overflow: auto;
+}
+
+.cron-run-trace {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.cron-run-assistant-chunk {
+  margin-top: 0.35rem;
+}
+
+.cron-run-assistant-chunk .cron-run-drawer-log {
+  max-height: min(28vh, 220px);
+}
+
+.cron-run-drawer-block.is-error .cron-run-drawer-log {
+  border-color: color-mix(in srgb, var(--danger, #e11d48) 28%, transparent);
+  background: color-mix(in srgb, var(--danger, #e11d48) 6%, transparent);
+  color: var(--danger, #e11d48);
+}
+
+@media (max-width: 780px) {
+  .cron-job-detail {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto 1fr;
+  }
+
+  .cron-job-detail-list {
+    flex-direction: row;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding-bottom: 4px;
+  }
+
+  .cron-job-detail-item {
+    min-width: 140px;
+    flex-shrink: 0;
+  }
+}
+
+/* 中等宽度：筛选可落到 Tab 下一整行，但内部仍单行横排 */
+@container cron-pane (max-width: 900px) {
+  .cron-toolbar-end.cron-history-filters {
+    flex: 1 1 100%;
+    margin-left: 0;
+    width: 100%;
+    max-width: 100%;
+    justify-content: flex-start;
+    flex-wrap: nowrap;
+    height: auto;
+    min-height: 0;
+    gap: 6px;
+  }
+
+  .cron-history-filter {
+    flex: 1 1 0;
+    width: auto;
+    min-width: 96px;
+    max-width: none;
+  }
+
+  .cron-history-dates {
+    flex: 1 1 0;
+    min-width: 0;
+    width: auto;
+  }
+
+  .cron-history-date-btn.cron-sched-field-shell {
+    flex: 1 1 0;
+    width: auto;
+    min-width: 0;
+    max-width: none;
+  }
+}
+
+@container cron-pane (max-width: 560px) {
+  .cron-toolbar-end.cron-history-filters {
+    flex-wrap: wrap;
+  }
+
+  .cron-history-filter {
+    flex: 1 1 calc(50% - 3px);
+    min-width: 0;
+  }
+
+  .cron-history-dates {
+    flex: 1 1 100%;
+    width: 100%;
+  }
+
+  .cron-history-date-btn.cron-sched-field-shell {
+    flex: 1 1 0;
+  }
+
+  .cron-history-filters {
+    gap: 6px;
+    padding: 6px;
+  }
+
+  .cron-timeline-card {
+    padding: 12px;
+  }
+
+  .cron-timeline-card-top {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .cron-timeline-card-foot {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+  }
+
+  .cron-timeline-card-foot .cron-history-item-actions {
+    width: 100%;
+    justify-content: flex-end;
+  }
+
+  .cron-timeline-log-btn {
+    max-width: 100%;
+  }
+}
+
+@media (max-width: 680px) {
+  .cron-gallery {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* 无 container query 时退回视口断点 */
+@supports not (container-type: inline-size) {
+  @media (max-width: 960px) {
+    .cron-toolbar-end.cron-history-filters {
+      flex: 1 1 100%;
+      margin-left: 0;
+      flex-wrap: nowrap;
+      height: auto;
+      min-height: 0;
+      justify-content: flex-start;
+      width: 100%;
+      max-width: 100%;
+      gap: 6px;
+    }
+
+    .cron-history-filter {
+      flex: 1 1 0;
+      max-width: none;
+      width: auto;
+      min-width: 96px;
+    }
+
+    .cron-history-dates {
+      flex: 1 1 0;
+      width: auto;
+      min-width: 0;
+    }
+
+    .cron-history-date-btn.cron-sched-field-shell {
+      flex: 1 1 0;
+      width: auto;
+      min-width: 0;
+      max-width: none;
+    }
+  }
+
+  @media (max-width: 560px) {
+    .cron-toolbar-end.cron-history-filters {
+      flex-wrap: wrap;
+    }
+
+    .cron-history-filter {
+      flex: 1 1 calc(50% - 3px);
+      min-width: 0;
+    }
+
+    .cron-history-dates {
+      flex: 1 1 100%;
+      width: 100%;
+    }
+
+    .cron-history-date-btn.cron-sched-field-shell {
+      flex: 1 1 0;
+    }
+
+    .cron-timeline-card-foot {
+      flex-direction: column;
+      align-items: stretch;
+      gap: 8px;
+    }
+
+    .cron-timeline-card-foot .cron-history-item-actions {
+      width: 100%;
+      justify-content: flex-end;
+    }
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cron-job-list-row:hover {
+    transform: none;
+  }
+}

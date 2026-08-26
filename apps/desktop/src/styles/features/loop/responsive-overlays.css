@@ -1,0 +1,209 @@
+/* ── Responsive breakpoints ──────────────────────────────────── */
+
+@media (max-width: 900px) {
+  .loop-node-palette {
+    width: 180px;
+  }
+  .loop-config-panel {
+    width: 320px;
+  }
+  .loop-run-history-panel {
+    width: 280px;
+  }
+  .loop-detail {
+    grid-template-columns: 160px minmax(0, 1fr);
+  }
+  .loop-btn-label {
+    display: none;
+  }
+  .loop-edge-type-select {
+    max-width: 48px;
+  }
+  .loop-editor-desc {
+    display: none;
+  }
+  .loop-editor-name-display {
+    max-width: 140px;
+  }
+}
+
+@media (max-width: 700px) {
+  .loop-node-palette {
+    width: 150px;
+  }
+  .loop-config-panel {
+    width: 280px;
+  }
+  .loop-detail {
+    grid-template-columns: 1fr;
+  }
+  .loop-detail-sidebar {
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+    padding-right: 0;
+    padding-bottom: 8px;
+    max-height: 150px;
+  }
+}
+
+/* ── Canvas search ───────────────────────────────────────────── */
+
+.loop-canvas-search {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 10px;
+  background: var(--bg0, #fff);
+  border: 1px solid var(--tone, #6366f1);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+  z-index: 50;
+  color: var(--ink-tertiary);
+}
+.loop-canvas-search input {
+  border: none;
+  background: transparent;
+  outline: none;
+  font-size: 13px;
+  color: var(--ink);
+  width: 200px;
+}
+
+/* ── Context menu ────────────────────────────────────────────── */
+
+.loop-context-menu {
+  position: fixed;
+  z-index: 100;
+  min-width: 160px;
+  padding: 4px;
+  border-radius: 10px;
+  background: var(--bg0, #fff);
+  border: 1px solid var(--border);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+}
+.loop-context-menu button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 10px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  font-size: 13px;
+  color: var(--ink);
+  cursor: pointer;
+  text-align: left;
+}
+.loop-context-menu button:hover {
+  background: var(--glass-hover);
+}
+
+/* ── Empty state with templates ──────────────────────────────── */
+
+.loop-empty-with-templates {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 20px;
+}
+.loop-empty-templates {
+  margin-top: 24px;
+  width: 100%;
+  max-width: 640px;
+}
+.loop-empty-templates-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink-secondary);
+  margin-bottom: 10px;
+  text-align: center;
+}
+
+/* ── Editor statusbar ────────────────────────────────────────── */
+
+.loop-statusbar {
+  position: absolute;
+  bottom: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 12px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--bg0, #fff) 85%, transparent);
+  backdrop-filter: blur(6px);
+  border: 1px solid var(--border);
+  font-size: 11px;
+  color: var(--ink-tertiary);
+  z-index: 5;
+  pointer-events: none;
+}
+.loop-statusbar-sep {
+  opacity: 0.4;
+}
+.loop-statusbar-dirty {
+  color: #f59e0b;
+  font-weight: 600;
+}
+
+/* ── Shortcuts overlay ───────────────────────────────────────── */
+
+.loop-shortcuts-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 50;
+  backdrop-filter: blur(2px);
+}
+.loop-shortcuts-panel {
+  background: var(--bg0, #fff);
+  border-radius: 14px;
+  padding: 20px 24px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15);
+  min-width: 220px;
+}
+.loop-shortcuts-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--ink);
+  margin-bottom: 12px;
+}
+.loop-shortcuts-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 0;
+  font-size: 13px;
+  color: var(--ink-secondary);
+}
+.loop-shortcuts-row kbd {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 5px;
+  background: var(--glass-panel);
+  border: 1px solid var(--border);
+  font-size: 11px;
+  font-family: inherit;
+  color: var(--ink);
+  min-width: 32px;
+  text-align: center;
+}
+
+/* ── Node toolbar clip fix ───────────────────────────────────── */
+
+.loop-canvas-container .react-flow__node {
+  overflow: visible;
+}
+.loop-rf-node-toolbar {
+  z-index: 20;
+  pointer-events: auto;
+}

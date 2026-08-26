@@ -1,0 +1,338 @@
+/* View toggle */
+.cron-view-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+  height: var(--plugins-control-h);
+  padding: 3px;
+  border-radius: 12px;
+  background: var(--plugins-shell-bg);
+  border: 1px solid var(--plugins-shell-border);
+  box-shadow: var(--plugins-shell-shadow);
+  backdrop-filter: blur(14px) saturate(1.18);
+  -webkit-backdrop-filter: blur(14px) saturate(1.18);
+}
+
+.cron-view-btn {
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--ink-mute);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  transition: background 0.12s ease, color 0.12s ease, box-shadow 0.12s ease;
+}
+
+.cron-view-btn:hover {
+  color: var(--tone);
+  background: color-mix(in srgb, var(--tone) 10%, transparent);
+}
+
+.cron-view-btn.is-active {
+  color: var(--tone);
+  background: var(--plugins-active-bg);
+  box-shadow: var(--plugins-active-shadow);
+}
+
+/* Compact list view */
+.cron-job-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 4px 2px 12px;
+}
+
+.cron-job-list-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: 16px;
+  border: 1px solid color-mix(in srgb, var(--glass-edge) 90%, transparent);
+  background:
+    linear-gradient(155deg, rgba(255, 255, 255, 0.42), rgba(255, 255, 255, 0.13)),
+    color-mix(in srgb, var(--glass-panel, rgba(255, 255, 255, 0.5)) 75%, transparent);
+  box-shadow: var(--glass-rim);
+  backdrop-filter: blur(14px) saturate(1.15);
+  -webkit-backdrop-filter: blur(14px) saturate(1.15);
+  transition: border-color 0.14s ease, transform 0.14s ease, box-shadow 0.14s ease;
+}
+
+.cron-job-list-row:hover {
+  border-color: color-mix(in srgb, var(--tone) 32%, var(--glass-border));
+  transform: translateY(-1px);
+  box-shadow:
+    0 10px 22px color-mix(in srgb, var(--tone) 12%, transparent),
+    var(--glass-rim);
+}
+
+html[data-theme="dark"] .cron-job-list-row {
+  background:
+    linear-gradient(155deg, rgba(255, 255, 255, 0.05) 0%, rgba(255, 255, 255, 0.01) 100%),
+    rgba(8, 6, 18, 0.52);
+  border-color: rgba(255, 255, 255, 0.08);
+  box-shadow:
+    0 8px 20px rgba(0, 0, 0, 0.28),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+.cron-job-list-row.is-disabled {
+  opacity: 0.72;
+}
+
+.cron-job-list-icon {
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  border-radius: 12px;
+  color: var(--tone);
+  background: var(--tone-soft);
+  border: 1px solid color-mix(in srgb, var(--tone) 18%, transparent);
+}
+
+.cron-job-list-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.cron-job-list-title {
+  font-size: 0.92rem;
+  font-weight: 700;
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cron-job-list-meta {
+  font-size: 0.76rem;
+  color: var(--ink-mute);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Detail view */
+.cron-job-detail {
+  display: grid;
+  grid-template-columns: minmax(180px, 240px) minmax(0, 1fr);
+  gap: 12px;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.cron-job-detail-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-height: 0;
+  overflow: auto;
+  padding: 4px 2px;
+}
+
+.cron-job-detail-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  align-items: flex-start;
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--chip-border);
+  border-radius: 14px;
+  background:
+    linear-gradient(155deg, rgba(255, 255, 255, 0.25), rgba(255, 255, 255, 0.12)),
+    color-mix(in srgb, var(--glass-fill) 55%, transparent);
+  cursor: pointer;
+  text-align: left;
+  transition: border-color 0.12s ease, background 0.12s ease, box-shadow 0.12s ease;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.29);
+}
+
+.cron-job-detail-item:hover {
+  border-color: color-mix(in srgb, var(--tone) 28%, transparent);
+  background:
+    linear-gradient(155deg, rgba(255, 255, 255, 0.32), rgba(255, 255, 255, 0.1)),
+    color-mix(in srgb, var(--tone-soft) 35%, transparent);
+}
+
+.cron-job-detail-item.is-selected {
+  border-color: color-mix(in srgb, var(--tone) 32%, transparent);
+  background:
+    linear-gradient(155deg, rgba(255, 255, 255, 0.3), rgba(255, 255, 255, 0.08)),
+    color-mix(in srgb, var(--tone-soft) 65%, transparent);
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--tone) 14%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.35);
+}
+
+html[data-theme="dark"] .cron-job-detail-item {
+  background:
+    linear-gradient(155deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.015)),
+    rgba(8, 6, 18, 0.4);
+  border-color: rgba(255, 255, 255, 0.08);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+html[data-theme="dark"] .cron-job-detail-item:hover {
+  background:
+    linear-gradient(155deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.02)),
+    color-mix(in srgb, var(--tone-soft) 35%, rgba(8, 6, 18, 0.45));
+  border-color: color-mix(in srgb, var(--tone) 28%, rgba(255, 255, 255, 0.1));
+}
+
+html[data-theme="dark"] .cron-job-detail-item.is-selected {
+  background:
+    linear-gradient(155deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.02)),
+    color-mix(in srgb, var(--tone-soft) 50%, rgba(8, 6, 18, 0.5));
+  border-color: color-mix(in srgb, var(--tone) 34%, rgba(255, 255, 255, 0.1));
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--tone) 20%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+.cron-job-detail-item.is-disabled {
+  opacity: 0.7;
+}
+
+.cron-job-detail-item-title {
+  font-size: 13px;
+  font-weight: 650;
+  color: var(--ink);
+  line-height: 1.3;
+}
+
+.cron-job-detail-item-meta {
+  font-size: 11px;
+  color: var(--ink-mute);
+}
+
+.cron-job-detail-panel {
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  padding: 4px 8px 12px 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.cron-job-detail-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.cron-job-detail-title {
+  margin: 0 0 6px;
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.cron-job-detail-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.cron-job-detail-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.cron-job-detail-label {
+  margin: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ink-mute);
+}
+
+.cron-job-detail-label svg {
+  flex-shrink: 0;
+  color: var(--tone, var(--ink-mute));
+  opacity: 0.9;
+}
+
+.cron-job-detail-task {
+  margin: 0;
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 1px solid color-mix(in srgb, var(--tone) 18%, rgba(255, 255, 255, 0.32));
+  background:
+    linear-gradient(155deg, rgba(255, 255, 255, 0.25), rgba(255, 255, 255, 0.12)),
+    color-mix(in srgb, var(--tone-soft) 28%, transparent);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.29);
+  backdrop-filter: blur(12px) saturate(1.15);
+  -webkit-backdrop-filter: blur(12px) saturate(1.15);
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--ink-soft);
+  white-space: pre-wrap;
+}
+
+html[data-theme="dark"] .cron-job-detail-task {
+  border-color: color-mix(in srgb, var(--tone) 22%, rgba(255, 255, 255, 0.1));
+  background:
+    linear-gradient(155deg, rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0.015)),
+    color-mix(in srgb, var(--tone-soft) 30%, rgba(8, 6, 18, 0.45));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+.cron-job-detail-meta-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 10px;
+}
+
+.cron-job-detail-meta-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--chip-border);
+  background:
+    linear-gradient(155deg, rgba(255, 255, 255, 0.22), rgba(255, 255, 255, 0.1)),
+    color-mix(in srgb, var(--glass-fill) 50%, transparent);
+  font-size: 13px;
+  color: var(--ink);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.26);
+}
+
+html[data-theme="dark"] .cron-job-detail-meta-item,
+html[data-theme="dark"] .cron-job-detail-task {
+  background:
+    linear-gradient(155deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.01)),
+    rgba(8, 6, 18, 0.38);
+  border-color: rgba(255, 255, 255, 0.08);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+.cron-job-detail-run {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 14px;
+}
+

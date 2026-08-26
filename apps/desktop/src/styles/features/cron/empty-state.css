@@ -1,0 +1,76 @@
+.cron-empty {
+  position: relative;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 48px 24px;
+  isolation: isolate;
+}
+
+.cron-empty-orb {
+  position: absolute;
+  width: 220px;
+  height: 160px;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 40% 35%, rgba(255, 255, 255, 0.45), transparent 45%),
+    radial-gradient(circle at 50% 50%, color-mix(in srgb, var(--tone) 32%, transparent), transparent 68%);
+  filter: blur(12px);
+  opacity: 0.75;
+  z-index: 0;
+  animation: welcome-orb-breathe 6.5s ease-in-out infinite;
+}
+
+.cron-empty-icon {
+  position: relative;
+  z-index: 1;
+  width: 64px;
+  height: 64px;
+  display: grid;
+  place-items: center;
+}
+
+.cron-empty-lens {
+  grid-area: 1 / 1;
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  background: var(--lens-bg);
+  border: 1.5px solid var(--lens-border);
+  box-shadow: var(--lens-shadow);
+}
+
+.cron-empty-glyph {
+  grid-area: 1 / 1;
+  display: grid;
+  place-items: center;
+  color: var(--tone);
+  filter:
+    drop-shadow(0 1px 0 rgba(255, 255, 255, 0.35))
+    drop-shadow(0 2px 3px color-mix(in srgb, var(--tone) 28%, transparent));
+}
+
+.cron-empty-title {
+  position: relative;
+  z-index: 1;
+  margin: 0;
+  font-size: 1.15rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+}
+
+.cron-empty-hint {
+  position: relative;
+  z-index: 1;
+  margin: 0;
+  font-size: 0.88rem;
+  color: var(--ink-mute);
+  text-align: center;
+  max-width: 300px;
+  line-height: 1.5;
+}
+

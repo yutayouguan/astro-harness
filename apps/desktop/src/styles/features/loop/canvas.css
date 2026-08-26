@@ -1,0 +1,364 @@
+/* ── Canvas ────────────────────────────────────────────────────── */
+
+.loop-canvas-container {
+  flex: 1;
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+}
+
+/* React Flow 样式覆盖 */
+.loop-canvas-container .react-flow__background {
+  background: var(--bg0);
+}
+.loop-canvas-container .react-flow__controls {
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+.loop-canvas-container .react-flow__controls-button {
+  background: var(--glass-panel);
+  color: var(--ink);
+  border-bottom: 1px solid var(--border);
+}
+.loop-canvas-container .react-flow__controls-button:hover {
+  background: var(--glass-hover);
+}
+.loop-canvas-container .react-flow__minimap {
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  overflow: hidden;
+  background: var(--glass-panel) !important;
+}
+:root[data-theme="dark"] .loop-canvas-container .react-flow__minimap {
+  background: color-mix(in srgb, var(--surface) 85%, transparent) !important;
+}
+.loop-canvas-container .react-flow__minimap-mask {
+  fill: var(--ink);
+  opacity: 0.06;
+}
+:root[data-theme="dark"] .loop-canvas-container .react-flow__minimap-mask {
+  fill: #fff;
+  opacity: 0.08;
+}
+
+/*
+ * 修复 React Flow 节点在 WebKit (Tauri WKWebView) 中模糊的问题。
+ * 根因：React Flow 用 transform: translate(x, y) 定位节点，
+ * 当 x/y 含小数时 WebKit 会做亚像素渲染导致文字和边框模糊。
+ * 解决：will-change: auto 阻止提升合成层，
+ *       image-rendering: pixelated 强制整像素，
+ *       禁用一切 filter/backdrop-filter/outline。
+ */
+.loop-canvas-container .react-flow__node {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  filter: none !important;
+  -webkit-filter: none !important;
+  outline: none !important;
+  will-change: auto !important;
+  image-rendering: auto !important;
+}
+.loop-canvas-container .react-flow__node.selected {
+  z-index: 10 !important;
+}
+.loop-canvas-container .react-flow__node:focus,
+.loop-canvas-container .react-flow__node:focus-visible {
+  outline: none !important;
+}
+.loop-canvas-container .react-flow__node .loop-rf-node {
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ── React Flow Edge styling ──────────────────────────────────── */
+
+.loop-canvas-container .react-flow__edge-path {
+  stroke-width: 1.5;
+  transition: stroke 0.15s, stroke-width 0.15s;
+}
+.loop-canvas-container .react-flow__edge-interaction {
+  stroke-width: 20;
+}
+.loop-canvas-container .react-flow__edge:hover .react-flow__edge-path {
+  stroke-width: 2.5;
+  stroke: var(--tone, #6366f1);
+}
+.loop-canvas-container .react-flow__edge.selected .react-flow__edge-path {
+  stroke-width: 2.5;
+  stroke: var(--tone, #6366f1);
+}
+.loop-canvas-container .react-flow__edgelabel-renderer {
+  pointer-events: none;
+}
+
+/* ── React Flow Node ──────────────────────────────────────────── */
+
+.loop-rf-node {
+  position: relative;
+  padding: 10px 16px;
+  border-radius: 12px;
+  border: 1.5px solid color-mix(in srgb, var(--node-color, #888) 30%, var(--border));
+  background: var(--bg0, #fff);
+  min-width: 170px;
+  max-width: 240px;
+  color: var(--ink);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.loop-rf-node:hover {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+.loop-rf-node.is-selected {
+  border-color: var(--node-color, #888);
+  box-shadow: 0 0 0 2.5px color-mix(in srgb, var(--node-color, #888) 20%, transparent);
+}
+.loop-rf-node.is-disabled {
+  opacity: 0.5;
+}
+
+/* ── Node validation warning badge ────────────────────────────── */
+
+.loop-rf-node-warn {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #f59e0b;
+  color: #fff;
+  z-index: 10;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
+  cursor: help;
+}
+
+/* ── Node toolbar (选中时悬浮在上方) ─────────────────────────── */
+
+.loop-rf-node-toolbar {
+  position: absolute;
+  top: -44px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 2px;
+  padding: 4px;
+  border-radius: 8px;
+  background: var(--bg0, #fff);
+  border: 1px solid var(--border);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  z-index: 20;
+}
+
+.loop-rf-toolbar-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  border: none;
+  background: transparent;
+  color: var(--ink-secondary);
+  cursor: pointer;
+  transition: background 0.12s ease, color 0.12s ease, transform 0.12s ease;
+}
+.loop-rf-toolbar-btn:hover {
+  background: color-mix(in srgb, var(--ink) 10%, transparent);
+  color: var(--ink);
+}
+.loop-rf-toolbar-btn.is-active {
+  color: var(--tone, #6366f1);
+  background: color-mix(in srgb, var(--tone, #6366f1) 10%, transparent);
+}
+.loop-rf-toolbar-btn--danger:hover {
+  color: #ef4444;
+  background: color-mix(in srgb, #ef4444 8%, transparent);
+}
+.loop-rf-toolbar-btn:active {
+  transform: scale(0.95);
+}
+
+.loop-rf-node-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.loop-rf-node-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--node-color, #888) 12%, transparent);
+  color: var(--node-color, #888);
+  flex-shrink: 0;
+}
+
+.loop-rf-node-text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.loop-rf-node-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.loop-rf-node-type-tag {
+  font-size: 11px;
+  color: var(--ink-tertiary);
+  white-space: nowrap;
+}
+
+.loop-rf-handle {
+  width: 8px !important;
+  height: 8px !important;
+  border-radius: 50% !important;
+  background: var(--node-color, #888) !important;
+  border: 2px solid var(--bg0, #fff) !important;
+}
+
+/* ── Branch node (multi-handle) ───────────────────────────────── */
+
+.loop-rf-node--branch {
+  min-height: 60px;
+}
+
+.loop-rf-branch-labels {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 6px;
+  justify-content: flex-end;
+}
+
+.loop-rf-branch-label {
+  font-size: 10px;
+  color: var(--node-color, #888);
+  opacity: 0.8;
+}
+
+/* ── Condition branch editor ─────────────────────────────────── */
+
+.loop-branch-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.loop-branch-row {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+}
+
+.loop-branch-input {
+  flex: 1;
+  min-width: 0;
+}
+
+.loop-branch-input--expr {
+  flex: 2;
+}
+
+.loop-branch-del {
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+}
+
+/* ── Workflow preview (详情面板) ──────────────────────────────── */
+
+.loop-preview-container {
+  flex: 1;
+  min-height: 200px;
+  margin-top: 20px;
+  margin-bottom: 8px;
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  background: var(--bg1, #f9fafb);
+  overflow: hidden;
+  position: relative;
+}
+
+.loop-preview-container .react-flow__edge-path {
+  stroke: color-mix(in srgb, var(--ink-tertiary, #a1a1aa) 50%, transparent);
+  stroke-dasharray: 5 3;
+}
+.loop-preview-container .react-flow__edge.animated .react-flow__edge-path {
+  animation: loop-preview-dash 0.6s linear infinite;
+}
+@keyframes loop-preview-dash {
+  to { stroke-dashoffset: -8; }
+}
+
+.loop-preview-node {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  border: 1.5px solid color-mix(in srgb, var(--node-color, #888) 30%, var(--border));
+  background: var(--bg0, #fff);
+  color: var(--ink);
+  white-space: nowrap;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
+}
+
+.loop-preview-node-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--node-color, #888) 12%, transparent);
+  color: var(--node-color, #888);
+  flex-shrink: 0;
+}
+
+.loop-preview-node-text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.loop-preview-node-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--ink);
+  max-width: 100px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.loop-preview-node-type {
+  font-size: 9px;
+  color: var(--ink-tertiary);
+}
+
+.loop-preview-handle {
+  width: 5px !important;
+  height: 5px !important;
+  border-radius: 50% !important;
+  background: var(--node-color, #888) !important;
+  border: 1.5px solid var(--bg0, #fff) !important;
+  min-width: 0 !important;
+  min-height: 0 !important;
+}
+

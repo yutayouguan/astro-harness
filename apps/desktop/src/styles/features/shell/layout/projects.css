@@ -1,0 +1,728 @@
+/* ── Sidebar project tree ──────────────────────────────────────────────── */
+
+.sidebar-feature-tabs {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  /* 与项目区之间留一条发丝线，否则两组列表会读成同一层 */
+  margin: 0 10px 8px;
+  padding: 0 0 10px;
+  border-bottom: 1px solid color-mix(in srgb, var(--ink) 7%, transparent);
+}
+
+.sidebar-feature-tab {
+  width: 100%;
+  min-height: 34px;
+  padding: 0 10px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: color-mix(in srgb, var(--ink) 86%, transparent);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 590;
+  letter-spacing: -0.01em;
+  text-align: left;
+  cursor: pointer;
+  transition: color 0.12s ease, background 0.12s ease;
+}
+
+.sidebar-feature-tab svg {
+  flex: 0 0 auto;
+  opacity: 0.9;
+}
+
+.sidebar-feature-tab:hover {
+  color: var(--ink);
+  background: color-mix(in srgb, var(--ink) 5%, transparent);
+}
+
+.sidebar-feature-tab.is-active {
+  color: var(--tone, var(--tone-blue));
+  background: color-mix(in srgb, var(--tone, var(--tone-blue)) 10%, transparent);
+}
+
+.sidebar-feature-tab.is-active svg {
+  opacity: 1;
+}
+
+.sidebar-projects {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 0 6px;
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--ink-mute) 20%, transparent) transparent;
+}
+
+.sidebar-section-header {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 6px 8px 4px;
+}
+
+.sidebar-section-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  font-weight: 590;
+  color: var(--ink-mute);
+  opacity: 0.75;
+  letter-spacing: -0.01em;
+}
+
+/* 搜索展开时让出整行，避免窄侧栏里标题与输入框互相挤压 */
+.sidebar-section-header:has(.expandable-search.is-open) .sidebar-section-title {
+  display: none;
+}
+
+/* 标题行三颗按钮（搜索 / 归档 / 新建）共用一套规格；
+   搜索按钮需覆盖全局玻璃拟态（阴影 + backdrop-filter），否则会浮起一块 */
+.sidebar-add-btn,
+.sidebar-session-filter-btn,
+.sidebar-session-search .expandable-search-btn {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  color: var(--ink-mute);
+  cursor: pointer;
+  transition: background 0.1s, color 0.1s;
+}
+
+.sidebar-add-btn > svg,
+.sidebar-session-filter-btn > svg,
+.sidebar-session-search .expandable-search-btn > svg {
+  width: 14px;
+  height: 14px;
+}
+
+.sidebar-add-btn:hover,
+.sidebar-session-filter-btn:hover,
+.sidebar-session-search .expandable-search-btn:hover {
+  border: none;
+  background: var(--glass);
+  box-shadow: none;
+  color: var(--ink);
+}
+
+.sidebar-session-filter-btn.is-on {
+  background: color-mix(in srgb, var(--tone, var(--tone-blue)) 16%, transparent);
+  color: var(--tone, var(--tone-blue));
+}
+
+.sidebar-project {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.sidebar-project-header {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 4px 3px 6px;
+  border-radius: 8px;
+}
+
+.sidebar-project-name {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 6px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ink);
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-align: left;
+  transition: background 0.1s;
+}
+
+.sidebar-project-name:hover {
+  background: var(--glass);
+}
+
+/* 激活项目只加重字重、图标着色，正文让位给激活会话的强调底色 */
+.sidebar-project.is-active > .sidebar-project-header {
+  position: relative;
+}
+
+/* 只用左侧强调条定位当前项目，底色留给当前会话 */
+.sidebar-project.is-active > .sidebar-project-header::before {
+  content: "";
+  position: absolute;
+  left: -2px;
+  top: 50%;
+  translate: 0 -50%;
+  width: 2px;
+  height: 15px;
+  border-radius: 999px;
+  background: var(--tone, var(--tone-blue));
+  opacity: 0.85;
+}
+
+.sidebar-project.is-active > .sidebar-project-header .sidebar-project-name {
+  font-weight: 620;
+}
+
+.sidebar-project.is-active > .sidebar-project-header .sidebar-project-name svg {
+  color: var(--tone, var(--tone-blue));
+}
+
+.sidebar-project-action {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--ink-mute);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.12s, background 0.1s, color 0.1s;
+}
+
+.sidebar-project-header:hover .sidebar-project-action,
+.sidebar-project-action:focus-visible {
+  opacity: 1;
+}
+
+.sidebar-project-action:hover {
+  background: var(--glass);
+  color: var(--ink);
+}
+
+.sidebar-sessions {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 0 0 0 12px;
+}
+
+/* 缩进之外再给一条淡引导线，多项目展开时才看得出会话归属 */
+.sidebar-project > .sidebar-sessions {
+  position: relative;
+}
+
+.sidebar-project > .sidebar-sessions::before {
+  content: "";
+  position: absolute;
+  top: 2px;
+  bottom: 2px;
+  left: 5px;
+  width: 1px;
+  border-radius: 1px;
+  background: color-mix(in srgb, var(--ink-mute) 18%, transparent);
+  pointer-events: none;
+}
+
+.sidebar-project.is-active > .sidebar-sessions::before {
+  background: color-mix(in srgb, var(--tone, var(--tone-blue)) 26%, transparent);
+}
+
+.sidebar-session-new {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  border: none;
+  border-radius: 7px;
+  background: transparent;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--ink-mute);
+  cursor: pointer;
+  transition: background 0.1s, color 0.1s;
+}
+
+.sidebar-session-new:hover {
+  background: var(--glass);
+  color: var(--ink);
+}
+
+/* 项目区顶部：跨项目会话搜索 + 归档视图切换 */
+.sidebar-session-search {
+  flex: 0 0 auto;
+}
+
+.sidebar-session-search.is-open {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.sidebar-session-search .expandable-search-field {
+  width: 100%;
+  height: 22px;
+  padding: 0 5px;
+  border: none;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--tone, #64748b) 8%, transparent);
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  color: var(--ink-mute);
+}
+
+.sidebar-session-search .expandable-search-input {
+  font-size: 12px;
+  min-width: 0;
+}
+
+.sidebar-sessions.is-global {
+  padding-left: 0;
+}
+
+
+.sidebar-empty {
+  display: block;
+  padding: 4px 10px;
+  font-size: 12px;
+  color: var(--ink-mute);
+  opacity: 0.62;
+  white-space: nowrap;
+}
+
+.sidebar.is-labels .sidebar-empty {
+  text-align: left;
+}
+
+/* ── Icon-only mode: 项目区域精简 ──────────────────── */
+
+.sidebar:not(.is-labels) .sidebar-feature-tabs {
+  align-items: center;
+  padding: 0 0 10px;
+}
+
+.sidebar:not(.is-labels) .sidebar-feature-tab {
+  width: 34px;
+  min-height: 34px;
+  padding: 0;
+  justify-content: center;
+}
+
+.sidebar:not(.is-labels) .sidebar-section-header {
+  justify-content: center;
+  padding: 4px 0;
+}
+
+.sidebar:not(.is-labels) .sidebar-section-title {
+  display: none;
+}
+
+.sidebar:not(.is-labels) .sidebar-add-btn {
+  width: 28px;
+  height: 28px;
+}
+
+.sidebar:not(.is-labels) .sidebar-project-header {
+  justify-content: center;
+  padding: 3px 0;
+}
+
+.sidebar:not(.is-labels) .sidebar-project-name {
+  justify-content: center;
+  padding: 6px;
+  width: 42px;
+  flex: none;
+}
+
+.sidebar:not(.is-labels) .sidebar-project-name .sidebar-item-label {
+  display: none;
+}
+
+.sidebar:not(.is-labels) .sidebar-project-more,
+.sidebar:not(.is-labels) .sidebar-project-action {
+  display: none;
+}
+
+.sidebar:not(.is-labels) .sidebar-sessions,
+/* 图标模式没有横向空间承载输入框与筛选 */
+.sidebar:not(.is-labels) .sidebar-session-search,
+.sidebar:not(.is-labels) .sidebar-session-filter-btn {
+  display: none;
+}
+
+.sidebar:not(.is-labels) .sidebar-empty {
+  display: none;
+}
+
+.sidebar-item-label {
+  display: none;
+}
+
+.sidebar.is-labels .sidebar-item-label {
+  display: inline;
+}
+
+.sidebar-settings-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 10px;
+  margin-top: auto;
+  border: none;
+  border-radius: 12px;
+  background: transparent;
+  color: var(--ink-soft);
+  font-size: 13.5px;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  position: relative;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+
+.sidebar.is-labels .sidebar-settings-btn {
+  justify-content: flex-start;
+  padding: 10px 12px;
+}
+
+.sidebar-settings-btn:hover {
+  background: var(--glass);
+  color: var(--ink);
+}
+
+.sidebar-settings-btn svg {
+  flex-shrink: 0;
+}
+
+.sidebar-settings-btn .nav-badge {
+  position: static;
+  margin-left: auto;
+}
+
+/* ── Settings inline (sidebar back + nav) ─────────────────────────────── */
+
+.sidebar-back-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 10px;
+  margin-bottom: 8px;
+  border: none;
+  border-radius: 12px;
+  background: transparent;
+  color: var(--ink-soft);
+  font-size: 13.5px;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+
+.sidebar.is-labels .sidebar-back-btn {
+  justify-content: flex-start;
+  padding: 10px 12px;
+}
+
+.sidebar-back-btn:hover {
+  background: var(--glass);
+  color: var(--ink);
+}
+
+.sidebar-back-btn svg {
+  flex-shrink: 0;
+}
+
+.sidebar-settings-nav {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 0 2px;
+}
+
+.sidebar-settings-nav .settings-sidebar-item {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border: none;
+  border-radius: 10px;
+  background: transparent;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ink);
+  cursor: pointer;
+  text-align: left;
+  white-space: nowrap;
+  transition: background 0.12s, color 0.12s;
+}
+
+.sidebar.is-labels .sidebar-settings-nav .settings-sidebar-item {
+  justify-content: flex-start;
+  padding: 8px 12px;
+}
+
+.sidebar-settings-nav .settings-sidebar-item svg {
+  flex-shrink: 0;
+  opacity: 0.6;
+  transition: opacity 0.12s;
+}
+
+.sidebar-settings-nav .settings-sidebar-item:hover {
+  background: color-mix(in srgb, var(--tone, #64748b) 8%, transparent);
+}
+
+.sidebar-settings-nav .settings-sidebar-item:hover svg {
+  opacity: 0.85;
+}
+
+.sidebar-settings-nav .settings-sidebar-item.is-active {
+  background: color-mix(in srgb, var(--tone, var(--tone-purple)) 14%, transparent);
+  color: var(--tone, var(--tone-purple));
+  font-weight: 600;
+}
+
+.sidebar-settings-nav .settings-sidebar-item.is-active svg {
+  opacity: 1;
+  color: var(--tone, var(--tone-purple));
+}
+
+html[data-theme="dark"] .sidebar-settings-nav .settings-sidebar-item.is-active {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+/* hide label text in icon-only mode */
+.sidebar:not(.is-labels) .sidebar-settings-nav .settings-sidebar-item .sidebar-item-label {
+  display: none;
+}
+
+.sidebar.is-labels .sidebar-settings-nav .settings-sidebar-item .sidebar-item-label {
+  display: inline;
+}
+
+/* ── Settings inline content ─────────────────────────────────────────── */
+
+.settings-content-inline {
+  flex: 1;
+  min-width: 0;
+  overflow-y: auto;
+}
+
+/* 自带分区滚动的设置页（工具）：撑满高度，外层不再整体滚动 */
+.settings-content-inline:has(> .agent-tools-page) {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* 定时任务 / 智能流程 / 插件：内联在内容区，撑满可用高度 */
+.feature-content-inline {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* 内联时外层 page-body 已提供留白，去掉面板自带的大内边距 */
+.feature-content-inline > .loop-panel {
+  padding: 0;
+}
+
+/* ── Settings / panel overlay ──────────────────────────────────────────── */
+
+.settings-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+}
+
+html[data-theme="dark"] .settings-overlay {
+  background: rgba(0, 0, 0, 0.55);
+}
+
+.settings-overlay-panel {
+  position: relative;
+  width: 80vw;
+  height: 80vh;
+  max-width: 1100px;
+  max-height: 800px;
+  border-radius: 18px;
+  background: color-mix(in srgb, var(--glass-fill, #fff) 97%, transparent);
+  backdrop-filter: blur(40px) saturate(1.2);
+  -webkit-backdrop-filter: blur(40px) saturate(1.2);
+  border: 1px solid color-mix(in srgb, var(--glass-edge, rgba(0, 0, 0, 0.08)) 50%, rgba(255, 255, 255, 0.25));
+  box-shadow:
+    0 24px 80px rgba(0, 0, 0, 0.15),
+    0 0 0 1px rgba(255, 255, 255, 0.12) inset;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.settings-overlay-panel--wide {
+  width: 85vw;
+  height: 85vh;
+  max-width: 1200px;
+  max-height: 900px;
+}
+
+@keyframes overlay-panel-in {
+  from { opacity: 0; transform: scale(0.96) translateY(8px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+html[data-theme="dark"] .settings-overlay-panel {
+  background: color-mix(in srgb, var(--glass-fill, #1a1a2e) 95%, transparent);
+  border-color: rgba(255, 255, 255, 0.1);
+  box-shadow:
+    0 24px 80px rgba(0, 0, 0, 0.4),
+    0 0 0 1px rgba(255, 255, 255, 0.06) inset;
+}
+
+.settings-overlay-close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 10;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ink-soft);
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  transition: background 0.12s, color 0.12s;
+}
+
+.settings-overlay-close:hover {
+  background: var(--glass);
+  color: var(--ink);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .settings-overlay,
+  .settings-overlay-panel {
+    animation: none;
+  }
+}
+
+/* ── Project context menu ─────────────────────────── */
+
+.project-context-menu {
+  position: fixed;
+  z-index: 9999;
+  min-width: 180px;
+  padding: 4px;
+  border-radius: 10px;
+  border: 1px solid color-mix(in srgb, var(--glass-edge) 70%, transparent);
+  background: var(--composer-bg, #fff);
+  box-shadow:
+    0 8px 28px rgba(15, 23, 42, 0.14),
+    0 2px 6px rgba(15, 23, 42, 0.06);
+  backdrop-filter: blur(16px) saturate(1.2);
+}
+
+html[data-theme="dark"] .project-context-menu {
+  background: color-mix(in srgb, var(--glass-fill, #1a1625) 92%, transparent);
+  border-color: rgba(255, 255, 255, 0.1);
+  box-shadow:
+    0 10px 32px rgba(0, 0, 0, 0.45),
+    0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+.project-context-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 7px 12px;
+  border: none;
+  border-radius: 7px;
+  background: transparent;
+  font-size: 13px;
+  font-weight: 450;
+  color: var(--ink);
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.08s;
+}
+
+.project-context-menu-item:hover {
+  background: color-mix(in srgb, var(--tone, #64748b) 10%, transparent);
+}
+
+.project-context-menu-item.is-danger {
+  color: var(--danger, #ef4444);
+}
+
+.project-context-menu-item.is-danger:hover {
+  background: color-mix(in srgb, var(--danger, #ef4444) 10%, transparent);
+}
+
+.project-context-menu-item svg {
+  flex-shrink: 0;
+  opacity: 0.65;
+}
+
+/* 项目 header 更多按钮 */
+.sidebar-project-more {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ink-mute);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.12s, background 0.1s, color 0.1s;
+}
+
+.sidebar-project-header:hover .sidebar-project-more,
+.sidebar-project-more:focus-visible {
+  opacity: 1;
+}
+
+.sidebar-project-more:hover {
+  background: var(--glass);
+  color: var(--ink);
+}
+
