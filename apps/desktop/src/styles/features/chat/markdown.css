@@ -265,8 +265,12 @@ html[data-theme="light"] .bubble.assistant {
 
 html[data-theme="light"] .msg-reasoning {
   background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.34) 0%, rgba(255, 255, 255, 0.14) 100%),
-    color-mix(in srgb, var(--tone-soft, rgba(37, 99, 235, 0.14)) 12%, transparent);
+    linear-gradient(155deg, rgba(255, 255, 255, 0.2) 0%, rgba(255, 255, 255, 0.06) 100%),
+    color-mix(
+      in srgb,
+      var(--tone-soft, rgba(37, 99, 235, 0.14)) 14%,
+      color-mix(in srgb, var(--ink) 4%, transparent)
+    );
   border-color: color-mix(in srgb, var(--tone, #2563eb) 14%, rgba(148, 163, 184, 0.28));
   backdrop-filter: blur(calc(12px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.2));
   -webkit-backdrop-filter: blur(calc(12px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.2));
@@ -326,9 +330,12 @@ html[data-theme="light"] .chat-msg-nav-bottom {
 
 html[data-theme="light"] .msg-md-codeblock {
   background:
-    linear-gradient(160deg, rgba(255, 255, 255, 0.42) 0%, rgba(241, 245, 249, 0.9) 100%);
-  border-color: rgba(148, 163, 184, 0.32);
-  box-shadow: var(--glass-rim), 0 6px 16px rgba(15, 23, 42, 0.06);
+    linear-gradient(160deg, rgba(255, 255, 255, 0.34) 0%, rgba(232, 238, 246, 0.92) 100%);
+  border-color: rgba(148, 163, 184, 0.42);
+  box-shadow:
+    var(--glass-rim),
+    inset 0 1px 3px rgba(15, 23, 42, 0.04),
+    0 4px 12px rgba(15, 23, 42, 0.05);
 }
 
 html[data-theme="light"] .msg-md-pre {
