@@ -531,7 +531,7 @@ html[data-theme="dark"] .bubble.user {
       color-mix(in srgb, #fff 18%, transparent) 0%,
       color-mix(in srgb, #fff 4%, transparent) 100%
     ),
-    color-mix(in srgb, var(--tone-soft, transparent) 28%, var(--assist-fill));
+    color-mix(in srgb, var(--tone-soft, transparent) 8%, var(--assist-fill));
   border-color: color-mix(in srgb, var(--tone, var(--accent)) 10%, var(--glass-edge));
   border-bottom-left-radius: 8px;
   box-shadow: var(--shadow-card), var(--glass-rim);

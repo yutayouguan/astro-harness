@@ -254,8 +254,8 @@
 
 html[data-theme="light"] .bubble.assistant {
   background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.35) 0%, rgba(255, 255, 255, 0.14) 100%),
-    color-mix(in srgb, var(--tone-soft, rgba(37, 99, 235, 0.14)) 40%, rgba(255, 255, 255, 0.18));
+    linear-gradient(155deg, rgba(255, 255, 255, 0.44) 0%, rgba(255, 255, 255, 0.22) 100%),
+    color-mix(in srgb, var(--tone-soft, rgba(37, 99, 235, 0.14)) 10%, rgba(255, 255, 255, 0.42));
   border-color: color-mix(in srgb, var(--tone, #2563eb) 14%, rgba(255, 255, 255, 0.45));
   box-shadow:
     var(--shadow-card),
@@ -265,8 +265,8 @@ html[data-theme="light"] .bubble.assistant {
 
 html[data-theme="light"] .msg-reasoning {
   background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.3) 0%, rgba(255, 255, 255, 0.11) 100%),
-    color-mix(in srgb, var(--tone-soft, rgba(37, 99, 235, 0.14)) 35%, transparent);
+    linear-gradient(155deg, rgba(255, 255, 255, 0.34) 0%, rgba(255, 255, 255, 0.14) 100%),
+    color-mix(in srgb, var(--tone-soft, rgba(37, 99, 235, 0.14)) 12%, transparent);
   border-color: color-mix(in srgb, var(--tone, #2563eb) 14%, rgba(148, 163, 184, 0.28));
   backdrop-filter: blur(calc(12px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.2));
   -webkit-backdrop-filter: blur(calc(12px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.2));
