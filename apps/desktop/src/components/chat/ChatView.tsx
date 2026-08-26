@@ -1778,7 +1778,9 @@ export default function ChatView({
   return (
     <ChatMediaAttachProvider value={mediaAttachApi}>
     <section
-      className={`chat-pane ${fileDragOver ? "is-file-dragover" : ""}`.trim()}
+      className={`chat-pane ${workspaceContent ? "has-project-file" : ""} ${
+        fileDragOver ? "is-file-dragover" : ""
+      }`.trim()}
       onDragEnter={onDragEnter}
       onDragLeave={onDragLeave}
       onDragOver={(e) => {

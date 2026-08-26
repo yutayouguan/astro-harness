@@ -3,18 +3,18 @@
   --tone-blue: var(--tone);
   --tone-blue-soft: var(--tone-soft);
   position: relative;
-  flex: 0 0 min(var(--project-files-width, 300px), 46%);
-  width: min(var(--project-files-width, 300px), 46%);
+  flex: 0 0 min(var(--project-files-width, 264px), 42%);
+  width: min(var(--project-files-width, 264px), 42%);
   min-width: 0;
   min-height: 0;
   display: flex;
   flex-direction: column;
-  border-left: 1px solid color-mix(in srgb, var(--tone) 12%, var(--glass-edge));
+  border-left: 1px solid color-mix(in srgb, var(--tone) 8%, var(--glass-edge));
   background:
-    linear-gradient(165deg, rgba(255, 255, 255, 0.22), rgba(255, 255, 255, 0.06)),
-    color-mix(in srgb, var(--tone-soft) 18%, var(--glass-panel));
-  backdrop-filter: blur(18px) saturate(1.12);
-  -webkit-backdrop-filter: blur(18px) saturate(1.12);
+    linear-gradient(165deg, rgba(255, 255, 255, 0.18), rgba(255, 255, 255, 0.045)),
+    color-mix(in srgb, var(--tone-soft) 12%, var(--glass-panel));
+  backdrop-filter: blur(22px) saturate(1.08);
+  -webkit-backdrop-filter: blur(22px) saturate(1.08);
   overflow: hidden;
 }
 
@@ -51,14 +51,14 @@
 }
 
 .project-files-header {
-  height: 46px;
-  flex: 0 0 46px;
+  height: 42px;
+  flex: 0 0 42px;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  padding: 0 10px 0 13px;
-  border-bottom: 1px solid color-mix(in srgb, var(--glass-edge) 72%, transparent);
+  padding: 0 8px 0 13px;
+  border-bottom: 1px solid color-mix(in srgb, var(--glass-edge) 52%, transparent);
 }
 
 .project-files-heading,
@@ -71,7 +71,7 @@
   min-width: 0;
   gap: 7px;
   color: var(--ink);
-  font-size: 12.5px;
+  font-size: 12px;
 }
 
 .project-files-heading svg {
@@ -83,7 +83,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-weight: 650;
+  font-weight: 620;
 }
 
 .project-files-actions {
@@ -92,13 +92,13 @@
 
 .project-files-actions button,
 .project-file-tab-actions button {
-  width: 27px;
-  height: 27px;
+  width: 25px;
+  height: 25px;
   display: grid;
   place-items: center;
   padding: 0;
   border: 0;
-  border-radius: 8px;
+  border-radius: 7px;
   background: transparent;
   color: var(--ink-mute);
   cursor: pointer;
@@ -111,15 +111,15 @@
 }
 
 .project-files-search {
-  height: 34px;
-  margin: 8px 10px 6px;
+  height: 32px;
+  margin: 9px 10px 7px;
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 0 9px;
-  border: 1px solid color-mix(in srgb, var(--tone) 10%, var(--glass-edge));
-  border-radius: 10px;
-  background: color-mix(in srgb, var(--ink) 3.5%, transparent);
+  padding: 0 10px;
+  border: 1px solid color-mix(in srgb, var(--glass-edge) 58%, transparent);
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--ink) 2.8%, rgba(255, 255, 255, 0.18));
   color: var(--ink-mute);
 }
 
@@ -144,20 +144,20 @@
   flex: 1;
   min-height: 0;
   overflow: auto;
-  padding: 2px 7px 12px;
+  padding: 1px 8px 16px;
   scrollbar-width: thin;
   scrollbar-color: color-mix(in srgb, var(--tone) 18%, transparent) transparent;
 }
 
 .project-file-row {
   width: 100%;
-  height: 29px;
+  height: 27px;
   display: flex;
   align-items: center;
   gap: 5px;
-  padding: 0 7px 0 calc(5px + var(--tree-level, 0) * 14px);
+  padding: 0 7px 0 calc(4px + var(--tree-level, 0) * 13px);
   border: 0;
-  border-radius: 7px;
+  border-radius: 6px;
   background: transparent;
   color: var(--ink-soft);
   text-align: left;
@@ -170,8 +170,11 @@
 }
 
 .project-file-row.is-active {
-  color: color-mix(in srgb, var(--tone) 72%, var(--ink));
-  background: color-mix(in srgb, var(--tone) 11%, transparent);
+  color: color-mix(in srgb, var(--tone) 76%, var(--ink));
+  background:
+    linear-gradient(90deg, color-mix(in srgb, var(--tone) 12%, transparent), transparent 92%),
+    color-mix(in srgb, var(--glass-panel) 58%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--tone) 8%, transparent);
 }
 
 .project-file-row > svg:not(.project-file-chevron) {
@@ -199,7 +202,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 12px;
+  font-size: 11.5px;
 }
 
 .project-file-loading,
@@ -241,17 +244,22 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  background: color-mix(in srgb, var(--glass-panel) 54%, transparent);
+  isolation: isolate;
+  background:
+    radial-gradient(circle at 72% 12%, color-mix(in srgb, var(--tone-soft) 24%, transparent), transparent 42%),
+    color-mix(in srgb, var(--glass-panel) 32%, transparent);
 }
 
 .project-file-tabs {
-  height: 38px;
-  flex: 0 0 38px;
+  height: 42px;
+  flex: 0 0 42px;
   display: flex;
   align-items: stretch;
   min-width: 0;
-  border-bottom: 1px solid color-mix(in srgb, var(--glass-edge) 72%, transparent);
-  background: color-mix(in srgb, var(--glass-panel) 34%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--glass-edge) 56%, transparent);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.12), transparent),
+    color-mix(in srgb, var(--glass-panel) 30%, transparent);
 }
 
 .project-file-tabs-scroll {
@@ -264,13 +272,13 @@
 
 .project-file-tab {
   position: relative;
-  min-width: 112px;
-  max-width: 220px;
+  min-width: 116px;
+  max-width: 210px;
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 0 6px 0 11px;
-  border-right: 1px solid color-mix(in srgb, var(--glass-edge) 56%, transparent);
+  padding: 0 7px 0 12px;
+  border-right: 1px solid color-mix(in srgb, var(--glass-edge) 42%, transparent);
   color: var(--ink-mute);
   cursor: pointer;
   outline: none;
@@ -278,16 +286,18 @@
 
 .project-file-tab.is-active {
   color: var(--ink);
-  background: color-mix(in srgb, var(--tone-soft) 34%, var(--glass-panel));
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--tone-soft) 26%, rgba(255, 255, 255, 0.12)), transparent),
+    color-mix(in srgb, var(--glass-panel) 56%, transparent);
 }
 
 .project-file-tab.is-active::after {
   content: "";
   position: absolute;
-  left: 10px;
-  right: 10px;
+  left: 12px;
+  right: 12px;
   bottom: 0;
-  height: 2px;
+  height: 1.5px;
   border-radius: 2px 2px 0 0;
   background: var(--tone);
 }
@@ -351,6 +361,7 @@
   flex: 1;
   min-height: 0;
   overflow: hidden;
+  background: color-mix(in srgb, var(--glass-panel) 16%, transparent);
 }
 
 .project-file-editor-body .ws-codemirror,
@@ -361,6 +372,16 @@
 
 .project-file-editor-body .cm-editor {
   background: transparent;
+}
+
+.project-file-editor-body .cm-gutters {
+  border-right: 1px solid color-mix(in srgb, var(--glass-edge) 38%, transparent);
+  background: color-mix(in srgb, var(--glass-panel) 22%, transparent);
+}
+
+.project-file-editor-body .cm-content {
+  padding-top: 8px;
+  padding-bottom: 156px;
 }
 
 .project-file-editor-state {
@@ -394,7 +415,43 @@
 html[data-theme="dark"] .project-files-panel {
   background:
     linear-gradient(165deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.012)),
-    color-mix(in srgb, var(--tone-soft) 22%, rgba(8, 6, 18, 0.74));
+    color-mix(in srgb, var(--tone-soft) 17%, rgba(8, 6, 18, 0.76));
+}
+
+/* 文件打开时，输入框成为编辑器上的悬浮控制台，保持聊天随时可用。 */
+.chat-pane.has-project-file {
+  position: relative;
+}
+
+.chat-pane.has-project-file .composer-shell {
+  position: absolute;
+  z-index: 8;
+  right: 24px;
+  bottom: 14px;
+  left: 24px;
+  width: auto;
+  max-width: 760px;
+  margin: 0 auto;
+  filter: drop-shadow(0 16px 34px rgba(var(--shadow-ink), 0.09));
+}
+
+.chat-pane.has-project-file .composer {
+  border-color: color-mix(in srgb, var(--tone) 10%, var(--glass-edge));
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.18), rgba(255, 255, 255, 0.045)),
+    color-mix(in srgb, var(--glass-panel) 88%, transparent);
+  backdrop-filter: blur(26px) saturate(1.14);
+  -webkit-backdrop-filter: blur(26px) saturate(1.14);
+}
+
+.chat-pane.has-project-file > .todo-progress-float {
+  position: absolute;
+  z-index: 9;
+  right: 24px;
+  bottom: 132px;
+  left: 24px;
+  max-width: 760px;
+  margin: 0 auto;
 }
 
 @media (max-width: 760px) {
@@ -404,8 +461,14 @@ html[data-theme="dark"] .project-files-panel {
     top: 0;
     right: 0;
     bottom: 0;
-    width: min(var(--project-files-width, 300px), calc(100% - 24px));
+    width: min(var(--project-files-width, 264px), calc(100% - 24px));
     max-width: calc(100% - 24px);
+  }
+
+  .chat-pane.has-project-file .composer-shell {
+    right: 12px;
+    bottom: 10px;
+    left: 12px;
   }
 }
 

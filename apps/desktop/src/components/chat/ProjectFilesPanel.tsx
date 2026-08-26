@@ -20,9 +20,9 @@ import type { FileEntryDto } from "../../types";
 import type { ProjectFileWorkbench } from "../../hooks/chat/useProjectFileWorkbench";
 
 const WIDTH_KEY = "astro.projectFiles.width";
-const DEFAULT_WIDTH = 300;
-const MIN_WIDTH = 236;
-const MAX_WIDTH = 520;
+const DEFAULT_WIDTH = 264;
+const MIN_WIDTH = 220;
+const MAX_WIDTH = 440;
 
 function initialWidth(): number {
   try {

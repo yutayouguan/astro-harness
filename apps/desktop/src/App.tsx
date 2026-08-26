@@ -249,7 +249,7 @@ export default function App() {
     [activeProjectId, projects],
   );
   const projectFiles = useProjectFileWorkbench(activeProject, chat.generatingPreview);
-  const [projectFilesWidth, setProjectFilesWidth] = useState(300);
+  const [projectFilesWidth, setProjectFilesWidth] = useState(264);
   const switchActiveProject = useCallback(
     (projectId: string) => {
       if (projectId === activeProjectId) return true;

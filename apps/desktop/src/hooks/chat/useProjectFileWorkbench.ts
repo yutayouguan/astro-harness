@@ -122,7 +122,7 @@ export function useProjectFileWorkbench(
   useEffect(() => {
     setEntriesByDirectory({});
     entriesRef.current = {};
-    setExpandedDirectories(new Set());
+    setExpandedDirectories(new Set(roots.map((root) => root.path)));
     setTabs([]);
     setActiveKeyState(null);
     if (panelOpen) {
