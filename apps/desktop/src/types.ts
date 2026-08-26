@@ -666,6 +666,9 @@ export type InstalledSkill = {
   enabled: boolean;
   scope?: "astro" | "machine" | string;
   linked?: boolean;
+  provenance?: "packaged" | "user" | "agent" | "project" | "external" | string;
+  editable?: boolean;
+  shadowed_by?: string | null;
 };
 
 /** 商店搜索结果条目 */

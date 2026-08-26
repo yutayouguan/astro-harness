@@ -134,19 +134,20 @@ function formatBytes(n: number): string {
 }
 
 /** Skills 面板入参 */
-type Props = {
+export type SkillsPanelProps = {
   /** 面板是否可见（用于懒加载 / 刷新） */
   active: boolean;
   /** 跳转对话并用 Agent 安装（填入安装 Prompt） */
   onInstallWithAgent?: (prompt: string) => void;
   /** 打开时落到该 tab；消费后通知父级清空 */
-  initialTab?: SkillsTab | null;
+  initialTab?: PluginsPrimaryTab | null;
   onInitialTabConsumed?: () => void;
   tone?: string;
 };
 
-/** 顶栏 Tab：已安装 / 本机 / 更新 / 商店 / MCP */
-type SkillsTab = "installed" | "machine" | "updates" | "online" | "mcp";
+type PluginsPrimaryTab = "skills" | "mcp";
+type PluginScope = "global" | "builtin" | "project";
+type SkillsDrawer = "machine" | "updates" | "online";
 /** 内容布局：画廊 / 列表 / 详情 */
 type SkillsView = "gallery" | "list" | "detail";
 /** 已安装列表排序 */
@@ -381,10 +382,12 @@ export default function SkillsPanel({
   initialTab = null,
   onInitialTabConsumed,
   tone,
-}: Props) {
+}: SkillsPanelProps) {
   const { t, locale } = useI18n();
   const { showToast, toastHost } = useTransientToast();
-  const [tab, setTab] = useState<SkillsTab>("installed");
+  const [primaryTab, setPrimaryTab] = useState<PluginsPrimaryTab>("skills");
+  const [scope, setScope] = useState<PluginScope>("global");
+  const [drawer, setDrawer] = useState<SkillsDrawer | null>(null);
   const [installed, setInstalled] = useState<InstalledSkill[]>([]);
   const [machineSkills, setMachineSkills] = useState<InstalledSkill[]>([]);
   const [storeResults, setStoreResults] = useState<StoreSkill[]>([]);
@@ -407,14 +410,15 @@ export default function SkillsPanel({
   const pageRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (!initialTab) return;
-    setTab(initialTab);
+    setPrimaryTab(initialTab);
     onInitialTabConsumed?.();
   }, [initialTab, onInitialTabConsumed]);
   const mcp = useMcpSection({
-    active: active && tab === "mcp",
+    active: active && primaryTab === "mcp",
     query: mcpQuery,
     viewMode,
     hostRef: pageRef,
+    scope,
   });
   const [selectedDetailId, setSelectedDetailId] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
@@ -459,9 +463,11 @@ export default function SkillsPanel({
   const activeStoreCacheKeyRef = useRef<string | null>(null);
   const storePageRef = useRef(1);
   const selectedDetailIdRef = useRef<string | null>(null);
-  const installedMetaRef = useRef<{ agentId: string; fetchedAt: number } | null>(
-    null,
-  );
+  const installedMetaRef = useRef<{
+    agentId: string;
+    scope: PluginScope;
+    fetchedAt: number;
+  } | null>(null);
   const machineMetaRef = useRef<{ agentId: string; fetchedAt: number } | null>(
     null,
   );
@@ -522,31 +528,33 @@ export default function SkillsPanel({
         installedRef.current = [];
         return;
       }
-      const agentChanged = installedMetaRef.current?.agentId !== agentId;
-      if (agentChanged) {
+      const contextChanged =
+        installedMetaRef.current?.agentId !== agentId ||
+        installedMetaRef.current?.scope !== scope;
+      if (contextChanged) {
         setInstalled([]);
         installedRef.current = [];
         installedMetaRef.current = null;
       }
       const silent =
-        opts?.mode === "silent" && installedRef.current.length > 0 && !agentChanged;
+        opts?.mode === "silent" && installedRef.current.length > 0 && !contextChanged;
       if (!silent) setLoadingInstalled(true);
       setError(null);
       try {
         const list = await invoke<InstalledSkill[]>("list_installed_skills", {
           agentId,
-          scope: "astro",
+          scope,
         });
         setInstalled(list);
         installedRef.current = list;
-        installedMetaRef.current = { agentId, fetchedAt: Date.now() };
+        installedMetaRef.current = { agentId, scope, fetchedAt: Date.now() };
       } catch (err) {
         setError(String(err));
       } finally {
         if (!silent) setLoadingInstalled(false);
       }
     },
-    [agentId],
+    [agentId, scope],
   );
 
   const refreshMachine = useCallback(
@@ -709,7 +717,7 @@ export default function SkillsPanel({
     (force = false) => {
       const meta = installedMetaRef.current;
       const hasData = installedRef.current.length > 0;
-      const sameAgent = meta?.agentId === agentId;
+      const sameAgent = meta?.agentId === agentId && meta?.scope === scope;
       if (
         !force &&
         sameAgent &&
@@ -725,7 +733,7 @@ export default function SkillsPanel({
       }
       void refreshInstalled({ mode: force || !hasData ? "hard" : "silent" });
     },
-    [agentId, refreshInstalled],
+    [agentId, scope, refreshInstalled],
   );
 
   const ensureMachine = useCallback(
@@ -919,19 +927,19 @@ export default function SkillsPanel({
   loadMoreRef.current = loadMore;
 
   useEffect(() => {
-    if (!active || tab !== "installed") return;
+    if (!active || primaryTab !== "skills") return;
     ensureInstalled();
     void refreshSkillCalls();
-  }, [active, tab, ensureInstalled, refreshSkillCalls]);
+  }, [active, primaryTab, ensureInstalled, refreshSkillCalls]);
 
   useEffect(() => {
-    if (!active || tab !== "machine") return;
+    if (!active || drawer !== "machine") return;
     ensureMachine();
     void refreshSkillCalls();
-  }, [active, tab, ensureMachine, refreshSkillCalls]);
+  }, [active, drawer, ensureMachine, refreshSkillCalls]);
 
   useEffect(() => {
-    if (!active || tab !== "updates") return;
+    if (!active || drawer !== "updates") return;
     ensureInstalled();
     ensureMachine();
     void refreshOrigins();
@@ -940,7 +948,7 @@ export default function SkillsPanel({
     void loadSkillBackups();
   }, [
     active,
-    tab,
+    drawer,
     agentId,
     ensureInstalled,
     ensureMachine,
@@ -951,14 +959,14 @@ export default function SkillsPanel({
   ]);
 
   useEffect(() => {
-    if (!active || tab !== "online") return;
+    if (!active || drawer !== "online") return;
     // 在线安装态依赖本机/Astro 列表：有缓存则轻量保证新鲜，不硬刷
     ensureInstalled();
     ensureMachine();
-  }, [active, tab, ensureInstalled, ensureMachine]);
+  }, [active, drawer, ensureInstalled, ensureMachine]);
 
   useEffect(() => {
-    if (!active || tab !== "online") return;
+    if (!active || drawer !== "online") return;
 
     // SWR：先写入上一 Tab 快照，再恢复缓存；过期则后台静默刷新
     persistActiveStoreCache();
@@ -977,7 +985,7 @@ export default function SkillsPanel({
     void fetchStorePage(1, false, { mode: "hard" });
   }, [
     active,
-    tab,
+    drawer,
     storeId,
     fetchStorePage,
     persistActiveStoreCache,
@@ -985,7 +993,7 @@ export default function SkillsPanel({
   ]);
 
   useEffect(() => {
-    if (!active || tab !== "online" || !hasMore || loadingStore) return;
+    if (!active || drawer !== "online" || !hasMore || loadingStore) return;
     const node = sentinelRef.current;
     const root =
       viewMode === "detail"
@@ -1011,7 +1019,7 @@ export default function SkillsPanel({
     );
     observer.observe(node);
     return () => observer.disconnect();
-  }, [active, tab, storeId, hasMore, loadingStore, viewMode, storeResults.length]);
+  }, [active, drawer, storeId, hasMore, loadingStore, viewMode, storeResults.length]);
 
   const storeLoadMoreFooter = (
     <>
@@ -1621,16 +1629,16 @@ export default function SkillsPanel({
   }, [storeResults, storeSort]);
 
   const detailItems = useMemo(() => {
-    if (tab === "installed") return filteredInstalled.map((s) => s.id);
-    if (tab === "machine") return filteredMachine.map((s) => s.id);
-    return sortedStoreResults.map((s) => s.id);
-  }, [tab, filteredInstalled, filteredMachine, sortedStoreResults]);
+    if (drawer === "machine") return filteredMachine.map((s) => s.id);
+    if (drawer === "online") return sortedStoreResults.map((s) => s.id);
+    return filteredInstalled.map((s) => s.id);
+  }, [drawer, filteredInstalled, filteredMachine, sortedStoreResults]);
 
   useEffect(() => {
     if (viewMode !== "detail") return;
     if (selectedDetailId && detailItems.includes(selectedDetailId)) return;
     setSelectedDetailId(detailItems[0] ?? null);
-  }, [viewMode, detailItems, selectedDetailId, tab]);
+  }, [viewMode, detailItems, selectedDetailId, drawer, scope]);
 
   const selectedInstalled = filteredInstalled.find(
     (s) => s.id === selectedDetailId,
@@ -1639,7 +1647,7 @@ export default function SkillsPanel({
   const selectedStore = sortedStoreResults.find((s) => s.id === selectedDetailId);
 
   useEffect(() => {
-    if (tab !== "online" || !selectedDetailId || !isTauri()) {
+    if (drawer !== "online" || !selectedDetailId || !isTauri()) {
       setStoreDetail(null);
       setLoadingStoreDetail(false);
       return;
@@ -1669,7 +1677,7 @@ export default function SkillsPanel({
     return () => {
       cancelled = true;
     };
-  }, [tab, selectedDetailId]);
+  }, [drawer, selectedDetailId]);
 
   const callSortOptions = useMemo(
     () => [
@@ -1742,6 +1750,7 @@ export default function SkillsPanel({
           <input
             type="checkbox"
             checked={skill.enabled}
+            disabled={skill.editable === false}
             onChange={() => void toggleEnabled(skill)}
           />
           <span className="skill-card-toggle-mark" aria-hidden>
@@ -1756,14 +1765,18 @@ export default function SkillsPanel({
             </svg>
           </span>
           <span>
-            {skill.enabled ? t("skills.enabled") : t("skills.disabled")}
+            {skill.editable === false
+              ? t("plugins.readonly")
+              : skill.enabled
+                ? t("skills.enabled")
+                : t("skills.disabled")}
           </span>
         </label>
       </header>
       <div className="skill-card-desc">
         <p>{skill.description || skill.path}</p>
         <span className="skill-card-tag" title={skill.source_dir}>
-          {formatTildePath(skill.source_dir)}
+          {t(`plugins.scope.${scope}` as MessageKey)} · {formatTildePath(skill.source_dir)}
         </span>
       </div>
       <div className="skill-card-actions">
@@ -2183,6 +2196,7 @@ export default function SkillsPanel({
                   <input
                     type="checkbox"
                     checked={selectedInstalled.enabled}
+                    disabled={selectedInstalled.editable === false}
                     onChange={() => void toggleEnabled(selectedInstalled)}
                   />
                   <span
@@ -2671,287 +2685,115 @@ export default function SkillsPanel({
 
   return (
     <div className="skills-page" data-tone={tone ?? "indigo"} ref={pageRef}>
-      <div className="skills-toolbar">
-      <div
-        className="skills-main-tabs"
-        role="tablist"
-        aria-label={t("skills.mainTabs")}
-      >
-        <button
-          type="button"
-          role="tab"
-          aria-selected={tab === "installed"}
-          className={`skills-main-tab ${tab === "installed" ? "active" : ""}`}
-          onClick={() => setTab("installed")}
-        >
-          <Package size={15} strokeWidth={2.25} aria-hidden />
-          {t("skills.tab.installed")}
-          {installed.length > 0 && (
-            <span className="skills-main-tab-count">
-              {enabledCount}/{installed.length}
-            </span>
-          )}
-        </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={tab === "machine"}
-          className={`skills-main-tab ${tab === "machine" ? "active" : ""}`}
-          onClick={() => setTab("machine")}
-        >
-          <HardDrive size={15} strokeWidth={2.25} aria-hidden />
-          {t("skills.tab.machine")}
-          {machineSkills.length > 0 && (
-            <span className="skills-main-tab-count">
-              {linkedCount}/{machineSkills.length}
-            </span>
-          )}
-        </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={tab === "updates"}
-          className={`skills-main-tab ${tab === "updates" ? "active" : ""}`}
-          onClick={() => setTab("updates")}
-        >
-          <RefreshCw size={15} strokeWidth={2.25} aria-hidden />
-          {t("skills.tab.updates")}
-          {outdatedCount > 0 && (
-            <span className="skills-main-tab-count">{outdatedCount}</span>
-          )}
-        </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={tab === "online"}
-          className={`skills-main-tab ${tab === "online" ? "active" : ""}`}
-          onClick={() => setTab("online")}
-        >
-          <CloudDownload size={15} strokeWidth={2.25} aria-hidden />
-          {t("skills.tab.online")}
-        </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={tab === "mcp"}
-          className={`skills-main-tab ${tab === "mcp" ? "active" : ""}`}
-          onClick={() => setTab("mcp")}
-        >
-          <McpIcon size={15} />
-          {t("tools.tab.mcp")}
-          {mcp.serverCount > 0 && (
-            <span className="skills-main-tab-count">{mcp.serverCount}</span>
-          )}
-        </button>
-      </div>
-      <div className="skills-toolbar-end">
-        {tab === "installed" && (
-          <>
-            <SelectMenu
-              size="sm"
-              value={installedSort}
-              onChange={(v) => setInstalledSort(v as CallSort)}
-              options={callSortOptions}
-              aria-label={t("skills.sort.label")}
-            />
-            <ExpandableSearch
-              value={installedQuery}
-              onChange={setInstalledQuery}
-              placeholderKey="skills.installedSearchPlaceholder"
-            />
-            {viewToggle}
-            <button
-              type="button"
-              className="skills-icon-btn"
-              onClick={() => {
-                void refreshInstalled({ mode: "hard" });
-                void refreshSkillCalls({ force: true });
-              }}
-              disabled={loadingInstalled}
-              title={
-                loadingInstalled ? t("skills.refreshing") : t("skills.refresh")
-              }
-              aria-label={
-                loadingInstalled ? t("skills.refreshing") : t("skills.refresh")
-              }
-            >
-              <IconRefresh
-                width={16}
-                height={16}
-                className={loadingInstalled ? "is-spin" : undefined}
-              />
-            </button>
-          </>
-        )}
-        {tab === "machine" && (
-          <>
-            <SelectMenu
-              size="sm"
-              value={machineLinkFilter}
-              onChange={(v) => setMachineLinkFilter(v as MachineLinkFilter)}
-              options={machineLinkFilterOptions}
-              aria-label={t("skills.filter.linkAll")}
-            />
-            <SelectMenu
-              size="sm"
-              value={machineSort}
-              onChange={(v) => setMachineSort(v as CallSort)}
-              options={callSortOptions}
-              aria-label={t("skills.sort.label")}
-            />
-            <ExpandableSearch
-              value={machineQuery}
-              onChange={setMachineQuery}
-              placeholderKey="skills.installedSearchPlaceholder"
-            />
-            {viewToggle}
-            <button
-              type="button"
-              className="skills-icon-btn"
-              onClick={() => {
-                void refreshMachine({ mode: "hard" });
-                void refreshSkillCalls({ force: true });
-              }}
-              disabled={loadingMachine}
-              title={
-                loadingMachine ? t("skills.refreshing") : t("skills.refresh")
-              }
-              aria-label={
-                loadingMachine ? t("skills.refreshing") : t("skills.refresh")
-              }
-            >
-              <IconRefresh
-                width={16}
-                height={16}
-                className={loadingMachine ? "is-spin" : undefined}
-              />
-            </button>
-          </>
-        )}
-        {tab === "updates" && (
-          <>
-            <div className="skills-tab-shell">
-              <button
-                type="button"
-                className="skills-action-btn"
-                disabled={
-                  checkingUpdates || updatingAll || updatingFolder !== null
-                }
-                onClick={() => void checkSkillUpdates({ force: true })}
-                title={t("skills.checkUpdates")}
-              >
-                {checkingUpdates ? (
-                  <LoaderCircle size={15} strokeWidth={2.25} className="is-spin" aria-hidden />
-                ) : (
-                  <RefreshCw size={15} strokeWidth={2.25} aria-hidden />
-                )}
-                <span>
-                  {checkingUpdates
-                    ? t("skills.checkingUpdates")
-                    : t("skills.checkUpdates")}
-                </span>
-              </button>
-              <button
-                type="button"
-                className="skills-action-btn primary"
-                disabled={
-                  outdatedCount === 0 ||
-                  updatingAll ||
-                  updatingFolder !== null ||
-                  checkingUpdates
-                }
-                onClick={() => void updateAllSkills()}
-                title={t("skills.updateAll")}
-              >
-                {updatingAll ? (
-                  <LoaderCircle size={15} strokeWidth={2.25} className="is-spin" aria-hidden />
-                ) : (
-                  <RefreshCw size={15} strokeWidth={2.25} aria-hidden />
-                )}
-                <span>{updatingAll ? t("skills.updating") : t("skills.updateAll")}</span>
-              </button>
-            </div>
-            <button
-              type="button"
-              className="skills-icon-btn"
-              onClick={() => {
-                void refreshInstalled({ mode: "hard" });
-                void refreshMachine({ mode: "hard" });
-                void refreshOrigins({ mode: "hard" });
-              }}
-              disabled={loadingInstalled || loadingMachine || loadingOrigins}
-              title={
-                loadingInstalled || loadingMachine || loadingOrigins
-                  ? t("skills.refreshing")
-                  : t("skills.refresh")
-              }
-              aria-label={
-                loadingInstalled || loadingMachine || loadingOrigins
-                  ? t("skills.refreshing")
-                  : t("skills.refresh")
-              }
-            >
-              <IconRefresh
-                width={16}
-                height={16}
-                className={
-                  loadingInstalled || loadingMachine || loadingOrigins
-                    ? "is-spin"
-                    : undefined
-                }
-              />
-            </button>
-          </>
-        )}
-        {tab === "online" && (
-          <>
-            <ExpandableSearch
-              value={query}
-              onChange={(value) => {
-                const prev = query;
-                setQuery(value);
-                if (prev.trim() && !value.trim()) {
-                  persistActiveStoreCache();
-                  activeStoreCacheKeyRef.current = null;
-                  void fetchStorePage(1, false, { mode: "hard" });
-                }
-              }}
-              onSubmit={() => void searchStore()}
-              placeholderKey="skills.searchPlaceholder"
-            />
-            {viewToggle}
-          </>
-        )}
-        {tab === "mcp" && (
-          <>
-            <ExpandableSearch
-              value={mcpQuery}
-              onChange={setMcpQuery}
-              placeholderKey="tools.searchPlaceholder"
-            />
-            {viewToggle}
-            <button
-              type="button"
-              className="skills-icon-btn"
-              onClick={mcp.openAdd}
-              title={t("mcpTools.add")}
-              aria-label={t("mcpTools.add")}
-            >
-              <CirclePlus size={17} />
-            </button>
-          </>
-        )}
-      </div>
+      <div className="plugins-primary-row">
+        <div className="skills-main-tabs" role="tablist" aria-label={t("plugins.tabs")}>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={primaryTab === "skills"}
+            className={`skills-main-tab ${primaryTab === "skills" ? "active" : ""}`}
+            onClick={() => setPrimaryTab("skills")}
+          >
+            <Package size={15} strokeWidth={2.25} aria-hidden />
+            {t("plugins.tab.skills")}
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={primaryTab === "mcp"}
+            className={`skills-main-tab ${primaryTab === "mcp" ? "active" : ""}`}
+            onClick={() => setPrimaryTab("mcp")}
+          >
+            <McpIcon size={15} />
+            {t("plugins.tab.mcp")}
+          </button>
+        </div>
       </div>
 
-      <MotionSwitch switchKey={tab} className="anim-switch--fill">
-      {tab === "installed" && (
+      <div className="skills-toolbar plugins-scope-toolbar">
+        <div className="plugins-scope-tabs" role="tablist" aria-label={t("plugins.scopes")}>
+          {(["global", "builtin", "project"] as const).map((item) => (
+            <button
+              key={item}
+              type="button"
+              role="tab"
+              aria-selected={scope === item}
+              className={`plugins-scope-tab ${scope === item ? "is-active" : ""}`}
+              onClick={() => setScope(item)}
+            >
+              {item === "global" ? <Library size={14} /> : item === "builtin" ? <Bot size={14} /> : <FolderOpen size={14} />}
+              {t(`plugins.scope.${item}` as MessageKey)}
+            </button>
+          ))}
+        </div>
+
+        <div className="skills-toolbar-end">
+          {primaryTab === "skills" ? (
+            <>
+              <SelectMenu
+                size="sm"
+                value={installedSort}
+                onChange={(v) => setInstalledSort(v as CallSort)}
+                options={callSortOptions}
+                aria-label={t("skills.sort.label")}
+              />
+              <ExpandableSearch
+                value={installedQuery}
+                onChange={setInstalledQuery}
+                placeholderKey="skills.installedSearchPlaceholder"
+              />
+              {viewToggle}
+              <button type="button" className="skills-icon-btn" onClick={() => setDrawer("machine")} title={t("plugins.action.import")} aria-label={t("plugins.action.import")}>
+                <HardDrive size={16} />
+              </button>
+              <button type="button" className="skills-icon-btn" onClick={() => setDrawer("updates")} title={t("plugins.action.updates")} aria-label={t("plugins.action.updates")}>
+                <RefreshCw size={16} />
+                {outdatedCount > 0 && <span className="plugins-action-count">{outdatedCount}</span>}
+              </button>
+              <button type="button" className="skills-icon-btn" onClick={() => setDrawer("online")} title={t("plugins.action.store")} aria-label={t("plugins.action.store")}>
+                <CloudDownload size={16} />
+              </button>
+              <button
+                type="button"
+                className="skills-icon-btn"
+                onClick={() => {
+                  void refreshInstalled({ mode: "hard" });
+                  void refreshSkillCalls({ force: true });
+                }}
+                disabled={loadingInstalled}
+                title={t("skills.refresh")}
+                aria-label={t("skills.refresh")}
+              >
+                <IconRefresh width={16} height={16} className={loadingInstalled ? "is-spin" : undefined} />
+              </button>
+            </>
+          ) : (
+            <>
+              <ExpandableSearch value={mcpQuery} onChange={setMcpQuery} placeholderKey="tools.searchPlaceholder" />
+              {viewToggle}
+              <button
+                type="button"
+                className="skills-icon-btn"
+                onClick={mcp.openAdd}
+                disabled={!mcp.canAdd}
+                title={scope === "builtin" ? t("plugins.readonly") : t("mcpTools.add")}
+                aria-label={scope === "builtin" ? t("plugins.readonly") : t("mcpTools.add")}
+              >
+                <CirclePlus size={17} />
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+
+      <MotionSwitch switchKey={`${primaryTab}:${scope}`} className="anim-switch--fill">
+      {primaryTab === "skills" && (
         <section className="skills-pane" role="tabpanel">
           <header className="skills-pane-head">
             <div>
-              <h2>{t("skills.installedTitle")}</h2>
+              <h2>{t(`plugins.scopeTitle.${scope}` as MessageKey)}</h2>
               <p>
-                {t("skills.installedSub")
+                {t(`plugins.scopeSub.${scope}` as MessageKey)
                   .replace("{count}", String(enabledCount))
                   .replace("{total}", String(installed.length))}
               </p>
@@ -2968,7 +2810,7 @@ export default function SkillsPanel({
                 className="skills-empty"
                 title={
                   installed.length === 0
-                    ? t("skills.installedEmpty")
+                    ? t(`plugins.scopeEmpty.${scope}` as MessageKey)
                     : t("skills.installedSearchEmpty")
                 }
               />
@@ -2982,7 +2824,7 @@ export default function SkillsPanel({
                   scene="skills"
                   size="lg"
                   className="skills-empty"
-                  title={t("skills.installedEmpty")}
+                  title={t(`plugins.scopeEmpty.${scope}` as MessageKey)}
                   role="listitem"
                 />
               )}
@@ -3003,12 +2845,36 @@ export default function SkillsPanel({
         </section>
       )}
 
-      {tab === "machine" && (
-        <section className="skills-pane" role="tabpanel">
+      {drawer === "machine" && (
+        <section className="skills-pane plugins-drawer" role="dialog" aria-modal="true">
           <header className="skills-pane-head">
             <div>
               <h2>{t("skills.machineTitle")}</h2>
-              <p>{t("skills.machineSub")}</p>
+              <p>{t("skills.machineSub")} · {linkedCount}/{machineSkills.length}</p>
+            </div>
+            <div className="skills-toolbar-end">
+              <SelectMenu
+                size="sm"
+                value={machineLinkFilter}
+                onChange={(value) => setMachineLinkFilter(value as MachineLinkFilter)}
+                options={machineLinkFilterOptions}
+                aria-label={t("skills.filter.linkAll")}
+              />
+              <SelectMenu
+                size="sm"
+                value={machineSort}
+                onChange={(value) => setMachineSort(value as CallSort)}
+                options={callSortOptions}
+                aria-label={t("skills.sort.label")}
+              />
+              <ExpandableSearch
+                value={machineQuery}
+                onChange={setMachineQuery}
+                placeholderKey="skills.installedSearchPlaceholder"
+              />
+            <button type="button" className="skills-icon-btn" onClick={() => setDrawer(null)} aria-label={t("common.close")}>
+              <X size={16} />
+            </button>
             </div>
           </header>
 
@@ -3057,8 +2923,8 @@ export default function SkillsPanel({
         </section>
       )}
 
-      {tab === "updates" && (
-        <section className="skills-pane" role="tabpanel">
+      {drawer === "updates" && (
+        <section className="skills-pane plugins-drawer" role="dialog" aria-modal="true">
           <header className="skills-pane-head">
             <div>
               <h2>{t("skills.updatesTitle")}</h2>
@@ -3066,6 +2932,19 @@ export default function SkillsPanel({
               <p className="skills-updates-hint">
                 {t("skills.updateOverwriteHint")}
               </p>
+            </div>
+            <div className="skills-toolbar-end">
+              <button type="button" className="skills-action-btn" onClick={() => void checkSkillUpdates({ force: true })} disabled={checkingUpdates}>
+                <RefreshCw size={14} />
+                {t("skills.checkUpdates")}
+              </button>
+              <button type="button" className="skills-action-btn primary" onClick={() => void updateAllSkills()} disabled={outdatedCount === 0 || updatingAll}>
+                <CloudDownload size={14} />
+                {t("skills.updateAll")}
+              </button>
+            <button type="button" className="skills-icon-btn" onClick={() => setDrawer(null)} aria-label={t("common.close")}>
+              <X size={16} />
+            </button>
             </div>
           </header>
 
@@ -3188,16 +3067,28 @@ export default function SkillsPanel({
         </section>
       )}
 
-      {tab === "online" && (
+      {drawer === "online" && (
         <section
           ref={onlinePaneRef}
-          className={`skills-pane skills-pane-online ${viewMode === "detail" ? "is-detail" : ""}`}
-          role="tabpanel"
+          className={`skills-pane skills-pane-online plugins-drawer ${viewMode === "detail" ? "is-detail" : ""}`}
+          role="dialog"
+          aria-modal="true"
         >
           <header className="skills-pane-head">
             <div>
               <h2>{t("skills.storeTitle")}</h2>
               <p>{t("skills.storeSub")}</p>
+            </div>
+            <div className="skills-toolbar-end">
+              <ExpandableSearch
+                value={query}
+                onChange={setQuery}
+                onSubmit={() => void searchStore()}
+                placeholderKey="skills.searchPlaceholder"
+              />
+            <button type="button" className="skills-icon-btn" onClick={() => setDrawer(null)} aria-label={t("common.close")}>
+              <X size={16} />
+            </button>
             </div>
           </header>
 
@@ -3298,7 +3189,7 @@ export default function SkillsPanel({
         </section>
       )}
 
-      {tab === "mcp" && (
+      {primaryTab === "mcp" && (
         <section className="skills-pane" role="tabpanel">
           <div className="skills-mcp-body">{mcp.content}</div>
         </section>

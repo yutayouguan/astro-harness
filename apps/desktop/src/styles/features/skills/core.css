@@ -1,10 +1,119 @@
 /* ── 我的技能 ── */
 .skills-page {
+  position: relative;
   flex: 1;
   min-height: 0;
   display: flex;
   flex-direction: column;
   gap: 14px;
+}
+
+.plugins-primary-row {
+  display: flex;
+  align-items: center;
+}
+
+.plugins-primary-row .skills-main-tabs {
+  padding: 4px;
+}
+
+.plugins-primary-row .skills-main-tab {
+  min-width: 104px;
+  justify-content: center;
+}
+
+.plugins-scope-toolbar {
+  min-height: 38px;
+}
+
+.plugins-scope-tabs {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 3px;
+  border: 1px solid color-mix(in srgb, var(--glass-edge) 76%, transparent);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--glass-panel) 62%, transparent);
+}
+
+.plugins-scope-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 29px;
+  padding: 0 11px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--ink-mute);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.plugins-scope-tab:hover {
+  color: var(--ink);
+  background: color-mix(in srgb, var(--tone) 7%, transparent);
+}
+
+.plugins-scope-tab.is-active {
+  color: var(--tone);
+  background: color-mix(in srgb, var(--tone) 12%, var(--glass-panel));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--tone) 22%, transparent);
+}
+
+.plugins-scope-tab:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--tone) 48%, transparent);
+  outline-offset: 2px;
+}
+
+.plugins-action-count {
+  position: absolute;
+  top: -3px;
+  right: -3px;
+  min-width: 14px;
+  height: 14px;
+  padding: 0 3px;
+  border-radius: 999px;
+  background: var(--tone);
+  color: white;
+  font-size: 9px;
+  line-height: 14px;
+}
+
+.skills-icon-btn {
+  position: relative;
+}
+
+.plugins-drawer {
+  position: absolute;
+  inset: 0;
+  z-index: 30;
+  box-shadow:
+    0 24px 64px rgba(39, 31, 82, 0.18),
+    var(--glass-rim);
+}
+
+.plugins-drawer[role="dialog"] {
+  animation: plugins-drawer-enter 160ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+@keyframes plugins-drawer-enter {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .plugins-drawer[role="dialog"] {
+    animation: none;
+  }
 }
 
 /* 顶栏一行：左主 Tab，右搜索 / 视图 / 刷新 */

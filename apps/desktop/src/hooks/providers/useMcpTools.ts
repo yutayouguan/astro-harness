@@ -6,6 +6,7 @@ import { open } from "@tauri-apps/plugin-shell";
 /** MCP 传输类型：本地进程 / Streamable HTTP。 */
 export type McpTransportType = "stdio" | "streamableHttp";
 export type McpToolApprovalMode = "auto" | "prompt" | "writes" | "approve";
+export type McpConfigScope = "global" | "builtin" | "project";
 export type McpRuntimeState =
   | "configured"
   | "disabled"
@@ -155,6 +156,9 @@ export type McpServer = {
   toolApprovalModes: Record<string, McpToolApprovalMode>;
   /** 最近一次 list_tools 缓存 */
   discovered: McpDiscoveredTool[];
+  scope: McpConfigScope;
+  provenance: string;
+  editable: boolean;
 };
 
 export function isMcpToolEnabled(server: McpServer, toolName: string): boolean {
@@ -314,6 +318,10 @@ function normalizeServer(raw: Partial<McpServer> & { id?: string; name?: string 
     tools,
     toolApprovalModes: toolSettings.approvalModes,
     discovered,
+    scope:
+      config.scope === "builtin" || config.scope === "project" ? config.scope : "global",
+    provenance: typeof config.provenance === "string" ? config.provenance : "user",
+    editable: config.editable !== false,
   };
 }
 
@@ -411,7 +419,11 @@ export function parseMcpJson(raw: string): McpServer[] {
   throw new Error("Unrecognized MCP JSON format");
 }
 
-export function useMcpTools(agentId?: string | null, watchRuntime = false) {
+export function useMcpTools(
+  agentId?: string | null,
+  watchRuntime = false,
+  scope: McpConfigScope = "global",
+) {
   const [servers, setServers] = useState<McpServer[]>([]);
   const [ready, setReady] = useState(false);
   const [skipNextSave, setSkipNextSave] = useState(true);
@@ -439,7 +451,7 @@ export function useMcpTools(agentId?: string | null, watchRuntime = false) {
         return;
       }
       try {
-        const list = await invoke<Partial<McpServer>[]>("get_mcp_servers");
+        const list = await invoke<Partial<McpServer>[]>("get_mcp_servers", { scope });
         if (!cancelled) {
           setServers(list.map((s) => normalizeServer(s)));
           setReady(true);
@@ -454,7 +466,7 @@ export function useMcpTools(agentId?: string | null, watchRuntime = false) {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [scope]);
 
   const refreshRuntimeStatuses = useCallback(async () => {
     if (!isTauri()) return;
@@ -568,8 +580,9 @@ export function useMcpTools(agentId?: string | null, watchRuntime = false) {
       }
       return;
     }
-    void invoke("set_mcp_servers", { servers }).catch(() => {});
-  }, [servers, ready, skipNextSave]);
+    if (scope === "builtin") return;
+    void invoke("set_mcp_servers", { servers, scope }).catch(() => {});
+  }, [servers, ready, skipNextSave, scope]);
 
   const addServers = useCallback((incoming: McpServer[]) => {
     setServers((prev) => [...prev, ...incoming.map((s) => normalizeServer(s))]);
@@ -637,17 +650,18 @@ export function useMcpTools(agentId?: string | null, watchRuntime = false) {
       if (!isTauri()) return;
       setRefreshing(true);
       try {
-        const list = await invoke<Partial<McpServer>[]>("refresh_mcp_tools", {
+        await invoke<Partial<McpServer>[]>("refresh_mcp_tools", {
           agentId: agentId || null,
           serverId: serverId || null,
         });
+        const list = await invoke<Partial<McpServer>[]>("get_mcp_servers", { scope });
         setSkipNextSave(true);
         setServers(list.map((s) => normalizeServer(s)));
       } finally {
         setRefreshing(false);
       }
     },
-    [agentId],
+    [agentId, scope],
   );
 
   return {

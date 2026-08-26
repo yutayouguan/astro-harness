@@ -32,7 +32,7 @@ import ExpandableSearch from "./components/ui/ExpandableSearch";
 import PreferencesPanel from "./components/settings/PreferencesPanel";
 import ProvidersPanel from "./components/settings/ProvidersPanel";
 import SidebarContextMenu from "./components/settings/SidebarContextMenu";
-import SkillsPanel from "./components/settings/SkillsPanel";
+import PluginsPage from "./components/plugins/PluginsPage";
 import ToolsPanel from "./components/settings/ToolsPanel";
 import EvolutionModelsPanel from "./components/settings/EvolutionModelsPanel";
 import {
@@ -1142,7 +1142,7 @@ export default function App() {
                     />
                   )}
                   {featureNav === "skills" && (
-                    <SkillsPanel
+                    <PluginsPage
                       active
                       initialTab={skillsInitialTab}
                       onInitialTabConsumed={() => setSkillsInitialTab(null)}

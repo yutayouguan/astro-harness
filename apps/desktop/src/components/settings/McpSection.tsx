@@ -41,6 +41,7 @@ import {
   type McpRuntimeState,
   type McpRuntimeStatus,
   type McpServer,
+  type McpConfigScope,
   type McpToolApprovalMode,
   type McpTransportType,
 } from "../../hooks/providers/useMcpTools";
@@ -238,6 +239,9 @@ function McpAddDialog({
         tools: {},
         toolApprovalModes: {},
         discovered: [],
+        scope: "global",
+        provenance: "user",
+        editable: true,
       },
     ]);
     onClose();
@@ -899,6 +903,7 @@ type McpSectionOptions = {
   viewMode: McpView;
   /** 取色用的宿主根节点 */
   hostRef: RefObject<HTMLElement | null>;
+  scope: McpConfigScope;
 };
 
 /** 宿主页面渲染 MCP 区块所需的片段与状态 */
@@ -907,6 +912,7 @@ type McpSection = {
   serverCount: number;
   /** 打开新增 Server 抽屉 */
   openAdd: () => void;
+  canAdd: boolean;
   /** 主体内容（含新增抽屉） */
   content: ReactNode;
 };
@@ -917,6 +923,7 @@ export function useMcpSection({
   query: rawQuery,
   viewMode,
   hostRef,
+  scope,
 }: McpSectionOptions): McpSection {
   const { t } = useI18n();
   const { activeAgentId: agentId } = useActiveAgent();
@@ -939,7 +946,7 @@ export function useMcpSection({
     authenticateServer,
     logoutServer,
     authenticatingServerIds,
-  } = useMcpTools(agentId, active);
+  } = useMcpTools(agentId, active, scope);
   const query = rawQuery.trim().toLowerCase();
 
   const filteredServers = useMemo(() => {
@@ -981,8 +988,12 @@ export function useMcpSection({
               <div className="mcp-tools-empty-icon" aria-hidden>
                 <McpIcon size={48} />
               </div>
-              <p className="mcp-tools-empty-title">{t("mcpTools.empty")}</p>
-              <p className="mcp-tools-empty-hint">{t("mcpTools.emptyHint")}</p>
+              <p className="mcp-tools-empty-title">
+                {t(`plugins.mcpEmpty.${scope}.title` as MessageKey)}
+              </p>
+              <p className="mcp-tools-empty-hint">
+                {t(`plugins.mcpEmpty.${scope}.hint` as MessageKey)}
+              </p>
             </div>
           ) : filteredServers.length === 0 ? (
             <p className="agent-tools-empty">{t("agentTools.empty")}</p>
@@ -1303,7 +1314,10 @@ export function useMcpSection({
 
   return {
     serverCount: servers.length,
-    openAdd: () => setShowAdd(true),
+    openAdd: () => {
+      if (scope !== "builtin") setShowAdd(true);
+    },
+    canAdd: scope !== "builtin",
     content,
   };
 }
