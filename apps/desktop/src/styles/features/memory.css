@@ -1,5 +1,5 @@
 .memory-panel {
-  --mem-top-ctrl-h: 50px;
+  --mem-top-ctrl-h: var(--seg-shell-h, 36px);
   position: relative;
   flex: 1;
   min-height: 0;
@@ -36,9 +36,9 @@
   flex-wrap: nowrap;
   align-items: center;
   justify-content: flex-start;
-  gap: 6px;
+  gap: var(--seg-shell-gap);
   margin: 0;
-  padding: 5px;
+  padding: var(--seg-shell-pad);
   height: var(--mem-top-ctrl-h);
   box-sizing: border-box;
   width: fit-content;
@@ -89,9 +89,8 @@
   position: absolute;
   left: 6%;
   right: 6%;
-  top: 48%;
-  height: 34px;
-  transform: translateY(-42%);
+  top: 0;
+  bottom: 0;
   z-index: 0;
   pointer-events: none;
   overflow: visible;
@@ -1409,18 +1408,13 @@ html[data-theme="dark"] .mem-view-rail {
 
 /* 窄屏：导航只保留图标，文案靠 title / aria-label */
 @media (max-width: 900px) {
-  .mem-view-tab {
-    gap: 0;
-    padding: 8px 10px;
+  .mem-view-nav {
+    --seg-item-gap: 0;
+    --seg-item-pad: 0 9px;
   }
 
   .mem-view-tab-label {
     display: none;
-  }
-
-  .mem-view-nav {
-    gap: 4px;
-    padding: 4px;
   }
 
   .mem-view-step {

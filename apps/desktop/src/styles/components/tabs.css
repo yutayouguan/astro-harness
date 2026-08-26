@@ -3,6 +3,9 @@
    功能页只保留自己的布局约束（滚动、宽度、装饰层），不再各写一套外观。 */
 
 :root {
+  /* 与工具栏控件（搜索、视图切换、下拉）同高，保证同一行内对齐 */
+  --seg-shell-h: 36px;
+  --seg-item-h: 28px;
   --seg-shell-radius: 12px;
   --seg-shell-pad: 3px;
   --seg-shell-gap: 2px;
@@ -11,7 +14,7 @@
   --seg-shell-blur: blur(12px) saturate(1.1);
 
   --seg-item-radius: 9px;
-  --seg-item-pad: 8px 14px;
+  --seg-item-pad: 0 13px;
   --seg-item-gap: 7px;
   --seg-item-font: 13px;
   --seg-item-weight: 650;
@@ -48,12 +51,14 @@ html[data-theme="dark"] {
 .files-mode-switch,
 .mcp-add-drawer-tabs,
 .loop-config-panel-tabs {
+  box-sizing: border-box;
   display: inline-flex;
   align-items: center;
   gap: var(--seg-shell-gap);
   flex-shrink: 0;
   width: fit-content;
   max-width: 100%;
+  min-height: var(--seg-shell-h);
   padding: var(--seg-shell-pad);
   border: 1px solid var(--seg-shell-border);
   border-radius: var(--seg-shell-radius);
@@ -101,11 +106,12 @@ html[data-theme="dark"] {
 .mem-view-tab,
 .mcp-add-drawer-tab,
 .loop-config-tab {
+  box-sizing: border-box;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: var(--seg-item-gap);
-  min-height: 0;
+  min-height: var(--seg-item-h);
   height: auto;
   margin: 0;
   padding: var(--seg-item-pad);
