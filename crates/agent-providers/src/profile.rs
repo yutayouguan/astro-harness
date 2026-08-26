@@ -480,7 +480,7 @@ static OPENAI_COMPAT_FALLBACK: ProviderProfile = ProviderProfile {
     auth: AuthKind::Bearer,
     env_keys: &["OPENAI_API_KEY"],
     azure_deployment_style: false,
-    default_model: "gpt-5.6",
+    default_model: "gpt-5.6-sol",
     supports_image_gen: false,
     supports_embedding: false,
     image_mode: None,
@@ -531,8 +531,6 @@ pub fn read_env_api_key(provider_id: &str) -> Option<String> {
     }
     None
 }
-
-// ─── 动态模型默认值（OpenRouter 驱动）────────────────────
 
 // ─── 动态模型默认值（OpenRouter 驱动）────────────────────
 
