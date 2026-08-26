@@ -23,9 +23,8 @@ import {
 import { Pause as PauseData, Play as PlayData } from "lucide";
 import { MorphToggleIcon } from "../icons/MorphIcon";
 
-/** lucide 导出 ["svg", attrs, children]，morphicons 只接受 children 里的 [tag, attrs] 列表。 */
-const PAUSE_ICON = PauseData[2] ?? [];
-const PLAY_ICON = PlayData[2] ?? [];
+const PAUSE_ICON = PauseData;
+const PLAY_ICON = PlayData;
 
 export type WelcomeCardId =
   | "intro" | "skills" | "files" | "data"

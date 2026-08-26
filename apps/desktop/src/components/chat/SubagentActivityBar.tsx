@@ -5,7 +5,6 @@ import {
   ChevronDown as ChevronDownData,
   ChevronUp as ChevronUpData,
 } from "lucide";
-import type { IconInput } from "morphicons/react";
 import { useI18n } from "../../i18n/LocaleContext";
 import {
   createAgentTreeRootLifecycle,
@@ -140,8 +139,8 @@ export default function SubagentActivityBar({
           </span>
           <MorphToggleIcon
             active={expanded}
-            activeIcon={ChevronUpData as unknown as IconInput}
-            inactiveIcon={ChevronDownData as unknown as IconInput}
+            activeIcon={ChevronUpData}
+            inactiveIcon={ChevronDownData}
             size={14}
             aria-hidden
           />

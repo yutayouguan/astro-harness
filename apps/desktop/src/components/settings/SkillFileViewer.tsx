@@ -11,7 +11,6 @@ import {
   ChevronDown as ChevronDownData,
   ChevronUp as ChevronUpData,
 } from "lucide";
-import type { IconInput } from "morphicons/react";
 import { useI18n } from "../../i18n/LocaleContext";
 import { useTheme } from "../../hooks/app/useTheme";
 import {
@@ -108,8 +107,8 @@ function SkillFrontmatterCard({
                   >
                     <MorphToggleIcon
                       active={descOpen}
-                      activeIcon={ChevronUpData as unknown as IconInput}
-                      inactiveIcon={ChevronDownData as unknown as IconInput}
+                      activeIcon={ChevronUpData}
+                      inactiveIcon={ChevronDownData}
                       size={13}
                       strokeWidth={2.3}
                       aria-hidden
@@ -134,8 +133,8 @@ function SkillFrontmatterCard({
           >
             <MorphToggleIcon
               active={extrasOpen}
-              activeIcon={ChevronUpData as unknown as IconInput}
-              inactiveIcon={ChevronDownData as unknown as IconInput}
+              activeIcon={ChevronUpData}
+              inactiveIcon={ChevronDownData}
               size={13}
               strokeWidth={2.3}
               aria-hidden

@@ -9,11 +9,10 @@ import {
 import { MorphToggleIcon } from "../icons/MorphIcon";
 import { useI18n } from "../../i18n/LocaleContext";
 
-/** lucide 导出 ["svg", attrs, children]，morphicons 只接受 children 里的 [tag, attrs] 列表。 */
-const PAUSE_ICON = PauseData[2] ?? [];
-const PLAY_ICON = PlayData[2] ?? [];
-const VOLUME_ON_ICON = Volume2Data[2] ?? [];
-const VOLUME_OFF_ICON = VolumeXData[2] ?? [];
+const PAUSE_ICON = PauseData;
+const PLAY_ICON = PlayData;
+const VOLUME_ON_ICON = Volume2Data;
+const VOLUME_OFF_ICON = VolumeXData;
 
 type Props = {
   src: string;

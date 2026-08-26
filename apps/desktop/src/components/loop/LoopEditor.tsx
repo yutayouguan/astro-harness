@@ -34,7 +34,6 @@ import {
   Maximize2 as Maximize2Data,
   Minimize2 as Minimize2Data,
 } from "lucide";
-import type { IconInput } from "morphicons/react";
 import { LOOP_ICON_MAP } from "./loopIcons";
 import type { LoopDto, NodeType, NodeMeta, LoopIconData } from "./loopTypes";
 import { NODE_CATEGORIES, NODE_REGISTRY, getNodesByCategory, getNodeMeta, parseLoopIcon, serializeLoopIcon } from "./loopTypes";
@@ -1030,8 +1029,8 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
           >
             <MorphToggleIcon
               active={fullscreen}
-              activeIcon={Minimize2Data as unknown as IconInput}
-              inactiveIcon={Maximize2Data as unknown as IconInput}
+              activeIcon={Minimize2Data}
+              inactiveIcon={Maximize2Data}
               size={16}
               aria-hidden
             />
@@ -1129,8 +1128,8 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
                 >
                   <MorphToggleIcon
                     active={!isCollapsed}
-                    activeIcon={ChevronDownData as unknown as IconInput}
-                    inactiveIcon={ChevronRightData as unknown as IconInput}
+                    activeIcon={ChevronDownData}
+                    inactiveIcon={ChevronRightData}
                     size={12}
                     aria-hidden
                   />

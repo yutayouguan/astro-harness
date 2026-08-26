@@ -1,21 +1,16 @@
 import { forwardRef, type ComponentProps, type ElementRef } from "react";
 import {
   MorphIcon as BaseMorphIcon,
-  type IconInput,
   type MorphHandle,
 } from "morphicons/react";
-import type { IconNode as LucideIconNode } from "lucide";
 import { Check as CheckData, Copy as CopyData } from "lucide";
 import { useMorphicons } from "../../hooks/app/useMorphicons";
+import {
+  toMorphIconInput,
+  type MorphableIcon,
+} from "../../lib/ui/morphIconData";
 
-export type MorphableIcon = IconInput | LucideIconNode;
-
-function normalizeIconData(icon: MorphableIcon): IconInput {
-  if (Array.isArray(icon) && icon[0] === "svg" && Array.isArray(icon[2])) {
-    return icon[2] as IconInput;
-  }
-  return icon as IconInput;
-}
+export type { MorphableIcon } from "../../lib/ui/morphIconData";
 
 export type AppMorphIconProps = Omit<
   ComponentProps<typeof BaseMorphIcon>,
@@ -32,7 +27,7 @@ export const AppMorphIcon = forwardRef<MorphHandle, AppMorphIconProps>(
     return (
       <BaseMorphIcon
         ref={ref}
-        icon={normalizeIconData(icon)}
+        icon={toMorphIconInput(icon)}
         spring={spring ?? prefs.spring}
         strokeWidth={strokeWidth ?? prefs.strokeWidth}
         reducedMotion="user"
@@ -59,11 +54,17 @@ export function MorphToggleIcon({
 
 export function CopyMorphIcon({
   copied,
+  copiedStrokeWidth = 2.4,
+  strokeWidth,
   ...props
-}: Omit<AppMorphIconProps, "icon"> & { copied: boolean }) {
+}: Omit<AppMorphIconProps, "icon"> & {
+  copied: boolean;
+  copiedStrokeWidth?: number;
+}) {
   return (
     <AppMorphIcon
       icon={copied ? CheckData : CopyData}
+      strokeWidth={copied ? copiedStrokeWidth : strokeWidth}
       {...props}
     />
   );

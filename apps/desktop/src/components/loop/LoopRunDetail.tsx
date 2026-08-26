@@ -11,7 +11,6 @@ import {
   ChevronDown as ChevronDownData,
   ChevronRight as ChevronRightData,
 } from "lucide";
-import type { IconInput } from "morphicons/react";
 import type { LoopRunDto, LoopStepLogDto } from "./loopTypes";
 import { MorphToggleIcon } from "../icons/MorphIcon";
 
@@ -112,8 +111,8 @@ function StepCard({ step }: { step: LoopStepLogDto }) {
             {hasDetail ? (
               <MorphToggleIcon
                 active={expanded}
-                activeIcon={ChevronDownData as unknown as IconInput}
-                inactiveIcon={ChevronRightData as unknown as IconInput}
+                activeIcon={ChevronDownData}
+                inactiveIcon={ChevronRightData}
                 size={14}
                 aria-hidden
               />
@@ -254,8 +253,8 @@ export default function LoopRunDetail({ runId, onBack }: Props) {
           >
             <MorphToggleIcon
               active={outputExpanded}
-              activeIcon={ChevronDownData as unknown as IconInput}
-              inactiveIcon={ChevronRightData as unknown as IconInput}
+              activeIcon={ChevronDownData}
+              inactiveIcon={ChevronRightData}
               size={14}
               aria-hidden
             />

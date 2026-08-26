@@ -4,7 +4,6 @@ import {
   ChevronDown as ChevronDownData,
   ChevronRight as ChevronRightData,
 } from "lucide";
-import type { IconInput } from "morphicons/react";
 import { AiAssistField, cfgStr } from "./ConfigField";
 import ProviderModelSelect from "./ProviderModelSelect";
 import ReasoningLevelSelect from "./ReasoningLevelSelect";
@@ -76,8 +75,8 @@ export default function AiAgentTaskConfig({ config, onChange, upstreamOutputs, a
         >
           <MorphToggleIcon
             active={upstreamOpen}
-            activeIcon={ChevronDownData as unknown as IconInput}
-            inactiveIcon={ChevronRightData as unknown as IconInput}
+            activeIcon={ChevronDownData}
+            inactiveIcon={ChevronRightData}
             size={14}
             aria-hidden
           />
