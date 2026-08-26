@@ -1,11 +1,44 @@
 /* ── 我的技能 ── */
 .skills-page {
+  --plugins-control-h: 36px;
+  --plugins-shell-radius: 14px;
+  --plugins-item-radius: 10px;
+  --plugins-shell-border: color-mix(in srgb, var(--glass-edge) 84%, transparent);
+  --plugins-shell-bg:
+    linear-gradient(155deg, rgba(255, 255, 255, 0.58), rgba(255, 255, 255, 0.2)),
+    color-mix(in srgb, var(--glass-panel) 70%, transparent);
+  --plugins-shell-shadow:
+    0 5px 16px color-mix(in srgb, var(--tone) 7%, rgba(15, 23, 42, 0.04)),
+    inset 0 1px 0 rgba(255, 255, 255, 0.62);
+  --plugins-active-bg:
+    linear-gradient(165deg, rgba(255, 255, 255, 0.86), rgba(255, 255, 255, 0.4)),
+    color-mix(in srgb, var(--tone) 11%, var(--glass-panel));
+  --plugins-active-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--tone) 24%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.82),
+    0 2px 8px color-mix(in srgb, var(--tone) 10%, transparent);
   position: relative;
   flex: 1;
   min-height: 0;
   display: flex;
   flex-direction: column;
   gap: 14px;
+}
+
+html[data-theme="dark"] .skills-page {
+  --plugins-shell-border: color-mix(in srgb, var(--tone) 18%, rgba(255, 255, 255, 0.09));
+  --plugins-shell-bg:
+    linear-gradient(155deg, rgba(255, 255, 255, 0.075), rgba(255, 255, 255, 0.018)),
+    color-mix(in srgb, var(--tone-soft) 28%, rgba(8, 6, 18, 0.52));
+  --plugins-shell-shadow:
+    0 4px 14px rgba(0, 0, 0, 0.18),
+    inset 0 1px 0 rgba(255, 255, 255, 0.07);
+  --plugins-active-bg:
+    linear-gradient(165deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.035)),
+    color-mix(in srgb, var(--tone-soft) 54%, rgba(8, 6, 18, 0.42));
+  --plugins-active-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--tone) 30%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.09);
 }
 
 .plugins-primary-row {
@@ -23,71 +56,36 @@
 }
 
 .plugins-scope-toolbar {
-  min-height: 38px;
+  min-height: var(--plugins-control-h);
 }
 
-.plugins-scope-tabs {
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-  padding: 3px;
-  border: 1px solid color-mix(in srgb, var(--glass-edge) 76%, transparent);
-  border-radius: 12px;
-  background: color-mix(in srgb, var(--glass-panel) 62%, transparent);
-}
-
-.plugins-scope-tab {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  min-height: 29px;
-  padding: 0 11px;
-  border: 0;
-  border-radius: 9px;
-  background: transparent;
-  color: var(--ink-mute);
-  font: inherit;
-  font-size: 12px;
-  font-weight: 650;
-  cursor: pointer;
-}
-
-.plugins-scope-tab:hover {
-  color: var(--ink);
-  background: color-mix(in srgb, var(--tone) 7%, transparent);
-}
-
-.plugins-scope-tab.is-active {
-  color: var(--tone);
-  background: color-mix(in srgb, var(--tone) 12%, var(--glass-panel));
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--tone) 22%, transparent);
-}
-
-.plugins-scope-tab:focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--tone) 48%, transparent);
-  outline-offset: 2px;
-}
-
-.plugins-personal-tabs {
+.plugins-scope-tabs,
+.plugins-personal-tabs,
+.skills-main-tabs {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
   width: fit-content;
+  max-width: 100%;
   padding: 4px;
-  border: 1px solid color-mix(in srgb, var(--glass-edge) 82%, transparent);
-  border-radius: 14px;
-  background: color-mix(in srgb, var(--glass-panel) 72%, transparent);
-  box-shadow: var(--glass-rim);
+  border: 1px solid var(--plugins-shell-border);
+  border-radius: var(--plugins-shell-radius);
+  background: var(--plugins-shell-bg);
+  box-shadow: var(--plugins-shell-shadow);
+  backdrop-filter: blur(14px) saturate(1.18);
+  -webkit-backdrop-filter: blur(14px) saturate(1.18);
 }
 
+.plugins-scope-tab,
 .plugins-personal-tab {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 7px;
-  min-height: 34px;
+  min-height: var(--plugins-control-h);
   padding: 0 13px;
   border: 0;
-  border-radius: 10px;
+  border-radius: var(--plugins-item-radius);
   background: transparent;
   color: var(--ink-mute);
   font: inherit;
@@ -100,24 +98,27 @@
     box-shadow 0.15s ease;
 }
 
+.plugins-scope-tab:hover,
 .plugins-personal-tab:hover {
   color: var(--ink);
   background: color-mix(in srgb, var(--tone) 7%, transparent);
 }
 
+.plugins-scope-tab.is-active,
 .plugins-personal-tab.is-active {
   color: var(--tone);
-  background:
-    linear-gradient(165deg, rgba(255, 255, 255, 0.82), rgba(255, 255, 255, 0.36)),
-    color-mix(in srgb, var(--tone) 11%, var(--glass-panel));
-  box-shadow:
-    inset 0 0 0 1px color-mix(in srgb, var(--tone) 24%, transparent),
-    0 2px 8px color-mix(in srgb, var(--tone) 10%, transparent);
+  background: var(--plugins-active-bg);
+  box-shadow: var(--plugins-active-shadow);
 }
 
+.plugins-scope-tab:focus-visible,
 .plugins-personal-tab:focus-visible {
   outline: 2px solid color-mix(in srgb, var(--tone) 48%, transparent);
   outline-offset: 2px;
+}
+
+.plugins-personal-tabs {
+  flex-shrink: 0;
 }
 
 .plugins-personal-tab-count {
@@ -201,26 +202,26 @@
 
 .skills-toolbar-end .expandable-search-btn,
 .skills-toolbar-end .expandable-search-field {
-  height: 36px;
+  height: var(--plugins-control-h);
+  border-color: var(--plugins-shell-border);
   border-radius: 12px;
+  background: var(--plugins-shell-bg);
+  box-shadow: var(--plugins-shell-shadow);
+}
+
+.skills-toolbar-end .select-menu--sm .select-menu-trigger {
+  min-height: var(--plugins-control-h);
+  height: var(--plugins-control-h);
+  border-color: var(--plugins-shell-border);
+  border-radius: 12px;
+  background: var(--plugins-shell-bg);
+  box-shadow: var(--plugins-shell-shadow);
+  backdrop-filter: blur(14px) saturate(1.18);
+  -webkit-backdrop-filter: blur(14px) saturate(1.18);
 }
 
 .skills-main-tabs {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 5px;
-  border-radius: 18px;
   flex-shrink: 0;
-  width: fit-content;
-  max-width: 100%;
-  border: 1px solid color-mix(in srgb, var(--glass-edge) 90%, transparent);
-  background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.72), rgba(255, 255, 255, 0.28)),
-    color-mix(in srgb, var(--glass-panel, rgba(255, 255, 255, 0.5)) 80%, transparent);
-  box-shadow: var(--shadow-card), var(--glass-rim);
-  backdrop-filter: blur(16px) saturate(1.2);
-  -webkit-backdrop-filter: blur(16px) saturate(1.2);
 }
 
 .skills-toolbar .skills-main-tab {
@@ -232,11 +233,12 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
+  gap: 7px;
+  min-height: var(--plugins-control-h);
   border: none;
-  border-radius: 13px;
-  padding: 10px 14px;
-  font-size: 13.5px;
+  border-radius: var(--plugins-item-radius);
+  padding: 0 14px;
+  font-size: 13px;
   font-weight: 650;
   cursor: pointer;
   color: var(--ink-mute);
@@ -260,13 +262,8 @@
 
 .skills-main-tab.active {
   color: var(--tone);
-    background:
-      linear-gradient(165deg, rgba(255, 255, 255, 0.88), rgba(255, 255, 255, 0.45)),
-      var(--tone-soft);
-    box-shadow:
-      inset 0 0 0 1px color-mix(in srgb, var(--tone) 26%, transparent),
-      inset 0 1px 0 rgba(255, 255, 255, 0.9),
-      0 2px 8px color-mix(in srgb, var(--tone) 12%, transparent);
+  background: var(--plugins-active-bg);
+  box-shadow: var(--plugins-active-shadow);
 }
 
 .skills-main-tab-count {
@@ -675,20 +672,16 @@ html[data-theme="dark"] .skills-store-toolbar .select-menu.is-open .select-menu-
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  width: 36px;
-  height: 36px;
+  width: var(--plugins-control-h);
+  height: var(--plugins-control-h);
   padding: 0;
-  border: 1px solid color-mix(in srgb, var(--tone, #64748b) 14%, rgba(255, 255, 255, 0.55));
+  border: 1px solid var(--plugins-shell-border);
   border-radius: 12px;
   color: var(--tone, var(--ink-soft));
-  background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.48) 0%, rgba(255, 255, 255, 0.16) 100%),
-    color-mix(in srgb, var(--tone-soft, transparent) 35%, rgba(255, 255, 255, 0.2));
-  box-shadow:
-    0 6px 16px color-mix(in srgb, var(--tone, transparent) 8%, rgba(15, 23, 42, 0.05)),
-    inset 0 1px 0 rgba(255, 255, 255, 0.55);
-  backdrop-filter: blur(16px) saturate(1.25);
-  -webkit-backdrop-filter: blur(16px) saturate(1.25);
+  background: var(--plugins-shell-bg);
+  box-shadow: var(--plugins-shell-shadow);
+  backdrop-filter: blur(14px) saturate(1.18);
+  -webkit-backdrop-filter: blur(14px) saturate(1.18);
   cursor: pointer;
   line-height: 1;
   transition: color 0.12s ease, border-color 0.12s ease, background 0.12s ease, box-shadow 0.12s ease;
