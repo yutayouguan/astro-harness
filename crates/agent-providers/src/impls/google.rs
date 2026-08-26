@@ -545,7 +545,7 @@ fn extract_interactions_delta(data: &str) -> Option<crate::types::StreamChunk> {
                 "arguments" | "arguments_delta" => {
                     let args = delta
                         .and_then(|d| d.get("arguments"))
-                        .map(|a| a.to_string())?;
+                        .map(interactions_arguments_delta)?;
                     let index = v.get("index").and_then(|i| i.as_u64()).unwrap_or(0) as u32;
                     Some(StreamChunk::ToolCallDelta {
                         index,
@@ -600,6 +600,17 @@ fn extract_interactions_delta(data: &str) -> Option<crate::types::StreamChunk> {
         }
         _ => None,
     }
+}
+
+/// Interactions API may stream function arguments either as an object or as an
+/// already-encoded JSON string. Calling `Value::to_string()` on the latter adds
+/// another pair of quotes, so the accumulator eventually parses it as
+/// `Value::String` instead of the object expected by tool argument structs.
+fn interactions_arguments_delta(arguments: &Value) -> String {
+    arguments
+        .as_str()
+        .map(str::to_owned)
+        .unwrap_or_else(|| arguments.to_string())
 }
 
 // ─── 连通性探测 ─────────────────────────────────────────
@@ -951,6 +962,28 @@ mod tests {
             r#"{"index":1,"delta":{"text":"Hello","type":"text"},"event_type":"step.delta"}"#;
         let chunk = extract_interactions_delta(data);
         assert!(matches!(chunk, Some(crate::types::StreamChunk::Text(ref t)) if t == "Hello"));
+    }
+
+    #[test]
+    fn extract_string_encoded_arguments_without_double_encoding() {
+        let data = r#"{"index":0,"delta":{"type":"arguments","arguments":"{\"command\":\"pwd && ls -la\"}"},"event_type":"step.delta"}"#;
+        let chunk = extract_interactions_delta(data);
+        assert!(matches!(
+            chunk,
+            Some(crate::types::StreamChunk::ToolCallDelta { arguments, .. })
+                if arguments == r#"{"command":"pwd && ls -la"}"#
+        ));
+    }
+
+    #[test]
+    fn extract_object_arguments_as_json() {
+        let data = r#"{"index":0,"delta":{"type":"arguments","arguments":{"path":".","operation":"list"}},"event_type":"step.delta"}"#;
+        let chunk = extract_interactions_delta(data);
+        assert!(matches!(
+            chunk,
+            Some(crate::types::StreamChunk::ToolCallDelta { arguments, .. })
+                if arguments == r#"{"operation":"list","path":"."}"#
+        ));
     }
 
     #[test]
