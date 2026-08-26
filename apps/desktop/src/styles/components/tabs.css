@@ -41,7 +41,7 @@
   --seg-border-base: color-mix(in srgb, var(--glass-edge) 84%, transparent);
   --seg-border-tone-amt: 0%;
   --seg-shell-drop-geo: 0 5px 16px;
-  --seg-shell-drop-base: rgba(15, 23, 42, 0.04);
+  --seg-shell-drop-base: rgba(var(--shadow-ink), 0.04);
   --seg-shell-drop-tone-amt: 7%;
   --seg-shell-rim: rgba(255, 255, 255, 0.62);
 
@@ -442,7 +442,7 @@ html[data-theme="dark"] {
     --seg-shell-base: color-mix(in srgb, var(--ink) 7%, var(--bg, #fff));
     --seg-shell-tone-amt: 0%;
     --seg-shell-drop-geo: 0 2px 6px -2px;
-    --seg-shell-drop-base: rgba(15, 23, 42, 0.16);
+    --seg-shell-drop-base: rgba(var(--shadow-ink), 0.16);
     --seg-shell-drop-tone-amt: 0%;
     --seg-shell-rim: transparent;
 

@@ -201,7 +201,21 @@ html:is([data-color-style="unified"], [data-color-style="dynamic"]) .page-title-
 /*
  * 统一色彩：强调色跟随 --unified-tone（由 JS 写入起始色）。
  * Skills 卡片哈希色不在此重映射（各自 class 仍指向原 token）。
+ *
+ * html 必须一起重映射，不能只映射 .app-shell。themes.css 在 html 上把
+ * --header-chip-* / --menu-glass-* / --lens-* / --badge-* 直接组装成了成品值，
+ * 而自定义属性里的 var() 是在**声明处**替换的 —— 只映射 .app-shell 的话，
+ * 这些玻璃会焊死在 html[data-tone] 的静态色上，而同一个元素上
+ * color: var(--tone) 又解析成了动态色，于是顶栏出现「图标是暖的、
+ * 玻璃是蓝的」这种撞色。--unified-tone 本来就写在 documentElement 上，
+ * 放到 html 层不需要额外改 JS。
+ *
+ * html 选择器上多带一个 [data-tone] 是为了把特异度顶到 (0,2,1)：
+ * shell.css 末尾还给 portal 浮层重声明了一组 html[data-tone=*] (0,1,1)，
+ * 且它排在本文件之后 —— 只靠源码顺序会被那一组反压回静态色。
+ * data-tone 由 App.tsx 无条件写在 documentElement 上，不会漏配。
  */
+html:is([data-color-style="unified"], [data-color-style="dynamic"])[data-tone],
 html:is([data-color-style="unified"], [data-color-style="dynamic"]) .app-shell,
 html:is([data-color-style="unified"], [data-color-style="dynamic"]) .app-shell[data-tone],
 html:is([data-color-style="unified"], [data-color-style="dynamic"]) .app-shell[data-tone] .sidebar {

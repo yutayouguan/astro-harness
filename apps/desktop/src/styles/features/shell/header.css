@@ -94,7 +94,7 @@
   border-radius: 12px;
   background: color-mix(in srgb, var(--glass-panel) 94%, transparent);
   box-shadow:
-    0 14px 36px rgba(15, 23, 42, 0.16),
+    0 14px 36px rgba(var(--shadow-ink), 0.16),
     inset 0 1px 0 rgba(255, 255, 255, 0.42);
   backdrop-filter: blur(22px) saturate(1.25);
   -webkit-backdrop-filter: blur(22px) saturate(1.25);
@@ -191,7 +191,7 @@ html[data-theme="dark"] .conversation-menu-popover {
     linear-gradient(165deg, rgba(255, 255, 255, 0.56), rgba(255, 255, 255, 0.3)),
     color-mix(in srgb, var(--tone, var(--tone-blue, #2563eb)) 14%, white);
   box-shadow:
-    0 1px 3px rgba(15, 23, 42, 0.06),
+    0 1px 3px rgba(var(--shadow-ink), 0.06),
     inset 0 1px 0 rgba(255, 255, 255, 0.58);
 }
 
@@ -310,7 +310,7 @@ html[data-theme="dark"] .header-icon-btn.is-active {
     rgba(255, 255, 255, 0.35);
   border: 1px solid rgba(255, 255, 255, 0.58);
   box-shadow:
-    0 1px 3px rgba(15, 23, 42, 0.06),
+    0 1px 3px rgba(var(--shadow-ink), 0.06),
     inset 0 1px 0 rgba(255, 255, 255, 0.65);
   overflow: hidden;
 }
@@ -1035,7 +1035,7 @@ html[data-theme="dark"] .model-picker-option.is-selected .model-picker-option-ic
     rgba(255, 255, 255, 0.35);
   border: 1px solid rgba(255, 255, 255, 0.58);
   box-shadow:
-    0 1px 3px rgba(15, 23, 42, 0.06),
+    0 1px 3px rgba(var(--shadow-ink), 0.06),
     inset 0 1px 0 rgba(255, 255, 255, 0.65);
   color: var(--tone, var(--ink));
 }
@@ -1131,8 +1131,8 @@ html[data-theme="dark"] .header-actions .model-picker-icon {
   line-height: 1;
   cursor: pointer;
   box-shadow:
-    0 6px 18px rgba(15, 23, 42, 0.08),
-    0 1px 3px rgba(15, 23, 42, 0.04),
+    0 6px 18px rgba(var(--shadow-ink), 0.08),
+    0 1px 3px rgba(var(--shadow-ink), 0.04),
     inset 0 1px 0 rgba(255, 255, 255, 0.62);
   backdrop-filter: blur(18px) saturate(1.35);
   -webkit-backdrop-filter: blur(18px) saturate(1.35);
