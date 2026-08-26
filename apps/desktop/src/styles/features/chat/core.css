@@ -13,10 +13,17 @@
   overflow-x: hidden;
   overflow-y: scroll;
   /* 右侧：Dock 留白 56px − 常驻滚动条 4px，内容宽度与原先无滚动条时一致 */
-  padding: 20px 52px 12px 20px;
+  padding: 24px 52px 8px 20px;
+  scroll-padding-block: 24px 32px;
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 18px;
+}
+
+.message-list-end-spacer {
+  flex: 0 0 24px;
+  width: 100%;
+  pointer-events: none;
 }
 
 .message-list::-webkit-scrollbar {
@@ -81,6 +88,7 @@
 
 .msg-row.assistant {
   justify-content: flex-start;
+  margin-inline: auto;
 }
 
 /* 编辑截断：气泡与文字粒子消散 */
@@ -193,6 +201,11 @@
   width: 100%;
   max-width: min(92%, 680px);
   flex: 1;
+}
+
+.msg-row.assistant .msg-stack {
+  /* 860px 阅读列减去头像与间距；工具卡与输入框不再一窄一宽。 */
+  max-width: calc(100% - 44px);
 }
 
 .msg-row.user .msg-stack {

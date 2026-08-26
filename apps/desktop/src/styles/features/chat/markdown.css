@@ -408,10 +408,30 @@ html[data-theme="dark"] .msg-md-codeblock {
   gap: 10px;
   margin: 0 12px 12px;
   padding: 10px 10px 10px 12px;
-  border-radius: 22px;
-  background: transparent;
-  border: 1px solid color-mix(in srgb, var(--tone, var(--accent)) 8%, transparent);
-  box-shadow: none;
+  border-radius: 20px;
+  background:
+    radial-gradient(
+      82% 140% at 10% -48%,
+      rgba(255, 255, 255, 0.22) 0%,
+      rgba(255, 255, 255, 0.04) 42%,
+      transparent 70%
+    ),
+    radial-gradient(
+      68% 120% at 100% 118%,
+      color-mix(in srgb, var(--tone, var(--accent)) 12%, transparent),
+      transparent 74%
+    ),
+    color-mix(in srgb, var(--tone-soft, transparent) 30%, transparent);
+  border: 1px solid color-mix(in srgb, var(--tone, var(--accent)) 14%, rgba(255, 255, 255, 0.3));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.7),
+    inset 1px 0 0 rgba(255, 255, 255, 0.2),
+    inset 0 -1px 0 rgba(57, 76, 110, 0.07),
+    0 16px 42px color-mix(in srgb, var(--ink) 8%, transparent);
+  backdrop-filter: blur(calc(30px * var(--glass-blur-scale, 1)))
+    saturate(min(var(--glass-saturate, 1.35), 1.35)) contrast(1.02);
+  -webkit-backdrop-filter: blur(calc(30px * var(--glass-blur-scale, 1)))
+    saturate(min(var(--glass-saturate, 1.35), 1.35)) contrast(1.02);
   transition:
     border-color 0.22s var(--ease-out, cubic-bezier(0.22, 1, 0.36, 1)),
     box-shadow 0.22s var(--ease-out, cubic-bezier(0.22, 1, 0.36, 1)),
@@ -419,17 +439,66 @@ html[data-theme="dark"] .msg-md-codeblock {
 }
 
 .composer:focus-within {
-  border-color: color-mix(in srgb, var(--tone, var(--accent)) 18%, var(--glass-edge));
-  background: color-mix(in srgb, var(--tone-soft, transparent) 12%, transparent);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--tone, var(--accent)) 8%, transparent);
+  border-color: color-mix(in srgb, var(--tone, var(--accent)) 30%, var(--glass-edge));
+  background:
+    radial-gradient(
+      82% 140% at 10% -48%,
+      rgba(255, 255, 255, 0.28) 0%,
+      rgba(255, 255, 255, 0.055) 42%,
+      transparent 70%
+    ),
+    radial-gradient(
+      68% 120% at 100% 118%,
+      color-mix(in srgb, var(--tone, var(--accent)) 16%, transparent),
+      transparent 74%
+    ),
+    color-mix(in srgb, var(--tone-soft, transparent) 38%, transparent);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.68),
+    0 0 0 3px color-mix(in srgb, var(--tone, var(--accent)) 9%, transparent),
+    0 14px 36px color-mix(in srgb, var(--ink) 9%, transparent);
+}
+
+/* Apple-style liquid glass: keep the canvas visible and build depth at the rim. */
+html[data-theme="light"] .chat-pane .bubble.assistant {
+  background:
+    radial-gradient(
+      86% 120% at 8% -32%,
+      rgba(255, 255, 255, 0.2) 0%,
+      rgba(255, 255, 255, 0.04) 38%,
+      transparent 68%
+    ),
+    radial-gradient(
+      72% 100% at 100% 100%,
+      color-mix(in srgb, var(--tone, #2563eb) 11%, transparent),
+      transparent 72%
+    ),
+    color-mix(in srgb, var(--tone-soft, transparent) 34%, transparent);
+  border-color: color-mix(in srgb, var(--tone, #2563eb) 13%, rgba(255, 255, 255, 0.3));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.68),
+    inset 1px 0 0 rgba(255, 255, 255, 0.2),
+    inset 0 -1px 0 rgba(57, 76, 110, 0.075),
+    0 18px 48px color-mix(in srgb, var(--tone, #2563eb) 7%, rgba(42, 64, 101, 0.07));
+  backdrop-filter: blur(calc(34px * var(--glass-blur-scale, 1)))
+    saturate(min(var(--glass-saturate, 1.35), 1.35)) contrast(1.02);
+  -webkit-backdrop-filter: blur(calc(34px * var(--glass-blur-scale, 1)))
+    saturate(min(var(--glass-saturate, 1.35), 1.35)) contrast(1.02);
+}
+
+@media (prefers-contrast: more) {
+  html[data-theme="light"] .chat-pane .bubble.assistant {
+    background: rgba(245, 248, 253, 0.94);
+    border-color: color-mix(in srgb, var(--tone, #2563eb) 24%, rgba(71, 85, 105, 0.4));
+  }
 }
 
 .composer--stacked {
   flex-direction: column;
   align-items: stretch;
   position: relative;
-  gap: 6px;
-  padding: 12px 12px 10px;
+  gap: 4px;
+  padding: 10px 10px 9px;
 }
 
 .composer.is-file-dragover {
@@ -460,7 +529,7 @@ html[data-theme="dark"] .msg-md-codeblock {
 .composer-input-wrap {
   position: relative;
   width: 100%;
-  min-height: 44px;
+  min-height: 40px;
 }
 
 .composer-slot-mirror {
@@ -609,8 +678,8 @@ html[data-theme="dark"] .composer-agent-validate-hint {
 
 .composer-input {
   width: 100%;
-  min-height: 44px;
-  max-height: 160px;
+  min-height: 40px;
+  max-height: 120px;
   resize: none;
   border: none;
   outline: none;
@@ -1938,15 +2007,50 @@ html[data-theme="dark"] .composer-palette-item:hover {
 }
 
 html[data-theme="dark"] .composer {
-  background: transparent;
-  border-color: rgba(255, 255, 255, 0.06);
-  box-shadow: none;
+  background:
+    linear-gradient(155deg, rgba(255, 255, 255, 0.075), rgba(255, 255, 255, 0.018)),
+    color-mix(in srgb, var(--glass-panel, rgba(8, 6, 18, 0.56)) 82%, transparent);
+  border-color: color-mix(in srgb, var(--tone, #60a5fa) 12%, rgba(255, 255, 255, 0.08));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.075),
+    0 14px 38px rgba(0, 0, 0, 0.18);
 }
 
 html[data-theme="dark"] .composer:focus-within {
-  border-color: color-mix(in srgb, var(--tone, #60a5fa) 22%, rgba(255, 255, 255, 0.1));
-  background: rgba(255, 255, 255, 0.03);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--tone, #60a5fa) 10%, transparent);
+  border-color: color-mix(in srgb, var(--tone, #60a5fa) 30%, rgba(255, 255, 255, 0.12));
+  background:
+    linear-gradient(155deg, rgba(255, 255, 255, 0.09), rgba(255, 255, 255, 0.022)),
+    color-mix(in srgb, var(--glass-panel, rgba(8, 6, 18, 0.58)) 78%, var(--tone-soft, transparent));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.09),
+    0 0 0 3px color-mix(in srgb, var(--tone, #60a5fa) 11%, transparent),
+    0 16px 42px rgba(0, 0, 0, 0.22);
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  html[data-theme="light"] .composer {
+    background: rgba(248, 250, 253, 0.98);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+
+  html[data-theme="dark"] .composer {
+    background: rgba(10, 10, 18, 0.97);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+}
+
+@media (prefers-contrast: more) {
+  html[data-theme="light"] .composer {
+    background: rgba(245, 248, 253, 0.94);
+    border-color: color-mix(in srgb, var(--tone, var(--accent)) 24%, rgba(71, 85, 105, 0.4));
+  }
+
+  html[data-theme="dark"] .composer {
+    background: rgba(9, 9, 18, 0.94);
+    border-color: color-mix(in srgb, var(--tone, #60a5fa) 28%, rgba(255, 255, 255, 0.22));
+  }
 }
 
 html[data-theme="dark"] .composer-mode-pill {
@@ -2281,8 +2385,8 @@ html[data-theme="dark"] .composer-preview {
   border: none;
   outline: none;
   resize: none;
-  min-height: 44px;
-  max-height: 160px;
+  min-height: 40px;
+  max-height: 120px;
   padding: 2px 4px 4px;
   line-height: 1.5;
   color: var(--ink);
