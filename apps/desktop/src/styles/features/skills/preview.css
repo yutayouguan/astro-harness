@@ -252,12 +252,9 @@ html[data-theme="dark"] .skills-preview-mark {
   z-index: 1;
   display: flex;
   flex-wrap: nowrap;
-  gap: 2px;
+  gap: var(--seg-shell-gap);
   margin: 0 12px;
-  padding: 4px;
-  border-radius: 14px;
-  background: color-mix(in srgb, var(--tone) 6%, transparent);
-  border: 1px solid color-mix(in srgb, var(--tone) 8%, transparent);
+  padding: var(--seg-shell-pad);
   /* 底部留白：overflow-x 会裁切纵向溢出 */
   overflow-x: auto;
   overflow-y: hidden;
@@ -265,58 +262,7 @@ html[data-theme="dark"] .skills-preview-mark {
 }
 
 .skills-preview-tab {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
   flex-shrink: 0;
-  padding: 6px 10px;
-  border: 1px solid transparent;
-  border-radius: 11px;
-  font-size: 12px;
-  font-weight: 650;
-  color: var(--ink-mute);
-  background: transparent;
-  box-shadow: none;
-  cursor: pointer;
-  transition: background 0.14s ease, color 0.14s ease, border-color 0.14s ease;
-}
-
-.skills-preview-tab svg {
-  flex-shrink: 0;
-  opacity: 0.88;
-}
-
-.skills-preview-tab:hover {
-  color: var(--ink);
-  background: color-mix(in srgb, var(--tone) 8%, transparent);
-}
-
-.skills-preview-tab.is-active {
-  color: var(--tone);
-  border-color: transparent;
-  background: color-mix(in srgb, var(--tone-soft) 70%, rgba(255, 255, 255, 0.55));
-  box-shadow: none;
-}
-
-html[data-theme="dark"] .skills-preview-tab.is-active {
-  border-color: transparent;
-  background: color-mix(in srgb, var(--tone) 18%, rgba(255, 255, 255, 0.04));
-  box-shadow: none;
-  color: color-mix(in srgb, #fff 18%, var(--tone));
-}
-
-.skills-preview-tab-count {
-  font-size: 10px;
-  font-weight: 700;
-  padding: 1px 6px;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--tone) 10%, transparent);
-  color: color-mix(in srgb, var(--tone) 75%, var(--ink-mute));
-}
-
-.skills-preview-tab.is-active .skills-preview-tab-count {
-  background: color-mix(in srgb, var(--tone) 16%, transparent);
-  color: var(--tone);
 }
 
 .skills-preview-filelist {

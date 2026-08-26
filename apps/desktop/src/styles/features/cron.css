@@ -2124,57 +2124,8 @@ html[data-theme="dark"] .cron-btn-primary:hover:not(:disabled) {
   color: var(--ink);
 }
 
-/* Tabs — glass segment control */
 .cron-tabs {
-  display: flex;
-  gap: 4px;
-  padding: 4px;
   margin-bottom: 0;
-  border-radius: var(--plugins-shell-radius);
-  width: fit-content;
-  flex-shrink: 0;
-  border: 1px solid var(--plugins-shell-border);
-  background: var(--plugins-shell-bg);
-  box-shadow: var(--plugins-shell-shadow);
-  backdrop-filter: blur(14px) saturate(1.18);
-  -webkit-backdrop-filter: blur(14px) saturate(1.18);
-}
-
-.cron-tab {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 7px;
-  min-height: var(--plugins-control-h);
-  padding: 0 14px;
-  border: none;
-  border-radius: var(--plugins-item-radius);
-  font-size: 13px;
-  font-weight: 650;
-  cursor: pointer;
-  color: var(--ink-mute);
-  background: transparent;
-  transition: color 0.14s ease, background 0.14s ease, box-shadow 0.14s ease;
-}
-
-.cron-tab > svg {
-  flex-shrink: 0;
-  opacity: 0.85;
-}
-
-.cron-tab.is-active > svg {
-  opacity: 1;
-}
-
-.cron-tab:hover {
-  color: var(--ink);
-  background: color-mix(in srgb, var(--tone) 8%, transparent);
-}
-
-.cron-tab.is-active {
-  color: var(--tone);
-  background: var(--plugins-active-bg);
-  box-shadow: var(--plugins-active-shadow);
 }
 
 /* View toggle */

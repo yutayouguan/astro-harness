@@ -1,0 +1,273 @@
+/* 全局统一分段 Tab —— 以「模型配置」页的供应商 / 辅助模型为基准。
+   本文件在 index.css 末尾导入，因此同特异度下覆盖各功能页的旧样式；
+   功能页只保留自己的布局约束（滚动、宽度、装饰层），不再各写一套外观。 */
+
+:root {
+  --seg-shell-radius: 12px;
+  --seg-shell-pad: 3px;
+  --seg-shell-gap: 2px;
+  --seg-shell-bg: color-mix(in srgb, var(--glass-panel, rgba(255, 255, 255, 0.35)) 88%, transparent);
+  --seg-shell-border: color-mix(in srgb, var(--glass-edge) 88%, transparent);
+  --seg-shell-blur: blur(12px) saturate(1.1);
+
+  --seg-item-radius: 9px;
+  --seg-item-pad: 8px 14px;
+  --seg-item-gap: 7px;
+  --seg-item-font: 13px;
+  --seg-item-weight: 650;
+  --seg-item-color: var(--ink-mute);
+  --seg-item-color-hover: var(--ink);
+  --seg-item-bg-hover: color-mix(in srgb, var(--ink) 5%, transparent);
+  --seg-item-color-active: var(--ink);
+  --seg-item-bg-active: color-mix(in srgb, #fff 82%, var(--tone-soft));
+  --seg-item-shadow-active:
+    0 1px 2px rgba(15, 23, 42, 0.06),
+    inset 0 0 0 1px color-mix(in srgb, var(--tone) 22%, transparent);
+}
+
+html[data-theme="dark"] {
+  --seg-shell-bg: color-mix(in srgb, var(--glass-panel, rgba(255, 255, 255, 0.06)) 70%, rgba(8, 6, 18, 0.4));
+  --seg-shell-border: color-mix(in srgb, var(--glass-edge) 70%, rgba(255, 255, 255, 0.09));
+  --seg-item-bg-hover: color-mix(in srgb, #fff 8%, transparent);
+  --seg-item-color-active: color-mix(in srgb, #fff 14%, var(--tone));
+  --seg-item-bg-active: color-mix(in srgb, var(--tone-soft) 55%, rgba(255, 255, 255, 0.06));
+  --seg-item-shadow-active: inset 0 0 0 1px color-mix(in srgb, var(--tone) 28%, transparent);
+}
+
+/* ── 容器：外观 + 标准布局 ───────────────────────────────────── */
+
+.providers-page-tabs,
+.providers-detail-tabs,
+.skills-main-tabs,
+.skills-store-tabs,
+.plugins-scope-tabs,
+.plugins-personal-tabs,
+.cron-tabs,
+.tool-main-tabs,
+.fs-tabs,
+.files-mode-switch,
+.mcp-add-drawer-tabs,
+.loop-config-panel-tabs {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--seg-shell-gap);
+  flex-shrink: 0;
+  width: fit-content;
+  max-width: 100%;
+  padding: var(--seg-shell-pad);
+  border: 1px solid var(--seg-shell-border);
+  border-radius: var(--seg-shell-radius);
+  background: var(--seg-shell-bg);
+  box-shadow: none;
+  backdrop-filter: var(--seg-shell-blur);
+  -webkit-backdrop-filter: var(--seg-shell-blur);
+}
+
+/* 仅取外观：这些容器自带滚动条、固定高度或装饰层，布局由功能页决定 */
+.mem-view-nav,
+.memory-file-tabs,
+.skills-preview-tabs {
+  border: 1px solid var(--seg-shell-border);
+  border-radius: var(--seg-shell-radius);
+  background: var(--seg-shell-bg);
+  box-shadow: none;
+  backdrop-filter: var(--seg-shell-blur);
+  -webkit-backdrop-filter: var(--seg-shell-blur);
+}
+
+/* 原本是下划线式，改为分段式后需要补回与相邻内容的间距 */
+.providers-detail-tabs {
+  margin: 0 0 14px;
+}
+
+.loop-config-panel-tabs {
+  margin: 12px 20px 0;
+}
+
+/* ── 选项 ────────────────────────────────────────────────────── */
+
+.providers-page-tab,
+.providers-detail-tab,
+.skills-main-tab,
+.skills-store-tab,
+.skills-preview-tab,
+.plugins-scope-tab,
+.plugins-personal-tab,
+.cron-tab,
+.tool-main-tab,
+.fs-tab,
+.files-mode-tab,
+.memory-file-tab,
+.mem-view-tab,
+.mcp-add-drawer-tab,
+.loop-config-tab {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--seg-item-gap);
+  min-height: 0;
+  height: auto;
+  margin: 0;
+  padding: var(--seg-item-pad);
+  border: none;
+  border-radius: var(--seg-item-radius);
+  font-size: var(--seg-item-font);
+  font-weight: var(--seg-item-weight);
+  line-height: 1.2;
+  white-space: nowrap;
+  color: var(--seg-item-color);
+  background: transparent;
+  box-shadow: none;
+  cursor: pointer;
+  transition:
+    background 0.16s ease,
+    color 0.16s ease,
+    box-shadow 0.16s ease;
+}
+
+.providers-page-tab > svg,
+.providers-detail-tab > svg,
+.skills-main-tab > svg,
+.skills-store-tab > svg,
+.skills-preview-tab > svg,
+.plugins-scope-tab > svg,
+.plugins-personal-tab > svg,
+.cron-tab > svg,
+.tool-main-tab > svg,
+.fs-tab > svg,
+.files-mode-tab > svg,
+.memory-file-tab > svg,
+.mem-view-tab > svg,
+.mcp-add-drawer-tab > svg,
+.loop-config-tab > svg {
+  flex-shrink: 0;
+  opacity: 0.8;
+}
+
+.providers-page-tab:hover,
+.providers-detail-tab:hover,
+.skills-main-tab:hover,
+.skills-store-tab:hover,
+.skills-preview-tab:hover,
+.plugins-scope-tab:hover,
+.plugins-personal-tab:hover,
+.cron-tab:hover,
+.tool-main-tab:hover,
+.fs-tab:hover,
+.files-mode-tab:hover,
+.memory-file-tab:hover,
+.mem-view-tab:hover,
+.mcp-add-drawer-tab:hover,
+.loop-config-tab:hover {
+  color: var(--seg-item-color-hover);
+  background: var(--seg-item-bg-hover);
+}
+
+.providers-page-tab:hover > svg,
+.providers-detail-tab:hover > svg,
+.skills-main-tab:hover > svg,
+.skills-store-tab:hover > svg,
+.skills-preview-tab:hover > svg,
+.plugins-scope-tab:hover > svg,
+.plugins-personal-tab:hover > svg,
+.cron-tab:hover > svg,
+.tool-main-tab:hover > svg,
+.fs-tab:hover > svg,
+.files-mode-tab:hover > svg,
+.memory-file-tab:hover > svg,
+.mem-view-tab:hover > svg,
+.mcp-add-drawer-tab:hover > svg,
+.loop-config-tab:hover > svg {
+  opacity: 1;
+  transform: none;
+}
+
+.providers-page-tab.is-active,
+.providers-detail-tab.is-active,
+.skills-main-tab.active,
+.skills-store-tab.active,
+.skills-preview-tab.is-active,
+.plugins-scope-tab.is-active,
+.plugins-personal-tab.is-active,
+.cron-tab.is-active,
+.tool-main-tab.active,
+.fs-tab.is-active,
+.files-mode-tab.is-active,
+.memory-file-tab.active,
+.mem-view-tab.active,
+.mcp-add-drawer-tab.active,
+.loop-config-tab.is-active {
+  color: var(--seg-item-color-active);
+  border-color: transparent;
+  background: var(--seg-item-bg-active);
+  box-shadow: var(--seg-item-shadow-active);
+}
+
+.providers-page-tab.is-active > svg,
+.providers-detail-tab.is-active > svg,
+.skills-main-tab.active > svg,
+.skills-store-tab.active > svg,
+.skills-preview-tab.is-active > svg,
+.plugins-scope-tab.is-active > svg,
+.plugins-personal-tab.is-active > svg,
+.cron-tab.is-active > svg,
+.tool-main-tab.active > svg,
+.fs-tab.is-active > svg,
+.files-mode-tab.is-active > svg,
+.memory-file-tab.active > svg,
+.mem-view-tab.active > svg,
+.mcp-add-drawer-tab.active > svg,
+.loop-config-tab.is-active > svg {
+  opacity: 1;
+  color: var(--tone);
+}
+
+.providers-page-tab:focus-visible,
+.providers-detail-tab:focus-visible,
+.skills-main-tab:focus-visible,
+.skills-store-tab:focus-visible,
+.skills-preview-tab:focus-visible,
+.plugins-scope-tab:focus-visible,
+.plugins-personal-tab:focus-visible,
+.cron-tab:focus-visible,
+.tool-main-tab:focus-visible,
+.fs-tab:focus-visible,
+.files-mode-tab:focus-visible,
+.memory-file-tab:focus-visible,
+.mem-view-tab:focus-visible,
+.mcp-add-drawer-tab:focus-visible,
+.loop-config-tab:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--tone) 48%, transparent);
+  outline-offset: 2px;
+}
+
+/* ── 选项内计数徽标 ──────────────────────────────────────────── */
+
+.skills-main-tab-count,
+.tool-main-tab-count,
+.plugins-personal-tab-count,
+.providers-detail-tab-count,
+.skills-preview-tab-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 16px;
+  color: inherit;
+  background: color-mix(in srgb, currentColor 12%, transparent);
+  box-shadow: none;
+}
+
+.skills-main-tab.active .skills-main-tab-count,
+.tool-main-tab.active .tool-main-tab-count,
+.plugins-personal-tab.is-active .plugins-personal-tab-count,
+.providers-detail-tab.is-active .providers-detail-tab-count,
+.skills-preview-tab.is-active .skills-preview-tab-count {
+  color: var(--tone);
+  background: color-mix(in srgb, var(--tone) 16%, transparent);
+}

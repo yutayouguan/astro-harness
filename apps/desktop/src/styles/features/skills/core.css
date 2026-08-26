@@ -46,90 +46,12 @@ html[data-theme="dark"] .skills-page {
   align-items: center;
 }
 
-.plugins-primary-row .skills-main-tabs {
-  padding: 4px;
-}
-
 .plugins-primary-row .skills-main-tab {
   min-width: 104px;
-  justify-content: center;
 }
 
 .plugins-scope-toolbar {
   min-height: var(--plugins-control-h);
-}
-
-.plugins-scope-tabs,
-.plugins-personal-tabs,
-.skills-main-tabs {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  width: fit-content;
-  max-width: 100%;
-  padding: 4px;
-  border: 1px solid var(--plugins-shell-border);
-  border-radius: var(--plugins-shell-radius);
-  background: var(--plugins-shell-bg);
-  box-shadow: var(--plugins-shell-shadow);
-  backdrop-filter: blur(14px) saturate(1.18);
-  -webkit-backdrop-filter: blur(14px) saturate(1.18);
-}
-
-.plugins-scope-tab,
-.plugins-personal-tab {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 7px;
-  min-height: var(--plugins-control-h);
-  padding: 0 13px;
-  border: 0;
-  border-radius: var(--plugins-item-radius);
-  background: transparent;
-  color: var(--ink-mute);
-  font: inherit;
-  font-size: 12.5px;
-  font-weight: 650;
-  cursor: pointer;
-  transition:
-    color 0.15s ease,
-    background 0.15s ease,
-    box-shadow 0.15s ease;
-}
-
-.plugins-scope-tab:hover,
-.plugins-personal-tab:hover {
-  color: var(--ink);
-  background: color-mix(in srgb, var(--tone) 7%, transparent);
-}
-
-.plugins-scope-tab.is-active,
-.plugins-personal-tab.is-active {
-  color: var(--tone);
-  background: var(--plugins-active-bg);
-  box-shadow: var(--plugins-active-shadow);
-}
-
-.plugins-scope-tab:focus-visible,
-.plugins-personal-tab:focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--tone) 48%, transparent);
-  outline-offset: 2px;
-}
-
-.plugins-personal-tabs {
-  flex-shrink: 0;
-}
-
-.plugins-personal-tab-count {
-  min-width: 18px;
-  padding: 1px 6px;
-  border-radius: 999px;
-  color: inherit;
-  background: color-mix(in srgb, currentColor 10%, transparent);
-  font-size: 10px;
-  line-height: 16px;
-  text-align: center;
 }
 
 .plugins-action-count {
@@ -220,66 +142,6 @@ html[data-theme="dark"] .skills-page {
   -webkit-backdrop-filter: blur(14px) saturate(1.18);
 }
 
-.skills-main-tabs {
-  flex-shrink: 0;
-}
-
-.skills-toolbar .skills-main-tab {
-  flex: 0 1 auto;
-}
-
-.skills-main-tab {
-  flex: 1;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 7px;
-  min-height: var(--plugins-control-h);
-  border: none;
-  border-radius: var(--plugins-item-radius);
-  padding: 0 14px;
-  font-size: 13px;
-  font-weight: 650;
-  cursor: pointer;
-  color: var(--ink-mute);
-  background: transparent;
-  transition: color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
-}
-
-.skills-main-tab > svg {
-  flex-shrink: 0;
-  opacity: 0.85;
-}
-
-.skills-main-tab.active > svg {
-  opacity: 1;
-}
-
-  .skills-main-tab:hover {
-    color: var(--ink);
-    background: color-mix(in srgb, var(--tone) 8%, transparent);
-}
-
-.skills-main-tab.active {
-  color: var(--tone);
-  background: var(--plugins-active-bg);
-  box-shadow: var(--plugins-active-shadow);
-}
-
-.skills-main-tab-count {
-  font-size: 11px;
-  font-weight: 650;
-  padding: 2px 8px;
-    border-radius: 999px;
-    background: color-mix(in srgb, var(--tone) 14%, transparent);
-    color: var(--tone);
-    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--tone) 18%, transparent);
-  }
-
-  .skills-main-tab.active .skills-main-tab-count {
-    background: color-mix(in srgb, var(--tone) 20%, transparent);
-  }
-
   .skills-usage-bar {
     display: flex;
     align-items: center;
@@ -348,7 +210,6 @@ html[data-theme="dark"] .skills-page {
   z-index: 1;
 }
 
-html[data-theme="dark"] .skills-main-tabs,
 html[data-theme="dark"] .skills-pane {
   background:
     linear-gradient(155deg, rgba(255, 255, 255, 0.05) 0%, rgba(255, 255, 255, 0.01) 100%),
@@ -357,13 +218,6 @@ html[data-theme="dark"] .skills-pane {
   box-shadow:
     0 4px 14px rgba(0, 0, 0, 0.24),
     inset 0 1px 0 rgba(255, 255, 255, 0.06);
-}
-
-html[data-theme="dark"] .skills-main-tab.active {
-  background:
-    linear-gradient(165deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.02)),
-    color-mix(in srgb, var(--tone) 14%, transparent);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--tone) 28%, transparent);
 }
 
 .skills-pane-head {

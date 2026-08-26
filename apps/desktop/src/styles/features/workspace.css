@@ -19,45 +19,6 @@
   display: none;
 }
 
-/* 页头分段切换：浏览 / 产物 */
-.files-mode-switch {
-  display: inline-flex;
-  gap: 4px;
-  flex-shrink: 0;
-  padding: 3px;
-  border-radius: 12px;
-  border: 1px solid color-mix(in srgb, var(--glass-edge) 80%, transparent);
-  background: color-mix(in srgb, var(--chip-bg) 70%, transparent);
-}
-
-.files-mode-tab {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 14px;
-  border: none;
-  border-radius: 9px;
-  font-size: 12.5px;
-  font-weight: 650;
-  color: var(--ink-mute);
-  background: transparent;
-  cursor: pointer;
-}
-
-.files-mode-tab.is-active {
-  color: var(--tone-purple, #8b5cf6);
-  background:
-    linear-gradient(165deg, rgba(255, 255, 255, 0.52), rgba(255, 255, 255, 0.25)),
-    color-mix(in srgb, var(--tone-purple, #8b5cf6) 14%, transparent);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.55);
-}
-
-html[data-theme="dark"] .files-mode-tab.is-active {
-  background: color-mix(in srgb, var(--tone-purple, #8b5cf6) 16%, rgba(255, 255, 255, 0.06));
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--tone-purple, #8b5cf6) 28%, transparent);
-  color: color-mix(in srgb, #fff 18%, var(--tone-purple, #8b5cf6));
-}
-
 .workspace-panel {
   flex: 1;
   min-height: 0;

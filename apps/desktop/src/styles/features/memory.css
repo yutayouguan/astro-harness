@@ -41,14 +41,6 @@
   padding: 5px;
   height: var(--mem-top-ctrl-h);
   box-sizing: border-box;
-  border-radius: 18px;
-  background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.45), rgba(255, 255, 255, 0.15)),
-    color-mix(in srgb, var(--glass-panel, rgba(255, 255, 255, 0.5)) 80%, transparent);
-  border: 1px solid color-mix(in srgb, var(--glass-edge) 90%, transparent);
-  box-shadow: var(--shadow-card), var(--glass-rim);
-  backdrop-filter: blur(16px) saturate(1.2);
-  -webkit-backdrop-filter: blur(16px) saturate(1.2);
   width: fit-content;
   max-width: min(100%, 620px);
   isolation: isolate;
@@ -1391,33 +1383,11 @@ html[data-theme="dark"] .aux-warning {
 .mem-view-tab {
   position: relative;
   z-index: 1;
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  border: none;
-  border-radius: 13px;
-  padding: 10px 14px;
-  font-size: 13.5px;
-  font-weight: 650;
-  cursor: pointer;
-  color: var(--ink-mute);
-  background: transparent;
-  box-shadow: none;
-  backdrop-filter: none;
-  -webkit-backdrop-filter: none;
-  transition: color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
 }
 
-.mem-view-tab svg {
-  opacity: 0.88;
-  color: inherit;
-}
-
-/* 做梦盖在圆点走线之上（未选中仍透明） */
+/* 做梦盖在圆点走线之上 */
 .mem-view-tab--dream {
   z-index: 2;
-  background: transparent;
-  box-shadow: none;
 }
 
 .mem-view-tab--pending {
@@ -1431,70 +1401,6 @@ html[data-theme="dark"] .mem-view-step {
 
 html[data-theme="dark"] .mem-view-rail {
   background: rgba(255, 255, 255, 0.22);
-}
-
-html[data-theme="dark"] .mem-view-nav {
-  background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0.02) 100%),
-    color-mix(in srgb, var(--glass-fill, transparent) 70%, transparent);
-  border-color: rgba(255, 255, 255, 0.12);
-  box-shadow:
-    0 3px 10px rgba(0, 0, 0, 0.18),
-    inset 0 1px 0 rgba(255, 255, 255, 0.06);
-  backdrop-filter: blur(16px) saturate(1.2);
-  -webkit-backdrop-filter: blur(16px) saturate(1.2);
-}
-
-html[data-theme="dark"] .mem-view-tab {
-  color: var(--ink-mute);
-  background: transparent;
-  box-shadow: none;
-}
-
-html[data-theme="dark"] .mem-view-tab svg {
-  opacity: 0.92;
-  filter: none;
-}
-
-html[data-theme="dark"] .mem-view-tab--dream {
-  background: transparent;
-  box-shadow: none;
-}
-
-html[data-theme="dark"] .mem-view-tab:hover:not(.active) {
-  color: var(--ink);
-  background: color-mix(in srgb, var(--tone, var(--tone-green)) 10%, transparent);
-}
-
-html[data-theme="dark"] .mem-view-tab.active {
-  color: color-mix(in srgb, #fff 22%, var(--tone, var(--tone-green)));
-  background:
-    linear-gradient(165deg, rgba(255, 255, 255, 0.12) 0%, rgba(255, 255, 255, 0.04) 100%),
-    color-mix(in srgb, var(--tone-soft, var(--tone-green-soft)) 48%, transparent);
-  box-shadow:
-    inset 0 0 0 1px color-mix(in srgb, var(--tone, var(--tone-green)) 30%, transparent),
-    inset 0 1px 0 rgba(255, 255, 255, 0.1),
-    0 2px 8px color-mix(in srgb, var(--tone, var(--tone-green)) 15%, rgba(0, 0, 0, 0.2));
-}
-
-.mem-view-tab:hover:not(.active) {
-  color: var(--ink);
-  background: color-mix(in srgb, var(--tone, var(--tone-green)) 8%, transparent);
-}
-
-.mem-view-tab.active {
-  color: var(--tone, var(--tone-green));
-  background:
-    linear-gradient(165deg, rgba(255, 255, 255, 0.55), rgba(255, 255, 255, 0.25)),
-    var(--tone-soft, var(--tone-green-soft));
-  box-shadow:
-    inset 0 0 0 1px color-mix(in srgb, var(--tone, var(--tone-green)) 26%, transparent),
-    inset 0 1px 0 rgba(255, 255, 255, 0.58),
-    0 2px 8px color-mix(in srgb, var(--tone, var(--tone-green)) 12%, transparent);
-}
-
-.mem-view-tab.active svg {
-  opacity: 1;
 }
 
 .mem-view-tab--dream.active {
@@ -2165,12 +2071,9 @@ html[data-theme="dark"] .mem-empty-chat {
 .memory-file-tabs {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--seg-shell-gap);
   margin: 0 0 10px;
-  padding: 4px 4px 6px;
-  border-radius: 16px;
-  background: var(--chip-bg);
-  border: 1px solid var(--chip-border);
+  padding: var(--seg-shell-pad) var(--seg-shell-pad) 6px;
   flex-shrink: 0;
   overflow-x: auto;
   overflow-y: hidden;
@@ -2200,45 +2103,7 @@ html[data-theme="dark"] .mem-empty-chat {
 .memory-file-tab {
   box-sizing: border-box;
   flex: 0 0 auto;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 5px;
-  height: 30px;
-  border: 1px solid transparent;
-  border-radius: 10px;
-  padding: 0 10px;
-  font-size: 11px;
-  font-weight: 650;
   letter-spacing: 0.02em;
-  line-height: 1;
-  cursor: pointer;
-  color: var(--ink-mute);
-  background: transparent;
-  transition: color 0.15s ease, background 0.15s ease, border-color 0.15s ease;
-  white-space: nowrap;
-}
-
-.memory-file-tab svg {
-  flex-shrink: 0;
-  opacity: 0.75;
-}
-
-.memory-file-tab:hover:not(.active) {
-  color: var(--ink);
-  background: color-mix(in srgb, var(--tone-green) 8%, transparent);
-}
-
-.memory-file-tab:hover:not(.active) svg,
-.memory-file-tab.active svg {
-  opacity: 1;
-}
-
-.memory-file-tab.active {
-  color: var(--tone-green);
-  background: var(--tone-green-soft);
-  border-color: color-mix(in srgb, var(--tone-green) 22%, transparent);
-  box-shadow: none;
 }
 
 .memory-editor-toolbar {

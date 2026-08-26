@@ -1592,35 +1592,6 @@
   box-shadow: -2px 0 12px rgba(0, 0, 0, 0.06);
 }
 
-/* tabs */
-.loop-config-panel-tabs {
-  display: flex;
-  gap: 0;
-  padding: 0 20px;
-  border-bottom: 1px solid var(--border);
-  flex-shrink: 0;
-}
-
-.loop-config-tab {
-  padding: 12px 4px;
-  margin-right: 24px;
-  font-size: 14px;
-  font-weight: 500;
-  color: var(--ink-tertiary);
-  background: transparent;
-  border: none;
-  border-bottom: 2px solid transparent;
-  cursor: pointer;
-  transition: color 0.15s;
-}
-.loop-config-tab:hover {
-  color: var(--ink);
-}
-.loop-config-tab.is-active {
-  color: var(--ink);
-  border-bottom-color: var(--tone, #6366f1);
-}
-
 /* scroll body */
 .loop-config-panel-scroll {
   flex: 1;

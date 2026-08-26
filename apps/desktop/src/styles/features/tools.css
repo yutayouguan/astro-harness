@@ -108,84 +108,6 @@ html[data-theme="dark"] .agent-tools-body {
   min-height: 0;
 }
 
-.tool-main-tabs {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 5px;
-  border-radius: 18px;
-  flex-shrink: 0;
-  width: fit-content;
-  max-width: 100%;
-  border: 1px solid color-mix(in srgb, var(--glass-edge) 90%, transparent);
-  background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.45), rgba(255, 255, 255, 0.15)),
-    color-mix(in srgb, var(--glass-panel, rgba(255, 255, 255, 0.5)) 80%, transparent);
-  box-shadow: var(--shadow-card), var(--glass-rim);
-  backdrop-filter: blur(16px) saturate(1.2);
-  -webkit-backdrop-filter: blur(16px) saturate(1.2);
-}
-
-.tools-toolbar .tool-main-tab {
-  flex: 0 1 auto;
-}
-
-.tool-main-tab {
-  flex: 1;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  border: none;
-  border-radius: 13px;
-  padding: 10px 14px;
-  font-size: 13.5px;
-  font-weight: 650;
-  cursor: pointer;
-  color: var(--ink-mute);
-  background: transparent;
-  transition: color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
-}
-
-.tool-main-tab > svg {
-  flex-shrink: 0;
-  opacity: 0.85;
-}
-
-.tool-main-tab.active > svg {
-  opacity: 1;
-}
-
-.tool-main-tab:hover {
-  color: var(--ink);
-  background: color-mix(in srgb, var(--tone) 8%, transparent);
-}
-
-.tool-main-tab.active {
-  color: var(--tone);
-  background:
-    linear-gradient(165deg, rgba(255, 255, 255, 0.55), rgba(255, 255, 255, 0.25)),
-    var(--tone-soft);
-  box-shadow:
-    inset 0 0 0 1px color-mix(in srgb, var(--tone) 26%, transparent),
-    inset 0 1px 0 rgba(255, 255, 255, 0.58),
-    0 2px 8px color-mix(in srgb, var(--tone) 12%, transparent);
-}
-
-.tool-main-tab-count {
-  font-size: 11px;
-  font-weight: 650;
-  padding: 2px 8px;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--tone) 14%, transparent);
-  color: var(--tone);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--tone) 18%, transparent);
-}
-
-.tool-main-tab.active .tool-main-tab-count {
-  background: color-mix(in srgb, var(--tone) 20%, transparent);
-}
-
 .tools-usage-chip {
   display: inline-flex;
   align-items: center;
@@ -719,19 +641,11 @@ html[data-theme="dark"] .mcp-server-remove:hover {
     white-space: nowrap;
 }
 
-html[data-theme="dark"] .tool-main-tabs,
 html[data-theme="dark"] .mcp-server-card {
   background:
     linear-gradient(155deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.03)),
     color-mix(in srgb, var(--glass-panel, #1a2238) 82%, #0b1224);
   border-color: rgba(255, 255, 255, 0.14);
-}
-
-html[data-theme="dark"] .tool-main-tab.active {
-  background:
-    linear-gradient(165deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.04)),
-    color-mix(in srgb, var(--tone) 18%, transparent);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--tone) 34%, transparent);
 }
 
 /* ── MCP add dialog ── */
@@ -913,77 +827,7 @@ html[data-theme="dark"] .mcp-add-drawer-title-icon {
 }
 
 .mcp-add-drawer-tabs {
-  display: flex;
-  gap: 4px;
   margin: 12px 16px 0;
-  padding: 4px;
-  flex-shrink: 0;
-  border-radius: 10px;
-  border: 1px solid color-mix(in srgb, var(--tone) 12%, var(--chip-border, transparent));
-  background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.32), rgba(255, 255, 255, 0.09)),
-    color-mix(in srgb, var(--glass-fill, transparent) 60%, transparent);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.32);
-}
-
-html[data-theme="dark"] .mcp-add-drawer-tabs {
-  background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.02)),
-    rgba(8, 6, 18, 0.35);
-  border-color: color-mix(in srgb, var(--tone) 18%, rgba(255, 255, 255, 0.1));
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
-}
-
-.mcp-add-drawer-tab {
-  flex: 1;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  padding: 8px 10px;
-  border: none;
-  border-radius: 8px;
-  font-size: 12.5px;
-  font-weight: 650;
-  cursor: pointer;
-  color: var(--ink-mute);
-  background: transparent;
-  transition: color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
-}
-
-.mcp-add-drawer-tab > svg {
-  flex-shrink: 0;
-  opacity: 0.85;
-}
-
-.mcp-add-drawer-tab:hover:not(.active) {
-  color: var(--ink);
-  background: color-mix(in srgb, var(--tone) 7%, transparent);
-}
-
-.mcp-add-drawer-tab.active {
-  color: var(--tone);
-  background:
-    linear-gradient(165deg, rgba(255, 255, 255, 0.35), rgba(255, 255, 255, 0.12)),
-    var(--tone-soft);
-  box-shadow:
-    inset 0 0 0 1px color-mix(in srgb, var(--tone) 22%, transparent),
-    0 2px 8px color-mix(in srgb, var(--tone) 12%, transparent);
-}
-
-html[data-theme="dark"] .mcp-add-drawer-tab:hover:not(.active) {
-  color: var(--ink);
-  background: color-mix(in srgb, var(--tone) 12%, transparent);
-}
-
-html[data-theme="dark"] .mcp-add-drawer-tab.active {
-  color: color-mix(in srgb, #fff 28%, var(--tone));
-  background: color-mix(in srgb, var(--tone) 14%, transparent);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--tone) 28%, transparent);
-}
-
-.mcp-add-drawer-tab.active > svg {
-  opacity: 1;
 }
 
 .mcp-add-drawer-scroll {

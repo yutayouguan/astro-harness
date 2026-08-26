@@ -49,3 +49,6 @@
 @import "./features/model-market.css";
 @import "./foundation/transitions.css";
 @import "./components/illustrations.css";
+
+/* 统一分段 Tab：必须最后导入，覆盖各功能页的历史外观 */
+@import "./components/tabs.css";
