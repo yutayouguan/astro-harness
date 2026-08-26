@@ -21,11 +21,11 @@
   background:
     linear-gradient(165deg, rgba(255, 255, 255, 0.42) 0%, rgba(255, 255, 255, 0.16) 100%),
     color-mix(in srgb, var(--tone-soft, transparent) 30%, var(--composer-bg, #fff));
+  /* 阴影与镜面高光都走玻璃 token，随「玻璃强度」偏好一起变，
+     不再自带一层比其他面板更重的投影。 */
   box-shadow:
-    0 20px 48px rgba(15, 23, 42, 0.16),
-    0 4px 14px rgba(15, 23, 42, 0.07),
-    inset 0 1px 0 rgba(255, 255, 255, 0.52),
-    inset 0 0 0 0.5px rgba(255, 255, 255, 0.22);
+    var(--menu-glass-shadow, 0 8px 20px -8px rgba(15, 23, 42, 0.12)),
+    var(--glass-rim, inset 0 1px 0 rgba(255, 255, 255, 0.45));
   backdrop-filter: blur(calc(22px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.28));
   -webkit-backdrop-filter: blur(calc(22px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.28));
   animation: chat-right-slide-in 0.32s var(--ease-spring, cubic-bezier(0.34, 1.56, 0.64, 1));
@@ -36,10 +36,6 @@ html[data-theme="dark"] .side-chat-panel {
   background:
     linear-gradient(165deg, rgba(255, 255, 255, 0.07) 0%, rgba(255, 255, 255, 0.02) 100%),
     color-mix(in srgb, var(--tone-soft, transparent) 18%, rgba(8, 6, 18, 0.72));
-  box-shadow:
-    0 20px 48px rgba(0, 0, 0, 0.42),
-    inset 0 1px 0 rgba(255, 255, 255, 0.1),
-    inset 0 0 0 0.5px rgba(255, 255, 255, 0.05);
 }
 
 /* ── 头部 ─────────────────────────────────────────────── */
