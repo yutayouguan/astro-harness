@@ -697,7 +697,7 @@ export default function App() {
   return (
     <div
       ref={shellRef}
-      className={`app-shell ${winChrome.windowMaximized ? "is-maximized" : ""}`}
+      className={`app-shell ${winChrome.windowMaximized ? "is-maximized" : ""} ${sidebar.sidebarResizing ? "is-sidebar-resizing" : ""}`}
       data-tone={shellTone}
       data-color-style={colorStyle}
     >

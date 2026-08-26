@@ -647,6 +647,12 @@ html[data-tone="twilight"] {
   transition: none;
 }
 
+/* 拖动时指针会掠过会话按钮，锁定光标避免退化成小手 */
+.app-shell.is-sidebar-resizing,
+.app-shell.is-sidebar-resizing * {
+  cursor: ew-resize !important;
+}
+
 .sidebar.is-open {
   transform: translateX(0);
   opacity: 1;
