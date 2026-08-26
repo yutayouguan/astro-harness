@@ -160,7 +160,9 @@ export default function App() {
   const [activeProjectId, setActiveProjectId] = useState("default");
   const [collapsedProjects, setCollapsedProjects] = useState<Set<string>>(new Set());
   const [projectMenu, setProjectMenu] = useState<{ id: string; name: string; x: number; y: number } | null>(null);
-  const [editingProject, setEditingProject] = useState<ProjectDto | null>(null);
+  const [projectDialog, setProjectDialog] = useState<
+    { mode: "create" } | { mode: "edit"; project: ProjectDto } | null
+  >(null);
   const [conversationMenuOpen, setConversationMenuOpen] = useState(false);
   const conversationMenuRef = useRef<HTMLDivElement | null>(null);
   // 侧栏会话检索：搜索与归档视图跨全部项目生效
@@ -821,31 +823,7 @@ export default function App() {
                   <button
                     type="button"
                     className="sidebar-add-btn"
-                    onClick={async () => {
-                      try {
-                        const { open } = await import("@tauri-apps/plugin-dialog");
-                        const selected = await open({
-                          directory: true,
-                          multiple: true,
-                          title: "选择一个或多个项目文件夹（第一个为主目录）",
-                        });
-                        const roots =
-                          typeof selected === "string"
-                            ? [selected]
-                            : Array.isArray(selected)
-                              ? selected
-                              : [];
-                        if (roots.length > 0) {
-                          const primary = roots[0];
-                          const newProject = await invoke<ProjectDto>("create_project", {
-                            name: primary.split("/").pop() || primary,
-                            roots,
-                          });
-                          setProjects((prev) => [...prev, newProject]);
-                          switchActiveProject(newProject.id);
-                        }
-                      } catch {}
-                    }}
+                    onClick={() => setProjectDialog({ mode: "create" })}
                     title="+ 新建项目"
                     aria-label="新建项目"
                   >
@@ -1414,7 +1392,7 @@ export default function App() {
               ).catch(() => {});
             } else if (action === "edit") {
               const proj = projects.find((p) => p.id === projectMenu.id);
-              if (proj) setEditingProject(proj);
+              if (proj) setProjectDialog({ mode: "edit", project: proj });
             } else if (action === "worktree") {
               window.alert("功能开发中");
             } else if (action === "archive") {
@@ -1437,9 +1415,13 @@ export default function App() {
       {toastHost}
       <AboutDialog open={aboutOpen} onClose={() => setAboutOpen(false)} />
       <ProjectEditDialog
-        open={editingProject !== null}
-        project={editingProject}
-        onClose={() => setEditingProject(null)}
+        open={projectDialog !== null}
+        project={projectDialog?.mode === "edit" ? projectDialog.project : null}
+        onClose={() => setProjectDialog(null)}
+        onCreated={(created) => {
+          setProjects((prev) => [...prev, created]);
+          switchActiveProject(created.id);
+        }}
         onUpdated={(updated) => {
           setProjects((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
         }}

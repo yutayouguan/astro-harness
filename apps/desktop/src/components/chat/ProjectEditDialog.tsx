@@ -1,4 +1,4 @@
-/** 编辑项目弹窗：修改名称、管理源文件夹、图标选择、移除项目。 */
+/** 创建 / 编辑项目弹窗：管理名称、源文件夹与图标。 */
 import { useCallback, useEffect, useId, useState } from "react";
 import { createPortal } from "react-dom";
 import { invoke } from "@tauri-apps/api/core";
@@ -13,6 +13,8 @@ type Props = {
   onClose: () => void;
   /** 项目已更新（名称/文件夹变化） */
   onUpdated: (updated: ProjectDto) => void;
+  /** 项目已创建 */
+  onCreated: (created: ProjectDto) => void;
   /** 项目已移除 */
   onRemoved: (projectId: string) => void;
 };
@@ -22,6 +24,7 @@ export default function ProjectEditDialog({
   project,
   onClose,
   onUpdated,
+  onCreated,
   onRemoved,
 }: Props) {
   const titleId = useId();
@@ -32,12 +35,18 @@ export default function ProjectEditDialog({
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
+    if (!open) return;
     if (project) {
       setName(project.name);
       setIconId(project.icon ?? null);
       setRoots([...project.roots]);
+    } else {
+      setName("");
+      setIconId(null);
+      setRoots([]);
     }
-  }, [project]);
+    setIconPickerOpen(false);
+  }, [open, project]);
 
   const handleAddFolder = useCallback(async () => {
     try {
@@ -45,11 +54,15 @@ export default function ProjectEditDialog({
       const selected = await pickDir({ directory: true, title: "选择源文件夹" });
       if (selected && typeof selected === "string") {
         setRoots((prev) => (prev.includes(selected) ? prev : [...prev, selected]));
+        if (!project && !name.trim()) {
+          const inferredName = selected.split(/[\\/]/).filter(Boolean).pop();
+          if (inferredName) setName(inferredName);
+        }
       }
     } catch {
       /* 用户取消 */
     }
-  }, []);
+  }, [project, name]);
 
   const handleRemoveRoot = useCallback((path: string) => {
     setRoots((prev) => prev.filter((r) => r !== path));
@@ -66,16 +79,27 @@ export default function ProjectEditDialog({
   }, []);
 
   const handleSave = useCallback(async () => {
-    if (!project || saving) return;
+    if (saving) return;
+    const trimmedName = name.trim();
+    if (!trimmedName || roots.length === 0) return;
     setSaving(true);
     try {
-      const updated = await invoke<ProjectDto>("update_project", {
-        projectId: project.id,
-        name: name.trim() || project.name,
-        icon: iconId ?? "",
-        roots: project.id === "default" ? undefined : roots,
-      });
-      onUpdated(updated);
+      if (project) {
+        const updated = await invoke<ProjectDto>("update_project", {
+          projectId: project.id,
+          name: trimmedName,
+          icon: iconId ?? "",
+          roots: project.id === "default" ? undefined : roots,
+        });
+        onUpdated(updated);
+      } else {
+        const created = await invoke<ProjectDto>("create_project", {
+          name: trimmedName,
+          icon: iconId,
+          roots,
+        });
+        onCreated(created);
+      }
       onClose();
     } catch (err) {
       console.error("[ProjectEditDialog] save failed:", err);
@@ -83,7 +107,7 @@ export default function ProjectEditDialog({
     } finally {
       setSaving(false);
     }
-  }, [project, name, iconId, roots, saving, onUpdated, onClose]);
+  }, [project, name, iconId, roots, saving, onUpdated, onCreated, onClose]);
 
   const handleRemoveProject = useCallback(async () => {
     if (!project) return;
@@ -106,7 +130,9 @@ export default function ProjectEditDialog({
     return () => window.removeEventListener("keydown", onKey);
   }, [open, iconPickerOpen, onClose]);
 
-  if (!open || !project) return null;
+  if (!open) return null;
+  const isDefaultProject = project?.id === "default";
+  const isCreating = project === null;
 
   return createPortal(
     <div
@@ -126,7 +152,9 @@ export default function ProjectEditDialog({
           <X size={16} strokeWidth={2} />
         </button>
 
-        <h2 id={titleId} className="project-edit-title">编辑项目</h2>
+        <h2 id={titleId} className="project-edit-title">
+          {isCreating ? "创建项目" : "编辑项目"}
+        </h2>
 
         {/* 项目名称（图标内嵌在名称行左侧，点击即可换） */}
         <label className="project-edit-label">项目名称</label>
@@ -190,7 +218,7 @@ export default function ProjectEditDialog({
                 type="button"
                 className="project-edit-root-remove"
                 onClick={() => handleRemoveRoot(r)}
-                disabled={roots.length === 1 || project.id === "default"}
+                disabled={isDefaultProject || (!isCreating && roots.length === 1)}
                 aria-label={`移除 ${r}`}
               >
                 <X size={14} strokeWidth={2} />
@@ -202,7 +230,7 @@ export default function ProjectEditDialog({
           type="button"
           className="project-edit-add-folder"
           onClick={() => void handleAddFolder()}
-          disabled={project.id === "default"}
+          disabled={isDefaultProject}
         >
           <Plus size={14} strokeWidth={2} />
           <span>添加文件夹</span>
@@ -210,7 +238,9 @@ export default function ProjectEditDialog({
 
         {/* 底部操作栏 */}
         <div className="project-edit-footer">
-          {project.id === "default" ? (
+          {isCreating ? (
+            <span className="project-edit-protected">设置名称、图标和项目文件夹</span>
+          ) : isDefaultProject ? (
             <span className="project-edit-protected">主空间不可移除</span>
           ) : (
             <button
@@ -234,9 +264,9 @@ export default function ProjectEditDialog({
               type="button"
               className="project-edit-btn project-edit-btn--primary"
               onClick={() => void handleSave()}
-              disabled={saving}
+              disabled={saving || !name.trim() || roots.length === 0}
             >
-              {saving ? "保存中…" : "保存"}
+              {saving ? (isCreating ? "创建中…" : "保存中…") : (isCreating ? "创建" : "保存")}
             </button>
           </div>
         </div>

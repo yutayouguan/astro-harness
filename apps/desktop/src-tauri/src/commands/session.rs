@@ -564,16 +564,29 @@ pub async fn ensure_default_project() -> Result<ProjectDto, String> {
 }
 
 #[tauri::command]
-pub async fn create_project(name: String, roots: Vec<String>) -> Result<ProjectDto, String> {
+pub async fn create_project(
+    name: String,
+    roots: Vec<String>,
+    icon: Option<String>,
+) -> Result<ProjectDto, String> {
     let name = name.trim();
     if name.is_empty() {
         return Err("project name cannot be empty".into());
     }
     let store = open_sessions()?;
     let root_refs: Vec<&str> = roots.iter().map(|s| s.as_str()).collect();
-    let proj = store
+    let mut proj = store
         .create_project(name, &root_refs)
         .map_err(|e| e.to_string())?;
+    if let Some(icon) = icon
+        .as_deref()
+        .map(str::trim)
+        .filter(|icon| !icon.is_empty())
+    {
+        proj = store
+            .update_project(&proj.id, None, Some(Some(icon)), None)
+            .map_err(|e| e.to_string())?;
+    }
     Ok(project_to_dto(proj))
 }
 
