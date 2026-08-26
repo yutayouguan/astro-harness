@@ -768,6 +768,21 @@ export default function WorkspacePanel({
     }
   };
 
+  const runOpenInVscode = async (targets: FileEntryDto[]) => {
+    if (!targets.length) return;
+    if (targets.length > MAX_OPEN_EXTERNALLY) {
+      showToast(t("workspace.toast.openLimit", { n: String(MAX_OPEN_EXTERNALLY) }), { error: true });
+    }
+    for (const entry of targets.slice(0, MAX_OPEN_EXTERNALLY)) {
+      try {
+        await invoke("open_path_in_vscode", { path: entry.path });
+      } catch (e) {
+        showToast(String(e), { error: true });
+        break;
+      }
+    }
+  };
+
   const runTrash = async (targets: FileEntryDto[]) => {
     if (!targets.length) return;
     const trashed: string[] = [];
@@ -875,6 +890,9 @@ export default function WorkspacePanel({
         break;
       case "openExternally":
         await runOpenExternally(targets);
+        break;
+      case "openInVscode":
+        await runOpenInVscode(targets);
         break;
       case "trash":
         requestTrash(targets);

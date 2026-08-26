@@ -219,6 +219,12 @@ export default function ProjectFilesPanel({
         case "openExternally":
           await invoke("open_path_externally", { path: entry.path });
           break;
+        case "openInVscode":
+          await invoke("open_path_in_vscode", {
+            path: entry.path,
+            projectId: workbench.project?.id ?? null,
+          });
+          break;
         case "copyPath":
           await navigator.clipboard.writeText(entry.path);
           showToast(t("workspace.toast.copiedPath"), { tone: "success" });
@@ -264,6 +270,10 @@ export default function ProjectFilesPanel({
           ? [
               { action: "open" as const, labelKey: "workspace.menu.open" as const },
               {
+                action: "openInVscode" as const,
+                labelKey: "workspace.menu.openInVscode" as const,
+              },
+              {
                 action: "openExternally" as const,
                 labelKey: "workspace.menu.openExternally" as const,
               },
@@ -271,11 +281,16 @@ export default function ProjectFilesPanel({
           : [
               { action: "newFile" as const, labelKey: "workspace.menu.newFile" as const },
               { action: "newFolder" as const, labelKey: "workspace.menu.newFolder" as const },
+              {
+                action: "openInVscode" as const,
+                labelKey: "workspace.menu.openInVscode" as const,
+                separatorBefore: true,
+              },
             ]),
         {
           action: "reveal",
           labelKey: "workspace.menu.reveal",
-          separatorBefore: true,
+          separatorBefore: !menu.entry.is_dir,
         },
         { action: "copyPath", labelKey: "workspace.menu.copyPath" },
         ...(!rootPaths.has(menu.entry.path)

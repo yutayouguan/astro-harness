@@ -284,6 +284,7 @@ pub fn run() {
             commands::files::list_files,
             commands::files::read_file,
             commands::files::open_path_externally,
+            commands::files::open_path_in_vscode,
             commands::files::reveal_in_folder,
             commands::files::trash_paths,
             commands::files::read_file_base64,

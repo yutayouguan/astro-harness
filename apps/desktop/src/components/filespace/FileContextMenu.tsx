@@ -4,6 +4,7 @@ import { createPortal } from "react-dom";
 import {
   ClipboardCopy,
   ClipboardPaste,
+  Code2,
   Copy,
   ExternalLink,
   File,
@@ -43,6 +44,7 @@ export type FileMenuAction =
   | "newFile"
   | "newFolder"
   | "openExternally"
+  | "openInVscode"
   | "openInWorkspace";
 
 /** 菜单单项 */
@@ -87,6 +89,7 @@ const ACTION_ICONS: Record<FileMenuAction, ComponentType<LucideProps>> = {
   newFile: FilePlus,
   newFolder: FolderPlus,
   openExternally: ExternalLink,
+  openInVscode: Code2,
   openInWorkspace: FolderTree,
 };
 

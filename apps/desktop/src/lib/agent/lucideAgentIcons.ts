@@ -1,7 +1,6 @@
 /** Lucide Agent 图标目录与 SVG base64 渲染。 */
 import { createElement, type ComponentType } from "react";
 import { createRoot } from "react-dom/client";
-import { icons as lucideDataIcons, type IconNode as LucideDataNode } from "lucide";
 import {
   AlarmClock,
   Anchor,
@@ -244,7 +243,6 @@ export type LucideAgentIcon = {
   id: string;
   label: string;
   Icon: LucideIconComponent;
-  data: LucideDataNode;
   keywords: string[];
 };
 
@@ -508,7 +506,7 @@ export function applyPaintToSvg(
 }
 
 /** 创建 Agent 时可选的 Lucide 图标 */
-const LUCIDE_AGENT_ICON_COMPONENTS: Omit<LucideAgentIcon, "data">[] = [
+export const LUCIDE_AGENT_ICONS: LucideAgentIcon[] = [
   { id: "bot", label: "Bot", Icon: Bot, keywords: ["ai", "robot", "助手"] },
   { id: "brain", label: "Brain", Icon: Brain, keywords: ["ai", "思考", "智能"] },
   { id: "sparkles", label: "Sparkles", Icon: Sparkles, keywords: ["magic", "闪光"] },
@@ -743,13 +741,6 @@ const LUCIDE_AGENT_ICON_COMPONENTS: Omit<LucideAgentIcon, "data">[] = [
   { id: "arrow-right-from-line", label: "Output", Icon: ArrowRightFromLine, keywords: ["输出", "导出"] },
   { id: "mouse-pointer-click", label: "Click", Icon: MousePointerClick, keywords: ["点击", "触发"] },
 ];
-
-export const LUCIDE_AGENT_ICONS: LucideAgentIcon[] =
-  LUCIDE_AGENT_ICON_COMPONENTS.flatMap((item) => {
-    const name = item.Icon.displayName;
-    const data = name ? lucideDataIcons[name as keyof typeof lucideDataIcons] : undefined;
-    return data ? [{ ...item, data }] : [];
-  });
 
 export function filterLucideAgentIcons(query: string): LucideAgentIcon[] {
   const q = query.trim().toLowerCase();

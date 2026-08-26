@@ -251,6 +251,52 @@ fn guess_mime(name: &str) -> String {
     .into()
 }
 
+/// 用 Visual Studio Code 打开文件或文件夹。
+fn open_path_with_vscode(path: &std::path::Path) -> Result<(), String> {
+    let missing = || "未找到 Visual Studio Code，请先安装或把 `code` 加入 PATH".to_string();
+
+    #[cfg(target_os = "macos")]
+    {
+        let opened = std::process::Command::new("open")
+            .args(["-b", "com.microsoft.VSCode"])
+            .arg(path)
+            .status()
+            .ok()
+            .is_some_and(|status| status.success());
+        if opened {
+            return Ok(());
+        }
+        std::process::Command::new("code")
+            .arg(path)
+            .spawn()
+            .map_err(|_| missing())?;
+        return Ok(());
+    }
+    #[cfg(target_os = "windows")]
+    {
+        let candidates = ["code.cmd", "code"];
+        for program in candidates {
+            if std::process::Command::new(program).arg(path).spawn().is_ok() {
+                return Ok(());
+            }
+        }
+        return Err(missing());
+    }
+    #[cfg(all(unix, not(target_os = "macos")))]
+    {
+        std::process::Command::new("code")
+            .arg(path)
+            .spawn()
+            .map_err(|_| missing())?;
+        return Ok(());
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "windows", unix)))]
+    {
+        let _ = path;
+        Err(missing())
+    }
+}
+
 /// 用系统默认应用打开路径。
 fn open_path_with_system(path: &std::path::Path) -> Result<(), String> {
     #[cfg(target_os = "macos")]
@@ -514,6 +560,24 @@ pub async fn open_path_externally(path: String) -> Result<(), String> {
         return Err("文件不存在".into());
     }
     open_path_with_system(&p)
+}
+
+/// 用 VS Code 打开路径。优先按项目根校验，否则回退到记忆沙箱。
+#[tauri::command]
+pub async fn open_path_in_vscode(
+    path: String,
+    project_id: Option<String>,
+) -> Result<(), String> {
+    let resolved = if let Some(project_id) = project_id.filter(|id| !id.trim().is_empty()) {
+        let roots = project_roots(&project_id)?;
+        resolve_project_path(&roots, &path)?
+    } else {
+        resolve_memory_path(&path)?
+    };
+    if !resolved.exists() {
+        return Err("路径不存在".into());
+    }
+    open_path_with_vscode(&resolved)
 }
 
 /// 在系统文件管理器中显示路径。
