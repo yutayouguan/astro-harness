@@ -149,6 +149,7 @@ type PluginsPrimaryTab = "skills" | "mcp";
 type PluginScope = "global" | "builtin" | "project";
 type PersonalSkillsTab = "installed" | "machine" | "online";
 type SkillsDrawer = "updates";
+type SkillInstallTarget = "global" | "project";
 /** 内容布局：画廊 / 列表 / 详情 */
 type SkillsView = "gallery" | "list" | "detail";
 /** 已安装列表排序 */
@@ -405,6 +406,8 @@ export default function SkillsPanel({
   const [storePage, setStorePage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
   const [installingId, setInstallingId] = useState<string | null>(null);
+  const [installPromptSkill, setInstallPromptSkill] = useState<StoreSkill | null>(null);
+  const [installTarget, setInstallTarget] = useState<SkillInstallTarget>("global");
   const [linkingId, setLinkingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const { activeAgentId: agentId } = useActiveAgent();
@@ -421,6 +424,16 @@ export default function SkillsPanel({
     }
     setDrawer(null);
   }, [primaryTab, scope]);
+  useEffect(() => {
+    if (!installPromptSkill) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && !installingId) {
+        setInstallPromptSkill(null);
+      }
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [installPromptSkill, installingId]);
   const mcp = useMcpSection({
     active: active && primaryTab === "mcp",
     query: mcpQuery,
@@ -1089,7 +1102,12 @@ export default function SkillsPanel({
     }
   };
 
-  const installSkill = async (skill: StoreSkill) => {
+  const beginInstallSkill = (skill: StoreSkill) => {
+    setInstallTarget(scope === "project" ? "project" : "global");
+    setInstallPromptSkill(skill);
+  };
+
+  const installSkill = async (skill: StoreSkill, target: SkillInstallTarget) => {
     if (!isTauri()) return;
     setInstallingId(skill.id);
     setError(null);
@@ -1100,12 +1118,21 @@ export default function SkillsPanel({
         name: skill.name,
         store: skill.store,
         folder: inferFolderFromInstallRef(skill.install_ref),
+        scope: target,
+        projectRoot: null,
       });
-      // 留在商店：刷新已安装态后卡片按钮变为「已安装」
-      await refreshInstalled({ mode: "hard" });
-      showToast(t("skills.installDone").replace("{name}", skill.name), {
-        tone: "success",
-      });
+      setInstallPromptSkill(null);
+      setScope(target);
+      setPersonalTab("installed");
+      showToast(
+        t("skills.installDoneTarget")
+          .replace("{name}", skill.name)
+          .replace(
+            "{target}",
+            t(target === "global" ? "plugins.scope.global" : "plugins.scope.project"),
+          ),
+        { tone: "success" },
+      );
     } catch (err) {
       setError(String(err));
       showToast(String(err), { error: true });
@@ -2087,7 +2114,7 @@ export default function SkillsPanel({
               type="button"
               className="skills-action-btn primary skill-card-primary"
               disabled={installingId === skill.id}
-              onClick={() => void installSkill(skill)}
+              onClick={() => beginInstallSkill(skill)}
             >
               {installingId === skill.id ? (
                 <LoaderCircle
@@ -2562,7 +2589,7 @@ export default function SkillsPanel({
                           type="button"
                           className="skills-action-btn primary"
                           disabled={installingId === selectedStore.id}
-                          onClick={() => void installSkill(selectedStore)}
+                          onClick={() => beginInstallSkill(selectedStore)}
                         >
                           {installingId === selectedStore.id ? (
                             <LoaderCircle size={14} strokeWidth={2.25} className="is-spin" aria-hidden />
@@ -3244,6 +3271,131 @@ export default function SkillsPanel({
       </MotionSwitch>
 
       {toastHost}
+
+      {installPromptSkill &&
+        createPortal(
+          <div
+            className="skills-install-target-backdrop"
+            role="presentation"
+            onClick={(event) => {
+              if (event.target === event.currentTarget && !installingId) {
+                setInstallPromptSkill(null);
+              }
+            }}
+          >
+            <div
+              className="skills-install-target-dialog"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="skills-install-target-title"
+            >
+              <header className="skills-install-target-head">
+                <span className="skills-install-target-mark" aria-hidden>
+                  <Download size={19} strokeWidth={2.2} />
+                </span>
+                <div>
+                  <p className="skills-install-target-kicker">
+                    {t("skills.installTargetKicker")}
+                  </p>
+                  <h3 id="skills-install-target-title">{installPromptSkill.name}</h3>
+                  <p>{t("skills.installTargetHint")}</p>
+                </div>
+                <button
+                  type="button"
+                  className="skills-icon-btn"
+                  onClick={() => setInstallPromptSkill(null)}
+                  disabled={installingId === installPromptSkill.id}
+                  aria-label={t("common.close")}
+                >
+                  <X size={16} />
+                </button>
+              </header>
+
+              <div
+                className="skills-install-target-options"
+                role="radiogroup"
+                aria-label={t("skills.installTargetLabel")}
+              >
+                {(["global", "project"] as const).map((target) => (
+                  <button
+                    key={target}
+                    type="button"
+                    role="radio"
+                    aria-checked={installTarget === target}
+                    className={`skills-install-target-option ${installTarget === target ? "is-selected" : ""}`}
+                    onClick={() => setInstallTarget(target)}
+                    disabled={installingId === installPromptSkill.id}
+                  >
+                    <span className="skills-install-target-option-icon" aria-hidden>
+                      {target === "global" ? (
+                        <User size={18} strokeWidth={2.1} />
+                      ) : (
+                        <FolderOpen size={18} strokeWidth={2.1} />
+                      )}
+                    </span>
+                    <span className="skills-install-target-option-copy">
+                      <strong>
+                        {t(
+                          target === "global"
+                            ? "skills.installTarget.personal"
+                            : "skills.installTarget.project",
+                        )}
+                      </strong>
+                      <small>
+                        {t(
+                          target === "global"
+                            ? "skills.installTarget.personalDesc"
+                            : "skills.installTarget.projectDesc",
+                        )}
+                      </small>
+                      <code>
+                        {target === "global"
+                          ? "~/.astro/skills"
+                          : "<project>/.astro/skills"}
+                      </code>
+                    </span>
+                    <span className="skills-install-target-radio" aria-hidden>
+                      <Check size={12} strokeWidth={2.8} />
+                    </span>
+                  </button>
+                ))}
+              </div>
+
+              <footer className="skills-install-target-foot">
+                <button
+                  type="button"
+                  className="skills-action-btn"
+                  onClick={() => setInstallPromptSkill(null)}
+                  disabled={installingId === installPromptSkill.id}
+                >
+                  {t("dialog.cancel")}
+                </button>
+                <button
+                  type="button"
+                  className="skills-action-btn primary"
+                  onClick={() => void installSkill(installPromptSkill, installTarget)}
+                  disabled={installingId === installPromptSkill.id}
+                >
+                  {installingId === installPromptSkill.id ? (
+                    <LoaderCircle size={15} className="is-spin" aria-hidden />
+                  ) : (
+                    <Download size={15} aria-hidden />
+                  )}
+                  {installingId === installPromptSkill.id
+                    ? t("skills.installing")
+                    : t("skills.installToTarget", {
+                        target: t(
+                          installTarget === "global"
+                            ? "plugins.scope.global"
+                            : "plugins.scope.project",
+                        ),
+                      })}
+                </button>
+              </footer>
+            </div>
+          </div>,
+          document.body,
+        )}
 
       {updateConfirm &&
         createPortal(

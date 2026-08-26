@@ -57,7 +57,9 @@ pub use check::{
     check_origin_against_detail, check_updates_for_agent, classify_update_status,
     filter_outdated_folders, origin_to_store_skill,
 };
-pub use install::{install_from_ref, InstallOriginHint};
+pub use install::{
+    install_from_ref, install_from_ref_scoped, scoped_skills_dir, InstallOriginHint,
+};
 pub use installed::{
     link_skill_to_agent, list_enabled_for_prompt, list_enabled_for_prompt_with_config,
     list_installed, list_installed_for_agent, list_installed_scoped_for_agent, list_skill_files,

@@ -43,6 +43,22 @@ pub fn agent_skills_dir(agent_id: Option<&str>) -> Result<PathBuf> {
     Ok(dir)
 }
 
+/// 解析商店安装目标。`global` 写入当前用户 `~/.astro/skills`，
+/// `project` 写入可信项目的 `<project>/.astro/skills`。
+pub fn scoped_skills_dir(scope: &str, project_root: Option<&Path>) -> Result<PathBuf> {
+    let dir = match scope {
+        "global" => memory_dir().join("skills"),
+        "project" => project_root
+            .ok_or_else(|| anyhow!("project scope requires a project root"))?
+            .join(".astro")
+            .join("skills"),
+        "builtin" => bail!("builtin Skills are read-only"),
+        other => bail!("unsupported Skill install scope: {other}"),
+    };
+    fs::create_dir_all(&dir).with_context(|| format!("create {}", dir.display()))?;
+    Ok(dir)
+}
+
 /// 去掉 GitHub URL 前缀，得到 `owner/repo`。
 fn strip_github_prefix(url: &str) -> Option<String> {
     url.strip_prefix("https://github.com/")
@@ -306,6 +322,44 @@ fn run_npx(args: &[String], cwd: &Path) -> Result<String> {
     }
 }
 
+fn copy_dir_recursive(src: &Path, dest: &Path) -> Result<()> {
+    fs::create_dir_all(dest)?;
+    for entry in fs::read_dir(src).with_context(|| format!("read {}", src.display()))? {
+        let entry = entry?;
+        let source = entry.path();
+        let target = dest.join(entry.file_name());
+        if entry.file_type()?.is_dir() {
+            copy_dir_recursive(&source, &target)?;
+        } else {
+            fs::copy(&source, &target)
+                .with_context(|| format!("copy {} -> {}", source.display(), target.display()))?;
+        }
+    }
+    Ok(())
+}
+
+/// `npx skills add` 会先落到 cwd 下的兼容目录；scoped install 再归一化到目标层。
+fn relocate_cli_install(workspace: &Path, skills_dir: &Path, folder: &str) -> Result<PathBuf> {
+    let destination = skills_dir.join(folder);
+    if destination.join("SKILL.md").is_file() {
+        return Ok(destination);
+    }
+    let source = [
+        workspace.join(".agents/skills").join(folder),
+        workspace.join(".cursor/skills").join(folder),
+        workspace.join("skills").join(folder),
+    ]
+    .into_iter()
+    .find(|candidate| candidate.join("SKILL.md").is_file())
+    .ok_or_else(|| anyhow!("installed Skill `{folder}` was not found after CLI completed"))?;
+    if destination.exists() {
+        fs::remove_dir_all(&destination)?;
+    }
+    let resolved = fs::canonicalize(&source).unwrap_or(source);
+    copy_dir_recursive(&resolved, &destination)?;
+    Ok(destination)
+}
+
 /// 安装时附带的来源提示（商店名 / 展示名 / 本地文件夹名）。
 #[derive(Debug, Clone, Default)]
 pub struct InstallOriginHint {
@@ -319,6 +373,17 @@ pub async fn record_after_install(
     install_ref: &str,
     agent_id: Option<&str>,
     hint: &InstallOriginHint,
+) -> Result<()> {
+    let skills_dir = agent_skills_dir(agent_id)?;
+    record_after_install_in_dir(install_ref, agent_id, hint, &skills_dir, None).await
+}
+
+async fn record_after_install_in_dir(
+    install_ref: &str,
+    agent_id: Option<&str>,
+    hint: &InstallOriginHint,
+    skills_dir: &Path,
+    scope: Option<&str>,
 ) -> Result<()> {
     let folder = hint
         .folder
@@ -358,23 +423,13 @@ pub async fn record_after_install(
     let installed_at = existing.as_ref().map(|r| r.installed_at).unwrap_or(now);
     let is_update = existing.is_some();
 
-    let content_digest = match agent_skills_dir(agent_id) {
-        Ok(skills_dir) => match skill_content_digest(&skills_dir.join(&folder)) {
-            Ok(digest) => Some(digest),
-            Err(e) => {
-                tracing::debug!(
-                    folder = %folder,
-                    error = %e,
-                    "compute content_digest after install failed; continuing"
-                );
-                None
-            }
-        },
+    let content_digest = match skill_content_digest(&skills_dir.join(&folder)) {
+        Ok(digest) => Some(digest),
         Err(e) => {
             tracing::debug!(
                 folder = %folder,
                 error = %e,
-                "resolve skills dir for content_digest failed; continuing"
+                "compute content_digest after install failed; continuing"
             );
             None
         }
@@ -387,7 +442,7 @@ pub async fn record_after_install(
         store,
         install_ref: install_ref.to_string(),
         agent_id: Some(normalized_agent.clone()),
-        scope: None,
+        scope: scope.map(str::to_string),
         installed_at,
         last_updated_at: if is_update { Some(now) } else { None },
         remote_version: None,
@@ -405,23 +460,62 @@ pub async fn install_from_ref(
     hint: Option<InstallOriginHint>,
 ) -> Result<String> {
     let skills_dir = agent_skills_dir(agent_id)?;
+    install_from_ref_into(install_ref, agent_id, hint, skills_dir, None).await
+}
+
+/// 按个人或项目作用域安装在线 Skill。
+pub async fn install_from_ref_scoped(
+    install_ref: &str,
+    agent_id: Option<&str>,
+    hint: Option<InstallOriginHint>,
+    scope: &str,
+    project_root: Option<&Path>,
+) -> Result<String> {
+    let skills_dir = scoped_skills_dir(scope, project_root)?;
+    install_from_ref_into(install_ref, agent_id, hint, skills_dir, Some(scope)).await
+}
+
+async fn install_from_ref_into(
+    install_ref: &str,
+    agent_id: Option<&str>,
+    hint: Option<InstallOriginHint>,
+    skills_dir: PathBuf,
+    scope: Option<&str>,
+) -> Result<String> {
     let workspace = skills_dir
         .parent()
         .map(|p| p.to_path_buf())
         .unwrap_or_else(|| skills_dir.clone());
 
+    let hint = hint.unwrap_or_default();
+    let folder = hint
+        .folder
+        .as_deref()
+        .map(str::trim)
+        .filter(|folder| !folder.is_empty())
+        .map(str::to_string)
+        .or_else(|| infer_folder(install_ref));
     let result = if is_skillhub_http_ref(install_ref) {
         let slug = skillhub_slug(install_ref)?;
         install_skillhub_http(&slug, &skills_dir).await?
     } else {
         let args = build_install_args(install_ref, &skills_dir)?;
-        tokio::task::spawn_blocking(move || run_npx(&args, &workspace))
+        let cli_workspace = workspace.clone();
+        let output = tokio::task::spawn_blocking(move || run_npx(&args, &cli_workspace))
             .await
-            .context("npx 任务 join 失败")??
+            .context("npx 任务 join 失败")??;
+        if scope.is_some() {
+            let folder = folder
+                .as_deref()
+                .ok_or_else(|| anyhow!("cannot determine installed Skill folder"))?;
+            let destination = relocate_cli_install(&workspace, &skills_dir, folder)?;
+            format!("{output}\n→ {}", destination.display())
+        } else {
+            output
+        }
     };
 
-    let hint = hint.unwrap_or_default();
-    record_after_install(install_ref, agent_id, &hint).await?;
+    record_after_install_in_dir(install_ref, agent_id, &hint, &skills_dir, scope).await?;
 
     Ok(result)
 }
@@ -557,6 +651,35 @@ mod tests {
         assert_eq!(
             std::fs::read_to_string(dir.path().join("web-tools-guide/refs/a.md")).unwrap(),
             "a\n"
+        );
+    }
+
+    #[test]
+    fn resolves_project_install_target_and_rejects_builtin() {
+        let project = tempfile::tempdir().unwrap();
+        let target = scoped_skills_dir("project", Some(project.path())).unwrap();
+
+        assert_eq!(target, project.path().join(".astro/skills"));
+        assert!(target.is_dir());
+        assert!(scoped_skills_dir("builtin", Some(project.path())).is_err());
+        assert!(scoped_skills_dir("project", None).is_err());
+    }
+
+    #[test]
+    fn relocates_cli_output_into_scoped_skills_directory() {
+        let dir = tempfile::tempdir().unwrap();
+        let workspace = dir.path();
+        let source = workspace.join(".agents/skills/demo");
+        let target_root = workspace.join(".astro/skills");
+        fs::create_dir_all(&source).unwrap();
+        fs::write(source.join("SKILL.md"), "# demo").unwrap();
+
+        let target = relocate_cli_install(workspace, &target_root, "demo").unwrap();
+
+        assert_eq!(target, target_root.join("demo"));
+        assert_eq!(
+            fs::read_to_string(target.join("SKILL.md")).unwrap(),
+            "# demo"
         );
     }
 

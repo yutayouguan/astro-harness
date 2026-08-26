@@ -79,3 +79,191 @@ html[data-theme="dark"] .skills-update-confirm {
 .skills-update-confirm-actions .skills-action-btn.primary {
   order: 3;
 }
+
+/* 在线商店：安装作用域选择 */
+.skills-install-target-backdrop {
+  --tone: var(--tone-indigo);
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-menu);
+  display: grid;
+  place-items: center;
+  padding: 24px 16px;
+  background:
+    radial-gradient(
+      ellipse 62% 58% at 50% 42%,
+      color-mix(in srgb, var(--tone) 18%, transparent),
+      transparent 70%
+    ),
+    color-mix(in srgb, var(--bg-base, #0f172a) 38%, transparent);
+  backdrop-filter: blur(12px) saturate(1.2);
+  -webkit-backdrop-filter: blur(12px) saturate(1.2);
+}
+
+.skills-install-target-dialog {
+  width: min(560px, 94vw);
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--tone) 22%, var(--glass-edge));
+  border-radius: 22px;
+  color: var(--ink);
+  background:
+    linear-gradient(155deg, rgba(255, 255, 255, 0.9), rgba(255, 255, 255, 0.5)),
+    color-mix(in srgb, var(--tone-soft) 42%, var(--glass-panel));
+  box-shadow:
+    0 28px 72px color-mix(in srgb, var(--tone) 16%, rgba(15, 23, 42, 0.18)),
+    var(--glass-rim);
+  backdrop-filter: blur(24px) saturate(1.35);
+  -webkit-backdrop-filter: blur(24px) saturate(1.35);
+}
+
+html[data-theme="dark"] .skills-install-target-dialog {
+  border-color: color-mix(in srgb, var(--tone) 30%, rgba(255, 255, 255, 0.1));
+  background:
+    linear-gradient(155deg, rgba(255, 255, 255, 0.09), rgba(255, 255, 255, 0.02)),
+    color-mix(in srgb, var(--tone-soft) 32%, rgba(8, 6, 18, 0.9));
+}
+
+.skills-install-target-head {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 13px;
+  padding: 22px 22px 16px;
+}
+
+.skills-install-target-mark,
+.skills-install-target-option-icon {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  color: var(--tone);
+  background: color-mix(in srgb, var(--tone) 13%, rgba(255, 255, 255, 0.62));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--tone) 18%, transparent);
+}
+
+.skills-install-target-mark {
+  width: 38px;
+  height: 38px;
+  border-radius: 12px;
+}
+
+.skills-install-target-kicker {
+  margin: 0 0 3px;
+  color: var(--tone);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.skills-install-target-head h3 {
+  margin: 0;
+  font-size: 18px;
+  line-height: 1.3;
+}
+
+.skills-install-target-head > div > p:last-child {
+  margin: 5px 0 0;
+  color: var(--ink-mute);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+.skills-install-target-options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  padding: 0 22px 20px;
+}
+
+.skills-install-target-option {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 11px;
+  min-height: 112px;
+  padding: 15px;
+  border: 1px solid color-mix(in srgb, var(--glass-edge) 86%, transparent);
+  border-radius: 16px;
+  color: var(--ink);
+  background: color-mix(in srgb, var(--glass-panel) 66%, transparent);
+  text-align: left;
+  cursor: pointer;
+}
+
+.skills-install-target-option:hover {
+  border-color: color-mix(in srgb, var(--tone) 28%, var(--glass-edge));
+  background: color-mix(in srgb, var(--tone) 7%, var(--glass-panel));
+}
+
+.skills-install-target-option.is-selected {
+  border-color: color-mix(in srgb, var(--tone) 48%, transparent);
+  background: color-mix(in srgb, var(--tone) 11%, var(--glass-panel));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--tone) 14%, transparent);
+}
+
+.skills-install-target-option:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--tone) 52%, transparent);
+  outline-offset: 2px;
+}
+
+.skills-install-target-option-icon {
+  width: 34px;
+  height: 34px;
+  border-radius: 11px;
+}
+
+.skills-install-target-option-copy {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.skills-install-target-option-copy strong {
+  font-size: 13.5px;
+}
+
+.skills-install-target-option-copy small {
+  color: var(--ink-mute);
+  font-size: 11.5px;
+  line-height: 1.45;
+}
+
+.skills-install-target-option-copy code {
+  overflow: hidden;
+  color: color-mix(in srgb, var(--tone) 84%, var(--ink));
+  font-size: 10.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.skills-install-target-radio {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border: 1px solid color-mix(in srgb, var(--ink-mute) 34%, transparent);
+  border-radius: 999px;
+  color: transparent;
+}
+
+.skills-install-target-option.is-selected .skills-install-target-radio {
+  border-color: var(--tone);
+  color: white;
+  background: var(--tone);
+}
+
+.skills-install-target-foot {
+  display: flex;
+  justify-content: flex-end;
+  gap: 9px;
+  padding: 15px 22px 20px;
+  border-top: 1px solid color-mix(in srgb, var(--glass-edge) 68%, transparent);
+}
+
+@media (max-width: 620px) {
+  .skills-install-target-options {
+    grid-template-columns: 1fr;
+  }
+}
