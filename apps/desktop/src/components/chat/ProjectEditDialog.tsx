@@ -2,10 +2,10 @@
 import { useCallback, useEffect, useId, useState } from "react";
 import { createPortal } from "react-dom";
 import { invoke } from "@tauri-apps/api/core";
-import { ArrowDown, ArrowUp, FolderOpen, Plus, Trash2, X } from "lucide-react";
+import { ArrowDown, ArrowUp, Plus, Trash2, X } from "lucide-react";
 import type { ProjectDto } from "../../types";
-import LucideIconPicker from "../agents/LucideIconPicker";
-import LucideByName from "../icons/LucideByName";
+import ProjectFolderIcon from "./ProjectFolderIcon";
+import ProjectFolderIconPicker from "./ProjectFolderIconPicker";
 
 type Props = {
   open: boolean;
@@ -100,11 +100,11 @@ export default function ProjectEditDialog({
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
+      if (e.key === "Escape" && !iconPickerOpen) onClose();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [open, onClose]);
+  }, [open, iconPickerOpen, onClose]);
 
   if (!open || !project) return null;
 
@@ -138,11 +138,7 @@ export default function ProjectEditDialog({
             title="点击更换图标"
             aria-label="更换项目图标"
           >
-            {iconId ? (
-              <LucideByName name={iconId} size={16} />
-            ) : (
-              <FolderOpen size={16} strokeWidth={1.7} />
-            )}
+            <ProjectFolderIcon iconId={iconId} expanded size={22} />
           </button>
           <input
             type="text"
@@ -152,12 +148,12 @@ export default function ProjectEditDialog({
             placeholder="项目名称"
           />
         </div>
-        <LucideIconPicker
+        <ProjectFolderIconPicker
           open={iconPickerOpen}
           selectedId={iconId}
           onClose={() => setIconPickerOpen(false)}
-          onSelect={(selected) => {
-            setIconId(selected.id);
+          onSelect={(selectedId) => {
+            setIconId(selectedId);
             setIconPickerOpen(false);
           }}
         />
@@ -214,15 +210,18 @@ export default function ProjectEditDialog({
 
         {/* 底部操作栏 */}
         <div className="project-edit-footer">
-          <button
-            type="button"
-            className="project-edit-btn project-edit-btn--danger"
-            onClick={() => void handleRemoveProject()}
-            disabled={project.id === "default"}
-          >
-            <Trash2 size={14} strokeWidth={1.8} />
-            <span>移除本地项目</span>
-          </button>
+          {project.id === "default" ? (
+            <span className="project-edit-protected">主空间不可移除</span>
+          ) : (
+            <button
+              type="button"
+              className="project-edit-btn project-edit-btn--danger"
+              onClick={() => void handleRemoveProject()}
+            >
+              <Trash2 size={14} strokeWidth={1.8} />
+              <span>移除本地项目</span>
+            </button>
+          )}
           <div className="project-edit-footer-right">
             <button
               type="button"

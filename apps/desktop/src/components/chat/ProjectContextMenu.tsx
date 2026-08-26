@@ -22,6 +22,7 @@ type Props = {
   y: number;
   projectName: string;
   projectPath: string;
+  canRemove?: boolean;
   onAction: (action: ProjectMenuAction) => void;
   onClose: () => void;
 };
@@ -45,6 +46,7 @@ export default function ProjectContextMenu({
   y,
   projectName: _projectName,
   projectPath: _projectPath,
+  canRemove = true,
   onAction,
   onClose,
 }: Props) {
@@ -90,7 +92,7 @@ export default function ProjectContextMenu({
       style={{ top: pos.top, left: pos.left }}
       role="menu"
     >
-      {ITEMS.map((item) => (
+      {ITEMS.filter((item) => item.id !== "remove" || canRemove).map((item) => (
         <button
           key={item.id}
           type="button"

@@ -15,6 +15,7 @@ import AboutDialog from "./components/ui/AboutDialog";
 import ChatRightPanel from "./components/chat/ChatRightPanel";
 import ProjectContextMenu from "./components/chat/ProjectContextMenu";
 import ProjectEditDialog from "./components/chat/ProjectEditDialog";
+import ProjectFolderIcon from "./components/chat/ProjectFolderIcon";
 import SidebarSessionList from "./components/chat/SidebarSessionList";
 import ChatView from "./components/chat/ChatView";
 import ProjectFileEditor from "./components/chat/ProjectFileEditor";
@@ -98,8 +99,6 @@ import { SETTINGS_TABS, settingsTabMeta } from "./lib/ui/settingsTabs";
 import {
   ArrowLeft,
   Archive,
-  FolderClosed,
-  FolderOpen,
   FolderTree,
   MoreHorizontal,
   Settings2,
@@ -902,10 +901,11 @@ export default function App() {
                           setNav("chat");
                         }}
                       >
-                        {collapsedProjects.has(proj.id)
-                          ? <FolderClosed size={16} strokeWidth={1.7} aria-hidden />
-                          : <FolderOpen size={16} strokeWidth={1.7} aria-hidden />
-                        }
+                        <ProjectFolderIcon
+                          iconId={proj.icon}
+                          expanded={!collapsedProjects.has(proj.id)}
+                          size={18}
+                        />
                         <span className="sidebar-item-label">{proj.name}</span>
                       </button>
                       <button
@@ -1390,6 +1390,7 @@ export default function App() {
           y={projectMenu.y}
           projectName={projectMenu.name}
           projectPath={projects.find((p) => p.id === projectMenu.id)?.roots[0] ?? ""}
+          canRemove={projectMenu.id !== "default"}
           onAction={(action) => {
             if (action === "remove") {
               if (projectMenu.id === "default") return;
