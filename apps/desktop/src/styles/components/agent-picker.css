@@ -143,17 +143,13 @@
   height: 14px;
   color: var(--ink-mute);
   opacity: 0.75;
-  transition: transform 0.16s ease, color 0.14s ease, opacity 0.14s ease;
+  transition: color 0.14s ease, opacity 0.14s ease;
 }
 
 .agent-picker-chip.is-open .agent-picker-chevron,
 .agent-picker-chip:hover:not(:disabled) .agent-picker-chevron {
   color: var(--tone, var(--ink));
   opacity: 1;
-}
-
-.agent-picker-chip.is-open .agent-picker-chevron {
-  transform: rotate(180deg);
 }
 
 .agent-picker-menu {

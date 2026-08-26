@@ -1292,11 +1292,6 @@ html[data-theme="dark"] .insights-collab-label{
   width: 18px;
   height: 20px;
   color: var(--ink-mute);
-  transition: transform 0.16s ease;
-}
-
-.insights-trace-event-details[open] .insights-trace-event-chevron {
-  transform: rotate(90deg);
 }
 
 .insights-trace-event-summary-main {

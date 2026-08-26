@@ -9,7 +9,12 @@ import {
   type ReactNode,
 } from "react";
 import { createPortal } from "react-dom";
+import {
+  ChevronDown as ChevronDownData,
+  ChevronUp as ChevronUpData,
+} from "lucide";
 import { useAnchoredMenu } from "../../hooks/ui/useAnchoredMenu";
+import { MorphToggleIcon } from "../icons/MorphIcon";
 
 /** 下拉选项 */
 export type SelectOption = {
@@ -33,26 +38,6 @@ type Props = {
   /** 展开方向：auto（默认）/ up（强制向上）/ down（强制向下） */
   openDirection?: "auto" | "up" | "down";
 };
-
-/** 触发器右侧展开箭头 */
-function ChevronDown({ open }: { open: boolean }) {
-  return (
-    <svg
-      className={`select-menu-chevron${open ? " is-open" : ""}`}
-      width="14"
-      height="14"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2.25"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden
-    >
-      <path d="m6 9 6 6 6-6" />
-    </svg>
-  );
-}
 
 /** 选中项勾选标记 */
 function CheckIcon() {
@@ -313,7 +298,15 @@ export function SelectMenu({
           </span>
         ) : null}
         <span className="select-menu-value">{label}</span>
-        <ChevronDown open={open} />
+        <MorphToggleIcon
+          className={`select-menu-chevron${open ? " is-open" : ""}`}
+          active={open}
+          activeIcon={ChevronUpData}
+          inactiveIcon={ChevronDownData}
+          size={14}
+          strokeWidth={2.25}
+          aria-hidden
+        />
       </button>
       {menu}
     </div>

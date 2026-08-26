@@ -6,14 +6,18 @@ import {
   useState,
   type CSSProperties,
   type KeyboardEvent,
-  type SVGProps,
 } from "react";
 import { createPortal } from "react-dom";
 import { Users } from "lucide-react";
+import {
+  ChevronDown as ChevronDownData,
+  ChevronUp as ChevronUpData,
+} from "lucide";
 import { useAnchoredMenu } from "../../hooks/ui/useAnchoredMenu";
 import { useI18n } from "../../i18n/LocaleContext";
 import type { MessageKey } from "../../i18n/messages";
 import type { AgentInfo } from "../../types/agent";
+import { MorphToggleIcon } from "../icons/MorphIcon";
 import AgentAvatar from "./AgentAvatar";
 
 /** Agent 下拉切换器入参 */
@@ -45,22 +49,18 @@ function agentSubline(
   return null;
 }
 
-function ChevronDown(props: SVGProps<SVGSVGElement>) {
+/** 触发器右侧展开箭头 */
+function PickerChevron({ open }: { open: boolean }) {
   return (
-    <svg
-      width="14"
-      height="14"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2.25"
-      strokeLinecap="round"
-      strokeLinejoin="round"
+    <MorphToggleIcon
+      className="agent-picker-chevron"
+      active={open}
+      activeIcon={ChevronUpData}
+      inactiveIcon={ChevronDownData}
+      size={14}
+      strokeWidth={2.25}
       aria-hidden
-      {...props}
-    >
-      <path d="m6 9 6 6 6-6" />
-    </svg>
+    />
   );
 }
 
@@ -238,7 +238,7 @@ export default function AgentPicker({
           <span className="agent-picker-meta">
             <span className="agent-picker-name">{t(labelKey)}</span>
           </span>
-          <ChevronDown className="agent-picker-chevron" />
+          <PickerChevron open={false} />
         </button>
       </div>
     );
@@ -412,7 +412,7 @@ export default function AgentPicker({
             <span className="agent-picker-name">—</span>
           </span>
         )}
-        <ChevronDown className="agent-picker-chevron" />
+        <PickerChevron open={open} />
       </button>
       {menu}
     </div>

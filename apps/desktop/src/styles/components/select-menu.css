@@ -144,7 +144,7 @@
   flex-shrink: 0;
   color: var(--ink-mute);
   opacity: 0.75;
-  transition: transform 0.16s ease, color 0.14s ease, opacity 0.14s ease;
+  transition: color 0.14s ease, opacity 0.14s ease;
 }
 
 .select-menu.is-open .select-menu-chevron,
@@ -152,11 +152,6 @@
 .select-menu-trigger:hover:not(:disabled) .select-menu-chevron {
   color: var(--select-tone);
   opacity: 1;
-}
-
-.select-menu.is-open .select-menu-chevron,
-.select-menu-chevron.is-open {
-  transform: rotate(180deg);
 }
 
 .select-menu-list {

@@ -1652,11 +1652,6 @@ html[data-theme="dark"] .skills-end-hint {
 
 .skills-backups-chevron {
   color: var(--ink-mute);
-  transition: transform 0.15s ease;
-}
-
-.skills-backups-chevron.is-open {
-  transform: rotate(180deg);
 }
 
 .skills-backups-body {

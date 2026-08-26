@@ -11,7 +11,6 @@ import {
   BookOpen,
   Bot,
   Check,
-  ChevronDown,
   CirclePlus,
   CloudDownload,
   Code2,
@@ -39,6 +38,10 @@ import {
   X,
   type LucideIcon,
 } from "lucide-react";
+import {
+  ChevronDown as ChevronDownData,
+  ChevronUp as ChevronUpData,
+} from "lucide";
 import { createPortal } from "react-dom";
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-shell";
@@ -77,7 +80,7 @@ import { useTransientToast } from "../../hooks/ui/useTransientToast";
 import MotionSwitch from "../ui/MotionSwitch";
 import ExpandableSearch from "../ui/ExpandableSearch";
 import MsgStreamLoader from "../chat/MsgStreamLoader";
-import { CopyMorphIcon } from "../icons/MorphIcon";
+import { CopyMorphIcon, MorphToggleIcon } from "../icons/MorphIcon";
 import McpIcon from "../icons/McpIcon";
 import { IconRefresh } from "../icons/NavIcons";
 import { useMcpSection } from "./McpSection";
@@ -3101,10 +3104,13 @@ export default function SkillsPanel({
               aria-expanded={backupsOpen}
               onClick={() => setBackupsOpen((open) => !open)}
             >
-              <ChevronDown
+              <MorphToggleIcon
+                active={backupsOpen}
+                activeIcon={ChevronUpData}
+                inactiveIcon={ChevronDownData}
                 size={16}
                 strokeWidth={2.25}
-                className={`skills-backups-chevron ${backupsOpen ? "is-open" : ""}`}
+                className="skills-backups-chevron"
                 aria-hidden
               />
               <span>{t("skills.backupsTitle")}</span>

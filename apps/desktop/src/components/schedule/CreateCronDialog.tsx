@@ -4,7 +4,6 @@ import { createPortal } from "react-dom";
 import {
   CalendarPlus,
   Check,
-  ChevronDown,
   Cpu,
   MessageSquareText,
   MessagesSquare,
@@ -15,8 +14,13 @@ import {
   Type,
   X,
 } from "lucide-react";
+import {
+  ChevronDown as ChevronDownData,
+  ChevronUp as ChevronUpData,
+} from "lucide";
 import { invoke } from "@tauri-apps/api/core";
 import { ScheduleEditor } from "./ScheduleEditor";
+import { MorphToggleIcon } from "../icons/MorphIcon";
 import { SelectMenu } from "../ui/SelectMenu";
 import { ModelBrandIcon, ProviderBrandIcon } from "../icons/ProviderIcons";
 import {
@@ -101,6 +105,7 @@ export function CreateCronDialog({
   const [modelOptions, setModelOptions] = useState<string[]>([]);
   const [selectedModel, setSelectedModel] = useState("");
   const [showInChat, setShowInChat] = useState(false);
+  const [advancedOpen, setAdvancedOpen] = useState(false);
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
 
@@ -321,14 +326,20 @@ export function CreateCronDialog({
 
           <ScheduleEditor value={draft} onChange={setDraft} />
 
-          <details className="cron-dialog-advanced">
+          <details
+            className="cron-dialog-advanced"
+            onToggle={(e) => setAdvancedOpen(e.currentTarget.open)}
+          >
             <summary>
               <span className="cron-dialog-advanced-label">
                 <SlidersHorizontal size={14} strokeWidth={2.2} aria-hidden />
                 {t("cron.advanced")}
               </span>
-              <ChevronDown
-                className="cron-dialog-advanced-chevron"
+              <MorphToggleIcon
+                active={advancedOpen}
+                activeIcon={ChevronUpData}
+                inactiveIcon={ChevronDownData}
+                className="cron-dialog-advanced-morph"
                 size={14}
                 strokeWidth={2.2}
                 aria-hidden

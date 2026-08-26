@@ -10,7 +10,6 @@ import {
   Calendar,
   CalendarDays,
   CalendarRange,
-  ChevronRight,
   Coins,
   Code2,
   Cpu,
@@ -26,6 +25,10 @@ import {
   UserRound,
   Wrench,
 } from "lucide-react";
+import {
+  ChevronDown as ChevronDownData,
+  ChevronRight as ChevronRightData,
+} from "lucide";
 import { useActiveAgent } from "../../hooks/app/useActiveAgent";
 import { useI18n } from "../../i18n/LocaleContext";
 import type { Locale, MessageKey } from "../../i18n/messages";
@@ -44,6 +47,7 @@ import {
   turnGroupTitle,
 } from "../../lib/chat/traceTurnGroups";
 import McpIcon from "../icons/McpIcon";
+import { MorphToggleIcon } from "../icons/MorphIcon";
 import { ModelBrandIcon, ProviderBrandIcon } from "../icons/ProviderIcons";
 
 type Period = "month" | "quarter" | "year";
@@ -1052,6 +1056,7 @@ function TraceEventItem({
   isLast: boolean;
   t: (key: MessageKey, vars?: Record<string, string>) => string;
 }) {
+  const [open, setOpen] = useState(false);
   const name =
     event.kind === "user" ? t("insights.trace.event.user") : event.name;
   const status = traceStatusLabel(event.status, t);
@@ -1068,10 +1073,19 @@ function TraceEventItem({
         </span>
         {!isLast && <span className="insights-trace-line" />}
       </span>
-      <details className="insights-trace-event-details">
+      <details
+        className="insights-trace-event-details"
+        onToggle={(e) => setOpen(e.currentTarget.open)}
+      >
         <summary className="insights-trace-event-summary">
           <span className="insights-trace-event-chevron" aria-hidden>
-            <ChevronRight size={14} strokeWidth={2.25} />
+            <MorphToggleIcon
+              active={open}
+              activeIcon={ChevronDownData}
+              inactiveIcon={ChevronRightData}
+              size={14}
+              strokeWidth={2.25}
+            />
           </span>
           <span className="insights-trace-event-summary-main">
             <span className="insights-trace-event-head">
