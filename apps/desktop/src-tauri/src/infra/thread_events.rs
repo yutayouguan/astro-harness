@@ -1946,16 +1946,9 @@ fn map_thread_event(event: proto::ThreadEvent) -> Vec<ChatStreamEvent> {
         Some(Payload::ReasoningDelta(delta)) => {
             vec![ChatStreamEvent::Reasoning { content: delta.delta }]
         }
-        Some(Payload::PlanDelta(delta)) => vec![activity(delta.item_id, "plan_delta", delta.delta)],
-        Some(Payload::ExecOutputDelta(delta)) => {
-            vec![ChatStreamEvent::ToolOutputDelta {
-                id: delta.item_id,
-                delta: delta.delta,
-            }]
-        }
-        Some(Payload::PatchDelta(delta)) => {
-            vec![activity(delta.item_id, "patch_delta", delta.delta)]
-        }
+        Some(Payload::PlanDelta(delta))
+        | Some(Payload::ExecOutputDelta(delta))
+        | Some(Payload::PatchDelta(delta)) => map_output_delta(delta),
         Some(Payload::ControlRequest(control)) => map_control_request(turn_id, control),
         Some(Payload::TokenCount(tokens)) => vec![ChatStreamEvent::Usage {
             prompt_tokens: tokens.input_tokens.min(u32::MAX.into()) as u32,
@@ -2017,6 +2010,13 @@ fn terminal_events(
         },
         ChatStreamEvent::Done,
     ]
+}
+
+fn map_output_delta(delta: proto::ThreadDelta) -> Vec<ChatStreamEvent> {
+    vec![ChatStreamEvent::ToolOutputDelta {
+        id: delta.item_id,
+        delta: delta.delta,
+    }]
 }
 
 fn activity(
@@ -2139,6 +2139,14 @@ fn map_item_event(item_event: proto::ThreadItemEvent, started: bool) -> Vec<Chat
             }]
         }
         Ok(TurnItem::AgentMessage(_)) | Ok(TurnItem::Reasoning(_)) => Vec::new(),
+        Ok(TurnItem::Plan(text)) => vec![ChatStreamEvent::ToolCall {
+            id: text.id,
+            name: "plan".into(),
+            arguments_json: String::new(),
+            result: text.content,
+            phase: if started { "started" } else { "completed" }.into(),
+            media: Vec::new(),
+        }],
         Ok(TurnItem::HookPrompt(text)) => vec![ChatStreamEvent::Hook {
             name: "hook_prompt".into(),
             detail: text.content,
@@ -2745,23 +2753,73 @@ mod tests {
             .unwrap_or_default()
     }
 
-    #[test]
-    fn exec_output_delta_feeds_the_tool_card_instead_of_a_surface() {
-        // 通用 activity 会被前端当成 a2ui surface，渲染成标题为事件名的空卡片。
-        let mapped = map_thread_event(proto::ThreadEvent {
+    fn delta_event(payload: proto::thread_event::Payload) -> proto::ThreadEvent {
+        proto::ThreadEvent {
             thread_id: "session-1".into(),
             turn_id: "turn-1".into(),
-            payload: Some(proto::thread_event::Payload::ExecOutputDelta(
-                proto::ThreadDelta {
-                    item_id: "call-1".into(),
-                    delta: "/tmp\n".into(),
-                },
-            )),
-        });
+            payload: Some(payload),
+        }
+    }
+
+    #[test]
+    fn streaming_deltas_feed_the_tool_card_instead_of_a_surface() {
+        // 通用 activity 会被前端当成 a2ui surface，渲染成标题为事件名的空卡片。
+        let cases = [
+            proto::thread_event::Payload::ExecOutputDelta(proto::ThreadDelta {
+                item_id: "call-1".into(),
+                delta: "/tmp\n".into(),
+            }),
+            proto::thread_event::Payload::PlanDelta(proto::ThreadDelta {
+                item_id: "plan-1".into(),
+                delta: "1. inspect\n".into(),
+            }),
+            proto::thread_event::Payload::PatchDelta(proto::ThreadDelta {
+                item_id: "patch-1".into(),
+                delta: "--- a/foo\n+++ b/foo\n".into(),
+            }),
+        ];
+        let expected = [
+            ("call-1", "/tmp\n"),
+            ("plan-1", "1. inspect\n"),
+            ("patch-1", "--- a/foo\n+++ b/foo\n"),
+        ];
+        for (payload, (want_id, want_delta)) in cases.into_iter().zip(expected) {
+            let mapped = map_thread_event(delta_event(payload));
+            assert!(
+                matches!(
+                    mapped.as_slice(),
+                    [ChatStreamEvent::ToolOutputDelta { id, delta }]
+                        if id == want_id && delta == want_delta
+                ),
+                "{mapped:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn plan_item_opens_a_tool_card() {
+        let item = proto::ThreadItem {
+            id: "plan-1".into(),
+            item_type: "plan".into(),
+            status: "in_progress".into(),
+            payload_json: serde_json::to_string(&TurnItem::Plan(agent_protocol::TextItem {
+                id: "plan-1".into(),
+                content: "1. inspect\n".into(),
+            }))
+            .unwrap(),
+        };
         assert!(matches!(
-            mapped.as_slice(),
-            [ChatStreamEvent::ToolOutputDelta { id, delta }]
-                if id == "call-1" && delta == "/tmp\n"
+            map_item_event(proto::ThreadItemEvent { item: Some(item) }, true).as_slice(),
+            [ChatStreamEvent::ToolCall {
+                id,
+                name,
+                result,
+                phase,
+                ..
+            }] if id == "plan-1"
+                && name == "plan"
+                && result == "1. inspect\n"
+                && phase == "started"
         ));
     }
 
