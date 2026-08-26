@@ -1,0 +1,67 @@
+/* Shared glass surfaces and compatibility names. */
+html[data-theme="dark"] {
+  --glass: rgba(255, 255, 255, 0.045);
+  --glass-strong: rgba(255, 255, 255, 0.07);
+  --glass-edge: var(--surface-panel-border);
+  --glass-card:
+    linear-gradient(155deg, rgba(255, 255, 255, 0.07) 0%, rgba(255, 255, 255, 0.02) 100%),
+    rgba(10, 8, 20, 0.55);
+  --glass-panel: var(--surface-panel-background);
+  --glass-hover: var(--surface-panel-hover);
+  --glass-inner: rgba(0, 0, 0, 0.28);
+  --glass-border: rgba(255, 255, 255, 0.1);
+  --glass-fill:
+    linear-gradient(155deg, rgba(255, 255, 255, 0.06) 0%, rgba(255, 255, 255, 0.02) 100%),
+    rgba(8, 6, 18, 0.55);
+  --glass-fill-soft:
+    linear-gradient(155deg, rgba(255, 255, 255, 0.045) 0%, rgba(255, 255, 255, 0.015) 100%),
+    rgba(8, 6, 18, 0.42);
+  --sidebar-bg: rgba(8, 6, 18, 0.48);
+  --sidebar-pinned-bg: rgba(6, 4, 14, 0.55);
+  --chip-bg: rgba(255, 255, 255, 0.06);
+  --chip-border: rgba(255, 255, 255, 0.1);
+  --composer-bg: rgba(12, 10, 24, 0.42);
+  --rim: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  --blur-glass: 22px;
+  --glass-blur: 22px;
+  --glass-layer: var(--glass-panel);
+  --glass-rim:
+    0 0 0 1px rgba(255, 255, 255, 0.06) inset,
+    0 1px 0 rgba(255, 255, 255, 0.09) inset;
+  --backdrop-glass: blur(var(--blur-glass, 22px)) saturate(1.15);
+}
+
+html[data-theme="light"] {
+  --glass: rgba(255, 255, 255, 0.22);
+  --glass-strong: rgba(255, 255, 255, 0.38);
+  --glass-edge: var(--surface-panel-border);
+  --glass-card: rgba(255, 255, 255, 0.3);
+  --glass-panel: var(--surface-panel-background);
+  --glass-hover: var(--surface-panel-hover);
+  --glass-inner: rgba(255, 255, 255, 0.38);
+  --glass-border: rgba(148, 163, 184, 0.28);
+  --glass-fill:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.38), rgba(255, 255, 255, 0.14)),
+    rgba(255, 255, 255, 0.28);
+  --glass-fill-soft:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.3), rgba(255, 255, 255, 0.1)),
+    rgba(255, 255, 255, 0.22);
+  --sidebar-bg: rgba(255, 255, 255, 0.26);
+  --sidebar-pinned-bg: rgba(255, 255, 255, 0.28);
+  --chip-bg: rgba(255, 255, 255, 0.26);
+  --chip-border: rgba(148, 163, 184, 0.22);
+  --composer-bg: rgba(255, 255, 255, 0.18);
+  --rim: inset 0 1px 0 rgba(255, 255, 255, 0.72), inset 0 0 0 0.5px rgba(255, 255, 255, 0.4);
+  --blur-glass: 22px;
+  --glass-layer: var(--sidebar-bg);
+  --glass-rim:
+    0 0 0 1px rgba(255, 255, 255, 0.32) inset,
+    0 1px 0 rgba(255, 255, 255, 0.58) inset;
+  --backdrop-glass: blur(var(--blur-glass, 20px)) saturate(1.35);
+}
+
+/* Legacy generic surface aliases. */
+html[data-theme] {
+  --surface: var(--surface-panel-background);
+  --panel: var(--surface-panel-background);
+}

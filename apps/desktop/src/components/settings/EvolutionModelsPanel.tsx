@@ -49,7 +49,7 @@ import type {
   ProviderModelsResult,
   ProvidersStateDto,
 } from "../../types";
-import { SelectMenu } from "../ui/SelectMenu";
+import { SegmentedTabs, SelectMenu } from "../ui";
 
 type Props = {
   active: boolean;
@@ -591,24 +591,18 @@ export default function EvolutionModelsPanel({ active, tone }: Props) {
         </div>
 
         <div className="evo-toolbar-row">
-          <div className="evo-seg" role="tablist" aria-label={t("evo.sections")}>
-            {SECTIONS.map(({ id, labelKey, Icon }) => (
-              <button
-                key={id}
-                type="button"
-                role="tab"
-                aria-selected={section === id}
-                className={`evo-seg-item${section === id ? " is-active" : ""}`}
-                onClick={() => setSection(id)}
-              >
-                <Icon size={14} strokeWidth={2.25} aria-hidden />
-                {t(labelKey)}
-                {id === "run" && pendingCount > 0 ? (
-                  <span className="evo-seg-badge">{pendingCount}</span>
-                ) : null}
-              </button>
-            ))}
-          </div>
+          <SegmentedTabs
+            className="evo-seg"
+            aria-label={t("evo.sections")}
+            value={section}
+            onValueChange={(value) => setSection(value as EvoSection)}
+            items={SECTIONS.map(({ id, labelKey, Icon }) => ({
+              value: id,
+              label: t(labelKey),
+              icon: <Icon size={14} strokeWidth={2.25} />,
+              count: id === "run" && pendingCount > 0 ? pendingCount : undefined,
+            }))}
+          />
           <button
             type="button"
             className="aux-action aux-action-ghost evo-refresh-btn"

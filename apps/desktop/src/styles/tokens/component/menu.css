@@ -1,0 +1,27 @@
+/*
+ * Menu recipes stay theme-scoped so var(--tone) resolves exactly where the
+ * inherited component token is declared. Portals receive the document tone.
+ */
+html[data-theme="dark"] {
+  --menu-glass-bg:
+    linear-gradient(165deg, rgba(255, 255, 255, 0.12) 0%, rgba(255, 255, 255, 0.04) 100%),
+    color-mix(in srgb, var(--tone-soft, rgba(96, 165, 250, 0.16)) 42%, rgba(14, 16, 28, 0.9));
+  --menu-glass-border: color-mix(in srgb, var(--tone, transparent) 14%, rgba(255, 255, 255, 0.16));
+  --menu-glass-shadow:
+    0 16px 40px rgba(0, 0, 0, 0.42),
+    0 2px 8px rgba(0, 0, 0, 0.22),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  --menu-glass-blur: blur(28px) saturate(1.4);
+}
+
+html[data-theme="light"] {
+  --menu-glass-bg:
+    linear-gradient(165deg, rgba(255, 255, 255, 0.48) 0%, rgba(255, 255, 255, 0.2) 100%),
+    color-mix(in srgb, var(--tone-soft, transparent) 28%, rgba(255, 255, 255, 0.22));
+  --menu-glass-border: color-mix(in srgb, var(--tone, #94a3b8) 10%, rgba(255, 255, 255, 0.48));
+  --menu-glass-shadow:
+    0 16px 40px rgba(var(--shadow-ink), 0.14),
+    0 2px 8px rgba(var(--shadow-ink), 0.06),
+    inset 0 1px 0 rgba(255, 255, 255, 0.62);
+  --menu-glass-blur: blur(24px) saturate(1.35);
+}

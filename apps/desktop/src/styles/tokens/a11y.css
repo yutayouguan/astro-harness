@@ -1,0 +1,106 @@
+/* Transparency, contrast, and segmented-control accessibility overrides. */
+@media (prefers-reduced-transparency: reduce) {
+  html[data-theme="dark"] {
+    --glass: rgba(18, 14, 30, 0.92);
+    --glass-strong: rgba(18, 14, 30, 0.95);
+    --surface-panel-background: rgba(12, 10, 22, 0.95);
+    --glass-panel: var(--surface-panel-background);
+    --sidebar-bg: rgba(8, 6, 18, 0.95);
+    --sidebar-pinned-bg: rgba(6, 4, 14, 0.95);
+    --menu-glass-bg: rgba(14, 12, 26, 0.96);
+    --header-chip-bg: rgba(18, 14, 30, 0.92);
+    --composer-bg: rgba(12, 10, 24, 0.92);
+    --backdrop-glass: none;
+    --menu-glass-blur: none;
+  }
+
+  html[data-theme="light"] {
+    --glass: rgba(245, 245, 252, 0.88);
+    --glass-strong: rgba(245, 245, 252, 0.92);
+    --surface-panel-background: rgba(245, 245, 252, 0.9);
+    --glass-panel: var(--surface-panel-background);
+    --sidebar-bg: rgba(240, 240, 248, 0.92);
+    --sidebar-pinned-bg: rgba(238, 238, 246, 0.92);
+    --menu-glass-bg: rgba(245, 245, 252, 0.94);
+    --header-chip-bg: rgba(245, 245, 252, 0.9);
+    --composer-bg: rgba(245, 245, 252, 0.9);
+    --backdrop-glass: none;
+    --menu-glass-blur: none;
+  }
+
+  .sidebar,
+  .chat-header-tools,
+  .select-menu-list,
+  .select-menu-trigger,
+  .agent-picker-menu,
+  .agent-picker-chip,
+  .app-dialog-backdrop,
+  .app-dialog,
+  .astro-toast,
+  .glass-menu {
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+  }
+
+  html:root {
+    --seg-shell-blur: none;
+    --seg-item-blur-active: none;
+    --seg-shell-sheen-a: transparent;
+    --seg-shell-sheen-b: transparent;
+    --seg-shell-base: color-mix(in srgb, var(--ink) 7%, var(--bg, #fff));
+    --seg-shell-tone-amt: 0%;
+    --seg-shell-drop-geo: 0 2px 6px -2px;
+    --seg-shell-drop-base: rgba(var(--shadow-ink), 0.16);
+    --seg-shell-drop-tone-amt: 0%;
+    --seg-shell-rim: transparent;
+    --seg-item-sheen-a: transparent;
+    --seg-item-sheen-b: transparent;
+    --seg-item-base: var(--bg, #fff);
+    --seg-item-tone-amt: 0%;
+    --seg-item-ring-amt: 22%;
+    --seg-item-glow-amt: 0%;
+    --seg-item-rim: transparent;
+    --seg-hover-tone-amt: 0%;
+    --seg-hover-base: color-mix(in srgb, var(--ink) 4%, var(--bg, #fff));
+  }
+
+  html[data-theme="dark"]:root {
+    --seg-shell-base: color-mix(in srgb, #fff 8%, var(--bg, #111));
+    --seg-shell-drop-base: rgba(0, 0, 0, 0.5);
+    --seg-item-base: color-mix(in srgb, #fff 16%, var(--bg, #111));
+    --seg-hover-base: color-mix(in srgb, #fff 10%, var(--bg, #111));
+  }
+}
+
+@media (prefers-contrast: more) {
+  html[data-theme="dark"] {
+    --color-border: rgba(255, 255, 255, 0.28);
+    --surface-panel-border: var(--color-border);
+    --glass-edge: var(--surface-panel-border);
+    --border: var(--color-border);
+    --chip-border: rgba(255, 255, 255, 0.22);
+    --menu-glass-border: rgba(255, 255, 255, 0.3);
+    --header-chip-border: rgba(255, 255, 255, 0.25);
+    --color-text-muted: rgba(196, 190, 220, 0.78);
+    --ink-mute: var(--color-text-muted);
+  }
+
+  html[data-theme="light"] {
+    --color-border: rgba(15, 23, 42, 0.2);
+    --surface-panel-border: var(--color-border);
+    --glass-edge: var(--surface-panel-border);
+    --border: var(--color-border);
+    --chip-border: rgba(15, 23, 42, 0.18);
+    --menu-glass-border: rgba(15, 23, 42, 0.22);
+    --header-chip-border: rgba(15, 23, 42, 0.18);
+    --color-text-muted: rgba(71, 85, 105, 0.88);
+    --ink-mute: var(--color-text-muted);
+  }
+
+  html:root {
+    --seg-item-color: var(--ink-soft);
+    --seg-item-ring-amt: 100%;
+    --seg-item-glow-amt: 0%;
+    --seg-item-rim: transparent;
+  }
+}

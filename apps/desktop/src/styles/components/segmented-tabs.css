@@ -1,0 +1,99 @@
+.ui-segmented-tabs {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--seg-shell-gap, 2px);
+  padding: var(--seg-shell-pad, 3px);
+  border: 1px solid var(--surface-panel-border, rgba(148, 163, 184, 0.24));
+  border-radius: var(--seg-shell-radius, 12px);
+  background: var(--surface-panel-background, rgba(255, 255, 255, 0.24));
+  backdrop-filter: var(--seg-shell-blur, blur(14px));
+  -webkit-backdrop-filter: var(--seg-shell-blur, blur(14px));
+}
+
+.ui-segmented-tabs__tab {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--seg-item-gap, 7px);
+  height: var(--seg-item-h, 28px);
+  padding: var(--seg-item-pad, 0 13px);
+  border: 0;
+  border-radius: var(--seg-item-radius, 9px);
+  background: transparent;
+  color: var(--color-text-muted, #64748b);
+  font: inherit;
+  font-size: var(--seg-item-font, 13px);
+  font-weight: var(--seg-item-weight, 600);
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    color var(--duration-fast, 140ms) var(--ease-out, ease-out),
+    background var(--duration-fast, 140ms) var(--ease-out, ease-out),
+    box-shadow var(--duration-fast, 140ms) var(--ease-out, ease-out);
+}
+
+.ui-segmented-tabs__tab:hover:not(:disabled) {
+  color: var(--color-text, #111827);
+  background: color-mix(in srgb, var(--color-accent, #7c3aed) 8%, transparent);
+}
+
+.ui-segmented-tabs__tab.is-active {
+  color: color-mix(
+    in srgb,
+    var(--color-accent, #7c3aed) 62%,
+    var(--color-text, #111827)
+  );
+  background: color-mix(
+    in srgb,
+    var(--color-accent, #7c3aed) 12%,
+    var(--color-bg-raised, #fff)
+  );
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--color-accent, #7c3aed) 20%, transparent),
+    inset 0 1px 0 color-mix(in srgb, #fff 42%, transparent);
+}
+
+.ui-segmented-tabs__tab:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--color-accent, #7c3aed) 60%, transparent);
+  outline-offset: 1px;
+}
+
+.ui-segmented-tabs__tab:disabled {
+  opacity: 0.42;
+  cursor: not-allowed;
+}
+
+.ui-segmented-tabs__icon {
+  display: inline-flex;
+  flex: 0 0 auto;
+}
+
+.ui-segmented-tabs__count {
+  display: inline-grid;
+  place-items: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: color-mix(in srgb, currentcolor 10%, transparent);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+.ui-segmented-tabs--sm {
+  --seg-shell-pad: 2px;
+  --seg-item-h: 24px;
+  --seg-item-pad: 0 9px;
+  --seg-item-gap: 5px;
+  --seg-item-font: 12px;
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .ui-segmented-tabs {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    background: var(--color-bg-subtle, #f1f5f9);
+  }
+}

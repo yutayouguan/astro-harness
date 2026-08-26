@@ -1,6 +1,5 @@
 /** 新建/编辑定时任务：右侧抽屉。 */
-import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
-import { createPortal } from "react-dom";
+import { useCallback, useEffect, useState, type CSSProperties } from "react";
 import {
   CalendarPlus,
   Check,
@@ -21,7 +20,7 @@ import {
 import { invoke } from "@tauri-apps/api/core";
 import { ScheduleEditor } from "./ScheduleEditor";
 import { MorphToggleIcon } from "../icons/MorphIcon";
-import { SelectMenu } from "../ui/SelectMenu";
+import { Drawer, SelectMenu } from "../ui";
 import { ModelBrandIcon, ProviderBrandIcon } from "../icons/ProviderIcons";
 import {
   decodeSchedule,
@@ -93,7 +92,6 @@ export function CreateCronDialog({
   toneStyle,
 }: Props) {
   const { t } = useI18n();
-  const backdropRef = useRef<HTMLDivElement>(null);
   const isEdit = Boolean(editingJob);
 
   const [title, setTitle] = useState("");
@@ -200,21 +198,6 @@ export function CreateCronDialog({
     };
   }, [open, modelsProp, selectedProviderId, providers, activeProviderId, editingJob]);
 
-  useEffect(() => {
-    if (!open) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [open, onClose]);
-
-  if (!open) return null;
-
-  function handleBackdrop(e: React.MouseEvent) {
-    if (e.target === backdropRef.current) onClose();
-  }
-
   async function handleSave() {
     setError("");
     if (!title.trim() || !task.trim()) {
@@ -256,19 +239,16 @@ export function CreateCronDialog({
 
   const TitleIcon = isEdit ? Pencil : CalendarPlus;
 
-  return createPortal(
-    <div
-      className="cron-create-drawer-backdrop"
-      ref={backdropRef}
-      style={toneStyle}
-      onClick={handleBackdrop}
+  return (
+    <Drawer
+      open={open}
+      onClose={onClose}
+      size="lg"
+      backdropClassName="cron-create-drawer-backdrop"
+      backdropStyle={toneStyle}
+      className="cron-create-drawer"
+      aria-labelledby="cron-create-drawer-title"
     >
-      <aside
-        className="cron-create-drawer"
-        role="dialog"
-        aria-modal
-        aria-labelledby="cron-create-drawer-title"
-      >
         <header className="cron-create-drawer-head">
           <h2 id="cron-create-drawer-title" className="cron-create-drawer-title">
             <span className="cron-create-drawer-title-icon" aria-hidden>
@@ -432,8 +412,6 @@ export function CreateCronDialog({
             {t("cron.save")}
           </button>
         </footer>
-      </aside>
-    </div>,
-    document.body,
+    </Drawer>
   );
 }

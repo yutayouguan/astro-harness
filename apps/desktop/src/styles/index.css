@@ -1,56 +1,91 @@
-/* Foundation */
-@import "./foundation/themes.css";
-@import "./foundation/reset.css";
-@import "./foundation/tones.css";
-@import "./foundation/globals.css";
-@import "./foundation/motion.css";
+/* ═══════════════════════════════════════════════════════════════
+   Cascade layer 顺序 —— 优先级的唯一事实源。
+   靠后的 layer 胜出，与选择器特异度无关；同一 layer 内仍按特异度 + 源码顺序。
+   顺序一旦声明就固定，后续新增样式只需选 layer，不再依赖「谁最后导入」。
+   ═══════════════════════════════════════════════════════════════ */
+@layer vendor, tokens.primitive, tokens.semantic, tokens.component, base, shell, components,
+  features, overrides;
+
+/* 第三方：放最底层，功能层无需 !important 就能覆盖 React Flow 默认外观 */
+@import "@xyflow/react/dist/style.css" layer(vendor);
+
+/* Token contract: primitive → palette/semantic → component → contextual overrides. */
+@import "./tokens/primitive.css" layer(tokens.primitive);
+@import "./tokens/palette.css" layer(tokens.primitive);
+@import "./tokens/semantic-light.css" layer(tokens.semantic);
+@import "./tokens/semantic-dark.css" layer(tokens.semantic);
+@import "./tokens/component/glass.css" layer(tokens.component);
+@import "./tokens/component/menu.css" layer(tokens.component);
+@import "./tokens/component/header.css" layer(tokens.component);
+@import "./tokens/component/badge.css" layer(tokens.component);
+@import "./tokens/component/segmented.css" layer(tokens.component);
+@import "./tokens/tone-context.css" layer(overrides);
+@import "./tokens/unified-color.css" layer(overrides);
+@import "./tokens/glass-intensity.css" layer(overrides);
+@import "./tokens/a11y.css" layer(overrides);
+
+/* Foundation behavior and element rules. Deprecated theme barrels are not imported. */
+@import "./foundation/reset.css" layer(base);
+@import "./foundation/globals.css" layer(base);
+@import "./foundation/motion.css" layer(base);
 
 /* Application shell */
-@import "./features/shell/shell.css";
-@import "./features/shell/layout.css";
-@import "./features/shell/header.css";
+@import "./features/shell/shell.css" layer(shell);
+/* layout / header 大量以 .sidebar-x .expandable-search-btn、.model-picker-icon
+   .model-brand-icon 这类页面作用域覆写共享组件，进 shell 层会被 components 反压，
+   故暂随 features 走；等这些覆写收敛成组件变体后再下沉到 shell。 */
+@import "./features/shell/layout.css" layer(features);
+@import "./features/shell/header.css" layer(features);
 
 /* Shared components and chat */
-@import "./components/tooltip.css";
-@import "./features/chat/core.css";
-@import "./features/chat/activity.css";
-@import "./features/chat/navigation.css";
-@import "./features/chat/markdown.css";
-@import "./features/chat/drawers.css";
-@import "./features/chat/emoji-picker.css";
-@import "./features/chat/right-panel.css";
-@import "./features/chat/project-files.css";
-@import "./features/chat/subagents.css";
-@import "./features/chat/branch-graph.css";
-@import "./components/cards.css";
+@import "./components/tooltip.css" layer(components);
+@import "./components/button.css" layer(components);
+@import "./components/surface.css" layer(components);
+@import "./components/segmented-tabs.css" layer(components);
+@import "./components/overlay.css" layer(components);
+@import "./features/chat/core.css" layer(features);
+@import "./features/chat/activity.css" layer(features);
+@import "./features/chat/navigation.css" layer(features);
+@import "./features/chat/markdown.css" layer(features);
+@import "./features/chat/drawers.css" layer(features);
+@import "./features/chat/emoji-picker.css" layer(features);
+@import "./features/chat/right-panel.css" layer(features);
+@import "./features/chat/project-files.css" layer(features);
+@import "./features/chat/subagents.css" layer(features);
+@import "./features/chat/branch-graph.css" layer(features);
+/* cards / media / agent-picker / select-menu / illustrations 的容器类被各功能页
+   以同特异度作用域覆写（.providers-x .select-menu-trigger 等），当前靠「组件在后」
+   取胜。下沉到 components 会整片翻转外观，故先留在 features 保持现状。 */
+@import "./components/cards.css" layer(features);
 
 /* Feature styles */
-@import "./features/memory.css";
-@import "./features/workspace.css";
-@import "./features/filespace.css";
-@import "./components/media.css";
-@import "./components/agent-picker.css";
-@import "./features/preferences.css";
-@import "./features/tools.css";
-@import "./features/skills/core.css";
-@import "./features/skills/gallery.css";
-@import "./features/skills/detail.css";
-@import "./features/skills/cards.css";
-@import "./features/skills/preview.css";
-@import "./features/skills/file-viewer.css";
-@import "./features/skills/dialogs.css";
-@import "./components/toast.css";
-@import "./components/dialog.css";
+@import "./features/memory.css" layer(features);
+@import "./features/workspace.css" layer(features);
+@import "./features/filespace.css" layer(features);
+@import "./components/media.css" layer(features);
+@import "./components/agent-picker.css" layer(features);
+@import "./features/preferences.css" layer(features);
+@import "./features/tools.css" layer(features);
+@import "./features/skills/core.css" layer(features);
+@import "./features/skills/gallery.css" layer(features);
+@import "./features/skills/detail.css" layer(features);
+@import "./features/skills/cards.css" layer(features);
+@import "./features/skills/preview.css" layer(features);
+@import "./features/skills/file-viewer.css" layer(features);
+@import "./features/skills/dialogs.css" layer(features);
+@import "./components/toast.css" layer(components);
+@import "./components/dialog.css" layer(components);
 
 /* Shared overlays and utilities */
-@import "./features/providers.css";
-@import "./components/select-menu.css";
-@import "./features/cron.css";
-@import "./features/loop.css";
-@import "./features/insights.css";
-@import "./features/model-market.css";
-@import "./foundation/transitions.css";
-@import "./components/illustrations.css";
+@import "./features/providers.css" layer(features);
+@import "./components/select-menu.css" layer(features);
+@import "./features/cron.css" layer(features);
+@import "./features/loop.css" layer(features);
+@import "./features/insights.css" layer(features);
+@import "./features/model-market.css" layer(features);
+@import "./foundation/transitions.css" layer(base);
+@import "./components/illustrations.css" layer(features);
 
-/* 统一分段 Tab：必须最后导入，覆盖各功能页的历史外观 */
-@import "./components/tabs.css";
+/* 统一分段 Tab：overrides 层显式声明「压过各功能页历史外观」，
+   不再依赖它是 index.css 最后一行 */
+@import "./components/tabs.css" layer(overrides);

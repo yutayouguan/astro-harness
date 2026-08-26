@@ -49,7 +49,7 @@ import {
   type ProviderOpt,
 } from "./CreateCronDialog";
 import { GlassDatePicker } from "./GlassDatePicker";
-import { SelectMenu } from "../ui/SelectMenu";
+import { Drawer, SelectMenu } from "../ui";
 import { EmptyIllustration } from "../../illustrations";
 
 type CronTemplate = {
@@ -1508,20 +1508,15 @@ export default function CronPanel({
           document.body,
         )}
 
-      {drawerRun &&
-        createPortal(
-          <div
-            className="cron-run-drawer-backdrop"
-            onClick={(e) => {
-              if (e.target === e.currentTarget) setDrawerRun(null);
-            }}
-          >
-            <aside
-              className="cron-run-drawer"
-              role="dialog"
-              aria-modal
-              aria-labelledby="cron-run-drawer-title"
-            >
+      {drawerRun && (
+        <Drawer
+          open
+          onClose={() => setDrawerRun(null)}
+          size="lg"
+          backdropClassName="cron-run-drawer-backdrop"
+          className="cron-run-drawer"
+          aria-labelledby="cron-run-drawer-title"
+        >
               <header className="cron-run-drawer-head">
                 <div>
                   <h2 id="cron-run-drawer-title" className="cron-run-drawer-title">
@@ -1660,10 +1655,8 @@ export default function CronPanel({
                   </section>
                 )}
               </div>
-            </aside>
-          </div>,
-          document.body,
-        )}
+        </Drawer>
+      )}
     </div>
   );
 }

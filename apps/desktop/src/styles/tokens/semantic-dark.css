@@ -1,0 +1,62 @@
+/* Dark semantic contract. Canonical names own values; legacy names alias them. */
+html[data-theme="dark"] {
+  color-scheme: dark;
+
+  --color-bg-base: #120a1c;
+  --color-bg-subtle: #1a1028;
+  --color-bg-raised: #24143a;
+  --color-text: #ece8f8;
+  --color-text-muted: rgba(196, 190, 220, 0.58);
+  --color-text-secondary: rgba(236, 232, 248, 0.78);
+  --color-text-tertiary: var(--color-text-muted);
+  --color-accent: var(--palette-accent);
+  --color-accent-secondary: var(--palette-accent-secondary);
+  --color-border: rgba(255, 255, 255, 0.09);
+  --color-danger: var(--palette-danger);
+  --color-danger-background: var(--palette-danger-bg);
+
+  --surface-panel-background:
+    linear-gradient(155deg, rgba(255, 255, 255, 0.06) 0%, rgba(255, 255, 255, 0.015) 100%),
+    rgba(8, 6, 18, 0.62);
+  --surface-panel-border: var(--color-border);
+  --surface-panel-hover: rgba(255, 255, 255, 0.07);
+
+  --shell-bg:
+    radial-gradient(ellipse 80% 70% at 20% 0%, rgba(124, 58, 237, 0.28), transparent 55%),
+    radial-gradient(ellipse 70% 60% at 90% 20%, rgba(59, 130, 246, 0.16), transparent 50%),
+    radial-gradient(ellipse 60% 50% at 50% 100%, rgba(236, 72, 153, 0.1), transparent 55%),
+    linear-gradient(160deg, #100816 0%, #1a1028 45%, #0e0a18 100%);
+  --user-fill: linear-gradient(145deg, rgba(147, 197, 253, 0.32), rgba(96, 165, 250, 0.18));
+  --assist-fill: rgba(255, 255, 255, 0.05);
+  --shadow-ink: 0, 0, 0;
+  --shadow: 0 8px 24px rgba(var(--shadow-ink), 0.28);
+  --shadow-card: 0 2px 8px rgba(var(--shadow-ink), 0.16);
+  --scroll-thumb: rgba(255, 255, 255, 0.1);
+  --send-fg: #1a1028;
+
+  /* Compatibility aliases: remove after all consumers use the canonical contract. */
+  --bg0: var(--color-bg-base);
+  --bg1: var(--color-bg-subtle);
+  --bg2: var(--color-bg-raised);
+  --bg: var(--color-bg-subtle);
+  --bg-base: var(--color-bg-base);
+  --ink: var(--color-text);
+  --ink-soft: var(--color-text-secondary);
+  --ink-mute: var(--color-text-muted);
+  --ink-secondary: var(--color-text-secondary);
+  --ink-tertiary: var(--color-text-tertiary);
+  --ink-1: var(--color-text);
+  --ink-2: var(--color-text-secondary);
+  --text: var(--color-text);
+  --text-muted: var(--color-text-muted);
+  --muted: var(--color-text-muted);
+  --border: var(--color-border);
+  --accent: var(--color-accent);
+  --accent-2: var(--color-accent-secondary);
+  --pink: var(--palette-pink);
+  --gold: var(--palette-gold);
+  --danger: var(--color-danger);
+  --danger-bg: var(--color-danger-background);
+  --radius-lg: var(--primitive-radius-lg);
+  --radius-xl: var(--primitive-radius-xl);
+}

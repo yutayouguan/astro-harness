@@ -1,0 +1,108 @@
+/* Window underlay follows the active document tone. */
+html[data-theme="light"] { --window-underlay: #e9eef6; }
+html[data-theme="light"][data-tone="blue"] { --window-underlay: #dbeafe; }
+html[data-theme="light"][data-tone="green"] { --window-underlay: #dcfce7; }
+html[data-theme="light"][data-tone="purple"] { --window-underlay: #ede9fe; }
+html[data-theme="light"][data-tone="orange"] { --window-underlay: #ffedd5; }
+html[data-theme="light"][data-tone="pink"] { --window-underlay: #fce7f3; }
+html[data-theme="light"][data-tone="cyan"] { --window-underlay: #cffafe; }
+html[data-theme="light"][data-tone="indigo"] { --window-underlay: #e0e7ff; }
+html[data-theme="light"][data-tone="amber"] { --window-underlay: #fef3c7; }
+html[data-theme="light"][data-tone="teal"] { --window-underlay: #ccfbf1; }
+html[data-theme="light"][data-tone="aurora"] { --window-underlay: #cffafe; }
+html[data-theme="light"][data-tone="twilight"] { --window-underlay: #ede9fe; }
+
+html[data-theme="dark"] { --window-underlay: #100816; }
+html[data-theme="dark"][data-tone="blue"] { --window-underlay: #0a1018; }
+html[data-theme="dark"][data-tone="green"] { --window-underlay: #07140f; }
+html[data-theme="dark"][data-tone="purple"] { --window-underlay: #100816; }
+html[data-theme="dark"][data-tone="orange"] { --window-underlay: #16120c; }
+html[data-theme="dark"][data-tone="pink"] { --window-underlay: #1a0c16; }
+html[data-theme="dark"][data-tone="cyan"] { --window-underlay: #0a161a; }
+html[data-theme="dark"][data-tone="indigo"] { --window-underlay: #0c0c1a; }
+html[data-theme="dark"][data-tone="amber"] { --window-underlay: #16120c; }
+html[data-theme="dark"][data-tone="teal"] { --window-underlay: #071412; }
+html[data-theme="dark"][data-tone="aurora"] { --window-underlay: #07141a; }
+html[data-theme="dark"][data-tone="twilight"] { --window-underlay: #140818; }
+
+/*
+ * Document-level mapping keeps body portals on the active tab tone. A nearer
+ * panel or element declaration still wins through normal custom-property inheritance.
+ */
+html[data-tone="blue"] {
+  --tone: var(--tone-blue);
+  --tone-soft: var(--tone-blue-soft);
+  --tone-glow: var(--tone-blue-glow);
+  --accent: var(--tone-blue);
+  --accent-2: var(--tone-blue);
+}
+html[data-tone="green"] {
+  --tone: var(--tone-green);
+  --tone-soft: var(--tone-green-soft);
+  --tone-glow: var(--tone-green-glow);
+  --accent: var(--tone-green);
+  --accent-2: var(--tone-green);
+}
+html[data-tone="purple"] {
+  --tone: var(--tone-purple);
+  --tone-soft: var(--tone-purple-soft);
+  --tone-glow: var(--tone-purple-glow);
+  --accent: var(--tone-purple);
+  --accent-2: var(--tone-purple);
+}
+html[data-tone="orange"] {
+  --tone: var(--tone-orange);
+  --tone-soft: var(--tone-orange-soft);
+  --tone-glow: var(--tone-orange-glow);
+  --accent: var(--tone-orange);
+  --accent-2: var(--tone-orange);
+}
+html[data-tone="pink"] {
+  --tone: var(--tone-pink);
+  --tone-soft: var(--tone-pink-soft);
+  --tone-glow: var(--tone-pink-glow);
+  --accent: var(--tone-pink);
+  --accent-2: var(--tone-pink);
+}
+html[data-tone="cyan"] {
+  --tone: var(--tone-cyan);
+  --tone-soft: var(--tone-cyan-soft);
+  --tone-glow: var(--tone-cyan-glow);
+  --accent: var(--tone-cyan);
+  --accent-2: var(--tone-cyan);
+}
+html[data-tone="indigo"] {
+  --tone: var(--tone-indigo);
+  --tone-soft: var(--tone-indigo-soft);
+  --tone-glow: var(--tone-indigo-glow);
+  --accent: var(--tone-indigo);
+  --accent-2: var(--tone-indigo);
+}
+html[data-tone="amber"] {
+  --tone: var(--tone-amber);
+  --tone-soft: var(--tone-amber-soft);
+  --tone-glow: var(--tone-amber-glow);
+  --accent: var(--tone-amber);
+  --accent-2: var(--tone-amber);
+}
+html[data-tone="teal"] {
+  --tone: var(--tone-teal);
+  --tone-soft: var(--tone-teal-soft);
+  --tone-glow: var(--tone-teal-glow);
+  --accent: var(--tone-teal);
+  --accent-2: var(--tone-teal);
+}
+html[data-tone="aurora"] {
+  --tone: var(--tone-aurora);
+  --tone-soft: var(--tone-aurora-soft);
+  --tone-glow: var(--tone-aurora-glow);
+  --accent: var(--tone-aurora);
+  --accent-2: var(--tone-indigo);
+}
+html[data-tone="twilight"] {
+  --tone: var(--tone-twilight);
+  --tone-soft: var(--tone-twilight-soft);
+  --tone-glow: var(--tone-twilight-glow);
+  --accent: var(--tone-twilight);
+  --accent-2: var(--tone-pink);
+}

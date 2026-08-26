@@ -1,9 +1,9 @@
 /** 创建 / 编辑项目弹窗：管理名称、源文件夹与图标。 */
 import { useCallback, useEffect, useId, useState } from "react";
-import { createPortal } from "react-dom";
 import { invoke } from "@tauri-apps/api/core";
 import { ArrowDown, ArrowUp, Plus, Trash2, X } from "lucide-react";
 import type { ProjectDto } from "../../types";
+import { ModalShell } from "../ui";
 import ProjectFolderIcon from "./ProjectFolderIcon";
 import ProjectFolderIconPicker from "./ProjectFolderIconPicker";
 
@@ -120,29 +120,17 @@ export default function ProjectEditDialog({
     }
   }, [project, onRemoved, onClose]);
 
-  // ESC 关闭
-  useEffect(() => {
-    if (!open) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && !iconPickerOpen) onClose();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [open, iconPickerOpen, onClose]);
-
-  if (!open) return null;
   const isDefaultProject = project?.id === "default";
   const isCreating = project === null;
 
-  return createPortal(
-    <div
-      className="settings-overlay"
-      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
-      role="dialog"
-      aria-modal="true"
+  return (
+    <ModalShell
+      open={open}
+      onClose={onClose}
+      closeOnEscape={!iconPickerOpen}
+      className="project-edit-panel"
       aria-labelledby={titleId}
     >
-      <div className="project-edit-panel">
         <button
           type="button"
           className="settings-overlay-close"
@@ -270,8 +258,6 @@ export default function ProjectEditDialog({
             </button>
           </div>
         </div>
-      </div>
-    </div>,
-    document.body,
+    </ModalShell>
   );
 }

@@ -49,6 +49,7 @@ import {
 import McpIcon from "../icons/McpIcon";
 import { MorphToggleIcon } from "../icons/MorphIcon";
 import { ModelBrandIcon, ProviderBrandIcon } from "../icons/ProviderIcons";
+import { SegmentedTabs } from "../ui";
 
 type Period = "month" | "quarter" | "year";
 type Metric = "calls" | "tokens" | "cost";
@@ -319,20 +320,18 @@ function InsightsTrendChart({
             </span>
           )}
         </div>
-        <div className="insights-seg insights-seg--sm insights-metric-tabs" role="tablist">
-          {METRIC_TABS.map(({ id, labelKey }) => (
-            <button
-              key={id}
-              type="button"
-              role="tab"
-              className={`insights-seg-item insights-metric-tab${metric === id ? " active" : ""}`}
-              aria-selected={metric === id}
-              onClick={() => onMetricChange(id)}
-            >
-              {t(labelKey)}
-            </button>
-          ))}
-        </div>
+        <SegmentedTabs
+          size="sm"
+          className="insights-metric-tabs"
+          aria-label={`${title} metric`}
+          value={metric}
+          onValueChange={(value) => onMetricChange(value as Metric)}
+          items={METRIC_TABS.map(({ id, labelKey }) => ({
+            value: id,
+            label: t(labelKey),
+            className: "insights-metric-tab",
+          }))}
+        />
       </div>
       {series.length > 0 && hasSignal ? (
         <div className="insights-chart" aria-label={`${metric} trend`}>
@@ -530,40 +529,30 @@ export default function InsightsPanel({ active }: { active: boolean }) {
   return (
     <div className="insights-panel">
       <div className="insights-toolbar">
-        <div
-          className="insights-seg insights-view-tabs"
-          role="tablist"
+        <SegmentedTabs
+          className="insights-view-tabs"
           aria-label="insights view"
-        >
-          {VIEW_TABS.map(({ id, labelKey, Icon }) => (
-            <button
-              key={id}
-              type="button"
-              role="tab"
-              className={`insights-seg-item insights-view-tab${view === id ? " active" : ""}`}
-              aria-selected={view === id}
-              onClick={() => setView(id)}
-            >
-              <Icon size={15} strokeWidth={2.25} aria-hidden />
-              {t(labelKey)}
-            </button>
-          ))}
-        </div>
-        <div className="insights-seg insights-period-tabs" role="tablist">
-          {PERIOD_TABS.map(({ id, labelKey, Icon }) => (
-            <button
-              key={id}
-              type="button"
-              role="tab"
-              className={`insights-seg-item insights-period-tab${period === id ? " active" : ""}`}
-              aria-selected={period === id}
-              onClick={() => setPeriod(id)}
-            >
-              <Icon size={15} strokeWidth={2.25} aria-hidden />
-              {t(labelKey)}
-            </button>
-          ))}
-        </div>
+          value={view}
+          onValueChange={(value) => setView(value as ViewMode)}
+          items={VIEW_TABS.map(({ id, labelKey, Icon }) => ({
+            value: id,
+            label: t(labelKey),
+            icon: <Icon size={15} strokeWidth={2.25} />,
+            className: "insights-view-tab",
+          }))}
+        />
+        <SegmentedTabs
+          className="insights-period-tabs"
+          aria-label="insights period"
+          value={period}
+          onValueChange={(value) => setPeriod(value as Period)}
+          items={PERIOD_TABS.map(({ id, labelKey, Icon }) => ({
+            value: id,
+            label: t(labelKey),
+            icon: <Icon size={15} strokeWidth={2.25} />,
+            className: "insights-period-tab",
+          }))}
+        />
       </div>
 
       {error && <p className="insights-error">{error}</p>}

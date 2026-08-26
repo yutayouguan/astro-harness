@@ -1,0 +1,25 @@
+/* Tone-aware badge material recipes. */
+html[data-theme="dark"] {
+  --badge-bg:
+    radial-gradient(circle at 30% 24%, rgba(255, 255, 255, 0.1) 0%, transparent 50%),
+    linear-gradient(165deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.02)),
+    color-mix(in srgb, var(--tone, var(--accent)) 14%, transparent);
+  --badge-border: rgba(255, 255, 255, 0.12);
+  --badge-shadow:
+    0 5px 12px color-mix(in srgb, var(--tone, var(--accent)) 22%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1),
+    inset 0 -2px 5px rgba(0, 0, 0, 0.32);
+}
+
+html[data-theme="light"] {
+  --badge-bg:
+    radial-gradient(circle at 30% 24%, rgba(255, 255, 255, 0.52) 0%, rgba(255, 255, 255, 0.18) 42%, transparent 68%),
+    linear-gradient(165deg, rgba(255, 255, 255, 0.42) 0%, rgba(255, 255, 255, 0.16) 100%),
+    color-mix(in srgb, var(--tone, var(--accent)) 16%, transparent);
+  --badge-border: color-mix(in srgb, var(--tone, var(--accent)) 24%, rgba(255, 255, 255, 0.48));
+  --badge-shadow:
+    0 4px 12px color-mix(in srgb, var(--tone, var(--accent)) 20%, transparent),
+    0 1px 3px rgba(var(--shadow-ink), 0.05),
+    inset 0 1px 0 rgba(255, 255, 255, 0.62),
+    inset 0 -2px 4px rgba(var(--shadow-ink), 0.05);
+}

@@ -53,7 +53,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { open as shellOpen } from "@tauri-apps/plugin-shell";
 import { MorphToggleIcon } from "../icons/MorphIcon";
 import { ModelBrandIcon, ProviderBrandIcon } from "../icons/ProviderIcons";
-import { SelectMenu } from "../ui/SelectMenu";
+import { Button, IconButton, SelectMenu, Surface } from "../ui";
 import { useConfirm } from "../../hooks/ui/DialogContext";
 import { useI18n } from "../../i18n/LocaleContext";
 import type { MessageKey } from "../../i18n/messages";
@@ -1440,7 +1440,11 @@ export default function ProvidersPanel({ active, onStateChange, tone }: Props) {
         <AuxiliaryModelsPanel active={active} embedded tone={tone} />
       ) : (
       <div className="providers-layout">
-        <aside className="providers-pane providers-pane-list">
+        <Surface
+          variant="card"
+          className="providers-pane providers-pane-list"
+          role="complementary"
+        >
           <div className="providers-pane-head">
             <h2>{t("providers.listTitle")}</h2>
             <p>
@@ -1583,17 +1587,17 @@ export default function ProvidersPanel({ active, onStateChange, tone }: Props) {
                 options={addKindOptions}
               />
             </div>
-            <button
-              type="button"
-              className="providers-icon-btn providers-add-btn"
+            <IconButton
+              variant="primary"
+              className="providers-pane-action providers-add-btn"
               title={t("providers.add")}
               aria-label={t("providers.add")}
               onClick={() => void addProvider()}
             >
               <IconPlus />
-            </button>
+            </IconButton>
           </div>
-        </aside>
+        </Surface>
 
         <section className="providers-pane providers-pane-detail">
           <div className="providers-pane-head">
@@ -1603,39 +1607,41 @@ export default function ProvidersPanel({ active, onStateChange, tone }: Props) {
             </div>
             {selected && draft && (
               <div className="providers-pane-head-actions">
-                <button
-                  type="button"
-                  className="providers-icon-btn is-primary"
-                  disabled={saving}
+                <IconButton
+                  variant="primary"
+                  className="providers-pane-action"
+                  busy={saving}
+                  busyLabel={t("providers.saving")}
                   title={saving ? t("providers.saving") : t("providers.save")}
                   aria-label={saving ? t("providers.saving") : t("providers.save")}
                   onClick={() => void saveDraft()}
                 >
-                  {saving ? <IconLoader className="is-spin" /> : <IconSave />}
-                </button>
+                  <IconSave />
+                </IconButton>
                 {!isActive && draft.enabled && (
-                  <button
-                    type="button"
-                    className="providers-icon-btn"
+                  <IconButton
+                    variant="secondary"
+                    className="providers-pane-action"
                     title={t("providers.setActive")}
                     aria-label={t("providers.setActive")}
                     onClick={() => void setActive(selected.id)}
                   >
                     <IconStar />
-                  </button>
+                  </IconButton>
                 )}
-                <button
-                  type="button"
-                  className="providers-icon-btn is-danger"
+                <IconButton
+                  variant="danger"
+                  className="providers-pane-action"
                   title={t("providers.delete")}
                   aria-label={t("providers.delete")}
                   onClick={() => void deleteProvider()}
                 >
                   <IconTrash />
-                </button>
-                <button
-                  type="button"
-                  className={`providers-icon-btn ${draft.enabled ? "is-active" : ""}`}
+                </IconButton>
+                <IconButton
+                  variant="secondary"
+                  className="providers-pane-action"
+                  active={draft.enabled}
                   aria-pressed={draft.enabled}
                   title={
                     draft.enabled
@@ -1651,7 +1657,7 @@ export default function ProvidersPanel({ active, onStateChange, tone }: Props) {
                   onClick={() => void toggleEnabled()}
                 >
                   <IconPower />
-                </button>
+                </IconButton>
               </div>
             )}
           </div>
@@ -1958,13 +1964,14 @@ export default function ProvidersPanel({ active, onStateChange, tone }: Props) {
                     {t("providers.apiKey")}
                   </h4>
                   {needsKey && selected.official_key_url && (
-                    <button
-                      type="button"
+                    <Button
+                      variant="ghost"
+                      size="sm"
                       className="providers-key-link"
                       onClick={() => void openOfficialKey()}
                     >
                       {t("providers.getOfficialKey")}
-                    </button>
+                    </Button>
                   )}
                 </div>
                 {!needsKey ? (

@@ -79,14 +79,3 @@ html[data-platform="macos"] body {
 html[data-platform="macos"][data-theme="dark"] body {
   background: color-mix(in srgb, var(--window-underlay, var(--bg1)) 55%, transparent) !important;
 }
-
-
-/* Overlay 标题栏：红绿灯约占 12–38px 高、左侧约 78px 宽 */
-:root {
-  --titlebar-h: 52px;
-  --titlebar-traffic-w: 78px;
-  /* 浮层叠放：抽屉 < 菜单（含 portal 下拉） < tip */
-  --z-drawer: 1300;
-  --z-menu: 1400;
-  --z-tip: 10001;
-}

@@ -30,12 +30,15 @@
   flex-direction: column;
   padding: 18px 20px;
   border-radius: 20px;
+  overflow: hidden;
+}
+
+.providers-pane-detail {
   background: var(--sidebar-bg);
   border: 1px solid var(--glass-edge);
   box-shadow: var(--shadow-card), var(--glass-rim);
   backdrop-filter: blur(var(--blur-glass, 20px)) saturate(1.25);
   -webkit-backdrop-filter: blur(var(--blur-glass, 20px)) saturate(1.25);
-  overflow: hidden;
 }
 
 /* 与侧栏同色：半透明底 + 当前 tab 主题色晕 */
@@ -327,17 +330,8 @@ html[data-theme="dark"] .providers-badge--deprecated {
   background: color-mix(in srgb, var(--glass-panel) 82%, transparent);
 }
 
-.providers-add-row>.providers-icon-btn,
 .providers-add-btn {
-  width: 36px;
-  height: 36px;
   flex-shrink: 0;
-  border-radius: 12px;
-}
-
-.providers-add-row>.providers-icon-btn:active:not(:disabled),
-.providers-add-btn:active:not(:disabled) {
-  transform: scale(0.96);
 }
 
 .providers-kind-picker {
@@ -744,17 +738,9 @@ html[data-theme="dark"] .providers-media-model-select.select-menu.is-open .selec
 }
 
 .providers-key-link {
-  display: inline-flex;
-  align-items: center;
   flex-shrink: 0;
   margin: 0;
-  padding: 0;
-  border: none;
-  background: transparent;
-  color: var(--tone);
-  font-size: 12px;
-  font-weight: 600;
-  cursor: pointer;
+  --ui-button-accent: var(--tone);
   text-decoration: underline;
   text-underline-offset: 3px;
 }
@@ -986,6 +972,10 @@ html[data-theme="dark"] .providers-media-model-select.select-menu.is-open .selec
 .providers-models-title-row .providers-block-title,
 .providers-models-title-row .providers-models-count {
   flex-shrink: 0;
+}
+
+.providers-pane-action {
+  --ui-button-accent: var(--tone);
 }
 
 /* 与 ExpandableSearch / skills-icon-btn 同套玻璃液态图标钮；色跟随页内 --tone（providers tab = blue） */

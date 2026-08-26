@@ -1,0 +1,58 @@
+/* Light semantic contract. Canonical names own values; legacy names alias them. */
+html[data-theme="light"] {
+  color-scheme: light;
+
+  --color-bg-base: #eef2f7;
+  --color-bg-subtle: #e8edf5;
+  --color-bg-raised: #dde5f0;
+  --color-text: #1e293b;
+  --color-text-muted: rgba(71, 85, 105, 0.72);
+  --color-text-secondary: rgba(30, 41, 59, 0.78);
+  --color-text-tertiary: var(--color-text-muted);
+  --color-accent: var(--palette-accent);
+  --color-accent-secondary: var(--palette-accent-secondary);
+  --color-border: rgba(255, 255, 255, 0.48);
+  --color-danger: var(--palette-danger);
+  --color-danger-background: var(--palette-danger-bg);
+
+  --surface-panel-background: rgba(255, 255, 255, 0.24);
+  --surface-panel-border: var(--color-border);
+  --surface-panel-hover: rgba(255, 255, 255, 0.38);
+
+  --shell-bg:
+    radial-gradient(ellipse 90% 70% at 12% 8%, rgba(147, 197, 253, 0.42), transparent 55%),
+    radial-gradient(ellipse 70% 55% at 88% 18%, rgba(196, 181, 253, 0.32), transparent 50%),
+    radial-gradient(ellipse 60% 50% at 50% 100%, rgba(167, 243, 208, 0.22), transparent 55%),
+    linear-gradient(165deg, #f4f6fa 0%, #e9eef6 48%, #e4eaf3 100%);
+  --user-fill: linear-gradient(145deg, rgba(219, 234, 254, 0.72), rgba(191, 219, 254, 0.42));
+  --assist-fill: rgba(255, 255, 255, 0.18);
+  --shadow-ink: 18, 18, 22;
+  --shadow: 0 4px 16px rgba(var(--shadow-ink), 0.05);
+  --shadow-card: 0 1px 6px rgba(var(--shadow-ink), 0.04), 0 0 1px rgba(var(--shadow-ink), 0.03);
+  --scroll-thumb: rgba(148, 163, 184, 0.16);
+  --send-fg: #1e293b;
+
+  /* Compatibility aliases: remove after all consumers use the canonical contract. */
+  --bg0: var(--color-bg-base);
+  --bg1: var(--color-bg-subtle);
+  --bg2: var(--color-bg-raised);
+  --bg: var(--color-bg-subtle);
+  --bg-base: var(--color-bg-base);
+  --ink: var(--color-text);
+  --ink-soft: var(--color-text-secondary);
+  --ink-mute: var(--color-text-muted);
+  --ink-secondary: var(--color-text-secondary);
+  --ink-tertiary: var(--color-text-tertiary);
+  --ink-1: var(--color-text);
+  --ink-2: var(--color-text-secondary);
+  --text: var(--color-text);
+  --text-muted: var(--color-text-muted);
+  --muted: var(--color-text-muted);
+  --border: var(--color-border);
+  --accent: var(--color-accent);
+  --accent-2: var(--color-accent-secondary);
+  --pink: var(--palette-pink);
+  --gold: var(--palette-gold);
+  --danger: var(--color-danger);
+  --danger-bg: var(--color-danger-background);
+}

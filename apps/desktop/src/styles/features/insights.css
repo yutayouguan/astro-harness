@@ -30,6 +30,12 @@
   max-width: 100%;
 }
 
+.insights-view-tabs,
+.insights-period-tabs,
+.insights-metric-tabs {
+  --color-accent: var(--tone);
+}
+
 /* View Tab 保持单行，避免 Tracing 被挤换行 */
 .insights-panel .insights-view-tabs {
   flex-wrap: nowrap;
@@ -44,65 +50,6 @@
   flex-wrap: nowrap;
   flex-shrink: 0;
   margin-left: auto;
-}
-
-/* View / Period / Metric 共用分段控件 */
-.insights-seg {
-  display: inline-flex;
-  flex-wrap: wrap;
-  gap: 2px;
-  min-width: 0;
-  max-width: 100%;
-  padding: 3px;
-  border-radius: 12px;
-  border: 1px solid color-mix(in srgb, var(--glass-edge) 88%, transparent);
-  background: color-mix(in srgb, var(--glass-panel, rgba(255, 255, 255, 0.35)) 88%, transparent);
-  box-shadow: none;
-  backdrop-filter: blur(12px) saturate(1.1);
-  -webkit-backdrop-filter: blur(12px) saturate(1.1);
-}
-
-.insights-seg-item {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  border: none;
-  border-radius: 9px;
-  padding: 7px 12px;
-  font-size: 13px;
-  font-weight: 650;
-  cursor: pointer;
-  color: var(--ink-mute);
-  background: transparent;
-  transition: color 0.16s ease, background 0.16s ease, box-shadow 0.16s ease;
-}
-
-.insights-seg-item > svg {
-  flex-shrink: 0;
-  opacity: 0.8;
-}
-
-.insights-seg-item.active > svg {
-  opacity: 1;
-}
-
-.insights-seg-item:hover {
-  color: var(--ink);
-  background: color-mix(in srgb, var(--ink) 5%, transparent);
-}
-
-.insights-seg-item.active {
-  color: var(--ink);
-  background: color-mix(in srgb, #fff 82%, var(--tone-soft));
-  box-shadow:
-    0 1px 2px rgba(15, 23, 42, 0.06),
-    inset 0 0 0 1px color-mix(in srgb, var(--tone) 22%, transparent);
-}
-
-.insights-seg--sm .insights-seg-item {
-  padding: 4px 9px;
-  font-size: 11.5px;
-  border-radius: 8px;
 }
 
 .insights-kpis {
@@ -715,15 +662,6 @@
   clip: rect(0, 0, 0, 0);
   white-space: nowrap;
   border: 0;
-}
-
-html[data-theme="dark"] .insights-seg{
-  background: color-mix(in srgb, var(--glass-panel, rgba(20, 20, 24, 0.7)) 88%, transparent);
-}
-
-html[data-theme="dark"] .insights-seg-item.active{
-  background: color-mix(in srgb, var(--tone-soft) 70%, rgba(255, 255, 255, 0.08));
-  color: color-mix(in srgb, var(--tone) 40%, #fff);
 }
 
 html[data-theme="dark"] .insights-kpi--primary{
