@@ -318,6 +318,52 @@ fn decode_base64_approx(input: &str) -> Option<String> {
     String::from_utf8(buffer).ok()
 }
 
+/// 确定本次提交归属的项目，其首个 root 即工具执行目录。
+///
+/// `ensure_default_project` 会把所有未归属会话批量并入默认项目，因此本会话
+/// 此前的真实归属必须在它之前读出，否则新会话会被误判成「已在默认项目」，
+/// 侧栏选中的项目也就永远传不到工具执行目录。
+fn resolve_session_project(
+    store: &session::SessionStore,
+    session_id: &str,
+    requested_project_id: &str,
+    workspace: &str,
+) -> Result<session::Project, String> {
+    let prior_project_id = store
+        .project_for_session(session_id)
+        .map_err(|e| e.to_string())?
+        .map(|project| project.id);
+    let default_project = store
+        .ensure_default_project(std::path::Path::new(workspace))
+        .map_err(|e| e.to_string())?;
+    let target_id = if requested_project_id.trim().is_empty() {
+        default_project.id.as_str()
+    } else {
+        requested_project_id.trim()
+    };
+    let requested_project = store
+        .get_project(target_id)
+        .map_err(|e| e.to_string())?
+        .ok_or_else(|| format!("项目不存在：{target_id}"))?;
+    // 已经归属到某个具体项目的历史会话保持原归属；新会话或仍停留在默认项目的
+    // 会话跟随本次请求选中的项目。
+    let sticky = prior_project_id
+        .as_deref()
+        .filter(|id| *id != session::DEFAULT_PROJECT_ID && *id != target_id);
+    match sticky {
+        Some(existing) => Ok(store
+            .get_project(existing)
+            .map_err(|e| e.to_string())?
+            .unwrap_or(requested_project)),
+        None => {
+            store
+                .assign_session_to_project(session_id, target_id)
+                .map_err(|e| e.to_string())?;
+            Ok(requested_project)
+        }
+    }
+}
+
 /// `start_chat` 前端入参（camelCase，与 invoke 字段对齐）。
 ///
 /// 调用形态固定为 `invoke("start_chat", { request: { … } })`，**不**接受扁平顶层字段。
@@ -401,17 +447,16 @@ pub async fn start_chat(app: AppHandle, request: StartChatRequest) -> Result<Str
         "plan" | "ask" => interaction_mode,
         _ => "agent".to_string(),
     };
-    let requested_project_id = project_id
-        .unwrap_or_default()
-        .trim()
-        .to_string();
+    let requested_project_id = project_id.unwrap_or_default().trim().to_string();
     let legacy_project_root = project_root.unwrap_or_default().trim().to_string();
 
     // 会话的项目归属与执行 roots 在提交前一次性确定，避免 UI effect 与首轮工具竞态。
     let (project_id, project_root, workspace_roots) = {
         bootstrap_workspace()?;
         let store = open_sessions()?;
-        store.ensure_session(&sid, "tauri").map_err(|e| e.to_string())?;
+        store
+            .ensure_session(&sid, "tauri")
+            .map_err(|e| e.to_string())?;
         if let Ok(Some(meta)) = store.get_session(&sid) {
             if meta.ended_at.is_some() {
                 let reason = meta.end_reason.as_deref().unwrap_or("ended");
@@ -424,28 +469,7 @@ pub async fn start_chat(app: AppHandle, request: StartChatRequest) -> Result<Str
         }
         let workspace = super::common::workspace_dir();
         std::fs::create_dir_all(&workspace).map_err(|e| e.to_string())?;
-        let default_project = store
-            .ensure_default_project(std::path::Path::new(&workspace))
-            .map_err(|e| e.to_string())?;
-        let target_id = if requested_project_id.is_empty() {
-            default_project.id.as_str()
-        } else {
-            requested_project_id.as_str()
-        };
-        if store
-            .get_project(target_id)
-            .map_err(|e| e.to_string())?
-            .is_none()
-        {
-            return Err(format!("项目不存在：{target_id}"));
-        }
-        store
-            .assign_session_to_project_if_unassigned(&sid, target_id)
-            .map_err(|e| e.to_string())?;
-        let project = store
-            .project_for_session(&sid)
-            .map_err(|e| e.to_string())?
-            .unwrap_or(default_project);
+        let project = resolve_session_project(&store, &sid, &requested_project_id, &workspace)?;
         let mut roots = project.roots;
         // 仅为旧客户端保留：没有可用项目 root 时才接受旧 projectRoot。
         if roots.is_empty() && !legacy_project_root.is_empty() {
@@ -1034,9 +1058,44 @@ pub async fn count_tokens(model: String) -> Result<u32, String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{chat_control_with_lifecycle, parse_chat_control_action};
+    use super::{chat_control_with_lifecycle, parse_chat_control_action, resolve_session_project};
     use crate::infra::thread_events::ThreadEventsBridge;
     use proto::ChatControlAction;
+
+    #[test]
+    fn requested_project_wins_over_the_default_project_backfill() {
+        let dir = tempfile::tempdir().unwrap();
+        let workspace = dir.path().join("workspace");
+        let project_root = dir.path().join("八股文");
+        std::fs::create_dir_all(&workspace).unwrap();
+        std::fs::create_dir_all(&project_root).unwrap();
+        let workspace = workspace.to_string_lossy().into_owned();
+        let store = session::SessionStore::open(&dir.path().join("state.db")).unwrap();
+        store
+            .ensure_default_project(std::path::Path::new(&workspace))
+            .unwrap();
+        let project = store
+            .create_project("八股文", &[project_root.to_string_lossy().as_ref()])
+            .unwrap();
+
+        store.ensure_session("s1", "test").unwrap();
+        let resolved = resolve_session_project(&store, "s1", &project.id, &workspace).unwrap();
+        assert_eq!(resolved.id, project.id);
+        assert_eq!(resolved.roots, project.roots);
+        assert_eq!(
+            store.project_for_session("s1").unwrap().map(|p| p.id),
+            Some(project.id.clone())
+        );
+
+        // 已归属具体项目的历史会话不会被后续请求改判。
+        let resolved = resolve_session_project(&store, "s1", "default", &workspace).unwrap();
+        assert_eq!(resolved.id, project.id);
+
+        // 未指定项目的新会话仍落到默认项目。
+        store.ensure_session("s2", "test").unwrap();
+        let resolved = resolve_session_project(&store, "s2", "", &workspace).unwrap();
+        assert_eq!(resolved.id, session::DEFAULT_PROJECT_ID);
+    }
 
     #[test]
     fn explicit_session_lifecycle_actions_forget_thread_recovery_targets() {

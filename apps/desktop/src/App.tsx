@@ -119,6 +119,8 @@ import type {
   ProviderModelsResult,
 } from "./types";
 
+const ACTIVE_PROJECT_KEY = "astro.activeProjectId";
+
 export default function App() {
   // ── Theme / i18n / prefs ──────────────────────────────────────────────────
   const { mode, setMode, resolved, reassert } = useTheme();
@@ -157,7 +159,10 @@ export default function App() {
   const [nav, setNav] = useState<NavId>(NAV[0].id);
   const [settingsTab, setSettingsTab] = useState<SettingsTabId>("preferences");
   const [projects, setProjects] = useState<ProjectDto[]>([]);
-  const [activeProjectId, setActiveProjectId] = useState("default");
+  // 选中的项目决定工具执行目录，重启后必须沿用上次的选择，否则会退回默认空间。
+  const [activeProjectId, setActiveProjectId] = useState(
+    () => localStorage.getItem(ACTIVE_PROJECT_KEY) ?? "default",
+  );
   const [collapsedProjects, setCollapsedProjects] = useState<Set<string>>(new Set());
   const [projectMenu, setProjectMenu] = useState<{ id: string; name: string; x: number; y: number } | null>(null);
   const [projectDialog, setProjectDialog] = useState<
@@ -184,6 +189,9 @@ export default function App() {
       }
     })();
   }, []);
+  useEffect(() => {
+    localStorage.setItem(ACTIVE_PROJECT_KEY, activeProjectId);
+  }, [activeProjectId]);
   /** 导航到 settings 并切换到指定子 tab */
   const openSettingsTab = useCallback((tab: SettingsTabId) => {
     setSettingsTab(tab);
