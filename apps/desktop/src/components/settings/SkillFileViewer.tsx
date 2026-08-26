@@ -2,15 +2,16 @@
 import { useCallback, useMemo, useState } from "react";
 import CodeMirror from "@uiw/react-codemirror";
 import {
-  Check,
-  ChevronDown,
-  ChevronUp,
-  Copy,
   Eye,
   FileCode2,
   FolderOpen,
   Tags,
 } from "lucide-react";
+import {
+  ChevronDown as ChevronDownData,
+  ChevronUp as ChevronUpData,
+} from "lucide";
+import type { IconInput } from "morphicons/react";
 import { useI18n } from "../../i18n/LocaleContext";
 import { useTheme } from "../../hooks/app/useTheme";
 import {
@@ -22,6 +23,7 @@ import {
   type SkillFrontmatter,
 } from "../../lib/skills/skillFrontmatter";
 import { ChatMarkdown } from "../chat/ChatMarkdown";
+import { CopyMorphIcon, MorphToggleIcon } from "../icons/MorphIcon";
 
 const MD_MODE_KEY = "astro.skills.mdPreviewMode";
 export const SKILL_PREVIEW_MAX_BYTES = 512 * 1024;
@@ -104,11 +106,14 @@ function SkillFrontmatterCard({
                     className="skills-frontmatter-toggle"
                     onClick={() => setDescOpen((v) => !v)}
                   >
-                    {descOpen ? (
-                      <ChevronUp size={13} strokeWidth={2.3} aria-hidden />
-                    ) : (
-                      <ChevronDown size={13} strokeWidth={2.3} aria-hidden />
-                    )}
+                    <MorphToggleIcon
+                      active={descOpen}
+                      activeIcon={ChevronUpData as unknown as IconInput}
+                      inactiveIcon={ChevronDownData as unknown as IconInput}
+                      size={13}
+                      strokeWidth={2.3}
+                      aria-hidden
+                    />
                     {descOpen
                       ? t("skills.frontmatterCollapse")
                       : t("skills.frontmatterExpand")}
@@ -127,11 +132,14 @@ function SkillFrontmatterCard({
             onClick={() => setExtrasOpen((v) => !v)}
             aria-expanded={extrasOpen}
           >
-            {extrasOpen ? (
-              <ChevronUp size={13} strokeWidth={2.3} aria-hidden />
-            ) : (
-              <ChevronDown size={13} strokeWidth={2.3} aria-hidden />
-            )}
+            <MorphToggleIcon
+              active={extrasOpen}
+              activeIcon={ChevronUpData as unknown as IconInput}
+              inactiveIcon={ChevronDownData as unknown as IconInput}
+              size={13}
+              strokeWidth={2.3}
+              aria-hidden
+            />
             {t("skills.frontmatterMore")}
             <span className="skills-frontmatter-extra-count">
               {meta.extras.length}
@@ -309,11 +317,7 @@ export function SkillFileViewer({
             title={copied ? t("skills.copied") : t("skills.copyContent")}
             aria-label={copied ? t("skills.copied") : t("skills.copyContent")}
           >
-            {copied ? (
-              <Check size={14} strokeWidth={2.4} aria-hidden />
-            ) : (
-              <Copy size={14} strokeWidth={2.2} aria-hidden />
-            )}
+            <CopyMorphIcon copied={copied} size={14} aria-hidden />
             <span>{copied ? t("skills.copied") : t("skills.copyContent")}</span>
           </button>
         </div>

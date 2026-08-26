@@ -19,7 +19,6 @@ import {
   Check,
   ChevronDown,
   CornerDownRight,
-  Copy,
   ArrowDown,
   ArrowUp,
   Eye,
@@ -36,9 +35,7 @@ import {
   MessageCircle,
   Music2,
   Paperclip,
-  Pause,
   Pencil,
-  Play,
   RefreshCw,
   SendHorizontal,
   ShieldAlert,
@@ -47,10 +44,17 @@ import {
   Trash2,
   Volume2,
   Loader2,
-  Mic,
-  MicOff,
   MoreHorizontal,
 } from "lucide-react";
+import {
+  Check as CheckData,
+  Copy as CopyData,
+  Mic as MicData,
+  MicOff as MicOffData,
+  Pause as PauseData,
+  Play as PlayData,
+} from "lucide";
+import { MorphToggleIcon } from "../icons/MorphIcon";
 import {
   isActivityVisible,
   type ChatDisplayPrefs,
@@ -145,6 +149,14 @@ import {
   parseSlashInput,
   type SlashAction,
 } from "../../lib/chat/composerCommands";
+
+/** lucide 导出 ["svg", attrs, children]，morphicons 只接受 children 里的 [tag, attrs] 列表。 */
+const CHECK_ICON = CheckData[2] ?? [];
+const COPY_ICON = CopyData[2] ?? [];
+const MIC_ICON = MicData[2] ?? [];
+const MIC_OFF_ICON = MicOffData[2] ?? [];
+const PAUSE_ICON = PauseData[2] ?? [];
+const PLAY_ICON = PlayData[2] ?? [];
 
 /** 格式化 token/s 展示（整数不带小数） */
 function formatTokenSpeed(n: number): string {
@@ -552,11 +564,14 @@ function MessageActions({
         aria-label={copied ? t("chat.copied") : t("chat.copy")}
         title={copied ? t("chat.copied") : t("chat.copy")}
       >
-        {copied ? (
-          <Check size={14} strokeWidth={2.4} aria-hidden />
-        ) : (
-          <Copy size={14} strokeWidth={2} aria-hidden />
-        )}
+        <MorphToggleIcon
+          active={copied}
+          activeIcon={CHECK_ICON}
+          inactiveIcon={COPY_ICON}
+          size={14}
+          strokeWidth={copied ? 2.4 : 2}
+          aria-hidden
+        />
       </button>
       {role === "assistant" && (
         <button
@@ -2839,36 +2854,36 @@ export default function ChatView({
               >
                 {transcribing ? (
                   <Loader2 size={17} strokeWidth={2} style={{ animation: "msg-tts-spin 0.9s linear infinite" }} />
-                ) : recording ? (
-                  <MicOff size={17} strokeWidth={2} />
                 ) : (
-                  <Mic size={17} strokeWidth={2} />
+                  <MorphToggleIcon
+                    active={recording}
+                    activeIcon={MIC_OFF_ICON}
+                    inactiveIcon={MIC_ICON}
+                    size={17}
+                    strokeWidth={2}
+                  />
                 )}
               </button>
               {showStopControl ? (
                 <>
                   {showPauseResume ? (
-                    streamPaused ? (
-                      <button
-                        type="button"
-                        className="composer-icon-btn"
-                        onClick={() => onResumeStream?.()}
-                        title={t("chat.streamResume")}
-                        aria-label={t("chat.streamResume")}
-                      >
-                        <Play size={17} strokeWidth={2.2} />
-                      </button>
-                    ) : (
-                      <button
-                        type="button"
-                        className="composer-icon-btn"
-                        onClick={() => onPauseStream?.()}
-                        title={t("chat.streamPause")}
-                        aria-label={t("chat.streamPause")}
-                      >
-                        <Pause size={17} strokeWidth={2.2} />
-                      </button>
-                    )
+                    <button
+                      type="button"
+                      className="composer-icon-btn"
+                      onClick={() =>
+                        streamPaused ? onResumeStream?.() : onPauseStream?.()
+                      }
+                      title={t(streamPaused ? "chat.streamResume" : "chat.streamPause")}
+                      aria-label={t(streamPaused ? "chat.streamResume" : "chat.streamPause")}
+                    >
+                      <MorphToggleIcon
+                        active={streamPaused}
+                        activeIcon={PLAY_ICON}
+                        inactiveIcon={PAUSE_ICON}
+                        size={17}
+                        strokeWidth={2.2}
+                      />
+                    </button>
                   ) : null}
                   <button
                     type="button"

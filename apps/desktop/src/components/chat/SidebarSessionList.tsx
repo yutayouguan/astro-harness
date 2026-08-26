@@ -5,18 +5,22 @@ import { createPortal } from "react-dom";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import {
-  Archive,
-  ArchiveRestore,
   ChevronDown,
   Download,
   Edit3,
   GitBranch,
   MoreVertical,
   Pin,
-  PinOff,
   RefreshCw,
   Trash2,
 } from "lucide-react";
+import {
+  Archive as ArchiveData,
+  ArchiveRestore as ArchiveRestoreData,
+  Pin as PinData,
+  PinOff as PinOffData,
+} from "lucide";
+import { MorphToggleIcon } from "../icons/MorphIcon";
 import {
   deleteManagedSession,
   dispatchSessionsChanged,
@@ -436,7 +440,14 @@ export default function SidebarSessionList({
         return createPortal(
           <div ref={menuRef} className="project-context-menu" style={{ top: sessionMenu.y, left: sessionMenu.x }} role="menu">
             <button type="button" role="menuitem" className="project-context-menu-item" onClick={() => { if (menuSession) handlePinToggle(menuSession); }}>
-              {pinned ? <PinOff size={14} strokeWidth={1.8} aria-hidden /> : <Pin size={14} strokeWidth={1.8} aria-hidden />}
+              <MorphToggleIcon
+                active={pinned}
+                activeIcon={PinOffData}
+                inactiveIcon={PinData}
+                size={14}
+                strokeWidth={1.8}
+                aria-hidden
+              />
               <span>{pinned ? t("sessions.unpin") : t("sessions.pin")}</span>
             </button>
             <button type="button" role="menuitem" className="project-context-menu-item" onClick={() => void handleRename()}>
@@ -452,9 +463,14 @@ export default function SidebarSessionList({
               <GitBranch size={14} strokeWidth={1.8} aria-hidden /><span>{t("sessions.branch")}</span>
             </button>
             <button type="button" role="menuitem" className="project-context-menu-item" onClick={() => { if (menuSession) handleArchiveToggle(menuSession); }}>
-              {archived
-                ? <ArchiveRestore size={14} strokeWidth={1.8} aria-hidden />
-                : <Archive size={14} strokeWidth={1.8} aria-hidden />}
+              <MorphToggleIcon
+                active={archived}
+                activeIcon={ArchiveRestoreData}
+                inactiveIcon={ArchiveData}
+                size={14}
+                strokeWidth={1.8}
+                aria-hidden
+              />
               <span>{archived ? t("sessions.unarchive") : t("sessions.archive")}</span>
             </button>
             <button type="button" role="menuitem" className="project-context-menu-item is-danger" onClick={() => void handleDelete()}>
@@ -545,12 +561,24 @@ function SessionItem({
       </button>
       <div className="sidebar-session-actions">
         <button type="button" className="sidebar-session-action-btn" title={s.pinnedAt ? t("sessions.unpin") : t("sessions.pin")} onClick={(e) => { e.stopPropagation(); onPinToggle(); }}>
-          {s.pinnedAt ? <PinOff size={13} strokeWidth={1.8} aria-hidden /> : <Pin size={13} strokeWidth={1.8} aria-hidden />}
+          <MorphToggleIcon
+            active={Boolean(s.pinnedAt)}
+            activeIcon={PinOffData}
+            inactiveIcon={PinData}
+            size={13}
+            strokeWidth={1.8}
+            aria-hidden
+          />
         </button>
         <button type="button" className="sidebar-session-action-btn" title={archived ? t("sessions.unarchive") : t("sessions.archive")} onClick={(e) => { e.stopPropagation(); onArchiveToggle(); }}>
-          {archived
-            ? <ArchiveRestore size={13} strokeWidth={1.8} aria-hidden />
-            : <Archive size={13} strokeWidth={1.8} aria-hidden />}
+          <MorphToggleIcon
+            active={archived}
+            activeIcon={ArchiveRestoreData}
+            inactiveIcon={ArchiveData}
+            size={13}
+            strokeWidth={1.8}
+            aria-hidden
+          />
         </button>
         <button
           type="button"

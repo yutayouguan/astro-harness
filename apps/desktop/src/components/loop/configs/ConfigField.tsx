@@ -3,7 +3,9 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import type { ReactNode } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { FolderOpen, Variable, X, Sparkles, Eye, EyeOff, Loader2 } from "lucide-react";
+import { FolderOpen, Variable, X, Sparkles, Loader2 } from "lucide-react";
+import { Eye as EyeData, EyeOff as EyeOffData } from "lucide";
+import { MorphToggleIcon } from "../../icons/MorphIcon";
 import type { UpstreamOutput, MediaType } from "./upstreamOutputs";
 import { varRef } from "./upstreamOutputs";
 import AutocompleteTextarea from "./AutocompleteTextarea";
@@ -295,7 +297,12 @@ export function PasswordField({ label, value, onChange, placeholder, hint }: Pas
           title={visible ? "隐藏" : "显示"}
           type="button"
         >
-          {visible ? <EyeOff size={14} /> : <Eye size={14} />}
+          <MorphToggleIcon
+            active={visible}
+            activeIcon={EyeOffData}
+            inactiveIcon={EyeData}
+            size={14}
+          />
         </button>
       </div>
       {hint && <span className="loop-config-hint">{hint}</span>}

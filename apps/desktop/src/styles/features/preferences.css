@@ -59,6 +59,88 @@
   --tone-glow: var(--tone-twilight-glow);
 }
 
+.morphicon-settings-card {
+  gap: 16px;
+}
+
+.morphicon-preview-button {
+  padding: 0;
+  border: 0;
+  color: inherit;
+  cursor: pointer;
+}
+
+.morphicon-preview-button:focus-visible {
+  outline: 2px solid var(--tone);
+  outline-offset: 3px;
+}
+
+.morphicon-setting-row {
+  display: grid;
+  grid-template-columns: minmax(72px, 0.45fr) minmax(260px, 1fr);
+  align-items: center;
+  gap: 18px;
+}
+
+.morphicon-setting-label {
+  color: var(--ink-soft);
+  font-size: 13px;
+  font-weight: 650;
+  letter-spacing: 0.01em;
+}
+
+.morphicon-segmented {
+  display: grid;
+  grid-auto-columns: minmax(0, 1fr);
+  grid-auto-flow: column;
+  overflow: hidden;
+  min-height: 42px;
+  border: 1px solid color-mix(in srgb, var(--ink) 13%, transparent);
+  border-radius: 11px;
+  background: color-mix(in srgb, var(--glass-panel, transparent) 72%, transparent);
+}
+
+.morphicon-segmented button {
+  min-width: 0;
+  padding: 0 14px;
+  border: 0;
+  border-right: 1px solid color-mix(in srgb, var(--ink) 10%, transparent);
+  background: transparent;
+  color: var(--ink-soft);
+  font: inherit;
+  font-size: 14px;
+  cursor: pointer;
+  transition: color 140ms ease, background 140ms ease;
+}
+
+.morphicon-segmented button:last-child {
+  border-right: 0;
+}
+
+.morphicon-segmented button:hover {
+  color: var(--ink);
+  background: color-mix(in srgb, var(--tone-soft) 45%, transparent);
+}
+
+.morphicon-segmented button.is-active {
+  color: var(--bg0, #fff);
+  background: color-mix(in srgb, var(--ink) 92%, transparent);
+}
+
+.morphicon-segmented button:focus-visible {
+  position: relative;
+  z-index: 1;
+  outline: 2px solid var(--tone);
+  outline-offset: -2px;
+}
+
+@media (max-width: 620px) {
+  .morphicon-setting-row {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+}
+
 .prefs-category-nav[hidden] {
   display: none;
 }

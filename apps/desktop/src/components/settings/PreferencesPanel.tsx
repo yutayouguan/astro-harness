@@ -17,8 +17,10 @@ import {
   List,
   Wrench,
 } from "lucide-react";
+import { Activity as ActivityData, Sparkles as SparklesData } from "lucide";
 import { invoke } from "@tauri-apps/api/core";
 import { useAppIcon } from "../../hooks/settings/useAppIcon";
+import { useMorphicons } from "../../hooks/app/useMorphicons";
 import type { AppIconId } from "../../types";
 import type { ShellColorStyle } from "../../hooks/app/useShellColorStyle";
 import { useTheme, type ThemeMode, type GlassLevel } from "../../hooks/app/useTheme";
@@ -31,6 +33,11 @@ import {
   SHELL_GRADIENT_PRESETS,
   type ShellGradient,
 } from "../../lib/ui/shellGradient";
+import {
+  MORPHICON_SPRINGS,
+  MORPHICON_STROKE_WIDTHS,
+} from "../../lib/ui/morphiconPrefs";
+import { AppMorphIcon } from "../icons/MorphIcon";
 import { IconGlobe, IconMonitor, IconMoon, IconSun, IconChat, IconAtom } from "../icons/NavIcons";
 import { SelectMenu } from "../ui/SelectMenu";
 import CompressionSettingsCard from "./CompressionSettingsCard";
@@ -198,8 +205,10 @@ export default function PreferencesPanel({
 }: Props) {
   const { locale, setLocale, t } = useI18n();
   const { glassLevel, setGlassLevel } = useTheme();
+  const { spring, strokeWidth, setSpring, setStrokeWidth } = useMorphicons();
   const { settings: appIcon, setIcon: setAppIcon } = useAppIcon();
   const [gradientEditorOpen, setGradientEditorOpen] = useState(false);
+  const [morphPreviewActive, setMorphPreviewActive] = useState(false);
   const [internalCategory, setInternalCategory] =
     useState<PreferenceCategory>("general");
   const activeCategory = section ?? internalCategory;
@@ -633,6 +642,74 @@ export default function PreferencesPanel({
           setGradientEditorOpen(false);
         }}
       />
+
+      <section className="prefs-card morphicon-settings-card">
+        <div className="prefs-card-head">
+          <button
+            type="button"
+            className="prefs-icon-badge morphicon-preview-button"
+            data-tone={tone}
+            onClick={() => setMorphPreviewActive((value) => !value)}
+            aria-label={t("prefs.morphicons.preview")}
+          >
+            <AppMorphIcon
+              icon={morphPreviewActive ? SparklesData : ActivityData}
+              size={22}
+            />
+          </button>
+          <div>
+            <h2 className="prefs-card-title">{t("prefs.morphicons.title")}</h2>
+            <p className="prefs-card-sub">{t("prefs.morphicons.sub")}</p>
+          </div>
+        </div>
+
+        <div className="morphicon-setting-row">
+          <span className="morphicon-setting-label">{t("prefs.morphicons.spring")}</span>
+          <div
+            className="morphicon-segmented"
+            role="radiogroup"
+            aria-label={t("prefs.morphicons.spring")}
+          >
+            {MORPHICON_SPRINGS.map((value) => (
+              <button
+                key={value}
+                type="button"
+                role="radio"
+                aria-checked={spring === value}
+                className={spring === value ? "is-active" : ""}
+                onClick={() => {
+                  setSpring(value);
+                  setMorphPreviewActive((current) => !current);
+                }}
+              >
+                {value}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="morphicon-setting-row">
+          <span className="morphicon-setting-label">{t("prefs.morphicons.stroke")}</span>
+          <div
+            className="morphicon-segmented"
+            role="radiogroup"
+            aria-label={t("prefs.morphicons.stroke")}
+          >
+            {MORPHICON_STROKE_WIDTHS.map((value) => (
+              <button
+                key={value}
+                type="button"
+                role="radio"
+                aria-checked={strokeWidth === value}
+                className={strokeWidth === value ? "is-active" : ""}
+                onClick={() => setStrokeWidth(value)}
+              >
+                {value}
+              </button>
+            ))}
+          </div>
+        </div>
+      </section>
 
       <section className="prefs-card">
         <div className="prefs-card-head">

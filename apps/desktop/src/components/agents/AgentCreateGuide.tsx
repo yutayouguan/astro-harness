@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { X } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
 import { useI18n } from "../../i18n/LocaleContext";
+import { useMorphicons } from "../../hooks/app/useMorphicons";
 import { agentNameInitial } from "../../lib/agent/agentIcons";
 import {
   lucideIconToSvgBase64Async,
@@ -52,6 +53,7 @@ async function fileToBase64(file: File): Promise<string> {
 
 export function AgentCreateGuide({ onSkip, previewName = "" }: Props) {
   const { t } = useI18n();
+  const { strokeWidth } = useMorphicons();
   const [emoji, setEmoji] = useState<SlotState>({ previewUrl: null, fileName: null });
   const [avatar, setAvatar] = useState<SlotState>({ previewUrl: null, fileName: null });
   const [coverId, setCoverId] = useState<CoverId | null>(null);
@@ -140,7 +142,11 @@ export function AgentCreateGuide({ onSkip, previewName = "" }: Props) {
     setLucideBusy(true);
     setError(null);
     try {
-      const dataBase64 = await lucideIconToSvgBase64Async(icon.Icon, { paint, style });
+      const dataBase64 = await lucideIconToSvgBase64Async(icon.Icon, {
+        paint,
+        style,
+        strokeWidth,
+      });
       const fileName = `emoji-${icon.id}.svg`;
 
       if (isTauri()) {

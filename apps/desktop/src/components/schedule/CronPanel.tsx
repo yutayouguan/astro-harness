@@ -8,11 +8,9 @@ import {
   BrainCircuit,
   CalendarClock,
   CalendarPlus,
-  Check,
   CheckCircle2,
   CircleAlert,
   Clock3,
-  Copy,
   Eye,
   EyeOff,
   Film,
@@ -35,6 +33,7 @@ import {
 } from "lucide-react";
 import { useAnchoredMenu } from "../../hooks/ui/useAnchoredMenu";
 import { useConfirm } from "../../hooks/ui/DialogContext";
+import { CopyMorphIcon } from "../icons/MorphIcon";
 import { useI18n } from "../../i18n/LocaleContext";
 import type { MessageKey } from "../../i18n/messages";
 import { formatScheduleLabel } from "../../lib/cron/cronSchedule";
@@ -303,11 +302,7 @@ function CopyLogButton({ text }: { text: string }) {
       aria-label={copied ? t("chat.copied") : t("chat.copy")}
       title={copied ? t("chat.copied") : t("chat.copy")}
     >
-      {copied ? (
-        <Check size={13} strokeWidth={2.4} aria-hidden />
-      ) : (
-        <Copy size={13} strokeWidth={2.2} aria-hidden />
-      )}
+      <CopyMorphIcon copied={copied} size={13} aria-hidden />
     </button>
   );
 }

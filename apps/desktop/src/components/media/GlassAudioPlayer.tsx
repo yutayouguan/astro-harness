@@ -1,7 +1,19 @@
 /** 毛玻璃风格音频播放器，替代原生黑色 controls。 */
 import { useEffect, useRef, useState, type CSSProperties } from "react";
-import { Pause, Play, Volume2, VolumeX } from "lucide-react";
+import {
+  Pause as PauseData,
+  Play as PlayData,
+  Volume2 as Volume2Data,
+  VolumeX as VolumeXData,
+} from "lucide";
+import { MorphToggleIcon } from "../icons/MorphIcon";
 import { useI18n } from "../../i18n/LocaleContext";
+
+/** lucide 导出 ["svg", attrs, children]，morphicons 只接受 children 里的 [tag, attrs] 列表。 */
+const PAUSE_ICON = PauseData[2] ?? [];
+const PLAY_ICON = PlayData[2] ?? [];
+const VOLUME_ON_ICON = Volume2Data[2] ?? [];
+const VOLUME_OFF_ICON = VolumeXData[2] ?? [];
 
 type Props = {
   src: string;
@@ -85,11 +97,14 @@ export default function GlassAudioPlayer({ src, className, onError }: Props) {
         aria-label={playing ? t("media.pause") : t("media.play")}
         onClick={togglePlay}
       >
-        {playing ? (
-          <Pause size={16} strokeWidth={2.25} aria-hidden />
-        ) : (
-          <Play size={16} strokeWidth={2.25} aria-hidden />
-        )}
+        <MorphToggleIcon
+          active={playing}
+          activeIcon={PAUSE_ICON}
+          inactiveIcon={PLAY_ICON}
+          size={16}
+          strokeWidth={2.25}
+          aria-hidden
+        />
       </button>
       <span className="glass-audio-time">{formatTime(current)}</span>
       <label className="glass-audio-seek">
@@ -121,11 +136,14 @@ export default function GlassAudioPlayer({ src, className, onError }: Props) {
         aria-label={muted ? t("media.unmute") : t("media.mute")}
         onClick={() => setMuted((v) => !v)}
       >
-        {muted ? (
-          <VolumeX size={15} strokeWidth={2.1} aria-hidden />
-        ) : (
-          <Volume2 size={15} strokeWidth={2.1} aria-hidden />
-        )}
+        <MorphToggleIcon
+          active={muted}
+          activeIcon={VOLUME_OFF_ICON}
+          inactiveIcon={VOLUME_ON_ICON}
+          size={15}
+          strokeWidth={2.1}
+          aria-hidden
+        />
       </button>
     </div>
   );

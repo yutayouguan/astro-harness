@@ -1,10 +1,16 @@
 import { useState } from "react";
-import { ChevronDown, ChevronRight, Plus, X, Variable } from "lucide-react";
+import { Plus, X, Variable } from "lucide-react";
+import {
+  ChevronDown as ChevronDownData,
+  ChevronRight as ChevronRightData,
+} from "lucide";
+import type { IconInput } from "morphicons/react";
 import { AiAssistField, cfgStr } from "./ConfigField";
 import ProviderModelSelect from "./ProviderModelSelect";
 import ReasoningLevelSelect from "./ReasoningLevelSelect";
 import type { UpstreamOutput } from "./upstreamOutputs";
 import { varRef } from "./upstreamOutputs";
+import { MorphToggleIcon } from "../../icons/MorphIcon";
 
 interface UpstreamFieldEntry {
   name: string;
@@ -68,7 +74,13 @@ export default function AiAgentTaskConfig({ config, onChange, upstreamOutputs, a
           className="loop-config-upstream-toggle"
           onClick={() => setUpstreamOpen((v) => !v)}
         >
-          {upstreamOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+          <MorphToggleIcon
+            active={upstreamOpen}
+            activeIcon={ChevronDownData as unknown as IconInput}
+            inactiveIcon={ChevronRightData as unknown as IconInput}
+            size={14}
+            aria-hidden
+          />
           <span>引用上游字段</span>
           <span className="loop-config-upstream-badge">可选</span>
           {fields.length > 0 && (

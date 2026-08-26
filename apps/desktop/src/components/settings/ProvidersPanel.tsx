@@ -17,7 +17,6 @@ import {
   CircleDollarSign,
   ExternalLink,
   Eye,
-  EyeOff,
   FileText,
   Globe,
   GripVertical,
@@ -48,9 +47,11 @@ import {
   Wrench,
   Zap,
 } from "lucide-react";
+import { Eye as EyeData, EyeOff as EyeOffData } from "lucide";
 import { createPortal } from "react-dom";
 import { invoke } from "@tauri-apps/api/core";
 import { open as shellOpen } from "@tauri-apps/plugin-shell";
+import { MorphToggleIcon } from "../icons/MorphIcon";
 import { ModelBrandIcon, ProviderBrandIcon } from "../icons/ProviderIcons";
 import { SelectMenu } from "../ui/SelectMenu";
 import { useConfirm } from "../../hooks/ui/DialogContext";
@@ -301,14 +302,18 @@ function IconInfo(props: SVGProps<SVGSVGElement>) {
   return <Info size={16} strokeWidth={2} aria-hidden {...props} />;
 }
 
-/** 显示密钥图标 */
-function IconEye(props: SVGProps<SVGSVGElement>) {
-  return <Eye size={14} strokeWidth={2} aria-hidden {...props} />;
-}
-
-/** 隐藏密钥图标 */
-function IconEyeOff(props: SVGProps<SVGSVGElement>) {
-  return <EyeOff size={14} strokeWidth={2} aria-hidden {...props} />;
+/** 密钥可见性图标（显示 / 隐藏之间 morph） */
+function IconKeyVisibility({ visible }: { visible: boolean }) {
+  return (
+    <MorphToggleIcon
+      active={visible}
+      activeIcon={EyeOffData}
+      inactiveIcon={EyeData}
+      size={14}
+      strokeWidth={2}
+      aria-hidden
+    />
+  );
 }
 
 /** 掩码展示 API Key（保留首尾若干字符） */
@@ -2015,7 +2020,7 @@ export default function ProvidersPanel({ active, onStateChange, tone }: Props) {
                             }
                             onClick={() => setShowApiKey((v) => !v)}
                           >
-                            {showApiKey ? <IconEyeOff /> : <IconEye />}
+                            <IconKeyVisibility visible={showApiKey} />
                           </button>
                         )}
                       </div>

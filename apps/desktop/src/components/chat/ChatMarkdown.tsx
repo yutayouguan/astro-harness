@@ -7,7 +7,6 @@ import {
   type ReactElement,
   type ReactNode,
 } from "react";
-import { Check, Copy } from "lucide-react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { useI18n } from "../../i18n/LocaleContext";
@@ -24,6 +23,7 @@ import {
 import BrokenMedia from "../media/BrokenMedia";
 import GeneratedMediaCard from "../media/GeneratedMediaCard";
 import HtmlPreview from "../media/HtmlPreview";
+import { CopyMorphIcon } from "../icons/MorphIcon";
 
 /** Markdown 渲染入参 */
 type Props = {
@@ -167,11 +167,7 @@ function HtmlCodeBlock({
           title={copied ? t("chat.codeCopied") : t("chat.copyCode")}
           style={{ marginLeft: "auto" }}
         >
-          {copied ? (
-            <Check size={14} strokeWidth={2.4} aria-hidden />
-          ) : (
-            <Copy size={14} strokeWidth={2} aria-hidden />
-          )}
+          <CopyMorphIcon copied={copied} size={14} aria-hidden />
         </button>
       </div>
       {mode === "preview" ? (
@@ -224,11 +220,7 @@ function CodeBlock({
           aria-label={copied ? t("chat.codeCopied") : t("chat.copyCode")}
           title={copied ? t("chat.codeCopied") : t("chat.copyCode")}
         >
-          {copied ? (
-            <Check size={14} strokeWidth={2.4} aria-hidden />
-          ) : (
-            <Copy size={14} strokeWidth={2} aria-hidden />
-          )}
+          <CopyMorphIcon copied={copied} size={14} aria-hidden />
         </button>
       </div>
       <pre className="msg-md-pre">

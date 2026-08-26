@@ -39,6 +39,32 @@
   padding: 0 0 8px;
 }
 
+.lucide-picker-morph-preview {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 52px;
+  margin-bottom: 10px;
+  padding: 8px 12px;
+  border: 1px solid color-mix(in srgb, var(--ink, #0f172a) 9%, transparent);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--glass-strong) 78%, transparent);
+}
+
+.lucide-picker-morph-stage {
+  display: grid;
+  width: 38px;
+  height: 38px;
+  place-items: center;
+  color: var(--tone, currentColor);
+}
+
+.lucide-picker-morph-name {
+  color: var(--ink-soft);
+  font-size: 12px;
+  font-weight: 650;
+}
+
 .lucide-picker-style {
   display: flex;
   align-items: center;

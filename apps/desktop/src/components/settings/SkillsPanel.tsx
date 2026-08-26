@@ -16,7 +16,6 @@ import {
   CloudDownload,
   Code2,
   Columns2,
-  Copy,
   Download,
   Eye,
   ExternalLink,
@@ -78,6 +77,7 @@ import { useTransientToast } from "../../hooks/ui/useTransientToast";
 import MotionSwitch from "../ui/MotionSwitch";
 import ExpandableSearch from "../ui/ExpandableSearch";
 import MsgStreamLoader from "../chat/MsgStreamLoader";
+import { CopyMorphIcon } from "../icons/MorphIcon";
 import McpIcon from "../icons/McpIcon";
 import { IconRefresh } from "../icons/NavIcons";
 import { useMcpSection } from "./McpSection";
@@ -1859,11 +1859,11 @@ export default function SkillsPanel({
               copiedId === skill.id ? t("skills.copied") : t("skills.copyPrompt")
             }
           >
-            {copiedId === skill.id ? (
-              <Check size={15} strokeWidth={2.25} aria-hidden />
-            ) : (
-              <Copy size={15} strokeWidth={2.25} aria-hidden />
-            )}
+            <CopyMorphIcon
+              copied={copiedId === skill.id}
+              size={15}
+              aria-hidden
+            />
           </button>
         </div>
       </div>
@@ -1969,11 +1969,11 @@ export default function SkillsPanel({
               copiedId === skill.id ? t("skills.copied") : t("skills.copyPrompt")
             }
           >
-            {copiedId === skill.id ? (
-              <Check size={15} strokeWidth={2.25} aria-hidden />
-            ) : (
-              <Copy size={15} strokeWidth={2.25} aria-hidden />
-            )}
+            <CopyMorphIcon
+              copied={copiedId === skill.id}
+              size={15}
+              aria-hidden
+            />
           </button>
         </div>
       </div>
@@ -2160,11 +2160,11 @@ export default function SkillsPanel({
                   : t("skills.copyInstallCmd")
               }
             >
-              {copiedId === `${skill.id}:cmd` ? (
-                <Check size={15} strokeWidth={2.25} aria-hidden />
-              ) : (
-                <Copy size={15} strokeWidth={2.25} aria-hidden />
-              )}
+              <CopyMorphIcon
+                copied={copiedId === `${skill.id}:cmd`}
+                size={15}
+                aria-hidden
+              />
             </button>
             <button
               type="button"
@@ -2291,11 +2291,11 @@ export default function SkillsPanel({
                     className="skills-action-btn"
                     onClick={() => void copyInstalledPrompt(selectedInstalled)}
                   >
-                    {copiedId === selectedInstalled.id ? (
-                      <Check size={14} strokeWidth={2.25} aria-hidden />
-                    ) : (
-                      <Copy size={14} strokeWidth={2.25} aria-hidden />
-                    )}
+                    <CopyMorphIcon
+                      copied={copiedId === selectedInstalled.id}
+                      size={14}
+                      aria-hidden
+                    />
                     {copiedId === selectedInstalled.id
                       ? t("skills.copied")
                       : t("skills.copyPrompt")}
@@ -2448,11 +2448,11 @@ export default function SkillsPanel({
                     className="skills-action-btn"
                     onClick={() => void copyInstalledPrompt(selectedMachine)}
                   >
-                    {copiedId === selectedMachine.id ? (
-                      <Check size={14} strokeWidth={2.25} aria-hidden />
-                    ) : (
-                      <Copy size={14} strokeWidth={2.25} aria-hidden />
-                    )}
+                    <CopyMorphIcon
+                      copied={copiedId === selectedMachine.id}
+                      size={14}
+                      aria-hidden
+                    />
                     {copiedId === selectedMachine.id
                       ? t("skills.copied")
                       : t("skills.copyPrompt")}

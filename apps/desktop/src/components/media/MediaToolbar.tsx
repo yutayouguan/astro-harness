@@ -1,13 +1,12 @@
 /** 媒体悬停工具条：引用 / 放大 / 下载 / 复制 */
 import { useCallback, useMemo, useState, type MouseEvent } from "react";
 import {
-  Check,
-  Copy,
   Download,
   ExternalLink,
   Maximize2,
   Quote,
 } from "lucide-react";
+import { CopyMorphIcon } from "../icons/MorphIcon";
 import { invoke } from "@tauri-apps/api/core";
 import { useChatMediaAttach } from "../../contexts/ChatMediaAttachContext";
 import { useI18n } from "../../i18n/LocaleContext";
@@ -208,11 +207,7 @@ export default function MediaToolbar({
           title={copyLabel}
           aria-label={copyLabel}
         >
-          {copied ? (
-            <Check size={icon} strokeWidth={2.4} aria-hidden />
-          ) : (
-            <Copy size={icon} strokeWidth={2.1} aria-hidden />
-          )}
+          <CopyMorphIcon copied={copied} size={icon} aria-hidden />
         </button>
       </div>
       {toastHost}

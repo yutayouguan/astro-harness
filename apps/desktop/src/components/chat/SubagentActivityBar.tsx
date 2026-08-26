@@ -1,6 +1,11 @@
 import { useLayoutEffect, useMemo, useState, type CSSProperties } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { Bot, ChevronDown, Square } from "lucide-react";
+import { Bot, Square } from "lucide-react";
+import {
+  ChevronDown as ChevronDownData,
+  ChevronUp as ChevronUpData,
+} from "lucide";
+import type { IconInput } from "morphicons/react";
 import { useI18n } from "../../i18n/LocaleContext";
 import {
   createAgentTreeRootLifecycle,
@@ -8,6 +13,7 @@ import {
   type AgentThreadStatus,
   type AgentTreeNode,
 } from "../../hooks/chat/subagentTree";
+import { MorphToggleIcon } from "../icons/MorphIcon";
 
 type Props = {
   rootSessionId?: string | null;
@@ -132,7 +138,13 @@ export default function SubagentActivityBar({
                 : t("subagents.activity.done")}
             </small>
           </span>
-          <ChevronDown className={expanded ? "is-open" : ""} size={14} aria-hidden />
+          <MorphToggleIcon
+            active={expanded}
+            activeIcon={ChevronUpData as unknown as IconInput}
+            inactiveIcon={ChevronDownData as unknown as IconInput}
+            size={14}
+            aria-hidden
+          />
         </button>
         <span className="subagent-activity-actions">
           {running.length > 0 ? (

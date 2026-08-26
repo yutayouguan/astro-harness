@@ -1,8 +1,14 @@
 // 浮动 TODO 进度条：从聊天活动中提取最新计划，输入区上方展示折叠进度。
 
 import { useMemo, useState } from "react";
-import { CheckCircle2, Circle, ChevronDown, ListTodo } from "lucide-react";
+import { CheckCircle2, Circle, ListTodo } from "lucide-react";
+import {
+  ChevronDown as ChevronDownData,
+  ChevronUp as ChevronUpData,
+} from "lucide";
+import type { IconInput } from "morphicons/react";
 import type { ChatMessage } from "../../types";
+import { MorphToggleIcon } from "../icons/MorphIcon";
 
 export type TodoPlanItem = {
   text: string;
@@ -75,10 +81,12 @@ export default function TodoProgress({ messages }: Props) {
         aria-expanded={expanded}
         onClick={() => setExpanded((o) => !o)}
       >
-        <ChevronDown
+        <MorphToggleIcon
+          active={expanded}
+          activeIcon={ChevronUpData as unknown as IconInput}
+          inactiveIcon={ChevronDownData as unknown as IconInput}
           size={14}
           strokeWidth={2.2}
-          className={expanded ? "is-open" : ""}
           aria-hidden
         />
         <ListTodo size={14} strokeWidth={2} aria-hidden />

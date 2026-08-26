@@ -3,7 +3,6 @@ import { useMemo, useState } from "react";
 import {
   Bot,
   Brain,
-  ChevronDown,
   Coins,
   Database,
   Layers3,
@@ -16,8 +15,14 @@ import {
   Wrench,
   type LucideIcon,
 } from "lucide-react";
+import {
+  ChevronDown as ChevronDownData,
+  ChevronRight as ChevronRightData,
+} from "lucide";
+import type { IconInput } from "morphicons/react";
 import { useI18n } from "../../i18n/LocaleContext";
 import type { MessageKey } from "../../i18n/messages";
+import { MorphToggleIcon } from "../icons/MorphIcon";
 import {
   displayContextWindow,
   formatTokenCount,
@@ -252,8 +257,10 @@ export default function ContextExplorer({
                   onClick={() => toggleRow(s.id)}
                   aria-expanded={open}
                 >
-                  <ChevronDown
-                    className="ctx-explorer-chevron"
+                  <MorphToggleIcon
+                    active={open}
+                    activeIcon={ChevronDownData as unknown as IconInput}
+                    inactiveIcon={ChevronRightData as unknown as IconInput}
                     size={14}
                     strokeWidth={2.2}
                     aria-hidden

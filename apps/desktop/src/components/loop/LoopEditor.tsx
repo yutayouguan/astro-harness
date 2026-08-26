@@ -27,9 +27,14 @@ import {
   Play,
   Plus,
   History,
-  ChevronDown,
-  ChevronRight,
 } from "lucide-react";
+import {
+  ChevronDown as ChevronDownData,
+  ChevronRight as ChevronRightData,
+  Maximize2 as Maximize2Data,
+  Minimize2 as Minimize2Data,
+} from "lucide";
+import type { IconInput } from "morphicons/react";
 import { LOOP_ICON_MAP } from "./loopIcons";
 import type { LoopDto, NodeType, NodeMeta, LoopIconData } from "./loopTypes";
 import { NODE_CATEGORIES, NODE_REGISTRY, getNodesByCategory, getNodeMeta, parseLoopIcon, serializeLoopIcon } from "./loopTypes";
@@ -41,6 +46,7 @@ import LoopRunHistory from "./LoopRunHistory";
 import LoopRunDetail from "./LoopRunDetail";
 import LoopIcon from "./LoopIcon";
 import LoopAiAssistant from "./LoopAiAssistant";
+import { MorphToggleIcon } from "../icons/MorphIcon";
 import { layoutNodes } from "./loopLayout";
 import { useLoopHistory } from "./useLoopHistory";
 import { isValidConnection } from "./loopConnectionRules";
@@ -1022,7 +1028,13 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
             title={fullscreen ? t("loop.exitFullscreen") : t("loop.fullscreen")}
             onClick={() => setFullscreen((v) => !v)}
           >
-            {fullscreen ? <LOOP_ICON_MAP.Minimize2 size={16} /> : <LOOP_ICON_MAP.Maximize2 size={16} />}
+            <MorphToggleIcon
+              active={fullscreen}
+              activeIcon={Minimize2Data as unknown as IconInput}
+              inactiveIcon={Maximize2Data as unknown as IconInput}
+              size={16}
+              aria-hidden
+            />
           </button>
           <button
             className={`loop-icon-btn${showHistory ? " is-active" : ""}`}
@@ -1115,7 +1127,13 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
                   className="loop-palette-group-header"
                   onClick={() => toggleCategory(cat.key)}
                 >
-                  {isCollapsed ? <ChevronRight size={12} /> : <ChevronDown size={12} />}
+                  <MorphToggleIcon
+                    active={!isCollapsed}
+                    activeIcon={ChevronDownData as unknown as IconInput}
+                    inactiveIcon={ChevronRightData as unknown as IconInput}
+                    size={12}
+                    aria-hidden
+                  />
                   {CatIcon && <CatIcon size={14} className="loop-palette-cat-icon" />}
                   <span>{cat.label}</span>
                 </button>

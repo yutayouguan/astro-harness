@@ -4,6 +4,7 @@ import ReactDOM from "react-dom/client";
 import App from "./App";
 import { LocaleProvider } from "./i18n/LocaleContext";
 import { ActiveAgentProvider } from "./hooks/app/useActiveAgent";
+import { MorphiconProvider } from "./hooks/app/useMorphicons";
 import { ThemeProvider } from "./hooks/app/useTheme";
 import { DialogProvider } from "./hooks/ui/DialogContext";
 import { installContextMenuGuard } from "./lib/ui/contextMenuGuard";
@@ -67,13 +68,15 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
     <RootErrorBoundary>
       <ThemeProvider>
-        <LocaleProvider>
-          <ActiveAgentProvider>
-            <DialogProvider>
-              <App />
-            </DialogProvider>
-          </ActiveAgentProvider>
-        </LocaleProvider>
+        <MorphiconProvider>
+          <LocaleProvider>
+            <ActiveAgentProvider>
+              <DialogProvider>
+                <App />
+              </DialogProvider>
+            </ActiveAgentProvider>
+          </LocaleProvider>
+        </MorphiconProvider>
       </ThemeProvider>
     </RootErrorBoundary>
   </React.StrictMode>,

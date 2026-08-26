@@ -19,9 +19,13 @@ import {
   PenLine,
   Search,
   Languages,
-  Pause,
-  Play,
 } from "lucide-react";
+import { Pause as PauseData, Play as PlayData } from "lucide";
+import { MorphToggleIcon } from "../icons/MorphIcon";
+
+/** lucide 导出 ["svg", attrs, children]，morphicons 只接受 children 里的 [tag, attrs] 列表。 */
+const PAUSE_ICON = PauseData[2] ?? [];
+const PLAY_ICON = PlayData[2] ?? [];
 
 export type WelcomeCardId =
   | "intro" | "skills" | "files" | "data"
@@ -160,7 +164,13 @@ export function ChatWelcome({ onPickCard }: Props) {
           title={marqueeControlLabel}
           onClick={() => setMarqueePaused((paused) => !paused)}
         >
-          {marqueePaused ? <Play size={13} aria-hidden /> : <Pause size={13} aria-hidden />}
+          <MorphToggleIcon
+            active={marqueePaused}
+            activeIcon={PLAY_ICON}
+            inactiveIcon={PAUSE_ICON}
+            size={13}
+            aria-hidden
+          />
         </button>
 
         <div className={`chat-welcome-marquee-wrap ${marqueePaused ? "is-paused" : ""}`}>

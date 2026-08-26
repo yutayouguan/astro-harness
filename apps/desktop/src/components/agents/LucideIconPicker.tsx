@@ -2,6 +2,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { createPortal } from "react-dom";
 import { X } from "lucide-react";
+import { useMorphicons } from "../../hooks/app/useMorphicons";
 import { useI18n } from "../../i18n/LocaleContext";
 import {
   applyPaintToSvg,
@@ -20,6 +21,7 @@ import {
   type LucidePaint,
   type LucideRenderStyle,
 } from "../../lib/agent/lucideAgentIcons";
+import { AppMorphIcon } from "../icons/MorphIcon";
 
 /** Lucide 图标选择器入参 */
 type Props = {
@@ -56,6 +58,7 @@ function PaintedLucideIcon({
   style: LucideRenderStyle;
   size?: number;
 }) {
+  const { strokeWidth } = useMorphicons();
   const wrapRef = useRef<HTMLSpanElement | null>(null);
   // fillCutout 会改写 SVG 结构，换色/换样式时必须 remount 拿回原始 path
   const remountKey = `${style}:${paintKey(paint)}:${size}`;
@@ -71,7 +74,7 @@ function PaintedLucideIcon({
       <Icon
         key={remountKey}
         size={size}
-        strokeWidth={2}
+        strokeWidth={strokeWidth}
         color={paint.kind === "solid" ? paint.color : "#0f172a"}
       />
     </span>
@@ -97,6 +100,7 @@ export default function LucideIconPicker({
   );
   const [customFrom, setCustomFrom] = useState("#2563eb");
   const [customTo, setCustomTo] = useState("#06b6d4");
+  const [previewIconId, setPreviewIconId] = useState(selectedId ?? "bot");
   const inputRef = useRef<HTMLInputElement | null>(null);
   const uploadRef = useRef<HTMLInputElement | null>(null);
 
@@ -105,6 +109,7 @@ export default function LucideIconPicker({
   useEffect(() => {
     if (!open) return;
     setQuery("");
+    setPreviewIconId(selectedId ?? "bot");
     const next = initialPaint ?? DEFAULT_LUCIDE_PAINT;
     setPaint(next);
     setRenderStyle(initialStyle ?? DEFAULT_LUCIDE_RENDER_STYLE);
@@ -114,7 +119,7 @@ export default function LucideIconPicker({
     }
     const timer = window.setTimeout(() => inputRef.current?.focus(), 40);
     return () => window.clearTimeout(timer);
-  }, [open, initialPaint, initialStyle]);
+  }, [open, selectedId, initialPaint, initialStyle]);
 
   useEffect(() => {
     if (!open) return;
@@ -134,6 +139,10 @@ export default function LucideIconPicker({
     to: customTo,
     angle: 135,
   };
+  const previewIcon =
+    icons.find((item) => item.id === previewIconId) ??
+    filterLucideAgentIcons("").find((item) => item.id === previewIconId) ??
+    icons[0];
 
   return createPortal(
     <div
@@ -203,6 +212,28 @@ export default function LucideIconPicker({
               aria-label={t("chat.lucidePickerSearch")}
             />
           </div>
+
+          {previewIcon ? (
+            <div className="lucide-picker-morph-preview" aria-live="polite">
+              <span className="lucide-picker-morph-stage" aria-hidden>
+                {renderStyle === "stroke" ? (
+                  <AppMorphIcon
+                    icon={previewIcon.data}
+                    size={34}
+                    color={paint.kind === "solid" ? paint.color : "currentColor"}
+                  />
+                ) : (
+                  <PaintedLucideIcon
+                    Icon={previewIcon.Icon}
+                    paint={paint}
+                    style={renderStyle}
+                    size={34}
+                  />
+                )}
+              </span>
+              <span className="lucide-picker-morph-name">{previewIcon.label}</span>
+            </div>
+          ) : null}
 
           <div className="lucide-picker-style" role="group" aria-label={t("chat.lucidePickerStyle")}>
             <span className="lucide-picker-colors-label">{t("chat.lucidePickerStyle")}</span>
@@ -340,7 +371,12 @@ export default function LucideIconPicker({
                     aria-selected={active}
                     className={`lucide-picker-item ${active ? "is-active" : ""}`}
                     title={item.label}
-                    onClick={() => onSelect(item, paint, renderStyle)}
+                    onPointerEnter={() => setPreviewIconId(item.id)}
+                    onFocus={() => setPreviewIconId(item.id)}
+                    onClick={() => {
+                      setPreviewIconId(item.id);
+                      onSelect(item, paint, renderStyle);
+                    }}
                   >
                     <PaintedLucideIcon
                       Icon={item.Icon}

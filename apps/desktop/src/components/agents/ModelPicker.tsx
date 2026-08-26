@@ -8,7 +8,13 @@ import {
   type CSSProperties,
   type MouseEvent as ReactMouseEvent,
 } from "react";
-import { Check, ChevronDown, ChevronRight } from "lucide-react";
+import { Check } from "lucide-react";
+import {
+  ChevronDown as ChevronDownData,
+  ChevronRight as ChevronRightData,
+  ChevronUp as ChevronUpData,
+} from "lucide";
+import type { IconInput } from "morphicons/react";
 import { invoke } from "@tauri-apps/api/core";
 import { useClampPopover } from "../../hooks/ui/useClampPopover";
 import { useConfirm } from "../../hooks/ui/DialogContext";
@@ -42,6 +48,7 @@ import type {
 } from "../../types";
 import ModelCapabilityIcons from "./ModelCapabilityIcons";
 import { ModelBrandIcon } from "../icons/ProviderIcons";
+import { MorphToggleIcon } from "../icons/MorphIcon";
 
 /** 模型选择器入参 */
 type Props = {
@@ -70,11 +77,6 @@ type ModelOption = {
 /** 选中勾选图标 */
 function IconCheck(props: { className?: string }) {
   return <Check size={14} strokeWidth={2.5} aria-hidden {...props} />;
-}
-
-/** 下拉箭头图标 */
-function IconChevron(props: { className?: string }) {
-  return <ChevronDown size={12} strokeWidth={2.5} aria-hidden {...props} />;
 }
 
 /** 确保默认模型 id 出现在列表中（缺失则插入占位项） */
@@ -443,7 +445,14 @@ export default function ModelPicker({
         ) : (
           <span className="model-picker-label">{t("status.none")}</span>
         )}
-        <IconChevron className="model-picker-chevron" />
+        <MorphToggleIcon
+          active={open}
+          activeIcon={ChevronUpData as unknown as IconInput}
+          inactiveIcon={ChevronDownData as unknown as IconInput}
+          size={12}
+          strokeWidth={2.5}
+          aria-hidden
+        />
       </button>
 
       {open && (
@@ -490,21 +499,15 @@ export default function ModelPicker({
                         {group.items.length}
                       </span>
                     </span>
-                    {collapsed ? (
-                      <ChevronRight
-                        size={12}
-                        strokeWidth={2.4}
-                        className="model-picker-group-chevron"
-                        aria-hidden
-                      />
-                    ) : (
-                      <ChevronDown
-                        size={12}
-                        strokeWidth={2.4}
-                        className="model-picker-group-chevron"
-                        aria-hidden
-                      />
-                    )}
+                    <MorphToggleIcon
+                      active={!collapsed}
+                      activeIcon={ChevronDownData as unknown as IconInput}
+                      inactiveIcon={ChevronRightData as unknown as IconInput}
+                      size={12}
+                      strokeWidth={2.4}
+                      className="model-picker-group-chevron"
+                      aria-hidden
+                    />
                   </button>
                   {!collapsed ? (
                   <ul
