@@ -1,6 +1,9 @@
-/* 全局统一分段 Tab —— 对齐 Apple 分段控件的液态玻璃材质：
-   轨道是一层下凹的毛玻璃井，选中项是浮在井上的一枚玻璃透镜
-   （顶缘高光、底缘回光、下方投影）。
+/* 全局统一分段 Tab —— 对齐 Apple 分段控件的液态玻璃材质。
+
+   两层都是浮起来的，靠「浮多高」拉开层级：
+   轨道是一片薄玻璃，投影宽而淡，悬在内容之上；
+   选中项是压在轨道上的一枚厚透镜，投影紧而实，再高一层。
+   两者都有顶缘高光、底缘回光和边缘折射线。
 
    本文件在 index.css 末尾导入，因此同特异度下覆盖各功能页的旧样式；
    功能页只保留自己的布局约束（滚动、宽度、装饰层），不再各写一套外观。 */
@@ -13,13 +16,18 @@
   --seg-shell-pad: 3px;
   --seg-shell-gap: 2px;
 
-  /* 轨道：下凹的井。底色偏冷灰而非纯白，才压得住上面的玻璃片 */
-  --seg-shell-bg: rgba(118, 118, 128, 0.09);
-  --seg-shell-border: rgba(255, 255, 255, 0.5);
-  --seg-shell-blur: blur(24px) saturate(180%);
-  --seg-shell-inset:
-    inset 0 1px 2px rgba(15, 23, 42, 0.07),
-    inset 0 0 0 0.5px rgba(15, 23, 42, 0.05);
+  /* 轨道：悬浮的薄玻璃。投影分三层由紧到松，越远越淡越大 */
+  --seg-shell-bg:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.5) 0%, rgba(255, 255, 255, 0.26) 100%),
+    rgba(118, 118, 128, 0.1);
+  --seg-shell-border: rgba(255, 255, 255, 0.62);
+  --seg-shell-blur: blur(28px) saturate(190%);
+  --seg-shell-shadow:
+    0 0.5px 1px rgba(15, 23, 42, 0.05),
+    0 3px 8px -2px rgba(15, 23, 42, 0.09),
+    0 10px 24px -8px rgba(15, 23, 42, 0.15),
+    inset 0 1px 0 rgba(255, 255, 255, 0.78),
+    inset 0 -0.5px 0 rgba(255, 255, 255, 0.34);
 
   --seg-item-radius: 9px;
   --seg-item-pad: 0 13px;
@@ -41,21 +49,28 @@
       rgba(255, 255, 255, 0.86) 100%
     ),
     color-mix(in srgb, var(--tone-soft) 22%, rgba(255, 255, 255, 0.6));
-  --seg-item-blur-active: blur(10px) saturate(180%);
+  --seg-item-blur-active: blur(12px) saturate(200%);
+  /* 比轨道浮得更高：投影更紧更实，高光更亮 */
   --seg-item-shadow-active:
-    0 1px 2.5px rgba(15, 23, 42, 0.14),
-    0 4px 10px -3px rgba(15, 23, 42, 0.1),
-    inset 0 1px 0 rgba(255, 255, 255, 0.96),
-    inset 0 -1px 0 rgba(255, 255, 255, 0.55),
-    inset 0 0 0 0.5px rgba(255, 255, 255, 0.72);
+    0 1px 2px rgba(15, 23, 42, 0.1),
+    0 3px 8px -3px rgba(15, 23, 42, 0.16),
+    0 6px 14px -6px rgba(15, 23, 42, 0.14),
+    inset 0 1px 0 rgba(255, 255, 255, 1),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.62),
+    inset 0 0 0 0.5px rgba(255, 255, 255, 0.82);
 }
 
 html[data-theme="dark"] {
-  --seg-shell-bg: rgba(118, 118, 128, 0.26);
-  --seg-shell-border: rgba(255, 255, 255, 0.1);
-  --seg-shell-inset:
-    inset 0 1px 2px rgba(0, 0, 0, 0.3),
-    inset 0 0 0 0.5px rgba(0, 0, 0, 0.2);
+  --seg-shell-bg:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0.042) 100%),
+    rgba(118, 118, 128, 0.2);
+  --seg-shell-border: rgba(255, 255, 255, 0.14);
+  --seg-shell-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.3),
+    0 6px 16px -4px rgba(0, 0, 0, 0.4),
+    0 14px 32px -12px rgba(0, 0, 0, 0.52),
+    inset 0 1px 0 rgba(255, 255, 255, 0.17),
+    inset 0 -0.5px 0 rgba(255, 255, 255, 0.06);
 
   --seg-item-color: color-mix(in srgb, var(--ink) 62%, transparent);
   --seg-item-bg-hover: rgba(255, 255, 255, 0.08);
@@ -70,11 +85,12 @@ html[data-theme="dark"] {
     ),
     color-mix(in srgb, var(--tone-soft) 34%, rgba(255, 255, 255, 0.06));
   --seg-item-shadow-active:
-    0 1px 2.5px rgba(0, 0, 0, 0.34),
-    0 4px 10px -3px rgba(0, 0, 0, 0.28),
-    inset 0 1px 0 rgba(255, 255, 255, 0.22),
-    inset 0 -1px 0 rgba(255, 255, 255, 0.07),
-    inset 0 0 0 0.5px rgba(255, 255, 255, 0.14);
+    0 1px 2px rgba(0, 0, 0, 0.36),
+    0 3px 8px -3px rgba(0, 0, 0, 0.42),
+    0 6px 14px -6px rgba(0, 0, 0, 0.34),
+    inset 0 1px 0 rgba(255, 255, 255, 0.26),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.08),
+    inset 0 0 0 0.5px rgba(255, 255, 255, 0.16);
 }
 
 /* ── 容器：外观 + 标准布局 ───────────────────────────────────── */
@@ -103,7 +119,7 @@ html[data-theme="dark"] {
   border: 1px solid var(--seg-shell-border);
   border-radius: var(--seg-shell-radius);
   background: var(--seg-shell-bg);
-  box-shadow: var(--seg-shell-inset);
+  box-shadow: var(--seg-shell-shadow);
   backdrop-filter: var(--seg-shell-blur);
   -webkit-backdrop-filter: var(--seg-shell-blur);
 }
@@ -115,7 +131,7 @@ html[data-theme="dark"] {
   border: 1px solid var(--seg-shell-border);
   border-radius: var(--seg-shell-radius);
   background: var(--seg-shell-bg);
-  box-shadow: var(--seg-shell-inset);
+  box-shadow: var(--seg-shell-shadow);
   backdrop-filter: var(--seg-shell-blur);
   -webkit-backdrop-filter: var(--seg-shell-blur);
 }
@@ -344,20 +360,24 @@ html[data-theme="dark"] {
 
 /* ── 无障碍降级 ──────────────────────────────────────────────── */
 
-/* 关闭透明度：玻璃变实心霜面，去掉模糊与镜面渐变 */
+/* 关闭透明度：玻璃变实心霜面，去掉模糊与镜面高光，只留一层浅投影保住层级 */
 @media (prefers-reduced-transparency: reduce) {
   :root {
     --seg-shell-bg: color-mix(in srgb, var(--ink) 7%, var(--bg, #fff));
     --seg-shell-blur: none;
+    --seg-shell-shadow: 0 2px 6px -2px rgba(15, 23, 42, 0.16);
     --seg-item-blur-active: none;
     --seg-item-bg-active: var(--bg, #fff);
     --seg-item-bg-hover: color-mix(in srgb, var(--ink) 4%, var(--bg, #fff));
+    --seg-item-shadow-active: 0 1px 3px rgba(15, 23, 42, 0.2);
   }
 
   html[data-theme="dark"] {
     --seg-shell-bg: color-mix(in srgb, #fff 8%, var(--bg, #111));
+    --seg-shell-shadow: 0 2px 6px -2px rgba(0, 0, 0, 0.5);
     --seg-item-bg-active: color-mix(in srgb, #fff 16%, var(--bg, #111));
     --seg-item-bg-hover: color-mix(in srgb, #fff 10%, var(--bg, #111));
+    --seg-item-shadow-active: 0 1px 3px rgba(0, 0, 0, 0.55);
   }
 }
 
