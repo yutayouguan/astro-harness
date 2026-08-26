@@ -148,17 +148,52 @@ pub struct StoredSession {
     pub branch_inherited_turn_count: Option<i64>,
     /// 分支创建时间；普通会话与旧分支可为空。
     pub branch_created_at: Option<f64>,
+    /// 分支来源；普通会话与旧分支为空。
+    pub branch_kind: Option<String>,
 }
 
-/// 从父会话的一个已完成 user turn 创建分支后的结果。
+/// 子会话的来源类别。
+///
+/// 对应 Codex 对 `forked_from_id`（聊天分叉）与 `parent_thread_id`（子 Agent 派生）
+/// 的区分：两者都写 `parent_session_id`，但只有 `Fork` 属于聊天分支谱系。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BranchKind {
+    Fork,
+    Agent,
+}
+
+impl BranchKind {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Fork => "fork",
+            Self::Agent => "agent",
+        }
+    }
+}
+
+/// 分叉边界：包含锚点 turn，或停在锚点 turn 之前。
+///
+/// 对应 Codex `thread/fork` 的 `last_turn_id` / `before_turn_id`。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ForkBoundary {
+    /// 复制到锚点 turn 结束（要求该 turn 已完成）。
+    ThroughTurn,
+    /// 复制到锚点 turn 之前，锚点本身不进入新分支。
+    BeforeTurn,
+}
+
+/// 从父会话的某个 user turn 边界创建分支后的结果。
 #[derive(Debug, Clone, Serialize, PartialEq)]
 pub struct ForkedSession {
     pub session_id: String,
     pub parent_session_id: String,
-    pub parent_message_id: i64,
-    pub parent_turn_index: i64,
+    /// 新分支挂靠的父会话 user 消息行 id；`BeforeTurn` 分叉到首轮之前时为空。
+    pub parent_message_id: Option<i64>,
+    pub parent_turn_index: Option<i64>,
     pub inherited_turn_count: i64,
     pub copied_message_count: i64,
+    /// 复制进新分支的 user 消息数，用于对齐 rollout 前缀。
+    pub copied_user_turns: i64,
     pub created_at: f64,
 }
 

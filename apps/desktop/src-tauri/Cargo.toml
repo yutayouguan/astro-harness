@@ -38,6 +38,7 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 proto = { path = "../../../crates/agent-proto" }
 agent-protocol = { path = "../../../crates/agent-protocol" }
+agent-rollout = { path = "../../../crates/agent-rollout" }
 types = { path = "../../../crates/agent-types" }
 memory = { path = "../../../crates/agent-memory" }
 sandbox = { path = "../../../crates/agent-sandbox" }

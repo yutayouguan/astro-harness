@@ -6,8 +6,9 @@ use anyhow::{anyhow, Result};
 use rusqlite::{params, OptionalExtension, Transaction};
 
 use super::{
-    is_unique_constraint, now_epoch_secs, truncate_chars, ForkedSession, SessionLineageGraph,
-    SessionLineageNode, SessionStore, SessionTurnNode, StoredMessage, StoredSession,
+    is_unique_constraint, now_epoch_secs, truncate_chars, BranchKind, ForkBoundary, ForkedSession,
+    SessionLineageGraph, SessionLineageNode, SessionStore, SessionTurnNode, StoredMessage,
+    StoredSession,
 };
 
 #[derive(Debug)]
@@ -21,7 +22,7 @@ struct TurnSpan {
 }
 
 impl SessionStore {
-    /// 从父会话的一个已完成 user turn 分叉。
+    /// 从父会话的一个已完成 user turn 分叉（Codex `last_turn_id` 语义）。
     ///
     /// `parent_user_message_id` 必须属于 `source_id`，且该 turn 在下一条 user 消息前
     /// 至少有一条 assistant 消息。复制范围从会话开头到该 turn 末尾，消息使用新行 id。
@@ -31,9 +32,42 @@ impl SessionStore {
         new_id: &str,
         parent_user_message_id: i64,
     ) -> Result<ForkedSession> {
+        self.fork_session_at_boundary(
+            source_id,
+            new_id,
+            parent_user_message_id,
+            ForkBoundary::ThroughTurn,
+        )
+    }
+
+    /// 分叉到某个 user turn 之前（Codex `before_turn_id` 语义）。
+    ///
+    /// 锚点 turn 本身不进入新分支，因此未完成的 turn 也可作为锚点——这正是
+    /// 「改写上一条消息重开一条路径」需要的边界。
+    pub fn fork_session_before_user_message(
+        &self,
+        source_id: &str,
+        new_id: &str,
+        parent_user_message_id: i64,
+    ) -> Result<ForkedSession> {
+        self.fork_session_at_boundary(
+            source_id,
+            new_id,
+            parent_user_message_id,
+            ForkBoundary::BeforeTurn,
+        )
+    }
+
+    fn fork_session_at_boundary(
+        &self,
+        source_id: &str,
+        new_id: &str,
+        parent_user_message_id: i64,
+        boundary: ForkBoundary,
+    ) -> Result<ForkedSession> {
         anyhow::ensure!(
             source_id != new_id,
-            "fork_session_at_user_message: source and target session ids must differ"
+            "fork_session: source and target session ids must differ"
         );
         let tx = self.conn.unchecked_transaction()?;
         let (source, model, title) = tx
@@ -49,9 +83,7 @@ impl SessionStore {
                 },
             )
             .optional()?
-            .ok_or_else(|| {
-                anyhow!("fork_session_at_user_message: source session not found: {source_id:?}")
-            })?;
+            .ok_or_else(|| anyhow!("fork_session: source session not found: {source_id:?}"))?;
         let target_exists = tx.query_row(
             "SELECT EXISTS(SELECT 1 FROM sessions WHERE id = ?1)",
             params![new_id],
@@ -59,7 +91,7 @@ impl SessionStore {
         )?;
         anyhow::ensure!(
             !target_exists,
-            "fork_session_at_user_message: target session already exists"
+            "fork_session: target session already exists"
         );
 
         let (anchor_timestamp, anchor_id, role) = tx
@@ -76,12 +108,10 @@ impl SessionStore {
                 },
             )
             .optional()?
-            .ok_or_else(|| {
-                anyhow!("fork_session_at_user_message: parent message not found in source session")
-            })?;
+            .ok_or_else(|| anyhow!("fork_session: anchor message not found in source session"))?;
         anyhow::ensure!(
             role == "user",
-            "fork_session_at_user_message: parent message must have role=user"
+            "fork_session: anchor message must have role=user"
         );
 
         let next_user = tx
@@ -94,70 +124,108 @@ impl SessionStore {
                 |row| Ok((row.get::<_, f64>(0)?, row.get::<_, i64>(1)?)),
             )
             .optional()?;
-        let completed = match next_user {
-            Some((next_timestamp, next_id)) => tx.query_row(
-                "SELECT EXISTS(
-                    SELECT 1 FROM messages
-                    WHERE session_id = ?1 AND role = 'assistant'
-                      AND (timestamp > ?2 OR (timestamp = ?2 AND id > ?3))
-                      AND (timestamp < ?4 OR (timestamp = ?4 AND id < ?5))
-                 )",
-                params![
-                    source_id,
-                    anchor_timestamp,
-                    anchor_id,
-                    next_timestamp,
-                    next_id
-                ],
-                |row| row.get::<_, bool>(0),
-            )?,
-            None => tx.query_row(
-                "SELECT EXISTS(
-                    SELECT 1 FROM messages
-                    WHERE session_id = ?1 AND role = 'assistant'
-                      AND (timestamp > ?2 OR (timestamp = ?2 AND id > ?3))
-                 )",
-                params![source_id, anchor_timestamp, anchor_id],
-                |row| row.get::<_, bool>(0),
-            )?,
+        // 复制上界：through 停在下一条 user 之前，before 停在锚点自身之前。
+        let copy_boundary = match boundary {
+            ForkBoundary::ThroughTurn => next_user,
+            ForkBoundary::BeforeTurn => Some((anchor_timestamp, anchor_id)),
         };
-        anyhow::ensure!(
-            completed,
-            "fork_session_at_user_message: user turn is not completed"
-        );
 
-        let parent_turn_index = tx.query_row(
-            "SELECT COUNT(*) FROM messages
-             WHERE session_id = ?1 AND role = 'user'
-               AND (timestamp < ?2 OR (timestamp = ?2 AND id <= ?3))",
-            params![source_id, anchor_timestamp, anchor_id],
-            |row| row.get::<_, i64>(0),
-        )?;
-        let inherited_turn_count = completed_turn_count_before_boundary(&tx, source_id, next_user)?;
+        if boundary == ForkBoundary::ThroughTurn {
+            let completed = match next_user {
+                Some((next_timestamp, next_id)) => tx.query_row(
+                    "SELECT EXISTS(
+                        SELECT 1 FROM messages
+                        WHERE session_id = ?1 AND role = 'assistant'
+                          AND (timestamp > ?2 OR (timestamp = ?2 AND id > ?3))
+                          AND (timestamp < ?4 OR (timestamp = ?4 AND id < ?5))
+                     )",
+                    params![
+                        source_id,
+                        anchor_timestamp,
+                        anchor_id,
+                        next_timestamp,
+                        next_id
+                    ],
+                    |row| row.get::<_, bool>(0),
+                )?,
+                None => tx.query_row(
+                    "SELECT EXISTS(
+                        SELECT 1 FROM messages
+                        WHERE session_id = ?1 AND role = 'assistant'
+                          AND (timestamp > ?2 OR (timestamp = ?2 AND id > ?3))
+                     )",
+                    params![source_id, anchor_timestamp, anchor_id],
+                    |row| row.get::<_, bool>(0),
+                )?,
+            };
+            anyhow::ensure!(completed, "fork_session: user turn is not completed");
+        }
+
+        // 挂靠点取复制前缀里最后一个完整 turn：through 就是锚点本身，
+        // before 则回退到上一轮，首轮之前分叉时为空。
+        let anchor = match boundary {
+            ForkBoundary::ThroughTurn => {
+                let turn_index = tx.query_row(
+                    "SELECT COUNT(*) FROM messages
+                     WHERE session_id = ?1 AND role = 'user'
+                       AND (timestamp < ?2 OR (timestamp = ?2 AND id <= ?3))",
+                    params![source_id, anchor_timestamp, anchor_id],
+                    |row| row.get::<_, i64>(0),
+                )?;
+                Some((parent_user_message_id, turn_index))
+            }
+            ForkBoundary::BeforeTurn => tx
+                .query_row(
+                    "SELECT id, (
+                        SELECT COUNT(*) FROM messages inner_m
+                        WHERE inner_m.session_id = outer_m.session_id AND inner_m.role = 'user'
+                          AND (inner_m.timestamp < outer_m.timestamp
+                               OR (inner_m.timestamp = outer_m.timestamp
+                                   AND inner_m.id <= outer_m.id))
+                     ) FROM messages outer_m
+                     WHERE outer_m.session_id = ?1 AND outer_m.role = 'user'
+                       AND (outer_m.timestamp < ?2 OR (outer_m.timestamp = ?2 AND outer_m.id < ?3))
+                     ORDER BY outer_m.timestamp DESC, outer_m.id DESC LIMIT 1",
+                    params![source_id, anchor_timestamp, anchor_id],
+                    |row| Ok((row.get::<_, i64>(0)?, row.get::<_, i64>(1)?)),
+                )
+                .optional()?,
+        };
+
+        let inherited_turn_count =
+            completed_turn_count_before_boundary(&tx, source_id, copy_boundary)?;
         let created_at = now_epoch_secs()?;
         tx.execute(
             "INSERT INTO sessions (
                 id, source, model, parent_session_id, started_at,
                 branch_parent_message_id, branch_parent_turn_index,
-                branch_inherited_turn_count, branch_created_at
-             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?5)",
+                branch_inherited_turn_count, branch_created_at, branch_kind
+             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?5, ?9)",
             params![
                 new_id,
                 source,
                 model,
                 source_id,
                 created_at,
-                parent_user_message_id,
-                parent_turn_index,
-                inherited_turn_count
+                anchor.map(|(message_id, _)| message_id),
+                anchor.map(|(_, turn_index)| turn_index),
+                inherited_turn_count,
+                BranchKind::Fork.as_str()
             ],
         )?;
 
-        let copied_message_count = copy_prefix_through_turn(&tx, source_id, new_id, next_user)?;
-        let tool_call_count = tx.query_row(
-            "SELECT COUNT(*) FROM messages WHERE session_id = ?1 AND role = 'tool'",
+        let copied_message_count = copy_prefix_through_turn(&tx, source_id, new_id, copy_boundary)?;
+        let (tool_call_count, copied_user_turns) = tx.query_row(
+            "SELECT SUM(CASE WHEN role = 'tool' THEN 1 ELSE 0 END),
+                    SUM(CASE WHEN role = 'user' THEN 1 ELSE 0 END)
+             FROM messages WHERE session_id = ?1",
             params![new_id],
-            |row| row.get::<_, i64>(0),
+            |row| {
+                Ok((
+                    row.get::<_, Option<i64>>(0)?.unwrap_or(0),
+                    row.get::<_, Option<i64>>(1)?.unwrap_or(0),
+                ))
+            },
         )?;
         tx.execute(
             "UPDATE sessions SET message_count = ?1, tool_call_count = ?2 WHERE id = ?3",
@@ -169,17 +237,20 @@ impl SessionStore {
         Ok(ForkedSession {
             session_id: new_id.to_string(),
             parent_session_id: source_id.to_string(),
-            parent_message_id: parent_user_message_id,
-            parent_turn_index,
+            parent_message_id: anchor.map(|(message_id, _)| message_id),
+            parent_turn_index: anchor.map(|(_, turn_index)| turn_index),
             inherited_turn_count,
             copied_message_count,
+            copied_user_turns,
             created_at,
         })
     }
 
-    /// 查询任意会话所在的完整谱系：向上找到可达根，再递归收集全部后代。
+    /// 查询任意会话所在的完整聊天分支谱系：向上找到可达根，再递归收集全部后代。
     ///
-    /// v20 及更早创建的分支会通过父/子消息前缀推断锚点；损坏的父引用与循环不会死循环，
+    /// `branch_kind = 'agent'` 的会话（子 Agent 派生）连同其子树被剔除——它们共用
+    /// `parent_session_id` 但不属于聊天分支；仅当请求会话本身在这条链上时才保留。
+    /// v21 及更早创建的分支会通过父/子消息前缀推断锚点；损坏的父引用与循环不会死循环，
     /// 而是分别写入 `orphaned_parent_ids` / `cycle_detected`。
     pub fn session_lineage_graph(&self, session_id: &str) -> Result<SessionLineageGraph> {
         let sessions = self.load_all_sessions()?;
@@ -213,8 +284,14 @@ impl SessionStore {
             }
         };
 
+        let on_requested_path = ancestry.iter().cloned().collect::<HashSet<_>>();
         let mut children: HashMap<String, Vec<String>> = HashMap::new();
         for session in sessions.values() {
+            let derived_agent = session.branch_kind.as_deref() == Some(BranchKind::Agent.as_str())
+                && !on_requested_path.contains(&session.id);
+            if derived_agent {
+                continue;
+            }
             if let Some(parent_id) = &session.parent_session_id {
                 if sessions.contains_key(parent_id) {
                     children
@@ -316,6 +393,7 @@ impl SessionStore {
         source_id: &str,
         target_id: &str,
         copied_source_messages: &[StoredMessage],
+        kind: BranchKind,
     ) -> Result<()> {
         let turns = turn_spans(copied_source_messages);
         let completed = turns
@@ -323,46 +401,53 @@ impl SessionStore {
             .filter(|turn| turn.completed)
             .collect::<Vec<_>>();
         let anchor = completed.last().copied();
-        self.conn.execute(
-            "UPDATE sessions SET
-                branch_parent_message_id = ?1,
-                branch_parent_turn_index = ?2,
-                branch_inherited_turn_count = ?3,
-                branch_created_at = COALESCE(branch_created_at, ?4)
-             WHERE id = ?5 AND parent_session_id = ?6",
-            params![
-                anchor.map(|turn| turn.user_message_id),
-                anchor.map(|turn| turn.index),
-                i64::try_from(completed.len()).unwrap_or(i64::MAX),
-                now_epoch_secs()?,
-                target_id,
-                source_id
-            ],
-        )?;
-        Ok(())
+        self.write_branch_metadata(
+            source_id,
+            target_id,
+            kind,
+            &ResolvedBranchMetadata {
+                parent_message_id: anchor.map(|turn| turn.user_message_id),
+                parent_turn_index: anchor.map(|turn| turn.index),
+                inherited_turn_count: i64::try_from(completed.len()).unwrap_or(i64::MAX),
+                legacy: false,
+            },
+        )
     }
 
     pub(crate) fn infer_and_write_fork_metadata(
         &self,
         source_id: &str,
         target_id: &str,
+        kind: BranchKind,
     ) -> Result<()> {
         let inferred = infer_legacy_metadata(
             &self.get_messages(source_id)?,
             &self.get_messages(target_id)?,
         );
+        self.write_branch_metadata(source_id, target_id, kind, &inferred)
+    }
+
+    fn write_branch_metadata(
+        &self,
+        source_id: &str,
+        target_id: &str,
+        kind: BranchKind,
+        metadata: &ResolvedBranchMetadata,
+    ) -> Result<()> {
         self.conn.execute(
             "UPDATE sessions SET
                 branch_parent_message_id = ?1,
                 branch_parent_turn_index = ?2,
                 branch_inherited_turn_count = ?3,
-                branch_created_at = COALESCE(branch_created_at, ?4)
-             WHERE id = ?5 AND parent_session_id = ?6",
+                branch_created_at = COALESCE(branch_created_at, ?4),
+                branch_kind = ?5
+             WHERE id = ?6 AND parent_session_id = ?7",
             params![
-                inferred.parent_message_id,
-                inferred.parent_turn_index,
-                inferred.inherited_turn_count,
+                metadata.parent_message_id,
+                metadata.parent_turn_index,
+                metadata.inherited_turn_count,
                 now_epoch_secs()?,
+                kind.as_str(),
                 target_id,
                 source_id
             ],

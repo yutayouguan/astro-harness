@@ -17,7 +17,7 @@ impl SessionStore {
                         model, parent_session_id, message_count, tool_call_count,
                         archived_at, pinned_at, branch_parent_message_id,
                         branch_parent_turn_index, branch_inherited_turn_count,
-                        branch_created_at
+                        branch_created_at, branch_kind
                  FROM sessions WHERE id = ?1",
                 params![id],
                 |row| {
@@ -38,6 +38,7 @@ impl SessionStore {
                         branch_parent_turn_index: row.get(13)?,
                         branch_inherited_turn_count: row.get(14)?,
                         branch_created_at: row.get(15)?,
+                        branch_kind: row.get(16)?,
                     })
                 },
             )

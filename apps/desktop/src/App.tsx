@@ -1360,6 +1360,7 @@ export default function App() {
                       messages={chat.messages}
                       streaming={chat.streaming}
                       onOpenSession={(sessionId) => openSessionFromFilespace(sessionId)}
+                      onPrefillInput={setInput}
                       onOpenMemory={() => openSettingsTab("memory")}
                       onOpenSkills={() => setNav("skills")}
                     />

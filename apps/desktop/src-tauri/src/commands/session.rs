@@ -228,12 +228,17 @@ pub async fn get_chat_history(
     })
 }
 
-/// 从当前会话分支：复制截止到第 `keep_chat_bubbles` 条聊天气泡的消息到新会话。
+/// 从当前会话分支。
+///
+/// `source_message_id` 指定锚点 user 消息时按 Turn 边界分叉，`boundary` 取
+/// `through_turn`（含该轮，需已完成）或 `before_turn`（该轮不进新分支）；
+/// 否则退回按 `keep_chat_bubbles` 条聊天气泡复制。SQLite 投影与 rollout 一起分叉。
 #[tauri::command]
 pub async fn fork_chat_session(
     source_session_id: String,
     keep_chat_bubbles: Option<i32>,
     source_message_id: Option<i64>,
+    boundary: Option<String>,
     new_session_id: Option<String>,
 ) -> Result<String, String> {
     let source = source_session_id.trim();
@@ -247,16 +252,53 @@ pub async fn fork_chat_session(
     if new_id == source {
         return Err("新会话 id 不能与源会话相同".into());
     }
+    let boundary = match boundary.as_deref().map(str::trim) {
+        None | Some("") | Some("through_turn") => session::ForkBoundary::ThroughTurn,
+        Some("before_turn") => session::ForkBoundary::BeforeTurn,
+        Some(other) => return Err(format!("未知的分叉边界: {other}")),
+    };
 
-    let store = open_sessions()?;
-    if let Some(source_message_id) = source_message_id {
-        store
-            .fork_session_at_user_message(source, &new_id, source_message_id)
-            .map_err(|e| e.to_string())?;
-    } else {
-        store
-            .fork_session(source, &new_id, keep)
-            .map_err(|e| e.to_string())?;
+    let copied_user_turns = {
+        let store = open_sessions()?;
+        match source_message_id {
+            Some(source_message_id) => {
+                let forked = match boundary {
+                    session::ForkBoundary::ThroughTurn => {
+                        store.fork_session_at_user_message(source, &new_id, source_message_id)
+                    }
+                    session::ForkBoundary::BeforeTurn => {
+                        store.fork_session_before_user_message(source, &new_id, source_message_id)
+                    }
+                }
+                .map_err(|e| e.to_string())?;
+                forked.copied_user_turns.max(0) as usize
+            }
+            None => {
+                store
+                    .fork_session(source, &new_id, keep)
+                    .map_err(|e| e.to_string())?;
+                store
+                    .get_messages(&new_id)
+                    .map_err(|e| e.to_string())?
+                    .iter()
+                    .filter(|message| message.role == "user")
+                    .count()
+            }
+        }
+    };
+
+    // rollout 是权威历史；复制失败只记日志，SQLite 分支已经可用。
+    let rollout_root = home::default_memory_dir().join("sessions").join("rollouts");
+    if let Err(error) = agent_rollout::fork_rollout(
+        &rollout_root,
+        source,
+        &new_id,
+        copied_user_turns,
+        chrono::Utc::now(),
+    )
+    .await
+    {
+        tracing::warn!(%error, source, new_id = %new_id, "failed to fork rollout history");
     }
     Ok(new_id)
 }

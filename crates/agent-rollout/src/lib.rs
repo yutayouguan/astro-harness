@@ -1,10 +1,12 @@
 use serde::{Deserialize, Serialize};
 
+mod fork;
 mod path;
 mod policy;
 mod reconstruction;
 mod recorder;
 
+pub use fork::*;
 pub use path::*;
 pub use policy::*;
 pub use reconstruction::*;

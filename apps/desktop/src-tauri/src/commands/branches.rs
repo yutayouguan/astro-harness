@@ -24,6 +24,9 @@ pub struct BranchGraphNodeDto {
     agent_path: Option<String>,
     is_current: bool,
     can_fork: bool,
+    /// 该 turn 的完整用户输入，供「在此轮前分支并改写」回填输入框。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    user_message: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -79,6 +82,9 @@ fn agent_status(status: &subagents::AgentStatusV2) -> &'static str {
 }
 
 /// 返回当前会话所在完整聊天谱系，并把子 Agent spawn 图作为独立边类型附着。
+///
+/// 子 Agent 会话与聊天分叉共用 `parent_session_id`，因此它们只以 `agent` 节点出现一次：
+/// v22 起靠 `branch_kind` 区分，更早的数据靠 Agent 图里的 session id 兜底剔除。
 #[tauri::command]
 pub async fn get_chat_branch_graph(session_id: String) -> Result<BranchGraphDto, String> {
     let current_session_id = session_id.trim().to_string();
@@ -86,16 +92,49 @@ pub async fn get_chat_branch_graph(session_id: String) -> Result<BranchGraphDto,
         return Err("session_id cannot be empty".into());
     }
 
-    let (lineage, mut nodes, anchors, branch_heads) = {
+    let lineage = {
         let store = open_sessions()?;
-        let lineage = store
+        store
             .session_lineage_graph(&current_session_id)
-            .map_err(|error| error.to_string())?;
+            .map_err(|error| error.to_string())?
+    };
+
+    // Agent 图按会话取快照，因此顺带记下宿主聊天会话；thread.session_id 是 Agent 自己的会话。
+    let control = DefaultDesktopAgentThreadControl::new(home::default_memory_dir());
+    let mut threads: Vec<(String, subagents::AgentThreadV2)> = Vec::new();
+    let mut seen_threads = HashSet::new();
+    for session in &lineage.nodes {
+        let Ok(snapshot) = control.snapshot(&session.session_id).await else {
+            continue;
+        };
+        for thread in snapshot.threads {
+            if thread.canonical_path.as_str() == "/root"
+                || matches!(thread.status, subagents::AgentStatusV2::Shutdown)
+                || !seen_threads.insert(thread.thread_id.clone())
+            {
+                continue;
+            }
+            threads.push((session.session_id.clone(), thread));
+        }
+    }
+    let agent_session_ids = threads
+        .iter()
+        .map(|(_, thread)| thread.session_id.clone())
+        .filter(|id| *id != current_session_id)
+        .collect::<HashSet<_>>();
+
+    let (mut nodes, anchors, branch_heads, spawn_anchors, chat_session_count) = {
+        let store = open_sessions()?;
         let mut nodes = Vec::new();
         let mut anchors: HashMap<String, Vec<TurnAnchor>> = HashMap::new();
         let mut branch_heads = HashMap::new();
+        let chat_sessions = lineage
+            .nodes
+            .iter()
+            .filter(|node| !agent_session_ids.contains(&node.session_id))
+            .collect::<Vec<_>>();
 
-        for session_node in &lineage.nodes {
+        for session_node in &chat_sessions {
             let metadata = store
                 .get_session(&session_node.session_id)
                 .map_err(|error| error.to_string())?;
@@ -171,6 +210,7 @@ pub async fn get_chat_branch_graph(session_id: String) -> Result<BranchGraphDto,
                     agent_path: None,
                     is_current: session_node.session_id == current_session_id,
                     can_fork: turn.completed,
+                    user_message: turn.content.clone(),
                 });
                 previous = Some(id.clone());
                 session_anchors.push(TurnAnchor { id, timestamp });
@@ -201,6 +241,7 @@ pub async fn get_chat_branch_graph(session_id: String) -> Result<BranchGraphDto,
                     agent_path: None,
                     is_current: session_node.session_id == current_session_id,
                     can_fork: false,
+                    user_message: None,
                 });
                 branch_heads.insert(session_node.session_id.clone(), id);
             } else if let Some(last) = previous {
@@ -209,77 +250,87 @@ pub async fn get_chat_branch_graph(session_id: String) -> Result<BranchGraphDto,
             anchors.insert(session_node.session_id.clone(), session_anchors);
         }
 
-        (lineage, nodes, anchors, branch_heads)
+        // spawn 时复制的历史前缀就是 Agent 的发起点，读它的分叉锚点比按创建时间猜更准。
+        let mut spawn_anchors = HashMap::new();
+        for (_, thread) in &threads {
+            let Ok(Some(session)) = store.get_session(&thread.session_id) else {
+                continue;
+            };
+            if let (Some(parent), Some(message_id)) =
+                (session.parent_session_id, session.branch_parent_message_id)
+            {
+                spawn_anchors.insert(
+                    thread.thread_id.clone(),
+                    format!("turn:{parent}:{message_id}"),
+                );
+            }
+        }
+
+        (
+            nodes,
+            anchors,
+            branch_heads,
+            spawn_anchors,
+            chat_sessions.len(),
+        )
     };
 
-    let control = DefaultDesktopAgentThreadControl::new(home::default_memory_dir());
-    let mut agent_count = 0usize;
-    for session in &lineage.nodes {
-        let Ok(snapshot) = control.snapshot(&session.session_id).await else {
-            continue;
-        };
-        let threads = snapshot
-            .threads
-            .into_iter()
-            .filter(|thread| {
-                thread.canonical_path.as_str() != "/root"
-                    && !matches!(thread.status, subagents::AgentStatusV2::Shutdown)
+    let node_ids = nodes
+        .iter()
+        .map(|node| node.id.clone())
+        .collect::<HashSet<_>>();
+    let agent_count = threads.len();
+    for (host_session, thread) in &threads {
+        let parent_agent = thread
+            .parent_thread_id
+            .as_ref()
+            .filter(|parent| seen_threads.contains(*parent))
+            .map(|parent| format!("agent:{parent}"));
+        let persisted_anchor = spawn_anchors
+            .get(&thread.thread_id)
+            .filter(|id| node_ids.contains(*id))
+            .cloned();
+        let created_epoch = DateTime::parse_from_rfc3339(&thread.created_at)
+            .ok()
+            .map(|time| time.timestamp_millis() as f64 / 1000.0);
+        let turn_parent = created_epoch.and_then(|created| {
+            anchors.get(host_session).and_then(|session_anchors| {
+                session_anchors
+                    .iter()
+                    .rev()
+                    .find(|anchor| anchor.timestamp <= created)
+                    .map(|anchor| anchor.id.clone())
             })
-            .collect::<Vec<_>>();
-        let thread_ids = threads
-            .iter()
-            .map(|thread| thread.thread_id.clone())
-            .collect::<HashSet<_>>();
-        for thread in threads {
-            let id = format!("agent:{}", thread.thread_id);
-            let parent_agent = thread
-                .parent_thread_id
-                .as_ref()
-                .filter(|parent| thread_ids.contains(*parent))
-                .map(|parent| format!("agent:{parent}"));
-            let created_epoch = DateTime::parse_from_rfc3339(&thread.created_at)
-                .ok()
-                .map(|time| time.timestamp_millis() as f64 / 1000.0);
-            let turn_parent = created_epoch.and_then(|created| {
-                anchors
-                    .get(&session.session_id)
-                    .and_then(|session_anchors| {
-                        session_anchors
-                            .iter()
-                            .rev()
-                            .find(|anchor| anchor.timestamp <= created)
-                            .map(|anchor| anchor.id.clone())
-                    })
-            });
-            let parent_id = parent_agent
-                .or(turn_parent)
-                .or_else(|| branch_heads.get(&session.session_id).cloned());
-            nodes.push(BranchGraphNodeDto {
-                id,
-                kind: "agent".into(),
-                session_id: thread.session_id,
-                parent_id,
-                edge_kind: Some("spawn".into()),
-                title: thread.task_name,
-                preview: thread.agent_type,
-                status: agent_status(&thread.status).into(),
-                created_at: Some(thread.created_at),
-                source_message_id: None,
-                turn_index: None,
-                model: None,
-                agent_path: Some(thread.canonical_path.as_str().to_string()),
-                is_current: false,
-                can_fork: false,
-            });
-            agent_count += 1;
-        }
+        });
+        let parent_id = parent_agent
+            .or(persisted_anchor)
+            .or(turn_parent)
+            .or_else(|| branch_heads.get(host_session).cloned());
+        nodes.push(BranchGraphNodeDto {
+            id: format!("agent:{}", thread.thread_id),
+            kind: "agent".into(),
+            session_id: thread.session_id.clone(),
+            parent_id,
+            edge_kind: Some("spawn".into()),
+            title: thread.task_name.clone(),
+            preview: thread.agent_type.clone(),
+            status: agent_status(&thread.status).into(),
+            created_at: Some(thread.created_at.clone()),
+            source_message_id: None,
+            turn_index: None,
+            model: None,
+            agent_path: Some(thread.canonical_path.as_str().to_string()),
+            is_current: false,
+            can_fork: false,
+            user_message: None,
+        });
     }
 
     let turn_count = nodes.iter().filter(|node| node.kind == "turn").count();
     Ok(BranchGraphDto {
         root_session_id: lineage.root_session_id,
         current_session_id,
-        branch_count: lineage.nodes.len().saturating_sub(1),
+        branch_count: chat_session_count.saturating_sub(1),
         turn_count,
         agent_count,
         nodes,

@@ -1,4 +1,6 @@
-use session::store::{BillingDelta, NewMessage, SessionListFilter, SessionStore, SCHEMA_VERSION};
+use session::store::{
+    BillingDelta, BranchKind, NewMessage, SessionListFilter, SessionStore, SCHEMA_VERSION,
+};
 use tempfile::TempDir;
 
 fn test_store() -> (TempDir, SessionStore) {
@@ -1223,16 +1225,16 @@ fn fork_session_recent_turns_preserves_complete_rows_and_turn_boundaries() {
         .unwrap();
 
     store
-        .fork_session_recent_turns("source", "all", None)
+        .fork_session_recent_turns("source", "all", None, BranchKind::Agent)
         .unwrap();
     store
-        .fork_session_recent_turns("source", "none", Some(0))
+        .fork_session_recent_turns("source", "none", Some(0), BranchKind::Agent)
         .unwrap();
     store
-        .fork_session_recent_turns("source", "last", Some(1))
+        .fork_session_recent_turns("source", "last", Some(1), BranchKind::Agent)
         .unwrap();
     store
-        .fork_session_recent_turns("source", "last-two", Some(2))
+        .fork_session_recent_turns("source", "last-two", Some(2), BranchKind::Agent)
         .unwrap();
 
     let source = store.get_messages("source").unwrap();
@@ -1282,7 +1284,7 @@ fn fork_recent_turns_rejects_missing_source_without_creating_target() {
     let (_dir, store) = test_store();
 
     let error = store
-        .fork_session_recent_turns("missing", "target", None)
+        .fork_session_recent_turns("missing", "target", None, BranchKind::Agent)
         .unwrap_err();
 
     assert!(error.to_string().contains("source session not found"));
@@ -1319,7 +1321,7 @@ fn fork_recent_turns_rolls_back_target_and_retries_after_insert_failure() {
     .unwrap();
 
     let error = store
-        .fork_session_recent_turns("source", "target", None)
+        .fork_session_recent_turns("source", "target", None, BranchKind::Agent)
         .unwrap_err();
     assert!(error.to_string().contains("injected fork insert failure"));
     assert!(store.get_session("target").unwrap().is_none());
@@ -1327,7 +1329,7 @@ fn fork_recent_turns_rolls_back_target_and_retries_after_insert_failure() {
 
     raw.execute_batch("DROP TRIGGER fail_recent_fork;").unwrap();
     store
-        .fork_session_recent_turns("source", "target", None)
+        .fork_session_recent_turns("source", "target", None, BranchKind::Agent)
         .unwrap();
     let target = store.get_session("target").unwrap().unwrap();
     assert_eq!(target.parent_session_id.as_deref(), Some("source"));
@@ -2046,7 +2048,7 @@ fn v14_to_v15_adds_media_json_without_data_loss() {
 }
 
 #[test]
-fn v20_schema_migrates_to_v21_branch_metadata_without_data_loss() {
+fn v20_schema_migrates_to_current_branch_metadata_without_data_loss() {
     let dir = TempDir::new().unwrap();
     let path = dir.path().join("state.db");
     let store = SessionStore::open(&path).unwrap();
@@ -2067,13 +2069,14 @@ fn v20_schema_migrates_to_v21_branch_metadata_without_data_loss() {
          ALTER TABLE sessions DROP COLUMN branch_parent_turn_index;
          ALTER TABLE sessions DROP COLUMN branch_inherited_turn_count;
          ALTER TABLE sessions DROP COLUMN branch_created_at;
+         ALTER TABLE sessions DROP COLUMN branch_kind;
          UPDATE schema_version SET version = 20;",
     )
     .unwrap();
     drop(conn);
 
     let reopened = SessionStore::open(&path).unwrap();
-    assert_eq!(reopened.schema_version().unwrap(), 21);
+    assert_eq!(reopened.schema_version().unwrap(), SCHEMA_VERSION);
     assert_eq!(
         reopened.get_messages("keep").unwrap()[0].content.as_deref(),
         Some("keep-v20")
@@ -2083,6 +2086,7 @@ fn v20_schema_migrates_to_v21_branch_metadata_without_data_loss() {
     assert!(session.branch_parent_turn_index.is_none());
     assert!(session.branch_inherited_turn_count.is_none());
     assert!(session.branch_created_at.is_none());
+    assert!(session.branch_kind.is_none());
 }
 
 #[test]
@@ -2158,10 +2162,11 @@ fn fork_at_completed_user_turn_copies_tool_chain_with_new_ids_and_keeps_source()
         .iter()
         .zip(&source_before)
         .all(|(copied, source)| copied.id != source.id && copied.content == source.content));
-    assert_eq!(fork.parent_message_id, first_user);
-    assert_eq!(fork.parent_turn_index, 2);
+    assert_eq!(fork.parent_message_id, Some(first_user));
+    assert_eq!(fork.parent_turn_index, Some(2));
     assert_eq!(fork.inherited_turn_count, 1);
     assert_eq!(fork.copied_message_count, 5);
+    assert_eq!(fork.copied_user_turns, 2);
     let metadata = store.get_session("branch").unwrap().unwrap();
     assert_eq!(metadata.parent_session_id.as_deref(), Some("source"));
     assert_eq!(metadata.branch_parent_message_id, Some(first_user));
@@ -2174,6 +2179,132 @@ fn fork_at_completed_user_turn_copies_tool_chain_with_new_ids_and_keeps_source()
         .unwrap_err();
     assert!(error.to_string().contains("not completed"));
     assert!(store.get_session("bad-branch").unwrap().is_none());
+}
+
+#[test]
+fn fork_before_turn_excludes_the_anchor_and_accepts_incomplete_turns() {
+    let (_dir, store) = test_store();
+    store
+        .create_session("source", "tauri", Some("model-a"), None, None)
+        .unwrap();
+    let first_user = store
+        .append_message(NewMessage {
+            content: Some("first"),
+            ..NewMessage::empty("source", "user")
+        })
+        .unwrap();
+    store
+        .append_message(NewMessage {
+            content: Some("first answer"),
+            ..NewMessage::empty("source", "assistant")
+        })
+        .unwrap();
+    let second_user = store
+        .append_message(NewMessage {
+            content: Some("second"),
+            ..NewMessage::empty("source", "user")
+        })
+        .unwrap();
+    let source_before = store.get_messages("source").unwrap();
+
+    // 锚点这一轮还没有 assistant 回复，through 语义会拒绝，before 语义应当照常分叉。
+    let fork = store
+        .fork_session_before_user_message("source", "branch", second_user)
+        .unwrap();
+
+    assert_eq!(
+        source_before.iter().map(|row| row.id).collect::<Vec<_>>(),
+        store
+            .get_messages("source")
+            .unwrap()
+            .iter()
+            .map(|row| row.id)
+            .collect::<Vec<_>>()
+    );
+    assert_eq!(
+        store
+            .get_messages("branch")
+            .unwrap()
+            .iter()
+            .map(|row| (row.role.as_str(), row.content.as_deref()))
+            .collect::<Vec<_>>(),
+        vec![("user", Some("first")), ("assistant", Some("first answer"))]
+    );
+    assert_eq!(fork.parent_message_id, Some(first_user));
+    assert_eq!(fork.parent_turn_index, Some(1));
+    assert_eq!(fork.inherited_turn_count, 1);
+    assert_eq!(fork.copied_user_turns, 1);
+
+    // 首轮之前分叉留下空分支，仍然记录父会话但没有挂靠 turn。
+    let head = store
+        .fork_session_before_user_message("source", "head", first_user)
+        .unwrap();
+    assert_eq!(head.parent_message_id, None);
+    assert_eq!(head.copied_user_turns, 0);
+    assert!(store.get_messages("head").unwrap().is_empty());
+    assert_eq!(
+        store
+            .get_session("head")
+            .unwrap()
+            .unwrap()
+            .parent_session_id
+            .as_deref(),
+        Some("source")
+    );
+}
+
+#[test]
+fn lineage_graph_keeps_agent_derived_sessions_out_of_the_chat_branch_tree() {
+    let (_dir, store) = test_store();
+    store
+        .create_session("root", "tauri", None, None, None)
+        .unwrap();
+    let root_user = store
+        .append_message(NewMessage {
+            content: Some("root question"),
+            ..NewMessage::empty("root", "user")
+        })
+        .unwrap();
+    store
+        .append_message(NewMessage {
+            content: Some("root answer"),
+            ..NewMessage::empty("root", "assistant")
+        })
+        .unwrap();
+    store
+        .fork_session_at_user_message("root", "chat-branch", root_user)
+        .unwrap();
+    store
+        .fork_session_recent_turns("root", "agent-session", None, BranchKind::Agent)
+        .unwrap();
+    store
+        .fork_session_recent_turns("agent-session", "nested-agent", None, BranchKind::Agent)
+        .unwrap();
+
+    let graph = store.session_lineage_graph("root").unwrap();
+    assert_eq!(
+        graph
+            .nodes
+            .iter()
+            .map(|node| node.session_id.as_str())
+            .collect::<Vec<_>>(),
+        vec!["root", "chat-branch"]
+    );
+    assert_eq!(
+        graph.nodes[0].turns[0].child_session_ids,
+        vec!["chat-branch"]
+    );
+
+    // 直接打开某个子 Agent 会话时，它自己那条链仍要可见。
+    let agent_graph = store.session_lineage_graph("agent-session").unwrap();
+    assert!(agent_graph
+        .nodes
+        .iter()
+        .any(|node| node.session_id == "agent-session"));
+    assert!(!agent_graph
+        .nodes
+        .iter()
+        .any(|node| node.session_id == "nested-agent"));
 }
 
 #[test]

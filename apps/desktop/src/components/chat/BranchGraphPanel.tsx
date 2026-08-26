@@ -17,6 +17,7 @@ import {
   Loader2,
   Maximize2,
   Minimize2,
+  Pencil,
   RefreshCw,
   Route,
   Sparkles,
@@ -34,7 +35,11 @@ type Props = {
   sessionId: string | null;
   streaming: boolean;
   onOpenSession: (sessionId: string) => void | Promise<void>;
+  onPrefillInput?: (text: string) => void;
 };
+
+/** Codex `last_turn_id` / `before_turn_id` 两种分叉边界。 */
+type ForkBoundary = "through_turn" | "before_turn";
 
 function BranchNode({ data, selected }: NodeProps<BranchFlowNode>) {
   const { t } = useI18n();
@@ -78,12 +83,13 @@ export default function BranchGraphPanel({
   sessionId,
   streaming,
   onOpenSession,
+  onPrefillInput,
 }: Props) {
   const { t } = useI18n();
   const [graph, setGraph] = useState<BranchGraphDto | null>(null);
   const [selected, setSelected] = useState<BranchGraphNodeDto | null>(null);
   const [loading, setLoading] = useState(false);
-  const [forking, setForking] = useState(false);
+  const [forking, setForking] = useState<ForkBoundary | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [fullscreen, setFullscreen] = useState(false);
   const [showAgents, setShowAgents] = useState(true);
@@ -134,26 +140,35 @@ export default function BranchGraphPanel({
     [visibleGraph],
   );
 
-  const forkSelected = useCallback(async () => {
-    if (!selected || selected.kind !== "turn" || !selected.canFork || forking) return;
-    setForking(true);
-    setError(null);
-    try {
-      const newId = await invoke<string>("fork_chat_session", {
-        sourceSessionId: selected.sessionId,
-        sourceMessageId: selected.sourceMessageId,
-        keepChatBubbles: null,
-        newSessionId: null,
-      });
-      dispatchSessionsChanged();
-      await onOpenSession(newId);
-      setFullscreen(false);
-    } catch (reason) {
-      setError(String(reason));
-    } finally {
-      setForking(false);
-    }
-  }, [forking, onOpenSession, selected]);
+  const forkSelected = useCallback(
+    async (boundary: ForkBoundary) => {
+      if (!selected || selected.kind !== "turn" || forking) return;
+      if (boundary === "through_turn" && !selected.canFork) return;
+      setForking(boundary);
+      setError(null);
+      try {
+        const newId = await invoke<string>("fork_chat_session", {
+          sourceSessionId: selected.sessionId,
+          sourceMessageId: selected.sourceMessageId,
+          boundary,
+          keepChatBubbles: null,
+          newSessionId: null,
+        });
+        dispatchSessionsChanged();
+        await onOpenSession(newId);
+        // before_turn 会把这轮输入留在新分支之外，回填让用户直接改写重发。
+        if (boundary === "before_turn" && selected.userMessage) {
+          onPrefillInput?.(selected.userMessage);
+        }
+        setFullscreen(false);
+      } catch (reason) {
+        setError(String(reason));
+      } finally {
+        setForking(null);
+      }
+    },
+    [forking, onOpenSession, onPrefillInput, selected],
+  );
 
   const canvas = (
     <section className={`branch-graph-panel${fullscreen ? " is-fullscreen" : ""}`}>
@@ -243,15 +258,30 @@ export default function BranchGraphPanel({
               </button>
             )}
             {selected.kind === "turn" && (
-              <button
-                type="button"
-                className="is-primary"
-                disabled={!selected.canFork || streaming || forking}
-                onClick={() => void forkSelected()}
-              >
-                {forking ? <Loader2 size={13} className="is-spinning" aria-hidden /> : <GitBranch size={13} aria-hidden />}
-                {t("chat.branches.branchHere")}
-              </button>
+              <>
+                <button
+                  type="button"
+                  disabled={streaming || forking !== null}
+                  title={t("chat.branches.branchBeforeHint")}
+                  onClick={() => void forkSelected("before_turn")}
+                >
+                  {forking === "before_turn"
+                    ? <Loader2 size={13} className="is-spinning" aria-hidden />
+                    : <Pencil size={13} aria-hidden />}
+                  {t("chat.branches.branchBefore")}
+                </button>
+                <button
+                  type="button"
+                  className="is-primary"
+                  disabled={!selected.canFork || streaming || forking !== null}
+                  onClick={() => void forkSelected("through_turn")}
+                >
+                  {forking === "through_turn"
+                    ? <Loader2 size={13} className="is-spinning" aria-hidden />
+                    : <GitBranch size={13} aria-hidden />}
+                  {t("chat.branches.branchHere")}
+                </button>
+              </>
             )}
           </div>
         </footer>

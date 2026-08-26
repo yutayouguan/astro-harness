@@ -828,6 +828,8 @@ export type BranchGraphNodeDto = {
   agentPath: string | null;
   isCurrent: boolean;
   canFork: boolean;
+  /** turn 节点的完整用户输入；用于在此轮前分支时回填输入框 */
+  userMessage?: string | null;
 };
 
 /** 当前会话所在整棵聊天谱系，以及附着的子 Agent 执行层。 */

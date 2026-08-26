@@ -909,6 +909,7 @@ fn fork_parent_session(
         &runtime.parent_session_id,
         child_session_id,
         recent_turns,
+        session::BranchKind::Agent,
     )?;
     Ok(ForkedSessionGuard {
         sessions_dir,

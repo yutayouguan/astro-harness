@@ -1146,6 +1146,8 @@ export const zh = {
   "chat.branches.legacyBoundary": "旧版分支，分叉边界由历史前缀推断",
   "chat.branches.openSession": "打开会话",
   "chat.branches.branchHere": "从此回合分支",
+  "chat.branches.branchBefore": "在此轮前分支",
+  "chat.branches.branchBeforeHint": "这一轮不进新分支，原输入回填到输入框供改写重发",
   "chat.taskMonitor.streaming": "运行中",
   "chat.taskMonitor.idle": "空闲",
   "chat.taskMonitor.recentTools": "最近工具调用",
@@ -3303,6 +3305,9 @@ export const en: Record<MessageKey, string> = {
   "chat.branches.legacyBoundary": "Legacy branch with an inferred fork boundary",
   "chat.branches.openSession": "Open session",
   "chat.branches.branchHere": "Branch from this turn",
+  "chat.branches.branchBefore": "Branch before this turn",
+  "chat.branches.branchBeforeHint":
+    "Leaves this turn out of the new branch and puts the original input back in the composer",
   "chat.taskMonitor.streaming": "Running",
   "chat.taskMonitor.idle": "Idle",
   "chat.taskMonitor.recentTools": "Recent tool calls",

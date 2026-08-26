@@ -5,8 +5,8 @@ use rusqlite::{params, OptionalExtension, Transaction};
 use serde_json::Value;
 
 use super::{
-    is_unique_constraint, json_from_db, json_to_db, now_epoch_secs, truncate_chars, NewMessage,
-    SessionStore, StoredMessage,
+    is_unique_constraint, json_from_db, json_to_db, now_epoch_secs, truncate_chars, BranchKind,
+    NewMessage, SessionStore, StoredMessage,
 };
 
 pub(crate) fn insert_message_row(
@@ -260,7 +260,7 @@ impl SessionStore {
         self.create_session(new_id, "tauri", model.as_deref(), None, Some(source_id))?;
 
         if keep_chat_bubbles == 0 {
-            self.write_legacy_fork_metadata(source_id, new_id, &[])?;
+            self.write_legacy_fork_metadata(source_id, new_id, &[], BranchKind::Fork)?;
             return Ok(());
         }
 
@@ -328,7 +328,7 @@ impl SessionStore {
             let branched = format!("{title} · branch");
             let _ = self.set_session_title(new_id, &branched);
         }
-        self.write_legacy_fork_metadata(source_id, new_id, &messages[..=end])?;
+        self.write_legacy_fork_metadata(source_id, new_id, &messages[..=end], BranchKind::Fork)?;
 
         Ok(())
     }
@@ -339,11 +339,15 @@ impl SessionStore {
     /// `None` copies the full history. `Some(0)` creates an empty child
     /// session. A positive value starts at the Nth user row counted from the
     /// end, so assistant/tool rows belonging to that user turn remain intact.
+    ///
+    /// `kind` records whether the child belongs to the chat branch lineage or was
+    /// derived for a sub-agent, so the branch graph can keep the two apart.
     pub fn fork_session_recent_turns(
         &self,
         source_id: &str,
         new_id: &str,
         recent_turns: Option<usize>,
+        kind: BranchKind,
     ) -> Result<()> {
         if source_id == new_id {
             anyhow::bail!("fork_session_recent_turns: source and target session ids must differ");
@@ -465,7 +469,7 @@ impl SessionStore {
             }
         }
         tx.commit()?;
-        self.infer_and_write_fork_metadata(source_id, new_id)?;
+        self.infer_and_write_fork_metadata(source_id, new_id, kind)?;
 
         Ok(())
     }
