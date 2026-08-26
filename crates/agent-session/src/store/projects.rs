@@ -8,6 +8,9 @@ use std::path::{Path, PathBuf};
 use super::SessionStore;
 
 pub const DEFAULT_PROJECT_ID: &str = "default";
+pub const DEFAULT_PROJECT_NAME: &str = "主空间";
+/// v19 早期版本写入的默认项目名；仅当用户没有自定义过名字时才改写成新名。
+const LEGACY_DEFAULT_PROJECT_NAMES: [&str; 1] = ["默认工作空间"];
 
 /// 从库中读出的 Project 实体。
 #[derive(Debug, Clone)]
@@ -338,13 +341,11 @@ impl SessionStore {
     // ---- internal ----
 
     fn load_project_roots(&self, project_id: &str) -> Result<Vec<String>> {
-        let mut stmt = self
-            .conn
-            .prepare(
-                "SELECT path FROM project_roots
+        let mut stmt = self.conn.prepare(
+            "SELECT path FROM project_roots
                  WHERE project_id = ?1
                  ORDER BY root_position ASC, path ASC",
-            )?;
+        )?;
         let roots = stmt
             .query_map(params![project_id], |row| row.get(0))?
             .collect::<Result<Vec<String>, _>>()?;
@@ -355,32 +356,77 @@ impl SessionStore {
     pub fn ensure_default_project(&self, workspace_root: &Path) -> Result<Project> {
         let workspace = workspace_root.to_string_lossy().into_owned();
         let canonical = normalize_project_roots(&[workspace.as_str()])?;
-        if self.get_project(DEFAULT_PROJECT_ID)?.is_none() {
-            self.conn.execute(
-                "INSERT INTO projects (id, name, position)
-                 VALUES (?1, '默认工作空间', -1)",
-                params![DEFAULT_PROJECT_ID],
-            )?;
-            self.conn.execute(
-                "INSERT INTO project_roots (project_id, path, root_position)
-                 VALUES (?1, ?2, 0)",
-                params![DEFAULT_PROJECT_ID, canonical[0]],
-            )?;
+        let root = canonical[0].as_str();
+        let tx = self.conn.unchecked_transaction()?;
+        // foreign_keys 未开启时 project_roots 会留下孤儿行，使 find_project_by_root
+        // 误判工作区目录空闲，从而放行重复的默认项目。
+        tx.execute(
+            "DELETE FROM project_roots
+             WHERE project_id NOT IN (SELECT id FROM projects)",
+            [],
+        )?;
+        let exists: bool = tx.query_row(
+            "SELECT EXISTS(SELECT 1 FROM projects WHERE id = ?1)",
+            params![DEFAULT_PROJECT_ID],
+            |row| row.get(0),
+        )?;
+        if exists {
+            for legacy in LEGACY_DEFAULT_PROJECT_NAMES {
+                tx.execute(
+                    "UPDATE projects SET name = ?1, updated_at = datetime('now')
+                     WHERE id = ?2 AND name = ?3",
+                    params![DEFAULT_PROJECT_NAME, DEFAULT_PROJECT_ID, legacy],
+                )?;
+            }
         } else {
-            self.conn.execute(
-                "DELETE FROM project_roots WHERE project_id = ?1",
-                params![DEFAULT_PROJECT_ID],
-            )?;
-            self.conn.execute(
-                "INSERT INTO project_roots (project_id, path, root_position)
-                 VALUES (?1, ?2, 0)",
-                params![DEFAULT_PROJECT_ID, canonical[0]],
+            tx.execute(
+                "INSERT INTO projects (id, name, position) VALUES (?1, ?2, -1)",
+                params![DEFAULT_PROJECT_ID, DEFAULT_PROJECT_NAME],
             )?;
         }
-        self.conn.execute(
+        tx.execute(
+            "DELETE FROM project_roots WHERE project_id = ?1",
+            params![DEFAULT_PROJECT_ID],
+        )?;
+        tx.execute(
+            "INSERT INTO project_roots (project_id, path, root_position)
+             VALUES (?1, ?2, 0)",
+            params![DEFAULT_PROJECT_ID, root],
+        )?;
+        // 旧版本用随机 id 建过默认项目，只以工作区为唯一目录的项目一律并入 default。
+        let mut stmt = tx.prepare(
+            "SELECT pr.project_id FROM project_roots pr
+             WHERE pr.path = ?1
+               AND pr.project_id != ?2
+               AND (SELECT COUNT(*) FROM project_roots x
+                    WHERE x.project_id = pr.project_id) = 1",
+        )?;
+        let duplicates: Vec<String> = stmt
+            .query_map(params![root, DEFAULT_PROJECT_ID], |row| row.get(0))?
+            .collect::<Result<Vec<_>, _>>()?;
+        drop(stmt);
+        for duplicate in &duplicates {
+            tx.execute(
+                "UPDATE sessions SET project_id = ?1 WHERE project_id = ?2",
+                params![DEFAULT_PROJECT_ID, duplicate],
+            )?;
+            tx.execute(
+                "DELETE FROM project_roots WHERE project_id = ?1",
+                params![duplicate],
+            )?;
+            tx.execute("DELETE FROM projects WHERE id = ?1", params![duplicate])?;
+        }
+        tx.execute(
             "UPDATE sessions SET project_id = ?1 WHERE project_id IS NULL",
             params![DEFAULT_PROJECT_ID],
         )?;
+        tx.commit()?;
+        if !duplicates.is_empty() {
+            tracing::info!(
+                count = duplicates.len(),
+                "merged legacy default projects into the stable default project"
+            );
+        }
         self.get_project(DEFAULT_PROJECT_ID)?
             .ok_or_else(|| anyhow!("default project not found after ensure"))
     }
@@ -566,6 +612,73 @@ mod tests {
             project.id
         );
         assert!(store.delete_project(&project.id).is_err());
+    }
+
+    #[test]
+    fn ensure_default_project_merges_legacy_default_projects() {
+        let store = open_memory();
+        let base = tempfile::tempdir().unwrap();
+        let workspace = make_root(&base, "workspace");
+        let legacy = store.create_project("默认工作空间", &[&workspace]).unwrap();
+        store.ensure_session("legacy-session", "tauri").unwrap();
+        store
+            .assign_session_to_project("legacy-session", &legacy.id)
+            .unwrap();
+
+        let default = store
+            .ensure_default_project(std::path::Path::new(&workspace))
+            .unwrap();
+
+        assert_eq!(default.id, crate::store::projects::DEFAULT_PROJECT_ID);
+        assert_eq!(store.list_projects().unwrap().len(), 1);
+        assert_eq!(
+            store
+                .project_for_session("legacy-session")
+                .unwrap()
+                .unwrap()
+                .id,
+            default.id
+        );
+    }
+
+    #[test]
+    fn ensure_default_project_renames_legacy_name_but_keeps_custom_one() {
+        let store = open_memory();
+        let base = tempfile::tempdir().unwrap();
+        let workspace = make_root(&base, "workspace");
+        let path = std::path::Path::new(&workspace);
+
+        let created = store.ensure_default_project(path).unwrap();
+        assert_eq!(created.name, crate::store::projects::DEFAULT_PROJECT_NAME);
+
+        store
+            .update_project(&created.id, Some("默认工作空间"), None, None)
+            .unwrap();
+        let renamed = store.ensure_default_project(path).unwrap();
+        assert_eq!(renamed.name, crate::store::projects::DEFAULT_PROJECT_NAME);
+
+        store
+            .update_project(&created.id, Some("我的空间"), None, None)
+            .unwrap();
+        let kept = store.ensure_default_project(path).unwrap();
+        assert_eq!(kept.name, "我的空间");
+    }
+
+    #[test]
+    fn ensure_default_project_ignores_multi_root_projects_containing_workspace() {
+        let store = open_memory();
+        let base = tempfile::tempdir().unwrap();
+        let workspace = make_root(&base, "workspace");
+        let other = make_root(&base, "other");
+        let combined = store
+            .create_project("Combined", &[&other, &workspace])
+            .unwrap();
+
+        store
+            .ensure_default_project(std::path::Path::new(&workspace))
+            .unwrap();
+
+        assert!(store.get_project(&combined.id).unwrap().is_some());
     }
 
     #[test]
