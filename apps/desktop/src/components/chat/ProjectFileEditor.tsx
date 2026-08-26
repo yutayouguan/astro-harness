@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
-import { FileCode2, LoaderCircle, Save, X } from "lucide-react";
-import { Eye as EyeData, FileCode2 as FileCode2Data } from "lucide";
+import { Eye, FileCode2, LoaderCircle, Save, X } from "lucide-react";
 import type { ResolvedTheme } from "../../hooks/app/useTheme";
 import type { ProjectFileWorkbench } from "../../hooks/chat/useProjectFileWorkbench";
 import {
@@ -9,7 +8,6 @@ import {
   writeWorkspaceMdMode,
   type MdMode,
 } from "../../lib/filespace/workspaceMdMode";
-import { MorphToggleIcon } from "../icons/MorphIcon";
 import { ChatMarkdown } from "./ChatMarkdown";
 import FileTypeIcon from "../filespace/FileTypeIcon";
 import WorkspaceEditor from "../workspace/WorkspaceEditor";
@@ -102,13 +100,11 @@ export default function ProjectFileEditor({
               aria-label={showMarkdownPreview ? "显示 Markdown 源码" : "预览 Markdown"}
               aria-pressed={showMarkdownPreview}
             >
-              <MorphToggleIcon
-                active={showMarkdownPreview}
-                activeIcon={FileCode2Data}
-                inactiveIcon={EyeData}
-                size={14}
-                aria-hidden
-              />
+              {showMarkdownPreview ? (
+                <FileCode2 size={14} aria-hidden />
+              ) : (
+                <Eye size={14} aria-hidden />
+              )}
             </button>
           ) : null}
           <button
