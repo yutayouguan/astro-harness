@@ -2,7 +2,6 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
 import { createPortal } from "react-dom";
 import {
-  Bot,
   CalendarPlus,
   Check,
   ChevronDown,
@@ -26,8 +25,6 @@ import {
   type ScheduleDraft,
 } from "../../lib/cron/cronSchedule";
 import { useI18n } from "../../i18n/LocaleContext";
-import type { AgentInfo } from "../../types/agent";
-import { normalizeAgentId } from "../../types/agent";
 import type { CronJobDto } from "./CronPanel";
 
 /** 创建任务对话框可选的供应商简项 */
@@ -55,8 +52,6 @@ type Props = {
   providers: ProviderOpt[];
   activeProviderId: string | null;
   models?: string[];
-  agents?: AgentInfo[];
-  defaultAgentId?: string;
   /** 传入则进入编辑模式 */
   editingJob?: CronJobDto | null;
   /** 模板预填（仅填入表单，提交时走创建流程） */
@@ -89,8 +84,6 @@ export function CreateCronDialog({
   providers,
   activeProviderId,
   models: modelsProp,
-  agents = [],
-  defaultAgentId = "default",
   editingJob = null,
   prefill = null,
   toneStyle,
@@ -102,9 +95,6 @@ export function CreateCronDialog({
   const [title, setTitle] = useState("");
   const [task, setTask] = useState("");
   const [draft, setDraft] = useState<ScheduleDraft>(DEFAULT_DRAFT);
-  const [selectedAgentId, setSelectedAgentId] = useState(() =>
-    normalizeAgentId(defaultAgentId),
-  );
   const [selectedProviderId, setSelectedProviderId] = useState(() =>
     defaultProviderId(providers, activeProviderId),
   );
@@ -118,14 +108,13 @@ export function CreateCronDialog({
     setTitle("");
     setTask("");
     setDraft({ ...DEFAULT_DRAFT, weekdays: [] });
-    setSelectedAgentId(normalizeAgentId(defaultAgentId));
     setSelectedProviderId(defaultProviderId(providers, activeProviderId));
     setModelOptions([]);
     setSelectedModel("");
     setShowInChat(false);
     setError("");
     setSaving(false);
-  }, [providers, activeProviderId, defaultAgentId]);
+  }, [providers, activeProviderId]);
 
   useEffect(() => {
     if (!open) return;
@@ -133,7 +122,6 @@ export function CreateCronDialog({
       setTitle(editingJob.title);
       setTask(editingJob.task);
       setDraft(decodeSchedule(editingJob.schedule));
-      setSelectedAgentId(normalizeAgentId(editingJob.agent_id));
       setSelectedProviderId(
         editingJob.provider_id &&
           providers.some((p) => p.id === editingJob.provider_id)
@@ -151,11 +139,10 @@ export function CreateCronDialog({
       setTask(prefill.task);
       setDraft(decodeSchedule(prefill.schedule));
     }
-    setSelectedAgentId(normalizeAgentId(defaultAgentId));
     setSelectedProviderId(defaultProviderId(providers, activeProviderId));
     setShowInChat(false);
     setError("");
-  }, [open, providers, activeProviderId, defaultAgentId, editingJob, prefill]);
+  }, [open, providers, activeProviderId, editingJob, prefill]);
 
   useEffect(() => {
     if (!open) return;
@@ -240,7 +227,7 @@ export function CreateCronDialog({
         schedule: encodeSchedule(draft),
         task: task.trim(),
         title: title.trim(),
-        agent_id: normalizeAgentId(selectedAgentId),
+        agent_id: "default",
         provider_id: selectedProviderId || null,
         model: selectedModel || null,
         show_in_chat: showInChat,
@@ -261,19 +248,6 @@ export function CreateCronDialog({
       setSaving(false);
     }
   }
-
-  const agentOptions =
-    agents.length > 0
-      ? agents
-      : [
-          {
-            id: "default",
-            name: t("cron.agent.default"),
-            path: "",
-            is_default: true,
-            is_active: true,
-          } satisfies AgentInfo,
-        ];
 
   const TitleIcon = isEdit ? Pencil : CalendarPlus;
 
@@ -324,24 +298,6 @@ export function CreateCronDialog({
                 onChange={(e) => setTitle(e.target.value)}
                 placeholder={t("cron.field.namePlaceholder")}
                 autoFocus
-              />
-            </label>
-            <label className="cron-dialog-field">
-              <span className="cron-dialog-label">
-                <Bot size={13} strokeWidth={2.2} aria-hidden />
-                {t("cron.field.agent")}
-              </span>
-              <SelectMenu
-                className="cron-dialog-select"
-                value={selectedAgentId}
-                onChange={setSelectedAgentId}
-                aria-label={t("cron.field.agent")}
-                options={agentOptions.map((a) => ({
-                  value: a.id,
-                  label: a.is_default
-                    ? `${a.name} (${t("workspace.defaultAgent")})`
-                    : a.name,
-                }))}
               />
             </label>
           </div>

@@ -809,7 +809,7 @@ impl Session {
         let turn_context = {
             let state = self.lock_state();
             state.current_turn_context.clone().unwrap_or_else(|| {
-                Arc::new(TurnContext::new(
+                Arc::new(TurnContext::new_with_roots(
                     state
                         .turn
                         .current_turn_id()
@@ -819,6 +819,7 @@ impl Session {
                     state.interaction_mode,
                     state.permission_profile.clone(),
                     state.project_root.clone(),
+                    state.workspace_roots.clone(),
                 ))
             })
         };

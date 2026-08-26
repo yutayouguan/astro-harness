@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useId, useState } from "react";
 import { createPortal } from "react-dom";
 import { invoke } from "@tauri-apps/api/core";
-import { FolderOpen, Plus, Trash2, X } from "lucide-react";
+import { ArrowDown, ArrowUp, FolderOpen, Plus, Trash2, X } from "lucide-react";
 import type { ProjectDto } from "../../types";
 import LucideIconPicker from "../agents/LucideIconPicker";
 import LucideByName from "../icons/LucideByName";
@@ -55,6 +55,16 @@ export default function ProjectEditDialog({
     setRoots((prev) => prev.filter((r) => r !== path));
   }, []);
 
+  const moveRoot = useCallback((index: number, offset: -1 | 1) => {
+    setRoots((prev) => {
+      const target = index + offset;
+      if (target < 0 || target >= prev.length) return prev;
+      const next = [...prev];
+      [next[index], next[target]] = [next[target], next[index]];
+      return next;
+    });
+  }, []);
+
   const handleSave = useCallback(async () => {
     if (!project || saving) return;
     setSaving(true);
@@ -63,12 +73,13 @@ export default function ProjectEditDialog({
         projectId: project.id,
         name: name.trim() || project.name,
         icon: iconId ?? "",
-        roots,
+        roots: project.id === "default" ? undefined : roots,
       });
       onUpdated(updated);
       onClose();
     } catch (err) {
       console.error("[ProjectEditDialog] save failed:", err);
+      alert(`保存失败: ${err}`);
     } finally {
       setSaving(false);
     }
@@ -157,13 +168,33 @@ export default function ProjectEditDialog({
           {roots.length === 0 && (
             <div className="project-edit-roots-empty">暂无文件夹</div>
           )}
-          {roots.map((r) => (
+          {roots.map((r, index) => (
             <div key={r} className="project-edit-root-item">
               <span className="project-edit-root-path">{r}</span>
+              {index === 0 && <span className="project-edit-root-primary">主目录</span>}
+              <button
+                type="button"
+                className="project-edit-root-remove"
+                onClick={() => moveRoot(index, -1)}
+                disabled={index === 0}
+                aria-label={`上移 ${r}`}
+              >
+                <ArrowUp size={13} strokeWidth={2} />
+              </button>
+              <button
+                type="button"
+                className="project-edit-root-remove"
+                onClick={() => moveRoot(index, 1)}
+                disabled={index === roots.length - 1}
+                aria-label={`下移 ${r}`}
+              >
+                <ArrowDown size={13} strokeWidth={2} />
+              </button>
               <button
                 type="button"
                 className="project-edit-root-remove"
                 onClick={() => handleRemoveRoot(r)}
+                disabled={roots.length === 1 || project.id === "default"}
                 aria-label={`移除 ${r}`}
               >
                 <X size={14} strokeWidth={2} />
@@ -175,6 +206,7 @@ export default function ProjectEditDialog({
           type="button"
           className="project-edit-add-folder"
           onClick={() => void handleAddFolder()}
+          disabled={project.id === "default"}
         >
           <Plus size={14} strokeWidth={2} />
           <span>添加文件夹</span>
@@ -186,6 +218,7 @@ export default function ProjectEditDialog({
             type="button"
             className="project-edit-btn project-edit-btn--danger"
             onClick={() => void handleRemoveProject()}
+            disabled={project.id === "default"}
           >
             <Trash2 size={14} strokeWidth={1.8} />
             <span>移除本地项目</span>

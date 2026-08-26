@@ -220,9 +220,10 @@ fn sandbox_policy_for_call(
         .project_root()
         .map(ToOwned::to_owned)
         .unwrap_or_else(|| session.memory().workspace_dir.clone());
-    let mut policy = tools::context::build_command_sandbox_policy(
+    let mut policy = tools::context::build_command_sandbox_policy_with_roots(
         session.memory_dir(),
         &execution_root,
+        step_context.turn.workspace_roots(),
         step_context.turn.permission_profile(),
         workspace_write_grant,
         None,

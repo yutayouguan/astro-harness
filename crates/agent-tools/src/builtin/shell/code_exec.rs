@@ -307,6 +307,7 @@ mod tests {
             memory_dir: dir.path().to_path_buf(),
             workspace_dir: ws,
             project_root: None,
+            workspace_roots: Vec::new(),
             image_gen_targets: targets,
             session_id: "test".into(),
             turn_id: None,

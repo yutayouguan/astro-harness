@@ -336,6 +336,8 @@ pub struct StartChatRequest {
     pub resume_json: Option<String>,
     pub keep_chat_bubbles: Option<i32>,
     pub interaction_mode: Option<String>,
+    pub project_id: Option<String>,
+    /// Legacy compatibility; project_id now resolves the authoritative cwd.
     pub project_root: Option<String>,
 }
 
@@ -369,6 +371,7 @@ pub async fn start_chat(app: AppHandle, request: StartChatRequest) -> Result<Str
         resume_json,
         keep_chat_bubbles,
         interaction_mode,
+        project_id,
         project_root,
     } = request;
     let sid = session_id.unwrap_or_else(|| Uuid::new_v4().to_string());
@@ -398,12 +401,17 @@ pub async fn start_chat(app: AppHandle, request: StartChatRequest) -> Result<Str
         "plan" | "ask" => interaction_mode,
         _ => "agent".to_string(),
     };
-    let project_root = project_root.unwrap_or_default().trim().to_string();
+    let requested_project_id = project_id
+        .unwrap_or_default()
+        .trim()
+        .to_string();
+    let legacy_project_root = project_root.unwrap_or_default().trim().to_string();
 
-    // 已结束（含 compacted）会话禁止再开聊，避免落到 gRPC Internal。
-    {
+    // 会话的项目归属与执行 roots 在提交前一次性确定，避免 UI effect 与首轮工具竞态。
+    let (project_id, project_root, workspace_roots) = {
         bootstrap_workspace()?;
         let store = open_sessions()?;
+        store.ensure_session(&sid, "tauri").map_err(|e| e.to_string())?;
         if let Ok(Some(meta)) = store.get_session(&sid) {
             if meta.ended_at.is_some() {
                 let reason = meta.end_reason.as_deref().unwrap_or("ended");
@@ -414,7 +422,38 @@ pub async fn start_chat(app: AppHandle, request: StartChatRequest) -> Result<Str
                 });
             }
         }
-    }
+        let workspace = super::common::workspace_dir();
+        std::fs::create_dir_all(&workspace).map_err(|e| e.to_string())?;
+        let default_project = store
+            .ensure_default_project(std::path::Path::new(&workspace))
+            .map_err(|e| e.to_string())?;
+        let target_id = if requested_project_id.is_empty() {
+            default_project.id.as_str()
+        } else {
+            requested_project_id.as_str()
+        };
+        if store
+            .get_project(target_id)
+            .map_err(|e| e.to_string())?
+            .is_none()
+        {
+            return Err(format!("项目不存在：{target_id}"));
+        }
+        store
+            .assign_session_to_project_if_unassigned(&sid, target_id)
+            .map_err(|e| e.to_string())?;
+        let project = store
+            .project_for_session(&sid)
+            .map_err(|e| e.to_string())?
+            .unwrap_or(default_project);
+        let mut roots = project.roots;
+        // 仅为旧客户端保留：没有可用项目 root 时才接受旧 projectRoot。
+        if roots.is_empty() && !legacy_project_root.is_empty() {
+            roots.push(legacy_project_root);
+        }
+        let cwd = roots.first().cloned().unwrap_or(workspace);
+        (project.id, cwd, roots)
+    };
 
     if let Some(keep) = keep_chat_bubbles {
         bootstrap_workspace()?;
@@ -590,6 +629,8 @@ pub async fn start_chat(app: AppHandle, request: StartChatRequest) -> Result<Str
         // Initial submissions are not queued steer messages and therefore do
         // not participate in client-side optimistic delivery reconciliation.
         client_message_id: String::new(),
+        project_id,
+        workspace_roots,
     };
 
     let bridge = managed_bridge(&app).inner().clone();

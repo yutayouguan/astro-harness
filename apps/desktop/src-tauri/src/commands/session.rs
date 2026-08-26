@@ -555,13 +555,10 @@ pub async fn list_projects() -> Result<Vec<ProjectDto>, String> {
 #[tauri::command]
 pub async fn ensure_default_project() -> Result<ProjectDto, String> {
     let store = open_sessions()?;
-    let projects = store.list_projects().map_err(|e| e.to_string())?;
-    if let Some(existing) = projects.into_iter().next() {
-        return Ok(project_to_dto(existing));
-    }
     let ws_path = super::common::workspace_dir();
+    std::fs::create_dir_all(&ws_path).map_err(|e| e.to_string())?;
     let proj = store
-        .create_project("默认工作空间", &[ws_path.as_str()])
+        .ensure_default_project(std::path::Path::new(&ws_path))
         .map_err(|e| e.to_string())?;
     Ok(project_to_dto(proj))
 }

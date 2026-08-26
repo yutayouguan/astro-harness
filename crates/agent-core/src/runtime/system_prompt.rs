@@ -59,7 +59,13 @@ impl AgentLoop {
                 &daily,
             )
         };
-        if static_ctx.agent_md.is_empty() {
+        // 项目行为准则只取主 cwd；无项目文件时回退全局 default 工作区。
+        let project_agent_md = self
+            .project_root()
+            .and_then(|root| std::fs::read_to_string(root.join(".astro/AGENT.md")).ok());
+        if let Some(content) = project_agent_md.filter(|content| !content.trim().is_empty()) {
+            static_ctx.agent_md = content;
+        } else {
             let ws = self.resolve_workspace_dir();
             if let Ok(content) = std::fs::read_to_string(ws.join("AGENTS.md")) {
                 static_ctx.agent_md = content;

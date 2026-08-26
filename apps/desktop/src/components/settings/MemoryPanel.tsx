@@ -24,7 +24,6 @@ import { useConfirm } from "../../hooks/ui/DialogContext";
 import { useI18n } from "../../i18n/LocaleContext";
 import MotionSwitch from "../ui/MotionSwitch";
 import AgentAvatar from "../agents/AgentAvatar";
-import AgentPicker from "../agents/AgentPicker";
 import { EmptyIllustration } from "../../illustrations";
 import type { AgentInfo } from "../../types/agent";
 
@@ -191,7 +190,7 @@ export default function MemoryPanel({
   const [view, setView] = useState<MemoryView>("diary");
   const [, setMemoryDir] = useState("");
   const [workspaceDir, setWorkspaceDir] = useState("");
-  const [filterAgentId, setFilterAgentId] = useState(ALL_AGENTS);
+  const [filterAgentId, setFilterAgentId] = useState("default");
   /** 右侧正文当前展示对应的专家（与侧栏选中可短暂不同，避免切换时内容区闪跳） */
   const [diaryPaneAgentId, setDiaryPaneAgentId] = useState(ALL_AGENTS);
   const filterSwitchGen = useRef(0);
@@ -867,21 +866,6 @@ export default function MemoryPanel({
         </nav>
 
         <div className="mem-top-stats">
-          {(view === "diary" || view === "longterm") && (
-            <AgentPicker
-              className="mem-agent-picker"
-              agents={agents}
-              value={filterAgentId}
-              onChange={(agentId) => void switchFilterAgent(agentId)}
-              allOption={
-                view === "diary"
-                  ? { value: ALL_AGENTS, labelKey: "memory.allExperts" }
-                  : undefined
-              }
-              labelKey="memory.agents"
-              menuAlign="end"
-            />
-          )}
           {view === "diary" && (
             <>
               <div className="mem-stat" title={t("memory.diaryTotal")}>

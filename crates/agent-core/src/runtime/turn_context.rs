@@ -74,6 +74,8 @@ pub struct TurnContext {
     pub(crate) permission_profile: Option<String>,
     /// Project root admitted when the turn started.
     pub(crate) project_root: Option<PathBuf>,
+    /// All writable project roots admitted when the turn started.
+    pub(crate) workspace_roots: Vec<PathBuf>,
     /// User input steered into the active task, consumed before the next sampling request.
     input_state: Mutex<TurnInputState>,
     input_notify: Notify,
@@ -90,6 +92,7 @@ pub(crate) enum TerminalInputDecision {
 }
 
 impl TurnContext {
+    #[cfg(test)]
     pub(crate) fn new(
         sub_id: String,
         turn: usize,
@@ -97,12 +100,32 @@ impl TurnContext {
         permission_profile: Option<String>,
         project_root: Option<PathBuf>,
     ) -> Self {
+        let workspace_roots = project_root.iter().cloned().collect();
+        Self::new_with_roots(
+            sub_id,
+            turn,
+            mode,
+            permission_profile,
+            project_root,
+            workspace_roots,
+        )
+    }
+
+    pub(crate) fn new_with_roots(
+        sub_id: String,
+        turn: usize,
+        mode: types::InteractionMode,
+        permission_profile: Option<String>,
+        project_root: Option<PathBuf>,
+        workspace_roots: Vec<PathBuf>,
+    ) -> Self {
         Self {
             sub_id,
             turn,
             mode,
             permission_profile,
             project_root,
+            workspace_roots,
             input_state: Mutex::new(TurnInputState {
                 pending: Vec::new(),
                 mailbox_pending: Vec::new(),
@@ -134,6 +157,10 @@ impl TurnContext {
 
     pub fn project_root(&self) -> Option<&Path> {
         self.project_root.as_deref()
+    }
+
+    pub fn workspace_roots(&self) -> &[PathBuf] {
+        &self.workspace_roots
     }
 
     /// 注册一个子任务并返回存活凭证。

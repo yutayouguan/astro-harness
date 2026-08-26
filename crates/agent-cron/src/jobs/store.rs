@@ -47,7 +47,12 @@ impl CronStore {
 
     /// 列出全部任务（加载时补全缺省 title / agent_id）
     pub fn list(&self) -> anyhow::Result<Vec<CronJob>> {
-        Ok(self.load()?.jobs)
+        Ok(self
+            .load()?
+            .jobs
+            .into_iter()
+            .filter(|job| job.agent_id == default_agent_id())
+            .collect())
     }
 
     /// 快捷添加：仅 schedule + task，其余用默认值
@@ -78,7 +83,7 @@ impl CronStore {
         } else {
             input.title.trim().to_string()
         };
-        let agent_id = normalize_cron_agent_id(&input.agent_id);
+        let agent_id = default_agent_id();
         // 校验表达式
         let next = compute_next_run(schedule, Local::now())?
             .to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
@@ -122,7 +127,7 @@ impl CronStore {
         } else {
             input.title.trim().to_string()
         };
-        let agent_id = normalize_cron_agent_id(&input.agent_id);
+        let agent_id = default_agent_id();
         let next = compute_next_run(schedule, Local::now())?
             .to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
 
@@ -225,7 +230,7 @@ impl CronStore {
         let mut fired = Vec::new();
 
         for job in &mut file.jobs {
-            if !job.enabled {
+            if !job.enabled || job.agent_id != default_agent_id() {
                 continue;
             }
             let due = match &job.next_run_at {
@@ -259,7 +264,10 @@ impl CronStore {
             // 只在有 next_run 需要初始化时才写文件
             let mut needs_save = false;
             for job in &mut file.jobs {
-                if job.enabled && job.next_run_at.is_none() {
+                if job.enabled
+                    && job.agent_id == default_agent_id()
+                    && job.next_run_at.is_none()
+                {
                     job.next_run_at = Some(
                         compute_next_run(&job.schedule, now)?
                             .to_rfc3339_opts(chrono::SecondsFormat::Secs, true),

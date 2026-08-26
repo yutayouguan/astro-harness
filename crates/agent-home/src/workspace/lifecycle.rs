@@ -157,52 +157,27 @@ pub struct AgentInfo {
     pub vibe: Option<String>,
 }
 
-/// 列出所有记忆空间（默认 workspace + workspace-*）
+/// 单专家模式只暴露默认工作空间；历史 workspace-* 不再扫描。
 pub fn list_agents(base: &Path) -> Vec<AgentInfo> {
-    let active = active_agent_id(base);
-    let mut out = Vec::new();
-    let mut seen = std::collections::HashSet::new();
-
-    let Ok(entries) = fs::read_dir(base) else {
-        return out;
-    };
-    let mut dirs: Vec<_> = entries.flatten().filter(|e| e.path().is_dir()).collect();
-    dirs.sort_by_key(|e| e.file_name());
-
-    for entry in dirs {
-        let name = entry.file_name().to_string_lossy().to_string();
-        let Some(id) = agent_id_from_workspace_dir_name(&name) else {
-            continue;
-        };
-        if !seen.insert(id.clone()) {
-            continue;
-        }
-        let ws = entry.path();
-        let identity = read_agent_identity_fields(&ws);
-        let display = identity
+    let ws = agent_workspace_dir(base, DEFAULT_AGENT_ID);
+    if !ws.is_dir() {
+        return Vec::new();
+    }
+    let identity = read_agent_identity_fields(&ws);
+    vec![AgentInfo {
+        id: DEFAULT_AGENT_ID.to_string(),
+        name: identity
             .name
             .clone()
-            .filter(|n| !n.is_empty())
-            .unwrap_or_else(|| read_agent_display_name(&ws, &id));
-        out.push(AgentInfo {
-            id: id.clone(),
-            name: display,
-            path: ws.to_string_lossy().into_owned(),
-            is_default: id == DEFAULT_AGENT_ID,
-            is_active: active == id,
-            emoji: resolve_icon_field(&ws, identity.emoji.as_deref()),
-            avatar: resolve_icon_field(&ws, identity.avatar.as_deref()),
-            vibe: identity.vibe,
-        });
-    }
-
-    // 默认排最前
-    out.sort_by(|a, b| match (a.is_default, b.is_default) {
-        (true, false) => std::cmp::Ordering::Less,
-        (false, true) => std::cmp::Ordering::Greater,
-        _ => a.name.to_lowercase().cmp(&b.name.to_lowercase()),
-    });
-    out
+            .filter(|name| !name.is_empty())
+            .unwrap_or_else(|| read_agent_display_name(&ws, DEFAULT_AGENT_ID)),
+        path: ws.to_string_lossy().into_owned(),
+        is_default: true,
+        is_active: true,
+        emoji: resolve_icon_field(&ws, identity.emoji.as_deref()),
+        avatar: resolve_icon_field(&ws, identity.avatar.as_deref()),
+        vibe: identity.vibe,
+    }]
 }
 
 /// 创建 Agent 时由技能/工具填入的人设模板字段

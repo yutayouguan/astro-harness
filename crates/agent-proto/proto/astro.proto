@@ -125,6 +125,10 @@ message ChatRequest {
   string image_gen_fallback_music_model = 36;
   // 前端队列身份；仅在输入持久化后通过 user_input_committed 回执。
   string client_message_id = 37;
+  // 会话绑定的持久项目；服务端用于审计与恢复。
+  string project_id = 38;
+  // 当前项目全部可读写目录；第一个元素必须与 project_root（主 cwd）一致。
+  repeated string workspace_roots = 39;
 }
 
 // 聊天多模态图片附件（OpenAI 兼容 image_url 的 data URL 原料）。

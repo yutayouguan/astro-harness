@@ -614,6 +614,7 @@ mod path_escape_tests {
             memory_dir,
             workspace_dir,
             project_root: None,
+            workspace_roots: Vec::new(),
             image_gen_targets: targets,
             session_id: "test".into(),
             turn_id: None,

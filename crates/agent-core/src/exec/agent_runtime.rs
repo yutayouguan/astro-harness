@@ -1574,7 +1574,10 @@ async fn run_request(
     } else {
         session.ensure_assistant_error_boundary().await?;
     }
-    session.set_project_root(request.runtime.project_root.clone());
+    session.set_project_context(
+        request.runtime.project_root.clone(),
+        request.runtime.workspace_roots.clone(),
+    );
     session.set_permission_profile(sandbox_profile(request.runtime.sandbox_mode.as_deref()));
     session.set_mcp_config_override(mcp::decode_inline_mcp_servers(
         &request.runtime.mcp_servers,
@@ -1935,6 +1938,7 @@ mod tests {
                     api_mode: String::new(),
                 }],
                 project_root: None,
+                workspace_roots: Vec::new(),
                 hook_runtime: None,
                 hook_bus: None,
                 interrupt_message: true,

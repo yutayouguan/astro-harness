@@ -1,4 +1,4 @@
-// 聊天右侧栏（任务监控 / 上下文 / 预览 / Agent Tab）；会话列表在左侧项目栏。
+// 聊天右侧栏（任务监控 / 上下文 / 预览）；会话列表在左侧项目栏。
 import {
   useCallback,
   useEffect,
@@ -11,7 +11,6 @@ import {
 } from "react";
 import {
   Activity,
-  Bot,
   Eye,
   Layers,
   PanelRight,
@@ -31,13 +30,12 @@ import {
   maxChatRightPanelWidth,
   parseStoredChatRightPanelWidth,
 } from "../../lib/ui/chatRightPanelWidth";
-import ChatAgentInfo from "./ChatAgentInfo";
 import ContextExplorer from "./ContextExplorer";
 import GeneratingPreviewPanel from "./GeneratingPreviewPanel";
 import TaskMonitorPanel from "./TaskMonitorPanel";
 import MotionSwitch from "../ui/MotionSwitch";
 
-export type ChatRightTab = "monitor" | "context" | "preview" | "agent";
+export type ChatRightTab = "monitor" | "context" | "preview";
 
 /** 右侧栏入参 */
 type Props = {
@@ -45,7 +43,6 @@ type Props = {
   onTabChange: (t: ChatRightTab) => void;
   onClose: () => void;
   sessionId: string | null;
-  turnId?: string | null;
   /** 当前会话累计 token（可选展示） */
   tokenUsage?: {
     promptTokens: number;
@@ -56,8 +53,6 @@ type Props = {
   contextUsage?: ContextUsageSnapshot | null;
   /** 模型上下文窗口；未知时回落 128000 */
   contextWindow?: number;
-  onOpenMemory: () => void;
-  onOpenSkills: () => void;
   /** 生成中的文件实时预览（preview Tab） */
   generatingPreview?: GeneratingPreview | null;
   /** 聊天消息列表（任务监控 Tab 使用） */
@@ -70,14 +65,12 @@ const TAB_KEYS: Record<ChatRightTab, MessageKey> = {
   monitor: "chat.rightPanel.monitor",
   context: "chat.rightPanel.context",
   preview: "chat.rightPanel.preview",
-  agent: "chat.rightPanel.agent",
 };
 
 const TAB_ICONS: Record<ChatRightTab, LucideIcon> = {
   monitor: Activity,
   context: Layers,
   preview: Eye,
-  agent: Bot,
 };
 
 const RESIZE_KEYBOARD_STEP = 16;
@@ -88,18 +81,15 @@ export default function ChatRightPanel({
   onTabChange,
   onClose,
   sessionId,
-  turnId = null,
   tokenUsage: _tokenUsage = null,
   contextUsage = null,
   contextWindow = 0,
-  onOpenMemory,
-  onOpenSkills,
   generatingPreview = null,
   messages = [],
   streaming = false,
 }: Props) {
   const { t } = useI18n();
-  const tabs: ChatRightTab[] = ["monitor", "context", "preview", "agent"];
+  const tabs: ChatRightTab[] = ["monitor", "context", "preview"];
   const tabsRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLElement>(null);
   const panelWidthRef = useRef(CHAT_RIGHT_PANEL_DEFAULT_WIDTH);
@@ -347,17 +337,6 @@ export default function ChatRightPanel({
             )}
             {tab === "preview" && (
               <GeneratingPreviewPanel preview={generatingPreview} />
-            )}
-            {tab === "agent" && (
-              <ChatAgentInfo
-                sessionId={sessionId}
-                turnId={turnId}
-                contextUsage={contextUsage}
-                contextWindow={contextWindow}
-                onOpenMemory={onOpenMemory}
-                onOpenSkills={onOpenSkills}
-                onOpenContextTab={() => onTabChange("context")}
-              />
             )}
           </MotionSwitch>
         </div>

@@ -59,7 +59,6 @@ import {
 import { useI18n } from "../../i18n/LocaleContext";
 import {
   findSlotAt,
-  firstSlotValue,
   listTemplateSegments,
   nextEmptySlot,
   prepareAgentCreateSend,
@@ -107,7 +106,6 @@ import {
 } from "../../lib/model/modelCaps";
 import { useTransientToast } from "../../hooks/ui/useTransientToast";
 import { useConfirm } from "../../hooks/ui/DialogContext";
-import { AgentCreateGuide } from "../agents/AgentCreateGuide";
 import AgentAvatar from "../agents/AgentAvatar";
 import ChatMessageNav from "./ChatMessageNav";
 import { ChatMarkdown } from "./ChatMarkdown";
@@ -273,7 +271,6 @@ type Props = {
   /** 新建空白会话 */
   onNewChat: () => void;
   /** 跳过创建 Agent 引导 */
-  onSkipAgentCreate: () => void;
   /** 点击欢迎页示例 Prompt */
   onPickWelcomePrompt: (prompt: string) => void;
   /** DeepSeek 等支持 thinking 时显示输入框控件 */
@@ -666,7 +663,6 @@ export default function ChatView({
   onResumeStream,
   onStopStream,
   onNewChat,
-  onSkipAgentCreate,
   onPickWelcomePrompt,
   showThinkingControls = false,
   reasoningMeta = null,
@@ -1801,13 +1797,8 @@ export default function ChatView({
       onDrop={(e) => void onDrop(e)}
     >
       {toastHost}
-      {emptyMode === "chat" ? (
+      {emptyMode === "chat" || emptyMode === "agent" ? (
         <ChatWelcome onPickCard={onPickWelcomePrompt} />
-      ) : emptyMode === "agent" ? (
-          <AgentCreateGuide
-            onSkip={onSkipAgentCreate}
-            previewName={firstSlotValue(input)}
-          />
       ) : (
         <div className="message-list-wrap">
           <div className="message-list" ref={messageListRef}>

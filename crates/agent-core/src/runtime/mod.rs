@@ -614,12 +614,13 @@ impl Session {
     pub async fn set_current_turn_id(&self, turn_id: impl Into<String>) {
         let sub_id = turn_id.into();
         let mut state = self.lock_state();
-        let turn_context = Arc::new(TurnContext::new(
+        let turn_context = Arc::new(TurnContext::new_with_roots(
             sub_id,
             state.turn.current_turn(),
             state.interaction_mode,
             state.permission_profile.clone(),
             state.project_root.clone(),
+            state.workspace_roots.clone(),
         ));
         state
             .turn
@@ -630,12 +631,13 @@ impl Session {
     #[doc(hidden)]
     pub async fn create_turn_context(&self, sub_id: String) -> Arc<TurnContext> {
         let state = self.lock_state();
-        Arc::new(TurnContext::new(
+        Arc::new(TurnContext::new_with_roots(
             sub_id,
             state.turn.current_turn().saturating_add(1),
             state.interaction_mode,
             state.permission_profile.clone(),
             state.project_root.clone(),
+            state.workspace_roots.clone(),
         ))
     }
 
@@ -1071,7 +1073,20 @@ impl Session {
 
     /// 设置代码/项目根（委派 worktree）；`None` 时文件/终端回退到记忆工作区。
     pub fn set_project_root(&self, root: Option<PathBuf>) {
-        self.lock_state().project_root = root;
+        let mut state = self.lock_state();
+        state.workspace_roots = root.iter().cloned().collect();
+        state.project_root = root;
+    }
+
+    /// 设置主 cwd 与全部项目工作目录；主 cwd 始终位于 roots 首位。
+    pub fn set_project_context(&self, root: Option<PathBuf>, mut workspace_roots: Vec<PathBuf>) {
+        if let Some(primary) = root.as_ref() {
+            workspace_roots.retain(|candidate| candidate != primary);
+            workspace_roots.insert(0, primary.clone());
+        }
+        let mut state = self.lock_state();
+        state.project_root = root;
+        state.workspace_roots = workspace_roots;
     }
 
     /// 当前代码/项目根（若有）。
@@ -1081,6 +1096,10 @@ impl Session {
 
     pub async fn project_root_snapshot(&self) -> Option<PathBuf> {
         self.lock_state().project_root.clone()
+    }
+
+    pub fn workspace_roots(&self) -> Vec<PathBuf> {
+        self.lock_state().workspace_roots.clone()
     }
 
     /// 设置含 primary 的聊天 fallback 链（主聊 / cron / Agent Thread 共用）。
@@ -1221,10 +1240,11 @@ impl Session {
     /// 无论是否存在 required 失败，已成功连接的工具都会同步到 `MCP_TOOLSET`。
     pub async fn reload_mcp(&self) -> anyhow::Result<()> {
         let agent_id = self.agent_id.clone();
-        let (project_root, permission_profile, mcp_config_override) = {
+        let (project_root, workspace_roots, permission_profile, mcp_config_override) = {
             let state = self.lock_state();
             (
                 state.project_root.clone(),
+                state.workspace_roots.clone(),
                 state.permission_profile.clone(),
                 state.mcp_config_override.clone(),
             )
@@ -1241,9 +1261,10 @@ impl Session {
             "mcp",
             profile_id,
         );
-        let execution_context = tools::context::build_command_sandbox_policy(
+        let execution_context = tools::context::build_command_sandbox_policy_with_roots(
             &self.config.memory_dir,
             &execution_root,
+            &workspace_roots,
             permission_profile.as_deref(),
             false,
             None,

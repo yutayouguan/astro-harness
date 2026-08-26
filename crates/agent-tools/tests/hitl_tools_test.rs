@@ -38,6 +38,7 @@ async fn confirm_emits_valid_a2ui_hitl() {
         memory_dir: dir.path().to_path_buf(),
         workspace_dir: workspace,
         project_root: None,
+        workspace_roots: Vec::new(),
         image_gen_targets: &targets,
         session_id: "test".into(),
         turn_id: None,
@@ -87,6 +88,7 @@ async fn clarify_emits_valid_a2ui_hitl() {
         memory_dir: dir.path().to_path_buf(),
         workspace_dir: workspace,
         project_root: None,
+        workspace_roots: Vec::new(),
         image_gen_targets: &targets,
 
         session_id: "test".into(),
@@ -152,6 +154,7 @@ async fn clarify_free_text_step_allows_empty_options() {
         memory_dir: dir.path().to_path_buf(),
         workspace_dir: workspace,
         project_root: None,
+        workspace_roots: Vec::new(),
         image_gen_targets: &targets,
 
         session_id: "test".into(),
@@ -223,6 +226,7 @@ async fn clarify_multi_emits_wizard_hitl() {
         memory_dir: dir.path().to_path_buf(),
         workspace_dir: workspace,
         project_root: None,
+        workspace_roots: Vec::new(),
         image_gen_targets: &targets,
 
         session_id: "test".into(),
@@ -299,6 +303,7 @@ async fn ask_user_location_mode_emits_valid_a2ui_hitl() {
         memory_dir: dir.path().to_path_buf(),
         workspace_dir: workspace,
         project_root: None,
+        workspace_roots: Vec::new(),
         image_gen_targets: &targets,
 
         session_id: "test".into(),
@@ -348,6 +353,7 @@ async fn present_emits_valid_astro_ui() {
         memory_dir: dir.path().to_path_buf(),
         workspace_dir: workspace,
         project_root: None,
+        workspace_roots: Vec::new(),
         image_gen_targets: &targets,
 
         session_id: "test".into(),
@@ -399,6 +405,7 @@ async fn ask_user_rejects_mixed_questions_and_body() {
         memory_dir: dir.path().to_path_buf(),
         workspace_dir: workspace,
         project_root: None,
+        workspace_roots: Vec::new(),
         image_gen_targets: &targets,
 
         session_id: "test".into(),

@@ -47,7 +47,6 @@ import { isCodePath } from "../../lib/media/parseGeneratedMedia";
 import type { ChatDisplayPrefs } from "./useChatDisplayPrefs";
 import type { ShowToastOptions } from "../ui/useTransientToast";
 import type { MessageKey } from "../../i18n/messages";
-import { useActiveAgent } from "../app/useActiveAgent";
 
 type TFn = (key: MessageKey, vars?: Record<string, string>) => string;
 type ShowToastFn = (msg: string, opts?: ShowToastOptions) => void;
@@ -66,6 +65,7 @@ export interface SendOpts {
 }
 
 export interface UseSendDeps {
+  projectId: string;
   // composer state
   input: string;
   attachments: ChatAttachment[];
@@ -79,7 +79,6 @@ export interface UseSendDeps {
   providers: ProviderDto[];
   // session
   sessionId: string | null;
-  messages: ChatMessage[];
   emptyMode: ChatEmptyMode;
   sessionPendingInterrupts: PendingInterrupt[];
   // config
@@ -141,12 +140,6 @@ export interface UseSendDeps {
   /** 流式活动时间戳（token/tool）；供长任务 idle checkpoint */
   lastStreamActivityAtRef: MutableRefObject<number>;
   /** Agent 会话级 worktree（按 sessionId 复用） */
-  sessionWorktreeRef: MutableRefObject<{
-    sessionId: string;
-    path: string;
-    repoRoot: string;
-    branch: string;
-  } | null>;
   /** 本轮首次检测到模式切换请求时记录（流结束后再弹授权条） */
   onModeSwitchDetected?: (req: ModeSwitchRequest) => void;
   /** 流正常结束后，若本轮有模式切换请求则提示 UI */
@@ -164,14 +157,12 @@ function calcTokensPerSec(completionTokens: number, durationMs: number): number 
 export function useSend(deps: UseSendDeps) {
   const depsRef = useRef(deps);
   depsRef.current = deps;
-  const { setActiveAgent } = useActiveAgent();
-  const setActiveAgentRef = useRef(setActiveAgent);
-  setActiveAgentRef.current = setActiveAgent;
 
   /** @returns 是否已开始流式（`setStreaming(true)` 之后）；供 follow-up 队列判断是否出队成功 */
   const send = useCallback(
     async (opts?: SendOpts): Promise<boolean> => {
       const {
+        projectId,
         input,
         attachments,
         streaming,
@@ -181,7 +172,6 @@ export function useSend(deps: UseSendDeps) {
         activeProvider,
         providers,
         sessionId,
-        messages,
         emptyMode,
         sessionPendingInterrupts,
         chatMode,
@@ -229,7 +219,6 @@ export function useSend(deps: UseSendDeps) {
         turnInFlightRef,
         setTurnInFlight,
         lastStreamActivityAtRef,
-        sessionWorktreeRef,
         onModeSwitchDetected,
         onModeSwitchPrompt,
         onUserInputCommitted,
@@ -292,10 +281,6 @@ export function useSend(deps: UseSendDeps) {
       let modelBody = text;
       if (text && !resumeJson) {
         try {
-          const cfg = await invoke<{
-            agents: { id: string; name: string }[];
-            active_agent_id?: string;
-          }>("get_config");
           const skillList = await invoke<
             { id: string; name: string; enabled?: boolean }[]
           >("list_installed_skills").catch(() => []);
@@ -304,7 +289,7 @@ export function useSend(deps: UseSendDeps) {
           >("get_mcp_servers").catch(() => []);
 
           const resolved = await resolveComposerTurn(text, {
-            agents: cfg.agents ?? [],
+            agents: [],
             skills: (skillList ?? [])
               .filter((s) => s.enabled !== false)
               .map((s) => ({ id: s.id, name: s.name })),
@@ -317,25 +302,6 @@ export function useSend(deps: UseSendDeps) {
 
           displayText = resolved.displayText || text;
           modelBody = resolved.modelText || text;
-
-          if (resolved.switchAgentId) {
-            try {
-              await setActiveAgentRef.current(resolved.switchAgentId);
-              const hasHistory = messages.some(
-                (m) => m.id !== "welcome" && (m.role === "user" || m.role === "assistant"),
-              );
-              showTransientToast(
-                t(
-                  hasHistory
-                    ? "chat.mentionAgentSwitchedLater"
-                    : "chat.mentionAgentSwitched",
-                  { name: resolved.switchAgentName ?? resolved.switchAgentId },
-                ),
-              );
-            } catch (e) {
-              console.warn("set_active_agent failed", e);
-            }
-          }
 
           if (resolved.enableMcpIds.length > 0) {
             try {
@@ -943,50 +909,6 @@ export function useSend(deps: UseSendDeps) {
 
         const keepChatBubbles = pendingKeepChatBubblesRef.current;
 
-        // Agent：会话级 worktree；其它模式显式传空串，避免后端粘住上一轮 project_root
-        let projectRoot = "";
-        if (effectiveMode === "agent") {
-          const existing = sessionWorktreeRef.current;
-          if (existing && existing.sessionId === sid) {
-            projectRoot = existing.path;
-          } else {
-            if (existing) {
-              void invoke("cleanup_task_worktree", {
-                path: existing.path,
-                repoRoot: existing.repoRoot,
-                branch: existing.branch,
-              }).catch(() => {});
-              sessionWorktreeRef.current = null;
-            }
-            try {
-              const prepared = await invoke<{
-                path: string;
-                repoRoot: string;
-                branch: string;
-              } | null>("prepare_task_worktree", { taskId: sid });
-              if (prepared?.path) {
-                sessionWorktreeRef.current = {
-                  sessionId: sid,
-                  path: prepared.path,
-                  repoRoot: prepared.repoRoot,
-                  branch: prepared.branch,
-                };
-                projectRoot = prepared.path;
-              }
-            } catch (e) {
-              console.warn("prepare session worktree failed", e);
-            }
-          }
-        } else if (sessionWorktreeRef.current) {
-          const existing = sessionWorktreeRef.current;
-          void invoke("cleanup_task_worktree", {
-            path: existing.path,
-            repoRoot: existing.repoRoot,
-            branch: existing.branch,
-          }).catch(() => {});
-          sessionWorktreeRef.current = null;
-        }
-
         await invoke<string>("start_chat", {
           request: {
             content: contentForModel,
@@ -1000,7 +922,7 @@ export function useSend(deps: UseSendDeps) {
             resumeJson: resumeJson || undefined,
             keepChatBubbles: keepChatBubbles != null ? keepChatBubbles : undefined,
             interactionMode: effectiveMode,
-            projectRoot,
+            projectId,
             attachments: pending.map((a) => ({
               name: a.name,
               mime: a.mime,

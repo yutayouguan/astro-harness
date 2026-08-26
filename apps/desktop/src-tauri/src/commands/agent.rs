@@ -112,10 +112,8 @@ pub async fn list_agents() -> Result<Vec<AgentInfoDto>, String> {
 /// 创建新 Agent 记忆空间（可选激活）。
 #[tauri::command]
 pub async fn create_agent(app: AppHandle, name: String) -> Result<AgentInfoDto, String> {
-    bootstrap_workspace()?;
-    let info = home::create_agent(&memory_root(), &name).map_err(|e| e.to_string())?;
-    emit_agents_changed(&app, &home::active_agent_id(&memory_root()));
-    Ok(agent_info_dto(info))
+    let _ = (app, name);
+    Err("Astro 已切换为单专家模式，不能创建额外专家".into())
 }
 
 /// 切换当前活跃 Agent。
@@ -166,7 +164,8 @@ pub async fn clear_pending_agent_icon(kind: Option<String>) -> Result<(), String
 pub async fn list_daily_memory(agent_id: Option<String>) -> Result<Vec<String>, String> {
     bootstrap_workspace()?;
     let root = memory_root();
-    let id = agent_id.unwrap_or_else(|| home::active_agent_id(&root));
+    let _ = agent_id;
+    let id = home::DEFAULT_AGENT_ID.to_string();
     let ws = home::agent_workspace_dir(&root, &id);
     Ok(home::list_daily_memory_dates(&ws))
 }
@@ -179,7 +178,8 @@ pub async fn read_daily_memory(
 ) -> Result<String, String> {
     bootstrap_workspace()?;
     let root = memory_root();
-    let id = agent_id.unwrap_or_else(|| home::active_agent_id(&root));
+    let _ = agent_id;
+    let id = home::DEFAULT_AGENT_ID.to_string();
     let ws = home::agent_workspace_dir(&root, &id);
     let date = date.unwrap_or_else(home::today_date_string);
     let path = home::ensure_daily_memory(&ws, &date).map_err(|e| e.to_string())?;
@@ -195,7 +195,8 @@ pub async fn write_daily_memory(
 ) -> Result<(), String> {
     bootstrap_workspace()?;
     let root = memory_root();
-    let id = agent_id.unwrap_or_else(|| home::active_agent_id(&root));
+    let _ = agent_id;
+    let id = home::DEFAULT_AGENT_ID.to_string();
     let ws = home::agent_workspace_dir(&root, &id);
     let date = date.unwrap_or_else(home::today_date_string);
     let path = home::ensure_daily_memory(&ws, &date).map_err(|e| e.to_string())?;

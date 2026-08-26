@@ -124,7 +124,7 @@ async fn dispatch_run(
         .map(str::trim)
         .filter(|s| !s.is_empty())
     {
-        crate::path_safe::resolve_safe(&root, rel)?
+        crate::path_safe::resolve_safe_in_roots(&root, &ctx.workspace_roots, rel)?
     } else {
         root
     };
@@ -309,6 +309,7 @@ mod tests {
             memory_dir: dir.path().to_path_buf(),
             workspace_dir: workspace,
             project_root: None,
+            workspace_roots: Vec::new(),
             image_gen_targets: targets,
             session_id: session_id.into(),
             turn_id: None,
@@ -500,6 +501,7 @@ PY"#;
             memory_dir: dir.path().to_path_buf(),
             workspace_dir: ws.clone(),
             project_root: None,
+            workspace_roots: Vec::new(),
             image_gen_targets: &targets,
             session_id: "test".into(),
             turn_id: None,
@@ -548,6 +550,7 @@ PY"#;
             memory_dir: dir.path().to_path_buf(),
             workspace_dir: ws,
             project_root: None,
+            workspace_roots: Vec::new(),
             image_gen_targets: &targets,
             session_id: "test".into(),
             turn_id: None,
@@ -602,6 +605,7 @@ PY"#;
             memory_dir: dir.path().to_path_buf(),
             workspace_dir: ws,
             project_root: None,
+            workspace_roots: Vec::new(),
             image_gen_targets: &targets,
             session_id: "test".into(),
             turn_id: None,

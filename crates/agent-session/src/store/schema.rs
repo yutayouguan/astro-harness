@@ -5,7 +5,7 @@ use rusqlite::{params, OptionalExtension};
 
 use super::SessionStore;
 
-pub const SCHEMA_VERSION: i32 = 19;
+pub const SCHEMA_VERSION: i32 = 20;
 
 const SCHEMA_V11_DDL: &str = r#"
 CREATE TABLE IF NOT EXISTS schema_version (
@@ -144,6 +144,42 @@ impl SessionStore {
             self.conn
                 .execute("ALTER TABLE projects ADD COLUMN icon TEXT", [])?;
         }
+        if self.table_exists("project_roots")?
+            && !self.column_exists("project_roots", "root_position")?
+        {
+            self.conn.execute(
+                "ALTER TABLE project_roots ADD COLUMN root_position INTEGER NOT NULL DEFAULT 0",
+                [],
+            )?;
+            // v19 按 path 读取 roots；迁移时沿用该稳定顺序，之后由用户显式排序。
+            self.conn.execute_batch(
+                "WITH ranked AS (
+                    SELECT project_id, path,
+                           ROW_NUMBER() OVER (PARTITION BY project_id ORDER BY path) - 1 AS pos
+                    FROM project_roots
+                 )
+                 UPDATE project_roots
+                 SET root_position = (
+                    SELECT pos FROM ranked
+                    WHERE ranked.project_id = project_roots.project_id
+                      AND ranked.path = project_roots.path
+                 );",
+            )?;
+        }
+        if self.table_exists("project_roots")? {
+            self.conn.execute_batch(
+                "CREATE INDEX IF NOT EXISTS idx_project_roots_path
+                    ON project_roots(path);
+                 CREATE INDEX IF NOT EXISTS idx_project_roots_project_position
+                    ON project_roots(project_id, root_position);",
+            )?;
+        }
+        if self.table_exists("sessions")? && self.column_exists("sessions", "project_id")? {
+            self.conn.execute_batch(
+                "CREATE INDEX IF NOT EXISTS idx_sessions_project_id
+                    ON sessions(project_id);",
+            )?;
+        }
 
         if current < SCHEMA_VERSION {
             // v16→v17：删除历史用户消息末尾的 `chatModeHint`。
@@ -170,6 +206,7 @@ impl SessionStore {
                     CREATE TABLE IF NOT EXISTS project_roots (
                         project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
                         path TEXT NOT NULL,
+                        root_position INTEGER NOT NULL DEFAULT 0,
                         PRIMARY KEY (project_id, path)
                     );",
                 )?;
@@ -182,6 +219,7 @@ impl SessionStore {
                 // 迁移已有 project_root → projects 实体
                 self.migrate_project_root_to_projects()?;
             }
+            // v19→v20 的列与索引由上方幂等自愈分支补齐。
             self.stamp_schema_version()?;
         }
         tx.commit()?;

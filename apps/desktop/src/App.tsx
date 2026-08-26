@@ -139,7 +139,7 @@ export default function App() {
     cancelGradientEdit,
   } = useShellColorStyle();
   useBeautifyTips();
-  const { t, locale } = useI18n();
+  const { t } = useI18n();
   const { prefs: chatDisplayPrefs, setVerbosity, setToggle } = useChatDisplayPrefs();
   const chatDisplayPrefsRef = useRef(chatDisplayPrefs);
   chatDisplayPrefsRef.current = chatDisplayPrefs;
@@ -219,12 +219,12 @@ export default function App() {
     syncProvidersFromState,
   } = useProviders();
   const chat = useChatSession({
+    activeProjectId,
     activeProvider,
     providers,
     chatMode,
     onChatModeChange,
     chatDisplayPrefsRef,
-    locale,
     t,
     showTransientToast,
     nav,
@@ -234,7 +234,6 @@ export default function App() {
   const {
     send,
     startNewChat,
-    skipAgentCreate,
     runCompactSession,
     undoLastExchange,
     retryLastAssistant,
@@ -814,20 +813,24 @@ export default function App() {
                     onClick={async () => {
                       try {
                         const { open } = await import("@tauri-apps/plugin-dialog");
-                        const selected = await open({ directory: true, title: "选择项目文件夹" });
-                        if (selected && typeof selected === "string") {
-                          const newProject: ProjectDto = {
-                            id: crypto.randomUUID(),
-                            name: selected.split("/").pop() || selected,
-                            roots: [selected],
-                            position: projects.length,
-                            createdAt: new Date().toISOString(),
-                            updatedAt: new Date().toISOString(),
-                          };
-                          setProjects((prev) => {
-                            if (prev.some((p) => p.roots[0] === selected)) return prev;
-                            return [...prev, newProject];
+                        const selected = await open({
+                          directory: true,
+                          multiple: true,
+                          title: "选择一个或多个项目文件夹（第一个为主目录）",
+                        });
+                        const roots =
+                          typeof selected === "string"
+                            ? [selected]
+                            : Array.isArray(selected)
+                              ? selected
+                              : [];
+                        if (roots.length > 0) {
+                          const primary = roots[0];
+                          const newProject = await invoke<ProjectDto>("create_project", {
+                            name: primary.split("/").pop() || primary,
+                            roots,
                           });
+                          setProjects((prev) => [...prev, newProject]);
                           setActiveProjectId(newProject.id);
                         }
                       } catch {}
@@ -914,7 +917,6 @@ export default function App() {
                         projectId={proj.id}
                         query=""
                         listKind={sessionListKind}
-                        autoAssignActiveSession={activeProjectId === proj.id}
                         onOpenSession={(sid) => { setActiveProjectId(proj.id); void openSessionFromFilespace(sid); }}
                         onPrepareDeleteCurrentSession={prepareDeleteCurrentSession}
                         onClearDeletedCurrentSession={clearDeletedCurrentSession}
@@ -1269,7 +1271,6 @@ export default function App() {
                       onResumeStream={resumeStream}
                       onStopStream={stopStream}
                       onNewChat={startNewChat}
-                      onSkipAgentCreate={skipAgentCreate}
                       onPickWelcomePrompt={(prompt) => setInput(prompt)}
                       showThinkingControls={showThinking}
                       reasoningMeta={activeModelReasoning}
@@ -1310,13 +1311,10 @@ export default function App() {
                       onTabChange={setChatRightTab}
                       onClose={() => setChatRightOpen(false)}
                       sessionId={chat.sessionId}
-                      turnId={chat.currentTurnId}
                       tokenUsage={chat.tokenUsage}
                       contextUsage={chat.contextUsage}
                       contextWindow={contextWindow}
                       generatingPreview={chat.generatingPreview}
-                      onOpenMemory={() => openSettingsTab("memory")}
-                      onOpenSkills={() => setNav("skills")}
                     />
                   )}
                 </div>

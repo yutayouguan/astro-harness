@@ -66,11 +66,7 @@ Prefer after loading the create-agent skill."
     });
 }
 
-crate::submit_builtin_tool! {
-    register: register,
-    names: ["persona_create"],
-    sync_ctx: dispatch,
-}
+// 单专家模式不再把 persona_create 暴露给模型；保留实现仅供旧数据迁移工具复用。
 
 /// 将可选字符串规范为空串（缺省或仅空白视为空）。
 fn opt_str(v: &Option<String>) -> String {

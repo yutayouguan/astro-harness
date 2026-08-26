@@ -32,6 +32,8 @@ pub struct ToolContext<'a> {
     pub workspace_dir: PathBuf,
     /// 可选代码/项目根（git worktree 或 `ASTRO_PROJECT_ROOT`）；有值时 terminal/file_ops 以此为根。
     pub project_root: Option<PathBuf>,
+    /// 项目全部授权根；第一个元素是主 cwd。
+    pub workspace_roots: Vec<PathBuf>,
     /// 媒体生成主备凭证，由前端 Provider 面板注入。
     pub image_gen_targets: &'a ImageGenTargets,
     /// 当前会话 id；subagent threads、todo 等持久记录用它关联父会话。
@@ -114,9 +116,10 @@ impl<'a> ToolContext<'a> {
     /// 从当前磁盘配置构造本次工具调用的不可变命令沙箱策略。
     pub fn command_sandbox_policy(&self) -> anyhow::Result<sandbox::SandboxPolicy> {
         let root = self.ensure_project_or_workspace()?;
-        build_command_sandbox_policy(
+        build_command_sandbox_policy_with_roots(
             &self.memory_dir,
             &root,
+            &self.workspace_roots,
             self.permission_profile.as_deref(),
             self.workspace_write_grant,
             self.sandbox_policy.clone(),
@@ -197,6 +200,24 @@ pub fn build_command_sandbox_policy(
     workspace_write_grant: bool,
     sandbox_policy: Option<sandbox::SandboxPolicy>,
 ) -> anyhow::Result<sandbox::SandboxPolicy> {
+    build_command_sandbox_policy_with_roots(
+        memory_dir,
+        execution_root,
+        &[],
+        permission_profile,
+        workspace_write_grant,
+        sandbox_policy,
+    )
+}
+
+pub fn build_command_sandbox_policy_with_roots(
+    memory_dir: &Path,
+    execution_root: &Path,
+    workspace_roots: &[PathBuf],
+    permission_profile: Option<&str>,
+    workspace_write_grant: bool,
+    sandbox_policy: Option<sandbox::SandboxPolicy>,
+) -> anyhow::Result<sandbox::SandboxPolicy> {
     if let Some(policy) = sandbox_policy {
         return Ok(policy);
     }
@@ -207,7 +228,12 @@ pub fn build_command_sandbox_policy(
     if workspace_write_grant && mode == types::SandboxMode::ReadOnly {
         mode = types::SandboxMode::WorkspaceWrite;
     }
-    sandbox::SandboxPolicy::new(mode, execution_root, Vec::new(), false).map_err(Into::into)
+    let extra_roots: Vec<PathBuf> = workspace_roots
+        .iter()
+        .filter(|root| root.as_path() != execution_root)
+        .cloned()
+        .collect();
+    sandbox::SandboxPolicy::new(mode, execution_root, extra_roots, false).map_err(Into::into)
 }
 
 #[cfg(test)]
@@ -295,6 +321,7 @@ permissions:
             memory_dir: dir.path().to_path_buf(),
             workspace_dir: workspace.clone(),
             project_root: None,
+            workspace_roots: Vec::new(),
             image_gen_targets: &targets,
             session_id: "test".into(),
             turn_id: None,
@@ -370,6 +397,34 @@ permissions:
         .unwrap();
 
         assert_eq!(policy, selected);
+    }
+
+    #[test]
+    fn workspace_profile_materializes_all_project_roots() {
+        let dir = tempfile::tempdir().unwrap();
+        let primary = dir.path().join("primary");
+        let secondary = dir.path().join("secondary");
+        std::fs::create_dir_all(&primary).unwrap();
+        std::fs::create_dir_all(&secondary).unwrap();
+        memory::set_permission_preset(dir.path(), types::PermissionPreset::ApproveForMe).unwrap();
+
+        let policy = build_command_sandbox_policy_with_roots(
+            dir.path(),
+            &primary,
+            &[primary.clone(), secondary.clone()],
+            None,
+            false,
+            None,
+        )
+        .unwrap();
+
+        assert_eq!(
+            policy.writable_roots,
+            vec![
+                primary.canonicalize().unwrap(),
+                secondary.canonicalize().unwrap()
+            ]
+        );
     }
 
     #[test]

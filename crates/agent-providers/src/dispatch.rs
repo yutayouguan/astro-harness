@@ -425,12 +425,27 @@ fn normalize_provider_id(id: &str) -> &str {
     crate::profile::normalize_provider_id(id)
 }
 
-/// 根据 provider id + config.api_mode 注册到注册表。
+/// 是否应使用 Responses API 协议。
+///
+/// 优先级：`config.api_mode` 显式指定 > profile `supports_responses` 默认。
+/// - `api_mode == "chat"` → 强制 ChatCompletions
+/// - `api_mode == "responses"` → 强制 Responses
+/// - `api_mode` 为空 → profile.supports_responses 决定
+fn use_responses(provider: &str, config: &ProviderConfig) -> bool {
+    match config.api_mode.as_str() {
+        "chat" => false,
+        "responses" => true,
+        _ => crate::profile::resolve(provider)
+            .is_some_and(|p| p.supports_responses),
+    }
+}
+
+/// 根据 provider id 注册到注册表。
 fn register_provider(reg: &mut crate::registry::Registry, provider: &str, config: &ProviderConfig) {
     let key = &config.api_key;
     let base = config.base_url.as_deref().filter(|s| !s.trim().is_empty());
     let model = &config.model;
-    let responses = config.api_mode == "responses";
+    let responses = use_responses(provider, config);
 
     match provider {
         "anthropic" | "claude" => reg.register_anthropic(key, base, model),
@@ -576,15 +591,42 @@ mod tests {
     }
 
     #[test]
-    fn responses_mode_routes_correctly() {
-        let mut config = ProviderConfig::default();
-        config.api_mode = "responses".to_string();
+    fn responses_default_for_supported_providers() {
+        let config = ProviderConfig::default();
+        for id in ["openai", "deepseek", "minimax"] {
+            assert!(
+                use_responses(id, &config),
+                "{id} should default to Responses API"
+            );
+        }
+        for id in ["anthropic", "google", "ollama", "azure", "zhipu"] {
+            assert!(
+                !use_responses(id, &config),
+                "{id} should NOT default to Responses API"
+            );
+        }
+    }
+
+    #[test]
+    fn api_mode_override() {
+        let mut chat_config = ProviderConfig::default();
+        chat_config.api_mode = "chat".to_string();
+        assert!(!use_responses("openai", &chat_config), "api_mode=chat forces ChatCompletions");
+
+        let mut resp_config = ProviderConfig::default();
+        resp_config.api_mode = "responses".to_string();
+        assert!(use_responses("ollama", &resp_config), "api_mode=responses forces Responses");
+    }
+
+    #[test]
+    fn responses_providers_register_correctly() {
+        let config = ProviderConfig::default();
         for id in ["openai", "deepseek", "minimax"] {
             let mut reg = crate::registry::Registry::new();
             register_provider(&mut reg, id, &config);
             assert!(
                 reg.completion_model(id).is_some(),
-                "provider {id} with api_mode=responses should resolve"
+                "provider {id} (default Responses) should have completion model"
             );
         }
     }

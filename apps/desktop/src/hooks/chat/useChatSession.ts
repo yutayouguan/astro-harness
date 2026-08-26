@@ -27,7 +27,6 @@ import {
   buildParallelTasksSummaryMarkdown,
   countRunningParallel,
 } from "../../lib/chat/parallelTasks";
-import { templateForLocale } from "../../lib/agent/agentCreateTemplate";
 import {
   clearChatSession,
   isChatCleared,
@@ -96,12 +95,12 @@ function calcTokensPerSec(completionTokens: number, durationMs: number): number 
 }
 
 export interface UseChatSessionDeps {
+  activeProjectId: string;
   activeProvider: ProviderDto | undefined;
   providers: ProviderDto[];
   chatMode: ChatInteractionMode;
   onChatModeChange: (mode: ChatWorkMode) => void;
   chatDisplayPrefsRef: RefObject<ChatDisplayPrefs>;
-  locale: string;
   t: TFn;
   showTransientToast: ShowToastFn;
   nav: NavId;
@@ -109,12 +108,12 @@ export interface UseChatSessionDeps {
 }
 
 export function useChatSession({
+  activeProjectId,
   activeProvider,
   providers,
   chatMode,
   onChatModeChange,
   chatDisplayPrefsRef,
-  locale,
   t,
   showTransientToast,
   nav,
@@ -263,6 +262,7 @@ export function useChatSession({
   );
 
   const { send: sendImmediate } = useSend({
+    projectId: activeProjectId,
     input,
     attachments,
     streaming,
@@ -272,7 +272,6 @@ export function useChatSession({
     activeProvider,
     providers,
     sessionId,
-    messages,
     emptyMode,
     sessionPendingInterrupts,
     chatMode,
@@ -321,7 +320,6 @@ export function useChatSession({
     turnInFlightRef,
     setTurnInFlight,
     lastStreamActivityAtRef,
-    sessionWorktreeRef,
     onModeSwitchDetected,
     onModeSwitchPrompt,
     onUserInputCommitted,
@@ -1649,25 +1647,6 @@ export function useChatSession({
     setEmptyMode("chat");
   }, [confirmIfStreaming, resetChatSurface]);
 
-  const startNewAgent = useCallback(async () => {
-    if (!(await confirmIfStreaming())) return;
-    resetChatSurface();
-    setEmptyMode("agent");
-    setInput(templateForLocale(locale));
-    setChatRightOpen(false);
-    if (typeof window !== "undefined" && "__TAURI_INTERNALS__" in window) {
-      void invoke("clear_pending_agent_icon", { kind: null }).catch(() => {});
-    }
-  }, [confirmIfStreaming, resetChatSurface, locale]);
-
-  const skipAgentCreate = useCallback(() => {
-    setEmptyMode("chat");
-    setInput("");
-    if (typeof window !== "undefined" && "__TAURI_INTERNALS__" in window) {
-      void invoke("clear_pending_agent_icon", { kind: null }).catch(() => {});
-    }
-  }, []);
-
   const resetSchedulingSurface = useCallback(() => {
     setQueuedFollowUps((prev) => {
       for (const q of prev) {
@@ -1892,8 +1871,6 @@ export function useChatSession({
     onUiAction,
     resetChatSurface,
     startNewChat,
-    startNewAgent,
-    skipAgentCreate,
     openSessionFromFilespace,
     attachArtifactsToChat,
     applyRestoredHistory,

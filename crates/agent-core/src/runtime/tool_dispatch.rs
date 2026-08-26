@@ -160,10 +160,11 @@ impl AgentLoop {
         let execution = Some(self.execution());
         let hook_runtime = Some(self.hook_runtime());
         let hook_bus = Some(self.hook_bus());
-        let (project_root, permission_profile, model_ctx, skill_config_overrides) = {
+        let (project_root, workspace_roots, permission_profile, model_ctx, skill_config_overrides) = {
             let state = self.lock_state();
             (
                 state.project_root.clone(),
+                state.workspace_roots.clone(),
                 state.permission_profile.clone(),
                 state.model_ctx.clone(),
                 state.skill_config_overrides.clone(),
@@ -177,6 +178,9 @@ impl AgentLoop {
             project_root: step_context
                 .and_then(|step_context| step_context.turn.project_root().map(ToOwned::to_owned))
                 .or(project_root),
+            workspace_roots: step_context
+                .map(|step_context| step_context.turn.workspace_roots().to_vec())
+                .unwrap_or(workspace_roots),
             image_gen_targets: &model_ctx.image_gen_targets,
             session_id,
             turn_id,

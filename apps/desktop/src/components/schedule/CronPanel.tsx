@@ -5,7 +5,6 @@ import { toneStyleFromElement } from "../../lib/ui/toneFromElement";
 import { invoke } from "@tauri-apps/api/core";
 import {
   BookOpen,
-  Bot,
   BrainCircuit,
   CalendarClock,
   CalendarPlus,
@@ -40,8 +39,6 @@ import { useI18n } from "../../i18n/LocaleContext";
 import type { MessageKey } from "../../i18n/messages";
 import { formatScheduleLabel } from "../../lib/cron/cronSchedule";
 import { mapHistoryMessages } from "../../lib/chat/mapHistoryMessages";
-import { useActiveAgent } from "../../hooks/app/useActiveAgent";
-import { normalizeAgentId } from "../../types/agent";
 import type { ChatHistoryDto, ChatMessage } from "../../types";
 import MotionSwitch from "../ui/MotionSwitch";
 import ExpandableSearch from "../ui/ExpandableSearch";
@@ -457,19 +454,6 @@ function IconLastRun(props: SVGProps<SVGSVGElement>) {
   );
 }
 
-/** Agent / 模型元信息 */
-function IconAgentModel(props: SVGProps<SVGSVGElement>) {
-  return (
-    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden {...props}>
-      <rect x="5" y="8" width="14" height="10" rx="3" />
-      <path d="M12 4v4" />
-      <circle cx="9" cy="13" r="1" fill="currentColor" stroke="none" />
-      <circle cx="15" cy="13" r="1" fill="currentColor" stroke="none" />
-      <path d="M9 18v2M15 18v2" />
-    </svg>
-  );
-}
-
 export default function CronPanel({
   active,
   providers,
@@ -479,7 +463,7 @@ export default function CronPanel({
   const { t, locale } = useI18n();
   const confirm = useConfirm();
   const [jobs, setJobs] = useState<CronJobDto[]>([]);
-  const { agents, activeAgentId: agentId } = useActiveAgent();
+  const agentId = "default";
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -496,7 +480,6 @@ export default function CronPanel({
   const [detailRunsLoading, setDetailRunsLoading] = useState(false);
 
   const [filterJobId, setFilterJobId] = useState("");
-  const [filterAgentId, setFilterAgentId] = useState("");
   const [filterDateFrom, setFilterDateFrom] = useState("");
   const [filterDateTo, setFilterDateTo] = useState("");
   const [historyRuns, setHistoryRuns] = useState<CronRunDto[]>([]);
@@ -564,7 +547,7 @@ export default function CronPanel({
     try {
       const runs = await fetchCronRuns({
         jobId: filterJobId,
-        agentId: filterAgentId,
+        agentId: "default",
         dateFrom: filterDateFrom,
         dateTo: filterDateTo,
       });
@@ -575,7 +558,7 @@ export default function CronPanel({
     } finally {
       setHistoryLoading(false);
     }
-  }, [filterJobId, filterAgentId, filterDateFrom, filterDateTo]);
+  }, [filterJobId, filterDateFrom, filterDateTo]);
 
   const loadDetailRuns = useCallback(async (jobId: string) => {
     if (!isTauri()) {
@@ -665,7 +648,7 @@ export default function CronPanel({
   const filteredJobs = useMemo(() => {
     const q = search.trim().toLowerCase();
     return jobs.filter((j) => {
-      if (normalizeAgentId(j.agent_id) !== normalizeAgentId(agentId)) return false;
+      if (j.agent_id !== agentId && j.agent_id !== "workspace") return false;
       if (!q) return true;
       return (
         j.title.toLowerCase().includes(q) ||
@@ -698,14 +681,6 @@ export default function CronPanel({
     void loadDetailRuns(selectedDetailId);
   }, [jobsView, selectedDetailId, loadDetailRuns]);
 
-  const agentName = useCallback(
-    (id: string) => {
-      const normalized = normalizeAgentId(id);
-      return agents.find((a) => a.id === normalized)?.name ?? t("cron.agent.default");
-    },
-    [agents, t],
-  );
-
   const providerName = useCallback(
     (id: string | null) => {
       if (!id) return "—";
@@ -731,14 +706,6 @@ export default function CronPanel({
       ...jobs.map((j) => ({ value: j.id, label: j.title })),
     ],
     [jobs, t],
-  );
-
-  const agentFilterOptions = useMemo(
-    () => [
-      { value: "", label: t("cron.history.filterAgent") },
-      ...agents.map((a) => ({ value: a.id, label: a.name })),
-    ],
-    [agents, t],
   );
 
   const toggleEnabled = async (job: CronJobDto) => {
@@ -1005,10 +972,6 @@ export default function CronPanel({
               </div>
             </div>
             <div className="cron-card-meta-tags">
-              <span className="cron-card-tag is-agent">
-                <IconAgentModel />
-                {agentName(job.agent_id)}
-              </span>
               {job.model ? (
                 <span className="cron-card-tag is-model" title={job.model}>
                   {job.model}
@@ -1101,13 +1064,6 @@ export default function CronPanel({
                   {t("cron.field.schedule")}
                 </span>
                 <span>{formatScheduleLabel(selectedDetailJob.schedule, locale)}</span>
-              </div>
-              <div className="cron-job-detail-meta-item">
-                <span className="cron-job-detail-label">
-                  <Bot size={12} strokeWidth={2.2} aria-hidden />
-                  {t("cron.field.agent")}
-                </span>
-                <span>{agentName(selectedDetailJob.agent_id)}</span>
               </div>
               <div className="cron-job-detail-meta-item">
                 <span className="cron-job-detail-label">
@@ -1261,10 +1217,6 @@ export default function CronPanel({
                   </p>
                   <div className="cron-timeline-card-foot">
                     <span className="cron-timeline-meta">
-                      <span className="cron-timeline-meta-chip">
-                        <Bot size={12} strokeWidth={2.2} aria-hidden />
-                        {agentName(run.agent_id)}
-                      </span>
                       {run.trigger ? (
                         <span className="cron-timeline-meta-chip">
                           {run.trigger === "manual" ? (
@@ -1385,13 +1337,6 @@ export default function CronPanel({
                 aria-label={t("cron.history.filterJob")}
                 className="cron-history-filter"
               />
-              <SelectMenu
-                value={filterAgentId}
-                onChange={setFilterAgentId}
-                options={agentFilterOptions}
-                aria-label={t("cron.history.filterAgent")}
-                className="cron-history-filter"
-              />
               <div className="cron-history-dates" role="group" aria-label={t("cron.history.filterDate")}>
                 <GlassDatePicker
                   value={filterDateFrom}
@@ -1500,8 +1445,6 @@ export default function CronPanel({
         onCreated={() => void loadJobs()}
         providers={providers}
         activeProviderId={activeProviderId}
-        agents={agents}
-        defaultAgentId={agentId}
         toneStyle={toneStyleFromElement(pageRef.current)}
       />
 

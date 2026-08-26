@@ -98,8 +98,6 @@ type Props = {
   /** 侧栏全局搜索词；非空时展示全部匹配结果 */
   query: string;
   listKind: SessionListKind;
-  /** 仅激活项目认领当前会话，避免多个展开项目互相抢占归属 */
-  autoAssignActiveSession?: boolean;
   onOpenSession: (sessionId: string) => void;
   /** 删除当前会话前取消流 */
   onPrepareDeleteCurrentSession?: () => void | Promise<void>;
@@ -124,7 +122,6 @@ export default function SidebarSessionList({
   projectId,
   query,
   listKind,
-  autoAssignActiveSession = false,
   onOpenSession,
   onPrepareDeleteCurrentSession,
   onClearDeletedCurrentSession,
@@ -184,20 +181,6 @@ export default function SidebarSessionList({
       unlisten?.();
     };
   }, []);
-
-  // 当前会话自动关联到此项目，关联完成后再刷新列表
-  useEffect(() => {
-    if (!activeSessionId || !projectId || !autoAssignActiveSession) return;
-    void (async () => {
-      try {
-        await invoke("assign_session_to_project_if_unassigned", {
-          sessionId: activeSessionId,
-          projectId,
-        });
-      } catch {}
-      await load();
-    })();
-  }, [activeSessionId, projectId, autoAssignActiveSession, load]);
 
   const [sessionMenu, setSessionMenu] = useState<{ sessionId: string; x: number; y: number } | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);

@@ -22,9 +22,6 @@ const AGENT_ID_HEX_LEN: usize = 12;
 /// slug 段最大长度（避免目录名过长）
 const AGENT_ID_SLUG_MAX: usize = 24;
 
-/// 当前激活 Agent 的持久化文件名（位于数据根目录）
-pub(crate) const ACTIVE_AGENT_FILE: &str = "active-agent.json";
-
 /// 用户主目录（跨平台统一入口）。
 ///
 /// - Windows：优先 `USERPROFILE`，再 `HOME`（Git Bash 等）
@@ -110,12 +107,8 @@ pub fn default_memory_dir() -> PathBuf {
 /// - `default`（默认）→ `{base}/workspace`（目录名保持 `workspace` 不变）
 /// - 其他 id → `{base}/workspace-{id}`
 pub fn agent_workspace_dir(base: &Path, agent_id: &str) -> PathBuf {
-    let id = normalize_agent_id(agent_id);
-    if id == DEFAULT_AGENT_ID {
-        base.join(DEFAULT_AGENT_WORKSPACE_DIR)
-    } else {
-        base.join(format!("workspace-{id}"))
-    }
+    let _ = agent_id;
+    base.join(DEFAULT_AGENT_WORKSPACE_DIR)
 }
 
 /// 默认 Agent 的配置目录名（`agents/default/`），与工作区目录名 `workspace/` 区分。
@@ -126,12 +119,8 @@ pub const DEFAULT_AGENT_CONFIG_DIR: &str = "default";
 /// 默认 Agent（id = `workspace`）的配置目录固定为 `agents/default/`，
 /// 避免与工作区内容目录 `workspace/` 产生歧义。
 pub fn agent_config_dir(base: &Path, agent_id: &str) -> PathBuf {
-    let id = normalize_agent_id(agent_id);
-    if id == DEFAULT_AGENT_ID {
-        base.join("agents").join(DEFAULT_AGENT_CONFIG_DIR)
-    } else {
-        base.join("agents").join(id)
-    }
+    let _ = agent_id;
+    base.join("agents").join(DEFAULT_AGENT_CONFIG_DIR)
 }
 
 /// 从工作区目录名解析 agent id（`workspace` → `"default"`；`workspace-xxx` → `"xxx"`）
@@ -235,30 +224,17 @@ pub fn normalize_agent_id(raw: &str) -> String {
 
 /// 读取当前激活的 Agent id（缺省为 `workspace`）
 pub fn active_agent_id(base: &Path) -> String {
-    let path = base.join(ACTIVE_AGENT_FILE);
-    let Ok(text) = fs::read_to_string(&path) else {
-        return DEFAULT_AGENT_ID.to_string();
-    };
-    let Ok(v) = serde_json::from_str::<serde_json::Value>(&text) else {
-        return DEFAULT_AGENT_ID.to_string();
-    };
-    v.get("id")
-        .and_then(|x| x.as_str())
-        .map(normalize_agent_id)
-        .filter(|id| agent_workspace_dir(base, id).is_dir())
-        .unwrap_or_else(|| DEFAULT_AGENT_ID.to_string())
+    let _ = base;
+    DEFAULT_AGENT_ID.to_string()
 }
 
 /// 设置当前激活的 Agent（目标工作区必须已存在）
 pub fn set_active_agent(base: &Path, agent_id: &str) -> anyhow::Result<String> {
     let id = normalize_agent_id(agent_id);
-    let dir = agent_workspace_dir(base, &id);
-    if !dir.is_dir() {
-        anyhow::bail!("Agent 工作区不存在: {id}");
+    if id != DEFAULT_AGENT_ID {
+        anyhow::bail!("Astro 已切换为单专家模式，仅支持 default");
     }
-    let path = base.join(ACTIVE_AGENT_FILE);
-    let json = serde_json::json!({ "id": id });
-    fs::write(&path, format!("{}\n", serde_json::to_string_pretty(&json)?))?;
+    let _ = base;
     Ok(id)
 }
 

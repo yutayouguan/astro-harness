@@ -446,7 +446,7 @@ mod tests {
         crate::register_all(&mut reg);
         assert!(reg.any_exclusive_access(&["memory", "spawn_agent", "pin_context"]));
         assert!(!reg.any_exclusive_access(&["web_search"]));
-        assert!(reg.get("persona_create").unwrap().exclusive_access);
+        assert!(reg.get("persona_create").is_none());
         assert!(reg.get("context_search").is_some());
         assert!(reg.get("pin_context").unwrap().exclusive_access);
     }

@@ -162,7 +162,7 @@ pub fn dispatch(
         .map_err(|e| anyhow::anyhow!("file_ops 参数无效: {e}"))?;
     let op = parsed.operation.trim().to_lowercase();
     let root = ctx.project_or_workspace();
-    let full = crate::path_safe::resolve_safe(root, &parsed.path)?;
+    let full = crate::path_safe::resolve_safe_in_roots(root, &ctx.workspace_roots, &parsed.path)?;
     let rel = display_rel(root, &full);
     let active_profile = if is_mutating_operation(&op) {
         let settings = memory::load_permission_settings(&ctx.memory_dir);
@@ -272,7 +272,8 @@ pub fn dispatch(
                 .map(str::trim)
                 .filter(|s| !s.is_empty())
                 .ok_or_else(|| anyhow::anyhow!("move 需要 dest 参数"))?;
-            let dest_full = crate::path_safe::resolve_safe(root, dest_rel)?;
+            let dest_full =
+                crate::path_safe::resolve_safe_in_roots(root, &ctx.workspace_roots, dest_rel)?;
             enforce_file_mutation_policy(
                 active_profile
                     .as_deref()
@@ -289,7 +290,8 @@ pub fn dispatch(
                 .map(str::trim)
                 .filter(|s| !s.is_empty())
                 .ok_or_else(|| anyhow::anyhow!("copy 需要 dest 参数"))?;
-            let dest_full = crate::path_safe::resolve_safe(root, dest_rel)?;
+            let dest_full =
+                crate::path_safe::resolve_safe_in_roots(root, &ctx.workspace_roots, dest_rel)?;
             enforce_file_mutation_policy(
                 active_profile
                     .as_deref()
@@ -1053,6 +1055,7 @@ mod tests {
             memory_dir: dir.path().to_path_buf(),
             workspace_dir: dir.path().join("workspace"),
             project_root: None,
+            workspace_roots: Vec::new(),
             image_gen_targets: targets,
             session_id: "test".into(),
             turn_id: None,

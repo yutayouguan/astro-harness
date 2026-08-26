@@ -1210,9 +1210,32 @@ impl AstroServiceImpl {
         session
             .set_interaction_mode(types::InteractionMode::parse(&req.interaction_mode))
             .await;
-        session.set_project_root(
-            (!req.project_root.trim().is_empty()).then(|| PathBuf::from(req.project_root.trim())),
-        );
+        let project_root =
+            (!req.project_root.trim().is_empty()).then(|| PathBuf::from(req.project_root.trim()));
+        let mut workspace_roots = Vec::new();
+        for raw in &req.workspace_roots {
+            let root = PathBuf::from(raw.trim());
+            if !root.is_absolute() || !root.is_dir() {
+                return Err(Status::invalid_argument(format!(
+                    "workspace root must be an existing absolute directory: {}",
+                    raw
+                )));
+            }
+            let root = std::fs::canonicalize(&root).map_err(|error| {
+                Status::invalid_argument(format!("invalid workspace root {raw}: {error}"))
+            })?;
+            if !workspace_roots.contains(&root) {
+                workspace_roots.push(root);
+            }
+        }
+        if let Some(primary) = project_root.as_ref() {
+            let primary = std::fs::canonicalize(primary).map_err(|error| {
+                Status::invalid_argument(format!("invalid project root: {error}"))
+            })?;
+            session.set_project_context(Some(primary), workspace_roots);
+        } else {
+            session.set_project_context(None, workspace_roots);
+        }
         if let Some(temperature) = req.temperature {
             if !temperature.is_finite() || !(0.0..=2.0).contains(&temperature) {
                 return Err(Status::invalid_argument(
@@ -1491,6 +1514,14 @@ impl AstroServiceImpl {
             .map_err(|e| Status::internal(e.to_string()))?;
         let handle = Arc::new(agent);
         handle.set_hook_runtime(Arc::clone(&self.hook_runtime));
+        if let Ok(store) =
+            session::SessionStore::open_sessions_dir(&self.memory_dir.join("sessions"))
+        {
+            if let Ok(Some(project)) = store.project_for_session(session_id) {
+                let roots: Vec<PathBuf> = project.roots.into_iter().map(PathBuf::from).collect();
+                handle.set_project_context(roots.first().cloned(), roots);
+            }
+        }
         let mut sessions = self.sessions.write().await;
         if let Some(existing) = sessions.get(session_id) {
             return Ok(existing.clone());
