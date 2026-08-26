@@ -31,6 +31,16 @@ fn render_mcp_instructions(entries: &[mcp::McpServerInstructions]) -> String {
     )
 }
 
+fn load_agent_instructions(
+    project_root: Option<&std::path::Path>,
+    global_workspace: &std::path::Path,
+) -> Option<String> {
+    project_root
+        .and_then(|root| std::fs::read_to_string(root.join(".astro/AGENT.md")).ok())
+        .filter(|content| !content.trim().is_empty())
+        .or_else(|| std::fs::read_to_string(global_workspace.join("AGENTS.md")).ok())
+}
+
 impl AgentLoop {
     /// 与 `build_system_prompt` 同源加载静态/动态上下文与技能列表（不含 env 副作用）。
     async fn system_prompt_parts(&self) -> (StaticContext, DynamicContext, Vec<(String, String)>) {
@@ -60,16 +70,10 @@ impl AgentLoop {
             )
         };
         // 项目行为准则只取主 cwd；无项目文件时回退全局 default 工作区。
-        let project_agent_md = self
-            .project_root()
-            .and_then(|root| std::fs::read_to_string(root.join(".astro/AGENT.md")).ok());
-        if let Some(content) = project_agent_md.filter(|content| !content.trim().is_empty()) {
+        let project_root = self.project_root();
+        let ws = self.resolve_workspace_dir();
+        if let Some(content) = load_agent_instructions(project_root.as_deref(), &ws) {
             static_ctx.agent_md = content;
-        } else {
-            let ws = self.resolve_workspace_dir();
-            if let Ok(content) = std::fs::read_to_string(ws.join("AGENTS.md")) {
-                static_ctx.agent_md = content;
-            }
         }
         let dynamic_ctx = {
             let mut dyn_ctx =
@@ -276,5 +280,24 @@ mod tests {
     #[test]
     fn no_mcp_instructions_produces_no_prompt_layer() {
         assert!(render_mcp_instructions(&[]).is_empty());
+    }
+
+    #[test]
+    fn project_agent_md_overrides_global_agents_md_with_fallback() {
+        let global = tempfile::tempdir().unwrap();
+        let project = tempfile::tempdir().unwrap();
+        std::fs::write(global.path().join("AGENTS.md"), "global rules").unwrap();
+
+        assert_eq!(
+            load_agent_instructions(Some(project.path()), global.path()).as_deref(),
+            Some("global rules")
+        );
+
+        std::fs::create_dir_all(project.path().join(".astro")).unwrap();
+        std::fs::write(project.path().join(".astro/AGENT.md"), "project rules").unwrap();
+        assert_eq!(
+            load_agent_instructions(Some(project.path()), global.path()).as_deref(),
+            Some("project rules")
+        );
     }
 }

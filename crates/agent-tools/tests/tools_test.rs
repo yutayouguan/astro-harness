@@ -39,7 +39,6 @@ async fn register_all_includes_panel_tools() {
         "send_message",
         "wait_agent",
         "interrupt_agent",
-        "persona_create",
         "todo",
     ] {
         assert!(names.contains(&expected), "missing {expected}");

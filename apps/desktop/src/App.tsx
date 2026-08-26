@@ -869,6 +869,17 @@ export default function App() {
                         type="button"
                         className="sidebar-project-name"
                         onClick={() => {
+                          if (activeProjectId !== proj.id) {
+                            setActiveProjectId(proj.id);
+                            setCollapsedProjects((prev) => {
+                              const next = new Set(prev);
+                              next.delete(proj.id);
+                              return next;
+                            });
+                            setNav("chat");
+                            void startNewChat();
+                            return;
+                          }
                           setCollapsedProjects((prev) => {
                             const next = new Set(prev);
                             if (next.has(proj.id)) next.delete(proj.id);
@@ -1367,6 +1378,7 @@ export default function App() {
           projectPath={projects.find((p) => p.id === projectMenu.id)?.roots[0] ?? ""}
           onAction={(action) => {
             if (action === "remove") {
+              if (projectMenu.id === "default") return;
               void invoke("delete_project", { projectId: projectMenu.id }).catch(() => {});
               setProjects((prev) => prev.filter((p) => p.id !== projectMenu.id));
               if (activeProjectId === projectMenu.id) {

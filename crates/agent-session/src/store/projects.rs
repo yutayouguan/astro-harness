@@ -219,7 +219,7 @@ impl SessionStore {
             .ok_or_else(|| anyhow!("project not found after update"))
     }
 
-    /// 删除项目，返回孤儿会话 ID 列表（原先关联到该项目的会话）。
+    /// 删除项目，返回受影响会话 ID；默认项目存在时将这些会话迁回 default。
     pub fn delete_project(&self, id: &str) -> Result<Vec<String>> {
         if id == DEFAULT_PROJECT_ID {
             anyhow::bail!("the default project cannot be deleted");
@@ -231,10 +231,15 @@ impl SessionStore {
             .query_map(params![id], |row| row.get(0))?
             .collect::<Result<Vec<_>, _>>()?;
         drop(stmt);
-        // 解除会话关联
+        // 默认项目存在时迁回 default；测试/迁移场景尚未创建 default 时才回退 NULL。
         tx.execute(
-            "UPDATE sessions SET project_id = NULL WHERE project_id = ?1",
-            params![id],
+            "UPDATE sessions
+             SET project_id = CASE
+                 WHEN EXISTS(SELECT 1 FROM projects WHERE id = ?1) THEN ?1
+                 ELSE NULL
+             END
+             WHERE project_id = ?2",
+            params![DEFAULT_PROJECT_ID, id],
         )?;
         // project_roots 由 ON DELETE CASCADE 自动清理
         let changed = tx.execute("DELETE FROM projects WHERE id = ?1", params![id])?;
@@ -561,5 +566,27 @@ mod tests {
             project.id
         );
         assert!(store.delete_project(&project.id).is_err());
+    }
+
+    #[test]
+    fn deleting_project_moves_sessions_back_to_default() {
+        let store = open_memory();
+        let base = tempfile::tempdir().unwrap();
+        let workspace = make_root(&base, "workspace");
+        let custom_root = make_root(&base, "custom");
+        let default = store
+            .ensure_default_project(std::path::Path::new(&workspace))
+            .unwrap();
+        let custom = store.create_project("Custom", &[&custom_root]).unwrap();
+        store.ensure_session("session", "tauri").unwrap();
+        store
+            .assign_session_to_project("session", &custom.id)
+            .unwrap();
+
+        store.delete_project(&custom.id).unwrap();
+        assert_eq!(
+            store.project_for_session("session").unwrap().unwrap().id,
+            default.id
+        );
     }
 }

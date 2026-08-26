@@ -214,6 +214,9 @@ pub fn create_agent_with_profile(
     inherit_config: bool,
     activate: bool,
 ) -> anyhow::Result<AgentInfo> {
+    if !name.trim().is_empty() {
+        anyhow::bail!("Astro 已切换为单专家模式，不能创建额外专家");
+    }
     let display = name.trim();
     if display.is_empty() {
         anyhow::bail!("Agent 名称不能为空");
@@ -652,71 +655,35 @@ mod tests {
         let dir = TempDir::new().unwrap();
         ensure_workspace(dir.path()).unwrap();
 
-        let info = create_agent(dir.path(), "PPT Expert").unwrap();
-        assert!(
-            is_generated_agent_id(&info.id),
-            "expected {{slug}}--{{hex}} id, got {}",
-            info.id
-        );
-        assert!(
-            info.id.starts_with("ppt-expert--"),
-            "expected readable slug prefix, got {}",
-            info.id
-        );
-        assert_eq!(info.name, "PPT Expert");
-        assert!(info.path.ends_with(&format!("workspace-{}", info.id)));
+        assert!(create_agent(dir.path(), "PPT Expert").is_err());
 
         let agents = list_agents(dir.path());
-        assert!(agents.iter().any(|a| a.is_default));
-        assert!(agents
-            .iter()
-            .any(|a| a.id == info.id && a.name == "PPT Expert"));
-
-        let ws = PathBuf::from(&info.path);
-        assert!(ws.join("IDENTITY.md").is_file());
-        assert!(ws.join("MEMORY.md").is_file());
-        assert!(ws.join("memory").is_dir());
-        assert!(ws.join("skills").is_dir());
-        assert!(dir
-            .path()
-            .join(format!("agents/{}/config.json", info.id))
-            .is_file());
-
-        set_active_agent(dir.path(), &info.id).unwrap();
-        assert_eq!(active_agent_id(dir.path()), info.id);
-        assert_eq!(
-            agent_workspace_dir(dir.path(), &active_agent_id(dir.path())),
-            agent_workspace_dir(dir.path(), &info.id)
-        );
-
-        // 同名可再建（id 不同）
-        let info2 = create_agent(dir.path(), "PPT Expert").unwrap();
-        assert_ne!(info.id, info2.id);
-        assert!(is_generated_agent_id(&info2.id));
+        assert_eq!(agents.len(), 1);
+        assert_eq!(agents[0].id, DEFAULT_AGENT_ID);
+        assert!(set_active_agent(dir.path(), "ppt-expert").is_err());
+        assert_eq!(active_agent_id(dir.path()), DEFAULT_AGENT_ID);
     }
 
     #[test]
-    fn create_agent_keeps_legacy_explicit_id() {
+    fn single_persona_rejects_legacy_explicit_id() {
         let dir = TempDir::new().unwrap();
         ensure_workspace(dir.path()).unwrap();
-        let info = create_agent_with_profile(
+        let result = create_agent_with_profile(
             dir.path(),
             "遗留助手",
             Some("legacy-slug"),
             None,
             true,
             false,
-        )
-        .unwrap();
-        assert_eq!(info.id, "legacy-slug");
-        assert!(info.path.ends_with("workspace-legacy-slug"));
+        );
+        assert!(result.is_err());
     }
 
     #[test]
     fn list_agents_reads_identity_icons() {
         let dir = TempDir::new().unwrap();
         ensure_workspace(dir.path()).unwrap();
-        let ws = dir.path().join("workspace-ima");
+        let ws = dir.path().join("workspace");
         fs::create_dir_all(ws.join("assets")).unwrap();
         fs::write(ws.join("assets/emoji.png"), b"emoji").unwrap();
         fs::write(ws.join("assets/avatar.png"), b"avatar").unwrap();
@@ -730,10 +697,19 @@ mod tests {
 "#,
         )
         .unwrap();
-        write_agent_config(dir.path(), "ima", "ima知识库检索专家", false).unwrap();
+        write_agent_config(
+            dir.path(),
+            DEFAULT_AGENT_ID,
+            "ima知识库检索专家",
+            false,
+        )
+        .unwrap();
 
         let agents = list_agents(dir.path());
-        let ima = agents.iter().find(|a| a.id == "ima").expect("ima agent");
+        let ima = agents
+            .iter()
+            .find(|a| a.id == DEFAULT_AGENT_ID)
+            .expect("default agent");
         assert_eq!(ima.name, "ima知识库检索专家");
         assert!(ima.emoji.as_ref().unwrap().ends_with("assets/emoji.png"));
         assert!(ima.avatar.as_ref().unwrap().ends_with("assets/avatar.png"));
@@ -744,7 +720,7 @@ mod tests {
     }
 
     #[test]
-    fn create_agent_with_profile_fills_md() {
+    fn single_persona_rejects_profile_creation() {
         let dir = TempDir::new().unwrap();
         ensure_workspace(dir.path()).unwrap();
         let profile = AgentProfile {
@@ -755,29 +731,16 @@ mod tests {
             call_me: "老板".into(),
             preferences: "先给大纲".into(),
         };
-        let info = create_agent_with_profile(
+        let result = create_agent_with_profile(
             dir.path(),
             "演示专家",
             Some("demo-expert"),
             Some(&profile),
             true,
             true,
-        )
-        .unwrap();
-        assert_eq!(info.id, "demo-expert");
-        assert!(info.path.ends_with("workspace-demo-expert"));
-        let ws = PathBuf::from(&info.path);
-        let identity = fs::read_to_string(ws.join("IDENTITY.md")).unwrap();
-        assert!(identity.contains("十年 PPT"));
-        let user = fs::read_to_string(ws.join("USER.md")).unwrap();
-        assert!(user.contains("老板"));
-        assert_eq!(active_agent_id(dir.path()), info.id);
-        // 未手动选图标时自动写入 Lucide SVG
-        assert!(
-            ws.join("assets/emoji.svg").is_file(),
-            "expected auto lucide emoji.svg"
         );
-        assert!(info.emoji.as_ref().unwrap().ends_with("assets/emoji.svg"));
+        assert!(result.is_err());
+        assert_eq!(active_agent_id(dir.path()), DEFAULT_AGENT_ID);
     }
 
     #[test]
