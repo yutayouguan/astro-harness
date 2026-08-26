@@ -133,17 +133,10 @@ impl CompletionModel for InteractionsCompletionModel {
                 gen.insert("max_output_tokens".into(), json!(max));
             }
         }
-        let thinking_level = match request.thinking.as_ref() {
-            Some(tc) if !tc.enabled => "minimal",
-            Some(tc) => match tc.effort.trim() {
-                "max" | "xhigh" | "high" => "high",
-                "minimal" | "min" => "minimal",
-                "low" => "low",
-                _ => "medium",
-            },
-            None => "medium",
-        };
-        gen.insert("thinking_level".into(), json!(thinking_level));
+        gen.insert(
+            "thinking_level".into(),
+            json!(thinking_level(request.thinking.as_ref())),
+        );
         if !gen.is_empty() {
             body["generation_config"] = Value::Object(gen);
         }
@@ -239,6 +232,22 @@ impl CompletionModel for InteractionsCompletionModel {
         )
         .await
         .with_context(|| format!("{url} (model={model})"))
+    }
+}
+
+/// Interactions 的思考档位。
+///
+/// 服务端只接受 `low` / `medium` / `high`，`minimal` 会被整轮拒收
+/// （400 invalid_request），因此关闭思考与 minimal effort 都落到最低档 `low`。
+fn thinking_level(thinking: Option<&crate::types::request::ThinkingConfig>) -> &'static str {
+    match thinking {
+        Some(tc) if !tc.enabled => "low",
+        Some(tc) => match tc.effort.trim() {
+            "max" | "xhigh" | "high" => "high",
+            "minimal" | "min" | "low" => "low",
+            _ => "medium",
+        },
+        None => "medium",
     }
 }
 
@@ -852,6 +861,30 @@ mod tests {
     fn google_has_chat() {
         let client = ProviderClient::new("test-key", Google);
         let _model = client.completion_model("gemini-3.5-flash");
+    }
+
+    #[test]
+    fn thinking_level_never_emits_unsupported_minimal() {
+        use crate::types::request::ThinkingConfig;
+        let off = ThinkingConfig {
+            enabled: false,
+            effort: "high".into(),
+            ..ThinkingConfig::default()
+        };
+        let minimal = ThinkingConfig {
+            enabled: true,
+            effort: "minimal".into(),
+            ..ThinkingConfig::default()
+        };
+        assert_eq!(thinking_level(Some(&off)), "low");
+        assert_eq!(thinking_level(Some(&minimal)), "low");
+        assert_eq!(thinking_level(None), "medium");
+        let high = ThinkingConfig {
+            enabled: true,
+            effort: "xhigh".into(),
+            ..ThinkingConfig::default()
+        };
+        assert_eq!(thinking_level(Some(&high)), "high");
     }
 
     #[test]

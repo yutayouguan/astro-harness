@@ -51,7 +51,7 @@ pub fn spawn_title_generation_after_turn(
                 }
             }
             Ok(None) => {}
-            Err(e) => warn!(error = %e, "session title generation failed"),
+            Err(e) => warn!(error = format!("{e:#}"), "session title generation failed"),
         }
     });
 }
@@ -134,7 +134,9 @@ pub async fn maybe_generate_session_title(
         async move {
             complete_title_chat(&target, &prompt)
                 .await
-                .map_err(|e| e.to_string())
+                // `{e}` 只会留下最外层 context（一个裸 URL），HTTP 状态与服务端
+                // 报错都在 source 链里。
+                .map_err(|e| format!("{e:#}"))
         }
     })
     .await

@@ -710,7 +710,8 @@ pub fn build_interaction_vision_body(
                 "mime_type": "application/json",
                 "schema": vision_boxes_json_schema(true)
             });
-            body["generation_config"] = json!({ "thinking_level": "minimal" });
+            // `minimal` 只被部分 Gemini 版本接受（3.7 起会 400），`low` 是通用最低档。
+            body["generation_config"] = json!({ "thinking_level": "low" });
         }
     }
     body
@@ -1936,7 +1937,7 @@ mod vision_tests {
     }
 
     #[test]
-    fn build_segment_body_has_mask_and_minimal_thinking() {
+    fn build_segment_body_has_mask_and_lowest_thinking() {
         let body = build_interaction_vision_body(
             "gemini-3.5-flash",
             "seg",
@@ -1949,7 +1950,7 @@ mod vision_tests {
         let props =
             &body["response_format"]["schema"]["properties"]["boxes"]["items"]["properties"];
         assert!(props.get("mask").is_some());
-        assert_eq!(body["generation_config"]["thinking_level"], "minimal");
+        assert_eq!(body["generation_config"]["thinking_level"], "low");
     }
 
     #[test]
