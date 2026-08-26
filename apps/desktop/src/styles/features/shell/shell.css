@@ -647,9 +647,11 @@ html[data-tone="twilight"] {
   transition: none;
 }
 
-/* 拖动时指针会掠过会话按钮，锁定光标避免退化成小手 */
-.app-shell.is-sidebar-resizing,
-.app-shell.is-sidebar-resizing * {
+/* 拖动分隔条时指针会掠过按钮，锁定光标避免中途退化成小手 */
+.app-shell:has(.sidebar.is-resizing),
+.app-shell:has(.sidebar.is-resizing) *,
+.app-shell:has(.chat-right-panel.is-resizing),
+.app-shell:has(.chat-right-panel.is-resizing) * {
   cursor: ew-resize !important;
 }
 

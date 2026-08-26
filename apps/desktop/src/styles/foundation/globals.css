@@ -6,7 +6,8 @@ textarea {
   color: inherit;
 }
 
-button:not(:disabled),
+/* 分隔条也是 button，但它的光标由各自的 resizer 规则定义 */
+button:not(:disabled, [role="separator"]),
 [role="button"]:not(:disabled) {
   cursor: pointer;
 }
