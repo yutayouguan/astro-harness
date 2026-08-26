@@ -1,4 +1,7 @@
-/* 全局统一分段 Tab —— 以「模型配置」页的供应商 / 辅助模型为基准。
+/* 全局统一分段 Tab —— 对齐 Apple 分段控件的液态玻璃材质：
+   轨道是一层下凹的毛玻璃井，选中项是浮在井上的一枚玻璃透镜
+   （顶缘高光、底缘回光、下方投影）。
+
    本文件在 index.css 末尾导入，因此同特异度下覆盖各功能页的旧样式；
    功能页只保留自己的布局约束（滚动、宽度、装饰层），不再各写一套外观。 */
 
@@ -9,32 +12,69 @@
   --seg-shell-radius: 12px;
   --seg-shell-pad: 3px;
   --seg-shell-gap: 2px;
-  --seg-shell-bg: color-mix(in srgb, var(--glass-panel, rgba(255, 255, 255, 0.35)) 88%, transparent);
-  --seg-shell-border: color-mix(in srgb, var(--glass-edge) 88%, transparent);
-  --seg-shell-blur: blur(12px) saturate(1.1);
+
+  /* 轨道：下凹的井。底色偏冷灰而非纯白，才压得住上面的玻璃片 */
+  --seg-shell-bg: rgba(118, 118, 128, 0.09);
+  --seg-shell-border: rgba(255, 255, 255, 0.5);
+  --seg-shell-blur: blur(24px) saturate(180%);
+  --seg-shell-inset:
+    inset 0 1px 2px rgba(15, 23, 42, 0.07),
+    inset 0 0 0 0.5px rgba(15, 23, 42, 0.05);
 
   --seg-item-radius: 9px;
   --seg-item-pad: 0 13px;
   --seg-item-gap: 7px;
   --seg-item-font: 13px;
-  --seg-item-weight: 650;
-  --seg-item-color: var(--ink-mute);
+  --seg-item-weight: 600;
+  /* 半透明表面上不用平灰，靠对比度保可读性 */
+  --seg-item-color: color-mix(in srgb, var(--ink) 58%, transparent);
   --seg-item-color-hover: var(--ink);
-  --seg-item-bg-hover: color-mix(in srgb, var(--ink) 5%, transparent);
+  --seg-item-bg-hover: rgba(255, 255, 255, 0.42);
   --seg-item-color-active: var(--ink);
-  --seg-item-bg-active: color-mix(in srgb, #fff 82%, var(--tone-soft));
+
+  /* 透镜本体：自上而下的镜面渐变，中段略暗形成折射腰线 */
+  --seg-item-bg-active:
+    linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 0.94) 0%,
+      rgba(255, 255, 255, 0.72) 46%,
+      rgba(255, 255, 255, 0.86) 100%
+    ),
+    color-mix(in srgb, var(--tone-soft) 22%, rgba(255, 255, 255, 0.6));
+  --seg-item-blur-active: blur(10px) saturate(180%);
   --seg-item-shadow-active:
-    0 1px 2px rgba(15, 23, 42, 0.06),
-    inset 0 0 0 1px color-mix(in srgb, var(--tone) 22%, transparent);
+    0 1px 2.5px rgba(15, 23, 42, 0.14),
+    0 4px 10px -3px rgba(15, 23, 42, 0.1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.96),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.55),
+    inset 0 0 0 0.5px rgba(255, 255, 255, 0.72);
 }
 
 html[data-theme="dark"] {
-  --seg-shell-bg: color-mix(in srgb, var(--glass-panel, rgba(255, 255, 255, 0.06)) 70%, rgba(8, 6, 18, 0.4));
-  --seg-shell-border: color-mix(in srgb, var(--glass-edge) 70%, rgba(255, 255, 255, 0.09));
-  --seg-item-bg-hover: color-mix(in srgb, #fff 8%, transparent);
-  --seg-item-color-active: color-mix(in srgb, #fff 14%, var(--tone));
-  --seg-item-bg-active: color-mix(in srgb, var(--tone-soft) 55%, rgba(255, 255, 255, 0.06));
-  --seg-item-shadow-active: inset 0 0 0 1px color-mix(in srgb, var(--tone) 28%, transparent);
+  --seg-shell-bg: rgba(118, 118, 128, 0.26);
+  --seg-shell-border: rgba(255, 255, 255, 0.1);
+  --seg-shell-inset:
+    inset 0 1px 2px rgba(0, 0, 0, 0.3),
+    inset 0 0 0 0.5px rgba(0, 0, 0, 0.2);
+
+  --seg-item-color: color-mix(in srgb, var(--ink) 62%, transparent);
+  --seg-item-bg-hover: rgba(255, 255, 255, 0.08);
+  --seg-item-color-active: color-mix(in srgb, #fff 82%, var(--tone));
+
+  --seg-item-bg-active:
+    linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 0.18) 0%,
+      rgba(255, 255, 255, 0.08) 46%,
+      rgba(255, 255, 255, 0.13) 100%
+    ),
+    color-mix(in srgb, var(--tone-soft) 34%, rgba(255, 255, 255, 0.06));
+  --seg-item-shadow-active:
+    0 1px 2.5px rgba(0, 0, 0, 0.34),
+    0 4px 10px -3px rgba(0, 0, 0, 0.28),
+    inset 0 1px 0 rgba(255, 255, 255, 0.22),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.07),
+    inset 0 0 0 0.5px rgba(255, 255, 255, 0.14);
 }
 
 /* ── 容器：外观 + 标准布局 ───────────────────────────────────── */
@@ -63,7 +103,7 @@ html[data-theme="dark"] {
   border: 1px solid var(--seg-shell-border);
   border-radius: var(--seg-shell-radius);
   background: var(--seg-shell-bg);
-  box-shadow: none;
+  box-shadow: var(--seg-shell-inset);
   backdrop-filter: var(--seg-shell-blur);
   -webkit-backdrop-filter: var(--seg-shell-blur);
 }
@@ -75,7 +115,7 @@ html[data-theme="dark"] {
   border: 1px solid var(--seg-shell-border);
   border-radius: var(--seg-shell-radius);
   background: var(--seg-shell-bg);
-  box-shadow: none;
+  box-shadow: var(--seg-shell-inset);
   backdrop-filter: var(--seg-shell-blur);
   -webkit-backdrop-filter: var(--seg-shell-blur);
 }
@@ -120,15 +160,18 @@ html[data-theme="dark"] {
   font-size: var(--seg-item-font);
   font-weight: var(--seg-item-weight);
   line-height: 1.2;
+  /* 小号 UI 字在半透明表面上需要一点正字距才立得住 */
+  letter-spacing: 0.005em;
   white-space: nowrap;
   color: var(--seg-item-color);
   background: transparent;
   box-shadow: none;
   cursor: pointer;
   transition:
-    background 0.16s ease,
-    color 0.16s ease,
-    box-shadow 0.16s ease;
+    background 0.22s cubic-bezier(0.32, 0.72, 0, 1),
+    color 0.22s cubic-bezier(0.32, 0.72, 0, 1),
+    box-shadow 0.22s cubic-bezier(0.32, 0.72, 0, 1),
+    transform 0.12s ease-out;
 }
 
 .providers-page-tab > svg,
@@ -207,6 +250,8 @@ html[data-theme="dark"] {
   border-color: transparent;
   background: var(--seg-item-bg-active);
   box-shadow: var(--seg-item-shadow-active);
+  backdrop-filter: var(--seg-item-blur-active);
+  -webkit-backdrop-filter: var(--seg-item-blur-active);
 }
 
 .providers-page-tab.is-active > svg,
@@ -247,6 +292,25 @@ html[data-theme="dark"] {
   outline-offset: 2px;
 }
 
+/* 反馈落在按下瞬间，而不是抬起后 */
+.providers-page-tab:active,
+.providers-detail-tab:active,
+.skills-main-tab:active,
+.skills-store-tab:active,
+.skills-preview-tab:active,
+.plugins-scope-tab:active,
+.plugins-personal-tab:active,
+.cron-tab:active,
+.tool-main-tab:active,
+.fs-tab:active,
+.files-mode-tab:active,
+.memory-file-tab:active,
+.mem-view-tab:active,
+.mcp-add-drawer-tab:active,
+.loop-config-tab:active {
+  transform: scale(0.97);
+}
+
 /* ── 选项内计数徽标 ──────────────────────────────────────────── */
 
 .skills-main-tab-count,
@@ -276,4 +340,69 @@ html[data-theme="dark"] {
 .skills-preview-tab.is-active .skills-preview-tab-count {
   color: var(--tone);
   background: color-mix(in srgb, var(--tone) 16%, transparent);
+}
+
+/* ── 无障碍降级 ──────────────────────────────────────────────── */
+
+/* 关闭透明度：玻璃变实心霜面，去掉模糊与镜面渐变 */
+@media (prefers-reduced-transparency: reduce) {
+  :root {
+    --seg-shell-bg: color-mix(in srgb, var(--ink) 7%, var(--bg, #fff));
+    --seg-shell-blur: none;
+    --seg-item-blur-active: none;
+    --seg-item-bg-active: var(--bg, #fff);
+    --seg-item-bg-hover: color-mix(in srgb, var(--ink) 4%, var(--bg, #fff));
+  }
+
+  html[data-theme="dark"] {
+    --seg-shell-bg: color-mix(in srgb, #fff 8%, var(--bg, #111));
+    --seg-item-bg-active: color-mix(in srgb, #fff 16%, var(--bg, #111));
+    --seg-item-bg-hover: color-mix(in srgb, #fff 10%, var(--bg, #111));
+  }
+}
+
+/* 提高对比度：选中项给一条实描边，不再只靠明度差 */
+@media (prefers-contrast: more) {
+  :root {
+    --seg-item-color: var(--ink-soft);
+    --seg-item-shadow-active: inset 0 0 0 1.5px var(--tone);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .providers-page-tab,
+  .providers-detail-tab,
+  .skills-main-tab,
+  .skills-store-tab,
+  .skills-preview-tab,
+  .plugins-scope-tab,
+  .plugins-personal-tab,
+  .cron-tab,
+  .tool-main-tab,
+  .fs-tab,
+  .files-mode-tab,
+  .memory-file-tab,
+  .mem-view-tab,
+  .mcp-add-drawer-tab,
+  .loop-config-tab {
+    transition: background 0.12s ease, color 0.12s ease;
+  }
+
+  .providers-page-tab:active,
+  .providers-detail-tab:active,
+  .skills-main-tab:active,
+  .skills-store-tab:active,
+  .skills-preview-tab:active,
+  .plugins-scope-tab:active,
+  .plugins-personal-tab:active,
+  .cron-tab:active,
+  .tool-main-tab:active,
+  .fs-tab:active,
+  .files-mode-tab:active,
+  .memory-file-tab:active,
+  .mem-view-tab:active,
+  .mcp-add-drawer-tab:active,
+  .loop-config-tab:active {
+    transform: none;
+  }
 }
