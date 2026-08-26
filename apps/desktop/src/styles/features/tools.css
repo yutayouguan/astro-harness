@@ -1365,7 +1365,8 @@ html[data-theme="dark"] .mcp-btn-primary:hover:not(:disabled) {
   flex-direction: column;
   gap: 6px;
   min-height: 0;
-  overflow: auto;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   padding: 4px 2px;
 }
 
@@ -1487,19 +1488,32 @@ html[data-theme="dark"] .mcp-btn-primary:hover:not(:disabled) {
 .tools-detail-panel {
   min-width: 0;
   min-height: 0;
-  overflow: auto;
+  overflow: hidden;
   padding: 4px 8px 12px 4px;
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 14px;
 }
 
 .tools-detail-head {
+  flex: none;
   display: flex;
   align-items: flex-start;
-    justify-content: space-between;
-    gap: 12px;
-    flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+/* 详情正文自带滚动，滚左侧列表时右侧保持不动 */
+.tools-detail-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding-right: 4px;
 }
 
 .tools-detail-head-main {

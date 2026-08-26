@@ -31,6 +31,35 @@
   background: color-mix(in srgb, var(--ink, #0f172a) 9%, transparent);
 }
 
+/* 抽屉体：搜索 / 预览 / 配色区固定，仅图标网格滚动 */
+.lucide-picker-drawer .lucide-picker-body {
+  position: relative;
+  z-index: 1;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.lucide-picker-controls {
+  flex: none;
+  padding: 12px 16px 4px;
+}
+
+.lucide-picker-gridwrap {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 10px 16px 20px;
+  border-top: 1px solid color-mix(in srgb, var(--glass-edge) 70%, transparent);
+}
+
+html[data-theme="dark"] .lucide-picker-gridwrap {
+  border-top-color: rgba(255, 255, 255, 0.08);
+}
+
 .lucide-picker-upload-wrap {
   margin-bottom: 10px;
 }
