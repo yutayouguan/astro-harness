@@ -1,5 +1,9 @@
 node_modules/
 dist/
+storybook-static/
+test-results/
+playwright-report/
+blob-report/
 .DS_Store
 *.local
 .tsbuildinfo

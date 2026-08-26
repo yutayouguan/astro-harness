@@ -8,6 +8,11 @@
     "test": "node scripts/run-tests.mjs",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
+    "lint:css": "stylelint \"src/**/*.css\"",
+    "storybook": "storybook dev -p 6006",
+    "build-storybook": "storybook build",
+    "test:visual": "playwright test",
+    "test:visual:update": "playwright test --update-snapshots",
     "tauri": "tauri",
     "tauri:build": "tauri build",
     "tauri:build:arm": "tauri build --target aarch64-apple-darwin",
@@ -50,10 +55,15 @@
     "remark-gfm": "^4.0.1"
   },
   "devDependencies": {
+    "@playwright/test": "^1.62.1",
+    "@storybook/react-vite": "^10.5.10",
     "@tauri-apps/cli": "^2",
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",
     "@vitejs/plugin-react": "^4.3.4",
+    "http-server": "^14.1.1",
+    "storybook": "^10.5.10",
+    "stylelint": "^17.14.1",
     "typescript": "^5.6.3",
     "vite": "^5.4.11"
   }
