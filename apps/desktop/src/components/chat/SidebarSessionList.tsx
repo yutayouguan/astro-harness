@@ -5,7 +5,6 @@ import { createPortal } from "react-dom";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import {
-  ChevronDown,
   Download,
   Edit3,
   GitBranch,
@@ -17,6 +16,8 @@ import {
 import {
   Archive as ArchiveData,
   ArchiveRestore as ArchiveRestoreData,
+  ChevronDown as ChevronDownData,
+  ChevronUp as ChevronUpData,
   Pin as PinData,
   PinOff as PinOffData,
 } from "lucide";
@@ -420,9 +421,12 @@ export default function SidebarSessionList({
           className="sidebar-session-expand"
           onClick={() => setExpanded((v) => !v)}
         >
-          <ChevronDown
-            size={12} strokeWidth={2}
-            className={expanded ? "is-open" : ""}
+          <MorphToggleIcon
+            active={expanded}
+            activeIcon={ChevronUpData}
+            inactiveIcon={ChevronDownData}
+            size={12}
+            strokeWidth={2}
             aria-hidden
           />
           <span>

@@ -202,14 +202,6 @@
   flex: 0 0 13px;
 }
 
-.project-file-chevron {
-  transition: transform 0.14s ease;
-}
-
-.project-file-chevron.is-open {
-  transform: rotate(90deg);
-}
-
 .project-file-name {
   min-width: 0;
   flex: 1;
@@ -519,7 +511,6 @@ html[data-theme="dark"] .project-files-panel {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .project-file-chevron,
   .project-files-resizer::after {
     transition: none;
   }

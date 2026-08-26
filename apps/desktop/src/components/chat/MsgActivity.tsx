@@ -1,6 +1,10 @@
 /** 单条聊天活动卡：kind 图标 + 可折叠 IO / 生成媒体。 */
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { Activity, ChevronDown, Webhook } from "lucide-react";
+import { Activity, Webhook } from "lucide-react";
+import {
+  ChevronDown as ChevronDownData,
+  ChevronUp as ChevronUpData,
+} from "lucide";
 import { useI18n } from "../../i18n/LocaleContext";
 import { useLiveElapsedSec } from "../../hooks/chat/useLiveElapsedSec";
 import {
@@ -17,6 +21,7 @@ import type { ChatActivity, ChatActivityKind } from "../../types";
 import McpIcon from "../icons/McpIcon";
 import GeneratedMediaCard from "../media/GeneratedMediaCard";
 import { IconMemory, IconSkills, IconTools } from "../icons/NavIcons";
+import { MorphToggleIcon } from "../icons/MorphIcon";
 
 type Props = {
   activity: ChatActivity;
@@ -120,7 +125,10 @@ export default function MsgActivity({
             onClick={() => setOpen((v) => !v)}
           >
             {summary}
-            <ChevronDown
+            <MorphToggleIcon
+              active={open}
+              activeIcon={ChevronUpData}
+              inactiveIcon={ChevronDownData}
               size={14}
               strokeWidth={2}
               className="msg-activity-chevron"

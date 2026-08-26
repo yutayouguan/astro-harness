@@ -1,10 +1,15 @@
 /** 可折叠的 A2UI surface 卡头：非 HITL 的 present_* 工具结果用此包裹。 */
 
 import { useState } from "react";
-import { AlertCircle, BarChart3, CheckCircle, ChevronDown, Info, Music2 } from "lucide-react";
+import { AlertCircle, BarChart3, CheckCircle, Info, Music2 } from "lucide-react";
+import {
+  ChevronDown as ChevronDownData,
+  ChevronUp as ChevronUpData,
+} from "lucide";
 import type { UiSurface } from "../../types";
 import { collectComponents, parseOperations } from "../../a2ui/validate";
 import A2UIRenderer from "../../a2ui/A2UIRenderer";
+import { MorphToggleIcon } from "../icons/MorphIcon";
 
 type Props = {
   surface: UiSurface;
@@ -117,7 +122,10 @@ export default function A2UISurfaceCard({
                 {statusBadge.text}
               </span>
             ) : null}
-            <ChevronDown
+            <MorphToggleIcon
+              active={open}
+              activeIcon={ChevronUpData}
+              inactiveIcon={ChevronDownData}
               size={14}
               strokeWidth={2}
               className="msg-activity-chevron"

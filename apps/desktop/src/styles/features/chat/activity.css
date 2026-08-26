@@ -1235,11 +1235,6 @@ html[data-theme="dark"] .msg-activity-detail {
   flex-shrink: 0;
   margin-left: auto;
   color: var(--ink-mute);
-  transition: transform 0.15s ease;
-}
-
-.msg-activity.is-open .msg-activity-chevron {
-  transform: rotate(180deg);
 }
 
 .msg-activity-kind-icon {

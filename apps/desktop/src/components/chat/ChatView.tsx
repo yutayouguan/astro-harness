@@ -48,6 +48,8 @@ import {
 } from "lucide-react";
 import {
   Check as CheckData,
+  ChevronDown as ChevronDownData,
+  ChevronUp as ChevronUpData,
   Copy as CopyData,
   Mic as MicData,
   MicOff as MicOffData,
@@ -150,13 +152,12 @@ import {
   type SlashAction,
 } from "../../lib/chat/composerCommands";
 
-/** lucide 导出 ["svg", attrs, children]，morphicons 只接受 children 里的 [tag, attrs] 列表。 */
-const CHECK_ICON = CheckData[2] ?? [];
-const COPY_ICON = CopyData[2] ?? [];
-const MIC_ICON = MicData[2] ?? [];
-const MIC_OFF_ICON = MicOffData[2] ?? [];
-const PAUSE_ICON = PauseData[2] ?? [];
-const PLAY_ICON = PlayData[2] ?? [];
+const CHECK_ICON = CheckData;
+const COPY_ICON = CopyData;
+const MIC_ICON = MicData;
+const MIC_OFF_ICON = MicOffData;
+const PAUSE_ICON = PauseData;
+const PLAY_ICON = PlayData;
 
 /** 格式化 token/s 展示（整数不带小数） */
 function formatTokenSpeed(n: number): string {
@@ -2353,10 +2354,12 @@ export default function ChatView({
               aria-expanded={tasksOpen}
               onClick={() => setTasksOpen((o) => !o)}
             >
-              <ChevronDown
+              <MorphToggleIcon
+                active={tasksOpen}
+                activeIcon={ChevronUpData}
+                inactiveIcon={ChevronDownData}
                 size={14}
                 strokeWidth={2.2}
-                className={tasksOpen ? "is-open" : ""}
                 aria-hidden
               />
               <span>

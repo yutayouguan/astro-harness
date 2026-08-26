@@ -10,13 +10,16 @@ import {
 } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import {
-  ChevronRight,
   Folder,
   FolderOpen,
   PanelRightClose,
   RefreshCw,
   Search,
 } from "lucide-react";
+import {
+  ChevronDown as ChevronDownData,
+  ChevronRight as ChevronRightData,
+} from "lucide";
 import type { FileEntryDto } from "../../types";
 import type { ProjectFileWorkbench } from "../../hooks/chat/useProjectFileWorkbench";
 import { useAppDialog } from "../../hooks/ui/DialogContext";
@@ -24,6 +27,7 @@ import { useTransientToast } from "../../hooks/ui/useTransientToast";
 import { useI18n } from "../../i18n/LocaleContext";
 import FileContextMenu, { type FileMenuAction } from "../filespace/FileContextMenu";
 import FileTypeIcon from "../filespace/FileTypeIcon";
+import { MorphToggleIcon } from "../icons/MorphIcon";
 
 const WIDTH_KEY = "astro.projectFiles.width";
 const DEFAULT_WIDTH = 264;
@@ -79,8 +83,11 @@ function TreeRow({ entry, level, workbench, query, onContextMenu }: TreeRowProps
         title={entry.path}
       >
         {entry.is_dir ? (
-          <ChevronRight
-            className={`project-file-chevron${expanded ? " is-open" : ""}`}
+          <MorphToggleIcon
+            className="project-file-chevron"
+            active={expanded}
+            activeIcon={ChevronDownData}
+            inactiveIcon={ChevronRightData}
             size={14}
             aria-hidden
           />
