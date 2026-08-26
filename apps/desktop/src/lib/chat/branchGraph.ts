@@ -17,13 +17,14 @@ const Y_GAP = 168;
 
 function edgeClass(kind: BranchGraphNodeDto["edgeKind"]): string {
   if (kind === "fork") return "branch-edge is-fork";
+  if (kind === "side") return "branch-edge is-side";
   if (kind === "spawn") return "branch-edge is-spawn";
   return "branch-edge is-continuation";
 }
 
 /**
  * 把后端已消除共享前缀重复的谱系变成稳定的纵向轨道。
- * continuation 留在父轨，fork 向右展开，spawn 向左展开。
+ * continuation 留在父轨，持久 fork / 临时 side 向右展开，spawn 向左展开。
  */
 export function buildBranchFlow(graph: BranchGraphDto): BranchFlowModel {
   const source = new Map(graph.nodes.map((node) => [node.id, node]));
@@ -49,7 +50,7 @@ export function buildBranchFlow(graph: BranchGraphDto): BranchFlowModel {
     } else {
       place(parent.id, visiting);
       depth.set(id, (depth.get(parent.id) ?? 0) + 1);
-      if (node.edgeKind === "fork") {
+      if (node.edgeKind === "fork" || node.edgeKind === "side") {
         lane.set(id, nextForkLane++);
       } else if (node.edgeKind === "spawn") {
         lane.set(id, nextAgentLane--);

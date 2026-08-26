@@ -60,6 +60,7 @@ type Props = {
   /** 是否正在流式输出 */
   streaming?: boolean;
   onOpenSession: (sessionId: string) => void | Promise<void>;
+  onOpenSideSession: (sessionId: string) => void | Promise<void>;
   /** 在某轮之前分支后，把原始输入回填到输入框 */
   onPrefillInput?: (text: string) => void;
   onOpenMemory: () => void;
@@ -95,6 +96,7 @@ export default function ChatRightPanel({
   messages = [],
   streaming = false,
   onOpenSession,
+  onOpenSideSession,
   onPrefillInput,
   onOpenMemory,
   onOpenSkills,
@@ -362,6 +364,7 @@ export default function ChatRightPanel({
                 sessionId={sessionId}
                 streaming={streaming}
                 onOpenSession={onOpenSession}
+                onOpenSideSession={onOpenSideSession}
                 onPrefillInput={onPrefillInput}
               />
             )}

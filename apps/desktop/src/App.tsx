@@ -13,6 +13,7 @@ import { listen } from "@tauri-apps/api/event";
 
 import AboutDialog from "./components/ui/AboutDialog";
 import ChatRightPanel from "./components/chat/ChatRightPanel";
+import SideChatPanel from "./components/chat/SideChatPanel";
 import ProjectContextMenu from "./components/chat/ProjectContextMenu";
 import ProjectEditDialog from "./components/chat/ProjectEditDialog";
 import ProjectFolderIcon from "./components/chat/ProjectFolderIcon";
@@ -100,6 +101,7 @@ import {
   ArrowLeft,
   Archive,
   FolderTree,
+  MessageSquare,
   MoreHorizontal,
   Settings2,
   Sparkles,
@@ -259,6 +261,56 @@ export default function App() {
   );
   const projectFiles = useProjectFileWorkbench(activeProject, chat.generatingPreview);
   const [projectFilesWidth, setProjectFilesWidth] = useState(264);
+  const [sideSessionId, setSideSessionId] = useState<string | null>(null);
+  const [sideHostSessionId, setSideHostSessionId] = useState<string | null>(null);
+
+  const closeSideChat = useCallback(async () => {
+    const sideId = sideSessionId;
+    setSideSessionId(null);
+    setSideHostSessionId(null);
+    if (!sideId) return;
+    await invoke("discard_side_session", { sessionId: sideId }).catch((error) => {
+      console.warn("discard_side_session failed", error);
+    });
+  }, [sideSessionId]);
+
+  const startSideChat = useCallback(async () => {
+    if (!chat.sessionId || !activeProvider || chat.streaming || sideSessionId) return;
+    const keepChatBubbles = chat.messages.filter(
+      (message) => message.id !== "welcome",
+    ).length;
+    if (keepChatBubbles === 0) return;
+    try {
+      const id = await invoke<string>("fork_chat_session", {
+        sourceSessionId: chat.sessionId,
+        keepChatBubbles,
+        sourceMessageId: null,
+        boundary: "through_turn",
+        ephemeral: true,
+        excludeTurns: true,
+        newSessionId: null,
+      });
+      setSideSessionId(id);
+      setSideHostSessionId(chat.sessionId);
+      setChatRightOpen(false);
+    } catch (error) {
+      showTransientToast(String(error), { tone: "error" });
+    }
+  }, [
+    activeProvider,
+    chat.messages,
+    chat.sessionId,
+    chat.streaming,
+    setChatRightOpen,
+    showTransientToast,
+    sideSessionId,
+  ]);
+
+  useEffect(() => {
+    if (sideSessionId && sideHostSessionId && chat.sessionId !== sideHostSessionId) {
+      void closeSideChat();
+    }
+  }, [chat.sessionId, closeSideChat, sideHostSessionId, sideSessionId]);
   const switchActiveProject = useCallback(
     (projectId: string) => {
       if (projectId === activeProjectId) return true;
@@ -1238,6 +1290,19 @@ export default function App() {
                     </button>
                     <button
                       type="button"
+                      className={`header-icon-btn ${sideSessionId ? "is-active" : ""}`}
+                      onClick={() =>
+                        void (sideSessionId ? closeSideChat() : startSideChat())
+                      }
+                      title={sideSessionId ? t("chat.side.close") : t("chat.side.open")}
+                      aria-label={sideSessionId ? t("chat.side.close") : t("chat.side.open")}
+                      aria-pressed={!!sideSessionId}
+                      disabled={!sideSessionId && (!chat.sessionId || chat.streaming)}
+                    >
+                      <MessageSquare width={16} height={16} />
+                    </button>
+                    <button
+                      type="button"
                       className={`header-icon-btn ${chat.chatRightOpen ? "is-active" : ""}`}
                       onClick={() => setChatRightOpen((open) => !open)}
                       title={t("chat.rightPanel.toggle")}
@@ -1257,6 +1322,32 @@ export default function App() {
                   } as CSSProperties}
                 >
                   <div className="chat-main">
+                    {chat.sessionEphemeral && (
+                      <div className="chat-side-banner" role="status">
+                        <span className="chat-side-mark" aria-hidden>
+                          <MessageSquare size={14} />
+                        </span>
+                        <div>
+                          <strong>{t("chat.side.banner")}</strong>
+                          <span>
+                            {t("chat.side.hiddenTurns", {
+                              count: String(chat.sideExcludedTurnCount),
+                            })}
+                          </span>
+                        </div>
+                        {chat.sideParentSessionId && (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              void openSessionFromFilespace(chat.sideParentSessionId!)
+                            }
+                          >
+                            <ArrowLeft size={13} aria-hidden />
+                            {t("chat.side.exit")}
+                          </button>
+                        )}
+                      </div>
+                    )}
                     <ChatView
                       sessionId={chat.sessionId}
                       messages={chat.messages}
@@ -1347,7 +1438,15 @@ export default function App() {
                       onWidthChange={setProjectFilesWidth}
                     />
                   ) : null}
-                  {chat.chatRightOpen && (
+                  {sideSessionId && activeProvider && (
+                    <SideChatPanel
+                      sessionId={sideSessionId}
+                      provider={activeProvider}
+                      interactionMode={chatMode}
+                      onClose={closeSideChat}
+                    />
+                  )}
+                  {chat.chatRightOpen && !sideSessionId && (
                     <ChatRightPanel
                       tab={chat.chatRightTab}
                       onTabChange={setChatRightTab}
@@ -1360,6 +1459,11 @@ export default function App() {
                       messages={chat.messages}
                       streaming={chat.streaming}
                       onOpenSession={(sessionId) => openSessionFromFilespace(sessionId)}
+                      onOpenSideSession={(sessionId) => {
+                        setSideSessionId(sessionId);
+                        setSideHostSessionId(chat.sessionId);
+                        setChatRightOpen(false);
+                      }}
                       onPrefillInput={setInput}
                       onOpenMemory={() => openSettingsTab("memory")}
                       onOpenSkills={() => setNav("skills")}

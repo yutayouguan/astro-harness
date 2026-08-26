@@ -27,6 +27,8 @@ pub async fn fork_rollout(
     source_thread_id: &str,
     new_thread_id: &str,
     keep_user_turns: usize,
+    ephemeral: bool,
+    exclude_turns: bool,
     now: DateTime<Utc>,
 ) -> io::Result<Option<ForkedRollout>> {
     if source_thread_id == new_thread_id {
@@ -62,12 +64,20 @@ pub async fn fork_rollout(
             new_thread_id,
             source_thread_id,
             keep_user_turns,
+            ephemeral,
+            exclude_turns,
         ));
     }
     if !has_meta {
         prefix.insert(
             0,
-            RolloutItem::SessionMeta(fork_meta(new_thread_id, source_thread_id, keep_user_turns)),
+            RolloutItem::SessionMeta(fork_meta(
+                new_thread_id,
+                source_thread_id,
+                keep_user_turns,
+                ephemeral,
+                exclude_turns,
+            )),
         );
     }
 
@@ -98,6 +108,8 @@ fn retarget(
     new_thread_id: &str,
     source_thread_id: &str,
     keep_user_turns: usize,
+    ephemeral: bool,
+    exclude_turns: bool,
 ) -> RolloutItem {
     let RolloutItem::SessionMeta(mut meta) = item else {
         return item;
@@ -115,6 +127,8 @@ fn retarget(
                 "user_turns": keep_user_turns,
             }),
         );
+        object.insert("ephemeral".into(), ephemeral.into());
+        object.insert("exclude_turns".into(), exclude_turns.into());
     }
     RolloutItem::SessionMeta(meta)
 }
@@ -123,6 +137,8 @@ fn fork_meta(
     new_thread_id: &str,
     source_thread_id: &str,
     keep_user_turns: usize,
+    ephemeral: bool,
+    exclude_turns: bool,
 ) -> serde_json::Value {
     serde_json::json!({
         "thread_id": new_thread_id,
@@ -130,6 +146,8 @@ fn fork_meta(
             "thread_id": source_thread_id,
             "user_turns": keep_user_turns,
         },
+        "ephemeral": ephemeral,
+        "exclude_turns": exclude_turns,
     })
 }
 
@@ -171,7 +189,7 @@ mod tests {
             .await
             .unwrap();
 
-        let forked = fork_rollout(temp.path(), "source", "branch", 1, now())
+        let forked = fork_rollout(temp.path(), "source", "branch", 1, true, true, now())
             .await
             .unwrap()
             .unwrap();
@@ -183,6 +201,8 @@ mod tests {
         };
         assert_eq!(meta["thread_id"], "branch");
         assert_eq!(meta["forked_from"]["thread_id"], "source");
+        assert_eq!(meta["ephemeral"], true);
+        assert_eq!(meta["exclude_turns"], true);
         assert_eq!(
             items[1..]
                 .iter()
@@ -207,7 +227,7 @@ mod tests {
     #[tokio::test]
     async fn fork_without_source_history_is_not_an_error() {
         let temp = TempDir::new().unwrap();
-        assert!(fork_rollout(temp.path(), "missing", "branch", 3, now())
+        assert!(fork_rollout(temp.path(), "missing", "branch", 3, false, false, now())
             .await
             .unwrap()
             .is_none());
@@ -218,12 +238,12 @@ mod tests {
     async fn fork_refuses_to_overwrite_an_existing_target_history() {
         let temp = TempDir::new().unwrap();
         seed_source(temp.path()).await;
-        fork_rollout(temp.path(), "source", "branch", 2, now())
+        fork_rollout(temp.path(), "source", "branch", 2, false, false, now())
             .await
             .unwrap()
             .unwrap();
 
-        let error = fork_rollout(temp.path(), "source", "branch", 2, now())
+        let error = fork_rollout(temp.path(), "source", "branch", 2, false, false, now())
             .await
             .unwrap_err();
         assert_eq!(error.kind(), std::io::ErrorKind::AlreadyExists);

@@ -263,6 +263,7 @@ pub fn run() {
             commands::session::pin_session,
             commands::session::unpin_session,
             commands::session::delete_session_permanently,
+            commands::session::discard_side_session,
             commands::branches::get_chat_branch_graph,
             // — projects —
             commands::common::get_default_workspace_path,
@@ -488,6 +489,13 @@ pub fn run() {
             infra::ip_location::infer_ip_location,
         ])
         .setup(|app| {
+            match commands::session::cleanup_stale_side_sessions() {
+                Ok(count) if count > 0 => {
+                    tracing::info!(count, "cleaned stale ephemeral side sessions");
+                }
+                Ok(_) => {}
+                Err(err) => tracing::warn!("side session cleanup failed: {err}"),
+            }
             if let Err(err) = memory::ensure_default_workspace() {
                 tracing::warn!("workspace bootstrap failed: {err}");
             }

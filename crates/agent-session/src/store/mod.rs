@@ -160,6 +160,8 @@ pub struct StoredSession {
 pub enum BranchKind {
     Fork,
     Agent,
+    /// 临时旁路会话：继承模型历史，但 UI 从分叉边界后开始显示。
+    Side,
 }
 
 impl BranchKind {
@@ -167,6 +169,7 @@ impl BranchKind {
         match self {
             Self::Fork => "fork",
             Self::Agent => "agent",
+            Self::Side => "side",
         }
     }
 }

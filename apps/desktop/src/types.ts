@@ -189,6 +189,11 @@ export type ChatHistoryDto = {
   endReason?: string | null;
   /** 结束时间（epoch 秒）；未结束为 null */
   endedAt?: number | null;
+  /** 临时 Side 会话；离开时自动丢弃 */
+  ephemeral?: boolean;
+  parentSessionId?: string | null;
+  /** UI 隐藏、但模型仍继承的 turn 数 */
+  excludedTurnCount?: number;
 };
 
 /** 聊天后备链条目（写入 providers.json） */
@@ -817,7 +822,7 @@ export type BranchGraphNodeDto = {
   kind: "turn" | "branchHead" | "agent";
   sessionId: string;
   parentId: string | null;
-  edgeKind: "continuation" | "fork" | "spawn" | null;
+  edgeKind: "continuation" | "fork" | "side" | "spawn" | null;
   title: string;
   preview: string;
   status: string;
@@ -828,6 +833,7 @@ export type BranchGraphNodeDto = {
   agentPath: string | null;
   isCurrent: boolean;
   canFork: boolean;
+  isEphemeral: boolean;
   /** turn 节点的完整用户输入；用于在此轮前分支时回填输入框 */
   userMessage?: string | null;
 };
@@ -840,6 +846,7 @@ export type BranchGraphDto = {
   branchCount: number;
   turnCount: number;
   agentCount: number;
+  sideCount: number;
 };
 
 /** 后端持久化的项目实体 */

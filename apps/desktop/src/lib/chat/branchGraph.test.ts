@@ -25,6 +25,7 @@ function node(
     agentPath: null,
     isCurrent: false,
     canFork: kind === "turn",
+    isEphemeral: edgeKind === "side",
   };
 }
 
@@ -36,6 +37,7 @@ function graph(nodes: BranchGraphNodeDto[]): BranchGraphDto {
     branchCount: 0,
     turnCount: nodes.filter((item) => item.kind === "turn").length,
     agentCount: nodes.filter((item) => item.kind === "agent").length,
+    sideCount: nodes.filter((item) => item.isEphemeral).length,
   };
 }
 
@@ -61,6 +63,15 @@ test("chat forks and agent spawns use separate sides and edge classes", () => {
   assert.ok(positions.agent < 0);
   assert.match(flow.edges.find((edge) => edge.target === "fork")?.className ?? "", /is-fork/);
   assert.match(flow.edges.find((edge) => edge.target === "agent")?.className ?? "", /is-spawn/);
+});
+
+test("ephemeral side conversations get a dedicated edge class", () => {
+  const flow = buildBranchFlow(graph([
+    node("root", null, null),
+    node("side", "root", "side", "branchHead"),
+  ]));
+  assert.match(flow.edges[0]?.className ?? "", /is-side/);
+  assert.ok((flow.nodes.find((item) => item.id === "side")?.position.x ?? 0) > 0);
 });
 
 test("cycles degrade to a finite layout", () => {

@@ -2,12 +2,283 @@
   --branch-rail: color-mix(in srgb, var(--text-secondary) 38%, transparent);
   --branch-current: var(--tone, #16a34a);
   --branch-agent: #3b82f6;
+  --branch-side: #8b5cf6;
   display: grid;
   grid-template-rows: auto auto minmax(0, 1fr) auto;
   width: 100%;
   height: 100%;
   min-height: 0;
   color: var(--text-primary);
+}
+
+.chat-side-banner {
+  --side-ink: #8b5cf6;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  padding: 6px 10px;
+  border-bottom: 1px dashed color-mix(in srgb, var(--side-ink) 42%, var(--border-subtle));
+  color: var(--text-secondary);
+  background: color-mix(in srgb, var(--side-ink) 7%, var(--bg-primary));
+}
+
+.chat-side-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 25px;
+  height: 25px;
+  flex: 0 0 auto;
+  border-radius: 7px;
+  color: var(--side-ink);
+  background: color-mix(in srgb, var(--side-ink) 11%, transparent);
+}
+
+.chat-side-banner > div {
+  display: grid;
+  min-width: 0;
+  gap: 1px;
+}
+
+.chat-side-banner strong {
+  color: var(--side-ink);
+  font-size: 10.5px;
+  font-weight: 650;
+}
+
+.chat-side-banner > div > span {
+  overflow: hidden;
+  color: var(--text-tertiary);
+  font-size: 9.5px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.chat-side-banner button {
+  display: inline-flex;
+  align-items: center;
+  height: 27px;
+  margin-left: auto;
+  gap: 5px;
+  padding: 0 8px;
+  flex: 0 0 auto;
+  border: 1px solid color-mix(in srgb, var(--side-ink) 34%, var(--border-subtle));
+  border-radius: 7px;
+  color: var(--side-ink);
+  background: var(--control-bg, var(--bg-primary));
+  font-size: 9.5px;
+}
+
+.chat-side-banner button:hover {
+  background: color-mix(in srgb, var(--side-ink) 10%, var(--control-bg, var(--bg-primary)));
+}
+
+.chat-side-banner button:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--side-ink) 58%, transparent);
+  outline-offset: 2px;
+}
+
+.side-chat-panel {
+  --side-ink: #8b5cf6;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  width: clamp(320px, 34vw, 440px);
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  border-left: 1px solid var(--border-subtle);
+  background: var(--bg-primary);
+}
+
+.side-chat-panel > header {
+  display: flex;
+  align-items: center;
+  min-height: 48px;
+  gap: 8px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.side-chat-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 27px;
+  height: 27px;
+  flex: 0 0 auto;
+  border-radius: 7px;
+  color: var(--side-ink);
+  background: color-mix(in srgb, var(--side-ink) 11%, transparent);
+}
+
+.side-chat-panel > header > div {
+  display: grid;
+  min-width: 0;
+  gap: 1px;
+}
+
+.side-chat-panel > header strong {
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.side-chat-panel > header span:not(.side-chat-icon) {
+  overflow: hidden;
+  color: var(--text-tertiary);
+  font-size: 9px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.side-chat-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  margin-left: auto;
+  border: 0;
+  border-radius: 7px;
+  color: var(--text-tertiary);
+  background: transparent;
+}
+
+.side-chat-close:hover {
+  color: var(--text-primary);
+  background: var(--hover-bg);
+}
+
+.side-chat-messages {
+  display: flex;
+  min-height: 0;
+  overflow-y: auto;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 12px;
+}
+
+.side-chat-empty {
+  display: flex;
+  min-height: 100%;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 6px;
+  color: var(--text-tertiary);
+  text-align: center;
+}
+
+.side-chat-empty svg { color: var(--side-ink); opacity: 0.72; }
+.side-chat-empty strong { color: var(--text-secondary); font-size: 12px; }
+.side-chat-empty span { max-width: 240px; font-size: 10px; line-height: 1.5; }
+
+.side-chat-message {
+  width: fit-content;
+  max-width: 92%;
+  padding: 8px 10px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  color: var(--text-primary);
+  background: var(--bg-elevated, var(--bg-primary));
+  font-size: 11px;
+}
+
+.side-chat-message.is-user {
+  align-self: flex-end;
+  border-color: color-mix(in srgb, var(--side-ink) 25%, var(--border-subtle));
+  background: color-mix(in srgb, var(--side-ink) 8%, var(--bg-primary));
+}
+
+.side-chat-message.is-assistant { align-self: flex-start; }
+.side-chat-message.is-error { border-color: color-mix(in srgb, var(--status-error) 35%, var(--border-subtle)); }
+.side-chat-message .markdown-body { font-size: 11px; line-height: 1.55; }
+
+.side-chat-message details {
+  margin-bottom: 6px;
+  color: var(--text-tertiary);
+  font-size: 9px;
+}
+
+.side-chat-message details p {
+  max-height: 120px;
+  margin: 5px 0 0;
+  overflow: auto;
+  white-space: pre-wrap;
+}
+
+.side-chat-tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: 6px;
+}
+
+.side-chat-tools span {
+  padding: 2px 5px;
+  border-radius: 5px;
+  color: var(--side-ink);
+  background: color-mix(in srgb, var(--side-ink) 9%, transparent);
+  font: 9px/1.35 var(--font-mono, monospace);
+}
+
+.side-chat-error {
+  color: var(--status-error);
+  font-size: 10px;
+}
+
+.side-chat-panel > footer {
+  position: relative;
+  padding: 9px 10px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.side-chat-panel textarea {
+  width: 100%;
+  min-height: 66px;
+  max-height: 160px;
+  padding: 9px 38px 9px 10px;
+  resize: vertical;
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  outline: none;
+  color: var(--text-primary);
+  background: var(--control-bg, var(--bg-secondary));
+  font: inherit;
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.side-chat-panel textarea:focus {
+  border-color: color-mix(in srgb, var(--side-ink) 48%, var(--border-subtle));
+}
+
+.side-chat-send {
+  position: absolute;
+  right: 17px;
+  bottom: 17px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 27px;
+  height: 27px;
+  border: 0;
+  border-radius: 50%;
+  color: white;
+  background: var(--side-ink);
+}
+
+.side-chat-send:disabled { opacity: 0.38; }
+.side-chat-spinner { position: absolute; left: 16px; bottom: 18px; color: var(--side-ink); }
+
+@media (max-width: 900px) {
+  .side-chat-panel {
+    position: absolute;
+    inset: 0 0 0 auto;
+    z-index: 20;
+    width: min(88vw, 420px);
+    box-shadow: -16px 0 44px color-mix(in srgb, #000 18%, transparent);
+  }
 }
 
 .branch-graph-panel.is-fullscreen {
@@ -119,6 +390,9 @@
 .branch-graph-legend i.is-agent {
   background: repeating-linear-gradient(90deg, var(--branch-agent) 0 2px, transparent 2px 5px);
 }
+.branch-graph-legend i.is-side {
+  background: repeating-linear-gradient(90deg, var(--branch-side) 0 5px, transparent 5px 8px);
+}
 
 .branch-graph-canvas {
   position: relative;
@@ -187,6 +461,11 @@
   border-color: color-mix(in srgb, var(--branch-agent) 40%, var(--border-primary));
 }
 
+.branch-graph-node.is-ephemeral {
+  border-color: color-mix(in srgb, var(--branch-side) 52%, var(--border-primary));
+  border-style: dashed;
+}
+
 .branch-graph-node.is-branchHead {
   min-height: 82px;
   border-style: dashed;
@@ -223,6 +502,11 @@
 .is-agent .branch-node-kind {
   color: var(--branch-agent);
   background: color-mix(in srgb, var(--branch-agent) 10%, transparent);
+}
+
+.is-ephemeral .branch-node-kind {
+  color: var(--branch-side);
+  background: color-mix(in srgb, var(--branch-side) 10%, transparent);
 }
 
 .branch-node-current {
@@ -274,6 +558,7 @@
 .branch-node-status.is-current { color: var(--branch-current); }
 .branch-node-status.is-running,
 .branch-node-status.is-pending_init { color: var(--status-warning, #d97706); }
+.branch-node-status.is-ephemeral { color: var(--branch-side); }
 .branch-node-status.is-errored,
 .branch-node-status.is-failed { color: var(--status-error, #dc2626); }
 
@@ -297,6 +582,11 @@
 .branch-graph-panel .branch-edge.is-spawn .react-flow__edge-path {
   stroke: var(--branch-agent);
   stroke-dasharray: 2 4;
+}
+
+.branch-graph-panel .branch-edge.is-side .react-flow__edge-path {
+  stroke: var(--branch-side);
+  stroke-dasharray: 8 4 2 4;
 }
 
 .branch-graph-panel .react-flow__controls {
@@ -342,6 +632,10 @@
 .branch-graph-inspector button.is-primary {
   border-color: color-mix(in srgb, var(--branch-current) 44%, var(--border-subtle));
   color: var(--branch-current);
+}
+.branch-graph-inspector button.is-side {
+  border-color: color-mix(in srgb, var(--branch-side) 42%, var(--border-subtle));
+  color: var(--branch-side);
 }
 .branch-graph-inspector button:disabled {
   cursor: not-allowed;

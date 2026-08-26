@@ -16,6 +16,7 @@ import {
   GitBranch,
   Loader2,
   Maximize2,
+  MessageSquare,
   Minimize2,
   Pencil,
   RefreshCw,
@@ -35,17 +36,21 @@ type Props = {
   sessionId: string | null;
   streaming: boolean;
   onOpenSession: (sessionId: string) => void | Promise<void>;
+  onOpenSideSession: (sessionId: string) => void | Promise<void>;
   onPrefillInput?: (text: string) => void;
 };
 
 /** Codex `last_turn_id` / `before_turn_id` 两种分叉边界。 */
 type ForkBoundary = "through_turn" | "before_turn";
+type ForkOperation = ForkBoundary | "side";
 
 function BranchNode({ data, selected }: NodeProps<BranchFlowNode>) {
   const { t } = useI18n();
   const node = data.node;
   const preview = node.preview || (node.kind === "branchHead"
-    ? node.status === "legacy"
+    ? node.isEphemeral
+      ? t("chat.branches.sideReady")
+      : node.status === "legacy"
       ? t("chat.branches.legacyBoundary")
       : t("chat.branches.branchReady")
     : "");
@@ -54,6 +59,7 @@ function BranchNode({ data, selected }: NodeProps<BranchFlowNode>) {
       className={[
         "branch-graph-node",
         `is-${node.kind}`,
+        node.isEphemeral ? "is-ephemeral" : "",
         node.isCurrent ? "is-current" : "",
         selected ? "is-selected" : "",
       ].filter(Boolean).join(" ")}
@@ -61,7 +67,13 @@ function BranchNode({ data, selected }: NodeProps<BranchFlowNode>) {
       <Handle type="target" position={Position.Top} />
       <div className="branch-node-heading">
         <span className="branch-node-kind" aria-hidden>
-          {node.kind === "agent" ? <Bot size={12} /> : node.kind === "branchHead" ? <GitBranch size={12} /> : <Route size={12} />}
+          {node.kind === "agent"
+            ? <Bot size={12} />
+            : node.isEphemeral
+              ? <MessageSquare size={12} />
+              : node.kind === "branchHead"
+                ? <GitBranch size={12} />
+                : <Route size={12} />}
         </span>
         <strong>{node.title}</strong>
         {node.isCurrent && <span className="branch-node-current">{t("chat.branches.current")}</span>}
@@ -83,13 +95,14 @@ export default function BranchGraphPanel({
   sessionId,
   streaming,
   onOpenSession,
+  onOpenSideSession,
   onPrefillInput,
 }: Props) {
   const { t } = useI18n();
   const [graph, setGraph] = useState<BranchGraphDto | null>(null);
   const [selected, setSelected] = useState<BranchGraphNodeDto | null>(null);
   const [loading, setLoading] = useState(false);
-  const [forking, setForking] = useState<ForkBoundary | null>(null);
+  const [forking, setForking] = useState<ForkOperation | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [fullscreen, setFullscreen] = useState(false);
   const [showAgents, setShowAgents] = useState(true);
@@ -141,23 +154,30 @@ export default function BranchGraphPanel({
   );
 
   const forkSelected = useCallback(
-    async (boundary: ForkBoundary) => {
+    async (operation: ForkOperation) => {
       if (!selected || selected.kind !== "turn" || forking) return;
-      if (boundary === "through_turn" && !selected.canFork) return;
-      setForking(boundary);
+      if (operation !== "before_turn" && !selected.canFork) return;
+      setForking(operation);
       setError(null);
       try {
+        const ephemeral = operation === "side";
+        const boundary: ForkBoundary =
+          operation === "before_turn" ? "before_turn" : "through_turn";
         const newId = await invoke<string>("fork_chat_session", {
           sourceSessionId: selected.sessionId,
           sourceMessageId: selected.sourceMessageId,
           boundary,
+          ephemeral,
+          excludeTurns: ephemeral,
           keepChatBubbles: null,
           newSessionId: null,
         });
         dispatchSessionsChanged();
-        await onOpenSession(newId);
+        await (operation === "side"
+          ? onOpenSideSession(newId)
+          : onOpenSession(newId));
         // before_turn 会把这轮输入留在新分支之外，回填让用户直接改写重发。
-        if (boundary === "before_turn" && selected.userMessage) {
+        if (operation === "before_turn" && selected.userMessage) {
           onPrefillInput?.(selected.userMessage);
         }
         setFullscreen(false);
@@ -167,7 +187,7 @@ export default function BranchGraphPanel({
         setForking(null);
       }
     },
-    [forking, onOpenSession, onPrefillInput, selected],
+    [forking, onOpenSession, onOpenSideSession, onPrefillInput, selected],
   );
 
   const canvas = (
@@ -178,6 +198,7 @@ export default function BranchGraphPanel({
           <span>
             {t("chat.branches.summary", {
               branches: String(graph?.branchCount ?? 0),
+              sides: String(graph?.sideCount ?? 0),
               turns: String(graph?.turnCount ?? 0),
               agents: String(graph?.agentCount ?? 0),
             })}
@@ -214,6 +235,7 @@ export default function BranchGraphPanel({
       <div className="branch-graph-legend" aria-label={t("chat.branches.legend")}>
         <span><i className="is-current" />{t("chat.branches.current")}</span>
         <span><i className="is-fork" />{t("chat.branches.fork")}</span>
+        <span><i className="is-side" />{t("chat.branches.side")}</span>
         <span><i className="is-agent" />{t("chat.branches.agent")}</span>
       </div>
 
@@ -253,7 +275,14 @@ export default function BranchGraphPanel({
           </div>
           <div>
             {selected.kind !== "agent" && selected.sessionId !== sessionId && (
-              <button type="button" onClick={() => void onOpenSession(selected.sessionId)}>
+              <button
+                type="button"
+                onClick={() => void (
+                  selected.isEphemeral
+                    ? onOpenSideSession(selected.sessionId)
+                    : onOpenSession(selected.sessionId)
+                )}
+              >
                 <ExternalLink size={13} aria-hidden />{t("chat.branches.openSession")}
               </button>
             )}
@@ -269,6 +298,18 @@ export default function BranchGraphPanel({
                     ? <Loader2 size={13} className="is-spinning" aria-hidden />
                     : <Pencil size={13} aria-hidden />}
                   {t("chat.branches.branchBefore")}
+                </button>
+                <button
+                  type="button"
+                  className="is-side"
+                  disabled={!selected.canFork || streaming || forking !== null}
+                  title={t("chat.branches.sideHint")}
+                  onClick={() => void forkSelected("side")}
+                >
+                  {forking === "side"
+                    ? <Loader2 size={13} className="is-spinning" aria-hidden />
+                    : <MessageSquare size={13} aria-hidden />}
+                  {t("chat.branches.startSide")}
                 </button>
                 <button
                   type="button"

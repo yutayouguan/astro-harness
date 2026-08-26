@@ -36,6 +36,7 @@ import {
   persistAfterEditTruncate,
   saveChatSession,
   saveContextUsageForSession,
+  saveEphemeralSessionMeta,
 } from "../../lib/chat/chatSessionStore";
 import { mapHistoryMessages } from "../../lib/chat/mapHistoryMessages";
 import { MSG_DISSOLVE_MS } from "../../components/chat/MsgDissolveOverlay";
@@ -155,6 +156,15 @@ export function useChatSession({
   const [sessionId, setSessionId] = useState<string | null>(
     () => loadChatSession()?.sessionId ?? null,
   );
+  const [sideParentSessionId, setSideParentSessionId] = useState<string | null>(
+    () => loadChatSession()?.parentSessionId ?? null,
+  );
+  const [sideExcludedTurnCount, setSideExcludedTurnCount] = useState(
+    () => loadChatSession()?.excludedTurnCount ?? 0,
+  );
+  const [sessionEphemeral, setSessionEphemeral] = useState(
+    () => loadChatSession()?.ephemeral ?? false,
+  );
   const [sessionPendingInterrupts, setSessionPendingInterrupts] = useState<PendingInterrupt[]>(
     () => loadChatSession()?.pendingInterrupts ?? [],
   );
@@ -177,6 +187,21 @@ export function useChatSession({
   });
   const [chatRightTab, setChatRightTab] = useState<ChatRightTab>("agent");
   const confirm = useConfirm();
+
+  useEffect(() => {
+    if (!sessionEphemeral || !sessionId || isWelcomeOnly(messages)) return;
+    saveEphemeralSessionMeta(
+      sessionId,
+      sideParentSessionId,
+      sideExcludedTurnCount,
+    );
+  }, [
+    messages,
+    sessionEphemeral,
+    sessionId,
+    sideParentSessionId,
+    sideExcludedTurnCount,
+  ]);
 
   // ── 生成中文件实时预览 ──────────────────────────────────────────────────────
   const { preview: generatingPreview, api: generatingPreviewApi } =
@@ -885,12 +910,24 @@ export function useChatSession({
           limit: 1,
         })
           .then((h) => {
+            setSessionEphemeral(!!h.ephemeral);
+            setSideParentSessionId(h.ephemeral ? h.parentSessionId ?? null : null);
+            setSideExcludedTurnCount(h.ephemeral ? h.excludedTurnCount ?? 0 : 0);
             if (h.endReason) {
               setSessionReadOnly(true);
               setSessionEndReason(h.endReason);
             }
           })
-          .catch(() => {});
+          .catch(() => {
+            if (!stored.ephemeral) return;
+            clearChatSession();
+            setMessages([]);
+            setSessionId(null);
+            setSessionEphemeral(false);
+            setSideParentSessionId(null);
+            setSideExcludedTurnCount(0);
+            setEmptyMode("chat");
+          });
       }
       return;
     }
@@ -904,10 +941,35 @@ export function useChatSession({
       const restored = mapHistoryMessages(history.messages);
       if (restored.length === 0) return;
       applyRestoredHistory(history.sessionId, restored, [], history.endReason);
+      setSessionEphemeral(!!history.ephemeral);
+      setSideParentSessionId(history.ephemeral ? history.parentSessionId ?? null : null);
+      setSideExcludedTurnCount(history.ephemeral ? history.excludedTurnCount ?? 0 : 0);
+      if (history.ephemeral && history.sessionId) {
+        saveEphemeralSessionMeta(
+          history.sessionId,
+          history.parentSessionId,
+          history.excludedTurnCount ?? 0,
+        );
+      }
     } catch {
       // keep welcome page if backend unavailable
     }
   }, [applyRestoredHistory, messages, sessionId, streaming]);
+
+  const discardCurrentSide = useCallback(
+    async (nextSessionId?: string | null) => {
+      if (!sessionEphemeral || !sessionId || nextSessionId === sessionId) return;
+      try {
+        await invoke("discard_side_session", { sessionId });
+      } catch (error) {
+        console.warn("discard_side_session failed", error);
+      }
+      setSessionEphemeral(false);
+      setSideParentSessionId(null);
+      setSideExcludedTurnCount(0);
+    },
+    [sessionEphemeral, sessionId],
+  );
 
   const clearLocalChatSurface = useCallback(() => {
     unlistenRef.current?.();
@@ -916,6 +978,9 @@ export function useChatSession({
     clearChatSession();
     pendingKeepChatBubblesRef.current = null;
     setSessionId(null);
+    setSessionEphemeral(false);
+    setSideParentSessionId(null);
+    setSideExcludedTurnCount(0);
     setAttachments((prev) => {
       for (const a of prev) {
         if (a.previewUrl) URL.revokeObjectURL(a.previewUrl);
@@ -1619,13 +1684,20 @@ export function useChatSession({
   // ── Reset / New session ───────────────────────────────────────────────────
   const resetChatSurface = useCallback(() => {
     const sid = sessionId;
-    if (sid && typeof window !== "undefined" && "__TAURI_INTERNALS__" in window) {
+    if (sessionEphemeral && sid) {
+      void discardCurrentSide(null);
+    } else if (sid && typeof window !== "undefined" && "__TAURI_INTERNALS__" in window) {
       void invoke("chat_control", { sessionId: sid, action: "new_chat" }).catch(
         (e) => console.warn("chat_control new_chat failed", e),
       );
     }
     clearLocalChatSurface();
-  }, [sessionId, clearLocalChatSurface]);
+  }, [
+    sessionId,
+    sessionEphemeral,
+    discardCurrentSide,
+    clearLocalChatSurface,
+  ]);
 
   const confirmIfStreaming = useCallback(async () => {
     if (!streaming && !turnInFlight) return true;
@@ -1676,6 +1748,7 @@ export function useChatSession({
   const openSessionFromFilespace = useCallback(
     async (targetSessionId: string, messageId?: string | null) => {
       try {
+        await discardCurrentSide(targetSessionId);
         resetSchedulingSurface();
         const hist = await invoke<ChatHistoryDto>("get_chat_history", {
           sessionId: targetSessionId,
@@ -1683,16 +1756,27 @@ export function useChatSession({
         });
         const restored = mapHistoryMessages(hist.messages ?? []);
         const endReason = hist.endReason ?? null;
+        const resolvedSessionId = hist.sessionId ?? targetSessionId;
         if (restored.length > 0) {
-          applyRestoredHistory(hist.sessionId ?? targetSessionId, restored, [], endReason);
+          applyRestoredHistory(resolvedSessionId, restored, [], endReason);
         } else {
           currentRunIdRef.current = null;
           setCurrentTurnId(null);
-          setSessionId(hist.sessionId ?? targetSessionId);
+          setSessionId(resolvedSessionId);
           setSessionReadOnly(!!endReason);
           setSessionEndReason(endReason);
-          const usage = loadContextUsageForSession(hist.sessionId ?? targetSessionId);
+          const usage = loadContextUsageForSession(resolvedSessionId);
           setContextUsage(usage);
+        }
+        setSessionEphemeral(!!hist.ephemeral);
+        setSideParentSessionId(hist.ephemeral ? hist.parentSessionId ?? null : null);
+        setSideExcludedTurnCount(hist.ephemeral ? hist.excludedTurnCount ?? 0 : 0);
+        if (hist.ephemeral) {
+          saveEphemeralSessionMeta(
+            resolvedSessionId,
+            hist.parentSessionId,
+            hist.excludedTurnCount ?? 0,
+          );
         }
         const canFocus = !!messageId && restored.some((m) => m.id === messageId);
         setFocusMessageId(canFocus ? messageId! : null);
@@ -1704,7 +1788,13 @@ export function useChatSession({
         setStatusDetail(String(e));
       }
     },
-    [applyRestoredHistory, currentRunIdRef, setNav, resetSchedulingSurface],
+    [
+      applyRestoredHistory,
+      currentRunIdRef,
+      setNav,
+      resetSchedulingSurface,
+      discardCurrentSide,
+    ],
   );
 
   // ── Attach artifacts ──────────────────────────────────────────────────────
@@ -1818,6 +1908,9 @@ export function useChatSession({
     tokenUsage,
     contextUsage,
     sessionId,
+    sessionEphemeral,
+    sideParentSessionId,
+    sideExcludedTurnCount,
     sessionPendingInterrupts,
     sessionReadOnly,
     sessionEndReason,

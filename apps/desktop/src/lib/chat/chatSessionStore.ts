@@ -63,6 +63,9 @@ export type StoredChatSession = {
   pendingInterrupts?: PendingInterrupt[];
   /** 最近一次后端 context_usage 快照（真实窗口与分层占用） */
   contextUsage?: ContextUsageSnapshot;
+  ephemeral?: boolean;
+  parentSessionId?: string;
+  excludedTurnCount?: number;
   updatedAt: number;
 };
 
@@ -170,6 +173,10 @@ export function saveChatSession(
       pendingInterrupts:
         pendingInterrupts.length > 0 ? pendingInterrupts : undefined,
       contextUsage: usage,
+      ephemeral: prev?.sessionId === sessionId ? prev.ephemeral : undefined,
+      parentSessionId: prev?.sessionId === sessionId ? prev.parentSessionId : undefined,
+      excludedTurnCount:
+        prev?.sessionId === sessionId ? prev.excludedTurnCount : undefined,
       updatedAt: Date.now(),
     };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
@@ -178,6 +185,30 @@ export function saveChatSession(
     }
   } catch {
     // quota / private mode
+  }
+}
+
+/** 记录当前会话的临时 Side 属性，供刷新/异常退出恢复时执行清理。 */
+export function saveEphemeralSessionMeta(
+  sessionId: string,
+  parentSessionId: string | null | undefined,
+  excludedTurnCount: number,
+): void {
+  try {
+    const current = peekStoredSession();
+    if (!current || current.sessionId !== sessionId) return;
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({
+        ...current,
+        ephemeral: true,
+        parentSessionId: parentSessionId ?? undefined,
+        excludedTurnCount,
+        updatedAt: Date.now(),
+      } satisfies StoredChatSession),
+    );
+  } catch {
+    // private mode / quota
   }
 }
 

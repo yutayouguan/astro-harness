@@ -24,6 +24,7 @@ pub struct BranchGraphNodeDto {
     agent_path: Option<String>,
     is_current: bool,
     can_fork: bool,
+    is_ephemeral: bool,
     /// 该 turn 的完整用户输入，供「在此轮前分支并改写」回填输入框。
     #[serde(skip_serializing_if = "Option::is_none")]
     user_message: Option<String>,
@@ -38,6 +39,7 @@ pub struct BranchGraphDto {
     branch_count: usize,
     turn_count: usize,
     agent_count: usize,
+    side_count: usize,
 }
 
 #[derive(Debug, Clone)]
@@ -123,11 +125,13 @@ pub async fn get_chat_branch_graph(session_id: String) -> Result<BranchGraphDto,
         .filter(|id| *id != current_session_id)
         .collect::<HashSet<_>>();
 
-    let (mut nodes, anchors, branch_heads, spawn_anchors, chat_session_count) = {
+    let (mut nodes, anchors, branch_heads, spawn_anchors, branch_count, side_count) = {
         let store = open_sessions()?;
         let mut nodes = Vec::new();
         let mut anchors: HashMap<String, Vec<TurnAnchor>> = HashMap::new();
         let mut branch_heads = HashMap::new();
+        let mut persistent_branches = 0usize;
+        let mut side_count = 0usize;
         let chat_sessions = lineage
             .nodes
             .iter()
@@ -139,6 +143,16 @@ pub async fn get_chat_branch_graph(session_id: String) -> Result<BranchGraphDto,
                 .get_session(&session_node.session_id)
                 .map_err(|error| error.to_string())?;
             let model = metadata.as_ref().and_then(|session| session.model.clone());
+            let is_ephemeral = metadata
+                .as_ref()
+                .is_some_and(|session| session.branch_kind.as_deref() == Some("side"));
+            if session_node.parent_session_id.is_some() {
+                if is_ephemeral {
+                    side_count += 1;
+                } else {
+                    persistent_branches += 1;
+                }
+            }
             let title = metadata
                 .as_ref()
                 .and_then(|session| session.title.clone())
@@ -166,7 +180,7 @@ pub async fn get_chat_branch_graph(session_id: String) -> Result<BranchGraphDto,
             for (visible_index, turn) in visible_turns.iter().enumerate() {
                 let id = format!("turn:{}:{}", session_node.session_id, turn.user_message_id);
                 let edge_kind = if visible_index == 0 && session_node.parent_session_id.is_some() {
-                    Some("fork".into())
+                    Some(if is_ephemeral { "side" } else { "fork" }.into())
                 } else if previous.is_some() {
                     Some("continuation".into())
                 } else {
@@ -210,6 +224,7 @@ pub async fn get_chat_branch_graph(session_id: String) -> Result<BranchGraphDto,
                     agent_path: None,
                     is_current: session_node.session_id == current_session_id,
                     can_fork: turn.completed,
+                    is_ephemeral,
                     user_message: turn.content.clone(),
                 });
                 previous = Some(id.clone());
@@ -223,13 +238,18 @@ pub async fn get_chat_branch_graph(session_id: String) -> Result<BranchGraphDto,
                     kind: "branchHead".into(),
                     session_id: session_node.session_id.clone(),
                     parent_id: fork_parent,
-                    edge_kind: session_node
-                        .parent_session_id
-                        .as_ref()
-                        .map(|_| "fork".into()),
+                    edge_kind: session_node.parent_session_id.as_ref().map(|_| {
+                        if is_ephemeral {
+                            "side".into()
+                        } else {
+                            "fork".into()
+                        }
+                    }),
                     title,
                     preview: String::new(),
-                    status: if session_node.legacy_metadata {
+                    status: if is_ephemeral {
+                        "ephemeral".into()
+                    } else if session_node.legacy_metadata {
                         "legacy".into()
                     } else {
                         "idle".into()
@@ -241,6 +261,7 @@ pub async fn get_chat_branch_graph(session_id: String) -> Result<BranchGraphDto,
                     agent_path: None,
                     is_current: session_node.session_id == current_session_id,
                     can_fork: false,
+                    is_ephemeral,
                     user_message: None,
                 });
                 branch_heads.insert(session_node.session_id.clone(), id);
@@ -271,7 +292,8 @@ pub async fn get_chat_branch_graph(session_id: String) -> Result<BranchGraphDto,
             anchors,
             branch_heads,
             spawn_anchors,
-            chat_sessions.len(),
+            persistent_branches,
+            side_count,
         )
     };
 
@@ -322,6 +344,7 @@ pub async fn get_chat_branch_graph(session_id: String) -> Result<BranchGraphDto,
             agent_path: Some(thread.canonical_path.as_str().to_string()),
             is_current: false,
             can_fork: false,
+            is_ephemeral: false,
             user_message: None,
         });
     }
@@ -330,9 +353,10 @@ pub async fn get_chat_branch_graph(session_id: String) -> Result<BranchGraphDto,
     Ok(BranchGraphDto {
         root_session_id: lineage.root_session_id,
         current_session_id,
-        branch_count: chat_session_count.saturating_sub(1),
+        branch_count,
         turn_count,
         agent_count,
+        side_count,
         nodes,
     })
 }

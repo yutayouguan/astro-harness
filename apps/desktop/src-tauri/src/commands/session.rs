@@ -112,6 +112,12 @@ pub struct ChatHistoryDto {
     pub end_reason: Option<String>,
     /// 结束时间（epoch 秒）；未结束为 `None`
     pub ended_at: Option<f64>,
+    /// Codex-style 临时 Side 会话；离开时应丢弃。
+    pub ephemeral: bool,
+    /// Side 会话返回父会话，供 UI 显示“返回主线”。
+    pub parent_session_id: Option<String>,
+    /// 因 `excludeTurns` 在 UI 隐藏、但仍提供给模型的继承 turn 数。
+    pub excluded_turn_count: i64,
 }
 
 // ---------------------------------------------------------------------------
@@ -184,6 +190,9 @@ pub async fn get_chat_history(
                     messages: vec![],
                     end_reason: None,
                     ended_at: None,
+                    ephemeral: false,
+                    parent_session_id: None,
+                    excluded_turn_count: 0,
                 });
             }
         },
@@ -192,11 +201,49 @@ pub async fn get_chat_history(
     let meta = store.get_session(&sid).map_err(|e| e.to_string())?;
     let end_reason = meta.as_ref().and_then(|s| s.end_reason.clone());
     let ended_at = meta.as_ref().and_then(|s| s.ended_at);
+    let ephemeral = meta
+        .as_ref()
+        .is_some_and(|session| session.branch_kind.as_deref() == Some("side"));
+    let parent_session_id = ephemeral
+        .then(|| meta.as_ref().and_then(|session| session.parent_session_id.clone()))
+        .flatten();
+    let excluded_turn_count = if ephemeral {
+        meta.as_ref()
+            .and_then(|session| session.branch_inherited_turn_count)
+            .unwrap_or(0)
+            .max(0)
+    } else {
+        0
+    };
+    let visible_start_id = if excluded_turn_count > 0 {
+        store
+            .get_messages(&sid)
+            .map_err(|e| e.to_string())?
+            .into_iter()
+            .filter(|message| message.role == "user")
+            .nth(excluded_turn_count as usize)
+            .map(|message| message.id)
+    } else {
+        None
+    };
 
-    let messages = store
+    let history = store
         .build_chat_history(&sid, limit)
-        .map_err(|e| e.to_string())?
+        .map_err(|e| e.to_string())?;
+    // excludeTurns 只影响 UI hydration：模型仍从完整 SQLite/rollout 历史恢复。
+    let messages = if ephemeral && excluded_turn_count > 0 && visible_start_id.is_none() {
+        Vec::new()
+    } else {
+        history
         .into_iter()
+        .filter(|message| {
+            visible_start_id.is_none_or(|start| {
+                message
+                    .id
+                    .parse::<i64>()
+                    .is_ok_and(|message_id| message_id >= start)
+            })
+        })
         .map(|m| ChatHistoryMessageDto {
             id: format!("db-{}", m.id),
             role: m.role,
@@ -218,13 +265,17 @@ pub async fn get_chat_history(
             segments: m.segments,
             ui_surfaces: m.ui_surfaces,
         })
-        .collect();
+        .collect()
+    };
 
     Ok(ChatHistoryDto {
         session_id: Some(sid),
         messages,
         end_reason,
         ended_at,
+        ephemeral,
+        parent_session_id,
+        excluded_turn_count,
     })
 }
 
@@ -232,13 +283,17 @@ pub async fn get_chat_history(
 ///
 /// `source_message_id` 指定锚点 user 消息时按 Turn 边界分叉，`boundary` 取
 /// `through_turn`（含该轮，需已完成）或 `before_turn`（该轮不进新分支）；
-/// 否则退回按 `keep_chat_bubbles` 条聊天气泡复制。SQLite 投影与 rollout 一起分叉。
+/// 否则退回按 `keep_chat_bubbles` 条聊天气泡复制。`ephemeral + exclude_turns`
+/// 对应 Codex `/side`：模型继承历史，但新会话 UI 从空白边界开始。SQLite 投影与
+/// rollout 一起分叉。
 #[tauri::command]
 pub async fn fork_chat_session(
     source_session_id: String,
     keep_chat_bubbles: Option<i32>,
     source_message_id: Option<i64>,
     boundary: Option<String>,
+    ephemeral: Option<bool>,
+    exclude_turns: Option<bool>,
     new_session_id: Option<String>,
 ) -> Result<String, String> {
     let source = source_session_id.trim();
@@ -257,10 +312,12 @@ pub async fn fork_chat_session(
         Some("before_turn") => session::ForkBoundary::BeforeTurn,
         Some(other) => return Err(format!("未知的分叉边界: {other}")),
     };
+    let ephemeral = ephemeral.unwrap_or(false);
+    let exclude_turns = exclude_turns.unwrap_or(false);
 
     let copied_user_turns = {
         let store = open_sessions()?;
-        match source_message_id {
+        let copied_user_turns = match source_message_id {
             Some(source_message_id) => {
                 let forked = match boundary {
                     session::ForkBoundary::ThroughTurn => {
@@ -284,7 +341,14 @@ pub async fn fork_chat_session(
                     .filter(|message| message.role == "user")
                     .count()
             }
+        };
+        if ephemeral {
+            if let Err(error) = store.mark_session_as_side(&new_id) {
+                let _ = store.delete_session_permanently(&new_id);
+                return Err(error.to_string());
+            }
         }
+        copied_user_turns
     };
 
     // rollout 是权威历史；复制失败只记日志，SQLite 分支已经可用。
@@ -294,6 +358,8 @@ pub async fn fork_chat_session(
         source,
         &new_id,
         copied_user_turns,
+        ephemeral,
+        exclude_turns,
         chrono::Utc::now(),
     )
     .await
@@ -560,6 +626,53 @@ pub async fn delete_session_permanently(app: AppHandle, session_id: String) -> R
     open_sessions()?
         .delete_session_permanently(&session_id)
         .map_err(|e| e.to_string())
+}
+
+fn remove_session_rollout(session_id: &str) {
+    let root = home::default_memory_dir().join("sessions").join("rollouts");
+    match agent_rollout::find_rollout(&root, session_id) {
+        Ok(Some(path)) => {
+            if let Err(error) = std::fs::remove_file(&path) {
+                tracing::warn!(%error, path = %path.display(), "failed to remove side rollout");
+            }
+        }
+        Ok(None) => {}
+        Err(error) => tracing::warn!(%error, session_id, "failed to locate side rollout"),
+    }
+}
+
+/// 离开 Codex-style Side 会话时释放运行时并丢弃临时 SQLite/rollout 状态。
+#[tauri::command]
+pub async fn discard_side_session(app: AppHandle, session_id: String) -> Result<(), String> {
+    let session_id = session_id.trim().to_string();
+    if session_id.is_empty() {
+        return Err("session_id 不能为空".into());
+    }
+    if let Err(error) =
+        super::chat::chat_control(app, session_id.clone(), "release_session".into()).await
+    {
+        tracing::warn!(%error, session_id, "release_session before side discard failed");
+    }
+    open_sessions()?
+        .delete_side_session(&session_id)
+        .map_err(|error| error.to_string())?;
+    remove_session_rollout(&session_id);
+    Ok(())
+}
+
+/// 应用启动时清理异常退出遗留的 Side 会话；普通分支不受影响。
+pub fn cleanup_stale_side_sessions() -> Result<usize, String> {
+    let store = open_sessions()?;
+    let ids = store
+        .list_side_session_ids()
+        .map_err(|error| error.to_string())?;
+    for id in &ids {
+        store
+            .delete_side_session(id)
+            .map_err(|error| error.to_string())?;
+        remove_session_rollout(id);
+    }
+    Ok(ids.len())
 }
 
 // ---------------------------------------------------------------------------

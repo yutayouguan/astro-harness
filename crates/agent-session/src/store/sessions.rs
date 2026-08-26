@@ -4,8 +4,8 @@ use anyhow::Result;
 use rusqlite::{params, OptionalExtension};
 
 use super::{
-    is_unique_constraint, now_epoch_secs, truncate_chars, BillingDelta, SessionBillingRow,
-    SessionStore, StoredSession,
+    is_unique_constraint, now_epoch_secs, truncate_chars, BillingDelta, BranchKind,
+    SessionBillingRow, SessionStore, StoredSession,
 };
 
 impl SessionStore {
@@ -231,6 +231,41 @@ impl SessionStore {
         );
         tx.commit()?;
         Ok(())
+    }
+
+    /// 把已创建的聊天分支标记为临时 Side 会话。
+    pub fn mark_session_as_side(&self, id: &str) -> Result<()> {
+        let changed = self.conn.execute(
+            "UPDATE sessions SET branch_kind = ?1
+             WHERE id = ?2 AND parent_session_id IS NOT NULL",
+            params![BranchKind::Side.as_str(), id],
+        )?;
+        anyhow::ensure!(changed == 1, "mark_session_as_side: forked session not found");
+        Ok(())
+    }
+
+    /// 返回上次进程异常退出后遗留的临时 Side 会话。
+    pub fn list_side_session_ids(&self) -> Result<Vec<String>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id FROM sessions WHERE branch_kind = ?1 ORDER BY started_at, id",
+        )?;
+        let ids = stmt
+            .query_map(params![BranchKind::Side.as_str()], |row| row.get(0))?
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(ids)
+    }
+
+    /// 仅删除临时 Side 会话，防止普通聊天会话误走临时清理路径。
+    pub fn delete_side_session(&self, id: &str) -> Result<()> {
+        let kind = self
+            .get_session(id)?
+            .and_then(|session| session.branch_kind)
+            .ok_or_else(|| anyhow::anyhow!("delete_side_session: session not found"))?;
+        anyhow::ensure!(
+            kind == BranchKind::Side.as_str(),
+            "delete_side_session: session is not ephemeral"
+        );
+        self.delete_session_permanently(id)
     }
 
     /// 按消息顺序读取最早可完成的非空 user → assistant 文本配对。
