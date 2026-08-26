@@ -1,10 +1,43 @@
 /* Cron panel list page */
 .cron-page {
+  --plugins-control-h: 36px;
+  --plugins-shell-radius: 14px;
+  --plugins-item-radius: 10px;
+  --plugins-shell-border: color-mix(in srgb, var(--glass-edge) 84%, transparent);
+  --plugins-shell-bg:
+    linear-gradient(155deg, rgba(255, 255, 255, 0.58), rgba(255, 255, 255, 0.2)),
+    color-mix(in srgb, var(--glass-panel) 70%, transparent);
+  --plugins-shell-shadow:
+    0 5px 16px color-mix(in srgb, var(--tone) 7%, rgba(15, 23, 42, 0.04)),
+    inset 0 1px 0 rgba(255, 255, 255, 0.62);
+  --plugins-active-bg:
+    linear-gradient(165deg, rgba(255, 255, 255, 0.86), rgba(255, 255, 255, 0.4)),
+    color-mix(in srgb, var(--tone) 11%, var(--glass-panel));
+  --plugins-active-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--tone) 24%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.82),
+    0 2px 8px color-mix(in srgb, var(--tone) 10%, transparent);
   flex: 1;
   min-height: 0;
   display: flex;
   flex-direction: column;
   gap: 14px;
+}
+
+html[data-theme="dark"] .cron-page {
+  --plugins-shell-border: color-mix(in srgb, var(--tone) 18%, rgba(255, 255, 255, 0.09));
+  --plugins-shell-bg:
+    linear-gradient(155deg, rgba(255, 255, 255, 0.075), rgba(255, 255, 255, 0.018)),
+    color-mix(in srgb, var(--tone-soft) 28%, rgba(8, 6, 18, 0.52));
+  --plugins-shell-shadow:
+    0 4px 14px rgba(0, 0, 0, 0.18),
+    inset 0 1px 0 rgba(255, 255, 255, 0.07);
+  --plugins-active-bg:
+    linear-gradient(165deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.035)),
+    color-mix(in srgb, var(--tone-soft) 54%, rgba(8, 6, 18, 0.42));
+  --plugins-active-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--tone) 30%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.09);
 }
 
 /* 直接铺在页面底色上：不再套一层玻璃卡片 */
@@ -53,8 +86,11 @@
 
 .cron-toolbar-end .expandable-search-btn,
 .cron-toolbar-end .expandable-search-field {
-  height: 36px;
+  height: var(--plugins-control-h);
+  border-color: var(--plugins-shell-border);
   border-radius: 12px;
+  background: var(--plugins-shell-bg);
+  box-shadow: var(--plugins-shell-shadow);
 }
 
 .cron-pane-head {
@@ -2094,26 +2130,25 @@ html[data-theme="dark"] .cron-btn-primary:hover:not(:disabled) {
   gap: 4px;
   padding: 4px;
   margin-bottom: 0;
-  border-radius: 14px;
+  border-radius: var(--plugins-shell-radius);
   width: fit-content;
   flex-shrink: 0;
-  border: 1px solid color-mix(in srgb, var(--glass-edge) 90%, transparent);
-  background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.35), rgba(255, 255, 255, 0.1)),
-    color-mix(in srgb, var(--glass-fill) 70%, transparent);
-  box-shadow: var(--glass-rim), inset 0 1px 0 rgba(255, 255, 255, 0.35);
-  backdrop-filter: blur(14px) saturate(1.2);
-  -webkit-backdrop-filter: blur(14px) saturate(1.2);
+  border: 1px solid var(--plugins-shell-border);
+  background: var(--plugins-shell-bg);
+  box-shadow: var(--plugins-shell-shadow);
+  backdrop-filter: blur(14px) saturate(1.18);
+  -webkit-backdrop-filter: blur(14px) saturate(1.18);
 }
 
 .cron-tab {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
-  padding: 8px 16px;
+  gap: 7px;
+  min-height: var(--plugins-control-h);
+  padding: 0 14px;
   border: none;
-  border-radius: 10px;
+  border-radius: var(--plugins-item-radius);
   font-size: 13px;
   font-weight: 650;
   cursor: pointer;
@@ -2138,28 +2173,8 @@ html[data-theme="dark"] .cron-btn-primary:hover:not(:disabled) {
 
 .cron-tab.is-active {
   color: var(--tone);
-  background:
-    linear-gradient(165deg, rgba(255, 255, 255, 0.58), rgba(255, 255, 255, 0.3)),
-    var(--tone-soft);
-  box-shadow:
-    inset 0 0 0 1px color-mix(in srgb, var(--tone) 18%, transparent),
-    inset 0 1px 0 rgba(255, 255, 255, 0.45);
-}
-
-html[data-theme="dark"] .cron-tabs {
-  background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.02)),
-    rgba(8, 6, 18, 0.42);
-  border-color: rgba(255, 255, 255, 0.09);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
-}
-
-html[data-theme="dark"] .cron-tab.is-active {
-  background:
-    linear-gradient(165deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.03)),
-    color-mix(in srgb, var(--tone-soft) 70%, transparent);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--tone) 28%, transparent);
-  color: color-mix(in srgb, #fff 14%, var(--tone));
+  background: var(--plugins-active-bg);
+  box-shadow: var(--plugins-active-shadow);
 }
 
 /* View toggle */
@@ -2168,15 +2183,14 @@ html[data-theme="dark"] .cron-tab.is-active {
   align-items: center;
   gap: 2px;
   flex-shrink: 0;
+  height: var(--plugins-control-h);
   padding: 3px;
   border-radius: 12px;
-  background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.22), rgba(255, 255, 255, 0.12)),
-    color-mix(in srgb, var(--glass-fill) 55%, transparent);
-  border: 1px solid color-mix(in srgb, var(--tone) 12%, var(--chip-border));
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35);
-  backdrop-filter: blur(12px) saturate(1.15);
-  -webkit-backdrop-filter: blur(12px) saturate(1.15);
+  background: var(--plugins-shell-bg);
+  border: 1px solid var(--plugins-shell-border);
+  box-shadow: var(--plugins-shell-shadow);
+  backdrop-filter: blur(14px) saturate(1.18);
+  -webkit-backdrop-filter: blur(14px) saturate(1.18);
 }
 
 .cron-view-btn {
@@ -2199,28 +2213,8 @@ html[data-theme="dark"] .cron-tab.is-active {
 
 .cron-view-btn.is-active {
   color: var(--tone);
-  background:
-    linear-gradient(165deg, rgba(255, 255, 255, 0.35), rgba(255, 255, 255, 0.12)),
-    color-mix(in srgb, var(--tone-soft) 80%, transparent);
-  box-shadow:
-    inset 0 0 0 1px color-mix(in srgb, var(--tone) 18%, transparent),
-    inset 0 1px 0 rgba(255, 255, 255, 0.45);
-}
-
-html[data-theme="dark"] .cron-view-toggle {
-  background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.02)),
-    rgba(8, 6, 18, 0.42);
-  border-color: rgba(255, 255, 255, 0.09);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
-}
-
-html[data-theme="dark"] .cron-view-btn.is-active {
-  background:
-    linear-gradient(165deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.03)),
-    color-mix(in srgb, var(--tone-soft) 60%, transparent);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--tone) 28%, transparent);
-  color: color-mix(in srgb, #fff 18%, var(--tone));
+  background: var(--plugins-active-bg);
+  box-shadow: var(--plugins-active-shadow);
 }
 
 /* Compact list view */
