@@ -5,6 +5,20 @@
   user-select: none;
 }
 
+/* 默认与品牌图标跟随当前 Tab 主题色，与侧栏 logo 用同一套渐变变量 */
+.project-folder-icon--tinted {
+  color: var(--tone, var(--tone-blue));
+  --astro-mark-c0: color-mix(in srgb, var(--tone, #2563eb) 82%, #0b1020 18%);
+  --astro-mark-c1: var(--tone, #2563eb);
+  --astro-mark-c2: color-mix(in srgb, var(--tone, #2563eb) 60%, #ffffff 40%);
+  transition: color 0.18s ease;
+}
+
+/* 当前项目的图标用满色，其余稍退让，保持侧栏层级 */
+.sidebar-project:not(.is-active) .project-folder-icon--tinted {
+  opacity: 0.72;
+}
+
 .project-edit-name-icon-btn .project-folder-icon {
   width: 22px;
   height: 22px;
@@ -150,7 +164,7 @@ html[data-theme="dark"] .project-icon-picker {
   background: color-mix(in srgb, var(--tone, #64748b) 13%, transparent);
 }
 
-.project-icon-picker-grid img {
+.project-icon-picker-grid .project-folder-icon {
   width: 27px;
   height: 27px;
 }

@@ -6,10 +6,9 @@ export type MaterialProjectIcon = {
   searchText: string;
 };
 
-/** 品牌图标不走 material 抽取流程，单独放在 public/project-icons 下避免被清理。 */
+/** 品牌图标由 ProjectFolderGlyph 内联渲染，没有对应的 svg 资源文件。 */
 export const ASTRO_SPACE_ICON_ID = "astro-space";
 
-const BRAND_ICON_DIR = "/project-icons/";
 const MATERIAL_ICON_DIR = "/file-icons/";
 
 const BRAND_ICONS: MaterialProjectIcon[] = [
@@ -108,15 +107,26 @@ export function isMaterialProjectIcon(iconId: string | null | undefined): boolea
   return Boolean(iconId && knownIds.has(iconId));
 }
 
+/** 默认文件夹（含未设置图标）——单色，跟随当前 tab 主题色着色。 */
+export function isDefaultProjectIcon(iconId: string | null | undefined): boolean {
+  const id = iconId?.trim();
+  return !id || id === materialIconManifest.defaults.folder;
+}
+
+/** 品牌图标同样随主题色变化，渐变由 --astro-mark-c0/c1/c2 驱动。 */
+export function isBrandProjectIcon(iconId: string | null | undefined): boolean {
+  return Boolean(iconId && brandIds.has(iconId));
+}
+
+/** 仅适用于 material 抽取出来的图标；默认与品牌图标走内联字形。 */
 export function materialProjectIconUrl(
   iconId: string | null | undefined,
   expanded: boolean,
 ): string {
   const closedId =
-    iconId && knownIds.has(iconId) ? iconId : materialIconManifest.defaults.folder;
-  if (brandIds.has(closedId)) {
-    return `${BRAND_ICON_DIR}${closedId}${expanded ? "-open" : ""}.svg`;
-  }
+    iconId && knownIds.has(iconId) && !brandIds.has(iconId)
+      ? iconId
+      : materialIconManifest.defaults.folder;
   const resolvedId = expanded ? (expandedByClosed.get(closedId) ?? closedId) : closedId;
   return `${MATERIAL_ICON_DIR}${resolvedId}.svg`;
 }

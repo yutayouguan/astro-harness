@@ -1,10 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Check, Search, X } from "lucide-react";
-import {
-  filterMaterialProjectIcons,
-  materialProjectIconUrl,
-} from "../../lib/projects/materialProjectIcons";
+import { filterMaterialProjectIcons } from "../../lib/projects/materialProjectIcons";
+import ProjectFolderIcon from "./ProjectFolderIcon";
 
 type Props = {
   open: boolean;
@@ -87,14 +85,11 @@ export default function ProjectFolderIconPicker({
                 aria-pressed={selected}
                 onClick={() => onSelect(icon.id)}
               >
-                <img
-                  src={materialProjectIconUrl(icon.id, false)}
-                  width={26}
-                  height={26}
-                  alt=""
+                <ProjectFolderIcon
+                  iconId={icon.id}
+                  expanded={false}
+                  size={26}
                   loading="lazy"
-                  draggable={false}
-                  aria-hidden
                 />
                 {selected && (
                   <span className="project-icon-picker-check">
