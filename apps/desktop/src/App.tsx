@@ -23,10 +23,7 @@ import CronPanel from "./components/schedule/CronPanel";
 import FilesPage from "./components/files/FilesPage";
 import InsightsPanel from "./components/settings/InsightsPanel";
 import ModelMarketPanel from "./components/settings/ModelMarketPanel";
-import MemoryPanel, {
-  type MemoryHeaderAgentPicker,
-} from "./components/settings/MemoryPanel";
-import AgentPicker from "./components/agents/AgentPicker";
+import MemoryPanel from "./components/settings/MemoryPanel";
 import ModelPicker from "./components/agents/ModelPicker";
 import ExpandableSearch from "./components/ui/ExpandableSearch";
 import PreferencesPanel from "./components/settings/PreferencesPanel";
@@ -46,7 +43,6 @@ import {
   IconPlugin,
   IconRightPanel,
 } from "./components/icons";
-import { useActiveAgent } from "./hooks/app/useActiveAgent";
 import { useChatDisplayPrefs } from "./hooks/chat/useChatDisplayPrefs";
 import { useActiveSessionTitle } from "./hooks/chat/useActiveSessionTitle";
 import { useChatSession } from "./hooks/chat/useChatSession";
@@ -94,10 +90,10 @@ import {
 import {
   NAV,
   PAGE_META,
-  showsHeaderAgentPicker,
   type NavId,
   type SettingsTabId,
 } from "./lib/ui/navConfig";
+import { SETTINGS_TABS, settingsTabMeta } from "./lib/ui/settingsTabs";
 import {
   readFilesSubmode,
   writeFilesSubmode,
@@ -106,20 +102,11 @@ import {
 import {
   ArrowLeft,
   Archive,
-  Brain,
-  ChartPie,
-  Cpu,
   FolderClosed,
   FolderOpen,
-  Info,
-  Layers2,
-  MessageSquare,
   MoreHorizontal,
-  ScrollText,
   Settings2,
   Sparkles,
-  Store,
-  Wrench,
 } from "lucide-react";
 import { syncWindowUnderlay } from "./lib/ui/windowUnderlay";
 import { dynamicGradientForTab } from "./lib/ui/dynamicGradient";
@@ -221,17 +208,9 @@ export default function App() {
     useState<ModelReasoningMeta | null>(null);
   const [activeModelPricing, setActiveModelPricing] =
     useState<ModelPricingMeta | null>(null);
-  const [memoryHeaderAgent, setMemoryHeaderAgent] =
-    useState<MemoryHeaderAgentPicker | null>(null);
-
   // ── Extracted hooks ───────────────────────────────────────────────────────
   const sidebar = useSidebar();
   const winChrome = useWindowChrome();
-  const {
-    agents,
-    activeAgentId,
-    setActiveAgent,
-  } = useActiveAgent();
   const {
     providers,
     activeProviderId,
@@ -255,7 +234,6 @@ export default function App() {
   const {
     send,
     startNewChat,
-    startNewAgent,
     skipAgentCreate,
     runCompactSession,
     undoLastExchange,
@@ -674,6 +652,7 @@ export default function App() {
     ? (NAV.find((item) => item.id === featureNav)?.Icon ?? IconChat)
     : IconChat;
   const conversationTitle = useActiveSessionTitle(chat.sessionId);
+  const { label: settingsTitle, Icon: SettingsIcon } = settingsTabMeta(settingsTab);
 
   useEffect(() => {
     if (!conversationMenuOpen) return;
@@ -764,24 +743,12 @@ export default function App() {
                 <span className="sidebar-item-label">返回</span>
               </button>
               <div className="sidebar-settings-nav">
-                {([
-                  { id: "preferences", label: "通用", Icon: Settings2 },
-                  { id: "preferences:appearance", label: "外观", Icon: Sparkles },
-                  { id: "preferences:conversation", label: "对话", Icon: MessageSquare },
-                  { id: "preferences:context", label: "上下文与压缩", Icon: Layers2 },
-                  { id: "providers", label: "模型配置", Icon: Cpu },
-                  { id: "tools", label: "工具", Icon: Wrench },
-                  { id: "memory", label: "记忆", Icon: Brain },
-                  { id: "models", label: "模型市场", Icon: Store },
-                  { id: "insights", label: "洞察", Icon: ChartPie },
-                  { id: "preferences:diagnostics", label: "诊断", Icon: ScrollText },
-                  { id: "preferences:about", label: "关于", Icon: Info },
-                ] as const).map((item) => (
+                {SETTINGS_TABS.map((item) => (
                   <button
                     key={item.id}
                     type="button"
                     className={`settings-sidebar-item ${settingsTab === item.id ? "is-active" : ""}`}
-                    onClick={() => setSettingsTab(item.id as SettingsTabId)}
+                    onClick={() => setSettingsTab(item.id)}
                   >
                     <item.Icon size={18} strokeWidth={1.6} aria-hidden />
                     <span className="sidebar-item-label">{item.label}</span>
@@ -1012,27 +979,14 @@ export default function App() {
                 <div className="content-heading">
                   <div className="page-title-block">
                     <div className="page-title-icon" data-tone="twilight" aria-hidden>
-                      <Settings2 width={15} height={15} strokeWidth={1.6} />
+                      <SettingsIcon width={15} height={15} strokeWidth={1.6} />
                     </div>
                     <div className="page-title-text">
                       <h1 className="content-title" data-tone="twilight">
-                        <span className="content-title-main">偏好设置</span>
+                        <span className="content-title-main">{settingsTitle}</span>
                       </h1>
                     </div>
                   </div>
-                </div>
-                <div className="header-actions">
-                  {settingsTab === "memory" && memoryHeaderAgent?.show && (
-                    <AgentPicker
-                      className="header-agent-picker"
-                      agents={agents}
-                      value={memoryHeaderAgent.value}
-                      onChange={memoryHeaderAgent.onChange}
-                      allOption={memoryHeaderAgent.allOption}
-                      labelKey="memory.agents"
-                      menuAlign="end"
-                    />
-                  )}
                 </div>
               </div>
               <div className="page-body">
@@ -1085,7 +1039,6 @@ export default function App() {
                     <MemoryPanel
                       onClose={() => setSettingsTab("preferences")}
                       sessionId={chat.sessionId}
-                      onHeaderAgentPickerChange={setMemoryHeaderAgent}
                     />
                   )}
                 </div>
@@ -1235,29 +1188,13 @@ export default function App() {
                       {statusText}
                     </span>
                   )}
-                  <div className="header-identity-picker">
-                    {showsHeaderAgentPicker(nav) && (
-                      <AgentPicker
-                        className="header-agent-picker"
-                        agents={agents}
-                        value={activeAgentId}
-                        onChange={(id) => {
-                          void setActiveAgent(id).catch((e) => {
-                            console.warn("set_active_agent failed", e);
-                          });
-                        }}
-                        onCreateNew={startNewAgent}
-                        menuAlign="end"
-                      />
-                    )}
-                    <ModelPicker
-                      providers={providers}
-                      value={activeProviderId}
-                      onChange={(id, model) => void onChatModelChange(id, model)}
-                      onActivePrefsChange={syncComposerFromModelPrefs}
-                      disabled={chat.streaming}
-                    />
-                  </div>
+                  <ModelPicker
+                    providers={providers}
+                    value={activeProviderId}
+                    onChange={(id, model) => void onChatModelChange(id, model)}
+                    onActivePrefsChange={syncComposerFromModelPrefs}
+                    disabled={chat.streaming}
+                  />
                   <div className="chat-header-tools">
                     <button
                       type="button"
