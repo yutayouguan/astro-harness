@@ -11,7 +11,16 @@ import {
 
 export type ThemeMode = "light" | "dark" | "auto";
 export type ResolvedTheme = "light" | "dark";
-export type GlassLevel = "rich" | "normal" | "minimal";
+export type GlassLevel = "liquid" | "liquid-soft" | "rich" | "normal" | "minimal";
+
+const GLASS_LEVELS: readonly GlassLevel[] = [
+  "liquid",
+  "liquid-soft",
+  "rich",
+  "normal",
+  "minimal",
+];
+const DEFAULT_GLASS_LEVEL: GlassLevel = "liquid";
 
 const STORAGE_KEY = "astro-theme-mode";
 const GLASS_KEY = "astro-glass-level";
@@ -46,13 +55,14 @@ export function resolveTheme(mode: ThemeMode): ResolvedTheme {
 function readGlassLevel(): GlassLevel {
   try {
     const v = localStorage.getItem(GLASS_KEY);
-    if (v === "rich" || v === "normal" || v === "minimal") return v;
+    if (GLASS_LEVELS.includes(v as GlassLevel)) return v as GlassLevel;
   } catch { /* ignore */ }
-  return "rich";
+  return DEFAULT_GLASS_LEVEL;
 }
 
 function applyGlass(level: GlassLevel) {
   const root = document.documentElement;
+  // rich 是 token 基线本身，不需要属性钩子。
   if (level === "rich") {
     root.removeAttribute("data-glass");
   } else {
@@ -105,7 +115,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     typeof window === "undefined" ? "dark" : resolveTheme(readStoredMode()),
   );
   const [glassLevel, setGlassState] = useState<GlassLevel>(() =>
-    typeof window === "undefined" ? "rich" : readGlassLevel(),
+    typeof window === "undefined" ? DEFAULT_GLASS_LEVEL : readGlassLevel(),
   );
 
   const apply = useCallback((nextMode: ThemeMode) => {

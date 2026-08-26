@@ -17,8 +17,8 @@
       transparent 72%
     ),
     color-mix(in srgb, var(--bg-base, #0f172a) 42%, transparent);
-  backdrop-filter: blur(10px) saturate(1.2);
-  -webkit-backdrop-filter: blur(10px) saturate(1.2);
+  backdrop-filter: blur(calc(10px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.2));
+  -webkit-backdrop-filter: blur(calc(10px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.2));
   animation: app-dialog-fade-in 0.16s ease-out;
 }
 
@@ -44,8 +44,8 @@ html[data-theme="light"] .app-dialog-backdrop {
   box-shadow:
     0 22px 52px color-mix(in srgb, var(--dialog-accent) 14%, rgba(15, 23, 42, 0.18)),
     0 1px 0 rgba(255, 255, 255, 0.42) inset;
-  backdrop-filter: blur(22px) saturate(1.35);
-  -webkit-backdrop-filter: blur(22px) saturate(1.35);
+  backdrop-filter: blur(calc(22px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.35));
+  -webkit-backdrop-filter: blur(calc(22px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.35));
   color: var(--ink);
   animation: app-dialog-rise-in 0.32s var(--ease-spring, cubic-bezier(0.34, 1.56, 0.64, 1));
 }
@@ -355,8 +355,8 @@ body:has(.app-dialog-backdrop.is-closing) .app-shell {
   box-shadow:
     0 28px 64px color-mix(in srgb, var(--tone, #3b82f6) 16%, rgba(15, 23, 42, 0.18)),
     inset 0 1px 0 rgba(255, 255, 255, 0.7);
-  backdrop-filter: blur(24px) saturate(1.4);
-  -webkit-backdrop-filter: blur(24px) saturate(1.4);
+  backdrop-filter: blur(calc(24px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.4));
+  -webkit-backdrop-filter: blur(calc(24px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.4));
   color: var(--ink);
   animation: app-dialog-rise-in 0.36s var(--ease-spring, cubic-bezier(0.34, 1.56, 0.64, 1));
 }

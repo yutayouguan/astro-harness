@@ -11,7 +11,7 @@
   --seg-item-font: 13px;
   --seg-item-weight: 600;
   --seg-item-color: var(--ink-mute);
-  --seg-shell-blur: blur(14px) saturate(1.18);
+  --seg-shell-blur: blur(calc(14px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.18));
   --seg-item-blur-active: none;
   --seg-shell-sheen-a: rgba(255, 255, 255, 0.58);
   --seg-shell-sheen-b: rgba(255, 255, 255, 0.2);

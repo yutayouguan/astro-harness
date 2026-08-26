@@ -303,7 +303,7 @@
   flex-direction: column;
   border-left: 1px solid var(--border);
   background: var(--glass-panel);
-  backdrop-filter: blur(14px);
+  backdrop-filter: blur(calc(14px * var(--glass-blur-scale, 1)));
   overflow-y: auto;
 }
 

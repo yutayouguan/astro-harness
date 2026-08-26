@@ -120,8 +120,8 @@
     linear-gradient(160deg, color-mix(in srgb, var(--tone-soft) 28%, transparent), transparent 42%),
     color-mix(in srgb, var(--composer-bg) 92%, var(--glass-panel));
   box-shadow: -18px 0 48px color-mix(in srgb, var(--ink) 14%, transparent);
-  backdrop-filter: blur(30px) saturate(1.35);
-  -webkit-backdrop-filter: blur(30px) saturate(1.35);
+  backdrop-filter: blur(calc(30px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.35));
+  -webkit-backdrop-filter: blur(calc(30px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.35));
   animation: subagents-panel-in 0.2s cubic-bezier(0.22, 1, 0.36, 1);
 }
 

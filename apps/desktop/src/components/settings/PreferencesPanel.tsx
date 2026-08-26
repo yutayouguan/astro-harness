@@ -508,6 +508,8 @@ export default function PreferencesPanel({
         </div>
         <div className="theme-options" role="radiogroup" aria-label={t("prefs.glass.title")}>
           {([
+            { id: "liquid" as GlassLevel, label: t("prefs.glass.liquid"), desc: t("prefs.glass.liquidDesc") },
+            { id: "liquid-soft" as GlassLevel, label: t("prefs.glass.liquidSoft"), desc: t("prefs.glass.liquidSoftDesc") },
             { id: "rich" as GlassLevel, label: t("prefs.glass.rich"), desc: t("prefs.glass.richDesc") },
             { id: "normal" as GlassLevel, label: t("prefs.glass.normal"), desc: t("prefs.glass.normalDesc") },
             { id: "minimal" as GlassLevel, label: t("prefs.glass.minimal"), desc: t("prefs.glass.minimalDesc") },

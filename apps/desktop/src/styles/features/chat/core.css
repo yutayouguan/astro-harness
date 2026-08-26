@@ -254,8 +254,8 @@ html[data-theme="dark"] .msg-token-stats {
     linear-gradient(155deg, rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0.03) 100%),
     rgba(18, 16, 32, 0.45);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
-  backdrop-filter: blur(10px) saturate(1.2);
-  -webkit-backdrop-filter: blur(10px) saturate(1.2);
+  backdrop-filter: blur(calc(10px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.2));
+  -webkit-backdrop-filter: blur(calc(10px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.2));
 }
 
 html[data-theme="light"] .msg-token-stats {
@@ -265,8 +265,8 @@ html[data-theme="light"] .msg-token-stats {
     linear-gradient(155deg, rgba(255, 255, 255, 0.55) 0%, rgba(255, 255, 255, 0.22) 100%),
     color-mix(in srgb, var(--tone-soft, rgba(37, 99, 235, 0.14)) 45%, transparent);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.85);
-  backdrop-filter: blur(12px) saturate(1.25);
-  -webkit-backdrop-filter: blur(12px) saturate(1.25);
+  backdrop-filter: blur(calc(12px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.25));
+  -webkit-backdrop-filter: blur(calc(12px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.25));
 }
 
 .msg-token-stats {
@@ -300,8 +300,8 @@ html[data-theme="light"] .msg-token-stats {
     linear-gradient(155deg, rgba(255, 255, 255, 0.55) 0%, rgba(255, 255, 255, 0.2) 100%),
     color-mix(in srgb, var(--tone-soft, transparent) 40%, transparent);
   box-shadow: var(--glass-rim), 0 6px 16px color-mix(in srgb, var(--tone, #2563eb) 10%, rgba(15, 23, 42, 0.06));
-  backdrop-filter: blur(16px) saturate(1.35);
-  -webkit-backdrop-filter: blur(16px) saturate(1.35);
+  backdrop-filter: blur(calc(16px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.35));
+  -webkit-backdrop-filter: blur(calc(16px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.35));
 }
 
 .msg-row.assistant:hover .msg-actions,
@@ -459,8 +459,8 @@ html[data-theme="dark"] .avatar {
   box-shadow:
     var(--glass-rim),
     0 8px 22px color-mix(in srgb, var(--tone, #2563eb) 14%, transparent);
-  backdrop-filter: blur(18px) saturate(1.35);
-  -webkit-backdrop-filter: blur(18px) saturate(1.35);
+  backdrop-filter: blur(calc(18px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.35));
+  -webkit-backdrop-filter: blur(calc(18px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.35));
   white-space: pre-wrap;
   width: fit-content;
   max-width: 100%;
@@ -535,8 +535,8 @@ html[data-theme="dark"] .bubble.user {
   border-color: color-mix(in srgb, var(--tone, var(--accent)) 10%, var(--glass-edge));
   border-bottom-left-radius: 8px;
   box-shadow: var(--shadow-card), var(--glass-rim);
-  backdrop-filter: blur(18px) saturate(1.3);
-  -webkit-backdrop-filter: blur(18px) saturate(1.3);
+  backdrop-filter: blur(calc(18px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.3));
+  -webkit-backdrop-filter: blur(calc(18px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.3));
   color: var(--ink);
 }
 

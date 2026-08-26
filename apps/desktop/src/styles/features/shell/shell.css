@@ -387,8 +387,8 @@ html[data-theme="dark"][data-unified-surface="dark-neutral"]:is([data-color-styl
   background: var(--sidebar-bg);
   border: none;
   border-right: 1px solid var(--glass-edge);
-  backdrop-filter: blur(var(--blur-glass, 20px)) saturate(1.25);
-  -webkit-backdrop-filter: blur(var(--blur-glass, 20px)) saturate(1.25);
+  backdrop-filter: blur(calc((var(--blur-glass, 20px)) * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.25));
+  -webkit-backdrop-filter: blur(calc((var(--blur-glass, 20px)) * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.25));
   position: absolute;
   left: 0;
   top: 0;
@@ -678,8 +678,8 @@ html[data-tone="twilight"] {
   pointer-events: auto;
   box-shadow: none;
   background: var(--sidebar-pinned-bg);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(calc(12px * var(--glass-blur-scale, 1)));
+  -webkit-backdrop-filter: blur(calc(12px * var(--glass-blur-scale, 1)));
 }
 
 .sidebar-brand {

@@ -15,8 +15,8 @@
     linear-gradient(155deg, rgba(255, 255, 255, 0.35), rgba(255, 255, 255, 0.1)),
     color-mix(in srgb, var(--glass-fill) 70%, transparent);
   box-shadow: none;
-  backdrop-filter: blur(14px) saturate(1.2);
-  -webkit-backdrop-filter: blur(14px) saturate(1.2);
+  backdrop-filter: blur(calc(14px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.2));
+  -webkit-backdrop-filter: blur(calc(14px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.2));
   box-sizing: border-box;
 }
 
@@ -243,8 +243,8 @@ html[data-theme="dark"] .cron-dt-clear {
   box-shadow:
     var(--glass-rim),
     0 4px 12px color-mix(in srgb, var(--tone) 6%, transparent);
-  backdrop-filter: blur(16px) saturate(1.2);
-  -webkit-backdrop-filter: blur(16px) saturate(1.2);
+  backdrop-filter: blur(calc(16px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.2));
+  -webkit-backdrop-filter: blur(calc(16px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.2));
   overflow: hidden;
 }
 
@@ -484,8 +484,8 @@ html[data-theme="dark"] .cron-timeline-log-btn:hover {
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.45),
     0 4px 14px color-mix(in srgb, var(--tone) 8%, transparent);
-  backdrop-filter: blur(14px) saturate(1.2);
-  -webkit-backdrop-filter: blur(14px) saturate(1.2);
+  backdrop-filter: blur(calc(14px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.2));
+  -webkit-backdrop-filter: blur(calc(14px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.2));
   cursor: pointer;
   user-select: none;
   transition: border-color 0.14s ease, box-shadow 0.14s ease, background 0.14s ease;

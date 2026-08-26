@@ -48,8 +48,8 @@ html[data-theme="dark"] .cron-sched {
     color-mix(in srgb, var(--glass-fill) 60%, transparent);
   border: 1px solid color-mix(in srgb, var(--tone) 10%, var(--chip-border));
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.32);
-  backdrop-filter: blur(10px) saturate(1.1);
-  -webkit-backdrop-filter: blur(10px) saturate(1.1);
+  backdrop-filter: blur(calc(10px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.1));
+  -webkit-backdrop-filter: blur(calc(10px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.1));
 }
 
 html[data-theme="dark"] .cron-sched-modes {
@@ -150,8 +150,8 @@ html[data-theme="dark"] .cron-sched-mode.active {
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.47),
     0 4px 12px color-mix(in srgb, var(--tone) 8%, transparent);
-  backdrop-filter: blur(16px) saturate(1.25);
-  -webkit-backdrop-filter: blur(16px) saturate(1.25);
+  backdrop-filter: blur(calc(16px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.25));
+  -webkit-backdrop-filter: blur(calc(16px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.25));
   color: var(--tone);
   transition: border-color 0.14s ease, box-shadow 0.14s ease, background 0.14s ease;
 }
@@ -223,8 +223,8 @@ html[data-theme="dark"] .cron-sched-stepper {
   font-size: 13px;
   font-family: inherit;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.58);
-  backdrop-filter: blur(10px) saturate(1.1);
-  -webkit-backdrop-filter: blur(10px) saturate(1.1);
+  backdrop-filter: blur(calc(10px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.1));
+  -webkit-backdrop-filter: blur(calc(10px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.1));
   transition: border-color 0.14s ease, box-shadow 0.14s ease;
 }
 
@@ -346,8 +346,8 @@ html[data-theme="dark"] .cron-sched-input {
   font-size: 12px;
   font-weight: 600;
   cursor: pointer;
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(calc(10px * var(--glass-blur-scale, 1)));
+  -webkit-backdrop-filter: blur(calc(10px * var(--glass-blur-scale, 1)));
   transition: color 0.15s ease, background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
@@ -388,8 +388,8 @@ html[data-theme="dark"] .cron-sched-wd.active {
     linear-gradient(165deg, rgba(255, 255, 255, 0.36), rgba(255, 255, 255, 0.12)),
     color-mix(in srgb, var(--tone-soft) 48%, transparent);
   box-shadow: 0 14px 36px color-mix(in srgb, var(--tone) 14%, rgba(15, 23, 42, 0.14));
-  backdrop-filter: blur(20px) saturate(1.3);
-  -webkit-backdrop-filter: blur(20px) saturate(1.3);
+  backdrop-filter: blur(calc(20px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.3));
+  -webkit-backdrop-filter: blur(calc(20px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.3));
   animation: cron-dt-pop-in 0.16s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 

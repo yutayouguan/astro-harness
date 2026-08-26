@@ -24,8 +24,8 @@
   background:
     linear-gradient(165deg, rgba(255, 255, 255, 0.18), rgba(255, 255, 255, 0.045)),
     color-mix(in srgb, var(--tone-soft) 12%, var(--glass-panel));
-  backdrop-filter: blur(22px) saturate(1.08);
-  -webkit-backdrop-filter: blur(22px) saturate(1.08);
+  backdrop-filter: blur(calc(22px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.08));
+  -webkit-backdrop-filter: blur(calc(22px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.08));
   box-shadow: 0 2px 10px rgba(var(--shadow-ink), 0.04);
   overflow: hidden;
 }
@@ -476,8 +476,8 @@ html[data-theme="dark"] .project-files-panel {
   background:
     linear-gradient(145deg, rgba(255, 255, 255, 0.2), rgba(255, 255, 255, 0.06)),
     color-mix(in srgb, var(--glass-panel) 96%, transparent);
-  backdrop-filter: blur(26px) saturate(1.14);
-  -webkit-backdrop-filter: blur(26px) saturate(1.14);
+  backdrop-filter: blur(calc(26px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.14));
+  -webkit-backdrop-filter: blur(calc(26px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.14));
   box-shadow: 0 16px 34px rgba(var(--shadow-ink), 0.1);
 }
 

@@ -1,5 +1,11 @@
 /* Transparency, contrast, and segmented-control accessibility overrides. */
 @media (prefers-reduced-transparency: reduce) {
+  /* 写死的 backdrop-filter 只受这两个旋钮控制，必须与 --backdrop-glass: none 同步归零 */
+  html[data-theme] {
+    --glass-blur-scale: 0;
+    --glass-saturate: 1;
+  }
+
   html[data-theme="dark"] {
     --glass: rgba(18, 14, 30, 0.92);
     --glass-strong: rgba(18, 14, 30, 0.95);

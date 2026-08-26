@@ -1,6 +1,63 @@
-/* User-selected glass intensity overrides. Rich is the theme default. */
+/* User-selected glass intensity overrides. Liquid is the app default; rich is the
+ * legacy frosted look.
+ *
+ * --glass-blur-scale / --glass-saturate 是全局旋钮：功能样式里写死的模糊与饱和
+ * 已由 scripts/glass-knobs-codemod.mjs 统一接到这两个变量上，回退值保持原样。
+ * 因此改这两个值能一次性调节全部玻璃表面，各组件仍保留自己的模糊半径比例。 */
+
+/* Liquid Glass —— 贴近参考稿：稀薄衬底、高饱和透视、镜面折光边缘。
+ *
+ * 不限定 html：自定义属性会继承，挂在任意容器上即可局部启用，
+ * 便于并排对比两档。a11y 的 `html[data-theme]` 特异度更高且在本文件之后导入，
+ * 降低透明度 / 高对比偏好仍能压过这里。 */
+[data-glass="liquid"] {
+  --glass-saturate: var(--liquid-glass-saturate);
+  --glass-blur-scale: var(--liquid-glass-blur-scale);
+  --backdrop-glass: var(--liquid-glass-backdrop);
+  --glass-rim: var(--liquid-glass-rim);
+  --glass-edge: var(--liquid-glass-edge);
+  --glass-border: var(--liquid-glass-edge);
+  --chip-border: var(--liquid-glass-edge);
+  --glass-inner: var(--liquid-glass-inner);
+  --glass-fill: var(--liquid-glass-sheen), var(--liquid-glass-tint);
+  --glass-fill-soft: var(--liquid-glass-sheen), var(--liquid-glass-tint);
+  --glass-card: var(--liquid-glass-sheen), var(--liquid-glass-tint);
+  --chip-bg: var(--liquid-glass-tint);
+  --surface-panel-background: var(--liquid-glass-tint);
+  --glass-panel: var(--surface-panel-background);
+  --surface-panel-border: var(--liquid-glass-edge);
+  --menu-glass-shadow: var(--liquid-glass-shadow);
+  --header-chip-shadow: var(--liquid-glass-shadow);
+  --lens-shadow: var(--liquid-glass-shadow);
+  --badge-shadow: var(--liquid-glass-shadow);
+}
+
+/* Liquid Glass（克制）—— 同样的折光边缘，衬底更实，长文本更好读。 */
+[data-glass="liquid-soft"] {
+  --glass-saturate: var(--liquid-glass-soft-saturate);
+  --glass-blur-scale: var(--liquid-glass-soft-blur-scale);
+  --backdrop-glass: var(--liquid-glass-soft-backdrop);
+  --glass-rim: var(--liquid-glass-soft-rim);
+  --glass-edge: var(--liquid-glass-soft-edge);
+  --glass-border: var(--liquid-glass-soft-edge);
+  --chip-border: var(--liquid-glass-soft-edge);
+  --glass-inner: var(--liquid-glass-soft-inner);
+  --glass-fill: var(--liquid-glass-soft-sheen), var(--liquid-glass-soft-tint);
+  --glass-fill-soft: var(--liquid-glass-soft-sheen), var(--liquid-glass-soft-tint);
+  --glass-card: var(--liquid-glass-soft-sheen), var(--liquid-glass-soft-tint);
+  --chip-bg: var(--liquid-glass-soft-tint);
+  --surface-panel-background: var(--liquid-glass-soft-tint);
+  --glass-panel: var(--surface-panel-background);
+  --surface-panel-border: var(--liquid-glass-soft-edge);
+  --menu-glass-shadow: var(--liquid-glass-soft-shadow);
+  --header-chip-shadow: var(--liquid-glass-soft-shadow);
+  --lens-shadow: var(--liquid-glass-soft-shadow);
+  --badge-shadow: var(--liquid-glass-soft-shadow);
+}
+
 html[data-glass="normal"] {
   --blur-glass: 12px;
+  --glass-blur-scale: 0.7;
   --header-chip-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
   --lens-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
   --badge-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
@@ -10,6 +67,9 @@ html[data-glass="normal"] {
 
 html[data-glass="minimal"] {
   --blur-glass: 0px;
+  /* 写死的 backdrop-filter 靠这个旋钮一起归零，--backdrop-glass 只覆盖走 token 的那几处 */
+  --glass-blur-scale: 0;
+  --glass-saturate: 1;
   --backdrop-glass: none;
   --menu-glass-blur: none;
   --header-chip-shadow: none;

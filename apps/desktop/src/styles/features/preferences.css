@@ -174,8 +174,8 @@
     linear-gradient(155deg, rgba(255, 255, 255, 0.28), rgba(255, 255, 255, 0.07)),
     color-mix(in srgb, var(--tone-soft) 24%, var(--glass-panel, transparent));
   box-shadow: var(--shadow-card), var(--glass-rim);
-  backdrop-filter: blur(18px) saturate(1.2);
-  -webkit-backdrop-filter: blur(18px) saturate(1.2);
+  backdrop-filter: blur(calc(18px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.2));
+  -webkit-backdrop-filter: blur(calc(18px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.2));
 }
 
 html[data-theme="dark"] .prefs-category-nav {
@@ -322,8 +322,8 @@ html[data-theme="dark"] .prefs-category-nav {
     linear-gradient(155deg, rgba(255, 255, 255, 0.3), rgba(255, 255, 255, 0.08)),
     color-mix(in srgb, var(--tone-soft) 35%, var(--glass-panel, transparent));
   box-shadow: var(--shadow-card), var(--glass-rim);
-  backdrop-filter: blur(16px) saturate(1.2);
-  -webkit-backdrop-filter: blur(16px) saturate(1.2);
+  backdrop-filter: blur(calc(16px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.2));
+  -webkit-backdrop-filter: blur(calc(16px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.2));
 }
 
 html[data-theme="dark"] .prefs-card,
@@ -525,8 +525,8 @@ html[data-theme="dark"] .prefs-icon-badge {
   text-align: left;
   cursor: pointer;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.29);
-  backdrop-filter: blur(12px) saturate(1.15);
-  -webkit-backdrop-filter: blur(12px) saturate(1.15);
+  backdrop-filter: blur(calc(12px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.15));
+  -webkit-backdrop-filter: blur(calc(12px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.15));
   transition:
     border-color 0.15s ease,
     background 0.15s ease,
@@ -1547,8 +1547,8 @@ html[data-theme="dark"] .shell-dynamic-reshuffle {
     0 3px 10px color-mix(in srgb, #0f172a 6%, transparent),
     inset 0 1px 0 color-mix(in srgb, #fff 70%, transparent),
     inset 0 -1px 0 color-mix(in srgb, #94a3b8 10%, transparent);
-  backdrop-filter: blur(16px) saturate(1.25);
-  -webkit-backdrop-filter: blur(16px) saturate(1.25);
+  backdrop-filter: blur(calc(16px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.25));
+  -webkit-backdrop-filter: blur(calc(16px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.25));
   scrollbar-width: none;
 }
 
@@ -1679,8 +1679,8 @@ html[data-theme="dark"] .shell-color-presets {
   box-shadow:
     0 24px 60px color-mix(in srgb, #0f172a 22%, transparent),
     inset 0 0 0 1px color-mix(in srgb, #fff 40%, transparent);
-  backdrop-filter: blur(18px) saturate(1.2);
-  -webkit-backdrop-filter: blur(18px) saturate(1.2);
+  backdrop-filter: blur(calc(18px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.2));
+  -webkit-backdrop-filter: blur(calc(18px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.2));
 }
 
 @media (max-width: 700px) {
@@ -1821,8 +1821,8 @@ html[data-theme="dark"] .shell-grad-stop-btn {
     0 2px 8px color-mix(in srgb, #0f172a 6%, transparent),
     inset 0 1px 0 color-mix(in srgb, #fff 70%, transparent),
     inset 0 -1px 0 color-mix(in srgb, #94a3b8 10%, transparent);
-  backdrop-filter: blur(14px) saturate(1.2);
-  -webkit-backdrop-filter: blur(14px) saturate(1.2);
+  backdrop-filter: blur(calc(14px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.2));
+  -webkit-backdrop-filter: blur(calc(14px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.2));
   scrollbar-width: none;
 }
 

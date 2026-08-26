@@ -114,8 +114,8 @@
   border-radius: 12px;
   background: var(--plugins-shell-bg);
   box-shadow: var(--plugins-shell-shadow);
-  backdrop-filter: blur(14px) saturate(1.18);
-  -webkit-backdrop-filter: blur(14px) saturate(1.18);
+  backdrop-filter: blur(calc(14px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.18));
+  -webkit-backdrop-filter: blur(calc(14px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.18));
 }
 
   .skills-usage-bar {
@@ -165,8 +165,8 @@
       linear-gradient(155deg, rgba(255, 255, 255, 0.62), rgba(255, 255, 255, 0.22)),
       color-mix(in srgb, var(--glass-panel, rgba(255, 255, 255, 0.5)) 78%, transparent);
     box-shadow: var(--shadow-card), var(--glass-rim);
-    backdrop-filter: blur(18px) saturate(1.25);
-    -webkit-backdrop-filter: blur(18px) saturate(1.25);
+    backdrop-filter: blur(calc(18px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.25));
+    -webkit-backdrop-filter: blur(calc(18px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.25));
 }
 
 .skills-pane::before {
@@ -237,8 +237,8 @@ html[data-theme="dark"] .skills-pane {
     linear-gradient(165deg, rgba(255, 255, 255, 0.88), rgba(255, 255, 255, 0.42)),
     color-mix(in srgb, var(--tone-soft) 55%, transparent);
   box-shadow: 0 2px 8px color-mix(in srgb, var(--tone) 10%, rgba(15, 23, 42, 0.04));
-  backdrop-filter: blur(10px) saturate(1.15);
-  -webkit-backdrop-filter: blur(10px) saturate(1.15);
+  backdrop-filter: blur(calc(10px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.15));
+  -webkit-backdrop-filter: blur(calc(10px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.15));
 }
 
 .skills-tab-shell .skills-action-btn:hover {
@@ -321,8 +321,8 @@ html[data-theme="dark"] .skills-tab-pill {
     linear-gradient(165deg, rgba(255, 255, 255, 0.9), rgba(255, 255, 255, 0.45)),
     var(--tone-soft);
   box-shadow: 0 2px 10px color-mix(in srgb, var(--tone) 12%, rgba(15, 23, 42, 0.04));
-  backdrop-filter: blur(10px) saturate(1.15);
-  -webkit-backdrop-filter: blur(10px) saturate(1.15);
+  backdrop-filter: blur(calc(10px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.15));
+  -webkit-backdrop-filter: blur(calc(10px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.15));
 }
 
 .skills-tab-shell .agent-picker-chip:hover:not(:disabled),
@@ -404,8 +404,8 @@ html[data-theme="dark"] .skills-tab-shell .agent-picker-chip.is-open {
     linear-gradient(165deg, rgba(255, 255, 255, 0.9), rgba(255, 255, 255, 0.45)),
     var(--tone-soft);
   box-shadow: 0 2px 10px color-mix(in srgb, var(--tone) 12%, rgba(15, 23, 42, 0.04));
-  backdrop-filter: blur(10px) saturate(1.15);
-  -webkit-backdrop-filter: blur(10px) saturate(1.15);
+  backdrop-filter: blur(calc(10px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.15));
+  -webkit-backdrop-filter: blur(calc(10px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.15));
 }
 
 .skills-pane-actions .select-menu--sm .select-menu-trigger:hover:not(:disabled),
@@ -510,8 +510,8 @@ html[data-theme="dark"] .skills-store-toolbar .select-menu.is-open .select-menu-
   color: var(--tone, var(--ink-soft));
   background: var(--plugins-shell-bg);
   box-shadow: var(--plugins-shell-shadow);
-  backdrop-filter: blur(14px) saturate(1.18);
-  -webkit-backdrop-filter: blur(14px) saturate(1.18);
+  backdrop-filter: blur(calc(14px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.18));
+  -webkit-backdrop-filter: blur(calc(14px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.18));
   cursor: pointer;
   line-height: 1;
   transition: color 0.12s ease, border-color 0.12s ease, background 0.12s ease, box-shadow 0.12s ease;

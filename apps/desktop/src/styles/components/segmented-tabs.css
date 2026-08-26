@@ -6,8 +6,8 @@
   border: 1px solid var(--surface-panel-border, rgba(148, 163, 184, 0.24));
   border-radius: var(--seg-shell-radius, 12px);
   background: var(--surface-panel-background, rgba(255, 255, 255, 0.24));
-  backdrop-filter: var(--seg-shell-blur, blur(14px));
-  -webkit-backdrop-filter: var(--seg-shell-blur, blur(14px));
+  backdrop-filter: var(--seg-shell-blur, blur(calc(14px * var(--glass-blur-scale, 1))));
+  -webkit-backdrop-filter: var(--seg-shell-blur, blur(calc(14px * var(--glass-blur-scale, 1))));
 }
 
 .ui-segmented-tabs__tab {

@@ -83,8 +83,8 @@
   background: var(--plugins-shell-bg);
   border: 1px solid var(--plugins-shell-border);
   box-shadow: var(--plugins-shell-shadow);
-  backdrop-filter: blur(14px) saturate(1.18);
-  -webkit-backdrop-filter: blur(14px) saturate(1.18);
+  backdrop-filter: blur(calc(14px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.18));
+  -webkit-backdrop-filter: blur(calc(14px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.18));
 }
 
 .loop-view-btn {
@@ -142,8 +142,8 @@
   color: var(--ink);
   border: 1px solid var(--plugins-shell-border);
   box-shadow: var(--plugins-shell-shadow);
-  backdrop-filter: blur(14px) saturate(1.18);
-  -webkit-backdrop-filter: blur(14px) saturate(1.18);
+  backdrop-filter: blur(calc(14px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.18));
+  -webkit-backdrop-filter: blur(calc(14px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.18));
 }
 .loop-btn--secondary:hover {
   color: var(--tone);
@@ -294,7 +294,7 @@
   border-radius: 12px;
   background: var(--glass-panel);
   border: 1px solid var(--border);
-  backdrop-filter: blur(20px);
+  backdrop-filter: blur(calc(20px * var(--glass-blur-scale, 1)));
   transition: border-color 0.15s, transform 0.15s;
   overflow: hidden;
 }
@@ -445,7 +445,7 @@
   border-radius: 12px;
   background: var(--glass-panel);
   border: 1px solid var(--border);
-  backdrop-filter: blur(14px);
+  backdrop-filter: blur(calc(14px * var(--glass-blur-scale, 1)));
   transition: transform 0.1s, box-shadow 0.15s;
 }
 .loop-list-row:hover {
