@@ -9,6 +9,8 @@ use super::SessionStore;
 
 pub const DEFAULT_PROJECT_ID: &str = "default";
 pub const DEFAULT_PROJECT_NAME: &str = "主空间";
+/// 前端 `public/project-icons/astro-space.svg` 的品牌文件夹图标。
+pub const DEFAULT_PROJECT_ICON: &str = "astro-space";
 /// v19 早期版本写入的默认项目名；仅当用户没有自定义过名字时才改写成新名。
 const LEGACY_DEFAULT_PROJECT_NAMES: [&str; 1] = ["默认工作空间"];
 
@@ -378,10 +380,20 @@ impl SessionStore {
                     params![DEFAULT_PROJECT_NAME, DEFAULT_PROJECT_ID, legacy],
                 )?;
             }
+            // 没有图标的历史默认项目补上品牌图标；用户已选的图标保持不变。
+            tx.execute(
+                "UPDATE projects SET icon = ?1, updated_at = datetime('now')
+                 WHERE id = ?2 AND (icon IS NULL OR TRIM(icon) = '')",
+                params![DEFAULT_PROJECT_ICON, DEFAULT_PROJECT_ID],
+            )?;
         } else {
             tx.execute(
-                "INSERT INTO projects (id, name, position) VALUES (?1, ?2, -1)",
-                params![DEFAULT_PROJECT_ID, DEFAULT_PROJECT_NAME],
+                "INSERT INTO projects (id, name, icon, position) VALUES (?1, ?2, ?3, -1)",
+                params![
+                    DEFAULT_PROJECT_ID,
+                    DEFAULT_PROJECT_NAME,
+                    DEFAULT_PROJECT_ICON
+                ],
             )?;
         }
         tx.execute(
@@ -638,6 +650,35 @@ mod tests {
                 .unwrap()
                 .id,
             default.id
+        );
+    }
+
+    #[test]
+    fn ensure_default_project_seeds_brand_icon_without_touching_custom_choice() {
+        let store = open_memory();
+        let base = tempfile::tempdir().unwrap();
+        let workspace = make_root(&base, "workspace");
+        let path = std::path::Path::new(&workspace);
+
+        let created = store.ensure_default_project(path).unwrap();
+        assert_eq!(
+            created.icon.as_deref(),
+            Some(crate::store::projects::DEFAULT_PROJECT_ICON)
+        );
+
+        store
+            .update_project(&created.id, None, Some(Some("folder-rust")), None)
+            .unwrap();
+        let kept = store.ensure_default_project(path).unwrap();
+        assert_eq!(kept.icon.as_deref(), Some("folder-rust"));
+
+        store
+            .update_project(&created.id, None, Some(None), None)
+            .unwrap();
+        let reseeded = store.ensure_default_project(path).unwrap();
+        assert_eq!(
+            reseeded.icon.as_deref(),
+            Some(crate::store::projects::DEFAULT_PROJECT_ICON)
         );
     }
 
