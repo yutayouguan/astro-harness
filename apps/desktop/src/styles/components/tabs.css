@@ -1,5 +1,9 @@
 /* 全局统一分段 Tab —— 对齐 Apple 分段控件的液态玻璃材质。
 
+   玻璃是透的：底下的内容看得见，只是被模糊和提饱和了。所以填充只给很淡
+   的一层白，材质感全部交给 backdrop-filter 和边缘高光——糊一层厚白会立刻
+   退回磨砂塑料。
+
    两层都是浮起来的，靠「浮多高」拉开层级：
    轨道是一片薄玻璃，投影宽而淡，悬在内容之上；
    选中项是压在轨道上的一枚厚透镜，投影紧而实，再高一层。
@@ -16,81 +20,82 @@
   --seg-shell-pad: 3px;
   --seg-shell-gap: 2px;
 
-  /* 轨道：悬浮的薄玻璃。投影分三层由紧到松，越远越淡越大 */
+  /* 轨道：悬浮的薄玻璃。只给一层极淡的白让边界成立，其余靠模糊
+     投影分三层由紧到松，越远越淡越大；玻璃是透的，投影也要跟着轻 */
   --seg-shell-bg:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.5) 0%, rgba(255, 255, 255, 0.26) 100%),
-    rgba(118, 118, 128, 0.1);
-  --seg-shell-border: rgba(255, 255, 255, 0.62);
-  --seg-shell-blur: blur(28px) saturate(190%);
+    linear-gradient(180deg, rgba(255, 255, 255, 0.2) 0%, rgba(255, 255, 255, 0.07) 100%);
+  --seg-shell-border: rgba(255, 255, 255, 0.45);
+  --seg-shell-blur: blur(20px) saturate(180%) brightness(1.05);
   --seg-shell-shadow:
-    0 0.5px 1px rgba(15, 23, 42, 0.05),
-    0 3px 8px -2px rgba(15, 23, 42, 0.09),
-    0 10px 24px -8px rgba(15, 23, 42, 0.15),
-    inset 0 1px 0 rgba(255, 255, 255, 0.78),
-    inset 0 -0.5px 0 rgba(255, 255, 255, 0.34);
+    0 0.5px 1px rgba(15, 23, 42, 0.04),
+    0 3px 8px -2px rgba(15, 23, 42, 0.07),
+    0 10px 24px -8px rgba(15, 23, 42, 0.12),
+    inset 0 1px 0 rgba(255, 255, 255, 0.6),
+    inset 0 -0.5px 0 rgba(255, 255, 255, 0.24);
 
   --seg-item-radius: 9px;
   --seg-item-pad: 0 13px;
   --seg-item-gap: 7px;
   --seg-item-font: 13px;
   --seg-item-weight: 600;
-  /* 半透明表面上不用平灰，靠对比度保可读性 */
-  --seg-item-color: color-mix(in srgb, var(--ink) 58%, transparent);
+  /* 表面透光，底下的内容会晃动，字要比在实色上更重一点才压得住 */
+  --seg-item-color: color-mix(in srgb, var(--ink) 64%, transparent);
   --seg-item-color-hover: var(--ink);
-  --seg-item-bg-hover: rgba(255, 255, 255, 0.42);
+  --seg-item-bg-hover: rgba(255, 255, 255, 0.22);
   --seg-item-color-active: var(--ink);
 
-  /* 透镜本体：自上而下的镜面渐变，中段略暗形成折射腰线 */
+  /* 透镜本体：仍然透光，只比轨道亮一档；中段略暗形成折射腰线 */
   --seg-item-bg-active:
     linear-gradient(
       180deg,
-      rgba(255, 255, 255, 0.94) 0%,
-      rgba(255, 255, 255, 0.72) 46%,
-      rgba(255, 255, 255, 0.86) 100%
-    ),
-    color-mix(in srgb, var(--tone-soft) 22%, rgba(255, 255, 255, 0.6));
-  --seg-item-blur-active: blur(12px) saturate(200%);
+      rgba(255, 255, 255, 0.52) 0%,
+      rgba(255, 255, 255, 0.28) 46%,
+      rgba(255, 255, 255, 0.42) 100%
+    );
+  /* 叠在轨道的模糊之上，二次折射把底下的内容推得更远 */
+  --seg-item-blur-active: blur(16px) saturate(200%) brightness(1.08);
   /* 比轨道浮得更高：投影更紧更实，高光更亮 */
   --seg-item-shadow-active:
-    0 1px 2px rgba(15, 23, 42, 0.1),
-    0 3px 8px -3px rgba(15, 23, 42, 0.16),
-    0 6px 14px -6px rgba(15, 23, 42, 0.14),
-    inset 0 1px 0 rgba(255, 255, 255, 1),
-    inset 0 -1px 0 rgba(255, 255, 255, 0.62),
-    inset 0 0 0 0.5px rgba(255, 255, 255, 0.82);
+    0 1px 2px rgba(15, 23, 42, 0.09),
+    0 3px 8px -3px rgba(15, 23, 42, 0.14),
+    0 6px 14px -6px rgba(15, 23, 42, 0.12),
+    inset 0 1px 0 rgba(255, 255, 255, 0.9),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.45),
+    inset 0 0 0 0.5px rgba(255, 255, 255, 0.6);
 }
 
 html[data-theme="dark"] {
+  /* 深色下玻璃是压暗而不是提亮，brightness 走反方向 */
   --seg-shell-bg:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0.042) 100%),
-    rgba(118, 118, 128, 0.2);
-  --seg-shell-border: rgba(255, 255, 255, 0.14);
+    linear-gradient(180deg, rgba(255, 255, 255, 0.07) 0%, rgba(255, 255, 255, 0.025) 100%);
+  --seg-shell-border: rgba(255, 255, 255, 0.12);
+  --seg-shell-blur: blur(20px) saturate(180%) brightness(0.92);
   --seg-shell-shadow:
-    0 1px 2px rgba(0, 0, 0, 0.3),
-    0 6px 16px -4px rgba(0, 0, 0, 0.4),
-    0 14px 32px -12px rgba(0, 0, 0, 0.52),
-    inset 0 1px 0 rgba(255, 255, 255, 0.17),
-    inset 0 -0.5px 0 rgba(255, 255, 255, 0.06);
+    0 1px 2px rgba(0, 0, 0, 0.26),
+    0 6px 16px -4px rgba(0, 0, 0, 0.34),
+    0 14px 32px -12px rgba(0, 0, 0, 0.44),
+    inset 0 1px 0 rgba(255, 255, 255, 0.13),
+    inset 0 -0.5px 0 rgba(255, 255, 255, 0.05);
 
-  --seg-item-color: color-mix(in srgb, var(--ink) 62%, transparent);
-  --seg-item-bg-hover: rgba(255, 255, 255, 0.08);
+  --seg-item-color: color-mix(in srgb, var(--ink) 66%, transparent);
+  --seg-item-bg-hover: rgba(255, 255, 255, 0.07);
   --seg-item-color-active: color-mix(in srgb, #fff 82%, var(--tone));
 
   --seg-item-bg-active:
     linear-gradient(
       180deg,
-      rgba(255, 255, 255, 0.18) 0%,
-      rgba(255, 255, 255, 0.08) 46%,
-      rgba(255, 255, 255, 0.13) 100%
-    ),
-    color-mix(in srgb, var(--tone-soft) 34%, rgba(255, 255, 255, 0.06));
+      rgba(255, 255, 255, 0.16) 0%,
+      rgba(255, 255, 255, 0.07) 46%,
+      rgba(255, 255, 255, 0.11) 100%
+    );
+  --seg-item-blur-active: blur(16px) saturate(200%) brightness(1.18);
   --seg-item-shadow-active:
-    0 1px 2px rgba(0, 0, 0, 0.36),
-    0 3px 8px -3px rgba(0, 0, 0, 0.42),
-    0 6px 14px -6px rgba(0, 0, 0, 0.34),
-    inset 0 1px 0 rgba(255, 255, 255, 0.26),
-    inset 0 -1px 0 rgba(255, 255, 255, 0.08),
-    inset 0 0 0 0.5px rgba(255, 255, 255, 0.16);
+    0 1px 2px rgba(0, 0, 0, 0.32),
+    0 3px 8px -3px rgba(0, 0, 0, 0.38),
+    0 6px 14px -6px rgba(0, 0, 0, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.24),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.07),
+    inset 0 0 0 0.5px rgba(255, 255, 255, 0.15);
 }
 
 /* ── 容器：外观 + 标准布局 ───────────────────────────────────── */
