@@ -37,6 +37,11 @@
 }
 
 .chat-right-panel {
+  /* 右栏旧样式统一使用 --tone-blue / --tone-blue-soft；在组件根部将它们
+     映射到当前 Tab 的语义色，内部面板、图标、选中态和深色规则即可整体
+     跟随 .app-shell 的 --tone，而不再固定呈蓝色。 */
+  --tone-blue: var(--tone);
+  --tone-blue-soft: var(--tone-soft);
   position: absolute;
   top: 0;
   right: 0;
