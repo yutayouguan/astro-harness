@@ -264,10 +264,7 @@ impl CronStore {
             // 只在有 next_run 需要初始化时才写文件
             let mut needs_save = false;
             for job in &mut file.jobs {
-                if job.enabled
-                    && job.agent_id == default_agent_id()
-                    && job.next_run_at.is_none()
-                {
+                if job.enabled && job.agent_id == default_agent_id() && job.next_run_at.is_none() {
                     job.next_run_at = Some(
                         compute_next_run(&job.schedule, now)?
                             .to_rfc3339_opts(chrono::SecondsFormat::Secs, true),

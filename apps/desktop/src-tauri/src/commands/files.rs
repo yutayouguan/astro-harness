@@ -276,7 +276,11 @@ fn open_path_with_vscode(path: &std::path::Path) -> Result<(), String> {
     {
         let candidates = ["code.cmd", "code"];
         for program in candidates {
-            if std::process::Command::new(program).arg(path).spawn().is_ok() {
+            if std::process::Command::new(program)
+                .arg(path)
+                .spawn()
+                .is_ok()
+            {
                 return Ok(());
             }
         }
@@ -564,10 +568,7 @@ pub async fn open_path_externally(path: String) -> Result<(), String> {
 
 /// 用 VS Code 打开路径。优先按项目根校验，否则回退到记忆沙箱。
 #[tauri::command]
-pub async fn open_path_in_vscode(
-    path: String,
-    project_id: Option<String>,
-) -> Result<(), String> {
+pub async fn open_path_in_vscode(path: String, project_id: Option<String>) -> Result<(), String> {
     let resolved = if let Some(project_id) = project_id.filter(|id| !id.trim().is_empty()) {
         let roots = project_roots(&project_id)?;
         resolve_project_path(&roots, &path)?

@@ -697,13 +697,7 @@ mod tests {
 "#,
         )
         .unwrap();
-        write_agent_config(
-            dir.path(),
-            DEFAULT_AGENT_ID,
-            "ima知识库检索专家",
-            false,
-        )
-        .unwrap();
+        write_agent_config(dir.path(), DEFAULT_AGENT_ID, "ima知识库检索专家", false).unwrap();
 
         let agents = list_agents(dir.path());
         let ima = agents

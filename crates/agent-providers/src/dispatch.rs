@@ -435,8 +435,7 @@ fn use_responses(provider: &str, config: &ProviderConfig) -> bool {
     match config.api_mode.as_str() {
         "chat" => false,
         "responses" => true,
-        _ => crate::profile::resolve(provider)
-            .is_some_and(|p| p.supports_responses),
+        _ => crate::profile::resolve(provider).is_some_and(|p| p.supports_responses),
     }
 }
 
@@ -611,11 +610,17 @@ mod tests {
     fn api_mode_override() {
         let mut chat_config = ProviderConfig::default();
         chat_config.api_mode = "chat".to_string();
-        assert!(!use_responses("openai", &chat_config), "api_mode=chat forces ChatCompletions");
+        assert!(
+            !use_responses("openai", &chat_config),
+            "api_mode=chat forces ChatCompletions"
+        );
 
         let mut resp_config = ProviderConfig::default();
         resp_config.api_mode = "responses".to_string();
-        assert!(use_responses("ollama", &resp_config), "api_mode=responses forces Responses");
+        assert!(
+            use_responses("ollama", &resp_config),
+            "api_mode=responses forces Responses"
+        );
     }
 
     #[test]

@@ -105,27 +105,14 @@
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   font-size: 0.86em;
   padding: 0.12em 0.4em;
-  border-radius: 6px;
-  background: color-mix(in srgb, var(--glass-inner, rgba(255, 255, 255, 0.12)) 70%, transparent);
-  border: 1px solid color-mix(in srgb, var(--glass-edge) 70%, transparent);
+  border-radius: calc(var(--chat-inset-radius, 10px) - 2px);
   color: var(--ink);
 }
 
 .msg-md-codeblock {
   margin: 0.75em 0;
-  border-radius: 12px;
+  border-radius: var(--chat-inset-radius, 10px);
   overflow: hidden;
-  border: 1px solid color-mix(in srgb, var(--glass-edge) 85%, transparent);
-  background:
-    linear-gradient(
-      160deg,
-      color-mix(in srgb, #fff 8%, transparent) 0%,
-      transparent 42%
-    ),
-    color-mix(in srgb, var(--glass-inner, rgba(0, 0, 0, 0.35)) 78%, transparent);
-  box-shadow: var(--glass-rim), 0 8px 22px rgba(0, 0, 0, 0.12);
-  backdrop-filter: blur(calc(14px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.15));
-  -webkit-backdrop-filter: blur(calc(14px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.15));
   position: relative;
 }
 
@@ -253,27 +240,34 @@
 }
 
 html[data-theme="light"] .bubble.assistant {
+  /* 大面积阅读面：厚模糊 + 克制的饱和，透明度留给背景色透出而不是刷白 */
   background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.44) 0%, rgba(255, 255, 255, 0.22) 100%),
-    color-mix(in srgb, var(--tone-soft, rgba(37, 99, 235, 0.14)) 10%, rgba(255, 255, 255, 0.42));
+    linear-gradient(155deg, rgba(255, 255, 255, 0.3) 0%, rgba(255, 255, 255, 0.12) 100%),
+    color-mix(in srgb, var(--tone-soft, rgba(37, 99, 235, 0.14)) 10%, rgba(255, 255, 255, 0.28));
   border-color: color-mix(in srgb, var(--tone, #2563eb) 14%, rgba(255, 255, 255, 0.45));
   box-shadow:
     var(--shadow-card),
     var(--glass-rim),
     0 1px 0 rgba(255, 255, 255, 0.56) inset;
+  backdrop-filter: blur(calc(30px * var(--glass-blur-scale, 1))) saturate(min(var(--glass-saturate, 1.18), 1.18));
+  -webkit-backdrop-filter: blur(calc(30px * var(--glass-blur-scale, 1))) saturate(min(var(--glass-saturate, 1.18), 1.18));
 }
 
 html[data-theme="light"] .msg-reasoning {
+  /* 三层嵌套面里最轻的一层：墨色更淡，高光更弱 */
   background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.2) 0%, rgba(255, 255, 255, 0.06) 100%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.12) 0%, transparent 40%),
     color-mix(
       in srgb,
-      var(--tone-soft, rgba(37, 99, 235, 0.14)) 14%,
+      var(--tone-soft, rgba(37, 99, 235, 0.14)) 12%,
       color-mix(in srgb, var(--ink) 4%, transparent)
     );
-  border-color: color-mix(in srgb, var(--tone, #2563eb) 14%, rgba(148, 163, 184, 0.28));
-  backdrop-filter: blur(calc(12px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.2));
-  -webkit-backdrop-filter: blur(calc(12px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.2));
+  border-color: color-mix(in srgb, var(--tone, #2563eb) 10%, color-mix(in srgb, var(--ink) 8%, transparent));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.5),
+    inset 0 -1px 0 color-mix(in srgb, var(--ink) 3%, transparent);
+  backdrop-filter: blur(calc(14px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.2));
+  -webkit-backdrop-filter: blur(calc(14px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.2));
 }
 
 html[data-theme="light"] .chat-msg-nav-track {
@@ -328,18 +322,19 @@ html[data-theme="light"] .chat-msg-nav-bottom {
   color: var(--tone, var(--accent));
 }
 
-html[data-theme="light"] .msg-md-codeblock {
-  background:
-    linear-gradient(160deg, rgba(255, 255, 255, 0.34) 0%, rgba(232, 238, 246, 0.92) 100%);
-  border-color: rgba(148, 163, 184, 0.42);
-  box-shadow:
-    var(--glass-rim),
-    inset 0 1px 3px rgba(15, 23, 42, 0.04),
-    0 4px 12px rgba(15, 23, 42, 0.05);
-}
-
 html[data-theme="light"] .msg-md-pre {
   color: #334155;
+}
+
+/* 关掉透明后玻璃只剩空底，阅读面收回不透明底色 */
+@media (prefers-reduced-transparency: reduce) {
+  html[data-theme="light"] .bubble.assistant {
+    background: rgba(248, 250, 253, 0.97);
+  }
+
+  html[data-theme="light"] .msg-reasoning {
+    background: color-mix(in srgb, var(--ink) 5%, rgba(248, 250, 253, 0.97));
+  }
 }
 
 html[data-theme="dark"] .bubble.assistant {
@@ -358,12 +353,6 @@ html[data-theme="dark"] .bubble.assistant {
     0 8px 20px rgba(0, 0, 0, 0.14);
   backdrop-filter: blur(calc(22px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.5));
   -webkit-backdrop-filter: blur(calc(22px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.5));
-}
-
-html[data-theme="dark"] .msg-md-codeblock {
-  background:
-    linear-gradient(160deg, rgba(255, 255, 255, 0.06) 0%, transparent 40%),
-    rgba(6, 8, 18, 0.72);
 }
 
 .stream-caret {
@@ -408,30 +397,10 @@ html[data-theme="dark"] .msg-md-codeblock {
   gap: 10px;
   margin: 0 12px 12px;
   padding: 10px 10px 10px 12px;
-  border-radius: 20px;
-  background:
-    radial-gradient(
-      82% 140% at 10% -48%,
-      rgba(255, 255, 255, 0.22) 0%,
-      rgba(255, 255, 255, 0.04) 42%,
-      transparent 70%
-    ),
-    radial-gradient(
-      68% 120% at 100% 118%,
-      color-mix(in srgb, var(--tone, var(--accent)) 12%, transparent),
-      transparent 74%
-    ),
-    color-mix(in srgb, var(--tone-soft, transparent) 30%, transparent);
-  border: 1px solid color-mix(in srgb, var(--tone, var(--accent)) 14%, rgba(255, 255, 255, 0.3));
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.7),
-    inset 1px 0 0 rgba(255, 255, 255, 0.2),
-    inset 0 -1px 0 rgba(57, 76, 110, 0.07),
-    0 16px 42px color-mix(in srgb, var(--ink) 8%, transparent);
-  backdrop-filter: blur(calc(30px * var(--glass-blur-scale, 1)))
-    saturate(min(var(--glass-saturate, 1.35), 1.35)) contrast(1.02);
-  -webkit-backdrop-filter: blur(calc(30px * var(--glass-blur-scale, 1)))
-    saturate(min(var(--glass-saturate, 1.35), 1.35)) contrast(1.02);
+  border-radius: 22px;
+  background: transparent;
+  border: 1px solid color-mix(in srgb, var(--tone, var(--accent)) 8%, transparent);
+  box-shadow: none;
   transition:
     border-color 0.22s var(--ease-out, cubic-bezier(0.22, 1, 0.36, 1)),
     box-shadow 0.22s var(--ease-out, cubic-bezier(0.22, 1, 0.36, 1)),
@@ -439,66 +408,17 @@ html[data-theme="dark"] .msg-md-codeblock {
 }
 
 .composer:focus-within {
-  border-color: color-mix(in srgb, var(--tone, var(--accent)) 30%, var(--glass-edge));
-  background:
-    radial-gradient(
-      82% 140% at 10% -48%,
-      rgba(255, 255, 255, 0.28) 0%,
-      rgba(255, 255, 255, 0.055) 42%,
-      transparent 70%
-    ),
-    radial-gradient(
-      68% 120% at 100% 118%,
-      color-mix(in srgb, var(--tone, var(--accent)) 16%, transparent),
-      transparent 74%
-    ),
-    color-mix(in srgb, var(--tone-soft, transparent) 38%, transparent);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.68),
-    0 0 0 3px color-mix(in srgb, var(--tone, var(--accent)) 9%, transparent),
-    0 14px 36px color-mix(in srgb, var(--ink) 9%, transparent);
-}
-
-/* Apple-style liquid glass: keep the canvas visible and build depth at the rim. */
-html[data-theme="light"] .chat-pane .bubble.assistant {
-  background:
-    radial-gradient(
-      86% 120% at 8% -32%,
-      rgba(255, 255, 255, 0.2) 0%,
-      rgba(255, 255, 255, 0.04) 38%,
-      transparent 68%
-    ),
-    radial-gradient(
-      72% 100% at 100% 100%,
-      color-mix(in srgb, var(--tone, #2563eb) 11%, transparent),
-      transparent 72%
-    ),
-    color-mix(in srgb, var(--tone-soft, transparent) 34%, transparent);
-  border-color: color-mix(in srgb, var(--tone, #2563eb) 13%, rgba(255, 255, 255, 0.3));
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.68),
-    inset 1px 0 0 rgba(255, 255, 255, 0.2),
-    inset 0 -1px 0 rgba(57, 76, 110, 0.075),
-    0 18px 48px color-mix(in srgb, var(--tone, #2563eb) 7%, rgba(42, 64, 101, 0.07));
-  backdrop-filter: blur(calc(34px * var(--glass-blur-scale, 1)))
-    saturate(min(var(--glass-saturate, 1.35), 1.35)) contrast(1.02);
-  -webkit-backdrop-filter: blur(calc(34px * var(--glass-blur-scale, 1)))
-    saturate(min(var(--glass-saturate, 1.35), 1.35)) contrast(1.02);
-}
-
-@media (prefers-contrast: more) {
-  html[data-theme="light"] .chat-pane .bubble.assistant {
-    background: rgba(245, 248, 253, 0.94);
-    border-color: color-mix(in srgb, var(--tone, #2563eb) 24%, rgba(71, 85, 105, 0.4));
-  }
+  border-color: color-mix(in srgb, var(--tone, var(--accent)) 18%, var(--glass-edge));
+  background: color-mix(in srgb, var(--tone-soft, transparent) 12%, transparent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--tone, var(--accent)) 8%, transparent);
 }
 
 .composer--stacked {
   flex-direction: column;
   align-items: stretch;
   position: relative;
-  gap: 4px;
-  padding: 10px 10px 9px;
+  gap: 6px;
+  padding: 12px 12px 10px;
 }
 
 .composer.is-file-dragover {
@@ -529,7 +449,7 @@ html[data-theme="light"] .chat-pane .bubble.assistant {
 .composer-input-wrap {
   position: relative;
   width: 100%;
-  min-height: 40px;
+  min-height: 44px;
 }
 
 .composer-slot-mirror {
@@ -678,8 +598,8 @@ html[data-theme="dark"] .composer-agent-validate-hint {
 
 .composer-input {
   width: 100%;
-  min-height: 40px;
-  max-height: 120px;
+  min-height: 44px;
+  max-height: 160px;
   resize: none;
   border: none;
   outline: none;
@@ -2007,50 +1927,15 @@ html[data-theme="dark"] .composer-palette-item:hover {
 }
 
 html[data-theme="dark"] .composer {
-  background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.075), rgba(255, 255, 255, 0.018)),
-    color-mix(in srgb, var(--glass-panel, rgba(8, 6, 18, 0.56)) 82%, transparent);
-  border-color: color-mix(in srgb, var(--tone, #60a5fa) 12%, rgba(255, 255, 255, 0.08));
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.075),
-    0 14px 38px rgba(0, 0, 0, 0.18);
+  background: transparent;
+  border-color: rgba(255, 255, 255, 0.06);
+  box-shadow: none;
 }
 
 html[data-theme="dark"] .composer:focus-within {
-  border-color: color-mix(in srgb, var(--tone, #60a5fa) 30%, rgba(255, 255, 255, 0.12));
-  background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.09), rgba(255, 255, 255, 0.022)),
-    color-mix(in srgb, var(--glass-panel, rgba(8, 6, 18, 0.58)) 78%, var(--tone-soft, transparent));
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.09),
-    0 0 0 3px color-mix(in srgb, var(--tone, #60a5fa) 11%, transparent),
-    0 16px 42px rgba(0, 0, 0, 0.22);
-}
-
-@media (prefers-reduced-transparency: reduce) {
-  html[data-theme="light"] .composer {
-    background: rgba(248, 250, 253, 0.98);
-    backdrop-filter: none;
-    -webkit-backdrop-filter: none;
-  }
-
-  html[data-theme="dark"] .composer {
-    background: rgba(10, 10, 18, 0.97);
-    backdrop-filter: none;
-    -webkit-backdrop-filter: none;
-  }
-}
-
-@media (prefers-contrast: more) {
-  html[data-theme="light"] .composer {
-    background: rgba(245, 248, 253, 0.94);
-    border-color: color-mix(in srgb, var(--tone, var(--accent)) 24%, rgba(71, 85, 105, 0.4));
-  }
-
-  html[data-theme="dark"] .composer {
-    background: rgba(9, 9, 18, 0.94);
-    border-color: color-mix(in srgb, var(--tone, #60a5fa) 28%, rgba(255, 255, 255, 0.22));
-  }
+  border-color: color-mix(in srgb, var(--tone, #60a5fa) 22%, rgba(255, 255, 255, 0.1));
+  background: rgba(255, 255, 255, 0.03);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--tone, #60a5fa) 10%, transparent);
 }
 
 html[data-theme="dark"] .composer-mode-pill {
@@ -2385,8 +2270,8 @@ html[data-theme="dark"] .composer-preview {
   border: none;
   outline: none;
   resize: none;
-  min-height: 40px;
-  max-height: 120px;
+  min-height: 44px;
+  max-height: 160px;
   padding: 2px 4px 4px;
   line-height: 1.5;
   color: var(--ink);

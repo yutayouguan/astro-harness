@@ -2111,11 +2111,7 @@ export default function ChatView({
                 </div>
               );
             })}
-            <div
-              ref={bottomRef}
-              className="message-list-end-spacer"
-              aria-hidden="true"
-            />
+            <div ref={bottomRef} />
           </div>
           <ChatMessageNav
             messages={messages}
