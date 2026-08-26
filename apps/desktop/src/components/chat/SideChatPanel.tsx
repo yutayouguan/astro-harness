@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
-import { Loader2, MessageSquare, Send, Square, X } from "lucide-react";
+import { Loader2, MessageSquare, SendHorizontal, Square, X } from "lucide-react";
 import { useI18n } from "../../i18n/LocaleContext";
 import type { ChatHistoryDto, ProviderDto } from "../../types";
 import { ChatMarkdown } from "./ChatMarkdown";
@@ -22,6 +22,13 @@ type StreamPayload = {
   name?: string;
   outcome_type?: string;
 };
+
+/** 空态里的快捷追问，点击即发送。 */
+const SUGGESTION_KEYS = [
+  "chat.side.askProgress",
+  "chat.side.askWhy",
+  "chat.side.askRisk",
+] as const;
 
 type Props = {
   sessionId: string;
@@ -45,6 +52,7 @@ export default function SideChatPanel({
   const [error, setError] = useState<string | null>(null);
   const unlistenRef = useRef<UnlistenFn | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
+  const inputRef = useRef<HTMLTextAreaElement | null>(null);
 
   useEffect(() => {
     void invoke<ChatHistoryDto>("get_chat_history", {
@@ -73,6 +81,14 @@ export default function SideChatPanel({
     });
   }, [messages]);
 
+  // 输入框跟随内容增高，超过上限后交给自身滚动。
+  useEffect(() => {
+    const field = inputRef.current;
+    if (!field) return;
+    field.style.height = "auto";
+    field.style.height = `${Math.min(field.scrollHeight, 148)}px`;
+  }, [input]);
+
   useEffect(
     () => () => {
       unlistenRef.current?.();
@@ -86,8 +102,8 @@ export default function SideChatPanel({
     await invoke("chat_control", { sessionId, action: "cancel" }).catch(() => {});
   }, [sessionId, streaming]);
 
-  const send = useCallback(async () => {
-    const content = input.trim();
+  const send = useCallback(async (prompt?: string) => {
+    const content = (prompt ?? input).trim();
     if (!content || streaming) return;
     const userId = `side-u-${crypto.randomUUID()}`;
     const assistantId = `side-a-${crypto.randomUUID()}`;
@@ -192,19 +208,20 @@ export default function SideChatPanel({
 
   return (
     <aside className="side-chat-panel" aria-label={t("chat.side.panel")}>
-      <header>
-        <span className="side-chat-icon" aria-hidden>
-          <MessageSquare size={14} />
+      <header className="side-chat-head">
+        <span className="side-chat-mark" aria-hidden>
+          <MessageSquare size={15} />
         </span>
-        <div>
+        <div className="side-chat-title">
           <strong>{t("chat.side.title")}</strong>
-          <span>{t("chat.side.subtitle")}</span>
+          <span title={t("chat.side.subtitle")}>{t("chat.side.subtitle")}</span>
         </div>
         <button
           type="button"
           className="side-chat-close"
           onClick={() => void onClose()}
           title={t("chat.side.close")}
+          aria-label={t("chat.side.close")}
         >
           <X size={15} aria-hidden />
         </button>
@@ -213,18 +230,27 @@ export default function SideChatPanel({
       <div className="side-chat-messages" ref={scrollRef}>
         {messages.length === 0 && (
           <div className="side-chat-empty">
-            <MessageSquare size={26} aria-hidden />
+            <span className="side-chat-empty-mark" aria-hidden>
+              <MessageSquare size={22} />
+            </span>
             <strong>{t("chat.side.emptyTitle")}</strong>
-            <span>{t("chat.side.emptyHint")}</span>
+            <p>{t("chat.side.emptyHint")}</p>
+            <div className="side-chat-suggestions">
+              {SUGGESTION_KEYS.map((key) => (
+                <button key={key} type="button" onClick={() => void send(t(key))}>
+                  {t(key)}
+                </button>
+              ))}
+            </div>
           </div>
         )}
         {messages.map((message) => (
           <article
             key={message.id}
-            className={`side-chat-message is-${message.role}${message.error ? " is-error" : ""}`}
+            className={`side-chat-msg is-${message.role}${message.error ? " is-error" : ""}`}
           >
             {message.reasoning && (
-              <details>
+              <details className="side-chat-reasoning">
                 <summary>{t("chat.side.reasoning")}</summary>
                 <p>{message.reasoning}</p>
               </details>
@@ -245,32 +271,44 @@ export default function SideChatPanel({
         {error && <div className="side-chat-error">{error}</div>}
       </div>
 
-      <footer>
-        <textarea
-          value={input}
-          onChange={(event) => setInput(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
-              event.preventDefault();
-              void send();
-            }
-          }}
-          placeholder={t("chat.side.placeholder")}
-          rows={2}
-          disabled={streaming}
-        />
-        <button
-          type="button"
-          className="side-chat-send"
-          onClick={() => void (streaming ? stop() : send())}
-          disabled={!streaming && !input.trim()}
-          title={streaming ? t("chat.side.stop") : t("chat.send")}
-        >
-          {streaming
-            ? <Square size={13} fill="currentColor" aria-hidden />
-            : <Send size={14} aria-hidden />}
-        </button>
-        {streaming && <Loader2 className="side-chat-spinner" size={12} aria-hidden />}
+      <footer className="side-chat-foot">
+        <div className="side-chat-composer">
+          <textarea
+            ref={inputRef}
+            value={input}
+            onChange={(event) => setInput(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
+                event.preventDefault();
+                void send();
+              }
+            }}
+            placeholder={t("chat.side.placeholder")}
+            rows={1}
+          />
+          <button
+            type="button"
+            className={`side-chat-send${streaming ? " is-stop" : ""}`}
+            onClick={() => void (streaming ? stop() : send())}
+            disabled={!streaming && !input.trim()}
+            title={streaming ? t("chat.side.stop") : t("chat.send")}
+            aria-label={streaming ? t("chat.side.stop") : t("chat.send")}
+          >
+            {streaming
+              ? <Square size={12} strokeWidth={2.4} fill="currentColor" aria-hidden />
+              : <SendHorizontal size={15} strokeWidth={2.2} aria-hidden />}
+          </button>
+        </div>
+        <div className="side-chat-hint">
+          {streaming ? (
+            <>
+              <Loader2 className="side-chat-spinner" size={11} aria-hidden />
+              {t("chat.side.thinking")}
+            </>
+          ) : (
+            t("chat.side.enterHint")
+          )}
+        </div>
       </footer>
     </aside>
   );
