@@ -140,10 +140,25 @@ cd apps/desktop && npm run tauri:build:universal    # universal-apple-darwin
       └─ 无工具调用时 → 返回最终文本
 ```
 
+### 网络访问
+
+网络默认放开，不需要任何预设、审批或域名白名单：
+
+- 子进程（`terminal`、`code_exec`、后台 job）：`build_command_sandbox_policy_with_roots`
+  统一给出 `network_access = true`，macOS seatbelt 直接 `(allow network*)`，Linux 不再
+  `--unshare-net`，Windows 不写 offline 标记。
+- 进程内 HTTP 工具（`web_search`、`web_fetch`）：直接发请求，无一次性审批卡、无 profile
+  域名裁决。唯一保留的检查是 `assert_public_http_url` 的 SSRF 防护——只允许 http/https，
+  并拦截本机、私网与云 metadata 目标（重定向每一跳同样校验）。
+- 远端 MCP（StreamableHttp）随之默认可连。
+
+权限 profile 只管文件系统写入与命令沙箱模式，不再决定能否联网。
+
 ### Managed subprocess network
 
-前台 `terminal action=run` 与 `code_exec` 在全局 proxy 开启且选中 custom
-profile 自身 `network.enabled=true` 时执行以下 attempt-scoped 链路：
+只有显式在 `~/.astro/config.yaml` 里开启 `network_proxy.enabled` 并让选中 custom
+profile 自身 `network.enabled=true` 时，前台 `terminal action=run` 与 `code_exec`
+才把流量收回受管代理，执行以下 attempt-scoped 链路：
 
 ```text
 ToolOrchestrator::run
@@ -161,15 +176,8 @@ ToolOrchestrator::run
 都不共享该 lease。结构化网络拒绝不进入文件系统 escalation；502/DNS/dial
 错误不是 policy denial。
 
-桌面端 `controlled_network` 预设写入保留的 `astro-controlled-network` profile：
-允许公网通配域名并启用 managed proxy，但保持 `allow_local_binding=false`，所以本机、
-私网与 metadata 地址仍被拦截。macOS managed sandbox 在存在 proxy lease 时自动允许
-DNS，不再要求用户通过 `allow_local_binding` 一并开放本地回环能力。
-
-进程内 HTTP 工具（`web_search`、`web_fetch`）不走代理，但共用同一份 leaf profile
-的 `network` 域名规则：allow 命中即直接放行并把授权收窄到命中主机，deny 命中直接
-拒绝，未覆盖或 `network.enabled=false` 时退回一次性审批卡；profile 未定义仍 fail
-closed。本机/内网地址始终由 `assert_public_http_url` 在发请求时拦截。
+macOS managed sandbox 在存在 proxy lease 时自动允许 DNS，不要求用户通过
+`allow_local_binding` 一并开放本地回环能力。
 
 ### agent-core 模块组织
 
@@ -248,7 +256,7 @@ Plugin bus 事件（可拦截/变更）：`PreLlmCall`、`PreToolUse`、`Stop`�
 
 7. **交互模式**：`interaction_mode` 经 ChatRequest 下传；行为说明只进 system（`system_guidance`），用户消息不得拼接 `[Mode: …]`。`start_chat` 仅接受 `StartChatRequest` 包装，无扁平字段兼容。schema v17 起剥离历史 Mode 后缀。
 
-8. **Managed network**：proxy listener 只归属单个 tool attempt，沙箱只放行其精确端口；terminal 后台模式在 spawn 前拒绝，code_exec 先 scrub secrets 再注入 proxy env，结构化网络拒绝不得触发文件系统提权。
+8. **网络默认放开**：沙箱策略一律 `network_access = true`，进程内 HTTP 工具只保留 SSRF 防护。开启 managed proxy 后，proxy listener 只归属单个 tool attempt，沙箱只放行其精确端口；terminal 后台模式在 spawn 前拒绝，code_exec 先 scrub secrets 再注入 proxy env，结构化网络拒绝不得触发文件系统提权。
 
 ## Data Flow: cron.rs → headless.rs
 

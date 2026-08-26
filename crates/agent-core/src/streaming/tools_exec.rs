@@ -14,9 +14,6 @@ use crate::runtime::{
 use super::hitl_bridge::{park_astro_hitl, park_confirm, parse_astro_hitl};
 use super::lifecycle::emit_async_agent_message;
 
-/// 进程内 HTTP 工具按 https 端口裁决域名策略。
-const HTTPS_PORT: u16 = 443;
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum ApprovalRoute {
     Deny,
@@ -854,189 +851,6 @@ async fn preflight_mcp_tool_approval(
     .await
 }
 
-/// 进程内 HTTP 工具的预检结果：审批结论 + 本次调用可用的主机授权。
-struct InProcessNetworkPreflight {
-    preflight: PermissionPreflight,
-    grant: tools::InProcessNetworkGrant,
-}
-
-impl InProcessNetworkPreflight {
-    fn not_required(grant: tools::InProcessNetworkGrant) -> Self {
-        Self {
-            preflight: PermissionPreflight::NotRequired,
-            grant,
-        }
-    }
-
-    fn denied(message: String) -> Self {
-        Self {
-            preflight: PermissionPreflight::Denied(message),
-            grant: tools::InProcessNetworkGrant::default(),
-        }
-    }
-}
-
-/// 自定义 profile 自有 `network` 策略对进程内请求的裁决。
-enum ProfileNetworkVerdict {
-    /// 策略已放行全部目标主机，无需审批。
-    Allowed(Vec<String>),
-    /// 目标主机全部命中 deny 规则或本地地址防御。
-    Denied(String),
-    /// 策略未覆盖某个主机，交给一次性审批。
-    NeedsApproval,
-}
-
-/// 按选中 leaf profile 自有的 `network` 字段裁决进程内目标主机。
-///
-/// 与 managed proxy 共用 `NetworkProxyState` 的 glob 与本地地址语义，
-/// 但不经过代理，因此与全局 `network_proxy.enabled` 开关无关。
-async fn profile_network_verdict(
-    settings: &memory::LoadedPermissionSettings,
-    profile_id: &str,
-    hosts: &[String],
-) -> ProfileNetworkVerdict {
-    let Some(profile) = settings.permissions.profiles.get(profile_id) else {
-        return ProfileNetworkVerdict::Denied(format!(
-            "Permission denied: profile {profile_id:?} is not defined in permission settings"
-        ));
-    };
-    if !profile.network.enabled || hosts.is_empty() {
-        return ProfileNetworkVerdict::NeedsApproval;
-    }
-    // 只做域名 allow/deny 裁决：本机/内网地址由 `assert_public_http_url` 在实际请求时拦截，
-    // 这里跳过代理那份 DNS 探测，避免解析失败被误判成策略拒绝。
-    let policy = types::NetworkPolicy {
-        allow_local_binding: true,
-        ..profile.network.clone()
-    };
-    let Ok(state) = network_proxy::NetworkProxyState::new(policy) else {
-        return ProfileNetworkVerdict::NeedsApproval;
-    };
-
-    let mut allowed = Vec::new();
-    let mut blocked = Vec::new();
-    for host in hosts {
-        match state.host_blocked(host, HTTPS_PORT).await {
-            Ok(network_proxy::HostBlockDecision::Allowed) => allowed.push(host.clone()),
-            Ok(network_proxy::HostBlockDecision::Blocked(
-                network_proxy::HostBlockReason::NotAllowed,
-            ))
-            | Err(_) => return ProfileNetworkVerdict::NeedsApproval,
-            Ok(network_proxy::HostBlockDecision::Blocked(reason)) => {
-                blocked.push(format!("{host} ({reason})"));
-            }
-        }
-    }
-
-    if allowed.is_empty() {
-        ProfileNetworkVerdict::Denied(format!(
-            "Permission denied: profile {profile_id:?} blocks {}",
-            blocked.join(", ")
-        ))
-    } else {
-        ProfileNetworkVerdict::Allowed(allowed)
-    }
-}
-
-async fn preflight_in_process_network(
-    session: &Arc<AgentLoop>,
-    call: &types::ParsedToolCall,
-    turn_context: &TurnContext,
-    hitl_gate: Option<&Arc<HitlGate>>,
-) -> Option<InProcessNetworkPreflight> {
-    if !tools::tool_requires_in_process_network(&call.name) {
-        return Some(InProcessNetworkPreflight::not_required(
-            tools::InProcessNetworkGrant::default(),
-        ));
-    }
-
-    let (session_id, turn_id, profile_id, memory_dir, settings) = {
-        let agent = session.as_ref();
-        let settings = memory::load_permission_settings(agent.memory_dir());
-        let profile_id = agent
-            .permission_profile()
-            .unwrap_or_else(|| settings.selection.profile_id.clone());
-        (
-            agent.session_id().to_string(),
-            agent.current_turn_id().await,
-            profile_id,
-            agent.memory_dir().to_path_buf(),
-            settings,
-        )
-    };
-    let selection = settings.selection.clone();
-    let hosts = tools::in_process_network_hosts(&call.name, &call.arguments);
-
-    match profile_id.as_str() {
-        types::DANGER_FULL_ACCESS_PROFILE => {
-            return Some(InProcessNetworkPreflight::not_required(
-                tools::InProcessNetworkGrant::unrestricted(),
-            ));
-        }
-        types::READ_ONLY_PROFILE | types::WORKSPACE_PROFILE => {}
-        custom => match profile_network_verdict(&settings, custom, &hosts).await {
-            ProfileNetworkVerdict::Allowed(allowed) => {
-                return Some(InProcessNetworkPreflight::not_required(
-                    tools::InProcessNetworkGrant::for_hosts(allowed),
-                ));
-            }
-            ProfileNetworkVerdict::Denied(message) => {
-                return Some(InProcessNetworkPreflight::denied(message));
-            }
-            ProfileNetworkVerdict::NeedsApproval => {}
-        },
-    }
-
-    let request = types::PermissionRequest {
-        request_id: uuid::Uuid::new_v4().to_string(),
-        session_id,
-        turn_id,
-        tool_call_id: call.id.clone(),
-        tool_name: call.name.clone(),
-        summary: format!("Allow {} to access the network for this call", call.name),
-        capabilities: vec![types::PermissionCapability::Network {
-            hosts: hosts.clone(),
-        }],
-        reason: types::PermissionReason::NetworkDisabled,
-        requested_scope: types::GrantScope::Once,
-        command_preview: None,
-        affected_paths: Vec::new(),
-        network_hosts: hosts.clone(),
-    };
-    let host_list = if hosts.is_empty() {
-        "- 请求参数中的远程主机".to_string()
-    } else {
-        format!("- {}", hosts.join("\n- "))
-    };
-    let body = format!(
-        "当前模式未直接授予进程内网络访问。是否仅允许本次 `{}` 访问以下主机？\n\n{}\n\n该授权不会开放 terminal/code_exec 网络，也不会持久化。",
-        call.name, host_list
-    );
-    let audit = PermissionAuditReceipt::new(
-        memory_dir,
-        &settings,
-        profile_id,
-        request,
-        session.config.thread_memory_mode,
-    );
-    let preflight = review_once_permission(
-        session,
-        &selection,
-        audit,
-        turn_context,
-        hitl_gate,
-        "surface=permission reason=network_disabled",
-        "批准本次网络访问",
-        &body,
-    )
-    .await?;
-    let grant = match &preflight {
-        PermissionPreflight::Granted(_) => tools::InProcessNetworkGrant::for_hosts(hosts),
-        _ => tools::InProcessNetworkGrant::default(),
-    };
-    Some(InProcessNetworkPreflight { preflight, grant })
-}
-
 async fn review_sandbox_denial(
     session: &Arc<AgentLoop>,
     step_context: &StepContext,
@@ -1111,9 +925,6 @@ async fn review_sandbox_denial(
 }
 
 pub(crate) fn tool_may_require_permission(name: &str, args: &serde_json::Value) -> bool {
-    if tools::tool_requires_in_process_network(name) {
-        return true;
-    }
     match name {
         // 权限 profile 和命令规则都可能要求 park；统一走串行 preflight。
         "terminal" | "code_exec" => true,
@@ -1161,7 +972,6 @@ async fn execute_tools_serial_inner(
         }
 
         let mut workspace_write_grant = false;
-        let mut network_grant = tools::InProcessNetworkGrant::default();
         let mut permission_audits = Vec::new();
         if !call.args_parse_error {
             match preflight_mcp_tool_approval(session, &step_context, call, turn_context, hitl_gate)
@@ -1180,23 +990,6 @@ async fn execute_tools_serial_inner(
                 PermissionPreflight::NotRequired => {}
                 PermissionPreflight::Granted(audit) => {
                     workspace_write_grant = true;
-                    permission_audits.push(*audit);
-                }
-                PermissionPreflight::Denied(message) => {
-                    out.push(format!(
-                        "{message}. Do not retry the same action or attempt a workaround without explicit authorization."
-                    ).into());
-                    continue;
-                }
-            }
-            let network_preflight =
-                preflight_in_process_network(session, call, turn_context, hitl_gate).await?;
-            match network_preflight.preflight {
-                PermissionPreflight::NotRequired => {
-                    network_grant = network_preflight.grant;
-                }
-                PermissionPreflight::Granted(audit) => {
-                    network_grant = network_preflight.grant;
                     permission_audits.push(*audit);
                 }
                 PermissionPreflight::Denied(message) => {
@@ -1605,7 +1398,6 @@ async fn execute_tools_serial_inner(
                 ToolExecutionGrants {
                     workspace_write: workspace_write_grant,
                     sandbox_policy,
-                    network: network_grant.clone(),
                     managed_network: managed_network.clone(),
                 },
             );
@@ -1661,7 +1453,8 @@ async fn execute_tools_serial_inner(
                                 let mut retry_policy =
                                     match sandbox::SandboxPolicy::unrestricted_file_system(
                                         &execution_root,
-                                        false,
+                                        // 文件系统提权不应顺带收紧网络。
+                                        true,
                                     ) {
                                         Ok(policy) => policy,
                                         Err(error) => {
@@ -1694,7 +1487,6 @@ async fn execute_tools_serial_inner(
                                     ToolExecutionGrants {
                                         workspace_write: workspace_write_grant,
                                         sandbox_policy: Some(retry_policy),
-                                        network: network_grant.clone(),
                                         managed_network: managed_network.clone(),
                                     },
                                 );
@@ -1915,96 +1707,6 @@ mod tests {
         json!({ "command": cmd })
     }
 
-    fn settings_with_profile(
-        id: &str,
-        network: types::NetworkPolicy,
-    ) -> memory::LoadedPermissionSettings {
-        let mut settings = memory::LoadedPermissionSettings::default();
-        settings.permissions.profiles.insert(
-            id.to_string(),
-            types::PermissionProfile {
-                network,
-                ..types::PermissionProfile::default()
-            },
-        );
-        settings
-    }
-
-    fn network_policy(
-        enabled: bool,
-        domains: &[(&str, types::NetworkAccess)],
-    ) -> types::NetworkPolicy {
-        types::NetworkPolicy {
-            enabled,
-            domains: domains
-                .iter()
-                .map(|(domain, access)| ((*domain).to_string(), *access))
-                .collect(),
-            ..types::NetworkPolicy::default()
-        }
-    }
-
-    #[tokio::test]
-    async fn custom_profile_allowlist_grants_in_process_network_without_approval() {
-        let settings = settings_with_profile(
-            "news",
-            network_policy(true, &[("www.bing.com", types::NetworkAccess::Allow)]),
-        );
-        let verdict =
-            profile_network_verdict(&settings, "news", &["www.bing.com".to_string()]).await;
-        match verdict {
-            ProfileNetworkVerdict::Allowed(hosts) => assert_eq!(hosts, vec!["www.bing.com"]),
-            _ => panic!("allowlisted host must be granted by profile policy"),
-        }
-    }
-
-    #[tokio::test]
-    async fn custom_profile_denylist_blocks_without_approval_prompt() {
-        let settings = settings_with_profile(
-            "news",
-            network_policy(true, &[("www.bing.com", types::NetworkAccess::Deny)]),
-        );
-        let verdict =
-            profile_network_verdict(&settings, "news", &["www.bing.com".to_string()]).await;
-        match verdict {
-            ProfileNetworkVerdict::Denied(message) => assert!(message.contains("www.bing.com")),
-            _ => panic!("denied host must not fall back to an approval prompt"),
-        }
-    }
-
-    #[tokio::test]
-    async fn custom_profile_uncovered_host_falls_back_to_approval() {
-        let settings = settings_with_profile(
-            "news",
-            network_policy(true, &[("www.bing.com", types::NetworkAccess::Allow)]),
-        );
-        let verdict = profile_network_verdict(
-            &settings,
-            "news",
-            &[
-                "www.bing.com".to_string(),
-                "api.search.brave.com".to_string(),
-            ],
-        )
-        .await;
-        assert!(matches!(verdict, ProfileNetworkVerdict::NeedsApproval));
-
-        let disabled = settings_with_profile("offline", network_policy(false, &[]));
-        assert!(matches!(
-            profile_network_verdict(&disabled, "offline", &["www.bing.com".to_string()]).await,
-            ProfileNetworkVerdict::NeedsApproval
-        ));
-    }
-
-    #[tokio::test]
-    async fn unknown_profile_stays_fail_closed() {
-        let settings = memory::LoadedPermissionSettings::default();
-        assert!(matches!(
-            profile_network_verdict(&settings, "missing", &["www.bing.com".to_string()]).await,
-            ProfileNetworkVerdict::Denied(_)
-        ));
-    }
-
     #[test]
     fn dangerous_commands_force_serial() {
         // hardline(Deny) 必须强制串行——否则会经并发路径绕过 Deny 拦截
@@ -2054,11 +1756,12 @@ mod tests {
             "skills",
             &serde_json::json!({"action": "load"})
         ));
-        assert!(tool_may_require_permission(
+        // 网络默认放开，网页工具不再占用串行审批槽位。
+        assert!(!tool_may_require_permission(
             "web_search",
             &serde_json::json!({"query": "rust"})
         ));
-        assert!(tool_may_require_permission(
+        assert!(!tool_may_require_permission(
             "web_fetch",
             &serde_json::json!({"url": "https://example.com"})
         ));

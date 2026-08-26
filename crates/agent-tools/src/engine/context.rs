@@ -7,9 +7,6 @@ use std::sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 use memory::MemoryManager;
 use session::ConversationStore;
-use types::DANGER_FULL_ACCESS_PROFILE;
-
-use super::network::InProcessNetworkGrant;
 
 pub use types::credentials::{ImageGenCreds, ImageGenParts, ImageGenTargets, ModelCredentials};
 
@@ -63,10 +60,6 @@ pub struct ToolContext<'a> {
     /// Only the orchestrator may set this for initial or escalated attempts.
     /// It is never persisted or inherited by later tool calls.
     pub sandbox_policy: Option<sandbox::SandboxPolicy>,
-    /// 当前单次工具调用已获得的进程内网络主机授权。
-    ///
-    /// 与命令沙箱的 `network.enabled` 相互独立，不会持久化或跨工具调用复用。
-    pub network_grant: InProcessNetworkGrant,
     /// Current attempt-scoped managed proxy lease.
     ///
     /// The lease keeps the listener alive through sandbox setup and process execution.
@@ -124,20 +117,6 @@ impl<'a> ToolContext<'a> {
             self.workspace_write_grant,
             self.sandbox_policy.clone(),
         )
-    }
-
-    /// 返回当前调用实际生效的进程内网络授权。
-    pub fn effective_in_process_network_grant(&self) -> InProcessNetworkGrant {
-        let loaded = memory::load_permission_settings(&self.memory_dir);
-        let profile_id = self
-            .permission_profile
-            .as_deref()
-            .unwrap_or(&loaded.selection.profile_id);
-        if profile_id == DANGER_FULL_ACCESS_PROFILE {
-            InProcessNetworkGrant::unrestricted()
-        } else {
-            self.network_grant.clone()
-        }
     }
 
     /// Prepare the managed network environment for a child process.
@@ -233,7 +212,8 @@ pub fn build_command_sandbox_policy_with_roots(
         .filter(|root| root.as_path() != execution_root)
         .cloned()
         .collect();
-    sandbox::SandboxPolicy::new(mode, execution_root, extra_roots, false).map_err(Into::into)
+    // 网络默认放开：只有显式配置 managed proxy 的 profile 才会把子进程流量收回代理。
+    sandbox::SandboxPolicy::new(mode, execution_root, extra_roots, true).map_err(Into::into)
 }
 
 #[cfg(test)]
@@ -268,7 +248,7 @@ network_proxy:
                 .unwrap();
 
         assert_eq!(policy.mode, types::SandboxMode::WorkspaceWrite);
-        assert!(!policy.network_access);
+        assert!(policy.network_access);
     }
 
     #[test]
@@ -304,7 +284,7 @@ permissions:
     }
 
     #[test]
-    fn one_call_grant_upgrades_read_only_to_workspace_write_without_network() {
+    fn one_call_grant_upgrades_read_only_to_workspace_write() {
         let dir = tempfile::tempdir().unwrap();
         let workspace = dir.path().join("workspace");
         std::fs::create_dir_all(&workspace).unwrap();
@@ -334,7 +314,6 @@ permissions:
             hook_runtime: None,
             workspace_write_grant: true,
             sandbox_policy: None,
-            network_grant: InProcessNetworkGrant::default(),
             managed_network: None,
             context_window: None,
             context_tokens_used: None,
@@ -346,11 +325,11 @@ permissions:
             policy.writable_roots,
             vec![workspace.canonicalize().unwrap()]
         );
-        assert!(!policy.network_access);
+        assert!(policy.network_access);
     }
 
     #[test]
-    fn one_attempt_sandbox_override_expands_filesystem_without_network() {
+    fn one_attempt_sandbox_override_keeps_its_own_network_setting() {
         let dir = tempfile::tempdir().unwrap();
         let workspace = dir.path().join("workspace");
         std::fs::create_dir_all(&workspace).unwrap();

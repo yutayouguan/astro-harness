@@ -1,48 +1,8 @@
-//! 进程内 HTTP 工具的单次主机授权与 SSRF 防护。
+//! 进程内 HTTP 工具的 SSRF 防护。
+//!
+//! 公网访问默认放开；这里只拦截本机、内网与云 metadata 目标。
 
-use std::collections::BTreeSet;
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, ToSocketAddrs};
-
-/// 只在一次工具调用内有效的进程内网络授权。
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
-pub struct InProcessNetworkGrant {
-    unrestricted: bool,
-    hosts: BTreeSet<String>,
-}
-
-impl InProcessNetworkGrant {
-    pub fn for_hosts(hosts: impl IntoIterator<Item = String>) -> Self {
-        Self {
-            unrestricted: false,
-            hosts: hosts
-                .into_iter()
-                .filter_map(|host| normalize_host(&host))
-                .collect(),
-        }
-    }
-
-    pub fn unrestricted() -> Self {
-        Self {
-            unrestricted: true,
-            hosts: BTreeSet::new(),
-        }
-    }
-
-    pub fn allows_host(&self, host: &str) -> bool {
-        self.unrestricted
-            || normalize_host(host)
-                .map(|host| self.hosts.contains(&host))
-                .unwrap_or(false)
-    }
-
-    pub fn is_empty(&self) -> bool {
-        !self.unrestricted && self.hosts.is_empty()
-    }
-
-    pub fn hosts(&self) -> Vec<String> {
-        self.hosts.iter().cloned().collect()
-    }
-}
 
 fn normalize_host(host: &str) -> Option<String> {
     let normalized = host
@@ -53,18 +13,15 @@ fn normalize_host(host: &str) -> Option<String> {
     (!normalized.is_empty()).then_some(normalized)
 }
 
-/// 构造同时执行主机授权与 SSRF 检查的重定向策略。
-pub(crate) fn public_redirect_policy(
-    max_redirects: usize,
-    grant: InProcessNetworkGrant,
-) -> reqwest::redirect::Policy {
+/// 构造对每一跳都执行 SSRF 检查的重定向策略。
+pub(crate) fn public_redirect_policy(max_redirects: usize) -> reqwest::redirect::Policy {
     reqwest::redirect::Policy::custom(move |attempt| {
         if attempt.previous().len() >= max_redirects {
             return attempt.error(std::io::Error::other(format!(
                 "redirect limit exceeded ({max_redirects})"
             )));
         }
-        match assert_public_http_url(attempt.url().as_str(), &grant) {
+        match assert_public_http_url(attempt.url().as_str()) {
             Ok(()) => attempt.follow(),
             Err(error) => attempt.error(std::io::Error::new(
                 std::io::ErrorKind::PermissionDenied,
@@ -74,11 +31,8 @@ pub(crate) fn public_redirect_policy(
     })
 }
 
-/// 校验 URL 仅使用 HTTP(S)，主机已授权，且 DNS 没有解析到本机/私网。
-pub(crate) fn assert_public_http_url(
-    raw: &str,
-    grant: &InProcessNetworkGrant,
-) -> anyhow::Result<()> {
+/// 校验 URL 仅使用 HTTP(S)，且 DNS 没有解析到本机/私网。
+pub(crate) fn assert_public_http_url(raw: &str) -> anyhow::Result<()> {
     let url = reqwest::Url::parse(raw).map_err(|error| anyhow::anyhow!("URL 无效: {error}"))?;
     match url.scheme() {
         "http" | "https" => {}
@@ -87,9 +41,6 @@ pub(crate) fn assert_public_http_url(
     let host = url
         .host_str()
         .ok_or_else(|| anyhow::anyhow!("URL 缺少主机名"))?;
-    if !grant.allows_host(host) {
-        anyhow::bail!("主机未在本次网络授权中: {host}");
-    }
     if is_blocked_host(host) {
         anyhow::bail!("拒绝访问本机/内网地址: {host}");
     }
@@ -161,27 +112,18 @@ mod tests {
     use super::*;
 
     #[test]
-    fn grant_normalizes_and_matches_exact_hosts() {
-        let grant = InProcessNetworkGrant::for_hosts([
-            "EXAMPLE.com.".to_string(),
-            "www.rust-lang.org".to_string(),
-        ]);
-        assert!(grant.allows_host("example.com"));
-        assert!(grant.allows_host("WWW.RUST-LANG.ORG"));
-        assert!(!grant.allows_host("sub.example.com"));
+    fn local_and_private_targets_stay_blocked() {
+        assert!(assert_public_http_url("http://127.0.0.1/").is_err());
+        assert!(assert_public_http_url("http://localhost:5173/").is_err());
+        assert!(assert_public_http_url("http://192.168.1.10/").is_err());
+        assert!(assert_public_http_url("http://198.18.0.1/").is_err());
+        assert!(assert_public_http_url("http://224.0.0.1/").is_err());
+        assert!(assert_public_http_url("http://metadata.google.internal/").is_err());
     }
 
     #[test]
-    fn public_url_requires_granted_non_private_host() {
-        let grant = InProcessNetworkGrant::for_hosts([
-            "example.com".to_string(),
-            "127.0.0.1".to_string(),
-            "198.18.0.1".to_string(),
-            "224.0.0.1".to_string(),
-        ]);
-        assert!(assert_public_http_url("http://127.0.0.1/", &grant).is_err());
-        assert!(assert_public_http_url("http://198.18.0.1/", &grant).is_err());
-        assert!(assert_public_http_url("http://224.0.0.1/", &grant).is_err());
-        assert!(assert_public_http_url("https://not-approved.example/", &grant).is_err());
+    fn non_http_schemes_stay_blocked() {
+        assert!(assert_public_http_url("file:///etc/passwd").is_err());
+        assert!(assert_public_http_url("ftp://example.com/").is_err());
     }
 }

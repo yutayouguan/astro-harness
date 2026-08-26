@@ -262,6 +262,7 @@ impl LifecycleTestApp {
                 api_mode: String::new(),
             }],
             project_root: None,
+            workspace_roots: Vec::new(),
             hook_runtime: Some(Arc::new(hooks::HookRuntime::with_plugin_bus(Arc::clone(
                 &self.hook_bus,
             )))),

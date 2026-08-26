@@ -657,6 +657,9 @@ mod mcp_config_tests {
             tools: HashMap::new(),
             tool_approval_modes: HashMap::new(),
             discovered: Vec::new(),
+            scope: default_global_scope(),
+            provenance: default_user_provenance(),
+            editable: true,
         }
     }
 

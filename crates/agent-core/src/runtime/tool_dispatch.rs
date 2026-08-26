@@ -64,7 +64,6 @@ impl From<super::turn_budget::MaxDepthError> for ToolCallError {
 pub(crate) struct ToolExecutionGrants {
     pub(crate) workspace_write: bool,
     pub(crate) sandbox_policy: Option<sandbox::SandboxPolicy>,
-    pub(crate) network: tools::InProcessNetworkGrant,
     pub(crate) managed_network: Option<std::sync::Arc<network_proxy::StartedNetworkProxy>>,
 }
 
@@ -195,7 +194,6 @@ impl AgentLoop {
             hook_runtime,
             workspace_write_grant: grants.workspace_write,
             sandbox_policy: grants.sandbox_policy,
-            network_grant: grants.network,
             managed_network: grants.managed_network,
             context_window: None,
             context_tokens_used: None,

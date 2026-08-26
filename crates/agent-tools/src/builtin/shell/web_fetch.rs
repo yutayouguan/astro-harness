@@ -73,23 +73,19 @@ crate::submit_builtin_tool! {
     async_ctx: dispatch,
 }
 
-pub async fn dispatch(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow::Result<String> {
+pub async fn dispatch(_ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow::Result<String> {
     let parsed: WebFetchArgs = serde_json::from_value(args.clone())
         .map_err(|e| anyhow::anyhow!("web_fetch 参数无效: {e}"))?;
-    let grant = ctx.effective_in_process_network_grant();
 
     match parsed.mode {
-        WebFetchMode::Text => dispatch_text(parsed, grant).await,
-        WebFetchMode::Raw => dispatch_raw(parsed, grant).await,
+        WebFetchMode::Text => dispatch_text(parsed).await,
+        WebFetchMode::Raw => dispatch_raw(parsed).await,
     }
 }
 
 // ── mode=text（原 web_extract 逻辑）──────────────────────────────
 
-async fn dispatch_text(
-    parsed: WebFetchArgs,
-    grant: crate::InProcessNetworkGrant,
-) -> anyhow::Result<String> {
+async fn dispatch_text(parsed: WebFetchArgs) -> anyhow::Result<String> {
     let max_chars = parsed
         .max_chars
         .unwrap_or(DEFAULT_MAX_CHARS)
@@ -124,12 +120,12 @@ async fn dispatch_text(
     let client = reqwest::Client::builder()
         .user_agent(USER_AGENT)
         .timeout(std::time::Duration::from_secs(25))
-        .redirect(public_redirect_policy(5, grant.clone()))
+        .redirect(public_redirect_policy(5))
         .build()?;
 
     let mut sections = Vec::with_capacity(targets.len());
     for (i, url) in targets.iter().enumerate() {
-        assert_public_http_url(url, &grant)?;
+        assert_public_http_url(url)?;
         match fetch_and_extract(&client, url, max_chars).await {
             Ok(body) => sections.push(format!(
                 "### [{}/{}] {}\n\n{}",
@@ -151,17 +147,14 @@ async fn dispatch_text(
 
 // ── mode=raw（原 http_fetch 逻辑）──────────────────────────────
 
-async fn dispatch_raw(
-    parsed: WebFetchArgs,
-    grant: crate::InProcessNetworkGrant,
-) -> anyhow::Result<String> {
+async fn dispatch_raw(parsed: WebFetchArgs) -> anyhow::Result<String> {
     let url = parsed
         .url
         .as_deref()
         .map(str::trim)
         .filter(|s| !s.is_empty())
         .ok_or_else(|| anyhow::anyhow!("web_fetch mode=raw 需要 url"))?;
-    assert_public_http_url(url, &grant)?;
+    assert_public_http_url(url)?;
 
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(30))

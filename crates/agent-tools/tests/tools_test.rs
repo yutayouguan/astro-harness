@@ -169,7 +169,6 @@ async fn file_ops_write_and_read() {
         hook_runtime: None,
         workspace_write_grant: false,
         sandbox_policy: None,
-        network_grant: tools::InProcessNetworkGrant::default(),
         managed_network: None,
         context_window: None,
         context_tokens_used: None,

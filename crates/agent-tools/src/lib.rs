@@ -37,16 +37,12 @@ pub use context::{
     image_gen_targets_from_parts, ImageGenCreds, ImageGenParts, ImageGenTargets, ModelCredentials,
     ToolContext,
 };
-pub use dispatch::{
-    builtin_handler_names, dispatch_tool, in_process_network_hosts,
-    tool_requires_in_process_network, tool_requires_in_process_write,
-};
+pub use dispatch::{builtin_handler_names, dispatch_tool, tool_requires_in_process_write};
 pub use engine::execution::{
     AgentThreadDispatch, FollowupAgentDispatchRequest, ParentRuntimeMaterial,
     SpawnAgentDispatchRequest,
 };
 pub use engine::executor::{LegacyToolAdapter, ToolExecutor, ToolExecutorFuture};
-pub use engine::network::InProcessNetworkGrant;
 pub use path_safe::resolve_safe;
 pub use registry::DynToolHandler;
 pub use registry::{BuiltinToolHandler, BuiltinToolRegistrar, ToolEntry, ToolRegistry};
