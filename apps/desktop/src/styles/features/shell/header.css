@@ -356,15 +356,11 @@ html[data-theme="dark"] .header-icon-btn.is-active {
   text-overflow: ellipsis;
 }
 
+/* 形变图标自身在 down/up 之间过渡，不再叠加 rotate。 */
 .model-picker-chevron {
   flex-shrink: 0;
   margin-right: 9px;
   color: var(--ink-mute);
-  transition: transform 0.15s ease;
-}
-
-.model-picker.is-open .model-picker-chevron {
-  transform: rotate(180deg);
 }
 
 .model-picker-flyout {

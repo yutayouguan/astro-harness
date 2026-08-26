@@ -1565,15 +1565,10 @@ html[data-theme="dark"] .todo-progress-float {
   text-align: left;
 }
 
-.todo-progress-toggle svg:first-child {
-  transition: transform 0.15s ease;
-  transform: rotate(-90deg);
+/* 形变图标自带方向过渡，这里只做静态排版，避免叠加 rotate 造成双动画。 */
+.todo-progress-chevron {
   opacity: 0.65;
   flex-shrink: 0;
-}
-
-.todo-progress-toggle svg:first-child.is-open {
-  transform: rotate(0deg);
 }
 
 .todo-progress-summary {

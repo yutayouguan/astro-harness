@@ -29,10 +29,6 @@ export function MorphiconProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     writeMorphiconPrefs(prefs);
-    document.documentElement.style.setProperty(
-      "--morphicon-stroke-width",
-      String(prefs.strokeWidth),
-    );
   }, [prefs]);
 
   const setSpring = useCallback((spring: MorphiconSpring) => {

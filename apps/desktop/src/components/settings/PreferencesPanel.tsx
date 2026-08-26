@@ -1,5 +1,5 @@
 /** 偏好设置（主题、语言、日志诊断、关于）。 */
-import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
 import type { LucideIcon } from "lucide-react";
 import {
   Activity,
@@ -36,6 +36,7 @@ import {
 import {
   MORPHICON_SPRINGS,
   MORPHICON_STROKE_WIDTHS,
+  type MorphiconSpring,
 } from "../../lib/ui/morphiconPrefs";
 import { AppMorphIcon } from "../icons/MorphIcon";
 import { IconGlobe, IconMonitor, IconMoon, IconSun, IconChat, IconAtom } from "../icons/NavIcons";
@@ -54,6 +55,13 @@ type LogScope = "current" | "all";
 
 /** 内容过滤：全部 / 只看问题（warn 及以上） */
 type LogLevelFilter = "all" | "issues";
+
+/** 弹簧预设的本地化文案 */
+const MORPHICON_SPRING_LABEL: Record<MorphiconSpring, MessageKey> = {
+  smooth: "prefs.morphicons.spring.smooth",
+  snappy: "prefs.morphicons.spring.snappy",
+  bouncy: "prefs.morphicons.spring.bouncy",
+};
 
 
 function AutostartSwitch({ tone }: { tone: string }) {
@@ -209,6 +217,10 @@ export default function PreferencesPanel({
   const { settings: appIcon, setIcon: setAppIcon } = useAppIcon();
   const [gradientEditorOpen, setGradientEditorOpen] = useState(false);
   const [morphPreviewActive, setMorphPreviewActive] = useState(false);
+  // 预览靠翻转图标来触发一次形变；任何预设改动都在同一批渲染里带上新参数重播。
+  const playMorphPreview = useCallback(() => {
+    setMorphPreviewActive((value) => !value);
+  }, []);
   const [internalCategory, setInternalCategory] =
     useState<PreferenceCategory>("general");
   const activeCategory = section ?? internalCategory;
@@ -649,7 +661,7 @@ export default function PreferencesPanel({
             type="button"
             className="prefs-icon-badge morphicon-preview-button"
             data-tone={tone}
-            onClick={() => setMorphPreviewActive((value) => !value)}
+            onClick={playMorphPreview}
             aria-label={t("prefs.morphicons.preview")}
           >
             <AppMorphIcon
@@ -679,10 +691,10 @@ export default function PreferencesPanel({
                 className={spring === value ? "is-active" : ""}
                 onClick={() => {
                   setSpring(value);
-                  setMorphPreviewActive((current) => !current);
+                  playMorphPreview();
                 }}
               >
-                {value}
+                {t(MORPHICON_SPRING_LABEL[value])}
               </button>
             ))}
           </div>
@@ -702,7 +714,10 @@ export default function PreferencesPanel({
                 role="radio"
                 aria-checked={strokeWidth === value}
                 className={strokeWidth === value ? "is-active" : ""}
-                onClick={() => setStrokeWidth(value)}
+                onClick={() => {
+                  setStrokeWidth(value);
+                  playMorphPreview();
+                }}
               >
                 {value}
               </button>

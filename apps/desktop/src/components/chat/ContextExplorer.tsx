@@ -19,7 +19,6 @@ import {
   ChevronDown as ChevronDownData,
   ChevronRight as ChevronRightData,
 } from "lucide";
-import type { IconInput } from "morphicons/react";
 import { useI18n } from "../../i18n/LocaleContext";
 import type { MessageKey } from "../../i18n/messages";
 import { MorphToggleIcon } from "../icons/MorphIcon";
@@ -259,10 +258,11 @@ export default function ContextExplorer({
                 >
                   <MorphToggleIcon
                     active={open}
-                    activeIcon={ChevronDownData as unknown as IconInput}
-                    inactiveIcon={ChevronRightData as unknown as IconInput}
+                    activeIcon={ChevronDownData}
+                    inactiveIcon={ChevronRightData}
                     size={14}
                     strokeWidth={2.2}
+                    className="ctx-explorer-chevron"
                     aria-hidden
                   />
                   <span

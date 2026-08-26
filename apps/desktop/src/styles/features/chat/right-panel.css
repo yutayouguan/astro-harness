@@ -1295,18 +1295,10 @@ html[data-theme="dark"] .chat-agent-preview {
   background: color-mix(in srgb, var(--ink) 5%, transparent);
 }
 
+/* 形变图标自身在 right/down 之间过渡，不再叠加 rotate。 */
 .ctx-explorer-chevron {
   flex-shrink: 0;
   color: var(--ink-mute);
-  transition: transform 0.15s ease;
-}
-
-.ctx-explorer-row.is-open .ctx-explorer-chevron {
-  transform: rotate(0deg);
-}
-
-.ctx-explorer-row:not(.is-open) .ctx-explorer-chevron {
-  transform: rotate(-90deg);
 }
 
 .ctx-explorer-swatch {
@@ -1538,8 +1530,7 @@ html[data-theme="dark"] .ctx-explorer-expand-all {
 
 @media (prefers-reduced-motion: reduce) {
   .ctx-donut-arc,
-  .ctx-donut-rest,
-  .ctx-explorer-chevron {
+  .ctx-donut-rest {
     transition: none;
   }
 }

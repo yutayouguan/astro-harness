@@ -6,7 +6,6 @@ import {
   ChevronDown as ChevronDownData,
   ChevronUp as ChevronUpData,
 } from "lucide";
-import type { IconInput } from "morphicons/react";
 import type { ChatMessage } from "../../types";
 import { MorphToggleIcon } from "../icons/MorphIcon";
 
@@ -83,10 +82,11 @@ export default function TodoProgress({ messages }: Props) {
       >
         <MorphToggleIcon
           active={expanded}
-          activeIcon={ChevronUpData as unknown as IconInput}
-          inactiveIcon={ChevronDownData as unknown as IconInput}
+          activeIcon={ChevronUpData}
+          inactiveIcon={ChevronDownData}
           size={14}
           strokeWidth={2.2}
+          className="todo-progress-chevron"
           aria-hidden
         />
         <ListTodo size={14} strokeWidth={2} aria-hidden />

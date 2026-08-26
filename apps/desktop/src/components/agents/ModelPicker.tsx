@@ -14,7 +14,6 @@ import {
   ChevronRight as ChevronRightData,
   ChevronUp as ChevronUpData,
 } from "lucide";
-import type { IconInput } from "morphicons/react";
 import { invoke } from "@tauri-apps/api/core";
 import { useClampPopover } from "../../hooks/ui/useClampPopover";
 import { useConfirm } from "../../hooks/ui/DialogContext";
@@ -447,10 +446,11 @@ export default function ModelPicker({
         )}
         <MorphToggleIcon
           active={open}
-          activeIcon={ChevronUpData as unknown as IconInput}
-          inactiveIcon={ChevronDownData as unknown as IconInput}
+          activeIcon={ChevronUpData}
+          inactiveIcon={ChevronDownData}
           size={12}
           strokeWidth={2.5}
+          className="model-picker-chevron"
           aria-hidden
         />
       </button>
@@ -501,8 +501,8 @@ export default function ModelPicker({
                     </span>
                     <MorphToggleIcon
                       active={!collapsed}
-                      activeIcon={ChevronDownData as unknown as IconInput}
-                      inactiveIcon={ChevronRightData as unknown as IconInput}
+                      activeIcon={ChevronDownData}
+                      inactiveIcon={ChevronRightData}
                       size={12}
                       strokeWidth={2.4}
                       className="model-picker-group-chevron"
