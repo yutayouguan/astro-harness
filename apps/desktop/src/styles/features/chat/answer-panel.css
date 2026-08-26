@@ -47,6 +47,17 @@ html[data-theme="dark"] .bubble.assistant {
   padding-top: 9px;
 }
 
+.bubble.assistant .msg-timeline-step:is(
+  .kind-tool,
+  .kind-mcp,
+  .kind-skill,
+  .kind-hook,
+  .kind-memory,
+  .kind-status
+) .msg-timeline-rail {
+  padding-top: 4px;
+}
+
 .bubble.assistant .msg-timeline-step.kind-reply .msg-timeline-rail {
   padding-top: 3px;
 }
@@ -93,6 +104,12 @@ html[data-theme="dark"] .bubble.assistant {
   box-shadow: none;
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
+}
+
+.bubble.assistant .msg-activity-toggle,
+.bubble.assistant .msg-activity-summary,
+.bubble.assistant .msg-activity-group-toggle {
+  min-height: 32px;
 }
 
 /* Input / Output 共用一个内嵌阅读面，避免卡片继续套卡片。 */
@@ -269,6 +286,17 @@ html[data-theme] .bubble.assistant .msg-activity-detail {
     width: 22px;
     height: 22px;
     border-radius: 8px;
+  }
+
+  .bubble.assistant .msg-timeline-step:is(
+    .kind-tool,
+    .kind-mcp,
+    .kind-skill,
+    .kind-hook,
+    .kind-memory,
+    .kind-status
+  ) .msg-timeline-rail {
+    padding-top: 5px;
   }
 
   .bubble.assistant .msg-activity {

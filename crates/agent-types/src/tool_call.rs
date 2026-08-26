@@ -24,7 +24,7 @@ impl ParsedToolCall {
     pub fn new(name: impl Into<String>, arguments: Value) -> Self {
         Self {
             id: uuid::Uuid::new_v4().to_string(),
-            name: name.into(),
+            name: normalize_model_tool_name(name.into()),
             arguments,
             args_parse_error: false,
             signature: None,
@@ -34,12 +34,24 @@ impl ParsedToolCall {
     pub fn with_id(id: impl Into<String>, name: impl Into<String>, arguments: Value) -> Self {
         Self {
             id: id.into(),
-            name: name.into(),
+            name: normalize_model_tool_name(name.into()),
             arguments,
             args_parse_error: false,
             signature: None,
         }
     }
+}
+
+/// 去掉部分模型/兼容层为默认工具命名空间附加的展示前缀。
+///
+/// Astro 实际注册的是 `file_ops` 这类 canonical 名称；只接受已知的
+/// `default_api:` 包装，避免把任意命名空间误映射成可执行工具。StepContext
+/// 仍会在归一化后校验该工具是否确实向本次模型调用公开。
+fn normalize_model_tool_name(name: String) -> String {
+    name.strip_prefix("default_api:")
+        .filter(|canonical| !canonical.is_empty())
+        .map(str::to_owned)
+        .unwrap_or(name)
 }
 
 /// 从助手纯文本回复中提取 `<tool_call>...</tool_call>` 块。
@@ -155,7 +167,7 @@ impl ToolCallAccumulator {
                         };
                         ParsedToolCall {
                             id,
-                            name: s.name,
+                            name: normalize_model_tool_name(s.name),
                             arguments: serde_json::json!({
                                 "_parse_error": detail,
                                 "_raw": trimmed,
@@ -279,5 +291,40 @@ before
         });
         let calls = acc.finish();
         assert_eq!(calls[0].signature.as_deref(), Some("sig_abc"));
+    }
+
+    #[test]
+    fn normalizes_default_api_namespace_from_xml_tool_call() {
+        let calls = extract_tool_calls(
+            r#"<tool_call>{"name":"default_api:file_ops","arguments":{"operation":"list"}}</tool_call>"#,
+        );
+        assert_eq!(calls.len(), 1);
+        assert_eq!(calls[0].name, "file_ops");
+    }
+
+    #[test]
+    fn normalizes_default_api_namespace_from_native_tool_call() {
+        let mut acc = ToolCallAccumulator::new();
+        acc.push(&ToolCallDelta {
+            index: 0,
+            id: Some("call_namespaced".into()),
+            name: Some("default_api:file_ops".into()),
+            arguments: Some(r#"{"operation":"list"}"#.into()),
+            signature: None,
+        });
+        let calls = acc.finish();
+        assert_eq!(calls[0].name, "file_ops");
+    }
+
+    #[test]
+    fn preserves_unknown_or_empty_namespaces() {
+        assert_eq!(
+            ParsedToolCall::new("other_api:file_ops", serde_json::json!({})).name,
+            "other_api:file_ops"
+        );
+        assert_eq!(
+            ParsedToolCall::new("default_api:", serde_json::json!({})).name,
+            "default_api:"
+        );
     }
 }
