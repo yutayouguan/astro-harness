@@ -1,4 +1,4 @@
-// 聊天悬浮侧栏（Agent / 任务监控 / 上下文）；文件预览在内嵌项目工作台。
+// 聊天悬浮侧栏（Agent / 任务监控 / 上下文 / 分支）；文件预览在内嵌项目工作台。
 import {
   useCallback,
   useEffect,
@@ -12,6 +12,7 @@ import {
 import {
   Activity,
   Bot,
+  GitBranch,
   Layers,
   PanelRight,
   X,
@@ -32,9 +33,10 @@ import {
 import ContextExplorer from "./ContextExplorer";
 import TaskMonitorPanel from "./TaskMonitorPanel";
 import ChatAgentInfo from "./ChatAgentInfo";
+import BranchGraphPanel from "./BranchGraphPanel";
 import MotionSwitch from "../ui/MotionSwitch";
 
-export type ChatRightTab = "agent" | "monitor" | "context";
+export type ChatRightTab = "agent" | "monitor" | "context" | "branches";
 
 /** 右侧栏入参 */
 type Props = {
@@ -57,6 +59,7 @@ type Props = {
   messages?: ChatMessage[];
   /** 是否正在流式输出 */
   streaming?: boolean;
+  onOpenSession: (sessionId: string) => void | Promise<void>;
   onOpenMemory: () => void;
   onOpenSkills: () => void;
 };
@@ -65,12 +68,14 @@ const TAB_KEYS: Record<ChatRightTab, MessageKey> = {
   agent: "chat.rightPanel.agent",
   monitor: "chat.rightPanel.monitor",
   context: "chat.rightPanel.context",
+  branches: "chat.rightPanel.branches",
 };
 
 const TAB_ICONS: Record<ChatRightTab, LucideIcon> = {
   agent: Bot,
   monitor: Activity,
   context: Layers,
+  branches: GitBranch,
 };
 
 const RESIZE_KEYBOARD_STEP = 16;
@@ -87,11 +92,12 @@ export default function ChatRightPanel({
   contextWindow = 0,
   messages = [],
   streaming = false,
+  onOpenSession,
   onOpenMemory,
   onOpenSkills,
 }: Props) {
   const { t } = useI18n();
-  const tabs: ChatRightTab[] = ["agent", "monitor", "context"];
+  const tabs: ChatRightTab[] = ["agent", "monitor", "context", "branches"];
   const tabsRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLElement>(null);
   const panelWidthRef = useRef(CHAT_RIGHT_PANEL_DEFAULT_WIDTH);
@@ -346,6 +352,13 @@ export default function ChatRightPanel({
                 snapshot={contextUsage}
                 windowTokens={contextWindow}
                 sessionLabel={sessionId ?? "—"}
+              />
+            )}
+            {tab === "branches" && (
+              <BranchGraphPanel
+                sessionId={sessionId}
+                streaming={streaming}
+                onOpenSession={onOpenSession}
               />
             )}
           </MotionSwitch>

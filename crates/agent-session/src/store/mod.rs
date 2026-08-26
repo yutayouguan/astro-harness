@@ -1,5 +1,6 @@
 //! 单库会话存储（schema v17）：sessions、富 messages、FTS5；旧库走增量迁移不丢数据。
 
+mod branches;
 mod messages;
 pub mod projects;
 mod rollout_projection;
@@ -9,6 +10,7 @@ mod sessions;
 
 use anyhow::{anyhow, Context, Result};
 use rusqlite::{Connection, OptionalExtension};
+use serde::Serialize;
 use serde_json::Value;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -138,6 +140,61 @@ pub struct StoredSession {
     pub tool_call_count: i64,
     pub archived_at: Option<f64>,
     pub pinned_at: Option<f64>,
+    /// 源会话中作为分叉点的 user 消息行 id；旧分支可为空。
+    pub branch_parent_message_id: Option<i64>,
+    /// 分叉点在父会话中的 user turn 序号（从 1 开始）。
+    pub branch_parent_turn_index: Option<i64>,
+    /// 子会话创建时继承的完整 user turn 数。
+    pub branch_inherited_turn_count: Option<i64>,
+    /// 分支创建时间；普通会话与旧分支可为空。
+    pub branch_created_at: Option<f64>,
+}
+
+/// 从父会话的一个已完成 user turn 创建分支后的结果。
+#[derive(Debug, Clone, Serialize, PartialEq)]
+pub struct ForkedSession {
+    pub session_id: String,
+    pub parent_session_id: String,
+    pub parent_message_id: i64,
+    pub parent_turn_index: i64,
+    pub inherited_turn_count: i64,
+    pub copied_message_count: i64,
+    pub created_at: f64,
+}
+
+/// 会话图中的一个 user turn。
+#[derive(Debug, Clone, Serialize, PartialEq)]
+pub struct SessionTurnNode {
+    pub turn_index: i64,
+    pub user_message_id: i64,
+    pub content: Option<String>,
+    pub completed: bool,
+    /// 在此 turn 分叉出的直接子会话。
+    pub child_session_ids: Vec<String>,
+}
+
+/// 会话谱系图中的会话节点。
+#[derive(Debug, Clone, Serialize, PartialEq)]
+pub struct SessionLineageNode {
+    pub session_id: String,
+    pub parent_session_id: Option<String>,
+    pub parent_message_id: Option<i64>,
+    pub parent_turn_index: Option<i64>,
+    pub inherited_turn_count: i64,
+    pub branch_created_at: Option<f64>,
+    pub legacy_metadata: bool,
+    pub orphaned: bool,
+    pub turns: Vec<SessionTurnNode>,
+}
+
+/// 以可达根会话为起点的递归谱系图，适合直接序列化给 Tauri。
+#[derive(Debug, Clone, Serialize, PartialEq)]
+pub struct SessionLineageGraph {
+    pub requested_session_id: String,
+    pub root_session_id: String,
+    pub nodes: Vec<SessionLineageNode>,
+    pub cycle_detected: bool,
+    pub orphaned_parent_ids: Vec<String>,
 }
 
 /// FTS 搜索命中。

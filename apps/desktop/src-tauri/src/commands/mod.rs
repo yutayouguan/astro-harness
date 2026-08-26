@@ -2,6 +2,7 @@ pub(crate) mod agent;
 pub(crate) mod artifacts;
 pub(crate) mod auxiliary;
 pub(crate) mod batch;
+pub(crate) mod branches;
 pub(crate) mod chat;
 pub(crate) mod common;
 pub(crate) mod compaction;

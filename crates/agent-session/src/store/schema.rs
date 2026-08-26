@@ -5,7 +5,7 @@ use rusqlite::{params, OptionalExtension};
 
 use super::SessionStore;
 
-pub const SCHEMA_VERSION: i32 = 20;
+pub const SCHEMA_VERSION: i32 = 21;
 
 const SCHEMA_V11_DDL: &str = r#"
 CREATE TABLE IF NOT EXISTS schema_version (
@@ -41,6 +41,10 @@ CREATE TABLE IF NOT EXISTS sessions (
     title TEXT,
     archived_at REAL,
     pinned_at REAL,
+    branch_parent_message_id INTEGER,
+    branch_parent_turn_index INTEGER,
+    branch_inherited_turn_count INTEGER,
+    branch_created_at REAL,
     api_call_count INTEGER DEFAULT 0,
     project_root TEXT,
     FOREIGN KEY (parent_session_id) REFERENCES sessions(id)
@@ -140,6 +144,34 @@ impl SessionStore {
             self.conn
                 .execute("ALTER TABLE sessions ADD COLUMN pinned_at REAL", [])?;
         }
+        if self.table_exists("sessions")?
+            && !self.column_exists("sessions", "branch_parent_message_id")?
+        {
+            self.conn.execute(
+                "ALTER TABLE sessions ADD COLUMN branch_parent_message_id INTEGER",
+                [],
+            )?;
+        }
+        if self.table_exists("sessions")?
+            && !self.column_exists("sessions", "branch_parent_turn_index")?
+        {
+            self.conn.execute(
+                "ALTER TABLE sessions ADD COLUMN branch_parent_turn_index INTEGER",
+                [],
+            )?;
+        }
+        if self.table_exists("sessions")?
+            && !self.column_exists("sessions", "branch_inherited_turn_count")?
+        {
+            self.conn.execute(
+                "ALTER TABLE sessions ADD COLUMN branch_inherited_turn_count INTEGER",
+                [],
+            )?;
+        }
+        if self.table_exists("sessions")? && !self.column_exists("sessions", "branch_created_at")? {
+            self.conn
+                .execute("ALTER TABLE sessions ADD COLUMN branch_created_at REAL", [])?;
+        }
         if self.table_exists("projects")? && !self.column_exists("projects", "icon")? {
             self.conn
                 .execute("ALTER TABLE projects ADD COLUMN icon TEXT", [])?;
@@ -219,7 +251,7 @@ impl SessionStore {
                 // 迁移已有 project_root → projects 实体
                 self.migrate_project_root_to_projects()?;
             }
-            // v19→v20 的列与索引由上方幂等自愈分支补齐。
+            // v19→v21 的列与索引由上方幂等自愈分支补齐。
             self.stamp_schema_version()?;
         }
         tx.commit()?;

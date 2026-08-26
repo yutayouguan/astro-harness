@@ -2044,3 +2044,267 @@ fn v14_to_v15_adds_media_json_without_data_loss() {
     assert_eq!(msgs[0].content.as_deref(), Some("hello v14"));
     assert!(msgs[0].media_json.is_none());
 }
+
+#[test]
+fn v20_schema_migrates_to_v21_branch_metadata_without_data_loss() {
+    let dir = TempDir::new().unwrap();
+    let path = dir.path().join("state.db");
+    let store = SessionStore::open(&path).unwrap();
+    store
+        .create_session("keep", "tauri", None, None, None)
+        .unwrap();
+    store
+        .append_message(NewMessage {
+            content: Some("keep-v20"),
+            ..NewMessage::empty("keep", "user")
+        })
+        .unwrap();
+    drop(store);
+
+    let conn = rusqlite::Connection::open(&path).unwrap();
+    conn.execute_batch(
+        "ALTER TABLE sessions DROP COLUMN branch_parent_message_id;
+         ALTER TABLE sessions DROP COLUMN branch_parent_turn_index;
+         ALTER TABLE sessions DROP COLUMN branch_inherited_turn_count;
+         ALTER TABLE sessions DROP COLUMN branch_created_at;
+         UPDATE schema_version SET version = 20;",
+    )
+    .unwrap();
+    drop(conn);
+
+    let reopened = SessionStore::open(&path).unwrap();
+    assert_eq!(reopened.schema_version().unwrap(), 21);
+    assert_eq!(
+        reopened.get_messages("keep").unwrap()[0].content.as_deref(),
+        Some("keep-v20")
+    );
+    let session = reopened.get_session("keep").unwrap().unwrap();
+    assert!(session.branch_parent_message_id.is_none());
+    assert!(session.branch_parent_turn_index.is_none());
+    assert!(session.branch_inherited_turn_count.is_none());
+    assert!(session.branch_created_at.is_none());
+}
+
+#[test]
+fn fork_at_completed_user_turn_copies_tool_chain_with_new_ids_and_keeps_source() {
+    let (_dir, store) = test_store();
+    store
+        .create_session("source", "tauri", Some("model-a"), None, None)
+        .unwrap();
+    store
+        .append_message(NewMessage {
+            content: Some("abandoned"),
+            ..NewMessage::empty("source", "user")
+        })
+        .unwrap();
+    let first_user = store
+        .append_message(NewMessage {
+            content: Some("first"),
+            ..NewMessage::empty("source", "user")
+        })
+        .unwrap();
+    store
+        .append_message(NewMessage {
+            content: Some("calling"),
+            tool_calls: Some(serde_json::json!([{
+                "id": "call-1",
+                "name": "inspect",
+                "arguments": {"path": "src"}
+            }])),
+            ..NewMessage::empty("source", "assistant")
+        })
+        .unwrap();
+    store
+        .append_message(NewMessage {
+            content: Some("tool-result"),
+            tool_call_id: Some("call-1"),
+            tool_name: Some("inspect"),
+            ..NewMessage::empty("source", "tool")
+        })
+        .unwrap();
+    store
+        .append_message(NewMessage {
+            content: Some("done"),
+            ..NewMessage::empty("source", "assistant")
+        })
+        .unwrap();
+    let incomplete_user = store
+        .append_message(NewMessage {
+            content: Some("second"),
+            ..NewMessage::empty("source", "user")
+        })
+        .unwrap();
+    let source_before = store.get_messages("source").unwrap();
+
+    let fork = store
+        .fork_session_at_user_message("source", "branch", first_user)
+        .unwrap();
+    let source_after = store.get_messages("source").unwrap();
+    let branch = store.get_messages("branch").unwrap();
+
+    assert_eq!(
+        source_before.iter().map(|row| row.id).collect::<Vec<_>>(),
+        source_after.iter().map(|row| row.id).collect::<Vec<_>>()
+    );
+    assert_eq!(branch.len(), 5);
+    assert_eq!(
+        branch
+            .iter()
+            .map(|row| row.role.as_str())
+            .collect::<Vec<_>>(),
+        vec!["user", "user", "assistant", "tool", "assistant"]
+    );
+    assert!(branch
+        .iter()
+        .zip(&source_before)
+        .all(|(copied, source)| copied.id != source.id && copied.content == source.content));
+    assert_eq!(fork.parent_message_id, first_user);
+    assert_eq!(fork.parent_turn_index, 2);
+    assert_eq!(fork.inherited_turn_count, 1);
+    assert_eq!(fork.copied_message_count, 5);
+    let metadata = store.get_session("branch").unwrap().unwrap();
+    assert_eq!(metadata.parent_session_id.as_deref(), Some("source"));
+    assert_eq!(metadata.branch_parent_message_id, Some(first_user));
+    assert_eq!(metadata.branch_parent_turn_index, Some(2));
+    assert_eq!(metadata.branch_inherited_turn_count, Some(1));
+    assert!(metadata.branch_created_at.is_some());
+
+    let error = store
+        .fork_session_at_user_message("source", "bad-branch", incomplete_user)
+        .unwrap_err();
+    assert!(error.to_string().contains("not completed"));
+    assert!(store.get_session("bad-branch").unwrap().is_none());
+}
+
+#[test]
+fn lineage_graph_finds_root_descendants_and_turn_anchors() {
+    let (_dir, store) = test_store();
+    store
+        .create_session("root", "tauri", None, None, None)
+        .unwrap();
+    let root_user = store
+        .append_message(NewMessage {
+            content: Some("root question"),
+            ..NewMessage::empty("root", "user")
+        })
+        .unwrap();
+    store
+        .append_message(NewMessage {
+            content: Some("root answer"),
+            ..NewMessage::empty("root", "assistant")
+        })
+        .unwrap();
+    store
+        .fork_session_at_user_message("root", "child", root_user)
+        .unwrap();
+    let child_user = store
+        .append_message(NewMessage {
+            content: Some("child question"),
+            ..NewMessage::empty("child", "user")
+        })
+        .unwrap();
+    store
+        .append_message(NewMessage {
+            content: Some("child answer"),
+            ..NewMessage::empty("child", "assistant")
+        })
+        .unwrap();
+    store
+        .fork_session_at_user_message("child", "grandchild", child_user)
+        .unwrap();
+
+    let graph = store.session_lineage_graph("grandchild").unwrap();
+    assert_eq!(graph.root_session_id, "root");
+    assert_eq!(
+        graph
+            .nodes
+            .iter()
+            .map(|node| node.session_id.as_str())
+            .collect::<Vec<_>>(),
+        vec!["root", "child", "grandchild"]
+    );
+    assert!(!graph.cycle_detected);
+    assert!(graph.orphaned_parent_ids.is_empty());
+    let root = graph
+        .nodes
+        .iter()
+        .find(|node| node.session_id == "root")
+        .unwrap();
+    assert_eq!(root.turns[0].child_session_ids, vec!["child"]);
+    let child = graph
+        .nodes
+        .iter()
+        .find(|node| node.session_id == "child")
+        .unwrap();
+    assert_eq!(child.turns[1].child_session_ids, vec!["grandchild"]);
+    assert_eq!(child.parent_message_id, Some(root_user));
+    assert_eq!(child.inherited_turn_count, 1);
+}
+
+#[test]
+fn lineage_graph_infers_legacy_metadata_and_protects_orphans_and_cycles() {
+    let (dir, store) = test_store();
+    store
+        .create_session("root", "tauri", None, None, None)
+        .unwrap();
+    let root_user = store
+        .append_message(NewMessage {
+            content: Some("legacy question"),
+            ..NewMessage::empty("root", "user")
+        })
+        .unwrap();
+    store
+        .append_message(NewMessage {
+            content: Some("legacy answer"),
+            ..NewMessage::empty("root", "assistant")
+        })
+        .unwrap();
+    store.fork_session("root", "legacy", 2).unwrap();
+
+    let raw = rusqlite::Connection::open(dir.path().join("state.db")).unwrap();
+    raw.execute(
+        "UPDATE sessions SET
+            branch_parent_message_id = NULL,
+            branch_parent_turn_index = NULL,
+            branch_inherited_turn_count = NULL,
+            branch_created_at = NULL
+         WHERE id = 'legacy'",
+        [],
+    )
+    .unwrap();
+    let legacy_graph = store.session_lineage_graph("legacy").unwrap();
+    let legacy = legacy_graph
+        .nodes
+        .iter()
+        .find(|node| node.session_id == "legacy")
+        .unwrap();
+    assert!(legacy.legacy_metadata);
+    assert_eq!(legacy.parent_message_id, Some(root_user));
+    assert_eq!(legacy.parent_turn_index, Some(1));
+    assert_eq!(legacy.inherited_turn_count, 1);
+
+    raw.execute_batch("PRAGMA foreign_keys = OFF;").unwrap();
+    raw.execute(
+        "UPDATE sessions SET parent_session_id = 'missing-parent' WHERE id = 'legacy'",
+        [],
+    )
+    .unwrap();
+    let orphan_graph = store.session_lineage_graph("legacy").unwrap();
+    assert_eq!(orphan_graph.root_session_id, "legacy");
+    assert_eq!(orphan_graph.orphaned_parent_ids, vec!["missing-parent"]);
+    assert!(orphan_graph.nodes[0].orphaned);
+
+    raw.execute(
+        "UPDATE sessions SET parent_session_id = 'root' WHERE id = 'legacy'",
+        [],
+    )
+    .unwrap();
+    raw.execute(
+        "UPDATE sessions SET parent_session_id = 'legacy' WHERE id = 'root'",
+        [],
+    )
+    .unwrap();
+    let cycle_graph = store.session_lineage_graph("legacy").unwrap();
+    assert!(cycle_graph.cycle_detected);
+    assert_eq!(cycle_graph.nodes.len(), 2);
+}

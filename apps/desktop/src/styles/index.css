@@ -21,6 +21,7 @@
 @import "./features/chat/right-panel.css";
 @import "./features/chat/project-files.css";
 @import "./features/chat/subagents.css";
+@import "./features/chat/branch-graph.css";
 @import "./components/cards.css";
 
 /* Feature styles */

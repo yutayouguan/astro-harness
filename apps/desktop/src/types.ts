@@ -811,6 +811,35 @@ export type RecentSessionDto = {
   pinnedAt?: string | null;
 };
 
+/** 分支画布中的节点。聊天 fork 与 Agent spawn 通过 edgeKind 严格区分。 */
+export type BranchGraphNodeDto = {
+  id: string;
+  kind: "turn" | "branchHead" | "agent";
+  sessionId: string;
+  parentId: string | null;
+  edgeKind: "continuation" | "fork" | "spawn" | null;
+  title: string;
+  preview: string;
+  status: string;
+  createdAt: string | null;
+  sourceMessageId: number | null;
+  turnIndex: number | null;
+  model: string | null;
+  agentPath: string | null;
+  isCurrent: boolean;
+  canFork: boolean;
+};
+
+/** 当前会话所在整棵聊天谱系，以及附着的子 Agent 执行层。 */
+export type BranchGraphDto = {
+  rootSessionId: string;
+  currentSessionId: string;
+  nodes: BranchGraphNodeDto[];
+  branchCount: number;
+  turnCount: number;
+  agentCount: number;
+};
+
 /** 后端持久化的项目实体 */
 export type ProjectDto = {
   id: string;

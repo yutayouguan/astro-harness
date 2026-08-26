@@ -232,14 +232,15 @@ pub async fn get_chat_history(
 #[tauri::command]
 pub async fn fork_chat_session(
     source_session_id: String,
-    keep_chat_bubbles: i32,
+    keep_chat_bubbles: Option<i32>,
+    source_message_id: Option<i64>,
     new_session_id: Option<String>,
 ) -> Result<String, String> {
     let source = source_session_id.trim();
     if source.is_empty() {
         return Err("source_session_id 不能为空".into());
     }
-    let keep = keep_chat_bubbles.max(0) as usize;
+    let keep = keep_chat_bubbles.unwrap_or_default().max(0) as usize;
     let new_id = new_session_id
         .filter(|s| !s.trim().is_empty())
         .unwrap_or_else(|| Uuid::new_v4().to_string());
@@ -248,9 +249,15 @@ pub async fn fork_chat_session(
     }
 
     let store = open_sessions()?;
-    store
-        .fork_session(source, &new_id, keep)
-        .map_err(|e| e.to_string())?;
+    if let Some(source_message_id) = source_message_id {
+        store
+            .fork_session_at_user_message(source, &new_id, source_message_id)
+            .map_err(|e| e.to_string())?;
+    } else {
+        store
+            .fork_session(source, &new_id, keep)
+            .map_err(|e| e.to_string())?;
+    }
     Ok(new_id)
 }
 

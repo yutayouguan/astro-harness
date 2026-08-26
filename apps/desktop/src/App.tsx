@@ -1351,6 +1351,7 @@ export default function App() {
                       contextWindow={contextWindow}
                       messages={chat.messages}
                       streaming={chat.streaming}
+                      onOpenSession={(sessionId) => openSessionFromFilespace(sessionId)}
                       onOpenMemory={() => openSettingsTab("memory")}
                       onOpenSkills={() => setNav("skills")}
                     />

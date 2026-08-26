@@ -263,6 +263,7 @@ pub fn run() {
             commands::session::pin_session,
             commands::session::unpin_session,
             commands::session::delete_session_permanently,
+            commands::branches::get_chat_branch_graph,
             // — projects —
             commands::common::get_default_workspace_path,
             commands::session::list_projects,

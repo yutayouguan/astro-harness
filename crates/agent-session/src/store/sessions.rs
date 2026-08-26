@@ -15,7 +15,9 @@ impl SessionStore {
             .query_row(
                 "SELECT id, source, title, started_at, ended_at, end_reason,
                         model, parent_session_id, message_count, tool_call_count,
-                        archived_at, pinned_at
+                        archived_at, pinned_at, branch_parent_message_id,
+                        branch_parent_turn_index, branch_inherited_turn_count,
+                        branch_created_at
                  FROM sessions WHERE id = ?1",
                 params![id],
                 |row| {
@@ -32,6 +34,10 @@ impl SessionStore {
                         tool_call_count: row.get(9)?,
                         archived_at: row.get(10)?,
                         pinned_at: row.get(11)?,
+                        branch_parent_message_id: row.get(12)?,
+                        branch_parent_turn_index: row.get(13)?,
+                        branch_inherited_turn_count: row.get(14)?,
+                        branch_created_at: row.get(15)?,
                     })
                 },
             )

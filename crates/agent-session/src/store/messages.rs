@@ -260,6 +260,7 @@ impl SessionStore {
         self.create_session(new_id, "tauri", model.as_deref(), None, Some(source_id))?;
 
         if keep_chat_bubbles == 0 {
+            self.write_legacy_fork_metadata(source_id, new_id, &[])?;
             return Ok(());
         }
 
@@ -327,6 +328,7 @@ impl SessionStore {
             let branched = format!("{title} · branch");
             let _ = self.set_session_title(new_id, &branched);
         }
+        self.write_legacy_fork_metadata(source_id, new_id, &messages[..=end])?;
 
         Ok(())
     }
@@ -463,6 +465,7 @@ impl SessionStore {
             }
         }
         tx.commit()?;
+        self.infer_and_write_fork_metadata(source_id, new_id)?;
 
         Ok(())
     }
