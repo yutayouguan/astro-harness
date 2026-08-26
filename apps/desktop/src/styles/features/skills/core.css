@@ -68,6 +68,69 @@
   outline-offset: 2px;
 }
 
+.plugins-personal-tabs {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: fit-content;
+  padding: 4px;
+  border: 1px solid color-mix(in srgb, var(--glass-edge) 82%, transparent);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--glass-panel) 72%, transparent);
+  box-shadow: var(--glass-rim);
+}
+
+.plugins-personal-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 34px;
+  padding: 0 13px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--ink-mute);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 650;
+  cursor: pointer;
+  transition:
+    color 0.15s ease,
+    background 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.plugins-personal-tab:hover {
+  color: var(--ink);
+  background: color-mix(in srgb, var(--tone) 7%, transparent);
+}
+
+.plugins-personal-tab.is-active {
+  color: var(--tone);
+  background:
+    linear-gradient(165deg, rgba(255, 255, 255, 0.82), rgba(255, 255, 255, 0.36)),
+    color-mix(in srgb, var(--tone) 11%, var(--glass-panel));
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--tone) 24%, transparent),
+    0 2px 8px color-mix(in srgb, var(--tone) 10%, transparent);
+}
+
+.plugins-personal-tab:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--tone) 48%, transparent);
+  outline-offset: 2px;
+}
+
+.plugins-personal-tab-count {
+  min-width: 18px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  color: inherit;
+  background: color-mix(in srgb, currentColor 10%, transparent);
+  font-size: 10px;
+  line-height: 16px;
+  text-align: center;
+}
+
 .plugins-action-count {
   position: absolute;
   top: -3px;

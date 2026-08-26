@@ -147,7 +147,8 @@ export type SkillsPanelProps = {
 
 type PluginsPrimaryTab = "skills" | "mcp";
 type PluginScope = "global" | "builtin" | "project";
-type SkillsDrawer = "machine" | "updates" | "online";
+type PersonalSkillsTab = "installed" | "machine" | "online";
+type SkillsDrawer = "updates";
 /** 内容布局：画廊 / 列表 / 详情 */
 type SkillsView = "gallery" | "list" | "detail";
 /** 已安装列表排序 */
@@ -387,6 +388,7 @@ export default function SkillsPanel({
   const { showToast, toastHost } = useTransientToast();
   const [primaryTab, setPrimaryTab] = useState<PluginsPrimaryTab>("skills");
   const [scope, setScope] = useState<PluginScope>("global");
+  const [personalTab, setPersonalTab] = useState<PersonalSkillsTab>("installed");
   const [drawer, setDrawer] = useState<SkillsDrawer | null>(null);
   const [installed, setInstalled] = useState<InstalledSkill[]>([]);
   const [machineSkills, setMachineSkills] = useState<InstalledSkill[]>([]);
@@ -413,6 +415,12 @@ export default function SkillsPanel({
     setPrimaryTab(initialTab);
     onInitialTabConsumed?.();
   }, [initialTab, onInitialTabConsumed]);
+  useEffect(() => {
+    if (primaryTab !== "skills" || scope !== "global") {
+      setPersonalTab("installed");
+    }
+    setDrawer(null);
+  }, [primaryTab, scope]);
   const mcp = useMcpSection({
     active: active && primaryTab === "mcp",
     query: mcpQuery,
@@ -933,10 +941,10 @@ export default function SkillsPanel({
   }, [active, primaryTab, ensureInstalled, refreshSkillCalls]);
 
   useEffect(() => {
-    if (!active || drawer !== "machine") return;
+    if (!active || personalTab !== "machine") return;
     ensureMachine();
     void refreshSkillCalls();
-  }, [active, drawer, ensureMachine, refreshSkillCalls]);
+  }, [active, personalTab, ensureMachine, refreshSkillCalls]);
 
   useEffect(() => {
     if (!active || drawer !== "updates") return;
@@ -959,14 +967,14 @@ export default function SkillsPanel({
   ]);
 
   useEffect(() => {
-    if (!active || drawer !== "online") return;
+    if (!active || personalTab !== "online") return;
     // 在线安装态依赖本机/Astro 列表：有缓存则轻量保证新鲜，不硬刷
     ensureInstalled();
     ensureMachine();
-  }, [active, drawer, ensureInstalled, ensureMachine]);
+  }, [active, personalTab, ensureInstalled, ensureMachine]);
 
   useEffect(() => {
-    if (!active || drawer !== "online") return;
+    if (!active || personalTab !== "online") return;
 
     // SWR：先写入上一 Tab 快照，再恢复缓存；过期则后台静默刷新
     persistActiveStoreCache();
@@ -985,7 +993,7 @@ export default function SkillsPanel({
     void fetchStorePage(1, false, { mode: "hard" });
   }, [
     active,
-    drawer,
+    personalTab,
     storeId,
     fetchStorePage,
     persistActiveStoreCache,
@@ -993,7 +1001,7 @@ export default function SkillsPanel({
   ]);
 
   useEffect(() => {
-    if (!active || drawer !== "online" || !hasMore || loadingStore) return;
+    if (!active || personalTab !== "online" || !hasMore || loadingStore) return;
     const node = sentinelRef.current;
     const root =
       viewMode === "detail"
@@ -1019,7 +1027,7 @@ export default function SkillsPanel({
     );
     observer.observe(node);
     return () => observer.disconnect();
-  }, [active, drawer, storeId, hasMore, loadingStore, viewMode, storeResults.length]);
+  }, [active, personalTab, storeId, hasMore, loadingStore, viewMode, storeResults.length]);
 
   const storeLoadMoreFooter = (
     <>
@@ -1629,16 +1637,16 @@ export default function SkillsPanel({
   }, [storeResults, storeSort]);
 
   const detailItems = useMemo(() => {
-    if (drawer === "machine") return filteredMachine.map((s) => s.id);
-    if (drawer === "online") return sortedStoreResults.map((s) => s.id);
+    if (personalTab === "machine") return filteredMachine.map((s) => s.id);
+    if (personalTab === "online") return sortedStoreResults.map((s) => s.id);
     return filteredInstalled.map((s) => s.id);
-  }, [drawer, filteredInstalled, filteredMachine, sortedStoreResults]);
+  }, [personalTab, filteredInstalled, filteredMachine, sortedStoreResults]);
 
   useEffect(() => {
     if (viewMode !== "detail") return;
     if (selectedDetailId && detailItems.includes(selectedDetailId)) return;
     setSelectedDetailId(detailItems[0] ?? null);
-  }, [viewMode, detailItems, selectedDetailId, drawer, scope]);
+  }, [viewMode, detailItems, selectedDetailId, personalTab, scope]);
 
   const selectedInstalled = filteredInstalled.find(
     (s) => s.id === selectedDetailId,
@@ -1647,7 +1655,7 @@ export default function SkillsPanel({
   const selectedStore = sortedStoreResults.find((s) => s.id === selectedDetailId);
 
   useEffect(() => {
-    if (drawer !== "online" || !selectedDetailId || !isTauri()) {
+    if (personalTab !== "online" || !selectedDetailId || !isTauri()) {
       setStoreDetail(null);
       setLoadingStoreDetail(false);
       return;
@@ -1677,7 +1685,7 @@ export default function SkillsPanel({
     return () => {
       cancelled = true;
     };
-  }, [drawer, selectedDetailId]);
+  }, [personalTab, selectedDetailId]);
 
   const callSortOptions = useMemo(
     () => [
@@ -2730,41 +2738,82 @@ export default function SkillsPanel({
         <div className="skills-toolbar-end">
           {primaryTab === "skills" ? (
             <>
-              <SelectMenu
-                size="sm"
-                value={installedSort}
-                onChange={(v) => setInstalledSort(v as CallSort)}
-                options={callSortOptions}
-                aria-label={t("skills.sort.label")}
-              />
-              <ExpandableSearch
-                value={installedQuery}
-                onChange={setInstalledQuery}
-                placeholderKey="skills.installedSearchPlaceholder"
-              />
+              {personalTab === "installed" && (
+                <>
+                  <SelectMenu
+                    size="sm"
+                    value={installedSort}
+                    onChange={(v) => setInstalledSort(v as CallSort)}
+                    options={callSortOptions}
+                    aria-label={t("skills.sort.label")}
+                  />
+                  <ExpandableSearch
+                    value={installedQuery}
+                    onChange={setInstalledQuery}
+                    placeholderKey="skills.installedSearchPlaceholder"
+                  />
+                </>
+              )}
+              {personalTab === "machine" && (
+                <>
+                  <SelectMenu
+                    size="sm"
+                    value={machineLinkFilter}
+                    onChange={(value) => setMachineLinkFilter(value as MachineLinkFilter)}
+                    options={machineLinkFilterOptions}
+                    aria-label={t("skills.filter.linkAll")}
+                  />
+                  <SelectMenu
+                    size="sm"
+                    value={machineSort}
+                    onChange={(value) => setMachineSort(value as CallSort)}
+                    options={callSortOptions}
+                    aria-label={t("skills.sort.label")}
+                  />
+                  <ExpandableSearch
+                    value={machineQuery}
+                    onChange={setMachineQuery}
+                    placeholderKey="skills.installedSearchPlaceholder"
+                  />
+                </>
+              )}
+              {personalTab === "online" && (
+                <ExpandableSearch
+                  value={query}
+                  onChange={setQuery}
+                  onSubmit={() => void searchStore()}
+                  placeholderKey="skills.searchPlaceholder"
+                />
+              )}
               {viewToggle}
-              <button type="button" className="skills-icon-btn" onClick={() => setDrawer("machine")} title={t("plugins.action.import")} aria-label={t("plugins.action.import")}>
-                <HardDrive size={16} />
-              </button>
-              <button type="button" className="skills-icon-btn" onClick={() => setDrawer("updates")} title={t("plugins.action.updates")} aria-label={t("plugins.action.updates")}>
-                <RefreshCw size={16} />
-                {outdatedCount > 0 && <span className="plugins-action-count">{outdatedCount}</span>}
-              </button>
-              <button type="button" className="skills-icon-btn" onClick={() => setDrawer("online")} title={t("plugins.action.store")} aria-label={t("plugins.action.store")}>
-                <CloudDownload size={16} />
-              </button>
+              {scope === "global" && (
+                <button type="button" className="skills-icon-btn" onClick={() => setDrawer("updates")} title={t("plugins.action.updates")} aria-label={t("plugins.action.updates")}>
+                  <RefreshCw size={16} />
+                  {outdatedCount > 0 && <span className="plugins-action-count">{outdatedCount}</span>}
+                </button>
+              )}
               <button
                 type="button"
                 className="skills-icon-btn"
                 onClick={() => {
-                  void refreshInstalled({ mode: "hard" });
+                  if (personalTab === "machine") {
+                    void refreshMachine({ mode: "hard" });
+                  } else if (personalTab === "online") {
+                    void fetchStorePage(1, false, { mode: "hard" });
+                  } else {
+                    void refreshInstalled({ mode: "hard" });
+                  }
                   void refreshSkillCalls({ force: true });
                 }}
-                disabled={loadingInstalled}
+                disabled={loadingInstalled || loadingMachine || loadingStore}
                 title={t("skills.refresh")}
                 aria-label={t("skills.refresh")}
               >
-                <IconRefresh width={16} height={16} className={loadingInstalled ? "is-spin" : undefined} />
+                <IconRefresh
+                  width={16}
+                  height={16}
+                  className={loadingInstalled || loadingMachine || loadingStore ? "is-spin" : undefined}
+                />
               </button>
             </>
           ) : (
@@ -2786,8 +2835,42 @@ export default function SkillsPanel({
         </div>
       </div>
 
-      <MotionSwitch switchKey={`${primaryTab}:${scope}`} className="anim-switch--fill">
-      {primaryTab === "skills" && (
+      {primaryTab === "skills" && scope === "global" && (
+        <div
+          className="plugins-personal-tabs"
+          role="tablist"
+          aria-label={t("plugins.personalTabs")}
+        >
+          {(["installed", "machine", "online"] as const).map((item) => (
+            <button
+              key={item}
+              type="button"
+              role="tab"
+              aria-selected={personalTab === item}
+              className={`plugins-personal-tab ${personalTab === item ? "is-active" : ""}`}
+              onClick={() => setPersonalTab(item)}
+            >
+              {item === "installed" ? (
+                <Package size={15} aria-hidden />
+              ) : item === "machine" ? (
+                <HardDrive size={15} aria-hidden />
+              ) : (
+                <CloudDownload size={15} aria-hidden />
+              )}
+              {t(`plugins.personalTab.${item}` as MessageKey)}
+              {item === "machine" && machineSkills.length > 0 && (
+                <span className="plugins-personal-tab-count">{machineSkills.length}</span>
+              )}
+            </button>
+          ))}
+        </div>
+      )}
+
+      <MotionSwitch
+        switchKey={`${primaryTab}:${scope}:${personalTab}`}
+        className="anim-switch--fill"
+      >
+      {primaryTab === "skills" && (scope !== "global" || personalTab === "installed") && (
         <section className="skills-pane" role="tabpanel">
           <header className="skills-pane-head">
             <div>
@@ -2845,36 +2928,12 @@ export default function SkillsPanel({
         </section>
       )}
 
-      {drawer === "machine" && (
-        <section className="skills-pane plugins-drawer" role="dialog" aria-modal="true">
+      {primaryTab === "skills" && scope === "global" && personalTab === "machine" && (
+        <section className="skills-pane" role="tabpanel">
           <header className="skills-pane-head">
             <div>
               <h2>{t("skills.machineTitle")}</h2>
               <p>{t("skills.machineSub")} · {linkedCount}/{machineSkills.length}</p>
-            </div>
-            <div className="skills-toolbar-end">
-              <SelectMenu
-                size="sm"
-                value={machineLinkFilter}
-                onChange={(value) => setMachineLinkFilter(value as MachineLinkFilter)}
-                options={machineLinkFilterOptions}
-                aria-label={t("skills.filter.linkAll")}
-              />
-              <SelectMenu
-                size="sm"
-                value={machineSort}
-                onChange={(value) => setMachineSort(value as CallSort)}
-                options={callSortOptions}
-                aria-label={t("skills.sort.label")}
-              />
-              <ExpandableSearch
-                value={machineQuery}
-                onChange={setMachineQuery}
-                placeholderKey="skills.installedSearchPlaceholder"
-              />
-            <button type="button" className="skills-icon-btn" onClick={() => setDrawer(null)} aria-label={t("common.close")}>
-              <X size={16} />
-            </button>
             </div>
           </header>
 
@@ -3067,28 +3126,16 @@ export default function SkillsPanel({
         </section>
       )}
 
-      {drawer === "online" && (
+      {primaryTab === "skills" && scope === "global" && personalTab === "online" && (
         <section
           ref={onlinePaneRef}
-          className={`skills-pane skills-pane-online plugins-drawer ${viewMode === "detail" ? "is-detail" : ""}`}
-          role="dialog"
-          aria-modal="true"
+          className={`skills-pane skills-pane-online ${viewMode === "detail" ? "is-detail" : ""}`}
+          role="tabpanel"
         >
           <header className="skills-pane-head">
             <div>
               <h2>{t("skills.storeTitle")}</h2>
               <p>{t("skills.storeSub")}</p>
-            </div>
-            <div className="skills-toolbar-end">
-              <ExpandableSearch
-                value={query}
-                onChange={setQuery}
-                onSubmit={() => void searchStore()}
-                placeholderKey="skills.searchPlaceholder"
-              />
-            <button type="button" className="skills-icon-btn" onClick={() => setDrawer(null)} aria-label={t("common.close")}>
-              <X size={16} />
-            </button>
             </div>
           </header>
 
