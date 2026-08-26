@@ -1,7 +1,15 @@
-import { useEffect } from "react";
-import { FileCode2, LoaderCircle, Save, X } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Eye, FileCode2, LoaderCircle, Save, X } from "lucide-react";
 import type { ResolvedTheme } from "../../hooks/app/useTheme";
 import type { ProjectFileWorkbench } from "../../hooks/chat/useProjectFileWorkbench";
+import {
+  isMarkdownFilename,
+  readWorkspaceMdMode,
+  writeWorkspaceMdMode,
+  type MdMode,
+} from "../../lib/filespace/workspaceMdMode";
+import { ChatMarkdown } from "./ChatMarkdown";
+import FileGlyph from "../filespace/FileGlyph";
 import WorkspaceEditor from "../workspace/WorkspaceEditor";
 
 export default function ProjectFileEditor({
@@ -12,6 +20,15 @@ export default function ProjectFileEditor({
   theme: ResolvedTheme;
 }) {
   const { activeTab } = workbench;
+  const [mdMode, setMdMode] = useState<MdMode>(readWorkspaceMdMode);
+  const isMarkdown = Boolean(activeTab && isMarkdownFilename(activeTab.name));
+  const showMarkdownPreview = isMarkdown && mdMode === "preview";
+
+  const toggleMarkdownMode = () => {
+    const next = mdMode === "preview" ? "source" : "preview";
+    setMdMode(next);
+    writeWorkspaceMdMode(next);
+  };
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -48,7 +65,11 @@ export default function ProjectFileEditor({
                 }}
                 title={tab.path ?? tab.name}
               >
-                <FileCode2 size={13} aria-hidden />
+                <FileGlyph
+                  name={tab.name}
+                  className="ws-file-glyph project-file-tab-glyph"
+                  size={13}
+                />
                 <span>{tab.name}</span>
                 {dirty ? <i className="project-file-dirty" aria-label="未保存" /> : null}
                 <button
@@ -74,6 +95,22 @@ export default function ProjectFileEditor({
           })}
         </div>
         <div className="project-file-tab-actions">
+          {isMarkdown ? (
+            <button
+              type="button"
+              className={showMarkdownPreview ? "is-active" : undefined}
+              onClick={toggleMarkdownMode}
+              title={showMarkdownPreview ? "显示源码" : "预览 Markdown"}
+              aria-label={showMarkdownPreview ? "显示 Markdown 源码" : "预览 Markdown"}
+              aria-pressed={showMarkdownPreview}
+            >
+              {showMarkdownPreview ? (
+                <FileCode2 size={14} aria-hidden />
+              ) : (
+                <Eye size={14} aria-hidden />
+              )}
+            </button>
+          ) : null}
           <button
             type="button"
             onClick={() => void workbench.saveActive()}
@@ -122,12 +159,21 @@ export default function ProjectFileEditor({
                 {activeTab.readonly ? "Agent 正在生成" : "生成快照"}
               </div>
             ) : null}
-            <WorkspaceEditor
-              value={activeTab.content}
-              filename={activeTab.name}
-              theme={theme}
-              onChange={workbench.updateActiveContent}
-            />
+            {showMarkdownPreview ? (
+              <div className="project-file-markdown-preview">
+                <ChatMarkdown
+                  content={activeTab.content}
+                  mediaBaseDir={activeTab.path?.replace(/[\\/][^\\/]*$/, "")}
+                />
+              </div>
+            ) : (
+              <WorkspaceEditor
+                value={activeTab.content}
+                filename={activeTab.name}
+                theme={theme}
+                onChange={workbench.updateActiveContent}
+              />
+            )}
           </>
         ) : null}
       </div>

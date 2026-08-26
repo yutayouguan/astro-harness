@@ -189,9 +189,32 @@
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--tone) 8%, transparent);
 }
 
-.project-file-row > svg:not(.project-file-chevron) {
+.project-file-row > svg:not(.project-file-chevron),
+.project-file-glyph {
   flex-shrink: 0;
   opacity: 0.76;
+}
+
+.project-file-row > svg:not(.project-file-chevron) {
+  color: color-mix(in srgb, var(--tone) 76%, var(--ink-mute));
+}
+
+.project-file-row .project-file-glyph,
+.project-file-tab .project-file-tab-glyph {
+  width: 15px;
+  height: 15px;
+  display: grid;
+  place-items: center;
+  flex: 0 0 15px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--ws-tone, var(--ink-mute));
+}
+
+.project-file-row .project-file-glyph svg,
+.project-file-tab .project-file-tab-glyph svg {
+  display: block;
 }
 
 .project-file-chevron,
@@ -320,6 +343,10 @@
   box-shadow: 0 1px 2px rgba(var(--shadow-ink), 0.05);
 }
 
+.project-file-tab:not(.is-active) .project-file-tab-glyph {
+  opacity: 0.72;
+}
+
 .project-file-tab > span:not(.project-file-tab-close) {
   min-width: 0;
   flex: 1;
@@ -376,12 +403,30 @@
   cursor: default;
 }
 
+.project-file-tab-actions button.is-active {
+  color: var(--tone);
+  background: color-mix(in srgb, var(--tone) 12%, transparent);
+}
+
 .project-file-editor-body {
   position: relative;
   flex: 1;
   min-height: 0;
   overflow: hidden;
   background: color-mix(in srgb, var(--glass-panel) 16%, transparent);
+}
+
+.project-file-markdown-preview {
+  height: 100%;
+  overflow: auto;
+  padding: 24px clamp(24px, 5vw, 64px) 168px;
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--tone) 18%, transparent) transparent;
+}
+
+.project-file-markdown-preview > .msg-content {
+  width: min(100%, 860px);
+  margin: 0 auto;
 }
 
 .project-file-editor-body .ws-codemirror,

@@ -9,7 +9,6 @@ import {
 } from "react";
 import {
   ChevronRight,
-  File,
   Folder,
   FolderOpen,
   PanelRightClose,
@@ -18,6 +17,7 @@ import {
 } from "lucide-react";
 import type { FileEntryDto } from "../../types";
 import type { ProjectFileWorkbench } from "../../hooks/chat/useProjectFileWorkbench";
+import FileGlyph from "../filespace/FileGlyph";
 
 const WIDTH_KEY = "astro.projectFiles.width";
 const DEFAULT_WIDTH = 264;
@@ -72,7 +72,11 @@ function TreeRow({ entry, level, workbench, query }: TreeRowProps) {
         {entry.is_dir ? (
           expanded ? <FolderOpen size={15} aria-hidden /> : <Folder size={15} aria-hidden />
         ) : (
-          <File size={14} aria-hidden />
+          <FileGlyph
+            name={entry.name}
+            className="ws-file-glyph project-file-glyph"
+            size={14}
+          />
         )}
         <span className="project-file-name">{entry.name}</span>
         {loading ? <span className="project-file-loading" aria-label="加载中" /> : null}
