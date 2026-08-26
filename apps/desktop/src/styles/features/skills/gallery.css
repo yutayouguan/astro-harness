@@ -11,8 +11,8 @@
   background: var(--plugins-shell-bg);
   border: 1px solid var(--plugins-shell-border);
   box-shadow: var(--plugins-shell-shadow);
-  backdrop-filter: blur(14px) saturate(1.18);
-  -webkit-backdrop-filter: blur(14px) saturate(1.18);
+  backdrop-filter: var(--seg-shell-blur);
+  -webkit-backdrop-filter: var(--seg-shell-blur);
 }
 
 .skills-view-btn {
@@ -37,22 +37,6 @@
   color: var(--tone);
   background: var(--plugins-active-bg);
   box-shadow: var(--plugins-active-shadow);
-}
-
-html[data-theme="dark"] .skills-view-toggle {
-  background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.02)),
-    rgba(8, 6, 18, 0.42);
-  border-color: rgba(255, 255, 255, 0.09);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
-}
-
-html[data-theme="dark"] .skills-view-btn.is-active {
-  background:
-    linear-gradient(165deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.03)),
-    color-mix(in srgb, var(--tone-soft) 60%, transparent);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--tone) 28%, transparent);
-  color: color-mix(in srgb, #fff 18%, var(--tone));
 }
 
 /* List view */

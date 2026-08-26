@@ -3,42 +3,18 @@
   --plugins-control-h: 36px;
   --plugins-shell-radius: 14px;
   --plugins-item-radius: 10px;
-  --plugins-shell-border: color-mix(in srgb, var(--glass-edge) 84%, transparent);
-  --plugins-shell-bg:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.58), rgba(255, 255, 255, 0.2)),
-    color-mix(in srgb, var(--glass-panel) 70%, transparent);
-  --plugins-shell-shadow:
-    0 5px 16px color-mix(in srgb, var(--tone) 7%, rgba(15, 23, 42, 0.04)),
-    inset 0 1px 0 rgba(255, 255, 255, 0.62);
-  --plugins-active-bg:
-    linear-gradient(165deg, rgba(255, 255, 255, 0.86), rgba(255, 255, 255, 0.4)),
-    color-mix(in srgb, var(--tone) 11%, var(--glass-panel));
-  --plugins-active-shadow:
-    inset 0 0 0 1px color-mix(in srgb, var(--tone) 24%, transparent),
-    inset 0 1px 0 rgba(255, 255, 255, 0.82),
-    0 2px 8px color-mix(in srgb, var(--tone) 10%, transparent);
+  /* 材质与分段 Tab 同源，见 styles/components/tabs.css */
+  --plugins-shell-border: var(--seg-shell-border);
+  --plugins-shell-bg: var(--seg-shell-bg);
+  --plugins-shell-shadow: var(--seg-shell-shadow);
+  --plugins-active-bg: var(--seg-item-bg-active);
+  --plugins-active-shadow: var(--seg-item-shadow-active);
   position: relative;
   flex: 1;
   min-height: 0;
   display: flex;
   flex-direction: column;
   gap: 14px;
-}
-
-html[data-theme="dark"] .skills-page {
-  --plugins-shell-border: color-mix(in srgb, var(--tone) 18%, rgba(255, 255, 255, 0.09));
-  --plugins-shell-bg:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.075), rgba(255, 255, 255, 0.018)),
-    color-mix(in srgb, var(--tone-soft) 28%, rgba(8, 6, 18, 0.52));
-  --plugins-shell-shadow:
-    0 4px 14px rgba(0, 0, 0, 0.18),
-    inset 0 1px 0 rgba(255, 255, 255, 0.07);
-  --plugins-active-bg:
-    linear-gradient(165deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.035)),
-    color-mix(in srgb, var(--tone-soft) 54%, rgba(8, 6, 18, 0.42));
-  --plugins-active-shadow:
-    inset 0 0 0 1px color-mix(in srgb, var(--tone) 30%, transparent),
-    inset 0 1px 0 rgba(255, 255, 255, 0.09);
 }
 
 .plugins-primary-row {
