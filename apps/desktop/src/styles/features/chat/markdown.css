@@ -202,14 +202,21 @@
   color: inherit;
 }
 
-.msg-md table {
+.msg-md-table-wrap {
   width: 100%;
-  border-collapse: collapse;
   margin: 0.7em 0;
-  font-size: 0.92em;
-  overflow: hidden;
+  overflow-x: auto;
   border-radius: 10px;
   border: 1px solid color-mix(in srgb, var(--glass-edge) 80%, transparent);
+  overscroll-behavior-inline: contain;
+}
+
+.msg-md table {
+  width: max-content;
+  min-width: 100%;
+  border-collapse: collapse;
+  table-layout: auto;
+  font-size: 0.92em;
 }
 
 .msg-md th,
@@ -217,6 +224,14 @@
   padding: 0.45em 0.65em;
   border-bottom: 1px solid color-mix(in srgb, var(--glass-edge) 70%, transparent);
   text-align: left;
+  word-break: normal;
+  overflow-wrap: break-word;
+  vertical-align: top;
+}
+
+.msg-md th:first-child,
+.msg-md td:first-child {
+  min-width: 8rem;
 }
 
 .msg-md th {

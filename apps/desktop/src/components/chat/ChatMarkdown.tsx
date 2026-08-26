@@ -302,6 +302,11 @@ function ChatMarkdownImpl({
       img: ({ src, alt }) => (
         <MarkdownMedia src={src} alt={alt} baseDir={mediaBaseDir} />
       ),
+      table: ({ children }) => (
+        <div className="msg-md-table-wrap">
+          <table>{children}</table>
+        </div>
+      ),
       code: ({ className, children, ...props }) => {
         const text = String(children ?? "");
         const isBlock =
