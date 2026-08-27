@@ -24,9 +24,9 @@
 }
 
 .ui-tip {
-  --ui-tip-bg: #16181d;
-  --ui-tip-fg: #f4f6fb;
-  --ui-tip-border: rgba(255, 255, 255, 0.14);
+  --ui-tip-bg: rgba(18, 21, 28, 0.74);
+  --ui-tip-fg: #f7f8fc;
+  --ui-tip-border: rgba(255, 255, 255, 0.2);
   --arrow-size: 7px;
   --tip-arrow-x: 50%;
   --tip-arrow-y: 50%;
@@ -37,9 +37,11 @@
   max-width: min(280px, calc(100vw - 16px));
   width: max-content;
   padding: 6px 11px;
-  border-radius: 10px;
+  border-radius: 12px;
   border: 1px solid var(--ui-tip-border);
-  background: var(--ui-tip-bg);
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.14), transparent 48%),
+    var(--ui-tip-bg);
   color: var(--ui-tip-fg);
   font-size: 12px;
   font-weight: 550;
@@ -47,7 +49,12 @@
   letter-spacing: 0.01em;
   white-space: nowrap;
   text-align: center;
-  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.38);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.16),
+    0 10px 30px rgba(7, 10, 18, 0.24),
+    0 2px 8px rgba(7, 10, 18, 0.12);
+  backdrop-filter: blur(18px) saturate(155%);
+  -webkit-backdrop-filter: blur(18px) saturate(155%);
   opacity: 0;
   transform: translateY(4px) scale(0.96);
   transition:
@@ -198,12 +205,13 @@
 }
 
 html[data-theme="light"] .ui-tip {
-  --ui-tip-bg: #ffffff;
+  --ui-tip-bg: rgba(248, 250, 255, 0.72);
   --ui-tip-fg: #1e293b;
-  --ui-tip-border: rgba(15, 23, 42, 0.12);
+  --ui-tip-border: rgba(255, 255, 255, 0.72);
   box-shadow:
-    0 10px 28px rgba(15, 23, 42, 0.12),
-    0 2px 6px rgba(15, 23, 42, 0.05);
+    inset 0 1px 0 rgba(255, 255, 255, 0.68),
+    0 12px 32px rgba(43, 57, 88, 0.14),
+    0 2px 8px rgba(43, 57, 88, 0.07);
 }
 
 .ui-tip[data-instant] {
@@ -213,5 +221,24 @@ html[data-theme="light"] .ui-tip {
 @media (prefers-reduced-motion: reduce) {
   .ui-tip {
     transition: none;
+  }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .ui-tip {
+    --ui-tip-bg: #1d2027;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+
+  html[data-theme="light"] .ui-tip {
+    --ui-tip-bg: #f8faff;
+    --ui-tip-border: rgba(30, 41, 59, 0.16);
+  }
+}
+
+@media (prefers-contrast: more) {
+  .ui-tip {
+    --ui-tip-border: color-mix(in srgb, currentColor 48%, transparent);
   }
 }

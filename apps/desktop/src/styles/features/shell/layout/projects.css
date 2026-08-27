@@ -297,6 +297,16 @@
   color: var(--tone, var(--tone-blue));
 }
 
+.sidebar-session-filter-btn {
+  padding: 0;
+  line-height: 0;
+}
+
+.sidebar-session-filter-btn > svg {
+  display: block;
+  margin: auto;
+}
+
 .sidebar-global-search .expandable-search-btn {
   width: 40px;
   height: 40px;

@@ -7,6 +7,10 @@ const projectStyles = await readFile(
   new URL("../../styles/features/shell/layout/projects.css", import.meta.url),
   "utf8",
 );
+const tooltipStyles = await readFile(
+  new URL("../../styles/components/tooltip.css", import.meta.url),
+  "utf8",
+);
 const sessionStyles = await readFile(
   new URL("../../styles/features/shell/layout/sessions.css", import.meta.url),
   "utf8",
@@ -125,4 +129,21 @@ test("session activity uses trailing status and hover-revealed tools", () => {
   assert.match(actions, /pointer-events:\s*none;/);
   assert.ok(unreadDot, "missing unread marker styles");
   assert.match(unreadDot, /border-radius:\s*50%;/);
+});
+
+test("archive filter and tips keep optical alignment with glass fallbacks", () => {
+  const archiveButton = rule(projectStyles, ".sidebar-session-filter-btn");
+  const archiveIcon = rule(projectStyles, ".sidebar-session-filter-btn > svg");
+  const tip = rule(tooltipStyles, ".ui-tip");
+
+  assert.ok(archiveButton, "archive filter needs an explicit centering reset");
+  assert.match(archiveButton, /padding:\s*0;/);
+  assert.match(archiveButton, /line-height:\s*0;/);
+  assert.ok(archiveIcon, "archive icon needs deterministic centering");
+  assert.match(archiveIcon, /margin:\s*auto;/);
+  assert.ok(tip, "missing shared tip surface");
+  assert.match(tip, /backdrop-filter:\s*blur\(18px\) saturate\(155%\);/);
+  assert.match(tip, /linear-gradient\(/);
+  assert.match(tooltipStyles, /@media \(prefers-reduced-transparency: reduce\)/);
+  assert.match(tooltipStyles, /@media \(prefers-contrast: more\)/);
 });

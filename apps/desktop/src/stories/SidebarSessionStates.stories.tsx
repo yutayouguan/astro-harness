@@ -3,6 +3,7 @@ import { Archive, ChevronRight, MoreVertical, Pin, Plus } from "lucide-react";
 import type { CSSProperties } from "react";
 import ProjectFolderIcon from "../components/chat/ProjectFolderIcon";
 import SessionStatusIcon from "../components/chat/SessionStatusIcon";
+import { useBeautifyTips } from "../hooks/ui/useBeautifyTips";
 
 function SessionRow({
   title,
@@ -44,6 +45,8 @@ function SessionRow({
 }
 
 function SidebarSessionStates() {
+  useBeautifyTips();
+
   return (
     <main className="app-shell" data-tone="blue" style={{ minHeight: "100vh" }}>
       <div className="body-row">
@@ -58,8 +61,13 @@ function SidebarSessionStates() {
                 <ChevronRight className="sidebar-section-chevron is-expanded" size={12} aria-hidden />
               </button>
               <div className="sidebar-section-actions">
-                <button type="button" className="sidebar-add-btn" title="更多">
-                  <MoreVertical size={14} aria-hidden />
+                <button
+                  type="button"
+                  className="sidebar-session-filter-btn is-on"
+                  title="已归档"
+                  aria-pressed="true"
+                >
+                  <Archive size={14} strokeWidth={1.8} aria-hidden />
                 </button>
                 <button type="button" className="sidebar-add-btn" title="新建">
                   <Plus size={14} aria-hidden />
