@@ -24,7 +24,7 @@
   box-shadow: 0 10px 32px rgba(15, 23, 42, 0.12);
   backdrop-filter: blur(calc(16px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.2));
   -webkit-backdrop-filter: blur(calc(16px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.2));
-  animation: astro-toast-in 360ms var(--ease-spring, cubic-bezier(0.34, 1.56, 0.64, 1));
+  will-change: transform, opacity;
 }
 
 .astro-toast.tone-info {
@@ -136,12 +136,10 @@ html[data-theme="dark"] .astro-toast.tone-warning {
   background: color-mix(in srgb, var(--toast-tone) 15%, transparent);
 }
 
-/* success：圆 → 勾描边；与 toast 入场重叠启动 */
+/* success：圆 → 勾描边，总时长控制在 180ms。 */
 .astro-toast-success-icon {
   display: block;
   overflow: visible;
-  transform-origin: center;
-  animation: astro-toast-success-pop 360ms ease-out;
 }
 
 .astro-toast-success-circle,
@@ -152,28 +150,16 @@ html[data-theme="dark"] .astro-toast.tone-warning {
 }
 
 .astro-toast-success-circle {
-  animation: astro-toast-draw-stroke 180ms ease-out forwards;
+  animation: astro-toast-draw-stroke 100ms ease-out forwards;
 }
 
 .astro-toast-success-check {
-  animation: astro-toast-draw-stroke 180ms ease-out 160ms forwards;
+  animation: astro-toast-draw-stroke 100ms ease-out 80ms forwards;
 }
 
 @keyframes astro-toast-draw-stroke {
   to {
     stroke-dashoffset: 0;
-  }
-}
-
-@keyframes astro-toast-success-pop {
-  0% {
-    transform: scale(0.86);
-  }
-  55% {
-    transform: scale(1.06);
-  }
-  100% {
-    transform: scale(1);
   }
 }
 
@@ -216,41 +202,7 @@ html[data-theme="dark"] .astro-toast.tone-warning {
   outline-offset: 1px;
 }
 
-@keyframes astro-toast-in {
-  0% {
-    opacity: 0;
-    transform: translateY(16px) scale(0.94);
-  }
-  60% {
-    opacity: 1;
-    transform: translateY(-2px) scale(1.01);
-  }
-  100% {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
-}
-
-.astro-toast-icon {
-  animation: astro-toast-icon-bounce 320ms var(--ease-spring, cubic-bezier(0.34, 1.56, 0.64, 1)) 60ms both;
-}
-
-@keyframes astro-toast-icon-bounce {
-  0% {
-    opacity: 0;
-    transform: scale(0.5) rotate(-8deg);
-  }
-  100% {
-    opacity: 1;
-    transform: scale(1) rotate(0deg);
-  }
-}
-
 @media (prefers-reduced-motion: reduce) {
-  .astro-toast {
-    animation: none;
-  }
-
   .astro-toast-ring-progress {
     animation: none;
     stroke-dashoffset: 0;

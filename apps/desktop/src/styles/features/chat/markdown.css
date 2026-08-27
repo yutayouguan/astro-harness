@@ -1916,6 +1916,7 @@ html[data-theme="dark"] .composer-palette-item:hover {
     inset 0 1px 0 rgba(255, 255, 255, 0.28);
   backdrop-filter: blur(calc(18px * var(--glass-blur-scale, 1))) saturate(1.16);
   -webkit-backdrop-filter: blur(calc(18px * var(--glass-blur-scale, 1))) saturate(1.16);
+  will-change: transform, opacity;
 }
 
 .composer-plus-section {
@@ -2553,7 +2554,7 @@ html[data-theme="dark"] .composer-mode-pill--ghost {
   background: rgba(15, 23, 42, 0.18);
   backdrop-filter: blur(4px);
   -webkit-backdrop-filter: blur(4px);
-  animation: composer-context-backdrop-in 140ms ease-out;
+  will-change: opacity;
 }
 
 .composer-context-preview-dialog {
@@ -2572,7 +2573,7 @@ html[data-theme="dark"] .composer-mode-pill--ghost {
     inset 0 1px 0 rgba(255, 255, 255, 0.4);
   backdrop-filter: blur(20px) saturate(1.12);
   -webkit-backdrop-filter: blur(20px) saturate(1.12);
-  animation: composer-context-dialog-in 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  will-change: transform, opacity;
 }
 
 .composer-context-preview-header {
@@ -2684,22 +2685,6 @@ html[data-theme="dark"] .composer-mode-pill--ghost {
   overflow-wrap: anywhere;
   color: var(--ink-mute);
   font-size: 11px;
-}
-
-@keyframes composer-context-backdrop-in {
-  from { opacity: 0; }
-  to { opacity: 1; }
-}
-
-@keyframes composer-context-dialog-in {
-  from {
-    opacity: 0;
-    transform: translateY(8px) scale(0.985);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
 }
 
 .msg-attachments {

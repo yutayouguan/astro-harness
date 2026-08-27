@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { Loader2, MessageSquare, SendHorizontal, Square, X } from "lucide-react";
+import { motion, useReducedMotion } from "framer-motion";
 import { useI18n } from "../../i18n/LocaleContext";
 import type { ChatHistoryDto, ProviderDto } from "../../types";
 import { ChatMarkdown } from "./ChatMarkdown";
@@ -45,6 +46,7 @@ export default function SideChatPanel({
   onClose,
 }: Props) {
   const { t } = useI18n();
+  const reducedMotion = useReducedMotion();
   const [messages, setMessages] = useState<SideMessage[]>([]);
   const [input, setInput] = useState("");
   const [streaming, setStreaming] = useState(false);
@@ -207,7 +209,26 @@ export default function SideChatPanel({
   }, [input, interactionMode, provider, sessionId, streaming, t]);
 
   return (
-    <aside className="side-chat-panel" aria-label={t("chat.side.panel")}>
+    <motion.aside
+      className="side-chat-panel"
+      aria-label={t("chat.side.panel")}
+      initial={reducedMotion ? { opacity: 0 } : { opacity: 0, x: 12, scale: 0.98 }}
+      animate={{ opacity: 1, x: 0, scale: 1 }}
+      exit={
+        reducedMotion
+          ? { opacity: 0, transition: { duration: 0.12 } }
+          : {
+              opacity: 0,
+              x: 12,
+              scale: 0.985,
+              transition: { duration: 0.16, ease: "easeOut" },
+            }
+      }
+      transition={{
+        duration: reducedMotion ? 0.12 : 0.24,
+        ease: [0.22, 1, 0.36, 1],
+      }}
+    >
       <header className="side-chat-head">
         <span className="side-chat-mark" aria-hidden>
           <MessageSquare size={15} />
@@ -310,6 +331,6 @@ export default function SideChatPanel({
           )}
         </div>
       </footer>
-    </aside>
+    </motion.aside>
   );
 }

@@ -161,7 +161,7 @@
   list-style: none;
   border-radius: 16px;
   transform-origin: top center;
-  animation: agent-picker-in 0.24s var(--ease-spring, cubic-bezier(0.34, 1.56, 0.64, 1)) both;
+  animation: agent-picker-in 0.15s var(--ease-out, cubic-bezier(0.22, 1, 0.36, 1)) both;
   border: 1px solid color-mix(in srgb, var(--tone, transparent) 12%, var(--menu-glass-border));
   /* 更透的磨砂：靠 blur 保证可读 */
   background:
@@ -509,22 +509,23 @@ html[data-theme="dark"] .expandable-search-close:hover {
 }
 
 @keyframes agent-picker-in {
-  0% {
+  from {
     opacity: 0;
-    transform: scale(0.92) translateY(-4px);
+    transform: scale(0.97) translateY(-4px);
   }
-  65% {
-    opacity: 1;
-    transform: scale(1.01) translateY(1px);
-  }
-  100% {
+  to {
     opacity: 1;
     transform: scale(1) translateY(0);
   }
 }
 
+@keyframes agent-picker-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .agent-picker-menu {
-    animation: none;
+    animation: agent-picker-fade-in 0.1s ease-out both;
   }
 }

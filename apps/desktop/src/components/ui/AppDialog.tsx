@@ -48,11 +48,6 @@ export default function AppDialog({
         action();
         return;
       }
-      const prefersReduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-      if (prefersReduced) {
-        action();
-        return;
-      }
       setClosing(true);
       let done = false;
       const finish = () => {

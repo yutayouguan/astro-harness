@@ -10,6 +10,7 @@ import {
 } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+import { AnimatePresence } from "framer-motion";
 
 import AboutDialog from "./components/ui/AboutDialog";
 import ChatRightPanel, { type ChatRightTab } from "./components/chat/ChatRightPanel";
@@ -1664,46 +1665,50 @@ export default function App() {
                     workbench={projectFiles}
                     onWidthChange={setProjectFilesWidth}
                   />
-                  {activeChatRightDock === "side-chat" && sideSessionId && activeProvider && (
-                    <SideChatPanel
-                      sessionId={sideSessionId}
-                      provider={activeProvider}
-                      interactionMode={chatMode}
-                      onClose={closeSideChat}
-                    />
-                  )}
-                  {activeChatRightDock === "inspector" && (
-                    <ChatRightPanel
-                      tab={chat.chatRightTab}
-                      onTabChange={setChatRightTab}
-                      onClose={() => setChatRightOpen(false)}
-                      sessionId={chat.sessionId}
-                      turnId={chat.currentTurnId}
-                      tokenUsage={chat.tokenUsage}
-                      contextUsage={chat.contextUsage}
-                      contextWindow={contextWindow}
-                      messages={chat.messages}
-                      streaming={chat.streaming}
-                      subagentRoots={subagents.roots}
-                      subagentThreads={subagents.threads}
-                      subagentError={subagents.error}
-                      subagentsLoading={subagents.loading}
-                      subagentsInitialized={subagents.initialized}
-                      onRefreshSubagents={subagents.refresh}
-                      onMarkSubagentRead={subagents.markRead}
-                      onOpenSession={(sessionId) => openSessionFromFilespace(sessionId)}
-                      onOpenSideSession={(sessionId) => {
-                        projectFiles.setPanelOpen(false);
-                        setSideSessionId(sessionId);
-                        setSideHostSessionId(chat.sessionId);
-                        setChatRightOpen(false);
-                      }}
-                      onPrefillInput={setInput}
-                      onOpenMemory={() => openSettingsTab("memory")}
-                      onOpenSkills={() => setNav("skills")}
-                      onWidthChange={setChatRightPanelWidth}
-                    />
-                  )}
+                  <AnimatePresence initial={false}>
+                    {activeChatRightDock === "side-chat" && sideSessionId && activeProvider && (
+                      <SideChatPanel
+                        key={`side-chat-${sideSessionId}`}
+                        sessionId={sideSessionId}
+                        provider={activeProvider}
+                        interactionMode={chatMode}
+                        onClose={closeSideChat}
+                      />
+                    )}
+                    {activeChatRightDock === "inspector" && (
+                      <ChatRightPanel
+                        key="chat-inspector"
+                        tab={chat.chatRightTab}
+                        onTabChange={setChatRightTab}
+                        onClose={() => setChatRightOpen(false)}
+                        sessionId={chat.sessionId}
+                        turnId={chat.currentTurnId}
+                        tokenUsage={chat.tokenUsage}
+                        contextUsage={chat.contextUsage}
+                        contextWindow={contextWindow}
+                        messages={chat.messages}
+                        streaming={chat.streaming}
+                        subagentRoots={subagents.roots}
+                        subagentThreads={subagents.threads}
+                        subagentError={subagents.error}
+                        subagentsLoading={subagents.loading}
+                        subagentsInitialized={subagents.initialized}
+                        onRefreshSubagents={subagents.refresh}
+                        onMarkSubagentRead={subagents.markRead}
+                        onOpenSession={(sessionId) => openSessionFromFilespace(sessionId)}
+                        onOpenSideSession={(sessionId) => {
+                          projectFiles.setPanelOpen(false);
+                          setSideSessionId(sessionId);
+                          setSideHostSessionId(chat.sessionId);
+                          setChatRightOpen(false);
+                        }}
+                        onPrefillInput={setInput}
+                        onOpenMemory={() => openSettingsTab("memory")}
+                        onOpenSkills={() => setNav("skills")}
+                        onWidthChange={setChatRightPanelWidth}
+                      />
+                    )}
+                  </AnimatePresence>
                 </div>
               </div>
             </>

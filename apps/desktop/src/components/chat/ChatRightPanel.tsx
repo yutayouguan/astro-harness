@@ -17,6 +17,7 @@ import {
   X,
   type LucideIcon,
 } from "lucide-react";
+import { motion, useReducedMotion } from "framer-motion";
 import { useI18n } from "../../i18n/LocaleContext";
 import type { MessageKey } from "../../i18n/messages";
 import type { ChatMessage } from "../../types";
@@ -118,6 +119,7 @@ export default function ChatRightPanel({
   onWidthChange,
 }: Props) {
   const { t } = useI18n();
+  const reducedMotion = useReducedMotion();
   const tabs: ChatRightTab[] = ["summary", "context", "branches"];
   const tabsRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLElement>(null);
@@ -167,26 +169,13 @@ export default function ChatRightPanel({
     }
   }, [containerWidth]);
 
-  const closeWithAnim = useCallback(() => {
-    const el = panelRef.current;
-    if (!el || window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
-      onClose();
-      return;
-    }
-    el.classList.add("is-closing");
-    let done = false;
-    const finish = () => { if (done) return; done = true; onClose(); };
-    el.addEventListener("animationend", finish, { once: true });
-    setTimeout(finish, 160);
-  }, [onClose]);
-
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") closeWithAnim();
+      if (e.key === "Escape") onClose();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [closeWithAnim]);
+  }, [onClose]);
 
   useLayoutEffect(() => {
     const container = panelRef.current?.parentElement;
@@ -287,17 +276,37 @@ export default function ChatRightPanel({
 
   return (
     <>
-      <button
+      <motion.button
         type="button"
         className="chat-right-backdrop"
         aria-label={t("chat.rightPanel.close")}
-        onClick={closeWithAnim}
+        onClick={onClose}
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        transition={{ duration: reducedMotion ? 0.12 : 0.16, ease: "easeOut" }}
       />
-      <aside
+      <motion.aside
         ref={panelRef}
         className={`chat-right-panel${resizing ? " is-resizing" : ""}`}
         aria-label={t("chat.rightPanel.title")}
         style={{ "--chat-right-panel-width": `${panelWidth}px` } as CSSProperties}
+        initial={reducedMotion ? { opacity: 0 } : { opacity: 0, x: 12, scale: 0.98 }}
+        animate={{ opacity: 1, x: 0, scale: 1 }}
+        exit={
+          reducedMotion
+            ? { opacity: 0, transition: { duration: 0.12 } }
+            : {
+                opacity: 0,
+                x: 12,
+                scale: 0.985,
+                transition: { duration: 0.16, ease: "easeOut" },
+              }
+        }
+        transition={{
+          duration: reducedMotion ? 0.12 : 0.24,
+          ease: [0.22, 1, 0.36, 1],
+        }}
       >
         <button
           type="button"
@@ -325,7 +334,7 @@ export default function ChatRightPanel({
           <button
             type="button"
             className="chat-right-close"
-            onClick={closeWithAnim}
+            onClick={onClose}
             title={t("chat.rightPanel.close")}
             aria-label={t("chat.rightPanel.close")}
           >
@@ -444,7 +453,7 @@ export default function ChatRightPanel({
             )}
           </MotionSwitch>
         </div>
-      </aside>
+      </motion.aside>
     </>
   );
 }

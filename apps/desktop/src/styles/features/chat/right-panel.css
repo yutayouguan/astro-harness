@@ -87,7 +87,7 @@
   -webkit-backdrop-filter: blur(calc(24px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.14));
   min-height: 0;
   overflow: hidden;
-  animation: chat-right-slide-in 0.32s var(--ease-spring, cubic-bezier(0.34, 1.56, 0.64, 1));
+  will-change: transform, opacity;
 }
 
 .chat-right-resizer {
@@ -846,36 +846,8 @@ html[data-theme="dark"] .chat-agent-preview {
   }
 }
 
-@keyframes chat-right-slide-in {
-  0% {
-    opacity: 0;
-    transform: translateX(20px) scale(0.97);
-  }
-  65% {
-    opacity: 1;
-    transform: translateX(-3px) scale(1.003);
-  }
-  100% {
-    opacity: 1;
-    transform: translateX(0) scale(1);
-  }
-}
-
-@keyframes chat-right-slide-out {
-  to {
-    opacity: 0;
-    transform: translateX(12px);
-  }
-}
-
-.chat-right-panel.is-closing {
-  animation: chat-right-slide-out 0.14s ease-out forwards;
-}
-
 @media (prefers-reduced-motion: reduce) {
-  .chat-right-resizer::before,
-  .chat-right-panel,
-  .chat-right-panel.is-closing {
+  .chat-right-resizer::before {
     animation: none;
   }
 
