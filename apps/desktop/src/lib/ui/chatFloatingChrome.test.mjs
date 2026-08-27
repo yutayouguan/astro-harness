@@ -50,8 +50,9 @@ test("chat header reserves a dock-aware lane for floating controls", () => {
   assert.match(actions, /bottom:\s*8px;/);
 });
 
-test("right-side chat surfaces dock to the bottom and right edges", () => {
+test("right-side chat surfaces share one inset container material", () => {
   const layout = rule(rightPanelStyles, ".chat-layout-with-right.has-right-dock");
+  const layoutBase = rule(rightPanelStyles, ".chat-layout-with-right");
   const runtimePanel = rule(rightPanelStyles, ".chat-right-panel");
   const projectPanel = rule(projectFilesStyles, ".project-files-panel");
   const projectWorkbench = rule(projectFilesStyles, ".project-file-workbench");
@@ -59,23 +60,27 @@ test("right-side chat surfaces dock to the bottom and right edges", () => {
 
   assert.ok(layout, "missing docked chat layout rule");
   assert.match(layout, /border-radius:\s*28px 0 0 0;/);
+  assert.ok(layoutBase, "missing shared chat dock surface tokens");
+  assert.match(layoutBase, /--chat-dock-inset:\s*6px;/);
+  assert.match(layoutBase, /--chat-dock-radius:\s*18px;/);
+  assert.match(layoutBase, /--chat-dock-surface-border:/);
+  assert.match(layoutBase, /--chat-dock-surface-background:/);
+  assert.match(layoutBase, /--chat-dock-surface-shadow:/);
   assert.ok(runtimePanel, "missing runtime panel rule");
-  assert.match(runtimePanel, /right:\s*0;/);
-  assert.match(runtimePanel, /bottom:\s*0;/);
-  assert.match(runtimePanel, /border-radius:\s*20px 0 0 0;/);
+  assert.match(runtimePanel, /right:\s*var\(--chat-dock-inset\);/);
+  assert.match(runtimePanel, /bottom:\s*var\(--chat-dock-inset\);/);
   assert.ok(projectPanel, "missing project files panel rule");
-  assert.match(projectPanel, /margin:\s*var\(--pf-gutter, 6px\);/);
-  assert.match(projectPanel, /border:\s*var\(--pf-surface-border\);/);
-  assert.match(projectPanel, /border-radius:\s*var\(--pf-radius-card, 18px\);/);
-  assert.match(projectPanel, /background:\s*var\(--pf-surface-background\);/);
-  assert.match(projectPanel, /box-shadow:\s*var\(--pf-surface-shadow\);/);
   assert.ok(projectWorkbench, "missing project file workbench rule");
-  assert.match(projectWorkbench, /border:\s*var\(--pf-surface-border\);/);
-  assert.match(projectWorkbench, /background:\s*var\(--pf-surface-background\);/);
-  assert.match(projectWorkbench, /box-shadow:\s*var\(--pf-surface-shadow\);/);
   assert.ok(sidePanel, "missing side chat panel rule");
-  assert.match(sidePanel, /margin:\s*0 0 0 8px;/);
-  assert.match(sidePanel, /border-radius:\s*20px 0 0 0;/);
+
+  for (const panel of [runtimePanel, projectPanel, projectWorkbench, sidePanel]) {
+    assert.match(panel, /border:\s*var\(--chat-dock-surface-border\);/);
+    assert.match(panel, /border-radius:\s*var\(--chat-dock-radius\);/);
+    assert.match(panel, /background:\s*var\(--chat-dock-surface-background\);/);
+    assert.match(panel, /box-shadow:\s*var\(--chat-dock-surface-shadow\);/);
+  }
+  assert.match(projectPanel, /margin:\s*var\(--chat-dock-inset\);/);
+  assert.match(sidePanel, /margin:\s*var\(--chat-dock-inset\);/);
 });
 
 test("composer floats above a full-height conversation viewport", () => {

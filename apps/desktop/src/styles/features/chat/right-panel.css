@@ -1,5 +1,12 @@
 /* 右栏浮层：限制在对话布局内，圆角与主窗一致，避免四角光晕溢出 */
 .chat-layout-with-right {
+  --chat-dock-inset: 6px;
+  --chat-dock-radius: 18px;
+  --chat-dock-surface-border: 1px solid color-mix(in srgb, var(--glass-edge) 62%, transparent);
+  --chat-dock-surface-background:
+    radial-gradient(circle at 72% 12%, color-mix(in srgb, var(--tone-soft) 24%, transparent), transparent 42%),
+    color-mix(in srgb, var(--glass-panel) 32%, transparent);
+  --chat-dock-surface-shadow: 0 2px 10px rgba(var(--shadow-ink), 0.04);
   position: relative;
   flex: 1;
   min-height: 0;
@@ -64,23 +71,18 @@
   --tone-blue: var(--tone);
   --tone-blue-soft: var(--tone-soft);
   position: absolute;
-  top: 0;
-  right: 0;
-  bottom: 0;
+  top: var(--chat-dock-inset);
+  right: var(--chat-dock-inset);
+  bottom: var(--chat-dock-inset);
   z-index: 21;
   width: min(var(--chat-right-panel-width, 360px), calc(100% - 20px));
   display: flex;
   flex-direction: column;
-  border-radius: 20px 0 0 0;
-  border: 0.5px solid color-mix(in srgb, var(--tone-blue, #2563eb) 8%, var(--glass-edge));
-  background:
-    linear-gradient(165deg, rgba(255, 255, 255, 0.3) 0%, rgba(255, 255, 255, 0.1) 100%),
-    color-mix(in srgb, var(--tone-blue-soft, rgba(37, 99, 235, 0.14)) 20%, var(--composer-bg));
-  box-shadow:
-    0 3px 12px rgba(15, 23, 42, 0.07),
-    inset 0 1px 0 rgba(255, 255, 255, 0.34);
-  backdrop-filter: blur(calc(12px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.08));
-  -webkit-backdrop-filter: blur(calc(12px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.08));
+  isolation: isolate;
+  border: var(--chat-dock-surface-border);
+  border-radius: var(--chat-dock-radius);
+  background: var(--chat-dock-surface-background);
+  box-shadow: var(--chat-dock-surface-shadow);
   min-height: 0;
   overflow: hidden;
   animation: chat-right-slide-in 0.32s var(--ease-spring, cubic-bezier(0.34, 1.56, 0.64, 1));
@@ -129,16 +131,6 @@
 
 .chat-right-panel.is-resizing {
   user-select: none;
-}
-
-html[data-theme="dark"] .chat-right-panel {
-  border-color: color-mix(in srgb, var(--tone-blue, #60a5fa) 12%, var(--glass-edge));
-  background:
-    linear-gradient(165deg, rgba(255, 255, 255, 0.055) 0%, rgba(255, 255, 255, 0.018) 100%),
-    color-mix(in srgb, var(--tone-blue-soft, rgba(37, 99, 235, 0.14)) 14%, rgba(8, 6, 18, 0.82));
-  box-shadow:
-    0 4px 14px rgba(0, 0, 0, 0.2),
-    inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }
 
 .chat-right-header {
