@@ -1188,14 +1188,6 @@ html[data-theme="light"] .composer-mode-menu {
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.29);
 }
 
-.composer-thinking-btn.is-on,
-.composer-thinking-btn.is-open {
-  color: var(--ink-soft);
-  background: color-mix(in srgb, var(--ink) 7%, transparent);
-  border-color: transparent;
-  box-shadow: none;
-}
-
 html[data-theme="dark"] .composer-icon-btn:hover:not(:disabled) {
   background:
     linear-gradient(165deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.03)),
@@ -1211,14 +1203,6 @@ html[data-theme="dark"] .composer-icon-btn.is-open {
     color-mix(in srgb, var(--tone-green, #4ade80) 18%, transparent);
   border-color: color-mix(in srgb, var(--tone-green, #4ade80) 32%, transparent);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
-}
-
-html[data-theme="dark"] .composer-thinking-btn.is-on,
-html[data-theme="dark"] .composer-thinking-btn.is-open {
-  color: var(--ink-soft);
-  background: rgba(255, 255, 255, 0.06);
-  border-color: transparent;
-  box-shadow: none;
 }
 
 .composer-icon-btn:disabled {

@@ -1,11 +1,10 @@
-/** 输入框浮动命令面板（/ 斜杠 · @ 提及 · 推理档位）。 */
+/** 输入框浮动命令面板（/ 斜杠 · @ 提及）。 */
 import { useEffect, useMemo, useRef } from "react";
 import { useI18n } from "../../i18n/LocaleContext";
-import type { ThinkingLevel } from "../../lib/chat/thinkingPrefs";
 import type { SlashAction } from "../../lib/chat/composerCommands";
 import type { ComposerContextToken } from "../../lib/chat/composerContext";
 
-export type PaletteKind = "slash" | "mention" | "thinking";
+export type PaletteKind = "slash" | "mention";
 
 export type PaletteItem = {
   id: string;
@@ -18,7 +17,6 @@ export type PaletteItem = {
   mentionKind?: "agent" | "skill" | "mcp";
   /** 选择后以结构化标签加入输入框，而不是写入普通文本。 */
   contextToken?: ComposerContextToken;
-  level?: ThinkingLevel;
   /** 分组标签（如"指令"/"技能"/"添加"/"插件"） */
   group?: string;
 };
@@ -51,7 +49,7 @@ export function ComposerPalette({
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q || kind === "thinking") return items;
+    if (!q) return items;
     return items.filter(
       (it) =>
         it.title.toLowerCase().includes(q) ||
@@ -94,7 +92,7 @@ export function ComposerPalette({
               )}
               {group.items.map(({ item, globalIdx }) => {
                 const active = globalIdx === activeIndex;
-                const selected = selectedId === item.id || selectedId === item.level;
+                const selected = selectedId === item.id;
                 return (
                   <button
                     key={item.id}

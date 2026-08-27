@@ -27,7 +27,6 @@ import {
   Hand,
   Image,
   Infinity as InfinityIcon,
-  Lightbulb,
   ListX,
   ListTree,
   Music2,
@@ -82,7 +81,6 @@ import {
   pathsToAttachments,
 } from "../../lib/chat/chatPaste";
 import type { ChatThinkingPrefs, ThinkingLevel } from "../../lib/chat/thinkingPrefs";
-import { thinkingLevelsFromMeta } from "../../lib/chat/thinkingPrefs";
 import type {
   ChatActivity,
   ChatAttachment,
@@ -650,11 +648,6 @@ export default function ChatView({
   onStopStream,
   onNewChat,
   onPickWelcomePrompt,
-  showThinkingControls = false,
-  reasoningMeta = null,
-  thinkingPrefs,
-  onToggleThinking: _onToggleThinking,
-  onThinkingLevelChange,
   agentId = null,
   modelId = null,
   modelCapabilities = null,
@@ -1014,61 +1007,6 @@ export default function ChatView({
     [approvalBusy, approvalMode, confirm, showToast, t],
   );
 
-  const thinkingItems: PaletteItem[] = useMemo(() => {
-    const levels = thinkingLevelsFromMeta(reasoningMeta);
-    const label = (level: ThinkingLevel): { title: string; description: string } => {
-      switch (level) {
-        case "off":
-          return {
-            title: t("chat.thinkLevelOff"),
-            description: t("chat.thinkLevelOffDesc"),
-          };
-        case "none":
-          return {
-            title: t("chat.thinkLevelNone"),
-            description: t("chat.thinkLevelNoneDesc"),
-          };
-        case "minimal":
-          return {
-            title: t("chat.thinkLevelMinimal"),
-            description: t("chat.thinkLevelMinimalDesc"),
-          };
-        case "low":
-          return {
-            title: t("chat.thinkLevelLow"),
-            description: t("chat.thinkLevelLowDesc"),
-          };
-        case "medium":
-          return {
-            title: t("chat.thinkLevelMedium"),
-            description: t("chat.thinkLevelMediumDesc"),
-          };
-        case "high":
-          return {
-            title: t("chat.thinkLevelHigh"),
-            description: t("chat.thinkLevelHighDesc"),
-          };
-        case "xhigh":
-          return {
-            title: t("chat.thinkLevelXhigh"),
-            description: t("chat.thinkLevelXhighDesc"),
-          };
-        case "max":
-          return {
-            title: t("chat.thinkLevelMax"),
-            description: t("chat.thinkLevelMaxDesc"),
-          };
-      }
-    };
-    return levels.map((level) => {
-      const { title, description } = label(level);
-      return { id: level, level, title, description };
-    });
-  }, [t, reasoningMeta]);
-  const thinkingLevelLabel =
-    thinkingItems.find((item) => item.level === thinkingPrefs.level)?.title ??
-    t("chat.thinkingLength");
-
   const slashItems: PaletteItem[] = useMemo(() => {
     return buildSlashPaletteEntries(skills).map((e) => {
       const skill =
@@ -1139,14 +1077,12 @@ export default function ChatView({
   }, [agents, skills, mcpServers, t]);
 
   const activePaletteItems = useMemo(() => {
-    if (paletteKind === "thinking") return thinkingItems;
     if (paletteKind === "slash") return slashItems;
     if (paletteKind === "mention") return mentionItems;
     return [];
-  }, [paletteKind, thinkingItems, slashItems, mentionItems]);
+  }, [paletteKind, slashItems, mentionItems]);
 
   const filteredPaletteItems = useMemo(() => {
-    if (paletteKind === "thinking") return activePaletteItems;
     const q = paletteQuery.trim().toLowerCase();
     if (!q) return activePaletteItems;
     return activePaletteItems.filter(
@@ -1162,20 +1098,6 @@ export default function ChatView({
     setPaletteQuery("");
     setPaletteIndex(0);
   }, []);
-
-  const openThinkingPalette = useCallback(() => {
-    setPlusOpen(false);
-    setModeMenuOpen(false);
-    setContextPopoverOpen(false);
-    setPaletteKind((k) => (k === "thinking" ? null : "thinking"));
-    setPaletteQuery("");
-    setPaletteIndex(
-      Math.max(
-        0,
-        thinkingItems.findIndex((it) => it.level === thinkingPrefs.level),
-      ),
-    );
-  }, [thinkingItems, thinkingPrefs.level]);
 
   const insertAtTrigger = useCallback(
     (insert: string, start: number, end: number) => {
@@ -1260,11 +1182,6 @@ export default function ChatView({
 
   const applyPaletteItem = useCallback(
     (item: PaletteItem) => {
-      if (paletteKind === "thinking" && item.level) {
-        onThinkingLevelChange(item.level);
-        closePalette();
-        return;
-      }
       if (item.contextToken) {
         const end = textareaRef.current?.selectionStart ?? input.length;
         onInputChange(removeTriggerText(input, triggerStart, end));
@@ -1286,7 +1203,6 @@ export default function ChatView({
     },
     [
       paletteKind,
-      onThinkingLevelChange,
       closePalette,
       onInputChange,
       addComposerContext,
@@ -1299,7 +1215,6 @@ export default function ChatView({
 
   const syncTriggerFromCaret = useCallback(
     (text: string, caret: number) => {
-      if (paletteKind === "thinking") return;
       const hit = detectTrigger(text, caret);
       if (!hit) {
         if (paletteKind === "slash" || paletteKind === "mention") closePalette();
@@ -2570,9 +2485,6 @@ export default function ChatView({
             items={activePaletteItems}
             query={paletteQuery}
             activeIndex={paletteIndex}
-            selectedId={
-              paletteKind === "thinking" ? thinkingPrefs.level : null
-            }
             onHover={setPaletteIndex}
             onSelect={applyPaletteItem}
             onClose={closePalette}
@@ -2811,22 +2723,6 @@ export default function ChatView({
                     )
                   : null}
               </div>
-
-              {showThinkingControls ? (
-                <button
-                  type="button"
-                  className={`composer-icon-btn composer-thinking-btn ${
-                    thinkingPrefs.level !== "off" ? "is-on" : ""
-                  } ${paletteKind === "thinking" ? "is-open" : ""}`}
-                  onClick={openThinkingPalette}
-                  disabled={streaming}
-                  title={`${t("chat.thinkingLength")} · ${thinkingLevelLabel}`}
-                  aria-label={`${t("chat.thinkingLength")} · ${thinkingLevelLabel}`}
-                  aria-pressed={thinkingPrefs.level !== "off"}
-                >
-                  <Lightbulb size={17} strokeWidth={2} />
-                </button>
-              ) : null}
 
               <button
                 type="button"

@@ -58,6 +58,26 @@ test("chat surfaces do not expose read-aloud or voice-input controls", async () 
   assert.doesNotMatch(styles.join("\n"), /msg-tts-spin|mic-pulse|is-recording/);
 });
 
+test("composer does not expose a reasoning control", async () => {
+  const source = await readFile(chatViewUrl, "utf8");
+  const app = await readFile(new URL("../../App.tsx", import.meta.url), "utf8");
+  const palette = await readFile(
+    new URL("../../components/chat/ComposerPalette.tsx", import.meta.url),
+    "utf8",
+  );
+  const styles = await readFile(markdownCssUrl, "utf8");
+
+  for (const removedContract of ["composer-thinking-btn", "<Lightbulb"]) {
+    assert.doesNotMatch(source, new RegExp(removedContract), removedContract);
+  }
+  assert.doesNotMatch(
+    palette,
+    /PaletteKind = "slash" \| "mention" \| "thinking"/,
+  );
+  assert.doesNotMatch(styles, /\.composer-thinking-btn/);
+  assert.match(app, /thinking:\s*thinkingPrefs\.level/);
+});
+
 test("composer approval selector keeps the three supported permission choices", async () => {
   const source = await readFile(chatViewUrl, "utf8");
   const messages = await readFile(messagesUrl, "utf8");
