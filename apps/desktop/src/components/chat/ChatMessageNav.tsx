@@ -10,12 +10,8 @@ import {
   type RefObject,
 } from "react";
 import { createPortal } from "react-dom";
-import { ChevronDown } from "lucide-react";
+import { ChevronDown, User } from "lucide-react";
 import { useI18n } from "../../i18n/LocaleContext";
-import {
-  buildChatTurnPreviews,
-  type ChatTurnPreview,
-} from "../../lib/chat/chatMessageNav";
 import {
   clampFloatingTip,
   measurePopoverSize,
@@ -32,23 +28,35 @@ type Props = {
 
 const BASE = 18;
 /** 与 CSS `.chat-msg-nav-track` gap 一致；放大后仍要留缝 */
-const GAP = 4;
+const GAP = 12;
 /** 与 CSS `.chat-msg-nav-track` padding-top 一致 */
 const PAD_TOP = 10;
 /** 峰值放大：略收敛，避免挤成一团 */
 const MAX_SCALE = 1.52;
 /** 影响半径：配合间距做更柔和的鱼眼 */
-const RANGE = 72;
-/** 参考 Codex 的单张问答摘要卡，不叠放邻近预览。 */
-const LABEL_MAX = 1;
+const RANGE = 88;
+/** 同时展示的预览气泡（主 + 邻近） */
+const LABEL_MAX = 2;
 
 type TipModel = {
   id: string;
-  question: string;
-  answer: string;
+  text: string;
   primary: boolean;
   z: number;
 };
+
+function previewText(content: string, fallback: string): string {
+  const plain = content
+    .replace(/```[\s\S]*?```/g, " ")
+    .replace(/`[^`]*`/g, " ")
+    .replace(/!\[[^\]]*\]\([^)]*\)/g, " ")
+    .replace(/\[[^\]]*\]\([^)]*\)/g, " ")
+    .replace(/[#>*_\-~|]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!plain) return fallback;
+  return plain.length > 32 ? `${plain.slice(0, 32)}…` : plain;
+}
 
 /** Idle 槽位中心（放大距离一律相对此基准，避免反馈抖动）。 */
 function baseCenterY(index: number): number {
@@ -89,32 +97,33 @@ export default function ChatMessageNav({
   const pendingHoverYRef = useRef<number | null>(null);
   const hoverRafRef = useRef<number | null>(null);
   const focusIdRef = useRef<string | null>(null);
-  const turns = useMemo(() => {
-    return buildChatTurnPreviews(
-      messages,
-      t("chat.navUser"),
-      t("chat.navWaitingForAnswer"),
-    );
+  const messagesRef = useRef(messages);
+  messagesRef.current = messages;
+
+  const previews = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const m of messages) {
+      const fallback =
+        m.role === "user" ? t("chat.navUser") : t("chat.navAssistant");
+      map.set(m.id, previewText(m.content || m.reasoning || "", fallback));
+    }
+    return map;
   }, [messages, t]);
-  const turnsRef = useRef(turns);
-  turnsRef.current = turns;
+  const previewsRef = useRef(previews);
+  previewsRef.current = previews;
 
   useEffect(() => {
     const root = listRef.current;
-    if (!root || turns.length === 0) return;
+    if (!root || messages.length === 0) return;
 
     ratiosRef.current.clear();
     const pickActive = () => {
       let bestId: string | null = null;
       let bestRatio = 0;
-      for (const turn of turns) {
-        const ratio = Math.max(
-          0,
-          ...turn.messageIds.map((id) => ratiosRef.current.get(id) ?? 0),
-        );
+      for (const [id, ratio] of ratiosRef.current) {
         if (ratio > bestRatio) {
           bestRatio = ratio;
-          bestId = turn.id;
+          bestId = id;
         }
       }
       if (bestId) setActiveId(bestId);
@@ -143,21 +152,21 @@ export default function ChatMessageNav({
       observer.observe(n);
     });
     return () => observer.disconnect();
-  }, [listRef, turns]);
+  }, [listRef, messages]);
 
-  const scrollToMessage = useCallback((turn: ChatTurnPreview) => {
-    const el = document.getElementById(`msg-${turn.targetMessageId}`);
+  const scrollToMessage = useCallback((id: string) => {
+    const el = document.getElementById(`msg-${id}`);
     if (!el) return;
     el.scrollIntoView({ behavior: "smooth", block: "center" });
-    setActiveId(turn.id);
+    setActiveId(id);
   }, []);
 
   const scrollToBottom = useCallback(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
-    if (turns.length > 0) {
-      setActiveId(turns[turns.length - 1]!.id);
+    if (messages.length > 0) {
+      setActiveId(messages[messages.length - 1]!.id);
     }
-  }, [bottomRef, turns]);
+  }, [bottomRef, messages]);
 
   const paintTip = useCallback(
     (
@@ -223,35 +232,35 @@ export default function ChatMessageNav({
         const item = ranks[rank]!;
         const btn = buttonRefs.current.get(item.id);
         if (!btn) continue;
-        const turn = turnsRef.current.find((candidate) => candidate.id === item.id);
-        if (!turn) continue;
+        const text = previewsRef.current.get(item.id) ?? "";
+        if (!text) continue;
 
         const t = ranks.length === 1 ? 0 : Math.min(1, item.dist / maxDist);
         const opacity = Math.max(0.35, 1 - t * 0.55);
-        const labelScale = 1;
+        const grow = (item.scale - 1) / (MAX_SCALE - 1);
+        const labelScale = (0.9 + 0.22 * grow) * (1 - t * 0.08);
         const cached = tipSizeCache.current.get(item.id);
         const tipSize = cached ?? {
           width: Math.min(
-            520,
-            window.innerWidth - 96,
-            420,
+            16 * 16,
+            window.innerWidth * 0.46,
+            Math.max(48, text.length * 7.5 + 22),
           ),
-          height: 156,
+          height: rank === 0 ? 30 : 26,
         };
 
         const placed = clampFloatingTip({
           anchorRect: btn.getBoundingClientRect(),
           tipSize,
           bounds,
-          prefer: "right",
-          gap: 16,
+          prefer: "left",
+          gap: 10,
           pad: 8,
         });
 
         nextTips.push({
           id: item.id,
-          question: turn.question,
-          answer: turn.answer,
+          text,
           primary: rank === 0,
           z: ranks.length - rank,
         });
@@ -271,8 +280,7 @@ export default function ChatMessageNav({
           (p, i) =>
             p.id === nextTips[i]!.id &&
             p.primary === nextTips[i]!.primary &&
-            p.question === nextTips[i]!.question &&
-            p.answer === nextTips[i]!.answer,
+            p.text === nextTips[i]!.text,
         );
       if (!same) {
         tipMetaRef.current = nextTips;
@@ -292,12 +300,13 @@ export default function ChatMessageNav({
           const maxD = Math.max(ranks[ranks.length - 1]?.dist ?? 0, 1);
           const tt =
             ranks.length === 1 ? 0 : Math.min(1, item.dist / maxD);
+          const grow = (item.scale - 1) / (MAX_SCALE - 1);
           const placed = clampFloatingTip({
             anchorRect: btn.getBoundingClientRect(),
             tipSize: size,
             bounds: b,
-            prefer: "right",
-            gap: 16,
+            prefer: "left",
+            gap: 10,
             pad: 8,
           });
           paintTip(item.id, {
@@ -305,7 +314,7 @@ export default function ChatMessageNav({
             left: placed.left,
             side: placed.side,
             opacity: Math.max(0.35, 1 - tt * 0.55),
-            scale: 1,
+            scale: (0.9 + 0.22 * grow) * (1 - tt * 0.08),
           });
         }
       });
@@ -315,7 +324,7 @@ export default function ChatMessageNav({
 
   const applyDock = useCallback(
     (hoverY: number | null, focusId: string | null) => {
-      const list = turnsRef.current;
+      const list = messagesRef.current;
       const scales = list.map((m, i) => {
         if (hoverY != null) {
           return dockScale(Math.abs(hoverY - baseCenterY(i)));
@@ -405,7 +414,7 @@ export default function ChatMessageNav({
     );
   }, [tips]);
 
-  if (turns.length === 0) return null;
+  if (messages.length === 0) return null;
 
   return (
     <nav
@@ -418,42 +427,53 @@ export default function ChatMessageNav({
         onMouseMove={onTrackMove}
         onMouseLeave={onTrackLeave}
       >
-        {turns.map((turn) => {
-          const isActive = activeId === turn.id;
-          const label = `${turn.question} — ${turn.answer}`;
+        {messages.map((m) => {
+          const isActive = activeId === m.id;
+          const isUser = m.role === "user";
+          const label = previews.get(m.id) ?? "";
 
           return (
             <div
-              key={turn.id}
+              key={m.id}
               ref={(el) => {
-                if (el) slotRefs.current.set(turn.id, el);
-                else slotRefs.current.delete(turn.id);
+                if (el) slotRefs.current.set(m.id, el);
+                else slotRefs.current.delete(m.id);
               }}
               className="chat-msg-nav-item"
             >
               <button
                 type="button"
                 ref={(el) => {
-                  if (el) buttonRefs.current.set(turn.id, el);
-                  else buttonRefs.current.delete(turn.id);
+                  if (el) buttonRefs.current.set(m.id, el);
+                  else buttonRefs.current.delete(m.id);
                 }}
-                className={`chat-msg-nav-dot${isActive ? " is-active" : ""}`}
+                className={`chat-msg-nav-dot ${isUser ? "is-user" : "is-assistant"} ${
+                  isActive ? "is-active" : ""
+                }`}
                 aria-label={label}
                 aria-current={isActive ? "true" : undefined}
                 onFocus={() => {
-                  focusIdRef.current = turn.id;
+                  focusIdRef.current = m.id;
                   if (hoverYRef.current == null) {
-                    applyDockRef.current(null, turn.id);
+                    applyDockRef.current(null, m.id);
                   }
                 }}
                 onBlur={() => {
-                  if (focusIdRef.current === turn.id) focusIdRef.current = null;
+                  if (focusIdRef.current === m.id) focusIdRef.current = null;
                   if (hoverYRef.current == null) {
                     applyDockRef.current(null, null);
                   }
                 }}
-                onClick={() => scrollToMessage(turn)}
-              />
+                onClick={() => scrollToMessage(m.id)}
+              >
+                {isUser ? (
+                  <User size={9} strokeWidth={2.35} aria-hidden />
+                ) : (
+                  <span className="chat-msg-nav-glyph" aria-hidden>
+                    iC
+                  </span>
+                )}
+              </button>
             </div>
           );
         })}
@@ -486,14 +506,7 @@ export default function ChatMessageNav({
                   }
                   role="tooltip"
                 >
-                  <p className="chat-msg-nav-label-question">{p.question}</p>
-                  <strong className="chat-msg-nav-label-title">
-                    {t("chat.navReviewTitle")}
-                  </strong>
-                  <p className="chat-msg-nav-label-summary">
-                    {t("chat.navReviewSummary")}
-                  </p>
-                  <p className="chat-msg-nav-label-answer">{p.answer}</p>
+                  <span className="chat-msg-nav-label-text">{p.text}</span>
                 </div>
               ))}
             </>,

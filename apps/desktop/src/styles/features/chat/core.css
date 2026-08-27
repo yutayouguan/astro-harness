@@ -12,8 +12,8 @@
   /* scroll（非 auto）：始终占住纵向滚动槽，避免自定义 webkit 滚动条出现/消失时左右抖 */
   overflow-x: hidden;
   overflow-y: scroll;
-  /* 左侧给问答回合导航留白，右侧只保留常规阅读边距。 */
-  padding: 20px 20px 12px 64px;
+  /* 右侧：Dock 留白 56px − 常驻滚动条 4px，内容宽度与原先无滚动条时一致 */
+  padding: 20px 52px 12px 20px;
   display: flex;
   flex-direction: column;
   gap: 16px;

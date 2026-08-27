@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 
-test("chat turn anchors reserve a left-side hit area", async () => {
+test("chat message anchors share the bottom button alignment axis", async () => {
   const css = await readFile(
     new URL("../../styles/features/chat/navigation.css", import.meta.url),
     "utf8",
@@ -12,21 +12,9 @@ test("chat turn anchors reserve a left-side hit area", async () => {
   assert.ok(trackRule?.groups?.body, "missing chat message navigation track rule");
   assert.match(
     trackRule.groups.body,
-    /padding:\s*10px 28px 10px 0;/,
-    "the track must expand its hit area toward the conversation",
+    /padding:\s*10px 0 10px 28px;/,
+    "the track must not inset message anchors from the bottom button axis",
   );
-});
-
-test("chat turn navigation is anchored to the left edge", async () => {
-  const css = await readFile(
-    new URL("../../styles/features/chat/navigation.css", import.meta.url),
-    "utf8",
-  );
-  const navRule = css.match(/\.chat-msg-nav\s*\{(?<body>[\s\S]*?)\}/);
-
-  assert.ok(navRule?.groups?.body, "missing chat message navigation rule");
-  assert.match(navRule.groups.body, /left:\s*14px;/);
-  assert.doesNotMatch(navRule.groups.body, /right:/);
 });
 
 test("chat anchor labels use a translucent blurred surface", async () => {
