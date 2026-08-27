@@ -566,15 +566,25 @@ pub(crate) async fn run_turn(
             "step context captured"
         );
         let history = step_context.history.clone();
+        let prompt_context = step_context.prompt_context.clone();
         let tool_specs = step_context.tool_router.model_visible_specs().to_vec();
 
-        emit_context_usage(&session, &turn_context, &prompt, &history, &tool_specs).await;
+        emit_context_usage(
+            &session,
+            &turn_context,
+            &prompt,
+            &prompt_context,
+            &history,
+            &tool_specs,
+        )
+        .await;
 
         let raw_stream = match run_sampling_request(
             &session,
             &turn_context,
             &streamer,
             &prompt,
+            &prompt_context,
             &history,
             tool_specs,
         )

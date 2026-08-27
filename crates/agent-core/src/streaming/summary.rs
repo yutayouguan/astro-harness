@@ -60,16 +60,19 @@ pub(crate) async fn run_max_iterations_summary(a: MaxIterationsSummaryArgs<'_>) 
     emit_text_item_started(session, turn_context, assistant_item_id.clone(), false).await;
     emit_delta(session, turn_context, &assistant_item_id, notice, false).await;
 
-    let history = {
+    let (prompt_context, history) = {
         let agent = session.as_ref();
         agent
             .record_items(vec![Message::user(MAX_ITERATIONS_SUMMARY_PROMPT)])
             .await;
-        agent.clone_history().await
+        (
+            agent.prompt_context_history(),
+            agent.provider_history().await,
+        )
     };
 
     let raw_stream = match streamer
-        .stream_chat_with_contract(prompt, &history, Vec::new())
+        .stream_chat_with_contract(prompt, &prompt_context, &history, Vec::new())
         .await
     {
         Ok(s) => s,

@@ -171,8 +171,16 @@ mod tests {
             .record(vec![
                 RolloutItem::SessionMeta(serde_json::json!({"thread_id": "source"})),
                 RolloutItem::ResponseItem(Message::user("first")),
+                RolloutItem::WorldState(serde_json::json!({
+                    "full": true,
+                    "state": {"astro.prompt_context.v1": {"version": 2, "messages": []}},
+                })),
                 RolloutItem::ResponseItem(Message::assistant("first answer")),
                 RolloutItem::ResponseItem(Message::user("second")),
+                RolloutItem::WorldState(serde_json::json!({
+                    "full": false,
+                    "state": {"astro.prompt_context.v1": {"version": 2, "messages": []}},
+                })),
                 RolloutItem::ResponseItem(Message::assistant("second answer")),
             ])
             .await
@@ -206,8 +214,9 @@ mod tests {
         assert_eq!(
             items[1..]
                 .iter()
-                .map(|item| match item {
-                    RolloutItem::ResponseItem(message) => message.content.clone(),
+                .filter_map(|item| match item {
+                    RolloutItem::ResponseItem(message) => Some(message.content.clone()),
+                    RolloutItem::WorldState(_) => None,
                     other => panic!("unexpected item {other:?}"),
                 })
                 .collect::<Vec<_>>(),
@@ -216,6 +225,15 @@ mod tests {
                 types::message::MessageContent::Text("first answer".into()),
             ]
         );
+        let copied_world_states = items
+            .iter()
+            .filter_map(|item| match item {
+                RolloutItem::WorldState(value) => Some(value),
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(copied_world_states.len(), 1);
+        assert_eq!(copied_world_states[0]["full"], true);
         assert_eq!(
             read_rollout(&find_rollout(temp.path(), "source").unwrap().unwrap())
                 .await

@@ -392,7 +392,10 @@ impl Session {
     ///
     /// This state is intentionally independent from user/assistant conversation history.
     pub fn restore_prompt_context_from_rollout(&self, items: &[RolloutItem]) {
-        self.lock_state().prompt_context_snapshot = crate::prompt::context_state::restore(items);
+        let restored = crate::prompt::context_state::restore(items);
+        let mut state = self.lock_state();
+        state.prompt_context_snapshot = restored.snapshot;
+        state.prompt_context_history = restored.history;
     }
 
     pub(crate) async fn persist_prompt_context_if_changed(
@@ -412,16 +415,51 @@ impl Session {
         else {
             return;
         };
+        let updates = crate::prompt::context_state::model_updates(previous.as_ref(), &snapshot);
 
         let Some(bindings) = self.runtime_io.get() else {
-            self.lock_state().prompt_context_snapshot = Some(snapshot);
+            let mut state = self.lock_state();
+            state.prompt_context_snapshot = Some(snapshot);
+            state.prompt_context_history.extend(updates);
             return;
         };
         if let Err(error) = bindings.rollout.record(vec![item]).await {
             tracing::warn!(%error, "failed to persist prompt context world state");
             return;
         }
-        self.lock_state().prompt_context_snapshot = Some(snapshot);
+        let mut state = self.lock_state();
+        state.prompt_context_snapshot = Some(snapshot);
+        state.prompt_context_history.extend(updates);
+    }
+
+    pub(crate) fn prompt_context_history(&self) -> Vec<providers::types::message::Message> {
+        self.lock_state().prompt_context_history.clone()
+    }
+
+    /// Rebase provider-only context after compaction and persist a fresh full baseline.
+    pub(crate) async fn rebase_prompt_context_after_compaction(&self, summary: &str) {
+        let snapshot = self.lock_state().prompt_context_snapshot.clone();
+        let history = snapshot
+            .as_ref()
+            .map(|snapshot| crate::prompt::context_state::model_updates(None, snapshot))
+            .unwrap_or_default();
+        let mut items = vec![RolloutItem::Compacted(serde_json::json!({
+            "kind": "mid_run_summary",
+            "summary": summary,
+        }))];
+        if let Some(snapshot) = snapshot.as_ref() {
+            if let Some(full) = crate::prompt::context_state::rollout_update(None, snapshot) {
+                items.push(full);
+            }
+        }
+
+        let _dispatch = self.event_dispatch.lock().await;
+        if let Some(bindings) = self.runtime_io.get() {
+            if let Err(error) = bindings.rollout.record(items).await {
+                tracing::warn!(%error, "failed to persist compacted prompt context baseline");
+            }
+        }
+        self.lock_state().prompt_context_history = history;
     }
 
     /// Returns the stable pause and HITL controls used by actor-submitted turns.

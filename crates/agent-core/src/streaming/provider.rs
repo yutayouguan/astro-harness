@@ -92,15 +92,20 @@ impl ProviderStreamer {
             .unwrap_or_else(|| self.base_config.model.clone())
     }
 
-    /// Sample with stable instructions and role-bearing dynamic context kept distinct.
+    /// Sample with stable instructions and durable role-bearing context history kept distinct.
     /// Native tool schemas stay in the separate `tools` argument.
     pub(crate) async fn stream_chat_with_contract(
         &self,
         prompt: &crate::prompt::PromptContract,
+        prompt_context: &[ProviderMessage],
         history: &[Message],
         tools: Vec<serde_json::Value>,
     ) -> anyhow::Result<AssistantContentStream> {
-        let messages = crate::prompt::messages::to_provider_messages_with_context(prompt, history);
+        let messages = crate::prompt::messages::to_provider_messages_with_context_history(
+            prompt,
+            prompt_context,
+            history,
+        );
         self.stream_completion(messages, tools).await
     }
 }

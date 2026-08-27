@@ -283,6 +283,7 @@ mod tests {
         let prompt = crate::prompt::PromptContract {
             base_instructions: "base".into(),
             context: Vec::new(),
+            context_sections: Vec::new(),
             usage: PromptContractUsage {
                 base: vec![PromptSourceUsage {
                     id: "tool_guidance".into(),

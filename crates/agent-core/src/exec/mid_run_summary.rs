@@ -182,6 +182,7 @@ pub async fn maybe_apply_mid_run_summary(agent: &AgentLoop) -> anyhow::Result<bo
 
     let before = estimate_messages_tokens(&history);
     agent.set_mid_run_handoff(text.clone()).await;
+    agent.rebase_prompt_context_after_compaction(&text).await;
     let collapsed = collapse_history_with_handoff(&history, &text, protect_first, protect_last);
     let after = estimate_messages_tokens(&collapsed);
     info!(

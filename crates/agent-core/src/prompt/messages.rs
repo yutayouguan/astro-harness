@@ -27,12 +27,21 @@ pub fn to_provider_messages_with_context(
     prompt: &crate::prompt::PromptContract,
     session: &[Message],
 ) -> Vec<ProviderMessage> {
+    to_provider_messages_with_context_history(prompt, &prompt.context, session)
+}
+
+/// Convert stable instructions, durable provider-only context history, and chat history.
+pub fn to_provider_messages_with_context_history(
+    prompt: &crate::prompt::PromptContract,
+    prompt_context: &[ProviderMessage],
+    session: &[Message],
+) -> Vec<ProviderMessage> {
     let session = super::sanitize::sanitized_tool_pairs(session);
-    let mut messages = Vec::with_capacity(session.len() + prompt.context.len() + 1);
+    let mut messages = Vec::with_capacity(session.len() + prompt_context.len() + 1);
     if !prompt.base_instructions.trim().is_empty() {
         messages.push(ProviderMessage::system(&prompt.base_instructions));
     }
-    messages.extend(prompt.context.iter().cloned());
+    messages.extend(prompt_context.iter().cloned());
 
     for message in &session {
         if message.role == Role::Tool {
@@ -278,6 +287,34 @@ mod tests {
         assert_eq!(messages[1].text_content(), "developer policy");
         assert_eq!(messages[2].text_content(), "contextual user data");
         assert_eq!(messages[3].text_content(), "hello");
+    }
+
+    #[test]
+    fn explicit_context_history_replaces_the_current_prompt_context() {
+        let prompt = crate::prompt::PromptContract {
+            base_instructions: "stable base".into(),
+            context: vec![ProviderMessage::developer("current snapshot")],
+            ..Default::default()
+        };
+        let context_history = vec![
+            ProviderMessage::developer("initial snapshot"),
+            ProviderMessage::developer("incremental update"),
+        ];
+
+        let messages = to_provider_messages_with_context_history(
+            &prompt,
+            &context_history,
+            &[Message::user("hello")],
+        );
+
+        assert_eq!(messages.len(), 4);
+        assert_eq!(messages[0].text_content(), "stable base");
+        assert_eq!(messages[1].text_content(), "initial snapshot");
+        assert_eq!(messages[2].text_content(), "incremental update");
+        assert_eq!(messages[3].text_content(), "hello");
+        assert!(messages
+            .iter()
+            .all(|message| message.text_content() != "current snapshot"));
     }
 
     #[test]

@@ -5,6 +5,7 @@ use std::sync::Arc;
 use agent_protocol::{
     ContextUsageEvent, ContextUsageItem, ContextUsageSegment, DeltaEvent, EventMsg, ToolStatus,
 };
+use providers::types::message::Role as ProviderRole;
 
 use super::lifecycle::{
     bounded_tool_completed_event, emit, emit_context_compacted, emit_extension_completed,
@@ -73,11 +74,43 @@ pub(super) async fn emit_context_usage(
     session: &Arc<AgentLoop>,
     turn_context: &TurnContext,
     prompt: &crate::prompt::PromptContract,
+    prompt_context: &[providers::types::message::Message],
     history: &[types::message::Message],
     tools: &[serde_json::Value],
 ) {
     let agent = session.as_ref();
-    let layers = AgentLoop::prompt_contract_layer_breakdown(prompt);
+    let mut layers = AgentLoop::prompt_contract_layer_breakdown(prompt);
+    let actual_developer_chars = prompt_context
+        .iter()
+        .filter(|message| message.role() == ProviderRole::Developer)
+        .map(|message| message.text_content().chars().count())
+        .sum::<usize>();
+    let actual_user_chars = prompt_context
+        .iter()
+        .filter(|message| message.role() == ProviderRole::User)
+        .map(|message| message.text_content().chars().count())
+        .sum::<usize>();
+    let current_developer_chars =
+        layers.developer_chars + layers.skills_chars + layers.mcp_instruction_chars;
+    let current_user_chars = layers.user_context_chars + layers.memory_chars + layers.recall_chars;
+    let developer_history_chars = actual_developer_chars.saturating_sub(current_developer_chars);
+    let user_history_chars = actual_user_chars.saturating_sub(current_user_chars);
+    if developer_history_chars > 0 {
+        layers.developer_chars += developer_history_chars;
+        layers.developer_items.push((
+            "context_history".into(),
+            "Developer context history".into(),
+            developer_history_chars,
+        ));
+    }
+    if user_history_chars > 0 {
+        layers.user_context_chars += user_history_chars;
+        layers.user_context_items.push((
+            "context_history".into(),
+            "User context history".into(),
+            user_history_chars,
+        ));
+    }
     let recommend_compact_ratio = agent.compression_config().recommend_compact_ratio;
     let snap = crate::prompt::context_usage::build_snapshot(
         crate::prompt::context_usage::ContextUsageInput {
@@ -364,6 +397,7 @@ pub(super) async fn run_sampling_request(
     turn_context: &TurnContext,
     streamer: &ProviderStreamer,
     prompt: &crate::prompt::PromptContract,
+    prompt_context: &[providers::types::message::Message],
     history: &[types::message::Message],
     tool_specs: Vec<serde_json::Value>,
 ) -> Result<super::types::AssistantContentStream, String> {
@@ -383,7 +417,7 @@ pub(super) async fn run_sampling_request(
         emit_hook_completed(session, turn_context, hook_item, ::hooks::PRE_API_REQUEST).await;
     }
     match streamer
-        .stream_chat_with_contract(prompt, history, tool_specs)
+        .stream_chat_with_contract(prompt, prompt_context, history, tool_specs)
         .await
     {
         Ok(s) => {

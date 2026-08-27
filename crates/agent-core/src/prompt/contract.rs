@@ -6,7 +6,7 @@
 //! - native tool schemas (owned by the request pipeline, never rendered here).
 
 use providers::types::message::Message as ProviderMessage;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use crate::prompt::context::{DynamicContext, StaticContext};
 use crate::prompt::context_source::{ContextBudget, ContextSource, RenderedSource};
@@ -27,6 +27,20 @@ pub struct PromptContractUsage {
     pub user: Vec<PromptSourceUsage>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum PromptContextRole {
+    Developer,
+    User,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PromptContextSection {
+    pub id: String,
+    pub role: PromptContextRole,
+    pub content: String,
+}
+
 /// Provider-facing prompt data excluding native tool schemas.
 #[derive(Debug, Clone, Default)]
 pub struct PromptContract {
@@ -34,6 +48,8 @@ pub struct PromptContract {
     pub base_instructions: String,
     /// Dynamic context kept as explicit developer/user messages.
     pub context: Vec<ProviderMessage>,
+    /// Stable source identities used to render model-visible world-state diffs.
+    pub context_sections: Vec<PromptContextSection>,
     /// Exact per-source character usage after the shared budget is applied.
     pub usage: PromptContractUsage,
 }
@@ -51,6 +67,7 @@ impl PromptContract {
         Self {
             base_instructions,
             context: Vec::new(),
+            context_sections: Vec::new(),
             usage,
         }
     }
@@ -101,6 +118,7 @@ struct AllocatedSource {
 struct RenderedRole {
     body: String,
     usage: Vec<PromptSourceUsage>,
+    sources: Vec<AllocatedSource>,
 }
 
 impl RoleBuffer {
@@ -140,6 +158,7 @@ impl RoleBuffer {
         let separator_chars = LAYER_SEP.chars().count();
         let mut body = String::new();
         let mut usage = Vec::with_capacity(self.sources.len());
+        let mut sources = Vec::with_capacity(self.sources.len());
         for source in self.sources {
             let has_previous = !body.is_empty();
             if has_previous {
@@ -147,11 +166,16 @@ impl RoleBuffer {
             }
             body.push_str(&source.content);
             usage.push(PromptSourceUsage {
-                id: source.id,
+                id: source.id.clone(),
                 chars: source.content.chars().count() + usize::from(has_previous) * separator_chars,
             });
+            sources.push(source);
         }
-        RenderedRole { body, usage }
+        RenderedRole {
+            body,
+            usage,
+            sources,
+        }
     }
 }
 
@@ -245,10 +269,25 @@ pub(crate) fn assemble_prompt_contract_with_usage(
     if !user.body.is_empty() {
         context.push(ProviderMessage::user_text(user.body.clone()));
     }
+    let context_sections = developer
+        .sources
+        .iter()
+        .map(|source| PromptContextSection {
+            id: source.id.clone(),
+            role: PromptContextRole::Developer,
+            content: source.content.clone(),
+        })
+        .chain(user.sources.iter().map(|source| PromptContextSection {
+            id: source.id.clone(),
+            role: PromptContextRole::User,
+            content: source.content.clone(),
+        }))
+        .collect();
 
     PromptContract {
         base_instructions: base.body,
         context,
+        context_sections,
         usage: PromptContractUsage {
             base: base.usage,
             developer: developer.usage,
@@ -359,6 +398,25 @@ mod tests {
         assert!(contract.context[1]
             .text_content()
             .contains("RECALLED_CONTEXT"));
+        assert_eq!(
+            contract
+                .context_sections
+                .iter()
+                .map(|section| (section.role, section.id.as_str()))
+                .collect::<Vec<_>>(),
+            vec![
+                (PromptContextRole::Developer, "skills"),
+                (PromptContextRole::Developer, "mcp"),
+                (PromptContextRole::Developer, "mode"),
+                (PromptContextRole::User, "agents"),
+                (PromptContextRole::User, "hook"),
+                (PromptContextRole::User, "user_profile"),
+                (PromptContextRole::User, "memory"),
+                (PromptContextRole::User, "daily"),
+                (PromptContextRole::User, "timestamp"),
+                (PromptContextRole::User, "dynamic"),
+            ]
+        );
     }
 
     #[test]

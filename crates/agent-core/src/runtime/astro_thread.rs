@@ -124,6 +124,11 @@ mod tests {
         crate::prompt::PromptContract {
             base_instructions: "stable base".into(),
             context: vec![ProviderMessage::developer(content)],
+            context_sections: vec![crate::prompt::contract::PromptContextSection {
+                id: "mode".into(),
+                role: crate::prompt::contract::PromptContextRole::Developer,
+                content: content.into(),
+            }],
             usage: Default::default(),
         }
     }
@@ -174,6 +179,7 @@ mod tests {
             .unwrap(),
         );
         resumed_session.restore_prompt_context_from_rollout(&initial_items);
+        assert_eq!(resumed_session.prompt_context_history().len(), 1);
         let resumed_thread = AstroThread::spawn(
             Arc::clone(&resumed_session),
             RolloutRecorder::open(path.clone()).await.unwrap(),
@@ -186,6 +192,11 @@ mod tests {
         resumed_session
             .persist_prompt_context_if_changed(&prompt_context("second"))
             .await;
+        let context_history = resumed_session.prompt_context_history();
+        assert_eq!(context_history.len(), 2);
+        assert!(context_history[1].text_content().contains("second"));
+        let step_context = resumed_session.capture_step_context().await.unwrap();
+        assert_eq!(step_context.prompt_context.len(), 2);
         resumed_thread.flush_rollout().await.unwrap();
 
         let resumed_items = read_rollout(&path).await.unwrap();
@@ -199,6 +210,30 @@ mod tests {
         assert_eq!(world_states.len(), 2);
         assert_eq!(world_states[0]["full"], true);
         assert_eq!(world_states[1]["full"], false);
+
+        resumed_session
+            .rebase_prompt_context_after_compaction("summary")
+            .await;
+        resumed_thread.flush_rollout().await.unwrap();
+        assert_eq!(resumed_session.prompt_context_history().len(), 1);
+        let rebased_items = read_rollout(&path).await.unwrap();
+        assert!(matches!(
+            &rebased_items[rebased_items.len() - 2],
+            RolloutItem::Compacted(_)
+        ));
+        assert!(matches!(
+            &rebased_items[rebased_items.len() - 1],
+            RolloutItem::WorldState(value) if value["full"] == true
+        ));
+        let after_compaction = Session::with_session_id(
+            Config::with_defaults(dir.path().to_path_buf()),
+            "prompt-context-after-compaction".into(),
+        )
+        .unwrap();
+        after_compaction.restore_prompt_context_from_rollout(&rebased_items);
+        let compacted_history = after_compaction.prompt_context_history();
+        assert_eq!(compacted_history.len(), 1);
+        assert_eq!(compacted_history[0].text_content(), "second");
 
         resumed_thread.submit(Op::Shutdown).await.unwrap();
         resumed_thread.wait_terminated().await;

@@ -787,6 +787,7 @@ impl Session {
     pub(crate) async fn capture_step_context(&self) -> anyhow::Result<Arc<StepContext>> {
         self.reload_tools_and_mcp().await?;
         let mut history = self.provider_history().await;
+        let prompt_context = self.prompt_context_history();
         if let Some(ctx) = self.take_inject_context().await {
             history.push(Message::user(&format!("[astro:hook-context]\n{ctx}")));
         }
@@ -826,7 +827,12 @@ impl Session {
                 ))
             })
         };
-        let step_context = Arc::new(StepContext::new(turn_context, history, tool_router));
+        let step_context = Arc::new(StepContext::new(
+            turn_context,
+            history,
+            prompt_context,
+            tool_router,
+        ));
         self.lock_state().current_step_context = Some(Arc::clone(&step_context));
         Ok(step_context)
     }

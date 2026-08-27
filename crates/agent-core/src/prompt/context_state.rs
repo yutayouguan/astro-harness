@@ -8,6 +8,7 @@ use agent_rollout::RolloutItem;
 use serde::Serialize;
 use serde_json::{Map, Value};
 
+use super::contract::{PromptContextRole, PromptContextSection};
 use super::PromptContract;
 
 const PROMPT_CONTEXT_KEY: &str = "astro.prompt_context.v1";
@@ -16,6 +17,7 @@ const PROMPT_CONTEXT_KEY: &str = "astro.prompt_context.v1";
 struct PromptContextSnapshot<'a> {
     version: u32,
     messages: &'a [providers::types::message::Message],
+    sections: &'a [PromptContextSection],
     usage: PromptContextUsage<'a>,
 }
 
@@ -27,13 +29,162 @@ struct PromptContextUsage<'a> {
 
 pub(crate) fn snapshot(prompt: &PromptContract) -> serde_json::Result<Value> {
     serde_json::to_value(PromptContextSnapshot {
-        version: 1,
+        version: 2,
         messages: &prompt.context,
+        sections: &prompt.context_sections,
         usage: PromptContextUsage {
             developer: &prompt.usage.developer,
             user: &prompt.usage.user,
         },
     })
+}
+
+#[derive(Debug, Clone, Default)]
+pub(crate) struct RestoredPromptContext {
+    pub(crate) snapshot: Option<Value>,
+    pub(crate) history: Vec<providers::types::message::Message>,
+}
+
+fn snapshot_messages(snapshot: &Value) -> Option<Vec<providers::types::message::Message>> {
+    serde_json::from_value(snapshot.get("messages")?.clone()).ok()
+}
+
+fn snapshot_sections(snapshot: &Value) -> Option<Vec<PromptContextSection>> {
+    serde_json::from_value(snapshot.get("sections")?.clone()).ok()
+}
+
+fn context_update(id: &str, content: Option<&str>) -> String {
+    match content {
+        Some(content) => format!(
+            "<context_update source=\"{id}\">\n\
+             The following context supersedes the earlier `{id}` section.\n\
+             {content}\n\
+             </context_update>"
+        ),
+        None => format!(
+            "<context_update source=\"{id}\">\n\
+             The earlier `{id}` context section no longer applies.\n\
+             </context_update>"
+        ),
+    }
+}
+
+fn role_message(
+    role: PromptContextRole,
+    updates: impl IntoIterator<Item = String>,
+) -> Option<providers::types::message::Message> {
+    let body = updates.into_iter().collect::<Vec<_>>().join("\n\n");
+    if body.is_empty() {
+        return None;
+    }
+    Some(match role {
+        PromptContextRole::Developer => providers::types::message::Message::developer(body),
+        PromptContextRole::User => providers::types::message::Message::user_text(body),
+    })
+}
+
+fn section_updates(
+    previous: &Value,
+    current: &Value,
+) -> Option<Vec<providers::types::message::Message>> {
+    let previous_messages = snapshot_messages(previous).unwrap_or_default();
+    let current_messages = snapshot_messages(current).unwrap_or_default();
+    let previous = snapshot_sections(previous)?;
+    let current = snapshot_sections(current)?;
+    if (previous.is_empty() && !previous_messages.is_empty())
+        || (current.is_empty() && !current_messages.is_empty())
+    {
+        return None;
+    }
+    let mut updates = Vec::new();
+
+    for role in [PromptContextRole::Developer, PromptContextRole::User] {
+        let old = previous
+            .iter()
+            .filter(|section| section.role == role)
+            .map(|section| (section.id.as_str(), section.content.as_str()))
+            .collect::<std::collections::HashMap<_, _>>();
+        let new = current
+            .iter()
+            .filter(|section| section.role == role)
+            .map(|section| (section.id.as_str(), section.content.as_str()))
+            .collect::<std::collections::HashMap<_, _>>();
+        let changed = current
+            .iter()
+            .filter(|section| section.role == role)
+            .filter(|section| {
+                old.get(section.id.as_str()).copied() != Some(section.content.as_str())
+            })
+            .map(|section| context_update(&section.id, Some(&section.content)))
+            .chain(
+                previous
+                    .iter()
+                    .filter(|section| {
+                        section.role == role && !new.contains_key(section.id.as_str())
+                    })
+                    .map(|section| context_update(&section.id, None)),
+            );
+        if let Some(message) = role_message(role, changed) {
+            updates.push(message);
+        }
+    }
+    Some(updates)
+}
+
+fn role_text(
+    messages: &[providers::types::message::Message],
+    role: providers::types::message::Role,
+) -> Option<String> {
+    let body = messages
+        .iter()
+        .filter(|message| message.role() == role)
+        .map(providers::types::message::Message::text_content)
+        .filter(|text| !text.is_empty())
+        .collect::<Vec<_>>()
+        .join("\n\n");
+    (!body.is_empty()).then_some(body)
+}
+
+/// Render model-visible changes between two persisted snapshots.
+///
+/// Version 2 snapshots diff stable source ids. Version 1 snapshots fall back to replacing the
+/// changed role as one unit so rollouts written by the previous release remain resumable.
+pub(crate) fn model_updates(
+    previous: Option<&Value>,
+    current: &Value,
+) -> Vec<providers::types::message::Message> {
+    let Some(previous) = previous else {
+        return snapshot_messages(current).unwrap_or_default();
+    };
+    if let Some(updates) = section_updates(previous, current) {
+        return updates;
+    }
+
+    let old = snapshot_messages(previous).unwrap_or_default();
+    let new = snapshot_messages(current).unwrap_or_default();
+    let mut updates = Vec::new();
+    for (role, context_role) in [
+        (
+            providers::types::message::Role::Developer,
+            PromptContextRole::Developer,
+        ),
+        (
+            providers::types::message::Role::User,
+            PromptContextRole::User,
+        ),
+    ] {
+        let old_text = role_text(&old, role);
+        let new_text = role_text(&new, role);
+        if old_text != new_text {
+            if let Some(message) = role_message(
+                context_role,
+                [context_update(role.as_str(), new_text.as_deref())],
+            ) {
+                updates.push(message);
+            }
+        }
+    }
+    updates
 }
 
 pub(crate) fn rollout_update(previous: Option<&Value>, current: &Value) -> Option<RolloutItem> {
@@ -53,9 +204,13 @@ pub(crate) fn rollout_update(previous: Option<&Value>, current: &Value) -> Optio
 ///
 /// Unknown legacy `WorldState` payloads are ignored. A well-formed full snapshot without this
 /// namespace clears the baseline, matching the replacement semantics of a full world state.
-pub(crate) fn restore(items: &[RolloutItem]) -> Option<Value> {
-    let mut baseline = None;
+pub(crate) fn restore(items: &[RolloutItem]) -> RestoredPromptContext {
+    let mut restored = RestoredPromptContext::default();
     for item in items {
+        if matches!(item, RolloutItem::Compacted(_)) {
+            restored = RestoredPromptContext::default();
+            continue;
+        }
         let RolloutItem::WorldState(payload) = item else {
             continue;
         };
@@ -67,12 +222,24 @@ pub(crate) fn restore(items: &[RolloutItem]) -> Option<Value> {
         };
 
         if full {
-            baseline = state.get(PROMPT_CONTEXT_KEY).cloned();
+            restored.snapshot = state.get(PROMPT_CONTEXT_KEY).cloned();
+            restored.history = restored
+                .snapshot
+                .as_ref()
+                .and_then(snapshot_messages)
+                .unwrap_or_default();
         } else if let Some(value) = state.get(PROMPT_CONTEXT_KEY) {
-            baseline = (!value.is_null()).then(|| value.clone());
+            if value.is_null() {
+                restored = RestoredPromptContext::default();
+            } else {
+                restored
+                    .history
+                    .extend(model_updates(restored.snapshot.as_ref(), value));
+                restored.snapshot = Some(value.clone());
+            }
         }
     }
-    baseline
+    restored
 }
 
 #[cfg(test)]
@@ -85,6 +252,11 @@ mod tests {
         PromptContract {
             base_instructions: "stable base".into(),
             context: vec![Message::developer(text)],
+            context_sections: vec![PromptContextSection {
+                id: "mode".into(),
+                role: PromptContextRole::Developer,
+                content: text.into(),
+            }],
             usage: Default::default(),
         }
     }
@@ -112,7 +284,14 @@ mod tests {
             },
             Some(false)
         );
-        assert_eq!(restore(&[full, patch]), Some(second));
+        let restored = restore(&[full, patch]);
+        assert_eq!(restored.snapshot, Some(second));
+        assert_eq!(restored.history.len(), 2);
+        assert_eq!(
+            restored.history[1].role(),
+            providers::types::message::Role::Developer
+        );
+        assert!(restored.history[1].text_content().contains("second"));
     }
 
     #[test]
@@ -143,7 +322,64 @@ mod tests {
             "state": {"other.namespace": {"enabled": true}},
         }));
 
-        assert_eq!(restore(&[legacy, full.clone()]), Some(value));
-        assert_eq!(restore(&[full, replacement]), None);
+        assert_eq!(restore(&[legacy, full.clone()]).snapshot, Some(value));
+        let restored = restore(&[full, replacement]);
+        assert!(restored.snapshot.is_none());
+        assert!(restored.history.is_empty());
+    }
+
+    #[test]
+    fn diffs_only_the_changed_source_and_resets_after_compaction() {
+        let mut first = prompt("mode-one");
+        first
+            .context
+            .push(Message::user_text("time-one\n\nproject"));
+        first.context_sections.push(PromptContextSection {
+            id: "timestamp".into(),
+            role: PromptContextRole::User,
+            content: "time-one".into(),
+        });
+        first.context_sections.push(PromptContextSection {
+            id: "agents".into(),
+            role: PromptContextRole::User,
+            content: "project".into(),
+        });
+        let mut second = first.clone();
+        second.context[1] = Message::user_text("time-two\n\nproject");
+        second.context_sections[1].content = "time-two".into();
+
+        let first = snapshot(&first).unwrap();
+        let second = snapshot(&second).unwrap();
+        let updates = model_updates(Some(&first), &second);
+        assert_eq!(updates.len(), 1);
+        assert_eq!(updates[0].role(), providers::types::message::Role::User);
+        assert!(updates[0].text_content().contains("time-two"));
+        assert!(!updates[0].text_content().contains("project"));
+
+        let restored = restore(&[
+            rollout_update(None, &first).unwrap(),
+            rollout_update(Some(&first), &second).unwrap(),
+            RolloutItem::Compacted(serde_json::json!({"summary": "done"})),
+        ]);
+        assert!(restored.snapshot.is_none());
+        assert!(restored.history.is_empty());
+    }
+
+    #[test]
+    fn version_one_snapshot_falls_back_to_role_replacement() {
+        let mut first = snapshot(&prompt("first")).unwrap();
+        let mut second = snapshot(&prompt("second")).unwrap();
+        for value in [&mut first, &mut second] {
+            value["version"] = 1.into();
+            value.as_object_mut().unwrap().remove("sections");
+        }
+
+        let updates = model_updates(Some(&first), &second);
+        assert_eq!(updates.len(), 1);
+        assert_eq!(
+            updates[0].role(),
+            providers::types::message::Role::Developer
+        );
+        assert!(updates[0].text_content().contains("second"));
     }
 }
