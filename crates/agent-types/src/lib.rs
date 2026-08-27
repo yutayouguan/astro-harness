@@ -66,7 +66,8 @@ pub use memory_citation::MemoryCitation;
 pub use text::{truncate_chars, truncate_tool_result, truncate_utf8, MAX_TOOL_RESULT_BYTES};
 pub use thread_memory_mode::ThreadMemoryMode;
 pub use tool_call::{
-    extract_tool_calls, resolve_tool_calls, ParsedToolCall, ToolCallAccumulator, ToolCallDelta,
+    extract_tool_calls, resolve_tool_calls, LegacyToolCallTextStream, ParsedToolCall,
+    ToolCallAccumulator, ToolCallDelta,
 };
 pub use tool_entry::{
     ExecApprovalRequirement, McpToolAnnotations, McpToolApproval, McpToolApprovalMode,

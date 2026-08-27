@@ -1,14 +1,15 @@
 //! 工具调用解析：从 LLM 回复中提取结构化 tool call。
 //!
-//! 支持两种协议：
-//! - **原生 function calling**：流式 `delta.tool_calls` 片段由 [`ToolCallAccumulator`] 累积。
-//! - **XML 兼容协议**：`<tool_call>{"name":...,"arguments":...}</tool_call>` 由 [`extract_tool_calls`] 解析。
-//!
-//! [`resolve_tool_calls`] 合并两者，原生结果优先于 XML 回退。
+//! 原生 function calling 的流式 `delta.tool_calls` 片段由 [`ToolCallAccumulator`] 累积。
+//! 对仍返回旧 XML 工具块的模型，兼容层会用 [`LegacyToolCallTextStream`] 将其从
+//! 用户可见正文中隔离，再由 [`extract_tool_calls`] 解析；原生结果始终优先。
 
 use std::collections::BTreeMap;
 
 use serde_json::Value;
+
+const XML_TOOL_CALL_OPEN: &str = "<tool_call>";
+const XML_TOOL_CALL_CLOSE: &str = "</tool_call>";
 
 /// 解析完成的单次工具调用。
 #[derive(Debug, Clone)]
@@ -54,28 +55,103 @@ fn normalize_model_tool_name(name: String) -> String {
         .unwrap_or(name)
 }
 
-/// 从助手纯文本回复中提取 `<tool_call>...</tool_call>` 块。
+fn parse_xml_tool_call_payload(payload: &str) -> Option<ParsedToolCall> {
+    let value = serde_json::from_str::<Value>(payload.trim()).ok()?;
+    let name = value.get("name")?.as_str()?;
+    let arguments = value
+        .get("arguments")
+        .cloned()
+        .unwrap_or_else(|| serde_json::json!({}));
+    Some(ParsedToolCall::new(name, arguments))
+}
+
+/// 从助手纯文本回复中提取旧协议 `<tool_call>...</tool_call>` 块。
 pub fn extract_tool_calls(text: &str) -> Vec<ParsedToolCall> {
     let mut out = Vec::new();
     let mut rest = text;
-    while let Some(start) = rest.find("<tool_call>") {
-        let after = &rest[start + "<tool_call>".len()..];
-        let Some(end) = after.find("</tool_call>") else {
+    while let Some(start) = rest.find(XML_TOOL_CALL_OPEN) {
+        let after = &rest[start + XML_TOOL_CALL_OPEN.len()..];
+        let Some(end) = after.find(XML_TOOL_CALL_CLOSE) else {
             break;
         };
-        let json_str = after[..end].trim();
-        if let Ok(v) = serde_json::from_str::<Value>(json_str) {
-            if let Some(name) = v.get("name").and_then(|n| n.as_str()) {
-                let arguments = v
-                    .get("arguments")
-                    .cloned()
-                    .unwrap_or_else(|| serde_json::json!({}));
-                out.push(ParsedToolCall::new(name, arguments));
-            }
+        if let Some(call) = parse_xml_tool_call_payload(&after[..end]) {
+            out.push(call);
         }
-        rest = &after[end + "</tool_call>".len()..];
+        rest = &after[end + XML_TOOL_CALL_CLOSE.len()..];
     }
     out
+}
+
+/// 流式隔离旧 XML 工具块，只把普通助手文本交给 UI 和持久化层。
+///
+/// 完整且可解析的工具块会被隐藏；无效或未闭合的标记仍按普通文本返回，避免吞掉
+/// 模型的非工具输出。解析后的调用继续由 [`extract_tool_calls`] 统一生成。
+#[derive(Debug, Default)]
+pub struct LegacyToolCallTextStream {
+    pending: String,
+    in_tool_call: bool,
+}
+
+impl LegacyToolCallTextStream {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// 推入一个文本增量，返回当前已确认可展示的正文。
+    pub fn push(&mut self, chunk: &str) -> String {
+        self.pending.push_str(chunk);
+        let mut visible = String::new();
+
+        loop {
+            if self.in_tool_call {
+                let Some(close_start) = self.pending.find(XML_TOOL_CALL_CLOSE) else {
+                    break;
+                };
+                let block_end = close_start + XML_TOOL_CALL_CLOSE.len();
+                let remainder = self.pending.split_off(block_end);
+                let block = std::mem::replace(&mut self.pending, remainder);
+                let payload = &block[XML_TOOL_CALL_OPEN.len()..close_start];
+                if parse_xml_tool_call_payload(payload).is_none() {
+                    visible.push_str(&block);
+                }
+                self.in_tool_call = false;
+                continue;
+            }
+
+            if let Some(open_start) = self.pending.find(XML_TOOL_CALL_OPEN) {
+                let remainder = self.pending.split_off(open_start);
+                visible.push_str(&self.pending);
+                self.pending = remainder;
+                self.in_tool_call = true;
+                continue;
+            }
+
+            let retained = longest_suffix_matching_prefix(&self.pending, XML_TOOL_CALL_OPEN);
+            let split_at = self.pending.len() - retained;
+            let suffix = self.pending.split_off(split_at);
+            visible.push_str(&self.pending);
+            self.pending = suffix;
+            break;
+        }
+
+        visible
+    }
+
+    /// 结束流；未形成有效完整工具块的尾部按普通正文返回。
+    pub fn finish(mut self) -> String {
+        std::mem::take(&mut self.pending)
+    }
+}
+
+fn longest_suffix_matching_prefix(text: &str, prefix: &str) -> usize {
+    let max_len = text.len().min(prefix.len().saturating_sub(1));
+    (1..=max_len)
+        .rev()
+        .find(|len| {
+            let start = text.len() - len;
+            text.is_char_boundary(start) && prefix.starts_with(&text[start..])
+        })
+        .unwrap_or(0)
 }
 
 /// 流式原生 function calling 的单个增量片段。
@@ -191,7 +267,7 @@ fn looks_like_complete_json(s: &str) -> bool {
     (t.starts_with('{') && t.ends_with('}')) || (t.starts_with('[') && t.ends_with(']'))
 }
 
-/// 合并原生 tool_calls 与 XML 解析结果。原生非空时忽略 XML。
+/// 合并原生 tool_calls 与旧 XML 解析结果。原生非空时忽略 XML。
 pub fn resolve_tool_calls(
     native: Vec<ParsedToolCall>,
     assistant_text: &str,
@@ -216,6 +292,43 @@ before
         assert_eq!(calls.len(), 1);
         assert_eq!(calls[0].name, "file_ops");
         assert_eq!(calls[0].arguments["path"], "a.txt");
+    }
+
+    #[test]
+    fn legacy_xml_stream_hides_valid_tool_calls_across_chunks() {
+        let mut stream = LegacyToolCallTextStream::new();
+        assert_eq!(stream.push("before <tool_"), "before ");
+        assert_eq!(
+            stream
+                .push("call>{\"name\":\"file_ops\",\"arguments\":{\"operation\":\"read\"}}</tool"),
+            ""
+        );
+        assert_eq!(stream.push("_call> after"), " after");
+        assert_eq!(stream.finish(), "");
+    }
+
+    #[test]
+    fn legacy_xml_stream_preserves_invalid_or_unclosed_markup() {
+        let mut invalid = LegacyToolCallTextStream::new();
+        assert_eq!(
+            invalid.push("a<tool_call>not-json</tool_call>b"),
+            "a<tool_call>not-json</tool_call>b"
+        );
+        assert_eq!(invalid.finish(), "");
+
+        let mut unclosed = LegacyToolCallTextStream::new();
+        assert_eq!(unclosed.push("a<tool_call>{\"name\":\"file_ops\"}"), "a");
+        assert_eq!(unclosed.finish(), "<tool_call>{\"name\":\"file_ops\"}");
+    }
+
+    #[test]
+    fn legacy_xml_stream_does_not_hold_unrelated_angle_brackets() {
+        let mut stream = LegacyToolCallTextStream::new();
+        assert_eq!(
+            stream.push("Use <section> and 1 < 2"),
+            "Use <section> and 1 < 2"
+        );
+        assert_eq!(stream.finish(), "");
     }
 
     #[test]

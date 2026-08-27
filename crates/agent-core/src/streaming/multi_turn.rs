@@ -579,6 +579,8 @@ pub(crate) async fn run_turn(
         let mut stream = Abortable::new(raw_stream, abort_reg);
 
         let mut full_response = String::new();
+        let mut raw_response = String::new();
+        let mut legacy_tool_text = types::LegacyToolCallTextStream::new();
         let mut full_reasoning = String::new();
         let mut thought_signature: Option<String> = None;
         let mut tool_acc = types::ToolCallAccumulator::new();
@@ -637,8 +639,13 @@ pub(crate) async fn run_turn(
             match next {
                 None => break,
                 Some(Ok(StreamedAssistantContent::Text(text))) => {
-                    full_response.push_str(&text);
-                    emit_delta(&session, &turn_context, &assistant_item_id, text, false).await;
+                    raw_response.push_str(&text);
+                    let visible = legacy_tool_text.push(&text);
+                    if !visible.is_empty() {
+                        full_response.push_str(&visible);
+                        emit_delta(&session, &turn_context, &assistant_item_id, visible, false)
+                            .await;
+                    }
                 }
                 Some(Ok(StreamedAssistantContent::Reasoning(r))) => {
                     full_reasoning.push_str(&r);
@@ -735,6 +742,19 @@ pub(crate) async fn run_turn(
             saw_usage = true;
         }
 
+        let trailing_text = legacy_tool_text.finish();
+        if !trailing_text.is_empty() {
+            full_response.push_str(&trailing_text);
+            emit_delta(
+                &session,
+                &turn_context,
+                &assistant_item_id,
+                trailing_text,
+                false,
+            )
+            .await;
+        }
+
         for index in &tool_call_indices {
             let pending = tool_argument_events
                 .get_mut(index)
@@ -756,7 +776,7 @@ pub(crate) async fn run_turn(
                 call.id.clone_from(item_id);
             }
         }
-        let calls = types::resolve_tool_calls(native_calls, &full_response);
+        let calls = types::resolve_tool_calls(native_calls, &raw_response);
 
         if full_response.is_empty() && calls.is_empty() {
             if !full_reasoning.is_empty() && thinking_only_retries < MAX_THINKING_ONLY_RETRIES {

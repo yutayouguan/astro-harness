@@ -1,6 +1,6 @@
 //! 结构化抽取（Rig Extractor 风格）：强制模型通过 `submit` 提交强类型结果。
 //!
-//! 主聊天仍走 XML `<tool_call>`；本模块用于入梦 / 澄清 / cron 等一次性抽取，
+//! 主聊天优先使用原生结构化工具调用；本模块用于入梦 / 澄清 / cron 等一次性抽取，
 //! 不向下流式 UI 暴露原生 tools。
 
 use std::marker::PhantomData;
