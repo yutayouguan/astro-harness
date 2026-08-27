@@ -83,6 +83,8 @@
   border-radius: var(--chat-dock-radius);
   background: var(--chat-dock-surface-background);
   box-shadow: var(--chat-dock-surface-shadow);
+  backdrop-filter: blur(calc(24px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.14));
+  -webkit-backdrop-filter: blur(calc(24px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.14));
   min-height: 0;
   overflow: hidden;
   animation: chat-right-slide-in 0.32s var(--ease-spring, cubic-bezier(0.34, 1.56, 0.64, 1));

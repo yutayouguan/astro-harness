@@ -69,6 +69,8 @@ test("right-side chat surfaces share one inset container material", () => {
   assert.ok(runtimePanel, "missing runtime panel rule");
   assert.match(runtimePanel, /right:\s*var\(--chat-dock-inset\);/);
   assert.match(runtimePanel, /bottom:\s*var\(--chat-dock-inset\);/);
+  assert.match(runtimePanel, /backdrop-filter:\s*blur\(calc\(24px \* var\(--glass-blur-scale, 1\)\)\)/);
+  assert.match(runtimePanel, /-webkit-backdrop-filter:\s*blur\(calc\(24px \* var\(--glass-blur-scale, 1\)\)\)/);
   assert.ok(projectPanel, "missing project files panel rule");
   assert.ok(projectWorkbench, "missing project file workbench rule");
   assert.ok(sidePanel, "missing side chat panel rule");
