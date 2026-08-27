@@ -331,9 +331,9 @@ mod tests {
 
     #[test]
     fn tool_name_plain_roundtrips() {
-        let name = ToolName::plain("terminal");
-        assert_eq!(name.wire_name(), "terminal");
-        assert_eq!(ToolName::parse("terminal"), name);
+        let name = ToolName::plain("exec_command");
+        assert_eq!(name.wire_name(), "exec_command");
+        assert_eq!(ToolName::parse("exec_command"), name);
     }
 
     #[test]

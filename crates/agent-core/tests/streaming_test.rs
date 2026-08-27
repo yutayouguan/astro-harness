@@ -278,7 +278,7 @@ async fn scripted_tool_turn_emits_item_lifecycle_and_one_terminal() {
             StreamChunk::ToolCallStart {
                 index: 0,
                 id: "call-1".into(),
-                name: "terminal".into(),
+                name: "exec_command".into(),
                 signature: None,
             },
             StreamChunk::ToolCallDelta {
@@ -560,7 +560,7 @@ async fn tool_argument_events_keep_stable_ids_across_late_start_and_rounds() {
             StreamChunk::ToolCallStart {
                 index: 0,
                 id: "provider-call-1".into(),
-                name: "terminal".into(),
+                name: "exec_command".into(),
                 signature: None,
             },
             StreamChunk::Done {
@@ -575,7 +575,7 @@ async fn tool_argument_events_keep_stable_ids_across_late_start_and_rounds() {
             StreamChunk::ToolCallStart {
                 index: 0,
                 id: "provider-call-2".into(),
-                name: "terminal".into(),
+                name: "exec_command".into(),
                 signature: None,
             },
             StreamChunk::Done {
@@ -1908,7 +1908,7 @@ async fn pre_verify_keep_going_retries_capped_at_two() {
             StreamChunk::ToolCallStart {
                 index: 0,
                 id: "call_write".into(),
-                name: "terminal".into(),
+                name: "exec_command".into(),
                 signature: None,
             },
             StreamChunk::ToolCallDelta {
@@ -2469,7 +2469,7 @@ async fn approval_hooks_fire_pre_then_post_on_allow() {
             StreamChunk::ToolCallStart {
                 index: 0,
                 id: "call_term_allow".into(),
-                name: "terminal".into(),
+                name: "exec_command".into(),
                 signature: None,
             },
             StreamChunk::ToolCallDelta {
@@ -2639,7 +2639,7 @@ async fn approval_hooks_fire_pre_then_post_on_deny() {
             StreamChunk::ToolCallStart {
                 index: 0,
                 id: "call_term_deny".into(),
-                name: "terminal".into(),
+                name: "exec_command".into(),
                 signature: None,
             },
             StreamChunk::ToolCallDelta {
@@ -2737,7 +2737,7 @@ async fn approval_hooks_fire_pre_then_post_on_deny() {
         items.iter().any(|i| matches!(
             i,
             ProjectedStreamItem::ToolResult { name, result, .. }
-            if name == "terminal" && result.contains("denied by user")
+            if name == "exec_command" && result.contains("denied by user")
         )),
         "expected denial tool result; got: {:?}",
         items.iter().map(|i| format!("{i:?}")).collect::<Vec<_>>()

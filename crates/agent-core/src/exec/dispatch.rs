@@ -1781,7 +1781,7 @@ mod tests {
             .append_message(session::NewMessage {
                 content: Some("calling tool"),
                 compressed_content: Some("compressed assistant"),
-                tool_calls: Some(serde_json::json!([{"id":"call-1","name":"terminal"}])),
+                tool_calls: Some(serde_json::json!([{"id":"call-1","name":"exec_command"}])),
                 reasoning: Some("summary"),
                 reasoning_content: Some("private reasoning"),
                 reasoning_details: Some(serde_json::json!({"phase":"analysis"})),
@@ -1795,7 +1795,7 @@ mod tests {
             .append_message(session::NewMessage {
                 content: Some("tool output"),
                 tool_call_id: Some("call-1"),
-                tool_name: Some("terminal"),
+                tool_name: Some("exec_command"),
                 ..session::NewMessage::empty(&child.session_id, "tool")
             })
             .unwrap();

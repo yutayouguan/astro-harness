@@ -341,7 +341,7 @@ mod tests {
             session_id: "session-1".into(),
             turn_id: Some("turn-1".into()),
             tool_call_id: "call-1".into(),
-            tool_name: "terminal".into(),
+            tool_name: "exec_command".into(),
             summary: "run command".into(),
             capabilities: vec![PermissionCapability::ProcessSpawn {
                 program: "/bin/sh".into(),

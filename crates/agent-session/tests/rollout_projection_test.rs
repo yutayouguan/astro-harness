@@ -14,7 +14,7 @@ fn rich_rollout() -> Vec<RolloutItem> {
         "world",
         vec![ToolCall {
             id: "call-1".into(),
-            name: "terminal".into(),
+            name: "exec_command".into(),
             arguments: serde_json::json!({"command": "pwd"}),
             signature: Some("tool-signature".into()),
         }],
@@ -99,7 +99,7 @@ fn repeated_rebuild_is_idempotent_and_preserves_rich_message_fields() {
 
     assert_eq!(messages[2].role, "tool");
     assert_eq!(messages[2].tool_call_id.as_deref(), Some("call-1"));
-    assert_eq!(messages[2].tool_name.as_deref(), Some("terminal"));
+    assert_eq!(messages[2].tool_name.as_deref(), Some("exec_command"));
     assert_eq!(messages[2].content.as_deref(), Some("tool output"));
     assert_eq!(
         messages[2].compressed_content.as_deref(),

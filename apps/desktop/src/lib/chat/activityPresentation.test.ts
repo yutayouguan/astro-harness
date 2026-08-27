@@ -38,7 +38,7 @@ test("extracts compact targets for human-readable rows", () => {
   );
   assert.equal(
     activityDisplayTarget({
-      ...activity("terminal"),
+      ...activity("exec_command"),
       input: '{"command":"npm run build\\nnpm test"}',
     }),
     "npm run build",
@@ -74,7 +74,7 @@ test("returns distinct visual kinds in event order", () => {
       activity("read_file"),
       activity("read_file"),
       activity("rg_search"),
-      activity("terminal"),
+      activity("exec_command"),
     ]),
     ["read", "search", "run"],
   );

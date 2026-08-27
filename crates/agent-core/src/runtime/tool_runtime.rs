@@ -57,7 +57,7 @@ impl ToolCallRuntime {
         tool_name: &str,
         payload: &serde_json::Value,
     ) -> Option<types::ToolOutput> {
-        if tool_name != "terminal" {
+        if tool_name != "exec_command" {
             return None;
         }
         let command = payload.get("command").and_then(serde_json::Value::as_str)?;

@@ -446,7 +446,7 @@ async fn transform_tool_result_replaces_before_post_tool_call() {
 
     let args = serde_json::json!({"command": "echo hello"});
     let out = agent
-        .handle_tool_call_async("terminal", &args)
+        .handle_tool_call_async("exec_command", &args)
         .await
         .unwrap();
 
@@ -464,9 +464,9 @@ async fn turn_wrote_disk_tracks_writes_and_resets_on_new_turn() {
     let agent = AgentLoop::new(test_config(&dir)).unwrap();
     assert!(!agent.turn_wrote_disk().await);
 
-    // terminal 工具调用应置位（保守视为总是写盘）
+    // exec_command 工具调用应置位（保守视为总是写盘）
     let _ = agent
-        .handle_tool_call_async("terminal", &serde_json::json!({"command": "echo hi"}))
+        .handle_tool_call_async("exec_command", &serde_json::json!({"command": "echo hi"}))
         .await
         .unwrap();
     assert!(agent.turn_wrote_disk().await);
@@ -475,9 +475,9 @@ async fn turn_wrote_disk_tracks_writes_and_resets_on_new_turn() {
     agent.begin_user_turn().await;
     assert!(!agent.turn_wrote_disk().await);
 
-    // terminal 工具调用也应置位
+    // exec_command 工具调用也应置位
     let _ = agent
-        .handle_tool_call_async("terminal", &serde_json::json!({"command": "true"}))
+        .handle_tool_call_async("exec_command", &serde_json::json!({"command": "true"}))
         .await
         .unwrap();
     assert!(agent.turn_wrote_disk().await);

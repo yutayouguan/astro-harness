@@ -201,7 +201,7 @@ fn insert_and_count_events() {
     db.insert(zero_billing_event(ZeroBillingEvent {
         ts: "2026-07-13T02:00:00Z",
         kind: "tool",
-        name: "terminal",
+        name: "exec_command",
         agent_id: "default",
         session_id: None,
         input_tokens: 0,
@@ -242,9 +242,9 @@ fn filters_by_agent_and_excludes_out_of_range() {
     let dir = TempDir::new().unwrap();
     let db = UsageDb::new(dir.path().join("usage.db")).unwrap();
     for (ts, agent, kind, name) in [
-        ("2026-07-01T10:00:00Z", "default", "tool", "terminal"),
+        ("2026-07-01T10:00:00Z", "default", "tool", "exec_command"),
         ("2026-07-02T10:00:00Z", "research", "tool", "web_search"),
-        ("2026-06-01T10:00:00Z", "default", "tool", "terminal"), // 上月
+        ("2026-06-01T10:00:00Z", "default", "tool", "exec_command"), // 上月
     ] {
         db.insert(zero_billing_event(ZeroBillingEvent {
             ts,
@@ -278,7 +278,7 @@ fn filters_by_agent_and_excludes_out_of_range() {
         })
         .unwrap();
     assert_eq!(one.kpis.calls, 1);
-    assert_eq!(one.rankings.by_kind[0].name, "terminal");
+    assert_eq!(one.rankings.by_kind[0].name, "exec_command");
 }
 
 #[test]
@@ -334,7 +334,7 @@ fn offset_timestamp_normalized_and_counted_in_month() {
     db.insert(zero_billing_event(ZeroBillingEvent {
         ts: "2026-07-01T00:00:00+00:00",
         kind: "tool",
-        name: "terminal",
+        name: "exec_command",
         agent_id: "default",
         session_id: None,
         input_tokens: 0,

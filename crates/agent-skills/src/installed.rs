@@ -1264,10 +1264,10 @@ mod tests {
     #[test]
     fn parse_astro_tools_list_and_inline() {
         let block =
-            "---\nname: t\ndescription: d\nastro_tools:\n  - terminal\n  - apply_patch\n---\nbody\n";
+            "---\nname: t\ndescription: d\nastro_tools:\n  - exec_command\n  - apply_patch\n---\nbody\n";
         let m = parse_skill_frontmatter_full(block);
         assert_eq!(m.name, "t");
-        assert_eq!(m.astro_tools, vec!["terminal", "apply_patch"]);
+        assert_eq!(m.astro_tools, vec!["exec_command", "apply_patch"]);
 
         let inline = "---\nname: t2\ndescription: d\nastro_tools: [web_search, browser]\n---\n";
         let m2 = parse_skill_frontmatter_full(inline);
@@ -1282,7 +1282,7 @@ mod tests {
         fs::create_dir_all(&skill_dir).unwrap();
         fs::write(
             skill_dir.join("SKILL.md"),
-            "---\nname: recent-skill\ndescription: d\nastro_tools: [terminal, web_search]\n---\nbody\n",
+            "---\nname: recent-skill\ndescription: d\nastro_tools: [exec_command, web_search]\n---\nbody\n",
         )
         .unwrap();
         std::env::set_var("ASTRO_MEMORY_DIR", dir.path());
@@ -1295,10 +1295,10 @@ mod tests {
 
         assert!(recent_astro_tools("recent-skill").is_none());
         let loaded = load_skill_by_name("recent-skill").unwrap();
-        assert_eq!(loaded.metadata.astro_tools, vec!["terminal", "web_search"]);
+        assert_eq!(loaded.metadata.astro_tools, vec!["exec_command", "web_search"]);
         assert_eq!(
             recent_astro_tools("recent-skill"),
-            Some(vec!["terminal".to_string(), "web_search".to_string()])
+            Some(vec!["exec_command".to_string(), "web_search".to_string()])
         );
         assert!(recent_astro_tools("other-skill").is_none());
     }

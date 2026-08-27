@@ -74,7 +74,7 @@ pub(crate) fn tool_turn_item(
         media,
         status,
     };
-    if name == "terminal" || name == "code_exec" {
+    if name == "exec_command" || name == "code_exec" {
         TurnItem::CommandExecution(item)
     } else if name.starts_with("mcp__") {
         TurnItem::McpToolCall(item)
@@ -693,8 +693,8 @@ mod tests {
     #[test]
     fn oversized_provider_call_id_cannot_break_completed_event_cap() {
         let call_id = "provider-call-id".repeat(TOOL_COMPLETED_EVENT_MAX_BYTES / 8);
-        let first = completed_event_with_identity("turn-1", &call_id, "terminal");
-        let second = completed_event_with_identity("turn-1", &call_id, "terminal");
+        let first = completed_event_with_identity("turn-1", &call_id, "exec_command");
+        let second = completed_event_with_identity("turn-1", &call_id, "exec_command");
         assert!(serialized_event_len("turn-1", &first) <= TOOL_COMPLETED_EVENT_MAX_BYTES);
         assert_eq!(first, second, "bounded correlation id must be stable");
     }
@@ -711,8 +711,8 @@ mod tests {
     #[test]
     fn oversized_turn_id_cannot_break_completed_event_cap() {
         let turn_id = "provider-turn-id".repeat(TOOL_COMPLETED_EVENT_MAX_BYTES / 8);
-        let first = completed_event_with_identity(&turn_id, "call-1", "terminal");
-        let second = completed_event_with_identity(&turn_id, "call-1", "terminal");
+        let first = completed_event_with_identity(&turn_id, "call-1", "exec_command");
+        let second = completed_event_with_identity(&turn_id, "call-1", "exec_command");
         assert!(serialized_event_len(&turn_id, &first) <= TOOL_COMPLETED_EVENT_MAX_BYTES);
         assert_eq!(first, second, "bounded turn correlation id must be stable");
     }

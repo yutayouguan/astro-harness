@@ -102,9 +102,9 @@ pub fn check_tool_call(
             }
         }
     }
-    if name == "terminal" {
+    if name == "exec_command" {
         return Err(format!(
-            "[blocked by {} mode] terminal is disabled (side effects). Call switch_mode(to=\"agent\") when ready to execute.",
+            "[blocked by {} mode] exec_command is disabled (side effects). Call switch_mode(to=\"agent\") when ready to execute.",
             mode.as_str()
         ));
     }
@@ -191,7 +191,7 @@ mod tests {
 
     #[test]
     fn plan_hides_terminal_in_schema() {
-        assert!(!tool_visible_in_mode(InteractionMode::Plan, "terminal"));
+        assert!(!tool_visible_in_mode(InteractionMode::Plan, "exec_command"));
         assert!(tool_visible_in_mode(InteractionMode::Plan, "web_search"));
         assert!(tool_visible_in_mode(InteractionMode::Plan, "switch_mode"));
         assert!(!tool_visible_in_mode(InteractionMode::Plan, "memory"));

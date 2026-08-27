@@ -21,7 +21,7 @@ async fn register_all_includes_panel_tools() {
         "image_gen",
         "video_gen",
         "video_analyze",
-        "terminal",
+        "exec_command",
         "web_search",
         "web_fetch",
         "code_exec",

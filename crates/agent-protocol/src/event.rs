@@ -210,7 +210,7 @@ mod tests {
                     tokens: 42,
                     count: Some(1),
                     items: vec![ContextUsageItem {
-                        id: "terminal".into(),
+                        id: "exec_command".into(),
                         label: "Terminal".into(),
                         tokens: 42,
                     }],

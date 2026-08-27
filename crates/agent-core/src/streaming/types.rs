@@ -103,7 +103,7 @@ mod tests {
         let item = StreamedAssistantContent::from_stream_chunk(StreamChunk::ToolCallStart {
             index: 1,
             id: "fc_1".into(),
-            name: "terminal".into(),
+            name: "exec_command".into(),
             signature: Some("sig_abc".into()),
         });
         assert!(matches!(
@@ -114,7 +114,7 @@ mod tests {
                 name: Some(name),
                 signature: Some(signature),
                 ..
-            })) if id == "fc_1" && name == "terminal" && signature == "sig_abc"
+            })) if id == "fc_1" && name == "exec_command" && signature == "sig_abc"
         ));
     }
 }

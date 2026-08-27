@@ -876,7 +876,7 @@ mod tests {
         db.insert(zero_event(
             "2026-07-01T00:00:00+00:00",
             "tool",
-            "terminal",
+            "exec_command",
             "workspace",
             0,
         ))
@@ -906,7 +906,7 @@ mod tests {
         db.insert(zero_event(
             "2026-07-13T02:00:01Z",
             "tool",
-            "terminal",
+            "exec_command",
             "workspace",
             0,
         ))

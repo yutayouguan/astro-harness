@@ -30,7 +30,7 @@ const IS_TAURI =
 
 export type AgentToolId =
   | "web_search"
-  | "terminal"
+  | "exec_command"
   | "code_exec"
   | "image_analyze"
   | "robotics"
@@ -121,9 +121,9 @@ export const AGENT_TOOLS: AgentToolDef[] = [
     ],
   },
   {
-    id: "terminal",
-    titleKey: "agentTools.terminal.title",
-    descKey: "agentTools.terminal.desc",
+    id: "exec_command",
+    titleKey: "agentTools.execCommand.title",
+    descKey: "agentTools.execCommand.desc",
     Icon: IconTerminal,
     tone: "purple",
     params: [

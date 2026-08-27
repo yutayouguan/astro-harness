@@ -85,7 +85,7 @@ test("tool interrupt seals first reasoning with segment wall-clock", () => {
   m = applyActivityUpsert(m, {
     id: "c1",
     kind: "tool",
-    title: "terminal",
+    title: "exec_command",
     status: "running",
     at: 3500,
   });
@@ -106,14 +106,14 @@ test("tool done preserves at and writes durationSec", () => {
   m = applyActivityUpsert(m, {
     id: "c1",
     kind: "tool",
-    title: "terminal",
+    title: "exec_command",
     status: "running",
     at: 10_000,
   });
   m = applyActivityUpsert(m, {
     id: "c1",
     kind: "tool",
-    title: "terminal",
+    title: "exec_command",
     output: "ok",
     status: "done",
     at: 99_000,

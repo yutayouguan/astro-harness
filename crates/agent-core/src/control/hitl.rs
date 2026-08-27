@@ -536,6 +536,6 @@ mod tests {
         assert!(!is_exclusive_tool("web_search"));
         assert!(is_interactive_tool("ask_user"));
         assert!(!is_interactive_tool("switch_mode"));
-        assert!(!is_interactive_tool("terminal"));
+        assert!(!is_interactive_tool("exec_command"));
     }
 }

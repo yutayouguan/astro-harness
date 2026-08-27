@@ -105,9 +105,9 @@ mod tests {
         assert!(path.exists());
         let rel = spill_path_for_prompt(dir.path(), &path);
         assert!(rel.contains("tool_spills/sess-1/42.txt"));
-        let view = make_spill_view(Some("terminal"), &rel, 11, "hello world");
+        let view = make_spill_view(Some("exec_command"), &rel, 11, "hello world");
         assert!(view.contains(TOOL_SPILL_MARK));
-        assert!(view.contains("terminal"));
+        assert!(view.contains("exec_command"));
     }
 
     #[test]

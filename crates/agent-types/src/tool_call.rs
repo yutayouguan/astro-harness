@@ -162,7 +162,7 @@ mod tests {
         acc.push(&ToolCallDelta {
             index: 0,
             id: Some("call_1".into()),
-            name: Some("terminal".into()),
+            name: Some("exec_command".into()),
             arguments: Some("{\"path\":".into()),
             signature: None,
         });
@@ -176,7 +176,7 @@ mod tests {
         let calls = acc.finish();
         assert_eq!(calls.len(), 1);
         assert_eq!(calls[0].id, "call_1");
-        assert_eq!(calls[0].name, "terminal");
+        assert_eq!(calls[0].name, "exec_command");
         assert_eq!(calls[0].arguments["operation"], "read");
         assert!(!calls[0].args_parse_error);
     }
@@ -187,7 +187,7 @@ mod tests {
         acc.push(&ToolCallDelta {
             index: 0,
             id: Some("x".into()),
-            name: Some("terminal".into()),
+            name: Some("exec_command".into()),
             arguments: Some("{\"path\":".into()),
             signature: None,
         });
@@ -202,7 +202,7 @@ mod tests {
         acc.push(&ToolCallDelta {
             index: 0,
             id: Some("g".into()),
-            name: Some("terminal".into()),
+            name: Some("exec_command".into()),
             arguments: Some("{\"path\":\"a\"}".into()),
             signature: None,
         });

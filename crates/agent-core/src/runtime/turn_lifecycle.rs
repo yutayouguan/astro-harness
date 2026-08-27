@@ -1148,7 +1148,7 @@ mod tests {
             second.tool_router.model_visible_specs().as_ref()
         );
         assert!(first.advertises_tool("web_search"));
-        assert!(!first.advertises_tool("terminal"));
+        assert!(!first.advertises_tool("exec_command"));
     }
 
     #[tokio::test]

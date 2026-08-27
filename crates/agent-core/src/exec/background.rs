@@ -313,7 +313,7 @@ mod tests {
         let (tx, rx) = async_channel::unbounded();
         let item = TurnItem::CommandExecution(ToolItem {
             id: "call-1".into(),
-            name: "terminal".into(),
+            name: "exec_command".into(),
             arguments: serde_json::json!({"command": "pwd"}),
             output: None,
             media: Vec::new(),

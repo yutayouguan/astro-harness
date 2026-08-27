@@ -127,7 +127,7 @@ mod tests {
                 "skill: demo-skill 结果不对",
                 Some("skills"),
             ),
-            entry(DecisionKind::ToolFailure, "无关日志", Some("terminal")),
+            entry(DecisionKind::ToolFailure, "无关日志", Some("exec_command")),
         ];
         let counts = skill_failure_signals(&decisions, &skills);
         assert_eq!(counts.get("demo-skill"), Some(&3));

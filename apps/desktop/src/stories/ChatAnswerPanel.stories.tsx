@@ -11,7 +11,7 @@ import type { ChatActivity } from "../types";
 const terminalActivity: ChatActivity = {
   id: "storybook-terminal",
   kind: "tool",
-  title: "terminal",
+  title: "exec_command",
   input: '{"operation":"list","path":"."}',
   output:
     "已读取 **当前目录**。可继续查看 `00-README.md`，或按主题生成摘要。\n\n- 14 篇 Markdown\n- 2 个代码目录",
@@ -23,7 +23,7 @@ const groupedActivities: ChatActivity[] = [
   {
     id: "storybook-read",
     kind: "tool",
-    title: "terminal",
+    title: "exec_command",
     input: '{"operation":"read","path":"apps/desktop/src/components/chat/ChatView.tsx"}',
     output: "读取 2146 行",
     status: "done",
@@ -32,7 +32,7 @@ const groupedActivities: ChatActivity[] = [
   {
     id: "storybook-search",
     kind: "tool",
-    title: "terminal",
+    title: "exec_command",
     input: '{"operation":"search","query":"msg-activity"}',
     output: "找到 18 处匹配",
     status: "done",
@@ -41,7 +41,7 @@ const groupedActivities: ChatActivity[] = [
   {
     id: "storybook-run",
     kind: "tool",
-    title: "terminal",
+    title: "exec_command",
     input: '{"cmd":"npm run build"}',
     output: "Build completed",
     status: "done",

@@ -26,7 +26,7 @@ enum ApprovalRoute {
 fn call_uses_managed_network(call: &types::ParsedToolCall) -> bool {
     match call.name.as_str() {
         "code_exec" => true,
-        "terminal" => match call.arguments.get("action") {
+        "exec_command" => match call.arguments.get("action") {
             None => true,
             Some(serde_json::Value::String(action)) => {
                 let action = action.trim();
@@ -918,7 +918,7 @@ async fn review_sandbox_denial(
 pub(crate) fn tool_may_require_permission(name: &str, args: &serde_json::Value) -> bool {
     match name {
         // 权限 profile 和命令规则都可能要求 park；统一走串行 preflight。
-        "terminal" | "code_exec" => true,
+        "exec_command" | "code_exec" => true,
         _ => tools::tool_requires_in_process_write(name, args),
     }
 }
@@ -993,7 +993,7 @@ async fn execute_tools_serial_inner(
         }
 
         // 危险 terminal：deny / auto / ask
-        if call.name == "terminal" && !call.args_parse_error {
+        if call.name == "exec_command" && !call.args_parse_error {
             if let Some(decision) = call
                 .arguments
                 .get("command")
@@ -1702,16 +1702,16 @@ mod tests {
     fn dangerous_commands_force_serial() {
         // hardline(Deny) 必须强制串行——否则会经并发路径绕过 Deny 拦截
         assert!(tool_may_require_permission(
-            "terminal",
+            "exec_command",
             &term("mkfs.ext4 /dev/sdb1")
         ));
         assert!(tool_may_require_permission(
-            "terminal",
+            "exec_command",
             &term("dd if=/dev/zero of=/dev/sda")
         ));
         // Ask 也强制串行（需 HITL 卡）
         assert!(tool_may_require_permission(
-            "terminal",
+            "exec_command",
             &term("rm -rf /tmp/project")
         ));
     }
@@ -1719,10 +1719,10 @@ mod tests {
     #[test]
     fn process_and_mutating_file_tools_force_serial_preflight() {
         assert!(tool_may_require_permission(
-            "terminal",
+            "exec_command",
             &term("rm -rf node_modules")
         ));
-        assert!(tool_may_require_permission("terminal", &term("ls -la")));
+        assert!(tool_may_require_permission("exec_command", &term("ls -la")));
         assert!(tool_may_require_permission(
             "code_exec",
             &serde_json::json!({})
@@ -1849,7 +1849,7 @@ mod tests {
                 session_id: session_id.into(),
                 turn_id: Some("turn-hook".into()),
                 tool_call_id: "call-hook".into(),
-                tool_name: "terminal".into(),
+                tool_name: "exec_command".into(),
                 summary: "run command".into(),
                 capabilities: Vec::new(),
                 reason: types::PermissionReason::RulePrompt,

@@ -234,7 +234,7 @@ mod tests {
     #[test]
     fn detail_uses_canonical_input_fields() {
         let tool = HookPayload {
-            tool_name: Some("terminal".into()),
+            tool_name: Some("exec_command".into()),
             tool_input: Some(json!({"command": "pwd"})),
             ..Default::default()
         };

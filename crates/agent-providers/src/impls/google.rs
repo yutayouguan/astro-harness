@@ -1025,7 +1025,7 @@ mod tests {
             crate::types::Message::user_text("查看当前目录"),
             crate::types::Message::assistant(vec![AssistantContent::ToolCall(ToolCall {
                 id: "call-1".into(),
-                name: "terminal".into(),
+                name: "exec_command".into(),
                 arguments: json!({"command": "pwd"}),
                 signature: Some("sig-1".into()),
             })]),
@@ -1042,7 +1042,7 @@ mod tests {
         assert_eq!(converted.steps[0]["type"], "function_result");
         assert_eq!(converted.steps[0]["call_id"], "call-1");
         // 缺少 name 会被服务端整体拒收。
-        assert_eq!(converted.steps[0]["name"], "terminal");
+        assert_eq!(converted.steps[0]["name"], "exec_command");
         assert_eq!(converted.system.as_deref(), Some("Be helpful"));
     }
 
@@ -1057,7 +1057,7 @@ mod tests {
             .collect();
         assert_eq!(kinds, ["user_input", "function_call", "function_result"]);
         assert_eq!(converted.steps[1]["id"], "call-1");
-        assert_eq!(converted.steps[1]["name"], "terminal");
+        assert_eq!(converted.steps[1]["name"], "exec_command");
         assert_eq!(converted.steps[1]["arguments"]["command"], "pwd");
         assert_eq!(converted.steps[1]["signature"], "sig-1");
         assert_eq!(converted.steps[2]["call_id"], "call-1");
@@ -1075,7 +1075,7 @@ mod tests {
                 },
                 AssistantContent::ToolCall(ToolCall {
                     id: "call-1".into(),
-                    name: "terminal".into(),
+                    name: "exec_command".into(),
                     arguments: json!({"command": "pwd"}),
                     signature: Some("sig-1".into()),
                 }),
@@ -1084,10 +1084,10 @@ mod tests {
         let converted = to_interactions_input(&msgs, false);
         let text = converted.steps[1]["content"][0]["text"].as_str().unwrap();
         assert_eq!(text, "Checking the directory.");
-        assert!(!text.contains("terminal"));
+        assert!(!text.contains("exec_command"));
         assert!(!text.contains("pwd"));
         assert_eq!(converted.steps[2]["type"], "function_call");
-        assert_eq!(converted.steps[2]["name"], "terminal");
+        assert_eq!(converted.steps[2]["name"], "exec_command");
         assert_eq!(converted.steps[2]["arguments"]["command"], "pwd");
     }
 
@@ -1098,7 +1098,7 @@ mod tests {
             crate::types::Message::user_text("查看当前目录"),
             crate::types::Message::assistant(vec![AssistantContent::ToolCall(ToolCall {
                 id: "foreign-call".into(),
-                name: "terminal".into(),
+                name: "exec_command".into(),
                 arguments: json!({"command": "pwd"}),
                 signature: None,
             })]),
@@ -1200,7 +1200,7 @@ mod tests {
     fn function_call_signature_and_arguments_follow_the_native_call_slot() {
         let mut parser = InteractionsStreamState::default();
         let start = parser.extract(
-            r#"{"index":1,"step":{"type":"function_call","id":"fc_1","name":"terminal","arguments":{},"signature":"sig_abc"},"event_type":"step.start"}"#,
+            r#"{"index":1,"step":{"type":"function_call","id":"fc_1","name":"exec_command","arguments":{},"signature":"sig_abc"},"event_type":"step.start"}"#,
         );
         assert!(matches!(
             &start[0],
@@ -1209,7 +1209,7 @@ mod tests {
                 id,
                 name,
                 signature: Some(signature),
-            } if id == "fc_1" && name == "terminal" && signature == "sig_abc"
+            } if id == "fc_1" && name == "exec_command" && signature == "sig_abc"
         ));
 
         let step_done = parser.extract(

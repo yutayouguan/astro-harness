@@ -16,7 +16,7 @@ export type ActivityVisualKind =
 
 const SEARCH_NAMES = /(^|[_-])(search|grep|rg|find|glob|query)([_-]|$)/;
 const READ_NAMES = /(^|[_-])(read|open|list|view|inspect|stat)([_-]|$)/;
-const RUN_NAMES = /(^|[_-])(run|exec|execute|terminal|shell|command|code_exec)([_-]|$)/;
+const RUN_NAMES = /(^|[_-])(run|exec|execute|exec_command|shell|command|code_exec)([_-]|$)/;
 const EDIT_NAMES = /(^|[_-])(edit|write|patch|apply|create|delete|remove|move|copy|rename)([_-]|$)/;
 const BROWSE_NAMES = /(^|[_-])(browser|fetch|crawl|navigate|visit|http|url)([_-]|$)/;
 const MEDIA_NAMES = /(^|[_-])(image|video|audio|media|render|generate)([_-]|$)/;

@@ -124,7 +124,7 @@ mod wire_tests {
             cwd: "/workspace".into(),
             hook_event_name: "PreToolUse".into(),
             model: "gpt-5.6-sol".into(),
-            tool_name: Some("terminal".into()),
+            tool_name: Some("exec_command".into()),
             tool_use_id: Some("call-1".into()),
             tool_input: Some(json!({"command": "pwd"})),
             ..Default::default()
@@ -138,7 +138,7 @@ mod wire_tests {
                 "cwd": "/workspace",
                 "hook_event_name": "PreToolUse",
                 "model": "gpt-5.6-sol",
-                "tool_name": "terminal",
+                "tool_name": "exec_command",
                 "tool_use_id": "call-1",
                 "tool_input": {"command": "pwd"}
             })

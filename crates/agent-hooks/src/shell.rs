@@ -231,7 +231,7 @@ mod tests {
                 turn_id: Some("turn-1".into()),
                 detail: "running terminal".into(),
                 prompt: Some("canonical prompt".into()),
-                tool_name: Some("terminal".into()),
+                tool_name: Some("exec_command".into()),
                 tool_input: Some(serde_json::json!({"message": "do not infer this"})),
                 ..Default::default()
             },
@@ -247,7 +247,7 @@ mod tests {
             env_value(&env, "ASTRO_HOOK_DETAIL"),
             Some("running terminal")
         );
-        assert_eq!(env_value(&env, "ASTRO_HOOK_TOOL"), Some("terminal"));
+        assert_eq!(env_value(&env, "ASTRO_HOOK_TOOL"), Some("exec_command"));
         assert_eq!(
             env_value(&env, "ASTRO_HOOK_MESSAGE"),
             Some("canonical prompt")

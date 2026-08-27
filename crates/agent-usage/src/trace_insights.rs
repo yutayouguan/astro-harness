@@ -694,7 +694,7 @@ mod tests {
         db.insert(evt(Evt {
             ts: "2026-07-13T10:00:01Z",
             kind: "tool",
-            name: "terminal",
+            name: "exec_command",
             agent_id: "default",
             session_id: "s1",
             input_tokens: 0,

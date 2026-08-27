@@ -141,17 +141,17 @@ mod tests {
 
     #[test]
     fn prompt_mentions_tool_and_budget() {
-        let p = tool_summary_prompt("terminal", "hello world", 900);
-        assert!(p.contains("terminal"));
+        let p = tool_summary_prompt("exec_command", "hello world", 900);
+        assert!(p.contains("exec_command"));
         assert!(p.contains("900"));
         assert!(p.contains("hello world"));
     }
 
     #[test]
     fn llm_view_uses_mark() {
-        let v = make_llm_compress_view(Some("terminal"), "ls ok", 1200);
+        let v = make_llm_compress_view(Some("exec_command"), "ls ok", 1200);
         assert!(v.starts_with(TOOL_LLM_COMPRESS_MARK));
-        assert!(v.contains("terminal"));
+        assert!(v.contains("exec_command"));
         assert!(v.contains("ls ok"));
         assert!(types::is_externalized_view(&v));
     }

@@ -293,7 +293,7 @@ pub(super) async fn record_tool_outcomes(
             return false;
         }
 
-        if matches!(call.name.as_str(), "terminal" | "code_exec") && !result_text.is_empty() {
+        if matches!(call.name.as_str(), "exec_command" | "code_exec") && !result_text.is_empty() {
             emit(
                 session,
                 turn_context,

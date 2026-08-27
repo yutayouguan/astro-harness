@@ -575,7 +575,7 @@ mod tests {
     #[test]
     fn chat_contract_rejects_tool_name_override() {
         let mut chat = valid_chat_request();
-        chat.tool_names = vec!["terminal".into()];
+        chat.tool_names = vec!["exec_command".into()];
         assert_eq!(
             validate_chat_request(&chat)
                 .expect_err("tool override must fail")

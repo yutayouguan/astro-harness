@@ -421,7 +421,7 @@ mod tests {
             "run it",
             vec![ToolCall {
                 id: "call-1".into(),
-                name: "terminal".into(),
+                name: "exec_command".into(),
                 arguments: serde_json::json!({"command": "pwd"}),
                 signature: Some("sig-1".into()),
             }],

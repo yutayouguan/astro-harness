@@ -2085,7 +2085,7 @@ fn looks_like_user_correction(msg: &str) -> bool {
 
 fn tool_writes_disk(name: &str, args: &Value) -> bool {
     match name {
-        "terminal" => true,
+        "exec_command" => true,
         "skills" => {
             let action = args
                 .get("action")

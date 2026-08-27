@@ -49,7 +49,7 @@ language must be python|javascript (default python). \
 Runs through the active command sandbox policy with the workspace as cwd. \
 Guardrails: env scrubbing (no API keys/tokens), Unix resource limits (CPU/memory/file size/fd), 30s timeout. \
 stdout/stderr capped at 64KiB. \
-For shell commands, use terminal."
+For shell commands, use exec_command."
             .to_string(),
         schema: schema_for_args::<CodeExecArgs>(),
         check_fn: None,
@@ -153,7 +153,7 @@ pub async fn dispatch(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow
         "python" | "python3" | "py" => ("python3", vec![], "py"),
         "javascript" | "js" => ("node", vec![], "js"),
         "shell" | "bash" | "sh" => {
-            anyhow::bail!("code_exec 不再支持 shell；请使用 terminal 工具执行 shell 命令")
+            anyhow::bail!("code_exec 不再支持 shell；请使用 exec_command 工具执行 shell 命令")
         }
         other => {
             anyhow::bail!("code_exec 不支持 language={other}；请使用 python 或 javascript")
@@ -646,6 +646,6 @@ print(sock.recv(4096).decode())"#;
         )
         .await
         .unwrap_err();
-        assert!(err.to_string().contains("terminal"), "{err}");
+        assert!(err.to_string().contains("exec_command"), "{err}");
     }
 }
