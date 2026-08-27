@@ -1,6 +1,7 @@
 /** 多题澄清叠层向导：Tab + 选项/自由输入 + 卡片切换动画。 */
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { ArrowRight, PencilLine } from "lucide-react";
 import { useI18n } from "../i18n/LocaleContext";
 import {
   isPresetAnswer,
@@ -33,6 +34,7 @@ export default function ClarifyWizard({
   const [direction, setDirection] = useState<Direction>("forward");
   const [pendingIndex, setPendingIndex] = useState<number | null>(null);
   const [collapsed, setCollapsed] = useState(false);
+  const customInputRef = useRef<HTMLInputElement>(null);
 
   const safeIndex = Math.min(Math.max(index, 0), Math.max(steps.length - 1, 0));
   const step = steps[safeIndex];
@@ -217,6 +219,32 @@ export default function ClarifyWizard({
   const customValue =
     customDrafts[step.id] ??
     (saved && !isPresetAnswer(step, saved) ? saved : "");
+  const customActionLabel = isLast
+    ? t("chat.a2ui.clarifySubmit")
+    : t("chat.a2ui.clarifyNext");
+  const previousStepsAnswered = steps
+    .slice(0, safeIndex)
+    .every((s) => answers[s.id]?.trim() || customDrafts[s.id]?.trim());
+  const customActionDisabled =
+    disabled ||
+    phase === "exit" ||
+    !currentHasAnswer() ||
+    (isLast && !previousStepsAnswered);
+
+  const handleCustomAction = () => {
+    if (customActionDisabled) return;
+    const draft = customDrafts[step.id]?.trim();
+    if (draft) {
+      confirmCustom(draft);
+      return;
+    }
+    if (isSingle) return;
+    if (isLast) {
+      handleSubmit();
+    } else {
+      handleNext();
+    }
+  };
 
   const backPeek = multi
     ? steps.slice(safeIndex + 1, safeIndex + 3).map((_, i) => i + 1)
@@ -225,47 +253,54 @@ export default function ClarifyWizard({
   const dirClass = `is-${direction}`;
 
   const customInput = (
-    <label
+    <div
       className={`a2ui-clarify-custom ${hasPresets ? "is-inline-option" : "is-standalone"}`}
+      onClick={(event) => {
+        if ((event.target as HTMLElement).closest("button")) return;
+        customInputRef.current?.focus();
+      }}
     >
-      {hasPresets ? (
-        <span className="a2ui-clarify-custom-label">{t("chat.a2ui.clarifyCustom")}</span>
-      ) : null}
+      <PencilLine className="a2ui-clarify-custom-icon" size={16} aria-hidden />
       <input
+        ref={customInputRef}
         type="text"
         className="a2ui-clarify-custom-input"
         disabled={disabled || phase === "exit"}
-        placeholder={t("chat.a2ui.clarifyCustomPlaceholder")}
+        aria-label={t("chat.a2ui.clarifyCustom")}
+        placeholder={
+          hasPresets
+            ? t("chat.a2ui.clarifyCustom")
+            : t("chat.a2ui.clarifyCustomPlaceholder")
+        }
         value={customValue}
         onChange={(e) => {
           const v = e.target.value;
           setCustomDrafts((prev) => ({ ...prev, [step.id]: v }));
-          if (presetSelected) {
-            setAnswers((prev) => {
-              const next = { ...prev };
-              delete next[step.id];
-              return next;
-            });
-          }
+          setAnswers((prev) => {
+            const next = { ...prev };
+            if (v.trim()) next[step.id] = v.trim();
+            else delete next[step.id];
+            return next;
+          });
         }}
         onKeyDown={(e) => {
           if (e.key === "Enter") {
             e.preventDefault();
-            confirmCustom();
+            handleCustomAction();
           }
         }}
       />
-      {!hasPresets || isSingle ? (
-        <button
-          type="button"
-          className="a2ui-button is-primary a2ui-clarify-custom-submit"
-          disabled={disabled || !customValue.trim() || phase === "exit"}
-          onClick={() => confirmCustom()}
-        >
-          {isSingle ? t("chat.a2ui.clarifySubmit") : t("chat.a2ui.clarifyNext")}
-        </button>
-      ) : null}
-    </label>
+      <button
+        type="button"
+        className="a2ui-clarify-custom-submit"
+        disabled={customActionDisabled}
+        onClick={handleCustomAction}
+        aria-label={customActionLabel}
+        title={customActionLabel}
+      >
+        <ArrowRight size={17} strokeWidth={2.2} aria-hidden />
+      </button>
+    </div>
   );
 
   return (
@@ -364,44 +399,6 @@ export default function ClarifyWizard({
             customInput
           )}
 
-          {multi ? (
-            <div className="a2ui-clarify-nav">
-              <button
-                type="button"
-                className="a2ui-button"
-                disabled={disabled || safeIndex === 0 || phase === "exit"}
-                onClick={() => goTo(safeIndex - 1)}
-              >
-                {t("chat.a2ui.clarifyBack")}
-              </button>
-              {!isLast ? (
-                <button
-                  type="button"
-                  className="a2ui-button is-primary"
-                  disabled={
-                    disabled || !currentHasAnswer() || phase === "exit"
-                  }
-                  onClick={handleNext}
-                >
-                  {t("chat.a2ui.clarifyNext")}
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  className="a2ui-button is-primary"
-                  disabled={
-                    disabled ||
-                    !currentHasAnswer() ||
-                    steps.slice(0, -1).some((s) => !answers[s.id]?.trim()) ||
-                    phase === "exit"
-                  }
-                  onClick={handleSubmit}
-                >
-                  {t("chat.a2ui.clarifySubmit")}
-                </button>
-              )}
-            </div>
-          ) : null}
         </div>
       </div>
     </div>

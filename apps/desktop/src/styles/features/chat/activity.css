@@ -986,102 +986,102 @@ html[data-theme="dark"] .a2ui-clarify-wizard.is-collapsed:hover .a2ui-clarify-co
 }
 
 .a2ui-clarify-custom {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
   width: 100%;
+  box-sizing: border-box;
+  margin: 2px -16px -14px;
+  padding: 10px 12px 10px 16px;
+  border-top: 1px solid color-mix(in srgb, var(--ink) 9%, transparent);
+  background: color-mix(in srgb, var(--ink) 2%, transparent);
+  cursor: text;
+  transition: background 160ms ease;
 }
 
 .a2ui-clarify-custom.is-inline-option {
-  padding: 9px 13px;
-  border-radius: 12px;
-  border: 1px solid var(--a2ui-glass-border);
-  background: var(--a2ui-glass-fill);
-  transition:
-    border-color 160ms ease,
-    background 160ms ease,
-    box-shadow 160ms ease;
+  width: calc(100% + 32px);
+  border-radius: 0 0 17px 17px;
 }
 
-.a2ui-clarify-custom.is-inline-option:focus-within {
-  border-color: var(--a2ui-accent-border);
-  background: var(--a2ui-accent-fill);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent, #6366f1) 14%, transparent);
+.a2ui-clarify-custom.is-standalone {
+  width: calc(100% + 32px);
+  border-radius: 0 0 17px 17px;
 }
 
-.a2ui-clarify-custom-label {
-  font-size: 0.7rem;
-  font-weight: 650;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
+.a2ui-clarify-custom:focus-within {
+  background: color-mix(in srgb, var(--accent, #6366f1) 7%, transparent);
+}
+
+.a2ui-clarify-custom-icon {
+  flex-shrink: 0;
   color: var(--ink-mute);
+  opacity: 0.78;
+  transition: color 160ms ease, opacity 160ms ease;
+}
+
+.a2ui-clarify-custom:focus-within .a2ui-clarify-custom-icon {
+  color: var(--accent, #6366f1);
+  opacity: 1;
 }
 
 .a2ui-clarify-custom-input {
   appearance: none;
+  min-width: 0;
   width: 100%;
-  border: 1px solid var(--a2ui-glass-border);
-  background: var(--a2ui-glass-fill);
+  border: 0;
+  background: transparent;
   color: var(--ink);
-  border-radius: 10px;
-  padding: 9px 12px;
+  border-radius: 0;
+  padding: 7px 0;
   font: inherit;
   font-size: 0.9rem;
-  transition:
-    border-color 160ms ease,
-    box-shadow 160ms ease;
 }
 
 .a2ui-clarify-custom-input:focus-visible {
   outline: none;
-  border-color: var(--a2ui-accent-border);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent, #6366f1) 14%, transparent);
 }
 
 .a2ui-clarify-custom-input::placeholder {
   color: color-mix(in srgb, var(--ink-mute) 82%, transparent);
 }
 
-.a2ui-clarify-custom.is-inline-option .a2ui-clarify-custom-input {
-  border: none;
-  background: transparent;
-  padding: 2px 0 0;
-}
-
-.a2ui-clarify-custom.is-inline-option .a2ui-clarify-custom-input:focus-visible {
-  box-shadow: none;
-}
-
 .a2ui-clarify-custom-submit {
-  align-self: flex-start;
-}
-
-.a2ui-clarify-nav {
-  display: flex;
-  justify-content: space-between;
-  gap: 8px;
-  margin-top: 4px;
-}
-
-.a2ui-clarify-nav .a2ui-button {
-  min-width: 5.5rem;
-  padding: 8px 16px;
-  font-weight: 600;
+  appearance: none;
+  display: inline-grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: 1px solid color-mix(in srgb, var(--accent, #6366f1) 50%, transparent);
+  border-radius: 50%;
+  background: var(--accent, #6366f1);
+  color: #fff;
+  cursor: pointer;
+  box-shadow: 0 5px 14px color-mix(in srgb, var(--accent, #6366f1) 24%, transparent);
   transition:
     background 160ms ease,
     border-color 160ms ease,
+    opacity 160ms ease,
     box-shadow 160ms ease,
     transform 160ms cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
-.a2ui-clarify-nav .a2ui-button:hover:not(:disabled) {
-  transform: translateY(-1px);
-  border-color: color-mix(in srgb, var(--ink) 20%, var(--a2ui-glass-border));
+.a2ui-clarify-custom-submit:hover:not(:disabled) {
+  transform: translateY(-1px) scale(1.03);
+  box-shadow: 0 7px 18px color-mix(in srgb, var(--accent, #6366f1) 32%, transparent);
 }
 
-.a2ui-clarify-nav .a2ui-button.is-primary:hover:not(:disabled) {
-  border-color: var(--a2ui-accent-border);
-  box-shadow: 0 6px 16px color-mix(in srgb, var(--accent, #6366f1) 24%, transparent);
+.a2ui-clarify-custom-submit:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent, #6366f1) 55%, #fff);
+  outline-offset: 2px;
+}
+
+.a2ui-clarify-custom-submit:disabled {
+  cursor: default;
+  opacity: 0.3;
+  box-shadow: none;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -1090,7 +1090,9 @@ html[data-theme="dark"] .a2ui-clarify-wizard.is-collapsed:hover .a2ui-clarify-co
   .a2ui-clarify-option::before,
   .a2ui-clarify-option::after,
   .a2ui-clarify-progress-fill,
-  .a2ui-clarify-nav .a2ui-button {
+  .a2ui-clarify-custom,
+  .a2ui-clarify-custom-icon,
+  .a2ui-clarify-custom-submit {
     transition: none;
   }
   .a2ui-clarify-layer.is-front.is-exit,
