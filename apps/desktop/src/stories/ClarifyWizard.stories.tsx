@@ -1,7 +1,8 @@
 import { useState } from "react";
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import ClarifyWizard from "../a2ui/ClarifyWizard";
+import ComposerClarifySurface from "../components/chat/ComposerClarifySurface";
 import { LocaleProvider } from "../i18n/LocaleContext";
+import type { UiSurface } from "../types";
 
 const steps = [
   {
@@ -16,6 +17,41 @@ const steps = [
   },
 ];
 
+const surface: UiSurface = {
+  messageId: "clarify-preview",
+  activityType: "clarify",
+  status: "active",
+  operations: [
+    {
+      createSurface: {
+        surfaceId: "clarify-preview",
+        catalogId: "astro://a2ui/catalog/v2",
+      },
+    },
+    {
+      updateComponents: {
+        surfaceId: "clarify-preview",
+        components: [
+          { id: "root", component: "Card", child: "col" },
+          {
+            id: "col",
+            component: "Column",
+            children: ["badge", "title", "wizard"],
+          },
+          { id: "badge", component: "Badge", text: "Clarify", variant: "info" },
+          {
+            id: "title",
+            component: "Text",
+            text: "定制专属健身计划 - 基础信息收集",
+            variant: "h2",
+          },
+          { id: "wizard", component: "ClarifyWizard", steps },
+        ],
+      },
+    },
+  ],
+};
+
 function ClarifyWizardPreview() {
   const [result, setResult] = useState<Record<string, unknown> | null>(null);
 
@@ -27,12 +63,26 @@ function ClarifyWizardPreview() {
           minHeight: "100vh",
           boxSizing: "border-box",
           padding: "48px 24px",
+          display: "flex",
+          flexDirection: "column",
+          justifyContent: "flex-end",
           background: "var(--shell-bg)",
           color: "var(--ink)",
         }}
       >
-        <div style={{ width: "min(760px, 100%)", margin: "0 auto" }}>
-          <ClarifyWizard steps={steps} onAction={(_, context) => setResult(context)} />
+        <div className="composer-shell">
+          <div className="composer composer--stacked has-clarify">
+            <ComposerClarifySurface
+              surface={surface}
+              onAction={(_, context) => setResult(context)}
+            />
+            <div className="composer-bar" aria-hidden>
+              <div className="composer-bar-left">
+                <span className="composer-mode-pill">∞ Agent · 请求批准</span>
+              </div>
+              <div className="composer-bar-right" />
+            </div>
+          </div>
           {result ? (
             <pre data-testid="clarify-result" style={{ marginTop: 20 }}>
               {JSON.stringify(result, null, 2)}

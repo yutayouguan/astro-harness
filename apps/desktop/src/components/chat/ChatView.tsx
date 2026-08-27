@@ -135,6 +135,7 @@ import { useMcpTools } from "../../hooks/providers/useMcpTools";
 import { useTypingPlaceholder } from "../../hooks/chat/useTypingPlaceholder";
 import LocationA2UISurface from "./LocationA2UISurface";
 import A2UISurfaceCard from "./A2UISurfaceCard";
+import ComposerClarifySurface from "./ComposerClarifySurface";
 import TodoProgress from "./TodoProgress";
 import SubagentActivityBar from "./SubagentActivityBar";
 import SubagentsPanel from "./SubagentsPanel";
@@ -146,6 +147,10 @@ import {
   isConsecutiveActivityGroup,
 } from "../../lib/chat/groupActivities";
 import { isLocationRequiredSurface } from "../../lib/chat/locationSurface";
+import {
+  findComposerClarifySurface,
+  isClarifySurface,
+} from "../../lib/chat/composerClarify";
 import {
   isAgentIconSrc,
   type AgentIconInfo,
@@ -1650,6 +1655,10 @@ export default function ChatView({
   };
 
   const interruptBlocked = pendingInterrupts.length > 0;
+  const composerClarify = useMemo(
+    () => findComposerClarifySurface(messages, pendingInterrupts),
+    [messages, pendingInterrupts],
+  );
   const canQueueWhileBusy =
     streaming || turnInFlight || interruptBlocked;
   const canSend =
@@ -1698,7 +1707,7 @@ export default function ChatView({
 
   const showStopControl = streaming || turnInFlight;
   const showPauseResume = streaming;
-  const showSendButton = !streaming;
+  const showSendButton = !streaming && !composerClarify;
   const modeSwitchLocked = streaming || turnInFlight || interruptBlocked;
   const parallelRunningIds = useMemo(
     () =>
@@ -1911,6 +1920,9 @@ export default function ChatView({
                         const pushSurface = (
                           surface: NonNullable<ChatMessage["uiSurfaces"]>[number],
                         ) => {
+                          // Clarify is an input interaction: it belongs in the composer,
+                          // never inside the assistant answer timeline.
+                          if (isClarifySurface(surface)) return;
                           steps.push({
                             key: `surf-${surface.messageId}`,
                             kind: "surface",
@@ -2533,7 +2545,7 @@ export default function ChatView({
         ) : null}
 
         <div
-          className={`composer composer--stacked ${fileDragOver ? "is-file-dragover" : ""}`.trim()}
+          className={`composer composer--stacked ${composerClarify ? "has-clarify" : ""} ${fileDragOver ? "is-file-dragover" : ""}`.trim()}
         >
           <input
             ref={fileInputRef}
@@ -2551,11 +2563,20 @@ export default function ChatView({
               {t("chat.dropFilesHint")}
             </div>
           ) : null}
-          {emptyMode === "agent" && agentCreateMissing.length > 0 ? (
+          {!composerClarify && emptyMode === "agent" && agentCreateMissing.length > 0 ? (
             <p className="composer-agent-validate-hint" role="alert">
               {t("chat.agentCreateNeedRequired")}
             </p>
           ) : null}
+          {composerClarify ? (
+            <ComposerClarifySurface
+              surface={composerClarify.surface}
+              mediaBaseDir={mediaBaseDir}
+              onAction={(name, context) =>
+                onUiAction?.(composerClarify.messageId, name, context)
+              }
+            />
+          ) : (
           <div className={`composer-input-wrap ${emptyMode === "agent" ? "is-agent-template" : ""}`.trim()}>
             <div
               className="composer-typed-hint"
@@ -2631,6 +2652,7 @@ export default function ChatView({
               autoFocus
             />
           </div>
+          )}
           <div className="composer-bar">
             <div className="composer-bar-left">
               <div className="composer-mode" ref={modeMenuRef}>
