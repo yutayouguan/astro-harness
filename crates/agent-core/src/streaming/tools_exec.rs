@@ -552,23 +552,7 @@ async fn review_once_permission(
             );
             return Some(PermissionPreflight::Granted(Box::new(audit)));
         }
-        fire_post_permission_response(
-            session,
-            &request.session_id,
-            request.turn_id.as_deref(),
-            request,
-            "deny",
-        )
-        .await;
-        audit.record_review(
-            selection.approvals_reviewer,
-            "auto_denied",
-            false,
-            review_started.elapsed().as_millis() as u64,
-        );
-        return Some(PermissionPreflight::Denied(
-            "Permission denied by automatic approval review".to_string(),
-        ));
+        // 辅模型未放行时回退到用户手动审批（有 HITL gate 的情况下）
     }
 
     let Some(gate) = hitl_gate else {
@@ -1271,27 +1255,9 @@ async fn execute_tools_serial_inner(
                                     approval_started.elapsed().as_millis() as u64,
                                 );
                                 permission_audits.push(approval_audit);
-                            } else if route == ApprovalRoute::Smart {
-                                fire_post_approval_response(
-                                    session,
-                                    &approval_session_id,
-                                    approval_turn_id.as_deref(),
-                                    &cmd,
-                                    "deny",
-                                )
-                                .await;
-                                approval_audit.record_review(
-                                    permissions.approvals_reviewer,
-                                    "auto_denied",
-                                    false,
-                                    approval_started.elapsed().as_millis() as u64,
-                                );
-                                out.push(
-                                    "Command denied by automatic approval review. Do not retry the same action or attempt a workaround without explicit user authorization."
-                                        .into(),
-                                );
-                                continue;
                             } else if let Some(gate) = hitl_gate {
+                                // Smart 模式下辅模型未放行时回退到用户手动审批，
+                                // 而非直接拒绝——「不确定就问用户」比「不确定就拒绝」更合理。
                                 let title = "批准危险命令";
                                 let body = format!(
                                     "检测到潜在危险操作（{}）：\n\n```\n{cmd}\n```",
