@@ -468,9 +468,6 @@ html[data-theme="dark"] .project-files-panel {
 /* 阴影必须落在 .composer 上：父级 filter 会成为 backdrop root，令毛玻璃失效。 */
 .chat-pane.has-project-file .composer {
   border-color: color-mix(in srgb, var(--tone) 10%, var(--glass-edge));
-  background:
-    linear-gradient(145deg, rgba(255, 255, 255, 0.2), rgba(255, 255, 255, 0.06)),
-    color-mix(in srgb, var(--glass-panel) 96%, transparent);
   backdrop-filter: blur(calc(26px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.14));
   -webkit-backdrop-filter: blur(calc(26px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.14));
   box-shadow: 0 16px 34px rgba(var(--shadow-ink), 0.1);

@@ -54,3 +54,18 @@ test("composer overlay clearance follows the live composer height", () => {
   assert.match(chatView, /--composer-overlay-height/);
   assert.match(chatView, /ref=\{composerShellRef\}/);
 });
+
+test("floating composer uses a legible glass surface", () => {
+  const composer = rule(chatStyles, ".composer");
+  const darkComposer = rule(chatStyles, 'html[data-theme="dark"] .composer');
+
+  assert.ok(composer, "missing composer rule");
+  assert.match(composer, /--composer-surface-base:\s*rgba\([^;]+0\.78\);/);
+  assert.match(composer, /background:[\s\S]*var\(--composer-surface-sheen\)/);
+  assert.match(composer, /backdrop-filter:\s*blur\(/);
+  assert.doesNotMatch(composer, /background:\s*transparent;/);
+
+  assert.ok(darkComposer, "missing dark composer rule");
+  assert.match(darkComposer, /--composer-surface-base:\s*rgba\([^;]+0\.76\);/);
+  assert.doesNotMatch(darkComposer, /background:\s*transparent;/);
+});
