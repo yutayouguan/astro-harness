@@ -146,6 +146,8 @@ export interface UseSendDeps {
   onModeSwitchPrompt?: (req: ModeSwitchRequest) => void;
   /** A steered queue item is durable in the active turn history. */
   onUserInputCommitted?: (clientMessageId: string) => void;
+  /** 独立临时聊天不覆盖主聊天的 context usage 快照。 */
+  persistContextUsage?: boolean;
 }
 
 function calcTokensPerSec(completionTokens: number, durationMs: number): number | undefined {
@@ -218,6 +220,7 @@ export function useSend(deps: UseSendDeps) {
         showTransientToast,
         turnInFlightRef,
         setTurnInFlight,
+        persistContextUsage = true,
         lastStreamActivityAtRef,
         onModeSwitchDetected,
         onModeSwitchPrompt,
@@ -511,7 +514,7 @@ export function useSend(deps: UseSendDeps) {
           } else if (payload.type === "context_usage") {
             const snap = normalizeContextUsageEvent(payload);
             setContextUsage(snap);
-            if (sid) saveContextUsageForSession(sid, snap);
+            if (sid && persistContextUsage) saveContextUsageForSession(sid, snap);
             if (snap.recommendCompact) {
               const now = Date.now();
               // 流式中只提示，不自动拆 session；60s 冷却避免刷屏

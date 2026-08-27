@@ -1,12 +1,16 @@
-/* 临时侧边聊天：行为独立，外壳与其余右侧容器共用 chat dock 表面。 */
+/* Codex-style 临时侧聊：外壳独立，内部完整复用主 ChatView。 */
 
 .side-chat-panel {
   --side-tone: var(--tone, var(--accent, #2563eb));
-  --side-line: color-mix(in srgb, var(--side-tone) 18%, var(--glass-edge, rgba(15, 23, 42, 0.1)));
+  --side-line: color-mix(
+    in srgb,
+    var(--side-tone) 18%,
+    var(--glass-edge, rgba(15, 23, 42, 0.1))
+  );
   position: relative;
   z-index: 2;
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr) auto;
+  grid-template-rows: auto minmax(0, 1fr);
   flex: 0 0 auto;
   width: min(var(--side-chat-width, 384px), 46%);
   min-width: 0;
@@ -20,8 +24,6 @@
   box-shadow: var(--chat-dock-surface-shadow);
   will-change: transform, opacity;
 }
-
-/* ── 头部 ─────────────────────────────────────────────── */
 
 .side-chat-head {
   display: flex;
@@ -84,7 +86,9 @@
   color: var(--ink-mute);
   background: transparent;
   cursor: pointer;
-  transition: color 0.15s ease, background 0.15s ease;
+  transition:
+    color 0.15s ease,
+    background 0.15s ease;
 }
 
 .side-chat-close:hover {
@@ -97,318 +101,84 @@
   outline-offset: 1px;
 }
 
-/* ── 消息区 ───────────────────────────────────────────── */
-
-.side-chat-messages {
-  display: flex;
+/* 主聊天整体嵌入 Side 容器；只改变窄宽度下的密度。 */
+.side-chat-body {
+  position: relative;
+  min-width: 0;
   min-height: 0;
-  flex-direction: column;
-  gap: 12px;
-  padding: 16px 12px 12px;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  scrollbar-width: thin;
+  overflow: hidden;
 }
 
-.side-chat-empty {
-  display: flex;
-  min-height: 100%;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  padding: 12px;
-  text-align: center;
-}
-
-.side-chat-empty-mark {
-  display: grid;
-  place-items: center;
-  width: 48px;
-  height: 48px;
-  margin-bottom: 2px;
-  border-radius: 16px;
-  color: var(--side-tone);
-  background: color-mix(in srgb, var(--side-tone) 10%, transparent);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--side-tone) 18%, transparent);
-}
-
-.side-chat-empty strong {
-  color: var(--ink);
-  font-size: 12.5px;
-  font-weight: 640;
-}
-
-.side-chat-empty p {
-  max-width: 240px;
-  margin: 0;
-  color: var(--ink-mute);
-  font-size: 10.5px;
-  line-height: 1.6;
-}
-
-.side-chat-suggestions {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 6px;
-  margin-top: 6px;
-}
-
-.side-chat-suggestions button {
-  padding: 5px 10px;
-  border: 1px solid color-mix(in srgb, var(--side-tone) 18%, var(--glass-edge, transparent));
-  border-radius: 999px;
-  color: color-mix(in srgb, var(--side-tone) 72%, var(--ink));
-  background: color-mix(in srgb, var(--side-tone) 7%, transparent);
-  font-size: 10.5px;
-  cursor: pointer;
-  transition: background 0.15s ease, border-color 0.15s ease, transform 0.15s ease;
-}
-
-.side-chat-suggestions button:hover {
-  border-color: color-mix(in srgb, var(--side-tone) 34%, transparent);
-  background: color-mix(in srgb, var(--side-tone) 14%, transparent);
-  transform: translateY(-1px);
-}
-
-.side-chat-msg {
-  display: flex;
-  max-width: 90%;
-  flex-direction: column;
-  padding: 9px 11px;
-  border-radius: 14px;
-  color: var(--ink);
-  font-size: 12px;
-}
-
-.side-chat-msg.is-user {
-  align-self: flex-end;
-  border: 1px solid color-mix(in srgb, var(--side-tone) 22%, transparent);
-  border-bottom-right-radius: 5px;
-  background: color-mix(in srgb, var(--side-tone) 10%, transparent);
-}
-
-.side-chat-msg.is-assistant {
-  align-self: stretch;
-  max-width: 100%;
-  border: 1px solid color-mix(in srgb, var(--glass-edge, rgba(15, 23, 42, 0.08)) 70%, transparent);
-  border-bottom-left-radius: 5px;
-  background: rgba(255, 255, 255, 0.34);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.4);
-}
-
-html[data-theme="dark"] .side-chat-msg.is-assistant {
-  background: rgba(255, 255, 255, 0.045);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
-}
-
-.side-chat-msg.is-error {
-  border-color: color-mix(in srgb, var(--danger, #dc2626) 34%, transparent);
-  background: color-mix(in srgb, var(--danger, #dc2626) 7%, transparent);
-}
-
-/* 侧栏窄，压一档字号并收紧代码块与列表 */
-.side-chat-msg .msg-content {
-  font-size: 12px;
-  line-height: 1.62;
-}
-
-.side-chat-msg .msg-md-pre {
-  font-size: 10.5px;
-}
-
-.side-chat-msg .msg-content > :first-child {
-  margin-top: 0;
-}
-
-.side-chat-msg .msg-content > :last-child {
-  margin-bottom: 0;
-}
-
-.side-chat-reasoning {
-  margin-bottom: 7px;
-  color: var(--ink-mute);
-  font-size: 10px;
-}
-
-.side-chat-reasoning summary {
-  cursor: pointer;
-  list-style: none;
-  user-select: none;
-}
-
-.side-chat-reasoning summary::-webkit-details-marker {
-  display: none;
-}
-
-.side-chat-reasoning summary::before {
-  content: "▸";
-  display: inline-block;
-  margin-right: 4px;
-  transition: transform 0.15s ease;
-}
-
-.side-chat-reasoning[open] summary::before {
-  transform: rotate(90deg);
-}
-
-.side-chat-reasoning p {
-  max-height: 128px;
-  margin: 6px 0 0;
-  padding-left: 9px;
-  overflow: auto;
-  border-left: 2px solid color-mix(in srgb, var(--side-tone) 24%, transparent);
-  line-height: 1.6;
-  white-space: pre-wrap;
-}
-
-.side-chat-tools {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 5px;
-  margin-bottom: 7px;
-}
-
-.side-chat-tools span {
-  padding: 2px 6px;
-  border-radius: 6px;
-  color: color-mix(in srgb, var(--side-tone) 76%, var(--ink));
-  background: color-mix(in srgb, var(--side-tone) 9%, transparent);
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 9.5px;
-  line-height: 1.5;
-}
-
-.side-chat-error {
-  align-self: stretch;
-  padding: 7px 9px;
-  border: 1px solid color-mix(in srgb, var(--danger, #dc2626) 26%, transparent);
-  border-radius: 10px;
-  color: var(--danger, #dc2626);
-  background: color-mix(in srgb, var(--danger, #dc2626) 6%, transparent);
-  font-size: 10.5px;
-  line-height: 1.5;
-}
-
-/* ── 输入区 ───────────────────────────────────────────── */
-
-.side-chat-foot {
-  padding: 8px 10px 10px;
-  border-top: 1px solid color-mix(in srgb, var(--side-line) 70%, transparent);
-}
-
-.side-chat-composer {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: end;
-  gap: 8px;
-  padding: 8px 8px 8px 11px;
-  border: 1px solid color-mix(in srgb, var(--side-tone) 10%, var(--glass-edge, transparent));
-  border-radius: 18px;
-  background: rgba(255, 255, 255, 0.3);
-  transition: border-color 0.2s var(--ease-out, ease), box-shadow 0.2s var(--ease-out, ease),
-    background 0.2s ease;
-}
-
-html[data-theme="dark"] .side-chat-composer {
-  background: rgba(255, 255, 255, 0.04);
-}
-
-.side-chat-composer:focus-within {
-  border-color: color-mix(in srgb, var(--side-tone) 26%, transparent);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--side-tone) 9%, transparent);
-}
-
-.side-chat-composer textarea {
+.side-chat-body > .chat-pane {
   width: 100%;
-  min-height: 24px;
-  max-height: 148px;
-  padding: 2px 0 3px;
-  border: 0;
-  outline: none;
-  resize: none;
-  color: var(--ink);
-  background: transparent;
-  font: inherit;
-  font-size: 12px;
-  line-height: 1.55;
-  scrollbar-width: thin;
+  height: 100%;
+  border-radius: 0;
 }
 
-.side-chat-composer textarea::placeholder {
-  color: var(--ink-mute);
+.side-chat-body .message-list {
+  padding: 16px 12px calc(var(--composer-overlay-height, 112px) + 20px);
 }
 
-.side-chat-send {
-  display: grid;
-  place-items: center;
-  width: 30px;
-  height: 30px;
+.side-chat-body .msg-row {
+  width: 100%;
   flex: 0 0 auto;
-  padding: 0;
-  border: 1px solid color-mix(in srgb, #fff 22%, transparent);
-  border-radius: 999px;
-  color: #fff;
-  background: var(--side-tone);
-  box-shadow:
-    0 4px 12px color-mix(in srgb, var(--side-tone) 28%, transparent),
-    inset 0 1px 0 rgba(255, 255, 255, 0.24);
-  cursor: pointer;
-  transition: filter 0.15s ease, transform 0.18s var(--ease-spring, ease), box-shadow 0.18s ease;
+  gap: 9px;
 }
 
-/* 与主输入区一致：发送箭头朝上，停止方块不旋转 */
-.side-chat-send:not(.is-stop) svg {
-  transform: rotate(-90deg);
+.side-chat-body .msg-row.assistant .avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 10px;
 }
 
-.side-chat-send.is-stop {
-  border-color: rgba(255, 255, 255, 0.14);
-  color: #f8fafc;
-  background: #1e293b;
-  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.22);
+.side-chat-body .msg-row.assistant .msg-stack {
+  max-width: calc(100% - 37px);
 }
 
-.side-chat-send:hover:not(:disabled) {
-  filter: brightness(1.07);
-  transform: scale(1.05);
+.side-chat-body .msg-row.user .msg-stack {
+  max-width: 84%;
 }
 
-.side-chat-send:active:not(:disabled) {
-  transform: scale(0.93);
-  transition-duration: 0.08s;
+.side-chat-body .bubble.assistant {
+  padding: 13px 13px 12px;
+  border-radius: 14px;
 }
 
-.side-chat-send:disabled {
-  opacity: 0.4;
-  box-shadow: none;
-  cursor: not-allowed;
+.side-chat-body .bubble.assistant .msg-timeline-step {
+  grid-template-columns: 22px minmax(0, 1fr);
+  gap: 8px;
 }
 
-.side-chat-hint {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  height: 14px;
-  margin: 6px 2px 0;
-  color: var(--ink-mute);
-  font-size: 9.5px;
+.side-chat-body .bubble.assistant .msg-timeline-dot {
+  width: 22px;
+  height: 22px;
+  border-radius: 8px;
 }
 
-.side-chat-hint .side-chat-spinner {
-  color: var(--side-tone);
-  animation: side-chat-spin 0.9s linear infinite;
+.side-chat-body .composer-shell {
+  right: 10px;
+  bottom: 10px;
+  left: 10px;
+  max-width: none;
 }
 
-@keyframes side-chat-spin {
-  to {
-    transform: rotate(360deg);
-  }
+.side-chat-body .composer {
+  margin: 0;
+  border-radius: 18px;
 }
 
-/* ── 主聊天区顶栏：当前会话本身就是临时 Side 时的提示 ── */
+.side-chat-body .composer-mode-pill {
+  max-width: 150px;
+}
 
+.side-chat-body .composer-mode-pill-label,
+.side-chat-body .composer-policy-approval {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 主聊天区顶栏：当前会话本身就是临时 Side 时的提示。 */
 .chat-side-banner {
   --side-tone: var(--tone, var(--accent, #2563eb));
   display: flex;
@@ -417,7 +187,8 @@ html[data-theme="dark"] .side-chat-composer {
   min-height: 40px;
   margin: 8px 12px 0;
   padding: 7px 9px 7px 10px;
-  border: 1px dashed color-mix(in srgb, var(--side-tone) 32%, var(--glass-edge, transparent));
+  border: 1px dashed
+    color-mix(in srgb, var(--side-tone) 32%, var(--glass-edge, transparent));
   border-radius: 14px;
   background: color-mix(in srgb, var(--side-tone) 7%, transparent);
 }
@@ -461,13 +232,16 @@ html[data-theme="dark"] .side-chat-composer {
   gap: 5px;
   margin-left: auto;
   padding: 0 9px;
-  border: 1px solid color-mix(in srgb, var(--side-tone) 26%, var(--glass-edge, transparent));
+  border: 1px solid
+    color-mix(in srgb, var(--side-tone) 26%, var(--glass-edge, transparent));
   border-radius: 999px;
   color: color-mix(in srgb, var(--side-tone) 76%, var(--ink));
   background: rgba(255, 255, 255, 0.32);
   font-size: 10px;
   cursor: pointer;
-  transition: background 0.15s ease, border-color 0.15s ease;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease;
 }
 
 html[data-theme="dark"] .chat-side-banner button {
@@ -484,11 +258,12 @@ html[data-theme="dark"] .chat-side-banner button {
   outline-offset: 2px;
 }
 
-/* 窄屏改为覆盖式，避免挤压主任务 */
+/* 窄屏改为覆盖式，避免挤压主任务。 */
 @media (max-width: 900px) {
   .side-chat-panel {
     position: absolute;
-    inset: var(--chat-dock-inset) var(--chat-dock-inset) var(--chat-dock-inset) auto;
+    inset: var(--chat-dock-inset) var(--chat-dock-inset) var(--chat-dock-inset)
+      auto;
     z-index: 22;
     width: min(88vw, 400px);
     margin: 0;
@@ -496,12 +271,7 @@ html[data-theme="dark"] .chat-side-banner button {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .side-chat-send:hover:not(:disabled),
-  .side-chat-suggestions button:hover {
-    transform: none;
-  }
-
-  .side-chat-hint .side-chat-spinner {
-    animation-duration: 2.4s;
+  .side-chat-panel .msg-row {
+    animation-duration: 0.1s;
   }
 }

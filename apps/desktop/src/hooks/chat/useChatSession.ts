@@ -105,8 +105,15 @@ export interface UseChatSessionDeps {
   chatDisplayPrefsRef: RefObject<ChatDisplayPrefs>;
   t: TFn;
   showTransientToast: ShowToastFn;
-  nav: NavId;
-  setNav: Dispatch<SetStateAction<NavId>>;
+  nav?: NavId;
+  setNav?: Dispatch<SetStateAction<NavId>>;
+  /** 是否把当前 UI 会话快照写入 localStorage。 */
+  persistClientState?: boolean;
+  /** 独立聊天表面可直接绑定已创建的 backend session。 */
+  initialSessionId?: string | null;
+  initialParentSessionId?: string | null;
+  initialExcludedTurnCount?: number;
+  initialEphemeral?: boolean;
 }
 
 export function useChatSession({
@@ -118,18 +125,25 @@ export function useChatSession({
   chatDisplayPrefsRef,
   t,
   showTransientToast,
-  nav,
-  setNav,
+  nav = "chat",
+  setNav = () => {},
+  persistClientState = true,
+  initialSessionId = null,
+  initialParentSessionId = null,
+  initialExcludedTurnCount = 0,
+  initialEphemeral = false,
 }: UseChatSessionDeps) {
+  const [initialStored] = useState(() =>
+    persistClientState ? loadChatSession() : null,
+  );
   // ── Core state ────────────────────────────────────────────────────────────
   const [messages, setMessages] = useState<ChatMessage[]>(() => {
-    const stored = loadChatSession();
-    if (stored?.messages?.length) return stored.messages;
+    if (initialStored?.messages?.length) return initialStored.messages;
     return [];
   });
   const [emptyMode, setEmptyMode] = useState<ChatEmptyMode>(() => {
-    const stored = loadChatSession();
-    return stored && !isWelcomeOnly(stored.messages) ? null : "chat";
+    if (initialSessionId) return null;
+    return initialStored && !isWelcomeOnly(initialStored.messages) ? null : "chat";
   });
   const [input, setInput] = useState("");
   const [attachments, setAttachments] = useState<ChatAttachment[]>([]);
@@ -152,22 +166,22 @@ export function useChatSession({
   const [streamPaused, setStreamPaused] = useState(false);
   const [tokenUsage, setTokenUsage] = useState<MessageTokenUsage | null>(null);
   const [contextUsage, setContextUsage] = useState<ContextUsageSnapshot | null>(
-    () => loadChatSession()?.contextUsage ?? null,
+    () => initialStored?.contextUsage ?? null,
   );
   const [sessionId, setSessionId] = useState<string | null>(
-    () => loadChatSession()?.sessionId ?? null,
+    () => initialSessionId ?? initialStored?.sessionId ?? null,
   );
   const [sideParentSessionId, setSideParentSessionId] = useState<string | null>(
-    () => loadChatSession()?.parentSessionId ?? null,
+    () => initialParentSessionId ?? initialStored?.parentSessionId ?? null,
   );
   const [sideExcludedTurnCount, setSideExcludedTurnCount] = useState(
-    () => loadChatSession()?.excludedTurnCount ?? 0,
+    () => initialExcludedTurnCount || initialStored?.excludedTurnCount || 0,
   );
   const [sessionEphemeral, setSessionEphemeral] = useState(
-    () => loadChatSession()?.ephemeral ?? false,
+    () => initialEphemeral || initialStored?.ephemeral || false,
   );
   const [sessionPendingInterrupts, setSessionPendingInterrupts] = useState<PendingInterrupt[]>(
-    () => loadChatSession()?.pendingInterrupts ?? [],
+    () => initialStored?.pendingInterrupts ?? [],
   );
   const [sessionReadOnly, setSessionReadOnly] = useState(false);
   const [sessionEndReason, setSessionEndReason] = useState<string | null>(null);
@@ -180,6 +194,7 @@ export function useChatSession({
   const [statusDetail, setStatusDetail] = useState<string | null>(null);
   const [memoryPendingCount, setMemoryPendingCount] = useState(0);
   const [chatRightOpen, setChatRightOpen] = useState(() => {
+    if (!persistClientState) return false;
     try {
       return localStorage.getItem("astro.chatRightOpen") === "1";
     } catch {
@@ -190,7 +205,7 @@ export function useChatSession({
   const confirm = useConfirm();
 
   useEffect(() => {
-    if (!sessionEphemeral || !sessionId || isWelcomeOnly(messages)) return;
+    if (!persistClientState || !sessionEphemeral || !sessionId || isWelcomeOnly(messages)) return;
     saveEphemeralSessionMeta(
       sessionId,
       sideParentSessionId,
@@ -202,6 +217,7 @@ export function useChatSession({
     sessionId,
     sideParentSessionId,
     sideExcludedTurnCount,
+    persistClientState,
   ]);
 
   // ── 生成中文件实时预览 ──────────────────────────────────────────────────────
@@ -344,6 +360,7 @@ export function useChatSession({
     onModeSwitchDetected,
     onModeSwitchPrompt,
     onUserInputCommitted,
+    persistContextUsage: persistClientState,
   });
 
   const prevChatModeRef = useRef(chatMode);
@@ -724,20 +741,21 @@ export function useChatSession({
 
   // ── Persist session ───────────────────────────────────────────────────────
   useEffect(() => {
-    if (restoringRef.current || streaming) return;
+    if (!persistClientState || restoringRef.current || streaming) return;
     saveChatSession(sessionId, messages, sessionPendingInterrupts, contextUsage);
     if (sessionId && contextUsage) {
       saveContextUsageForSession(sessionId, contextUsage);
     }
-  }, [messages, sessionId, streaming, sessionPendingInterrupts, contextUsage]);
+  }, [messages, sessionId, streaming, sessionPendingInterrupts, contextUsage, persistClientState]);
 
   useEffect(() => {
+    if (!persistClientState) return;
     try {
       localStorage.setItem("astro.chatRightOpen", chatRightOpen ? "1" : "0");
     } catch {
       // ignore quota / private mode
     }
-  }, [chatRightOpen]);
+  }, [chatRightOpen, persistClientState]);
 
   // ── Memory pending count init ─────────────────────────────────────────────
   useEffect(() => {
@@ -886,13 +904,15 @@ export function useChatSession({
       // 按会话恢复占用快照，避免显示上一会话数字
       const usage = loadContextUsageForSession(sid);
       setContextUsage(usage);
-      saveChatSession(sid, restored, pendingInterrupts, usage);
+      if (persistClientState) {
+        saveChatSession(sid, restored, pendingInterrupts, usage);
+      }
       queueMicrotask(() => {
         restoringRef.current = false;
       });
       return true;
     },
-    [currentRunIdRef],
+    [currentRunIdRef, persistClientState],
   );
 
   const restoreChatHistory = useCallback(async () => {
@@ -901,9 +921,9 @@ export function useChatSession({
     if (pendingKeepChatBubblesRef.current != null || dissolvingIdsRef.current.length > 0) {
       return;
     }
-    if (isChatCleared()) return;
+    if (persistClientState && isChatCleared()) return;
 
-    const stored = loadChatSession();
+    const stored = persistClientState ? loadChatSession() : null;
     if (stored && !isWelcomeOnly(stored.messages)) {
       applyRestoredHistory(
         stored.sessionId,
@@ -926,7 +946,7 @@ export function useChatSession({
           })
           .catch(() => {
             if (!stored.ephemeral) return;
-            clearChatSession();
+            if (persistClientState) clearChatSession();
             setMessages([]);
             setSessionId(null);
             setSessionEphemeral(false);
@@ -950,7 +970,7 @@ export function useChatSession({
       setSessionEphemeral(!!history.ephemeral);
       setSideParentSessionId(history.ephemeral ? history.parentSessionId ?? null : null);
       setSideExcludedTurnCount(history.ephemeral ? history.excludedTurnCount ?? 0 : 0);
-      if (history.ephemeral && history.sessionId) {
+      if (history.ephemeral && history.sessionId && persistClientState) {
         saveEphemeralSessionMeta(
           history.sessionId,
           history.parentSessionId,
@@ -960,7 +980,7 @@ export function useChatSession({
     } catch {
       // keep welcome page if backend unavailable
     }
-  }, [applyRestoredHistory, messages, sessionId, streaming]);
+  }, [applyRestoredHistory, messages, sessionId, streaming, persistClientState]);
 
   const discardCurrentSide = useCallback(
     async (nextSessionId?: string | null) => {
@@ -981,7 +1001,7 @@ export function useChatSession({
     unlistenRef.current?.();
     unlistenRef.current = null;
     clearStreamBuffers();
-    clearChatSession();
+    if (persistClientState) clearChatSession();
     pendingKeepChatBubblesRef.current = null;
     setSessionId(null);
     setSessionEphemeral(false);
@@ -1032,7 +1052,7 @@ export function useChatSession({
       }).catch(() => {});
       sessionWorktreeRef.current = null;
     }
-  }, [activeAssistantIdRef, clearStreamBuffers, currentRunIdRef, setNav]);
+  }, [activeAssistantIdRef, clearStreamBuffers, currentRunIdRef, persistClientState, setNav]);
 
   /** 永久删除当前会话前：先取消流并丢弃本地监听，避免 ghost token。 */
   const prepareDeleteCurrentSession = useCallback(async () => {
@@ -1105,7 +1125,7 @@ export function useChatSession({
       setSessionEndReason(null);
       setSessionId(res.newSessionId);
       setEmptyMode(null);
-      saveChatSession(res.newSessionId, [], []);
+      if (persistClientState) saveChatSession(res.newSessionId, [], []);
 
       try {
         const history = await invoke<ChatHistoryDto>("get_chat_history", {
@@ -1115,7 +1135,7 @@ export function useChatSession({
         const restored = mapHistoryMessages(history.messages ?? []);
         if (!applyRestoredHistory(res.newSessionId, restored, [], null)) {
           setMessages(restored);
-          saveChatSession(res.newSessionId, restored, []);
+          if (persistClientState) saveChatSession(res.newSessionId, restored, []);
         }
         showTransientToast(
           res.degraded ? t("chat.compactDegraded") : t("chat.compactDone"),
@@ -1381,7 +1401,7 @@ export function useChatSession({
       pendingKeepChatBubblesRef.current = bubbleStart;
 
       const beginCut = () => {
-        persistAfterEditTruncate(sessionId, kept);
+        if (persistClientState) persistAfterEditTruncate(sessionId, kept);
         setInput(userMsg.content);
         setAttachments((userMsg.attachments ?? []).map((a) => ({ ...a })));
         setSessionPendingInterrupts([]);
@@ -1446,7 +1466,7 @@ export function useChatSession({
       }
       beginCut();
     },
-    [messages, streaming, dissolvingIds.length, sessionId, showTransientToast, t],
+    [messages, streaming, dissolvingIds.length, sessionId, persistClientState, showTransientToast, t],
   );
 
   const deleteMessage = useCallback(
@@ -1465,10 +1485,10 @@ export function useChatSession({
       const applyLocal = () => {
         setMessages(next);
         if (next.length === 0 || next.every((m) => m.id === "welcome")) {
-          clearChatSession();
+          if (persistClientState) clearChatSession();
           queueMicrotask(() => setEmptyMode("chat"));
         } else {
-          saveChatSession(sessionId, next, []);
+          if (persistClientState) saveChatSession(sessionId, next, []);
         }
         setSessionPendingInterrupts([]);
       };
@@ -1496,7 +1516,7 @@ export function useChatSession({
       }
       applyLocal();
     },
-    [messages, sessionId, streaming, showTransientToast, t],
+    [messages, sessionId, streaming, persistClientState, showTransientToast, t],
   );
 
   const branchMessage = useCallback(
@@ -1541,10 +1561,10 @@ export function useChatSession({
       setSessionReadOnly(false);
       setSessionEndReason(null);
       setEmptyMode(null);
-      saveChatSession(newId, keep, []);
+      if (persistClientState) saveChatSession(newId, keep, []);
       showTransientToast(t("chat.branchDone"), { tone: "success" });
     },
-    [messages, streaming, sessionId, clearStreamBuffers, showTransientToast, t, currentRunIdRef],
+    [messages, streaming, sessionId, clearStreamBuffers, persistClientState, showTransientToast, t, currentRunIdRef],
   );
 
   // ── HITL UI action ────────────────────────────────────────────────────────
@@ -1789,7 +1809,7 @@ export function useChatSession({
         setSessionEphemeral(!!hist.ephemeral);
         setSideParentSessionId(hist.ephemeral ? hist.parentSessionId ?? null : null);
         setSideExcludedTurnCount(hist.ephemeral ? hist.excludedTurnCount ?? 0 : 0);
-        if (hist.ephemeral) {
+        if (hist.ephemeral && persistClientState) {
           saveEphemeralSessionMeta(
             resolvedSessionId,
             hist.parentSessionId,
@@ -1812,6 +1832,7 @@ export function useChatSession({
       setNav,
       resetSchedulingSurface,
       discardCurrentSide,
+      persistClientState,
     ],
   );
 

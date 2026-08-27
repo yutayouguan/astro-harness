@@ -10,6 +10,7 @@ import {
   PanelRight,
   Plus,
   RotateCw,
+  SendHorizontal,
   X,
 } from "lucide-react";
 import SubagentActivityBar from "../components/chat/SubagentActivityBar";
@@ -91,6 +92,51 @@ function DockPanel({ kind }: { kind: DockKind }) {
             <X size={15} />
           </button>
         </header>
+        <div className="side-chat-body">
+          <section className="chat-pane">
+            <div className="message-list-wrap">
+              <div className="message-list">
+                <article className="msg-row assistant">
+                  <div className="avatar is-model">G</div>
+                  <div className="msg-stack">
+                    <div className="bubble assistant">
+                      <div className="msg-content">
+                        <p>当前任务已完成界面梳理，我可以继续检查工具调用和审批流程。</p>
+                      </div>
+                    </div>
+                  </div>
+                </article>
+                <article className="msg-row user">
+                  <div className="msg-stack">
+                    <div className="bubble user">
+                      <div className="msg-content">再检查一下 Skills 和附件</div>
+                    </div>
+                  </div>
+                </article>
+              </div>
+            </div>
+            <form className="composer-shell">
+              <div className="composer composer--stacked">
+                <div className="composer-input-wrap">
+                  <textarea className="composer-input" placeholder="询问当前任务…" rows={1} />
+                </div>
+                <div className="composer-bar">
+                  <div className="composer-bar-left">
+                    <button type="button" className="composer-mode-pill">∞ Agent</button>
+                    <button type="button" className="composer-icon-btn" aria-label="添加">
+                      <Plus size={17} />
+                    </button>
+                  </div>
+                  <div className="composer-bar-right">
+                    <button type="button" className="send-btn send-btn--round" aria-label="发送">
+                      <SendHorizontal size={15} />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </form>
+          </section>
+        </div>
       </aside>
     );
   }

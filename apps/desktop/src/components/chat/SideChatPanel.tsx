@@ -1,218 +1,105 @@
-import { useCallback, useEffect, useRef, useState } from "react";
-import { invoke } from "@tauri-apps/api/core";
-import { listen, type UnlistenFn } from "@tauri-apps/api/event";
-import { Loader2, MessageSquare, SendHorizontal, Square, X } from "lucide-react";
+import { useCallback, useRef, useState } from "react";
 import { motion, useReducedMotion } from "framer-motion";
+import { MessageSquare, X } from "lucide-react";
+import { useChatSession } from "../../hooks/chat/useChatSession";
+import type { ChatDisplayPrefs } from "../../hooks/chat/useChatDisplayPrefs";
+import { useTransientToast } from "../../hooks/ui/useTransientToast";
 import { useI18n } from "../../i18n/LocaleContext";
-import type { ChatHistoryDto, ProviderDto } from "../../types";
-import { ChatMarkdown } from "./ChatMarkdown";
-
-type SideMessage = {
-  id: string;
-  role: "user" | "assistant";
-  content: string;
-  reasoning?: string;
-  tools?: string[];
-  error?: boolean;
-};
-
-type StreamPayload = {
-  type: string;
-  content?: string;
-  message?: string;
-  name?: string;
-  outcome_type?: string;
-};
-
-/** 空态里的快捷追问，点击即发送。 */
-const SUGGESTION_KEYS = [
-  "chat.side.askProgress",
-  "chat.side.askWhy",
-  "chat.side.askRisk",
-] as const;
+import type { ChatWorkMode } from "../../lib/chat/chatMode";
+import { usagePercent } from "../../lib/chat/contextUsage";
+import type {
+  ChatThinkingPrefs,
+  ThinkingLevel,
+} from "../../lib/chat/thinkingPrefs";
+import type {
+  ModelCapabilities,
+  ModelPricingMeta,
+  ModelReasoningMeta,
+  ProviderDto,
+} from "../../types";
+import ChatView from "./ChatView";
 
 type Props = {
   sessionId: string;
+  parentSessionId: string | null;
+  activeProjectId: string;
   provider: ProviderDto;
-  interactionMode: string;
+  providers: ProviderDto[];
+  displayPrefs: ChatDisplayPrefs;
+  interactionMode: ChatWorkMode;
+  thinkingPrefs: ChatThinkingPrefs;
+  showThinkingControls: boolean;
+  reasoningMeta: ModelReasoningMeta | null;
+  modelCapabilities: ModelCapabilities | null;
+  modelPricing: ModelPricingMeta | null;
+  contextWindow: number;
+  onThinkingLevelChange: (level: ThinkingLevel) => void;
+  onToggleThinking: () => void;
+  onOpenMcpSettings: () => void;
+  onOpenContext: () => void;
   onClose: () => void | Promise<void>;
 };
 
-/** Codex-style 旁路对话：独立流、独立输入框，不改变左侧主任务状态。 */
+/**
+ * Codex-style Side Chat：复用完整 ChatView 与 useChatSession 能力，
+ * 但关闭浏览器端快照持久化，由父级在关闭时删除 ephemeral backend session。
+ */
 export default function SideChatPanel({
   sessionId,
+  parentSessionId,
+  activeProjectId,
   provider,
+  providers,
+  displayPrefs,
   interactionMode,
+  thinkingPrefs,
+  showThinkingControls,
+  reasoningMeta,
+  modelCapabilities,
+  modelPricing,
+  contextWindow,
+  onThinkingLevelChange,
+  onToggleThinking,
+  onOpenMcpSettings,
+  onOpenContext,
   onClose,
 }: Props) {
   const { t } = useI18n();
   const reducedMotion = useReducedMotion();
-  const [messages, setMessages] = useState<SideMessage[]>([]);
-  const [input, setInput] = useState("");
-  const [streaming, setStreaming] = useState(false);
-  const [activeAssistantId, setActiveAssistantId] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const unlistenRef = useRef<UnlistenFn | null>(null);
-  const scrollRef = useRef<HTMLDivElement | null>(null);
-  const inputRef = useRef<HTMLTextAreaElement | null>(null);
+  const { showToast, toastHost } = useTransientToast();
+  const displayPrefsRef = useRef(displayPrefs);
+  displayPrefsRef.current = displayPrefs;
+  const [sideMode, setSideMode] = useState<ChatWorkMode>(interactionMode);
 
-  useEffect(() => {
-    void invoke<ChatHistoryDto>("get_chat_history", {
-      sessionId,
-      limit: 120,
-    }).then((history) => {
-      setMessages(
-        (history.messages ?? []).flatMap((message) =>
-          message.role === "user" || message.role === "assistant"
-            ? [{
-                id: message.id,
-                role: message.role,
-                content: message.content,
-                reasoning: message.reasoning ?? undefined,
-              }]
-            : [],
-        ),
-      );
-    }).catch((reason) => setError(String(reason)));
-  }, [sessionId]);
+  const chat = useChatSession({
+    activeProjectId,
+    activeProvider: provider,
+    providers,
+    chatMode: sideMode,
+    onChatModeChange: setSideMode,
+    chatDisplayPrefsRef: displayPrefsRef,
+    t,
+    showTransientToast: showToast,
+    persistClientState: false,
+    initialSessionId: sessionId,
+    initialParentSessionId: parentSessionId,
+    initialEphemeral: true,
+  });
 
-  useEffect(() => {
-    scrollRef.current?.scrollTo({
-      top: scrollRef.current.scrollHeight,
-      behavior: "smooth",
-    });
-  }, [messages]);
-
-  // 输入框跟随内容增高，超过上限后交给自身滚动。
-  useEffect(() => {
-    const field = inputRef.current;
-    if (!field) return;
-    field.style.height = "auto";
-    field.style.height = `${Math.min(field.scrollHeight, 148)}px`;
-  }, [input]);
-
-  useEffect(
-    () => () => {
-      unlistenRef.current?.();
-      unlistenRef.current = null;
-    },
-    [],
-  );
-
-  const stop = useCallback(async () => {
-    if (!streaming) return;
-    await invoke("chat_control", { sessionId, action: "cancel" }).catch(() => {});
-  }, [sessionId, streaming]);
-
-  const send = useCallback(async (prompt?: string) => {
-    const content = (prompt ?? input).trim();
-    if (!content || streaming) return;
-    const userId = `side-u-${crypto.randomUUID()}`;
-    const assistantId = `side-a-${crypto.randomUUID()}`;
-    setInput("");
-    setError(null);
-    setStreaming(true);
-    setActiveAssistantId(assistantId);
-    setMessages((current) => [
-      ...current,
-      { id: userId, role: "user", content },
-      { id: assistantId, role: "assistant", content: "" },
-    ]);
-
-    try {
-      unlistenRef.current?.();
-      const eventName = `chat_stream_${sessionId}`;
-      unlistenRef.current = await listen<StreamPayload>(eventName, (event) => {
-        const payload = event.payload;
-        if (payload.type === "token" && payload.content) {
-          setMessages((current) =>
-            current.map((message) =>
-              message.id === assistantId
-                ? { ...message, content: message.content + payload.content }
-                : message,
-            ),
-          );
-        } else if (payload.type === "text_reconcile") {
-          setMessages((current) =>
-            current.map((message) =>
-              message.id === assistantId
-                ? { ...message, content: payload.content ?? message.content }
-                : message,
-            ),
-          );
-        } else if (payload.type === "reasoning" && payload.content) {
-          setMessages((current) =>
-            current.map((message) =>
-              message.id === assistantId
-                ? {
-                    ...message,
-                    reasoning: `${message.reasoning ?? ""}${payload.content}`,
-                  }
-                : message,
-            ),
-          );
-        } else if (payload.type === "tool_call" && payload.name) {
-          setMessages((current) =>
-            current.map((message) =>
-              message.id === assistantId
-                ? {
-                    ...message,
-                    tools: Array.from(new Set([...(message.tools ?? []), payload.name!])),
-                  }
-                : message,
-            ),
-          );
-        } else if (payload.type === "error") {
-          const message = payload.message || t("status.unknownError");
-          setError(message);
-          setMessages((current) =>
-            current.map((item) =>
-              item.id === assistantId ? { ...item, error: true } : item,
-            ),
-          );
-        } else if (payload.type === "done") {
-          setStreaming(false);
-          setActiveAssistantId(null);
-          unlistenRef.current?.();
-          unlistenRef.current = null;
-        }
-      });
-
-      await invoke<string>("start_chat", {
-        request: {
-          content,
-          provider: provider.backend_id,
-          providerId: provider.id,
-          model: provider.model,
-          sessionId,
-          useMemory: true,
-          thinkingEnabled: false,
-          reasoningEffort: "high",
-          interactionMode,
-          projectRoot: null,
-          attachments: [],
-        },
-      });
-    } catch (reason) {
-      const message = String(reason);
-      setError(message);
-      setStreaming(false);
-      setActiveAssistantId(null);
-      unlistenRef.current?.();
-      unlistenRef.current = null;
-      setMessages((current) =>
-        current.map((item) =>
-          item.id === assistantId ? { ...item, content: message, error: true } : item,
-        ),
-      );
+  const close = useCallback(async () => {
+    if (chat.streaming || chat.turnInFlight) {
+      await chat.stopStream();
     }
-  }, [input, interactionMode, provider, sessionId, streaming, t]);
+    await onClose();
+  }, [chat.stopStream, chat.streaming, chat.turnInFlight, onClose]);
 
   return (
     <motion.aside
       className="side-chat-panel"
       aria-label={t("chat.side.panel")}
-      initial={reducedMotion ? { opacity: 0 } : { opacity: 0, x: 12, scale: 0.98 }}
+      initial={
+        reducedMotion ? { opacity: 0 } : { opacity: 0, x: 12, scale: 0.98 }
+      }
       animate={{ opacity: 1, x: 0, scale: 1 }}
       exit={
         reducedMotion
@@ -240,7 +127,7 @@ export default function SideChatPanel({
         <button
           type="button"
           className="side-chat-close"
-          onClick={() => void onClose()}
+          onClick={() => void close()}
           title={t("chat.side.close")}
           aria-label={t("chat.side.close")}
         >
@@ -248,89 +135,76 @@ export default function SideChatPanel({
         </button>
       </header>
 
-      <div className="side-chat-messages" ref={scrollRef}>
-        {messages.length === 0 && (
-          <div className="side-chat-empty">
-            <span className="side-chat-empty-mark" aria-hidden>
-              <MessageSquare size={22} />
-            </span>
-            <strong>{t("chat.side.emptyTitle")}</strong>
-            <p>{t("chat.side.emptyHint")}</p>
-            <div className="side-chat-suggestions">
-              {SUGGESTION_KEYS.map((key) => (
-                <button key={key} type="button" onClick={() => void send(t(key))}>
-                  {t(key)}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-        {messages.map((message) => (
-          <article
-            key={message.id}
-            className={`side-chat-msg is-${message.role}${message.error ? " is-error" : ""}`}
-          >
-            {message.reasoning && (
-              <details className="side-chat-reasoning">
-                <summary>{t("chat.side.reasoning")}</summary>
-                <p>{message.reasoning}</p>
-              </details>
-            )}
-            {message.tools && message.tools.length > 0 && (
-              <div className="side-chat-tools">
-                {message.tools.map((tool) => <span key={tool}>{tool}</span>)}
-              </div>
-            )}
-            <ChatMarkdown
-              content={message.content}
-              streaming={streaming && message.id === activeAssistantId}
-              compact
-              caret={streaming && message.id === activeAssistantId}
-            />
-          </article>
-        ))}
-        {error && <div className="side-chat-error">{error}</div>}
+      <div className="side-chat-body">
+        <ChatView
+          sessionId={chat.sessionId}
+          messages={chat.messages}
+          input={chat.input}
+          attachments={chat.attachments}
+          streaming={chat.streaming}
+          turnInFlight={chat.turnInFlight}
+          streamPaused={chat.streamPaused}
+          sendBlocked={chat.isCompacting || chat.sessionReadOnly}
+          sendBlockedReason={
+            chat.isCompacting
+              ? t("chat.compactInProgress")
+              : chat.sessionReadOnly
+                ? t("chat.sessionEndedReadOnly")
+                : undefined
+          }
+          displayPrefs={displayPrefs}
+          emptyMode={chat.emptyMode}
+          focusMessageId={chat.focusMessageId}
+          onFocusConsumed={() => chat.setFocusMessageId(null)}
+          onInputChange={chat.setInput}
+          onAttachmentsChange={chat.setAttachments}
+          onSend={chat.send}
+          queuedFollowUps={chat.queuedFollowUps}
+          onRemoveQueuedFollowUp={chat.removeQueuedFollowUp}
+          onUpdateQueuedFollowUpText={chat.updateQueuedFollowUpText}
+          onMoveQueuedFollowUp={chat.moveQueuedFollowUp}
+          onSteerQueuedFollowUp={chat.steerQueuedFollowUp}
+          onCloseQueuedFollowUps={chat.closeQueuedFollowUps}
+          modeSwitchPrompt={chat.modeSwitchPrompt}
+          onApproveModeSwitch={chat.approveModeSwitch}
+          onDismissModeSwitch={chat.dismissModeSwitch}
+          parallelTasks={chat.parallelTasks}
+          onCancelParallelTask={chat.cancelParallelTask}
+          onWriteParallelSummary={chat.writeParallelSummary}
+          onClearSettledParallel={chat.clearSettledParallel}
+          pendingInterrupts={chat.sessionPendingInterrupts}
+          onUiAction={chat.onUiAction}
+          onPauseStream={chat.pauseStream}
+          onResumeStream={chat.resumeStream}
+          onStopStream={chat.stopStream}
+          onNewChat={() => void close()}
+          onPickWelcomePrompt={chat.setInput}
+          showThinkingControls={showThinkingControls}
+          reasoningMeta={reasoningMeta}
+          thinkingPrefs={thinkingPrefs}
+          onToggleThinking={onToggleThinking}
+          onThinkingLevelChange={onThinkingLevelChange}
+          onOpenMcpSettings={onOpenMcpSettings}
+          chatMode={sideMode}
+          onChatModeChange={setSideMode}
+          onOpenContext={onOpenContext}
+          onRegenerateMessage={chat.regenerateMessage}
+          onEditUserMessage={chat.editUserMessage}
+          dissolvingIds={chat.dissolvingIds}
+          onDeleteMessage={chat.deleteMessage}
+          contextUsage={chat.contextUsage}
+          contextWindow={contextWindow}
+          modelId={provider.model}
+          modelCapabilities={modelCapabilities}
+          modelPricing={modelPricing}
+          contextUsagePercent={
+            chat.contextUsage && contextWindow > 0
+              ? usagePercent(chat.contextUsage.totalTokens, contextWindow)
+              : null
+          }
+        />
       </div>
-
-      <footer className="side-chat-foot">
-        <div className="side-chat-composer">
-          <textarea
-            ref={inputRef}
-            value={input}
-            onChange={(event) => setInput(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
-                event.preventDefault();
-                void send();
-              }
-            }}
-            placeholder={t("chat.side.placeholder")}
-            rows={1}
-          />
-          <button
-            type="button"
-            className={`side-chat-send${streaming ? " is-stop" : ""}`}
-            onClick={() => void (streaming ? stop() : send())}
-            disabled={!streaming && !input.trim()}
-            title={streaming ? t("chat.side.stop") : t("chat.send")}
-            aria-label={streaming ? t("chat.side.stop") : t("chat.send")}
-          >
-            {streaming
-              ? <Square size={12} strokeWidth={2.4} fill="currentColor" aria-hidden />
-              : <SendHorizontal size={15} strokeWidth={2.2} aria-hidden />}
-          </button>
-        </div>
-        <div className="side-chat-hint">
-          {streaming ? (
-            <>
-              <Loader2 className="side-chat-spinner" size={11} aria-hidden />
-              {t("chat.side.thinking")}
-            </>
-          ) : (
-            t("chat.side.enterHint")
-          )}
-        </div>
-      </footer>
+      {toastHost}
     </motion.aside>
   );
 }

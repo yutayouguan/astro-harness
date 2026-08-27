@@ -1670,8 +1670,25 @@ export default function App() {
                       <SideChatPanel
                         key={`side-chat-${sideSessionId}`}
                         sessionId={sideSessionId}
+                        parentSessionId={sideHostSessionId}
+                        activeProjectId={activeProjectId}
                         provider={activeProvider}
+                        providers={providers}
+                        displayPrefs={chatDisplayPrefs}
                         interactionMode={chatMode}
+                        thinkingPrefs={thinkingPrefs}
+                        showThinkingControls={showThinking}
+                        reasoningMeta={activeModelReasoning}
+                        modelCapabilities={activeModelCapabilities}
+                        modelPricing={activeModelPricing}
+                        contextWindow={contextWindow}
+                        onThinkingLevelChange={onThinkingLevelChange}
+                        onToggleThinking={onToggleThinking}
+                        onOpenMcpSettings={() => {
+                          setSkillsInitialTab("mcp");
+                          setNav("skills");
+                        }}
+                        onOpenContext={() => openChatRightDock("context")}
                         onClose={closeSideChat}
                       />
                     )}
