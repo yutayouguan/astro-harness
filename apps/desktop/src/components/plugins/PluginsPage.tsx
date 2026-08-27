@@ -1,4 +1,4 @@
-/** 插件能力中心入口：Skills 与 MCP 共用同一套作用域导航。 */
+/** 插件能力中心入口：Skills 与 MCP 使用各自的来源分类导航。 */
 import SkillsPanel, {
   type SkillsPanelProps,
 } from "../settings/SkillsPanel";

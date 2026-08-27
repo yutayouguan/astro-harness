@@ -7,6 +7,20 @@ import { open } from "@tauri-apps/plugin-shell";
 export type McpTransportType = "stdio" | "streamableHttp";
 export type McpToolApprovalMode = "auto" | "prompt" | "writes" | "approve";
 export type McpConfigScope = "global" | "builtin" | "project";
+export const MCP_PUBLIC_CATEGORY_IDS = [
+  "featured",
+  "productivity",
+  "development",
+  "finance",
+  "travel",
+  "health",
+  "research",
+  "education",
+  "communication",
+  "analytics",
+  "other",
+] as const;
+export type McpPublicCategory = (typeof MCP_PUBLIC_CATEGORY_IDS)[number];
 export type McpRuntimeState =
   | "configured"
   | "disabled"
@@ -159,6 +173,10 @@ export type McpServer = {
   scope: McpConfigScope;
   provenance: string;
   editable: boolean;
+  /** 公开 MCP 目录中的分类；个人配置通常不提供。 */
+  category?: Exclude<McpPublicCategory, "featured">;
+  /** 是否进入公开目录的精选集合。 */
+  featured?: boolean;
 };
 
 export function isMcpToolEnabled(server: McpServer, toolName: string): boolean {
@@ -278,6 +296,9 @@ function normalizeServer(raw: Partial<McpServer> & { id?: string; name?: string 
         openWorldHint: typeof d.openWorldHint === "boolean" ? d.openWorldHint : undefined,
       }))
     : [];
+  const category = MCP_PUBLIC_CATEGORY_IDS.find(
+    (item) => item !== "featured" && item === config.category,
+  ) as Exclude<McpPublicCategory, "featured"> | undefined;
   for (const d of discovered) {
     if (d.name && tools[d.name] === undefined) tools[d.name] = true;
   }
@@ -322,6 +343,8 @@ function normalizeServer(raw: Partial<McpServer> & { id?: string; name?: string 
       config.scope === "builtin" || config.scope === "project" ? config.scope : "global",
     provenance: typeof config.provenance === "string" ? config.provenance : "user",
     editable: config.editable !== false,
+    category,
+    featured: config.featured === true,
   };
 }
 

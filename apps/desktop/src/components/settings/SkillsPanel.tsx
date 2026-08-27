@@ -20,6 +20,7 @@ import {
   ExternalLink,
   FileText,
   FolderOpen,
+  Globe2,
   HardDrive,
   Image as ImageIcon,
   LayoutGrid,
@@ -84,6 +85,10 @@ import { CopyMorphIcon, MorphToggleIcon } from "../icons/MorphIcon";
 import McpIcon from "../icons/McpIcon";
 import { IconRefresh } from "../icons/NavIcons";
 import { useMcpSection } from "./McpSection";
+import {
+  MCP_PUBLIC_CATEGORY_IDS,
+  type McpPublicCategory,
+} from "../../hooks/providers/useMcpTools";
 import { SelectMenu } from "../ui/SelectMenu";
 import EmptyIllustration from "../../illustrations/EmptyIllustration";
 import {
@@ -150,6 +155,7 @@ export type SkillsPanelProps = {
 
 type PluginsPrimaryTab = "skills" | "mcp";
 type PluginScope = "global" | "builtin" | "project";
+type McpScopeTab = "personal" | "public";
 type PersonalSkillsTab = "installed" | "machine" | "online";
 type SkillsDrawer = "updates";
 type SkillInstallTarget = "global" | "project";
@@ -392,6 +398,9 @@ export default function SkillsPanel({
   const { showToast, toastHost } = useTransientToast();
   const [primaryTab, setPrimaryTab] = useState<PluginsPrimaryTab>("skills");
   const [scope, setScope] = useState<PluginScope>("global");
+  const [mcpScope, setMcpScope] = useState<McpScopeTab>("personal");
+  const [mcpPublicCategory, setMcpPublicCategory] =
+    useState<McpPublicCategory>("featured");
   const [personalTab, setPersonalTab] = useState<PersonalSkillsTab>("installed");
   const [drawer, setDrawer] = useState<SkillsDrawer | null>(null);
   const [installed, setInstalled] = useState<InstalledSkill[]>([]);
@@ -442,7 +451,8 @@ export default function SkillsPanel({
     query: mcpQuery,
     viewMode,
     hostRef: pageRef,
-    scope,
+    scope: mcpScope === "public" ? "builtin" : "global",
+    publicCategory: mcpScope === "public" ? mcpPublicCategory : undefined,
   });
   const [selectedDetailId, setSelectedDetailId] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
@@ -2723,49 +2733,91 @@ export default function SkillsPanel({
 
   return (
     <div className="skills-page" data-tone={tone ?? "indigo"} ref={pageRef}>
-      <div className="plugins-primary-row">
-        <div className="skills-main-tabs" role="tablist" aria-label={t("plugins.tabs")}>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={primaryTab === "skills"}
-            className={`skills-main-tab ${primaryTab === "skills" ? "active" : ""}`}
-            onClick={() => setPrimaryTab("skills")}
-          >
-            <Package size={15} strokeWidth={2.25} aria-hidden />
-            {t("plugins.tab.skills")}
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={primaryTab === "mcp"}
-            className={`skills-main-tab ${primaryTab === "mcp" ? "active" : ""}`}
-            onClick={() => setPrimaryTab("mcp")}
-          >
-            <McpIcon size={15} />
-            {t("plugins.tab.mcp")}
-          </button>
-        </div>
-      </div>
-
-      <div className="skills-toolbar plugins-scope-toolbar">
-        <div className="plugins-scope-tabs" role="tablist" aria-label={t("plugins.scopes")}>
-          {(["global", "builtin", "project"] as const).map((item) => (
+      <div className="plugins-command-bar">
+        <div className="plugins-command-row plugins-command-row--primary">
+          <div className="skills-main-tabs" role="tablist" aria-label={t("plugins.tabs")}>
             <button
-              key={item}
               type="button"
               role="tab"
-              aria-selected={scope === item}
-              className={`plugins-scope-tab ${scope === item ? "is-active" : ""}`}
-              onClick={() => setScope(item)}
+              aria-selected={primaryTab === "skills"}
+              className={`skills-main-tab ${primaryTab === "skills" ? "active" : ""}`}
+              onClick={() => setPrimaryTab("skills")}
             >
-              {item === "global" ? <Library size={14} /> : item === "builtin" ? <Bot size={14} /> : <FolderOpen size={14} />}
-              {t(`plugins.scope.${item}` as MessageKey)}
+              <Package size={15} strokeWidth={2.25} aria-hidden />
+              {t("plugins.tab.skills")}
             </button>
-          ))}
+            <button
+              type="button"
+              role="tab"
+              aria-selected={primaryTab === "mcp"}
+              className={`skills-main-tab ${primaryTab === "mcp" ? "active" : ""}`}
+              onClick={() => setPrimaryTab("mcp")}
+            >
+              <McpIcon size={15} />
+              {t("plugins.tab.mcp")}
+            </button>
+          </div>
+
+          <div className="plugins-command-divider" aria-hidden />
+
+          {primaryTab === "skills" ? (
+            <div className="plugins-scope-tabs" role="tablist" aria-label={t("plugins.skillsScopes")}>
+              {(["global", "builtin", "project"] as const).map((item) => (
+                <button
+                  key={item}
+                  type="button"
+                  role="tab"
+                  aria-selected={scope === item}
+                  className={`plugins-scope-tab ${scope === item ? "is-active" : ""}`}
+                  onClick={() => setScope(item)}
+                >
+                  {item === "global" ? <Library size={14} aria-hidden /> : item === "builtin" ? <Bot size={14} aria-hidden /> : <FolderOpen size={14} aria-hidden />}
+                  {t(`plugins.scope.${item}` as MessageKey)}
+                </button>
+              ))}
+            </div>
+          ) : (
+            <div className="plugins-scope-tabs" role="tablist" aria-label={t("plugins.mcpScopes")}>
+              {(["personal", "public"] as const).map((item) => (
+                <button
+                  key={item}
+                  type="button"
+                  role="tab"
+                  aria-selected={mcpScope === item}
+                  className={`plugins-scope-tab ${mcpScope === item ? "is-active" : ""}`}
+                  onClick={() => setMcpScope(item)}
+                >
+                  {item === "personal" ? <User size={14} aria-hidden /> : <Globe2 size={14} aria-hidden />}
+                  {t(`plugins.mcpScope.${item}` as MessageKey)}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
 
-        <div className="skills-toolbar-end">
+        <div className="skills-toolbar plugins-context-toolbar">
+          {primaryTab === "skills" && scope === "global" && (
+            <div className="plugins-personal-tabs" role="tablist" aria-label={t("plugins.personalTabs")}>
+              {(["installed", "online", "machine"] as const).map((item) => (
+                <button
+                  key={item}
+                  type="button"
+                  role="tab"
+                  aria-selected={personalTab === item}
+                  className={`plugins-personal-tab ${item === "machine" ? "is-import" : ""} ${personalTab === item ? "is-active" : ""}`}
+                  onClick={() => setPersonalTab(item)}
+                >
+                  {item === "installed" ? <Package size={15} aria-hidden /> : item === "online" ? <CloudDownload size={15} aria-hidden /> : <HardDrive size={15} aria-hidden />}
+                  {t(`plugins.personalTab.${item}` as MessageKey)}
+                  {item === "machine" && machineSkills.length > 0 && (
+                    <span className="plugins-personal-tab-count">{machineSkills.length}</span>
+                  )}
+                </button>
+              ))}
+            </div>
+          )}
+
+          <div className="skills-toolbar-end">
           {primaryTab === "skills" ? (
             <>
               {personalTab === "installed" && (
@@ -2818,7 +2870,7 @@ export default function SkillsPanel({
               {viewToggle}
               {scope === "global" && (
                 <button type="button" className="skills-icon-btn" onClick={() => setDrawer("updates")} title={t("plugins.action.updates")} aria-label={t("plugins.action.updates")}>
-                  <RefreshCw size={16} />
+                  <Download size={16} />
                   {outdatedCount > 0 && <span className="plugins-action-count">{outdatedCount}</span>}
                 </button>
               )}
@@ -2855,49 +2907,38 @@ export default function SkillsPanel({
                 className="skills-icon-btn"
                 onClick={mcp.openAdd}
                 disabled={!mcp.canAdd}
-                title={scope === "builtin" ? t("plugins.readonly") : t("mcpTools.add")}
-                aria-label={scope === "builtin" ? t("plugins.readonly") : t("mcpTools.add")}
+                title={mcpScope === "public" ? t("plugins.publicReadonly") : t("mcpTools.add")}
+                aria-label={mcpScope === "public" ? t("plugins.publicReadonly") : t("mcpTools.add")}
               >
                 <CirclePlus size={17} />
               </button>
             </>
           )}
+          </div>
         </div>
+
+        {primaryTab === "mcp" && mcpScope === "public" && (
+          <div className="plugins-public-category-row">
+            <div className="plugins-public-categories" role="tablist" aria-label={t("plugins.mcpPublic.categories")}>
+              {MCP_PUBLIC_CATEGORY_IDS.map((category) => (
+                <button
+                  key={category}
+                  type="button"
+                  role="tab"
+                  aria-selected={mcpPublicCategory === category}
+                  className={`plugins-public-category ${mcpPublicCategory === category ? "is-active" : ""}`}
+                  onClick={() => setMcpPublicCategory(category)}
+                >
+                  {t(`plugins.mcpPublic.category.${category}` as MessageKey)}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
-      {primaryTab === "skills" && scope === "global" && (
-        <div
-          className="plugins-personal-tabs"
-          role="tablist"
-          aria-label={t("plugins.personalTabs")}
-        >
-          {(["installed", "machine", "online"] as const).map((item) => (
-            <button
-              key={item}
-              type="button"
-              role="tab"
-              aria-selected={personalTab === item}
-              className={`plugins-personal-tab ${personalTab === item ? "is-active" : ""}`}
-              onClick={() => setPersonalTab(item)}
-            >
-              {item === "installed" ? (
-                <Package size={15} aria-hidden />
-              ) : item === "machine" ? (
-                <HardDrive size={15} aria-hidden />
-              ) : (
-                <CloudDownload size={15} aria-hidden />
-              )}
-              {t(`plugins.personalTab.${item}` as MessageKey)}
-              {item === "machine" && machineSkills.length > 0 && (
-                <span className="plugins-personal-tab-count">{machineSkills.length}</span>
-              )}
-            </button>
-          ))}
-        </div>
-      )}
-
       <MotionSwitch
-        switchKey={`${primaryTab}:${scope}:${personalTab}`}
+        switchKey={`${primaryTab}:${scope}:${personalTab}:${mcpScope}:${mcpPublicCategory}`}
         className="anim-switch--fill"
       >
       {primaryTab === "skills" && (scope !== "global" || personalTab === "installed") && (

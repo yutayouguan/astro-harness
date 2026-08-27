@@ -42,6 +42,7 @@ import {
   type McpRuntimeStatus,
   type McpServer,
   type McpConfigScope,
+  type McpPublicCategory,
   type McpToolApprovalMode,
   type McpTransportType,
 } from "../../hooks/providers/useMcpTools";
@@ -904,6 +905,8 @@ type McpSectionOptions = {
   /** 取色用的宿主根节点 */
   hostRef: RefObject<HTMLElement | null>;
   scope: McpConfigScope;
+  /** 公开目录分类；仅 builtin/public 视图使用。 */
+  publicCategory?: McpPublicCategory;
 };
 
 /** 宿主页面渲染 MCP 区块所需的片段与状态 */
@@ -924,6 +927,7 @@ export function useMcpSection({
   viewMode,
   hostRef,
   scope,
+  publicCategory,
 }: McpSectionOptions): McpSection {
   const { t } = useI18n();
   const { activeAgentId: agentId } = useActiveAgent();
@@ -950,17 +954,27 @@ export function useMcpSection({
   const query = rawQuery.trim().toLowerCase();
 
   const filteredServers = useMemo(() => {
-    if (!query) return servers;
-    return servers.filter(
-      (s) =>
-        s.name.toLowerCase().includes(query) ||
-        s.description.toLowerCase().includes(query) ||
-        s.type.toLowerCase().includes(query) ||
-        s.command.toLowerCase().includes(query) ||
-        s.url.toLowerCase().includes(query) ||
-        s.args.join(" ").toLowerCase().includes(query),
-    );
-  }, [servers, query]);
+    return servers.filter((server) => {
+      const matchesCategory =
+        scope !== "builtin" ||
+        !publicCategory ||
+        (publicCategory === "featured"
+          ? server.featured === true
+          : publicCategory === "other"
+            ? !server.category || server.category === "other"
+            : server.category === publicCategory);
+      if (!matchesCategory) return false;
+      if (!query) return true;
+      return (
+        server.name.toLowerCase().includes(query) ||
+        server.description.toLowerCase().includes(query) ||
+        server.type.toLowerCase().includes(query) ||
+        server.command.toLowerCase().includes(query) ||
+        server.url.toLowerCase().includes(query) ||
+        server.args.join(" ").toLowerCase().includes(query)
+      );
+    });
+  }, [servers, query, scope, publicCategory]);
 
   useEffect(() => {
     if (viewMode !== "detail") return;
@@ -996,7 +1010,11 @@ export function useMcpSection({
               </p>
             </div>
           ) : filteredServers.length === 0 ? (
-            <p className="agent-tools-empty">{t("agentTools.empty")}</p>
+            <p className="agent-tools-empty">
+              {scope === "builtin" && publicCategory
+                ? t("plugins.mcpPublic.categoryEmpty")
+                : t("agentTools.empty")}
+            </p>
           ) : viewMode === "detail" ? (
             <div className="tools-detail">
               <div className="tools-detail-list" role="list">
