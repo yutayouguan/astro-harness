@@ -38,16 +38,22 @@ function rule(css, selector) {
   )?.groups?.body;
 }
 
-test("chat header reserves a dock-aware lane for floating controls", () => {
+test("chat header keeps floating controls fixed while docks toggle", () => {
   const header = rule(headerStyles, ".content-header--chat");
   const actions = rule(headerStyles, ".content-header--chat .header-actions");
+  const dockedActions = rule(
+    headerStyles,
+    ".content-header--chat.has-right-dock .header-actions",
+  );
 
   assert.ok(header, "missing chat header rule");
   assert.match(header, /min-height:\s*60px;/);
   assert.ok(actions, "missing chat header action rule");
   assert.match(actions, /position:\s*absolute;/);
-  assert.match(actions, /right:\s*calc\(16px \+ var\(--chat-header-right-offset, 0px\)\);/);
+  assert.match(actions, /right:\s*16px;/);
   assert.match(actions, /bottom:\s*8px;/);
+  assert.doesNotMatch(actions, /transition:\s*right/);
+  assert.equal(dockedActions, undefined);
 });
 
 test("right-side chat surfaces share one inset container material", () => {
