@@ -1301,7 +1301,7 @@ export const zh = {
   "chat.rightPanel.agentUnavailable": "无法加载 Agent 信息",
 
   "sidebar.pin": "显示导航栏",
-  "sidebar.newChat": "新建会话",
+  "sidebar.newChat": "新对话",
   "sidebar.features": "自动化与扩展",
   "sidebar.plugins": "插件",
   "sidebar.unpin": "收起导航栏",

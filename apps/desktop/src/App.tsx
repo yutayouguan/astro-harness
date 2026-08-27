@@ -836,6 +836,20 @@ export default function App() {
                 </div>
                 <div className="sidebar-brand-text">Astro Agent</div>
               </div>
+              <button
+                type="button"
+                className="sidebar-new-chat"
+                onClick={() => {
+                  setNav("chat");
+                  void startNewChat();
+                }}
+                title={t("sidebar.newChat")}
+                aria-label={t("sidebar.newChat")}
+                aria-keyshortcuts="Meta+N Control+N"
+              >
+                <IconNewChat width={20} height={20} strokeWidth={1.8} />
+                <span className="sidebar-item-label">{t("sidebar.newChat")}</span>
+              </button>
               <nav className="sidebar-feature-tabs" aria-label={t("sidebar.features")}>
                 {([
                   { id: "cron", label: t("nav.cron"), Icon: IconCron },
@@ -847,8 +861,9 @@ export default function App() {
                     type="button"
                     className={`sidebar-feature-tab ${nav === id ? "is-active" : ""}`}
                     onClick={() => setNav(id)}
+                    aria-current={nav === id ? "page" : undefined}
                   >
-                    <Icon width={17} height={17} />
+                    <Icon width={20} height={20} strokeWidth={1.8} />
                     <span className="sidebar-item-label">{label}</span>
                   </button>
                 ))}
@@ -998,7 +1013,7 @@ export default function App() {
                 className="sidebar-settings-btn"
                 onClick={() => setNav("settings")}
               >
-                <Settings2 size={15} strokeWidth={1.8} aria-hidden />
+                <Settings2 size={20} strokeWidth={1.8} aria-hidden />
                 <span className="sidebar-item-label">{t("nav.settings")}</span>
                 {chat.memoryPendingCount > 0 && (
                   <span className="nav-badge">
