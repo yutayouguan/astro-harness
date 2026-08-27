@@ -907,24 +907,44 @@ html[data-theme="light"] .composer-mode-menu {
 }
 
 .composer-context-btn {
-  gap: 0;
-  width: auto;
+  width: 34px;
   min-width: 34px;
-  padding: 0 0.45rem;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
+  padding: 0;
 }
 
 .composer-context-wrap {
   position: relative;
 }
 
-.composer-context-pct {
-  margin-left: 0.2rem;
-  font-size: 0.65rem;
-  font-weight: 700;
-  color: var(--ink-mute);
+.composer-context-ring {
+  width: 23px;
+  height: 23px;
+  overflow: visible;
+  transform: rotate(-90deg);
+}
+
+.composer-context-ring-track,
+.composer-context-ring-value {
+  fill: none;
+  stroke-width: 2.4;
+}
+
+.composer-context-ring-track {
+  stroke: color-mix(in srgb, currentColor 24%, transparent);
+}
+
+.composer-context-ring-value {
+  stroke: var(--tone-green, #16a34a);
+  stroke-linecap: round;
+  transition: stroke 0.18s ease, stroke-dasharray 0.24s ease;
+}
+
+.composer-context-btn.is-warning .composer-context-ring-value {
+  stroke: var(--tone-amber, #d97706);
+}
+
+.composer-context-btn.is-critical .composer-context-ring-value {
+  stroke: var(--danger, #dc2626);
 }
 
 .ctx-usage-popover {

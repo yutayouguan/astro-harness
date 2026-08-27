@@ -15,7 +15,6 @@ import { invoke } from "@tauri-apps/api/core";
 import { useClampPopover } from "../../hooks/ui/useClampPopover";
 import {
   Bot,
-  ChartPie,
   Check,
   ChevronDown,
   CornerDownRight,
@@ -1622,6 +1621,23 @@ export default function ChatView({
   const showPauseResume = streaming;
   const showSendButton = !streaming && !composerClarify;
   const modeSwitchLocked = streaming || turnInFlight || interruptBlocked;
+  const contextProgress =
+    typeof contextUsagePercent === "number" &&
+    Number.isFinite(contextUsagePercent)
+      ? Math.min(100, Math.max(0, contextUsagePercent))
+      : null;
+  const contextProgressTone =
+    contextProgress == null
+      ? "is-unknown"
+      : contextProgress >= 90
+        ? "is-critical"
+        : contextProgress >= 70
+          ? "is-warning"
+          : "is-normal";
+  const contextUsageLabel =
+    contextProgress != null
+      ? `${t("chat.contextUsage")} · ${contextProgress}%`
+      : t("chat.contextUsageHint");
   const parallelRunningIds = useMemo(
     () =>
       new Set(
@@ -2762,16 +2778,12 @@ export default function ChatView({
               <div className="composer-context-wrap" ref={contextWrapRef}>
                 <button
                   type="button"
-                  className={`composer-icon-btn composer-context-btn ${
+                  className={`composer-icon-btn composer-context-btn ${contextProgressTone} ${
                     contextPopoverOpen ? "is-open" : ""
                   }`}
                   disabled={streaming}
-                  title={
-                    contextUsagePercent != null
-                      ? `${t("chat.contextUsage")} · ${contextUsagePercent}%`
-                      : t("chat.contextUsageHint")
-                  }
-                  aria-label={t("chat.contextUsage")}
+                  title={contextUsageLabel}
+                  aria-label={contextUsageLabel}
                   aria-expanded={contextPopoverOpen}
                   onClick={() => {
                     setModeMenuOpen(false);
@@ -2780,12 +2792,29 @@ export default function ChatView({
                     setContextPopoverOpen((v) => !v);
                   }}
                 >
-                  <ChartPie size={17} strokeWidth={2} />
-                  {contextUsagePercent != null ? (
-                    <span className="composer-context-pct">
-                      {contextUsagePercent}%
-                    </span>
-                  ) : null}
+                  <svg
+                    className="composer-context-ring"
+                    viewBox="0 0 24 24"
+                    aria-hidden
+                  >
+                    <circle
+                      className="composer-context-ring-track"
+                      cx="12"
+                      cy="12"
+                      r="9"
+                      pathLength="100"
+                    />
+                    {contextProgress != null ? (
+                      <circle
+                        className="composer-context-ring-value"
+                        cx="12"
+                        cy="12"
+                        r="9"
+                        pathLength="100"
+                        strokeDasharray={`${contextProgress} 100`}
+                      />
+                    ) : null}
+                  </svg>
                 </button>
                 <ContextUsagePopover
                   open={contextPopoverOpen}

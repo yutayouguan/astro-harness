@@ -80,8 +80,15 @@ test("composer approval selector keeps the three supported permission choices", 
 
 test("composer keeps context usage available at every occupancy level", async () => {
   const source = await readFile(chatViewUrl, "utf8");
+  const styles = await readFile(markdownCssUrl, "utf8");
 
   assert.match(source, /className="composer-context-wrap"/);
   assert.match(source, /<ContextUsagePopover/);
   assert.doesNotMatch(source, /showContextControl/);
+  assert.doesNotMatch(source, /<ChartPie/);
+  assert.match(source, /className="composer-context-ring-value"/);
+  assert.match(source, /strokeDasharray=\{`\$\{contextProgress\} 100`\}/);
+  assert.match(styles, /\.composer-context-ring-track/);
+  assert.match(styles, /\.composer-context-btn\.is-warning/);
+  assert.match(styles, /\.composer-context-btn\.is-critical/);
 });
