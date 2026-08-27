@@ -65,9 +65,17 @@ test("sidebar hierarchy stays compact and keeps a separated footer", () => {
   const groupLabel = rule(projectStyles, ".sidebar-group-label");
   const activeNav = rule(projectStyles, ".sidebar-feature-tab.is-active::before");
   const sectionToggle = rule(projectStyles, ".sidebar-section-toggle");
+  const interactiveSectionToggle = rule(
+    projectStyles,
+    ".sidebar-section-toggle:is(:hover, :focus-visible, :active)",
+  );
   const sectionChevron = rule(projectStyles, ".sidebar-section-chevron");
   const sectionActions = rule(projectStyles, ".sidebar-section-actions");
   const sectionTitle = rule(projectStyles, ".sidebar-section-title");
+  const activeProjectIndicator = rule(
+    projectStyles,
+    ".sidebar-project.is-active > .sidebar-project-header::before",
+  );
   const footer = rule(projectStyles, ".sidebar-footer");
   const footerDivider = rule(projectStyles, ".sidebar-footer::before");
 
@@ -82,6 +90,8 @@ test("sidebar hierarchy stays compact and keeps a separated footer", () => {
   assert.match(activeNav, /width:\s*2px;/);
   assert.ok(sectionToggle, "missing collapsible section toggle styles");
   assert.match(sectionToggle, /gap:\s*6px;/);
+  assert.ok(interactiveSectionToggle, "section headings need explicit interaction styles");
+  assert.match(interactiveSectionToggle, /background:\s*transparent;/);
   assert.ok(sectionChevron, "missing section chevron styles");
   assert.match(sectionChevron, /opacity:\s*0;/);
   assert.ok(sectionActions, "missing section action styles");
@@ -90,6 +100,8 @@ test("sidebar hierarchy stays compact and keeps a separated footer", () => {
   assert.ok(sectionTitle, "missing section heading styles");
   assert.match(sectionTitle, /font-size:\s*14px;/);
   assert.match(sectionTitle, /font-weight:\s*650;/);
+  assert.ok(activeProjectIndicator, "active project needs a position marker");
+  assert.match(activeProjectIndicator, /left:\s*2px;/);
   assert.ok(footer, "missing fixed sidebar footer");
   assert.match(footer, /margin-top:\s*auto;/);
   assert.ok(footerDivider, "sidebar footer should be visually separated");

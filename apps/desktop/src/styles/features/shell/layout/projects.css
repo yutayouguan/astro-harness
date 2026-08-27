@@ -178,11 +178,10 @@
   color: inherit;
   font: inherit;
   text-align: left;
-  transition: background 0.1s;
 }
 
-.sidebar-section-toggle:hover {
-  background: color-mix(in srgb, var(--ink) 5%, transparent);
+.sidebar-section-toggle:is(:hover, :focus-visible, :active) {
+  background: transparent;
 }
 
 .sidebar-section-chevron {
@@ -358,7 +357,7 @@
 .sidebar-project.is-active > .sidebar-project-header::before {
   content: "";
   position: absolute;
-  left: -2px;
+  left: 2px;
   top: 50%;
   translate: 0 -50%;
   width: 2px;

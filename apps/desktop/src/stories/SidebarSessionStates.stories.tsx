@@ -1,6 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { Archive, ChevronRight, MoreVertical, Pin, Plus } from "lucide-react";
 import type { CSSProperties } from "react";
+import ProjectFolderIcon from "../components/chat/ProjectFolderIcon";
 import SessionStatusIcon from "../components/chat/SessionStatusIcon";
 
 function SessionRow({
@@ -53,7 +54,7 @@ function SidebarSessionStates() {
           <div className="sidebar-projects">
             <div className="sidebar-collapsible-section">
               <button type="button" className="sidebar-section-toggle" aria-expanded>
-                <span className="sidebar-section-title">置顶</span>
+                <span className="sidebar-section-title">项目</span>
                 <ChevronRight className="sidebar-section-chevron is-expanded" size={12} aria-hidden />
               </button>
               <div className="sidebar-section-actions">
@@ -62,6 +63,22 @@ function SidebarSessionStates() {
                 </button>
                 <button type="button" className="sidebar-add-btn" title="新建">
                   <Plus size={14} aria-hidden />
+                </button>
+              </div>
+            </div>
+            <div className="sidebar-project">
+              <div className="sidebar-project-header">
+                <button type="button" className="sidebar-project-name">
+                  <ProjectFolderIcon iconId="astro-space" expanded size={18} />
+                  <span className="sidebar-item-label">主空间</span>
+                </button>
+              </div>
+            </div>
+            <div className="sidebar-project is-active">
+              <div className="sidebar-project-header">
+                <button type="button" className="sidebar-project-name">
+                  <ProjectFolderIcon iconId="folder-rust" expanded size={18} />
+                  <span className="sidebar-item-label">大模型八股文</span>
                 </button>
               </div>
             </div>
