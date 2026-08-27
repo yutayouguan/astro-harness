@@ -370,6 +370,7 @@ impl Session {
         let prompt = self
             .build_prompt_contract_with_inject(admission_context)
             .await;
+        self.persist_prompt_context_if_changed(&prompt).await;
         let system_prompt = prompt.flattened();
         let turn_id = self.current_turn_id().await;
         let inject = self.fire_hook(

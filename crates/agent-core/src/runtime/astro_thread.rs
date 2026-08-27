@@ -106,6 +106,8 @@ mod tests {
     use std::sync::atomic::{AtomicUsize, Ordering};
     use std::time::Duration;
 
+    use agent_rollout::{read_rollout, RolloutItem};
+    use providers::types::message::Message as ProviderMessage;
     use providers::types::stream::StreamChunk;
     use providers::CompletionStream;
     use tempfile::TempDir;
@@ -116,6 +118,90 @@ mod tests {
 
     async fn recorder(dir: &TempDir, name: &str) -> RolloutRecorder {
         RolloutRecorder::open(dir.path().join(name)).await.unwrap()
+    }
+
+    fn prompt_context(content: &str) -> crate::prompt::PromptContract {
+        crate::prompt::PromptContract {
+            base_instructions: "stable base".into(),
+            context: vec![ProviderMessage::developer(content)],
+            usage: Default::default(),
+        }
+    }
+
+    #[tokio::test]
+    async fn prompt_context_world_state_resumes_and_deduplicates() {
+        let dir = TempDir::new().unwrap();
+        let path = dir.path().join("prompt-context.jsonl");
+        let first_session = Arc::new(
+            Session::with_session_id(
+                Config::with_defaults(dir.path().to_path_buf()),
+                "prompt-context-first".into(),
+            )
+            .unwrap(),
+        );
+        let first_thread = AstroThread::spawn(
+            Arc::clone(&first_session),
+            RolloutRecorder::open(path.clone()).await.unwrap(),
+        )
+        .unwrap();
+
+        first_session
+            .persist_prompt_context_if_changed(&prompt_context("first"))
+            .await;
+        first_session
+            .persist_prompt_context_if_changed(&prompt_context("first"))
+            .await;
+        first_thread.flush_rollout().await.unwrap();
+        let initial_items = read_rollout(&path).await.unwrap();
+        assert_eq!(
+            initial_items
+                .iter()
+                .filter(|item| matches!(item, RolloutItem::WorldState(_)))
+                .count(),
+            1
+        );
+
+        first_thread.submit(Op::Shutdown).await.unwrap();
+        first_thread.wait_terminated().await;
+        drop(first_thread);
+        drop(first_session);
+
+        let resumed_session = Arc::new(
+            Session::with_session_id(
+                Config::with_defaults(dir.path().to_path_buf()),
+                "prompt-context-resumed".into(),
+            )
+            .unwrap(),
+        );
+        resumed_session.restore_prompt_context_from_rollout(&initial_items);
+        let resumed_thread = AstroThread::spawn(
+            Arc::clone(&resumed_session),
+            RolloutRecorder::open(path.clone()).await.unwrap(),
+        )
+        .unwrap();
+
+        resumed_session
+            .persist_prompt_context_if_changed(&prompt_context("first"))
+            .await;
+        resumed_session
+            .persist_prompt_context_if_changed(&prompt_context("second"))
+            .await;
+        resumed_thread.flush_rollout().await.unwrap();
+
+        let resumed_items = read_rollout(&path).await.unwrap();
+        let world_states = resumed_items
+            .iter()
+            .filter_map(|item| match item {
+                RolloutItem::WorldState(value) => Some(value),
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(world_states.len(), 2);
+        assert_eq!(world_states[0]["full"], true);
+        assert_eq!(world_states[1]["full"], false);
+
+        resumed_thread.submit(Op::Shutdown).await.unwrap();
+        resumed_thread.wait_terminated().await;
     }
 
     #[tokio::test]

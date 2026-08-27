@@ -1039,6 +1039,7 @@ impl AstroServiceImpl {
         let rollout = agent_rollout::RolloutRecorder::open(rollout_path)
             .await
             .map_err(|error| Status::internal(error.to_string()))?;
+        session.restore_prompt_context_from_rollout(&existing_items);
         let runtime = agent::AstroThread::spawn(Arc::clone(&session), rollout)
             .map_err(|error| Status::failed_precondition(error.to_string()))?;
 

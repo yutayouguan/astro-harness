@@ -388,6 +388,42 @@ impl Session {
             .map_err(|_| RuntimeIoBindError::AlreadyBound)
     }
 
+    /// Restore the latest role-bearing prompt-context baseline from durable rollout state.
+    ///
+    /// This state is intentionally independent from user/assistant conversation history.
+    pub fn restore_prompt_context_from_rollout(&self, items: &[RolloutItem]) {
+        self.lock_state().prompt_context_snapshot = crate::prompt::context_state::restore(items);
+    }
+
+    pub(crate) async fn persist_prompt_context_if_changed(
+        &self,
+        prompt: &crate::prompt::PromptContract,
+    ) {
+        let snapshot = match crate::prompt::context_state::snapshot(prompt) {
+            Ok(snapshot) => snapshot,
+            Err(error) => {
+                tracing::warn!(%error, "failed to serialize prompt context world state");
+                return;
+            }
+        };
+        let _dispatch = self.event_dispatch.lock().await;
+        let previous = self.lock_state().prompt_context_snapshot.clone();
+        let Some(item) = crate::prompt::context_state::rollout_update(previous.as_ref(), &snapshot)
+        else {
+            return;
+        };
+
+        let Some(bindings) = self.runtime_io.get() else {
+            self.lock_state().prompt_context_snapshot = Some(snapshot);
+            return;
+        };
+        if let Err(error) = bindings.rollout.record(vec![item]).await {
+            tracing::warn!(%error, "failed to persist prompt context world state");
+            return;
+        }
+        self.lock_state().prompt_context_snapshot = Some(snapshot);
+    }
+
     /// Returns the stable pause and HITL controls used by actor-submitted turns.
     pub fn ensure_thread_controls(&self) -> (Arc<providers::PauseControl>, Arc<crate::HitlGate>) {
         let mut controls = self

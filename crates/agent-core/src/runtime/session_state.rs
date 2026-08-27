@@ -21,6 +21,8 @@ pub(crate) struct SessionState {
     pub(crate) turn: turn_budget::TurnState,
     pub(crate) pending_inject_context: Option<String>,
     pub(crate) pending_learning_nudge: Option<String>,
+    /// Latest durable role-bearing context baseline used for WorldState diffing.
+    pub(crate) prompt_context_snapshot: Option<Value>,
     pub(crate) interaction_mode: types::InteractionMode,
     pub(crate) current_turn_context: Option<Arc<TurnContext>>,
     pub(crate) current_step_context: Option<Arc<StepContext>>,
@@ -49,6 +51,7 @@ impl SessionState {
             turn: turn_budget::TurnState::default(),
             pending_inject_context: None,
             pending_learning_nudge: None,
+            prompt_context_snapshot: None,
             interaction_mode: types::InteractionMode::Agent,
             current_turn_context: None,
             current_step_context: None,

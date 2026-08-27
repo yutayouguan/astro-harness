@@ -6,6 +6,7 @@
 //! - native tool schemas (owned by the request pipeline, never rendered here).
 
 use providers::types::message::Message as ProviderMessage;
+use serde::Serialize;
 
 use crate::prompt::context::{DynamicContext, StaticContext};
 use crate::prompt::context_source::{ContextBudget, ContextSource, RenderedSource};
@@ -13,7 +14,7 @@ use crate::prompt::prompt_builder::PromptBuilder;
 
 const LAYER_SEP: &str = "\n\n---\n\n";
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct PromptSourceUsage {
     pub id: String,
     pub chars: usize,
