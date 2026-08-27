@@ -543,7 +543,7 @@ function SessionItem({
     }
   };
 
-  const showUnread = unread && status !== "running";
+  const showUnread = unread && status === "idle";
 
   return (
     <div
@@ -554,10 +554,6 @@ function SessionItem({
       onMouseEnter={handleMouseEnter}
     >
       <button type="button" className="sidebar-session-main" onClick={onOpen}>
-        <SessionStatusIcon
-          status={status}
-          label={t(`sessions.status.${status}` as MessageKey)}
-        />
         <span className="sidebar-session-title-wrap">
           <span className="sidebar-session-title" ref={titleRef}>
             {s.summary || t("chat.rightPanel.untitledSession")}
@@ -566,13 +562,18 @@ function SessionItem({
         {s.pinnedAt && (
           <Pin className="sidebar-session-pin-mark" size={10} strokeWidth={2} aria-hidden />
         )}
-        <span
-          className={`sidebar-session-time ${status !== "idle" ? "is-status" : ""}`}
-        >
-          {status === "idle"
-            ? relativeTime(s.createdAt, t)
-            : t(`sessions.status.${status}` as MessageKey)}
-        </span>
+        {status === "idle" && (
+          <span className="sidebar-session-time">{relativeTime(s.createdAt, t)}</span>
+        )}
+        <SessionStatusIcon
+          status={status}
+          unread={showUnread}
+          label={t(
+            showUnread
+              ? "sessions.status.unread"
+              : (`sessions.status.${status}` as MessageKey),
+          )}
+        />
       </button>
       <div className="sidebar-session-actions">
         <button type="button" className="sidebar-session-action-btn" title={s.pinnedAt ? t("sessions.unpin") : t("sessions.pin")} onClick={(e) => { e.stopPropagation(); onPinToggle(); }}>

@@ -6,6 +6,8 @@
   flex-shrink: 0;
   display: grid;
   place-items: center;
+  margin-left: 2px;
+  transition: opacity 120ms ease;
 }
 
 .session-status-icon-spin {
@@ -13,8 +15,12 @@
   animation: session-status-spin 0.85s linear infinite;
 }
 
-.session-status-icon-complete {
-  color: var(--ink-soft);
+.session-status-unread-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--tone, var(--tone-blue));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--tone, var(--tone-blue)) 12%, transparent);
 }
 
 .session-status-icon-awaiting {
@@ -44,11 +50,6 @@
 
 .sidebar-session-item.is-unread .sidebar-session-title {
   font-weight: 650;
-}
-
-.sidebar-session-item.is-unread .sidebar-session-main .session-status-icon-complete {
-  color: var(--tone, var(--tone-blue));
-  opacity: 1;
 }
 
 .sidebar-session-main .sidebar-session-pin-mark {
@@ -184,32 +185,33 @@
   margin-right: 2px;
 }
 
-.sidebar-session-time.is-status {
-  color: var(--tone, var(--tone-blue));
-  font-weight: 600;
-  opacity: 1;
-}
-
-.sidebar-session-item.is-awaiting .sidebar-session-time.is-status,
-.sidebar-session-item.is-errored .sidebar-session-time.is-status {
-  color: var(--danger, #e11d48);
-}
-
 /* hover 时隐藏时间，显示操作按钮 */
-.sidebar-session-item:hover .sidebar-session-time {
-  display: none;
+.sidebar-session-item:is(:hover, :focus-within) .sidebar-session-time,
+.sidebar-session-item:is(:hover, :focus-within) .sidebar-session-pin-mark,
+.sidebar-session-item:is(:hover, :focus-within) .session-status-icon {
+  opacity: 0;
 }
 
 .sidebar-session-actions {
-  display: none;
+  position: absolute;
+  right: 4px;
+  top: 50%;
+  display: flex;
   align-items: center;
   gap: 1px;
   flex-shrink: 0;
-  padding-right: 4px;
+  padding: 2px;
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--sidebar-bg, var(--glass)) 88%, transparent);
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-50%);
+  transition: opacity 120ms ease;
 }
 
-.sidebar-session-item:hover .sidebar-session-actions {
-  display: flex;
+.sidebar-session-item:is(:hover, :focus-within) .sidebar-session-actions {
+  opacity: 1;
+  pointer-events: auto;
 }
 
 .sidebar-session-action-btn {
@@ -229,4 +231,3 @@
   background: color-mix(in srgb, var(--tone, #64748b) 14%, transparent);
   color: var(--ink);
 }
-

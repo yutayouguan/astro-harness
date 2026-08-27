@@ -986,13 +986,13 @@ export default function App() {
                           onClick={() => toggleSection("pinned")}
                           aria-expanded={!collapsedSections.has("pinned")}
                         >
+                          <span className="sidebar-section-title">{t("sessions.pin")}</span>
                           <ChevronRight
                             size={12}
                             strokeWidth={2}
                             className={`sidebar-section-chevron ${!collapsedSections.has("pinned") ? "is-expanded" : ""}`}
                             aria-hidden
                           />
-                          <span className="sidebar-section-title">{t("sessions.pin")}</span>
                         </button>
                       </div>
                     )}
@@ -1019,15 +1019,15 @@ export default function App() {
                         onClick={() => toggleSection("projects")}
                         aria-expanded={!collapsedSections.has("projects")}
                       >
+                        <span className="sidebar-section-title">
+                          {t("sidebar.projects")}
+                        </span>
                         <ChevronRight
                           size={12}
                           strokeWidth={2}
                           className={`sidebar-section-chevron ${!collapsedSections.has("projects") ? "is-expanded" : ""}`}
                           aria-hidden
                         />
-                        <span className="sidebar-section-title">
-                          {t("sidebar.projects")}
-                        </span>
                       </button>
                       <div className="sidebar-section-actions">
                         <button
@@ -1142,15 +1142,15 @@ export default function App() {
                         onClick={() => toggleSection("recent")}
                         aria-expanded={!collapsedSections.has("recent")}
                       >
+                        <span className="sidebar-section-title">
+                          {sessionListKind === "archived" ? t("sessions.archived") : t("sidebar.recent")}
+                        </span>
                         <ChevronRight
                           size={12}
                           strokeWidth={2}
                           className={`sidebar-section-chevron ${!collapsedSections.has("recent") ? "is-expanded" : ""}`}
                           aria-hidden
                         />
-                        <span className="sidebar-section-title">
-                          {sessionListKind === "archived" ? t("sessions.archived") : t("sidebar.recent")}
-                        </span>
                       </button>
                       <div className="sidebar-section-actions">
                         <button

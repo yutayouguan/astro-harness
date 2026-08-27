@@ -7,6 +7,18 @@ const projectStyles = await readFile(
   new URL("../../styles/features/shell/layout/projects.css", import.meta.url),
   "utf8",
 );
+const sessionStyles = await readFile(
+  new URL("../../styles/features/shell/layout/sessions.css", import.meta.url),
+  "utf8",
+);
+const sessionList = await readFile(
+  new URL("../../components/chat/SidebarSessionList.tsx", import.meta.url),
+  "utf8",
+);
+const statusIcon = await readFile(
+  new URL("../../components/chat/SessionStatusIcon.tsx", import.meta.url),
+  "utf8",
+);
 
 function rule(css, selector) {
   const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -40,6 +52,11 @@ test("project and recent actions stay with the section they affect", () => {
   assert.ok(recent >= 0 && archive > recent, "archive action must follow the Recent heading");
   assert.match(app, /aria-expanded=\{!collapsedSections\.has\("projects"\)\}/);
   assert.match(app, /aria-expanded=\{!collapsedSections\.has\("recent"\)\}/);
+  assert.match(
+    app,
+    /<span className="sidebar-section-title">[\s\S]*?<\/span>[\s\S]*?<ChevronRight/,
+    "section chevrons should follow their labels",
+  );
 });
 
 test("sidebar hierarchy stays compact and keeps a separated footer", () => {
@@ -49,6 +66,7 @@ test("sidebar hierarchy stays compact and keeps a separated footer", () => {
   const activeNav = rule(projectStyles, ".sidebar-feature-tab.is-active::before");
   const sectionToggle = rule(projectStyles, ".sidebar-section-toggle");
   const sectionChevron = rule(projectStyles, ".sidebar-section-chevron");
+  const sectionActions = rule(projectStyles, ".sidebar-section-actions");
   const sectionTitle = rule(projectStyles, ".sidebar-section-title");
   const footer = rule(projectStyles, ".sidebar-footer");
   const footerDivider = rule(projectStyles, ".sidebar-footer::before");
@@ -63,13 +81,36 @@ test("sidebar hierarchy stays compact and keeps a separated footer", () => {
   assert.ok(activeNav, "active workspace navigation needs a position marker");
   assert.match(activeNav, /width:\s*2px;/);
   assert.ok(sectionToggle, "missing collapsible section toggle styles");
-  assert.match(sectionToggle, /gap:\s*0;/);
+  assert.match(sectionToggle, /gap:\s*6px;/);
   assert.ok(sectionChevron, "missing section chevron styles");
-  assert.match(sectionChevron, /margin-left:\s*-16px;/);
+  assert.match(sectionChevron, /opacity:\s*0;/);
+  assert.ok(sectionActions, "missing section action styles");
+  assert.match(sectionActions, /opacity:\s*0;/);
+  assert.match(sectionActions, /pointer-events:\s*none;/);
   assert.ok(sectionTitle, "missing section heading styles");
   assert.match(sectionTitle, /font-size:\s*14px;/);
   assert.match(sectionTitle, /font-weight:\s*650;/);
   assert.ok(footer, "missing fixed sidebar footer");
   assert.match(footer, /margin-top:\s*auto;/);
   assert.ok(footerDivider, "sidebar footer should be visually separated");
+});
+
+test("session activity uses trailing status and hover-revealed tools", () => {
+  const actions = rule(sessionStyles, ".sidebar-session-actions");
+  const unreadDot = rule(sessionStyles, ".session-status-unread-dot");
+
+  assert.match(sessionList, /const showUnread = unread && status === "idle";/);
+  assert.match(
+    sessionList,
+    /<span className="sidebar-session-time">[\s\S]*?<SessionStatusIcon/,
+    "status indicator should trail the timestamp",
+  );
+  assert.match(statusIcon, /if \(status === "idle" && !unread\) return null;/);
+  assert.match(statusIcon, /className="session-status-icon-spin"/);
+  assert.match(statusIcon, /className="session-status-unread-dot"/);
+  assert.ok(actions, "missing session action styles");
+  assert.match(actions, /opacity:\s*0;/);
+  assert.match(actions, /pointer-events:\s*none;/);
+  assert.ok(unreadDot, "missing unread marker styles");
+  assert.match(unreadDot, /border-radius:\s*50%;/);
 });

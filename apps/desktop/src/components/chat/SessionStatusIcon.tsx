@@ -1,4 +1,4 @@
-import { CircleAlert, CircleCheck, LoaderCircle, ShieldAlert } from "lucide-react";
+import { CircleAlert, LoaderCircle, ShieldAlert } from "lucide-react";
 import type { SessionRuntimeStatus } from "../../hooks/chat/useSessionStatusMap";
 
 /** 会话在列表中的活动状态 */
@@ -23,11 +23,14 @@ export function resolveSessionStatus(
 
 type Props = {
   status: SessionActivityStatus;
+  unread?: boolean;
   /** 无障碍标签 / 悬浮提示；不传则图标对读屏隐藏 */
   label?: string;
 };
 
-export default function SessionStatusIcon({ status, label }: Props) {
+export default function SessionStatusIcon({ status, unread = false, label }: Props) {
+  if (status === "idle" && !unread) return null;
+
   const a11y = label
     ? { role: "img" as const, "aria-label": label, title: label }
     : { "aria-hidden": true };
@@ -53,11 +56,7 @@ export default function SessionStatusIcon({ status, label }: Props) {
           strokeWidth={2.2}
         />
       ) : (
-        <CircleCheck
-          className="session-status-icon-complete"
-          size={14}
-          strokeWidth={2}
-        />
+        <span className="session-status-unread-dot" aria-hidden />
       )}
     </span>
   );
