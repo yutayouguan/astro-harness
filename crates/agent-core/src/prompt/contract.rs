@@ -89,18 +89,27 @@ pub struct RuntimePromptLayers<'a> {
 
 #[derive(Default)]
 struct RoleBuffer {
+    sources: Vec<AllocatedSource>,
+}
+
+struct AllocatedSource {
+    id: String,
+    content: String,
+}
+
+struct RenderedRole {
     body: String,
     usage: Vec<PromptSourceUsage>,
 }
 
 impl RoleBuffer {
-    fn push(&mut self, budget: &mut ContextBudget, source: &dyn ContextSource) {
+    fn allocate(&mut self, budget: &mut ContextBudget, source: &dyn ContextSource) {
         let separator_chars = LAYER_SEP.chars().count();
-        if !self.body.is_empty() && budget.remaining() < separator_chars + 1 {
+        if !self.sources.is_empty() && budget.remaining() < separator_chars + 1 {
             return;
         }
 
-        let has_previous = !self.body.is_empty();
+        let has_previous = !self.sources.is_empty();
         if has_previous {
             let _ = budget.take_chars(LAYER_SEP);
         }
@@ -112,14 +121,36 @@ impl RoleBuffer {
             return;
         }
 
-        if has_previous {
-            self.body.push_str(LAYER_SEP);
-        }
-        self.body.push_str(&chunk);
-        self.usage.push(PromptSourceUsage {
+        self.sources.push(AllocatedSource {
             id: source.id().to_string(),
-            chars: chunk.chars().count() + usize::from(has_previous) * separator_chars,
+            content: chunk,
         });
+    }
+
+    /// Render after allocation so budget priority and instruction precedence remain independent.
+    fn render(mut self, source_order: &[&str]) -> RenderedRole {
+        self.sources.sort_by_key(|source| {
+            source_order
+                .iter()
+                .position(|id| *id == source.id.as_str())
+                .unwrap_or(source_order.len())
+        });
+
+        let separator_chars = LAYER_SEP.chars().count();
+        let mut body = String::new();
+        let mut usage = Vec::with_capacity(self.sources.len());
+        for source in self.sources {
+            let has_previous = !body.is_empty();
+            if has_previous {
+                body.push_str(LAYER_SEP);
+            }
+            body.push_str(&source.content);
+            usage.push(PromptSourceUsage {
+                id: source.id,
+                chars: source.content.chars().count() + usize::from(has_previous) * separator_chars,
+            });
+        }
+        RenderedRole { body, usage }
     }
 }
 
@@ -178,19 +209,33 @@ pub(crate) fn assemble_prompt_contract_with_usage(
     let mut user = RoleBuffer::default();
 
     // Trust/priority order. Output role order is assembled separately below.
-    base.push(budget, &soul);
-    base.push(budget, &identity);
-    base.push(budget, &tool_guidance);
-    developer.push(budget, &mode);
-    user.push(budget, &agents);
-    user.push(budget, &hook);
-    user.push(budget, &user_profile);
-    user.push(budget, &memory);
-    user.push(budget, &daily);
-    developer.push(budget, &skills);
-    developer.push(budget, &mcp);
-    user.push(budget, &timestamp);
-    user.push(budget, &dynamic);
+    base.allocate(budget, &soul);
+    base.allocate(budget, &identity);
+    base.allocate(budget, &tool_guidance);
+    developer.allocate(budget, &mode);
+    user.allocate(budget, &agents);
+    user.allocate(budget, &hook);
+    user.allocate(budget, &user_profile);
+    user.allocate(budget, &memory);
+    user.allocate(budget, &daily);
+    developer.allocate(budget, &skills);
+    developer.allocate(budget, &mcp);
+    user.allocate(budget, &timestamp);
+    user.allocate(budget, &dynamic);
+
+    let base = base.render(&["soul", "identity", "tool_guidance"]);
+    // Codex renders capabilities before the active collaboration mode so the mode can override
+    // general usage guidance without losing its earlier budget reservation.
+    let developer = developer.render(&["skills", "mcp", "mode"]);
+    let user = user.render(&[
+        "agents",
+        "hook",
+        "user_profile",
+        "memory",
+        "daily",
+        "timestamp",
+        "dynamic",
+    ]);
 
     let mut context = Vec::with_capacity(2);
     if !developer.body.is_empty() {
@@ -295,6 +340,14 @@ mod tests {
             .text_content()
             .contains("MCP_INSTRUCTIONS"));
         assert!(!contract.context[0].text_content().contains(TOOL_GUIDANCE));
+        let developer = contract.context[0].text_content();
+        assert!(
+            developer.find("example-skill").unwrap() < developer.find("MCP_INSTRUCTIONS").unwrap()
+        );
+        assert!(
+            developer.find("MCP_INSTRUCTIONS").unwrap()
+                < developer.find("DEVELOPER_POLICY").unwrap()
+        );
         assert_eq!(contract.context[1].role(), Role::User);
         assert!(contract.context[1].text_content().contains("PROJECT_RULES"));
         assert!(contract.context[1]
