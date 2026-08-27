@@ -146,6 +146,22 @@ impl Default for ApprovalsConfig {
     }
 }
 
+/// 统一审批粒度配置（`config.yaml` 的 `approval:` 段）。
+///
+/// 优先级低于各域的独立配置字段（向后兼容）。
+#[derive(Debug, Clone, Default, Deserialize, PartialEq, Eq)]
+pub struct UnifiedApprovalConfig {
+    /// Terminal 审批模式：`smart` | `manual` | `off`
+    #[serde(default)]
+    pub terminal: Option<String>,
+    /// 全局审批策略：`on-request` | `untrusted` | `never`
+    #[serde(default)]
+    pub policy: Option<ApprovalPolicy>,
+    /// 审查者：`user` | `auto_review`
+    #[serde(default)]
+    pub reviewer: Option<ApprovalsReviewer>,
+}
+
 /// 命令网络代理开关。它与 profile 的 `network.enabled` 是两个独立维度。
 #[derive(Debug, Clone, Default, Deserialize, PartialEq, Eq)]
 struct NetworkProxyConfig {
@@ -779,6 +795,8 @@ struct FileConfig {
     sandbox_workspace_write: Option<serde_yaml::Value>,
     #[serde(default)]
     compression: Option<CompressionConfig>,
+    #[serde(default)]
+    approval: Option<UnifiedApprovalConfig>,
 }
 
 fn read_file_config(base: &Path) -> FileConfig {
@@ -836,6 +854,10 @@ pub fn load_evolution_config(base: &Path) -> EvolutionConfig {
 /// 从 `{base}/config.yaml` 加载危险命令审批配置。
 pub fn load_approvals_config(base: &Path) -> ApprovalsConfig {
     read_file_config(base).approvals.unwrap_or_default()
+}
+
+pub fn load_unified_approval_config(base: &Path) -> UnifiedApprovalConfig {
+    read_file_config(base).approval.unwrap_or_default()
 }
 
 /// 加载新权限配置；旧 `approvals.mode` 只做安全迁移，不会把 `off` 扩大成完全访问。
@@ -950,10 +972,18 @@ fn load_explicit_permissions(
         };
     }
 
+    // 统一审批配置作为默认层；各域独立字段优先级更高
+    let unified = file.approval.unwrap_or_default();
     let selection = SessionPermissions {
         profile_id: permissions.default_profile.clone(),
-        approval_policy: file.approval_policy.unwrap_or_default(),
-        approvals_reviewer: file.approvals_reviewer.unwrap_or_default(),
+        approval_policy: file
+            .approval_policy
+            .or(unified.policy)
+            .unwrap_or_default(),
+        approvals_reviewer: file
+            .approvals_reviewer
+            .or(unified.reviewer)
+            .unwrap_or_default(),
     };
     let legacy_command_allowlist = file
         .approvals

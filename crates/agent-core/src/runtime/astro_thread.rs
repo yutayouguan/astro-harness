@@ -461,7 +461,7 @@ mod tests {
         .expect("actor thread should emit a HITL control event");
         assert!(!request_id.is_empty());
 
-        let (_, gate) = session.ensure_thread_controls();
+        let (_, gate, _) = session.ensure_thread_controls();
         let pending = gate.pending_interrupts().await;
         assert_eq!(pending.len(), 1);
         assert_eq!(pending[0].id, request_id);
