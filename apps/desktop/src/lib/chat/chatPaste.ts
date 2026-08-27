@@ -42,7 +42,7 @@ function dtoToAttachment(path: string, dto: FileBase64Dto): ChatAttachment {
           dto.name,
         )));
   let previewUrl: string | undefined;
-  if (kind === "image" || kind === "video") {
+  if (kind === "image" || kind === "video" || kind === "audio") {
     try {
       previewUrl = convertFileSrc(path);
     } catch {

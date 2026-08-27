@@ -9,7 +9,10 @@ import {
 import { createPortal } from "react-dom";
 import { Paperclip, Search, Settings2, Sparkles } from "lucide-react";
 import { useClampPopover } from "../../hooks/ui/useClampPopover";
-import { useMcpTools } from "../../hooks/providers/useMcpTools";
+import {
+  useMcpTools,
+  type McpServer,
+} from "../../hooks/providers/useMcpTools";
 import { useI18n } from "../../i18n/LocaleContext";
 import type { InstalledSkill } from "../../types";
 import McpIcon from "../icons/McpIcon";
@@ -22,6 +25,7 @@ type Props = {
   canAttach: boolean;
   onAttach: () => void;
   onSelectSkill: (skill: InstalledSkill) => void;
+  onSelectMcp: (server: McpServer) => void;
   onClose: () => void;
   onOpenSettings: () => void;
 };
@@ -34,6 +38,7 @@ export default function ComposerPlusMenu({
   canAttach,
   onAttach,
   onSelectSkill,
+  onSelectMcp,
   onClose,
   onOpenSettings,
 }: Props) {
@@ -184,9 +189,21 @@ export default function ComposerPlusMenu({
                 <ul className="composer-mcp-menu-list">
                   {filteredServers.map((server) => (
                     <li key={server.id} className="composer-mcp-menu-row">
-                      <span className="composer-mcp-menu-name" title={server.name}>
-                        {server.name}
-                      </span>
+                      <button
+                        type="button"
+                        className="composer-plus-plugin-button composer-plus-plugin-select"
+                        onClick={() => {
+                          onSelectMcp(server);
+                          onClose();
+                        }}
+                      >
+                        <span className="composer-mcp-menu-name" title={server.name}>
+                          {server.name}
+                        </span>
+                        <span className="composer-plus-plugin-hint">
+                          {t("chat.plusMenuUseMcp")}
+                        </span>
+                      </button>
                       <button
                         type="button"
                         role="switch"

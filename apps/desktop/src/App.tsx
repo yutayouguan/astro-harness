@@ -173,6 +173,7 @@ export default function App() {
   );
   const [collapsedProjects, setCollapsedProjects] = useState<Set<string>>(new Set());
   const [collapsedSections, setCollapsedSections] = useState<Set<string>>(new Set());
+  const [pinnedCount, setPinnedCount] = useState(0);
   const toggleSection = useCallback((section: string) => {
     setCollapsedSections((prev) => {
       const next = new Set(prev);
@@ -970,23 +971,25 @@ export default function App() {
                   </>
                 ) : (
                   <>
-                    {/* ── 置顶 ── */}
-                    <div className="sidebar-collapsible-section">
-                      <button
-                        type="button"
-                        className="sidebar-section-toggle"
-                        onClick={() => toggleSection("pinned")}
-                      >
-                        <ChevronRight
-                          size={12}
-                          strokeWidth={2}
-                          className={`sidebar-section-chevron ${!collapsedSections.has("pinned") ? "is-expanded" : ""}`}
-                          aria-hidden
-                        />
-                        <span className="sidebar-section-title">{t("sessions.pin")}</span>
-                      </button>
-                    </div>
-                    {!collapsedSections.has("pinned") && (
+                    {/* ── 置顶（无置顶会话时整个分区隐藏） ── */}
+                    {pinnedCount > 0 && (
+                      <div className="sidebar-collapsible-section">
+                        <button
+                          type="button"
+                          className="sidebar-section-toggle"
+                          onClick={() => toggleSection("pinned")}
+                        >
+                          <ChevronRight
+                            size={12}
+                            strokeWidth={2}
+                            className={`sidebar-section-chevron ${!collapsedSections.has("pinned") ? "is-expanded" : ""}`}
+                            aria-hidden
+                          />
+                          <span className="sidebar-section-title">{t("sessions.pin")}</span>
+                        </button>
+                      </div>
+                    )}
+                    <div style={pinnedCount > 0 && !collapsedSections.has("pinned") ? undefined : { display: "none" }}>
                       <SidebarSessionList
                         activeSessionId={chat.sessionId}
                         sessionStatuses={sessionStatuses}
@@ -994,11 +997,12 @@ export default function App() {
                         query=""
                         listKind={sessionListKind}
                         pinnedFilter="pinned"
+                        onCountChange={setPinnedCount}
                         onOpenSession={(sid) => void openSessionFromFilespace(sid)}
                         onPrepareDeleteCurrentSession={prepareDeleteCurrentSession}
                         onClearDeletedCurrentSession={clearDeletedCurrentSession}
                       />
-                    )}
+                    </div>
 
                     {/* ── 项目 ── */}
                     <div className="sidebar-collapsible-section">

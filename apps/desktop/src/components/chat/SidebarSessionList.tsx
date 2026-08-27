@@ -105,6 +105,8 @@ type Props = {
   listKind: SessionListKind;
   /** 按置顶状态过滤：pinned 只显示已置顶，unpinned 只显示未置顶，all 不过滤 */
   pinnedFilter?: "all" | "pinned" | "unpinned";
+  /** 过滤后条目数变化时回调，用于外部按需隐藏整个分区 */
+  onCountChange?: (count: number) => void;
   onOpenSession: (sessionId: string) => void;
   /** 删除当前会话前取消流 */
   onPrepareDeleteCurrentSession?: () => void | Promise<void>;
@@ -130,6 +132,7 @@ export default function SidebarSessionList({
   query,
   listKind,
   pinnedFilter = "all",
+  onCountChange,
   onOpenSession,
   onPrepareDeleteCurrentSession,
   onClearDeletedCurrentSession,
@@ -381,6 +384,8 @@ export default function SidebarSessionList({
         s.sessionId.toLowerCase().includes(q),
     );
   }, [items, query, pinnedFilter]);
+
+  useEffect(() => { onCountChange?.(filtered.length); }, [filtered.length, onCountChange]);
 
   const hasQuery = query.trim().length > 0;
   const archived = listKind === "archived";

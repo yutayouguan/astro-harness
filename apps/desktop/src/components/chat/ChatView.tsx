@@ -37,6 +37,7 @@ import {
   SendHorizontal,
   ShieldAlert,
   ShieldCheck,
+  Sparkles,
   Square,
   Trash2,
   MoreHorizontal,
@@ -113,7 +114,11 @@ import {
   type PaletteKind,
 } from "./ComposerPalette";
 import ComposerPlusMenu from "./ComposerPlusMenu";
+import ComposerContextPreview, {
+  type ComposerPreviewTarget,
+} from "./ComposerContextPreview";
 import ContextUsagePopover from "./ContextUsagePopover";
+import McpIcon from "../icons/McpIcon";
 import { ModelBrandIcon } from "../icons/ProviderIcons";
 import MsgActivity from "./MsgActivity";
 import MsgActivityGroup from "./MsgActivityGroup";
@@ -152,6 +157,12 @@ import {
   parseSlashInput,
   type SlashAction,
 } from "../../lib/chat/composerCommands";
+import {
+  addComposerContextToken,
+  removeTriggerText,
+  serializeComposerContext,
+  type ComposerContextToken,
+} from "../../lib/chat/composerContext";
 
 const CHECK_ICON = CheckData;
 const COPY_ICON = CopyData;
@@ -427,7 +438,9 @@ async function fileToAttachment(file: File): Promise<ChatAttachment> {
   const kind = kindFromMime(file.type || "", file.name);
   const id = `att-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   const previewUrl =
-    kind === "image" || kind === "video" ? URL.createObjectURL(file) : undefined;
+    kind === "image" || kind === "video" || kind === "audio"
+      ? URL.createObjectURL(file)
+      : undefined;
 
   let dataBase64: string | undefined;
   const shouldInline =
@@ -707,11 +720,41 @@ export default function ChatView({
   const [agents, setAgents] = useState<AgentIconInfo[]>([]);
   const [activeAgentId, setActiveAgentId] = useState<string | null>(null);
   const [skills, setSkills] = useState<InstalledSkill[]>([]);
+  const [composerContexts, setComposerContexts] = useState<
+    ComposerContextToken[]
+  >([]);
+  const [previewTarget, setPreviewTarget] =
+    useState<ComposerPreviewTarget | null>(null);
   const [mediaBaseDir, setMediaBaseDir] = useState<string | null>(null);
   /** 创建 Agent：发送校验失败时高亮的必填槽 index */
   const [agentCreateMissing, setAgentCreateMissing] = useState<number[]>([]);
   const { servers: mcpServers } = useMcpTools(agentId);
   const mcpHasEnabled = mcpServers.some((s) => s.enabled);
+
+  const addComposerContext = useCallback((token: ComposerContextToken) => {
+    setComposerContexts((current) => addComposerContextToken(current, token));
+    window.requestAnimationFrame(() => textareaRef.current?.focus());
+  }, []);
+
+  const removeComposerContext = useCallback((token: ComposerContextToken) => {
+    setComposerContexts((current) =>
+      current.filter(
+        (item) => !(item.kind === token.kind && item.id === token.id),
+      ),
+    );
+    setPreviewTarget((current) =>
+      current?.type === "context" &&
+      current.item.kind === token.kind &&
+      current.item.id === token.id
+        ? null
+        : current,
+    );
+  }, []);
+
+  useEffect(() => {
+    setComposerContexts([]);
+    setPreviewTarget(null);
+  }, [sessionId]);
 
   const cancelContextPopoverClose = useCallback(() => {
     if (contextCloseTimerRef.current == null) return;
@@ -844,7 +887,8 @@ export default function ChatView({
     !streaming &&
     pendingInterrupts.length === 0 &&
     input.length === 0 &&
-    attachments.length === 0;
+    attachments.length === 0 &&
+    composerContexts.length === 0;
   useTypingPlaceholder(welcomeHints, typingPlaceholderEnabled, typedHintRef);
 
   useEffect(() => {
@@ -1026,19 +1070,29 @@ export default function ChatView({
     t("chat.thinkingLength");
 
   const slashItems: PaletteItem[] = useMemo(() => {
-    return buildSlashPaletteEntries(skills).map((e) => ({
-      id: e.id,
-      title: e.title,
-      description: e.description ?? t(e.descKey),
-      action: e.action,
-      icon: e.icon,
-      skillName: e.skillName,
-      // Hermes：技能斜杠插入 /name，发送时再注入 SKILL.md
-      insert:
+    return buildSlashPaletteEntries(skills).map((e) => {
+      const skill =
         e.action === "insert_skill" && e.skillName
-          ? `/${e.skillName} `
+          ? skills.find((item) => item.name === e.skillName)
+          : undefined;
+      return {
+        id: e.id,
+        title: e.title,
+        description: e.description ?? t(e.descKey),
+        action: e.action,
+        icon: e.icon,
+        skillName: e.skillName,
+        contextToken: skill
+          ? {
+              id: skill.id,
+              kind: "skill" as const,
+              name: skill.name,
+              description: skill.description,
+              path: skill.path,
+            }
           : undefined,
-    }));
+      };
+    });
   }, [skills, t]);
 
   const mentionItems: PaletteItem[] = useMemo(() => {
@@ -1067,10 +1121,19 @@ export default function ChatView({
         id: `mention-${c.kind}-${c.id}`,
         title: `@${c.name}`,
         description: c.description || t(descKey),
-        insert: `@${c.name} `,
         icon,
         mentionKind: c.kind,
         action: "insert" as const,
+        contextToken: {
+          id: c.id,
+          kind: c.kind,
+          name: c.name,
+          description: c.description,
+          path:
+            c.kind === "skill"
+              ? skills.find((skill) => skill.id === c.id)?.path
+              : undefined,
+        },
       };
     });
   }, [agents, skills, mcpServers, t]);
@@ -1202,6 +1265,13 @@ export default function ChatView({
         closePalette();
         return;
       }
+      if (item.contextToken) {
+        const end = textareaRef.current?.selectionStart ?? input.length;
+        onInputChange(removeTriggerText(input, triggerStart, end));
+        addComposerContext(item.contextToken);
+        closePalette();
+        return;
+      }
       if (paletteKind === "slash" && item.action && item.action !== "insert") {
         runSlashAction(
           item.action === "clear" ? "new_chat" : (item.action as SlashAction),
@@ -1218,6 +1288,8 @@ export default function ChatView({
       paletteKind,
       onThinkingLevelChange,
       closePalette,
+      onInputChange,
+      addComposerContext,
       runSlashAction,
       insertAtTrigger,
       triggerStart,
@@ -1526,6 +1598,9 @@ export default function ChatView({
   const removeAttachment = (id: string) => {
     const target = attachments.find((a) => a.id === id);
     if (target) revokePreview(target);
+    setPreviewTarget((current) =>
+      current?.type === "attachment" && current.item.id === id ? null : current,
+    );
     onAttachmentsChange(attachments.filter((a) => a.id !== id));
   };
 
@@ -1640,7 +1715,9 @@ export default function ChatView({
     streaming || turnInFlight || interruptBlocked;
   const canSend =
     !sendBlocked &&
-    (input.trim().length > 0 || attachments.length > 0) &&
+    (input.trim().length > 0 ||
+      attachments.length > 0 ||
+      composerContexts.length > 0) &&
     (!streaming || canQueueWhileBusy);
   const parallelRunningCount = useMemo(
     () => countRunningParallel(parallelTasks),
@@ -1721,10 +1798,14 @@ export default function ChatView({
         return;
       }
       setAgentCreateMissing([]);
-      onSend({ text: prep.sanitized });
+      onSend({ text: serializeComposerContext(composerContexts, prep.sanitized) });
+      setComposerContexts([]);
+      setPreviewTarget(null);
       return;
     }
-    onSend();
+    onSend({ text: serializeComposerContext(composerContexts, input) });
+    setComposerContexts([]);
+    setPreviewTarget(null);
   };
 
   useEffect(() => {

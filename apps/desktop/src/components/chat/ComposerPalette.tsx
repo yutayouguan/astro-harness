@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef } from "react";
 import { useI18n } from "../../i18n/LocaleContext";
 import type { ThinkingLevel } from "../../lib/chat/thinkingPrefs";
 import type { SlashAction } from "../../lib/chat/composerCommands";
+import type { ComposerContextToken } from "../../lib/chat/composerContext";
 
 export type PaletteKind = "slash" | "mention" | "thinking";
 
@@ -15,6 +16,8 @@ export type PaletteItem = {
   action?: SlashAction | "insert" | "help" | "clear";
   skillName?: string;
   mentionKind?: "agent" | "skill" | "mcp";
+  /** 选择后以结构化标签加入输入框，而不是写入普通文本。 */
+  contextToken?: ComposerContextToken;
   level?: ThinkingLevel;
   /** 分组标签（如"指令"/"技能"/"添加"/"插件"） */
   group?: string;
