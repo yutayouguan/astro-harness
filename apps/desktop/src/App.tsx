@@ -914,20 +914,29 @@ export default function App() {
                 </div>
                 <div className="sidebar-brand-text">Astro Agent</div>
               </div>
-              <button
-                type="button"
-                className="sidebar-new-chat"
-                onClick={() => {
-                  setNav("chat");
-                  void startNewChat();
-                }}
-                title={t("sidebar.newChat")}
-                aria-label={t("sidebar.newChat")}
-                aria-keyshortcuts="Meta+N Control+N"
-              >
-                <IconNewChat width={20} height={20} strokeWidth={1.8} />
-                <span className="sidebar-item-label">{t("sidebar.newChat")}</span>
-              </button>
+              <div className="sidebar-primary-actions">
+                <button
+                  type="button"
+                  className="sidebar-new-chat"
+                  onClick={() => {
+                    setNav("chat");
+                    void startNewChat();
+                  }}
+                  title={t("sidebar.newChat")}
+                  aria-label={t("sidebar.newChat")}
+                  aria-keyshortcuts="Meta+N Control+N"
+                >
+                  <IconNewChat width={18} height={18} strokeWidth={1.8} />
+                  <span className="sidebar-item-label">{t("sidebar.newChat")}</span>
+                </button>
+                <ExpandableSearch
+                  value={sessionQuery}
+                  onChange={setSessionQuery}
+                  placeholderKey="chat.rightPanel.searchSessions"
+                  className="sidebar-session-search sidebar-global-search"
+                />
+              </div>
+              <div className="sidebar-group-label">{t("sidebar.workspace")}</div>
               <nav className="sidebar-feature-tabs" aria-label={t("sidebar.features")}>
                 {([
                   { id: "cron", label: t("nav.cron"), Icon: IconCron },
@@ -940,8 +949,9 @@ export default function App() {
                     className={`sidebar-feature-tab ${nav === id ? "is-active" : ""}`}
                     onClick={() => setNav(id)}
                     aria-current={nav === id ? "page" : undefined}
+                    title={label}
                   >
-                    <Icon width={20} height={20} strokeWidth={1.8} />
+                    <Icon width={18} height={18} strokeWidth={1.8} />
                     <span className="sidebar-item-label">{label}</span>
                   </button>
                 ))}
@@ -950,13 +960,9 @@ export default function App() {
                 {searchingSessions ? (
                   <>
                     <div className="sidebar-section-header">
-                      <span className="sidebar-section-title">搜索结果</span>
-                      <ExpandableSearch
-                        value={sessionQuery}
-                        onChange={setSessionQuery}
-                        placeholderKey="chat.rightPanel.searchSessions"
-                        className="sidebar-session-search"
-                      />
+                      <span className="sidebar-section-title">
+                        {t("sidebar.searchResults")}
+                      </span>
                     </div>
                     <SidebarSessionList
                       activeSessionId={chat.sessionId}
@@ -978,6 +984,7 @@ export default function App() {
                           type="button"
                           className="sidebar-section-toggle"
                           onClick={() => toggleSection("pinned")}
+                          aria-expanded={!collapsedSections.has("pinned")}
                         >
                           <ChevronRight
                             size={12}
@@ -1010,6 +1017,7 @@ export default function App() {
                         type="button"
                         className="sidebar-section-toggle"
                         onClick={() => toggleSection("projects")}
+                        aria-expanded={!collapsedSections.has("projects")}
                       >
                         <ChevronRight
                           size={12}
@@ -1018,28 +1026,10 @@ export default function App() {
                           aria-hidden
                         />
                         <span className="sidebar-section-title">
-                          {sessionListKind === "archived" ? t("sessions.archived") : "项目"}
+                          {t("sidebar.projects")}
                         </span>
                       </button>
                       <div className="sidebar-section-actions">
-                        <ExpandableSearch
-                          value={sessionQuery}
-                          onChange={setSessionQuery}
-                          placeholderKey="chat.rightPanel.searchSessions"
-                          className="sidebar-session-search"
-                        />
-                        <button
-                          type="button"
-                          className={`sidebar-session-filter-btn ${sessionListKind === "archived" ? "is-on" : ""}`}
-                          title={sessionListKind === "archived" ? t("sessions.active") : t("sessions.archived")}
-                          aria-label={sessionListKind === "archived" ? t("sessions.active") : t("sessions.archived")}
-                          aria-pressed={sessionListKind === "archived"}
-                          onClick={() =>
-                            setSessionListKind((kind) => (kind === "archived" ? "active" : "archived"))
-                          }
-                        >
-                          <Archive size={14} strokeWidth={1.8} aria-hidden />
-                        </button>
                         <button
                           type="button"
                           className="sidebar-add-btn"
@@ -1067,6 +1057,7 @@ export default function App() {
                           <button
                             type="button"
                             className="sidebar-project-name"
+                            title={proj.name}
                             onClick={() => {
                               if (activeProjectId !== proj.id) {
                                 if (!switchActiveProject(proj.id)) return;
@@ -1149,6 +1140,7 @@ export default function App() {
                         type="button"
                         className="sidebar-section-toggle"
                         onClick={() => toggleSection("recent")}
+                        aria-expanded={!collapsedSections.has("recent")}
                       >
                         <ChevronRight
                           size={12}
@@ -1156,8 +1148,24 @@ export default function App() {
                           className={`sidebar-section-chevron ${!collapsedSections.has("recent") ? "is-expanded" : ""}`}
                           aria-hidden
                         />
-                        <span className="sidebar-section-title">最近</span>
+                        <span className="sidebar-section-title">
+                          {sessionListKind === "archived" ? t("sessions.archived") : t("sidebar.recent")}
+                        </span>
                       </button>
+                      <div className="sidebar-section-actions">
+                        <button
+                          type="button"
+                          className={`sidebar-session-filter-btn ${sessionListKind === "archived" ? "is-on" : ""}`}
+                          title={sessionListKind === "archived" ? t("sessions.active") : t("sessions.archived")}
+                          aria-label={sessionListKind === "archived" ? t("sessions.active") : t("sessions.archived")}
+                          aria-pressed={sessionListKind === "archived"}
+                          onClick={() =>
+                            setSessionListKind((kind) => (kind === "archived" ? "active" : "archived"))
+                          }
+                        >
+                          <Archive size={14} strokeWidth={1.8} aria-hidden />
+                        </button>
+                      </div>
                     </div>
                     {!collapsedSections.has("recent") && (
                       <SidebarSessionList
@@ -1175,19 +1183,22 @@ export default function App() {
                   </>
                 )}
               </div>
-              <button
-                type="button"
-                className="sidebar-settings-btn"
-                onClick={() => setNav("settings")}
-              >
-                <Settings2 size={20} strokeWidth={1.8} aria-hidden />
-                <span className="sidebar-item-label">{t("nav.settings")}</span>
-                {chat.memoryPendingCount > 0 && (
-                  <span className="nav-badge">
-                    {chat.memoryPendingCount > 99 ? "99+" : String(chat.memoryPendingCount)}
-                  </span>
-                )}
-              </button>
+              <div className="sidebar-footer">
+                <button
+                  type="button"
+                  className="sidebar-settings-btn"
+                  onClick={() => setNav("settings")}
+                  title={t("nav.settings")}
+                >
+                  <Settings2 size={18} strokeWidth={1.8} aria-hidden />
+                  <span className="sidebar-item-label">{t("nav.settings")}</span>
+                  {chat.memoryPendingCount > 0 && (
+                    <span className="nav-badge">
+                      {chat.memoryPendingCount > 99 ? "99+" : String(chat.memoryPendingCount)}
+                    </span>
+                  )}
+                </button>
+              </div>
             </>
           )}
         </aside>

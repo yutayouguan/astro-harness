@@ -3,28 +3,38 @@
 .sidebar-feature-tabs {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 2px;
   /* 与项目区之间留一条发丝线，否则两组列表会读成同一层 */
   margin: 0 10px 10px;
-  padding: 0 0 12px;
+  padding: 0 0 10px;
   border-bottom: 1px solid color-mix(in srgb, var(--ink) 7%, transparent);
 }
 
-.sidebar-new-chat {
-  width: calc(100% - 20px);
-  min-height: 44px;
+.sidebar-primary-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
   margin: 0 10px 12px;
-  padding: 0 12px;
+}
+
+.sidebar-new-chat {
+  flex: 1 1 auto;
+  width: auto;
+  min-width: 0;
+  min-height: 40px;
+  margin: 0;
+  padding: 0 10px;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 12px;
+  gap: 10px;
   border: 1px solid color-mix(in srgb, var(--ink) 8%, transparent);
   border-radius: 12px;
   background: color-mix(in srgb, var(--ink) 5%, transparent);
   color: color-mix(in srgb, var(--ink) 94%, transparent);
   font: inherit;
-  font-size: 16px;
+  font-size: 14px;
   font-weight: 600;
   letter-spacing: -0.015em;
   text-align: left;
@@ -42,7 +52,16 @@
 }
 
 .sidebar-new-chat svg {
-  flex: 0 0 20px;
+  flex: 0 0 18px;
+}
+
+.sidebar-group-label {
+  margin: 0 14px 5px;
+  color: color-mix(in srgb, var(--ink-mute) 88%, transparent);
+  font-size: 11px;
+  font-weight: 650;
+  line-height: 1.2;
+  letter-spacing: 0.035em;
 }
 
 @media (hover: hover) and (pointer: fine) {
@@ -63,18 +82,19 @@
 }
 
 .sidebar-feature-tab {
+  position: relative;
   width: 100%;
-  min-height: 40px;
-  padding: 0 12px;
+  min-height: 38px;
+  padding: 0 10px;
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
   border: 0;
   border-radius: 10px;
   background: transparent;
   color: color-mix(in srgb, var(--ink) 86%, transparent);
   font: inherit;
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 550;
   letter-spacing: -0.01em;
   line-height: 1;
@@ -87,7 +107,7 @@
 }
 
 .sidebar-feature-tab svg {
-  flex: 0 0 20px;
+  flex: 0 0 18px;
   opacity: 0.82;
 }
 
@@ -99,6 +119,18 @@
 .sidebar-feature-tab.is-active {
   color: var(--tone, var(--tone-blue));
   background: color-mix(in srgb, var(--tone, var(--tone-blue)) 10%, transparent);
+}
+
+.sidebar-feature-tab.is-active::before {
+  content: "";
+  position: absolute;
+  left: 2px;
+  top: 50%;
+  width: 2px;
+  height: 16px;
+  border-radius: 999px;
+  background: currentColor;
+  transform: translateY(-50%);
 }
 
 .sidebar-feature-tab.is-active svg {
@@ -129,7 +161,7 @@
   display: flex;
   align-items: center;
   gap: 2px;
-  padding: 6px 8px 4px;
+  padding: 7px 8px 4px;
 }
 
 .sidebar-section-toggle {
@@ -184,10 +216,9 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 13px;
-  font-weight: 590;
-  color: var(--ink-mute);
-  opacity: 0.75;
+  font-size: 12px;
+  font-weight: 650;
+  color: color-mix(in srgb, var(--ink) 64%, transparent);
   letter-spacing: -0.01em;
 }
 
@@ -235,6 +266,18 @@
 .sidebar-session-filter-btn.is-on {
   background: color-mix(in srgb, var(--tone, var(--tone-blue)) 16%, transparent);
   color: var(--tone, var(--tone-blue));
+}
+
+.sidebar-global-search .expandable-search-btn {
+  width: 40px;
+  height: 40px;
+  border: 1px solid color-mix(in srgb, var(--ink) 8%, transparent);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--ink) 3%, transparent);
+}
+
+.sidebar-primary-actions:has(.sidebar-global-search.is-open) .sidebar-new-chat {
+  display: none;
 }
 
 .sidebar-project {
@@ -376,7 +419,7 @@
   color: var(--ink);
 }
 
-/* 项目区顶部：跨项目会话搜索 + 归档视图切换 */
+/* 跨项目会话搜索 */
 .sidebar-session-search {
   flex: 0 0 auto;
 }
@@ -404,6 +447,18 @@
   min-width: 0;
 }
 
+.sidebar-global-search .expandable-search-field {
+  height: 40px;
+  padding: 0 10px;
+  border: 1px solid color-mix(in srgb, var(--ink) 8%, transparent);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--ink) 4%, transparent);
+}
+
+.sidebar-global-search .expandable-search-input {
+  font-size: 13px;
+}
+
 .sidebar-sessions.is-global {
   padding-left: 0;
 }
@@ -427,6 +482,23 @@
 .sidebar:not(.is-labels) .sidebar-feature-tabs {
   align-items: center;
   padding: 0 0 10px;
+}
+
+.sidebar:not(.is-labels) .sidebar-primary-actions {
+  justify-content: center;
+  margin-inline: 0;
+}
+
+.sidebar:not(.is-labels) .sidebar-new-chat {
+  flex: 0 0 34px;
+  width: 34px;
+  min-height: 34px;
+  padding: 0;
+  justify-content: center;
+}
+
+.sidebar:not(.is-labels) .sidebar-group-label {
+  display: none;
 }
 
 .sidebar:not(.is-labels) .sidebar-feature-tab {
@@ -503,14 +575,32 @@
   display: inline;
 }
 
+.sidebar-footer {
+  position: relative;
+  flex: 0 0 auto;
+  margin-top: auto;
+  padding: 10px 10px 0;
+}
+
+.sidebar-footer::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 2px;
+  right: 2px;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--ink) 10%, transparent), transparent);
+}
+
 .sidebar-settings-btn {
+  width: 100%;
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 12px;
   min-height: 40px;
   padding: 0 12px;
-  margin: auto 10px 0;
+  margin: 0;
   border: none;
   border-radius: 10px;
   background: transparent;
@@ -536,7 +626,11 @@
 }
 
 .sidebar-settings-btn svg {
-  flex: 0 0 20px;
+  flex: 0 0 18px;
+}
+
+.sidebar:not(.is-labels) .sidebar-footer {
+  padding-inline: 0;
 }
 
 .sidebar-settings-btn:active {
