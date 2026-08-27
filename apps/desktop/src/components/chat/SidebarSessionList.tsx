@@ -103,6 +103,8 @@ type Props = {
   /** 侧栏全局搜索词；非空时展示全部匹配结果 */
   query: string;
   listKind: SessionListKind;
+  /** 按置顶状态过滤：pinned 只显示已置顶，unpinned 只显示未置顶，all 不过滤 */
+  pinnedFilter?: "all" | "pinned" | "unpinned";
   onOpenSession: (sessionId: string) => void;
   /** 删除当前会话前取消流 */
   onPrepareDeleteCurrentSession?: () => void | Promise<void>;
@@ -127,6 +129,7 @@ export default function SidebarSessionList({
   projectId,
   query,
   listKind,
+  pinnedFilter = "all",
   onOpenSession,
   onPrepareDeleteCurrentSession,
   onClearDeletedCurrentSession,
@@ -367,14 +370,17 @@ export default function SidebarSessionList({
   ]);
 
   const filtered = useMemo(() => {
+    let result = items;
+    if (pinnedFilter === "pinned") result = result.filter((s) => s.pinnedAt);
+    else if (pinnedFilter === "unpinned") result = result.filter((s) => !s.pinnedAt);
     const q = query.trim().toLowerCase();
-    if (!q) return items;
-    return items.filter(
+    if (!q) return result;
+    return result.filter(
       (s) =>
         (s.summary ?? "").toLowerCase().includes(q) ||
         s.sessionId.toLowerCase().includes(q),
     );
-  }, [items, query]);
+  }, [items, query, pinnedFilter]);
 
   const hasQuery = query.trim().length > 0;
   const archived = listKind === "archived";

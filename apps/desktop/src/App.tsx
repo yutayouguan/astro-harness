@@ -105,6 +105,7 @@ import {
 import {
   ArrowLeft,
   Archive,
+  ChevronRight,
   FolderTree,
   MessageSquare,
   MoreHorizontal,
@@ -171,6 +172,15 @@ export default function App() {
     () => localStorage.getItem(ACTIVE_PROJECT_KEY) ?? "default",
   );
   const [collapsedProjects, setCollapsedProjects] = useState<Set<string>>(new Set());
+  const [collapsedSections, setCollapsedSections] = useState<Set<string>>(new Set());
+  const toggleSection = useCallback((section: string) => {
+    setCollapsedSections((prev) => {
+      const next = new Set(prev);
+      if (next.has(section)) next.delete(section);
+      else next.add(section);
+      return next;
+    });
+  }, []);
   const [projectMenu, setProjectMenu] = useState<{ id: string; name: string; x: number; y: number } | null>(null);
   const [projectDialog, setProjectDialog] = useState<
     { mode: "create" } | { mode: "edit"; project: ProjectDto } | null
@@ -936,144 +946,230 @@ export default function App() {
                 ))}
               </nav>
               <div className="sidebar-projects">
-                <div className="sidebar-section-header">
-                  <span className="sidebar-section-title">
-                    {searchingSessions
-                      ? "搜索结果"
-                      : sessionListKind === "archived"
-                        ? t("sessions.archived")
-                        : "项目"}
-                  </span>
-                  <ExpandableSearch
-                    value={sessionQuery}
-                    onChange={setSessionQuery}
-                    placeholderKey="chat.rightPanel.searchSessions"
-                    className="sidebar-session-search"
-                  />
-                  <button
-                    type="button"
-                    className={`sidebar-session-filter-btn ${sessionListKind === "archived" ? "is-on" : ""}`}
-                    title={sessionListKind === "archived" ? t("sessions.active") : t("sessions.archived")}
-                    aria-label={sessionListKind === "archived" ? t("sessions.active") : t("sessions.archived")}
-                    aria-pressed={sessionListKind === "archived"}
-                    onClick={() =>
-                      setSessionListKind((kind) => (kind === "archived" ? "active" : "archived"))
-                    }
-                  >
-                    <Archive size={14} strokeWidth={1.8} aria-hidden />
-                  </button>
-                  <button
-                    type="button"
-                    className="sidebar-add-btn"
-                    onClick={() => setProjectDialog({ mode: "create" })}
-                    title="+ 新建项目"
-                    aria-label="新建项目"
-                  >
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-                      <path d="M12 5v14" /><path d="M5 12h14" />
-                    </svg>
-                  </button>
-                </div>
                 {searchingSessions ? (
-                  <SidebarSessionList
-                    activeSessionId={chat.sessionId}
-                    sessionStatuses={sessionStatuses}
-                    projectId={null}
-                    query={sessionQuery}
-                    listKind={sessionListKind}
-                    onOpenSession={(sid) => void openSessionFromFilespace(sid)}
-                    onPrepareDeleteCurrentSession={prepareDeleteCurrentSession}
-                    onClearDeletedCurrentSession={clearDeletedCurrentSession}
-                  />
-                ) : projects.map((proj) => (
-                  <div
-                    key={proj.id}
-                    className={`sidebar-project ${activeProjectId === proj.id ? "is-active" : ""}`}
-                    onContextMenu={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      setProjectMenu({ ...proj, x: e.clientX, y: e.clientY });
-                    }}
-                  >
-                    <div className="sidebar-project-header">
+                  <>
+                    <div className="sidebar-section-header">
+                      <span className="sidebar-section-title">搜索结果</span>
+                      <ExpandableSearch
+                        value={sessionQuery}
+                        onChange={setSessionQuery}
+                        placeholderKey="chat.rightPanel.searchSessions"
+                        className="sidebar-session-search"
+                      />
+                    </div>
+                    <SidebarSessionList
+                      activeSessionId={chat.sessionId}
+                      sessionStatuses={sessionStatuses}
+                      projectId={null}
+                      query={sessionQuery}
+                      listKind={sessionListKind}
+                      onOpenSession={(sid) => void openSessionFromFilespace(sid)}
+                      onPrepareDeleteCurrentSession={prepareDeleteCurrentSession}
+                      onClearDeletedCurrentSession={clearDeletedCurrentSession}
+                    />
+                  </>
+                ) : (
+                  <>
+                    {/* ── 置顶 ── */}
+                    <div className="sidebar-collapsible-section">
                       <button
                         type="button"
-                        className="sidebar-project-name"
-                        onClick={() => {
-                          if (activeProjectId !== proj.id) {
-                            if (!switchActiveProject(proj.id)) return;
-                            setCollapsedProjects((prev) => {
-                              const next = new Set(prev);
-                              next.delete(proj.id);
-                              return next;
-                            });
-                            setNav("chat");
-                            void startNewChat();
-                            return;
-                          }
-                          setCollapsedProjects((prev) => {
-                            const next = new Set(prev);
-                            if (next.has(proj.id)) next.delete(proj.id);
-                            else next.add(proj.id);
-                            return next;
-                          });
-                          if (!switchActiveProject(proj.id)) return;
-                          setNav("chat");
-                        }}
+                        className="sidebar-section-toggle"
+                        onClick={() => toggleSection("pinned")}
                       >
-                        <ProjectFolderIcon
-                          iconId={proj.icon}
-                          expanded={!collapsedProjects.has(proj.id)}
-                          size={18}
+                        <ChevronRight
+                          size={12}
+                          strokeWidth={2}
+                          className={`sidebar-section-chevron ${!collapsedSections.has("pinned") ? "is-expanded" : ""}`}
+                          aria-hidden
                         />
-                        <span className="sidebar-item-label">{proj.name}</span>
-                      </button>
-                      <button
-                        type="button"
-                        className="sidebar-project-more"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          const rect = e.currentTarget.getBoundingClientRect();
-                          setProjectMenu({ ...proj, x: rect.right + 4, y: rect.top });
-                        }}
-                        title="更多"
-                        aria-label="更多"
-                      >
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
-                          <circle cx="12" cy="5" r="1.5" /><circle cx="12" cy="12" r="1.5" /><circle cx="12" cy="19" r="1.5" />
-                        </svg>
-                      </button>
-                      <button
-                        type="button"
-                        className="sidebar-project-action"
-                        onClick={() => {
-                          if (!switchActiveProject(proj.id)) return;
-                          setNav("chat");
-                          startNewChat();
-                        }}
-                        title={t("sidebar.newChat")}
-                        aria-label={t("sidebar.newChat")}
-                      >
-                        <IconNewChat width={14} height={14} />
+                        <span className="sidebar-section-title">{t("sessions.pin")}</span>
                       </button>
                     </div>
-                    {!collapsedProjects.has(proj.id) && (
+                    {!collapsedSections.has("pinned") && (
                       <SidebarSessionList
                         activeSessionId={chat.sessionId}
                         sessionStatuses={sessionStatuses}
-                        projectId={proj.id}
+                        projectId={null}
                         query=""
                         listKind={sessionListKind}
-                        onOpenSession={(sid) => {
-                          if (!switchActiveProject(proj.id)) return;
-                          void openSessionFromFilespace(sid);
-                        }}
+                        pinnedFilter="pinned"
+                        onOpenSession={(sid) => void openSessionFromFilespace(sid)}
                         onPrepareDeleteCurrentSession={prepareDeleteCurrentSession}
                         onClearDeletedCurrentSession={clearDeletedCurrentSession}
                       />
                     )}
-                  </div>
-                ))}
+
+                    {/* ── 项目 ── */}
+                    <div className="sidebar-collapsible-section">
+                      <button
+                        type="button"
+                        className="sidebar-section-toggle"
+                        onClick={() => toggleSection("projects")}
+                      >
+                        <ChevronRight
+                          size={12}
+                          strokeWidth={2}
+                          className={`sidebar-section-chevron ${!collapsedSections.has("projects") ? "is-expanded" : ""}`}
+                          aria-hidden
+                        />
+                        <span className="sidebar-section-title">
+                          {sessionListKind === "archived" ? t("sessions.archived") : "项目"}
+                        </span>
+                      </button>
+                      <div className="sidebar-section-actions">
+                        <ExpandableSearch
+                          value={sessionQuery}
+                          onChange={setSessionQuery}
+                          placeholderKey="chat.rightPanel.searchSessions"
+                          className="sidebar-session-search"
+                        />
+                        <button
+                          type="button"
+                          className={`sidebar-session-filter-btn ${sessionListKind === "archived" ? "is-on" : ""}`}
+                          title={sessionListKind === "archived" ? t("sessions.active") : t("sessions.archived")}
+                          aria-label={sessionListKind === "archived" ? t("sessions.active") : t("sessions.archived")}
+                          aria-pressed={sessionListKind === "archived"}
+                          onClick={() =>
+                            setSessionListKind((kind) => (kind === "archived" ? "active" : "archived"))
+                          }
+                        >
+                          <Archive size={14} strokeWidth={1.8} aria-hidden />
+                        </button>
+                        <button
+                          type="button"
+                          className="sidebar-add-btn"
+                          onClick={() => setProjectDialog({ mode: "create" })}
+                          title="+ 新建项目"
+                          aria-label="新建项目"
+                        >
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                            <path d="M12 5v14" /><path d="M5 12h14" />
+                          </svg>
+                        </button>
+                      </div>
+                    </div>
+                    {!collapsedSections.has("projects") && projects.map((proj) => (
+                      <div
+                        key={proj.id}
+                        className={`sidebar-project ${activeProjectId === proj.id ? "is-active" : ""}`}
+                        onContextMenu={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          setProjectMenu({ ...proj, x: e.clientX, y: e.clientY });
+                        }}
+                      >
+                        <div className="sidebar-project-header">
+                          <button
+                            type="button"
+                            className="sidebar-project-name"
+                            onClick={() => {
+                              if (activeProjectId !== proj.id) {
+                                if (!switchActiveProject(proj.id)) return;
+                                setCollapsedProjects((prev) => {
+                                  const next = new Set(prev);
+                                  next.delete(proj.id);
+                                  return next;
+                                });
+                                setNav("chat");
+                                void startNewChat();
+                                return;
+                              }
+                              setCollapsedProjects((prev) => {
+                                const next = new Set(prev);
+                                if (next.has(proj.id)) next.delete(proj.id);
+                                else next.add(proj.id);
+                                return next;
+                              });
+                              if (!switchActiveProject(proj.id)) return;
+                              setNav("chat");
+                            }}
+                          >
+                            <ProjectFolderIcon
+                              iconId={proj.icon}
+                              expanded={!collapsedProjects.has(proj.id)}
+                              size={18}
+                            />
+                            <span className="sidebar-item-label">{proj.name}</span>
+                          </button>
+                          <button
+                            type="button"
+                            className="sidebar-project-more"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              const rect = e.currentTarget.getBoundingClientRect();
+                              setProjectMenu({ ...proj, x: rect.right + 4, y: rect.top });
+                            }}
+                            title="更多"
+                            aria-label="更多"
+                          >
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+                              <circle cx="12" cy="5" r="1.5" /><circle cx="12" cy="12" r="1.5" /><circle cx="12" cy="19" r="1.5" />
+                            </svg>
+                          </button>
+                          <button
+                            type="button"
+                            className="sidebar-project-action"
+                            onClick={() => {
+                              if (!switchActiveProject(proj.id)) return;
+                              setNav("chat");
+                              startNewChat();
+                            }}
+                            title={t("sidebar.newChat")}
+                            aria-label={t("sidebar.newChat")}
+                          >
+                            <IconNewChat width={14} height={14} />
+                          </button>
+                        </div>
+                        {!collapsedProjects.has(proj.id) && (
+                          <SidebarSessionList
+                            activeSessionId={chat.sessionId}
+                            sessionStatuses={sessionStatuses}
+                            projectId={proj.id}
+                            query=""
+                            listKind={sessionListKind}
+                            onOpenSession={(sid) => {
+                              if (!switchActiveProject(proj.id)) return;
+                              void openSessionFromFilespace(sid);
+                            }}
+                            onPrepareDeleteCurrentSession={prepareDeleteCurrentSession}
+                            onClearDeletedCurrentSession={clearDeletedCurrentSession}
+                          />
+                        )}
+                      </div>
+                    ))}
+
+                    {/* ── 最近 ── */}
+                    <div className="sidebar-collapsible-section">
+                      <button
+                        type="button"
+                        className="sidebar-section-toggle"
+                        onClick={() => toggleSection("recent")}
+                      >
+                        <ChevronRight
+                          size={12}
+                          strokeWidth={2}
+                          className={`sidebar-section-chevron ${!collapsedSections.has("recent") ? "is-expanded" : ""}`}
+                          aria-hidden
+                        />
+                        <span className="sidebar-section-title">最近</span>
+                      </button>
+                    </div>
+                    {!collapsedSections.has("recent") && (
+                      <SidebarSessionList
+                        activeSessionId={chat.sessionId}
+                        sessionStatuses={sessionStatuses}
+                        projectId={null}
+                        query=""
+                        listKind={sessionListKind}
+                        pinnedFilter="unpinned"
+                        onOpenSession={(sid) => void openSessionFromFilespace(sid)}
+                        onPrepareDeleteCurrentSession={prepareDeleteCurrentSession}
+                        onClearDeletedCurrentSession={clearDeletedCurrentSession}
+                      />
+                    )}
+                  </>
+                )}
               </div>
               <button
                 type="button"
