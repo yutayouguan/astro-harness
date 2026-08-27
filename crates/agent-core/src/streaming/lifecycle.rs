@@ -400,12 +400,15 @@ pub(crate) async fn emit_reasoning_completed(
 pub(crate) async fn emit_response_items_completed(
     session: &Session,
     turn_context: &TurnContext,
+    assistant_started: bool,
     assistant_item_id: String,
     assistant_content: String,
     reasoning_item_id: String,
     reasoning_content: String,
 ) {
-    emit_assistant_completed(session, turn_context, assistant_item_id, assistant_content).await;
+    if assistant_started {
+        emit_assistant_completed(session, turn_context, assistant_item_id, assistant_content).await;
+    }
     if !reasoning_content.is_empty() {
         emit_reasoning_completed(session, turn_context, reasoning_item_id, reasoning_content).await;
     }

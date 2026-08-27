@@ -325,6 +325,30 @@ async fn scripted_tool_turn_emits_item_lifecycle_and_one_terminal() {
     assert_eq!(
         events
             .iter()
+            .filter(|event| matches!(
+                &event.msg,
+                EventMsg::ItemStarted(item)
+                    if matches!(&item.item, TurnItem::AgentMessage(_))
+            ))
+            .count(),
+        1,
+        "the native tool-only round must not create an empty assistant item"
+    );
+    assert_eq!(
+        events
+            .iter()
+            .filter(|event| matches!(
+                &event.msg,
+                EventMsg::ItemCompleted(item)
+                    if matches!(&item.item, TurnItem::AgentMessage(_))
+            ))
+            .count(),
+        1,
+        "only the final text response should complete an assistant item"
+    );
+    assert_eq!(
+        events
+            .iter()
             .filter(|event| event.msg.is_terminal())
             .count(),
         1
@@ -332,28 +356,18 @@ async fn scripted_tool_turn_emits_item_lifecycle_and_one_terminal() {
 }
 
 #[tokio::test]
-async fn legacy_xml_tool_call_is_structured_without_leaking_into_assistant_text() {
+async fn legacy_xml_tool_markup_is_plain_text_and_never_executes() {
     let (_dir, session, thread, _recorder, _path) = common::new_thread().await;
-    let turn_id = "legacy-xml-tool-call";
+    let turn_id = "legacy-xml-is-text";
     let turn_context = session.create_turn_context(turn_id.into()).await;
-    let chat = scripted_chat(vec![
-        vec![
-            StreamChunk::Text("Checking first.\n<tool_".into()),
-            StreamChunk::Text(
-                "call>{\"name\":\"echo\",\"arguments\":{\"text\":\"hello\"}}</tool".into(),
-            ),
-            StreamChunk::Text("_call>".into()),
-            StreamChunk::Done {
-                finish_reason: "stop".into(),
-            },
-        ],
-        vec![
-            StreamChunk::Text("Final answer".into()),
-            StreamChunk::Done {
-                finish_reason: "stop".into(),
-            },
-        ],
-    ]);
+    let legacy_markup =
+        "<tool_call>{\"name\":\"echo\",\"arguments\":{\"text\":\"hello\"}}</tool_call>";
+    let chat = scripted_chat(vec![vec![
+        StreamChunk::Text(legacy_markup.into()),
+        StreamChunk::Done {
+            finish_reason: "stop".into(),
+        },
+    ]]);
 
     let run = tokio::spawn(run_multi_turn_stream_with_chat_fn(
         Arc::clone(&session),
@@ -375,29 +389,19 @@ async fn legacy_xml_tool_call_is_structured_without_leaking_into_assistant_text(
             _ => None,
         })
         .collect::<String>();
-    assert_eq!(visible_text, "Checking first.\nFinal answer");
-    assert!(!visible_text.contains("tool_call"));
-    assert!(events.iter().any(|event| matches!(
+    assert_eq!(visible_text, legacy_markup);
+    assert!(!events.iter().any(|event| matches!(
         &event.msg,
         EventMsg::ItemStarted(item)
             if matches!(&item.item, TurnItem::DynamicToolCall(tool) if tool.name == "echo")
     )));
 
     let history = session.clone_history().await;
-    assert!(history.iter().all(|message| match &message.content {
-        types::message::MessageContent::Text(text) => !text.contains("<tool_call>"),
-        types::message::MessageContent::Parts(parts) => parts
-            .iter()
-            .filter_map(|part| part.text.as_deref())
-            .all(|text| !text.contains("<tool_call>")),
-    }));
-    assert!(history.iter().any(|message| {
-        message.tool_calls.as_ref().is_some_and(|calls| {
-            calls
-                .iter()
-                .any(|call| call.name == "echo" && call.arguments["text"] == "hello")
-        })
-    }));
+    assert!(history.iter().any(|message| matches!(
+        &message.content,
+        types::message::MessageContent::Text(text) if text == legacy_markup
+    )));
+    assert!(history.iter().all(|message| message.tool_calls.is_none()));
 }
 
 #[tokio::test]

@@ -160,6 +160,7 @@ pub(crate) async fn run_max_iterations_summary(a: MaxIterationsSummaryArgs<'_>) 
                         emit_response_items_completed(
                             session,
                             turn_context,
+                            true,
                             assistant_item_id,
                             full_response.clone(),
                             reasoning_item_id,
@@ -208,6 +209,7 @@ pub(crate) async fn run_max_iterations_summary(a: MaxIterationsSummaryArgs<'_>) 
     emit_response_items_completed(
         session,
         turn_context,
+        true,
         assistant_item_id,
         full_response,
         reasoning_item_id,

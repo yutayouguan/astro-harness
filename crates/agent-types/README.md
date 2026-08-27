@@ -50,7 +50,7 @@
 - `ModelCredentials` — LLM 凭证聚合：provider / model / api_key / base_url
 - `ModelSpec` / `ModelRole` — Agno 风格模型声明与角色绑定
 - `ToolEntry` — 工具元数据：name / description / schema / needs_confirmation / mcp_approval
-- `ToolCallAccumulator` — 流式 tool_call_delta 累积器，统一 native 与 XML 解析
+- `ToolCallAccumulator` — 原生流式 tool_call_delta 累积器；自由文本不参与工具识别
 - `ToolOutput` — 工具结果封装，支持文本与结构化输出
 - `InteractionMode` — 交互模式：`Agent`（全功能）/ `Plan`（只读规划）/ `Ask`（问答）
 - `PermissionProfile` — 权限配置集：预设（read-only / workspace / danger）或自定义

@@ -134,7 +134,7 @@ cd apps/desktop && npm run tauri:build:universal    # universal-apple-darwin
   → run_multi_turn_stream() (streaming 路径)
   → run_headless_multi_turn() (cron/无流式路径)
       ├─ loop: maintain_tool_context → reload → LLM stream → accumulate
-      ├─ ToolCallAccumulator: native tool_call_deltas + XML <tool_call> 统一解析
+      ├─ ToolCallAccumulator: 仅累积原生 tool_call_deltas（自由文本不参与工具识别）
       ├─ record_assistant_message_with_tools()
       ├─ handle_tool_call_async() × N → record_tool_result_with_id()
       └─ 无工具调用时 → 返回最终文本

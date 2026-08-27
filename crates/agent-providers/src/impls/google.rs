@@ -212,9 +212,8 @@ impl CompletionModel for InteractionsCompletionModel {
         };
 
         let mut response = send(body.clone()).await?;
-        // 服务端 interaction 里没有对应的 function_call 时（例如上一轮工具调用来自
-        // 文本 <tool_call> 而不是原生 function_call），续写会以 404 拒绝。
-        // 这种不一致只能靠整段重放修复。
+        // 服务端 interaction 状态过期或与客户端历史不一致时，续写会以 404 拒绝；
+        // 此时放弃 previous_interaction_id 并整段重放。
         if converted.continues_previous && response.status() == reqwest::StatusCode::NOT_FOUND {
             if let Some(obj) = body.as_object_mut() {
                 obj.remove("previous_interaction_id");
@@ -268,8 +267,9 @@ struct InteractionsInput {
 /// 服务端状态冲突。其余情况（新的用户消息、压缩后的历史）以客户端历史为准，
 /// 整段重放并放弃续写。
 ///
-/// 服务端只接受自己签发的 `function_call`，客户端重放的会被判为非法参数，
-/// 因此整段重放时工具往返一律降级成文本步骤。
+/// 服务端只接受自己签发的 `function_call`，客户端重放的会被判为非法参数。
+/// 因此整段重放不伪造 function call：只保留助手正文，并把既有工具结果作为
+/// 明确标注来源的用户输入上下文。
 fn to_interactions_input(
     messages: &[crate::types::Message],
     has_previous: bool,
@@ -369,7 +369,7 @@ fn to_interactions_steps(
                         "type": "user_input",
                         "content": [{
                             "type": "text",
-                            "text": format!("<tool_result name=\"{name}\">\n{content}\n</tool_result>"),
+                            "text": format!("Tool result ({name}):\n{content}"),
                         }],
                     }));
                 }
@@ -388,9 +388,8 @@ fn to_interactions_steps(
                         steps.push(step);
                     }
                 }
-                // text output（重放时把工具调用一并折叠成文本，服务端不接受
-                // 客户端签发的 function_call 步骤）
-                let mut text = content
+                // 只重放模型正文；历史 ToolCall 保持结构化语义，不伪装成文本。
+                let text = content
                     .iter()
                     .filter_map(|c| match c {
                         AssistantContent::Text { text } => Some(text.as_str()),
@@ -398,17 +397,6 @@ fn to_interactions_steps(
                     })
                     .collect::<Vec<_>>()
                     .join("");
-                if !text.contains("<tool_call>") {
-                    for c in content {
-                        if let AssistantContent::ToolCall(tc) = c {
-                            if !text.is_empty() {
-                                text.push('\n');
-                            }
-                            let call = json!({"name": tc.name, "arguments": tc.arguments});
-                            text.push_str(&format!("<tool_call>{call}</tool_call>"));
-                        }
-                    }
-                }
                 if !text.is_empty() {
                     steps.push(json!({
                         "type": "model_output",
@@ -929,7 +917,7 @@ mod tests {
     }
 
     #[test]
-    fn replayed_history_folds_tool_round_trips_into_text() {
+    fn replayed_history_keeps_tool_result_context_without_faking_a_call() {
         let converted = to_interactions_input(&tool_loop_messages(), false);
         assert!(!converted.continues_previous);
         let kinds: Vec<&str> = converted
@@ -937,30 +925,20 @@ mod tests {
             .iter()
             .map(|s| s["type"].as_str().unwrap_or_default())
             .collect();
-        // 服务端拒收客户端签发的 function_call，重放只能用文本步骤。
-        assert_eq!(kinds, ["user_input", "model_output", "user_input"]);
-        let call = converted.steps[1]["content"][0]["text"].as_str().unwrap();
-        assert!(
-            call.contains("<tool_call>") && call.contains("terminal"),
-            "{call}"
-        );
-        let result = converted.steps[2]["content"][0]["text"].as_str().unwrap();
-        assert!(
-            result.contains("<tool_result name=\"terminal\">"),
-            "{result}"
-        );
+        assert_eq!(kinds, ["user_input", "user_input"]);
+        let result = converted.steps[1]["content"][0]["text"].as_str().unwrap();
+        assert!(result.starts_with("Tool result (terminal):"), "{result}");
         assert!(result.contains("/tmp"), "{result}");
     }
 
     #[test]
-    fn replay_keeps_a_single_tool_call_block_for_text_style_calls() {
+    fn replay_does_not_serialize_structured_tool_calls_as_text() {
         use crate::types::message::{AssistantContent, ToolCall};
         let msgs = vec![
             crate::types::Message::user_text("查看当前目录"),
             crate::types::Message::assistant(vec![
                 AssistantContent::Text {
-                    text: "<tool_call>{\"name\":\"terminal\",\"arguments\":{\"command\":\"pwd\"}}</tool_call>"
-                        .into(),
+                    text: "Checking the directory.".into(),
                 },
                 AssistantContent::ToolCall(ToolCall {
                     id: "call-1".into(),
@@ -972,7 +950,9 @@ mod tests {
         ];
         let converted = to_interactions_input(&msgs, false);
         let text = converted.steps[1]["content"][0]["text"].as_str().unwrap();
-        assert_eq!(text.matches("<tool_call>").count(), 1, "{text}");
+        assert_eq!(text, "Checking the directory.");
+        assert!(!text.contains("terminal"));
+        assert!(!text.contains("pwd"));
     }
 
     #[test]
