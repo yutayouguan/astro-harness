@@ -607,16 +607,7 @@ async fn review_once_permission(
     }
 }
 
-fn affected_write_paths(name: &str, args: &serde_json::Value) -> Vec<String> {
-    if name == "file_ops" {
-        return ["path", "dest"]
-            .into_iter()
-            .filter_map(|key| args.get(key).and_then(|value| value.as_str()))
-            .map(str::trim)
-            .filter(|value| !value.is_empty())
-            .map(str::to_string)
-            .collect();
-    }
+fn affected_write_paths(name: &str, _args: &serde_json::Value) -> Vec<String> {
     let logical_path = match name {
         "todo" => "workspace/plans",
         "memory" => "agent/MEMORY.md or USER.md",
@@ -1737,14 +1728,6 @@ mod tests {
             &serde_json::json!({})
         ));
         assert!(tool_may_require_permission(
-            "file_ops",
-            &serde_json::json!({"operation": "mv"})
-        ));
-        assert!(!tool_may_require_permission(
-            "file_ops",
-            &serde_json::json!({"operation": "read"})
-        ));
-        assert!(tool_may_require_permission(
             "todo",
             &serde_json::json!({"action": "create"})
         ));
@@ -1768,14 +1751,7 @@ mod tests {
     }
 
     #[test]
-    fn permission_request_paths_include_both_move_endpoints() {
-        assert_eq!(
-            affected_write_paths(
-                "file_ops",
-                &serde_json::json!({"path": "src/a.rs", "dest": "src/b.rs"})
-            ),
-            vec!["src/a.rs", "src/b.rs"]
-        );
+    fn permission_request_paths_include_logical_path() {
         assert_eq!(
             affected_write_paths("todo", &serde_json::json!({})),
             vec!["workspace/plans"]

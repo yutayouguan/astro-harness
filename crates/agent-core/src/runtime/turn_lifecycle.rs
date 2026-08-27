@@ -1147,7 +1147,7 @@ mod tests {
             first.tool_router.model_visible_specs().as_ref(),
             second.tool_router.model_visible_specs().as_ref()
         );
-        assert!(first.advertises_tool("file_ops"));
+        assert!(first.advertises_tool("web_search"));
         assert!(!first.advertises_tool("terminal"));
     }
 

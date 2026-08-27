@@ -1,7 +1,7 @@
 //! 创建持久人设：在 `~/.astro` 下新建独立记忆空间与配置。
 //!
 //! 调用 [`home::create_agent_with_profile`]；若 `activate`，会就地更新
-//! [`ToolContext`] 的工作区与 MemoryManager，便于后续 file_ops 写到新空间。
+//! [`ToolContext`] 的工作区与 MemoryManager，便于后续写到新空间。
 //!
 //! **禁止**用本工具拆解当前回合任务——这类任务应启动 Agent Thread。
 
@@ -113,7 +113,7 @@ pub fn dispatch(ctx: &mut ToolContext<'_>, args: &serde_json::Value) -> anyhow::
         activate,
     )?;
 
-    // 若已切换，更新当前 ToolContext 工作区，便于后续 file_ops 写到新空间
+    // 若已切换，更新当前 ToolContext 工作区，便于后续写到新空间
     if activate {
         ctx.workspace_dir = std::path::PathBuf::from(&info.path);
         skills::set_workspace_override(std::path::Path::new(&info.path));
@@ -123,7 +123,7 @@ pub fn dispatch(ctx: &mut ToolContext<'_>, args: &serde_json::Value) -> anyhow::
     }
 
     Ok(format!(
-        "已创建 Agent「{name}」\n- id: {id}\n- 工作区: {path}\n- 配置: {cfg}\n- 已激活: {active}\n- 图标: {icon}\n\n可用 file_ops 继续微调 AGENT.md / IDENTITY.md / SOUL.md / USER.md / MEMORY.md。",
+        "已创建 Agent「{name}」\n- id: {id}\n- 工作区: {path}\n- 配置: {cfg}\n- 已激活: {active}\n- 图标: {icon}\n\n可用 apply_patch 继续微调 AGENT.md / IDENTITY.md / SOUL.md / USER.md / MEMORY.md。",
         name = info.name,
         id = info.id,
         path = info.path,

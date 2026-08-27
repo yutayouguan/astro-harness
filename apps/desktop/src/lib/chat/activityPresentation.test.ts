@@ -24,8 +24,8 @@ test("classifies native tool names into visual verbs", () => {
 test("extracts compact targets for human-readable rows", () => {
   assert.equal(
     activityDisplayTarget({
-      ...activity("file_ops"),
-      input: '{"operation":"read","path":"apps/desktop/src/ChatView.tsx"}',
+      ...activity("read_file"),
+      input: '{"path":"apps/desktop/src/ChatView.tsx"}',
     }),
     "ChatView.tsx",
   );
@@ -48,22 +48,15 @@ test("extracts compact targets for human-readable rows", () => {
 test("classifies multiplexed tools from their structured operation", () => {
   assert.equal(
     activityVisualKind({
-      ...activity("file_ops"),
-      input: '{"operation":"read","path":"README.md"}',
-    }),
-    "read",
-  );
-  assert.equal(
-    activityVisualKind({
-      ...activity("file_ops"),
-      input: '{"operation":"search","query":"timeline"}',
+      ...activity("skills"),
+      input: '{"action":"search","query":"timeline"}',
     }),
     "search",
   );
   assert.equal(
     activityVisualKind({
-      ...activity("file_ops"),
-      input: '{"operation":"patch","path":"ChatView.tsx"}',
+      ...activity("apply_patch"),
+      input: '{"path":"ChatView.tsx"}',
     }),
     "edit",
   );

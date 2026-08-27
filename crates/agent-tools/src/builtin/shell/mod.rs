@@ -2,12 +2,13 @@
 
 pub mod code_exec;
 pub mod context_remaining;
-pub mod file_ops;
 pub mod jobs;
 pub mod new_context_window;
+pub mod request_permissions;
 pub mod request_plugin_install;
 pub mod terminal;
 pub mod tool_search;
 pub mod wait_for_environment;
 pub mod web_fetch;
 pub mod web_search;
+pub mod write_stdin;

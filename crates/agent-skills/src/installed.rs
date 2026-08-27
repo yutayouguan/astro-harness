@@ -1264,10 +1264,10 @@ mod tests {
     #[test]
     fn parse_astro_tools_list_and_inline() {
         let block =
-            "---\nname: t\ndescription: d\nastro_tools:\n  - terminal\n  - file_ops\n---\nbody\n";
+            "---\nname: t\ndescription: d\nastro_tools:\n  - terminal\n  - apply_patch\n---\nbody\n";
         let m = parse_skill_frontmatter_full(block);
         assert_eq!(m.name, "t");
-        assert_eq!(m.astro_tools, vec!["terminal", "file_ops"]);
+        assert_eq!(m.astro_tools, vec!["terminal", "apply_patch"]);
 
         let inline = "---\nname: t2\ndescription: d\nastro_tools: [web_search, browser]\n---\n";
         let m2 = parse_skill_frontmatter_full(inline);

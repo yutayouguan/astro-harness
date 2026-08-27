@@ -1,5 +1,5 @@
 /**
- * 生成中的文件实时预览状态：解析 file_ops write 的流式参数，累积 path/content。
+ * 生成中的文件实时预览状态：解析 apply_patch 等写工具的流式参数，累积 path/content。
  *
  * 数据来源是 useSend 的 tool_call_delta / tool_call 事件。为避免频繁重渲染
  * （尤其是 HTML iframe 重挂），状态更新经 ~90ms 节流。
@@ -114,8 +114,8 @@ export function useGeneratingPreview(opts: { onActivate?: () => void }) {
       if (d.name && d.name.trim()) nameRef.current.set(key, d.name.trim());
 
       const name = (nameRef.current.get(key) ?? "").toLowerCase();
-      // 名称已知但不是 file_ops：跳过
-      if (name && name !== "file_ops") return;
+      // 名称已知但不是可预览的写工具：跳过
+      if (name && name !== "apply_patch") return;
 
       const parsed = parsePartialFileWrite(args);
       // 需要 content 字段才值得预览（read/list/patch 无 content）

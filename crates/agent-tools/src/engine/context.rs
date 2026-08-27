@@ -27,7 +27,7 @@ pub struct ToolContext<'a> {
     pub memory_dir: PathBuf,
     /// 当前 Agent 工作区目录（记忆空间），与代码仓分离。
     pub workspace_dir: PathBuf,
-    /// 可选代码/项目根（git worktree 或 `ASTRO_PROJECT_ROOT`）；有值时 terminal/file_ops 以此为根。
+    /// 可选代码/项目根（git worktree 或 `ASTRO_PROJECT_ROOT`）；有值时 terminal/apply_patch 以此为根。
     pub project_root: Option<PathBuf>,
     /// 项目全部授权根；第一个元素是主 cwd。
     pub workspace_roots: Vec<PathBuf>,

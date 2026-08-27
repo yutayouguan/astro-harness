@@ -1,8 +1,6 @@
 //! 内置工具注册与分发集成测试。
 
-use std::path::Path;
-use tempfile::TempDir;
-use tools::{builtin_handler_names, register_all, ToolContext, ToolRegistry};
+use tools::{builtin_handler_names, register_all, ToolRegistry};
 
 #[tokio::test]
 async fn register_all_includes_panel_tools() {
@@ -23,7 +21,6 @@ async fn register_all_includes_panel_tools() {
         "image_gen",
         "video_gen",
         "video_analyze",
-        "file_ops",
         "terminal",
         "web_search",
         "web_fetch",
@@ -139,95 +136,3 @@ async fn metadata_tools_have_handlers_without_legacy_memory_aliases() {
     }
 }
 
-#[tokio::test]
-async fn file_ops_write_and_read() {
-    let dir = TempDir::new().unwrap();
-    let workspace = dir.path().join("workspace");
-    std::fs::create_dir_all(&workspace).unwrap();
-    let memory = memory::MemoryManager::new(dir.path().to_path_buf()).unwrap();
-    let sessions =
-        session::SessionStore::open_sessions_dir(&memory.base_dir.join("sessions")).unwrap();
-    let memory = std::sync::RwLock::new(memory);
-    let targets = tools::ImageGenTargets::default();
-    let creds = tools::ModelCredentials::default();
-    let mut ctx = ToolContext {
-        memory: &memory,
-        sessions: &sessions,
-        memory_dir: dir.path().to_path_buf(),
-        workspace_dir: workspace.clone(),
-        project_root: None,
-        workspace_roots: Vec::new(),
-        image_gen_targets: &targets,
-        session_id: "test".into(),
-        turn_id: None,
-        credentials: &creds,
-        chat_targets: &[],
-        execution: None,
-        permission_profile: None,
-        skill_config_overrides: &[],
-        hook_bus: None,
-        hook_runtime: None,
-        workspace_write_grant: false,
-        sandbox_policy: None,
-        managed_network: None,
-        context_window: None,
-        context_tokens_used: None,
-    };
-
-    let w = tools::dispatch_tool(
-        |_| true,
-        &mut ctx,
-        "file_ops",
-        &serde_json::json!({
-            "path": "notes/hello.txt",
-            "operation": "write",
-            "content": "hello tools"
-        }),
-        None,
-    )
-    .await
-    .unwrap();
-    assert!(w.text().contains("已写入"));
-    assert!(w.text().contains("notes/hello.txt"));
-    assert!(!Path::new(w.text().trim_start_matches("已写入 ").trim()).is_absolute());
-
-    let r = tools::dispatch_tool(
-        |_| true,
-        &mut ctx,
-        "file_ops",
-        &serde_json::json!({
-            "path": "notes/hello.txt",
-            "operation": "read"
-        }),
-        None,
-    )
-    .await
-    .unwrap();
-    assert_eq!(r.text(), "hello tools");
-
-    let missing = tools::dispatch_tool(
-        |_| true,
-        &mut ctx,
-        "file_ops",
-        &serde_json::json!({
-            "path": "notes/x.txt",
-            "operation": "write"
-        }),
-        None,
-    )
-    .await;
-    assert!(missing.unwrap_err().to_string().contains("content"));
-
-    let del_root = tools::dispatch_tool(
-        |_| true,
-        &mut ctx,
-        "file_ops",
-        &serde_json::json!({
-            "path": ".",
-            "operation": "delete"
-        }),
-        None,
-    )
-    .await;
-    assert!(del_root.unwrap_err().to_string().contains("根目录"));
-}

@@ -1908,12 +1908,12 @@ async fn pre_verify_keep_going_retries_capped_at_two() {
             StreamChunk::ToolCallStart {
                 index: 0,
                 id: "call_write".into(),
-                name: "file_ops".into(),
+                name: "terminal".into(),
                 signature: None,
             },
             StreamChunk::ToolCallDelta {
                 index: 0,
-                arguments: r#"{"path":"verify.txt","operation":"write","content":"hi"}"#.into(),
+                arguments: r#"{"command":"echo hi > verify.txt"}"#.into(),
             },
             StreamChunk::Done {
                 finish_reason: "tool_calls".into(),

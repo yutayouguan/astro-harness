@@ -1,5 +1,5 @@
 /**
- * 从（可能不完整的）file_ops 工具参数 JSON 中容错提取 path / operation / content。
+ * 从（可能不完整的）写工具参数 JSON 中容错提取 path / operation / content。
  *
  * 流式场景下，模型逐块吐出工具参数，JSON 往往未闭合（content 字符串未结束）。
  * 这里先尝试完整解析，失败则按字段扫描，支持读取「已到达的部分 content」用于实时预览。

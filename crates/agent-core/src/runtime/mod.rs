@@ -1054,7 +1054,7 @@ impl Session {
         self.lock_state().compression.take_recommend_compact()
     }
 
-    /// 本轮用户消息内是否已发生磁盘写入（`terminal` / `file_ops` 写类操作）。
+    /// 本轮用户消息内是否已发生磁盘写入（`terminal` / `apply_patch` 等写类操作）。
     pub async fn turn_wrote_disk(&self) -> bool {
         self.lock_state().turn.turn_wrote_disk()
     }
@@ -2041,8 +2041,7 @@ mod tests {
 
 /// 判断一次工具调用是否可能写入磁盘（供 `turn_wrote_disk` 标记使用）。
 ///
-/// `terminal` 命令不受限，保守视为总是可能写盘；`file_ops` 仅在写类
-/// `operation`（`write`/`append`/`delete`/`mkdir`）时视为写盘，`read`/`list` 不算。
+/// `terminal` 命令不受限，保守视为总是可能写盘。
 /// 启发式判断用户消息是否像「纠正上一轮」（中英常见提示语）。
 ///
 /// 仅作学习信号，宁缺毋滥；命中即记 DecisionLog，不改变对话流程。
@@ -2087,13 +2086,6 @@ fn looks_like_user_correction(msg: &str) -> bool {
 fn tool_writes_disk(name: &str, args: &Value) -> bool {
     match name {
         "terminal" => true,
-        "file_ops" => matches!(
-            args.get("operation")
-                .and_then(|v| v.as_str())
-                .map(str::to_lowercase)
-                .as_deref(),
-            Some("write") | Some("append") | Some("delete") | Some("mkdir") | Some("patch")
-        ),
         "skills" => {
             let action = args
                 .get("action")

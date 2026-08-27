@@ -268,11 +268,6 @@ mod tests {
     fn builtin_catalog_covers_known_toolsets() {
         let cat = builtin_catalog();
         assert!(cat.len() >= home::KNOWN_TOOLSET_IDS.len());
-        let file_ops = cat.iter().find(|c| c.id == "file_ops").expect("file_ops");
-        assert_eq!(file_ops.icon, "folder-kanban");
-        assert!(file_ops.params.iter().any(|p| p.name == "path"));
-        assert!(!file_ops.functions.is_empty());
-        assert_eq!(file_ops.functions[0].icon, "folder-kanban");
         let web = cat
             .iter()
             .find(|c| c.id == "web_search")

@@ -1,6 +1,6 @@
 //! Workspace 相对路径安全解析：防止 `..`、symlink 与目录逃逸攻击。
 //!
-//! 所有文件类工具（`file_ops`、`terminal` 等）在拼接用户给定相对路径前，
+//! 所有文件类工具（`terminal`、`apply_patch` 等）在拼接用户给定相对路径前，
 //! 须经 [`resolve_safe`] 校验，确保解析结果始终落在 Agent 工作区之内。
 
 use std::path::{Component, Path, PathBuf};

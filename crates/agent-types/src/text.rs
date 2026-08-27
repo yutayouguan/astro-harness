@@ -1,6 +1,6 @@
 //! UTF-8 安全截断，供工具结果回灌 LLM 时统一限长。
 
-/// 工具结果默认上限（64 KiB），与 file_ops read 对齐。
+/// 工具结果默认上限（64 KiB）。
 pub const MAX_TOOL_RESULT_BYTES: usize = 64 * 1024;
 
 /// 按字节上限截断字符串，保证落在 UTF-8 字符边界上。
@@ -25,7 +25,7 @@ pub fn truncate_chars(s: &str, max_chars: usize) -> String {
     out
 }
 
-/// 超限时追加 `[truncated]` 提示，便于模型分段续读或改用 file_ops。
+/// 超限时追加 `[truncated]` 提示，便于模型分段续读。
 pub fn truncate_tool_result(s: &str, max_bytes: usize) -> String {
     if s.len() <= max_bytes {
         return s.to_string();
@@ -33,7 +33,7 @@ pub fn truncate_tool_result(s: &str, max_bytes: usize) -> String {
     let kept = truncate_utf8(s, max_bytes);
     format!(
         "{kept}\n\n[truncated] returned {kept_len}/{total} bytes (cap {max_bytes}). \
-         Prefer narrower commands or file_ops read with offset/limit for large content.",
+         Prefer narrower commands or exec_command with offset/limit for large content.",
         kept_len = kept.len(),
         total = s.len(),
     )

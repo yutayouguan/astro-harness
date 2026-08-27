@@ -7,7 +7,6 @@ import {
   IconClarify,
   IconCodeExec,
   IconEye,
-  IconFileOps,
   IconImageGen,
   IconMemoryTool,
   IconMultiAgent,
@@ -32,7 +31,6 @@ const IS_TAURI =
 export type AgentToolId =
   | "web_search"
   | "terminal"
-  | "file_ops"
   | "code_exec"
   | "image_analyze"
   | "robotics"
@@ -136,24 +134,6 @@ export const AGENT_TOOLS: AgentToolDef[] = [
       { name: "background", type: "boolean", optional: true },
       { name: "id", type: "string", optional: true },
       { name: "offset", type: "number", optional: true },
-    ],
-  },
-  {
-    id: "file_ops",
-    titleKey: "agentTools.fileOps.title",
-    descKey: "agentTools.fileOps.desc",
-    Icon: IconFileOps,
-    tone: "green",
-    params: [
-      { name: "path", type: "string" },
-      { name: "operation", type: "string" },
-      { name: "content", type: "string", optional: true },
-      { name: "query", type: "string", optional: true },
-      { name: "old_string", type: "string", optional: true },
-      { name: "new_string", type: "string", optional: true },
-      { name: "offset", type: "number", optional: true },
-      { name: "limit", type: "number", optional: true },
-      { name: "recursive", type: "boolean", optional: true },
     ],
   },
   {

@@ -38,8 +38,8 @@ Classify the request before using side-effect tools. Answer pure questions direc
             }
             Self::Plan => {
                 "# Interaction mode: Plan (read-only planning) / 交互模式：Plan（只读规划）\n\
-Read-only: file_ops(read/list/search), web_search, todo. No writes, terminal, code_exec, agent-thread tools, or memory. Produce a concrete, reviewable plan with scope, steps, verification, and risks. When ready, call switch_mode(to=\"agent\", reason=…, summary=complete plan). Then stop and wait for explicit user approval; never assume approval or continue executing.\n\
-可用 file_ops(read/list/search)、web_search、todo 等只读工具。禁止写文件、terminal、code_exec、Agent Thread 工具、memory。\n\
+Read-only: web_search, todo. No writes, terminal, code_exec, agent-thread tools, or memory. Produce a concrete, reviewable plan with scope, steps, verification, and risks. When ready, call switch_mode(to=\"agent\", reason=…, summary=complete plan). Then stop and wait for explicit user approval; never assume approval or continue executing.\n\
+可用 web_search、todo 等只读工具。禁止写文件、terminal、code_exec、Agent Thread 工具、memory。\n\
 输出可审阅的具体计划，包含范围、步骤、验证与风险。计划就绪后调用 switch_mode(to=\"agent\", reason=…, summary=完整计划)，随后停止并等待用户明确批准，不得自行继续执行。"
             }
             Self::Ask => {

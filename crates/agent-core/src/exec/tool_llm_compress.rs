@@ -50,7 +50,7 @@ pub fn make_llm_compress_view(
         "{TOOL_LLM_COMPRESS_MARK}\n\
          Tool: {name}\n\
          Original chars: {original_chars}. Full output remains in session DB.\n\
-         Recovery: `search` (scope=session) or `file_ops` read on spill path if present.\n\n\
+         Recovery: `search` (scope=session) or `exec_command` to read the spill path if present.\n\n\
          {body}"
     )
 }
@@ -141,8 +141,8 @@ mod tests {
 
     #[test]
     fn prompt_mentions_tool_and_budget() {
-        let p = tool_summary_prompt("file_ops", "hello world", 900);
-        assert!(p.contains("file_ops"));
+        let p = tool_summary_prompt("terminal", "hello world", 900);
+        assert!(p.contains("terminal"));
         assert!(p.contains("900"));
         assert!(p.contains("hello world"));
     }

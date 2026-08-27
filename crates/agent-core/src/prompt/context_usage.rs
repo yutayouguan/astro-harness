@@ -461,7 +461,7 @@ mod tests {
     #[test]
     fn mcp_prefix_goes_to_mcp_segment() {
         let tools: Vec<serde_json::Value> = serde_json::json!([
-            {"type":"function","function":{"name":"file_ops","parameters":{}}},
+            {"type":"function","function":{"name":"terminal","parameters":{}}},
             {"type":"function","function":{"name":"mcp__fs__read","parameters":{"a":1}}}
         ])
         .as_array()
@@ -494,7 +494,7 @@ mod tests {
         assert!(mcp_seg.tokens > 0);
         assert_eq!(mcp_seg.meta.as_ref().and_then(|m| m.count), Some(1));
         assert_eq!(tools_seg.items.len(), 1);
-        assert_eq!(tools_seg.items[0].id, "file_ops");
+        assert_eq!(tools_seg.items[0].id, "terminal");
         assert_eq!(mcp_seg.items[0].id, "mcp__fs__read");
     }
 
@@ -570,7 +570,7 @@ mod tests {
     #[test]
     fn agent_def_tools_go_to_agents_segment() {
         let tools: Vec<serde_json::Value> = serde_json::json!([
-            {"type":"function","function":{"name":"file_ops","parameters":{}}},
+            {"type":"function","function":{"name":"terminal","parameters":{}}},
             {"type":"function","function":{"name":"spawn_agent","parameters":{"task_name":"x","message":"work"}}},
             {"type":"function","function":{"name":"wait_agent","parameters":{}}}
         ])

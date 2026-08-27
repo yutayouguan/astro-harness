@@ -96,7 +96,7 @@ test("loadContextUsageForSession restores per-session cache", () => {
   const usage = {
     contextWindow: 128_000,
     totalTokens: 99,
-    segments: [{ id: "tools", tokens: 99, items: [{ id: "file_ops", label: "file_ops", tokens: 99 }] }],
+    segments: [{ id: "tools", tokens: 99, items: [{ id: "terminal", label: "terminal", tokens: 99 }] }],
     updatedAt: 7,
   };
   saveChatSession("sess-a", [msg("u1", "user", "a"), msg("a1", "assistant", "b")], [], usage);

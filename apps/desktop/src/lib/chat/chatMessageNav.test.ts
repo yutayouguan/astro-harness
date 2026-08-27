@@ -53,7 +53,7 @@ describe("compactMessagePreview", () => {
   it("removes raw tool-call protocol noise from the answer preview", () => {
     assert.equal(
       compactMessagePreview(
-        '<tool_call>{"name":"file_ops"}</tool_call> 已完成检查，没有发现问题。',
+        '<tool_call>{"name":"terminal"}</tool_call> 已完成检查，没有发现问题。',
       ),
       "已完成检查，没有发现问题。",
     );

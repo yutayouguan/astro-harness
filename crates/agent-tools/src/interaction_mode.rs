@@ -5,9 +5,8 @@
 pub use types::InteractionMode;
 
 /// Plan / Ask 下明确允许的工具名（其余非 MCP 默认拒绝；MCP 默认拒绝）。
-/// `memory` 全写，不在此列；`skills` / `file_ops` / `todo` 另有 action 级限制。
+/// `memory` 全写，不在此列；`skills` / `todo` 另有 action 级限制。
 const READONLY_ALLOW: &[&str] = &[
-    "file_ops", // action 级再拦写
     "web_search",
     "web_fetch",
     "context_search",
@@ -18,9 +17,6 @@ const READONLY_ALLOW: &[&str] = &[
     "switch_mode",
     "present",
 ];
-
-/// `file_ops` 只读 operation。
-const FILE_OPS_READ: &[&str] = &["read", "list", "search"];
 
 /// `skills` 只读 / 加载类 action（禁 manage 写盘）。
 const SKILLS_READ: &[&str] = &["list", "load", "view", "curate", "search"];
@@ -75,21 +71,6 @@ pub fn check_tool_call(
             "[blocked by {} mode] Tool `{name}` is not available. Stay read-only, or call switch_mode(to=\"agent\", …) after the plan is ready.",
             mode.as_str()
         ));
-    }
-    if name == "file_ops" {
-        let op = args
-            .get("operation")
-            .or_else(|| args.get("action"))
-            .and_then(|v| v.as_str())
-            .unwrap_or("")
-            .trim()
-            .to_ascii_lowercase();
-        if !FILE_OPS_READ.iter().any(|o| *o == op) {
-            return Err(format!(
-                "[blocked by {} mode] file_ops operation `{op}` writes or mutates the workspace. Only read/list/search are allowed. Call switch_mode(to=\"agent\") to execute.",
-                mode.as_str()
-            ));
-        }
     }
     if name == "skills" {
         let action = args
@@ -154,27 +135,6 @@ mod tests {
     use serde_json::json;
 
     #[test]
-    fn plan_blocks_write_file_ops() {
-        let err = check_tool_call(
-            InteractionMode::Plan,
-            "file_ops",
-            &json!({ "operation": "write", "path": "a.md", "content": "x" }),
-        )
-        .unwrap_err();
-        assert!(err.contains("blocked"));
-    }
-
-    #[test]
-    fn plan_allows_read_file_ops() {
-        assert!(check_tool_call(
-            InteractionMode::Plan,
-            "file_ops",
-            &json!({ "operation": "read", "path": "a.md" }),
-        )
-        .is_ok());
-    }
-
-    #[test]
     fn plan_blocks_memory_and_skills_manage() {
         assert!(check_tool_call(
             InteractionMode::Plan,
@@ -227,16 +187,6 @@ mod tests {
                 mode
             );
         }
-    }
-
-    #[test]
-    fn agent_allows_write() {
-        assert!(check_tool_call(
-            InteractionMode::Agent,
-            "file_ops",
-            &json!({ "operation": "write", "path": "a.md", "content": "x" }),
-        )
-        .is_ok());
     }
 
     #[test]

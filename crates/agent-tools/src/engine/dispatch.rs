@@ -125,24 +125,6 @@ pub fn tool_requires_in_process_write(name: &str, args: &serde_json::Value) -> b
             .to_ascii_lowercase()
     };
     match name {
-        "file_ops" => matches!(
-            args.get("operation")
-                .and_then(serde_json::Value::as_str)
-                .unwrap_or("")
-                .trim()
-                .to_ascii_lowercase()
-                .as_str(),
-            "write"
-                | "append"
-                | "delete"
-                | "mkdir"
-                | "patch"
-                | "move"
-                | "rename"
-                | "mv"
-                | "copy"
-                | "cp"
-        ),
         "memory" | "todo" | "persona_create" => true,
         "skills" => action() == "manage",
         "pin_context" => matches!(action().as_str(), "pin" | "unpin" | "clear"),
@@ -192,14 +174,6 @@ mod permission_tests {
 
     #[test]
     fn classifies_in_process_writes_without_blocking_read_actions() {
-        assert!(tool_requires_in_process_write(
-            "file_ops",
-            &serde_json::json!({"operation": "mv"})
-        ));
-        assert!(!tool_requires_in_process_write(
-            "file_ops",
-            &serde_json::json!({"operation": "read"})
-        ));
         assert!(tool_requires_in_process_write(
             "skills",
             &serde_json::json!({"action": "manage"})

@@ -195,7 +195,6 @@ mod inventory_register_tests {
             "wait_agent",
             "interrupt_agent",
             "present",
-            "file_ops",
             "web_search",
         ] {
             assert!(

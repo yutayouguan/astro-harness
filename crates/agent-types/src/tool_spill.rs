@@ -67,7 +67,7 @@ pub fn make_spill_view(
          Tool: {name}\n\
          Bytes: {total_bytes}\n\
          Spill: {spill_rel}\n\
-         Recovery: use `file_ops` read with offset/limit on the spill path, or `search` (scope=session).\n\
+         Recovery: use `exec_command` to read the spill path with offset/limit, or `search` (scope=session).\n\
          \n\
          Preview{truncated_suffix}:\n{preview}",
         truncated_suffix = if truncated { " (truncated)" } else { "" },
@@ -83,7 +83,7 @@ pub fn make_prune_view(tool_name: Option<&str>, spill_rel: Option<&str>) -> Stri
         "{TOOL_PRUNE_MARK}\n\
          Tool: {name}\n\
          Reason: context window maintenance (recent tail protected).{spill_line}\n\
-         Full output remains in session DB. Recover via `search` (scope=session) or `file_ops` read on spill path."
+         Full output remains in session DB. Recover via `search` (scope=session) or `exec_command` to read the spill path."
     )
 }
 

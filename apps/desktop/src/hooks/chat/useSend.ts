@@ -638,7 +638,7 @@ export function useSend(deps: UseSendDeps) {
                       m.kind === "html"
                         ? m.kind
                         : null;
-                    // 后端把 file_ops 产物标为 kind="file"；按扩展名归类（对齐历史加载逻辑）
+                    // 后端把写工具产物标为 kind="file"；按扩展名归类（对齐历史加载逻辑）
                     if (!kind && m.kind === "file" && path) {
                       if (/\.html?$/i.test(path)) kind = "html";
                       else if (/\.(png|jpe?g|webp|gif|bmp|svg|avif)$/i.test(path))

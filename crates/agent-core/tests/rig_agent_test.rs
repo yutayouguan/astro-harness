@@ -444,9 +444,9 @@ async fn transform_tool_result_replaces_before_post_tool_call() {
         hooks::HookOutcome::Continue
     });
 
-    let args = serde_json::json!({"path": "x.txt", "operation": "write", "content": "hello"});
+    let args = serde_json::json!({"command": "echo hello"});
     let out = agent
-        .handle_tool_call_async("file_ops", &args)
+        .handle_tool_call_async("terminal", &args)
         .await
         .unwrap();
 
@@ -464,22 +464,9 @@ async fn turn_wrote_disk_tracks_writes_and_resets_on_new_turn() {
     let agent = AgentLoop::new(test_config(&dir)).unwrap();
     assert!(!agent.turn_wrote_disk().await);
 
-    // 只读操作不应置位
+    // terminal 工具调用应置位（保守视为总是写盘）
     let _ = agent
-        .handle_tool_call_async(
-            "file_ops",
-            &serde_json::json!({"path": ".", "operation": "list"}),
-        )
-        .await
-        .unwrap();
-    assert!(!agent.turn_wrote_disk().await);
-
-    // 写操作应置位
-    let _ = agent
-        .handle_tool_call_async(
-            "file_ops",
-            &serde_json::json!({"path": "a.txt", "operation": "write", "content": "hi"}),
-        )
+        .handle_tool_call_async("terminal", &serde_json::json!({"command": "echo hi"}))
         .await
         .unwrap();
     assert!(agent.turn_wrote_disk().await);

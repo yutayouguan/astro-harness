@@ -23,7 +23,7 @@ const groupedActivities: ChatActivity[] = [
   {
     id: "storybook-read",
     kind: "tool",
-    title: "file_ops",
+    title: "terminal",
     input: '{"operation":"read","path":"apps/desktop/src/components/chat/ChatView.tsx"}',
     output: "读取 2146 行",
     status: "done",
@@ -32,7 +32,7 @@ const groupedActivities: ChatActivity[] = [
   {
     id: "storybook-search",
     kind: "tool",
-    title: "file_ops",
+    title: "terminal",
     input: '{"operation":"search","query":"msg-activity"}',
     output: "找到 18 处匹配",
     status: "done",
