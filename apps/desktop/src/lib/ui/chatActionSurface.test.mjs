@@ -77,3 +77,11 @@ test("composer approval selector keeps the three supported permission choices", 
   assert.match(styles, /\.composer-policy-menu/);
   assert.match(styles, /\.composer-policy-pill\.is-full-access/);
 });
+
+test("composer keeps context usage available at every occupancy level", async () => {
+  const source = await readFile(chatViewUrl, "utf8");
+
+  assert.match(source, /className="composer-context-wrap"/);
+  assert.match(source, /<ContextUsagePopover/);
+  assert.doesNotMatch(source, /showContextControl/);
+});

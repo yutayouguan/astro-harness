@@ -712,10 +712,6 @@ export default function ChatView({
   const [agentCreateMissing, setAgentCreateMissing] = useState<number[]>([]);
   const { servers: mcpServers } = useMcpTools(agentId);
   const mcpHasEnabled = mcpServers.some((s) => s.enabled);
-  const showContextControl =
-    contextPopoverOpen ||
-    contextUsage?.recommendCompact === true ||
-    (contextUsagePercent ?? 0) >= 70;
 
   useEffect(() => {
     const pane = chatPaneRef.current;
@@ -2763,8 +2759,7 @@ export default function ChatView({
             </div>
 
             <div className="composer-bar-right">
-              {showContextControl ? (
-                <div className="composer-context-wrap" ref={contextWrapRef}>
+              <div className="composer-context-wrap" ref={contextWrapRef}>
                 <button
                   type="button"
                   className={`composer-icon-btn composer-context-btn ${
@@ -2803,8 +2798,7 @@ export default function ChatView({
                     onOpenContext();
                   }}
                 />
-                </div>
-              ) : null}
+              </div>
               {showStopControl ? (
                 <>
                   {showPauseResume ? (
