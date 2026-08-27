@@ -135,6 +135,7 @@ test("archive filter and tips keep optical alignment with glass fallbacks", () =
   const archiveButton = rule(projectStyles, ".sidebar-session-filter-btn");
   const archiveIcon = rule(projectStyles, ".sidebar-session-filter-btn > svg");
   const tip = rule(tooltipStyles, ".ui-tip");
+  const tipArrow = rule(tooltipStyles, ".ui-tip[data-pos]::before");
 
   assert.ok(archiveButton, "archive filter needs an explicit centering reset");
   assert.match(archiveButton, /padding:\s*0;/);
@@ -144,6 +145,12 @@ test("archive filter and tips keep optical alignment with glass fallbacks", () =
   assert.ok(tip, "missing shared tip surface");
   assert.match(tip, /backdrop-filter:\s*blur\(18px\) saturate\(155%\);/);
   assert.match(tip, /linear-gradient\(/);
+  assert.ok(tipArrow, "tip arrow should share the glass surface");
+  assert.match(tipArrow, /width:\s*11px;/);
+  assert.match(tipArrow, /height:\s*11px;/);
+  assert.match(tipArrow, /border-radius:\s*2px;/);
+  assert.match(tipArrow, /background:\s*var\(--ui-tip-bg\);/);
+  assert.doesNotMatch(tipArrow, /border-style:\s*solid;/);
   assert.match(tooltipStyles, /@media \(prefers-reduced-transparency: reduce\)/);
   assert.match(tooltipStyles, /@media \(prefers-contrast: more\)/);
 });
