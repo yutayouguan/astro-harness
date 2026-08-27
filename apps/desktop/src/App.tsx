@@ -12,7 +12,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 
 import AboutDialog from "./components/ui/AboutDialog";
-import ChatRightPanel from "./components/chat/ChatRightPanel";
+import ChatRightPanel, { type ChatRightTab } from "./components/chat/ChatRightPanel";
 import SideChatPanel from "./components/chat/SideChatPanel";
 import ProjectContextMenu from "./components/chat/ProjectContextMenu";
 import ProjectEditDialog from "./components/chat/ProjectEditDialog";
@@ -98,6 +98,10 @@ import {
 } from "./lib/ui/navConfig";
 import { SETTINGS_TABS, settingsTabMeta } from "./lib/ui/settingsTabs";
 import { CHAT_RIGHT_PANEL_DEFAULT_WIDTH } from "./lib/ui/chatRightPanelWidth";
+import {
+  chatRightDockWidth,
+  resolveChatRightDock,
+} from "./lib/ui/chatRightDock";
 import {
   ArrowLeft,
   Archive,
@@ -278,6 +282,46 @@ export default function App() {
     });
   }, [sideSessionId]);
 
+  const openChatRightDock = useCallback(
+    (tab?: ChatRightTab) => {
+      projectFiles.setPanelOpen(false);
+      if (sideSessionId) void closeSideChat();
+      if (tab) setChatRightTab(tab);
+      setChatRightOpen(true);
+    },
+    [
+      closeSideChat,
+      projectFiles.setPanelOpen,
+      setChatRightOpen,
+      setChatRightTab,
+      sideSessionId,
+    ],
+  );
+
+  const toggleChatRightDock = useCallback(() => {
+    if (chat.chatRightOpen) {
+      setChatRightOpen(false);
+      return;
+    }
+    openChatRightDock();
+  }, [chat.chatRightOpen, openChatRightDock, setChatRightOpen]);
+
+  const toggleProjectFilesDock = useCallback(() => {
+    if (projectFiles.panelOpen) {
+      projectFiles.setPanelOpen(false);
+      return;
+    }
+    setChatRightOpen(false);
+    if (sideSessionId) void closeSideChat();
+    projectFiles.setPanelOpen(true);
+  }, [
+    closeSideChat,
+    projectFiles.panelOpen,
+    projectFiles.setPanelOpen,
+    setChatRightOpen,
+    sideSessionId,
+  ]);
+
   const startSideChat = useCallback(async () => {
     if (!chat.sessionId || !activeProvider || chat.streaming || sideSessionId) return;
     const keepChatBubbles = chat.messages.filter(
@@ -294,6 +338,7 @@ export default function App() {
         excludeTurns: true,
         newSessionId: null,
       });
+      projectFiles.setPanelOpen(false);
       setSideSessionId(id);
       setSideHostSessionId(chat.sessionId);
       setChatRightOpen(false);
@@ -305,10 +350,20 @@ export default function App() {
     chat.messages,
     chat.sessionId,
     chat.streaming,
+    projectFiles.setPanelOpen,
     setChatRightOpen,
     showTransientToast,
     sideSessionId,
   ]);
+
+  const projectPanelWasOpenRef = useRef(false);
+  useEffect(() => {
+    const justOpened = projectFiles.panelOpen && !projectPanelWasOpenRef.current;
+    projectPanelWasOpenRef.current = projectFiles.panelOpen;
+    if (!justOpened) return;
+    setChatRightOpen(false);
+    if (sideSessionId) void closeSideChat();
+  }, [closeSideChat, projectFiles.panelOpen, setChatRightOpen, sideSessionId]);
 
   useEffect(() => {
     if (sideSessionId && sideHostSessionId && chat.sessionId !== sideHostSessionId) {
@@ -683,8 +738,7 @@ export default function App() {
           setNav("settings");
           break;
         case "open_context":
-          setChatRightTab("context");
-          setChatRightOpen(true);
+          openChatRightDock("context");
           setNav("chat");
           break;
         default:
@@ -713,8 +767,7 @@ export default function App() {
       onThinkingLevelChange,
       onChatModeChange,
       setMemoryPendingCount,
-      setChatRightTab,
-      setChatRightOpen,
+      openChatRightDock,
       openSettingsTab,
     ],
   );
@@ -729,17 +782,16 @@ export default function App() {
     : IconChat;
   const conversationTitle = useActiveSessionTitle(chat.sessionId);
   const { label: settingsTitle, Icon: SettingsIcon } = settingsTabMeta(settingsTab);
-  const hasChatRightDock =
-    projectFiles.panelOpen ||
-    Boolean(sideSessionId) ||
-    (chat.chatRightOpen && !sideSessionId);
-  const chatHeaderRightOffset =
-    (projectFiles.panelOpen ? projectFilesWidth : 0) +
-    (sideSessionId
-      ? 384
-      : chat.chatRightOpen
-        ? chatRightPanelWidth
-        : 0);
+  const activeChatRightDock = resolveChatRightDock({
+    projectFilesOpen: projectFiles.panelOpen,
+    sideSessionOpen: Boolean(sideSessionId),
+    inspectorOpen: chat.chatRightOpen,
+  });
+  const hasChatRightDock = activeChatRightDock !== null;
+  const chatHeaderRightOffset = chatRightDockWidth(activeChatRightDock, {
+    projectFiles: projectFilesWidth,
+    inspector: chatRightPanelWidth,
+  });
 
   useEffect(() => {
     if (!conversationMenuOpen) return;
@@ -1273,8 +1325,7 @@ export default function App() {
                               role="menuitem"
                               onClick={() => {
                                 setConversationMenuOpen(false);
-                                setChatRightTab("context");
-                                setChatRightOpen(true);
+                                openChatRightDock("context");
                               }}
                             >
                               <IconRightPanel width={15} height={15} />
@@ -1315,34 +1366,34 @@ export default function App() {
                     </button>
                     <button
                       type="button"
-                      className={`header-icon-btn ${projectFiles.panelOpen ? "is-active" : ""}`}
-                      onClick={projectFiles.togglePanel}
+                      className={`header-icon-btn ${activeChatRightDock === "project-files" ? "is-active" : ""}`}
+                      onClick={toggleProjectFilesDock}
                       title="展开项目文件"
                       aria-label="展开项目文件"
-                      aria-pressed={projectFiles.panelOpen}
+                      aria-pressed={activeChatRightDock === "project-files"}
                     >
                       <FolderTree width={16} height={16} />
                     </button>
                     <button
                       type="button"
-                      className={`header-icon-btn ${sideSessionId ? "is-active" : ""}`}
+                      className={`header-icon-btn ${activeChatRightDock === "side-chat" ? "is-active" : ""}`}
                       onClick={() =>
                         void (sideSessionId ? closeSideChat() : startSideChat())
                       }
                       title={sideSessionId ? t("chat.side.close") : t("chat.side.open")}
                       aria-label={sideSessionId ? t("chat.side.close") : t("chat.side.open")}
-                      aria-pressed={!!sideSessionId}
+                      aria-pressed={activeChatRightDock === "side-chat"}
                       disabled={!sideSessionId && (!chat.sessionId || chat.streaming)}
                     >
                       <MessageSquare width={16} height={16} />
                     </button>
                     <button
                       type="button"
-                      className={`header-icon-btn ${chat.chatRightOpen ? "is-active" : ""}`}
-                      onClick={() => setChatRightOpen((open) => !open)}
+                      className={`header-icon-btn ${activeChatRightDock === "inspector" ? "is-active" : ""}`}
+                      onClick={toggleChatRightDock}
                       title={t("chat.rightPanel.toggle")}
                       aria-label={t("chat.rightPanel.toggle")}
-                      aria-pressed={chat.chatRightOpen}
+                      aria-pressed={activeChatRightDock === "inspector"}
                     >
                       <IconRightPanel width={16} height={16} />
                     </button>
@@ -1351,7 +1402,7 @@ export default function App() {
               </div>
               <div className="page-body page-body--chat">
                 <div
-                  className={`chat-layout-with-right${projectFiles.panelOpen ? " has-project-files" : ""}${sideSessionId ? " has-side-chat" : ""}${chat.chatRightOpen && !sideSessionId ? " has-chat-right" : ""}${hasChatRightDock ? " has-right-dock" : ""}`}
+                  className={`chat-layout-with-right${activeChatRightDock === "project-files" ? " has-project-files" : ""}${activeChatRightDock === "side-chat" ? " has-side-chat" : ""}${activeChatRightDock === "inspector" ? " has-chat-right" : ""}${hasChatRightDock ? " has-right-dock" : ""}`}
                   style={{
                     "--project-files-current-width": `${projectFilesWidth}px`,
                   } as CSSProperties}
@@ -1446,8 +1497,7 @@ export default function App() {
                       chatMode={chatMode}
                       onChatModeChange={onChatModeChange}
                       onOpenContext={() => {
-                        setChatRightTab("context");
-                        setChatRightOpen(true);
+                        openChatRightDock("context");
                       }}
                       onRegenerateMessage={regenerateMessage}
                       onEditUserMessage={editUserMessage}
@@ -1467,13 +1517,13 @@ export default function App() {
                       }
                     />
                   </div>
-                  {projectFiles.panelOpen ? (
+                  {activeChatRightDock === "project-files" ? (
                     <ProjectFilesPanel
                       workbench={projectFiles}
                       onWidthChange={setProjectFilesWidth}
                     />
                   ) : null}
-                  {sideSessionId && activeProvider && (
+                  {activeChatRightDock === "side-chat" && sideSessionId && activeProvider && (
                     <SideChatPanel
                       sessionId={sideSessionId}
                       provider={activeProvider}
@@ -1481,7 +1531,7 @@ export default function App() {
                       onClose={closeSideChat}
                     />
                   )}
-                  {chat.chatRightOpen && !sideSessionId && (
+                  {activeChatRightDock === "inspector" && (
                     <ChatRightPanel
                       tab={chat.chatRightTab}
                       onTabChange={setChatRightTab}
@@ -1495,6 +1545,7 @@ export default function App() {
                       streaming={chat.streaming}
                       onOpenSession={(sessionId) => openSessionFromFilespace(sessionId)}
                       onOpenSideSession={(sessionId) => {
+                        projectFiles.setPanelOpen(false);
                         setSideSessionId(sessionId);
                         setSideHostSessionId(chat.sessionId);
                         setChatRightOpen(false);

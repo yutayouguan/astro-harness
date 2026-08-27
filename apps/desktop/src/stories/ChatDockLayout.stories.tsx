@@ -1,4 +1,4 @@
-import type { CSSProperties } from "react";
+import { useState, type CSSProperties } from "react";
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import {
   FolderTree,
@@ -11,7 +11,14 @@ import {
 
 type DockKind = "files" | "side" | "runtime";
 
-function HeaderActions() {
+function HeaderActions({
+  kind,
+  onSelect,
+}: {
+  kind: DockKind | null;
+  onSelect?: (kind: DockKind | null) => void;
+}) {
+  const toggle = (next: DockKind) => onSelect?.(kind === next ? null : next);
   return (
     <div className="header-actions">
       <div className="model-picker">
@@ -27,13 +34,31 @@ function HeaderActions() {
         <button type="button" className="header-icon-btn" aria-label="新对话">
           <Plus size={16} />
         </button>
-        <button type="button" className="header-icon-btn is-active" aria-label="项目文件">
+        <button
+          type="button"
+          className={`header-icon-btn${kind === "files" ? " is-active" : ""}`}
+          aria-label="项目文件"
+          aria-pressed={kind === "files"}
+          onClick={() => toggle("files")}
+        >
           <FolderTree size={16} />
         </button>
-        <button type="button" className="header-icon-btn" aria-label="对话侧栏">
+        <button
+          type="button"
+          className={`header-icon-btn${kind === "side" ? " is-active" : ""}`}
+          aria-label="旁路对话"
+          aria-pressed={kind === "side"}
+          onClick={() => toggle("side")}
+        >
           <MessageSquare size={16} />
         </button>
-        <button type="button" className="header-icon-btn" aria-label="运行信息">
+        <button
+          type="button"
+          className={`header-icon-btn${kind === "runtime" ? " is-active" : ""}`}
+          aria-label="运行信息"
+          aria-pressed={kind === "runtime"}
+          onClick={() => toggle("runtime")}
+        >
           <PanelRight size={16} />
         </button>
       </div>
@@ -100,25 +125,39 @@ function DockPanel({ kind }: { kind: DockKind }) {
   );
 }
 
-function ChatDockLayout({ kind }: { kind: DockKind }) {
-  const dockWidth = kind === "files" ? 320 : kind === "side" ? 384 : 360;
+function ChatDockLayout({
+  kind,
+  onSelect,
+}: {
+  kind: DockKind | null;
+  onSelect?: (kind: DockKind | null) => void;
+}) {
+  const dockWidth =
+    kind === "files" ? 320 : kind === "side" ? 384 : kind === "runtime" ? 360 : 0;
   const dockClasses =
-    kind === "files" ? " has-project-files" : kind === "side" ? " has-side-chat" : " has-chat-right";
+    kind === "files"
+      ? " has-project-files"
+      : kind === "side"
+        ? " has-side-chat"
+        : kind === "runtime"
+          ? " has-chat-right"
+          : "";
+  const hasDock = kind !== null;
   return (
     <main
       style={{ minHeight: "100vh", display: "flex", background: "var(--shell-bg)" }}
     >
       <section className="content-pane">
         <div
-          className="content-header content-header--chat has-right-dock"
+          className={`content-header content-header--chat${hasDock ? " has-right-dock" : ""}`}
           style={{ "--chat-header-right-offset": `${dockWidth}px` } as CSSProperties}
         >
           <div className="content-heading" />
-          <HeaderActions />
+          <HeaderActions kind={kind} onSelect={onSelect} />
         </div>
         <div className="page-body page-body--chat">
           <div
-            className={`chat-layout-with-right has-right-dock${dockClasses}`}
+            className={`chat-layout-with-right${hasDock ? " has-right-dock" : ""}${dockClasses}`}
             style={{
               "--project-files-current-width": `${dockWidth}px`,
               "--project-files-width": `${dockWidth}px`,
@@ -132,12 +171,17 @@ function ChatDockLayout({ kind }: { kind: DockKind }) {
                 </p>
               </div>
             </div>
-            <DockPanel kind={kind} />
+            {kind && <DockPanel kind={kind} />}
           </div>
         </div>
       </section>
     </main>
   );
+}
+
+function UnifiedDockPreview() {
+  const [kind, setKind] = useState<DockKind | null>("files");
+  return <ChatDockLayout kind={kind} onSelect={setKind} />;
 }
 
 const meta = {
@@ -153,3 +197,4 @@ type Story = StoryObj<typeof meta>;
 export const ProjectFiles: Story = {};
 export const SideChat: Story = { args: { kind: "side" } };
 export const RuntimePanel: Story = { args: { kind: "runtime" } };
+export const UnifiedSwitching: Story = { render: () => <UnifiedDockPreview /> };
