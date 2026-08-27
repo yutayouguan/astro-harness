@@ -18,8 +18,9 @@
 .content-header--chat {
   position: relative;
   gap: 12px;
-  padding-top: 16px;
-  padding-bottom: 10px;
+  min-height: 60px;
+  box-sizing: border-box;
+  padding: 12px 16px 8px;
 }
 
 .content-header--chat .content-heading {
@@ -62,9 +63,40 @@
 
 .content-header--chat .header-actions {
   position: absolute;
-  top: 16px;
-  right: 28px;
+  top: auto;
+  right: calc(16px + var(--chat-header-right-offset, 0px));
+  bottom: 8px;
   flex-wrap: nowrap;
+  transition: right 180ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* 右侧停靠面板占用页身宽度时，宽屏标题栏同步让位。 */
+@media (max-width: 1280px) {
+  .content-header--chat.has-right-dock .header-actions {
+    right: 12px;
+  }
+}
+
+/* 只有真正的窄屏才折叠模型文案，普通桌面尺寸仍保留当前模型信息。 */
+@media (max-width: 700px) {
+  .content-header--chat.has-right-dock .model-picker {
+    width: 34px;
+    max-width: 34px;
+  }
+
+  .content-header--chat.has-right-dock .model-picker-trigger {
+    width: 34px;
+    min-width: 34px;
+  }
+
+  .content-header--chat.has-right-dock .model-picker-label,
+  .content-header--chat.has-right-dock .model-picker-chevron {
+    display: none;
+  }
+
+  .content-header--chat.has-right-dock .model-picker-icon {
+    margin: 4px;
+  }
 }
 
 .conversation-menu {
@@ -249,6 +281,12 @@ html[data-theme="dark"] .header-icon-btn.is-active {
   padding-left: 16px;
   padding-right: 16px;
   padding-bottom: 16px;
+}
+
+.content-pane > .page-body.page-body--chat,
+.app-shell.is-chat-expanded .page-body--chat {
+  padding-right: 0;
+  padding-bottom: 0;
 }
 
 .app-shell.is-chat-expanded .chat-pane {

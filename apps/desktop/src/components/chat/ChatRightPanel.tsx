@@ -65,6 +65,7 @@ type Props = {
   onPrefillInput?: (text: string) => void;
   onOpenMemory: () => void;
   onOpenSkills: () => void;
+  onWidthChange?: (width: number) => void;
 };
 
 const TAB_KEYS: Record<ChatRightTab, MessageKey> = {
@@ -100,6 +101,7 @@ export default function ChatRightPanel({
   onPrefillInput,
   onOpenMemory,
   onOpenSkills,
+  onWidthChange,
 }: Props) {
   const { t } = useI18n();
   const tabs: ChatRightTab[] = ["agent", "monitor", "context", "branches"];
@@ -119,6 +121,10 @@ export default function ChatRightPanel({
   const [resizing, setResizing] = useState(false);
 
   panelWidthRef.current = panelWidth;
+
+  useEffect(() => {
+    onWidthChange?.(panelWidth);
+  }, [onWidthChange, panelWidth]);
 
   const containerWidth = useCallback(() => {
     const width = panelRef.current?.parentElement?.getBoundingClientRect().width ?? 0;

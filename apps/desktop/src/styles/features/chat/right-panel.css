@@ -10,6 +10,10 @@
   border-radius: 28px;
 }
 
+.chat-layout-with-right.has-right-dock {
+  border-radius: 28px 0 0 0;
+}
+
 .chat-layout-with-right > .chat-main {
   flex: 1;
   min-width: 0;
@@ -22,11 +26,11 @@
 /* 内嵌文件栏存在时，悬浮运行栏停在它左侧；文件栏仍可独立浏览。
    窄屏由 project-files.css 把文件栏切为覆盖式，此时运行栏恢复贴右。 */
 .chat-layout-with-right.has-project-files .chat-right-panel {
-  right: calc(min(var(--project-files-current-width, 264px), 42%) + var(--pf-gutter, 6px));
+  right: min(var(--project-files-current-width, 264px), 42%);
 }
 
 .chat-layout-with-right.has-project-files .chat-right-backdrop {
-  right: calc(min(var(--project-files-current-width, 264px), 42%) + var(--pf-gutter, 6px));
+  right: min(var(--project-files-current-width, 264px), 42%);
 }
 
 @media (max-width: 760px) {
@@ -67,7 +71,7 @@
   width: min(var(--chat-right-panel-width, 360px), calc(100% - 20px));
   display: flex;
   flex-direction: column;
-  border-radius: 20px;
+  border-radius: 20px 0 0 0;
   border: 0.5px solid color-mix(in srgb, var(--tone-blue, #2563eb) 8%, var(--glass-edge));
   background:
     linear-gradient(165deg, rgba(255, 255, 255, 0.3) 0%, rgba(255, 255, 255, 0.1) 100%),

@@ -97,6 +97,7 @@ import {
   type SettingsTabId,
 } from "./lib/ui/navConfig";
 import { SETTINGS_TABS, settingsTabMeta } from "./lib/ui/settingsTabs";
+import { CHAT_RIGHT_PANEL_DEFAULT_WIDTH } from "./lib/ui/chatRightPanelWidth";
 import {
   ArrowLeft,
   Archive,
@@ -261,6 +262,9 @@ export default function App() {
   );
   const projectFiles = useProjectFileWorkbench(activeProject, chat.generatingPreview);
   const [projectFilesWidth, setProjectFilesWidth] = useState(264);
+  const [chatRightPanelWidth, setChatRightPanelWidth] = useState(
+    CHAT_RIGHT_PANEL_DEFAULT_WIDTH,
+  );
   const [sideSessionId, setSideSessionId] = useState<string | null>(null);
   const [sideHostSessionId, setSideHostSessionId] = useState<string | null>(null);
 
@@ -725,6 +729,17 @@ export default function App() {
     : IconChat;
   const conversationTitle = useActiveSessionTitle(chat.sessionId);
   const { label: settingsTitle, Icon: SettingsIcon } = settingsTabMeta(settingsTab);
+  const hasChatRightDock =
+    projectFiles.panelOpen ||
+    Boolean(sideSessionId) ||
+    (chat.chatRightOpen && !sideSessionId);
+  const chatHeaderRightOffset =
+    (projectFiles.panelOpen ? projectFilesWidth : 0) +
+    (sideSessionId
+      ? 384
+      : chat.chatRightOpen
+        ? chatRightPanelWidth
+        : 0);
 
   useEffect(() => {
     if (!conversationMenuOpen) return;
@@ -1196,7 +1211,12 @@ export default function App() {
             </>
           ) : (
             <>
-              <div className="content-header content-header--chat">
+              <div
+                className={`content-header content-header--chat${hasChatRightDock ? " has-right-dock" : ""}`}
+                style={{
+                  "--chat-header-right-offset": `${chatHeaderRightOffset}px`,
+                } as CSSProperties}
+              >
                 <div className="content-heading">
                   {conversationTitle && (
                     <>
@@ -1329,9 +1349,9 @@ export default function App() {
                   </div>
                 </div>
               </div>
-              <div className="page-body">
+              <div className="page-body page-body--chat">
                 <div
-                  className={`chat-layout-with-right${projectFiles.panelOpen ? " has-project-files" : ""}`}
+                  className={`chat-layout-with-right${projectFiles.panelOpen ? " has-project-files" : ""}${sideSessionId ? " has-side-chat" : ""}${chat.chatRightOpen && !sideSessionId ? " has-chat-right" : ""}${hasChatRightDock ? " has-right-dock" : ""}`}
                   style={{
                     "--project-files-current-width": `${projectFilesWidth}px`,
                   } as CSSProperties}
@@ -1482,6 +1502,7 @@ export default function App() {
                       onPrefillInput={setInput}
                       onOpenMemory={() => openSettingsTab("memory")}
                       onOpenSkills={() => setNav("skills")}
+                      onWidthChange={setChatRightPanelWidth}
                     />
                   )}
                 </div>

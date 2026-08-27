@@ -14,10 +14,10 @@
   width: min(var(--side-chat-width, 384px), 46%);
   min-width: 0;
   min-height: 0;
-  margin: 8px 8px 8px 0;
+  margin: 0 0 0 8px;
   overflow: hidden;
   border: 1px solid var(--side-line);
-  border-radius: 20px;
+  border-radius: 20px 0 0 0;
   background:
     linear-gradient(165deg, rgba(255, 255, 255, 0.42) 0%, rgba(255, 255, 255, 0.16) 100%),
     color-mix(in srgb, var(--tone-soft, transparent) 30%, var(--composer-bg, #fff));
@@ -505,7 +505,7 @@ html[data-theme="dark"] .chat-side-banner button {
 @media (max-width: 900px) {
   .side-chat-panel {
     position: absolute;
-    inset: 8px 8px 8px auto;
+    inset: 0 0 0 auto;
     z-index: 22;
     width: min(88vw, 400px);
     margin: 0;

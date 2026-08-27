@@ -14,6 +14,18 @@ const coreStyles = await readFile(
   new URL("../../styles/features/chat/core.css", import.meta.url),
   "utf8",
 );
+const rightPanelStyles = await readFile(
+  new URL("../../styles/features/chat/right-panel.css", import.meta.url),
+  "utf8",
+);
+const projectFilesStyles = await readFile(
+  new URL("../../styles/features/chat/project-files.css", import.meta.url),
+  "utf8",
+);
+const sideChatStyles = await readFile(
+  new URL("../../styles/features/chat/side-chat.css", import.meta.url),
+  "utf8",
+);
 const chatView = await readFile(
   new URL("../../components/chat/ChatView.tsx", import.meta.url),
   "utf8",
@@ -26,12 +38,36 @@ function rule(css, selector) {
   )?.groups?.body;
 }
 
-test("chat header controls float without taking horizontal layout space", () => {
+test("chat header reserves a dock-aware lane for floating controls", () => {
+  const header = rule(headerStyles, ".content-header--chat");
   const actions = rule(headerStyles, ".content-header--chat .header-actions");
 
+  assert.ok(header, "missing chat header rule");
+  assert.match(header, /min-height:\s*60px;/);
   assert.ok(actions, "missing chat header action rule");
   assert.match(actions, /position:\s*absolute;/);
-  assert.match(actions, /right:\s*28px;/);
+  assert.match(actions, /right:\s*calc\(16px \+ var\(--chat-header-right-offset, 0px\)\);/);
+  assert.match(actions, /bottom:\s*8px;/);
+});
+
+test("right-side chat surfaces dock to the bottom and right edges", () => {
+  const layout = rule(rightPanelStyles, ".chat-layout-with-right.has-right-dock");
+  const runtimePanel = rule(rightPanelStyles, ".chat-right-panel");
+  const projectPanel = rule(projectFilesStyles, ".project-files-panel");
+  const sidePanel = rule(sideChatStyles, ".side-chat-panel");
+
+  assert.ok(layout, "missing docked chat layout rule");
+  assert.match(layout, /border-radius:\s*28px 0 0 0;/);
+  assert.ok(runtimePanel, "missing runtime panel rule");
+  assert.match(runtimePanel, /right:\s*0;/);
+  assert.match(runtimePanel, /bottom:\s*0;/);
+  assert.match(runtimePanel, /border-radius:\s*20px 0 0 0;/);
+  assert.ok(projectPanel, "missing project files panel rule");
+  assert.match(projectPanel, /margin:\s*0 0 0 var\(--pf-gutter, 6px\);/);
+  assert.match(projectPanel, /border-radius:\s*var\(--pf-radius-card, 18px\) 0 0 0;/);
+  assert.ok(sidePanel, "missing side chat panel rule");
+  assert.match(sidePanel, /margin:\s*0 0 0 8px;/);
+  assert.match(sidePanel, /border-radius:\s*20px 0 0 0;/);
 });
 
 test("composer floats above a full-height conversation viewport", () => {

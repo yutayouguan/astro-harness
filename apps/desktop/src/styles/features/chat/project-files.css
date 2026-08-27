@@ -16,11 +16,11 @@
   width: min(var(--project-files-width, 264px), 42%);
   min-width: 0;
   min-height: 0;
-  margin: var(--pf-gutter, 6px) var(--pf-gutter, 6px) var(--pf-gutter, 6px) 0;
+  margin: 0 0 0 var(--pf-gutter, 6px);
   display: flex;
   flex-direction: column;
   border: 1px solid color-mix(in srgb, var(--tone) 8%, var(--glass-edge));
-  border-radius: var(--pf-radius-card, 18px);
+  border-radius: var(--pf-radius-card, 18px) 0 0 0;
   background:
     linear-gradient(165deg, rgba(255, 255, 255, 0.18), rgba(255, 255, 255, 0.045)),
     color-mix(in srgb, var(--tone-soft) 12%, var(--glass-panel));
@@ -490,6 +490,7 @@ html[data-theme="dark"] .project-files-panel {
     top: 0;
     right: 0;
     bottom: 0;
+    margin: 0;
     width: min(var(--project-files-width, 264px), calc(100% - 24px));
     max-width: calc(100% - 24px);
     box-shadow: -12px 0 28px rgba(var(--shadow-ink), 0.1);
