@@ -6,6 +6,11 @@
   --pf-radius-control: 10px;
   --pf-radius-row: 8px;
   --pf-radius-tight: 6px;
+  --pf-surface-border: 1px solid color-mix(in srgb, var(--glass-edge) 62%, transparent);
+  --pf-surface-background:
+    radial-gradient(circle at 72% 12%, color-mix(in srgb, var(--tone-soft) 24%, transparent), transparent 42%),
+    color-mix(in srgb, var(--glass-panel) 32%, transparent);
+  --pf-surface-shadow: 0 2px 10px rgba(var(--shadow-ink), 0.04);
 }
 
 .project-files-panel {
@@ -16,17 +21,14 @@
   width: min(var(--project-files-width, 264px), 42%);
   min-width: 0;
   min-height: 0;
-  margin: 0 0 0 var(--pf-gutter, 6px);
+  margin: var(--pf-gutter, 6px);
   display: flex;
   flex-direction: column;
-  border: 1px solid color-mix(in srgb, var(--tone) 8%, var(--glass-edge));
-  border-radius: var(--pf-radius-card, 18px) 0 0 0;
-  background:
-    linear-gradient(165deg, rgba(255, 255, 255, 0.18), rgba(255, 255, 255, 0.045)),
-    color-mix(in srgb, var(--tone-soft) 12%, var(--glass-panel));
-  backdrop-filter: blur(calc(22px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.08));
-  -webkit-backdrop-filter: blur(calc(22px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.08));
-  box-shadow: 0 2px 10px rgba(var(--shadow-ink), 0.04);
+  isolation: isolate;
+  border: var(--pf-surface-border);
+  border-radius: var(--pf-radius-card, 18px);
+  background: var(--pf-surface-background);
+  box-shadow: var(--pf-surface-shadow);
   overflow: hidden;
   transform-origin: right center;
   animation: project-files-panel-enter 220ms cubic-bezier(0.23, 1, 0.32, 1) both;
@@ -254,12 +256,10 @@
   flex-direction: column;
   overflow: hidden;
   isolation: isolate;
-  border: 1px solid color-mix(in srgb, var(--glass-edge) 62%, transparent);
+  border: var(--pf-surface-border);
   border-radius: var(--pf-radius-card, 18px);
-  background:
-    radial-gradient(circle at 72% 12%, color-mix(in srgb, var(--tone-soft) 24%, transparent), transparent 42%),
-    color-mix(in srgb, var(--glass-panel) 32%, transparent);
-  box-shadow: 0 2px 10px rgba(var(--shadow-ink), 0.04);
+  background: var(--pf-surface-background);
+  box-shadow: var(--pf-surface-shadow);
 }
 
 .project-file-tabs {
@@ -450,12 +450,6 @@
   pointer-events: none;
 }
 
-html[data-theme="dark"] .project-files-panel {
-  background:
-    linear-gradient(165deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.012)),
-    color-mix(in srgb, var(--tone-soft) 17%, rgba(8, 6, 18, 0.76));
-}
-
 /* 文件打开时收窄悬浮输入框，使它与编辑器正文列对齐。 */
 .chat-pane.has-project-file {
   position: relative;
@@ -490,7 +484,7 @@ html[data-theme="dark"] .project-files-panel {
     top: 0;
     right: 0;
     bottom: 0;
-    margin: 0;
+    margin: var(--pf-gutter, 6px);
     width: min(var(--project-files-width, 264px), calc(100% - 24px));
     max-width: calc(100% - 24px);
     box-shadow: -12px 0 28px rgba(var(--shadow-ink), 0.1);

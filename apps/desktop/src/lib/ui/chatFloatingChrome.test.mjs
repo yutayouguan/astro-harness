@@ -54,6 +54,7 @@ test("right-side chat surfaces dock to the bottom and right edges", () => {
   const layout = rule(rightPanelStyles, ".chat-layout-with-right.has-right-dock");
   const runtimePanel = rule(rightPanelStyles, ".chat-right-panel");
   const projectPanel = rule(projectFilesStyles, ".project-files-panel");
+  const projectWorkbench = rule(projectFilesStyles, ".project-file-workbench");
   const sidePanel = rule(sideChatStyles, ".side-chat-panel");
 
   assert.ok(layout, "missing docked chat layout rule");
@@ -63,8 +64,15 @@ test("right-side chat surfaces dock to the bottom and right edges", () => {
   assert.match(runtimePanel, /bottom:\s*0;/);
   assert.match(runtimePanel, /border-radius:\s*20px 0 0 0;/);
   assert.ok(projectPanel, "missing project files panel rule");
-  assert.match(projectPanel, /margin:\s*0 0 0 var\(--pf-gutter, 6px\);/);
-  assert.match(projectPanel, /border-radius:\s*var\(--pf-radius-card, 18px\) 0 0 0;/);
+  assert.match(projectPanel, /margin:\s*var\(--pf-gutter, 6px\);/);
+  assert.match(projectPanel, /border:\s*var\(--pf-surface-border\);/);
+  assert.match(projectPanel, /border-radius:\s*var\(--pf-radius-card, 18px\);/);
+  assert.match(projectPanel, /background:\s*var\(--pf-surface-background\);/);
+  assert.match(projectPanel, /box-shadow:\s*var\(--pf-surface-shadow\);/);
+  assert.ok(projectWorkbench, "missing project file workbench rule");
+  assert.match(projectWorkbench, /border:\s*var\(--pf-surface-border\);/);
+  assert.match(projectWorkbench, /background:\s*var\(--pf-surface-background\);/);
+  assert.match(projectWorkbench, /box-shadow:\s*var\(--pf-surface-shadow\);/);
   assert.ok(sidePanel, "missing side chat panel rule");
   assert.match(sidePanel, /margin:\s*0 0 0 8px;/);
   assert.match(sidePanel, /border-radius:\s*20px 0 0 0;/);
