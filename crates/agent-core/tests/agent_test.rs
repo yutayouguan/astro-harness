@@ -256,3 +256,36 @@ async fn system_prompt_includes_interaction_mode_guidance() {
     let (system_chars, _, _, _) = agent.system_prompt_layer_chars().await;
     assert!(system_chars > 0);
 }
+
+#[tokio::test]
+async fn prompt_contract_separates_base_developer_and_user_context() {
+    let dir = TempDir::new().unwrap();
+    let mut config = test_config(&dir);
+    config.static_override = Some(agent::prompt::context::StaticContext {
+        soul: "STABLE_SOUL".into(),
+        identity: "STABLE_IDENTITY".into(),
+        agent_md: "PROJECT_INSTRUCTIONS".into(),
+        memory: "MEMORY_CONTEXT".into(),
+        user_profile: "USER_CONTEXT".into(),
+        daily: "DAILY_CONTEXT".into(),
+    });
+    let agent = AgentLoop::new(config).unwrap();
+
+    let prompt = agent.build_prompt_contract().await;
+
+    assert!(prompt.base_instructions.contains("STABLE_SOUL"));
+    assert!(prompt.base_instructions.contains("STABLE_IDENTITY"));
+    assert!(!prompt.base_instructions.contains("PROJECT_INSTRUCTIONS"));
+    assert!(!prompt.base_instructions.contains("MEMORY_CONTEXT"));
+    assert_eq!(prompt.context.len(), 2);
+    assert_eq!(
+        prompt.context[0].role(),
+        providers::types::message::Role::Developer
+    );
+    assert!(prompt.context[0].text_content().contains("# 工具使用"));
+    assert_eq!(
+        prompt.context[1].role(),
+        providers::types::message::Role::User
+    );
+    assert!(prompt.context[1].text_content().contains("MEMORY_CONTEXT"));
+}

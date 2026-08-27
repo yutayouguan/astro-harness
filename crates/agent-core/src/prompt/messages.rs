@@ -13,8 +13,26 @@ use types::message::{Message, MessageContent, Role};
 /// 发送前会 [`sanitize_tool_pairs`](super::sanitize::sanitize_tool_pairs)：去掉悬挂
 /// `tool_calls` 与孤儿 tool 消息，避免上游 400。
 pub fn to_provider_messages(system_prompt: &str, session: &[Message]) -> Vec<ProviderMessage> {
+    to_provider_messages_with_context(
+        &crate::prompt::PromptContract::from_base_instructions(system_prompt),
+        session,
+    )
+}
+
+/// Convert a three-layer prompt contract plus durable history into provider input.
+///
+/// The stable base is emitted as the dedicated system/instructions item, followed by
+/// role-bearing dynamic context. Native tool schemas are supplied separately by the caller.
+pub fn to_provider_messages_with_context(
+    prompt: &crate::prompt::PromptContract,
+    session: &[Message],
+) -> Vec<ProviderMessage> {
     let session = super::sanitize::sanitized_tool_pairs(session);
-    let mut messages = vec![ProviderMessage::system(system_prompt)];
+    let mut messages = Vec::with_capacity(session.len() + prompt.context.len() + 1);
+    if !prompt.base_instructions.trim().is_empty() {
+        messages.push(ProviderMessage::system(&prompt.base_instructions));
+    }
+    messages.extend(prompt.context.iter().cloned());
 
     for message in &session {
         if message.role == Role::Tool {
@@ -234,6 +252,31 @@ mod tests {
         } else {
             panic!("expected User message");
         }
+    }
+
+    #[test]
+    fn prompt_contract_keeps_dynamic_roles_ahead_of_conversation() {
+        let prompt = crate::prompt::PromptContract {
+            base_instructions: "stable base".into(),
+            context: vec![
+                ProviderMessage::developer("developer policy"),
+                ProviderMessage::user_text("contextual user data"),
+            ],
+        };
+        let messages = to_provider_messages_with_context(&prompt, &[Message::user("hello")]);
+
+        assert_eq!(messages.len(), 4);
+        assert_eq!(messages[0].role(), providers::types::message::Role::System);
+        assert_eq!(
+            messages[1].role(),
+            providers::types::message::Role::Developer
+        );
+        assert_eq!(messages[2].role(), providers::types::message::Role::User);
+        assert_eq!(messages[3].role(), providers::types::message::Role::User);
+        assert_eq!(messages[0].text_content(), "stable base");
+        assert_eq!(messages[1].text_content(), "developer policy");
+        assert_eq!(messages[2].text_content(), "contextual user data");
+        assert_eq!(messages[3].text_content(), "hello");
     }
 
     #[test]

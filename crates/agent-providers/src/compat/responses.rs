@@ -71,15 +71,7 @@ where
             &request.model
         };
 
-        let input = crate::openai::responses::to_responses_input(&request.messages);
-
-        let instructions = request.messages.iter().find_map(|m| {
-            if let crate::types::message::Message::System { content } = m {
-                Some(content.clone())
-            } else {
-                None
-            }
-        });
+        let input = crate::openai::responses::to_responses_input(&request.input);
 
         let mut body = json!({
             "model": model,
@@ -89,10 +81,8 @@ where
         if Ext::RESPONSES_STORE_FALSE {
             body["store"] = json!(false);
         }
-        if let Some(inst) = instructions {
-            if !inst.is_empty() {
-                body["instructions"] = json!(inst);
-            }
+        if !request.instructions.is_empty() {
+            body["instructions"] = json!(&request.instructions);
         }
         if let Some(temp) = request.temperature {
             let has_reasoning = request.thinking.as_ref().is_some_and(|tc| tc.enabled);

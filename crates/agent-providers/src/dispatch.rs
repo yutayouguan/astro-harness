@@ -53,6 +53,14 @@ pub(crate) async fn chat_stream_with_tool_policy(
     tool_choice: Option<ToolChoice>,
     parallel_tool_calls: Option<bool>,
 ) -> ProviderResult<CompletionStream> {
+    let mut instructions = String::new();
+    let mut input = Vec::with_capacity(messages.len());
+    for message in messages {
+        match message {
+            Message::System { content } if instructions.is_empty() => instructions = content,
+            other => input.push(other),
+        }
+    }
     let tool_defs: Vec<ToolDefinition> = tools
         .iter()
         .filter_map(|t| {
@@ -74,7 +82,8 @@ pub(crate) async fn chat_stream_with_tool_policy(
 
     let request = CompletionRequest {
         model: config.model.clone(),
-        messages,
+        instructions,
+        input,
         tools: tool_defs,
         tool_choice,
         parallel_tool_calls,

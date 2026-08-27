@@ -8,7 +8,7 @@
 
 ```rust
 /// 角色枚举（替代 `role: String`）
-pub enum Role { System, User, Assistant, Tool }
+pub enum Role { System, Developer, User, Assistant, Tool }
 
 /// 用户消息内容（多模态）
 pub enum UserContent {
@@ -30,6 +30,7 @@ pub enum AssistantContent {
 /// 统一消息
 pub enum Message {
     System { content: String },
+    Developer { content: String },
     User { content: Vec<UserContent> },
     Assistant { content: Vec<AssistantContent> },
 }
@@ -56,7 +57,8 @@ pub struct ToolDefinition {
 /// 统一聊天请求
 pub struct CompletionRequest {
     pub model: String,
-    pub messages: Vec<Message>,
+    pub instructions: String,      // 稳定基础指令
+    pub input: Vec<Message>,       // 带角色的动态上下文与对话历史
     pub tools: Vec<ToolDefinition>,
     pub temperature: Option<f32>,
     pub max_tokens: Option<u32>,

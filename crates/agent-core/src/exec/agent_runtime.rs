@@ -1611,15 +1611,15 @@ async fn run_request(
         request.runtime.model_request.model.as_deref(),
     )?;
     session.set_chat_targets(targets.clone());
-    let prepared_system_prompt = if request.consume_mailbox {
+    let prepared_prompt = if request.consume_mailbox {
         let turn = session.prepare_mailbox_turn().await?;
-        let system_prompt = match turn {
-            TurnResult::Continue { system_prompt, .. } => system_prompt,
+        let prompt = match turn {
+            TurnResult::Continue { prompt, .. } => prompt,
             TurnResult::BudgetExhausted => anyhow::bail!("conversation turn budget exhausted"),
             TurnResult::Interrupted => anyhow::bail!("follow-up turn interrupted while preparing"),
             other => anyhow::bail!("unexpected follow-up preparation result: {other:?}"),
         };
-        Some(system_prompt)
+        Some(prompt)
     } else {
         None
     };
@@ -1627,11 +1627,11 @@ async fn run_request(
     if let Some(started) = request.followup_start_tx.as_ref() {
         let _ = started.send(Some(Ok(())));
     }
-    let result = if let Some(system_prompt) = prepared_system_prompt {
+    let result = if let Some(prompt) = prepared_prompt {
         crate::exec::background::run_background_prepared_turn_controlled_with_chat(
             Arc::clone(&session),
             targets,
-            system_prompt,
+            prompt,
             Some(Arc::clone(&interrupt)),
             request.chat_override.clone(),
         )
@@ -2310,7 +2310,7 @@ mod tests {
 
         assert_eq!(
             captured_roles.lock().unwrap().as_slice(),
-            &["user", "assistant", "user"]
+            &["developer", "user", "user", "assistant", "user"]
         );
         let roles = sessions
             .get_messages(&thread.session_id)
@@ -2430,7 +2430,7 @@ mod tests {
 
         assert_eq!(
             captured_roles.lock().unwrap().as_slice(),
-            &["user", "assistant", "user"]
+            &["developer", "user", "user", "assistant", "user"]
         );
         let roles = sessions
             .get_messages(&thread.session_id)
@@ -2664,7 +2664,7 @@ mod tests {
 
         assert_eq!(
             *captured_roles.lock().unwrap(),
-            vec!["user", "assistant", "user"]
+            vec!["developer", "user", "user", "assistant", "user"]
         );
         let stored =
             session::SessionStore::open_sessions_dir(&memory_dir.join("sessions")).unwrap();

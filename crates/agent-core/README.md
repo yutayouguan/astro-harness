@@ -5,7 +5,7 @@ Agent 运行时核心 crate：组装对话循环、上下文管理、钩子系�
 ## 核心职责
 
 - 维护单次会话的消息历史、轮次预算（`max_turns` / `multi_turn`）与取消信号
-- 每轮用户输入时召回记忆、组装静态/动态上下文并生成 system prompt
+- 每轮用户输入时召回记忆，组装 Codex 风格的三层 Prompt 契约：稳定基础指令、带角色动态上下文、独立原生工具 schema
 - 统一路由内置工具与 MCP 工具，调用前后触发三总线 hook
 - 实现流式补全的三层 trait 抽象（`StreamingCompletion` / `StreamingChat` / `StreamingPrompt`）
 - 驱动「LLM 流式 → 工具执行 → 再请求」的多轮闭环
@@ -36,6 +36,7 @@ Agent 运行时核心 crate：组装对话循环、上下文管理、钩子系�
 | `prompt/context.rs` | 静态/动态上下文组装（`StaticContext`） |
 | `prompt/context_source.rs` | 上下文来源抽象 |
 | `prompt/context_usage.rs` | 上下文预算与用量追踪 |
+| `prompt/contract.rs` | `PromptContract` 三层边界与 developer/user 角色分层 |
 | `prompt/prompt_builder.rs` | System prompt 分层构建器 |
 | `prompt/hooks.rs` | Hook 集成与 `CancelSignal` |
 | `prompt/messages.rs` | 消息变换与注入 |
@@ -55,7 +56,7 @@ Agent 运行时核心 crate：组装对话循环、上下文管理、钩子系�
 | `runtime/recording.rs` | 消息记录 — `record_assistant_*` / `record_tool_result_*` |
 | `runtime/tool_dispatch.rs` | 工具调度 — `handle_tool_call_async` / `finalize_tool_call_result` |
 | `runtime/tool_router.rs` | `ToolRouter` — 内置/MCP/动态工具统一路由 |
-| `runtime/system_prompt.rs` | System prompt 构建 — `build_system_prompt` |
+| `runtime/system_prompt.rs` | Prompt 契约构建 — `build_prompt_contract` |
 | `runtime/submission_loop.rs` | 有序提交循环 |
 | `runtime/validate.rs` | `validate_message_order` 消息角色顺序校验 |
 | `streaming/multi_turn.rs` | 多轮工具循环编排（核心流式主循环） |

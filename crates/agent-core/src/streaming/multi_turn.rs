@@ -86,6 +86,7 @@ pub(crate) struct ThreadTurnTaskArgs {
     pub(crate) base_config: ProviderConfig,
     pub(crate) input: Vec<TurnInput>,
     pub(crate) system_prompt: Option<String>,
+    pub(crate) prompt: Option<crate::prompt::PromptContract>,
     pub(crate) pause: Arc<PauseControl>,
     pub(crate) hitl_gate: Option<Arc<HitlGate>>,
     pub(crate) chat_override: Option<super::provider::ChatOverride>,
@@ -125,6 +126,7 @@ pub(crate) async fn install_multi_turn_task(
         base_config,
         input,
         system_prompt,
+        prompt,
         pause,
         hitl_gate,
         chat_override,
@@ -139,6 +141,7 @@ pub(crate) async fn install_multi_turn_task(
         targets,
         base_config,
         system_prompt,
+        prompt,
         pause,
         hitl_gate,
         chat_override,
@@ -178,6 +181,7 @@ pub async fn run_thread_turn_events(args: ThreadTurnEventArgs) {
         base_config,
         input,
         system_prompt,
+        prompt: None,
         pause,
         hitl_gate,
         chat_override,
@@ -270,6 +274,7 @@ pub(crate) struct RunTurnArgs {
     targets: Vec<ChatTarget>,
     base_config: ProviderConfig,
     system_prompt: Option<String>,
+    prompt: Option<crate::prompt::PromptContract>,
     pause: Arc<PauseControl>,
     hitl_gate: Option<Arc<HitlGate>>,
     chat_override: Option<super::provider::ChatOverride>,
@@ -315,6 +320,7 @@ impl RunTurnArgs {
             targets,
             base_config,
             system_prompt: None,
+            prompt: None,
             pause,
             hitl_gate: Some(hitl_gate),
             chat_override,
@@ -336,15 +342,22 @@ impl RunTurnArgs {
         &self.turn_context
     }
 
-    pub(crate) fn with_system_prompt(&self, system_prompt: String) -> Self {
+    pub(crate) fn with_prompt(&self, prompt: crate::prompt::PromptContract) -> Self {
         Self {
-            system_prompt: Some(system_prompt),
+            prompt: Some(prompt),
             ..self.clone()
         }
     }
 
     pub(crate) fn prepared_system_prompt(&self) -> Option<&str> {
         self.system_prompt.as_deref()
+    }
+
+    pub(crate) fn prepared_prompt(&self) -> Option<crate::prompt::PromptContract> {
+        self.prompt.clone().or_else(|| {
+            self.prepared_system_prompt()
+                .map(crate::prompt::PromptContract::from_base_instructions)
+        })
     }
 }
 
@@ -435,11 +448,16 @@ pub(crate) async fn run_turn(
         targets,
         base_config,
         system_prompt,
+        prompt,
         pause,
         hitl_gate,
         chat_override,
     } = args;
-    let system_prompt = system_prompt.expect("RegularTask prepares the system prompt");
+    debug_assert!(
+        system_prompt.is_none(),
+        "prebuilt system prompt must be consumed by RegularTask"
+    );
+    let prompt = prompt.expect("RegularTask prepares the prompt contract");
     let streamer = match chat_override {
         Some(f) => ProviderStreamer::with_chat_override(targets, base_config, f),
         None => ProviderStreamer::new(targets, base_config),
@@ -555,7 +573,7 @@ pub(crate) async fn run_turn(
             &session,
             &turn_context,
             &streamer,
-            &system_prompt,
+            &prompt,
             &history,
             tool_specs,
         )
@@ -1169,7 +1187,7 @@ pub(crate) async fn run_turn(
         match run_max_iterations_summary(crate::streaming::summary::MaxIterationsSummaryArgs {
             session: &session,
             streamer: &streamer,
-            system_prompt: &system_prompt,
+            prompt: &prompt,
             pause: &pause,
             turn_context: &turn_context,
             timeline: &mut timeline,

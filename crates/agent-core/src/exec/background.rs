@@ -60,6 +60,7 @@ pub(crate) async fn run_background_multi_turn_controlled_with_chat(
         targets,
         input,
         None,
+        None,
         control,
         chat_override,
     )
@@ -69,7 +70,7 @@ pub(crate) async fn run_background_multi_turn_controlled_with_chat(
 pub(crate) async fn run_background_prepared_turn_controlled_with_chat(
     session: Arc<Session>,
     targets: Vec<ChatTarget>,
-    system_prompt: String,
+    prompt: crate::prompt::PromptContract,
     control: Option<Arc<subagents::AgentThreadControl>>,
     chat_override: Option<ChatOverride>,
 ) -> anyhow::Result<(String, Usage)> {
@@ -77,7 +78,8 @@ pub(crate) async fn run_background_prepared_turn_controlled_with_chat(
         session,
         targets,
         Vec::new(),
-        Some(system_prompt),
+        None,
+        Some(prompt),
         control,
         chat_override,
     )
@@ -89,6 +91,7 @@ async fn run_background_multi_turn_controlled_with_chat_and_system(
     targets: Vec<ChatTarget>,
     input: Vec<TurnInput>,
     system_prompt: Option<String>,
+    prompt: Option<crate::prompt::PromptContract>,
     control: Option<Arc<subagents::AgentThreadControl>>,
     chat_override: Option<ChatOverride>,
 ) -> anyhow::Result<(String, Usage)> {
@@ -119,6 +122,7 @@ async fn run_background_multi_turn_controlled_with_chat_and_system(
         base_config,
         input,
         system_prompt,
+        prompt,
         pause,
         hitl_gate: None,
         chat_override,
@@ -552,6 +556,7 @@ mod tests {
                 client_message_id: None,
             }],
             system_prompt: None,
+            prompt: None,
             pause: PauseControl::new(),
             hitl_gate: None,
             chat_override: Some(completed_chat()),

@@ -91,20 +91,29 @@ impl AgentLoop {
         (static_ctx, dynamic_ctx, skill_pairs)
     }
 
-    /// 组装完整 system prompt：静态上下文 + 动态召回 + 技能索引 + 工具指引 + 时间戳。
+    /// 兼容性平铺视图；真实采样使用 [`Self::build_prompt_contract`] 保留角色边界。
     ///
     /// MEMORY / USER 仅注入 **snapshot**（同会话冻结）；日记读盘后截断注入。
-    /// 各层经 [`crate::prompt::ContextSource`] 共享字符预算（优先 static）。
+    /// 各层经 [`crate::prompt::ContextSource`] 共享字符预算，优先级为
+    /// stable base → developer context → contextual user data。
     ///
     /// `pending_inject_context` 仍走 [`Self::take_inject_context`] 的消息侧注入；初始
     /// SessionStart/UserPromptSubmit admission context 由内部带预算入口单独传入。
     ///
     /// 副作用：设置 workspace 目录覆盖供 skills 发现使用。
     pub async fn build_system_prompt(&self) -> String {
-        self.build_system_prompt_with_inject(None).await
+        self.build_prompt_contract().await.flattened()
     }
 
-    pub(crate) async fn build_system_prompt_with_inject(&self, inject: Option<&str>) -> String {
+    /// 构造 Codex 风格三层契约：稳定基础指令、带角色动态上下文、外置原生工具 schema。
+    pub async fn build_prompt_contract(&self) -> crate::prompt::PromptContract {
+        self.build_prompt_contract_with_inject(None).await
+    }
+
+    pub(crate) async fn build_prompt_contract_with_inject(
+        &self,
+        inject: Option<&str>,
+    ) -> crate::prompt::PromptContract {
         let (static_ctx, dynamic_ctx, skill_pairs) = self.system_prompt_parts().await;
         skills::set_workspace_override(&self.workspace_dir());
         let skill_index: Vec<(&str, &str)> = skill_pairs
@@ -115,13 +124,13 @@ impl AgentLoop {
         let (guidance, timestamp) = self.system_prompt_guidance_timestamp().await;
         let mcp_instructions = render_mcp_instructions(&self.lock_state().mcp_instructions.clone());
         let mut budget = crate::prompt::ContextBudget::new(self.config.context_budget_chars.max(1));
-        crate::prompt::assemble_system_layers(
+        crate::prompt::contract::assemble_prompt_contract(
             &mut budget,
             &static_ctx,
             inject,
             &skill_index,
             &dynamic_ctx,
-            crate::prompt::context_source::RuntimeSystemLayers {
+            crate::prompt::contract::RuntimePromptLayers {
                 guidance: &guidance,
                 timestamp: &timestamp,
                 mcp_instructions: &mcp_instructions,

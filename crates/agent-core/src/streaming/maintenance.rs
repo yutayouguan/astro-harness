@@ -12,7 +12,6 @@ use super::lifecycle::{
     is_subagent_tool,
 };
 use super::provider::ProviderStreamer;
-use super::traits::StreamingChat;
 use crate::runtime::{AgentLoop, TurnContext};
 
 /// Gateway 预压安全网 + mid-run 辅模型摘要，统一进 LLM 前的上下文维护。
@@ -359,7 +358,7 @@ pub(super) async fn run_sampling_request(
     session: &Arc<AgentLoop>,
     turn_context: &TurnContext,
     streamer: &ProviderStreamer,
-    system_prompt: &str,
+    prompt: &crate::prompt::PromptContract,
     history: &[types::message::Message],
     tool_specs: Vec<serde_json::Value>,
 ) -> Result<super::types::AssistantContentStream, String> {
@@ -379,7 +378,7 @@ pub(super) async fn run_sampling_request(
         emit_hook_completed(session, turn_context, hook_item, ::hooks::PRE_API_REQUEST).await;
     }
     match streamer
-        .stream_chat(system_prompt, history, tool_specs)
+        .stream_chat_with_contract(prompt, history, tool_specs)
         .await
     {
         Ok(s) => {

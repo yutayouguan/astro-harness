@@ -97,7 +97,8 @@ impl CompletionModel for InteractionsCompletionModel {
             .previous_interaction_id
             .as_deref()
             .filter(|prev| !prev.is_empty());
-        let converted = to_interactions_input(&request.messages, previous.is_some());
+        let messages = request.input_with_instructions();
+        let converted = to_interactions_input(&messages, previous.is_some());
 
         let mut body = json!({
             "model": model,
@@ -223,7 +224,7 @@ impl CompletionModel for InteractionsCompletionModel {
                 obj.remove("previous_interaction_id");
                 obj.insert(
                     "input".into(),
-                    json!(to_interactions_input(&request.messages, false).steps),
+                    json!(to_interactions_input(&messages, false).steps),
                 );
             }
             response = send(body).await?;
@@ -300,10 +301,18 @@ fn to_interactions_input(
         }
     }
     // system_instruction 是 interaction 级参数，续写时同样要重发。
-    let system = messages.iter().find_map(|m| match m {
-        Message::System { content } => Some(content.clone()),
-        _ => None,
-    });
+    // Interactions exposes one system_instruction field. Keep developer context
+    // instruction-scoped when lowering the richer internal role model.
+    let instruction_parts = messages
+        .iter()
+        .filter_map(|m| match m {
+            Message::System { content } | Message::Developer { content } => {
+                (!content.trim().is_empty()).then(|| content.clone())
+            }
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+    let system = (!instruction_parts.is_empty()).then(|| instruction_parts.join("\n\n"));
 
     let steps = to_interactions_steps(replayed, &call_names);
     InteractionsInput {
@@ -323,7 +332,7 @@ fn to_interactions_steps(
     for m in messages {
         match m {
             // system_instruction 由调用方单独下发，不进 input。
-            Message::System { .. } => {}
+            Message::System { .. } | Message::Developer { .. } => {}
             Message::User { content } => {
                 let parts: Vec<Value> = content
                     .iter()
@@ -881,10 +890,14 @@ mod tests {
     fn system_instruction_extracted() {
         let msgs = vec![
             crate::types::Message::system("Be helpful"),
+            crate::types::Message::developer("Follow project policy"),
             crate::types::Message::user_text("Hi"),
         ];
         let converted = to_interactions_input(&msgs, false);
-        assert_eq!(converted.system.as_deref(), Some("Be helpful"));
+        assert_eq!(
+            converted.system.as_deref(),
+            Some("Be helpful\n\nFollow project policy")
+        );
         assert_eq!(converted.steps.len(), 1);
         assert_eq!(converted.steps[0]["type"], "user_input");
         assert!(!converted.continues_previous);

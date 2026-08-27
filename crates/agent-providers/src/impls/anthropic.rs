@@ -90,7 +90,8 @@ impl CompletionModel for AnthropicCompletionModel {
         let base = self.base_url.trim_end_matches('/').trim_end_matches("/v1");
         let url = format!("{base}/v1/messages");
 
-        let (system, api_messages) = to_anthropic_messages(&request.messages);
+        let messages = request.input_with_instructions();
+        let (system, api_messages) = to_anthropic_messages(&messages);
 
         let model = if request.model.is_empty() {
             &self.model
@@ -196,9 +197,12 @@ fn to_anthropic_messages(messages: &[crate::types::Message]) -> (Value, Vec<Valu
 
     for m in messages {
         match m {
-            Message::System { content } => {
+            // Anthropic has one top-level system channel. Preserve the internal
+            // developer boundary in the unified model, then lower both instruction
+            // roles into that channel for this provider.
+            Message::System { content } | Message::Developer { content } => {
                 if !system.is_empty() {
-                    system.push('\n');
+                    system.push_str("\n\n");
                 }
                 system.push_str(content);
             }
@@ -488,10 +492,17 @@ mod tests {
 
     #[test]
     fn system_with_cache_control() {
-        let msgs = vec![crate::types::Message::system("You are helpful.")];
+        let msgs = vec![
+            crate::types::Message::system("You are helpful."),
+            crate::types::Message::developer("Follow project policy."),
+        ];
         let (sys, _) = to_anthropic_messages(&msgs);
         let blocks = sys.as_array().unwrap();
         assert_eq!(blocks[0]["cache_control"]["type"], "ephemeral");
+        assert_eq!(
+            blocks[0]["text"],
+            "You are helpful.\n\nFollow project policy."
+        );
     }
 
     #[test]

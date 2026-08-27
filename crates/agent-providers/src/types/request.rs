@@ -75,7 +75,11 @@ pub enum ToolChoice {
 #[derive(Debug, Clone)]
 pub struct CompletionRequest {
     pub model: String,
-    pub messages: Vec<Message>,
+    /// Stable base instructions, independent from role-bearing request input.
+    pub instructions: String,
+    /// Dynamic context and conversation items with explicit roles.
+    pub input: Vec<Message>,
+    /// Native tool schemas; never encoded into instruction or message text.
     pub tools: Vec<ToolDefinition>,
     /// Explicit native tool-selection contract. `None` keeps the provider default.
     pub tool_choice: Option<ToolChoice>,
@@ -93,7 +97,8 @@ impl Default for CompletionRequest {
     fn default() -> Self {
         Self {
             model: String::new(),
-            messages: Vec::new(),
+            instructions: String::new(),
+            input: Vec::new(),
             tools: Vec::new(),
             tool_choice: None,
             parallel_tool_calls: None,
@@ -103,5 +108,52 @@ impl Default for CompletionRequest {
             additional_params: Value::Null,
             previous_interaction_id: None,
         }
+    }
+}
+
+impl CompletionRequest {
+    /// Lower the explicit instruction field into a system message for providers whose
+    /// wire protocol has no dedicated top-level instructions field.
+    pub fn input_with_instructions(&self) -> Vec<Message> {
+        let mut messages = Vec::with_capacity(self.input.len() + 1);
+        if !self.instructions.trim().is_empty() {
+            messages.push(Message::system(&self.instructions));
+        }
+        messages.extend(self.input.iter().cloned());
+        messages
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::types::message::Role;
+
+    #[test]
+    fn lowering_keeps_contract_layers_distinct() {
+        let request = CompletionRequest {
+            instructions: "stable base".into(),
+            input: vec![
+                Message::developer("dynamic policy"),
+                Message::user_text("hello"),
+            ],
+            tools: vec![ToolDefinition {
+                name: "lookup".into(),
+                description: "Lookup data".into(),
+                parameters: serde_json::json!({"type": "object"}),
+            }],
+            ..Default::default()
+        };
+
+        let input = request.input_with_instructions();
+        assert_eq!(input[0].role(), Role::System);
+        assert_eq!(input[1].role(), Role::Developer);
+        assert_eq!(input[2].role(), Role::User);
+        assert!(!request.instructions.contains("lookup"));
+        assert!(request
+            .input
+            .iter()
+            .all(|message| !message.text_content().contains("lookup")));
+        assert_eq!(request.tools[0].name, "lookup");
     }
 }

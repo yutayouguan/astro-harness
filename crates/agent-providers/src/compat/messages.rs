@@ -6,12 +6,26 @@ use crate::types::message::{AssistantContent, Message, UserContent};
 
 /// 将统一 Message 列表转为 OpenAI `messages` JSON 数组。
 pub fn to_openai_messages(messages: &[Message]) -> Vec<Value> {
-    messages.iter().filter_map(message_to_openai).collect()
+    to_openai_messages_with_developer_role(messages, true)
 }
 
-fn message_to_openai(msg: &Message) -> Option<Value> {
+pub fn to_openai_messages_with_developer_role(
+    messages: &[Message],
+    supports_developer_role: bool,
+) -> Vec<Value> {
+    messages
+        .iter()
+        .filter_map(|message| message_to_openai(message, supports_developer_role))
+        .collect()
+}
+
+fn message_to_openai(msg: &Message, supports_developer_role: bool) -> Option<Value> {
     match msg {
         Message::System { content } => Some(json!({"role": "system", "content": content})),
+        Message::Developer { content } => Some(json!({
+            "role": if supports_developer_role { "developer" } else { "system" },
+            "content": content,
+        })),
 
         Message::User { content } => {
             if content.len() == 1 {
@@ -126,13 +140,24 @@ mod tests {
     fn simple_text_messages() {
         let msgs = to_openai_messages(&[
             Message::system("You are helpful."),
+            Message::developer("Follow repository instructions."),
             Message::user_text("Hello"),
         ]);
-        assert_eq!(msgs.len(), 2);
+        assert_eq!(msgs.len(), 3);
         assert_eq!(msgs[0]["role"], "system");
         assert_eq!(msgs[0]["content"], "You are helpful.");
-        assert_eq!(msgs[1]["role"], "user");
-        assert_eq!(msgs[1]["content"], "Hello");
+        assert_eq!(msgs[1]["role"], "developer");
+        assert_eq!(msgs[1]["content"], "Follow repository instructions.");
+        assert_eq!(msgs[2]["role"], "user");
+        assert_eq!(msgs[2]["content"], "Hello");
+    }
+
+    #[test]
+    fn legacy_chat_protocol_lowers_developer_to_system() {
+        let messages =
+            to_openai_messages_with_developer_role(&[Message::developer("dynamic policy")], false);
+        assert_eq!(messages[0]["role"], "system");
+        assert_eq!(messages[0]["content"], "dynamic policy");
     }
 
     #[test]

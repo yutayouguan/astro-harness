@@ -87,7 +87,8 @@ impl CompletionModel for GeminiNativeCompletionModel {
         };
         let url = format!("{base}/models/{model}:streamGenerateContent?alt=sse");
 
-        let (system_instruction, contents) = to_native_contents(&request.messages);
+        let messages = request.input_with_instructions();
+        let (system_instruction, contents) = to_native_contents(&messages);
 
         let mut body = json!({ "contents": contents });
 
@@ -183,13 +184,17 @@ impl CompletionModel for GeminiNativeCompletionModel {
 
 fn to_native_contents(messages: &[crate::types::Message]) -> (Option<String>, Vec<Value>) {
     use crate::types::message::*;
-    let mut system = None;
+    let mut instruction_parts = Vec::new();
     let mut contents = Vec::new();
 
     for m in messages {
         match m {
-            Message::System { content } => {
-                system = Some(content.clone());
+            // Gemini exposes one system_instruction field, so developer context
+            // is lowered into that field without turning it into user content.
+            Message::System { content } | Message::Developer { content } => {
+                if !content.trim().is_empty() {
+                    instruction_parts.push(content.clone());
+                }
             }
             Message::User { content } => {
                 let parts: Vec<Value> = content
@@ -263,6 +268,7 @@ fn to_native_contents(messages: &[crate::types::Message]) -> (Option<String>, Ve
             }
         }
     }
+    let system = (!instruction_parts.is_empty()).then(|| instruction_parts.join("\n\n"));
     (system, contents)
 }
 
@@ -428,10 +434,11 @@ mod tests {
     fn system_instruction_extracted() {
         let msgs = vec![
             crate::types::Message::system("Be helpful"),
+            crate::types::Message::developer("Follow project policy"),
             crate::types::Message::user_text("Hi"),
         ];
         let (sys, contents) = to_native_contents(&msgs);
-        assert_eq!(sys.as_deref(), Some("Be helpful"));
+        assert_eq!(sys.as_deref(), Some("Be helpful\n\nFollow project policy"));
         assert_eq!(contents.len(), 1);
         assert_eq!(contents[0]["role"], "user");
     }

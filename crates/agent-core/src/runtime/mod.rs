@@ -2011,8 +2011,12 @@ fn tool_writes_disk(name: &str, args: &Value) -> bool {
 /// 单轮 `run_turn` 或上层编排的可能结果。
 #[derive(Debug)]
 pub enum TurnResult {
-    /// 准备就绪，携带轮次编号与 system prompt，等待 LLM 响应。
-    Continue { turn: usize, system_prompt: String },
+    /// 准备就绪：`prompt` 是采样事实源，`system_prompt` 仅供旧调用方诊断展示。
+    Continue {
+        turn: usize,
+        system_prompt: String,
+        prompt: crate::prompt::PromptContract,
+    },
     /// Input was queued into the currently active regular task.
     Steered { turn_id: String },
     /// 模型请求的工具名称列表（由 streaming 层填充）。

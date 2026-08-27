@@ -367,9 +367,10 @@ impl Session {
         self.lock_state().compression.last_recalled_context = format_recalled_context(&recalled);
 
         self.increment_turn().await;
-        let system_prompt = self
-            .build_system_prompt_with_inject(admission_context)
+        let prompt = self
+            .build_prompt_contract_with_inject(admission_context)
             .await;
+        let system_prompt = prompt.flattened();
         let turn_id = self.current_turn_id().await;
         let inject = self.fire_hook(
             ::hooks::PRE_LLM_CALL,
@@ -390,6 +391,7 @@ impl Session {
         Ok(TurnResult::Continue {
             turn: self.session_turn().await,
             system_prompt,
+            prompt,
         })
     }
 

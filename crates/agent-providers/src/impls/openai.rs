@@ -35,6 +35,7 @@ impl ProviderExt for OpenAI {
 
 impl OpenAICompatible for OpenAI {
     const STREAM_USAGE: bool = true;
+    const SUPPORTS_DEVELOPER_ROLE: bool = true;
     const SUPPORTS_RESPONSES: bool = true;
     const RESPONSES_STORE_FALSE: bool = true;
     const RESPONSES_PARALLEL_TOOLS: bool = true;

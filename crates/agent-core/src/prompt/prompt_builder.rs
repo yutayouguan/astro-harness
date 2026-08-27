@@ -1,13 +1,14 @@
-//! System prompt 分层组装器。
+//! Prompt 文本片段组装器。
 //!
-//! 以 builder 模式将身份、静态/动态上下文、工具指引、技能索引等逐层叠入，
-//! 最终 `build` 产出用 `---` 分隔的完整 system 指令字符串。
+//! 以 builder 模式生成可组合的身份、工具指引和技能索引片段。
+//! 真实采样边界由 `PromptContract` 负责，不应把动态上下文或工具 schema
+//! 压平到基础指令中。
 
 use chrono::Local;
 
 use crate::prompt::context::{DynamicContext, StaticContext};
 
-/// 工具调用与学习闭环固定指引（注入 system prompt）。
+/// 工具调用与学习闭环固定指引（注入 developer 上下文）。
 pub const TOOL_GUIDANCE: &str = "\
 # 工具使用\n\
 调用工具时只使用模型提供的原生结构化工具接口；不得把工具名称和参数 JSON 写入回答正文。\n\

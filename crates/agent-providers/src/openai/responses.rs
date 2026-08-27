@@ -76,12 +76,38 @@ pub fn to_responses_input(messages: &[Message]) -> Vec<Value> {
                 }));
             }
 
+            Message::Developer { content } => {
+                input.push(json!({
+                    "role": "developer",
+                    "content": content,
+                }));
+            }
+
             Message::System { .. } => {
                 // 跳过：由调用方通过顶层 `instructions` 字段发送
             }
         }
     }
     input
+}
+
+#[cfg(test)]
+mod input_tests {
+    use super::*;
+
+    #[test]
+    fn developer_context_is_a_role_bearing_input_item() {
+        let input = to_responses_input(&[
+            Message::system("stable base"),
+            Message::developer("dynamic policy"),
+            Message::user_text("hello"),
+        ]);
+
+        assert_eq!(input.len(), 2);
+        assert_eq!(input[0]["role"], "developer");
+        assert_eq!(input[0]["content"], "dynamic policy");
+        assert_eq!(input[1]["role"], "user");
+    }
 }
 
 fn build_content_from_user(parts: &[UserContent]) -> Value {

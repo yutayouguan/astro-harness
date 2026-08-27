@@ -8,6 +8,7 @@ use serde_json::Value;
 #[serde(rename_all = "lowercase")]
 pub enum Role {
     System,
+    Developer,
     User,
     Assistant,
     Tool,
@@ -17,6 +18,7 @@ impl Role {
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::System => "system",
+            Self::Developer => "developer",
             Self::User => "user",
             Self::Assistant => "assistant",
             Self::Tool => "tool",
@@ -100,6 +102,9 @@ pub enum Message {
     System {
         content: String,
     },
+    Developer {
+        content: String,
+    },
     User {
         content: Vec<UserContent>,
     },
@@ -124,6 +129,12 @@ impl Message {
     pub fn user_text(text: impl Into<String>) -> Self {
         Self::User {
             content: vec![UserContent::Text { text: text.into() }],
+        }
+    }
+
+    pub fn developer(content: impl Into<String>) -> Self {
+        Self::Developer {
+            content: content.into(),
         }
     }
 
@@ -156,6 +167,7 @@ impl Message {
     pub fn role(&self) -> Role {
         match self {
             Self::System { .. } => Role::System,
+            Self::Developer { .. } => Role::Developer,
             Self::User { .. } => Role::User,
             Self::Assistant { .. } => Role::Assistant,
             Self::Tool { .. } => Role::Tool,
@@ -164,7 +176,7 @@ impl Message {
 
     pub fn text_content(&self) -> &str {
         match self {
-            Self::System { content } => content,
+            Self::System { content } | Self::Developer { content } => content,
             Self::Tool { content, .. } => content,
             Self::User { content } => content
                 .iter()
@@ -193,6 +205,10 @@ mod tests {
         let sys = Message::system("You are helpful.");
         assert_eq!(sys.role(), Role::System);
         assert_eq!(sys.text_content(), "You are helpful.");
+
+        let developer = Message::developer("Follow project policy.");
+        assert_eq!(developer.role(), Role::Developer);
+        assert_eq!(developer.text_content(), "Follow project policy.");
 
         let user = Message::user_text("Hello");
         assert_eq!(user.role(), Role::User);
@@ -250,6 +266,10 @@ mod tests {
     #[test]
     fn role_serialization() {
         assert_eq!(serde_json::to_string(&Role::System).unwrap(), "\"system\"");
+        assert_eq!(
+            serde_json::to_string(&Role::Developer).unwrap(),
+            "\"developer\""
+        );
         assert_eq!(serde_json::to_string(&Role::User).unwrap(), "\"user\"");
         assert_eq!(
             serde_json::to_string(&Role::Assistant).unwrap(),

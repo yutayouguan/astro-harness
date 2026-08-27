@@ -11,7 +11,6 @@ use crate::runtime::{AgentLoop, TurnContext};
 
 use super::lifecycle::{emit_delta, emit_response_items_completed, emit_text_item_started};
 use super::provider::ProviderStreamer;
-use super::traits::StreamingChat;
 use super::types::StreamedAssistantContent;
 
 /// 预算耗尽后注入的总结提示（对齐 Hermes `handle_max_iterations`）。
@@ -29,7 +28,7 @@ pub(crate) enum SummaryOutcome {
 pub(crate) struct MaxIterationsSummaryArgs<'a> {
     pub session: &'a Arc<AgentLoop>,
     pub streamer: &'a ProviderStreamer,
-    pub system_prompt: &'a str,
+    pub prompt: &'a crate::prompt::PromptContract,
     pub pause: &'a Arc<PauseControl>,
     pub turn_context: &'a TurnContext,
     pub timeline: &'a mut crate::timeline::TimelineBuilder,
@@ -44,7 +43,7 @@ pub(crate) async fn run_max_iterations_summary(a: MaxIterationsSummaryArgs<'_>) 
     let MaxIterationsSummaryArgs {
         session,
         streamer,
-        system_prompt,
+        prompt,
         pause,
         turn_context,
         timeline,
@@ -70,7 +69,7 @@ pub(crate) async fn run_max_iterations_summary(a: MaxIterationsSummaryArgs<'_>) 
     };
 
     let raw_stream = match streamer
-        .stream_chat(system_prompt, &history, Vec::new())
+        .stream_chat_with_contract(prompt, &history, Vec::new())
         .await
     {
         Ok(s) => s,

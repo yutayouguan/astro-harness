@@ -10,7 +10,7 @@ use anyhow::{Context, Result};
 use reqwest::Client as HttpClient;
 use serde_json::{json, Value};
 
-use super::messages::to_openai_messages;
+use super::messages::to_openai_messages_with_developer_role;
 use super::sse::extract_openai_delta;
 use crate::traits::{CompletionModel, FromClient, ProviderClient, ProviderExt};
 use crate::types::{CompletionRequest, CompletionStream};
@@ -38,6 +38,9 @@ pub trait OpenAICompatible: ProviderExt {
 
     /// 是否支持原生 function calling。
     const SUPPORTS_TOOLS: bool = true;
+
+    /// Chat Completions 是否原生接受 `developer` role；旧兼容端点降级为 `system`。
+    const SUPPORTS_DEVELOPER_ROLE: bool = false;
 
     /// 是否支持 Responses API（`/responses` 端点）。
     const SUPPORTS_RESPONSES: bool = false;
@@ -174,9 +177,13 @@ where
         let base = self.base_url.trim_end_matches('/');
         let url = format!("{base}/chat/completions");
 
+        let messages = request.input_with_instructions();
         let mut body = json!({
             "model": if request.model.is_empty() { &self.model } else { &request.model },
-            "messages": to_openai_messages(&request.messages),
+            "messages": to_openai_messages_with_developer_role(
+                &messages,
+                Ext::SUPPORTS_DEVELOPER_ROLE,
+            ),
             "stream": true,
         });
 
