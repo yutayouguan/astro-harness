@@ -49,4 +49,13 @@ describe("compactMessagePreview", () => {
     assert.equal(compactMessagePreview("# Result\n[docs](https://example.com)"), "Result docs");
     assert.equal(compactMessagePreview("abcdefgh", 6), "abcde…");
   });
+
+  it("removes raw tool-call protocol noise from the answer preview", () => {
+    assert.equal(
+      compactMessagePreview(
+        '<tool_call>{"name":"file_ops"}</tool_call> 已完成检查，没有发现问题。',
+      ),
+      "已完成检查，没有发现问题。",
+    );
+  });
 });

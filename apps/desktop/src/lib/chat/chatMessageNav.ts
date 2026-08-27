@@ -10,6 +10,11 @@ export type ChatTurnPreview = {
 
 export function compactMessagePreview(content: string, limit = 180): string {
   const plain = content
+    .replace(
+      /<tool(?:_|\s+)call\b[^>]*>[\s\S]*?<\/tool(?:_|\s+)call\s*>/gi,
+      " ",
+    )
+    .replace(/<tool(?:_|\s+)call\b[^>]*>[\s\S]*$/gi, " ")
     .replace(/```[\s\S]*?```/g, " ")
     .replace(/`([^`]*)`/g, "$1")
     .replace(/!\[[^\]]*\]\([^)]*\)/g, " ")

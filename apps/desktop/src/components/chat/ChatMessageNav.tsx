@@ -231,12 +231,8 @@ export default function ChatMessageNav({
         const labelScale = 1;
         const cached = tipSizeCache.current.get(item.id);
         const tipSize = cached ?? {
-          width: Math.min(
-            520,
-            window.innerWidth - 96,
-            420,
-          ),
-          height: 156,
+          width: Math.min(440, window.innerWidth - 96),
+          height: 96,
         };
 
         const placed = clampFloatingTip({
@@ -487,12 +483,6 @@ export default function ChatMessageNav({
                   role="tooltip"
                 >
                   <p className="chat-msg-nav-label-question">{p.question}</p>
-                  <strong className="chat-msg-nav-label-title">
-                    {t("chat.navReviewTitle")}
-                  </strong>
-                  <p className="chat-msg-nav-label-summary">
-                    {t("chat.navReviewSummary")}
-                  </p>
                   <p className="chat-msg-nav-label-answer">{p.answer}</p>
                 </div>
               ))}
