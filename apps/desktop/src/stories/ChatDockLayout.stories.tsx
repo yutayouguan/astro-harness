@@ -1,13 +1,21 @@
 import { useState, type CSSProperties } from "react";
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import {
+  Activity,
   FolderTree,
+  Gauge,
+  GitBranch,
+  Layers,
   MessageSquare,
   PanelRight,
   Plus,
   RotateCw,
   X,
 } from "lucide-react";
+import SubagentActivityBar from "../components/chat/SubagentActivityBar";
+import TaskMonitorPanel from "../components/chat/TaskMonitorPanel";
+import { LocaleProvider } from "../i18n/LocaleContext";
+import { MorphiconProvider } from "../hooks/app/useMorphicons";
 
 type DockKind = "files" | "side" | "runtime";
 
@@ -54,12 +62,13 @@ function HeaderActions({
         </button>
         <button
           type="button"
-          className={`header-icon-btn${kind === "runtime" ? " is-active" : ""}`}
-          aria-label="运行信息"
+          className={`header-icon-btn header-summary-btn${kind === "runtime" ? " is-active" : ""}`}
+          aria-label="运行摘要，2 个 Subagent 运行中"
           aria-pressed={kind === "runtime"}
           onClick={() => toggle("runtime")}
         >
-          <PanelRight size={16} />
+          <Activity size={16} />
+          <span className="header-summary-badge" aria-hidden>2</span>
         </button>
       </div>
     </div>
@@ -93,11 +102,57 @@ function DockPanel({ kind }: { kind: DockKind }) {
     >
       <div className="chat-right-header">
         <h2 className="chat-right-title">
-          <PanelRight size={17} />运行信息
+          <PanelRight size={17} />会话详情
         </h2>
         <button type="button" className="chat-right-close" aria-label="关闭">
           <X size={14} />
         </button>
+      </div>
+      <div className="chat-right-tabs" role="tablist">
+        <button type="button" role="tab" aria-selected className="chat-right-tab is-active">
+          <Activity size={15} />运行摘要
+        </button>
+        <button type="button" role="tab" aria-selected={false} className="chat-right-tab">
+          <Layers size={15} />上下文
+        </button>
+        <button type="button" role="tab" aria-selected={false} className="chat-right-tab">
+          <GitBranch size={15} />分支
+        </button>
+      </div>
+      <div className="chat-right-body">
+        <LocaleProvider>
+          <MorphiconProvider>
+            <div className="chat-summary-panel">
+              <div className="chat-agent-info">
+                <header className="chat-agent-hero">
+                  <div className="chat-agent-avatar" aria-hidden>A</div>
+                  <div className="chat-agent-identity">
+                    <h3>Astro</h3>
+                    <p className="chat-agent-status">官方默认 Agent</p>
+                  </div>
+                </header>
+                <section className="chat-agent-card">
+                  <h4 className="chat-agent-card-title">
+                    <span className="chat-agent-card-icon" aria-hidden>
+                      <Gauge size={15} />
+                    </span>
+                    用量参考
+                  </h4>
+                  <p className="chat-agent-usage-empty muted">本轮暂无用量数据</p>
+                </section>
+              </div>
+              <SubagentActivityBar
+                rootSessionId="story-session"
+                roots={[]}
+                showEmpty
+                onRefresh={async () => {}}
+                onOpenPanel={() => {}}
+                onOpenThread={() => {}}
+              />
+              <TaskMonitorPanel messages={[]} streaming={false} />
+            </div>
+          </MorphiconProvider>
+        </LocaleProvider>
       </div>
     </aside>
   );

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { Bot, RefreshCw, SendHorizontal, Square, Wrench, X } from "lucide-react";
+import { ArrowLeft, Bot, RefreshCw, SendHorizontal, Square, Wrench, X } from "lucide-react";
 import { useI18n } from "../../i18n/LocaleContext";
 import {
   createAgentTreeRootLifecycle,
@@ -23,6 +23,7 @@ type Props = {
   refreshThreads: () => Promise<void>;
   markRead: (canonicalPath: string) => void;
   onClose: () => void;
+  embedded?: boolean;
 };
 
 type FlatNode = { node: AgentTreeNode; depth: number };
@@ -63,6 +64,7 @@ export default function SubagentsPanel({
   refreshThreads,
   markRead,
   onClose,
+  embedded = false,
 }: Props) {
   const { t } = useI18n();
   const root = rootSessionId?.trim() ?? "";
@@ -204,13 +206,12 @@ export default function SubagentsPanel({
   const status = selected?.status.kind;
   const archived = status === "shutdown";
 
-  return (
-    <div className="subagents-backdrop" role="presentation" onMouseDown={onClose}>
-      <aside
-        className="subagents-panel"
-        aria-label={t("subagents.title")}
-        onMouseDown={(event) => event.stopPropagation()}
-      >
+  const panel = (
+    <section
+      className={`subagents-panel${embedded ? " is-embedded" : ""}`}
+      aria-label={t("subagents.title")}
+      onMouseDown={(event) => event.stopPropagation()}
+    >
         <header className="subagents-head">
           <div>
             <h2><Bot size={17} />{t("subagents.title")}</h2>
@@ -220,8 +221,13 @@ export default function SubagentsPanel({
             <button type="button" onClick={() => void refreshThreads()} aria-label={t("subagents.refresh")}>
               <RefreshCw size={15} />
             </button>
-            <button type="button" onClick={onClose} aria-label={t("subagents.closePanel")}>
-              <X size={16} />
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label={t(embedded ? "subagents.backToSummary" : "subagents.closePanel")}
+              title={t(embedded ? "subagents.backToSummary" : "subagents.closePanel")}
+            >
+              {embedded ? <ArrowLeft size={16} /> : <X size={16} />}
             </button>
           </div>
         </header>
@@ -351,7 +357,13 @@ export default function SubagentsPanel({
         {error || streamError ? (
           <div className="subagents-error subagents-error-global">{error ?? streamError}</div>
         ) : null}
-      </aside>
+    </section>
+  );
+
+  if (embedded) return panel;
+  return (
+    <div className="subagents-backdrop" role="presentation" onMouseDown={onClose}>
+      {panel}
     </div>
   );
 }

@@ -26,3 +26,19 @@ test("opening either dock entry closes the previously active surface", () => {
     /const toggleProjectFilesDock[\s\S]+?setChatRightOpen\(false\)[\s\S]+?projectFiles\.setPanelOpen\(true\)/,
   );
 });
+
+test("the pinned summary entry opens the reorganized three-tab inspector", async () => {
+  const panelSource = await readFile(
+    new URL("../../components/chat/ChatRightPanel.tsx", import.meta.url),
+    "utf8",
+  );
+
+  assert.match(appSource, /const toggleChatSummaryDock/);
+  assert.match(appSource, /openChatRightDock\("summary"\)/);
+  assert.match(appSource, /header-summary-btn/);
+  assert.match(
+    panelSource,
+    /export type ChatRightTab = "summary" \| "context" \| "branches"/,
+  );
+  assert.doesNotMatch(panelSource, /const tabs:[^;]+\["agent", "monitor"/);
+});

@@ -242,6 +242,47 @@ html[data-theme="dark"] .conversation-menu-popover {
   pointer-events: none;
 }
 
+.header-summary-btn {
+  position: relative;
+}
+
+.header-summary-badge,
+.header-summary-dot {
+  position: absolute;
+  pointer-events: none;
+}
+
+.header-summary-badge {
+  top: -4px;
+  right: -5px;
+  min-width: 15px;
+  height: 15px;
+  padding: 0 4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1.5px solid color-mix(in srgb, var(--glass-panel) 86%, transparent);
+  border-radius: 999px;
+  color: #fff;
+  background: var(--tone, var(--tone-blue, #2563eb));
+  box-shadow: 0 2px 7px color-mix(in srgb, var(--tone, #2563eb) 30%, transparent);
+  font-size: 8.5px;
+  font-weight: 750;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.header-summary-dot {
+  top: 0;
+  right: 0;
+  width: 7px;
+  height: 7px;
+  border: 1.5px solid color-mix(in srgb, var(--glass-panel) 86%, transparent);
+  border-radius: 50%;
+  background: var(--danger, #ef4444);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--danger, #ef4444) 13%, transparent);
+}
+
 html[data-theme="dark"] .header-icon-btn.is-active {
   background:
     linear-gradient(165deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.04)),

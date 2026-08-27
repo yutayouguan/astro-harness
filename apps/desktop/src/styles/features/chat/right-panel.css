@@ -284,6 +284,38 @@
   );
 }
 
+.chat-summary-panel,
+.chat-context-stack {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.chat-summary-panel .chat-agent-info,
+.chat-context-stack .chat-agent-info {
+  padding-bottom: 0;
+}
+
+.chat-summary-panel .task-monitor-panel {
+  flex: none;
+  min-height: auto;
+  padding: 12px;
+  overflow: visible;
+  border: 1px solid color-mix(in srgb, var(--glass-edge) 82%, transparent);
+  border-radius: 15px;
+  background: color-mix(in srgb, var(--glass-panel) 46%, transparent);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, white 34%, transparent);
+}
+
+.chat-summary-panel .task-monitor-empty {
+  padding: 24px 16px;
+}
+
+.chat-context-stack > .ctx-explorer {
+  min-height: 220px;
+}
+
 .chat-context-timeline {
   list-style: none;
   margin: 0;

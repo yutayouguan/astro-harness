@@ -50,6 +50,7 @@ import { useActiveSessionTitle } from "./hooks/chat/useActiveSessionTitle";
 import { useChatSession } from "./hooks/chat/useChatSession";
 import { useProjectFileWorkbench } from "./hooks/chat/useProjectFileWorkbench";
 import { useSessionStatusMap } from "./hooks/chat/useSessionStatusMap";
+import { useSubagentThreads } from "./hooks/chat/useSubagentThreads";
 import { useChatThinkingPrefs } from "./hooks/chat/useChatThinkingPrefs";
 import { useBeautifyTips } from "./hooks/ui/useBeautifyTips";
 import { useProviders } from "./hooks/providers/useProviders";
@@ -103,6 +104,7 @@ import {
   resolveChatRightDock,
 } from "./lib/ui/chatRightDock";
 import {
+  Activity,
   ArrowLeft,
   Archive,
   ChevronRight,
@@ -247,6 +249,28 @@ export default function App() {
     nav,
     setNav,
   });
+  const subagents = useSubagentThreads(chat.sessionId);
+  const runningSubagentCount = useMemo(
+    () =>
+      subagents.threads.filter(
+        (thread) =>
+          thread.status.kind === "pending_init" || thread.status.kind === "running",
+      ).length,
+    [subagents.threads],
+  );
+  const hasSubagentAttention = useMemo(
+    () =>
+      Boolean(subagents.error) ||
+      Object.values(subagents.state.byPath).some(
+        (node) => node.unread || node.thread.status.kind === "errored",
+      ),
+    [subagents.error, subagents.state.byPath],
+  );
+  const summaryButtonLabel = runningSubagentCount > 0
+    ? t("chat.rightPanel.summaryRunning", { count: String(runningSubagentCount) })
+    : hasSubagentAttention
+      ? t("chat.rightPanel.summaryAttention")
+      : t("chat.rightPanel.summary");
   const sessionStatuses = useSessionStatusMap();
   const {
     send,
@@ -309,13 +333,13 @@ export default function App() {
     ],
   );
 
-  const toggleChatRightDock = useCallback(() => {
-    if (chat.chatRightOpen) {
+  const toggleChatSummaryDock = useCallback(() => {
+    if (chat.chatRightOpen && chat.chatRightTab === "summary") {
       setChatRightOpen(false);
       return;
     }
-    openChatRightDock();
-  }, [chat.chatRightOpen, openChatRightDock, setChatRightOpen]);
+    openChatRightDock("summary");
+  }, [chat.chatRightOpen, chat.chatRightTab, openChatRightDock, setChatRightOpen]);
 
   const toggleProjectFilesDock = useCallback(() => {
     if (projectFiles.panelOpen) {
@@ -1500,13 +1524,20 @@ export default function App() {
                     </button>
                     <button
                       type="button"
-                      className={`header-icon-btn ${activeChatRightDock === "inspector" ? "is-active" : ""}`}
-                      onClick={toggleChatRightDock}
-                      title={t("chat.rightPanel.toggle")}
-                      aria-label={t("chat.rightPanel.toggle")}
-                      aria-pressed={activeChatRightDock === "inspector"}
+                      className={`header-icon-btn header-summary-btn ${activeChatRightDock === "inspector" && chat.chatRightTab === "summary" ? "is-active" : ""} ${hasSubagentAttention ? "has-attention" : ""}`.trim()}
+                      onClick={toggleChatSummaryDock}
+                      title={summaryButtonLabel}
+                      aria-label={summaryButtonLabel}
+                      aria-pressed={activeChatRightDock === "inspector" && chat.chatRightTab === "summary"}
                     >
-                      <IconRightPanel width={16} height={16} />
+                      <Activity width={16} height={16} />
+                      {runningSubagentCount > 0 ? (
+                        <span className="header-summary-badge" aria-hidden>
+                          {runningSubagentCount > 9 ? "9+" : runningSubagentCount}
+                        </span>
+                      ) : hasSubagentAttention ? (
+                        <span className="header-summary-dot" aria-hidden />
+                      ) : null}
                     </button>
                   </div>
                 </div>
@@ -1653,6 +1684,13 @@ export default function App() {
                       contextWindow={contextWindow}
                       messages={chat.messages}
                       streaming={chat.streaming}
+                      subagentRoots={subagents.roots}
+                      subagentThreads={subagents.threads}
+                      subagentError={subagents.error}
+                      subagentsLoading={subagents.loading}
+                      subagentsInitialized={subagents.initialized}
+                      onRefreshSubagents={subagents.refresh}
+                      onMarkSubagentRead={subagents.markRead}
                       onOpenSession={(sessionId) => openSessionFromFilespace(sessionId)}
                       onOpenSideSession={(sessionId) => {
                         projectFiles.setPanelOpen(false);

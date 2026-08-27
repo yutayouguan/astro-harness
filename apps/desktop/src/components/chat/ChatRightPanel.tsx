@@ -1,4 +1,4 @@
-// 聊天悬浮侧栏（Agent / 任务监控 / 上下文 / 分支）；文件预览在内嵌项目工作台。
+// 聊天悬浮侧栏（摘要 / 上下文 / 分支）；文件预览在内嵌项目工作台。
 import {
   useCallback,
   useEffect,
@@ -10,9 +10,8 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from "react";
 import {
-  Activity,
-  Bot,
   GitBranch,
+  LayoutDashboard,
   Layers,
   PanelRight,
   X,
@@ -35,8 +34,11 @@ import TaskMonitorPanel from "./TaskMonitorPanel";
 import ChatAgentInfo from "./ChatAgentInfo";
 import BranchGraphPanel from "./BranchGraphPanel";
 import MotionSwitch from "../ui/MotionSwitch";
+import SubagentActivityBar from "./SubagentActivityBar";
+import SubagentsPanel from "./SubagentsPanel";
+import type { AgentThread, AgentTreeNode } from "../../hooks/chat/subagentTree";
 
-export type ChatRightTab = "agent" | "monitor" | "context" | "branches";
+export type ChatRightTab = "summary" | "context" | "branches";
 
 /** 右侧栏入参 */
 type Props = {
@@ -59,6 +61,13 @@ type Props = {
   messages?: ChatMessage[];
   /** 是否正在流式输出 */
   streaming?: boolean;
+  subagentRoots: AgentTreeNode[];
+  subagentThreads: AgentThread[];
+  subagentError?: string | null;
+  subagentsLoading: boolean;
+  subagentsInitialized: boolean;
+  onRefreshSubagents: () => Promise<void>;
+  onMarkSubagentRead: (canonicalPath: string) => void;
   onOpenSession: (sessionId: string) => void | Promise<void>;
   onOpenSideSession: (sessionId: string) => void | Promise<void>;
   /** 在某轮之前分支后，把原始输入回填到输入框 */
@@ -69,15 +78,13 @@ type Props = {
 };
 
 const TAB_KEYS: Record<ChatRightTab, MessageKey> = {
-  agent: "chat.rightPanel.agent",
-  monitor: "chat.rightPanel.monitor",
+  summary: "chat.rightPanel.summary",
   context: "chat.rightPanel.context",
   branches: "chat.rightPanel.branches",
 };
 
 const TAB_ICONS: Record<ChatRightTab, LucideIcon> = {
-  agent: Bot,
-  monitor: Activity,
+  summary: LayoutDashboard,
   context: Layers,
   branches: GitBranch,
 };
@@ -96,6 +103,13 @@ export default function ChatRightPanel({
   contextWindow = 0,
   messages = [],
   streaming = false,
+  subagentRoots,
+  subagentThreads,
+  subagentError = null,
+  subagentsLoading,
+  subagentsInitialized,
+  onRefreshSubagents,
+  onMarkSubagentRead,
   onOpenSession,
   onOpenSideSession,
   onPrefillInput,
@@ -104,7 +118,7 @@ export default function ChatRightPanel({
   onWidthChange,
 }: Props) {
   const { t } = useI18n();
-  const tabs: ChatRightTab[] = ["agent", "monitor", "context", "branches"];
+  const tabs: ChatRightTab[] = ["summary", "context", "branches"];
   const tabsRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLElement>(null);
   const panelWidthRef = useRef(CHAT_RIGHT_PANEL_DEFAULT_WIDTH);
@@ -119,12 +133,21 @@ export default function ChatRightPanel({
   });
   const [maxPanelWidth, setMaxPanelWidth] = useState(CHAT_RIGHT_PANEL_DEFAULT_WIDTH);
   const [resizing, setResizing] = useState(false);
+  const [subagentsOpen, setSubagentsOpen] = useState(false);
+  const [selectedSubagentPath, setSelectedSubagentPath] = useState<string | null>(null);
 
   panelWidthRef.current = panelWidth;
 
   useEffect(() => {
     onWidthChange?.(panelWidth);
   }, [onWidthChange, panelWidth]);
+
+  useEffect(() => {
+    if (tab !== "summary") {
+      setSubagentsOpen(false);
+      setSelectedSubagentPath(null);
+    }
+  }, [tab]);
 
   const containerWidth = useCallback(() => {
     const width = panelRef.current?.parentElement?.getBoundingClientRect().width ?? 0;
@@ -341,29 +364,74 @@ export default function ChatRightPanel({
             className="anim-switch--fill"
             variant="fade"
           >
-            {tab === "agent" && (
-              <ChatAgentInfo
-                sessionId={sessionId}
-                turnId={turnId}
-                contextUsage={contextUsage}
-                contextWindow={contextWindow}
-                onOpenMemory={onOpenMemory}
-                onOpenSkills={onOpenSkills}
-                onOpenContextTab={() => onTabChange("context")}
-              />
-            )}
-            {tab === "monitor" && (
-              <TaskMonitorPanel
-                messages={messages}
-                streaming={streaming}
-              />
+            {tab === "summary" && (
+              subagentsOpen ? (
+                <SubagentsPanel
+                  embedded
+                  open
+                  rootSessionId={sessionId}
+                  roots={subagentRoots}
+                  threads={subagentThreads}
+                  initialTarget={selectedSubagentPath}
+                  streamError={subagentError}
+                  loading={subagentsLoading}
+                  initialized={subagentsInitialized}
+                  refreshThreads={onRefreshSubagents}
+                  markRead={onMarkSubagentRead}
+                  onClose={() => {
+                    setSubagentsOpen(false);
+                    setSelectedSubagentPath(null);
+                  }}
+                />
+              ) : (
+                <div className="chat-summary-panel">
+                  <ChatAgentInfo
+                    variant="summary"
+                    sessionId={sessionId}
+                    turnId={turnId}
+                    contextUsage={contextUsage}
+                    contextWindow={contextWindow}
+                    onOpenMemory={onOpenMemory}
+                    onOpenSkills={onOpenSkills}
+                    onOpenContextTab={() => onTabChange("context")}
+                  />
+                  <SubagentActivityBar
+                    rootSessionId={sessionId}
+                    roots={subagentRoots}
+                    onRefresh={onRefreshSubagents}
+                    showEmpty
+                    onOpenPanel={() => {
+                      setSelectedSubagentPath(null);
+                      setSubagentsOpen(true);
+                    }}
+                    onOpenThread={(canonicalPath) => {
+                      onMarkSubagentRead(canonicalPath);
+                      setSelectedSubagentPath(canonicalPath);
+                      setSubagentsOpen(true);
+                    }}
+                  />
+                  <TaskMonitorPanel messages={messages} streaming={streaming} />
+                </div>
+              )
             )}
             {tab === "context" && (
-              <ContextExplorer
-                snapshot={contextUsage}
-                windowTokens={contextWindow}
-                sessionLabel={sessionId ?? "—"}
-              />
+              <div className="chat-context-stack">
+                <ContextExplorer
+                  snapshot={contextUsage}
+                  windowTokens={contextWindow}
+                  sessionLabel={sessionId ?? "—"}
+                />
+                <ChatAgentInfo
+                  variant="context"
+                  sessionId={sessionId}
+                  turnId={turnId}
+                  contextUsage={contextUsage}
+                  contextWindow={contextWindow}
+                  onOpenMemory={onOpenMemory}
+                  onOpenSkills={onOpenSkills}
+                  onOpenContextTab={() => onTabChange("context")}
+                />
+              </div>
             )}
             {tab === "branches" && (
               <BranchGraphPanel

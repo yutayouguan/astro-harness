@@ -186,7 +186,7 @@ export function useChatSession({
       return false;
     }
   });
-  const [chatRightTab, setChatRightTab] = useState<ChatRightTab>("agent");
+  const [chatRightTab, setChatRightTab] = useState<ChatRightTab>("summary");
   const confirm = useConfirm();
 
   useEffect(() => {

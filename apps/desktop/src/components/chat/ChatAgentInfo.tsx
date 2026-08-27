@@ -27,6 +27,7 @@ import ContextUsageBar from "./ContextUsageBar";
 
 /** 当前 Agent 信息条入参 */
 type Props = {
+  variant?: "all" | "summary" | "context";
   sessionId?: string | null;
   turnId?: string | null;
   /** 分层上下文占用快照 */
@@ -42,6 +43,7 @@ type Props = {
 const MEMORY_PREVIEW_LEN = 280;
 
 export default function ChatAgentInfo({
+  variant = "all",
   sessionId = null,
   turnId = null,
   contextUsage = null,
@@ -79,6 +81,8 @@ export default function ChatAgentInfo({
           cfg.agents.find((a) => a.id === cfg.active_agent_id) ?? cfg.agents[0] ?? null;
         setAgent(active);
         if (!active) return;
+
+        if (variant === "summary") return;
 
         try {
           const mem = await invoke<string>("read_file", {
@@ -132,7 +136,7 @@ export default function ChatAgentInfo({
     return () => {
       cancelled = true;
     };
-  }, [t]);
+  }, [t, variant]);
 
   if (loading) {
     return (
@@ -158,131 +162,139 @@ export default function ChatAgentInfo({
 
   return (
     <div className="chat-agent-info">
-      <header className="chat-agent-hero">
-        <div className="chat-agent-avatar" aria-hidden>
-          <AgentAvatar agent={agent} size={48} />
-        </div>
-        <div className="chat-agent-identity">
-          <h3>{agent.name}</h3>
-          <p className="chat-agent-status">
-            {agent.is_default ? t("chat.rightPanel.defaultAgent") : agent.id}
-          </p>
-        </div>
-      </header>
-
-      <section className="chat-agent-card">
-        <div className="chat-agent-card-head">
-          <h4 className="chat-agent-card-title">
-            <span className="chat-agent-card-icon" aria-hidden>
-              <Gauge size={15} strokeWidth={2.1} />
-            </span>
-            <span>{t("chat.rightPanel.usageTitle")}</span>
-          </h4>
-          <button type="button" className="linkish" onClick={onOpenContextTab}>
-            <span>{t("chat.contextUsageDetail")}</span>
-            <ArrowUpRight size={12} strokeWidth={2.1} aria-hidden />
-          </button>
-        </div>
-        {contextUsage && (win > 0 || used > 0) ? (
-          <button
-            type="button"
-            className="chat-agent-usage"
-            onClick={onOpenContextTab}
-            aria-label={
-              pct != null
-                ? t("chat.contextUsageFull", { pct: String(pct) })
-                : t("chat.contextUsage")
-            }
-          >
-            <div className="chat-agent-usage-meta">
-              <span className="chat-agent-usage-pct">
-                {pct != null
-                  ? t("chat.contextUsageFull", { pct: String(pct) })
-                  : t("chat.contextUsage")}
-              </span>
-              <span className="chat-agent-usage-tokens">
-                ~{formatTokenCount(used)}
-                {win > 0 ? ` / ${formatTokenCount(win)}` : ""}
-              </span>
+      {variant !== "context" ? (
+        <>
+          <header className="chat-agent-hero">
+            <div className="chat-agent-avatar" aria-hidden>
+              <AgentAvatar agent={agent} size={48} />
             </div>
-            {win > 0 ? (
-              <ContextUsageBar snapshot={contextUsage} windowTokens={win} />
+            <div className="chat-agent-identity">
+              <h3>{agent.name}</h3>
+              <p className="chat-agent-status">
+                {agent.is_default ? t("chat.rightPanel.defaultAgent") : agent.id}
+              </p>
+            </div>
+          </header>
+
+          <section className="chat-agent-card">
+            <div className="chat-agent-card-head">
+              <h4 className="chat-agent-card-title">
+                <span className="chat-agent-card-icon" aria-hidden>
+                  <Gauge size={15} strokeWidth={2.1} />
+                </span>
+                <span>{t("chat.rightPanel.usageTitle")}</span>
+              </h4>
+              <button type="button" className="linkish" onClick={onOpenContextTab}>
+                <span>{t("chat.contextUsageDetail")}</span>
+                <ArrowUpRight size={12} strokeWidth={2.1} aria-hidden />
+              </button>
+            </div>
+            {contextUsage && (win > 0 || used > 0) ? (
+              <button
+                type="button"
+                className="chat-agent-usage"
+                onClick={onOpenContextTab}
+                aria-label={
+                  pct != null
+                    ? t("chat.contextUsageFull", { pct: String(pct) })
+                    : t("chat.contextUsage")
+                }
+              >
+                <div className="chat-agent-usage-meta">
+                  <span className="chat-agent-usage-pct">
+                    {pct != null
+                      ? t("chat.contextUsageFull", { pct: String(pct) })
+                      : t("chat.contextUsage")}
+                  </span>
+                  <span className="chat-agent-usage-tokens">
+                    ~{formatTokenCount(used)}
+                    {win > 0 ? ` / ${formatTokenCount(win)}` : ""}
+                  </span>
+                </div>
+                {win > 0 ? (
+                  <ContextUsageBar snapshot={contextUsage} windowTokens={win} />
+                ) : null}
+              </button>
+            ) : (
+              <p className="chat-agent-usage-empty muted">
+                {t("chat.rightPanel.usagePlaceholder")}
+              </p>
+            )}
+            {turnId && sessionId ? (
+              <div className="chat-agent-turn">
+                <span>{t("chat.rightPanel.turnLabel")}</span>
+                <code>{turnId.length > 8 ? `${turnId.slice(0, 8)}…` : turnId}</code>
+                <button
+                  type="button"
+                  className="linkish"
+                  onClick={() => {
+                    void navigator.clipboard.writeText(
+                      formatDiagnosticContext(sessionId, turnId),
+                    );
+                  }}
+                >
+                  <Copy size={12} strokeWidth={2.1} aria-hidden />
+                  <span>{t("chat.rightPanel.copyDiagnostic")}</span>
+                </button>
+              </div>
             ) : null}
-          </button>
-        ) : (
-          <p className="chat-agent-usage-empty muted">
-            {t("chat.rightPanel.usagePlaceholder")}
-          </p>
-        )}
-        {turnId && sessionId ? (
-          <div className="chat-agent-turn">
-            <span>{t("chat.rightPanel.turnLabel")}</span>
-            <code>{turnId.length > 8 ? `${turnId.slice(0, 8)}…` : turnId}</code>
-            <button
-              type="button"
-              className="linkish"
-              onClick={() => {
-                void navigator.clipboard.writeText(
-                  formatDiagnosticContext(sessionId, turnId),
-                );
-              }}
-            >
-              <Copy size={12} strokeWidth={2.1} aria-hidden />
-              <span>{t("chat.rightPanel.copyDiagnostic")}</span>
+          </section>
+        </>
+      ) : null}
+
+      {variant !== "summary" ? (
+        <>
+          <section className="chat-agent-card">
+            <div className="chat-agent-card-head">
+              <h4 className="chat-agent-card-title">
+                <span className="chat-agent-card-icon" aria-hidden>
+                  <Brain size={15} strokeWidth={2.1} />
+                </span>
+                <span>{t("chat.rightPanel.memory")}</span>
+              </h4>
+              <button type="button" className="linkish" onClick={onOpenMemory}>
+                <Pencil size={12} strokeWidth={2.1} aria-hidden />
+                <span>{t("chat.rightPanel.edit")}</span>
+              </button>
+            </div>
+            <pre className="chat-agent-preview">{memoryPreview}</pre>
+          </section>
+
+          <section className="chat-agent-card">
+            <h4 className="chat-agent-card-title">
+              <span className="chat-agent-card-icon" aria-hidden>
+                <NotebookText size={15} strokeWidth={2.1} />
+              </span>
+              <span>{t("chat.rightPanel.diary")}</span>
+            </h4>
+            <pre className="chat-agent-preview">{diary}</pre>
+          </section>
+
+          <section className="chat-agent-card">
+            <div className="chat-agent-card-head">
+              <h4 className="chat-agent-card-title">
+                <span className="chat-agent-card-icon" aria-hidden>
+                  <Sparkles size={15} strokeWidth={2.1} />
+                </span>
+                <span>{t("chat.rightPanel.skills")}</span>
+              </h4>
+            </div>
+            {skillNames.length > 0 ? (
+              <div className="chat-agent-skill-tags">
+                {skillNames.map((n) => (
+                  <span key={n}>{n}</span>
+                ))}
+              </div>
+            ) : (
+              <p className="muted">暂无已启用技能</p>
+            )}
+            <button type="button" className="chat-agent-view-all" onClick={onOpenSkills}>
+              <span>{`${t("chat.rightPanel.viewAllSkills")} (${skillTotal})`}</span>
+              <ArrowUpRight size={14} strokeWidth={2.1} aria-hidden />
             </button>
-          </div>
-        ) : null}
-      </section>
-
-      <section className="chat-agent-card">
-        <div className="chat-agent-card-head">
-          <h4 className="chat-agent-card-title">
-            <span className="chat-agent-card-icon" aria-hidden>
-              <Brain size={15} strokeWidth={2.1} />
-            </span>
-            <span>{t("chat.rightPanel.memory")}</span>
-          </h4>
-          <button type="button" className="linkish" onClick={onOpenMemory}>
-            <Pencil size={12} strokeWidth={2.1} aria-hidden />
-            <span>{t("chat.rightPanel.edit")}</span>
-          </button>
-        </div>
-        <pre className="chat-agent-preview">{memoryPreview}</pre>
-      </section>
-
-      <section className="chat-agent-card">
-        <h4 className="chat-agent-card-title">
-          <span className="chat-agent-card-icon" aria-hidden>
-            <NotebookText size={15} strokeWidth={2.1} />
-          </span>
-          <span>{t("chat.rightPanel.diary")}</span>
-        </h4>
-        <pre className="chat-agent-preview">{diary}</pre>
-      </section>
-
-      <section className="chat-agent-card">
-        <div className="chat-agent-card-head">
-          <h4 className="chat-agent-card-title">
-            <span className="chat-agent-card-icon" aria-hidden>
-              <Sparkles size={15} strokeWidth={2.1} />
-            </span>
-            <span>{t("chat.rightPanel.skills")}</span>
-          </h4>
-        </div>
-        {skillNames.length > 0 ? (
-          <div className="chat-agent-skill-tags">
-            {skillNames.map((n) => (
-              <span key={n}>{n}</span>
-            ))}
-          </div>
-        ) : (
-          <p className="muted">暂无已启用技能</p>
-        )}
-        <button type="button" className="chat-agent-view-all" onClick={onOpenSkills}>
-          <span>{`${t("chat.rightPanel.viewAllSkills")} (${skillTotal})`}</span>
-          <ArrowUpRight size={14} strokeWidth={2.1} aria-hidden />
-        </button>
-      </section>
+          </section>
+        </>
+      ) : null}
     </div>
   );
 }

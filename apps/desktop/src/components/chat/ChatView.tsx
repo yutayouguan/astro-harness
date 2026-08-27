@@ -131,9 +131,6 @@ import LocationA2UISurface from "./LocationA2UISurface";
 import A2UISurfaceCard from "./A2UISurfaceCard";
 import ComposerClarifySurface from "./ComposerClarifySurface";
 import TodoProgress from "./TodoProgress";
-import SubagentActivityBar from "./SubagentActivityBar";
-import SubagentsPanel from "./SubagentsPanel";
-import { useSubagentThreads } from "../../hooks/chat/useSubagentThreads";
 import { formatElapsedSec } from "../../lib/chat/elapsedSec";
 import { coalesceReasoningSegments } from "../../lib/chat/chatTimeline";
 import {
@@ -701,17 +698,6 @@ export default function ChatView({
   const [queueMenuId, setQueueMenuId] = useState<string | null>(null);
   const [contextPopoverOpen, setContextPopoverOpen] = useState(false);
   const [plusOpen, setPlusOpen] = useState(false);
-  const [subagentsOpen, setSubagentsOpen] = useState(false);
-  const [selectedSubagentPath, setSelectedSubagentPath] = useState<string | null>(null);
-  const {
-    threads: subagentThreads,
-    roots: subagentRoots,
-    error: subagentError,
-    loading: subagentsLoading,
-    initialized: subagentsInitialized,
-    refresh: refreshSubagentThreads,
-    markRead: markSubagentRead,
-  } = useSubagentThreads(sessionId);
   const [paletteKind, setPaletteKind] = useState<PaletteKind | null>(null);
   const [paletteQuery, setPaletteQuery] = useState("");
   const [paletteIndex, setPaletteIndex] = useState(0);
@@ -2146,21 +2132,6 @@ export default function ChatView({
           trySubmitComposer();
         }}
       >
-        <SubagentActivityBar
-          key={sessionId ?? "no-session"}
-          rootSessionId={sessionId}
-          roots={subagentRoots}
-          onRefresh={refreshSubagentThreads}
-          onOpenPanel={() => {
-            setSelectedSubagentPath(null);
-            setSubagentsOpen(true);
-          }}
-          onOpenThread={(canonicalPath) => {
-            markSubagentRead(canonicalPath);
-            setSelectedSubagentPath(canonicalPath);
-            setSubagentsOpen(true);
-          }}
-        />
         {modeSwitchPrompt?.to === "agent" && (
           <div
             className="composer-queue composer-mode-switch"
@@ -2799,24 +2770,6 @@ export default function ChatView({
                   : null}
               </div>
 
-              <button
-                type="button"
-                className={`composer-icon-btn ${subagentsOpen ? "is-open" : ""}`}
-                title={t("subagents.open")}
-                aria-label={t("subagents.open")}
-                aria-expanded={subagentsOpen}
-                onClick={() => {
-                  setPlusOpen(false);
-                  setModeMenuOpen(false);
-                  setContextPopoverOpen(false);
-                  setPaletteKind(null);
-                  setSelectedSubagentPath(null);
-                  setSubagentsOpen(true);
-                }}
-              >
-                <Bot size={17} strokeWidth={2} />
-              </button>
-
               <div className="composer-mcp-wrap" ref={plusWrapRef}>
                 <button
                   type="button"
@@ -2977,20 +2930,6 @@ export default function ChatView({
       <ComposerContextPreview
         target={previewTarget}
         onClose={() => setPreviewTarget(null)}
-      />
-      <SubagentsPanel
-        key={sessionId ?? "no-session"}
-        open={subagentsOpen}
-        rootSessionId={sessionId}
-        roots={subagentRoots}
-        threads={subagentThreads}
-        initialTarget={selectedSubagentPath}
-        streamError={subagentError}
-        loading={subagentsLoading}
-        initialized={subagentsInitialized}
-        refreshThreads={refreshSubagentThreads}
-        markRead={markSubagentRead}
-        onClose={() => setSubagentsOpen(false)}
       />
     </section>
     </ChatMediaAttachProvider>

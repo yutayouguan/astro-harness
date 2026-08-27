@@ -20,6 +20,7 @@ type Props = {
   onRefresh: () => Promise<void>;
   onOpenThread: (canonicalPath: string) => void;
   onOpenPanel: () => void;
+  showEmpty?: boolean;
 };
 
 function statusKey(status: AgentThreadStatus): string {
@@ -40,6 +41,7 @@ export default function SubagentActivityBar({
   onRefresh,
   onOpenThread,
   onOpenPanel,
+  showEmpty = false,
 }: Props) {
   const { t } = useI18n();
   const root = rootSessionId?.trim() ?? "";
@@ -62,7 +64,8 @@ export default function SubagentActivityBar({
     return () => rootLifecycle.invalidate(token);
   }, [root, rootLifecycle]);
 
-  if (!root || visible.length === 0) return null;
+  if (!root && !showEmpty) return null;
+  if (visible.length === 0 && !showEmpty) return null;
 
   const stopAll = async () => {
     if (running.length === 0 || stopping) return;
@@ -120,7 +123,7 @@ export default function SubagentActivityBar({
   };
 
   return (
-    <section className="composer-queue subagent-activity" aria-live="polite">
+    <section className="subagent-activity" aria-live="polite">
       <div className="subagent-activity-head">
         <button
           type="button"
@@ -132,9 +135,13 @@ export default function SubagentActivityBar({
           <span className="subagent-activity-copy">
             <strong>{t("subagents.activity.title", { count: String(visible.length) })}</strong>
             <small>
-              {running.length > 0
-                ? t("subagents.activity.running", { count: String(running.length) })
-                : t("subagents.activity.done")}
+              {!root
+                ? t("subagents.noSession")
+                : visible.length === 0
+                  ? t("subagents.empty")
+                  : running.length > 0
+                    ? t("subagents.activity.running", { count: String(running.length) })
+                    : t("subagents.activity.done")}
             </small>
           </span>
           <MorphToggleIcon
@@ -155,7 +162,7 @@ export default function SubagentActivityBar({
           <button type="button" onClick={onOpenPanel}>{t("subagents.activity.openAll")}</button>
         </span>
       </div>
-      {expanded ? (
+      {expanded && visibleRoots.length > 0 ? (
         <div className="subagent-activity-list" role="tree" aria-label={t("subagents.threadList")}>
           {visibleRoots.map((node) => renderNode(node, 0))}
         </div>

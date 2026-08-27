@@ -1,4 +1,4 @@
-// 任务监控面板：子 Agent 活动树、当前 turn 进度、工具调用流、Todo 计划。
+// 任务监控面板：当前 turn 进度、工具调用流、Todo 计划。
 
 import { useMemo } from "react";
 import {

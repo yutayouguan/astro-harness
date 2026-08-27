@@ -1,6 +1,11 @@
 .subagent-activity {
   display: flex;
   flex-direction: column;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--glass-edge) 82%, transparent);
+  border-radius: 15px;
+  background: color-mix(in srgb, var(--glass-panel) 46%, transparent);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, white 34%, transparent);
   color: var(--ink);
 }
 
@@ -123,6 +128,34 @@
   backdrop-filter: blur(calc(30px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.35));
   -webkit-backdrop-filter: blur(calc(30px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.35));
   animation: subagents-panel-in 0.2s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.subagents-panel.is-embedded {
+  width: 100%;
+  height: max(480px, calc(100vh - 182px));
+  min-height: 0;
+  border: 1px solid color-mix(in srgb, var(--glass-edge) 82%, transparent);
+  border-radius: 15px;
+  background: color-mix(in srgb, var(--glass-panel) 44%, transparent);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, white 34%, transparent);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  animation: none;
+}
+
+.subagents-panel.is-embedded .subagents-head {
+  min-height: 54px;
+  padding: 11px 12px;
+}
+
+.subagents-panel.is-embedded .subagents-layout {
+  grid-template-columns: 1fr;
+  grid-template-rows: minmax(112px, 32%) minmax(0, 1fr);
+}
+
+.subagents-panel.is-embedded .subagents-list {
+  border-right: 0;
+  border-bottom: 1px solid var(--glass-edge);
 }
 
 @keyframes subagents-panel-in {
