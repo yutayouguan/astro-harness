@@ -170,7 +170,11 @@ export default function ComposerContextPreview({
                 <span>{t("chat.contextPreviewLoading")}</span>
               ) : (
                 <>
-                  <p>{target.item.description || t("chat.contextPreviewUnavailable")}</p>
+                  <p>
+                    {target.type === "context"
+                      ? target.item.description || t("chat.contextPreviewUnavailable")
+                      : t("chat.contextPreviewUnavailable")}
+                  </p>
                   {target.type === "attachment" && target.item.localPath ? (
                     <code>{target.item.localPath}</code>
                   ) : target.type === "context" ? (

@@ -5,7 +5,7 @@ import {
   removeTriggerText,
   serializeComposerContext,
   type ComposerContextToken,
-} from "./composerContext";
+} from "./composerContext.ts";
 
 const skill: ComposerContextToken = {
   id: "skill-pdf",

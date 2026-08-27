@@ -1991,6 +1991,13 @@ html[data-theme="dark"] .composer-palette-item:hover {
   justify-content: space-between;
 }
 
+.composer-mcp-menu-row .composer-plus-plugin-select {
+  width: auto;
+  min-width: 0;
+  flex: 1;
+  padding: 5px 6px;
+}
+
 .composer-plus-plugin-button .composer-mcp-menu-name {
   flex: 1;
 }
@@ -2348,42 +2355,77 @@ html[data-theme="dark"] .composer-mode-pill--ghost {
 
 .composer-previews {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
-  overflow-x: auto;
-  padding: 0 12px 8px;
-  margin: 0 0 -2px;
+  width: 100%;
+  padding: 0 0 2px;
+  margin: 0;
 }
 
-.composer-preview {
+.composer-preview,
+.composer-context-token {
   position: relative;
   display: flex;
   align-items: center;
-  gap: 8px;
-  min-width: 148px;
-  max-width: 220px;
-  padding: 8px 28px 8px 8px;
-  border-radius: 14px;
+  min-width: 132px;
+  max-width: min(230px, 100%);
+  min-height: 44px;
+  padding: 3px 26px 3px 3px;
+  border-radius: 11px;
   background:
-    linear-gradient(145deg, rgba(255, 255, 255, 0.45), rgba(255, 255, 255, 0.22)),
-    var(--chip-bg);
-  border: 1px solid var(--chip-border);
-  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.05);
+    linear-gradient(145deg, rgba(255, 255, 255, 0.48), rgba(255, 255, 255, 0.18)),
+    color-mix(in srgb, var(--chip-bg) 92%, transparent);
+  border: 1px solid color-mix(in srgb, var(--ink) 12%, var(--chip-border));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.34),
+    0 1px 3px rgba(15, 23, 42, 0.05);
+  overflow: hidden;
+}
+
+.composer-preview-open,
+.composer-context-token-open {
+  min-width: 0;
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 8px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.composer-preview:hover,
+.composer-context-token:hover {
+  border-color: color-mix(in srgb, var(--tone, var(--accent)) 34%, var(--chip-border));
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.58), rgba(255, 255, 255, 0.22)),
+    color-mix(in srgb, var(--tone-soft, var(--chip-bg)) 78%, transparent);
+}
+
+.composer-preview:focus-within,
+.composer-context-token:focus-within {
+  border-color: color-mix(in srgb, var(--tone, var(--accent)) 52%, var(--chip-border));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--tone, var(--accent)) 12%, transparent);
 }
 
 .composer-preview img,
 .composer-preview video {
-  width: 44px;
-  height: 44px;
+  width: 36px;
+  height: 36px;
   object-fit: cover;
-  border-radius: 10px;
+  border-radius: 8px;
   flex-shrink: 0;
   background: color-mix(in srgb, var(--ink) 6%, transparent);
 }
 
 .composer-preview-icon {
-  width: 44px;
-  height: 44px;
-  border-radius: 10px;
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
   display: grid;
   place-items: center;
   flex-shrink: 0;
@@ -2449,6 +2491,215 @@ html[data-theme="dark"] .composer-mode-pill--ghost {
 .composer-preview-remove:hover {
   color: var(--danger);
   background: color-mix(in srgb, var(--danger) 14%, transparent);
+}
+
+.composer-context-token[data-kind="skill"] {
+  --composer-token-tone: var(--tone-purple, #7c3aed);
+}
+
+.composer-context-token[data-kind="mcp"] {
+  --composer-token-tone: var(--tone-green, #059669);
+}
+
+.composer-context-token[data-kind="agent"] {
+  --composer-token-tone: var(--tone-blue, #2563eb);
+}
+
+.composer-context-token-icon {
+  width: 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  flex: none;
+  border: 1px solid color-mix(in srgb, var(--composer-token-tone) 24%, transparent);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--composer-token-tone) 12%, var(--chip-bg));
+  color: var(--composer-token-tone);
+}
+
+.composer-context-token-meta {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.composer-context-token-kind {
+  color: var(--composer-token-tone);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
+.composer-context-token-name {
+  overflow: hidden;
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 620;
+  line-height: 1.3;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.composer-context-preview-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: calc(var(--z-menu) + 20);
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(15, 23, 42, 0.18);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  animation: composer-context-backdrop-in 140ms ease-out;
+}
+
+.composer-context-preview-dialog {
+  width: min(680px, calc(100vw - 32px));
+  max-height: min(72vh, 760px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--glass-edge) 90%, transparent);
+  border-radius: 18px;
+  background:
+    linear-gradient(155deg, rgba(255, 255, 255, 0.28), transparent 44%),
+    color-mix(in srgb, var(--bg2) 96%, transparent);
+  box-shadow:
+    0 16px 44px rgba(15, 23, 42, 0.16),
+    inset 0 1px 0 rgba(255, 255, 255, 0.4);
+  backdrop-filter: blur(20px) saturate(1.12);
+  -webkit-backdrop-filter: blur(20px) saturate(1.12);
+  animation: composer-context-dialog-in 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.composer-context-preview-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border-bottom: 1px solid color-mix(in srgb, var(--ink) 9%, transparent);
+}
+
+.composer-context-preview-icon {
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  flex: none;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--tone-soft, var(--accent)) 32%, transparent);
+  color: var(--tone, var(--accent));
+}
+
+.composer-context-preview-heading {
+  min-width: 0;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.composer-context-preview-heading strong,
+.composer-context-preview-heading small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.composer-context-preview-heading strong {
+  color: var(--ink);
+  font-size: 14px;
+}
+
+.composer-context-preview-heading small {
+  color: var(--ink-mute);
+  font-size: 11px;
+}
+
+.composer-context-preview-close {
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  flex: none;
+  border: 0;
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--ink) 6%, transparent);
+  color: var(--ink-mute);
+  cursor: pointer;
+}
+
+.composer-context-preview-close:hover {
+  background: color-mix(in srgb, var(--ink) 10%, transparent);
+  color: var(--ink);
+}
+
+.composer-context-preview-body {
+  min-height: 150px;
+  overflow: auto;
+  padding: 18px;
+  color: var(--ink);
+}
+
+.composer-context-preview-body > img,
+.composer-context-preview-body > video {
+  display: block;
+  max-width: 100%;
+  max-height: 58vh;
+  margin: auto;
+  border-radius: 12px;
+  object-fit: contain;
+}
+
+.composer-context-preview-body > audio {
+  width: 100%;
+}
+
+.composer-context-preview-body > pre {
+  margin: 0;
+  padding: 14px;
+  overflow: auto;
+  border: 1px solid color-mix(in srgb, var(--ink) 9%, transparent);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--ink) 4%, transparent);
+  font: 12px/1.55 ui-monospace, SFMono-Regular, Menlo, monospace;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.composer-context-preview-summary {
+  display: grid;
+  gap: 10px;
+  color: var(--ink-soft);
+}
+
+.composer-context-preview-summary p {
+  margin: 0;
+}
+
+.composer-context-preview-summary code {
+  overflow-wrap: anywhere;
+  color: var(--ink-mute);
+  font-size: 11px;
+}
+
+@keyframes composer-context-backdrop-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes composer-context-dialog-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
 }
 
 .msg-attachments {
@@ -2528,10 +2779,20 @@ html[data-theme="dark"] .composer-mode-pill--ghost {
   border-color: color-mix(in srgb, currentColor 18%, transparent);
 }
 
-html[data-theme="dark"] .composer-preview {
+html[data-theme="dark"] .composer-preview,
+html[data-theme="dark"] .composer-context-token {
   background:
     linear-gradient(145deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.02)),
     var(--chip-bg);
+}
+
+html[data-theme="dark"] .composer-context-preview-dialog {
+  background:
+    linear-gradient(155deg, rgba(255, 255, 255, 0.08), transparent 44%),
+    color-mix(in srgb, var(--bg2) 97%, transparent);
+  box-shadow:
+    0 18px 48px rgba(0, 0, 0, 0.34),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }
 
 .composer-input {
@@ -4408,6 +4669,8 @@ html[data-theme="dark"] .chat-agent-icon-plus {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .composer-context-preview-backdrop,
+  .composer-context-preview-dialog,
   .chat-welcome-orb,
   .chat-welcome-mark,
   .chat-welcome-mark-glow,
@@ -4434,5 +4697,18 @@ html[data-theme="dark"] .chat-agent-icon-plus {
   .chat-agent-guide-skip:hover,
   .send-btn:hover:not(:disabled) {
     transform: none;
+  }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .composer-context-preview-backdrop {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+
+  .composer-context-preview-dialog {
+    background: var(--bg2);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
   }
 }

@@ -483,6 +483,12 @@ function AttachmentGlyph({ kind }: { kind: ChatAttachmentKind }) {
   return <File size={16} strokeWidth={2} aria-hidden />;
 }
 
+function ComposerContextGlyph({ kind }: { kind: ComposerContextToken["kind"] }) {
+  if (kind === "skill") return <Sparkles size={15} strokeWidth={2} aria-hidden />;
+  if (kind === "mcp") return <McpIcon size={15} />;
+  return <Bot size={15} strokeWidth={2} aria-hidden />;
+}
+
 /** 消息内附件缩略图条 */
 function MessageAttachments({ items }: { items: ChatAttachment[] }) {
   if (!items.length) return null;
@@ -1139,6 +1145,8 @@ export default function ChatView({
       }
       if (action === "new_chat") {
         closePalette();
+        setComposerContexts([]);
+        setPreviewTarget(null);
         onNewChat();
         return;
       }
@@ -1277,7 +1285,7 @@ export default function ChatView({
     }
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
-      if (tryHandleSlashSubmit()) return;
+      if (composerContexts.length === 0 && tryHandleSlashSubmit()) return;
       trySubmitComposer();
     }
   };
@@ -1345,7 +1353,8 @@ export default function ChatView({
   const estimateCostLabel = useMemo(() => {
     const inChars =
       input.length +
-      attachments.reduce((n, a) => n + (a.name?.length ?? 0) + 64, 0);
+      attachments.reduce((n, a) => n + (a.name?.length ?? 0) + 64, 0) +
+      composerContexts.reduce((n, item) => n + item.name.length + 2, 0);
     const outTokens = 1024;
     const usd = estimateTurnCostUsd({
       pricing: modelPricing,
@@ -1364,7 +1373,7 @@ export default function ChatView({
         out: String(outTokens),
       }),
     };
-  }, [attachments, input.length, modelPricing, t]);
+  }, [attachments, composerContexts, input.length, modelPricing, t]);
 
   // 切换模型后丢掉不再支持的附件
   useEffect(() => {
@@ -1714,11 +1723,17 @@ export default function ChatView({
       }
       setAgentCreateMissing([]);
       onSend({ text: serializeComposerContext(composerContexts, prep.sanitized) });
+      onInputChange("");
       setComposerContexts([]);
       setPreviewTarget(null);
       return;
     }
-    onSend({ text: serializeComposerContext(composerContexts, input) });
+    if (composerContexts.length > 0) {
+      onSend({ text: serializeComposerContext(composerContexts, input) });
+      onInputChange("");
+    } else {
+      onSend();
+    }
     setComposerContexts([]);
     setPreviewTarget(null);
   };
@@ -2127,7 +2142,7 @@ export default function ChatView({
         className="composer-shell"
         onSubmit={(e) => {
           e.preventDefault();
-          if (tryHandleSlashSubmit()) return;
+          if (composerContexts.length === 0 && tryHandleSlashSubmit()) return;
           trySubmitComposer();
         }}
       >
@@ -2447,38 +2462,6 @@ export default function ChatView({
           </div>
         )}
 
-        {attachments.length > 0 && (
-          <div className="composer-previews">
-            {attachments.map((att) => (
-              <div key={att.id} className="composer-preview" data-kind={att.kind}>
-                {att.kind === "image" && att.previewUrl ? (
-                  <img src={att.previewUrl} alt={att.name} />
-                ) : att.kind === "video" && att.previewUrl ? (
-                  <video src={att.previewUrl} muted />
-                ) : (
-                  <span className="composer-preview-icon" data-kind={att.kind}>
-                    <AttachmentGlyph kind={att.kind} />
-                  </span>
-                )}
-                <div className="composer-preview-meta">
-                  <span className="composer-preview-name">{att.name}</span>
-                  <span className="composer-preview-size">{formatSize(att.size)}</span>
-                </div>
-                <button
-                  type="button"
-                  className="composer-preview-remove"
-                  onClick={() => removeAttachment(att.id)}
-                  aria-label={t("chat.removeAttachment")}
-                  title={t("chat.removeAttachment")}
-                  disabled={streaming}
-                >
-                  ×
-                </button>
-              </div>
-            ))}
-          </div>
-        )}
-
         {paletteKind ? (
           <ComposerPalette
             kind={paletteKind}
@@ -2508,6 +2491,98 @@ export default function ChatView({
           {fileDragOver ? (
             <div className="composer-drop-hint" aria-live="polite">
               {t("chat.dropFilesHint")}
+            </div>
+          ) : null}
+          {attachments.length > 0 || composerContexts.length > 0 ? (
+            <div
+              className="composer-previews composer-context-strip"
+              aria-label={t("chat.contextStripLabel")}
+            >
+              {attachments.map((att) => (
+                <div key={att.id} className="composer-preview" data-kind={att.kind}>
+                  <button
+                    type="button"
+                    className="composer-preview-open"
+                    onClick={() =>
+                      setPreviewTarget({ type: "attachment", item: att })
+                    }
+                    aria-label={t("chat.previewContext", { name: att.name })}
+                    title={t("chat.previewContext", { name: att.name })}
+                  >
+                    {att.kind === "image" && att.previewUrl ? (
+                      <img src={att.previewUrl} alt="" />
+                    ) : att.kind === "video" && att.previewUrl ? (
+                      <video src={att.previewUrl} muted />
+                    ) : (
+                      <span className="composer-preview-icon" data-kind={att.kind}>
+                        <AttachmentGlyph kind={att.kind} />
+                      </span>
+                    )}
+                    <span className="composer-preview-meta">
+                      <span className="composer-preview-name">{att.name}</span>
+                      <span className="composer-preview-size">
+                        {formatSize(att.size)}
+                      </span>
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    className="composer-preview-remove"
+                    onClick={() => removeAttachment(att.id)}
+                    aria-label={t("chat.removeAttachment")}
+                    title={t("chat.removeAttachment")}
+                    disabled={streaming}
+                  >
+                    ×
+                  </button>
+                </div>
+              ))}
+              {composerContexts.map((token) => {
+                const kindLabel = {
+                  agent: t("chat.contextToken.agent"),
+                  skill: t("chat.contextToken.skill"),
+                  mcp: t("chat.contextToken.mcp"),
+                }[token.kind];
+                return (
+                  <div
+                    key={`${token.kind}:${token.id}`}
+                    className="composer-context-token"
+                    data-kind={token.kind}
+                  >
+                    <button
+                      type="button"
+                      className="composer-context-token-open"
+                      onClick={() =>
+                        setPreviewTarget({ type: "context", item: token })
+                      }
+                      aria-label={t("chat.previewContext", { name: token.name })}
+                      title={t("chat.previewContext", { name: token.name })}
+                    >
+                      <span className="composer-context-token-icon">
+                        <ComposerContextGlyph kind={token.kind} />
+                      </span>
+                      <span className="composer-context-token-meta">
+                        <span className="composer-context-token-kind">
+                          {kindLabel}
+                        </span>
+                        <span className="composer-context-token-name">
+                          {token.name}
+                        </span>
+                      </span>
+                    </button>
+                    <button
+                      type="button"
+                      className="composer-preview-remove"
+                      onClick={() => removeComposerContext(token)}
+                      aria-label={t("chat.removeContext", { name: token.name })}
+                      title={t("chat.removeContext", { name: token.name })}
+                      disabled={streaming}
+                    >
+                      ×
+                    </button>
+                  </div>
+                );
+              })}
             </div>
           ) : null}
           {!composerClarify && emptyMode === "agent" && agentCreateMissing.length > 0 ? (
@@ -2772,7 +2847,21 @@ export default function ChatView({
                   }
                   onAttach={() => fileInputRef.current?.click()}
                   onSelectSkill={(skill) =>
-                    runSlashAction("insert_skill", undefined, skill.name)
+                    addComposerContext({
+                      id: skill.id,
+                      kind: "skill",
+                      name: skill.name,
+                      description: skill.description,
+                      path: skill.path,
+                    })
+                  }
+                  onSelectMcp={(server) =>
+                    addComposerContext({
+                      id: server.id,
+                      kind: "mcp",
+                      name: server.name,
+                      description: server.description,
+                    })
                   }
                   onClose={() => setPlusOpen(false)}
                   onOpenSettings={() => onOpenMcpSettings?.()}
@@ -2885,6 +2974,10 @@ export default function ChatView({
           </div>
         </div>
       </form>
+      <ComposerContextPreview
+        target={previewTarget}
+        onClose={() => setPreviewTarget(null)}
+      />
       <SubagentsPanel
         key={sessionId ?? "no-session"}
         open={subagentsOpen}
