@@ -12,21 +12,45 @@
   --tone-blue: var(--tone);
   --tone-blue-soft: var(--tone-soft);
   position: relative;
-  flex: 0 0 min(var(--project-files-width, 264px), 42%);
-  width: min(var(--project-files-width, 264px), 42%);
+  flex: 0 0 0;
+  width: 0;
   min-width: 0;
   min-height: 0;
-  margin: var(--chat-dock-inset);
+  margin: var(--chat-dock-inset) 0;
   display: flex;
   flex-direction: column;
   isolation: isolate;
   border: var(--chat-dock-surface-border);
+  border-width: 0;
   border-radius: var(--chat-dock-radius);
   background: var(--chat-dock-surface-background);
   box-shadow: var(--chat-dock-surface-shadow);
   overflow: hidden;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transform: translateX(18px) scale(0.985);
   transform-origin: right center;
-  animation: project-files-panel-enter 220ms cubic-bezier(0.23, 1, 0.32, 1) both;
+  transition:
+    flex-basis 300ms cubic-bezier(0.22, 1, 0.36, 1),
+    width 300ms cubic-bezier(0.22, 1, 0.36, 1),
+    margin 300ms cubic-bezier(0.22, 1, 0.36, 1),
+    border-width 300ms cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 180ms ease,
+    transform 300ms cubic-bezier(0.22, 1, 0.36, 1),
+    visibility 0s linear 300ms;
+}
+
+.project-files-panel.is-open {
+  flex-basis: min(var(--project-files-width, 264px), 42%);
+  width: min(var(--project-files-width, 264px), 42%);
+  margin: var(--chat-dock-inset);
+  border-width: 1px;
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  transform: translateX(0) scale(1);
+  transition-delay: 0s;
 }
 
 .project-files-resizer {
@@ -479,10 +503,15 @@
     top: 0;
     right: 0;
     bottom: 0;
-    margin: var(--chat-dock-inset);
-    width: min(var(--project-files-width, 264px), calc(100% - 24px));
+    margin: var(--chat-dock-inset) 0;
+    width: 0;
     max-width: calc(100% - 24px);
     box-shadow: var(--chat-dock-surface-shadow);
+  }
+
+  .project-files-panel.is-open {
+    margin: var(--chat-dock-inset);
+    width: min(var(--project-files-width, 264px), calc(100% - 24px));
   }
 
   .chat-pane.has-project-file .composer-shell {
@@ -494,7 +523,8 @@
 
 @media (prefers-reduced-motion: reduce) {
   .project-files-panel {
-    animation: none;
+    transform: none;
+    transition: none;
   }
 
   .project-files-resizer::after {
@@ -504,18 +534,6 @@
   .project-file-loading,
   .project-file-spin {
     animation: none;
-  }
-}
-
-@keyframes project-files-panel-enter {
-  from {
-    opacity: 0;
-    transform: translateX(16px);
-  }
-
-  to {
-    opacity: 1;
-    transform: translateX(0);
   }
 }
 

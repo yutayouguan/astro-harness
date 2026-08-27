@@ -1628,12 +1628,11 @@ export default function App() {
                       }
                     />
                   </div>
-                  {activeChatRightDock === "project-files" ? (
-                    <ProjectFilesPanel
-                      workbench={projectFiles}
-                      onWidthChange={setProjectFilesWidth}
-                    />
-                  ) : null}
+                  <ProjectFilesPanel
+                    open={activeChatRightDock === "project-files"}
+                    workbench={projectFiles}
+                    onWidthChange={setProjectFilesWidth}
+                  />
                   {activeChatRightDock === "side-chat" && sideSessionId && activeProvider && (
                     <SideChatPanel
                       sessionId={sideSessionId}

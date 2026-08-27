@@ -67,28 +67,6 @@ function HeaderActions({
 }
 
 function DockPanel({ kind }: { kind: DockKind }) {
-  if (kind === "files") {
-    return (
-      <aside className="project-files-panel">
-        <header className="project-files-header">
-          <span className="project-files-heading">
-            <FolderTree size={16} />
-            <strong>大模型八股文</strong>
-          </span>
-          <span className="project-files-actions">
-            <button type="button" aria-label="刷新">
-              <RotateCw size={15} />
-            </button>
-            <button type="button" aria-label="关闭">
-              <X size={15} />
-            </button>
-          </span>
-        </header>
-        <div className="project-files-search">筛选文件…</div>
-      </aside>
-    );
-  }
-
   if (kind === "side") {
     return (
       <aside className="side-chat-panel">
@@ -121,6 +99,28 @@ function DockPanel({ kind }: { kind: DockKind }) {
           <X size={14} />
         </button>
       </div>
+    </aside>
+  );
+}
+
+function ProjectFilesDockPreview({ open }: { open: boolean }) {
+  return (
+    <aside className={`project-files-panel${open ? " is-open" : ""}`}>
+      <header className="project-files-header">
+        <span className="project-files-heading">
+          <FolderTree size={16} />
+          <strong>大模型八股文</strong>
+        </span>
+        <span className="project-files-actions">
+          <button type="button" aria-label="刷新">
+            <RotateCw size={15} />
+          </button>
+          <button type="button" aria-label="关闭">
+            <X size={15} />
+          </button>
+        </span>
+      </header>
+      <div className="project-files-search">筛选文件…</div>
     </aside>
   );
 }
@@ -171,7 +171,8 @@ function ChatDockLayout({
                 </p>
               </div>
             </div>
-            {kind && <DockPanel kind={kind} />}
+            <ProjectFilesDockPreview open={kind === "files"} />
+            {kind && kind !== "files" ? <DockPanel kind={kind} /> : null}
           </div>
         </div>
       </section>

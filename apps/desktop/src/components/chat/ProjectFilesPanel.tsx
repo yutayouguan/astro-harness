@@ -128,9 +128,11 @@ function TreeRow({ entry, level, workbench, query, onContextMenu }: TreeRowProps
 }
 
 export default function ProjectFilesPanel({
+  open,
   workbench,
   onWidthChange,
 }: {
+  open: boolean;
   workbench: ProjectFileWorkbench;
   onWidthChange?: (width: number) => void;
 }) {
@@ -319,9 +321,11 @@ export default function ProjectFilesPanel({
 
   return (
     <aside
-      className="project-files-panel"
+      className={`project-files-panel${open ? " is-open" : ""}`}
       style={{ "--project-files-width": `${width}px` } as CSSProperties}
       aria-label="项目文件"
+      aria-hidden={!open}
+      data-state={open ? "open" : "closed"}
     >
       <button
         type="button"

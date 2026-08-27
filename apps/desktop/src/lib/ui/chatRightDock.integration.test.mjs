@@ -4,9 +4,13 @@ import test from "node:test";
 
 const appSource = await readFile(new URL("../../App.tsx", import.meta.url), "utf8");
 
-test("chat shell renders only the resolved right-dock surface", () => {
+test("chat shell keeps the project files surface mounted for reversible motion", () => {
   assert.match(appSource, /const activeChatRightDock = resolveChatRightDock/);
-  assert.match(appSource, /activeChatRightDock === "project-files" \? \(/);
+  assert.match(
+    appSource,
+    /<ProjectFilesPanel\s+open=\{activeChatRightDock === "project-files"\}/,
+  );
+  assert.doesNotMatch(appSource, /activeChatRightDock === "project-files" \? \(/);
   assert.match(appSource, /activeChatRightDock === "side-chat" && sideSessionId/);
   assert.match(appSource, /activeChatRightDock === "inspector" && \(/);
   assert.doesNotMatch(appSource, /const chatHeaderRightOffset\s*=\s*\([^;]+\)\s*\+/);

@@ -61,6 +61,7 @@ test("right-side chat surfaces share one inset container material", () => {
   const layoutBase = rule(rightPanelStyles, ".chat-layout-with-right");
   const runtimePanel = rule(rightPanelStyles, ".chat-right-panel");
   const projectPanel = rule(projectFilesStyles, ".project-files-panel");
+  const openProjectPanel = rule(projectFilesStyles, ".project-files-panel.is-open");
   const projectWorkbench = rule(projectFilesStyles, ".project-file-workbench");
   const sidePanel = rule(sideChatStyles, ".side-chat-panel");
 
@@ -78,6 +79,7 @@ test("right-side chat surfaces share one inset container material", () => {
   assert.match(runtimePanel, /backdrop-filter:\s*blur\(calc\(24px \* var\(--glass-blur-scale, 1\)\)\)/);
   assert.match(runtimePanel, /-webkit-backdrop-filter:\s*blur\(calc\(24px \* var\(--glass-blur-scale, 1\)\)\)/);
   assert.ok(projectPanel, "missing project files panel rule");
+  assert.ok(openProjectPanel, "missing open project files panel rule");
   assert.ok(projectWorkbench, "missing project file workbench rule");
   assert.ok(sidePanel, "missing side chat panel rule");
 
@@ -87,8 +89,26 @@ test("right-side chat surfaces share one inset container material", () => {
     assert.match(panel, /background:\s*var\(--chat-dock-surface-background\);/);
     assert.match(panel, /box-shadow:\s*var\(--chat-dock-surface-shadow\);/);
   }
-  assert.match(projectPanel, /margin:\s*var\(--chat-dock-inset\);/);
+  assert.match(openProjectPanel, /margin:\s*var\(--chat-dock-inset\);/);
   assert.match(sidePanel, /margin:\s*var\(--chat-dock-inset\);/);
+});
+
+test("project files dock animates layout in both directions", () => {
+  const panel = rule(projectFilesStyles, ".project-files-panel");
+  const openPanel = rule(projectFilesStyles, ".project-files-panel.is-open");
+
+  assert.ok(panel, "missing collapsed project files panel rule");
+  assert.match(panel, /flex:\s*0 0 0;/);
+  assert.match(panel, /width:\s*0;/);
+  assert.match(panel, /border-width:\s*0;/);
+  assert.match(panel, /visibility:\s*hidden;/);
+  assert.match(panel, /transition:[\s\S]*flex-basis 300ms[\s\S]*width 300ms[\s\S]*transform 300ms/);
+
+  assert.ok(openPanel, "missing expanded project files panel rule");
+  assert.match(openPanel, /flex-basis:\s*min\(var\(--project-files-width, 264px\), 42%\);/);
+  assert.match(openPanel, /border-width:\s*1px;/);
+  assert.match(openPanel, /visibility:\s*visible;/);
+  assert.match(openPanel, /pointer-events:\s*auto;/);
 });
 
 test("composer floats above a full-height conversation viewport", () => {
