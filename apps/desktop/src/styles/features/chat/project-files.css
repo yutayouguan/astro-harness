@@ -456,20 +456,13 @@ html[data-theme="dark"] .project-files-panel {
     color-mix(in srgb, var(--tone-soft) 17%, rgba(8, 6, 18, 0.76));
 }
 
-/* 文件打开时，输入框成为编辑器上的悬浮控制台，保持聊天随时可用。 */
+/* 文件打开时收窄悬浮输入框，使它与编辑器正文列对齐。 */
 .chat-pane.has-project-file {
   position: relative;
 }
 
 .chat-pane.has-project-file .composer-shell {
-  position: absolute;
-  z-index: 8;
-  right: 24px;
-  bottom: 14px;
-  left: 24px;
-  width: auto;
   max-width: 760px;
-  margin: 0 auto;
 }
 
 /* 阴影必须落在 .composer 上：父级 filter 会成为 backdrop root，令毛玻璃失效。 */

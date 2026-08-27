@@ -13,7 +13,8 @@
   overflow-x: hidden;
   overflow-y: scroll;
   /* 左侧给问答回合导航留白，右侧只保留常规阅读边距。 */
-  padding: 20px 20px 12px 64px;
+  padding: 20px 20px calc(var(--composer-overlay-height, 112px) + 28px) 64px;
+  scroll-padding-block-end: calc(var(--composer-overlay-height, 112px) + 28px);
   display: flex;
   flex-direction: column;
   gap: 16px;

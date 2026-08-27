@@ -664,8 +664,10 @@ export default function ChatView({
   const { showToast, toastHost } = useTransientToast();
   const confirm = useConfirm();
   const dissolvingSet = useMemo(() => new Set(dissolvingIds), [dissolvingIds]);
+  const chatPaneRef = useRef<HTMLElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const messageListRef = useRef<HTMLDivElement>(null);
+  const composerShellRef = useRef<HTMLFormElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const typedHintRef = useRef<HTMLSpanElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -712,6 +714,33 @@ export default function ChatView({
     contextPopoverOpen ||
     contextUsage?.recommendCompact === true ||
     (contextUsagePercent ?? 0) >= 70;
+
+  useEffect(() => {
+    const pane = chatPaneRef.current;
+    const composer = composerShellRef.current;
+    if (!pane || !composer) return;
+
+    const syncComposerOverlayHeight = () => {
+      pane.style.setProperty(
+        "--composer-overlay-height",
+        `${Math.ceil(composer.getBoundingClientRect().height)}px`,
+      );
+    };
+
+    syncComposerOverlayHeight();
+    const observer =
+      typeof ResizeObserver === "undefined"
+        ? null
+        : new ResizeObserver(syncComposerOverlayHeight);
+    observer?.observe(composer);
+    window.addEventListener("resize", syncComposerOverlayHeight);
+
+    return () => {
+      observer?.disconnect();
+      window.removeEventListener("resize", syncComposerOverlayHeight);
+      pane.style.removeProperty("--composer-overlay-height");
+    };
+  }, []);
 
   const loadMentionSources = useCallback(async () => {
     try {
@@ -1720,6 +1749,7 @@ export default function ChatView({
   return (
     <ChatMediaAttachProvider value={mediaAttachApi}>
     <section
+      ref={chatPaneRef}
       className={`chat-pane ${workspaceContent ? "has-project-file" : ""} ${
         fileDragOver ? "is-file-dragover" : ""
       }`.trim()}
@@ -2081,6 +2111,7 @@ export default function ChatView({
       <TodoProgress messages={messages} />
 
       <form
+        ref={composerShellRef}
         className="composer-shell"
         onSubmit={(e) => {
           e.preventDefault();

@@ -16,6 +16,7 @@
    压低后让正文更早开始。标题区不含交互元素（「⋯」菜单自带 z-index 51），
    所以压进 --titlebar-h 52px 的拖拽区里不影响点击。 */
 .content-header--chat {
+  position: relative;
   gap: 12px;
   padding-top: 16px;
   padding-bottom: 10px;
@@ -60,7 +61,9 @@
 }
 
 .content-header--chat .header-actions {
-  flex: 0 0 auto;
+  position: absolute;
+  top: 16px;
+  right: 28px;
   flex-wrap: nowrap;
 }
 
@@ -1236,8 +1239,10 @@ html[data-theme="dark"] .mem-glass-btn.is-primary {
 }
 
 .chat-pane {
+  --composer-overlay-height: 112px;
   flex: 1;
   min-height: 0;
+  position: relative;
   display: flex;
   flex-direction: column;
   border-radius: 28px;

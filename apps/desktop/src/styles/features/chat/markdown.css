@@ -1200,12 +1200,16 @@ html[data-theme="dark"] .composer-thinking-btn.is-open {
 }
 
 .composer-shell {
-  position: relative;
+  position: absolute;
+  z-index: 12;
+  right: 24px;
+  bottom: 14px;
+  left: 24px;
   display: flex;
   flex-direction: column;
   gap: 0;
   /* 与消息列同宽（.msg-row 860px + 两侧 12px 外边距），避免宽屏下输入区空旷 */
-  width: 100%;
+  width: auto;
   max-width: 884px;
   margin: 0 auto;
   padding: 0;
@@ -2413,7 +2417,7 @@ html[data-theme="light"] .composer--stacked .send-btn:not(.send-btn--stop) {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 20px 20px;
+  padding: 20px 20px calc(var(--composer-overlay-height, 112px) + 24px);
   gap: 12px;
   overflow: auto;
   overscroll-behavior: contain;
