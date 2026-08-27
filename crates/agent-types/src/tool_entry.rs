@@ -112,18 +112,36 @@ pub enum ToolExposure {
     Deferred,
     /// Completely hidden from LLM and tool_search. Internal use only.
     Hidden,
+    /// Deferred but only surfaced to the model, not the user.
+    DeferredModelOnly,
+    /// Direct but only surfaced to the model, not the user.
+    DirectModelOnly,
+    /// Only available in code mode.
+    CodeModeOnly,
 }
 
 impl ToolExposure {
     pub fn is_direct(&self) -> bool {
-        *self == Self::Direct
+        matches!(self, Self::Direct | Self::DirectModelOnly)
     }
     pub fn is_deferred(&self) -> bool {
-        *self == Self::Deferred
+        matches!(self, Self::Deferred | Self::DeferredModelOnly)
     }
     pub fn is_hidden(&self) -> bool {
-        *self == Self::Hidden
+        matches!(self, Self::Hidden | Self::CodeModeOnly)
     }
+}
+
+/// Format descriptor for freeform (non-JSON) tools like apply_patch.
+/// The model outputs raw text matching the grammar instead of JSON arguments.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FreeformToolFormat {
+    /// Format type, e.g. "grammar".
+    pub r#type: String,
+    /// Grammar syntax, e.g. "lark".
+    pub syntax: String,
+    /// Grammar definition string.
+    pub definition: String,
 }
 
 /// MCP 工具审批模式，对齐 Codex `approval_mode` 配置。
@@ -249,6 +267,8 @@ pub struct ToolEntry {
     /// Tool namespace for grouping (e.g., "shell", "media", "system", "mcp").
     /// Default empty string means the default namespace.
     pub namespace: String,
+    /// Optional freeform format descriptor for non-JSON tools (e.g. apply_patch grammar).
+    pub freeform_format: Option<FreeformToolFormat>,
 }
 
 impl ToolEntry {
@@ -268,6 +288,7 @@ impl ToolEntry {
             approval_requirement: ExecApprovalRequirement::Skip,
             exposure: ToolExposure::Direct,
             namespace: String::new(),
+            freeform_format: None,
         }
     }
 

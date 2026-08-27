@@ -67,8 +67,8 @@ pub use text::{truncate_chars, truncate_tool_result, truncate_utf8, MAX_TOOL_RES
 pub use thread_memory_mode::ThreadMemoryMode;
 pub use tool_call::{ParsedToolCall, ToolCallAccumulator, ToolCallDelta};
 pub use tool_entry::{
-    ExecApprovalRequirement, McpToolAnnotations, McpToolApproval, McpToolApprovalMode,
-    McpToolApprovalRoute, NamespacedToolDef, SandboxablePreference, ToolEntry, ToolExposure,
-    ToolName, ToolSpec,
+    ExecApprovalRequirement, FreeformToolFormat, McpToolAnnotations, McpToolApproval,
+    McpToolApprovalMode, McpToolApprovalRoute, NamespacedToolDef, SandboxablePreference, ToolEntry,
+    ToolExposure, ToolName, ToolSpec,
 };
 pub use tool_output::ToolOutput;

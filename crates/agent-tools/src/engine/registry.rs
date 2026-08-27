@@ -281,8 +281,14 @@ impl ToolRegistry {
     /// 始终可调用；此方法仅控制是否向 LLM 暴露 schema。
     pub fn activate_deferred(&mut self, name: &str) {
         if let Some(entry) = self.tools.get_mut(name) {
-            if entry.exposure == types::ToolExposure::Deferred {
-                entry.exposure = types::ToolExposure::Direct;
+            match entry.exposure {
+                types::ToolExposure::Deferred => {
+                    entry.exposure = types::ToolExposure::Direct;
+                }
+                types::ToolExposure::DeferredModelOnly => {
+                    entry.exposure = types::ToolExposure::DirectModelOnly;
+                }
+                _ => {}
             }
         }
     }
