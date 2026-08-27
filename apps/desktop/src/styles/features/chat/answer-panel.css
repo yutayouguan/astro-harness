@@ -1,13 +1,13 @@
 /* AI 回答面板：在不改变消息结构的前提下，收敛长文阅读面与嵌套工具层级。 */
 .bubble.assistant {
-  --answer-radius: 28px;
+  --answer-radius: 16px;
   --answer-inset-radius: 13px;
   position: relative;
   isolation: isolate;
   overflow: clip;
   padding: 18px 20px 16px;
   border-radius: var(--answer-radius);
-  border: 1px solid var(--glass-edge);
+  border: 0.5px solid var(--glass-edge);
   background: var(--glass-layer, var(--glass-panel));
   box-shadow: var(--shadow-card), var(--glass-rim);
   backdrop-filter: var(--backdrop-glass);
@@ -274,7 +274,7 @@ html[data-theme] .bubble.assistant .msg-activity-detail {
 
   .bubble.assistant {
     padding: 13px 13px 12px;
-    border-radius: 20px;
+    border-radius: 14px;
   }
 
   .bubble.assistant .msg-timeline-step {
