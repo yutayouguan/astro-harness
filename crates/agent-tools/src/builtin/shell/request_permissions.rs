@@ -51,7 +51,7 @@ pub struct RequestPermissionsArgs {
 pub fn register(registry: &mut ToolRegistry) {
     registry.register(ToolEntry {
         name: "request_permissions".to_string(),
-        toolset: "shell".to_string(),
+        toolset: "exec_command".to_string(),
         description:
             "Request additional filesystem or network permissions from the user. Granted permissions apply to later commands in the current session."
                 .to_string(),

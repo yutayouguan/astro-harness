@@ -17,6 +17,7 @@ use crate::{
 pub const KNOWN_TOOLSET_IDS: &[&str] = &[
     "web_search",
     "exec_command",
+    "apply_patch",
     "code_exec",
     "image_analyze",
     "robotics",
@@ -193,7 +194,8 @@ pub fn tool_name_to_toolset(name: &str) -> &str {
         "image_gen" => "image_gen",
         "video_gen" => "video_gen",
         "video_analyze" | "video_understand" => "video_analyze",
-        "exec_command" => "exec_command",
+        "exec_command" | "write_stdin" | "request_permissions" => "exec_command",
+        "apply_patch" => "apply_patch",
         "web_search" | "web_fetch" | "web_extract" | "http_fetch" => "web_search",
         "code_exec" => "code_exec",
         "image_analyze" | "image_understand" => "image_analyze",

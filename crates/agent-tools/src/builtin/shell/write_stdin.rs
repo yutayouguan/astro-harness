@@ -36,7 +36,7 @@ pub struct WriteStdinArgs {
 pub fn register(registry: &mut ToolRegistry) {
     registry.register(ToolEntry {
         name: "write_stdin".to_string(),
-        toolset: "shell".to_string(),
+        toolset: "exec_command".to_string(),
         description:
             "Writes characters to an existing exec_command session and returns recent output. Use empty chars to poll."
                 .to_string(),

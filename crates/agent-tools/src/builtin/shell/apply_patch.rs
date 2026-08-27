@@ -676,7 +676,7 @@ fn format_summary(affected: &AffectedPaths) -> String {
 pub fn register(registry: &mut ToolRegistry) {
     registry.register(ToolEntry {
         name: "apply_patch".to_string(),
-        toolset: "file_ops".to_string(),
+        toolset: "apply_patch".to_string(),
         description: "Apply a freeform patch to add, delete, or update files. \
             This is a FREEFORM tool — the model outputs raw patch text following \
             the Lark grammar, not JSON."

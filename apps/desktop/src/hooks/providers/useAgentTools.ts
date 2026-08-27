@@ -31,6 +31,7 @@ const IS_TAURI =
 export type AgentToolId =
   | "web_search"
   | "exec_command"
+  | "apply_patch"
   | "code_exec"
   | "image_analyze"
   | "robotics"
@@ -135,6 +136,14 @@ export const AGENT_TOOLS: AgentToolDef[] = [
       { name: "id", type: "string", optional: true },
       { name: "offset", type: "number", optional: true },
     ],
+  },
+  {
+    id: "apply_patch",
+    titleKey: "agentTools.applyPatch.title",
+    descKey: "agentTools.applyPatch.desc",
+    Icon: IconTerminal,
+    tone: "green",
+    params: [{ name: "patch", type: "string" }],
   },
   {
     id: "code_exec",
