@@ -91,6 +91,8 @@ pub enum StreamChunk {
         index: u32,
         id: String,
         name: String,
+        /// Provider-owned opaque signature required for exact stateless replay.
+        signature: Option<String>,
     },
     /// 工具调用参数增量。
     ToolCallDelta { index: u32, arguments: String },

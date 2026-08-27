@@ -36,15 +36,18 @@ impl StreamedAssistantContent {
             StreamChunk::Text(t) => Some(Self::Text(t)),
             StreamChunk::Thinking(t) => Some(Self::Reasoning(t)),
             StreamChunk::ThoughtSignature(s) => Some(Self::ThoughtSignature(s)),
-            StreamChunk::ToolCallStart { index, id, name } => {
-                Some(Self::ToolCallDelta(ToolCallDelta {
-                    index,
-                    id: Some(id),
-                    name: Some(name),
-                    arguments: None,
-                    signature: None,
-                }))
-            }
+            StreamChunk::ToolCallStart {
+                index,
+                id,
+                name,
+                signature,
+            } => Some(Self::ToolCallDelta(ToolCallDelta {
+                index,
+                id: Some(id),
+                name: Some(name),
+                arguments: None,
+                signature,
+            })),
             StreamChunk::ToolCallDelta { index, arguments } => {
                 Some(Self::ToolCallDelta(ToolCallDelta {
                     index,
@@ -89,4 +92,29 @@ pub(crate) fn map_new_provider_stream(
             Err(err) => Some(Err(err)),
         }
     }))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn native_tool_start_preserves_provider_signature() {
+        let item = StreamedAssistantContent::from_stream_chunk(StreamChunk::ToolCallStart {
+            index: 1,
+            id: "fc_1".into(),
+            name: "terminal".into(),
+            signature: Some("sig_abc".into()),
+        });
+        assert!(matches!(
+            item,
+            Some(StreamedAssistantContent::ToolCallDelta(ToolCallDelta {
+                index: 1,
+                id: Some(id),
+                name: Some(name),
+                signature: Some(signature),
+                ..
+            })) if id == "fc_1" && name == "terminal" && signature == "sig_abc"
+        ));
+    }
 }

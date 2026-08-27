@@ -1659,6 +1659,7 @@ mod tests {
                             index: 0,
                             id: "list-agents-call".into(),
                             name: "list_agents".into(),
+                            signature: None,
                         }),
                         Ok(StreamChunk::ToolCallDelta {
                             index: 0,

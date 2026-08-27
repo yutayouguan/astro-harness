@@ -347,6 +347,7 @@ fn extract_native_chunks(data: &str) -> Vec<crate::types::StreamChunk> {
                         index: tool_index,
                         id: format!("call_{name}_{tool_index}"),
                         name,
+                        signature: None,
                     });
                     chunks.push(StreamChunk::ToolCallDelta {
                         index: tool_index,

@@ -342,6 +342,7 @@ fn extract_anthropic_delta(data: &str) -> Option<crate::types::StreamChunk> {
                         .and_then(|s| s.as_str())
                         .unwrap_or("")
                         .to_string(),
+                    signature: None,
                 }),
                 "thinking" => {
                     let sig = block

@@ -279,6 +279,7 @@ async fn scripted_tool_turn_emits_item_lifecycle_and_one_terminal() {
                 index: 0,
                 id: "call-1".into(),
                 name: "terminal".into(),
+                signature: None,
             },
             StreamChunk::ToolCallDelta {
                 index: 0,
@@ -415,6 +416,7 @@ async fn async_user_message_is_a_durable_item_separate_from_the_final_answer() {
                 index: 0,
                 id: "call-async".into(),
                 name: "send_user_message_async".into(),
+                signature: None,
             },
             StreamChunk::ToolCallDelta {
                 index: 0,
@@ -559,6 +561,7 @@ async fn tool_argument_events_keep_stable_ids_across_late_start_and_rounds() {
                 index: 0,
                 id: "provider-call-1".into(),
                 name: "terminal".into(),
+                signature: None,
             },
             StreamChunk::Done {
                 finish_reason: "tool_calls".into(),
@@ -573,6 +576,7 @@ async fn tool_argument_events_keep_stable_ids_across_late_start_and_rounds() {
                 index: 0,
                 id: "provider-call-2".into(),
                 name: "terminal".into(),
+                signature: None,
             },
             StreamChunk::Done {
                 finish_reason: "tool_calls".into(),
@@ -812,6 +816,7 @@ async fn media_tool_result_survives_rollout_and_legacy_adapter() {
                 index: 0,
                 id: "media-call".into(),
                 name: "test_media".into(),
+                signature: None,
             },
             StreamChunk::ToolCallDelta {
                 index: 0,
@@ -971,6 +976,7 @@ async fn oversized_inline_media_is_bounded_only_in_completed_event_copy() {
                 index: 0,
                 id: "large-media-call".into(),
                 name: "test_large_media".into(),
+                signature: None,
             },
             StreamChunk::ToolCallDelta {
                 index: 0,
@@ -1385,6 +1391,7 @@ async fn multi_turn_emits_text_tool_result_and_usage() {
                 index: 0,
                 id: "call_1".into(),
                 name: "echo".into(),
+                signature: None,
             },
             StreamChunk::ToolCallDelta {
                 index: 0,
@@ -1503,6 +1510,7 @@ async fn multi_turn_tool_exec_works_on_current_thread_runtime() {
                 index: 0,
                 id: "call_current_thread".into(),
                 name: "echo".into(),
+                signature: None,
             },
             StreamChunk::ToolCallDelta {
                 index: 0,
@@ -1635,6 +1643,7 @@ async fn multi_turn_persists_reasoning_and_tool_activities() {
                 index: 0,
                 id: "call_persist".into(),
                 name: "echo".into(),
+                signature: None,
             },
             StreamChunk::ToolCallDelta {
                 index: 0,
@@ -1900,6 +1909,7 @@ async fn pre_verify_keep_going_retries_capped_at_two() {
                 index: 0,
                 id: "call_write".into(),
                 name: "file_ops".into(),
+                signature: None,
             },
             StreamChunk::ToolCallDelta {
                 index: 0,
@@ -2225,6 +2235,7 @@ async fn tool_call_delta_and_memory_path() {
                 index: 0,
                 id: "c1".into(),
                 name: "memory".into(),
+                signature: None,
             },
             StreamChunk::ToolCallDelta {
                 index: 0,
@@ -2312,6 +2323,7 @@ async fn hitl_waiting_parks_then_continues_same_run() {
                 index: 0,
                 id: "call_confirm".into(),
                 name: "ask_user".into(),
+                signature: None,
             },
             StreamChunk::ToolCallDelta {
                 index: 0,
@@ -2458,6 +2470,7 @@ async fn approval_hooks_fire_pre_then_post_on_allow() {
                 index: 0,
                 id: "call_term_allow".into(),
                 name: "terminal".into(),
+                signature: None,
             },
             StreamChunk::ToolCallDelta {
                 index: 0,
@@ -2627,6 +2640,7 @@ async fn approval_hooks_fire_pre_then_post_on_deny() {
                 index: 0,
                 id: "call_term_deny".into(),
                 name: "terminal".into(),
+                signature: None,
             },
             StreamChunk::ToolCallDelta {
                 index: 0,
@@ -2764,6 +2778,7 @@ async fn multi_turn_budget_exhausted_forces_toolless_summary() {
                 index: 0,
                 id: "call_b".into(),
                 name: "echo".into(),
+                signature: None,
             },
             StreamChunk::ToolCallDelta {
                 index: 0,

@@ -345,6 +345,7 @@ impl RunTurnArgs {
     pub(crate) fn with_prompt(&self, prompt: crate::prompt::PromptContract) -> Self {
         Self {
             prompt: Some(prompt),
+            system_prompt: None,
             ..self.clone()
         }
     }

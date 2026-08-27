@@ -132,6 +132,7 @@ fn parse_tool_deltas(choice: &Value, chunks: &mut Vec<StreamChunk>) {
             index,
             id,
             name: name.unwrap_or_default(),
+            signature: None,
         });
         // MiniMax：id 和 arguments 在同一对象，不能丢 arguments
         if let Some(args) = arguments {

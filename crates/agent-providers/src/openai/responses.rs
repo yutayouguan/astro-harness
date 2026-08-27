@@ -210,7 +210,12 @@ pub fn extract_responses_chunks(data: &str) -> Vec<StreamChunk> {
                         .unwrap_or("")
                         .to_string();
                     let index = v.get("output_index").and_then(|i| i.as_u64()).unwrap_or(0) as u32;
-                    one!(StreamChunk::ToolCallStart { index, id, name });
+                    one!(StreamChunk::ToolCallStart {
+                        index,
+                        id,
+                        name,
+                        signature: None,
+                    });
                 }
             }
         }
@@ -429,7 +434,7 @@ mod tests {
         let chunks = extract_responses_chunks(data);
         assert_eq!(chunks.len(), 1);
         assert!(
-            matches!(&chunks[0], StreamChunk::ToolCallStart { index: 0, ref id, ref name } if id == "call_1" && name == "search")
+            matches!(&chunks[0], StreamChunk::ToolCallStart { index: 0, ref id, ref name, .. } if id == "call_1" && name == "search")
         );
     }
 

@@ -267,6 +267,7 @@ mod tests {
                                 index: 0,
                                 id: "ask-1".into(),
                                 name: "ask_user".into(),
+                                signature: None,
                             },
                             StreamChunk::ToolCallDelta {
                                 index: 0,
