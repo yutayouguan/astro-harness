@@ -235,12 +235,12 @@ async fn system_prompt_includes_interaction_mode_guidance() {
         plan_prompt.contains("Interaction mode: Plan") && plan_prompt.contains("交互模式：Plan"),
         "Plan guidance missing from system prompt:\n{plan_prompt}"
     );
-    // mode 应出现在 TOOL_GUIDANCE 之前（预算截断时优先保留）
+    // 固定工具规则属于稳定基础指令；动态 mode 保持 developer 角色。
     let mode_pos = plan_prompt.find("Interaction mode: Plan").expect("mode");
     let tool_pos = plan_prompt.find("# 工具使用").expect("tool guidance");
     assert!(
-        mode_pos < tool_pos,
-        "mode guidance should precede TOOL_GUIDANCE"
+        tool_pos < mode_pos,
+        "TOOL_GUIDANCE should stay in stable base instructions"
     );
 
     agent
@@ -282,7 +282,8 @@ async fn prompt_contract_separates_base_developer_and_user_context() {
         prompt.context[0].role(),
         providers::types::message::Role::Developer
     );
-    assert!(prompt.context[0].text_content().contains("# 工具使用"));
+    assert!(prompt.base_instructions.contains("# 工具使用"));
+    assert!(!prompt.context[0].text_content().contains("# 工具使用"));
     assert_eq!(
         prompt.context[1].role(),
         providers::types::message::Role::User

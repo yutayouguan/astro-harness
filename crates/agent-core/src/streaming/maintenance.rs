@@ -72,20 +72,25 @@ pub(super) async fn pre_llm_maintenance(
 pub(super) async fn emit_context_usage(
     session: &Arc<AgentLoop>,
     turn_context: &TurnContext,
+    prompt: &crate::prompt::PromptContract,
     history: &[types::message::Message],
     tools: &[serde_json::Value],
 ) {
     let agent = session.as_ref();
-    let layers = agent.system_prompt_layer_breakdown().await;
+    let layers = AgentLoop::prompt_contract_layer_breakdown(prompt);
     let recommend_compact_ratio = agent.compression_config().recommend_compact_ratio;
     let snap = crate::prompt::context_usage::build_snapshot(
         crate::prompt::context_usage::ContextUsageInput {
             system_chars: layers.system_chars,
+            developer_chars: layers.developer_chars,
+            user_context_chars: layers.user_context_chars,
             memory_chars: layers.memory_chars,
             skills_chars: layers.skills_chars,
             recall_chars: layers.recall_chars,
             mcp_instruction_chars: layers.mcp_instruction_chars,
             system_items: &layers.system_items,
+            developer_items: &layers.developer_items,
+            user_context_items: &layers.user_context_items,
             memory_items: &layers.memory_items,
             skill_items: &layers.skill_items,
             mcp_instruction_items: &layers.mcp_instruction_items,

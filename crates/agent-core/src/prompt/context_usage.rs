@@ -75,12 +75,18 @@ pub type NamedChars = (String, String, usize);
 
 pub struct ContextUsageInput<'a> {
     pub system_chars: usize,
+    pub developer_chars: usize,
+    pub user_context_chars: usize,
     pub memory_chars: usize,
     pub skills_chars: usize,
     pub recall_chars: usize,
     pub mcp_instruction_chars: usize,
     /// SOUL / guidance 等系统提示子项
     pub system_items: &'a [NamedChars],
+    /// 交互模式等 developer message 子项
+    pub developer_items: &'a [NamedChars],
+    /// AGENTS / Hook / timestamp 等 contextual user message 子项
+    pub user_context_items: &'a [NamedChars],
     /// MEMORY / USER / daily 等子项
     pub memory_items: &'a [NamedChars],
     /// 技能索引条目：(skill_id, 展示名, 该行字符数)
@@ -103,11 +109,15 @@ pub fn estimate_tokens(chars: usize) -> u32 {
 #[derive(Debug, Clone, Default)]
 pub struct LayerBreakdown {
     pub system_chars: usize,
+    pub developer_chars: usize,
+    pub user_context_chars: usize,
     pub memory_chars: usize,
     pub skills_chars: usize,
     pub recall_chars: usize,
     pub mcp_instruction_chars: usize,
     pub system_items: Vec<NamedChars>,
+    pub developer_items: Vec<NamedChars>,
+    pub user_context_items: Vec<NamedChars>,
     pub memory_items: Vec<NamedChars>,
     pub skill_items: Vec<NamedChars>,
     pub mcp_instruction_items: Vec<NamedChars>,
@@ -312,6 +322,8 @@ pub fn build_snapshot(input: ContextUsageInput<'_>) -> ContextUsageSnapshot {
     };
 
     let system_items = items_from_named(input.system_items);
+    let developer_items = items_from_named(input.developer_items);
+    let user_context_items = items_from_named(input.user_context_items);
     let memory_items = items_from_named(input.memory_items);
     let skill_items = items_from_named(input.skill_items);
 
@@ -322,6 +334,20 @@ pub fn build_snapshot(input: ContextUsageInput<'_>) -> ContextUsageSnapshot {
         input.system_chars,
         (!system_items.is_empty()).then_some(system_items.len() as u32),
         system_items,
+    );
+    push_seg(
+        &mut segments,
+        "developer",
+        input.developer_chars,
+        (!developer_items.is_empty()).then_some(developer_items.len() as u32),
+        developer_items,
+    );
+    push_seg(
+        &mut segments,
+        "user_context",
+        input.user_context_chars,
+        (!user_context_items.is_empty()).then_some(user_context_items.len() as u32),
+        user_context_items,
     );
     push_seg(
         &mut segments,
@@ -443,11 +469,15 @@ mod tests {
         .clone();
         let snap = build_snapshot(ContextUsageInput {
             system_chars: 40,
+            developer_chars: 0,
+            user_context_chars: 0,
             memory_chars: 0,
             skills_chars: 0,
             recall_chars: 0,
             mcp_instruction_chars: 0,
             system_items: &[],
+            developer_items: &[],
+            user_context_items: &[],
             memory_items: &[],
             skill_items: &[],
             mcp_instruction_items: &[],
@@ -477,11 +507,15 @@ mod tests {
         )];
         let snap = build_snapshot(ContextUsageInput {
             system_chars: 0,
+            developer_chars: 0,
+            user_context_chars: 0,
             memory_chars: 0,
             skills_chars: 0,
             recall_chars: 0,
             mcp_instruction_chars: 40,
             system_items: &[],
+            developer_items: &[],
+            user_context_items: &[],
             memory_items: &[],
             skill_items: &[],
             mcp_instruction_items: &instructions,
@@ -508,11 +542,15 @@ mod tests {
         .clone();
         let snap = build_snapshot(ContextUsageInput {
             system_chars: 0,
+            developer_chars: 0,
+            user_context_chars: 0,
             memory_chars: 0,
             skills_chars: 0,
             recall_chars: 0,
             mcp_instruction_chars: 0,
             system_items: &[],
+            developer_items: &[],
+            user_context_items: &[],
             memory_items: &[],
             skill_items: &[],
             mcp_instruction_items: &[],
@@ -541,11 +579,15 @@ mod tests {
         .clone();
         let snap = build_snapshot(ContextUsageInput {
             system_chars: 0,
+            developer_chars: 0,
+            user_context_chars: 0,
             memory_chars: 0,
             skills_chars: 0,
             recall_chars: 0,
             mcp_instruction_chars: 0,
             system_items: &[],
+            developer_items: &[],
+            user_context_items: &[],
             memory_items: &[],
             skill_items: &[],
             mcp_instruction_items: &[],
@@ -575,11 +617,15 @@ mod tests {
         ];
         let snap = build_snapshot(ContextUsageInput {
             system_chars: 0,
+            developer_chars: 0,
+            user_context_chars: 0,
             memory_chars: 48,
             skills_chars: 100,
             recall_chars: 0,
             mcp_instruction_chars: 0,
             system_items: &[],
+            developer_items: &[],
+            user_context_items: &[],
             memory_items: &memory,
             skill_items: &skills,
             mcp_instruction_items: &[],
@@ -599,6 +645,38 @@ mod tests {
     }
 
     #[test]
+    fn role_bearing_prompt_context_has_distinct_segments() {
+        let developer = vec![("mode".into(), "交互模式引导".into(), 20usize)];
+        let user_context = vec![("agents".into(), "AGENTS.md".into(), 40usize)];
+        let snap = build_snapshot(ContextUsageInput {
+            system_chars: 80,
+            developer_chars: 20,
+            user_context_chars: 40,
+            memory_chars: 0,
+            skills_chars: 0,
+            recall_chars: 0,
+            mcp_instruction_chars: 0,
+            system_items: &[],
+            developer_items: &developer,
+            user_context_items: &user_context,
+            memory_items: &[],
+            skill_items: &[],
+            mcp_instruction_items: &[],
+            tools: &[],
+            messages: &[],
+            context_window: 128_000,
+            updated_at_ms: 1,
+            recommend_compact: false,
+            recommend_compact_ratio: 0.85,
+        });
+
+        assert_eq!(snap.segment("system").unwrap().tokens, 20);
+        assert_eq!(snap.segment("developer").unwrap().tokens, 5);
+        assert_eq!(snap.segment("user_context").unwrap().tokens, 10);
+        assert_eq!(snap.total_tokens, 35);
+    }
+
+    #[test]
     fn agent_thread_tool_result_counts_as_subagent() {
         let assistant = Message::assistant_with_tools(
             "",
@@ -612,11 +690,15 @@ mod tests {
         let tool = Message::tool_with_id("c1", &"x".repeat(40));
         let snap = build_snapshot(ContextUsageInput {
             system_chars: 0,
+            developer_chars: 0,
+            user_context_chars: 0,
             memory_chars: 0,
             skills_chars: 0,
             recall_chars: 0,
             mcp_instruction_chars: 0,
             system_items: &[],
+            developer_items: &[],
+            user_context_items: &[],
             memory_items: &[],
             skill_items: &[],
             mcp_instruction_items: &[],

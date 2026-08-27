@@ -567,7 +567,7 @@ pub(crate) async fn run_turn(
         let history = step_context.history.clone();
         let tool_specs = step_context.tool_router.model_visible_specs().to_vec();
 
-        emit_context_usage(&session, &turn_context, &history, &tool_specs).await;
+        emit_context_usage(&session, &turn_context, &prompt, &history, &tool_specs).await;
 
         let raw_stream = match run_sampling_request(
             &session,

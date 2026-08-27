@@ -1,7 +1,7 @@
 //! 可插拔上下文源 + 字符预算（对齐 Agno ContextProvider 思路）。
 //!
 //! 各层通过 [`ContextSource::contribute`] 在共享 [`ContextBudget`] 下取字符；
-//! 优先级由调用方排列。三层契约当前按 base → developer → contextual user 消耗预算。
+//! 优先级由调用方排列；三层契约可独立于最终消息角色顺序分配预算。
 
 use crate::prompt::context::{DynamicContext, StaticContext};
 

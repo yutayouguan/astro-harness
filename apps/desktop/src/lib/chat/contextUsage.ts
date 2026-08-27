@@ -1,5 +1,7 @@
 export type ContextUsageSegmentId =
   | "system"
+  | "developer"
+  | "user_context"
   | "tools"
   | "agents"
   | "mcp"
@@ -34,6 +36,8 @@ export type ContextUsageSnapshot = {
 
 export const SEGMENT_ORDER: ContextUsageSegmentId[] = [
   "system",
+  "developer",
+  "user_context",
   "tools",
   "agents",
   "mcp",
@@ -47,6 +51,8 @@ export const SEGMENT_ORDER: ContextUsageSegmentId[] = [
 /** CSS 变量名（不含 var()） */
 export const SEGMENT_TONE: Record<string, string> = {
   system: "--ink-mute",
+  developer: "--tone-purple",
+  user_context: "--tone-cyan",
   tools: "--tone-purple",
   agents: "--tone-indigo",
   mcp: "--tone-pink",

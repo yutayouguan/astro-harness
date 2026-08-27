@@ -8,7 +8,7 @@ use chrono::Local;
 
 use crate::prompt::context::{DynamicContext, StaticContext};
 
-/// 工具调用与学习闭环固定指引（注入 developer 上下文）。
+/// 工具调用与学习闭环固定指引（注入稳定基础指令）。
 pub const TOOL_GUIDANCE: &str = "\
 # 工具使用\n\
 调用工具时只使用模型提供的原生结构化工具接口；不得把工具名称和参数 JSON 写入回答正文。\n\

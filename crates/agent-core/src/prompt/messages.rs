@@ -262,6 +262,7 @@ mod tests {
                 ProviderMessage::developer("developer policy"),
                 ProviderMessage::user_text("contextual user data"),
             ],
+            ..Default::default()
         };
         let messages = to_provider_messages_with_context(&prompt, &[Message::user("hello")]);
 

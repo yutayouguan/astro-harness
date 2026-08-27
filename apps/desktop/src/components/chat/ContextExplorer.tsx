@@ -33,6 +33,8 @@ import {
 
 const SEG_LABEL: Record<string, MessageKey> = {
   system: "chat.contextSeg.system",
+  developer: "chat.contextSeg.developer",
+  user_context: "chat.contextSeg.userContext",
   tools: "chat.contextSeg.tools",
   agents: "chat.contextSeg.agents",
   mcp: "chat.contextSeg.mcp",
@@ -45,6 +47,8 @@ const SEG_LABEL: Record<string, MessageKey> = {
 
 const SEG_HINT: Record<string, MessageKey> = {
   system: "chat.contextExplorer.hint.system",
+  developer: "chat.contextExplorer.hint.developer",
+  user_context: "chat.contextExplorer.hint.userContext",
   tools: "chat.contextExplorer.hint.tools",
   agents: "chat.contextExplorer.hint.agents",
   mcp: "chat.contextExplorer.hint.mcp",
@@ -57,6 +61,8 @@ const SEG_HINT: Record<string, MessageKey> = {
 
 const SEG_ICON: Record<string, LucideIcon> = {
   system: Shield,
+  developer: Wrench,
+  user_context: MessageSquare,
   tools: Wrench,
   agents: Bot,
   mcp: Plug,
