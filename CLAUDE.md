@@ -129,11 +129,24 @@ AstroThread::submit(Op)
 
 6 个模型工具：`spawn_agent`、`list_agents`、`send_message`、`followup_task`、`wait_agent`、`interrupt_agent`。桌面控制面额外提供 `read_subagent_thread` 和 `close_subagent_thread`。
 
+与 Codex 原版差异：Codex V2 有 8 个工具（额外 `resume_agent`、`close_agent`）。Astro 精简为 6 个——`resume_agent` 的功能被 `followup_task` 吸收（可向已完成 agent 发后续任务并重新激活）；`close_agent` 从模型工具降级为桌面控制面操作（关闭 agent 是用户决策而非模型决策）。
+
 架构：一个 `AgentControl` per 根会话，所有后代共享。`subagents.db` 拥有线程图、邮箱、状态事件和迁移元数据；`SessionStore` 保持会话/工具时间线。
 
 状态：`PendingInit` → `Running` → `Completed { last_message }` / `Interrupted` / `Errored { message }` → `Shutdown`。
 
 配置：从 `~/.astro/agents` 和受信任的 `<project>/.astro/agents` 加载自定义 agent 定义；设置从 `~/.astro/config.toml` 和受信任的 `<project>/.astro/config.toml` 加载。`.codex` 不作为 Astro 配置输入。
+
+### 工具对齐（Codex → Astro）
+
+| Codex 工具 | Astro 工具 | 说明 |
+|---|---|---|
+| `apply_patch` (Freeform) | `apply_patch` (Freeform) | Lark 语法 diff 补丁，支持多文件批量增删改 |
+| `exec_command` | `exec_command` | Shell 命令执行，含 session 管理（`yield_time_ms`、`session_id`） |
+| `write_stdin` | `write_stdin` (stub) | 向运行中 session 写入 stdin |
+| `request_permissions` | `request_permissions` (stub) | 运行时请求额外权限 |
+| _(无)_ | _(原 file_ops 已移除)_ | 读/搜索/列目录归入 `exec_command` |
+| _(无)_ | _(原 terminal 已重命名)_ | → `exec_command` |
 
 ### Provider 架构（agent-providers）
 
