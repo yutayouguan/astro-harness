@@ -677,6 +677,7 @@ export default function ChatView({
   const approvalRequestIdRef = useRef(0);
   const plusWrapRef = useRef<HTMLDivElement>(null);
   const contextWrapRef = useRef<HTMLDivElement>(null);
+  const contextCloseTimerRef = useRef<number | null>(null);
   const [modeMenuOpen, setModeMenuOpen] = useState(false);
   const [approvalMode, setApprovalMode] =
     useState<PermissionPreset>("ask_for_approval");
@@ -711,6 +712,35 @@ export default function ChatView({
   const [agentCreateMissing, setAgentCreateMissing] = useState<number[]>([]);
   const { servers: mcpServers } = useMcpTools(agentId);
   const mcpHasEnabled = mcpServers.some((s) => s.enabled);
+
+  const cancelContextPopoverClose = useCallback(() => {
+    if (contextCloseTimerRef.current == null) return;
+    window.clearTimeout(contextCloseTimerRef.current);
+    contextCloseTimerRef.current = null;
+  }, []);
+
+  const openContextPopover = useCallback(() => {
+    cancelContextPopoverClose();
+    setModeMenuOpen(false);
+    setPlusOpen(false);
+    setPaletteKind(null);
+    setContextPopoverOpen(true);
+  }, [cancelContextPopoverClose]);
+
+  const closeContextPopover = useCallback(() => {
+    cancelContextPopoverClose();
+    setContextPopoverOpen(false);
+  }, [cancelContextPopoverClose]);
+
+  const scheduleContextPopoverClose = useCallback(() => {
+    cancelContextPopoverClose();
+    contextCloseTimerRef.current = window.setTimeout(() => {
+      contextCloseTimerRef.current = null;
+      setContextPopoverOpen(false);
+    }, 160);
+  }, [cancelContextPopoverClose]);
+
+  useEffect(() => cancelContextPopoverClose, [cancelContextPopoverClose]);
 
   useEffect(() => {
     const pane = chatPaneRef.current;
@@ -2775,7 +2805,12 @@ export default function ChatView({
             </div>
 
             <div className="composer-bar-right">
-              <div className="composer-context-wrap" ref={contextWrapRef}>
+              <div
+                className="composer-context-wrap"
+                ref={contextWrapRef}
+                onPointerEnter={openContextPopover}
+                onPointerLeave={scheduleContextPopoverClose}
+              >
                 <button
                   type="button"
                   className={`composer-icon-btn composer-context-btn ${contextProgressTone} ${
@@ -2785,12 +2820,8 @@ export default function ChatView({
                   title={contextUsageLabel}
                   aria-label={contextUsageLabel}
                   aria-expanded={contextPopoverOpen}
-                  onClick={() => {
-                    setModeMenuOpen(false);
-                    setPlusOpen(false);
-                    setPaletteKind(null);
-                    setContextPopoverOpen((v) => !v);
-                  }}
+                  onFocus={openContextPopover}
+                  onClick={openContextPopover}
                 >
                   <svg
                     className="composer-context-ring"
@@ -2822,7 +2853,9 @@ export default function ChatView({
                   windowTokens={contextWindow}
                   estimateCost={estimateCostLabel}
                   containRef={contextWrapRef}
-                  onClose={() => setContextPopoverOpen(false)}
+                  onPointerEnter={cancelContextPopoverClose}
+                  onPointerLeave={scheduleContextPopoverClose}
+                  onClose={closeContextPopover}
                   onViewDetails={() => {
                     onOpenContext();
                   }}

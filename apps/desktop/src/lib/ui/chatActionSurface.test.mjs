@@ -6,6 +6,10 @@ const chatViewUrl = new URL(
   "../../components/chat/ChatView.tsx",
   import.meta.url,
 );
+const contextUsagePopoverUrl = new URL(
+  "../../components/chat/ContextUsagePopover.tsx",
+  import.meta.url,
+);
 const messagesUrl = new URL("../../i18n/messages.ts", import.meta.url);
 const coreCssUrl = new URL(
   "../../styles/features/chat/core.css",
@@ -91,4 +95,16 @@ test("composer keeps context usage available at every occupancy level", async ()
   assert.match(styles, /\.composer-context-ring-track/);
   assert.match(styles, /\.composer-context-btn\.is-warning/);
   assert.match(styles, /\.composer-context-btn\.is-critical/);
+});
+
+test("context usage preview opens on hover and stays open across the portal gap", async () => {
+  const source = await readFile(chatViewUrl, "utf8");
+  const popover = await readFile(contextUsagePopoverUrl, "utf8");
+
+  assert.match(source, /onPointerEnter=\{openContextPopover\}/);
+  assert.match(source, /onPointerLeave=\{scheduleContextPopoverClose\}/);
+  assert.match(source, /window\.setTimeout\([\s\S]*?, 160\)/);
+  assert.match(source, /onPointerEnter=\{cancelContextPopoverClose\}/);
+  assert.match(popover, /onPointerEnter=\{onPointerEnter\}/);
+  assert.match(popover, /onPointerLeave=\{onPointerLeave\}/);
 });

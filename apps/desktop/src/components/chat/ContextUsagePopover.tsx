@@ -43,6 +43,8 @@ type Props = {
   estimateCost?: EstimateCostLabel | null;
   onClose: () => void;
   onViewDetails: () => void;
+  onPointerEnter?: () => void;
+  onPointerLeave?: () => void;
   /** 含触发按钮的外层；用于 click-outside 与锚点定位 */
   containRef?: RefObject<HTMLElement | null>;
 };
@@ -54,6 +56,8 @@ export default function ContextUsagePopover({
   estimateCost = null,
   onClose,
   onViewDetails,
+  onPointerEnter,
+  onPointerLeave,
   containRef,
 }: Props) {
   const { t } = useI18n();
@@ -107,6 +111,8 @@ export default function ContextUsagePopover({
       role="dialog"
       aria-label={t("chat.contextUsage")}
       style={style ?? { visibility: "hidden" }}
+      onPointerEnter={onPointerEnter}
+      onPointerLeave={onPointerLeave}
     >
       <div className="ctx-usage-popover-header">
         <span className="ctx-usage-popover-title">{t("chat.contextUsage")}</span>
