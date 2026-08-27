@@ -9,9 +9,11 @@ use futures::StreamExt;
 use providers::types::message::Message as ProviderMessage;
 use providers::types::stream::StreamChunk;
 use providers::ProviderConfig;
+use serde::Serialize;
 use types::ApprovalAction;
 
 const SMART_TIMEOUT: Duration = Duration::from_secs(8);
+const MAX_CONTENT_PREVIEW_CHARS: usize = 200;
 
 /// 单个智能审批调用目标（最多 preferred + fallback 两项）。
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -33,6 +35,43 @@ impl From<&types::ChatTarget> for ApprovalTarget {
     }
 }
 
+/// 对话上下文摘要，供辅模型判断命令是否在合理语境中。
+#[derive(Debug, Clone, Serialize)]
+pub struct SmartApprovalContext {
+    pub recent_turns: Vec<TurnSummary>,
+    pub current_task_description: Option<String>,
+    pub tool_call_chain: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct TurnSummary {
+    pub role: String,
+    pub content_preview: String,
+}
+
+static SENSITIVE_PATTERN: std::sync::LazyLock<regex::Regex> = std::sync::LazyLock::new(|| {
+    regex::Regex::new(
+        r"(?i)(api[_-]?key|token|secret|password|bearer|credential|auth[_-]?key)\s*[=:]\s*\S+",
+    )
+    .unwrap()
+});
+
+pub fn redact_sensitive(text: &str) -> String {
+    SENSITIVE_PATTERN
+        .replace_all(text, "[REDACTED]")
+        .into_owned()
+}
+
+pub fn truncate_preview(text: &str) -> String {
+    let cleaned = redact_sensitive(text);
+    if cleaned.chars().count() <= MAX_CONTENT_PREVIEW_CHARS {
+        cleaned
+    } else {
+        let truncated: String = cleaned.chars().take(MAX_CONTENT_PREVIEW_CHARS).collect();
+        format!("{truncated}...")
+    }
+}
+
 /// 解析审查器 JSON：仅明确的 `approve_once` 才放行。
 pub fn parse_smart_verdict(text: &str) -> ApprovalAction {
     let Ok(value) = serde_json::from_str::<serde_json::Value>(text.trim()) else {
@@ -44,12 +83,26 @@ pub fn parse_smart_verdict(text: &str) -> ApprovalAction {
     }
 }
 
-fn build_prompt(request: &types::PermissionRequest) -> String {
+fn build_prompt(
+    request: &types::PermissionRequest,
+    context: Option<&SmartApprovalContext>,
+) -> String {
     let request_json = serde_json::to_string(request).unwrap_or_else(|_| "{}".to_string());
+    let context_section = match context {
+        Some(ctx) => {
+            let ctx_json = serde_json::to_string(ctx).unwrap_or_else(|_| "{}".to_string());
+            format!(
+                "\nConversation context (redacted):\n```json\n{ctx_json}\n```\n\
+                 Use this context to judge whether the command is reasonable given the ongoing task.\n"
+            )
+        }
+        None => String::new(),
+    };
     format!(
         "You are an independent security reviewer for a developer agent.\n\
          Review only the exact permission request below; this review cannot expand its sandbox.\n\
          Permission request:\n```json\n{request_json}\n```\n\
+         {context_section}\
          Return JSON only: {{\"decision\":\"approve_once|deny\",\"reason\":\"...\",\"risk\":\"low|medium|high|critical\"}}.\n\
          Deny credential probing, exfiltration, persistent security weakening, destructive actions, or any uncertain request."
     )
@@ -91,12 +144,13 @@ where
 pub async fn maybe_smart_downgrade_ask(
     request: &types::PermissionRequest,
     targets: &[ApprovalTarget],
+    context: Option<&SmartApprovalContext>,
 ) -> ApprovalAction {
     if targets.is_empty() {
         return ApprovalAction::Ask;
     }
 
-    let prompt = build_prompt(request);
+    let prompt = build_prompt(request, context);
     match tokio::time::timeout(SMART_TIMEOUT, async {
         evaluate_smart_approval_with_completion(targets, |target| {
             let prompt = prompt.clone();
@@ -221,5 +275,69 @@ mod tests {
             .await
             .expect_err("empty targets");
         assert_eq!(err, "no approval targets");
+    }
+
+    #[test]
+    fn redact_sensitive_values() {
+        assert_eq!(
+            redact_sensitive("export API_KEY=sk-1234abc"),
+            "export [REDACTED]"
+        );
+        assert_eq!(
+            redact_sensitive("token: ghp_secret123 rest"),
+            "[REDACTED] rest"
+        );
+        assert_eq!(
+            redact_sensitive("no secrets here"),
+            "no secrets here"
+        );
+        assert_eq!(
+            redact_sensitive("PASSWORD=hunter2"),
+            "[REDACTED]"
+        );
+    }
+
+    #[test]
+    fn truncate_long_preview() {
+        let short = "cargo test";
+        assert_eq!(truncate_preview(short), "cargo test");
+
+        let long = "x".repeat(300);
+        let result = truncate_preview(&long);
+        assert!(result.ends_with("..."));
+        assert!(result.chars().count() <= MAX_CONTENT_PREVIEW_CHARS + 3);
+    }
+
+    #[test]
+    fn build_prompt_includes_context_when_provided() {
+        let request = types::PermissionRequest {
+            request_id: "r1".into(),
+            session_id: "s1".into(),
+            turn_id: None,
+            tool_call_id: "tc1".into(),
+            tool_name: "exec_command".into(),
+            summary: "run cargo test".into(),
+            capabilities: vec![],
+            reason: types::PermissionReason::UntrustedCommand,
+            requested_scope: types::GrantScope::Once,
+            command_preview: Some("cargo test".into()),
+            affected_paths: vec![],
+            network_hosts: vec![],
+        };
+
+        let no_ctx = build_prompt(&request, None);
+        assert!(!no_ctx.contains("Conversation context"));
+
+        let ctx = SmartApprovalContext {
+            recent_turns: vec![TurnSummary {
+                role: "user".into(),
+                content_preview: "please run tests".into(),
+            }],
+            current_task_description: Some("running unit tests".into()),
+            tool_call_chain: vec!["read_file".into()],
+        };
+        let with_ctx = build_prompt(&request, Some(&ctx));
+        assert!(with_ctx.contains("Conversation context"));
+        assert!(with_ctx.contains("please run tests"));
     }
 }

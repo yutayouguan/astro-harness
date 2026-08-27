@@ -313,7 +313,7 @@ impl RunTurnArgs {
             max_tokens: provider_options.max_tokens,
             ..ProviderConfig::default()
         };
-        let (pause, hitl_gate) = session.ensure_thread_controls();
+        let (pause, hitl_gate, _approval_cache) = session.ensure_thread_controls();
         Self {
             session,
             turn_context,

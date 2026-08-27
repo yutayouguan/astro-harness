@@ -209,6 +209,7 @@ struct RuntimeIoBindings {
 struct ThreadControls {
     pause: Arc<providers::PauseControl>,
     hitl_gate: Arc<crate::HitlGate>,
+    approval_cache: Arc<crate::control::approval_cache::SessionApprovalCache>,
 }
 
 #[derive(Clone)]
@@ -486,17 +487,31 @@ impl Session {
         self.lock_state().prompt_context_history = history;
     }
 
-    /// Returns the stable pause and HITL controls used by actor-submitted turns.
-    pub fn ensure_thread_controls(&self) -> (Arc<providers::PauseControl>, Arc<crate::HitlGate>) {
+    /// Returns the stable pause, HITL, and approval-cache controls used by actor-submitted turns.
+    pub fn ensure_thread_controls(
+        &self,
+    ) -> (
+        Arc<providers::PauseControl>,
+        Arc<crate::HitlGate>,
+        Arc<crate::control::approval_cache::SessionApprovalCache>,
+    ) {
         let mut controls = self
             .thread_controls
             .lock()
             .expect("thread controls mutex poisoned");
-        let controls = controls.get_or_insert_with(|| ThreadControls {
-            pause: providers::PauseControl::new(),
-            hitl_gate: crate::HitlGate::new(self.session_id.clone()),
+        let controls = controls.get_or_insert_with(|| {
+            let sid = self.session_id.clone();
+            ThreadControls {
+                pause: providers::PauseControl::new(),
+                hitl_gate: crate::HitlGate::new(sid.clone()),
+                approval_cache: crate::control::approval_cache::SessionApprovalCache::new(sid),
+            }
         });
-        (Arc::clone(&controls.pause), Arc::clone(&controls.hitl_gate))
+        (
+            Arc::clone(&controls.pause),
+            Arc::clone(&controls.hitl_gate),
+            Arc::clone(&controls.approval_cache),
+        )
     }
 
     pub fn set_thread_provider_options(&self, options: ThreadProviderOptions) {

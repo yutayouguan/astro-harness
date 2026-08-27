@@ -38,6 +38,7 @@ async-trait = { workspace = true }
 uuid = { version = "1", features = ["v4"] }
 chrono = { version = "0.4", features = ["clock"] }
 futures = "0.3"
+regex = "1"
 async-channel = "2"
 
 [dev-dependencies]

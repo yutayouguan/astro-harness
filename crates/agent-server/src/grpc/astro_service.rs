@@ -1160,7 +1160,7 @@ impl AstroServiceImpl {
         }));
         let session = thread.session();
         session.set_hook_runtime(Arc::clone(&self.hook_runtime));
-        let (_, hitl_gate) = session.ensure_thread_controls();
+        let (_, hitl_gate, _) = session.ensure_thread_controls();
         if !self
             .hitl_registry
             .get(session.session_id())
@@ -2161,7 +2161,7 @@ impl AstroService for AstroServiceImpl {
 
         if matches!(action, ChatControlAction::ChatControlCancel) {
             if let Some(managed) = self.threads.get(&req.session_id).await {
-                let (_, gate) = managed.runtime.session().ensure_thread_controls();
+                let (_, gate, _) = managed.runtime.session().ensure_thread_controls();
                 gate.cancel_all().await;
                 managed
                     .runtime
@@ -2184,7 +2184,7 @@ impl AstroService for AstroServiceImpl {
         }
 
         if let Some(managed) = self.threads.get(&req.session_id).await {
-            let (pause, _) = managed.runtime.session().ensure_thread_controls();
+            let (pause, _, _) = managed.runtime.session().ensure_thread_controls();
             match action {
                 ChatControlAction::ChatControlPause => pause.pause(),
                 ChatControlAction::ChatControlResume

@@ -2551,7 +2551,7 @@ async fn approval_hooks_fire_pre_then_post_on_allow() {
         pre_idx.is_some() && post_idx.is_some() && pre_idx < post_idx,
         "expected PermissionRequest before PostApprovalResponse, events={events:?}"
     );
-    let post_tool_idx = events.iter().position(|e| e == "PostToolUse:terminal");
+    let post_tool_idx = events.iter().position(|e| e == "PostToolUse:exec_command");
     assert!(
         post_idx < post_tool_idx,
         "expected PostApprovalResponse before PostToolUse, events={events:?}"

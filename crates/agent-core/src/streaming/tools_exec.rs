@@ -14,6 +14,36 @@ use crate::runtime::{
 use super::hitl_bridge::{park_astro_hitl, park_confirm, parse_astro_hitl};
 use super::lifecycle::emit_async_agent_message;
 
+use crate::control::smart_approval::{SmartApprovalContext, TurnSummary};
+
+async fn build_smart_approval_context(session: &Arc<AgentLoop>) -> Option<SmartApprovalContext> {
+    let history = session.clone_history().await;
+    let recent: Vec<TurnSummary> = history
+        .iter()
+        .rev()
+        .take(5)
+        .filter_map(|msg| {
+            let role = format!("{:?}", msg.role).to_lowercase();
+            let text = msg.content_str();
+            if text.is_empty() {
+                return None;
+            }
+            Some(TurnSummary {
+                role,
+                content_preview: crate::control::smart_approval::truncate_preview(text),
+            })
+        })
+        .collect();
+    if recent.is_empty() {
+        return None;
+    }
+    Some(SmartApprovalContext {
+        recent_turns: recent,
+        current_task_description: None,
+        tool_call_chain: vec![],
+    })
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum ApprovalRoute {
     Deny,
@@ -155,7 +185,7 @@ fn build_network_approval_decider(
                         types::NetworkApprovalProtocol::Socks5Udp => "socks5-udp",
                     };
 
-                    let (_, hitl_gate) = session.ensure_thread_controls();
+                    let (_, hitl_gate, _) = session.ensure_thread_controls();
                     let outcome = super::hitl_bridge::park_network_approval(
                         &hitl_gate,
                         &session,
@@ -504,7 +534,7 @@ async fn review_once_permission(
                 .collect::<Vec<_>>()
         };
         let action =
-            crate::control::smart_approval::maybe_smart_downgrade_ask(request, &targets).await;
+            crate::control::smart_approval::maybe_smart_downgrade_ask(request, &targets, None).await;
         if action == types::ApprovalAction::Auto {
             fire_post_permission_response(
                 session,
@@ -1048,7 +1078,20 @@ async fn execute_tools_serial_inner(
                             )
                         };
 
-                        let route = approval_route(&cmd, &permissions, &allowlist);
+                        let mut route = approval_route(&cmd, &permissions, &allowlist);
+                        if matches!(route, ApprovalRoute::Smart | ApprovalRoute::Manual) {
+                            let cache_key = crate::control::approval_cache::ApprovalCacheKey::new(
+                                &call.name, &cmd,
+                            );
+                            let (_, _, approval_cache) = session.ensure_thread_controls();
+                            if approval_cache.lookup(&cache_key).await.is_some() {
+                                tracing::debug!(
+                                    command = %cmd,
+                                    "approval cache hit — skipping user prompt"
+                                );
+                                route = ApprovalRoute::Allowlist;
+                            }
+                        }
                         let permission_request = types::PermissionRequest {
                             request_id: uuid::Uuid::new_v4().to_string(),
                             session_id: approval_session_id.clone(),
@@ -1197,9 +1240,11 @@ async fn execute_tools_serial_inner(
                                     .iter()
                                     .map(crate::control::smart_approval::ApprovalTarget::from)
                                     .collect();
+                                let smart_ctx = build_smart_approval_context(session).await;
                                 crate::control::smart_approval::maybe_smart_downgrade_ask(
                                     &permission_request,
                                     &targets,
+                                    smart_ctx.as_ref(),
                                 )
                                 .await
                             } else {
@@ -1296,6 +1341,15 @@ async fn execute_tools_serial_inner(
                                     } else {
                                         tracing::info!(command = %cmd, "added command to approval allowlist");
                                     }
+                                }
+                                {
+                                    let cache_key =
+                                        crate::control::approval_cache::ApprovalCacheKey::new(
+                                            &call.name, &cmd,
+                                        );
+                                    let (_, _, approval_cache) =
+                                        session.ensure_thread_controls();
+                                    approval_cache.insert(cache_key).await;
                                 }
                                 permission_audits.push(approval_audit);
                             } else {
