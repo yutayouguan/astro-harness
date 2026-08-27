@@ -1,7 +1,7 @@
 //! 本机 Skill 扫描、启用状态与按名称加载。
 
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     fs,
     path::{Path, PathBuf},
     sync::Mutex,
@@ -110,14 +110,41 @@ fn astro_skill_roots(agent_id: Option<&str>) -> Vec<PathBuf> {
     roots
 }
 
-/// 本机其它技能目录（Codex / Claude / Cursor 等），不含 Astro 数据根
+fn machine_skill_root_priority(path: &Path) -> u8 {
+    let normalized = path
+        .to_string_lossy()
+        .replace('\\', "/")
+        .to_ascii_lowercase();
+    [
+        ".agents/skills",
+        ".codex/skills",
+        ".claude/skills",
+        ".cursor/skills",
+        ".astro/skills",
+    ]
+    .iter()
+    .position(|suffix| {
+        normalized
+            .strip_suffix(suffix)
+            .is_some_and(|prefix| prefix.is_empty() || prefix.ends_with('/'))
+    })
+    .map_or(u8::MAX, |index| index as u8)
+}
+
+/// 本机其它技能目录（Agents / Codex / Claude / Cursor 等），不含 Astro 数据根。
+/// 同名 Skill 冲突时，开放标准 `.agents/skills` 的优先级最高。
 fn machine_skill_roots() -> Vec<PathBuf> {
     let mut roots = Vec::new();
     let mem = memory_dir();
 
     if let Ok(mut dir) = std::env::current_dir() {
         for _ in 0..8 {
-            for sub in [".agents/skills", ".cursor/skills"] {
+            for sub in [
+                ".agents/skills",
+                ".codex/skills",
+                ".claude/skills",
+                ".cursor/skills",
+            ] {
                 let p = dir.join(sub);
                 if !p.starts_with(&mem) {
                     roots.push(p);
@@ -133,6 +160,7 @@ fn machine_skill_roots() -> Vec<PathBuf> {
         let home = PathBuf::from(home);
         for sub in [
             ".agents/skills",
+            ".codex/skills",
             ".cursor/skills",
             ".claude/skills",
             ".astro/skills",
@@ -143,9 +171,45 @@ fn machine_skill_roots() -> Vec<PathBuf> {
             }
         }
     }
-    roots.sort();
+    roots.sort_by(|left, right| {
+        machine_skill_root_priority(left)
+            .cmp(&machine_skill_root_priority(right))
+            .then_with(|| left.cmp(right))
+    });
     roots.dedup();
     roots
+}
+
+fn machine_skill_identity_keys(skill: &InstalledSkill) -> Vec<String> {
+    let mut keys = Vec::with_capacity(2);
+    if let Some(folder) = Path::new(&skill.path)
+        .parent()
+        .and_then(Path::file_name)
+        .and_then(|value| value.to_str())
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    {
+        keys.push(format!("folder:{}", folder.to_ascii_lowercase()));
+    }
+    let name = skill.name.trim();
+    if !name.is_empty() {
+        keys.push(format!("name:{}", name.to_ascii_lowercase()));
+    }
+    keys
+}
+
+fn dedupe_machine_skills(skills: Vec<InstalledSkill>) -> Vec<InstalledSkill> {
+    let mut seen = HashSet::new();
+    let mut unique = Vec::with_capacity(skills.len());
+    for skill in skills {
+        let keys = machine_skill_identity_keys(&skill);
+        if keys.iter().any(|key| seen.contains(key)) {
+            continue;
+        }
+        seen.extend(keys);
+        unique.push(skill);
+    }
+    unique
 }
 
 /// 解析 SKILL.md YAML frontmatter 为元数据。
@@ -409,6 +473,13 @@ fn scan_machine(agent_id: Option<&str>) -> Vec<InstalledSkill> {
     let mut state = HashMap::new();
     let mut dirty = false;
     let mut out = scan_roots(&roots, agent_id, "machine", &mut state, &mut dirty, false);
+    out.sort_by(|left, right| {
+        machine_skill_root_priority(Path::new(&left.source_dir))
+            .cmp(&machine_skill_root_priority(Path::new(&right.source_dir)))
+            .then_with(|| left.name.to_lowercase().cmp(&right.name.to_lowercase()))
+            .then_with(|| left.id.cmp(&right.id))
+    });
+    out = dedupe_machine_skills(out);
     out.sort_by_key(|a| a.name.to_lowercase());
     out
 }
@@ -1106,6 +1177,61 @@ mod tests {
     use crate::ENV_TEST_LOCK;
     use std::fs;
     use tempfile::tempdir;
+
+    fn machine_skill(source_dir: &str, folder: &str, name: &str) -> InstalledSkill {
+        InstalledSkill {
+            id: format!("{source_dir}/{folder}"),
+            name: name.to_string(),
+            description: String::new(),
+            path: format!("{source_dir}/{folder}/SKILL.md"),
+            source_dir: source_dir.to_string(),
+            enabled: false,
+            scope: "machine".to_string(),
+            linked: false,
+            provenance: "external".to_string(),
+            editable: false,
+            shadowed_by: None,
+        }
+    }
+
+    #[test]
+    fn machine_skills_dedupe_prefers_agents_directory() {
+        let mut skills = vec![
+            machine_skill("/home/test/.cursor/skills", "shared", "Shared Skill"),
+            machine_skill("/home/test/.claude/skills", "shared", "Shared Skill"),
+            machine_skill("/home/test/.codex/skills", "shared", "Shared Skill"),
+            machine_skill("/home/test/.agents/skills", "shared", "Shared Skill"),
+            machine_skill("/home/test/.cursor/skills", "unique", "Unique Skill"),
+        ];
+        skills.sort_by(|left, right| {
+            machine_skill_root_priority(Path::new(&left.source_dir))
+                .cmp(&machine_skill_root_priority(Path::new(&right.source_dir)))
+                .then_with(|| left.id.cmp(&right.id))
+        });
+
+        let unique = dedupe_machine_skills(skills);
+
+        assert_eq!(unique.len(), 2);
+        let shared = unique
+            .iter()
+            .find(|skill| skill.name == "Shared Skill")
+            .expect("shared skill");
+        assert_eq!(shared.source_dir, "/home/test/.agents/skills");
+    }
+
+    #[test]
+    fn machine_skills_dedupe_matches_folder_or_declared_name_case_insensitively() {
+        let skills = vec![
+            machine_skill("/home/test/.agents/skills", "canonical", "Shared Skill"),
+            machine_skill("/home/test/.codex/skills", "canonical", "Renamed Skill"),
+            machine_skill("/home/test/.claude/skills", "other-folder", "shared skill"),
+        ];
+
+        let unique = dedupe_machine_skills(skills);
+
+        assert_eq!(unique.len(), 1);
+        assert_eq!(unique[0].source_dir, "/home/test/.agents/skills");
+    }
 
     #[test]
     fn configured_skill_layer_is_ephemeral_and_enforced() {
