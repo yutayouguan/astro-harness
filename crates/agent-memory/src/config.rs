@@ -974,15 +974,28 @@ fn load_explicit_permissions(
 
     // 统一审批配置作为默认层；各域独立字段优先级更高
     let unified = file.approval.unwrap_or_default();
+    let (terminal_policy, terminal_reviewer) = match unified
+        .terminal
+        .as_deref()
+        .map(|s| s.trim().to_ascii_lowercase())
+        .as_deref()
+    {
+        Some("off" | "yolo") => (Some(ApprovalPolicy::Never), None),
+        Some("smart") => (None, Some(ApprovalsReviewer::AutoReview)),
+        Some("manual") => (None, Some(ApprovalsReviewer::User)),
+        _ => (None, None),
+    };
     let selection = SessionPermissions {
         profile_id: permissions.default_profile.clone(),
         approval_policy: file
             .approval_policy
             .or(unified.policy)
+            .or(terminal_policy)
             .unwrap_or_default(),
         approvals_reviewer: file
             .approvals_reviewer
             .or(unified.reviewer)
+            .or(terminal_reviewer)
             .unwrap_or_default(),
     };
     let legacy_command_allowlist = file

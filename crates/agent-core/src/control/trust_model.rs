@@ -9,38 +9,30 @@ use tokio::sync::Mutex;
 const UPGRADE_TO_SMART: u32 = 5;
 const UPGRADE_TO_AUTO: u32 = 10;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum TrustLevel {
+    #[default]
     AlwaysAsk,
     SmartReview,
     AutoApprove,
 }
 
-impl Default for TrustLevel {
-    fn default() -> Self {
-        Self::AlwaysAsk
-    }
-}
-
 /// 按命令前缀索引的信任分数。
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct TrustScore {
     pub consecutive_approvals: u32,
     pub level: TrustLevel,
 }
 
-impl Default for TrustScore {
-    fn default() -> Self {
-        Self {
-            consecutive_approvals: 0,
-            level: TrustLevel::AlwaysAsk,
-        }
-    }
-}
-
 /// 会话级信任评估器。
 pub struct TrustEvaluator {
     scores: Mutex<HashMap<String, TrustScore>>,
+}
+
+impl Default for TrustEvaluator {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl TrustEvaluator {

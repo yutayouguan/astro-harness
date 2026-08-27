@@ -1608,6 +1608,10 @@ impl Session {
         self.lock_state().clone_history()
     }
 
+    pub fn tail_history(&self, n: usize) -> Vec<Message> {
+        self.lock_state().tail_history(n)
+    }
+
     /// Replace the current conversation history with an owned snapshot.
     pub async fn replace_history(&self, history: Vec<Message>) {
         let _write_guard = self.conversation_write_lock.lock().await;

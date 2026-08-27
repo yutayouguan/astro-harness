@@ -80,6 +80,15 @@ impl SessionState {
         self.history.clone()
     }
 
+    pub(crate) fn tail_history(&self, n: usize) -> Vec<Message> {
+        let len = self.history.len();
+        if n >= len {
+            self.history.clone()
+        } else {
+            self.history[len - n..].to_vec()
+        }
+    }
+
     pub(crate) fn replace_history(&mut self, history: Vec<Message>) {
         self.history = history;
     }

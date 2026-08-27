@@ -17,11 +17,10 @@ use super::lifecycle::emit_async_agent_message;
 use crate::control::smart_approval::{SmartApprovalContext, TurnSummary};
 
 async fn build_smart_approval_context(session: &Arc<AgentLoop>) -> Option<SmartApprovalContext> {
-    let history = session.clone_history().await;
+    let history = session.tail_history(5);
     let recent: Vec<TurnSummary> = history
         .iter()
         .rev()
-        .take(5)
         .filter_map(|msg| {
             let role = format!("{:?}", msg.role).to_lowercase();
             let text = msg.content_str();
@@ -533,8 +532,9 @@ async fn review_once_permission(
                 .map(crate::control::smart_approval::ApprovalTarget::from)
                 .collect::<Vec<_>>()
         };
+        let smart_ctx = build_smart_approval_context(session).await;
         let action =
-            crate::control::smart_approval::maybe_smart_downgrade_ask(request, &targets, None).await;
+            crate::control::smart_approval::maybe_smart_downgrade_ask(request, &targets, smart_ctx.as_ref()).await;
         if action == types::ApprovalAction::Auto {
             fire_post_permission_response(
                 session,
