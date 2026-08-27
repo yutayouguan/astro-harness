@@ -33,14 +33,14 @@ impl InteractionMode {
         match self {
             Self::Agent => {
                 "# Interaction mode: Agent / 交互模式：Agent\n\
-Tools enabled. For complex multi-step work, call switch_mode(to=\"plan\", reason=…) first, then return to Agent after authorization.\n\
-可执行工具完成任务。复杂多步工作可先调用 switch_mode(to=\"plan\", reason=…) 进入规划，再在授权后回到 Agent 执行。"
+Classify the request before using side-effect tools. Answer pure questions directly without a todo. For a bounded execution task with two or more concrete steps, create and maintain a compact todo list. For complex, high-risk, ambiguous, cross-module, or externally mutating work, call switch_mode(to=\"plan\", reason=…) before any side effect. Agent to Plan is automatic; returning to Agent requires explicit user review.\n\
+使用有副作用的工具前先判断任务类型：纯问答直接回答，不创建 todo；有两个及以上明确步骤的简单执行任务，创建并持续更新紧凑 todo；复杂、高风险、需求不清、跨模块或涉及外部变更的任务，必须先调用 switch_mode(to=\"plan\", reason=…)。进入 Plan 自动完成，回到 Agent 必须等待用户明确审阅。"
             }
             Self::Plan => {
                 "# Interaction mode: Plan (read-only planning) / 交互模式：Plan（只读规划）\n\
-Read-only: file_ops(read/list/search), web_search, todo. No writes, terminal, code_exec, agent-thread tools, or memory. When ready, call switch_mode(to=\"agent\", reason=…, summary=plan summary).\n\
+Read-only: file_ops(read/list/search), web_search, todo. No writes, terminal, code_exec, agent-thread tools, or memory. Produce a concrete, reviewable plan with scope, steps, verification, and risks. When ready, call switch_mode(to=\"agent\", reason=…, summary=complete plan). Then stop and wait for explicit user approval; never assume approval or continue executing.\n\
 可用 file_ops(read/list/search)、web_search、todo 等只读工具。禁止写文件、terminal、code_exec、Agent Thread 工具、memory。\n\
-计划就绪后调用 switch_mode(to=\"agent\", reason=…, summary=计划摘要) 请求执行授权。"
+输出可审阅的具体计划，包含范围、步骤、验证与风险。计划就绪后调用 switch_mode(to=\"agent\", reason=…, summary=完整计划)，随后停止并等待用户明确批准，不得自行继续执行。"
             }
             Self::Ask => {
                 "# Interaction mode: Ask (read-only Q&A) / 交互模式：Ask（只读问答）\n\

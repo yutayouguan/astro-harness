@@ -17,6 +17,7 @@ import {
   type ChatInteractionMode,
   type ChatWorkMode,
   type ModeSwitchRequest,
+  shouldAutoApproveModeSwitch,
 } from "../../lib/chat/chatMode";
 import {
   MAX_QUEUED_FOLLOWUPS,
@@ -395,11 +396,10 @@ export function useChatSession({
       return;
     }
     const inject =
-      `[Mode switch declined]\n` +
-      `The user declined switching to "${req.to}". ` +
-      `Requested reason was: ${req.reason}\n` +
-      `Stay in the current interaction mode and continue. ` +
-      `Do not call switch_mode again for the same reason unless the user explicitly asks.`;
+      `[Plan review: continue planning]\n` +
+      `The user is not authorizing execution yet. ` +
+      `Stay in Plan mode and revise or clarify the plan. ` +
+      `Do not call switch_mode again until the plan has materially changed or the user explicitly asks.`;
     showTransientToast(t("chat.modeSwitch.declined"), { tone: "warning" });
     void (async () => {
       await sendImmediateRef.current({ text: inject });
@@ -468,6 +468,12 @@ export function useChatSession({
     }
     setQueueKick((k) => k + 1);
   }, []);
+
+  useEffect(() => {
+    if (!shouldAutoApproveModeSwitch(modeSwitchPrompt)) return;
+    // 进入只读 Plan 是收窄权限，自动接受；返回 Agent 始终留给用户显式审阅。
+    void approveModeSwitch();
+  }, [approveModeSwitch, modeSwitchPrompt]);
 
   /** 当前任务忙时入队；空闲时立即发送。 */
   const send = useCallback(

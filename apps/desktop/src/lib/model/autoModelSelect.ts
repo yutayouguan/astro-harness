@@ -109,7 +109,6 @@ export function classifyTask(input: {
     return "reasoning";
   }
   if (
-    input.chatMode === "agent" ||
     /代码|实现|bug|修复|函数|组件|refactor|typescript|rust|python|写一?个|fix|debug|报错|编译/.test(
       text,
     )
@@ -119,7 +118,7 @@ export function classifyTask(input: {
   if (
     text.length < 48 &&
     !/[`{}\n]/.test(text) &&
-    (input.chatMode === "ask" || text.length < 32)
+    text.length < 32
   ) {
     return "simple";
   }

@@ -78,7 +78,7 @@ function ClarifyWizardPreview() {
             />
             <div className="composer-bar" aria-hidden>
               <div className="composer-bar-left">
-                <span className="composer-mode-pill">∞ Agent · 请求批准</span>
+                <span className="composer-mode-pill">∞ Agent</span>
               </div>
               <div className="composer-bar-right" />
             </div>

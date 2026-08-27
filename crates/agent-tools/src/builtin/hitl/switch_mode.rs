@@ -1,4 +1,4 @@
-//! `switch_mode`：请求切换 Agent ↔ Plan（流结束后由前端授权条确认）。
+//! `switch_mode`：请求切换 Agent ↔ Plan（进入 Plan 自动，恢复 Agent 需用户审阅）。
 //!
 //! 与 `ask_user`（同回合 HITL park）不同：本工具产出 `astro_mode_switch`，不走 HitlGate。
 
@@ -30,7 +30,7 @@ impl ModeSwitchTarget {
 struct ModeSwitchArgs {
     /// Target mode: only `plan` or `agent`.
     to: ModeSwitchTarget,
-    /// Why the switch is needed (shown on the authorize bar).
+    /// Why the switch is needed (shown when the plan is reviewed).
     reason: String,
     /// Required when `to=agent`: plan summary injected into the next turn after approval.
     #[serde(default)]
@@ -44,7 +44,7 @@ pub fn register(registry: &mut crate::registry::ToolRegistry) {
         description: "Request switching chat interaction mode between Agent and Plan only \
 (not ask). Use for Agent→Plan when a complex task needs a written plan first, \
 or Plan→Agent when the plan is ready to execute. \
-User confirms via a post-stream countdown authorize bar — do not assume the switch until approved. \
+Agent→Plan is accepted automatically because it narrows capabilities. Plan→Agent waits for explicit user review; never assume approval. \
 Always set `reason`; when `to=\"agent\"`, `summary` is required (confirmed plan text). \
 Do not use ask_user(confirm) for mode changes; do not use this tool for clarifying questions or location."
             .to_string(),

@@ -206,7 +206,13 @@ mod tests {
     #[test]
     fn system_guidance_mentions_mode() {
         assert!(InteractionMode::Agent.system_guidance().contains("Agent"));
+        assert!(InteractionMode::Agent
+            .system_guidance()
+            .contains("compact todo"));
         assert!(InteractionMode::Plan.system_guidance().contains("Plan"));
+        assert!(InteractionMode::Plan
+            .system_guidance()
+            .contains("explicit user approval"));
         assert!(InteractionMode::Ask.system_guidance().contains("Ask"));
         // 中英并列，避免英文 UI 丢失指引
         for mode in [
