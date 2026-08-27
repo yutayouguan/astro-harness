@@ -1,15 +1,15 @@
-/* 对话右侧锚点导航：垂直居中 + macOS Dock 放大 */
+/* 对话左侧问答回合导航：短横线轨道 + Codex 式摘要卡 */
 .chat-msg-nav {
   position: absolute;
   top: 50%;
-  right: 8px;
+  left: 14px;
   bottom: auto;
   z-index: 4;
   display: flex;
   flex-direction: column;
-  align-items: flex-end;
+  align-items: flex-start;
   justify-content: center;
-  gap: 12px;
+  gap: 8px;
   width: auto;
   /* 限制在聊天区中部，放大起落不得顶出上/下缘 */
   max-height: min(56vh, calc(100% - 120px));
@@ -26,12 +26,12 @@
   overflow-x: visible;
   display: flex;
   flex-direction: column;
-  align-items: flex-end;
+  align-items: flex-start;
   justify-content: flex-start;
   /* 与 ChatMessageNav GAP 一致 */
-  gap: 12px;
-  /* 左侧加宽命中区；右侧归零，使消息锚点与底部按钮共用同一轴线 */
-  padding: 10px 0 10px 28px;
+  gap: 4px;
+  /* 右侧扩大命中区，横线视觉轴贴左。 */
+  padding: 10px 28px 10px 0;
   border-radius: 0;
   background: transparent;
   border: none;
@@ -60,9 +60,9 @@
   position: relative;
   display: flex;
   align-items: center;
-  justify-content: flex-end;
+  justify-content: flex-start;
   flex-shrink: 0;
-  width: 18px;
+  width: 52px;
   height: 18px;
   z-index: var(--dock-z);
   pointer-events: none;
@@ -70,7 +70,7 @@
 
 /* 导航气泡：fixed + translate3d，由 JS 每帧直接写 transform 跟随 Dock */
 .chat-msg-nav-label {
-  --nav-label-bg: rgba(18, 16, 30, 0.7);
+  --nav-label-bg: rgba(38, 38, 38, 0.94);
   --nav-label-fg: var(--ink, #f4f6fb);
   --nav-label-border: color-mix(
     in srgb,
@@ -82,23 +82,24 @@
   top: 0;
   left: 0;
   z-index: var(--z-tip);
-  display: inline-flex;
-  align-items: center;
-  max-width: min(16rem, 46vw);
-  padding: 6px 11px;
-  border-radius: 10px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  width: min(520px, calc(100vw - 96px));
+  max-width: min(520px, calc(100vw - 96px));
+  box-sizing: border-box;
+  padding: 17px 18px 18px;
+  border-radius: 18px;
   border: 1px solid var(--nav-label-border);
   background: var(--nav-label-bg);
   backdrop-filter: blur(calc(18px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.35));
   -webkit-backdrop-filter: blur(calc(18px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.35));
   color: var(--nav-label-fg);
-  font-size: 12px;
-  font-weight: 550;
-  line-height: 1.35;
-  letter-spacing: 0.01em;
+  font-size: 13px;
+  line-height: 1.45;
   opacity: 0;
   transform: translate3d(-9999px, -9999px, 0) scale(1);
-  transform-origin: right center;
+  transform-origin: left center;
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.1),
     0 8px 22px rgba(0, 0, 0, 0.3);
@@ -108,7 +109,7 @@
   transition: none;
 }
 
-/* 最近项保留尖角；邻近项去掉尾巴，减轻重叠 */
+/* 默认是卡片在轨道左侧时的右指尖角。 */
 .chat-msg-nav-label.is-primary::after {
   content: "";
   position: absolute;
@@ -147,11 +148,48 @@
   content: none;
 }
 
-.chat-msg-nav-label-text {
-  min-width: 0;
+.chat-msg-nav-label-question,
+.chat-msg-nav-label-summary,
+.chat-msg-nav-label-answer {
+  margin: 0;
+}
+
+.chat-msg-nav-label-question {
+  color: color-mix(in srgb, var(--nav-label-fg) 86%, transparent);
+  font-size: 14px;
+}
+
+.chat-msg-nav-label-title {
+  margin-top: 7px;
+  color: var(--nav-label-fg);
+  font-size: 23px;
+  font-weight: 720;
+  line-height: 1.2;
+}
+
+.chat-msg-nav-label-summary {
+  margin-top: 10px;
+  color: color-mix(in srgb, var(--nav-label-fg) 58%, transparent);
+  font-size: 13px;
+}
+
+.chat-msg-nav-label-answer {
+  display: -webkit-box;
+  margin-top: 8px;
+  padding-left: 18px;
+  color: color-mix(in srgb, var(--nav-label-fg) 72%, transparent);
+  font-size: 13px;
+  font-weight: 620;
+  line-height: 1.5;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
+
+.chat-msg-nav-label-answer::before {
+  content: "•";
+  margin-left: -14px;
+  margin-right: 8px;
 }
 
 .chat-msg-nav-dot,
@@ -161,26 +199,16 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 100%;
-  height: 100%;
+  position: relative;
+  width: 52px;
+  height: 18px;
   padding: 0;
   border-radius: 999px;
   /* 默认色跟随会话 tone / 主题 token */
-  border: 1px solid
-    color-mix(in srgb, var(--tone, var(--accent)) 28%, var(--glass-edge));
-  background:
-    linear-gradient(
-      155deg,
-      color-mix(in srgb, var(--tone-soft, transparent) 72%, transparent) 0%,
-      color-mix(in srgb, var(--tone-soft, transparent) 28%, var(--glass-inner, transparent))
-        100%
-    );
-  box-shadow:
-    inset 0 1px 0 color-mix(in srgb, #fff 14%, transparent),
-    0 1px 4px color-mix(in srgb, var(--tone, var(--accent)) 12%, transparent);
-  backdrop-filter: blur(calc(10px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.15));
-  -webkit-backdrop-filter: blur(calc(10px * var(--glass-blur-scale, 1))) saturate(var(--glass-saturate, 1.15));
-  color: color-mix(in srgb, var(--tone, var(--accent)) 62%, var(--ink-mute));
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  color: transparent;
   cursor: pointer;
   transition:
     box-shadow 0.15s ease,
@@ -189,23 +217,40 @@
     filter 0.15s ease;
 }
 
+.chat-msg-nav-dot::before,
+.chat-msg-nav-bottom::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 0;
+  width: 22px;
+  height: 3px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--ink-mute) 48%, transparent);
+  transform: translateY(-50%);
+  transition: width 0.16s ease, background 0.16s ease, box-shadow 0.16s ease;
+}
+
 .chat-msg-nav-item .chat-msg-nav-dot {
-  width: 100%;
-  height: 100%;
-  /* 槽位固定、只原地放大；邻居略重叠，峰值在鼠标下 */
-  transform: scale(var(--dock-scale, 1));
-  transform-origin: right center;
+  width: 52px;
+  height: 18px;
+}
+
+.chat-msg-nav-item .chat-msg-nav-dot::before {
+  /* 命中区不动，只让短横线向右放大。 */
+  transform: translateY(-50%) scaleX(var(--dock-scale, 1));
+  transform-origin: left center;
   will-change: transform;
   transition: none;
 }
 
 /* 鼠标离开后回落丝滑一点 */
-.chat-msg-nav:not(.is-dock-active) .chat-msg-nav-item .chat-msg-nav-dot {
+.chat-msg-nav:not(.is-dock-active) .chat-msg-nav-item .chat-msg-nav-dot::before {
   transition: transform 0.22s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .chat-msg-nav-bottom {
-  width: 18px;
+  width: 52px;
   height: 18px;
   transition:
     box-shadow 0.15s ease,
@@ -217,56 +262,49 @@
 
 .chat-msg-nav-dot:hover,
 .chat-msg-nav-bottom:hover {
-  color: var(--tone, var(--accent));
-  border-color: color-mix(in srgb, var(--tone, var(--accent)) 48%, var(--glass-edge));
-  filter: brightness(1.05);
+  filter: none;
+}
+
+.chat-msg-nav-dot:hover::before,
+.chat-msg-nav-bottom:hover::before {
+  background: color-mix(in srgb, var(--ink) 82%, transparent);
 }
 
 .chat-msg-nav-bottom:hover {
-  transform: scale(1.22);
-}
-
-/* 用户锚点：主题色更实一点 */
-.chat-msg-nav-dot.is-user {
-  background:
-    linear-gradient(
-      155deg,
-      color-mix(in srgb, var(--tone-soft, transparent) 88%, transparent) 0%,
-      color-mix(in srgb, var(--tone-soft, transparent) 42%, var(--glass-inner, transparent))
-        100%
-    );
-  border-color: color-mix(in srgb, var(--tone, var(--accent)) 42%, var(--glass-edge));
-  color: var(--tone, var(--accent));
-  box-shadow:
-    inset 0 1px 0 color-mix(in srgb, #fff 16%, transparent),
-    0 2px 7px color-mix(in srgb, var(--tone, var(--accent)) 16%, transparent);
-}
-
-.chat-msg-nav-dot.is-assistant {
-  color: color-mix(in srgb, var(--tone, var(--accent)) 48%, var(--ink-soft));
+  transform: scaleX(1.28);
+  transform-origin: left center;
 }
 
 .chat-msg-nav-dot.is-active {
-  box-shadow:
-    inset 0 1px 0 color-mix(in srgb, #fff 12%, transparent),
-    0 0 0 1.5px color-mix(in srgb, var(--tone, var(--accent)) 52%, transparent),
-    0 2px 8px color-mix(in srgb, var(--tone, var(--accent)) 18%, transparent);
+  box-shadow: none;
 }
 
-.chat-msg-nav-dot.is-user.is-active {
-  box-shadow:
-    inset 0 1px 0 color-mix(in srgb, #fff 18%, transparent),
-    0 0 0 1.5px color-mix(in srgb, var(--tone, var(--accent)) 58%, transparent),
-    0 2px 8px color-mix(in srgb, var(--tone, var(--accent)) 22%, transparent);
-}
-
-.chat-msg-nav-glyph {
-  font-size: 7px;
-  font-weight: 700;
-  letter-spacing: -0.04em;
-  line-height: 1;
+.chat-msg-nav-dot.is-active::before {
+  width: 34px;
+  background: color-mix(in srgb, var(--ink) 88%, #fff);
+  box-shadow: 0 0 8px color-mix(in srgb, var(--ink) 14%, transparent);
 }
 
 .chat-msg-nav-bottom {
-  color: var(--tone, var(--accent));
+  margin-top: 2px;
+}
+
+.chat-msg-nav-bottom svg {
+  position: absolute;
+  left: 27px;
+  width: 9px;
+  color: var(--ink-mute);
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.chat-msg-nav-bottom:hover svg,
+.chat-msg-nav-bottom:focus-visible svg {
+  opacity: 0.78;
+}
+
+.chat-msg-nav-dot:focus-visible,
+.chat-msg-nav-bottom:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--tone, var(--accent)) 52%, transparent);
+  outline-offset: 1px;
 }
