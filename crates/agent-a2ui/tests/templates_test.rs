@@ -55,8 +55,8 @@ fn confirm_template_validates_and_uses_v2() {
     validate_operations(&ops).unwrap();
     assert_eq!(catalog_ids(&ops), vec![ASTRO_CATALOG_ID]);
     let names = all_component_names(&ops);
-    assert!(names.iter().any(|n| n == "Avatar" || n == "Badge"));
-    assert!(names.iter().any(|n| n == "Button"));
+    assert!(names.iter().any(|n| n == "Badge"));
+    assert!(names.iter().any(|n| n == "ClarifyWizard"));
 }
 
 #[test]

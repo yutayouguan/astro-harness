@@ -1618,14 +1618,26 @@ export function useChatSession({
       } else if (name === "choose") {
         const answers = context.answers;
         if (answers && typeof answers === "object" && !Array.isArray(answers)) {
-          const value =
-            typeof context.value === "string" && context.value.trim()
-              ? context.value.trim()
-              : Object.values(answers as Record<string, unknown>)
-                  .filter((v) => typeof v === "string" && v.trim())
-                  .join("；");
-          if (!value) return;
-          payload = { answers, value };
+          const confirmAnswer = (answers as Record<string, string>).confirm;
+          if (typeof confirmAnswer === "string") {
+            const lower = confirmAnswer.toLowerCase();
+            if (lower.includes("approve") && lower.includes("always")) {
+              payload = { approved: true, always: true };
+            } else if (lower.includes("approve")) {
+              payload = { approved: true };
+            } else {
+              payload = { approved: false };
+            }
+          } else {
+            const value =
+              typeof context.value === "string" && context.value.trim()
+                ? context.value.trim()
+                : Object.values(answers as Record<string, unknown>)
+                    .filter((v) => typeof v === "string" && v.trim())
+                    .join("；");
+            if (!value) return;
+            payload = { answers, value };
+          }
         } else {
           const value = context.value;
           if (typeof value !== "string" || !value.trim()) return;
