@@ -74,7 +74,7 @@ pub(super) async fn emit_context_usage(
     session: &Arc<AgentLoop>,
     turn_context: &TurnContext,
     prompt: &crate::prompt::PromptContract,
-    prompt_context: &[providers::types::message::Message],
+    prompt_context: &[crate::prompt::context_state::PromptContextEvent],
     history: &[types::message::Message],
     tools: &[serde_json::Value],
 ) {
@@ -82,11 +82,13 @@ pub(super) async fn emit_context_usage(
     let mut layers = AgentLoop::prompt_contract_layer_breakdown(prompt);
     let actual_developer_chars = prompt_context
         .iter()
+        .flat_map(|event| &event.messages)
         .filter(|message| message.role() == ProviderRole::Developer)
         .map(|message| message.text_content().chars().count())
         .sum::<usize>();
     let actual_user_chars = prompt_context
         .iter()
+        .flat_map(|event| &event.messages)
         .filter(|message| message.role() == ProviderRole::User)
         .map(|message| message.text_content().chars().count())
         .sum::<usize>();
@@ -397,7 +399,7 @@ pub(super) async fn run_sampling_request(
     turn_context: &TurnContext,
     streamer: &ProviderStreamer,
     prompt: &crate::prompt::PromptContract,
-    prompt_context: &[providers::types::message::Message],
+    prompt_context: &[crate::prompt::context_state::PromptContextEvent],
     history: &[types::message::Message],
     tool_specs: Vec<serde_json::Value>,
 ) -> Result<super::types::AssistantContentStream, String> {

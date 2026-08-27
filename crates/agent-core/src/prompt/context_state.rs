@@ -42,7 +42,26 @@ pub(crate) fn snapshot(prompt: &PromptContract) -> serde_json::Result<Value> {
 #[derive(Debug, Clone, Default)]
 pub(crate) struct RestoredPromptContext {
     pub(crate) snapshot: Option<Value>,
-    pub(crate) history: Vec<providers::types::message::Message>,
+    pub(crate) history: Vec<PromptContextEvent>,
+}
+
+/// Provider-only context emitted immediately before a specific user message ordinal.
+#[derive(Debug, Clone)]
+pub(crate) struct PromptContextEvent {
+    pub(crate) before_user: usize,
+    pub(crate) messages: Vec<providers::types::message::Message>,
+}
+
+impl PromptContextEvent {
+    pub(crate) fn new(
+        before_user: usize,
+        messages: Vec<providers::types::message::Message>,
+    ) -> Self {
+        Self {
+            before_user,
+            messages,
+        }
+    }
 }
 
 fn snapshot_messages(snapshot: &Value) -> Option<Vec<providers::types::message::Message>> {
@@ -187,7 +206,11 @@ pub(crate) fn model_updates(
     updates
 }
 
-pub(crate) fn rollout_update(previous: Option<&Value>, current: &Value) -> Option<RolloutItem> {
+pub(crate) fn rollout_update(
+    previous: Option<&Value>,
+    current: &Value,
+    before_user: usize,
+) -> Option<RolloutItem> {
     if previous == Some(current) {
         return None;
     }
@@ -196,6 +219,7 @@ pub(crate) fn rollout_update(previous: Option<&Value>, current: &Value) -> Optio
     state.insert(PROMPT_CONTEXT_KEY.to_string(), current.clone());
     Some(RolloutItem::WorldState(serde_json::json!({
         "full": previous.is_none(),
+        "before_user": before_user,
         "state": state,
     })))
 }
@@ -206,10 +230,19 @@ pub(crate) fn rollout_update(previous: Option<&Value>, current: &Value) -> Optio
 /// namespace clears the baseline, matching the replacement semantics of a full world state.
 pub(crate) fn restore(items: &[RolloutItem]) -> RestoredPromptContext {
     let mut restored = RestoredPromptContext::default();
+    let mut user_count = 0usize;
     for item in items {
-        if matches!(item, RolloutItem::Compacted(_)) {
-            restored = RestoredPromptContext::default();
-            continue;
+        match item {
+            RolloutItem::Compacted(_) => {
+                restored = RestoredPromptContext::default();
+                user_count = 0;
+                continue;
+            }
+            RolloutItem::ResponseItem(message) if message.role == types::message::Role::User => {
+                user_count += 1;
+                continue;
+            }
+            _ => {}
         }
         let RolloutItem::WorldState(payload) = item else {
             continue;
@@ -220,21 +253,35 @@ pub(crate) fn restore(items: &[RolloutItem]) -> RestoredPromptContext {
         let Some(state) = payload.get("state").and_then(Value::as_object) else {
             continue;
         };
+        // Version 2 rollouts carry the exact insertion point. Older rollouts wrote the state
+        // immediately after the current user input, so the preceding user is the safe fallback.
+        let before_user = payload
+            .get("before_user")
+            .and_then(Value::as_u64)
+            .and_then(|value| usize::try_from(value).ok())
+            .unwrap_or_else(|| user_count.saturating_sub(1));
 
         if full {
             restored.snapshot = state.get(PROMPT_CONTEXT_KEY).cloned();
-            restored.history = restored
+            let messages = restored
                 .snapshot
                 .as_ref()
                 .and_then(snapshot_messages)
                 .unwrap_or_default();
+            restored.history = (!messages.is_empty())
+                .then(|| PromptContextEvent::new(before_user, messages))
+                .into_iter()
+                .collect();
         } else if let Some(value) = state.get(PROMPT_CONTEXT_KEY) {
             if value.is_null() {
                 restored = RestoredPromptContext::default();
             } else {
-                restored
-                    .history
-                    .extend(model_updates(restored.snapshot.as_ref(), value));
+                let messages = model_updates(restored.snapshot.as_ref(), value);
+                if !messages.is_empty() {
+                    restored
+                        .history
+                        .push(PromptContextEvent::new(before_user, messages));
+                }
                 restored.snapshot = Some(value.clone());
             }
         }
@@ -266,7 +313,7 @@ mod tests {
         let first = snapshot(&prompt("first")).unwrap();
         let second = snapshot(&prompt("second")).unwrap();
 
-        let full = rollout_update(None, &first).unwrap();
+        let full = rollout_update(None, &first, 0).unwrap();
         assert_eq!(
             match &full {
                 RolloutItem::WorldState(value) => value["full"].as_bool(),
@@ -274,9 +321,9 @@ mod tests {
             },
             Some(true)
         );
-        assert!(rollout_update(Some(&first), &first).is_none());
+        assert!(rollout_update(Some(&first), &first, 1).is_none());
 
-        let patch = rollout_update(Some(&first), &second).unwrap();
+        let patch = rollout_update(Some(&first), &second, 1).unwrap();
         assert_eq!(
             match &patch {
                 RolloutItem::WorldState(value) => value["full"].as_bool(),
@@ -287,11 +334,15 @@ mod tests {
         let restored = restore(&[full, patch]);
         assert_eq!(restored.snapshot, Some(second));
         assert_eq!(restored.history.len(), 2);
+        assert_eq!(restored.history[0].before_user, 0);
+        assert_eq!(restored.history[1].before_user, 1);
         assert_eq!(
-            restored.history[1].role(),
+            restored.history[1].messages[0].role(),
             providers::types::message::Role::Developer
         );
-        assert!(restored.history[1].text_content().contains("second"));
+        assert!(restored.history[1].messages[0]
+            .text_content()
+            .contains("second"));
     }
 
     #[test]
@@ -315,7 +366,7 @@ mod tests {
     #[test]
     fn ignores_legacy_world_state_and_honors_full_replacement() {
         let value = snapshot(&prompt("current")).unwrap();
-        let full = rollout_update(None, &value).unwrap();
+        let full = rollout_update(None, &value, 0).unwrap();
         let legacy = RolloutItem::WorldState(serde_json::json!({"cwd": "/tmp"}));
         let replacement = RolloutItem::WorldState(serde_json::json!({
             "full": true,
@@ -357,8 +408,8 @@ mod tests {
         assert!(!updates[0].text_content().contains("project"));
 
         let restored = restore(&[
-            rollout_update(None, &first).unwrap(),
-            rollout_update(Some(&first), &second).unwrap(),
+            rollout_update(None, &first, 0).unwrap(),
+            rollout_update(Some(&first), &second, 1).unwrap(),
             RolloutItem::Compacted(serde_json::json!({"summary": "done"})),
         ]);
         assert!(restored.snapshot.is_none());
@@ -381,5 +432,31 @@ mod tests {
             providers::types::message::Role::Developer
         );
         assert!(updates[0].text_content().contains("second"));
+    }
+
+    #[test]
+    fn restores_legacy_positions_at_the_preceding_user_boundary() {
+        let first = snapshot(&prompt("first")).unwrap();
+        let second = snapshot(&prompt("second")).unwrap();
+        let mut full = rollout_update(None, &first, 99).unwrap();
+        let mut patch = rollout_update(Some(&first), &second, 99).unwrap();
+        for item in [&mut full, &mut patch] {
+            let RolloutItem::WorldState(value) = item else {
+                unreachable!();
+            };
+            value.as_object_mut().unwrap().remove("before_user");
+        }
+
+        let restored = restore(&[
+            RolloutItem::ResponseItem(types::message::Message::user("first")),
+            full,
+            RolloutItem::ResponseItem(types::message::Message::assistant("answer")),
+            RolloutItem::ResponseItem(types::message::Message::user("second")),
+            patch,
+        ]);
+
+        assert_eq!(restored.history.len(), 2);
+        assert_eq!(restored.history[0].before_user, 0);
+        assert_eq!(restored.history[1].before_user, 1);
     }
 }

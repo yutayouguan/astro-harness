@@ -97,7 +97,7 @@ impl ProviderStreamer {
     pub(crate) async fn stream_chat_with_contract(
         &self,
         prompt: &crate::prompt::PromptContract,
-        prompt_context: &[ProviderMessage],
+        prompt_context: &[crate::prompt::context_state::PromptContextEvent],
         history: &[Message],
         tools: Vec<serde_json::Value>,
     ) -> anyhow::Result<AssistantContentStream> {

@@ -151,6 +151,9 @@ mod tests {
         .unwrap();
 
         first_session
+            .record_items(vec![types::message::Message::user("first")])
+            .await;
+        first_session
             .persist_prompt_context_if_changed(&prompt_context("first"))
             .await;
         first_session
@@ -190,11 +193,22 @@ mod tests {
             .persist_prompt_context_if_changed(&prompt_context("first"))
             .await;
         resumed_session
+            .record_items(vec![
+                types::message::Message::user("first"),
+                types::message::Message::assistant("answer"),
+                types::message::Message::user("second"),
+            ])
+            .await;
+        resumed_session
             .persist_prompt_context_if_changed(&prompt_context("second"))
             .await;
         let context_history = resumed_session.prompt_context_history();
         assert_eq!(context_history.len(), 2);
-        assert!(context_history[1].text_content().contains("second"));
+        assert_eq!(context_history[0].before_user, 0);
+        assert_eq!(context_history[1].before_user, 1);
+        assert!(context_history[1].messages[0]
+            .text_content()
+            .contains("second"));
         let step_context = resumed_session.capture_step_context().await.unwrap();
         assert_eq!(step_context.prompt_context.len(), 2);
         resumed_thread.flush_rollout().await.unwrap();
@@ -233,7 +247,8 @@ mod tests {
         after_compaction.restore_prompt_context_from_rollout(&rebased_items);
         let compacted_history = after_compaction.prompt_context_history();
         assert_eq!(compacted_history.len(), 1);
-        assert_eq!(compacted_history[0].text_content(), "second");
+        assert_eq!(compacted_history[0].before_user, 0);
+        assert_eq!(compacted_history[0].messages[0].text_content(), "second");
 
         resumed_thread.submit(Op::Shutdown).await.unwrap();
         resumed_thread.wait_terminated().await;

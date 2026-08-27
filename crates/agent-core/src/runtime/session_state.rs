@@ -5,7 +5,6 @@
 //! directly on [`super::Session`]. [`super::Session`] owns this container behind
 //! a short-lived mutex so callers never expose references tied to a state guard.
 
-use providers::types::message::Message as ProviderMessage;
 use serde_json::Value;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -25,7 +24,7 @@ pub(crate) struct SessionState {
     /// Latest durable role-bearing context baseline used for WorldState diffing.
     pub(crate) prompt_context_snapshot: Option<Value>,
     /// Model-visible initial context plus source-level updates, kept outside chat storage.
-    pub(crate) prompt_context_history: Vec<ProviderMessage>,
+    pub(crate) prompt_context_history: Vec<crate::prompt::context_state::PromptContextEvent>,
     pub(crate) interaction_mode: types::InteractionMode,
     pub(crate) current_turn_context: Option<Arc<TurnContext>>,
     pub(crate) current_step_context: Option<Arc<StepContext>>,

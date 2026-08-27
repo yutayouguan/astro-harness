@@ -2,7 +2,6 @@
 
 use std::sync::Arc;
 
-use providers::types::message::Message as ProviderMessage;
 use types::message::Message;
 
 use super::{ToolRouter, TurnContext};
@@ -12,7 +11,7 @@ use super::{ToolRouter, TurnContext};
 pub(crate) struct StepContext {
     pub(crate) turn: Arc<TurnContext>,
     pub(crate) history: Vec<Message>,
-    pub(crate) prompt_context: Vec<ProviderMessage>,
+    pub(crate) prompt_context: Vec<crate::prompt::context_state::PromptContextEvent>,
     pub(crate) tool_router: Arc<ToolRouter>,
 }
 
@@ -20,7 +19,7 @@ impl StepContext {
     pub(crate) fn new(
         turn: Arc<TurnContext>,
         history: Vec<Message>,
-        prompt_context: Vec<ProviderMessage>,
+        prompt_context: Vec<crate::prompt::context_state::PromptContextEvent>,
         tool_router: Arc<ToolRouter>,
     ) -> Self {
         Self {

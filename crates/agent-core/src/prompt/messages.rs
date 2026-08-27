@@ -27,23 +27,41 @@ pub fn to_provider_messages_with_context(
     prompt: &crate::prompt::PromptContract,
     session: &[Message],
 ) -> Vec<ProviderMessage> {
-    to_provider_messages_with_context_history(prompt, &prompt.context, session)
+    let history = (!prompt.context.is_empty())
+        .then(|| crate::prompt::context_state::PromptContextEvent::new(0, prompt.context.clone()))
+        .into_iter()
+        .collect::<Vec<_>>();
+    to_provider_messages_with_context_history(prompt, &history, session)
 }
 
 /// Convert stable instructions, durable provider-only context history, and chat history.
-pub fn to_provider_messages_with_context_history(
+pub(crate) fn to_provider_messages_with_context_history(
     prompt: &crate::prompt::PromptContract,
-    prompt_context: &[ProviderMessage],
+    prompt_context: &[crate::prompt::context_state::PromptContextEvent],
     session: &[Message],
 ) -> Vec<ProviderMessage> {
     let session = super::sanitize::sanitized_tool_pairs(session);
-    let mut messages = Vec::with_capacity(session.len() + prompt_context.len() + 1);
+    let context_message_count = prompt_context
+        .iter()
+        .map(|event| event.messages.len())
+        .sum::<usize>();
+    let mut messages = Vec::with_capacity(session.len() + context_message_count + 1);
     if !prompt.base_instructions.trim().is_empty() {
         messages.push(ProviderMessage::system(&prompt.base_instructions));
     }
-    messages.extend(prompt_context.iter().cloned());
 
+    let mut context_events = prompt_context.iter().peekable();
+    let mut user_ordinal = 0usize;
     for message in &session {
+        if message.role == Role::User {
+            while context_events
+                .peek()
+                .is_some_and(|event| event.before_user <= user_ordinal)
+            {
+                messages.extend(context_events.next().unwrap().messages.iter().cloned());
+            }
+            user_ordinal += 1;
+        }
         if message.role == Role::Tool {
             let ok = message
                 .tool_call_id
@@ -120,6 +138,10 @@ pub fn to_provider_messages_with_context_history(
                 messages.push(ProviderMessage::User { content: parts });
             }
         }
+    }
+
+    for event in context_events {
+        messages.extend(event.messages.iter().cloned());
     }
 
     messages
@@ -297,21 +319,33 @@ mod tests {
             ..Default::default()
         };
         let context_history = vec![
-            ProviderMessage::developer("initial snapshot"),
-            ProviderMessage::developer("incremental update"),
+            crate::prompt::context_state::PromptContextEvent::new(
+                0,
+                vec![ProviderMessage::developer("initial snapshot")],
+            ),
+            crate::prompt::context_state::PromptContextEvent::new(
+                1,
+                vec![ProviderMessage::developer("incremental update")],
+            ),
         ];
 
         let messages = to_provider_messages_with_context_history(
             &prompt,
             &context_history,
-            &[Message::user("hello")],
+            &[
+                Message::user("first"),
+                Message::assistant("answer"),
+                Message::user("second"),
+            ],
         );
 
-        assert_eq!(messages.len(), 4);
+        assert_eq!(messages.len(), 6);
         assert_eq!(messages[0].text_content(), "stable base");
         assert_eq!(messages[1].text_content(), "initial snapshot");
-        assert_eq!(messages[2].text_content(), "incremental update");
-        assert_eq!(messages[3].text_content(), "hello");
+        assert_eq!(messages[2].text_content(), "first");
+        assert_eq!(messages[3].text_content(), "answer");
+        assert_eq!(messages[4].text_content(), "incremental update");
+        assert_eq!(messages[5].text_content(), "second");
         assert!(messages
             .iter()
             .all(|message| message.text_content() != "current snapshot"));

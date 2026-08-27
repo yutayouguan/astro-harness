@@ -2310,7 +2310,7 @@ mod tests {
 
         assert_eq!(
             captured_roles.lock().unwrap().as_slice(),
-            &["developer", "user", "user", "assistant", "user"]
+            &["user", "assistant", "developer", "user", "user"]
         );
         let roles = sessions
             .get_messages(&thread.session_id)
@@ -2430,7 +2430,7 @@ mod tests {
 
         assert_eq!(
             captured_roles.lock().unwrap().as_slice(),
-            &["developer", "user", "user", "assistant", "user"]
+            &["user", "assistant", "developer", "user", "user"]
         );
         let roles = sessions
             .get_messages(&thread.session_id)
@@ -2664,7 +2664,7 @@ mod tests {
 
         assert_eq!(
             *captured_roles.lock().unwrap(),
-            vec!["developer", "user", "user", "assistant", "user"]
+            vec!["user", "assistant", "developer", "user", "user"]
         );
         let stored =
             session::SessionStore::open_sessions_dir(&memory_dir.join("sessions")).unwrap();

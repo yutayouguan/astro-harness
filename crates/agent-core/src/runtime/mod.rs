@@ -410,17 +410,30 @@ impl Session {
             }
         };
         let _dispatch = self.event_dispatch.lock().await;
-        let previous = self.lock_state().prompt_context_snapshot.clone();
-        let Some(item) = crate::prompt::context_state::rollout_update(previous.as_ref(), &snapshot)
+        let (previous, before_user) = {
+            let state = self.lock_state();
+            let before_user = state
+                .history
+                .iter()
+                .filter(|message| message.role == types::message::Role::User)
+                .count()
+                .saturating_sub(1);
+            (state.prompt_context_snapshot.clone(), before_user)
+        };
+        let Some(item) =
+            crate::prompt::context_state::rollout_update(previous.as_ref(), &snapshot, before_user)
         else {
             return;
         };
         let updates = crate::prompt::context_state::model_updates(previous.as_ref(), &snapshot);
+        let event = crate::prompt::context_state::PromptContextEvent::new(before_user, updates);
 
         let Some(bindings) = self.runtime_io.get() else {
             let mut state = self.lock_state();
             state.prompt_context_snapshot = Some(snapshot);
-            state.prompt_context_history.extend(updates);
+            if !event.messages.is_empty() {
+                state.prompt_context_history.push(event);
+            }
             return;
         };
         if let Err(error) = bindings.rollout.record(vec![item]).await {
@@ -429,10 +442,14 @@ impl Session {
         }
         let mut state = self.lock_state();
         state.prompt_context_snapshot = Some(snapshot);
-        state.prompt_context_history.extend(updates);
+        if !event.messages.is_empty() {
+            state.prompt_context_history.push(event);
+        }
     }
 
-    pub(crate) fn prompt_context_history(&self) -> Vec<providers::types::message::Message> {
+    pub(crate) fn prompt_context_history(
+        &self,
+    ) -> Vec<crate::prompt::context_state::PromptContextEvent> {
         self.lock_state().prompt_context_history.clone()
     }
 
@@ -441,14 +458,21 @@ impl Session {
         let snapshot = self.lock_state().prompt_context_snapshot.clone();
         let history = snapshot
             .as_ref()
-            .map(|snapshot| crate::prompt::context_state::model_updates(None, snapshot))
-            .unwrap_or_default();
+            .map(|snapshot| {
+                crate::prompt::context_state::PromptContextEvent::new(
+                    0,
+                    crate::prompt::context_state::model_updates(None, snapshot),
+                )
+            })
+            .filter(|event| !event.messages.is_empty())
+            .into_iter()
+            .collect();
         let mut items = vec![RolloutItem::Compacted(serde_json::json!({
             "kind": "mid_run_summary",
             "summary": summary,
         }))];
         if let Some(snapshot) = snapshot.as_ref() {
-            if let Some(full) = crate::prompt::context_state::rollout_update(None, snapshot) {
+            if let Some(full) = crate::prompt::context_state::rollout_update(None, snapshot, 0) {
                 items.push(full);
             }
         }
