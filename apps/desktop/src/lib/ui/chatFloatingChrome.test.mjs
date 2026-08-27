@@ -134,15 +134,26 @@ test("composer overlay clearance follows the live composer height", () => {
 
 test("floating composer uses a legible glass surface", () => {
   const composer = rule(chatStyles, ".composer");
+  const focusedComposer = rule(chatStyles, ".composer:focus-within");
   const darkComposer = rule(chatStyles, 'html[data-theme="dark"] .composer');
+  const darkFocusedComposer = rule(chatStyles, 'html[data-theme="dark"] .composer:focus-within');
 
   assert.ok(composer, "missing composer rule");
-  assert.match(composer, /--composer-surface-base:\s*rgba\([^;]+0\.78\);/);
+  assert.match(composer, /--composer-surface-base:\s*rgba\([^;]+0\.9\);/);
   assert.match(composer, /background:[\s\S]*var\(--composer-surface-sheen\)/);
-  assert.match(composer, /backdrop-filter:\s*blur\(/);
+  assert.match(composer, /backdrop-filter:\s*blur\(calc\(12px\s*\*/);
+  assert.match(composer, /0 5px 16px rgba\(var\(--shadow-ink\), 0\.055\)/);
   assert.doesNotMatch(composer, /background:\s*transparent;/);
 
+  assert.ok(focusedComposer, "missing focused composer rule");
+  assert.match(focusedComposer, /0 0 0 1px color-mix\(/);
+  assert.doesNotMatch(focusedComposer, /0 0 0 2px/);
+
   assert.ok(darkComposer, "missing dark composer rule");
-  assert.match(darkComposer, /--composer-surface-base:\s*rgba\([^;]+0\.76\);/);
+  assert.match(darkComposer, /--composer-surface-base:\s*rgba\([^;]+0\.88\);/);
   assert.doesNotMatch(darkComposer, /background:\s*transparent;/);
+
+  assert.ok(darkFocusedComposer, "missing dark focused composer rule");
+  assert.match(darkFocusedComposer, /0 0 0 1px color-mix\(/);
+  assert.doesNotMatch(darkFocusedComposer, /0 0 0 2px/);
 });
