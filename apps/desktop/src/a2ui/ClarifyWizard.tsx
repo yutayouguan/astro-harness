@@ -6,6 +6,7 @@ import { useI18n } from "../i18n/LocaleContext";
 import {
   isPresetAnswer,
   parseClarifySteps,
+  shouldSubmitClarifyInput,
   type ClarifyWizardStep,
 } from "./clarifySteps";
 
@@ -284,7 +285,7 @@ export default function ClarifyWizard({
           });
         }}
         onKeyDown={(e) => {
-          if (e.key === "Enter") {
+          if (shouldSubmitClarifyInput(e.key, e.nativeEvent.isComposing)) {
             e.preventDefault();
             handleCustomAction();
           }

@@ -1,6 +1,10 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { isPresetAnswer, parseClarifySteps } from "./clarifySteps.ts";
+import {
+  isPresetAnswer,
+  parseClarifySteps,
+  shouldSubmitClarifyInput,
+} from "./clarifySteps.ts";
 
 test("parseClarifySteps normalizes ids and options", () => {
   const steps = parseClarifySteps([
@@ -25,4 +29,10 @@ test("isPresetAnswer distinguishes preset vs custom", () => {
   const step = { id: "q0", question: "风格？", options: ["民谣", "电子"] };
   assert.equal(isPresetAnswer(step, "民谣"), true);
   assert.equal(isPresetAnswer(step, "爵士即兴"), false);
+});
+
+test("clarify input ignores Enter while an IME composition is active", () => {
+  assert.equal(shouldSubmitClarifyInput("Enter", true), false);
+  assert.equal(shouldSubmitClarifyInput("Enter", false), true);
+  assert.equal(shouldSubmitClarifyInput("Escape", false), false);
 });

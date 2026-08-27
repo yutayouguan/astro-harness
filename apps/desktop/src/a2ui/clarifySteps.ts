@@ -48,3 +48,7 @@ export function isPresetAnswer(step: ClarifyWizardStep, value: string | undefine
   if (!value) return false;
   return step.options.includes(value);
 }
+
+export function shouldSubmitClarifyInput(key: string, isComposing: boolean): boolean {
+  return key === "Enter" && !isComposing;
+}
