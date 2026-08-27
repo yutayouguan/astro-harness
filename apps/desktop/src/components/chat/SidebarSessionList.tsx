@@ -536,9 +536,11 @@ function SessionItem({
     const wrap = el?.parentElement;
     if (!el || !wrap) return;
     const overflow = el.scrollWidth - wrap.clientWidth;
-    if (overflow > 0) {
+    if (overflow > 1) {
+      el.dataset.scrollable = "true";
       el.style.setProperty("--scroll-distance", `-${overflow + 4}px`);
     } else {
+      delete el.dataset.scrollable;
       el.style.removeProperty("--scroll-distance");
     }
   };

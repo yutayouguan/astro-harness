@@ -367,7 +367,7 @@
 .sidebar-project.is-active > .sidebar-project-header::before {
   content: "";
   position: absolute;
-  left: 2px;
+  left: 4px;
   top: 50%;
   translate: 0 -50%;
   width: 2px;

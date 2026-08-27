@@ -123,10 +123,7 @@
   flex: 1;
   min-width: 0;
   overflow: hidden;
-  /* 渐隐区收窄并留出右间距，否则淡出的尾字会贴到时间戳上 */
   margin-right: 2px;
-  mask-image: linear-gradient(to right, transparent 0, #000 3px, #000 calc(100% - 14px), transparent 100%);
-  -webkit-mask-image: linear-gradient(to right, transparent 0, #000 3px, #000 calc(100% - 14px), transparent 100%);
 }
 
 .sidebar-session-title {
@@ -134,7 +131,7 @@
   white-space: nowrap;
 }
 
-.sidebar-session-item:hover .sidebar-session-title {
+.sidebar-session-item:hover .sidebar-session-title[data-scrollable="true"] {
   animation: sidebar-title-scroll 7s ease-in-out 0.3s infinite;
 }
 
@@ -146,7 +143,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .sidebar-session-item:hover .sidebar-session-title {
+  .sidebar-session-item:hover .sidebar-session-title[data-scrollable="true"] {
     animation: none;
   }
 }

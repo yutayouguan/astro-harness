@@ -105,7 +105,7 @@ test("sidebar hierarchy stays compact and keeps a separated footer", () => {
   assert.match(sectionTitle, /font-size:\s*14px;/);
   assert.match(sectionTitle, /font-weight:\s*650;/);
   assert.ok(activeProjectIndicator, "active project needs a position marker");
-  assert.match(activeProjectIndicator, /left:\s*2px;/);
+  assert.match(activeProjectIndicator, /left:\s*4px;/);
   assert.ok(footer, "missing fixed sidebar footer");
   assert.match(footer, /margin-top:\s*auto;/);
   assert.ok(footerDivider, "sidebar footer should be visually separated");
@@ -114,6 +114,11 @@ test("sidebar hierarchy stays compact and keeps a separated footer", () => {
 test("session activity uses trailing status and hover-revealed tools", () => {
   const actions = rule(sessionStyles, ".sidebar-session-actions");
   const unreadDot = rule(sessionStyles, ".session-status-unread-dot");
+  const titleWrap = rule(sessionStyles, ".sidebar-session-title-wrap");
+  const scrollableTitle = rule(
+    sessionStyles,
+    '.sidebar-session-item:hover .sidebar-session-title[data-scrollable="true"]',
+  );
 
   assert.match(sessionList, /const showUnread = unread && status === "idle";/);
   assert.match(
@@ -129,6 +134,13 @@ test("session activity uses trailing status and hover-revealed tools", () => {
   assert.match(actions, /pointer-events:\s*none;/);
   assert.ok(unreadDot, "missing unread marker styles");
   assert.match(unreadDot, /border-radius:\s*50%;/);
+  assert.ok(titleWrap, "missing session title clipping wrapper");
+  assert.doesNotMatch(titleWrap, /mask-image:/);
+  assert.ok(scrollableTitle, "only clipped session titles should scroll");
+  assert.match(scrollableTitle, /animation:\s*sidebar-title-scroll/);
+  assert.match(sessionList, /if \(overflow > 1\)/);
+  assert.match(sessionList, /el\.dataset\.scrollable = "true";/);
+  assert.match(sessionList, /delete el\.dataset\.scrollable;/);
 });
 
 test("archive filter and tips keep optical alignment with glass fallbacks", () => {
