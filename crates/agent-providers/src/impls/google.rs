@@ -194,6 +194,10 @@ impl CompletionModel for InteractionsCompletionModel {
                 }
             }
         }
+        crate::shared::tool_policy::apply_google_interactions(
+            &mut body,
+            request.tool_choice.as_ref(),
+        );
 
         let send = |body: Value| {
             let request = self
@@ -262,30 +266,24 @@ struct InteractionsInput {
 
 /// 把内部消息序列转成 Interactions API 的 `input` 步骤。
 ///
-/// 工具回合（末尾只剩 tool 结果）在服务端已经存有 `function_call` 与
-/// thought signature，此时只补发新增的 `function_result`；重放整段历史会与
-/// 服务端状态冲突。其余情况（新的用户消息、压缩后的历史）以客户端历史为准，
-/// 整段重放并放弃续写。
-///
-/// 服务端只接受自己签发的 `function_call`，客户端重放的会被判为非法参数。
-/// 因此整段重放不伪造 function call：只保留助手正文，并把既有工具结果作为
-/// 明确标注来源的用户输入上下文。
+/// 已有 `previous_interaction_id` 时，只补发最后一条 assistant 之后的
+/// `function_result` / `user_input`，由服务端保留之前的 function call 与签名。
+/// 无法续写时按 Interactions 原生 step 完整重放 call/result 对，不将工具
+/// 结果降级为 `user_input`。
 fn to_interactions_input(
     messages: &[crate::types::Message],
     has_previous: bool,
 ) -> InteractionsInput {
     use crate::types::message::*;
 
-    let tool_loop_start = messages
+    let continuation_start = messages
         .iter()
         .rposition(|m| matches!(m, Message::Assistant { .. }))
         .map(|idx| idx + 1)
-        .filter(|start| {
-            *start < messages.len() && messages[*start..].iter().all(|m| m.role() == Role::Tool)
-        });
-    let continues_previous = has_previous && tool_loop_start.is_some();
+        .filter(|start| *start < messages.len());
+    let continues_previous = has_previous && continuation_start.is_some();
     let replayed = if continues_previous {
-        &messages[tool_loop_start.unwrap_or(0)..]
+        &messages[continuation_start.unwrap_or(0)..]
     } else {
         messages
     };
@@ -307,7 +305,7 @@ fn to_interactions_input(
         _ => None,
     });
 
-    let steps = to_interactions_steps(replayed, &call_names, continues_previous);
+    let steps = to_interactions_steps(replayed, &call_names);
     InteractionsInput {
         system,
         steps,
@@ -318,7 +316,6 @@ fn to_interactions_input(
 fn to_interactions_steps(
     messages: &[crate::types::Message],
     call_names: &std::collections::HashMap<&str, &str>,
-    continues_previous: bool,
 ) -> Vec<Value> {
     use crate::types::message::*;
     let mut steps = Vec::new();
@@ -356,23 +353,13 @@ fn to_interactions_steps(
                     .get(tool_call_id.as_str())
                     .copied()
                     .unwrap_or("tool");
-                if continues_previous {
-                    // 缺少 name 的 function_result 会被服务端整体拒收。
-                    steps.push(json!({
-                        "type": "function_result",
-                        "call_id": tool_call_id,
-                        "name": name,
-                        "result": content,
-                    }));
-                } else {
-                    steps.push(json!({
-                        "type": "user_input",
-                        "content": [{
-                            "type": "text",
-                            "text": format!("Tool result ({name}):\n{content}"),
-                        }],
-                    }));
-                }
+                // 缺少 name 的 function_result 会被服务端整体拒收。
+                steps.push(json!({
+                    "type": "function_result",
+                    "call_id": tool_call_id,
+                    "name": name,
+                    "result": content,
+                }));
             }
             Message::Assistant { content } => {
                 // thinking step first
@@ -388,7 +375,7 @@ fn to_interactions_steps(
                         steps.push(step);
                     }
                 }
-                // 只重放模型正文；历史 ToolCall 保持结构化语义，不伪装成文本。
+                // 先重放模型正文。
                 let text = content
                     .iter()
                     .filter_map(|c| match c {
@@ -402,6 +389,21 @@ fn to_interactions_steps(
                         "type": "model_output",
                         "content": [{"type": "text", "text": text}]
                     }));
+                }
+                // 再重放原生 function_call，保留 call id、参数和 Gemini 签名。
+                for c in content {
+                    if let AssistantContent::ToolCall(tc) = c {
+                        let mut step = json!({
+                            "type": "function_call",
+                            "id": tc.id,
+                            "name": tc.name,
+                            "arguments": tc.arguments,
+                        });
+                        if let Some(signature) = &tc.signature {
+                            step["signature"] = json!(signature);
+                        }
+                        steps.push(step);
+                    }
                 }
             }
         }
@@ -897,7 +899,7 @@ mod tests {
                 id: "call-1".into(),
                 name: "terminal".into(),
                 arguments: json!({"command": "pwd"}),
-                signature: None,
+                signature: Some("sig-1".into()),
             })]),
             crate::types::Message::tool_result("call-1", "/tmp", false),
         ]
@@ -917,7 +919,7 @@ mod tests {
     }
 
     #[test]
-    fn replayed_history_keeps_tool_result_context_without_faking_a_call() {
+    fn replayed_history_keeps_native_tool_call_and_result_paired() {
         let converted = to_interactions_input(&tool_loop_messages(), false);
         assert!(!converted.continues_previous);
         let kinds: Vec<&str> = converted
@@ -925,10 +927,13 @@ mod tests {
             .iter()
             .map(|s| s["type"].as_str().unwrap_or_default())
             .collect();
-        assert_eq!(kinds, ["user_input", "user_input"]);
-        let result = converted.steps[1]["content"][0]["text"].as_str().unwrap();
-        assert!(result.starts_with("Tool result (terminal):"), "{result}");
-        assert!(result.contains("/tmp"), "{result}");
+        assert_eq!(kinds, ["user_input", "function_call", "function_result"]);
+        assert_eq!(converted.steps[1]["id"], "call-1");
+        assert_eq!(converted.steps[1]["name"], "terminal");
+        assert_eq!(converted.steps[1]["arguments"]["command"], "pwd");
+        assert_eq!(converted.steps[1]["signature"], "sig-1");
+        assert_eq!(converted.steps[2]["call_id"], "call-1");
+        assert_eq!(converted.steps[2]["result"], "/tmp");
     }
 
     #[test]
@@ -953,16 +958,20 @@ mod tests {
         assert_eq!(text, "Checking the directory.");
         assert!(!text.contains("terminal"));
         assert!(!text.contains("pwd"));
+        assert_eq!(converted.steps[2]["type"], "function_call");
+        assert_eq!(converted.steps[2]["name"], "terminal");
+        assert_eq!(converted.steps[2]["arguments"]["command"], "pwd");
     }
 
     #[test]
-    fn new_user_turn_replays_history_instead_of_continuing() {
+    fn new_user_turn_continues_with_only_the_new_input() {
         let mut msgs = tool_loop_messages();
         msgs.push(crate::types::Message::assistant_text("在 /tmp"));
         msgs.push(crate::types::Message::user_text("再看一次"));
         let converted = to_interactions_input(&msgs, true);
-        // 客户端历史可能已被压缩，新用户回合以客户端为准整段重放。
-        assert!(!converted.continues_previous);
+        // 服务端已保留上一轮，新用户回合只补发末尾 user_input。
+        assert!(converted.continues_previous);
+        assert_eq!(converted.steps.len(), 1);
         assert_eq!(
             converted.steps.last().map(|s| s["type"].as_str()),
             Some(Some("user_input"))

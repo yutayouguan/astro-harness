@@ -243,6 +243,11 @@ where
                 }
             }
         }
+        crate::shared::tool_policy::apply_openai_chat(
+            &mut body,
+            request.tool_choice.as_ref(),
+            request.parallel_tool_calls,
+        );
 
         let auth = self.ext_instance.auth_headers(&self.api_key);
         let has_auth = !auth.is_empty();

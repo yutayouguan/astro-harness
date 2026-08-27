@@ -162,6 +162,7 @@ impl CompletionModel for GeminiNativeCompletionModel {
                 }
             }
         }
+        crate::shared::tool_policy::apply_gemini_native(&mut body, request.tool_choice.as_ref());
 
         let auth = GeminiNative.auth_headers(&self.api_key);
         let response = self

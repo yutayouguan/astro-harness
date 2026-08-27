@@ -58,12 +58,29 @@ pub struct ThinkingConfig {
     pub effort: String,
 }
 
+/// Provider-independent native tool selection policy.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ToolChoice {
+    /// Let the model decide whether to call a tool.
+    Auto,
+    /// Require at least one native tool call.
+    Required,
+    /// Disable native tool calls.
+    None,
+    /// Require one specific native tool by name.
+    Specific(String),
+}
+
 /// 统一聊天补全请求（provider-agnostic）。
 #[derive(Debug, Clone)]
 pub struct CompletionRequest {
     pub model: String,
     pub messages: Vec<Message>,
     pub tools: Vec<ToolDefinition>,
+    /// Explicit native tool-selection contract. `None` keeps the provider default.
+    pub tool_choice: Option<ToolChoice>,
+    /// Whether the provider may emit parallel tool calls. `None` keeps its default.
+    pub parallel_tool_calls: Option<bool>,
     pub temperature: Option<f32>,
     pub max_tokens: Option<u32>,
     pub thinking: Option<ThinkingConfig>,
@@ -78,6 +95,8 @@ impl Default for CompletionRequest {
             model: String::new(),
             messages: Vec::new(),
             tools: Vec::new(),
+            tool_choice: None,
+            parallel_tool_calls: None,
             temperature: None,
             max_tokens: None,
             thinking: None,

@@ -201,6 +201,11 @@ impl CompletionModel for ConfigDrivenCompletionModel {
                 }
             }
         }
+        crate::shared::tool_policy::apply_openai_responses(
+            &mut body,
+            request.tool_choice.as_ref(),
+            request.parallel_tool_calls,
+        );
 
         let response = self
             .http

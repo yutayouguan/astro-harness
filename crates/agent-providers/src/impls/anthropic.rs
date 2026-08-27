@@ -149,6 +149,11 @@ impl CompletionModel for AnthropicCompletionModel {
                 }
             }
         }
+        crate::shared::tool_policy::apply_anthropic(
+            &mut body,
+            request.tool_choice.as_ref(),
+            request.parallel_tool_calls,
+        );
 
         let auth = Anthropic.auth_headers(&self.api_key);
         let response = self

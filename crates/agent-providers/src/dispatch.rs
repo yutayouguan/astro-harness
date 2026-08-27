@@ -8,7 +8,7 @@ use serde_json::Value;
 use crate::types::error::{ProviderError, ProviderResult};
 use crate::types::media::{GeneratedAudio, GeneratedImage, GeneratedVideo};
 use crate::types::message::{Message, ToolDefinition};
-use crate::types::request::{CompletionRequest, ProviderConfig, ThinkingConfig};
+use crate::types::request::{CompletionRequest, ProviderConfig, ThinkingConfig, ToolChoice};
 use crate::types::stream::CompletionStream;
 
 /// 协议管线分发。
@@ -42,6 +42,17 @@ pub async fn chat_stream(
     tools: Vec<Value>,
     config: &ProviderConfig,
 ) -> ProviderResult<CompletionStream> {
+    chat_stream_with_tool_policy(provider, messages, tools, config, None, None).await
+}
+
+pub(crate) async fn chat_stream_with_tool_policy(
+    provider: &str,
+    messages: Vec<Message>,
+    tools: Vec<Value>,
+    config: &ProviderConfig,
+    tool_choice: Option<ToolChoice>,
+    parallel_tool_calls: Option<bool>,
+) -> ProviderResult<CompletionStream> {
     let tool_defs: Vec<ToolDefinition> = tools
         .iter()
         .filter_map(|t| {
@@ -65,6 +76,8 @@ pub async fn chat_stream(
         model: config.model.clone(),
         messages,
         tools: tool_defs,
+        tool_choice,
+        parallel_tool_calls,
         temperature: Some(config.temperature),
         max_tokens: Some(config.max_tokens),
         thinking: Some(ThinkingConfig {

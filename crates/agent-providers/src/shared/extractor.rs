@@ -12,7 +12,7 @@ use serde_json::{json, Value};
 use thiserror::Error;
 
 use crate::types::message::Message;
-use crate::types::request::ProviderConfig;
+use crate::types::request::{ProviderConfig, ToolChoice};
 use crate::types::stream::StreamChunk;
 
 /// 结构化抽取过程中的错误类型。
@@ -65,13 +65,20 @@ impl NativeSubmitAccumulator {
     }
 
     fn finish<T: DeserializeOwned>(self) -> Result<T, ExtractionError> {
-        let Some((index, _)) = self
-            .names
-            .iter()
-            .find(|(_, name)| name.as_str() == "submit")
-        else {
+        if self.names.len() != 1 {
+            return Err(ExtractionError::PromptError(format!(
+                "expected exactly one native submit call, received {}",
+                self.names.len()
+            )));
+        }
+        let Some((index, name)) = self.names.iter().next() else {
             return Err(ExtractionError::NoData);
         };
+        if name != "submit" {
+            return Err(ExtractionError::PromptError(format!(
+                "expected native submit call, received {name}"
+            )));
+        }
         let arguments = self.arguments.get(index).map(String::as_str).unwrap_or("");
         Ok(serde_json::from_str(arguments.trim())?)
     }
@@ -298,11 +305,13 @@ where
     /// 调用模型并反序列化为 `T`。
     pub async fn extract(&self, text: &str) -> Result<T, ExtractionError> {
         let messages = self.build_messages(text);
-        let mut stream = crate::dispatch::chat_stream(
+        let mut stream = crate::dispatch::chat_stream_with_tool_policy(
             &self.provider,
             messages,
             vec![self.submit_tool()],
             &self.config,
+            Some(ToolChoice::Specific("submit".into())),
+            Some(false),
         )
         .await
         .map_err(|e| ExtractionError::PromptError(e.to_string()))?;
@@ -352,7 +361,20 @@ mod unit_tests {
         submit.push_arguments(0, "{\"ok\":true}");
         assert!(matches!(
             submit.finish::<Tiny>(),
-            Err(ExtractionError::NoData)
+            Err(ExtractionError::PromptError(_))
+        ));
+    }
+
+    #[test]
+    fn native_submit_rejects_multiple_calls() {
+        let mut submit = NativeSubmitAccumulator::default();
+        submit.start(0, "submit".into());
+        submit.push_arguments(0, "{\"ok\":true}");
+        submit.start(1, "submit".into());
+        submit.push_arguments(1, "{\"ok\":false}");
+        assert!(matches!(
+            submit.finish::<Tiny>(),
+            Err(ExtractionError::PromptError(_))
         ));
     }
 
