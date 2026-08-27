@@ -394,16 +394,6 @@ html[data-theme="dark"] .msg-token-stats {
   background: color-mix(in srgb, var(--danger, #e11d48) 12%, transparent);
 }
 
-.msg-action-btn.is-active {
-  color: var(--tone, var(--accent));
-  background: color-mix(in srgb, var(--tone, var(--accent)) 15%, transparent);
-}
-
-@keyframes msg-tts-spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
-}
-
 .msg-action-btn:disabled {
   opacity: 0.35;
   cursor: not-allowed;

@@ -5,6 +5,7 @@ import { ChatMarkdown } from "../components/chat/ChatMarkdown";
 import MsgActivity from "../components/chat/MsgActivity";
 import MsgActivityGroup from "../components/chat/MsgActivityGroup";
 import { MsgTimeline, MsgTimelineStep } from "../components/chat/MsgTimeline";
+import { MessageActions } from "../components/chat/ChatView";
 import type { ChatActivity } from "../types";
 
 const terminalActivity: ChatActivity = {
@@ -100,6 +101,14 @@ function ChatAnswerPanel() {
                 <span className="msg-token-stats-usage">428 tokens</span>
               </div>
             </article>
+            <MessageActions
+              messageId="storybook-assistant"
+              content={answer}
+              role="assistant"
+              onRegenerate={() => {}}
+              onDelete={() => {}}
+              onBranch={() => {}}
+            />
           </div>
         </div>
       </main>

@@ -11,7 +11,7 @@ import {
   type ReactNode,
 } from "react";
 import { createPortal } from "react-dom";
-import { convertFileSrc, invoke } from "@tauri-apps/api/core";
+import { invoke } from "@tauri-apps/api/core";
 import { useClampPopover } from "../../hooks/ui/useClampPopover";
 import {
   Bot,
@@ -42,8 +42,6 @@ import {
   ShieldCheck,
   Square,
   Trash2,
-  Volume2,
-  Loader2,
   MoreHorizontal,
 } from "lucide-react";
 import {
@@ -51,8 +49,6 @@ import {
   ChevronDown as ChevronDownData,
   ChevronUp as ChevronUpData,
   Copy as CopyData,
-  Mic as MicData,
-  MicOff as MicOffData,
   Pause as PauseData,
   Play as PlayData,
 } from "lucide";
@@ -164,8 +160,6 @@ import {
 
 const CHECK_ICON = CheckData;
 const COPY_ICON = CopyData;
-const MIC_ICON = MicData;
-const MIC_OFF_ICON = MicOffData;
 const PAUSE_ICON = PauseData;
 const PLAY_ICON = PlayData;
 
@@ -504,9 +498,8 @@ function MessageAttachments({ items }: { items: ChatAttachment[] }) {
   );
 }
 
-/** 消息悬停操作（复制/再生/删除/分支） */
 /** 消息悬停操作（复制 / 再生或编辑 / 删除 / 分支） */
-function MessageActions({
+export function MessageActions({
   messageId,
   content,
   role,
@@ -527,8 +520,6 @@ function MessageActions({
 }) {
   const { t } = useI18n();
   const [copied, setCopied] = useState(false);
-  const [ttsState, setTtsState] = useState<"idle" | "loading" | "playing">("idle");
-  const ttsAudioRef = useRef<HTMLAudioElement | null>(null);
 
   const onCopy = async () => {
     if (!content) return;
@@ -538,30 +529,6 @@ function MessageActions({
       window.setTimeout(() => setCopied(false), 1600);
     } catch {
       // ignore
-    }
-  };
-
-  const onReadAloud = async () => {
-    if (ttsState === "playing") {
-      ttsAudioRef.current?.pause();
-      setTtsState("idle");
-      return;
-    }
-    if (!content.trim()) return;
-    setTtsState("loading");
-    try {
-      const result = await invoke<{ path: string }>("tts_synthesize", {
-        text: content.slice(0, 4000),
-      });
-      const url = convertFileSrc(result.path);
-      const audio = new Audio(url);
-      ttsAudioRef.current = audio;
-      audio.onended = () => setTtsState("idle");
-      audio.onerror = () => setTtsState("idle");
-      audio.play();
-      setTtsState("playing");
-    } catch {
-      setTtsState("idle");
     }
   };
 
@@ -584,22 +551,6 @@ function MessageActions({
           aria-hidden
         />
       </button>
-      {role === "assistant" && (
-        <button
-          type="button"
-          className={`msg-action-btn ${ttsState === "playing" ? "is-active" : ""}`}
-          disabled={disabled || !content || ttsState === "loading"}
-          onClick={() => void onReadAloud()}
-          aria-label={t("chat.readAloud")}
-          title={t("chat.readAloud")}
-        >
-          {ttsState === "loading" ? (
-            <Loader2 size={14} strokeWidth={2} style={{ animation: "msg-tts-spin 0.9s linear infinite" }} aria-hidden />
-          ) : (
-            <Volume2 size={14} strokeWidth={2} aria-hidden />
-          )}
-        </button>
-      )}
       {role === "assistant" ? (
         <button
           type="button"
@@ -745,10 +696,6 @@ export default function ChatView({
     refresh: refreshSubagentThreads,
     markRead: markSubagentRead,
   } = useSubagentThreads(sessionId);
-  const [recording, setRecording] = useState(false);
-  const [transcribing, setTranscribing] = useState(false);
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const audioChunksRef = useRef<Blob[]>([]);
   const [paletteKind, setPaletteKind] = useState<PaletteKind | null>(null);
   const [paletteQuery, setPaletteQuery] = useState("");
   const [paletteIndex, setPaletteIndex] = useState(0);
@@ -1670,41 +1617,6 @@ export default function ChatView({
     [parallelTasks],
   );
   /** 主会话流式或同一 turn 未收束时显示 Stop；独立任务在各自卡片停止。 */
-  const toggleMic = useCallback(async () => {
-    if (recording) {
-      mediaRecorderRef.current?.stop();
-      setRecording(false);
-      return;
-    }
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const recorder = new MediaRecorder(stream, { mimeType: "audio/webm" });
-      audioChunksRef.current = [];
-      recorder.ondataavailable = (e) => { if (e.data.size > 0) audioChunksRef.current.push(e.data); };
-      recorder.onstop = async () => {
-        stream.getTracks().forEach((t) => t.stop());
-        const blob = new Blob(audioChunksRef.current, { type: "audio/webm" });
-        if (blob.size < 100) return;
-        setTranscribing(true);
-        try {
-          const buf = await blob.arrayBuffer();
-          const b64 = btoa(String.fromCharCode(...new Uint8Array(buf)));
-          const text = await invoke<string>("speech_to_text", { audioBase64: b64, filename: "recording.webm" });
-          if (text.trim()) onInputChange(input ? input + " " + text.trim() : text.trim());
-        } catch (e) {
-          console.error("STT failed:", e);
-        } finally {
-          setTranscribing(false);
-        }
-      };
-      mediaRecorderRef.current = recorder;
-      recorder.start();
-      setRecording(true);
-    } catch {
-      // 用户拒绝麦克风权限
-    }
-  }, [recording, onInputChange, input]);
-
   const showStopControl = streaming || turnInFlight;
   const showPauseResume = streaming;
   const showSendButton = !streaming && !composerClarify;
@@ -2901,26 +2813,6 @@ export default function ChatView({
                 aria-label={t("chat.attach")}
               >
                 <Paperclip size={17} strokeWidth={2} />
-              </button>
-              <button
-                type="button"
-                className={`composer-icon-btn${recording ? " is-recording" : ""}`}
-                disabled={transcribing}
-                onClick={() => void toggleMic()}
-                title={recording ? t("chat.micStop") : transcribing ? t("chat.micTranscribing") : t("chat.micStart")}
-                aria-label={recording ? t("chat.micStop") : t("chat.micStart")}
-              >
-                {transcribing ? (
-                  <Loader2 size={17} strokeWidth={2} style={{ animation: "msg-tts-spin 0.9s linear infinite" }} />
-                ) : (
-                  <MorphToggleIcon
-                    active={recording}
-                    activeIcon={MIC_OFF_ICON}
-                    inactiveIcon={MIC_ICON}
-                    size={17}
-                    strokeWidth={2}
-                  />
-                )}
               </button>
               {showStopControl ? (
                 <>
