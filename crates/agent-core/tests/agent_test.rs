@@ -265,11 +265,17 @@ async fn prompt_contract_separates_base_developer_and_user_context() {
         soul: "STABLE_SOUL".into(),
         identity: "STABLE_IDENTITY".into(),
         agent_md: "PROJECT_INSTRUCTIONS".into(),
+        tools_md: String::new(),
         memory: "MEMORY_CONTEXT".into(),
         user_profile: "USER_CONTEXT".into(),
         daily: "DAILY_CONTEXT".into(),
     });
     let agent = AgentLoop::new(config).unwrap();
+    std::fs::write(
+        agent.workspace_dir().join("TOOLS.md"),
+        "LOCAL_TOOL_INSTRUCTIONS",
+    )
+    .unwrap();
 
     let prompt = agent.build_prompt_contract().await;
 
@@ -288,5 +294,8 @@ async fn prompt_contract_separates_base_developer_and_user_context() {
         prompt.context[1].role(),
         providers::types::message::Role::User
     );
+    assert!(prompt.context[1]
+        .text_content()
+        .contains("LOCAL_TOOL_INSTRUCTIONS"));
     assert!(prompt.context[1].text_content().contains("MEMORY_CONTEXT"));
 }

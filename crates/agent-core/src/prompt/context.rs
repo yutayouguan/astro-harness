@@ -12,6 +12,8 @@ pub struct StaticContext {
     pub identity: String,
     /// AGENTS 层：工作空间工作方式（`AGENTS.md`）。
     pub agent_md: String,
+    /// TOOLS 层：当前机器的工具与环境说明（`TOOLS.md`）。
+    pub tools_md: String,
     /// 长期精炼记忆（`MEMORY.md` 摘要）。
     pub memory: String,
     /// 用户画像与偏好。
@@ -21,7 +23,8 @@ pub struct StaticContext {
 }
 
 impl StaticContext {
-    /// 从工作区文件内容构造上下文；`identity` 与 `agent_md` 置空，由后续填充。
+    /// 从工作区文件内容构造上下文；`identity`、`agent_md` 与 `tools_md`
+    /// 置空，由后续填充。
     ///
     /// 适用于启动时仅加载 soul、memory、user_profile、daily 四类的场景。
     pub fn from_workspace_files(
@@ -34,6 +37,7 @@ impl StaticContext {
             soul: soul.into(),
             identity: String::new(),
             agent_md: String::new(),
+            tools_md: String::new(),
             memory: memory.into(),
             user_profile: user_profile.into(),
             daily: daily.into(),
@@ -53,6 +57,9 @@ impl StaticContext {
         }
         if !self.agent_md.trim().is_empty() {
             layers.push(format!("# AGENT\n{}", self.agent_md.trim()));
+        }
+        if !self.tools_md.trim().is_empty() {
+            layers.push(format!("# TOOLS.md\n{}", self.tools_md.trim()));
         }
         if !self.user_profile.trim().is_empty() {
             layers.push(format!("# 用户画像\n{}", self.user_profile.trim()));

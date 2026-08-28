@@ -1,6 +1,8 @@
 //! AgentLoop system prompt 构建：静态/动态上下文组装与分层占用估算。
 
 use crate::prompt::context::{DynamicContext, StaticContext};
+use std::ffi::OsStr;
+use std::path::Path;
 
 use super::AgentLoop;
 
@@ -40,6 +42,84 @@ fn load_agent_instructions(
         .or_else(|| std::fs::read_to_string(global_workspace.join("AGENTS.md")).ok())
 }
 
+const RTK_RUNTIME_GUIDANCE: &str = r#"## Astro 检测到的可选工具：RTK
+
+当前进程的 PATH 中存在可执行的 `rtk`。执行受支持且输出较大的只读、搜索、构建或测试 Shell 命令时，优先添加 `rtk` 前缀以减少模型上下文占用。
+
+- 适合：测试、编译检查、lint、搜索，以及 `git status` / `git diff` / `git log` 等查看命令。
+- 不适合：需要精确或机器可读输出、JSON、补丁、管道或重定向、交互式命令，以及 RTK 不支持的命令。
+- 不得自行安装、升级、初始化或修改 RTK 配置。
+- RTK 拒绝或执行失败时，在安全且无需额外授权的前提下改用原始命令。"#;
+
+fn executable_file(path: &Path) -> bool {
+    let Ok(metadata) = path.metadata() else {
+        return false;
+    };
+    if !metadata.is_file() {
+        return false;
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        metadata.permissions().mode() & 0o111 != 0
+    }
+    #[cfg(not(unix))]
+    {
+        true
+    }
+}
+
+fn command_available_in_path(
+    command: &str,
+    path_value: Option<&OsStr>,
+    path_ext_value: Option<&OsStr>,
+) -> bool {
+    let Some(path_value) = path_value else {
+        return false;
+    };
+
+    std::env::split_paths(path_value).any(|dir| {
+        #[cfg(windows)]
+        {
+            let command_path = Path::new(command);
+            if command_path.extension().is_some() {
+                return executable_file(&dir.join(command));
+            }
+            let path_ext = path_ext_value
+                .and_then(OsStr::to_str)
+                .unwrap_or(".COM;.EXE;.BAT;.CMD");
+            path_ext
+                .split(';')
+                .filter(|ext| !ext.is_empty())
+                .any(|ext| executable_file(&dir.join(format!("{command}{ext}"))))
+        }
+        #[cfg(not(windows))]
+        {
+            let _ = path_ext_value;
+            executable_file(&dir.join(command))
+        }
+    })
+}
+
+fn rtk_available() -> bool {
+    command_available_in_path(
+        "rtk",
+        std::env::var_os("PATH").as_deref(),
+        std::env::var_os("PATHEXT").as_deref(),
+    )
+}
+
+fn render_tools_context(workspace: &Path, has_rtk: bool) -> String {
+    let mut content = std::fs::read_to_string(workspace.join("TOOLS.md")).unwrap_or_default();
+    if has_rtk {
+        if !content.trim().is_empty() {
+            content.push_str("\n\n");
+        }
+        content.push_str(RTK_RUNTIME_GUIDANCE);
+    }
+    content
+}
+
 impl AgentLoop {
     /// 与 `build_system_prompt` 同源加载静态/动态上下文与技能列表（不含 env 副作用）。
     async fn system_prompt_parts(&self) -> (StaticContext, DynamicContext, Vec<(String, String)>) {
@@ -74,6 +154,7 @@ impl AgentLoop {
         if let Some(content) = load_agent_instructions(project_root.as_deref(), &ws) {
             static_ctx.agent_md = content;
         }
+        static_ctx.tools_md = render_tools_context(&ws, rtk_available());
         let dynamic_ctx = {
             let mut dyn_ctx =
                 DynamicContext::from_recalled(self.config.dynamic_max_items, &recalled_context);
@@ -221,6 +302,7 @@ impl AgentLoop {
                     layers.user_context_chars += item.chars;
                     let label = match item.id.as_str() {
                         "agents" => "AGENTS.md",
+                        "tools" => "TOOLS.md",
                         "hook" => "Hook context",
                         "timestamp" => "当前时间",
                         _ => item.id.as_str(),
@@ -244,6 +326,45 @@ impl AgentLoop {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn tools_context_only_advertises_rtk_when_available() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("TOOLS.md"), "LOCAL TOOL NOTES").unwrap();
+
+        let without_rtk = render_tools_context(dir.path(), false);
+        assert_eq!(without_rtk, "LOCAL TOOL NOTES");
+        assert!(!without_rtk.contains("RTK"));
+
+        let with_rtk = render_tools_context(dir.path(), true);
+        assert!(with_rtk.contains("LOCAL TOOL NOTES"));
+        assert!(with_rtk.contains("当前进程的 PATH 中存在可执行的 `rtk`"));
+        assert!(with_rtk.contains("不得自行安装、升级、初始化或修改 RTK 配置"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn path_probe_requires_an_executable_file() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let dir = tempfile::tempdir().unwrap();
+        let rtk = dir.path().join("rtk");
+        std::fs::write(&rtk, "#!/bin/sh\n").unwrap();
+
+        assert!(!command_available_in_path(
+            "rtk",
+            Some(dir.path().as_os_str()),
+            None,
+        ));
+        let mut permissions = std::fs::metadata(&rtk).unwrap().permissions();
+        permissions.set_mode(0o755);
+        std::fs::set_permissions(&rtk, permissions).unwrap();
+        assert!(command_available_in_path(
+            "rtk",
+            Some(dir.path().as_os_str()),
+            None,
+        ));
+    }
 
     #[test]
     fn mcp_instructions_are_wrapped_as_untrusted_jsonl() {

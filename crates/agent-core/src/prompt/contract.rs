@@ -206,6 +206,7 @@ pub(crate) fn assemble_prompt_contract_with_usage(
     let tool_guidance = RenderedSource::new("tool_guidance", runtime.base_guidance);
     let mode = RenderedSource::new("mode", runtime.developer_guidance);
     let agents = RenderedSource::new("agents", titled("# AGENTS.md", &static_ctx.agent_md));
+    let tools = RenderedSource::new("tools", titled("# TOOLS.md", &static_ctx.tools_md));
     let hook = RenderedSource::new(
         "hook",
         inject
@@ -240,6 +241,7 @@ pub(crate) fn assemble_prompt_contract_with_usage(
     developer.allocate(budget, &mode);
     user.allocate(budget, &agents);
     user.allocate(budget, &hook);
+    user.allocate(budget, &tools);
     user.allocate(budget, &user_profile);
     user.allocate(budget, &memory);
     user.allocate(budget, &daily);
@@ -254,6 +256,7 @@ pub(crate) fn assemble_prompt_contract_with_usage(
     let developer = developer.render(&["skills", "mcp", "mode"]);
     let user = user.render(&[
         "agents",
+        "tools",
         "hook",
         "user_profile",
         "memory",
@@ -339,6 +342,7 @@ mod tests {
             soul: "STABLE_SOUL".into(),
             identity: "STABLE_IDENTITY".into(),
             agent_md: "PROJECT_RULES".into(),
+            tools_md: "LOCAL_TOOL_RULES".into(),
             memory: "PROJECT_MEMORY".into(),
             user_profile: "USER_PROFILE".into(),
             daily: "DAILY_CONTEXT".into(),
@@ -359,6 +363,7 @@ mod tests {
         assert!(contract.base_instructions.contains(TOOL_GUIDANCE));
         for dynamic_text in [
             "PROJECT_RULES",
+            "LOCAL_TOOL_RULES",
             "PROJECT_MEMORY",
             "USER_PROFILE",
             "DAILY_CONTEXT",
@@ -409,6 +414,7 @@ mod tests {
                 (PromptContextRole::Developer, "mcp"),
                 (PromptContextRole::Developer, "mode"),
                 (PromptContextRole::User, "agents"),
+                (PromptContextRole::User, "tools"),
                 (PromptContextRole::User, "hook"),
                 (PromptContextRole::User, "user_profile"),
                 (PromptContextRole::User, "memory"),
@@ -423,6 +429,7 @@ mod tests {
     fn optional_capabilities_cannot_displace_project_or_hook_context() {
         let static_ctx = StaticContext {
             agent_md: "PROJECT_RULES".into(),
+            tools_md: "LOCAL_TOOL_RULES".into(),
             ..Default::default()
         };
         let dynamic = DynamicContext::from_recalled(1, "RECALL_SHOULD_BE_DROPPED");
@@ -432,7 +439,8 @@ mod tests {
             + mode.chars().count()
             + titled("# AGENTS.md", &static_ctx.agent_md).chars().count()
             + titled("# Hook context", hook).chars().count()
-            + LAYER_SEP.chars().count();
+            + titled("# TOOLS.md", &static_ctx.tools_md).chars().count()
+            + LAYER_SEP.chars().count() * 2;
         let huge_skill = "S".repeat(10_000);
         let huge_mcp = "M".repeat(10_000);
         let mut budget = ContextBudget::new(required_chars + 8);
@@ -450,6 +458,7 @@ mod tests {
         assert!(developer.contains(mode));
         assert!(user.contains("PROJECT_RULES"));
         assert!(user.contains(hook));
+        assert!(user.contains("LOCAL_TOOL_RULES"));
         assert!(!developer.contains("huge-skill"));
         assert!(!user.contains("RECALL_SHOULD_BE_DROPPED"));
     }
@@ -460,6 +469,7 @@ mod tests {
             soul: "SOUL".into(),
             identity: "IDENTITY".into(),
             agent_md: "AGENTS".into(),
+            tools_md: "TOOLS".into(),
             memory: "MEMORY".into(),
             user_profile: "USER".into(),
             daily: "DAILY".into(),
