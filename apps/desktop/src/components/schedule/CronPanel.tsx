@@ -29,13 +29,11 @@ import {
   Phone,
   Server,
   Stethoscope,
-  TerminalSquare,
   X,
   type LucideIcon,
 } from "lucide-react";
 import { useAnchoredMenu } from "../../hooks/ui/useAnchoredMenu";
 import { useConfirm } from "../../hooks/ui/DialogContext";
-import { CopyMorphIcon } from "../icons/MorphIcon";
 import { useI18n } from "../../i18n/LocaleContext";
 import type { MessageKey } from "../../i18n/messages";
 import { formatScheduleLabel } from "../../lib/cron/cronSchedule";
@@ -43,13 +41,15 @@ import { mapHistoryMessages } from "../../lib/chat/mapHistoryMessages";
 import type { ChatHistoryDto, ChatMessage } from "../../types";
 import MotionSwitch from "../ui/MotionSwitch";
 import ExpandableSearch from "../ui/ExpandableSearch";
-import MsgActivity from "../chat/MsgActivity";
-import { ChatMarkdown } from "../chat/ChatMarkdown";
 import {
   CreateCronDialog,
   type CronPrefill,
   type ProviderOpt,
 } from "./CreateCronDialog";
+import {
+  CronRunDetailDrawer,
+  type CronRunDto,
+} from "./CronRunDetailDrawer";
 import { GlassDatePicker } from "./GlassDatePicker";
 import { Drawer, SelectMenu } from "../ui";
 import { EmptyIllustration } from "../../illustrations";
@@ -165,25 +165,6 @@ export type CronJobDto = {
   show_in_chat: boolean;
 };
 
-/** 单次运行记录 */
-type CronRunDto = {
-  id: string;
-  job_id: string;
-  title: string;
-  agent_id: string;
-  schedule: string;
-  task: string;
-  fired_at: string;
-  finished_at: string | null;
-  status: string;
-  summary: string;
-  output: string;
-  error: string | null;
-  session_id: string | null;
-  /** due / manual 等触发来源 */
-  trigger: string;
-};
-
 /** 顶栏：任务列表 / 运行历史 */
 type TabId = "jobs" | "history";
 /** 任务列表布局 */
@@ -278,35 +259,6 @@ function RunStatusIcon({ status }: { status: string }) {
     return <LoaderCircle size={12} strokeWidth={2.4} className="is-spin" aria-hidden />;
   }
   return <Clock3 size={12} strokeWidth={2.4} aria-hidden />;
-}
-
-/** 复制运行日志按钮 */
-function CopyLogButton({ text }: { text: string }) {
-  const { t } = useI18n();
-  const [copied, setCopied] = useState(false);
-
-  const onCopy = useCallback(async () => {
-    if (!text) return;
-    try {
-      await navigator.clipboard.writeText(text);
-      setCopied(true);
-      window.setTimeout(() => setCopied(false), 1600);
-    } catch {
-      /* ignore */
-    }
-  }, [text]);
-
-  return (
-    <button
-      type="button"
-      className={`cron-run-drawer-copy ${copied ? "is-copied" : ""}`}
-      onClick={() => void onCopy()}
-      aria-label={copied ? t("chat.copied") : t("chat.copy")}
-      title={copied ? t("chat.copied") : t("chat.copy")}
-    >
-      <CopyMorphIcon copied={copied} size={13} aria-hidden />
-    </button>
-  );
 }
 
 /** 拉取定时任务运行记录（兼容两种 invoke 参数形态） */
@@ -1716,153 +1668,13 @@ export default function CronPanel({
       )}
 
       {drawerRun && (
-        <Drawer
-          open
+        <CronRunDetailDrawer
+          run={drawerRun}
+          messages={drawerMessages}
+          traceLoading={drawerTraceLoading}
           onClose={() => setDrawerRun(null)}
-          size="lg"
-          backdropClassName="cron-run-drawer-backdrop"
-          className="cron-run-drawer"
-          aria-labelledby="cron-run-drawer-title"
-        >
-              <header className="cron-run-drawer-head">
-                <div>
-                  <h2 id="cron-run-drawer-title" className="cron-run-drawer-title">
-                    <History size={16} strokeWidth={2.3} aria-hidden />
-                    {t("cron.history.logTitle")}
-                  </h2>
-                  <p className="cron-run-drawer-sub">
-                    <CalendarClock size={12} strokeWidth={2.2} aria-hidden />
-                    <span>
-                      {drawerRun.title} · {formatLastRun(drawerRun.fired_at, locale)}
-                    </span>
-                  </p>
-                </div>
-                <div className="cron-run-drawer-head-actions">
-                  <button
-                    type="button"
-                    className="cron-timeline-log-btn is-danger"
-                    disabled={runStatusKind(drawerRun.status) === "running"}
-                    onClick={() => void deleteRun(drawerRun)}
-                    title={t("cron.history.deleteRun")}
-                    aria-label={t("cron.history.deleteRun")}
-                  >
-                    <IconTrash width={14} height={14} />
-                    <span>{t("cron.history.deleteRun")}</span>
-                  </button>
-                  <button
-                    type="button"
-                    className="cron-dialog-close"
-                    onClick={() => setDrawerRun(null)}
-                    aria-label={t("cron.cancel")}
-                  >
-                    <X size={16} strokeWidth={2.5} aria-hidden />
-                  </button>
-                </div>
-              </header>
-              <div className="cron-run-drawer-body">
-                <div className="cron-run-drawer-meta">
-                  <span
-                    className={`cron-status-pill is-${runStatusKind(drawerRun.status)}`}
-                  >
-                    <RunStatusIcon status={drawerRun.status} />
-                    {runStatusLabel(drawerRun.status)}
-                  </span>
-                  {drawerRun.summary && (
-                    <p className="cron-run-drawer-summary">
-                      <MessageSquareText size={13} strokeWidth={2.2} aria-hidden />
-                      <span>{drawerRun.summary}</span>
-                    </p>
-                  )}
-                </div>
-
-                <section className="cron-run-drawer-block">
-                  <div className="cron-run-drawer-block-head">
-                    <h3 className="cron-run-drawer-label">
-                      <ListTree size={12} strokeWidth={2.3} aria-hidden />
-                      {t("cron.history.traceTitle")}
-                    </h3>
-                    {(() => {
-                      const texts = drawerMessages
-                        .filter((m) => m.role === "assistant" && (m.content || "").trim())
-                        .map((m) => (m.content || "").trim());
-                      const copyText = texts[texts.length - 1] || drawerRun.output;
-                      return copyText ? <CopyLogButton text={copyText} /> : null;
-                    })()}
-                  </div>
-                  {(() => {
-                    const activities = drawerMessages.flatMap((m) => m.activities ?? []);
-                    const assistantTexts = drawerMessages
-                      .filter((m) => m.role === "assistant" && (m.content || "").trim())
-                      .map((m) => (m.content || "").trim());
-                    const isRunning =
-                      runStatusKind(drawerRun.status) === "running";
-                    if (activities.length === 0 && assistantTexts.length === 0) {
-                      return (
-                        <p className="cron-history-empty">
-                          {isRunning
-                            ? t("cron.history.runningWait")
-                            : drawerTraceLoading
-                              ? t("cron.history.loadingTrace")
-                              : t("cron.history.empty")}
-                        </p>
-                      );
-                    }
-                    return (
-                      <div className="cron-run-trace">
-                        {activities.map((act, i) => (
-                          <MsgActivity
-                            key={act.id || `act-${i}`}
-                            activity={act}
-                            defaultOpen={act.status === "running"}
-                            showTimestamp
-                          />
-                        ))}
-                        {assistantTexts.map((text, i) => (
-                          <div key={`asst-${i}`} className="cron-run-assistant-chunk">
-                            <div className="cron-run-md">
-                              <ChatMarkdown content={text} compact />
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    );
-                  })()}
-                </section>
-
-                {/* 会话里已有助手终稿时，output 字段是同一份快照，不再重复渲染 */}
-                {drawerRun.output &&
-                  !drawerMessages.some(
-                    (m) => m.role === "assistant" && (m.content || "").trim(),
-                  ) && (
-                  <section className="cron-run-drawer-block">
-                    <div className="cron-run-drawer-block-head">
-                      <h3 className="cron-run-drawer-label">
-                        <TerminalSquare size={12} strokeWidth={2.3} aria-hidden />
-                        Output
-                      </h3>
-                      <CopyLogButton text={drawerRun.output} />
-                    </div>
-                    <div className="cron-run-md">
-                      <ChatMarkdown content={drawerRun.output} compact />
-                    </div>
-                  </section>
-                )}
-                {drawerRun.error && (
-                  <section className="cron-run-drawer-block is-error">
-                    <div className="cron-run-drawer-block-head">
-                      <h3 className="cron-run-drawer-label">
-                        <CircleAlert size={12} strokeWidth={2.3} aria-hidden />
-                        Error
-                      </h3>
-                      <CopyLogButton text={drawerRun.error} />
-                    </div>
-                    <div className="cron-run-md">
-                      <ChatMarkdown content={drawerRun.error} plain compact />
-                    </div>
-                  </section>
-                )}
-              </div>
-        </Drawer>
+          onDelete={() => void deleteRun(drawerRun)}
+        />
       )}
     </div>
   );

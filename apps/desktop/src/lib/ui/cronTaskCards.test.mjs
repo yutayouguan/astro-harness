@@ -16,12 +16,27 @@ const drawerUrl = new URL(
 );
 const dialogUrl = new URL("../../styles/components/dialog.css", import.meta.url);
 const overlayUrl = new URL("../../styles/components/overlay.css", import.meta.url);
+const chatUrl = new URL(
+  "../../components/chat/ChatView.tsx",
+  import.meta.url,
+);
+const runDetailUrl = new URL(
+  "../../components/schedule/CronRunDetailDrawer.tsx",
+  import.meta.url,
+);
+const commandUrl = new URL(
+  "../../../src-tauri/src/commands/cron.rs",
+  import.meta.url,
+);
 
 const panel = await readFile(panelUrl, "utf8");
 const cards = await readFile(cardsUrl, "utf8");
 const drawer = await readFile(drawerUrl, "utf8");
 const dialog = await readFile(dialogUrl, "utf8");
 const overlay = await readFile(overlayUrl, "utf8");
+const chat = await readFile(chatUrl, "utf8");
+const runDetail = await readFile(runDetailUrl, "utf8");
+const command = await readFile(commandUrl, "utf8");
 
 test("scheduled task cards expose a dedicated detail affordance", () => {
   assert.match(panel, /className="cron-card-actions-cluster"/);
@@ -60,4 +75,19 @@ test("delete confirmation stays above the open task drawer", () => {
     overlayLayers.every((layer) => dialogLayer > layer),
     "confirmation dialog must render above every shared overlay",
   );
+});
+
+test("cron sessions keep the answer and expose a separate floating task card", () => {
+  assert.match(chat, /invoke<CronRunDto \| null>\("get_cron_run_by_session"/);
+  assert.match(chat, /className="chat-cron-run-float"/);
+  assert.match(chat, /<CronRunFloatingCard/);
+  assert.doesNotMatch(chat, /cronRun && m\.id === cronResultMessageId/);
+  assert.match(chat, /<ChatMarkdown\s+content=\{m\.content\}/);
+  assert.match(chat, /<CronRunDetailDrawer/);
+  assert.match(runDetail, /export function CronRunFloatingCard/);
+  assert.match(runDetail, /export function CronRunDetailDrawer/);
+  assert.match(runDetail, /modal=\{false\}/);
+  assert.match(runDetail, /pointerEvents: "none"/);
+  assert.match(runDetail, /trapFocus=\{false\}/);
+  assert.match(command, /pub async fn get_cron_run_by_session/);
 });

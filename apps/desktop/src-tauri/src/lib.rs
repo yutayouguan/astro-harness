@@ -312,6 +312,7 @@ pub fn run() {
             commands::cron::set_cron_job_enabled,
             commands::cron::run_cron_job_now,
             commands::cron::get_cron_run,
+            commands::cron::get_cron_run_by_session,
             commands::cron::delete_cron_run,
             commands::cron::list_cron_runs,
             commands::cron::list_cron_job_runs,

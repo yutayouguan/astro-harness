@@ -35,6 +35,7 @@ CREATE TABLE IF NOT EXISTS cron_runs (
 CREATE INDEX IF NOT EXISTS idx_cron_runs_fired ON cron_runs(fired_at DESC);
 CREATE INDEX IF NOT EXISTS idx_cron_runs_job ON cron_runs(job_id, fired_at DESC);
 CREATE INDEX IF NOT EXISTS idx_cron_runs_agent ON cron_runs(agent_id, fired_at DESC);
+CREATE INDEX IF NOT EXISTS idx_cron_runs_session ON cron_runs(session_id, fired_at DESC);
 "#;
 
 /// `summary` 字段最大字节数
@@ -227,6 +228,21 @@ impl CronRunDb {
         Ok(row)
     }
 
+    /// 按关联会话查询最近一条运行记录，供聊天中的定时任务卡片恢复详情。
+    pub fn get_by_session_id(&self, session_id: &str) -> anyhow::Result<Option<CronRunRow>> {
+        let sql = format!(
+            "SELECT {SELECT_COLS} FROM cron_runs
+             WHERE session_id = ?1
+             ORDER BY fired_at DESC
+             LIMIT 1"
+        );
+        let mut stmt = self.conn.prepare(&sql)?;
+        let row = stmt
+            .query_row(params![session_id], row_from_query)
+            .optional()?;
+        Ok(row)
+    }
+
     /// 删除单条运行记录；返回是否删到行。运行中的记录也可删（用于用户取消展示）。
     pub fn delete(&self, id: &str) -> anyhow::Result<bool> {
         let changed = self
@@ -369,6 +385,28 @@ mod tests {
         assert!(db.delete(&id).unwrap());
         assert!(db.get(&id).unwrap().is_none());
         assert!(!db.delete(&id).unwrap());
+    }
+
+    #[test]
+    fn get_by_session_id_returns_the_linked_run() {
+        let dir = TempDir::new().unwrap();
+        let db = CronRunDb::new(dir.path().join("cron.db")).unwrap();
+        let id = db
+            .insert_running(NewCronRun {
+                job_id: "j".into(),
+                title: "t".into(),
+                agent_id: "workspace".into(),
+                schedule: "every:1d".into(),
+                task: "task".into(),
+                fired_at: "2026-07-11T11:00:00+08:00".into(),
+                trigger: "due".into(),
+                session_id: Some("cron-session".into()),
+            })
+            .unwrap();
+
+        let run = db.get_by_session_id("cron-session").unwrap().unwrap();
+        assert_eq!(run.id, id);
+        assert!(db.get_by_session_id("other-session").unwrap().is_none());
     }
 
     #[test]

@@ -99,6 +99,7 @@ const meta = {
   beforeEach: () => {
     mockIPC((command, payload) => {
       if (command === "list_cron_jobs") return jobs;
+      if (command === "list_cron_runs") return runs;
       if (command === "list_cron_job_runs") {
         const id = String((payload as { id?: string } | undefined)?.id ?? "");
         return runs.filter((run) => run.job_id === id);

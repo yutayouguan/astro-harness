@@ -442,6 +442,18 @@ pub async fn get_cron_run(id: String) -> Result<Option<CronRunDto>, String> {
     Ok(row.map(run_to_dto))
 }
 
+/// 按会话 id 取对应的定时任务运行记录（供聊天结果卡片使用）。
+#[tauri::command]
+pub async fn get_cron_run_by_session(session_id: String) -> Result<Option<CronRunDto>, String> {
+    bootstrap_workspace()?;
+    let _ = agent::exec::cron::reconcile_orphaned_runs();
+    let db = cron::CronRunDb::open_default().map_err(|e| e.to_string())?;
+    let row = db
+        .get_by_session_id(&session_id)
+        .map_err(|e| e.to_string())?;
+    Ok(row.map(run_to_dto))
+}
+
 /// 删除单条定时任务运行记录。
 #[tauri::command]
 pub async fn delete_cron_run(id: String) -> Result<bool, String> {

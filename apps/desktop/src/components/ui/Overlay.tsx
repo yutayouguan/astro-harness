@@ -26,6 +26,7 @@ type OverlayCommonProps = Omit<
   closeOnBackdrop?: boolean;
   closeOnEscape?: boolean;
   trapFocus?: boolean;
+  modal?: boolean;
 };
 
 type OverlayFrameProps = OverlayCommonProps & {
@@ -43,6 +44,7 @@ function OverlayFrame({
   closeOnEscape = true,
   trapFocus = true,
   kind,
+  modal = kind !== "popover",
   panelRef: providedPanelRef,
   panelStyle,
   backdropClassName = "",
@@ -93,7 +95,7 @@ function OverlayFrame({
           .join(" ")}
         style={{ ...style, ...panelStyle }}
         role={role}
-        aria-modal={kind === "popover" ? undefined : true}
+        aria-modal={modal ? true : undefined}
         tabIndex={-1}
         onMouseDown={(event) => {
           props.onMouseDown?.(event);

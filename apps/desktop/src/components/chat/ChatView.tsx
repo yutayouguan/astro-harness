@@ -132,7 +132,7 @@ import A2UISurfaceCard from "./A2UISurfaceCard";
 import ComposerClarifySurface from "./ComposerClarifySurface";
 import TodoProgress from "./TodoProgress";
 import {
-  CronRunChatCard,
+  CronRunFloatingCard,
   CronRunDetailDrawer,
   cronRunStatusKind,
   type CronRunDto,
@@ -847,15 +847,6 @@ export default function ChatView({
       if (timer != null) window.clearTimeout(timer);
     };
   }, [sessionId]);
-
-  const cronResultMessageId = useMemo(() => {
-    if (!cronRun) return null;
-    for (let index = messages.length - 1; index >= 0; index -= 1) {
-      const message = messages[index];
-      if (message?.role === "assistant" && message.content.trim()) return message.id;
-    }
-    return null;
-  }, [cronRun, messages]);
 
   const deleteCronRun = useCallback(async () => {
     if (!cronRun) return;
@@ -1948,7 +1939,7 @@ export default function ChatView({
       ref={chatPaneRef}
       className={`chat-pane ${workspaceContent ? "has-project-file" : ""} ${
         fileDragOver ? "is-file-dragover" : ""
-      }`.trim()}
+      } ${cronRun && !workspaceContent ? "has-cron-run" : ""}`.trim()}
       onDragEnter={onDragEnter}
       onDragLeave={onDragLeave}
       onDragOver={(e) => {
@@ -1958,6 +1949,14 @@ export default function ChatView({
       onDrop={(e) => void onDrop(e)}
     >
       {toastHost}
+      {cronRun && !workspaceContent ? (
+        <aside className="chat-cron-run-float">
+          <CronRunFloatingCard
+            run={cronRun}
+            onOpen={() => setCronRunOpen(true)}
+          />
+        </aside>
+      ) : null}
       {workspaceContent ? (
         workspaceContent
       ) : emptyMode === "chat" || emptyMode === "agent" ? (
@@ -2178,21 +2177,14 @@ export default function ChatView({
                             kind: "reply",
                             node: (
                               <>
-                                {cronRun && m.id === cronResultMessageId ? (
-                                  <CronRunChatCard
-                                    run={cronRun}
-                                    onOpen={() => setCronRunOpen(true)}
-                                  />
-                                ) : (
-                                  <ChatMarkdown
-                                    content={m.content}
-                                    streaming={isStreamingBubble}
-                                    compact={displayPrefs.verbosity === "compact"}
-                                    plain={Boolean(m.error)}
-                                    caret={false}
-                                    mediaBaseDir={mediaBaseDir}
-                                  />
-                                )}
+                                <ChatMarkdown
+                                  content={m.content}
+                                  streaming={isStreamingBubble}
+                                  compact={displayPrefs.verbosity === "compact"}
+                                  plain={Boolean(m.error)}
+                                  caret={false}
+                                  mediaBaseDir={mediaBaseDir}
+                                />
                                 <MsgStreamLoader visible={isStreamingBubble} />
                               </>
                             ),
