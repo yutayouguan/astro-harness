@@ -236,7 +236,7 @@ html[data-theme="dark"] .msg-token-stats {
   }
 }
 
-/* AI 消息悬停操作条：玻璃液态小按钮，贴在气泡下方，不挡选中文字 */
+/* 消息悬停操作条：玻璃液态小按钮，贴在气泡下方，不挡选中文字 */
 .msg-actions {
   display: inline-flex;
   align-items: center;
@@ -263,6 +263,8 @@ html[data-theme="dark"] .msg-token-stats {
 
 .msg-row.assistant:hover .msg-actions,
 .msg-row.assistant:focus-within .msg-actions,
+.msg-row.user:hover .msg-actions,
+.msg-row.user:focus-within .msg-actions,
 .msg-actions:focus-within {
   opacity: 1;
   pointer-events: auto;
@@ -406,43 +408,6 @@ html[data-theme="dark"] .avatar {
   max-width: 100%;
 }
 
-.bubble.user.has-inline-edit {
-  position: relative;
-  padding-right: 48px;
-}
-
-.user-message-edit-trigger {
-  position: absolute;
-  top: 8px;
-  right: 8px;
-  display: inline-grid;
-  place-items: center;
-  width: 28px;
-  height: 28px;
-  padding: 0;
-  border: 1px solid color-mix(in srgb, currentColor 12%, transparent);
-  border-radius: 9px;
-  background: color-mix(in srgb, currentColor 7%, transparent);
-  color: color-mix(in srgb, currentColor 62%, transparent);
-  cursor: pointer;
-  transition:
-    color 140ms ease,
-    background-color 140ms ease,
-    border-color 140ms ease,
-    transform 140ms cubic-bezier(0.23, 1, 0.32, 1);
-}
-
-.user-message-edit-trigger:hover {
-  color: currentColor;
-  background: color-mix(in srgb, currentColor 11%, transparent);
-  border-color: color-mix(in srgb, currentColor 18%, transparent);
-}
-
-.user-message-edit-trigger:active {
-  transform: scale(0.97);
-}
-
-.user-message-edit-trigger:focus-visible,
 .user-message-editor-btn:focus-visible,
 .user-message-editor-input:focus-visible {
   outline: 2px solid color-mix(in srgb, var(--tone, #2563eb) 64%, transparent);
@@ -528,8 +493,10 @@ html[data-theme="dark"] .avatar {
 }
 
 @media (hover: none), (pointer: coarse) {
-  .user-message-edit-trigger {
-    color: currentColor;
+  .msg-row.user .msg-actions {
+    opacity: 1;
+    pointer-events: auto;
+    transform: none;
   }
 }
 

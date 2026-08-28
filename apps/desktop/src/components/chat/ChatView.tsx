@@ -515,18 +515,22 @@ function MessageAttachments({ items }: { items: ChatAttachment[] }) {
   );
 }
 
-/** AI 消息悬停操作（复制 / 重新生成 / 分支）。 */
+/** 消息悬停操作：AI 为复制/重新生成/分支，最后一条用户消息为复制/编辑。 */
 export function MessageActions({
   messageId,
   content,
+  role,
   disabled,
   onRegenerate,
+  onEdit,
   onBranch,
 }: {
   messageId: string;
   content: string;
+  role: "user" | "assistant";
   disabled?: boolean;
   onRegenerate?: (messageId: string) => void;
+  onEdit?: (messageId: string) => void;
   onBranch?: (messageId: string) => void;
 }) {
   const { t } = useI18n();
@@ -562,26 +566,41 @@ export function MessageActions({
           aria-hidden
         />
       </button>
-      <button
-        type="button"
-        className="msg-action-btn"
-        disabled={disabled || !onRegenerate}
-        onClick={() => onRegenerate?.(messageId)}
-        aria-label={t("chat.regenerate")}
-        title={t("chat.regenerate")}
-      >
-        <RefreshCw size={14} strokeWidth={2} aria-hidden />
-      </button>
-      <button
-        type="button"
-        className="msg-action-btn"
-        disabled={disabled || !onBranch}
-        onClick={() => onBranch?.(messageId)}
-        aria-label={t("chat.branch")}
-        title={t("chat.branchHint")}
-      >
-        <GitBranch size={14} strokeWidth={2} aria-hidden />
-      </button>
+      {role === "assistant" ? (
+        <>
+          <button
+            type="button"
+            className="msg-action-btn"
+            disabled={disabled || !onRegenerate}
+            onClick={() => onRegenerate?.(messageId)}
+            aria-label={t("chat.regenerate")}
+            title={t("chat.regenerate")}
+          >
+            <RefreshCw size={14} strokeWidth={2} aria-hidden />
+          </button>
+          <button
+            type="button"
+            className="msg-action-btn"
+            disabled={disabled || !onBranch}
+            onClick={() => onBranch?.(messageId)}
+            aria-label={t("chat.branch")}
+            title={t("chat.branchHint")}
+          >
+            <GitBranch size={14} strokeWidth={2} aria-hidden />
+          </button>
+        </>
+      ) : (
+        <button
+          type="button"
+          className="msg-action-btn"
+          disabled={disabled || !onEdit}
+          onClick={() => onEdit?.(messageId)}
+          aria-label={t("chat.editQuestion")}
+          title={t("chat.editQuestion")}
+        >
+          <Pencil size={14} strokeWidth={2} aria-hidden />
+        </button>
+      )}
     </div>
   );
 }
@@ -2001,10 +2020,8 @@ export default function ChatView({
                           ? "typing"
                           : ""
                       } ${isStreamingBubble && (m.content || m.reasoning) ? "is-streaming" : ""}${
-                        canEditUserMessage && !isEditingUserMessage
-                          ? " has-inline-edit"
-                          : ""
-                      }${isEditingUserMessage ? " is-editing" : ""}`}
+                        isEditingUserMessage ? " is-editing" : ""
+                      }`}
                     >
                       {m.attachments && m.attachments.length > 0 && (
                         <MessageAttachments items={m.attachments} />
@@ -2252,17 +2269,6 @@ export default function ChatView({
                           </MsgTimeline>
                         );
                       })()}
-                      {canEditUserMessage && !isEditingUserMessage ? (
-                        <button
-                          type="button"
-                          className="user-message-edit-trigger"
-                          aria-label={t("chat.editQuestion")}
-                          title={t("chat.editQuestion")}
-                          onClick={() => beginUserMessageEdit(m)}
-                        >
-                          <Pencil size={14} strokeWidth={2} aria-hidden />
-                        </button>
-                      ) : null}
                       {displayPrefs.showTimestamps && m.createdAt ? (
                         <div className="msg-timestamp">
                           {new Date(m.createdAt).toLocaleTimeString()}
@@ -2280,13 +2286,24 @@ export default function ChatView({
                     </div>
                     {!isStreamingBubble &&
                     m.id !== "welcome" &&
-                    m.role === "assistant" ? (
+                    (m.role === "assistant" ||
+                      (canEditUserMessage && !isEditingUserMessage)) ? (
                       <MessageActions
                         messageId={m.id}
                         content={m.content}
+                        role={m.role}
                         disabled={streaming}
-                        onRegenerate={onRegenerateMessage}
-                        onBranch={onBranchMessage}
+                        onRegenerate={
+                          m.role === "assistant" ? onRegenerateMessage : undefined
+                        }
+                        onEdit={
+                          m.role === "user"
+                            ? () => beginUserMessageEdit(m)
+                            : undefined
+                        }
+                        onBranch={
+                          m.role === "assistant" ? onBranchMessage : undefined
+                        }
                       />
                     ) : null}
                   </div>

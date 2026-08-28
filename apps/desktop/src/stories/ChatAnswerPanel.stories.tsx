@@ -105,6 +105,7 @@ function ChatAnswerPanel() {
             <MessageActions
               messageId="storybook-assistant"
               content={answer}
+              role="assistant"
               onRegenerate={() => {}}
               onBranch={() => {}}
             />

@@ -24,22 +24,27 @@ const markdownCssUrl = new URL(
   import.meta.url,
 );
 
-test("assistant actions exclude deletion and user editing stays in the latest bubble", async () => {
+test("hover actions exclude deletion and only the latest user question can be edited", async () => {
   const [source, session, messages, styles] = await Promise.all([
     readFile(chatViewUrl, "utf8"),
     readFile(chatSessionUrl, "utf8"),
     readFile(messagesUrl, "utf8"),
     readFile(coreCssUrl, "utf8"),
   ]);
-  const assistantActions = source.match(
+  const messageActions = source.match(
     /export function MessageActions[\s\S]*?\n}\n\nfunction InlineUserMessageEditor/,
   )?.[0];
 
-  assert.ok(assistantActions, "missing assistant action surface");
-  for (const label of ["chat.copy", "chat.regenerate", "chat.branch"]) {
-    assert.ok(assistantActions.includes(`t("${label}")`), label);
+  assert.ok(messageActions, "missing message action surface");
+  for (const label of [
+    "chat.copy",
+    "chat.editQuestion",
+    "chat.regenerate",
+    "chat.branch",
+  ]) {
+    assert.ok(messageActions.includes(`t("${label}")`), label);
   }
-  assert.doesNotMatch(assistantActions, /onDelete|chat\.delete|Trash2/);
+  assert.doesNotMatch(messageActions, /onDelete|chat\.delete|Trash2/);
   assert.match(source, /findLastUserMessageId\(messages\)/);
   assert.match(source, /m\.id === lastUserMessageId/);
   assert.match(source, /<InlineUserMessageEditor/);
@@ -49,7 +54,8 @@ test("assistant actions exclude deletion and user editing stays in the latest bu
   assert.match(session, /await sendImmediate\(\{[\s\S]*?truncateTo: idx,[\s\S]*?reuseUserId: userMsg\.id/);
   assert.match(messages, /"chat\.editSubmit": "保存并重新生成"/);
   assert.match(styles, /\.bubble\.user\.is-editing/);
-  assert.match(styles, /\.user-message-edit-trigger/);
+  assert.match(styles, /\.msg-row\.user:hover \.msg-actions/);
+  assert.doesNotMatch(styles, /\.user-message-edit-trigger/);
   assert.doesNotMatch(source, /MsgDissolveOverlay|onDeleteMessage/);
   assert.doesNotMatch(session, /const deleteMessage|persistAfterEditTruncate/);
   assert.doesNotMatch(styles, /msg-dissolve/);
